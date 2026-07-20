@@ -1,0 +1,617 @@
+{
+ "cases": [
+  {
+   "expect": {
+    "path": [
+     "route",
+     "chained",
+     "route",
+     "chained",
+     "done"
+    ],
+    "pending_node": null,
+    "spawn": null,
+    "stopped": "terminal"
+   },
+   "flow": "---\nname: predicates\nstart: route\n---\n\n## route\nRoute on the emitted fields. NB the guards: with every field missing, an unguarded\n`x == true` would be None == None (true) and an unguarded `a not in b` is not-in-on-None\n(satisfied) — both would shadow every later edge. The guards keep each fixture on its\nown branch, which the meta-check below enforces.\n-> chained: when 1 < n < 5\n-> boolnum: when flag == 1\n-> substr: when \"error\" in text\n-> member: when action in (\"contain\", \"watch\")\n-> pyconst: when x == True\n-> fieldname: when x == true and x != None\n-> notin: when a and a not in b\n-> empty: when items\n-> done: else\n\n## chained\n-> route: when visits < 2\n-> done: else\n\n## boolnum\n-> done: always\n\n## substr\n-> done: always\n\n## member\n-> done: always\n\n## pyconst\n-> done: always\n\n## fieldname\n-> done: always\n\n## notin\n-> done: always\n\n## empty\n-> done: always\n\n## done\nDone.\n",
+   "name": "chained-comparison",
+   "script": {
+    "route": [
+     {
+      "n": 3,
+      "text": "r"
+     }
+    ]
+   }
+  },
+  {
+   "expect": {
+    "path": [
+     "route",
+     "boolnum",
+     "done"
+    ],
+    "pending_node": null,
+    "spawn": null,
+    "stopped": "terminal"
+   },
+   "flow": "---\nname: predicates\nstart: route\n---\n\n## route\nRoute on the emitted fields. NB the guards: with every field missing, an unguarded\n`x == true` would be None == None (true) and an unguarded `a not in b` is not-in-on-None\n(satisfied) — both would shadow every later edge. The guards keep each fixture on its\nown branch, which the meta-check below enforces.\n-> chained: when 1 < n < 5\n-> boolnum: when flag == 1\n-> substr: when \"error\" in text\n-> member: when action in (\"contain\", \"watch\")\n-> pyconst: when x == True\n-> fieldname: when x == true and x != None\n-> notin: when a and a not in b\n-> empty: when items\n-> done: else\n\n## chained\n-> route: when visits < 2\n-> done: else\n\n## boolnum\n-> done: always\n\n## substr\n-> done: always\n\n## member\n-> done: always\n\n## pyconst\n-> done: always\n\n## fieldname\n-> done: always\n\n## notin\n-> done: always\n\n## empty\n-> done: always\n\n## done\nDone.\n",
+   "name": "bool-eq-one",
+   "script": {
+    "route": [
+     {
+      "flag": true,
+      "text": "r"
+     }
+    ]
+   }
+  },
+  {
+   "expect": {
+    "path": [
+     "route",
+     "substr",
+     "done"
+    ],
+    "pending_node": null,
+    "spawn": null,
+    "stopped": "terminal"
+   },
+   "flow": "---\nname: predicates\nstart: route\n---\n\n## route\nRoute on the emitted fields. NB the guards: with every field missing, an unguarded\n`x == true` would be None == None (true) and an unguarded `a not in b` is not-in-on-None\n(satisfied) — both would shadow every later edge. The guards keep each fixture on its\nown branch, which the meta-check below enforces.\n-> chained: when 1 < n < 5\n-> boolnum: when flag == 1\n-> substr: when \"error\" in text\n-> member: when action in (\"contain\", \"watch\")\n-> pyconst: when x == True\n-> fieldname: when x == true and x != None\n-> notin: when a and a not in b\n-> empty: when items\n-> done: else\n\n## chained\n-> route: when visits < 2\n-> done: else\n\n## boolnum\n-> done: always\n\n## substr\n-> done: always\n\n## member\n-> done: always\n\n## pyconst\n-> done: always\n\n## fieldname\n-> done: always\n\n## notin\n-> done: always\n\n## empty\n-> done: always\n\n## done\nDone.\n",
+   "name": "substring-in",
+   "script": {
+    "route": [
+     {
+      "text": "an error happened"
+     }
+    ]
+   }
+  },
+  {
+   "expect": {
+    "path": [
+     "route",
+     "member",
+     "done"
+    ],
+    "pending_node": null,
+    "spawn": null,
+    "stopped": "terminal"
+   },
+   "flow": "---\nname: predicates\nstart: route\n---\n\n## route\nRoute on the emitted fields. NB the guards: with every field missing, an unguarded\n`x == true` would be None == None (true) and an unguarded `a not in b` is not-in-on-None\n(satisfied) — both would shadow every later edge. The guards keep each fixture on its\nown branch, which the meta-check below enforces.\n-> chained: when 1 < n < 5\n-> boolnum: when flag == 1\n-> substr: when \"error\" in text\n-> member: when action in (\"contain\", \"watch\")\n-> pyconst: when x == True\n-> fieldname: when x == true and x != None\n-> notin: when a and a not in b\n-> empty: when items\n-> done: else\n\n## chained\n-> route: when visits < 2\n-> done: else\n\n## boolnum\n-> done: always\n\n## substr\n-> done: always\n\n## member\n-> done: always\n\n## pyconst\n-> done: always\n\n## fieldname\n-> done: always\n\n## notin\n-> done: always\n\n## empty\n-> done: always\n\n## done\nDone.\n",
+   "name": "tuple-membership",
+   "script": {
+    "route": [
+     {
+      "action": "watch",
+      "text": "r"
+     }
+    ]
+   }
+  },
+  {
+   "expect": {
+    "path": [
+     "route",
+     "pyconst",
+     "done"
+    ],
+    "pending_node": null,
+    "spawn": null,
+    "stopped": "terminal"
+   },
+   "flow": "---\nname: predicates\nstart: route\n---\n\n## route\nRoute on the emitted fields. NB the guards: with every field missing, an unguarded\n`x == true` would be None == None (true) and an unguarded `a not in b` is not-in-on-None\n(satisfied) — both would shadow every later edge. The guards keep each fixture on its\nown branch, which the meta-check below enforces.\n-> chained: when 1 < n < 5\n-> boolnum: when flag == 1\n-> substr: when \"error\" in text\n-> member: when action in (\"contain\", \"watch\")\n-> pyconst: when x == True\n-> fieldname: when x == true and x != None\n-> notin: when a and a not in b\n-> empty: when items\n-> done: else\n\n## chained\n-> route: when visits < 2\n-> done: else\n\n## boolnum\n-> done: always\n\n## substr\n-> done: always\n\n## member\n-> done: always\n\n## pyconst\n-> done: always\n\n## fieldname\n-> done: always\n\n## notin\n-> done: always\n\n## empty\n-> done: always\n\n## done\nDone.\n",
+   "name": "True-is-a-constant",
+   "script": {
+    "route": [
+     {
+      "text": "r",
+      "x": true
+     }
+    ]
+   }
+  },
+  {
+   "expect": {
+    "path": [
+     "route",
+     "fieldname",
+     "done"
+    ],
+    "pending_node": null,
+    "spawn": null,
+    "stopped": "terminal"
+   },
+   "flow": "---\nname: predicates\nstart: route\n---\n\n## route\nRoute on the emitted fields. NB the guards: with every field missing, an unguarded\n`x == true` would be None == None (true) and an unguarded `a not in b` is not-in-on-None\n(satisfied) — both would shadow every later edge. The guards keep each fixture on its\nown branch, which the meta-check below enforces.\n-> chained: when 1 < n < 5\n-> boolnum: when flag == 1\n-> substr: when \"error\" in text\n-> member: when action in (\"contain\", \"watch\")\n-> pyconst: when x == True\n-> fieldname: when x == true and x != None\n-> notin: when a and a not in b\n-> empty: when items\n-> done: else\n\n## chained\n-> route: when visits < 2\n-> done: else\n\n## boolnum\n-> done: always\n\n## substr\n-> done: always\n\n## member\n-> done: always\n\n## pyconst\n-> done: always\n\n## fieldname\n-> done: always\n\n## notin\n-> done: always\n\n## empty\n-> done: always\n\n## done\nDone.\n",
+   "name": "true-is-a-field-name",
+   "script": {
+    "route": [
+     {
+      "text": "r",
+      "true": 7,
+      "x": 7
+     }
+    ]
+   }
+  },
+  {
+   "expect": {
+    "path": [
+     "route",
+     "notin",
+     "done"
+    ],
+    "pending_node": null,
+    "spawn": null,
+    "stopped": "terminal"
+   },
+   "flow": "---\nname: predicates\nstart: route\n---\n\n## route\nRoute on the emitted fields. NB the guards: with every field missing, an unguarded\n`x == true` would be None == None (true) and an unguarded `a not in b` is not-in-on-None\n(satisfied) — both would shadow every later edge. The guards keep each fixture on its\nown branch, which the meta-check below enforces.\n-> chained: when 1 < n < 5\n-> boolnum: when flag == 1\n-> substr: when \"error\" in text\n-> member: when action in (\"contain\", \"watch\")\n-> pyconst: when x == True\n-> fieldname: when x == true and x != None\n-> notin: when a and a not in b\n-> empty: when items\n-> done: else\n\n## chained\n-> route: when visits < 2\n-> done: else\n\n## boolnum\n-> done: always\n\n## substr\n-> done: always\n\n## member\n-> done: always\n\n## pyconst\n-> done: always\n\n## fieldname\n-> done: always\n\n## notin\n-> done: always\n\n## empty\n-> done: always\n\n## done\nDone.\n",
+   "name": "not-in-on-type-error-satisfied",
+   "script": {
+    "route": [
+     {
+      "a": 1,
+      "b": 42,
+      "text": "r"
+     }
+    ]
+   }
+  },
+  {
+   "expect": {
+    "path": [
+     "route",
+     "done"
+    ],
+    "pending_node": null,
+    "spawn": null,
+    "stopped": "terminal"
+   },
+   "flow": "---\nname: predicates\nstart: route\n---\n\n## route\nRoute on the emitted fields. NB the guards: with every field missing, an unguarded\n`x == true` would be None == None (true) and an unguarded `a not in b` is not-in-on-None\n(satisfied) — both would shadow every later edge. The guards keep each fixture on its\nown branch, which the meta-check below enforces.\n-> chained: when 1 < n < 5\n-> boolnum: when flag == 1\n-> substr: when \"error\" in text\n-> member: when action in (\"contain\", \"watch\")\n-> pyconst: when x == True\n-> fieldname: when x == true and x != None\n-> notin: when a and a not in b\n-> empty: when items\n-> done: else\n\n## chained\n-> route: when visits < 2\n-> done: else\n\n## boolnum\n-> done: always\n\n## substr\n-> done: always\n\n## member\n-> done: always\n\n## pyconst\n-> done: always\n\n## fieldname\n-> done: always\n\n## notin\n-> done: always\n\n## empty\n-> done: always\n\n## done\nDone.\n",
+   "name": "empty-list-is-falsy",
+   "script": {
+    "route": [
+     {
+      "items": [],
+      "text": "r"
+     }
+    ]
+   }
+  },
+  {
+   "expect": {
+    "path": [
+     "route",
+     "empty",
+     "done"
+    ],
+    "pending_node": null,
+    "spawn": null,
+    "stopped": "terminal"
+   },
+   "flow": "---\nname: predicates\nstart: route\n---\n\n## route\nRoute on the emitted fields. NB the guards: with every field missing, an unguarded\n`x == true` would be None == None (true) and an unguarded `a not in b` is not-in-on-None\n(satisfied) — both would shadow every later edge. The guards keep each fixture on its\nown branch, which the meta-check below enforces.\n-> chained: when 1 < n < 5\n-> boolnum: when flag == 1\n-> substr: when \"error\" in text\n-> member: when action in (\"contain\", \"watch\")\n-> pyconst: when x == True\n-> fieldname: when x == true and x != None\n-> notin: when a and a not in b\n-> empty: when items\n-> done: else\n\n## chained\n-> route: when visits < 2\n-> done: else\n\n## boolnum\n-> done: always\n\n## substr\n-> done: always\n\n## member\n-> done: always\n\n## pyconst\n-> done: always\n\n## fieldname\n-> done: always\n\n## notin\n-> done: always\n\n## empty\n-> done: always\n\n## done\nDone.\n",
+   "name": "nonempty-list-is-truthy",
+   "script": {
+    "route": [
+     {
+      "items": [
+       1
+      ],
+      "text": "r"
+     }
+    ]
+   }
+  },
+  {
+   "expect": {
+    "path": [
+     "route",
+     "done"
+    ],
+    "pending_node": null,
+    "spawn": null,
+    "stopped": "terminal"
+   },
+   "flow": "---\nname: predicates\nstart: route\n---\n\n## route\nRoute on the emitted fields. NB the guards: with every field missing, an unguarded\n`x == true` would be None == None (true) and an unguarded `a not in b` is not-in-on-None\n(satisfied) — both would shadow every later edge. The guards keep each fixture on its\nown branch, which the meta-check below enforces.\n-> chained: when 1 < n < 5\n-> boolnum: when flag == 1\n-> substr: when \"error\" in text\n-> member: when action in (\"contain\", \"watch\")\n-> pyconst: when x == True\n-> fieldname: when x == true and x != None\n-> notin: when a and a not in b\n-> empty: when items\n-> done: else\n\n## chained\n-> route: when visits < 2\n-> done: else\n\n## boolnum\n-> done: always\n\n## substr\n-> done: always\n\n## member\n-> done: always\n\n## pyconst\n-> done: always\n\n## fieldname\n-> done: always\n\n## notin\n-> done: always\n\n## empty\n-> done: always\n\n## done\nDone.\n",
+   "name": "missing-fields-fall-to-else",
+   "script": {
+    "route": [
+     {
+      "text": "r"
+     }
+    ]
+   }
+  },
+  {
+   "expect": {
+    "path": [
+     "route",
+     "done"
+    ],
+    "pending_node": null,
+    "spawn": null,
+    "stopped": "terminal"
+   },
+   "flow": "---\nname: predicates\nstart: route\n---\n\n## route\nRoute on the emitted fields. NB the guards: with every field missing, an unguarded\n`x == true` would be None == None (true) and an unguarded `a not in b` is not-in-on-None\n(satisfied) — both would shadow every later edge. The guards keep each fixture on its\nown branch, which the meta-check below enforces.\n-> chained: when 1 < n < 5\n-> boolnum: when flag == 1\n-> substr: when \"error\" in text\n-> member: when action in (\"contain\", \"watch\")\n-> pyconst: when x == True\n-> fieldname: when x == true and x != None\n-> notin: when a and a not in b\n-> empty: when items\n-> done: else\n\n## chained\n-> route: when visits < 2\n-> done: else\n\n## boolnum\n-> done: always\n\n## substr\n-> done: always\n\n## member\n-> done: always\n\n## pyconst\n-> done: always\n\n## fieldname\n-> done: always\n\n## notin\n-> done: always\n\n## empty\n-> done: always\n\n## done\nDone.\n",
+   "name": "string-vs-int-ordering-unsatisfied",
+   "script": {
+    "route": [
+     {
+      "n": "three",
+      "text": "r"
+     }
+    ]
+   }
+  },
+  {
+   "expect": {
+    "path": [
+     "route",
+     "boolnum",
+     "done"
+    ],
+    "pending_node": null,
+    "spawn": null,
+    "stopped": "terminal"
+   },
+   "flow": "---\nname: predicates\nstart: route\n---\n\n## route\nRoute on the emitted fields. NB the guards: with every field missing, an unguarded\n`x == true` would be None == None (true) and an unguarded `a not in b` is not-in-on-None\n(satisfied) — both would shadow every later edge. The guards keep each fixture on its\nown branch, which the meta-check below enforces.\n-> chained: when 1 < n < 5\n-> boolnum: when flag == 1\n-> substr: when \"error\" in text\n-> member: when action in (\"contain\", \"watch\")\n-> pyconst: when x == True\n-> fieldname: when x == true and x != None\n-> notin: when a and a not in b\n-> empty: when items\n-> done: else\n\n## chained\n-> route: when visits < 2\n-> done: else\n\n## boolnum\n-> done: always\n\n## substr\n-> done: always\n\n## member\n-> done: always\n\n## pyconst\n-> done: always\n\n## fieldname\n-> done: always\n\n## notin\n-> done: always\n\n## empty\n-> done: always\n\n## done\nDone.\n",
+   "name": "float-int-equality",
+   "script": {
+    "route": [
+     {
+      "flag": 1.0,
+      "text": "r"
+     }
+    ]
+   }
+  },
+  {
+   "expect": {
+    "path": [
+     "route",
+     "chained",
+     "route",
+     "chained",
+     "done"
+    ],
+    "pending_node": null,
+    "spawn": null,
+    "stopped": "terminal"
+   },
+   "flow": "---\nname: predicates\nstart: route\n---\n\n## route\nRoute on the emitted fields. NB the guards: with every field missing, an unguarded\n`x == true` would be None == None (true) and an unguarded `a not in b` is not-in-on-None\n(satisfied) — both would shadow every later edge. The guards keep each fixture on its\nown branch, which the meta-check below enforces.\n-> chained: when 1 < n < 5\n-> boolnum: when flag == 1\n-> substr: when \"error\" in text\n-> member: when action in (\"contain\", \"watch\")\n-> pyconst: when x == True\n-> fieldname: when x == true and x != None\n-> notin: when a and a not in b\n-> empty: when items\n-> done: else\n\n## chained\n-> route: when visits < 2\n-> done: else\n\n## boolnum\n-> done: always\n\n## substr\n-> done: always\n\n## member\n-> done: always\n\n## pyconst\n-> done: always\n\n## fieldname\n-> done: always\n\n## notin\n-> done: always\n\n## empty\n-> done: always\n\n## done\nDone.\n",
+   "name": "visits-loop",
+   "script": {
+    "chained": [
+     {
+      "text": "c"
+     }
+    ],
+    "route": [
+     {
+      "n": 2,
+      "text": "r"
+     }
+    ]
+   }
+  },
+  {
+   "expect": {
+    "path": [
+     "work",
+     "work",
+     "recovered"
+    ],
+    "pending_node": null,
+    "spawn": null,
+    "stopped": "terminal"
+   },
+   "flow": "---\nname: errors\nstart: work\n---\n\n## work\n-> recovered: on error when error_count >= 2\n-> work: on error\n-> done: when ok\n\n## recovered\nRecovered.\n\n## done\nDone.\n",
+   "name": "error-count-escalation",
+   "script": {
+    "work": [
+     {
+      "__raise__": "kapow"
+     },
+     {
+      "__raise__": "kapow again"
+     }
+    ]
+   }
+  },
+  {
+   "expect": {
+    "path": [
+     "work",
+     "work",
+     "done"
+    ],
+    "pending_node": null,
+    "spawn": null,
+    "stopped": "terminal"
+   },
+   "flow": "---\nname: errors\nstart: work\n---\n\n## work\n-> recovered: on error when error_count >= 2\n-> work: on error\n-> done: when ok\n\n## recovered\nRecovered.\n\n## done\nDone.\n",
+   "name": "error-then-success",
+   "script": {
+    "work": [
+     {
+      "__raise__": "once"
+     },
+     {
+      "ok": true,
+      "text": "w"
+     }
+    ]
+   }
+  },
+  {
+   "expect": {
+    "path": [
+     "hold"
+    ],
+    "pending_node": "hold",
+    "spawn": null,
+    "stopped": "waiting"
+   },
+   "flow": "---\nname: waits\nstart: hold\n---\n\n## hold\n-> go: on event ping\n-> bail: on timeout\n\n## go\nDone.\n\n## bail\nBailed.\n",
+   "name": "wait-suspension",
+   "script": {
+    "hold": [
+     {
+      "text": "h",
+      "timeout_s": 60,
+      "wait": true
+     }
+    ]
+   }
+  },
+  {
+   "expect": {
+    "path": [
+     "hold"
+    ],
+    "pending_node": "hold",
+    "spawn": {
+     "child": "x.md",
+     "items": [
+      1,
+      2
+     ]
+    },
+    "stopped": "waiting"
+   },
+   "flow": "---\nname: waits\nstart: hold\n---\n\n## hold\n-> go: on event ping\n-> bail: on timeout\n\n## go\nDone.\n\n## bail\nBailed.\n",
+   "name": "spawn-implies-wait",
+   "script": {
+    "hold": [
+     {
+      "spawn": {
+       "child": "x.md",
+       "items": [
+        1,
+        2
+       ]
+      },
+      "text": "h"
+     }
+    ]
+   }
+  },
+  {
+   "expect": {
+    "path": [
+     "hold"
+    ],
+    "pending_node": "hold",
+    "spawn": null,
+    "stopped": "needs_human"
+   },
+   "flow": "---\nname: waits\nstart: hold\n---\n\n## hold\n-> go: on event ping\n-> bail: on timeout\n\n## go\nDone.\n\n## bail\nBailed.\n",
+   "name": "needs-human",
+   "script": {
+    "hold": [
+     {
+      "needs_human": true,
+      "reason": "?",
+      "text": "h"
+     }
+    ]
+   }
+  },
+  {
+   "expect": {
+    "path": [
+     "go"
+    ],
+    "pending_node": null,
+    "spawn": null,
+    "stopped": "terminal"
+   },
+   "flow": "---\nname: waits\nstart: hold\n---\n\n## hold\n-> go: on event ping\n-> bail: on timeout\n\n## go\nDone.\n\n## bail\nBailed.\n",
+   "name": "resume-reentry-at-event-target",
+   "script": {
+    "go": [
+     {
+      "text": "g"
+     }
+    ]
+   },
+   "start": "go",
+   "state": {
+    "transcript": [],
+    "visits": {
+     "hold": 1
+    }
+   }
+  },
+  {
+   "expect": {
+    "path": [
+     "work"
+    ],
+    "pending_node": null,
+    "spawn": null,
+    "stopped": "stuck"
+   },
+   "flow": "---\nname: errors\nstart: work\n---\n\n## work\n-> recovered: on error when error_count >= 2\n-> work: on error\n-> done: when ok\n\n## recovered\nRecovered.\n\n## done\nDone.\n",
+   "name": "stuck-deterministic-no-match",
+   "script": {
+    "work": [
+     {
+      "ok": false,
+      "text": "w"
+     }
+    ]
+   }
+  },
+  {
+   "expect": {
+    "path": [
+     "spin",
+     "spin",
+     "spin",
+     "spin",
+     "spin",
+     "spin",
+     "spin",
+     "spin",
+     "spin",
+     "spin",
+     "spin"
+    ],
+    "pending_node": null,
+    "spawn": null,
+    "stopped": "max_steps"
+   },
+   "flow": "---\nname: loops\nstart: spin\n---\n\n## spin\n-> spin: when visits < 100\n-> out: else\n\n## out\nDone.\n",
+   "maxSteps": 10,
+   "name": "max-steps",
+   "script": {
+    "spin": [
+     {
+      "text": "s"
+     }
+    ]
+   }
+  },
+  {
+   "expect": {
+    "path": [
+     "route",
+     "review"
+    ],
+    "pending_node": null,
+    "spawn": null,
+    "stopped": "terminal"
+   },
+   "flow": "---\nname: kw\nstart: route\n---\n\n## route\n`class` is a Python hard keyword: this predicate is a PredicateError on BOTH engines, so the\nedge is non-matching and everything falls to else — never a route flip.\n-> quarantine: when class == \"phish\"\n-> review: else\n\n## quarantine\nQ.\n\n## review\nR.\n",
+   "name": "python-keyword-field-name-is-error-both-sides",
+   "script": {
+    "route": [
+     {
+      "class": "phish",
+      "text": "r"
+     }
+    ]
+   }
+  },
+  {
+   "expect": {
+    "path": [
+     "route",
+     "got_true"
+    ],
+    "pending_node": null,
+    "spawn": null,
+    "stopped": "terminal"
+   },
+   "flow": "---\nname: pystr\nstart: route\n---\n\n## route\nA PLAIN (non-dict) outcome becomes `text` via Python str(): True -> \"True\", None -> \"None\".\n-> got_true: when text == \"True\"\n-> got_none: when text == \"None\"\n-> other: else\n\n## got_true\nT.\n\n## got_none\nN.\n\n## other\nO.\n",
+   "name": "plain-bool-outcome-pystr",
+   "script": {
+    "route": [
+     true
+    ]
+   }
+  },
+  {
+   "expect": {
+    "path": [
+     "route",
+     "got_none"
+    ],
+    "pending_node": null,
+    "spawn": null,
+    "stopped": "terminal"
+   },
+   "flow": "---\nname: pystr\nstart: route\n---\n\n## route\nA PLAIN (non-dict) outcome becomes `text` via Python str(): True -> \"True\", None -> \"None\".\n-> got_true: when text == \"True\"\n-> got_none: when text == \"None\"\n-> other: else\n\n## got_true\nT.\n\n## got_none\nN.\n\n## other\nO.\n",
+   "name": "plain-none-outcome-pystr",
+   "script": {
+    "route": [
+     null
+    ]
+   }
+  },
+  {
+   "expect": {
+    "path": [
+     "route",
+     "other"
+    ],
+    "pending_node": null,
+    "spawn": null,
+    "stopped": "terminal"
+   },
+   "flow": "---\nname: pystr\nstart: route\n---\n\n## route\nA PLAIN (non-dict) outcome becomes `text` via Python str(): True -> \"True\", None -> \"None\".\n-> got_true: when text == \"True\"\n-> got_none: when text == \"None\"\n-> other: else\n\n## got_true\nT.\n\n## got_none\nN.\n\n## other\nO.\n",
+   "name": "dict-with-none-text",
+   "script": {
+    "route": [
+     {
+      "text": null
+     }
+    ]
+   }
+  },
+  {
+   "expect": {
+    "path": [
+     "route",
+     "deep"
+    ],
+    "pending_node": null,
+    "spawn": null,
+    "stopped": "terminal"
+   },
+   "flow": "---\nname: parens\nstart: route\n---\n\n## route\nTen nested parens add ZERO AST depth in Python — the port must agree.\n-> deep: when ((((((((((x))))))))))\n-> flat: else\n\n## deep\nD.\n\n## flat\nF.\n",
+   "name": "deep-parens-zero-ast-depth",
+   "script": {
+    "route": [
+     {
+      "text": "r",
+      "x": 1
+     }
+    ]
+   }
+  },
+  {
+   "expect": {
+    "path": [
+     "route",
+     "trap"
+    ],
+    "pending_node": null,
+    "spawn": null,
+    "stopped": "terminal"
+   },
+   "flow": "---\nname: tup\nstart: route\n---\n\n## route\nA bare `when done, verified` is a TUPLE in Python — non-empty, so ALWAYS truthy (a real trap,\nbut parity first; both engines must take it).\n-> trap: when done, verified\n-> safe: else\n\n## trap\nT.\n\n## safe\nS.\n",
+   "name": "top-level-tuple-always-truthy",
+   "script": {
+    "route": [
+     {
+      "text": "r"
+     }
+    ]
+   }
+  }
+ ],
+ "note": "script maps node -> outcomes consumed in visit order (last repeats); {'__raise__': msg} throws. expect is the Python reference engine's result.",
+ "version": 1
+}

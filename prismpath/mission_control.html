@@ -1,0 +1,423 @@
+<!doctype html><html lang=en><head><meta charset=utf-8>
+<meta name=viewport content="width=device-width,initial-scale=1">
+<title>Swarm · Mission Control</title>
+<style>
+:root{--bg:#0a0e16;--panel:#111824;--panel2:#0d131e;--line:#1e2a3a;--ink:#e7eef7;--dim:#8ea3bf;
+--accent:#7cc7ff;--ok:#5fd08a;--bad:#ff8da0;--warn:#e0b25f;--mono:ui-monospace,'JetBrains Mono',Menlo,Consolas,monospace}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+header{position:sticky;top:0;z-index:9;background:#0a0e16ee;backdrop-filter:blur(8px);border-bottom:1px solid var(--line);padding:11px 18px}
+.row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+h1{font-size:15px;font-weight:650;margin:0}.h1 .a{color:var(--accent)}
+.chip{font:12px/1 var(--mono);padding:5px 9px;border:1px solid var(--line);border-radius:999px;background:var(--panel2);color:var(--dim);white-space:nowrap}
+.chip b{color:var(--ink)} .chip.ok{color:var(--ok);border-color:#1f4030}.chip.bad{color:var(--bad);border-color:#43212b}.chip.warn{color:var(--warn);border-color:#473a1e}
+.pulse{width:8px;height:8px;border-radius:50%;background:var(--ok)}
+.tabs{display:flex;gap:4px;margin-top:11px}
+.tab{cursor:pointer;font:13px/1 ui-sans-serif;padding:7px 14px;border-radius:8px 8px 0 0;color:var(--dim);border:1px solid transparent;user-select:none}
+.tab.on{color:var(--ink);background:var(--panel);border-color:var(--line);border-bottom-color:var(--panel)}
+main{max-width:1120px;margin:0 auto;padding:18px}
+.view{display:none}.view.on{display:block}
+.card{border:1px solid var(--line);border-radius:11px;background:var(--panel);padding:14px 16px;margin:10px 0}
+label{font:12px var(--mono);color:var(--dim);display:block;margin:8px 0 3px}
+input,select,textarea{background:var(--panel2);border:1px solid var(--line);border-radius:7px;color:var(--ink);padding:7px 10px;font:13px var(--mono);outline:none;width:100%}
+button{cursor:pointer;font:13px ui-sans-serif;font-weight:600;padding:8px 16px;border-radius:8px;border:1px solid var(--line);background:#16202e;color:var(--ink)}
+button:hover{border-color:var(--accent)} button.go{background:#12351f;border-color:#1f4030;color:var(--ok)}
+button.stop{background:#351418;border-color:#43212b;color:var(--bad)} button.warn{background:#352b14;color:var(--warn);border-color:#473a1e}
+.qbtn{font:12px var(--mono);font-weight:500;padding:4px 10px;border-radius:6px;border:1px solid var(--line);background:var(--panel2);color:var(--ink)}.qbtn:hover{border-color:var(--accent);color:var(--accent)}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.btnrow{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+.icard{border:1px solid var(--line);border-left:3px solid var(--rc,#445);border-radius:10px;margin:8px 0;background:var(--panel)}
+.ihead{display:flex;gap:9px;align-items:center;padding:8px 12px;cursor:pointer;flex-wrap:wrap}
+.badge{font:10px/1 var(--mono);font-weight:700;padding:3px 6px;border-radius:5px;text-transform:uppercase;color:#0a0e16;background:var(--rc,#445)}
+.ibody{display:none;border-top:1px solid var(--line);padding:6px 12px 10px}.icard.open .ibody{display:block}
+pre{margin:6px 0 0;white-space:pre-wrap;word-break:break-word;font:12px/1.5 var(--mono);background:var(--panel2);border:1px solid var(--line);border-radius:7px;padding:9px 11px;max-height:320px;overflow:auto;color:#cdd9ea}
+.flist{font:12px var(--mono);max-height:60vh;overflow:auto}
+.fitem{display:flex;gap:8px;align-items:center;padding:5px 8px;border-radius:6px;cursor:pointer;color:var(--dim)}
+.fitem:hover{background:var(--panel2)}.fitem.sel{background:#16202e;color:var(--ink)}
+.fname{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fsz{flex:none;font-size:11px}
+.fitem.fresh{animation:flash 2.6s ease-out}
+@keyframes flash{0%{background:#12351f;color:var(--ok)}100%{background:transparent}}
+table{width:100%;border-collapse:collapse;font:12px var(--mono)}
+td,th{text-align:left;padding:5px 8px;border-bottom:1px solid var(--line);color:var(--dim)}
+th{color:var(--ink)} .meta{font:11px var(--mono);color:var(--dim)}
+.muted{color:var(--dim);font:12px var(--mono)}
+.flowrow{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.stage{font:12px var(--mono);padding:8px 13px;border:1px solid var(--line);border-radius:8px;background:var(--panel2);color:var(--dim);transition:all .3s}
+.stage.active{background:#16314a;color:var(--accent);border-color:var(--accent)}
+.stage.green{background:#12351f;color:var(--ok);border-color:#1f4030}
+.stage.fail{background:#351418;color:var(--bad);border-color:#43212b}
+.arr{color:#5a6b86;font:14px var(--mono)}
+.backedge{margin-top:10px;font:12px var(--mono);color:var(--bad);min-height:16px}
+.froto{font:11px var(--mono);color:var(--accent)}
+.mtag{padding:1px 6px;border-radius:4px;font-weight:600}
+.m-gemma{background:rgba(120,170,255,.18);color:#9fc2ff}
+.m-qwen{background:rgba(255,170,90,.20);color:#ffb86b}
+.m-doc{background:rgba(150,150,150,.18);color:#bbb}
+.toggle{display:inline-flex;align-items:center;gap:6px;font:12px var(--mono);color:var(--dim)}
+.cites{margin-top:7px;display:flex;gap:6px;flex-wrap:wrap}
+.cite{font:11px var(--mono);color:var(--accent);background:var(--panel2);border:1px solid var(--line);border-radius:6px;padding:2px 7px;cursor:default}
+.dropzone{margin-top:10px;border:1px dashed var(--line);border-radius:8px;padding:14px 10px;text-align:center;font:12px var(--mono);color:var(--dim);transition:all .15s}
+.dropzone.drag{border-color:var(--accent);background:#16202e;color:var(--ink)}
+.lk{color:var(--accent);cursor:pointer;text-decoration:underline}
+</style></head><body>
+<header>
+ <div class=row>
+  <span class=pulse id=pulse></span><h1 class=h1>Swarm <span class=a>· Mission Control</span></h1>
+  <select id=sel-sprint class=chip title="follow a sprint — auto = the live one" style="cursor:pointer;color:var(--ink);max-width:260px"></select><span class=chip id=c-run>—</span><span class=chip id=c-it>—</span>
+  <span class=chip id=c-gate>—</span><span class=chip id=c-files>—</span><span class=chip id=c-help>—</span>
+  <span style=flex:1></span>
+  <span class=chip id=c-user title="signed-in user · role (per-project sandbox)">—</span>
+  <span class=chip id=c-audit title="append-only action log">audit —</span>
+ </div>
+ <div class=tabs id=tabs>
+  <span class="tab on" data-v=control>Control</span><span class=tab data-v=lens>Lens</span><span class=tab data-v=queue>Queue</span>
+  <span class=tab data-v=files>Files</span><span class=tab data-v=chat>Chat</span><span class=tab data-v=audit>Audit</span><span class=tab data-v=agy>agy</span>
+ </div>
+</header>
+<main>
+ <div class="view on" id=v-control>
+  <div class=card>
+   <div class=grid>
+    <div><label>project dir</label><input id=f-proj></div>
+    <div><label>nudge file (the task)</label><input id=f-nudge value="/tmp/tycoon_nudge.md"></div>
+    <div><label>gate</label><select id=f-gate><option>luau</option><option>browser</option></select></div>
+    <div><label>model</label><input id=f-model value=gemma4></div>
+    <div><label>agent backend</label><select id=f-agent><option value=swarm>swarm (5-agent council)</option><option value=served>served (single)</option></select></div>
+    <div><label>executor</label><select id=f-exec><option value=cecli>cecli (diff-edit)</option><option value=agent>agent (whole-file)</option></select></div>
+    <div><label>iteration limit (0 = run until convergence)</label><input id=f-iters value=0 type=number min=0></div>
+    <div style="display:flex;gap:18px;align-items:flex-end;padding-bottom:4px">
+     <span class=toggle><input type=checkbox id=f-rag checked style=width:auto> RAG grounding</span>
+     <span class=toggle><input type=checkbox id=f-lessons checked style=width:auto> lessons</span>
+    </div>
+   </div>
+   <div class=btnrow>
+    <button class=go onclick=startSprint()>▶ Start</button>
+    <button class=warn onclick="act('pause')">⏸ Pause</button>
+    <button onclick="act('resume')">⏵ Resume</button>
+    <button class=stop onclick="act('stop')">■ Stop</button>
+    <span class=muted id=ctl-msg style=align-self:center></span>
+   </div>
+  </div>
+  <div class=card><div class=muted>last gate error</div><pre id=ctl-err>—</pre></div>
+ </div>
+
+ <div class=view id=v-lens>
+  <div class=card id=flowpanel>
+   <div class=flowrow>
+    <span class=stage data-s=propose>Propose</span><span class=arr>→</span>
+    <span class=stage data-s=accept>Accept</span><span class=arr>→</span>
+    <span class=stage data-s=build>Build</span><span class=arr>→</span>
+    <span class=stage data-s=test>Test</span><span class=arr>→</span>
+    <span class=stage data-s=validate>Validate</span><span class=arr>↺</span>
+   </div>
+   <div id=backedge class=backedge></div>
+   <div id=flowrecent class=muted style=margin-top:8px></div>
+  </div>
+  <div class=card id=balancepanel><div class=muted>category balance — even expansion across directions (count · vote/dice weight)</div>
+   <div id=baltree style="margin-top:8px"></div></div>
+  <div id=feed></div><div class=muted id=lens-empty>no interactions yet…</div>
+ </div>
+
+ <div class=view id=v-files>
+  <div class=grid style="grid-template-columns:280px 1fr">
+   <div class=card><div class=muted id=ftitle title="working directory">files</div><div class=flist id=ftree></div>
+    <div id=dropzone class=dropzone>drop files or a folder here, or
+     <label class=lk>choose files<input type=file id=fup accept=".md,.txt,.pdf" multiple hidden></label> ·
+     <label class=lk>choose folder<input type=file id=fupdir webkitdirectory multiple hidden></label>
+     <div style="font-size:11px;margin-top:4px;opacity:.8">.md / .txt / .pdf → added to your docs/ and indexed for chat</div></div>
+    <div class=row style="margin-top:8px;gap:6px">
+     <button id=reidx onclick="reindexDocs(false)" title="rebuild your doc index so chat uses the latest docs">↻ Re-index my docs</button>
+     <span class=muted id=fup-msg style="font-size:11px;align-self:center"></span></div>
+   </div>
+   <div class=card>
+    <div class=row><span class=muted id=fpath>select a file</span><span style=flex:1></span>
+     <button onclick=saveFile() id=fsave style=display:none>Save</button></div>
+    <textarea id=feditor rows=22 style="margin-top:8px;font-size:12px" spellcheck=false oninput=markDirty()></textarea>
+   </div>
+  </div>
+ </div>
+
+ <div class=view id=v-chat>
+  <div class=card>
+   <div class=row><span class=muted id=chat-sub>grounded chat — your project's docs ground every answer (gemma4)</span>
+    <span style=flex:1></span>
+    <button onclick=clearChat() title="clear this conversation">Clear chat</button></div>
+   <div id=chatlog style="margin:10px 0;max-height:50vh;overflow:auto"></div>
+   <div class=row><textarea id=chatbox rows=2 placeholder="ask anything…  (Ctrl/⌘+Enter to send)"
+     onkeydown="if(event.key==='Enter'&&(event.ctrlKey||event.metaKey)){event.preventDefault();sendChat();}"></textarea>
+    <button class=go onclick=sendChat() style=align-self:flex-end>Send</button></div>
+  </div>
+ </div>
+
+ <div class=view id=v-audit>
+  <div class=card>
+   <div class=row><span class=chip id=a-root>root —</span><span class=chip id=a-verify>—</span>
+    <span class=muted>every action is recorded in an append-only log</span></div>
+   <table style=margin-top:8px><thead><tr><th>#</th><th>time</th><th>actor</th><th>action</th><th>data</th><th>proof</th></tr></thead>
+    <tbody id=audit-rows></tbody></table>
+  </div>
+ </div>
+
+ <div class=view id=v-agy>
+  <div class=card>
+   <div class=row><span class=chip id=agy-count>—</span>
+    <span class=muted>frontier junior-dev runs launched via <code>agy-run</code> — live. click a run to stream its log.</span></div>
+   <div class=grid style="grid-template-columns:minmax(220px,290px) 1fr;gap:12px;margin-top:8px">
+    <div id=agy-list style="max-height:520px;overflow:auto"><div class=muted>loading…</div></div>
+    <div>
+     <div class=row style=margin-bottom:6px>
+      <span class=chip id=agy-sel-status>—</span><span class=muted id=agy-sel-label style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
+      <span style=flex:1></span>
+      <span class="tab on" data-w=log onclick="agySetWhich('log')">live log</span><span class=tab data-w=out onclick="agySetWhich('out')">output</span>
+     </div>
+     <pre id=agy-log style=max-height:480px>select a run to watch</pre>
+    </div>
+   </div>
+  </div>
+ </div>
+ <div class=view id=v-queue>
+  <div class=card>
+   <div class=row><span class=chip id=q-count>—</span>
+    <span class=muted>runs suspended for a human decision — the evidence packet and the confidence scores that asked for you. pick an edge to record the decision; the owning run resumes on it.</span></div>
+   <div id=queue-list style="margin-top:10px"><div class=muted>loading…</div></div>
+  </div>
+ </div>
+</main>
+<script>
+const RC={architect:'#8b9cff',coder:'#5fd08a','test-author':'#e0b25f',fixer:'#ff8da0',critic:'#5fc8e0',retriever:'#9bd9a0',dice:'#f5c451',build:'#b48bff',fix:'#ff9e7a','?':'#5a6b86'};
+const $=s=>document.querySelector(s), esc=s=>(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmtTs=t=>{if(!t)return'';const d=new Date(t*1000);return d.toLocaleTimeString([],{hour12:false})+'.'+String(d.getMilliseconds()).padStart(3,'0').slice(0,2);};
+let TAB='control', openK=new Set(), filesSig='', filesLoaded=false, curFile=null, curMtime=0, dirty=false;
+document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{TAB=t.dataset.v;
+ document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('on',x===t));
+ document.querySelectorAll('.view').forEach(v=>v.classList.toggle('on',v.id==='v-'+TAB));
+ if(TAB==='files')loadFiles(true); if(TAB==='audit')loadAudit(); if(TAB==='agy')tickAgy(); if(TAB==='queue')loadQueue(); if(TAB==='lens'){tickLens();tickFlow();tickBalance();}});
+function chip(id,txt,cls){const e=$('#'+id);e.textContent=txt;e.className='chip'+(cls?' '+cls:'');}
+async function jget(u){return (await fetch(u)).json();}
+async function jpost(u,b){return (await fetch(u,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b||{})})).json();}
+
+// --- agy tab: watch frontier junior-dev runs live -----------------------------
+let agySel=null, agyWhich='log', agyOff=0;
+const AGY_C={running:'#f5c451',done:'#5fd08a',failed:'#ff8da0',stale:'#8ea3bf'};
+function agyElapsed(r){const s=r.status==='running'?Math.max(0,Math.floor(Date.now()/1000-r.start)):r.dur;
+ if(s==null)return'';return s<60?s+'s':Math.floor(s/60)+'m'+String(Math.round(s%60)).padStart(2,'0')+'s';}
+function agyRow(r){const c=AGY_C[r.status]||'#5a6b86';const el=agyElapsed(r);
+ return `<div class="fitem${r.id===agySel?' sel':''}" style="border-left:3px solid ${c}" onclick="agySelect('${r.id}')">
+  <div class=row><span style="color:${c};font:11px var(--mono)">${r.status}${r.status==='running'?' ●':''}</span>
+   <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.label||r.id)}</span></div>
+  <div class=muted style=font-size:11px>${(r.start_iso||'').slice(11)||''} · ${el}${r.exit?` · rc=${r.exit}`:''}</div></div>`;}
+function agySelect(id){agySel=id;agyOff=0;$('#agy-log').textContent='';tickAgy();}
+function agySetWhich(w){agyWhich=w;agyOff=0;$('#agy-log').textContent='';
+ document.querySelectorAll('#v-agy .tab[data-w]').forEach(x=>x.classList.toggle('on',x.dataset.w===w));tickAgy();}
+async function tickAgy(){if(TAB!=='agy')return;let d;try{d=await jget('/api/agy/runs');}catch(e){return;}
+ if(d.error){$('#agy-list').innerHTML='<div class=muted>'+esc(d.error)+'</div>';return;}
+ const runs=d.runs||[];chip('agy-count',runs.length+' run'+(runs.length===1?'':'s'));
+ if(!agySel&&runs.length)agySel=runs[0].id;
+ $('#agy-list').innerHTML=runs.length?runs.map(agyRow).join(''):'<div class=muted>no agy runs yet — launch one via <code>agy-run "&lt;task&gt;"</code></div>';
+ if(!agySel)return;const sel=runs.find(r=>r.id===agySel);
+ if(sel){const c=AGY_C[sel.status]||'#5a6b86';const e=$('#agy-sel-status');e.textContent=sel.status;e.className='chip';e.style.color=c;e.style.borderColor=c;
+  $('#agy-sel-label').textContent=sel.label||sel.id;}
+ let l;try{l=await jget('/api/agy/log?id='+encodeURIComponent(agySel)+'&which='+agyWhich+'&offset='+agyOff);}catch(e){return;}
+ if(l&&!l.error){const pre=$('#agy-log');const bot=pre.scrollTop+pre.clientHeight>=pre.scrollHeight-30;
+  if(agyOff===0&&!l.content&&pre.textContent==='')pre.textContent=(agyWhich==='out'?'(no output yet)':'(waiting for agy…)');
+  if(l.content){if(pre.textContent==='(waiting for agy…)'||pre.textContent==='(no output yet)')pre.textContent='';pre.textContent+=l.content;}
+  agyOff=l.next!=null?l.next:agyOff;if(bot)pre.scrollTop=pre.scrollHeight;}}
+
+function fillSprints(s){const sel=$('#sel-sprint');if(document.activeElement===sel)return; // don't fight the user mid-open
+ const opts=[`<option value="" ${!s.pinned?'selected':''}>◉ auto — follow live${s.pinned?'':' ('+esc(s.proj||'—')+')'}</option>`];
+ (s.sprints||[]).forEach(sp=>{const tag=sp.running?'● ':(sp.done?'✓ ':'○ ');const it=sp.iteration!=null?' · it'+sp.iteration:'';
+  const seld=(s.pinned&&sp.proj===s.dir)?'selected':'';
+  opts.push(`<option value="${esc(sp.proj)}" ${seld}>${tag}${esc(sp.name)}${it}${sp.running?'':' · '+Math.round(sp.age)+'s'}</option>`);});
+ sel.innerHTML=opts.join('');}
+async function tickStatus(){try{const s=await jget('/api/status');
+ fillSprints(s);
+ chip('c-run', s.paused?'PAUSED':(s.running?'RUNNING':'idle'), s.paused?'warn':(s.running?'ok':''));
+ chip('c-it','it '+(s.iteration??'—')); chip('c-gate', s.valid?'gate GREEN':'gate RED', s.valid?'ok':'bad');
+ chip('c-files','files '+(s.files??'—')); chip('c-help', s.help_open?('HELP #'+s.help_open):'no help', s.help_open?'warn':'');
+ chip('c-audit','audit '+(s.audit_root||'—')+' ('+(s.audit_n||0)+')');
+ if(s.user){chip('c-user',s.user+(s.role?(' · '+s.role):''), s.role==='operator'?'':'warn');}
+ const cs=$('#chat-sub'); if(cs) cs.textContent='grounded chat — answers grounded on '+(s.proj||'your project')+' docs (gemma4)';
+ const rx=s.reindex||{},btn=$('#reidx'),fm=$('#fup-msg');
+ if(!uploading&&fm){if(rx.running){if(btn)btn.disabled=true;fm.innerHTML='<span style=color:var(--accent)>● indexing your docs…</span>';}
+  else{if(btn)btn.disabled=false;
+   if(rx.error)fm.innerHTML='<span style=color:var(--bad)>✗ index: '+esc(rx.error)+'</span>';
+   else if(rx.chunks)fm.innerHTML='<span style=color:var(--ok)>✓ indexed '+rx.docs+' docs · '+rx.chunks+' chunks</span>';}}
+ $('#ctl-err').textContent=s.last_error||'—'; $('#pulse').style.background='var(--ok)';
+ if(!$('#f-proj').value && s.proj) $('#f-proj').value='/tmp/'+s.proj;
+}catch(e){$('#pulse').style.background='var(--bad)';}}
+
+function modelCls(to){to=to||'';if(to.indexOf('qwen')>=0)return 'm-qwen';if(to.indexOf('gemma')>=0)return 'm-gemma';return 'm-doc';}
+async function tickLens(){if(TAB!=='lens')return;const d=await jget('/api/interactions');
+ const evs=d.events||[]; $('#lens-empty').style.display=evs.length?'none':'block';
+ $('#feed').innerHTML=evs.slice().reverse().map(e=>{const rc=RC[e.role]||RC[e.kind]||RC['?'],k=(e.ts||'')+e.kind+e.prompt_len,op=openK.has(k)?' open':'';
+  return `<div class="icard${op}" data-k="${esc(k)}" style="--rc:${rc}"><div class=ihead onclick=tog(this)>
+   <span class=badge>${esc(e.kind)}</span>
+   <span class=froto>${esc(e.from||e.role)} → <span class="mtag ${modelCls(e.to)}">${esc(e.to||'LLM')}</span></span>
+   <span class=meta>${esc(e.substage||e.phase||'')}${e.rc!=null?' · rc='+e.rc:''}</span>
+   <span class=meta>↑${e.prompt_len||0} ↓${e.output_len||0}</span><span style=flex:1></span>
+   <span class=meta>${e.dur_ms?(e.dur_ms<1000?e.dur_ms+'ms':(e.dur_ms/1000).toFixed(1)+'s'):''}</span>
+   <span class=meta style=margin-left:8px>${fmtTs(e.ts)}</span></div>
+   <div class=ibody><pre>${esc(e.prompt)}</pre><pre style=color:#bfe6cf>${esc(e.output)}</pre></div></div>`;}).join('');}
+function tog(h){const c=h.parentElement,k=c.dataset.k;c.classList.toggle('open');c.classList.contains('open')?openK.add(k):openK.delete(k);}
+
+function markDirty(){dirty=true;}
+async function loadFiles(force){let d;try{d=await jget('/api/files');}catch(e){return;}
+ const files=d.files||[];
+ const sig=files.map(f=>f.path+':'+f.size+':'+f.mtime).join('|');
+ if(sig===filesSig&&!force)return;                 // unchanged -> skip re-render (no flicker, keeps scroll)
+ const firstLoad=!filesLoaded; filesLoaded=true;   // distinct from "loaded an empty list" (filesSig='')
+ const prev=new Set(filesSig?filesSig.split('|').map(x=>x.split(':')[0]):[]);
+ filesSig=sig;
+ $('#ftitle').textContent='files ('+files.length+')  ·  '+(d.dir||d.proj||'');
+ $('#ftree').innerHTML=files.map(f=>{const fresh=!firstLoad&&!prev.has(f.path);
+  const szc=f.size===0?'var(--bad)':'var(--dim)';
+  return `<div class="fitem${f.path===curFile?' sel':''}${fresh?' fresh':''}" data-path="${esc(f.path)}"><span class=fname>${esc(f.path)}</span><span class=fsz style=color:${szc}>${f.size}b</span></div>`;}).join('');
+ // live-refresh the OPEN file if it changed on disk — but never clobber the user's unsaved edits
+ if(curFile&&!dirty){const cur=files.find(f=>f.path===curFile);if(cur&&cur.mtime!==curMtime)openFile(curFile);}}
+async function openFile(p,el){curFile=p;dirty=false;
+ if(el)document.querySelectorAll('.fitem').forEach(x=>x.classList.toggle('sel',x===el));
+ const d=await jget('/api/file?path='+encodeURIComponent(p));
+ if(d.error!==undefined){$('#fpath').textContent=p+'  ✗ '+d.error;$('#feditor').value='';$('#fsave').style.display='none';return;}
+ $('#fpath').textContent=p;$('#feditor').value=d.content||'';$('#feditor').dataset.path=p;
+ curMtime=d.mtime||0;$('#fsave').style.display='inline-block';}
+async function saveFile(){const p=$('#feditor').dataset.path;if(!p)return;
+ const r=await jpost('/api/file',{path:p,content:$('#feditor').value});
+ dirty=false;if(r&&r.mtime)curMtime=r.mtime;$('#fpath').textContent=p+'  ✓ saved';}
+async function tickFiles(){if(TAB!=='files')return;await loadFiles(false);}
+
+async function sendChat(){const m=$('#chatbox').value.trim();if(!m)return;$('#chatbox').value='';
+ const log=$('#chatlog');log.innerHTML+=`<div style="margin:6px 0"><span class=muted>you ›</span> ${esc(m)}</div>`;
+ const id='r'+Date.now();
+ log.innerHTML+=`<div id=${id} style="margin:6px 0 14px"><span class=muted>gemma4 ›</span> <span id=${id}-t class=muted>thinking…</span><span id=${id}-c></span></div>`;
+ log.scrollTop=log.scrollHeight;
+ const tEl=document.getElementById(id+'-t'); let acc='';
+ const paint=()=>{tEl.className='';tEl.innerHTML='<pre>'+esc(acc)+'</pre>';log.scrollTop=log.scrollHeight;};
+ try{
+  const resp=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:m,stream:true})});
+  const reader=resp.body.getReader(),dec=new TextDecoder(); let buf='';
+  for(;;){const {value,done}=await reader.read();if(done)break;
+   buf+=dec.decode(value,{stream:true});
+   let nl;while((nl=buf.indexOf('\n\n'))>=0){const line=buf.slice(0,nl).trim();buf=buf.slice(nl+2);
+    if(!line.startsWith('data:'))continue;
+    let j;try{j=JSON.parse(line.slice(5).trim());}catch(e){continue;}
+    if(j.delta){acc+=j.delta;paint();}
+    else if(j.error){tEl.className='';tEl.innerHTML='<pre style=color:var(--bad)>'+esc(j.error)+'</pre>';}
+    else if(j.done){renderCites(id+'-c',j.citations);}}
+  }
+  if(acc==='')tEl.textContent='(no response)';
+ }catch(e){tEl.className='';tEl.innerHTML='<pre style=color:var(--bad)>'+esc(''+e)+'</pre>';}
+ log.scrollTop=log.scrollHeight;}
+function renderCites(elId,cits){const el=document.getElementById(elId);if(!el||!cits||!cits.length)return;
+ el.innerHTML='<div class=cites>'+cits.map(c=>`<span class=cite title="relevance ${c.score}">${esc(c.source||'')}/${esc(c.path||'')}</span>`).join('')+'</div>';}
+async function clearChat(){await jpost('/api/chat/reset',{});$('#chatlog').innerHTML='';}
+let uploading=false;
+function fileB64(f){return new Promise((res,rej)=>{const r=new FileReader();
+ r.onload=()=>{const s=r.result;res(s.slice(s.indexOf(',')+1));};r.onerror=rej;r.readAsDataURL(f);});}
+async function uploadOne(relPath,f){const ext=(relPath.split('.').pop()||'').toLowerCase();
+ if(!['md','txt','pdf'].includes(ext))return {skipped:true};
+ return jpost('/api/upload',{name:relPath,content_b64:await fileB64(f)});}
+async function uploadItems(items){const msg=$('#fup-msg');
+ if(!items.length){msg.textContent='nothing to upload';return;}
+ uploading=true;let ok=0,skip=0,fail=0;
+ for(const it of items){msg.textContent='uploading '+it.path+'…';
+  let r;try{r=await uploadOne(it.path,it.file);}catch(e){fail++;continue;}
+  if(r&&r.ok)ok++;else if(r&&r.skipped)skip++;else fail++;}
+ msg.innerHTML=`<span style=color:var(--ok)>✓ ${ok} uploaded</span>`+(skip?` · ${skip} skipped`:'')+(fail?` · <span style=color:var(--bad)>${fail} failed</span>`:'');
+ uploading=false;filesSig='';loadFiles(true);
+ if(ok)reindexDocs(true);}                          // auto-rebuild the index after a successful batch
+function itemsFromInput(inp){return Array.from(inp.files||[]).map(f=>({path:f.webkitRelativePath||f.name,file:f}));}
+async function readAll(reader){let out=[];for(;;){const b=await new Promise(r=>reader.readEntries(r,()=>r([])));if(!b.length)break;out=out.concat(b);}return out;}
+async function entryItems(entry,prefix){const items=[];
+ if(entry.isFile){await new Promise(res=>entry.file(f=>{items.push({path:(prefix||'')+entry.name,file:f});res();},()=>res()));}
+ else if(entry.isDirectory){for(const e of await readAll(entry.createReader()))items.push(...await entryItems(e,(prefix||'')+entry.name+'/'));}
+ return items;}
+async function reindexDocs(auto){const btn=$('#reidx'),msg=$('#fup-msg');
+ let r;try{r=await jpost('/api/reindex',{});}catch(e){msg.innerHTML='<span style=color:var(--bad)>✗ '+esc(''+e)+'</span>';return;}
+ if(r&&r.ok){if(btn)btn.disabled=true;if(!auto)msg.innerHTML='<span style=color:var(--accent)>● indexing your docs…</span>';}
+ else{msg.innerHTML='<span style=color:var(--bad)>✗ '+esc((r&&r.error)||'reindex failed')+'</span>';}}
+
+async function startSprint(){const cfg={proj:$('#f-proj').value,nudge_file:$('#f-nudge').value,gate:$('#f-gate').value,
+ model:$('#f-model').value,agent:$('#f-agent').value,exec:$('#f-exec').value,
+ max_iters:+$('#f-iters').value,seconds:0,rag:$('#f-rag').checked,lessons:$('#f-lessons').checked};
+ const r=await jpost('/api/sprint/start',cfg);$('#ctl-msg').textContent=r.ok?('started pid '+r.pid):('✗ '+(r.error||''));}
+async function act(a){const r=await jpost('/api/sprint/'+a,{});$('#ctl-msg').textContent=a+(r.ok?' ✓':' ✗');}
+
+async function loadAudit(){const d=await jget('/api/audit');chip('a-root','root '+(d.root||'').slice(0,24)+'…');
+ chip('a-verify', d.verify&&d.verify.ok?'✓ intact ('+d.verify.n+')':'✗ TAMPER', d.verify&&d.verify.ok?'ok':'bad');
+ $('#audit-rows').innerHTML=(d.events||[]).slice().reverse().map(e=>{const t=new Date(e.ts*1000).toLocaleTimeString([],{hour12:false});
+  return `<tr style=cursor:pointer onclick=proveEvent(${e.idx})><td>${e.idx}</td><td>${t}</td><td>${esc(e.actor)}</td><td style=color:var(--ink)>${esc(e.action)}</td><td>${esc(JSON.stringify(e.data)).slice(0,80)}</td><td id=pf-${e.idx} class=muted>·</td></tr>`;}).join('');}
+async function proveEvent(i){const el=document.getElementById('pf-'+i);if(el)el.textContent='…';
+ const d=await jget('/api/audit/proof?i='+i);if(!el)return;
+ el.innerHTML=d.verified?`<span style=color:var(--ok)>✓ proven (${d.path_len} hops → ${d.root})</span>`:'<span style=color:var(--bad)>✗ unproven</span>';}
+
+const STMAP={propose:'propose',accept:'accept',build:'build',fix:'build',validate:'validate',test:'test'};
+async function tickFlow(){if(TAB!=='lens')return;let f;try{f=await jget('/api/flow');}catch(e){return;}
+ const active=STMAP[f.stage]||'propose';
+ document.querySelectorAll('.stage').forEach(s=>s.className='stage'+(s.dataset.s===active?' active':''));
+ if(f.gate_valid){const v=document.querySelector('.stage[data-s=validate]');if(v)v.className='stage green';}
+ let be='';
+ if(!f.gate_valid&&f.fail_kind){const n=f.fail_kind==='test'?'test':'validate';const el=document.querySelector('.stage[data-s='+n+']');if(el)el.className='stage fail';
+  be=`↩ ${f.fail_kind} failed → back to Build/Fix${f.reason?'  ·  '+esc(f.reason):''}`;}
+ if(f.help_open)be=`⚠ blocked — HELP #${f.help_open} awaiting supervisor`+(be?'  ·  '+be:'');
+ $('#backedge').textContent=be;
+ $('#flowrecent').innerHTML=(f.recent||[]).map(r=>esc(r)).join('  ›  ');}
+async function tickBalance(){if(TAB!=='lens')return;let d;try{d=await jget('/api/balance');}catch(e){return;}
+ const cats=d.categories||[],mx=Math.max(1,...cats.map(c=>c.count));
+ $('#baltree').innerHTML=cats.map(c=>{const pct=Math.round(100*c.count/mx);
+  const wc=c.weight>1.15?'var(--ok)':(c.weight<0.85?'var(--bad)':'var(--dim)');
+  return `<div style="display:flex;align-items:center;gap:8px;margin:3px 0;font:11px var(--mono)">
+   <span style="width:160px;color:var(--dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.name)}</span>
+   <span style="flex:1;background:var(--panel2);border-radius:4px;overflow:hidden"><span style="display:block;height:12px;width:${pct}%;background:#3a5a8a"></span></span>
+   <span style="width:24px;text-align:right">${c.count}</span>
+   <span style="width:46px;text-align:right;color:${wc}">×${c.weight}</span></div>`;}).join('')
+  ||'<span class=muted>no categories chosen yet…</span>';}
+$('#ftree').onclick=e=>{const it=e.target.closest('.fitem');if(it)openFile(it.dataset.path,it);};
+$('#fup').onchange=e=>{uploadItems(itemsFromInput(e.target));e.target.value='';};
+$('#fupdir').onchange=e=>{uploadItems(itemsFromInput(e.target));e.target.value='';};
+(()=>{const dz=$('#dropzone');if(!dz)return;
+ dz.ondragover=e=>{e.preventDefault();dz.classList.add('drag');};
+ dz.ondragleave=()=>dz.classList.remove('drag');
+ dz.ondrop=async e=>{e.preventDefault();dz.classList.remove('drag');const dt=e.dataTransfer;let items=[];
+  const ents=[];if(dt.items){for(const it of dt.items){const en=it.webkitGetAsEntry&&it.webkitGetAsEntry();if(en)ents.push(en);}}
+  if(ents.length){for(const en of ents)items.push(...await entryItems(en,''));}
+  else{items=Array.from(dt.files||[]).map(f=>({path:f.name,file:f}));}
+  uploadItems(items);};})();
+$('#sel-sprint').onchange=async e=>{const v=e.target.value;
+ if(v) await jpost('/api/sprint/select',{proj:v}); else await jpost('/api/sprint/auto',{});
+ filesSig='';filesLoaded=false;curFile=null; tickStatus();if(TAB==='files')loadFiles(true);};
+// --- queue tab: runs suspended for a human decision (ask-a-human) -------------
+async function loadQueue(){
+ let d;try{d=await jget('/api/queue');}catch(e){return;}
+ const items=(d&&d.items)||[];
+ chip('q-count', items.length? items.length+' awaiting' : 'none awaiting');
+ const box=$('#queue-list');
+ if(!items.length){box.innerHTML='<div class=muted>no runs are waiting on a human</div>';return;}
+ box.innerHTML=items.map(it=>{
+  const cands=(it.candidates||[]).map(c=>{
+   const sc=(c.score!==null&&c.score!==undefined)?' <span class=muted>'+Number(c.score).toFixed(3)+'</span>':'';
+   if(it.decision){const on=it.decision.choose===c.target?' style="border-color:var(--accent);color:var(--accent)"':'';
+    return '<span class=qbtn'+on+'>'+esc(c.target)+sc+'</span>';}
+   return '<button class=qbtn onclick="decideQueue(\''+esc(it.id)+'\',\''+esc(c.target)+'\')">'+esc(c.target)+sc+'</button>';
+  }).join(' ');
+  const badge=it.decision
+   ? '<span class="chip ok">decided \u2192 '+esc(it.decision.choose)+' \u00b7 awaiting resume</span>'
+   : '<span class="chip warn">needs human</span>';
+  return '<div class=card style="margin:0 0 8px">'
+   +'<div class=row style="gap:8px;flex-wrap:wrap">'+badge
+   +'<b>'+esc(it.flow)+'</b><span class=muted>node</span><code>'+esc(it.node||'')+'</code>'
+   +'<span style=flex:1></span><span class=muted>'+fmtTs(it.ts)+'</span></div>'
+   +(it.reason?'<div class=muted style="margin:5px 0 7px">'+esc(it.reason)+'</div>':'')
+   +'<div class=row style="gap:6px;flex-wrap:wrap">'+cands+'</div></div>';
+ }).join('');
+}
+async function decideQueue(id,choose){
+ const r=await jpost('/api/queue/decide',{id:id,choose:choose});
+ if(r&&r.ok){loadQueue();}else{alert('decide failed: '+((r&&r.error)||'unknown'));}
+}
+tickStatus();setInterval(tickStatus,2000);setInterval(tickLens,2000);setInterval(tickFlow,2500);
+setInterval(tickFiles,2000);setInterval(tickBalance,2500);
+setInterval(()=>{if(TAB==='audit')loadAudit();},4000);
+setInterval(()=>{if(TAB==='agy')tickAgy();},2000);
+setInterval(()=>{if(TAB==='queue')loadQueue();},3000);
+</script></body></html>

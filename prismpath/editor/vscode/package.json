@@ -1,0 +1,52 @@
+{
+  "name": "prismpath-flows",
+  "displayName": "prismpath flows",
+  "description": "Editor surface for prismpath flow files: tier-aware edge highlighting, a live playground preview (the conformance-tested JS kernel — no Python needed), and validate-on-save diagnostics.",
+  "version": "0.1.0",
+  "publisher": "prismpath",
+  "license": "Apache-2.0",
+  "engines": { "vscode": "^1.85.0" },
+  "categories": ["Programming Languages", "Visualization", "Linters"],
+  "main": "./extension.js",
+  "activationEvents": ["onLanguage:markdown"],
+  "contributes": {
+    "grammars": [
+      {
+        "scopeName": "markdown.prismpath.injection",
+        "path": "./syntaxes/prismpath.injection.json",
+        "injectTo": ["text.html.markdown"]
+      }
+    ],
+    "commands": [
+      {
+        "command": "prismpath.openPreview",
+        "title": "Flow: Open Preview",
+        "icon": "$(open-preview)"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "prismpath.openPreview",
+          "when": "editorLangId == markdown",
+          "group": "navigation"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "prismpath",
+      "properties": {
+        "prismpath.validateCommand": {
+          "type": "string",
+          "default": "prismpath validate",
+          "markdownDescription": "Command run on save against flow files (`<cmd> <file> --json`); findings become squiggles on their `## node` lines. Clear it to disable. Use `python3 -m prismpath.cli validate` if `prismpath` is not on PATH. The preview needs NO Python — this is the one optional Python touchpoint."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "sync": "node scripts/sync.mjs",
+    "vscode:prepublish": "node scripts/sync.mjs",
+    "test": "node --test test/*.test.mjs && node --check extension.js && node --check scripts/sync.mjs"
+  }
+}

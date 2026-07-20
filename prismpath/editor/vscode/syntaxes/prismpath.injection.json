@@ -1,0 +1,94 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "scopeName": "markdown.prismpath.injection",
+  "injectionSelector": "L:text.html.markdown",
+  "name": "prismpath flow edges (Markdown injection)",
+  "patterns": [
+    { "include": "#edge-error" },
+    { "include": "#edge-event" },
+    { "include": "#edge-deterministic" },
+    { "include": "#edge-always" },
+    { "include": "#edge-semantic" },
+    { "include": "#annotation" }
+  ],
+  "repository": {
+    "edge-deterministic": {
+      "comment": "-> target: when <predicate>   (the free, exact tier)",
+      "match": "^\\s*(->)\\s*([A-Za-z_][\\w-]*)\\s*(:)\\s*(when)\\b(.*)$",
+      "captures": {
+        "1": { "name": "keyword.operator.arrow.prismpath" },
+        "2": { "name": "entity.name.function.target.prismpath" },
+        "3": { "name": "punctuation.separator.prismpath" },
+        "4": { "name": "keyword.control.when.prismpath" },
+        "5": { "name": "source.predicate.prismpath", "patterns": [
+          { "match": "\\b(and|or|not|in)\\b", "name": "keyword.operator.logical.prismpath" },
+          { "match": "==|!=|<=|>=|<|>", "name": "keyword.operator.comparison.prismpath" },
+          { "match": "\\b(true|false)\\b", "name": "constant.language.boolean.prismpath" },
+          { "match": "\\b\\d+(\\.\\d+)?\\b", "name": "constant.numeric.prismpath" },
+          { "match": "\"[^\"]*\"|'[^']*'", "name": "string.quoted.prismpath" }
+        ] }
+      }
+    },
+    "edge-error": {
+      "comment": "-> target: on error [when …]   (the failure tier)",
+      "match": "^\\s*(->)\\s*([A-Za-z_][\\w-]*)\\s*(:)\\s*(on\\s+error)\\b(.*)$",
+      "captures": {
+        "1": { "name": "keyword.operator.arrow.prismpath" },
+        "2": { "name": "entity.name.function.target.prismpath" },
+        "3": { "name": "punctuation.separator.prismpath" },
+        "4": { "name": "keyword.control.exception.prismpath" },
+        "5": { "name": "source.predicate.prismpath", "patterns": [
+          { "match": "\\b(when|and|or|not)\\b", "name": "keyword.control.when.prismpath" },
+          { "match": "==|!=|<=|>=|<|>", "name": "keyword.operator.comparison.prismpath" },
+          { "match": "\\b\\d+(\\.\\d+)?\\b", "name": "constant.numeric.prismpath" }
+        ] }
+      }
+    },
+    "edge-event": {
+      "comment": "-> target: on event <name> | on timeout   (the suspension tier)",
+      "match": "^\\s*(->)\\s*([A-Za-z_][\\w-]*)\\s*(:)\\s*(on\\s+(?:event|timeout))\\b\\s*([\\w-]*)\\s*$",
+      "captures": {
+        "1": { "name": "keyword.operator.arrow.prismpath" },
+        "2": { "name": "entity.name.function.target.prismpath" },
+        "3": { "name": "punctuation.separator.prismpath" },
+        "4": { "name": "keyword.control.event.prismpath" },
+        "5": { "name": "variable.parameter.event-name.prismpath" }
+      }
+    },
+    "edge-always": {
+      "comment": "-> target: always   (the deterministic catch-all)",
+      "match": "^\\s*(->)\\s*([A-Za-z_][\\w-]*)\\s*(:)\\s*(always)\\s*$",
+      "captures": {
+        "1": { "name": "keyword.operator.arrow.prismpath" },
+        "2": { "name": "entity.name.function.target.prismpath" },
+        "3": { "name": "punctuation.separator.prismpath" },
+        "4": { "name": "constant.language.always.prismpath" }
+      }
+    },
+    "edge-semantic": {
+      "comment": "-> target: <natural-language condition>   (the embedding tier — italic string)",
+      "match": "^\\s*(->)\\s*([A-Za-z_][\\w-]*)\\s*(:)\\s*(\\S.*)$",
+      "captures": {
+        "1": { "name": "keyword.operator.arrow.prismpath" },
+        "2": { "name": "entity.name.function.target.prismpath" },
+        "3": { "name": "punctuation.separator.prismpath" },
+        "4": { "name": "string.unquoted.semantic-condition.prismpath markup.italic" }
+      }
+    },
+    "annotation": {
+      "comment": "@checkpoint(...) @spawn(...) @worker(...) @state_bound(...) @emits(...) …",
+      "match": "^\\s*(@[A-Za-z_][\\w]*)(\\()([^)]*)(\\))\\s*$",
+      "captures": {
+        "1": { "name": "storage.type.annotation.prismpath" },
+        "2": { "name": "punctuation.definition.annotation.begin.prismpath" },
+        "3": { "name": "variable.parameter.annotation-args.prismpath", "patterns": [
+          { "match": "([\\w.]+)\\s*(=)", "captures": {
+            "1": { "name": "variable.parameter.key.prismpath" },
+            "2": { "name": "keyword.operator.assignment.prismpath" } } },
+          { "match": "\\b\\d+(\\.\\d+)?\\b", "name": "constant.numeric.prismpath" }
+        ] },
+        "4": { "name": "punctuation.definition.annotation.end.prismpath" }
+      }
+    }
+  }
+}

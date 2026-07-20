@@ -1,0 +1,78 @@
+name: "prismpath — validate and test flows"
+description: >-
+  Lint agent-workflow Markdown flows (static analysis, "your flow compiles") and assert their
+  routing against fixture tables — model-free, milliseconds. The CI half of
+  "the PR is the process change."
+branding:
+  icon: "git-branch"
+  color: "purple"
+inputs:
+  flows:
+    description: "Glob of flow files to check (fixture files *.tests.md are skipped automatically)"
+    required: false
+    default: "flows/*.md"
+  test:
+    description: "Also run fixture tests for flows that have a sibling <flow>.tests.md"
+    required: false
+    default: "true"
+  comment:
+    description: >-
+      On pull_request events, post a sticky PR comment for the flows this PR changed: validate
+      findings, fixture results, and the routing topology BEFORE -> AFTER as live Mermaid
+      diagrams — the process change reviewable in the conversation. Needs the job permission
+      `pull-requests: write`.
+    required: false
+    default: "true"
+  python-version:
+    description: "Python version to set up"
+    required: false
+    default: "3.12"
+runs:
+  using: "composite"
+  steps:
+    - uses: actions/setup-python@v5
+      with:
+        python-version: ${{ inputs.python-version }}
+    - name: Install prismpath (kernel only — numpy, no model)
+      shell: bash
+      run: pip install --quiet "${{ github.action_path }}"
+    - name: PR flow report (sticky comment with before/after Mermaid)
+      if: ${{ github.event_name == 'pull_request' && inputs.comment == 'true' }}
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        PR: ${{ github.event.pull_request.number }}
+        REPO: ${{ github.repository }}
+      run: |
+        set -uo pipefail
+        # the base sha may be absent under the default shallow checkout — fetch it defensively
+        git fetch --no-tags --depth=1 origin "$BASE_SHA" 2>/dev/null || true
+        report="$RUNNER_TEMP/prismpath-report.md"
+        prismpath ci-report --base "$BASE_SHA" --out "$report" || true   # the comment informs; the gate below fails
+        existing=$(gh api "repos/$REPO/issues/$PR/comments" --paginate           -q '.[] | select(.body | startswith("<!-- prismpath-ci-report -->")) | .id' | head -n1)
+        if [ -n "$existing" ]; then
+          gh api -X PATCH "repos/$REPO/issues/comments/$existing" -F body=@"$report" >/dev/null
+        else
+          gh api "repos/$REPO/issues/$PR/comments" -F body=@"$report" >/dev/null
+        fi
+        echo "posted the flow report to PR #$PR"
+    - name: Validate + test flows
+      shell: bash
+      run: |
+        set -euo pipefail
+        shopt -s nullglob
+        fail=0
+        for f in ${{ inputs.flows }}; do
+          case "$f" in *.tests.md) continue;; esac
+          echo "── prismpath validate $f"
+          prismpath validate "$f" || fail=1
+          if [ "${{ inputs.test }}" = "true" ]; then
+            base="${f%.md}"
+            if [ -f "${base}.tests.md" ]; then
+              echo "── prismpath test $f"
+              prismpath test "$f" || fail=1
+            fi
+          fi
+        done
+        exit $fail

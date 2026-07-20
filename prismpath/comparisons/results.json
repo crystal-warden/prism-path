@@ -1,0 +1,54 @@
+{
+  "config": {
+    "repeats": 2,
+    "margin": 0.05,
+    "temperature": 0.0,
+    "only": ""
+  },
+  "rows": [
+    {
+      "name": "prismpath",
+      "n_cases": 301,
+      "n_decisions": 300,
+      "repeats": 2,
+      "accuracy": 0.8372093023255814,
+      "llm_calls_per_1k": 383.3333333333333,
+      "latency_median_s": 0.2053280919790268,
+      "latency_p95_s": 0.655001332052052,
+      "determinism": 1.0
+    },
+    {
+      "name": "llm_router",
+      "n_cases": 301,
+      "n_decisions": 300,
+      "repeats": 2,
+      "accuracy": 0.9900332225913622,
+      "llm_calls_per_1k": 1000.0,
+      "latency_median_s": 0.43719577707815915,
+      "latency_p95_s": 0.4532544759567827,
+      "determinism": 1.0
+    },
+    {
+      "name": "langgraph",
+      "n_cases": 301,
+      "n_decisions": 300,
+      "repeats": 2,
+      "accuracy": 0.9900332225913622,
+      "llm_calls_per_1k": 1000.0,
+      "latency_median_s": 0.435335312562529,
+      "latency_p95_s": 0.44480760605074465,
+      "determinism": 1.0
+    },
+    {
+      "name": "crewai",
+      "n_cases": 301,
+      "n_decisions": 300,
+      "repeats": 2,
+      "accuracy": 0.9900332225913622,
+      "llm_calls_per_1k": 1000.0,
+      "latency_median_s": 0.4299278894905001,
+      "latency_p95_s": 0.4421337159583345,
+      "determinism": 1.0
+    }
+  ]
+}

@@ -1,0 +1,11448 @@
+{
+ "cases": [
+  {
+   "cond": "when x == True",
+   "ctx": {
+    "x": true
+   },
+   "expect": true
+  },
+  {
+   "cond": "when x == True",
+   "ctx": {
+    "x": 1
+   },
+   "expect": true
+  },
+  {
+   "cond": "when x == true",
+   "ctx": {
+    "x": true
+   },
+   "expect": false
+  },
+  {
+   "cond": "when x == true",
+   "ctx": {
+    "true": 7,
+    "x": 7
+   },
+   "expect": true
+  },
+  {
+   "cond": "when x == None",
+   "ctx": {},
+   "expect": true
+  },
+  {
+   "cond": "when x == None",
+   "ctx": {
+    "x": null
+   },
+   "expect": true
+  },
+  {
+   "cond": "when x == False",
+   "ctx": {
+    "x": 0
+   },
+   "expect": true
+  },
+  {
+   "cond": "when flag == 1",
+   "ctx": {
+    "flag": true
+   },
+   "expect": true
+  },
+  {
+   "cond": "when flag == 0",
+   "ctx": {
+    "flag": false
+   },
+   "expect": true
+  },
+  {
+   "cond": "when flag < 2",
+   "ctx": {
+    "flag": true
+   },
+   "expect": true
+  },
+  {
+   "cond": "when n == 1.0",
+   "ctx": {
+    "n": 1
+   },
+   "expect": true
+  },
+  {
+   "cond": "when nope > 3",
+   "ctx": {},
+   "expect": false
+  },
+  {
+   "cond": "when x > 3",
+   "ctx": {
+    "x": "high"
+   },
+   "expect": false
+  },
+  {
+   "cond": "when x in y",
+   "ctx": {
+    "x": 1,
+    "y": 42
+   },
+   "expect": false
+  },
+  {
+   "cond": "when x not in y",
+   "ctx": {
+    "x": 1,
+    "y": 42
+   },
+   "expect": true
+  },
+  {
+   "cond": "when not nope",
+   "ctx": {},
+   "expect": true
+  },
+  {
+   "cond": "when 1 < x < 5",
+   "ctx": {
+    "x": 3
+   },
+   "expect": true
+  },
+  {
+   "cond": "when 1 < x < 5",
+   "ctx": {
+    "x": 7
+   },
+   "expect": false
+  },
+  {
+   "cond": "when 1 < x < 5",
+   "ctx": {},
+   "expect": false
+  },
+  {
+   "cond": "when a <= b <= c",
+   "ctx": {
+    "a": 1,
+    "b": 1,
+    "c": 2
+   },
+   "expect": true
+  },
+  {
+   "cond": "when \"error\" in text",
+   "ctx": {
+    "text": "an error happened"
+   },
+   "expect": true
+  },
+  {
+   "cond": "when \"xyz\" in text",
+   "ctx": {
+    "text": "an error happened"
+   },
+   "expect": false
+  },
+  {
+   "cond": "when a in [\"contain\", \"watch\"]",
+   "ctx": {
+    "a": "watch"
+   },
+   "expect": true
+  },
+  {
+   "cond": "when a in (\"contain\", \"watch\")",
+   "ctx": {
+    "a": "contain"
+   },
+   "expect": true
+  },
+  {
+   "cond": "when k in obj",
+   "ctx": {
+    "k": "a",
+    "obj": {
+     "a": 1
+    }
+   },
+   "expect": true
+  },
+  {
+   "cond": "when 1 in xs",
+   "ctx": {
+    "xs": [
+     1.0,
+     2
+    ]
+   },
+   "expect": true
+  },
+  {
+   "cond": "when x in ()",
+   "ctx": {
+    "x": 1
+   },
+   "expect": false
+  },
+  {
+   "cond": "when items",
+   "ctx": {
+    "items": []
+   },
+   "expect": false
+  },
+  {
+   "cond": "when items",
+   "ctx": {
+    "items": [
+     0
+    ]
+   },
+   "expect": true
+  },
+  {
+   "cond": "when d",
+   "ctx": {
+    "d": {}
+   },
+   "expect": false
+  },
+  {
+   "cond": "when d",
+   "ctx": {
+    "d": {
+     "k": 0
+    }
+   },
+   "expect": true
+  },
+  {
+   "cond": "when s",
+   "ctx": {
+    "s": ""
+   },
+   "expect": false
+  },
+  {
+   "cond": "when s and ok",
+   "ctx": {
+    "ok": true,
+    "s": "x"
+   },
+   "expect": true
+  },
+  {
+   "cond": "when class == \"phish\"",
+   "ctx": {
+    "class": "phish"
+   },
+   "expect": "ERROR"
+  },
+  {
+   "cond": "when import > 1",
+   "ctx": {
+    "import": 2
+   },
+   "expect": "ERROR"
+  },
+  {
+   "cond": "when match == 1",
+   "ctx": {
+    "match": 1
+   },
+   "expect": true
+  },
+  {
+   "cond": "when type == 'a'",
+   "ctx": {
+    "type": "a"
+   },
+   "expect": true
+  },
+  {
+   "cond": "when ((((((((((x))))))))))",
+   "ctx": {
+    "x": 1
+   },
+   "expect": true
+  },
+  {
+   "cond": "when (a or b) and c",
+   "ctx": {
+    "a": 0,
+    "b": 1,
+    "c": 1
+   },
+   "expect": true
+  },
+  {
+   "cond": "when x, y",
+   "ctx": {},
+   "expect": true
+  },
+  {
+   "cond": "when not x < ()",
+   "ctx": {},
+   "expect": true
+  },
+  {
+   "cond": "when n == 0x10",
+   "ctx": {
+    "n": 16
+   },
+   "expect": true
+  },
+  {
+   "cond": "when n == 0o17",
+   "ctx": {
+    "n": 15
+   },
+   "expect": true
+  },
+  {
+   "cond": "when n == 0b101",
+   "ctx": {
+    "n": 5
+   },
+   "expect": true
+  },
+  {
+   "cond": "when n == 1_000",
+   "ctx": {
+    "n": 1000
+   },
+   "expect": true
+  },
+  {
+   "cond": "when n == 1e3",
+   "ctx": {
+    "n": 1000
+   },
+   "expect": true
+  },
+  {
+   "cond": "when x == \"\\x41\"",
+   "ctx": {
+    "x": "A"
+   },
+   "expect": true
+  },
+  {
+   "cond": "when x == \"\\u0041\"",
+   "ctx": {
+    "x": "A"
+   },
+   "expect": true
+  },
+  {
+   "cond": "when x == r'\\n'",
+   "ctx": {
+    "x": "\\n"
+   },
+   "expect": true
+  },
+  {
+   "cond": "when x == \"a\\qb\"",
+   "ctx": {
+    "x": "a\\qb"
+   },
+   "expect": true
+  },
+  {
+   "cond": "when [None, 1] > [None]",
+   "ctx": {},
+   "expect": true
+  },
+  {
+   "cond": "when [1, 2] < [1, 3]",
+   "ctx": {},
+   "expect": true
+  },
+  {
+   "cond": "when xs < ys",
+   "ctx": {
+    "xs": [
+     1,
+     "a"
+    ],
+    "ys": [
+     2
+    ]
+   },
+   "expect": true
+  },
+  {
+   "cond": "when ...",
+   "ctx": {},
+   "expect": true
+  },
+  {
+   "cond": "when f(x)",
+   "ctx": {},
+   "expect": "ERROR"
+  },
+  {
+   "cond": "when x.y",
+   "ctx": {},
+   "expect": "ERROR"
+  },
+  {
+   "cond": "when x + 1 > 2",
+   "ctx": {},
+   "expect": "ERROR"
+  },
+  {
+   "cond": "when -1 < x",
+   "ctx": {
+    "x": 5
+   },
+   "expect": "ERROR"
+  },
+  {
+   "cond": "when 2 < 1 < f(x)",
+   "ctx": {},
+   "expect": "ERROR"
+  },
+  {
+   "cond": "when x is None",
+   "ctx": {},
+   "expect": "ERROR"
+  },
+  {
+   "cond": "always",
+   "ctx": {},
+   "expect": true
+  },
+  {
+   "cond": "else",
+   "ctx": {},
+   "expect": true
+  },
+  {
+   "cond": "never",
+   "ctx": {},
+   "expect": false
+  },
+  {
+   "cond": "false",
+   "ctx": {},
+   "expect": false
+  },
+  {
+   "cond": "when a < b",
+   "ctx": {
+    "a": "apple",
+    "b": "banana"
+   },
+   "expect": true
+  },
+  {
+   "cond": "when a == b",
+   "ctx": {
+    "a": "café",
+    "b": "café"
+   },
+   "expect": true
+  },
+  {
+   "cond": "when \"é\" in s",
+   "ctx": {
+    "s": "café"
+   },
+   "expect": true
+  },
+  {
+   "cond": "when items < []",
+   "ctx": {
+    "action": 1000,
+    "true": 1000,
+    "x": null,
+    "y": ""
+   },
+   "expect": false
+  },
+  {
+   "cond": "when x < ['watch', text]",
+   "ctx": {},
+   "expect": false
+  },
+  {
+   "cond": "when not not x != action",
+   "ctx": {},
+   "expect": false
+  },
+  {
+   "cond": "when true >= 0 <= y",
+   "ctx": {
+    "action": 1,
+    "flag": [
+     0.5
+    ],
+    "items": true,
+    "text": 1.0,
+    "visits": true,
+    "y": "café"
+   },
+   "expect": false
+  },
+  {
+   "cond": "when x == action and 3 in visits and (ok in action)",
+   "ctx": {
+    "flag": true,
+    "n": []
+   },
+   "expect": false
+  },
+  {
+   "cond": "when 'fix' not in True and ok >= action",
+   "ctx": {
+    "score": -0.0
+   },
+   "expect": false
+  },
+  {
+   "cond": "when ok > ok <= n",
+   "ctx": {
+    "ok": 0.5,
+    "score": {
+     "k": 1
+    },
+    "text": 3,
+    "x": {
+     "k": -0.0
+    }
+   },
+   "expect": false
+  },
+  {
+   "cond": "when not (not n < 'error happened')",
+   "ctx": {
+    "flag": [
+     "watch",
+     "watch",
+     0.5
+    ],
+    "ok": "error happened",
+    "visits": "watch"
+   },
+   "expect": false
+  },
+  {
+   "cond": "when not 0 == y or '' < [score, flag, visits]",
+   "ctx": {
+    "action": 1,
+    "text": "café",
+    "true": 0.5
+   },
+   "expect": true
+  },
+  {
+   "cond": "when flag not in n",
+   "ctx": {
+    "flag": "error happened",
+    "score": {
+     "k": 1
+    }
+   },
+   "expect": true
+  },
+  {
+   "cond": "when not 1 <= score not in action",
+   "ctx": {},
+   "expect": true
+  },
+  {
+   "cond": "when '' not in items and 0 not in 2 and not y <= 'error happened'",
+   "ctx": {
+    "true": null
+   },
+   "expect": true
+  },
+  {
+   "cond": "when not -0.0 >= action",
+   "ctx": {
+    "visits": false
+   },
+   "expect": "ERROR"
+  },
+  {
+   "cond": "when not 1000 > text and text not in items",
+   "ctx": {
+    "items": [
+     -0.0
+    ],
+    "ok": {
+     "k": 2
+    },
+    "visits": {
+     "k": 1
+    },
+    "x": 1
+   },
+   "expect": true
+  },
+  {
+   "cond": "when visits not in 'fix' != [text, visits] and score in 2",
+   "ctx": {
+    "n": [],
+    "ok": {
+     "k": 3
+    },
+    "text": "fix",
+    "x": "fix"
+   },
+   "expect": false
+  },
+  {
+   "cond": "when [n] == text in flag or score <= visits and 'fix' > 'error happened' in ok and n > true and text != 'error happened'",
+   "ctx": {
+    "items": 1.0
+   },
+   "expect": false
+  },
+  {
+   "cond": "when not 3 != text",
+   "ctx": {
+    "items": 1.0,
+    "ok": [
+     "fix"
+    ],
+    "text": [
+     1.0,
+     "contain"
+    ],
+    "y": 2
+   },
+   "expect": false
+  },
+  {
+   "cond": "when 'fix' <= 'error happened'",
+   "ctx": {
+    "ok": 0.5,
+    "score": 1,
+    "text": null,
+    "visits": "watch"
+   },
+   "expect": false
+  },
+  {
+   "cond": "when not items <= x",
+   "ctx": {
+    "score": true
+   },
+   "expect": true
+  },
+  {
+   "cond": "when (1.0 <= x)",
+   "ctx": {
+    "action": true,
+    "flag": "",
+    "n": [
+     "",
+     "café"
+    ],
+    "text": {
+     "k": 1.0
+    },
+    "true": "café",
+    "y": true
+   },
+   "expect": false
+  },
+  {
+   "cond": "when 10 <= items",
+   "ctx": {
+    "flag": 2,
+    "items": 2,
+    "ok": [
+     -0.0
+    ],
+    "score": "error happened",
+    "visits": [],
+    "x": "contain"
+   },
+   "expect": false
+  },
+  {
+   "cond": "when 'watch' in true == true",
+   "ctx": {
+    "score": 1.0,
+    "text": null,
+    "x": {
+     "k": 1.0
+    }
+   },
+   "expect": false
+  },
+  {
+   "cond": "when [10] >= [[true, None, 1.0], score, items]",
+   "ctx": {
+    "flag": 1.0,
+    "score": 1,
+    "text": ""
+   },
+   "expect": false
+  },
+  {
+   "cond": "when (text != visits)",
+   "ctx": {},
+   "expect": false
+  },
+  {
+   "cond": "when flag < score != -0.0",
+   "ctx": {
+    "n": false,
+    "score": -0.0,
+    "text": false,
+    "true": 3,
+    "x": {
+     "k": 1
+    },
+    "y": "café"
+   },
+   "expect": "ERROR"
+  },
+  {
+   "cond": "when 1000 >= visits",
+   "ctx": {
+    "action": "contain",
+    "x": []
+   },
+   "expect": false
+  },
+  {
+   "cond": "when n > [-0.0, 'watch', y]",
+   "ctx": {
+    "flag": {
+     "k": 2
+    },
+    "score": [
+     0.5,
+     0,
+     10
+    ]
+   },
+   "expect": "ERROR"
+  },
+  {
+   "cond": "when (3 not in 10 or 1 in items or 'error happened' in ok)",
+   "ctx": {
+    "score": 3,
+    "text": -0.0
+   },
+   "expect": true
+  },
+  {
+   "cond": "when items < 'café' or 'fix' < score or not '' < items and 1.0 == true",
+   "ctx": {
+    "flag": null,
+    "y": 1.0
+   },
+   "expect": false
+  },
+  {
+   "cond": "when ((items == y)) or flag != n",
+   "ctx": {
+    "action": [
+     1,
+     "watch",
+     3
+    ],
+    "n": "fix",
+    "x": -0.0,
+    "y": "error happened"
+   },
+   "expect": true
+  },
+  {
+   "cond": "when visits <= 'error happened'",
+   "ctx": {
+    "visits": -0.0
+   },
+   "expect": false
+  },
+  {
+   "cond": "when n > ''",
+   "ctx": {
+    "action": {
+     "k": 0.5
+    },
+    "flag": {
+     "k": -0.0
+    },
+    "items": 0,
+    "score": 0,
+    "visits": true
+   },
+   "expect": false
+  },
+  {
+   "cond": "when n not in n",
+   "ctx": {
+    "action": "contain",
+    "score": "fix",
+    "true": "",
+    "y": {
+     "k": 0.5
+    }
+   },
+   "expect": true
+  },
+  {
+   "cond": "when 0.5 != action or x not in 'watch'",
+   "ctx": {
+    "ok": "fix",
+    "score": "café",
+    "text": [
+     -0.0
+    ],
+    "true": false
+   },
+   "expect": true
+  },
+  {
+   "cond": "when [[1, y]] != [1000]",
+   "ctx": {
+    "action": "error happened",
+    "items": "watch",
+    "ok": {
+     "k": -0.0
+    },
+    "score": true,
+    "y": [
+     0.5,
+     "café",
+     ""
+    ]
+   },
+   "expect": true
+  },
+  {
+   "cond": "when items not in score",
+   "ctx": {
+    "action": {
+     "k": 1.0
+    },
+    "score": "contain",
+    "text": {
+     "k": 3
+    },
+    "true": true
+   },
+   "expect": true
+  },
+  {
+   "cond": "when not ['café', visits, score] < 1 not in score",
+   "ctx": {},
+   "expect": true
+  },
+  {
+   "cond": "when 'café' != False in [ok, 'contain']",
+   "ctx": {
+    "ok": {
+     "k": 1
+    },
+    "score": false,
+    "visits": "café",
+    "x": "fix",
+    "y": []
+   },
+   "expect": false
+  },
+  {
+   "cond": "when not 'contain' <= 2 and 'café' < visits and score < text > action or 1.0 != true >= False",
+   "ctx": {},
+   "expect": false
+  },
+  {
+   "cond": "when [visits, x] not in items <= [flag, [visits]]",
+   "ctx": {
+    "items": -0.0,
+    "score": "",
+    "true": [
+     1000,
+     1000
+    ],
+    "visits": 2,
+    "x": "watch"
+   },
+   "expect": false
+  },
+  {
+   "cond": "when items not in items >= score",
+   "ctx": {},
+   "expect": false
+  },
+  {
+   "cond": "when not visits >= action == 'fix'",
+   "ctx": {
+    "action": null,
+    "items": 0,
+    "text": [
+     1,
+     "watch"
+    ]
+   },
+   "expect": true
+  },
+  {
+   "cond": "when [items, y, x] not in flag and score in 1.0",
+   "ctx": {
+    "action": {
+     "k": 1
+    },
+    "items": {
+     "k": 0.5
+    },
+    "score": "watch",
+    "x": null,
+    "y": [
+     10
+    ]
+   },
+   "expect": false
+  },
+  {
+   "cond": "when y == text and ok <= flag and true < ok or not text <= -0.0 and not 10 >= 1000",
+   "ctx": {
+    "true": 1000
+   },
+   "expect": "ERROR"
+  },
+  {
+   "cond": "when not (score not in y) and not ok in ok and visits <= 'watch' or action != 'contain'",
+   "ctx": {
+    "items": 1,
+    "n": [
+     "",
+     2
+    ],
+    "score": null,
+    "text": 1,
+    "x": {
+     "k": 1000
+    }
+   },
+   "expect": true
+  },
+  {
+   "cond": "when (action == true > 'error happened') and score != 'error happened'",
+   "ctx": {
+    "items": [],
+    "y": false
+   },
+   "expect": false
+  },
+  {
+   "cond": "when [items, [text, n]] in visits",
+   "ctx": {},
+   "expect": false
+  },
+  {
+   "cond": "when not '' >= 'contain'",
+   "ctx": {
+    "action": 1.0,
+    "ok": 1000,
+    "true": [],
+    "visits": [
+     10,
+     "watch"
+    ],
+    "x": "contain",
+    "y": "error happened"
+   },
+   "expect": true
+  },
+  {
+   "cond": "when not -0.0 in x",
+   "ctx": {},
+   "expect": "ERROR"
+  },
+  {
+   "cond": "when items == 2 and text == '' and true in action",
+   "ctx": {
+    "action": 10,
+    "y": 0.5
+   },
+   "expect": false
+  },
+  {
+   "cond": "when y != true",
+   "ctx": {
+    "action": 1,
+    "ok": {
+     "k": 0.5
+    },
+    "y": 2
+   },
+   "expect": true
+  },
+  {
+   "cond": "when text < n",
+   "ctx": {
+    "flag": null,
+    "n": 10
+   },
+   "expect": false
+  },
+  {
+   "cond": "when (0.5 >= y not in 'contain')",
+   "ctx": {
+    "items": "",
+    "ok": "error happened",
+    "text": true,
+    "true": 0.5,
+    "visits": null,
+    "x": []
+   },
+   "expect": false
+  },
+  {
+   "cond": "when x <= ''",
+   "ctx": {
+    "n": [
+     "contain",
+     1
+    ],
+    "score": 10,
+    "x": true,
+    "y": {
+     "k": 1000
+    }
+   },
+   "expect": false
+  },
+  {
+   "cond": "when text in 'contain' == visits",
+   "ctx": {
+    "text": 2,
+    "y": 1.0
+   },
+   "expect": false
+  },
+  {
+   "cond": "when 'café' in y and 'watch' != action or items <= ''",
+   "ctx": {
+    "flag": {
+     "k": 2
+    }
+   },
+   "expect": false
+  },
+  {
+   "cond": "when not ok == [2] < []",
+   "ctx": {
+    "flag": [
+     1000
+    ],
+    "score": 10,
+    "text": null
+   },
+   "expect": true
+  },
+  {
+   "cond": "when visits not in 1.0 in flag",
+   "ctx": {
+    "flag": 1.0,
+    "items": {
+     "k": -0.0
+    },
+    "n": {
+     "k": 1000
+    },
+    "text": 1000,
+    "true": {
+     "k": 1000
+    },
+    "x": 2
+   },
+   "expect": false
+  },
+  {
+   "cond": "when not text in ok >= y",
+   "ctx": {
+    "flag": "fix",
+    "x": [
+     "",
+     2
+    ]
+   },
+   "expect": true
+  },
+  {
+   "cond": "when not score == x or ok > y and 'error happened' != score",
+   "ctx": {
+    "flag": [],
+    "ok": [
+     1.0,
+     0
+    ],
+    "visits": true,
+    "x": true
+   },
+   "expect": true
+  },
+  {
+   "cond": "when 'error happened' == ''",
+   "ctx": {},
+   "expect": false
+  },
+  {
+   "cond": "when items >= text",
+   "ctx": {
+    "visits": null
+   },
+   "expect": false
+  },
+  {
+   "cond": "when 'fix' >= n",
+   "ctx": {
+    "action": {
+     "k": 1000
+    },
+    "n": {
+     "k": 0.5
+    },
+    "score": 3,
+    "true": 3,
+    "visits": 10,
+    "y": "error happened"
+   },
+   "expect": false
+  },
+  {
+   "cond": "when (not 'fix' >= 'contain' in score)",
+   "ctx": {
+    "n": true,
+    "score": [],
+    "text": [
+     "café",
+     ""
+    ]
+   },
+   "expect": true
+  },
+  {
+   "cond": "when (items != 'contain')",
+   "ctx": {
+    "score": [
+     "contain"
+    ],
+    "true": ""
+   },
+   "expect": true
+  },
+  {
+   "cond": "when not '' == visits",
+   "ctx": {
+    "n": 0.5,
+    "ok": [
+     0,
+     2,
+     1
+    ],
+    "text": {
+     "k": 2
+    }
+   },
+   "expect": true
+  },
+  {
+   "cond": "when ['fix', 1.0] > y and not items <= items or flag != 10",
+   "ctx": {},
+   "expect": true
+  },
+  {
+   "cond": "when text != -0.0",
+   "ctx": {
+    "flag": "error happened",
+    "n": [
+     ""
+    ],
+    "text": false,
+    "visits": "contain",
+    "x": 1,
+    "y": 1.0
+   },
+   "expect": "ERROR"
+  },
+  {
+   "cond": "when [true, text, [2, ok, n]] < 'fix'",
+   "ctx": {
+    "action": true,
+    "items": 1000,
+    "n": {
+     "k": 1
+    },
+    "ok": 1000,
+    "visits": -0.0,
+    "y": "café"
+   },
+   "expect": false
+  },
+  {
+   "cond": "when true >= true",
+   "ctx": {},
+   "expect": false
+  },
+  {
+   "cond": "when x > [[], -0.0, [1.0, 'fix']] == action",
+   "ctx": {
+    "flag": {
+     "k": 0.5
+    },
+    "score": false,
+    "text": [
+     1.0,
+     2
+    ]
+   },
+   "expect": "ERROR"
+  },
+  {
+   "cond": "when 3 > 'watch'",
+   "ctx": {},
+   "expect": false
+  },
+  {
+   "cond": "when not action < true",
+   "ctx": {
+    "flag": "fix",
+    "items": 0.5,
+    "n": {
+     "k": 1000
+    },
+    "score": "watch",
+    "text": "contain"
+   },
+   "expect": true
+  },
+  {
+   "cond": "when not 'contain' in '' and -0.0 not in items or true != 'contain'",
+   "ctx": {
+    "action": false,
+    "flag": [
+     2,
+     "fix",
+     "café"
+    ],
+    "n": 0.5,
+    "text": true
+   },
+   "expect": "ERROR"
+  },
+  {
+   "cond": "when '' > 1000 not in [0.5, [0, 3, true]]",
+   "ctx": {
+    "action": 10,
+    "n": 3,
+    "ok": 1
+   },
+   "expect": false
+  },
+  {
+   "cond": "when (x <= False or 'watch' >= -0.0) and flag > items",
+   "ctx": {
+    "flag": 1,
+    "items": null,
+    "n": 1,
+    "score": null,
+    "text": "",
+    "true": [
+     -0.0
+    ]
+   },
+   "expect": "ERROR"
+  },
+  {
+   "cond": "when [ok] > true or x <= []",
+   "ctx": {},
+   "expect": false
+  },
+  {
+   "cond": "when (n < '')",
+   "ctx": {
+    "flag": 1,
+    "items": [
+     1000
+    ],
+    "visits": "café"
+   },
+   "expect": false
+  },
+  {
+   "cond": "when x < 'watch' == action",
+   "ctx": {
+    "items": 1000,
+    "n": {
+     "k": 0.5
+    },
+    "score": true,
+    "true": 1,
+    "visits": {
+     "k": 10
+    },
+    "x": true
+   },
+   "expect": false
+  },
+  {
+   "cond": "when [] > 2 or [ok, '', n] not in 'watch' == 'watch'",
+   "ctx": {
+    "items": null,
+    "text": 0.5,
+    "visits": []
+   },
+   "expect": true
+  },
+  {
+   "cond": "when 1000 > ['watch', n] not in true",
+   "ctx": {
+    "action": {
+     "k": 1000
+    },
+    "ok": [
+     ""
+    ]
+   },
+   "expect": false
+  },
+  {
+   "cond": "when 1 <= 0.5 and 'café' not in ok",
+   "ctx": {
+    "n": "contain",
+    "score": null,
+    "x": false
+   },
+   "expect": false
+  },
+  {
+   "cond": "when 'fix' != text",
+   "ctx": {
+    "flag": "café",
+    "ok": 2,
+    "visits": "",
+    "x": [
+     0.5,
+     "café",
+     1.0
+    ],
+    "y": 1.0
+   },
+   "expect": true
+  },
+  {
+   "cond": "when n >= ok",
+   "ctx": {
+    "flag": [
+     1000,
+     1.0,
+     "error happened"
+    ],
+    "n": {
+     "k": 10
+    },
+    "ok": []
+   },
+   "expect": false
+  },
+  {
+   "cond": "when true == y and true == x or (x > true) or -0.0 < action and text in text in 'contain' or n == None < 'contain' or score != 0 > 'error happened'",
+   "ctx": {
+    "flag": 3,
+    "ok": {
+     "k": 1
+    },
+    "x": "contain",
+    "y": "fix"
+   },
+   "expect": "ERROR"
+  },
+  {
+   "cond": "when flag <= 'watch'",
+   "ctx": {
+    "action": false,
+    "items": "contain",
+    "score": "café",
+    "text": false
+   },
+   "expect": false
+  },
+  {
+   "cond": "when (text == 2)",
+   "ctx": {},
+   "expect": false
+  },
+  {
+   "cond": "when ok >= '' or score >= ok and (0 != visits) or not not y == score",
+   "ctx": {
+    "true": {
+     "k": 10
+    },
+    "x": null
+   },
+   "expect": true
+  },
+  {
+   "cond": "when not 'fix' > 1000",
+   "ctx": {
+    "action": false,
+    "items": {
+     "k": 3
+    },
+    "n": [
+     "",
+     1.0
+    ],
+    "visits": 3,
+    "x": "watch",
+    "y": 1.0
+   },
+   "expect": true
+  },
+  {
+   "cond": "when x in '' and not not 0.5 != x",
+   "ctx": {
+    "flag": {
+     "k": 10
+    }
+   },
+   "expect": false
+  },
+  {
+   "cond": "when 'error happened' == text and not action > flag in ok and n != True",
+   "ctx": {},
+   "expect": false
+  },
+  {
+   "cond": "when ('error happened' in text == [1.0, 'café', -0.0])",
+   "ctx": {
+    "flag": [
+     "contain"
+    ],
+    "items": {
+     "k": 10
+    },
+    "ok": "contain",
+    "true": 0,
+    "visits": 1,
+    "y": "contain"
+   },
+   "expect": "ERROR"
+  },
+  {
+   "cond": "when 1 != 1.0 or not (ok <= 1.0 < items)",
+   "ctx": {
+    "n": -0.0,
+    "score": 1.0
+   },
+   "expect": true
+  },
+  {
+   "cond": "when (not 10 > action and text in visits)",
+   "ctx": {
+    "flag": {
+     "k": 3
+    },
+    "items": {
+     "k": 0.5
+    },
+    "n": "watch",
+    "text": 10
+   },
+   "expect": false
+  },
+  {
+   "cond": "when 'fix' <= 1000 == score or items != action not in items",
+   "ctx": {
+    "items": [
+     "",
+     1.0,
+     1
+    ]
+   },
+   "expect": true
+  },
+  {
+   "cond": "when (1.0 >= [])",
+   "ctx": {},
+   "expect": false
+  },
+  {
+   "cond": "when [true, visits] in text",
+   "ctx": {
+    "action": null,
+    "n": [
+     0.5
+    ],
+    "score": {
+     "k": 10
+    },
+    "true": "",
+    "x": false,
+    "y": null
+   },
+   "expect": false
+  },
+  {
+   "cond": "when not (n >= 10)",
+   "ctx": {
+    "score": "café",
+    "y": "fix"
+   },
+   "expect": true
+  },
+  {
+   "cond": "when not flag < '' and action < action and (flag != 1000) and visits >= 1 >= '' or items != text != y",
+   "ctx": {
+    "text": [
+     1.0,
+     "fix",
+     2
+    ]
+   },
+   "expect": true
+  },
+  {
+   "cond": "when '' < 2",
+   "ctx": {
+    "text": []
+   },
+   "expect": false
+  },
+  {
+   "cond": "when score in ok",
+   "ctx": {
+    "action": 3,
+    "score": [
+     2,
+     1,
+     "fix"
+    ],
+    "text": 10,
+    "true": -0.0,
+    "visits": -0.0
+   },
+   "expect": false
+  },
+  {
+   "cond": "when score != 1000",
+   "ctx": {
+    "items": {
+     "k": 1
+    },
+    "ok": [
+     -0.0
+    ],
+    "score": "contain",
+    "text": {
+     "k": 1
+    },
+    "x": {
+     "k": 0
+    },
+    "y": "fix"
+   },
+   "expect": true
+  },
+  {
+   "cond": "when true in n",
+   "ctx": {
+    "flag": true,
+    "items": {
+     "k": 1
+    },
+    "n": 1.0,
+    "text": {
+     "k": 1000
+    },
+    "visits": "café",
+    "x": -0.0
+   },
+   "expect": false
+  },
+  {
+   "cond": "when visits < text",
+   "ctx": {
+    "action": "fix",
+    "flag": 1.0,
+    "items": 0.5,
+    "n": "café",
+    "score": true,
+    "text": ""
+   },
+   "expect": false
+  },
+  {
+   "cond": "when y not in [ok, ''] and -0.0 < 0.5",
+   "ctx": {
+    "score": 2,
+    "true": {
+     "k": -0.0
+    },
+    "visits": "fix",
+    "x": 2,
+    "y": {
+     "k": 1.0
+    }
+   },
+   "expect": "ERROR"
+  },
+  {
+   "cond": "when not n > flag and y not in true or not action not in action or not text < 'watch' < true",
+   "ctx": {},
+   "expect": true
+  },
+  {
+   "cond": "when text < true",
+   "ctx": {
+    "flag": [
+     -0.0
+    ],
+    "ok": null,
+    "score": [
+     0.5,
+     1.0,
+     0.5
+    ],
+    "visits": [
+     "",
+     "contain"
+    ],
+    "y": true
+   },
+   "expect": false
+  },
+  {
+   "cond": "when not flag <= [flag, 10]",
+   "ctx": {
+    "n": true,
+    "ok": "error happened",
+    "true": {
+     "k": 2
+    },
+    "x": [
+     "",
+     1,
+     0
+    ],
+    "y": "error happened"
+   },
+   "expect": true
+  },
+  {
+   "cond": "when action in '' and not items != 2",
+   "ctx": {
+    "action": 1.0,
+    "items": "café",
+    "text": [
+     0
+    ],
+    "y": 0
+   },
+   "expect": false
+  },
+  {
+   "cond": "when x == text",
+   "ctx": {
+    "items": [],
+    "n": [],
+    "ok": -0.0,
+    "text": ""
+   },
+   "expect": false
+  },
+  {
+   "cond": "when (true < 'fix') and y == x and x in flag and items >= visits == ok or y > items >= score",
+   "ctx": {},
+   "expect": false
+  },
+  {
+   "cond": "when 'error happened' >= 3 or 2 in ok",
+   "ctx": {
+    "visits": {
+     "k": 0
+    },
+    "x": [
+     "error happened",
+     "contain",
+     "contain"
+    ]
+   },
+   "expect": false
+  },
+  {
+   "cond": "when score < [] == ok and (1 in true)",
+   "ctx": {},
+   "expect": false
+  },
+  {
+   "cond": "when (items in ['contain', flag] < true)",
+   "ctx": {},
+   "expect": false
+  },
+  {
+   "cond": "when (flag not in 'fix' and items == text < flag) and 'fix' > n",
+   "ctx": {},
+   "expect": false
+  },
+  {
+   "cond": "when ok <= y",
+   "ctx": {
+    "action": {
+     "k": 1
+    },
+    "n": 1.0,
+    "ok": false,
+    "true": 1,
+    "x": {
+     "k": 1
+    },
+    "y": "café"
+   },
+   "expect": false
+  },
+  {
+   "cond": "when text not in true or (1.0 <= items)",
+   "ctx": {
+    "n": false,
+    "score": 3
+   },
+   "expect": true
+  },
+  {
+   "cond": "when (items in ok)",
+   "ctx": {
+    "visits": {
+     "k": 1000
+    }
+   },
+   "expect": false
+  },
+  {
+   "cond": "when text not in 'error happened'",
+   "ctx": {
+    "action": -0.0,
+    "items": 10,
+    "n": null,
+    "text": 3
+   },
+   "expect": true
+  },
+  {
+   "cond": "when y <= 'café'",
+   "ctx": {},
+   "expect": false
+  },
+  {
+   "cond": "when true in 'watch' < text",
+   "ctx": {
+    "action": 3,
+    "items": 10,
+    "text": 3,
+    "true": [
+     1000,
+     -0.0,
+     2
+    ],
+    "visits": 3,
+    "x": "fix"
+   },
+   "expect": false
+  },
+  {
+   "cond": "when 'watch' >= n < ok",
+   "ctx": {
+    "action": true,
+    "items": [
+     3,
+     "watch"
+    ],
+    "text": "contain",
+    "visits": [
+     "",
+     "watch",
+     10
+    ],
+    "x": true,
+    "y": 2
+   },
+   "expect": false
+  },
+  {
+   "cond": "when not true == text or flag != n",
+   "ctx": {
+    "flag": 1,
+    "y": "contain"
+   },
+   "expect": true
+  },
+  {
+   "cond": "when ['contain', y] != []",
+   "ctx": {
+    "action": {
+     "k": 0.5
+    },
+    "n": true,
+    "score": {
+     "k": 10
+    }
+   },
+   "expect": true
+  },
+  {
+   "cond": "when true <= y",
+   "ctx": {
+    "items": {
+     "k": 2
+    },
+    "n": {
+     "k": 0
+    },
+    "ok": "café",
+    "text": "error happened",
+    "visits": [],
+    "x": 2
+   },
+   "expect": false
+  },
+  {
+   "cond": "when None > 'fix' and 2 == 'contain' and score == visits or (score > ok) and '' not in -0.0 or visits >= action",
+   "ctx": {
+    "action": 1000,
+    "flag": {
+     "k": 3
+    },
+    "ok": "fix",
+    "true": [
+     1000,
+     "watch",
+     "error happened"
+    ],
+    "visits": [
+     1
+    ],
+    "x": "café"
+   },
+   "expect": "ERROR"
+  },
+  {
+   "cond": "when 'watch' <= action != action",
+   "ctx": {
+    "visits": -0.0
+   },
+   "expect": false
+  },
+  {
+   "cond": "when not 1000 == true and y < 1",
+   "ctx": {},
+   "expect": false
+  },
+  {
+   "cond": "when items >= items in [items, 'error happened', [text, x, items]]",
+   "ctx": {
+    "text": [],
+    "x": [
+     -0.0,
+     -0.0
+    ]
+   },
+   "expect": false
+  },
+  {
+   "cond": "when items not in text > []",
+   "ctx": {
+    "score": 1.0
+   },
+   "expect": false
+  },
+  {
+   "cond": "when text < ok in ok",
+   "ctx": {
+    "flag": [
+     0.5,
+     "error happened"
+    ],
+    "n": "contain",
+    "ok": "",
+    "x": [
+     0
+    ]
+   },
+   "expect": false
+  },
+  {
+   "cond": "when x not in 10",
+   "ctx": {
+    "n": {
+     "k": 3
+    },
+    "ok": [
+     "contain",
+     "error happened"
+    ],
+    "text": [
+     0,
+     1.0
+    ],
+    "true": 3
+   },
+   "expect": true
+  },
+  {
+   "cond": "when '' == 2",
+   "ctx": {
+    "flag": "contain",
+    "items": "watch",
+    "ok": "café",
+    "x": [
+     1.0,
+     "café"
+    ]
+   },
+   "expect": false
+  },
+  {
+   "cond": "when [] >= -0.0",
+   "ctx": {
+    "visits": "contain",
+    "y": {
+     "k": 0.5
+    }
+   },
+   "expect": "ERROR"
+  },
+  {
+   "cond": "when 'café' > ok <= true",
+   "ctx": {
+    "n": [
+     0.5
+    ],
+    "text": "",
+    "visits": [
+     -0.0,
+     -0.0,
+     "café"
+    ]
+   },
+   "expect": false
+  },
+  {
+   "cond": "when ok not in visits",
+   "ctx": {
+    "items": 2,
+    "ok": [
+     -0.0
+    ]
+   },
+   "expect": true
+  },
+  {
+   "cond": "when [text] <= 'café'",
+   "ctx": {
+    "action": "café",
+    "items": 1,
+    "n": null,
+    "ok": 3,
+    "text": null,
+    "visits": "contain"
+   },
+   "expect": false
+  },
+  {
+   "cond": "when (flag not in n)",
+   "ctx": {
+    "n": "fix",
+    "ok": false,
+    "score": 2,
+    "text": true,
+    "true": 1.0,
+    "y": 10
+   },
+   "expect": true
+  },
+  {
+   "cond": "when ((not x <= x <= text))",
+   "ctx": {
+    "n": "error happened",
+    "y": "fix"
+   },
+   "expect": true
+  },
+  {
+   "cond": "when 'contain' >= 'café'",
+   "ctx": {
+    "text": {
+     "k": 10
+    }
+   },
+   "expect": true
+  },
+  {
+   "cond": "when not flag < visits or 'café' == 1 and y in items",
+   "ctx": {
+    "flag": 1000,
+    "n": "café",
+    "x": 2
+   },
+   "expect": true
+  },
+  {
+   "cond": "when (-0.0 != -0.0)",
+   "ctx": {
+    "action": 1,
+    "flag": {
+     "k": 10
+    },
+    "n": {
+     "k": 10
+    },
+    "ok": 10,
+    "text": "fix",
+    "y": 1
+   },
+   "expect": "ERROR"
+  },
+  {
+   "cond": "when y <= False not in n",
+   "ctx": {
+    "flag": {
+     "k": -0.0
+    },
+    "items": 2,
+    "ok": "",
+    "score": {
+     "k": 1
+    },
+    "text": [
+     0.5
+    ],
+    "x": 0
+   },
+   "expect": false
+  },
+  {
+   "cond": "when (score < x) or y not in visits or (true < 1.0)",
+   "ctx": {
+    "items": {
+     "k": 1000
+    },
+    "x": [],
+    "y": [
+     "watch"
+    ]
+   },
+   "expect": true
+  },
+  {
+   "cond": "when [] <= 1.0",
+   "ctx": {
+    "ok": {
+     "k": 0
+    }
+   },
+   "expect": false
+  },
+  {
+   "cond": "when not 10 != text <= 'contain'",
+   "ctx": {},
+   "expect": true
+  },
+  {
+   "cond": "when 3 not in score",
+   "ctx": {},
+   "expect": true
+  },
+  {
+   "cond": "when 'fix' == action == 1",
+   "ctx": {
+    "action": 3,
+    "flag": false,
+    "items": [
+     0.5,
+     1000,
+     ""
+    ],
+    "text": [
+     "contain",
+     10
+    ],
+    "true": "contain",
+    "visits": "fix"
+   },
+   "expect": false
+  },
+  {
+   "cond": "when not 'fix' < 1.0 or not action <= y",
+   "ctx": {
+    "action": null,
+    "flag": [
+     "café",
+     1000,
+     ""
+    ],
+    "score": false,
+    "text": {
+     "k": 2
+    },
+    "x": 10,
+    "y": 0
+   },
+   "expect": true
+  },
+  {
+   "cond": "when n >= 3",
+   "ctx": {
+    "action": {
+     "k": 10
+    },
+    "text": [
+     1.0
+    ]
+   },
+   "expect": false
+  },
+  {
+   "cond": "when ok >= [true]",
+   "ctx": {
+    "items": null,
+    "n": [
+     "fix",
+     "fix",
+     "watch"
+    ],
+    "ok": [
+     "café",
+     "error happened"
+    ],
+    "text": "fix",
+    "visits": "fix"
+   },
+   "expect": false
+  },
+  {
+   "cond": "when n == n",
+   "ctx": {
+    "items": [
+     3,
+     ""
+    ],
+    "visits": 0
+   },
+   "expect": true
+  },
+  {
+   "cond": "when '' <= [items, [], action]",
+   "ctx": {
+    "ok": [
+     "",
+     "fix"
+    ],
+    "text": 10,
+    "visits": -0.0
+   },
+   "expect": false
+  },
+  {
+   "cond": "when ['watch'] != n != ''",
+   "ctx": {
+    "items": 10,
+    "ok": -0.0
+   },
+   "expect": true
+  },
+  {
+   "cond": "when n == visits > 0.5",
+   "ctx": {},
+   "expect": false
+  },
+  {
+   "cond": "when 'watch' != n in 0.5",
+   "ctx": {
+    "flag": [
+     0.5,
+     -0.0
+    ]
+   },
+   "expect": false
+  },
+  {
+   "cond": "when visits >= 'café' or [] >= 'fix'",
+   "ctx": {
+    "items": 1000,
+    "ok": [
+     1000,
+     ""
+    ],
+    "visits": false
+   },
+   "expect": false
+  },
+  {
+   "cond": "when not ok != ok",
+   "ctx": {
+    "flag": [
+     "watch",
+     "error happened",
+     1
+    ],
+    "ok": [
+     0
+    ],
+    "x": {
+     "k": 1.0
+    },
+    "y": [
+     1000
+    ]
+   },
+   "expect": true
+  },
+  {
+   "cond": "when (not 'fix' <= action and visits == true or x != 'error happened')",
+   "ctx": {},
+   "expect": true
+  },
+  {
+   "cond": "when '' == 2 or ok < 'café'",
+   "ctx": {
+    "n": [
+     3,
+     1.0
+    ],
+    "ok": "café",
+    "text": 1.0,
+    "true": {
+     "k": 1000
+    },
+    "x": true
+   },
+   "expect": false
+  },
+  {
+   "cond": "when not 1000 != 'fix' and true >= 'café' or true <= ''",
+   "ctx": {
+    "items": false,
+    "true": [
+     "fix"
+    ]
+   },
+   "expect": false
+  },
+  {
+   "cond": "when text <= ['contain', text, score]",
+   "ctx": {
+    "items": true,
+    "score": [
+     "café"
+    ],
+    "text": true
+   },
+   "expect": false
+  },
+  {
+   "cond": "when 'café' != ok",
+   "ctx": {
+    "action": "watch",
+    "flag": "watch",
+    "true": {
+     "k": 1000
+    },
+    "visits": {
+     "k": -0.0
+    },
+    "x": null
+   },
+   "expect": true
+  },
+  {
+   "cond": "when not text <= true",
+   "ctx": {
+    "n": 2,
+    "ok": [
+     0.5,
+     0,
+     3
+    ],
+    "score": 3,
+    "visits": [
+     1
+    ],
+    "y": 3
+   },
+   "expect": true
+  },
+  {
+   "cond": "when action not in x",
+   "ctx": {
+    "action": {
+     "k": 3
+    },
+    "items": false,
+    "ok": {
+     "k": 1
+    },
+    "text": [
+     1.0
+    ],
+    "y": [
+     "fix",
+     "watch"
+    ]
+   },
+   "expect": true
+  },
+  {
+   "cond": "when 'contain' not in x",
+   "ctx": {
+    "flag": [
+     "",
+     0.5,
+     "contain"
+    ],
+    "n": -0.0,
+    "score": 2,
+    "visits": 1
+   },
+   "expect": true
+  },
+  {
+   "cond": "when not 1.0 == true",
+   "ctx": {
+    "n": true
+   },
+   "expect": true
+  },
+  {
+   "cond": "when n < 0",
+   "ctx": {
+    "flag": null,
+    "items": {
+     "k": 2
+    },
+    "score": [
+     "fix"
+    ],
+    "visits": false,
+    "y": 1.0
+   },
+   "expect": false
+  },
+  {
+   "cond": "when 'café' not in 1.0",
+   "ctx": {
+    "n": 1000,
+    "x": 10,
+    "y": [
+     "fix"
+    ]
+   },
+   "expect": true
+  },
+  {
+   "cond": "when 1000 != visits",
+   "ctx": {
+    "true": true
+   },
+   "expect": true
+  },
+  {
+   "cond": "when visits in 'fix'",
+   "ctx": {
+    "action": [],
+    "flag": "contain",
+    "ok": [
+     "fix",
+     ""
+    ],
+    "score": "watch",
+    "true": {
+     "k": 1
+    }
+   },
+   "expect": false
+  },
+  {
+   "cond": "when true == 'watch' and 'contain' in items or visits <= 'error happened' or (-0.0 in visits)",
+   "ctx": {},
+   "expect": "ERROR"
+  },
+  {
+   "cond": "when 'café' != action >= true",
+   "ctx": {
+    "action": 1,
+    "n": -0.0,
+    "text": null,
+    "visits": 1,
+    "x": [
+     "café",
+     "fix",
+     1.0
+    ]
+   },
+   "expect": false
+  },
+  {
+   "cond": "when 0 < [visits, ok, 'fix'] <= [] or items >= action and 1 > ok >= 'contain'",
+   "ctx": {
+    "true": {
+     "k": 10
+    }
+   },
+   "expect": false
+  },
+  {
+   "cond": "when 1.0 != 1",
+   "ctx": {
+    "flag": [
+     ""
+    ],
+    "items": [
+     "",
+     10
+    ],
+    "ok": {
+     "k": 10
+    },
+    "text": 3,
+    "true": "contain",
+    "visits": []
+   },
+   "expect": false
+  },
+  {
+   "cond": "when items != 'café' or n >= true",
+   "ctx": {
+    "flag": 3,
+    "n": "watch"
+   },
+   "expect": true
+  },
+  {
+   "cond": "when flag >= y != visits",
+   "ctx": {
+    "action": 3,
+    "ok": 1000,
+    "score": "error happened",
+    "true": "error happened",
+    "x": {
+     "k": 10
+    }
+   },
+   "expect": false
+  },
+  {
+   "cond": "when ok not in x",
+   "ctx": {
+    "action": "café",
+    "n": 3,
+    "score": "fix",
+    "text": {
+     "k": 1000
+    }
+   },
+   "expect": true
+  },
+  {
+   "cond": "when 'watch' <= 'contain' or '' < visits or ok in n and action >= items or score != 'contain' > 'error happened' and text != 'café' and true < items",
+   "ctx": {
+    "ok": "fix",
+    "text": "café"
+   },
+   "expect": false
+  },
+  {
+   "cond": "when (visits >= 'error happened' in y) or not 'contain' in '' or true not in 'watch'",
+   "ctx": {
+    "action": 2,
+    "flag": 10,
+    "items": true,
+    "n": "fix",
+    "text": [],
+    "x": [
+     2
+    ]
+   },
+   "expect": true
+  },
+  {
+   "cond": "when not 'watch' > 'watch'",
+   "ctx": {
+    "ok": []
+   },
+   "expect": true
+  },
+  {
+   "cond": "when not -0.0 < ok or true > score or score in 'contain'",
+   "ctx": {},
+   "expect": "ERROR"
+  },
+  {
+   "cond": "when not text == [score, '', true]",
+   "ctx": {
+    "x": true
+   },
+   "expect": true
+  },
+  {
+   "cond": "when ('watch' in flag)",
+   "ctx": {
+    "action": [
+     -0.0,
+     "watch"
+    ],
+    "y": null
+   },
+   "expect": false
+  },
+  {
+   "cond": "when action != items",
+   "ctx": {},
+   "expect": false
+  },
+  {
+   "cond": "when [[x, ok, y], 'watch'] == n",
+   "ctx": {},
+   "expect": false
+  },
+  {
+   "cond": "when (0 < action or not items == flag in score)",
+   "ctx": {
+    "x": 1
+   },
+   "expect": true
+  },
+  {
+   "cond": "when score > n",
+   "ctx": {
+    "n": false,
+    "ok": 0,
+    "true": {
+     "k": 3
+    },
+    "x": "contain",
+    "y": {
+     "k": 3
+    }
+   },
+   "expect": false
+  },
+  {
+   "cond": "when not 3 == 2",
+   "ctx": {
+    "flag": [
+     "café",
+     ""
+    ],
+    "y": 1
+   },
+   "expect": true
+  },
+  {
+   "cond": "when visits != flag",
+   "ctx": {
+    "ok": [
+     "contain",
+     3,
+     0
+    ],
+    "text": [
+     "contain",
+     2
+    ]
+   },
+   "expect": false
+  },
+  {
+   "cond": "when ((flag >= '')) and not 'contain' not in visits and x >= flag",
+   "ctx": {
+    "ok": [
+     "fix"
+    ],
+    "y": [
+     1000
+    ]
+   },
+   "expect": false
+  },
+  {
+   "cond": "when ok == n or visits not in -0.0 == 'error happened' or flag != 0.5 and action == items == items",
+   "ctx": {},
+   "expect": "ERROR"
+  },
+  {
+   "cond": "when y <= 1000",
+   "ctx": {
+    "action": 10,
+    "flag": 0.5,
+    "n": [
+     1000,
+     0.5,
+     "watch"
+    ],
+    "text": {
+     "k": 0.5
+    },
+    "true": [
+     "café",
+     1,
+     2
+    ]
+   },
+   "expect": false
+  },
+  {
+   "cond": "when text in text",
+   "ctx": {
+    "flag": "error happened",
+    "ok": "",
+    "true": {
+     "k": -0.0
+    },
+    "visits": ""
+   },
+   "expect": false
+  },
+  {
+   "cond": "when not not items <= text and items < score >= items",
+   "ctx": {
+    "flag": 1.0,
+    "true": -0.0
+   },
+   "expect": false
+  },
+  {
+   "cond": "when y not in true",
+   "ctx": {
+    "items": "",
+    "ok": [],
+    "text": {
+     "k": 3
+    },
+    "true": {
+     "k": 0.5
+    },
+    "x": "fix",
+    "y": "fix"
+   },
+   "expect": true
+  },
+  {
+   "cond": "when [] == 'error happened'",
+   "ctx": {
+    "text": true
+   },
+   "expect": false
+  },
+  {
+   "cond": "when true <= '' or not action in 2 or 1.0 <= None",
+   "ctx": {
+    "flag": 1.0
+   },
+   "expect": true
+  },
+  {
+   "cond": "when not (text == n) and [score, flag, text] != x",
+   "ctx": {
+    "true": {
+     "k": -0.0
+    }
+   },
+   "expect": false
+  },
+  {
+   "cond": "when not score >= ok",
+   "ctx": {
+    "flag": false
+   },
+   "expect": true
+  },
+  {
+   "cond": "when [[]] == 'fix'",
+   "ctx": {
+    "flag": 10,
+    "true": []
+   },
+   "expect": false
+  },
+  {
+   "cond": "when not [x, 'café'] in 0.5",
+   "ctx": {
+    "ok": {
+     "k": 1000
+    },
+    "true": 1000,
+    "y": {
+     "k": 0
+    }
+   },
+   "expect": true
+  },
+  {
+   "cond": "when not '' < visits",
+   "ctx": {
+    "items": 0,
+    "text": 1000
+   },
+   "expect": true
+  },
+  {
+   "cond": "when x > text in []",
+   "ctx": {
+    "action": false,
+    "flag": "watch",
+    "ok": {
+     "k": 0.5
+    },
+    "visits": 2,
+    "y": null
+   },
+   "expect": false
+  },
+  {
+   "cond": "when items < 'watch'",
+   "ctx": {
+    "items": {
+     "k": 1.0
+    },
+    "n": 0.5,
+    "text": [
+     "contain"
+    ],
+    "true": null,
+    "y": 0.5
+   },
+   "expect": false
+  },
+  {
+   "cond": "when 'café' > flag != x",
+   "ctx": {
+    "flag": [
+     "contain",
+     "watch",
+     0.5
+    ],
+    "items": [
+     1000
+    ],
+    "ok": 1.0,
+    "true": 0,
+    "visits": "café",
+    "y": "watch"
+   },
+   "expect": false
+  },
+  {
+   "cond": "when not items <= flag <= score and 10 in 'fix' in [true, 0, 0]",
+   "ctx": {
+    "ok": null
+   },
+   "expect": false
+  },
+  {
+   "cond": "when not 'contain' in 'fix' or score not in ok != true and n >= 3",
+   "ctx": {
+    "items": [],
+    "text": 10,
+    "y": [
+     "contain"
+    ]
+   },
+   "expect": true
+  },
+  {
+   "cond": "when action < ''",
+   "ctx": {},
+   "expect": false
+  },
+  {
+   "cond": "when true < n < x",
+   "ctx": {
+    "items": 2,
+    "score": {
+     "k": 0
+    },
+    "visits": 2
+   },
+   "expect": false
+  },
+  {
+   "cond": "when '' not in 10",
+   "ctx": {
+    "flag": false
+   },
+   "expect": true
+  },
+  {
+   "cond": "when ((ok <= n))",
+   "ctx": {},
+   "expect": false
+  },
+  {
+   "cond": "when x > 'fix'",
+   "ctx": {},
+   "expect": false
+  },
+  {
+   "cond": "when not items < true",
+   "ctx": {
+    "x": [
+     0.5,
+     "café"
+    ],
+    "y": "fix"
+   },
+   "expect": true
+  },
+  {
+   "cond": "when y < items",
+   "ctx": {
+    "action": 0,
+    "ok": null
+   },
+   "expect": false
+  },
+  {
+   "cond": "when not [] > 'contain'",
+   "ctx": {
+    "ok": {
+     "k": 0.5
+    },
+    "true": {
+     "k": 10
+    }
+   },
+   "expect": true
+  },
+  {
+   "cond": "when [true, items, x] not in []",
+   "ctx": {
+    "action": null,
+    "flag": "error happened",
+    "ok": 1,
+    "true": [
+     0
+    ],
+    "x": "error happened"
+   },
+   "expect": true
+  },
+  {
+   "cond": "when y >= 'error happened'",
+   "ctx": {
+    "flag": "café",
+    "n": 2,
+    "text": "error happened",
+    "x": [
+     "café",
+     10,
+     ""
+    ]
+   },
+   "expect": false
+  },
+  {
+   "cond": "when 0 > 1000 == visits",
+   "ctx": {
+    "text": {
+     "k": -0.0
+    },
+    "y": [
+     1.0,
+     "watch"
+    ]
+   },
+   "expect": false
+  },
+  {
+   "cond": "when true != items",
+   "ctx": {
+    "action": 0.5,
+    "items": -0.0,
+    "text": "watch",
+    "true": [
+     "café"
+    ],
+    "x": "contain"
+   },
+   "expect": true
+  },
+  {
+   "cond": "when not ok >= ok",
+   "ctx": {
+    "n": [
+     3
+    ],
+    "text": []
+   },
+   "expect": true
+  },
+  {
+   "cond": "when 1000 > visits",
+   "ctx": {
+    "action": 1000,
+    "score": true,
+    "text": false,
+    "true": null,
+    "x": "watch",
+    "y": []
+   },
+   "expect": false
+  },
+  {
+   "cond": "when 'watch' == ok or text > items",
+   "ctx": {
+    "flag": false,
+    "items": {
+     "k": 0
+    },
+    "n": true,
+    "y": 10
+   },
+   "expect": false
+  },
+  {
+   "cond": "when not not (10 > 'watch')",
+   "ctx": {
+    "items": {
+     "k": 1.0
+    },
+    "ok": -0.0,
+    "score": -0.0,
+    "visits": 10,
+    "y": [
+     10,
+     3,
+     3
+    ]
+   },
+   "expect": false
+  },
+  {
+   "cond": "when score != 10 or 'contain' < 1",
+   "ctx": {
+    "ok": [
+     1.0,
+     "fix",
+     1.0
+    ],
+    "y": 3
+   },
+   "expect": true
+  },
+  {
+   "cond": "when action <= true",
+   "ctx": {
+    "action": true,
+    "text": [
+     1,
+     "fix",
+     "fix"
+    ],
+    "true": 1
+   },
+   "expect": true
+  },
+  {
+   "cond": "when (n in y)",
+   "ctx": {
+    "action": 2,
+    "ok": false,
+    "score": [
+     10
+    ],
+    "text": {
+     "k": 0
+    },
+    "true": []
+   },
+   "expect": false
+  },
+  {
+   "cond": "when 'watch' >= 'café'",
+   "ctx": {
+    "action": {
+     "k": 0
+    },
+    "text": null
+   },
+   "expect": true
+  },
+  {
+   "cond": "when (not x >= items or true >= action)",
+   "ctx": {
+    "action": [
+     2,
+     3,
+     1000
+    ],
+    "flag": [
+     -0.0
+    ],
+    "ok": "contain"
+   },
+   "expect": true
+  },
+  {
+   "cond": "when [visits] not in [visits]",
+   "ctx": {
+    "action": "",
+    "flag": 1000,
+    "items": 1000,
+    "n": null,
+    "score": "watch",
+    "visits": 0
+   },
+   "expect": true
+  },
+  {
+   "cond": "when x >= score",
+   "ctx": {
+    "flag": {
+     "k": 1000
+    },
+    "items": [
+     "fix",
+     0
+    ],
+    "n": {
+     "k": 1
+    },
+    "ok": 1,
+    "y": null
+   },
+   "expect": false
+  },
+  {
+   "cond": "when 10 >= 'contain'",
+   "ctx": {
+    "n": [
+     "contain",
+     ""
+    ],
+    "x": true
+   },
+   "expect": false
+  },
+  {
+   "cond": "when -0.0 == 'fix' < -0.0",
+   "ctx": {
+    "n": -0.0,
+    "true": 1
+   },
+   "expect": "ERROR"
+  },
+  {
+   "cond": "when n >= items",
+   "ctx": {
+    "flag": {
+     "k": 2
+    },
+    "n": [
+     3
+    ],
+    "ok": -0.0,
+    "score": [
+     "",
+     1.0,
+     3
+    ],
+    "true": [],
+    "x": false
+   },
+   "expect": false
+  },
+  {
+   "cond": "when not ((ok in 1.0))",
+   "ctx": {},
+   "expect": true
+  },
+  {
+   "cond": "when x >= action or items > items or 'café' <= 2",
+   "ctx": {
+    "ok": [],
+    "x": 1
+   },
+   "expect": false
+  },
+  {
+   "cond": "when [items, 'fix'] != true",
+   "ctx": {
+    "flag": {
+     "k": 2
+    },
+    "ok": {
+     "k": 2
+    },
+    "true": "café",
+    "x": 10,
+    "y": true
+   },
+   "expect": true
+  },
+  {
+   "cond": "when score > visits >= 'fix'",
+   "ctx": {
+    "action": -0.0,
+    "x": "fix"
+   },
+   "expect": false
+  },
+  {
+   "cond": "when (n != action) and y != 10 and not x in 'café' >= true",
+   "ctx": {},
+   "expect": false
+  },
+  {
+   "cond": "when score in y",
+   "ctx": {
+    "action": "contain",
+    "flag": 1000,
+    "score": "café",
+    "x": {
+     "k": 0.5
+    }
+   },
+   "expect": false
+  },
+  {
+   "cond": "when [True, items] < None",
+   "ctx": {
+    "items": []
+   },
+   "expect": false
+  },
+  {
+   "cond": "when 'fix' not in [x] <= 1000",
+   "ctx": {
+    "items": 0,
+    "ok": 1,
+    "score": "café",
+    "true": 1000,
+    "x": "café"
+   },
+   "expect": false
+  },
+  {
+   "cond": "when 3 == [[true, visits, n], [y, 1], y] != 3",
+   "ctx": {},
+   "expect": false
+  },
+  {
+   "cond": "when 'café' >= visits",
+   "ctx": {
+    "flag": 0.5,
+    "n": -0.0,
+    "ok": [
+     0.5
+    ],
+    "text": 1.0
+   },
+   "expect": false
+  },
+  {
+   "cond": "when 'error happened' != visits",
+   "ctx": {
+    "action": 0,
+    "n": 1,
+    "score": [
+     "contain",
+     2,
+     3
+    ],
+    "x": [
+     1.0,
+     "contain"
+    ]
+   },
+   "expect": true
+  },
+  {
+   "cond": "when not (x not in y) or text <= ok",
+   "ctx": {},
+   "expect": false
+  },
+  {
+   "cond": "when ok not in visits",
+   "ctx": {
+    "items": 1
+   },
+   "expect": true
+  },
+  {
+   "cond": "when [0, text, ''] not in x",
+   "ctx": {
+    "n": true,
+    "score": "café",
+    "visits": {
+     "k": 10
+    },
+    "x": false
+   },
+   "expect": true
+  },
+  {
+   "cond": "when 'fix' != action",
+   "ctx": {
+    "action": 10,
+    "flag": "",
+    "items": 2,
+    "ok": false,
+    "visits": 0.5,
+    "y": 3
+   },
+   "expect": true
+  },
+  {
+   "cond": "when not 'fix' not in 'contain' <= true",
+   "ctx": {
+    "visits": {
+     "k": 2
+    }
+   },
+   "expect": true
+  },
+  {
+   "cond": "when 1.0 not in flag not in items",
+   "ctx": {},
+   "expect": true
+  },
+  {
+   "cond": "when [action] < x",
+   "ctx": {
+    "score": "café",
+    "visits": "",
+    "x": []
+   },
+   "expect": false
+  },
+  {
+   "cond": "when 1000 in n",
+   "ctx": {
+    "flag": -0.0,
+    "items": true
+   },
+   "expect": false
+  },
+  {
+   "cond": "when [] not in action < text or [] != 'café' >= -0.0",
+   "ctx": {
+    "flag": "fix",
+    "items": "fix",
+    "ok": null,
+    "true": {
+     "k": 0
+    },
+    "y": 0.5
+   },
+   "expect": "ERROR"
+  },
+  {
+   "cond": "when [text] != [flag] and 'fix' >= 1 or (items >= y)",
+   "ctx": {
+    "score": 1.0
+   },
+   "expect": false
+  },
+  {
+   "cond": "when 'fix' > n",
+   "ctx": {
+    "flag": 1000,
+    "n": {
+     "k": 0
+    },
+    "ok": {
+     "k": 10
+    }
+   },
+   "expect": false
+  },
+  {
+   "cond": "when flag <= ok or 'contain' >= 1000",
+   "ctx": {
+    "items": {
+     "k": 0
+    },
+    "ok": {
+     "k": -0.0
+    },
+    "score": -0.0,
+    "true": 0.5,
+    "visits": -0.0,
+    "y": "watch"
+   },
+   "expect": false
+  },
+  {
+   "cond": "when ok < visits",
+   "ctx": {
+    "flag": 0,
+    "n": false,
+    "true": true,
+    "visits": 2,
+    "x": "watch",
+    "y": [
+     2,
+     0.5
+    ]
+   },
+   "expect": false
+  },
+  {
+   "cond": "when '' not in n",
+   "ctx": {},
+   "expect": true
+  },
+  {
+   "cond": "when -0.0 > true",
+   "ctx": {
+    "n": 10,
+    "ok": true,
+    "score": [],
+    "text": "",
+    "true": {
+     "k": 2
+    }
+   },
+   "expect": "ERROR"
+  },
+  {
+   "cond": "when (not not -0.0 != 1)",
+   "ctx": {
+    "action": null,
+    "flag": {
+     "k": 0.5
+    },
+    "score": "café",
+    "text": {
+     "k": 0.5
+    }
+   },
+   "expect": "ERROR"
+  },
+  {
+   "cond": "when score in items or action in true or items >= true and action > 'error happened'",
+   "ctx": {
+    "flag": -0.0,
+    "n": 10,
+    "true": 1.0
+   },
+   "expect": false
+  },
+  {
+   "cond": "when 'error happened' <= x",
+   "ctx": {
+    "items": "café"
+   },
+   "expect": false
+  },
+  {
+   "cond": "when -0.0 not in visits",
+   "ctx": {
+    "x": -0.0
+   },
+   "expect": "ERROR"
+  },
+  {
+   "cond": "when (10 > [y, 'café', 2])",
+   "ctx": {
+    "n": "fix",
+    "score": false,
+    "text": 1.0,
+    "x": {
+     "k": 2
+    }
+   },
+   "expect": false
+  },
+  {
+   "cond": "when not n < -0.0 and 0 > '' or n < 1000",
+   "ctx": {
+    "ok": "fix",
+    "true": {
+     "k": 10
+    },
+    "visits": 2,
+    "y": "café"
+   },
+   "expect": "ERROR"
+  },
+  {
+   "cond": "when 0.5 > y or 'watch' != 'fix' and not x == ok",
+   "ctx": {
+    "items": {
+     "k": 2
+    },
+    "score": [],
+    "x": -0.0,
+    "y": [
+     "fix"
+    ]
+   },
+   "expect": true
+  },
+  {
+   "cond": "when n > text >= ok",
+   "ctx": {
+    "flag": -0.0,
+    "items": {
+     "k": 10
+    },
+    "ok": 1000,
+    "true": [
+     "contain"
+    ],
+    "x": {
+     "k": 1000
+    },
+    "y": 1
+   },
+   "expect": false
+  },
+  {
+   "cond": "when (text in flag in text) and not not items == score",
+   "ctx": {},
+   "expect": false
+  },
+  {
+   "cond": "when '' in '' or visits == score and 'error happened' != action",
+   "ctx": {
+    "n": [
+     1,
+     3,
+     "error happened"
+    ],
+    "true": 3,
+    "y": "error happened"
+   },
+   "expect": true
+  },
+  {
+   "cond": "when ((true in 'café'))",
+   "ctx": {
+    "action": 10,
+    "items": true,
+    "ok": "watch",
+    "score": -0.0
+   },
+   "expect": false
+  },
+  {
+   "cond": "when not score < 'café'",
+   "ctx": {
+    "items": [
+     "",
+     10,
+     3
+    ],
+    "n": true
+   },
+   "expect": true
+  },
+  {
+   "cond": "when (0 != 'contain' in 'fix' or -0.0 < 1.0 not in true) or [1000, items, None] > 'fix'",
+   "ctx": {
+    "n": [
+     1.0,
+     1
+    ],
+    "ok": "fix",
+    "text": "contain",
+    "x": []
+   },
+   "expect": "ERROR"
+  },
+  {
+   "cond": "when visits != y",
+   "ctx": {
+    "items": "",
+    "n": [],
+    "text": "fix",
+    "visits": false,
+    "x": {
+     "k": 1.0
+    },
+    "y": [
+     "fix",
+     1000,
+     "café"
+    ]
+   },
+   "expect": true
+  },
+  {
+   "cond": "when y <= 'error happened'",
+   "ctx": {
+    "flag": [],
+    "items": {
+     "k": 1.0
+    },
+    "n": -0.0,
+    "ok": [],
+    "text": [
+     -0.0
+    ],
+    "visits": 1
+   },
+   "expect": false
+  },
+  {
+   "cond": "when 'error happened' not in 'contain' != [1000, '']",
+   "ctx": {
+    "items": "error happened",
+    "ok": null,
+    "true": 0
+   },
+   "expect": true
+  },
+  {
+   "cond": "when 10 in visits",
+   "ctx": {},
+   "expect": false
+  },
+  {
+   "cond": "when 'watch' > action",
+   "ctx": {
+    "flag": false,
+    "y": [
+     "error happened",
+     -0.0
+    ]
+   },
+   "expect": false
+  },
+  {
+   "cond": "when flag <= items",
+   "ctx": {
+    "action": -0.0,
+    "ok": -0.0,
+    "score": "fix"
+   },
+   "expect": false
+  },
+  {
+   "cond": "when 'error happened' == score",
+   "ctx": {
+    "items": null,
+    "n": {
+     "k": 1000
+    },
+    "text": [
+     1
+    ],
+    "visits": {
+     "k": 1
+    },
+    "x": {
+     "k": 1.0
+    },
+    "y": "café"
+   },
+   "expect": false
+  },
+  {
+   "cond": "when 1000 != y",
+   "ctx": {
+    "action": "contain",
+    "flag": {
+     "k": 0
+    },
+    "score": "contain",
+    "text": 2,
+    "visits": -0.0,
+    "y": []
+   },
+   "expect": true
+  },
+  {
+   "cond": "when (text >= x or x == visits <= '') or ok not in '' > 'watch' or visits == 'fix' and score >= y",
+   "ctx": {
+    "flag": -0.0,
+    "items": [
+     "contain",
+     0,
+     ""
+    ],
+    "n": null,
+    "ok": 2,
+    "visits": 1.0,
+    "y": null
+   },
+   "expect": false
+  },
+  {
+   "cond": "when not text < 'café' and 'contain' in '' and true == visits",
+   "ctx": {
+    "flag": 1.0,
+    "score": 0.5,
+    "visits": 2,
+    "y": true
+   },
+   "expect": false
+  },
+  {
+   "cond": "when not score not in flag <= items and items <= '' or items not in text or y < action",
+   "ctx": {
+    "action": 3,
+    "flag": 0,
+    "items": {
+     "k": 0
+    },
+    "true": "contain",
+    "x": 1000
+   },
+   "expect": true
+  },
+  {
+   "cond": "when '' < ok",
+   "ctx": {},
+   "expect": false
+  },
+  {
+   "cond": "when 'error happened' >= n",
+   "ctx": {},
+   "expect": false
+  },
+  {
+   "cond": "when not not items in 'contain' or items in text",
+   "ctx": {
+    "n": 0,
+    "ok": "watch",
+    "score": 0,
+    "visits": [
+     1,
+     "café",
+     "café"
+    ],
+    "x": ""
+   },
+   "expect": false
+  },
+  {
+   "cond": "when (not text > n) or true <= None < 'fix'",
+   "ctx": {
+    "score": [
+     0,
+     -0.0
+    ]
+   },
+   "expect": true
+  },
+  {
+   "cond": "when ['fix', n, score] not in None == 'fix'",
+   "ctx": {
+    "n": 1.0,
+    "score": "fix",
+    "text": [
+     1,
+     1.0,
+     -0.0
+    ],
+    "true": {
+     "k": -0.0
+    },
+    "y": 3
+   },
+   "expect": false
+  },
+  {
+   "cond": "when not 'contain' < 'fix' >= 1.0 and ('' < '' != text) or [ok] != ''",
+   "ctx": {},
+   "expect": true
+  },
+  {
+   "cond": "when 2 > ok",
+   "ctx": {
+    "items": true,
+    "true": null,
+    "x": "fix"
+   },
+   "expect": false
+  },
+  {
+   "cond": "when (text != x)",
+   "ctx": {},
+   "expect": false
+  },
+  {
+   "cond": "when 1.0 in items",
+   "ctx": {
+    "score": "watch",
+    "true": [
+     "fix",
+     "",
+     -0.0
+    ]
+   },
+   "expect": false
+  },
+  {
+   "cond": "when [] == y and not 10 >= visits",
+   "ctx": {
+    "items": 3,
+    "n": [
+     "error happened"
+    ],
+    "y": 0
+   },
+   "expect": false
+  },
+  {
+   "cond": "when not (not ok > n)",
+   "ctx": {
+    "action": 2,
+    "x": [
+     10,
+     10,
+     0
+    ],
+    "y": {
+     "k": 3
+    }
+   },
+   "expect": false
+  },
+  {
+   "cond": "when not not action > action not in 10 or 'contain' > action and true >= '' == flag",
+   "ctx": {
+    "flag": {
+     "k": 10
+    },
+    "score": {
+     "k": 0.5
+    },
+    "text": null
+   },
+   "expect": false
+  },
+  {
+   "cond": "when not visits >= n or 'café' not in flag",
+   "ctx": {
+    "true": ""
+   },
+   "expect": true
+  },
+  {
+   "cond": "when 1000 == 'contain'",
+   "ctx": {
+    "n": 1,
+    "visits": 1000
+   },
+   "expect": false
+  },
+  {
+   "cond": "when flag >= x and 1000 != [y, true, y]",
+   "ctx": {
+    "ok": 3,
+    "score": 0.5,
+    "text": "watch",
+    "visits": [
+     "",
+     1000,
+     10
+    ],
+    "x": {
+     "k": 2
+    },
+    "y": []
+   },
+   "expect": false
+  },
+  {
+   "cond": "when not score < text or 'café' < ok",
+   "ctx": {
+    "action": [
+     0,
+     10
+    ],
+    "flag": "",
+    "n": {
+     "k": 1000
+    }
+   },
+   "expect": true
+  },
+  {
+   "cond": "when not not y in n",
+   "ctx": {
+    "action": null,
+    "visits": {
+     "k": 1000
+    },
+    "x": [
+     "café"
+    ]
+   },
+   "expect": false
+  },
+  {
+   "cond": "when 'café' > [x, ok]",
+   "ctx": {
+    "action": [
+     "",
+     3,
+     "café"
+    ],
+    "flag": false,
+    "n": {
+     "k": 10
+    },
+    "score": "fix"
+   },
+   "expect": false
+  },
+  {
+   "cond": "when [3] > 2",
+   "ctx": {},
+   "expect": false
+  },
+  {
+   "cond": "when not -0.0 != ['error happened', 'fix']",
+   "ctx": {
+    "items": 2,
+    "ok": [
+     1
+    ],
+    "score": [
+     0.5
+    ],
+    "text": "error happened",
+    "visits": 0.5,
+    "y": {
+     "k": 1000
+    }
+   },
+   "expect": "ERROR"
+  },
+  {
+   "cond": "when (not 'fix' < 0.5) or 'error happened' in true",
+   "ctx": {
+    "action": 1000,
+    "score": 10,
+    "visits": [
+     "contain",
+     1.0,
+     "error happened"
+    ]
+   },
+   "expect": true
+  },
+  {
+   "cond": "when not y not in 1000",
+   "ctx": {
+    "true": -0.0,
+    "y": {
+     "k": 1
+    }
+   },
+   "expect": false
+  },
+  {
+   "cond": "when not 2 in items or score >= x or (False < ok)",
+   "ctx": {
+    "action": [],
+    "n": 10,
+    "score": [],
+    "true": "error happened",
+    "visits": [
+     1.0,
+     3,
+     "café"
+    ]
+   },
+   "expect": true
+  },
+  {
+   "cond": "when [1000, true] == ok",
+   "ctx": {
+    "score": true
+   },
+   "expect": false
+  },
+  {
+   "cond": "when not x <= true",
+   "ctx": {
+    "ok": "fix",
+    "text": "watch",
+    "y": "fix"
+   },
+   "expect": true
+  },
+  {
+   "cond": "when ('contain' != 2)",
+   "ctx": {
+    "n": [],
+    "y": ""
+   },
+   "expect": true
+  },
+  {
+   "cond": "when 'fix' > 'contain'",
+   "ctx": {
+    "action": {
+     "k": -0.0
+    }
+   },
+   "expect": true
+  },
+  {
+   "cond": "when not action > score in x and x != ok and true != ok",
+   "ctx": {
+    "n": "watch"
+   },
+   "expect": false
+  },
+  {
+   "cond": "when 1000 == true",
+   "ctx": {
+    "n": -0.0,
+    "visits": 10
+   },
+   "expect": false
+  },
+  {
+   "cond": "when 'contain' <= 0 < []",
+   "ctx": {
+    "action": false,
+    "y": [
+     "contain"
+    ]
+   },
+   "expect": false
+  },
+  {
+   "cond": "when ok >= text > score",
+   "ctx": {
+    "flag": "",
+    "text": {
+     "k": 0.5
+    }
+   },
+   "expect": false
+  },
+  {
+   "cond": "when not [] == visits",
+   "ctx": {
+    "action": null
+   },
+   "expect": true
+  },
+  {
+   "cond": "when ok != 10",
+   "ctx": {
+    "action": {
+     "k": 10
+    },
+    "flag": [
+     3,
+     1
+    ],
+    "text": 0.5,
+    "true": 0,
+    "y": 0
+   },
+   "expect": true
+  },
+  {
+   "cond": "when [score] == 'café' <= visits",
+   "ctx": {
+    "items": 2,
+    "ok": 2,
+    "y": "error happened"
+   },
+   "expect": false
+  },
+  {
+   "cond": "when true > visits == visits",
+   "ctx": {
+    "items": null,
+    "ok": 0.5,
+    "score": "",
+    "true": 1.0
+   },
+   "expect": false
+  },
+  {
+   "cond": "when (flag in 1.0) or flag in flag <= items and not action >= flag != True",
+   "ctx": {
+    "action": "café",
+    "flag": 0,
+    "items": 2,
+    "ok": null,
+    "text": true,
+    "y": {
+     "k": 1.0
+    }
+   },
+   "expect": false
+  },
+  {
+   "cond": "when not true != x",
+   "ctx": {
+    "action": "",
+    "items": 0,
+    "ok": [],
+    "x": 1.0
+   },
+   "expect": false
+  },
+  {
+   "cond": "when (y <= n and '' not in n) and items >= 'error happened'",
+   "ctx": {
+    "items": 1000,
+    "n": 0,
+    "ok": {
+     "k": 1.0
+    },
+    "score": [],
+    "true": "watch",
+    "visits": null
+   },
+   "expect": false
+  },
+  {
+   "cond": "when y not in [0.5, ['fix', 0, None], flag]",
+   "ctx": {
+    "flag": [
+     3,
+     1.0,
+     2
+    ],
+    "true": "contain",
+    "visits": []
+   },
+   "expect": true
+  },
+  {
+   "cond": "when not text == items and 'error happened' <= items or visits != 'watch' and true != n <= action or '' <= true <= items and 'fix' > ok",
+   "ctx": {
+    "flag": 1.0,
+    "score": [],
+    "visits": "contain",
+    "y": [
+     10,
+     1000
+    ]
+   },
+   "expect": false
+  },
+  {
+   "cond": "when 10 in []",
+   "ctx": {
+    "flag": {
+     "k": 10
+    }
+   },
+   "expect": false
+  },
+  {
+   "cond": "when 'contain' in False",
+   "ctx": {
+    "ok": 1,
+    "y": 1000
+   },
+   "expect": false
+  },
+  {
+   "cond": "when ('' >= text) and y != flag and x >= text and n > items > action or visits < flag",
+   "ctx": {
+    "flag": "error happened"
+   },
+   "expect": false
+  },
+  {
+   "cond": "when 10 != 'watch'",
+   "ctx": {
+    "action": "error happened",
+    "flag": 2,
+    "score": true
+   },
+   "expect": true
+  },
+  {
+   "cond": "when ('watch' in ok) and n >= 1.0 and action in y",
+   "ctx": {
+    "score": 1,
+    "true": false
+   },
+   "expect": false
+  },
+  {
+   "cond": "when true < action",
+   "ctx": {
+    "flag": 1000,
+    "visits": 0
+   },
+   "expect": false
+  },
+  {
+   "cond": "when 'café' <= flag and visits > 10 or '' <= False and -0.0 not in 'café' and 'watch' < action",
+   "ctx": {
+    "action": "fix",
+    "n": 2,
+    "y": 1000
+   },
+   "expect": "ERROR"
+  },
+  {
+   "cond": "when [action] != y != 1.0 and (visits in '' and 'fix' < 'café')",
+   "ctx": {
+    "score": 3,
+    "visits": [
+     2,
+     10,
+     "error happened"
+    ],
+    "y": 2
+   },
+   "expect": false
+  },
+  {
+   "cond": "when y in visits and ['watch'] == ok",
+   "ctx": {
+    "score": []
+   },
+   "expect": false
+  },
+  {
+   "cond": "when (action <= 'watch') or ('watch' != y) and n == 'fix'",
+   "ctx": {
+    "flag": "watch",
+    "items": 0.5,
+    "ok": 1,
+    "text": {
+     "k": 1.0
+    },
+    "visits": {
+     "k": 1
+    },
+    "y": 3
+   },
+   "expect": false
+  },
+  {
+   "cond": "when (not text <= 'error happened')",
+   "ctx": {
+    "n": [
+     0.5
+    ],
+    "ok": null,
+    "y": 1
+   },
+   "expect": true
+  },
+  {
+   "cond": "when [] not in 'café' or 0 != 'café'",
+   "ctx": {
+    "flag": 0.5,
+    "true": "watch",
+    "y": 3
+   },
+   "expect": true
+  },
+  {
+   "cond": "when true not in [text, []] in [flag, text]",
+   "ctx": {
+    "flag": null,
+    "visits": {
+     "k": 3
+    }
+   },
+   "expect": false
+  },
+  {
+   "cond": "when 'contain' == score",
+   "ctx": {},
+   "expect": false
+  },
+  {
+   "cond": "when n < true <= y",
+   "ctx": {
+    "items": 3,
+    "n": "error happened",
+    "score": [
+     1.0
+    ]
+   },
+   "expect": false
+  },
+  {
+   "cond": "when ('' >= 'watch')",
+   "ctx": {
+    "action": [
+     0,
+     "",
+     1.0
+    ],
+    "ok": "fix",
+    "score": false
+   },
+   "expect": false
+  },
+  {
+   "cond": "when true < ''",
+   "ctx": {
+    "items": "contain",
+    "score": "error happened"
+   },
+   "expect": false
+  },
+  {
+   "cond": "when not (text in text and 'error happened' == y)",
+   "ctx": {
+    "flag": "café",
+    "n": [
+     1000,
+     "contain"
+    ],
+    "true": [
+     "",
+     "café"
+    ]
+   },
+   "expect": true
+  },
+  {
+   "cond": "when flag == text and [''] < 'error happened' < y",
+   "ctx": {
+    "action": 1.0,
+    "flag": [
+     "fix",
+     -0.0,
+     "contain"
+    ],
+    "score": "café",
+    "visits": -0.0,
+    "y": null
+   },
+   "expect": false
+  },
+  {
+   "cond": "when true >= items",
+   "ctx": {
+    "action": 1.0,
+    "flag": [],
+    "items": null,
+    "x": 1.0,
+    "y": 0.5
+   },
+   "expect": false
+  },
+  {
+   "cond": "when true < n <= '' and (visits > y) and not 0 == x or not true > score",
+   "ctx": {
+    "action": "fix",
+    "n": [],
+    "score": "café",
+    "text": {
+     "k": 0.5
+    },
+    "true": [
+     "watch",
+     1.0
+    ],
+    "visits": {
+     "k": 0.5
+    }
+   },
+   "expect": true
+  },
+  {
+   "cond": "when (x > flag)",
+   "ctx": {
+    "score": [
+     1000,
+     1.0,
+     "watch"
+    ],
+    "true": 0.5
+   },
+   "expect": false
+  },
+  {
+   "cond": "when not visits not in 'error happened' and '' != items <= ok",
+   "ctx": {
+    "n": 10,
+    "ok": [
+     "error happened",
+     "watch"
+    ],
+    "score": {
+     "k": 10
+    },
+    "x": {
+     "k": 10
+    }
+   },
+   "expect": false
+  },
+  {
+   "cond": "when flag != x",
+   "ctx": {
+    "text": {
+     "k": -0.0
+    }
+   },
+   "expect": false
+  },
+  {
+   "cond": "when visits < visits or text != [action, ok, action] <= y",
+   "ctx": {
+    "visits": [],
+    "y": 3
+   },
+   "expect": false
+  },
+  {
+   "cond": "when text == 'error happened' <= action",
+   "ctx": {
+    "n": true,
+    "text": null
+   },
+   "expect": false
+  },
+  {
+   "cond": "when -0.0 == 1 or items in text or flag == n or [visits, n] in 'café' not in action",
+   "ctx": {
+    "items": [],
+    "ok": [
+     1,
+     2,
+     0.5
+    ],
+    "y": 3
+   },
+   "expect": "ERROR"
+  },
+  {
+   "cond": "when [[''], 'watch', flag] == 'error happened'",
+   "ctx": {},
+   "expect": false
+  },
+  {
+   "cond": "when n in [y]",
+   "ctx": {
+    "n": {
+     "k": 0.5
+    },
+    "score": {
+     "k": 1
+    }
+   },
+   "expect": false
+  },
+  {
+   "cond": "when visits <= flag",
+   "ctx": {
+    "items": [],
+    "n": [
+     -0.0,
+     "watch",
+     "watch"
+    ],
+    "score": [
+     "",
+     "contain",
+     ""
+    ]
+   },
+   "expect": false
+  },
+  {
+   "cond": "when (not not ok not in 'café')",
+   "ctx": {},
+   "expect": true
+  },
+  {
+   "cond": "when score in 'watch' != 'café'",
+   "ctx": {
+    "action": [],
+    "flag": {
+     "k": 2
+    },
+    "items": {
+     "k": 2
+    },
+    "n": null,
+    "ok": [
+     1,
+     1000,
+     "error happened"
+    ],
+    "x": [
+     "watch"
+    ]
+   },
+   "expect": false
+  },
+  {
+   "cond": "when not (n > x and items < 'café')",
+   "ctx": {},
+   "expect": true
+  },
+  {
+   "cond": "when 1000 not in [ok, y] and x > flag",
+   "ctx": {
+    "true": null
+   },
+   "expect": false
+  },
+  {
+   "cond": "when 'error happened' in ['fix'] and [-0.0] <= ['watch'] >= action",
+   "ctx": {
+    "flag": true,
+    "true": null,
+    "x": 1
+   },
+   "expect": "ERROR"
+  },
+  {
+   "cond": "when flag != 'watch' or ok > 1 and items != n and x < n or x >= flag in n or (1.0 <= 'fix')",
+   "ctx": {
+    "action": [],
+    "text": 3
+   },
+   "expect": true
+  },
+  {
+   "cond": "when x > 0",
+   "ctx": {
+    "n": "error happened",
+    "ok": [],
+    "visits": "error happened"
+   },
+   "expect": false
+  },
+  {
+   "cond": "when [visits, ok] == [ok] and text >= action not in 'contain'",
+   "ctx": {},
+   "expect": false
+  },
+  {
+   "cond": "when y not in 'watch' and not 'contain' == true not in x",
+   "ctx": {
+    "items": "fix",
+    "score": 0.5,
+    "text": {
+     "k": 2
+    },
+    "true": 10
+   },
+   "expect": true
+  },
+  {
+   "cond": "when (visits not in 'contain') and '' not in text and flag > action",
+   "ctx": {
+    "n": "café",
+    "text": [
+     "watch",
+     -0.0,
+     1
+    ],
+    "x": "error happened"
+   },
+   "expect": false
+  },
+  {
+   "cond": "when '' in y",
+   "ctx": {
+    "items": 2,
+    "n": [
+     1.0,
+     "fix"
+    ],
+    "text": "",
+    "true": [
+     10,
+     -0.0,
+     -0.0
+    ],
+    "visits": [
+     3
+    ],
+    "x": [
+     0
+    ]
+   },
+   "expect": false
+  },
+  {
+   "cond": "when flag in y and 2 < 'contain'",
+   "ctx": {
+    "n": "error happened"
+   },
+   "expect": false
+  },
+  {
+   "cond": "when flag not in action or 'contain' >= flag and flag > y and '' > visits and not text >= true",
+   "ctx": {
+    "flag": 1,
+    "items": 3,
+    "text": 1,
+    "true": 1.0
+   },
+   "expect": true
+  },
+  {
+   "cond": "when ok > [2] or ok >= 'café' != y or (x > n)",
+   "ctx": {
+    "true": [
+     10,
+     "watch",
+     1000
+    ],
+    "x": 3
+   },
+   "expect": false
+  },
+  {
+   "cond": "when n in -0.0",
+   "ctx": {
+    "n": 3
+   },
+   "expect": "ERROR"
+  },
+  {
+   "cond": "when ok > 'watch'",
+   "ctx": {
+    "items": 3,
+    "ok": 3
+   },
+   "expect": false
+  },
+  {
+   "cond": "when 'watch' == [flag] and text >= 'café'",
+   "ctx": {
+    "action": [
+     "contain"
+    ],
+    "items": "fix",
+    "n": true,
+    "visits": {
+     "k": 2
+    }
+   },
+   "expect": false
+  },
+  {
+   "cond": "when true in items and [flag] <= 1.0",
+   "ctx": {
+    "score": 1.0
+   },
+   "expect": false
+  },
+  {
+   "cond": "when not true < x and action <= y or (('café' == action))",
+   "ctx": {
+    "visits": 0,
+    "x": [],
+    "y": 1
+   },
+   "expect": false
+  },
+  {
+   "cond": "when y >= y",
+   "ctx": {
+    "n": "error happened"
+   },
+   "expect": false
+  },
+  {
+   "cond": "when items < ok",
+   "ctx": {
+    "action": 1.0,
+    "items": 1000,
+    "ok": 1000,
+    "x": 3,
+    "y": {
+     "k": 1.0
+    }
+   },
+   "expect": false
+  },
+  {
+   "cond": "when visits != True or not 'error happened' >= y",
+   "ctx": {},
+   "expect": true
+  },
+  {
+   "cond": "when ok < [visits]",
+   "ctx": {
+    "items": 10,
+    "true": "fix"
+   },
+   "expect": false
+  },
+  {
+   "cond": "when y < n",
+   "ctx": {
+    "action": [],
+    "n": ""
+   },
+   "expect": false
+  },
+  {
+   "cond": "when items >= n",
+   "ctx": {
+    "action": [
+     "fix",
+     "",
+     "watch"
+    ],
+    "flag": false,
+    "score": "",
+    "text": "café",
+    "true": {
+     "k": 1.0
+    },
+    "visits": true
+   },
+   "expect": false
+  },
+  {
+   "cond": "when flag <= 'watch' or ok < x",
+   "ctx": {
+    "n": [
+     3,
+     3,
+     "error happened"
+    ],
+    "text": 2
+   },
+   "expect": false
+  },
+  {
+   "cond": "when not x in 'café' and not 2 >= flag",
+   "ctx": {},
+   "expect": true
+  },
+  {
+   "cond": "when not 'watch' < [10, x]",
+   "ctx": {
+    "n": true,
+    "y": 0
+   },
+   "expect": true
+  },
+  {
+   "cond": "when action not in 1000",
+   "ctx": {
+    "action": {
+     "k": 1000
+    },
+    "flag": {
+     "k": -0.0
+    }
+   },
+   "expect": true
+  },
+  {
+   "cond": "when 'fix' < ok and score in n",
+   "ctx": {},
+   "expect": false
+  },
+  {
+   "cond": "when ['fix'] >= items",
+   "ctx": {
+    "ok": 3
+   },
+   "expect": false
+  },
+  {
+   "cond": "when items <= []",
+   "ctx": {
+    "items": 0
+   },
+   "expect": false
+  },
+  {
+   "cond": "when x != x",
+   "ctx": {
+    "action": [
+     2,
+     "contain"
+    ],
+    "items": false
+   },
+   "expect": false
+  },
+  {
+   "cond": "when 'café' < action",
+   "ctx": {
+    "items": {
+     "k": 3
+    },
+    "true": 10,
+    "x": 1
+   },
+   "expect": false
+  },
+  {
+   "cond": "when visits < ok",
+   "ctx": {
+    "ok": false,
+    "score": 1,
+    "text": 1.0,
+    "true": [
+     -0.0,
+     0.5
+    ]
+   },
+   "expect": false
+  },
+  {
+   "cond": "when True < items != 2",
+   "ctx": {
+    "n": 0.5,
+    "y": "fix"
+   },
+   "expect": false
+  },
+  {
+   "cond": "when score < true or ('' < 'error happened' >= 'café') or ((x == flag))",
+   "ctx": {
+    "n": 10,
+    "ok": "error happened",
+    "visits": false,
+    "x": "fix",
+    "y": [
+     10,
+     10
+    ]
+   },
+   "expect": true
+  },
+  {
+   "cond": "when not action >= text and 10 not in n",
+   "ctx": {
+    "flag": [],
+    "n": null,
+    "text": {
+     "k": 0.5
+    }
+   },
+   "expect": true
+  },
+  {
+   "cond": "when flag == visits",
+   "ctx": {
+    "items": 1,
+    "n": 10,
+    "visits": 1
+   },
+   "expect": false
+  },
+  {
+   "cond": "when -0.0 == action",
+   "ctx": {
+    "items": 1.0,
+    "n": "error happened"
+   },
+   "expect": "ERROR"
+  },
+  {
+   "cond": "when action in ok",
+   "ctx": {
+    "flag": 10,
+    "n": {
+     "k": 1
+    },
+    "score": [
+     -0.0,
+     1000,
+     "contain"
+    ],
+    "text": 10,
+    "true": {
+     "k": 0.5
+    },
+    "y": {
+     "k": 10
+    }
+   },
+   "expect": false
+  },
+  {
+   "cond": "when visits != flag",
+   "ctx": {
+    "action": "contain",
+    "n": {
+     "k": 0
+    },
+    "ok": 3
+   },
+   "expect": false
+  },
+  {
+   "cond": "when not 10 not in 'contain'",
+   "ctx": {
+    "action": 2,
+    "ok": false
+   },
+   "expect": false
+  },
+  {
+   "cond": "when ('café' in true and y != x in true)",
+   "ctx": {
+    "ok": 10,
+    "score": "",
+    "x": {
+     "k": 0.5
+    },
+    "y": [
+     3,
+     3,
+     ""
+    ]
+   },
+   "expect": false
+  },
+  {
+   "cond": "when action in text <= -0.0",
+   "ctx": {
+    "action": 1.0,
+    "flag": 0
+   },
+   "expect": "ERROR"
+  },
+  {
+   "cond": "when 0.5 in action or true in n or (flag < 1.0)",
+   "ctx": {
+    "items": "café",
+    "n": null,
+    "ok": [
+     0
+    ],
+    "score": {
+     "k": 1
+    },
+    "visits": 0,
+    "y": true
+   },
+   "expect": false
+  },
+  {
+   "cond": "when score >= visits",
+   "ctx": {
+    "items": 3
+   },
+   "expect": false
+  },
+  {
+   "cond": "when action == 'watch'",
+   "ctx": {
+    "flag": [
+     1.0
+    ],
+    "ok": 10,
+    "true": -0.0,
+    "x": {
+     "k": 1
+    },
+    "y": 2
+   },
+   "expect": false
+  },
+  {
+   "cond": "when not '' != action in visits",
+   "ctx": {
+    "items": 0.5,
+    "n": 2,
+    "visits": []
+   },
+   "expect": true
+  },
+  {
+   "cond": "when 1000 > flag",
+   "ctx": {
+    "n": 2,
+    "ok": 3,
+    "visits": 2,
+    "x": 0.5
+   },
+   "expect": false
+  },
+  {
+   "cond": "when action in items or items != -0.0 < score and (0.5 in 'error happened') or (items > visits) and 1 >= 'watch'",
+   "ctx": {
+    "flag": 0.5,
+    "y": "contain"
+   },
+   "expect": "ERROR"
+  },
+  {
+   "cond": "when not true <= 3 and items != 1.0",
+   "ctx": {
+    "flag": "contain",
+    "text": 10
+   },
+   "expect": true
+  },
+  {
+   "cond": "when (not x == items or x == 'fix' != 1.0)",
+   "ctx": {
+    "flag": [],
+    "items": 0.5,
+    "ok": {
+     "k": 10
+    },
+    "text": "café",
+    "visits": "fix"
+   },
+   "expect": true
+  },
+  {
+   "cond": "when y == n",
+   "ctx": {},
+   "expect": true
+  },
+  {
+   "cond": "when action != text",
+   "ctx": {
+    "action": 0.5,
+    "items": {
+     "k": 10
+    },
+    "ok": -0.0,
+    "true": [
+     -0.0,
+     "contain",
+     2
+    ],
+    "visits": {
+     "k": 1.0
+    },
+    "x": 0.5
+   },
+   "expect": true
+  },
+  {
+   "cond": "when [-0.0] not in items",
+   "ctx": {
+    "action": 1000,
+    "flag": [
+     "error happened",
+     1.0,
+     3
+    ],
+    "items": [
+     "contain"
+    ],
+    "ok": "contain",
+    "text": 0,
+    "y": 10
+   },
+   "expect": "ERROR"
+  },
+  {
+   "cond": "when 'contain' < y",
+   "ctx": {
+    "flag": {
+     "k": 1.0
+    }
+   },
+   "expect": false
+  },
+  {
+   "cond": "when ok in items",
+   "ctx": {
+    "items": [
+     0
+    ],
+    "n": 1,
+    "y": {
+     "k": 2
+    }
+   },
+   "expect": false
+  },
+  {
+   "cond": "when 1000 in action or -0.0 == [flag, 'error happened', 'error happened']",
+   "ctx": {
+    "action": 0,
+    "ok": [
+     1
+    ],
+    "y": {
+     "k": -0.0
+    }
+   },
+   "expect": "ERROR"
+  },
+  {
+   "cond": "when items < text and items != true or (flag != text) and x in 'watch'",
+   "ctx": {
+    "n": false,
+    "y": []
+   },
+   "expect": false
+  },
+  {
+   "cond": "when 1 == True",
+   "ctx": {
+    "n": "café",
+    "ok": 0.5,
+    "true": "error happened",
+    "y": 10
+   },
+   "expect": true
+  },
+  {
+   "cond": "when not true > visits or flag < 'fix' or visits > visits and ok >= action or items == 1",
+   "ctx": {
+    "score": 0,
+    "text": 2,
+    "true": "café"
+   },
+   "expect": true
+  },
+  {
+   "cond": "when 'error happened' > -0.0",
+   "ctx": {},
+   "expect": "ERROR"
+  },
+  {
+   "cond": "when (not 'café' == 'contain' > ok and n > flag in 3)",
+   "ctx": {},
+   "expect": false
+  },
+  {
+   "cond": "when ((items > action >= n) or n <= 'fix')",
+   "ctx": {
+    "score": [
+     1,
+     2,
+     1000
+    ],
+    "true": false
+   },
+   "expect": false
+  },
+  {
+   "cond": "when (('' == action) or not flag >= ok)",
+   "ctx": {
+    "action": "fix",
+    "items": "fix",
+    "n": -0.0,
+    "x": "error happened"
+   },
+   "expect": true
+  },
+  {
+   "cond": "when [10, []] == [True]",
+   "ctx": {
+    "visits": true
+   },
+   "expect": false
+  },
+  {
+   "cond": "when score <= x or y not in 'fix' and ok not in true or x <= ok",
+   "ctx": {
+    "score": "contain"
+   },
+   "expect": true
+  },
+  {
+   "cond": "when score > 'café'",
+   "ctx": {
+    "action": true,
+    "ok": null,
+    "score": true,
+    "visits": true,
+    "x": {
+     "k": 0.5
+    },
+    "y": 1
+   },
+   "expect": false
+  },
+  {
+   "cond": "when -0.0 < 'error happened'",
+   "ctx": {
+    "text": {
+     "k": 1000
+    }
+   },
+   "expect": "ERROR"
+  },
+  {
+   "cond": "when n > y or action < None > text and 1.0 == n and ('watch' <= n in action) and items != 'contain'",
+   "ctx": {
+    "n": true,
+    "text": 10,
+    "visits": 10,
+    "x": "café"
+   },
+   "expect": false
+  },
+  {
+   "cond": "when ('error happened' <= x != n and '' != 'café')",
+   "ctx": {
+    "action": "café",
+    "flag": {
+     "k": 1
+    },
+    "ok": false,
+    "score": null,
+    "visits": 10
+   },
+   "expect": false
+  },
+  {
+   "cond": "when ok != 1000 and 'contain' >= n and true > 'fix'",
+   "ctx": {
+    "items": 1000,
+    "score": 0,
+    "true": "contain",
+    "y": []
+   },
+   "expect": false
+  },
+  {
+   "cond": "when 'café' == y == 'fix'",
+   "ctx": {
+    "true": {
+     "k": 10
+    },
+    "visits": {
+     "k": -0.0
+    },
+    "y": []
+   },
+   "expect": false
+  },
+  {
+   "cond": "when not [3, x, flag] in []",
+   "ctx": {
+    "action": 0.5,
+    "ok": "contain",
+    "score": [
+     "contain",
+     1.0,
+     1000
+    ],
+    "x": 10
+   },
+   "expect": true
+  },
+  {
+   "cond": "when (not ok == flag and n > text)",
+   "ctx": {
+    "flag": [],
+    "items": 1000,
+    "n": 0.5,
+    "visits": false
+   },
+   "expect": false
+  },
+  {
+   "cond": "when score >= items",
+   "ctx": {
+    "flag": 1.0,
+    "items": {
+     "k": 1000
+    },
+    "n": 1000,
+    "ok": [
+     -0.0,
+     1,
+     3
+    ],
+    "text": 0.5,
+    "visits": true
+   },
+   "expect": false
+  },
+  {
+   "cond": "when x not in [x, -0.0, 1] == 'error happened'",
+   "ctx": {
+    "action": 1.0,
+    "score": "fix",
+    "x": 1.0
+   },
+   "expect": "ERROR"
+  },
+  {
+   "cond": "when [] >= true",
+   "ctx": {
+    "flag": [
+     "contain",
+     "café",
+     "watch"
+    ],
+    "items": [],
+    "n": "error happened",
+    "text": [
+     "error happened",
+     1.0,
+     ""
+    ],
+    "visits": [
+     2,
+     1.0
+    ],
+    "x": 1000
+   },
+   "expect": false
+  },
+  {
+   "cond": "when (x > flag)",
+   "ctx": {
+    "action": [
+     10
+    ],
+    "items": [],
+    "ok": -0.0,
+    "text": 0.5,
+    "true": 0,
+    "x": ""
+   },
+   "expect": false
+  },
+  {
+   "cond": "when 3 != 'error happened'",
+   "ctx": {
+    "n": 0,
+    "score": 2,
+    "text": -0.0,
+    "y": 10
+   },
+   "expect": true
+  },
+  {
+   "cond": "when flag > x or text == text and not y >= 1.0",
+   "ctx": {},
+   "expect": true
+  },
+  {
+   "cond": "when n >= ''",
+   "ctx": {
+    "items": 3,
+    "score": {
+     "k": 0
+    },
+    "text": "contain",
+    "x": [
+     3,
+     1.0
+    ],
+    "y": []
+   },
+   "expect": false
+  },
+  {
+   "cond": "when visits != flag",
+   "ctx": {
+    "action": false,
+    "ok": true,
+    "true": [],
+    "visits": null
+   },
+   "expect": false
+  },
+  {
+   "cond": "when 'watch' >= text and flag in 'contain'",
+   "ctx": {
+    "ok": false,
+    "score": false,
+    "text": [
+     "café"
+    ],
+    "y": [
+     "fix"
+    ]
+   },
+   "expect": false
+  },
+  {
+   "cond": "when [text, 'fix'] < 3",
+   "ctx": {
+    "score": 1
+   },
+   "expect": false
+  },
+  {
+   "cond": "when ([n, action, n] < 1.0 in '')",
+   "ctx": {
+    "flag": null,
+    "items": 0,
+    "n": {
+     "k": 1.0
+    },
+    "ok": {
+     "k": 0.5
+    },
+    "y": 0.5
+   },
+   "expect": false
+  },
+  {
+   "cond": "when ['', [true], ok] == 10",
+   "ctx": {
+    "n": 10,
+    "score": 1,
+    "text": null
+   },
+   "expect": false
+  },
+  {
+   "cond": "when flag > 1 and items not in n or flag < ok or x == ok or score == 'contain' in [items]",
+   "ctx": {},
+   "expect": true
+  },
+  {
+   "cond": "when y in 2",
+   "ctx": {
+    "visits": {
+     "k": 1
+    },
+    "y": [
+     "contain"
+    ]
+   },
+   "expect": false
+  },
+  {
+   "cond": "when not 'fix' >= ok and x == true in flag or 'watch' < items",
+   "ctx": {
+    "flag": true
+   },
+   "expect": false
+  },
+  {
+   "cond": "when flag != 2",
+   "ctx": {},
+   "expect": true
+  },
+  {
+   "cond": "when (text < flag or score in -0.0)",
+   "ctx": {},
+   "expect": "ERROR"
+  },
+  {
+   "cond": "when (('watch' >= text)) or [score, visits, items] <= action",
+   "ctx": {},
+   "expect": false
+  },
+  {
+   "cond": "when 'café' in action",
+   "ctx": {
+    "items": "watch",
+    "visits": "",
+    "x": "fix"
+   },
+   "expect": false
+  },
+  {
+   "cond": "when y >= ok == x and text != ['watch'] < action",
+   "ctx": {
+    "flag": 3,
+    "items": {
+     "k": 0
+    },
+    "n": [],
+    "ok": -0.0,
+    "text": false,
+    "visits": "watch"
+   },
+   "expect": false
+  },
+  {
+   "cond": "when [] != action",
+   "ctx": {
+    "action": 1.0,
+    "items": true,
+    "n": 1000,
+    "x": -0.0,
+    "y": 1.0
+   },
+   "expect": true
+  },
+  {
+   "cond": "when 'café' > 10",
+   "ctx": {
+    "action": false,
+    "items": 1.0,
+    "y": 1000
+   },
+   "expect": false
+  },
+  {
+   "cond": "when '' >= y",
+   "ctx": {
+    "flag": "watch",
+    "true": "",
+    "x": null
+   },
+   "expect": false
+  },
+  {
+   "cond": "when y <= score and action not in 3",
+   "ctx": {},
+   "expect": false
+  },
+  {
+   "cond": "when 'contain' < true",
+   "ctx": {
+    "action": [
+     1000,
+     10,
+     0.5
+    ],
+    "flag": "error happened",
+    "items": "café",
+    "x": {
+     "k": 3
+    }
+   },
+   "expect": false
+  },
+  {
+   "cond": "when y in [x, y, score] != action",
+   "ctx": {
+    "n": 1000,
+    "ok": "fix",
+    "score": 1.0
+   },
+   "expect": true
+  },
+  {
+   "cond": "when [0.5, -0.0] <= text",
+   "ctx": {
+    "items": {
+     "k": 2
+    },
+    "ok": 1.0,
+    "score": 10,
+    "true": 0.5
+   },
+   "expect": "ERROR"
+  },
+  {
+   "cond": "when not 'watch' != 0 or 1000 >= [''] > ''",
+   "ctx": {
+    "ok": true,
+    "visits": 2
+   },
+   "expect": false
+  },
+  {
+   "cond": "when not 1.0 > true and 3 != true < score and 'fix' not in ''",
+   "ctx": {
+    "items": [
+     1000
+    ],
+    "ok": ""
+   },
+   "expect": false
+  },
+  {
+   "cond": "when 'error happened' != flag",
+   "ctx": {
+    "visits": [
+     "error happened"
+    ]
+   },
+   "expect": true
+  },
+  {
+   "cond": "when (('fix' in n))",
+   "ctx": {},
+   "expect": false
+  },
+  {
+   "cond": "when visits in ok",
+   "ctx": {
+    "action": "café"
+   },
+   "expect": false
+  },
+  {
+   "cond": "when text == 0.5",
+   "ctx": {
+    "ok": true,
+    "x": null
+   },
+   "expect": false
+  },
+  {
+   "cond": "when (not 'café' == score)",
+   "ctx": {
+    "n": null,
+    "score": [],
+    "true": 0,
+    "visits": "café"
+   },
+   "expect": true
+  },
+  {
+   "cond": "when action != visits == 'error happened' and text >= n >= False and (flag < y < 'contain')",
+   "ctx": {
+    "action": "contain",
+    "flag": true,
+    "n": "café",
+    "ok": "error happened"
+   },
+   "expect": false
+  },
+  {
+   "cond": "when not y != true",
+   "ctx": {
+    "flag": true,
+    "n": {
+     "k": 3
+    },
+    "text": [
+     -0.0
+    ],
+    "visits": "café",
+    "x": "fix"
+   },
+   "expect": true
+  },
+  {
+   "cond": "when not n in flag",
+   "ctx": {
+    "flag": {
+     "k": -0.0
+    },
+    "n": [
+     1,
+     10
+    ]
+   },
+   "expect": true
+  },
+  {
+   "cond": "when n in true or items > flag or 1 < 0.5 or text >= x or y >= '' or score not in 1.0 not in items",
+   "ctx": {
+    "ok": {
+     "k": 1.0
+    },
+    "score": "contain",
+    "text": "fix",
+    "true": {
+     "k": 3
+    },
+    "visits": []
+   },
+   "expect": true
+  },
+  {
+   "cond": "when n <= true < text",
+   "ctx": {
+    "action": 3,
+    "items": 2,
+    "n": "fix",
+    "score": "café",
+    "x": "watch",
+    "y": "café"
+   },
+   "expect": false
+  },
+  {
+   "cond": "when not flag in flag != 'contain' and text in 0.5 not in true or not flag >= 1.0",
+   "ctx": {},
+   "expect": true
+  },
+  {
+   "cond": "when flag > 'contain'",
+   "ctx": {
+    "action": 1.0,
+    "n": "",
+    "visits": -0.0
+   },
+   "expect": false
+  },
+  {
+   "cond": "when score >= [] in x or '' in 'fix' and score not in ok or n in y < true",
+   "ctx": {
+    "flag": [
+     1.0,
+     0,
+     10
+    ],
+    "ok": 1
+   },
+   "expect": true
+  },
+  {
+   "cond": "when 0.5 >= []",
+   "ctx": {
+    "items": "",
+    "n": "café",
+    "text": "fix",
+    "visits": 1
+   },
+   "expect": false
+  },
+  {
+   "cond": "when 'watch' != n",
+   "ctx": {
+    "action": [
+     0,
+     1,
+     0.5
+    ],
+    "flag": true,
+    "items": "watch",
+    "score": [
+     "café"
+    ],
+    "text": null
+   },
+   "expect": true
+  },
+  {
+   "cond": "when (items != action) or true > ok and x not in action",
+   "ctx": {
+    "items": true,
+    "n": true
+   },
+   "expect": true
+  },
+  {
+   "cond": "when '' in ['error happened', visits]",
+   "ctx": {
+    "flag": -0.0,
+    "y": 0.5
+   },
+   "expect": false
+  },
+  {
+   "cond": "when [0.5, 1000, text] not in score",
+   "ctx": {
+    "ok": [
+     -0.0,
+     1.0,
+     0
+    ]
+   },
+   "expect": true
+  },
+  {
+   "cond": "when 10 >= ok",
+   "ctx": {
+    "items": [
+     "watch",
+     10,
+     0
+    ],
+    "visits": 2
+   },
+   "expect": false
+  },
+  {
+   "cond": "when 0 > 3",
+   "ctx": {
+    "action": 1,
+    "n": 3,
+    "ok": true
+   },
+   "expect": false
+  },
+  {
+   "cond": "when n in 3",
+   "ctx": {
+    "items": [
+     1000,
+     1000
+    ],
+    "text": true,
+    "true": []
+   },
+   "expect": false
+  },
+  {
+   "cond": "when 10 < 'fix'",
+   "ctx": {
+    "n": "café",
+    "score": "",
+    "text": "café",
+    "y": 3
+   },
+   "expect": false
+  },
+  {
+   "cond": "when not true in text",
+   "ctx": {
+    "flag": {
+     "k": 0
+    },
+    "n": [
+     1000,
+     1000,
+     "error happened"
+    ],
+    "score": 2,
+    "y": "café"
+   },
+   "expect": true
+  },
+  {
+   "cond": "when flag > x",
+   "ctx": {
+    "true": "watch"
+   },
+   "expect": false
+  },
+  {
+   "cond": "when 'watch' not in 0.5",
+   "ctx": {
+    "flag": {
+     "k": 10
+    },
+    "n": 1.0,
+    "score": {
+     "k": 1
+    },
+    "text": [],
+    "x": null,
+    "y": [
+     "café",
+     "contain"
+    ]
+   },
+   "expect": true
+  },
+  {
+   "cond": "when (action == 'café' not in 'fix')",
+   "ctx": {},
+   "expect": false
+  },
+  {
+   "cond": "when not 'café' <= flag and score > 'café' or items == n",
+   "ctx": {
+    "flag": false,
+    "items": null,
+    "text": "",
+    "x": 2
+   },
+   "expect": true
+  },
+  {
+   "cond": "when n > items",
+   "ctx": {
+    "flag": false,
+    "items": 0.5,
+    "visits": [
+     10,
+     "fix",
+     "café"
+    ],
+    "x": "error happened",
+    "y": null
+   },
+   "expect": false
+  },
+  {
+   "cond": "when 'contain' not in [action, y, 'contain']",
+   "ctx": {
+    "flag": 1
+   },
+   "expect": false
+  },
+  {
+   "cond": "when '' == ok",
+   "ctx": {
+    "flag": "fix"
+   },
+   "expect": false
+  },
+  {
+   "cond": "when 1000 != x not in -0.0 and visits <= [true, 'contain', flag] != n",
+   "ctx": {
+    "flag": {
+     "k": 0
+    },
+    "items": 10,
+    "ok": "café",
+    "x": "error happened"
+   },
+   "expect": "ERROR"
+  },
+  {
+   "cond": "when not ((true not in 'fix'))",
+   "ctx": {
+    "action": null,
+    "flag": [
+     10,
+     "watch"
+    ],
+    "score": {
+     "k": -0.0
+    },
+    "y": false
+   },
+   "expect": false
+  },
+  {
+   "cond": "when items <= 'café' or '' < 1000",
+   "ctx": {
+    "n": [],
+    "score": 1.0,
+    "true": {
+     "k": 10
+    }
+   },
+   "expect": false
+  },
+  {
+   "cond": "when ok not in items and visits < action and true >= score",
+   "ctx": {
+    "action": "contain",
+    "flag": [
+     10,
+     -0.0
+    ],
+    "items": "contain",
+    "n": "",
+    "true": "contain"
+   },
+   "expect": false
+  },
+  {
+   "cond": "when action in 'watch'",
+   "ctx": {
+    "flag": 1.0,
+    "items": -0.0,
+    "x": 0.5
+   },
+   "expect": false
+  },
+  {
+   "cond": "when 'error happened' <= [y, n, '']",
+   "ctx": {
+    "action": false,
+    "score": 1.0,
+    "text": false,
+    "true": {
+     "k": 10
+    },
+    "x": 0
+   },
+   "expect": false
+  },
+  {
+   "cond": "when n != 'café' in n",
+   "ctx": {
+    "flag": 1000,
+    "items": "contain",
+    "true": null,
+    "y": []
+   },
+   "expect": false
+  },
+  {
+   "cond": "when not text >= score <= score",
+   "ctx": {
+    "score": "watch"
+   },
+   "expect": true
+  },
+  {
+   "cond": "when [[], visits] in x",
+   "ctx": {
+    "items": {
+     "k": 1
+    },
+    "ok": "fix",
+    "text": null,
+    "true": 1,
+    "visits": [
+     -0.0,
+     "fix",
+     0.5
+    ],
+    "x": {
+     "k": 0.5
+    }
+   },
+   "expect": false
+  },
+  {
+   "cond": "when y not in [visits]",
+   "ctx": {
+    "items": {
+     "k": 2
+    },
+    "score": [],
+    "true": 0.5
+   },
+   "expect": false
+  },
+  {
+   "cond": "when ([action, 1.0, flag] < 'watch')",
+   "ctx": {
+    "ok": [
+     3
+    ],
+    "score": [
+     -0.0
+    ],
+    "text": [
+     "café",
+     "café"
+    ],
+    "visits": [
+     ""
+    ]
+   },
+   "expect": false
+  },
+  {
+   "cond": "when x >= text and visits > items",
+   "ctx": {
+    "flag": []
+   },
+   "expect": false
+  },
+  {
+   "cond": "when not '' <= ''",
+   "ctx": {
+    "action": [],
+    "flag": 2,
+    "true": null
+   },
+   "expect": false
+  },
+  {
+   "cond": "when flag not in [['watch', ok], 'contain']",
+   "ctx": {
+    "ok": [
+     "error happened",
+     "watch",
+     -0.0
+    ],
+    "score": "fix",
+    "x": "contain",
+    "y": ""
+   },
+   "expect": true
+  },
+  {
+   "cond": "when score > [flag, x] and not flag > '' < 'watch' or visits != x",
+   "ctx": {
+    "action": [
+     0,
+     "café"
+    ],
+    "flag": false,
+    "items": true
+   },
+   "expect": false
+  },
+  {
+   "cond": "when (action in ok)",
+   "ctx": {
+    "n": 0.5
+   },
+   "expect": false
+  },
+  {
+   "cond": "when y not in 1000",
+   "ctx": {
+    "n": "",
+    "true": {
+     "k": -0.0
+    },
+    "x": 1000
+   },
+   "expect": true
+  },
+  {
+   "cond": "when (flag < n) and items != items < items and -0.0 < 'contain' or True in flag",
+   "ctx": {
+    "x": 0
+   },
+   "expect": "ERROR"
+  },
+  {
+   "cond": "when action not in 1.0",
+   "ctx": {
+    "flag": true,
+    "items": 0.5,
+    "score": [
+     0.5,
+     "café"
+    ]
+   },
+   "expect": true
+  },
+  {
+   "cond": "when 1 >= items",
+   "ctx": {},
+   "expect": false
+  },
+  {
+   "cond": "when 'fix' < score != items",
+   "ctx": {
+    "text": ""
+   },
+   "expect": false
+  },
+  {
+   "cond": "when ok <= visits",
+   "ctx": {
+    "x": 0.5
+   },
+   "expect": false
+  },
+  {
+   "cond": "when true == text <= ['fix']",
+   "ctx": {
+    "flag": 1.0,
+    "items": {
+     "k": 10
+    },
+    "n": {
+     "k": 1.0
+    },
+    "true": {
+     "k": -0.0
+    },
+    "visits": 1000
+   },
+   "expect": false
+  },
+  {
+   "cond": "when (not items > true)",
+   "ctx": {
+    "action": [
+     1.0,
+     "fix",
+     3
+    ],
+    "n": 0.5,
+    "x": [
+     1.0
+    ],
+    "y": 2
+   },
+   "expect": true
+  },
+  {
+   "cond": "when not '' < n",
+   "ctx": {
+    "items": "fix",
+    "text": [
+     3,
+     "watch",
+     10
+    ],
+    "visits": "fix",
+    "x": 1,
+    "y": null
+   },
+   "expect": true
+  },
+  {
+   "cond": "when text == 'contain' != [10, flag, 0.5]",
+   "ctx": {
+    "visits": "café"
+   },
+   "expect": false
+  },
+  {
+   "cond": "when 'café' > items",
+   "ctx": {
+    "ok": [
+     1,
+     0
+    ],
+    "visits": "café"
+   },
+   "expect": false
+  },
+  {
+   "cond": "when not score in []",
+   "ctx": {
+    "action": {
+     "k": 3
+    },
+    "items": [
+     "watch",
+     ""
+    ],
+    "ok": true,
+    "score": 1,
+    "true": "café",
+    "x": [
+     "error happened",
+     1.0,
+     "contain"
+    ]
+   },
+   "expect": true
+  },
+  {
+   "cond": "when ((action in x <= 0.5))",
+   "ctx": {},
+   "expect": false
+  },
+  {
+   "cond": "when ['café', 'watch'] == 'café' or 'watch' >= [n, y]",
+   "ctx": {
+    "text": true,
+    "true": "contain"
+   },
+   "expect": false
+  },
+  {
+   "cond": "when not [visits, action] not in ''",
+   "ctx": {
+    "n": "fix",
+    "visits": -0.0
+   },
+   "expect": false
+  },
+  {
+   "cond": "when [ok, true] <= true",
+   "ctx": {
+    "action": "watch",
+    "items": {
+     "k": 1
+    },
+    "n": [
+     "fix",
+     "fix"
+    ],
+    "text": {
+     "k": 0.5
+    },
+    "true": {
+     "k": 10
+    }
+   },
+   "expect": false
+  },
+  {
+   "cond": "when n > flag",
+   "ctx": {
+    "flag": -0.0,
+    "score": [
+     1000,
+     1000,
+     "fix"
+    ],
+    "text": 2,
+    "true": {
+     "k": 10
+    },
+    "visits": 0,
+    "y": [
+     "watch",
+     "fix",
+     "café"
+    ]
+   },
+   "expect": false
+  },
+  {
+   "cond": "when 'contain' >= items",
+   "ctx": {
+    "flag": "café",
+    "text": "contain",
+    "visits": 2
+   },
+   "expect": false
+  },
+  {
+   "cond": "when not score != true and ok <= 0 not in score or n not in 0.5",
+   "ctx": {
+    "n": -0.0,
+    "text": 10,
+    "y": null
+   },
+   "expect": true
+  },
+  {
+   "cond": "when (action not in 'café')",
+   "ctx": {
+    "action": [],
+    "flag": [
+     "fix",
+     1
+    ],
+    "items": [
+     "error happened",
+     0
+    ],
+    "text": {
+     "k": 0
+    },
+    "y": null
+   },
+   "expect": true
+  },
+  {
+   "cond": "when (score >= action and action in n >= items and 1.0 >= visits or -0.0 == x)",
+   "ctx": {
+    "items": false,
+    "n": [
+     "error happened",
+     1
+    ],
+    "text": 0.5,
+    "x": {
+     "k": 3
+    },
+    "y": "fix"
+   },
+   "expect": "ERROR"
+  },
+  {
+   "cond": "when visits >= 2 < score and not not y > y >= true",
+   "ctx": {
+    "flag": [
+     1,
+     "watch",
+     1000
+    ],
+    "n": null,
+    "score": {
+     "k": 1000
+    },
+    "y": {
+     "k": 10
+    }
+   },
+   "expect": false
+  },
+  {
+   "cond": "when not 'contain' not in visits or y != text in visits and items in '' != 0.5 or items > x",
+   "ctx": {
+    "flag": 0.5,
+    "items": -0.0,
+    "x": {
+     "k": 1000
+    },
+    "y": []
+   },
+   "expect": false
+  },
+  {
+   "cond": "when visits < 0 <= n or [] not in visits",
+   "ctx": {
+    "action": {
+     "k": 0.5
+    },
+    "flag": {
+     "k": 1.0
+    },
+    "visits": {
+     "k": 0
+    },
+    "x": {
+     "k": 1
+    }
+   },
+   "expect": true
+  },
+  {
+   "cond": "when '' < -0.0",
+   "ctx": {
+    "items": "",
+    "true": "fix",
+    "visits": -0.0
+   },
+   "expect": "ERROR"
+  },
+  {
+   "cond": "when 1.0 not in flag and not not y >= items",
+   "ctx": {
+    "action": {
+     "k": -0.0
+    },
+    "items": 1,
+    "n": [
+     2
+    ],
+    "ok": "watch",
+    "true": {
+     "k": 1000
+    }
+   },
+   "expect": false
+  },
+  {
+   "cond": "when score <= action",
+   "ctx": {
+    "y": []
+   },
+   "expect": false
+  },
+  {
+   "cond": "when (not ok <= text) or not not items >= True in 'contain'",
+   "ctx": {
+    "flag": "",
+    "n": 3,
+    "true": false,
+    "y": "café"
+   },
+   "expect": true
+  },
+  {
+   "cond": "when text != 'error happened'",
+   "ctx": {},
+   "expect": true
+  },
+  {
+   "cond": "when text < visits",
+   "ctx": {
+    "x": "error happened"
+   },
+   "expect": false
+  },
+  {
+   "cond": "when not x != score and items in 'café'",
+   "ctx": {
+    "visits": "contain"
+   },
+   "expect": false
+  },
+  {
+   "cond": "when (3 < action) or text in n",
+   "ctx": {},
+   "expect": false
+  },
+  {
+   "cond": "when (1.0 >= action)",
+   "ctx": {
+    "action": "",
+    "score": "contain",
+    "true": ""
+   },
+   "expect": false
+  },
+  {
+   "cond": "when not flag >= ok",
+   "ctx": {
+    "action": "error happened",
+    "flag": 3,
+    "items": {
+     "k": 1.0
+    },
+    "score": "watch",
+    "text": [
+     "café",
+     "error happened"
+    ],
+    "y": [
+     2,
+     10,
+     0
+    ]
+   },
+   "expect": true
+  },
+  {
+   "cond": "when 'café' < [text]",
+   "ctx": {
+    "flag": "error happened",
+    "n": null,
+    "score": {
+     "k": 1
+    }
+   },
+   "expect": false
+  },
+  {
+   "cond": "when x == 'fix' >= text",
+   "ctx": {
+    "n": {
+     "k": -0.0
+    }
+   },
+   "expect": false
+  },
+  {
+   "cond": "when 'contain' not in -0.0",
+   "ctx": {
+    "ok": 1,
+    "y": 2
+   },
+   "expect": "ERROR"
+  },
+  {
+   "cond": "when [-0.0] <= visits",
+   "ctx": {
+    "score": 0
+   },
+   "expect": "ERROR"
+  },
+  {
+   "cond": "when not (False < 'fix' not in true) or y > n or visits >= 'fix'",
+   "ctx": {
+    "score": {
+     "k": 0.5
+    },
+    "true": 1.0
+   },
+   "expect": true
+  },
+  {
+   "cond": "when items == True <= ['', 'contain']",
+   "ctx": {
+    "items": "café",
+    "score": [],
+    "text": {
+     "k": 1.0
+    },
+    "visits": 0,
+    "y": "watch"
+   },
+   "expect": false
+  },
+  {
+   "cond": "when ['error happened', action] >= text",
+   "ctx": {
+    "flag": [
+     "error happened",
+     1000
+    ],
+    "items": 10,
+    "n": [],
+    "ok": {
+     "k": 1
+    },
+    "score": {
+     "k": 0
+    }
+   },
+   "expect": false
+  },
+  {
+   "cond": "when y == text != visits and visits != x < y and not x in 'error happened' and 10 == 'error happened' and flag <= y",
+   "ctx": {
+    "n": [
+     2
+    ]
+   },
+   "expect": false
+  },
+  {
+   "cond": "when 1.0 >= [] or items < y",
+   "ctx": {
+    "action": "contain",
+    "text": 10,
+    "x": 1
+   },
+   "expect": false
+  },
+  {
+   "cond": "when [] >= 10",
+   "ctx": {
+    "items": 2,
+    "score": [
+     1000,
+     "contain"
+    ]
+   },
+   "expect": false
+  },
+  {
+   "cond": "when not '' not in 1.0 or (text < 'fix')",
+   "ctx": {
+    "n": 0,
+    "true": "watch",
+    "visits": true
+   },
+   "expect": false
+  },
+  {
+   "cond": "when not items not in score or n == 'fix' and not ok <= 'fix' > text or action < 0.5",
+   "ctx": {
+    "flag": "watch",
+    "n": "watch",
+    "score": [
+     "watch",
+     "café"
+    ],
+    "text": 0.5,
+    "x": [
+     "fix",
+     ""
+    ],
+    "y": {
+     "k": 10
+    }
+   },
+   "expect": false
+  },
+  {
+   "cond": "when visits <= [flag]",
+   "ctx": {
+    "score": "watch",
+    "true": "fix",
+    "x": true
+   },
+   "expect": false
+  },
+  {
+   "cond": "when None not in 'watch'",
+   "ctx": {
+    "flag": null,
+    "items": 0,
+    "n": "error happened",
+    "text": "watch",
+    "x": [
+     10,
+     0.5
+    ],
+    "y": 3
+   },
+   "expect": true
+  },
+  {
+   "cond": "when 0 <= 3",
+   "ctx": {
+    "action": 0,
+    "items": [
+     10
+    ],
+    "n": null,
+    "visits": 1.0,
+    "x": 10,
+    "y": 10
+   },
+   "expect": true
+  },
+  {
+   "cond": "when items <= ['error happened', x, text]",
+   "ctx": {
+    "n": "contain",
+    "score": [
+     1000,
+     0,
+     "watch"
+    ],
+    "text": "contain",
+    "true": true
+   },
+   "expect": false
+  },
+  {
+   "cond": "when 'error happened' == [True]",
+   "ctx": {
+    "y": null
+   },
+   "expect": false
+  },
+  {
+   "cond": "when '' != 1000 or (ok <= 'fix' > x)",
+   "ctx": {
+    "ok": 3,
+    "text": "café",
+    "true": 0.5,
+    "visits": [
+     10
+    ],
+    "x": [
+     "error happened"
+    ]
+   },
+   "expect": true
+  },
+  {
+   "cond": "when items in 0",
+   "ctx": {
+    "flag": true
+   },
+   "expect": false
+  },
+  {
+   "cond": "when 'watch' < None and 'contain' < true",
+   "ctx": {
+    "flag": "café",
+    "text": "contain"
+   },
+   "expect": false
+  },
+  {
+   "cond": "when (action != y) and flag > visits",
+   "ctx": {
+    "true": [
+     10,
+     0
+    ]
+   },
+   "expect": false
+  },
+  {
+   "cond": "when items == 'watch'",
+   "ctx": {
+    "flag": "error happened",
+    "n": [
+     1.0,
+     "fix",
+     ""
+    ],
+    "ok": {
+     "k": 0
+    },
+    "score": 3,
+    "text": 10,
+    "true": 1
+   },
+   "expect": false
+  },
+  {
+   "cond": "when items > 'café' < text",
+   "ctx": {
+    "visits": 1.0
+   },
+   "expect": false
+  },
+  {
+   "cond": "when 'contain' == 'fix'",
+   "ctx": {},
+   "expect": false
+  },
+  {
+   "cond": "when (flag == score) or not true > 'café' and n in x",
+   "ctx": {},
+   "expect": true
+  },
+  {
+   "cond": "when ('fix' == [score, items])",
+   "ctx": {},
+   "expect": false
+  },
+  {
+   "cond": "when flag not in visits",
+   "ctx": {},
+   "expect": true
+  },
+  {
+   "cond": "when action not in x",
+   "ctx": {
+    "text": false,
+    "y": [
+     0.5
+    ]
+   },
+   "expect": true
+  },
+  {
+   "cond": "when 'error happened' >= ['error happened', '']",
+   "ctx": {
+    "items": [
+     "watch",
+     1000,
+     1.0
+    ],
+    "n": ""
+   },
+   "expect": false
+  },
+  {
+   "cond": "when not 2 >= 2 >= 2 or True in action != ok and not ok < visits",
+   "ctx": {
+    "score": "café",
+    "text": [
+     1000,
+     "café"
+    ],
+    "true": [],
+    "visits": "",
+    "y": [
+     "fix"
+    ]
+   },
+   "expect": false
+  },
+  {
+   "cond": "when ok not in y and '' <= 3 or not not visits > 0.5",
+   "ctx": {
+    "action": "contain",
+    "flag": "contain",
+    "items": {
+     "k": 0
+    },
+    "text": [],
+    "x": "error happened"
+   },
+   "expect": false
+  },
+  {
+   "cond": "when not action != 'error happened'",
+   "ctx": {
+    "action": 3,
+    "score": [],
+    "text": 10,
+    "x": "error happened"
+   },
+   "expect": false
+  },
+  {
+   "cond": "when [] >= score",
+   "ctx": {},
+   "expect": false
+  },
+  {
+   "cond": "when not 0 not in n not in 'error happened' or ok not in 'watch' and action < y or n == 'watch' or score not in y or not true not in 1.0",
+   "ctx": {},
+   "expect": true
+  },
+  {
+   "cond": "when text != 'fix'",
+   "ctx": {
+    "action": [],
+    "ok": -0.0
+   },
+   "expect": true
+  },
+  {
+   "cond": "when ['watch', n, n] < [[2, 0], n, 'café']",
+   "ctx": {
+    "action": [],
+    "items": "watch",
+    "text": true,
+    "true": "watch",
+    "x": false
+   },
+   "expect": false
+  },
+  {
+   "cond": "when flag not in 1.0",
+   "ctx": {
+    "n": [
+     3,
+     "error happened"
+    ],
+    "ok": [
+     1000,
+     1,
+     "fix"
+    ],
+    "visits": [
+     "error happened"
+    ],
+    "y": 1.0
+   },
+   "expect": true
+  },
+  {
+   "cond": "when text == text and true in visits < ok and y < x and '' >= 'error happened'",
+   "ctx": {
+    "items": null,
+    "ok": "fix",
+    "score": {
+     "k": 2
+    },
+    "text": "café"
+   },
+   "expect": false
+  },
+  {
+   "cond": "when ok != 'contain'",
+   "ctx": {
+    "items": false,
+    "true": {
+     "k": 0.5
+    }
+   },
+   "expect": true
+  },
+  {
+   "cond": "when -0.0 >= -0.0",
+   "ctx": {
+    "action": 0.5,
+    "flag": [
+     3,
+     ""
+    ],
+    "items": -0.0,
+    "n": "error happened"
+   },
+   "expect": "ERROR"
+  },
+  {
+   "cond": "when visits < score >= score",
+   "ctx": {
+    "items": 1,
+    "score": [
+     0,
+     1,
+     3
+    ],
+    "text": [
+     "café",
+     10
+    ],
+    "true": 1.0,
+    "y": "error happened"
+   },
+   "expect": false
+  },
+  {
+   "cond": "when 'error happened' > action",
+   "ctx": {
+    "flag": 1000,
+    "score": "fix",
+    "true": 1,
+    "visits": 1,
+    "y": "fix"
+   },
+   "expect": false
+  },
+  {
+   "cond": "when y in visits == text",
+   "ctx": {
+    "action": [
+     0
+    ],
+    "flag": false,
+    "items": -0.0,
+    "visits": {
+     "k": 0.5
+    }
+   },
+   "expect": false
+  },
+  {
+   "cond": "when action == y",
+   "ctx": {
+    "items": 10,
+    "score": true,
+    "true": 1.0,
+    "y": {
+     "k": -0.0
+    }
+   },
+   "expect": false
+  },
+  {
+   "cond": "when not (score != action) or 'café' in items <= score",
+   "ctx": {
+    "ok": 1000,
+    "text": false,
+    "true": false
+   },
+   "expect": true
+  },
+  {
+   "cond": "when not not n <= text",
+   "ctx": {
+    "flag": false,
+    "items": {
+     "k": 1.0
+    },
+    "visits": {
+     "k": 3
+    }
+   },
+   "expect": false
+  },
+  {
+   "cond": "when x >= 'fix'",
+   "ctx": {
+    "action": -0.0,
+    "score": "contain",
+    "visits": "contain"
+   },
+   "expect": false
+  },
+  {
+   "cond": "when (text <= n and not y > 1.0)",
+   "ctx": {
+    "flag": true,
+    "n": "watch"
+   },
+   "expect": false
+  },
+  {
+   "cond": "when [''] < flag != y",
+   "ctx": {
+    "n": 10,
+    "ok": false
+   },
+   "expect": false
+  },
+  {
+   "cond": "when n == 'watch'",
+   "ctx": {
+    "flag": "",
+    "items": 10,
+    "ok": 2,
+    "true": false,
+    "x": 0.5,
+    "y": 1
+   },
+   "expect": false
+  },
+  {
+   "cond": "when true != n",
+   "ctx": {},
+   "expect": false
+  },
+  {
+   "cond": "when 'error happened' not in ok or 1000 < flag != -0.0 or not 'contain' >= 3",
+   "ctx": {
+    "n": false,
+    "score": "watch",
+    "visits": {
+     "k": 2
+    }
+   },
+   "expect": "ERROR"
+  },
+  {
+   "cond": "when not 10 == n or items >= 1.0 or not ok not in text",
+   "ctx": {
+    "items": {
+     "k": 2
+    }
+   },
+   "expect": true
+  },
+  {
+   "cond": "when not not 1000 >= action",
+   "ctx": {
+    "score": 0,
+    "true": "contain"
+   },
+   "expect": false
+  },
+  {
+   "cond": "when 10 == []",
+   "ctx": {
+    "action": "café"
+   },
+   "expect": false
+  },
+  {
+   "cond": "when ('watch' <= action)",
+   "ctx": {
+    "action": -0.0,
+    "flag": 2
+   },
+   "expect": false
+  },
+  {
+   "cond": "when (ok <= y) and n not in visits not in text or score > 0.5 >= 1000 and flag == 'contain'",
+   "ctx": {
+    "items": {
+     "k": 0
+    },
+    "ok": "café"
+   },
+   "expect": false
+  },
+  {
+   "cond": "when 'contain' < 3",
+   "ctx": {
+    "score": {
+     "k": 1
+    }
+   },
+   "expect": false
+  },
+  {
+   "cond": "when 1.0 >= 'watch'",
+   "ctx": {
+    "true": "café"
+   },
+   "expect": false
+  },
+  {
+   "cond": "when not (score >= y > score) and 'watch' <= 'error happened'",
+   "ctx": {
+    "flag": {
+     "k": 0
+    },
+    "items": {
+     "k": 2
+    },
+    "n": {
+     "k": 1
+    },
+    "text": 0,
+    "true": "fix",
+    "visits": 1.0
+   },
+   "expect": false
+  },
+  {
+   "cond": "when (not text != items or true == flag)",
+   "ctx": {
+    "action": -0.0,
+    "items": 3,
+    "n": 1000,
+    "score": 10,
+    "visits": 1000,
+    "y": false
+   },
+   "expect": true
+  },
+  {
+   "cond": "when text not in text",
+   "ctx": {
+    "action": [
+     3
+    ],
+    "items": [
+     ""
+    ],
+    "ok": "café",
+    "visits": {
+     "k": -0.0
+    }
+   },
+   "expect": true
+  },
+  {
+   "cond": "when not score != 'contain' and 1.0 > flag",
+   "ctx": {
+    "text": -0.0,
+    "visits": 3,
+    "x": "fix"
+   },
+   "expect": false
+  },
+  {
+   "cond": "when (text >= action) or true < n > ''",
+   "ctx": {
+    "n": {
+     "k": 3
+    },
+    "x": false
+   },
+   "expect": false
+  },
+  {
+   "cond": "when n == [text, 'fix']",
+   "ctx": {
+    "flag": 1.0,
+    "ok": 1000,
+    "true": {
+     "k": 3
+    }
+   },
+   "expect": false
+  },
+  {
+   "cond": "when (score > 0 > '')",
+   "ctx": {
+    "action": {
+     "k": 0
+    },
+    "score": "contain",
+    "visits": {
+     "k": 3
+    },
+    "y": {
+     "k": 3
+    }
+   },
+   "expect": false
+  },
+  {
+   "cond": "when ['fix', 10] == 'fix'",
+   "ctx": {
+    "action": 1000,
+    "items": {
+     "k": -0.0
+    },
+    "ok": [],
+    "true": "error happened",
+    "visits": {
+     "k": 1.0
+    },
+    "x": 1
+   },
+   "expect": false
+  },
+  {
+   "cond": "when 'error happened' == []",
+   "ctx": {
+    "flag": -0.0,
+    "visits": {
+     "k": 0
+    }
+   },
+   "expect": false
+  },
+  {
+   "cond": "when '' < 'contain' or not x != items < score and 1 != '' or 0 != n < 'error happened'",
+   "ctx": {
+    "flag": 1000,
+    "n": {
+     "k": 3
+    },
+    "ok": {
+     "k": 1.0
+    },
+    "score": [
+     3,
+     2,
+     3
+    ],
+    "text": false,
+    "x": []
+   },
+   "expect": true
+  },
+  {
+   "cond": "when score not in 'café'",
+   "ctx": {
+    "flag": 3,
+    "x": 0.5
+   },
+   "expect": true
+  },
+  {
+   "cond": "when not 'contain' == score",
+   "ctx": {},
+   "expect": true
+  },
+  {
+   "cond": "when not not true not in 0.5",
+   "ctx": {},
+   "expect": true
+  },
+  {
+   "cond": "when visits > 0",
+   "ctx": {
+    "items": {
+     "k": 1000
+    },
+    "n": "",
+    "score": "fix",
+    "text": "contain",
+    "x": "",
+    "y": [
+     -0.0
+    ]
+   },
+   "expect": false
+  },
+  {
+   "cond": "when 'café' < true",
+   "ctx": {
+    "ok": true,
+    "text": "fix",
+    "visits": 3,
+    "y": {
+     "k": 0.5
+    }
+   },
+   "expect": false
+  },
+  {
+   "cond": "when 1000 > action and action >= 'fix' or not not score >= 'fix'",
+   "ctx": {
+    "n": {
+     "k": 3
+    },
+    "true": 2
+   },
+   "expect": false
+  },
+  {
+   "cond": "when flag < visits and x > 3",
+   "ctx": {
+    "flag": [
+     "error happened"
+    ],
+    "ok": "error happened",
+    "x": false
+   },
+   "expect": false
+  },
+  {
+   "cond": "when not 'error happened' <= []",
+   "ctx": {
+    "action": "watch",
+    "items": [
+     "fix"
+    ],
+    "ok": 0,
+    "score": 1,
+    "x": {
+     "k": 3
+    }
+   },
+   "expect": true
+  },
+  {
+   "cond": "when [flag, 'fix', 1] == 'contain' <= 'watch' and text in 'error happened'",
+   "ctx": {
+    "flag": "contain",
+    "items": "watch",
+    "n": "contain",
+    "score": {
+     "k": 3
+    },
+    "y": 10
+   },
+   "expect": false
+  },
+  {
+   "cond": "when 1 < 'watch' in score and 0.5 <= 'café'",
+   "ctx": {
+    "action": false,
+    "flag": 0.5,
+    "items": 2,
+    "score": 3,
+    "visits": 1000,
+    "y": true
+   },
+   "expect": false
+  },
+  {
+   "cond": "when [ok, action] != items",
+   "ctx": {
+    "flag": {
+     "k": 1000
+    },
+    "ok": {
+     "k": 10
+    }
+   },
+   "expect": true
+  },
+  {
+   "cond": "when x in 3",
+   "ctx": {
+    "y": [
+     -0.0,
+     "contain",
+     ""
+    ]
+   },
+   "expect": false
+  },
+  {
+   "cond": "when [score, flag] >= 'watch' and 1000 != n",
+   "ctx": {
+    "action": {
+     "k": 3
+    }
+   },
+   "expect": false
+  },
+  {
+   "cond": "when ([] not in [flag])",
+   "ctx": {
+    "x": -0.0,
+    "y": 1.0
+   },
+   "expect": true
+  },
+  {
+   "cond": "when flag <= []",
+   "ctx": {
+    "flag": [
+     ""
+    ],
+    "items": [
+     "watch"
+    ],
+    "ok": {
+     "k": 10
+    },
+    "score": 1000,
+    "true": [],
+    "x": "contain"
+   },
+   "expect": false
+  },
+  {
+   "cond": "when items >= score",
+   "ctx": {
+    "n": [
+     2
+    ],
+    "true": 3,
+    "x": [
+     "contain"
+    ],
+    "y": 2
+   },
+   "expect": false
+  },
+  {
+   "cond": "when (n <= 'contain') or 'café' < 0.5",
+   "ctx": {},
+   "expect": false
+  },
+  {
+   "cond": "when [n, n, ''] < 'error happened'",
+   "ctx": {
+    "ok": [
+     10
+    ],
+    "score": null,
+    "text": [
+     -0.0,
+     0.5,
+     -0.0
+    ],
+    "visits": "error happened",
+    "y": []
+   },
+   "expect": false
+  },
+  {
+   "cond": "when y < flag or 1000 < n or n == 1",
+   "ctx": {
+    "ok": false
+   },
+   "expect": false
+  },
+  {
+   "cond": "when items < x",
+   "ctx": {
+    "flag": null,
+    "n": 10,
+    "score": [
+     "contain"
+    ]
+   },
+   "expect": false
+  },
+  {
+   "cond": "when not 0.5 > text",
+   "ctx": {},
+   "expect": true
+  },
+  {
+   "cond": "when not not not x < visits",
+   "ctx": {
+    "flag": true,
+    "score": [],
+    "visits": "error happened",
+    "y": {
+     "k": 1
+    }
+   },
+   "expect": true
+  },
+  {
+   "cond": "when text != ok",
+   "ctx": {
+    "items": true,
+    "n": "fix",
+    "true": false,
+    "visits": null,
+    "x": -0.0
+   },
+   "expect": false
+  },
+  {
+   "cond": "when text == 0",
+   "ctx": {
+    "flag": "error happened",
+    "items": [
+     1000,
+     2
+    ],
+    "visits": "contain",
+    "x": "café"
+   },
+   "expect": false
+  },
+  {
+   "cond": "when not (False >= 'watch')",
+   "ctx": {
+    "action": 1000,
+    "flag": -0.0,
+    "ok": [],
+    "text": [
+     2
+    ],
+    "true": 3,
+    "x": "contain"
+   },
+   "expect": true
+  },
+  {
+   "cond": "when action != ok",
+   "ctx": {
+    "items": {
+     "k": 3
+    },
+    "n": [
+     1000
+    ],
+    "ok": false,
+    "true": false,
+    "x": {
+     "k": 10
+    }
+   },
+   "expect": true
+  },
+  {
+   "cond": "when action > ['watch', action] and ok != 'contain'",
+   "ctx": {},
+   "expect": false
+  },
+  {
+   "cond": "when (not text == flag or 'error happened' > x)",
+   "ctx": {
+    "action": true,
+    "flag": "error happened",
+    "items": [],
+    "score": {
+     "k": 1000
+    },
+    "y": [
+     1000,
+     "fix"
+    ]
+   },
+   "expect": true
+  },
+  {
+   "cond": "when -0.0 < 0",
+   "ctx": {
+    "action": 0.5,
+    "items": {
+     "k": 0.5
+    },
+    "text": 3,
+    "true": 1000,
+    "x": {
+     "k": 3
+    }
+   },
+   "expect": "ERROR"
+  },
+  {
+   "cond": "when flag != true not in 1",
+   "ctx": {
+    "flag": true,
+    "ok": 1.0,
+    "true": [
+     3,
+     2,
+     1.0
+    ],
+    "x": null
+   },
+   "expect": true
+  },
+  {
+   "cond": "when [] not in text in ok",
+   "ctx": {
+    "action": 0,
+    "ok": {
+     "k": 0
+    },
+    "score": null,
+    "true": false,
+    "x": [],
+    "y": true
+   },
+   "expect": false
+  },
+  {
+   "cond": "when False <= 'error happened' >= x or y > items <= ok or (1.0 < true) or flag >= 'fix'",
+   "ctx": {},
+   "expect": false
+  },
+  {
+   "cond": "when items in x and [action, 'café'] != n",
+   "ctx": {
+    "flag": "",
+    "visits": true,
+    "x": {
+     "k": 0
+    }
+   },
+   "expect": false
+  },
+  {
+   "cond": "when x not in flag",
+   "ctx": {},
+   "expect": true
+  },
+  {
+   "cond": "when items >= action < 'fix'",
+   "ctx": {
+    "action": [
+     "contain",
+     0
+    ],
+    "score": 1000,
+    "visits": [
+     "fix"
+    ]
+   },
+   "expect": false
+  },
+  {
+   "cond": "when not flag <= 1000 and 3 >= y",
+   "ctx": {},
+   "expect": false
+  },
+  {
+   "cond": "when not text != items < score and 1.0 in visits",
+   "ctx": {
+    "ok": [
+     1,
+     "café",
+     1000
+    ],
+    "true": 1000
+   },
+   "expect": false
+  },
+  {
+   "cond": "when 3 != 'error happened'",
+   "ctx": {
+    "true": [
+     2
+    ],
+    "visits": {
+     "k": 1
+    }
+   },
+   "expect": true
+  },
+  {
+   "cond": "when 'error happened' == 'café' and not visits in x and flag <= 0.5",
+   "ctx": {
+    "action": "error happened",
+    "flag": [
+     "error happened",
+     0
+    ],
+    "n": {
+     "k": 1
+    },
+    "ok": {
+     "k": 1.0
+    },
+    "x": {
+     "k": 1.0
+    }
+   },
+   "expect": false
+  },
+  {
+   "cond": "when action >= -0.0",
+   "ctx": {},
+   "expect": "ERROR"
+  },
+  {
+   "cond": "when '' != flag",
+   "ctx": {},
+   "expect": true
+  },
+  {
+   "cond": "when y < ok",
+   "ctx": {
+    "text": 3,
+    "true": {
+     "k": 1
+    }
+   },
+   "expect": false
+  },
+  {
+   "cond": "when 'watch' > items",
+   "ctx": {
+    "action": [
+     1000,
+     3,
+     1
+    ],
+    "n": {
+     "k": 1
+    },
+    "score": {
+     "k": 1
+    },
+    "visits": [
+     "fix",
+     1.0,
+     "café"
+    ],
+    "x": 0
+   },
+   "expect": false
+  },
+  {
+   "cond": "when not x != 'fix' or 'contain' != text",
+   "ctx": {},
+   "expect": true
+  },
+  {
+   "cond": "when (ok not in [text])",
+   "ctx": {
+    "visits": 0
+   },
+   "expect": false
+  },
+  {
+   "cond": "when 'error happened' < score",
+   "ctx": {
+    "action": [
+     "watch",
+     2,
+     "fix"
+    ]
+   },
+   "expect": false
+  },
+  {
+   "cond": "when not not score not in x",
+   "ctx": {
+    "true": []
+   },
+   "expect": true
+  },
+  {
+   "cond": "when '' > flag <= flag",
+   "ctx": {},
+   "expect": false
+  },
+  {
+   "cond": "when text < action",
+   "ctx": {},
+   "expect": false
+  },
+  {
+   "cond": "when (2 != [])",
+   "ctx": {
+    "action": 10,
+    "flag": {
+     "k": 0.5
+    },
+    "y": 1000
+   },
+   "expect": true
+  },
+  {
+   "cond": "when action <= 'café'",
+   "ctx": {
+    "items": [
+     "error happened"
+    ],
+    "true": 1.0,
+    "visits": true,
+    "x": 0
+   },
+   "expect": false
+  },
+  {
+   "cond": "when items == flag",
+   "ctx": {
+    "action": [
+     "café"
+    ],
+    "items": 2,
+    "score": 0,
+    "visits": [],
+    "y": {
+     "k": 10
+    }
+   },
+   "expect": false
+  },
+  {
+   "cond": "when true < flag",
+   "ctx": {
+    "action": "",
+    "ok": 1000
+   },
+   "expect": false
+  },
+  {
+   "cond": "when [action, flag, ok] != n",
+   "ctx": {
+    "action": "café",
+    "text": [],
+    "visits": "error happened",
+    "x": null
+   },
+   "expect": true
+  },
+  {
+   "cond": "when 'fix' == ''",
+   "ctx": {
+    "action": true
+   },
+   "expect": false
+  },
+  {
+   "cond": "when x < n",
+   "ctx": {
+    "flag": false
+   },
+   "expect": false
+  },
+  {
+   "cond": "when action >= text",
+   "ctx": {
+    "action": "",
+    "items": 2,
+    "score": null,
+    "y": 2
+   },
+   "expect": false
+  },
+  {
+   "cond": "when x > true",
+   "ctx": {
+    "items": {
+     "k": 0
+    },
+    "ok": {
+     "k": 2
+    },
+    "visits": {
+     "k": 0
+    },
+    "x": {
+     "k": 3
+    }
+   },
+   "expect": false
+  },
+  {
+   "cond": "when None > 2",
+   "ctx": {
+    "text": false,
+    "true": []
+   },
+   "expect": false
+  },
+  {
+   "cond": "when x not in n or (True not in 'fix') or visits not in 1.0",
+   "ctx": {
+    "action": 0,
+    "n": [
+     "error happened"
+    ],
+    "score": [
+     "watch",
+     1000
+    ],
+    "true": [
+     1000,
+     "fix"
+    ]
+   },
+   "expect": true
+  },
+  {
+   "cond": "when not ['café'] == [action, 'error happened']",
+   "ctx": {
+    "score": [
+     -0.0
+    ],
+    "visits": true
+   },
+   "expect": true
+  },
+  {
+   "cond": "when text > 'error happened' in 2",
+   "ctx": {
+    "items": true,
+    "true": 3
+   },
+   "expect": false
+  },
+  {
+   "cond": "when [flag, flag] != 'watch'",
+   "ctx": {
+    "text": [
+     2,
+     "café",
+     0.5
+    ],
+    "y": 0.5
+   },
+   "expect": true
+  },
+  {
+   "cond": "when (flag >= ok) and not 'fix' not in None >= text",
+   "ctx": {
+    "flag": {
+     "k": 1
+    },
+    "items": 1000,
+    "score": "error happened",
+    "true": [],
+    "x": {
+     "k": 10
+    },
+    "y": 3
+   },
+   "expect": false
+  },
+  {
+   "cond": "when ['fix'] >= items",
+   "ctx": {},
+   "expect": false
+  },
+  {
+   "cond": "when not flag >= flag or 1000 in 'contain'",
+   "ctx": {},
+   "expect": true
+  },
+  {
+   "cond": "when not n != 'fix'",
+   "ctx": {},
+   "expect": false
+  },
+  {
+   "cond": "when action != [2, x, 'watch']",
+   "ctx": {
+    "ok": false
+   },
+   "expect": true
+  },
+  {
+   "cond": "when (ok in 'contain' in score)",
+   "ctx": {
+    "items": null,
+    "n": false,
+    "score": 0.5,
+    "true": {
+     "k": -0.0
+    }
+   },
+   "expect": false
+  },
+  {
+   "cond": "when 'contain' >= true",
+   "ctx": {
+    "n": 1,
+    "ok": {
+     "k": 1.0
+    }
+   },
+   "expect": false
+  },
+  {
+   "cond": "when x == items >= [flag]",
+   "ctx": {
+    "visits": {
+     "k": 1
+    }
+   },
+   "expect": false
+  },
+  {
+   "cond": "when y >= 'fix'",
+   "ctx": {
+    "action": {
+     "k": 1000
+    },
+    "flag": [
+     -0.0,
+     -0.0
+    ],
+    "n": null,
+    "ok": false
+   },
+   "expect": false
+  },
+  {
+   "cond": "when ((flag not in items))",
+   "ctx": {
+    "action": [
+     "café"
+    ],
+    "n": "watch",
+    "score": [],
+    "true": true,
+    "x": {
+     "k": 1
+    }
+   },
+   "expect": true
+  },
+  {
+   "cond": "when y < visits",
+   "ctx": {},
+   "expect": false
+  },
+  {
+   "cond": "when [] == ok",
+   "ctx": {
+    "action": 2
+   },
+   "expect": false
+  },
+  {
+   "cond": "when 'café' not in n and 0.5 > 0 or visits in ok and 10 not in score <= flag and n == 'watch' < 3",
+   "ctx": {
+    "action": "error happened",
+    "n": -0.0,
+    "score": "contain",
+    "visits": 2,
+    "y": 1000
+   },
+   "expect": true
+  },
+  {
+   "cond": "when true <= 'contain' > ''",
+   "ctx": {
+    "flag": null,
+    "score": false,
+    "true": {
+     "k": 10
+    },
+    "visits": [
+     3,
+     0
+    ],
+    "y": 10
+   },
+   "expect": false
+  },
+  {
+   "cond": "when true < 2",
+   "ctx": {},
+   "expect": false
+  },
+  {
+   "cond": "when y >= ok or 0 != text in []",
+   "ctx": {
+    "flag": 1000,
+    "n": "café",
+    "ok": null,
+    "x": {
+     "k": 1000
+    }
+   },
+   "expect": false
+  },
+  {
+   "cond": "when ([text, visits] == x)",
+   "ctx": {
+    "x": -0.0
+   },
+   "expect": false
+  },
+  {
+   "cond": "when true not in n or true != n < true",
+   "ctx": {
+    "items": {
+     "k": 1.0
+    },
+    "ok": {
+     "k": 1
+    },
+    "text": "café",
+    "x": {
+     "k": 1000
+    },
+    "y": 3
+   },
+   "expect": true
+  },
+  {
+   "cond": "when not x < n or not score < true",
+   "ctx": {
+    "action": {
+     "k": 3
+    },
+    "flag": {
+     "k": 10
+    },
+    "ok": "café",
+    "true": "café",
+    "visits": 2,
+    "y": 0
+   },
+   "expect": true
+  },
+  {
+   "cond": "when [true] in 'error happened'",
+   "ctx": {},
+   "expect": false
+  },
+  {
+   "cond": "when -0.0 != items",
+   "ctx": {
+    "y": 0
+   },
+   "expect": "ERROR"
+  },
+  {
+   "cond": "when [x] >= n",
+   "ctx": {
+    "action": [
+     "contain",
+     1.0
+    ],
+    "items": [
+     "contain"
+    ],
+    "n": [],
+    "x": []
+   },
+   "expect": true
+  },
+  {
+   "cond": "when visits >= true",
+   "ctx": {
+    "flag": "contain",
+    "x": {
+     "k": 1
+    },
+    "y": 3
+   },
+   "expect": false
+  },
+  {
+   "cond": "when 2 == 'fix'",
+   "ctx": {
+    "n": "contain",
+    "score": 2,
+    "true": true,
+    "visits": 10,
+    "x": false
+   },
+   "expect": false
+  },
+  {
+   "cond": "when (action == 'watch' < ok)",
+   "ctx": {
+    "action": {
+     "k": 1.0
+    },
+    "items": 0.5,
+    "text": -0.0,
+    "true": 0,
+    "y": 0
+   },
+   "expect": false
+  },
+  {
+   "cond": "when 10 > ['café', text]",
+   "ctx": {
+    "action": "fix",
+    "items": [
+     -0.0
+    ]
+   },
+   "expect": false
+  },
+  {
+   "cond": "when not 0 != ok",
+   "ctx": {},
+   "expect": false
+  },
+  {
+   "cond": "when not not ok not in 'fix'",
+   "ctx": {
+    "action": null,
+    "n": 0,
+    "ok": [
+     1,
+     2,
+     "fix"
+    ]
+   },
+   "expect": true
+  },
+  {
+   "cond": "when not x <= 1",
+   "ctx": {
+    "x": "watch"
+   },
+   "expect": true
+  },
+  {
+   "cond": "when 'error happened' not in '' < flag and not ok >= 'café' in 3",
+   "ctx": {},
+   "expect": false
+  },
+  {
+   "cond": "when 'café' <= [score] > action",
+   "ctx": {
+    "n": null,
+    "text": [
+     0,
+     0,
+     0
+    ],
+    "y": 2
+   },
+   "expect": false
+  },
+  {
+   "cond": "when '' >= []",
+   "ctx": {
+    "flag": [
+     "fix",
+     0
+    ],
+    "items": [],
+    "score": null,
+    "visits": {
+     "k": 0
+    },
+    "x": -0.0,
+    "y": []
+   },
+   "expect": false
+  },
+  {
+   "cond": "when not -0.0 not in action and 3 <= 1 and 'error happened' != ''",
+   "ctx": {},
+   "expect": "ERROR"
+  },
+  {
+   "cond": "when not (3 < action)",
+   "ctx": {
+    "flag": [
+     "fix",
+     "fix"
+    ]
+   },
+   "expect": true
+  },
+  {
+   "cond": "when score != [action, visits] < score",
+   "ctx": {},
+   "expect": false
+  },
+  {
+   "cond": "when ok != x < []",
+   "ctx": {
+    "items": [
+     "café",
+     2,
+     "café"
+    ],
+    "ok": {
+     "k": 1000
+    },
+    "score": null,
+    "visits": "café",
+    "y": 10
+   },
+   "expect": false
+  },
+  {
+   "cond": "when ok != action",
+   "ctx": {
+    "items": 1,
+    "ok": "contain"
+   },
+   "expect": true
+  },
+  {
+   "cond": "when [1000] == 0",
+   "ctx": {
+    "ok": "contain",
+    "x": "fix"
+   },
+   "expect": false
+  },
+  {
+   "cond": "when flag != ''",
+   "ctx": {},
+   "expect": true
+  },
+  {
+   "cond": "when [-0.0] in 10",
+   "ctx": {
+    "action": 0.5,
+    "n": 1000,
+    "score": 1,
+    "true": 1,
+    "x": [
+     1,
+     0.5,
+     1.0
+    ]
+   },
+   "expect": "ERROR"
+  },
+  {
+   "cond": "when items <= ''",
+   "ctx": {
+    "score": [
+     2,
+     -0.0,
+     "watch"
+    ],
+    "y": null
+   },
+   "expect": false
+  },
+  {
+   "cond": "when not 'café' in 'watch'",
+   "ctx": {
+    "action": 1000,
+    "items": "contain",
+    "n": 0.5,
+    "true": 10,
+    "x": ""
+   },
+   "expect": true
+  },
+  {
+   "cond": "when visits < true",
+   "ctx": {
+    "action": "watch",
+    "flag": null,
+    "items": 1.0,
+    "ok": -0.0,
+    "text": "error happened",
+    "true": {
+     "k": 1000
+    }
+   },
+   "expect": false
+  },
+  {
+   "cond": "when not not y != 3",
+   "ctx": {
+    "true": {
+     "k": 3
+    },
+    "visits": true
+   },
+   "expect": true
+  },
+  {
+   "cond": "when flag in text",
+   "ctx": {
+    "flag": -0.0
+   },
+   "expect": false
+  },
+  {
+   "cond": "when (n > score) and not not 'fix' > 'error happened' in 'fix'",
+   "ctx": {
+    "ok": [],
+    "score": -0.0,
+    "y": null
+   },
+   "expect": false
+  },
+  {
+   "cond": "when x not in n != ''",
+   "ctx": {
+    "action": [],
+    "ok": [
+     "fix",
+     2
+    ]
+   },
+   "expect": true
+  },
+  {
+   "cond": "when [1000, [true]] not in 'error happened'",
+   "ctx": {
+    "items": 0.5,
+    "true": "error happened",
+    "y": []
+   },
+   "expect": true
+  },
+  {
+   "cond": "when not [visits] >= action",
+   "ctx": {
+    "flag": -0.0,
+    "ok": 2,
+    "text": 1000,
+    "x": 0,
+    "y": [
+     3,
+     1.0,
+     0.5
+    ]
+   },
+   "expect": true
+  },
+  {
+   "cond": "when not items > 2 == '' and items in '' and not 'fix' > 'contain' not in text",
+   "ctx": {
+    "items": {
+     "k": 0.5
+    },
+    "score": "watch",
+    "true": [],
+    "x": [
+     3
+    ]
+   },
+   "expect": false
+  },
+  {
+   "cond": "when visits in 'contain' or not 'fix' in n or n not in '' not in 'watch'",
+   "ctx": {
+    "action": [
+     1000,
+     ""
+    ],
+    "score": {
+     "k": 0
+    },
+    "text": -0.0,
+    "true": [],
+    "x": false,
+    "y": 1000
+   },
+   "expect": true
+  },
+  {
+   "cond": "when x in 1000",
+   "ctx": {
+    "flag": {
+     "k": 2
+    }
+   },
+   "expect": false
+  },
+  {
+   "cond": "when text == items",
+   "ctx": {
+    "action": 1,
+    "items": {
+     "k": 0
+    },
+    "n": {
+     "k": 1.0
+    }
+   },
+   "expect": false
+  },
+  {
+   "cond": "when 1000 >= visits or ok < ok or text >= items == action or flag != flag < score or 10 != False or items < 1000",
+   "ctx": {
+    "action": "fix",
+    "n": [],
+    "score": false,
+    "y": []
+   },
+   "expect": true
+  },
+  {
+   "cond": "when items <= true",
+   "ctx": {
+    "flag": {
+     "k": 0.5
+    },
+    "items": "contain",
+    "n": null,
+    "ok": {
+     "k": 1
+    },
+    "score": {
+     "k": 10
+    },
+    "text": [
+     0,
+     0
+    ]
+   },
+   "expect": false
+  },
+  {
+   "cond": "when action < 'contain'",
+   "ctx": {
+    "action": "error happened",
+    "items": false,
+    "text": [
+     "error happened"
+    ],
+    "true": [
+     "fix",
+     "fix",
+     3
+    ],
+    "x": 0.5
+   },
+   "expect": false
+  },
+  {
+   "cond": "when not (ok in ok) and true >= 10",
+   "ctx": {},
+   "expect": false
+  },
+  {
+   "cond": "when 'watch' != true or items < ok",
+   "ctx": {
+    "flag": 1,
+    "items": {
+     "k": 2
+    },
+    "n": "",
+    "score": {
+     "k": 1000
+    },
+    "true": 1
+   },
+   "expect": true
+  },
+  {
+   "cond": "when None == [y] == x",
+   "ctx": {
+    "flag": 0
+   },
+   "expect": false
+  },
+  {
+   "cond": "when not '' == ok",
+   "ctx": {
+    "flag": null,
+    "ok": 1.0,
+    "score": [
+     0,
+     "café"
+    ],
+    "text": [
+     "café",
+     0.5
+    ],
+    "true": -0.0,
+    "visits": 1000
+   },
+   "expect": true
+  },
+  {
+   "cond": "when 10 < items",
+   "ctx": {
+    "text": [],
+    "true": 3,
+    "y": ""
+   },
+   "expect": false
+  },
+  {
+   "cond": "when items in 'fix' >= x",
+   "ctx": {
+    "action": 1,
+    "true": {
+     "k": -0.0
+    },
+    "visits": 1.0
+   },
+   "expect": false
+  },
+  {
+   "cond": "when [x] >= true > score",
+   "ctx": {},
+   "expect": false
+  },
+  {
+   "cond": "when ok in 'watch'",
+   "ctx": {
+    "n": null,
+    "ok": "café"
+   },
+   "expect": false
+  },
+  {
+   "cond": "when (1000 != None or y >= action)",
+   "ctx": {
+    "text": "fix"
+   },
+   "expect": true
+  },
+  {
+   "cond": "when x <= y",
+   "ctx": {
+    "action": {
+     "k": 0.5
+    }
+   },
+   "expect": false
+  },
+  {
+   "cond": "when (2 > ok)",
+   "ctx": {
+    "flag": 2,
+    "n": 1,
+    "text": "",
+    "true": "fix",
+    "visits": [
+     10
+    ],
+    "x": "error happened"
+   },
+   "expect": false
+  },
+  {
+   "cond": "when visits < 'error happened'",
+   "ctx": {
+    "action": false,
+    "n": "error happened",
+    "ok": [
+     "contain",
+     "contain"
+    ],
+    "true": 2,
+    "visits": 0
+   },
+   "expect": false
+  },
+  {
+   "cond": "when not text == 'error happened' and not text == x",
+   "ctx": {
+    "action": "watch",
+    "flag": [
+     "error happened",
+     "error happened"
+    ],
+    "text": "watch",
+    "x": {
+     "k": 1.0
+    },
+    "y": 0
+   },
+   "expect": true
+  },
+  {
+   "cond": "when true > y",
+   "ctx": {
+    "n": 1.0,
+    "ok": -0.0,
+    "visits": [
+     1
+    ]
+   },
+   "expect": false
+  },
+  {
+   "cond": "when not False != text",
+   "ctx": {
+    "ok": {
+     "k": 1
+    },
+    "visits": true,
+    "x": false,
+    "y": {
+     "k": 1
+    }
+   },
+   "expect": false
+  },
+  {
+   "cond": "when not flag not in true < x or (0 > visits != true)",
+   "ctx": {
+    "items": 1000,
+    "ok": "error happened",
+    "text": true,
+    "true": 10,
+    "visits": {
+     "k": 1.0
+    },
+    "y": "error happened"
+   },
+   "expect": true
+  },
+  {
+   "cond": "when 'café' < flag",
+   "ctx": {
+    "action": -0.0,
+    "flag": [
+     3,
+     "watch",
+     2
+    ],
+    "items": [],
+    "ok": 0,
+    "text": 0.5,
+    "y": 1000
+   },
+   "expect": false
+  },
+  {
+   "cond": "when (flag < 'fix')",
+   "ctx": {
+    "action": null,
+    "items": 1.0,
+    "ok": "error happened"
+   },
+   "expect": false
+  },
+  {
+   "cond": "when ok > text",
+   "ctx": {
+    "action": 10,
+    "flag": 0.5,
+    "items": {
+     "k": 0
+    },
+    "ok": 1.0,
+    "true": "",
+    "y": false
+   },
+   "expect": false
+  },
+  {
+   "cond": "when x >= text and not (visits != y != score)",
+   "ctx": {
+    "action": [
+     2
+    ],
+    "n": [],
+    "ok": [
+     "watch",
+     1.0,
+     0
+    ],
+    "visits": "contain",
+    "x": [
+     "café",
+     3
+    ],
+    "y": false
+   },
+   "expect": false
+  },
+  {
+   "cond": "when y < 'contain'",
+   "ctx": {
+    "flag": "error happened",
+    "ok": {
+     "k": 0.5
+    },
+    "text": 1,
+    "true": [],
+    "x": "café",
+    "y": {
+     "k": -0.0
+    }
+   },
+   "expect": false
+  },
+  {
+   "cond": "when not n == true or flag != action or x != text and not x > ok",
+   "ctx": {
+    "true": {
+     "k": 0.5
+    },
+    "visits": {
+     "k": 3
+    }
+   },
+   "expect": true
+  },
+  {
+   "cond": "when [text] <= visits",
+   "ctx": {
+    "n": 10,
+    "text": "fix",
+    "visits": 0,
+    "x": null
+   },
+   "expect": false
+  },
+  {
+   "cond": "when ok in ['café', score, 2] or visits > 'café'",
+   "ctx": {
+    "flag": 10,
+    "x": "watch"
+   },
+   "expect": true
+  },
+  {
+   "cond": "when flag >= '' < '' or x < flag and not x in x and ok > n != action and true > text not in 'error happened'",
+   "ctx": {
+    "n": "watch",
+    "ok": 1.0,
+    "score": "",
+    "text": 3
+   },
+   "expect": false
+  },
+  {
+   "cond": "when n >= 10",
+   "ctx": {
+    "n": [
+     "contain"
+    ],
+    "true": 0.5,
+    "x": 10
+   },
+   "expect": false
+  },
+  {
+   "cond": "when flag < true",
+   "ctx": {
+    "items": false,
+    "n": "fix",
+    "text": true,
+    "visits": [
+     "contain",
+     0,
+     "watch"
+    ],
+    "y": "fix"
+   },
+   "expect": false
+  },
+  {
+   "cond": "when true not in [y, 'error happened', x] >= score",
+   "ctx": {
+    "action": [
+     0.5,
+     "café"
+    ],
+    "flag": null,
+    "true": true,
+    "y": "watch"
+   },
+   "expect": false
+  },
+  {
+   "cond": "when n not in x and 3 < y and n != text <= visits or x <= items",
+   "ctx": {
+    "flag": {
+     "k": 2
+    },
+    "n": "contain",
+    "ok": 3,
+    "text": 2,
+    "visits": []
+   },
+   "expect": false
+  },
+  {
+   "cond": "when 'fix' in visits",
+   "ctx": {
+    "action": "",
+    "flag": 1,
+    "ok": 1,
+    "score": [
+     "fix"
+    ],
+    "text": 1000,
+    "x": "error happened"
+   },
+   "expect": false
+  },
+  {
+   "cond": "when n <= x",
+   "ctx": {
+    "flag": [],
+    "ok": false
+   },
+   "expect": false
+  },
+  {
+   "cond": "when y == 1000 and action in 0 in action",
+   "ctx": {
+    "y": false
+   },
+   "expect": false
+  },
+  {
+   "cond": "when items not in action or true <= -0.0 and '' < ''",
+   "ctx": {
+    "items": [
+     "watch",
+     2
+    ],
+    "n": 1000,
+    "score": {
+     "k": 0
+    },
+    "true": false,
+    "visits": [
+     "watch",
+     1000
+    ],
+    "y": [
+     "café"
+    ]
+   },
+   "expect": "ERROR"
+  },
+  {
+   "cond": "when 1 in flag",
+   "ctx": {
+    "action": {
+     "k": -0.0
+    },
+    "items": 0.5,
+    "true": {
+     "k": 0
+    },
+    "visits": {
+     "k": 2
+    },
+    "y": [
+     "contain"
+    ]
+   },
+   "expect": false
+  },
+  {
+   "cond": "when x <= text not in 'contain' or '' in true and 1.0 > [text, action]",
+   "ctx": {
+    "score": "café",
+    "true": {
+     "k": -0.0
+    }
+   },
+   "expect": false
+  },
+  {
+   "cond": "when True > n",
+   "ctx": {
+    "items": 0,
+    "text": null
+   },
+   "expect": false
+  },
+  {
+   "cond": "when 'fix' < true < 'contain'",
+   "ctx": {
+    "action": 3,
+    "items": 0.5,
+    "score": [],
+    "visits": -0.0
+   },
+   "expect": false
+  },
+  {
+   "cond": "when not visits <= n in items or flag == 10",
+   "ctx": {
+    "y": {
+     "k": 0
+    }
+   },
+   "expect": true
+  },
+  {
+   "cond": "when not [text, n, y] not in ok",
+   "ctx": {
+    "n": [
+     1.0
+    ],
+    "text": -0.0
+   },
+   "expect": false
+  },
+  {
+   "cond": "when -0.0 not in score <= [visits]",
+   "ctx": {},
+   "expect": "ERROR"
+  },
+  {
+   "cond": "when 'contain' < score not in 1.0",
+   "ctx": {
+    "action": {
+     "k": 0
+    },
+    "flag": {
+     "k": 0.5
+    },
+    "ok": [
+     "café",
+     1000,
+     1
+    ],
+    "score": 0.5,
+    "text": -0.0
+   },
+   "expect": false
+  },
+  {
+   "cond": "when not 2 < 'café' and action > true",
+   "ctx": {
+    "action": "contain",
+    "flag": 3,
+    "true": false,
+    "visits": "watch",
+    "y": {
+     "k": 0
+    }
+   },
+   "expect": false
+  },
+  {
+   "cond": "when visits <= 'café' >= text and visits <= n",
+   "ctx": {
+    "flag": [
+     ""
+    ],
+    "n": 1.0,
+    "score": 10,
+    "true": "watch",
+    "x": 0.5
+   },
+   "expect": false
+  },
+  {
+   "cond": "when 0 not in n",
+   "ctx": {
+    "score": {
+     "k": 1.0
+    },
+    "true": [
+     "error happened"
+    ],
+    "y": 0
+   },
+   "expect": true
+  },
+  {
+   "cond": "when (2 not in visits and items > score and flag <= n < ok or true < 'café')",
+   "ctx": {
+    "n": 0.5,
+    "ok": {
+     "k": 3
+    },
+    "score": 1,
+    "text": [
+     "error happened",
+     "",
+     3
+    ],
+    "true": "",
+    "visits": 0
+   },
+   "expect": true
+  },
+  {
+   "cond": "when 'café' > flag",
+   "ctx": {},
+   "expect": false
+  },
+  {
+   "cond": "when (text != action or '' not in action and score >= 'fix')",
+   "ctx": {
+    "flag": false,
+    "n": 1,
+    "ok": true,
+    "text": "",
+    "true": 1,
+    "y": null
+   },
+   "expect": true
+  },
+  {
+   "cond": "when 2 == x",
+   "ctx": {
+    "action": 10,
+    "n": {
+     "k": 0
+    }
+   },
+   "expect": false
+  },
+  {
+   "cond": "when not items <= 1.0",
+   "ctx": {
+    "action": "error happened",
+    "ok": 2,
+    "score": {
+     "k": 10
+    },
+    "true": ""
+   },
+   "expect": true
+  },
+  {
+   "cond": "when not x >= ok and 0.5 <= visits",
+   "ctx": {
+    "flag": "watch",
+    "items": false,
+    "ok": [
+     2,
+     3
+    ],
+    "y": 1000
+   },
+   "expect": false
+  },
+  {
+   "cond": "when not not not text in 'contain'",
+   "ctx": {
+    "items": {
+     "k": 10
+    },
+    "score": 1.0,
+    "true": "contain",
+    "visits": 0
+   },
+   "expect": true
+  },
+  {
+   "cond": "when score not in True",
+   "ctx": {
+    "action": 0.5,
+    "flag": "fix",
+    "text": 1.0
+   },
+   "expect": true
+  },
+  {
+   "cond": "when 1.0 in ['fix', true, n] in flag or not text < 1.0 or text >= text",
+   "ctx": {
+    "action": 0.5,
+    "visits": [
+     "contain",
+     3
+    ]
+   },
+   "expect": true
+  },
+  {
+   "cond": "when items in 3 or items not in 'error happened'",
+   "ctx": {
+    "action": 1000,
+    "items": 3
+   },
+   "expect": true
+  },
+  {
+   "cond": "when not not flag > n != true or (score not in 'error happened')",
+   "ctx": {
+    "flag": false,
+    "items": ""
+   },
+   "expect": true
+  },
+  {
+   "cond": "when n == items",
+   "ctx": {
+    "action": 3,
+    "items": true,
+    "visits": 0.5,
+    "y": 1
+   },
+   "expect": false
+  },
+  {
+   "cond": "when 3 >= score or 1 <= items >= 0.5 or not 3 < action and items < 'watch' and flag in 1.0",
+   "ctx": {
+    "action": "contain",
+    "ok": {
+     "k": -0.0
+    },
+    "score": false,
+    "text": {
+     "k": 1
+    },
+    "true": {
+     "k": 2
+    },
+    "x": "error happened"
+   },
+   "expect": true
+  },
+  {
+   "cond": "when not text < ok > 'contain' or n < 3 and not 'error happened' <= x <= flag",
+   "ctx": {
+    "action": "café",
+    "score": [
+     "",
+     10,
+     0.5
+    ]
+   },
+   "expect": true
+  },
+  {
+   "cond": "when action not in [text, x]",
+   "ctx": {
+    "items": true
+   },
+   "expect": false
+  },
+  {
+   "cond": "when not flag > n",
+   "ctx": {
+    "x": 2
+   },
+   "expect": true
+  },
+  {
+   "cond": "when not None == n < ['contain']",
+   "ctx": {},
+   "expect": true
+  },
+  {
+   "cond": "when ('contain' not in [])",
+   "ctx": {
+    "flag": null,
+    "items": "café",
+    "score": null,
+    "text": {
+     "k": 0
+    },
+    "visits": {
+     "k": 2
+    },
+    "x": {
+     "k": 10
+    }
+   },
+   "expect": true
+  },
+  {
+   "cond": "when 'fix' >= 0.5 or n not in flag not in True or not y == text",
+   "ctx": {
+    "action": 0,
+    "flag": null,
+    "ok": {
+     "k": 10
+    },
+    "x": [
+     "fix"
+    ],
+    "y": 1
+   },
+   "expect": true
+  },
+  {
+   "cond": "when [1] < score",
+   "ctx": {
+    "flag": 0.5,
+    "items": true,
+    "true": {
+     "k": 2
+    }
+   },
+   "expect": false
+  },
+  {
+   "cond": "when not items in flag or x <= items",
+   "ctx": {
+    "items": {
+     "k": 0
+    },
+    "score": "error happened"
+   },
+   "expect": true
+  },
+  {
+   "cond": "when (x == x)",
+   "ctx": {
+    "action": {
+     "k": 1.0
+    },
+    "items": "contain",
+    "text": [
+     3,
+     ""
+    ],
+    "true": [
+     -0.0,
+     "fix",
+     "contain"
+    ],
+    "visits": "café",
+    "x": 0.5
+   },
+   "expect": true
+  },
+  {
+   "cond": "when (text == '') or not text < items and not action < 1.0",
+   "ctx": {
+    "action": 2
+   },
+   "expect": true
+  },
+  {
+   "cond": "when true < action",
+   "ctx": {},
+   "expect": false
+  },
+  {
+   "cond": "when visits != y or not flag < visits and not n >= ok",
+   "ctx": {
+    "action": false,
+    "n": 1,
+    "ok": 0,
+    "text": false,
+    "y": ""
+   },
+   "expect": true
+  },
+  {
+   "cond": "when items < visits == action",
+   "ctx": {
+    "true": {
+     "k": 10
+    }
+   },
+   "expect": false
+  },
+  {
+   "cond": "when (text in [action, y])",
+   "ctx": {
+    "action": [],
+    "flag": {
+     "k": 2
+    },
+    "items": 3,
+    "n": null
+   },
+   "expect": true
+  },
+  {
+   "cond": "when n <= y or true != true or ('error happened' > 2)",
+   "ctx": {
+    "flag": 1.0,
+    "ok": [
+     "contain"
+    ],
+    "x": 0,
+    "y": "fix"
+   },
+   "expect": false
+  },
+  {
+   "cond": "when 1.0 != visits and not 'error happened' == ok < true",
+   "ctx": {
+    "visits": []
+   },
+   "expect": true
+  },
+  {
+   "cond": "when not flag <= ok or 'watch' not in 'café' or not visits in score != ok",
+   "ctx": {
+    "x": 1000,
+    "y": {
+     "k": 3
+    }
+   },
+   "expect": true
+  },
+  {
+   "cond": "when flag < ok",
+   "ctx": {
+    "flag": false,
+    "n": "",
+    "ok": true,
+    "text": [],
+    "true": "fix",
+    "visits": [
+     "",
+     "watch",
+     "contain"
+    ]
+   },
+   "expect": true
+  },
+  {
+   "cond": "when not -0.0 != score and y != 'error happened'",
+   "ctx": {
+    "flag": 0,
+    "ok": "",
+    "true": false
+   },
+   "expect": "ERROR"
+  },
+  {
+   "cond": "when n in ''",
+   "ctx": {
+    "action": 10,
+    "n": 1000,
+    "text": true,
+    "y": "watch"
+   },
+   "expect": false
+  },
+  {
+   "cond": "when [] > true",
+   "ctx": {
+    "flag": 10,
+    "items": false,
+    "score": 10,
+    "text": "error happened",
+    "true": 1.0,
+    "x": "contain"
+   },
+   "expect": false
+  },
+  {
+   "cond": "when items != flag or items not in score or ['error happened'] != items",
+   "ctx": {
+    "action": {
+     "k": 0
+    },
+    "items": [],
+    "n": 2,
+    "ok": [
+     "café",
+     0,
+     0.5
+    ],
+    "true": 2,
+    "x": {
+     "k": 1
+    }
+   },
+   "expect": true
+  },
+  {
+   "cond": "when x < 'contain' >= 0 or 0 > [score]",
+   "ctx": {
+    "ok": 10,
+    "y": "watch"
+   },
+   "expect": false
+  },
+  {
+   "cond": "when x == [action, true, 'watch']",
+   "ctx": {},
+   "expect": false
+  },
+  {
+   "cond": "when action > flag",
+   "ctx": {
+    "action": true,
+    "flag": 3,
+    "items": [
+     2,
+     1.0,
+     "café"
+    ],
+    "ok": {
+     "k": 0
+    },
+    "score": 10,
+    "true": "café"
+   },
+   "expect": false
+  },
+  {
+   "cond": "when not 10 >= ok or 'contain' == 'watch' or not action < '' < n",
+   "ctx": {},
+   "expect": true
+  },
+  {
+   "cond": "when 'watch' > 'fix' > 1.0",
+   "ctx": {
+    "items": 1.0,
+    "ok": [
+     0.5,
+     "fix"
+    ]
+   },
+   "expect": false
+  },
+  {
+   "cond": "when ok == 2 and true <= 'café' and y not in visits < score or ('café' <= ok)",
+   "ctx": {
+    "text": -0.0,
+    "visits": true
+   },
+   "expect": false
+  },
+  {
+   "cond": "when not y >= 10 != x or ['fix', ''] not in text",
+   "ctx": {
+    "flag": {
+     "k": -0.0
+    },
+    "items": [
+     3,
+     -0.0,
+     -0.0
+    ],
+    "n": -0.0,
+    "text": 10,
+    "visits": [
+     0
+    ]
+   },
+   "expect": true
+  },
+  {
+   "cond": "when flag <= 'fix' or visits < 'fix'",
+   "ctx": {
+    "n": -0.0,
+    "ok": "watch",
+    "score": [],
+    "true": ""
+   },
+   "expect": false
+  },
+  {
+   "cond": "when 'contain' >= score",
+   "ctx": {
+    "action": true,
+    "flag": "café",
+    "items": [
+     "",
+     "",
+     ""
+    ],
+    "n": "contain",
+    "text": true
+   },
+   "expect": false
+  },
+  {
+   "cond": "when ('' in -0.0 <= action) or not '' in 'contain'",
+   "ctx": {},
+   "expect": "ERROR"
+  },
+  {
+   "cond": "when 0 >= 1000",
+   "ctx": {
+    "visits": [
+     1
+    ]
+   },
+   "expect": false
+  },
+  {
+   "cond": "when 1000 > items",
+   "ctx": {
+    "items": 10,
+    "ok": false,
+    "true": 0.5
+   },
+   "expect": true
+  },
+  {
+   "cond": "when text >= n",
+   "ctx": {
+    "n": [
+     1000,
+     1000
+    ],
+    "true": [
+     "contain",
+     1000,
+     "fix"
+    ],
+    "x": [],
+    "y": 10
+   },
+   "expect": false
+  },
+  {
+   "cond": "when None > y or flag < 1000",
+   "ctx": {},
+   "expect": false
+  },
+  {
+   "cond": "when not [1.0] != true <= [y, 'contain', 0]",
+   "ctx": {
+    "flag": 0.5,
+    "n": false,
+    "true": "fix",
+    "visits": "watch",
+    "y": {
+     "k": 3
+    }
+   },
+   "expect": true
+  },
+  {
+   "cond": "when not 'error happened' == score",
+   "ctx": {
+    "flag": null,
+    "n": 3,
+    "text": [],
+    "true": {
+     "k": 1000
+    },
+    "x": "café"
+   },
+   "expect": true
+  },
+  {
+   "cond": "when not 0.5 <= []",
+   "ctx": {
+    "ok": 0.5,
+    "text": 2,
+    "x": {
+     "k": 1
+    },
+    "y": 10
+   },
+   "expect": true
+  },
+  {
+   "cond": "when ok in n and text in 3",
+   "ctx": {
+    "items": {
+     "k": 1.0
+    },
+    "n": 10,
+    "text": 0.5,
+    "true": {
+     "k": 1.0
+    },
+    "visits": "watch",
+    "x": -0.0
+   },
+   "expect": false
+  },
+  {
+   "cond": "when 'fix' > visits",
+   "ctx": {
+    "flag": {
+     "k": 1.0
+    },
+    "n": "watch",
+    "ok": false,
+    "x": "watch"
+   },
+   "expect": false
+  },
+  {
+   "cond": "when ('fix' in y not in text and ok > 'contain' == y and not 3 < 2)",
+   "ctx": {
+    "items": "watch",
+    "n": "",
+    "ok": "error happened",
+    "text": true,
+    "visits": {
+     "k": 1.0
+    },
+    "y": [
+     "fix"
+    ]
+   },
+   "expect": false
+  },
+  {
+   "cond": "when ok > ok and ('café' >= 2 or items == action != action)",
+   "ctx": {
+    "flag": "error happened",
+    "items": null,
+    "score": 1.0,
+    "visits": "café",
+    "x": {
+     "k": 1000
+    },
+    "y": [
+     "contain"
+    ]
+   },
+   "expect": false
+  },
+  {
+   "cond": "when (x != text) or n >= 'watch' or y < flag",
+   "ctx": {},
+   "expect": false
+  },
+  {
+   "cond": "when [-0.0, y] not in [flag, text]",
+   "ctx": {
+    "flag": [
+     1,
+     "watch"
+    ],
+    "items": {
+     "k": 1.0
+    },
+    "ok": {
+     "k": 2
+    },
+    "visits": 2,
+    "x": [
+     2,
+     "contain",
+     1.0
+    ],
+    "y": [
+     0,
+     "fix",
+     "contain"
+    ]
+   },
+   "expect": "ERROR"
+  },
+  {
+   "cond": "when n > visits or y == items",
+   "ctx": {
+    "action": "watch",
+    "ok": [
+     0
+    ],
+    "y": false
+   },
+   "expect": false
+  },
+  {
+   "cond": "when n == 3",
+   "ctx": {
+    "action": true,
+    "n": "error happened",
+    "y": true
+   },
+   "expect": false
+  },
+  {
+   "cond": "when y < 'error happened' or score not in x",
+   "ctx": {
+    "n": null,
+    "score": 1.0,
+    "true": true,
+    "x": -0.0,
+    "y": [
+     2,
+     2,
+     1
+    ]
+   },
+   "expect": true
+  },
+  {
+   "cond": "when score < True or (not x < items > n)",
+   "ctx": {
+    "text": 1.0
+   },
+   "expect": true
+  },
+  {
+   "cond": "when not 'fix' == 10 and 0 < 'café'",
+   "ctx": {
+    "text": 2,
+    "y": "fix"
+   },
+   "expect": false
+  },
+  {
+   "cond": "when [[], visits] >= text",
+   "ctx": {
+    "action": true,
+    "ok": 1,
+    "text": 1,
+    "y": "error happened"
+   },
+   "expect": false
+  },
+  {
+   "cond": "when 'café' in 'error happened' or (visits <= True)",
+   "ctx": {
+    "items": [
+     "error happened",
+     "watch",
+     1000
+    ],
+    "ok": 1000,
+    "score": false,
+    "true": {
+     "k": 1
+    }
+   },
+   "expect": false
+  },
+  {
+   "cond": "when not ok <= 'café' < text and 'contain' > 'fix' and true in '' < x",
+   "ctx": {
+    "y": {
+     "k": 3
+    }
+   },
+   "expect": false
+  },
+  {
+   "cond": "when True >= x <= x",
+   "ctx": {},
+   "expect": false
+  },
+  {
+   "cond": "when not 'contain' in 0",
+   "ctx": {},
+   "expect": true
+  },
+  {
+   "cond": "when 1 != 'fix'",
+   "ctx": {},
+   "expect": true
+  },
+  {
+   "cond": "when y < n",
+   "ctx": {
+    "flag": "error happened",
+    "ok": {
+     "k": 1
+    },
+    "score": [],
+    "text": {
+     "k": 1000
+    },
+    "visits": [
+     -0.0,
+     1000
+    ]
+   },
+   "expect": false
+  },
+  {
+   "cond": "when ('fix' > ['fix'])",
+   "ctx": {
+    "flag": {
+     "k": 0.5
+    },
+    "items": -0.0,
+    "ok": 1000,
+    "score": 1000,
+    "y": null
+   },
+   "expect": false
+  },
+  {
+   "cond": "when y >= items or ('error happened' > 'café') and (x > x) or ok < visits <= -0.0",
+   "ctx": {},
+   "expect": "ERROR"
+  },
+  {
+   "cond": "when not ok != 2",
+   "ctx": {
+    "flag": "watch",
+    "text": {
+     "k": 3
+    },
+    "visits": ""
+   },
+   "expect": false
+  },
+  {
+   "cond": "when not ok >= y in visits and visits in x == 0 or 'fix' <= 0",
+   "ctx": {},
+   "expect": false
+  },
+  {
+   "cond": "when [n] in y",
+   "ctx": {
+    "x": [
+     1000,
+     "contain"
+    ]
+   },
+   "expect": false
+  },
+  {
+   "cond": "when 'contain' > 'café' or not n in visits > 'fix'",
+   "ctx": {},
+   "expect": true
+  },
+  {
+   "cond": "when 'fix' <= items",
+   "ctx": {
+    "flag": true,
+    "items": 1.0,
+    "n": ""
+   },
+   "expect": false
+  },
+  {
+   "cond": "when visits not in ['fix']",
+   "ctx": {
+    "action": {
+     "k": 1.0
+    },
+    "text": {
+     "k": 10
+    },
+    "true": 1,
+    "visits": {
+     "k": 2
+    }
+   },
+   "expect": true
+  },
+  {
+   "cond": "when 'error happened' > items",
+   "ctx": {
+    "n": 1,
+    "score": null,
+    "y": 0
+   },
+   "expect": false
+  },
+  {
+   "cond": "when 'error happened' > n",
+   "ctx": {
+    "text": {
+     "k": 3
+    }
+   },
+   "expect": false
+  },
+  {
+   "cond": "when action != text or 'contain' >= items",
+   "ctx": {
+    "action": [
+     "",
+     3,
+     1000
+    ],
+    "items": null,
+    "n": [],
+    "x": []
+   },
+   "expect": true
+  },
+  {
+   "cond": "when not 1000 != 1.0 == action and text != n != text or flag != x > ok or flag != visits",
+   "ctx": {
+    "action": 10,
+    "ok": 3,
+    "true": 0,
+    "visits": true,
+    "x": null,
+    "y": -0.0
+   },
+   "expect": true
+  },
+  {
+   "cond": "when score not in ok or (visits < text)",
+   "ctx": {
+    "items": true,
+    "ok": {
+     "k": 0
+    },
+    "true": false,
+    "visits": 10,
+    "x": [
+     "error happened",
+     1000,
+     0.5
+    ]
+   },
+   "expect": true
+  },
+  {
+   "cond": "when [] < 10 or n == [action, x, 10]",
+   "ctx": {
+    "action": 1.0,
+    "flag": "watch",
+    "n": "fix",
+    "ok": {
+     "k": 0
+    },
+    "true": true,
+    "visits": false
+   },
+   "expect": false
+  },
+  {
+   "cond": "when [score, ok] < [n, action] or y == action",
+   "ctx": {
+    "action": "",
+    "ok": [
+     1,
+     1.0
+    ],
+    "text": true,
+    "visits": [
+     1.0,
+     "watch"
+    ]
+   },
+   "expect": false
+  },
+  {
+   "cond": "when n == [n, 'fix', 3] or flag != flag or 'contain' <= items",
+   "ctx": {},
+   "expect": false
+  },
+  {
+   "cond": "when [] >= x < y",
+   "ctx": {
+    "ok": 0.5,
+    "score": {
+     "k": -0.0
+    },
+    "text": "watch"
+   },
+   "expect": false
+  },
+  {
+   "cond": "when not '' < 1.0 and score >= 'fix' and not score != true",
+   "ctx": {
+    "score": "watch",
+    "true": false
+   },
+   "expect": false
+  },
+  {
+   "cond": "when score in items and 'café' >= action not in 1",
+   "ctx": {
+    "score": "contain",
+    "x": "contain",
+    "y": 1000
+   },
+   "expect": false
+  },
+  {
+   "cond": "when True == score",
+   "ctx": {
+    "flag": {
+     "k": -0.0
+    },
+    "items": true
+   },
+   "expect": false
+  },
+  {
+   "cond": "when ok not in [true, items, action] in score",
+   "ctx": {
+    "ok": false
+   },
+   "expect": false
+  },
+  {
+   "cond": "when '' == ''",
+   "ctx": {
+    "action": 2,
+    "flag": [
+     0.5
+    ],
+    "n": 1000,
+    "score": {
+     "k": 1.0
+    },
+    "y": "café"
+   },
+   "expect": true
+  },
+  {
+   "cond": "when true == ok or 3 >= flag",
+   "ctx": {
+    "text": 1.0,
+    "x": [
+     10
+    ]
+   },
+   "expect": true
+  },
+  {
+   "cond": "when text not in 'contain'",
+   "ctx": {
+    "action": true,
+    "flag": "contain",
+    "ok": "fix",
+    "text": false,
+    "true": "watch",
+    "x": 10
+   },
+   "expect": true
+  },
+  {
+   "cond": "when not n <= n and score != text or 10 < items",
+   "ctx": {
+    "true": {
+     "k": 0.5
+    }
+   },
+   "expect": false
+  },
+  {
+   "cond": "when not text != true or not n < true",
+   "ctx": {
+    "items": {
+     "k": 10
+    },
+    "ok": "",
+    "text": {
+     "k": 1
+    },
+    "visits": "fix",
+    "x": [],
+    "y": "fix"
+   },
+   "expect": true
+  },
+  {
+   "cond": "when (x <= action and items <= score)",
+   "ctx": {
+    "true": 10
+   },
+   "expect": false
+  },
+  {
+   "cond": "when (x >= 'watch' and true >= true <= flag)",
+   "ctx": {
+    "score": [
+     2,
+     1000,
+     "error happened"
+    ]
+   },
+   "expect": false
+  },
+  {
+   "cond": "when not action == 'error happened'",
+   "ctx": {
+    "action": "café",
+    "flag": false,
+    "n": "watch",
+    "text": "watch",
+    "visits": false,
+    "x": "watch"
+   },
+   "expect": true
+  },
+  {
+   "cond": "when [x, -0.0] in [x, ok] == []",
+   "ctx": {
+    "n": 1,
+    "true": {
+     "k": -0.0
+    },
+    "visits": false,
+    "x": {
+     "k": 3
+    }
+   },
+   "expect": "ERROR"
+  },
+  {
+   "cond": "when n <= n and not text >= 'fix' != flag or 'café' == action",
+   "ctx": {
+    "items": 3,
+    "ok": [
+     "fix"
+    ],
+    "true": 2,
+    "visits": 3
+   },
+   "expect": false
+  },
+  {
+   "cond": "when ok <= items and true >= action",
+   "ctx": {
+    "true": true,
+    "visits": 3
+   },
+   "expect": false
+  },
+  {
+   "cond": "when 'fix' > 1",
+   "ctx": {},
+   "expect": false
+  },
+  {
+   "cond": "when False != 10 or not n > 1000 in 'fix' or x in flag == true",
+   "ctx": {
+    "visits": [
+     0.5,
+     "error happened"
+    ]
+   },
+   "expect": true
+  },
+  {
+   "cond": "when not not text >= flag and true > x",
+   "ctx": {
+    "n": 1,
+    "score": 2,
+    "true": 2,
+    "visits": "café"
+   },
+   "expect": false
+  },
+  {
+   "cond": "when items >= []",
+   "ctx": {
+    "items": [
+     3
+    ],
+    "n": "",
+    "score": {
+     "k": 2
+    },
+    "x": ""
+   },
+   "expect": true
+  },
+  {
+   "cond": "when action >= x",
+   "ctx": {
+    "text": "error happened"
+   },
+   "expect": false
+  },
+  {
+   "cond": "when items >= [[ok], text]",
+   "ctx": {
+    "action": 1000,
+    "n": 2,
+    "score": 10,
+    "true": {
+     "k": 0.5
+    },
+    "visits": "watch"
+   },
+   "expect": false
+  },
+  {
+   "cond": "when true < text",
+   "ctx": {},
+   "expect": false
+  },
+  {
+   "cond": "when 1.0 > 'error happened'",
+   "ctx": {
+    "flag": {
+     "k": 0
+    },
+    "items": [
+     "café"
+    ],
+    "true": 2
+   },
+   "expect": false
+  },
+  {
+   "cond": "when x in 'café' or (not 'contain' == text in y)",
+   "ctx": {
+    "items": [],
+    "true": true,
+    "x": 1
+   },
+   "expect": true
+  },
+  {
+   "cond": "when n not in true and 'fix' < 0.5 in 'fix' and x in action",
+   "ctx": {
+    "flag": [
+     0,
+     0
+    ],
+    "ok": true
+   },
+   "expect": false
+  },
+  {
+   "cond": "when (not flag <= flag or visits > 'fix' in 'watch')",
+   "ctx": {
+    "action": "",
+    "items": false,
+    "text": "",
+    "true": {
+     "k": 0
+    },
+    "y": 3
+   },
+   "expect": true
+  },
+  {
+   "cond": "when (true == action)",
+   "ctx": {
+    "items": {
+     "k": -0.0
+    },
+    "ok": -0.0,
+    "score": {
+     "k": 10
+    },
+    "text": null,
+    "x": [],
+    "y": true
+   },
+   "expect": true
+  },
+  {
+   "cond": "when 'contain' != n",
+   "ctx": {
+    "items": "contain"
+   },
+   "expect": true
+  },
+  {
+   "cond": "when -0.0 == items",
+   "ctx": {
+    "action": "café",
+    "flag": 1000,
+    "ok": "error happened",
+    "score": 0,
+    "text": 10,
+    "y": {
+     "k": 0
+    }
+   },
+   "expect": "ERROR"
+  },
+  {
+   "cond": "when text >= True",
+   "ctx": {},
+   "expect": false
+  },
+  {
+   "cond": "when flag != '' and not action > ok or 10 in score",
+   "ctx": {
+    "action": {
+     "k": 1
+    },
+    "flag": {
+     "k": 1
+    },
+    "items": "contain",
+    "ok": null,
+    "text": [
+     1000,
+     "café",
+     ""
+    ],
+    "visits": 1.0
+   },
+   "expect": true
+  },
+  {
+   "cond": "when True < 1000",
+   "ctx": {
+    "text": [
+     0,
+     -0.0,
+     3
+    ],
+    "x": ""
+   },
+   "expect": true
+  },
+  {
+   "cond": "when not flag in 0",
+   "ctx": {
+    "flag": true,
+    "score": 1.0,
+    "visits": "fix"
+   },
+   "expect": true
+  },
+  {
+   "cond": "when (-0.0 == score) and 1000 == 'watch'",
+   "ctx": {
+    "action": [
+     1.0,
+     0,
+     "contain"
+    ],
+    "flag": [
+     "error happened",
+     0
+    ],
+    "items": [
+     "fix",
+     2
+    ],
+    "n": 1
+   },
+   "expect": "ERROR"
+  },
+  {
+   "cond": "when visits in y in [action, x, action]",
+   "ctx": {
+    "items": {
+     "k": 3
+    },
+    "n": null,
+    "score": 2,
+    "true": [],
+    "x": [
+     10
+    ],
+    "y": "contain"
+   },
+   "expect": false
+  },
+  {
+   "cond": "when y == -0.0",
+   "ctx": {
+    "action": 3,
+    "items": 3,
+    "n": [
+     "café"
+    ],
+    "visits": {
+     "k": -0.0
+    }
+   },
+   "expect": "ERROR"
+  },
+  {
+   "cond": "when [] >= true",
+   "ctx": {
+    "action": "fix",
+    "score": true,
+    "x": null
+   },
+   "expect": false
+  },
+  {
+   "cond": "when 'error happened' > [n] != 1.0 and (visits > visits)",
+   "ctx": {},
+   "expect": false
+  },
+  {
+   "cond": "when not 'error happened' < visits != 'watch' and y < 'contain'",
+   "ctx": {},
+   "expect": false
+  },
+  {
+   "cond": "when (not not visits != 1000 < action)",
+   "ctx": {
+    "items": [],
+    "n": [],
+    "text": null,
+    "true": "error happened"
+   },
+   "expect": false
+  },
+  {
+   "cond": "when n not in []",
+   "ctx": {},
+   "expect": true
+  },
+  {
+   "cond": "when (not true in n not in 'watch')",
+   "ctx": {},
+   "expect": true
+  },
+  {
+   "cond": "when 3 not in n",
+   "ctx": {
+    "flag": 0.5,
+    "items": [
+     "watch",
+     "watch",
+     2
+    ],
+    "true": false
+   },
+   "expect": true
+  },
+  {
+   "cond": "when [y, items, visits] < [true, y]",
+   "ctx": {
+    "flag": "watch"
+   },
+   "expect": false
+  },
+  {
+   "cond": "when not '' == action",
+   "ctx": {
+    "items": [
+     1000,
+     ""
+    ],
+    "n": "café",
+    "score": "watch",
+    "x": [
+     0,
+     0.5
+    ],
+    "y": 1000
+   },
+   "expect": true
+  },
+  {
+   "cond": "when items <= items",
+   "ctx": {
+    "n": 1.0,
+    "ok": false,
+    "text": "",
+    "true": {
+     "k": 3
+    },
+    "visits": 0.5,
+    "y": "watch"
+   },
+   "expect": false
+  },
+  {
+   "cond": "when ((action != true))",
+   "ctx": {
+    "score": 0,
+    "true": {
+     "k": 2
+    }
+   },
+   "expect": true
+  },
+  {
+   "cond": "when ok < true",
+   "ctx": {
+    "action": 0.5,
+    "n": "",
+    "ok": "error happened",
+    "x": {
+     "k": 1.0
+    }
+   },
+   "expect": false
+  },
+  {
+   "cond": "when visits <= ok not in action",
+   "ctx": {
+    "ok": false,
+    "score": {
+     "k": 1.0
+    },
+    "true": 1,
+    "visits": 1000
+   },
+   "expect": false
+  },
+  {
+   "cond": "when y <= true or not 'fix' != 'fix'",
+   "ctx": {
+    "action": [
+     "error happened"
+    ],
+    "n": -0.0,
+    "ok": [],
+    "score": {
+     "k": -0.0
+    },
+    "visits": null
+   },
+   "expect": true
+  },
+  {
+   "cond": "when not 1000 == 0.5 and 'watch' < 'fix'",
+   "ctx": {
+    "n": 3,
+    "true": 2
+   },
+   "expect": false
+  },
+  {
+   "cond": "when not action != [2, true]",
+   "ctx": {
+    "action": "",
+    "items": "error happened",
+    "ok": {
+     "k": 1
+    },
+    "text": 0,
+    "x": "contain",
+    "y": "contain"
+   },
+   "expect": false
+  },
+  {
+   "cond": "when visits > x > items",
+   "ctx": {
+    "items": "fix",
+    "n": {
+     "k": 1
+    },
+    "y": [
+     "watch",
+     "fix",
+     0.5
+    ]
+   },
+   "expect": false
+  },
+  {
+   "cond": "when not ((text in true))",
+   "ctx": {
+    "n": null,
+    "score": [
+     -0.0,
+     "error happened"
+    ],
+    "text": 2,
+    "true": "watch",
+    "visits": [],
+    "x": "watch"
+   },
+   "expect": true
+  },
+  {
+   "cond": "when (items == 'error happened')",
+   "ctx": {
+    "flag": [
+     1.0,
+     0.5,
+     1
+    ],
+    "n": {
+     "k": 0
+    },
+    "text": []
+   },
+   "expect": false
+  },
+  {
+   "cond": "when [flag, n] >= text in items",
+   "ctx": {},
+   "expect": false
+  },
+  {
+   "cond": "when text >= 'café'",
+   "ctx": {},
+   "expect": false
+  },
+  {
+   "cond": "when text not in 'café' in [[]]",
+   "ctx": {
+    "score": 3,
+    "true": {
+     "k": 0
+    },
+    "x": -0.0
+   },
+   "expect": false
+  },
+  {
+   "cond": "when 'contain' > flag",
+   "ctx": {
+    "n": [
+     1.0,
+     "",
+     2
+    ],
+    "ok": [],
+    "true": [],
+    "y": 0.5
+   },
+   "expect": false
+  },
+  {
+   "cond": "when -0.0 == []",
+   "ctx": {
+    "action": "error happened"
+   },
+   "expect": "ERROR"
+  },
+  {
+   "cond": "when action in [flag]",
+   "ctx": {
+    "action": 3,
+    "n": false
+   },
+   "expect": false
+  },
+  {
+   "cond": "when 1.0 not in x and visits != -0.0",
+   "ctx": {
+    "flag": [
+     1,
+     1,
+     0.5
+    ],
+    "ok": 1.0,
+    "text": 1,
+    "true": "fix",
+    "visits": "",
+    "y": null
+   },
+   "expect": "ERROR"
+  },
+  {
+   "cond": "when not visits < flag not in [-0.0, 'café', x]",
+   "ctx": {
+    "flag": false,
+    "n": [
+     "contain",
+     3
+    ],
+    "ok": 1,
+    "visits": [
+     2,
+     "error happened",
+     1.0
+    ],
+    "x": 0.5,
+    "y": {
+     "k": 10
+    }
+   },
+   "expect": "ERROR"
+  },
+  {
+   "cond": "when False == action",
+   "ctx": {},
+   "expect": false
+  },
+  {
+   "cond": "when 'watch' not in action",
+   "ctx": {
+    "action": "fix",
+    "text": "fix",
+    "true": "watch",
+    "x": "watch"
+   },
+   "expect": true
+  },
+  {
+   "cond": "when y in 'fix'",
+   "ctx": {
+    "ok": {
+     "k": 0
+    },
+    "true": true,
+    "x": true,
+    "y": 3
+   },
+   "expect": false
+  },
+  {
+   "cond": "when 'café' not in true and (y < x)",
+   "ctx": {},
+   "expect": false
+  },
+  {
+   "cond": "when 10 not in visits",
+   "ctx": {
+    "items": {
+     "k": 2
+    },
+    "visits": -0.0
+   },
+   "expect": true
+  },
+  {
+   "cond": "when items >= y",
+   "ctx": {},
+   "expect": false
+  },
+  {
+   "cond": "when [] in 'contain'",
+   "ctx": {
+    "flag": "",
+    "items": 2,
+    "text": "fix",
+    "true": null
+   },
+   "expect": false
+  },
+  {
+   "cond": "when ((action in items or x < action))",
+   "ctx": {},
+   "expect": false
+  },
+  {
+   "cond": "when not 'watch' != 'café' or action != 'fix' and 'watch' != true or 'contain' in text",
+   "ctx": {
+    "y": [
+     "contain",
+     "café"
+    ]
+   },
+   "expect": true
+  },
+  {
+   "cond": "when (not y in 'café')",
+   "ctx": {
+    "action": 0.5,
+    "true": "fix"
+   },
+   "expect": true
+  },
+  {
+   "cond": "when text not in 'café'",
+   "ctx": {
+    "action": 2,
+    "ok": {
+     "k": 10
+    },
+    "score": "",
+    "x": []
+   },
+   "expect": true
+  },
+  {
+   "cond": "when x != 0.5 in 2",
+   "ctx": {
+    "flag": 1000,
+    "n": {
+     "k": 0.5
+    },
+    "score": 0,
+    "true": false,
+    "y": 2
+   },
+   "expect": false
+  },
+  {
+   "cond": "when score < ''",
+   "ctx": {
+    "flag": 1000,
+    "n": 3,
+    "true": {
+     "k": 2
+    }
+   },
+   "expect": false
+  },
+  {
+   "cond": "when y == true",
+   "ctx": {
+    "flag": [
+     1000
+    ]
+   },
+   "expect": true
+  },
+  {
+   "cond": "when (0 not in 'contain') or 'contain' < x and '' != flag",
+   "ctx": {},
+   "expect": true
+  },
+  {
+   "cond": "when not 'contain' <= [action] < score",
+   "ctx": {
+    "flag": true,
+    "score": 1,
+    "visits": "café"
+   },
+   "expect": true
+  },
+  {
+   "cond": "when 'contain' == score",
+   "ctx": {},
+   "expect": false
+  },
+  {
+   "cond": "when not 'error happened' > items and visits > n or 'café' in 1000",
+   "ctx": {
+    "action": "watch"
+   },
+   "expect": false
+  },
+  {
+   "cond": "when 'watch' == action and action > y > 10 or ok not in ok > true",
+   "ctx": {
+    "action": 1.0,
+    "items": -0.0,
+    "ok": null,
+    "true": 3,
+    "x": [
+     -0.0,
+     3,
+     2
+    ],
+    "y": [
+     "error happened",
+     0.5
+    ]
+   },
+   "expect": false
+  },
+  {
+   "cond": "when '' != ok",
+   "ctx": {
+    "ok": null,
+    "text": [
+     "watch"
+    ],
+    "true": 0,
+    "y": {
+     "k": 3
+    }
+   },
+   "expect": true
+  },
+  {
+   "cond": "when (n <= ok)",
+   "ctx": {
+    "action": [
+     "café"
+    ],
+    "items": {
+     "k": 2
+    },
+    "n": [],
+    "score": "café",
+    "visits": "error happened"
+   },
+   "expect": false
+  },
+  {
+   "cond": "when ok not in visits",
+   "ctx": {
+    "action": [
+     "fix",
+     "watch"
+    ],
+    "items": "fix",
+    "x": "contain",
+    "y": {
+     "k": 3
+    }
+   },
+   "expect": true
+  },
+  {
+   "cond": "when (False >= -0.0)",
+   "ctx": {
+    "action": {
+     "k": 10
+    },
+    "flag": 1.0,
+    "ok": [],
+    "true": []
+   },
+   "expect": "ERROR"
+  },
+  {
+   "cond": "when y < action",
+   "ctx": {
+    "text": [
+     -0.0,
+     0.5,
+     10
+    ],
+    "visits": [
+     0.5,
+     0.5,
+     ""
+    ]
+   },
+   "expect": false
+  },
+  {
+   "cond": "when text < ''",
+   "ctx": {
+    "visits": "error happened",
+    "x": 1000
+   },
+   "expect": false
+  },
+  {
+   "cond": "when 'error happened' > [action, 'contain'] != items",
+   "ctx": {
+    "items": 3,
+    "n": [
+     "error happened",
+     0,
+     "contain"
+    ],
+    "score": 3,
+    "visits": 1.0,
+    "x": 0,
+    "y": {
+     "k": 1.0
+    }
+   },
+   "expect": false
+  },
+  {
+   "cond": "when 'fix' > items < ok",
+   "ctx": {
+    "action": [],
+    "n": true,
+    "true": {
+     "k": -0.0
+    },
+    "visits": [
+     -0.0
+    ],
+    "x": null
+   },
+   "expect": false
+  },
+  {
+   "cond": "when action not in 10",
+   "ctx": {
+    "items": "watch"
+   },
+   "expect": true
+  },
+  {
+   "cond": "when text > 0",
+   "ctx": {
+    "action": true,
+    "flag": [
+     -0.0,
+     1000,
+     0
+    ],
+    "text": false
+   },
+   "expect": false
+  },
+  {
+   "cond": "when [1000, visits] == true > 'café'",
+   "ctx": {
+    "action": 10,
+    "flag": "contain",
+    "items": 3,
+    "text": "contain",
+    "x": {
+     "k": 2
+    },
+    "y": true
+   },
+   "expect": false
+  },
+  {
+   "cond": "when 10 >= y",
+   "ctx": {
+    "action": 0.5,
+    "items": 1000,
+    "ok": null,
+    "text": [
+     "contain",
+     1000,
+     ""
+    ],
+    "y": [
+     0
+    ]
+   },
+   "expect": false
+  },
+  {
+   "cond": "when action <= action",
+   "ctx": {},
+   "expect": false
+  },
+  {
+   "cond": "when 'error happened' > action",
+   "ctx": {
+    "flag": {
+     "k": 1
+    },
+    "items": "watch",
+    "ok": [
+     "watch"
+    ],
+    "score": 0,
+    "visits": {
+     "k": 1
+    },
+    "x": "error happened"
+   },
+   "expect": false
+  },
+  {
+   "cond": "when ('watch' >= true > 'error happened')",
+   "ctx": {
+    "action": 10,
+    "flag": {
+     "k": 0
+    },
+    "n": 1000,
+    "x": 2
+   },
+   "expect": false
+  },
+  {
+   "cond": "when flag == action",
+   "ctx": {
+    "items": false,
+    "ok": 1000
+   },
+   "expect": true
+  },
+  {
+   "cond": "when 1 not in 'contain' or ok == flag and (0 > 'error happened')",
+   "ctx": {
+    "action": false,
+    "items": "watch",
+    "n": "error happened",
+    "score": {
+     "k": 10
+    },
+    "true": 2,
+    "visits": -0.0
+   },
+   "expect": true
+  },
+  {
+   "cond": "when visits == [ok, ok] or not ok in y",
+   "ctx": {
+    "n": {
+     "k": 1.0
+    },
+    "score": {
+     "k": 0
+    },
+    "true": "watch",
+    "x": []
+   },
+   "expect": true
+  },
+  {
+   "cond": "when ok <= ok and visits not in flag",
+   "ctx": {
+    "action": [
+     3
+    ],
+    "n": "",
+    "score": "café",
+    "text": "error happened",
+    "x": "error happened"
+   },
+   "expect": false
+  },
+  {
+   "cond": "when (visits <= text >= ['fix', 'café'])",
+   "ctx": {},
+   "expect": false
+  },
+  {
+   "cond": "when [-0.0] > 'error happened'",
+   "ctx": {
+    "flag": 10,
+    "items": [],
+    "true": [
+     "watch"
+    ],
+    "y": {
+     "k": 1
+    }
+   },
+   "expect": "ERROR"
+  },
+  {
+   "cond": "when not 'error happened' == 10 or 2 > visits",
+   "ctx": {
+    "action": "",
+    "text": false
+   },
+   "expect": true
+  },
+  {
+   "cond": "when 'watch' in [x, flag, true] >= 1000",
+   "ctx": {
+    "flag": "watch",
+    "n": [
+     "contain"
+    ],
+    "score": "error happened",
+    "text": [
+     3,
+     1,
+     1000
+    ],
+    "y": null
+   },
+   "expect": false
+  },
+  {
+   "cond": "when not ok > [items]",
+   "ctx": {},
+   "expect": true
+  },
+  {
+   "cond": "when not 0 <= '' not in action or visits > visits or (true != 'contain')",
+   "ctx": {},
+   "expect": true
+  },
+  {
+   "cond": "when y != 'error happened'",
+   "ctx": {},
+   "expect": true
+  },
+  {
+   "cond": "when y > visits",
+   "ctx": {
+    "action": [
+     "contain"
+    ],
+    "items": 2,
+    "x": ""
+   },
+   "expect": false
+  },
+  {
+   "cond": "when [3] == action >= x",
+   "ctx": {
+    "action": "error happened",
+    "n": [
+     1.0,
+     1.0,
+     1
+    ],
+    "true": "",
+    "visits": 3
+   },
+   "expect": false
+  },
+  {
+   "cond": "when not ['fix'] < flag",
+   "ctx": {
+    "true": true,
+    "visits": {
+     "k": 3
+    }
+   },
+   "expect": true
+  },
+  {
+   "cond": "when ok in 0",
+   "ctx": {},
+   "expect": false
+  },
+  {
+   "cond": "when ((not '' > n))",
+   "ctx": {
+    "flag": [
+     1,
+     10
+    ]
+   },
+   "expect": true
+  },
+  {
+   "cond": "when 'contain' in y or n != 0.5",
+   "ctx": {
+    "action": [
+     "error happened",
+     "café",
+     -0.0
+    ],
+    "items": "watch",
+    "ok": 1000,
+    "text": [
+     "fix",
+     0
+    ],
+    "visits": [
+     10
+    ]
+   },
+   "expect": true
+  },
+  {
+   "cond": "when 'fix' <= items",
+   "ctx": {
+    "action": {
+     "k": 1
+    },
+    "flag": 0.5,
+    "items": 1000,
+    "ok": "watch",
+    "visits": 0,
+    "y": 1
+   },
+   "expect": false
+  },
+  {
+   "cond": "when not 'error happened' not in 1 and not 'error happened' <= 'café' or (not text == ok)",
+   "ctx": {
+    "flag": 1,
+    "items": 1.0,
+    "y": "fix"
+   },
+   "expect": false
+  },
+  {
+   "cond": "when ((x != 1.0))",
+   "ctx": {
+    "action": [
+     "error happened"
+    ],
+    "items": "error happened",
+    "ok": "",
+    "text": [
+     "watch",
+     1000,
+     "watch"
+    ],
+    "y": [
+     "café"
+    ]
+   },
+   "expect": true
+  },
+  {
+   "cond": "when items <= x",
+   "ctx": {},
+   "expect": false
+  },
+  {
+   "cond": "when text == n < 'fix' or not action != 'contain' and not 'watch' < n and true < action and visits == y",
+   "ctx": {
+    "action": [
+     0.5,
+     "error happened"
+    ],
+    "flag": true,
+    "items": 2,
+    "ok": "error happened",
+    "true": "fix",
+    "y": [
+     3
+    ]
+   },
+   "expect": false
+  },
+  {
+   "cond": "when [items, action] > [n, 'error happened', 'watch']",
+   "ctx": {
+    "n": [
+     3,
+     1.0
+    ],
+    "x": [
+     "watch",
+     "café",
+     "error happened"
+    ]
+   },
+   "expect": false
+  },
+  {
+   "cond": "when 'error happened' >= score",
+   "ctx": {
+    "action": "contain",
+    "flag": 1.0,
+    "n": 1.0,
+    "text": {
+     "k": 1.0
+    },
+    "true": {
+     "k": 0.5
+    },
+    "y": true
+   },
+   "expect": false
+  },
+  {
+   "cond": "when ok in 'fix'",
+   "ctx": {
+    "score": 1.0,
+    "text": [
+     2,
+     -0.0
+    ]
+   },
+   "expect": false
+  },
+  {
+   "cond": "when items in 'contain' <= 'error happened'",
+   "ctx": {
+    "action": [
+     -0.0
+    ],
+    "n": 1.0,
+    "ok": "error happened",
+    "text": 1
+   },
+   "expect": false
+  },
+  {
+   "cond": "when action <= 'watch' > 'contain' or 'café' in action and true <= []",
+   "ctx": {
+    "flag": [
+     1,
+     0,
+     3
+    ],
+    "text": 1000,
+    "y": []
+   },
+   "expect": false
+  },
+  {
+   "cond": "when not 10 == items",
+   "ctx": {
+    "action": "contain",
+    "score": true,
+    "true": true,
+    "x": 1
+   },
+   "expect": true
+  },
+  {
+   "cond": "when 'watch' > score",
+   "ctx": {
+    "items": "watch",
+    "n": [
+     1.0
+    ],
+    "text": [
+     0.5,
+     ""
+    ]
+   },
+   "expect": false
+  },
+  {
+   "cond": "when -0.0 in items",
+   "ctx": {
+    "n": false,
+    "true": true,
+    "visits": null,
+    "y": {
+     "k": -0.0
+    }
+   },
+   "expect": "ERROR"
+  },
+  {
+   "cond": "when visits <= flag != action",
+   "ctx": {},
+   "expect": false
+  },
+  {
+   "cond": "when not true == y and action <= items != 'error happened' or y != score and items != x > 1",
+   "ctx": {
+    "items": "error happened",
+    "n": {
+     "k": 1
+    },
+    "true": {
+     "k": 0
+    },
+    "visits": {
+     "k": 1
+    },
+    "x": false,
+    "y": 2
+   },
+   "expect": false
+  },
+  {
+   "cond": "when not ok >= 'contain' < flag",
+   "ctx": {
+    "flag": "café",
+    "y": "café"
+   },
+   "expect": true
+  },
+  {
+   "cond": "when not y in text",
+   "ctx": {
+    "ok": 1000,
+    "score": {
+     "k": 1
+    },
+    "true": {
+     "k": 0
+    },
+    "visits": {
+     "k": -0.0
+    },
+    "x": {
+     "k": 0
+    },
+    "y": false
+   },
+   "expect": true
+  },
+  {
+   "cond": "when [n, score] > '' != true",
+   "ctx": {
+    "action": "error happened"
+   },
+   "expect": false
+  },
+  {
+   "cond": "when y not in 'fix' and 'error happened' < n != 'fix' or not flag in 2 or text >= visits or (n > 10)",
+   "ctx": {
+    "items": {
+     "k": 0
+    },
+    "ok": "error happened",
+    "text": "error happened",
+    "true": 3
+   },
+   "expect": true
+  },
+  {
+   "cond": "when ['contain', action] >= items",
+   "ctx": {
+    "n": "café"
+   },
+   "expect": false
+  },
+  {
+   "cond": "when not not 'fix' == 1 or action in items or score != x",
+   "ctx": {
+    "action": 1,
+    "ok": 10,
+    "text": true,
+    "visits": "error happened",
+    "x": "watch"
+   },
+   "expect": true
+  },
+  {
+   "cond": "when not [ok] < 1000",
+   "ctx": {
+    "score": {
+     "k": 1000
+    },
+    "text": -0.0
+   },
+   "expect": true
+  },
+  {
+   "cond": "when not 1 != flag and text not in n and 0 in 'café'",
+   "ctx": {
+    "items": -0.0,
+    "score": 1,
+    "text": 1000,
+    "visits": [
+     0
+    ],
+    "x": -0.0
+   },
+   "expect": false
+  },
+  {
+   "cond": "when [y, [ok]] != items",
+   "ctx": {
+    "ok": 2,
+    "score": ""
+   },
+   "expect": true
+  },
+  {
+   "cond": "when visits <= flag",
+   "ctx": {
+    "ok": 10,
+    "score": [
+     1
+    ],
+    "text": "error happened",
+    "visits": [
+     "fix",
+     "fix",
+     0
+    ],
+    "x": 3,
+    "y": "contain"
+   },
+   "expect": false
+  },
+  {
+   "cond": "when score > []",
+   "ctx": {
+    "action": null,
+    "items": false,
+    "n": true,
+    "x": [
+     "café",
+     2
+    ]
+   },
+   "expect": false
+  },
+  {
+   "cond": "when (items == text or 'watch' != 'error happened' and not ok not in true)",
+   "ctx": {
+    "action": "fix",
+    "items": null,
+    "n": 10,
+    "true": [
+     "error happened",
+     "café",
+     2
+    ]
+   },
+   "expect": true
+  },
+  {
+   "cond": "when items == '' and 'café' <= action",
+   "ctx": {
+    "ok": "",
+    "text": [],
+    "true": false,
+    "y": "contain"
+   },
+   "expect": false
+  }
+ ],
+ "note": "expect: true|false = eval_condition result; 'ERROR' = PredicateError (edge non-matching at run time). Any implementation must match every case.",
+ "seed": 42,
+ "version": 1
+}

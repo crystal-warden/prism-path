@@ -1,0 +1,449 @@
+<!doctype html>
+<!--
+  prismpath playground — the portable kernel running IN YOUR BROWSER.
+
+  Zero build, zero install: this page imports ../portable/prismpath.mjs (the same dependency-free
+  ES module the conformance vectors certify) and runs flows entirely client-side. Serve the
+  portable/ directory over HTTP (ES modules don't load from file://):
+
+      cd portable && python3 -m http.server 8321
+      open http://localhost:8321/playground.html
+
+  Mermaid (the graph render) loads from a CDN; offline, the panel falls back to the raw
+  definition text — everything else works air-gapped.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>prismpath playground — the flow is data</title>
+<style>
+  :root {
+    --bg: #0f1419; --panel: #171d24; --panel2: #1d242d; --text: #d6dee8; --dim: #7d8b9d;
+    --accent: #58a6ff; --green: #3fb950; --red: #f85149; --amber: #d29922; --purple: #bc8cff;
+    --border: #2b3440; --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { padding: 14px 20px 10px; border-bottom: 1px solid var(--border); }
+  header h1 { margin: 0; font-size: 17px; font-weight: 650; }
+  header h1 span { color: var(--accent); }
+  header p { margin: 4px 0 0; color: var(--dim); font-size: 12.5px; }
+  .wrap { display: grid; grid-template-columns: minmax(380px, 46%) 1fr; gap: 0;
+          height: calc(100vh - 62px); }
+  .left, .right { overflow-y: auto; padding: 14px 16px; }
+  .left { border-right: 1px solid var(--border); }
+  @media (max-width: 900px) {
+    .wrap { grid-template-columns: 1fr; height: auto; }
+    .left { border-right: none; border-bottom: 1px solid var(--border); }
+  }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
+  select, button {
+    background: var(--panel2); color: var(--text); border: 1px solid var(--border);
+    border-radius: 6px; padding: 6px 12px; font-size: 13px; cursor: pointer;
+  }
+  button.primary { background: #1f6feb; border-color: #1f6feb; color: #fff; font-weight: 600; }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  textarea {
+    width: 100%; background: var(--panel); color: var(--text); border: 1px solid var(--border);
+    border-radius: 8px; padding: 10px; font: 12.5px/1.5 var(--mono); resize: vertical;
+  }
+  #flow { height: 320px; } #script { height: 120px; }
+  .label { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--dim);
+           margin: 14px 0 6px; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+          padding: 10px 12px; margin-bottom: 12px; }
+  .badge { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 11.5px;
+           font-weight: 650; }
+  .b-p0 { background: #12341c; color: var(--green); } .b-p2 { background: #3d1d20; color: var(--red); }
+  .b-det { background: #12341c; color: var(--green); } .b-sem { background: #2a1c3d; color: var(--purple); }
+  .b-err { background: #3d2a12; color: var(--amber); } .b-evt { background: #12283d; color: var(--accent); }
+  .b-stop-terminal { background: #12341c; color: var(--green); }
+  .b-stop-waiting, .b-stop-needs_human { background: #3d2a12; color: var(--amber); }
+  .b-stop-stuck, .b-stop-max_steps { background: #3d1d20; color: var(--red); }
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  td, th { padding: 4px 8px; border-bottom: 1px solid var(--border); text-align: left;
+           vertical-align: top; }
+  th { color: var(--dim); font-weight: 600; font-size: 11px; text-transform: uppercase; }
+  code, .mono { font-family: var(--mono); font-size: 12px; }
+  .prob { color: var(--red); font-size: 12px; }
+  .ok { color: var(--green); }
+  .path-chip { display: inline-block; background: var(--panel2); border: 1px solid var(--border);
+               border-radius: 6px; padding: 2px 8px; margin: 2px 3px 2px 0; font-family: var(--mono);
+               font-size: 12px; }
+  .arrow { color: var(--dim); margin: 0 2px; }
+  pre { background: var(--panel2); border-radius: 6px; padding: 8px 10px; overflow-x: auto;
+        font-size: 12px; margin: 6px 0; }
+  #mermaid-out svg { max-width: 100%; }
+  .hint { color: var(--dim); font-size: 12px; }
+</style>
+</head>
+<body>
+<header>
+  <h1><span>prismpath</span> playground — one Markdown file is the workflow</h1>
+  <p>The portable kernel (parser + sandboxed predicates + engine) running client-side —
+     the same module the cross-language conformance vectors certify. Nothing leaves this page.</p>
+</header>
+
+<div class="wrap">
+  <div class="left">
+    <div class="row">
+      <select id="preset"></select>
+      <button class="primary" id="run">▶ Run</button>
+      <button id="share" title="Copy a link that opens this exact flow — no server, the flow lives in the URL fragment">🔗 Share</button>
+      <span class="hint">edits re-check live; Run replays the scripted outcomes</span>
+    </div>
+    <div class="label">The flow (this document IS the program)</div>
+    <textarea id="flow" spellcheck="false"></textarea>
+    <div class="label">Scripted worker outcomes — <span class="mono">{node: [outcome, …]}</span>,
+      consumed in visit order; <span class="mono">{"__raise__": "msg"}</span> throws</div>
+    <textarea id="script" spellcheck="false"></textarea>
+  </div>
+
+  <div class="right">
+    <div class="label">Compile — parsed live, no model, no server</div>
+    <div class="card" id="checks"></div>
+    <div class="label">Graph</div>
+    <div class="card"><div id="mermaid-out" class="hint">…</div></div>
+    <div class="label">Run result</div>
+    <div class="card" id="result"><span class="hint">press ▶ Run</span></div>
+  </div>
+</div>
+
+<script type="module">
+import { parse, run, checkPredicate, portabilityViolations,
+         isDeterministic, isError, isEvent, isSemantic } from "./prismpath.mjs";
+
+// ------------------------------------------------------------------ presets
+const PRESETS = {
+  "coding loop (P0 — deterministic)": {
+    flow: `---
+name: coding
+start: write_code
+---
+
+## write_code
+Write or revise the function so it passes the tests.
+-> run_tests: always
+
+## run_tests
+Run the test suite and emit tests_pass.
+-> done: when tests_pass
+-> give_up: when visits > 3
+-> write_code: else
+
+## done
+All tests pass.
+
+## give_up
+Too many attempts.`,
+    script: `{
+  "write_code": [{"text": "wrote v1"}],
+  "run_tests": [{"text": "2 failing", "tests_pass": false},
+                {"text": "1 failing", "tests_pass": false},
+                {"text": "all green", "tests_pass": true}]
+}`,
+  },
+  "error tier — retry ×2 then recover": {
+    flow: `---
+name: resilient
+start: call_api
+---
+
+## call_api
+Call the flaky upstream API.
+-> done: when ok
+-> recovered: on error when error_count >= 3
+-> call_api: on error
+
+## recovered
+Gave up on the API; used the fallback.
+
+## done
+Success.`,
+    script: `{
+  "call_api": [{"__raise__": "503 upstream"},
+               {"__raise__": "503 upstream again"},
+               {"text": "200 OK", "ok": true}]
+}`,
+  },
+  "human handoff — needs_human suspends": {
+    flow: `---
+name: triage
+start: classify
+---
+
+## classify
+Classify the alert; unsure cases go to a person with the evidence.
+-> contain: when action == "contain"
+-> ignore: when action == "ignore"
+
+## contain
+Stage the containment.
+
+## ignore
+Log and close.`,
+    script: `{
+  "classify": [{"text": "novel pattern, not confident",
+                "needs_human": true, "reason": "confidence 0.41 < floor 0.6"}]
+}`,
+  },
+  "fan-out — @spawn suspends for the join": {
+    flow: `---
+name: reviews
+start: dispatch
+---
+
+## dispatch
+Fan out one review per changed file, then wait for all of them.
+@spawn(child=review_one.md, over=files, item_id=path, join=all_done)
+-> aggregate: on event all_done
+-> escalate: on timeout
+
+## aggregate
+Combine the child verdicts.
+
+## escalate
+A child timed out.`,
+    script: `{
+  "dispatch": [{"text": "3 files changed",
+                "spawn": {"items": [{"path": "a.py"}, {"path": "b.py"}, {"path": "c.py"}]},
+                "timeout_s": 600}]
+}`,
+  },
+  "not portable — a semantic edge": {
+    flow: `---
+name: bugfix
+start: triage
+---
+
+## triage
+Read the bug report and decide what to do.
+-> implement: the root cause is clear from the report
+-> close: when duplicate
+
+## implement
+Fix it.
+
+## close
+Duplicate.`,
+    script: `{
+  "triage": [{"text": "stack trace points at the cache", "duplicate": false}]
+}`,
+  },
+};
+
+const $ = (id) => document.getElementById(id);
+const flowEl = $("flow"), scriptEl = $("script"), presetEl = $("preset");
+
+for (const name of Object.keys(PRESETS)) {
+  const o = document.createElement("option");
+  o.textContent = name;
+  presetEl.appendChild(o);
+}
+function loadPreset(name) {
+  flowEl.value = PRESETS[name].flow;
+  scriptEl.value = PRESETS[name].script;
+  $("result").innerHTML = '<span class="hint">press ▶ Run</span>';
+  recheck();
+}
+presetEl.onchange = () => loadPreset(presetEl.value);
+
+// ------------------------------------------------------------------ live compile panel
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+function edgeKind(c) {
+  if (isDeterministic(c)) return ["deterministic", "b-det"];
+  if (isError(c)) return ["error", "b-err"];
+  if (isEvent(c)) return ["event", "b-evt"];
+  return ["semantic", "b-sem"];
+}
+
+function recheck() {
+  let g;
+  try {
+    g = parse(flowEl.value);
+  } catch (e) {
+    $("checks").innerHTML = `<span class="prob">parse failed: ${esc(e.message)}</span>`;
+    return null;
+  }
+  const violations = portabilityViolations(g);
+  const tier = violations.length === 0 ? "P0" : "P1/P2";
+  const tierCls = violations.length === 0 ? "b-p0" : "b-p2";
+  const tierNote = violations.length === 0
+    ? "every reachable edge is decidable — zero ML, runs anywhere (this page is the proof)"
+    : `${violations.length} semantic edge(s) need the embedding/LLM tier — the full engine (or a lockfile for P1)`;
+
+  let rows = "";
+  let problems = 0;
+  for (const [name, node] of Object.entries(g.nodes)) {
+    if (node.edges.length === 0) {
+      rows += `<tr><td class="mono">${esc(name)}</td><td colspan="3">
+               <span class="badge b-p0">terminal</span></td></tr>`;
+      continue;
+    }
+    for (const [t, c] of node.edges) {
+      const [kind, cls] = edgeKind(c);
+      const probs = checkPredicate(c);
+      problems += probs.length;
+      rows += `<tr><td class="mono">${esc(name)}</td>
+        <td class="mono">→ ${esc(t)}</td>
+        <td><span class="badge ${cls}">${kind}</span></td>
+        <td class="mono">${esc(c)}${probs.map(p => `<div class="prob">✗ ${esc(p)}</div>`).join("")}</td></tr>`;
+    }
+  }
+  $("checks").innerHTML = `
+    <div class="row"><span class="badge ${tierCls}">${tier}</span>
+      <span class="hint">${tierNote}</span></div>
+    ${problems ? `<div class="prob">✗ ${problems} unsafe/unparseable predicate(s)</div>`
+               : `<div class="ok">✓ predicates safe & parseable</div>`}
+    <table><tr><th>node</th><th>edge</th><th>tier</th><th>condition</th></tr>${rows}</table>`;
+  renderMermaid(g);
+  return g;
+}
+
+// ------------------------------------------------------------------ mermaid (CDN, graceful fallback)
+let mermaidReady = null;
+function mermaidDef(g) {
+  const lines = ["graph TD"];
+  const nid = (n) => n.replace(/[^A-Za-z0-9_]/g, "_");
+  for (const [name, node] of Object.entries(g.nodes)) {
+    lines.push(node.edges.length === 0 ? `  ${nid(name)}(["${name}"])` : `  ${nid(name)}["${name}"]`);
+    for (const [t, c] of node.edges) {
+      const label = c.length > 34 ? c.slice(0, 32) + "…" : c;
+      const arrow = isSemantic(c) ? "-.->" : "-->";
+      lines.push(`  ${nid(name)} ${arrow}|"${label.replace(/"/g, "'")}"| ${nid(t)}`);
+    }
+  }
+  return lines.join("\n");
+}
+async function renderMermaid(g) {
+  const def = mermaidDef(g);
+  const out = $("mermaid-out");
+  if (mermaidReady === null) {
+    mermaidReady = import("https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs")
+      .then((m) => { m.default.initialize({ startOnLoad: false, theme: "dark" }); return m.default; })
+      .catch(() => null);
+  }
+  const mermaid = await mermaidReady;
+  if (!mermaid) {
+    out.innerHTML = `<div class="hint">mermaid CDN unavailable (offline?) — raw definition:</div>
+                     <pre>${esc(def)}</pre>`;
+    return;
+  }
+  try {
+    const { svg } = await mermaid.render("g" + Date.now(), def);
+    out.innerHTML = svg;
+  } catch (e) {
+    out.innerHTML = `<pre>${esc(def)}</pre>`;
+  }
+}
+
+// ------------------------------------------------------------------ the run simulator
+function scriptedAgent(script) {
+  const used = {};
+  return (node) => {
+    const seq = script[node];
+    if (seq === undefined) return { text: node };
+    const i = used[node] || 0;
+    used[node] = i + 1;
+    const outcome = seq[Math.min(i, seq.length - 1)];
+    if (outcome !== null && typeof outcome === "object" && "__raise__" in outcome) {
+      throw new Error(outcome.__raise__);
+    }
+    return outcome;
+  };
+}
+
+$("run").onclick = () => {
+  const g = recheck();
+  if (!g) return;
+  let script;
+  try {
+    script = JSON.parse(scriptEl.value || "{}");
+  } catch (e) {
+    $("result").innerHTML = `<span class="prob">script is not valid JSON: ${esc(e.message)}</span>`;
+    return;
+  }
+  let res;
+  try {
+    res = run(g, scriptedAgent(script));
+  } catch (e) {
+    $("result").innerHTML = `<span class="prob">${esc(e.message)}</span>
+      <div class="hint" style="margin-top:6px">the port refuses non-portable flows — rewrite the
+      semantic edge as a <code>when</code> predicate, or run it on the Python engine</div>`;
+    return;
+  }
+  const chips = res.path.map((n) => `<span class="path-chip">${esc(n)}</span>`)
+                        .join('<span class="arrow">→</span>');
+  const steps = res.steps.map((s) => `<tr>
+      <td class="mono">${esc(s.node)}</td><td class="mono">→ ${esc(s.target)}</td>
+      <td><span class="badge ${s.info.used === "error" ? "b-err" : "b-det"}">${esc(s.info.used)}</span></td>
+      <td class="mono">${esc(s.outcome).slice(0, 90)}</td></tr>`).join("");
+  const pending = res.pending
+    ? `<div class="label">pending — the evidence packet a human/harness receives</div>
+       <pre>${esc(JSON.stringify(res.pending, null, 2))}</pre>`
+    : "";
+  $("result").innerHTML = `
+    <div class="row"><span class="badge b-stop-${esc(res.stopped)}">stopped: ${esc(res.stopped)}</span></div>
+    <div style="margin:8px 0">${chips}</div>
+    ${steps ? `<table><tr><th>node</th><th>routed</th><th>via</th><th>outcome</th></tr>${steps}</table>` : ""}
+    ${pending}`;
+};
+
+flowEl.addEventListener("input", () => { clearTimeout(recheck._t); recheck._t = setTimeout(recheck, 250); });
+
+// Embedding hook — a host page (VS Code webview, an iframe) can seed and live-update the flow:
+//   frame.postMessage({ type: "prismpath:flow", text: "<the flow markdown>" }, "*")
+// The preset picker hides in embedded mode; the live compile panel refreshes on every message.
+window.addEventListener("message", (ev) => {
+  const d = ev.data || {};
+  if (d.type === "prismpath:flow" && typeof d.text === "string") {
+    if (!window.__embedded) { window.__embedded = true; presetEl.style.display = "none"; }
+    flowEl.value = d.text;
+    $("result").innerHTML = '<span class="hint">press ▶ Run</span>';
+    recheck();
+  }
+});
+
+// ------------------------------------------------------------------ URL-shareable flows
+// The flow lives in the URL FRAGMENT (never sent to any server — this page has no server):
+//   playground.html#s=<base64url of JSON {f: flow, s: script}>
+// so every flow is a link: click it, watch it route, edit the rules live.
+const b64u = {
+  enc: (s) => btoa(String.fromCharCode(...new TextEncoder().encode(s)))
+    .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, ""),
+  dec: (s) => new TextDecoder().decode(Uint8Array.from(
+    atob(s.replace(/-/g, "+").replace(/_/g, "/")), (c) => c.charCodeAt(0))),
+};
+
+function loadFromHash() {
+  const m = location.hash.match(/^#s=([A-Za-z0-9_-]+)$/);
+  if (!m) return false;
+  try {
+    const d = JSON.parse(b64u.dec(m[1]));
+    if (typeof d.f !== "string") return false;
+    flowEl.value = d.f;
+    scriptEl.value = typeof d.s === "string" ? d.s : "{}";
+    $("result").innerHTML = '<span class="hint">press ▶ Run</span>';
+    recheck();
+    return true;
+  } catch { return false; }
+}
+
+$("share").onclick = async () => {
+  const url = location.origin + location.pathname + "#s=" +
+    b64u.enc(JSON.stringify({ f: flowEl.value, s: scriptEl.value }));
+  history.replaceState(null, "", url);
+  try { await navigator.clipboard.writeText(url); } catch { /* clipboard needs a secure context */ }
+  const btn = $("share"), old = btn.textContent;
+  btn.textContent = "✓ link copied";
+  setTimeout(() => { btn.textContent = old; }, 1500);
+};
+window.addEventListener("hashchange", loadFromHash);
+
+if (!loadFromHash()) loadPreset(presetEl.value = Object.keys(PRESETS)[0]);
+</script>
+</body>
+</html>

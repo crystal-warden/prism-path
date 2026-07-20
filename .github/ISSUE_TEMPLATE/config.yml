@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Contribute a gallery flow
+    url: https://github.com/OWNER/prismpath/blob/main/gallery/README.md
+    about: Share a real workflow from your domain — no code required.
+  - name: Security vulnerability
+    url: https://github.com/OWNER/prismpath/security/policy
+    about: Please report privately, not as a public issue (see SECURITY.md).

@@ -1,0 +1,57 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      # The flow kernel needs only numpy at import time (sentence-transformers is lazy-loaded
+      # inside the embedder and never touched by the test suite, which stubs all routing). So CI
+      # stays fast and offline — no torch download — while still exercising the real code paths.
+      - name: Install
+        run: pip install numpy pytest
+      - name: Unit tests (parser / predicates / router / engine / prefilter)
+        run: python -m pytest prismpath/tests -q
+      # The sandbox security + robustness gate. Exits non-zero on ANY code execution or uncaught
+      # crash across ~23k adversarial + random predicate inputs. This is the check that guards the
+      # "a `when` predicate cannot execute code, and cannot crash a run" claim in the papers.
+      - name: Fuzz the predicate sandbox
+        run: python -m prismpath.fuzz_predicates -n 20000
+
+  # The conformance gate: the JS port must match the Python reference bit-for-bit on the FROZEN
+  # vectors (portable/conformance/), and the committed vectors must match a fresh regeneration
+  # from the live Python code (no silent reference drift). This is the check that guards the
+  # "any implementation is provably interchangeable" claim.
+  conformance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install
+        run: pip install numpy pytest
+      - name: Port unit tests
+        run: node --test prismpath/portable/prismpath.test.mjs
+      - name: Editor grammar tier-classification tests
+        run: node --test prismpath/editor/vscode/test/grammar.test.mjs
+      - name: Frozen conformance vectors (port side)
+        run: node prismpath/portable/run_vectors.mjs prismpath/portable/conformance
+      - name: Frozen conformance vectors (reference-drift side)
+        run: python -m pytest prismpath/tests/test_conformance_vectors.py -q

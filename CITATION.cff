@@ -1,0 +1,29 @@
+cff-version: 1.2.0
+message: "If you use this software or the routing benchmark, please cite it as below."
+type: software
+title: "PrismPath: agent workflows as data"
+authors:
+  - name: "Crystal Warden Labs"
+version: 0.1.0
+license: Apache-2.0
+repository-code: "https://github.com/OWNER/prismpath"
+abstract: >-
+  A workflow format and reference implementation in which the control flow of LLM-agent
+  systems is a human-authored Markdown document: a routing spectrum of four edge tiers
+  (deterministic predicates, embedding-with-LLM-escalation semantics, error, event), a
+  decidable static-analysis pass, a routing lockfile, risk-controlled escalation calibration,
+  durable execution with a git proof-ledger, a machine-checkable conformance-vector suite,
+  and a dependency-free portable kernel for the ML-free subset.
+keywords:
+  - llm-agents
+  - workflow-orchestration
+  - markdown
+  - routing
+  - declarative
+preferred-citation:
+  type: article
+  title: "A Routing Spectrum for Human-Authored LLM-Agent Workflows: When Control Flow Is Data, Not Code"
+  authors:
+    - name: "Crystal Warden Labs"
+  year: 2026
+  notes: "Preprint in docs/papers/; arXiv identifier to be added on submission."

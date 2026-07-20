@@ -1,0 +1,8 @@
+# Area-5 head-to-head runner deps (dedicated venv: comparisons/.venv).
+# The bge embedder model is pulled by sentence-transformers on first use.
+openai>=1.40
+numpy>=1.26
+sentence-transformers>=2.7
+langgraph>=0.2
+langchain-openai>=0.1
+crewai>=0.70

@@ -1,0 +1,256 @@
+{
+ "config": {
+  "n": 300,
+  "folds": 5,
+  "prior_weight": 4.0,
+  "model": "gemma4",
+  "embedder": "BAAI/bge-base-en-v1.5",
+  "deltas": [
+   0.0,
+   0.01,
+   0.02,
+   0.03,
+   0.04,
+   0.05,
+   0.06,
+   0.08,
+   0.1,
+   0.12,
+   0.15,
+   0.2,
+   0.3,
+   0.5
+  ]
+ },
+ "llm_only": 0.9967,
+ "zero_shot_only": 0.69,
+ "centroid_only_cv": 0.8267,
+ "hybrid_over_zero_shot": [
+  {
+   "delta": 0.0,
+   "escalation": 0.0,
+   "abstraction": 0.7449,
+   "intent": 0.8058,
+   "polarity": 0.5152,
+   "ALL": 0.69
+  },
+  {
+   "delta": 0.01,
+   "escalation": 0.0867,
+   "abstraction": 0.7653,
+   "intent": 0.8447,
+   "polarity": 0.5758,
+   "ALL": 0.73
+  },
+  {
+   "delta": 0.02,
+   "escalation": 0.1767,
+   "abstraction": 0.8061,
+   "intent": 0.8544,
+   "polarity": 0.6162,
+   "ALL": 0.76
+  },
+  {
+   "delta": 0.03,
+   "escalation": 0.2533,
+   "abstraction": 0.8673,
+   "intent": 0.8641,
+   "polarity": 0.6364,
+   "ALL": 0.79
+  },
+  {
+   "delta": 0.04,
+   "escalation": 0.3033,
+   "abstraction": 0.8673,
+   "intent": 0.8932,
+   "polarity": 0.6566,
+   "ALL": 0.8067
+  },
+  {
+   "delta": 0.05,
+   "escalation": 0.38,
+   "abstraction": 0.9082,
+   "intent": 0.9223,
+   "polarity": 0.6869,
+   "ALL": 0.84
+  },
+  {
+   "delta": 0.06,
+   "escalation": 0.42,
+   "abstraction": 0.9082,
+   "intent": 0.9223,
+   "polarity": 0.7071,
+   "ALL": 0.8467
+  },
+  {
+   "delta": 0.08,
+   "escalation": 0.5467,
+   "abstraction": 0.9388,
+   "intent": 0.9515,
+   "polarity": 0.7374,
+   "ALL": 0.8767
+  },
+  {
+   "delta": 0.1,
+   "escalation": 0.6733,
+   "abstraction": 0.9592,
+   "intent": 0.9806,
+   "polarity": 0.8182,
+   "ALL": 0.92
+  },
+  {
+   "delta": 0.12,
+   "escalation": 0.77,
+   "abstraction": 0.9592,
+   "intent": 1.0,
+   "polarity": 0.8889,
+   "ALL": 0.95
+  },
+  {
+   "delta": 0.15,
+   "escalation": 0.84,
+   "abstraction": 0.9694,
+   "intent": 1.0,
+   "polarity": 0.9697,
+   "ALL": 0.98
+  },
+  {
+   "delta": 0.2,
+   "escalation": 0.93,
+   "abstraction": 0.9898,
+   "intent": 1.0,
+   "polarity": 0.9798,
+   "ALL": 0.99
+  },
+  {
+   "delta": 0.3,
+   "escalation": 0.9933,
+   "abstraction": 1.0,
+   "intent": 1.0,
+   "polarity": 0.9899,
+   "ALL": 0.9967
+  },
+  {
+   "delta": 0.5,
+   "escalation": 1.0,
+   "abstraction": 1.0,
+   "intent": 1.0,
+   "polarity": 0.9899,
+   "ALL": 0.9967
+  }
+ ],
+ "hybrid_over_centroids": [
+  {
+   "delta": 0.0,
+   "escalation": 0.0,
+   "abstraction": 0.8367,
+   "intent": 0.8932,
+   "polarity": 0.7475,
+   "ALL": 0.8267
+  },
+  {
+   "delta": 0.01,
+   "escalation": 0.16,
+   "abstraction": 0.9388,
+   "intent": 0.9417,
+   "polarity": 0.8182,
+   "ALL": 0.9
+  },
+  {
+   "delta": 0.02,
+   "escalation": 0.2567,
+   "abstraction": 0.9388,
+   "intent": 0.9612,
+   "polarity": 0.8687,
+   "ALL": 0.9233
+  },
+  {
+   "delta": 0.03,
+   "escalation": 0.36,
+   "abstraction": 0.9694,
+   "intent": 0.9709,
+   "polarity": 0.9192,
+   "ALL": 0.9533
+  },
+  {
+   "delta": 0.04,
+   "escalation": 0.4533,
+   "abstraction": 0.9796,
+   "intent": 0.9903,
+   "polarity": 0.9394,
+   "ALL": 0.97
+  },
+  {
+   "delta": 0.05,
+   "escalation": 0.5067,
+   "abstraction": 0.9796,
+   "intent": 0.9903,
+   "polarity": 0.9697,
+   "ALL": 0.98
+  },
+  {
+   "delta": 0.06,
+   "escalation": 0.5967,
+   "abstraction": 0.9796,
+   "intent": 0.9903,
+   "polarity": 0.9697,
+   "ALL": 0.98
+  },
+  {
+   "delta": 0.08,
+   "escalation": 0.7133,
+   "abstraction": 1.0,
+   "intent": 1.0,
+   "polarity": 0.9798,
+   "ALL": 0.9933
+  },
+  {
+   "delta": 0.1,
+   "escalation": 0.7967,
+   "abstraction": 1.0,
+   "intent": 1.0,
+   "polarity": 0.9899,
+   "ALL": 0.9967
+  },
+  {
+   "delta": 0.12,
+   "escalation": 0.8667,
+   "abstraction": 1.0,
+   "intent": 1.0,
+   "polarity": 0.9899,
+   "ALL": 0.9967
+  },
+  {
+   "delta": 0.15,
+   "escalation": 0.9333,
+   "abstraction": 1.0,
+   "intent": 1.0,
+   "polarity": 0.9899,
+   "ALL": 0.9967
+  },
+  {
+   "delta": 0.2,
+   "escalation": 0.99,
+   "abstraction": 1.0,
+   "intent": 1.0,
+   "polarity": 0.9899,
+   "ALL": 0.9967
+  },
+  {
+   "delta": 0.3,
+   "escalation": 1.0,
+   "abstraction": 1.0,
+   "intent": 1.0,
+   "polarity": 0.9899,
+   "ALL": 0.9967
+  },
+  {
+   "delta": 0.5,
+   "escalation": 1.0,
+   "abstraction": 1.0,
+   "intent": 1.0,
+   "polarity": 0.9899,
+   "ALL": 0.9967
+  }
+ ]
+}

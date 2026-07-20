@@ -1,0 +1,27 @@
+# prismpath as pre-commit hooks — "your flow compiles" on every commit.
+#
+# In YOUR repo's .pre-commit-config.yaml:
+#
+#   repos:
+#     - repo: https://github.com/OWNER/prismpath        # resolves at first push
+#       rev: v0.1.0
+#       hooks:
+#         - id: prismpath-validate
+#           files: ^flows/.*\.md$                    # point at YOUR flow files
+#         - id: prismpath-test
+#           files: ^flows/.*\.md$                    # only flows that have a <flow>.tests.md
+#
+# Both hooks are model-free and run in milliseconds. The default `files` pattern targets a
+# conventional flows/ directory and excludes fixture files; override it for your layout.
+- id: prismpath-validate
+  name: prismpath validate (static analysis — the flow compiles)
+  entry: prismpath validate
+  language: python
+  files: (^|/)flows/.*\.md$
+  exclude: \.tests\.md$
+- id: prismpath-test
+  name: prismpath test (fixture-asserted routing, no model)
+  entry: prismpath test
+  language: python
+  files: (^|/)flows/.*\.md$
+  exclude: \.tests\.md$

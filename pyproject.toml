@@ -1,0 +1,71 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "prismpath"
+version = "0.1.0"
+description = "One Markdown file is the workflow: a routing spectrum (deterministic predicates -> embeddings -> LLM-on-doubt) for LLM-agent workflows, plus a gated sprint control plane."
+readme = "README.md"
+license = { text = "Apache-2.0" }
+authors = [{ name = "Crystal Warden Labs" }]
+requires-python = ">=3.10"
+keywords = ["llm", "agents", "workflow", "orchestration", "markdown", "routing", "declarative"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Information Technology",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: System :: Distributed Computing",
+]
+
+dependencies = [
+    "numpy",                   # required to import the CLI (routing/embedding math)
+]
+
+[project.optional-dependencies]
+embeddings = [
+    "sentence-transformers",   # the bge embedder — semantic routing, lockfile, calibrate, centroids,
+]                              # lint's semantic checks. Lazy-loaded, so the CLI core installs without it.
+control-plane = [
+    "requests",                # served-model endpoints, wazuh adapter
+    "fastapi",                 # orchestrator (SSE backend)
+    "uvicorn",
+    "pydantic",
+]
+llm-local = [
+    "transformers",            # llm_local fallback router/agent
+]
+comparisons = [               # Area-5 head-to-head harness (prismpath/comparisons/) — reproduction only
+    "langgraph", "langchain-openai", "crewai", "openai", "litellm",
+]
+test = ["pytest"]
+
+[project.scripts]
+prismpath = "prismpath.cli:main"
+
+[tool.setuptools]
+packages = [
+    "prismpath",
+    "prismpath.plugins",
+    "prismpath.plugins.roblox",
+    "prismpath.plugins.council",
+    "prismpath.tests",
+]
+
+[tool.setuptools.package-data]
+prismpath = ["flows/*.md", "nudges/*.md", "*.md", "*.html", "gallery/*.md",
+          "gallery/*/*.md", "portable/*.mjs", "portable/*.html",
+          "portable/conformance/*.json", "plugins/council/*.md"]
+
+[project.urls]
+Repository = "https://github.com/OWNER/prismpath"
+"Getting Started" = "https://github.com/OWNER/prismpath/blob/main/GETTING_STARTED.md"
+Specification = "https://github.com/OWNER/prismpath/blob/main/SPEC.md"
+Changelog = "https://github.com/OWNER/prismpath/blob/main/CHANGELOG.md"
+Security = "https://github.com/OWNER/prismpath/blob/main/SECURITY.md"

@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+# runtime artifacts (never commit)
+*.bak-*
+interactions.jsonl
+mission_audit.log
+mc_sprint.log
+*.jsonl.tmp
+
+# Area-5 comparison venv (recreate from prismpath/comparisons/requirements.txt)
+prismpath/comparisons/.venv/

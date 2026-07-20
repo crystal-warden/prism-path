@@ -1,0 +1,31 @@
+{
+  "intent": {
+    "n": 103,
+    "baseline": 0.8058,
+    "centroid": 0.8932,
+    "delta": 0.0874
+  },
+  "ALL": {
+    "n": 300,
+    "baseline": 0.69,
+    "centroid": 0.8267,
+    "delta": 0.1367
+  },
+  "abstraction": {
+    "n": 98,
+    "baseline": 0.7449,
+    "centroid": 0.8367,
+    "delta": 0.0918
+  },
+  "polarity": {
+    "n": 99,
+    "baseline": 0.5152,
+    "centroid": 0.7475,
+    "delta": 0.2323
+  },
+  "config": {
+    "folds": 5,
+    "prior_weight": 4.0,
+    "n_decisions": 300
+  }
+}
