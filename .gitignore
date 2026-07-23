@@ -13,3 +13,6 @@ mc_sprint.log
 
 # Area-5 comparison venv (recreate from prismpath/comparisons/requirements.txt)
 prismpath/comparisons/.venv/
+
+# local test venv (recreate with pip install -e .[test])
+.venv/
