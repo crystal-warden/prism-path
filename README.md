@@ -53,12 +53,12 @@ graph TD
 And because the flow is data, **a pull request is a process change**: the `human_review` rule
 above lands as a three-line prose diff, a fixture row asserts it in CI (milliseconds, no
 model), and merging it changes production routing — no deploy, no engineer. **See it run:**
-[`examples/pr_demo/`](PrismPath/examples/pr_demo/README.md).
+[`examples/pr_demo/`](prismpath/examples/pr_demo/README.md).
 
 ## Measured, not asserted
 
 N=301 labeled routing decisions, 8 flows, same local model for every arm
-([benchmark/](PrismPath/benchmark/), reproducible):
+([benchmark/](prismpath/benchmark/), reproducible):
 
 | arm | accuracy | LLM calls / 1k decisions | median latency | p95 |
 |---|---|---|---|---|
@@ -91,8 +91,8 @@ prismpath validate prismpath/examples/pr_demo/triage.md   # "your flow compiles"
 prismpath test prismpath/examples/pr_demo/triage.md       # fixture-asserted routing, no model
 ```
 
-Or skip the terminal: the **[playground](PrismPath/portable/playground.html)** runs the portable
-kernel in your browser — paste a flow, watch it route ([serve it](PrismPath/portable/README.md)).
+Or skip the terminal: the **[playground](prismpath/portable/playground.html)** runs the portable
+kernel in your browser — paste a flow, watch it route ([serve it](prismpath/portable/README.md)).
 The full walk from "what's this?" to a real agent driving your own flow is
 **[GETTING_STARTED.md](GETTING_STARTED.md)** — every step executed before it was written,
 honestly counted (spoiler: eight).
@@ -107,7 +107,7 @@ honestly counted (spoiler: eight).
   plane, deliberately not a SaaS or an integration ecosystem.
 - **Sub-millisecond routing over *semantic* conditions everywhere** — the semantic tier costs an
   embedding; only the deterministic tier is free (though for fields-only flows, that tier
-  [runs anywhere](PrismPath/portable/README.md), browser to edge).
+  [runs anywhere](prismpath/portable/README.md), browser to edge).
 - **Run state grows unless you bound it** — `@state_bound(transcript=N)` sliding-windows the
   transcript and re-seeded history (deterministic drop accounting; routing counters never
   windowed) so long-lived runs keep a flat checkpoint; it is opt-in per flow.
@@ -119,16 +119,16 @@ engineer to fluency on parallel tracks — same artifacts, one shared vocabulary
 
 - **Coming from LangGraph?** `prismpath import your_graph.py` renders your `StateGraph` as a
   skeleton flow — see what your control flow looks like as prose in fifteen minutes.
-- **Platform / SRE:** [the lockfile](PrismPath/AUTHORING.md) (bit-reproducible routing),
+- **Platform / SRE:** [the lockfile](prismpath/AUTHORING.md) (bit-reproducible routing),
   ["your flow compiles"](#your-flow-compiles--static-analysis), OTel decision spans into the
   Grafana/Jaeger/Datadog you already run — decision-level semantics (margin, escalated-or-not) as
   span attributes, not a new pane of glass to adopt.
-- **Security / compliance:** the [SOC triage case](PrismPath/PRISMPATH_USECASE_blue_team_soc_triage.md)
+- **Security / compliance:** the [SOC triage case](prismpath/PRISMPATH_USECASE_blue_team_soc_triage.md)
   — prefilter reuse measured live, human-gated containment, ledger proofs, air-gap-friendly
-  [portable subset](PrismPath/portable/README.md).
-- **Process owner / PM:** the [playground](PrismPath/portable/playground.html) and the
-  [persona examples](PrismPath/examples/README.md) — no terminal required. Contribute your own workflow (no code) to the [gallery](PrismPath/gallery/README.md).
-- **Researcher:** the [benchmark](PrismPath/benchmark/), the [papers](PrismPath/docs/papers/), and the
+  [portable subset](prismpath/portable/README.md).
+- **Process owner / PM:** the [playground](prismpath/portable/playground.html) and the
+  [persona examples](prismpath/examples/README.md) — no terminal required. Contribute your own workflow (no code) to the [gallery](prismpath/gallery/README.md).
+- **Researcher:** the [benchmark](prismpath/benchmark/), the [papers](prismpath/docs/papers/), and the
   [format spec](SPEC.md) with its machine-checkable conformance vectors.
 
 > **Commercial support & custom flows** — PrismPath is developed by Crystal Warden Labs; we build
@@ -158,7 +158,7 @@ It has two layers:
   Roblox/Luau via a plugin) are pluggable; the engine itself stays game- and platform-agnostic.
 
 > The thesis: **a human holds the vision; the swarm builds; gates — not prose — define done.**
-> See [FRAMEWORK.md](PrismPath/FRAMEWORK.md) for the operating methodology and hard-won lessons.
+> See [FRAMEWORK.md](prismpath/FRAMEWORK.md) for the operating methodology and hard-won lessons.
 
 ---
 
@@ -293,14 +293,14 @@ else:
 ```
 
 In a flow it's just a node with deterministic edges on the cached action — see
-[`flows/wazuh_triage.md`](PrismPath/flows/wazuh_triage.md) (`vector_prefilter`). **Measured live on SOC
+[`flows/wazuh_triage.md`](prismpath/flows/wazuh_triage.md) (`vector_prefilter`). **Measured live on SOC
 alert triage: ~59% of alerts auto-resolve at threshold 0.97 → ~2.4× capacity** before the LLM
-tier is touched ([use case](PrismPath/PRISMPATH_USECASE_blue_team_soc_triage.md)).
+tier is touched ([use case](prismpath/PRISMPATH_USECASE_blue_team_soc_triage.md)).
 
 This is **use-as-needed, not an engine default** — nothing invokes it implicitly. It pays off
 only when one node dominates cost, inputs genuinely recur, and a prior verdict is still valid
 when the same input recurs; it is wrong for generative, novelty-heavy, or context-dependent
-nodes. See [AUTHORING.md](PrismPath/AUTHORING.md) for the applicability test.
+nodes. See [AUTHORING.md](prismpath/AUTHORING.md) for the applicability test.
 
 ### Your flow compiles — static analysis
 
@@ -340,15 +340,15 @@ never double-spawns), and delivers the join event (`all_done` / `any` / `quorum:
 `on event` edge. Fan-in *semantics* live in the Markdown; concurrency *mechanics* live in the harness.
 Children are ordinary checkpointed runs (durable, resumable, ledgered), the git ledger dedups child
 units across parents, and `prismpath lock` pins the whole composition tree. See
-[`flows/fanout_review.md`](PrismPath/flows/fanout_review.md) + [`flows/review_one.md`](PrismPath/flows/review_one.md).
+[`flows/fanout_review.md`](prismpath/flows/fanout_review.md) + [`flows/review_one.md`](prismpath/flows/review_one.md).
 
 ### The portable subset — locked flows run anywhere
 
 A flow whose reachable edges are all decidable (`when` predicates, error edges, event edges) needs
-**no ML runtime for routing** — and that subset ships as [`portable/prismpath.mjs`](PrismPath/portable/PrismPath.mjs),
+**no ML runtime for routing** — and that subset ships as [`portable/prismpath.mjs`](prismpath/portable/PrismPath.mjs),
 a single dependency-free ES module (parser + sandboxed predicate evaluator + engine loop) that runs
 in Node, a browser, an edge function, or a network appliance. **Try it in the browser:**
-[`portable/playground.html`](PrismPath/portable/playground.html) runs the kernel client-side — paste a flow,
+[`portable/playground.html`](prismpath/portable/playground.html) runs the kernel client-side — paste a flow,
 watch it parse, tier-classify, graph, and route live.
 
 `prismpath portable <flow>` computes the flow's **portability tier** for the whole composition tree:
@@ -356,19 +356,19 @@ watch it parse, tier-classify, graph, and route live.
 lockfile — needs only an outcome-side embedder; appliance-deployable as one flow + one lock + one
 encoder), **P2** (unlocked semantic edges — full engine). The port *refuses* non-P0 flows rather
 than guess. Routing fidelity is enforced by **frozen conformance vectors**
-([`portable/conformance/`](PrismPath/portable/conformance/README.md)): 1,067 predicate cases + 27 engine
+([`portable/conformance/`](prismpath/portable/conformance/README.md)): 1,067 predicate cases + 27 engine
 fixtures generated from the Python reference, checked in both directions on every test run — the
 spec is data, so a future Go/Rust kernel is provably interchangeable. The production SOC triage
 flow is P0: its routing is fully decidable; the LLM lives in the workers. See
-[`portable/README.md`](PrismPath/portable/README.md).
+[`portable/README.md`](prismpath/portable/README.md).
 
 ---
 
 ## The control plane
 
 Above the kernel, PrismPath runs **spec-driven feature sprints** against a local agent swarm.
-The loop's semantics are themselves an PrismPath flow ([`flows/sprint_loop.md`](PrismPath/flows/sprint_loop.md),
-run with `SPRINT_FLOW=1` via [`sprint_flow.py`](PrismPath/sprint_flow.py)): the gate routes on `when
+The loop's semantics are themselves an PrismPath flow ([`flows/sprint_loop.md`](prismpath/flows/sprint_loop.md),
+run with `SPRINT_FLOW=1` via [`sprint_flow.py`](prismpath/sprint_flow.py)): the gate routes on `when
 gate_green`, the 3×-same-error rule is an `on error` edge, escalation is a `needs_human`
 suspension, and each gate-green unit is a `@checkpoint` proof-commit — the control plane that
 builds PrismPath is driven by an PrismPath document. The wall clock, pause, and heartbeat stay in the
@@ -396,7 +396,7 @@ driver, where harness concerns belong:
   a completeness claim a gate doesn't enforce.*
 - **Targets are plugins.** `SPRINT_GATE=browser` is the built-in gate (syntax → link → DOM →
   headless behavioral). Any other value loads an optional plugin behind one uniform interface — see
-  [`plugins/roblox/`](PrismPath/plugins/roblox/) for the Roblox/Luau gate (parse → type-check vs the real Roblox
+  [`plugins/roblox/`](prismpath/plugins/roblox/) for the Roblox/Luau gate (parse → type-check vs the real Roblox
   API → Rojo build → headless Lune specs) bundled with its architecture contract and RAG index. The
   engine only ever touches the plugin interface, never a target's specifics.
 - **Execution backends** range from a served model to the full multi-agent swarm
@@ -424,14 +424,60 @@ SPRINT_PROJ=/tmp/demo SPRINT_GATE=browser SPRINT_NUDGE="a tip calculator" \
 python -u prismpath/mission_control.py   # observability console at http://127.0.0.1:9109 (loopback only)
 ```
 
+---
+
+## Attestation, provenance & human override — "prove it"
+
+The git Flow-Ledger (`ledger.py`, gate-green proof-commits) is the base tier. On top of it PrismPath
+ships an **attestation tier** that makes a decision *provable and tamper-evident*, air-gap-friendly:
+
+- **`ledger_airgap.provenance_manifest(...)`** binds a decision to its inputs — the policy (flow) hash,
+  the gate id, the knowledge-base hash, and the per-input ingestion hashes — content-addressed into a
+  `manifest_hash`.
+- **`ledger_airgap.verify_manifest(m)`** recomputes that content-address; tampering with *any* bound
+  field flips it false. That is what makes a manifest a tamper-evidence anchor rather than a label.
+- **`ledger_airgap.override_manifest(prior, overrider, rationale, new_root)`** records a **human
+  override as a superseding commit**: the AI determination is attested first and stays immutable, and
+  the override binds who/why/when and supersedes it — a provable *"the AI said X, auditor Y overrode to
+  Z because …"* trail.
+- **OpenTimestamps + RFC-3161** anchoring (`ledger_ots.py`, `ledger_airgap.py`) for an air-gapped,
+  third-party-verifiable timestamp tier.
+- **`deferral.py` — the Deferral/Resumption port:** suspend a unit for human review or missing-evidence
+  discovery and resume it later, recording the actor. One primitive serves both HITL override and
+  evidence-request loops.
+
+## Ports & adapters — one engine, many domains
+
+The engine owns routing, attestation, and the toolchain; **domains plug in behind ports** (Ingestion,
+Retrieval, Adjudicator, Action/Sink, Attestation, Deferral) with **no domain vocabulary in the core**.
+`tools/arch_guard.py` enforces that boundary (Signal-1 = a domain noun in the core is a hard fail).
+
+Two reference adapters exercise the same ports:
+
+- **SOC triage** (`flows/wazuh_triage*.md`) — decomposed alert triage with the prefilter cache,
+  human-gated containment, and Flow-Ledger proofs
+  ([use case](prismpath/PRISMPATH_USECASE_blue_team_soc_triage.md)).
+- **Compliance — NIST SP 800-171** (in the `mdflow` working tree, `adapters/compliance/`) — a
+  full-breadth assessment adapter on the same ports: a **runtime-selectable dual catalog** (Rev 2 —
+  110 controls / 14 families with DoD SPRS weights; Rev 3 — 130 / 17, official NIST OSCAL), a
+  **family-agnostic decomposed flow** routed by assessment-method profile with a bounded discovery
+  loop, **escalation-default adjudication**, a **dual OSCAL + CycloneDX emitter** (schema-validated), a
+  **partial-SPRS system rollup**, provable **human-override** and **evidence-discovery** loops, and a
+  ~130-test suite plus a held-out **efficacy harness** (independent-model blind corpora). See
+  `adapters/compliance/ADAPTER_CONTRACT.md` and `TESTING.md`.
+
+> The adapters currently live in the internal `mdflow` working tree and import the published
+> `prismpath` core; extracting them into first-class plugin packages is planned. New here? Start with
+> **[docs/HANDOFF.md](prismpath/HANDOFF.md)**.
+
 ## Status
 
 Working end to end: the flow kernel (parser / predicates / hybrid router / engine), the data-plane
 toolchain (validate/lint, `prismpath test`, lockfile, calibrate, centroids, graph, import, label,
 portable), fan-out/composition, the durable layer (checkpoints, scheduler, git Flow-Ledger), the
 sprint control plane (browser + Roblox gates; the loop itself runs as a flow under `SPRINT_FLOW=1`),
-Mission Control, and the browser/edge kernel with its frozen conformance vectors. **331 tests + 17
-Node tests passing**; the predicate sandbox is fuzz-hardened; the format is specified in
+Mission Control, and the browser/edge kernel with its frozen conformance vectors. **379 tests + 17
+Node tests passing** (core kernel; the compliance reference adapter adds a ~130-test suite with adversarial attestation-tamper + hypothesis property coverage); the predicate sandbox is fuzz-hardened; the format is specified in
 [SPEC.md](SPEC.md) (v1 draft). This repo is a curated export of an active research control plane
 extracted from a real build; the `eval_*.py` and `measure_*.py` scripts are the measurement
 harnesses behind every number in the papers. Licensed Apache-2.0.
@@ -453,6 +499,9 @@ prismpath/
   composer.py      fan-out & sub-flow composition harness (@spawn -> children -> join -> resume)
   ledger.py        git Flow-Ledger — gate-green proof-commits (opt-in; SPRINT_LEDGER=1)
   ledger_runner.py per-item runner for routing flows (@checkpoint) + resume-from-ledger
+  ledger_airgap.py air-gap attestation tier — provenance_manifest / verify_manifest / override_manifest / OTS + RFC-3161
+  ledger_ots.py    OpenTimestamps anchoring for Flow-Ledger roots
+  deferral.py      Deferral/Resumption port — suspend for HITL review or evidence discovery, resume with the actor
   lint.py          the one non-decidable check (semantic conditions that embed too similarly)
   flow_test.py     prismpath test — assert routing from a Markdown fixture (<flow>.tests.md, no LLM)
   contract.py      derive each node's worker output schema from its `when` edges (the type-gate)
@@ -489,22 +538,26 @@ prismpath/
 - [SPEC.md](SPEC.md) · [CHANGELOG.md](CHANGELOG.md) · [CITATION.cff](CITATION.cff)
 - **Use it in CI:** the [`prismpath` GitHub Action](action.yml) or the
   [pre-commit hooks](.pre-commit-hooks.yaml) run `validate` + `test` on your flows.
-- **Gallery:** real workflows contributed by the people who run them — [gallery/](PrismPath/gallery/README.md).
+- **Gallery:** real workflows contributed by the people who run them — [gallery/](prismpath/gallery/README.md).
 
 ## Docs
 
 - [SPEC.md](SPEC.md) — the format specification (grammar, tiers, predicate semantics, conformance).
-- [portable/README.md](PrismPath/portable/README.md) — the browser/edge kernel, playground, conformance vectors.
-- [examples/README.md](PrismPath/examples/README.md) — persona-curated example flows + the money demo.
-- [AUTHORING.md](PrismPath/AUTHORING.md) — the flow authoring guide and the rules that govern the kernel.
-- [ARCHITECTURE.md](PrismPath/ARCHITECTURE.md) — how the control plane fits together (data flow + the plugin seam).
-- [FRAMEWORK.md](PrismPath/FRAMEWORK.md) — the operating methodology and hard-won lessons of running the swarm.
-- [docs/papers/PrismPath_whitepaper_engineering.md](PrismPath/docs/papers/PrismPath_whitepaper_engineering.md) — the
+- [portable/README.md](prismpath/portable/README.md) — the browser/edge kernel, playground, conformance vectors.
+- [examples/README.md](prismpath/examples/README.md) — persona-curated example flows + the money demo.
+- [AUTHORING.md](prismpath/AUTHORING.md) — the flow authoring guide and the rules that govern the kernel.
+- [ARCHITECTURE.md](prismpath/ARCHITECTURE.md) — how the control plane fits together (data flow + the plugin seam).
+- [FRAMEWORK.md](prismpath/FRAMEWORK.md) — the operating methodology and hard-won lessons of running the swarm.
+- [docs/papers/prismpath_whitepaper_engineering.md](prismpath/docs/papers/prismpath_whitepaper_engineering.md) — the
   technical white paper (engineering audience).
-- [docs/papers/PrismPath_paper_research.md](PrismPath/docs/papers/PrismPath_paper_research.md) — the research
+- [docs/papers/prismpath_paper_research.md](prismpath/docs/papers/prismpath_paper_research.md) — the research
   preprint (routing spectrum, measured results, stated limitations).
-- [PRISMPATH_USECASE_blue_team_soc_triage.md](PrismPath/PRISMPATH_USECASE_blue_team_soc_triage.md) — a live,
+- [PRISMPATH_USECASE_blue_team_soc_triage.md](prismpath/PRISMPATH_USECASE_blue_team_soc_triage.md) — a live,
   measured deployment: SOC alert triage over a real SIEM.
+- [docs/HANDOFF.md](prismpath/HANDOFF.md) — the current developer handoff (state, decisions, open items, next steps).
+- `adapters/compliance/ADAPTER_CONTRACT.md` — the hexagonal port boundary + the compliance adapter's ports (mdflow tree).
+- `adapters/compliance/TESTING.md` — the adapter testing methodology (deterministic + adversarial + property + opt-in live-model).
+- [docs/papers/SUPPORTING_EVIDENCE.md](prismpath/docs/papers/SUPPORTING_EVIDENCE.md) — the results ledger behind the attestation + adapter claims.
 
 ## Running the tests
 
