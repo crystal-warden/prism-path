@@ -1,0 +1,27 @@
+{
+  "model": "google/embeddinggemma-300m",
+  "dim_full": 768,
+  "prompt_mode": "prompt_name",
+  "scouting": {
+    "bge-base_768": {
+      "intent": 0.8932,
+      "ALL": 0.8267,
+      "abstraction": 0.8367,
+      "polarity": 0.7475
+    },
+    "embeddinggemma_full": {
+      "intent": 0.9612,
+      "ALL": 0.8533,
+      "abstraction": 0.8469,
+      "polarity": 0.7475
+    }
+  },
+  "cross_family_succession": {
+    "mapped_acc": 0.88,
+    "native_acc": 0.8767,
+    "retention": 1.0038,
+    "passes_98": true
+  },
+  "native128_dontknow_auc": 0.706,
+  "native128_verdict": "still parked (AUC<0.75)"
+}

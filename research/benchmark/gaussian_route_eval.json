@@ -1,0 +1,44 @@
+{
+  "intent": {
+    "baseline": 0.8058,
+    "centroid": 0.8932,
+    "g_shared": 0.8641,
+    "g_diag": 0.8544,
+    "n": 103
+  },
+  "ALL": {
+    "baseline": 0.69,
+    "centroid": 0.8267,
+    "g_shared": 0.7967,
+    "g_diag": 0.8033,
+    "n": 300
+  },
+  "abstraction": {
+    "baseline": 0.7449,
+    "centroid": 0.8367,
+    "g_shared": 0.8265,
+    "g_diag": 0.7653,
+    "n": 98
+  },
+  "polarity": {
+    "baseline": 0.5152,
+    "centroid": 0.7475,
+    "g_shared": 0.697,
+    "g_diag": 0.7879,
+    "n": 99
+  },
+  "dont_know": {
+    "n_correct": 239,
+    "n_wrong": 61,
+    "maha_correct_mean": 1342.75,
+    "maha_wrong_mean": 1430.68,
+    "auc_wrong_farther_than_correct": 0.582
+  },
+  "config": {
+    "folds": 5,
+    "shrinkage_lambda": 0.3,
+    "prior": 4.0,
+    "n_decisions": 300,
+    "dim": 768
+  }
+}

@@ -11,15 +11,20 @@ PrismPath is **agent workflows as data**: one markdown file (a "map & directions
 the engine walks. The engine + toolchain + control plane are documented in [../README.md](../README.md)
 (read it — this handoff assumes it).
 
-**Two-repo reality (important):**
-- `~/cwprojects/prismpath` — the **published engine package** (`prismpath/`). Core kernel, routing,
-  the attestation tier (`ledger_airgap.py`, `ledger_ots.py`), the Deferral port (`deferral.py`),
-  `tools/arch_guard.py`, the 379-test suite. This is the thing to keep clean.
-- `~/cwprojects/mdflow` — the **internal working tree** where domain **adapters** live
-  (`adapters/compliance/`, plus the SOC flows). Adapters `import prismpath` (the published core).
-  The mdflow root also holds a lot of retired/legacy files from before the mdflow→prismpath rename;
-  its `git status` shows large deletions from that restructure — **left uncommitted on purpose**, not
-  mine to reconcile.
+**One canonical repo:** `~/cwprojects/prismpath` holds everything:
+- `prismpath/` — the engine package: core kernel, routing, the attestation tier (`ledger_airgap.py`,
+  `ledger_ots.py`), the Deferral port (`deferral.py`), the 379-test suite.
+- `adapters/` — domain adapters (`adapters/compliance/` = the NIST 800-171 adapter; imports the
+  `prismpath` package).
+- `research/` — the measurement harnesses behind the papers (embedder scouting, triage evals, routing
+  experiments).
+- `tools/` — `arch_guard.py` (the hexagonal boundary gate) + `docs_health.py`.
+
+**Migration note (2026-07-23):** the old `~/cwprojects/mdflow` tree — the name we pivoted from — was a
+near-complete *stale duplicate*. Its only unique content (the compliance adapter + those research
+harnesses) was migrated into this repo; `mdflow` is now **deprecated** and retained only for history
+(a tombstone `DEPRECATED.md` at its root points here). Treat `~/cwprojects/prismpath` as the single
+source of truth.
 
 **Hexagonal boundary:** the engine owns routing/attestation/toolchain; domains plug in behind six
 **ports** (Ingestion, Retrieval, Adjudicator, Action/Sink, Attestation, Deferral). `tools/arch_guard.py`
@@ -30,7 +35,7 @@ Signal-1 (a domain noun in the core) is a **hard fail** — keep it green.
 ## 2. What this session built — the compliance adapter (#60–#72)
 
 A second reference adapter (after SOC triage), proving the hexagon generalizes. In
-`mdflow/adapters/compliance/`:
+`adapters/compliance/`:
 
 - **Ports & runtime** (`compliance_adapter.py`): Retrieval (runtime-selectable catalog), Ingestion,
   Adjudicator (escalation-default, method-profile-aware), Sink, Attestation (reuses core
@@ -83,8 +88,8 @@ positive corpus.
 ## 3. Current state (as of 2026-07-23)
 
 **Git — nothing pushed, `master` untouched in both repos:**
-- `mdflow` @ branch `compliance-adapter-full-breadth`: `c98e4b3` (#60–#71) + `177535e` (efficacy + folded
-  discovery loop).
+- Compliance adapter + research were migrated into `prismpath` on 2026-07-23 (see the migration
+  note in §1). The old `mdflow` branches (`compliance-adapter-full-breadth`) are frozen history.
 - `prismpath` @ branch `attestation-deferral-verify`: `0757641` (core attestation/deferral/verify) +
   `7dae61d` (efficacy findings in SUPPORTING_EVIDENCE).
 - **Uncommitted after those commits:** this `docs/HANDOFF.md` and the README update (commit them).
@@ -111,11 +116,11 @@ GB10=gb10   # ssh alias in ~/.ssh/config (192.168.4.10, user cwadmin, key gb10_e
 ssh $GB10 'cd ~/cwprojects/prismpath && .venv/bin/python -m pytest prismpath/tests -q'
 
 # Validate a map compiles
-ssh $GB10 'cd ~/cwprojects/mdflow/adapters/compliance && ~/cwprojects/prismpath/.venv/bin/python -m prismpath.cli validate flows/nist_800171_generic.md'
+ssh $GB10 'cd ~/cwprojects/prismpath/adapters/compliance && ~/cwprojects/prismpath/.venv/bin/python -m prismpath.cli validate flows/nist_800171_generic.md'
 
 # Compliance adapter suite (fast + opt-in live-gemma)
-ssh $GB10 'cd ~/cwprojects/mdflow/adapters/compliance && ~/cwprojects/prismpath/.venv/bin/python -m pytest -q'      # deterministic
-ssh $GB10 'cd ~/cwprojects/mdflow/adapters/compliance && ~/cwprojects/prismpath/.venv/bin/python -m pytest -m gemma -q'  # live
+ssh $GB10 'cd ~/cwprojects/prismpath/adapters/compliance && ~/cwprojects/prismpath/.venv/bin/python -m pytest -q'      # deterministic
+ssh $GB10 'cd ~/cwprojects/prismpath/adapters/compliance && ~/cwprojects/prismpath/.venv/bin/python -m pytest -m gemma -q'  # live
 
 # Rebuild catalogs / switch standard
 #   use_standard("nist_800171_r2" | "nist_800171_r3") in compliance_adapter
@@ -123,8 +128,8 @@ ssh $GB10 'cd ~/cwprojects/mdflow/adapters/compliance && ~/cwprojects/prismpath/
 # Efficacy harness (agy = Antigravity, user-authenticated; headless ssh cannot OAuth)
 #   see the agy memory; task prompts staged under efficacy/*.md
 # Semantic retrieval (EmbeddingGemma, CPU):
-ssh $GB10 'cd ~/cwprojects/mdflow/adapters/compliance && ~/jupyterlab/.venv/bin/python semantic_retrieve.py'
-ssh $GB10 'cd ~/cwprojects/mdflow/adapters/compliance && python3 ingest_company.py --map efficacy/semantic_map.json'
+ssh $GB10 'cd ~/cwprojects/prismpath/adapters/compliance && ~/jupyterlab/.venv/bin/python semantic_retrieve.py'
+ssh $GB10 'cd ~/cwprojects/prismpath/adapters/compliance && python3 ingest_company.py --map efficacy/semantic_map.json'
 ```
 
 ### Gotchas the next dev will hit
@@ -168,14 +173,14 @@ Do the shell/components first; the engine plugs in behind the same six ports whe
 - **Escalation-default calibration:** decide, deliberately, how conservative "met" should be.
 - **Maps execution:** wire the engine to actually *walk* an agy-authored map with gemma as the node
   agent (today the compliance adapter dispositions in Python; the `.md` is a validated playbook).
-- **Adapter extraction:** promote `adapters/*` out of the mdflow working tree into first-class plugin
-  packages; relocate the SOC adapter under `adapters/soc/`.
+- **Adapter packaging:** adapters now live in `adapters/` in-repo (migrated 2026-07-23); promoting
+  them into installable plugin packages + relocating the SOC flows under `adapters/soc/` remain.
 - **Semantic ingestion not wired as the adapter default** (dependency weight); it's a test-path today.
 
 ---
 
 ## 7. Where the receipts are
 - Engine: [../README.md](../README.md), [AUTHORING.md](AUTHORING.md), [../SPEC.md](../SPEC.md).
-- Adapter: `mdflow/adapters/compliance/ADAPTER_CONTRACT.md`, `TESTING.md`.
+- Adapter: `adapters/compliance/ADAPTER_CONTRACT.md`, `adapters/compliance/TESTING.md`.
 - Results ledger (every claim above): [docs/papers/SUPPORTING_EVIDENCE.md](docs/papers/SUPPORTING_EVIDENCE.md).
 - Architecture boundary: `tools/arch_guard.py` + `arch_guard.config.json`.

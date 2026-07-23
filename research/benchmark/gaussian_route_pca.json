@@ -1,0 +1,25 @@
+{
+  "K": 32,
+  "gpca_accuracy": 0.7967,
+  "dont_know_auc": 0.6077,
+  "screen_ge_0p75": false,
+  "frontier_likelihood": {
+    "0.0": 0.7967,
+    "0.1": 0.83,
+    "0.2": 0.8633,
+    "0.3": 0.88,
+    "0.4": 0.9,
+    "0.5": 0.9267
+  },
+  "frontier_margin": {
+    "0.0": 0.7967,
+    "0.1": 0.84,
+    "0.2": 0.89,
+    "0.3": 0.92,
+    "0.4": 0.95,
+    "0.5": 0.97
+  },
+  "likelihood_beats_margin_at_matched_escalation": false,
+  "VERDICT": "PARK",
+  "note": "baselines for ref: centroid 0.827, raw-768 gaussian 0.797/0.803, raw dont-know AUC 0.582"
+}

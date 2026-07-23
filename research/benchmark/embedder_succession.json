@@ -1,0 +1,30 @@
+{
+  "scouting": {
+    "bge-base_768(baseline)": {
+      "intent": 0.8932,
+      "ALL": 0.8267,
+      "abstraction": 0.8367,
+      "polarity": 0.7475
+    },
+    "bge-small_384(candidate)": {
+      "intent": 0.8835,
+      "ALL": 0.8033,
+      "abstraction": 0.8571,
+      "polarity": 0.6667
+    }
+  },
+  "scouting_note": "embeddinggemma unavailable offline (403 Client Error. (Request ID: Root=1-6a5ef458-0b991b0d4f000) -> queued as first real customer",
+  "succession_unit_test_rotation": {
+    "mapped_acc": 0.8433,
+    "native_acc": 0.8433,
+    "retention": 1.0,
+    "passes_98": true
+  },
+  "succession_real_bgebase_to_bgesmall": {
+    "mapped_acc": 0.8533,
+    "native_acc": 0.8433,
+    "retention": 1.0119,
+    "passes_98": true
+  },
+  "verdict_real": "PASS \u226598%"
+}

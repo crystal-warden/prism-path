@@ -457,7 +457,7 @@ Two reference adapters exercise the same ports:
 - **SOC triage** (`flows/wazuh_triage*.md`) — decomposed alert triage with the prefilter cache,
   human-gated containment, and Flow-Ledger proofs
   ([use case](prismpath/PRISMPATH_USECASE_blue_team_soc_triage.md)).
-- **Compliance — NIST SP 800-171** (in the `mdflow` working tree, `adapters/compliance/`) — a
+- **Compliance — NIST SP 800-171** (`adapters/compliance/`) — a
   full-breadth assessment adapter on the same ports: a **runtime-selectable dual catalog** (Rev 2 —
   110 controls / 14 families with DoD SPRS weights; Rev 3 — 130 / 17, official NIST OSCAL), a
   **family-agnostic decomposed flow** routed by assessment-method profile with a bounded discovery
@@ -466,8 +466,8 @@ Two reference adapters exercise the same ports:
   ~130-test suite plus a held-out **efficacy harness** (independent-model blind corpora). See
   `adapters/compliance/ADAPTER_CONTRACT.md` and `TESTING.md`.
 
-> The adapters currently live in the internal `mdflow` working tree and import the published
-> `prismpath` core; extracting them into first-class plugin packages is planned. New here? Start with
+> The adapters live in `adapters/` in this repo and import the `prismpath` package; promoting them
+> into installable plugin packages is planned. New here? Start with
 > **[docs/HANDOFF.md](prismpath/HANDOFF.md)**.
 
 ## Status
@@ -555,7 +555,7 @@ prismpath/
 - [PRISMPATH_USECASE_blue_team_soc_triage.md](prismpath/PRISMPATH_USECASE_blue_team_soc_triage.md) — a live,
   measured deployment: SOC alert triage over a real SIEM.
 - [docs/HANDOFF.md](prismpath/HANDOFF.md) — the current developer handoff (state, decisions, open items, next steps).
-- `adapters/compliance/ADAPTER_CONTRACT.md` — the hexagonal port boundary + the compliance adapter's ports (mdflow tree).
+- `adapters/compliance/ADAPTER_CONTRACT.md` — the hexagonal port boundary + the compliance adapter's ports.
 - `adapters/compliance/TESTING.md` — the adapter testing methodology (deterministic + adversarial + property + opt-in live-model).
 - [docs/papers/SUPPORTING_EVIDENCE.md](prismpath/docs/papers/SUPPORTING_EVIDENCE.md) — the results ledger behind the attestation + adapter claims.
 

@@ -1,0 +1,51 @@
+{
+  "routing_vs_samples_per_edge": {
+    "3": {
+      "centroid": 0.77,
+      "g_diag": 0.79
+    },
+    "5": {
+      "centroid": 0.8033,
+      "g_diag": 0.8033
+    },
+    "8": {
+      "centroid": 0.8067,
+      "g_diag": 0.8267
+    },
+    "15": {
+      "centroid": 0.8267,
+      "g_diag": 0.8033
+    },
+    "None": {
+      "centroid": 0.8267,
+      "g_diag": 0.8033
+    },
+    "_meta": {
+      "max_samples_per_edge": 15,
+      "median_per_edge": 12
+    }
+  },
+  "detection_vs_flows_per_family": {
+    "25": {
+      "macro_recall": 0.1439,
+      "corpus_flows": 1227
+    },
+    "50": {
+      "macro_recall": 0.1514,
+      "corpus_flows": 2217
+    },
+    "100": {
+      "macro_recall": 0.1544,
+      "corpus_flows": 3777
+    },
+    "200": {
+      "macro_recall": 0.1764,
+      "corpus_flows": 6620
+    },
+    "None": {
+      "macro_recall": 0.2235,
+      "corpus_flows": 47812
+    }
+  },
+  "read": "compare the last two rows in each: still rising => more data helps; flat => it won't"
+}
