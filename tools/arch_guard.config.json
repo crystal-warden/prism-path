@@ -1,0 +1,30 @@
+{
+  "_doc": "Architecture guard config = the hexagonal contract. Signal 1 (domain noun / adapter-import in CORE) is a HARD FAIL. Signals 3 (core churn) and 7 (marginal cost + %-logic-in-md) are TREND metrics, reported not gated (co-evolution edits the core early; the alarm is a PLATEAU, not any single edit). Refining core-vs-adapter membership is itself part of the refactor.",
+  "package_dir": "prismpath",
+  "core_modules": [
+    "engine.py", "parser.py", "router.py", "centroid.py", "lockfile.py", "gates.py",
+    "predicates.py", "contract.py", "retriever.py", "checkpoint.py", "ledger.py",
+    "ledger_ots.py", "ledger_airgap.py", "composer.py", "lint.py", "kappa.py",
+    "calibrate.py", "flow_test.py", "eval_flows.py", "eval_routing.py", "routelog.py",
+    "annotate.py", "otel.py", "langgraph_import.py", "cli_worker.py", "ci_report.py",
+    "fuzz_predicates.py", "prefilter.py", "deferral.py", "cli.py"
+  ],
+  "_soc_extracted_note": "measure_prefilter.py + wazuh_triage_agent.py were extracted from the published core 2026-07-22 (SOC adapter code; the canonical copies live in the mdflow working tree). Published package is now core-only.",
+  "adapters": {
+    "soc": {
+      "code": [],
+      "flows": ["flows/wazuh_triage.md", "flows/wazuh_triage_decomposed.md"]
+    }
+  },
+  "unclassified_needs_triage": [
+    "run_sprint.py", "mission_control.py", "analysis.py", "swarm_runner.py",
+    "swarm_exporter.py", "hermes_swarm.py", "orchestrator.py", "sprint_flow.py",
+    "chat_agent.py", "ledger_runner.py"
+  ],
+  "domain_nouns": {
+    "soc": ["wazuh", "etbert", "et-bert", "opnsense", "suricata", "mitre", "lolbas", "att&ck", "threat_class", "containment", "malware"],
+    "compliance": ["control_id", "cmmc", "800-171", "poam", "hipaa", "soc2 control"],
+    "tutor": ["learner", "pedagog", "curriculum", "borrow-checker"],
+    "sensor": ["bno086", "quaternion", "mcp2221", "\\bfpga\\b", "\\bimu\\b"]
+  }
+}

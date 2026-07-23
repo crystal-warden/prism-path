@@ -1,0 +1,34 @@
+{
+  "signal_1_core_purity": {
+    "PASS": true,
+    "violations": []
+  },
+  "signal_3_core_churn": {
+    "core_total_loc": 6131,
+    "churn_since_baseline": null,
+    "note": "track per-adapter; must DECAY. flat/rising = rebuilding, not generalizing."
+  },
+  "signal_7_marginal_cost": {
+    "adapters": [
+      {
+        "adapter": "soc",
+        "code_loc": 0,
+        "flow_md_loc": 281,
+        "pct_logic_in_md": 1.0
+      }
+    ],
+    "note": "adapter #N should cost < #1; higher %_logic_in_md = logic stays in plain-English (good)."
+  },
+  "unclassified_needs_triage": [
+    "run_sprint.py",
+    "mission_control.py",
+    "analysis.py",
+    "swarm_runner.py",
+    "swarm_exporter.py",
+    "hermes_swarm.py",
+    "orchestrator.py",
+    "sprint_flow.py",
+    "chat_agent.py",
+    "ledger_runner.py"
+  ]
+}
