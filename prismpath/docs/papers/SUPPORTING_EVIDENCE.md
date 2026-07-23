@@ -182,3 +182,37 @@ served locally. No number here depends on a cloud API.
 **Method:** `_method_profile(control)` classifies by family_name into technical/procedural/operational/general (matching the generic flow); profile guidance + the control's catalog methods (Examine/Interview/Test) injected into the adjudication prompt.
 
 **Result:** zero general-leak across both catalogs (R2 83/8/19, R3 88/18/24). Adapter suite now 129 (125 deterministic + 4 gemma), all green; test_method_profile.py covers classification, risk-vs-security-assessment disambiguation, full-catalog no-leak, and prompt-injection (monkeypatched, no gemma). Gemma regression: unambiguous determinations unchanged. arch_guard PASS. Follow-up: the profile still shapes the PROMPT only; a future step could route to distinct decision nodes per profile (true graph decomposition) and score interview/test evidence sufficiency explicitly.
+
+### agy-authored map — engine generalization proof (2026-07-23)
+
+**Claim:** the PrismPath maps-and-directions format is authorable by an INDEPENDENT frontier model (agy) from the spec (AUTHORING.md/SPEC.md) + a task description alone — not just by us.
+
+**Method:** agy (Antigravity CLI, user-driven) given the format rules + a NIST 800-171 assessment task spec, explicitly told NOT to read our flows; instructed to self-validate with `prismpath validate`. Output: flows/agy_800171_assessment.md.
+
+**Result:** compiles clean on the engine validator. 9 nodes / 17 edges (11 deterministic / 6 semantic), terminal=attest. agy independently: split deterministic `when` (no_evidence, determination==X, visits>=3) from semantic judgment edges (intent-only-policy/out-of-scope/missing-objective) per the routing spectrum; encoded escalation-default; built a BOUNDED discovery loop (check_evidence <-> request_evidence with a `when visits >= 3` guard) — more complete at the flow level than our hand-written nist_800171_generic.md (which handles discovery in Python). Nuance: its adjudicate-node semantic fallbacks are shadowed by the deterministic determination edges (precedence). Ours differs by routing on method-profile (#71); agy used a single adjudicate node.
+
+**Value:** independent-authorability is a real generalization/usability signal for the ENGINE. Follow-up: fold agy's in-graph bounded discovery loop into nist_800171_generic.md. Maps-execution (engine walks the .md with gemma as node agent) still deferred.
+
+### Labeled-corpus efficacy test — INVALID (agy authored circular evidence) (2026-07-23)
+
+**What ran:** agy authored a 9-control x 3-difficulty labeled corpus (efficacy/corpus/, 27 bundles), then gemma adjudicated each; efficacy_harness.py compared gemma vs agy's `_label.status`.
+
+**Raw numbers (DO NOT TRUST):** overall agreement 52%; by difficulty easy .44 / medium .11 / hard 1.0; gemma distribution 0 met / 3 partial / 24 not-met; confusion agy-met->gemma-not-met x5, agy-partial->gemma-not-met x8.
+
+**Why invalid:** spot-check showed agy did NOT author real evidence — every bundle's "evidence" is a single `policy` doc that RESTATES the control objectives as declarative claims with a verdict preamble ("All objectives are fully met." / "Most objectives are met."), and the label just tracks that preamble. No configs/logs/screenshots/records. Asking an LLM to "generate evidence labeled X" yields the conclusion, not substantive evidence.
+
+**Correct conclusion:** gemma behaved CORRECTLY — it rejected circular intent-only assertions as not-met every time (escalation-default working; not fooled by "we are compliant" text). This raises confidence in the adjudicator, not lowers it. The "hard=100%" is a class-imbalance artifact (all not-met on both sides). #62 already showed gemma awards met/partial on genuine implementation evidence.
+
+**Methodology lesson (vindicates the BLIND approach):** the blind "be a company, write your docs" framing produced realistic artifacts (SSP/IR plan/roster/draft RA) and a better test; the "author evidence labeled X" framing produced degenerate circular text. Prefer blind generation. A valid positive test still needs a corpus with genuine met-worthy implementation evidence (concrete config/logs/screenshots), or a human/third-model reference. See [[testing-depth-standard]] [[agy-antigravity-cli]].
+
+### Semantic retrieval (EmbeddingGemma) — retrieval was NOT the bottleneck (2026-07-23)
+
+**Method:** replaced lexical TF-IDF ingestion with EmbeddingGemma-300m (CPU, GPU/gemma untouched) semantic retrieval over the 15 blind company docs → 14 breadth controls (semantic_retrieve.py under jupyterlab venv; ingest_company.py --map adjudicates under prismpath venv).
+
+**Result:** routing quality improved for TOPICAL prose (MP->Media_Protection_Standard 0.64, IR->IR_Plan 0.52, RA->Risk_Assessment, PE->Physical_Policy) — real improvement over lexical. BUT disposition distribution UNCHANGED: 14/14 not-met, identical to lexical, control-for-control (zero flips).
+
+**Conclusion:** retrieval was NOT the cause of uniform not-met (earlier hypothesis FALSIFIED). Dispositions are driven by evidence quality; agy's blind company is genuinely paper-only (policies/SSP/draft RA/template IR plan) and correctly fails escalation-default regardless of routing. Triangulated across lexical + semantic + gap-summary inspection -> adjudicator is evidence-driven and correctly strict.
+
+**Residuals (logged):** semantic retrieval is a genuine keep (routes prose well) but can't route RAW ARTIFACTS (logs/configs/CSVs — content is data not prose) -> needs doc-type/metadata-aware HYBRID ingestion. SSP legitimately dominates (discusses all families). Still no clean POSITIVE test (company with genuinely-met controls).
+
+**Env note:** installed sentence-transformers into ~/jupyterlab/.venv (torch already present); bumped its transformers 4.56.1->4.57.6 (4.56.1 warned EmbeddingGemma bidirectional may fall back to causal; briefly hit 5.14.1 which broke peft HybridCache, pinned back to <5). EmbeddingGemma-300m cached at ~/.cache/huggingface (1.2G). See [[gb10-wazuh-hub]].
