@@ -293,7 +293,7 @@ else:
 ```
 
 In a flow it's just a node with deterministic edges on the cached action — see
-[`flows/wazuh_triage.md`](prismpath/flows/wazuh_triage.md) (`vector_prefilter`). **Measured live on SOC
+[`prismpath/flows/wazuh_triage.md`](prismpath/flows/wazuh_triage.md) (`vector_prefilter`). **Measured live on SOC
 alert triage: ~59% of alerts auto-resolve at threshold 0.97 → ~2.4× capacity** before the LLM
 tier is touched ([use case](prismpath/PRISMPATH_USECASE_blue_team_soc_triage.md)).
 
@@ -454,7 +454,7 @@ Retrieval, Adjudicator, Action/Sink, Attestation, Deferral) with **no domain voc
 
 Two reference adapters exercise the same ports:
 
-- **SOC triage** (`flows/wazuh_triage*.md`) — decomposed alert triage with the prefilter cache,
+- **SOC triage** (`adapters/soc/`) — decomposed alert triage with the prefilter cache,
   human-gated containment, and Flow-Ledger proofs
   ([use case](prismpath/PRISMPATH_USECASE_blue_team_soc_triage.md)).
 - **Compliance — NIST SP 800-171** (`adapters/compliance/`) — a

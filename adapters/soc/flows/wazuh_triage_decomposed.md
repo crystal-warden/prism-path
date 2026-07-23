@@ -1,0 +1,1 @@
+../../../prismpath/flows/wazuh_triage_decomposed.md

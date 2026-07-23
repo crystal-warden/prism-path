@@ -12,9 +12,15 @@
     "adapters": [
       {
         "adapter": "soc",
-        "code_loc": 0,
+        "code_loc": 807,
         "flow_md_loc": 281,
-        "pct_logic_in_md": 1.0
+        "pct_logic_in_md": 0.258
+      },
+      {
+        "adapter": "compliance",
+        "code_loc": 720,
+        "flow_md_loc": 125,
+        "pct_logic_in_md": 0.148
       }
     ],
     "note": "adapter #N should cost < #1; higher %_logic_in_md = logic stays in plain-English (good)."
