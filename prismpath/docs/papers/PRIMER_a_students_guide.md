@@ -118,7 +118,7 @@ And the fix was the *same fix*: the detector only knew what **bad** looked like;
 **normal** looked like. So they built a library of *normal* traffic too, and changed the question from
 *"is this close to something bad?"* to *"is this closer to bad than it is to normal?"* Result
 (measured on the real system): false alarms dropped from ~2% to a **mathematically certified under
-0.05%** — while still catching the real malware it caught before. **Zero cost to detection, ~40× fewer
+0.053%** — while still catching the real malware it caught before. **Zero cost to detection, ~40× fewer
 false alarms.** (This is written up in the two `CONTRIB_outline_*` files next to this one.)
 
 That "mathematically certified" part is worth pausing on: instead of *guessing* a cutoff and hoping,

@@ -129,7 +129,7 @@ routing. The bundled GitHub Action takes it further: on every PR it posts a stic
 with the flow's topology **before → after** (live Mermaid) plus the fixture verdicts — the
 process change reviewable in the conversation. That loop — the point of the whole system —
 is demonstrated end-to-end in
-[`examples/pr_demo/`](PrismPath/examples/pr_demo/README.md).
+[`examples/pr_demo/`](prismpath/examples/pr_demo/README.md).
 
 ---
 
@@ -146,7 +146,7 @@ is demonstrated end-to-end in
   suspend for a human with the evidence packet; `@spawn` fans out child runs.
 - **The edge** — `prismpath portable <flow>` tells you if your flow is P0: zero-ML, runnable by
   the same kernel the playground uses, anywhere JavaScript runs.
-- **Your role's door** — the [persona examples](PrismPath/examples/README.md): SOC triage, support
+- **Your role's door** — the [persona examples](prismpath/examples/README.md): SOC triage, support
   routing, release trains, HR onboarding, fan-out review, and the sprint loop that builds this
   repo.
 

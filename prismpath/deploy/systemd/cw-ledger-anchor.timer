@@ -1,0 +1,11 @@
+[Unit]
+Description=PrismPath Flow-Ledger anchor timer (hourly stamp of new roots)
+Documentation=file:///home/cwadmin/cwprojects/prismpath/prismpath/SPEC_ledger_opentimestamps.md
+
+[Timer]
+OnCalendar=hourly
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target

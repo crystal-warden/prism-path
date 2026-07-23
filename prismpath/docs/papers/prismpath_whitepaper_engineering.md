@@ -11,6 +11,8 @@ draw it, trace it, resume it, and commit its progress to git.**
 
 ## Executive summary
 
+*Supporting evidence for every number below: `docs/papers/SUPPORTING_EVIDENCE.md` (results ledger + provenance, negative results included) and `CONTRIB_outline_engineering_etbert_hardening.md` (the ET-BERT/SOC hardening findings — silent-failure war-story, no-sudo capture, GPU-batch economics, per-tenant suppression, the flywheel).*
+
 PrismPath is a control plane for LLM-agent workflows built on one idea: **the workflow graph should be a
 human-authored artifact, and routing should be a spectrum, not a single mechanism.** A flow is a
 Markdown file — `## headings` are nodes, the prose is the instruction handed to an agent, and
@@ -117,9 +119,11 @@ route straight to the LLM; PrismPath is the wrong tool for a strict tail budget.
 cheap common case, and we state it rather than hide it.
 
 PrismPath also *loses ~16 points of accuracy* to the three LLM arms (83.7% vs 99.0%) — but that is **an
-operating point, not a ceiling.** PrismPath is **a knob, not a point**: 83.7% is the δ=0.05 setting;
-sweeping δ or swapping in the risk-controlled τ of §4.7 trades toward ~99% accuracy at a higher call
-rate. The other three expose no such dial — they are pinned at one call per hop. And their 99.0% is
+operating point, not a ceiling.** PrismPath is **a knob, not a point**: 83.7% is the *zero-shot* δ=0.05 setting; stacking the same escalation over learned
+centroids (the recommended configuration) lifts this to **90.0% at δ=0.01, 95.3% at δ=0.03, and
+98.0% at δ=0.05** (companion research write-up §4.3), converging toward the always-call arms' 99.0%
+at higher call budgets — with one honest ceiling: escalation cannot reach the *confident* errors the
+embedder is sure-but-wrong on (the margin blind spot), so closing the final gap to 99.0% is not free. The other three expose no such dial — they are pinned at one call per hop. And their 99.0% is
 itself soft: the LLM arm scored 100% on the old 17-case gold set and fell to 99.0% at N=301, and would
 fall further at larger N — which *strengthens* PrismPath's relative position, not weakens it.
 
@@ -298,7 +302,7 @@ the GPU free). This nails **intent/topic** distinctions ("the customer is asking
 `HybridRouter` computes the embedding decision *and its margin* (top-1 similarity − top-2). If the
 margin ≥ δ, it takes the embedding pick for free. If not — a near-tie, i.e. the model is *unsure* —
 it makes **one** LLM call to break the tie, and records that it escalated. δ (default 0.05 — the
-default; the frontier is smooth — re-derived at N=300, see the companion research write-up — and best stacked over learned centroids) is the
+default; the frontier is smooth — re-derived at N=301, see the companion research write-up — and best stacked over learned centroids) is the
 single knob trading LLM-call rate for accuracy.
 
 Why this matters in practice: embeddings are perfect on intent but fragile on *logical polarity* and
@@ -608,7 +612,10 @@ concurrent ref move, **re-reads the tip and rebuilds on it** (retrying up to `_C
 than dropping the proof — no lost commits under concurrency. One honest scoping note: "tamper-evident"
 here means **accident-evident** — a fat-fingered edit breaks the hash chain and is caught — but an
 *adversary* with filesystem access can rewrite the whole chain and its pinned dates; the honest
-adversarial upgrade is external anchoring (e.g. OpenTimestamps), which is future work.
+adversarial upgrade is external anchoring (OpenTimestamps): **connected v1 is delivered**
+(`ledger_ots.py`, Bitcoin/OTS) and the **air-gap tier is delivered too** (`ledger_airgap.py`, an
+internal **RFC-3161** trusted-timestamp path validated fully offline) — trustless at the connected
+tier, trust-a-TSA at the air-gapped tier, and never presented as Bitcoin-strength on an air-gapped site.
 
 The thesis is `done_set()` (`ledger.py:221`): it folds the log into `{unit → latest green record}`,
 **newest-wins**, so "which units are done" is a *derived projection over `git log`*, not a mutable
@@ -780,7 +787,10 @@ asymmetric negation marker (`not`/`no`/`never`/`n't`/…) or a hardcoded antonym
 a curated lexicon), they are honestly *not* decidable and are quarantined out of the compile gate into
 the advisory linter — the design keeps the soundness guarantee where it can be honored, and bounds the
 fuzzy signal behind two conjunctive gates (tuned against synonyms so "clear"/"obvious" does *not*
-fire).
+fire). On the only corpus measured to date (the N=99 polarity stratum), `polarity_mirror` fired on
+**0/99** — a precise catch for *lexically-explicit* negation/antonym pairs, not a general polarity
+detector, so its true-positive efficacy is unvalidated (loosening the topic gate to 0.65 buys ~16%
+coverage at ~14% false-flag).
 
 ---
 

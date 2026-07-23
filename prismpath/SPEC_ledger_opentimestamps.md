@@ -118,3 +118,37 @@ Connected v1 (1-3) is ~a week; the defensible IP is item 4.
 - Not "proof the AI's verdict was correct" (C1).
 - Not "instant tamper-proof" before the confirmation window closes (C2) — say pending vs confirmed.
 - Not "cryptographically provable" until §5's gate passes.
+
+---
+## CONNECTED V1 — DELIVERED + VALIDATED (2026-07-21, #36)
+`ledger_ots.py` implements the connected anchoring engine, validated end-to-end (`ots` CLI v0.7.2 + opentimestamps 0.4.5):
+- **`from_ledger()`** enumerates `Mdflow-Output-Hash` trailers from a live Flow-Ledger via git-log — tested: read 3 hashes from a real bare-repo mini-ledger.
+- **Merkle batching**: every leaf reconstructs the root (verified); one `ots stamp` covers the whole batch.
+- **OTS stamp**: real submission to 4 Bitcoin calendar servers (opentimestamps / eternitywall / catallaxy), `stamped=true`; `upgrade()` promotes pending→confirmed (async ~1-6h).
+- **Verify**: output-hash → Merkle path → root → `ots verify` (honest "Pending confirmation in Bitcoin blockchain" in-session, upgrades later).
+- **Tamper-evident**: corrupted Merkle sibling → False; absent hash → rejected.
+
+**REMAINING (task #53, the ~1-2wk defensible IP):** out-of-band `cw-ledger-anchor`/`cw-ledger-upgrade` timers (deploy when a ledger produces data); `prismpath ledger verify --ots` CLI; the **AIR-GAP TIER** (egress-stamp / batch-forward / RFC-3161 fallback); the C1 compensations (ingestion-boundary + POLICY_HASH binding). The connected v1 upgrades the ledger's attestation from *accident*-tamper-evident to *adversarial* temporal integrity for internet-connected deployments; air-gap tier extends it to DIB/OT/healthcare.
+
+
+## AIR-GAP TIER — DELIVERED + VALIDATED (2026-07-21, #53)
+`ledger_airgap.py` implements the disconnected-deployment tiers from §4 and the §6 compensations;
+validated end-to-end with **zero internet** (the exact air-gapped condition):
+- **T1 batch-and-forward** (§4.2) — `export_stamp_request` packages ONLY high-entropy roots + a
+  provenance manifest into a tiny tar the one-way boundary can pass; `relay_stamp` `ots stamp`s on a
+  connected relay; `import_proofs` places `.ots` beside the roots. Full round-trip proven for real
+  (export → real calendar stamp → import; proof file lands).
+- **T2 RFC-3161 offline TSA** (§4.3) — `rfc3161_query`/`rfc3161_verify` + a throwaway local test TSA
+  (`make_test_tsa`) prove query → sign → **`Verification: OK`** → tampered-root **rejected**, entirely
+  offline. This is the fully-disconnected fallback (internal appliance) and the patent-defensible core.
+- **C1 compensations** (§6) — `provenance_manifest` binds `POLICY_HASH` + gate identity + ingestion
+  hashes to the anchored root, so chain-of-custody starts at ingestion and *what logic ran* is provable.
+- **C4** — `salt_leaf` HMACs low-entropy unit hashes with an in-enclave secret before anchoring.
+- **CLI** — `prismpath ledger {anchor,upgrade,verify --ots,export-request,relay-stamp,import-proofs,rfc3161}`.
+- **Timers** — `deploy/systemd/cw-ledger-{anchor,upgrade}.{service,timer}` + `cw-ledger-run.sh` wrapper,
+  STAGED (not enabled; no live ledger yet — deploy when a ledger produces data).
+
+**Claim-gate status (§5):** the air-gap tier has now shipped AND connected v1 round-trips, so the
+stronger claim language is unlocked for connected deployments; air-gapped sites use "RFC-3161
+trusted-timestamp (immediate) + OTS-when-a-window-opens (trustless)" — state the tier actually in use,
+never imply Bitcoin-strength on a site that only has the internal TSA.

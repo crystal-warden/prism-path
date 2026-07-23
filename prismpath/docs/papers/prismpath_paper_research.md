@@ -379,7 +379,7 @@ face of the durable-execution machinery of §3.4.
   meaning of "does not compile." A broken-flow corpus (`tests/fixtures/broken/`) is the spec, one file
   per failure class, with a coverage test asserting the corpus exercises *every* code the analyzer can
   emit. This is the guarantee a runtime-assembled graph structurally cannot give (§2.1).
-- **Polarity lint — the negation blind-spot, caught at authoring time (delivered).** One failure
+- **Polarity lint — the negation blind-spot, flagged at authoring time where lexically explicit (delivered — with measured limits below).** One failure
   class needs the *embedder* and so lives in a separate advisory linter (`lint.py`), not the decidable
   pass: two sibling semantic conditions that are **topically near-identical but logically opposite** —
   "the tests pass" vs "the tests fail", "ready" vs "not ready". An embedding encodes topic, and a
@@ -388,11 +388,11 @@ face of the durable-execution machinery of §3.4.
   (cosine ≥ `POLARITY_SIM = 0.72`, deliberately *below* the plain-ambiguity 0.86 to catch the
   close-but-not-tied band) and a cheap, model-free lexical polarity signal (asymmetric negation
   markers, or a hardcoded antonym flip like pass/fail, valid/invalid) agree — two conjunctive gates
-  tuned to stay silent on synonyms. Its prescribed fix restates the project thesis: have the worker
+  tuned to stay silent on synonyms. **Measured coverage (honest limit):** on our own N=301 suite the conjunction is strict enough to *rarely fire* — at the shipped `POLARITY_SIM = 0.72` it flags **0 of the 99 polarity-stratum decisions**: the explicitly-negated pairs sit just *under* the cosine bar (e.g. "all tests pass" vs "some tests still fail" at cos 0.699), while the topically-closer pairs express polarity *implicitly* (no negation marker) and miss the lexical gate. Loosening the threshold trades coverage for false flags roughly one-for-one (~16% coverage at ~14% false-flag on non-polarity at `POLARITY_SIM = 0.65`). So the lint is a **precise catch for lexically-explicit** negation/antonym pairs, **not** a general polarity detector; implicit polarity remains an open authoring-time gap (a learned classifier, not a lexical heuristic, is future work). Its prescribed fix restates the project thesis: have the worker
   emit a structured field and rewrite the branch as `when <field>` / `when not <field>`, demoting the
   polarity decision from the unreliable embedding tier into the decidable predicate fragment — at
   which point the static analyzer can even *prove* the resulting pair exhaustive. This directly targets
-  the negation failure class the Q1 finding is about (§4.2).
+  the **lexically-explicit** subset of the negation failure class (§4.2); the implicit-polarity remainder is not caught.
 - **Sandboxed predicates (a security property).** The `when` evaluator walks a Python AST but
   permits **only** names, constants, boolean ops, `not`, comparisons, and literal collections — **no
   calls, attribute access, or subscripts.** Unknown names resolve to `None` (falsy). Predicates
@@ -459,8 +459,7 @@ in a dedicated **`prismpath-Wallclock`** trailer, and the proof is content-addre
 order-independent **`prismpath-Output-Hash`** (`sha256_files`), *not* the SHA. Tamper-evidence is scoped
 to **accident**: any edit re-hashes the chain, so an incidental corruption is detected — but an
 adversary with filesystem access can rewrite the whole chain, so we do not claim adversarial
-integrity; anchoring the ref heads with **OpenTimestamps** is the honest adversarial upgrade (future
-work). Every ref write is a **compare-and-swap** (`update-ref <new> <old>`); on a concurrent ref move
+integrity; anchoring the ref heads with **OpenTimestamps** is the honest adversarial upgrade — **connected v1 delivered** (`ledger_ots.py`: Merkle-batched `prismpath-Output-Hash`es → Bitcoin `ots stamp` → tamper-evident verify), and the **air-gap tier now also delivered** (`ledger_airgap.py`: batch-and-forward plus an internal **RFC-3161** trusted-timestamp path, validated fully offline). The tiering is honest about strength: the connected tier is trustless (Bitcoin); the air-gapped RFC-3161 tier **trusts a timestamp authority** and is never presented as Bitcoin-strength. See `SPEC_ledger_opentimestamps.md` and `SUPPORTING_EVIDENCE.md` §G. Every ref write is a **compare-and-swap** (`update-ref <new> <old>`); on a concurrent ref move
 it **re-reads the tip and rebuilds on it, retrying rather than dropping the proof** (`ledger.py`).
 
 **Done-ness is a projection, not a field.** `done_set()` folds the append-only log into `{unit →
@@ -579,8 +578,8 @@ The **logical-polarity** subclass here — the "all tests pass" / "three tests f
 the whole hard suite — is now caught *at authoring time*, before it ever reaches a benchmark: the
 polarity lint of §3.3 flags a pair of sibling semantic conditions that are topically close but
 logically opposite and prescribes demoting them to a `when <field>` / `when not <field>` deterministic
-pair. In other words, the empirical failure mode this section characterizes has a shipped, decidable
-authoring-time defense, closing the loop between the finding and the tooling.
+pair. In other words, the empirical failure mode this section characterizes has a shipped, advisory
+authoring-time lint for its **lexically-explicit** cases (measured: 0/99 polarity decisions flagged at the shipped threshold, §3.3), *partially* closing the loop between finding and tooling — implicit polarity stays open.
 
 ### 4.3 Results — the hybrid frontier (Q2)
 
@@ -642,7 +641,7 @@ split as the CV above, same routing prompt as the head-to-head, one shared LLM p
 `benchmark/hybrid_sweep.py`, artifact `hybrid_sweep.json`) dominates the zero-shot hybrid at every
 call budget: **90.0% at 160 LLM calls per 1k** (δ=0.01 — better accuracy than the old headline at
 2.4× fewer calls), **95.3% at 360/1k** (δ=0.03 — the old operating point's call budget, +11.6
-accuracy points), **98.0% at 507/1k** (δ=0.05), converging to the LLM arms' 99.7% as δ grows. On
+accuracy points), **98.0% at 507/1k** (δ=0.05), converging to the always-call arms' 99.0% as δ grows. On
 the polarity stratum — the near-chance failure that motivates the spectrum — the stack reaches
 **0.92 at δ=0.03** (from 0.52 zero-shot, 0.75 centroids-alone). The two mechanisms are
 complementary by construction: centroids repair the *confident* errors the margin cannot see
@@ -896,5 +895,5 @@ consistent with venue AI-disclosure policy.
 
 *Artifacts (parser, safe predicate evaluator, four-tier router, embedder, checkpoint + Flow-Ledger,
 static analyzer, lockfile, calibration, the data-plane tools, evaluation harnesses, and the
-`comparisons/` head-to-head, plus example flows) are self-contained and small enough to audit
+`comparisons/` head-to-head, plus example flows, plus the succession/scouting/suppression/flywheel/OTS engines and a **`SUPPORTING_EVIDENCE.md`** results ledger mapping every claim to a measured result + provenance, **negative results included** — the density/geometry thread, §B) are self-contained and small enough to audit
 end-to-end.*

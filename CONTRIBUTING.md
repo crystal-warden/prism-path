@@ -4,7 +4,7 @@ Thanks for looking. This project has an unusual property that shapes how contrib
 **the control flow is data**, so the highest-value contributions are often *checks on the data*
 (lint rules), *examples of the data* (gallery flows), or *implementations of the data's spec*
 (conformance-certified runtimes) — not features on the engine, which stays deliberately small
-and pure (see the invariants in [AUTHORING.md](PrismPath/AUTHORING.md) §9 and the boundary rules in
+and pure (see the invariants in [AUTHORING.md](prismpath/AUTHORING.md) §9 and the boundary rules in
 [SPEC.md](SPEC.md)).
 
 ## Setup
@@ -75,7 +75,7 @@ Each of these is a self-contained afternoon. Claim one by opening an issue with 
 ## Other welcome shapes
 
 - **Gallery flows** — a real workflow from your domain, no code required: see
-  [gallery/README.md](PrismPath/gallery/README.md). This is the contribution path for analysts, PMs, and
+  [gallery/README.md](prismpath/gallery/README.md). This is the contribution path for analysts, PMs, and
   ops people.
 - **A runtime in your language** — implement SPEC.md, read two JSON files
   (`prismpath/portable/conformance/`), and `run_vectors`-equivalence makes it official. Open an issue

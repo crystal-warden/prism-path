@@ -18,3 +18,12 @@ or mistaken for committed work. 2026-07-19.*
   into a principled density test using data we already own, and the SAME move principledizes the
   ET-BERT detector's s_bad−s_benign margin (density ratio) and the prefilter gate (inside-the-cluster,
   not near-center). One benchmark on the N=301 suite, publishable either way.
+
+
+---
+## VERDICT (2026-07-20): density/geometry thread PARKED — margin+centroid vindicated
+Three bounded, pre-registered experiments tested whether learned geometry beats the plain mean + cosine margin at our data scale. All three failed their bars:
+- **#39 Gaussian-per-edge (raw 768-d):** accuracy 0.797/0.803 < centroid 0.827; don't-know AUC 0.582.
+- **#41 PCA-reduced (32-d) don't-know:** AUC 0.608 (< 0.75 screen); likelihood-abstention LOSES to the cosine margin at every escalation rate. PARK.
+- **#47 Stratified router (g_diag on lint-flagged polarity edges):** DEAD ON ARRIVAL — the polarity lint fires on 0/99 polarity cases (see #51), so g_diag has no delivery mechanism.
+**Net:** at ~15 labeled outcomes/edge, the shrunk mean + margin is the empirical winner; covariance/density adds noise. This is a publishable NEGATIVE result (strengthens the paper against 'pet-idea' geometry). The ONLY remaining shot: native-Matryoshka low-dim (EmbeddingGemma, #48) — a *trained* truncatable space, unlike post-hoc PCA — gets one final test in the scouting harness. Otherwise closed.

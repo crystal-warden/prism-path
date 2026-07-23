@@ -160,7 +160,7 @@ safety monitor; **@field_only** is the prompt-injection boundary.
 
 **Stage S1 — the severity playbook (30 min).** `prismpath init --template incident_severity`. Read
 it: hard severity policy as `when` edges (`data_at_risk`, `error_rate`), judgment as semantic
-edges. Run the fixture table. Then read the [SOC triage case study](PrismPath/PRISMPATH_USECASE_blue_team_soc_triage.md)
+edges. Run the fixture table. Then read the [SOC triage case study](prismpath/PRISMPATH_USECASE_blue_team_soc_triage.md)
 — a real Wazuh deployment, including the measured verdict-reuse result (58% hit rate, **zero
 unsafe downgrades**: the cache never reused a benign verdict where the fresh decision would have
 been more severe).

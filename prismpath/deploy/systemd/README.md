@@ -1,0 +1,37 @@
+# Flow-Ledger anchoring timers (out-of-band, #53)
+
+Two `oneshot` services + timers that run the Flow-Ledger attestation on a schedule,
+**outside** the pure PrismPath engine (SPEC §3.2 — the engine never does network I/O):
+
+| Unit | Cadence | Action |
+|------|---------|--------|
+| `cw-ledger-anchor` | hourly | `ledger anchor` — Merkle-root the new `Mdflow-Output-Hash` set + `ots stamp` the root (pending calendar proof) |
+| `cw-ledger-upgrade` | daily | `ledger upgrade` — promote pending proofs to full Bitcoin attestation once confirmed (~1–6 h lag, SPEC C2) |
+
+Both call `cw-ledger-run.sh`, which sources the project env (numpy/requests/`ots` on PATH)
+and invokes `python3 -m prismpath.cli ledger …`, so the units stay interpreter-agnostic.
+
+## STAGED — NOT ENABLED
+These are templates. They are **not installed or enabled** on this node: there is no live
+ledger producing `Output-Hash` data yet, and enabling a network-touching timer before there is
+work to do would be noise. Deploy them when a ledger repo goes live.
+
+## Deploy (when a ledger exists)
+1. Edit `--repo` / `--out` / `--label` in `cw-ledger-anchor.service` and `cw-ledger-upgrade.service`
+   to point at your ledger git repo and proof-store dir.
+2. Install as **user** units (no root needed; matches the out-of-band, least-privilege posture):
+   ```
+   mkdir -p ~/.config/systemd/user
+   cp cw-ledger-*.{service,timer} ~/.config/systemd/user/
+   chmod +x cw-ledger-run.sh
+   systemctl --user daemon-reload
+   systemctl --user enable --now cw-ledger-anchor.timer cw-ledger-upgrade.timer
+   loginctl enable-linger "$USER"   # so timers run without an active login session
+   ```
+3. Verify: `systemctl --user list-timers 'cw-ledger-*'`
+
+## Air-gapped sites
+Do **not** enable these (no egress). Use the air-gap tier instead (`ledger_airgap.py`):
+`export-request` in-enclave → carry the tiny hash-only bundle out → `relay-stamp` on a connected
+relay → carry `.ots` proofs back → `import-proofs`; or the fully-offline RFC-3161 tier
+(`ledger rfc3161`) against an internal TSA appliance. See SPEC §4.

@@ -72,7 +72,7 @@ better than negated routing conditions.
 
 **(b) Risk-controlled τ gives a certificate, not a folk constant.**
 On 5,076 held-out benign, the raw rule FPs at **2.09%**; the margin at **τ=0** yields **0 observed FP,
-Wilson lower bound ⇒ certified FP ≤ 0.05% @ 95%**, at **zero cross-family TP cost**. τ is *derived*
+Wilson lower bound ⇒ certified FP ≤ 0.053% @ 95%**, at **zero cross-family TP cost**. τ is *derived*
 (the paper's `calibrate`), not hand-set — the same LTT/RCPS single-threshold instance, with FP-rate as
 the controlled risk (flagging is the complement of routing-abstention).
 

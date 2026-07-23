@@ -162,6 +162,29 @@ def main(argv=None) -> int:
                                   "its routing tests")
     init_parser.set_defaults(func=init_cmd)
 
+    ledger_parser = subparsers.add_parser(
+        'ledger', help='Flow-Ledger attestation: OTS anchor/upgrade/verify + air-gap tier (#36/#53)')
+    ledger_parser.add_argument('action', choices=[
+        'anchor', 'upgrade', 'verify', 'export-request', 'relay-stamp', 'import-proofs', 'rfc3161'],
+        help='ledger attestation action')
+    ledger_parser.add_argument('--repo', help='ledger git repo (anchor: enumerate Output-Hash trailers)')
+    ledger_parser.add_argument('--out', help='output dir (anchor/upgrade/verify) or bundle path (air-gap)')
+    ledger_parser.add_argument('--label', default='v1', help='anchor label (default v1)')
+    ledger_parser.add_argument('--leaf', help='leaf hash hex (verify)')
+    ledger_parser.add_argument('--root', help='root file (rfc3161 / export-request)')
+    ledger_parser.add_argument('--request', help='stamp-request bundle (relay-stamp)')
+    ledger_parser.add_argument('--proofs', help='proof bundle (import-proofs)')
+    ledger_parser.add_argument('--dir', help='roots dir (import-proofs)')
+    ledger_parser.add_argument('--cafile', help='TSA CA cert (rfc3161 verify)')
+    ledger_parser.add_argument('--tsr', help='RFC-3161 response file to verify')
+    ledger_parser.add_argument('--policy-hash', dest='policy_hash', default=None,
+                               help='C1: bind the flow-definition hash to the anchored record')
+    ledger_parser.add_argument('--gate-id', dest='gate_id', default=None,
+                               help='C1: bind the gate identity that produced the record')
+    ledger_parser.add_argument('--ots', action='store_true',
+                               help='verify: include the full OTS/Bitcoin proof chain')
+    ledger_parser.set_defaults(func=ledger_cmd)
+
     args = parser.parse_args(argv)
     if not args.command:
         parser.print_help()
@@ -736,6 +759,63 @@ def lint_flow(args) -> int:
     findings.sort(key=lambda f: (f.severity != "error", f.code, f.node or ""))
     return _report(findings, args.json)
 
+
+def ledger_cmd(args):
+    """Flow-Ledger attestation CLI (#36 connected OTS + #53 air-gap tier)."""
+    import json as _json
+    from . import ledger_ots as L
+    from . import ledger_airgap as A
+    a = args.action
+    if a == 'anchor':
+        hashes = L.from_ledger(args.repo) if args.repo else []
+        if not hashes:
+            print('no Output-Hash values found in ledger (need --repo with Mdflow-Output-Hash trailers)')
+            return 1
+        res = L.anchor(hashes, args.out or '.', args.label)
+        print(_json.dumps(res, indent=1))
+        return 0 if res.get('stamped') else 1
+    if a == 'upgrade':
+        print(_json.dumps(L.upgrade(args.out or '.', args.label), indent=1))
+        return 0
+    if a == 'verify':
+        if not args.leaf:
+            print('--leaf <hex> required for verify')
+            return 2
+        res = L.verify_unit(args.leaf, args.out or '.', args.label)
+        print(_json.dumps(res, indent=1))
+        return 0 if res.get('merkle_ok') else 1
+    if a == 'export-request':
+        if not (args.root and args.out):
+            print('--root and --out required for export-request')
+            return 2
+        res = A.export_stamp_request([(args.root, args.label)], args.out,
+                                     policy_hash=args.policy_hash, gate_id=args.gate_id)
+        print(_json.dumps(res, indent=1))
+        return 0
+    if a == 'relay-stamp':
+        if not (args.request and args.out):
+            print('--request and --out required for relay-stamp')
+            return 2
+        print(_json.dumps(A.relay_stamp(args.request, args.out), indent=1))
+        return 0
+    if a == 'import-proofs':
+        if not args.proofs:
+            print('--proofs required for import-proofs')
+            return 2
+        print(_json.dumps(A.import_proofs(args.proofs, args.dir or '.'), indent=1))
+        return 0
+    if a == 'rfc3161':
+        if not args.root:
+            print('--root required for rfc3161')
+            return 2
+        if args.tsr and args.cafile:
+            res = A.rfc3161_verify(args.root, args.tsr, args.cafile)
+            print(_json.dumps(res, indent=1))
+            return 0 if res.get('verified') else 1
+        print(_json.dumps(A.rfc3161_query(args.root), indent=1))
+        return 0
+    print('unknown ledger action: ' + str(a))
+    return 2
 
 if __name__ == '__main__':
     raise SystemExit(main())

@@ -1,0 +1,12 @@
+[Unit]
+Description=PrismPath Flow-Ledger — stamp new Output-Hash roots (OpenTimestamps calendars)
+Documentation=file:///home/cwadmin/cwprojects/prismpath/prismpath/SPEC_ledger_opentimestamps.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# EDIT --repo (your ledger git repo) and --out (proof store dir) before enabling.
+ExecStart=%h/cwprojects/prismpath/prismpath/deploy/systemd/cw-ledger-run.sh anchor --repo %h/cwprojects/ledger --out %h/cw-ledger/proofs --label auto
+Nice=10
+IOSchedulingClass=idle

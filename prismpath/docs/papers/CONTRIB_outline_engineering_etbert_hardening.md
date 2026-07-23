@@ -46,7 +46,7 @@ maps to a whitepaper theme already present — durable services, honest health c
   `margin` for observability (the "a decision explains itself because it is scored data" principle,
   applied to detections).
 - Reversible by construction (a refinement of the existing gate — can only remove flags), and the
-  operating τ is **calibrated with a certificate** (FP ≤ 0.05% @ 95% Wilson) rather than hand-set — the
+  operating τ is **calibrated with a certificate** (FP ≤ 0.053% @ 95% Wilson) rather than hand-set — the
   ops-layer instance of the paper's risk-controlled τ.
 
 ## 5. Defense-in-depth as a deliberate FP budget
