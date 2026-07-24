@@ -57,13 +57,11 @@ The Chat Mentor integrates the PrismPath dual-sided safety filter paradigm:
 - **Deterministic Safety Guarantees**: Journeyman must guarantee safety filters run at tier P0 (independent of model intelligence) because weak local models are highly prone to jailbreaks. PrismPath's hybrid routing model (deterministic predicates checked before semantic fallbacks) guarantees that safety filters cannot be bypassed by model hallucinations.
 - **Static Auditability and Compliance**: The strict regulatory obligations of Journeyman (such as the EU AI Act, California SB 942, and Texas HB 149) require traceable logs. PrismPath's ledger-backed Flow-Ledger commits and native OSCAL/CycloneDX attestation outputs provide automated compliance logging.
 
----
+## 4. Resolved Gaps & Implementations
 
-## 4. Gaps & Areas Where PrismPath Falls Short
-
-- **Lack of Native Rust/Tauri Runtime**: Journeyman is built as a compiled Rust application via Tauri for native execution. PrismPath's core is Python-based, and its portable compiler only outputs JavaScript. To interpret the capability manifest and guided path on the native Rust side, Journeyman must duplicate resolver logic in Rust or delegate it to the frontend JS webview. A native `prismpath-rs` interpreter would bridge this gap.
-- **No Native Device Telemetry Hooks**: PrismPath requires input payloads to be fed into its hexagonal Ingestion ports. It lacks native hooks to query system resources (RAM, VRAM, GPU cores). To resolve the manifest, Journeyman has to write custom Python/Rust system-probing telemetry code to populate the resolver inputs.
-- **State Modelling for Fast Interactive Loops**: PrismPath is designed for step-by-step agent transitions (nodes with clear inputs/outputs). It is ill-suited to model high-frequency interactive events, such as tracking character changes in the IDE editor, caret line-and-column positions, or mouse resizing drag events, which require custom React event hooks.
+- **Native Rust/Tauri Runtime (`prismpath-rs`)**: _Resolved in Sprint 1_. Scaffolds `prismpath-rs` inside the `prismpath` repository. A lightweight, dependency-free Rust crate that parses compiled P0 JSON workflow graphs and evaluates transitions. This allows Tauri's native backend to check safety bounds, parse configurations, and anchor ledger states directly in Rust without executing a JS webview sandbox.
+- **System Hardware Telemetry (`SystemTelemetry` Connector)**: _Resolved in Sprint 1_. Implements the `SystemTelemetry` Ingestion Connector in `prismpath/connector.py`. It dynamically probes local CPU cores, system RAM (reading `/proc/meminfo` or `psutil`), and GPU VRAM (via `nvidia-smi` subprocess lookups) during startup and outputs a clean JSON payload for the capability manifest resolver.
+- **High-Frequency Ephemeral States**: _Resolved in Sprint 2_. Designed and implemented a decoupled frontend architecture inside the Journeyman Vite project. Ephemeral micro-states (resizer handles, editor caret indices, input typing buffers) are managed within a lightweight Zustand store, isolating them from parent react rendering cycles to maintain a smooth 120Hz UI. Throttled/debounced bridges connect these ephemeral UI inputs to PrismPath milestone events (like saving or compile checks).
 
 ---
 
