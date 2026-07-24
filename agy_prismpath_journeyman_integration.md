@@ -26,28 +26,24 @@ This paper reviews **PrismPath** and **Journeyman**, analyzing their architectur
 
 ---
 
-## 2. How Journeyman Utilizes PrismPath
+## 2. How Journeyman Relates to PrismPath — blueprint, not yet a runtime dependency
 
-Journeyman incorporates the core mental models and assets of PrismPath to govern its adaptive rendering, guided instruction, and deterministic compliance:
+**Honest current status:** Journeyman today runs **no PrismPath code**. `prismpath-rs` is not referenced by Journeyman's Tauri backend, and nothing in the frontend or the `capability_resolver` engine imports PrismPath. What Journeyman uses is PrismPath's **architecture and vocabulary as a blueprint** — the pieces below are standalone implementations built _in the shape of_ PrismPath, not integrations of it. (The one concrete live integration worth building is the tutor mentor as a PrismPath **adapter** — see §4.)
 
-### A. The Knowledge-Graph Capability Manifest
+### A. The capability manifest (PrismPath-shaped, standalone)
 
-Journeyman's engine (`tutor_engine.py` / `capability_resolver.py`) uses a declarative schema derived from PrismPath's hexagonal ports. The [capability_manifest.yaml](file:///home/cwadmin/cwprojects/journeyman/manifest/capability_manifest.yaml) defines hardware requirements as nodes and links them to capabilities (features) and obligations (always-on compliance conditions) via typed edges:
+Journeyman's `capability_resolver.py` reads [capability_manifest.yaml](file:///home/cwadmin/cwprojects/journeyman/manifest/capability_manifest.yaml), a knowledge-graph document modelled on PrismPath's hexagonal thinking — capabilities and always-on compliance obligations as typed nodes/edges, tagged with PrismPath tier labels (P0/P1/P2). It is _inspired by_, but does not execute through, the PrismPath engine.
 
-- **Capabilities**: Unlocked adaptively by probing the system's VRAM, RAM, and CPU core counts (e.g., `book_reader`, `terminal`, `ide_syntax` are active on the 8 GB floor, while `fim_autocomplete` and `agentic_mentor` are locked).
-- **Obligations**: Remain active globally independent of hardware specifications, enforcing AI-disclosure chips, GDPR/CCPA data purges, WCAG 2.2 AA accessibility structures, and safety filters.
+- **Capabilities**: unlocked by probing VRAM/RAM/CPU (`book_reader`, `terminal`, `ide_syntax` active on the 8 GB floor; `fim_autocomplete`, `agentic_mentor` locked).
+- **Obligations**: hardware-independent — AI-disclosure, GDPR/CCPA purge, WCAG 2.2 AA, safety filters.
 
-### B. The Guided Path Curriculum
+### B. The Guided Path (P0-_style_, hand-coded)
 
-The **Guided Path** curriculum operates as a linear, deterministic state walk modeled on the PrismPath P0 execution spec. The step-by-step progress checklist (e.g., compile code, check diagnostic, run test) corresponds to transition predicates evaluated locally in the webview, checking off goals based on terminal standard out events (such as tracking when a user types `cargo run` or successfully builds a file).
+The Guided Path is a linear deterministic checklist advanced by terminal-stdout events — the _pattern_ of a PrismPath P0 flow (deterministic transitions, no LLM), implemented directly in the React webview rather than run through a PrismPath flow or lockfile.
 
-### C. Grounded RAG & Safety Prefilters (Hexagonal Ports)
+### C. The dual-sided safety filter (P0-_discipline_, hand-coded)
 
-The Chat Mentor integrates the PrismPath dual-sided safety filter paradigm:
-
-1.  **Ingestion & Retrieval Ports**: The user's query is analyzed via keyword-scoring against chapter content. If the RAG toggle is active, relevant snippets are retrieved and injected as context in the system prompt.
-2.  **Deterministic Prefilter (P0 Guardrail)**: User input is audited against `PROHIBITED_WORDS` before contacting the LLM. If blocked, a static safety refusal is returned without querying the sidecar.
-3.  **Adjudication & Sink Ports**: The LLM sidecar generates the response, which is scanned for blocklisted words prior to rendering.
+The Chat Mentor applies a deterministic blocklist to **both** user input (before the LLM call) and model output (before render), following PrismPath's principle that safety gating must be deterministic and independent of model judgement. It is hand-coded in `useMentor.ts` — it does **not** route through PrismPath's ingestion/adjudicator/sink ports.
 
 ---
 
@@ -57,11 +53,15 @@ The Chat Mentor integrates the PrismPath dual-sided safety filter paradigm:
 - **Deterministic Safety Guarantees**: Journeyman must guarantee safety filters run at tier P0 (independent of model intelligence) because weak local models are highly prone to jailbreaks. PrismPath's hybrid routing model (deterministic predicates checked before semantic fallbacks) guarantees that safety filters cannot be bypassed by model hallucinations.
 - **Static Auditability and Compliance**: The strict regulatory obligations of Journeyman (such as the EU AI Act, California SB 942, and Texas HB 149) require traceable logs. PrismPath's ledger-backed Flow-Ledger commits and native OSCAL/CycloneDX attestation outputs provide automated compliance logging.
 
-## 4. Resolved Gaps & Implementations
+## 4. Prototyped Support — built, but not yet integrated
 
-- **Native Rust/Tauri Runtime (`prismpath-rs`)**: _Resolved in Sprint 1_. Scaffolds `prismpath-rs` inside the `prismpath` repository. A lightweight, dependency-free Rust crate that parses compiled P0 JSON workflow graphs and evaluates transitions. This allows Tauri's native backend to check safety bounds, parse configurations, and anchor ledger states directly in Rust without executing a JS webview sandbox.
-- **System Hardware Telemetry (`SystemTelemetry` Connector)**: _Resolved in Sprint 1_. Implements the `SystemTelemetry` Ingestion Connector in `prismpath/connector.py`. It dynamically probes local CPU cores, system RAM (reading `/proc/meminfo` or `psutil`), and GPU VRAM (via `nvidia-smi` subprocess lookups) during startup and outputs a clean JSON payload for the capability manifest resolver.
-- **High-Frequency Ephemeral States**: _Resolved in Sprint 2_. Designed and implemented a decoupled frontend architecture inside the Journeyman Vite project. Ephemeral micro-states (resizer handles, editor caret indices, input typing buffers) are managed within a lightweight Zustand store, isolating them from parent react rendering cycles to maintain a smooth 120Hz UI. Throttled/debounced bridges connect these ephemeral UI inputs to PrismPath milestone events (like saving or compile checks).
+These were scaffolded during the sprint. They are **prototypes for a possible future integration, not live capabilities** — none is wired into Journeyman today. Each should be treated as speculative until a concrete need (a real tutor adapter) exists.
+
+- **`prismpath-rs` (native P0 interpreter)**: a competent, dependency-light Rust crate that evaluates P0 flow graphs. _Caveats_: it is a **second** implementation of PrismPath's evaluator (a drift risk against the Python source of truth), its flow schema is **not verified** against PrismPath's actual compiled-flow format, and it is **not referenced by Journeyman's Tauri backend**. Park until a concrete need exists.
+- **`SystemTelemetry` connector**: probes CPU/RAM/VRAM. _Caveat_: this **duplicates** the hardware probing `capability_resolver.py` already performs; it targets PrismPath's ingestion port, which Journeyman does not currently use.
+- **Zustand high-frequency store (Journeyman)**: isolates resizer/caret/keystroke state from React re-renders — a genuine, working frontend performance optimization. It is **unrelated to PrismPath** and is listed here only because it shipped in the same sprint.
+
+**The integration actually worth building next:** the tutor mentor as a PrismPath **adapter** (`adapters/tutor/`) — a pedagogy-routed, escalation-default adjudicator with attestation and human deferral, conforming to `adapters/ADAPTER_GUIDE.md`. That is the path that makes Journeyman a real PrismPath _consumer_, rather than reimplementing the engine.
 
 ---
 
