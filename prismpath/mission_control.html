@@ -60,6 +60,8 @@ th{color:var(--ink)} .meta{font:11px var(--mono);color:var(--dim)}
 .dropzone{margin-top:10px;border:1px dashed var(--line);border-radius:8px;padding:14px 10px;text-align:center;font:12px var(--mono);color:var(--dim);transition:all .15s}
 .dropzone.drag{border-color:var(--accent);background:#16202e;color:var(--ink)}
 .lk{color:var(--accent);cursor:pointer;text-decoration:underline}
+.active-pulse{animation:activePulse 2s infinite alternate}
+@keyframes activePulse{0%{transform:scale(1);box-shadow:0 0 10px rgba(124,199,255,0.4)}100%{transform:scale(1.03);box-shadow:0 0 20px rgba(124,199,255,0.7)}}
 </style></head><body>
 <header>
  <div class=row>
@@ -72,7 +74,7 @@ th{color:var(--ink)} .meta{font:11px var(--mono);color:var(--dim)}
  </div>
  <div class=tabs id=tabs>
   <span class="tab on" data-v=control>Control</span><span class=tab data-v=lens>Lens</span><span class=tab data-v=queue>Queue</span>
-  <span class=tab data-v=files>Files</span><span class=tab data-v=chat>Chat</span><span class=tab data-v=audit>Audit</span><span class=tab data-v=agy>agy</span>
+  <span class=tab data-v=graph>Graph</span><span class=tab data-v=files>Files</span><span class=tab data-v=chat>Chat</span><span class=tab data-v=audit>Audit</span><span class=tab data-v=agy>agy</span>
  </div>
 </header>
 <main>
@@ -183,6 +185,33 @@ th{color:var(--ink)} .meta{font:11px var(--mono);color:var(--dim)}
    <div id=queue-list style="margin-top:10px"><div class=muted>loading…</div></div>
   </div>
  </div>
+ <div class=view id=v-graph>
+  <div class=grid style="grid-template-columns:1fr 320px;gap:12px">
+   <div class=card style="position:relative;padding:0;min-height:550px">
+    <div class=row style="padding:10px 14px;border-bottom:1px solid var(--line);background:var(--panel2);border-radius:11px 11px 0 0">
+     <span class=muted id=g-title>flow graph</span>
+     <span style=flex:1></span>
+     <button onclick="loadGraph(true)">↻ Refresh</button>
+    </div>
+    <div id=graph-container style="position:relative;width:100%;height:500px;overflow:auto;background:#070b12">
+     <svg id=graph-svg style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none"></svg>
+     <div id=graph-nodes style="position:absolute;top:0;left:0;width:100%;height:100%"></div>
+    </div>
+   </div>
+   <div class=card id=graph-sidebar style="max-height:550px;overflow:auto">
+    <div class=muted style="border-bottom:1px solid var(--line);padding-bottom:6px;margin-bottom:10px;font-weight:600">Step Details</div>
+    <div id=g-detail-empty class=muted>Click on a node in the graph to view details, variables, and instructions.</div>
+    <div id=g-detail-content style="display:none">
+     <h3 id=g-node-name style="margin:0 0 8px;font-size:15px;color:var(--accent)">-</h3>
+     <div class=row style="gap:6px;margin-bottom:10px" id=g-node-badges></div>
+     <label>instruction</label>
+     <pre id=g-node-instruction style="white-space:pre-wrap;max-height:220px;overflow:auto;margin-bottom:12px"></pre>
+     <label>annotations</label>
+     <pre id=g-node-annos style="font-size:11px;max-height:150px;overflow:auto"></pre>
+    </div>
+   </div>
+  </div>
+ </div>
 </main>
 <script>
 const RC={architect:'#8b9cff',coder:'#5fd08a','test-author':'#e0b25f',fixer:'#ff8da0',critic:'#5fc8e0',retriever:'#9bd9a0',dice:'#f5c451',build:'#b48bff',fix:'#ff9e7a','?':'#5a6b86'};
@@ -192,7 +221,7 @@ let TAB='control', openK=new Set(), filesSig='', filesLoaded=false, curFile=null
 document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{TAB=t.dataset.v;
  document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('on',x===t));
  document.querySelectorAll('.view').forEach(v=>v.classList.toggle('on',v.id==='v-'+TAB));
- if(TAB==='files')loadFiles(true); if(TAB==='audit')loadAudit(); if(TAB==='agy')tickAgy(); if(TAB==='queue')loadQueue(); if(TAB==='lens'){tickLens();tickFlow();tickBalance();}});
+ if(TAB==='files')loadFiles(true); if(TAB==='audit')loadAudit(); if(TAB==='agy')tickAgy(); if(TAB==='queue')loadQueue(); if(TAB==='graph')loadGraph(true); if(TAB==='lens'){tickLens();tickFlow();tickBalance();}});
 function chip(id,txt,cls){const e=$('#'+id);e.textContent=txt;e.className='chip'+(cls?' '+cls:'');}
 async function jget(u){return (await fetch(u)).json();}
 async function jpost(u,b){return (await fetch(u,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b||{})})).json();}
@@ -415,9 +444,79 @@ async function decideQueue(id,choose){
  const r=await jpost('/api/queue/decide',{id:id,choose:choose});
  if(r&&r.ok){loadQueue();}else{alert('decide failed: '+((r&&r.error)||'unknown'));}
 }
+async function loadGraph(force){if(TAB!=='graph'&&!force)return;
+ let d;try{d=await jget('/api/flow/graph');}catch(e){return;}
+ if(d.error){$('#graph-nodes').innerHTML='<div class=muted style="padding:20px">'+esc(d.error)+'</div>';return;}
+ drawGraph(d);}
+function layoutGraph(graph){const nodes=graph.nodes,start=graph.start;if(!nodes||!start)return null;
+ const levels={},queue=[[start,0]],visited=new Set([start]);
+ while(queue.length>0){const[curr,d]=queue.shift();if(!levels[d])levels[d]=[];levels[d].push(curr);
+  const node=nodes[curr];if(node&&node.edges){for(const edge of node.edges){if(!visited.has(edge.target)&&nodes[edge.target]){
+   visited.add(edge.target);queue.push([edge.target,d+1]);}}}}
+ const maxD=Math.max(-1,...Object.keys(levels).map(Number))+1;
+ for(const name in nodes){if(!visited.has(name)){if(!levels[maxD])levels[maxD]=[];levels[maxD].push(name);}}
+ return levels;}
+function drawGraph(d){const container=$('#graph-container'),nodesDiv=$('#graph-nodes'),svg=$('#graph-svg');
+ nodesDiv.innerHTML='';svg.innerHTML='';$('#g-title').textContent=`flow graph · ${d.name} (start: ${d.start})`;
+ const levels=layoutGraph(d);if(!levels)return;
+ const nodes=d.nodes,activeNode=d.active_node,transcript=d.transcript||[];
+ const traversed=new Set();
+ for(let i=0;i<transcript.length-1;i++){
+  const src=transcript[i].node||transcript[i],tgt=transcript[i+1].node||transcript[i+1];
+  traversed.add(`${src}->${tgt}`);}
+ const positions={},colWidth=230,rowHeight=90,margin=40;
+ let maxCols=0,maxRows=0;
+ Object.entries(levels).forEach(([lvlStr,nodeNames])=>{const col=parseInt(lvlStr);
+  if(col+1>maxCols)maxCols=col+1;if(nodeNames.length>maxRows)maxRows=nodeNames.length;
+  nodeNames.forEach((name,row)=>{positions[name]={x:col*colWidth+margin,y:row*rowHeight+margin};});});
+ const totalW=maxCols*colWidth+margin,totalH=maxRows*rowHeight+margin;
+ svg.setAttribute('width',totalW);svg.setAttribute('height',totalH);
+ svg.style.width=totalW+'px';svg.style.height=totalH+'px';
+ nodesDiv.style.width=totalW+'px';nodesDiv.style.height=totalH+'px';
+ svg.innerHTML=`<defs>
+   <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+     <path d="M 0 1 L 10 5 L 0 9 z" fill="#5a6b86" />
+   </marker>
+   <marker id="arrow-traversed" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+     <path d="M 0 1 L 10 5 L 0 9 z" fill="var(--ok)" />
+   </marker>
+ </defs>`;
+ Object.values(nodes).forEach(n=>{const srcPos=positions[n.name];if(!srcPos||!n.edges)return;
+  n.edges.forEach(edge=>{const tgtPos=positions[edge.target];if(!tgtPos)return;
+   const isTraversed=traversed.has(`${n.name}->${edge.target}`);
+   let color='#5a6b86';
+   if(isTraversed)color='var(--ok)';
+   else{if(edge.tier==='error')color='var(--bad)';
+    else if(edge.tier==='event')color='#c5a3ff';
+    else if(edge.tier==='deterministic')color='var(--accent)';
+    else if(edge.tier==='semantic')color='var(--warn)';}
+   const x1=srcPos.x+130,y1=srcPos.y+25,x2=tgtPos.x,y2=tgtPos.y+25;
+   const pathD=`M ${x1} ${y1} C ${x1+45} ${y1}, ${x2-45} ${y2}, ${x2} ${y2}`;
+   const strokeW=isTraversed?3.5:2;
+   const marker=isTraversed?'url(#arrow-traversed)':'url(#arrow)';
+   svg.innerHTML+=`<path d="${pathD}" fill="none" stroke="${color}" stroke-width="${strokeW}" marker-end="${marker}" />`;});});
+ Object.values(nodes).forEach(n=>{const pos=positions[n.name];if(!pos)return;
+  const isActive=n.name===activeNode,isVisited=transcript.some(t=>(t.node||t)===n.name);
+  let border='1px solid var(--line)',glow='',cls='';
+  if(isActive){border='2.5px solid var(--accent)';glow='box-shadow:0 0 15px rgba(124,199,255,0.4)';cls='active-pulse';}
+  else if(isVisited){border='1.5px solid var(--ok)';}
+  const nodeEl=document.createElement('div');
+  nodeEl.className=`card ${cls}`;
+  nodeEl.style.cssText=`position:absolute;left:${pos.x}px;top:${pos.y}px;width:130px;height:50px;padding:0;display:flex;align-items:center;justify-content:center;border:${border};background:var(--panel);cursor:pointer;user-select:none;font:11px var(--mono);font-weight:bold;color:${isActive?'var(--accent)':'var(--ink)'};text-align:center;word-break:break-all;overflow:hidden;z-index:2;${glow}`;
+  nodeEl.textContent=n.name;
+  nodeEl.onclick=()=>showNodeDetails(n);
+  nodesDiv.appendChild(nodeEl);});}
+function showNodeDetails(node){
+ $('#g-detail-empty').style.display='none';$('#g-detail-content').style.display='block';
+ $('#g-node-name').textContent=node.name;$('#g-node-instruction').textContent=node.instruction||'(no instruction)';
+ const badges=$('#g-node-badges');badges.innerHTML='';
+ if(node.terminal)badges.innerHTML+='<span class="chip bad">terminal</span>';
+ const annos=node.annotations||{};
+ $('#g-node-annos').textContent=Object.keys(annos).length?JSON.stringify(annos,null,2):'(no annotations)';}
 tickStatus();setInterval(tickStatus,2000);setInterval(tickLens,2000);setInterval(tickFlow,2500);
 setInterval(tickFiles,2000);setInterval(tickBalance,2500);
 setInterval(()=>{if(TAB==='audit')loadAudit();},4000);
 setInterval(()=>{if(TAB==='agy')tickAgy();},2000);
 setInterval(()=>{if(TAB==='queue')loadQueue();},3000);
+setInterval(()=>{if(TAB==='graph')loadGraph(false);},3000);
 </script></body></html>

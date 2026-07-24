@@ -676,7 +676,78 @@ class H(BaseHTTPRequestHandler):
                 self._send(flow_state(state))
             elif path == "/api/balance":
                 self._send(balance_state(state))
+            elif path == "/api/flow/graph":
+                flow_path = q.get("path")
+                if not flow_path:
+                    sp = os.path.join(state["proj"], "status.json")
+                    if os.path.isfile(sp):
+                        try:
+                            with open(sp, encoding="utf-8") as f:
+                                st = json.load(f)
+                            flow_path = st.get("flow_path") or st.get("flow")
+                        except Exception:
+                            pass
+                    if not flow_path:
+                        import glob
+                        candidates = glob.glob(os.path.join(state["proj"], "flows", "*.md")) + \
+                                     glob.glob(os.path.join(state["proj"], "*.md"))
+                        if candidates:
+                            flow_path = candidates[0]
+                        else:
+                            flow_path = os.path.join(HERE, "flows", "coding.md")
+                
+                resolved_path = os.path.abspath(flow_path)
+                if not (_under(resolved_path, state["proj"]) or _under(resolved_path, HERE)):
+                    self._send({"error": "flow path escapes project sandbox"})
+                    return
+                
+                from prismpath.parser import parse_file
+                from prismpath import predicates
+                
+                graph = parse_file(resolved_path)
+                nodes_data = {}
+                for name, n in graph.nodes.items():
+                    edges_data = []
+                    for target, cond in n.edges:
+                        if predicates.is_error(cond):
+                            tier = "error"
+                        elif predicates.is_event(cond):
+                            tier = "event"
+                        elif predicates.is_deterministic(cond):
+                            tier = "deterministic"
+                        else:
+                            tier = "semantic"
+                        edges_data.append({
+                            "target": target,
+                            "condition": cond,
+                            "tier": tier
+                        })
+                    nodes_data[name] = {
+                        "name": name,
+                        "instruction": n.instruction,
+                        "terminal": n.terminal,
+                        "annotations": n.annotations,
+                        "edges": edges_data
+                    }
+                
+                ckpt_path = os.path.join(state["proj"], "checkpoint.json")
+                active_state = {}
+                if os.path.isfile(ckpt_path):
+                    try:
+                        with open(ckpt_path, encoding="utf-8") as f:
+                            active_state = json.load(f)
+                    except Exception:
+                        pass
+                self._send({
+                    "name": graph.name,
+                    "start": graph.start,
+                    "nodes": nodes_data,
+                    "active_node": active_state.get("node"),
+                    "transcript": active_state.get("transcript", []),
+                    "state_variables": active_state.get("state", {})
+                })
             elif path == "/api/files":
+
                 self._send({"proj": os.path.basename(state["proj"]), "dir": state["proj"],
                             "files": file_tree(state["proj"])})
             elif path == "/api/file":
