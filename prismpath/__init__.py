@@ -1,1 +1,1 @@
-from prismpath.connector import BaseConnector, node
+from prismpath.connector import BaseConnector, node, PayloadFlattener

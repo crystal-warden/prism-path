@@ -9,7 +9,7 @@ import hashlib
 import json
 import inspect
 from abc import ABC
-from typing import Any, Dict, List, Callable, Optional
+from typing import Any, Dict, List, Callable, Optional, Union, Tuple
 
 # Decorator to register node handlers
 def node(name: str):
@@ -139,3 +139,120 @@ class BaseConnector(ABC):
             ingestion_hashes=ingestion_hashes,
             knowledge_base_hash=kb_hash
         )
+
+
+class PayloadFlattener:
+    """
+    Utility class to flatten nested dictionary payloads and apply custom mapping rules.
+    Helps connectors format nested API responses into flat key-value pairs for the LLM.
+    """
+    def __init__(self, delimiter: str = "."):
+        self.delimiter = delimiter
+
+    def flatten(self, data: Any, prefix: str = "") -> Dict[str, Any]:
+        """
+        Recursively flattens a nested dict/list structure into a flat dict.
+        Lists are represented as index-based keys (e.g., 'roles.0') and also
+        joined as comma-separated strings at their parent prefix.
+        """
+        flat = {}
+        if isinstance(data, dict):
+            for k, v in data.items():
+                new_key = f"{prefix}{k}" if not prefix else f"{prefix}{self.delimiter}{k}"
+                flat.update(self.flatten(v, new_key))
+        elif isinstance(data, list):
+            if prefix:
+                flat[prefix] = ", ".join(str(item) for item in data if not isinstance(item, (dict, list)))
+            for idx, item in enumerate(data):
+                new_key = f"{prefix}{self.delimiter}{idx}" if prefix else str(idx)
+                flat.update(self.flatten(item, new_key))
+        else:
+            if prefix:
+                flat[prefix] = data
+        return flat
+
+    def map_fields(self, data: Any, rules: Dict[str, Union[str, Tuple[str, Callable]]]) -> Dict[str, Any]:
+        """
+        Maps fields from a nested structure using rules.
+        Rules definition:
+        {target_key: source_path}
+        or
+        {target_key: (source_path, transform_fn)}
+        """
+        mapped = {}
+        # Pre-flatten only if fallback is needed, but we can do it lazily
+        flat_data = None
+        for target, rule in rules.items():
+            if isinstance(rule, tuple):
+                source_path, transform = rule
+            else:
+                source_path, transform = rule, None
+            
+            # Resolve from raw nested structure first to preserve original types for transformers
+            val = self._resolve_path(data, source_path)
+            if val is None:
+                if flat_data is None:
+                    flat_data = self.flatten(data)
+                val = flat_data.get(source_path)
+                
+            if val is not None and transform is not None:
+                try:
+                    val = transform(val)
+                except Exception:
+                    pass
+            mapped[target] = val
+        return mapped
+
+
+    def _resolve_path(self, data: Any, path: str) -> Any:
+        """Resolves a nested path manually in the original raw data structure."""
+        parts = path.split(self.delimiter)
+        current = data
+        for part in parts:
+            if isinstance(current, dict):
+                current = current.get(part)
+            elif isinstance(current, list):
+                try:
+                    current = current[int(part)]
+                except (ValueError, IndexError):
+                    return None
+            else:
+                return None
+        return current
+
+    @staticmethod
+    def to_delimited_string(key: str, delimiter: str = ", ") -> Callable[[List[Dict[str, Any]]], str]:
+        """Extracts a specific key from a list of dicts and joins them into a string."""
+        def transformer(items: List[Dict[str, Any]]) -> str:
+            if not isinstance(items, list):
+                return str(items)
+            extracted = []
+            for item in items:
+                if isinstance(item, dict):
+                    val = item.get(key)
+                    if val is not None:
+                        extracted.append(str(val))
+                else:
+                    extracted.append(str(item))
+            return delimiter.join(extracted)
+        return transformer
+
+    @staticmethod
+    def format_datetime(output_format: str = "%Y-%m-%d") -> Callable[[str], str]:
+        """Parses a datetime string and formats it to output_format."""
+        from datetime import datetime
+        def transformer(val: str) -> str:
+            formats = [
+                "%Y-%m-%dT%H:%M:%S.%fZ",
+                "%Y-%m-%dT%H:%M:%SZ",
+                "%Y-%m-%d %H:%M:%S",
+                "%Y-%m-%d"
+            ]
+            for fmt in formats:
+                try:
+                    dt = datetime.strptime(val, fmt)
+                    return dt.strftime(output_format)
+                except ValueError:
+                    continue
+            return val
+        return transformer

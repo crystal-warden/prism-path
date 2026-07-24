@@ -84,3 +84,54 @@ def test_connector_ports():
     assert manifest["gate_id"] == "mock_gate"
     assert manifest["ingestion_hashes"] == [h1]
     assert manifest["knowledge_base_hash"] == h2
+
+def test_payload_flattener():
+    from prismpath import PayloadFlattener
+
+    nested_data = {
+        "event": "alert",
+        "timestamp": "2026-07-23T19:33:22Z",
+        "data": {
+            "source_ip": "10.0.0.5",
+            "threats": [
+                {"name": "malware_a", "severity": "high"},
+                {"name": "adware_b", "severity": "low"}
+            ],
+            "tags": ["prod", "db"]
+        }
+    }
+
+    flattener = PayloadFlattener()
+    
+    # 1. Test Flattening
+    flat = flattener.flatten(nested_data)
+    assert flat["event"] == "alert"
+    assert flat["data.source_ip"] == "10.0.0.5"
+    assert flat["data.threats.0.name"] == "malware_a"
+    assert flat["data.threats.1.severity"] == "low"
+    assert flat["data.tags"] == "prod, db"
+    assert flat["data.tags.0"] == "prod"
+    assert flat["data.tags.1"] == "db"
+
+    # 2. Test Mapping Rules with Type Transformations
+    rules = {
+        "event_type": "event",
+        "src_ip": "data.source_ip",
+        "threat_names": ("data.threats", PayloadFlattener.to_delimited_string("name")),
+        "t_date": ("timestamp", PayloadFlattener.format_datetime("%Y/%m/%d")),
+        "tag_str": "data.tags"
+    }
+
+    mapped = flattener.map_fields(nested_data, rules)
+    assert mapped["event_type"] == "alert"
+    assert mapped["src_ip"] == "10.0.0.5"
+    assert mapped["threat_names"] == "malware_a, adware_b"
+    assert mapped["t_date"] == "2026/07/23"
+    assert mapped["tag_str"] == ["prod", "db"]
+
+
+    # 3. Test Manual Resolve Path fallback
+    assert flattener._resolve_path(nested_data, "data.threats.0.name") == "malware_a"
+    assert flattener._resolve_path(nested_data, "data.threats.99.name") is None
+    assert flattener._resolve_path(nested_data, "data.nonexistent") is None
+
