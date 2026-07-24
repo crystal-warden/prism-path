@@ -202,6 +202,26 @@ def _reachable(graph) -> set:
     return seen
 
 
+def _upstream_nodes(graph, node_name: str) -> set:
+    """Returns the set of all node names that have a path to node_name and are reachable from start."""
+    rev_adj = {}
+    for name, n in graph.nodes.items():
+        for tgt, _ in n.edges:
+            rev_adj.setdefault(tgt, set()).add(name)
+            
+    seen = set()
+    stack = [node_name]
+    while stack:
+        cur = stack.pop()
+        for parent in rev_adj.get(cur, []):
+            if parent not in seen:
+                seen.add(parent)
+                stack.append(parent)
+    reach = _reachable(graph)
+    return seen & reach
+
+
+
 def _sccs(graph) -> List[set]:
     """Tarjan's strongly-connected components over the node graph."""
     import sys
@@ -399,20 +419,31 @@ ERROR_CODES = {"undefined-start", "undefined-target", "unsafe-predicate", "no-te
 
 def _check_provenance(graph) -> List[Finding]:
     """Field provenance (opt-in, per `@emits`): every field a node's `when` edges READ must be a field
-    the node DECLARES its worker emits. A field read but not declared means the worker won't produce it,
-    so those deterministic edges silently fall through. Nodes without `@emits` are skipped."""
+    the node DECLARES its worker emits, OR declared by an upstream node. A field read but never declared
+    means the worker won't produce it and it is not in the state, so those edges fall through."""
     from prismpath import contract
     out: List[Finding] = []
     contracts = contract.derive_contract(graph)
     for name, node in graph.nodes.items():
-        declared = contract.declared_emits(node)
-        if declared is None:
+        node_declared = contract.declared_emits(node)
+        if node_declared is None:
             continue
-        for f in sorted(set(contracts.get(name, {})) - declared):
+        
+        # Collect upstream declared fields
+        upstream = _upstream_nodes(graph, name)
+        upstream_declared = set()
+        for u in upstream:
+            unode = graph.nodes[u]
+            udec = contract.declared_emits(unode)
+            if udec:
+                upstream_declared.update(udec)
+                
+        for f in sorted(set(contracts.get(name, {})) - node_declared - upstream_declared):
             out.append(Finding("warning", "undeclared-field", name,
-                               f"a `when` edge reads field {f!r}, but the node's `@emits` does not "
-                               f"declare it — the worker won't emit it, so those edges fall through"))
+                               f"a `when` edge reads field {f!r}, but neither this node's `@emits` "
+                               f"nor any upstream node's `@emits` declares it"))
     return out
+
 
 
 # declared @emits type token -> the derived-contract type family it must agree with
@@ -467,7 +498,31 @@ def _check_emits_types(graph) -> List[Finding]:
                                    f"`when` edges read {field_name!r} as {have} — the declaration and "
                                    f"the predicates disagree (the type_gate enforces the inferred "
                                    f"{have})"))
+                                   
+        # Upstream type checks (Task 3)
+        upstream = _upstream_nodes(graph, name)
+        upstream_emits = {}
+        for u in upstream:
+            unode = graph.nodes[u]
+            uemits = unode.annotations.get("emits") or {}
+            for f, token in uemits.items():
+                if token:
+                    want = _EMIT_TYPE_FAMILY.get(str(token).strip().lower())
+                    if want:
+                        # Store type family and node name that declared it
+                        upstream_emits[f] = (want, u)
+                        
+        for field_name, spec in derived.items():
+            if field_name not in emits and field_name in upstream_emits:
+                want, u_node = upstream_emits[field_name]
+                have = _derived_family(spec)
+                if have is not None and have != want:
+                    out.append(Finding("warning", "upstream-type-mismatch", name,
+                                       f"a `when` edge reads field {field_name!r} as {have}, but upstream node "
+                                       f"'{u_node}' declares it as {want} via `@emits` — the downstream "
+                                       f"usage and upstream declaration disagree"))
     return out
+
 
 
 def _check_field_only(graph) -> List[Finding]:
@@ -553,6 +608,19 @@ def _child_emitted_fields(graph) -> set:
     return out
 
 
+def _child_emitted_types(graph) -> Dict[str, str]:
+    """Returns a dict of {field_name: type_family} declared in the child flow's nodes."""
+    out = {}
+    for node in graph.nodes.values():
+        emits = node.annotations.get("emits") or {}
+        for f, t in emits.items():
+            if t:
+                family = _EMIT_TYPE_FAMILY.get(str(t).strip().lower())
+                if family:
+                    out[f] = family
+    return out
+
+
 def analyze_composition(graph, flow_path) -> List[Finding]:
     """Cross-FLOW-BOUNDARY checks for `@spawn` nodes (roadmap item #4, hard part 2). Unlike the pure
     `analyze()`, these do I/O — they resolve the child flow path (relative to `flow_path`'s dir), parse
@@ -597,7 +665,20 @@ def analyze_composition(graph, flow_path) -> List[Finding]:
                                    f"`@expect{tuple(expect)}` but child {child!r} never `@emits` "
                                    f"{missing} — the composition contract is unmet (fix the field name "
                                    f"or declare it in the child)"))
+            
+            # Cross-check types (Task 3)
+            child_types = _child_emitted_types(child_graph)
+            for f, token in expect.items():
+                if token and f in child_types:
+                    want = _EMIT_TYPE_FAMILY.get(str(token).strip().lower())
+                    have = child_types[f]
+                    if want and have and want != have:
+                        out.append(Finding("warning", "spawn-expect-type-mismatch", name,
+                                           f"`@expect({f}={token})` expects {want}, but child {child!r} "
+                                           f"declares {f!r} as {have} via `@emits` — the parent and child "
+                                           f"types disagree"))
     return out
+
 
 
 # --------------------------------------------------------------------------------------

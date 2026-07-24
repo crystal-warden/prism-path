@@ -183,3 +183,27 @@ def test_composition_check_is_separate_from_pure_analyze(tmp_path):
     g = parse_file(str(p))
     assert "spawn-missing-child" not in _codes(analysis.analyze(g))
     assert "spawn-missing-child" in _codes(analysis.analyze_composition(g, str(p)))
+
+
+def test_spawn_expect_type_mismatch(tmp_path):
+    (tmp_path / "child.md").write_text("""---
+name: child
+start: review
+---
+
+## review
+@emits(score=bool)
+-> done: always
+
+## done
+Done.
+""")
+    # Parent expects score to be a number, but child emits it as a bool
+    p = _parent(tmp_path, "@spawn(child=child.md, join=all_done)", "@expect(score=number)")
+    g = parse_file(str(p))
+    comp = analysis.analyze_composition(g, str(p))
+    mismatches = [f for f in comp if f.code == "spawn-expect-type-mismatch"]
+    assert len(mismatches) == 1
+    assert mismatches[0].node == "dispatch"
+    assert "expects number" in mismatches[0].message
+    assert "declares 'score' as boolean" in mismatches[0].message

@@ -64,3 +64,53 @@ def test_declared_but_unread_field_is_skipped():
 def test_numeric_enum_agrees_with_number_declaration():
     g = _flow("@emits(priority=number)", ["when priority == 3"])
     assert _codes(g) == []
+
+
+def test_upstream_type_match():
+    # Node a emits ok=bool. Node b is downstream of a and reads ok as a boolean context.
+    g = parse("""---
+name: t
+start: a
+---
+
+## a
+@emits(ok=bool)
+-> b: always
+
+## b
+@emits(status=str)
+-> done: when ok
+-> done: else
+
+## done
+Done.
+""")
+    # No type mismatch, and also 'ok' is not flagged as undeclared on node b because it is declared upstream!
+    findings = analysis.analyze(g)
+    assert not [f for f in findings if f.code in ("emits-type-mismatch", "upstream-type-mismatch", "undeclared-field")]
+
+
+def test_upstream_type_mismatch():
+    # Node a emits status=str. Node b reads status as a number (status > 3)
+    g = parse("""---
+name: t
+start: a
+---
+
+## a
+@emits(status=str)
+-> b: always
+
+## b
+-> done: when status > 3
+-> done: else
+
+## done
+Done.
+""")
+    findings = analysis.analyze(g)
+    mismatches = [f for f in findings if f.code == "upstream-type-mismatch"]
+    assert len(mismatches) == 1
+    assert mismatches[0].node == "b"
+    assert "reads field 'status' as number" in mismatches[0].message and "declares it as string" in mismatches[0].message
+
