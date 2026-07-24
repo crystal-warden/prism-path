@@ -256,3 +256,64 @@ class PayloadFlattener:
                     continue
             return val
         return transformer
+
+
+class SystemTelemetry(BaseConnector):
+    """
+    Ingestion Connector to dynamically probe system hardware telemetry (RAM, VRAM, CPU cores)
+    on launch.
+    """
+    def __init__(self):
+        super().__init__("SystemTelemetry", "1.0.0")
+
+    def ingest_payload(self, raw_data: Any = None) -> Dict[str, Any]:
+        """Probes system hardware: RAM, VRAM, CPU cores."""
+        import os
+
+        # Query CPU cores
+        try:
+            cpu_cores = os.cpu_count() or 1
+        except Exception:
+            cpu_cores = 1
+
+        # Query System RAM (MB to GB)
+        ram_gb = 8.0
+        try:
+            if os.path.exists("/proc/meminfo"):
+                with open("/proc/meminfo", "r") as f:
+                    for line in f:
+                        if line.startswith("MemTotal:"):
+                            parts = line.split()
+                            if len(parts) >= 2:
+                                ram_gb = round(float(parts[1]) / (1024 * 1024), 2)
+                                break
+            else:
+                import psutil
+                ram_gb = round(psutil.virtual_memory().total / (1024 ** 3), 2)
+        except Exception:
+            ram_gb = 8.0
+
+        # Query VRAM (MB to GB via nvidia-smi if available)
+        vram_gb = 0.0
+        try:
+            import subprocess
+            res = subprocess.run(
+                ["nvidia-smi", "--query-gpu=memory.total", "--format=csv,noheader,nounits"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                check=True
+            )
+            val = float(res.stdout.strip())
+            vram_gb = round(val / 1024.0, 2)
+        except Exception:
+            vram_gb = 0.0
+
+        return {
+            "ram_gb": ram_gb,
+            "vram_gb": vram_gb,
+            "cpu_cores": cpu_cores,
+            "ram_source": "host",
+            "unified": False
+        }
+

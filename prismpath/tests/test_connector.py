@@ -135,3 +135,19 @@ def test_payload_flattener():
     assert flattener._resolve_path(nested_data, "data.threats.99.name") is None
     assert flattener._resolve_path(nested_data, "data.nonexistent") is None
 
+
+def test_system_telemetry():
+    from prismpath.connector import SystemTelemetry
+    conn = SystemTelemetry()
+    data = conn.ingest_payload()
+    
+    assert "ram_gb" in data
+    assert "vram_gb" in data
+    assert "cpu_cores" in data
+    assert "ram_source" in data
+    assert isinstance(data["ram_gb"], float)
+    assert isinstance(data["vram_gb"], float)
+    assert isinstance(data["cpu_cores"], int)
+    assert data["cpu_cores"] >= 1
+
+
