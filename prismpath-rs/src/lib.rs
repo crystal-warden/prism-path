@@ -296,5 +296,176 @@ mod tests {
         let path2 = engine.run(None, &context2).unwrap();
         assert_eq!(path2, vec!["node_a", "node_c"]);
     }
+
+    #[test]
+    fn test_in_operator() {
+        let mut nodes = HashMap::new();
+        nodes.insert(
+            "start".to_string(),
+            Node {
+                name: "start".to_string(),
+                edges: vec![
+                    Edge {
+                        target: "in_array".to_string(),
+                        condition: "when item in valid_items".to_string(),
+                    },
+                ],
+            },
+        );
+        nodes.insert("in_array".to_string(), Node { name: "in_array".to_string(), edges: vec![] });
+        let flow = Flow { name: "test_in".to_string(), start: "start".to_string(), nodes };
+        let engine = Engine::new(flow);
+
+        // Test array containment
+        let mut context = HashMap::new();
+        context.insert("item".to_string(), Value::String("rust".to_string()));
+        context.insert(
+            "valid_items".to_string(),
+            Value::Array(vec![
+                Value::String("c".to_string()),
+                Value::String("rust".to_string()),
+            ]),
+        );
+        let path = engine.run(None, &context).unwrap();
+        assert_eq!(path, vec!["start", "in_array"]);
+
+        // Test substring containment
+        let mut nodes2 = HashMap::new();
+        nodes2.insert(
+            "start".to_string(),
+            Node {
+                name: "start".to_string(),
+                edges: vec![
+                    Edge {
+                        target: "in_str".to_string(),
+                        condition: "when sub in main_str".to_string(),
+                    },
+                ],
+            },
+        );
+        nodes2.insert("in_str".to_string(), Node { name: "in_str".to_string(), edges: vec![] });
+        let engine2 = Engine::new(Flow { name: "test_sub".to_string(), start: "start".to_string(), nodes: nodes2 });
+
+        let mut context2 = HashMap::new();
+        context2.insert("sub".to_string(), Value::String("journeyman".to_string()));
+        context2.insert("main_str".to_string(), Value::String("welcome to journeyman learning".to_string()));
+        let path2 = engine2.run(None, &context2).unwrap();
+        assert_eq!(path2, vec!["start", "in_str"]);
+    }
+
+    #[test]
+    fn test_all_comparison_operators() {
+        let create_flow_for_op = |op: &str| -> Engine {
+            let mut nodes = HashMap::new();
+            nodes.insert(
+                "start".to_string(),
+                Node {
+                    name: "start".to_string(),
+                    edges: vec![Edge {
+                        target: "matched".to_string(),
+                        condition: format!("when val {} 10", op),
+                    }],
+                },
+            );
+            nodes.insert("matched".to_string(), Node { name: "matched".to_string(), edges: vec![] });
+            Engine::new(Flow { name: "op_test".to_string(), start: "start".to_string(), nodes })
+        };
+
+        // < : 5 < 10 -> matched
+        let mut ctx = HashMap::new();
+        ctx.insert("val".to_string(), Value::Number(5.0));
+        assert_eq!(create_flow_for_op("<").run(None, &ctx).unwrap(), vec!["start", "matched"]);
+
+        // <= : 10 <= 10 -> matched
+        ctx.insert("val".to_string(), Value::Number(10.0));
+        assert_eq!(create_flow_for_op("<=").run(None, &ctx).unwrap(), vec!["start", "matched"]);
+
+        // > : 15 > 10 -> matched
+        ctx.insert("val".to_string(), Value::Number(15.0));
+        assert_eq!(create_flow_for_op(">").run(None, &ctx).unwrap(), vec!["start", "matched"]);
+
+        // >= : 10 >= 10 -> matched
+        ctx.insert("val".to_string(), Value::Number(10.0));
+        assert_eq!(create_flow_for_op(">=").run(None, &ctx).unwrap(), vec!["start", "matched"]);
+
+        // == : 10 == 10 -> matched
+        ctx.insert("val".to_string(), Value::Number(10.0));
+        assert_eq!(create_flow_for_op("==").run(None, &ctx).unwrap(), vec!["start", "matched"]);
+
+        // != : 5 != 10 -> matched
+        ctx.insert("val".to_string(), Value::Number(5.0));
+        assert_eq!(create_flow_for_op("!=").run(None, &ctx).unwrap(), vec!["start", "matched"]);
+    }
+
+    #[test]
+    fn test_python_cross_type_comparison() {
+        let mut nodes = HashMap::new();
+        nodes.insert(
+            "start".to_string(),
+            Node {
+                name: "start".to_string(),
+                edges: vec![Edge {
+                    target: "equal".to_string(),
+                    condition: "when flag == 1".to_string(),
+                }],
+            },
+        );
+        nodes.insert("equal".to_string(), Node { name: "equal".to_string(), edges: vec![] });
+        let engine = Engine::new(Flow { name: "cross_type".to_string(), start: "start".to_string(), nodes });
+
+        let mut context = HashMap::new();
+        context.insert("flag".to_string(), Value::Bool(true));
+        let path = engine.run(None, &context).unwrap();
+        assert_eq!(path, vec!["start", "equal"]);
+    }
+
+    #[test]
+    fn test_truthiness_single_var_condition() {
+        let mut nodes = HashMap::new();
+        nodes.insert(
+            "start".to_string(),
+            Node {
+                name: "start".to_string(),
+                edges: vec![Edge {
+                    target: "is_true".to_string(),
+                    condition: "when enabled".to_string(),
+                }],
+            },
+        );
+        nodes.insert("is_true".to_string(), Node { name: "is_true".to_string(), edges: vec![] });
+        let engine = Engine::new(Flow { name: "truthiness".to_string(), start: "start".to_string(), nodes });
+
+        // Truthy case
+        let mut context = HashMap::new();
+        context.insert("enabled".to_string(), Value::Bool(true));
+        assert_eq!(engine.run(None, &context).unwrap(), vec!["start", "is_true"]);
+
+        // Falsy case
+        let mut context_false = HashMap::new();
+        context_false.insert("enabled".to_string(), Value::Bool(false));
+        assert_eq!(engine.run(None, &context_false).unwrap(), vec!["start"]);
+    }
+
+    #[test]
+    fn test_max_steps_infinite_loop_protection() {
+        let mut nodes = HashMap::new();
+        // Self-cycling node: node_a loops back to node_a unconditionally
+        nodes.insert(
+            "node_a".to_string(),
+            Node {
+                name: "node_a".to_string(),
+                edges: vec![Edge {
+                    target: "node_a".to_string(),
+                    condition: "always".to_string(),
+                }],
+            },
+        );
+        let flow = Flow { name: "infinite_loop".to_string(), start: "node_a".to_string(), nodes };
+        let engine = Engine::new(flow);
+
+        let result = engine.run(None, &HashMap::new());
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("maximum step limit"));
+    }
 }
 
