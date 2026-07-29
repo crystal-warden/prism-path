@@ -124,6 +124,26 @@ impl Engine {
         false
     }
 
+    /// Certification hook: evaluate a `when …` predicate with the spec's three-valued result.
+    ///
+    /// The frozen conformance corpus (`prismpath/portable/conformance/predicates.json`) specifies
+    /// `(condition, context) -> true | false | "ERROR"`, where ERROR means the sandbox rejected the
+    /// predicate. `evaluate_condition` collapses that third state via `unwrap_or(false)`, which is the
+    /// right behaviour at run time (a rejected edge is non-matching, never a crash) but hides the
+    /// distinction the corpus checks. This exposes it so the crate can be measured against the spec.
+    pub fn conformance_eval(
+        &self,
+        condition: &str,
+        context: &HashMap<String, Value>,
+    ) -> Result<bool, String> {
+        let cond = condition.trim();
+        if let Some(expr) = cond.strip_prefix("when ") {
+            self.evaluate_expression(expr, context)
+        } else {
+            Ok(self.evaluate_condition(cond, context))
+        }
+    }
+
     fn evaluate_expression(&self, expr: &str, context: &HashMap<String, Value>) -> Result<bool, String> {
         let parts: Vec<&str> = expr.split_whitespace().collect();
         if parts.is_empty() {
