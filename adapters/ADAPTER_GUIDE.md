@@ -62,6 +62,13 @@ adapters/<domain>/
    the knowledge base mid-run. Inject criteria per-item, not as an undifferentiated dump.
 6. **No domain nouns in core.** Register the domain's nouns in `tools/arch_guard.config.json`
    (`domain_nouns.<domain>`) so Signal-1 guards the boundary; list the adapter under `adapters.<domain>`.
+8. **Model I/O crosses the guard.** Every call into a model or tool goes through
+   `prismpath.guard.guarded_exchange`, composed from the statutory floor plus any augmentation the
+   adapter's domain needs. The safety boundary is a layer, not an adapter concern: an adapter may add
+   strictness and can never subtract it (the policy language has no permitting verb). Bind
+   `guard.policy_hash` into the attestation manifest so *which safety policy ran* is provable. See
+   `prismpath/SPEC_guard_onion.md`.
+
 7. **A cheap gate before the expensive node, where inputs recur.** If one adjudication node dominates
    cost and inputs repeat, put a `PrefilterCache` (SOC) or a retrieval/skip in front — measured, opt-in.
 
