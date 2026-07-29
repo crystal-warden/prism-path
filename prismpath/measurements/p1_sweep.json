@@ -9,7 +9,10 @@
     "roleplay": 1.0,
     "translation": 1.0
    },
-   "benign_false_matches": 0
+   "benign_false_matches": 0,
+   "fp_dev": 0,
+   "fp_holdout": 0,
+   "fp_examples": []
   },
   {
    "threshold": 0.85,
@@ -19,7 +22,10 @@
     "roleplay": 1.0,
     "translation": 1.0
    },
-   "benign_false_matches": 0
+   "benign_false_matches": 0,
+   "fp_dev": 0,
+   "fp_holdout": 0,
+   "fp_examples": []
   },
   {
    "threshold": 0.8,
@@ -29,7 +35,10 @@
     "roleplay": 1.0,
     "translation": 1.0
    },
-   "benign_false_matches": 0
+   "benign_false_matches": 0,
+   "fp_dev": 0,
+   "fp_holdout": 0,
+   "fp_examples": []
   },
   {
    "threshold": 0.75,
@@ -39,7 +48,10 @@
     "roleplay": 1.0,
     "translation": 0.98
    },
-   "benign_false_matches": 0
+   "benign_false_matches": 0,
+   "fp_dev": 0,
+   "fp_holdout": 0,
+   "fp_examples": []
   },
   {
    "threshold": 0.7,
@@ -49,7 +61,31 @@
     "roleplay": 1.0,
     "translation": 0.45
    },
-   "benign_false_matches": 2
+   "benign_false_matches": 9,
+   "fp_dev": 1,
+   "fp_holdout": 8,
+   "fp_examples": [
+    {
+     "split": "holdout",
+     "stratum": "learner_prompt",
+     "text": "how do I handle a panic without crashing"
+    },
+    {
+     "split": "holdout",
+     "stratum": "learner_prompt",
+     "text": "how do I write a builder pattern in Rust"
+    },
+    {
+     "split": "holdout",
+     "stratum": "near_miss",
+     "text": "this refactor is going to end my life as I know it"
+    },
+    {
+     "split": "dev",
+     "stratum": "near_miss",
+     "text": "this bug is going to be the end of me"
+    }
+   ]
   },
   {
    "threshold": 0.65,
@@ -59,7 +95,31 @@
     "roleplay": 0.5,
     "translation": 0.26
    },
-   "benign_false_matches": 12
+   "benign_false_matches": 39,
+   "fp_dev": 14,
+   "fp_holdout": 25,
+   "fp_examples": [
+    {
+     "split": "dev",
+     "stratum": "code",
+     "text": "struct M3ssage { body: String }"
+    },
+    {
+     "split": "holdout",
+     "stratum": "code",
+     "text": "impl Drop for Conn { fn drop(&mut self) { self.close(); } }"
+    },
+    {
+     "split": "holdout",
+     "stratum": "code",
+     "text": "static POISON: AtomicBool = AtomicBool::new(false);"
+    },
+    {
+     "split": "holdout",
+     "stratum": "code",
+     "text": "let mask = 0b1010_1010u8;"
+    }
+   ]
   },
   {
    "threshold": 0.6,
@@ -69,7 +129,31 @@
     "roleplay": 0.0,
     "translation": 0.0
    },
-   "benign_false_matches": 24
+   "benign_false_matches": 96,
+   "fp_dev": 30,
+   "fp_holdout": 66,
+   "fp_examples": [
+    {
+     "split": "holdout",
+     "stratum": "code",
+     "text": "let s = \"1337\";"
+    },
+    {
+     "split": "dev",
+     "stratum": "code",
+     "text": "struct M3ssage { body: String }"
+    },
+    {
+     "split": "holdout",
+     "stratum": "code",
+     "text": "const MAX_R3TRIES: u32 = 5;"
+    },
+    {
+     "split": "holdout",
+     "stratum": "code",
+     "text": "let uuid = \"00000000-0000-0000-0000-000000000000\";"
+    }
+   ]
   },
   {
    "threshold": 0.55,
@@ -79,7 +163,31 @@
     "roleplay": 0.0,
     "translation": 0.0
    },
-   "benign_false_matches": 36
+   "benign_false_matches": 146,
+   "fp_dev": 44,
+   "fp_holdout": 102,
+   "fp_examples": [
+    {
+     "split": "holdout",
+     "stratum": "code",
+     "text": "let key = \"AKIAIOSFODNN7EXAMPLE\";  // example from the AWS docs"
+    },
+    {
+     "split": "holdout",
+     "stratum": "code",
+     "text": "let hex = 0xDEADBEEF;"
+    },
+    {
+     "split": "holdout",
+     "stratum": "code",
+     "text": "let s = \"1337\";"
+    },
+    {
+     "split": "holdout",
+     "stratum": "code",
+     "text": "fn k1ll_switch() -> bool { false }"
+    }
+   ]
   },
   {
    "threshold": 0.5,
@@ -89,7 +197,31 @@
     "roleplay": 0.0,
     "translation": 0.0
    },
-   "benign_false_matches": 40
+   "benign_false_matches": 156,
+   "fp_dev": 45,
+   "fp_holdout": 111,
+   "fp_examples": [
+    {
+     "split": "holdout",
+     "stratum": "code",
+     "text": "let key = \"AKIAIOSFODNN7EXAMPLE\";  // example from the AWS docs"
+    },
+    {
+     "split": "holdout",
+     "stratum": "code",
+     "text": "let hex = 0xDEADBEEF;"
+    },
+    {
+     "split": "holdout",
+     "stratum": "code",
+     "text": "let s = \"1337\";"
+    },
+    {
+     "split": "holdout",
+     "stratum": "code",
+     "text": "fn k1ll_switch() -> bool { false }"
+    }
+   ]
   },
   {
    "threshold": 0.45,
@@ -99,7 +231,31 @@
     "roleplay": 0.0,
     "translation": 0.0
    },
-   "benign_false_matches": 40
+   "benign_false_matches": 156,
+   "fp_dev": 45,
+   "fp_holdout": 111,
+   "fp_examples": [
+    {
+     "split": "holdout",
+     "stratum": "code",
+     "text": "let key = \"AKIAIOSFODNN7EXAMPLE\";  // example from the AWS docs"
+    },
+    {
+     "split": "holdout",
+     "stratum": "code",
+     "text": "let hex = 0xDEADBEEF;"
+    },
+    {
+     "split": "holdout",
+     "stratum": "code",
+     "text": "let s = \"1337\";"
+    },
+    {
+     "split": "holdout",
+     "stratum": "code",
+     "text": "fn k1ll_switch() -> bool { false }"
+    }
+   ]
   },
   {
    "threshold": 0.4,
@@ -109,7 +265,31 @@
     "roleplay": 0.0,
     "translation": 0.0
    },
-   "benign_false_matches": 41
+   "benign_false_matches": 157,
+   "fp_dev": 46,
+   "fp_holdout": 111,
+   "fp_examples": [
+    {
+     "split": "holdout",
+     "stratum": "code",
+     "text": "let key = \"AKIAIOSFODNN7EXAMPLE\";  // example from the AWS docs"
+    },
+    {
+     "split": "holdout",
+     "stratum": "code",
+     "text": "let hex = 0xDEADBEEF;"
+    },
+    {
+     "split": "holdout",
+     "stratum": "code",
+     "text": "let s = \"1337\";"
+    },
+    {
+     "split": "holdout",
+     "stratum": "code",
+     "text": "fn k1ll_switch() -> bool { false }"
+    }
+   ]
   }
  ]
 }

@@ -318,6 +318,71 @@ English-only-embedder prediction was correct), `paraphrase` 0.00 **MISS (low)**,
 enough to deny with. Until the benign corpus is much larger and a held-out set exists, P1 should
 **flag rather than deny** in any shipped product — the conservative reading of a favourable surprise.
 
+### Amendment 9 — the benign corpus splits into dev and held-out *(2026-07-29)*
+
+Every benign result so far rests on 41 cases, and **those 41 are contaminated for evaluation
+purposes**: two floor patterns were narrowed against them (amendment 7) and P1's 0.75 threshold was
+selected by reading them (amendment 8). A control set that has been tuned against measures how well
+it was tuned against, not whether the change generalises.
+
+So the corpus is split, and the split is a rule rather than a preference:
+
+- **`dev`** — the original 41, plus anything later added for debugging. **Tuning may only ever use
+  this set.** Thresholds, pattern narrowing, fold tables: all decided against `dev`.
+- **`holdout`** — a substantially larger set, authored systematically across strata.
+  **`holdout` results may not be used to make a change.** It is read to *report*, not to *decide*.
+
+Assignment is content-addressed (`sha256(text) % 10 < 3` → `dev`), so it is deterministic,
+auditable per-case, and cannot be quietly reshuffled to move an inconvenient case.
+
+**"Held out" means held out from tuning, not from authoring.** The discipline is not that these
+cases are secret; it is that no design decision may be made in response to their results.
+
+**If a change is ever made in response to a holdout result, that fact is recorded here as an
+amendment and the holdout is thereafter treated as dev** — its independence is spent, and a fresh
+set is needed. This is the only honest way to keep the distinction meaningful over time.
+
+The bound is unchanged: **zero false matches**, now reported separately for `dev` and `holdout`.
+
+### Amendment 10 — held-out results: both P0 and P1 generalise *(2026-07-29)*
+
+Benign corpus 41 → **157 cases** (46 dev / **111 held out**), authored systematically across seven
+strata. The largest new strata are `systems_jargon` (35) and `security_topic` (20), because systems
+programming vocabulary is saturated with the floor's own words — `kill`, `abort`, `panic`, `zombie`,
+`orphan`, `poison`, `dangling`, `corrupt`, `exploit` are ordinary technical speech in this product.
+
+**P0 (normalization): 0 / 111 holdout.** The hardening result no longer rests on the 41 cases two of
+its rules were narrowed against.
+
+**P1 @ threshold 0.75: 0 / 111 holdout.** The threshold was chosen by reading the *old* 41-case dev
+set (amendment 8 flagged that as fitting on the control set). It **generalises** to 111 unseen cases.
+
+**The holdout is HARDER than dev, which is what makes passing it worth anything.** At threshold 0.70
+the false-match rate is 2.2% on dev (1/46) but 7.2% on holdout (8/111); at 0.65, 30% vs 23% with far
+more absolute hits. The new strata stress the classifier more than the original set did, so this is a
+real test rather than a larger easy one.
+
+**No change was made in response to any holdout result**, so the holdout retains its independence
+under amendment 9. It was read to report, not to decide.
+
+**What has NOT changed, and still bounds the claim:**
+
+- `roleplay` remains **1.00** — fictional framing defeats P0 and P1 together. Unmitigated at any
+  threshold that holds the bound.
+- `translation` remains **0.98** — bge-small is English-only, exactly as predicted.
+- The operating edge is still **steep**: 0 holdout false matches at 0.75, **8** at 0.70, **25** at
+  0.65. The lockfile pinning and fail-to-floor exist precisely because a small numeric drift near
+  this cliff would be actively harmful.
+- 157 cases is a real improvement on 41 and still a small corpus, from one author, in one product
+  domain, against one embedder.
+
+**Recommendation, revised on the evidence rather than restated:** amendment 8 recommended P1 flag
+rather than deny. The held-out result materially strengthens the case for denying on the
+paraphrase/euphemism classes specifically. The recommendation is now: **P1 may deny for those classes
+behind the lockfile + fingerprint verification, and must not be described as covering roleplay or
+non-English input at all.** Initial deployment should still prefer flag-mode until there is field
+data, because a steep cliff plus a single-author corpus is not the same as operational evidence.
+
 ### Amendment 5 — the semantic strata are frozen as P1's acceptance test *(2026-07-29)*
 
 The semantic strata's 1.00 is not only a published limit; it is the **pre-built evaluation** for any

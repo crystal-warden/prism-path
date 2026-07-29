@@ -89,16 +89,20 @@ def measure_collisions() -> dict:
 
     guard = _floor()
     per_stratum: dict[str, list[int]] = defaultdict(lambda: [0, 0])
+    per_split: dict[str, list[int]] = defaultdict(lambda: [0, 0])
     false_matches = []
 
     for case in benign_corpus.generate():
         per_stratum[case["stratum"]][1] += 1
+        per_split[case["split"]][1] += 1
         for direction in ("inbound", "outbound"):
             verdict = guard.check(case["text"], direction)
             if not verdict.allowed:
                 per_stratum[case["stratum"]][0] += 1
+                per_split[case["split"]][0] += 1
                 false_matches.append({
                     "stratum": case["stratum"],
+                    "split": case["split"],
                     "text": case["text"],
                     "direction": direction,
                     "rule": verdict.rule,
@@ -111,6 +115,7 @@ def measure_collisions() -> dict:
         "cases": total,
         "false_matches": hits,
         "per_stratum": dict(per_stratum),
+        "per_split": dict(per_split),
         "detail": false_matches,
     }
 
@@ -198,6 +203,11 @@ def main() -> int:
     else:
         print(render(report))
         print("\n--- benign-collision control (bound: ZERO, per §5.3) ---")
+        for split in ("dev", "holdout"):
+            cell = collisions["per_split"].get(split, [0, 0])
+            note = " (tuning may use this)" if split == "dev" else " (READ TO REPORT, NEVER TO DECIDE)"
+            print(f"  {split.ljust(9)}{cell[0]}/{cell[1]} false matches{note}")
+        print()
         for stratum in sorted(collisions["per_stratum"]):
             cell = collisions["per_stratum"][stratum]
             flag = "" if cell[0] == 0 else "   <-- FALSE MATCH"

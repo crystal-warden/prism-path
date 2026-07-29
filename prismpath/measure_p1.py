@@ -80,7 +80,7 @@ def main() -> int:
     print(f"semantic variants: {len(semantic_variants)}   benign cases: {len(benign)}\n")
 
     strata = sorted({v["stratum"] for v in semantic_variants})
-    header = "thresh  " + "".join(s[:11].ljust(13) for s in strata) + "benign_FP"
+    header = "thresh  " + "".join(s[:11].ljust(13) for s in strata) + "benign false matches"
     print(header)
     print("-" * len(header))
 
@@ -97,23 +97,38 @@ def main() -> int:
             if layered.check(v["variant"], v["direction"]).allowed:
                 per[v["stratum"]][0] += 1
 
-        fp = 0
+        fp = {"dev": 0, "holdout": 0}
+        hits = []
         for case in benign:
             if not layered.check_inbound(case["text"]).allowed:
-                fp += 1
+                fp[case["split"]] += 1
+                hits.append(case)
 
+        n_dev = sum(1 for c in benign if c["split"] == "dev")
+        n_hold = len(benign) - n_dev
         row = {"threshold": threshold,
                "strata": {s: round(per[s][0] / per[s][1], 2) for s in strata},
-               "benign_false_matches": fp}
+               "benign_false_matches": fp["dev"] + fp["holdout"],
+               "fp_dev": fp["dev"], "fp_holdout": fp["holdout"],
+               "fp_examples": [{"split": c["split"], "stratum": c["stratum"], "text": c["text"]}
+                               for c in hits[:4]]}
         rows.append(row)
         line = f"{threshold:.2f}    "
         for s in strata:
             line += f"{row['strata'][s]:.2f}".ljust(13)
-        line += f"{fp}/{len(benign)}"
+        line += f"{fp['dev']}/{n_dev} dev  {fp['holdout']}/{n_hold} HOLDOUT"
         print(line)
 
     print("\n--- against the pre-registered bands (§5.4) ---")
     zero_fp = [r for r in rows if r["benign_false_matches"] == 0]
+    print("\n--- what the HOLDOUT says about the threshold chosen on dev (amendment 9) ---")
+    at75 = next((r for r in rows if abs(r["threshold"] - 0.75) < 1e-9), None)
+    if at75:
+        print(f"  threshold 0.75 was selected by reading the OLD 41-case dev set.")
+        print(f"  on the held-out {sum(1 for c in benign if c['split']=='holdout')} cases it produces "
+              f"{at75['fp_holdout']} false matches.")
+        for ex in at75["fp_examples"]:
+            print(f"    [{ex['split']}/{ex['stratum']}] {ex['text'][:66]!r}")
     best = min(zero_fp, key=lambda r: sum(r["strata"].values())) if zero_fp else None
 
     if best is None:
