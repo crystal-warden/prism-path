@@ -1,10 +1,60 @@
 # prismpath-rs — conformance certification against the frozen kernel spec
 
-**Date:** 2026-07-28 · **Verdict: NOT CONFORMANT** · Reproduce with:
+**Date:** 2026-07-29 · **Verdict: CONFORMANT** — 1067/1067 predicates, 27/27 flows · Reproduce with:
 
 ```
 cargo run --bin conformance -- ../prismpath/portable/conformance
 ```
+
+The spec now has its **second independent implementation**: two kernels (this crate and
+`portable/prismpath.mjs`), one vector corpus, bit-for-bit. Both replay exactly what
+`run_vectors.mjs` replays — the same scripted outcomes, the same `{path, stopped, pending_node,
+spawn}` contract, the same three-valued predicate results.
+
+## How it got here
+
+The 2026-07-28 certification (preserved below) found the original crate was "one implementation and
+one sketch": a string-splitting evaluator handling two token shapes, no flow parser, one of four
+engine output fields. The gap list it produced was executed in dependency order as a guided rewrite
+of the .mjs kernel (689 reference lines):
+
+1. **Items 1–3, the predicate pipeline** — a hand-rolled tokenizer + recursive-descent parser onto a
+   small AST, plus the Python-semantics primitives (`py_truthy`, `py_eq`, `py_order`, `py_in`,
+   `compare_op`), the escape table, keyword rejection, and Python-AST depth accounting. First full
+   run: **1067/1067**.
+2. **Item 4, the flow parser** — Markdown + YAML frontmatter, with Python `splitlines()` boundaries
+   and the three line patterns (`##` heading, `->` edge, `@` annotation) hand-rolled so no regex
+   dialect's `\s` gets to disagree.
+3. **Item 5, the engine** — the full `run` loop: portability refusal, visits, transcript, the error
+   tier, `needs_human`, `wait`/`spawn` suspension, and the four-field result.
+
+The only post-evaluator fix was in the HARNESS, not the kernel: `JSON.stringify(1.0)` is `"1"`, so
+integral floats must serialize as integers or the spawn fixture fails on notation alone.
+
+## What keeps it honest
+
+* **The gate can go red.** Deliberately breaking one semantic (boolean-numeric equality) produced
+  13 divergences and NOT CONFORMANT; reverting restored the pass. A gate that cannot fail proves
+  nothing.
+* **Porting discipline is written into the source:** where Python/JS semantics are subtle, the crate
+  mirrors the certified .mjs decision and says so at the site — including the two places the .mjs
+  itself is arguably un-Pythonic (`Ellipsis` equals nothing, even itself; `error_type` is `"Error"`).
+  The corpus is the judge, and the corpus cannot tell — if it ever learns to, the gate will say so.
+* **Rust has no catchable stack overflow**, so the .mjs blanket `catch` in `compareOp` becomes an
+  explicit comparison-depth budget with the same observable behaviour (unsatisfied, never a crash).
+
+## Scope boundary
+
+Kernel conformance ≠ the guard. `safety.json` in the corpus dir belongs to the P0 **guard**
+(`guard.py` / Journeyman's `guard.ts`), which this crate does not implement. A native Rust guard
+would be its own port with its own parity story — do not let "the Rust kernel is conformant" drift
+into a claim about the safety boundary.
+
+---
+
+# Appendix: the 2026-07-28 NOT CONFORMANT certification (historical)
+
+Preserved because the itemized gap list is the reason the rewrite had a work plan at all.
 
 ## Why this was run rather than shelved
 

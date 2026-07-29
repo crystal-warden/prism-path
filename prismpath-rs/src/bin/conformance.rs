@@ -6,13 +6,13 @@
 //!
 //! Its README states the intent plainly: "A future Go / Rust / WASM kernel implements the frozen
 //! subset, reads these two files, and is provably interchangeable — or measurably not." This binary
-//! answers that question for the Rust crate. It is deliberately non-forgiving: every divergence from
-//! the reference is reported, grouped by cause, so a failure is itemized drift documentation rather
+//! answers that question for the Rust crate, replaying exactly what `run_vectors.mjs` replays. On
+//! failure every divergence is reported, grouped by cause — itemized drift documentation rather
 //! than a verdict.
 //!
 //! Usage: cargo run --bin conformance -- [path/to/conformance/dir]
 
-use prismpath_rs::{Engine, Flow, Value};
+use prismpath_rs::{eval_condition, parse, run, RunOpts, RunState, V};
 use std::collections::HashMap;
 
 #[derive(serde::Deserialize)]
@@ -29,9 +29,17 @@ struct PredicateFile {
 
 #[derive(serde::Deserialize)]
 struct FlowCase {
+    name: String,
     flow: String,
     #[serde(default)]
+    script: HashMap<String, Vec<serde_json::Value>>,
     expect: serde_json::Value,
+    #[serde(default)]
+    start: Option<String>,
+    #[serde(default)]
+    state: Option<serde_json::Value>,
+    #[serde(default, rename = "maxSteps")]
+    max_steps: Option<usize>,
 }
 
 #[derive(serde::Deserialize)]
@@ -39,32 +47,18 @@ struct FlowFile {
     cases: Vec<FlowCase>,
 }
 
-/// Convert a serde_json value into the crate's own `Value`.
-fn to_value(v: &serde_json::Value) -> Value {
-    match v {
-        serde_json::Value::Null => Value::Null,
-        serde_json::Value::Bool(b) => Value::Bool(*b),
-        serde_json::Value::Number(n) => Value::Number(n.as_f64().unwrap_or(0.0)),
-        serde_json::Value::String(s) => Value::String(s.clone()),
-        serde_json::Value::Array(a) => Value::Array(a.iter().map(to_value).collect()),
-        serde_json::Value::Object(o) => {
-            Value::Object(o.iter().map(|(k, val)| (k.clone(), to_value(val))).collect())
-        }
-    }
-}
-
-/// Classify a divergence so the report groups causes instead of listing 900 near-identical lines.
+/// Classify a divergence so the report groups causes instead of listing hundreds of lines.
 fn classify(cond: &str) -> &'static str {
     let c = cond.trim_start_matches("when ").trim();
     let tokens: Vec<&str> = c.split_whitespace().collect();
     if c.contains(" not in ") {
-        "`not in` operator unsupported"
+        "`not in` semantics"
     } else if tokens.len() > 3 && (c.contains('<') || c.contains('>') || c.contains("==")) {
-        "chained / multi-term comparison (>3 tokens)"
+        "chained / multi-term comparison"
     } else if c.contains(" and ") || c.contains(" or ") || c.starts_with("not ") {
         "boolean connective (and/or/not)"
-    } else if c.contains('[') || c.contains('.') {
-        "index / attribute access"
+    } else if c.contains('[') || c.contains('(') {
+        "collection literal / grouping"
     } else if tokens.len() == 3 {
         "binary comparison semantics"
     } else if tokens.len() == 1 {
@@ -74,108 +68,160 @@ fn classify(cond: &str) -> &'static str {
     }
 }
 
+/// The scripted agent from `run_vectors.mjs`: outcomes are consumed in visit order, the last one
+/// repeats, an unscripted node answers `{text: node}`, and `{"__raise__": msg}` throws.
+fn scripted_agent(
+    script: &HashMap<String, Vec<serde_json::Value>>,
+) -> impl FnMut(&str, &str, &RunState) -> Result<V, String> + '_ {
+    let mut used: HashMap<String, usize> = HashMap::new();
+    move |node: &str, _instruction: &str, _state: &RunState| {
+        let Some(seq) = script.get(node) else {
+            return Ok(V::Obj(vec![("text".to_string(), V::Str(node.to_string()))]));
+        };
+        let i = *used.get(node).unwrap_or(&0);
+        used.insert(node.to_string(), i + 1);
+        let outcome = &seq[i.min(seq.len().saturating_sub(1))];
+        if let serde_json::Value::Object(o) = outcome {
+            if let Some(msg) = o.get("__raise__") {
+                return Err(match msg {
+                    serde_json::Value::String(s) => s.clone(),
+                    other => other.to_string(),
+                });
+            }
+        }
+        Ok(V::from_json(outcome))
+    }
+}
+
 fn main() {
-    let dir = std::env::args().nth(1).unwrap_or_else(|| {
-        "../prismpath/portable/conformance".to_string()
-    });
+    let dir = std::env::args()
+        .nth(1)
+        .unwrap_or_else(|| "../prismpath/portable/conformance".to_string());
 
     println!("=== prismpath-rs CONFORMANCE CERTIFICATION ===");
     println!("corpus: {dir}\n");
 
+    let mut failures = 0usize;
+
     // ---------------------------------------------------------------- predicates
-    let pred_path = format!("{dir}/predicates.json");
-    let raw = match std::fs::read_to_string(&pred_path) {
-        Ok(r) => r,
-        Err(e) => {
-            eprintln!("cannot read {pred_path}: {e}");
-            std::process::exit(2);
-        }
-    };
+    let raw = std::fs::read_to_string(format!("{dir}/predicates.json")).unwrap_or_else(|e| {
+        eprintln!("cannot read predicates.json: {e}");
+        std::process::exit(2);
+    });
     let pf: PredicateFile = serde_json::from_str(&raw).expect("predicates.json parse");
 
-    // A minimal flow so we can construct an Engine; the predicate evaluator does not use it.
-    let flow = Flow {
-        name: "conformance".into(),
-        start: "n".into(),
-        nodes: HashMap::new(),
-    };
-    let engine = Engine::new(flow);
-
-    let mut pass = 0usize;
-    let mut fail = 0usize;
+    let mut pred_pass = 0usize;
     let mut buckets: HashMap<&'static str, usize> = HashMap::new();
-    let mut samples: HashMap<&'static str, (String, String, String)> = HashMap::new();
+    let mut samples: HashMap<&'static str, Vec<String>> = HashMap::new();
 
     for case in &pf.cases {
-        let ctx: HashMap<String, Value> =
-            case.ctx.iter().map(|(k, v)| (k.clone(), to_value(v))).collect();
+        let ctx: HashMap<String, V> =
+            case.ctx.iter().map(|(k, v)| (k.clone(), V::from_json(v))).collect();
 
-        let got = engine.conformance_eval(&case.cond, &ctx);
-        let got_repr = match &got {
+        let got = match eval_condition(&case.cond, &ctx) {
             Ok(b) => b.to_string(),
             Err(_) => "ERROR".to_string(),
         };
-        let want_repr = match &case.expect {
+        let want = match &case.expect {
             serde_json::Value::Bool(b) => b.to_string(),
             serde_json::Value::String(s) => s.clone(),
             other => other.to_string(),
         };
 
-        if got_repr == want_repr {
-            pass += 1;
+        if got == want {
+            pred_pass += 1;
         } else {
-            fail += 1;
+            failures += 1;
             let bucket = classify(&case.cond);
             *buckets.entry(bucket).or_insert(0) += 1;
-            samples.entry(bucket).or_insert_with(|| {
-                (case.cond.clone(), want_repr.clone(), got_repr.clone())
-            });
+            let entry = samples.entry(bucket).or_default();
+            if entry.len() < 3 {
+                entry.push(format!(
+                    "{:?} ctx={} -> expected {want}, got {got}",
+                    case.cond,
+                    serde_json::to_string(&case.ctx).unwrap_or_default()
+                ));
+            }
         }
     }
-
-    let total = pass + fail;
-    println!("PREDICATES: {pass}/{total} match the frozen spec");
-    if fail > 0 {
+    println!("PREDICATES: {pred_pass}/{} match the frozen spec", pf.cases.len());
+    if pred_pass < pf.cases.len() {
         println!("\n  divergences grouped by cause:");
         let mut rows: Vec<_> = buckets.iter().collect();
         rows.sort_by(|a, b| b.1.cmp(a.1));
         for (bucket, count) in rows {
             println!("    {count:>5}  {bucket}");
-            if let Some((cond, want, got)) = samples.get(*bucket) {
-                println!("           e.g. {cond:?} -> expected {want}, got {got}");
+            for s in &samples[*bucket] {
+                println!("           {s}");
             }
         }
     }
 
     // ---------------------------------------------------------------- flows
-    let flow_path = format!("{dir}/flows.json");
-    let fraw = std::fs::read_to_string(&flow_path).expect("read flows.json");
+    let fraw = std::fs::read_to_string(format!("{dir}/flows.json")).expect("read flows.json");
     let ff: FlowFile = serde_json::from_str(&fraw).expect("flows.json parse");
 
-    // The fixtures carry the flow as a Markdown document with YAML frontmatter. The crate's `Flow`
-    // is a JSON struct with no parser for that format, and `run()` returns only a path — the spec
-    // requires {path, stopped, pending_node, spawn}. Report this as a structural gap rather than
-    // pretending to run 27 cases we cannot even load.
-    let markdown_fixtures = ff
-        .cases
-        .iter()
-        .filter(|c| c.flow.trim_start().starts_with("---"))
-        .count();
-
-    println!("\nFLOWS: 0/{} executable", ff.cases.len());
-    println!("    {markdown_fixtures} of {} fixtures are Markdown documents with YAML frontmatter;", ff.cases.len());
-    println!("    the crate deserializes Flow from JSON and has no Markdown/frontmatter parser.");
-    println!("    Engine::run also returns only `path`, while the spec requires");
-    println!("    {{path, stopped, pending_node, spawn}} — 3 of 4 output fields are absent.");
+    let mut flow_pass = 0usize;
+    for fx in &ff.cases {
+        let graph = parse(&fx.flow);
+        let opts = RunOpts {
+            max_steps: fx.max_steps.unwrap_or(25),
+            start: fx.start.clone(),
+            state: fx.state.as_ref().map(V::from_json),
+        };
+        let got = match run(&graph, scripted_agent(&fx.script), opts) {
+            Ok(res) => serde_json::json!({
+                "path": res.path,
+                "stopped": res.stopped,
+                "pending_node": res.pending.as_ref().map(|p| p.node.clone()),
+                "spawn": res.pending.as_ref().and_then(|p| p.spawn.as_ref().map(v_to_json)),
+            }),
+            Err(e) => serde_json::json!({ "error": e.to_string() }),
+        };
+        let want = serde_json::json!({
+            "path": fx.expect.get("path").cloned().unwrap_or(serde_json::Value::Null),
+            "stopped": fx.expect.get("stopped").cloned().unwrap_or(serde_json::Value::Null),
+            "pending_node": fx.expect.get("pending_node").cloned().unwrap_or(serde_json::Value::Null),
+            "spawn": fx.expect.get("spawn").cloned().unwrap_or(serde_json::Value::Null),
+        });
+        if got == want {
+            flow_pass += 1;
+        } else {
+            failures += 1;
+            println!("\nFLOW MISMATCH  {}", fx.name);
+            println!("  expect = {want}");
+            println!("  got    = {got}");
+        }
+    }
+    println!("\nFLOWS: {flow_pass}/{} match the frozen spec", ff.cases.len());
 
     // ---------------------------------------------------------------- verdict
     println!("\n---------------------------------------------------");
-    if fail == 0 && ff.cases.is_empty() {
-        println!("CONFORMANT");
+    if failures == 0 {
+        println!("CONFORMANT — prismpath-rs matches the frozen kernel spec.");
         std::process::exit(0);
     }
-    println!("NOT CONFORMANT — prismpath-rs does not implement the frozen kernel spec.");
-    println!("  predicates: {fail} of {total} cases diverge");
-    println!("  flows:      {} of {} fixtures cannot be executed at all", ff.cases.len(), ff.cases.len());
+    println!("NOT CONFORMANT — {failures} divergence(s) from the frozen kernel spec.");
     std::process::exit(1);
+}
+
+fn v_to_json(v: &V) -> serde_json::Value {
+    match v {
+        V::Null => serde_json::Value::Null,
+        V::Bool(b) => serde_json::Value::Bool(*b),
+        // JSON.stringify(1.0) is "1": the contract's numbers are f64 rendered the JS way, so an
+        // integral float must serialize as an integer or the comparison fails on notation alone.
+        V::Num(n) if n.fract() == 0.0 && n.abs() < 9.2e18 => {
+            serde_json::Value::Number(serde_json::Number::from(*n as i64))
+        }
+        V::Num(n) => serde_json::Number::from_f64(*n)
+            .map(serde_json::Value::Number)
+            .unwrap_or(serde_json::Value::Null),
+        V::Str(s) => serde_json::Value::String(s.clone()),
+        V::List(a) => serde_json::Value::Array(a.iter().map(v_to_json).collect()),
+        V::Obj(o) => serde_json::Value::Object(
+            o.iter().map(|(k, x)| (k.clone(), v_to_json(x))).collect(),
+        ),
+        V::Ellipsis => serde_json::Value::Null,
+    }
 }
