@@ -8,7 +8,10 @@ import os, sys, json, hashlib, requests
 sys.path.insert(0, "/home/cwadmin/cwprojects/prismpath")
 from prismpath import ledger_airgap, deferral  # CORE attestation + deferral ports (adapter→core OK; core→adapter is the leak)
 
-GEMMA = "http://127.0.0.1:8888/v1/chat/completions"; MODEL = "gemma4"
+# Adjudicator LLM endpoint (OpenAI-compatible /v1/chat/completions). Env-overridable so the same
+# adapter runs against the GPU vLLM factory (default) OR an air-gapped CPU llama.cpp llama-server.
+GEMMA = os.environ.get("PRISMPATH_LLM_ENDPOINT", "http://127.0.0.1:8888/v1/chat/completions")
+MODEL = os.environ.get("PRISMPATH_LLM_MODEL", "gemma4")
 HERE = os.path.dirname(os.path.abspath(__file__))
 # ---------- Retrieval port: runtime-selectable control catalog (the engine is catalog-agnostic) ----------
 STANDARDS = {
