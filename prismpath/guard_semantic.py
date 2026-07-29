@@ -34,7 +34,7 @@ arbitrary hardware.
 from __future__ import annotations
 
 import hashlib
-import json
+import struct
 from dataclasses import dataclass
 from typing import Callable, Optional, Sequence
 
@@ -119,14 +119,36 @@ class SemanticLayer:
         return self.status == SemanticStatus.ACTIVE and self.embed is not None
 
     def layer_hash(self) -> str:
-        """Identity of this layer — mixed into the attested record alongside `policy_hash`."""
+        """Identity of this layer — mixed into the attested record alongside `policy_hash`.
+
+        The preimage is a byte encoding, never a formatted string. Version 1 hashed `json.dumps`
+        output, which made the identity depend on the *language's float repr*: Python writes
+        `{"a": [1.0, 2.0]}` and goes exponential below 1e-4 (`9.6e-05`), JavaScript writes
+        `{"a":[1,2]}` and holds out until 1e-7. The TypeScript port replicated Python's formatting
+        character by character to compensate — which means any third implementation would have hit
+        the same wall, and the parity test was pinning an accident. Hashing the IEEE-754 bits removes
+        formatting from the preimage entirely: both consumers parse the same lockfile JSON, decimal→
+        binary parsing is correctly rounded in every language that matters, so they hold identical
+        doubles and identity holds by construction.
+
+        Deliberate semantic change from v1: no rounding before hashing. Two layers whose centroids
+        differ only in the 7th decimal are different numbers and therefore different boundaries —
+        blurring them into one identity was tolerance for a formatting problem that no longer exists.
+
+        Layout (all lengths big-endian u32, all floats big-endian f64, strings NUL-terminated so a
+        rule name can never absorb the bytes that follow it):
+        domain tag · embedder_id · threshold · rule count · (rule name · dim · values)*, rules sorted.
+        """
         h = hashlib.sha256()
-        h.update(self.embedder_id.encode("utf-8"))
-        h.update(f"{self.threshold:.6f}".encode())
-        h.update(json.dumps(
-            {k: [round(x, 6) for x in v] for k, v in sorted(self.centroids.items())},
-            sort_keys=True,
-        ).encode("utf-8"))
+        h.update(b"p1-layer-hash-v2\x00")
+        h.update(self.embedder_id.encode("utf-8") + b"\x00")
+        h.update(struct.pack(">d", float(self.threshold)))
+        h.update(struct.pack(">I", len(self.centroids)))
+        for rule in sorted(self.centroids):
+            vec = self.centroids[rule]
+            h.update(rule.encode("utf-8") + b"\x00")
+            h.update(struct.pack(">I", len(vec)))
+            h.update(struct.pack(f">{len(vec)}d", *(float(x) for x in vec)))
         return h.hexdigest()
 
     def verify(self, probe: str = "the quick brown fox jumps over the lazy dog") -> str:
