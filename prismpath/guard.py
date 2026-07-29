@@ -60,7 +60,9 @@ Policy documents are Markdown, so the people who write them can read them:
 from __future__ import annotations
 
 import hashlib
+import json
 import re
+import unicodedata
 from dataclasses import dataclass, field
 from typing import Iterable, Sequence
 
@@ -75,6 +77,8 @@ __all__ = [
     "parse_policy_file",
     "compose",
     "guarded_exchange",
+    "normalize",
+    "normalization_hash",
     "INBOUND",
     "OUTBOUND",
 ]
@@ -95,6 +99,116 @@ _REGEX_LITERAL_RE = re.compile(r"^/(.*)/([a-zA-Z]*)$", re.DOTALL)
 
 class PolicyError(ValueError):
     """A policy document is malformed. Raised rather than skipped — the layer fails closed."""
+
+
+# ------------------------------------------------------------------------------- normalization
+#
+# Measured bypass rates (BYPASS_MEASUREMENT.md, run 1) showed the unhardened floor was defeated by
+# purely mechanical surface changes: zero-width characters, combining accents, Cyrillic homoglyphs,
+# character spacing. Those are *normalization* problems, not semantic ones, so they can be closed
+# here — inside P0, with the floor still a grammar and bypass still inexpressible rather than merely
+# detectable.
+#
+# TWO PROPERTIES THIS MUST PRESERVE:
+#
+# 1. **Normalization is monotone.** A rule matches if it matches the raw text OR the normalized
+#    text. Folding can therefore only ever ADD matches. If matching used the normalized form alone,
+#    a fold that happened to destroy a pattern would silently *weaken* the floor — reintroducing the
+#    exact hole the "no permitting verb" grammar exists to prevent, through the back door.
+# 2. **It is part of the policy's identity.** The folding tables are hashed into `Guard.policy_hash`,
+#    so an attested verdict commits to *which* normalization produced it. Changing a table changes
+#    the hash, the same way changing a rule does.
+#
+# Order matters and is fixed: invisibles are stripped first (they sit between the characters every
+# later step reads), then compatibility normalization, then accent removal, then confusable folding,
+# then the lossy heuristics.
+
+NORMALIZATION_VERSION = 1
+
+#: Characters that are invisible but split a regex match. Stripped outright.
+_INVISIBLE = {
+    "​",  # zero width space
+    "‌",  # zero width non-joiner
+    "‍",  # zero width joiner
+    "⁠",  # word joiner
+    "﻿",  # zero width no-break space
+    "­",  # soft hyphen
+}
+
+#: Visually confusable non-Latin codepoints -> their Latin lookalike. A finite table: misses are
+#: gaps to extend, not ambiguity to resolve, which is why this stratum is predicted near zero.
+_CONFUSABLES = {
+    # Cyrillic
+    "а": "a", "в": "b", "с": "c", "е": "e", "һ": "h", "і": "i", "ј": "j", "к": "k", "м": "m",
+    "н": "h", "о": "o", "р": "p", "ѕ": "s", "т": "t", "у": "y", "х": "x", "г": "r", "ԁ": "d",
+    "ν": "v", "ѡ": "w",
+    # Greek
+    "α": "a", "β": "b", "ε": "e", "ι": "i", "κ": "k", "ο": "o", "ρ": "p", "τ": "t", "υ": "u",
+    "χ": "x", "ϲ": "c", "ѵ": "v",
+}
+
+#: Leetspeak substitutions that are UNAMBIGUOUS. `1` is deliberately absent: it reads as both `l`
+#: and `i`, and folding it one way would be a guess that either misses bypasses or manufactures
+#: collisions. Partial closure of this stratum is therefore expected and pre-registered.
+_LEET_UNAMBIGUOUS = {"4": "a", "3": "e", "5": "s", "0": "o", "7": "t", "@": "a", "$": "s"}
+
+#: Collapses runs of single characters separated by one space/dot/hyphen ("k i l l", "k.i.l.l").
+#: A heuristic, not a fold — hence a collision budget rather than a zero prediction.
+_SPACED_RUN_RE = re.compile(r"\b(?:\w[ .\-_]){2,}\w\b")
+
+
+def _strip_invisible(text: str) -> str:
+    return "".join(ch for ch in text if ch not in _INVISIBLE)
+
+
+def _strip_accents(text: str) -> str:
+    decomposed = unicodedata.normalize("NFD", text)
+    return unicodedata.normalize(
+        "NFC", "".join(ch for ch in decomposed if not unicodedata.combining(ch))
+    )
+
+
+def _fold_confusables(text: str) -> str:
+    return "".join(_CONFUSABLES.get(ch, ch) for ch in text)
+
+
+def _fold_leet(text: str) -> str:
+    return "".join(_LEET_UNAMBIGUOUS.get(ch, ch) for ch in text)
+
+
+def _collapse_spaced_runs(text: str) -> str:
+    def join(m: re.Match[str]) -> str:
+        return re.sub(r"[ .\-_]", "", m.group(0))
+
+    return _SPACED_RUN_RE.sub(join, text)
+
+
+def normalize(text: str) -> str:
+    """Fold a string toward its canonical form. Order is fixed; see the note above."""
+    if not text:
+        return ""
+    out = _strip_invisible(text)
+    out = unicodedata.normalize("NFKC", out)
+    out = _strip_accents(out)
+    out = _fold_confusables(out)
+    out = _fold_leet(out)
+    out = _collapse_spaced_runs(out)
+    return out.casefold()
+
+
+def normalization_hash() -> str:
+    """Hash of the folding behaviour, mixed into `policy_hash`.
+
+    Hashes the TABLES rather than this module's source, so reformatting or a comment edit does not
+    churn the identity of every attested verdict — but changing what folding actually does, does.
+    """
+    h = hashlib.sha256()
+    h.update(str(NORMALIZATION_VERSION).encode())
+    h.update(json.dumps(sorted(_INVISIBLE), ensure_ascii=False).encode("utf-8"))
+    h.update(json.dumps(_CONFUSABLES, sort_keys=True, ensure_ascii=False).encode("utf-8"))
+    h.update(json.dumps(_LEET_UNAMBIGUOUS, sort_keys=True, ensure_ascii=False).encode("utf-8"))
+    h.update(_SPACED_RUN_RE.pattern.encode("utf-8"))
+    return h.hexdigest()
 
 
 @dataclass(frozen=True)
@@ -121,7 +235,14 @@ class Rule:
         return direction in self.directions
 
     def matches(self, text: str) -> bool:
-        return any(p.search(text) for p in self.patterns)
+        """Match the raw text OR its normalized form.
+
+        Checking both is what keeps normalization MONOTONE: folding can add a match, never remove
+        one. Matching the normalized form alone would let a fold that happens to destroy a pattern
+        silently weaken the floor.
+        """
+        folded = normalize(text)
+        return any(p.search(text) or p.search(folded) for p in self.patterns)
 
 
 @dataclass(frozen=True)
@@ -334,11 +455,16 @@ class Guard:
 
     @property
     def policy_hash(self) -> str:
-        """Stable hash of every contributing policy — bind into attestation to prove what ran."""
+        """Stable hash of every contributing policy AND the normalization that matched them.
+
+        The folding tables change what a rule catches, so they are part of the policy's identity: an
+        attested verdict must commit to *which* normalization produced it, not only which rules ran.
+        """
         h = hashlib.sha256()
         for p in sorted(self.policies, key=lambda p: p.name):
             h.update(p.name.encode("utf-8"))
             h.update(p.source_hash.encode("utf-8"))
+        h.update(normalization_hash().encode("utf-8"))
         return h.hexdigest()
 
     def check(self, text: str, direction: str) -> Verdict:

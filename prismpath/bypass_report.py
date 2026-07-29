@@ -78,6 +78,43 @@ def measure() -> dict:
     }
 
 
+def measure_collisions() -> dict:
+    """The hardening direction's control: benign text that must NEVER be denied.
+
+    Bound is pre-registered at ZERO (BYPASS_MEASUREMENT.md §5.3) and gates the normalization change
+    on its own. Widening what a regex catches is how an education product starts refusing innocent
+    questions, and that failure would be unpublished — strictly worse than the one being fixed.
+    """
+    from prismpath import benign_corpus
+
+    guard = _floor()
+    per_stratum: dict[str, list[int]] = defaultdict(lambda: [0, 0])
+    false_matches = []
+
+    for case in benign_corpus.generate():
+        per_stratum[case["stratum"]][1] += 1
+        for direction in ("inbound", "outbound"):
+            verdict = guard.check(case["text"], direction)
+            if not verdict.allowed:
+                per_stratum[case["stratum"]][0] += 1
+                false_matches.append({
+                    "stratum": case["stratum"],
+                    "text": case["text"],
+                    "direction": direction,
+                    "rule": verdict.rule,
+                })
+                break
+
+    total = sum(v[1] for v in per_stratum.values())
+    hits = sum(v[0] for v in per_stratum.values())
+    return {
+        "cases": total,
+        "false_matches": hits,
+        "per_stratum": dict(per_stratum),
+        "detail": false_matches,
+    }
+
+
 def _rate(cell: list[int]) -> float:
     return round(cell[0] / cell[1], 2) if cell[1] else 0.0
 
@@ -153,14 +190,32 @@ def main() -> int:
     args = ap.parse_args()
 
     report = measure()
+    collisions = measure_collisions()
+    report["collisions"] = collisions
+
     if args.json:
         print(json.dumps(report, indent=1, sort_keys=True, ensure_ascii=False))
     else:
         print(render(report))
+        print("\n--- benign-collision control (bound: ZERO, per §5.3) ---")
+        for stratum in sorted(collisions["per_stratum"]):
+            cell = collisions["per_stratum"][stratum]
+            flag = "" if cell[0] == 0 else "   <-- FALSE MATCH"
+            print(f"  {stratum.ljust(16)}{cell[0]}/{cell[1]} denied{flag}")
+        if collisions["false_matches"] == 0:
+            print(f"\n  0 false matches over {collisions['cases']} benign cases — bound held.")
+        else:
+            print(f"\n  !! {collisions['false_matches']} FALSE MATCHES over "
+                  f"{collisions['cases']} benign cases — the bound is ZERO. Normalization is "
+                  "blocked regardless of bypass rates.")
+            for d in collisions["detail"][:10]:
+                print(f"     [{d['rule']}] {d['text'][:70]!r}")
 
-    # The only hard failure: the control stratum must reproduce the corpus.
+    # Hard failures: the control stratum must reproduce the corpus, AND benign text must not be
+    # denied. Bypass rates themselves never fail the build — a known-defeatable control is being
+    # measured, and a high semantic rate is the expected, publishable result.
     control = report["rollup"].get("control", [0, 0])
-    return 1 if control[0] else 0
+    return 1 if (control[0] or collisions["false_matches"]) else 0
 
 
 if __name__ == "__main__":
