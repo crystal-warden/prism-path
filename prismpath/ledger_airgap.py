@@ -64,8 +64,11 @@ def provenance_manifest(root_hex, label, policy_hash=None, gate_id=None, ingesti
 def override_manifest(prior, overrider_id, rationale, new_root_hex, new_label=None):
     """Attest a HUMAN OVERRIDE of a prior automated decision as a SUPERSEDING commit. The prior manifest
     stays immutable; this binds its manifest_hash + the overrider + the rationale + the new decision, so
-    the override trail is cryptographically provable — who overrode what, when, and why, with the
-    automated output PRESERVED, never erased. Domain-neutral: a SOC analyst, a compliance auditor, or a
+    the override trail is attested and auditable — who overrode what, when, and why, with the
+    automated output PRESERVED, never erased. NOT "cryptographically provable": until the root is
+    OTS-anchored (SPEC_ledger_opentimestamps.md §1), an adversary with filesystem access can rewrite
+    the whole chain, and that spec's own §5 gates the stronger wording behind a passing
+    stamp->upgrade->verify round-trip. Domain-neutral: a SOC analyst, a compliance auditor, or a
     tutor mentor superseding an automated call all use this same core capability."""
     m = {"kind": "override", "supersedes": prior["manifest_hash"], "prior_root": prior.get("root"),
          "prior_created": prior.get("created"), "overrider_id": overrider_id, "rationale": rationale,

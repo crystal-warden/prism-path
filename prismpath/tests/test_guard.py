@@ -358,10 +358,17 @@ def test_every_verdict_is_offered_to_the_observability_half():
 
     seen = []
     g = compose([floor()])
-    guarded_exchange(g, "explain ownership", lambda _t: "ownership is...", on_verdict=seen.append)
+    guarded_exchange(
+        g,
+        "explain ownership",
+        lambda _t: "ownership is...",
+        on_verdict=lambda v, text: seen.append((v, text)),
+    )
 
-    assert [v.direction for v in seen] == [INBOUND, OUTBOUND]
-    assert all(v.allowed for v in seen)
+    assert [v.direction for v, _ in seen] == [INBOUND, OUTBOUND]
+    assert all(v.allowed for v, _ in seen)
+    # The text is handed over too, so a recorder can bind WHICH text produced the verdict.
+    assert [t for _, t in seen] == ["explain ownership", "ownership is..."]
 
 
 def test_a_blocked_exchange_raises_rather_than_returning_a_sentinel():

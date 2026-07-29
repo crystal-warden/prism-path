@@ -555,16 +555,18 @@ def guarded_exchange(guard: Guard, text: str, call, *, on_verdict=None) -> str:
     `guarded_exchange(text, call)` overload that quietly skips the boundary, and an adapter that wants
     a model response has nothing simpler to reach for.
 
-    `on_verdict` receives every verdict, allowed or not — wire it to `audit_log` / attestation so the
-    observability half of the onion records what the security half decided. Bind `guard.policy_hash`
-    into the attestation manifest and *which policy ran* becomes provable after the fact.
+    `on_verdict(verdict, text)` receives every verdict, allowed or not, together with the text it was
+    made about — wire it to `guard_ledger.verdict_recorder` so the observability half of the onion
+    records what the security half decided. Allowed verdicts matter as much as denials: a trail
+    containing only refusals cannot distinguish "the guard ran and permitted this" from "the guard
+    never ran". `guard.policy_hash` binds which rules AND which normalization produced the answer.
 
     Raises `Blocked` rather than returning a sentinel, so a caller that forgets to check cannot
     accidentally treat a refusal as a normal answer.
     """
     inbound = guard.check(text, INBOUND)
     if on_verdict is not None:
-        on_verdict(inbound)
+        on_verdict(inbound, text)
     if not inbound.allowed:
         raise Blocked(inbound)
 
@@ -572,7 +574,7 @@ def guarded_exchange(guard: Guard, text: str, call, *, on_verdict=None) -> str:
 
     outbound = guard.check(response, OUTBOUND)
     if on_verdict is not None:
-        on_verdict(outbound)
+        on_verdict(outbound, response)
     if not outbound.allowed:
         raise Blocked(outbound)
 
