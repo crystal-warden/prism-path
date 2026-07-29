@@ -1360,9 +1360,29 @@ fn js_truthy(v: &V) -> bool {
 /// `agent(node, instruction, state)` returns a worker outcome (`Ok`) or raises (`Err`) — the Err
 /// arm feeds the error tier exactly like a thrown exception does in the reference. Returns
 /// `{path, steps, stopped, state, pending}`; REFUSES a non-portable flow up front.
-pub fn run<F>(graph: &Graph, mut agent: F, opts: RunOpts) -> Result<RunResult, EngineError>
+pub fn run<F>(graph: &Graph, agent: F, opts: RunOpts) -> Result<RunResult, EngineError>
 where
     F: FnMut(&str, &str, &RunState) -> Result<V, String>,
+{
+    run_observed(graph, agent, opts, |_, _, _| {})
+}
+
+/// `run` with the reference's `onStep` hook: called at every checkpoint the .mjs kernel calls its
+/// `checkpoint()` — before each worker, and at terminal / needs_human / waiting / stuck.
+///
+/// This is the OBSERVATION SEAM, and it is deliberately part of the kernel's public surface on
+/// both implementations: telemetry, audit trails, progress UIs and the like belong to the HOST,
+/// watching through this hook — never inside the kernel, where a capability grown on one
+/// implementation and not the other would quietly fork the spec the conformance corpus froze.
+pub fn run_observed<F, O>(
+    graph: &Graph,
+    mut agent: F,
+    opts: RunOpts,
+    mut on_step: O,
+) -> Result<RunResult, EngineError>
+where
+    F: FnMut(&str, &str, &RunState) -> Result<V, String>,
+    O: FnMut(&RunResult, &RunState, Option<&str>),
 {
     if let Some(v) = portability_violations(graph).into_iter().next() {
         return Err(EngineError::NotPortable(v));
@@ -1384,8 +1404,10 @@ where
 
         if n.edges.is_empty() {
             res.stopped = "terminal".to_string(); // a node with no edges is terminal
+            on_step(&res, &state, None);
             break;
         }
+        on_step(&res, &state, Some(&node));
         *state.visits.entry(node.clone()).or_insert(0) += 1;
 
         let outcome = match agent(&node, &n.instruction, &state) {
@@ -1469,6 +1491,7 @@ where
                 candidates: n.edges.clone(),
                 spawn: None,
             });
+            on_step(&res, &state, Some(&node));
             break;
         }
 
@@ -1487,6 +1510,7 @@ where
                 candidates: events.iter().map(|e| (*e).clone()).collect(),
                 spawn: spawn.cloned(),
             });
+            on_step(&res, &state, Some(&node));
             break;
         }
 
@@ -1495,6 +1519,7 @@ where
         ctx.insert("visits".to_string(), V::Num(state.visits[&node] as f64));
         let Some((dt, dc)) = first_deterministic(&n.edges, &ctx) else {
             res.stopped = "stuck".to_string(); // deterministic-only, nothing matched
+            on_step(&res, &state, None);
             break;
         };
         res.steps.push(Step {
