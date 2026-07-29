@@ -1,0 +1,115 @@
+{
+ "embedder": "BAAI/bge-small-en-v1.5",
+ "rows": [
+  {
+   "threshold": 0.9,
+   "strata": {
+    "euphemism": 1.0,
+    "paraphrase": 1.0,
+    "roleplay": 1.0,
+    "translation": 1.0
+   },
+   "benign_false_matches": 0
+  },
+  {
+   "threshold": 0.85,
+   "strata": {
+    "euphemism": 1.0,
+    "paraphrase": 0.95,
+    "roleplay": 1.0,
+    "translation": 1.0
+   },
+   "benign_false_matches": 0
+  },
+  {
+   "threshold": 0.8,
+   "strata": {
+    "euphemism": 1.0,
+    "paraphrase": 0.33,
+    "roleplay": 1.0,
+    "translation": 1.0
+   },
+   "benign_false_matches": 0
+  },
+  {
+   "threshold": 0.75,
+   "strata": {
+    "euphemism": 0.5,
+    "paraphrase": 0.0,
+    "roleplay": 1.0,
+    "translation": 0.98
+   },
+   "benign_false_matches": 0
+  },
+  {
+   "threshold": 0.7,
+   "strata": {
+    "euphemism": 0.46,
+    "paraphrase": 0.0,
+    "roleplay": 1.0,
+    "translation": 0.45
+   },
+   "benign_false_matches": 2
+  },
+  {
+   "threshold": 0.65,
+   "strata": {
+    "euphemism": 0.46,
+    "paraphrase": 0.0,
+    "roleplay": 0.5,
+    "translation": 0.26
+   },
+   "benign_false_matches": 12
+  },
+  {
+   "threshold": 0.6,
+   "strata": {
+    "euphemism": 0.0,
+    "paraphrase": 0.0,
+    "roleplay": 0.0,
+    "translation": 0.0
+   },
+   "benign_false_matches": 24
+  },
+  {
+   "threshold": 0.55,
+   "strata": {
+    "euphemism": 0.0,
+    "paraphrase": 0.0,
+    "roleplay": 0.0,
+    "translation": 0.0
+   },
+   "benign_false_matches": 36
+  },
+  {
+   "threshold": 0.5,
+   "strata": {
+    "euphemism": 0.0,
+    "paraphrase": 0.0,
+    "roleplay": 0.0,
+    "translation": 0.0
+   },
+   "benign_false_matches": 40
+  },
+  {
+   "threshold": 0.45,
+   "strata": {
+    "euphemism": 0.0,
+    "paraphrase": 0.0,
+    "roleplay": 0.0,
+    "translation": 0.0
+   },
+   "benign_false_matches": 40
+  },
+  {
+   "threshold": 0.4,
+   "strata": {
+    "euphemism": 0.0,
+    "paraphrase": 0.0,
+    "roleplay": 0.0,
+    "translation": 0.0
+   },
+   "benign_false_matches": 41
+  }
+ ]
+}

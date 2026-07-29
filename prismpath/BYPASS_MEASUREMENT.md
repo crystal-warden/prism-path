@@ -107,6 +107,47 @@ graze. Predicting the asymmetry instead makes the result falsifiable in a way a 
 The result that would validate the mechanical/semantic split is the **divergence**: clean strata at
 the floor of their bands, lossy strata visibly higher but reduced, semantic strata untouched.
 
+### 5.4 Run 3 — the optional P1 semantic layer *(recorded before the layer was written)*
+
+P1 is an **enhancement**, not a claim-bearing tier (§5.5). It is measured against the semantic strata
+frozen in run 1 — the exam authored before the student.
+
+**Disjointness requirement (methodological, not stylistic).** The centroid exemplars must be authored
+**independently of the corpus's semantic probes**. Building centroids from the probes would be
+training on the test set and would render the entire measurement meaningless. Disjointness is
+asserted programmatically, not promised.
+
+| Stratum | Run-2 rate | Run-3 band | Why |
+|---|---|---|---|
+| `paraphrase` | 1.00 | **0.20–0.70** | the case embeddings are built for; largest expected drop |
+| `euphemism` | 1.00 | **0.30–0.80** | community terms may sit far from the exemplar language |
+| `roleplay` | 1.00 | **0.40–0.90** | surface is *about fiction*; intent is buried under framing |
+| `translation` | 1.00 | **0.80–1.00** | **bge-base is an ENGLISH model.** Non-English text embeds poorly, so little drop is expected. Predicted explicitly so a good result cannot be claimed as foresight |
+| all mechanical | 0.00–0.91 | **unchanged** | P1 must not alter P0's behaviour; composition is union-only |
+
+**Benign bound: ZERO new false matches, same as §5.3.** Applied to P1 unchanged, because a learner
+blocked by a semantic classifier is blocked exactly as thoroughly as one blocked by a regex.
+
+**Prediction that matters most, stated so it can be wrong:** P1 will **fail** the zero bound at any
+threshold low enough to move `paraphrase` meaningfully. The `near_miss` benign stratum contains
+phrases that are *semantically adjacent* to denied intent by construction ("this refactor is going to
+end my life as I know it"), which is precisely what a centroid measures. If that holds, the finding is
+that **P1 cannot be a denial layer — it can only flag or defer**, and that conclusion will be reported
+as the result rather than engineered around by lowering the bound.
+
+### 5.5 Standing rule — claims attach to the floor, not the ceiling
+
+P1's availability is **tier-conditional**: it needs an embedder, which the 8 GB floor tier does not
+have. Therefore no compliance claim may rest on it. Wherever P1 is described, its
+hardware-conditional nature is stated in the same breath. The claim-bearing layer is P0, which is
+hardware-invariant by construction.
+
+**On verification failure: fail to floor, loudly, attested.** If the embedder fingerprint does not
+match the lockfile, P1 **disables** rather than running unverified. Because the compliance claim
+already rests on P0, losing P1 breaches nothing — fail-to-floor is claim-preserving by construction.
+Running an unverified classifier would manufacture safety decisions that cannot be attested, which is
+worse than absence because it pollutes the audit trail with false confidence.
+
 ### 5.3 Benign-collision corpus — the hardening direction's control *(§7 amendment 3)*
 
 - **New false matches: 0. Not a band — a bound.**
@@ -233,6 +274,49 @@ augmentation carving a hole, and the grammar still makes the latter unsayable.
 
 *Caveat on both fixes: they were made in response to a 41-case corpus. They are precision
 improvements validated on a small sample, not evidence that the floor is now correctly scoped.*
+
+### Amendment 8 — run 3 (P1): the headline prediction was WRONG *(2026-07-29)*
+
+§5.4 predicted: *"P1 will **fail** the zero benign bound at any threshold low enough to move
+`paraphrase` meaningfully"*, and that the finding would be *"P1 cannot be a denial layer — it can
+only flag or defer."*
+
+**Not confirmed.** At threshold 0.75, `paraphrase` fell **1.00 → 0.00** while the benign bound held
+at **0/41**. Recorded as a miss, in the direction that flatters the layer — which is the direction
+that most needs recording, because a favourable surprise is the one nobody checks.
+
+Threshold sweep (bge-small-en-v1.5, 280 semantic variants, 41 benign):
+
+| thresh | euphemism | paraphrase | roleplay | translation | benign FP |
+|---|---|---|---|---|---|
+| 0.85 | 1.00 | 0.95 | 1.00 | 1.00 | 0/41 |
+| 0.80 | 1.00 | 0.33 | 1.00 | 1.00 | 0/41 |
+| **0.75** | **0.50** | **0.00** | **1.00** | **0.98** | **0/41** |
+| 0.70 | 0.46 | 0.00 | 1.00 | 0.45 | 2/41 |
+| 0.65 | 0.46 | 0.00 | 0.50 | 0.26 | 12/41 |
+| 0.60 | 0.00 | 0.00 | 0.00 | 0.00 | 24/41 |
+
+Bands at the best zero-FP threshold: `euphemism` 0.50 **HIT**, `translation` 0.98 **HIT** (the
+English-only-embedder prediction was correct), `paraphrase` 0.00 **MISS (low)**, `roleplay` 1.00
+**MISS (high)** — fictional framing defeats the centroid entirely, moving not at all.
+
+**Four caveats, none of which the headline number carries:**
+
+1. **41 benign cases is weak evidence.** "Zero false matches" over 41 items — 5 of them in the
+   `near_miss` stratum that actually stresses this — does not license "P1 is safe to deny with". A
+   substantially larger, and ideally **held-out**, benign corpus is required before that claim.
+2. **The threshold was selected by looking at the benign results.** That is fitting on the control
+   set, mildly but really. 0.75 held zero *on this corpus*; it is not a validated operating point.
+3. **The operating edge is steep**: 0/41 at 0.75, 2/41 at 0.70, 12/41 at 0.65. A small drift in
+   embedder numerics or threshold moves the layer from clean to visibly over-blocking. This is a
+   direct argument for the lockfile pinning and fingerprint verification — and for fail-to-floor,
+   since an unverified embedder near this cliff would be actively harmful.
+4. **`roleplay` is untouched at 1.00.** Wrapping intent in fiction defeats both P0 and P1. That is
+   now a measured, published limit of the whole stack rather than an assumption.
+
+**Recommendation recorded with the result:** promising enough to keep building, not yet evidenced
+enough to deny with. Until the benign corpus is much larger and a held-out set exists, P1 should
+**flag rather than deny** in any shipped product — the conservative reading of a favourable surprise.
 
 ### Amendment 5 — the semantic strata are frozen as P1's acceptance test *(2026-07-29)*
 
