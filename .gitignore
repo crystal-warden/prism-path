@@ -16,3 +16,7 @@ prismpath/comparisons/.venv/
 
 # local test venv (recreate with pip install -e .[test])
 .venv/
+
+# Cargo build output — 333 object files were tracked before this line existed,
+# turning every build into hundreds of phantom git modifications
+prismpath-rs/target/
