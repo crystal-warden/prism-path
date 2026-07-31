@@ -1,0 +1,277 @@
+{
+ "cases": [
+  {
+   "embedMap": {
+    "great job": "6Zd+P/pk1j0AAAAAAAAAAA=="
+   },
+   "expect": {
+    "path": [
+     "classify",
+     "positive"
+    ],
+    "pending_node": null,
+    "stopped": "terminal",
+    "would_pick": null
+   },
+   "flow": "---\nname: sentiment\nstart: classify\n---\n## classify\nClassify the sentiment.\n\n-> positive: sentiment is positive\n-> negative: sentiment is negative\n\n## positive\nPositive result.\n\n## negative\nNegative result.\n",
+   "lock": {
+    "conditions": {
+     "sentiment is negative": "AAAAAAAAgD8AAAAAAAAAAA==",
+     "sentiment is positive": "AACAPwAAAAAAAAAAAAAAAA=="
+    },
+    "embedder": {
+     "dim": 4
+    }
+   },
+   "name": "basic_semantic_routing",
+   "script": {
+    "classify": [
+     {
+      "text": "great job"
+     }
+    ]
+   }
+  },
+  {
+   "embedMap": {
+    "go": "AAAAAAAAAAAqb34/7SniPQ=="
+   },
+   "expect": {
+    "path": [
+     "a",
+     "b"
+    ],
+    "pending_node": null,
+    "stopped": "terminal",
+    "would_pick": null
+   },
+   "flow": "---\nname: mixed\nstart: a\n---\n## a\nRoute.\n\n-> b: when x == 1\n-> c: semantic fallback\n\n## b\nDeterministic.\n\n## c\nSemantic.\n",
+   "lock": {
+    "conditions": {
+     "semantic fallback": "AAAAAAAAAAAAAIA/AAAAAA=="
+    },
+    "embedder": {
+     "dim": 4
+    }
+   },
+   "name": "deterministic_takes_priority",
+   "script": {
+    "a": [
+     {
+      "text": "go",
+      "x": 1
+     }
+    ]
+   }
+  },
+  {
+   "embedMap": {
+    "looks right": "Zed5PwUjXj4AAAAAAAAAAA=="
+   },
+   "expect": {
+    "path": [
+     "a",
+     "c"
+    ],
+    "pending_node": null,
+    "stopped": "terminal",
+    "would_pick": null
+   },
+   "flow": "---\nname: fallback\nstart: a\n---\n## a\nRoute.\n\n-> b: when x == 99\n-> c: the answer is correct\n-> d: the answer is wrong\n\n## b\nB.\n\n## c\nC.\n\n## d\nD.\n",
+   "lock": {
+    "conditions": {
+     "the answer is correct": "AACAPwAAAAAAAAAAAAAAAA==",
+     "the answer is wrong": "AAAAAAAAgD8AAAAAAAAAAA=="
+    },
+    "embedder": {
+     "dim": 4
+    }
+   },
+   "name": "deterministic_fails_semantic_succeeds",
+   "script": {
+    "a": [
+     {
+      "text": "looks right",
+      "x": 5
+     }
+    ]
+   }
+  },
+  {
+   "embedMap": {
+    "ambiguous": "JqpEPyDjIz8AAAAAAAAAAA=="
+   },
+   "expect": {
+    "path": [
+     "a"
+    ],
+    "pending_node": "a",
+    "stopped": "needs_human",
+    "would_pick": "b"
+   },
+   "flow": "---\nname: hfloor\nstart: a\n---\n## a\nClassify.\n\n-> b: option one\n-> c: option two\n\n## b\nB.\n\n## c\nC.\n",
+   "humanFloor": 0.9,
+   "lock": {
+    "conditions": {
+     "option one": "AACAPwAAAAAAAAAAAAAAAA==",
+     "option two": "AAAAAAAAgD8AAAAAAAAAAA=="
+    },
+    "embedder": {
+     "dim": 4
+    }
+   },
+   "name": "human_floor_triggers",
+   "script": {
+    "a": [
+     {
+      "text": "ambiguous"
+     }
+    ]
+   }
+  },
+  {
+   "embedMap": {
+    "clear signal": "p/x/P4t8JTwAAAAAAAAAAA=="
+   },
+   "expect": {
+    "path": [
+     "a",
+     "b"
+    ],
+    "pending_node": null,
+    "stopped": "terminal",
+    "would_pick": null
+   },
+   "flow": "---\nname: hfloor_pass\nstart: a\n---\n## a\nClassify.\n\n-> b: option one\n-> c: option two\n\n## b\nB.\n\n## c\nC.\n",
+   "humanFloor": 0.5,
+   "lock": {
+    "conditions": {
+     "option one": "AACAPwAAAAAAAAAAAAAAAA==",
+     "option two": "AAAAAAAAgD8AAAAAAAAAAA=="
+    },
+    "embedder": {
+     "dim": 4
+    }
+   },
+   "name": "human_floor_passes",
+   "script": {
+    "a": [
+     {
+      "text": "clear signal"
+     }
+    ]
+   }
+  },
+  {
+   "embedMap": {
+    "anything": "24x2P9uMdj7bjPY9AAAAAA=="
+   },
+   "expect": {
+    "path": [
+     "a",
+     "b"
+    ],
+    "pending_node": null,
+    "stopped": "terminal",
+    "would_pick": null
+   },
+   "flow": "---\nname: single\nstart: a\n---\n## a\nDo.\n\n-> b: the only option\n\n## b\nDone.\n",
+   "lock": {
+    "conditions": {
+     "the only option": "AACAPwAAAAAAAAAAAAAAAA=="
+    },
+    "embedder": {
+     "dim": 4
+    }
+   },
+   "name": "single_semantic_edge",
+   "script": {
+    "a": [
+     {
+      "text": "anything"
+     }
+    ]
+   }
+  },
+  {
+   "embedMap": {
+    "test input": "+JpOPZOsfz8AAAAAAAAAAA=="
+   },
+   "expect": {
+    "path": [
+     "a",
+     "b"
+    ],
+    "pending_node": null,
+    "stopped": "terminal",
+    "would_pick": null
+   },
+   "flow": "---\nname: centroid\nstart: a\n---\n## a\nClassify.\n\n-> b: alpha\n-> c: beta\n\n## b\nB.\n\n## c\nC.\n",
+   "lock": {
+    "centroids": {
+     "alpha": {
+      "n": 5,
+      "vec": "AAAAAAAAgD8AAAAAAAAAAA=="
+     }
+    },
+    "conditions": {
+     "alpha": "AACAPwAAAAAAAAAAAAAAAA==",
+     "beta": "AAAAAAAAgD8AAAAAAAAAAA=="
+    },
+    "embedder": {
+     "dim": 4
+    }
+   },
+   "name": "centroid_override",
+   "script": {
+    "a": [
+     {
+      "text": "test input"
+     }
+    ]
+   }
+  },
+  {
+   "embedMap": {
+    "complex case": "Km9+P+0p4j0AAAAAAAAAAA==",
+    "finished analyzing": "+PtWPfj7Vj02S38/AAAAAA=="
+   },
+   "expect": {
+    "path": [
+     "intake",
+     "analyze",
+     "done"
+    ],
+    "pending_node": null,
+    "stopped": "terminal",
+    "would_pick": null
+   },
+   "flow": "---\nname: pipeline\nstart: intake\n---\n## intake\nRead the input.\n\n-> analyze: needs analysis\n-> done: already resolved\n\n## analyze\nAnalyze it.\n\n-> done: analysis complete\n\n## done\nFinished.\n",
+   "lock": {
+    "conditions": {
+     "already resolved": "AAAAAAAAgD8AAAAAAAAAAA==",
+     "analysis complete": "AAAAAAAAAAAAAIA/AAAAAA==",
+     "needs analysis": "AACAPwAAAAAAAAAAAAAAAA=="
+    },
+    "embedder": {
+     "dim": 4
+    }
+   },
+   "name": "multi_step_semantic",
+   "script": {
+    "analyze": [
+     {
+      "text": "finished analyzing"
+     }
+    ],
+    "intake": [
+     {
+      "text": "complex case"
+     }
+    ]
+   }
+  }
+ ],
+ "note": "P1 locked-routing conformance: synthetic 4D vectors, no real embedder needed. embedMap maps outcome text -> base64 float32 vector for the scripted embed callback.",
+ "version": 1
+}

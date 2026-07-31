@@ -540,6 +540,58 @@ export function portabilityViolations(graph) {
   return out;
 }
 
+// ------------------------------------------------------------------- P1: locked routing
+// Base64 → Float32Array (little-endian). Works in Node (Buffer) and browsers (atob).
+export function decodeVec(b64) {
+  if (typeof Buffer !== "undefined") {
+    const buf = Buffer.from(b64, "base64");
+    return new Float32Array(buf.buffer, buf.byteOffset, buf.byteLength / 4);
+  }
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return new Float32Array(bytes.buffer);
+}
+
+// Dot product of two unit-normalized vectors (cosine = dot when ||a|| = ||b|| = 1).
+// f64 accumulation for precision parity with Python's np.dot on float32 inputs.
+function cosine(a, b) {
+  let dot = 0;
+  for (let i = 0; i < a.length; i++) dot += a[i] * b[i];
+  return dot;
+}
+
+// Look up the locked vector for a condition: centroids take precedence over conditions
+// (matches lockfile.locked_conditions(lock, prefer_centroids=True) in the Python reference).
+function lockVec(lock, condition) {
+  const cen = lock.centroids?.[condition];
+  if (cen) return decodeVec(cen.vec);
+  const cv = lock.conditions?.[condition];
+  if (cv) return decodeVec(cv);
+  return null;
+}
+
+/** Route an outcome against locked condition vectors.  Returns {target, info}. */
+function lockedRoute(text, semEdges, lock, embed) {
+  const queryVec = embed(text);
+  const sims = new Array(semEdges.length);
+  const simsMap = {};
+  for (let i = 0; i < semEdges.length; i++) {
+    const [t, c] = semEdges[i];
+    const condVec = lockVec(lock, c);
+    if (!condVec) throw new Error(`condition not in lock: ${JSON.stringify(c)} — the flow changed; re-run \`prismpath lock\``);
+    sims[i] = cosine(queryVec, condVec);
+    simsMap[t] = sims[i];
+  }
+  const order = [...sims.keys()].sort((a, b) => sims[b] - sims[a]);
+  const top1 = order[0];
+  const margin = order.length > 1 ? sims[order[0]] - sims[order[1]] : 1.0;
+  return {
+    target: semEdges[top1][0],
+    info: { used: "locked", locked: true, score: sims[top1], margin, sims: simsMap },
+  };
+}
+
 // -------------------------------------------------------------------------- the engine
 /** Python str() for the JSON value kinds a worker can return — differential fuzzing showed
  * String() diverges on exactly the values that then ROUTE differently: true -> "True" (not
@@ -597,13 +649,23 @@ export function eventTarget(graph, node, event) {
  * REFUSES a non-portable flow (semantic edge on a reachable node) up front.
  */
 export function run(graph, agent, opts = {}) {
-  const { maxSteps = 25, start = null, state: state0 = null, onStep = null } = opts;
+  const { maxSteps = 25, start = null, state: state0 = null, onStep = null,
+          lock = null, embed = null, humanFloor = null } = opts;
   const violations = portabilityViolations(graph);
   if (violations.length) {
-    const v = violations[0];
-    throw new Error(
-      `flow is not portable: semantic edge [${v.node}] -> ${v.target} (${JSON.stringify(v.condition)}) ` +
-      `needs the embedding/LLM tier — run it on the Python engine, or rewrite the edge as a \`when\` predicate`);
+    if (!lock || !embed) {
+      const v = violations[0];
+      throw new Error(
+        `flow is not portable: semantic edge [${v.node}] -> ${v.target} (${JSON.stringify(v.condition)}) ` +
+        `needs the embedding/LLM tier — run it on the Python engine, or rewrite the edge as a \`when\` predicate`);
+    }
+    for (const v of violations) {
+      if (!lockVec(lock, v.condition)) {
+        throw new Error(
+          `lockfile does not cover semantic condition ${JSON.stringify(v.condition)} ` +
+          `on edge [${v.node}] -> ${v.target} — re-run \`prismpath lock\``);
+      }
+    }
   }
   let node = start !== null ? start : graph.start;
   const state = state0 || {};
@@ -675,13 +737,35 @@ export function run(graph, agent, opts = {}) {
 
     const ctx = { ...fields, visits: state.visits[node] };
     const [dt, dc] = firstDeterministic(n.edges, ctx);
-    if (dt === null) {                                           // deterministic-only, nothing matched
+    let target = null, info = {};
+    if (dt !== null) {
+      target = dt;
+      info = { used: "deterministic", cond: dc };
+    } else {
+      const sem = n.edges.filter(([, c]) => isSemantic(c));
+      if (sem.length && embed && lock) {
+        const d = lockedRoute(text, sem, lock, embed);
+        if (humanFloor != null && d.info.score != null && d.info.score < humanFloor) {
+          res.stopped = "needs_human";
+          res.pending = {
+            node, reason: `router confidence ${d.info.score.toFixed(3)} < human_floor ${humanFloor}`,
+            would_pick: d.target,
+            candidates: sem.map(([t, c]) => ({ target: t, condition: c, score: d.info.sims[t] })),
+          };
+          checkpoint(node);
+          break;
+        }
+        target = d.target;
+        info = d.info;
+      }
+    }
+    if (target === null) {
       res.stopped = "stuck";
       checkpoint(node);
       break;
     }
-    res.steps.push({ node, outcome: text, target: dt, info: { used: "deterministic", cond: dc } });
-    node = dt;
+    res.steps.push({ node, outcome: text, target, info });
+    node = target;
     res.path.push(node);
   }
   if (!res.stopped) res.stopped = "max_steps";

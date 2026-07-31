@@ -1284,6 +1284,8 @@ pub struct Pending {
     pub timeout_s: Option<V>,
     pub candidates: Vec<(String, String)>,
     pub spawn: Option<V>,
+    pub would_pick: Option<String>,
+    pub scored_candidates: Option<Vec<(String, String, f64)>>,
 }
 
 #[derive(Debug, Clone)]
@@ -1292,6 +1294,11 @@ pub struct Step {
     pub outcome: String,
     pub target: String,
     pub used: String,
+    pub cond: Option<String>,
+    pub score: Option<f64>,
+    pub margin: Option<f64>,
+    pub sims: Option<HashMap<String, f64>>,
+    pub locked: Option<bool>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -1313,6 +1320,8 @@ pub enum EngineError {
     /// A route led to a node the document does not define. The JS kernel crashes here
     /// (`graph.nodes[node]` is undefined); an explicit error is the Rust spelling of that.
     MissingNode(String),
+    /// A semantic condition is not covered by the lockfile.
+    LockMissing(String),
 }
 
 impl std::fmt::Display for EngineError {
@@ -1326,6 +1335,10 @@ impl std::fmt::Display for EngineError {
             ),
             EngineError::Unhandled(msg) => write!(f, "{msg}"),
             EngineError::MissingNode(n) => write!(f, "flow routes to undefined node {n:?}"),
+            EngineError::LockMissing(c) => write!(
+                f,
+                "condition not in lock: {c:?} \u{2014} the flow changed; re-run `prismpath lock`"
+            ),
         }
     }
 }
@@ -1335,13 +1348,159 @@ pub struct RunOpts {
     pub max_steps: usize,
     pub start: Option<String>,
     pub state: Option<V>,
+    pub human_floor: Option<f64>,
 }
 
 impl Default for RunOpts {
     fn default() -> Self {
-        RunOpts { max_steps: 25, start: None, state: None }
+        RunOpts { max_steps: 25, start: None, state: None, human_floor: None }
     }
 }
+
+// ----------------------------------------------------------------- P1: locked routing
+
+#[derive(Debug, Clone)]
+pub struct CentroidPin {
+    pub vec: Vec<f32>,
+    pub n: usize,
+}
+
+#[derive(Debug, Clone)]
+pub struct Lock {
+    pub conditions: HashMap<String, Vec<f32>>,
+    pub centroids: Option<HashMap<String, CentroidPin>>,
+    pub dim: usize,
+}
+
+impl Lock {
+    pub fn condition_vec(&self, condition: &str) -> Option<&[f32]> {
+        self.centroids
+            .as_ref()
+            .and_then(|c| c.get(condition).map(|p| p.vec.as_slice()))
+            .or_else(|| self.conditions.get(condition).map(|v| v.as_slice()))
+    }
+
+    pub fn from_json(v: &serde_json::Value) -> Result<Lock, String> {
+        let obj = v.as_object().ok_or("lock must be an object")?;
+        let dim = obj
+            .get("embedder")
+            .and_then(|e| e.get("dim"))
+            .and_then(|d| d.as_u64())
+            .ok_or("lock.embedder.dim is required")? as usize;
+
+        let conds_obj = obj
+            .get("conditions")
+            .and_then(|c| c.as_object())
+            .ok_or("lock.conditions is required")?;
+        let mut conditions = HashMap::new();
+        for (k, val) in conds_obj {
+            let b64 = val.as_str().ok_or_else(|| format!("condition {k:?}: expected base64 string"))?;
+            conditions.insert(k.clone(), decode_b64_f32(b64)?);
+        }
+
+        let centroids = if let Some(cen_val) = obj.get("centroids") {
+            let cen_obj = cen_val.as_object().ok_or("lock.centroids must be an object")?;
+            let mut map = HashMap::new();
+            for (k, val) in cen_obj {
+                let pin_obj = val.as_object().ok_or_else(|| format!("centroid {k:?}: expected object"))?;
+                let vec_b64 = pin_obj
+                    .get("vec")
+                    .and_then(|v| v.as_str())
+                    .ok_or_else(|| format!("centroid {k:?}: missing vec"))?;
+                let n = pin_obj.get("n").and_then(|n| n.as_u64()).unwrap_or(1) as usize;
+                map.insert(k.clone(), CentroidPin { vec: decode_b64_f32(vec_b64)?, n });
+            }
+            Some(map)
+        } else {
+            None
+        };
+
+        Ok(Lock { conditions, centroids, dim })
+    }
+}
+
+pub fn decode_b64_f32(b64: &str) -> Result<Vec<f32>, String> {
+    const LUT: [u8; 256] = {
+        let mut t = [255u8; 256];
+        let mut i = 0u8;
+        while i < 26 { t[(b'A' + i) as usize] = i; i += 1; }
+        i = 0;
+        while i < 26 { t[(b'a' + i) as usize] = 26 + i; i += 1; }
+        i = 0;
+        while i < 10 { t[(b'0' + i) as usize] = 52 + i; i += 1; }
+        t[b'+' as usize] = 62;
+        t[b'/' as usize] = 63;
+        t
+    };
+    let input = b64.as_bytes();
+    let len = input.len();
+    let pad = if len >= 2 && input[len - 1] == b'=' {
+        if input[len - 2] == b'=' { 2 } else { 1 }
+    } else {
+        0
+    };
+    let out_len = len / 4 * 3 - pad;
+    let mut bytes = Vec::with_capacity(out_len);
+    let mut i = 0;
+    while i + 3 < len {
+        let (a, b, c, d) = (LUT[input[i] as usize], LUT[input[i + 1] as usize],
+                            LUT[input[i + 2] as usize], LUT[input[i + 3] as usize]);
+        bytes.push((a << 2) | (b >> 4));
+        if bytes.len() < out_len { bytes.push((b << 4) | (c >> 2)); }
+        if bytes.len() < out_len { bytes.push((c << 6) | d); }
+        i += 4;
+    }
+    if bytes.len() % 4 != 0 {
+        return Err(format!("base64 decoded to {} bytes, not a multiple of 4 (f32)", bytes.len()));
+    }
+    let floats: Vec<f32> = bytes
+        .chunks_exact(4)
+        .map(|chunk| f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]))
+        .collect();
+    Ok(floats)
+}
+
+fn cosine_sim(a: &[f32], b: &[f32]) -> f64 {
+    a.iter().zip(b).map(|(x, y)| (*x as f64) * (*y as f64)).sum()
+}
+
+struct RouteDecision {
+    target: String,
+    score: f64,
+    margin: f64,
+    sims: HashMap<String, f64>,
+}
+
+fn locked_route(
+    text: &str,
+    sem_edges: &[(String, String)],
+    lock: &Lock,
+    embed: &mut dyn FnMut(&str) -> Vec<f32>,
+) -> Result<RouteDecision, EngineError> {
+    let query_vec = embed(text);
+    let mut scores = Vec::with_capacity(sem_edges.len());
+    let mut sims_map = HashMap::new();
+    for (t, c) in sem_edges {
+        let cond_vec = lock
+            .condition_vec(c)
+            .ok_or_else(|| EngineError::LockMissing(c.clone()))?;
+        let sim = cosine_sim(&query_vec, cond_vec);
+        scores.push(sim);
+        sims_map.insert(t.clone(), sim);
+    }
+    let mut order: Vec<usize> = (0..scores.len()).collect();
+    order.sort_by(|a, b| scores[*b].partial_cmp(&scores[*a]).unwrap_or(std::cmp::Ordering::Equal));
+    let top1 = order[0];
+    let margin = if order.len() > 1 { scores[order[0]] - scores[order[1]] } else { 1.0 };
+    Ok(RouteDecision {
+        target: sem_edges[top1].0.clone(),
+        score: scores[top1],
+        margin,
+        sims: sims_map,
+    })
+}
+
+// -------------------------------------------------------------------------- the engine
 
 /// JS truthiness — used in exactly one reference spot (`fields.reason || text`), where the
 /// semantics genuinely are JS's and not Python's: [] and {} are TRUTHY here.
@@ -1378,14 +1537,71 @@ pub fn run_observed<F, O>(
     graph: &Graph,
     mut agent: F,
     opts: RunOpts,
+    on_step: O,
+) -> Result<RunResult, EngineError>
+where
+    F: FnMut(&str, &str, &RunState) -> Result<V, String>,
+    O: FnMut(&RunResult, &RunState, Option<&str>),
+{
+    run_core(graph, &mut agent, None, opts, on_step)
+}
+
+/// Run a P1 flow: semantic edges are allowed if `lock` covers them. The `embed` callback
+/// produces a unit-normalized vector for the worker's outcome text; cosine similarity against
+/// the lock's pre-baked condition vectors picks the route.
+pub fn run_locked<F, E>(
+    graph: &Graph,
+    agent: F,
+    embed: E,
+    lock: &Lock,
+    opts: RunOpts,
+) -> Result<RunResult, EngineError>
+where
+    F: FnMut(&str, &str, &RunState) -> Result<V, String>,
+    E: FnMut(&str) -> Vec<f32>,
+{
+    run_locked_observed(graph, agent, embed, lock, opts, |_, _, _| {})
+}
+
+/// `run_locked` with the observation seam.
+pub fn run_locked_observed<F, E, O>(
+    graph: &Graph,
+    mut agent: F,
+    mut embed: E,
+    lock: &Lock,
+    opts: RunOpts,
+    on_step: O,
+) -> Result<RunResult, EngineError>
+where
+    F: FnMut(&str, &str, &RunState) -> Result<V, String>,
+    E: FnMut(&str) -> Vec<f32>,
+    O: FnMut(&RunResult, &RunState, Option<&str>),
+{
+    run_core(graph, &mut agent, Some((lock, &mut embed as &mut dyn FnMut(&str) -> Vec<f32>)), opts, on_step)
+}
+
+fn run_core<F, O>(
+    graph: &Graph,
+    agent: &mut F,
+    mut semantic_ctx: Option<(&Lock, &mut dyn FnMut(&str) -> Vec<f32>)>,
+    opts: RunOpts,
     mut on_step: O,
 ) -> Result<RunResult, EngineError>
 where
     F: FnMut(&str, &str, &RunState) -> Result<V, String>,
     O: FnMut(&RunResult, &RunState, Option<&str>),
 {
-    if let Some(v) = portability_violations(graph).into_iter().next() {
-        return Err(EngineError::NotPortable(v));
+    let violations = portability_violations(graph);
+    if !violations.is_empty() {
+        if let Some((ref lock, _)) = semantic_ctx {
+            for v in &violations {
+                if lock.condition_vec(&v.condition).is_none() {
+                    return Err(EngineError::LockMissing(v.condition.clone()));
+                }
+            }
+        } else {
+            return Err(EngineError::NotPortable(violations.into_iter().next().unwrap()));
+        }
     }
 
     let mut node = opts.start.clone().unwrap_or_else(|| graph.start.clone());
@@ -1461,6 +1677,7 @@ where
                     outcome: etext,
                     target: etarget.to_string(),
                     used: "error".to_string(),
+                    cond: None, score: None, margin: None, sims: None, locked: None,
                 });
                 node = etarget.to_string();
                 res.path.push(node.clone());
@@ -1490,6 +1707,8 @@ where
                 timeout_s: None,
                 candidates: n.edges.clone(),
                 spawn: None,
+                would_pick: None,
+                scored_candidates: None,
             });
             on_step(&res, &state, Some(&node));
             break;
@@ -1509,6 +1728,8 @@ where
                 timeout_s: V::obj_get(&fields, "timeout_s").cloned(),
                 candidates: events.iter().map(|e| (*e).clone()).collect(),
                 spawn: spawn.cloned(),
+                would_pick: None,
+                scored_candidates: None,
             });
             on_step(&res, &state, Some(&node));
             break;
@@ -1517,18 +1738,84 @@ where
         // -------------------------------------------------------------------- routing
         let mut ctx: HashMap<String, V> = fields.iter().cloned().collect();
         ctx.insert("visits".to_string(), V::Num(state.visits[&node] as f64));
-        let Some((dt, dc)) = first_deterministic(&n.edges, &ctx) else {
-            res.stopped = "stuck".to_string(); // deterministic-only, nothing matched
+
+        let mut target: Option<String> = None;
+        let mut step_used = String::new();
+        let mut step_cond: Option<String> = None;
+        let mut step_score: Option<f64> = None;
+        let mut step_margin: Option<f64> = None;
+        let mut step_sims: Option<HashMap<String, f64>> = None;
+        let mut step_locked: Option<bool> = None;
+
+        if let Some((dt, dc)) = first_deterministic(&n.edges, &ctx) {
+            target = Some(dt.to_string());
+            step_used = format!("deterministic: {dc}");
+            step_cond = Some(dc.to_string());
+        }
+
+        if target.is_none() {
+            if let Some((ref lock, ref mut embed_fn)) = semantic_ctx {
+                let sem: Vec<(String, String)> = n.edges.iter()
+                    .filter(|(_, c)| is_semantic(c))
+                    .cloned()
+                    .collect();
+                if !sem.is_empty() {
+                    let d = locked_route(&text, &sem, lock, *embed_fn)?;
+                    if let Some(floor) = opts.human_floor {
+                        if d.score < floor {
+                            res.stopped = "needs_human".to_string();
+                            res.pending = Some(Pending {
+                                node: node.clone(),
+                                wait: false,
+                                reason: Some(format!(
+                                    "router confidence {:.3} < human_floor {floor}",
+                                    d.score
+                                )),
+                                awaiting: Vec::new(),
+                                timeout_s: None,
+                                candidates: sem.clone(),
+                                spawn: None,
+                                would_pick: Some(d.target.clone()),
+                                scored_candidates: Some(
+                                    sem.iter()
+                                        .map(|(t, c)| {
+                                            let s = d.sims.get(t).copied().unwrap_or(0.0);
+                                            (t.clone(), c.clone(), s)
+                                        })
+                                        .collect(),
+                                ),
+                            });
+                            on_step(&res, &state, Some(&node));
+                            break;
+                        }
+                    }
+                    target = Some(d.target);
+                    step_used = "locked".to_string();
+                    step_score = Some(d.score);
+                    step_margin = Some(d.margin);
+                    step_sims = Some(d.sims);
+                    step_locked = Some(true);
+                }
+            }
+        }
+
+        let Some(tgt) = target else {
+            res.stopped = "stuck".to_string();
             on_step(&res, &state, None);
             break;
         };
         res.steps.push(Step {
             node: node.clone(),
             outcome: text,
-            target: dt.to_string(),
-            used: format!("deterministic: {dc}"),
+            target: tgt.clone(),
+            used: step_used,
+            cond: step_cond,
+            score: step_score,
+            margin: step_margin,
+            sims: step_sims,
+            locked: step_locked,
         });
-        node = dt.to_string();
+        node = tgt;
         res.path.push(node.clone());
     }
 
@@ -1622,5 +1909,133 @@ mod tests {
             run(&g, |_, _, _| Ok(V::Null), RunOpts::default()),
             Err(EngineError::NotPortable(_))
         ));
+    }
+
+    #[test]
+    fn locked_routing_picks_closest_condition() {
+        let g = parse("## a\nClassify.\n\n-> b: positive\n-> c: negative\n\n## b\nB.\n\n## c\nC.\n");
+        let mut conds = HashMap::new();
+        conds.insert("positive".to_string(), vec![1.0f32, 0.0, 0.0, 0.0]);
+        conds.insert("negative".to_string(), vec![0.0, 1.0, 0.0, 0.0]);
+        let lock = Lock { conditions: conds, centroids: None, dim: 4 };
+        let res = run_locked(
+            &g,
+            |_, _, _| Ok(V::Obj(vec![("text".to_string(), V::Str("great".into()))])),
+            |_text| vec![0.99f32, 0.11, 0.0, 0.0],
+            &lock,
+            RunOpts::default(),
+        ).unwrap();
+        assert_eq!(res.path, vec!["a", "b"]);
+        assert_eq!(res.stopped, "terminal");
+        assert_eq!(res.steps[0].used, "locked");
+        assert!(res.steps[0].score.unwrap() > 0.9);
+    }
+
+    #[test]
+    fn locked_routing_human_floor_suspends() {
+        let g = parse("## a\nClassify.\n\n-> b: positive\n-> c: negative\n\n## b\nB.\n\n## c\nC.\n");
+        let mut conds = HashMap::new();
+        conds.insert("positive".to_string(), vec![1.0f32, 0.0, 0.0, 0.0]);
+        conds.insert("negative".to_string(), vec![0.0, 1.0, 0.0, 0.0]);
+        let lock = Lock { conditions: conds, centroids: None, dim: 4 };
+        let res = run_locked(
+            &g,
+            |_, _, _| Ok(V::Obj(vec![("text".to_string(), V::Str("ambiguous".into()))])),
+            |_text| vec![0.72f32, 0.69, 0.0, 0.07],
+            &lock,
+            RunOpts { human_floor: Some(0.99), ..Default::default() },
+        ).unwrap();
+        assert_eq!(res.stopped, "needs_human");
+        assert_eq!(res.pending.as_ref().unwrap().would_pick.as_deref(), Some("b"));
+    }
+
+    #[test]
+    fn locked_routing_deterministic_takes_priority() {
+        let g = parse("## a\nRoute.\n\n-> b: when x == 1\n-> c: semantic edge\n\n## b\nB.\n\n## c\nC.\n");
+        let mut conds = HashMap::new();
+        conds.insert("semantic edge".to_string(), vec![0.0, 0.0, 1.0, 0.0]);
+        let lock = Lock { conditions: conds, centroids: None, dim: 4 };
+        let res = run_locked(
+            &g,
+            |_, _, _| Ok(V::Obj(vec![
+                ("text".to_string(), V::Str("go".into())),
+                ("x".to_string(), V::Num(1.0)),
+            ])),
+            |_text| vec![0.0, 0.0, 0.9, 0.0],
+            &lock,
+            RunOpts::default(),
+        ).unwrap();
+        assert_eq!(res.path, vec!["a", "b"]);
+        assert!(res.steps[0].used.starts_with("deterministic"));
+    }
+
+    #[test]
+    fn lock_missing_condition_is_caught() {
+        let g = parse("## a\nDo.\n\n-> b: foo\n-> c: bar\n\n## b\nB.\n\n## c\nC.\n");
+        let mut conds = HashMap::new();
+        conds.insert("foo".to_string(), vec![1.0, 0.0, 0.0, 0.0]);
+        // "bar" is missing from the lock
+        let lock = Lock { conditions: conds, centroids: None, dim: 4 };
+        let res = run_locked(
+            &g,
+            |_, _, _| Ok(V::Null),
+            |_| vec![1.0, 0.0, 0.0, 0.0],
+            &lock,
+            RunOpts::default(),
+        );
+        assert!(matches!(res, Err(EngineError::LockMissing(_))));
+    }
+
+    #[test]
+    fn centroid_overrides_condition_vector() {
+        let g = parse("## a\nClassify.\n\n-> b: positive\n-> c: negative\n\n## b\nB.\n\n## c\nC.\n");
+        let mut conds = HashMap::new();
+        conds.insert("positive".to_string(), vec![1.0, 0.0, 0.0, 0.0]);
+        conds.insert("negative".to_string(), vec![0.0, 1.0, 0.0, 0.0]);
+        let mut centroids = HashMap::new();
+        // Centroid overrides "positive" to point toward the negative direction
+        centroids.insert("positive".to_string(), CentroidPin {
+            vec: vec![0.0, 1.0, 0.0, 0.0], n: 5,
+        });
+        let lock = Lock { conditions: conds, centroids: Some(centroids), dim: 4 };
+        let res = run_locked(
+            &g,
+            |_, _, _| Ok(V::Obj(vec![("text".to_string(), V::Str("test".into()))])),
+            |_| vec![0.0, 0.99, 0.0, 0.1],
+            &lock,
+            RunOpts::default(),
+        ).unwrap();
+        // Both "positive" (via centroid) and "negative" point at [0,1,0,0], so either could win.
+        // With the centroid override, "positive" has the SAME vector as "negative", so the first
+        // in document order wins when margin is 0 (argsort is stable in Rust's sort_by).
+        assert_eq!(res.path[1], "b"); // "positive" is first in doc order
+    }
+
+    #[test]
+    fn decode_b64_f32_roundtrip() {
+        let original = vec![1.0f32, 0.0, -0.5, 3.14];
+        let b64 = {
+            let bytes: Vec<u8> = original.iter().flat_map(|f| f.to_le_bytes()).collect();
+            const CHARS: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+            let mut out = String::new();
+            for chunk in bytes.chunks(3) {
+                let (b0, b1, b2) = (chunk[0] as u32,
+                    *chunk.get(1).unwrap_or(&0) as u32,
+                    *chunk.get(2).unwrap_or(&0) as u32);
+                let n = (b0 << 16) | (b1 << 8) | b2;
+                out.push(CHARS[((n >> 18) & 63) as usize] as char);
+                out.push(CHARS[((n >> 12) & 63) as usize] as char);
+                if chunk.len() > 1 { out.push(CHARS[((n >> 6) & 63) as usize] as char); }
+                else { out.push('='); }
+                if chunk.len() > 2 { out.push(CHARS[(n & 63) as usize] as char); }
+                else { out.push('='); }
+            }
+            out
+        };
+        let decoded = decode_b64_f32(&b64).unwrap();
+        assert_eq!(decoded.len(), original.len());
+        for (a, b) in decoded.iter().zip(&original) {
+            assert!((a - b).abs() < 1e-6, "{a} != {b}");
+        }
     }
 }

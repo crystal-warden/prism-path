@@ -12,7 +12,7 @@
 //!
 //! Usage: cargo run --bin conformance -- [path/to/conformance/dir]
 
-use prismpath_rs::{eval_condition, parse, run, RunOpts, RunState, V};
+use prismpath_rs::{eval_condition, parse, run, run_locked, Lock, RunOpts, RunState, V};
 use std::collections::HashMap;
 
 #[derive(serde::Deserialize)]
@@ -45,6 +45,31 @@ struct FlowCase {
 #[derive(serde::Deserialize)]
 struct FlowFile {
     cases: Vec<FlowCase>,
+}
+
+#[derive(serde::Deserialize)]
+struct P1FlowCase {
+    name: String,
+    flow: String,
+    #[serde(default)]
+    script: HashMap<String, Vec<serde_json::Value>>,
+    lock: serde_json::Value,
+    #[serde(default, rename = "embedMap")]
+    embed_map: HashMap<String, serde_json::Value>,
+    expect: serde_json::Value,
+    #[serde(default)]
+    start: Option<String>,
+    #[serde(default)]
+    state: Option<serde_json::Value>,
+    #[serde(default, rename = "maxSteps")]
+    max_steps: Option<usize>,
+    #[serde(default, rename = "humanFloor")]
+    human_floor: Option<f64>,
+}
+
+#[derive(serde::Deserialize)]
+struct P1FlowFile {
+    cases: Vec<P1FlowCase>,
 }
 
 /// Classify a divergence so the report groups causes instead of listing hundreds of lines.
@@ -168,6 +193,7 @@ fn main() {
             max_steps: fx.max_steps.unwrap_or(25),
             start: fx.start.clone(),
             state: fx.state.as_ref().map(V::from_json),
+            human_floor: None,
         };
         let got = match run(&graph, scripted_agent(&fx.script), opts) {
             Ok(res) => serde_json::json!({
@@ -194,6 +220,74 @@ fn main() {
         }
     }
     println!("\nFLOWS: {flow_pass}/{} match the frozen spec", ff.cases.len());
+
+    // ---------------------------------------------------------------- P1 locked flows
+    let p1_path = format!("{dir}/locked_flows.json");
+    if let Ok(p1_raw) = std::fs::read_to_string(&p1_path) {
+        let p1f: P1FlowFile = serde_json::from_str(&p1_raw).expect("locked_flows.json parse");
+        let mut p1_pass = 0usize;
+        for fx in &p1f.cases {
+            let graph = parse(&fx.flow);
+            let lock = Lock::from_json(&fx.lock).unwrap_or_else(|e| {
+                panic!("P1 fixture {:?}: lock parse error: {e}", fx.name);
+            });
+
+            let embed_map: HashMap<String, Vec<f32>> = fx
+                .embed_map
+                .iter()
+                .map(|(k, v)| {
+                    let b64 = v.as_str().expect("embedMap values must be base64 strings");
+                    (k.clone(), prismpath_rs::decode_b64_f32(b64).expect("embedMap base64 decode"))
+                })
+                .collect();
+            let dim = lock.dim;
+
+            let opts = RunOpts {
+                max_steps: fx.max_steps.unwrap_or(25),
+                start: fx.start.clone(),
+                state: fx.state.as_ref().map(V::from_json),
+                human_floor: fx.human_floor,
+            };
+
+            let got = match run_locked(
+                &graph,
+                scripted_agent(&fx.script),
+                |text: &str| {
+                    embed_map
+                        .get(text)
+                        .cloned()
+                        .unwrap_or_else(|| vec![0.0f32; dim])
+                },
+                &lock,
+                opts,
+            ) {
+                Ok(res) => serde_json::json!({
+                    "path": res.path,
+                    "stopped": res.stopped,
+                    "pending_node": res.pending.as_ref().map(|p| p.node.clone()),
+                    "would_pick": res.pending.as_ref().and_then(|p| p.would_pick.clone()),
+                }),
+                Err(e) => serde_json::json!({ "error": e.to_string() }),
+            };
+            let want = serde_json::json!({
+                "path": fx.expect.get("path").cloned().unwrap_or(serde_json::Value::Null),
+                "stopped": fx.expect.get("stopped").cloned().unwrap_or(serde_json::Value::Null),
+                "pending_node": fx.expect.get("pending_node").cloned().unwrap_or(serde_json::Value::Null),
+                "would_pick": fx.expect.get("would_pick").cloned().unwrap_or(serde_json::Value::Null),
+            });
+            if got == want {
+                p1_pass += 1;
+            } else {
+                failures += 1;
+                println!("\nP1 FLOW MISMATCH  {}", fx.name);
+                println!("  expect = {want}");
+                println!("  got    = {got}");
+            }
+        }
+        println!("\nP1 LOCKED FLOWS: {p1_pass}/{} match the frozen spec", p1f.cases.len());
+    } else {
+        println!("\n(no locked_flows.json found — P1 conformance skipped)");
+    }
 
     // ---------------------------------------------------------------- verdict
     println!("\n---------------------------------------------------");
