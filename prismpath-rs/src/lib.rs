@@ -1464,14 +1464,20 @@ fn cosine_sim(a: &[f32], b: &[f32]) -> f64 {
     a.iter().zip(b).map(|(x, y)| (*x as f64) * (*y as f64)).sum()
 }
 
-struct RouteDecision {
-    target: String,
-    score: f64,
-    margin: f64,
-    sims: HashMap<String, f64>,
+/// One locked-routing decision. Public for consumers building suggestion layers — parity with
+/// the Python reference's standalone `lockfile.locked_router` surface.
+#[derive(Debug, Clone)]
+pub struct RouteDecision {
+    pub target: String,
+    pub score: f64,
+    pub margin: f64,
+    pub sims: HashMap<String, f64>,
 }
 
-fn locked_route(
+/// Route one text against a node's semantic edges using the lock's pinned vectors — the
+/// single-step form of what `run_locked` does per step. EXPORTED for suggestion-layer
+/// consumers; behavior unchanged (the engine calls this internally).
+pub fn locked_route(
     text: &str,
     sem_edges: &[(String, String)],
     lock: &Lock,
@@ -1834,6 +1840,44 @@ mod tests {
 
     fn ctx(pairs: &[(&str, V)]) -> HashMap<String, V> {
         pairs.iter().map(|(k, v)| (k.to_string(), v.clone())).collect()
+    }
+
+    #[test]
+    fn locked_route_exported_matches_the_frozen_p1_fixture() {
+        // The exported single-step surface must give the same decision run_locked gives per
+        // step — parity with the JS export test and with the Python reference's standalone
+        // locked_router. Driven off the frozen P1 corpus so the answer is spec-pinned.
+        let raw = std::fs::read_to_string("../prismpath/portable/conformance/locked_flows.json")
+            .expect("locked_flows.json");
+        let doc: serde_json::Value = serde_json::from_str(&raw).unwrap();
+        let cases = doc["cases"].as_array().unwrap();
+        let fx = cases
+            .iter()
+            .find(|c| c["name"] == "locked_basic_route")
+            .unwrap_or(&cases[0]);
+        let graph = parse(fx["flow"].as_str().unwrap());
+        let lock = Lock::from_json(&fx["lock"]).unwrap();
+        let start = fx.get("start").and_then(|s| s.as_str()).unwrap_or(&graph.start).to_string();
+        let sem_edges: Vec<(String, String)> = graph.nodes[&start]
+            .edges
+            .iter()
+            .filter(|(_, c)| is_semantic(c))
+            .cloned()
+            .collect();
+        let embed_map = fx["embedMap"].as_object().cloned().unwrap_or_default();
+        let dim = lock.dim;
+        let text = embed_map.keys().next().cloned().unwrap_or_default();
+        let mut embed = |s: &str| -> Vec<f32> {
+            embed_map
+                .get(s)
+                .and_then(|v| v.as_str())
+                .map(|b64| decode_b64_f32(b64).unwrap())
+                .unwrap_or_else(|| vec![0.0f32; dim])
+        };
+        let d = locked_route(&text, &sem_edges, &lock, &mut embed).unwrap();
+        let expected_target = fx["expect"]["path"][1].as_str().unwrap();
+        assert_eq!(d.target, expected_target);
+        assert!(d.score > 0.0);
     }
 
     #[test]

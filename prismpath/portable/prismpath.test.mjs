@@ -6,7 +6,9 @@ import assert from "node:assert/strict";
 import {
   parse, run, evalCondition, checkPredicate, portabilityViolations, eventTarget,
   isDeterministic, isError, isEvent, isSemantic, eventName, pyTruthy, PredicateError,
+  lockedRoute, decodeVec,
 } from "./prismpath.mjs";
+import { readFileSync } from "node:fs";
 
 // ------------------------------------------------------------------ condition tiers
 test("condition tier classification", () => {
@@ -223,4 +225,25 @@ Done.
 `);
   const res = run(g, () => ({ text: "t" }));
   assert.equal(res.stopped, "stuck");
+});
+
+test("lockedRoute (exported): routes one text against locked vectors, matching run()'s decision", () => {
+  // Reuse the frozen P1 corpus's first fixture so the exported single-step surface is pinned
+  // to the same answers the engine gives — the export changes surface, never behavior.
+  const doc = JSON.parse(
+    readFileSync(new URL("./conformance/locked_flows.json", import.meta.url), "utf-8"),
+  );
+  const fx = doc.cases.find((c) => c.name === "locked_basic_route") ?? doc.cases[0];
+  const g = parse(fx.flow);
+  const start = fx.start ?? g.start;
+  const semEdges = g.nodes[start].edges.filter(([, c]) => isSemantic(c));
+  const embed = (text) => {
+    const b64 = (fx.embedMap || {})[text];
+    return b64 ? decodeVec(b64) : new Float32Array(fx.lock.embedder.dim);
+  };
+  const text = Object.keys(fx.embedMap || {})[0];
+  const d = lockedRoute(text, semEdges, fx.lock, embed);
+  assert.equal(d.target, fx.expect.path[1]); // the step run() routes to from start
+  assert.ok(d.info.locked && d.info.score > 0);
+  assert.ok(typeof d.info.margin === "number");
 });

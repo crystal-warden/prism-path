@@ -571,8 +571,13 @@ function lockVec(lock, condition) {
   return null;
 }
 
-/** Route an outcome against locked condition vectors.  Returns {target, info}. */
-function lockedRoute(text, semEdges, lock, embed) {
+/** Route an outcome against locked condition vectors.  Returns {target, info}.
+ *
+ * EXPORTED for consumers building suggestion layers (route one text at one node's semantic
+ * edges without running a whole flow) — parity with the Python reference, whose
+ * `lockfile.locked_router` exposes standalone locked routing. `run()` uses this internally;
+ * exporting changes no behavior. */
+export function lockedRoute(text, semEdges, lock, embed) {
   const queryVec = embed(text);
   const sims = new Array(semEdges.length);
   const simsMap = {};
