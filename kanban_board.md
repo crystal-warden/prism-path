@@ -57,3 +57,19 @@ Based on our architectural rebuttals and technical solutions, here are the concr
     * [x] Shipped `prismpath compile --tier p1` CLI command.
     * [x] Generates an optimized, single-file bundle ready for edge environment deployments (Node/Browser).
     * [x] Includes vector compression for embedded locks to minimize bundle sizes.
+
+---
+
+## 📊 Task: Adversarial agentic benchmark (testbed #3 for the win/lose comparison)
+*   **Priority**: Medium (positioning / sales credibility)
+*   **Context**: The Journeyman kernel comparison (2026-08-01) showed PrismPath's WINS on
+    deterministic routing + portability + certified locked routing + dual-cert. A credible comparison
+    must also show where PrismPath LOSES. Journeyman is a biased testbed (plays to PrismPath's niche);
+    `routing_bench` covers the neutral routing-accuracy axis. The missing piece is an ADVERSARIAL
+    testbed on the axis PrismPath is designed to lose.
+*   **Description**: A small benchmark of agentic tasks — tool-use, multi-step reasoning, dynamic
+    branching — scoring PrismPath vs LangGraph vs CrewAI where PrismPath is EXPECTED to lose (it is a
+    constrained routing kernel, not an agent framework), plus a state-machine-richness scenario where
+    it loses to XState. langgraph/crewai are installed in `.venv`; the gemma endpoint is up.
+*   **Acceptance**: a scored table (task-completion / expressiveness) published alongside the wins, so
+    the comparison leads with the loss and is therefore believed. See `DIRECTION.md` (3-testbed methodology).
