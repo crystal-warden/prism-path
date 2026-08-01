@@ -377,6 +377,27 @@ def _check_error_shadowing(graph) -> List[Finding]:
     return out
 
 
+def _check_event_shadowing(graph) -> List[Finding]:
+    """Event edges resume on a delivered signal, first-match-wins by event name (the engine's
+    `eventTarget` returns the first `on event <name>` edge). Two edges on one node awaiting the SAME
+    event make the second unreachable — the same first-match hazard as a deterministic catch-all or a
+    bare `on error`, in the event tier. (Surfaced by the Journeyman cross-kernel comparison.)"""
+    out: List[Finding] = []
+    for name, n in graph.nodes.items():
+        seen: Dict[str, str] = {}
+        for t, c in n.edges:
+            if not predicates.is_event(c):
+                continue
+            ev = predicates.event_name(c)
+            if ev in seen:
+                out.append(Finding("warning", "shadowed-event-edge", name,
+                                   f"event edge -> '{t}' is unreachable: an earlier edge on this "
+                                   f"node already awaits '{ev}' (first-match-wins)"))
+            else:
+                seen[ev] = t
+    return out
+
+
 def _check_cycles(graph) -> List[Finding]:
     """A cycle with no `visits`-based cap on any node in it is bounded only by max_steps."""
     out: List[Finding] = []
@@ -581,6 +602,7 @@ def analyze(graph) -> List[Finding]:
     findings += _check_reachability(graph)
     findings += _check_stuck(graph)
     findings += _check_shadowing(graph)
+    findings += _check_event_shadowing(graph)
     findings += _check_error_shadowing(graph)
     findings += _check_provenance(graph)
     findings += _check_emits_types(graph)

@@ -38,6 +38,7 @@ CORPUS = {
     "stuck_node.md": "possible-stuck",
     "shadowed_edge.md": "shadowed-edge",
     "shadowed_error_edge.md": "shadowed-error-edge",
+    "shadowed_event_edge.md": "shadowed-event-edge",
     "undeclared_field.md": "undeclared-field",
     "field_only_violation.md": "field-only-violation",
     "unbounded_cycle.md": "unbounded-cycle",
@@ -73,7 +74,7 @@ def test_corpus_covers_every_analysis_code():
         emitted |= _codes(parse_file(os.path.join(BROKEN, fname)))
     known = {"undefined-target", "undefined-start", "unsafe-predicate", "unreachable-node",
              "no-terminal", "possible-stuck", "shadowed-edge", "shadowed-error-edge",
-             "undeclared-field", "field-only-violation",
+             "shadowed-event-edge", "undeclared-field", "field-only-violation",
              "unbounded-cycle", "always-false-edge", "duplicate-condition"}
     assert known <= emitted
 
