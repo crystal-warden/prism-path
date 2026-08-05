@@ -1,3 +1,7 @@
+<!-- The independent-authoring brief: an agent that has never seen this repo's compliance flows
+designs the assessment map from SPEC/AUTHORING alone — the generalization test whose product is
+kept as flows/agy_800171_assessment.md. Committed for reproducibility. -->
+
 # Author a PrismPath "maps and directions" file
 
 A PrismPath map IS a single markdown file that the engine walks as a decision graph: nodes are
@@ -5,9 +9,9 @@ A PrismPath map IS a single markdown file that the engine walks as a decision gr
 engine.
 
 ## Step 1 — Learn the rules (read before writing)
-Read the normative authoring contract:
-  - /home/cwadmin/cwprojects/prismpath/prismpath/AUTHORING.md
-  - /home/cwadmin/cwprojects/prismpath/SPEC.md
+Read the normative authoring contract (paths from the repo root):
+  - prismpath/AUTHORING.md
+  - SPEC.md
 Note especially: node/edge syntax; the routing spectrum — deterministic `-> t: when <expr>` (also
 always/else) vs semantic `-> t: <natural language>` vs `-> t: on error ...` / `on event ...`;
 precedence (deterministic edges first, in document order, first-true-wins; then semantic); terminal
@@ -32,14 +36,14 @@ Write a map that dispositions a NIST SP 800-171 control-assessment request. The 
     this repo; the point is your independent authoring.
 
 ## Step 3 — Self-validate with the engine (iterate until clean)
-Run:
-  /home/cwadmin/cwprojects/prismpath/.venv/bin/python -m prismpath.cli validate <your-file>
+Run (from the repo root):
+  python -m prismpath.cli validate <your-file>
 Fix whatever it reports (dangling edge targets, missing start, malformed edges) and re-run until it
 prints: clean OK — the flow compiles.
 
 ## Output + rules
-Write the file to: /home/cwadmin/cwprojects/prismpath/adapters/compliance/flows/agy_800171_assessment.md
-Authoring + `prismpath validate` (static, read-only) ONLY. Do NOT run the flow (prismpath run), do NOT
-start any model/inference server, do NOT use the GPU, do NOT touch port 8888. When done, print the final
+Write the file to: adapters/compliance/flows/agy_800171_assessment.md
+Authoring + `prismpath validate` (static, read-only) ONLY. Do NOT run the flow (prismpath run) and
+do NOT run any model/inference service — the authoring must stay independent of the system under test. When done, print the final
 validate output and a 3-line summary of your graph (node count, and how you split deterministic vs
 semantic routing).

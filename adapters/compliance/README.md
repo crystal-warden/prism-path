@@ -30,6 +30,10 @@ Runs against the published `prismpath` core (`import prismpath`). Test env:
   CycloneDX JSON schemas (the hermetic validation gate). `requests/` — sample evidence bundles.
 
 **Efficacy harness (#72 — testing decision quality with a held-out, independent-model corpus)**
+
+(*agy* = the independent frontier-model coding agent used as corpus author, reference assessor,
+and second annotator — a different model family from the local adjudicator, so agreement numbers
+measure cross-family consistency, not self-agreement.)
 | file | role |
 |---|---|
 | `build_efficacy_spec.py` | extract a stratified control set (spec) to ground corpus generation |

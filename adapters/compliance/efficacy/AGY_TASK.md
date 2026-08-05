@@ -1,11 +1,16 @@
+<!-- The corpus-authoring brief: handed VERBATIM to an independent frontier-model agent (never
+the adjudicator under test) to generate the held-out efficacy corpus. Committed for
+reproducibility — the generated corpus itself is gitignored; regenerate an equivalent one by
+giving this brief + spec.json to any capable independent agent. -->
+
 You are an independent senior NIST SP 800-171 assessor authoring a HELD-OUT evaluation corpus that will
 be used to test a SEPARATE, weaker automated adjudicator. You did not build that adjudicator and must not
 try to make it pass — author realistic evidence and assign the HONEST assessor determination.
 
-## Hard operating rules (shared host — read carefully)
-- This is a DOCUMENT-AUTHORING task ONLY. Do NOT start any model/inference server, do NOT load or run any
-  ML model, do NOT use the GPU, and do NOT touch the service on port 8888. Only read spec.json and write
-  JSON files under ./efficacy/corpus/. No network needed.
+## Hard operating rules (corpus independence)
+- This is a DOCUMENT-AUTHORING task ONLY. Do NOT run any model/inference service — in particular
+  never the adjudicator this corpus will evaluate (that would break the held-out property). Only
+  read spec.json and write JSON files under ./efficacy/corpus/. No network needed.
 - Stay inside this directory.
 
 ## Input

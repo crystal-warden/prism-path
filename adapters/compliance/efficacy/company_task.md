@@ -1,3 +1,7 @@
+<!-- The blind-company brief: an independent agent authors a realistic, imperfect documentation
+package with NO knowledge of any control checklist — the ingestion pipeline's blind input.
+Committed for reproducibility; the generated package is gitignored. -->
+
 You operate a small U.S. defense subcontractor named "Meridian Aerospace Components" that handles
 Controlled Unclassified Information (CUI) on a modest IT environment (a Windows/AD network, some cloud,
 a CUI enclave). Create the information-security DOCUMENTATION PACKAGE your company would submit to pass a
@@ -14,6 +18,6 @@ others are thin, aspirational, out of date, generic-template, or simply missing.
 perfect, and do NOT tailor the documents to any control list or checklist — just produce the company genuine
 documentation as it would actually exist.
 
-Rules: document-authoring ONLY. Do not start any model/inference server, do not use the GPU, do not touch
-the service on port 8888. Write only under ./efficacy/company/ . When finished, print a one-line list of the
+Rules: document-authoring ONLY. Do not run any model/inference service (never the adjudicator
+this package will be assessed by). Write only under ./efficacy/company/ . When finished, print a one-line list of the
 filenames you created.
