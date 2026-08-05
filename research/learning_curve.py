@@ -11,10 +11,10 @@ from collections import defaultdict, Counter
 sys.path.insert(0,"/home/cwadmin/cwprojects")
 
 # ---------- A) ROUTING ----------
-from mdflow import embedder
-from mdflow.centroid import _decision_items, load_graphs, _unit
-recs=[json.loads(l) for l in open("/home/cwadmin/cwprojects/mdflow/benchmark/routing_bench.jsonl")]
-graphs=load_graphs(recs, flows_dir="/home/cwadmin/cwprojects/mdflow/flows")
+from prismpath import embedder
+from prismpath.centroid import _decision_items, load_graphs, _unit
+recs=[json.loads(l) for l in open(os.path.join(_REPO, "prismpath", "benchmark/routing_bench.jsonl"))]
+graphs=load_graphs(recs, flows_dir=os.path.join(_REPO, "prismpath", "flows"))
 items=_decision_items(recs, graphs)
 outs=[it[0]["outcome"] for it in items]
 op=np.asarray(embedder.embed(outs,is_query=False),dtype=np.float32)
@@ -48,6 +48,8 @@ routeA["_meta"]={"max_samples_per_edge":max(per_edge.values()),"median_per_edge"
 
 # ---------- B) DETECTION ----------
 import torch
+
+_REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LAB="/home/cwadmin/cwprojects/etbert-lab"
 def l2(X): X=np.asarray(X,np.float32); return X/np.clip(np.linalg.norm(X,axis=1,keepdims=True),1e-8,None)
 M=l2(np.load(f"{LAB}/corpus_v2/emb.npy")); fam=np.load(f"{LAB}/corpus_v2/family.npy",allow_pickle=True).astype(str)
@@ -69,5 +71,5 @@ for cap in [25,50,100,200,None]:
 
 out={"routing_vs_samples_per_edge":routeA,"detection_vs_flows_per_family":detB,
      "read":"compare the last two rows in each: still rising => more data helps; flat => it won't"}
-json.dump(out,open("/home/cwadmin/cwprojects/mdflow/benchmark/learning_curve.json","w"),indent=2)
+json.dump(out,open(os.path.join(_REPO, "prismpath", "benchmark/learning_curve.json"),"w"),indent=2)
 print(json.dumps(out,indent=2))

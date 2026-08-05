@@ -11,7 +11,7 @@ per-tenant suppression layer (#44) via suppression.propose_rule().
 """
 import sys
 sys.path.insert(0, "/home/cwadmin/cwprojects")
-from mdflow import suppression
+from prismpath import suppression  # NOTE: `suppression` was not migrated from the pre-rename codebase; port it before running this script
 
 AUTHORITATIVE = {"human", "authoritative_oracle"}
 BENIGN = {"ignore", "watch"}

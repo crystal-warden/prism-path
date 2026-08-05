@@ -23,7 +23,7 @@ import os, sys, json, time, argparse, subprocess, collections
 import requests, urllib3
 urllib3.disable_warnings()
 sys.path.insert(0, os.path.expanduser("~/cwprojects"))
-sys.path.insert(0, os.path.expanduser("~/cwprojects/mdflow"))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 GEMMA = "http://127.0.0.1:8888/v1/chat/completions"; MODEL = "gemma4"
 IDX = "https://127.0.0.1:9200/wazuh-alerts-4.x-*/_search"
@@ -35,7 +35,7 @@ VERDICT_SCHEMA = {"type":"object","properties":{
     "required":["threat_class","is_active_threat","confidence","recommended_action","rationale"]}
 
 try:
-    from mdflow.prefilter import PrefilterCache
+    from prismpath.prefilter import PrefilterCache
     CACHE = PrefilterCache(os.path.expanduser("~/cw-staging/prefilter_corpus"))
 except Exception:
     CACHE = None

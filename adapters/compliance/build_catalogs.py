@@ -14,7 +14,7 @@ Schema (both): {_meta, families:{digraph:name}, controls:{cid:{family,family_nam
 import json, os, re, sys
 
 SRC = "/tmp"
-OUT = os.path.expanduser("~/cwprojects/mdflow/adapters/compliance/catalog")
+OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "catalog")
 CURATED_AC = os.path.join(OUT, "nist_800171_ac.json")
 
 

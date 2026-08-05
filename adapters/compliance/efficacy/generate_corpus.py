@@ -1,8 +1,8 @@
 import json
 import os
 
-spec_file = '/home/cwadmin/cwprojects/mdflow/adapters/compliance/efficacy/spec.json'
-output_dir = '/home/cwadmin/cwprojects/mdflow/adapters/compliance/efficacy/corpus'
+spec_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'spec.json')
+output_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'corpus')
 
 os.makedirs(output_dir, exist_ok=True)
 

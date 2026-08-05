@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Drive agy over the 9 per-control prompts on ONE session (--continue), 5s sleep between (anti-hang).
 set -uo pipefail
-cd ~/cwprojects/mdflow/adapters/compliance
+cd "$(dirname "$0")/.."
 export PATH="$HOME/.local/bin:$PATH"
 mkdir -p efficacy/agy_logs
 ORDER=$(python3 -c "import json;print(chr(32).join(json.load(open(\"efficacy/prompts/_order.json\"))))")

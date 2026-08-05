@@ -11,12 +11,14 @@ wrong ones? (AUC: P(wrong is farther than correct)). That's the principled repla
 """
 import sys, json, numpy as np
 sys.path.insert(0, "/home/cwadmin/cwprojects")
-from mdflow import embedder
-from mdflow.centroid import _decision_items, load_graphs, _unit
+from prismpath import embedder
+from prismpath.centroid import _decision_items, load_graphs, _unit
 from collections import defaultdict
 
-BENCH="/home/cwadmin/cwprojects/mdflow/benchmark/routing_bench.jsonl"
-FLOWS="/home/cwadmin/cwprojects/mdflow/flows"
+_REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+BENCH=os.path.join(_REPO, "prismpath", "benchmark/routing_bench.jsonl")
+FLOWS=os.path.join(_REPO, "prismpath", "flows")
 records=[json.loads(l) for l in open(BENCH)]
 graphs=load_graphs(records, flows_dir=FLOWS)
 items=_decision_items(records, graphs)
@@ -79,5 +81,5 @@ res["dont_know"]={"n_correct":len(c),"n_wrong":len(w),
                   "maha_wrong_mean":round(float(w.mean()),2) if len(w) else None,
                   "auc_wrong_farther_than_correct":round(auc,4) if auc else None}
 res["config"]={"folds":folds,"shrinkage_lambda":LAM,"prior":prior,"n_decisions":len(items),"dim":d}
-json.dump(res, open("/home/cwadmin/cwprojects/mdflow/benchmark/gaussian_route_eval.json","w"), indent=2)
+json.dump(res, open(os.path.join(_REPO, "prismpath", "benchmark/gaussian_route_eval.json"),"w"), indent=2)
 print(json.dumps(res, indent=2))

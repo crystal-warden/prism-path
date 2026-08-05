@@ -122,7 +122,7 @@ Connected v1 (1-3) is ~a week; the defensible IP is item 4.
 ---
 ## CONNECTED V1 — DELIVERED + VALIDATED (2026-07-21, #36)
 `ledger_ots.py` implements the connected anchoring engine, validated end-to-end (`ots` CLI v0.7.2 + opentimestamps 0.4.5):
-- **`from_ledger()`** enumerates `Mdflow-Output-Hash` trailers from a live Flow-Ledger via git-log — tested: read 3 hashes from a real bare-repo mini-ledger.
+- **`from_ledger()`** enumerates `PrismPath-Output-Hash` trailers from a live Flow-Ledger via git-log — tested: read 3 hashes from a real bare-repo mini-ledger.
 - **Merkle batching**: every leaf reconstructs the root (verified); one `ots stamp` covers the whole batch.
 - **OTS stamp**: real submission to 4 Bitcoin calendar servers (opentimestamps / eternitywall / catallaxy), `stamped=true`; `upgrade()` promotes pending→confirmed (async ~1-6h).
 - **Verify**: output-hash → Merkle path → root → `ots verify` (honest "Pending confirmation in Bitcoin blockchain" in-session, upgrades later).

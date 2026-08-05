@@ -17,7 +17,7 @@ Two `oneshot` services + timers that run the Flow-Ledger attestation on a schedu
 
 | Unit | Cadence | Action |
 |------|---------|--------|
-| `cw-ledger-anchor` | hourly | `ledger anchor` — Merkle-root the new `Mdflow-Output-Hash` set + `ots stamp` the root (pending calendar proof) |
+| `cw-ledger-anchor` | hourly | `ledger anchor` — Merkle-root the new `PrismPath-Output-Hash` set + `ots stamp` the root (pending calendar proof) |
 | `cw-ledger-upgrade` | daily | `ledger upgrade` — promote pending proofs to full Bitcoin attestation once confirmed (~1–6 h lag, SPEC C2) |
 
 Both call `cw-ledger-run.sh`, which sources the project env (numpy/requests/`ots` on PATH)

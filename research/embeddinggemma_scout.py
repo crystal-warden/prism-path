@@ -6,9 +6,11 @@ os.environ.pop("HF_HUB_OFFLINE", None)
 from collections import defaultdict
 sys.path.insert(0,"/home/cwadmin/cwprojects")
 from sentence_transformers import SentenceTransformer
-from mdflow.centroid import _decision_items, load_graphs, _unit
-recs=[json.loads(l) for l in open("/home/cwadmin/cwprojects/mdflow/benchmark/routing_bench.jsonl")]
-graphs=load_graphs(recs,flows_dir="/home/cwadmin/cwprojects/mdflow/flows"); items=_decision_items(recs,graphs)
+from prismpath.centroid import _decision_items, load_graphs, _unit
+
+_REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+recs=[json.loads(l) for l in open(os.path.join(_REPO, "prismpath", "benchmark/routing_bench.jsonl"))]
+graphs=load_graphs(recs,flows_dir=os.path.join(_REPO, "prismpath", "flows")); items=_decision_items(recs,graphs)
 outs=[it[0]["outcome"] for it in items]; conds=sorted({c for _,sem,_ in items for _,c in sem})
 folds=5; PRIOR=4.0
 def cos1(a,B):
@@ -94,5 +96,5 @@ try:
     del g
 except Exception as e:
     import traceback; out["error"]=str(e)[:200]; out["trace"]=traceback.format_exc()[-400:]
-json.dump(out, open("/home/cwadmin/cwprojects/mdflow/benchmark/embeddinggemma_scout.json","w"), indent=2)
+json.dump(out, open(os.path.join(_REPO, "prismpath", "benchmark/embeddinggemma_scout.json"),"w"), indent=2)
 print(json.dumps(out, indent=2))

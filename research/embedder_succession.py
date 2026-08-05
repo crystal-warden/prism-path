@@ -12,8 +12,10 @@ import sys, json, numpy as np
 from collections import defaultdict
 sys.path.insert(0,"/home/cwadmin/cwprojects")
 from sentence_transformers import SentenceTransformer
-from mdflow.centroid import _decision_items, load_graphs, _unit
-BENCH="/home/cwadmin/cwprojects/mdflow/benchmark/routing_bench.jsonl"; FLOWS="/home/cwadmin/cwprojects/mdflow/flows"
+from prismpath.centroid import _decision_items, load_graphs, _unit
+
+_REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+BENCH=os.path.join(_REPO, "prismpath", "benchmark/routing_bench.jsonl"); FLOWS=os.path.join(_REPO, "prismpath", "flows")
 recs=[json.loads(l) for l in open(BENCH)]; graphs=load_graphs(recs,flows_dir=FLOWS); items=_decision_items(recs,graphs)
 outs=[it[0]["outcome"] for it in items]; conds=sorted({c for _,sem,_ in items for _,c in sem})
 folds=5; PRIOR=4.0
@@ -86,5 +88,5 @@ real=succession_cv(Ob,Cb,Os,Cs)
 out=dict(scouting=scout, scouting_note=extra,
          succession_unit_test_rotation=unit, succession_real_bgebase_to_bgesmall=real,
          verdict_real=("PASS ≥98%" if real["passes_98"] else "BELOW 98% -> vector-only artifacts don't survive this succession; retain text"))
-json.dump(out, open("/home/cwadmin/cwprojects/mdflow/benchmark/embedder_succession.json","w"), indent=2)
+json.dump(out, open(os.path.join(_REPO, "prismpath", "benchmark/embedder_succession.json"),"w"), indent=2)
 print(json.dumps(out, indent=2))

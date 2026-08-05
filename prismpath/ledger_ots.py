@@ -2,7 +2,7 @@
 """OpenTimestamps anchoring for the Flow-Ledger (task #36 / SPEC_ledger_opentimestamps.md).
 
 Upgrades the ledger from ACCIDENT-tamper-evident to ADVERSARIAL temporal integrity: batches the
-per-unit `Mdflow-Output-Hash` values into a Merkle tree, stamps the single ROOT via OpenTimestamps
+per-unit `PrismPath-Output-Hash` values into a Merkle tree, stamps the single ROOT via OpenTimestamps
 (free Bitcoin anchoring via calendar servers), and stores per-unit inclusion proofs. Verification
 walks: output-hash -> Merkle path -> root -> OTS proof -> Bitcoin block time. Out-of-band by design
 (network I/O), so the pure engine is never touched. Two-phase: stamp returns a PENDING calendar proof
@@ -38,13 +38,13 @@ def verify_leaf(leaf_hex, path, root_hex):
         s=bytes.fromhex(sib); cur=_h(cur+s) if side=="R" else _h(s+cur)
     return cur.hex()==root_hex
 
-def from_ledger(ledger_repo, ref="refs/mdflow/runs"):
-    """Enumerate Mdflow-Output-Hash values from a Flow-Ledger bare repo (git log trailers)."""
+def from_ledger(ledger_repo, ref="refs/prismpath/runs"):
+    """Enumerate PrismPath-Output-Hash values from a Flow-Ledger bare repo (git log trailers)."""
     env={**os.environ, "GIT_DIR":ledger_repo}
     refs=subprocess.run(["git","for-each-ref","--format=%(refname)",ref],capture_output=True,text=True,env=env).stdout.split()
     out=[]
     for r in refs:
-        log=subprocess.run(["git","log","--format=%(trailers:key=Mdflow-Output-Hash,valueonly)",r],capture_output=True,text=True,env=env).stdout
+        log=subprocess.run(["git","log","--format=%(trailers:key=PrismPath-Output-Hash,valueonly)",r],capture_output=True,text=True,env=env).stdout
         out+=[l.strip() for l in log.splitlines() if l.strip()]
     return out
 

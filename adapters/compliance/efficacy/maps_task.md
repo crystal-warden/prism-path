@@ -38,7 +38,7 @@ Fix whatever it reports (dangling edge targets, missing start, malformed edges) 
 prints: clean OK — the flow compiles.
 
 ## Output + rules
-Write the file to: /home/cwadmin/cwprojects/mdflow/adapters/compliance/flows/agy_800171_assessment.md
+Write the file to: /home/cwadmin/cwprojects/prismpath/adapters/compliance/flows/agy_800171_assessment.md
 Authoring + `prismpath validate` (static, read-only) ONLY. Do NOT run the flow (prismpath run), do NOT
 start any model/inference server, do NOT use the GPU, do NOT touch port 8888. When done, print the final
 validate output and a 3-line summary of your graph (node count, and how you split deterministic vs

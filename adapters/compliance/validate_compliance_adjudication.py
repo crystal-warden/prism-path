@@ -8,7 +8,8 @@ The dangerous error in compliance is OVER-PASS (claiming more compliance than th
 worst case, 'met' when it is 'not-met'). The escalation-default should drive over-pass toward zero
 while a neutral prompt rubber-stamps intent-only / absent / out-of-boundary evidence.
 """
-import json, requests
+import json
+import os, requests
 from collections import Counter
 GEMMA = "http://127.0.0.1:8888/v1/chat/completions"; MODEL = "gemma4"
 SCHEMA = {"type": "object", "properties": {
@@ -112,7 +113,7 @@ out = {"n_bundles": n,
                                 "OVER_PASS": C["E"]["over_pass"], "severe_overpass(met_when_notmet)": C["E"]["severe_overpass"],
                                 "over_strict": C["E"]["under_call"]},
        "per_bundle": res}
-json.dump(out, open("/home/cwadmin/cwprojects/mdflow/adapters/compliance/compliance_efficacy_v0.json", "w"), indent=1)
+json.dump(out, open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "compliance_efficacy_v0.json"), "w"), indent=1)
 print(json.dumps({k: out[k] for k in ("n_bundles", "N_neutral", "E_escalation_default")}, indent=1))
 print("\nper-bundle (control | expected | N | E):")
 for r in res:

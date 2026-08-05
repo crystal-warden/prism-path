@@ -9,11 +9,13 @@ frontier at matched escalation rate. Else park.
 import sys, json, numpy as np
 from collections import defaultdict
 sys.path.insert(0,"/home/cwadmin/cwprojects")
-from mdflow import embedder
-from mdflow.centroid import _decision_items, load_graphs, _unit
+from prismpath import embedder
+from prismpath.centroid import _decision_items, load_graphs, _unit
+
+_REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 K=32; LAM=0.3; folds=5
-recs=[json.loads(l) for l in open("/home/cwadmin/cwprojects/mdflow/benchmark/routing_bench.jsonl")]
-graphs=load_graphs(recs, flows_dir="/home/cwadmin/cwprojects/mdflow/flows")
+recs=[json.loads(l) for l in open(os.path.join(_REPO, "prismpath", "benchmark/routing_bench.jsonl"))]
+graphs=load_graphs(recs, flows_dir=os.path.join(_REPO, "prismpath", "flows"))
 items=_decision_items(recs, graphs)
 outs=[it[0]["outcome"] for it in items]
 op=np.asarray(embedder.embed(outs,is_query=False),dtype=np.float64)
@@ -83,5 +85,5 @@ res=dict(K=K, gpca_accuracy=round(acc,4), dont_know_auc=round(dk_auc,4) if dk_au
          frontier_likelihood=fr_ll, frontier_margin=fr_marg,
          likelihood_beats_margin_at_matched_escalation=all(fr_ll[fr]>=fr_marg[fr] for fr in fr_ll if fr>0),
          VERDICT=verdict, note="baselines for ref: centroid 0.827, raw-768 gaussian 0.797/0.803, raw dont-know AUC 0.582")
-json.dump(res, open("/home/cwadmin/cwprojects/mdflow/benchmark/gaussian_route_pca.json","w"), indent=2)
+json.dump(res, open(os.path.join(_REPO, "prismpath", "benchmark/gaussian_route_pca.json"),"w"), indent=2)
 print(json.dumps(res, indent=2))

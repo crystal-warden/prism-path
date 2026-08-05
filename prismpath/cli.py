@@ -1083,7 +1083,7 @@ def ledger_cmd(args):
     if a == 'anchor':
         hashes = L.from_ledger(args.repo) if args.repo else []
         if not hashes:
-            print('no Output-Hash values found in ledger (need --repo with Mdflow-Output-Hash trailers)')
+            print('no Output-Hash values found in ledger (need --repo with PrismPath-Output-Hash trailers)')
             return 1
         res = L.anchor(hashes, args.out or '.', args.label)
         print(_json.dumps(res, indent=1))
