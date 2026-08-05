@@ -11,7 +11,7 @@ draw it, trace it, resume it, and commit its progress to git.**
 
 ## Executive summary
 
-*Supporting evidence for every number below: `docs/papers/SUPPORTING_EVIDENCE.md` (results ledger + provenance, negative results included) and `CONTRIB_outline_engineering_etbert_hardening.md` (the ET-BERT/SOC hardening findings — silent-failure war-story, no-sudo capture, GPU-batch economics, per-tenant suppression, the flywheel).*
+*Supporting evidence for every number below: `prismpath/docs/papers/SUPPORTING_EVIDENCE.md` (results ledger + provenance, negative results included). The ET-BERT/SOC hardening findings it cites — silent-failure war-story, no-sudo capture, GPU-batch economics, per-tenant suppression, the flywheel — were measured in a separate first-party lab repository; see that ledger's provenance note.*
 
 PrismPath is a control plane for LLM-agent workflows built on one idea: **the workflow graph should be a
 human-authored artifact, and routing should be a spectrum, not a single mechanism.** A flow is a
@@ -36,7 +36,11 @@ lockfile** (`prismpath lock`) that pins the embedding numerics for bit-for-bit r
 "does this flow compile?", a native **Mermaid render** (`prismpath graph`), **OpenTelemetry**
 decision-spans, a one-way **LangGraph importer** (`prismpath import`), and a **risk-controlled
 calibrator** (`prismpath calibrate`) that *derives* the escalation threshold with a finite-sample
-(Wilson) lower-bound risk guarantee instead of hand-tuning it.
+(Wilson) lower-bound risk guarantee instead of hand-tuning it. Two later additions extend the same
+asymmetry: a **bounded model checker** (`prismpath verify`) that proves a node unreachable under a
+stated assumption — decidable because the deterministic tier is a finite match-action table — and a
+**language server** (`prismpath lsp`) that puts the analyzer's findings on the authoring line as you
+type.
 
 Two more layers make runs durable. A **JSON checkpoint** makes a single run crash-resumable and
 suspendable for a human or an event — atomic sidecar writes, five stop reasons, and a **flow-hash
@@ -870,12 +874,16 @@ A flow whose reachable edges are all decidable — `when` predicates, error edge
 **no ML runtime for its routing**. That boundary is now enforceable and demonstrated. `prismpath
 portable <flow>` decides membership, listing the exact semantic edges that violate it and recursing
 through `@spawn` children (a portable parent spawning a non-portable child is not portable). The
-subset itself ships as **`portable/prismpath.mjs`**: the parser, the predicate sandbox (a hand-rolled
-recursive-descent evaluator — no `eval`, the same allowed grammar as the Python AST sandbox), and
-the engine loop (deterministic + error + event tiers, every suspension shape, re-entry), in **one
-dependency-free ES module** that runs unmodified in Node, a browser `<script type="module">`, an
-edge function, or a network appliance — places a Python ML stack does not go. `run()` *refuses* a
-non-portable flow rather than guess at a semantic edge.
+subset itself ships as **`prismpath/portable/prismpath.mjs`**: the parser, the predicate sandbox (a
+hand-rolled recursive-descent evaluator — no `eval`, the same allowed grammar as the Python AST
+sandbox), and the engine loop (deterministic + error + event tiers, every suspension shape,
+re-entry), in **one dependency-free ES module** that runs unmodified in Node, a browser
+`<script type="module">`, an edge function, or a network appliance — places a Python ML stack does
+not go. `run()` *refuses* a non-portable flow rather than guess at a semantic edge. Two further
+kernels have since been written against the same frozen vectors — **`prismpath-rs/`** (Rust; native
+binaries and WASM) and **`prismpath-go/`** (Go; services and network appliances) — each
+dependency-free in its own ecosystem, so the portable claim is now carried by three independent
+implementations rather than one.
 
 The load-bearing engineering is fidelity, and it is **verified, not asserted**: a cross-language
 conformance suite replays identical flows and scripted worker outcomes through both engines and
@@ -884,24 +892,44 @@ of Python's predicate semantics that a naive port would miss (`True`/`False`/`No
 while lowercase `true` is a *field name*; booleans compare numerically, so `flag == 1` matches
 `flag: true`; a comparison against a missing field is *unsatisfied*, never a crash, except `not in`,
 whose failure is *satisfied*; chained comparisons; substring `in`; `[]` and `{}` are falsy). A
-differential fuzzer over both evaluators backs the suite. One honest note on scope: the original
-sketch imagined locked *semantic* routing in the port ("cosine over committed vectors"), but the
-outcome side of a semantic decision still requires a runtime embedder, so the honest portable
-boundary is the fields-only tier; an in-browser embedder (ONNX/transformers.js) over the lockfile's
-committed vectors is the natural extension if an engagement needs it. The flow that motivates the
-feature is already inside the boundary: the production SOC triage flow's routing is fully decidable
+differential fuzzer over both evaluators backs the suite.
+
+The scope note this section used to carry — that locked *semantic* routing could not live in the
+port, because the outcome side of a semantic decision still needs a runtime embedder — has since
+been closed rather than argued away. The ports now implement the **P1 tier**: pass a parsed lockfile
+and a caller-supplied `embed(text)` callback and the kernel routes against the committed condition
+vectors itself, with `human_floor` escalation, staying dependency-free because the *embedder is the
+caller's* — an ONNX/transformers.js encoder in a browser, a native model in a Rust host, nothing at
+all in a P0 deployment. A separate frozen fixture set (`locked_flows.json`) certifies that tier
+independently. What remains genuinely outside the ports is *unlocked* semantic routing, which needs
+live condition embedding and the LLM escalation path. The flow that motivates the feature was
+already inside the boundary: the production SOC triage flow's routing is fully decidable
 — the LLM lives in the *workers*, which the host supplies in any language.
 
-**Future work: the deterministic tier is synthesizable.** A predicate in the match-action
-fragment (SPEC §4.3 — field-vs-constant comparisons, constant-set membership, boolean
-combinators, the `visits`/`error_count` counters) is not *like* hardware; it is the abstract
-description of one: each atom is a `(field-selector, operator, constant)` row, a node's ordered
+**The fragment is now machine-recognized — and machine-checked.** SPEC §4.3's match-action
+fragment stopped being a prose definition: `prismpath verify --level-m` classifies every
+deterministic edge as in-fragment or out (with a stable reason code — chained comparison,
+field-vs-field, substring membership, string ordering), and `portability_tier()` reports Level-M
+membership for the whole flow alongside P0/P1/P2. The same recognizer powers **bounded model
+checking**: `prismpath verify --reach NODE --forbid NODE --assume "<expr>"` searches the reachable
+state space under the engine's real first-match semantics, returning a concrete witness outcome for
+a reachable node and a *proof for all bounds* for an unreachable one (per-node `visits` counters are
+modeled with saturation, so the search terminates on a finite state space rather than a depth cut).
+Satisfiability is decided by enumerating candidate outcomes against the **actual predicate
+evaluator**, so the checker cannot drift from the engine the way a re-implemented decision procedure
+would. Outside the fragment it over-approximates deliberately — semantic, error, and event hops are
+*may*-takeable — which keeps UNREACHABLE sound while labeling optimistic witnesses honestly.
+
+**Future work: the deterministic tier is synthesizable.** A predicate in that same match-action
+fragment (field-vs-constant comparisons, constant-set membership, boolean combinators, the
+`visits`/`error_count` counters) is not *like* hardware; it is the abstract description of one: each atom is a `(field-selector, operator, constant)` row, a node's ordered
 deterministic edges are a priority encoder, and the counters are registers. A locked, fields-only
 flow therefore compiles toward **table-driven targets** — an XDP/eBPF program in the kernel
 datapath, a P4 match-action pipeline, an FPGA block-RAM image interpreted by one fixed, formally
 verifiable circuit — with the flow remaining *data all the way to silicon*: the same conformance
-vectors that certify the JS port become the hardware test bench, and the lockfile hash, table-image
-hash, and bitstream hash chain into a single attestation from prose to gate-level enforcement.
+vectors that certify the three software kernels become the hardware test bench, and the lockfile hash,
+table-image hash, and bitstream hash chain into a single attestation from prose to gate-level
+enforcement.
 The routing spectrum then becomes a **physical latency hierarchy**: the fabric evaluates
 deterministic edges per-packet in nanoseconds; a CPU beside it runs locked semantic routing on the
 diverted residue in milliseconds; LLM escalation and the human queue live upstream in seconds —
@@ -931,8 +959,9 @@ human intent → spec → sprint loop:
   until it compiles, type-checks, builds, passes tests, *and is wired into a composition root and
   reachable by the user.* The rule that falls out: **"never write a completeness claim a gate doesn't
   enforce."** Dead code, an unbuilt UI, an unreachable feature, a stale contract — each becomes a
-  gate, not a thing you remember to check. Gates are pluggable per target (a browser gate: syntax →
-  imports resolve → DOM element exists → headless click changes the DOM; a Roblox/Luau gate; etc.).
+  gate, not a thing you remember to check. Gates are pluggable per target (the built-in browser gate: syntax →
+  imports resolve → DOM element exists → headless click changes the DOM; any other target loads a
+  gate plugin behind the same `validate(proj)` interface).
 - **Three next-step strategies plug into the one loop, determinism-first** (the loop, gate, and
   escalation are identical across all three — only the choice of *what to build next* differs; the
   strategy is the `if KG_MODE / elif SPEC_MODE / else` dispatch at `run_sprint.py:1344–1355`):
@@ -945,9 +974,9 @@ human intent → spec → sprint loop:
   2. `spec` — build a flat ordered list of modules, each from its embedded spec: the same determinism
      without the dependency graph.
   3. `council` — the **exception, not the default**: an optional, **domain-specific expansion
-     strategy that arose from our Roblox game-dev use case**, where the goal was wide coverage of a
-     game's many aspects and we wanted the swarm to decide *how* to proceed. Role-lensed agents
-     (its `ROLE_LENS`/`WORLD_LENS` are explicitly "player-facing"/"world" game framings) propose
+     strategy that arose from a game-development use case**, where the goal was wide coverage of a
+     product's many aspects and we wanted the swarm to decide *how* to proceed. Role-lensed agents
+     (its `ROLE_LENS`/`WORLD_LENS` frame the proposal along user-facing and surface axes) propose
      net-new subsystems and vote, steered by a seeded "dice" roll toward under-explored areas — open,
      dice-driven expansion answering "what should this grow into?" It runs only when neither spec mode
      is set *and* the swarm backend is selected (`run_sprint.py:1355`); it is the least deterministic
@@ -1068,8 +1097,11 @@ we scope the actual contribution narrowly:
 
 **Status (honest).** The flow kernel (parser, four-tier router, safe predicates, engine) is solid
 with a passing test suite; durable checkpoints/resume, the Flow-Ledger, the lockfile, the static
-analyzer + broken-flow corpus, `prismpath test`/`graph`/`import`/`label`/`calibrate`, the sprint loop,
-browser + Roblox gates, and Mission Control observability (including the human-queue view) all work.
+analyzer + broken-flow corpus, `prismpath test`/`graph`/`import`/`label`/`calibrate`/`verify`/`lsp`,
+the sprint loop, the browser gate, the safety guard with its pre-registered bypass measurement, the
+Connector SDK behind which both reference adapters run, and Mission Control observability (the
+human-queue view and the live fan-out composition trees) all work. The portable subset is carried by
+three independently written kernels (JavaScript, Rust, Go), each passing every conformance vector.
 It's an active research control plane extracted from a real build, not a packaged release — several
 root scripts are experiments, and the supported entry points are `cli.py`, `run_sprint.py`,
 `engine.py`, `mission_control.py`.
@@ -1084,14 +1116,15 @@ root scripts are experiments, and the supported entry points are `cli.py`, `run_
 > **Convention.** `pip install prismpath` provides the `prismpath` console command used throughout this
 > paper (from a source checkout, `pip install -e .`); it is the `console_scripts` entry point
 > `prismpath = prismpath.cli:main` declared in `pyproject.toml`, dispatching `cli.py`'s argparse subcommands
-> (`run`, `lint`, `validate`, `resume`, `lock`, `import`, `calibrate`, `graph`, `label`, `test`).
+> (`run`, `lint`, `validate`, `verify`, `lsp`, `resume`, `lock`, `import`, `calibrate`, `graph`,
+> `label`, `test`, `portable`, `compose`, `plugins`, `ci-report`, `init`, `ledger`).
 > Without installing, every command runs equivalently as `python -m prismpath.cli <cmd>`.
 
 ```python
-from PrismPath.parser import parse_file
-from PrismPath.engine import run
-from PrismPath.router import HybridRouter, LLMRouter
-from PrismPath.prefilter import PrefilterCache
+from prismpath.parser import parse_file
+from prismpath.engine import run
+from prismpath.router import HybridRouter, LLMRouter
+from prismpath.prefilter import PrefilterCache
 
 graph = parse_file("flows/bugfix.md")
 router = HybridRouter(LLMRouter(generate_fn), margin=0.05)   # embed-first, LLM-on-doubt
@@ -1105,18 +1138,18 @@ res = cache.lookup(document)                                  # res.hit -> reuse
 cache.learn(res.vector, action, confidence, key=..., description=...)   # miss -> adjudicate, learn
 
 # Durable execution (§5)
-from PrismPath import checkpoint
+from prismpath import checkpoint
 checkpoint.run_durable("flows/bugfix.md", agent, "run.ckpt", router=router)  # checkpoint every step
 checkpoint.resume("run.ckpt", agent, choose="implement")     # apply a human's edge (needs_human)
 checkpoint.resume("run.ckpt", agent, event="approved")       # deliver an event (waiting)
 
 # Reproducible / calibrated routing (§4.6 / §4.7)
-from PrismPath.lockfile import locked_router
-from PrismPath.calibrate import RiskControlledHybridRouter   # HybridRouter at a calibrated τ
+from prismpath.lockfile import locked_router
+from prismpath.calibrate import RiskControlledHybridRouter   # HybridRouter at a calibrated τ
                                                           # (ConformalHybridRouter = back-compat alias)
 
 # The Flow-Ledger (§5.2)
-from PrismPath.ledger import Ledger
+from prismpath.ledger import Ledger
 Ledger(flow, run_id).commit_unit(unit, gate="green", files={f"{unit}.proof": b"..."})  # proof-commit
 ```
 

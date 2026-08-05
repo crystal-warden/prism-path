@@ -95,8 +95,8 @@ In this repo:
   `prismpath/docs/papers/prismpath_whitepaper_engineering.md` (engineering).
 - **Specs:** `prismpath/SPEC_ledger_opentimestamps.md` (OTS — connected v1 + air-gap tier delivered),
   `prismpath/SPEC_guard_onion.md` (the safety floor), `SPEC.md` (the format).
-- **Parking lot / negative results:** `prismpath/docs/papers/RESEARCH_IDEAS_parking_lot.md`
-  (density thread PARKED, hyperbolic/curvature parked).
+- **Negative results:** §B of this ledger (the density/geometry thread — four pre-registered
+  experiments, all failed their bars; the publishable negative result).
 - **On-ramp:** `prismpath/docs/papers/PRIMER_a_students_guide.md`.
 - **Use case:** `prismpath/PRISMPATH_USECASE_blue_team_soc_triage.md`.
 - **Bypass protocol:** `prismpath/BYPASS_MEASUREMENT.md` (pre-registered, per-stratum rates).

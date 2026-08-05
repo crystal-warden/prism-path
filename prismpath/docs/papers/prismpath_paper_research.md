@@ -47,7 +47,13 @@ one-way **LangGraph importer**. We further describe **durable, resumable executi
 checkpoints with flow-hash-bound resume and a human-in-the-loop queue, and a **commit-as-state
 Flow-Ledger** in which each gate-green unit is a content-addressed git proof-commit and "done" is a
 projection over the log — and a control-plane methodology (machine-enforced "gates as the definition
-of done") distilled from a real spec-driven build. We are explicit about the provenance of the
+of done") distilled from a real spec-driven build. Two consequences of the data framing are stronger
+than static analysis alone: the deterministic tier is a finite **match-action fragment**, so
+reachability is decidable and a bounded model checker answers *"can this state be reached under this
+assumption?"* with a concrete witness (exact inside the fragment, soundly over-approximated outside
+it); and the ML-free subset is now certified by **three independent re-implementations** (JavaScript,
+Rust, Go) that each pass all 1,067 predicate and 27 engine conformance vectors — conformance
+refereed by re-implementation rather than asserted. We are explicit about the provenance of the
 routing evaluation's labels; the once-open bounded-state critique is now closed (§6).
 
 ---
@@ -732,8 +738,8 @@ them. The default and what PrismPath was built for is a **deterministic** order 
 over an authored spec whose `##` are requirements, or a flat ordered spec list (`run_sprint.py`
 selects the mode by env config, `kg_next`/`spec_next`/`council_next` all returning the *same*
 `{done, target, instruction}` contract). The **exception, not the default**, is an optional
-**"council"** expansion strategy that arose from a Roblox game-development use case, where the goal was
-AI-driven *breadth* across a game's many aspects: role-lensed agents propose net-new subsystems and
+**"council"** expansion strategy that arose from a game-development use case, where the goal was
+AI-driven *breadth* across a product's many aspects: role-lensed agents propose net-new subsystems and
 vote, steered by a seeded "dice" roll toward under-explored areas — an open, dice-driven "what should
 this grow into?" loop. Council is the least deterministic mode and is load-bearing for *none* of the
 control-plane guarantees; the systems contribution below is the control plane and its durable proofs,
@@ -841,6 +847,20 @@ We are deliberately explicit here.
   (and, per §4.1, its labels are AI-annotated); the routing
   lockfile (§3.3) assumes a *stable embedder identity* — its probe-cosine fingerprint detects drift but
   cannot itself re-derive a correct lock, so a deliberate embedder change requires a re-`lock`.
+- **The model checker's guarantee is one-sided, deliberately.** Bounded reachability is exact only
+  over the match-action fragment; a semantic edge cannot be decided statically (it depends on an
+  embedder and, at low margin, an LLM), so those hops are treated as *possibly takeable*. The
+  asymmetry is chosen: UNREACHABLE verdicts are sound (the property a safety reviewer relies on),
+  while a reported witness may cross an over-approximated hop and is labeled *may* rather than
+  claimed. A flow whose critical branch is semantic therefore gets a weaker guarantee than one whose
+  guard rails are `when` predicates — which is itself an argument for expressing policy
+  deterministically, and one the tool makes visible per edge.
+- **The safety floor is a floor, and its bypass rates are published rather than argued.** Deterministic
+  pattern matching is defeatable; the pre-registered measurement reports per-stratum rates including
+  the ones that do not fall (fiction-framed intent survives every configuration that holds the
+  benign-collision bound; a non-English probe survives an English embedder). No claim of
+  jailbreak-resistance is made or implied, and the numbers are the argument for layering rather than
+  for the floor's sufficiency.
 
 ---
 
@@ -869,9 +889,12 @@ check suite — reachability, terminal reachability, exhaustiveness via compleme
 shadowing, Tarjan cycle loop-caps, interval-unsatisfiability — with zero false positives and a
 broken-flow corpus, §3.3); **durable, resumable execution with a git proof-ledger** (§3.4);
 **field-only routing** enforced as decidable provenance lints (`@emits`/`@field_only`), which also
-delimits an **ML-free portable subset**: flows whose reachable edges are all decidable run on a
-dependency-free JavaScript port of the kernel whose routing parity with the Python engine is enforced
-by a cross-language conformance suite rather than asserted; **fan-out and sub-flow composition** as
+delimits an **ML-free portable subset**: flows whose reachable edges are all decidable run on
+dependency-free ports of the kernel whose routing parity with the Python reference is enforced by a
+cross-language conformance suite rather than asserted — **three independent implementations
+(JavaScript, Rust, Go) now pass every one of the 1,067 predicate and 27 engine vectors**, which is
+the strongest form the claim can take: conformance is refereed by re-implementation, not by
+assertion, and a fourth kernel is a weekend against a frozen target; **fan-out and sub-flow composition** as
 event edges plus a declarative `@spawn` annotation — the engine stays pure (it only records the spawn
 spec), an out-of-band harness spawns durable child runs under deterministic ids and delivers the join
 event, static analysis crosses the flow boundary (a missing join edge is a compile-time deadlock
@@ -881,6 +904,28 @@ with cumulative *and* windowed drift bounds that quarantine a drifting entry); a
 spectrum to a security-triage flow** (the streaming replay over the author's own Wazuh instance where
 the decision-memoization and reuse-accuracy findings of §5 were measured — a flow whose routing, we
 note, falls entirely in the portable subset: the LLM lives in the workers, not the control flow).
+Three further items have since been delivered, each a consequence of the same data-not-code
+asymmetry. **Bounded model checking over the match-action fragment** (§3.2's Level M): because a
+flow's deterministic tier is a finite match-action table, reachability is decidable, and
+`prismpath verify` answers *"can state X be reached under assumption Y?"* by explicit-state search
+with the engine's own first-match semantics — an edge is takeable iff `assume ∧ pred_i ∧ ¬pred_{<i}`
+is satisfiable, decided by candidate enumeration against the *real* evaluator so the checker cannot
+drift from the engine. Verdicts are exact with a concrete witness outcome inside the fragment and
+soundly over-approximated outside it (semantic, error, and event hops are labeled *may*), and
+per-node `visits` counters are modeled with saturation, so an UNREACHABLE verdict holds for **all**
+bounds rather than the explored depth. This turns the paper's static-analysis story from *"the flow
+compiles"* into *"this state is provably unreachable under this policy"* — the check a reviewer of a
+safety-relevant process actually wants. **A deterministic safety floor** (`guard.py`): a policy
+language whose grammar has **no verb for permitting**, so composition is union-of-denials and
+weakening the floor is *unsayable* rather than disallowed-and-validated; its bypass rates are
+published per stratum from a **pre-registered protocol** whose predictions are recorded before each
+run and whose misses are reported against them, including one that failed in the flattering
+direction. **A risk-controlled operating point for decision memoization**: the §5 reuse cache no
+longer takes a hand-set similarity threshold but derives it, selecting the point that maximizes
+auto-resolution among those whose reuse-error rate a Wilson upper bound certifies below a stated
+risk — the same LTT/RCPS discipline as §4.3's τ, applied to caching, and it declines to choose when
+the evidence cannot clear the bound.
+
 What remains genuinely open: (i) a larger, *human*-annotated routing benchmark across more flows and
 embedders, to test whether the frontier shape and the confident-error blind spot generalize; and (ii)
 confidence-aware terminal behavior beyond the current `human_floor` suspension (ask-a-human as an even
@@ -894,6 +939,9 @@ Design review and adversarial critique of this work were conducted with an AI as
 consistent with venue AI-disclosure policy.
 
 *Artifacts (parser, safe predicate evaluator, four-tier router, embedder, checkpoint + Flow-Ledger,
-static analyzer, lockfile, calibration, the data-plane tools, evaluation harnesses, and the
-`comparisons/` head-to-head, plus example flows, plus the succession/scouting/suppression/flywheel/OTS engines and a **`SUPPORTING_EVIDENCE.md`** results ledger mapping every claim to a measured result + provenance, **negative results included** — the density/geometry thread, §B) are self-contained and small enough to audit
-end-to-end.*
+static analyzer, bounded model checker, safety guard, lockfile, calibration, the data-plane tools,
+the three conformant portable kernels, evaluation harnesses, and the `comparisons/` head-to-head,
+plus example flows, plus the succession/scouting/suppression/flywheel/OTS engines and a
+**`SUPPORTING_EVIDENCE.md`** results ledger mapping every claim to a measured result + provenance,
+**negative results included** — the density/geometry thread, §B) are self-contained and small enough
+to audit end-to-end.*
