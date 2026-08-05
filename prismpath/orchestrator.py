@@ -44,8 +44,10 @@ ORCH_PLUGIN = None
 if TARGET != "browser":
     from prismpath.plugins import load_gate
     ORCH_PLUGIN = load_gate(TARGET)
-# architecture contract: browser is built-in; any other target's contract comes from its plugin
-ARCH_FILE = "prismpath/APP_ARCHITECTURE.md" if TARGET == "browser" else getattr(ORCH_PLUGIN, "ARCH_PATH", "")
+# architecture contract: browser is built-in (resolved relative to this file, CWD-independent);
+# any other target's contract comes from its plugin
+ARCH_FILE = (os.path.join(os.path.dirname(os.path.abspath(__file__)), "nudges", "APP_ARCHITECTURE.md")
+             if TARGET == "browser" else getattr(ORCH_PLUGIN, "ARCH_PATH", ""))
 
 PLAN_SENTINEL = "reply ok to build"
 PLANNER_SYS = (

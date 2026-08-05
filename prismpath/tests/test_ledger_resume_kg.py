@@ -50,12 +50,10 @@ def _load(monkeypatch, proj, spec_file, ledger_dir, run_id):
     monkeypatch.setenv("SPRINT_LEDGER", "1")
     monkeypatch.setenv("SPRINT_LEDGER_RUN", run_id)
     monkeypatch.setenv("PRISMPATH_LEDGER_DIR", str(ledger_dir))
-    # run_sprint reads ARCH at import; without SPRINT_ARCH it falls back to a hardcoded relative path
-    # (prismpath/APP_ARCHITECTURE.md) that doesn't resolve in this flat layout, so make the load hermetic
-    # by pointing at the repo's real arch file — otherwise this file passes only when a sibling test
-    # happens to leak SPRINT_ARCH into the environment, and fails in isolation.
+    # run_sprint's ARCH default is now __file__-relative (nudges/APP_ARCHITECTURE.md), so the
+    # import is hermetic from any CWD; pin SPRINT_ARCH anyway to keep this test self-describing.
     monkeypatch.setenv("SPRINT_ARCH",
-                       os.path.join(os.path.dirname(__file__), "..", "APP_ARCHITECTURE.md"))
+                       os.path.join(os.path.dirname(__file__), "..", "nudges", "APP_ARCHITECTURE.md"))
     sys.modules.pop("run_sprint_uut", None)
     path = os.path.join(os.path.dirname(__file__), "..", "run_sprint.py")
     spec = importlib.util.spec_from_file_location("run_sprint_uut", path)

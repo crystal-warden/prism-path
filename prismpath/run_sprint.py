@@ -27,7 +27,7 @@ On escalation the driver appends an OPEN block to HELP.md and KEEPS WORKING. A s
 Config (env):
   LLM_BASE, LLM_MODEL          served OpenAI-compatible endpoint
   SPRINT_PROJ                  output project dir (required)
-  SPRINT_ARCH                  architecture contract file (default prismpath/APP_ARCHITECTURE.md)
+  SPRINT_ARCH                  architecture contract file (default prismpath/nudges/APP_ARCHITECTURE.md)
   SPRINT_NUDGE | SPRINT_NUDGE_FILE   the goal (required; file wins if both set)
   SPRINT_GATE                  "browser" (default) | a gate-plugin name
   SPRINT_SECONDS               wall-clock budget; 0/unset = open-ended (until STOP file)
@@ -116,10 +116,12 @@ else:
     validate_fn = GATE_PLUGIN.validate
     HAS_SPEC_LAYER = GATE_PLUGIN.HAS_SPEC_LAYER  # the plugin's gate runs specs the test-author owns
 
-# Architecture contract: explicit SPRINT_ARCH wins; else the active gate plugin's contract; else browser default.
+# Architecture contract: explicit SPRINT_ARCH wins; else the active gate plugin's contract; else the
+# browser default — resolved relative to THIS file, so it works from any CWD.
 ARCH_FILE = (os.environ.get("SPRINT_ARCH")
              or (getattr(GATE_PLUGIN, "ARCH_PATH", "") if GATE_PLUGIN else "")
-             or "prismpath/APP_ARCHITECTURE.md")
+             or os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                             "nudges", "APP_ARCHITECTURE.md"))
 ARCH = open(ARCH_FILE, encoding="utf-8").read()
 
 # --- the lazy-dev / verification / help posture baked into every role (AGENT_PRINCIPLES #5-8) ---
