@@ -12,35 +12,44 @@ PrismPath is an open-source framework that treats **agent workflows as data**. O
 1. **The Flow is Data, Not Code**: Process logic remains in readable, diffable, static Markdown files—never hidden inside imperative Python callbacks.
 2. **Logic Where Logic Exists, Intent Where It Doesn't**: Free, exact `when` predicates handle logic; models handle semantic judgment only on low-margin doubt.
 3. **Safety Through Decidability**: Expand static analysis (`prismpath validate`) toward formal verification and zero-false-positive safety guarantees.
-4. **Zero-Dependency Edge Portability**: Pure P0 flows compile to lightweight, non-ML targets (JavaScript, WebAssembly, Rust).
+4. **Zero-Dependency Edge Portability**: Pure P0 flows run on lightweight, non-ML kernels (JavaScript, Rust, Go, WebAssembly).
 
 ---
 
 ## 🎯 Release Milestones
 
-### Phase 1: Core Specification & Multi-Language Kernels (Current)
+### Phase 1: Core Specification & Multi-Language Kernels (Complete)
 
 - [x] **Spec Version 1 (Draft)**: Normative definition of grammar, edge tiers, sandbox predicates, engine contracts, and portability levels ([`SPEC.md`](SPEC.md)).
 - [x] **Frozen Conformance Vectors**: 1,067 predicate cases and 27 engine fixtures checked deterministically across implementations ([`portable/conformance/`](prismpath/portable/conformance/README.md)).
-- [x] **JavaScript Portable Kernel**: Dependency-free ES module (`portable/prismpath.mjs`) and interactive browser playground ([`portable/playground.html`](prismpath/portable/playground.html)).
+- [x] **JavaScript Portable Kernel**: Dependency-free ES module (`prismpath/portable/prismpath.mjs`) and interactive browser playground ([`portable/playground.html`](prismpath/portable/playground.html)).
 - [x] **Reference Rust Kernel (`prismpath-rs`)**: Certified conformant core kernel running natively on ARM64 and x86_64.
 - [x] **Go Portable Kernel (`prismpath-go`)**: Lightweight dependency-free Go runtime passing 100% of conformance vectors.
 
-### Phase 2: Static Analysis, Formal Verification & Developer Tooling
+### Phase 2: Static Analysis, Formal Verification & Developer Tooling (Complete)
 
 - [x] **Static Validator (`prismpath validate`)**: Decidable compile-time checks for cycles, deadlocks, unreachable nodes, and shadowed edges.
 - [x] **Cross-Flow Type Contracts**: Compile-time checking of `@emits(...)` and `@expect(...)` variables across `@spawn` composition trees.
-- [ ] **Formal Model Checking**: Verify reachability and invariant guarantees (*"State X can never be reached under condition Y"*) using bounded model checking over Level M match-action fragments.
-- [ ] **Language Server Protocol (LSP)**: Real-time diagnostics, autocompletion, and graph previews for VS Code, Neovim, and JetBrains IDEs.
-- [ ] **Sub-flow Composition Harness Improvements**: Enhanced fan-out debugging and live state visualization in Mission Control.
+- [x] **Formal Model Checking (`prismpath verify`)**: Reachability and invariant guarantees (*"State X can never be reached under condition Y"*) via bounded model checking — exact with concrete witnesses over the Level M match-action fragment (per-edge membership now reported), sound over-approximation outside it, UNREACHABLE proven for all bounds.
+- [x] **Language Server Protocol (`prismpath lsp`)**: Real-time diagnostics, completion, hover, symbols, and a Mermaid graph request over stdio — stdlib only, for Neovim, JetBrains (LSP4IJ), VS Code, and any LSP editor ([`prismpath/editor/README.md`](prismpath/editor/README.md)).
+- [x] **Sub-flow Composition Harness Improvements**: Fan-out debugging + live composition trees (`composer.fanout_tree`) in Mission Control's Flows tab — every child's stop state, gate-aware join progress, nested fan-outs, child_error surfacing.
+- [ ] **Deploy-Kernel Test Action**: a sibling GitHub action (`actions/test-<kernel>`) asserting a flow's `.tests.md` fixtures on the exact portable kernel (JS/Rust/Go) a deployment ships — "test what you run". Prerequisite: a general fixture runner per kernel.
 
-### Phase 3: Attestation, Compliance & Enterprise Emitters
+### Phase 3: Attestation, Compliance & Enterprise Emitters (Complete)
 
 - [x] **Git Flow-Ledger (`ledger.py`)**: Gate-green proof-commits on dedicated orphan refs (`refs/prismpath/runs/*`).
 - [x] **Air-Gap Attestation Suite (`ledger_airgap.py`)**: Provenance manifests, human-override tracking, and OpenTimestamps / RFC-3161 anchoring.
 - [x] **NIST SP 800-171 Reference Adapter**: Dual catalog support (Rev 2 & official NIST OSCAL Rev 3) with schema-validated **OSCAL AR/POA&M** and **CycloneDX 1.6** emission.
-- [ ] **SOC Triage Adapter Refinements**: Production SIEM integrations and automatic prefilter cache tuning.
-- [ ] **Third-Party Connector SDK**: Streamlined base classes and schema-flattening middleware for enterprise connectors.
+- [x] **SOC Triage Adapter Refinements**: Production SIEM integrations — a `SIEMSource` ingestion port with Elasticsearch/OpenSearch (env-configured, TLS-verified), Wazuh, and NDJSON file sources (Splunk best-effort) + systemd poller units — and automatic prefilter cache tuning (`prefilter.tune`, a Wilson-bound risk-certified operating point derived from the deployment's own adjudication history).
+- [x] **Third-Party Connector SDK**: `BaseConnector` covering all six hexagonal ports (Ingestion, Retrieval, Adjudicator, Action/Sink, Attestation, Deferral) + `PayloadFlattener` schema-flattening middleware + the one-line plugin-registry pattern; the SOC adapter is the migration proof.
+
+### Phase 4: Documentation & Repo-Surface Hardening (Complete)
+
+- [x] **Doc-accuracy pass**: every root + package doc audited (see the per-doc audit trail); dead links, placeholder URLs, path-casing, and rename artifacts fixed; every relative link verified to resolve.
+- [x] **Security posture updated for shipped attestation**: SECURITY.md's ledger exclusion is now conditional on anchoring; anchoring/attestation forgery is an in-scope reporting class.
+- [x] **De-fusing the game-dev origin**: the roblox gate plugin removed; the sprint control plane genericized end to end (council deliberation stays as a general capability).
+- [x] **Brand-residue sweep (mdflow → prismpath)**: including the functional `ledger_ots` ref/trailer mismatch that silently emptied `prismpath ledger anchor`, the seven `research/` scripts, and the compliance tooling paths.
+- [x] **Contract relocation**: the app-architecture coder contract lives with the prompt assets (`prismpath/nudges/`), resolved CWD-independently.
 
 ---
 
