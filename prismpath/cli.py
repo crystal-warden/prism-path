@@ -161,6 +161,9 @@ def main(argv=None) -> int:
     from prismpath.ci_report import add_parser as _add_ci_report
     _add_ci_report(subparsers)
 
+    from prismpath.model_check import add_parser as _add_verify
+    _add_verify(subparsers)
+
     init_parser = subparsers.add_parser(
         'init', help='Scaffold a starter flow — zero to a running, validated flow in two commands')
     init_parser.add_argument('path', nargs='?', default=None,

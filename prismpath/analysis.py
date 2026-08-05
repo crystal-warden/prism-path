@@ -772,7 +772,10 @@ def portability_tier(graph, flow_path) -> dict:
         (live condition embedding and/or LLM escalation).
 
     Returns {tier, semantic_edges: [(node, target, condition)], unlocked: [condition, ...],
-    lock: path|None}. Decidable from the document + its sidecar lock — no model, no execution."""
+    lock: path|None, level_m: bool}. `level_m` marks the compile-to-hardware subset (SPEC §7):
+    a P0 flow whose deterministic edges are all in the match-action fragment (§4.3). Decidable
+    from the document + its sidecar lock — no model, no execution."""
+    from prismpath import model_check as _mc
     reach = _reachable(graph)
     semantic = []
     for name in sorted(reach):
@@ -782,8 +785,10 @@ def portability_tier(graph, flow_path) -> dict:
         for t, c in node.edges:
             if predicates.is_semantic(c):
                 semantic.append((name, t, c))
+    lm_all, _lm_bad = _mc.flow_level_m(graph)
     if not semantic:
-        return {"tier": "P0", "semantic_edges": [], "unlocked": [], "lock": None}
+        return {"tier": "P0", "semantic_edges": [], "unlocked": [], "lock": None,
+                "level_m": lm_all}
     import os
     from prismpath import lockfile as _lf
     lp = _lf.lock_path(flow_path)
@@ -797,7 +802,8 @@ def portability_tier(graph, flow_path) -> dict:
             pass
     unlocked = sorted({c for _, _, c in semantic if c not in locked_conds})
     tier = "P1" if lock_found and not unlocked else "P2"
-    return {"tier": tier, "semantic_edges": semantic, "unlocked": unlocked, "lock": lock_found}
+    return {"tier": tier, "semantic_edges": semantic, "unlocked": unlocked, "lock": lock_found,
+            "level_m": False}       # Level M is a within-P0 stratum (SPEC §7)
 
 
 def portability_tier_tree(graph, flow_path, _seen=None) -> dict:
