@@ -7,11 +7,21 @@
 Read it. Diff it. Lint it. Test it. Lock it. Prove it. Six verbs, each backed by a shipped
 tool — try doing any of that to a Python callback.
 
-This has happened before. Infrastructure went from shell scripts to Terraform. CI went from
-Jenkins jobs to YAML in the repo. Deploys went from runbooks to manifests. Same story every
-time: logic only engineers could touch becomes **a file the whole team can read and own**.
-Agent workflows are still stuck in their shell-script era — routing smeared across Python
-callbacks. PrismPath gets them out.
+**[Try it in your browser](https://www.crystalwardenlabs.com/playground)** — the kernel runs client-side, nothing to
+install, nothing you type leaves the page.
+
+PrismPath is built for five specific pains:
+
+- **"What does this workflow actually do?"** means reading Python. The graph is smeared across
+  callbacks — there's nothing to *read*.
+- **The process owner can't change the process.** The SOC lead who knows the rules files a
+  ticket and waits.
+- **Every branch is an LLM call.** Slow, not free, and models fumble the easy ones — "tests did
+  *not* pass" routes wrong.
+- **You can't test routing** without a model in the loop.
+- **"Why did it go there?"** is a log dive, not an answer.
+
+One Markdown file fixes all five.
 
 ## The whole idea in one file
 
@@ -89,14 +99,14 @@ N=301 labeled routing decisions, 7 flows, same local model for every arm
 python -m prismpath.comparisons.run_comparison   # reproduce the table against your own endpoint
 ```
 
-The trade is explicit and **tunable**: the recommended configuration (LLM-on-doubt over
-**learned per-condition centroids**, 5-fold cross-validated, `prismpath/benchmark/hybrid_sweep.py`) reaches
-95.3% at 2.8× fewer LLM calls and ~2× lower median latency; δ — or a risk-calibrated τ with a
-finite-sample guarantee — slides the same frontier from 90% @ 160 calls/1k to ~99.7% at
-always-call. The honest costs: a bimodal p95 on escalated hops, and centroids need labeled
-history (zero-shot is the cold-start row). The external arms are more accurate out of the box
-because they pay the model for *every* transition; if that's the right trade for you, see the
-box below.
+The trade is a dial, not a verdict. The recommended setup — LLM-on-doubt over **learned
+per-condition centroids** (5-fold cross-validated, `prismpath/benchmark/hybrid_sweep.py`) — hits
+95.3% with 2.8× fewer LLM calls at about half the median latency. Turn δ up, or derive τ with
+`prismpath calibrate`, and the same system trades toward ~99.7% at always-call prices. The
+honest costs: an escalated hop pays the embedding *and* the LLM call (that's the p95), and
+centroids need labeled history — zero-shot is the cold-start row. The external arms are more
+accurate out of the box because they pay the model on every single transition; if that's the
+right trade for your workload, use them — see the box below.
 
 ## Who wrote this — and why it shouldn't matter
 
@@ -130,11 +140,12 @@ prismpath validate prismpath/examples/pr_demo/triage.md   # "your flow compiles"
 prismpath test prismpath/examples/pr_demo/triage.md       # fixture-asserted routing, no model
 ```
 
-Or skip the terminal: the **[playground](prismpath/portable/playground.html)** runs the portable
-kernel in your browser — paste a flow, watch it route ([serve it](prismpath/portable/README.md)).
-The full walk from "what's this?" to a real agent driving your own flow is
-**[GETTING_STARTED.md](GETTING_STARTED.md)** — every step executed before it was written,
-honestly counted (spoiler: eight).
+Or skip the terminal entirely: the **[live playground](https://www.crystalwardenlabs.com/playground)** runs the
+portable kernel in your browser — paste a flow, watch it route. (The same playground ships in
+this repo at [`portable/playground.html`](prismpath/portable/playground.html) if you'd rather
+[serve it](prismpath/portable/README.md) yourself, offline.)
+**[GETTING_STARTED.md](GETTING_STARTED.md)** walks you from clone to a real agent driving
+your own flow — eight steps, each one actually run before it was written down.
 
 ## When PrismPath is the wrong tool
 
@@ -153,7 +164,10 @@ honestly counted (spoiler: eight).
 
 ## Tradeoffs & Paradigm Comparisons
 
-Different tools solve different problems. PrismPath is a **specialist for safety-minded, auditable, and edge-deployable routing**, deliberately ceding open-ended agentic expressiveness (dynamic graph creation, unconstrained tool loops) to generalist frameworks.
+Different tools, different jobs. PrismPath specializes in **auditable, safety-minded,
+edge-deployable routing** — and gives up open-ended agentic freedom (dynamic graph creation,
+unconstrained tool loops) to get it. If your problem needs that freedom, use a generalist
+framework; the table is honest about who wins where.
 
 | Framework | Primary Approach | Where It Excels | The Tradeoff vs. PrismPath |
 |---|---|---|---|
@@ -164,56 +178,26 @@ Different tools solve different problems. PrismPath is a **specialist for safety
 | **Temporal / Cadence** | Microservice Orchestration (Code) | Massive throughput (100k+ exec/sec), microservice crash recovery & replay | Code-bound (Go/Java/Python); non-developers cannot audit rules; LLM routing is manual. |
 | **n8n / Camunda (BPMN)** | Visual Drag-and-Drop / XML | Non-developer GUI builders, drag-and-drop web workflow design | Hard to version-control/diff in Git; LLMs are external API nodes without hybrid confidence escalation. |
 
-Onboarding a team? **[GETTING_STARTED.md](GETTING_STARTED.md)** is the walk from "what's this?"
-to a real agent driving your own flow — honestly counted, every step executed before written.
+Onboarding a team? Start with **[GETTING_STARTED.md](GETTING_STARTED.md)**.
 
-## Two objections, answered up front
+## Common objections
 
-**"Structured output already solved routing — ask the worker for JSON and branch on the field."**
-Where the worker can emit a clean enum, agreed — and that *is* this system's recommendation:
-`@emits` + `when` is exactly that pattern, the polarity lint exists to push authors toward it, and
-the one production flow is P0 with no semantic edges at all. What the objection misses is that
-structured output doesn't eliminate the routing decision — it relocates it *inside the model* and
-strips the confidence signal. The classification into your enum is the same semantic judgment,
-now made where nothing measures it, exiting in a deterministic costume. JSON mode has no doubt
-channel: the field looks equally confident right or wrong, and you cannot calibrate an abstention
-threshold ([`calibrate`](prismpath/calibrate.py)'s risk-controlled τ) over a score that doesn't
-exist. The semantic tier is for the residue — outcomes that resist enumeration, and workers that
-aren't promptable LLMs at all (CLI tools, humans, legacy scripts emit text and exit codes, not
-your schema). And even all-structured, the schema + routing live in *one* statically-checked flow
-document (`emits-type-mismatch`, `undeclared-field`) rather than scattered across a Pydantic
-model, a prompt string, and a callback.
-
-**"Logic-as-data is a rules engine, and we buried those."** Rules engines died of two specific
-diseases, and this design is built against both. *Emergence*: a RETE engine fires N rules in
-data-dependent order — nobody could answer "can this rule ever fire?". PrismPath routing is
-first-match-deterministic in document order over a decidable core, which is why
-`shadowed-edge` / `always-false-edge` lints and a bounded model checker with witnesses
-([`verify`](prismpath/model_check.py)) can exist at all. *Expressiveness*: rules engines could
-hold the application, so the application moved in. The Level M predicate fragment **cannot** —
-comparisons, membership, counters, nothing else — so anything complicated is forced across the
-worker boundary into ordinary code, and the flow stays coordination. The weakness of the
-predicate language is the moat. The sharpest form of the objection — a one-word semantic edit
-whose behavioral shift hides in embedding geometry — is real, and it is every semantic system's
-problem (the same drift in a prompt string has *zero* tripwires). Here it trips three:
-[`lock --check`](prismpath/lockfile.py) fails CI until the moved vectors are re-locked, the
-flow's fixture table re-runs modelless and names any flipped case, and emitted labels re-score
-the change before merge. You review a semantic change by its pinned consequences — the same way
-you review any refactor. What remains honestly open: composition at scale (`@spawn` is young; no
-flow beyond ~30 nodes is battle-tested).
+The two strongest — *"structured output already solved routing"* and *"logic-as-data is a
+rules engine, and we buried those"* — get full answers, concessions included, in
+**[docs/objections.md](docs/objections.md)**.
 
 ## Five doors
 
 - **Coming from LangGraph?** `prismpath import your_graph.py` renders your `StateGraph` as a
   skeleton flow — see what your control flow looks like as prose in fifteen minutes.
 - **Platform / SRE:** [the lockfile](SPEC.md#7-portability-levels) (bit-reproducible routing),
-  ["your flow compiles"](#your-flow-compiles--static-analysis), OTel decision spans into the
+  ["your flow compiles"](docs/guides/tour.md#your-flow-compiles--static-analysis), OTel decision spans into the
   Grafana/Jaeger/Datadog you already run — decision-level semantics (margin, escalated-or-not) as
   span attributes, not a new pane of glass to adopt.
 - **Security / compliance:** the [SOC triage case](docs/research/soc-triage-case-study.md)
   — prefilter reuse measured live, human-gated containment, ledger proofs, air-gap-friendly
   [portable subset](prismpath/portable/README.md).
-- **Process owner / PM:** the [playground](prismpath/portable/playground.html) and the
+- **Process owner / PM:** the [live playground](https://www.crystalwardenlabs.com/playground) and the
   [persona examples](prismpath/examples/README.md) — no terminal required. Contribute your own workflow (no code) to the [gallery](prismpath/gallery/README.md).
 - **Researcher:** the [benchmark](prismpath/benchmark/), the [papers](docs/research/), and the
   [format spec](SPEC.md) with its machine-checkable conformance vectors.
@@ -223,64 +207,7 @@ flow beyond ~30 nodes is battle-tested).
 
 ---
 
-## The reference deployment — what we run in production on top
-
-Everything above is the **format play**: the spec, the kernel, the toolchain. Everything below is
-the **reference deployment** — the control plane Crystal Warden Labs runs to build real software
-with a local agent swarm. It is credibility proof, not part of the format: a conforming runtime
-needs none of it, and its examples (browser gates, sprint councils) speak the
-dialect of *our* production, not yours.
-
-## The two layers
-
-PrismPath turns a **human's intent into a supervised, gated build run by a local-LLM agent swarm**.
-It has two layers:
-
-- **The flow kernel** — *one markdown file is the workflow.* Each `## heading` is a node (its prose
-  is the instruction handed to an agent); `-> target: condition` lines are the edges. No `StateGraph`,
-  no routing functions in code — a PM, analyst, or domain expert can author and read a flow.
-- **The control plane on top** — a spec-driven **sprint** loop that drives the swarm: a council picks
-  the next unit of work, an executor edits the real tree, and **deterministic gates decide when it's
-  done**. Progress is observable live through Mission Control. Build targets (the browser gate is
-  built in; others load as plugins) are pluggable; the engine itself stays target-agnostic.
-
-> The thesis: **a human holds the vision; the swarm builds; gates — not prose — define done.**
-> See [docs/design/framework.md](docs/design/framework.md) for the operating methodology and hard-won lessons.
-
----
-
-## A worked example: one line in, a checked app out
-
-Before the abstractions, here's the whole thing on a real task. You want a tip calculator. You hand the
-control plane that one line of intent:
-
-```bash
-SPRINT_PROJ=/tmp/tip SPRINT_GATE=browser SPRINT_NUDGE="a tip calculator" python -u prismpath/run_sprint.py
-```
-
-From there the loop runs on its own:
-
-1. **Build.** The swarm turns the intent into a small file layout (`index.html` + a little JS) and the
-   coder writes the first version into `/tmp/tip`.
-2. **Gate — the definition of done, machine-enforced.** The browser gate checks the result the way a
-   reviewer would, not "does it look finished": every JS file parses (`node --check`); every `import`
-   resolves to a symbol that's really exported; every `getElementById('total')` the JS references
-   actually exists in the HTML; and then the real test — a **headless Chromium loads the page, fills the
-   bill input, clicks the button, and asserts the DOM actually changed**.
-3. **Red → fix, and loop.** If clicking does nothing, the gate says exactly that — *"the primary control
-   produced no visible change… its handler is likely not wired"* — and that message becomes the coder's
-   next task. Build → gate → fix repeats; if the same error recurs 3×, it escalates (to agy, then you).
-4. **Green → done.** The build is "done" only when every check passes. You open `/tmp/tip/index.html`
-   and it works — because a machine already confirmed the button *does* something, not just that code
-   exists to handle it.
-
-That's the **control plane** with the built-in **browser gate**. Swap `SPRINT_GATE` for a gate plugin
-and the identical loop targets a different world — same discipline, different gate. The
-rest of this README is the two layers underneath that run.
-
----
-
-## The flow kernel
+## How routing works
 
 Routing is a **spectrum chosen by the engine, not the author**:
 
@@ -294,256 +221,11 @@ Routing is a **spectrum chosen by the engine, not the author**:
 > node, **deterministic edges are evaluated first, in document order — first true wins**; only if none
 > match do the semantic edges go to the router.
 
-### A minimal flow
-
-```markdown
----
-name: coding
-start: write_code
----
-
-## write_code
-Write or revise the function so it passes the tests.
--> run_tests: when always
-
-## run_tests
-Run the hidden test suite.
--> done: when tests_pass
--> give_up: when visits > 3
--> debug: when not tests_pass
-
-## debug
-Judge whether the fix is clear or the task is unsolvable.
--> write_code: the fix is clear, edit the code and try again
--> give_up: the problem is unsolvable
-
-## done
-All tests pass.
-
-## give_up
-Too many attempts.
-```
-
-### The agent contract
-
-The engine is agent-agnostic. You pass `run(graph, agent, router=...)` where:
-
-```python
-agent(node_name: str, instruction: str, state: dict) -> str | dict
-```
-
-- Return a **string** → it becomes the text used for semantic routing.
-- Return a **dict** `{"text": ..., <field>: <value>, ...}` → `text` feeds semantic routing and the
-  other fields are the variables the deterministic `when` predicates see (e.g. a `run_tests` node
-  returns `{"tests_pass": True, "text": "all tests passed"}` so `-> done: when tests_pass` fires
-  deterministically).
-
-`state` is a dict shared across the whole run; the engine seeds `state["transcript"]` and
-`state["visits"]` (per-node entry counts). `run(...)` returns `RunResult(path, steps, stopped, state)`.
-
-### Routers
-
-```python
-from prismpath.engine import run
-from prismpath.router import HybridRouter, LLMRouter
-from prismpath import llm_local
-
-router = HybridRouter(LLMRouter(llm_local.generate), margin=0.05)  # recommended
-run(graph, agent, router=router)
-```
-
-- `EmbeddingRouter()` — cosine only (cheap, ~0.82 on the routing bench).
-- `LLMRouter(generate_fn)` — a 1-shot LLM picks the edge (accurate, costs a call).
-- `HybridRouter(LLMRouter(...), margin=0.05)` — embed first; escalate to the LLM only when the
-  top-1↔top-2 margin < `margin`. The frontier is smooth (re-derived at N=301:
-  `prismpath/benchmark/hybrid_sweep.py`); stack it over `CentroidRouter` for the measured best
-  accuracy-per-call, and derive the margin with `prismpath calibrate` rather than hand-picking.
-
-### The prefilter cache — skip the expensive node entirely (opt-in)
-
-Routing is cheap; in *triage-shaped* flows the cost concentrates in one **adjudication node**
-(an LLM classification) whose inputs recur near-identically. `PrefilterCache` memoizes its
-verdicts: look the incoming document up before the call — a near-identical prior (cosine ≥ 0.97)
-whose verdict carried confidence ≥ 0.8 is reused and the call is **skipped**; a miss
-adjudicates, then `learn()`s the fresh verdict so the cache compounds.
-
-```python
-from prismpath.prefilter import PrefilterCache
-
-cache = PrefilterCache("corpus/")            # lazy; pluggable embed_fn
-res = cache.lookup(document)
-if res.hit:
-    act_on(res.record["action"])             # LLM call skipped, reuse logged + auditable
-else:
-    verdict = expensive_adjudication(document)
-    cache.learn(res.vector, verdict.action, verdict.confidence)
-```
-
-In a flow it's just a node with deterministic edges on the cached action — see
-[`prismpath/flows/wazuh_triage.md`](prismpath/flows/wazuh_triage.md) (`vector_prefilter`). **Measured live on SOC
-alert triage: ~59% of alerts auto-resolve at threshold 0.97 → ~2.4× capacity** before the LLM
-tier is touched ([use case](docs/research/soc-triage-case-study.md)).
-
-This is **use-as-needed, not an engine default** — nothing invokes it implicitly. It pays off
-only when one node dominates cost, inputs genuinely recur, and a prior verdict is still valid
-when the same input recurs; it is wrong for generative, novelty-heavy, or context-dependent
-nodes. See [docs/guides/authoring.md](docs/guides/authoring.md) for the applicability test.
-
-### Your flow compiles — static analysis
-
-Because the flow *is* the graph (a Markdown file, not code smeared across Python), the whole
-control structure is checkable **before you run anything** — a guarantee a code-first framework
-structurally can't give. `prismpath validate` runs a set of *decidable* checks (no model, no
-embeddings) and exits non-zero on any error:
-
-| check | severity | what it catches |
-|---|---|---|
-| undefined start / edge target | error | an edge points at a node that isn't defined |
-| unsafe / unparseable predicate | error | a `when` that isn't safe & well-formed (see the sandbox) |
-| no reachable terminal | error | the flow can only ever end at `max_steps` |
-| unreachable node | warning | a node nothing routes to |
-| possible stuck | warning | a deterministic-only node whose conditions aren't provably exhaustive |
-| shadowed edge | warning | an `always`/`else` catch-all makes later (or semantic) edges dead |
-| unbounded cycle | warning | a loop with no `visits`-based cap (bounded only by `max_steps`) |
-| always-false edge | warning | a dead condition like `when visits < 4 and visits > 10` |
-| duplicate condition | warning | two identical semantic edges — a guaranteed router near-tie |
-| `@spawn` no join edge | error | a fan-out node with no matching `on event <join>` edge (deadlock) |
-| missing / terminal-less child | error | a `@spawn` child flow is absent, unparseable, or never finishes |
-| `@expect` unmet | warning | the parent expects a field the child never `@emits` (cross-flow) |
-| `@emits` type mismatch | warning | a typed declaration (`@emits(x=bool)`) contradicts how the `when` edges read the field |
-
-The predicate reasoning is confined to the tiny decidable fragment the `when` language allows, so
-there are **zero false positives** on the shipping flows (verified in the test suite). `--json`
-emits machine-readable findings for CI/pre-commit; `prismpath lint` adds the one non-decidable check
-(semantic conditions that embed too similarly to route between). The last three checks **cross the
-flow boundary** — composition is inspectable statically, no run required.
-
-Beyond linting, **`prismpath verify`** answers reachability questions — *"can `human_review` ever
-be reached?"*, *"prove `contain` is unreachable when `amount <= 500`"* — by bounded model checking
-over the decidable tiers: exact verdicts with a concrete witness outcome over the **Level M
-match-action fragment** (SPEC §4.3), sound over-approximation outside it, and UNREACHABLE proven
-for all bounds via saturated `visits` modeling (`--reach` / `--forbid` / `--assume` / `--level-m`).
-
-Level M isn't just for analysis: a flow inside the fragment *is* a match-action table, and
-tables run in places no framework runtime can follow — microcontrollers, smart sensors,
-in-kernel packet paths. None of that is built yet; [ROADMAP Phase 6](ROADMAP.md) is upfront
-about it.
-
-### Fan-out & sub-flow composition — parallelism without impurity
-
-A **fan-out node** spawns one durable child run per item and suspends until they join; a single
-sub-flow is just the N=1 case. The engine stays pure — it only records the worker's `spawn` data spec;
-an out-of-band harness (`prismpath compose`) spawns the children under **deterministic ids** (so a restart
-never double-spawns), and delivers the join event (`all_done` / `any` / `quorum:k`) as an ordinary
-`on event` edge. Fan-in *semantics* live in the Markdown; concurrency *mechanics* live in the harness.
-Children are ordinary checkpointed runs (durable, resumable, ledgered), the git ledger dedups child
-units across parents, and `prismpath lock` pins the whole composition tree. See
-[`flows/fanout_review.md`](prismpath/flows/fanout_review.md) + [`flows/review_one.md`](prismpath/flows/review_one.md).
-
-### The portable subset — locked flows run anywhere
-
-A flow whose reachable edges are all decidable (`when` predicates, error edges, event edges) needs
-**no ML runtime for routing** — and that subset ships as [`portable/prismpath.mjs`](prismpath/portable/prismpath.mjs),
-a single dependency-free ES module (parser + sandboxed predicate evaluator + engine loop) that runs
-in Node, a browser, an edge function, or a network appliance. **Try it in the browser:**
-[`portable/playground.html`](prismpath/portable/playground.html) runs the kernel client-side — paste a flow,
-watch it parse, tier-classify, graph, and route live.
-
-`prismpath portable <flow>` computes the flow's **portability tier** for the whole composition tree:
-**P0** (all edges decidable — zero ML, runs on the port), **P1** (semantic edges all pinned in the
-lockfile — needs only an outcome-side embedder; appliance-deployable as one flow + one lock + one
-encoder), **P2** (unlocked semantic edges — full engine). The port *refuses* non-P0 flows rather
-than guess. Routing fidelity is enforced by **frozen conformance vectors**
-([`portable/conformance/`](prismpath/portable/conformance/README.md)): 1,067 predicate cases + 27 engine
-fixtures generated from the Python reference, checked in both directions on every test run — the
-spec is data, so a conforming kernel is provably interchangeable, and **three independent portable
-kernels already are**: JavaScript (`prismpath/portable/prismpath.mjs`), Rust (`prismpath-rs/`),
-and Go (`prismpath-go/`), each passing every vector. The production SOC triage
-flow is P0: its routing is fully decidable; the LLM lives in the workers. See
-[`portable/README.md`](prismpath/portable/README.md).
-
----
-
-## The control plane
-
-Above the kernel, PrismPath runs **spec-driven feature sprints** against a local agent swarm.
-The loop's semantics are themselves a PrismPath flow ([`flows/sprint_loop.md`](prismpath/flows/sprint_loop.md),
-run with `SPRINT_FLOW=1` via [`sprint_flow.py`](prismpath/sprint_flow.py)): the gate routes on `when
-gate_green`, the 3×-same-error rule is an `on error` edge, escalation is a `needs_human`
-suspension, and each gate-green unit is a `@checkpoint` proof-commit — the control plane that
-builds PrismPath is driven by a PrismPath document. The wall clock, pause, and heartbeat stay in the
-driver, where harness concerns belong:
-
-```
-  human intent ──▶ spec / nudge
-                      │
-                      ▼
-        run_sprint.py  (the sprint loop)
-            │  council picks the next unit of work (dice-steered)
-            │  executor edits the REAL tree (cecli / swarm / served model)
-            ▼
-        GATE (pluggable)  ── compiles? types? builds? tests? wired? reachable? ──┐
-            │ green → next unit                                                  │
-            │ red ×3 (same error) → escalate (frontier auto-unblock, then human)│
-            └────────────────────────────────────────────────────────────────◀─┘
-                      │
-                      ▼
-        Mission Control (:9109, loopback)  — live observability + audit
-```
-
-- **Gates are the definition of done, machine-enforced.** A build is not green until it compiles,
-  type-checks, builds, passes tests, is wired into a composition root, and is reachable. *Never write
-  a completeness claim a gate doesn't enforce.*
-- **Targets are plugins.** `SPRINT_GATE=browser` is the built-in gate (syntax → link → DOM →
-  headless behavioral). Any other value loads an optional plugin behind one uniform interface
-  (NAME / ARCH_PATH / RAG_INDEX / validate(proj) — see `prismpath/plugins/registry.py`). The
-  engine only ever touches the plugin interface, never a target's specifics.
-- **Execution backends** range from a served model to the full multi-agent swarm
-  (`SPRINT_AGENT=swarm`, `SPRINT_EXEC=cecli`); `swarm_runner.py` prefers the real swarm and falls
-  back to `llm_local` so a run always proceeds.
-
----
-
-## Command cheatsheet
-
-```bash
-# --- flow kernel (no model required) ---
-python -m prismpath.cli validate prismpath/flows/coding.md   # static analysis: does the flow compile? (fast, no model)
-python -m prismpath.cli validate prismpath/flows/release.md --json   # machine-readable findings (CI / pre-commit)
-python -m prismpath.cli lint     prismpath/flows/triage_support.md   # validate + flag ambiguous semantic conditions (needs embedder)
-python -m prismpath.cli test     prismpath/flows/coding.md   # assert routing from coding.tests.md (a Markdown table, no LLM)
-python -m prismpath.cli lock     prismpath/flows/coding.md   # commit condition embeddings -> reproducible routing
-python -m prismpath.cli graph    prismpath/flows/coding.md --fenced   # -> a Mermaid diagram for your README
-python -m prismpath.cli run      prismpath/flows/coding.md   # run with a built-in mock agent; print path + stop reason
-
-# --- control plane (needs a served model / swarm) ---
-pip install -e .          # or: export PYTHONPATH=$PWD
-SPRINT_PROJ=/tmp/demo SPRINT_GATE=browser SPRINT_NUDGE="a tip calculator" \
-  python -u prismpath/run_sprint.py
-python -u prismpath/mission_control.py   # observability console at http://127.0.0.1:9109 (loopback only)
-```
-
----
-
-## Attestation, provenance & human override — "prove it"
-
-The git Flow-Ledger (`ledger.py`, gate-green proof-commits) is the base tier. On top of it PrismPath
-ships an **attestation tier** that makes a decision *provable and tamper-evident*, air-gap-friendly:
-
-- **`ledger_airgap.provenance_manifest(...)`** binds a decision to its inputs — the policy (flow) hash,
-  the gate id, the knowledge-base hash, and the per-input ingestion hashes — content-addressed into a
-  `manifest_hash`.
-- **`ledger_airgap.verify_manifest(m)`** recomputes that content-address; tampering with *any* bound
-  field flips it false. That is what makes a manifest a tamper-evidence anchor rather than a label.
-- **`ledger_airgap.override_manifest(prior, overrider, rationale, new_root)`** records a **human
-  override as a superseding commit**: the AI determination is attested first and stays immutable, and
-  the override binds who/why/when and supersedes it — a provable *"the AI said X, auditor Y overrode to
-  Z because …"* trail.
-- **OpenTimestamps + RFC-3161** anchoring (`ledger_ots.py`, `ledger_airgap.py`) for an air-gapped,
-  third-party-verifiable timestamp tier.
-- **`deferral.py` — the Deferral/Resumption port:** suspend a unit for human review or missing-evidence
-  discovery and resume it later, recording the actor. One primitive serves both HITL override and
-  evidence-request loops.
+That's the core mechanic. The rest of the machinery — the agent contract, routers, the
+prefilter cache, static analysis and `verify`, fan-out, attestation, the portable kernels —
+is a ten-minute read: **[docs/guides/tour.md](docs/guides/tour.md)**. The sprint control
+plane we run on top (gates, Mission Control, the worked tip-calculator example):
+**[docs/design/control-plane.md](docs/design/control-plane.md)**.
 
 ## Ports & adapters — one engine, many domains
 
@@ -583,59 +265,9 @@ independent implementations (JS, Rust, Go) each pass all 1,067 predicate + 27 fl
 extracted from a real build; the `eval_*.py` and `measure_*.py` scripts are the measurement
 harnesses behind every number in the papers. Licensed Apache-2.0.
 
-## Layout
-
-```
-prismpath/
-  # flow kernel
-  parser.py        markdown -> Graph (nodes, edges, front-matter, terminal detection)
-  predicates.py    safe `when` evaluator (no calls/attrs/subscripts -> no code exec)
-  router.py        EmbeddingRouter, LLMRouter, HybridRouter (embed-first, LLM-on-doubt)
-  engine.py        run(graph, agent, router) -> RunResult  (the routing spectrum)
-  embedder.py      bge embedder for semantic routing
-  lockfile.py      routing lockfile — committed condition embeddings (reproducible semantic routing)
-  prefilter.py     PrefilterCache — verdict memoization + risk-controlled auto-tuning (tune)
-  analysis.py      static analysis over the graph ("your flow compiles") — the decidable checks
-  model_check.py   prismpath verify — Level M classification + bounded reachability proofs
-  checkpoint.py    durable execution — suspend (needs_human) / atomic JSON checkpoint / resume
-  composer.py      fan-out & sub-flow composition harness (@spawn -> children -> join -> resume)
-  ledger.py        git Flow-Ledger — gate-green proof-commits (opt-in; SPRINT_LEDGER=1)
-  ledger_runner.py per-item runner for routing flows (@checkpoint) + resume-from-ledger
-  ledger_airgap.py air-gap attestation tier — provenance_manifest / verify_manifest / override_manifest / OTS + RFC-3161
-  ledger_ots.py    OpenTimestamps anchoring for Flow-Ledger roots
-  deferral.py      Deferral/Resumption port — suspend for HITL review or evidence discovery, resume with the actor
-  lint.py          the one non-decidable check (semantic conditions that embed too similarly)
-  flow_test.py     prismpath test — assert routing from a Markdown fixture (<flow>.tests.md, no LLM)
-  contract.py      derive each node's worker output schema from its `when` edges (the type-gate)
-  calibrate.py     risk-controlled escalation threshold τ (Wilson lower bound; LTT/RCPS family)
-  centroid.py      prototype routing — centroids of historical correct outcomes (lockfile-pinnable)
-  scheduler.py     reference timer — fires `on timeout` edges for waiting checkpoints
-  sprint_flow.py   the sprint loop as a flow (SPRINT_FLOW=1) — seams + per-unit ledger proofs
-  portable/        the ML-free kernel as one dependency-free ES module + playground + conformance vectors
-  graph_export.py  prismpath graph — render a flow as a Mermaid diagram (tier-styled edges)
-  routelog.py      durable routing-decision log + `prismpath label` workbench (calibration data)
-  llm_local.py     local generate() for the agent + the router's LLM fallback
-  cli.py           run / lint / validate / verify / lsp subcommands
-  lsp.py           prismpath lsp — stdlib Language Server (diagnostics, completion, hover, graph)
-  connector.py     the Connector SDK — six-port BaseConnector + PayloadFlattener middleware
-  # control plane
-  run_sprint.py    the spec-driven sprint loop (council -> execute -> gate -> escalate)
-  orchestrator.py  plan -> approve -> execute backend for a chat UI (SSE)
-  gates.py         the built-in browser gate (syntax/link/DOM/behavioral)
-  swarm_runner.py  adapter: a prismpath agent backed by the real swarm (llm_local fallback)
-  retriever.py     dense doc retriever (grounds the coder; index supplied by the active plugin)
-  mission_control.py  live observability + audit console (loopback)
-  plugins/         the plugin ecosystem (council = the deliberation expansion; gates load here)
-  flows/           example flows (coding, bugfix, triage_support, pr_review, ...)
-  examples/        persona-curated index + the pr_demo ("the PR is the process change")
-  benchmark/       the N=301 labeled routing suite + reproduce.py
-  comparisons/     the LangGraph / CrewAI / LLM-router head-to-head harness
-  tests/           pytest suite (kernel, toolchain, durable layer, conformance vectors)
-```
-
 ## Contributing & community
 
-- [GETTING_STARTED.md](GETTING_STARTED.md) — from zero to a routed flow, honestly counted.
+- [GETTING_STARTED.md](GETTING_STARTED.md) — from zero to a routed flow in eight steps.
 - [CONTRIBUTING.md](CONTRIBUTING.md) — the perfect first contribution is a lint rule (ten are
   waiting); DCO sign-off, not a CLA.
 - [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) — community impact guidelines and pledge.
@@ -654,11 +286,13 @@ Long-form documentation lives in **[docs/](docs/README.md)** — start there for
   fastest way in if the papers get jargon-heavy.
 - [SPEC.md](SPEC.md) — the format specification (grammar, tiers, predicate semantics, conformance).
 - [ROADMAP.md](ROADMAP.md) — the public project roadmap and future vision.
-- [docs/guides/](docs/guides/) — [authoring](docs/guides/authoring.md) (the flow authoring
-  reference) · [frontier-agent integration](docs/guides/frontier-agent-integration.md) (pairing
-  PrismPath with frontier agents and LLMs).
-- [docs/design/](docs/design/) — [architecture](docs/design/architecture.md) (kernel, portable
-  kernels, control plane, the plugin seam) · [framework](docs/design/framework.md) (the operating
+- [docs/guides/](docs/guides/) — [the ten-minute tour](docs/guides/tour.md) (the flow kernel at
+  working depth) · [authoring](docs/guides/authoring.md) (the flow authoring reference) ·
+  [frontier-agent integration](docs/guides/frontier-agent-integration.md) (pairing PrismPath with
+  frontier agents and LLMs).
+- [docs/design/](docs/design/) — [the control plane](docs/design/control-plane.md) (the
+  reference deployment) · [architecture](docs/design/architecture.md) (kernel, portable kernels,
+  the plugin seam) · [framework](docs/design/framework.md) (the operating
   methodology) · [guard onion](docs/design/spec-guard-onion.md) and
   [ledger anchoring](docs/design/spec-ledger-opentimestamps.md) (the two subsystem design specs).
 - [docs/research/](docs/research/) — [the primer](docs/research/primer-students-guide.md) (the

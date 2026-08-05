@@ -9,10 +9,14 @@ is the walk from "what's this?" to a running flow.
 > index of every document, module, kernel, and CLI command in the repo. Start here if a paper
 > loses you, or if you're looking for where something lives.
 
+**[objections.md](objections.md)** — the two strongest critiques ("structured output already
+solved routing", "logic-as-data is a rules engine"), answered with the concessions left in.
+
 ## guides/ — how to use it
 
 | doc | what it covers |
 |---|---|
+| [tour.md](guides/tour.md) | the ten-minute engineer's tour of the flow kernel — agent contract, routers, prefilter, static analysis, `verify`, fan-out, attestation, the portable subset |
 | [authoring.md](guides/authoring.md) | the flow authoring reference: file anatomy, the four edge tiers, the agent contract, predicates, durable execution, annotations, plugins, fan-out, the portable subset — and the invariants to preserve when extending |
 | [frontier-agent-integration.md](guides/frontier-agent-integration.md) | pairing PrismPath with frontier agents and LLMs: CLI workers, API/local backends, auto-unblock loops, `@spawn` swarms, human-in-the-loop |
 
@@ -20,6 +24,7 @@ is the walk from "what's this?" to a running flow.
 
 | doc | what it covers |
 |---|---|
+| [control-plane.md](design/control-plane.md) | the reference deployment — sprint loops, gates as the definition of done, Mission Control, the worked example |
 | [architecture.md](design/architecture.md) | the flow kernel, the portable kernels, the control plane, and the gate-plugin seam |
 | [framework.md](design/framework.md) | the operating methodology: spec-per-module, gates as the definition of done, the hard-won lessons |
 | [spec-guard-onion.md](design/spec-guard-onion.md) | formal design spec for the safety floor — the policy grammar with no verb for permitting |
