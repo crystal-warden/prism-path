@@ -857,6 +857,24 @@ We are deliberately explicit here.
   (and, per §4.1, its labels are AI-annotated); the routing
   lockfile (§3.3) assumes a *stable embedder identity* — its probe-cosine fingerprint detects drift but
   cannot itself re-derive a correct lock, so a deliberate embedder change requires a re-`lock`.
+- **Structured output is the strongest standing alternative, and the comparison is unmeasured.**
+  A practitioner's idiomatic answer to semantic routing is schema-constrained worker output
+  (`{"category": …}`) plus deterministic branching — a pattern this system itself implements as
+  `@emits` + `when` and actively recommends where outcomes are enumerable. Our rebuttal is that
+  schema-classification relocates the semantic judgment inside the worker model (unmeasured, no
+  margin, so the risk-controlled abstention of §4.3 is not constructible) and does not reach
+  non-LLM workers; but the head-to-head of §4.4 does not currently include a structured-output
+  arm, so the cost/accuracy frontier of that alternative is asserted, not measured. Adding it is
+  the highest-value missing experiment after a second human annotator, and we commit to reporting
+  it whichever way it lands.
+- **Semantic-edge legibility under review is bounded by tooling, not solved.** A one-word edit to
+  a semantic condition can shift routing behavior through embedding geometry while producing a
+  minimal textual diff. The delivered mitigations detect rather than render: a lockfile check
+  fails CI until moved condition vectors are deliberately re-committed, fixture tables catch
+  flipped cases they contain, and emitted labels allow pre-merge re-scoring — but no tool
+  displays what a wording change *means* in embedding space, and unpinned cases are unguarded.
+  Composition at scale carries the same caveat: `@spawn` fan-out is young, and no flow beyond
+  ~30 nodes has been exercised in anger.
 - **The model checker's guarantee is one-sided, deliberately.** Bounded reachability is exact only
   over the match-action fragment; a semantic edge cannot be decided statically (it depends on an
   embedder and, at low margin, an LLM), so those hops are treated as *possibly takeable*. The

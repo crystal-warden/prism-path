@@ -1060,8 +1060,9 @@ blank slate.
 the model); you need hard real-time guarantees per step; or the "graph" is really a data pipeline
 better served by a durable-workflow engine with typed gateways only (no semantic tier needed).
 
-**Known gaps / threats (named honestly).** Two objections we name here rather than paper over — both
-still **open**:
+**Known gaps / threats (named honestly).** Objections we name here rather than paper over. The
+first two arrived open and are now delivered/closed; the last two are standing objections with
+partial answers:
 
 - **Field-only routing mode — DELIVERED** (kept here because it originated as this list's
   highest-value open item). The concern: semantic and predicate routing can be influenced by raw
@@ -1087,6 +1088,30 @@ still **open**:
   `visits`/`error_count` counters, which are never trimmed; `_outcomes` is last-write-per-node and
   bounded by node count already. Residual caveats: opt-in per flow (default remains unbounded), and
   a malformed bound fails loudly at run start rather than silently not binding.
+
+- **"Structured output obsoletes the semantic tier" — partially conceded, and the concession is
+  the design.** Where a worker can emit a clean enum, `@emits` + `when` is strictly better than
+  semantic routing, and the tooling pushes authors there (the polarity lint's prescription; the
+  production SOC flow is P0). The standing rebuttal is twofold. First, schema-classification
+  *relocates* the semantic judgment inside the model — the enum-mapping is the same fuzzy decision,
+  made where nothing measures it — and deletes the confidence signal: there is no margin to
+  threshold, so risk-controlled abstention (§4.7) is not constructible over structured outputs;
+  self-reported `"confidence"` fields are not calibrated quantities. Second, the semantic tier
+  serves workers that are not promptable LLMs at all — the CLI-worker contract routes on stdout,
+  and a human's or legacy script's output carries no schema. Honest residual: for
+  LLM-worker-only flows with enumerable outcomes, the semantic tier is legitimately optional, and
+  the head-to-head should grow a fourth arm (idiomatic structured-output LangGraph) to measure
+  exactly this — a result we commit to publishing whichever way it lands.
+- **"The innocent diff": a one-word semantic edit hides its behavioral shift in embedding
+  geometry.** True, and worth stating at full strength: the most dangerous class of change
+  produces the most innocent-looking `git diff`. Two responses. This is every semantic system's
+  problem — the same one-word drift in a routing prompt has no tripwire anywhere — and here it has
+  three: `prismpath lock --check` fails CI until the moved condition vectors are deliberately
+  re-locked (the wording change cannot merge alone), the flow's fixture table re-runs modelless
+  and names any flipped routing case, and `--emit-labels` re-scores the edit against labeled
+  history before merge. Review therefore targets pinned consequences, not geometry. Honest
+  residual: the tripwires bound *detection*, not *legibility* — no tool renders what a wording
+  change means in embedding space, and a fixture table only guards the cases it contains.
 
 **Novelty caveats (stated before a reviewer states them).** Two ideas here have clear prior art, and
 we scope the actual contribution narrowly:
