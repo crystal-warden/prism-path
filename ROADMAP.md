@@ -51,6 +51,30 @@ PrismPath is an open-source framework that treats **agent workflows as data**. O
 - [x] **Brand-residue sweep (mdflow → prismpath)**: including the functional `ledger_ots` ref/trailer mismatch that silently emptied `prismpath ledger anchor`, the seven `research/` scripts, and the compliance tooling paths.
 - [x] **Contract relocation**: the app-architecture coder contract lives with the prompt assets (`prismpath/nudges/`), resolved CWD-independently.
 
+### Phase 5: Guard Hardening (Planned)
+
+- [ ] **Roleplay-framing detector (deferral-only)**: a locked prototype layer targeting the
+  *framing*, not the intent behind it. The bypass measurement's standing result is that
+  fiction-framed intent defeats every configuration — but the framing wrapper itself ("pretend
+  you are…", "in a story where…") has a stable semantic signature even when the wrapped intent is
+  disguised, because the framing *is* the attack mechanism. Implementation is the existing
+  centroid machinery pointed at a roleplay-framing corpus: shrunk prototypes, pinned in the
+  lockfile (P1, deterministic, bit-for-bit reproducible), cosine-gated. Two hard constraints:
+  it may only trigger **deferral** (human review), never a block — the dominant false-positive
+  population is learners legitimately writing story-flavored flows, and the guard grammar has no
+  verb for permitting to preserve; and **no claim ships before measurement** — a new stratum in
+  the pre-registered protocol ([bypass-measurement](docs/research/bypass-measurement.md)) reporting
+  both the detection rate on framed attacks and the benign-collision rate on innocent creative
+  framings, published either way. If the benign-collision bound can't be held, the honest,
+  publishable result is that it can't.
+- [ ] **Low-discrepancy probe generation for the embedder fingerprint**: the lockfile's drift
+  fingerprint probes the embedder and checks cosines; probe *selection* is a coverage problem —
+  probes should spread evenly over the embedding sphere so drift anywhere gets caught, not
+  cluster where random draws happen to land. Swap random probes for a quasi-random low-discrepancy
+  sequence (Sobol, or the R_d golden-ratio generalization — the same aperiodic-coverage mathematics
+  as Fermat's spiral, lifted to high dimension). Small, self-contained, and strengthens the
+  fingerprint's guarantee from "probably notices drift" toward "notices drift anywhere".
+
 ---
 
 ## 🤝 Community & Contributions
