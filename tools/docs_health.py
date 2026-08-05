@@ -14,7 +14,7 @@ from collections import defaultdict
 
 BASE = "/home/cwadmin/cwprojects"
 CANON = ["prismpath", "cw-strategy", "etbert-lab", "knowledge-lib"]
-EXC = re.compile(r"(node_modules|/\.git/|\.venv|/venv|site-packages|dist-info|__pycache__|/ET-BERT/|/_src/|/extern/|/plugins/roblox/tools/|_retired_docs)")
+EXC = re.compile(r"(node_modules|/\.git/|\.venv|/venv|site-packages|dist-info|__pycache__|/ET-BERT/|/_src/|/extern/|_retired_docs)")
 EV = os.path.join(BASE, "prismpath/prismpath/docs/papers/SUPPORTING_EVIDENCE.md")
 CLAIMS = os.path.join(BASE, "etbert-lab/CLAIMS_detection_metrics.md")
 

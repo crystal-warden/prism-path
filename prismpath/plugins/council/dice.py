@@ -6,7 +6,7 @@ distribution so the council explores instead of fixating. The gate + the PM veto
 dispose, so a wild roll that doesn't cohere is simply voted down or fails the gate.
 
 Three dice, MULTIPLIED → 6 × 6 × 3 = 108 distinct mandates from a tiny table:
-  • DIRECTION (d6) — which axis of the game to push. COVERAGE-WEIGHTED: biased toward under-covered axes.
+  • DIRECTION (d6) — which axis of the product to push. COVERAGE-WEIGHTED: biased toward under-covered axes.
   • PROVOCATION (d6) — a lateral-thinking nudge (the real "think differently" engine).
   • SCOPE (d3) — how big: a hook, a full subsystem, or a cross-cutting tie between two systems.
 
@@ -22,7 +22,7 @@ import random
 import re
 
 # (name, description, coverage-keywords). If any keyword already appears in the project, that axis is
-# "covered" and its weight drops — the die leans toward axes the game has not explored yet.
+# "covered" and its weight drops — the die leans toward axes the product has not explored yet.
 DIRECTIONS = [
     ("Player progression",
      "new ways to advance: prestige layers, skill trees, milestone unlocks, ascension/rebirth tiers",
@@ -66,7 +66,7 @@ SCOPES = [
 WORLD_AXES = [
     ("Layout & plot", "the physical arrangement the player owns and stands in — where droppers, "
      "collectors, buildings, the portal, and paths sit, and how the plot reads as a coherent space"),
-    ("Tycoon machinery", "make the economy PHYSICAL and visible — droppers that visibly produce, "
+    ("Economy machinery", "make the economy PHYSICAL and visible — producers that visibly produce, "
      "conveyors and collectors, cash flowing through real parts the player watches and touches"),
     ("Systems made visible", "give an existing server system a BODY in the world — a prestige aura, pet "
      "companions that follow, boosts as visible effects, tiers as the plot physically expanding"),
@@ -106,9 +106,9 @@ def world_mandate(r: dict) -> str:
         f"• ASPECT: {r['axis']} — {r['axis_desc']}\n"
         f"• PROVOCATION: {r['provocation']}\n"
         f"• SCOPE: {r['scope']} — {r['scope_desc']}\n"
-        f"Target a PHYSICAL/VISUAL file — a SERVER ADAPTER (src/server/adapters/X.luau that builds real "
+        f"Target a PHYSICAL/VISUAL file — an ADAPTER (adapters/X.js that builds real "
         f"Instances/Parts in workspace) or the CLIENT — NOT a pure-core module. The player must SEE it, "
-        f"and it must be wired from the composition root so it actually appears in-game."
+        f"and it must be wired from the composition root so it actually appears in the product."
     )
 
 
@@ -152,7 +152,7 @@ def roll(round_key, files: dict, ledger: dict | None = None) -> dict:
 # ---- category-balance ledger: keep expansion EVEN across the 6 direction categories -----------------
 # "Gone down a path more often -> weigh it LESS; as one category loses weight from overprescription, the
 # others rise." Inverse-frequency, mean-normalized, gently clamped. Drives BOTH the direction die and the
-# council vote tally (an over-built category's votes count for less), so the game grows in balance.
+# council vote tally (an over-built category's votes count for less), so the product grows in balance.
 CATEGORIES = [d[0] for d in DIRECTIONS]
 _KEYWORDS = {d[0]: d[2] for d in DIRECTIONS}
 # WORD-BOUNDARY matching (not raw substring): otherwise 'event' matches 'OnServerEvent', 'invest' matches
@@ -225,10 +225,10 @@ def mandate(r: dict) -> str:
 
 
 if __name__ == "__main__":   # self-test: determinism + distribution + sample mandates
-    sample = {"src/shared/core/Economy.luau": "upgrades costGrowth",
-              "src/shared/core/Prestige.luau": "rebirth prestige",
-              "src/shared/core/Leaderboards.luau": "leaderboard rival",
-              "src/shared/core/Pets.luau": "pet cosmetic"}
+    sample = {"core/economy.js": "upgrades costGrowth",
+              "core/prestige.js": "rebirth prestige",
+              "core/leaderboards.js": "leaderboard rival",
+              "core/collectibles.js": "collectible cosmetic"}
     a = roll(1, sample)
     b = roll(1, sample)
     assert a == b, "NOT deterministic!"
@@ -253,7 +253,7 @@ if __name__ == "__main__":   # self-test: determinism + distribution + sample ma
         print(f"  {v:3d}  {k}")
     assert dist2["World & spectacle"] < dist["World & spectacle"], "balance did not suppress overbuilt axis"
     print("\nclassify checks:",
-          classify("src/shared/core/Leaderboards.luau", "global rivalry ranking"),
-          "|", classify("src/shared/core/DailyStreak.luau", "login streak reward"),
-          "|", classify("src/shared/core/Foo.luau", "generic thing"))
+          classify("core/leaderboards.js", "global rivalry ranking"),
+          "|", classify("core/daily_streak.js", "login streak reward"),
+          "|", classify("core/foo.js", "generic thing"))
     print("\nsample mandate (round 7):\n" + mandate(roll(7, sample)))

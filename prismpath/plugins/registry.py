@@ -7,7 +7,7 @@ engine. What they extend is the HARNESS — the layer that was always allowed to
     lives in the document (diffable, reviewable) and `prismpath plugins --check flow.md` verifies every
     binding resolves against what is actually installed. Dispatched outcomes carry a `_worker`
     provenance field, so the transcript records which tool produced each hop.
-  * **gates** — build/validation targets (the original seam; `plugins/roblox` is the exemplar).
+  * **gates** — build/validation targets (the original seam; `gates.py`'s browser gate is built in).
   * **CLI** — a plugin may ship its own subcommands (`plugins/<name>/cli.py`).
 
 Discovery is two-source, both auditable via `prismpath plugins [--json]`:

@@ -5,14 +5,14 @@ thesis: a human holds the VISION, that vision is compiled into **one spec per sc
 swarm builds each spec as a **feature sprint** against deterministic **gates**, steered by
 **oblique-strategy dice**.
 
-> The concrete examples below (a `GAME_DESIGN.md` umbrella, `.luau` modules, an `EnemyDef` drift, a
-> Roblox client) come from the **reference project** — a game built via the optional `plugins/roblox`
-> gate. The methodology and every lesson are target-agnostic; only the examples are Roblox-flavored.
+> The concrete examples below (a `PRODUCT_DESIGN.md` umbrella, core modules, a `WidgetDef` drift, a
+> client layer) come from the **reference project** — an app built under a target gate plugin.
+> The methodology and every lesson are target-agnostic; only the examples are app-flavored.
 
 ## The pipeline
 ```
 VISION (human, in conversation)
-   → UMBRELLA design doc (GAME_DESIGN.md) — the cohering whole; lore, loops, pillars, the ONE ironclad contract
+   → UMBRELLA design doc (PRODUCT_DESIGN.md) — the cohering whole; narrative, loops, pillars, the ONE ironclad contract
    → SPEC-PER-SCRIPT (specs/<Module>.md) — purpose, types/contract, behavior, deps, ACCEPTANCE CRITERIA
    → FEATURE SPRINTS (prismpath swarm) — council picks the next spec; cecli diff-edits the real tree to green
    → GATES dispose; DICE direct; human supervises the hard parts
@@ -44,7 +44,7 @@ VISION (human, in conversation)
   follow-up deterministic check confirms. The glossary is what makes a small model reliable here: focused
   conformance-to-an-explicit-contract is a 7B's sweet spot. Opt-in via `SPRINT_AUDIT=1`.
 - **Human as supervisor:** answers HELP escalations, and HAND-BUILDS the parts the swarm genuinely can't
-  (Roblox client/UI, composition-root wiring, the playable storefront) — "agents propose, gates dispose,
+  (client/UI, composition-root wiring, the usable storefront) — "agents propose, gates dispose,
   Claude unblocks the hard parts."
 
 ## Hard-won operating lessons (so far)
@@ -111,7 +111,7 @@ VISION (human, in conversation)
   ("WIRE IT into AppService", "SURFACE IT") for pure cores — they're built in isolation and integrated later.
 
 - **Three execution modes — and DETERMINISM is the default, council is the exception.** (1) `council` (dice-
-  driven, free expansion) — for open-ended "what should this game grow into" exploration. (2) `spec` mode
+  driven, free expansion) — for open-ended "what should this product grow into" exploration. (2) `spec` mode
   (`SPRINT_SPEC_ORDER`) — build a flat list of module-files, each from its embedded `specs/<M>.md`, in order.
   (3) `kg` mode (`SPRINT_SPEC_FILE` + `SPRINT_KG`) — the most deterministic, and the one PrismPath was made for:
   ONE structured spec whose `##` are REQUIREMENTS, `### Contract` the binding interface, `### Definition of

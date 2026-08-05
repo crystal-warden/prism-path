@@ -58,46 +58,46 @@ def test_cas_retries_on_a_concurrent_ref_move(tmp_path, monkeypatch):
 
 def test_commit_and_done_set_roundtrip(tmp_path):
     led = _led(tmp_path)
-    led.commit_unit("auth", files={"auth.luau": "-- auth"}, gate_name="browser")
-    led.commit_unit("store", files={"store.luau": "-- store"}, depends=["auth"])
-    led.commit_unit("ui", files={"ui.luau": "-- ui"}, depends=["auth", "store"])
+    led.commit_unit("auth", files={"auth.js": "// auth"}, gate_name="browser")
+    led.commit_unit("store", files={"store.js": "// store"}, depends=["auth"])
+    led.commit_unit("ui", files={"ui.js": "// ui"}, depends=["auth", "store"])
     done = led.done_set()
     assert set(done) == {"auth", "store", "ui"}
     assert done["store"]["depends"] == ["auth"]
     assert done["ui"]["gate"] == "green"
-    assert done["auth"]["output_hash"] == sha256_files({"auth.luau": "-- auth"})
+    assert done["auth"]["output_hash"] == sha256_files({"auth.js": "// auth"})
 
 
 def test_output_hash_is_a_per_unit_invalidation_key(tmp_path):
     led = _led(tmp_path)
-    led.commit_unit("auth", files={"auth.luau": "v1"})
+    led.commit_unit("auth", files={"auth.js": "v1"})
     h1 = led.done_set()["auth"]["output_hash"]
     # a fresh run producing DIFFERENT bytes for the same unit -> different hash (re-open dependents)
     led2 = _led(tmp_path, run="01HOTHER")
-    led2.commit_unit("auth", files={"auth.luau": "v2"})
+    led2.commit_unit("auth", files={"auth.js": "v2"})
     h2 = led2.done_set()["auth"]["output_hash"]
     assert h1 != h2
     # identical bytes -> identical hash (dedupe)
     led3 = _led(tmp_path, run="01HSAME")
-    led3.commit_unit("auth", files={"auth.luau": "v1"})
+    led3.commit_unit("auth", files={"auth.js": "v1"})
     assert led3.done_set()["auth"]["output_hash"] == h1
 
 
 def test_tree_is_cumulative_snapshot(tmp_path):
     led = _led(tmp_path)
-    led.commit_unit("auth", files={"auth.luau": "-- auth"})
-    assert _ls_tree(led) == ["auth.luau"]
-    led.commit_unit("store", files={"store.luau": "-- store"})
-    assert _ls_tree(led) == ["auth.luau", "store.luau"]   # tip tree carries BOTH units' files
+    led.commit_unit("auth", files={"auth.js": "// auth"})
+    assert _ls_tree(led) == ["auth.js"]
+    led.commit_unit("store", files={"store.js": "// store"})
+    assert _ls_tree(led) == ["auth.js", "store.js"]   # tip tree carries BOTH units' files
 
 
 def test_loops_disambiguate_on_seq_newest_wins(tmp_path):
     led = _led(tmp_path)
-    led.commit_unit("fix", files={"a.luau": "attempt-1"}, seq=1)
-    led.commit_unit("fix", files={"a.luau": "attempt-2"}, seq=2)
+    led.commit_unit("fix", files={"a.js": "attempt-1"}, seq=1)
+    led.commit_unit("fix", files={"a.js": "attempt-2"}, seq=2)
     done = led.done_set()
     assert done["fix"]["seq"] == 2                                   # newest wins
-    assert done["fix"]["output_hash"] == sha256_files({"a.luau": "attempt-2"})
+    assert done["fix"]["output_hash"] == sha256_files({"a.js": "attempt-2"})
     assert len(led.log()) == 2                                       # append-only: both retained
 
 
@@ -152,12 +152,12 @@ def test_repo_isolation_ambient_project_repo_untouched(tmp_path):
     os.chdir(proj)
     try:
         led = Ledger(flow="demo", run_id="01HISO", state_dir=tmp_path / "ledger")
-        led.commit_unit("auth", files={"auth.luau": "-- auth"})
-        led.commit_unit("store", files={"store.luau": "-- store"})
+        led.commit_unit("auth", files={"auth.js": "// auth"})
+        led.commit_unit("store", files={"store.js": "// store"})
     finally:
         os.chdir(cwd)
     assert snapshot() == before                                    # project refs + working tree unchanged
-    assert not (proj / "auth.luau").exists()                       # nothing written into the project tree
+    assert not (proj / "auth.js").exists()                       # nothing written into the project tree
 
 
 def test_ledger_repo_is_under_state_dir_not_project(tmp_path):

@@ -202,7 +202,7 @@ resume deterministically.
 The plugin ecosystem extends the **harness**, never the engine: routing, predicates, and purity are
 not extensible on purpose. A plugin (bundled under `plugins/`, or any pip-installed package
 registering the ``prismpath.plugins`` entry-point group) provides **workers** (named tools),
-**gates** (build targets — `roblox` is the exemplar), and/or **CLI** subcommands.
+**gates** (build targets — the browser gate in `gates.py` is the built-in), and/or **CLI** subcommands.
 
 Bind a node to a tool *in the document*, where a reviewer can see it:
 
@@ -336,10 +336,10 @@ becomes exactly one commit whose git tree is the content-hashed state the gate b
 trailers correlate it to the flow node:
 
 ```
-prismpath: auth green  (roblox-integration run 20260710T…)
+prismpath: auth green  (browser-integration run 20260710T…)
 
 prismpath-Unit: auth   prismpath-Node: auth   prismpath-Seq: 1   prismpath-Gate: green
-prismpath-Gate-Name: roblox   prismpath-Output-Hash: sha256:…   prismpath-Depends: …
+prismpath-Gate-Name: browser   prismpath-Output-Hash: sha256:…   prismpath-Depends: …
 ```
 
 Design points that matter:

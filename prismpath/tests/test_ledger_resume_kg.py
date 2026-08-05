@@ -34,9 +34,9 @@ Build the ui module.
 
 ```json
 {"nodes": [
-  {"id": "auth",  "section": "auth",  "depends_on": [],               "produces": ["auth.luau"]},
-  {"id": "store", "section": "store", "depends_on": ["auth"],         "produces": ["store.luau"]},
-  {"id": "ui",    "section": "ui",    "depends_on": ["auth","store"], "produces": ["ui.luau"]}
+  {"id": "auth",  "section": "auth",  "depends_on": [],               "produces": ["auth.js"]},
+  {"id": "store", "section": "store", "depends_on": ["auth"],         "produces": ["store.js"]},
+  {"id": "ui",    "section": "ui",    "depends_on": ["auth","store"], "produces": ["ui.js"]}
 ]}
 ```
 """
@@ -93,8 +93,8 @@ def test_kg_resumes_at_first_unproven_node(tmp_path, monkeypatch):
     run_id = "01HRESUME"
     # a prior sprint proved auth + store, then its .kg.json was wiped; the ledger survives
     led = Ledger(flow="myproj", run_id=run_id, state_dir=ledger_dir)
-    led.commit_unit("auth", files={"auth.luau": "-- auth"})
-    led.commit_unit("store", files={"store.luau": "-- store"})
+    led.commit_unit("auth", files={"auth.js": "// auth"})
+    led.commit_unit("store", files={"store.js": "// store"})
 
     m = _load(monkeypatch, proj, spec_file, ledger_dir, run_id)
     assert not os.path.exists(proj / "INTEGRATION.kg.json")   # fresh: no local progress record

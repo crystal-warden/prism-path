@@ -1,7 +1,7 @@
 # Council — the deliberation expansion (optional; the exception, not the default)
 
 The default PrismPath shape is a **flow**: one worker per node, edges routing on the outcome. The
-council pattern is what a game-build sprint loop (Roblox-origin) grew when single-voice decisions
+council pattern is what a product-build sprint loop grew when single-voice decisions
 kept fixating: several voices **propose**, a weighted **vote** picks, and a **seeded dice roll**
 steers the round toward neglected territory. Keep it demoted in your mental model — reach for a
 council only after a plain flow has demonstrably plateaued on a decision that benefits from

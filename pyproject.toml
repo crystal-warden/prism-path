@@ -53,7 +53,6 @@ prismpath = "prismpath.cli:main"
 packages = [
     "prismpath",
     "prismpath.plugins",
-    "prismpath.plugins.roblox",
     "prismpath.plugins.council",
     "prismpath.tests",
 ]

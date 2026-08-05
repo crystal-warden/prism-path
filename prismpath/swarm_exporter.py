@@ -12,7 +12,7 @@ tracks whatever sprint SWARM_PROJ points at:
 Interaction events are written by prismpath/interactions.py at the three model tap points
 (served chat, swarm dispatch, cecli) to  $SWARM_PROJ/interactions.jsonl.
 
-Run:  SWARM_PROJ=/tmp/rbx_tycoon python -u prismpath/swarm_exporter.py   # binds 0.0.0.0:9108
+Run:  SWARM_PROJ=/tmp/demo python -u prismpath/swarm_exporter.py   # binds 0.0.0.0:9108
 """
 import glob
 import html
@@ -22,7 +22,7 @@ import re
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-PROJ = os.environ.get("SWARM_PROJ", "/tmp/rbx_tycoon")
+PROJ = os.environ.get("SWARM_PROJ", "/tmp/demo")
 ROLES_DIR = os.path.expanduser(os.environ.get("HERMES_ROLES_DIR", "~/.hermes-roles"))
 PORT = int(os.environ.get("SWARM_EXPORTER_PORT", "9108"))
 ROLES = ["architect", "coder", "test-author", "fixer", "critic"]
@@ -64,7 +64,7 @@ def collect():
         g("swarm_log_events", log.count(f"[{kind}]"), f'kind="{kind}"')
     phases = re.findall(r"\[(" + "|".join(_PHASES) + r")\]", log)
     phase = phases[-1] if phases else "init"
-    decisions = re.findall(r"\[(?:council|review)\][^\n]*?([\w./\-]+\.luau?)", log)
+    decisions = re.findall(r"\[(?:council|review)\][^\n]*?([\w./\-]+\.(?:js|mjs|html|css))", log)
     target = decisions[-1] if decisions else ((st.get("files") or ["—"])[-1])
     g("swarm_current", 1,
       f'phase="{_esc(phase)}",target="{_esc(target)}",last_error="{_esc(st.get("last_error") or "none")}"')
@@ -94,8 +94,8 @@ def collect():
 # --------------------------------------------------------------- the glass lens
 # Markers that begin the repeated boilerplate prefix in coder/fixer prompts; everything from the
 # first hit to the real task tail is folded into a "[context]" chip so the human sees the signal.
-_BOILER = re.compile(r"(PROJECT GOAL|APPROVED BLUEPRINT|Roblox/Luau architecture contract|"
-                     r"You are building a Roblox)", re.I)
+_BOILER = re.compile(r"(PROJECT GOAL|APPROVED BLUEPRINT|architecture contract|"
+                     r"You are building a single-page)", re.I)
 
 
 def _fold(text, head=220, tail=1100):

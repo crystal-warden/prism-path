@@ -1,9 +1,7 @@
 # PrismPath — agent workflows as data
 
-[![ci](https://github.com/OWNER/PrismPath/actions/workflows/ci.yml/badge.svg)](https://github.com/OWNER/PrismPath/actions/workflows/ci.yml)
+[![ci](https://github.com/crystal-warden/prism-path/actions/workflows/ci.yml/badge.svg)](https://github.com/crystal-warden/prism-path/actions/workflows/ci.yml)
 &nbsp;[![license: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
-
-<!-- Replace OWNER with the GitHub org/user once the remote is set; the badge resolves after the first push. -->
 
 **The document your team reads is the graph the engine runs.**
 Read it. Diff it. Lint it. Test it. Lock it. Prove it. — six verbs, each backed by a shipped
@@ -112,6 +110,19 @@ honestly counted (spoiler: eight).
   transcript and re-seeded history (deterministic drop accounting; routing counters never
   windowed) so long-lived runs keep a flat checkpoint; it is opt-in per flow.
 
+## Tradeoffs & Paradigm Comparisons
+
+Different tools solve different problems. PrismPath is a **specialist for safety-minded, auditable, and edge-deployable routing**, deliberately ceding open-ended agentic expressiveness (dynamic graph creation, unconstrained tool loops) to generalist frameworks.
+
+| Framework | Primary Approach | Where It Excels | The Tradeoff vs. PrismPath |
+|---|---|---|---|
+| **PrismPath** | **Declarative Data (Markdown)** | Auditable SOPs, static compilation (`validate`), $0/sub-ms deterministic edges, P0/P1 edge JS/Rust, Merkle Flow-Ledger | Dynamic graph creation & open-ended tool loops require internal worker nodes. |
+| **LangGraph / Custom Python** | Imperative Python Stategraphs | Open-ended agentic exploration, dynamic graph generation, unconstrained tool loops | Hidden routing logic in Python callbacks, non-deterministic, no static linting, heavy runtime. |
+| **XState** | TypeScript Statecharts (FSM) | Rich UI state machines, deterministic state transitions, event handling | Code-bound TS, lacks native hybrid LLM routing & cryptographic attestation ledgers. |
+| **CrewAI / AutoGen** | Multi-Agent Roleplay Swarms | Open-ended agentic debate, creative multi-agent brainstorming | Highly non-deterministic, infinite chatter loops, zero static safety, high LLM token costs. |
+| **Temporal / Cadence** | Microservice Orchestration (Code) | Massive throughput (100k+ exec/sec), microservice crash recovery & replay | Code-bound (Go/Java/Python); non-developers cannot audit rules; LLM routing is manual. |
+| **n8n / Camunda (BPMN)** | Visual Drag-and-Drop / XML | Non-developer GUI builders, drag-and-drop web workflow design | Hard to version-control/diff in Git; LLMs are external API nodes without hybrid confidence escalation. |
+
 Onboarding a team? **[LEARNING_PLAN.md](LEARNING_PLAN.md)** walks an analyst, a developer, and an
 engineer to fluency on parallel tracks — same artifacts, one shared vocabulary.
 
@@ -119,7 +130,7 @@ engineer to fluency on parallel tracks — same artifacts, one shared vocabulary
 
 - **Coming from LangGraph?** `prismpath import your_graph.py` renders your `StateGraph` as a
   skeleton flow — see what your control flow looks like as prose in fifteen minutes.
-- **Platform / SRE:** [the lockfile](prismpath/AUTHORING.md) (bit-reproducible routing),
+- **Platform / SRE:** [the lockfile](SPEC.md#7-portability-levels) (bit-reproducible routing),
   ["your flow compiles"](#your-flow-compiles--static-analysis), OTel decision spans into the
   Grafana/Jaeger/Datadog you already run — decision-level semantics (margin, escalated-or-not) as
   span attributes, not a new pane of glass to adopt.
@@ -141,7 +152,7 @@ engineer to fluency on parallel tracks — same artifacts, one shared vocabulary
 Everything above is the **format play**: the spec, the kernel, the toolchain. Everything below is
 the **reference deployment** — the control plane Crystal Warden Labs runs to build real software
 with a local agent swarm. It is credibility proof, not part of the format: a conforming runtime
-needs none of it, and its examples (browser gates, Roblox plugins, sprint councils) speak the
+needs none of it, and its examples (browser gates, sprint councils) speak the
 dialect of *our* production, not yours.
 
 ## The two layers
@@ -154,8 +165,8 @@ It has two layers:
   no routing functions in code — a PM, analyst, or domain expert can author and read a flow.
 - **The control plane on top** — a spec-driven **sprint** loop that drives the swarm: a council picks
   the next unit of work, an executor edits the real tree, and **deterministic gates decide when it's
-  done**. Progress is observable live through Mission Control. Build targets (e.g. browser apps, or
-  Roblox/Luau via a plugin) are pluggable; the engine itself stays game- and platform-agnostic.
+  done**. Progress is observable live through Mission Control. Build targets (the browser gate is
+  built in; others load as plugins) are pluggable; the engine itself stays target-agnostic.
 
 > The thesis: **a human holds the vision; the swarm builds; gates — not prose — define done.**
 > See [FRAMEWORK.md](prismpath/FRAMEWORK.md) for the operating methodology and hard-won lessons.
@@ -187,8 +198,8 @@ From there the loop runs on its own:
    and it works — because a machine already confirmed the button *does* something, not just that code
    exists to handle it.
 
-That's the **control plane** with the built-in **browser gate**. Swap `SPRINT_GATE` for a plugin (e.g.
-Roblox/Luau) and the identical loop targets a different world — same discipline, different gate. The
+That's the **control plane** with the built-in **browser gate**. Swap `SPRINT_GATE` for a gate plugin
+and the identical loop targets a different world — same discipline, different gate. The
 rest of this README is the two layers underneath that run.
 
 ---
@@ -395,9 +406,8 @@ driver, where harness concerns belong:
   type-checks, builds, passes tests, is wired into a composition root, and is reachable. *Never write
   a completeness claim a gate doesn't enforce.*
 - **Targets are plugins.** `SPRINT_GATE=browser` is the built-in gate (syntax → link → DOM →
-  headless behavioral). Any other value loads an optional plugin behind one uniform interface — see
-  [`plugins/roblox/`](prismpath/plugins/roblox/) for the Roblox/Luau gate (parse → type-check vs the real Roblox
-  API → Rojo build → headless Lune specs) bundled with its architecture contract and RAG index. The
+  headless behavioral). Any other value loads an optional plugin behind one uniform interface
+  (NAME / ARCH_PATH / RAG_INDEX / validate(proj) — see `prismpath/plugins/registry.py`). The
   engine only ever touches the plugin interface, never a target's specifics.
 - **Execution backends** range from a served model to the full multi-agent swarm
   (`SPRINT_AGENT=swarm`, `SPRINT_EXEC=cecli`); `swarm_runner.py` prefers the real swarm and falls
@@ -468,15 +478,15 @@ Two reference adapters exercise the same ports:
 
 > The adapters live in `adapters/` in this repo and import the `prismpath` package; promoting them
 > into installable plugin packages is planned. New here? Start with
-> **[docs/HANDOFF.md](prismpath/HANDOFF.md)**.
+> **[ROADMAP.md](ROADMAP.md)** or **[GETTING_STARTED.md](GETTING_STARTED.md)**.
 
 ## Status
 
 Working end to end: the flow kernel (parser / predicates / hybrid router / engine), the data-plane
 toolchain (validate/lint, `prismpath test`, lockfile, calibrate, centroids, graph, import, label,
 portable), fan-out/composition, the durable layer (checkpoints, scheduler, git Flow-Ledger), the
-sprint control plane (browser + Roblox gates; the loop itself runs as a flow under `SPRINT_FLOW=1`),
-Mission Control, and the browser/edge kernel with its frozen conformance vectors. **379 tests + 17
+sprint control plane (the browser gate; the loop itself runs as a flow under `SPRINT_FLOW=1`),
+Mission Control, and the browser/edge kernel with its frozen conformance vectors. **379 tests (373 pass / 6 skipped) + 17
 Node tests passing** (core kernel; the compliance reference adapter adds a ~130-test suite with adversarial attestation-tamper + hypothesis property coverage); the predicate sandbox is fuzz-hardened; the format is specified in
 [SPEC.md](SPEC.md) (v1 draft). This repo is a curated export of an active research control plane
 extracted from a real build; the `eval_*.py` and `measure_*.py` scripts are the measurement
@@ -521,7 +531,7 @@ prismpath/
   swarm_runner.py  adapter: an prismpath agent backed by the real swarm (llm_local fallback)
   retriever.py     dense doc retriever (grounds the coder; index supplied by the active plugin)
   mission_control.py  live observability + audit console (loopback)
-  plugins/         pluggable build targets (roblox/ = the Roblox/Luau gate + contract + RAG)
+  plugins/         the plugin ecosystem (council = the deliberation expansion; gates load here)
   flows/           example flows (coding, bugfix, triage_support, pr_review, ...)
   examples/        persona-curated index + the pr_demo ("the PR is the process change")
   benchmark/       the N=301 labeled routing suite + reproduce.py
@@ -534,6 +544,7 @@ prismpath/
 - [GETTING_STARTED.md](GETTING_STARTED.md) — from zero to a routed flow, honestly counted.
 - [CONTRIBUTING.md](CONTRIBUTING.md) — the perfect first contribution is a lint rule (ten are
   waiting); DCO sign-off, not a CLA.
+- [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) — community impact guidelines and pledge.
 - [SECURITY.md](SECURITY.md) — report privately; the sandbox and conformance claims are in scope.
 - [SPEC.md](SPEC.md) · [CHANGELOG.md](CHANGELOG.md) · [CITATION.cff](CITATION.cff)
 - **Use it in CI:** the [`prismpath` GitHub Action](action.yml) or the
@@ -542,7 +553,9 @@ prismpath/
 
 ## Docs
 
+- [ROADMAP.md](ROADMAP.md) — the public project roadmap and future vision.
 - [SPEC.md](SPEC.md) — the format specification (grammar, tiers, predicate semantics, conformance).
+- [docs/FRONTIER_AGENT_INTEGRATION.md](prismpath/docs/FRONTIER_AGENT_INTEGRATION.md) — architectural guide for pairing PrismPath with Frontier AI Agents & LLMs.
 - [portable/README.md](prismpath/portable/README.md) — the browser/edge kernel, playground, conformance vectors.
 - [examples/README.md](prismpath/examples/README.md) — persona-curated example flows + the money demo.
 - [AUTHORING.md](prismpath/AUTHORING.md) — the flow authoring guide and the rules that govern the kernel.
@@ -554,7 +567,6 @@ prismpath/
   preprint (routing spectrum, measured results, stated limitations).
 - [PRISMPATH_USECASE_blue_team_soc_triage.md](prismpath/PRISMPATH_USECASE_blue_team_soc_triage.md) — a live,
   measured deployment: SOC alert triage over a real SIEM.
-- [docs/HANDOFF.md](prismpath/HANDOFF.md) — the current developer handoff (state, decisions, open items, next steps).
 - `adapters/compliance/ADAPTER_CONTRACT.md` — the hexagonal port boundary + the compliance adapter's ports.
 - `adapters/compliance/TESTING.md` — the adapter testing methodology (deterministic + adversarial + property + opt-in live-model).
 - [docs/papers/SUPPORTING_EVIDENCE.md](prismpath/docs/papers/SUPPORTING_EVIDENCE.md) — the results ledger behind the attestation + adapter claims.

@@ -1,9 +1,0 @@
-{
-  "name": "PrismPathSample",
-  "tree": {
-    "$className": "DataModel",
-    "ReplicatedStorage": {
-      "$path": "src"
-    }
-  }
-}

@@ -1,6 +1,6 @@
 # Architecture
 
-PrismPath is layered so the **engine stays game- and platform-agnostic** and everything target-specific
+PrismPath is layered so the **engine stays platform-agnostic** and everything target-specific
 lives behind one plugin interface. Two layers, one seam.
 
 ## 1. The flow kernel
@@ -91,8 +91,8 @@ specifics live** — extractable to a standalone package/image. A plugin module 
 | `BUILD_RULES` / `BUILD_RULES_SPEC` | target build discipline injected into the coder |
 
 The engine reads these through `getattr` with safe defaults, so with **no plugin** (the browser path)
-it degrades to an empty, layout-agnostic configuration and runs entirely on the built-in gate. See
-[`plugins/roblox/__init__.py`](plugins/roblox/__init__.py) for the reference implementation (Roblox/Luau).
+it degrades to an empty, layout-agnostic configuration and runs entirely on the built-in gate. A
+gate plugin is any module exposing this table's attributes (discovered via `plugins/registry.py`).
 
 > Design property: because the seam is a narrow ports/adapters boundary, adding a build target is a
 > new plugin module — not a change to the engine.

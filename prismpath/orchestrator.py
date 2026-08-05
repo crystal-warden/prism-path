@@ -39,7 +39,7 @@ BASE = os.environ.get("LLM_BASE", "http://127.0.0.1:8888/v1")
 MODEL = os.environ.get("LLM_MODEL", "gemma4")
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 WORK = os.environ.get("ORCH_WORK", "/tmp/orchestrator")
-TARGET = os.environ.get("ORCH_TARGET", "browser")          # browser | a gate-plugin name (e.g. roblox/luau)
+TARGET = os.environ.get("ORCH_TARGET", "browser")          # browser | a gate-plugin name
 ORCH_PLUGIN = None
 if TARGET != "browser":
     from prismpath.plugins import load_gate

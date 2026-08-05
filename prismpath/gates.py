@@ -10,7 +10,7 @@ The BROWSER gate is the 4-layer contract gate proven across sprints 1-3:
   3. dom      — every getElementById/querySelector('#x') id exists in the HTML
   4. behavioral — headless chromium loads it, no JS errors, primary control reacts
 
-Optional non-browser gates live in plugins (e.g. the Roblox/Luau gate at plugins/roblox/gate.py) and mirror this shape.
+Optional non-browser gates live in plugins (loaded via plugins.load_gate) and mirror this shape.
 """
 from __future__ import annotations
 

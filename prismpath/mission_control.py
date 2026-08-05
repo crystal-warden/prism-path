@@ -10,7 +10,7 @@ Security is a pillar, not a bolt-on: every state-changing endpoint appends to th
 acting, and the event count is surfaced in the UI. (A tamper-evident cryptographic audit backend
 is a separate component, not part of this open release — see audit_log.py.)
 
-  MC_PROJ=/tmp/rbx_tycoon_live python -u prismpath/mission_control.py      # binds 127.0.0.1:9109 (loopback)
+  MC_PROJ=/tmp/demo python -u prismpath/mission_control.py      # binds 127.0.0.1:9109 (loopback)
 """
 import base64
 import json
@@ -41,7 +41,7 @@ except Exception:
         _retriever = None                                 # RAG simply off if unavailable (never fatal)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-PROJ = os.path.abspath(os.environ.get("MC_PROJ", "/tmp/rbx_tycoon_live"))
+PROJ = os.path.abspath(os.environ.get("MC_PROJ", "/tmp/demo"))
 PORT = int(os.environ.get("MC_PORT", "9109"))
 # SECURITY: loopback-only by default. Mission Control can start/stop the swarm, edit files, and query
 # the models — it must never be reachable from the LAN. Override MC_HOST only behind a trusted proxy.
@@ -171,7 +171,7 @@ def file_tree(proj):
     for dp, dns, fns in os.walk(proj):
         dns[:] = [d for d in dns if d not in (".git", "tools", "__pycache__", "last-good")]
         for fn in sorted(fns):
-            if fn.endswith((".luau", ".lua", ".json", ".md", ".txt", ".pdf")) and not fn.startswith("."):
+            if fn.endswith((".js", ".mjs", ".html", ".css", ".json", ".md", ".txt", ".pdf")) and not fn.startswith("."):
                 rel = os.path.relpath(os.path.join(dp, fn), proj)
                 try:
                     stt = os.stat(os.path.join(dp, fn))
@@ -455,7 +455,7 @@ def balance_state(state):
     return {"total": sum(r["count"] for r in rows), "categories": rows}
 
 
-_FAIL_VALIDATE = re.compile(r"TypeError|Unknown|rojo|duplicate|missing|Expected|Argument", re.I)
+_FAIL_VALIDATE = re.compile(r"TypeError|Unknown|duplicate|missing|Expected|Argument", re.I)
 
 
 def flow_state(state):

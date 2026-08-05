@@ -55,7 +55,7 @@ spec-stable.
 - **The plugin ecosystem** (`prismpath/plugins/registry.py`) — harness-side extension with the engine's
   purity untouched. Plugins (bundled, or pip-installed via the ``prismpath.plugins`` entry-point group)
   provide **workers** (tools a flow binds in the document with `@worker(plugin.name)`), **gates**
-  (build targets — roblox), and **CLI** subcommands. Auditable end to end: `prismpath plugins [--json]`
+  (build targets), and **CLI** subcommands. Auditable end to end: `prismpath plugins [--json]`
   lists what's installed and what each provides; `prismpath plugins --check flow.md` verifies every
   binding resolves (CI gate); `registry.worker_agent(graph, default=…)` resolves bindings at
   construction (fail-fast) and stamps dispatched outcomes with `_worker` provenance.

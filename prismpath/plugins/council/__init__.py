@@ -2,7 +2,7 @@
 
 prismpath's default control plane is a flow: one worker per node, edges route on the outcome. The
 council pattern — several voices propose, a vote picks, a seeded dice roll steers exploration —
-came out of a game-build sprint loop (Roblox-origin) and earns its complexity ONLY where a single
+came out of a product-build sprint loop and earns its complexity ONLY where a single
 decision benefits from deliberate diversity (design/expand rounds, contested triage). It is not the
 recommended starting shape for anything; reach for it after a plain flow has demonstrably plateaued.
 

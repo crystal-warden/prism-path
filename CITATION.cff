@@ -6,7 +6,7 @@ authors:
   - name: "Crystal Warden Labs"
 version: 0.1.0
 license: Apache-2.0
-repository-code: "https://github.com/OWNER/prismpath"
+repository-code: "https://github.com/crystal-warden/prism-path"
 abstract: >-
   A workflow format and reference implementation in which the control flow of LLM-agent
   systems is a human-authored Markdown document: a routing spectrum of four edge tiers

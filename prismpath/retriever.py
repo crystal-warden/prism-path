@@ -1,7 +1,7 @@
 """Dense retriever over a cwplatform-format turbovec docs index — grounds the coder in real docs.
 
-Generic by design: the index is whatever the active gate-plugin points at (its RAG_INDEX) — e.g. the
-Roblox plugin supplies a Luau-docs index. The engine just retrieves; it knows nothing of the target.
+Generic by design: the index is whatever the active gate-plugin points at (its RAG_INDEX) — a
+plugin supplies its own target-docs index. The engine just retrieves; it knows nothing of the target.
 
 Self-contained: BGE-base (sentence-transformers, CPU) + turbovec, reading the index written by
 cwplatform's TurbovecIndexWriter — meta shape `{id: {chunk_id, text, meta:{source,path,heading_path}}}`.
@@ -10,7 +10,7 @@ This reads OUR index directly (sidesteps pipeline/doc_rag's flat-meta format).
 BEST-EFFORT by design: if sentence-transformers / turbovec / the index are unavailable, `retrieve`
 returns [] (warns once) so a sprint launched without the RAG deps installed simply runs RAG-off.
 
-  EMBED_DEVICE=cpu SPRINT_RAG_INDEX=prismpath/rag/luau.tvim python prismpath/retriever.py "export a Luau type"
+  EMBED_DEVICE=cpu SPRINT_RAG_INDEX=<your-index>.tvim python prismpath/retriever.py "export a typed port"
 """
 import json
 import os
@@ -55,7 +55,7 @@ def _load(index_path):
 
 
 def retrieve(query, k=4, index_path=None):
-    """Top-k Luau doc chunks for `query` -> [{score, source, path, text}]. Never raises."""
+    """Top-k doc chunks for `query` -> [{score, source, path, text}]. Never raises."""
     global _warned
     index_path = index_path or os.environ.get("SPRINT_RAG_INDEX") or _DEFAULT_INDEX
     per_doc = int(os.environ.get("SPRINT_RAG_PER_DOC", "2"))    # diversity cap: ≤N chunks per doc
@@ -96,7 +96,7 @@ def retrieve(query, k=4, index_path=None):
 
 if __name__ == "__main__":
     import sys
-    q = sys.argv[1] if len(sys.argv) > 1 else "export a Luau type for a port"
+    q = sys.argv[1] if len(sys.argv) > 1 else "export a typed port"
     hits = retrieve(q, int(os.environ.get("K", "4")))
     print(f"query: {q}\n{len(hits)} hits:")
     for h in hits:

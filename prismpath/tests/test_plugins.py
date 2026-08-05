@@ -39,12 +39,11 @@ Finished.
 
 def test_discover_finds_bundled_plugins_with_manifests():
     infos = registry.discover()
-    assert "council" in infos and "roblox" in infos
+    assert "council" in infos
     council = infos["council"]
     assert council.source == "bundled"
     assert sorted(council.workers) == ["roll", "tally"]
     assert not council.is_gate
-    assert infos["roblox"].is_gate                       # the original seam, visible in the audit
 
 def test_audit_renders_both_formats():
     text = registry.audit()
@@ -87,7 +86,7 @@ def test_worker_agent_dispatches_with_provenance_and_fallback():
 
     agent = registry.worker_agent(graph, default=default)
     state = {"transcript": [], "visits": {}, "round_key": 7,
-             "files": {"a.luau": "local x = 1"}, "votes": {"v1": "combat", "v2": "combat"}}
+             "files": {"a.js": "let x = 1"}, "votes": {"v1": "combat", "v2": "combat"}}
     res = run(graph, agent, state=state)
     assert res.stopped == "terminal"
     assert seen == []                                    # every node was bound; fallback untouched
@@ -107,7 +106,7 @@ def test_worker_agent_requires_default_for_unbound_nodes():
 
 def test_council_roll_is_seeded_deterministic():
     from prismpath.plugins import council
-    state = {"round_key": 3, "files": {"a.luau": "combat spawn wave"}}
+    state = {"round_key": 3, "files": {"a.js": "combat spawn wave"}}
     a = council.WORKERS["roll"]("steer", "", dict(state))
     b = council.WORKERS["roll"]("steer", "", dict(state))
     assert a == b                                        # same round + files -> same mandate, always
@@ -125,8 +124,9 @@ def test_council_tally_weighted_and_tiebreak_deterministic():
 
 # --- the old seams stay unchanged --------------------------------------------------------
 
-def test_load_gate_backcompat_alias():
-    assert load_gate("luau").NAME == "roblox"
+def test_load_gate_unknown_raises_cleanly():
+    with pytest.raises(ModuleNotFoundError):
+        load_gate("nonexistent_gate")
 
 def test_dice_shim_still_imports():
     import prismpath.dice as dice_shim

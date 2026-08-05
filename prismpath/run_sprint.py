@@ -8,7 +8,7 @@ builds; the coder never validates its own work):
              self-grading. Can remove a file with a `DELETE: <path>` line.
   TEST-AUTHOR writes/maintains the headless specs (the behavioral validation) — independent of the
              implementation. Owns specs; never touches impl. (Only when the gate has a spec layer.)
-  GATE       deterministic validation (syntax/type/build/logic).  [gates.py / luau_gate.py]
+  GATE       deterministic validation (syntax/type/build/logic).  [gates.py / a gate plugin]
   FIXER      makes the SMALLEST change to satisfy the gate (impl only; specs are the authoritative
              contract — it conforms code to them, never edits them).
   CRITIC     reviews quality + architecture + blueprint adherence; picks the next step or says DONE.
@@ -29,7 +29,7 @@ Config (env):
   SPRINT_PROJ                  output project dir (required)
   SPRINT_ARCH                  architecture contract file (default prismpath/APP_ARCHITECTURE.md)
   SPRINT_NUDGE | SPRINT_NUDGE_FILE   the goal (required; file wins if both set)
-  SPRINT_GATE                  "browser" (default) | "luau"
+  SPRINT_GATE                  "browser" (default) | a gate-plugin name
   SPRINT_SECONDS               wall-clock budget; 0/unset = open-ended (until STOP file)
   SPRINT_MAX_NEW               generation budget per call (default 12000)
   SPRINT_STUCK_REPEAT          identical-error repeats before auto-escalate (default 3)
@@ -103,9 +103,9 @@ BLUEPRINT_FILE = os.path.join(PROJ, "BLUEPRINT.md")
 LASTGOOD = PROJ.rstrip("/") + ".lastgood"   # sibling dir (outside PROJ so gates/load_project don't scan it)
 
 from prismpath.gates import token_est   # noqa: E402
-# Gate selection (the ports/adapters seam). The engine itself is game/platform-agnostic: "browser" is the
-# built-in default gate; ANY other value is an optional plugin (e.g. SPRINT_GATE=roblox|luau -> the roblox
-# plugin). The engine only ever touches the plugin interface, never a target's specifics.
+# Gate selection (the ports/adapters seam). The engine itself is target/platform-agnostic: "browser" is the
+# built-in default gate; ANY other value is an optional plugin loaded via plugins.load_gate. The
+# engine only ever touches the plugin interface, never a target's specifics.
 GATE_PLUGIN = None
 if GATE == "browser":
     from prismpath.gates import validate_browser as validate_fn    # noqa: E402
@@ -190,7 +190,7 @@ CECLI = os.environ.get("SPRINT_CECLI_BIN", os.path.expanduser("~/.cecli-venv/bin
 CECLI_REFLECTIONS = int(os.environ.get("SPRINT_CECLI_REFLECTIONS", "3"))  # was 5: 5 failed reflections x slow large-context builds = 20-min CECLI_TIMEOUT spins; 3 fails fast + the 3x-same-error auto-stuck detector escalates instead
 CECLI_TIMEOUT = int(os.environ.get("SPRINT_CECLI_TIMEOUT", "1200"))   # bound stalled-completion hangs
 CECLI_SETTINGS = os.environ.get("SPRINT_CECLI_SETTINGS", "")     # model-settings yml (e.g. no-think for qwen)
-CECLI_TESTCMD = os.environ.get("SPRINT_CECLI_TESTCMD",           # default: the luau gate over PROJ
+CECLI_TESTCMD = os.environ.get("SPRINT_CECLI_TESTCMD",           # default: the gate script over PROJ
                                f"bash {os.path.join(SPRINT_DIR, 'gate_test.sh')} {PROJ}")
 
 # --- consistency AUDITOR: a qwen coder checks each just-built file against the GLOSSARY (opt-in SPRINT_AUDIT=1).
@@ -226,13 +226,13 @@ if KG_MODE and not KG_PATH:
 
 # --- RAG: the Retriever role — ground the coder in retrieved real docs (opt-in via SPRINT_RAG=1) ---
 #   gemma4 demonstrably USES injected docs where it lacks knowledge (rag_worthit contrast +0.833),
-#   so per build step we retrieve the most relevant Luau docs and inject them into the coder prompt.
+#   so per build step we retrieve the most relevant target docs and inject them into the coder prompt.
 RAG = os.environ.get("SPRINT_RAG", "0") == "1"
 RAG_INDEX = os.environ.get("SPRINT_RAG_INDEX") or (getattr(GATE_PLUGIN, "RAG_INDEX", "") if GATE_PLUGIN else "")
 RAG_K = int(os.environ.get("SPRINT_RAG_K", "4"))
 
 # --- supervisor lessons: hard-won project rules ("my answers") injected into every coder prompt.
-# Always-on (SPRINT_LESSONS=0 to disable); luau gate auto-loads the Luau ruleset. Also lives in the
+# Always-on (SPRINT_LESSONS=0 to disable); a gate plugin auto-loads its own ruleset. Also lives in the
 # RAG corpus (source `prismpath-lessons`) so it is retrievable, per the "in the docs AND the prompts" ask.
 LESSONS_ON = os.environ.get("SPRINT_LESSONS", "1") == "1"
 LESSONS_FILE = os.environ.get("SPRINT_LESSONS_FILE") or (
@@ -262,7 +262,7 @@ def _doc_block(hits) -> str:
 
 
 def retrieve_docs(query: str) -> str:
-    """Retriever role: fetch Luau docs for `query`, return an injectable doc block ('' if off/empty).
+    """Retriever role: fetch target docs for `query`, return an injectable doc block ('' if off/empty).
     Lazy + defensive — a missing retriever/deps degrades to no grounding, never breaks the sprint."""
     if not RAG:
         return ""
@@ -322,7 +322,7 @@ def _cecli_run(message: str, focus: list, label: str = "build") -> dict:
                    dur_ms=int((time.time() - _t0) * 1000), rc=rc,
                    focus=",".join(focus))
     # guard: cecli/gemma4 occasionally writes a file at a DOUBLED nested path (e.g.
-    # src/shared/src/shared/core/X.luau). RELOCATE it to the de-doubled canonical path so the work is
+    # core/core/X.js). RELOCATE it to the de-doubled canonical path so the work is
     # KEPT (deleting would lose the just-built module and force a rebuild churn); fall back to delete
     # only when we can't compute a canonical path or a canonical copy already exists.
     # generic: relocate over the gate plugin's declared source extensions (none -> no-op for the browser gate)
@@ -394,7 +394,7 @@ def _src_context() -> list:
 
 def cecli_build(files: dict, instruction: str, target: str, blueprint: str) -> dict:
     """CECLI build step: implement ONE council-chosen action via diff-editing, looped to green."""
-    # Target-specific build conventions (e.g. Luau `--!strict`, the wiring/surfacing rules) live in the gate
+    # Target-specific build conventions (a plugin's strict-mode / wiring / surfacing rules) live in the gate
     # plugin; the engine itself only states GENERIC build discipline. Empty for the generic/browser gate.
     def _plugin_rules(attr: str) -> str:
         r = getattr(GATE_PLUGIN, attr, "") if GATE_PLUGIN else ""
@@ -418,7 +418,7 @@ def cecli_build(files: dict, instruction: str, target: str, blueprint: str) -> d
         _ix.set_phase("build")
     if SPEC_MODE:
         # pure-core build: focus = target + only the already-built IN-LAYER (combat) cores it can depend on.
-        # The full contract is embedded in the message; handing cecli all ~36 tycoon cores just bloated the
+        # The full contract is embedded in the message; handing cecli all ~36 core modules just bloated the
         # context (10-20 min builds, timeouts). Cross-layer dep contracts are described in the spec text.
         _cdir = getattr(GATE_PLUGIN, "CORE_DIR", "") if GATE_PLUGIN else ""
         _ext = (getattr(GATE_PLUGIN, "FILE_EXTS", ()) or ("",))[0] if GATE_PLUGIN else ""
@@ -434,7 +434,7 @@ def cecli_build(files: dict, instruction: str, target: str, blueprint: str) -> d
 def cecli_fix(files: dict, last_error: str, answer: str, blueprint: str) -> dict:
     """CECLI fix step: smallest change to make the gate pass, supervisor guidance honored."""
     hint = f"\n\nA SUPERVISOR PROVIDED THIS GUIDANCE — follow it:\n{answer}\n" if answer else ""
-    named = sorted(set(re.findall(r"([\w./\-]+\.(?:js|mjs|html|luau|lua|json))", last_error)))
+    named = sorted(set(re.findall(r"([\w./\-]+\.(?:js|mjs|html|css|json))", last_error)))
     msg = (GOAL + ARCH + "\n\nAPPROVED BLUEPRINT (preserve it):\n" + blueprint
            + f"\n\nThe project FAILS its test command:\n{last_error}{hint}\n\n"
            "Make the SMALLEST change so the test command passes. Conform to the architecture; do NOT "
@@ -552,7 +552,7 @@ def manifest(files: dict) -> str:
     return "\n".join(lines)
 
 
-_SRC_EXT = (".html", ".js", ".mjs", ".css", ".luau", ".lua", ".json")
+_SRC_EXT = (".html", ".js", ".mjs", ".css", ".json")
 _NON_SRC = {"package.json", "status.json", "HELP.md", "sprint.log", "STOP", "NUDGE.md",
             "orch_run.out", "BLUEPRINT.md"}
 
@@ -703,7 +703,7 @@ def build(files: dict, instruction: str, target: str, blueprint: str):
 
 def fix(files: dict, last_error: str, answer: str, blueprint: str):
     """FIXER: smallest change to satisfy the gate. Impl only — conforms code to the specs."""
-    named = sorted(set(re.findall(r"([\w./\-]+\.(?:js|mjs|html|luau|lua|json))", last_error)))
+    named = sorted(set(re.findall(r"([\w./\-]+\.(?:js|mjs|html|css|json))", last_error)))
     bodies = "\n\n".join(f"--- {p} ---\n{files.get(p, '(missing)')[:60000]}" for p in named[:12])
     hint = f"\n\nA SUPERVISOR PROVIDED THIS GUIDANCE — follow it:\n{answer}\n" if answer else ""
     user = (GOAL + ARCH + "\n\nAPPROVED BLUEPRINT (preserve it):\n" + blueprint
@@ -798,10 +798,10 @@ except Exception:
     _COUNCIL_AUDIT = None
 
 ROLE_LENS = {
-    "architect": "a NEW structural subsystem — a new port + adapter giving the game a whole new capability",
+    "architect": "a NEW structural subsystem — a new port + adapter giving the product a whole new capability",
     "coder": "a NEW gameplay mechanic players directly interact with (not a tweak to an existing one)",
     "test-author": "an entirely NEW pure-core module with rules worth unit-testing",
-    "fixer": "a MISSING safeguard the game lacks (anti-exploit, data-loss protection, an unhandled edge)",
+    "fixer": "a MISSING safeguard the product lacks (abuse resistance, data-loss protection, an unhandled edge)",
     "critic": "the single NEW feature that most increases player-facing DEPTH and fun",
     "product-manager": "the single MISSING player-facing system that delivers the most NEW value — reject optimizing files that already work",
     "engagement-manager": "the boldest FUN/retention feature that makes a player say 'one more run' — dissent from dry technical or test-only work",
@@ -811,13 +811,13 @@ WORLD_LENS = {
     "architect": "the structural layout of the physical plot — how the owned space is organized and reads",
     "coder": "a visible, interactive world object the player physically touches and gets feedback from",
     "fixer": "a missing piece of physical presence the world lacks (it feels empty / a system is invisible)",
-    "product-manager": "the world feature that most makes the game feel like a real PLACE worth standing in",
+    "product-manager": "the feature that most makes the product feel complete and worth using",
     "engagement-manager": "the most alive, screenshot-worthy visual moment in the world",
 }
-# Optional, CONSUMER-PROVIDED "expected subsystems -> presence keywords" map (domain/game-specific). The
-# engine ships with NONE — it knows nothing about any particular game. Point SPRINT_SUBSYSTEMS_FILE at a JSON
+# Optional, CONSUMER-PROVIDED "expected subsystems -> presence keywords" map (domain-specific). The
+# engine ships with NONE — it knows nothing about any particular product. Point SPRINT_SUBSYSTEMS_FILE at a JSON
 # map to drive coverage-based EXPAND proposals; empty -> the coverage map is simply unused (the role-lensed
-# council still proposes net-new subsystems). See examples/subsystems.tycoon.json for the format.
+# council still proposes net-new subsystems). Map format: {subsystem-name: [presence keywords]}.
 SUBSYSTEMS = {}
 _SUBSYS_FILE = os.environ.get("SPRINT_SUBSYSTEMS_FILE")
 if _SUBSYS_FILE and os.path.isfile(_SUBSYS_FILE):
@@ -882,7 +882,7 @@ def council_next(files: dict, blueprint: str) -> dict:
             except Exception:
                 pass
     elif phase == "EXPAND":
-        directive = ("This is an EXPANSION round (the game must GROW). Propose a NET-NEW subsystem it LACKS — "
+        directive = ("This is an EXPANSION round (the product must GROW). Propose a NET-NEW subsystem it LACKS — "
                      "pick from MISSING above. Create a NEW file (new core module + its adapter/port); do NOT "
                      f"propose editing or optimizing a file that already exists. Recently-built (do NOT re-pick): {recent}.")
     else:
@@ -897,7 +897,7 @@ def council_next(files: dict, blueprint: str) -> dict:
     for role in roles:
         lens = WORLD_LENS.get(role, ROLE_LENS[role]) if phase == "WORLD" else ROLE_LENS[role]
         p = _swarm_dispatch(role, ctx + f"\nYOUR LENS ({role}): propose {lens}.\n{directive}\n"
-            "If the game is genuinely complete and excellent with nothing worthwhile left, reply exactly `DONE`. "
+            "If the product is genuinely complete and excellent with nothing worthwhile left, reply exactly `DONE`. "
             "Otherwise reply EXACTLY two lines:\nTARGET: <relative file path>\nACTION: <one concrete improvement>")
         proposals.append((role, p or ""))
     if sum(1 for _, p in proposals if re.search(r"^\s*DONE\s*$", p, re.M) and "TARGET" not in p) >= 3:
@@ -910,8 +910,8 @@ def council_next(files: dict, blueprint: str) -> dict:
             opts.append({"role": role, "target": tm.group(1).strip().lstrip("./"),
                          "instruction": am.group(1).strip()[:240]})
     if not opts:
-        return {"done": False, "target": "src/shared/core/NewSystem.luau",
-                "instruction": "Add a net-new subsystem the game lacks."}
+        return {"done": False, "target": "core/new_system.js",
+                "instruction": "Add a net-new subsystem the product lacks."}
     if phase in ("EXPAND", "WORLD"):                   # enforce novelty: prefer net-new, un-churned targets
         fresh = [o for o in opts if o["target"] not in files and o["target"] not in _RECENT_TARGETS]
         if fresh:
@@ -925,7 +925,7 @@ def council_next(files: dict, blueprint: str) -> dict:
         if mv and 0 <= int(mv.group(1)) - 1 < len(opts):
             tally[int(mv.group(1)) - 1] += 1
     # BALANCE: scale each proposal's raw votes by its category weight — a path we've travelled often counts
-    # for LESS, so neglected categories can win and the game expands evenly. (Near no-op within an EXPAND
+    # for LESS, so neglected categories can win and the product expands evenly. (Near no-op within an EXPAND
     # round where every proposal shares the rolled direction; decisive on REFINE / cross-category rounds.)
     if BALANCE and dice is not None:
         cats = [dice.classify(o["target"], o["instruction"]) for o in opts]
@@ -1018,7 +1018,7 @@ def antigravity_unblock(errors: str, named: list) -> bool:
         hint = (" The canonical type contract is specs/GLOSSARY.md (+ the per-module specs in specs/) — "
                 "conform to it exactly and do NOT change any public interface.")
     task = (
-        "You are an automated build unblocker for this Roblox/Luau project (its directory is in your "
+        "You are an automated build unblocker for this project (its directory is in your "
         "workspace). A DETERMINISTIC build gate is STUCK — the local swarm failed to fix the SAME error three "
         "times. Make the SMALLEST change that resolves it: do NOT refactor working code, rename public "
         f"symbols, or add features.{hint}\n\nThe stuck gate errors:\n{errors}\n\n"
@@ -1055,7 +1055,7 @@ def spec_next(files: dict) -> dict:
     its `<SPEC_DIR>/<Module>.md` contract — the deterministic alternative to council_next's dice exploration.
     Returns the first module whose core file isn't present yet; done when all are built (gate is green)."""
     for m in SPEC_ORDER:
-        target = f"src/shared/core/{m}.luau"
+        target = f"core/{m}.js"
         if target not in files:
             def _spec_read(rel: str) -> str:
                 try:
@@ -1201,7 +1201,7 @@ def kg_next(files: dict) -> dict:
             if name != "GLOSSARY" and os.path.isfile(rp):
                 ref += f"\n\n===== specs/{name}.md =====\n" + open(rp, encoding="utf-8").read()
         prod = n.get("produces", [])
-        target = next((p for p in prod if p.endswith((".luau", ".lua"))), prod[0] if prod else "")
+        target = next((p for p in prod if p.endswith((".js", ".mjs"))), prod[0] if prod else "")
         donelist = "; ".join(f"{x} -> {','.join(next((mm.get('produces', []) for mm in nodes if mm['id'] == x), []))}"
                              for x in done) or "(nothing yet)"
         instruction = (
@@ -1452,7 +1452,7 @@ def main():
                 refactor(files, v.get("oversized_file") or v.get("biggest_file"))
                 continue
 
-            named = sorted(set(re.findall(r"([\w./\-]+\.(?:js|mjs|html|luau|lua|json))", "; ".join(v["errs"]))))
+            named = sorted(set(re.findall(r"([\w./\-]+\.(?:js|mjs|html|css|json))", "; ".join(v["errs"]))))
             sig = err_signature(v["errs"])
             repeat = repeat + 1 if sig == last_sig else 1
             last_sig = sig
