@@ -7,7 +7,7 @@ python -m prismpath.benchmark.reproduce
 ```
 
 - **`routing_bench.jsonl`** — **N=301** labeled cases `{flow, node, outcome, label, stratum}` across
-  8 flows and 11 semantic-decision nodes. The `stratum` splits the finding: **intent** (embeddings do
+  7 flows and 11 semantic-decision nodes. The `stratum` splits the finding: **intent** (embeddings do
   well), **abstraction** and **polarity** (where embeddings degrade — the argument for the
   deterministic + LLM tiers).
 - **`reproduce.py`** — scores the model-free lexical baseline and the embedding router per stratum. If
@@ -66,7 +66,7 @@ python prismpath/benchmark/collect_blind.py prismpath/benchmark/gate_zero/answer
 
 # 3. the agreements (κ, Landis–Koch band, per stratum)
 prismpath kappa prismpath/benchmark/gate_zero/annot_human.jsonl prismpath/benchmark/routing_bench.jsonl   # human vs gold  = 0.961
-prismpath kappa prismpath/benchmark/gate_zero/annot_human.jsonl gate_zero/annot_agy.jsonl \
+prismpath kappa prismpath/benchmark/gate_zero/annot_human.jsonl prismpath/benchmark/gate_zero/annot_agy.jsonl \
        --by-stratum --disagreements prismpath/benchmark/gate_zero/disagreements.jsonl        # human vs model = 0.682
 ```
 

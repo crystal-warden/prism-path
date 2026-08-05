@@ -23,7 +23,7 @@ And one fixture row in `triage.tests.md` asserts it forever:
 ## Run it
 
 ```bash
-bash examples/pr_demo/demo.sh
+bash prismpath/examples/pr_demo/demo.sh
 ```
 
 Shows the diff → `prismpath validate` (clean) → `prismpath test` (6/6, deterministic, milliseconds,

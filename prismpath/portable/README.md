@@ -4,7 +4,7 @@
 watch it parse, tier-classify, graph, and route live; nothing leaves the page):
 
 ```
-cd portable && python3 -m http.server 8321   # ES modules need HTTP, not file://
+cd prismpath/portable && python3 -m http.server 8321   # ES modules need HTTP, not file://
 open http://localhost:8321/playground.html
 ```
 
@@ -29,7 +29,7 @@ whole composition tree (`@spawn` children included):
   LLM escalation). `prismpath lock` promotes to P1; rewriting edges as `when` predicates promotes
   to P0.
 
-Notably, the production SOC triage flow (`flows/wazuh_triage.md`) is **P0**: its *routing* is
+Notably, the production SOC triage flow (`prismpath/flows/wazuh_triage.md`) is **P0**: its *routing* is
 fully decidable — the LLM lives in the workers, which the host supplies in any language.
 
 ```js
@@ -41,14 +41,14 @@ const result = run(graph, (node, instruction, state) => myWorker(node, state));
 ```
 
 **Fidelity is verified, not claimed.** The cross-language conformance suite
-(`tests/test_portable_conformance.py` + `run_conformance.mjs`) replays the same flows and scripted
+(`prismpath/tests/test_portable_conformance.py` + `run_conformance.mjs`) replays the same flows and scripted
 worker outcomes through both engines and requires identical paths, stop reasons, and pending
 nodes. The Python-exact predicate semantics are preserved deliberately, including the sharp edges:
 `True/False/None` are constants while lowercase `true`/`false` are *field names*; booleans compare
 numerically (`flag == 1` matches `flag: true`); a comparison against a missing field or
 type-mismatched pair is *unsatisfied*, never a crash — except `not in`, whose failure is
 *satisfied*; chained comparisons; substring `in` on strings; Python truthiness (`[]` and `{}` are
-falsy). Unit tests: `node --test portable/prismpath.test.mjs`.
+falsy). Unit tests: `node --test prismpath/portable/prismpath.test.mjs`.
 
 On top of the suite, a **differential fuzzer** (~61,700 comparisons: 45k grammar-fuzzed
 predicate/context pairs, 15k realistic flow predicates, plus classifier/parser/engine probes) drove
@@ -63,15 +63,20 @@ The spec itself now ships as **data**: [`conformance/`](conformance/README.md) h
 predicate vectors + 27 engine fixtures, generated deterministically from the Python reference
 (`gen_conformance.py`) and enforced in both directions on every test run — the committed files
 must match a fresh regeneration (no silent reference drift), and this port must pass them
-(`node portable/run_vectors.mjs` → CONFORMANT). A future Go or Rust/WASM kernel implements the
-frozen subset, reads two JSON files, and is provably interchangeable.
+(`node prismpath/portable/run_vectors.mjs` → CONFORMANT). And no longer only this port: **Rust
+(`prismpath-rs/`) and Go (`prismpath-go/`) kernels implement the frozen subset and pass every
+vector** — three independent implementations, provably interchangeable.
 
 **Known non-portable corner:** `error_type` in error-edge predicates is language-specific
 (`RuntimeError` vs `Error`) — route on `error_count` or `error_message` content, which are
 portable, not on exception class names. JSON integer context values beyond 2^53 lose precision in
 any JavaScript host (an ecosystem constraint, not a port bug).
 
-**Not in the portable subset (by design):** semantic routing (embedder/LLM), the risk-controlled
+**In the portable subset since P1 landed:** locked semantic routing — pass a parsed `.lock` and a
+caller-supplied `embed(text)` callback to `run()` and pinned-vector cosine routing (with
+`humanFloor` escalation) runs right here, model-free on the condition side
+(`run_p1_conformance.mjs` certifies it). **Not in the portable subset (by design):** live/unlocked
+semantic routing (embedder/LLM), the risk-controlled
 calibration, `type_gate` (needs `contract.py`), and the fan-out *harness* (`composer.py` spawns
 processes; the port still *suspends* correctly on `spawn` and exposes the spec — a JS host can
 implement its own composer against `eventTarget()`).

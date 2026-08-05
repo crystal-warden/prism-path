@@ -11,10 +11,10 @@ gallery entry is contributing a template.
 
 ## What a gallery entry is
 
-A directory `gallery/<your-flow-name>/` containing:
+A directory `prismpath/gallery/<your-flow-name>/` containing:
 
 1. **`<name>.md`** — the flow. It must `prismpath validate` clean (`pip install -e .` then
-   `prismpath validate gallery/<name>/<name>.md`). Keep worker prose generic — no secrets, no
+   `prismpath validate prismpath/gallery/<name>/<name>.md`). Keep worker prose generic — no secrets, no
    internal hostnames, no customer data.
 2. **`<name>.tests.md`** — a fixture table asserting the key routing decisions (at least the
    ones that matter). This is what proves your flow does what you say; `prismpath test` runs it
@@ -27,7 +27,7 @@ That's the whole bar. You do not need to write Python, run an LLM, or understand
 ## Submitting
 
 Open a PR adding your directory. CI runs `prismpath validate` + `prismpath test` on it automatically
-(see [`action.yml`](../action.yml)). A maintainer checks that the prose is generic and the
+(see [`action.yml`](../../action.yml)). A maintainer checks that the prose is generic and the
 fixtures assert something real, and merges. Sign your commit (`git commit -s`).
 
 ## Starting points

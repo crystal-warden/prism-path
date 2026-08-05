@@ -22,7 +22,7 @@ second human would not — and the papers must say exactly that.
 
 ```bash
 # 1. the human annotator (you) — blind, AI label hidden:
-prismpath annotate routing_bench.jsonl --out prismpath/benchmark/gate_zero/annot_human.jsonl
+prismpath annotate prismpath/benchmark/routing_bench.jsonl --out prismpath/benchmark/gate_zero/annot_human.jsonl
 
 # 2. the second annotator = an independent model, given ONLY a blind sheet (no answer key):
 python prismpath/benchmark/make_blind.py                          # -> gate_zero/blind_cases.jsonl
@@ -30,8 +30,8 @@ python prismpath/benchmark/make_blind.py                          # -> gate_zero
 python prismpath/benchmark/collect_blind.py <answers.jsonl> --out prismpath/benchmark/gate_zero/annot_model.jsonl   # VERIFIES + converts
 
 # 3. the agreement:
-prismpath kappa prismpath/benchmark/gate_zero/annot_human.jsonl gate_zero/annot_model.jsonl --by-stratum \
-      --gold gate_zero/gold.jsonl --disagreements prismpath/benchmark/gate_zero/disagreements.jsonl
+prismpath kappa prismpath/benchmark/gate_zero/annot_human.jsonl prismpath/benchmark/gate_zero/annot_model.jsonl --by-stratum \
+      --gold prismpath/benchmark/gate_zero/gold.jsonl --disagreements prismpath/benchmark/gate_zero/disagreements.jsonl
 ```
 
 `collect_blind.py` refuses to produce an annotation file unless every case is answered exactly once

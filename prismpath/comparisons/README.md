@@ -175,7 +175,7 @@ are the *routing strategy's*, not a model or prompt advantage. Baselines whose f
 installed are skipped with a note, so the PrismPath / LLM-router numbers regenerate on a bare install.
 Flags: `--margin` (PrismPath's δ), `--temperature`, `--only prismpath,llm_router`.
 
-**Threats to validity (invited PRs).** The LangGraph and CrewAI baselines were written by an PrismPath
+**Threats to validity (invited PRs).** The LangGraph and CrewAI baselines were written by a PrismPath
 author; a more idiomatic implementation of either — especially one that avoids a per-hop LLM call —
 would strengthen the comparison, and a PR improving them is genuinely welcome. The suite is N=301
 across 7 flows (built to stress semantic routing, where embeddings degrade), of which 17 are

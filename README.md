@@ -55,7 +55,7 @@ model), and merging it changes production routing — no deploy, no engineer. **
 
 ## Measured, not asserted
 
-N=301 labeled routing decisions, 8 flows, same local model for every arm
+N=301 labeled routing decisions, 7 flows, same local model for every arm
 ([benchmark/](prismpath/benchmark/), reproducible):
 
 | arm | accuracy | LLM calls / 1k decisions | median latency | p95 |
