@@ -7,14 +7,17 @@ human-gated triage decisions.
 
 ## The six ports (SOC mapping)
 
+The adapter is a **Connector SDK** consumer: `WazuhTriageConnector(BaseConnector)` carries the
+six ports; the module functions remain the stable API (see adapters/ADAPTER_GUIDE.md §2b).
+
 | Port | SOC implementation |
 |---|---|
-| **Ingestion** | `wazuh_triage_agent._search` — read the next batch of alerts from the Wazuh indexer (auth at runtime, never at import; never a sudo prompt on load). `alert_document` / `alert_key` normalize an alert into a document + a stable key. |
+| **Ingestion** | the `siem.SIEMSource` port (`ElasticSource`/`WazuhSource`/`NDJSONFileSource`; Splunk best-effort) behind `wazuh_triage_agent._search` — auth at runtime, never at import; TLS verified by default. `alert_document` / `alert_key` normalize an alert into a document + a stable key. |
 | **Retrieval** | detection knowledge (MITRE technique framing in the flow) + the **prefilter corpus** of prior verdicts, injected as decision criteria (one-directional; the dilution rule). |
-| **cheap gate** | `PrefilterCache` (`prismpath.prefilter`) — a near-identical prior verdict (cosine ≥ 0.97, confidence ≥ 0.8) auto-resolves and **skips the LLM**; a miss adjudicates then `learn()`s. Measured ~59% auto-resolve → ~2.4× capacity. Opt-in, use-as-needed (§4.7 of the guide). |
+| **cheap gate** *(auxiliary — shared infrastructure, not one of the six ports)* | `PrefilterCache` (`prismpath.prefilter`) — a near-identical prior verdict (cosine ≥ 0.97, confidence ≥ 0.8) auto-resolves and **skips the LLM**; a miss adjudicates then `learn()`s. Measured ~59% auto-resolve → ~2.4× capacity. Opt-in, use-as-needed (§4.7 of the guide). |
 | **Adjudicator** | the decomposed flow routes by **MITRE ATT&CK tactic** into per-tactic escalation-default nodes; each recommends `contain` / `watch` / `ignore` with a structured verdict. |
 | **Action / Sink** | a finding record + a **STAGED** containment action written to disk — **never applied.** A human approves every action (Mode 1, report-only). |
-| **Attestation** | the Flow-Ledger: each triaged unit is a `@checkpoint` proof-commit; `_flow_hash(FLOW)` is the `policy_hash` so editing the map rotates the attestation. |
+| **Attestation** | the Flow-Ledger: each triaged unit is a `@checkpoint` proof-commit; `flow_hash(FLOW)` is the `policy_hash` so editing the map rotates the attestation. |
 | **Deferral** | human-gated containment is the review queue; staged actions await sign-off. |
 
 ## Rules (adapter-specific, on top of the guide's invariants)

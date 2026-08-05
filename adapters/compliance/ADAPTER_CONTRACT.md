@@ -14,14 +14,18 @@ It knows only: **route → adjudicate a node → emit a structured result → at
 and catalogs live in the **adapter only**. Adding an adapter must touch **zero** core files.
 
 ## The six ports (core-owned interfaces) and what each adapter supplies
+The adapter is a **Connector SDK** consumer: `ComplianceConnector(BaseConnector)` carries the
+six ports; the module functions remain the stable API (see adapters/ADAPTER_GUIDE.md §2b).
+
 | Port | Core interface | SOC adapter (#1) | **Compliance adapter (#2)** |
 |---|---|---|---|
 | **Ingestion** | yields a unit-of-work | Wazuh alert | control-assessment request (control id + evidence bundle) |
 | **Adjudicator** | node → structured result | threat verdict (contain/watch/ignore) | control determination (met / partially-met / not-met) |
-| **Embedder** | text → vector | bge / EmbeddingGemma | *same (shared)* |
+| **Embedder** *(auxiliary — shared infrastructure, not one of the six ports)* | text → vector | bge / EmbeddingGemma | *same (shared)* |
 | **Retrieval** | query → few relevant snippets | LOLBAS cards | control objectives + assessment procedures (800-171A) |
 | **Action/Sink** | consume a determination | OPNsense containment staging | finding + POA&M entry |
 | **Attestation** | bind + prove | Flow-Ledger + OTS (+ knowledge-base hash) | *same* + control-catalog hash + evidence-bundle hash |
+| **Deferral** | suspend / resume with the actor | human-gated containment queue | HITL review (`defer_for_review`/`resolve_review`) + evidence discovery (`defer_for_evidence`/`resolve_evidence`) |
 
 Note the **Adjudicator** port must NOT assume an LLM — the FPGA adapter (#4) will drive it with
 comparators. Here it drives an LLM; the port stays neutral.

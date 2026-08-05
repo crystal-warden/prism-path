@@ -2,11 +2,15 @@
 """Compliance adapter (#2) — the domain code behind PrismPath's ports for NIST 800-171 assessment.
 
 NO compliance vocabulary lives in the core engine; it lives HERE, behind the ports (ADAPTER_CONTRACT.md).
-The Attestation port REUSES the core `ledger_airgap` (#53) — proving it is shared core, not re-implemented.
+Built on the **Connector SDK** (`prismpath.connector.BaseConnector` — the six hexagonal ports;
+`ComplianceConnector` below), with the module-level functions kept as the stable API exactly like
+the SOC adapter's migration. The Attestation port REUSES the core `ledger_airgap` (#53) through
+the SDK — proving it is shared core, not re-implemented.
 """
 import os, sys, json, hashlib, requests
-sys.path.insert(0, "/home/cwadmin/cwprojects/prismpath")
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 from prismpath import ledger_airgap, deferral  # CORE attestation + deferral ports (adapter→core OK; core→adapter is the leak)
+from prismpath.connector import BaseConnector  # the Connector SDK — six-port base
 
 # Adjudicator LLM endpoint (OpenAI-compatible /v1/chat/completions). Env-overridable so the same
 # adapter runs against the GPU vLLM factory (default) OR an air-gapped CPU llama.cpp llama-server.
@@ -130,22 +134,10 @@ _PROFILE_GUIDANCE = {
 }
 
 def adjudicate(control, req):
-    objs = "\n".join(f"  - {o['id']}: {o['text']}" for o in control["objectives"])
-    ev = "\n".join(f"  - [{e.get('type', 'evidence')}] {e.get('text', '')}" for e in req.get("evidence", [])) or "  (no evidence submitted)"
-    profile = _method_profile(control)
-    methods = ", ".join(control.get("methods", [])) or "Examine"
-    prompt = (f"You are a NIST SP 800-171 assessor evaluating control {control['id']} — {control['title']} "
-              f"against the assessed boundary '{req.get('boundary', '(unspecified)')}'.\n"
-              f"800-171A assessment methods for this control: {methods}.\n"
-              f"{_PROFILE_GUIDANCE[profile]}\n"
-              f"Assessment objectives:\n{objs}\nSubmitted evidence:\n{ev}\n\n"
-              "The control is NOT MET unless the evidence POSITIVELY DEMONSTRATES each objective on the assessed "
-              "boundary, using the assessment methods above. Intent-only policy without the corroboration the method "
-              "requires, evidence outside the boundary, or a missing objective each mean that objective is NOT "
-              "satisfied. In unmet_objective_ids list the id of EVERY objective the evidence does not positively "
-              "demonstrate. status = 'met' only if that list is empty; 'partially-met' if some but not all objectives "
-              "are unmet; 'not-met' if all or most objectives are unmet or the control intent is unmet. Give a "
-              "one-line gap_summary.")
+    """Adjudicator port: the prompt is built by the connector (overridable seam); the call stays
+    on the module-level `_gemma` seam (schema-constrained; tests monkeypatch it); a None return
+    remains the failure contract."""
+    prompt = CONNECTOR.adjudication_prompt(req, criteria=control)
     return _gemma(prompt, DETERMINATION_SCHEMA, "determination")
 
 # ---------- Action/Sink port: POA&M writer + finding record ----------
@@ -176,11 +168,70 @@ def active_flow_hash(path=GENERIC_FLOW):
     return "sha256:" + hashlib.sha256(open(path, "rb").read()).hexdigest()[:16]
 
 def attest(control, req, determination, flow_hash=None):
-    return ledger_airgap.provenance_manifest(
-        root_hex=hashlib.sha256(json.dumps(determination, sort_keys=True).encode()).hexdigest(),
-        label=f"assess:{control['id']}",
+    """Attestation port — through the SDK's ledger_airgap binding (`attest_decision` computes the
+    same sort_keys root hash this function always did; byte-for-byte manifest parity)."""
+    return CONNECTOR.attest_decision(
+        outcome=determination,
         policy_hash=flow_hash or active_flow_hash(), gate_id="nist_800171_generic@v1",
-        ingestion_hashes=[bundle_hash(req)], knowledge_base_hash=catalog_hash())
+        ingestion_hashes=[bundle_hash(req)], kb_hash=catalog_hash(),
+        label=f"assess:{control['id']}")
+
+
+# ---------- The Connector SDK binding: all six ports, one subclassable surface ----------
+class ComplianceConnector(BaseConnector):
+    """The compliance adapter as a Connector SDK consumer — the second migration after the SOC
+    adapter (`WazuhTriageConnector`). Ports map onto this module's domain functions, which remain
+    the stable public API:
+
+      Ingestion   = load_request / bundle_hash          Retrieval = get_control / catalog_hash
+      Adjudicator = the assessor prompt below (overridable) + the schema-constrained `_gemma` seam
+      Action/Sink = write_result + the OSCAL/CycloneDX emitters (emit_reports); the SDK's
+                    idempotent JSONL sink stays available as emit_record
+      Attestation = attest → the SDK's ledger_airgap binding
+      Deferral    = FileDeferralStore under deferrals/ (this module's `_DEFER` IS the store)
+    """
+
+    def __init__(self, deferral_store=None):
+        super().__init__("compliance.nist_800171", "1.0.0",
+                         deferral_store=deferral_store
+                         or deferral.FileDeferralStore(os.path.join(HERE, "deferrals")))
+
+    # -- Ingestion port
+    def ingest_payload(self, raw):
+        return load_request(raw) if isinstance(raw, str) else dict(raw)
+
+    def compute_ingestion_hash(self, req):
+        return bundle_hash(req)
+
+    # -- Retrieval port
+    def retrieve_criteria(self, control_id):
+        return get_control(control_id)
+
+    def compute_knowledge_hash(self, kb_data=None):
+        return catalog_hash()
+
+    # -- Adjudicator port: the domain prompt (payload = the assessment request, criteria = control)
+    def adjudication_prompt(self, payload, criteria=None, schema=None):
+        control, req = criteria, payload
+        objs = "\n".join(f"  - {o['id']}: {o['text']}" for o in control["objectives"])
+        ev = "\n".join(f"  - [{e.get('type', 'evidence')}] {e.get('text', '')}" for e in req.get("evidence", [])) or "  (no evidence submitted)"
+        profile = _method_profile(control)
+        methods = ", ".join(control.get("methods", [])) or "Examine"
+        return (f"You are a NIST SP 800-171 assessor evaluating control {control['id']} — {control['title']} "
+                f"against the assessed boundary '{req.get('boundary', '(unspecified)')}'.\n"
+                f"800-171A assessment methods for this control: {methods}.\n"
+                f"{_PROFILE_GUIDANCE[profile]}\n"
+                f"Assessment objectives:\n{objs}\nSubmitted evidence:\n{ev}\n\n"
+                "The control is NOT MET unless the evidence POSITIVELY DEMONSTRATES each objective on the assessed "
+                "boundary, using the assessment methods above. Intent-only policy without the corroboration the method "
+                "requires, evidence outside the boundary, or a missing objective each mean that objective is NOT "
+                "satisfied. In unmet_objective_ids list the id of EVERY objective the evidence does not positively "
+                "demonstrate. status = 'met' only if that list is empty; 'partially-met' if some but not all objectives "
+                "are unmet; 'not-met' if all or most objectives are unmet or the control intent is unmet. Give a "
+                "one-line gap_summary.")
+
+
+CONNECTOR = ComplianceConnector()
 
 # ---------- Sink port (report emitter): standards-native OSCAL + CycloneDX (#65) ----------
 sys.path.insert(0, HERE)
@@ -219,7 +270,9 @@ def rollup_report(records, scope_meta, out_dir=None, fmt="both"):
                         for k, v in emitted.items()}}
 
 # ---------- Deferral port wiring: HITL review + missing-evidence discovery ----------
-_DEFER = deferral.FileDeferralStore(os.path.join(HERE, "deferrals"))
+# The module global is the swap seam (tests replace it); it is initialized to the CONNECTOR's own
+# store, so the SDK surface and the module functions share one deferral backend by default.
+_DEFER = CONNECTOR.deferrals
 
 def sufficient_evidence(req):
     """v1: an empty evidence bundle is insufficient — triggers the discovery loop."""

@@ -19,15 +19,31 @@ toolchain; the adapter owns the domain knowledge, the decision prompts, and the 
 
 | Port | Responsibility | Core primitive it reuses | Required? |
 |---|---|---|---|
-| **Ingestion** | pull the next unit of work + hash its inputs | — (adapter code) | ✅ |
-| **Retrieval** | the domain knowledge as *decision criteria*, one-directional (the dilution rule: criteria in, never a context dump) | `prismpath` embedder / a catalog | ✅ |
-| **Adjudicator** | the escalation-default determination (the LLM decision node) | `router` / `llm_local`; served model | ✅ |
-| **Action / Sink** | write the record / emit the standard artifact | — (adapter code) | ✅ |
-| **Attestation** | bind the decision to its inputs, tamper-evident | `ledger_airgap.provenance_manifest` / `verify_manifest` / `override_manifest`; `ledger` CLI | ✅ |
-| **Deferral** | suspend for human review (HITL override) or missing-input discovery; resume with the actor | `deferral.py` (FileDeferralStore) | recommended |
+| **Ingestion** | pull the next unit of work + hash its inputs | `connector.BaseConnector.ingest_payload` / `compute_ingestion_hash` (override) | ✅ |
+| **Retrieval** | the domain knowledge as *decision criteria*, one-directional (the dilution rule: criteria in, never a context dump) | `BaseConnector.retrieve_criteria` / `compute_knowledge_hash`; `prismpath` embedder / a catalog | ✅ |
+| **Adjudicator** | the escalation-default determination (the decision node — never assumes an LLM) | `BaseConnector.adjudicate` + `adjudication_prompt` (flat, overridable); optional `guard.guarded_exchange` | ✅ |
+| **Action / Sink** | write the record / emit the standard artifact | `BaseConnector.emit_record` (idempotent JSONL default; override for OSCAL/CycloneDX/…) | ✅ |
+| **Attestation** | bind the decision to its inputs, tamper-evident | `BaseConnector.attest_decision` / `policy_hash_for` → `ledger_airgap.provenance_manifest` / `verify_manifest` / `override_manifest`; `ledger` CLI | ✅ |
+| **Deferral** | suspend for human review (HITL override) or missing-input discovery; resume with the actor | `BaseConnector.defer_decision` / `resume_decision` → `deferral.py` (FileDeferralStore, injectable) | recommended |
 
 Minimum viable adapter = Ingestion + Adjudicator + Sink + Attestation. Add Retrieval when decisions need
 domain knowledge, Deferral when a human must be able to override or evidence is requested.
+
+**Auxiliary (not ports):** the *cheap gate* (`prismpath.prefilter.PrefilterCache`, §4.7) and the
+*embedder* are shared infrastructure an adapter may use — they appear in adapter contracts as extra
+rows, but the boundary is the six ports above.
+
+## 2b. Building on the Connector SDK
+
+`prismpath.connector.BaseConnector` implements all six ports as one subclassable surface, plus
+`PayloadFlattener` (the nested-payload → flat key/value middleware behind invariant §4.3) and
+node-handler dispatch that makes a connector instance a flow agent (with `_worker` provenance on
+every outcome). Both reference adapters consume it — `WazuhTriageConnector` (SOC) and
+`ComplianceConnector` (compliance) — each keeping its module-level functions as the stable API and
+delegating to the connector, so an SDK upgrade lands in every adapter at once. A connector becomes
+a pip-installable plugin in one line: ``WORKERS = MyConnector().get_workers()`` under a
+``prismpath.plugins`` entry point. Start a new adapter by subclassing; override only the ports the
+domain actually bends.
 
 ## 3. Standard directory layout
 
