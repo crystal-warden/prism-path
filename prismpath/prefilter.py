@@ -137,9 +137,34 @@ class PrefilterCache:
     def __init__(self, dir_path, threshold: float = None, min_conf: float = None,
                  embed_fn: Callable[[List[str]], np.ndarray] = None):
         self.dir = Path(dir_path).expanduser()
-        self.threshold = DEFAULT_THRESHOLD if threshold is None else float(threshold)
-        self.min_conf = DEFAULT_MIN_CONF if min_conf is None else float(min_conf)
+        tuned = self._load_tuning()
+        self.threshold, self._threshold_source = self._resolve(
+            threshold, "PREFILTER_THRESHOLD", tuned.get("threshold"), 0.97)
+        self.min_conf, self._min_conf_source = self._resolve(
+            min_conf, "PREFILTER_MIN_CONF", tuned.get("min_conf"), 0.8)
         self.embed_fn = embed_fn or default_embed_fn
+
+    def _load_tuning(self) -> dict:
+        """The chosen operating point from a prior `tune()` run (`<corpus>/tuning.json`), if
+        any. Sits BELOW explicit args and env in precedence — a derived point never overrides
+        an operator's decision, it replaces the hardcoded default."""
+        try:
+            with open(self.dir / "tuning.json") as f:
+                return (json.load(f) or {}).get("chosen") or {}
+        except (OSError, ValueError):
+            return {}
+
+    @staticmethod
+    def _resolve(explicit, env_name: str, tuned, fallback: float):
+        """Operating-point precedence: explicit arg > env var > tuning.json > default."""
+        if explicit is not None:
+            return float(explicit), "explicit"
+        env = os.environ.get(env_name)
+        if env is not None:
+            return float(env), "env"
+        if tuned is not None:
+            return float(tuned), "tuning.json"
+        return fallback, "default"
 
     @property
     def _emb_path(self) -> Path:
@@ -387,7 +412,129 @@ class PrefilterCache:
                 "dim": int(emb.shape[1]) if emb.shape[0] else 0,
                 "by_action": actions,
                 "threshold": self.threshold, "min_conf": self.min_conf,
+                "threshold_source": self._threshold_source,
+                "min_conf_source": self._min_conf_source,
                 "dir": str(self.dir)}
+
+
+# --- automatic tuning (risk-controlled operating point) -------------------------------
+def _wilson_upper(k: int, n: int, confidence: float = 0.95) -> float:
+    """High-probability UPPER bound on a binomial rate (Wilson score interval) — the mirror of
+    calibrate._wilson_lower, bounding the reuse-ERROR rate from above. No scipy."""
+    if n == 0:
+        return 1.0                       # no evidence -> assume the worst; never certify on n=0
+    import math
+    z = 1.959963984540054 if confidence == 0.95 else {0.9: 1.6448536269514722,
+                                                      0.99: 2.5758293035489004}.get(confidence,
+                                                                                    1.959963984540054)
+    phat = k / n
+    denom = 1 + z * z / n
+    center = phat + z * z / (2 * n)
+    half = z * math.sqrt(phat * (1 - phat) / n + z * z / (4 * n * n))
+    return min(1.0, (center + half) / denom)
+
+
+def tune(dir_path, labels: Optional[List[dict]] = None, risk: float = 0.02,
+         confidence: float = 0.95, thresholds: Optional[List[float]] = None,
+         min_confs: Optional[List[float]] = None,
+         embed_fn: Callable[[List[str]], np.ndarray] = None, write: bool = True) -> dict:
+    """Derive the cache's operating point from evidence instead of a hand-picked constant —
+    the same risk-controlled pattern as `prismpath calibrate` (τ), applied to the prefilter.
+
+    Sweeps a (threshold × min_conf) grid via the pure `match_arrays` gate and selects the point
+    that MAXIMIZES the auto-resolve rate among points whose reuse-error rate is certified
+    ≤ `risk` by a Wilson upper bound at `confidence` (ties -> the higher threshold — the safer
+    of two equal operating points). Evaluation stream:
+
+      * `labels` given — replayed labeled decisions: rows of {"doc": str | "vec": [...],
+        "action": <oracle>} (e.g. emitted by the SOC adapter's shadow audit);
+      * `labels` None — leave-one-out over the corpus itself: each stored entry is matched
+        against the corpus minus itself and its own action is the oracle. Zero extra data, but
+        it measures self-consistency — prefer real labels when you have them.
+
+    Writes `<corpus>/tuning.json` (chosen point + the full grid + provenance) unless
+    `write=False`; `PrefilterCache` then picks it up automatically (precedence: explicit arg >
+    env > tuning.json > default). Returns the same dict it writes. A grid with NO certified
+    point returns chosen=None with a warning — the honest answer is "don't enable reuse yet",
+    never a guessed threshold."""
+    import time
+    cache = PrefilterCache(dir_path, embed_fn=embed_fn)
+    emb, meta = cache.load()
+    n_corpus = int(emb.shape[0])
+    thresholds = thresholds or [0.90, 0.93, 0.95, 0.97, 0.99]
+    min_confs = min_confs or [0.5, 0.8, 0.9]
+
+    # ---- build the evaluation stream: (query_vec, oracle_action, mask_index|None)
+    stream = []
+    if labels is not None:
+        for row in labels:
+            if row.get("vec") is not None:
+                v = _normalize(np.asarray(row["vec"], dtype=np.float32))
+            elif row.get("doc"):
+                v = _normalize(cache.embed([row["doc"]])[0])
+            else:
+                continue
+            stream.append((v, row.get("action"), None))
+        source = "labels"
+    else:
+        for i in range(n_corpus):
+            stream.append((emb[i], meta[i].get("action"), i))
+        source = "leave-one-out"
+
+    grid = []
+    eligible = []
+    for thr in sorted(thresholds):
+        for mc in sorted(min_confs):
+            hits = errors = 0
+            for v, oracle, mask in stream:
+                if mask is None:
+                    hit, rec, _sim = match_arrays(v, emb, meta, thr, mc)
+                else:                       # leave-one-out: hide the entry's own row
+                    if n_corpus < 2:
+                        continue
+                    sel = np.arange(n_corpus) != mask
+                    hit, rec, _sim = match_arrays(v, emb[sel],
+                                                  [m for j, m in enumerate(meta) if j != mask],
+                                                  thr, mc)
+                if not hit:
+                    continue
+                hits += 1
+                if rec.get("action") != oracle:
+                    errors += 1
+            n_eval = len(stream)
+            auto = hits / n_eval if n_eval else 0.0
+            err_rate = errors / hits if hits else 0.0
+            upper = _wilson_upper(errors, hits, confidence)
+            row = {"threshold": thr, "min_conf": mc, "n_eval": n_eval, "hits": hits,
+                   "errors": errors, "auto_resolve": round(auto, 4),
+                   "reuse_error": round(err_rate, 4), "err_upper": round(upper, 4),
+                   "certified": bool(hits and upper <= risk)}
+            grid.append(row)
+            if row["certified"]:
+                eligible.append(row)
+
+    chosen = None
+    if eligible:
+        chosen = max(eligible, key=lambda r: (r["auto_resolve"], r["threshold"], r["min_conf"]))
+    out = {
+        "chosen": {"threshold": chosen["threshold"], "min_conf": chosen["min_conf"],
+                   "auto_resolve": chosen["auto_resolve"], "reuse_error": chosen["reuse_error"],
+                   "err_upper": chosen["err_upper"], "hits": chosen["hits"],
+                   "errors": chosen["errors"]} if chosen else None,
+        "risk": risk, "confidence": confidence, "labels": source,
+        "n_eval": len(stream), "corpus_entries": n_corpus,
+        "grid": grid, "generated_at": time.time(),
+        "warning": None if chosen else
+        f"no grid point's reuse-error upper bound clears risk={risk} — keep reuse off or "
+        f"gather more labeled decisions (evidence n grows the certifiable region)",
+    }
+    if write:
+        cache.dir.mkdir(parents=True, exist_ok=True)
+        tmp = cache.dir / "tuning.json.tmp"
+        with open(tmp, "w") as f:
+            json.dump(out, f, indent=2)
+        os.replace(tmp, cache.dir / "tuning.json")
+    return out
 
 
 # --- CLI ------------------------------------------------------------------------------
@@ -411,11 +558,33 @@ def _monitor(dir_path: str) -> None:
                   f"{m.get('quarantine_reason', '')}")
 
 
+def _tune_cli(argv: List[str]) -> None:
+    import argparse
+    ap = argparse.ArgumentParser(prog="python -m prismpath.prefilter tune")
+    ap.add_argument("corpus", help="corpus dir (embeddings.npy + meta.json)")
+    ap.add_argument("--labels", default=None,
+                    help="JSONL of labeled decisions: {'doc'|'vec': ..., 'action': oracle}; "
+                         "default = leave-one-out over the corpus")
+    ap.add_argument("--risk", type=float, default=0.02,
+                    help="max certified reuse-error rate (Wilson upper bound; default 0.02)")
+    args = ap.parse_args(argv)
+    labels = None
+    if args.labels:
+        labels = [json.loads(l) for l in open(args.labels) if l.strip()]
+    out = tune(args.corpus, labels=labels, risk=args.risk)
+    slim = {k: v for k, v in out.items() if k != "grid"}
+    print(json.dumps(slim, indent=2))
+    print(f"grid: {len(out['grid'])} points swept; "
+          f"{sum(1 for r in out['grid'] if r['certified'])} certified at risk<={args.risk}")
+
+
 if __name__ == "__main__":
     cmd = sys.argv[1] if len(sys.argv) > 1 else "info"
     if cmd == "info" and len(sys.argv) > 2:
         _info(sys.argv[2])
     elif cmd == "monitor" and len(sys.argv) > 2:
         _monitor(sys.argv[2])
+    elif cmd == "tune" and len(sys.argv) > 2:
+        _tune_cli(sys.argv[2:])
     else:
-        print("usage: python -m prismpath.prefilter {info|monitor} <corpus-dir>")
+        print("usage: python -m prismpath.prefilter {info|monitor|tune} <corpus-dir>")
