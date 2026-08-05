@@ -4,6 +4,11 @@
 and `prismpath_whitepaper_engineering.md` (the engineering white paper). No CS degree required. If you
 can follow a recipe and you've argued with a chatbot, you're qualified. ~20 minute read.*
 
+*Written for a bright high-schooler or first-year undergraduate — originally so the author could
+explain the project to his son. It survived into the repo because that audience turned out to be the
+right one for anyone meeting the ideas cold: the "cheapest question first" framing below is the
+thesis, minus the vocabulary.*
+
 ---
 
 ## Start here: a tiny story
@@ -119,7 +124,7 @@ And the fix was the *same fix*: the detector only knew what **bad** looked like;
 *"is this close to something bad?"* to *"is this closer to bad than it is to normal?"* Result
 (measured on the real system): false alarms dropped from ~2% to a **mathematically certified under
 0.053%** — while still catching the real malware it caught before. **Zero cost to detection, ~40× fewer
-false alarms.** (This is written up in the two `CONTRIB_outline_*` files next to this one.)
+false alarms.** (This is written up in the security track's contribution outlines, held with the strategy set.)
 
 That "mathematically certified" part is worth pausing on: instead of *guessing* a cutoff and hoping,
 they used statistics (a *Wilson bound*) to **prove** the error stays low *even on traffic they haven't

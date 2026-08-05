@@ -3,6 +3,11 @@
 *Exploratory threads triaged out of the build queue. Kept so a curiosity doesn't get re-derived
 or mistaken for committed work. 2026-07-19.*
 
+> **Status: this thread is CLOSED.** The density/geometry idea was promoted to a real experiment,
+> pre-registered, run — and it LOST to the plain shrunk mean + cosine margin. The verdict is at the
+> bottom, and it is a publishable negative result, not an unfinished task. Nothing here is on any
+> roadmap; `ROADMAP.md` is the committed work.
+
 - **Hyperbolic / hierarchy-aware embeddings for ATT&CK.** MITRE ATT&CK's tactic → technique →
   sub-technique tree is a genuine hierarchy, and hyperbolic (negative-curvature) representations embed
   trees with far less distortion than Euclidean space. *Possible* relevance: the cross-family
