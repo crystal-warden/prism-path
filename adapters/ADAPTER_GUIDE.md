@@ -1,7 +1,7 @@
 # PrismPath Adapter Standard
 
 How we **create, stage, architect, develop, and verify** a domain adapter. Every use case follows this;
-the two reference adapters (`soc/`, `compliance/`) conform, and the next one (tutor) starts here.
+the two reference adapters (`soc/`, `compliance/`) conform, and the next domain starts here.
 
 The thesis: **the engine is domain-agnostic; a domain is a set of small decisions plugged in behind
 ports.** If you find yourself adding domain vocabulary to the core, stop — it belongs in an adapter.
@@ -68,7 +68,7 @@ adapters/<domain>/
    demonstrates X.* (`not-met` unless evidenced; `contain/escalate` unless benign is shown.)
 2. **Decomposed flow, routed by a domain profile.** Narrow decision nodes beat a monolith (#54). Route
    by the axis that changes the evidence bar — assessment-method profile (compliance), MITRE tactic
-   (SOC), pedagogy (tutor) — into per-profile escalation-default adjudicators.
+   (SOC) — into per-profile escalation-default adjudicators.
 3. **FLAT adjudication schemas.** The served model degenerates on nested object-array JSON schemas —
    keep determination schemas flat (enums + string/array-of-string), with a concise-retry fallback.
 4. **Attestation reuses the core, never re-implements it.** `provenance_manifest` binds

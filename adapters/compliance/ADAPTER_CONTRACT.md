@@ -34,7 +34,7 @@ comparators. Here it drives an LLM; the port stays neutral.
 destabilizes on nested object arrays: a per-objective array of `{id, satisfied, finding}` objects made
 the model loop and truncate → invalid JSON. The determination schema is therefore flat —
 `{status, unmet_objective_ids: [strings], gap_summary}` — and the Sink derives per-objective weaknesses
-by intersecting `unmet_objective_ids` with the catalog. Any LLM-adjudicator adapter (tutor, etc.)
+by intersecting `unmet_objective_ids` with the catalog. Any LLM-adjudicator adapter
 should avoid nested object arrays in its structured-output schema.
 
 ## This adapter (`adapters/compliance/`)

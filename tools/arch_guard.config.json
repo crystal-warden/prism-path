@@ -93,8 +93,7 @@
     "tutor": [
       "learner",
       "pedagog",
-      "curriculum",
-      "borrow-checker"
+      "curriculum"
     ],
     "sensor": [
       "bno086",

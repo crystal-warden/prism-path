@@ -69,7 +69,7 @@ def override_manifest(prior, overrider_id, rationale, new_root_hex, new_label=No
     OTS-anchored (SPEC_ledger_opentimestamps.md §1), an adversary with filesystem access can rewrite
     the whole chain, and that spec's own §5 gates the stronger wording behind a passing
     stamp->upgrade->verify round-trip. Domain-neutral: a SOC analyst, a compliance auditor, or a
-    tutor mentor superseding an automated call all use this same core capability."""
+    reviewer superseding an automated call all use this same core capability."""
     m = {"kind": "override", "supersedes": prior["manifest_hash"], "prior_root": prior.get("root"),
          "prior_created": prior.get("created"), "overrider_id": overrider_id, "rationale": rationale,
          "root": new_root_hex, "label": new_label or ("override:" + str(prior.get("label", ""))),

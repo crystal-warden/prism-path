@@ -87,7 +87,7 @@ keys. The `Policy.source_hash` is the hook for that; signing itself is future wo
 
 1. Core guard: parse → compose → evaluate, with the shim. *(done)*
 2. Shipped statutory floor + 37 tests, weighted toward attempts to weaken it. *(done)*
-3. Adapter wiring: route the tutor mentor through `guarded_exchange`; retire the hand-rolled
+3. Adapter wiring: route consumer mentors/adjudicators through `guarded_exchange`; retire the hand-rolled
    `useMentor.ts` blocklist. *(next)*
 4. **Frozen safety-conformance corpus** — `(policies, text, direction) → verdict` vectors in the shape
    of `portable/conformance/predicates.json`, so the boundary is provably unchanged after any edit and
