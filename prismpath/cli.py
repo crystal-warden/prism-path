@@ -164,6 +164,9 @@ def main(argv=None) -> int:
     from prismpath.model_check import add_parser as _add_verify
     _add_verify(subparsers)
 
+    from prismpath.lsp import add_parser as _add_lsp
+    _add_lsp(subparsers)
+
     init_parser = subparsers.add_parser(
         'init', help='Scaffold a starter flow — zero to a running, validated flow in two commands')
     init_parser.add_argument('path', nargs='?', default=None,
