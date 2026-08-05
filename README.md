@@ -424,6 +424,11 @@ over the decidable tiers: exact verdicts with a concrete witness outcome over th
 match-action fragment** (SPEC §4.3), sound over-approximation outside it, and UNREACHABLE proven
 for all bounds via saturated `visits` modeling (`--reach` / `--forbid` / `--assume` / `--level-m`).
 
+Level M is more than an analysis convenience: a flow inside the fragment *is* a match-action
+table, and tables compile to places no framework runtime can follow — microcontrollers, smart
+sensors, in-kernel packet paths. That direction is deliberate and unbuilt;
+[ROADMAP Phase 6](ROADMAP.md) states it honestly.
+
 ### Fan-out & sub-flow composition — parallelism without impurity
 
 A **fan-out node** spawns one durable child run per item and suspends until they join; a single

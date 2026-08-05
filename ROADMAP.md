@@ -12,7 +12,7 @@ PrismPath is an open-source framework that treats **agent workflows as data**. O
 1. **The Flow is Data, Not Code**: Process logic remains in readable, diffable, static Markdown files—never hidden inside imperative Python callbacks.
 2. **Logic Where Logic Exists, Intent Where It Doesn't**: Free, exact `when` predicates handle logic; models handle semantic judgment only on low-margin doubt.
 3. **Safety Through Decidability**: Expand static analysis (`prismpath validate`) toward formal verification and zero-false-positive safety guarantees.
-4. **Zero-Dependency Edge Portability**: Pure P0 flows run on lightweight, non-ML kernels (JavaScript, Rust, Go, WebAssembly).
+4. **Zero-Dependency Edge Portability**: Pure P0 flows run on lightweight, non-ML kernels (JavaScript, Rust, Go, WebAssembly) — and the Level M fragment is deliberately shaped to go further, down to devices where no framework runtime exists at all (Phase 6).
 
 ---
 
@@ -74,6 +74,41 @@ PrismPath is an open-source framework that treats **agent workflows as data**. O
   sequence (Sobol, or the R_d golden-ratio generalization — the same aperiodic-coverage mathematics
   as Fermat's spiral, lifted to high dimension). Small, self-contained, and strengthens the
   fingerprint's guarantee from "probably notices drift" toward "notices drift anywhere".
+
+### Phase 6: Edge, Embedded & IoT Compilation (Direction — not yet built)
+
+*Stated as direction, honestly: none of this exists today. It is listed because the load-bearing
+design choices were made **for** it, and because it is the ground competing frameworks structurally
+cannot reach — a Python-runtime orchestrator has no move here at any price.*
+
+The Level M match-action fragment (SPEC §4.3) is not an analysis convenience; it is a
+**compilation target**. Each atom is a `(field, operator, constant)` row, ordered deterministic
+edges are a priority encoder, `visits`/`error_count` are registers — a Level M flow *is* a
+match-action table, and tables run where interpreters cannot: microcontrollers, smart sensors,
+PLC-adjacent industrial controllers, NICs, in-kernel packet paths. The pieces this phase would
+build, in rough order of reach:
+
+- [ ] **`prismpath compile --target c-table`**: emit a Level M flow as a static C table + a
+  fixed ~200-line interpreter loop — no allocator, no OS assumptions — as the reference embedded
+  target. The frozen conformance vectors are the certification suite, exactly as they were for the
+  Go kernel: a target is conformant when it passes the vectors, not when its author says so.
+- [ ] **WASM micro-target**: the same table interpreter compiled to a few-KB WASM module, for edge
+  runtimes (Cloudflare Workers, embedded WASM hosts) where even the JS kernel is too much.
+- [ ] **In-kernel / in-network targets (exploratory)**: XDP/eBPF and P4 emission for flows that are
+  packet- or event-shaped — routing decisions at line rate, authored as Markdown, verified by
+  `prismpath verify` before they ever touch a device.
+- [ ] **The guard's statutory floor on-device**: the safety layer is already P0-deterministic by
+  design; compiled alongside a Level M flow it becomes safety enforcement that runs *on the
+  sensor*, with no cloud round-trip to fail or intercept — deferral degrades to fail-closed when
+  the uplink is down.
+- [ ] **Field-provenance story for constrained emitters**: `@emits`/`@field_only` map naturally to
+  devices whose workers are ADCs and comparators, not LLMs — the port contract already anticipates
+  a hardware target driving it.
+
+What makes this credible rather than aspirational hand-waving is that every prerequisite is
+already load-bearing elsewhere: decidability (the model checker), per-edge Level M membership
+reporting (`prismpath verify --level-m`), dependency-free kernels as proof the spec re-implements
+cleanly, and frozen vectors as the referee. The phase is unbuilt; the runway to it is not.
 
 ---
 
