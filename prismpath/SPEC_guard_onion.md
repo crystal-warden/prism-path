@@ -9,9 +9,9 @@ covers the observability half. Crystal Warden Labs, 2026-07-29.*
 
 The onion is **security + observability** wrapped around the engine. The observability half exists —
 `audit_log.py`, `ledger*.py`, attestation. The security half did not, so every consumer hand-rolled
-its own filter: Journeyman applied a deterministic blocklist to mentor input and output directly in
-`useMentor.ts`. Good discipline, wrong location — it is per-app, per-language, unversioned, untestable
-in isolation, and it protects exactly one caller.
+its own filter — a deterministic blocklist applied to model input and output inside the calling
+component. Good discipline, wrong location: per-app, per-language, unversioned, untestable in
+isolation, and it protects exactly one caller.
 
 This spec makes the safety boundary a **layer**: authored once, inherited by every adapter, bypassable
 by none.
@@ -87,16 +87,24 @@ keys. The `Policy.source_hash` is the hook for that; signing itself is future wo
 
 1. Core guard: parse → compose → evaluate, with the shim. *(done)*
 2. Shipped statutory floor + 37 tests, weighted toward attempts to weaken it. *(done)*
-3. Adapter wiring: route consumer mentors/adjudicators through `guarded_exchange`; retire the hand-rolled
-   `useMentor.ts` blocklist. *(next)*
+3. Adapter wiring: route consumer mentors/adjudicators through `guarded_exchange`; retire the
+   hand-rolled in-component blocklists. *(done — the Connector SDK's Adjudicator port takes an
+   optional `guard` and routes the exchange through `guarded_exchange`)*
 4. **Frozen safety-conformance corpus** — `(policies, text, direction) → verdict` vectors in the shape
-   of `portable/conformance/predicates.json`, so the boundary is provably unchanged after any edit and
-   a second implementation (the TS side of Journeyman) is measurable against it. *(the important one)*
-5. Policy signing + `arch_guard` signal that flags a model call not routed through a guard.
+   of `prismpath/portable/conformance/predicates.json`, so the boundary is provably unchanged after any
+   edit and a second implementation is measurable against it. *(done — 136 vectors in
+   `prismpath/portable/conformance/safety.json`; a second, independent TypeScript guard passes them)*
+5. Policy signing + `arch_guard` signal that flags a model call not routed through a guard. *(open)*
 
 ## 6. Claim-upgrade gate
 
-Until step 4 ships and a second implementation passes the corpus, the wording is
+The gate was: *until step 4 ships and a second implementation passes the corpus*, the wording stays
 **"a deterministic, auditable safety floor with attested policy provenance."**
-Not "verified safe", not "jailbreak-resistant", not "compliant with X". Same discipline as
-`SPEC_ledger_opentimestamps.md` §5 — the overclaim is what a regulator dismantles.
+
+**Status: the gate's conditions are met** — the frozen corpus ships (136 vectors) and an independent
+TypeScript implementation passes it, so the boundary is provably reproducible across two languages.
+What the gate unlocked is *cross-implementation reproducibility*, and **nothing more**: the wording
+above still stands, because §4's limits are unchanged and measured — `BYPASS_MEASUREMENT.md` publishes
+the per-stratum bypass rates (`roleplay` 1.00 at every threshold that holds the benign bound;
+`translation` 0.98). Still not "verified safe", not "jailbreak-resistant", not "compliant with X".
+Same discipline as `SPEC_ledger_opentimestamps.md` §5 — the overclaim is what a regulator dismantles.

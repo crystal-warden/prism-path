@@ -9,7 +9,7 @@ backdated or silently rewritten even by an adversary with filesystem access. Com
 
 ## 1. Goal & current gap
 The ledger already makes each gate-green unit a content-addressed git proof-commit with an
-order-independent `prismpath-Output-Hash`. Per §3.4 this is scoped to **accident**: "an adversary with
+order-independent `PrismPath-Output-Hash` trailer. Per §3.4 this is scoped to **accident**: "an adversary with
 filesystem access can rewrite the whole chain, so we do not claim adversarial integrity; anchoring the
 ref heads with OpenTimestamps is the honest adversarial upgrade (future work)." This spec is that
 upgrade.
@@ -23,7 +23,7 @@ verifiable by anyone against Bitcoin. It is **integrity-of-record + trustless ti
 
 ## 3. Design
 ### 3.1 Batched Merkle anchoring (not per-proof)
-On an **anchor tick**, build a Merkle tree over every new `prismpath-Output-Hash` since the last anchor;
+On an **anchor tick**, build a Merkle tree over every new `PrismPath-Output-Hash` since the last anchor;
 stamp the single **root**. Each unit stores its Merkle **inclusion path** to that root. One OTS call
 covers thousands of proofs. Roots are the only value that leaves the enclave (high-entropy — see §6).
 ### 3.2 Engine stays pure — anchoring is out-of-band
@@ -31,6 +31,8 @@ OTS is network I/O, so it lives in the **harness**, never the pure engine (same 
 event-tier `scheduler.py`). Two timers:
 - `cw-ledger-anchor` — build root → `ots stamp` → store `<root>.ots` (pending) + per-unit Merkle paths.
 - `cw-ledger-upgrade` — periodically `ots upgrade` pending proofs to confirmed Bitcoin proofs.
+
+Both ship as staged user units in `prismpath/deploy/systemd/` (see its README).
 Both are strictly off the critical path: any failure degrades to the existing accident-evident ledger.
 ### 3.3 Verification
 `prismpath ledger verify --ots <unit>`: recompute the Output-Hash from stored content → verify the Merkle

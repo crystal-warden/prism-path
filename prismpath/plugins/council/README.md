@@ -1,9 +1,9 @@
 # Council — the deliberation expansion (optional; the exception, not the default)
 
 The default PrismPath shape is a **flow**: one worker per node, edges routing on the outcome. The
-council pattern is what a product-build sprint loop grew when single-voice decisions
-kept fixating: several voices **propose**, a weighted **vote** picks, and a **seeded dice roll**
-steers the round toward neglected territory. Keep it demoted in your mental model — reach for a
+council pattern is what a spec-driven build loop grew when single-voice decisions kept fixating:
+several voices **propose**, a weighted **vote** picks, and a **seeded dice roll** steers the round
+toward neglected territory. Keep it demoted in your mental model — reach for a
 council only after a plain flow has demonstrably plateaued on a decision that benefits from
 deliberate diversity (design/expand rounds, contested triage). Everything else is better served by
 an ordinary edge.

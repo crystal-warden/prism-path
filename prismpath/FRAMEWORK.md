@@ -16,27 +16,30 @@ VISION (human, in conversation)
    → SPEC-PER-SCRIPT (specs/<Module>.md) — purpose, types/contract, behavior, deps, ACCEPTANCE CRITERIA
    → FEATURE SPRINTS (prismpath swarm) — council picks the next spec; cecli diff-edits the real tree to green
    → GATES dispose; DICE direct; human supervises the hard parts
-   → playable, then iterate
+   → working, then iterate
 ```
 
 ## Why spec-per-script (not one mega-doc, not blank-slate)
 - A swarm builds a **module** well when it has a tight, self-contained contract. One file = one spec = one
   sprint keeps the prompt small and the acceptance criteria checkable.
-- This is a **FEATURE-sprint** engine, not a blank-slate generator. It excels at *extending a base* (we have
-  ~30 systems + a playable hub). Blank-slate produces breadth without a spine; specs-against-a-base produce
-  depth that integrates. Establish a thin playable base FIRST, then spec-driven feature sprints.
+- This is a **FEATURE-sprint** engine, not a blank-slate generator. It excels at *extending a base*
+  (the reference build had ~30 systems + a working hub before feature sprints began). Blank-slate
+  produces breadth without a spine; specs-against-a-base produce depth that integrates. Establish a
+  thin working base FIRST, then spec-driven feature sprints.
 
 ## The components and their jobs
 - **Council (2-model, dice-driven):** decides WHAT to build next. Lean context (goal + coverage + file list),
   not the whole architecture. 3 gemma4 engineering voices + 2 qwen25 product voices for real vote diversity.
 - **Dice (oblique strategy):** decide the DIRECTION. A *system* die (direction × provocation × scope,
-  coverage- and balance-weighted) and a separate **World Lens** die (the physical/visual world) on a cadence
-  knob (`SPRINT_WORLD : SPRINT_EXPAND : SPRINT_REFINE`). Dice widen the proposal distribution; gates dispose.
+  coverage- and balance-weighted) and a separate **surface die** (the user-visible layer — `SPRINT_WORLD`
+  in the env, named for the reference build) on a cadence knob
+  (`SPRINT_WORLD : SPRINT_EXPAND : SPRINT_REFINE`). Dice widen the proposal distribution; gates dispose.
 - **cecli (executor):** diff-edits the REAL tree to green (no whole-file regen → no require-scrambling).
 - **Gates = the DEFINITION OF DONE, machine-enforced** (the key discovery): a build is not green until it
-  *compiles + types + builds + tests + is wired + has a world + is reachable by the player*. Declare an
-  invariant in the spec → confirm it with a gate, never with prose alone (`wiring_check`, `world_check`,
-  `presentation_check`). "Never write a completeness claim a gate doesn't enforce."
+  *compiles + types + builds + tests + is wired + is reachable by the user*. Declare an
+  invariant in the spec → confirm it with a gate, never with prose alone (`wiring_check`,
+  `presentation_check`, plus whatever invariants your target demands). "Never write a completeness
+  claim a gate doesn't enforce."
 - **Auditor (qwen, idle-time judge):** a consistency reviewer that, after each build, checks the changed file
   against a canonical `GLOSSARY.md` and flags contract drift (a type/field/signature named differently than
   the glossary mandates). It runs on the otherwise-idle qwen25 coder in its window between gemma4 builds, so
@@ -58,16 +61,16 @@ VISION (human, in conversation)
   the slowness is elsewhere (build size / retry count), not a clog.
 - **Cap retries to the build's COST, or a fixable RED becomes an infinite spin.** cecli `--max-reflections 5`
   × a slow large-context build = a ~20-min `CECLI_TIMEOUT` *per iteration*. If the RED is one the model can't
-  self-fix (here: a `WorldAdapter` missing a `setupPlot` field the linter had added to the `World` port type),
+  self-fix (here: an adapter missing a field the linter had added to its port type),
   every iteration burns all 5 reflections → times out → restarts → spins forever, surfacing to the human as
   "cecli timeouts." Fail FAST (reflections=3 ≈ 10 min) and let the **3×-same-error auto-stuck detector ESCALATE
   to the human**, who hand-fixes the one hard edit and the swarm flows again. Retry budget must be < timeout ÷
   per-attempt cost, with margin.
-- **World rounds edit the WIRING, so their builds are big and brittle.** Touching `main.server` + adapters +
-  the port `Types` per round pulls a large focus into one cecli call (slow) and is where port/adapter type
-  mismatches surface (the World-port spin above). Worth scoping the world-round focus tighter, or accepting
-  that these are the rounds most likely to need a human unblock.
-- **Drift is preventable with gates, not vigilance.** Dead modules, an unbuilt world, an unreachable surface,
+- **Surface rounds edit the WIRING, so their builds are big and brittle.** Touching the composition root
+  + adapters + the port `Types` per round pulls a large focus into one cecli call (slow) and is where
+  port/adapter type mismatches surface (the port spin above). Worth scoping the surface-round focus
+  tighter, or accepting that these are the rounds most likely to need a human unblock.
+- **Drift is preventable with gates, not vigilance.** Dead modules, an unbuilt surface, an unreachable one,
   a stale blueprint — each becomes a gate or an auto-refresh, not a thing you remember to check.
 - **The blueprint is a CONTRACT, not a status doc** — structural + behavioral expectations only; priorities
   and current-state are derived live (a red gate IS the priority), never authored into the contract.
