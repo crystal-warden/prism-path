@@ -4,14 +4,14 @@
 &nbsp;[![license: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
 **The document your team reads is the graph the engine runs.**
-Read it. Diff it. Lint it. Test it. Lock it. Prove it. — six verbs, each backed by a shipped
-tool, none available to a routing callback.
+Read it. Diff it. Lint it. Test it. Lock it. Prove it. Six verbs, each backed by a shipped
+tool — try doing any of that to a Python callback.
 
-Every operational domain eventually makes this move: infrastructure went from shell scripts to
-Terraform, CI from Jenkins jobs to YAML in the repo, deployment from runbooks to manifests —
-imperative code owned by engineers becomes **declarative data owned by the people who own the
-process**. Agent orchestration is still in its shell-script era, smeared across Python
-callbacks. PrismPath is that transition.
+This has happened before. Infrastructure went from shell scripts to Terraform. CI went from
+Jenkins jobs to YAML in the repo. Deploys went from runbooks to manifests. Same story every
+time: logic only engineers could touch becomes **a file the whole team can read and own**.
+Agent workflows are still stuck in their shell-script era — routing smeared across Python
+callbacks. PrismPath gets them out.
 
 ## The whole idea in one file
 
@@ -118,8 +118,8 @@ that **correctness shouldn't depend on trusting the author**:
   landed only after compiling, passing the suites, and surviving the gates, the same bar as
   anything else.
 
-Verify the artifact, not the author's diligence — human or otherwise. That discipline is what this
-project *is*; this repo is simply its first user.
+Check the artifact, not the author. That's the whole idea behind this project — this repo just
+happens to be its first user.
 
 ## Quickstart
 
@@ -424,10 +424,10 @@ over the decidable tiers: exact verdicts with a concrete witness outcome over th
 match-action fragment** (SPEC §4.3), sound over-approximation outside it, and UNREACHABLE proven
 for all bounds via saturated `visits` modeling (`--reach` / `--forbid` / `--assume` / `--level-m`).
 
-Level M is more than an analysis convenience: a flow inside the fragment *is* a match-action
-table, and tables compile to places no framework runtime can follow — microcontrollers, smart
-sensors, in-kernel packet paths. That direction is deliberate and unbuilt;
-[ROADMAP Phase 6](ROADMAP.md) states it honestly.
+Level M isn't just for analysis: a flow inside the fragment *is* a match-action table, and
+tables run in places no framework runtime can follow — microcontrollers, smart sensors,
+in-kernel packet paths. None of that is built yet; [ROADMAP Phase 6](ROADMAP.md) is upfront
+about it.
 
 ### Fan-out & sub-flow composition — parallelism without impurity
 
