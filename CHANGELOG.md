@@ -9,15 +9,42 @@ spec-stable.
 ## [Unreleased]
 
 ### Added
-- **LEARNING_PLAN.md** — three roads into the same document: parallel tracks for the analyst
-  (no code, ever), the developer, and the platform engineer, over the same artifacts, converging
-  on the PR-is-the-process-change loop. Centerpiece: the shared-vocabulary table (one concept,
-  three dialects, one standardized term) and a checkable "done when" per stage. Grown to six
-  personas + a sidebar: SecOps (containment behind human gates, `@field_only` as the
-  prompt-injection boundary, air-gap P0 deployment), the auditor (reconstruct any decision
-  from artifacts alone; routing changes only by reviewed diff), the decision-maker's hour
-  (five questions, reading only), and the human in the queue (a tier, not a fallback). Also
-  fixed the README's stale "unbounded run state" limitation (superseded by `@state_bound`).
+- **Four conformant kernels** — `prismpath-go` joins Python / JS (`prismpath/portable/prismpath.mjs`) /
+  Rust (`prismpath-rs`): a dependency-free Go P0 kernel at 1,067/1,067 predicates and 27/27 flows
+  against the frozen vectors. Conformance is now a refereed sport with three independent referees.
+- **`prismpath verify` — formal model checking** (`prismpath/model_check.py`): "state X can never be
+  reached under condition Y", answered by adversarial-worker reachability with first-match
+  semantics. Exact verdicts with concrete witness outcomes over the **Level M match-action
+  fragment** (SPEC §4.3 membership is now reported per edge, and `portability_tier` carries a
+  `level_m` flag); sound over-approximation outside it (semantic/error/event hops labeled "may");
+  `visits` modeled with saturation so UNREACHABLE is proven for all bounds. `--reach/--forbid/
+  --assume/--bound/--level-m/--json`.
+- **`prismpath lsp` — a Language Server, stdlib only** (`prismpath/lsp.py`): live diagnostics (the
+  full validate check set, anchored to the offending edge line), completion (targets, derived
+  predicate fields, tier keywords, annotations), hover, document symbols, and a `prismpath/graph`
+  Mermaid request — for Neovim, JetBrains (LSP4IJ), VS Code, and any LSP editor. Client setup in
+  `prismpath/editor/README.md`.
+- **Fan-out debugging + live visualization** — `composer.fanout_tree()` (read-only composition
+  trees: all child stop states, join progress with the gate-aware done-criterion, `child_error`
+  reasons, nested fan-outs) behind Mission Control's new **Flows tab** (`/api/fanouts`,
+  `/api/fanout/ckpt` queue-dir-confined).
+- **The Connector SDK, complete** (`prismpath/connector.py`): all six hexagonal ports —
+  Adjudicator (callable-driven, never assumes an LLM; flat prompts via `PayloadFlattener`;
+  optional `guard.guarded_exchange` routing), Deferral (`DeferralStore` wiring), an idempotent
+  JSONL sink default, `checkpoint.flow_hash()` (public) as the attestation policy hash, and the
+  proven one-line plugin pattern `WORKERS = MyConnector().get_workers()`.
+- **Production SIEM integrations** (`adapters/soc/siem.py`): a `SIEMSource` ingestion port with
+  `ElasticSource` (any Elasticsearch/OpenSearch-compatible indexer; env-configured, TLS
+  verification on by default), `WazuhSource` (lazy, opt-in legacy credentials), `NDJSONFileSource`
+  (air-gap/replay), and a best-effort `SplunkSource`. The SOC agent now rides the Connector SDK
+  (`WazuhTriageConnector`) with env seams matching the compliance adapter, plus `cw-triage`
+  systemd units.
+- **Automatic prefilter tuning** — `prefilter.tune()` derives the cache's operating point from
+  evidence: a (threshold × min_conf) sweep with a **Wilson upper bound** certifying the
+  reuse-error rate ≤ `--risk` (the `calibrate` pattern applied to reuse); refuses to choose when
+  the evidence can't clear the bound. `tuning.json` slots under explicit args and env in
+  precedence; the SOC adapter's `labels` command feeds the tuner its own adjudication history.
+
 - **`prismpath ci-report` + the PR comment** — the money demo as a living product: for every flow a
   PR changes, one sticky comment with validate findings, fixture verdicts, and the routing topology
   **before → after as live Mermaid diagrams** (GitHub renders them in the conversation). The Action
@@ -84,9 +111,25 @@ spec-stable.
   `--drop-invalid` and `--split-compound FLOW/NODE` modes), `prismpath/benchmark/parse_annotate_transcript.py`
   — the reproducible second-annotator pipeline around `prismpath annotate` / `prismpath kappa`.
 
-## [0.1.0] — first public release
+### Changed
+- **The roblox plugin is gone** (deep excision): the game-dev-origin gate plugin (~9 MB incl. its
+  RAG index) was never meant to fuse into PrismPath. The sprint control plane is now fully
+  target-generic; the council deliberation expansion stays. `plugins.load_gate` no longer aliases
+  `luau`.
+- **APP_ARCHITECTURE.md → `prismpath/nudges/`** — it is a coder-prompt contract, not a doc; all
+  reference sites now resolve it `__file__`-relative (CWD-independent).
 
-The initial release is the whole system; highlights rather than an exhaustive list:
+### Fixed
+- **OTS anchoring read the wrong ledger** — `ledger_ots.from_ledger()` defaulted to the
+  pre-rename `refs/mdflow/runs` namespace and `Mdflow-Output-Hash` trailer key, which the ledger
+  writer never produces; `prismpath ledger anchor` always found nothing. Now matches `ledger.py`
+  exactly (verified against a real ledger). Part of a repo-wide mdflow-leftover sweep that also
+  restored the seven `research/` scripts and the compliance adapter's tooling paths.
+
+## [0.1.0] — the initial baseline (pre-release)
+
+The baseline is the whole system; highlights rather than an exhaustive list. (Not yet tagged
+or published — on first release, [Unreleased] folds into the release notes.)
 
 ### The format
 - **SPEC.md v1 (draft)** — document grammar, the four edge tiers (deterministic / semantic /
@@ -113,12 +156,12 @@ The initial release is the whole system; highlights rather than an exhaustive li
   predicates; failures ride the error tier.
 
 ### The portable kernel
-- `portable/prismpath.mjs` — parser + predicate sandbox + engine for the ML-free subset in one
+- `prismpath/portable/prismpath.mjs` — parser + predicate sandbox + engine for the ML-free subset in one
   dependency-free ES module (browser/edge/Node), certified against the vectors; the
-  **playground** (`portable/playground.html`) runs it client-side.
+  **playground** (`prismpath/portable/playground.html`) runs it client-side.
 
 ### Measured
 - N=300/301 labeled routing suite + reproducible head-to-head vs LangGraph / CrewAI /
   LLM-router; **hybrid-over-centroids**: 90.0% @ 160 LLM calls/1k, 95.3% @ 360, 98.0% @ 507
-  (5-fold CV, shared LLM pass; `benchmark/hybrid_sweep.py`); polarity 0.52 → 0.92. Prefilter
+  (5-fold CV, shared LLM pass; `prismpath/benchmark/hybrid_sweep.py`); polarity 0.52 → 0.92. Prefilter
   reuse audited live (97% oracle agreement, zero unsafe downgrades).

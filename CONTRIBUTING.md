@@ -10,7 +10,7 @@ and pure (see the invariants in [AUTHORING.md](prismpath/AUTHORING.md) §9 and t
 ## Setup
 
 ```bash
-git clone <this-repo> && cd <repo>
+git clone https://github.com/crystal-warden/prism-path.git && cd prism-path
 pip install -e .            # numpy only; add ".[embeddings]" for semantic-routing work
 pip install pytest
 pytest -q                   # the Python suite
@@ -27,9 +27,9 @@ diff **is** the spec-change review, and it bumps the spec version (SPEC.md §8).
 ## Sign-off (DCO, not CLA)
 
 We use the [Developer Certificate of Origin](https://developercertificate.org/). Sign your
-commits (`git commit -s`) to certify you have the right to contribute the code. There is no
-CLA and no copyright assignment — the commercial tier of this project is a separate codebase,
-so we never need to relicense your work.
+commits (`git commit -s`) to certify you have the right to contribute under the project's
+Apache-2.0 license. There is no CLA and no copyright assignment — your contribution stays
+yours, licensed to the project and everyone else under Apache-2.0.
 
 ## The perfect first contribution: a lint rule
 
@@ -40,7 +40,7 @@ The recipe (every existing check followed it):
 2. Write the check in `prismpath/analysis.py` — a function `Graph -> List[Finding]`, wired into
    `analyze()`. Stay inside the decidable fragment: **no false positives** is the bar, and
    "unknown → no finding" is the rule (see the module docstring).
-3. Add a broken flow demonstrating it to `tests/fixtures/broken/` and a test asserting the
+3. Add a broken flow demonstrating it to `prismpath/tests/fixtures/broken/` and a test asserting the
    finding (and asserting it does NOT fire on the shipping flows — they're the false-positive
    corpus).
 4. Add one row to the README's check table.

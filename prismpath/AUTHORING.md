@@ -4,7 +4,7 @@ A workflow is **one markdown file**. The kernel (~700 LOC across parser/predicat
 engine; hard dep: numpy — the embedder is the optional `[embeddings]` extra, transformers only
 for the LLM-fallback router) reads it and drives any agent through it. No code defines the
 graph; no framework state objects. This doc is the authoring contract — the normative format
-definition lives in [SPEC.md](SPEC.md); read both before extending.
+definition lives in [SPEC.md](../SPEC.md); read both before extending.
 
 ---
 
@@ -176,7 +176,7 @@ decision is logged in the transcript with `decided_by: "human"`.
 **Flow-hash binding.** The checkpoint records a content hash of the flow `.md`. If the flow is
 edited while a run is suspended, `resume` **refuses** by default rather than silently governing by
 the new version (a real correctness trap for long-lived suspensions). Override with
-`prismpath_RESUME_ON_FLOW_CHANGE=warn` (proceed + warn) or `=allow` (proceed silently).
+`PRISMPATH_RESUME_ON_FLOW_CHANGE=warn` (proceed + warn) or `=allow` (proceed silently).
 
 CLI: `python -m prismpath.cli resume <checkpoint> [--choose <edge>]`.
 
@@ -219,9 +219,9 @@ agent = registry.worker_agent(graph, default=my_agent)   # bound nodes -> plugin
 ```
 
 Three auditability guarantees back the binding: `worker_agent` resolves every binding at
-**construction** (a missing tool fails before the run, not at hop 40); `PrismPath plugins --check
+**construction** (a missing tool fails before the run, not at hop 40); `prismpath plugins --check
 flow.md` is the same verification as a CI gate; and every dispatched outcome carries a `_worker`
-provenance field, so the transcript records which installed tool produced each hop. `PrismPath plugins
+provenance field, so the transcript records which installed tool produced each hop. `prismpath plugins
 [--json]` lists everything discovered — name, version, source (bundled vs entry-point), and what it
 provides. The bundled `council` plugin (seeded dice + weighted vote tally) is the showcase
 *expansion*: an optional deliberation pattern for decisions that benefit from deliberate diversity —
@@ -319,7 +319,7 @@ suite (`tests/test_portable_conformance.py`), not asserted.
 
 ### The human queue (Mission Control)
 
-A suspended run's checkpoint, written into the **queue dir** (`prismpath_QUEUE_DIR`, else
+A suspended run's checkpoint, written into the **queue dir** (`PRISMPATH_QUEUE_DIR`, else
 `$XDG_STATE_HOME/prismpath/queue`), surfaces in Mission Control's **Queue** tab: each waiting run shows
 its evidence packet — flow, node, the reason it escalated, and the candidate edges *with the router
 scores that asked for a human*. An operator picks an edge; `checkpoint.record_decision(path, choose)`
@@ -358,7 +358,7 @@ Design points that matter:
   from `done_set()` before the loop, so the sprint restarts at the first *unproven* node instead of
   rebuilding what git already attests.
 
-This is the *public* durable-proof tier; a multi-party tamper-evident audit is a separate premium layer. Full design: `docs/design/commit-as-state.md`.
+This is the *public* durable-proof tier; external anchoring (OpenTimestamps / RFC-3161 — `ledger_ots.py`, `SPEC_ledger_opentimestamps.md`) upgrades it to adversarial temporal integrity.
 
 ### Ledgering a routing flow — `@checkpoint` + `run_ledgered_loop`
 
@@ -496,7 +496,7 @@ embedder's identity + a **fingerprint** (a fixed probe sentence's embedding), δ
 flow. At runtime, `lockfile.locked_router(lock, llm_router)` routes conditions against the committed
 vectors — so the condition side of every decision is bit-for-bit reproducible — and `verify_lock`
 checks the local embedder still reproduces the fingerprint, turning silent drift into a loud,
-policy-controlled signal (`prismpath_LOCK_POLICY=refuse|warn|allow`, refuse by default). This makes
+policy-controlled signal (`PRISMPATH_LOCK_POLICY=refuse|warn|allow`, refuse by default). This makes
 semantic routing reproducible across machines, installs, and years — a compliance *feature* rather
 than a liability. Commit the `.lock` next to the flow.
 

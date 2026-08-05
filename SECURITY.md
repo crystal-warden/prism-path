@@ -35,8 +35,14 @@ vulnerability we want to hear about **at highest priority**:
 6. **Path traversal / queue escape** in checkpoint, queue, or ledger handling (e.g.
    `resolve_queue_item`), or Mission Control endpoint issues (note: MC binds loopback by
    design).
-7. **Playground XSS** — `portable/playground.html` renders user-pasted flows; script execution
-   from a crafted flow document is in scope.
+7. **Playground XSS** — `prismpath/portable/playground.html` renders user-pasted flows; script
+   execution from a crafted flow document is in scope.
+8. **Anchoring / attestation forgery.** With the ledger anchored (`ledger_ots.py`,
+   `SPEC_ledger_opentimestamps.md`): `verify_unit`/`verify_leaf` accepting a leaf not in the
+   anchored batch, a backdated or otherwise invalid `.ots` proof passing verification, or a
+   Merkle path validating against the wrong root. OTS's claim is *adversarial temporal
+   integrity* — proofs that cannot be backdated or silently rewritten even with filesystem
+   access — and breaking it is a finding.
 
 ## Scope — what does not count
 
@@ -45,8 +51,10 @@ vulnerability we want to hear about **at highest priority**:
   sandbox claim covers the *routing* layer only.
 - **Resource exhaustion via authored flows you control** (e.g. `max_steps`-bound loops in your
   own document) — that's an authoring lint concern, not a vulnerability.
-- **The git Flow-Ledger against an adversary with filesystem access** — its tamper-evidence is
-  explicitly scoped to *accident* (papers §5.2); external anchoring is documented future work.
+- **The git Flow-Ledger *without external anchoring* against an adversary with filesystem
+  access** — an unanchored ledger's tamper-evidence is explicitly scoped to *accident*. Once
+  anchored via OpenTimestamps / RFC-3161 (`ledger_ots.py`, shipped), this exclusion no longer
+  applies — see in-scope item 8.
 - Findings requiring a hostile local user on the operator's own machine.
 
 ## Hardening notes for deployers

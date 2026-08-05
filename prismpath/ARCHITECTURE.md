@@ -28,6 +28,16 @@ parser.py ──▶ Graph ──▶ engine.run(graph, agent, router) ──▶ R
 
 The kernel knows nothing about sprints, gates, or build targets.
 
+### The portable kernels — one spec, four implementations
+
+The decidable subset of the kernel is re-implemented, dependency-free, in three more languages —
+JavaScript ([`portable/prismpath.mjs`](portable/prismpath.mjs), browser/edge/Node), Rust
+(`prismpath-rs/`, native + WASM), and Go (`prismpath-go/`) — each certified against the frozen
+conformance vectors ([`portable/conformance/`](portable/conformance/README.md): 1,067 predicate
+cases + 27 engine fixtures, bit-for-bit). The Python kernel stays the reference (vectors are
+generated from it); the ports are runtime surfaces, and the tooling (validate/verify/test/lock/
+ci-report/lsp) deliberately lives only on the reference side — an asymmetry, not a gap.
+
 ## 2. The control plane
 
 `run_sprint.py` is the loop that drives a real agent swarm to build a real tree against a gate.
@@ -58,7 +68,7 @@ Supporting services:
   done`, streaming build status over SSE; on approval it launches `run_sprint.py` as a subprocess.
 - **`mission_control.py`** — a loopback-only console (`127.0.0.1`) that auto-discovers live sprints,
   can start/stop/pause them, and records an append-only **action log** (`audit_log.py`).
-- **`swarm_runner.py`** — `make_swarm_agent(spec, backend="auto")` returns an PrismPath agent backed by
+- **`swarm_runner.py`** — `make_swarm_agent(spec, backend="auto")` returns a PrismPath agent backed by
   the real swarm, falling back to `llm_local` when no backend is up.
 - **`retriever.py`** — dense retrieval over a turbovec docs index to ground the coder in real APIs.
   The engine is index-agnostic; the path comes from the active gate plugin's `RAG_INDEX`.

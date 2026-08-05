@@ -2,10 +2,10 @@
 
 **Spec version 1 (draft).** This document is the normative definition of the PrismPath flow format:
 the document grammar, the four edge tiers, the predicate language, the engine contract, and the
-portability levels. The **conformance vectors** (`portable/conformance/`) are part of this spec:
+portability levels. The **conformance vectors** (`prismpath/portable/conformance/`) are part of this spec:
 an implementation conforms to spec version 1 iff it passes every committed vector bit-for-bit.
 The Python kernel in this repository is the **reference implementation**; the vectors are
-generated from it deterministically (`portable/gen_conformance.py`), so the `git diff` of the
+generated from it deterministically (`prismpath/portable/gen_conformance.py`), so the `git diff` of the
 vector files is the authoritative record of any semantic change.
 
 The design principle behind every rule here: **the flow is data, not code.** A flow is an inert,
@@ -233,8 +233,8 @@ Computed over **reachable** edges, recursively through `@spawn` children (a tree
 worst member's):
 
 - **P0** — every reachable edge is deterministic/error/event. No ML runtime: the flow runs on
-  any conforming kernel (the reference JS port is ~one file). A P0 engine must **refuse** flows
-  outside P0 rather than guess.
+  any conforming kernel — three independent portable kernels (JavaScript, Rust, Go) pass the
+  vectors today. A P0 engine must **refuse** flows outside P0 rather than guess.
 - **P1** — reachable semantic edges exist and are all pinned in the flow's routing lockfile
   (committed condition vectors + embedder identity `(model, provider, precision)` + fingerprint).
   Runtime needs only an outcome-side embedder.
@@ -247,9 +247,9 @@ match-action fragment — the compile-to-hardware subset.
 
 An implementation of spec version 1:
 
-1. MUST pass `portable/conformance/predicates.json` — every `(cond, ctx)` case evaluating to the
+1. MUST pass `prismpath/portable/conformance/predicates.json` — every `(cond, ctx)` case evaluating to the
    recorded `true`/`false`, or rejecting as invalid where the record says `"ERROR"`;
-2. MUST pass `portable/conformance/flows.json` — every scripted run reproducing the recorded
+2. MUST pass `prismpath/portable/conformance/flows.json` — every scripted run reproducing the recorded
    `path`, `stopped`, `pending_node`, and `spawn`;
 3. MUST implement §1–§5 as written; MAY omit semantic routing entirely iff it refuses non-P0
    flows (a *P0 kernel*).

@@ -63,8 +63,8 @@ prismpath = ["flows/*.md", "nudges/*.md", "*.md", "*.html", "gallery/*.md",
           "portable/conformance/*.json", "plugins/council/*.md"]
 
 [project.urls]
-Repository = "https://github.com/OWNER/prismpath"
-"Getting Started" = "https://github.com/OWNER/prismpath/blob/main/GETTING_STARTED.md"
-Specification = "https://github.com/OWNER/prismpath/blob/main/SPEC.md"
-Changelog = "https://github.com/OWNER/prismpath/blob/main/CHANGELOG.md"
-Security = "https://github.com/OWNER/prismpath/blob/main/SECURITY.md"
+Repository = "https://github.com/crystal-warden/prism-path"
+"Getting Started" = "https://github.com/crystal-warden/prism-path/blob/main/GETTING_STARTED.md"
+Specification = "https://github.com/crystal-warden/prism-path/blob/main/SPEC.md"
+Changelog = "https://github.com/crystal-warden/prism-path/blob/main/CHANGELOG.md"
+Security = "https://github.com/crystal-warden/prism-path/blob/main/SECURITY.md"

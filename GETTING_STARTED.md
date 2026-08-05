@@ -20,7 +20,7 @@ The one dependency the minimal path installs is numpy.
 
 The portable kernel runs in your browser; nothing leaves the page.
 
-1. `git clone <this-repo> && cd prismpath`
+1. `git clone https://github.com/crystal-warden/prism-path.git && cd prism-path`
 2. `cd prismpath/portable && python3 -m http.server 8321`
 3. Open `http://localhost:8321/playground.html` — pick a preset, press **▶ Run**, watch the
    path light up. Edit an edge; the tier badges and checks update as you type.
@@ -32,7 +32,7 @@ the page), so a tweet, HN comment, or bug report can carry an executable flow.
 ## Path 2 — use the toolchain (4 steps)
 
 ```bash
-git clone <this-repo> && cd prismpath          # 1
+git clone https://github.com/crystal-warden/prism-path.git && cd prism-path   # 1
 pip install -e .                            # 2  (numpy only)
 prismpath validate prismpath/examples/pr_demo/triage.md  # 3  → "clean ✅ — the flow compiles"
 prismpath test prismpath/examples/pr_demo/triage.md      # 4  → "6/6 passed"  (no model, milliseconds)
@@ -44,7 +44,9 @@ To start from a scaffold instead of the example, **`prismpath init`** writes a s
 routing-test table into the current directory and prints exactly these commands against it —
 or start from a real gallery workflow with `prismpath init --template <name>` (`--template list`).
 Editing in VS Code? `prismpath/editor/vscode/` ships tier-aware highlighting, a live playground
-preview (no Python needed), and validate-on-save squiggles — see its README.
+preview (no Python needed), and validate-on-save squiggles. Any other LSP editor (Neovim,
+JetBrains, Zed, …): `prismpath lsp` serves live diagnostics, completion, and hover — see
+`prismpath/editor/README.md`.
 
 ## Path 3 — your own flow, with a real agent (steps 5–8)
 
@@ -59,6 +61,7 @@ start: classify
 ## classify
 Read the message below and decide: is it urgent, routine, or spam?
 Reply with JSON: {"text": "<one line>", "kind": "urgent"|"routine"|"spam"}
+Message: "URGENT: production database is down, customers cannot log in!"
 -> page_me: when kind == "urgent"
 -> queue: when kind == "routine"
 -> bin: else
@@ -141,7 +144,7 @@ is demonstrated end-to-end in
 - **Reproducibility** — `prismpath lock` pins the semantic routing bit-for-bit;
   `prismpath calibrate` *derives* the escalation threshold with a finite-sample guarantee instead
   of a magic constant; `prismpath centroids` learns from your labeled history (the measured best
-  accuracy-per-call — see `benchmark/`).
+  accuracy-per-call — see `prismpath/benchmark/`).
 - **Durability** — `checkpoint.run_durable(...)` makes any run crash-resumable and lets it
   suspend for a human with the evidence packet; `@spawn` fans out child runs.
 - **The edge** — `prismpath portable <flow>` tells you if your flow is P0: zero-ML, runnable by
