@@ -11,7 +11,7 @@ draw it, trace it, resume it, and commit its progress to git.**
 
 ## Executive summary
 
-*Supporting evidence for every number below: `prismpath/docs/papers/SUPPORTING_EVIDENCE.md` (results ledger + provenance, negative results included). The ET-BERT/SOC hardening findings it cites — silent-failure war-story, no-sudo capture, GPU-batch economics, per-tenant suppression, the flywheel — were measured in a separate first-party lab repository; see that ledger's provenance note.*
+*Supporting evidence for every number below: `docs/research/supporting-evidence.md` (results ledger + provenance, negative results included). The ET-BERT/SOC hardening findings it cites — silent-failure war-story, no-sudo capture, GPU-batch economics, per-tenant suppression, the flywheel — were measured in a separate first-party lab repository; see that ledger's provenance note.*
 
 PrismPath is a control plane for LLM-agent workflows built on one idea: **the workflow graph should be a
 human-authored artifact, and routing should be a spectrum, not a single mechanism.** A flow is a
@@ -95,7 +95,7 @@ comparison below**, *grounded in* this data-not-code asymmetry — not the other
 LangGraph `StateGraph` whose conditional edge is an LLM call, the naive one-call-per-hop LLM-router,
 and a CrewAI `Flow` whose `@router` is an LLM call — and scored all four on the same labeled hard
 suite (**N=301**), same local model (gemma4), same routing prompt, δ=0.05, 2 repeats
-([`comparisons/`](../../comparisons/), one-command reproducer). The N=301 suite is 17 hand-crafted
+([`comparisons/`](../../prismpath/comparisons/), one-command reproducer). The N=301 suite is 17 hand-crafted
 gold cases plus 284 generated cases each gated by an independent blind second-labeler (see the
 provenance note in §4.3):
 

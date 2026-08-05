@@ -1,0 +1,18 @@
+# Source-distribution contents beyond the package itself.
+# (Wheel contents are governed by pyproject.toml's package-data + data-files.)
+
+include README.md SPEC.md GETTING_STARTED.md ROADMAP.md CHANGELOG.md
+include CONTRIBUTING.md CODE_OF_CONDUCT.md SECURITY.md LICENSE CITATION.cff
+include action.yml .pre-commit-hooks.yaml
+recursive-include docs *.md
+
+# Runtime data the package reads (also declared as package-data, listed here for sdist parity).
+recursive-include prismpath/flows *.md
+recursive-include prismpath/nudges *.md
+recursive-include prismpath/policies *.md *.json
+recursive-include prismpath/gallery *.md
+recursive-include prismpath/portable *.mjs *.html *.json
+recursive-include prismpath/tests/fixtures *.md
+
+prune prismpath/__pycache__
+global-exclude *.py[co]

@@ -1,6 +1,6 @@
 # Integrating Frontier AI Agents & LLMs with PrismPath
 
-**Document Location:** `prismpath/docs/FRONTIER_AGENT_INTEGRATION.md`  
+**Document Location:** `docs/guides/frontier-agent-integration.md`  
 **Target Audience:** AI Architects, Platform Engineers, and Workflow Developers  
 
 ---
@@ -41,7 +41,7 @@ This architecture pairs the **determinism, auditability, and safety of PrismPath
 
 ### Pattern A: Any CLI as a Worker (`prismpath.cli_worker`)
 
-The most decoupled worker pattern uses processes. PrismPath’s [`cli_worker.py`](../cli_worker.py) can invoke any command-line agent (passing node instructions on `stdin` and parsing JSON/stdout):
+The most decoupled worker pattern uses processes. PrismPath’s [`cli_worker.py`](../../prismpath/cli_worker.py) can invoke any command-line agent (passing node instructions on `stdin` and parsing JSON/stdout):
 
 ```python
 from prismpath.parser import parse_file
@@ -108,9 +108,9 @@ Process each changed file in parallel.
 ### Pattern E: Human-in-the-Loop (HITL) Suspension & Co-Pilots
 
 When a workflow reaches a high-risk policy threshold (`-> manager_approval: when amount > 50000`) or low-confidence ambiguity:
-1. PrismPath suspends execution as `needs_human` and generates an evidence packet ([`checkpoint.py`](../checkpoint.py)).
+1. PrismPath suspends execution as `needs_human` and generates an evidence packet ([`checkpoint.py`](../../prismpath/checkpoint.py)).
 2. An agent or chat UI consumes the evidence packet and presents a structured review interface to a human operator.
-3. Once the human provides sign-off, the application resumes execution via `resume --choose <target>`, recording a tamper-evident audit log in the **Flow-Ledger** ([`ledger.py`](../ledger.py)).
+3. Once the human provides sign-off, the application resumes execution via `resume --choose <target>`, recording a tamper-evident audit log in the **Flow-Ledger** ([`ledger.py`](../../prismpath/ledger.py)).
 
 ---
 
@@ -127,5 +127,5 @@ When a workflow reaches a high-risk policy threshold (`-> manager_approval: when
 ## Related Documentation
 
 * [`SPEC.md`](../../SPEC.md) — Normative format specification (grammar, edge tiers, predicate language).
-* [`AUTHORING.md`](../AUTHORING.md) — Complete guide to authoring Markdown flows.
-* [`ARCHITECTURE.md`](../ARCHITECTURE.md) — Engine architecture, control plane, and plugin seams.
+* [`docs/guides/authoring.md`](authoring.md) — Complete guide to authoring Markdown flows.
+* [`docs/design/architecture.md`](../design/architecture.md) — Engine architecture, control plane, and plugin seams.

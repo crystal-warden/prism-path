@@ -38,7 +38,7 @@ vulnerability we want to hear about **at highest priority**:
 7. **Playground XSS** — `prismpath/portable/playground.html` renders user-pasted flows; script
    execution from a crafted flow document is in scope.
 8. **Anchoring / attestation forgery.** With the ledger anchored (`ledger_ots.py`,
-   `SPEC_ledger_opentimestamps.md`): `verify_unit`/`verify_leaf` accepting a leaf not in the
+   `docs/design/spec-ledger-opentimestamps.md`): `verify_unit`/`verify_leaf` accepting a leaf not in the
    anchored batch, a backdated or otherwise invalid `.ots` proof passing verification, or a
    Merkle path validating against the wrong root. OTS's claim is *adversarial temporal
    integrity* — proofs that cannot be backdated or silently rewritten even with filesystem

@@ -4,7 +4,7 @@
 below are fixed in advance so results cannot be tuned into a flattering shape after the fact. Any
 change to this protocol after the first published run must be recorded in §7 with a reason.*
 
-*Crystal Warden Labs, 2026-07-29. Companion to `SPEC_guard_onion.md`.*
+*Crystal Warden Labs, 2026-07-29. Companion to `docs/design/spec-guard-onion.md`.*
 
 ---
 

@@ -58,9 +58,32 @@ packages = [
 ]
 
 [tool.setuptools.package-data]
-prismpath = ["flows/*.md", "nudges/*.md", "*.md", "*.html", "gallery/*.md",
-          "gallery/*/*.md", "portable/*.mjs", "portable/*.html",
-          "portable/conformance/*.json", "plugins/council/*.md"]
+# Everything here is READ AT RUNTIME by shipped code — not documentation. The prose docs live in
+# the repo's top-level docs/ tree and ship via [tool.setuptools.data-files] below.
+prismpath = ["flows/*.md",                    # example + reference flows
+          "nudges/*.md",                      # prompt assets (orchestrator/run_sprint read these)
+          "policies/*.md", "policies/*.json", # the guard's statutory floor + P1 lockfile
+          "gallery/*.md", "gallery/*/*.md",   # `prismpath init --template` copies these
+          "tests/fixtures/broken/*.md",       # the analyzer's broken-flow corpus (test_analysis)
+          "*.html",
+          "portable/*.mjs", "portable/*.html",
+          "portable/conformance/*.json"]      # the frozen kernel spec
+"prismpath.plugins.council" = ["*.md"]
+
+# Prose documentation, installed beside the package (sys.prefix/share/doc/prismpath/…) so an
+# air-gapped install still carries it. Not importable — read these from the repo or GitHub normally.
+#
+# The layout MIRRORS THE REPO on purpose: root entry points at the top, everything else under
+# docs/. Two reasons. (1) Flattening collides — README.md and docs/README.md would both land as
+# share/doc/prismpath/README.md and one would silently win. (2) The relative links inside the docs
+# (`../../SPEC.md` from docs/guides/, `../README.md` from docs/) only resolve if the depth is
+# preserved; flattened, every cross-doc link in the installed tree would dangle.
+[tool.setuptools.data-files]
+"share/doc/prismpath" = ["README.md", "SPEC.md", "GETTING_STARTED.md", "ROADMAP.md"]
+"share/doc/prismpath/docs" = ["docs/README.md"]
+"share/doc/prismpath/docs/guides" = ["docs/guides/*.md"]
+"share/doc/prismpath/docs/design" = ["docs/design/*.md"]
+"share/doc/prismpath/docs/research" = ["docs/research/*.md"]
 
 [project.urls]
 Repository = "https://github.com/crystal-warden/prism-path"

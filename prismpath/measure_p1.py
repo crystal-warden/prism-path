@@ -1,6 +1,6 @@
 """measure_p1.py — efficacy of the optional P1 semantic layer against the frozen corpus.
 
-Protocol: `BYPASS_MEASUREMENT.md` §5.4, recorded before this layer was written. The semantic strata
+Protocol: `docs/research/bypass-measurement.md` §5.4, recorded before this layer was written. The semantic strata
 are P1's acceptance test and were frozen in run 1 — the exam authored before the student.
 
 Needs an embedder, so it does not run in the default test suite (the floor tier has none, which is
@@ -76,7 +76,7 @@ def main() -> int:
     benign = benign_corpus.generate()
 
     print("=== P1 SEMANTIC LAYER — THRESHOLD SWEEP ===")
-    print(f"protocol: BYPASS_MEASUREMENT.md §5.4 (pre-registered)   embedder: {EMBED_MODEL}")
+    print(f"protocol: docs/research/bypass-measurement.md §5.4 (pre-registered)   embedder: {EMBED_MODEL}")
     print(f"semantic variants: {len(semantic_variants)}   benign cases: {len(benign)}\n")
 
     strata = sorted({v["stratum"] for v in semantic_variants})

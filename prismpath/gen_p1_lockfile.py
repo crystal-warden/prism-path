@@ -33,7 +33,7 @@ EMBED_MODEL = "BAAI/bge-small-en-v1.5"
 EMBEDDER_ID = "BAAI/bge-small-en-v1.5|candle|f32"
 FINGERPRINT_PROBE = "the quick brown fox jumps over the lazy dog"
 
-#: The operating point measured in BYPASS_MEASUREMENT.md §5.4 / amendment 10: the lowest threshold
+#: The operating point measured in docs/research/bypass-measurement.md §5.4 / amendment 10: the lowest threshold
 #: in the sweep that held the ZERO benign bound, on dev AND on the 111-case holdout.
 THRESHOLD = 0.75
 
@@ -130,7 +130,7 @@ def generate() -> dict:
         "reference_scores": probes,
         "parity_vectors": parity,
         "measurement": {
-            "protocol": "BYPASS_MEASUREMENT.md §5.4, amendment 8 and 10",
+            "protocol": "docs/research/bypass-measurement.md §5.4, amendment 8 and 10",
             "at_this_threshold": {
                 "paraphrase": 0.00,
                 "euphemism": 0.50,

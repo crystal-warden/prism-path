@@ -14,7 +14,7 @@ Measured on 64 malicious + 48 benign (triage_corpus_v0), same inputs:
   D  this decomposed graph        recall 0.969-0.984 / benign 0.938
 The win is on BOTH axes and holds when a learned embedder does the routing (no ground-truth
 label): the binary attack/benign gate is 100%, fine tactic is 45% but harmless because every
-attack node shares the escalation-default contract. See SUPPORTING_EVIDENCE.md rows #54/#56.
+attack node shares the escalation-default contract. See docs/research/supporting-evidence.md rows #54/#56.
 
 WHY it works: a flat prompt must compromise across malicious and benign; narrow nodes each tune
 to their sub-population. The escalation-default contract removes the "it could be normal admin"

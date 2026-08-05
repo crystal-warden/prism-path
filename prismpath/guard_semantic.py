@@ -3,7 +3,7 @@
 P0 (`guard.py`) is a grammar: bypass is inexpressible, the guarantee is hardware-invariant, and every
 compliance claim rests on it. P1 is a *measurement* tier — semantic similarity to prohibited-intent
 centroids, for the paraphrase and euphemism classes a grammar provably cannot reach
-(`BYPASS_MEASUREMENT.md`, semantic strata at 1.00).
+(`docs/research/bypass-measurement.md`, semantic strata at 1.00).
 
 THREE RULES THIS LAYER OBEYS
 ----------------------------

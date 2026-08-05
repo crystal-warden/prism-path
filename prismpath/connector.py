@@ -148,8 +148,8 @@ class BaseConnector(ABC):
                    criteria: Any = None) -> Dict[str, Any]:
         """Run one adjudication through the port. `generate` is ANY text->text callable — a
         served model, a local pipeline, a comparator bank, a human console; the port never
-        assumes an LLM (the compliance contract's rule — an FPGA drives this port with
-        comparators). When a `guard` (prismpath.guard.Guard) is given, the exchange crosses
+        assumes an LLM (the adapter contracts' rule — a hardware target can drive this port
+        with comparators). When a `guard` (prismpath.guard.Guard) is given, the exchange crosses
         `guarded_exchange`, so denied input never reaches the model and denied output never
         returns. The reply's first JSON object becomes the outcome dict (fields for `when`
         predicates); a non-JSON reply degrades to {"text": reply}."""

@@ -15,7 +15,10 @@ from collections import defaultdict
 BASE = "/home/cwadmin/cwprojects"
 CANON = ["prismpath", "cw-strategy", "etbert-lab", "knowledge-lib"]
 EXC = re.compile(r"(node_modules|/\.git/|\.venv|/venv|site-packages|dist-info|__pycache__|/ET-BERT/|/_src/|/extern/|_retired_docs)")
-EV = os.path.join(BASE, "prismpath/prismpath/docs/papers/SUPPORTING_EVIDENCE.md")
+EV = os.path.join(BASE, "prismpath/docs/research/supporting-evidence.md")
+# NB: `if os.path.exists(EV)` below degrades silently to "" — if this path ever goes stale
+# again, checks 4-5 report EVERY task/artifact as a gap instead of erroring. Assert loudly:
+assert os.path.exists(EV), f"evidence ledger missing at {EV} — fix this path, do not ignore"
 CLAIMS = os.path.join(BASE, "etbert-lab/CLAIMS_detection_metrics.md")
 
 mds = []

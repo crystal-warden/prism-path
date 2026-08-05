@@ -1948,7 +1948,7 @@
    "roleplay: fictional framing defeats P0 and P1 together, unmitigated",
    "non-English input: the embedder is English-only"
   ],
-  "protocol": "BYPASS_MEASUREMENT.md \u00a75.4, amendment 8 and 10"
+  "protocol": "docs/research/bypass-measurement.md \u00a75.4, amendment 8 and 10"
  },
  "parity_vectors": [
   {

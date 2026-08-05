@@ -83,7 +83,7 @@ adapters/<domain>/
    adapter's domain needs. The safety boundary is a layer, not an adapter concern: an adapter may add
    strictness and can never subtract it (the policy language has no permitting verb). Bind
    `guard.policy_hash` into the attestation manifest so *which safety policy ran* is provable. See
-   `prismpath/SPEC_guard_onion.md`.
+   `docs/design/spec-guard-onion.md`.
 
 7. **A cheap gate before the expensive node, where inputs recur.** If one adjudication node dominates
    cost and inputs repeat, put a `PrefilterCache` (SOC) or a retrieval/skip in front — measured, opt-in.

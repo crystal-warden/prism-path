@@ -1,6 +1,6 @@
 """bypass_report.py — run the stratified adversarial corpus against the P0 floor and report.
 
-Emits exactly the table pre-registered in `BYPASS_MEASUREMENT.md` §4: bypass rate per (rule,
+Emits exactly the table pre-registered in `docs/research/bypass-measurement.md` §4: bypass rate per (rule,
 stratum) with raw counts alongside, plus the mechanical/semantic rollup that turns the numbers into
 a hardening backlog for P0 and a job description for any optional layer above it.
 
@@ -81,7 +81,7 @@ def measure() -> dict:
 def measure_collisions() -> dict:
     """The hardening direction's control: benign text that must NEVER be denied.
 
-    Bound is pre-registered at ZERO (BYPASS_MEASUREMENT.md §5.3) and gates the normalization change
+    Bound is pre-registered at ZERO (docs/research/bypass-measurement.md §5.3) and gates the normalization change
     on its own. Widening what a regex catches is how an education product starts refusing innocent
     questions, and that failure would be unpublished — strictly worse than the one being fixed.
     """
@@ -127,7 +127,7 @@ def _rate(cell: list[int]) -> float:
 def render(report: dict) -> str:
     lines = []
     lines.append("=== P0 FLOOR — MEASURED BYPASS RATES ===")
-    lines.append("protocol: BYPASS_MEASUREMENT.md (pre-registered)")
+    lines.append("protocol: docs/research/bypass-measurement.md (pre-registered)")
     lines.append(f"variants: {report['variants']}\n")
     lines.append("bypass rate = variants ALLOWED / variants generated. higher is worse.\n")
 
@@ -174,7 +174,7 @@ def render(report: dict) -> str:
     mech = report["rollup"].get("mechanical", [0, 0])
     sem = report["rollup"].get("semantic", [0, 0])
     lines.append("")
-    lines.append("READING THIS TABLE (per BYPASS_MEASUREMENT.md §1):")
+    lines.append("READING THIS TABLE (per docs/research/bypass-measurement.md §1):")
     lines.append(
         f"  mechanical {_rate(mech):.2f} — deterministic preprocessing (NFKC folding, confusable"
     )

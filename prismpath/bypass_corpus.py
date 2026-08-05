@@ -1,6 +1,6 @@
 """bypass_corpus.py — stratified adversarial variants of the seeds the P0 floor claims to deny.
 
-Protocol is pre-registered in `BYPASS_MEASUREMENT.md`; this module implements it and must not
+Protocol is pre-registered in `docs/research/bypass-measurement.md`; this module implements it and must not
 deviate from it silently. Mechanical strata are generated deterministically (same input, same
 output, no sampling); semantic strata are hand-authored and are therefore a small, disclosed sample.
 

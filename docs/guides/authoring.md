@@ -4,7 +4,7 @@ A workflow is **one markdown file**. The kernel (~700 LOC across parser/predicat
 engine; hard dep: numpy — the embedder is the optional `[embeddings]` extra, transformers only
 for the LLM-fallback router) reads it and drives any agent through it. No code defines the
 graph; no framework state objects. This doc is the authoring contract — the normative format
-definition lives in [SPEC.md](../SPEC.md); read both before extending.
+definition lives in [SPEC.md](../../SPEC.md); read both before extending.
 
 ---
 
@@ -358,7 +358,7 @@ Design points that matter:
   from `done_set()` before the loop, so the sprint restarts at the first *unproven* node instead of
   rebuilding what git already attests.
 
-This is the *public* durable-proof tier; external anchoring (OpenTimestamps / RFC-3161 — `ledger_ots.py`, `SPEC_ledger_opentimestamps.md`) upgrades it to adversarial temporal integrity.
+This is the *public* durable-proof tier; external anchoring (OpenTimestamps / RFC-3161 — `ledger_ots.py`, `docs/design/spec-ledger-opentimestamps.md`) upgrades it to adversarial temporal integrity.
 
 ### Ledgering a routing flow — `@checkpoint` + `run_ledgered_loop`
 

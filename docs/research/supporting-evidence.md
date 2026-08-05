@@ -2,8 +2,8 @@
 
 *Every claim in the PrismPath papers, backed by a measured result, its provenance, and an honest
 verdict — negative results included. Written to survive a hostile read and to be merge-ready into the
-research paper (`prismpath_paper_research.md`) and engineering white paper
-(`prismpath_whitepaper_engineering.md`). All numbers first-party on the GB10 (Grace-Blackwell, unified
+research paper (`docs/research/paper-routing-spectrum.md`) and engineering white paper
+(`docs/research/whitepaper-engineering.md`). All numbers first-party on the GB10 (Grace-Blackwell, unified
 memory). Consolidated 2026-07-21.*
 
 > **Rule of use.** No claim ships without its row here (result + provenance + gap).
@@ -74,8 +74,8 @@ Provenance: `benchmark/learning_curve.json`. This *justifies* the corpus-collect
 | ET-BERT capture redesign (#33) | silent-failure war-story; no-sudo rotating capture; hourly GPU batch (4.23 ms/flow); cwcheck function-check | ET-BERT lab repo (`batch_score.py`) |
 | Per-tenant suppression (#44) | **17.3% hard-suppressed** (skip LLM) on 5k live alerts + context-tagged over-calls; hash-versioned | `research/suppression.py`, `homelab.json` |
 | Learning flywheel (#38) | authoritative labels teach cache (recurrence auto-resolves cos 0.994) + propose context rules; **self-labels REFUSED, threats never suppressed** | `research/flywheel.py` |
-| OTS anchoring connected v1 (#36) | ledger enumerate → Merkle → real Bitcoin `ots stamp` → verify → **tamper-evident** | `prismpath/ledger_ots.py`; `SPEC_ledger_opentimestamps.md` |
-| OTS air-gap tier (#53) — disconnected attestation | T1 batch-and-forward (tiny hash-only bundle across the diode; real stamp round-trip proven) + **T2 RFC-3161 internal-TSA validated fully OFFLINE** (query->sign->`Verification: OK`->tamper rejected) + C1 provenance binding (POLICY_HASH+gate+ingestion) + C4 salt + `prismpath ledger` CLI + staged timers. Extends attestation to DIB/OT/healthcare air-gapped sites. | `prismpath/ledger_airgap.py`, `deploy/systemd/`, `SPEC_ledger_opentimestamps.md` §4/§6 |
+| OTS anchoring connected v1 (#36) | ledger enumerate → Merkle → real Bitcoin `ots stamp` → verify → **tamper-evident** | `prismpath/ledger_ots.py`; `docs/design/spec-ledger-opentimestamps.md` |
+| OTS air-gap tier (#53) — disconnected attestation | T1 batch-and-forward (tiny hash-only bundle across the diode; real stamp round-trip proven) + **T2 RFC-3161 internal-TSA validated fully OFFLINE** (query->sign->`Verification: OK`->tamper rejected) + C1 provenance binding (POLICY_HASH+gate+ingestion) + C4 salt + `prismpath ledger` CLI + staged timers. Extends attestation to DIB/OT/healthcare air-gapped sites. | `prismpath/ledger_airgap.py`, `deploy/systemd/`, `docs/design/spec-ledger-opentimestamps.md` §4/§6 |
 | Shadow-pilot harness (P6) | dry-run: containment agreement 0.867, **0 dangerous under-calls**, 0 parse errors | `research/shadow_agreement.py` |
 | Triage vs DIVERSE labeled data (#40, honest breadth) | on 249-technique ATT&CK corpus (single-event): escalation **0.672**, **33% dangerous under-calls** (vs 0 on monotone homelab — the distribution-shift blind spot MEASURED), benign-correct 0.923; weakest = Lateral Movement 2/8. *Caveat: isolated single events understate a correlated stream; attack signal is in the sequence.* | `triage-corpus/validation_v0.json` |
 | LM deep-dive (#3): is LM a model gap or ambiguity? | On 14 LM cases escalation is **10/14 (71%)** — the 2/8 draw was pessimistic (LM escalation is high-variance by technique). The 4 under-calls are **all admin-mimicry** (DCOM 10016, impacket-via-mmc, PowerShell-Remoting, System file-create); LLM rationales explicitly read them as "common administrative behavior"/"false positive." One (DCOM 10016) is a **correct** benign call the by-construction label penalizes. **Conclusion: LM under-calls are single-event ambiguity, not a reasoning gap.** | `triage-corpus/lm_deepdive.json` |
@@ -91,15 +91,15 @@ Provenance: `benchmark/learning_curve.json`. This *justifies* the corpus-collect
 
 ## H. Document map (the whole set, navigable)
 In this repo:
-- **Papers:** `prismpath/docs/papers/prismpath_paper_research.md` (research),
-  `prismpath/docs/papers/prismpath_whitepaper_engineering.md` (engineering).
-- **Specs:** `prismpath/SPEC_ledger_opentimestamps.md` (OTS — connected v1 + air-gap tier delivered),
-  `prismpath/SPEC_guard_onion.md` (the safety floor), `SPEC.md` (the format).
+- **Papers:** `docs/research/paper-routing-spectrum.md` (research),
+  `docs/research/whitepaper-engineering.md` (engineering).
+- **Specs:** `docs/design/spec-ledger-opentimestamps.md` (OTS — connected v1 + air-gap tier delivered),
+  `docs/design/spec-guard-onion.md` (the safety floor), `SPEC.md` (the format).
 - **Negative results:** §B of this ledger (the density/geometry thread — four pre-registered
   experiments, all failed their bars; the publishable negative result).
-- **On-ramp:** `prismpath/docs/papers/PRIMER_a_students_guide.md`.
-- **Use case:** `prismpath/PRISMPATH_USECASE_blue_team_soc_triage.md`.
-- **Bypass protocol:** `prismpath/BYPASS_MEASUREMENT.md` (pre-registered, per-stratum rates).
+- **On-ramp:** `docs/research/primer-students-guide.md`.
+- **Use case:** `docs/research/soc-triage-case-study.md`.
+- **Bypass protocol:** `docs/research/bypass-measurement.md` (pre-registered, per-stratum rates).
 
 Not in this repo (first-party, separate — see the provenance note at the top):
 - **Merge-ready paper outlines:** the ET-BERT research + engineering contribution outlines
@@ -202,7 +202,7 @@ served locally. No number here depends on a cloud API.
 
 ### agy-authored map — engine generalization proof (2026-07-23)
 
-**Claim:** the PrismPath maps-and-directions format is authorable by an INDEPENDENT frontier model (agy) from the spec (AUTHORING.md/SPEC.md) + a task description alone — not just by us.
+**Claim:** the PrismPath maps-and-directions format is authorable by an INDEPENDENT frontier model (agy) from the spec (docs/guides/authoring.md/SPEC.md) + a task description alone — not just by us.
 
 **Method:** agy (Antigravity CLI, user-driven) given the format rules + a NIST 800-171 assessment task spec, explicitly told NOT to read our flows; instructed to self-validate with `prismpath validate`. Output: flows/agy_800171_assessment.md.
 

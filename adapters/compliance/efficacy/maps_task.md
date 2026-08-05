@@ -10,7 +10,7 @@ engine.
 
 ## Step 1 — Learn the rules (read before writing)
 Read the normative authoring contract (paths from the repo root):
-  - prismpath/AUTHORING.md
+  - docs/guides/authoring.md
   - SPEC.md
 Note especially: node/edge syntax; the routing spectrum — deterministic `-> t: when <expr>` (also
 always/else) vs semantic `-> t: <natural language>` vs `-> t: on error ...` / `on event ...`;

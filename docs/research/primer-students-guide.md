@@ -1,7 +1,7 @@
 # The Cheapest Question First: A Student's Guide to PrismPath (and Why It Also Catches Hackers)
 
-*An on-ramp to the two big papers in this folder — `prismpath_paper_research.md` (the research paper)
-and `prismpath_whitepaper_engineering.md` (the engineering white paper). No CS degree required. If you
+*An on-ramp to the two big papers in this folder — `docs/research/paper-routing-spectrum.md` (the research paper)
+and `docs/research/whitepaper-engineering.md` (the engineering white paper). No CS degree required. If you
 can follow a recipe and you've argued with a chatbot, you're qualified. ~20 minute read.*
 
 *Written for a bright high-schooler or first-year undergraduate — originally so the author could

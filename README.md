@@ -134,12 +134,12 @@ to a real agent driving your own flow — honestly counted, every step executed 
   ["your flow compiles"](#your-flow-compiles--static-analysis), OTel decision spans into the
   Grafana/Jaeger/Datadog you already run — decision-level semantics (margin, escalated-or-not) as
   span attributes, not a new pane of glass to adopt.
-- **Security / compliance:** the [SOC triage case](prismpath/PRISMPATH_USECASE_blue_team_soc_triage.md)
+- **Security / compliance:** the [SOC triage case](docs/research/soc-triage-case-study.md)
   — prefilter reuse measured live, human-gated containment, ledger proofs, air-gap-friendly
   [portable subset](prismpath/portable/README.md).
 - **Process owner / PM:** the [playground](prismpath/portable/playground.html) and the
   [persona examples](prismpath/examples/README.md) — no terminal required. Contribute your own workflow (no code) to the [gallery](prismpath/gallery/README.md).
-- **Researcher:** the [benchmark](prismpath/benchmark/), the [papers](prismpath/docs/papers/), and the
+- **Researcher:** the [benchmark](prismpath/benchmark/), the [papers](docs/research/), and the
   [format spec](SPEC.md) with its machine-checkable conformance vectors.
 
 > **Commercial support & custom flows** — PrismPath is developed by Crystal Warden Labs; we build
@@ -169,7 +169,7 @@ It has two layers:
   built in; others load as plugins) are pluggable; the engine itself stays target-agnostic.
 
 > The thesis: **a human holds the vision; the swarm builds; gates — not prose — define done.**
-> See [FRAMEWORK.md](prismpath/FRAMEWORK.md) for the operating methodology and hard-won lessons.
+> See [docs/design/framework.md](docs/design/framework.md) for the operating methodology and hard-won lessons.
 
 ---
 
@@ -306,12 +306,12 @@ else:
 In a flow it's just a node with deterministic edges on the cached action — see
 [`prismpath/flows/wazuh_triage.md`](prismpath/flows/wazuh_triage.md) (`vector_prefilter`). **Measured live on SOC
 alert triage: ~59% of alerts auto-resolve at threshold 0.97 → ~2.4× capacity** before the LLM
-tier is touched ([use case](prismpath/PRISMPATH_USECASE_blue_team_soc_triage.md)).
+tier is touched ([use case](docs/research/soc-triage-case-study.md)).
 
 This is **use-as-needed, not an engine default** — nothing invokes it implicitly. It pays off
 only when one node dominates cost, inputs genuinely recur, and a prior verdict is still valid
 when the same input recurs; it is wrong for generative, novelty-heavy, or context-dependent
-nodes. See [AUTHORING.md](prismpath/AUTHORING.md) for the applicability test.
+nodes. See [docs/guides/authoring.md](docs/guides/authoring.md) for the applicability test.
 
 ### Your flow compiles — static analysis
 
@@ -474,7 +474,7 @@ Two reference adapters exercise the same ports:
 
 - **SOC triage** (`adapters/soc/`) — decomposed alert triage with the prefilter cache,
   human-gated containment, and Flow-Ledger proofs
-  ([use case](prismpath/PRISMPATH_USECASE_blue_team_soc_triage.md)).
+  ([use case](docs/research/soc-triage-case-study.md)).
 - **Compliance — NIST SP 800-171** (`adapters/compliance/`) — a
   full-breadth assessment adapter on the same ports: a **runtime-selectable dual catalog** (Rev 2 —
   110 controls / 14 families with DoD SPRS weights; Rev 3 — 130 / 17, official NIST OSCAL), a
@@ -566,23 +566,29 @@ prismpath/
 
 ## Docs
 
-- [ROADMAP.md](ROADMAP.md) — the public project roadmap and future vision.
+Long-form documentation lives in **[docs/](docs/README.md)** — start there for the index.
+
 - [SPEC.md](SPEC.md) — the format specification (grammar, tiers, predicate semantics, conformance).
-- [docs/FRONTIER_AGENT_INTEGRATION.md](prismpath/docs/FRONTIER_AGENT_INTEGRATION.md) — architectural guide for pairing PrismPath with Frontier AI Agents & LLMs.
-- [portable/README.md](prismpath/portable/README.md) — the browser/edge kernel, playground, conformance vectors.
-- [examples/README.md](prismpath/examples/README.md) — persona-curated example flows + the money demo.
-- [AUTHORING.md](prismpath/AUTHORING.md) — the flow authoring guide and the rules that govern the kernel.
-- [ARCHITECTURE.md](prismpath/ARCHITECTURE.md) — how the control plane fits together (data flow + the plugin seam).
-- [FRAMEWORK.md](prismpath/FRAMEWORK.md) — the operating methodology and hard-won lessons of running the swarm.
-- [docs/papers/prismpath_whitepaper_engineering.md](prismpath/docs/papers/prismpath_whitepaper_engineering.md) — the
-  technical white paper (engineering audience).
-- [docs/papers/prismpath_paper_research.md](prismpath/docs/papers/prismpath_paper_research.md) — the research
-  preprint (routing spectrum, measured results, stated limitations).
-- [PRISMPATH_USECASE_blue_team_soc_triage.md](prismpath/PRISMPATH_USECASE_blue_team_soc_triage.md) — a live,
-  measured deployment: SOC alert triage over a real SIEM.
-- `adapters/compliance/ADAPTER_CONTRACT.md` — the hexagonal port boundary + the compliance adapter's ports.
-- `adapters/compliance/TESTING.md` — the adapter testing methodology (deterministic + adversarial + property + opt-in live-model).
-- [docs/papers/SUPPORTING_EVIDENCE.md](prismpath/docs/papers/SUPPORTING_EVIDENCE.md) — the results ledger behind the attestation + adapter claims.
+- [ROADMAP.md](ROADMAP.md) — the public project roadmap and future vision.
+- [docs/guides/](docs/guides/) — [authoring](docs/guides/authoring.md) (the flow authoring
+  reference) · [frontier-agent integration](docs/guides/frontier-agent-integration.md) (pairing
+  PrismPath with frontier agents and LLMs).
+- [docs/design/](docs/design/) — [architecture](docs/design/architecture.md) (kernel, portable
+  kernels, control plane, the plugin seam) · [framework](docs/design/framework.md) (the operating
+  methodology) · [guard onion](docs/design/spec-guard-onion.md) and
+  [ledger anchoring](docs/design/spec-ledger-opentimestamps.md) (the two subsystem design specs).
+- [docs/research/](docs/research/) — [the primer](docs/research/primer-students-guide.md) (the
+  ideas, no CS degree required) · [research paper](docs/research/paper-routing-spectrum.md) ·
+  [engineering white paper](docs/research/whitepaper-engineering.md) ·
+  [supporting evidence](docs/research/supporting-evidence.md) (every claim → a measured result) ·
+  [bypass measurement](docs/research/bypass-measurement.md) (the pre-registered safety protocol) ·
+  [SOC triage case study](docs/research/soc-triage-case-study.md).
+
+Docs that live with the code they describe: [portable kernel](prismpath/portable/README.md) ·
+[examples](prismpath/examples/README.md) · [gallery](prismpath/gallery/README.md) ·
+[benchmark](prismpath/benchmark/README.md) · [comparisons](prismpath/comparisons/README.md) ·
+[editor surfaces](prismpath/editor/README.md) · [adapter standard](adapters/ADAPTER_GUIDE.md) ·
+`adapters/compliance/ADAPTER_CONTRACT.md` + `TESTING.md`.
 
 ## Running the tests
 

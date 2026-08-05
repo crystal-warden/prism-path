@@ -4,7 +4,7 @@ Thanks for looking. This project has an unusual property that shapes how contrib
 **the control flow is data**, so the highest-value contributions are often *checks on the data*
 (lint rules), *examples of the data* (gallery flows), or *implementations of the data's spec*
 (conformance-certified runtimes) — not features on the engine, which stays deliberately small
-and pure (see the invariants in [AUTHORING.md](prismpath/AUTHORING.md) §9 and the boundary rules in
+and pure (see the invariants in [docs/guides/authoring.md](docs/guides/authoring.md) §9 and the boundary rules in
 [SPEC.md](SPEC.md)).
 
 ## Setup

@@ -3,7 +3,7 @@
 A PrismPath **domain adapter** (the second reference adapter after SOC triage). It plugs into the
 engine's six ports with **no compliance vocabulary in the core** — see `ADAPTER_CONTRACT.md` for the
 port boundary and `TESTING.md` for how it's tested. Assessment claims are logged in the engine's
-`prismpath/docs/papers/SUPPORTING_EVIDENCE.md`.
+`docs/research/supporting-evidence.md`.
 
 Runs against the published `prismpath` core (`import prismpath`; `pip install -e ../..`). Live
 adjudication calls the served model at `PRISMPATH_LLM_ENDPOINT` (default `http://127.0.0.1:8888`).

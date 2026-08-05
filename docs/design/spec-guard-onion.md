@@ -1,6 +1,6 @@
 # SPEC — the Guard: the security half of the onion
 
-*Formal design spec for `prismpath/guard.py`. Companion to `SPEC_ledger_opentimestamps.md`, which
+*Formal design spec for `prismpath/guard.py`. Companion to `docs/design/spec-ledger-opentimestamps.md`, which
 covers the observability half. Crystal Warden Labs, 2026-07-29.*
 
 ---
@@ -104,7 +104,7 @@ The gate was: *until step 4 ships and a second implementation passes the corpus*
 **Status: the gate's conditions are met** — the frozen corpus ships (136 vectors) and an independent
 TypeScript implementation passes it, so the boundary is provably reproducible across two languages.
 What the gate unlocked is *cross-implementation reproducibility*, and **nothing more**: the wording
-above still stands, because §4's limits are unchanged and measured — `BYPASS_MEASUREMENT.md` publishes
+above still stands, because §4's limits are unchanged and measured — `docs/research/bypass-measurement.md` publishes
 the per-stratum bypass rates (`roleplay` 1.00 at every threshold that holds the benign bound;
 `translation` 0.98). Still not "verified safe", not "jailbreak-resistant", not "compliant with X".
-Same discipline as `SPEC_ledger_opentimestamps.md` §5 — the overclaim is what a regulator dismantles.
+Same discipline as `docs/design/spec-ledger-opentimestamps.md` §5 — the overclaim is what a regulator dismantles.

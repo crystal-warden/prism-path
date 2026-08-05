@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Air-gap attestation tier for the Flow-Ledger (task #53 / SPEC_ledger_opentimestamps.md §4, §6).
+"""Air-gap attestation tier for the Flow-Ledger (task #53 / docs/design/spec-ledger-opentimestamps.md §4, §6).
 
 Extends the connected OTS engine (ledger_ots.py, #36) to disconnected deployments — the DIB/OT/
 healthcare vertical where OTS calendars are unreachable. Implements the tiered, strongest-available
@@ -66,7 +66,7 @@ def override_manifest(prior, overrider_id, rationale, new_root_hex, new_label=No
     stays immutable; this binds its manifest_hash + the overrider + the rationale + the new decision, so
     the override trail is attested and auditable — who overrode what, when, and why, with the
     automated output PRESERVED, never erased. NOT "cryptographically provable": until the root is
-    OTS-anchored (SPEC_ledger_opentimestamps.md §1), an adversary with filesystem access can rewrite
+    OTS-anchored (docs/design/spec-ledger-opentimestamps.md §1), an adversary with filesystem access can rewrite
     the whole chain, and that spec's own §5 gates the stronger wording behind a passing
     stamp->upgrade->verify round-trip. Domain-neutral: a SOC analyst, a compliance auditor, or a
     reviewer superseding an automated call all use this same core capability."""

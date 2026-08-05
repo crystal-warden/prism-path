@@ -465,7 +465,7 @@ in a dedicated **`prismpath-Wallclock`** trailer, and the proof is content-addre
 order-independent **`prismpath-Output-Hash`** (`sha256_files`), *not* the SHA. Tamper-evidence is scoped
 to **accident**: any edit re-hashes the chain, so an incidental corruption is detected — but an
 adversary with filesystem access can rewrite the whole chain, so we do not claim adversarial
-integrity; anchoring the ref heads with **OpenTimestamps** is the honest adversarial upgrade — **connected v1 delivered** (`ledger_ots.py`: Merkle-batched `prismpath-Output-Hash`es → Bitcoin `ots stamp` → tamper-evident verify), and the **air-gap tier now also delivered** (`ledger_airgap.py`: batch-and-forward plus an internal **RFC-3161** trusted-timestamp path, validated fully offline). The tiering is honest about strength: the connected tier is trustless (Bitcoin); the air-gapped RFC-3161 tier **trusts a timestamp authority** and is never presented as Bitcoin-strength. See `SPEC_ledger_opentimestamps.md` and `SUPPORTING_EVIDENCE.md` §G. Every ref write is a **compare-and-swap** (`update-ref <new> <old>`); on a concurrent ref move
+integrity; anchoring the ref heads with **OpenTimestamps** is the honest adversarial upgrade — **connected v1 delivered** (`ledger_ots.py`: Merkle-batched `prismpath-Output-Hash`es → Bitcoin `ots stamp` → tamper-evident verify), and the **air-gap tier now also delivered** (`ledger_airgap.py`: batch-and-forward plus an internal **RFC-3161** trusted-timestamp path, validated fully offline). The tiering is honest about strength: the connected tier is trustless (Bitcoin); the air-gapped RFC-3161 tier **trusts a timestamp authority** and is never presented as Bitcoin-strength. See `docs/design/spec-ledger-opentimestamps.md` and `docs/research/supporting-evidence.md` §G. Every ref write is a **compare-and-swap** (`update-ref <new> <old>`); on a concurrent ref move
 it **re-reads the tip and rebuilds on it, retrying rather than dropping the proof** (`ledger.py`).
 
 **Done-ness is a projection, not a field.** `done_set()` folds the append-only log into `{unit →
@@ -942,6 +942,6 @@ consistent with venue AI-disclosure policy.
 static analyzer, bounded model checker, safety guard, lockfile, calibration, the data-plane tools,
 the three conformant portable kernels, evaluation harnesses, and the `comparisons/` head-to-head,
 plus example flows, plus the succession/scouting/suppression/flywheel/OTS engines and a
-**`SUPPORTING_EVIDENCE.md`** results ledger mapping every claim to a measured result + provenance,
+**`docs/research/supporting-evidence.md`** results ledger mapping every claim to a measured result + provenance,
 **negative results included** — the density/geometry thread, §B) are self-contained and small enough
 to audit end-to-end.*

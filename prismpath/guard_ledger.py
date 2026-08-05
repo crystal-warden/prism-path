@@ -29,7 +29,7 @@ WHAT THIS IS NOT *(vocabulary, per the standing rule)*
 ------------------------------------------------------
 This produces an **attested, auditable** trail. It is **not** tamper-evident against an adversary
 with filesystem access, because the underlying log is append-only by convention rather than by
-construction — the same limitation `audit_log.py` states about itself and `SPEC_ledger_opentimestamps.md`
+construction — the same limitation `audit_log.py` states about itself and `docs/design/spec-ledger-opentimestamps.md`
 §1 states about the un-anchored ledger. The word "cryptographic" does not belong in any description
 of this until OTS anchoring ships and a stamp→upgrade→verify round-trip has passed.
 """

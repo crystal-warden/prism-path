@@ -103,7 +103,7 @@ class PolicyError(ValueError):
 
 # ------------------------------------------------------------------------------- normalization
 #
-# Measured bypass rates (BYPASS_MEASUREMENT.md, run 1) showed the unhardened floor was defeated by
+# Measured bypass rates (docs/research/bypass-measurement.md, run 1) showed the unhardened floor was defeated by
 # purely mechanical surface changes: zero-width characters, combining accents, Cyrillic homoglyphs,
 # character spacing. Those are *normalization* problems, not semantic ones, so they can be closed
 # here — inside P0, with the floor still a grammar and bypass still inexpressible rather than merely
