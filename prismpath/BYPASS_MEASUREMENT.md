@@ -26,7 +26,7 @@ characterize nothing.**
 
 ## 2. Seeds
 
-Seeds are exactly the texts the frozen safety corpus (`portable/conformance/safety.json`) records as
+Seeds are exactly the texts the frozen safety corpus (`prismpath/portable/conformance/safety.json`) records as
 **denied by the floor**. Using the corpus rather than fresh phrases means the seeds are, by
 construction, the things the floor *claims* to stop — no seed is chosen because it happens to
 survive or happens to fail.
@@ -208,7 +208,7 @@ numbers. The hardening direction needs its own control exactly as the bypass dir
 
 Internal reports may cite any bypass verbatim; that is evidence. **Public-facing material selects
 its illustrative example from a tame rule** — a credential or scope rule demonstrates a homoglyph
-bypass exactly as well as a synthesis rule does. Journeyman's audience includes young learners and
+bypass exactly as well as a synthesis rule does. The consuming education product's audience includes young learners and
 their parents, and the documentation should not require a drug-synthesis string to make a point
 about Unicode.
 

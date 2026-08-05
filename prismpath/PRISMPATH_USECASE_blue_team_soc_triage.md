@@ -11,7 +11,7 @@ production firewall. Includes the benchmarks and capacity metrics captured to da
 A SOC alert-triage procedure is a decision graph: *observe → enrich → decide → contain-or-not →
 verify → report*. PrismPath lets you write that graph **as one markdown file** where each `## heading`
 is a step (its prose is the agent instruction) and each `-> target: when <predicate>` is an edge.
-We authored the blue-team playbook `flows/wazuh_triage.md` this way, backed it with an agent adapter
+We authored the blue-team playbook `prismpath/flows/wazuh_triage.md` this way, backed it with an agent adapter
 (`wazuh_triage_agent.py`) that reasons via a locally-served Gemma-4-31B, and ran it live against the
 homelab Wazuh hub. The payoff PrismPath specifically provides:
 
@@ -44,7 +44,7 @@ for them than a hand-coded state machine or an opaque agent loop:
 
 ---
 
-## 2. The flow — `flows/wazuh_triage.md` (annotated)
+## 2. The flow — `prismpath/flows/wazuh_triage.md` (annotated)
 
 ```
 observe → enrich → vector_prefilter → classify → stage_containment → verify_staged → report → end
@@ -164,10 +164,13 @@ a human approves a staged draft.
 ---
 
 ## 6. Reproduce / where things live (repo-relative)
-- Flow: `prismpath/flows/wazuh_triage.md`  ·  Adapter: `prismpath/wazuh_triage_agent.py`
+- Flow: `prismpath/flows/wazuh_triage.md`  ·  Adapter: `adapters/soc/wazuh_triage_agent.py`
+  (a Connector SDK consumer — `WazuhTriageConnector`; SIEM ingestion behind the
+  `adapters/soc/siem.py` port: Wazuh/Elastic/OpenSearch, NDJSON files for air-gap/replay)
 - Engine/routing: `prismpath/{engine,router,predicates,parser}.py`  ·  Gates: `prismpath/gates.py`
-- Pre-filter: `prismpath/prefilter.py` (generic `PrefilterCache`; seeding lives in the adapter:
-  `python wazuh_triage_agent.py seed | info`) (+ `measure_prefilter.py`)  ·  Routing evals: `prismpath/eval_hybrid_served.py`
+- Pre-filter: `prismpath/prefilter.py` (generic `PrefilterCache` + risk-controlled `tune()`; seeding
+  lives in the adapter: `python wazuh_triage_agent.py seed | info | labels`)
+  (+ `adapters/soc/measure_prefilter.py`)  ·  Routing evals: `prismpath/eval_hybrid_served.py`
 - Supply-lever A/B and the L2 detector live in internal lab repos (numbers reproduced in §4d/§4e).
 - Staged firewall drafts (never applied) and runtime state live outside the repo (`~/cw-staging/`).
 - Reasoning model: `model-gemma` container, `gemma4` @ `127.0.0.1:8888`.

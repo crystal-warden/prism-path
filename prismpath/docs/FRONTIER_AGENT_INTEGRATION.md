@@ -37,7 +37,7 @@ This architecture pairs the **determinism, auditability, and safety of PrismPath
 
 ---
 
-## 2. Four Core Integration Patterns
+## 2. Five Core Integration Patterns
 
 ### Pattern A: Any CLI as a Worker (`prismpath.cli_worker`)
 
