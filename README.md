@@ -98,6 +98,29 @@ history (zero-shot is the cold-start row). The external arms are more accurate o
 because they pay the model for *every* transition; if that's the right trade for you, see the
 box below.
 
+## Who wrote this — and why it shouldn't matter
+
+Much of this code was written by AI agents under a gated control plane — the same one this repo
+ships. Here are the vectors, the tests, and the reproducers, because the point of this project is
+that **correctness shouldn't depend on trusting the author**:
+
+- **[1,067 predicate + 27 engine conformance vectors](prismpath/portable/conformance/README.md)**,
+  frozen — passed independently by four kernels in four languages
+  ([Python](prismpath/engine.py), [JS](prismpath/portable/README.md),
+  [Rust](prismpath-rs/CONFORMANCE.md), [Go](prismpath-go/README.md)). Independent
+  re-implementations agreeing bit-for-bit is the one check a plausible-looking codebase can't fake.
+- **660+ tests** across the package and both adapters — [run them yourself](#running-the-tests).
+- **[Reproducers for every measured number](docs/research/supporting-evidence.md)** — each claim in
+  the papers maps to the script that produced it; the benchmark table above regenerates with one
+  command against your own endpoint.
+- **[Machine-enforced boundaries](tools/arch_guard.py)** — the operating rule is *never write a
+  completeness claim a gate doesn't enforce*, and it applies to the authors too: AI-written code
+  landed only after compiling, passing the suites, and surviving the gates, the same bar as
+  anything else.
+
+Verify the artifact, not the author's diligence — human or otherwise. That discipline is what this
+project *is*; this repo is simply its first user.
+
 ## Quickstart
 
 ```bash
