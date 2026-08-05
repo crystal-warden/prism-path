@@ -1,49 +1,55 @@
 """wazuh_triage_agent.py — agent adapter for flows/wazuh_triage.md (blue-team playbook, Mode 1).
 
-Bridges the prismpath kernel to the live Wazuh hub on this box:
-  observe  -> OpenSearch query against wazuh-alerts-* (indexer, :9200)
-  reason   -> served Gemma (vLLM OpenAI endpoint, 127.0.0.1:8888) — NOT llm_local,
-              which would load a second model onto the GPU next to the swarm
+Bridges the prismpath kernel to a SIEM through the **Connector SDK** and the **SIEM ingestion
+port** (siem.py):
+  observe  -> SOURCE.poll / query-DSL against the configured indexer (Wazuh/OpenSearch/
+              Elastic by env; NDJSON files for air-gap/replay; Splunk best-effort)
+  reason   -> the served model at PRISMPATH_LLM_ENDPOINT (default: local gemma4 — NOT
+              llm_local, which would load a second model onto the GPU next to the swarm)
   contain  -> writes a rule DRAFT to the staging dir for human approval; the
               verify_staged node is the gate: the file on disk is the definition
-              of done, not the model's claim. Nothing ever touches OPNsense.
+              of done, not the model's claim. Nothing ever touches the firewall.
 
-Runtime artifacts live outside the repo in ~/cw-staging/ (drafts, reports,
-watchlist, processed-alert state). Indexer credentials are read at runtime from
-the root-owned install bundle via sudo — never stored in this file or the repo.
+Runtime artifacts live outside the repo in SOC_STATE_DIR (default ~/cw-staging/). TLS
+verification to the indexer is ON by default (SIEM_VERIFY_TLS=0 opts out for self-signed
+homelabs); credentials come from SIEM_USER/SIEM_PASSWORD, with the legacy root-owned
+wazuh-install-files.tar extraction as the Wazuh fallback — never stored in this file.
 
 Run one triage cycle:  python wazuh_triage_agent.py
 Seed / inspect the prefilter corpus:  python wazuh_triage_agent.py seed | info
-Env: WAZUH_MIN_LEVEL (default 7) · TRIAGE_FLOW (default flows/wazuh_triage.md)
+Emit labeled decisions for `prefilter tune`:  python wazuh_triage_agent.py labels out.jsonl
+Env: WAZUH_MIN_LEVEL (7) · TRIAGE_FLOW · SIEM_KIND/SIEM_URL/SIEM_INDEX/SIEM_VERIFY_TLS
+     · SOC_STATE_DIR · PRISMPATH_LLM_ENDPOINT/PRISMPATH_LLM_MODEL
 """
 from __future__ import annotations
 
 import json
 import os
 import re
-import subprocess
 import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
 
 import requests
-import urllib3
-
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 from prismpath.parser import parse_file
 from prismpath.engine import run
 from prismpath.router import HybridRouter, LLMRouter
+from prismpath.connector import BaseConnector
 from prismpath.prefilter import PrefilterCache  # verdict memoization (auto-resolve near-identical alerts)
 from prismpath.ledger_runner import upsert_jsonl  # idempotent side-effect appends (replay-safe)
-from prismpath.checkpoint import _flow_hash  # content hash of the flow file -> the prefilter policy_hash
+from prismpath.checkpoint import flow_hash  # content hash of the flow file -> the prefilter policy_hash
 
-INDEXER = "https://127.0.0.1:9200"
-GEMMA = "http://127.0.0.1:8888/v1/chat/completions"
-GEMMA_MODEL = "gemma4"
+import siem
+
+LLM_ENDPOINT = os.environ.get("PRISMPATH_LLM_ENDPOINT", "http://127.0.0.1:8888/v1/chat/completions")
+LLM_MODEL = os.environ.get("PRISMPATH_LLM_MODEL", "gemma4")
 MIN_LEVEL = int(os.environ.get("WAZUH_MIN_LEVEL", "7"))
 FLOW = os.environ.get("TRIAGE_FLOW", str(Path(__file__).parent / "flows" / "wazuh_triage.md"))
+
+# The SIEM behind the port — selected by SIEM_KIND (wazuh | elastic | ndjson | splunk).
+SOURCE = siem.source_from_env()
 
 # --- measurement instrumentation ----------------------------------------------------
 GEMMA_CALLS: list = []   # {latency_s, prompt_tokens, completion_tokens, max_tokens}
@@ -64,7 +70,7 @@ VERDICT_SCHEMA = {
     "required": ["threat_class", "is_active_threat", "confidence", "recommended_action", "rationale"],
 }
 
-BASE = Path.home() / "cw-staging"
+BASE = Path(os.environ.get("SOC_STATE_DIR", str(Path.home() / "cw-staging"))).expanduser()
 DRAFTS = BASE / "opnsense-rule-drafts"
 REPORTS = BASE / "triage-reports"
 STATE_FILE = BASE / "triage_state.json"
@@ -80,7 +86,7 @@ CACHE = PrefilterCache(BASE / "prefilter_corpus")
 # lookups auto-skip verdicts learned under the old policy — a flow edit invalidates stale cache hits
 # without a manual purge. SHADOW_RATE routes that fraction of cache HITS through the LLM anyway and
 # compares: sustained disagreement quarantines the drifting entry. Set to 0 to disable the audit.
-POLICY_HASH = _flow_hash(FLOW)
+POLICY_HASH = flow_hash(FLOW)
 SHADOW_RATE = float(os.environ.get("PREFILTER_SHADOW_RATE", "0.05"))
 
 
@@ -105,55 +111,19 @@ def alert_key(alert: dict) -> str:
     return f"{alert.get('rule_id','')}|{alert.get('agent','')}|{alert.get('srcip') or 'none'}"
 
 
-# --- credentials (runtime-only, from the root-owned install bundle) -----------------
-def _indexer_auth() -> tuple[str, str]:
-    out = subprocess.run(
-        ["sudo", "tar", "-O", "-xf", str(Path.home() / "wazuh-install-files.tar"),
-         "wazuh-install-files/wazuh-passwords.txt"],
-        capture_output=True, text=True, check=True).stdout
-    pw, take = None, False
-    for line in out.splitlines():
-        if "indexer_username: 'admin'" in line:
-            take = True
-        elif take and "indexer_password:" in line:
-            pw = line.split("'")[1]
-            break
-    if not pw:
-        raise RuntimeError("could not locate admin indexer password in install bundle")
-    return "admin", pw
-
-
-_AUTH = None
-
-
-def _auth() -> tuple[str, str]:
-    """Lazy: only a live triage cycle needs the indexer; `seed`/`info` never
-    touch it (and shouldn't trigger a sudo prompt at import time)."""
-    global _AUTH
-    if _AUTH is None:
-        _AUTH = _indexer_auth()
-    return _AUTH
-
-
-# --- small helpers -------------------------------------------------------------------
+# --- small helpers (the SIEM port, kept under the old names so handlers read the same) --
 def _search(body: dict, size: int = 10) -> list[dict]:
-    r = requests.get(f"{INDEXER}/wazuh-alerts-*/_search?size={size}&sort=timestamp:desc",
-                     auth=_auth(), verify=False, json=body, timeout=15)
-    r.raise_for_status()
-    return r.json()["hits"]["hits"]
+    return SOURCE.search(body, size=size)
 
 
 def _count(body: dict) -> int:
-    r = requests.get(f"{INDEXER}/wazuh-alerts-*/_count", auth=_auth(), verify=False,
-                     json=body, timeout=15)
-    r.raise_for_status()
-    return r.json()["count"]
+    return SOURCE.count(body)
 
 
 def gemma(prompt: str, max_tokens: int = 8) -> str:
     t = time.time()
-    r = requests.post(GEMMA, json={
-        "model": GEMMA_MODEL, "temperature": 0, "max_tokens": max_tokens,
+    r = requests.post(LLM_ENDPOINT, json={
+        "model": LLM_MODEL, "temperature": 0, "max_tokens": max_tokens,
         "messages": [{"role": "user", "content": prompt}]}, timeout=120)
     dt = time.time() - t
     r.raise_for_status()
@@ -167,11 +137,11 @@ def gemma(prompt: str, max_tokens: int = 8) -> str:
 def gemma_json(prompt: str, schema: dict, max_tokens: int = 768) -> dict:
     """Schema-constrained call — vLLM guarantees valid JSON matching `schema`."""
     t = time.time()
-    body = {"model": GEMMA_MODEL, "temperature": 0, "max_tokens": max_tokens,
+    body = {"model": LLM_MODEL, "temperature": 0, "max_tokens": max_tokens,
             "messages": [{"role": "user", "content": prompt}],
             "response_format": {"type": "json_schema",
                                 "json_schema": {"name": "verdict", "schema": schema}}}
-    r = requests.post(GEMMA, json=body, timeout=120)
+    r = requests.post(LLM_ENDPOINT, json=body, timeout=120)
     dt = time.time() - t
     r.raise_for_status()
     j = r.json()
@@ -563,15 +533,51 @@ HANDLERS = {
 }
 
 
-def agent(node: str, instruction: str, state: dict):
-    handler = HANDLERS.get(node)
-    if handler is None:
+class WazuhTriageConnector(BaseConnector):
+    """The SOC triage adapter on the Connector SDK — the HANDLERS dict promoted onto the
+    six-port base. Dispatch (with `_worker` provenance stamped into every outcome) comes from
+    BaseConnector; the SIEM ingestion rides the siem.py port; attestation/deferral/sink come
+    with the base. A node without a handler degrades to a soft note (the flow keeps routing)
+    rather than the SDK's hard NotImplementedError — triage prefers a readable transcript over
+    a crash."""
+
+    def __init__(self):
+        super().__init__("soc.wazuh_triage", "1.0.0")
+        for name, fn in HANDLERS.items():
+            self.register_handler(name, fn)
+
+    def fallback(self, node: str, instruction: str, state: dict):
         return {"text": f"(no handler for node '{node}')"}
+
+
+CONNECTOR = WazuhTriageConnector()
+
+
+def agent(node: str, instruction: str, state: dict):
+    """Back-compat agent callable: the connector dispatch plus the per-node timing/logging the
+    metrics summary reads. Existing callers (main, run_ledgered_loop, tests) are unchanged."""
     t = time.time()
-    out = handler(state)
+    out = CONNECTOR.agent(node, instruction, state)
     NODE_TIMES.append({"node": node, "seconds": round(time.time() - t, 2)})
     print(f"  [{node}] ({NODE_TIMES[-1]['seconds']}s) {out['text'][:130]}")
     return out
+
+
+def emit_labels(out_path: str) -> dict:
+    """Write the adapter's past adjudications (drafts + benign + reports — the same parsers
+    seed_corpus uses) as labeled decisions for `python -m prismpath.prefilter tune --labels`:
+    one {"doc", "action"} row per de-duplicated adjudication. The tuner then derives the
+    risk-certified operating point from THIS deployment's own history."""
+    sources = _seed_from_drafts() + _seed_from_benign() + _seed_from_reports()
+    by_key = {}
+    for alert, action, conf in sources:
+        k = alert_key(alert)
+        if k not in by_key or conf > by_key[k][2]:
+            by_key[k] = (alert, action, conf)
+    with open(out_path, "w") as f:
+        for alert, action, _conf in by_key.values():
+            f.write(json.dumps({"doc": alert_document(alert), "action": action}) + "\n")
+    return {"labels": len(by_key), "path": out_path}
 
 
 def main_ledgered() -> int:
@@ -630,7 +636,10 @@ if __name__ == "__main__":
         print(json.dumps(seed_corpus(rebuild=True), indent=2))
     elif cmd == "info":
         print(json.dumps(CACHE.stats(), indent=2))
+    elif cmd == "labels":
+        out = sys.argv[2] if len(sys.argv) > 2 else str(BASE / "triage_labels.jsonl")
+        print(json.dumps(emit_labels(out), indent=2))
     elif cmd == "run":
         raise SystemExit(main())
     else:
-        print(f"unknown command: {cmd} (use: run | seed | info)")
+        print(f"unknown command: {cmd} (use: run | seed | info | labels)")
