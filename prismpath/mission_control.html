@@ -73,7 +73,7 @@ th{color:var(--ink)} .meta{font:11px var(--mono);color:var(--dim)}
   <span class=chip id=c-audit title="append-only action log">audit —</span>
  </div>
  <div class=tabs id=tabs>
-  <span class="tab on" data-v=control>Control</span><span class=tab data-v=lens>Lens</span><span class=tab data-v=queue>Queue</span>
+  <span class="tab on" data-v=control>Control</span><span class=tab data-v=lens>Lens</span><span class=tab data-v=queue>Queue</span><span class=tab data-v=flows>Flows</span>
   <span class=tab data-v=graph>Graph</span><span class=tab data-v=files>Files</span><span class=tab data-v=chat>Chat</span><span class=tab data-v=audit>Audit</span><span class=tab data-v=agy>agy</span>
  </div>
 </header>
@@ -185,6 +185,18 @@ th{color:var(--ink)} .meta{font:11px var(--mono);color:var(--dim)}
    <div id=queue-list style="margin-top:10px"><div class=muted>loading…</div></div>
   </div>
  </div>
+ <div class=view id=v-flows>
+  <div class=card>
+   <div class=row><span class=chip id=fo-count>—</span>
+    <span class=muted>fan-out composition, live — every @spawn parent with its join policy, progress, and each child's stop state. read-only: children advance via <code>prismpath compose</code>, never from here.</span></div>
+   <div id=fanout-list style="margin-top:10px"><div class=muted>loading…</div></div>
+  </div>
+  <div class=card id=fo-ckpt-card style="display:none">
+   <div class=row><b id=fo-ckpt-title>checkpoint</b><span style=flex:1></span>
+    <button class=qbtn onclick="$('#fo-ckpt-card').style.display='none'">close</button></div>
+   <pre id=fo-ckpt-body style="max-height:420px;overflow:auto;font-size:12px;margin:8px 0 0"></pre>
+  </div>
+ </div>
  <div class=view id=v-graph>
   <div class=grid style="grid-template-columns:1fr 320px;gap:12px">
    <div class=card style="position:relative;padding:0;min-height:550px">
@@ -221,7 +233,7 @@ let TAB='control', openK=new Set(), filesSig='', filesLoaded=false, curFile=null
 document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{TAB=t.dataset.v;
  document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('on',x===t));
  document.querySelectorAll('.view').forEach(v=>v.classList.toggle('on',v.id==='v-'+TAB));
- if(TAB==='files')loadFiles(true); if(TAB==='audit')loadAudit(); if(TAB==='agy')tickAgy(); if(TAB==='queue')loadQueue(); if(TAB==='graph')loadGraph(true); if(TAB==='lens'){tickLens();tickFlow();tickBalance();}});
+ if(TAB==='files')loadFiles(true); if(TAB==='audit')loadAudit(); if(TAB==='agy')tickAgy(); if(TAB==='queue')loadQueue(); if(TAB==='flows')loadFanouts(); if(TAB==='graph')loadGraph(true); if(TAB==='lens'){tickLens();tickFlow();tickBalance();}});
 function chip(id,txt,cls){const e=$('#'+id);e.textContent=txt;e.className='chip'+(cls?' '+cls:'');}
 async function jget(u){return (await fetch(u)).json();}
 async function jpost(u,b){return (await fetch(u,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b||{})})).json();}
@@ -444,6 +456,53 @@ async function decideQueue(id,choose){
  const r=await jpost('/api/queue/decide',{id:id,choose:choose});
  if(r&&r.ok){loadQueue();}else{alert('decide failed: '+((r&&r.error)||'unknown'));}
 }
+// --- flows tab: fan-out composition trees (read-only debugging surface) --------
+function foChip(stopped){
+ const cls=stopped==='terminal'?'ok':(stopped==='error'?'bad':(stopped==='waiting'||stopped==='needs_human')?'warn':'');
+ return '<span class="chip '+cls+'">'+esc(stopped||'?')+'</span>';
+}
+function foRender(fo,depth){
+ const p=fo.progress||{n:0,done:0};
+ const pct=p.n? Math.round(100*p.done/p.n):0;
+ const kids=(fo.children||[]).map(c=>{
+  const err=c.child_error?'<div class="muted" style="color:var(--bad);margin:2px 0 0 24px">'+esc(c.child_error)+'</div>':'';
+  const nested=c.fanout?foRender(c.fanout,depth+1):'';
+  return '<div class=row style="gap:8px;flex-wrap:wrap;margin:4px 0 0 '+(depth*18+18)+'px">'
+   +foChip(c.stopped)+'<code>'+esc(c.item_id)+'</code>'
+   +(c.node?'<span class=muted>at</span><code>'+esc(c.node)+'</code>':'')
+   +(c.done?'<span class="chip ok">done</span>':'')
+   +'<span style=flex:1></span>'
+   +'<button class=qbtn onclick="foCkpt(\''+esc(c.path)+'\')">ckpt</button></div>'+err+nested;
+ }).join('');
+ return '<div class=card style="margin:0 0 8px '+(depth*18)+'px">'
+  +'<div class=row style="gap:8px;flex-wrap:wrap">'+foChip(fo.stopped)
+  +'<b>'+esc((fo.flow||'').split('/').pop())+'</b>'
+  +'<span class=muted>@spawn</span><code>'+esc(fo.node||'')+'</code>'
+  +'<span class=muted>join</span><code>'+esc(fo.join)+(fo.gate?' gate='+esc(fo.gate):'')+'</code>'
+  +(fo.joined?'<span class="chip ok">joined</span>':'')
+  +'<span style=flex:1></span><span class=muted>'+fmtTs(fo.ts)+'</span></div>'
+  +'<div class=row style="gap:10px;margin:7px 0 0;align-items:center">'
+  +'<div style="flex:1;height:7px;border:1px solid var(--line);border-radius:99px;overflow:hidden">'
+  +'<div style="width:'+pct+'%;height:100%;background:var(--ok)"></div></div>'
+  +'<span class=chip>'+p.done+' / '+p.n+' done</span>'
+  +'<button class=qbtn onclick="foCkpt(\''+esc(fo.path)+'\')">parent ckpt</button></div>'
+  +kids+'</div>';
+}
+async function loadFanouts(){
+ let d;try{d=await jget('/api/fanouts');}catch(e){return;}
+ const fos=(d&&d.fanouts)||[];
+ chip('fo-count', fos.length? fos.length+' fan-out'+(fos.length>1?'s':'') : 'none');
+ const box=$('#fanout-list');
+ if(!fos.length){box.innerHTML='<div class=muted>no fan-outs in the queue — a flow suspends here when a worker returns a spawn spec</div>';return;}
+ box.innerHTML=fos.map(fo=>foRender(fo,0)).join('');
+}
+async function foCkpt(path){
+ let d;try{d=await jget('/api/fanout/ckpt?path='+encodeURIComponent(path));}catch(e){return;}
+ if(d.error){alert(d.error);return;}
+ $('#fo-ckpt-title').textContent=path.split('/').pop();
+ $('#fo-ckpt-body').textContent=JSON.stringify(d.checkpoint,null,2);
+ $('#fo-ckpt-card').style.display='';
+}
 async function loadGraph(force){if(TAB!=='graph'&&!force)return;
  let d;try{d=await jget('/api/flow/graph');}catch(e){return;}
  if(d.error){$('#graph-nodes').innerHTML='<div class=muted style="padding:20px">'+esc(d.error)+'</div>';return;}
@@ -518,5 +577,6 @@ setInterval(tickFiles,2000);setInterval(tickBalance,2500);
 setInterval(()=>{if(TAB==='audit')loadAudit();},4000);
 setInterval(()=>{if(TAB==='agy')tickAgy();},2000);
 setInterval(()=>{if(TAB==='queue')loadQueue();},3000);
+setInterval(()=>{if(TAB==='flows')loadFanouts();},3000);
 setInterval(()=>{if(TAB==='graph')loadGraph(false);},3000);
 </script></body></html>

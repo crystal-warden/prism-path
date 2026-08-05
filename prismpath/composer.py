@@ -314,6 +314,95 @@ def advance_fanout(parent_ckpt_path: str, agent, router=None,
     return rec
 
 
+# --- fan-out observability (read-only) ------------------------------------------------
+def _child_brief(cpath: str, cp: dict) -> dict:
+    """One child's debug-relevant surface: identity, where it stopped (and why, when it
+    errored), and its latest node — everything the queue-side observer needs without the
+    flow's agent."""
+    state = cp.get("state") or {}
+    return {
+        "item_id": state.get("_item_id") or os.path.splitext(os.path.basename(cpath))[0],
+        "stopped": cp.get("stopped"),
+        "node": cp.get("pending_node"),
+        "child_error": cp.get("child_error"),
+        "flow": cp.get("flow_path"),
+        "ts": cp.get("saved_at"),
+        "path": cpath,
+    }
+
+
+def _fanout_record(parent_path: str) -> Optional[dict]:
+    """The read-only fan-out tree rooted at one checkpoint: spec (annotation-reconciled), join
+    policy + progress, and every child's brief — recursing into children that are themselves
+    fan-outs (nested composition). None when the checkpoint isn't fan-out-shaped at all."""
+    try:
+        cp = load_checkpoint(parent_path)
+    except Exception:                                    # noqa: BLE001 - unreadable — not ours
+        return None
+    pend = cp.get("pending_decision") or {}
+    spec = pend.get("spawn")
+    node = pend.get("node") or cp.get("pending_node")
+    spawned_state = (cp.get("state") or {}).get("_spawned") or {}
+    cdir = _children_dir(parent_path)
+    has_children = os.path.isdir(cdir)
+    if spec is None and not spawned_state and not has_children:
+        return None                                      # ordinary checkpoint, not a fan-out
+    if spec is None and spawned_state and node is None:
+        node = next(iter(spawned_state), None)           # post-join: name the fan-out node
+    eff, _graph = _effective_spec(cp, node, spec or {})
+    gate = eff.get("gate")
+    join = (eff.get("join") or "all_done").strip()
+
+    children: List[dict] = []
+    if has_children:
+        for cpath in sorted(glob.glob(os.path.join(cdir, "*.json"))):
+            try:
+                ccp = load_checkpoint(cpath)
+            except Exception:                            # noqa: BLE001
+                continue
+            brief = _child_brief(cpath, ccp)
+            brief["done"] = _child_done(ccp, gate)
+            nested = _fanout_record(cpath)               # a child may itself fan out
+            if nested is not None:
+                brief["fanout"] = nested
+            children.append(brief)
+
+    n = len(children)
+    done = sum(1 for c in children if c["done"])
+    return {
+        "path": parent_path,
+        "flow": cp.get("flow_path"),
+        "node": node,
+        "stopped": cp.get("stopped"),
+        "ts": cp.get("saved_at"),
+        "join": join,
+        "join_event": predicates.spawn_join_event(join),
+        "gate": gate,
+        "child_flow": eff.get("child"),
+        "progress": {"n": n, "done": done,
+                     "terminal": sum(1 for c in children if c["stopped"] == "terminal")},
+        "joined": bool(spawned_state),
+        "children": children,
+    }
+
+
+def fanout_tree(qdir: Optional[str] = None) -> List[dict]:
+    """Every fan-out in a queue dir as a nested, READ-ONLY tree — the observability half of the
+    harness (Mission Control's Flows tab renders this). Reports ALL child stop states (waiting /
+    needs_human / error / terminal / …), join progress against the declared policy, and
+    `child_error` reasons — unlike `checkpoint.list_queue`, which only surfaces `needs_human`.
+    Never writes, never resumes, never needs the flow's agent."""
+    qdir = qdir or checkpoint.queue_dir()
+    out: List[dict] = []
+    for path in sorted(glob.glob(os.path.join(qdir, "*.json"))):
+        if not os.path.isfile(path):
+            continue
+        rec = _fanout_record(path)
+        if rec is not None:
+            out.append(rec)
+    return out
+
+
 def advance_fanouts(agent, qdir: Optional[str] = None, router=None,
                     human_floor: Optional[float] = None) -> List[dict]:
     """Scan a queue dir once and advance every `waiting` parent that carries a `spawn` spec. Returns

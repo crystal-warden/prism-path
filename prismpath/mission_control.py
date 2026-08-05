@@ -776,6 +776,18 @@ class H(BaseHTTPRequestHandler):
             elif path == "/api/queue":                      # runs suspended for a human decision
                 from prismpath import checkpoint as _ckpt
                 self._send({"items": _ckpt.list_queue()})
+            elif path == "/api/fanouts":                    # fan-out composition trees (read-only)
+                from prismpath import composer as _composer
+                self._send({"fanouts": _composer.fanout_tree()})
+            elif path == "/api/fanout/ckpt":                # one raw checkpoint, queue-dir-confined
+                from prismpath import checkpoint as _ckpt
+                qroot = os.path.realpath(_ckpt.queue_dir())
+                rp = os.path.realpath(q.get("path", ""))
+                if not rp.startswith(qroot + os.sep) or not rp.endswith(".json"):
+                    self._send({"error": "path escapes the queue dir"})
+                    return
+                with open(rp, encoding="utf-8") as f:
+                    self._send({"path": q.get("path", ""), "checkpoint": json.load(f)})
             else:
                 self._send({"error": "not found"})
         except Exception as e:
