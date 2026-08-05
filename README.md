@@ -568,6 +568,9 @@ prismpath/
 
 Long-form documentation lives in **[docs/](docs/README.md)** — start there for the index.
 
+- [docs/decoder-ring.md](docs/decoder-ring.md) — **the glossary and repo map.** Every borrowed
+  term in plain language, plus where every document, module, kernel, and command lives. The
+  fastest way in if the papers get jargon-heavy.
 - [SPEC.md](SPEC.md) — the format specification (grammar, tiers, predicate semantics, conformance).
 - [ROADMAP.md](ROADMAP.md) — the public project roadmap and future vision.
 - [docs/guides/](docs/guides/) — [authoring](docs/guides/authoring.md) (the flow authoring

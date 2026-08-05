@@ -80,7 +80,7 @@ prismpath = ["flows/*.md",                    # example + reference flows
 # preserved; flattened, every cross-doc link in the installed tree would dangle.
 [tool.setuptools.data-files]
 "share/doc/prismpath" = ["README.md", "SPEC.md", "GETTING_STARTED.md", "ROADMAP.md"]
-"share/doc/prismpath/docs" = ["docs/README.md"]
+"share/doc/prismpath/docs" = ["docs/*.md"]          # index + decoder ring
 "share/doc/prismpath/docs/guides" = ["docs/guides/*.md"]
 "share/doc/prismpath/docs/design" = ["docs/design/*.md"]
 "share/doc/prismpath/docs/research" = ["docs/research/*.md"]

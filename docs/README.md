@@ -4,6 +4,11 @@ Long-form documentation lives here, in three groups. Start at the repo root if y
 [`README.md`](../README.md) is the front door and [`GETTING_STARTED.md`](../GETTING_STARTED.md)
 is the walk from "what's this?" to a running flow.
 
+> **[decoder-ring.md](decoder-ring.md)** — every borrowed term (Wilson interval, selective
+> classification, match-action fragment, hexagonal ports) explained in plain language, plus an
+> index of every document, module, kernel, and CLI command in the repo. Start here if a paper
+> loses you, or if you're looking for where something lives.
+
 ## guides/ — how to use it
 
 | doc | what it covers |
