@@ -253,6 +253,15 @@ Understand the bug report and decide what to do next.
 -> implement: the bug is reproduced and the root cause is clear
 -> gather_info: it cannot be reproduced or more information is needed
 -> close: it is a duplicate or invalid
+
+## implement
+Write or revise the fix.
+
+## gather_info
+Ask the reporter for what is missing.
+
+## close
+Close the report with a reason.
 ```
 
 The engine is agent-agnostic. The **agent contract** is a single callable:

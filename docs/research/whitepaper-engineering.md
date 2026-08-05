@@ -207,6 +207,12 @@ Review the change.
 
 ## done
 Summarize and finish.
+
+## gather_info
+Ask the reporter for what is missing.
+
+## close
+Close the report with a reason.
 ```
 
 Read it top to bottom and you understand the whole process. Note `## implement` mixes tiers: two

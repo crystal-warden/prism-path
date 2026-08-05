@@ -111,7 +111,30 @@ spec-stable.
   `--drop-invalid` and `--split-compound FLOW/NODE` modes), `prismpath/benchmark/parse_annotate_transcript.py`
   — the reproducible second-annotator pipeline around `prismpath annotate` / `prismpath kappa`.
 
+- **`docs/decoder-ring.md` — the glossary and repo map.** Every term the papers borrow from
+  statistics, formal methods, and distributed systems, explained in plain language: the Wilson
+  interval (and why it is read from both ends), selective classification and abstention, δ vs τ,
+  Learn-Then-Test and why this is *not* conformal prediction, James-Stein shrinkage, Cohen's κ,
+  the match-action fragment and one-sided soundness, hexagonal ports, Merkle batching. Plus an
+  A–Z glossary, an index of every document / kernel / CLI command / module, and ordered reading
+  paths. Caveats travel with their concepts — the κ entry states that 0.961 is the author agreeing
+  with the author's own labeling process, not inter-annotator reliability — so a reader who never
+  opens a paper still can't over-claim from it.
+
 ### Changed
+- **Documentation consolidated into a top-level `docs/` tree** — the 12 standalone documents were
+  scattered across the repo root, the package dir, and `prismpath/docs/papers/`; they now live in
+  `docs/{guides,design,research}/` with kebab-case names. Deliberately *not* moved: files tooling
+  reads at the root only (README, LICENSE, CITATION.cff, action.yml), the community-health files
+  GitHub surfaces in its UI, SPEC/GETTING_STARTED/ROADMAP as normative text and entry points,
+  subsystem READMEs (a README documents its own directory), and program data that merely looks
+  like docs (`flows/`, `gallery/`, `nudges/`, `policies/statutory_floor.md`,
+  `tests/fixtures/broken/`). `prismpath/docs/` is gone, so the package dir holds only code and
+  runtime data. All 12 moves preserve `git log --follow` history; every relative link re-resolved
+  (0 broken across 108 files) and 53 bare-path prose citations rewritten.
+- **Docs ship in the wheel** under `share/doc/prismpath/`, mirroring the repo layout rather than
+  flattened — flattening collides `README.md` with `docs/README.md` and dangles every relative
+  cross-doc link. New `MANIFEST.in` carries the same set into sdists.
 - **The roblox plugin is gone** (deep excision): the game-dev-origin gate plugin (~9 MB incl. its
   RAG index) was never meant to fuse into PrismPath. The sprint control plane is now fully
   target-generic; the council deliberation expansion stays. `plugins.load_gate` no longer aliases
@@ -120,6 +143,32 @@ spec-stable.
   reference sites now resolve it `__file__`-relative (CWD-independent).
 
 ### Fixed
+- **The wheel was missing files shipped code opens** — `package-data` omitted
+  `prismpath/policies/statutory_floor.md` (loaded by `guard`, `measure_p1`, `bypass_report` and
+  three test modules) and `prismpath/tests/fixtures/broken/*.md` (read by `test_analysis`). Present
+  in the repo, absent from an installed wheel. Both now declared, along with `policies/*.json`.
+- **`tools/docs_health.py` failed silently on a stale path** — the evidence-ledger location was
+  hardcoded behind an `if os.path.exists(...) else ""`, so a wrong path degraded into reporting
+  *every* task and artifact as a coverage gap with no error. Repointed, and it now asserts loudly
+  rather than degrading.
+- **`tools/arch_guard.py` recreated the directory the reorganization removed** — it wrote its
+  scorecard into `prismpath/docs/`. Now writes `docs/design/arch-scorecard.md`, git-ignored, with
+  `tools/arch_scorecard.json` remaining the committed artifact. Also caught a genuine **Signal-1
+  HARD FAIL** it had not been run against: a Connector SDK docstring used "FPGA", a registered
+  sensor-domain noun, inside core. Reworded; Signal-1 passes with 0 violations.
+- **The README's headline example did not compile** — the front-page `support_triage` flow routed
+  to `billing`, `retention`, and `general` without defining them: three `undefined-target` errors,
+  in the showcase for a project whose headline feature is "your flow compiles." The three terminal
+  nodes are now present, and the Mermaid beside it is verbatim `prismpath graph` output rather than
+  a hand-drawing captioned as tool output. A sweep now validates every self-contained flow snippet
+  in the docs; the two paper excerpts it also caught are fixed, and the annotated anatomy diagrams
+  in SPEC.md / authoring.md are correctly exempt.
+- **The mdflow → prismpath rename had corrupted both papers** — a blanket substitution overwrote a
+  *third party's* project name in Related Work ("Lindquist's `prismpath` task runner, unrelated to
+  this system"), destroying the attribution and inverting the disambiguation. Restored to `mdflow`
+  with a note that explains itself. Also 11 uncopyable commands (`python -m PrismPath.cli`, the
+  whitepaper's entire CLI reference block) and two article artifacts ("an PrismPath author"). The
+  research paper had been using the correct lowercase form 12 times elsewhere.
 - **OTS anchoring read the wrong ledger** — `ledger_ots.from_ledger()` defaulted to the
   pre-rename `refs/mdflow/runs` namespace and `Mdflow-Output-Hash` trailer key, which the ledger
   writer never produces; `prismpath ledger anchor` always found nothing. Now matches `ledger.py`

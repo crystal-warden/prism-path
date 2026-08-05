@@ -32,20 +32,38 @@ Read the incoming support ticket. Emit `category`, `amount`, and `sentiment`.
 ## human_review
 A person decides. High-value billing disputes are never auto-routed.
 
+## billing
+Apply the standard billing workflow.
+
 ## outage
 Page the on-call engineer.
+
+## retention
+Hand off to the retention team.
+
+## general
+Answer from the support knowledge base.
 ```
 
-That file **is** the program. The same document, as the engine sees it (`prismpath graph`):
+That file **is** the program. The same document, as the engine sees it — this is verbatim
+`prismpath graph` output, not a drawing:
 
 ```mermaid
-graph TD
-  classify["classify"]
-  classify -->|"amount > 500 …"| human_review(["human_review"])
-  classify -->|"category in (billing, …)"| billing(["billing"])
-  classify -->|"category == outage"| outage(["outage"])
-  classify -->|"sentiment == angry"| retention(["retention"])
-  classify -->|"else"| general(["general"])
+flowchart TD
+    _start(( )) --> classify
+    classify["classify"]
+    human_review(["human_review"])
+    billing(["billing"])
+    outage(["outage"])
+    retention(["retention"])
+    general(["general"])
+    classify -->|"when category == 'billing_dispute' and amou…"| human_review
+    classify -->|"when category in ('billing', 'billing_dispu…"| billing
+    classify -->|"when category == 'outage'"| outage
+    classify -->|"when sentiment == 'angry'"| retention
+    classify -->|"else"| general
+    classDef terminal fill:#e6f7ec,stroke:#3aa76d;
+    class human_review,billing,outage,retention,general terminal;
 ```
 
 And because the flow is data, **a pull request is a process change**: the `human_review` rule
