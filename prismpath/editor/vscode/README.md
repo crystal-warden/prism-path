@@ -17,12 +17,12 @@ Three things, all thin wrappers over the repo's own tooling:
 ## Run it from the repo (no build)
 
 Open this repo in VS Code → Run and Debug → **Run Extension** (or `code --extensionDevelopmentPath
-editor/vscode`). In dev mode the preview reads `../../portable/` directly — no copies.
+prismpath/editor/vscode`). In dev mode the preview reads `../../portable/` directly — no copies.
 
 ## Package it
 
 ```bash
-cd editor/vscode
+cd prismpath/editor/vscode
 npm test                 # grammar tier-classification tests + syntax checks
 npx @vscode/vsce package # runs the sync script, emits prismpath-flows-0.1.0.vsix
 ```
@@ -32,5 +32,7 @@ carries duplicates). Marketplace publication is launch-gated with everything els
 
 ## Other editors
 
-The grammar (`syntaxes/prismpath.injection.json`) is plain TextMate — Sublime, Zed, and TextMate-lineage
+Any LSP-capable editor (Neovim, JetBrains, Zed, …) gets diagnostics/completion/hover from
+`prismpath lsp` instead — see [`../README.md`](../README.md). For highlighting alone:
+the grammar (`syntaxes/prismpath.injection.json`) is plain TextMate — Sublime, Zed, and TextMate-lineage
 editors can consume it directly; the semantic anchor is the scope names (`*.prismpath`).

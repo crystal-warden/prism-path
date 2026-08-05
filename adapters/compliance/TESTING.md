@@ -3,11 +3,12 @@
 Run from `adapters/compliance/`:
 
 ```bash
-~/cwprojects/prismpath/.venv/bin/python -m pytest        # fast, deterministic, no gemma (default)
-~/cwprojects/prismpath/.venv/bin/python -m pytest -m gemma   # opt-in live-gemma integration (slow)
+python -m pytest             # fast, deterministic, no live model (default)
+python -m pytest -m gemma    # opt-in live-model integration (slow)
 ```
 
-The venv (`prismpath/.venv`) has `pytest`, `hypothesis`, `jsonschema`; the core package is installed editable so `from prismpath import ...` resolves. `pytest.ini` deselects `gemma`-marked tests by default so the everyday run is fast and deterministic.
+The environment needs `pytest`, `hypothesis`, `jsonschema`, and the core package installed
+editable (`pip install -e ../..`) so `from prismpath import ...` resolves. `pytest.ini` deselects `gemma`-marked tests by default so the everyday run is fast and deterministic.
 
 ## Layers (depth, not just happy path)
 
@@ -22,6 +23,7 @@ The venv (`prismpath/.venv`) has `pytest`, `hypothesis`, `jsonschema`; the core 
 ## What it caught
 The empty-`observations` bug: when every control is met, the POA&M emitted an empty `observations` array, which OSCAL rejects (minItems 1 if present). The happy-path demos always included a not-met control, so this only surfaced under the all-met / property tests. Fixed by omitting empty optional arrays.
 
-## Counts (2026-07-22)
-- Core suite: **379** tests (373 passed, 6 skipped — git/env gated).
-- Adapter: **86** (83 deterministic + 3 opt-in gemma), all green.
+## Counts (2026-08-05)
+- Core suite: **523** tests, all green.
+- Adapter: **135** (131 deterministic — including the Connector SDK migration-parity tests —
+  + 4 opt-in live-model), all green.

@@ -11,29 +11,32 @@ applied** — a human approves every action.
 
 | file | role |
 |---|---|
-| `wazuh_triage_agent.py` | the adapter: Ingestion (Wazuh search), Retrieval (detection knowledge), the **prefilter** cheap-gate, the per-tactic Adjudicator agent, Sink (finding + staged containment), Attestation (Flow-Ledger `@checkpoint`) |
+| `wazuh_triage_agent.py` | the adapter — a **Connector SDK** consumer (`WazuhTriageConnector`): Retrieval (detection knowledge), the **prefilter** cheap-gate, the per-tactic Adjudicator agent, Sink (finding + staged containment), Attestation (Flow-Ledger `@checkpoint`); `labels` emits adjudication history for `prefilter tune` |
+| `siem.py` | the **SIEM ingestion port**: `ElasticSource` (any Elasticsearch/OpenSearch indexer, env-configured, TLS verified by default), `WazuhSource`, `NDJSONFileSource` (air-gap/replay), `SplunkSource` (best-effort) — selected by `SIEM_KIND` |
 | `measure_prefilter.py` | escalation-reduction measurement for the vector prefilter (static + streaming self-learning rates) |
 | `flows/wazuh_triage.md` | the triage map (prefilter → signature gate → adjudicate → stage/watch/benign) |
 | `flows/wazuh_triage_decomposed.md` | the decomposed map: route by **MITRE ATT&CK tactic** into per-tactic escalation-default adjudicators |
 | `tests/` | deterministic flow-structure tests; live-SIEM adjudication is opt-in |
 
 ## How it maps the six ports (see ADAPTER_CONTRACT.md)
-Ingestion = Wazuh indexer search · Retrieval = detection knowledge + the prefilter corpus ·
+Ingestion = the `siem.py` SIEMSource port · Retrieval = detection knowledge + the prefilter corpus ·
 **cheap gate** = `PrefilterCache` (≈59% auto-resolve, measured) · Adjudicator = per-tactic decision
 (`contain`/`watch`/`ignore`) · Sink = finding + **staged** containment · Attestation = Flow-Ledger.
 
 ## Quick start
 ```bash
-PP=~/cwprojects/prismpath/.venv/bin/python
-$PP -m prismpath.cli validate flows/wazuh_triage_decomposed.md   # the map compiles
-$PP -m pytest tests -q                                           # deterministic flow-structure tests
-# live (needs the Wazuh hub + served model):
+# from this directory, with the repo's package installed (pip install -e ../..)
+python -m prismpath.cli validate flows/wazuh_triage_decomposed.md   # the map compiles
+python -m pytest tests -q                                           # deterministic tests (stubbed HTTP)
+# live (needs a reachable SIEM + served model):
 python wazuh_triage_agent.py seed        # seed/inspect the prefilter corpus
 TRIAGE_FLOW=flows/wazuh_triage.md python wazuh_triage_agent.py   # one triage pass (report-only, Mode 1)
 ```
 
-> Live operation needs the Wazuh indexer (auth via `sudo`, read at runtime), a served model at
-> `:8888`, and the ET-BERT flow embedder for the Layer-2 signal. See
+> Live operation needs a SIEM behind the `siem.py` port (`SIEM_KIND`; credentials via
+> `SIEM_USER`/`SIEM_PASSWORD`, TLS verified by default — the legacy Wazuh install-tar extraction is
+> the opt-in fallback), a served model at `PRISMPATH_LLM_ENDPOINT`, and the ET-BERT flow embedder
+> for the Layer-2 signal. `deploy/systemd/cw-triage.*` runs it on a timer. See
 > `../../prismpath/PRISMPATH_USECASE_blue_team_soc_triage.md` for the measured deployment.
 
 > **Flows are symlinks** to the canonical engine-reference flows in `prismpath/flows/` (the SOC

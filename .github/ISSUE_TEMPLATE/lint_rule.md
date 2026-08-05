@@ -6,7 +6,7 @@ labels: good first issue, lint
 
 **The mistake it catches.** A flow-authoring error a real author makes.
 
-**A broken flow that triggers it** (goes in `tests/fixtures/broken/`):
+**A broken flow that triggers it** (goes in `prismpath/tests/fixtures/broken/`):
 
 ```markdown
 
