@@ -31,7 +31,8 @@
     "fuzz_predicates.py",
     "prefilter.py",
     "deferral.py",
-    "cli.py"
+    "cli.py",
+    "connector.py"
   ],
   "adapters": {
     "soc": {

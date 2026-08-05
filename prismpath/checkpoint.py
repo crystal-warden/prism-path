@@ -33,14 +33,19 @@ from prismpath.parser import parse_file
 CHECKPOINT_VERSION = 1
 
 
-def _flow_hash(flow_path) -> str:
-    """Content hash of the flow file — bound into the checkpoint so a resume can detect that the
-    .md was edited while the run was suspended."""
+def flow_hash(flow_path) -> str:
+    """Content hash of the flow file — the run's POLICY HASH. Bound into the checkpoint so a
+    resume can detect that the .md was edited while the run was suspended, and bound into
+    attestation manifests so a decision is provably tied to the exact flow version that made it
+    (the Connector SDK's `attest_decision` uses it as `policy_hash`)."""
     try:
         with open(flow_path, "rb") as f:
             return "sha256:" + hashlib.sha256(f.read()).hexdigest()
     except OSError:
         return ""
+
+
+_flow_hash = flow_hash          # back-compat alias (pre-SDK callers import the private name)
 
 
 class CheckpointError(Exception):
