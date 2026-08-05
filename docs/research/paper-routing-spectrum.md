@@ -71,8 +71,9 @@ first-class, diffable artifact — it is scattered across function definitions.
 
 **Task-level Markdown runners.** A complementary family of tools treats a *single task* as a
 Markdown document — frontmatter selecting the engine and its flags, prose as the prompt — executed
-by a CLI (e.g. Lindquist's `prismpath` task runner, unrelated to this system). These operate one
-layer below us and compose naturally: such a runner can serve as a node's *worker* through the
+by a CLI (e.g. Lindquist's `mdflow` task runner — no relation, though this system carried that name
+before it was renamed to PrismPath). These operate one layer below us and compose naturally: such a
+runner can serve as a node's *worker* through the
 generic CLI-worker contract (stdout as outcome, exit codes onto the error tier), while our system
 routes *between* tasks by outcome. The layering — every task a document, the workflow over them a
 document — is complementary, not competing.
@@ -126,7 +127,7 @@ no model, and translate a foreign code graph into it. We contribute:
 encode control flow as code. PrismPath keeps the graph as a declarative, human-owned document and makes
 *routing* the pluggable concern. This is not merely a stylistic choice: PrismPath ships a **one-way
 importer** (`prismpath import` — the `prismpath` command throughout this paper is the `console_scripts`
-entry point `prismpath = prismpath.cli:main` from `pip install prismpath`; equivalently `python -m PrismPath.cli
+entry point `prismpath = prismpath.cli:main` from `pip install prismpath`; equivalently `python -m prismpath.cli
 <cmd>`) that walks a LangGraph `StateGraph`'s
 Python AST — `add_node` /
 `add_edge` / `set_entry_point` / `add_conditional_edges` — into a skeleton flow, mechanically
@@ -635,7 +636,7 @@ to 0.83 overall (+0.14)** and — the targeted claim — from **0.52 to 0.75 (+0
 stratum**, exactly the confidently-wrong class the margin cannot escalate. An ablation confirms the
 gain is the learned prototypes, not the embedding-space change (passage-space alone *hurts*, −0.03),
 and the result is robust across shrinkage priors. Because centroids are unit vectors like any other
-committed condition embedding, they **pin in the routing lockfile** (`PrismPath lock --centroids
+committed condition embedding, they **pin in the routing lockfile** (`prismpath lock --centroids
 <labeled.jsonl>` commits the shrunk vectors), making the learned improvement bit-for-bit
 reproducible rather than an artifact of a mutable corpus. The escalation tier thereby becomes a
 *teacher*: every LLM repair and human label enriches the prototypes that let the cheap tier answer
@@ -714,14 +715,14 @@ accuracy gap to PrismPath narrows as the benchmark grows. Second, **83.7% is an 
 ceiling**: because PrismPath exposes δ (and the risk-controlled τ of §4.3), the same system trades toward
 ~99% at a higher call rate; the other three arms have no such dial. Determinism did not separate the
 arms on this suite/model (gemma4 was deterministic across the 2 repeats at temperature 0.0, the config
-we measured; it is re-runnable at other temperatures via `python -m PrismPath.comparisons.run_comparison
+we measured; it is re-runnable at other temperatures via `python -m prismpath.comparisons.run_comparison
 --temperature 0.7`); the structural guarantee — embedding hops deterministic by construction and, with
 a lockfile (§3.3), bit-for-bit across machines — is real but not exercised into a measured gap here,
 and we do not claim one. The distinguishing tax of the external stacks is therefore structural rather
 than accuracy: control flow expressed as code (a routing function, a `@router` method) rather than as a
 diffable per-edge condition a domain expert can read.
 
-*Threat to validity.* The LangGraph and CrewAI baselines were authored by an PrismPath author; a more
+*Threat to validity.* The LangGraph and CrewAI baselines were authored by a PrismPath author; a more
 idiomatic implementation avoiding a per-hop LLM call would tighten the comparison. The reproducer and
 both reference implementations are released in `comparisons/`.
 

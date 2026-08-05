@@ -508,7 +508,7 @@ cache stability.) Generative, novelty-heavy, or context-dependent nodes should n
 above answers "was reuse safe *then*"; production needs the question answered *continuously*.
 `lookup(doc, sample_rate=r)` flags a fraction of cache **hits** for shadowing: the adapter reuses the
 verdict *and* runs the real adjudicator, then feeds the comparison to `record_shadow()`. The corpus
-accumulates a live **reuse-error rate** reported alongside the hit rate (`python -m PrismPath.prefilter
+accumulates a live **reuse-error rate** reported alongside the hit rate (`python -m prismpath.prefilter
 monitor <dir>`), and an entry whose disagreement crosses a bound — on the **cumulative** rate *or* a
 bounded **recent window**, so an entry that was stable for months and then drifts is pulled within a
 few samples rather than after its lifetime rate erodes — is **quarantined**: `_eligible()` drops it
@@ -995,7 +995,7 @@ and every gate-green unit is a `@checkpoint` **proof-commit** in the Flow-Ledger
 sprint resumes at the first unproven unit. The concrete work (pick/build/gate/fix/escalate) plugs in
 as a seam bundle (`sprint_flow.py`); `run_sprint.py` wires its own machinery behind `SPRINT_FLOW=1`,
 keeping only the harness concerns (wall clock, pause, heartbeat) in the driver — where harness
-concerns belong. The control plane that builds prismpath is driven by an prismpath flow: `prismpath validate`
+concerns belong. The control plane that builds PrismPath is driven by a PrismPath flow: `prismpath validate`
 compiles the sprint loop itself, which is the credibility argument in its most literal form.
 
 ---
@@ -1154,16 +1154,16 @@ Ledger(flow, run_id).commit_unit(unit, gate="green", files={f"{unit}.proof": b".
 ```
 
 ```bash
-PrismPath validate  flows/bugfix.md          # static analysis: does the flow compile? (--json for CI)
-PrismPath lint      flows/bugfix.md          # validate + semantic-ambiguity + polarity-mirror (--json)
-PrismPath run       flows/bugfix.md          # trace the path with a mock agent
-PrismPath test      flows/bugfix.md [--json] [--emit-labels labels.jsonl]  # fixtures-as-data (no LLM)
-PrismPath lock      flows/bugfix.md [--check] # write/verify the routing lockfile (§4.6)
-PrismPath calibrate labels.jsonl [--alpha 0.05] [--out cal.json]           # derive τ (§4.7)
-PrismPath graph     flows/bugfix.md [--direction TD|LR] [--fenced]         # Mermaid render (§8.2)
-PrismPath import    graph.py [--name NAME] [--out flow.md]                 # LangGraph → skeleton (§8.4)
-PrismPath label     labels.jsonl             # hand-label routing decisions (§8.5)
-PrismPath resume    run.ckpt [--choose <edge>]   # resume a suspended/crashed run (§5.1)
+prismpath validate  flows/bugfix.md          # static analysis: does the flow compile? (--json for CI)
+prismpath lint      flows/bugfix.md          # validate + semantic-ambiguity + polarity-mirror (--json)
+prismpath run       flows/bugfix.md          # trace the path with a mock agent
+prismpath test      flows/bugfix.md [--json] [--emit-labels labels.jsonl]  # fixtures-as-data (no LLM)
+prismpath lock      flows/bugfix.md [--check] # write/verify the routing lockfile (§4.6)
+prismpath calibrate labels.jsonl [--alpha 0.05] [--out cal.json]           # derive τ (§4.7)
+prismpath graph     flows/bugfix.md [--direction TD|LR] [--fenced]         # Mermaid render (§8.2)
+prismpath import    graph.py [--name NAME] [--out flow.md]                 # LangGraph → skeleton (§8.4)
+prismpath label     labels.jsonl             # hand-label routing decisions (§8.5)
+prismpath resume    run.ckpt [--choose <edge>]   # resume a suspended/crashed run (§5.1)
 ```
 *(OTel export is a library API only — `prismpath.otel.span_records` / `to_otel_sink`; no CLI subcommand.
 `resume --choose` is the only resume flag in the CLI; `event=`-resume and `run_durable` are library
