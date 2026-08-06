@@ -2,6 +2,7 @@
 
 [![ci](https://github.com/crystal-warden/prism-path/actions/workflows/ci.yml/badge.svg)](https://github.com/crystal-warden/prism-path/actions/workflows/ci.yml)
 &nbsp;[![license: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+&nbsp;[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.21816125.svg)](https://doi.org/10.5281/zenodo.21816125)
 
 **The document your team reads is the graph the engine runs.**
 Read it. Diff it. Lint it. Test it. Lock it. Prove it. Six verbs, each backed by a shipped

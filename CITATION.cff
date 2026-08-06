@@ -5,7 +5,16 @@ title: "PrismPath: agent workflows as data"
 authors:
   - name: "Crystal Warden Labs"
 version: 0.1.0
+date-released: 2026-08-06
 license: Apache-2.0
+doi: 10.5281/zenodo.21816125
+identifiers:
+  - type: doi
+    value: 10.5281/zenodo.21816125
+    description: "Concept DOI — cites all versions, always resolves to the latest release."
+  - type: doi
+    value: 10.5281/zenodo.21816126
+    description: "Version DOI for v0.1.0, the anchored launch release."
 repository-code: "https://github.com/crystal-warden/prism-path"
 abstract: >-
   A workflow format and reference implementation in which the control flow of LLM-agent
@@ -26,4 +35,4 @@ preferred-citation:
   authors:
     - name: "Crystal Warden Labs"
   year: 2026
-  notes: "Preprint in prismpath/docs/papers/; arXiv identifier to be added on submission."
+  notes: "Preprint in docs/research/; arXiv identifier to be added on submission."
