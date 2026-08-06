@@ -265,6 +265,23 @@ independent implementations (JS, Rust, Go) each pass all 1,067 predicate + 27 fl
 extracted from a real build; the `eval_*.py` and `measure_*.py` scripts are the measurement
 harnesses behind every number in the papers. Licensed Apache-2.0.
 
+### The launch is anchored
+
+The project that ships tamper-evident attestation launched with its own machinery pointed at
+itself: the `v0.1.0` release artifact is OpenTimestamps-anchored in **Bitcoin block 961224**
+(2026-08-06 00:11 UTC). Neither our word nor GitHub's timestamps are part of the claim — rebuild
+the artifact from the tag and check the chain:
+
+```
+git archive --format=tar.gz --prefix=prismpath-0.1.0/ v0.1.0 | sha256sum
+# b3f07facaacc4daaead1cc8f53caf4637b7b1aaf1a165b3c50b949566ce52112
+ots verify prismpath-0.1.0.tar.gz.ots   # needs a Bitcoin node; the .ots proofs ship with the release
+```
+
+The tarball, `SHA256SUMS`, and both `.ots` proofs are attached to the
+[v0.1.0 release](https://github.com/crystal-warden/prism-path/releases/tag/v0.1.0). Same
+machinery, same rule as everything else here: check the artifact, not the author.
+
 ## Contributing & community
 
 - [GETTING_STARTED.md](GETTING_STARTED.md) — from zero to a routed flow in eight steps.
