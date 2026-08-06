@@ -69,6 +69,8 @@ def _atom_reason(node) -> Optional[str]:
         if len(node.ops) != 1:
             return _R_CHAINED                              # desugars mechanically; not in fragment
         left, op, right = node.left, node.ops[0], node.comparators[0]
+        if not isinstance(op, _ORDER_OPS + _EQ_OPS + (ast.In, ast.NotIn)):
+            return _R_SYNTAX                               # `is`/`is not` — eval rejects them too
         # membership: field in/not in [scalar literals]
         if isinstance(op, (ast.In, ast.NotIn)):
             if not isinstance(left, ast.Name):

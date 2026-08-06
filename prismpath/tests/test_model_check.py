@@ -46,6 +46,10 @@ def test_level_m_members(cond):
     ("when 1", "constant-only"),                       # no field — not a table row
     # (`when True` reduces to the keyword `true` ∈ ALWAYS — a default row, in-fragment)
     ("the root cause is clear", "not-deterministic"),  # semantic tier
+    # `is`/`is not` are outside the predicate sandbox (eval raises PredicateError) — the
+    # classifier must not call table-compilable what the evaluator won't even run
+    ("when x is None", "disallowed-or-unparseable"),
+    ("when x is not None", "disallowed-or-unparseable"),
 ])
 def test_level_m_non_members(cond, reason):
     ok, got = mc.is_level_m(cond)
