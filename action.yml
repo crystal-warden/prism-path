@@ -1,8 +1,7 @@
 name: "prismpath — validate and test flows"
 description: >-
-  Lint agent-workflow Markdown flows (static analysis, "your flow compiles") and assert their
-  routing against fixture tables — model-free, milliseconds. The CI half of
-  "the PR is the process change."
+  Lint agent-workflow Markdown flows — your flow compiles — and test routing
+  against fixtures. Model-free, milliseconds.
 branding:
   icon: "git-branch"
   color: "purple"
