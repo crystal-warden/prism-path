@@ -143,6 +143,10 @@ spec-stable.
   reference sites now resolve it `__file__`-relative (CWD-independent).
 
 ### Fixed
+- **CI red on Python 3.10/3.11 — a backslash inside an f-string expression** (`prismpath/lsp.py`).
+  Legal only on 3.12+, a `SyntaxError` on the older interpreters CI tests against, which aborted
+  the entire collection. The expression is hoisted to a variable; the full suite now passes under
+  3.11 (verified locally) and the whole package compiles clean under `python3.11 -m compileall`.
 - **The wheel was missing files shipped code opens** — `package-data` omitted
   `prismpath/policies/statutory_floor.md` (loaded by `guard`, `measure_p1`, `bypass_report` and
   three test modules) and `prismpath/tests/fixtures/broken/*.md` (read by `test_analysis`). Present

@@ -328,7 +328,8 @@ class Server:
             return None
         rows = [f"- `-> {t}` — *{_tier(c)}* `{c}`" for t, c in node.edges] or ["- *(terminal)*"]
         annos = ", ".join(f"@{a}" for a in node.annotations) if node.annotations else ""
-        md = f"**## {current}**{'  \n' + annos if annos else ''}\n" + "\n".join(rows)
+        anno_part = "  \n" + annos if annos else ""
+        md = f"**## {current}**{anno_part}\n" + "\n".join(rows)
         return {"contents": {"kind": "markdown", "value": md}}
 
     def _symbols(self, params: dict) -> List[dict]:
