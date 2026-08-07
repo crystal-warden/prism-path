@@ -46,3 +46,10 @@ silent reference drift), and the port must pass the committed vectors (no silent
 The Rust (`prismpath-rs/`) and Go (`prismpath-go/`) kernels already did exactly this — read the
 files, pass every case — and any future kernel (WASM, or yours) is provably interchangeable the
 same way, or measurably not.
+
+The vectors also referee **declared-subset targets**: an implementation that cannot host the full
+value domain (a fixed circuit, a table interpreter) declares the subset it certifies against,
+passes every vector inside it, and publishes a machine-readable reason for every exclusion — it
+is never called conformant unqualified. The first example is the Level M hardware target
+([prism-path-hw](https://github.com/crystal-warden/prism-path-hw)): 114/1,067 predicate + 6/27
+engine vectors, zero divergence, in C and in RTL.

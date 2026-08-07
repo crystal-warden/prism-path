@@ -65,7 +65,10 @@ predicate vectors + 27 engine fixtures, generated deterministically from the Pyt
 must match a fresh regeneration (no silent reference drift), and this port must pass them
 (`node prismpath/portable/run_vectors.mjs` → CONFORMANT). And no longer only this port: **Rust
 (`prismpath-rs/`) and Go (`prismpath-go/`) kernels implement the frozen subset and pass every
-vector** — three independent implementations, provably interchangeable.
+vector** — three independent implementations, provably interchangeable. (The Level M fragment
+additionally has a hardware target certified on a *declared subset* of these vectors —
+[prism-path-hw](https://github.com/crystal-warden/prism-path-hw) — deliberately not counted as a
+fourth kernel.)
 
 **Known non-portable corner:** `error_type` in error-edge predicates is language-specific
 (`RuntimeError` vs `Error`) — route on `error_count` or `error_message` content, which are

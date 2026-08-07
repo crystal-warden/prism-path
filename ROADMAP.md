@@ -12,7 +12,7 @@ PrismPath is an open-source framework that treats **agent workflows as data**. O
 1. **The Flow is Data, Not Code**: Process logic remains in readable, diffable, static Markdown files—never hidden inside imperative Python callbacks.
 2. **Logic Where Logic Exists, Intent Where It Doesn't**: Free, exact `when` predicates handle logic; models handle semantic judgment only on low-margin doubt.
 3. **Safety Through Decidability**: Expand static analysis (`prismpath validate`) toward formal verification and zero-false-positive safety guarantees.
-4. **Zero-Dependency Edge Portability**: Pure P0 flows run on lightweight, non-ML kernels (JavaScript, Rust, Go, WebAssembly) — and the Level M fragment is deliberately shaped to go further, down to devices where no framework runtime exists at all (Phase 6).
+4. **Zero-Dependency Edge Portability**: Pure P0 flows run on lightweight, non-ML kernels (JavaScript, Rust, Go, WebAssembly) — and the Level M fragment is deliberately shaped to go further, down to devices where no framework runtime exists at all; the shape has now been demonstrated all the way down to an FPGA (Phase 6, first target).
 
 ---
 
@@ -75,11 +75,15 @@ PrismPath is an open-source framework that treats **agent workflows as data**. O
   as Fermat's spiral, lifted to high dimension). Small, self-contained, and strengthens the
   fingerprint's guarantee from "probably notices drift" toward "notices drift anywhere".
 
-### Phase 6: Edge, Embedded & IoT Compilation (Direction — not yet built)
+### Phase 6: Edge, Embedded & IoT Compilation (First hardware target delivered — off-repo; remainder planned)
 
-*Stated as direction, honestly: none of this exists today. It is listed because the load-bearing
-design choices were made **for** it, and because it is the ground competing frameworks structurally
-cannot reach — a Python-runtime orchestrator has no move here at any price.*
+*Status, honestly: the first target now exists — built, measured, and running on silicon — in a
+separate public repo, [`prism-path-hw`](https://github.com/crystal-warden/prism-path-hw),
+off-repo by design: nothing lands here until it clears this repo's own bar. What remains
+unbuilt is listed below, unchecked. The reason this phase was listed before it existed still
+holds: the load-bearing design choices were made **for** it, and it is the ground competing
+frameworks structurally cannot reach — a Python-runtime orchestrator has no move here at any
+price.*
 
 The Level M match-action fragment (SPEC §4.3) is not an analysis convenience; it is a
 **compilation target**. Each atom is a `(field, operator, constant)` row, ordered deterministic
@@ -88,10 +92,21 @@ match-action table, and tables run where interpreters cannot: microcontrollers, 
 PLC-adjacent industrial controllers, NICs, in-kernel packet paths. The pieces this phase would
 build, in rough order of reach:
 
-- [ ] **`prismpath compile --target c-table`**: emit a Level M flow as a static C table + a
-  fixed ~200-line interpreter loop — no allocator, no OS assumptions — as the reference embedded
-  target. The frozen conformance vectors are the certification suite, exactly as they were for the
-  Go kernel: a target is conformant when it passes the vectors, not when its author says so.
+- [x] **The FPGA target (delivered 2026-08-06/07, [`prism-path-hw`](https://github.com/crystal-warden/prism-path-hw))**:
+  a Level M flow compiles to a binary table image (PPT v1) interpreted by **one fixed circuit** —
+  never re-synthesized per flow. Certified on a **declared subset** of the frozen vectors
+  (114/1,067 predicate + 6/27 engine, zero divergence, every exclusion machine-readable — the
+  vectors-as-referee pattern, one level down; deliberately *not* claimed as full SPEC §8
+  conformance). C target and RTL agree bit-for-bit with the Python reference, including a
+  7,436-sample live-sensor replay. On a Zynq-7020: timing-clean at 50 MHz, **1,064 LUTs (2.0%
+  of the part)**, WCET **100–420 ns per routing decision**, and 2,985 live sensor samples routed
+  in fabric — `wazuh_triage`, the production SOC flow, is a 302-byte image. Evidence hashes are
+  OTS-anchored in the repo. (Ledger rows #72–#76.)
+- [ ] **`prismpath compile --target c-table`** — the in-repo integration step: fold the
+  off-repo compiler + C interpreter into this repo's CLI as the reference embedded
+  target — no allocator, no OS assumptions. The frozen conformance vectors are the certification
+  suite, exactly as they were for the Go kernel: a target is conformant when it passes the
+  vectors, not when its author says so.
 - [ ] **WASM micro-target**: the same table interpreter compiled to a few-KB WASM module, for edge
   runtimes (Cloudflare Workers, embedded WASM hosts) where even the JS kernel is too much.
 - [ ] **In-kernel / in-network targets (exploratory)**: XDP/eBPF and P4 emission for flows that are
@@ -105,10 +120,15 @@ build, in rough order of reach:
   devices whose workers are ADCs and comparators, not LLMs — the port contract already anticipates
   a hardware target driving it.
 
-What makes this credible rather than aspirational hand-waving is that every prerequisite is
-already load-bearing elsewhere: decidability (the model checker), per-edge Level M membership
-reporting (`prismpath verify --level-m`), dependency-free kernels as proof the spec re-implements
-cleanly, and frozen vectors as the referee. The phase is unbuilt; the runway to it is not.
+What made this credible before it existed was that every prerequisite was already load-bearing
+elsewhere: decidability (the model checker), per-edge Level M membership reporting
+(`prismpath verify --level-m`), dependency-free kernels as proof the spec re-implements cleanly,
+and frozen vectors as the referee. The first leg is now built and measured — the fragment runs
+as a 136-byte table in FPGA fabric with a provable 100–420 ns decision bound at 2% of a $65-class
+part — and the certification pattern worked exactly as this section predicted: the vectors
+refereed the hardware the same way they refereed the Go kernel, and the target's first act was
+to surface a real classifier bug (ledger row #76). The remaining legs above are unbuilt; the
+runway to them just got shorter.
 
 ---
 

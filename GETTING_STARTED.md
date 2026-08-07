@@ -148,7 +148,9 @@ is demonstrated end-to-end in
 - **Durability** — `checkpoint.run_durable(...)` makes any run crash-resumable and lets it
   suspend for a human with the evidence packet; `@spawn` fans out child runs.
 - **The edge** — `prismpath portable <flow>` tells you if your flow is P0: zero-ML, runnable by
-  the same kernel the playground uses, anywhere JavaScript runs.
+  the same kernel the playground uses, anywhere JavaScript runs. (The Level M core goes further
+  still — it now runs as table images in FPGA fabric, declared-subset certified: see
+  [ROADMAP Phase 6](ROADMAP.md).)
 - **Your role's door** — the [persona examples](prismpath/examples/README.md): SOC triage, support
   routing, release trains, HR onboarding, fan-out review, and the sprint loop that builds this
   repo.

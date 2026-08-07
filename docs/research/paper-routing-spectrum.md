@@ -53,8 +53,12 @@ reachability is decidable and a bounded model checker answers *"can this state b
 assumption?"* with a concrete witness (exact inside the fragment, soundly over-approximated outside
 it); and the ML-free subset is now certified by **three independent re-implementations** (JavaScript,
 Rust, Go) that each pass all 1,067 predicate and 27 engine conformance vectors — conformance
-refereed by re-implementation rather than asserted. We are explicit about the provenance of the
-routing evaluation's labels; the once-open bounded-state critique is now closed (§6).
+refereed by re-implementation rather than asserted. The fragment now also has a **first hardware
+target**: a fixed FPGA interpreter circuit (Zynq-7020) that executes Level M flows as
+runtime-loaded table images, certified against a *declared subset* of the same frozen vectors
+(114/1,067 predicate + 6/27 engine, zero divergence) and demonstrated routing live sensor fields
+in fabric with a provable 100–420 ns decision bound (§7). We are explicit about the provenance of
+the routing evaluation's labels; the once-open bounded-state critique is now closed (§6).
 
 ---
 
@@ -932,8 +936,8 @@ with cumulative *and* windowed drift bounds that quarantine a drifting entry); a
 spectrum to a security-triage flow** (the streaming replay over the author's own Wazuh instance where
 the decision-memoization and reuse-accuracy findings of §5 were measured — a flow whose routing, we
 note, falls entirely in the portable subset: the LLM lives in the workers, not the control flow).
-Three further items have since been delivered, each a consequence of the same data-not-code
-asymmetry. **Bounded model checking over the match-action fragment** (§3.2's Level M): because a
+Four further items have since been delivered, each a consequence of the same data-not-code
+asymmetry. **Bounded model checking over the match-action fragment** (SPEC §4.3's Level M): because a
 flow's deterministic tier is a finite match-action table, reachability is decidable, and
 `prismpath verify` answers *"can state X be reached under assumption Y?"* by explicit-state search
 with the engine's own first-match semantics — an edge is takeable iff `assume ∧ pred_i ∧ ¬pred_{<i}`
@@ -952,7 +956,21 @@ direction. **A risk-controlled operating point for decision memoization**: the �
 longer takes a hand-set similarity threshold but derives it, selecting the point that maximizes
 auto-resolution among those whose reuse-error rate a Wilson upper bound certifies below a stated
 risk — the same LTT/RCPS discipline as §4.3's τ, applied to caching, and it declines to choose when
-the evidence cannot clear the bound.
+the evidence cannot clear the bound. **A hardware target for the fragment (delivered, measured;
+2026-08-07)**: because a Level M flow *is* a match-action table, it compiles to a binary table
+image — the production SOC triage flow, unmodified, is 302 bytes — interpreted by one fixed
+circuit on a Zynq-7020, never re-synthesized per flow; the same frozen vectors became the hardware
+test bench **on a declared subset, stated plainly** (the C reference target and the RTL each pass
+114/1,067 predicate + 6/27 engine vectors with zero divergence and a machine-readable reason per
+exclusion — the portability-tier pattern one level down, deliberately not claimed as full
+conformance), the RTL additionally reproduced 7,436 live sensor samples bit-for-bit against the C
+target, and on the bench 2,985 live accelerometer samples were routed *in fabric* — a
+5–21-cycle evaluate, a provable **100–420 ns worst-case decision bound** at 50 MHz, in 1,064 LUTs
+(2.0% of the part). The target's first act was to surface a real soundness defect in the fragment
+classifier (`is`/`is not` accepted by classification, rejected by evaluation) — the
+vectors-as-referee pattern doing exactly its job on its first hardware consumer. Artifacts,
+evidence logs, and OpenTimestamps-anchored hashes:
+<https://github.com/crystal-warden/prism-path-hw> (ledger rows #72–#76).
 
 What remains genuinely open: (i) a larger, *human*-annotated routing benchmark across more flows and
 embedders, to test whether the frontier shape and the confident-error blind spot generalize; and (ii)
@@ -969,7 +987,9 @@ consistent with venue AI-disclosure policy.
 *Artifacts (parser, safe predicate evaluator, four-tier router, embedder, checkpoint + Flow-Ledger,
 static analyzer, bounded model checker, safety guard, lockfile, calibration, the data-plane tools,
 the three conformant portable kernels, evaluation harnesses, and the `comparisons/` head-to-head,
-plus example flows, plus the succession/scouting/suppression/flywheel/OTS engines and a
+plus example flows, plus the succession/scouting/suppression/flywheel/OTS engines, plus the
+hardware target in its own public repo — compiler, C and RTL interpreters, testbenches, overlay
+build, and an OTS-anchored evidence set (<https://github.com/crystal-warden/prism-path-hw>) — and a
 **`docs/research/supporting-evidence.md`** results ledger mapping every claim to a measured result + provenance,
 **negative results included** — the density/geometry thread, §B) are self-contained and small enough
 to audit end-to-end.*

@@ -150,8 +150,11 @@ for all bounds via saturated `visits` modeling (`--reach` / `--forbid` / `--assu
 
 Level M isn't just for analysis: a flow inside the fragment *is* a match-action table, and
 tables run in places no framework runtime can follow — microcontrollers, smart sensors,
-in-kernel packet paths. None of that is built yet; [ROADMAP Phase 6](../../ROADMAP.md) is upfront
-about it.
+in-kernel packet paths. The first of those places is now real: a fixed FPGA interpreter circuit
+on a Zynq-7020 executes Level M flows as runtime-loaded table images (136 bytes for the demo
+flow), certified against a declared subset of the same frozen vectors —
+[prism-path-hw](https://github.com/crystal-warden/prism-path-hw). What remains (WASM, XDP/eBPF,
+P4) is listed honestly in [ROADMAP Phase 6](../../ROADMAP.md).
 
 ### Fan-out & sub-flow composition — parallelism without impurity
 
