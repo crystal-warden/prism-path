@@ -970,7 +970,7 @@ target, and on the bench 2,985 live accelerometer samples were routed *in fabric
 classifier (`is`/`is not` accepted by classification, rejected by evaluation) — the
 vectors-as-referee pattern doing exactly its job on its first hardware consumer. Artifacts,
 evidence logs, and OpenTimestamps-anchored hashes:
-<https://github.com/crystal-warden/prism-path-hw> (ledger rows #72–#76).
+[`prismpath-hw/`](../../prismpath-hw/README.md) (ledger rows #72–#76).
 
 What remains genuinely open: (i) a larger, *human*-annotated routing benchmark across more flows and
 embedders, to test whether the frontier shape and the confident-error blind spot generalize; and (ii)
@@ -988,8 +988,8 @@ consistent with venue AI-disclosure policy.
 static analyzer, bounded model checker, safety guard, lockfile, calibration, the data-plane tools,
 the three conformant portable kernels, evaluation harnesses, and the `comparisons/` head-to-head,
 plus example flows, plus the succession/scouting/suppression/flywheel/OTS engines, plus the
-hardware target in its own public repo — compiler, C and RTL interpreters, testbenches, overlay
-build, and an OTS-anchored evidence set (<https://github.com/crystal-warden/prism-path-hw>) — and a
+hardware target (`prismpath-hw/`) — compiler, C and RTL interpreters, testbenches, overlay
+build, and an OTS-anchored evidence set ([`prismpath-hw/`](../../prismpath-hw/README.md)) — and a
 **`docs/research/supporting-evidence.md`** results ledger mapping every claim to a measured result + provenance,
 **negative results included** — the density/geometry thread, §B) are self-contained and small enough
 to audit end-to-end.*

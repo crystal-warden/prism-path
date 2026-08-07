@@ -1,9 +1,10 @@
 # prismpath-hw — the FPGA sprint workspace
 
-*Off-repo by design: nothing here lands in `prismpath` until it passes that repo's own bar.
-The claim under construction: a **fixed
-circuit** routes any conformant Level M flow loaded as a **BRAM table image** — the flow
-stays data all the way down to silicon.*
+*A top-level target directory of the PrismPath repo, beside `prismpath-rs/` and
+`prismpath-go/` — built off to the side during the FPGA sprint and landed after clearing the
+repo's gates. The claim, delivered and measured: a **fixed circuit** routes any conformant
+Level M flow loaded as a **BRAM table image** — the flow stays data all the way down to
+silicon.*
 
 ## Layout
 

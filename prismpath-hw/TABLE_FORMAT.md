@@ -1,7 +1,7 @@
 # PPT v1 — the PrismPath Level M table image ("the ISA")
 
 *The binary format a fixed interpreter circuit executes. One interpreter, any conformant flow
-as data. Off-repo until it clears the repo's bar (see PLAN_prismpath_fpga_week.md).*
+as data.*
 
 ## Declared subset (stated plainly, never claimed beyond)
 

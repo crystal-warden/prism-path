@@ -931,7 +931,7 @@ predicate in that same match-action
 fragment (field-vs-constant comparisons, constant-set membership, boolean combinators, the
 `visits`/`error_count` counters) is not *like* hardware; it is the abstract description of one: each atom is a `(field-selector, operator, constant)` row, a node's ordered
 deterministic edges are a priority encoder, and the counters are registers. As of 2026-08-07
-that argument is an artifact ([`prism-path-hw`](https://github.com/crystal-warden/prism-path-hw),
+that argument is an artifact ([`prismpath-hw/`](../../prismpath-hw/README.md),
 evidence rows #72–#76): a Level M flow compiles to a binary table image — the production SOC flow
 `wazuh_triage`, unmodified, is **302 bytes**; `incident_severity` is **136** — interpreted by
 **one fixed circuit** on a Zynq-7020, never re-synthesized per flow. The promised certification
@@ -941,7 +941,7 @@ pass 114/1,067 predicate + 6/27 engine vectors with zero divergence and a machin
 for every exclusion (this is the portability-tier pattern one level down, *not* full SPEC §8
 conformance), and the RTL reproduced 7,436 live sensor samples bit-for-bit against the C target.
 The promised hash-chain attestation is **partially delivered**: the table-image and bitstream
-hashes are published and OpenTimestamps-anchored in the target repo's evidence set; chaining the
+hashes are published and OpenTimestamps-anchored in `prismpath-hw/evidence/`; chaining the
 routing-lockfile hash into that same attestation remains open, as do the XDP/eBPF and P4 emitters.
 The routing spectrum's **physical latency hierarchy** is no longer a projection but a
 measurement: the fabric answers a deterministic routing decision in **5–21 cycles — a provable

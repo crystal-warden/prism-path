@@ -130,8 +130,8 @@ table. It now runs as one — in FPGA fabric, as of 2026-08-07:
   in fabric at 89/96/202 µs min/median/max round-trip (that figure includes Linux, Python, and
   an SSH hop — the fabric is the nanoseconds part).
 
-The work lives in its own public repo —
-**[prism-path-hw](https://github.com/crystal-warden/prism-path-hw)** — and its evidence set is
+The work lives in this repo —
+**[`prismpath-hw/`](prismpath-hw/README.md)** — and its evidence set is
 anchored the same way this repo's launch was: `evidence/SHA256SUMS` is OpenTimestamps-anchored
 in **Bitcoin block 961390**, and the two artifacts that matter are pinned by hash:
 
@@ -299,7 +299,7 @@ Mission Control, and the portable kernels with their frozen conformance vectors 
 reference plus **three independent re-implementations (JS, Rust, Go), each passing all 1,067
 predicate + 27 flow vectors**. The Level M fragment additionally
 [runs in FPGA fabric](#the-fragment-runs-on-silicon), certified on a declared subset of the same
-vectors ([prism-path-hw](https://github.com/crystal-warden/prism-path-hw)).
+vectors ([`prismpath-hw/`](prismpath-hw/README.md)).
 **523 Python tests + 18 Node kernel tests passing** (the compliance reference adapter adds a ~130-test suite with adversarial attestation-tamper + hypothesis property coverage); the predicate sandbox is fuzz-hardened; the format is specified in
 [SPEC.md](SPEC.md) (v1 draft). This repo is a curated export of an active research control plane
 extracted from a real build; the `eval_*.py` and `measure_*.py` scripts are the measurement

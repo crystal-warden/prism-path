@@ -67,7 +67,7 @@ must match a fresh regeneration (no silent reference drift), and this port must 
 (`prismpath-rs/`) and Go (`prismpath-go/`) kernels implement the frozen subset and pass every
 vector** — three independent implementations, provably interchangeable. (The Level M fragment
 additionally has a hardware target certified on a *declared subset* of these vectors —
-[prism-path-hw](https://github.com/crystal-warden/prism-path-hw) — deliberately not counted as a
+[`prismpath-hw/`](../../prismpath-hw/README.md) — deliberately not counted as a
 fourth kernel.)
 
 **Known non-portable corner:** `error_type` in error-edge predicates is language-specific

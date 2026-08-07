@@ -75,12 +75,12 @@ PrismPath is an open-source framework that treats **agent workflows as data**. O
   as Fermat's spiral, lifted to high dimension). Small, self-contained, and strengthens the
   fingerprint's guarantee from "probably notices drift" toward "notices drift anywhere".
 
-### Phase 6: Edge, Embedded & IoT Compilation (First hardware target delivered — off-repo; remainder planned)
+### Phase 6: Edge, Embedded & IoT Compilation (First hardware target delivered; remainder planned)
 
-*Status, honestly: the first target now exists — built, measured, and running on silicon — in a
-separate public repo, [`prism-path-hw`](https://github.com/crystal-warden/prism-path-hw),
-off-repo by design: nothing lands here until it clears this repo's own bar. What remains
-unbuilt is listed below, unchecked. The reason this phase was listed before it existed still
+*Status, honestly: the first target now exists — built, measured, and running on silicon — in
+[`prismpath-hw/`](prismpath-hw/README.md), a top-level target directory beside `prismpath-rs/`
+and `prismpath-go/`. It was built off to the side and landed here only after clearing the
+repo's own gates. What remains unbuilt is listed below, unchecked. The reason this phase was listed before it existed still
 holds: the load-bearing design choices were made **for** it, and it is the ground competing
 frameworks structurally cannot reach — a Python-runtime orchestrator has no move here at any
 price.*
@@ -92,7 +92,7 @@ match-action table, and tables run where interpreters cannot: microcontrollers, 
 PLC-adjacent industrial controllers, NICs, in-kernel packet paths. The pieces this phase would
 build, in rough order of reach:
 
-- [x] **The FPGA target (delivered 2026-08-06/07, [`prism-path-hw`](https://github.com/crystal-warden/prism-path-hw))**:
+- [x] **The FPGA target (delivered 2026-08-06/07, [`prismpath-hw/`](prismpath-hw/README.md))**:
   a Level M flow compiles to a binary table image (PPT v1) interpreted by **one fixed circuit** —
   never re-synthesized per flow. Certified on a **declared subset** of the frozen vectors
   (114/1,067 predicate + 6/27 engine, zero divergence, every exclusion machine-readable — the
@@ -103,7 +103,7 @@ build, in rough order of reach:
   in fabric — `wazuh_triage`, the production SOC flow, is a 302-byte image. Evidence hashes are
   OTS-anchored in the repo. (Ledger rows #72–#76.)
 - [ ] **`prismpath compile --target c-table`** — the in-repo integration step: fold the
-  off-repo compiler + C interpreter into this repo's CLI as the reference embedded
+  `prismpath-hw/` compiler + C interpreter into this repo's CLI as the reference embedded
   target — no allocator, no OS assumptions. The frozen conformance vectors are the certification
   suite, exactly as they were for the Go kernel: a target is conformant when it passes the
   vectors, not when its author says so.
