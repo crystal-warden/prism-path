@@ -15,6 +15,11 @@ memory). Consolidated 2026-07-21.*
 > detector (ET-BERT), the ATT&CK triage corpora, and the knowledge index. Their numbers are reported
 > here because the papers cite them; they are **not independently reproducible from this repo alone**,
 > and that limitation is stated rather than implied by a path that looks local.
+>
+> Rows citing `prism-path-hw` (the hardware target, rows #72–#76) are from a **public**
+> first-party repo — <https://github.com/crystal-warden/prism-path-hw> — whose evidence set is
+> OTS-anchored (`evidence/SHA256SUMS` + `.ots`), so unlike the lab paths those rows ARE
+> independently checkable: rerun the gates, or verify the hashes.
 
 ---
 
@@ -233,3 +238,43 @@ served locally. No number here depends on a cloud API.
 **Residuals (logged):** semantic retrieval is a genuine keep (routes prose well) but can't route RAW ARTIFACTS (logs/configs/CSVs — content is data not prose) -> needs doc-type/metadata-aware HYBRID ingestion. SSP legitimately dominates (discusses all families). Still no clean POSITIVE test (company with genuinely-met controls).
 
 **Env note:** installed sentence-transformers into ~/jupyterlab/.venv (torch already present); bumped its transformers 4.56.1->4.57.6 (4.56.1 warned EmbeddingGemma bidirectional may fall back to causal; briefly hit 5.14.1 which broke peft HybridCache, pinned back to <5). EmbeddingGemma-300m cached at ~/.cache/huggingface (1.2G). See [[gb10-wazuh-hub]].
+
+### #72 — PPT v1 table compiler + C target: declared-subset certification (2026-08-06)
+
+**Claim:** a Level M flow compiles to a binary table image (PPT v1) and a fixed C interpreter reproduces the frozen conformance vectors on a **declared subset** — the portability-tier pattern taken one level down. The subset is stated, never exceeded: this is NOT SPEC §8 conformance, and no hardware-target claim uses "conformant" unqualified.
+
+**Method:** `ppt_compile.py` uses the repo's own classifier (`prismpath.model_check`) as the fragment authority — the compiler cannot disagree with `verify --level-m`; chained comparisons desugared per SPEC §4.3 SHOULD (exact: operands pure, comparisons total); compilation over reachable nodes only (SPEC §7); error/event edges skipped as host-side tiers. `run_vectors.py` filters the corpus to the declared v0 domain (ints/bools/interned strings; no floats), compiles each case, runs `interp.c`, diffs; every image compiled twice and byte-compared.
+
+**Result:** **114/1,067 predicate + 6/27 engine vectors pass with zero divergence**; every excluded vector carries a **machine-readable exclusion reason**; recompiles **byte-identical** (gated). Repo sweep: **8/23** flow files fully table-compile; `wazuh_triage` (production SOC flow, unmodified) = **302 bytes** (5 fields, 9 atoms, 12 nodes, 19 edges); `incident_severity` = **136 bytes**. Provenance: `prism-path-hw` (`make cert`, `TABLE_FORMAT.md`).
+
+### #73 — RTL interpreter: vector-equivalent in simulation; AXI wrapper bus-proven (2026-08-06)
+
+**Claim:** a fixed Verilog interpreter circuit reproduces the C target exactly — one synthesized-shape design, every flow loaded as runtime data through a load port, never re-synthesized per flow.
+
+**Method:** `rtl/ppt_interp.sv` under cocotb 1.9.2 + Verilator 5.020; the testbench mirrors the C harness (same subset filter, same expectations) and drives the DUT's load port per image. Second test replays the full Day-2 live sensor log; third suite drives `rtl/ppt_axi.sv` through real AXI4-Lite transactions.
+
+**Result:** **same 114 + 6 vectors, zero divergence, one DUT build**; **7,436 live sensor samples** replayed through simulated fabric reproduce the C target's live decisions with **zero mismatches** (spec → C → RTL: three implementations, one behavior, physical data); evaluate = **5–21 cycles**; AXI wrapper: **532-sample** replay via bus transactions, zero mismatches. Provenance: `prism-path-hw` (`make -C tb`, `make -C tb/axi`).
+
+### #74 — Vivado overlay: timing-clean at 50 MHz, two percent of the part (2026-08-06)
+
+**Claim:** the interpreter synthesizes, implements, and closes timing on a Zynq-7020 (Arty Z7-20, PYNQ-Z1 v3.1.1 image) as an AXI-Lite peripheral, at negligible area.
+
+**Method:** Vivado 2023.2 batch (`vivado/build_overlay.tcl`), part `xc7z020clg400-1` targeted directly; PS7 configured from a previously board-proven preset; interpreter attached as a module reference.
+
+**Result:** fabric clock **50 MHz**: WNS **+1.623 ns**, **0/4,455 failing endpoints**, hold clean (+0.044 ns). 100 MHz missed by **5.23 ns** (single-cycle atom path; a one-stage fetch/evaluate overlap is backlogged, PR-sized, expected ~2× latency win). Resources: **1,064 LUTs (2.0% of XC7Z020)**, 995 FFs (0.9%), 300 LUTRAM, 0.5 BRAM tile. WCET: **100–420 ns per evaluate** (5–21 cycles at 50 MHz). Provenance: `prism-path-hw/evidence/timing.rpt`, `utilization.rpt` (hashes in `SHA256SUMS`).
+
+### #75 — First light on silicon: live sensor fields routed in fabric (2026-08-07)
+
+**Claim:** the bitstream on the physical board answers memory-mapped evaluate correctly, and an unmodified repo flow routes live sensor fields in fabric.
+
+**Method:** PYNQ overlay load; magic-register check (`"PPT1"`) asserted before use; the 136-byte `incident_severity` image written into fabric over AXI-Lite MMIO; live BNO086 accelerometer fields streamed from a host bridge; every sample and decision logged with per-sample timing.
+
+**Result:** **2,985 live samples routed in fabric**; round-trip **89/96/202 µs min/median/max — including Linux, Python, and an SSH-tunnel hop** (the fabric evaluate itself is the measured 5–21 cycles of #73/#74); hand-run choreography executed by the circuit: `watch` → `sev3_ticket` → `sev2_oncall` → `sev1_page` in 0.3 s, peak deviation 5.0 m/s², decay to `watch`. Artifact hashes: `ppt_overlay.bit` = `2b69d54dc2194f40d0d06e555e18e1b9550ab3929f7b781c155fa38acbbc88d2`, `incident_severity.ppt` = `314b033cd1251b6da7671cbd8a209be0b46d3babd77e254bed1b669ea4d83065` — both in the OTS-anchored `SHA256SUMS`. Provenance: `prism-path-hw/evidence/fabric_session1.ndjson`.
+
+### #76 — Classifier/evaluator disagreement found by the compiler, fixed (2026-08-06)
+
+**Claim:** the hardware work functioned as a spec stress test: the first external consumer of the Level M classifier surfaced a real soundness defect.
+
+**Method:** the table compiler consumed `model_check._atom_reason` as its fragment authority and hit conditions the evaluator rejects.
+
+**Result:** `is_level_m("when x is None")` returned in-fragment while `eval_condition` raises `PredicateError` on `is`/`is not` (the corpus records such cases as ERROR) — so `verify --level-m` could call table-compilable what the engine won't run. Fixed (operator gate in `_atom_reason`) + two regression rows; full suite 525 green; shipped on `main` as `6638670`.
