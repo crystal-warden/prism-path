@@ -554,7 +554,11 @@ def manifest(files: dict) -> str:
     return "\n".join(lines)
 
 
-_SRC_EXT = (".html", ".js", ".mjs", ".css", ".json")
+# Source extensions the coder's context collects. The browser gate's web tuple is the default;
+# a gate plugin that declares FILE_EXTS (e.g. pysprint for Python targets) overrides it, so the
+# engine stays target-agnostic — a .py-based target's files are visible to manifest()/load_project
+# exactly as web files are for the browser gate.
+_SRC_EXT = tuple(getattr(GATE_PLUGIN, "FILE_EXTS", None) or (".html", ".js", ".mjs", ".css", ".json"))
 _NON_SRC = {"package.json", "status.json", "HELP.md", "sprint.log", "STOP", "NUDGE.md",
             "orch_run.out", "BLUEPRINT.md"}
 
