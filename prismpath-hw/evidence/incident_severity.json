@@ -1,0 +1,119 @@
+{
+ "format": "PPT",
+ "version": 1,
+ "max_steps": 25,
+ "fields": {
+  "data_at_risk": 0,
+  "user_facing": 1,
+  "error_rate": 2
+ },
+ "intern": {
+  "": 0
+ },
+ "atoms": [
+  {
+   "i": 0,
+   "field": "data_at_risk",
+   "op": "truthy",
+   "type": "none",
+   "val": 0
+  },
+  {
+   "i": 1,
+   "field": "user_facing",
+   "op": "truthy",
+   "type": "none",
+   "val": 0
+  },
+  {
+   "i": 2,
+   "field": "error_rate",
+   "op": ">=",
+   "type": "int",
+   "val": 25
+  },
+  {
+   "i": 3,
+   "field": "error_rate",
+   "op": ">=",
+   "type": "int",
+   "val": 5
+  },
+  {
+   "i": 4,
+   "field": "error_rate",
+   "op": ">=",
+   "type": "int",
+   "val": 1
+  }
+ ],
+ "start": 0,
+ "nodes": [
+  {
+   "i": 0,
+   "name": "assess",
+   "edges": [
+    {
+     "target": 1,
+     "condition": "when data_at_risk",
+     "program": [
+      "ATOM 0"
+     ]
+    },
+    {
+     "target": 1,
+     "condition": "when user_facing and error_rate >= 25",
+     "program": [
+      "ATOM 1",
+      "ATOM 2",
+      "AND"
+     ]
+    },
+    {
+     "target": 2,
+     "condition": "when user_facing and error_rate >= 5",
+     "program": [
+      "ATOM 1",
+      "ATOM 3",
+      "AND"
+     ]
+    },
+    {
+     "target": 3,
+     "condition": "when error_rate >= 1",
+     "program": [
+      "ATOM 4"
+     ]
+    },
+    {
+     "target": 4,
+     "condition": "else",
+     "program": [
+      "TRUE"
+     ]
+    }
+   ]
+  },
+  {
+   "i": 1,
+   "name": "sev1_page",
+   "edges": []
+  },
+  {
+   "i": 2,
+   "name": "sev2_oncall",
+   "edges": []
+  },
+  {
+   "i": 3,
+   "name": "sev3_ticket",
+   "edges": []
+  },
+  {
+   "i": 4,
+   "name": "watch",
+   "edges": []
+  }
+ ],
+ "host_side_edges": []
+}

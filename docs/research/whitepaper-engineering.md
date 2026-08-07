@@ -926,23 +926,32 @@ evaluator**, so the checker cannot drift from the engine the way a re-implemente
 would. Outside the fragment it over-approximates deliberately — semantic, error, and event hops are
 *may*-takeable — which keeps UNREACHABLE sound while labeling optimistic witnesses honestly.
 
-**Future work: the deterministic tier is synthesizable.** A predicate in that same match-action
+**The deterministic tier is synthesizable — and now synthesized (delivered, measured).** A
+predicate in that same match-action
 fragment (field-vs-constant comparisons, constant-set membership, boolean combinators, the
 `visits`/`error_count` counters) is not *like* hardware; it is the abstract description of one: each atom is a `(field-selector, operator, constant)` row, a node's ordered
-deterministic edges are a priority encoder, and the counters are registers. A locked, fields-only
-flow therefore compiles toward **table-driven targets** — an XDP/eBPF program in the kernel
-datapath, a P4 match-action pipeline, an FPGA block-RAM image interpreted by one fixed, formally
-verifiable circuit — with the flow remaining *data all the way to silicon*: the same conformance
-vectors that certify the three software kernels become the hardware test bench, and the lockfile hash,
-table-image hash, and bitstream hash chain into a single attestation from prose to gate-level
-enforcement.
-The routing spectrum then becomes a **physical latency hierarchy**: the fabric evaluates
-deterministic edges per-packet in nanoseconds; a CPU beside it runs locked semantic routing on the
-diverted residue in milliseconds; LLM escalation and the human queue live upstream in seconds —
-the margin and floor thresholds stop being software parameters and become decisions about *where
-computation physically happens*. Confidence routes the work itself. None of this requires new
-authoring machinery — the fragment is deliberately pinned in the spec and conformance vectors
-today so the compile chain can be built against a frozen target.
+deterministic edges are a priority encoder, and the counters are registers. As of 2026-08-07
+that argument is an artifact ([`prismpath-hw/`](../../prismpath-hw/README.md),
+evidence rows #72–#76): a Level M flow compiles to a binary table image — the production SOC flow
+`wazuh_triage`, unmodified, is **302 bytes**; `incident_severity` is **136** — interpreted by
+**one fixed circuit** on a Zynq-7020, never re-synthesized per flow. The promised certification
+pattern held exactly: the same frozen conformance vectors that certify the software kernels became
+the hardware test bench, **on a declared subset, stated plainly** — the C target and the RTL each
+pass 114/1,067 predicate + 6/27 engine vectors with zero divergence and a machine-readable reason
+for every exclusion (this is the portability-tier pattern one level down, *not* full SPEC §8
+conformance), and the RTL reproduced 7,436 live sensor samples bit-for-bit against the C target.
+The promised hash-chain attestation is **partially delivered**: the table-image and bitstream
+hashes are published and OpenTimestamps-anchored in `prismpath-hw/evidence/`; chaining the
+routing-lockfile hash into that same attestation remains open, as do the XDP/eBPF and P4 emitters.
+The routing spectrum's **physical latency hierarchy** is no longer a projection but a
+measurement: the fabric answers a deterministic routing decision in **5–21 cycles — a provable
+100–420 ns worst case** at the shipped 50 MHz clock, in 1,064 LUTs (2.0% of the part); the CPU
+beside it (Linux, Python, and a network hop included) turned live sensor fields into fabric
+decisions at 89/96/202 µs min/median/max on the bench; LLM escalation and the human queue live
+upstream in seconds — the margin and floor thresholds stop being software parameters and become
+decisions about *where computation physically happens*. Confidence routes the work itself. None
+of this required new authoring machinery — the fragment was pinned in the spec and vectors
+precisely so the compile chain could be built against a frozen target, and it was.
 
 ---
 

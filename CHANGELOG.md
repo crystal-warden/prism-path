@@ -9,6 +9,16 @@ spec-stable.
 ## [Unreleased]
 
 ### Added
+- **The Level M hardware target ([`prismpath-hw/`](prismpath-hw/README.md))** —
+  a Level M flow compiles to a binary table image (`wazuh_triage`, unmodified: 302 bytes)
+  interpreted by one fixed FPGA circuit on a Zynq-7020; C and RTL interpreters certified on a
+  **declared subset** of the frozen corpus (114/1,067 predicate + 6/27 engine vectors, zero
+  divergence, machine-readable exclusion reasons — deliberately *not* SPEC §8 conformance);
+  timing-clean at 50 MHz (1,064 LUTs = 2.0% of the part, WCET 100–420 ns/decision); 2,985 live
+  sensor samples routed in fabric; evidence hashes OTS-anchored. Gates: `make cert` + the cocotb
+  suites under `prismpath-hw/`; evidence ledger rows #72–#76. Built off to the side, landed as
+  a top-level target directory beside `prismpath-rs/` and `prismpath-go/` after clearing the
+  repo's gates (the CLI integration, `compile --target c-table`, stays open on the roadmap).
 - **Four conformant kernels** — `prismpath-go` joins Python / JS (`prismpath/portable/prismpath.mjs`) /
   Rust (`prismpath-rs`): a dependency-free Go P0 kernel at 1,067/1,067 predicates and 27/27 flows
   against the frozen vectors. Conformance is now a refereed sport with three independent referees.
@@ -143,6 +153,12 @@ spec-stable.
   reference sites now resolve it `__file__`-relative (CWD-independent).
 
 ### Fixed
+- **The Level M classifier accepted `is`/`is not` — the evaluator rejects them**
+  (`prismpath/model_check.py`): `_atom_reason` never checked the comparison operator against the
+  evaluator's allowed set, so `verify --level-m` could call an edge table-compilable that
+  `eval_condition` refuses as unsafe (the corpus records such predicates as ERROR). Found by the
+  hardware target's compiler — the classifier's first external consumer — on its first day.
+  Operator gate added + regression rows; check, eval, and classify accept the same language again.
 - **CI red on Python 3.10/3.11 — a backslash inside an f-string expression** (`prismpath/lsp.py`).
   Legal only on 3.12+, a `SyntaxError` on the older interpreters CI tests against, which aborted
   the entire collection. The expression is hoisted to a variable; the full suite now passes under
@@ -181,8 +197,10 @@ spec-stable.
 
 ## [0.1.0] — the initial baseline (pre-release)
 
-The baseline is the whole system; highlights rather than an exhaustive list. (Not yet tagged
-or published — on first release, [Unreleased] folds into the release notes.)
+The baseline is the whole system; highlights rather than an exhaustive list. (Released
+2026-08-06, OpenTimestamps-anchored in Bitcoin block 961224 — see the README's "The launch is
+anchored" — with a Zenodo DOI in `CITATION.cff`. On the *next* release, [Unreleased] folds
+forward into its notes.)
 
 ### The format
 - **SPEC.md v1 (draft)** — document grammar, the four edge tiers (deterministic / semantic /

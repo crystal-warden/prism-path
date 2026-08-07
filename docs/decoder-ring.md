@@ -233,7 +233,10 @@ happen. The consequence is an asymmetry you should internalize:
 Which is itself an argument for writing safety-critical branches as `when` predicates: the more of
 your flow lives in the fragment, the stronger an answer the tool can give you.
 
-Where it lives: [`model_check.py`](../prismpath/model_check.py), `prismpath verify`, SPEC §4.3.
+Where it lives: [`model_check.py`](../prismpath/model_check.py), `prismpath verify`, SPEC §4.3 —
+and, since 2026-08-07, in FPGA fabric:
+[`prismpath-hw/`](../prismpath-hw/README.md), the fragment's first hardware
+target (declared-subset certified).
 
 ### 10. Hexagonal architecture (ports and adapters)
 
@@ -386,7 +389,10 @@ labels mean something. See idea 7 and its caveat.
 
 **Learn-Then-Test (LTT)** — the framework behind risk-controlled calibration. See idea 5.
 
-**Level M** — the match-action fragment; the decidable heart of the predicate language. See idea 9.
+**Level M** — the match-action fragment; the decidable heart of the predicate language. See
+idea 9. Now has a first hardware target — a fixed FPGA interpreter circuit, certified on a
+declared subset of the frozen vectors
+([`prismpath-hw/`](../prismpath-hw/README.md)).
 
 **Lockfile** — committed embeddings for every semantic condition, so semantic routing is
 reproducible bit-for-bit across machines. Promotes a flow from P2 to P1.

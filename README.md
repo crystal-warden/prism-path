@@ -109,6 +109,40 @@ centroids need labeled history — zero-shot is the cold-start row. The external
 accurate out of the box because they pay the model on every single transition; if that's the
 right trade for your workload, use them — see the box below.
 
+## The fragment runs on silicon
+
+The deterministic tier's Level M fragment ([SPEC §4.3](SPEC.md)) was designed as a match-action
+table. It now runs as one — in FPGA fabric, as of 2026-08-07:
+
+- **One fixed interpreter circuit; every flow is data.** A Level M flow compiles to a binary
+  table image loaded into block RAM at runtime — `incident_severity` is **136 bytes**,
+  `wazuh_triage` (the production SOC flow, unmodified) is **302 bytes**. Editing the Markdown
+  recompiles the table in seconds; the bitstream never changes.
+- **Certified against the same frozen vectors — on a declared subset, stated plainly.** The C
+  target and the RTL each pass **114/1,067 predicate + 6/27 engine vectors with zero
+  divergence**, and every excluded vector carries a machine-readable reason. That is *not*
+  SPEC §8 conformance — it is the portability-tier pattern taken one level down, and it is
+  never claimed as more. The RTL additionally reproduced **7,436 live sensor samples**
+  bit-for-bit against the C target.
+- **Measured on a Zynq-7020** (Arty Z7-20, PYNQ-Z1 v3.1.1 image): a routing decision takes
+  **5–21 cycles — a 100–420 ns worst case** at the shipped 50 MHz fabric clock, in
+  **1,064 LUTs: 2.0% of the part**. On the bench, **2,985 live accelerometer samples** routed
+  in fabric at 89/96/202 µs min/median/max round-trip (that figure includes Linux, Python, and
+  an SSH hop — the fabric is the nanoseconds part).
+
+The work lives in this repo —
+**[`prismpath-hw/`](prismpath-hw/README.md)** — and its evidence set is
+anchored the same way this repo's launch was: `evidence/SHA256SUMS` is OpenTimestamps-anchored
+in **Bitcoin block 961390**, and the two artifacts that matter are pinned by hash:
+
+```
+2b69d54dc2194f40d0d06e555e18e1b9550ab3929f7b781c155fa38acbbc88d2  ppt_overlay.bit
+314b033cd1251b6da7671cbd8a209be0b46d3babd77e254bed1b669ea4d83065  incident_severity.ppt
+```
+
+Every number above has a row in the [evidence ledger](docs/research/supporting-evidence.md)
+(#72–#76). Check the artifact, not the author.
+
 ## Who wrote this — and why it shouldn't matter
 
 Much of this code was written by AI agents under a gated control plane — the same one this repo
@@ -116,10 +150,12 @@ ships. Here are the vectors, the tests, and the reproducers, because the point o
 that **correctness shouldn't depend on trusting the author**:
 
 - **[1,067 predicate + 27 engine conformance vectors](prismpath/portable/conformance/README.md)**,
-  frozen — passed independently by four kernels in four languages
-  ([Python](prismpath/engine.py), [JS](prismpath/portable/README.md),
-  [Rust](prismpath-rs/CONFORMANCE.md), [Go](prismpath-go/README.md)). Independent
+  frozen — passed by the Python reference plus three independent re-implementations
+  ([JS](prismpath/portable/README.md), [Rust](prismpath-rs/CONFORMANCE.md),
+  [Go](prismpath-go/README.md)): four kernels in four languages. Independent
   re-implementations agreeing bit-for-bit is the one check a plausible-looking codebase can't fake.
+  (The [hardware target](#the-fragment-runs-on-silicon) is certified on a *declared subset* of the
+  same vectors and is deliberately not counted as a kernel.)
 - **660+ tests** across the package and both adapters — [run them yourself](#running-the-tests).
 - **[Reproducers for every measured number](docs/research/supporting-evidence.md)** — each claim in
   the papers maps to the script that produced it; the benchmark table above regenerates with one
@@ -259,8 +295,11 @@ toolchain (validate/lint, `prismpath test`, lockfile, calibrate, centroids, grap
 portable, verify, lsp), fan-out/composition + its live Mission Control Flows view, the durable
 layer (checkpoints, scheduler, git Flow-Ledger, OTS anchoring), the Connector SDK (six ports),
 the sprint control plane (the browser gate; the loop itself runs as a flow under `SPRINT_FLOW=1`),
-Mission Control, and the portable kernels with their frozen conformance vectors — **three
-independent implementations (JS, Rust, Go) each pass all 1,067 predicate + 27 flow vectors**.
+Mission Control, and the portable kernels with their frozen conformance vectors — the Python
+reference plus **three independent re-implementations (JS, Rust, Go), each passing all 1,067
+predicate + 27 flow vectors**. The Level M fragment additionally
+[runs in FPGA fabric](#the-fragment-runs-on-silicon), certified on a declared subset of the same
+vectors ([`prismpath-hw/`](prismpath-hw/README.md)).
 **523 Python tests + 18 Node kernel tests passing** (the compliance reference adapter adds a ~130-test suite with adversarial attestation-tamper + hypothesis property coverage); the predicate sandbox is fuzz-hardened; the format is specified in
 [SPEC.md](SPEC.md) (v1 draft). This repo is a curated export of an active research control plane
 extracted from a real build; the `eval_*.py` and `measure_*.py` scripts are the measurement
