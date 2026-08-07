@@ -19,9 +19,7 @@ RTL → AXI, zero divergence. This is the remaining physical checklist.
 
 ```sh
 # the bitstream pair, built 2026-08-06 on the rig:
-scp figue@100.101.145.39:C:/Users/figue/prismpath-hw/vivado/build_overlay/ppt_overlay.bit \
-    figue@100.101.145.39:C:/Users/figue/prismpath-hw/vivado/build_overlay/ppt_overlay.hwh \
-    xilinx@<board-ip>:/home/xilinx/
+scp evidence/ppt_overlay.bit evidence/ppt_overlay.hwh xilinx@<board-ip>:/home/xilinx/
 scp pynq/ppt_pynq.py xilinx@<board-ip>:/home/xilinx/
 ./deploy.sh <flow.md> <board-ip>        # emits live.ppt + live.json on the board
 ssh xilinx@<board-ip> "sudo python3 ppt_pynq.py ppt_overlay.bit live.ppt live.json"

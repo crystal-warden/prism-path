@@ -1,7 +1,7 @@
 # prismpath-hw — the FPGA sprint workspace
 
 *Off-repo by design: nothing here lands in `prismpath` until it passes that repo's own bar.
-The plan is `~/Desktop/PLAN_prismpath_fpga_week.md`; the claim under construction: a **fixed
+The claim under construction: a **fixed
 circuit** routes any conformant Level M flow loaded as a **BRAM table image** — the flow
 stays data all the way down to silicon.*
 
@@ -79,8 +79,9 @@ python3 -W ignore compile_flows.py
   configured from the Feb design's extracted 471-parameter preset (`vivado/ps7_preset.tcl`),
   interpreter attached as an AXI-Lite module reference (plain-Verilog shim `ppt_axi_top.v` —
   BD module refs refuse an SV top). Artifacts on the rig at
-  `C:/Users/figue/prismpath-hw/vivado/build_overlay/`.
-- **Fabric clock 50 MHz** (100 MHz missed by 5.2 ns — the single-cycle atom path: prog word
+  `vivado/build_overlay/` on the synthesis machine (the certified pair is committed
+  under `evidence/`).
+- **Fabric clock 50 MHz** (100 MHz missed by 5.23 ns — the single-cycle atom path: prog word
   → atom row → field register → 32-bit compare; v1 improvement: one pipeline stage). At
   50 MHz: WNS **+1.623 ns**, 0/4455 failing, hold clean.
 - **WCET, shipped numbers**: evaluate = 5–21 cycles → **100–420 ns worst case** on
@@ -101,12 +102,12 @@ python3 -W ignore compile_flows.py
 - Evidence: `build/fabric_route_log.session1.ndjson` (pulled from the board) — **2,985
   samples routed in fabric**, round-trip min/median/max **89/96/202 µs**, and the owner's
   hand-run choreography executed by the circuit: 252s of `watch`, then
-  `sev3_ticket → sev2_oncall → sev1_page` climbing in 0.3s, peak deviation 5.0 g-milli
+  `sev3_ticket → sev2_oncall → sev1_page` climbing in 0.3s, peak deviation 5.0 m/s²
   crossing the shake threshold, decay back to `watch`.
 - Ops notes: PYNQ v3 needs `sudo` + the pynq-venv env sourced; run the server from a
   subdir (a `~/pynq` source folder shadows the package); `xilinx` got NOPASSWD sudo via
   Jupyter (owner action); optional firewall rule for direct routing documented in chat —
-  until then the reverse tunnel (`-R 2222:ssh, -R 19317:9317`) is the path.
+  until then a board-initiated reverse SSH tunnel is the path.
 
 ## Backlog
 
