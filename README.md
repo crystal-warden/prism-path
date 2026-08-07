@@ -132,8 +132,8 @@ table. It now runs as one — in FPGA fabric, as of 2026-08-07:
 
 The work lives in its own public repo —
 **[prism-path-hw](https://github.com/crystal-warden/prism-path-hw)** — and its evidence set is
-anchored the same way this repo's launch was: `evidence/SHA256SUMS` is OpenTimestamps-stamped,
-and the two artifacts that matter are pinned by hash:
+anchored the same way this repo's launch was: `evidence/SHA256SUMS` is OpenTimestamps-anchored
+in **Bitcoin block 961390**, and the two artifacts that matter are pinned by hash:
 
 ```
 2b69d54dc2194f40d0d06e555e18e1b9550ab3929f7b781c155fa38acbbc88d2  ppt_overlay.bit
