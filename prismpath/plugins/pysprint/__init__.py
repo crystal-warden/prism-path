@@ -49,8 +49,16 @@ _PYTEST_TIMEOUT = int(os.environ.get("PYSPRINT_TEST_TIMEOUT", "300"))
 _FAIL_RE = re.compile(r"^(FAILED|ERROR)\s+(\S+)", re.MULTILINE)
 
 
+# Gate integrity: if PYSPRINT_FROZEN_TESTS names a directory, the gate runs the acceptance
+# tests from THERE (module still imported from the sandbox via PYTHONPATH), so a coder that
+# edits its own in-sandbox test copy gains nothing — the gate never runs the sandbox's tests.
+# Unset -> the gate runs the project's own test_*.py (default, backward compatible).
+_FROZEN = os.environ.get("PYSPRINT_FROZEN_TESTS", "")
+
+
 def _test_files(proj: str) -> list:
-    return sorted(f for f in os.listdir(proj)
+    d = _FROZEN or proj
+    return sorted(os.path.join(d, f) for f in os.listdir(d)
                   if f.startswith("test_") and f.endswith(".py"))
 
 
