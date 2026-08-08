@@ -35,6 +35,14 @@ spec-stable.
   [`docs/guides/mission-control-api.md`](docs/guides/mission-control-api.md); 13-test TestClient suite.
   **Removed** with the old multi-user scope: Tailscale identity, the Gemma chat, RAG doc-upload, and
   the AGY tab; the stdlib `http.server` console (`python -u prismpath/mission_control.py`) is retired.
+- **The sprint engine goes language-agnostic** — a **pysprint gate** plugin
+  (`prismpath/plugins/pysprint/`) runs pytest as the definition-of-done, so a sprint can build Python
+  targets, not just web; plus a **feature-extend mode** (`SPRINT_EXTEND` — skip greenfield ideate to
+  extend an existing tree) and an **uncheatable frozen gate** (tests read from a read-only dir outside
+  the sandbox). `run_sprint.py` now honors the gate plugin's `FILE_EXTS`.
+- **mdflow interop** (`prismpath/examples/mdflow_interop/`) — mdflow tasks run as PrismPath workers
+  behind the routing kernel ("PrismPath governs the routing; mdflow provides the action"), via mdflow's
+  `--json` envelope; gated example + tests.
 - **The Level M hardware target ([`prismpath-hw/`](prismpath-hw/README.md))** —
   a Level M flow compiles to a binary table image (`wazuh_triage`, unmodified: 302 bytes)
   interpreted by one fixed FPGA circuit on a Zynq-7020; C and RTL interpreters certified on a

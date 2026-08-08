@@ -77,6 +77,11 @@ ENABLE_THINKING = os.environ.get("SPRINT_ENABLE_THINKING", "0") == "1"  # let th
 STUCK_REPEAT = int(os.environ.get("SPRINT_STUCK_REPEAT", "3"))
 REGRESS_LIMIT = int(os.environ.get("SPRINT_REGRESS_LIMIT", "4"))   # consecutive-invalid before revert
 FRESH = os.environ.get("SPRINT_FRESH", "1") == "1"
+# Feature-extend mode: the project is a pre-seeded base to IMPROVE, not a greenfield to bootstrap.
+# When set, main() loads the existing files and skips plan()/ideate() (whose "build the initial
+# minimal project" bootstrap would otherwise clobber a large existing module with a stub). This is
+# what lets a sprint edit an existing file in place — pair with SPRINT_EXEC=cecli for diff editing.
+EXTEND = os.environ.get("SPRINT_EXTEND", "0") == "1"
 LEDGER = os.environ.get("SPRINT_LEDGER", "0") == "1"   # opt-in git Flow-Ledger of gate-green proofs
 _LEDGER = None                                          # lazy Ledger instance (ledger imported only if on)
 _RUN_ID = None                                          # minted once per sprint when LEDGER is on
@@ -559,7 +564,11 @@ def manifest(files: dict) -> str:
     return "\n".join(lines)
 
 
-_SRC_EXT = (".html", ".js", ".mjs", ".css", ".json")
+# Source extensions the coder's context collects. The browser gate's web tuple is the default;
+# a gate plugin that declares FILE_EXTS (e.g. pysprint for Python targets) overrides it, so the
+# engine stays target-agnostic — a .py-based target's files are visible to manifest()/load_project
+# exactly as web files are for the browser gate.
+_SRC_EXT = tuple(getattr(GATE_PLUGIN, "FILE_EXTS", None) or (".html", ".js", ".mjs", ".css", ".json"))
 _NON_SRC = {"package.json", "status.json", "HELP.md", "sprint.log", "STOP", "NUDGE.md",
             "orch_run.out", "BLUEPRINT.md"}
 
@@ -1377,12 +1386,12 @@ def main():
             help_escalate(help_id, "agent-declared", phase, htext, named)
 
     existing = load_project()
-    if existing and any(k.endswith(("index.html", "default.project.json")) for k in existing):
+    if existing and (EXTEND or any(k.endswith(("index.html", "default.project.json")) for k in existing)):
         files = existing
         blueprint = open(BLUEPRINT_FILE, encoding="utf-8").read() if os.path.isfile(BLUEPRINT_FILE) else plan(files)
         if os.path.isfile(HELP_FILE):
             help_id = open(HELP_FILE, encoding="utf-8").read().count("**HELP ")
-        log(f"    [resume] loaded {len(files)} existing files — skipping ideate")
+        log(f"    [{'extend' if EXTEND else 'resume'}] loaded {len(files)} existing files — skipping ideate")
     else:
         blueprint = plan()                       # ARCHITECT designs first
         files, ihelp = ideate(blueprint)         # CODER implements the handoff
