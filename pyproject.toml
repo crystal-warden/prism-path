@@ -52,6 +52,7 @@ prismpath = "prismpath.cli:main"
 [tool.setuptools]
 packages = [
     "prismpath",
+    "prismpath.mission_control",   # the control plane's proving + observability command center
     "prismpath.plugins",
     "prismpath.plugins.council",
     "prismpath.tests",
@@ -69,6 +70,8 @@ prismpath = ["flows/*.md",                    # example + reference flows
           "portable/*.mjs", "portable/*.html",
           "portable/conformance/*.json"]      # the frozen kernel spec
 "prismpath.plugins.council" = ["*.md"]
+# Mission Control's browser command center — served at runtime by the FastAPI app (control-plane extra).
+"prismpath.mission_control" = ["static/*", "static/vendor/*"]
 
 # Prose documentation, installed beside the package (sys.prefix/share/doc/prismpath/…) so an
 # air-gapped install still carries it. Not importable — read these from the repo or GitHub normally.

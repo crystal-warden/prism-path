@@ -27,7 +27,7 @@
   },
   "unclassified_needs_triage": [
     "run_sprint.py",
-    "mission_control.py",
+    "mission_control/",
     "analysis.py",
     "swarm_runner.py",
     "swarm_exporter.py",

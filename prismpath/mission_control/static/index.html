@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PrismPath Mission Control</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">◆</span> PrismPath <b>Mission Control</b>
+      <span class="sub">proving + observability · single-user · loopback</span>
+    </div>
+    <div class="pills" id="pills">
+      <span class="pill" id="p-conn" title="live event stream">● offline</span>
+      <span class="pill" id="p-run">idle</span>
+      <span class="pill" id="p-iter"></span>
+      <span class="pill" id="p-valid"></span>
+      <span class="pill" id="p-buf" title="run buffering mode"></span>
+      <span class="pill" id="p-audit"></span>
+      <a class="pill link" href="/docs" target="_blank" rel="noopener">API /docs</a>
+    </div>
+  </header>
+
+  <div class="control">
+    <button id="c-start-toggle" class="btn">▸ Start sprint</button>
+    <form id="startform" class="startform hidden">
+      <input name="proj" placeholder="project dir (blank = followed)" size="26">
+      <input name="gate" placeholder="gate (browser)" size="10">
+      <input name="nudge_file" placeholder="nudge file (optional)" size="16">
+      <input name="model" placeholder="model" size="8">
+      <label><input type="checkbox" name="rag" checked> rag</label>
+      <label><input type="checkbox" name="lessons" checked> lessons</label>
+      <label><input type="checkbox" name="fresh"> fresh</label>
+      <label title="python -u / PYTHONUNBUFFERED — stream live vs batch">
+        <input type="checkbox" name="unbuffered" checked> unbuffered
+      </label>
+      <button type="submit" class="btn go">Launch</button>
+    </form>
+    <span class="spacer"></span>
+    <button class="btn" data-act="pause">Pause</button>
+    <button class="btn" data-act="resume">Resume</button>
+    <button class="btn danger" data-act="stop">Stop</button>
+    <span class="proj" id="c-proj"></span>
+  </div>
+
+  <nav class="tabs" id="tabs">
+    <span class="tab active" data-v="graph">Graph</span>
+    <span class="tab" data-v="files">Files</span>
+    <span class="tab" data-v="audit">Audit</span>
+    <span class="tab" data-v="queue">Queue</span>
+    <span class="tab" data-v="flows">Flows</span>
+  </nav>
+
+  <main>
+    <!-- GRAPH: the command center -->
+    <section class="view active" id="v-graph">
+      <div class="graph-wrap">
+        <div class="graph-toolbar">
+          <span class="gname" id="g-name">flow</span>
+          <button class="btn" id="g-refresh">↻</button>
+          <button class="btn prove" id="g-levelm">Prove Level M</button>
+          <span class="chip" id="g-levelm-chip"></span>
+          <span class="grow"></span>
+          <span class="legend">
+            <i class="lg det"></i>deterministic <i class="lg sem"></i>semantic
+            <i class="lg err"></i>error <i class="lg evt"></i>event
+            <i class="lg nonm"></i>non-Level-M
+          </span>
+        </div>
+        <div id="cy"></div>
+      </div>
+      <aside class="side" id="g-side">
+        <div class="card" id="prove-reach">
+          <h3>Prove reachability</h3>
+          <label>target node(s)</label>
+          <select id="r-targets" multiple size="4"></select>
+          <label>assume (optional)</label>
+          <input id="r-assume" placeholder="e.g. amount &lt;= 500">
+          <button class="btn prove" id="r-go">Prove it</button>
+          <div class="verdicts" id="r-verdicts"></div>
+        </div>
+        <div class="card" id="node-detail">
+          <h3>Node</h3>
+          <div class="muted" id="nd-empty">Click a node to inspect it.</div>
+          <div id="nd-body" class="hidden"></div>
+        </div>
+      </aside>
+    </section>
+
+    <!-- FILES -->
+    <section class="view" id="v-files">
+      <div class="filelist" id="filelist"></div>
+      <div class="editor">
+        <div class="editor-bar"><span id="ed-path" class="muted">no file</span>
+          <button class="btn" id="ed-save" disabled>Save</button></div>
+        <textarea id="ed-body" spellcheck="false" placeholder="select a file"></textarea>
+      </div>
+    </section>
+
+    <!-- AUDIT -->
+    <section class="view" id="v-audit">
+      <div class="card">
+        <h3>Audit log <span class="chip" id="a-verify"></span></h3>
+        <div class="muted" id="a-meta"></div>
+        <div class="table" id="a-events"></div>
+      </div>
+    </section>
+
+    <!-- QUEUE (HITL) -->
+    <section class="view" id="v-queue">
+      <div class="card"><h3>Suspended for a human decision</h3>
+        <div id="q-items"></div></div>
+    </section>
+
+    <!-- FLOWS (fan-outs) -->
+    <section class="view" id="v-flows">
+      <div class="card"><h3>Fan-out composition</h3>
+        <div id="f-tree"></div></div>
+    </section>
+  </main>
+
+  <div id="toast" class="toast hidden"></div>
+
+  <script src="/vendor/cytoscape.min.js"></script>
+  <script src="/app.js"></script>
+</body>
+</html>

@@ -567,7 +567,7 @@ prismpath lsp         # language server for editors
 
 **Control plane** — [`run_sprint.py`](../prismpath/run_sprint.py) ·
 [`gates.py`](../prismpath/gates.py) · [`orchestrator.py`](../prismpath/orchestrator.py) ·
-[`mission_control.py`](../prismpath/mission_control.py) ·
+[`mission_control/`](../prismpath/mission_control/) ·
 [`composer.py`](../prismpath/composer.py)
 
 **Interop** — [`langgraph_import.py`](../prismpath/langgraph_import.py) ·

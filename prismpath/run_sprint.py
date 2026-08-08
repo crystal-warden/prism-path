@@ -282,7 +282,12 @@ def retrieve_docs(query: str) -> str:
         return ""
     block = _doc_block(hits)
     if _ix:
-        _ix.record("retriever", "retriever", query, block or "(no hits)", phase="retrieve", hits=len(hits))
+        # structured per-chunk metadata so Mission Control's /retrievals can render a clean citation
+        # list (source · path · score), not just a count — the Retrieval port made observable.
+        hits_meta = [{"source": h.get("source", ""), "path": h.get("path", ""),
+                      "score": round(float(h.get("score", 0)), 3)} for h in hits]
+        _ix.record("retriever", "retriever", query, block or "(no hits)", phase="retrieve",
+                   hits=len(hits), hits_meta=hits_meta)
     log(f"    [rag] {len(hits)} docs grounding: {query[:55]}")
     return ("\n\n" + block) if block else ""
 
