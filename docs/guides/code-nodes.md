@@ -54,12 +54,17 @@ Runners:
   Same agent; the envelope is enforced at runtime, and an unavailable sandbox **refuses** rather than
   running un-sandboxed.
 
-## Two governed safety floors
+## Where safety lives (and doesn't)
 
-A worker can do two things — emit text, or execute code — and PrismPath governs both boundaries with the
-same discipline: the **guard** screens outcomes/text (`prismpath/guard.py`), and the **code-node sandbox**
-governs code execution (this page). Both are declared, enforced, loud-when-absent, and honestly
-best-effort; neither is a guarantee against determined untrusted code.
+A worker can do two things — emit text, or execute code — and the two have **opposite ownership**:
+
+- **Execution is ours.** PrismPath runs the code, so PrismPath must contain it: the code-node sandbox
+  above fails closed — a sandbox that silently degrades to an unsafe fallback is worse than none, so
+  ours refuses instead. There is no upstream party whose job this is.
+- **Content is the model's.** Whether generated text is *harmful* is owned by the model and its
+  provider's moderation, not the routing layer. PrismPath delegates it. An optional deny-floor
+  (`prismpath/guard.py`) is available for the weak-local-model case, and you can compose a guardrail at
+  the worker boundary — but it is **not** a kernel feature. See `docs/design/spec-guard-onion.md`.
 
 ## Scope
 
