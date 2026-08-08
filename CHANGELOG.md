@@ -9,6 +9,18 @@ spec-stable.
 ## [Unreleased]
 
 ### Added
+- **Portability matrix + reachability, now in the portable kernel and provably in sync** — two
+  analyses that used to be Python-only are ported to `prismpath/portable/prismpath.mjs`:
+  `capabilityReport` (which targets a flow compiles to — python / portable JS-Rust-Go / Level M
+  hardware — and, for the ones it doesn't, the blocking edges) and `checkReach` (three-valued
+  yes/may/no bounded-model-checking reachability with `assume`/visit-caps/witnesses). Each is a faithful
+  port of its `model_check` reference and is **certified against a frozen corpus** so the CLI and the
+  browser can never disagree: `capability.json` (6 cases) and `reach.json` (11 cases), checked from
+  Python (`test_capability_conformance.py`, `test_reach_conformance.py`) and JS
+  (`run_capability.mjs`, `run_reach.mjs`). New CLI subcommand `prismpath capability <flow>` prints the
+  matrix (`--json` for machine output). The website playground gains a live **Targets** matrix and a
+  **Prove reachability** panel (node picker + optional `assume`, verdict + witness path), all
+  client-side.
 - **Code nodes — governed workers with a capability-scoped sandbox** (`prismpath/code_nodes.py`,
   `prismpath/sandbox.py`). A node's worker can be plain code; the flow still governs the routing
   (branching stays on the edges). Each code node declares an `@code(net, fs, timeout_s, mem_mb)`

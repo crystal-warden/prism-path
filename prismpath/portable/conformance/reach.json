@@ -1,0 +1,243 @@
+{
+  "note": "Frozen three-valued reachability verdicts from model_check.check_reach. Any checkReach implementation must reproduce every {reachable, proven} bit-for-bit. Witnesses are not frozen (BFS tie-order is an implementation detail).",
+  "version": 1,
+  "cases": [
+    {
+      "key": "certain_yes",
+      "flow": "---\nname: t\nstart: a\n---\n## a\n-> b: else\n## b\nx\n",
+      "targets": [
+        "b"
+      ],
+      "assume": null,
+      "bound": 25,
+      "include_errors": true,
+      "include_events": true,
+      "expected": {
+        "b": {
+          "reachable": "yes",
+          "proven": false
+        }
+      }
+    },
+    {
+      "key": "det_both",
+      "flow": "---\nname: t\nstart: a\n---\n## a\n-> b: when score > 5\n-> c: else\n## b\nx\n## c\ny\n",
+      "targets": [
+        "b",
+        "c"
+      ],
+      "assume": null,
+      "bound": 25,
+      "include_errors": true,
+      "include_events": true,
+      "expected": {
+        "b": {
+          "reachable": "yes",
+          "proven": false
+        },
+        "c": {
+          "reachable": "yes",
+          "proven": false
+        }
+      }
+    },
+    {
+      "key": "contradiction",
+      "flow": "---\nname: t\nstart: a\n---\n## a\n-> b: when x > 5 and x < 3\n-> c: else\n## b\nx\n## c\ny\n",
+      "targets": [
+        "b",
+        "c"
+      ],
+      "assume": null,
+      "bound": 25,
+      "include_errors": true,
+      "include_events": true,
+      "expected": {
+        "b": {
+          "reachable": "no",
+          "proven": true
+        },
+        "c": {
+          "reachable": "yes",
+          "proven": false
+        }
+      }
+    },
+    {
+      "key": "semantic_may",
+      "flow": "---\nname: t\nstart: a\n---\n## a\n-> b: the user is angry\n-> c: when score > 5\n## b\nx\n## c\ny\n",
+      "targets": [
+        "b",
+        "c"
+      ],
+      "assume": null,
+      "bound": 25,
+      "include_errors": true,
+      "include_events": true,
+      "expected": {
+        "b": {
+          "reachable": "may",
+          "proven": false
+        },
+        "c": {
+          "reachable": "yes",
+          "proven": false
+        }
+      }
+    },
+    {
+      "key": "error_may",
+      "flow": "---\nname: t\nstart: a\n---\n## a\n-> b: when score > 5\n-> c: on error\n-> d: else\n## b\nx\n## c\ny\n## d\nz\n",
+      "targets": [
+        "b",
+        "c",
+        "d"
+      ],
+      "assume": null,
+      "bound": 25,
+      "include_errors": true,
+      "include_events": true,
+      "expected": {
+        "b": {
+          "reachable": "yes",
+          "proven": false
+        },
+        "c": {
+          "reachable": "may",
+          "proven": false
+        },
+        "d": {
+          "reachable": "yes",
+          "proven": false
+        }
+      }
+    },
+    {
+      "key": "error_excluded",
+      "flow": "---\nname: t\nstart: a\n---\n## a\n-> b: when score > 5\n-> c: on error\n-> d: else\n## b\nx\n## c\ny\n## d\nz\n",
+      "targets": [
+        "c"
+      ],
+      "assume": null,
+      "bound": 25,
+      "include_errors": false,
+      "include_events": true,
+      "expected": {
+        "c": {
+          "reachable": "no",
+          "proven": true
+        }
+      }
+    },
+    {
+      "key": "event_may",
+      "flow": "---\nname: t\nstart: a\n---\n## a\n-> b: when score > 5\n-> c: on event go\n-> d: else\n## b\nx\n## c\ny\n## d\nz\n",
+      "targets": [
+        "b",
+        "c",
+        "d"
+      ],
+      "assume": null,
+      "bound": 25,
+      "include_errors": true,
+      "include_events": true,
+      "expected": {
+        "b": {
+          "reachable": "yes",
+          "proven": false
+        },
+        "c": {
+          "reachable": "may",
+          "proven": false
+        },
+        "d": {
+          "reachable": "yes",
+          "proven": false
+        }
+      }
+    },
+    {
+      "key": "field_vs_field",
+      "flow": "---\nname: t\nstart: a\n---\n## a\n-> b: when x == y\n-> c: else\n## b\nx\n## c\ny\n",
+      "targets": [
+        "b",
+        "c"
+      ],
+      "assume": null,
+      "bound": 25,
+      "include_errors": true,
+      "include_events": true,
+      "expected": {
+        "b": {
+          "reachable": "yes",
+          "proven": false
+        },
+        "c": {
+          "reachable": "yes",
+          "proven": false
+        }
+      }
+    },
+    {
+      "key": "loop_visits",
+      "flow": "---\nname: t\nstart: a\n---\n## a\n-> a: when visits < 3\n-> b: else\n## b\nx\n",
+      "targets": [
+        "b"
+      ],
+      "assume": null,
+      "bound": 25,
+      "include_errors": true,
+      "include_events": true,
+      "expected": {
+        "b": {
+          "reachable": "yes",
+          "proven": false
+        }
+      }
+    },
+    {
+      "key": "assume_kills",
+      "flow": "---\nname: t\nstart: a\n---\n## a\n-> b: when score > 5\n-> c: else\n## b\nx\n## c\ny\n",
+      "targets": [
+        "b",
+        "c"
+      ],
+      "assume": "score < 0",
+      "bound": 25,
+      "include_errors": true,
+      "include_events": true,
+      "expected": {
+        "b": {
+          "reachable": "no",
+          "proven": true
+        },
+        "c": {
+          "reachable": "yes",
+          "proven": false
+        }
+      }
+    },
+    {
+      "key": "deep_chain",
+      "flow": "---\nname: t\nstart: a\n---\n## a\n-> b: when score > 5\n## b\n-> c: when score > 10\n## c\nx\n",
+      "targets": [
+        "b",
+        "c"
+      ],
+      "assume": null,
+      "bound": 25,
+      "include_errors": true,
+      "include_events": true,
+      "expected": {
+        "b": {
+          "reachable": "yes",
+          "proven": false
+        },
+        "c": {
+          "reachable": "yes",
+          "proven": false
+        }
+      }
+    }
+  ]
+}
