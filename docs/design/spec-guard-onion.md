@@ -16,6 +16,27 @@ isolation, and it protects exactly one caller.
 This spec makes the safety boundary a **layer**: authored once, inherited by every adapter, bypassable
 by none.
 
+## 1.5 Scope & responsibility boundary
+
+The guard is a **deterministic floor for the case the model can't be trusted** — a weak or absent local
+model on an edge device — not a comprehensive content filter. Chasing every obfuscated bypass
+(homoglyphs, leetspeak, spacing) is an arms race the *model and its provider* are far better placed to
+run; duplicating that across kernels would be taking on a responsibility that is not the routing layer's.
+
+PrismPath draws the line deliberately:
+
+- **Ours to own, in every kernel:** provable **routing** (the decidable tiers, `verify`) and, where the
+  engine executes code, governed **execution** — the code-node sandbox (`docs/guides/code-nodes.md`),
+  which fails closed. Execution safety *is* the framework's job, because the framework runs the code; a
+  sandbox that silently degrades to an unsafe fallback is worse than none, so ours refuses instead.
+- **Delegated:** **content** safety. The model owns it; an opt-in guard can back it up.
+
+This guard therefore ships as an **optional** layer — the Python reference (`guard.py`) and Journeyman's
+`guard.ts`, the latter genuinely warranted (a learning app for possibly-vulnerable users on a weak local
+model). It is deliberately **not** embedded in the portable Rust/Go/JS kernels: a conformant kernel is
+*not* a content-guarded one, and each kernel's `CONFORMANCE.md` says so. Compose a guard at the worker
+boundary if your deployment wants one; otherwise content safety rests with the model.
+
 ## 2. The two-author model
 
 Two people with two different jobs write policy, and the design exists to let both do so safely:

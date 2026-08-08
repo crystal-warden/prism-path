@@ -9,6 +9,19 @@ spec-stable.
 ## [Unreleased]
 
 ### Added
+- **Code nodes — governed workers with a capability-scoped sandbox** (`prismpath/code_nodes.py`,
+  `prismpath/sandbox.py`). A node's worker can be plain code; the flow still governs the routing
+  (branching stays on the edges). Each code node declares an `@code(net, fs, timeout_s, mem_mb)`
+  capability envelope — statically checkable (`check_code_nodes`, verifiable like Level M) — and runs
+  **fail-closed**: no undeclared code, no invalid envelope, and (via `SandboxRunner`) a `bwrap`
+  subprocess whose profile is derived from the envelope, **refusing rather than degrading** when the
+  sandbox is unavailable. Guide: [`docs/guides/code-nodes.md`](docs/guides/code-nodes.md); 14 tests.
+- **Security posture clarified** ([`docs/design/spec-guard-onion.md`](docs/design/spec-guard-onion.md)
+  §1.5): PrismPath owns provable **routing** and governed code **execution** (the code-node sandbox);
+  **content** safety is delegated to the model or an opt-in guard — the routing layer is the wrong place
+  for a content filter. The content guard is therefore an **optional**
+  floor (`guard.py`, Journeyman's `guard.ts`), deliberately **not** embedded in the portable Rust/Go/JS
+  kernels; each kernel's `CONFORMANCE.md` now states "a conformant kernel is not a content-guarded one."
 - **Mission Control rebuilt as a proving + observability command center**
   (`prismpath/mission_control/`, now a FastAPI package; run `python -m prismpath.mission_control`).
   A single-user, loopback console over a **versioned JSON API** (`/api/v1`, OpenAPI at `/docs`): the

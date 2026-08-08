@@ -10,6 +10,15 @@ adapter inherits it and none can bypass it, so it lives in the core and carries 
 (`tools/arch_guard.py` Signal-1 is a hard fail on those). It speaks of policies, principals, text and
 verdicts — never of any particular application.
 
+SCOPE — AN OPTIONAL FLOOR, NOT THE WHOLE ANSWER
+-----------------------------------------------
+Content safety is primarily the model's responsibility (and its provider's moderation), not the routing
+layer's. This guard is an OPTIONAL deterministic floor for the case the model can't be trusted (a weak
+or absent local model); it
+is deliberately NOT embedded in the portable Rust/Go/JS kernels. PrismPath owns provable routing and
+governed code execution (the code-node sandbox); content safety is delegated. See
+`docs/design/spec-guard-onion.md` §1.5.
+
 THE TWO-AUTHOR MODEL
 --------------------
 Two different people with two different jobs write policy:

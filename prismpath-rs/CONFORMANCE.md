@@ -46,9 +46,12 @@ integral floats must serialize as integers or the spawn fixture fails on notatio
 ## Scope boundary
 
 Kernel conformance ≠ the guard. `safety.json` in the corpus dir belongs to the P0 **guard**
-(`guard.py` / Journeyman's `guard.ts`), which this crate does not implement. A native Rust guard
-would be its own port with its own parity story — do not let "the Rust kernel is conformant" drift
-into a claim about the safety boundary.
+(`guard.py` / Journeyman's `guard.ts`) — an **optional** content floor, not a kernel feature. By design
+this crate implements **no content guard**: content safety is delegated to the model or an opt-in
+guardrail, while PrismPath owns provable routing and — where it runs code — governed execution (the
+code-node sandbox). Do not let "the Rust kernel is conformant" drift
+into a claim about content safety; a conformant kernel is not a content-guarded one. See
+`docs/design/spec-guard-onion.md` §1.5.
 
 ---
 
