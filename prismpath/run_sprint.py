@@ -33,7 +33,7 @@ Config (env):
   SPRINT_SECONDS               wall-clock budget; 0/unset = open-ended (until STOP file)
   SPRINT_MAX_NEW               generation budget per call (default 12000)
   SPRINT_STUCK_REPEAT          identical-error repeats before auto-escalate (default 3)
-  SPRINT_FRESH                 "1" to wipe SPRINT_PROJ at start (default 1)
+  SPRINT_EXTEND                "1" to build on an existing SPRINT_PROJ (default 0 — else it must be empty)
 
 Live files written in SPRINT_PROJ: BLUEPRINT.md, STOP (touch to end), HELP.md, status.json, sprint.log
 """
@@ -76,7 +76,6 @@ MAX_NEW = int(os.environ.get("SPRINT_MAX_NEW", "12000"))
 ENABLE_THINKING = os.environ.get("SPRINT_ENABLE_THINKING", "0") == "1"  # let the model reason before emitting files
 STUCK_REPEAT = int(os.environ.get("SPRINT_STUCK_REPEAT", "3"))
 REGRESS_LIMIT = int(os.environ.get("SPRINT_REGRESS_LIMIT", "4"))   # consecutive-invalid before revert
-FRESH = os.environ.get("SPRINT_FRESH", "1") == "1"
 # Feature-extend mode: the project is a pre-seeded base to IMPROVE, not a greenfield to bootstrap.
 # When set, main() loads the existing files and skips plan()/ideate() (whose "build the initial
 # minimal project" bootstrap would otherwise clobber a large existing module with a stub). This is
@@ -1154,7 +1153,7 @@ def _apply_ledger_done(kg: dict, done_units) -> int:
 
 def _kg_seed_from_ledger():
     """Resume-from-git: mark KG nodes done from the ledger's proofs, so a sprint whose .kg.json was
-    wiped (SPRINT_FRESH) restarts at the first UNPROVEN node instead of rebuilding what git already
+    reset restarts at the first UNPROVEN node instead of rebuilding what git already
     attests. Point at a prior run with SPRINT_LEDGER_RUN=<id>. Best-effort — never blocks a sprint."""
     if not LEDGER:
         return
@@ -1356,9 +1355,19 @@ def main():
     except Exception as e:
         log(f"[sprint] endpoint check failed: {e} — aborting."); return
 
-    if FRESH:
-        shutil.rmtree(PROJ, ignore_errors=True)
+    # The sprint NEVER deletes your files. Greenfield builds into an EMPTY dir; to build on an
+    # existing tree, opt in with SPRINT_EXTEND=1. (Choosing the location — and clearing it — is the
+    # user's call, not ours: an auto-wipe here is one typo away from erasing a real project.)
     os.makedirs(PROJ, exist_ok=True)
+    if not EXTEND:
+        _keep = {"STOP", os.path.basename(HELP_FILE), "status.json", "sprint.log", "BLUEPRINT.md"}
+        _existing = [f for f in os.listdir(PROJ) if not f.startswith(".") and f not in _keep]
+        if _existing:
+            log(f"[sprint] refusing to run greenfield in a non-empty directory: {PROJ}\n"
+                f"         it holds {len(_existing)} item(s) (e.g. {', '.join(sorted(_existing)[:5])}).\n"
+                f"         The sprint never deletes your files — empty the dir yourself, point "
+                f"SPRINT_PROJ at an empty one, or pass SPRINT_EXTEND=1 to build on this tree.")
+            return
     open(HELP_FILE, "a").close()
     budget = f"{SECONDS}s" if SECONDS else "open-ended (until STOP file)"
     log(f"[sprint] model={MODEL} gate={GATE} budget={budget} proj={PROJ}")
