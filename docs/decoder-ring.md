@@ -516,6 +516,7 @@ prismpath run         # execute a flow
 prismpath validate    # static analysis — does it compile? (fast, no model)
 prismpath lint        # validate + semantic ambiguity + polarity traps (needs embedder)
 prismpath verify      # bounded model checking — can this node be reached?
+prismpath capability  # which targets does this flow compile to? (python / portable / Level M hw)
 prismpath test        # run the flow's Markdown fixtures (no model)
 prismpath lock        # pin semantic routing into a lockfile
 prismpath calibrate   # derive the risk-controlled threshold τ

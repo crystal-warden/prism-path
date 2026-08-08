@@ -537,6 +537,227 @@ export function flowLevelM(graph) {
   return { level_m: bad.length === 0, non_member_edges: bad };
 }
 
+/** Which targets a flow compiles to (+ the edges that push it out) — the portable capability matrix.
+ * Composes flowLevelM with the reachable-semantic-edge scan. Mirrors model_check.capability_report. */
+export function capabilityReport(graph) {
+  const semantic = portabilityViolations(graph);   // reachable semantic edges [{node,target,condition}]
+  const p0 = semantic.length === 0;
+  const lm = flowLevelM(graph);
+  const hwOk = p0 && lm.level_m;
+  return {
+    tier: p0 ? "P0" : "P1/P2",
+    level_m: lm.level_m,
+    targets: {
+      python: { status: "yes", reason: null, blocking_edges: [] },
+      portable: {
+        status: p0 ? "yes" : "needs-lockfile",
+        reason: p0 ? null
+          : `${semantic.length} reachable semantic edge(s) — P0 runs unconditionally; lock them for P1`,
+        blocking_edges: p0 ? [] : semantic,
+      },
+      level_m_hardware: {
+        status: hwOk ? "yes" : "no",
+        reason: hwOk ? null
+          : (!p0 ? `${semantic.length} reachable semantic edge(s) — not deterministic`
+                 : `${lm.non_member_edges.length} deterministic edge(s) outside the match-action fragment`),
+        blocking_edges: !p0 ? semantic : (hwOk ? [] : lm.non_member_edges),
+      },
+    },
+  };
+}
+
+// ------------------------------------------------------------ reachability (bounded model checking)
+// A faithful port of model_check.check_reach: three-valued yes/may/no reachability for target nodes,
+// exact over Level M and a sound over-approximation outside it. Reuses parseExpr / evalCondition /
+// isLevelM; no model, no execution. Verdicts match the Python reference bit-for-bit (reach.json).
+const _FRESH_STR = "\u0000fresh";
+const _CERTAIN = "certain", _MAY = "may";
+const _PRODUCT_CAP = 50000;
+
+function _condAst(cond) {                          // mirror analysis._parse
+  if (!isDeterministic(cond)) return null;
+  const expr = exprOf(cond), low = expr.toLowerCase();
+  if (ALWAYS.has(low) || NEVER.has(low)) return null;
+  try { return parseExpr(expr); } catch { return null; }
+}
+function _walk(node, out) {
+  if (!node) return;
+  out.push(node);
+  if (node.k === "and" || node.k === "or") node.vals.forEach((v) => _walk(v, out));
+  else if (node.k === "not") _walk(node.v, out);
+  else if (node.k === "cmp") { _walk(node.left, out); node.rights.forEach((r) => _walk(r, out)); }
+  else if (node.k === "list") node.elts.forEach((e) => _walk(e, out));
+}
+function _constsOf(node) { const a = []; _walk(node, a); return a.filter((n) => n.k === "const").map((n) => n.v); }
+function _fieldsOf(node) { const a = []; _walk(node, a); return new Set(a.filter((n) => n.k === "name").map((n) => n.v)); }
+
+function _candidates(consts) {
+  const nums = [...new Set(consts.filter((c) => typeof c === "number" && !Number.isNaN(c)))].sort((a, b) => a - b);
+  const cands = [null, true, false, 0, 1, "", _FRESH_STR];
+  for (const c of consts) cands.push(c);
+  for (const n of nums) cands.push(n - 1, n + 1);
+  for (let i = 0; i + 1 < nums.length; i++) cands.push((nums[i] + nums[i + 1]) / 2);
+  const seen = new Set(), out = [];
+  for (const v of cands) {
+    const t = v === null ? "null" : typeof v;
+    const key = t + ":" + (typeof v === "number" && Number.isNaN(v) ? "nan" : String(v));
+    if (!seen.has(key)) { seen.add(key); out.push(v); }
+  }
+  return out;
+}
+
+function _nodeSat(graph, name, assume) {
+  const node = graph.nodes[name];
+  const det = [];
+  node.edges.forEach(([t, c], i) => { if (isDeterministic(c)) det.push([i, t, c]); });
+  let consts = [], fields = new Set(), complete = true;
+  const exprs = det.map(([, , c]) => c).concat(assume ? [assume] : []);
+  for (const cond of exprs) {
+    const tree = _condAst(cond);
+    if (tree === null) continue;
+    consts = consts.concat(_constsOf(tree));
+    for (const f of _fieldsOf(tree)) fields.add(f);
+    if (!isLevelM(cond).level_m) complete = false;
+  }
+  fields.delete("visits");
+  const cands = _candidates(consts);
+  const fieldList = [...fields].sort();
+  if (Math.pow(cands.length, fieldList.length) > _PRODUCT_CAP) complete = false;
+  return { det, fields: fieldList, cands, complete };
+}
+
+function* _contexts(sat, visits) {
+  if (sat.fields.length === 0) { yield { visits }; return; }
+  let total = 1;
+  for (let i = 0; i < sat.fields.length; i++) { total *= sat.cands.length; if (total > _PRODUCT_CAP) return; }
+  const n = sat.fields.length, idx = new Array(n).fill(0);
+  for (;;) {
+    const ctx = { visits };
+    for (let i = 0; i < n; i++) ctx[sat.fields[i]] = sat.cands[idx[i]];
+    yield ctx;
+    let k = n - 1;
+    for (; k >= 0; k--) { if (++idx[k] < sat.cands.length) break; idx[k] = 0; }
+    if (k < 0) break;
+  }
+}
+
+function _edgeOutcomes(sat, assume, visits) {
+  const takeable = {}; let noneMatch = null, sawCtx = false;
+  for (const ctx of _contexts(sat, visits)) {
+    sawCtx = true;
+    if (assume) {
+      let ok; try { ok = evalCondition(assume, ctx); } catch (e) { if (e instanceof PredicateError) continue; throw e; }
+      if (!ok) continue;
+    }
+    let matched = null;
+    for (const [idx, , cond] of sat.det) {
+      let hit; try { hit = evalCondition(cond, ctx); } catch (e) { if (e instanceof PredicateError) hit = false; else throw e; }
+      if (hit) { matched = idx; break; }
+    }
+    const strip = () => { const c = { ...ctx }; delete c.visits; return c; };
+    if (matched === null) { if (noneMatch === null) noneMatch = strip(); }
+    else if (!(matched in takeable)) takeable[matched] = strip();
+  }
+  if (!sawCtx) return [{}, null];
+  if (sat.complete && noneMatch === null) noneMatch = false;
+  return [takeable, noneMatch];
+}
+
+function _visitCaps(graph) {
+  const caps = {};
+  for (const [name, node] of Object.entries(graph.nodes)) {
+    let best = null;
+    for (const [, c] of node.edges) {
+      let cond = c;
+      if (isError(c)) {
+        const expr = errorExpr(c);
+        if (!expr) continue;
+        cond = expr.toLowerCase().startsWith("when ") ? expr : "when " + expr;
+      }
+      const tree = _condAst(cond);
+      if (tree === null || !_fieldsOf(tree).has("visits")) continue;
+      const nums = _constsOf(tree).filter((v) => typeof v === "number" && !Number.isNaN(v));
+      const m = nums.length ? Math.max(...nums) : 0;
+      best = Math.max(best === null ? 0 : best, Math.trunc(m));
+    }
+    if (best !== null) caps[name] = best + 2;
+  }
+  return caps;
+}
+
+/** Bounded-model-checking reachability. targets: string[]; opts: {assume, bound, includeErrors,
+ * includeEvents}. Returns { node: {node, reachable:"yes"|"may"|"no", proven, depth, witness} }. */
+export function checkReach(graph, targets, opts = {}) {
+  let { assume = null, bound = 25, includeErrors = true, includeEvents = true } = opts;
+  if (assume && !assume.trim().toLowerCase().startsWith("when ")) assume = "when " + assume;
+  const caps = _visitCaps(graph);
+  const sats = {};
+  for (const name of Object.keys(graph.nodes)) sats[name] = _nodeSat(graph, name, assume);
+
+  const bump = (counts, node) => {
+    if (!(node in caps)) return counts;
+    const d = new Map(counts);
+    d.set(node, Math.min((d.get(node) || 0) + 1, caps[node]));
+    return [...d.entries()].sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
+  };
+  const key = (name, counts) => JSON.stringify([name, counts]);
+
+  const startCounts = bump([], graph.start), startKey = key(graph.start, startCounts);
+  const best = new Map([[startKey, _CERTAIN]]);
+  const parent = new Map(), stateOf = new Map([[startKey, [graph.start, startCounts]]]);
+  const depthOf = new Map([[startKey, 0]]);
+  const frontier = [[startKey, 0]];
+  let exhausted = true, fp = 0;
+
+  while (fp < frontier.length) {
+    const [stateKey, depth] = frontier[fp++];
+    const [nodeName, counts] = stateOf.get(stateKey);
+    if (depth >= bound) { exhausted = false; continue; }
+    const node = graph.nodes[nodeName];
+    if (!node || node.edges.length === 0) continue;
+    const visits = new Map(counts).get(nodeName) || 1;
+    const sat = sats[nodeName];
+    const [takeable, noneMatch] = _edgeOutcomes(sat, assume, visits);
+    const myCert = best.get(stateKey);
+
+    const moves = [];
+    for (const idxStr of Object.keys(takeable)) { const [t, c] = node.edges[Number(idxStr)]; moves.push([t, c, myCert]); }
+    if (!sat.complete) {
+      const taken = new Set(Object.keys(takeable).map(Number));
+      for (const [idx, t, c] of sat.det) if (!taken.has(idx)) moves.push([t, c, _MAY]);
+    }
+    if (noneMatch !== false) node.edges.forEach(([t, c]) => { if (isSemantic(c)) moves.push([t, c, _MAY]); });
+    if (includeErrors) node.edges.forEach(([t, c]) => { if (isError(c)) moves.push([t, c, _MAY]); });
+    if (includeEvents) node.edges.forEach(([t, c]) => { if (isEvent(c)) moves.push([t, c, _MAY]); });
+
+    for (const [t, c, stepCert] of moves) {
+      if (!(t in graph.nodes)) continue;
+      const cert = (myCert === _CERTAIN && stepCert === _CERTAIN) ? _CERTAIN : _MAY;
+      const nCounts = bump(counts, t), nKey = key(t, nCounts), prev = best.get(nKey);
+      if (prev === undefined || (prev === _MAY && cert === _CERTAIN)) {
+        best.set(nKey, cert);
+        parent.set(nKey, [stateKey, { node: nodeName, target: t, condition: c, certainty: cert }]);
+        stateOf.set(nKey, [t, nCounts]);
+        depthOf.set(nKey, depth + 1);
+        frontier.push([nKey, depth + 1]);
+      }
+    }
+  }
+
+  const results = {};
+  for (const target of targets) {
+    const hits = [...best.entries()].filter(([k]) => stateOf.get(k)[0] === target);
+    if (hits.length === 0) { results[target] = { node: target, reachable: "no", proven: exhausted, depth: null, witness: [] }; continue; }
+    const certHit = hits.find(([, c]) => c === _CERTAIN);
+    const chosenKey = certHit ? certHit[0] : hits[0][0];
+    const steps = []; let cur = chosenKey;
+    while (parent.has(cur)) { const [prev, step] = parent.get(cur); steps.push(step); cur = prev; }
+    steps.reverse();
+    results[target] = { node: target, reachable: certHit ? "yes" : "may", proven: false, depth: depthOf.get(chosenKey), witness: steps };
+  }
+  return results;
+}
+
 // ---------------------------------------------------------------------------- parsing
 const EDGE_RE = /^\s*-?\s*->\s*([A-Za-z0-9_\-]+)\s*:\s*(.+?)\s*$/;
 const HEAD_RE = /^\s*##\s+(.+?)\s*$/;

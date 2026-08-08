@@ -162,6 +162,41 @@ def flow_level_m(graph) -> Tuple[bool, List[dict]]:
     return (not bad), bad
 
 
+def capability_report(graph) -> dict:
+    """Which targets a flow compiles to, and — for the ones it doesn't — the edges that push it out.
+    Composes flow_level_m with a reachable-semantic-edge scan: a portable, verifiable answer to
+    "where does this flow run?", turning "runs everywhere" into a per-flow, machine-checked matrix."""
+    reach = _reachable(graph)
+    semantic = []
+    for name in sorted(reach):
+        node = graph.nodes.get(name)
+        if node is None:
+            continue
+        for t, c in node.edges:
+            if predicates.is_semantic(c):
+                semantic.append({"node": name, "target": t, "condition": c})
+    p0 = not semantic
+    lm_ok, lm_bad = flow_level_m(graph)
+    hw_ok = p0 and lm_ok
+    targets = {
+        "python": {"status": "yes", "reason": None, "blocking_edges": []},
+        "portable": {                                   # JS / Rust / Go portable kernels
+            "status": "yes" if p0 else "needs-lockfile",
+            "reason": None if p0 else
+                f"{len(semantic)} reachable semantic edge(s) — P0 runs unconditionally; lock them for P1",
+            "blocking_edges": [] if p0 else semantic,
+        },
+        "level_m_hardware": {                           # FPGA C-table (and the future eBPF target)
+            "status": "yes" if hw_ok else "no",
+            "reason": None if hw_ok else (
+                f"{len(semantic)} reachable semantic edge(s) — not deterministic" if not p0
+                else f"{len(lm_bad)} deterministic edge(s) outside the match-action fragment"),
+            "blocking_edges": semantic if not p0 else ([] if hw_ok else lm_bad),
+        },
+    }
+    return {"tier": "P0" if p0 else "P1/P2", "level_m": lm_ok, "targets": targets}
+
+
 # ------------------------------------------------------------------ satisfiability core
 
 _FRESH_STR = "\x00fresh"          # a string equal to no authored literal
@@ -476,6 +511,13 @@ def add_parser(subparsers) -> None:
     p.add_argument('--json', action='store_true', help='machine-readable output')
     p.set_defaults(func=verify_cmd)
 
+    cp = subparsers.add_parser(
+        'capability', help='Report which targets a flow compiles to (python / portable js-rust-go / '
+                           'Level M hardware) and, for the ones it does not, the blocking edges.')
+    cp.add_argument('flow_md', type=str, help='Path to the flow markdown file')
+    cp.add_argument('--json', action='store_true', help='machine-readable output')
+    cp.set_defaults(func=capability_cmd)
+
 
 def verify_cmd(args) -> int:
     from prismpath.parser import parse_file
@@ -525,3 +567,24 @@ def verify_cmd(args) -> int:
                 print(f"      [{r['node']}] -> {r['target']}  {r['condition']!r}  ({r['reason']})")
     print(f"  {'✅ verified' if ok else '✗ verification failed'}")
     return 0 if ok else 1
+
+
+def capability_cmd(args) -> int:
+    from prismpath.parser import parse_file
+    rep = capability_report(parse_file(args.flow_md))
+    if args.json:
+        print(json.dumps(rep, indent=2))
+        return 0
+    mark = {"yes": "✓", "needs-lockfile": "◐", "no": "✗"}
+    names = {"python": "python (reference)", "portable": "portable (js / rust / go)",
+             "level_m_hardware": "level-m hardware (fpga c-table / eBPF)"}
+    print(f"  tier: {rep['tier']}   level_m: {rep['level_m']}")
+    for key, tgt in rep["targets"].items():
+        line = f"  {mark.get(tgt['status'], '?')} {names.get(key, key):34} {tgt['status']}"
+        if tgt["reason"]:
+            line += f"  — {tgt['reason']}"
+        print(line)
+        for e in tgt.get("blocking_edges", []):
+            extra = f"  ({e['reason']})" if e.get("reason") else ""
+            print(f"        · {e['node']} -> {e['target']}: {e['condition']}{extra}")
+    return 0
