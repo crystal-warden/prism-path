@@ -448,6 +448,95 @@ export function checkPredicate(condition) {
   return [];
 }
 
+// ------------------------------------------------------------------ Level M classification
+// A faithful port of model_check.py: which deterministic edges compile to a hardware match-action
+// table (SPEC §7). Reuses the predicate AST above; reason codes are the same stable strings the
+// Python reference emits, so a verdict here matches `prismpath verify` / model_check bit-for-bit.
+const _LM = {
+  CHAINED: "chained-comparison", FIELD_VS_FIELD: "field-vs-field", SUBSTRING: "substring-in",
+  NONLITERAL: "non-literal-collection", STRING_ORDER: "string-ordering", CONSTANT: "constant-only",
+  NESTED: "nested-container", SYNTAX: "disallowed-or-unparseable",
+};
+const _LM_ORDER = new Set(["<", "<=", ">", ">="]);
+
+function _lmScalarConst(node) {
+  return node && node.k === "const" &&
+    (node.v === null || typeof node.v === "boolean" || typeof node.v === "number" || typeof node.v === "string");
+}
+function _lmAtomReason(node) {
+  if (!node) return _LM.SYNTAX;
+  if (node.k === "name") return null;                      // bare field (scalar truthiness)
+  if (node.k === "const") return _LM.CONSTANT;             // `when True` — no field, not a row
+  if (node.k === "cmp") {
+    if (node.ops.length !== 1) return _LM.CHAINED;         // chained comparison; desugars, not in fragment
+    const op = node.ops[0], left = node.left, right = node.rights[0];
+    if (op === "in" || op === "not in") {                  // membership: field in [scalar literals]
+      if (left.k !== "name") return left.k === "const" ? _LM.CONSTANT : _LM.FIELD_VS_FIELD;
+      if (right.k === "const" && typeof right.v === "string") return _LM.SUBSTRING;
+      if (right.k === "list") {
+        for (const e of right.elts) {
+          if (e.k === "list") return _LM.NESTED;
+          if (!_lmScalarConst(e)) return _LM.NONLITERAL;
+        }
+        return null;
+      }
+      return _LM.NONLITERAL;
+    }
+    let varC = null;                                       // comparison: field OP constant (either orientation)
+    if (left.k === "name" && _lmScalarConst(right)) varC = right;
+    else if (right.k === "name" && _lmScalarConst(left)) varC = left;
+    else if (left.k === "name" && right.k === "name") return _LM.FIELD_VS_FIELD;
+    else return (_lmScalarConst(left) && _lmScalarConst(right)) ? _LM.CONSTANT : _LM.SYNTAX;
+    if (_LM_ORDER.has(op) && typeof varC.v === "string") return _LM.STRING_ORDER;  // string ordering excluded
+    return null;
+  }
+  return _LM.SYNTAX;
+}
+function _lmClassify(node) {
+  if (node.k === "and" || node.k === "or") {
+    for (const v of node.vals) { const r = _lmClassify(v); if (r !== null) return r; }
+    return null;
+  }
+  if (node.k === "not") return _lmClassify(node.v);
+  return _lmAtomReason(node);
+}
+
+/** Is a deterministic condition in the match-action fragment? -> {level_m, reason}. Keyword
+ * catch-alls (always/else/false…) are trivially table-encodable (default/disabled row). */
+export function isLevelM(cond) {
+  if (!isDeterministic(cond)) {
+    if (isError(cond)) {
+      let expr = errorExpr(cond);                          // '' | 'when <expr>' | '<expr>'
+      if (!expr) return { level_m: true, reason: null };   // bare `on error` — a table default row
+      if (!expr.toLowerCase().startsWith("when ")) expr = "when " + expr;
+      return isLevelM(expr);
+    }
+    return { level_m: false, reason: "not-deterministic" };
+  }
+  const expr = exprOf(cond);
+  const low = expr.toLowerCase();
+  if (ALWAYS.has(low) || NEVER.has(low)) return { level_m: true, reason: null };
+  let node;
+  try { node = parseExpr(expr); } catch { return { level_m: false, reason: _LM.SYNTAX }; }
+  const reason = _lmClassify(node);
+  return { level_m: reason === null, reason };
+}
+
+/** SPEC §7: is every reachable deterministic edge in the fragment? -> {level_m, non_member_edges}. */
+export function flowLevelM(graph) {
+  const bad = [];
+  for (const name of [...reachable(graph)].sort()) {
+    const node = graph.nodes[name];
+    if (!node) continue;
+    for (const [target, cond] of node.edges) {
+      if (!isDeterministic(cond)) continue;
+      const r = isLevelM(cond);
+      if (!r.level_m) bad.push({ node: name, target, condition: cond, level_m: false, reason: r.reason });
+    }
+  }
+  return { level_m: bad.length === 0, non_member_edges: bad };
+}
+
 // ---------------------------------------------------------------------------- parsing
 const EDGE_RE = /^\s*-?\s*->\s*([A-Za-z0-9_\-]+)\s*:\s*(.+?)\s*$/;
 const HEAD_RE = /^\s*##\s+(.+?)\s*$/;

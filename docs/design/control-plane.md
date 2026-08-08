@@ -82,7 +82,7 @@ driver, where harness concerns belong:
             └────────────────────────────────────────────────────────────────◀─┘
                       │
                       ▼
-        Mission Control (:9109, loopback)  — live observability + audit
+        Mission Control (:9109, loopback)  — proving + observability command center + audit
 ```
 
 - **Gates are the definition of done, machine-enforced.** A build is not green until it compiles,
@@ -95,6 +95,13 @@ driver, where harness concerns belong:
 - **Execution backends** range from a served model to the full multi-agent swarm
   (`SPRINT_AGENT=swarm`, `SPRINT_EXEC=cecli`); `swarm_runner.py` prefers the real swarm and falls
   back to `llm_local` so a run always proceeds.
+- **Mission Control is proving + observability** (`prismpath/mission_control/`, a FastAPI package):
+  a single-user, loopback command center over a versioned JSON API (`/api/v1`, OpenAPI at `/docs`) —
+  the flow topology with live run-state over SSE, **text-in proving** (`/prove/level-m`,
+  `/prove/reach`, audit self-verify), RAG-retrieval visibility, and the sprint controls (incl. a
+  buffered/unbuffered launch toggle). It runs **no models** — PrismPath routes and proves; inference
+  belongs to the worker tier. The proving/observability API is the driving adapter other services
+  connect to; the command center is its first client. Needs the `control-plane` extra.
 
 ---
 
@@ -105,7 +112,8 @@ driver, where harness concerns belong:
 pip install -e .          # or: export PYTHONPATH=$PWD
 SPRINT_PROJ=/tmp/demo SPRINT_GATE=browser SPRINT_NUDGE="a tip calculator" \
   python -u prismpath/run_sprint.py
-python -u prismpath/mission_control.py   # observability console at http://127.0.0.1:9109 (loopback only)
+pip install -e ".[control-plane]"        # Mission Control needs FastAPI/uvicorn (the control-plane extra)
+python -m prismpath.mission_control      # proving + observability command center at http://127.0.0.1:9109 (loopback)
 ```
 
 The operating methodology and hard-won lessons behind this loop:

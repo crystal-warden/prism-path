@@ -9,6 +9,19 @@ spec-stable.
 ## [Unreleased]
 
 ### Added
+- **Mission Control rebuilt as a proving + observability command center**
+  (`prismpath/mission_control/`, now a FastAPI package; run `python -m prismpath.mission_control`).
+  A single-user, loopback console over a **versioned JSON API** (`/api/v1`, OpenAPI at `/docs`): the
+  flow topology (vendored Cytoscape) with live run-state over SSE; **text-in proving** — `POST
+  /prove/level-m` and `POST /prove/reach` run the real `model_check` against a posted flow document,
+  never a server path (closing the old arbitrary-read surface); audit self-verify; RAG-retrieval
+  visibility (`/retrievals`, per node); a **buffered/unbuffered** launch toggle. The proving/
+  observability API is the driving adapter other services connect to; the browser console is its
+  first client. It runs **no models** — inference belongs to the worker tier. Needs the
+  `control-plane` extra (fastapi/uvicorn/pydantic). Guide:
+  [`docs/guides/mission-control-api.md`](docs/guides/mission-control-api.md); 13-test TestClient suite.
+  **Removed** with the old multi-user scope: Tailscale identity, the Gemma chat, RAG doc-upload, and
+  the AGY tab; the stdlib `http.server` console (`python -u prismpath/mission_control.py`) is retired.
 - **The Level M hardware target ([`prismpath-hw/`](prismpath-hw/README.md))** —
   a Level M flow compiles to a binary table image (`wazuh_triage`, unmodified: 302 bytes)
   interpreted by one fixed FPGA circuit on a Zynq-7020; C and RTL interpreters certified on a

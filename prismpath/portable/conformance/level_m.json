@@ -1,0 +1,175 @@
+{
+  "note": "Frozen Level M vectors from model_check.flow_level_m. Any implementation of flowLevelM must reproduce every expected verdict + reason bit-for-bit.",
+  "version": 1,
+  "cases": [
+    {
+      "key": "clean_fragment",
+      "flow": "---\nname: clean\nstart: a\n---\n## a\n-> b: when score > 5\n-> c: else\n## b\nx\n## c\ny\n",
+      "expected": {
+        "level_m": true,
+        "non_member_edges": []
+      }
+    },
+    {
+      "key": "field_vs_field",
+      "flow": "---\nname: fvf\nstart: a\n---\n## a\n-> b: when x == y\n-> c: else\n## b\nx\n## c\ny\n",
+      "expected": {
+        "level_m": false,
+        "non_member_edges": [
+          {
+            "node": "a",
+            "target": "b",
+            "condition": "when x == y",
+            "reason": "field-vs-field"
+          }
+        ]
+      }
+    },
+    {
+      "key": "chained",
+      "flow": "---\nname: ch\nstart: a\n---\n## a\n-> b: when 1 < x < 10\n-> c: else\n## b\nx\n## c\ny\n",
+      "expected": {
+        "level_m": false,
+        "non_member_edges": [
+          {
+            "node": "a",
+            "target": "b",
+            "condition": "when 1 < x < 10",
+            "reason": "chained-comparison"
+          }
+        ]
+      }
+    },
+    {
+      "key": "substring_in",
+      "flow": "---\nname: sub\nstart: a\n---\n## a\n-> b: when tag in \"critical\"\n-> c: else\n## b\nx\n## c\ny\n",
+      "expected": {
+        "level_m": false,
+        "non_member_edges": [
+          {
+            "node": "a",
+            "target": "b",
+            "condition": "when tag in \"critical\"",
+            "reason": "substring-in"
+          }
+        ]
+      }
+    },
+    {
+      "key": "in_list_ok",
+      "flow": "---\nname: inl\nstart: a\n---\n## a\n-> b: when status in [\"open\", \"closed\"]\n-> c: else\n## b\nx\n## c\ny\n",
+      "expected": {
+        "level_m": true,
+        "non_member_edges": []
+      }
+    },
+    {
+      "key": "nonliteral_in",
+      "flow": "---\nname: nl\nstart: a\n---\n## a\n-> b: when x in items\n-> c: else\n## b\nx\n## c\ny\n",
+      "expected": {
+        "level_m": false,
+        "non_member_edges": [
+          {
+            "node": "a",
+            "target": "b",
+            "condition": "when x in items",
+            "reason": "non-literal-collection"
+          }
+        ]
+      }
+    },
+    {
+      "key": "string_order",
+      "flow": "---\nname: so\nstart: a\n---\n## a\n-> b: when name > \"m\"\n-> c: else\n## b\nx\n## c\ny\n",
+      "expected": {
+        "level_m": false,
+        "non_member_edges": [
+          {
+            "node": "a",
+            "target": "b",
+            "condition": "when name > \"m\"",
+            "reason": "string-ordering"
+          }
+        ]
+      }
+    },
+    {
+      "key": "constant_only",
+      "flow": "---\nname: co\nstart: a\n---\n## a\n-> b: when 42\n-> c: else\n## b\nx\n## c\ny\n",
+      "expected": {
+        "level_m": false,
+        "non_member_edges": [
+          {
+            "node": "a",
+            "target": "b",
+            "condition": "when 42",
+            "reason": "constant-only"
+          }
+        ]
+      }
+    },
+    {
+      "key": "always_else",
+      "flow": "---\nname: ae\nstart: a\n---\n## a\n-> b: always\n## b\ny\n",
+      "expected": {
+        "level_m": true,
+        "non_member_edges": []
+      }
+    },
+    {
+      "key": "bool_combo_ok",
+      "flow": "---\nname: bc\nstart: a\n---\n## a\n-> b: when flagged and score >= 3\n-> c: else\n## b\nx\n## c\ny\n",
+      "expected": {
+        "level_m": true,
+        "non_member_edges": []
+      }
+    },
+    {
+      "key": "bool_combo_bad",
+      "flow": "---\nname: bcb\nstart: a\n---\n## a\n-> b: when flagged and x == y\n-> c: else\n## b\nx\n## c\ny\n",
+      "expected": {
+        "level_m": false,
+        "non_member_edges": [
+          {
+            "node": "a",
+            "target": "b",
+            "condition": "when flagged and x == y",
+            "reason": "field-vs-field"
+          }
+        ]
+      }
+    },
+    {
+      "key": "not_ok",
+      "flow": "---\nname: no\nstart: a\n---\n## a\n-> b: when not flagged\n-> c: else\n## b\nx\n## c\ny\n",
+      "expected": {
+        "level_m": true,
+        "non_member_edges": []
+      }
+    },
+    {
+      "key": "error_edge_skipped",
+      "flow": "---\nname: ee\nstart: a\n---\n## a\n-> b: when score > 5\n-> c: on error\n-> d: else\n## b\nx\n## c\ny\n## d\nz\n",
+      "expected": {
+        "level_m": true,
+        "non_member_edges": []
+      }
+    },
+    {
+      "key": "semantic_edge_skipped",
+      "flow": "---\nname: se\nstart: a\n---\n## a\n-> b: the user is angry\n-> c: else\n## b\nx\n## c\ny\n",
+      "expected": {
+        "level_m": true,
+        "non_member_edges": []
+      }
+    },
+    {
+      "key": "unreachable_bad_ignored",
+      "flow": "---\nname: ur\nstart: a\n---\n## a\n-> b: when score > 5\n## b\nx\n## island\n-> a: when p == q\n",
+      "expected": {
+        "level_m": true,
+        "non_member_edges": []
+      }
+    }
+  ]
+}
