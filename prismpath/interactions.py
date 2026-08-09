@@ -21,7 +21,7 @@ _PHASE = "init"
 
 
 def set_phase(p: str):
-    """Coarse pipeline phase (architect/ideate/build/fix/council/review/...) stamped onto events."""
+    """Coarse pipeline phase (architect/ideate/build/fix/review/...) stamped onto events."""
     global _PHASE
     if p:
         _PHASE = str(p)

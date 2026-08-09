@@ -26,7 +26,7 @@ PROJ = os.environ.get("SWARM_PROJ", "/tmp/demo")
 ROLES_DIR = os.path.expanduser(os.environ.get("HERMES_ROLES_DIR", "~/.hermes-roles"))
 PORT = int(os.environ.get("SWARM_EXPORTER_PORT", "9108"))
 ROLES = ["architect", "coder", "test-author", "fixer", "critic"]
-_PHASES = ["architect", "ideate", "build", "fix", "test-author", "review", "council", "delete", "reflect"]
+_PHASES = ["architect", "ideate", "build", "fix", "test-author", "review", "delete", "reflect"]
 INTER_PATH = os.path.join(PROJ, "interactions.jsonl")
 MAX_EVENTS = int(os.environ.get("SWARM_LENS_EVENTS", "300"))
 
@@ -64,7 +64,7 @@ def collect():
         g("swarm_log_events", log.count(f"[{kind}]"), f'kind="{kind}"')
     phases = re.findall(r"\[(" + "|".join(_PHASES) + r")\]", log)
     phase = phases[-1] if phases else "init"
-    decisions = re.findall(r"\[(?:council|review)\][^\n]*?([\w./\-]+\.(?:js|mjs|html|css))", log)
+    decisions = re.findall(r"\[(?:review)\][^\n]*?([\w./\-]+\.(?:js|mjs|html|css))", log)
     target = decisions[-1] if decisions else ((st.get("files") or ["—"])[-1])
     g("swarm_current", 1,
       f'phase="{_esc(phase)}",target="{_esc(target)}",last_error="{_esc(st.get("last_error") or "none")}"')

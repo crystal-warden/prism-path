@@ -59,7 +59,7 @@ def retrieve(query, k=4, index_path=None):
     global _warned
     index_path = index_path or os.environ.get("SPRINT_RAG_INDEX") or _DEFAULT_INDEX
     per_doc = int(os.environ.get("SPRINT_RAG_PER_DOC", "2"))    # diversity cap: ≤N chunks per doc
-    # Denoise: drop chunks the converter tagged [deprecated]/[internal] (game-unusable API).
+    # Denoise: drop chunks the converter tagged [deprecated]/[internal] (runtime-unavailable API).
     # The corpus stays COMPLETE; filtering happens here. SPRINT_RAG_INCLUDE_ALL=1 retrieves raw.
     drop_marked = os.environ.get("SPRINT_RAG_INCLUDE_ALL", "0") != "1"
     try:

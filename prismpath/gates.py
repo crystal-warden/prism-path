@@ -186,11 +186,11 @@ def behavioral_check(proj: str) -> list:
                 pg.wait_for_timeout(2500)
             after = pg.evaluate("document.body.innerText")
             made_request = len(net) > net0   # a fetch/XHR counts as wired (async backends)
-            # game/grid apps: the primary interaction is clicking a CELL, not a button — try that too
+            # grid/canvas apps: the primary interaction is clicking a CELL, not a button — try that too
             if not has_canvas and after.strip() == before.strip() and not made_request:
                 cell = None
                 for sel in ("[data-index]", "[data-cell]", ".cell", "#board > *", ".board > *",
-                            "#game > *", ".grid > *", "td"):
+                            ".grid > *", "td"):
                     for e in pg.query_selector_all(sel):
                         try:
                             if e.is_visible():
