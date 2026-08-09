@@ -91,8 +91,12 @@ def main():
 
     out_path.write_bytes(records)
     total = len(cases)
+    EXPECTED_SUBSET = 114   # the declared subset shared with the FPGA C-target; see test_conformance_drift
     print(f"PREDICATE CORPUS: {total} frozen vectors")
     print(f"  in declared subset (in-fragment condition + read fields i32-representable): {kept}")
+    if kept != EXPECTED_SUBSET:
+        print(f"  *** WARNING: subset drifted from {EXPECTED_SUBSET} — reconcile FPGA/eBPF evidence "
+              f"(#72/#77) + the drift guard before trusting this run")
     print(f"  excluded: {sum(excl.values())}")
     for r, n in excl.most_common():
         print(f"     {n:4}  {r}")

@@ -55,3 +55,18 @@ jobs:
         run: node prismpath/portable/run_vectors.mjs prismpath/portable/conformance
       - name: Frozen conformance vectors (reference-drift side)
         run: python -m pytest prismpath/tests/test_conformance_vectors.py -q
+
+  # Mission Control is an optional control-plane extra (FastAPI). The main test job installs numpy-only
+  # and skips its tests (pytest.importorskip); this job installs the extra so the shipped control plane
+  # is actually exercised in CI — a collection error here previously masked the WHOLE suite.
+  mission_control:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install (numpy + control-plane extra)
+        run: pip install numpy pytest fastapi httpx
+      - name: Mission Control tests
+        run: python -m pytest prismpath/tests/test_mission_control.py -q
