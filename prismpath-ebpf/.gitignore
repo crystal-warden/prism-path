@@ -1,0 +1,7 @@
+# build artifacts
+ppt_xdp.bpf.o
+loader
+interp
+smoke.out
+scratch/
+*.o
