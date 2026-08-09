@@ -7,25 +7,25 @@ RTL → AXI, zero divergence. This is the remaining physical checklist.
 
 1. microSD (PYNQ-Z1 v3.1.1, flashed + verified 2026-08-06) into the Arty's underside slot.
 2. **JP4 boot jumper → SD** (it was on JTAG for the day-5 probing).
-3. Ethernet from the Arty to the LAN; micro-USB stays on the rig (power + serial console).
+3. Ethernet from the Arty to the LAN; micro-USB stays connected (power + serial console).
 4. Power on. First boot takes ~1–2 min (filesystem resize). The DONE LED lights when the
    PYNQ base overlay configures; LD4/LD5 flash when Linux is up.
 5. Find the board: check the router's DHCP table for hostname `pynq`, or watch the serial
-   console (COM3 on the rig, 115200) for the address. Login: `xilinx` / `xilinx`.
+   console (115200) for the address. Login: the default PYNQ credentials.
 6. Drop the GB10's SSH key on it:
-   `ssh-copy-id xilinx@<board-ip>`   (password xilinx — change it while you're there)
+   `ssh-copy-id xilinx@<board-ip>`   (change the default password while you're there)
 
 ## Deploy the overlay + runtime (from GB10)
 
 ```sh
-# the bitstream pair, built 2026-08-06 on the rig:
+# the bitstream pair, built 2026-08-06 on the synthesis machine:
 scp evidence/ppt_overlay.bit evidence/ppt_overlay.hwh xilinx@<board-ip>:/home/xilinx/
 scp pynq/ppt_pynq.py xilinx@<board-ip>:/home/xilinx/
 ./deploy.sh <flow.md> <board-ip>        # emits live.ppt + live.json on the board
 ssh xilinx@<board-ip> "sudo python3 ppt_pynq.py ppt_overlay.bit live.ppt live.json"
 ```
 
-Then start the Mac bridge pointed at the **board**:
+Then start the field bridge pointed at the **board**:
 ```sh
 python3 field_bridge.py --host <board-ip> --port 9317
 ```
