@@ -225,7 +225,7 @@ served locally. No number here depends on a cloud API.
 
 **Correct conclusion:** gemma behaved CORRECTLY — it rejected circular intent-only assertions as not-met every time (escalation-default working; not fooled by "we are compliant" text). This raises confidence in the adjudicator, not lowers it. The "hard=100%" is a class-imbalance artifact (all not-met on both sides). #62 already showed gemma awards met/partial on genuine implementation evidence.
 
-**Methodology lesson (vindicates the BLIND approach):** the blind "be a company, write your docs" framing produced realistic artifacts (SSP/IR plan/roster/draft RA) and a better test; the "author evidence labeled X" framing produced degenerate circular text. Prefer blind generation. A valid positive test still needs a corpus with genuine met-worthy implementation evidence (concrete config/logs/screenshots), or a human/third-model reference. See [[testing-depth-standard]] [[agy-antigravity-cli]].
+**Methodology lesson (vindicates the BLIND approach):** the blind "be a company, write your docs" framing produced realistic artifacts (SSP/IR plan/roster/draft RA) and a better test; the "author evidence labeled X" framing produced degenerate circular text. Prefer blind generation. A valid positive test still needs a corpus with genuine met-worthy implementation evidence (concrete config/logs/screenshots), or a human/third-model reference.
 
 ### Semantic retrieval (EmbeddingGemma) — retrieval was NOT the bottleneck (2026-07-23)
 
@@ -237,7 +237,7 @@ served locally. No number here depends on a cloud API.
 
 **Residuals (logged):** semantic retrieval is a genuine keep (routes prose well) but can't route RAW ARTIFACTS (logs/configs/CSVs — content is data not prose) -> needs doc-type/metadata-aware HYBRID ingestion. SSP legitimately dominates (discusses all families). Still no clean POSITIVE test (company with genuinely-met controls).
 
-**Env note:** installed sentence-transformers into ~/jupyterlab/.venv (torch already present); bumped its transformers 4.56.1->4.57.6 (4.56.1 warned EmbeddingGemma bidirectional may fall back to causal; briefly hit 5.14.1 which broke peft HybridCache, pinned back to <5). EmbeddingGemma-300m cached at ~/.cache/huggingface (1.2G). See [[gb10-wazuh-hub]].
+**Env note:** installed sentence-transformers into ~/jupyterlab/.venv (torch already present); bumped its transformers 4.56.1->4.57.6 (4.56.1 warned EmbeddingGemma bidirectional may fall back to causal; briefly hit 5.14.1 which broke peft HybridCache, pinned back to <5). EmbeddingGemma-300m cached at ~/.cache/huggingface (1.2G).
 
 ### #72 — PPT v1 table compiler + C target: declared-subset certification (2026-08-06)
 
