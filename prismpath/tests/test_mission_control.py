@@ -8,6 +8,8 @@ against a real server, not here — TestClient's sync portal blocks on an endles
 import json
 
 import pytest
+
+pytest.importorskip("fastapi")  # Mission Control is an optional control-plane extra — skip on minimal installs (e.g. CI's numpy-only env)
 from fastapi.testclient import TestClient
 
 from prismpath import audit_log
