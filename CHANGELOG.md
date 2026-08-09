@@ -8,6 +8,22 @@ spec-stable.
 
 ## [Unreleased]
 
+### Added
+- **eBPF target: in-kernel conformance + whole-flow execution.** The `prismpath-ebpf` loader gained
+  `certify` / `run` / `runbatch` modes that drive the actual verifier-accepted XDP program in-kernel via
+  `BPF_PROG_TEST_RUN`. The eBPF target now **certifies 66/66 of the Level M fragment** of the frozen
+  `predicates.json` corpus in-kernel (byte-matching `interp.c`; the other 1001 vectors are excluded as
+  not-match-action, each reason itemized, none an eBPF limit — max stack depth used = 2 of 4). Real
+  multi-node flows execute in-kernel: the 12-node `adapters/soc/flows/wazuh_triage.md` routed a **live
+  Wazuh alert stream** (real LLM verdicts) 27/27 identically to the reference. New harness:
+  `cert_corpus.py`, `cert_vectors.py`, `run_flow_demo.py`, `run_stream_demo.py`, `run_incident_demo.py`.
+  Framing: the Level M corpus is the cross-substrate standard; richer tiers are named, never a lump "+X."
+  Not yet done (stated honestly in the target README): live line-rate deployment, a real-packet parser
+  front-end, and measured performance.
+- **`prismpath context <flow.md>`** (`prismpath/flow_context.py`) — emits the kernel's own *verified*
+  facts about a flow (nodes, edges, declared fields, reachability, Level M status, capability tiers) as
+  grounding for an agent authoring/editing it. Composes `model_check` primitives; JSON or prose.
+
 ### Changed
 - **Sprint-engine hygiene: it never deletes your files, and the game-flavored "council" is gone.**
   `run_sprint.py` no longer auto-wipes `SPRINT_PROJ` — the old `SPRINT_FRESH=1` default ran
