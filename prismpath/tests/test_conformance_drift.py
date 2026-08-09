@@ -2,16 +2,14 @@
 classifier change turns a test RED instead of silently making a published number wrong.
 
 The number chain over the frozen `predicates.json` (1067 vectors):
-  * **118 cases / 113 distinct conditions** are Level M per `model_check.is_level_m` — the in-package
+  * **126 cases / 119 distinct conditions** are Level M per `model_check.is_level_m` — the in-package
     CLASSIFIER authority (what `verify --level-m` and `capability_report` use). Pinned here (CI-run).
-    Float constants are rejected: the Level M / i32 match-action fragment has no float value domain, so
-    a `field OP <float>` condition is NOT table-compilable — the classifier used to over-claim these as
-    Level M, a soundness bug now fixed (SPEC §4.3 "integer, boolean, or string literal").
-  * **126 cases / 119 distinct** compile via the PPT compiler (`prismpath-hw/ppt_compile`). The compiler
-    accepts 6 chained conditions (`1 < x < 5`, …) the classifier reports as excluded — this is the ONLY
-    classifier-vs-compiler gap, and it is SPEC-consistent: §4.3 lists chained comparisons as Excluded
-    from the fragment but "SHOULD be desugared by tooling", so the compiler desugars while the classifier
-    reports raw §4.3 membership. Neither is wrong; they answer different questions.
+    Chained comparisons are normalized into the fragment (SPEC §4.3): the classifier desugars
+    `a < b < c` -> `a < b and b < c` via the SAME `_desugar_chains` the PPT compiler imports, so the two
+    share one definition and cannot disagree. Float constants are rejected — the i32 fragment has no
+    float value domain, so `field OP <float>` is not table-compilable.
+  * The PPT compiler (`prismpath-hw/ppt_compile`) accepts the SAME 126 / 119 — **0 classifier-vs-compiler
+    disagreements** over the corpus (pinned by `test_classifier_compiler_gap_pinned`).
   * **114** of the 1067 vectors are runnable on the i32 table (in-fragment condition AND read fields
     representable) — the declared subset BOTH the FPGA C-target and the eBPF target certify (asserted
     where the cert runs; needs interp).
@@ -41,16 +39,17 @@ def test_level_m_fragment_count_pinned():
     """If this changes, a corpus or classifier edit shifted the Level M fragment — deliberate or not.
     Update the pin AND reconcile the FPGA/eBPF declared-subset numbers (README, evidence #72/#77)."""
     lm = [c for c in _cases() if mc.is_level_m(c["cond"])[0]]
-    assert len(lm) == 118, f"Level M case count drifted to {len(lm)} (was 118)"
-    assert len({c["cond"] for c in lm}) == 113
+    assert len(lm) == 126, f"Level M case count drifted to {len(lm)} (was 126)"
+    assert len({c["cond"] for c in lm}) == 119
 
 
 def test_classifier_compiler_gap_pinned():
-    """The classifier (is_level_m) and the PPT compiler (ppt_compile) must disagree on EXACTLY the
-    6 chained comparisons and nothing else — chained is §4.3-Excluded but tooling-desugarable, so the
-    compiler accepts what the classifier reports as excluded. Any drift here (a new gap, or the gap
-    closing) means the two authorities fell out of the SPEC-defined relationship — investigate, don't
-    just re-pin. Skips if the hardware compiler isn't on the path (it lives outside the package)."""
+    """The classifier (is_level_m) and the PPT compiler (ppt_compile) must agree EXACTLY over the corpus
+    — 0 disagreements in either direction. They share one `_desugar_chains` (the compiler imports it from
+    model_check) and one `_classify`, so a flow is Level M per `verify --level-m` iff it compiles to a
+    table. Any gap here means the two authorities fell out of sync (e.g. a divergent desugar copy crept
+    back) — investigate, don't just re-pin. Skips if the hardware compiler isn't on the path (it lives
+    outside the package)."""
     import sys as _sys
     _hw = Path(__file__).resolve().parent.parent.parent / "prismpath-hw"
     if not (_hw / "ppt_compile.py").exists():
@@ -66,11 +65,10 @@ def test_classifier_compiler_gap_pinned():
             pc.compile_predicate(c["cond"]); compiler.add(c["cond"])
         except Exception:
             pass
-    gap = compiler - classifier
-    assert classifier - compiler == set(), "classifier accepts a condition the compiler rejects — a bug"
-    assert len(gap) == 6, f"classifier/compiler gap drifted to {len(gap)} (was 6 chained): {sorted(gap)}"
-    assert all(mc.is_level_m(cond)[1] == "chained-comparison" for cond in gap), \
-        "the only allowed classifier/compiler gap is §4.3-Excluded chained comparisons"
+    assert compiler - classifier == set(), \
+        f"compiler accepts conditions the classifier rejects: {sorted(compiler - classifier)}"
+    assert classifier - compiler == set(), \
+        f"classifier accepts conditions the compiler rejects: {sorted(classifier - compiler)}"
 
 
 def test_capability_levelm_flow():

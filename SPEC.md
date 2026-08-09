@@ -152,8 +152,15 @@ A predicate is in the **match-action fragment** iff it is a boolean combination 
 
 Fields are worker-emitted scalars plus the engine counters `visits` and `error_count`.
 **Excluded** from the fragment: substring `in`, string *ordering*, field-vs-field comparisons,
-membership in non-literal (runtime) collections, nested containers, chained comparisons (they
-desugar into the fragment mechanically and SHOULD be desugared by tooling).
+membership in non-literal (runtime) collections, nested containers.
+
+**Chained comparisons** (`a < b < c`) are **normalized** into the fragment, not excluded: tooling
+desugars them to `a < b and b < c` before classifying or compiling, and MUST do so consistently
+(the classifier `verify --level-m` and any table compiler share one desugaring, so they cannot
+disagree). The desugaring is exact under §4.1–§4.2 — operands are pure and every pairwise
+comparison is total, so `and` over the conjuncts evaluates identically to the chain. A chained
+comparison is therefore in the fragment iff each desugared conjunct is: `1 < x < 5` is in-fragment
+(both conjuncts are `field OP integer`); `1 < a < b` is not (the `a < b` conjunct is field-vs-field).
 
 The fragment exists because it is exactly a **match-action table**: each atom is a
 `(field-selector, operator, constant)` row; a node's ordered deterministic edges are a priority

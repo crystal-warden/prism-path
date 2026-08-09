@@ -20,6 +20,7 @@ from prismpath.analysis import portability_tier
     "when not tests_pass",                      # not over an atom
     "when score >= 90",                         # field OP integer
     "when 3 < visits",                          # reversed orientation (mechanical flip)
+    "when 1 < x < 5",                           # chained -> (1<x) and (x<5): both in-fragment (§4.3 normalize)
     "when status == 'done'",                    # string equality
     "when status != 'done'",
     "when ok == True",                          # bool constant
@@ -37,7 +38,7 @@ def test_level_m_members(cond):
 
 
 @pytest.mark.parametrize("cond,reason", [
-    ("when 1 < x < 5", "chained-comparison"),            # SPEC §4.3: excluded (tooling desugars first)
+    ("when 1 < a < b", "field-vs-field"),                # chained desugars; the a<b conjunct is field-vs-field
     ("when score >= 0.9", "disallowed-or-unparseable"),  # float constant — the i32 fragment excludes it
     ("when a == b", "field-vs-field"),
     ("when x in 'abcdef'", "substring-in"),            # string RHS = substring test

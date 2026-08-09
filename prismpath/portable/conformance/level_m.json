@@ -1,6 +1,6 @@
 {
   "note": "Frozen Level M vectors from model_check.flow_level_m. Any implementation of flowLevelM must reproduce every expected verdict + reason bit-for-bit.",
-  "version": 1,
+  "version": 2,
   "cases": [
     {
       "key": "clean_fragment",
@@ -29,15 +29,8 @@
       "key": "chained",
       "flow": "---\nname: ch\nstart: a\n---\n## a\n-> b: when 1 < x < 10\n-> c: else\n## b\nx\n## c\ny\n",
       "expected": {
-        "level_m": false,
-        "non_member_edges": [
-          {
-            "node": "a",
-            "target": "b",
-            "condition": "when 1 < x < 10",
-            "reason": "chained-comparison"
-          }
-        ]
+        "level_m": true,
+        "non_member_edges": []
       }
     },
     {

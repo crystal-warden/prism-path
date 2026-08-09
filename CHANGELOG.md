@@ -14,14 +14,25 @@ spec-stable.
   value domain is `i32` — there is no float on the table, in silicon, or in the kernel — so the condition
   is genuinely outside the fragment. `is_level_m` / `capability_report` (Python and the JS kernel
   `prismpath.mjs`) now reject it (`disallowed-or-unparseable`), and SPEC §4.3 says "**integer**, boolean,
-  or string literal" where it previously said the imprecise "numeric". The classifier's Level M count over
-  the frozen corpus moves 129 → **118 cases / 113 distinct** (11 float over-claims removed); the FPGA/eBPF
-  runnable subset (114) is unchanged — the compiler already rejected floats, so no certified number moves.
-  Chained comparisons remain §4.3-Excluded (the classifier reports them excluded; the compiler desugars
-  them, per "SHOULD be desugared by tooling") — the sole, SPEC-consistent classifier/compiler gap, now
-  pinned by `test_conformance_drift.test_classifier_compiler_gap_pinned`. Conformance corpora
-  `level_m.json` / `capability.json` gained a new `float_const` case (a pure addition — no existing case
-  changed, so no spec-version bump is required per the format rule above).
+  or string literal" where it previously said the imprecise "numeric". This removes **11 float over-claims**
+  from the classifier's Level M count over the frozen corpus; the FPGA/eBPF runnable subset (114) is
+  unchanged — the compiler already rejected floats, so no certified number moves. Corpora gain a
+  `float_const` case. (Python↔JS agree bit-for-bit on floats incl. `1e3`, `.5`, `2.0e1`, floats-in-lists.)
+
+### Changed
+- **Chained comparisons are normalized into the Level M fragment, not excluded — one shared desugaring.**
+  SPEC §4.3 said chained comparisons (`when 1 < x < 5`) "SHOULD be desugared by tooling" but the
+  classifier (`verify --level-m` / `capability_report`) reported them as *outside* the fragment while the
+  PPT compiler desugared and accepted them — a real gap between "is this hardware-compilable?" and what the
+  compiler actually did. Now both **desugar-then-classify** through a single `model_check._desugar_chains`
+  (the compiler imports it; the JS kernel mirrors it): `a < b < c` → `a < b and b < c`, exact under
+  §4.1–§4.2 (pure operands, total comparisons). A chained comparison is Level M iff each conjunct is —
+  `1 < x < 5` is in-fragment, `1 < a < b` is not (`a < b` is field-vs-field, now reported with that precise
+  reason instead of a blanket "chained"). Net effect over the corpus: classifier **= compiler = 126 cases /
+  119 distinct, 0 disagreements** (pinned by `test_classifier_compiler_gap_pinned`); the 114 runnable
+  subset is unchanged (the compiler already desugared, so no certified number moves). SPEC §4.3 updated
+  (chained moved from "Excluded" to a normalization rule); conformance corpora `level_m.json` /
+  `capability.json` flip the `chained` case to Level M → **spec-vector version 1 → 2**.
 
 ### Added
 - **eBPF target: real-packet classification on live traffic + measured latency + live policy hot-swap.**
