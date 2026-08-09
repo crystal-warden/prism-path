@@ -518,6 +518,15 @@ def add_parser(subparsers) -> None:
     cp.add_argument('--json', action='store_true', help='machine-readable output')
     cp.set_defaults(func=capability_cmd)
 
+    xp = subparsers.add_parser(
+        'context', help='Emit the verified facts PrismPath can PROVE about a flow (nodes, edges, '
+                        'declared fields, reachability, Level M, capability) as grounding for an '
+                        'agent authoring or editing it.')
+    xp.add_argument('flow_md', type=str, help='Path to the flow markdown file')
+    xp.add_argument('--json', action='store_true', help='machine-readable output')
+    xp.set_defaults(func=lambda a: __import__('prismpath.flow_context', fromlist=['context_cmd'])
+                    .context_cmd(a))
+
 
 def verify_cmd(args) -> int:
     from prismpath.parser import parse_file
