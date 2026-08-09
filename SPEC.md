@@ -143,15 +143,24 @@ Over JSON-representable values (null, bool, number, string, array, object):
 A predicate is in the **match-action fragment** iff it is a boolean combination (`and`/`or`/
 `not`) of atoms, where every atom is one of:
 
-- `field OP constant` with `OP ∈ {==, !=, <, <=, >, >=}`, `field` a name, and `constant` a
-  numeric, boolean, or string literal (string constants with `==`/`!=` only);
+- `field OP constant` with `OP ∈ {==, !=, <, <=, >, >=}`, `field` a name, and `constant` an
+  **integer**, boolean, or string literal (string constants with `==`/`!=` only). The value
+  domain of the fragment is `i32`; **float literals are excluded** — a `field OP <float>`
+  condition is outside the fragment (it has no representation on the i32 match-action table);
 - `field in <list of scalar literals>` or its `not in` form;
 - a bare `field` (truthiness of a scalar).
 
 Fields are worker-emitted scalars plus the engine counters `visits` and `error_count`.
 **Excluded** from the fragment: substring `in`, string *ordering*, field-vs-field comparisons,
-membership in non-literal (runtime) collections, nested containers, chained comparisons (they
-desugar into the fragment mechanically and SHOULD be desugared by tooling).
+membership in non-literal (runtime) collections, nested containers.
+
+**Chained comparisons** (`a < b < c`) are **normalized** into the fragment, not excluded: tooling
+desugars them to `a < b and b < c` before classifying or compiling, and MUST do so consistently
+(the classifier `verify --level-m` and any table compiler share one desugaring, so they cannot
+disagree). The desugaring is exact under §4.1–§4.2 — operands are pure and every pairwise
+comparison is total, so `and` over the conjuncts evaluates identically to the chain. A chained
+comparison is therefore in the fragment iff each desugared conjunct is: `1 < x < 5` is in-fragment
+(both conjuncts are `field OP integer`); `1 < a < b` is not (the `a < b` conjunct is field-vs-field).
 
 The fragment exists because it is exactly a **match-action table**: each atom is a
 `(field-selector, operator, constant)` row; a node's ordered deterministic edges are a priority

@@ -135,7 +135,7 @@ function tokenize(src) {
         while (j < n && digits.test(src[j])) j++;
         const body = src.slice(i + 2, j).replace(/_/g, "");
         if (!body) throw new PredicateError(`malformed numeric literal in predicate`);
-        toks.push({ t: "num", v: parseInt(body, radix === "0x" ? 16 : radix === "0o" ? 8 : 2) });
+        toks.push({ t: "num", v: parseInt(body, radix === "0x" ? 16 : radix === "0o" ? 8 : 2), float: false });
         i = j;
         continue;
       }
@@ -148,7 +148,8 @@ function tokenize(src) {
       }
       if (src[j] === "j" || src[j] === "J")
         throw new PredicateError(`complex literals are not supported in predicates`);
-      toks.push({ t: "num", v: Number(src.slice(i, j).replace(/_/g, "")) });
+      const _raw = src.slice(i, j);   // float-ness (`.`/`e`) can't be recovered from the JS Number — flag it here
+      toks.push({ t: "num", v: Number(_raw.replace(/_/g, "")), float: /[.eE]/.test(_raw) });
       i = j;
       continue;
     }
@@ -247,7 +248,7 @@ function parseExpr(src) {
     if (d > MAX_DEPTH) throw new PredicateError("predicate nested too deeply");
     const tk = next();
     if (!tk) throw new PredicateError("unexpected end of predicate");
-    if (tk.t === "num") return { k: "const", v: tk.v };
+    if (tk.t === "num") return { k: "const", v: tk.v, float: tk.float };
     if (tk.t === "str") return { k: "const", v: tk.v };
     if (tk.t === "ellipsis") return { k: "const", v: ELLIPSIS };       // `...` is a truthy Constant
     if (tk.t === "name") {
@@ -460,15 +461,17 @@ const _LM = {
 const _LM_ORDER = new Set(["<", "<=", ">", ">="]);
 
 function _lmScalarConst(node) {
+  // float excluded — the Level M fragment is an i32 value domain; a float literal is not table-representable.
   return node && node.k === "const" &&
-    (node.v === null || typeof node.v === "boolean" || typeof node.v === "number" || typeof node.v === "string");
+    (node.v === null || typeof node.v === "boolean" ||
+     (typeof node.v === "number" && !node.float) || typeof node.v === "string");
 }
 function _lmAtomReason(node) {
   if (!node) return _LM.SYNTAX;
   if (node.k === "name") return null;                      // bare field (scalar truthiness)
   if (node.k === "const") return _LM.CONSTANT;             // `when True` — no field, not a row
   if (node.k === "cmp") {
-    if (node.ops.length !== 1) return _LM.CHAINED;         // chained comparison; desugars, not in fragment
+    if (node.ops.length !== 1) return _LM.CHAINED;         // defensive: isLevelM desugars chains first
     const op = node.ops[0], left = node.left, right = node.rights[0];
     if (op === "in" || op === "not in") {                  // membership: field in [scalar literals]
       if (left.k !== "name") return left.k === "const" ? _LM.CONSTANT : _LM.FIELD_VS_FIELD;
@@ -491,6 +494,21 @@ function _lmAtomReason(node) {
     return null;
   }
   return _LM.SYNTAX;
+}
+// `a < b < c` -> `a < b and b < c`, recursively (SPEC §4.3: tooling SHOULD desugar chained
+// comparisons before classifying). Exact under the engine's semantics (pure operands, total
+// comparisons, and/or evaluates all) — mirrors model_check._desugar_chains so the JS classifier and
+// the Python reference / PPT compiler can never disagree about chains.
+function _desugarChains(node) {
+  if (!node) return node;
+  if (node.k === "and" || node.k === "or") return { k: node.k, vals: node.vals.map(_desugarChains) };
+  if (node.k === "not") return { k: "not", v: _desugarChains(node.v) };
+  if (node.k === "cmp" && node.ops.length > 1) {
+    const operands = [node.left, ...node.rights];
+    return { k: "and", vals: node.ops.map((op, i) =>
+      ({ k: "cmp", ops: [op], left: operands[i], rights: [operands[i + 1]] })) };
+  }
+  return node;
 }
 function _lmClassify(node) {
   if (node.k === "and" || node.k === "or") {
@@ -518,6 +536,7 @@ export function isLevelM(cond) {
   if (ALWAYS.has(low) || NEVER.has(low)) return { level_m: true, reason: null };
   let node;
   try { node = parseExpr(expr); } catch { return { level_m: false, reason: _LM.SYNTAX }; }
+  node = _desugarChains(node);              // SPEC §4.3: chained comparisons normalize into the fragment
   const reason = _lmClassify(node);
   return { level_m: reason === null, reason };
 }

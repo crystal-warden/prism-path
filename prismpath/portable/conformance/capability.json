@@ -1,6 +1,6 @@
 {
   "note": "Frozen capability matrices from model_check.capability_report. Any implementation of capabilityReport must reproduce every target status + reason bit-for-bit.",
-  "version": 1,
+  "version": 2,
   "cases": [
     {
       "key": "clean_level_m",
@@ -65,7 +65,7 @@
       "flow": "---\nname: ch\nstart: a\n---\n## a\n-> b: when 1 < x < 10\n-> c: else\n## b\nx\n## c\ny\n",
       "expected": {
         "tier": "P0",
-        "level_m": false,
+        "level_m": true,
         "targets": {
           "python": {
             "status": "yes",
@@ -78,17 +78,9 @@
             "blocking_edges": []
           },
           "level_m_hardware": {
-            "status": "no",
-            "reason": "1 deterministic edge(s) outside the match-action fragment",
-            "blocking_edges": [
-              {
-                "node": "a",
-                "target": "b",
-                "condition": "when 1 < x < 10",
-                "level_m": false,
-                "reason": "chained-comparison"
-              }
-            ]
+            "status": "yes",
+            "reason": null,
+            "blocking_edges": []
           }
         }
       }
@@ -176,6 +168,39 @@
             "status": "yes",
             "reason": null,
             "blocking_edges": []
+          }
+        }
+      }
+    },
+    {
+      "key": "float_const",
+      "flow": "---\nname: floatcase\nstart: a\n---\n## a\n-> b: when score >= 1.0\n-> c: else\n## b\nx\n## c\ny\n",
+      "expected": {
+        "tier": "P0",
+        "level_m": false,
+        "targets": {
+          "python": {
+            "status": "yes",
+            "reason": null,
+            "blocking_edges": []
+          },
+          "portable": {
+            "status": "yes",
+            "reason": null,
+            "blocking_edges": []
+          },
+          "level_m_hardware": {
+            "status": "no",
+            "reason": "1 deterministic edge(s) outside the match-action fragment",
+            "blocking_edges": [
+              {
+                "node": "a",
+                "target": "b",
+                "condition": "when score >= 1.0",
+                "level_m": false,
+                "reason": "disallowed-or-unparseable"
+              }
+            ]
           }
         }
       }

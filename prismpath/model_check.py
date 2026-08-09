@@ -55,8 +55,13 @@ _EQ_OPS = (ast.Eq, ast.NotEq)
 
 
 def _scalar_const(node) -> bool:
+    # float is EXCLUDED: the Level M / hardware match-action fragment is an i32 value domain, so a float
+    # constant is not table-representable (the PPT compiler delegates here and so rejects it too, as
+    # `not-level-m:disallowed-or-unparseable`). bool is a subclass of int, so `isinstance(True, int)` is
+    # True — booleans stay in-fragment.
     return isinstance(node, ast.Constant) and (
-        node.value is None or isinstance(node.value, (bool, int, float, str)))
+        node.value is None or (isinstance(node.value, (bool, int, str))
+                               and not isinstance(node.value, float)))
 
 
 def _atom_reason(node) -> Optional[str]:
@@ -67,7 +72,10 @@ def _atom_reason(node) -> Optional[str]:
         return _R_CONSTANT                                 # `when True` — no field, not a row
     if isinstance(node, ast.Compare):
         if len(node.ops) != 1:
-            return _R_CHAINED                              # desugars mechanically; not in fragment
+            return _R_CHAINED                              # defensive: is_level_m desugars chains
+            #                                                first (SPEC §4.3), so this is unreachable
+            #                                                on that path — kept so a raw _classify
+            #                                                call can't silently read only ops[0].
         left, op, right = node.left, node.ops[0], node.comparators[0]
         if not isinstance(op, _ORDER_OPS + _EQ_OPS + (ast.In, ast.NotIn)):
             return _R_SYNTAX                               # `is`/`is not` — eval rejects them too
@@ -98,6 +106,25 @@ def _atom_reason(node) -> Optional[str]:
             return _R_STRING_ORDER                         # string *ordering* is excluded
         return None
     return _R_SYNTAX
+
+
+def _desugar_chains(node):
+    """`a < b < c` -> `a < b and b < c`, recursively (SPEC §4.3: tooling SHOULD desugar chained
+    comparisons before classifying/compiling). Exact under the engine's semantics: operands are pure
+    (names/constants, evaluated identically each time), every pairwise comparison is total, and BoolOp
+    evaluates all operands — so the desugared form cannot diverge from Python's chain evaluation on any
+    context. This is the ONE desugar both the classifier (`is_level_m`) and the PPT compiler
+    (`prismpath-hw/ppt_compile`, which imports this) use, so they can never disagree about chains."""
+    if isinstance(node, ast.BoolOp):
+        return ast.BoolOp(op=node.op, values=[_desugar_chains(v) for v in node.values])
+    if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.Not):
+        return ast.UnaryOp(op=node.op, operand=_desugar_chains(node.operand))
+    if isinstance(node, ast.Compare) and len(node.ops) > 1:
+        operands = [node.left] + list(node.comparators)
+        return ast.BoolOp(op=ast.And(), values=[
+            ast.Compare(left=operands[i], ops=[node.ops[i]], comparators=[operands[i + 1]])
+            for i in range(len(node.ops))])
+    return node
 
 
 def _classify(node) -> Optional[str]:
@@ -132,6 +159,7 @@ def is_level_m(cond: str) -> Tuple[bool, Optional[str]]:
     node = _parse(cond)
     if node is None:
         return False, _R_SYNTAX
+    node = _desugar_chains(node)             # SPEC §4.3: chained comparisons normalize into the fragment
     reason = _classify(node)
     return (reason is None), reason
 

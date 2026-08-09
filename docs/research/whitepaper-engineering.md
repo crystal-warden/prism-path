@@ -914,8 +914,9 @@ already inside the boundary: the production SOC triage flow's routing is fully d
 
 **The fragment is now machine-recognized — and machine-checked.** SPEC §4.3's match-action
 fragment stopped being a prose definition: `prismpath verify --level-m` classifies every
-deterministic edge as in-fragment or out (with a stable reason code — chained comparison,
-field-vs-field, substring membership, string ordering), and `portability_tier()` reports Level-M
+deterministic edge as in-fragment or out (with a stable reason code — field-vs-field, substring
+membership, string ordering, float constant; chained comparisons are normalized into the fragment,
+not reported out), and `portability_tier()` reports Level-M
 membership for the whole flow alongside P0/P1/P2. The same recognizer powers **bounded model
 checking**: `prismpath verify --reach NODE --forbid NODE --assume "<expr>"` searches the reachable
 state space under the engine's real first-match semantics, returning a concrete witness outcome for

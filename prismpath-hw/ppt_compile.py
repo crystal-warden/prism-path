@@ -23,7 +23,7 @@ if _REPO not in sys.path:
 
 from prismpath import predicates                     # noqa: E402
 from prismpath.analysis import _reachable            # noqa: E402
-from prismpath.model_check import _classify          # noqa: E402
+from prismpath.model_check import _classify, _desugar_chains   # noqa: E402
 
 TY_NONE, TY_BOOL, TY_INT, TY_STR = 0, 1, 2, 3
 OP_EQ, OP_NE, OP_LT, OP_LE, OP_GT, OP_GE, OP_TRUTHY = range(7)
@@ -68,21 +68,9 @@ def encode_scalar(v, intern: dict) -> tuple:
     raise SubsetError("non-scalar-value", type(v).__name__)
 
 
-def _desugar_chains(node):
-    """`a < b < c` -> `a < b and b < c`, recursively. Exact under the engine's semantics:
-    operands are pure (names/constants, evaluated identically each time), every pairwise
-    comparison is total, and BoolOp evaluates all operands — so the desugared form cannot
-    diverge from Python's chain evaluation on any context."""
-    if isinstance(node, ast.BoolOp):
-        return ast.BoolOp(op=node.op, values=[_desugar_chains(v) for v in node.values])
-    if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.Not):
-        return ast.UnaryOp(op=node.op, operand=_desugar_chains(node.operand))
-    if isinstance(node, ast.Compare) and len(node.ops) > 1:
-        operands = [node.left] + list(node.comparators)
-        return ast.BoolOp(op=ast.And(), values=[
-            ast.Compare(left=operands[i], ops=[node.ops[i]], comparators=[operands[i + 1]])
-            for i in range(len(node.ops))])
-    return node
+# _desugar_chains now lives in prismpath.model_check (imported above) — the ONE normalization the
+# classifier and this compiler share, so `verify --level-m` and the table compiler can never disagree
+# about chained comparisons (SPEC §4.3: tooling SHOULD desugar them).
 
 
 class TableImage:
