@@ -20,6 +20,15 @@ spec-stable.
   ports/adapters/examples.
 
 ### Added
+- **eBPF/XDP target — a decidable PrismPath table runs in the Linux kernel** (`prismpath-ebpf/`). A
+  third certified substrate beside the Python reference and the FPGA C-table (`prismpath-hw/`): a
+  Level M / PPT table image is loaded into BPF maps and executed by an XDP program whose interpreter
+  (nested `bpf_loop` for the edge + prog machines, a constant-indexed operand stack, a per-CPU-map
+  register file) is **accepted by the kernel verifier** and computes verdicts **byte-identical to the
+  C reference `interp.c`** on real packets — proven end-to-end (`sudo make smoke`) at full 32/64/64
+  bounds on kernel 6.17. Declared subset: operand-stack depth ≤ 4. The PPT format + reference
+  interpreter stay canonical in `prismpath-hw` (referenced, not duplicated). `prismpath-ebpf/README.md`
+  has the full verifier analysis, including the approaches that failed and why.
 - **Portability matrix + reachability, now in the portable kernel and provably in sync** — two
   analyses that used to be Python-only are ported to `prismpath/portable/prismpath.mjs`:
   `capabilityReport` (which targets a flow compiles to — python / portable JS-Rust-Go / Level M
