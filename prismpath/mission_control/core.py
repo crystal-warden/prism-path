@@ -21,10 +21,7 @@ try:
     from prismpath.swarm_exporter import _fold                # reuse the prompt/output folder
 except Exception:                                             # pragma: no cover
     from swarm_exporter import _fold
-try:
-    from prismpath import dice                                # council categories + balance weights
-except Exception:                                             # pragma: no cover
-    dice = None
+
 
 PKG_DIR = os.path.dirname(os.path.abspath(__file__))          # prismpath/mission_control/
 PRISM_DIR = os.path.dirname(PKG_DIR)                          # prismpath/  (the old "HERE")
@@ -209,7 +206,7 @@ def status(state):
             "audit_root": AUDIT.current_root()[:16], "audit_n": len(AUDIT.events)}
 
 
-# The council spans two served models: engineering voices + cecli on gemma4 (:8888), two contrarian
+# The build roles span two served models: engineering voices + cecli on gemma4 (:8888), two contrarian
 # product voices on qwen25 (:8889). Surfacing WHICH model answered lets the lens show the dialogue.
 QWEN_ROLES = {"product-manager", "engagement-manager"}
 
@@ -224,8 +221,7 @@ def _route(e):
     kind, role, prompt = e.get("kind"), e.get("role", ""), e.get("prompt", "")
     if kind == "retriever":
         return "retriever", "doc index", "retrieve"
-    if kind == "dice":
-        return "\U0001F3B2 council dice", "council", "roll"
+
     if kind == "cecli":
         return f"cecli·{role}", "gemma4 (LLM)", role
     sub = role
@@ -285,9 +281,9 @@ def balance_state(state):
             led = json.load(f)
     except Exception:
         led = {}
-    cats = dice.CATEGORIES if dice is not None else sorted(led)
+    cats = sorted(led)
     rows = [{"name": c, "count": int(led.get(c, 0)),
-             "weight": round(dice.balance_weight(led, c), 2) if dice is not None else 1.0}
+             "weight": 1.0}
             for c in cats]
     return {"total": sum(r["count"] for r in rows), "categories": rows}
 
@@ -319,7 +315,7 @@ def flow_state(state):
     fail_kind = None
     if not valid and err:
         fail_kind = "test" if "lune test failed" in err else ("validate" if _FAIL_VALIDATE.search(err) else "validate")
-    stage = {"council": "accept", "retrieve": "build", "build": "build",
+    stage = {"retrieve": "build", "build": "build",
              "fix": "fix", "review": "validate"}.get(phase, "propose")
     if valid:
         stage = "validate"
@@ -327,7 +323,7 @@ def flow_state(state):
     lp = os.path.join(proj, "sprint.log")
     if os.path.isfile(lp):
         for ln in open(lp, errors="ignore").read().splitlines()[-40:]:
-            m = re.search(r"\[(council|rag|cecli|fix|HELP \d+|reflect)\]\s*(.*)", ln)
+            m = re.search(r"\[(rag|cecli|fix|HELP \d+|reflect)\]\s*(.*)", ln)
             if m:
                 recent.append(m.group(0).split("] ", 1)[-1][:90] if "] " in m.group(0) else m.group(0)[:90])
             elif re.search(r"\[it \d+ \|.*valid=", ln):

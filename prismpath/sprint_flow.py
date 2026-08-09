@@ -13,7 +13,7 @@ a `SprintSeams` bundle of callables over the run state:
     seams = SprintSeams(pick=..., build=..., gate=..., fix=..., escalate=...)
     committed = run_sprint_flow(seams, ledger=Ledger("sprint", run_id))
 
-`run_sprint.py` builds its seams from its existing machinery (kg_next/council_next,
+`run_sprint.py` builds its seams from its existing machinery (kg_next,
 cecli_build/build, validate_fn, help_escalate) behind SPRINT_FLOW=1 — same behavior, but the
 loop's SEMANTICS now live in the document, inspectable by `prismpath validate`/`graph` like any
 other flow, while the wall-clock / pause / heartbeat machinery stays in the driver where

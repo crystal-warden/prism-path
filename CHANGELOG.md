@@ -8,6 +8,17 @@ spec-stable.
 
 ## [Unreleased]
 
+### Changed
+- **Sprint-engine hygiene: it never deletes your files, and the game-flavored "council" is gone.**
+  `run_sprint.py` no longer auto-wipes `SPRINT_PROJ` — the old `SPRINT_FRESH=1` default ran
+  `shutil.rmtree`, one typo from erasing a real project. Greenfield now requires an empty dir (or
+  `SPRINT_EXTEND=1` to build on an existing tree), else it errors clearly; choosing and clearing the
+  location is the user's call. The **council** deliberation subsystem (`prismpath/plugins/council/`,
+  the `prismpath/dice.py` shim, `council_next`, the role lenses) is **deleted** — the swarm backend
+  uses the `review` role. Game-flavored language ("player", "gameplay", "one more run", "world object",
+  …) is removed from the core: PrismPath itself carries no game flavor; that lives only in
+  ports/adapters/examples.
+
 ### Added
 - **Portability matrix + reachability, now in the portable kernel and provably in sync** — two
   analyses that used to be Python-only are ported to `prismpath/portable/prismpath.mjs`:

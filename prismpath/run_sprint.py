@@ -33,7 +33,7 @@ Config (env):
   SPRINT_SECONDS               wall-clock budget; 0/unset = open-ended (until STOP file)
   SPRINT_MAX_NEW               generation budget per call (default 12000)
   SPRINT_STUCK_REPEAT          identical-error repeats before auto-escalate (default 3)
-  SPRINT_FRESH                 "1" to wipe SPRINT_PROJ at start (default 1)
+  SPRINT_EXTEND                "1" to build on an existing SPRINT_PROJ (default 0 — else it must be empty)
 
 Live files written in SPRINT_PROJ: BLUEPRINT.md, STOP (touch to end), HELP.md, status.json, sprint.log
 """
@@ -58,13 +58,6 @@ except Exception:
     except Exception:
         _ix = None
 
-try:                                    # Oblique-Strategies council dice + category-balance ledger
-    from prismpath import dice
-except Exception:
-    try:
-        import dice
-    except Exception:
-        dice = None
 
 BASE = os.environ.get("LLM_BASE", "http://127.0.0.1:8888/v1")
 MODEL = os.environ.get("LLM_MODEL", "gemma4")
@@ -76,7 +69,6 @@ MAX_NEW = int(os.environ.get("SPRINT_MAX_NEW", "12000"))
 ENABLE_THINKING = os.environ.get("SPRINT_ENABLE_THINKING", "0") == "1"  # let the model reason before emitting files
 STUCK_REPEAT = int(os.environ.get("SPRINT_STUCK_REPEAT", "3"))
 REGRESS_LIMIT = int(os.environ.get("SPRINT_REGRESS_LIMIT", "4"))   # consecutive-invalid before revert
-FRESH = os.environ.get("SPRINT_FRESH", "1") == "1"
 # Feature-extend mode: the project is a pre-seeded base to IMPROVE, not a greenfield to bootstrap.
 # When set, main() loads the existing files and skips plan()/ideate() (whose "build the initial
 # minimal project" bootstrap would otherwise clobber a large existing module with a stub). This is
@@ -190,7 +182,7 @@ if AGENT_BACKEND == "swarm":
 # --- execution backend: how a build/fix step EDITS the tree ---
 #   "agent" (default) = the role agent emits WHOLE files (the original path).
 #   "cecli"           = drive cecli to DIFF-EDIT the real tree, gate-looped (proven to beat whole-file
-#                       regen: no require-scrambling, minimal targeted edits). Council still = the brain.
+#                       regen: no require-scrambling, minimal targeted edits). Reviewer still = the brain.
 EXEC = os.environ.get("SPRINT_EXEC", "agent")                   # "agent" | "cecli"
 SPRINT_DIR = os.path.dirname(os.path.abspath(__file__))
 CECLI = os.environ.get("SPRINT_CECLI_BIN", os.path.expanduser("~/.cecli-venv/bin/cecli"))
@@ -216,14 +208,14 @@ AGY_TIMEOUT = int(os.environ.get("SPRINT_AGY_TIMEOUT", "900"))
 AGY_MAX = int(os.environ.get("SPRINT_AGY_MAX", "4"))              # cap frontier dispatches per run
 
 # --- spec-driven sprint mode: build each named module to green in DEPENDENCY ORDER from its
-#     specs/<Module>.md contract — a deterministic alternative to the council's dice exploration.
+#     specs/<Module>.md contract — a deterministic alternative to heuristic exploration.
 #     Enabled when both SPRINT_SPEC_DIR and SPRINT_SPEC_ORDER are set. ---
 SPEC_DIR = os.environ.get("SPRINT_SPEC_DIR", "")
 SPEC_ORDER = [s.strip() for s in os.environ.get("SPRINT_SPEC_ORDER", "").split(",") if s.strip()]
 SPEC_MODE = bool(SPEC_DIR and SPEC_ORDER)
 
 # --- KG-driven STEPPED spec mode: execute ONE structured spec (its `## ` requirements) one node at a time,
-#     ordered + tracked by a knowledge graph (deterministic — the graph, not the council, decides what is
+#     ordered + tracked by a knowledge graph (deterministic — the graph decides what is
 #     done + what is next). The spec is ingested whole; each step embeds only that requirement's section. ---
 SPEC_FILE = os.environ.get("SPRINT_SPEC_FILE", "")          # e.g. specs/INTEGRATION.md (rel to PROJ or abs)
 KG_PATH = os.environ.get("SPRINT_KG", "")                   # e.g. specs/INTEGRATION.kg.json; default derived
@@ -299,7 +291,7 @@ def retrieve_docs(query: str) -> str:
 
 def _cecli_run(message: str, focus: list, label: str = "build") -> dict:
     """One cecli diff-edit pass over PROJ, gate-looped via --auto-test. Returns the reloaded file tree.
-    cecli owns the inner build->gate->fix loop; the swarm council decides WHAT this step should do."""
+    cecli owns the inner build->gate->fix loop; the reviewer decides WHAT this step should do."""
     focus = sorted({f for f in focus if f and os.path.isfile(os.path.join(PROJ, f))})
     args = [CECLI, "--model", f"openai/{MODEL}", "--openai-api-base", BASE,
             "--edit-format", "diff", "--map-tokens", "2048",
@@ -405,7 +397,7 @@ def _src_context() -> list:
 
 
 def cecli_build(files: dict, instruction: str, target: str, blueprint: str) -> dict:
-    """CECLI build step: implement ONE council-chosen action via diff-editing, looped to green."""
+    """CECLI build step: implement ONE review-chosen action via diff-editing, looped to green."""
     # Target-specific build conventions (a plugin's strict-mode / wiring / surfacing rules) live in the gate
     # plugin; the engine itself only states GENERIC build discipline. Empty for the generic/browser gate.
     def _plugin_rules(attr: str) -> str:
@@ -797,183 +789,7 @@ def review(files: dict, blueprint: str) -> dict:
     return nxt
 
 
-# --- council expansion engine: a deterministic EXPAND/REFINE cadence + coverage map + distinct
-# role lenses, so the council DRIVES BREADTH instead of re-optimizing the same salient file. ---
-EXPAND_N = int(os.environ.get("SPRINT_EXPAND", "5"))   # net-new-subsystem iterations per cycle
-REFINE_N = int(os.environ.get("SPRINT_REFINE", "2"))   # refinement/hardening iterations per cycle
-WORLD_N = int(os.environ.get("SPRINT_WORLD", "0"))     # WORLD-BUILD rounds per cycle (the World Lens die)
-_COUNCIL_ROUND = 0
-_RECENT_TARGETS: list = []                              # anti-churn: files chosen recently
-DICE = os.environ.get("SPRINT_DICE", "1") == "1"        # Oblique-Strategies exploration roll (EXPAND)
-BALANCE = os.environ.get("SPRINT_BALANCE", "1") == "1"  # category-balance weighting (dice + vote tally)
-LEDGER_PATH = os.path.join(PROJ, "category_balance.json")
-try:                                                    # append-only log of every roll + balance update
-    from prismpath import audit_log as _al
-    _COUNCIL_AUDIT = _al.AuditLog(os.path.join(PROJ, "council_audit.log"))
-except Exception:
-    _COUNCIL_AUDIT = None
 
-ROLE_LENS = {
-    "architect": "a NEW structural subsystem — a new port + adapter giving the product a whole new capability",
-    "coder": "a NEW gameplay mechanic players directly interact with (not a tweak to an existing one)",
-    "test-author": "an entirely NEW pure-core module with rules worth unit-testing",
-    "fixer": "a MISSING safeguard the product lacks (abuse resistance, data-loss protection, an unhandled edge)",
-    "critic": "the single NEW feature that most increases player-facing DEPTH and fun",
-    "product-manager": "the single MISSING player-facing system that delivers the most NEW value — reject optimizing files that already work",
-    "engagement-manager": "the boldest FUN/retention feature that makes a player say 'one more run' — dissent from dry technical or test-only work",
-}
-# WORLD-round lenses: every voice thinks about the PHYSICAL/VISUAL world, not server rulesets.
-WORLD_LENS = {
-    "architect": "the structural layout of the physical plot — how the owned space is organized and reads",
-    "coder": "a visible, interactive world object the player physically touches and gets feedback from",
-    "fixer": "a missing piece of physical presence the world lacks (it feels empty / a system is invisible)",
-    "product-manager": "the feature that most makes the product feel complete and worth using",
-    "engagement-manager": "the most alive, screenshot-worthy visual moment in the world",
-}
-# Optional, CONSUMER-PROVIDED "expected subsystems -> presence keywords" map (domain-specific). The
-# engine ships with NONE — it knows nothing about any particular product. Point SPRINT_SUBSYSTEMS_FILE at a JSON
-# map to drive coverage-based EXPAND proposals; empty -> the coverage map is simply unused (the role-lensed
-# council still proposes net-new subsystems). Map format: {subsystem-name: [presence keywords]}.
-SUBSYSTEMS = {}
-_SUBSYS_FILE = os.environ.get("SPRINT_SUBSYSTEMS_FILE")
-if _SUBSYS_FILE and os.path.isfile(_SUBSYS_FILE):
-    import json as _json
-    try:
-        SUBSYSTEMS = _json.load(open(_SUBSYS_FILE, encoding="utf-8"))
-    except Exception:
-        SUBSYSTEMS = {}
-
-
-def _coverage(files: dict):
-    blob = "\n".join((p + "\n" + c) for p, c in files.items()).lower()
-    present, missing = [], []
-    for name, kws in SUBSYSTEMS.items():
-        (present if any(k in blob for k in kws) else missing).append(name)
-    return present, missing
-
-
-def council_next(files: dict, blueprint: str) -> dict:
-    """DEMOCRATIZED next-step: 5 role-lensed proposals → vote. A 5:2 EXPAND/REFINE cadence + coverage
-    map drive BREADTH (in EXPAND, proposals must be net-new subsystems; existing/recent files filtered)."""
-    global _COUNCIL_ROUND
-    if _ix:
-        _ix.set_phase("council")
-    # 3 engineering voices (gemma4) + 2 contrarian product voices (qwen25): real diversity + a built-in
-    # push toward expansion/fun (the PM vetoes optimization; the engagement manager champions player joy).
-    roles = ["architect", "coder", "fixer", "product-manager", "engagement-manager"]
-    _COUNCIL_ROUND += 1
-    cycle = max(1, WORLD_N + EXPAND_N + REFINE_N)
-    _pos = (_COUNCIL_ROUND - 1) % cycle
-    phase = "WORLD" if _pos < WORLD_N else ("EXPAND" if _pos < WORLD_N + EXPAND_N else "REFINE")
-    present, missing = _coverage(files)
-    cov = (f"\n\nSUBSYSTEM COVERAGE — present: {', '.join(present) or 'none'}\n"
-           f"MISSING (build these): {', '.join(missing) or 'none — all core systems exist'}\n")
-    ledger = dice.load_ledger(LEDGER_PATH) if dice is not None else {}
-    rolled = None
-    recent = ", ".join(_RECENT_TARGETS) or "none"
-    if phase == "WORLD" and dice is not None:
-        wr = dice.world_roll(_COUNCIL_ROUND, files)                 # World Lens: build the physical space
-        directive = (dice.world_mandate(wr) + f"\nRecently-built (do NOT re-pick): {recent}.")
-        log(f"    [council/world] seed={wr['seed']} aspect='{wr['axis']}' scope={wr['scope']}")
-        if _ix:
-            _ix.record("dice", "council", dice.world_mandate(wr),
-                       f"WORLD aspect={wr['axis']} | scope={wr['scope']} | seed={wr['seed']}", phase="WORLD")
-        if _COUNCIL_AUDIT is not None:
-            try:
-                _COUNCIL_AUDIT.append("council", "world.roll", wr)
-            except Exception:
-                pass
-    elif phase == "EXPAND" and DICE and dice is not None:
-        rolled = dice.roll(_COUNCIL_ROUND, files, ledger)           # seeded; coverage × balance weighted
-        directive = (dice.mandate(rolled) + f"\nCreate a NEW file (new core module + its port/adapter); do "
-                     f"NOT edit or optimize a file that already exists. Recently-built (do NOT re-pick): {recent}.")
-        log(f"    [council/dice] seed={rolled['seed']} dir='{rolled['direction']}' scope={rolled['scope']}")
-        if _ix:
-            _ix.record("dice", "council", dice.mandate(rolled),
-                       f"DIRECTION={rolled['direction']} | SCOPE={rolled['scope']} | weights={rolled['weights']}",
-                       phase="EXPAND")
-        if _COUNCIL_AUDIT is not None:
-            try:
-                _COUNCIL_AUDIT.append("council", "dice.roll", rolled)
-            except Exception:
-                pass
-    elif phase == "EXPAND":
-        directive = ("This is an EXPANSION round (the product must GROW). Propose a NET-NEW subsystem it LACKS — "
-                     "pick from MISSING above. Create a NEW file (new core module + its adapter/port); do NOT "
-                     f"propose editing or optimizing a file that already exists. Recently-built (do NOT re-pick): {recent}.")
-    else:
-        directive = ("This is a REFINEMENT round. Propose a robustness/balance/UX improvement to an EXISTING "
-                     "system (edge-cases, tuning, polish). No new subsystem needed.")
-    # LEAN council context: the council decides WHAT to build next (a target + action), so it needs the
-    # goal, coverage, and what already exists — NOT the full architecture contract or blueprint (those are
-    # the BUILD step's concern). The old ctx was ~14KB, so each of 5 SEQUENTIAL propose dispatches took
-    # ~20s (≈80s/round, which froze the lens and ballooned under load). This ~3KB ctx makes them ~5s.
-    ctx = (GOAL + cov + "\nExisting files: " + ", ".join(sorted(files)) + "\n")
-    proposals = []
-    for role in roles:
-        lens = WORLD_LENS.get(role, ROLE_LENS[role]) if phase == "WORLD" else ROLE_LENS[role]
-        p = _swarm_dispatch(role, ctx + f"\nYOUR LENS ({role}): propose {lens}.\n{directive}\n"
-            "If the product is genuinely complete and excellent with nothing worthwhile left, reply exactly `DONE`. "
-            "Otherwise reply EXACTLY two lines:\nTARGET: <relative file path>\nACTION: <one concrete improvement>")
-        proposals.append((role, p or ""))
-    if sum(1 for _, p in proposals if re.search(r"^\s*DONE\s*$", p, re.M) and "TARGET" not in p) >= 3:
-        log("    [council] majority DONE")
-        return {"done": True, "raw": "council DONE"}
-    opts = []
-    for role, p in proposals:
-        tm, am = re.search(r"TARGET:\s*([^\n`]+)", p), re.search(r"ACTION:\s*(.+)", p)
-        if tm and am:
-            opts.append({"role": role, "target": tm.group(1).strip().lstrip("./"),
-                         "instruction": am.group(1).strip()[:240]})
-    if not opts:
-        return {"done": False, "target": "core/new_system.js",
-                "instruction": "Add a net-new subsystem the product lacks."}
-    if phase in ("EXPAND", "WORLD"):                   # enforce novelty: prefer net-new, un-churned targets
-        fresh = [o for o in opts if o["target"] not in files and o["target"] not in _RECENT_TARGETS]
-        if fresh:
-            opts = fresh
-    ballot = "\n".join(f"{i + 1}. [{o['role']}] {o['target']}: {o['instruction']}" for i, o in enumerate(opts))
-    tally = [0] * len(opts)
-    for role in roles:
-        v = _swarm_dispatch(role, ctx + "Proposed next actions:\n" + ballot + "\n\nVote for the SINGLE best "
-                            "one to do next (most value toward the GOAL, least risk). Reply with ONLY its number.")
-        mv = re.search(r"\b(\d+)\b", v or "")
-        if mv and 0 <= int(mv.group(1)) - 1 < len(opts):
-            tally[int(mv.group(1)) - 1] += 1
-    # BALANCE: scale each proposal's raw votes by its category weight — a path we've travelled often counts
-    # for LESS, so neglected categories can win and the product expands evenly. (Near no-op within an EXPAND
-    # round where every proposal shares the rolled direction; decisive on REFINE / cross-category rounds.)
-    if BALANCE and dice is not None:
-        cats = [dice.classify(o["target"], o["instruction"]) for o in opts]
-        bw = [round(dice.balance_weight(ledger, c), 2) for c in cats]
-        eff = [tally[i] * bw[i] for i in range(len(opts))]
-        win_i = eff.index(max(eff))
-    else:
-        cats, bw = ["" for _ in opts], [1.0 for _ in opts]
-        eff = [float(t) for t in tally]
-        win_i = tally.index(max(tally))
-    win = opts[win_i]
-    _RECENT_TARGETS.append(win["target"])
-    del _RECENT_TARGETS[:-6]
-    # Record the EXPANDED direction so future rounds steer AWAY from it (ledger = expansion history by
-    # direction). Only EXPAND rounds count — REFINE polishes, it does not expand. The ROLLED direction is
-    # authoritative (the whole round built toward it); classify(winner) is a fallback only when dice are
-    # off. Recording classify(winner) on EXPAND was wrong: a cross-flavored proposal (e.g. an economy
-    # round whose winner reads "trade with rivals") miscredits Social, so the neglected axis never rises.
-    if BALANCE and dice is not None and phase == "EXPAND":
-        wcat = rolled["direction"] if rolled else (cats[win_i] if cats[win_i] != "other" else None)
-        if wcat:
-            dice.record(ledger, wcat)
-            dice.save_ledger(LEDGER_PATH, ledger)
-            if _COUNCIL_AUDIT is not None:
-                try:
-                    _COUNCIL_AUDIT.append("council", "balance.update", {"category": wcat, "ledger": ledger})
-                except Exception:
-                    pass
-    log(f"    [council/{phase}] {len(opts)} proposals, votes={tally}"
-        + (f" xW={bw} -> eff={[round(e, 1) for e in eff]}" if (BALANCE and dice is not None) else "")
-        + f" -> [{win['role']}] {win['target']}: {win['instruction'][:48]} | missing={len(missing)}")
-    return {"done": False, "target": win["target"], "instruction": win["instruction"], "raw": ballot[:300]}
 
 
 def audit_consistency(target: str) -> None:
@@ -1068,7 +884,7 @@ def antigravity_unblock(errors: str, named: list) -> bool:
 
 def spec_next(files: dict) -> dict:
     """Spec-driven next-step: build each module in SPEC_ORDER to green, in dependency order, straight from
-    its `<SPEC_DIR>/<Module>.md` contract — the deterministic alternative to council_next's dice exploration.
+    its `<SPEC_DIR>/<Module>.md` contract — the deterministic alternative to heuristic exploration.
     Returns the first module whose core file isn't present yet; done when all are built (gate is green)."""
     for m in SPEC_ORDER:
         target = f"core/{m}.js"
@@ -1154,7 +970,7 @@ def _apply_ledger_done(kg: dict, done_units) -> int:
 
 def _kg_seed_from_ledger():
     """Resume-from-git: mark KG nodes done from the ledger's proofs, so a sprint whose .kg.json was
-    wiped (SPRINT_FRESH) restarts at the first UNPROVEN node instead of rebuilding what git already
+    reset restarts at the first UNPROVEN node instead of rebuilding what git already
     attests. Point at a prior run with SPRINT_LEDGER_RUN=<id>. Best-effort — never blocks a sprint."""
     if not LEDGER:
         return
@@ -1282,7 +1098,7 @@ def _start_heartbeat():
 
 def _flow_loop(files: dict, blueprint: str) -> str:
     """SPRINT_FLOW=1 (roadmap item #6): drive the sprint through flows/sprint_loop.md instead of the
-    Python while-loop below. Same primitives (kg_next/council_next, cecli/swarm executor, validate_fn,
+    Python while-loop below. Same primitives (kg_next/review, cecli/swarm executor, validate_fn,
     help_escalate) wired as SprintSeams; the routing, retry budget, escalation, and per-unit ledger
     proofs are now edges + a @checkpoint in the DOCUMENT. Returns the stop reason."""
     from prismpath.sprint_flow import GateRed, SprintSeams, run_sprint_flow
@@ -1296,7 +1112,7 @@ def _flow_loop(files: dict, blueprint: str) -> str:
         elif SPEC_MODE:
             r = spec_next(cur["files"])
         else:
-            r = council_next(cur["files"], blueprint) if AGENT_BACKEND == "swarm" else review(cur["files"], blueprint)
+            r = review(cur["files"], blueprint)
         if r.get("done"):
             return {"text": "sprint complete", "done": True}
         unit = str(r.get("_kg_node") or r.get("target") or f"step-{len(done_units) + 1}")
@@ -1356,16 +1172,25 @@ def main():
     except Exception as e:
         log(f"[sprint] endpoint check failed: {e} — aborting."); return
 
-    if FRESH:
-        shutil.rmtree(PROJ, ignore_errors=True)
+    # The sprint NEVER deletes your files. Greenfield builds into an EMPTY dir; to build on an
+    # existing tree, opt in with SPRINT_EXTEND=1. (Choosing the location — and clearing it — is the
+    # user's call, not ours: an auto-wipe here is one typo away from erasing a real project.)
     os.makedirs(PROJ, exist_ok=True)
+    if not EXTEND:
+        _keep = {"STOP", os.path.basename(HELP_FILE), "status.json", "sprint.log", "BLUEPRINT.md"}
+        _existing = [f for f in os.listdir(PROJ) if not f.startswith(".") and f not in _keep]
+        if _existing:
+            log(f"[sprint] refusing to run greenfield in a non-empty directory: {PROJ}\n"
+                f"         it holds {len(_existing)} item(s) (e.g. {', '.join(sorted(_existing)[:5])}).\n"
+                f"         The sprint never deletes your files — empty the dir yourself, point "
+                f"SPRINT_PROJ at an empty one, or pass SPRINT_EXTEND=1 to build on this tree.")
+            return
     open(HELP_FILE, "a").close()
     budget = f"{SECONDS}s" if SECONDS else "open-ended (until STOP file)"
     log(f"[sprint] model={MODEL} gate={GATE} budget={budget} proj={PROJ}")
     _start_heartbeat()
     _register_sprint()
-    log(f"[sprint] arch={ARCH_FILE} | build=architect,coder,test-author,fixer | "
-        f"council=architect,coder,fixer,product-manager(qwen25),engagement-manager(qwen25) | stop: touch {STOP_FILE}")
+    log(f"[sprint] arch={ARCH_FILE} | build=architect,coder,test-author,fixer | stop: touch {STOP_FILE}")
 
     t0 = time.time()
     nxt = {"done": False, "target": "main.js", "instruction": "Add the most valuable next improvement."}
@@ -1443,7 +1268,7 @@ def main():
                 elif SPEC_MODE:
                     r = spec_next(files)
                 else:
-                    r = council_next(files, blueprint) if AGENT_BACKEND == "swarm" else review(files, blueprint)
+                    r = review(files, blueprint)
                 if r.get("done"):
                     stopped = ("all KG nodes done + gate green" if KG_MODE
                                else "all specs built + gate green" if SPEC_MODE

@@ -112,7 +112,7 @@ def resolve_worker(ref: str) -> Callable:
 
 
 def _bound_ref(node) -> Optional[str]:
-    """The `@worker(...)` binding on a node: bare form `@worker(council.tally)` or `name=` form."""
+    """The `@worker(...)` binding on a node: bare form `@worker(mymodule.handler)` or `name=` form."""
     args = node.annotations.get("worker")
     if args is None:
         return None
