@@ -188,13 +188,14 @@ every other kernel uses, and can execute whole flows.
 
 - **`sudo ./loader <ppt> certify <packets.bin>`** — runs a table-per-vector conformance corpus. Each
   record carries its own compiled PPT table + a crafted packet; the maps are repopulated per vector.
-  Built by `cert_corpus.py`, which frames every **in-fragment** vector of
+  Built by `cert_corpus.py`, which frames every in-subset vector of
   `../prismpath/portable/conformance/predicates.json` and cross-checks each against `interp.c` first.
-  **Result: 66/66 of the Level M fragment pass in-kernel, byte-matching the reference.** The other 1001
-  corpus vectors are excluded because they are *not match-action tables* (field-vs-field, arithmetic,
-  floats, string-ordering, `is`, non-literal collections, …), itemized by `cert_corpus.py`. **No
-  exclusion is an eBPF limit** — the max operand-stack depth used across the corpus is 2, under
-  `STACK_MAX=4`.
+  The declared subset uses the **same filter as `prismpath-hw`'s C-target cert** (in-fragment condition
+  + the fields it *reads* representable on the i32 table): **114/1067**, of which the eBPF target passes
+  **114/114 in-kernel, byte-matching the reference.** The other 953 are excluded and itemized: 930 whose
+  condition is not a match-action table (field-vs-field, arithmetic, string-ordering, `is`, non-literal
+  collections, constant-only, …) plus 12 float / 11 non-scalar whose *read* field can't be represented on
+  an i32 table. **No exclusion is an eBPF limit** — operand-stack depth stays well under `STACK_MAX=4`.
 - **`sudo ./loader <ppt> run <regs.bin> [names.txt]`** — drives one flow hop-by-hop: start at the flow's
   start node, evaluate it in-kernel, follow the matched target, repeat to a terminal. Prints the
   in-kernel path and the host-reference path and checks they match. `run_flow_demo.py` / `run_incident_demo.py`
@@ -246,7 +247,8 @@ latency via `BPF_PROG_TEST_RUN`), `netupdate <new.ppt> <iface>` (live policy hot
 
 ## 9. Honest status — what is and isn't proven
 
-- **Proven:** compile → verifier-accepted → in-kernel execution; 66/66 in-fragment corpus conformance;
+- **Proven:** compile → verifier-accepted → in-kernel execution; 114/114 declared-subset conformance
+  (the same 114/1067 subset the FPGA C-target certifies);
   real multi-node flows + a live alert stream routed correctly in-kernel; **real on-wire packets parsed
   and classified on live home traffic; sub-microsecond per-packet latency measured.**
 - **Caveats / not yet done:** the latency figure is program **compute cost** (`BPF_PROG_TEST_RUN`), not

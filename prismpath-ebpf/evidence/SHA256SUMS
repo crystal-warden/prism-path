@@ -1,8 +1,9 @@
 # PrismPath eBPF target — milestone manifest
-# stamped: 2026-08-09T13:05:16Z
-# git-commit: 342baf8c2c469d02cc6b46d4139a497e332cb222
-# milestone: loads -> conforms 66/66 -> routes real flows -> triages a live alert stream ->
-#            classifies live traffic (132-182 ns/pkt) -> hot-swaps policy from a Markdown edit
+# stamped: 2026-08-09T13:40:20Z
+# git-commit (baseline): daa351a7aec1b49eb5eedc186598bb9f0567078f
+# milestone: loads -> conforms 114/114 (declared subset, same filter as the FPGA C-target) ->
+#            routes real flows -> triages a live alert stream -> classifies live traffic
+#            (132-182 ns/pkt) -> hot-swaps policy from a Markdown edit
 # evidence rows: docs/research/supporting-evidence.md #77, #78
 #
 e2efb5377b063d685184153fbf060c82b2f80f7e1035384703bc2a837afd7645  ppt_xdp.bpf.c
@@ -12,8 +13,8 @@ f809ef6b214ec27c5e83a372e3eda92f30b7a1e42270b3b18189d87a5e317a7b  ppt_common.h
 a0019ea7824b797199f9eb7bd4084b994e32786349f469420f12a2f29beb8685  Makefile
 906ff6e06027c4052099f4b41bcd122e85447d0a0db12bb8f6588bb0fab670ce  smoke.sh
 473f884879a2f98bc0d6f798b88cd4c3f097c0a513822c571f8cc35fd0c5f8c8  net_triage.md
-7555cf3512926679b9f62c1d59e64507e868331754830846cec8a025aafc4fe8  cert_corpus.py
+ffdf396e6dc13f6ee54de8d25a9c4d84c223875211790a9588466dd626be84d2  cert_corpus.py
 41a7492eb36c14166496b36b3c7fd831712ff9484e95e012243d20c4c2add545  net_compile.py
 c1664b2cad007ecd631baa90f2ca76c85eeba35ac009dd634382569c71734459  run_flow_demo.py
 30625ace002d0c034f1bd932693f55ed68c3fdd535c1b130b45b3cd634676e69  run_stream_demo.py
-8391253ef9a901b38446e88ebdc4ecdc1ffafe1e1c95c9baa5da2276e58396bc  README.md
+6910cd81b53b4c9456c01664c09cceb391ffca8b054a1f1252774a6fd488b599  README.md

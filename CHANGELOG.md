@@ -23,9 +23,10 @@ spec-stable.
   XDP, latency is program compute cost not end-to-end wire latency.
 - **eBPF target: in-kernel conformance + whole-flow execution.** The `prismpath-ebpf` loader gained
   `certify` / `run` / `runbatch` modes that drive the actual verifier-accepted XDP program in-kernel via
-  `BPF_PROG_TEST_RUN`. The eBPF target now **certifies 66/66 of the Level M fragment** of the frozen
-  `predicates.json` corpus in-kernel (byte-matching `interp.c`; the other 1001 vectors are excluded as
-  not-match-action, each reason itemized, none an eBPF limit — max stack depth used = 2 of 4). Real
+  `BPF_PROG_TEST_RUN`. The eBPF target now **certifies 114/114 of the declared subset** (the same
+  114/1067 filter `prismpath-hw`'s C-target uses — in-fragment condition + read fields i32-representable)
+  of the frozen `predicates.json` corpus in-kernel, byte-matching `interp.c`; the other 953 vectors are
+  excluded and itemized, none an eBPF limit. Real
   multi-node flows execute in-kernel: the 12-node `adapters/soc/flows/wazuh_triage.md` routed a **live
   Wazuh alert stream** (real LLM verdicts) 27/27 identically to the reference. New harness:
   `cert_corpus.py`, `cert_vectors.py`, `run_flow_demo.py`, `run_stream_demo.py`, `run_incident_demo.py`.

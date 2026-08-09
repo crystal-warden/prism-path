@@ -30,16 +30,6 @@ INTERP = HERE / "interp"
 CONF = REPO / "prismpath" / "portable" / "conformance"
 
 
-def scalar_ok(v):
-    if v is None or isinstance(v, (bool, str)):
-        return None
-    if isinstance(v, int):
-        return None if pc.I32_MIN <= v <= pc.I32_MAX else "int-out-of-i32"
-    if isinstance(v, float):
-        return "float-value"
-    return "non-scalar"
-
-
 def frame_packet(node_idx, n_fields, regs_bytes):
     payload = struct.pack("<III", PPT_MAGIC, node_idx, n_fields) + regs_bytes
     eth = struct.pack("!6s6sH", b"\xff" * 6, b"\x02" * 6, 0x0800)
@@ -78,13 +68,17 @@ def main():
         except Exception as e:
             excl[f"other:{type(e).__name__}"] += 1
             continue
-        bad = next((scalar_ok(v) for v in ctx.values() if scalar_ok(v)), None)
-        if bad:
-            excl[bad] += 1
+        # Canonical declared-subset filter (identical to prismpath-hw/run_vectors cert_predicates):
+        # in-subset iff the condition is in-fragment (compiled above) AND the fields it READS are
+        # representable on the i32 table machine. encode_regs only touches read fields, so a non-scalar
+        # value in an UNREAD ctx field is irrelevant — checking all ctx values was an over-strict bug.
+        try:
+            regs_payload = pc.encode_regs(img, ctx, node_idx=0)     # <I node_idx> + regs
+        except pc.SubsetError as e:
+            excl[e.reason] += 1
             continue
 
         tbl = img.serialize()
-        regs_payload = pc.encode_regs(img, ctx, node_idx=0)     # <I node_idx> + regs
         regs_bytes = regs_payload[4:]
         n_fields = len(img.fields)
         pkt = frame_packet(0, n_fields, regs_bytes)
@@ -98,8 +92,8 @@ def main():
     out_path.write_bytes(records)
     total = len(cases)
     print(f"PREDICATE CORPUS: {total} frozen vectors")
-    print(f"  in-fragment (framed for eBPF): {kept}")
-    print(f"  excluded (NOT match-action tables): {sum(excl.values())}")
+    print(f"  in declared subset (in-fragment condition + read fields i32-representable): {kept}")
+    print(f"  excluded: {sum(excl.values())}")
     for r, n in excl.most_common():
         print(f"     {n:4}  {r}")
     print(f"  interp.c reference vs recorded expect: {kept - ref_disagree}/{kept} agree"
