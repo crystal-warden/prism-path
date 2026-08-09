@@ -9,6 +9,18 @@ spec-stable.
 ## [Unreleased]
 
 ### Added
+- **eBPF target: real-packet classification on live traffic + measured latency + live policy hot-swap.**
+  `ppt_net.bpf.c` reuses the verified eval back-end with a real-packet front-end (parses on-wire
+  Ethernet/IPv4/TCP-UDP into a fixed canonical register file) and classifies each packet with a Level M
+  table, observe-only. Attached to `span0` (the home-traffic mirror) it classified thousands of real
+  packets in-kernel with a sensible TLS-dominant distribution. Per-packet latency measured via
+  `BPF_PROG_TEST_RUN`: **132–182 ns/packet, ~5.5–7.6 Mpps/core** — sub-microsecond, earned not asserted.
+  `netupdate` **hot-swaps the policy of a running program in place** (repopulates the table maps via the
+  program's map-IDs — no detach, no reload); demonstrated live by editing `net_triage.md`, recompiling,
+  and swapping a 7-class table for an 8-class one while classification continued uninterrupted. New:
+  `ppt_net.bpf.c`, `net_triage.md`, `net_compile.py`, loader `netattach`/`netstats`/`netdetach`/
+  `netbench`/`netupdate`. Honestly bounded (README §9): observe-only (no inline drop yet), generic/SKB
+  XDP, latency is program compute cost not end-to-end wire latency.
 - **eBPF target: in-kernel conformance + whole-flow execution.** The `prismpath-ebpf` loader gained
   `certify` / `run` / `runbatch` modes that drive the actual verifier-accepted XDP program in-kernel via
   `BPF_PROG_TEST_RUN`. The eBPF target now **certifies 66/66 of the Level M fragment** of the frozen
