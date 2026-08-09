@@ -16,7 +16,7 @@ INTERP_SRC := $(HWDIR)/interp.c
 CLANG_EXISTS  := $(shell which $(CLANG) >/dev/null 2>&1 && echo 1 || echo 0)
 LIBBPF_EXISTS := $(shell pkg-config --exists libbpf 2>/dev/null && echo 1 || echo 0)
 
-all: ppt_xdp.bpf.o loader interp
+all: ppt_xdp.bpf.o ppt_net.bpf.o loader interp
 
 # Reference C interpreter, built from prismpath-hw's canonical source — smoke.sh checks parity against it.
 interp: $(INTERP_SRC)
@@ -26,6 +26,14 @@ ppt_xdp.bpf.o: ppt_xdp.bpf.c ppt_common.h
 	@if [ $(CLANG_EXISTS) -eq 1 ]; then \
 		echo "Building eBPF program $(CLANG)..."; \
 		$(CLANG) $(BPF_CFLAGS) -c ppt_xdp.bpf.c -o ppt_xdp.bpf.o; \
+	else \
+		echo "[NOTICE] $(CLANG) not found — install clang/llvm/libbpf-dev to build the BPF object."; \
+	fi
+
+ppt_net.bpf.o: ppt_net.bpf.c ppt_common.h
+	@if [ $(CLANG_EXISTS) -eq 1 ]; then \
+		echo "Building eBPF real-packet program $(CLANG)..."; \
+		$(CLANG) $(BPF_CFLAGS) -c ppt_net.bpf.c -o ppt_net.bpf.o; \
 	else \
 		echo "[NOTICE] $(CLANG) not found — install clang/llvm/libbpf-dev to build the BPF object."; \
 	fi

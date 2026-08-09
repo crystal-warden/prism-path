@@ -23,6 +23,8 @@
 #include "ppt_common.h"
 
 #define PIN_PATH "/sys/fs/bpf/ppt_result"   /* result_map pin: read back the in-kernel verdict */
+#define NET_VERDICT_PIN "/sys/fs/bpf/ppt_net_verdict"  /* real-packet per-target histogram */
+#define NET_RESULT_PIN  "/sys/fs/bpf/ppt_net_result"   /* real-packet last-verdict + pkt_count */
 
 typedef struct {
     uint16_t n_fields, n_interns, n_atoms, n_nodes, n_edges, prog_len,
@@ -518,6 +520,228 @@ static int certify_bpf(const char *packets_path) {
     else printf("  ALL PASS — every in-fragment vector routed identically in-kernel and by the reference.\n");
     return (passed == total) ? 0 : 1;
 }
+
+/* Attach the REAL-packet program (ppt_net.bpf.o) to a live interface, observe-only (it only ever
+ * returns XDP_PASS). Populates the PPT table from <ppt>, pins the verdict + result maps so `netstats`
+ * can read them after this process exits, and attaches in SKB/generic mode (works on veth/gretap). */
+static int net_attach(const char *ppt_path, const char *ifname) {
+    Image im; load_image(ppt_path, &im);
+    unsigned int ifindex = if_nametoindex(ifname);
+    if (ifindex == 0) { fprintf(stderr, "error: no such interface %s\n", ifname); return 2; }
+
+    struct bpf_object *obj = bpf_object__open_file("ppt_net.bpf.o", NULL);
+    if (!obj || bpf_object__load(obj)) {
+        fprintf(stderr, "error: open/load ppt_net.bpf.o failed (verifier / CAP_BPF).\n");
+        if (obj) bpf_object__close(obj);
+        return -1;
+    }
+    populate_maps(obj, &im);
+
+    struct bpf_map *vmap = bpf_object__find_map_by_name(obj, "verdict_map");
+    struct bpf_map *rmap = bpf_object__find_map_by_name(obj, "result_map");
+    struct bpf_program *prog = bpf_object__find_program_by_name(obj, "ppt_net_prog");
+    if (!vmap || !rmap || !prog) {
+        fprintf(stderr, "error: ppt_net program/maps not found.\n");
+        bpf_object__close(obj); return -1;
+    }
+    unlink(NET_VERDICT_PIN); unlink(NET_RESULT_PIN);
+    if (bpf_map__pin(vmap, NET_VERDICT_PIN) || bpf_map__pin(rmap, NET_RESULT_PIN)) {
+        fprintf(stderr, "warning: could not pin net maps (netstats may not find them)\n");
+    }
+    /* zero the histogram so counts reflect this attach only */
+    int vfd = bpf_map__fd(vmap);
+    for (__u32 k = 0; k < MAX_NODES; k++) { __u64 z = 0; bpf_map_update_elem(vfd, &k, &z, BPF_ANY); }
+
+    int err = bpf_xdp_attach(ifindex, bpf_program__fd(prog), XDP_FLAGS_SKB_MODE, NULL);
+    if (err) {
+        fprintf(stderr, "error: bpf_xdp_attach on %s failed (err=%d)\n", ifname, err);
+        bpf_object__close(obj); return -1;
+    }
+    /* The attach holds a ref on the iface; the pinned maps keep the histogram readable after we exit. */
+    bpf_object__close(obj);
+    printf("OK: ppt_net attached to %s (SKB mode, observe-only). Read counts with:\n", ifname);
+    printf("     sudo ./loader netstats %s <names>\n", ifname);
+    return 0;
+}
+
+/* Read the pinned per-target histogram + total. Observe-only output over whatever real traffic the
+ * attached program has classified so far. */
+static int net_stats(char **names, int n_names) {
+    int vfd = bpf_obj_get(NET_VERDICT_PIN);
+    int rfd = bpf_obj_get(NET_RESULT_PIN);
+    if (vfd < 0 || rfd < 0) {
+        fprintf(stderr, "error: net maps not pinned — attach first (loader netattach <ppt> <iface>)\n");
+        return 2;
+    }
+    __u32 zero = 0; struct ppt_result res = {0};
+    bpf_map_lookup_elem(rfd, &zero, &res);
+    printf("\n[ppt_net — real-traffic classification histogram]\n");
+    __u64 total = 0;
+    for (__u32 k = 0; k < MAX_NODES; k++) {
+        __u64 c = 0;
+        if (bpf_map_lookup_elem(vfd, &k, &c) != 0 || c == 0) continue;
+        const char *nm = (names && k < (unsigned)n_names) ? names[k]
+                        : (k == MAX_NODES - 1 ? "(no-match)" : NULL);
+        if (nm) printf("  %-14s %llu\n", nm, (unsigned long long)c);
+        else    printf("  node[%u]        %llu\n", k, (unsigned long long)c);
+        total += c;
+    }
+    printf("  ----\n  total classified: %llu packets  (result_map pkt_count=%llu)\n",
+           (unsigned long long)total, (unsigned long long)res.pkt_count);
+    return 0;
+}
+
+/* Build a real (non-PPT) Ethernet+IPv4+L4 frame for benchmarking the parser+eval path. */
+static int build_ip_frame(uint8_t *out, uint8_t proto, uint16_t dport, int app_bytes) {
+    int l4 = (proto == 6) ? 20 : (proto == 17) ? 8 : 8;   /* tcp / udp / icmp header */
+    int tot = 20 + l4 + app_bytes;
+    uint8_t *p = out;
+    memset(p, 0xff, 6); p += 6; memset(p, 0x02, 6); p += 6; *p++ = 0x08; *p++ = 0x00;   /* eth ipv4 */
+    *p++ = 0x45; *p++ = 0; *p++ = (uint8_t)(tot >> 8); *p++ = (uint8_t)tot;              /* ip */
+    *p++ = 0x00; *p++ = 0x01; *p++ = 0x00; *p++ = 0x00; *p++ = 64; *p++ = proto; *p++ = 0; *p++ = 0;
+    *p++ = 192; *p++ = 168; *p++ = 1; *p++ = 50;  *p++ = 192; *p++ = 168; *p++ = 1; *p++ = 60;
+    if (proto == 6) {                                    /* tcp */
+        *p++ = 0x30; *p++ = 0x39; *p++ = (uint8_t)(dport >> 8); *p++ = (uint8_t)dport;
+        memset(p, 0, 8); p += 8;                          /* seq + ack */
+        *p++ = 0x50; *p++ = 0x18;                         /* data offset 5, flags PSH|ACK */
+        *p++ = 0xff; *p++ = 0xff; *p++ = 0; *p++ = 0; *p++ = 0; *p++ = 0;
+    } else if (proto == 17) {                            /* udp */
+        int ul = 8 + app_bytes;
+        *p++ = 0x30; *p++ = 0x39; *p++ = (uint8_t)(dport >> 8); *p++ = (uint8_t)dport;
+        *p++ = (uint8_t)(ul >> 8); *p++ = (uint8_t)ul; *p++ = 0; *p++ = 0;
+    } else {                                             /* icmp echo */
+        *p++ = 8; *p++ = 0; *p++ = 0; *p++ = 0; *p++ = 0; *p++ = 0; *p++ = 0; *p++ = 0;
+    }
+    for (int i = 0; i < app_bytes; i++) *p++ = 0x41;
+    return (int)(p - out);
+}
+
+/* Benchmark the real-packet path: for representative classes, BPF_PROG_TEST_RUN with a large repeat and
+ * report the kernel-measured average ns/packet (parse + Level M eval) and the implied packet rate. */
+static int net_bench(const char *ppt_path) {
+    Image im; load_image(ppt_path, &im);
+    struct bpf_object *obj = bpf_object__open_file("ppt_net.bpf.o", NULL);
+    if (!obj || bpf_object__load(obj)) {
+        fprintf(stderr, "error: open/load ppt_net.bpf.o failed (verifier / CAP_BPF).\n");
+        if (obj) bpf_object__close(obj);
+        return -1;
+    }
+    populate_maps(obj, &im);
+    struct bpf_program *prog = bpf_object__find_program_by_name(obj, "ppt_net_prog");
+    if (!prog) { fprintf(stderr, "error: ppt_net_prog not found\n"); bpf_object__close(obj); return -1; }
+    int prog_fd = bpf_program__fd(prog);
+
+    struct { const char *name; uint8_t proto; uint16_t dport; int app; } cases[] = {
+        {"https (tcp/443)", 6, 443, 100},
+        {"dns   (udp/53)",  17, 53, 60},
+        {"icmp  (proto 1)", 1, 0, 56},
+        {"jumbo (tcp/443)", 6, 443, 1400},
+        {"other (tcp/9999)",6, 9999, 100},
+    };
+    const int REPEAT = 1000000;
+    uint8_t frame[2048], out_buf[2048];
+    printf("\n[ppt_net per-packet latency — BPF_PROG_TEST_RUN x %d, kernel-measured]\n", REPEAT);
+    for (unsigned c = 0; c < sizeof(cases) / sizeof(cases[0]); c++) {
+        int flen = build_ip_frame(frame, cases[c].proto, cases[c].dport, cases[c].app);
+        struct bpf_test_run_opts opts; memset(&opts, 0, sizeof(opts));
+        opts.sz = sizeof(opts);
+        opts.data_in = frame; opts.data_size_in = flen;
+        opts.data_out = out_buf; opts.data_size_out = sizeof(out_buf);
+        opts.repeat = REPEAT;
+        int err = bpf_prog_test_run_opts(prog_fd, &opts);
+        if (err) { printf("  %-16s ERROR err=%d\n", cases[c].name, err); continue; }
+        double ns = (double)opts.duration;                /* kernel returns avg ns per run */
+        double mpps = ns > 0 ? 1000.0 / ns : 0;           /* million packets/sec on one core */
+        printf("  %-16s %7.1f ns/pkt   ~%.2f Mpps/core   (xdp_ret=%u, %d B)\n",
+               cases[c].name, ns, mpps, opts.retval, flen);
+    }
+    bpf_object__close(obj);
+    return 0;
+}
+
+/* Update ONE already-open map (by name, by fd) from a fresh image — the live hot-swap primitive. */
+static int update_named_map(const char *name, int fd, const Image *im) {
+    if (!strcmp(name, "config_map")) {
+        struct ppt_config cfg = {
+            .n_fields = im->n_fields, .n_interns = im->n_interns, .n_atoms = im->n_atoms,
+            .n_nodes = im->n_nodes, .n_edges = im->n_edges, .prog_len = im->prog_len,
+            .start_node = im->start, .visits_idx = im->visits_idx,
+            .max_steps = im->max_steps, .max_stack = im->max_stack };
+        __u32 k = 0; bpf_map_update_elem(fd, &k, &cfg, BPF_ANY); return 1;
+    }
+    if (!strcmp(name, "atoms_map")) {
+        for (__u32 i = 0; i < im->n_atoms; i++) bpf_map_update_elem(fd, &i, &im->atoms[i], BPF_ANY);
+        return 1;
+    }
+    if (!strcmp(name, "nodes_map")) {
+        for (__u32 i = 0; i < im->n_nodes; i++) bpf_map_update_elem(fd, &i, &im->nodes[i], BPF_ANY);
+        return 1;
+    }
+    if (!strcmp(name, "edges_map")) {
+        for (__u32 i = 0; i < im->n_edges; i++) bpf_map_update_elem(fd, &i, &im->edges[i], BPF_ANY);
+        return 1;
+    }
+    if (!strcmp(name, "prog_map")) {
+        for (__u32 i = 0; i < im->prog_len; i++) bpf_map_update_elem(fd, &i, &im->prog[i], BPF_ANY);
+        return 1;
+    }
+    if (!strcmp(name, "verdict_map")) {            /* zero the histogram so post-swap counts are clean */
+        for (__u32 i = 0; i < MAX_NODES; i++) { __u64 z = 0; bpf_map_update_elem(fd, &i, &z, BPF_ANY); }
+        return 1;
+    }
+    return 0;
+}
+
+/* Hot-swap the policy of the LIVE program attached to <iface> with a fresh compiled table (<new.ppt>) —
+ * NO detach, NO reload of the eBPF program. Reaches the running program's maps via its map-IDs and
+ * repopulates the table in place; the next packet routes by the new policy. This is the "swap the map,
+ * change the policy" property: alter the eBPF's behavior by editing an .md flow, live on the wire. */
+static int net_update(const char *new_ppt, const char *ifname) {
+    unsigned int ifindex = if_nametoindex(ifname);
+    if (!ifindex) { fprintf(stderr, "error: no such interface %s\n", ifname); return 2; }
+    __u32 prog_id = 0;
+    if (bpf_xdp_query_id(ifindex, XDP_FLAGS_SKB_MODE, &prog_id) || !prog_id) {
+        fprintf(stderr, "error: no XDP program attached to %s — netattach first.\n", ifname);
+        return 2;
+    }
+    int prog_fd = bpf_prog_get_fd_by_id(prog_id);
+    if (prog_fd < 0) { fprintf(stderr, "error: cannot open prog id %u\n", prog_id); return -1; }
+
+    __u32 map_ids[32] = {0};
+    struct bpf_prog_info pinfo; memset(&pinfo, 0, sizeof(pinfo));
+    pinfo.nr_map_ids = 32; pinfo.map_ids = (__u64)(unsigned long)map_ids;
+    __u32 len = sizeof(pinfo);
+    if (bpf_obj_get_info_by_fd(prog_fd, &pinfo, &len)) {
+        fprintf(stderr, "error: cannot read prog info\n"); close(prog_fd); return -1;
+    }
+
+    Image im; load_image(new_ppt, &im);
+    int updated = 0;
+    for (__u32 i = 0; i < pinfo.nr_map_ids; i++) {
+        int mfd = bpf_map_get_fd_by_id(map_ids[i]);
+        if (mfd < 0) continue;
+        struct bpf_map_info mi; memset(&mi, 0, sizeof(mi)); __u32 ml = sizeof(mi);
+        if (!bpf_obj_get_info_by_fd(mfd, &mi, &ml))
+            updated += update_named_map(mi.name, mfd, &im);
+        close(mfd);
+    }
+    close(prog_fd);
+    printf("OK: hot-swapped the LIVE %s policy from %s — %d maps updated, NO detach.\n",
+           ifname, new_ppt, updated);
+    printf("     table now: %u nodes, %u edges, %u atoms, %u prog-words (histogram reset)\n",
+           im.n_nodes, im.n_edges, im.n_atoms, im.prog_len);
+    return updated > 0 ? 0 : 1;
+}
+
+static int net_detach(const char *ifname) {
+    unsigned int ifindex = if_nametoindex(ifname);
+    if (ifindex == 0) { fprintf(stderr, "error: no such interface %s\n", ifname); return 2; }
+    int err = bpf_xdp_detach(ifindex, XDP_FLAGS_SKB_MODE, NULL);
+    unlink(NET_VERDICT_PIN); unlink(NET_RESULT_PIN);
+    if (err) fprintf(stderr, "warning: detach returned %d\n", err);
+    else printf("OK: ppt_net detached from %s, pins removed.\n", ifname);
+    return err ? 1 : 0;
+}
 #endif
 
 int main(int argc, char **argv) {
@@ -577,6 +801,35 @@ int main(int argc, char **argv) {
             free(nb);
         }
         return runbatch_flow(ppt_path, argv[3], names, n_names);
+    }
+
+    if (argc >= 4 && strcmp(argv[2], "netattach") == 0) {
+        if (getuid() != 0) { fprintf(stderr, "error: 'netattach' needs root / CAP_BPF.\n"); return 2; }
+        return net_attach(ppt_path, argv[3]);            /* loader <ppt> netattach <iface> */
+    }
+    if (argc >= 3 && strcmp(argv[2], "netstats") == 0) {
+        if (getuid() != 0) { fprintf(stderr, "error: 'netstats' needs root / CAP_BPF.\n"); return 2; }
+        char **names = NULL; int n_names = 0;
+        if (argc >= 4) {                                 /* loader <x> netstats <names> */
+            long nlen; uint8_t *nb = read_file(argv[3], &nlen);
+            names = malloc(sizeof(char *) * 512);
+            for (char *tok = strtok((char *)nb, "\r\n"); tok && n_names < 512; tok = strtok(NULL, "\r\n"))
+                names[n_names++] = strdup(tok);
+            free(nb);
+        }
+        return net_stats(names, n_names);
+    }
+    if (argc >= 4 && strcmp(argv[2], "netdetach") == 0) {
+        if (getuid() != 0) { fprintf(stderr, "error: 'netdetach' needs root / CAP_BPF.\n"); return 2; }
+        return net_detach(argv[3]);                      /* loader <x> netdetach <iface> */
+    }
+    if (argc >= 3 && strcmp(argv[2], "netbench") == 0) {
+        if (getuid() != 0) { fprintf(stderr, "error: 'netbench' needs root / CAP_BPF.\n"); return 2; }
+        return net_bench(ppt_path);                      /* loader <ppt> netbench */
+    }
+    if (argc >= 4 && strcmp(argv[2], "netupdate") == 0) {
+        if (getuid() != 0) { fprintf(stderr, "error: 'netupdate' needs root / CAP_BPF.\n"); return 2; }
+        return net_update(ppt_path, argv[3]);            /* loader <new.ppt> netupdate <iface> */
     }
 #endif
 

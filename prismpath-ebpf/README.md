@@ -216,14 +216,42 @@ each richer tier (P1 locked-semantic, P2/semantic) separately; never as a lump "
 target certifies **100% of the in-fragment corpus**, with every exclusion itemized as a language feature
 that isn't a decidable table.
 
-## 8. Honest status — what is and isn't proven
+## 8. Real-packet classification on live traffic (`ppt_net`) + measured latency
+
+`ppt_net.bpf.c` is the same verified eval back-end with a **real-packet front-end**: it parses live
+Ethernet/IPv4/TCP-UDP into a fixed canonical register file — `0 src_ip · 1 dst_ip · 2 src_port ·
+3 dst_port · 4 protocol · 5 pkt_len · 6 tcp_flags · 7 ttl` — and evaluates a Level M table per packet.
+**Observe-only (always `XDP_PASS`)**, built for a mirror attach where it cannot affect production traffic.
+`net_compile.py` compiles a triage flow (`net_triage.md`) with that schema pre-seeded so field indices
+line up with the parser's slots.
+
+Loader modes: `netattach <ppt> <iface>` (populate table + attach XDP in SKB mode + pin the histogram),
+`netstats [names]` (read the per-target histogram), `netdetach <iface>`, `netbench <ppt>` (per-packet
+latency via `BPF_PROG_TEST_RUN`), `netupdate <new.ppt> <iface>` (live policy hot-swap — below).
+
+- **Live traffic:** attached observe-only on `span0` (the gretap mirroring all home traffic), the
+  `net_triage` table (ssh/dns/http/https/icmp/jumbo/other) classified **7,491 real packets in-kernel**
+  with a sensible TLS-dominant distribution; the `(no-match)` bucket was 0 (the table is exhaustive over
+  real traffic). Zeek/AF_PACKET still see every packet — `XDP_PASS` doesn't disturb existing capture.
+- **Latency (kernel-measured, `BPF_PROG_TEST_RUN` × 1e6):** **132–182 ns/packet** for parse + Level M
+  eval, **~5.5–7.6 Mpps on one core** (aarch64, generic/SKB XDP). Sub-microsecond — measured, not asserted.
+- **Live policy hot-swap (`netupdate`):** the program holds no policy — it lives entirely in the maps.
+  Edit the `.md` flow → recompile → `netupdate <new.ppt> <iface>` reaches the running program via its
+  map-IDs and repopulates the table **in place, no detach, no reload**. Demonstrated on live `span0`:
+  swapped a 7-class table for an 8-class one (splitting `quic`=UDP/443 from `https`=TCP/443) while the
+  program kept classifying — `result_map.pkt_count` climbed straight through the swap, proving one
+  uninterrupted instance. This is the FPGA "swap the map, change the policy, no reprogram" property on
+  the kernel substrate: alter in-kernel line-rate behavior by editing Markdown. **Fixed without a
+  reload:** the 8-field packet ABI and the table bounds; any in-bounds Level M table hot-swaps.
+
+## 9. Honest status — what is and isn't proven
 
 - **Proven:** compile → verifier-accepted → in-kernel execution; 66/66 in-fragment corpus conformance;
-  real multi-node flows + a real alert stream routed correctly in-kernel (all via `BPF_PROG_TEST_RUN`
-  plus one veth attach in the smoke test).
-- **Not yet done:** (1) a **live, line-rate deployment** on a real interface processing real traffic —
-  everything so far is `TEST_RUN` + one veth; (2) a **real-packet parser front-end** — the program reads
-  a crafted PPT packet built from an alert's fields, it does *not* yet parse on-wire Ethernet/IP/TCP-UDP
-  into the register file; (3) **performance numbers** — the "line-rate / sub-microsecond" ambition is
-  *designed for*, **not measured**; (4) a first-class `prismpath compile --target ebpf` flag (today the
-  `.ppt` comes from `../prismpath-hw/ppt_compile.py`). Wiring (2) is the gate for (1) and (3).
+  real multi-node flows + a live alert stream routed correctly in-kernel; **real on-wire packets parsed
+  and classified on live home traffic; sub-microsecond per-packet latency measured.**
+- **Caveats / not yet done:** the latency figure is program **compute cost** (`BPF_PROG_TEST_RUN`), not
+  end-to-end wire latency, on **generic/SKB** XDP (native-driver XDP would likely be faster);
+  enforcement is **observe-only** (no inline `DROP`/`REDIRECT` yet); a first-class
+  `prismpath compile --target ebpf` flag is still a packaging nicety (the `.ppt` comes from
+  `../prismpath-hw/ppt_compile.py`). The inline deployment on the Protectli/Proxmox firewall (its Linux
+  side — never OPNsense/FreeBSD) is the follow-on.
