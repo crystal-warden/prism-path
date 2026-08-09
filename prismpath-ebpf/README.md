@@ -177,3 +177,53 @@ make
 ```bash
 sudo ./smoke.sh
 ```
+
+---
+
+## 7. Conformance & flow execution — the loader's `certify` / `run` / `runbatch` modes
+
+Beyond the single-packet smoke test, the loader drives the actual XDP program in-kernel via
+`BPF_PROG_TEST_RUN` (no NIC needed) so the eBPF target can be certified against the same frozen corpus
+every other kernel uses, and can execute whole flows.
+
+- **`sudo ./loader <ppt> certify <packets.bin>`** — runs a table-per-vector conformance corpus. Each
+  record carries its own compiled PPT table + a crafted packet; the maps are repopulated per vector.
+  Built by `cert_corpus.py`, which frames every **in-fragment** vector of
+  `../prismpath/portable/conformance/predicates.json` and cross-checks each against `interp.c` first.
+  **Result: 66/66 of the Level M fragment pass in-kernel, byte-matching the reference.** The other 1001
+  corpus vectors are excluded because they are *not match-action tables* (field-vs-field, arithmetic,
+  floats, string-ordering, `is`, non-literal collections, …), itemized by `cert_corpus.py`. **No
+  exclusion is an eBPF limit** — the max operand-stack depth used across the corpus is 2, under
+  `STACK_MAX=4`.
+- **`sudo ./loader <ppt> run <regs.bin> [names.txt]`** — drives one flow hop-by-hop: start at the flow's
+  start node, evaluate it in-kernel, follow the matched target, repeat to a terminal. Prints the
+  in-kernel path and the host-reference path and checks they match. `run_flow_demo.py` / `run_incident_demo.py`
+  build the inputs.
+- **`sudo ./loader <ppt> runbatch <records.bin> [names.txt]`** — the same, batched: one BPF load, many
+  register files (e.g. one per real alert), each traced to a terminal and checked against the reference.
+
+**Real-flow evidence.** The 12-node Level M SOC flow `adapters/soc/flows/wazuh_triage.md` has been run
+through the eBPF router in-kernel on a **live Wazuh alert stream** (`run_stream_demo.py` classifies each
+real alert with the live LLM, builds the routing register file, no synthetic values): 27/27 real alerts
+routed identically in-kernel and by the reference, branching correctly (`benign` vs `stage_containment`)
+on real verdicts.
+
+### Conformance framing (don't say "declared subset")
+
+Report the **Level M / match-action corpus** as the *cross-substrate standard* — the vectors that
+produce identical verdicts on Python, the portable JS/Rust/Go kernels, the FPGA C-table, and eBPF. Name
+each richer tier (P1 locked-semantic, P2/semantic) separately; never as a lump "+X above." The eBPF
+target certifies **100% of the in-fragment corpus**, with every exclusion itemized as a language feature
+that isn't a decidable table.
+
+## 8. Honest status — what is and isn't proven
+
+- **Proven:** compile → verifier-accepted → in-kernel execution; 66/66 in-fragment corpus conformance;
+  real multi-node flows + a real alert stream routed correctly in-kernel (all via `BPF_PROG_TEST_RUN`
+  plus one veth attach in the smoke test).
+- **Not yet done:** (1) a **live, line-rate deployment** on a real interface processing real traffic —
+  everything so far is `TEST_RUN` + one veth; (2) a **real-packet parser front-end** — the program reads
+  a crafted PPT packet built from an alert's fields, it does *not* yet parse on-wire Ethernet/IP/TCP-UDP
+  into the register file; (3) **performance numbers** — the "line-rate / sub-microsecond" ambition is
+  *designed for*, **not measured**; (4) a first-class `prismpath compile --target ebpf` flag (today the
+  `.ppt` comes from `../prismpath-hw/ppt_compile.py`). Wiring (2) is the gate for (1) and (3).

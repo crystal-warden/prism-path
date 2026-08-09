@@ -50,10 +50,32 @@ static uint8_t *read_file(const char *path, long *out_len) {
     fclose(f); *out_len = n; return buf;
 }
 
-static void load_image(const char *path, Image *im) {
-    long len; uint8_t *b = read_file(path, &len);
+/* Build an eth+ip+udp+ppt frame for evaluating `node_idx` with `regs` (matches smoke.sh / cert_*.py
+ * framing: network-order L2/L3/L4 headers, little-endian PPT payload). Returns the frame length. */
+static int build_frame(uint8_t *out, uint16_t node_idx, uint16_t n_fields, const struct ppt_reg *regs) {
+    int ppt_len = 12 + 8 * n_fields;
+    int udp_len = 8 + ppt_len;
+    int ip_len = 20 + udp_len;
+    uint8_t *p = out;
+    memset(p, 0xff, 6); p += 6; memset(p, 0x02, 6); p += 6; *p++ = 0x08; *p++ = 0x00;   /* eth */
+    *p++ = 0x45; *p++ = 0x00; *p++ = (uint8_t)(ip_len >> 8); *p++ = (uint8_t)ip_len;     /* ip  */
+    *p++ = 0x12; *p++ = 0x34; *p++ = 0x00; *p++ = 0x00; *p++ = 64; *p++ = 17; *p++ = 0; *p++ = 0;
+    *p++ = 192; *p++ = 168; *p++ = 1; *p++ = 1;  *p++ = 192; *p++ = 168; *p++ = 1; *p++ = 2;
+    *p++ = 0x30; *p++ = 0x39; *p++ = 0x27; *p++ = 0x0f;                                  /* udp 12345->9999 */
+    *p++ = (uint8_t)(udp_len >> 8); *p++ = (uint8_t)udp_len; *p++ = 0; *p++ = 0;
+    uint32_t magic = PPT_MAGIC, ni = node_idx, nf = n_fields;
+    memcpy(p, &magic, 4); p += 4; memcpy(p, &ni, 4); p += 4; memcpy(p, &nf, 4); p += 4;  /* ppt_hdr (LE) */
+    for (int i = 0; i < n_fields; i++) {
+        memcpy(p, &regs[i].ty, 4); p += 4; memcpy(p, &regs[i].val, 4); p += 4;
+    }
+    return (int)(p - out);
+}
+
+/* Parse a PPT image already resident in memory. Mallocs im->atoms/nodes/edges/prog (free_image frees
+ * them). Returns 0 on success, -1 on a malformed image (used by the certify loop, which must not exit). */
+static int parse_image_buf(const uint8_t *b, long len, Image *im) {
     if (len < 28 || rd32(b) != (int32_t)PPT_MAGIC || rd16(b + 4) != 1) {
-        fprintf(stderr, "error: bad image %s\n", path); exit(2);
+        return -1;
     }
     im->n_fields = rd16(b + 6);   im->n_interns = rd16(b + 8);
     im->n_atoms = rd16(b + 10);   im->n_nodes = rd16(b + 12);
@@ -61,24 +83,37 @@ static void load_image(const char *path, Image *im) {
     im->start = rd16(b + 18);     im->visits_idx = rd16(b + 20);
     im->max_steps = rd16(b + 22);  im->max_stack = rd16(b + 24);
     long need = 28 + 8L * im->n_atoms + 4L * im->n_nodes + 6L * im->n_edges + 2L * im->prog_len;
-    if (len < need) { fprintf(stderr, "error: truncated image %s\n", path); exit(2); }
+    if (len < need) return -1;
     const uint8_t *p = b + 28;
-    im->atoms = malloc(sizeof(struct ppt_atom) * im->n_atoms);
+    im->atoms = malloc(sizeof(struct ppt_atom) * (im->n_atoms ? im->n_atoms : 1));
     for (int i = 0; i < im->n_atoms; i++, p += 8) {
         im->atoms[i].field = rd16(p); im->atoms[i].op = p[2]; im->atoms[i].ty = p[3];
         im->atoms[i].val = rd32(p + 4);
     }
-    im->nodes = malloc(sizeof(struct ppt_node) * im->n_nodes);
+    im->nodes = malloc(sizeof(struct ppt_node) * (im->n_nodes ? im->n_nodes : 1));
     for (int i = 0; i < im->n_nodes; i++, p += 4) {
         im->nodes[i].edge_off = rd16(p); im->nodes[i].edge_cnt = rd16(p + 2);
     }
-    im->edges = malloc(sizeof(struct ppt_edge) * im->n_edges);
+    im->edges = malloc(sizeof(struct ppt_edge) * (im->n_edges ? im->n_edges : 1));
     for (int i = 0; i < im->n_edges; i++, p += 6) {
         im->edges[i].target = rd16(p); im->edges[i].prog_off = rd16(p + 2);
         im->edges[i].prog_cnt = rd16(p + 4);
     }
-    im->prog = malloc(sizeof(uint16_t) * im->prog_len);
+    im->prog = malloc(sizeof(uint16_t) * (im->prog_len ? im->prog_len : 1));
     for (int i = 0; i < im->prog_len; i++, p += 2) im->prog[i] = rd16(p);
+    return 0;
+}
+
+static void free_image(Image *im) {
+    free(im->atoms); free(im->nodes); free(im->edges); free(im->prog);
+    im->atoms = NULL; im->nodes = NULL; im->edges = NULL; im->prog = NULL;
+}
+
+static void load_image(const char *path, Image *im) {
+    long len; uint8_t *b = read_file(path, &len);
+    if (parse_image_buf(b, len, im) != 0) {
+        fprintf(stderr, "error: bad/truncated image %s\n", path); exit(2);
+    }
     free(b);
 }
 
@@ -139,20 +174,8 @@ static int evaluate_host(const Image *im, uint16_t node, const struct ppt_reg *r
 }
 
 #ifndef NO_LIBBPF
-static int populate_and_attach_bpf(const Image *im, const char *ifname) {
-    struct bpf_object *obj = bpf_object__open_file("ppt_xdp.bpf.o", NULL);
-    if (!obj) {
-        fprintf(stderr, "error: failed to open ppt_xdp.bpf.o. Ensure 'make' compiled the BPF object.\n");
-        return -1;
-    }
-
-    int err = bpf_object__load(obj);
-    if (err) {
-        fprintf(stderr, "error: failed to load bpf object (err=%d). Root / CAP_BPF required for kernel load.\n", err);
-        bpf_object__close(obj);
-        return -1;
-    }
-
+/* Populate the five table maps from a PPT image. Shared by the attach path and the certify path. */
+static int populate_maps(struct bpf_object *obj, const Image *im) {
     /* 1. config_map */
     struct bpf_map *config_map = bpf_object__find_map_by_name(obj, "config_map");
     if (config_map) {
@@ -199,9 +222,24 @@ static int populate_and_attach_bpf(const Image *im, const char *ifname) {
         }
     }
 
-    printf("[loader] Successfully populated BPF maps:\n");
-    printf("         atoms: %u, nodes: %u, edges: %u, prog_len: %u\n",
-           im->n_atoms, im->n_nodes, im->n_edges, im->prog_len);
+    return 0;
+}
+
+static int populate_and_attach_bpf(const Image *im, const char *ifname) {
+    struct bpf_object *obj = bpf_object__open_file("ppt_xdp.bpf.o", NULL);
+    if (!obj) {
+        fprintf(stderr, "error: failed to open ppt_xdp.bpf.o. Ensure 'make' compiled the BPF object.\n");
+        return -1;
+    }
+
+    int err = bpf_object__load(obj);
+    if (err) {
+        fprintf(stderr, "error: failed to load bpf object (err=%d). Root / CAP_BPF required for kernel load.\n", err);
+        bpf_object__close(obj);
+        return -1;
+    }
+
+    populate_maps(obj, im);
 
     /* Pin result_map so it outlives this process: the smoke test injects a packet (the attached XDP
      * program writes its verdict here) and then reads it back to compare against the host reference. */
@@ -260,11 +298,233 @@ static int read_pinned_result(void)
            r.matched_edge, r.target_node, r.eval_status, (unsigned long long)r.pkt_count);
     return 0;
 }
+
+/* Certify the eBPF target against a frozen conformance vector set, IN-KERNEL, without a NIC: load the
+ * PPT image into the maps, then run each crafted packet through the actual XDP program via
+ * BPF_PROG_TEST_RUN and compare the in-kernel target_node to the recorded reference. Requires CAP_BPF.
+ * Packet file format (little-endian, repeated): <s32 expected_target><u32 pkt_len><pkt_len bytes>. */
+/* Drive a whole flow through the XDP program IN-KERNEL, hop by hop: start at the flow's start node,
+ * evaluate it via BPF_PROG_TEST_RUN, follow the matched target, repeat to a terminal. Compares the
+ * in-kernel routing path against the host reference (evaluate_host, == interp.c). `names[]` (optional,
+ * one node name per line) makes the path human-readable. regs_path is encode_regs format. Root/CAP_BPF. */
+static int run_flow(const char *ppt_path, const char *regs_path, char **names, int n_names) {
+    Image im; load_image(ppt_path, &im);
+    long len; uint8_t *b = read_file(regs_path, &len);
+    int nf = im.n_fields;
+    struct ppt_reg *regs = calloc(nf ? nf : 1, sizeof(struct ppt_reg));
+    for (int i = 0; i < nf; i++) { regs[i].ty = rd32(b + 4 + 8 * i); regs[i].val = rd32(b + 8 + 8 * i); }
+    free(b);
+    int cap = im.max_steps ? im.max_steps : 64;
+
+    #define NAME(ix) ((names && (ix) >= 0 && (ix) < n_names) ? names[ix] : NULL)
+    #define PRINTPATH(arr, cnt) do { for (int i = 0; i < (cnt); i++) { \
+            if (NAME(arr[i])) printf("%s%s", NAME(arr[i]), i + 1 < (cnt) ? " -> " : "\n"); \
+            else printf("%d%s", arr[i], i + 1 < (cnt) ? " -> " : "\n"); } } while (0)
+
+    /* host reference path */
+    int hp[256], hn = 0, cur = im.start; hp[hn++] = cur;
+    for (int s = 0; s < cap && im.nodes[cur].edge_cnt; s++) {
+        int tgt = -1;
+        if (evaluate_host(&im, cur, regs, &tgt) < 0) { printf("  [host stuck]\n"); break; }
+        cur = tgt; if (hn < 256) hp[hn++] = cur;
+    }
+
+    struct bpf_object *obj = bpf_object__open_file("ppt_xdp.bpf.o", NULL);
+    if (!obj || bpf_object__load(obj)) {
+        fprintf(stderr, "error: bpf open/load failed (verifier / CAP_BPF).\n");
+        if (obj) bpf_object__close(obj);
+        return -1;
+    }
+    populate_maps(obj, &im);
+    struct bpf_program *prog = bpf_object__find_program_by_name(obj, "ppt_xdp_prog");
+    struct bpf_map *result_map = bpf_object__find_map_by_name(obj, "result_map");
+    int prog_fd = bpf_program__fd(prog), res_fd = bpf_map__fd(result_map);
+
+    /* in-kernel path */
+    int kp[256], kn = 0; cur = im.start; kp[kn++] = cur;
+    uint8_t frame[2048], out_buf[2048];
+    for (int s = 0; s < cap && im.nodes[cur].edge_cnt; s++) {
+        int flen = build_frame(frame, (uint16_t)cur, im.n_fields, regs);
+        struct bpf_test_run_opts opts; memset(&opts, 0, sizeof(opts));
+        opts.sz = sizeof(opts); opts.data_in = frame; opts.data_size_in = flen;
+        opts.data_out = out_buf; opts.data_size_out = sizeof(out_buf); opts.repeat = 1;
+        struct ppt_result r = {0}; __u32 key = 0;
+        if (bpf_prog_test_run_opts(prog_fd, &opts) != 0 ||
+            bpf_map_lookup_elem(res_fd, &key, &r) != 0 || r.eval_status != 1) {
+            printf("  [in-kernel stuck]\n"); break;
+        }
+        cur = r.target_node; if (kn < 256) kp[kn++] = cur;
+    }
+
+    printf("\n[Host reference path (evaluate_host == interp.c)]\n  "); PRINTPATH(hp, hn);
+    printf("[In-kernel path (XDP program, hop-by-hop BPF_PROG_TEST_RUN)]\n  "); PRINTPATH(kp, kn);
+    int same = (hn == kn); for (int i = 0; i < hn && same; i++) same = (hp[i] == kp[i]);
+    printf("\n%s: the flow routed IN-KERNEL along the same path as the reference.\n",
+           same ? "PASS" : "FAIL");
+    free(regs); bpf_object__close(obj);
+    return same ? 0 : 1;
+}
+
+/* Trace a flow to a terminal using the host reference evaluator (== interp.c). Fills out[] with the
+ * node-index path, returns its length. */
+static int host_trace(const Image *im, const struct ppt_reg *regs, int *out, int cap) {
+    int n = 0, cur = im->start; out[n++] = cur;
+    int lim = im->max_steps ? im->max_steps : 64;
+    for (int s = 0; s < lim && im->nodes[cur].edge_cnt; s++) {
+        int tgt = -1;
+        if (evaluate_host(im, cur, regs, &tgt) < 0) break;
+        cur = tgt; if (n < cap) out[n++] = cur;
+    }
+    return n;
+}
+
+/* Trace a flow to a terminal IN-KERNEL: evaluate each node via BPF_PROG_TEST_RUN, follow the target. */
+static int kernel_trace(const Image *im, const struct ppt_reg *regs, int prog_fd, int res_fd,
+                        int *out, int cap) {
+    int n = 0, cur = im->start; out[n++] = cur;
+    int lim = im->max_steps ? im->max_steps : 64;
+    uint8_t frame[2048], ob[2048];
+    for (int s = 0; s < lim && im->nodes[cur].edge_cnt; s++) {
+        int flen = build_frame(frame, (uint16_t)cur, im->n_fields, regs);
+        struct bpf_test_run_opts o; memset(&o, 0, sizeof(o)); o.sz = sizeof(o);
+        o.data_in = frame; o.data_size_in = flen; o.data_out = ob; o.data_size_out = sizeof(ob);
+        o.repeat = 1;
+        struct ppt_result r = {0}; __u32 k = 0;
+        if (bpf_prog_test_run_opts(prog_fd, &o) != 0 ||
+            bpf_map_lookup_elem(res_fd, &k, &r) != 0 || r.eval_status != 1) break;
+        cur = r.target_node; if (n < cap) out[n++] = cur;
+    }
+    return n;
+}
+
+/* Batch: route MANY register files (one per REAL alert) through the SAME flow table in-kernel, each
+ * hop-by-hop, and confirm each path matches the host reference. One BPF load for the whole batch.
+ * Record format (LE): <u32 reg_len><reg_len bytes of ppt_reg[]>  (reg_len = n_fields * 8). */
+static int runbatch_flow(const char *ppt_path, const char *records_path, char **names, int n_names) {
+    Image im; load_image(ppt_path, &im);
+    struct bpf_object *obj = bpf_object__open_file("ppt_xdp.bpf.o", NULL);
+    if (!obj || bpf_object__load(obj)) {
+        fprintf(stderr, "error: bpf open/load failed (verifier / CAP_BPF).\n");
+        if (obj) bpf_object__close(obj);
+        return -1;
+    }
+    populate_maps(obj, &im);
+    struct bpf_program *prog = bpf_object__find_program_by_name(obj, "ppt_xdp_prog");
+    struct bpf_map *rm = bpf_object__find_map_by_name(obj, "result_map");
+    int prog_fd = bpf_program__fd(prog), res_fd = bpf_map__fd(rm);
+
+    long flen; uint8_t *buf = read_file(records_path, &flen);
+    int nf = im.n_fields;
+    struct ppt_reg *regs = calloc(nf ? nf : 1, sizeof(struct ppt_reg));
+    long off = 0; int total = 0, passed = 0;
+
+    printf("\n[Real alerts -> eBPF router IN-KERNEL, hop-by-hop, vs host reference]\n");
+    while (off + 4 <= flen) {
+        uint32_t rlen = rd32(buf + off); off += 4;
+        if (off + (long)rlen > flen) break;
+        int cnt = (int)(rlen / 8);
+        for (int i = 0; i < nf; i++) {
+            if (i < cnt) { regs[i].ty = rd32(buf + off + 8 * i); regs[i].val = rd32(buf + off + 8 * i + 4); }
+            else { regs[i].ty = 0; regs[i].val = 0; }
+        }
+        off += rlen;
+        total++;
+        int hp[256], kp[256];
+        int hn = host_trace(&im, regs, hp, 256);
+        int kn = kernel_trace(&im, regs, prog_fd, res_fd, kp, 256);
+        int same = (hn == kn); for (int i = 0; i < hn && same; i++) same = (hp[i] == kp[i]);
+        passed += same;
+        printf("  alert %3d [%s]  ", total, same ? "PASS" : "FAIL");
+        for (int i = 0; i < kn; i++) {
+            const char *nm = (names && kp[i] >= 0 && kp[i] < n_names) ? names[kp[i]] : NULL;
+            if (nm) printf("%s%s", nm, i + 1 < kn ? " -> " : "\n");
+            else printf("%d%s", kp[i], i + 1 < kn ? " -> " : "\n");
+        }
+    }
+    free(regs); free(buf); bpf_object__close(obj);
+    printf("\neBPF vs reference: %d/%d REAL alerts routed identically in-kernel.\n", passed, total);
+    return (total > 0 && passed == total) ? 0 : 1;
+}
+
+static int certify_bpf(const char *packets_path) {
+    struct bpf_object *obj = bpf_object__open_file("ppt_xdp.bpf.o", NULL);
+    if (!obj) { fprintf(stderr, "error: failed to open ppt_xdp.bpf.o (run 'make').\n"); return -1; }
+    if (bpf_object__load(obj)) {
+        fprintf(stderr, "error: bpf load failed (verifier / CAP_BPF).\n");
+        bpf_object__close(obj); return -1;
+    }
+    struct bpf_program *prog = bpf_object__find_program_by_name(obj, "ppt_xdp_prog");
+    struct bpf_map *result_map = bpf_object__find_map_by_name(obj, "result_map");
+    if (!prog || !result_map) {
+        fprintf(stderr, "error: ppt_xdp_prog / result_map not found in object.\n");
+        bpf_object__close(obj); return -1;
+    }
+    int prog_fd = bpf_program__fd(prog);
+    int res_fd = bpf_map__fd(result_map);
+
+    long flen = 0; uint8_t *buf = read_file(packets_path, &flen);
+
+    /* Each vector carries its OWN compiled table (predicates each compile to a distinct PPT), so the
+     * maps are repopulated per vector before the in-kernel run. The BPF program bounds every access by
+     * config_map's counts, so stale higher-index map entries from a larger prior table are never read.
+     * Record format (LE): <s32 expected_target><u32 tbl_len><tbl><u32 pkt_len><pkt>. */
+    printf("\n[eBPF in-kernel conformance — BPF_PROG_TEST_RUN, table-per-vector]\n");
+    long off = 0; int total = 0, passed = 0, first_fail = -1;
+    uint8_t out_buf[2048];
+    while (off + 4 <= flen) {
+        int32_t expected = (int32_t)rd32(buf + off); off += 4;
+        if (off + 4 > flen) break;
+        uint32_t tbl_len = rd32(buf + off); off += 4;
+        if (off + (long)tbl_len > flen) break;
+        const uint8_t *tbl = buf + off; off += tbl_len;
+        if (off + 4 > flen) break;
+        uint32_t pkt_len = rd32(buf + off); off += 4;
+        if (off + (long)pkt_len > flen) break;
+        uint8_t *pkt = buf + off; off += pkt_len;
+        total++;
+
+        Image im; memset(&im, 0, sizeof(im));
+        if (parse_image_buf(tbl, tbl_len, &im) != 0) {
+            printf("  vector %3d: BAD TABLE (%u B)\n", total, tbl_len);
+            if (first_fail < 0) first_fail = total;
+            continue;
+        }
+        populate_maps(obj, &im);
+
+        struct bpf_test_run_opts opts;
+        memset(&opts, 0, sizeof(opts));
+        opts.sz = sizeof(opts);
+        opts.data_in = pkt; opts.data_size_in = pkt_len;
+        opts.data_out = out_buf; opts.data_size_out = sizeof(out_buf);
+        opts.repeat = 1;
+        int err = bpf_prog_test_run_opts(prog_fd, &opts);
+        struct ppt_result r = {0}; __u32 key = 0;
+        if (err == 0) bpf_map_lookup_elem(res_fd, &key, &r);
+        int got = (err == 0) ? r.target_node : -2;
+        int ok = (got == expected);
+        passed += ok;
+        if (!ok) {
+            printf("  vector %3d: FAIL  expected target=%d  in-kernel=%d (edge=%d status=%u ret=%u err=%d)\n",
+                   total, expected, got, r.matched_edge, r.eval_status, opts.retval, err);
+            if (first_fail < 0) first_fail = total;
+        }
+        free_image(&im);
+    }
+    free(buf);
+    bpf_object__close(obj);
+    if (total == 0) { fprintf(stderr, "error: no vectors read from %s\n", packets_path); return 2; }
+    printf("\neBPF in-kernel conformance: %d/%d vectors match the reference.\n", passed, total);
+    if (first_fail >= 0) printf("  (first mismatch at vector %d)\n", first_fail);
+    else printf("  ALL PASS — every in-fragment vector routed identically in-kernel and by the reference.\n");
+    return (passed == total) ? 0 : 1;
+}
 #endif
 
 int main(int argc, char **argv) {
     if (argc < 2) {
         printf("usage: %s <image.ppt> [ifname] [input_regs.bin]\n", argv[0]);
+        printf("       %s <image.ppt> readresult\n", argv[0]);
+        printf("       %s <image.ppt> certify <packets.bin>   (in-kernel conformance; root)\n", argv[0]);
         return 2;
     }
 
@@ -275,6 +535,49 @@ int main(int argc, char **argv) {
 #ifndef NO_LIBBPF
     if (argc >= 3 && strcmp(argv[2], "readresult") == 0)
         return read_pinned_result();
+
+    if (argc >= 4 && strcmp(argv[2], "certify") == 0) {
+        if (getuid() != 0) {
+            fprintf(stderr, "error: 'certify' loads the program into the kernel — run as root / CAP_BPF.\n");
+            return 2;
+        }
+        /* Each vector in the corpus file carries its own compiled table; argv[1] (ppt) is unused here. */
+        return certify_bpf(argv[3]);
+    }
+
+    if (argc >= 4 && strcmp(argv[2], "run") == 0) {
+        if (getuid() != 0) {
+            fprintf(stderr, "error: 'run' loads the program into the kernel — run as root / CAP_BPF.\n");
+            return 2;
+        }
+        char **names = NULL; int n_names = 0;
+        if (argc >= 5) {                                  /* optional: one node name per line, index order */
+            long nlen; uint8_t *nb = read_file(argv[4], &nlen);
+            names = malloc(sizeof(char *) * 512);
+            for (char *tok = strtok((char *)nb, "\r\n"); tok && n_names < 512;
+                 tok = strtok(NULL, "\r\n"))
+                names[n_names++] = strdup(tok);
+            free(nb);
+        }
+        return run_flow(ppt_path, argv[3], names, n_names);
+    }
+
+    if (argc >= 4 && strcmp(argv[2], "runbatch") == 0) {
+        if (getuid() != 0) {
+            fprintf(stderr, "error: 'runbatch' loads the program into the kernel — run as root / CAP_BPF.\n");
+            return 2;
+        }
+        char **names = NULL; int n_names = 0;
+        if (argc >= 5) {
+            long nlen; uint8_t *nb = read_file(argv[4], &nlen);
+            names = malloc(sizeof(char *) * 512);
+            for (char *tok = strtok((char *)nb, "\r\n"); tok && n_names < 512;
+                 tok = strtok(NULL, "\r\n"))
+                names[n_names++] = strdup(tok);
+            free(nb);
+        }
+        return runbatch_flow(ppt_path, argv[3], names, n_names);
+    }
 #endif
 
     Image im;

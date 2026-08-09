@@ -278,3 +278,11 @@ served locally. No number here depends on a cloud API.
 **Method:** the table compiler consumed `model_check._atom_reason` as its fragment authority and hit conditions the evaluator rejects.
 
 **Result:** `is_level_m("when x is None")` returned in-fragment while `eval_condition` raises `PredicateError` on `is`/`is not` (the corpus records such cases as ERROR) — so `verify --level-m` could call table-compilable what the engine won't run. Fixed (operator gate in `_atom_reason`) + two regression rows; full suite 525 green; shipped on `main` as `6638670`.
+
+### #77 — eBPF target: in-kernel conformance + real-flow triage on a live alert stream (2026-08-09)
+
+**Claim:** the same decidability that compiles Level M to FPGA BRAM makes it a verifier-accepted eBPF/XDP program, and that program is conformant *in-kernel* against the same frozen corpus as every other substrate — and executes real flows.
+
+**Method:** the loader drives the actual XDP program in-kernel via `BPF_PROG_TEST_RUN` (no NIC). `cert_corpus.py` frames every in-fragment vector of `portable/conformance/predicates.json` (table-per-vector) and cross-checks each against `interp.c`; `run`/`runbatch` drive whole flows hop-by-hop and compare paths to the host reference. The 12-node Level M SOC flow `adapters/soc/flows/wazuh_triage.md` was run against a live Wazuh alert stream, each alert given a real verdict by the live LLM (`classify_verdict`).
+
+**Result:** **66/66 of the Level M fragment** certified in-kernel, byte-matching the reference; the 1001 excluded vectors are itemized as not-match-action (field-vs-field, arithmetic, floats, string-ordering, `is`, …), none an eBPF limit (max operand-stack depth used = 2 of `STACK_MAX=4`). **27/27 real alerts** routed identically in-kernel and by the reference, branching correctly (`benign` vs `stage_containment`) on real LLM verdicts — including the LLM correctly downgrading a loopback-sourced brute-force to benign. Kernel 6.17 (aarch64), libbpf 1.3, in `prismpath/prismpath-ebpf/`. **Not yet earned:** live line-rate deployment on real traffic, a real-packet parser front-end, and measured per-packet latency (the "line-rate" claim is designed-for, not measured).
