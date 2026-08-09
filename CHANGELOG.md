@@ -8,6 +8,21 @@ spec-stable.
 
 ## [Unreleased]
 
+### Fixed
+- **Level M classifier soundness: float constants are no longer mis-classified as table-compilable.**
+  `field OP <float>` (e.g. `when score >= 0.9`) was reported as Level M, but the match-action fragment's
+  value domain is `i32` — there is no float on the table, in silicon, or in the kernel — so the condition
+  is genuinely outside the fragment. `is_level_m` / `capability_report` (Python and the JS kernel
+  `prismpath.mjs`) now reject it (`disallowed-or-unparseable`), and SPEC §4.3 says "**integer**, boolean,
+  or string literal" where it previously said the imprecise "numeric". The classifier's Level M count over
+  the frozen corpus moves 129 → **118 cases / 113 distinct** (11 float over-claims removed); the FPGA/eBPF
+  runnable subset (114) is unchanged — the compiler already rejected floats, so no certified number moves.
+  Chained comparisons remain §4.3-Excluded (the classifier reports them excluded; the compiler desugars
+  them, per "SHOULD be desugared by tooling") — the sole, SPEC-consistent classifier/compiler gap, now
+  pinned by `test_conformance_drift.test_classifier_compiler_gap_pinned`. Conformance corpora
+  `level_m.json` / `capability.json` gained a new `float_const` case (a pure addition — no existing case
+  changed, so no spec-version bump is required per the format rule above).
+
 ### Added
 - **eBPF target: real-packet classification on live traffic + measured latency + live policy hot-swap.**
   `ppt_net.bpf.c` reuses the verified eval back-end with a real-packet front-end (parses on-wire

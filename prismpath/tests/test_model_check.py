@@ -18,14 +18,14 @@ from prismpath.analysis import portability_tier
 @pytest.mark.parametrize("cond", [
     "when tests_pass",                          # bare field
     "when not tests_pass",                      # not over an atom
-    "when score >= 0.9",                        # field OP numeric
+    "when score >= 90",                         # field OP integer
     "when 3 < visits",                          # reversed orientation (mechanical flip)
     "when status == 'done'",                    # string equality
     "when status != 'done'",
     "when ok == True",                          # bool constant
     "when kind in ('urgent', 'routine')",       # membership in scalar literals
     "when kind not in ['spam']",
-    "when score >= 0.9 and not blocked",        # boolean combination of atoms
+    "when score >= 90 and not blocked",         # boolean combination of atoms
     "when a == 1 or b == 2 and not c",
     "always", "else", "false", "never",         # keyword rows (default / disabled)
     "on error",                                 # bare error default row
@@ -37,7 +37,8 @@ def test_level_m_members(cond):
 
 
 @pytest.mark.parametrize("cond,reason", [
-    ("when 1 < x < 5", "chained-comparison"),          # SPEC §4.3: excluded, desugarable
+    ("when 1 < x < 5", "chained-comparison"),            # SPEC §4.3: excluded (tooling desugars first)
+    ("when score >= 0.9", "disallowed-or-unparseable"),  # float constant — the i32 fragment excludes it
     ("when a == b", "field-vs-field"),
     ("when x in 'abcdef'", "substring-in"),            # string RHS = substring test
     ("when x in items", "non-literal-collection"),     # runtime collection

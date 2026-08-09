@@ -135,7 +135,7 @@ function tokenize(src) {
         while (j < n && digits.test(src[j])) j++;
         const body = src.slice(i + 2, j).replace(/_/g, "");
         if (!body) throw new PredicateError(`malformed numeric literal in predicate`);
-        toks.push({ t: "num", v: parseInt(body, radix === "0x" ? 16 : radix === "0o" ? 8 : 2) });
+        toks.push({ t: "num", v: parseInt(body, radix === "0x" ? 16 : radix === "0o" ? 8 : 2), float: false });
         i = j;
         continue;
       }
@@ -148,7 +148,8 @@ function tokenize(src) {
       }
       if (src[j] === "j" || src[j] === "J")
         throw new PredicateError(`complex literals are not supported in predicates`);
-      toks.push({ t: "num", v: Number(src.slice(i, j).replace(/_/g, "")) });
+      const _raw = src.slice(i, j);   // float-ness (`.`/`e`) can't be recovered from the JS Number — flag it here
+      toks.push({ t: "num", v: Number(_raw.replace(/_/g, "")), float: /[.eE]/.test(_raw) });
       i = j;
       continue;
     }
@@ -247,7 +248,7 @@ function parseExpr(src) {
     if (d > MAX_DEPTH) throw new PredicateError("predicate nested too deeply");
     const tk = next();
     if (!tk) throw new PredicateError("unexpected end of predicate");
-    if (tk.t === "num") return { k: "const", v: tk.v };
+    if (tk.t === "num") return { k: "const", v: tk.v, float: tk.float };
     if (tk.t === "str") return { k: "const", v: tk.v };
     if (tk.t === "ellipsis") return { k: "const", v: ELLIPSIS };       // `...` is a truthy Constant
     if (tk.t === "name") {
@@ -460,15 +461,17 @@ const _LM = {
 const _LM_ORDER = new Set(["<", "<=", ">", ">="]);
 
 function _lmScalarConst(node) {
+  // float excluded — the Level M fragment is an i32 value domain; a float literal is not table-representable.
   return node && node.k === "const" &&
-    (node.v === null || typeof node.v === "boolean" || typeof node.v === "number" || typeof node.v === "string");
+    (node.v === null || typeof node.v === "boolean" ||
+     (typeof node.v === "number" && !node.float) || typeof node.v === "string");
 }
 function _lmAtomReason(node) {
   if (!node) return _LM.SYNTAX;
   if (node.k === "name") return null;                      // bare field (scalar truthiness)
   if (node.k === "const") return _LM.CONSTANT;             // `when True` — no field, not a row
   if (node.k === "cmp") {
-    if (node.ops.length !== 1) return _LM.CHAINED;         // chained comparison; desugars, not in fragment
+    if (node.ops.length !== 1) return _LM.CHAINED;         // SPEC §4.3: excluded (tooling desugars first)
     const op = node.ops[0], left = node.left, right = node.rights[0];
     if (op === "in" || op === "not in") {                  // membership: field in [scalar literals]
       if (left.k !== "name") return left.k === "const" ? _LM.CONSTANT : _LM.FIELD_VS_FIELD;

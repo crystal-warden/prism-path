@@ -55,8 +55,13 @@ _EQ_OPS = (ast.Eq, ast.NotEq)
 
 
 def _scalar_const(node) -> bool:
+    # float is EXCLUDED: the Level M / hardware match-action fragment is an i32 value domain, so a float
+    # constant is not table-representable (the PPT compiler delegates here and so rejects it too, as
+    # `not-level-m:disallowed-or-unparseable`). bool is a subclass of int, so `isinstance(True, int)` is
+    # True — booleans stay in-fragment.
     return isinstance(node, ast.Constant) and (
-        node.value is None or isinstance(node.value, (bool, int, float, str)))
+        node.value is None or (isinstance(node.value, (bool, int, str))
+                               and not isinstance(node.value, float)))
 
 
 def _atom_reason(node) -> Optional[str]:
@@ -67,7 +72,7 @@ def _atom_reason(node) -> Optional[str]:
         return _R_CONSTANT                                 # `when True` — no field, not a row
     if isinstance(node, ast.Compare):
         if len(node.ops) != 1:
-            return _R_CHAINED                              # desugars mechanically; not in fragment
+            return _R_CHAINED                              # SPEC §4.3: excluded (tooling desugars first)
         left, op, right = node.left, node.ops[0], node.comparators[0]
         if not isinstance(op, _ORDER_OPS + _EQ_OPS + (ast.In, ast.NotIn)):
             return _R_SYNTAX                               # `is`/`is not` — eval rejects them too

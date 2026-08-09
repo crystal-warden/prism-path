@@ -143,8 +143,10 @@ Over JSON-representable values (null, bool, number, string, array, object):
 A predicate is in the **match-action fragment** iff it is a boolean combination (`and`/`or`/
 `not`) of atoms, where every atom is one of:
 
-- `field OP constant` with `OP ∈ {==, !=, <, <=, >, >=}`, `field` a name, and `constant` a
-  numeric, boolean, or string literal (string constants with `==`/`!=` only);
+- `field OP constant` with `OP ∈ {==, !=, <, <=, >, >=}`, `field` a name, and `constant` an
+  **integer**, boolean, or string literal (string constants with `==`/`!=` only). The value
+  domain of the fragment is `i32`; **float literals are excluded** — a `field OP <float>`
+  condition is outside the fragment (it has no representation on the i32 match-action table);
 - `field in <list of scalar literals>` or its `not in` form;
 - a bare `field` (truthiness of a scalar).
 

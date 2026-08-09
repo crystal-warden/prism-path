@@ -179,6 +179,39 @@
           }
         }
       }
+    },
+    {
+      "key": "float_const",
+      "flow": "---\nname: floatcase\nstart: a\n---\n## a\n-> b: when score >= 1.0\n-> c: else\n## b\nx\n## c\ny\n",
+      "expected": {
+        "tier": "P0",
+        "level_m": false,
+        "targets": {
+          "python": {
+            "status": "yes",
+            "reason": null,
+            "blocking_edges": []
+          },
+          "portable": {
+            "status": "yes",
+            "reason": null,
+            "blocking_edges": []
+          },
+          "level_m_hardware": {
+            "status": "no",
+            "reason": "1 deterministic edge(s) outside the match-action fragment",
+            "blocking_edges": [
+              {
+                "node": "a",
+                "target": "b",
+                "condition": "when score >= 1.0",
+                "level_m": false,
+                "reason": "disallowed-or-unparseable"
+              }
+            ]
+          }
+        }
+      }
     }
   ]
 }

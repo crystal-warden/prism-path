@@ -170,6 +170,21 @@
         "level_m": true,
         "non_member_edges": []
       }
+    },
+    {
+      "key": "float_const",
+      "flow": "---\nname: floatcase\nstart: a\n---\n## a\n-> b: when score >= 1.0\n-> c: else\n## b\nx\n## c\ny\n",
+      "expected": {
+        "level_m": false,
+        "non_member_edges": [
+          {
+            "node": "a",
+            "target": "b",
+            "condition": "when score >= 1.0",
+            "reason": "disallowed-or-unparseable"
+          }
+        ]
+      }
     }
   ]
 }
