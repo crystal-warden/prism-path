@@ -18,6 +18,8 @@ solved routing", "logic-as-data is a rules engine"), answered with the concessio
 |---|---|
 | [tour.md](guides/tour.md) | the ten-minute engineer's tour of the flow kernel — agent contract, routers, prefilter, static analysis, `verify`, fan-out, attestation, the portable subset |
 | [authoring.md](guides/authoring.md) | the flow authoring reference: file anatomy, the four edge tiers, the agent contract, predicates, durable execution, annotations, plugins, fan-out, the portable subset — and the invariants to preserve when extending |
+| [workers.md](guides/workers.md) | run any program (Python, JS, Go, Rust, an existing binary) as a node's worker: the stdin/JSON/exit contract, worked examples in four languages across three jobs (CI gate, log alerting, semver release gate), error-tier retry, per-node engines |
+| [code-nodes.md](guides/code-nodes.md) | the Python-function worker case: the `@code` capability envelope, the static gate, and the fail-closed sandbox |
 | [frontier-agent-integration.md](guides/frontier-agent-integration.md) | pairing PrismPath with frontier agents and LLMs: CLI workers, API/local backends, auto-unblock loops, `@spawn` swarms, human-in-the-loop |
 
 ## design/ — how and why it is built

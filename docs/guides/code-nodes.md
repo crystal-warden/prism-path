@@ -1,8 +1,28 @@
 # Code nodes
 
-A **code node** is a node whose worker is plain code — a local function — instead of an LLM or an
-mdflow task. It is the same worker seam mdflow rides on (`prismpath/connector.py`, `run(graph, agent, …)`),
-applied to a function. mdflow proved the mechanism; a code node is the simpler case.
+> **Wiring in another language, or an existing binary?** A code node is specifically a **Python function**.
+> To run a Go, Rust, JS, or Python *program* as a worker, see
+> [Run any program as a worker](workers.md). This page is the Python-function case, with a
+> capability-scoped sandbox.
+
+A **code node** is a node whose worker is a local Python function instead of an LLM or an external tool.
+You declare the node `@code` (see below), write a handler `(node, instruction, state) -> dict`, and
+register it:
+
+```python
+from prismpath.code_nodes import code_agent, in_process_runner
+from prismpath.engine import run
+
+def extract(node, instruction, state):
+    return {"amount": parse_amount(state["request"])}      # emit the fields the edges route on
+
+agent = code_agent(graph, {"extract": extract}, runner=in_process_runner)
+run(graph, agent)
+```
+
+It rides the same worker seam as mdflow and CLI workers (`prismpath/connector.py`), specialized to a
+function. A full runnable example is in
+[`prismpath/examples/code_nodes/`](../../prismpath/examples/code_nodes/README.md).
 
 ## The one rule
 
@@ -70,5 +90,6 @@ A worker can do two things — emit text, or execute code — and the two have *
 
 Code nodes are **software-tier (P2)**: substrate-specific (a Go/Rust/JS kernel can't run a Python
 function), and never Level M / never the hardware target. Keep them leaf actions with routing on their
-outcome fields. For a worker that orchestrates a whole tool run rather than a single function, see the
-mdflow interop example (`prismpath/examples/mdflow_interop/`).
+outcome fields. For a worker in another language, an existing binary, or a whole tool run rather than a
+single function, see [Run any program as a worker](workers.md) (and the mdflow interop example,
+`prismpath/examples/mdflow_interop/`).
