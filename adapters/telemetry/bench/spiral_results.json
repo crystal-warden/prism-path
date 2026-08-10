@@ -1,0 +1,75 @@
+{
+  "n": 20000,
+  "seed": 7,
+  "set1_2_bits": [
+    {
+      "k": 1,
+      "cells": 4,
+      "bands": 4,
+      "linear_bits": 2.79,
+      "decision_bits": 2.79,
+      "route_win_x": 1.0,
+      "progressive_bits": 4.79,
+      "fidelity_ratio": 1.72
+    },
+    {
+      "k": 2,
+      "cells": 16,
+      "bands": 4,
+      "linear_bits": 5.58,
+      "decision_bits": 2.94,
+      "route_win_x": 1.9,
+      "progressive_bits": 5.95,
+      "fidelity_ratio": 1.07
+    },
+    {
+      "k": 3,
+      "cells": 64,
+      "bands": 4,
+      "linear_bits": 8.35,
+      "decision_bits": 3.01,
+      "route_win_x": 2.78,
+      "progressive_bits": 7.31,
+      "fidelity_ratio": 0.88
+    },
+    {
+      "k": 4,
+      "cells": 256,
+      "bands": 4,
+      "linear_bits": 11.12,
+      "decision_bits": 3.06,
+      "route_win_x": 3.63,
+      "progressive_bits": 8.76,
+      "fidelity_ratio": 0.79
+    }
+  ],
+  "set3_correlation": {
+    "correlated": {
+      "decision_bits": 3.01,
+      "band_entropy_bits": 1.59
+    },
+    "uniform": {
+      "decision_bits": 3.9,
+      "band_entropy_bits": 1.38
+    }
+  },
+  "set4_loss": [
+    {
+      "regime": "light burst",
+      "linear_routed_pct": 92.9,
+      "spiral_routed_pct": 96.4
+    },
+    {
+      "regime": "heavy burst",
+      "linear_routed_pct": 68.1,
+      "spiral_routed_pct": 80.0
+    }
+  ],
+  "verdict": {
+    "route_win_for_multidim": true,
+    "win_grows_with_k": true,
+    "fidelity_parity": true,
+    "better_loss_survival": true,
+    "PASS": true
+  }
+}

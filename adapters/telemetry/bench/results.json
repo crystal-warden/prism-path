@@ -1,0 +1,198 @@
+{
+ "set1_bakeoff_10k": {
+  "quiet": {
+   "fixed32": 32.0,
+   "uvarint": 8.0,
+   "delta+zz+uvarint": 8.0,
+   "fib(raw)": 7.741,
+   "delta+zz+fib": 2.4897,
+   "zstd-19": 1.5152,
+   "zlib-9": 1.7592,
+   "lzma-9": 1.3248
+  },
+  "moderate": {
+   "fixed32": 32.0,
+   "uvarint": 15.1816,
+   "delta+zz+uvarint": 11.036,
+   "fib(raw)": 17.0298,
+   "delta+zz+fib": 7.3797,
+   "zstd-19": 6.8208,
+   "zlib-9": 8.8784,
+   "lzma-9": 6.48
+  },
+  "wide": {
+   "fixed32": 32.0,
+   "uvarint": 19.0888,
+   "delta+zz+uvarint": 11.0096,
+   "fib(raw)": 20.9964,
+   "delta+zz+fib": 6.3211,
+   "zstd-19": 5.1448,
+   "zlib-9": 5.3152,
+   "lzma-9": 4.1728
+  },
+  "spiky": {
+   "fixed32": 32.0,
+   "uvarint": 8.16,
+   "delta+zz+uvarint": 8.32,
+   "fib(raw)": 7.9498,
+   "delta+zz+fib": 3.0289,
+   "zstd-19": 2.0704,
+   "zlib-9": 2.236,
+   "lzma-9": 1.6832
+  }
+ },
+ "set1_decision_stream_10k": {
+  "incident_severity:quiet": {
+   "fields": 3,
+   "ours_bpr": 6.7439,
+   "raw_fib_bpr": 7.2093,
+   "raw_fixed_bpr": 96.0,
+   "shrink_vs_raw_fib": 1.0690105132045256,
+   "shrink_vs_raw_fixed": 14.235086522635271
+  },
+  "incident_severity:wide": {
+   "fields": 3,
+   "ours_bpr": 6.8696,
+   "raw_fib_bpr": 8.2091,
+   "raw_fixed_bpr": 96.0,
+   "shrink_vs_raw_fib": 1.1949895190404098,
+   "shrink_vs_raw_fixed": 13.9746127867707
+  },
+  "incident_severity:spiky": {
+   "fields": 3,
+   "ours_bpr": 6.7695,
+   "raw_fib_bpr": 7.3616,
+   "raw_fixed_bpr": 96.0,
+   "shrink_vs_raw_fib": 1.087465839426841,
+   "shrink_vs_raw_fixed": 14.181254154664304
+  },
+  "sensor_guard(wide):quiet": {
+   "fields": 1,
+   "ours_bpr": 2.0,
+   "raw_fib_bpr": 2.4897,
+   "raw_fixed_bpr": 32.0,
+   "shrink_vs_raw_fib": 1.24485,
+   "shrink_vs_raw_fixed": 16.0
+  },
+  "sensor_guard(wide):wide": {
+   "fields": 1,
+   "ours_bpr": 2.0165,
+   "raw_fib_bpr": 6.3211,
+   "raw_fixed_bpr": 32.0,
+   "shrink_vs_raw_fib": 3.1346888172576244,
+   "shrink_vs_raw_fixed": 15.869080089263576
+  },
+  "sensor_guard(wide):spiky": {
+   "fields": 1,
+   "ours_bpr": 2.0492,
+   "raw_fib_bpr": 3.0289,
+   "raw_fixed_bpr": 32.0,
+   "shrink_vs_raw_fib": 1.4780890103455007,
+   "shrink_vs_raw_fixed": 15.615850087839156
+  }
+ },
+ "set2_sweep": {
+  "quiet": {
+   "100": 4.7,
+   "1000": 2.505,
+   "10000": 2.4897,
+   "100000": 2.20083
+  },
+  "moderate": {
+   "100": 11.57,
+   "1000": 9.028,
+   "10000": 7.3797,
+   "100000": 3.91604
+  },
+  "wide": {
+   "100": 22.95,
+   "1000": 6.038,
+   "10000": 6.3211,
+   "100000": 3.85654
+  },
+  "spiky": {
+   "100": 5.23,
+   "1000": 3.033,
+   "10000": 3.0289,
+   "100000": 2.74602
+  }
+ },
+ "crossover": {
+  "approx_value": 4194304,
+  "fib_bits_at_value": 33
+ },
+ "set2_retransmission": [
+  {
+   "n_blocks": 313,
+   "lost_blocks": 27,
+   "selective_bytes": 1728.0,
+   "full_bytes": 20032.0,
+   "ratio": 0.08626198083067092,
+   "n": 10000,
+   "block_size": 32,
+   "p": 0.002,
+   "r": 0.2,
+   "lost_samples": 140
+  },
+  {
+   "n_blocks": 313,
+   "lost_blocks": 107,
+   "selective_bytes": 6848.0,
+   "full_bytes": 20032.0,
+   "ratio": 0.34185303514376997,
+   "n": 10000,
+   "block_size": 32,
+   "p": 0.01,
+   "r": 0.1,
+   "lost_samples": 909
+  },
+  {
+   "n_blocks": 79,
+   "lost_blocks": 21,
+   "selective_bytes": 5376.0,
+   "full_bytes": 20224.0,
+   "ratio": 0.26582278481012656,
+   "n": 10000,
+   "block_size": 128,
+   "p": 0.002,
+   "r": 0.2,
+   "lost_samples": 140
+  },
+  {
+   "n_blocks": 79,
+   "lost_blocks": 58,
+   "selective_bytes": 14848.0,
+   "full_bytes": 20224.0,
+   "ratio": 0.7341772151898734,
+   "n": 10000,
+   "block_size": 128,
+   "p": 0.01,
+   "r": 0.1,
+   "lost_samples": 909
+  },
+  {
+   "n_blocks": 20,
+   "lost_blocks": 13,
+   "selective_bytes": 13312.0,
+   "full_bytes": 20480.0,
+   "ratio": 0.65,
+   "n": 10000,
+   "block_size": 512,
+   "p": 0.002,
+   "r": 0.2,
+   "lost_samples": 140
+  },
+  {
+   "n_blocks": 20,
+   "lost_blocks": 20,
+   "selective_bytes": 20480.0,
+   "full_bytes": 20480.0,
+   "ratio": 1.0,
+   "n": 10000,
+   "block_size": 512,
+   "p": 0.01,
+   "r": 0.1,
+   "lost_samples": 909
+  }
+ ]
+}
