@@ -22,9 +22,14 @@ runs lands here.
   reproduce the frozen routes (drift guard), and the **wire round-trip** (quantize → Fibonacci-code →
   decode → reconstruct) must route to the same target at every node (decision preservation, end-to-end
   through the real codec). Regenerate with `gen_decisions_corpus.py`.
-- *(next)* the compression-margin + retransmission **go/no-go benchmarks** — Phase A's make-or-break gate
-  (threshold-quant + delta + Fibonacci vs varint/zstd, anomaly case shown; selective-repair vs full
-  retransmit under a Gilbert-Elliott loss model).
+- ✅ **Go/no-go benchmarks** (`bench/`, results in `bench/results.md`) — **PASS**. Two sets: a codec
+  bake-off and a parametric sweep (value regime × stream scale to 100k + Gilbert-Elliott retransmission).
+  Findings: `delta+zz+fib` beats the streaming baselines ~2–3× (batch compressors win on a buffered block
+  but aren't self-framing/line-rate); decision-preserving quantization is **magnitude-independent** — on a
+  wide-range field with few thresholds it holds ~2 bits/reading while raw scales with magnitude (~16× vs
+  fixed); ratios **converge** by N=10k–100k (a too-small test would have undersold it — the sweep proves
+  it); selective MMR retransmit is multiples cheaper under sparse burst loss. **Margins hold → Phase A
+  validates.**
 
 ## Roadmap (phased, benchmark-gated)
 - **Phase A** — quantizer + codec + decisions-preserved test + a frozen round-trip / error-injection corpus.
