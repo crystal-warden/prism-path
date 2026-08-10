@@ -24,3 +24,11 @@ def open_socket(node, instruction, state):
     s.connect(("1.1.1.1", 80))         # unreachable inside an unshared net namespace
     s.close()
     return {"text": "connected"}
+
+
+def write_file(node, instruction, state):
+    """Write `state['target']` — used to prove filesystem containment: blocked on the read-only root,
+    ephemeral under /tmp's tmpfs, persistent only inside an explicit rw scratch bind."""
+    with open(state["target"], "w") as f:
+        f.write("sandbox-was-here")
+    return {"text": "wrote", "path": state["target"]}
