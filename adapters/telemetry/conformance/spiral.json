@@ -1,0 +1,455 @@
+{
+ "flow": "---\nname: attitude\nstart: watch\n---\n## watch\n-> critical: when vibration >= 80\n-> alarm: when pitch >= 45 or roll >= 45\n-> caution: when pitch >= 20 or roll >= 20 or vibration >= 40\n-> nominal: else\n## critical\n## alarm\n## caution\n## nominal\n",
+ "node": "watch",
+ "fields": [
+  "pitch",
+  "roll",
+  "vibration"
+ ],
+ "radices": [
+  3,
+  3,
+  3
+ ],
+ "size": 27,
+ "bands": [
+  {
+   "route": "nominal",
+   "base": 0,
+   "width": 1
+  },
+  {
+   "route": "caution",
+   "base": 1,
+   "width": 7
+  },
+  {
+   "route": "alarm",
+   "base": 8,
+   "width": 10
+  },
+  {
+   "route": "critical",
+   "base": 18,
+   "width": 9
+  }
+ ],
+ "cells": [
+  {
+   "cell": [
+    0,
+    0,
+    0
+   ],
+   "n": 0,
+   "band": 0,
+   "route": "nominal"
+  },
+  {
+   "cell": [
+    0,
+    0,
+    1
+   ],
+   "n": 1,
+   "band": 1,
+   "route": "caution"
+  },
+  {
+   "cell": [
+    0,
+    1,
+    1
+   ],
+   "n": 2,
+   "band": 1,
+   "route": "caution"
+  },
+  {
+   "cell": [
+    0,
+    1,
+    0
+   ],
+   "n": 3,
+   "band": 1,
+   "route": "caution"
+  },
+  {
+   "cell": [
+    1,
+    1,
+    0
+   ],
+   "n": 4,
+   "band": 1,
+   "route": "caution"
+  },
+  {
+   "cell": [
+    1,
+    1,
+    1
+   ],
+   "n": 5,
+   "band": 1,
+   "route": "caution"
+  },
+  {
+   "cell": [
+    1,
+    0,
+    1
+   ],
+   "n": 6,
+   "band": 1,
+   "route": "caution"
+  },
+  {
+   "cell": [
+    1,
+    0,
+    0
+   ],
+   "n": 7,
+   "band": 1,
+   "route": "caution"
+  },
+  {
+   "cell": [
+    0,
+    2,
+    0
+   ],
+   "n": 8,
+   "band": 2,
+   "route": "alarm"
+  },
+  {
+   "cell": [
+    0,
+    2,
+    1
+   ],
+   "n": 9,
+   "band": 2,
+   "route": "alarm"
+  },
+  {
+   "cell": [
+    1,
+    2,
+    1
+   ],
+   "n": 10,
+   "band": 2,
+   "route": "alarm"
+  },
+  {
+   "cell": [
+    1,
+    2,
+    0
+   ],
+   "n": 11,
+   "band": 2,
+   "route": "alarm"
+  },
+  {
+   "cell": [
+    2,
+    0,
+    0
+   ],
+   "n": 12,
+   "band": 2,
+   "route": "alarm"
+  },
+  {
+   "cell": [
+    2,
+    0,
+    1
+   ],
+   "n": 13,
+   "band": 2,
+   "route": "alarm"
+  },
+  {
+   "cell": [
+    2,
+    1,
+    1
+   ],
+   "n": 14,
+   "band": 2,
+   "route": "alarm"
+  },
+  {
+   "cell": [
+    2,
+    1,
+    0
+   ],
+   "n": 15,
+   "band": 2,
+   "route": "alarm"
+  },
+  {
+   "cell": [
+    2,
+    2,
+    0
+   ],
+   "n": 16,
+   "band": 2,
+   "route": "alarm"
+  },
+  {
+   "cell": [
+    2,
+    2,
+    1
+   ],
+   "n": 17,
+   "band": 2,
+   "route": "alarm"
+  },
+  {
+   "cell": [
+    0,
+    0,
+    2
+   ],
+   "n": 18,
+   "band": 3,
+   "route": "critical"
+  },
+  {
+   "cell": [
+    0,
+    1,
+    2
+   ],
+   "n": 19,
+   "band": 3,
+   "route": "critical"
+  },
+  {
+   "cell": [
+    0,
+    2,
+    2
+   ],
+   "n": 20,
+   "band": 3,
+   "route": "critical"
+  },
+  {
+   "cell": [
+    1,
+    2,
+    2
+   ],
+   "n": 21,
+   "band": 3,
+   "route": "critical"
+  },
+  {
+   "cell": [
+    1,
+    1,
+    2
+   ],
+   "n": 22,
+   "band": 3,
+   "route": "critical"
+  },
+  {
+   "cell": [
+    1,
+    0,
+    2
+   ],
+   "n": 23,
+   "band": 3,
+   "route": "critical"
+  },
+  {
+   "cell": [
+    2,
+    0,
+    2
+   ],
+   "n": 24,
+   "band": 3,
+   "route": "critical"
+  },
+  {
+   "cell": [
+    2,
+    1,
+    2
+   ],
+   "n": 25,
+   "band": 3,
+   "route": "critical"
+  },
+  {
+   "cell": [
+    2,
+    2,
+    2
+   ],
+   "n": 26,
+   "band": 3,
+   "route": "critical"
+  }
+ ],
+ "probes": [
+  {
+   "reading": {
+    "pitch": 19,
+    "roll": 0,
+    "vibration": 0
+   },
+   "route": "nominal"
+  },
+  {
+   "reading": {
+    "pitch": 20,
+    "roll": 0,
+    "vibration": 0
+   },
+   "route": "caution"
+  },
+  {
+   "reading": {
+    "pitch": 21,
+    "roll": 0,
+    "vibration": 0
+   },
+   "route": "caution"
+  },
+  {
+   "reading": {
+    "pitch": 44,
+    "roll": 0,
+    "vibration": 0
+   },
+   "route": "caution"
+  },
+  {
+   "reading": {
+    "pitch": 45,
+    "roll": 0,
+    "vibration": 0
+   },
+   "route": "alarm"
+  },
+  {
+   "reading": {
+    "pitch": 46,
+    "roll": 0,
+    "vibration": 0
+   },
+   "route": "alarm"
+  },
+  {
+   "reading": {
+    "pitch": 0,
+    "roll": 19,
+    "vibration": 0
+   },
+   "route": "nominal"
+  },
+  {
+   "reading": {
+    "pitch": 0,
+    "roll": 20,
+    "vibration": 0
+   },
+   "route": "caution"
+  },
+  {
+   "reading": {
+    "pitch": 0,
+    "roll": 21,
+    "vibration": 0
+   },
+   "route": "caution"
+  },
+  {
+   "reading": {
+    "pitch": 0,
+    "roll": 44,
+    "vibration": 0
+   },
+   "route": "caution"
+  },
+  {
+   "reading": {
+    "pitch": 0,
+    "roll": 45,
+    "vibration": 0
+   },
+   "route": "alarm"
+  },
+  {
+   "reading": {
+    "pitch": 0,
+    "roll": 46,
+    "vibration": 0
+   },
+   "route": "alarm"
+  },
+  {
+   "reading": {
+    "pitch": 0,
+    "roll": 0,
+    "vibration": 39
+   },
+   "route": "nominal"
+  },
+  {
+   "reading": {
+    "pitch": 0,
+    "roll": 0,
+    "vibration": 40
+   },
+   "route": "caution"
+  },
+  {
+   "reading": {
+    "pitch": 0,
+    "roll": 0,
+    "vibration": 41
+   },
+   "route": "caution"
+  },
+  {
+   "reading": {
+    "pitch": 0,
+    "roll": 0,
+    "vibration": 79
+   },
+   "route": "caution"
+  },
+  {
+   "reading": {
+    "pitch": 0,
+    "roll": 0,
+    "vibration": 80
+   },
+   "route": "critical"
+  },
+  {
+   "reading": {
+    "pitch": 0,
+    "roll": 0,
+    "vibration": 81
+   },
+   "route": "critical"
+  }
+ ]
+}

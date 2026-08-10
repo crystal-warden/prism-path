@@ -61,15 +61,27 @@ runs lands here.
   round-trip is exact with no carried bit-count. Measured padding overhead amortizes from ~39% at N=10 to
   **~0% by N=100k** (the doc's "~3–7%" only bites at tiny streams). Nails the format + correctness; the
   ~10–20× throughput is the C/FPGA path (C2).
-- *(next)* C2 FPGA shift-register codec (RTL + Verilator sim local; board synthesis hardware-gated) → C3
-  Tier-6 spiral spatial packing (benchmark-gated) → C4 optional turbovec-VQ.
+- ✅ **Tier-6 decision-first spiral packing** (`spiral.py`, gate in `bench/spiral_bench.py`) — packs a
+  multi-var reading onto a Fermat/Vogel spiral whose contiguous index ranges **are** the routes, so the
+  wire carries a single **band ID** ("transmit the decision, not the magnitude"); band membership is
+  `base ≤ n < base+width` — an integer compare, the Level M atom (`r²=c²·n` ⇒ a radial ring *is* `n < K`).
+  Baseline sits at the dense center, severe branches outward; Gray-within-band gives on-demand fidelity
+  (progressive). All continuous math (√, golden angle in degrees) is build-time; the edge path is integer
+  table + compare. **Gate PASS** (`bench/spiral_results.md`): on multi-dim correlated telemetry the band
+  ID routes correctly at **1.9×/2.8×/3.6× fewer bits** than the linear per-field wire for k=2/3/4 (no win
+  at k=1 — scalars stay on the layer-2 quantizer, as intended), fidelity parity holds (progressive ≈1×
+  linear, so the win is progressiveness not dropped data), correlation makes the decision stream cheaper,
+  and the one decision frame survives burst loss better than *k* frames. Frozen `conformance/spiral.json`
+  (a mapping bug turns a test RED) + a decisions-preserved proof re-routing each probe three ways.
+- *(next)* C2 FPGA shift-register codec (RTL + Verilator sim local; board synthesis hardware-gated) → C4
+  optional turbovec-VQ.
 
 ## Roadmap (phased, benchmark-gated)
 - **Phase A** ✅ — quantizer + codec + decisions-preserved test + go/no-go benchmarks (margins hold).
 - **Phase B** ✅ — self-heal via the repo's real Merkle (`ledger_ots`) + selective retransmission +
   OTS-anchored chained-epoch retention + authenticated ACK + the decode/inspect path.
-- **Phase C** — word-packed wire ✅; FPGA shift-register codec; Tier-6 spiral spatial packing; optional
-  turbovec-VQ.
+- **Phase C** — word-packed wire ✅; Tier-6 spiral spatial packing ✅ (benchmark PASS); FPGA
+  shift-register codec; optional turbovec-VQ.
 
 ## Honest scope
 Benchmark-gated (if the compression/retransmission margins don't hold, it stops cheaply). Resilience and
