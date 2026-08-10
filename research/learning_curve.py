@@ -6,9 +6,9 @@ Subsamples EXISTING data (no collection) and reads the slope near the top of our
 Rising, unplateaued near the top => collection (#38/#40 dispositions, #35/#30 flows) will move it.
 Flat => it won't. NEVER touches model-gemma.
 """
-import sys, json, numpy as np
+import os, sys, json, numpy as np
 from collections import defaultdict, Counter
-sys.path.insert(0,"/home/cwadmin/cwprojects")
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # ---------- A) ROUTING ----------
 from prismpath import embedder
@@ -50,7 +50,7 @@ routeA["_meta"]={"max_samples_per_edge":max(per_edge.values()),"median_per_edge"
 import torch
 
 _REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-LAB="/home/cwadmin/cwprojects/etbert-lab"
+LAB=os.environ.get("ETBERT_LAB", os.path.expanduser("~/cwprojects/etbert-lab"))  # part-B corpus (first-party lab repo; not in this repo)
 def l2(X): X=np.asarray(X,np.float32); return X/np.clip(np.linalg.norm(X,axis=1,keepdims=True),1e-8,None)
 M=l2(np.load(f"{LAB}/corpus_v2/emb.npy")); fam=np.load(f"{LAB}/corpus_v2/family.npy",allow_pickle=True).astype(str)
 dev="cuda" if torch.cuda.is_available() else "cpu"

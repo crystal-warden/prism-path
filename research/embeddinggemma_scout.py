@@ -4,7 +4,7 @@ Robust to prompt/dim API differences. NEVER touches model-gemma (bge/egemma are 
 import os, sys, json, numpy as np
 os.environ.pop("HF_HUB_OFFLINE", None)
 from collections import defaultdict
-sys.path.insert(0,"/home/cwadmin/cwprojects")
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from sentence_transformers import SentenceTransformer
 from prismpath.centroid import _decision_items, load_graphs, _unit
 

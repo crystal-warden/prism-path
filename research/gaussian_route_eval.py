@@ -9,8 +9,8 @@ arms with the mandatory shrinkage (full per-edge cov is singular at these n):
 Plus the payoff: don't-know detection — does min-Mahalanobis (confidence) separate correct picks from
 wrong ones? (AUC: P(wrong is farther than correct)). That's the principled replacement for the margin.
 """
-import sys, json, numpy as np
-sys.path.insert(0, "/home/cwadmin/cwprojects")
+import os, sys, json, numpy as np
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from prismpath import embedder
 from prismpath.centroid import _decision_items, load_graphs, _unit
 from collections import defaultdict

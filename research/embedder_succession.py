@@ -8,9 +8,9 @@ B) SUCCESSION: migrate locked artifacts (centroids) across an embedder change vi
    bge-base -> bge-small (cross-model AND cross-dim -> a general ridge linear map, not orthogonal).
 NEVER touches model-gemma (bge models are tiny).
 """
-import sys, json, numpy as np
+import os, sys, json, numpy as np
 from collections import defaultdict
-sys.path.insert(0,"/home/cwadmin/cwprojects")
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from sentence_transformers import SentenceTransformer
 from prismpath.centroid import _decision_items, load_graphs, _unit
 

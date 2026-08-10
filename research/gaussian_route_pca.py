@@ -6,9 +6,9 @@ SCREEN: don't-know AUC (correct vs wrong) >= 0.75 (raw 768-d gave 0.582).
 GRADUATION: likelihood-abstention must BEAT cosine-margin-escalation on the accuracy/escalation
 frontier at matched escalation rate. Else park.
 """
-import sys, json, numpy as np
+import os, sys, json, numpy as np
 from collections import defaultdict
-sys.path.insert(0,"/home/cwadmin/cwprojects")
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from prismpath import embedder
 from prismpath.centroid import _decision_items, load_graphs, _unit
 
