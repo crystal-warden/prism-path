@@ -1,9 +1,9 @@
 # research/ — reproducibility scripts behind the evidence ledger
 
-Exploratory scripts that generate the **routing-spectrum** measurements cited in
+Scripts that regenerate the **routing-spectrum** measurements cited in
 [`docs/research/supporting-evidence.md`](../docs/research/supporting-evidence.md). Everything here is
 reproducible **from this repo** — the input corpus (`prismpath/benchmark/routing_bench.jsonl`) ships with
-the repo. Each script emits its JSON result into [`benchmark/`](benchmark/).
+the repo, and each script writes its JSON result into [`benchmark/`](benchmark/).
 
 | Script | Produces | Backs (evidence ledger) |
 |---|---|---|
@@ -14,14 +14,5 @@ the repo. Each script emits its JSON result into [`benchmark/`](benchmark/).
 | `embeddinggemma_scout.py` | `benchmark/embeddinggemma_scout.json` | EmbeddingGemma Matryoshka densities (#52) |
 
 **Dependencies:** `numpy`, `sentence-transformers` + `torch` (embedders, all local), and the `prismpath`
-package (imported via the repo root). `learning_curve.py`'s auxiliary part-B reads a corpus from the
-first-party lab repo — set `ETBERT_LAB=/path/to/etbert-lab` (defaults to `~/cwprojects/etbert-lab`); the
-in-repo part (the cited learning curve) needs nothing external.
-
-## Not here — the first-party lab repo
-The **SOC-triage** provenance scripts (`validate_triage_*.py`, `lm_deepdive.py`, `agentic_investigate.py`,
-`build_knowledge_index.py`) and the **pilot instruments** (`shadow_agreement.py`, `suppression.py`,
-`flywheel.py`) live in the private `etbert-lab/` lab repo, not here: they require private corpora
-(`triage-corpus/`, `knowledge-lib/`) and a live SIEM, so they are not reproducible from this repo. The
-evidence ledger cites each with its `etbert-lab/…` path. This keeps the public repo to what a reader can
-actually re-run.
+package (imported from the repo root). `learning_curve.py` also reads an optional external corpus via the
+`ETBERT_LAB` env var; its in-repo routing result needs nothing external.
