@@ -55,6 +55,17 @@ async def _unhandled(request: Request, exc: Exception):
     return _envelope(500, str(exc))
 
 
+@app.middleware("http")
+async def _limit_body_size(request: Request, call_next):
+    """Reject oversized request bodies before they are buffered. The control plane is loopback and
+    single-user, but an accidental multi-GB POST must not OOM it. This is a Content-Length gate; a chunked
+    body without a length still hits the per-endpoint size check downstream (edit.write_file)."""
+    cl = request.headers.get("content-length")
+    if cl is not None and cl.isdigit() and int(cl) > core.MAX_FILE_BYTES:
+        return _envelope(413, f"request body exceeds MC_MAX_FILE_BYTES ({core.MAX_FILE_BYTES} bytes)")
+    return await call_next(request)
+
+
 # The command center (Phase 4). Mounted last so the /api/v1 routes and /docs win over the catch-all.
 if os.path.isdir(STATIC_DIR):
     app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="static")

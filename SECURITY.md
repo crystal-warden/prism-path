@@ -59,6 +59,16 @@ vulnerability we want to hear about **at highest priority**:
 
 ## Hardening notes for deployers
 
-Run Mission Control on loopback only (default), treat flow documents from untrusted sources as
-untrusted *input* (they are safe to parse and lint by design — that claim is exactly what §1–2
-above defend), and pin your lockfiles in CI (`prismpath lock --check`).
+**Mission Control is single-user and unauthenticated by design.** It binds loopback (`127.0.0.1`) by
+default and ships no login, sessions, or credentials — authentication is a deliberate non-goal for the
+reference control plane, not an oversight. Do not bind it to a public interface or expose it through a
+reverse proxy without putting your own authentication in front of it; there is no built-in access control
+to fall back on. Its only write surface is one path-contained endpoint (traversal rejected via `_safe`),
+and request bodies, file reads, checkpoint loads, and the file listing are size/entry-bounded
+(`MC_MAX_FILE_BYTES`, `MC_MAX_TREE_ENTRIES`) so a runaway request cannot exhaust memory. The
+Content-Length body gate covers the common case; a chunked upload without a declared length is still
+caught by the per-endpoint size check.
+
+Treat flow documents from untrusted sources as untrusted *input* (they are safe to parse and lint by
+design — that claim is exactly what §1–2 above defend), and pin your lockfiles in CI
+(`prismpath lock --check`).

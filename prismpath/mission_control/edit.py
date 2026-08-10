@@ -1,7 +1,7 @@
 """Edit router — list/read/write flow files, the only write surface, path-contained and fail-closed."""
 import os
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, HTTPException, Query
 
 from . import core
 from .models import FileWriteReq
@@ -19,6 +19,8 @@ def list_files():
 def read_file(path: str = Query(...)):
     fp = core._safe(core.STATE["proj"], path)      # ValueError on traversal -> 400 envelope
     fst = os.stat(fp)
+    if fst.st_size > core.MAX_FILE_BYTES:
+        raise HTTPException(413, f"file exceeds MC_MAX_FILE_BYTES ({core.MAX_FILE_BYTES} bytes)")
     return {"path": path, "content": open(fp, errors="ignore").read(),
             "mtime": fst.st_mtime, "size": fst.st_size}
 
@@ -26,6 +28,8 @@ def read_file(path: str = Query(...)):
 @router.post("/file")
 def write_file(req: FileWriteReq):
     p = core._safe(core.STATE["proj"], req.path)   # ValueError on traversal -> 400 envelope
+    if len(req.content.encode("utf-8")) > core.MAX_FILE_BYTES:
+        raise HTTPException(413, f"content exceeds MC_MAX_FILE_BYTES ({core.MAX_FILE_BYTES} bytes)")
     with core._FILE_LOCK:
         open(p, "w", encoding="utf-8").write(req.content)
     core.AUDIT.append(core.ACTOR, "file.edit", {"path": req.path, "bytes": len(req.content)})

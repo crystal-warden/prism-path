@@ -135,3 +135,19 @@ def test_dropped_endpoints_are_gone(client):
 def test_index_is_served(client):
     r = client.get("/")
     assert r.status_code == 200 and "Mission Control" in r.text
+
+
+# ── hardening: resource caps on the only network-facing surface ───────────────
+def test_file_size_cap(client, proj, monkeypatch):
+    monkeypatch.setattr(core, "MAX_FILE_BYTES", 200)
+    assert client.post(V + "/file", json={"path": "flows/ok.md", "content": "x" * 50}).status_code == 200
+    assert client.post(V + "/file", json={"path": "flows/big.md", "content": "x" * 5000}).status_code == 413
+    (proj / "flows" / "toobig.md").write_text("y" * 5000, encoding="utf-8")
+    assert client.get(V + "/file", params={"path": "flows/toobig.md"}).status_code == 413
+
+
+def test_file_tree_bounded(client, proj, monkeypatch):
+    monkeypatch.setattr(core, "MAX_TREE_ENTRIES", 3)
+    for i in range(10):
+        (proj / "flows" / f"f{i}.md").write_text("hi", encoding="utf-8")
+    assert len(client.get(V + "/files").json()["files"]) <= 3

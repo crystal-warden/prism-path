@@ -38,6 +38,11 @@ ACTOR = "operator"                                            # single local ope
 MC_SCAN = os.environ.get("MC_SCAN", "/tmp/*/status.json")     # glob(s), os.pathsep-separated
 MC_REGISTRY = os.path.expanduser(os.environ.get("MC_REGISTRY", "~/.prismpath/sprints.json"))
 
+# Resource caps for the single-user control plane. Flow files and checkpoints are small; refuse anything
+# larger so a runaway read/write can't exhaust memory, and bound the file listing on a pathological tree.
+MAX_FILE_BYTES = int(os.environ.get("MC_MAX_FILE_BYTES", str(4 * 1024 * 1024)))   # 4 MiB
+MAX_TREE_ENTRIES = int(os.environ.get("MC_MAX_TREE_ENTRIES", "5000"))
+
 # --- single-user state --------------------------------------------------------
 # One operator, one followed-sprint state. `proc` is the sprint we launched (if any); `proj` is the
 # directory we observe; `pinned` freezes auto-follow to a chosen sprint.
@@ -66,6 +71,8 @@ def file_tree(proj):
     for dp, dns, fns in os.walk(proj):
         dns[:] = [d for d in dns if d not in (".git", "tools", "__pycache__", "last-good")]
         for fn in sorted(fns):
+            if len(out) >= MAX_TREE_ENTRIES:
+                return out                        # bound the listing on a pathological tree
             if fn.endswith((".js", ".mjs", ".html", ".css", ".json", ".md", ".txt", ".pdf")) and not fn.startswith("."):
                 rel = os.path.relpath(os.path.join(dp, fn), proj)
                 try:
