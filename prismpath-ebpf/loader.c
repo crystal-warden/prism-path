@@ -524,7 +524,31 @@ static int certify_bpf(const char *packets_path) {
 /* Attach the REAL-packet program (ppt_net.bpf.o) to a live interface, observe-only (it only ever
  * returns XDP_PASS). Populates the PPT table from <ppt>, pins the verdict + result maps so `netstats`
  * can read them after this process exits, and attaches in SKB/generic mode (works on veth/gretap). */
-static int net_attach(const char *ppt_path, const char *ifname) {
+/* Derive the drop-node bitmask from the node-name sidecar (a node named "drop" or "block" => XDP_DROP)
+ * and write it into config_map[0].drop_mask. names_path may be NULL => observe-only (mask stays 0).
+ * Covers node indices 0-63 (the net program bounds the shift). */
+static void config_set_drop_mask(struct bpf_object *obj, const char *names_path) {
+    if (!names_path) { printf("[loader] observe-only (no names sidecar given)\n"); return; }
+    long nlen; uint8_t *nb = read_file(names_path, &nlen);
+    if (!nb) { printf("[loader] observe-only (names sidecar unreadable)\n"); return; }
+    __u64 mask = 0; __u32 idx = 0;
+    for (char *tok = strtok((char *)nb, "\r\n"); tok; tok = strtok(NULL, "\r\n")) {
+        if (idx < 64 && (strcmp(tok, "drop") == 0 || strcmp(tok, "block") == 0)) mask |= (1ULL << idx);
+        idx++;
+    }
+    free(nb);
+    struct bpf_map *cm = bpf_object__find_map_by_name(obj, "config_map");
+    __u32 key = 0; struct ppt_config cfg;
+    if (cm && bpf_map_lookup_elem(bpf_map__fd(cm), &key, &cfg) == 0) {
+        cfg.drop_mask = mask;
+        bpf_map_update_elem(bpf_map__fd(cm), &key, &cfg, BPF_ANY);
+    }
+    if (mask) printf("[loader] INLINE ENFORCEMENT on: drop_mask=0x%llx (drop/block decision nodes)\n",
+                     (unsigned long long)mask);
+    else printf("[loader] observe-only (no drop/block node in this flow)\n");
+}
+
+static int net_attach(const char *ppt_path, const char *ifname, const char *names_path) {
     Image im; load_image(ppt_path, &im);
     unsigned int ifindex = if_nametoindex(ifname);
     if (ifindex == 0) { fprintf(stderr, "error: no such interface %s\n", ifname); return 2; }
@@ -536,6 +560,7 @@ static int net_attach(const char *ppt_path, const char *ifname) {
         return -1;
     }
     populate_maps(obj, &im);
+    config_set_drop_mask(obj, names_path);
 
     struct bpf_map *vmap = bpf_object__find_map_by_name(obj, "verdict_map");
     struct bpf_map *rmap = bpf_object__find_map_by_name(obj, "result_map");
@@ -559,7 +584,7 @@ static int net_attach(const char *ppt_path, const char *ifname) {
     }
     /* The attach holds a ref on the iface; the pinned maps keep the histogram readable after we exit. */
     bpf_object__close(obj);
-    printf("OK: ppt_net attached to %s (SKB mode, observe-only). Read counts with:\n", ifname);
+    printf("OK: ppt_net attached to %s (SKB mode). Read counts with:\n", ifname);
     printf("     sudo ./loader netstats %s <names>\n", ifname);
     return 0;
 }
@@ -805,7 +830,7 @@ int main(int argc, char **argv) {
 
     if (argc >= 4 && strcmp(argv[2], "netattach") == 0) {
         if (getuid() != 0) { fprintf(stderr, "error: 'netattach' needs root / CAP_BPF.\n"); return 2; }
-        return net_attach(ppt_path, argv[3]);            /* loader <ppt> netattach <iface> */
+        return net_attach(ppt_path, argv[3], argc >= 5 ? argv[4] : NULL);  /* loader <ppt> netattach <iface> [names] */
     }
     if (argc >= 3 && strcmp(argv[2], "netstats") == 0) {
         if (getuid() != 0) { fprintf(stderr, "error: 'netstats' needs root / CAP_BPF.\n"); return 2; }

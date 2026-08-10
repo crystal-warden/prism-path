@@ -261,6 +261,13 @@ int ppt_net_prog(struct xdp_md *ctx)
         res->eval_status = (rc == 0) ? 1 : 0;
         __sync_fetch_and_add(&res->pkt_count, 1);
     }
+
+    /* Inline enforcement: if the matched decision node is flagged in cfg->drop_mask, DROP; else PASS.
+     * drop_mask == 0 (default) keeps this observe-only. The histogram above already counted this packet
+     * under its decision bucket, so netstats reflects drops too. Nodes 0-63; the shift is bounded. */
+    if (cfg && target_node >= 0 && target_node < 64 &&
+        (cfg->drop_mask & (1ULL << ((__u32)target_node & 63))))
+        return XDP_DROP;
     return XDP_PASS;
 }
 
