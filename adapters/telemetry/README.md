@@ -9,13 +9,16 @@ The full design of record lives off-repo (the determination doc); only material 
 runs lands here.
 
 ## Status — Phase A (in progress)
-- **[this commit] Zeckendorf / Fibonacci codec** (`zeckendorf.py`) — the self-framing wire. Every code
-  ends in a unique `11`, so a stream is zero-header and self-delimiting; small integers are tiny
-  (`1->11`, `2->011`), which is where delta-differenced telemetry lives. Round-trip + framing invariants
-  under test.
-- *(next)* threshold-derived quantizer (from `model_check`), the **decisions-preserved conformance test**
-  (route on full-precision vs reconstructed telemetry; assert identical routing — the differentiated
-  proof), then the compression-margin + retransmission go/no-go benchmarks.
+- ✅ **Zeckendorf / Fibonacci codec** (`zeckendorf.py`) — the self-framing wire. Every code ends in a
+  unique `11`, so a stream is zero-header and self-delimiting; small integers are tiny (`1->11`,
+  `2->011`), which is where delta-differenced telemetry lives. Round-trip + framing invariants under test.
+- ✅ **Decision-preserving quantizer** (`quantizer.py`) — extracts each field's `field OP const`
+  thresholds from the flow and maps a reading to the **coarsest symbol that still resolves every routing
+  decision** (minimum sufficient statistic). `quantize` → `reconstruct` routes identically across
+  numeric / boolean / categorical fields; symbols are tiny.
+- *(next)* the **decisions-preserved conformance test** — a frozen cross-flow proof (route on
+  full-precision vs reconstructed telemetry; assert identical routing) — then the compression-margin +
+  retransmission go/no-go benchmarks.
 
 ## Roadmap (phased, benchmark-gated)
 - **Phase A** — quantizer + codec + decisions-preserved test + a frozen round-trip / error-injection corpus.
