@@ -60,7 +60,7 @@ MDFLOW_OK = ("examples/mdflow_interop/", "examples/code_nodes/README.md", "docs/
              "docs/research/paper-routing-spectrum.md", "CHANGELOG.md", "ROADMAP.md")
 for p in mds:
     rel = os.path.relpath(p, BASE)
-    if any(ok in rel for ok in MDFLOW_OK):
+    if rel == "README.md" or any(ok in rel for ok in MDFLOW_OK):   # root README cites the mdflow interop example
         continue
     for i, line in enumerate(read(p).split("\n"), 1):
         if brx.search(line):
