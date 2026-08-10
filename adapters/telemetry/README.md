@@ -44,8 +44,12 @@ runs lands here.
   forget the bytes, keep the root), a **retention cap**, and a **provable pressure-drop** (un-acked data
   forced out by the cap is a named gap, never a silent hole). Chain verifies after any drop; sealed roots
   are OTS-anchorable via `ledger_ots`.
-- *(next)* authenticated ACK/control channel (a forged ACK must not trigger premature drop) → the
-  `prismpath decode --flow` human-readable inspect path.
+- ✅ **Authenticated ACK channel** (`ackchannel.py`) — drop-on-ACK is gated behind an HMAC-SHA256 tag
+  over (high-water root, monotonic seq) with a secret shared out-of-band (the pattern `guard_ledger`
+  uses). The edge drops only for an ACK that verifies **and** advances the sequence; a forged, tampered,
+  wrong-secret, or replayed ACK is ignored and **drops nothing** — closing the data-loss-by-spoof hole
+  the doc flags.
+- *(next)* the `prismpath decode <stream> --flow` human-readable inspect path (the `.md` is the decoder).
 
 ## Roadmap (phased, benchmark-gated)
 - **Phase A** ✅ — quantizer + codec + decisions-preserved test + go/no-go benchmarks (margins hold).
