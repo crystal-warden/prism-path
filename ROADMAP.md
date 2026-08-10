@@ -47,7 +47,7 @@ PrismPath is an open-source framework that treats **agent workflows as data**. O
 
 - [x] **Doc-accuracy pass**: every root + package doc audited (see the per-doc audit trail); dead links, placeholder URLs, path-casing, and rename artifacts fixed; every relative link verified to resolve.
 - [x] **Security posture updated for shipped attestation**: SECURITY.md's ledger exclusion is now conditional on anchoring; anchoring/attestation forgery is an in-scope reporting class.
-- [x] **De-fusing the game-dev origin**: the roblox gate plugin removed; the sprint control plane genericized end to end (council deliberation stays as a general capability).
+- [x] **De-fusing the game-dev origin**: the roblox gate plugin removed; the sprint control plane genericized end to end (the game-flavored council/dice subsystem was later removed entirely).
 - [x] **Brand-residue sweep (mdflow → prismpath)**: including the functional `ledger_ots` ref/trailer mismatch that silently emptied `prismpath ledger anchor`, the seven `research/` scripts, and the compliance tooling paths.
 - [x] **Contract relocation**: the app-architecture coder contract lives with the prompt assets (`prismpath/nudges/`), resolved CWD-independently.
 

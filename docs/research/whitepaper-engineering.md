@@ -968,7 +968,7 @@ the work (`engine.py`), and none of the durable machinery knows *which* strategy
 human intent → spec → sprint loop:
    a next-step strategy picks one unit of work → executor diff-edits the REAL tree →
    GATE (compiles? types? builds? tests? WIRED? reachable?) → green: next / red ×3: escalate
-         ▲ the strategy is pluggable (kg | spec | council); the rest of the loop is fixed
+         ▲ the strategy is pluggable (kg | spec); the rest of the loop is fixed
 ```
 
 - **Gates are the machine-enforced definition of done — the key discovery.** A build is not green
@@ -978,25 +978,21 @@ human intent → spec → sprint loop:
   gate, not a thing you remember to check. Gates are pluggable per target (the built-in browser gate: syntax →
   imports resolve → DOM element exists → headless click changes the DOM; any other target loads a
   gate plugin behind the same `validate(proj)` interface).
-- **Three next-step strategies plug into the one loop, determinism-first** (the loop, gate, and
-  escalation are identical across all three — only the choice of *what to build next* differs; the
-  strategy is the `if KG_MODE / elif SPEC_MODE / else` dispatch at `run_sprint.py:1344–1355`):
+- **Two next-step strategies plug into the one loop, determinism-first** (the loop, gate, and
+  escalation are identical across both; only the choice of *what to build next* differs, a strategy
+  dispatch in `run_sprint.py`):
   1. `kg` (**the default, and what prismpath was built for**): **one structured spec** whose `##` are
      requirements, `### Contract` the binding interface, `### Definition of done` the gate-checkable
      target. The agent seeds a **knowledge graph from the spec itself** (authored, so deterministic),
      builds exactly one node per pass (the first `pending` whose `depends_on` are all `done`), and
      records each node's `produces`/`exports` so later steps *read* the graph instead of re-deriving
-     context — which is what stops a step from re-inventing a module an earlier step already built.
+     context, which is what stops a step from re-inventing a module an earlier step already built.
   2. `spec` — build a flat ordered list of modules, each from its embedded spec: the same determinism
      without the dependency graph.
-  3. `council` — the **exception, not the default**: an optional, **domain-specific expansion
-     strategy that arose from a game-development use case**, where the goal was wide coverage of a
-     product's many aspects and we wanted the swarm to decide *how* to proceed. Role-lensed agents
-     (its `ROLE_LENS`/`WORLD_LENS` frame the proposal along user-facing and surface axes) propose
-     net-new subsystems and vote, steered by a seeded "dice" roll toward under-explored areas — open,
-     dice-driven expansion answering "what should this grow into?" It runs only when neither spec mode
-     is set *and* the swarm backend is selected (`run_sprint.py:1355`); it is the least deterministic
-     mode and load-bearing for none of the control-plane guarantees above.
+
+  (A former `council` expansion strategy, game-dev in origin, once let the swarm propose and vote on
+  net-new subsystems; it has since been removed, and because it was load-bearing for none of the
+  control-plane guarantees above, removing it left them intact.)
 - **The auditor (advisory):** an idle-time small-model judge that checks each build against a
   canonical `GLOSSARY.md` for contract drift. Nearly free (runs on the otherwise-idle coder model);
   advisory by default because an LLM judge is fuzzy — it surfaces drift a human or a deterministic
@@ -1020,10 +1016,10 @@ compiles the sprint loop itself, which is the credibility argument in its most l
 
 These come from running prismpath against a real local-model swarm on a workstation:
 
-- **Lean the decision-step context** (the lesson surfaced in the multi-agent *council* strategy, but
-  it is general). A 14 KB prompt × 5 sequential agent dispatches = an ~80 s round that *looks hung*.
-  Pass only what the decision needs → ~5 s dispatches. Long context is not free and not neutral — this
-  holds for any fan-out of agent calls per unit of work, council or otherwise.
+- **Lean the decision-step context** (a general lesson, first surfaced in an earlier multi-agent
+  strategy). A 14 KB prompt across several sequential agent dispatches makes an ~80 s round that
+  *looks hung*. Pass only what the decision needs, for ~5 s dispatches. Long context is not free and not
+  neutral; this holds for any fan-out of agent calls per unit of work.
 - **Cap retries to the build's cost, or a fixable RED becomes an infinite spin.** `max-reflections 5`
   × a slow large-context build = a ~20-min timeout *per iteration*; if the RED is one the model can't
   self-fix, every iteration burns the full budget → times out → restarts → spins for hours. Fail
@@ -1231,6 +1227,6 @@ calls.)*
     lockfile (`lockfile.py:127`); note the `LOCK_COSINE_MIN = 0.9999` false-refuse caveat of §4.6
     (use `warn` on a mixed torch/ONNX/CPU–GPU fleet).
 - Sprint modes (§9): `SPRINT_SPEC_DIR`+`SPRINT_SPEC_ORDER` (flat `spec` mode), `SPRINT_SPEC_FILE`
-  (structured `kg` mode), `SPRINT_AGENT=swarm` (enables the `council` strategy), `SPRINT_LEDGER=1`
+  (structured `kg` mode), `SPRINT_AGENT=swarm` (multi-agent swarm backend), `SPRINT_LEDGER=1`
   (opt-in git Flow-Ledger of gate-green proofs; `SPRINT_LEDGER_RUN=<id>` resumes a prior run's ref),
   `SPRINT_GATE=<target>`, `SPRINT_AUDIT=1` (auditor), `SPRINT_AGY=1` (frontier auto-unblock).

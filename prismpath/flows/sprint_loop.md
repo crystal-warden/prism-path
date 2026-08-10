@@ -4,7 +4,7 @@ start: pick_unit
 ---
 
 ## pick_unit
-Consult the council / knowledge-graph for the next unproven unit of work, given the current
+Consult the knowledge-graph / spec order for the next unproven unit of work, given the current
 tree and blueprint. Skip anything in `state._done_units` (seeded from the git Flow-Ledger, so
 a restarted sprint resumes at the first unproven unit). Emit `done` when every unit is proven.
 @emits(done, instruction, target)

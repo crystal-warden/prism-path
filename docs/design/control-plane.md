@@ -5,7 +5,7 @@
 Everything above is the format: the spec, the kernel, the toolchain. Everything below is what
 we actually run on top of it — the control plane Crystal Warden Labs uses to build real software
 with a local agent swarm. None of it is required by the format; it's here as proof the format
-holds up under real use. Its examples (browser gates, sprint councils) are specific to our
+holds up under real use. Its examples (browser gates, the local-swarm sprint loop) are specific to our
 setup, not yours.
 
 ## The two layers
@@ -16,8 +16,8 @@ It has two layers:
 - **The flow kernel** — *one markdown file is the workflow.* Each `## heading` is a node (its prose
   is the instruction handed to an agent); `-> target: condition` lines are the edges. No `StateGraph`,
   no routing functions in code — a PM, analyst, or domain expert can author and read a flow.
-- **The control plane on top** — a spec-driven **sprint** loop that drives the swarm: a council picks
-  the next unit of work, an executor edits the real tree, and **deterministic gates decide when it's
+- **The control plane on top** — a spec-driven **sprint** loop that drives the swarm: a critic picks
+  the next step, an executor edits the real tree, and **deterministic gates decide when it's
   done**. Progress is observable live through Mission Control. Build targets (the browser gate is
   built in; others load as plugins) are pluggable; the engine itself stays target-agnostic.
 
@@ -73,7 +73,7 @@ driver, where harness concerns belong:
                       │
                       ▼
         run_sprint.py  (the sprint loop)
-            │  council picks the next unit of work (dice-steered)
+            │  a critic picks the next step (5-role pipeline: architect/coder/test-author/gate/fixer/critic)
             │  executor edits the REAL tree (cecli / swarm / served model)
             ▼
         GATE (pluggable)  ── compiles? types? builds? tests? wired? reachable? ──┐

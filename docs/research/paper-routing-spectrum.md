@@ -750,14 +750,13 @@ and is wired-in and reachable. *How* the next unit is chosen is a **pluggable mo
 gates, the durable proofs (§3.4), and the human-in-the-loop escalation are identical across all of
 them. The default and what PrismPath was built for is a **deterministic** order — a knowledge-graph walk
 over an authored spec whose `##` are requirements, or a flat ordered spec list (`run_sprint.py`
-selects the mode by env config, `kg_next`/`spec_next`/`council_next` all returning the *same*
-`{done, target, instruction}` contract). The **exception, not the default**, is an optional
-**"council"** expansion strategy that arose from a game-development use case, where the goal was
-AI-driven *breadth* across a product's many aspects: role-lensed agents propose net-new subsystems and
-vote, steered by a seeded "dice" roll toward under-explored areas — an open, dice-driven "what should
-this grow into?" loop. Council is the least deterministic mode and is load-bearing for *none* of the
-control-plane guarantees; the systems contribution below is the control plane and its durable proofs,
-not the council. The findings that generalize concern that constant machinery:
+selects the mode by env config, `kg_next` and `spec_next` both returning the *same*
+`{done, target, instruction}` contract). A game-development use case once added an optional
+**"council"** expansion strategy: role-lensed agents proposing and voting on net-new subsystems,
+steered toward under-explored areas, an open "what should this grow into?" loop. It has since been
+removed, and because it was load-bearing for *none* of the control-plane guarantees, removing it left
+them intact. The systems contribution below is that constant machinery and its durable proofs. The
+findings that generalize concern it:
 
 - **Gates as the machine-enforced definition of done.** A build is not "done" until it compiles,
   type-checks, builds, passes tests, *and is wired into a composition root and reachable*. The

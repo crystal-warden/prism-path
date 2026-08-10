@@ -46,7 +46,7 @@ ci-report/lsp) deliberately lives only on the reference side — an asymmetry, n
               SPRINT_NUDGE / spec                 (human intent)
                       │
         ┌─────────────▼──────────────┐
-        │  council  (dice.py)         │  pick the next unit of work (vote diversity + oblique-strategy dice)
+        │  critic                     │  reviews the build, picks the next unit of work or says DONE
         └─────────────┬──────────────┘
                       │  + RAG grounding (retriever.py, index from the active plugin)
         ┌─────────────▼──────────────┐
@@ -73,13 +73,18 @@ Supporting services:
 - **`retriever.py`** — dense retrieval over a turbovec docs index to ground the coder in real APIs.
   The engine is index-agnostic; the path comes from the active gate plugin's `RAG_INDEX`.
 
-### Execution modes
+### The roles and build modes
 
-- **`council`** — dice-driven free expansion; for open-ended "what should this grow into."
-- **`spec`** (`SPRINT_SPEC_ORDER`) — build a flat list of module files, each from its embedded spec.
-- **`kg`** (`SPRINT_KG`) — the most deterministic: one structured spec becomes an authored knowledge
-  graph; build exactly one node per pass (the first `pending` whose `depends_on` are all `done`),
-  embedding only that requirement + the glossary + named specs + what's already built.
+The loop is a **5-role pipeline** with hard boundaries: an **architect** designs a `BLUEPRINT.md` (file
+manifest + port contracts, no code), a **coder** implements one critic-chosen feature per turn, a
+**test-author** owns the headless specs, the **gate** validates deterministically, a **fixer** makes the
+smallest change to pass it, and a **critic** reviews quality and blueprint adherence, then picks the next
+step or says DONE. Two build modes:
+
+- **`spec`** (`SPRINT_SPEC_ORDER`): build a flat list of module files, each from its embedded spec.
+- **`kg`** (`SPRINT_KG`): the most deterministic. One structured spec becomes an authored knowledge graph;
+  build exactly one node per pass (the first `pending` whose `depends_on` are all `done`), embedding only
+  that requirement plus the glossary, named specs, and what's already built.
 
 ## 3. The seam — the gate plugin interface
 

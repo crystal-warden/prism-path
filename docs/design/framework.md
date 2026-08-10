@@ -2,8 +2,8 @@
 
 How PrismPath's control plane directs an AI-swarm project, distilled from a real spec-driven build. The
 thesis: a human holds the VISION, that vision is compiled into **one spec per script**, and a local-LLM
-swarm builds each spec as a **feature sprint** against deterministic **gates**, steered by
-**oblique-strategy dice**.
+swarm builds each spec as a **feature sprint** against deterministic **gates**, driven by a **5-role
+pipeline** (architect, coder, test-author, gate, fixer, critic) in which the critic picks the next step.
 
 > The concrete examples below (a `PRODUCT_DESIGN.md` umbrella, core modules, a `WidgetDef` drift, a
 > client layer) come from the **reference project** — an app built under a target gate plugin.
@@ -14,8 +14,8 @@ swarm builds each spec as a **feature sprint** against deterministic **gates**, 
 VISION (human, in conversation)
    → UMBRELLA design doc (PRODUCT_DESIGN.md) — the cohering whole; narrative, loops, pillars, the ONE ironclad contract
    → SPEC-PER-SCRIPT (specs/<Module>.md) — purpose, types/contract, behavior, deps, ACCEPTANCE CRITERIA
-   → FEATURE SPRINTS (prismpath swarm) — council picks the next spec; cecli diff-edits the real tree to green
-   → GATES dispose; DICE direct; human supervises the hard parts
+   → FEATURE SPRINTS (prismpath swarm) — the critic picks the next step; cecli diff-edits the real tree to green
+   → GATES dispose; the CRITIC directs; human supervises the hard parts
    → working, then iterate
 ```
 
@@ -28,13 +28,15 @@ VISION (human, in conversation)
   thin working base FIRST, then spec-driven feature sprints.
 
 ## The components and their jobs
-- **Council (2-model, dice-driven):** decides WHAT to build next. Lean context (goal + coverage + file list),
-  not the whole architecture. 3 gemma4 engineering voices + 2 qwen25 product voices for real vote diversity.
-- **Dice (oblique strategy):** decide the DIRECTION. A *system* die (direction × provocation × scope,
-  coverage- and balance-weighted) and a separate **surface die** (the user-visible layer — `SPRINT_WORLD`
-  in the env, named for the reference build) on a cadence knob
-  (`SPRINT_WORLD : SPRINT_EXPAND : SPRINT_REFINE`). Dice widen the proposal distribution; gates dispose.
-- **cecli (executor):** diff-edits the REAL tree to green (no whole-file regen → no require-scrambling).
+- **The 5-role pipeline (separated roles, hard boundaries):** no role grades its own work. The
+  **architect** designs a `BLUEPRINT.md` (file manifest + port contracts, no code); the **coder**
+  implements one critic-chosen feature per turn (no tests, no self-grading); the **test-author** owns the
+  headless specs (never touches impl); the **gate** validates deterministically; the **fixer** makes the
+  smallest change to satisfy the gate (conforms code to the specs, never edits them); the **critic**
+  reviews quality, architecture, and blueprint adherence, then picks the next step or says DONE. Lean each
+  role's context (goal + coverage + file list, not the whole architecture); the served model runs the
+  roles as gemma4/qwen25 voices.
+- **cecli (executor):** diff-edits the REAL tree to green (no whole-file regen, so no require-scrambling).
 - **Gates = the DEFINITION OF DONE, machine-enforced** (the key discovery): a build is not green until it
   *compiles + types + builds + tests + is wired + is reachable by the user*. Declare an
   invariant in the spec → confirm it with a gate, never with prose alone (`wiring_check`,
@@ -51,8 +53,8 @@ VISION (human, in conversation)
   Claude unblocks the hard parts."
 
 ## Hard-won operating lessons (so far)
-- **Lean the council context.** A 14KB prompt × 5 sequential dispatches = an 80s round that looks hung. Pass
-  what the decision needs, nothing more (→ ~5s dispatches).
+- **Lean each role's context.** A 14KB prompt across several sequential role dispatches makes a round that
+  looks hung. Pass what the decision needs, nothing more (~5s dispatches).
 - **Oversized auto-refactor is a footgun.** Inlining a whole file into one LLM dispatch to "split" it hangs
   and corrupts mid-feature. Make size a *soft, advisory* signal; do structure work deliberately on green.
 - **The model server clogs under hours of load** (orphaned long generations starve throughput on unified
@@ -113,10 +115,9 @@ VISION (human, in conversation)
   "agents propose, gates dispose" applies to CONFORMANCE too. Also strip the playable-app build clauses
   ("WIRE IT into AppService", "SURFACE IT") for pure cores — they're built in isolation and integrated later.
 
-- **Three execution modes — and DETERMINISM is the default, council is the exception.** (1) `council` (dice-
-  driven, free expansion) — for open-ended "what should this product grow into" exploration. (2) `spec` mode
-  (`SPRINT_SPEC_ORDER`) — build a flat list of module-files, each from its embedded `specs/<M>.md`, in order.
-  (3) `kg` mode (`SPRINT_SPEC_FILE` + `SPRINT_KG`) — the most deterministic, and the one PrismPath was made for:
+- **Two build modes — DETERMINISM is the default.** (1) `spec` mode (`SPRINT_SPEC_ORDER`) — build a flat
+  list of module-files, each from its embedded `specs/<M>.md`, in order. (2) `kg` mode (`SPRINT_SPEC_FILE` +
+  `SPRINT_KG`) — the most deterministic, and the one PrismPath was made for:
   ONE structured spec whose `##` are REQUIREMENTS, `### Contract` the binding interface, `### Definition of
   done` the gate-checkable target (pseudo-code where it helps). The agent INGESTS the whole spec, instantiates
   a **knowledge graph** seeded from the spec itself (authored, not LLM-derived — so the graph is deterministic),
@@ -144,5 +145,5 @@ VISION (human, in conversation)
 
 ## Open framework work
 - Auto-refresh the umbrella/specs when they lag the tree. A `spec_check` gate (every module has a spec; every
-  spec maps to a module). Make the per-script spec format a template the council can consume directly as a
+  spec maps to a module). Make the per-script spec format a template the sprint loop can consume directly as a
   feature-sprint nudge. Promote this from notes → a real CLI (`prismpath spec`, `prismpath sprint <spec>`).

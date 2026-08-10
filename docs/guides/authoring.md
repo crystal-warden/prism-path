@@ -207,10 +207,10 @@ registering the ``prismpath.plugins`` entry-point group) provides **workers** (n
 Bind a node to a tool *in the document*, where a reviewer can see it:
 
 ```markdown
-## steer
-Roll the expansion mandate for this round.
-@worker(council.roll)
--> propose: always
+## fetch
+Retrieve the customer record for this request.
+@worker(crm.lookup)
+-> handle: always
 ```
 
 ```python
@@ -223,9 +223,9 @@ Three auditability guarantees back the binding: `worker_agent` resolves every bi
 flow.md` is the same verification as a CI gate; and every dispatched outcome carries a `_worker`
 provenance field, so the transcript records which installed tool produced each hop. `prismpath plugins
 [--json]` lists everything discovered — name, version, source (bundled vs entry-point), and what it
-provides. The bundled `council` plugin (seeded dice + weighted vote tally) is the showcase
-*expansion*: an optional deliberation pattern for decisions that benefit from deliberate diversity —
-the exception, not the default (see `plugins/council/README.md`).
+provides. A worker plugin is any module exposing a `WORKERS` dict of
+`name -> callable(node, instruction, state)`; bind a node to one with `@worker(plugin.name)`, so which
+installed tool runs a node is visible in the document and resolved at construction.
 
 ### Bounding persisted state (`@state_bound`)
 
