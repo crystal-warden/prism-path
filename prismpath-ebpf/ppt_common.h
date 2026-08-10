@@ -86,6 +86,10 @@ struct ppt_config {
     __u16 visits_idx;
     __u16 max_steps;
     __u16 max_stack;
+    /* inline enforcement (ppt_net only): bit i set => decision node i returns XDP_DROP instead of
+     * XDP_PASS. 0 = observe-only (default). Covers node indices 0-63; the net program bounds the shift.
+     * ppt_xdp (the conformance program) ignores this field — the 114/114 cert is unaffected. */
+    __u64 drop_mask;
 };
 
 /* On-wire context header in packet payload */
