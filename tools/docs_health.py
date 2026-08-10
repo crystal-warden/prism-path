@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Docs-health lint (Phase 6) + new-work capture audit (Phase 5). Runnable in CI.
 
-Checks the CANONICAL repos (not mdflow working tree, not vendored, not _retired):
+Scoped to THIS public repo (not the private sibling dirs, not vendored, not _retired, not gitignored caches):
   1. dead doc-links   — markdown [..](x.md) whose target doesn't resolve
-  2. brand residue    — 'mdflow' left in published prismpath docs (post-rename hygiene)
+  2. brand residue    — a NEW 'mdflow' self-reference leaking into the docs (post-rename hygiene). The
+                        legitimate third-party + interop mentions are allowlisted, so only new leaks flag.
   3. lingering dupes  — normalized-content duplicates still present across canonical repos
   4. task coverage    — each key session task # referenced in SUPPORTING_EVIDENCE/CLAIMS
   5. artifact coverage— each session result artifact referenced in a durable doc
@@ -12,14 +13,14 @@ Emits docs_health_report.md; exits 1 on dead links or brand residue (real defect
 import os, re, json, hashlib
 from collections import defaultdict
 
-BASE = "/home/cwadmin/cwprojects"
-CANON = ["prismpath", "cw-strategy", "etbert-lab", "knowledge-lib"]
-EXC = re.compile(r"(node_modules|/\.git/|\.venv|/venv|site-packages|dist-info|__pycache__|/ET-BERT/|/_src/|/extern/|_retired_docs)")
-EV = os.path.join(BASE, "prismpath/docs/research/supporting-evidence.md")
+BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))   # scope: THIS public repo only
+CANON = ["."]
+EXC = re.compile(r"(node_modules|/\.git/|\.venv|/venv|site-packages|dist-info|__pycache__|\.pytest_cache|docs_health_report|/ET-BERT/|/_src/|/extern/|_retired_docs)")
+EV = os.path.join(BASE, "docs/research/supporting-evidence.md")
 # NB: `if os.path.exists(EV)` below degrades silently to "" — if this path ever goes stale
 # again, checks 4-5 report EVERY task/artifact as a gap instead of erroring. Assert loudly:
 assert os.path.exists(EV), f"evidence ledger missing at {EV} — fix this path, do not ignore"
-CLAIMS = os.path.join(BASE, "etbert-lab/CLAIMS_detection_metrics.md")
+CLAIMS = os.path.join(BASE, "docs/research/CLAIMS_detection_metrics.md")  # optional; lives in the private lab repo, absent here
 
 mds = []
 for r in CANON:
@@ -49,11 +50,17 @@ for p in mds:
         if not any(os.path.exists(c) for c in cands):
             dead.append((os.path.relpath(p, BASE), tgt))
 
-# 2. brand residue in published prismpath docs
+# 2. brand residue — pre-rename self-references leaking into the docs.
+# `mdflow` is BOTH the name this project carried before it was renamed to PrismPath AND a real
+# third-party tool (Lindquist's) that PrismPath interops with and cites. Those legitimate mentions live
+# in a known set of paths; flag `mdflow` ONLY outside them (i.e. a NEW leak into core docs).
 residue = []
 brx = re.compile(r"\bmdflow\b", re.I)
+MDFLOW_OK = ("examples/mdflow_interop/", "examples/code_nodes/README.md", "docs/guides/code-nodes.md",
+             "docs/research/paper-routing-spectrum.md", "CHANGELOG.md", "ROADMAP.md")
 for p in mds:
-    if "/prismpath/" not in p:
+    rel = os.path.relpath(p, BASE)
+    if any(ok in rel for ok in MDFLOW_OK):
         continue
     for i, line in enumerate(read(p).split("\n"), 1):
         if brx.search(line):
@@ -62,9 +69,13 @@ for p in mds:
 # 3. lingering dupes across canonical repos
 def nh(t):
     return hashlib.sha256(re.sub(r"\s+", "", t.lower().replace("prismpath", "\x00").replace("mdflow", "\x00")).encode()).hexdigest()
+DUP_OK = ("/gallery/", "/adapters/")   # gallery showcases the core flows; adapters ship self-contained copies
 byh = defaultdict(list)
 for p in mds:
-    byh[nh(read(p))].append(os.path.relpath(p, BASE))
+    rel = os.path.relpath(p, BASE)
+    if any(ok in "/" + rel for ok in DUP_OK):
+        continue
+    byh[nh(read(p))].append(rel)
 dupes = [v for v in byh.values() if len(v) > 1]
 
 # 4 + 5. coverage audit
@@ -94,3 +105,4 @@ if dupes:
     md += ["## Lingering dupes", *[f"- {' == '.join(g)}" for g in dupes], ""]
 open(os.path.join(BASE, "docs_health_report.md"), "w").write("\n".join(md) + "\n")
 print(json.dumps(report, indent=2))
+raise SystemExit(1 if (dead or residue) else 0)   # honor the docstring: fail on real defects
