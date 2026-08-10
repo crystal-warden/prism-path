@@ -22,6 +22,7 @@ is terminal.
 """
 from __future__ import annotations
 
+import os
 import re
 from dataclasses import dataclass, field
 from typing import Dict, List, Tuple
@@ -31,6 +32,20 @@ HEAD_RE = re.compile(r"^\s*##\s+(.+?)\s*$")
 # Node annotation, e.g. `@checkpoint(unit=alert.id, proof=verdict, gate=staged_ok)` — an extension
 # slot on a node (the control plane reads it; the kernel just parses it). Keeps the heading clean.
 ANNO_RE = re.compile(r"^\s*@(\w+)\s*\((.*)\)\s*$")
+
+# Input bounds. A flow is human-authored routing config, not a data payload: real ones are a handful
+# of nodes and a few KiB. These caps keep an untrusted or accidental oversized document from
+# exhausting memory or driving the polynomial static analysis (and the SCC recursion, whose limit
+# scales with node count) off a cliff. All override via env, mirroring the Mission Control caps.
+MAX_FLOW_BYTES = int(os.environ.get("PRISMPATH_MAX_FLOW_BYTES", str(2 * 1024 * 1024)))  # 2 MiB
+MAX_NODES = int(os.environ.get("PRISMPATH_MAX_NODES", "5000"))
+MAX_EDGES = int(os.environ.get("PRISMPATH_MAX_EDGES", "20000"))
+
+
+class ParseError(ValueError):
+    """A flow document could not be parsed within its input bounds. Subclasses ValueError so callers
+    that already funnel bad input to a client error (e.g. Mission Control's 400 envelope) route it
+    without special-casing."""
 
 
 def _parse_anno_args(argstr: str) -> dict:
@@ -79,6 +94,10 @@ class Graph:
 
 
 def parse(text: str) -> Graph:
+    # Bound before doing any work. len(text) is a character count — a tight lower proxy for bytes
+    # (>= 1 byte/char) and the figure that actually governs the in-memory string and the line scan.
+    if len(text) > MAX_FLOW_BYTES:
+        raise ParseError(f"flow document exceeds PRISMPATH_MAX_FLOW_BYTES ({MAX_FLOW_BYTES} bytes)")
     meta = {}
     body = text
     m = re.match(r"^---\s*\n(.*?)\n---\s*\n(.*)$", text, re.DOTALL)
@@ -92,6 +111,7 @@ def parse(text: str) -> Graph:
     nodes: Dict[str, Node] = {}
     cur: Node | None = None
     instr_lines: List[str] = []
+    edge_count = 0
 
     def flush():
         if cur is not None:
@@ -102,6 +122,9 @@ def parse(text: str) -> Graph:
         if h:
             flush()
             name = h.group(1).strip().lower().replace(" ", "_")
+            # Count distinct node names — a new heading that reuses a name isn't a new node.
+            if name not in nodes and len(nodes) >= MAX_NODES:
+                raise ParseError(f"flow document exceeds PRISMPATH_MAX_NODES ({MAX_NODES} nodes)")
             cur = Node(name=name)
             nodes[name] = cur
             instr_lines = []
@@ -111,6 +134,9 @@ def parse(text: str) -> Graph:
         e = EDGE_RE.match(line)
         a = ANNO_RE.match(line)
         if e:
+            edge_count += 1
+            if edge_count > MAX_EDGES:
+                raise ParseError(f"flow document exceeds PRISMPATH_MAX_EDGES ({MAX_EDGES} edges)")
             cur.edges.append((e.group(1).strip(), e.group(2).strip()))
         elif a:
             # merge repeated annotations of the same name (e.g. @emits split across two lines) rather
@@ -126,5 +152,11 @@ def parse(text: str) -> Graph:
 
 
 def parse_file(path: str) -> Graph:
+    # Gate on the on-disk size before reading the file into memory — a huge file never gets slurped.
+    sz = os.path.getsize(path)
+    if sz > MAX_FLOW_BYTES:
+        raise ParseError(
+            f"flow file {os.path.basename(path)!r} is {sz} bytes, exceeds "
+            f"PRISMPATH_MAX_FLOW_BYTES ({MAX_FLOW_BYTES})")
     with open(path, encoding="utf-8") as f:
         return parse(f.read())

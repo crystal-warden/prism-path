@@ -72,3 +72,13 @@ caught by the per-endpoint size check.
 Treat flow documents from untrusted sources as untrusted *input* (they are safe to parse and lint by
 design — that claim is exactly what §1–2 above defend), and pin your lockfiles in CI
 (`prismpath lock --check`).
+
+**Flow-parser input bounds.** The Python parser caps document size, node count, and edge count
+(`PRISMPATH_MAX_FLOW_BYTES` = 2 MiB, `PRISMPATH_MAX_NODES` = 5000, `PRISMPATH_MAX_EDGES` = 20000) and
+fails fast with a `ParseError` (a `ValueError`, so Mission Control returns it as a 400) before an
+oversized or accidental document can exhaust memory or drive the polynomial static analysis off a
+cliff. These are **host DoS bounds, not routing semantics**: they sit outside the cross-kernel
+conformance contract (§4), which covers routing *decisions* on valid flows, and no realistic or
+conformance-corpus flow approaches them. The portable JS/Rust/Go kernels are libraries bounded by
+their host (the JS playground runs client-side, where an oversized paste only affects the paster's own
+tab); raise the env caps if you have a legitimately enormous flow.
