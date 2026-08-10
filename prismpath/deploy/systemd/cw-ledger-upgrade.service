@@ -1,6 +1,6 @@
 [Unit]
 Description=PrismPath Flow-Ledger — upgrade pending proofs to full Bitcoin attestation
-Documentation=file:///home/cwadmin/cwprojects/prismpath/prismpath/SPEC_ledger_opentimestamps.md
+Documentation=https://github.com/crystal-warden/prism-path/blob/main/docs/design/spec-ledger-opentimestamps.md
 After=network-online.target
 Wants=network-online.target
 

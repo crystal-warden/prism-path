@@ -1,6 +1,6 @@
 [Unit]
 Description=PrismPath SOC triage — one cycle against the configured SIEM (siem.py port)
-Documentation=file:///home/cwadmin/cwprojects/prismpath/adapters/soc/README.md
+Documentation=https://github.com/crystal-warden/prism-path/blob/main/adapters/soc/README.md
 After=network-online.target
 Wants=network-online.target
 

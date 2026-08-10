@@ -1,6 +1,6 @@
 [Unit]
 Description=PrismPath Flow-Ledger upgrade timer (daily promote pending -> Bitcoin proof)
-Documentation=file:///home/cwadmin/cwprojects/prismpath/prismpath/SPEC_ledger_opentimestamps.md
+Documentation=https://github.com/crystal-warden/prism-path/blob/main/docs/design/spec-ledger-opentimestamps.md
 
 [Timer]
 # Bitcoin confirmation lags the stamp by ~1-6h (SPEC C2); a daily upgrade sweep is ample.

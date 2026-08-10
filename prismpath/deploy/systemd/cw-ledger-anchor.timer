@@ -1,6 +1,6 @@
 [Unit]
 Description=PrismPath Flow-Ledger anchor timer (hourly stamp of new roots)
-Documentation=file:///home/cwadmin/cwprojects/prismpath/prismpath/SPEC_ledger_opentimestamps.md
+Documentation=https://github.com/crystal-warden/prism-path/blob/main/docs/design/spec-ledger-opentimestamps.md
 
 [Timer]
 OnCalendar=hourly
