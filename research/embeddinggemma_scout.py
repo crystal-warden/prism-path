@@ -96,5 +96,5 @@ try:
     del g
 except Exception as e:
     import traceback; out["error"]=str(e)[:200]; out["trace"]=traceback.format_exc()[-400:]
-json.dump(out, open(os.path.join(_REPO, "prismpath", "benchmark/embeddinggemma_scout.json"),"w"), indent=2)
+json.dump(out, open(os.path.join(_REPO, "research", "benchmark/embeddinggemma_scout.json"),"w"), indent=2)
 print(json.dumps(out, indent=2))

@@ -81,5 +81,5 @@ res["dont_know"]={"n_correct":len(c),"n_wrong":len(w),
                   "maha_wrong_mean":round(float(w.mean()),2) if len(w) else None,
                   "auc_wrong_farther_than_correct":round(auc,4) if auc else None}
 res["config"]={"folds":folds,"shrinkage_lambda":LAM,"prior":prior,"n_decisions":len(items),"dim":d}
-json.dump(res, open(os.path.join(_REPO, "prismpath", "benchmark/gaussian_route_eval.json"),"w"), indent=2)
+json.dump(res, open(os.path.join(_REPO, "research", "benchmark/gaussian_route_eval.json"),"w"), indent=2)
 print(json.dumps(res, indent=2))

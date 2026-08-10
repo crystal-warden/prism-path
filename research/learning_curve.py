@@ -71,5 +71,5 @@ for cap in [25,50,100,200,None]:
 
 out={"routing_vs_samples_per_edge":routeA,"detection_vs_flows_per_family":detB,
      "read":"compare the last two rows in each: still rising => more data helps; flat => it won't"}
-json.dump(out,open(os.path.join(_REPO, "prismpath", "benchmark/learning_curve.json"),"w"),indent=2)
+json.dump(out,open(os.path.join(_REPO, "research", "benchmark/learning_curve.json"),"w"),indent=2)
 print(json.dumps(out,indent=2))

@@ -85,5 +85,5 @@ res=dict(K=K, gpca_accuracy=round(acc,4), dont_know_auc=round(dk_auc,4) if dk_au
          frontier_likelihood=fr_ll, frontier_margin=fr_marg,
          likelihood_beats_margin_at_matched_escalation=all(fr_ll[fr]>=fr_marg[fr] for fr in fr_ll if fr>0),
          VERDICT=verdict, note="baselines for ref: centroid 0.827, raw-768 gaussian 0.797/0.803, raw dont-know AUC 0.582")
-json.dump(res, open(os.path.join(_REPO, "prismpath", "benchmark/gaussian_route_pca.json"),"w"), indent=2)
+json.dump(res, open(os.path.join(_REPO, "research", "benchmark/gaussian_route_pca.json"),"w"), indent=2)
 print(json.dumps(res, indent=2))

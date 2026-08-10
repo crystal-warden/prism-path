@@ -88,5 +88,5 @@ real=succession_cv(Ob,Cb,Os,Cs)
 out=dict(scouting=scout, scouting_note=extra,
          succession_unit_test_rotation=unit, succession_real_bgebase_to_bgesmall=real,
          verdict_real=("PASS ≥98%" if real["passes_98"] else "BELOW 98% -> vector-only artifacts don't survive this succession; retain text"))
-json.dump(out, open(os.path.join(_REPO, "prismpath", "benchmark/embedder_succession.json"),"w"), indent=2)
+json.dump(out, open(os.path.join(_REPO, "research", "benchmark/embedder_succession.json"),"w"), indent=2)
 print(json.dumps(out, indent=2))
