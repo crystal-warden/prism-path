@@ -283,7 +283,9 @@ fn tokenize(src: &str) -> Result<Vec<Tok>, PredicateError> {
                 // accumulate in f64 — the same rounding parseInt's result carries downstream
                 let mut val = 0f64;
                 for c in body.chars() {
-                    val = val * radix as f64 + c.to_digit(radix).unwrap() as f64;
+                    // every char in `body` passed digit_ok for this radix (and '_' was filtered), so
+                    // to_digit(radix) is always Some.
+                    val = val * radix as f64 + c.to_digit(radix).expect("digit valid for radix") as f64;
                 }
                 toks.push(Tok::Num(val));
                 i = j;
@@ -345,13 +347,13 @@ fn tokenize(src: &str) -> Result<Vec<Tok>, PredicateError> {
                             && s[j + 3].is_ascii_hexdigit() =>
                         {
                             let code: String = s[j + 2..j + 4].iter().collect();
-                            let v = u32::from_str_radix(&code, 16).unwrap();
+                            let v = u32::from_str_radix(&code, 16).expect("two guarded hex digits"); // 0x00..0xff
                             out.push(char::from_u32(v).unwrap_or('\u{fffd}'));
                             j += 2;
                         }
                         'u' if j + 5 < n && s[j + 2..j + 6].iter().all(|c| c.is_ascii_hexdigit()) => {
                             let code: String = s[j + 2..j + 6].iter().collect();
-                            let v = u32::from_str_radix(&code, 16).unwrap();
+                            let v = u32::from_str_radix(&code, 16).expect("four guarded hex digits"); // 0x0000..0xffff
                             // String.fromCharCode is a UTF-16 unit; a lone surrogate cannot live
                             // in a Rust String, so it degrades to U+FFFD. No corpus vector uses
                             // one — if that ever changes, the gate will say so.
@@ -453,7 +455,7 @@ impl Parser {
             self.next_tok();
             vals.push(self.and_expr(d + 1)?);
         }
-        Ok(if vals.len() == 1 { vals.pop().unwrap() } else { Ast::Or(vals) })
+        Ok(if vals.len() == 1 { vals.pop().expect("len == 1") } else { Ast::Or(vals) })
     }
 
     fn and_expr(&mut self, d: usize) -> Result<Ast, PredicateError> {
@@ -465,7 +467,7 @@ impl Parser {
             self.next_tok();
             vals.push(self.not_expr(d + 1)?);
         }
-        Ok(if vals.len() == 1 { vals.pop().unwrap() } else { Ast::And(vals) })
+        Ok(if vals.len() == 1 { vals.pop().expect("len == 1") } else { Ast::And(vals) })
     }
 
     fn not_expr(&mut self, d: usize) -> Result<Ast, PredicateError> {
@@ -781,7 +783,10 @@ fn compare_op(op: &str, left: &V, right: &V) -> bool {
         },
         "in" => py_in(left, right, 0).unwrap_or(false),
         "not in" => py_in(left, right, 0).map(|b| !b).unwrap_or(true), // failure satisfies
-        _ => unreachable!("parser only emits known comparison operators"),
+        // The parser only emits the operators handled above, so this is unreachable in practice.
+        // We return `false` rather than panic so eval stays TOTAL: SECURITY.md §1 makes any
+        // non-PredicateError crash through eval_condition a critical sandbox finding.
+        _ => false,
     }
 }
 
@@ -1078,10 +1083,11 @@ pub fn parse(text: &str) -> Graph {
             continue;
         }
         let Some(cur_name) = &cur else { continue };
+        // cur is Some(cur_name) only after a heading inserted cur_name into `nodes` (never removed).
         if let Some((target, cond)) = match_edge(line) {
-            nodes.get_mut(cur_name).unwrap().edges.push((target, cond));
+            nodes.get_mut(cur_name).expect("cur names an inserted node").edges.push((target, cond));
         } else if let Some((nm, argstr)) = match_anno(line) {
-            let node = nodes.get_mut(cur_name).unwrap();
+            let node = nodes.get_mut(cur_name).expect("cur names an inserted node");
             let entry = node.annotations.entry(nm).or_default();
             for (k, v) in parse_anno_args(&argstr) {
                 entry.insert(k, v);
@@ -1606,7 +1612,9 @@ where
                 }
             }
         } else {
-            return Err(EngineError::NotPortable(violations.into_iter().next().unwrap()));
+            return Err(EngineError::NotPortable(
+                violations.into_iter().next().expect("violations non-empty (checked above)"),
+            ));
         }
     }
 
@@ -1900,6 +1908,29 @@ mod tests {
     }
 
     #[test]
+    fn eval_never_panics_on_adversarial_input() {
+        // SECURITY.md §1: eval_condition must never CRASH — only Ok/Err(PredicateError). The same
+        // tokenizer/parser backs check_predicate and is_deterministic, so all three must be total.
+        let c = ctx(&[("x", V::Num(3.0)), ("s", V::Str("hi".into()))]);
+        let nasty = [
+            "", "when", "when ", "when (", "when )))", "when 1 <", "when < 3", "when x ==",
+            "when \"\\x\"", "when \"\\u12\"", "when \"\\", "when 0x", "when 0o", "when 0b",
+            "when 1 < x < < 5", "when x in", "when x not", "when and or not",
+            "when 999999999999999999999999999 > x", "when x == 'unterminated", "when \\uffffffff",
+            "when x in in in", "when 1j > 0", "when x.y.z == 1", "when [1,2,3] == x",
+            "when x == \"\\U0001F600\"", "when x == \"\\uD800\"",
+        ];
+        for cond in nasty {
+            let _ = eval_condition(cond, &c); // must return, never panic
+            let _ = check_predicate(cond);
+            let _ = is_deterministic(cond);
+        }
+        // deep nesting is bounded by MAX_DEPTH -> a clean error, not a stack overflow.
+        let deep = format!("when {}x{}", "(".repeat(500), ")".repeat(500));
+        assert!(eval_condition(&deep, &c).is_err());
+    }
+
+    #[test]
     fn booleans_compare_numerically() {
         let c = ctx(&[("flag", V::Bool(true))]);
         assert!(eval_condition("when flag == 1", &c).unwrap());
@@ -2057,7 +2088,7 @@ mod tests {
 
     #[test]
     fn decode_b64_f32_roundtrip() {
-        let original = vec![1.0f32, 0.0, -0.5, 3.14];
+        let original = vec![1.0f32, 0.0, -0.5, 3.5]; // arbitrary f32s; avoid 3.14 (clippy reads it as PI)
         let b64 = {
             let bytes: Vec<u8> = original.iter().flat_map(|f| f.to_le_bytes()).collect();
             const CHARS: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
