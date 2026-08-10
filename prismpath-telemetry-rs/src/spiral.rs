@@ -216,12 +216,20 @@ impl SpiralLayout {
     }
 
     pub fn encode_decision(&self, reading: &HashMap<String, V>) -> String {
-        zeckendorf::encode(self.band_id(reading) + 1).unwrap()
+        // band_id + 1 >= 1, and zeckendorf::encode only errs for inputs < 1 — infallible here.
+        zeckendorf::encode(self.band_id(reading) + 1).expect("band_id + 1 >= 1")
     }
 
     pub fn decode_decision(&self, bits: &str) -> Result<Option<String>, String> {
-        let b = zeckendorf::decode(bits)? - 1;
-        Ok(self.routes[b].clone())
+        // `bits` is untrusted wire data: a crafted code can decode to any index. checked_sub guards
+        // the 1-based underflow and `.get` guards the out-of-range read — neither may panic here.
+        let b = zeckendorf::decode(bits)?
+            .checked_sub(1)
+            .ok_or_else(|| "decoded band index 0 is invalid (codes are 1-based)".to_string())?;
+        self.routes
+            .get(b)
+            .cloned()
+            .ok_or_else(|| format!("decoded band index {b} is outside the layout ({} bands)", self.routes.len()))
     }
 
     pub fn encode_progressive(&self, reading: &HashMap<String, V>) -> (String, String) {
@@ -229,8 +237,9 @@ impl SpiralLayout {
         let b = self.band_index[&self.route_of(n)];
         let local = n - self.band_base[b];
         (
-            zeckendorf::encode(b + 1).unwrap(),
-            zeckendorf::encode(local + 1).unwrap(),
+            // b + 1 and local + 1 are both >= 1; encode only errs for inputs < 1.
+            zeckendorf::encode(b + 1).expect("b + 1 >= 1"),
+            zeckendorf::encode(local + 1).expect("local + 1 >= 1"),
         )
     }
 

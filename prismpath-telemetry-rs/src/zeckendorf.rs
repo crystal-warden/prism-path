@@ -1,12 +1,13 @@
 //! Zeckendorf / Fibonacci codec — the self-framing wire for the decision-preserving telemetry stream.
 
 fn fibs_upto(n: usize) -> Vec<usize> {
+    // `fibs` is seeded with [1, 2] and only ever grows, so `.last()` is always Some.
     let mut fibs = vec![1, 2];
-    while *fibs.last().unwrap() <= n {
+    while *fibs.last().expect("fibs seeded non-empty") <= n {
         let next = fibs[fibs.len() - 1] + fibs[fibs.len() - 2];
         fibs.push(next);
     }
-    if *fibs.last().unwrap() > n {
+    if *fibs.last().expect("fibs seeded non-empty") > n {
         fibs.pop();
     }
     fibs

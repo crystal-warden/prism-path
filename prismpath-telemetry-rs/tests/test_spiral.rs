@@ -1,5 +1,5 @@
 use prismpath_rs::{parse, V};
-use prismpath_telemetry_rs::{quantizer as q, spiral as sp, wire as w};
+use prismpath_telemetry_rs::{quantizer as q, spiral as sp, wire as w, zeckendorf as z};
 use serde_json::Value;
 use std::collections::HashMap;
 
@@ -138,6 +138,31 @@ fn test_progressive_round_trip_recovers_the_cell() {
             layout.decode_decision(&layout.encode_decision(&reading)).unwrap(),
             expected_route
         );
+    }
+}
+
+#[test]
+fn test_decode_decision_rejects_out_of_range_bits_without_panicking() {
+    // `bits` is untrusted wire data. A crafted code that decodes to an index past the last band
+    // must return Err, not panic on an out-of-bounds slice read.
+    let corpus = load_corpus();
+    let (_, layout) = layout_from_corpus(&corpus);
+
+    let oob = z::encode(layout.routes.len() + 100).expect("encode a large index");
+    let err = layout.decode_decision(&oob);
+    assert!(err.is_err(), "out-of-range band index must be an error, got {err:?}");
+    assert!(err.unwrap_err().contains("outside the layout"));
+
+    // Garbage that isn't a Fibonacci code (no trailing "11") errors cleanly, never panics.
+    assert!(layout.decode_decision("101010").is_err());
+    // And a valid round-trip still succeeds.
+    let corpus_probe = &corpus["probes"][0];
+    if let Some(r_obj) = corpus_probe["reading"].as_object() {
+        let mut reading = HashMap::new();
+        for (k, v) in r_obj {
+            reading.insert(k.clone(), V::Num(v.as_f64().unwrap()));
+        }
+        assert!(layout.decode_decision(&layout.encode_decision(&reading)).is_ok());
     }
 }
 

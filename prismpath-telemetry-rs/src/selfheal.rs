@@ -20,9 +20,13 @@ pub fn chunk(bits: &str, block_bits: usize) -> Result<Vec<String>, String> {
 }
 
 fn leaf_hash(block: &str) -> String {
+    hex::encode(leaf_bytes(block))
+}
+
+fn leaf_bytes(block: &str) -> Vec<u8> {
     let mut hasher = Sha256::new();
     hasher.update(block.as_bytes());
-    hex::encode(hasher.finalize())
+    hasher.finalize().to_vec()
 }
 
 /// (root_hex, per-block inclusion proof) over block hashes — reproduces ledger_ots's Merkle tree byte-for-byte.
@@ -30,16 +34,14 @@ pub fn commit(blocks: &[String]) -> (String, Vec<Vec<(String, String)>>) {
     if blocks.is_empty() {
         return ("".to_string(), vec![]);
     }
-    let leaves_hex: Vec<String> = blocks.iter().map(|b| leaf_hash(b)).collect();
-    let mut layers: Vec<Vec<Vec<u8>>> = vec![leaves_hex
-        .iter()
-        .map(|h| hex::decode(h).expect("valid hex"))
-        .collect()];
+    // Build the leaf layer as raw hash bytes directly — no hex round-trip, no fallible decode.
+    let mut layers: Vec<Vec<Vec<u8>>> = vec![blocks.iter().map(|b| leaf_bytes(b)).collect()];
 
-    while layers.last().unwrap().len() > 1 {
-        let mut cur = layers.last().unwrap().clone();
+    // `layers` is seeded with one non-empty layer above and only grows, so `.last()` is always Some.
+    while layers.last().expect("layers is seeded non-empty").len() > 1 {
+        let mut cur = layers.last().expect("layers is seeded non-empty").clone();
         if cur.len() % 2 == 1 {
-            let last = cur.last().unwrap().clone();
+            let last = cur.last().expect("cur is non-empty (len > 1 above)").clone();
             cur.push(last);
         }
         let mut next_layer = Vec::new();
@@ -52,7 +54,7 @@ pub fn commit(blocks: &[String]) -> (String, Vec<Vec<(String, String)>>) {
         layers.push(next_layer);
     }
 
-    let root = hex::encode(&layers.last().unwrap()[0]);
+    let root = hex::encode(&layers.last().expect("layers is seeded non-empty")[0]);
 
     let mut proofs = Vec::new();
     for idx in 0..blocks.len() {
@@ -60,8 +62,8 @@ pub fn commit(blocks: &[String]) -> (String, Vec<Vec<(String, String)>>) {
         let mut cur_idx = idx;
         for layer in layers.iter().take(layers.len() - 1) {
             let mut layer_l = layer.clone();
-            if layer_l.len() % 2 == 1 {
-                let last = layer_l.last().unwrap().clone();
+            if layer_l.len() % 2 == 1 {                    // odd -> duplicate the last (non-empty: len is odd, so >= 1)
+                let last = layer_l.last().expect("layer is non-empty (odd length)").clone();
                 layer_l.push(last);
             }
             if cur_idx % 2 == 0 {

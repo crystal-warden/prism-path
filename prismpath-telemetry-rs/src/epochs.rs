@@ -43,7 +43,8 @@ impl EpochStore {
     }
 
     pub fn seal(&mut self, bits: &str) -> Epoch {
-        let blocks = selfheal::chunk(bits, self.block_bits).expect("valid block_bits");
+        // chunk only errs when block_bits == 0, a construction-time misconfiguration (see new()).
+        let blocks = selfheal::chunk(bits, self.block_bits).expect("block_bits must be > 0 (set at EpochStore::new)");
         let (merkle_root, _proofs) = selfheal::commit(&blocks);
         let prev = self
             .epochs
@@ -61,7 +62,8 @@ impl EpochStore {
         };
         self.epochs.push(ep.clone());
         self.enforce_cap();
-        self.epochs.last().unwrap().clone()
+        // just pushed above, and enforce_cap only nulls `blocks` (never removes epochs) -> non-empty.
+        self.epochs.last().expect("epochs non-empty after push").clone()
     }
 
     pub fn ack(&mut self, chained_root: &str) -> usize {
