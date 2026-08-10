@@ -218,12 +218,28 @@ def test_duplicate_policy_names_are_refused():
         ("---\nname: x\nauthority: y\n---\n\nprose only\n", "no rules"),
         ("---\nname: x\nauthority: y\n---\n\n## r\ndeny: /[unclosed/\n", "invalid regex"),
         ("---\nname: x\nauthority: y\n---\n\n## r\ndirection: sideways\ndeny: \"a\"\n", "direction"),
+        # ReDoS footgun: a nested unbounded quantifier is refused at parse time, not left to hang.
+        ("---\nname: x\nauthority: y\n---\n\n## r\ndeny: /(a+)+/\n", "ReDoS"),
+        ("---\nname: x\nauthority: y\n---\n\n## r\ndeny: /(\\d+)*x/\n", "ReDoS"),
+        # An overlong pattern is a program, not a phrase — rejected.
+        ("---\nname: x\nauthority: y\n---\n\n## r\ndeny: /" + "a" * 1001 + "/\n", "exceeds"),
     ],
 )
 def test_malformed_policies_raise_rather_than_being_skipped(doc, match):
     """A skipped rule is a silent hole. The layer fails closed instead."""
     with pytest.raises(PolicyError, match=match):
         parse_policy(doc)
+
+
+def test_safe_quantified_group_is_not_flagged_as_redos():
+    """The ReDoS heuristic is conservative: a quantified group of plain alternatives (no inner
+    unbounded quantifier) is legitimate and must still compile and match."""
+    p = parse_policy(
+        "---\nname: ok\nauthority: t\nprecedence: floor\n---\n\n## g\ndeny: /(foo|bar)+/\n"
+    )
+    g = compose([p])
+    assert not g.check_inbound("xx foofoo xx").allowed   # the pattern works
+    assert g.check_inbound("nothing here").allowed        # and doesn't over-match
 
 
 # ------------------------------------------------------------------------------------ mechanics

@@ -110,6 +110,53 @@ class PolicyError(ValueError):
     """A policy document is malformed. Raised rather than skipped — the layer fails closed."""
 
 
+# The regex in a `/…/` policy pattern is author-supplied, and under the two-author model an
+# *augmentation* author (a flow author, less trusted than the safety owner) can supply one too. A
+# catastrophic-backtracking pattern matched against worker-influenced text is a ReDoS: it hangs the
+# guard. These bounds turn that runtime hang into an author-time PolicyError. Best-effort, not a
+# proof — the guard is an optional floor, per the module docstring.
+_MAX_PATTERN_LEN = 1000                              # a policy pattern is a phrase, not a program
+
+
+def _looks_catastrophic(body: str) -> bool:
+    """Conservative ReDoS-footgun heuristic: True when an unbounded-quantified group (a `(...)` group
+    immediately followed by `*` or `+`) itself contains an unbounded quantifier — the classic
+    `(a+)+` / `(a*)*` / `(\\d+)*` family that backtracks exponentially. Escaped `\\(`/`\\+` etc. are
+    skipped. It deliberately does NOT flag a quantified group of plain alternatives like `(foo|bar)+`
+    (no inner quantifier), so false positives on ordinary patterns are rare. It is not exhaustive —
+    it does not catch every ReDoS shape (open-ended `{n,}` nesting, overlapping alternation) — it
+    catches the common footgun so the author sees it at parse time, not as a hang."""
+    def _has_unbounded(s: str) -> bool:
+        k = 0
+        while k < len(s):
+            if s[k] == "\\":
+                k += 2
+                continue
+            if s[k] in "*+":
+                return True
+            k += 1
+        return False
+
+    stack: list[int] = []
+    i, n = 0, len(body)
+    while i < n:
+        c = body[i]
+        if c == "\\":
+            i += 2
+            continue
+        if c == "(":
+            stack.append(i)
+        elif c == ")" and stack:
+            open_i = stack.pop()
+            nxt = body[i + 1] if i + 1 < n else ""
+            # tuple membership, not `in "*+"`: "" is a substring of every str, so `"" in "*+"` is
+            # True — a group at the very end of the pattern would false-positive.
+            if nxt in ("*", "+") and _has_unbounded(body[open_i + 1:i]):
+                return True
+        i += 1
+    return False
+
+
 # ------------------------------------------------------------------------------- normalization
 #
 # Measured bypass rates (docs/research/bypass-measurement.md, run 1) showed the unhardened floor was defeated by
@@ -310,6 +357,15 @@ def _parse_pattern(raw: str, rule_name: str) -> re.Pattern[str]:
                 f |= re.MULTILINE
             else:
                 raise PolicyError(f"rule '{rule_name}': unknown regex flag '{ch}'")
+        if len(body) > _MAX_PATTERN_LEN:
+            raise PolicyError(
+                f"rule '{rule_name}': regex is {len(body)} chars, exceeds {_MAX_PATTERN_LEN} — "
+                f"a policy pattern is a phrase, not a program")
+        if _looks_catastrophic(body):
+            raise PolicyError(
+                f"rule '{rule_name}': regex /{body}/ nests an unbounded quantifier inside a "
+                f"quantified group (the (a+)+ family), which can backtrack catastrophically (ReDoS) "
+                f"and hang the guard. Rewrite without the nested quantifier, or use a bare phrase.")
         try:
             return re.compile(body, f)
         except re.error as e:
