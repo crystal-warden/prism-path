@@ -65,6 +65,20 @@ def test_unlaunchable_command_raises(tmp_path):
         CliWorker(["/nonexistent/binary"])("n", "i", {})
 
 
+def test_stdout_overflow_rides_error_tier(tmp_path):
+    # a runaway worker (more stdout than the cap) is refused onto the error tier, not buffered.
+    cmd = fake_cli(tmp_path, 'sys.stdout.write("x" * 200000)')
+    with pytest.raises(CliWorkerError) as ei:
+        CliWorker(cmd, max_output=50000)("n", "i", {})
+    assert "exceeded" in str(ei.value) and "runaway" in str(ei.value)
+
+
+def test_output_just_under_cap_still_returns(tmp_path):
+    # only *exceeding* the cap errors — a normal (small) result is unaffected.
+    cmd = fake_cli(tmp_path, 'print("y" * 100)')
+    assert CliWorker(cmd, max_output=10000)("n", "i", {}) == "y" * 100
+
+
 def test_instruction_and_state_arrive_on_stdin(tmp_path):
     cmd = fake_cli(tmp_path, 'print(json.dumps({"text": "echo", "got": data}))')
     w = CliWorker(cmd, pass_state=["ticket"])

@@ -40,10 +40,17 @@ from __future__ import annotations
 
 import json
 import subprocess
+import threading
 from typing import Dict, List, Optional, Sequence, Union
 
 DEFAULT_TIMEOUT = 600.0
 _STDERR_TAIL = 800
+# A worker's stdout is a *result*, not a stream. `subprocess.run(capture_output=True)` would buffer
+# it without bound, so a runaway worker (infinite print loop) could OOM the host before `timeout`
+# fires. We drain the pipes ourselves with a hard byte cap instead. Override with MC-style env if
+# a worker legitimately returns more (rare — outcomes are small JSON, not payloads).
+DEFAULT_MAX_OUTPUT = 8 * 1024 * 1024              # 8 MiB of stdout is already pathological for a result
+_STDERR_CAP = 256 * 1024                          # keep plenty for the error tail; drop the rest
 
 
 class CliWorkerError(RuntimeError):
@@ -75,6 +82,84 @@ def _outcome_from_stdout(stdout: str):
     return s
 
 
+class _CappedResult:
+    """A drop-in stand-in for the CompletedProcess fields __call__ reads, plus `stdout_overflow` so
+    the caller can route a runaway worker onto the error tier instead of parsing truncated output."""
+    __slots__ = ("returncode", "stdout", "stderr", "stdout_overflow")
+
+    def __init__(self, returncode: int, stdout: str, stderr: str, stdout_overflow: bool):
+        self.returncode, self.stdout, self.stderr, self.stdout_overflow = \
+            returncode, stdout, stderr, stdout_overflow
+
+
+def _drain(pipe, cap: int, holder: dict) -> None:
+    """Read `pipe` to EOF, keeping at most `cap` bytes but recording the true total so overflow is
+    detectable. It keeps reading (dropping the excess) past the cap so the child never blocks on a
+    full pipe — that backpressure-avoidance is what lets us cap memory without deadlocking."""
+    kept, total = [], 0
+    try:
+        while True:
+            chunk = pipe.read(65536)
+            if not chunk:
+                break
+            total += len(chunk)
+            if total <= cap:
+                kept.append(chunk)
+    finally:
+        try:
+            pipe.close()
+        except OSError:
+            pass
+    holder["text"], holder["total"] = "".join(kept), total
+
+
+def _run_capped(argv, payload, timeout, max_output, cwd, env) -> _CappedResult:
+    """Like `subprocess.run(input=payload, capture_output=True, text=True, timeout=…)` but with a
+    hard cap on buffered stdout. stdout/stderr are drained by threads so neither pipe filling can
+    stall the other; on timeout the child is killed and TimeoutExpired is re-raised."""
+    p = subprocess.Popen(
+        argv,
+        stdin=subprocess.PIPE if payload is not None else None,
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        text=True, cwd=cwd, env=env,
+    )
+    out_h: dict = {}
+    err_h: dict = {}
+    t_out = threading.Thread(target=_drain, args=(p.stdout, max_output, out_h), daemon=True)
+    t_err = threading.Thread(target=_drain, args=(p.stderr, _STDERR_CAP, err_h), daemon=True)
+    t_out.start()
+    t_err.start()
+    if payload is not None:
+        # Write stdin from a thread so a large payload to a child that never reads it can't deadlock
+        # the main thread (subprocess.run does the same via communicate). On timeout the kill breaks
+        # this pipe and the daemon thread unwinds.
+        def _feed():
+            try:
+                p.stdin.write(payload)
+            except (BrokenPipeError, OSError):
+                pass                                  # child closed stdin early — its right to
+            finally:
+                try:
+                    p.stdin.close()
+                except OSError:
+                    pass
+        threading.Thread(target=_feed, daemon=True).start()
+    try:
+        p.wait(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        p.kill()
+        p.wait()
+        t_out.join(2)
+        t_err.join(2)
+        raise
+    t_out.join(5)
+    t_err.join(5)
+    return _CappedResult(
+        p.returncode, out_h.get("text", ""), err_h.get("text", ""),
+        out_h.get("total", 0) > max_output,
+    )
+
+
 class CliWorker:
     """One command as a worker. `command` is an argv list; `{node}`/`{instruction}` are templated
     into args. Unless `stdin=False`, the process receives the instruction and a JSON context block
@@ -82,13 +167,15 @@ class CliWorker:
 
     def __init__(self, command: Sequence[str], timeout: float = DEFAULT_TIMEOUT,
                  stdin: bool = True, pass_state: Optional[Sequence[str]] = None,
-                 cwd: Optional[str] = None, env: Optional[dict] = None):
+                 cwd: Optional[str] = None, env: Optional[dict] = None,
+                 max_output: int = DEFAULT_MAX_OUTPUT):
         self.command = list(command)
         self.timeout = float(timeout)
         self.stdin = stdin
         self.pass_state = list(pass_state or [])
         self.cwd = cwd
         self.env = env
+        self.max_output = int(max_output)
 
     def _stdin_payload(self, node: str, instruction: str, state: dict) -> str:
         ctx = {k: state.get(k) for k in self.pass_state if k in state}
@@ -104,13 +191,16 @@ class CliWorker:
         argv = [_render(a, node, instruction) for a in self.command]
         payload = self._stdin_payload(node, instruction, state) if self.stdin else None
         try:
-            p = subprocess.run(argv, input=payload, capture_output=True, text=True,
-                               timeout=self.timeout, cwd=self.cwd, env=self.env)
+            p = _run_capped(argv, payload, self.timeout, self.max_output, self.cwd, self.env)
         except subprocess.TimeoutExpired as e:
             raise CliWorkerError(
                 f"cli worker timeout after {self.timeout:.0f}s: {' '.join(argv[:3])}…") from e
         except OSError as e:                              # command not found / not executable
             raise CliWorkerError(f"cli worker could not start ({argv[0]!r}): {e}") from e
+        if p.stdout_overflow:                             # a runaway worker — do not parse a truncated result
+            raise CliWorkerError(
+                f"cli worker stdout exceeded {self.max_output} bytes ({argv[0]}): refusing to "
+                f"buffer a runaway worker")
         if p.returncode != 0:
             tail = (p.stderr or p.stdout or "").strip()[-_STDERR_TAIL:]
             raise CliWorkerError(
