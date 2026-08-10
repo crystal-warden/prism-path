@@ -8,7 +8,7 @@ to, the routing decision. Additive, arch-guard-isolated, zero core changes.
 The full design of record lives off-repo (the determination doc); only material backed by something that
 runs lands here.
 
-## Status — Phase A (in progress)
+## Status — Phase A ✅ complete · Phase B in progress
 - ✅ **Zeckendorf / Fibonacci codec** (`zeckendorf.py`) — the self-framing wire. Every code ends in a
   unique `11`, so a stream is zero-header and self-delimiting; small integers are tiny (`1->11`,
   `2->011`), which is where delta-differenced telemetry lives. Round-trip + framing invariants under test.
@@ -31,9 +31,20 @@ runs lands here.
   it); selective MMR retransmit is multiples cheaper under sparse burst loss. **Margins hold → Phase A
   validates.**
 
+### Phase B (in progress)
+- ✅ **Self-heal core** (`selfheal.py`) — the Fibonacci stream is chunked into Merkle-committed blocks,
+  reusing the repo's **real** Merkle primitive (`prismpath.ledger_ots`; `audit_log`'s open-release MMR is
+  a stub, so this is the genuine one — batch-per-epoch, OTS-anchorable). A lost block is a detected gap; a
+  **forged or corrupted block is rejected** (its inclusion proof fails against the trusted root), never
+  silently accepted; selective retransmission fills exactly the gaps and reassembles the stream
+  bit-for-bit; an unrecoverable block stays a **provable** gap (`assemble()` refuses a silent hole).
+- *(next)* OTS-anchored epoch root + retention (drop-on-ACK, provable pressure-drop) → authenticated ACK
+  channel → the `prismpath decode --flow` human-readable inspect path.
+
 ## Roadmap (phased, benchmark-gated)
-- **Phase A** — quantizer + codec + decisions-preserved test + a frozen round-trip / error-injection corpus.
-- **Phase B** — self-heal via the existing audit-log MMR + selective retransmission + a decode/inspect path.
+- **Phase A** ✅ — quantizer + codec + decisions-preserved test + go/no-go benchmarks (margins hold).
+- **Phase B** — self-heal via the repo's real Merkle (`ledger_ots`; `audit_log` is a stub) + selective
+  retransmission + OTS-anchored epoch retention + authenticated ACK + a decode/inspect path.
 - **Phase C** — the FPGA shift-register codec; optional vector-quantization / spatial-packing tier.
 
 ## Honest scope
