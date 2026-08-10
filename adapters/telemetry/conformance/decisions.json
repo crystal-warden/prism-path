@@ -1,0 +1,593 @@
+{
+ "version": 1,
+ "note": "Decisions-preserved corpus. Each reading is tagged with the full-precision route at every decision node; the engine must reproduce it (drift) and the quantize->Fibonacci->decode-> reconstruct wire round-trip must too (decision preservation).",
+ "cases": [
+  {
+   "name": "incident_severity",
+   "flow": "---\nname: incident_severity\nstart: assess\n---\n\n## assess\nRead the incoming alert and classify it. Emit `user_facing` (bool), `error_rate` (percent of\nrequests failing, 0\u2013100), and `data_at_risk` (bool).\n@emits(user_facing, error_rate, data_at_risk)\n-> sev1_page: when data_at_risk\n-> sev1_page: when user_facing and error_rate >= 25\n-> sev2_oncall: when user_facing and error_rate >= 5\n-> sev3_ticket: when error_rate >= 1\n-> watch: else\n\n## sev1_page\nPage the on-call lead and open a bridge \u2014 customer-facing or data-at-risk.\n\n## sev2_oncall\nNotify on-call; user-facing but contained.\n\n## sev3_ticket\nFile a ticket for business hours.\n\n## watch\nLog and keep an eye on it.\n",
+   "decision_nodes": [
+    "assess"
+   ],
+   "readings": [
+    {
+     "reading": {
+      "data_at_risk": false,
+      "error_rate": 0,
+      "user_facing": false
+     },
+     "routes": {
+      "assess": "watch"
+     }
+    },
+    {
+     "reading": {
+      "data_at_risk": false,
+      "error_rate": 0,
+      "user_facing": true
+     },
+     "routes": {
+      "assess": "watch"
+     }
+    },
+    {
+     "reading": {
+      "data_at_risk": false,
+      "error_rate": 1,
+      "user_facing": false
+     },
+     "routes": {
+      "assess": "sev3_ticket"
+     }
+    },
+    {
+     "reading": {
+      "data_at_risk": false,
+      "error_rate": 1,
+      "user_facing": true
+     },
+     "routes": {
+      "assess": "sev3_ticket"
+     }
+    },
+    {
+     "reading": {
+      "data_at_risk": false,
+      "error_rate": 4,
+      "user_facing": false
+     },
+     "routes": {
+      "assess": "sev3_ticket"
+     }
+    },
+    {
+     "reading": {
+      "data_at_risk": false,
+      "error_rate": 4,
+      "user_facing": true
+     },
+     "routes": {
+      "assess": "sev3_ticket"
+     }
+    },
+    {
+     "reading": {
+      "data_at_risk": false,
+      "error_rate": 5,
+      "user_facing": false
+     },
+     "routes": {
+      "assess": "sev3_ticket"
+     }
+    },
+    {
+     "reading": {
+      "data_at_risk": false,
+      "error_rate": 5,
+      "user_facing": true
+     },
+     "routes": {
+      "assess": "sev2_oncall"
+     }
+    },
+    {
+     "reading": {
+      "data_at_risk": false,
+      "error_rate": 24,
+      "user_facing": false
+     },
+     "routes": {
+      "assess": "sev3_ticket"
+     }
+    },
+    {
+     "reading": {
+      "data_at_risk": false,
+      "error_rate": 24,
+      "user_facing": true
+     },
+     "routes": {
+      "assess": "sev2_oncall"
+     }
+    },
+    {
+     "reading": {
+      "data_at_risk": false,
+      "error_rate": 25,
+      "user_facing": false
+     },
+     "routes": {
+      "assess": "sev3_ticket"
+     }
+    },
+    {
+     "reading": {
+      "data_at_risk": false,
+      "error_rate": 25,
+      "user_facing": true
+     },
+     "routes": {
+      "assess": "sev1_page"
+     }
+    },
+    {
+     "reading": {
+      "data_at_risk": true,
+      "error_rate": 0,
+      "user_facing": false
+     },
+     "routes": {
+      "assess": "sev1_page"
+     }
+    },
+    {
+     "reading": {
+      "data_at_risk": true,
+      "error_rate": 0,
+      "user_facing": true
+     },
+     "routes": {
+      "assess": "sev1_page"
+     }
+    },
+    {
+     "reading": {
+      "data_at_risk": true,
+      "error_rate": 1,
+      "user_facing": false
+     },
+     "routes": {
+      "assess": "sev1_page"
+     }
+    },
+    {
+     "reading": {
+      "data_at_risk": true,
+      "error_rate": 1,
+      "user_facing": true
+     },
+     "routes": {
+      "assess": "sev1_page"
+     }
+    },
+    {
+     "reading": {
+      "data_at_risk": true,
+      "error_rate": 4,
+      "user_facing": false
+     },
+     "routes": {
+      "assess": "sev1_page"
+     }
+    },
+    {
+     "reading": {
+      "data_at_risk": true,
+      "error_rate": 4,
+      "user_facing": true
+     },
+     "routes": {
+      "assess": "sev1_page"
+     }
+    },
+    {
+     "reading": {
+      "data_at_risk": true,
+      "error_rate": 5,
+      "user_facing": false
+     },
+     "routes": {
+      "assess": "sev1_page"
+     }
+    },
+    {
+     "reading": {
+      "data_at_risk": true,
+      "error_rate": 5,
+      "user_facing": true
+     },
+     "routes": {
+      "assess": "sev1_page"
+     }
+    },
+    {
+     "reading": {
+      "data_at_risk": true,
+      "error_rate": 24,
+      "user_facing": false
+     },
+     "routes": {
+      "assess": "sev1_page"
+     }
+    },
+    {
+     "reading": {
+      "data_at_risk": true,
+      "error_rate": 24,
+      "user_facing": true
+     },
+     "routes": {
+      "assess": "sev1_page"
+     }
+    },
+    {
+     "reading": {
+      "data_at_risk": true,
+      "error_rate": 25,
+      "user_facing": false
+     },
+     "routes": {
+      "assess": "sev1_page"
+     }
+    },
+    {
+     "reading": {
+      "data_at_risk": true,
+      "error_rate": 25,
+      "user_facing": true
+     },
+     "routes": {
+      "assess": "sev1_page"
+     }
+    }
+   ]
+  },
+  {
+   "name": "cat",
+   "flow": "---\nname: cat\nstart: classify\n---\n## classify\n-> urgent: when kind == 'urgent'\n-> batch: when kind in ('nightly', 'weekly')\n-> blocked: when status != 'ok'\n-> normal: else\n## urgent\n## batch\n## blocked\n## normal\n",
+   "decision_nodes": [
+    "classify"
+   ],
+   "readings": [
+    {
+     "reading": {
+      "kind": "urgent",
+      "status": "ok"
+     },
+     "routes": {
+      "classify": "urgent"
+     }
+    },
+    {
+     "reading": {
+      "kind": "urgent",
+      "status": "__unlisted__"
+     },
+     "routes": {
+      "classify": "urgent"
+     }
+    },
+    {
+     "reading": {
+      "kind": "nightly",
+      "status": "ok"
+     },
+     "routes": {
+      "classify": "batch"
+     }
+    },
+    {
+     "reading": {
+      "kind": "nightly",
+      "status": "__unlisted__"
+     },
+     "routes": {
+      "classify": "batch"
+     }
+    },
+    {
+     "reading": {
+      "kind": "weekly",
+      "status": "ok"
+     },
+     "routes": {
+      "classify": "batch"
+     }
+    },
+    {
+     "reading": {
+      "kind": "weekly",
+      "status": "__unlisted__"
+     },
+     "routes": {
+      "classify": "batch"
+     }
+    },
+    {
+     "reading": {
+      "kind": "__unlisted__",
+      "status": "ok"
+     },
+     "routes": {
+      "classify": "normal"
+     }
+    },
+    {
+     "reading": {
+      "kind": "__unlisted__",
+      "status": "__unlisted__"
+     },
+     "routes": {
+      "classify": "blocked"
+     }
+    }
+   ]
+  },
+  {
+   "name": "numeq",
+   "flow": "---\nname: numeq\nstart: classify\n---\n## classify\n-> exact: when x == 5\n-> high: when x >= 10\n-> low: else\n## exact\n## high\n## low\n",
+   "decision_nodes": [
+    "classify"
+   ],
+   "readings": [
+    {
+     "reading": {
+      "x": 4
+     },
+     "routes": {
+      "classify": "low"
+     }
+    },
+    {
+     "reading": {
+      "x": 5
+     },
+     "routes": {
+      "classify": "exact"
+     }
+    },
+    {
+     "reading": {
+      "x": 6
+     },
+     "routes": {
+      "classify": "low"
+     }
+    },
+    {
+     "reading": {
+      "x": 9
+     },
+     "routes": {
+      "classify": "low"
+     }
+    },
+    {
+     "reading": {
+      "x": 10
+     },
+     "routes": {
+      "classify": "high"
+     }
+    }
+   ]
+  },
+  {
+   "name": "pipeline",
+   "flow": "---\nname: pipeline\nstart: intake\n---\n## intake\n-> reject: when size > 1000\n-> triage: else\n## triage\n-> urgent: when priority >= 8\n-> batch: when kind in ('nightly', 'weekly')\n-> normal: else\n## reject\n## urgent\n## batch\n## normal\n",
+   "decision_nodes": [
+    "intake",
+    "triage"
+   ],
+   "readings": [
+    {
+     "reading": {
+      "kind": "nightly",
+      "priority": 7,
+      "size": 999
+     },
+     "routes": {
+      "intake": "triage",
+      "triage": "batch"
+     }
+    },
+    {
+     "reading": {
+      "kind": "nightly",
+      "priority": 7,
+      "size": 1000
+     },
+     "routes": {
+      "intake": "triage",
+      "triage": "batch"
+     }
+    },
+    {
+     "reading": {
+      "kind": "nightly",
+      "priority": 7,
+      "size": 1001
+     },
+     "routes": {
+      "intake": "reject",
+      "triage": "batch"
+     }
+    },
+    {
+     "reading": {
+      "kind": "nightly",
+      "priority": 8,
+      "size": 999
+     },
+     "routes": {
+      "intake": "triage",
+      "triage": "urgent"
+     }
+    },
+    {
+     "reading": {
+      "kind": "nightly",
+      "priority": 8,
+      "size": 1000
+     },
+     "routes": {
+      "intake": "triage",
+      "triage": "urgent"
+     }
+    },
+    {
+     "reading": {
+      "kind": "nightly",
+      "priority": 8,
+      "size": 1001
+     },
+     "routes": {
+      "intake": "reject",
+      "triage": "urgent"
+     }
+    },
+    {
+     "reading": {
+      "kind": "weekly",
+      "priority": 7,
+      "size": 999
+     },
+     "routes": {
+      "intake": "triage",
+      "triage": "batch"
+     }
+    },
+    {
+     "reading": {
+      "kind": "weekly",
+      "priority": 7,
+      "size": 1000
+     },
+     "routes": {
+      "intake": "triage",
+      "triage": "batch"
+     }
+    },
+    {
+     "reading": {
+      "kind": "weekly",
+      "priority": 7,
+      "size": 1001
+     },
+     "routes": {
+      "intake": "reject",
+      "triage": "batch"
+     }
+    },
+    {
+     "reading": {
+      "kind": "weekly",
+      "priority": 8,
+      "size": 999
+     },
+     "routes": {
+      "intake": "triage",
+      "triage": "urgent"
+     }
+    },
+    {
+     "reading": {
+      "kind": "weekly",
+      "priority": 8,
+      "size": 1000
+     },
+     "routes": {
+      "intake": "triage",
+      "triage": "urgent"
+     }
+    },
+    {
+     "reading": {
+      "kind": "weekly",
+      "priority": 8,
+      "size": 1001
+     },
+     "routes": {
+      "intake": "reject",
+      "triage": "urgent"
+     }
+    },
+    {
+     "reading": {
+      "kind": "__unlisted__",
+      "priority": 7,
+      "size": 999
+     },
+     "routes": {
+      "intake": "triage",
+      "triage": "normal"
+     }
+    },
+    {
+     "reading": {
+      "kind": "__unlisted__",
+      "priority": 7,
+      "size": 1000
+     },
+     "routes": {
+      "intake": "triage",
+      "triage": "normal"
+     }
+    },
+    {
+     "reading": {
+      "kind": "__unlisted__",
+      "priority": 7,
+      "size": 1001
+     },
+     "routes": {
+      "intake": "reject",
+      "triage": "normal"
+     }
+    },
+    {
+     "reading": {
+      "kind": "__unlisted__",
+      "priority": 8,
+      "size": 999
+     },
+     "routes": {
+      "intake": "triage",
+      "triage": "urgent"
+     }
+    },
+    {
+     "reading": {
+      "kind": "__unlisted__",
+      "priority": 8,
+      "size": 1000
+     },
+     "routes": {
+      "intake": "triage",
+      "triage": "urgent"
+     }
+    },
+    {
+     "reading": {
+      "kind": "__unlisted__",
+      "priority": 8,
+      "size": 1001
+     },
+     "routes": {
+      "intake": "reject",
+      "triage": "urgent"
+     }
+    }
+   ]
+  }
+ ]
+}

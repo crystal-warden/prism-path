@@ -16,9 +16,15 @@ runs lands here.
   thresholds from the flow and maps a reading to the **coarsest symbol that still resolves every routing
   decision** (minimum sufficient statistic). `quantize` → `reconstruct` routes identically across
   numeric / boolean / categorical fields; symbols are tiny.
-- *(next)* the **decisions-preserved conformance test** — a frozen cross-flow proof (route on
-  full-precision vs reconstructed telemetry; assert identical routing) — then the compression-margin +
-  retransmission go/no-go benchmarks.
+- ✅ **Decisions-preserved conformance test** (`wire.py` + `conformance/decisions.json`) — the
+  differentiated proof, frozen: 4 flows × 55 boundary-probing readings, each tagged with its
+  full-precision route at every decision node. The corpus is replayed two ways — the engine must
+  reproduce the frozen routes (drift guard), and the **wire round-trip** (quantize → Fibonacci-code →
+  decode → reconstruct) must route to the same target at every node (decision preservation, end-to-end
+  through the real codec). Regenerate with `gen_decisions_corpus.py`.
+- *(next)* the compression-margin + retransmission **go/no-go benchmarks** — Phase A's make-or-break gate
+  (threshold-quant + delta + Fibonacci vs varint/zstd, anomaly case shown; selective-repair vs full
+  retransmit under a Gilbert-Elliott loss model).
 
 ## Roadmap (phased, benchmark-gated)
 - **Phase A** — quantizer + codec + decisions-preserved test + a frozen round-trip / error-injection corpus.
