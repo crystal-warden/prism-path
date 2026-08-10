@@ -25,3 +25,4 @@ prismpath-rs/target/
 # tools/arch_scorecard.json; the markdown rendering is local-only.
 docs/design/arch-scorecard.md
 docs_health_report.md
+*.ots.bak

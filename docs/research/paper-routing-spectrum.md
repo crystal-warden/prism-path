@@ -1,6 +1,6 @@
 # PrismPath: A Routing Spectrum for Human-Authored LLM-Agent Workflows — When Control Flow Is Data, Not Code
 
-*Preprint / workshop-style manuscript. Crystal Warden Labs, 2026-07-10.*
+*Preprint / workshop-style manuscript. Crystal Warden Labs, 2026-07-10 (rev. 2026-08-10).*
 *Target venue class: an ICSE/FSE/NeurIPS-workshop or arXiv preprint (cs.SE / cs.AI).*
 
 ---
@@ -42,8 +42,9 @@ ill-defined against a Python routing callback: a routing **lockfile** that pins 
 bit-for-bit, **risk-controlled calibration** that *derives* the escalation threshold with a
 finite-sample risk guarantee, a decidable
 **static-analysis** pass ("your flow compiles"), a **polarity lint** that catches the embedder's
-negation blind-spot at authoring time, **Markdown flow tests** that run without a model, and a
-one-way **LangGraph importer**. We further describe **durable, resumable execution** — atomic
+negation blind-spot at authoring time, **Markdown flow tests** that run without a model, a
+one-way **LangGraph importer**, and a benchmark-gated **decision-preserving telemetry** adapter that
+transmits only the minimum sufficient statistic for a flow's routing decisions. We further describe **durable, resumable execution** — atomic
 checkpoints with flow-hash-bound resume and a human-in-the-loop queue, and a **commit-as-state
 Flow-Ledger** in which each gate-green unit is a content-addressed git proof-commit and "done" is a
 projection over the log — and a control-plane methodology (machine-enforced "gates as the definition
@@ -53,11 +54,13 @@ reachability is decidable and a bounded model checker answers *"can this state b
 assumption?"* with a concrete witness (exact inside the fragment, soundly over-approximated outside
 it); and the ML-free subset is now certified by **three independent re-implementations** (JavaScript,
 Rust, Go) that each pass all 1,067 predicate and 27 engine conformance vectors — conformance
-refereed by re-implementation rather than asserted. The fragment now also has a **first hardware
-target**: a fixed FPGA interpreter circuit (Zynq-7020) that executes Level M flows as
-runtime-loaded table images, certified against a *declared subset* of the same frozen vectors
-(114/1,067 predicate + 6/27 engine, zero divergence) and demonstrated routing live sensor fields
-in fabric with a provable 100–420 ns decision bound (§7). We are explicit about the provenance of
+refereed by re-implementation rather than asserted. The fragment now also runs on **two substrates
+below software**: a fixed FPGA interpreter circuit (Zynq-7020) that executes Level M flows as
+runtime-loaded table images with a provable 100–420 ns decision bound, and a **verifier-accepted
+in-kernel eBPF/XDP program** that classifies live network packets at 132–182 ns each
+(~5.5–7.6 Mpps/core) and hot-swaps its policy from an edited Markdown flow with no reload. Both are
+certified against the same *declared subset* of the frozen vectors (114/1,067 predicate + 6/27 engine,
+zero divergence; the eBPF target cross-checked on aarch64 and x86_64) (§7). We are explicit about the provenance of
 the routing evaluation's labels; the once-open bounded-state critique is now closed (§6).
 
 ---
@@ -935,7 +938,7 @@ with cumulative *and* windowed drift bounds that quarantine a drifting entry); a
 spectrum to a security-triage flow** (the streaming replay over the author's own Wazuh instance where
 the decision-memoization and reuse-accuracy findings of §5 were measured — a flow whose routing, we
 note, falls entirely in the portable subset: the LLM lives in the workers, not the control flow).
-Four further items have since been delivered, each a consequence of the same data-not-code
+Five further items have since been delivered, each a consequence of the same data-not-code
 asymmetry. **Bounded model checking over the match-action fragment** (SPEC §4.3's Level M): because a
 flow's deterministic tier is a finite match-action table, reachability is decidable, and
 `prismpath verify` answers *"can state X be reached under assumption Y?"* by explicit-state search
@@ -955,8 +958,8 @@ direction. **A risk-controlled operating point for decision memoization**: the �
 longer takes a hand-set similarity threshold but derives it, selecting the point that maximizes
 auto-resolution among those whose reuse-error rate a Wilson upper bound certifies below a stated
 risk — the same LTT/RCPS discipline as §4.3's τ, applied to caching, and it declines to choose when
-the evidence cannot clear the bound. **A hardware target for the fragment (delivered, measured;
-2026-08-07)**: because a Level M flow *is* a match-action table, it compiles to a binary table
+the evidence cannot clear the bound. **Targets below software (delivered, measured; FPGA 2026-08-07,
+eBPF 2026-08-09)**: because a Level M flow *is* a match-action table, it compiles to a binary table
 image — the production SOC triage flow, unmodified, is 302 bytes — interpreted by one fixed
 circuit on a Zynq-7020, never re-synthesized per flow; the same frozen vectors became the hardware
 test bench **on a declared subset, stated plainly** (the C reference target and the RTL each pass
@@ -967,9 +970,33 @@ target, and on the bench 2,985 live accelerometer samples were routed *in fabric
 5–21-cycle evaluate, a provable **100–420 ns worst-case decision bound** at 50 MHz, in 1,064 LUTs
 (2.0% of the part). The target's first act was to surface a real soundness defect in the fragment
 classifier (`is`/`is not` accepted by classification, rejected by evaluation) — the
-vectors-as-referee pattern doing exactly its job on its first hardware consumer. Artifacts,
-evidence logs, and OpenTimestamps-anchored hashes:
-[`prismpath-hw/`](../../prismpath-hw/README.md) (ledger rows #72–#76).
+vectors-as-referee pattern doing exactly its job on its first hardware consumer. **The same table also
+compiles to a verifier-accepted in-kernel eBPF/XDP program** (delivered 2026-08-09): the identical
+decidability that fits Level M into FPGA block-RAM makes it pass the kernel verifier, and the program is
+conformant *in-kernel* against the same frozen corpus (114/114 of the declared subset, byte-matching the
+reference, on both aarch64 and x86_64). Attached observe-only to a live-traffic mirror it classified real
+packets at **132–182 ns each (~5.5–7.6 Mpps/core)** and **hot-swapped its policy from an edited Markdown
+flow with no reload**, repopulating the running program's table maps in place: the "swap the map, change
+the policy" property carried onto the kernel substrate. Artifacts, evidence logs, and
+OpenTimestamps-anchored hashes: [`prismpath-hw/`](../../prismpath-hw/README.md) and
+[`prismpath-ebpf/`](../../prismpath-ebpf/README.md) (ledger rows #72–#80). **Decision-preserving
+telemetry (delivered, benchmark-gated; 2026-08-09).** The same decidability has a consequence off the
+routing path: because a flow's routes are decidable functions of a few `field OP const` thresholds, the
+coarsest symbol that still resolves every decision is the *minimum sufficient statistic* for that flow's
+telemetry. An adapter (`adapters/telemetry/`) extracts those cells from the flow, quantizes a reading to
+one small symbol per decision-relevant field, and entropy-codes the stream on a self-framing Fibonacci
+wire; a frozen decisions-preserved corpus (boundary-probing readings routed identically through the
+wire's quantize/code/decode/reconstruct round-trip) guards the invariant the way the portable vectors
+guard the kernel. On modeled channels the decision stream holds ~2 bits per reading on a wide-range field
+independent of magnitude (~14–16× vs fixed-width, ~1.1–3.1× vs a delta+varint baseline); delivery
+self-heals over the repo's real Merkle primitive with selective retransmission multiples cheaper than a
+full resend under Gilbert-Elliott burst loss; and a Tier-6 decision-first spiral packs correlated
+multi-dimensional state so one band ID routes correctly at 1.9–3.6× fewer bits than the per-field wire for
+two-to-four dimensions (no win at one dimension, by design). We are explicit about its maturity: a Python
+reference validated on synthetic/modeled data (not field-proven), benchmark-gated so it stops cheaply if a
+margin fails, and only partly built out: a word-packed byte format and the spiral have landed, while a
+hardware shift-register codec and a vector-quantization tier are designed but not built. Its priority date
+is OpenTimestamps-anchored (`adapters/telemetry/evidence/`). Ledger row #81.
 
 What remains genuinely open: (i) a larger, *human*-annotated routing benchmark across more flows and
 embedders, to test whether the frontier shape and the confident-error blind spot generalize; and (ii)
@@ -987,8 +1014,9 @@ consistent with venue AI-disclosure policy.
 static analyzer, bounded model checker, safety guard, lockfile, calibration, the data-plane tools,
 the three conformant portable kernels, evaluation harnesses, and the `comparisons/` head-to-head,
 plus example flows, plus the succession/scouting/suppression/flywheel/OTS engines, plus the
-hardware target (`prismpath-hw/`) — compiler, C and RTL interpreters, testbenches, overlay
-build, and an OTS-anchored evidence set ([`prismpath-hw/`](../../prismpath-hw/README.md)) — and a
+below-software targets (`prismpath-hw/` FPGA and `prismpath-ebpf/` in-kernel) — compiler, C/RTL and
+eBPF interpreters, testbenches, overlay build, and OTS-anchored evidence sets
+([`prismpath-hw/`](../../prismpath-hw/README.md), [`prismpath-ebpf/`](../../prismpath-ebpf/README.md)) — and a
 **`docs/research/supporting-evidence.md`** results ledger mapping every claim to a measured result + provenance,
 **negative results included** — the density/geometry thread, §B) are self-contained and small enough
 to audit end-to-end.*
