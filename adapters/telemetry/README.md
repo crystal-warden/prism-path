@@ -8,7 +8,7 @@ to, the routing decision. Additive, arch-guard-isolated, zero core changes.
 The full design of record lives off-repo (the determination doc); only material backed by something that
 runs lands here.
 
-## Status — Phase A ✅ · Phase B ✅ complete
+## Status — Phase A ✅ · Phase B ✅ · Phase C in progress
 - ✅ **Zeckendorf / Fibonacci codec** (`zeckendorf.py`) — the self-framing wire. Every code ends in a
   unique `11`, so a stream is zero-header and self-delimiting; small integers are tiny (`1->11`,
   `2->011`), which is where delta-differenced telemetry lives. Round-trip + framing invariants under test.
@@ -55,11 +55,21 @@ runs lands here.
   routing), so opaque wire traffic is debuggable without bespoke, drifting tooling. Standalone (no core
   change); a `prismpath decode` CLI alias would be a one-liner in `cli.py`.
 
+### Phase C (in progress)
+- ✅ **Word-packed wire** (`packed.py`) — the real byte format: Fibonacci bits accumulated MSB-first into
+  64-bit words, final word zero-padded; the self-framing makes the pad a droppable partial frame, so the
+  round-trip is exact with no carried bit-count. Measured padding overhead amortizes from ~39% at N=10 to
+  **~0% by N=100k** (the doc's "~3–7%" only bites at tiny streams). Nails the format + correctness; the
+  ~10–20× throughput is the C/FPGA path (C2).
+- *(next)* C2 FPGA shift-register codec (RTL + Verilator sim local; board synthesis hardware-gated) → C3
+  Tier-6 spiral spatial packing (benchmark-gated) → C4 optional turbovec-VQ.
+
 ## Roadmap (phased, benchmark-gated)
 - **Phase A** ✅ — quantizer + codec + decisions-preserved test + go/no-go benchmarks (margins hold).
 - **Phase B** ✅ — self-heal via the repo's real Merkle (`ledger_ots`) + selective retransmission +
   OTS-anchored chained-epoch retention + authenticated ACK + the decode/inspect path.
-- **Phase C** — the FPGA shift-register codec; optional vector-quantization / spatial-packing tier.
+- **Phase C** — word-packed wire ✅; FPGA shift-register codec; Tier-6 spiral spatial packing; optional
+  turbovec-VQ.
 
 ## Honest scope
 Benchmark-gated (if the compression/retransmission margins don't hold, it stops cheaply). Resilience and
