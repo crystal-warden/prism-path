@@ -97,3 +97,19 @@ jobs:
         run: python -m pytest adapters/soc -q
       - name: Compliance adapter tests
         run: python -m pytest adapters/compliance -q
+
+  # The Rust crates: the P0 kernel port (prismpath-rs) and the 1-1 telemetry adapter port
+  # (prismpath-telemetry-rs). ubuntu-latest ships a stable Rust toolchain, so no setup action is needed.
+  # `cargo test` runs each test binary with its crate root as the working directory, so the telemetry
+  # conformance tests resolve their ../adapters/telemetry/conformance/ relative paths — they load the SAME
+  # frozen corpora as the Python adapter and prove decision-preservation + byte-identical wire output.
+  rust:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Kernel crate (prismpath-rs)
+        run: cargo test --manifest-path prismpath-rs/Cargo.toml -q
+      - name: Telemetry port (prismpath-telemetry-rs) — frozen-corpus + byte-identity parity
+        run: cargo test --manifest-path prismpath-telemetry-rs/Cargo.toml -q
+      - name: Telemetry port clippy
+        run: cargo clippy --manifest-path prismpath-telemetry-rs/Cargo.toml --all-targets -- -D warnings
