@@ -38,8 +38,14 @@ runs lands here.
   **forged or corrupted block is rejected** (its inclusion proof fails against the trusted root), never
   silently accepted; selective retransmission fills exactly the gaps and reassembles the stream
   bit-for-bit; an unrecoverable block stays a **provable** gap (`assemble()` refuses a silent hole).
-- *(next)* OTS-anchored epoch root + retention (drop-on-ACK, provable pressure-drop) → authenticated ACK
-  channel → the `prismpath decode --flow` human-readable inspect path.
+- ✅ **Chained epochs + retention** (`epochs.py`) — each sealed window's Merkle root chains to the
+  previous (`H(prev‖merkle)`), so a tiny permanent chain of roots gives total ordering + tamper-evidence
+  across time while only recent epochs keep raw data. Retention: **drop-on-ACK** (verified up to a root →
+  forget the bytes, keep the root), a **retention cap**, and a **provable pressure-drop** (un-acked data
+  forced out by the cap is a named gap, never a silent hole). Chain verifies after any drop; sealed roots
+  are OTS-anchorable via `ledger_ots`.
+- *(next)* authenticated ACK/control channel (a forged ACK must not trigger premature drop) → the
+  `prismpath decode --flow` human-readable inspect path.
 
 ## Roadmap (phased, benchmark-gated)
 - **Phase A** ✅ — quantizer + codec + decisions-preserved test + go/no-go benchmarks (margins hold).
