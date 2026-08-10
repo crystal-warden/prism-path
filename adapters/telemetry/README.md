@@ -8,7 +8,7 @@ to, the routing decision. Additive, arch-guard-isolated, zero core changes.
 The full design of record lives off-repo (the determination doc); only material backed by something that
 runs lands here.
 
-## Status — Phase A ✅ complete · Phase B in progress
+## Status — Phase A ✅ · Phase B ✅ complete
 - ✅ **Zeckendorf / Fibonacci codec** (`zeckendorf.py`) — the self-framing wire. Every code ends in a
   unique `11`, so a stream is zero-header and self-delimiting; small integers are tiny (`1->11`,
   `2->011`), which is where delta-differenced telemetry lives. Round-trip + framing invariants under test.
@@ -49,12 +49,16 @@ runs lands here.
   uses). The edge drops only for an ACK that verifies **and** advances the sequence; a forged, tampered,
   wrong-secret, or replayed ACK is ignored and **drops nothing** — closing the data-loss-by-spoof hole
   the doc flags.
-- *(next)* the `prismpath decode <stream> --flow` human-readable inspect path (the `.md` is the decoder).
+- ✅ **Human-readable inspect path** (`decode.py`) — `python decode.py --flow <flow.md> --bits <stream>`
+  decodes a captured bitstream back to each reading's symbols, reconstructed values, and the **routing
+  decision** the policy makes on it. The `.md` is the decoder (it defines both the partition and the
+  routing), so opaque wire traffic is debuggable without bespoke, drifting tooling. Standalone (no core
+  change); a `prismpath decode` CLI alias would be a one-liner in `cli.py`.
 
 ## Roadmap (phased, benchmark-gated)
 - **Phase A** ✅ — quantizer + codec + decisions-preserved test + go/no-go benchmarks (margins hold).
-- **Phase B** — self-heal via the repo's real Merkle (`ledger_ots`; `audit_log` is a stub) + selective
-  retransmission + OTS-anchored epoch retention + authenticated ACK + a decode/inspect path.
+- **Phase B** ✅ — self-heal via the repo's real Merkle (`ledger_ots`) + selective retransmission +
+  OTS-anchored chained-epoch retention + authenticated ACK + the decode/inspect path.
 - **Phase C** — the FPGA shift-register codec; optional vector-quantization / spatial-packing tier.
 
 ## Honest scope
