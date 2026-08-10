@@ -4,8 +4,13 @@
     "violations": []
   },
   "signal_3_core_churn": {
-    "core_total_loc": 7133,
-    "churn_since_baseline": null,
+    "core_total_loc": 7255,
+    "churn_since_baseline": {
+      "baseline": "origin/main",
+      "core_files_changed": 2,
+      "lines_added": 125,
+      "lines_removed": 3
+    },
     "note": "track per-adapter; must DECAY. flat/rising = rebuilding, not generalizing."
   },
   "signal_7_marginal_cost": {
