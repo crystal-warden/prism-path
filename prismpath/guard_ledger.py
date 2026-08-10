@@ -109,9 +109,9 @@ def attest_verdicts(log: AuditLog, guard: Guard, label: str, *, gate_id: Optiona
     guard attestation is verifiable by the same tooling as every other attested decision in the
     system. The manifest binds `policy_hash`, so "which safety policy ran" travels with the record.
 
-    The `root` is the audit log's own marker. In the open release that is a count rather than a
-    Merkle root — stated plainly here because a caller might otherwise assume more from the field
-    name than the log actually provides.
+    The `root` is the audit log's Merkle root (real, via `ledger_ots`) over the recorded events — so it
+    changes if any past event is altered, and it is OTS/Bitcoin-anchorable like every other attested
+    artifact in the system.
     """
     ingestion = [
         e["id"] for e in log.events if e.get("action") == VERDICT_ACTION
