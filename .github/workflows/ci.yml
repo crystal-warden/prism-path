@@ -70,3 +70,29 @@ jobs:
         run: pip install numpy pytest fastapi httpx
       - name: Mission Control tests
         run: python -m pytest prismpath/tests/test_mission_control.py -q
+
+  # The bounded adapters (adapters/*) are additive and arch-guard-isolated, each shipping its own test
+  # suite. They are self-rooted — each adapter's tests put their own directory on sys.path — so a single
+  # combined collection across adapters clashes; each adapter therefore runs as its own pytest invocation.
+  # Install stays lean: numpy + hypothesis (compliance property tests) + requests (soc SIEM client). The
+  # compliance semantic-retrieve path top-level-imports sentence-transformers, but no test exercises it,
+  # so the heavy ML extra is deliberately left out — CI stays fast and offline, like the main test job.
+  adapters:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install
+        run: pip install numpy pytest hypothesis requests
+      - name: Telemetry adapter tests
+        run: python -m pytest adapters/telemetry -q
+      - name: SOC adapter tests
+        run: python -m pytest adapters/soc -q
+      - name: Compliance adapter tests
+        run: python -m pytest adapters/compliance -q
