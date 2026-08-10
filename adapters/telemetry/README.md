@@ -1,14 +1,14 @@
 # adapters/telemetry — decision-preserving telemetry
 
 A bounded adapter that turns a decidable flow's telemetry into the **minimum sufficient statistic for its
-decisions**, entropy-codes it on a **self-framing Fibonacci wire**, and (later phases) makes delivery
-**self-healing and Merkle-verified** — compression and integrity both derived from, and provably faithful
-to, the routing decision. Additive, arch-guard-isolated, zero core changes.
+decisions**, entropy-codes it on a **self-framing Fibonacci wire**, and makes delivery **self-healing and
+Merkle-verified** — compression and integrity both derived from, and provably faithful to, the routing
+decision. Additive, arch-guard-isolated, zero core changes.
 
 The full design of record lives off-repo (the determination doc); only material backed by something that
 runs lands here.
 
-## Status — Phase A ✅ · Phase B ✅ · Phase C in progress
+## Status — Phase A ✅ · Phase B ✅ · Phase C partial (C1 + C3 landed)
 - ✅ **Zeckendorf / Fibonacci codec** (`zeckendorf.py`) — the self-framing wire. Every code ends in a
   unique `11`, so a stream is zero-header and self-delimiting; small integers are tiny (`1->11`,
   `2->011`), which is where delta-differenced telemetry lives. Round-trip + framing invariants under test.
@@ -31,7 +31,7 @@ runs lands here.
   it); selective MMR retransmit is multiples cheaper under sparse burst loss. **Margins hold → Phase A
   validates.**
 
-### Phase B (in progress)
+### Phase B ✅
 - ✅ **Self-heal core** (`selfheal.py`) — the Fibonacci stream is chunked into Merkle-committed blocks,
   reusing the repo's **real** Merkle primitive (`prismpath.ledger_ots`; `audit_log`'s open-release MMR is
   a stub, so this is the genuine one — batch-per-epoch, OTS-anchorable). A lost block is a detected gap; a
@@ -55,7 +55,7 @@ runs lands here.
   routing), so opaque wire traffic is debuggable without bespoke, drifting tooling. Standalone (no core
   change); a `prismpath decode` CLI alias would be a one-liner in `cli.py`.
 
-### Phase C (in progress)
+### Phase C (partial)
 - ✅ **Word-packed wire** (`packed.py`) — the real byte format: Fibonacci bits accumulated MSB-first into
   64-bit words, final word zero-padded; the self-framing makes the pad a droppable partial frame, so the
   round-trip is exact with no carried bit-count. Measured padding overhead amortizes from ~39% at N=10 to
@@ -73,8 +73,8 @@ runs lands here.
   linear, so the win is progressiveness not dropped data), correlation makes the decision stream cheaper,
   and the one decision frame survives burst loss better than *k* frames. Frozen `conformance/spiral.json`
   (a mapping bug turns a test RED) + a decisions-preserved proof re-routing each probe three ways.
-- *(next)* C2 FPGA shift-register codec (RTL + Verilator sim local; board synthesis hardware-gated) → C4
-  optional turbovec-VQ.
+- *(pending)* C2 FPGA shift-register codec (RTL + Verilator sim local; board synthesis hardware-gated,
+  so it can't land without a real-board pass) and C4 optional turbovec-VQ. Not started.
 
 ## Roadmap (phased, benchmark-gated)
 - **Phase A** ✅ — quantizer + codec + decisions-preserved test + go/no-go benchmarks (margins hold).
@@ -84,11 +84,16 @@ runs lands here.
   shift-register codec; optional turbovec-VQ.
 
 ## Honest scope
-Benchmark-gated (if the compression/retransmission margins don't hold, it stops cheaply). Resilience and
-performance are validated under **stated channel models** (e.g. Gilbert-Elliott burst-loss) on real sensor
-data and real edge silicon — never claimed as field-/orbit-proven.
+Benchmark-gated (if the compression, retransmission, or routing-accuracy margins don't hold, it stops
+cheaply). Resilience and performance are validated under **stated channel models** (e.g. Gilbert-Elliott
+burst-loss) on real sensor data and real edge silicon — never claimed as field-/orbit-proven.
 
 ## Tests
 ```
 python -m pytest adapters/telemetry
+```
+The gates are standalone (not pytest); rerun them to reproduce the numbers cited above:
+```
+python adapters/telemetry/bench/run.py            # Phase A go/no-go -> bench/results.md
+python adapters/telemetry/bench/spiral_bench.py   # Tier-6 routing-accuracy gate -> bench/spiral_results.md
 ```
