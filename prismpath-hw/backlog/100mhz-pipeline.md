@@ -46,11 +46,3 @@ of register arrays — a resource-shape question, worthless until a flow outgrow
 4. `vivado/build_overlay.tcl` with `PCW_FPGA0_PERIPHERAL_FREQMHZ {100}`: **WNS ≥ 0**,
    zero failing endpoints; commit the new `timing.rpt`/`utilization.rpt`.
 5. README latency/clock numbers updated — never state a bound the reports don't back.
-
-## Why it matters (SBIR framing)
-
-The headline moves from "sub-microsecond" to **"sub-quarter-microsecond worst-case policy
-decisions, formally bounded"** — for ~an afternoon of RTL. WCET at 100 MHz on a $65-class
-part is the number that makes the software-framework comparison unanswerable, and the
-2%-of-die area figure means the claim scales to the SU35P Sentinel target with room for
-the entire cryptographic stack beside it.
