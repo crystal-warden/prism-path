@@ -44,6 +44,9 @@ llm-local = [
 comparisons = [               # Area-5 head-to-head harness (prismpath/comparisons/) — reproduction only
     "langgraph", "langchain-openai", "crewai", "openai", "litellm",
 ]
+signing = [
+    "cryptography",           # Ed25519 policy-pack signing (spec-secure-hotswap) — loud absence without it
+]
 test = ["pytest"]
 
 [project.scripts]

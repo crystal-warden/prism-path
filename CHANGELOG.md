@@ -35,6 +35,28 @@ spec-stable.
   `capability.json` flip the `chained` case to Level M → **spec-vector version 1 → 2**.
 
 ### Added
+- **Secure policy hot-swap: a live policy replacement that is authorized, envelope-bounded, attested,
+  and audited — published in full as prior art.** A `.ppt` policy now ships as a *pack*: the
+  byte-identical image plus a detached Ed25519-signed manifest (`prismpath/policy_pack.py`), so the
+  image hash the FPGA/eBPF evidence rows cite never changes. `PolicyHost`
+  (`prismpath/policy_host.py`) runs the swap pipeline — signature → envelope-conformance
+  (counts ≤ caps, fields ⊆ envelope, an image-native opcode-whitelist walk re-verifying Level M
+  membership at load time) → monotonic-version anti-rollback → shadow-stage → single atomic reference
+  flip — and writes every attempt, accepted or **rejected**, to the Merkle-rooted `audit_log`
+  (OTS-anchorable), so "policy X was live from T1 to T2" is provable. Any failure at any stage leaves
+  the prior policy active (fail-safe), and `rollback()` restores last-known-good. Crypto is the
+  optional `signing` extra with **loud absence** (verification unavailable → refuse with the install
+  message, never a silent pass); a demo `--allow-unsigned` path stamps `unsigned: true` into the
+  ledger rather than hide it. CLI: `prismpath swap {keygen,pack,verify,envelope,swap,attest}`. The
+  mechanism is specified and disclosed as prior art in
+  [`docs/design/spec-secure-hotswap.md`](docs/design/spec-secure-hotswap.md) (no patent sought). This
+  is the software reference tier; FPGA/MCU are named follow-ons under the hardware-retest rule.
+- **eBPF trusted pre-loader for the hot-swap (`prismpath-ebpf/net_swap.py`).** Puts the authorization
+  and envelope gates in front of the kernel `netupdate`: it verifies the signed pack against its
+  signed envelope and the version floor on the host, and execs the loader **only** on success — a
+  verification failure never reaches the kernel. Privilege-free up to the loader exec, so the whole
+  gate is tested without root (the loader call is injected; 5 tests, including "tampered/replayed
+  images never reach the loader").
 - **Cyber-physical fusion proven on the live rig: real IMU + real SIEM fused in real time, with the
   sensor's own on-chip fusion classifier as an independent cross-check.**
   `adapters/fusion/live_capture.py` runs the BNO086 (via `prismpath-hw/bridge/field_bridge_multi.py`,

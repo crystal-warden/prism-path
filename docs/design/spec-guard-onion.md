@@ -115,7 +115,10 @@ keys. The `Policy.source_hash` is the hook for that; signing itself is future wo
    of `prismpath/portable/conformance/predicates.json`, so the boundary is provably unchanged after any
    edit and a second implementation is measurable against it. *(done — 136 vectors in
    `prismpath/portable/conformance/safety.json`; a second, independent TypeScript guard passes them)*
-5. Policy signing + `arch_guard` signal that flags a model call not routed through a guard. *(open)*
+5. Policy signing + `arch_guard` signal that flags a model call not routed through a guard.
+   *(policy signing shipped — Ed25519 signed packs with envelope conformance, see
+   [spec-secure-hotswap.md](spec-secure-hotswap.md); the arch_guard unguarded-model-call signal
+   remains open)*
 
 ## 6. Claim-upgrade gate
 

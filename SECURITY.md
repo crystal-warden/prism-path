@@ -43,6 +43,15 @@ vulnerability we want to hear about **at highest priority**:
    Merkle path validating against the wrong root. OTS's claim is *adversarial temporal
    integrity* — proofs that cannot be backdated or silently rewritten even with filesystem
    access — and breaking it is a finding.
+9. **Policy hot-swap bypass** (`policy_pack.py` / `policy_host.py`,
+   `docs/design/spec-secure-hotswap.md`): a `PolicyHost` accepting a swap that is unsigned, signed by
+   an unknown or revoked key, over a tampered image, outside the signed envelope, or with a version
+   at or below the persisted floor; a swap that leaves the runtime in a torn state instead of
+   atomically keeping the prior policy; or the eBPF pre-loader (`net_swap.py`) reaching the kernel
+   loader on any of the above. Authorization attaches to the **policy artifact** (its signed
+   manifest), never to a user session, consistent with the control plane's "auth is a non-goal"
+   posture: the swap gate authenticates *what runs*, and session/operator auth stays the deployer's
+   responsibility.
 
 ## Scope — what does not count
 

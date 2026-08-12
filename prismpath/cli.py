@@ -1,6 +1,7 @@
 import argparse
 import json
 import os
+import sys
 
 from prismpath.parser import parse_file
 from prismpath.engine import run
@@ -199,6 +200,28 @@ def main(argv=None) -> int:
     ledger_parser.add_argument('--ots', action='store_true',
                                help='verify: include the full OTS/Bitcoin proof chain')
     ledger_parser.set_defaults(func=ledger_cmd)
+
+    swap_parser = subparsers.add_parser(
+        'swap', help='Secure policy hot-swap: signed packs, envelope check, attested swap '
+                     '(spec-secure-hotswap)')
+    swap_parser.add_argument('action', choices=[
+        'keygen', 'pack', 'verify', 'envelope', 'swap', 'attest'],
+        help='keygen | pack | verify | envelope | swap | attest')
+    swap_parser.add_argument('--ppt', help='the .ppt image (pack/verify/swap)')
+    swap_parser.add_argument('--priv', help='authority private key (keygen writes it; pack/envelope use it)')
+    swap_parser.add_argument('--pub', nargs='+', help='authority public key(s) (verify/swap/attest)')
+    swap_parser.add_argument('--out', help='output dir (keygen/envelope) or state dir (swap/attest)')
+    swap_parser.add_argument('--name', default='authority', help='keygen key name (default authority)')
+    swap_parser.add_argument('--fields', help='comma list name:kind (pack/envelope), e.g. temp:int,rule:str')
+    swap_parser.add_argument('--version', type=int, default=1, help='monotonic pack version (pack)')
+    swap_parser.add_argument('--envelope-id', dest='envelope_id', default='env1',
+                             help='envelope id the pack targets / the envelope defines')
+    swap_parser.add_argument('--envelope', help='envelope base path without .json/.sig (swap/attest)')
+    swap_parser.add_argument('--caps', help='comma list k=v envelope caps (envelope), e.g. atoms=1024,nodes=256')
+    swap_parser.add_argument('--revoked', help='revocation list JSON of key_ids (verify/swap)')
+    swap_parser.add_argument('--allow-unsigned', dest='allow_unsigned', action='store_true',
+                             help='demo escape hatch: swap an unsigned image, stamped in the audit log')
+    swap_parser.set_defaults(func=swap_cmd)
 
     args = parser.parse_args(argv)
     if not args.command:
@@ -1072,6 +1095,74 @@ def lint_flow(args) -> int:
     findings += polarity_mirror(graph)
     findings.sort(key=lambda f: (f.severity != "error", f.code, f.node or ""))
     return _report(findings, args.json)
+
+
+def _parse_fields(spec):
+    return dict(p.split(":", 1) for p in spec.split(",")) if spec else {}
+
+
+def swap_cmd(args):
+    """Secure policy hot-swap CLI (spec-secure-hotswap). Loud absence: a missing `cryptography`
+    surfaces the install message and exits non-zero, never a silent pass."""
+    import json as _json
+    try:
+        from . import policy_pack as pp
+        from . import policy_host as ph
+    except Exception as e:                                  # pragma: no cover
+        print(str(e), file=sys.stderr)
+        return 2
+    a = args.action
+    try:
+        if a == 'keygen':
+            print(_json.dumps(pp.keygen(args.out or '.', args.name), indent=1))
+            return 0
+        if a == 'pack':
+            if not (args.ppt and args.priv and args.pub):
+                print('pack needs --ppt --priv --pub', file=sys.stderr)
+                return 2
+            m = pp.build_pack(args.ppt, _parse_fields(args.fields), args.version,
+                              args.envelope_id, args.priv, args.pub[0])
+            print(_json.dumps(m, indent=1))
+            return 0
+        if a == 'verify':
+            if not (args.ppt and args.pub):
+                print('verify needs --ppt --pub', file=sys.stderr)
+                return 2
+            ok, reasons, _m = pp.verify_pack(args.ppt, args.pub, pp.load_revoked(args.revoked))
+            print(_json.dumps({'ok': ok, 'reasons': reasons}, indent=1))
+            return 0 if ok else 1
+        if a == 'envelope':
+            if not (args.priv and args.pub and args.out):
+                print('envelope needs --priv --pub --out', file=sys.stderr)
+                return 2
+            caps = ({k: int(v) for k, v in (kv.split("=", 1) for kv in args.caps.split(","))}
+                    if args.caps else None)
+            env = pp.build_envelope(args.envelope_id, _parse_fields(args.fields), caps,
+                                    args.priv, args.pub[0], args.out)
+            print(_json.dumps(env, indent=1))
+            return 0
+        if a in ('swap', 'attest'):
+            if not (args.out and args.pub and args.envelope):
+                print(f'{a} needs --out (state dir) --pub --envelope', file=sys.stderr)
+                return 2
+            env, reasons = pp.load_envelope(args.envelope, args.pub)
+            if env is None:
+                print(_json.dumps({'ok': False, 'reasons': reasons}, indent=1))
+                return 1
+            host = ph.PolicyHost(args.out, args.pub, env, revoked=pp.load_revoked(args.revoked))
+            if a == 'attest':
+                print(_json.dumps(host.attest(), indent=1))
+                return 0
+            if not args.ppt:
+                print('swap needs --ppt', file=sys.stderr)
+                return 2
+            res = host.swap(args.ppt, allow_unsigned=args.allow_unsigned)
+            print(_json.dumps(res, indent=1))
+            return 0 if res.get('ok') else 1
+    except RuntimeError as e:                               # loud absence (no cryptography)
+        print(str(e), file=sys.stderr)
+        return 2
+    return 2
 
 
 def ledger_cmd(args):

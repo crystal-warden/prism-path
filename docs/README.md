@@ -32,6 +32,7 @@ solved routing", "logic-as-data is a rules engine"), answered with the concessio
 | [spec-guard-onion.md](design/spec-guard-onion.md) | formal design spec for the safety floor — the policy grammar with no verb for permitting |
 | [spec-ledger-opentimestamps.md](design/spec-ledger-opentimestamps.md) | formal design spec for Flow-Ledger anchoring: OpenTimestamps, the air-gap tier, and the honest caveats |
 | [spec-telemetry-cbor.md](design/spec-telemetry-cbor.md) | interop framing spec: carry the telemetry decision symbols in CBOR (RFC 8949) for friction-free integration, alongside the compact Fibonacci wire |
+| [spec-secure-hotswap.md](design/spec-secure-hotswap.md) | formal design spec for the secure policy hot-swap: authorized, envelope-bounded, attested, audited + atomic — published deliberately as prior art |
 
 Running `python tools/arch_guard.py` writes a hexagonal-boundary scorecard to
 `docs/design/arch-scorecard.md`. It is generated, git-ignored, and regenerated on every run — the
