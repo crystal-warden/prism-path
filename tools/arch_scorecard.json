@@ -24,9 +24,9 @@
       },
       {
         "adapter": "fusion",
-        "code_loc": 687,
+        "code_loc": 1039,
         "flow_md_loc": 93,
-        "pct_logic_in_md": 0.119
+        "pct_logic_in_md": 0.082
       }
     ],
     "note": "adapter #N should cost < #1; higher %_logic_in_md = logic stays in plain-English (good)."

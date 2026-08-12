@@ -59,6 +59,7 @@
       "code": [
         "../adapters/fusion/projection.py",
         "../adapters/fusion/census.py",
+        "../adapters/fusion/live_capture.py",
         "../adapters/fusion/bench/bandwidth.py"
       ],
       "flows": [

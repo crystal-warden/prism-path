@@ -1,0 +1,258 @@
+{
+ "generated": "2026-08-12T06:19:32.607453Z",
+ "adapter": "fusion",
+ "capture": "live_coincident",
+ "node": "correlate",
+ "min_level": 3,
+ "physical": {
+  "n_readings": 1158,
+  "stability": {
+   "still": 724,
+   "moving": 68,
+   "shaken": 366
+  },
+  "dev_mg": {
+   "max": 46935,
+   "median": 128
+  },
+  "span_s": 174.4
+ },
+ "cyber": {
+  "alerts_seen": 46,
+  "level_histogram": {
+   "3": 21,
+   "5": 24,
+   "10": 1
+  }
+ },
+ "joint": {
+  "join_window_s": 3.0,
+  "alerts_seen": 46,
+  "alerts_matched_to_posture": 39,
+  "alerts_unmatched": 7,
+  "bands": {
+   "all_quiet": 14,
+   "physical_watch": 0,
+   "cyber_watch": 0,
+   "tandem_watch": 0,
+   "cyber_containment": 0,
+   "physical_escalation": 25,
+   "coincident_critical": 0
+  },
+  "notable_coincidences": [
+   {
+    "level": 5,
+    "stability": "shaken",
+    "dev_mg": 26116,
+    "band": "physical_escalation",
+    "dt_s": 1.32
+   },
+   {
+    "level": 5,
+    "stability": "shaken",
+    "dev_mg": 26116,
+    "band": "physical_escalation",
+    "dt_s": 1.32
+   },
+   {
+    "level": 5,
+    "stability": "shaken",
+    "dev_mg": 26116,
+    "band": "physical_escalation",
+    "dt_s": 1.32
+   },
+   {
+    "level": 5,
+    "stability": "shaken",
+    "dev_mg": 26116,
+    "band": "physical_escalation",
+    "dt_s": 1.32
+   },
+   {
+    "level": 5,
+    "stability": "shaken",
+    "dev_mg": 26116,
+    "band": "physical_escalation",
+    "dt_s": 1.32
+   },
+   {
+    "level": 5,
+    "stability": "shaken",
+    "dev_mg": 26116,
+    "band": "physical_escalation",
+    "dt_s": 1.32
+   },
+   {
+    "level": 5,
+    "stability": "shaken",
+    "dev_mg": 26116,
+    "band": "physical_escalation",
+    "dt_s": 1.32
+   },
+   {
+    "level": 5,
+    "stability": "shaken",
+    "dev_mg": 26116,
+    "band": "physical_escalation",
+    "dt_s": 1.32
+   },
+   {
+    "level": 5,
+    "stability": "shaken",
+    "dev_mg": 26116,
+    "band": "physical_escalation",
+    "dt_s": 1.32
+   },
+   {
+    "level": 5,
+    "stability": "shaken",
+    "dev_mg": 26116,
+    "band": "physical_escalation",
+    "dt_s": 1.32
+   },
+   {
+    "level": 5,
+    "stability": "shaken",
+    "dev_mg": 23857,
+    "band": "physical_escalation",
+    "dt_s": 2.63
+   },
+   {
+    "level": 5,
+    "stability": "shaken",
+    "dev_mg": 23857,
+    "band": "physical_escalation",
+    "dt_s": 2.63
+   },
+   {
+    "level": 5,
+    "stability": "shaken",
+    "dev_mg": 23857,
+    "band": "physical_escalation",
+    "dt_s": 2.63
+   },
+   {
+    "level": 5,
+    "stability": "shaken",
+    "dev_mg": 23857,
+    "band": "physical_escalation",
+    "dt_s": 2.63
+   },
+   {
+    "level": 5,
+    "stability": "shaken",
+    "dev_mg": 23857,
+    "band": "physical_escalation",
+    "dt_s": 2.63
+   },
+   {
+    "level": 5,
+    "stability": "shaken",
+    "dev_mg": 23857,
+    "band": "physical_escalation",
+    "dt_s": 2.63
+   },
+   {
+    "level": 5,
+    "stability": "shaken",
+    "dev_mg": 23857,
+    "band": "physical_escalation",
+    "dt_s": 2.63
+   },
+   {
+    "level": 5,
+    "stability": "shaken",
+    "dev_mg": 23857,
+    "band": "physical_escalation",
+    "dt_s": 2.63
+   },
+   {
+    "level": 10,
+    "stability": "shaken",
+    "dev_mg": 23857,
+    "band": "physical_escalation",
+    "dt_s": 2.63
+   },
+   {
+    "level": 5,
+    "stability": "shaken",
+    "dev_mg": 23857,
+    "band": "physical_escalation",
+    "dt_s": 2.63
+   },
+   {
+    "level": 5,
+    "stability": "shaken",
+    "dev_mg": 23857,
+    "band": "physical_escalation",
+    "dt_s": 2.63
+   },
+   {
+    "level": 5,
+    "stability": "shaken",
+    "dev_mg": 23857,
+    "band": "physical_escalation",
+    "dt_s": 2.63
+   },
+   {
+    "level": 5,
+    "stability": "shaken",
+    "dev_mg": 23857,
+    "band": "physical_escalation",
+    "dt_s": 2.63
+   },
+   {
+    "level": 5,
+    "stability": "shaken",
+    "dev_mg": 23857,
+    "band": "physical_escalation",
+    "dt_s": 2.63
+   },
+   {
+    "level": 5,
+    "stability": "shaken",
+    "dev_mg": 23857,
+    "band": "physical_escalation",
+    "dt_s": 2.63
+   }
+  ]
+ },
+ "multimodal": {
+  "n_rich_readings": 1158,
+  "orientation_deg": {
+   "roll": {
+    "min": -170.4,
+    "max": 176.5
+   },
+   "pitch": {
+    "min": -88.5,
+    "max": 84.9
+   },
+   "yaw": {
+    "min": -179.1,
+    "max": 179.4
+   },
+   "tilt_deg": {
+    "min": 0.4,
+    "max": 169.8
+   }
+  },
+  "chip_stability_verdicts": {
+   "In motion": 452,
+   "Stable": 12,
+   "On Table": 694
+  },
+  "derived_vs_chip_still_agreement": 0.967,
+  "bandwidth": {
+   "standard_multimodal_json_bytes_per_reading": 251.9,
+   "physical_decision_bits_per_reading": 6.05,
+   "ratio_json_over_decision": 333.3,
+   "note": "the full on-chip fusion reading vs the decision-sufficient physical code, per reading, LIVE; a batch compressor (zstd) needs the whole batch buffered and is not a streaming competitor; decision-lossless, not data-lossless"
+  }
+ },
+ "caveats": [
+  "TRUE joint: each alert is matched to the worst device posture within +/-3.0s of when it fired; both streams are real and time-coincident.",
+  "coincident_critical requires a containment-grade alert (rule_level >= 12), which does not occur naturally in a short window; an empty coincident_critical band is the honest finding for this capture, not a defect.",
+  "Aggregates only: no alert content, hostnames, agent names, or IPs are recorded."
+ ]
+}

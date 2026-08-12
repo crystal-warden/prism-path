@@ -1,0 +1,91 @@
+{
+ "generated": "2026-08-12T06:33:26.629108Z",
+ "adapter": "fusion",
+ "capture": "live_coincident_aggregate",
+ "note": "union of tonight's 3 live cyber-physical capture sessions (~10 min total). Each session is a real time-coincident window; this aggregate sums their per-session decisions. It is NOT one continuous window. High-value bands (tandem_watch, coincident_critical) are zero across all sessions: no high-severity cyber event coincided with the right posture; that emptiness is the honest finding.",
+ "sessions": 3,
+ "total_seconds": 600,
+ "physical": {
+  "n_readings": 4369,
+  "stability": {
+   "still": 2102,
+   "moving": 388,
+   "shaken": 1879
+  }
+ },
+ "cyber": {
+  "alerts_seen": 90,
+  "level_histogram": {
+   "3": 63,
+   "5": 24,
+   "7": 2,
+   "10": 1
+  }
+ },
+ "joint": {
+  "bands": {
+   "all_quiet": 14,
+   "physical_watch": 0,
+   "cyber_watch": 1,
+   "tandem_watch": 0,
+   "cyber_containment": 0,
+   "physical_escalation": 55,
+   "coincident_critical": 0
+  }
+ },
+ "multimodal": {
+  "rich_readings": 2398,
+  "derived_vs_chip_still_agreement": 0.963,
+  "chip_stability_verdicts": {
+   "On Table": 1151,
+   "In motion": 1214,
+   "Stable": 29,
+   "Unknown": 4
+  },
+  "orientation_tilt_deg": {
+   "min": 0.1,
+   "max": 169.8
+  },
+  "bandwidth": {
+   "standard_multimodal_json_bytes_per_reading": 251.9,
+   "physical_decision_bits_per_reading": 6.05,
+   "ratio_json_over_decision": 333.3,
+   "note": "the full on-chip fusion reading vs the decision-sufficient physical code, per reading, LIVE; a batch compressor (zstd) needs the whole batch buffered and is not a streaming competitor; decision-lossless, not data-lossless"
+  }
+ },
+ "per_session": [
+  {
+   "bridge": "accel",
+   "seconds": 240,
+   "n_read": 1971,
+   "n_alert": 29,
+   "bands": {
+    "physical_escalation": 22,
+    "cyber_watch": 1
+   }
+  },
+  {
+   "bridge": "multimodal",
+   "seconds": 180,
+   "n_read": 1240,
+   "n_alert": 15,
+   "bands": {
+    "physical_escalation": 8
+   }
+  },
+  {
+   "bridge": "multimodal+triggered",
+   "seconds": 180,
+   "n_read": 1158,
+   "n_alert": 46,
+   "bands": {
+    "all_quiet": 14,
+    "physical_escalation": 25
+   }
+  }
+ ],
+ "caveats": [
+  "Aggregate of independent live windows, not one continuous capture; labeled as such.",
+  "Aggregates only: no alert content, hostnames, agent names, or IPs."
+ ]
+}

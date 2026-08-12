@@ -35,6 +35,20 @@ spec-stable.
   `capability.json` flip the `chained` case to Level M → **spec-vector version 1 → 2**.
 
 ### Added
+- **Cyber-physical fusion proven on the live rig: real IMU + real SIEM fused in real time, with the
+  sensor's own on-chip fusion classifier as an independent cross-check.**
+  `adapters/fusion/live_capture.py` runs the BNO086 (via `prismpath-hw/bridge/field_bridge_multi.py`,
+  decision fields byte-identical to the committed pipeline + on-chip quaternion/orientation and the
+  chip's own stability classifier at 10 Hz) and the live SIEM in the same window, joining each alert
+  to the coincident device posture and routing it through `fusion_triage`. Across 3 live sessions
+  (**4,369 real readings + 90 real SIEM alerts**, incl. a self-triggered level-10 auth-failure event
+  as authorized detection-validation), the chip's AI classifier agreed with our derived posture
+  **96.3%** of the time, and the multi-modal-to-decision bandwidth was **~252 B vs ~6 bits per
+  reading (333×), live**. Honest scope: `tandem_watch`/`coincident_critical` stayed empty across all
+  sessions (no high-severity cyber event coincided with the right posture — the rare signal, honestly
+  unlit); the full six-channel suite saturates the MCP2221A HID pipe (10 Hz trio is the sustainable
+  rate — the case for wiring the sensor directly to the FPGA). Evidence row #85; aggregate artifacts
+  are aggregate-only (privacy-tested).
 - **Cyber-physical decision fusion adapter (`adapters/fusion/`): one Level M flow joins IMU posture
   and SIEM verdicts — proved, tessellated, censused, and bandwidth-measured on real data.**
   `flows/fusion_triage.md` fuses `{stability, dev_mg}` (the sensor bridge's own fields; thresholds
