@@ -191,8 +191,10 @@ every other kernel uses, and can execute whole flows.
   Built by `cert_corpus.py`, which frames every in-subset vector of
   `../prismpath/portable/conformance/predicates.json` and cross-checks each against `interp.c` first.
   The declared subset uses the **same filter as `prismpath-hw`'s C-target cert** (in-fragment condition
-  + the fields it *reads* representable on the i32 table): **114/1067**, of which the eBPF target passes
-  **114/114 in-kernel, byte-matching the reference.** The other 953 are excluded and itemized: 930 whose
+  + the fields it *reads* representable on the i32 table): **124/1079** (corpus v2, negative-integer
+  literals included), of which the eBPF target passes
+  **124/124 in-kernel, byte-matching the reference — re-certified 2026-08-12 on both aarch64 and
+  x86_64 with the hardened loader.** The other 955 are excluded and itemized: 943 whose
   condition is not a match-action table (field-vs-field, arithmetic, string-ordering, `is`, non-literal
   collections, constant-only, …) plus 12 float / 11 non-scalar whose *read* field can't be represented on
   an i32 table. **No exclusion is an eBPF limit** — operand-stack depth stays well under `STACK_MAX=4`.
@@ -263,8 +265,8 @@ latency via `BPF_PROG_TEST_RUN`), `netupdate <new.ppt> <iface>` (live policy hot
 
 ## 9. Honest status — what is and isn't proven
 
-- **Proven:** compile → verifier-accepted → in-kernel execution; 114/114 declared-subset conformance
-  (the same 114/1067 subset the FPGA C-target certifies);
+- **Proven:** compile → verifier-accepted → in-kernel execution; 124/124 declared-subset conformance
+  (the same 124/1079 subset the FPGA C-target certifies; re-certified 2026-08-12, aarch64 + x86_64);
   real multi-node flows + a live alert stream routed correctly in-kernel; **real on-wire packets parsed
   and classified on live home traffic; sub-microsecond per-packet latency measured.**
 - **Caveats / not yet done:** the latency figure is program **compute cost** (`BPF_PROG_TEST_RUN`), not

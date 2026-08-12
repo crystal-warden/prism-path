@@ -86,6 +86,16 @@ static int parse_image_buf(const uint8_t *b, long len, Image *im) {
     im->max_steps = rd16(b + 22);  im->max_stack = rd16(b + 24);
     long need = 28 + 8L * im->n_atoms + 4L * im->n_nodes + 6L * im->n_edges + 2L * im->prog_len;
     if (len < need) return -1;
+    /* Capacity bounds: the kernel maps are sized to these MAX_* — an image over any of them would
+     * partially populate (higher indices silently dropped) and route wrong. Reject up front. */
+    if (im->n_atoms > MAX_ATOMS || im->n_nodes > MAX_NODES || im->n_edges > MAX_EDGES ||
+        im->prog_len > MAX_PROG_WORDS || im->n_fields > MAX_FIELDS_PER_PKT) {
+        fprintf(stderr, "parse_image: table exceeds a MAX_* capacity "
+                "(atoms=%u/%d nodes=%u/%d edges=%u/%d prog=%u/%d fields=%u/%d)\n",
+                im->n_atoms, MAX_ATOMS, im->n_nodes, MAX_NODES, im->n_edges, MAX_EDGES,
+                im->prog_len, MAX_PROG_WORDS, im->n_fields, MAX_FIELDS_PER_PKT);
+        return -1;
+    }
     const uint8_t *p = b + 28;
     im->atoms = malloc(sizeof(struct ppt_atom) * (im->n_atoms ? im->n_atoms : 1));
     for (int i = 0; i < im->n_atoms; i++, p += 8) {
@@ -685,6 +695,14 @@ static int net_bench(const char *ppt_path) {
 }
 
 /* Update ONE already-open map (by name, by fd) from a fresh image — the live hot-swap primitive. */
+/* Repopulate one named map from the image. Returns 1 on success, 0 if the name is not one we own,
+ * and -1 (loud, with the map name + errno) if any element write fails — so a partial populate is a
+ * hard error the caller aborts on, not a silently torn table. */
+#define UPD_OR_FAIL(mapname, key_ptr, val_ptr)                                             \
+    do { if (bpf_map_update_elem(fd, (key_ptr), (val_ptr), BPF_ANY) != 0) {                \
+        fprintf(stderr, "netupdate: %s write failed: %s\n", (mapname), strerror(errno));   \
+        return -1; } } while (0)
+
 static int update_named_map(const char *name, int fd, const Image *im) {
     if (!strcmp(name, "config_map")) {
         struct ppt_config cfg = {
@@ -692,22 +710,29 @@ static int update_named_map(const char *name, int fd, const Image *im) {
             .n_nodes = im->n_nodes, .n_edges = im->n_edges, .prog_len = im->prog_len,
             .start_node = im->start, .visits_idx = im->visits_idx,
             .max_steps = im->max_steps, .max_stack = im->max_stack };
-        __u32 k = 0; bpf_map_update_elem(fd, &k, &cfg, BPF_ANY); return 1;
+        __u32 k = 0;
+        /* Carry inline enforcement across the swap: the designated initializer above zeroes
+         * drop_mask, so without this a hot-swap would silently drop an enforcing program back to
+         * observe-only. Preserve whatever was configured at attach time. */
+        struct ppt_config old;
+        if (bpf_map_lookup_elem(fd, &k, &old) == 0) cfg.drop_mask = old.drop_mask;
+        UPD_OR_FAIL("config_map", &k, &cfg);
+        return 1;
     }
     if (!strcmp(name, "atoms_map")) {
-        for (__u32 i = 0; i < im->n_atoms; i++) bpf_map_update_elem(fd, &i, &im->atoms[i], BPF_ANY);
+        for (__u32 i = 0; i < im->n_atoms; i++) UPD_OR_FAIL("atoms_map", &i, &im->atoms[i]);
         return 1;
     }
     if (!strcmp(name, "nodes_map")) {
-        for (__u32 i = 0; i < im->n_nodes; i++) bpf_map_update_elem(fd, &i, &im->nodes[i], BPF_ANY);
+        for (__u32 i = 0; i < im->n_nodes; i++) UPD_OR_FAIL("nodes_map", &i, &im->nodes[i]);
         return 1;
     }
     if (!strcmp(name, "edges_map")) {
-        for (__u32 i = 0; i < im->n_edges; i++) bpf_map_update_elem(fd, &i, &im->edges[i], BPF_ANY);
+        for (__u32 i = 0; i < im->n_edges; i++) UPD_OR_FAIL("edges_map", &i, &im->edges[i]);
         return 1;
     }
     if (!strcmp(name, "prog_map")) {
-        for (__u32 i = 0; i < im->prog_len; i++) bpf_map_update_elem(fd, &i, &im->prog[i], BPF_ANY);
+        for (__u32 i = 0; i < im->prog_len; i++) UPD_OR_FAIL("prog_map", &i, &im->prog[i]);
         return 1;
     }
     if (!strcmp(name, "verdict_map")) {            /* zero the histogram so post-swap counts are clean */
@@ -746,8 +771,15 @@ static int net_update(const char *new_ppt, const char *ifname) {
         int mfd = bpf_map_get_fd_by_id(map_ids[i]);
         if (mfd < 0) continue;
         struct bpf_map_info mi; memset(&mi, 0, sizeof(mi)); __u32 ml = sizeof(mi);
-        if (!bpf_obj_get_info_by_fd(mfd, &mi, &ml))
-            updated += update_named_map(mi.name, mfd, &im);
+        if (!bpf_obj_get_info_by_fd(mfd, &mi, &ml)) {
+            int rc = update_named_map(mi.name, mfd, &im);
+            if (rc < 0) {           /* a partial populate = a torn table; abort loudly, do not continue */
+                fprintf(stderr, "netupdate: aborting swap after a failed map write (%s)\n", mi.name);
+                close(mfd); close(prog_fd); free_image(&im);
+                return 1;
+            }
+            updated += rc;
+        }
         close(mfd);
     }
     close(prog_fd);

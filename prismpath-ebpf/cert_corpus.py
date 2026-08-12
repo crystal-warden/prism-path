@@ -91,7 +91,7 @@ def main():
 
     out_path.write_bytes(records)
     total = len(cases)
-    EXPECTED_SUBSET = 114   # the declared subset shared with the FPGA C-target; see test_conformance_drift
+    EXPECTED_SUBSET = 124   # the declared subset shared with the FPGA C-target (corpus v2, 2026-08-12); see test_conformance_drift
     print(f"PREDICATE CORPUS: {total} frozen vectors")
     print(f"  in declared subset (in-fragment condition + read fields i32-representable): {kept}")
     if kept != EXPECTED_SUBSET:
