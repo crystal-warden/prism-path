@@ -3,6 +3,13 @@
  "n": 10421,
  "span_s": 9412.756999969482,
  "overhead": "tcp_tls",
+ "crypto_cost": {
+  "measured": true,
+  "handshake_us": 83.2,
+  "encrypt_us_per_pkt": 1.0,
+  "aead_mb_s": 1214.1,
+  "payload_len": 1209
+ },
  "rows": [
   {
    "format": "ours O1 (decision)",
@@ -10,6 +17,7 @@
    "packets": 10421,
    "total_wire_bytes": 1146310,
    "bytes_per_event": 110.0,
+   "bytes_per_day": 10522016,
    "packets_per_day": 95655,
    "mean_latency_ms": 0.0,
    "p95_latency_ms": 0.0
@@ -20,16 +28,73 @@
    "packets": 163,
    "total_wire_bytes": 32314,
    "bytes_per_event": 3.101,
+   "bytes_per_day": 296611,
    "packets_per_day": 1496,
    "mean_latency_ms": 13456.0,
    "p95_latency_ms": 6968.0
   },
   {
    "format": "ours O1 (decision)",
-   "strategy": "mtu(+2s cap)",
+   "strategy": "mtu-fill",
+   "packets": 13,
+   "total_wire_bytes": 17046,
+   "bytes_per_event": 1.636,
+   "bytes_per_day": 156466,
+   "packets_per_day": 119,
+   "mean_latency_ms": 459659.5,
+   "p95_latency_ms": 441654.0
+  },
+  {
+   "format": "ours O1 (decision)",
+   "strategy": "mtu+2s cap",
    "packets": 575,
    "total_wire_bytes": 76586,
    "bytes_per_event": 7.349,
+   "bytes_per_day": 702985,
+   "packets_per_day": 5278,
+   "mean_latency_ms": 1032.3,
+   "p95_latency_ms": 2000.0
+  },
+  {
+   "format": "ours O1 +AEAD+ECDHE",
+   "strategy": "stream",
+   "packets": 10421,
+   "total_wire_bytes": 1313238,
+   "bytes_per_event": 126.018,
+   "bytes_per_day": 12054254,
+   "packets_per_day": 95655,
+   "mean_latency_ms": 0.0,
+   "p95_latency_ms": 0.0
+  },
+  {
+   "format": "ours O1 +AEAD+ECDHE",
+   "strategy": "batch:64",
+   "packets": 163,
+   "total_wire_bytes": 35114,
+   "bytes_per_event": 3.37,
+   "bytes_per_day": 322313,
+   "packets_per_day": 1496,
+   "mean_latency_ms": 13456.0,
+   "p95_latency_ms": 6968.0
+  },
+  {
+   "format": "ours O1 +AEAD+ECDHE",
+   "strategy": "mtu-fill",
+   "packets": 13,
+   "total_wire_bytes": 17446,
+   "bytes_per_event": 1.674,
+   "bytes_per_day": 160137,
+   "packets_per_day": 119,
+   "mean_latency_ms": 459659.5,
+   "p95_latency_ms": 441654.0
+  },
+  {
+   "format": "ours O1 +AEAD+ECDHE",
+   "strategy": "mtu+2s cap",
+   "packets": 575,
+   "total_wire_bytes": 85978,
+   "bytes_per_event": 8.25,
+   "bytes_per_day": 789195,
    "packets_per_day": 5278,
    "mean_latency_ms": 1032.3,
    "p95_latency_ms": 2000.0
@@ -40,6 +105,7 @@
    "packets": 10421,
    "total_wire_bytes": 1476661,
    "bytes_per_event": 141.701,
+   "bytes_per_day": 13554319,
    "packets_per_day": 95655,
    "mean_latency_ms": 0.0,
    "p95_latency_ms": 0.0
@@ -50,16 +116,29 @@
    "packets": 163,
    "total_wire_bytes": 758601,
    "bytes_per_event": 72.795,
+   "bytes_per_day": 6963223,
    "packets_per_day": 1496,
    "mean_latency_ms": 13456.0,
    "p95_latency_ms": 6968.0
   },
   {
    "format": "JSON B2 (4-field)",
-   "strategy": "mtu(+2s cap)",
+   "strategy": "mtu-fill",
+   "packets": 580,
+   "total_wire_bytes": 787791,
+   "bytes_per_event": 75.596,
+   "bytes_per_day": 7231159,
+   "packets_per_day": 5324,
+   "mean_latency_ms": 9869.6,
+   "p95_latency_ms": 2009.0
+  },
+  {
+   "format": "JSON B2 (4-field)",
+   "strategy": "mtu+2s cap",
    "packets": 598,
    "total_wire_bytes": 789051,
    "bytes_per_event": 75.717,
+   "bytes_per_day": 7242725,
    "packets_per_day": 5489,
    "mean_latency_ms": 1021.5,
    "p95_latency_ms": 1882.0
@@ -70,6 +149,7 @@
    "packets": 10421,
    "total_wire_bytes": 1493058,
    "bytes_per_event": 143.274,
+   "bytes_per_day": 13704828,
    "packets_per_day": 95655,
    "mean_latency_ms": 0.0,
    "p95_latency_ms": 0.0
@@ -80,16 +160,29 @@
    "packets": 163,
    "total_wire_bytes": 32521,
    "bytes_per_event": 3.121,
+   "bytes_per_day": 298511,
    "packets_per_day": 1496,
    "mean_latency_ms": 13456.0,
    "p95_latency_ms": 6968.0
   },
   {
    "format": "JSON B2 + zstd",
-   "strategy": "mtu(+2s cap)",
+   "strategy": "mtu-fill",
+   "packets": 580,
+   "total_wire_bytes": 96892,
+   "bytes_per_event": 9.298,
+   "bytes_per_day": 889375,
+   "packets_per_day": 5324,
+   "mean_latency_ms": 9869.6,
+   "p95_latency_ms": 2009.0
+  },
+  {
+   "format": "JSON B2 + zstd",
+   "strategy": "mtu+2s cap",
    "packets": 598,
    "total_wire_bytes": 99549,
    "bytes_per_event": 9.553,
+   "bytes_per_day": 913763,
    "packets_per_day": 5489,
    "mean_latency_ms": 1021.5,
    "p95_latency_ms": 1882.0
