@@ -1,0 +1,621 @@
+{
+ "canonical": [
+  {
+   "compact": "{\"a\":2,\"b\":1}",
+   "obj": {
+    "a": 2,
+    "b": 1
+   },
+   "spaced": "{\"a\": 2, \"b\": 1}"
+  },
+  {
+   "compact": "{\"a\":true,\"m\":false,\"z\":null}",
+   "obj": {
+    "a": true,
+    "m": false,
+    "z": null
+   },
+   "spaced": "{\"a\": true, \"m\": false, \"z\": null}"
+  },
+  {
+   "compact": "{\"nested\":{\"x\":\"s\",\"y\":[1,2,{\"k\":\"v\"}]}}",
+   "obj": {
+    "nested": {
+     "x": "s",
+     "y": [
+      1,
+      2,
+      {
+       "k": "v"
+      }
+     ]
+    }
+   },
+   "spaced": "{\"nested\": {\"x\": \"s\", \"y\": [1, 2, {\"k\": \"v\"}]}}"
+  },
+  {
+   "compact": "{\"n\":-5,\"text\":\"quote \\\" backslash \\\\ newline \\n tab \\t\"}",
+   "obj": {
+    "n": -5,
+    "text": "quote \" backslash \\ newline \n tab \t"
+   },
+   "spaced": "{\"n\": -5, \"text\": \"quote \\\" backslash \\\\ newline \\n tab \\t\"}"
+  },
+  {
+   "compact": "{\"ascii\":\"plain\",\"unicode\":\"caf\\u00e9 \\u2014 \\u2615 \\ud834\\udd1e\"}",
+   "obj": {
+    "ascii": "plain",
+    "unicode": "caf\u00e9 \u2014 \u2615 \ud834\udd1e"
+   },
+   "spaced": "{\"ascii\": \"plain\", \"unicode\": \"caf\\u00e9 \\u2014 \\u2615 \\ud834\\udd1e\"}"
+  },
+  {
+   "compact": "{\"floats\":[1.5,2.0,-0.25],\"int\":3}",
+   "obj": {
+    "floats": [
+     1.5,
+     2.0,
+     -0.25
+    ],
+    "int": 3
+   },
+   "spaced": "{\"floats\": [1.5, 2.0, -0.25], \"int\": 3}"
+  },
+  {
+   "compact": "{\"empty_list\":[],\"empty_obj\":{},\"empty_str\":\"\"}",
+   "obj": {
+    "empty_list": [],
+    "empty_obj": {},
+    "empty_str": ""
+   },
+   "spaced": "{\"empty_list\": [], \"empty_obj\": {}, \"empty_str\": \"\"}"
+  }
+ ],
+ "checkpoints": [
+  {
+   "ckpt": {
+    "flow_hash": "sha256:8479114608e9efef8e713c93d9076f326cdbcd6a198cb021395206d0ae97d15f",
+    "path": [
+     "ingest",
+     "work",
+     "done"
+    ],
+    "pending_decision": null,
+    "pending_node": null,
+    "state": {
+     "_outcomes": {
+      "ingest": {
+       "text": "in"
+      },
+      "work": {
+       "ok": true,
+       "text": "ok done"
+      }
+     },
+     "transcript": [
+      {
+       "node": "ingest",
+       "outcome": "in"
+      },
+      {
+       "node": "work",
+       "outcome": "ok done"
+      }
+     ],
+     "visits": {
+      "ingest": 1,
+      "work": 1
+     }
+    },
+    "steps": [
+     {
+      "node": "ingest",
+      "target": "work",
+      "used": "deterministic"
+     },
+     {
+      "node": "work",
+      "target": "done",
+      "used": "deterministic"
+     }
+    ],
+    "stopped": "terminal",
+    "type_gate": false,
+    "version": 1
+   },
+   "final": {
+    "path": [
+     "ingest",
+     "work",
+     "done"
+    ],
+    "stopped": "terminal"
+   },
+   "flow": "---\nname: fx_crash\nstart: ingest\n---\n## ingest\nTake the input.\n-> work: always\n## work\nDo the thing.\n-> done: when ok\n## done\nFinished.\n",
+   "name": "terminal",
+   "script": {
+    "ingest": [
+     {
+      "text": "in"
+     }
+    ],
+    "work": [
+     {
+      "ok": true,
+      "text": "ok done"
+     }
+    ]
+   }
+  },
+  {
+   "ckpt": {
+    "flow_hash": "sha256:9718057b0159f67d00df61cf5f7813f6679cb117b71fb98a20fdbbdeff894b77",
+    "path": [
+     "triage"
+    ],
+    "pending_decision": {
+     "candidates": [
+      {
+       "condition": "when done",
+       "target": "fix"
+      },
+      {
+       "condition": "when broken",
+       "target": "escalate"
+      }
+     ],
+     "node": "triage",
+     "reason": "ambiguous"
+    },
+    "pending_node": "triage",
+    "state": {
+     "_outcomes": {
+      "triage": {
+       "needs_human": true,
+       "reason": "ambiguous"
+      }
+     },
+     "transcript": [
+      {
+       "node": "triage",
+       "outcome": ""
+      }
+     ],
+     "visits": {
+      "triage": 1
+     }
+    },
+    "steps": [],
+    "stopped": "needs_human",
+    "type_gate": false,
+    "version": 1
+   },
+   "ckpt_after": {
+    "flow_hash": "sha256:9718057b0159f67d00df61cf5f7813f6679cb117b71fb98a20fdbbdeff894b77",
+    "path": [
+     "triage",
+     "fix",
+     "close"
+    ],
+    "pending_decision": null,
+    "pending_node": null,
+    "state": {
+     "_outcomes": {
+      "fix": {
+       "text": "repaired"
+      },
+      "triage": {
+       "needs_human": true,
+       "reason": "ambiguous"
+      }
+     },
+     "transcript": [
+      {
+       "node": "triage",
+       "outcome": ""
+      },
+      {
+       "decided_by": "human",
+       "node": "triage",
+       "outcome": "[human chose -> fix]"
+      },
+      {
+       "node": "fix",
+       "outcome": "repaired"
+      }
+     ],
+     "visits": {
+      "fix": 1,
+      "triage": 1
+     }
+    },
+    "steps": [
+     {
+      "node": "triage",
+      "target": "fix",
+      "used": "human"
+     },
+     {
+      "node": "fix",
+      "target": "close",
+      "used": "deterministic"
+     }
+    ],
+    "stopped": "terminal",
+    "type_gate": false,
+    "version": 1
+   },
+   "final": {
+    "path": [
+     "triage",
+     "fix",
+     "close"
+    ],
+    "stopped": "terminal"
+   },
+   "flow": "---\nname: fx_human\nstart: triage\n---\n## triage\nDecide.\n-> fix: when done\n-> escalate: when broken\n## fix\nRepair it.\n-> close: always\n## escalate\nHand off.\n-> close: always\n## close\nDone.\n",
+   "name": "needs_human_choose",
+   "resume": {
+    "choose": "fix"
+   },
+   "script": {
+    "fix": [
+     {
+      "text": "repaired"
+     }
+    ],
+    "triage": [
+     {
+      "needs_human": true,
+      "reason": "ambiguous"
+     }
+    ]
+   },
+   "suspended": {
+    "path": [
+     "triage"
+    ],
+    "stopped": "needs_human"
+   }
+  },
+  {
+   "ckpt": {
+    "flow_hash": "sha256:7e36751892ca01da11ff0064af1502d7798320981fd5833ac2cb99f3a1424988",
+    "path": [
+     "kickoff",
+     "await_result"
+    ],
+    "pending_decision": {
+     "awaiting": [
+      "ready",
+      "__timeout__"
+     ],
+     "candidates": [
+      {
+       "condition": "on event ready",
+       "target": "publish"
+      },
+      {
+       "condition": "on timeout",
+       "target": "giveup"
+      }
+     ],
+     "node": "await_result",
+     "timeout_s": null,
+     "wait": true
+    },
+    "pending_node": "await_result",
+    "state": {
+     "_outcomes": {
+      "await_result": {
+       "wait": true
+      },
+      "kickoff": {
+       "text": "started"
+      }
+     },
+     "transcript": [
+      {
+       "node": "kickoff",
+       "outcome": "started"
+      },
+      {
+       "node": "await_result",
+       "outcome": ""
+      }
+     ],
+     "visits": {
+      "await_result": 1,
+      "kickoff": 1
+     }
+    },
+    "steps": [
+     {
+      "node": "kickoff",
+      "target": "await_result",
+      "used": "deterministic"
+     }
+    ],
+    "stopped": "waiting",
+    "type_gate": false,
+    "version": 1
+   },
+   "ckpt_after": {
+    "flow_hash": "sha256:7e36751892ca01da11ff0064af1502d7798320981fd5833ac2cb99f3a1424988",
+    "path": [
+     "kickoff",
+     "await_result",
+     "publish"
+    ],
+    "pending_decision": null,
+    "pending_node": null,
+    "state": {
+     "_outcomes": {
+      "await_result": {
+       "wait": true
+      },
+      "kickoff": {
+       "text": "started"
+      }
+     },
+     "transcript": [
+      {
+       "node": "kickoff",
+       "outcome": "started"
+      },
+      {
+       "node": "await_result",
+       "outcome": ""
+      },
+      {
+       "event": "ready",
+       "node": "await_result",
+       "outcome": "[event: ready]"
+      }
+     ],
+     "visits": {
+      "await_result": 1,
+      "kickoff": 1
+     }
+    },
+    "steps": [
+     {
+      "node": "kickoff",
+      "target": "await_result",
+      "used": "deterministic"
+     },
+     {
+      "node": "await_result",
+      "target": "publish",
+      "used": "event"
+     }
+    ],
+    "stopped": "terminal",
+    "type_gate": false,
+    "version": 1
+   },
+   "final": {
+    "path": [
+     "kickoff",
+     "await_result",
+     "publish"
+    ],
+    "stopped": "terminal"
+   },
+   "flow": "---\nname: fx_event\nstart: kickoff\n---\n## kickoff\nStart the job.\n-> await_result: always\n## await_result\nWait for the callback.\n-> publish: on event ready\n-> giveup: on timeout\n## publish\nShip it.\n## giveup\nAbandon.\n",
+   "name": "waiting_event",
+   "resume": {
+    "event": "ready"
+   },
+   "script": {
+    "await_result": [
+     {
+      "wait": true
+     }
+    ],
+    "kickoff": [
+     {
+      "text": "started"
+     }
+    ],
+    "publish": [
+     {
+      "text": "shipped"
+     }
+    ]
+   },
+   "suspended": {
+    "path": [
+     "kickoff",
+     "await_result"
+    ],
+    "stopped": "waiting"
+   }
+  },
+  {
+   "ckpt": {
+    "flow_hash": "sha256:8479114608e9efef8e713c93d9076f326cdbcd6a198cb021395206d0ae97d15f",
+    "path": [
+     "ingest",
+     "work"
+    ],
+    "pending_decision": null,
+    "pending_node": "work",
+    "state": {
+     "_outcomes": {
+      "ingest": {
+       "text": "in"
+      }
+     },
+     "transcript": [
+      {
+       "node": "ingest",
+       "outcome": "in"
+      }
+     ],
+     "visits": {
+      "ingest": 1
+     }
+    },
+    "steps": [
+     {
+      "node": "ingest",
+      "target": "work",
+      "used": "deterministic"
+     }
+    ],
+    "stopped": "",
+    "type_gate": false,
+    "version": 1
+   },
+   "ckpt_after": {
+    "flow_hash": "sha256:8479114608e9efef8e713c93d9076f326cdbcd6a198cb021395206d0ae97d15f",
+    "path": [
+     "ingest",
+     "work",
+     "done"
+    ],
+    "pending_decision": null,
+    "pending_node": null,
+    "state": {
+     "_outcomes": {
+      "ingest": {
+       "text": "in"
+      },
+      "work": {
+       "ok": true,
+       "text": "ok now"
+      }
+     },
+     "transcript": [
+      {
+       "node": "ingest",
+       "outcome": "in"
+      },
+      {
+       "node": "work",
+       "outcome": "ok now"
+      }
+     ],
+     "visits": {
+      "ingest": 1,
+      "work": 1
+     }
+    },
+    "steps": [
+     {
+      "node": "ingest",
+      "target": "work",
+      "used": "deterministic"
+     },
+     {
+      "node": "work",
+      "target": "done",
+      "used": "deterministic"
+     }
+    ],
+    "stopped": "terminal",
+    "type_gate": false,
+    "version": 1
+   },
+   "final": {
+    "path": [
+     "ingest",
+     "work",
+     "done"
+    ],
+    "stopped": "terminal"
+   },
+   "flow": "---\nname: fx_crash\nstart: ingest\n---\n## ingest\nTake the input.\n-> work: always\n## work\nDo the thing.\n-> done: when ok\n## done\nFinished.\n",
+   "name": "crash_resume",
+   "resume": {
+    "script": {
+     "ingest": [
+      {
+       "text": "in"
+      }
+     ],
+     "work": [
+      {
+       "ok": true,
+       "text": "ok now"
+      }
+     ]
+    }
+   },
+   "script": {
+    "ingest": [
+     {
+      "text": "in"
+     }
+    ],
+    "work": [
+     {
+      "__raise__": "worker died"
+     }
+    ]
+   }
+  }
+ ],
+ "manifests": {
+  "override": {
+   "created": "2026-08-12T00:00:01Z",
+   "gate_id": "wazuh_triage@v3",
+   "ingestion_hashes": [
+    "sha256:aa",
+    "sha256:bb"
+   ],
+   "kind": "override",
+   "knowledge_base_hash": "sha256:kb26e3",
+   "label": "override:demo",
+   "manifest_hash": "8a98ac5e8d4ef1e5bc8589cc10f4f8fcf29e82fe5bed79157d655ceaba7bc792",
+   "overrider_id": "auditor:jsmith",
+   "policy_hash": "sha256:deadbeef",
+   "prior_created": "2026-08-12T00:00:00Z",
+   "prior_root": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+   "rationale": "compensating control accepted",
+   "root": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+   "supersedes": "503255abd81e0fcd327ad1f8a7e7cb4b289a6e24f8e8a2cdd6d155e8ca38e632"
+  },
+  "provenance": {
+   "created": "2026-08-12T00:00:00Z",
+   "gate_id": "wazuh_triage@v3",
+   "ingestion_hashes": [
+    "sha256:aa",
+    "sha256:bb"
+   ],
+   "knowledge_base_hash": "sha256:kb26e3",
+   "label": "demo",
+   "manifest_hash": "503255abd81e0fcd327ad1f8a7e7cb4b289a6e24f8e8a2cdd6d155e8ca38e632",
+   "policy_hash": "sha256:deadbeef",
+   "root": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+  },
+  "tampered": {
+   "created": "2026-08-12T00:00:00Z",
+   "gate_id": "wazuh_triage@v3",
+   "ingestion_hashes": [
+    "sha256:aa",
+    "sha256:bb"
+   ],
+   "knowledge_base_hash": "sha256:kb26e3",
+   "label": "demo",
+   "manifest_hash": "503255abd81e0fcd327ad1f8a7e7cb4b289a6e24f8e8a2cdd6d155e8ca38e632",
+   "policy_hash": "sha256:deadbeef",
+   "root": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+  }
+ },
+ "note": "Cross-language durable-layer fixtures, generated by the Python reference. The Rust port must reproduce every entry (canonical bytes exactly; checkpoints semantically with flow_path/saved_at dropped).",
+ "salt": [
+  {
+   "expected": "2e2c3f32abf8edfd922e4a2ea5c6e50a36c0c9a942da3b328731ce037eb778cd",
+   "leaf": "1ad81b218bce6f7045ffc7a035614240849c221d4c79b44a64d0c873af5a8627",
+   "secret": "enclave-secret"
+  },
+  {
+   "expected": "06f7238ccf362eb6a5af6933d468832992f8636db73b4dfbe95bc8116eb14cd3",
+   "leaf": "0000000000000000000000000000000000000000000000000000000000000000",
+   "secret": "s2"
+  }
+ ],
+ "version": 1
+}

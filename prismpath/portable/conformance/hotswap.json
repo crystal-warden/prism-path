@@ -1,0 +1,276 @@
+{
+ "authority_key_id": "b198f798a4657104c3a921bbd7c9595e74aea6e7f1d9239135b9826a183f8b00",
+ "authority_pub_hex": "701dd81419fba3d7f8d62dcde9d793d634405157e38ca4b55761f37d08ec4faf",
+ "cases": [
+  {
+   "envelope_check": {
+    "ok": true,
+    "reasons": []
+   },
+   "image_b64": "UFBUTQEAAQABAAEAAgABAAEAAAD//wEAAQAAAAAABQIFAAAAAAABAAEAAAABAAAAAQAAAA==",
+   "manifest": {
+    "counts": {
+     "atoms": 1,
+     "edges": 1,
+     "max_stack": 1,
+     "max_steps": 1,
+     "nodes": 2,
+     "prog_words": 1
+    },
+    "created": "2026-08-12T23:08:19+00:00",
+    "envelope_id": "test-env",
+    "fields": {
+     "x": "int"
+    },
+    "format": "ppt-pack/1",
+    "image_sha256": "5d84dd0bb048dc6dc3f7905d1fe82a1e2171f5d50484dc747b402128acdf02af",
+    "key_id": "b198f798a4657104c3a921bbd7c9595e74aea6e7f1d9239135b9826a183f8b00",
+    "version": 3
+   },
+   "name": "valid",
+   "pubs": [
+    "701dd81419fba3d7f8d62dcde9d793d634405157e38ca4b55761f37d08ec4faf"
+   ],
+   "revoked": [],
+   "sig_hex": "ac5bad17dccff697c5c13a636e1442abeb6c81c2b07216ca4ea13a63c52d759634ec65b9b2b3f0803712ce69091d569446d561d245fdf3388091da2d82df370b",
+   "verify": {
+    "ok": true,
+    "reasons": []
+   }
+  },
+  {
+   "image_b64": "UFBUTQEAAQABAAEAAgABAAEAAAD//wEAAQAAAAAABQIFAAAAAAABAAEAAAABAAAAAQAA/w==",
+   "manifest": {
+    "counts": {
+     "atoms": 1,
+     "edges": 1,
+     "max_stack": 1,
+     "max_steps": 1,
+     "nodes": 2,
+     "prog_words": 1
+    },
+    "created": "2026-08-12T23:08:19+00:00",
+    "envelope_id": "test-env",
+    "fields": {
+     "x": "int"
+    },
+    "format": "ppt-pack/1",
+    "image_sha256": "5d84dd0bb048dc6dc3f7905d1fe82a1e2171f5d50484dc747b402128acdf02af",
+    "key_id": "b198f798a4657104c3a921bbd7c9595e74aea6e7f1d9239135b9826a183f8b00",
+    "version": 3
+   },
+   "name": "tampered_image",
+   "pubs": [
+    "701dd81419fba3d7f8d62dcde9d793d634405157e38ca4b55761f37d08ec4faf"
+   ],
+   "revoked": [],
+   "sig_hex": "ac5bad17dccff697c5c13a636e1442abeb6c81c2b07216ca4ea13a63c52d759634ec65b9b2b3f0803712ce69091d569446d561d245fdf3388091da2d82df370b",
+   "verify": {
+    "ok": false,
+    "reasons": [
+     "image:sha256-mismatch"
+    ]
+   }
+  },
+  {
+   "image_b64": "UFBUTQEAAQABAAEAAgABAAEAAAD//wEAAQAAAAAABQIFAAAAAAABAAEAAAABAAAAAQAAAA==",
+   "manifest": {
+    "counts": {
+     "atoms": 1,
+     "edges": 1,
+     "max_stack": 1,
+     "max_steps": 1,
+     "nodes": 2,
+     "prog_words": 1
+    },
+    "created": "2026-08-12T23:08:19+00:00",
+    "envelope_id": "test-env",
+    "fields": {
+     "x": "int"
+    },
+    "format": "ppt-pack/1",
+    "image_sha256": "5d84dd0bb048dc6dc3f7905d1fe82a1e2171f5d50484dc747b402128acdf02af",
+    "key_id": "b198f798a4657104c3a921bbd7c9595e74aea6e7f1d9239135b9826a183f8b00",
+    "version": 9
+   },
+   "name": "tampered_manifest",
+   "pubs": [
+    "701dd81419fba3d7f8d62dcde9d793d634405157e38ca4b55761f37d08ec4faf"
+   ],
+   "revoked": [],
+   "sig_hex": "ac5bad17dccff697c5c13a636e1442abeb6c81c2b07216ca4ea13a63c52d759634ec65b9b2b3f0803712ce69091d569446d561d245fdf3388091da2d82df370b",
+   "verify": {
+    "ok": false,
+    "reasons": [
+     "sig:invalid"
+    ]
+   }
+  },
+  {
+   "image_b64": "UFBUTQEAAQABAAEAAgABAAEAAAD//wEAAQAAAAAABQIFAAAAAAABAAEAAAABAAAAAQAAAA==",
+   "manifest": {
+    "counts": {
+     "atoms": 1,
+     "edges": 1,
+     "max_stack": 1,
+     "max_steps": 1,
+     "nodes": 2,
+     "prog_words": 1
+    },
+    "created": "2026-08-12T23:08:19+00:00",
+    "envelope_id": "test-env",
+    "fields": {
+     "x": "int"
+    },
+    "format": "ppt-pack/1",
+    "image_sha256": "5d84dd0bb048dc6dc3f7905d1fe82a1e2171f5d50484dc747b402128acdf02af",
+    "key_id": "b198f798a4657104c3a921bbd7c9595e74aea6e7f1d9239135b9826a183f8b00",
+    "version": 3
+   },
+   "name": "wrong_key",
+   "pubs": [
+    "2a5497f9201b2c7d4984cbb347eb4eef4346dafc302efba7a1a9ce3fa1e6724a"
+   ],
+   "revoked": [],
+   "sig_hex": "ac5bad17dccff697c5c13a636e1442abeb6c81c2b07216ca4ea13a63c52d759634ec65b9b2b3f0803712ce69091d569446d561d245fdf3388091da2d82df370b",
+   "verify": {
+    "ok": false,
+    "reasons": [
+     "sig:invalid"
+    ]
+   }
+  },
+  {
+   "image_b64": "UFBUTQEAAQABAAEAAgABAAEAAAD//wEAAQAAAAAABQIFAAAAAAABAAEAAAABAAAAAQAAAA==",
+   "manifest": {
+    "counts": {
+     "atoms": 1,
+     "edges": 1,
+     "max_stack": 1,
+     "max_steps": 1,
+     "nodes": 2,
+     "prog_words": 1
+    },
+    "created": "2026-08-12T23:08:19+00:00",
+    "envelope_id": "test-env",
+    "fields": {
+     "x": "int"
+    },
+    "format": "ppt-pack/1",
+    "image_sha256": "5d84dd0bb048dc6dc3f7905d1fe82a1e2171f5d50484dc747b402128acdf02af",
+    "key_id": "b198f798a4657104c3a921bbd7c9595e74aea6e7f1d9239135b9826a183f8b00",
+    "version": 3
+   },
+   "name": "revoked_key",
+   "pubs": [
+    "701dd81419fba3d7f8d62dcde9d793d634405157e38ca4b55761f37d08ec4faf"
+   ],
+   "revoked": [
+    "b198f798a4657104c3a921bbd7c9595e74aea6e7f1d9239135b9826a183f8b00"
+   ],
+   "sig_hex": "ac5bad17dccff697c5c13a636e1442abeb6c81c2b07216ca4ea13a63c52d759634ec65b9b2b3f0803712ce69091d569446d561d245fdf3388091da2d82df370b",
+   "verify": {
+    "ok": false,
+    "reasons": [
+     "sig:revoked-key"
+    ]
+   }
+  },
+  {
+   "envelope_check": {
+    "ok": false,
+    "reasons": [
+     "envelope:unknown-field:z"
+    ]
+   },
+   "image_b64": "UFBUTQEAAQABAAEAAgABAAEAAAD//wEAAQAAAAAABQIFAAAAAAABAAEAAAABAAAAAQAAAA==",
+   "manifest": {
+    "counts": {
+     "atoms": 1,
+     "edges": 1,
+     "max_stack": 1,
+     "max_steps": 1,
+     "nodes": 2,
+     "prog_words": 1
+    },
+    "created": "2026-08-12T23:08:19+00:00",
+    "envelope_id": "test-env",
+    "fields": {
+     "z": "int"
+    },
+    "format": "ppt-pack/1",
+    "image_sha256": "5d84dd0bb048dc6dc3f7905d1fe82a1e2171f5d50484dc747b402128acdf02af",
+    "key_id": "b198f798a4657104c3a921bbd7c9595e74aea6e7f1d9239135b9826a183f8b00",
+    "version": 4
+   },
+   "name": "bad_envelope_field",
+   "pubs": [
+    "701dd81419fba3d7f8d62dcde9d793d634405157e38ca4b55761f37d08ec4faf"
+   ],
+   "revoked": [],
+   "sig_hex": "6a2567a464ae148600994fef7976ab9c87008db8f2818fd4eb7b0b6082f5df267adf4918713a450bcf29909137318c2469cea1cb625605a4f15770438c39fc08",
+   "verify": {
+    "ok": true,
+    "reasons": []
+   }
+  },
+  {
+   "envelope_check": {
+    "ok": false,
+    "reasons": [
+     "image:unknown-opcode:word0"
+    ]
+   },
+   "image_b64": "UFBUTQEAAQABAAEAAgABAAEAAAD//wEAAQAAAAAABQIFAAAAAAABAAEAAAABAAAAAQCZmQ==",
+   "manifest": {
+    "counts": {
+     "atoms": 1,
+     "edges": 1,
+     "max_stack": 1,
+     "max_steps": 1,
+     "nodes": 2,
+     "prog_words": 1
+    },
+    "created": "2026-08-12T23:08:19+00:00",
+    "envelope_id": "test-env",
+    "fields": {
+     "x": "int"
+    },
+    "format": "ppt-pack/1",
+    "image_sha256": "f98178796c05a58d717f21152dc7d2e5a81b1f2a4268be07551e815d4d60b8d2",
+    "key_id": "b198f798a4657104c3a921bbd7c9595e74aea6e7f1d9239135b9826a183f8b00",
+    "version": 5
+   },
+   "name": "injected_opcode",
+   "pubs": [
+    "701dd81419fba3d7f8d62dcde9d793d634405157e38ca4b55761f37d08ec4faf"
+   ],
+   "revoked": [],
+   "sig_hex": "17fc836f66da8172d9bce26b38db764f24878a25cb4c98d371e97e7f0d915a2bc69d661d756d111a1372db7713555efc345e8dd0ed8bcc37378aee9ecf716100",
+   "verify": {
+    "ok": true,
+    "reasons": []
+   }
+  }
+ ],
+ "envelope": {
+  "caps": {
+   "atoms": 1024,
+   "edges": 1024,
+   "max_stack": 16,
+   "max_steps": 25,
+   "nodes": 256,
+   "prog_words": 4096
+  },
+  "envelope_id": "test-env",
+  "fields": {
+   "x": "int",
+   "y": "str"
+  },
+  "key_id": "b198f798a4657104c3a921bbd7c9595e74aea6e7f1d9239135b9826a183f8b00",
+  "require_level_m": true
+ },
+ "envelope_sig_hex": "e2accc889043a7915a2bdc5a45930fa49d2aa48bba50b5bac993456b80ed6ccdf316cff0f495a34010cf29ed97f30c6ecca60bea0ec0d2b2438a73dd9f8ce506",
+ "note": "Cross-language hot-swap fixtures. Every verdict (ok + stable reasons) was produced by the Python reference gates; the Rust port must reproduce each exactly. version_floor: swapping the valid pack (version 3) twice must reject the second with version:not-monotonic:3<=3.",
+ "version": 1
+}

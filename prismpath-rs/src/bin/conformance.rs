@@ -1,7 +1,7 @@
 //! Certify `prismpath-rs` against the frozen kernel spec.
 //!
 //! The conformance corpus is the specification expressed as data:
-//!   * `predicates.json` — 1,067 `(condition, context) -> true | false | "ERROR"` cases
+//!   * `predicates.json` — 1,079 `(condition, context) -> true | false | "ERROR"` cases
 //!   * `flows.json`      — 27 engine fixtures -> `{path, stopped, pending_node, spawn}`
 //!
 //! Its README states the intent plainly: "A future Go / Rust / WASM kernel implements the frozen
@@ -193,7 +193,7 @@ fn main() {
             max_steps: fx.max_steps.unwrap_or(25),
             start: fx.start.clone(),
             state: fx.state.as_ref().map(V::from_json),
-            human_floor: None,
+            ..Default::default()
         };
         let got = match run(&graph, scripted_agent(&fx.script), opts) {
             Ok(res) => serde_json::json!({
@@ -247,6 +247,7 @@ fn main() {
                 start: fx.start.clone(),
                 state: fx.state.as_ref().map(V::from_json),
                 human_floor: fx.human_floor,
+                ..Default::default()
             };
 
             let got = match run_locked(

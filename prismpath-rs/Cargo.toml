@@ -4,6 +4,16 @@ version = "0.1.0"
 edition = "2021"
 description = "A lightweight Rust-native P0 engine for PrismPath"
 
+[features]
+# `durable` = checkpoint/resume + the content-addressed attestation manifests (sha2/hmac are tiny,
+# pure-Rust). Default-on so the conformance gate always runs; embedded builds that want the bare
+# kernel use `default-features = false` and keep only serde.
+default = ["durable"]
+durable = ["dep:sha2", "dep:hmac", "dep:hex"]
+
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+sha2 = { version = "0.10", optional = true }
+hmac = { version = "0.12", optional = true }
+hex = { version = "0.4", optional = true }

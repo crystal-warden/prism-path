@@ -1,7 +1,7 @@
 //! prismpath-rs — the portable PrismPath kernel, in Rust.
 //!
 //! A faithful port of `portable/prismpath.mjs` (itself a certified port of the Python reference:
-//! 1067/1067 predicates, 27/27 flows). The conformance corpus in `../prismpath/portable/conformance`
+//! 1079/1079 predicates, 27/27 flows). The conformance corpus in `../prismpath/portable/conformance`
 //! IS the specification, and this crate's only claim to correctness is passing it bit-for-bit:
 //!
 //! ```text
@@ -57,6 +57,33 @@ pub enum V {
 }
 
 impl V {
+    /// Inverse of `from_json`. An integral finite `Num` serializes as a JSON integer — the
+    /// reference (Python/JS) writes `3`, never `3.0`, and checkpoints must round-trip that.
+    pub fn to_json(&self) -> serde_json::Value {
+        match self {
+            V::Null | V::Ellipsis => serde_json::Value::Null,
+            V::Bool(b) => serde_json::Value::Bool(*b),
+            V::Num(n) => {
+                if n.fract() == 0.0 && n.is_finite() && n.abs() < 9.0e15 {
+                    serde_json::Value::Number((*n as i64).into())
+                } else {
+                    serde_json::Number::from_f64(*n)
+                        .map(serde_json::Value::Number)
+                        .unwrap_or(serde_json::Value::Null)
+                }
+            }
+            V::Str(s) => serde_json::Value::String(s.clone()),
+            V::List(items) => serde_json::Value::Array(items.iter().map(V::to_json).collect()),
+            V::Obj(entries) => {
+                let mut m = serde_json::Map::new();
+                for (k, v) in entries {
+                    m.insert(k.clone(), v.to_json());
+                }
+                serde_json::Value::Object(m)
+            }
+        }
+    }
+
     pub fn from_json(v: &serde_json::Value) -> V {
         match v {
             serde_json::Value::Null => V::Null,
@@ -214,7 +241,7 @@ fn expr_of(condition: &str) -> String {
 #[derive(Debug, Clone, PartialEq)]
 enum Tok {
     Name(String),
-    Num(f64),
+    Num(f64, bool), // value, is_float — the flag lets `-<int>` fold while `-<float>` stays rejected
     Str(String),
     Ellipsis,
     Op(String),
@@ -287,7 +314,7 @@ fn tokenize(src: &str) -> Result<Vec<Tok>, PredicateError> {
                     // to_digit(radix) is always Some.
                     val = val * radix as f64 + c.to_digit(radix).expect("digit valid for radix") as f64;
                 }
-                toks.push(Tok::Num(val));
+                toks.push(Tok::Num(val, false)); // radix literal: always integer
                 i = j;
                 continue;
             }
@@ -320,7 +347,8 @@ fn tokenize(src: &str) -> Result<Vec<Tok>, PredicateError> {
             let text: String = s[i..j].iter().filter(|c| **c != '_').collect();
             // JS Number() and Rust f64 parsing are both correctly rounded; "1." parses as 1
             let val = text.parse::<f64>().unwrap_or(f64::NAN);
-            toks.push(Tok::Num(val));
+            let is_float = text.contains('.') || text.contains('e') || text.contains('E');
+            toks.push(Tok::Num(val, is_float));
             i = j;
             continue;
         }
@@ -396,6 +424,11 @@ fn tokenize(src: &str) -> Result<Vec<Tok>, PredicateError> {
             i += 1;
             continue;
         }
+        if ch == '-' || ch == '+' {
+            toks.push(Tok::Op(ch.to_string())); // sign; folded onto an int literal in operand()
+            i += 1;
+            continue;
+        }
         let near: String = s[i..(i + 8).min(n)].iter().collect();
         return perr(format!("predicate uses disallowed syntax near {near:?}"));
     }
@@ -404,7 +437,9 @@ fn tokenize(src: &str) -> Result<Vec<Tok>, PredicateError> {
 
 #[derive(Debug, Clone)]
 enum Ast {
-    Const(V),
+    // `is_float` (2nd field) is carried only for the proof layer: the Level M i32 fragment excludes
+    // float literals, and `V::Num(f64)` alone cannot tell `1` from `1.0`.
+    Const(V, bool),
     Name(String),
     And(Vec<Ast>),
     Or(Vec<Ast>),
@@ -529,17 +564,29 @@ impl Parser {
             Some(t) => t,
             None => return perr("unexpected end of predicate"),
         };
+        // Sign on an INTEGER literal folds to a single constant (mirrors predicates.fold_unary_signs):
+        // `-5` -> const -5. A sign on a float or a name does NOT fold and stays disallowed.
+        if let Tok::Op(ref o) = tk {
+            if o == "-" || o == "+" {
+                if let Some(Tok::Num(v, false)) = self.peek().cloned() {
+                    self.next_tok();
+                    let signed = if o == "-" { -v } else { v };
+                    return Ok(Ast::Const(V::Num(signed), false));
+                }
+                return perr(format!("predicate uses disallowed syntax (unary {o})"));
+            }
+        }
         match tk {
-            Tok::Num(v) => Ok(Ast::Const(V::Num(v))),
-            Tok::Str(v) => Ok(Ast::Const(V::Str(v))),
-            Tok::Ellipsis => Ok(Ast::Const(V::Ellipsis)), // `...` is a truthy Constant
+            Tok::Num(v, f) => Ok(Ast::Const(V::Num(v), f)),
+            Tok::Str(v) => Ok(Ast::Const(V::Str(v), false)),
+            Tok::Ellipsis => Ok(Ast::Const(V::Ellipsis, false)), // `...` is a truthy Constant
             Tok::Name(nm) => {
                 // Python-exact: True/False/None are constants; anything else (incl. lowercase
                 // true) is a Name that reads the context.
                 match nm.as_str() {
-                    "True" => Ok(Ast::Const(V::Bool(true))),
-                    "False" => Ok(Ast::Const(V::Bool(false))),
-                    "None" => Ok(Ast::Const(V::Null)),
+                    "True" => Ok(Ast::Const(V::Bool(true), false)),
+                    "False" => Ok(Ast::Const(V::Bool(false), false)),
+                    "None" => Ok(Ast::Const(V::Null, false)),
                     "and" | "or" | "not" | "in" => {
                         perr(format!("unexpected keyword {nm} in predicate"))
                     }
@@ -795,7 +842,7 @@ fn ev_node(node: &Ast, ctx: &HashMap<String, V>, depth: usize) -> Result<V, Pred
         return perr("predicate nested too deeply");
     }
     match node {
-        Ast::Const(v) => Ok(v.clone()),
+        Ast::Const(v, _) => Ok(v.clone()),
         Ast::Name(nm) => Ok(ctx.get(nm).cloned().unwrap_or(V::Null)),
         Ast::And(vals) => {
             // NB: evaluate ALL operands first, like the reference's `.map` — no short-circuit,
@@ -1271,6 +1318,23 @@ impl RunState {
                         }
                     }
                     ("transcript", V::List(items)) => st.transcript = items.clone(),
+                    // The reference keeps these under underscore keys in the same dict; a resumed
+                    // run must ADOPT them so prior history merges with new accumulation instead of
+                    // being shadowed by it.
+                    ("_errors", V::Obj(es)) => {
+                        for (node, count) in es {
+                            if let Some(n) = as_num(count) {
+                                st.errors.insert(node.clone(), n as i64);
+                            }
+                        }
+                    }
+                    ("_outcomes", V::Obj(os)) => {
+                        for (node, out) in os {
+                            if let V::Obj(entries) = out {
+                                st.outcomes.insert(node.clone(), entries.clone());
+                            }
+                        }
+                    }
                     _ => {
                         st.extra.insert(k.clone(), val.clone());
                     }
@@ -1355,11 +1419,23 @@ pub struct RunOpts {
     pub start: Option<String>,
     pub state: Option<V>,
     pub human_floor: Option<f64>,
+    /// Resume support (mirrors the reference's `_seed_path`/`_seed_steps`): prior history a
+    /// resumed run carries so `RunResult.path`/`.steps` stay continuous. Empty = fresh run,
+    /// behavior identical to before these fields existed.
+    pub seed_path: Vec<String>,
+    pub seed_steps: Vec<Step>,
 }
 
 impl Default for RunOpts {
     fn default() -> Self {
-        RunOpts { max_steps: 25, start: None, state: None, human_floor: None }
+        RunOpts {
+            max_steps: 25,
+            start: None,
+            state: None,
+            human_floor: None,
+            seed_path: Vec::new(),
+            seed_steps: Vec::new(),
+        }
     }
 }
 
@@ -1623,7 +1699,15 @@ where
         Some(v) => RunState::from_v(v),
         None => RunState::default(),
     };
-    let mut res = RunResult { path: vec![node.clone()], ..Default::default() };
+    let mut res = RunResult {
+        path: {
+            let mut p = opts.seed_path.clone();
+            p.push(node.clone());
+            p
+        },
+        steps: opts.seed_steps.clone(),
+        ..Default::default()
+    };
 
     for _step in 0..opts.max_steps {
         let n = graph
@@ -1842,6 +1926,721 @@ where
 
 // ------------------------------------------------------------------------------- tests
 
+// ============================ PROOF LAYER: Level M / capability ============================
+// Faithful port of prismpath/portable/prismpath.mjs (isLevelM / flowLevelM / capabilityReport),
+// which mirrors model_check.py. Reason codes are the same stable strings the reference emits, gated
+// byte-for-byte against conformance/{level_m,capability}.json (tests/test_proof.rs).
+
+#[cfg(feature = "durable")]
+pub mod durable;
+
+#[cfg(feature = "durable")]
+pub mod connector;
+
+#[cfg(feature = "durable")]
+pub mod compose;
+
+mod lm_reason {
+    pub const CHAINED: &str = "chained-comparison";
+    pub const FIELD_VS_FIELD: &str = "field-vs-field";
+    pub const SUBSTRING: &str = "substring-in";
+    pub const NONLITERAL: &str = "non-literal-collection";
+    pub const STRING_ORDER: &str = "string-ordering";
+    pub const CONSTANT: &str = "constant-only";
+    pub const NESTED: &str = "nested-container";
+    pub const SYNTAX: &str = "disallowed-or-unparseable";
+}
+
+fn lm_is_order_op(op: &str) -> bool {
+    matches!(op, "<" | "<=" | ">" | ">=")
+}
+
+/// A scalar constant representable in the i32 match-action fragment. Float literals are excluded —
+/// the fragment has no float value domain (this is why `Ast::Const` carries the `is_float` flag).
+fn lm_scalar_const(node: &Ast) -> bool {
+    matches!(
+        node,
+        Ast::Const(V::Null, _)
+            | Ast::Const(V::Bool(_), _)
+            | Ast::Const(V::Str(_), _)
+            | Ast::Const(V::Num(_), false)
+    )
+}
+
+/// `a < b < c` -> `a < b and b < c`, recursively (SPEC §4.3). Mirrors `_desugarChains` so the
+/// classifier and the PPT compiler cannot disagree about chains.
+fn lm_desugar_chains(node: Ast) -> Ast {
+    match node {
+        Ast::And(vals) => Ast::And(vals.into_iter().map(lm_desugar_chains).collect()),
+        Ast::Or(vals) => Ast::Or(vals.into_iter().map(lm_desugar_chains).collect()),
+        Ast::Not(v) => Ast::Not(Box::new(lm_desugar_chains(*v))),
+        Ast::Cmp { left, ops, rights } if ops.len() > 1 => {
+            let operands: Vec<Ast> = std::iter::once(*left).chain(rights).collect();
+            let vals = ops
+                .iter()
+                .enumerate()
+                .map(|(i, op)| Ast::Cmp {
+                    left: Box::new(operands[i].clone()),
+                    ops: vec![op.clone()],
+                    rights: vec![operands[i + 1].clone()],
+                })
+                .collect();
+            Ast::And(vals)
+        }
+        other => other,
+    }
+}
+
+/// Why a single atom is outside the fragment (`None` = in fragment). Mirrors `_lmAtomReason`.
+fn lm_atom_reason(node: &Ast) -> Option<&'static str> {
+    match node {
+        Ast::Name(_) => None,                        // bare field (scalar truthiness)
+        Ast::Const(..) => Some(lm_reason::CONSTANT), // `when True` — no field, not a row
+        Ast::Cmp { left, ops, rights } => {
+            if ops.len() != 1 {
+                return Some(lm_reason::CHAINED); // defensive: chains are desugared first
+            }
+            let op = ops[0].as_str();
+            let right = &rights[0];
+            if op == "in" || op == "not in" {
+                match left.as_ref() {
+                    Ast::Name(_) => {}
+                    Ast::Const(..) => return Some(lm_reason::CONSTANT),
+                    _ => return Some(lm_reason::FIELD_VS_FIELD),
+                }
+                if let Ast::Const(V::Str(_), _) = right {
+                    return Some(lm_reason::SUBSTRING);
+                }
+                if let Ast::List(elts) = right {
+                    for e in elts {
+                        if let Ast::List(_) = e {
+                            return Some(lm_reason::NESTED);
+                        }
+                        if !lm_scalar_const(e) {
+                            return Some(lm_reason::NONLITERAL);
+                        }
+                    }
+                    return None;
+                }
+                return Some(lm_reason::NONLITERAL);
+            }
+            // comparison: field OP const (either orientation)
+            let left_is_name = matches!(left.as_ref(), Ast::Name(_));
+            let right_is_name = matches!(right, Ast::Name(_));
+            let var_const: &Ast = if left_is_name && lm_scalar_const(right) {
+                right
+            } else if right_is_name && lm_scalar_const(left) {
+                left
+            } else if left_is_name && right_is_name {
+                return Some(lm_reason::FIELD_VS_FIELD);
+            } else {
+                return Some(if lm_scalar_const(left) && lm_scalar_const(right) {
+                    lm_reason::CONSTANT
+                } else {
+                    lm_reason::SYNTAX
+                });
+            };
+            if lm_is_order_op(op) {
+                if let Ast::Const(V::Str(_), _) = var_const {
+                    return Some(lm_reason::STRING_ORDER); // string ordering excluded
+                }
+            }
+            None
+        }
+        _ => Some(lm_reason::SYNTAX),
+    }
+}
+
+/// First non-member reason over a boolean tree, or `None`. Mirrors `_lmClassify`.
+fn lm_classify(node: &Ast) -> Option<&'static str> {
+    match node {
+        Ast::And(vals) | Ast::Or(vals) => {
+            for v in vals {
+                if let Some(r) = lm_classify(v) {
+                    return Some(r);
+                }
+            }
+            None
+        }
+        Ast::Not(v) => lm_classify(v),
+        _ => lm_atom_reason(node),
+    }
+}
+
+/// Is a deterministic condition in the match-action fragment? -> (level_m, reason).
+/// Faithful port of `isLevelM`; keyword catch-alls (always/else/false…) are trivially table rows.
+pub fn is_level_m(cond: &str) -> (bool, Option<String>) {
+    if !is_deterministic(cond) {
+        if is_error(cond) {
+            let mut expr = error_expr(cond); // '' | 'when <expr>' | '<expr>'
+            if expr.is_empty() {
+                return (true, None); // bare `on error` — a default row
+            }
+            if !expr.to_lowercase().starts_with("when ") {
+                expr = format!("when {expr}");
+            }
+            return is_level_m(&expr);
+        }
+        return (false, Some("not-deterministic".to_string()));
+    }
+    let expr = expr_of(cond);
+    let low = expr.to_lowercase();
+    if ALWAYS.contains(&low.as_str()) || NEVER.contains(&low.as_str()) {
+        return (true, None);
+    }
+    let node = match parse_expr(&expr) {
+        Ok(n) => lm_desugar_chains(n),
+        Err(_) => return (false, Some(lm_reason::SYNTAX.to_string())),
+    };
+    match lm_classify(&node) {
+        None => (true, None),
+        Some(r) => (false, Some(r.to_string())),
+    }
+}
+
+/// A reachable deterministic edge outside the fragment (serialized to match the reference).
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct NonMemberEdge {
+    pub node: String,
+    pub target: String,
+    pub condition: String,
+    pub level_m: bool, // always false in this list; kept for corpus parity
+    pub reason: Option<String>,
+}
+
+/// SPEC §7: is every reachable deterministic edge in the fragment? Mirrors `flowLevelM`.
+pub fn flow_level_m(graph: &Graph) -> (bool, Vec<NonMemberEdge>) {
+    let mut bad = Vec::new();
+    let mut names = reachable(graph);
+    names.sort();
+    for name in names {
+        let Some(node) = graph.nodes.get(&name) else { continue };
+        for (target, cond) in &node.edges {
+            if !is_deterministic(cond) {
+                continue;
+            }
+            let (lm, reason) = is_level_m(cond);
+            if !lm {
+                bad.push(NonMemberEdge {
+                    node: name.clone(),
+                    target: target.clone(),
+                    condition: cond.clone(),
+                    level_m: false,
+                    reason,
+                });
+            }
+        }
+    }
+    (bad.is_empty(), bad)
+}
+
+/// Which targets a flow compiles to (+ the edges that push it out) — the portable capability matrix.
+/// Faithful port of `capabilityReport` / `model_check.capability_report`; returns the exact JSON the
+/// reference emits (gated against capability.json).
+pub fn capability_report(graph: &Graph) -> serde_json::Value {
+    let semantic = portability_violations(graph); // reachable semantic edges
+    let p0 = semantic.is_empty();
+    let (lm_ok, non_member) = flow_level_m(graph);
+    let hw_ok = p0 && lm_ok;
+
+    let semantic_json: Vec<serde_json::Value> = semantic
+        .iter()
+        .map(|v| serde_json::json!({ "node": v.node, "target": v.target, "condition": v.condition }))
+        .collect();
+    let non_member_json =
+        serde_json::to_value(&non_member).unwrap_or(serde_json::Value::Array(vec![]));
+
+    let portable_reason = if p0 {
+        serde_json::Value::Null
+    } else {
+        serde_json::json!(format!(
+            "{} reachable semantic edge(s) — P0 runs unconditionally; lock them for P1",
+            semantic.len()
+        ))
+    };
+    let hw_reason = if hw_ok {
+        serde_json::Value::Null
+    } else if !p0 {
+        serde_json::json!(format!(
+            "{} reachable semantic edge(s) — not deterministic",
+            semantic.len()
+        ))
+    } else {
+        serde_json::json!(format!(
+            "{} deterministic edge(s) outside the match-action fragment",
+            non_member.len()
+        ))
+    };
+
+    serde_json::json!({
+        "tier": if p0 { "P0" } else { "P1/P2" },
+        "level_m": lm_ok,
+        "targets": {
+            "python": { "status": "yes", "reason": null, "blocking_edges": [] },
+            "portable": {
+                "status": if p0 { "yes" } else { "needs-lockfile" },
+                "reason": portable_reason,
+                "blocking_edges": if p0 { serde_json::json!([]) } else { serde_json::json!(semantic_json) },
+            },
+            "level_m_hardware": {
+                "status": if hw_ok { "yes" } else { "no" },
+                "reason": hw_reason,
+                "blocking_edges": if !p0 {
+                    serde_json::json!(semantic_json)
+                } else if hw_ok {
+                    serde_json::json!([])
+                } else {
+                    non_member_json
+                },
+            },
+        },
+    })
+}
+
+// ================= PROOF LAYER: reachability / bounded model checking =================
+// Faithful port of prismpath.mjs checkReach (mirrors model_check.check_reach): three-valued
+// yes/may/no reachability for target nodes, EXACT over the Level M fragment and a sound
+// over-approximation outside it. No model, no execution — it enumerates candidate contexts against
+// the REAL predicate evaluator, so the checker cannot drift from the engine. Verdicts (reachable +
+// proven) match the reference bit-for-bit (reach.json); witnesses/depth are implementation detail.
+use std::collections::{BTreeMap, HashSet};
+
+const REACH_FRESH_STR: &str = "\u{0}fresh";
+const REACH_PRODUCT_CAP: usize = 50_000;
+
+/// Mirror analysis._parse: a deterministic, non-keyword condition's AST, else None.
+fn reach_cond_ast(cond: &str) -> Option<Ast> {
+    if !is_deterministic(cond) {
+        return None;
+    }
+    let expr = expr_of(cond);
+    let low = expr.to_lowercase();
+    if ALWAYS.contains(&low.as_str()) || NEVER.contains(&low.as_str()) {
+        return None;
+    }
+    parse_expr(&expr).ok()
+}
+
+fn reach_walk<'a>(node: &'a Ast, out: &mut Vec<&'a Ast>) {
+    out.push(node);
+    match node {
+        Ast::And(vals) | Ast::Or(vals) => {
+            for v in vals {
+                reach_walk(v, out);
+            }
+        }
+        Ast::Not(v) => reach_walk(v, out),
+        Ast::Cmp { left, rights, .. } => {
+            reach_walk(left, out);
+            for r in rights {
+                reach_walk(r, out);
+            }
+        }
+        Ast::List(elts) => {
+            for e in elts {
+                reach_walk(e, out);
+            }
+        }
+        _ => {}
+    }
+}
+
+fn reach_consts_of(node: &Ast) -> Vec<V> {
+    let mut all = Vec::new();
+    reach_walk(node, &mut all);
+    all.into_iter()
+        .filter_map(|n| if let Ast::Const(v, _) = n { Some(v.clone()) } else { None })
+        .collect()
+}
+
+fn reach_fields_of(node: &Ast) -> HashSet<String> {
+    let mut all = Vec::new();
+    reach_walk(node, &mut all);
+    all.into_iter()
+        .filter_map(|n| if let Ast::Name(nm) = n { Some(nm.clone()) } else { None })
+        .collect()
+}
+
+/// A stable dedup key over candidate values (mirrors the mjs `type:value` key).
+fn reach_cand_key(v: &V) -> String {
+    match v {
+        V::Null => "null".to_string(),
+        V::Bool(b) => format!("boolean:{b}"),
+        V::Num(n) => {
+            if n.is_nan() {
+                "number:nan".to_string()
+            } else {
+                format!("number:{n}")
+            }
+        }
+        V::Str(s) => format!("string:{s}"),
+        other => format!("other:{other:?}"),
+    }
+}
+
+/// Boundary-probing candidate values for the fields a node routes on (mirrors `_candidates`).
+fn reach_candidates(consts: &[V]) -> Vec<V> {
+    let mut nums: Vec<f64> = consts
+        .iter()
+        .filter_map(|v| match v {
+            V::Num(n) if !n.is_nan() => Some(*n),
+            _ => None,
+        })
+        .collect();
+    nums.sort_by(|a, b| a.partial_cmp(b).expect("finite"));
+    nums.dedup();
+
+    let mut cands: Vec<V> = vec![
+        V::Null,
+        V::Bool(true),
+        V::Bool(false),
+        V::Num(0.0),
+        V::Num(1.0),
+        V::Str(String::new()),
+        V::Str(REACH_FRESH_STR.to_string()),
+    ];
+    cands.extend(consts.iter().cloned());
+    for n in &nums {
+        cands.push(V::Num(n - 1.0));
+        cands.push(V::Num(n + 1.0));
+    }
+    for i in 0..nums.len().saturating_sub(1) {
+        cands.push(V::Num((nums[i] + nums[i + 1]) / 2.0));
+    }
+
+    let mut seen = HashSet::new();
+    let mut out = Vec::new();
+    for v in cands {
+        if seen.insert(reach_cand_key(&v)) {
+            out.push(v);
+        }
+    }
+    out
+}
+
+/// true iff base^exp > cap, without overflow (mirrors the `Math.pow(...) > CAP` guard).
+fn reach_pow_exceeds(base: usize, exp: usize, cap: usize) -> bool {
+    let mut acc: u128 = 1;
+    let cap = cap as u128;
+    for _ in 0..exp {
+        acc = acc.saturating_mul(base as u128);
+        if acc > cap {
+            return true;
+        }
+    }
+    acc > cap
+}
+
+struct NodeSat {
+    det: Vec<(usize, String, String)>, // (edge index, target, condition)
+    fields: Vec<String>,               // sorted
+    cands: Vec<V>,
+    complete: bool,
+}
+
+/// Per-node satisfiability data (mirrors `_nodeSat`).
+fn reach_node_sat(graph: &Graph, name: &str, assume: Option<&str>) -> NodeSat {
+    let node = &graph.nodes[name];
+    let mut det = Vec::new();
+    for (i, (t, c)) in node.edges.iter().enumerate() {
+        if is_deterministic(c) {
+            det.push((i, t.clone(), c.clone()));
+        }
+    }
+    let mut consts: Vec<V> = Vec::new();
+    let mut fields: HashSet<String> = HashSet::new();
+    let mut complete = true;
+    let mut exprs: Vec<String> = det.iter().map(|(_, _, c)| c.clone()).collect();
+    if let Some(a) = assume {
+        exprs.push(a.to_string());
+    }
+    for cond in &exprs {
+        if let Some(tree) = reach_cond_ast(cond) {
+            consts.extend(reach_consts_of(&tree));
+            for f in reach_fields_of(&tree) {
+                fields.insert(f);
+            }
+            if !is_level_m(cond).0 {
+                complete = false;
+            }
+        }
+    }
+    fields.remove("visits");
+    let cands = reach_candidates(&consts);
+    let mut field_list: Vec<String> = fields.into_iter().collect();
+    field_list.sort();
+    if reach_pow_exceeds(cands.len(), field_list.len(), REACH_PRODUCT_CAP) {
+        complete = false;
+    }
+    NodeSat { det, fields: field_list, cands, complete }
+}
+
+/// Enumerate candidate contexts (mirrors `_contexts`); empty if the product exceeds the cap.
+fn reach_contexts(sat: &NodeSat, visits: f64) -> Vec<HashMap<String, V>> {
+    let mut out = Vec::new();
+    if sat.fields.is_empty() {
+        let mut m = HashMap::new();
+        m.insert("visits".to_string(), V::Num(visits));
+        out.push(m);
+        return out;
+    }
+    if reach_pow_exceeds(sat.cands.len(), sat.fields.len(), REACH_PRODUCT_CAP) {
+        return out;
+    }
+    let n = sat.fields.len();
+    let mut idx = vec![0usize; n];
+    loop {
+        let mut ctx = HashMap::new();
+        ctx.insert("visits".to_string(), V::Num(visits));
+        for (field, &cand_i) in sat.fields.iter().zip(idx.iter()) {
+            ctx.insert(field.clone(), sat.cands[cand_i].clone());
+        }
+        out.push(ctx);
+        let mut k = n as isize - 1;
+        while k >= 0 {
+            idx[k as usize] += 1;
+            if idx[k as usize] < sat.cands.len() {
+                break;
+            }
+            idx[k as usize] = 0;
+            k -= 1;
+        }
+        if k < 0 {
+            break;
+        }
+    }
+    out
+}
+
+/// Which edges are certainly takeable, and whether "no edge matches" is proven impossible
+/// (mirrors `_edgeOutcomes`; returns (takeable indices, none_match_is_false)).
+fn reach_edge_outcomes(sat: &NodeSat, assume: Option<&str>, visits: f64) -> (HashSet<usize>, bool) {
+    let mut takeable: HashSet<usize> = HashSet::new();
+    let mut none_seen = false;
+    let mut saw_ctx = false;
+    for ctx in reach_contexts(sat, visits) {
+        saw_ctx = true;
+        if let Some(a) = assume {
+            match eval_condition(a, &ctx) {
+                Ok(true) => {}
+                Ok(false) | Err(_) => continue,
+            }
+        }
+        let mut matched: Option<usize> = None;
+        for (idx, _t, cond) in &sat.det {
+            if eval_condition(cond, &ctx).unwrap_or(false) {
+                matched = Some(*idx);
+                break;
+            }
+        }
+        match matched {
+            None => none_seen = true,
+            Some(idx) => {
+                takeable.insert(idx);
+            }
+        }
+    }
+    if !saw_ctx {
+        return (HashSet::new(), false);
+    }
+    (takeable, sat.complete && !none_seen)
+}
+
+/// Per-node visit cap = (max `visits` constant referenced) + 2 (mirrors `_visitCaps`). Saturating
+/// the count is what makes an UNREACHABLE verdict hold for all bounds rather than the explored depth.
+fn reach_visit_caps(graph: &Graph) -> HashMap<String, i64> {
+    let mut caps = HashMap::new();
+    for (name, node) in &graph.nodes {
+        let mut best: Option<i64> = None;
+        for (_t, c) in &node.edges {
+            let mut cond = c.clone();
+            if is_error(c) {
+                let expr = error_expr(c);
+                if expr.is_empty() {
+                    continue;
+                }
+                cond = if expr.to_lowercase().starts_with("when ") {
+                    expr
+                } else {
+                    format!("when {expr}")
+                };
+            }
+            let Some(tree) = reach_cond_ast(&cond) else { continue };
+            if !reach_fields_of(&tree).contains("visits") {
+                continue;
+            }
+            let m = reach_consts_of(&tree)
+                .iter()
+                .filter_map(|v| match v {
+                    V::Num(n) if !n.is_nan() => Some(*n),
+                    _ => None,
+                })
+                .fold(f64::NEG_INFINITY, f64::max);
+            let m = if m.is_finite() { m.trunc() as i64 } else { 0 };
+            best = Some(best.unwrap_or(0).max(m));
+        }
+        if let Some(b) = best {
+            caps.insert(name.clone(), b + 2);
+        }
+    }
+    caps
+}
+
+fn reach_bump(
+    counts: &[(String, i64)],
+    node: &str,
+    caps: &HashMap<String, i64>,
+) -> Vec<(String, i64)> {
+    if !caps.contains_key(node) {
+        return counts.to_vec();
+    }
+    let mut m: BTreeMap<String, i64> = counts.iter().cloned().collect();
+    let cap = caps[node];
+    let e = m.entry(node.to_string()).or_insert(0);
+    *e = (*e + 1).min(cap);
+    m.into_iter().collect()
+}
+
+fn reach_state_key(name: &str, counts: &[(String, i64)]) -> String {
+    let mut s = String::from(name);
+    s.push('\u{1}');
+    for (n, c) in counts {
+        s.push_str(n);
+        s.push(':');
+        s.push_str(&c.to_string());
+        s.push(',');
+    }
+    s
+}
+
+/// Bounded-model-checking reachability. Returns `{ target: {reachable: "yes"|"may"|"no", proven} }`.
+/// Faithful port of `checkReach`; gated against reach.json.
+pub fn check_reach(
+    graph: &Graph,
+    targets: &[String],
+    assume: Option<&str>,
+    bound: usize,
+    include_errors: bool,
+    include_events: bool,
+) -> serde_json::Value {
+    let assume_owned: Option<String> = assume.map(|a| {
+        if a.trim().to_lowercase().starts_with("when ") {
+            a.to_string()
+        } else {
+            format!("when {a}")
+        }
+    });
+    let assume_ref = assume_owned.as_deref();
+
+    let caps = reach_visit_caps(graph);
+    let mut sats: HashMap<String, NodeSat> = HashMap::new();
+    for name in graph.nodes.keys() {
+        sats.insert(name.clone(), reach_node_sat(graph, name, assume_ref));
+    }
+
+    let start_counts = reach_bump(&[], &graph.start, &caps);
+    let start_key = reach_state_key(&graph.start, &start_counts);
+    let mut best: HashMap<String, bool> = HashMap::new();
+    best.insert(start_key.clone(), true);
+    let mut state_of: HashMap<String, (String, Vec<(String, i64)>)> = HashMap::new();
+    state_of.insert(start_key.clone(), (graph.start.clone(), start_counts));
+    let mut frontier: Vec<(String, usize)> = vec![(start_key, 0)];
+    let mut exhausted = true;
+    let mut fp = 0;
+
+    while fp < frontier.len() {
+        let (state_k, depth) = frontier[fp].clone();
+        fp += 1;
+        let (node_name, counts) = state_of[&state_k].clone();
+        if depth >= bound {
+            exhausted = false;
+            continue;
+        }
+        let Some(node) = graph.nodes.get(&node_name) else { continue };
+        if node.edges.is_empty() {
+            continue;
+        }
+        let visits = counts
+            .iter()
+            .find(|(n, _)| *n == node_name)
+            .map(|(_, c)| *c)
+            .unwrap_or(1);
+        let sat = &sats[&node_name];
+        let (takeable, none_match_false) = reach_edge_outcomes(sat, assume_ref, visits as f64);
+        let my_certain = best[&state_k];
+
+        let mut moves: Vec<(String, bool)> = Vec::new(); // (target, step_certain)
+        for &idx in &takeable {
+            moves.push((node.edges[idx].0.clone(), true));
+        }
+        if !sat.complete {
+            for (idx, t, _c) in &sat.det {
+                if !takeable.contains(idx) {
+                    moves.push((t.clone(), false));
+                }
+            }
+        }
+        if !none_match_false {
+            for (t, c) in &node.edges {
+                if is_semantic(c) {
+                    moves.push((t.clone(), false));
+                }
+            }
+        }
+        if include_errors {
+            for (t, c) in &node.edges {
+                if is_error(c) {
+                    moves.push((t.clone(), false));
+                }
+            }
+        }
+        if include_events {
+            for (t, c) in &node.edges {
+                if is_event(c) {
+                    moves.push((t.clone(), false));
+                }
+            }
+        }
+
+        for (t, step_certain) in moves {
+            if !graph.nodes.contains_key(&t) {
+                continue;
+            }
+            let cert = my_certain && step_certain;
+            let n_counts = reach_bump(&counts, &t, &caps);
+            let n_key = reach_state_key(&t, &n_counts);
+            let update = match best.get(&n_key) {
+                None => true,
+                Some(false) => cert,
+                Some(true) => false,
+            };
+            if update {
+                best.insert(n_key.clone(), cert);
+                state_of.insert(n_key.clone(), (t.clone(), n_counts));
+                frontier.push((n_key, depth + 1));
+            }
+        }
+    }
+
+    let mut results = serde_json::Map::new();
+    for target in targets {
+        let mut hit_certain: Option<bool> = None;
+        for (k, c) in &best {
+            if state_of[k].0 == *target {
+                hit_certain = Some(hit_certain.unwrap_or(false) || *c);
+            }
+        }
+        let entry = match hit_certain {
+            None => serde_json::json!({ "reachable": "no", "proven": exhausted }),
+            Some(certain) => {
+                serde_json::json!({ "reachable": if certain { "yes" } else { "may" }, "proven": false })
+            }
+        };
+        results.insert(target.clone(), entry);
+    }
+    serde_json::Value::Object(results)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1938,9 +2737,14 @@ mod tests {
 
     #[test]
     fn keywords_and_disallowed_syntax_are_errors() {
-        for cond in ["when class == \"phish\"", "when f(x)", "when x + 1 > 2", "when -1 < x"] {
+        for cond in ["when class == \"phish\"", "when f(x)", "when x + 1 > 2"] {
             assert!(eval_condition(cond, &ctx(&[])).is_err(), "{cond} must be a PredicateError");
         }
+        // A signed INTEGER literal folds and is valid (predicates.fold_unary_signs); a sign on a
+        // float or a field stays rejected.
+        assert!(eval_condition("when -1 < x", &ctx(&[("x", V::Num(5.0))])).is_ok());
+        assert!(eval_condition("when x >= -0.5", &ctx(&[("x", V::Num(1.0))])).is_err());
+        assert!(eval_condition("when -y < x", &ctx(&[("x", V::Num(1.0)), ("y", V::Num(2.0))])).is_err());
     }
 
     #[test]

@@ -1,0 +1,310 @@
+{
+ "attestation": {
+  "gate_id": "wazuh_triage@v3",
+  "ingestion_hashes": [
+   "sha256:aa"
+  ],
+  "kb_hash": "sha256:kb",
+  "manifest": {
+   "created": "2026-08-12T00:00:00Z",
+   "gate_id": "wazuh_triage@v3",
+   "ingestion_hashes": [
+    "sha256:aa"
+   ],
+   "knowledge_base_hash": "sha256:kb",
+   "label": "echo:decision",
+   "manifest_hash": "821b6ebc0e2b275718bae69be53ec65108c5f8b2e9754b904b2a79f97549240d",
+   "policy_hash": "sha256:deadbeef",
+   "root": "5af55e1022be5bb92df3172524b8f843fd2056258bdf2577f0d3898579b181c0"
+  },
+  "outcome": {
+   "score": 0.93,
+   "verdict": "contain"
+  },
+  "policy_hash": "sha256:deadbeef"
+ },
+ "fanout": {
+  "child_flow": "---\nname: fx_child\nstart: work\n---\n## work\nProcess one item.\n-> finish: always\n## finish\nDone.\n",
+  "child_script": {
+   "finish": [
+    {
+     "text": "done"
+    }
+   ],
+   "work": [
+    {
+     "text": "worked"
+    }
+   ]
+  },
+  "children": [
+   {
+    "item": {
+     "id": 1
+    },
+    "path": [
+     "work",
+     "finish"
+    ],
+    "stopped": "terminal"
+   },
+   {
+    "item": {
+     "id": 2
+    },
+    "path": [
+     "work",
+     "finish"
+    ],
+    "stopped": "terminal"
+   },
+   {
+    "item": {
+     "id": 3
+    },
+    "path": [
+     "work",
+     "finish"
+    ],
+    "stopped": "terminal"
+   }
+  ],
+  "final": {
+   "children_in_state": [
+    {
+     "item": {
+      "id": 1
+     },
+     "path": [
+      "work",
+      "finish"
+     ],
+     "stopped": "terminal"
+    },
+    {
+     "item": {
+      "id": 2
+     },
+     "path": [
+      "work",
+      "finish"
+     ],
+     "stopped": "terminal"
+    },
+    {
+     "item": {
+      "id": 3
+     },
+     "path": [
+      "work",
+      "finish"
+     ],
+     "stopped": "terminal"
+    }
+   ],
+   "path": [
+    "plan",
+    "gather",
+    "merge",
+    "end"
+   ],
+   "stopped": "terminal"
+  },
+  "items": [
+   {
+    "id": 1
+   },
+   {
+    "id": 2
+   },
+   {
+    "id": 3
+   }
+  ],
+  "parent_flow": "---\nname: fx_parent\nstart: plan\n---\n## plan\nPlan the fan-out.\n-> gather: always\n## gather\nFan out one child per item.\n-> merge: on event all_done\n## merge\nCombine child results.\n-> end: always\n## end\nDone.\n",
+  "parent_script": {
+   "gather": [
+    {
+     "spawn": {
+      "flow": "fx_child",
+      "items": [
+       {
+        "id": 1
+       },
+       {
+        "id": 2
+       },
+       {
+        "id": 3
+       }
+      ],
+      "join": "all_done"
+     }
+    }
+   ],
+   "merge": [
+    {
+     "text": "merged"
+    }
+   ],
+   "plan": [
+    {
+     "text": "planned"
+    }
+   ]
+  },
+  "suspended": {
+   "path": [
+    "plan",
+    "gather"
+   ],
+   "spawn": {
+    "flow": "fx_child",
+    "items": [
+     {
+      "id": 1
+     },
+     {
+      "id": 2
+     },
+     {
+      "id": 3
+     }
+    ],
+    "join": "all_done"
+   },
+   "stopped": "waiting"
+  }
+ },
+ "flatten": [
+  {
+   "data": {
+    "agent": "web-01",
+    "alert": {
+     "id": 7,
+     "severity": "high"
+    }
+   },
+   "flat": {
+    "agent": "web-01",
+    "alert.id": 7,
+    "alert.severity": "high"
+   }
+  },
+  {
+   "data": {
+    "active": true,
+    "roles": [
+     "admin",
+     "dev"
+    ],
+    "score": 1.5
+   },
+   "flat": {
+    "active": true,
+    "roles": "admin, dev",
+    "roles.0": "admin",
+    "roles.1": "dev",
+    "score": 1.5
+   }
+  },
+  {
+   "data": {
+    "nested": {
+     "deep": {
+      "leaf": null
+     }
+    },
+    "note": "caf\u00e9"
+   },
+   "flat": {
+    "nested.deep.leaf": null,
+    "note": "caf\u00e9"
+   }
+  }
+ ],
+ "hashes": [
+  {
+   "data": {
+    "agent": "web-01",
+    "alert": {
+     "id": 7,
+     "severity": "high"
+    }
+   },
+   "ingestion": "sha256:e2caadad00699795",
+   "knowledge": "sha256:e2caadad00699795"
+  },
+  {
+   "data": {
+    "active": true,
+    "roles": [
+     "admin",
+     "dev"
+    ],
+    "score": 1.5
+   },
+   "ingestion": "sha256:f818c81481a90d15",
+   "knowledge": "sha256:f818c81481a90d15"
+  },
+  {
+   "data": {
+    "nested": {
+     "deep": {
+      "leaf": null
+     }
+    },
+    "note": "caf\u00e9"
+   },
+   "ingestion": "sha256:c63ccca1f1902394",
+   "knowledge": "sha256:c63ccca1f1902394"
+  }
+ ],
+ "note": "Connector-SDK + composition fixtures from the Python reference. Rust must reproduce hashes and prompt strings byte-for-byte, the attestation manifest exactly, and the fan-out final path/stopped with _children aggregated.",
+ "prompts": [
+  {
+   "criteria": null,
+   "payload": {
+    "agent": "web-01",
+    "alert": {
+     "id": 7,
+     "severity": "high"
+    }
+   },
+   "prompt": "agent: web-01\nalert.id: 7\nalert.severity: high",
+   "schema": null
+  },
+  {
+   "criteria": "rule 12 governs",
+   "payload": {
+    "active": true,
+    "roles": [
+     "admin",
+     "dev"
+    ],
+    "score": 1.5
+   },
+   "prompt": "active: True\nroles: admin, dev\nroles.0: admin\nroles.1: dev\nscore: 1.5\n\nCRITERIA:\nrule 12 governs",
+   "schema": null
+  },
+  {
+   "criteria": null,
+   "payload": {
+    "nested": {
+     "deep": {
+      "leaf": null
+     }
+    },
+    "note": "caf\u00e9"
+   },
+   "prompt": "nested.deep.leaf: None\nnote: caf\u00e9\n\nReply with ONE flat JSON object (no nesting) with keys: reason, verdict.",
+   "schema": {
+    "properties": {
+     "reason": {},
+     "verdict": {}
+    }
+   }
+  }
+ ],
+ "version": 1
+}
