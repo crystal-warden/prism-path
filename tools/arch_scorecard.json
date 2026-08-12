@@ -5,12 +5,7 @@
   },
   "signal_3_core_churn": {
     "core_total_loc": 7255,
-    "churn_since_baseline": {
-      "baseline": "origin/main",
-      "core_files_changed": 2,
-      "lines_added": 125,
-      "lines_removed": 3
-    },
+    "churn_since_baseline": null,
     "note": "track per-adapter; must DECAY. flat/rising = rebuilding, not generalizing."
   },
   "signal_7_marginal_cost": {
@@ -26,6 +21,12 @@
         "code_loc": 776,
         "flow_md_loc": 125,
         "pct_logic_in_md": 0.139
+      },
+      {
+        "adapter": "fusion",
+        "code_loc": 687,
+        "flow_md_loc": 93,
+        "pct_logic_in_md": 0.119
       }
     ],
     "note": "adapter #N should cost < #1; higher %_logic_in_md = logic stays in plain-English (good)."
