@@ -152,12 +152,12 @@ Much of this code was written by AI agents under a gated control plane, the same
 the project is built on a bet: **correctness shouldn't depend on trusting whoever (or whatever) wrote
 it.** Everything is therefore checkable.
 
-- **[1,067 predicate + 27 flow conformance vectors](prismpath/portable/conformance/README.md)**, frozen,
+- **[1,079 predicate + 27 flow conformance vectors](prismpath/portable/conformance/README.md)**, frozen,
   passed bit-for-bit by the Python reference *and* three independent re-implementations
   ([JS](prismpath/portable/README.md), [Rust](prismpath-rs/CONFORMANCE.md), [Go](prismpath-go/README.md)).
   Four kernels, four languages, one answer: the one check a plausible-looking codebase can't fake.
-- **~845 tests**: 576 in the kernel package, 251 across the three adapters, 18 in the Node kernel, plus a
-  fuzz-hardened predicate sandbox. [Run them yourself](#running-the-tests).
+- **~1,040 tests**: 649 in the kernel package, 370 across the four adapters (SOC, compliance, telemetry,
+  fusion), 18 in the Node kernel, plus a fuzz-hardened predicate sandbox. [Run them yourself](#running-the-tests).
 - **[A reproducer for every measured number](docs/research/supporting-evidence.md)**: each claim maps to
   the script that made it, the benchmark table regenerates with one command, and the silicon and kernel
   rows (#72 to #78) are each anchored in Bitcoin via OpenTimestamps. **Check the artifact, not the
@@ -185,7 +185,7 @@ eight steps, each run before it was written down.
 
 The engine owns routing, attestation, and the toolchain; **domains plug in behind ports** (Ingestion,
 Retrieval, Adjudicator, Action/Sink, Attestation, Deferral) with **no domain vocabulary in the core**:
-`tools/arch_guard.py` fails the build if a domain noun leaks inward. Three reference adapters ride the
+`tools/arch_guard.py` fails the build if a domain noun leaks inward. Four reference adapters ride the
 same ports:
 
 - **SOC triage** (`adapters/soc/`): decomposed alert triage with the prefilter cache, human-gated
@@ -197,6 +197,10 @@ same ports:
 - **Decision-preserving telemetry** (`adapters/telemetry/`): compress a flow's telemetry to the *minimum
   statistic that still reproduces its routing decisions*, entropy-coded on a self-framing wire and
   Merkle-verified end to end; benchmark-gated, arch-guard-isolated.
+- **Cyber-physical fusion** (`adapters/fusion/`): fuses a SIEM's cyber verdict with a live IMU's
+  physical posture through one Level M tessellation, emitting a self-framing decision wire measured at
+  ~45× under batched JSON (integrity apparatus counted) and proven end to end on the live rig
+  ([evidence #82–#86](docs/research/supporting-evidence.md)).
 
 ## Where PrismPath is the wrong tool
 
@@ -220,12 +224,12 @@ the head-to-head against other paradigms lives in [comparisons/](prismpath/compa
 Working end to end: the flow kernel (parser / predicates / hybrid router / engine); the data-plane
 toolchain (validate/lint, `test`, lockfile, calibrate, centroids, graph, import, label, portable, verify,
 lsp); fan-out/composition with its Mission Control view; the durable layer (checkpoints, scheduler, git
-Flow-Ledger, OTS anchoring); the Connector SDK (six ports); the sprint control plane; and the portable
+Flow-Ledger, OTS anchoring, and a signed, envelope-checked policy hot-swap); the Connector SDK (six ports); the sprint control plane; and the portable
 kernels, the Python reference plus three independent re-implementations (JS, Rust, Go), each passing all
-**1,067 predicate + 27 flow vectors**. The Level M fragment additionally
+**1,079 predicate + 27 flow vectors**. The Level M fragment additionally
 [runs in FPGA fabric and as an in-kernel eBPF/XDP program](#it-runs-all-the-way-down-to-the-fpga-and-inside-the-kernel),
-each certified on a declared subset. **576 Python + 18 Node kernel tests pass** (the three adapters add
-251 more, with adversarial attestation-tamper and property coverage); the format is specified in
+each certified on a declared subset. **649 Python + 18 Node kernel tests pass** (the four adapters add
+370 more, with adversarial attestation-tamper and property coverage); the format is specified in
 [SPEC.md](SPEC.md) (v1 draft). This repo is a curated export of an active research control plane. Licensed
 Apache-2.0.
 

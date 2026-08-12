@@ -83,7 +83,9 @@ test("keywords: always/else/false; empty and unsafe predicates are flagged", () 
   assert.ok(checkPredicate("when f(x)").length > 0);                 // call -> disallowed
   assert.ok(checkPredicate("when x.y").length > 0);                  // attribute -> disallowed
   assert.ok(checkPredicate("when x + 1 > 2").length > 0);            // arithmetic -> disallowed
-  assert.ok(checkPredicate("when -1 < x").length > 0);               // unary minus -> disallowed
+  assert.deepEqual(checkPredicate("when -1 < x"), []);               // signed integer literal -> allowed (folds)
+  assert.ok(checkPredicate("when x >= -0.5").length > 0);            // sign on a float -> still disallowed
+  assert.ok(checkPredicate("when -y < x").length > 0);               // sign on a field -> still disallowed
   assert.throws(() => evalCondition("when f(x)", {}), PredicateError);
 });
 

@@ -21,7 +21,7 @@ PrismPath is an open-source framework that treats **agent workflows as data**. O
 ### Phase 1: Core Specification & Multi-Language Kernels (Complete)
 
 - [x] **Spec Version 1 (Draft)**: Normative definition of grammar, edge tiers, sandbox predicates, engine contracts, and portability levels ([`SPEC.md`](SPEC.md)).
-- [x] **Frozen Conformance Vectors**: 1,067 predicate cases and 27 engine fixtures checked deterministically across implementations ([`portable/conformance/`](prismpath/portable/conformance/README.md)).
+- [x] **Frozen Conformance Vectors**: 1,079 predicate cases and 27 engine fixtures checked deterministically across implementations ([`portable/conformance/`](prismpath/portable/conformance/README.md)).
 - [x] **JavaScript Portable Kernel**: Dependency-free ES module (`prismpath/portable/prismpath.mjs`) and interactive browser playground ([`portable/playground.html`](prismpath/portable/playground.html)).
 - [x] **Reference Rust Kernel (`prismpath-rs`)**: Certified conformant core kernel running natively on ARM64 and x86_64.
 - [x] **Go Portable Kernel (`prismpath-go`)**: Lightweight dependency-free Go runtime passing 100% of conformance vectors.
@@ -95,7 +95,7 @@ build, in rough order of reach:
 - [x] **The FPGA target (delivered 2026-08-06/07, [`prismpath-hw/`](prismpath-hw/README.md))**:
   a Level M flow compiles to a binary table image (PPT v1) interpreted by **one fixed circuit** —
   never re-synthesized per flow. Certified on a **declared subset** of the frozen vectors
-  (114/1,067 predicate + 6/27 engine, zero divergence, every exclusion machine-readable — the
+  (the C target 124/1,079 predicate + 6/27 engine, and the eBPF target 124/124 in-kernel on the same subset, re-certified 2026-08-12 on aarch64 + x86_64; the RTL 114/1,067, its re-sweep to 124/1,079 pending a hardware retest; zero divergence, every exclusion machine-readable — the
   vectors-as-referee pattern, one level down; deliberately *not* claimed as full SPEC §8
   conformance). C target and RTL agree bit-for-bit with the Python reference, including a
   7,436-sample live-sensor replay. On a Zynq-7020: timing-clean at 50 MHz, **1,064 LUTs (2.0%

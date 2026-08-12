@@ -8,7 +8,7 @@
 - **Data-Not-Code Workflows**: Parse Markdown workflows directly into executable graph data.
 - **Safe Predicate Sandbox**: Evaluates `when` AST expressions without `eval` or arbitrary code execution.
 - **Durable Suspension**: Supports `needs_human` and `wait`/`spawn` event-driven suspensions.
-- **Spec-Conformant**: Built and verified against the frozen PrismPath conformance test vectors (`1067/1067` predicates, `27/27` flows).
+- **Spec-Conformant**: Built and verified against the frozen PrismPath conformance test vectors (`1079/1079` predicates, `27/27` flows).
 
 ## Quickstart
 

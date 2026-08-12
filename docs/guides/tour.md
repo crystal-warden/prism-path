@@ -181,7 +181,7 @@ watch it parse, tier-classify, graph, and route live.
 lockfile — needs only an outcome-side embedder; appliance-deployable as one flow + one lock + one
 encoder), **P2** (unlocked semantic edges — full engine). The port *refuses* non-P0 flows rather
 than guess. Routing fidelity is enforced by **frozen conformance vectors**
-([`portable/conformance/`](../../prismpath/portable/conformance/README.md)): 1,067 predicate cases + 27 engine
+([`portable/conformance/`](../../prismpath/portable/conformance/README.md)): 1,079 predicate cases + 27 engine
 fixtures generated from the Python reference, checked in both directions on every test run — the
 spec is data, so a conforming kernel is provably interchangeable, and **three independent portable
 kernels already are**: JavaScript (`prismpath/portable/prismpath.mjs`), Rust (`prismpath-rs/`),

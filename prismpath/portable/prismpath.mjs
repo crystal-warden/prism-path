@@ -186,6 +186,7 @@ function tokenize(src) {
     const two = src.slice(i, i + 2);
     if (two === "==" || two === "!=" || two === "<=" || two === ">=") { toks.push({ t: "op", v: two }); i += 2; continue; }
     if ("<>[](),".includes(ch)) { toks.push({ t: "op", v: ch }); i++; continue; }
+    if (ch === "-" || ch === "+") { toks.push({ t: "op", v: ch }); i++; continue; }  // sign; folded in operand()
     throw new PredicateError(`predicate uses disallowed syntax near ${JSON.stringify(src.slice(i, i + 8))}`);
   }
   return toks;
@@ -248,6 +249,14 @@ function parseExpr(src) {
     if (d > MAX_DEPTH) throw new PredicateError("predicate nested too deeply");
     const tk = next();
     if (!tk) throw new PredicateError("unexpected end of predicate");
+    // Sign on an INTEGER literal folds to a single constant (mirrors predicates.fold_unary_signs):
+    // `-5` -> const -5. A sign on a float or a name does NOT fold and stays disallowed, so `-field`
+    // and `-3.5` throw exactly as the Python sandbox rejects them.
+    if (tk.t === "op" && (tk.v === "-" || tk.v === "+")) {
+      const nx = peek();
+      if (nx && nx.t === "num" && !nx.float) { next(); return { k: "const", v: tk.v === "-" ? -nx.v : nx.v, float: false }; }
+      throw new PredicateError(`predicate uses disallowed syntax (unary ${tk.v})`);
+    }
     if (tk.t === "num") return { k: "const", v: tk.v, float: tk.float };
     if (tk.t === "str") return { k: "const", v: tk.v };
     if (tk.t === "ellipsis") return { k: "const", v: ELLIPSIS };       // `...` is a truthy Constant

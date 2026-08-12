@@ -109,6 +109,23 @@ python3 -W ignore compile_flows.py
   configured; a direct-routing firewall rule is possible, but until then a board-initiated
   reverse SSH tunnel is the path.
 
+**Day update (2026-08-12, negative-integer literals).**
+- The predicate front end learned signed integer literals (`when x >= -1282`) as a first-class
+  match-action atom — one shared `predicates.fold_unary_signs`, mirrored into the JS/Rust/Go twins;
+  a sign on a float or a field stays out of the language. The frozen corpus went **v1 → v2**
+  (1,067 → 1,079 cases). The `.ppt` format needed no change: `val` was always a signed `i32` that
+  `interp.c` and the RTL already compare signed.
+- **C target re-certified**: `make cert` → **124/1,079 predicate + 6/6 engine, zero divergence** (the
+  10 new in-subset vectors are the negative-integer cases, byte-identical to the reference).
+- **Fabric**: a compiled `x >= -1282` table (96 B) deployed via a signed, envelope-checked swap
+  decided the boundary live — -1283 → low, -1282 → high, 0 → high — byte-conformant at ~100 µs,
+  proving the silicon needs no change.
+- **eBPF re-certified same day**: 124/124 in-kernel (`BPF_PROG_TEST_RUN`, table-per-vector) on BOTH
+  aarch64 and x86_64, with the hardened loader; drop_mask-survives-swap and over-`MAX_*`-rejection
+  smokes green on a live attach. (Ledger #90.)
+- **Not yet earned**: the full **RTL** re-sweep to 124/1,079 is held for a hardware retest; until
+  then the RTL stands at its 114/1,067 sweep. (Ledger #89.)
+
 ## Backlog
 
 - [100 MHz fabric clock](backlog/100mhz-pipeline.md) — overlap prog fetch / atom eval;

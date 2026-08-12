@@ -320,7 +320,7 @@ Resume is bound to a hash of the flow, so an edited flow can't silently resume i
 
 **Conformal prediction** — a method this project explicitly does **not** use. See idea 5.
 
-**Conformance vectors** — 1,067 predicate cases + 27 engine flows that define correct behavior. Any
+**Conformance vectors** — 1,079 predicate cases + 27 engine flows that define correct behavior. Any
 kernel claiming compatibility must pass all of them.
 [vectors](../prismpath/portable/conformance/README.md)
 
@@ -505,7 +505,7 @@ centroids make it few-shot.
 | Rust | [`prismpath-rs/`](../prismpath-rs/CONFORMANCE.md) | native/embedded |
 | Go | [`prismpath-go/`](../prismpath-go/README.md) | services |
 
-All four pass [the same frozen vectors](../prismpath/portable/conformance/README.md) — 1,067
+All four pass [the same frozen vectors](../prismpath/portable/conformance/README.md) — 1,079
 predicates, 27 flows. Conformance refereed by re-implementation rather than asserted.
 
 ### The CLI

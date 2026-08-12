@@ -20,6 +20,29 @@ spec-stable.
   `float_const` case. (Python↔JS agree bit-for-bit on floats incl. `1e3`, `.5`, `2.0e1`, floats-in-lists.)
 
 ### Changed
+- **Negative (and unary-plus) integer literals are now inside the predicate language and the Level M
+  fragment.** `when x >= -1282` was rejected everywhere — the sandbox flagged the `USub` node as
+  disallowed syntax, and the classifier/compiler never saw a constant — even though the `.ppt`
+  format already stores `val` as a signed `i32` and both `interp.c` and the RTL compare signed. The
+  gap was purely front-end. A single normalization, `predicates.fold_unary_signs`, folds
+  `UnaryOp(USub|UAdd, Constant(int))` into a signed `Constant` right after parse, applied at the one
+  place check / eval / the Level M classifier / the PPT compiler all share, so they accept the same
+  language (SPEC §4.4). Scope is deliberately narrow and the sandbox stays exactly as tight: only
+  **integer** operands fold, so `-<float>` (e.g. `-0.0`) keeps its pre-existing rejection and
+  `-field` (arithmetic on a name, e.g. `-x`) stays outside the language — the bare `USub` node never
+  reaches the allowlist walk. Mirrored bit-for-bit in the JS (`prismpath.mjs`) and Rust
+  (`prismpath-rs`) kernels; **all three conformance runners CONFORMANT** on the regenerated corpus.
+  **Measured effect:** the frozen predicate corpus goes **v1 → v2** (1067 → 1079 cases; one existing
+  vector `when -1 < x` flips from `ERROR` to `True` — the bug being fixed); Level M cases 126 → 136,
+  distinct Level M conditions 119 → 126; the **C-target declared subset re-certifies 114 → 124/1079,
+  zero divergence**, and a negative-literal table (`x >= -1282`) was **proven on the Zynq-7020
+  fabric** deciding correctly at the exact boundary (−1283 → low, −1282 → high). Nothing on the board
+  changed — the circuit already compares signed `i32`. SPEC §4.3 updated. Pins moved (fragment count,
+  corpus version). **eBPF re-certified same day: 124/124 in-kernel on BOTH aarch64 and x86_64 with
+  the hardened loader** (`BPF_PROG_TEST_RUN`, table-per-vector), and the held `loader.c` hardening
+  smokes passed on a live attach (drop_mask survives `netupdate`; an over-`MAX_*` image is rejected
+  with the running table untouched) — the cross-substrate headline reconciles at **124** (evidence
+  #90). The **RTL re-sweep** to 124/1079 remains pending a hardware retest.
 - **Chained comparisons are normalized into the Level M fragment, not excluded — one shared desugaring.**
   SPEC §4.3 said chained comparisons (`when 1 < x < 5`) "SHOULD be desugared by tooling" but the
   classifier (`verify --level-m` / `capability_report`) reported them as *outside* the fragment while the

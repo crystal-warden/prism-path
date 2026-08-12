@@ -5,7 +5,7 @@ generated from the **Python reference implementation** by `../gen_conformance.py
 (deterministic: fixed seed, sorted keys — regeneration is byte-identical unless semantics
 changed), and any implementation claiming conformance must pass **every case bit-for-bit**:
 
-- **`predicates.json`** — 1,067 `(condition, context) → true | false | "ERROR"` cases for the
+- **`predicates.json`** — 1,079 `(condition, context) → true | false | "ERROR"` cases for the
   `when`-predicate evaluator: one curated case per semantic sharp edge (the classes a
   61,700-comparison differential fuzz found implementations diverge on — Python keywords as
   field names, `True`-constant vs `true`-field-name, bool/number equality, chained
@@ -38,7 +38,7 @@ node prismpath/portable/run_p1_conformance.mjs   # JS, P1  -> P1 CONFORMANT
 node prismpath/portable/run_capability.mjs        # JS, portability matrix -> CONFORMANT
 node prismpath/portable/run_reach.mjs             # JS, reachability       -> CONFORMANT
 cd prismpath-rs && cargo run --bin conformance -- ../prismpath/portable/conformance
-cd prismpath-go && go test ./...                 # 1067/1067 predicates, 27/27 flows
+cd prismpath-go && go test ./...                 # 1079/1079 predicates, 27/27 flows
 ```
 
 (The capability/reachability corpora are parity contracts between the JS analyses and their
@@ -63,5 +63,6 @@ The vectors also referee **declared-subset targets**: an implementation that can
 value domain (a fixed circuit, a table interpreter) declares the subset it certifies against,
 passes every vector inside it, and publishes a machine-readable reason for every exclusion — it
 is never called conformant unqualified. The first example is the Level M hardware target
-([`prismpath-hw/`](../../../prismpath-hw/README.md)): 114/1,067 predicate + 6/27
-engine vectors, zero divergence, in C and in RTL.
+([`prismpath-hw/`](../../../prismpath-hw/README.md)): the C target certifies 124/1,079 predicate + 6/27
+engine vectors, and the eBPF target the same 124 in-kernel (re-certified 2026-08-12, aarch64 + x86_64);
+the RTL certifies 114/1,067, its re-sweep to 124/1,079 pending a hardware retest; zero divergence.

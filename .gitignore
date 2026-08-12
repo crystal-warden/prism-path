@@ -27,3 +27,5 @@ docs/design/arch-scorecard.md
 docs_health_report.md
 *.ots.bak
 prismpath-telemetry-rs/target/
+/target/
+/target/

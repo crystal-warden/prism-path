@@ -35,7 +35,7 @@ from prismpath.engine import run
 from prismpath.parser import parse
 
 OUT_DIR = Path(__file__).parent / "conformance"
-VERSION = 1
+VERSION = 2   # v2: signed integer literals fold to constants (predicates.fold_unary_signs)
 SEED = 42
 N_FUZZ = 1000
 
@@ -55,6 +55,21 @@ CURATED = [
     ("when flag == 0", {"flag": False}),
     ("when flag < 2", {"flag": True}),
     ("when n == 1.0", {"n": 1}),
+    # signed integer literals: `-5` folds to a single constant, so it is an ordinary Level M atom
+    # (predicates.fold_unary_signs). `-field` and `-<float>` do NOT fold and stay outside the
+    # sandbox, and the sign folds in every orientation and inside membership lists.
+    ("when x >= -5", {"x": -5}),
+    ("when x >= -5", {"x": -6}),
+    ("when x < -1282", {"x": -2000}),
+    ("when -1 < x", {"x": 5}),                            # constant-OP-field, flipped orientation
+    ("when x == -3", {"x": -3}),
+    ("when x != -3", {"x": 0}),
+    ("when +7 == x", {"x": 7}),                           # unary plus folds too
+    ("when x in [-3, -1, 2]", {"x": -1}),
+    ("when x in [-3, -1, 2]", {"x": 0}),
+    ("when x >= -0.0", {"x": 1}),                         # negative FLOAT: still disallowed (ERROR)
+    ("when -y < x", {"x": 1, "y": 2}),                    # negation of a FIELD: still disallowed
+    ("when x >= -foo", {"x": 1}),                         # negation of a field name: disallowed
     # missing fields / type mismatch: unsatisfied, never a crash; not-in satisfied
     ("when nope > 3", {}),
     ("when x > 3", {"x": "high"}),

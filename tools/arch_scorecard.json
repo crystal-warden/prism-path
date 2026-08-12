@@ -4,7 +4,7 @@
     "violations": []
   },
   "signal_3_core_churn": {
-    "core_total_loc": 7255,
+    "core_total_loc": 7380,
     "churn_since_baseline": null,
     "note": "track per-adapter; must DECAY. flat/rising = rebuilding, not generalizing."
   },

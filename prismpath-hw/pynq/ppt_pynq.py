@@ -153,7 +153,7 @@ def watch_and_reload(ol: PptOverlay, holder: dict, lock, ppt_path: str, json_pat
             print(f"*** TABLE RELOADED in {dt_ms:.1f}ms — same circuit, new policy ***")
 
 
-def serve(ol: PptOverlay, holder: dict, lock, port: int):
+def serve(ol: PptOverlay, holder: dict, lock, port: int, respond: bool = False):
     srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     srv.bind(("0.0.0.0", port))
@@ -181,6 +181,13 @@ def serve(ol: PptOverlay, holder: dict, lock, port: int):
             log.write(json.dumps({"decision": decision, "us": round(dt_us, 1),
                                   **sample}) + "\n")
             log.flush()
+            if respond:
+                # Request/response mode: the caller needs the fabric's verdict back, not just a
+                # board-side log. Used by the in-silicon governor, where the host holds the model
+                # and the FABRIC makes the routing decision. Off by default so the streaming
+                # sensor demo keeps its exact certified behavior.
+                conn.sendall((json.dumps({"decision": decision, "us": round(dt_us, 1)})
+                              + "\n").encode())
             if decision != last:
                 print(f"#{n:6d} -> {decision:12s} ({dt_us:.0f}us round-trip) "
                       f"rate={sample.get('error_rate')} risk={sample.get('data_at_risk')}")
@@ -195,6 +202,10 @@ def main() -> int:
     ap.add_argument("ppt")
     ap.add_argument("json")
     ap.add_argument("--port", type=int, default=9317)
+    ap.add_argument("--respond", action="store_true",
+                    help="write each verdict back to the caller (request/response; "
+                         "the in-silicon governor needs this). Default off = the "
+                         "certified streaming behavior, unchanged.")
     args = ap.parse_args()
     import threading
     img = PptImage(args.ppt, args.json)
@@ -206,7 +217,7 @@ def main() -> int:
     lock = threading.Lock()
     threading.Thread(target=watch_and_reload, args=(ol, holder, lock, args.ppt, args.json),
                      daemon=True).start()
-    serve(ol, holder, lock, args.port)
+    serve(ol, holder, lock, args.port, respond=args.respond)
     return 0
 
 

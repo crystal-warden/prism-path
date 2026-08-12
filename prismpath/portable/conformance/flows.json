@@ -613,5 +613,5 @@
   }
  ],
  "note": "script maps node -> outcomes consumed in visit order (last repeats); {'__raise__': msg} throws. expect is the Python reference engine's result.",
- "version": 1
+ "version": 2
 }

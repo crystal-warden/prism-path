@@ -48,6 +48,38 @@ _ALLOWED_NODES = (
 )
 
 
+class _SignFolder(ast.NodeTransformer):
+    """Fold a unary sign on an INTEGER literal into a single constant: `-5` (which Python parses as
+    `UnaryOp(USub, Constant(5))`) becomes `Constant(-5)`.
+
+    Scope is deliberately narrow, so the sandbox stays exactly as tight and nothing else changes:
+      * only `int` operands fold (not `bool` — `-True` is a curiosity, not a threshold — and not
+        `float`: the fragment is an i32 value domain, so a negative float is doubly out-of-fragment
+        and keeps its pre-existing rejection);
+      * `-field` does NOT fold (the operand is a Name, not a Constant), so arithmetic on fields
+        stays outside the language and the sandbox allowlist still rejects the bare `USub` node.
+    Bottom-up, so `-(-5)` folds to `Constant(5)`. Idempotent."""
+
+    def visit_UnaryOp(self, node):
+        self.generic_visit(node)
+        if (isinstance(node.op, (ast.USub, ast.UAdd))
+                and isinstance(node.operand, ast.Constant)
+                and isinstance(node.operand.value, int)
+                and not isinstance(node.operand.value, bool)):
+            v = node.operand.value
+            return ast.copy_location(
+                ast.Constant(value=(-v if isinstance(node.op, ast.USub) else v)), node)
+        return node
+
+
+def fold_unary_signs(tree):
+    """Normalize signed integer literals in a parsed predicate AST, in place. The one place this
+    transform is defined so check / eval / the Level M classifier / the PPT compiler all treat
+    `x >= -5` identically (SPEC §4.4: they accept the same language)."""
+    _SignFolder().visit(tree)
+    return tree
+
+
 class PredicateError(ValueError):
     """A predicate is unsafe (disallowed syntax) or unparseable. Subclasses ValueError so
     existing callers that catch ValueError keep working."""
@@ -123,6 +155,7 @@ def check_predicate(condition: str) -> List[str]:
         tree = ast.parse(expr, mode="eval")
     except (SyntaxError, ValueError) as e:  # ValueError: e.g. null bytes
         return [f"unparseable predicate {condition!r}: {e}"]
+    fold_unary_signs(tree)                   # `-5` is a constant; the bare USub node never reaches the walk
     problems: List[str] = []
     for node in ast.walk(tree):
         if not isinstance(node, _ALLOWED_NODES):
@@ -156,6 +189,7 @@ def eval_condition(condition: str, ctx: Dict[str, Any]) -> bool:
         tree = ast.parse(expr, mode="eval")
     except (SyntaxError, ValueError) as e:
         raise PredicateError(f"unparseable predicate {condition!r}: {e}") from e
+    fold_unary_signs(tree)                   # same normalization the static check applies, so both agree
     # Enforce the sandbox STATICALLY before evaluating, exactly like check_predicate: without this,
     # a lazily-short-circuited chain (`2 < 1 < f(x)`) never visits the disallowed Call and quietly
     # evaluates on one engine while erroring on another (found by differential fuzzing). eval and

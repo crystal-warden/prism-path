@@ -151,7 +151,7 @@ class TableImage:
         # the corpus records as "ERROR"), so check/eval/compile accept the same language
         if predicates.check_predicate(cond):
             raise SubsetError("not-level-m:disallowed-or-unparseable")
-        tree = _desugar_chains(ast.parse(expr, mode="eval").body)
+        tree = _desugar_chains(predicates.fold_unary_signs(ast.parse(expr, mode="eval").body))
         # fragment membership judged by the repo classifier — applied AFTER the mechanical
         # chain desugar the SPEC says tooling SHOULD perform (§4.3)
         reason = _classify(tree)

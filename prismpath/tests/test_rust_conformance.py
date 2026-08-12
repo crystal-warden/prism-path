@@ -1,7 +1,7 @@
 """The Rust kernel must stay CONFORMANT — certification as a gate, not an event.
 
-`prismpath-rs` was certified against the frozen vectors on 2026-07-29 (1067/1067 predicates,
-27/27 flows — `prismpath-rs/CONFORMANCE.md`). A one-time certificate decays the moment either
+`prismpath-rs` was certified against the frozen vectors on 2026-07-29 and re-verified on every run
+(now 1079/1079 predicates, 27/27 flows — `prismpath-rs/CONFORMANCE.md`). A one-time certificate decays the moment either
 side changes; running the binary here makes drift a red test instead of a discovery. Together
 with `test_portable_conformance.py` (Python ↔ .mjs) and `test_conformance_vectors.py` (vectors ↔
 live Python), every implementation is re-certified on every pytest run.

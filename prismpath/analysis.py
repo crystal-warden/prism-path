@@ -59,7 +59,7 @@ def _parse(cond: str):
     if expr.lower() in predicates.ALWAYS or expr.lower() in predicates.NEVER:
         return None
     try:
-        return ast.parse(expr, mode="eval").body
+        return predicates.fold_unary_signs(ast.parse(expr, mode="eval").body)
     except (SyntaxError, ValueError):
         return None
 

@@ -677,6 +677,54 @@ func tokenize(src string) ([]token, error) {
 			i++
 			continue
 		}
+		if ch == '-' || ch == '+' {
+			// Fold a unary sign onto a base-10 INTEGER literal, mirroring
+			// predicates.fold_unary_signs (SPEC §4.3) and the JS/Rust twins: the sign must be
+			// in operand position (start of the predicate, or right after an operator, '(',
+			// '[', ',', or an operator-keyword) and directly precede an integer. A sign on a
+			// float, a field, or in a binary-arithmetic position is left as unrecognized
+			// syntax -> PredicateError, exactly as before — so -0.0, x - 1, and -y stay out.
+			unary := len(toks) == 0
+			if !unary {
+				prev := toks[len(toks)-1]
+				switch prev.kind {
+				case tokOp, tokLParen, tokLBracket, tokComma:
+					unary = true
+				case tokName:
+					switch prev.str {
+					case "and", "or", "not", "in":
+						unary = true
+					}
+				}
+			}
+			if unary && i+1 < n && unicode.IsDigit(rune(src[i+1])) {
+				j := i + 1
+				for j < n && (unicode.IsDigit(rune(src[j])) || src[j] == '_') {
+					j++
+				}
+				// A trailing '.', exponent, complex suffix, or identifier char means it is not
+				// a plain base-10 integer (float / 0x.. / 1j) — leave the sign to be rejected.
+				foldable := true
+				if j < n {
+					c := rune(src[j])
+					if c == '.' || c == 'e' || c == 'E' || c == 'j' || c == 'J' || unicode.IsLetter(c) || c == '_' {
+						foldable = false
+					}
+				}
+				if foldable {
+					body := strings.ReplaceAll(src[i+1:j], "_", "")
+					if val, err := strconv.ParseInt(body, 10, 64); err == nil {
+						if ch == '-' {
+							val = -val
+						}
+						toks = append(toks, token{kind: tokNum, val: val, str: src[i:j]})
+						i = j
+						continue
+					}
+				}
+			}
+			return nil, newPredErr("unrecognized syntax in predicate: %s", string(ch))
+		}
 		if strings.HasPrefix(src[i:], "...") {
 			toks = append(toks, token{kind: tokName, val: "...", str: "..."})
 			i += 3

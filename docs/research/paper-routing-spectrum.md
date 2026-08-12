@@ -53,14 +53,15 @@ than static analysis alone: the deterministic tier is a finite **match-action fr
 reachability is decidable and a bounded model checker answers *"can this state be reached under this
 assumption?"* with a concrete witness (exact inside the fragment, soundly over-approximated outside
 it); and the ML-free subset is now certified by **three independent re-implementations** (JavaScript,
-Rust, Go) that each pass all 1,067 predicate and 27 engine conformance vectors — conformance
+Rust, Go) that each pass all 1,079 predicate and 27 engine conformance vectors — conformance
 refereed by re-implementation rather than asserted. The fragment now also runs on **two substrates
 below software**: a fixed FPGA interpreter circuit (Zynq-7020) that executes Level M flows as
 runtime-loaded table images with a provable 100–420 ns decision bound, and a **verifier-accepted
 in-kernel eBPF/XDP program** that classifies live network packets at 132–182 ns each
 (~5.5–7.6 Mpps/core) and hot-swaps its policy from an edited Markdown flow with no reload. Both are
-certified against the same *declared subset* of the frozen vectors (114/1,067 predicate + 6/27 engine,
-zero divergence; the eBPF target cross-checked on aarch64 and x86_64) (§7). We are explicit about the provenance of
+certified against a *declared subset* of the frozen vectors, zero divergence (the FPGA C target
+124/1,079 predicate + 6/27 engine after the 2026-08-12 negative-integer literals, and the eBPF target
+the same 124/124 in-kernel, re-certified that day on both aarch64 and x86_64) (§7). We are explicit about the provenance of
 the routing evaluation's labels; the once-open bounded-state critique is now closed (§6).
 
 ---
@@ -926,7 +927,7 @@ broken-flow corpus, §3.3); **durable, resumable execution with a git proof-ledg
 delimits an **ML-free portable subset**: flows whose reachable edges are all decidable run on
 dependency-free ports of the kernel whose routing parity with the Python reference is enforced by a
 cross-language conformance suite rather than asserted — **three independent implementations
-(JavaScript, Rust, Go) now pass every one of the 1,067 predicate and 27 engine vectors**, which is
+(JavaScript, Rust, Go) now pass every one of the 1,079 predicate and 27 engine vectors**, which is
 the strongest form the claim can take: conformance is refereed by re-implementation, not by
 assertion, and a fourth kernel is a weekend against a frozen target; **fan-out and sub-flow composition** as
 event edges plus a declarative `@spawn` annotation — the engine stays pure (it only records the spawn
@@ -962,9 +963,10 @@ the evidence cannot clear the bound. **Targets below software (delivered, measur
 eBPF 2026-08-09)**: because a Level M flow *is* a match-action table, it compiles to a binary table
 image — the production SOC triage flow, unmodified, is 302 bytes — interpreted by one fixed
 circuit on a Zynq-7020, never re-synthesized per flow; the same frozen vectors became the hardware
-test bench **on a declared subset, stated plainly** (the C reference target and the RTL each pass
-114/1,067 predicate + 6/27 engine vectors with zero divergence and a machine-readable reason per
-exclusion — the portability-tier pattern one level down, deliberately not claimed as full
+test bench **on a declared subset, stated plainly** (the C reference target passes 124/1,079 predicate
++ 6/27 engine vectors and the RTL 114/1,067 — its re-sweep to 124/1,079 for the 2026-08-12
+negative-integer literals is pending a hardware retest — each with zero divergence and a machine-readable
+reason per exclusion — the portability-tier pattern one level down, deliberately not claimed as full
 conformance), the RTL additionally reproduced 7,436 live sensor samples bit-for-bit against the C
 target, and on the bench 2,985 live accelerometer samples were routed *in fabric* — a
 5–21-cycle evaluate, a provable **100–420 ns worst-case decision bound** at 50 MHz, in 1,064 LUTs
@@ -973,8 +975,8 @@ classifier (`is`/`is not` accepted by classification, rejected by evaluation) �
 vectors-as-referee pattern doing exactly its job on its first hardware consumer. **The same table also
 compiles to a verifier-accepted in-kernel eBPF/XDP program** (delivered 2026-08-09): the identical
 decidability that fits Level M into FPGA block-RAM makes it pass the kernel verifier, and the program is
-conformant *in-kernel* against the same frozen corpus (114/114 of the declared subset, byte-matching the
-reference, on both aarch64 and x86_64). Attached observe-only to a live-traffic mirror it classified real
+conformant *in-kernel* against the same frozen corpus (124/124 of the declared subset, byte-matching the
+reference, on both aarch64 and x86_64; re-certified 2026-08-12 on corpus v2 with the hardened loader). Attached observe-only to a live-traffic mirror it classified real
 packets at **132–182 ns each (~5.5–7.6 Mpps/core)** and **hot-swapped its policy from an edited Markdown
 flow with no reload**, repopulating the running program's table maps in place: the "swap the map, change
 the policy" property carried onto the kernel substrate. Artifacts, evidence logs, and
@@ -997,6 +999,34 @@ reference validated on synthetic/modeled data (not field-proven), benchmark-gate
 margin fails, and only partly built out: a word-packed byte format and the spiral have landed, while a
 hardware shift-register codec and a vector-quantization tier are designed but not built. Its priority date
 is OpenTimestamps-anchored (`adapters/telemetry/evidence/`). Ledger row #81.
+
+**Cyber-physical fusion (delivered, measured on the live rig; 2026-08-12).** The same decidable
+match-action fragment composes across *modalities*: a fusion adapter (`adapters/fusion/`) tessellates a
+SIEM's cyber verdict and a live IMU's physical posture into one Level M table whose bands are the joint
+decision, decidable the same way a single-modality flow is. Over the whole real triage backlog
+(64,484 level-≥7 alerts) the fused decision wire measures ~1.5 bytes per alert with its integrity
+apparatus (Merkle roots, epoch chaining, ACK channel) counted — 1,992× under the raw alert JSON and 45×
+under a minimal four-field JSON on *payload*, and ~45× under batched JSON on the *wire* once per-packet
+transport framing is charged; we state plainly that zstd over batched minimal JSON wins on raw bytes, so
+the differentiator is tamper-evidence, per-reading streamability, and decidability, not size. Run end to
+end on the live rig — a BNO086 IMU and the live Wazuh indexer fused in real time, the sensor's own
+on-chip classifier corroborating the derived posture 96.3% of the time — the high-value coincident bands
+stayed empty across every session, which is the honest finding a rare-event detector should report, not a
+gap. Ledger rows #82–#86.
+
+**Secure signed policy hot-swap (delivered, published as prior art; 2026-08-12).** A frozen model or a
+fixed circuit still needs its *governor* to change, and the swap is the attack surface. A policy pack is
+the Level M `.ppt` image plus a detached Ed25519-signed manifest, gated on load against a
+separately-signed *envelope* of what the qualified system may contain — signature, monotonic version,
+counts ≤ caps, fields ⊆ envelope, and an image-native opcode-whitelist walk that re-verifies Level M
+membership from the shipped bytes without trusting the build host — then applied by a single atomic
+reference flip, with every attempt (accepted or rejected) written to a Merkle-rooted audit log. The
+negative matrix (tampered image, wrong or revoked key, version replay, out-of-envelope field, injected
+out-of-fragment opcode) all rejects with stable reason codes and leaves the running policy untouched;
+atomicity is proven two ways, including an uncaught exception injected mid-pipeline. The mechanism is
+disclosed in full as prior art, no patent sought (`docs/design/spec-secure-hotswap.md`); the same gate
+fronts the kernel eBPF `netupdate` as a host-side pre-loader, so a tampered policy never reaches a map.
+Ledger rows #87–#88.
 
 What remains genuinely open: (i) a larger, *human*-annotated routing benchmark across more flows and
 embedders, to test whether the frontier shape and the confident-error blind spot generalize; and (ii)

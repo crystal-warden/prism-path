@@ -77,6 +77,91 @@
    "expect": true
   },
   {
+   "cond": "when x >= -5",
+   "ctx": {
+    "x": -5
+   },
+   "expect": true
+  },
+  {
+   "cond": "when x >= -5",
+   "ctx": {
+    "x": -6
+   },
+   "expect": false
+  },
+  {
+   "cond": "when x < -1282",
+   "ctx": {
+    "x": -2000
+   },
+   "expect": true
+  },
+  {
+   "cond": "when -1 < x",
+   "ctx": {
+    "x": 5
+   },
+   "expect": true
+  },
+  {
+   "cond": "when x == -3",
+   "ctx": {
+    "x": -3
+   },
+   "expect": true
+  },
+  {
+   "cond": "when x != -3",
+   "ctx": {
+    "x": 0
+   },
+   "expect": true
+  },
+  {
+   "cond": "when +7 == x",
+   "ctx": {
+    "x": 7
+   },
+   "expect": true
+  },
+  {
+   "cond": "when x in [-3, -1, 2]",
+   "ctx": {
+    "x": -1
+   },
+   "expect": true
+  },
+  {
+   "cond": "when x in [-3, -1, 2]",
+   "ctx": {
+    "x": 0
+   },
+   "expect": false
+  },
+  {
+   "cond": "when x >= -0.0",
+   "ctx": {
+    "x": 1
+   },
+   "expect": "ERROR"
+  },
+  {
+   "cond": "when -y < x",
+   "ctx": {
+    "x": 1,
+    "y": 2
+   },
+   "expect": "ERROR"
+  },
+  {
+   "cond": "when x >= -foo",
+   "ctx": {
+    "x": 1
+   },
+   "expect": "ERROR"
+  },
+  {
    "cond": "when nope > 3",
    "ctx": {},
    "expect": false
@@ -404,7 +489,7 @@
    "ctx": {
     "x": 5
    },
-   "expect": "ERROR"
+   "expect": true
   },
   {
    "cond": "when 2 < 1 < f(x)",
@@ -11444,5 +11529,5 @@
  ],
  "note": "expect: true|false = eval_condition result; 'ERROR' = PredicateError (edge non-matching at run time). Any implementation must match every case.",
  "seed": 42,
- "version": 1
+ "version": 2
 }

@@ -144,9 +144,12 @@ A predicate is in the **match-action fragment** iff it is a boolean combination 
 `not`) of atoms, where every atom is one of:
 
 - `field OP constant` with `OP ∈ {==, !=, <, <=, >, >=}`, `field` a name, and `constant` an
-  **integer**, boolean, or string literal (string constants with `==`/`!=` only). The value
-  domain of the fragment is `i32`; **float literals are excluded** — a `field OP <float>`
-  condition is outside the fragment (it has no representation on the i32 match-action table);
+  **integer** (positive or negative — a leading `-`/`+` on an integer literal folds to a signed
+  `i32` constant; the table stores `val` as signed `i32`), boolean, or string literal (string
+  constants with `==`/`!=` only). The value domain of the fragment is `i32`; **float literals are
+  excluded** — a `field OP <float>` condition is outside the fragment (it has no representation on
+  the i32 match-action table), and a sign on anything other than an integer literal (a float, or a
+  field name as in `-x`) does **not** fold and stays outside the language;
 - `field in <list of scalar literals>` or its `not in` form;
 - a bare `field` (truthiness of a scalar).
 
