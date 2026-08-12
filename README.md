@@ -114,7 +114,10 @@ table, and the circuit or program never changes:
 - **Linux kernel / eBPF.** The same table compiles to a **verifier-accepted XDP program**, certified
   in-kernel against the frozen corpus. On a live-traffic mirror it classifies real packets at **132 to 182
   ns/packet (~5.5 to 7.6 Mpps/core)**, and its **policy hot-swaps live from a Markdown edit**: repopulate
-  the running program's maps, no detach, no reload. ([`prismpath-ebpf/`](prismpath-ebpf/README.md))
+  the running program's maps, no detach, no reload. Each swap can be cryptographically **authorized,
+  envelope-checked, and audited** (secure hot-swap, published as prior art —
+  [`docs/design/spec-secure-hotswap.md`](docs/design/spec-secure-hotswap.md)).
+  ([`prismpath-ebpf/`](prismpath-ebpf/README.md))
 
 Both are certified on a **declared subset** of the frozen vectors. This is the portability pattern taken
 one level below software, never claimed as full SPEC §8 conformance, with every excluded vector carrying a

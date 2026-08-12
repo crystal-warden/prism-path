@@ -30,6 +30,17 @@ runs lands here.
   fixed); ratios **converge** by N=10k–100k (a too-small test would have undersold it — the sweep proves
   it); selective MMR retransmit is multiples cheaper under sparse burst loss. **Margins hold → Phase A
   validates.**
+- ✅ **On a real wire (cross-adapter check)** — the self-framing property this codec rests on is
+  measured on a real transport by [`adapters/fusion/bench/wire.py`](../fusion/bench/wire.py), which
+  charges per-packet IP/TCP/TLS framing over the full SIEM backlog and recorded IMU sessions. The
+  payoff is exactly the self-framing one: unbatched, a per-decision packet is header-bound (110
+  B/decision), but because the codec carries no per-record framing the header amortizes to ~0 when a
+  packet holds many readings (MTU-fill → **1.6 B/decision**), and the advantage persists **~45×** vs
+  uncompressed batched JSON. Stated honestly: against *zstd-batched* JSON it is a wash on pure bytes —
+  the win there is tamper-evidence, per-reading streamability, no decompression, and decidability, not
+  raw size. An optional AEAD + X25519-ECDHE confidentiality layer is measured on top (~0.035
+  B/decision when batched). Single-stream (N=1) baseline; the multi-source scaling claim is a stated
+  hypothesis, not yet measured. See supporting-evidence #86.
 
 ### Phase B ✅
 - ✅ **Self-heal core** (`selfheal.py`) — the Fibonacci stream is chunked into Merkle-committed blocks,

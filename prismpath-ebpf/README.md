@@ -244,6 +244,22 @@ latency via `BPF_PROG_TEST_RUN`), `netupdate <new.ppt> <iface>` (live policy hot
   uninterrupted instance. This is the FPGA "swap the map, change the policy, no reprogram" property on
   the kernel substrate: alter in-kernel line-rate behavior by editing Markdown. **Fixed without a
   reload:** the 8-field packet ABI and the table bounds; any in-bounds Level M table hot-swaps.
+- **Secure hot-swap (trusted pre-loader, `net_swap.py`):** bare `netupdate` loads any
+  structurally-valid image. `net_swap.py` puts the authorization + envelope gates in front of it —
+  it verifies the signed policy pack against its signed envelope and monotonic-version floor
+  **on the host**, and execs `netupdate` only on success, so a tampered or replayed policy never
+  reaches a map. Privilege-free up to the loader exec (tested without root by injecting the loader
+  call). This is the eBPF layer of the secure-hot-swap composition; the full four-property mechanism
+  (authorized / envelope-bounded / attested / audited-atomic) and its software reference tier are
+  specified in [`../docs/design/spec-secure-hotswap.md`](../docs/design/spec-secure-hotswap.md).
+- **Loader-side hardenings (staged, pending a privileged recert):** three `loader.c` fixes are built
+  but held until a root live-smoke passes (substrate-retest discipline) — a `MAX_*` capacity check in
+  `parse_image_buf` (an oversized image previously partial-populated instead of being rejected),
+  checked `bpf_map_update_elem` returns (a partial populate aborts loudly instead of leaving a torn
+  table), and **preserving `drop_mask` across a swap**. That last one fixes a real bug: `netupdate`
+  rebuilds `config_map[0]` with a designated initializer that zeroes the enforcement mask, so a
+  hot-swap silently drops an enforcing program back to observe-only. It is **latent today** because
+  enforcement is observe-only anyway (§9), but it must land before inline `DROP` does.
 
 ## 9. Honest status — what is and isn't proven
 
