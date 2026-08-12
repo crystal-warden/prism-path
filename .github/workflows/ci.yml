@@ -97,6 +97,8 @@ jobs:
         run: python -m pytest adapters/soc -q
       - name: Compliance adapter tests
         run: python -m pytest adapters/compliance -q
+      - name: Fusion adapter tests
+        run: python -m pytest adapters/fusion -q
 
   # The Rust crates: the P0 kernel port (prismpath-rs) and the 1-1 telemetry adapter port
   # (prismpath-telemetry-rs). ubuntu-latest ships a stable Rust toolchain, so no setup action is needed.

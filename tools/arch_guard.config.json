@@ -54,6 +54,16 @@
       "flows": [
         "../adapters/compliance/flows/nist_800171_generic.md"
       ]
+    },
+    "fusion": {
+      "code": [
+        "../adapters/fusion/projection.py",
+        "../adapters/fusion/census.py",
+        "../adapters/fusion/bench/bandwidth.py"
+      ],
+      "flows": [
+        "../adapters/fusion/flows/fusion_triage.md"
+      ]
     }
   },
   "unclassified_needs_triage": [
@@ -101,6 +111,12 @@
       "mcp2221",
       "\\bfpga\\b",
       "\\bimu\\b"
+    ],
+    "fusion": [
+      "dev_mg",
+      "soc_action",
+      "fusion_triage",
+      "coincident_critical"
     ]
   },
   "_adapters_note": "Domain adapters live in ../adapters/<domain>/ (migrated 2026-07-23). The published prismpath/ package is core-only; Signal-1 scans core_modules for domain_nouns. Each adapter conforms to adapters/ADAPTER_GUIDE.md."

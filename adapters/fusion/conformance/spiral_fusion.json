@@ -1,0 +1,1555 @@
+{
+ "version": 1,
+ "note": "Frozen integer tessellation of fusion_triage@correlate. xy floats deliberately excluded (build-time geometry, regenerable). A mapping change flips a frozen entry -> test RED. flow_sha256 pins the flow this corpus was built from.",
+ "flow": "---\nname: fusion_triage\nstart: intake\n---\n\n## intake\nOne fused observation per adjudicated SIEM alert: the alert's cyber verdict (rule_level and\nsoc_action) joined with the device's physical posture for the same window (stability and dev_mg,\nthe sensor bridge's own fields). Every threshold in this flow is a real operational boundary\ninherited from the systems that produce the fields \u2014 none exists to shape the decision space:\n150 / 500 / 2500 dev_mg are the bridge's DEADBAND / MOVE_DEV / SHAKE_DEV constants (x1000);\n7 and 12 are the SIEM's triage floor and containment line (the wazuh_triage flow's own edges).\n-> physical_check: when always\n\n## physical_check\nClassify the physical posture on the bridge's operational boundaries: 2500 dev_mg is the\nviolent-spike threshold (SHAKE_DEV), 500 is the sustained-handling threshold (MOVE_DEV).\nThe stability field carries the bridge's temporal state (a shake persists for its hold window\neven after the deviation returns to zero), so magnitude and persistence are distinct axes.\n-> tamper_path: when stability == \"shaken\" or dev_mg >= 2500\n-> handling_path: when stability == \"moving\" or dev_mg >= 500\n-> quiescent_path: else\n\n## tamper_path\nThe device reports physical tamper. Carry that posture into the fusion decision.\n-> correlate: when always\n\n## handling_path\nThe device reports sustained handling or movement. Carry that posture into the fusion decision.\n-> correlate: when always\n\n## quiescent_path\nThe device is physically quiet. Carry that posture into the fusion decision.\n-> correlate: when always\n\n## correlate\nThe fusion decision, escalation-default: coincidence of physical disturbance and a\ncontainment-grade cyber verdict is the worst case and is checked first; quiet must be shown on\nboth axes before anything is dismissed. The deadband edge (dev_mg >= 150) treats any detectable\nmotion during a containment-grade alert as coincidence: 150 is the sensor's noise floor, used\nhere only jointly with rule_level >= 12, never alone.\n-> coincident_critical: when stability == \"shaken\" and rule_level >= 12\n-> coincident_critical: when stability == \"shaken\" and soc_action == \"contain\"\n-> coincident_critical: when dev_mg >= 2500 and soc_action == \"contain\"\n-> coincident_critical: when dev_mg >= 150 and rule_level >= 12\n-> physical_escalation: when stability == \"shaken\" or dev_mg >= 2500\n-> cyber_containment: when soc_action == \"contain\" or rule_level >= 12\n-> tandem_watch: when stability == \"moving\" and rule_level >= 7\n-> tandem_watch: when dev_mg >= 500 and soc_action == \"watch\"\n-> cyber_watch: when soc_action == \"watch\" or rule_level >= 7\n-> physical_watch: when stability == \"moving\" or dev_mg >= 500\n-> all_quiet: else\n\n## coincident_critical\nPhysical disturbance coincident with a containment-grade cyber verdict \u2014 the highest severity\nthis flow can assign. Escalate to a human immediately with both evidence chains attached.\n-> record: when always\n\n## physical_escalation\nPhysical tamper without a matching cyber verdict. Dispatch a physical-site check; the cyber\naxis stays on watch.\n-> record: when always\n\n## cyber_containment\nA containment-grade cyber verdict with the device physically quiet. Follow the SOC containment\npath (staged action, human approval); physical posture recorded as context.\n-> record: when always\n\n## tandem_watch\nElevated activity on both axes below their escalation lines. Watch with both evidence chains\nlinked so recurrence is visible as a pair.\n-> record: when always\n\n## cyber_watch\nA watch-grade cyber verdict with the device physically quiet. Standard SOC watchlist path.\n-> record: when always\n\n## physical_watch\nMovement or handling without any cyber signal. Log the posture; no cyber action.\n-> record: when always\n\n## all_quiet\nBoth axes quiet. Store the observation so the baseline stays measured, not assumed.\n-> record: when always\n\n## record\n@checkpoint(unit=alert.id, proof=verdict)\nWrite the fused decision: the alert reference, the physical posture, the verdict band, and the\npath taken. Reaching this node means the fused observation is fully adjudicated.\n-> end: when always\n\n## end\nCycle complete.\n",
+ "flow_sha256": "f7aa7328367caa5f573017cd536cb168d7444692d2b385cdd2df18174e83c47b",
+ "node": "correlate",
+ "fields": [
+  "dev_mg",
+  "rule_level",
+  "soc_action",
+  "stability"
+ ],
+ "radices": [
+  4,
+  3,
+  3,
+  3
+ ],
+ "size": 108,
+ "bands": [
+  {
+   "route": "all_quiet",
+   "base": 0,
+   "width": 2
+  },
+  {
+   "route": "physical_watch",
+   "base": 2,
+   "width": 4
+  },
+  {
+   "route": "cyber_watch",
+   "base": 6,
+   "width": 9
+  },
+  {
+   "route": "tandem_watch",
+   "base": 15,
+   "width": 9
+  },
+  {
+   "route": "cyber_containment",
+   "base": 24,
+   "width": 18
+  },
+  {
+   "route": "physical_escalation",
+   "base": 42,
+   "width": 24
+  },
+  {
+   "route": "coincident_critical",
+   "base": 66,
+   "width": 42
+  }
+ ],
+ "cells": [
+  {
+   "cell": [
+    0,
+    0,
+    2,
+    2
+   ],
+   "n": 0,
+   "band": 0,
+   "route": "all_quiet"
+  },
+  {
+   "cell": [
+    1,
+    0,
+    2,
+    2
+   ],
+   "n": 1,
+   "band": 0,
+   "route": "all_quiet"
+  },
+  {
+   "cell": [
+    0,
+    0,
+    2,
+    1
+   ],
+   "n": 2,
+   "band": 1,
+   "route": "physical_watch"
+  },
+  {
+   "cell": [
+    1,
+    0,
+    2,
+    1
+   ],
+   "n": 3,
+   "band": 1,
+   "route": "physical_watch"
+  },
+  {
+   "cell": [
+    2,
+    0,
+    2,
+    1
+   ],
+   "n": 4,
+   "band": 1,
+   "route": "physical_watch"
+  },
+  {
+   "cell": [
+    2,
+    0,
+    2,
+    2
+   ],
+   "n": 5,
+   "band": 1,
+   "route": "physical_watch"
+  },
+  {
+   "cell": [
+    0,
+    0,
+    1,
+    2
+   ],
+   "n": 6,
+   "band": 2,
+   "route": "cyber_watch"
+  },
+  {
+   "cell": [
+    0,
+    0,
+    1,
+    1
+   ],
+   "n": 7,
+   "band": 2,
+   "route": "cyber_watch"
+  },
+  {
+   "cell": [
+    0,
+    1,
+    2,
+    2
+   ],
+   "n": 8,
+   "band": 2,
+   "route": "cyber_watch"
+  },
+  {
+   "cell": [
+    0,
+    1,
+    1,
+    2
+   ],
+   "n": 9,
+   "band": 2,
+   "route": "cyber_watch"
+  },
+  {
+   "cell": [
+    1,
+    1,
+    1,
+    2
+   ],
+   "n": 10,
+   "band": 2,
+   "route": "cyber_watch"
+  },
+  {
+   "cell": [
+    1,
+    1,
+    2,
+    2
+   ],
+   "n": 11,
+   "band": 2,
+   "route": "cyber_watch"
+  },
+  {
+   "cell": [
+    1,
+    0,
+    1,
+    1
+   ],
+   "n": 12,
+   "band": 2,
+   "route": "cyber_watch"
+  },
+  {
+   "cell": [
+    1,
+    0,
+    1,
+    2
+   ],
+   "n": 13,
+   "band": 2,
+   "route": "cyber_watch"
+  },
+  {
+   "cell": [
+    2,
+    1,
+    2,
+    2
+   ],
+   "n": 14,
+   "band": 2,
+   "route": "cyber_watch"
+  },
+  {
+   "cell": [
+    0,
+    1,
+    2,
+    1
+   ],
+   "n": 15,
+   "band": 3,
+   "route": "tandem_watch"
+  },
+  {
+   "cell": [
+    0,
+    1,
+    1,
+    1
+   ],
+   "n": 16,
+   "band": 3,
+   "route": "tandem_watch"
+  },
+  {
+   "cell": [
+    1,
+    1,
+    1,
+    1
+   ],
+   "n": 17,
+   "band": 3,
+   "route": "tandem_watch"
+  },
+  {
+   "cell": [
+    1,
+    1,
+    2,
+    1
+   ],
+   "n": 18,
+   "band": 3,
+   "route": "tandem_watch"
+  },
+  {
+   "cell": [
+    2,
+    0,
+    1,
+    2
+   ],
+   "n": 19,
+   "band": 3,
+   "route": "tandem_watch"
+  },
+  {
+   "cell": [
+    2,
+    0,
+    1,
+    1
+   ],
+   "n": 20,
+   "band": 3,
+   "route": "tandem_watch"
+  },
+  {
+   "cell": [
+    2,
+    1,
+    2,
+    1
+   ],
+   "n": 21,
+   "band": 3,
+   "route": "tandem_watch"
+  },
+  {
+   "cell": [
+    2,
+    1,
+    1,
+    1
+   ],
+   "n": 22,
+   "band": 3,
+   "route": "tandem_watch"
+  },
+  {
+   "cell": [
+    2,
+    1,
+    1,
+    2
+   ],
+   "n": 23,
+   "band": 3,
+   "route": "tandem_watch"
+  },
+  {
+   "cell": [
+    0,
+    0,
+    0,
+    1
+   ],
+   "n": 24,
+   "band": 4,
+   "route": "cyber_containment"
+  },
+  {
+   "cell": [
+    0,
+    0,
+    0,
+    2
+   ],
+   "n": 25,
+   "band": 4,
+   "route": "cyber_containment"
+  },
+  {
+   "cell": [
+    0,
+    1,
+    0,
+    2
+   ],
+   "n": 26,
+   "band": 4,
+   "route": "cyber_containment"
+  },
+  {
+   "cell": [
+    0,
+    1,
+    0,
+    1
+   ],
+   "n": 27,
+   "band": 4,
+   "route": "cyber_containment"
+  },
+  {
+   "cell": [
+    0,
+    2,
+    0,
+    1
+   ],
+   "n": 28,
+   "band": 4,
+   "route": "cyber_containment"
+  },
+  {
+   "cell": [
+    0,
+    2,
+    0,
+    2
+   ],
+   "n": 29,
+   "band": 4,
+   "route": "cyber_containment"
+  },
+  {
+   "cell": [
+    0,
+    2,
+    1,
+    2
+   ],
+   "n": 30,
+   "band": 4,
+   "route": "cyber_containment"
+  },
+  {
+   "cell": [
+    0,
+    2,
+    1,
+    1
+   ],
+   "n": 31,
+   "band": 4,
+   "route": "cyber_containment"
+  },
+  {
+   "cell": [
+    0,
+    2,
+    2,
+    1
+   ],
+   "n": 32,
+   "band": 4,
+   "route": "cyber_containment"
+  },
+  {
+   "cell": [
+    0,
+    2,
+    2,
+    2
+   ],
+   "n": 33,
+   "band": 4,
+   "route": "cyber_containment"
+  },
+  {
+   "cell": [
+    1,
+    1,
+    0,
+    1
+   ],
+   "n": 34,
+   "band": 4,
+   "route": "cyber_containment"
+  },
+  {
+   "cell": [
+    1,
+    1,
+    0,
+    2
+   ],
+   "n": 35,
+   "band": 4,
+   "route": "cyber_containment"
+  },
+  {
+   "cell": [
+    1,
+    0,
+    0,
+    2
+   ],
+   "n": 36,
+   "band": 4,
+   "route": "cyber_containment"
+  },
+  {
+   "cell": [
+    1,
+    0,
+    0,
+    1
+   ],
+   "n": 37,
+   "band": 4,
+   "route": "cyber_containment"
+  },
+  {
+   "cell": [
+    2,
+    0,
+    0,
+    1
+   ],
+   "n": 38,
+   "band": 4,
+   "route": "cyber_containment"
+  },
+  {
+   "cell": [
+    2,
+    0,
+    0,
+    2
+   ],
+   "n": 39,
+   "band": 4,
+   "route": "cyber_containment"
+  },
+  {
+   "cell": [
+    2,
+    1,
+    0,
+    2
+   ],
+   "n": 40,
+   "band": 4,
+   "route": "cyber_containment"
+  },
+  {
+   "cell": [
+    2,
+    1,
+    0,
+    1
+   ],
+   "n": 41,
+   "band": 4,
+   "route": "cyber_containment"
+  },
+  {
+   "cell": [
+    0,
+    0,
+    1,
+    0
+   ],
+   "n": 42,
+   "band": 5,
+   "route": "physical_escalation"
+  },
+  {
+   "cell": [
+    0,
+    0,
+    2,
+    0
+   ],
+   "n": 43,
+   "band": 5,
+   "route": "physical_escalation"
+  },
+  {
+   "cell": [
+    0,
+    1,
+    2,
+    0
+   ],
+   "n": 44,
+   "band": 5,
+   "route": "physical_escalation"
+  },
+  {
+   "cell": [
+    0,
+    1,
+    1,
+    0
+   ],
+   "n": 45,
+   "band": 5,
+   "route": "physical_escalation"
+  },
+  {
+   "cell": [
+    1,
+    1,
+    1,
+    0
+   ],
+   "n": 46,
+   "band": 5,
+   "route": "physical_escalation"
+  },
+  {
+   "cell": [
+    1,
+    1,
+    2,
+    0
+   ],
+   "n": 47,
+   "band": 5,
+   "route": "physical_escalation"
+  },
+  {
+   "cell": [
+    1,
+    0,
+    2,
+    0
+   ],
+   "n": 48,
+   "band": 5,
+   "route": "physical_escalation"
+  },
+  {
+   "cell": [
+    1,
+    0,
+    1,
+    0
+   ],
+   "n": 49,
+   "band": 5,
+   "route": "physical_escalation"
+  },
+  {
+   "cell": [
+    2,
+    0,
+    1,
+    0
+   ],
+   "n": 50,
+   "band": 5,
+   "route": "physical_escalation"
+  },
+  {
+   "cell": [
+    2,
+    0,
+    2,
+    0
+   ],
+   "n": 51,
+   "band": 5,
+   "route": "physical_escalation"
+  },
+  {
+   "cell": [
+    2,
+    1,
+    2,
+    0
+   ],
+   "n": 52,
+   "band": 5,
+   "route": "physical_escalation"
+  },
+  {
+   "cell": [
+    2,
+    1,
+    1,
+    0
+   ],
+   "n": 53,
+   "band": 5,
+   "route": "physical_escalation"
+  },
+  {
+   "cell": [
+    3,
+    1,
+    1,
+    2
+   ],
+   "n": 54,
+   "band": 5,
+   "route": "physical_escalation"
+  },
+  {
+   "cell": [
+    3,
+    1,
+    1,
+    1
+   ],
+   "n": 55,
+   "band": 5,
+   "route": "physical_escalation"
+  },
+  {
+   "cell": [
+    3,
+    1,
+    1,
+    0
+   ],
+   "n": 56,
+   "band": 5,
+   "route": "physical_escalation"
+  },
+  {
+   "cell": [
+    3,
+    1,
+    2,
+    0
+   ],
+   "n": 57,
+   "band": 5,
+   "route": "physical_escalation"
+  },
+  {
+   "cell": [
+    3,
+    1,
+    2,
+    1
+   ],
+   "n": 58,
+   "band": 5,
+   "route": "physical_escalation"
+  },
+  {
+   "cell": [
+    3,
+    1,
+    2,
+    2
+   ],
+   "n": 59,
+   "band": 5,
+   "route": "physical_escalation"
+  },
+  {
+   "cell": [
+    3,
+    0,
+    2,
+    2
+   ],
+   "n": 60,
+   "band": 5,
+   "route": "physical_escalation"
+  },
+  {
+   "cell": [
+    3,
+    0,
+    2,
+    1
+   ],
+   "n": 61,
+   "band": 5,
+   "route": "physical_escalation"
+  },
+  {
+   "cell": [
+    3,
+    0,
+    2,
+    0
+   ],
+   "n": 62,
+   "band": 5,
+   "route": "physical_escalation"
+  },
+  {
+   "cell": [
+    3,
+    0,
+    1,
+    0
+   ],
+   "n": 63,
+   "band": 5,
+   "route": "physical_escalation"
+  },
+  {
+   "cell": [
+    3,
+    0,
+    1,
+    1
+   ],
+   "n": 64,
+   "band": 5,
+   "route": "physical_escalation"
+  },
+  {
+   "cell": [
+    3,
+    0,
+    1,
+    2
+   ],
+   "n": 65,
+   "band": 5,
+   "route": "physical_escalation"
+  },
+  {
+   "cell": [
+    0,
+    0,
+    0,
+    0
+   ],
+   "n": 66,
+   "band": 6,
+   "route": "coincident_critical"
+  },
+  {
+   "cell": [
+    0,
+    1,
+    0,
+    0
+   ],
+   "n": 67,
+   "band": 6,
+   "route": "coincident_critical"
+  },
+  {
+   "cell": [
+    0,
+    2,
+    0,
+    0
+   ],
+   "n": 68,
+   "band": 6,
+   "route": "coincident_critical"
+  },
+  {
+   "cell": [
+    0,
+    2,
+    1,
+    0
+   ],
+   "n": 69,
+   "band": 6,
+   "route": "coincident_critical"
+  },
+  {
+   "cell": [
+    0,
+    2,
+    2,
+    0
+   ],
+   "n": 70,
+   "band": 6,
+   "route": "coincident_critical"
+  },
+  {
+   "cell": [
+    1,
+    2,
+    2,
+    2
+   ],
+   "n": 71,
+   "band": 6,
+   "route": "coincident_critical"
+  },
+  {
+   "cell": [
+    1,
+    2,
+    2,
+    1
+   ],
+   "n": 72,
+   "band": 6,
+   "route": "coincident_critical"
+  },
+  {
+   "cell": [
+    1,
+    2,
+    2,
+    0
+   ],
+   "n": 73,
+   "band": 6,
+   "route": "coincident_critical"
+  },
+  {
+   "cell": [
+    1,
+    2,
+    1,
+    0
+   ],
+   "n": 74,
+   "band": 6,
+   "route": "coincident_critical"
+  },
+  {
+   "cell": [
+    1,
+    2,
+    1,
+    1
+   ],
+   "n": 75,
+   "band": 6,
+   "route": "coincident_critical"
+  },
+  {
+   "cell": [
+    1,
+    2,
+    1,
+    2
+   ],
+   "n": 76,
+   "band": 6,
+   "route": "coincident_critical"
+  },
+  {
+   "cell": [
+    1,
+    2,
+    0,
+    2
+   ],
+   "n": 77,
+   "band": 6,
+   "route": "coincident_critical"
+  },
+  {
+   "cell": [
+    1,
+    2,
+    0,
+    1
+   ],
+   "n": 78,
+   "band": 6,
+   "route": "coincident_critical"
+  },
+  {
+   "cell": [
+    1,
+    2,
+    0,
+    0
+   ],
+   "n": 79,
+   "band": 6,
+   "route": "coincident_critical"
+  },
+  {
+   "cell": [
+    1,
+    1,
+    0,
+    0
+   ],
+   "n": 80,
+   "band": 6,
+   "route": "coincident_critical"
+  },
+  {
+   "cell": [
+    1,
+    0,
+    0,
+    0
+   ],
+   "n": 81,
+   "band": 6,
+   "route": "coincident_critical"
+  },
+  {
+   "cell": [
+    2,
+    0,
+    0,
+    0
+   ],
+   "n": 82,
+   "band": 6,
+   "route": "coincident_critical"
+  },
+  {
+   "cell": [
+    2,
+    1,
+    0,
+    0
+   ],
+   "n": 83,
+   "band": 6,
+   "route": "coincident_critical"
+  },
+  {
+   "cell": [
+    2,
+    2,
+    0,
+    0
+   ],
+   "n": 84,
+   "band": 6,
+   "route": "coincident_critical"
+  },
+  {
+   "cell": [
+    2,
+    2,
+    0,
+    1
+   ],
+   "n": 85,
+   "band": 6,
+   "route": "coincident_critical"
+  },
+  {
+   "cell": [
+    2,
+    2,
+    0,
+    2
+   ],
+   "n": 86,
+   "band": 6,
+   "route": "coincident_critical"
+  },
+  {
+   "cell": [
+    2,
+    2,
+    1,
+    2
+   ],
+   "n": 87,
+   "band": 6,
+   "route": "coincident_critical"
+  },
+  {
+   "cell": [
+    2,
+    2,
+    1,
+    1
+   ],
+   "n": 88,
+   "band": 6,
+   "route": "coincident_critical"
+  },
+  {
+   "cell": [
+    2,
+    2,
+    1,
+    0
+   ],
+   "n": 89,
+   "band": 6,
+   "route": "coincident_critical"
+  },
+  {
+   "cell": [
+    2,
+    2,
+    2,
+    0
+   ],
+   "n": 90,
+   "band": 6,
+   "route": "coincident_critical"
+  },
+  {
+   "cell": [
+    2,
+    2,
+    2,
+    1
+   ],
+   "n": 91,
+   "band": 6,
+   "route": "coincident_critical"
+  },
+  {
+   "cell": [
+    2,
+    2,
+    2,
+    2
+   ],
+   "n": 92,
+   "band": 6,
+   "route": "coincident_critical"
+  },
+  {
+   "cell": [
+    3,
+    2,
+    2,
+    2
+   ],
+   "n": 93,
+   "band": 6,
+   "route": "coincident_critical"
+  },
+  {
+   "cell": [
+    3,
+    2,
+    2,
+    1
+   ],
+   "n": 94,
+   "band": 6,
+   "route": "coincident_critical"
+  },
+  {
+   "cell": [
+    3,
+    2,
+    2,
+    0
+   ],
+   "n": 95,
+   "band": 6,
+   "route": "coincident_critical"
+  },
+  {
+   "cell": [
+    3,
+    2,
+    1,
+    0
+   ],
+   "n": 96,
+   "band": 6,
+   "route": "coincident_critical"
+  },
+  {
+   "cell": [
+    3,
+    2,
+    1,
+    1
+   ],
+   "n": 97,
+   "band": 6,
+   "route": "coincident_critical"
+  },
+  {
+   "cell": [
+    3,
+    2,
+    1,
+    2
+   ],
+   "n": 98,
+   "band": 6,
+   "route": "coincident_critical"
+  },
+  {
+   "cell": [
+    3,
+    2,
+    0,
+    2
+   ],
+   "n": 99,
+   "band": 6,
+   "route": "coincident_critical"
+  },
+  {
+   "cell": [
+    3,
+    2,
+    0,
+    1
+   ],
+   "n": 100,
+   "band": 6,
+   "route": "coincident_critical"
+  },
+  {
+   "cell": [
+    3,
+    2,
+    0,
+    0
+   ],
+   "n": 101,
+   "band": 6,
+   "route": "coincident_critical"
+  },
+  {
+   "cell": [
+    3,
+    1,
+    0,
+    0
+   ],
+   "n": 102,
+   "band": 6,
+   "route": "coincident_critical"
+  },
+  {
+   "cell": [
+    3,
+    1,
+    0,
+    1
+   ],
+   "n": 103,
+   "band": 6,
+   "route": "coincident_critical"
+  },
+  {
+   "cell": [
+    3,
+    1,
+    0,
+    2
+   ],
+   "n": 104,
+   "band": 6,
+   "route": "coincident_critical"
+  },
+  {
+   "cell": [
+    3,
+    0,
+    0,
+    2
+   ],
+   "n": 105,
+   "band": 6,
+   "route": "coincident_critical"
+  },
+  {
+   "cell": [
+    3,
+    0,
+    0,
+    1
+   ],
+   "n": 106,
+   "band": 6,
+   "route": "coincident_critical"
+  },
+  {
+   "cell": [
+    3,
+    0,
+    0,
+    0
+   ],
+   "n": 107,
+   "band": 6,
+   "route": "coincident_critical"
+  }
+ ],
+ "probes": [
+  {
+   "reading": {
+    "stability": "still",
+    "dev_mg": 0,
+    "rule_level": 0,
+    "soc_action": "ignore"
+   },
+   "route": "all_quiet"
+  },
+  {
+   "reading": {
+    "stability": "still",
+    "dev_mg": 149,
+    "rule_level": 0,
+    "soc_action": "ignore"
+   },
+   "route": "all_quiet"
+  },
+  {
+   "reading": {
+    "stability": "still",
+    "dev_mg": 150,
+    "rule_level": 0,
+    "soc_action": "ignore"
+   },
+   "route": "all_quiet"
+  },
+  {
+   "reading": {
+    "stability": "still",
+    "dev_mg": 151,
+    "rule_level": 0,
+    "soc_action": "ignore"
+   },
+   "route": "all_quiet"
+  },
+  {
+   "reading": {
+    "stability": "still",
+    "dev_mg": 499,
+    "rule_level": 0,
+    "soc_action": "ignore"
+   },
+   "route": "all_quiet"
+  },
+  {
+   "reading": {
+    "stability": "still",
+    "dev_mg": 500,
+    "rule_level": 0,
+    "soc_action": "ignore"
+   },
+   "route": "physical_watch"
+  },
+  {
+   "reading": {
+    "stability": "still",
+    "dev_mg": 501,
+    "rule_level": 0,
+    "soc_action": "ignore"
+   },
+   "route": "physical_watch"
+  },
+  {
+   "reading": {
+    "stability": "still",
+    "dev_mg": 2499,
+    "rule_level": 0,
+    "soc_action": "ignore"
+   },
+   "route": "physical_watch"
+  },
+  {
+   "reading": {
+    "stability": "still",
+    "dev_mg": 2500,
+    "rule_level": 0,
+    "soc_action": "ignore"
+   },
+   "route": "physical_escalation"
+  },
+  {
+   "reading": {
+    "stability": "still",
+    "dev_mg": 2501,
+    "rule_level": 0,
+    "soc_action": "ignore"
+   },
+   "route": "physical_escalation"
+  },
+  {
+   "reading": {
+    "stability": "still",
+    "dev_mg": 0,
+    "rule_level": 6,
+    "soc_action": "ignore"
+   },
+   "route": "all_quiet"
+  },
+  {
+   "reading": {
+    "stability": "still",
+    "dev_mg": 0,
+    "rule_level": 7,
+    "soc_action": "ignore"
+   },
+   "route": "cyber_watch"
+  },
+  {
+   "reading": {
+    "stability": "still",
+    "dev_mg": 0,
+    "rule_level": 8,
+    "soc_action": "ignore"
+   },
+   "route": "cyber_watch"
+  },
+  {
+   "reading": {
+    "stability": "still",
+    "dev_mg": 0,
+    "rule_level": 11,
+    "soc_action": "ignore"
+   },
+   "route": "cyber_watch"
+  },
+  {
+   "reading": {
+    "stability": "still",
+    "dev_mg": 0,
+    "rule_level": 12,
+    "soc_action": "ignore"
+   },
+   "route": "cyber_containment"
+  },
+  {
+   "reading": {
+    "stability": "still",
+    "dev_mg": 0,
+    "rule_level": 13,
+    "soc_action": "ignore"
+   },
+   "route": "cyber_containment"
+  },
+  {
+   "reading": {
+    "stability": "still",
+    "dev_mg": 0,
+    "rule_level": 0,
+    "soc_action": "contain"
+   },
+   "route": "cyber_containment"
+  },
+  {
+   "reading": {
+    "stability": "still",
+    "dev_mg": 0,
+    "rule_level": 0,
+    "soc_action": "watch"
+   },
+   "route": "cyber_watch"
+  },
+  {
+   "reading": {
+    "stability": "still",
+    "dev_mg": 0,
+    "rule_level": 0,
+    "soc_action": "none"
+   },
+   "route": "all_quiet"
+  },
+  {
+   "reading": {
+    "stability": "shaken",
+    "dev_mg": 0,
+    "rule_level": 0,
+    "soc_action": "ignore"
+   },
+   "route": "physical_escalation"
+  },
+  {
+   "reading": {
+    "stability": "moving",
+    "dev_mg": 0,
+    "rule_level": 0,
+    "soc_action": "ignore"
+   },
+   "route": "physical_watch"
+  },
+  {
+   "reading": {
+    "stability": "On Table",
+    "dev_mg": 0,
+    "rule_level": 0,
+    "soc_action": "ignore"
+   },
+   "route": "all_quiet"
+  },
+  {
+   "reading": {
+    "stability": "shaken",
+    "dev_mg": 3000,
+    "rule_level": 13,
+    "soc_action": "contain"
+   },
+   "route": "coincident_critical"
+  },
+  {
+   "reading": {
+    "stability": "shaken",
+    "dev_mg": 0,
+    "rule_level": 3,
+    "soc_action": "contain"
+   },
+   "route": "coincident_critical"
+  },
+  {
+   "reading": {
+    "stability": "still",
+    "dev_mg": 3000,
+    "rule_level": 3,
+    "soc_action": "contain"
+   },
+   "route": "coincident_critical"
+  },
+  {
+   "reading": {
+    "stability": "still",
+    "dev_mg": 200,
+    "rule_level": 12,
+    "soc_action": "watch"
+   },
+   "route": "coincident_critical"
+  },
+  {
+   "reading": {
+    "stability": "still",
+    "dev_mg": 0,
+    "rule_level": 12,
+    "soc_action": "contain"
+   },
+   "route": "cyber_containment"
+  },
+  {
+   "reading": {
+    "stability": "still",
+    "dev_mg": 149,
+    "rule_level": 12,
+    "soc_action": "contain"
+   },
+   "route": "cyber_containment"
+  },
+  {
+   "reading": {
+    "stability": "shaken",
+    "dev_mg": 2600,
+    "rule_level": 5,
+    "soc_action": "ignore"
+   },
+   "route": "physical_escalation"
+  },
+  {
+   "reading": {
+    "stability": "still",
+    "dev_mg": 2500,
+    "rule_level": 3,
+    "soc_action": "ignore"
+   },
+   "route": "physical_escalation"
+  },
+  {
+   "reading": {
+    "stability": "moving",
+    "dev_mg": 600,
+    "rule_level": 8,
+    "soc_action": "watch"
+   },
+   "route": "tandem_watch"
+  },
+  {
+   "reading": {
+    "stability": "still",
+    "dev_mg": 600,
+    "rule_level": 3,
+    "soc_action": "watch"
+   },
+   "route": "tandem_watch"
+  },
+  {
+   "reading": {
+    "stability": "moving",
+    "dev_mg": 100,
+    "rule_level": 3,
+    "soc_action": "ignore"
+   },
+   "route": "physical_watch"
+  },
+  {
+   "reading": {
+    "stability": "still",
+    "dev_mg": 400,
+    "rule_level": 3,
+    "soc_action": "ignore"
+   },
+   "route": "all_quiet"
+  }
+ ]
+}

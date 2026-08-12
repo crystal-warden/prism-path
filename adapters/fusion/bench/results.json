@@ -1,0 +1,108 @@
+{
+ "source": "live:wazuh-alerts-*",
+ "synthetic": false,
+ "min_level": 7,
+ "n": 64484,
+ "block_bits": 1024,
+ "epoch_readings": 4096,
+ "b0": {
+  "n": 64484,
+  "total_bytes": 194766714,
+  "avg": 3020.4,
+  "median": 1369,
+  "p90": 7048,
+  "min": 588,
+  "max": 22194
+ },
+ "b1": {
+  "n": 64484,
+  "total_bytes": 42590251,
+  "avg": 660.5,
+  "median": 650,
+  "p90": 752,
+  "min": 211,
+  "max": 760
+ },
+ "b2": {
+  "n": 64484,
+  "total_bytes": 4388366,
+  "avg": 68.1,
+  "median": 68,
+  "p90": 68,
+  "min": 68,
+  "max": 71
+ },
+ "b3_full": {
+  "raw_bytes": 194831197,
+  "zlib9_bytes": 7957163,
+  "zstd19_bytes": 4037604
+ },
+ "b3_minimal": {
+  "raw_bytes": 4452849,
+  "zlib9_bytes": 20147,
+  "zstd19_bytes": 14098
+ },
+ "o1": {
+  "n": 64484,
+  "epochs": 16,
+  "payload_bits": 773808,
+  "pad_bits": 16,
+  "wire_bytes": 96728,
+  "merkle_epoch_bytes": 1024,
+  "ack_bytes": 512,
+  "wire_bytes_total": 97752,
+  "bytes_per_alert": 1.516
+ },
+ "o2": {
+  "n": 64484,
+  "epochs": 16,
+  "payload_bits": 257939,
+  "pad_bits": 109,
+  "wire_bytes": 32256,
+  "merkle_epoch_bytes": 1024,
+  "ack_bytes": 512,
+  "wire_bytes_total": 33280,
+  "bytes_per_alert": 0.516
+ },
+ "o1_loss": [
+  {
+   "regime": "light burst",
+   "p": 0.02,
+   "r": 0.5,
+   "n_blocks": 756,
+   "lost_blocks": 40,
+   "repair_bytes": 17920,
+   "proof_bytes_per_block": 320
+  },
+  {
+   "regime": "heavy burst",
+   "p": 0.08,
+   "r": 0.3,
+   "n_blocks": 756,
+   "lost_blocks": 167,
+   "repair_bytes": 74816,
+   "proof_bytes_per_block": 320
+  }
+ ],
+ "o2_loss": [
+  {
+   "regime": "light burst",
+   "p": 0.02,
+   "r": 0.5,
+   "n_blocks": 252,
+   "lost_blocks": 19,
+   "repair_bytes": 7296,
+   "proof_bytes_per_block": 256
+  },
+  {
+   "regime": "heavy burst",
+   "p": 0.08,
+   "r": 0.3,
+   "n_blocks": 252,
+   "lost_blocks": 67,
+   "repair_bytes": 25728,
+   "proof_bytes_per_block": 256
+  }
+ ],
+ "elapsed": 38.567925453186035
+}

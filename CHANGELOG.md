@@ -35,6 +35,26 @@ spec-stable.
   `capability.json` flip the `chained` case to Level M → **spec-vector version 1 → 2**.
 
 ### Added
+- **Cyber-physical decision fusion adapter (`adapters/fusion/`): one Level M flow joins IMU posture
+  and SIEM verdicts — proved, tessellated, censused, and bandwidth-measured on real data.**
+  `flows/fusion_triage.md` fuses `{stability, dev_mg}` (the sensor bridge's own fields; thresholds
+  150/500/2500 are its DEADBAND/MOVE_DEV/SHAKE_DEV constants) with `{rule_level, soc_action}` (7/12
+  are the SIEM's triage floor and the wazuh_triage containment edge) into 7 verdicts —
+  escalation-default, coincidence checked first, `else` last. `flow_level_m` → `(True, [])`
+  asserted in-suite; the 108-cell / 7-band Tier-6 tessellation is frozen
+  (`conformance/spiral_fusion.json`, flow sha256 pinned, 34 boundary probes decisions-preserved
+  three ways — the first mixed numeric/categorical spiral corpus, no telemetry change needed).
+  `census.py` weights the bands with the real month-scale backlog (64,483 triage alerts of
+  2,498,693 total) + 10,421 real IMU session rows — pairings labeled (`assume_still`,
+  `independence_expected`; NOT time-coincident; the empty coincident bands are the finding), and
+  the committed artifact is aggregates-only (privacy regression test enforced).
+  `bench/bandwidth.py` measures the full population, overheads itemized and included:
+  **O1 1.516 B/alert vs raw 3,020 B/alert (1,992×; 45× vs minimal 4-field JSON); the band-ID
+  stream is 0.516 B/alert (~4.1 bits/decision)** — gate PASS, with the buffered-batch-compressor
+  caveat stated in the results before anyone else can state it. Honest scope: software proof only
+  (substrate cert + hardware retest is a named follow-on), the census projection is decidable (not
+  an adjudicator verdict), and the live coincident capture is the only future true-joint artifact.
+  Evidence rows #82–#84.
 - **eBPF target: real-packet classification on live traffic + measured latency + live policy hot-swap.**
   `ppt_net.bpf.c` reuses the verified eval back-end with a real-packet front-end (parses on-wire
   Ethernet/IPv4/TCP-UDP into a fixed canonical register file) and classifies each packet with a Level M
