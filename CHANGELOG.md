@@ -8,6 +8,19 @@ spec-stable.
 
 ## [Unreleased]
 
+### Changed
+- **The eBPF live hot-swap is now double-buffered and proven atomic under concurrency** (evidence
+  #93), closing the "still element-wise (not double-buffered)" caveat from #88. The `ppt_net`
+  program's four table maps are doubled into two banks; a packet reads a single `__u32` bank
+  selector (`bank_map`) once — an aligned load, atomic against the loader's aligned store — and
+  evaluates entirely within that bank. `netupdate` writes the inactive bank in full, then commits
+  with ONE update to `bank_map`; a failed inactive-bank write is never committed, so the active
+  policy is untouched on any error. New `loader netstorm <a> <b>` proof: a thread flips banks
+  0↔1 while another hammers `BPF_PROG_TEST_RUN` — **200,000 evaluations under ~500k concurrent
+  flips, TORN=0** on both aarch64 and x86_64, verdicts split ~50/50 between banks (the race was
+  real). The conformance program `ppt_xdp` is single-bank and untouched — **124/124 unchanged on
+  both architectures**.
+
 ### Added
 - **Context ledger — attest what a frozen model was conditioned on** (`prismpath/context_ledger.py`,
   mirrored in `prismpath-rs::durable::ContextLedger`; evidence #91). For a hardwired/frozen-weights

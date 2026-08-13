@@ -155,9 +155,12 @@ flag and stamps `unsigned: true` into the audit event.
 - **eBPF:** the loader's `netupdate` is fronted by a **trusted pre-loader** on the host
   (`net_swap.py`): verify pack + envelope first, only then touch maps. Loader-side hardening:
   capacity bounds enforced at parse, map-update return values checked, and the enforcement mask
-  carried forward across swaps. True double-buffered atomicity (generation counter in the kernel
-  program) is a named follow-on because it changes the verified program and therefore requires
-  full re-verification and re-certification.
+  carried forward across swaps. **True double-buffered atomicity is now delivered** (evidence #93):
+  the table maps hold two banks and a packet reads a single `__u32` bank selector once (aligned
+  load, atomic against the loader's aligned store); `netupdate` writes the inactive bank in full,
+  then flips the selector in one update, so no packet ever sees a torn table. Re-verified and
+  re-certified on both aarch64 and x86_64 (124/124 unchanged); proven torn-free under a concurrent
+  swap-storm.
 - **FPGA:** the pre-loader verifies and signs an envelope-conformance attestation; the device
   verifies that signature and a version register (eFUSE-backed monotonic counter for
   anti-rollback). Gated on the hardware-retest rule — no FPGA change lands without re-running the
@@ -172,6 +175,7 @@ flag and stamps `unsigned: true` into the audit event.
 3. Attestation + audit ledger + OTS anchoring. *(this change)*
 4. Atomic shadow swap + rollback, failure-injection tested. *(this change)*
 5. eBPF pre-loader + loader hardening. *(this change)*
+5b. eBPF double-buffered atomic swap + concurrent swap-storm proof. *(delivered, #93)*
 6. FPGA signed-attestation path + version register. *(follow-on: hardware retest)*
 7. MCU pre-loader. *(follow-on: hardware availability)*
 8. Key management hardening: rotation, revocation distribution, secure-element storage.
@@ -181,8 +185,8 @@ flag and stamps `unsigned: true` into the audit event.
 
 - The software anti-rollback counter is file-backed: tamper-evident via the ledger, not
   tamper-proof. The hardware monotonic counter is the qualified answer.
-- The eBPF swap remains element-wise until the double-buffer follow-on lands; the pre-loader
-  closes the *authorization* gap now, not the torn-read window (which is bounded and observed-only
-  in the current deployment).
+- The eBPF swap is double-buffered (#93): the torn-read window is closed, proven torn-free under a
+  concurrent swap-storm on both architectures. The atomicity rests on aligned-word load/store
+  atomicity (x86_64 and aarch64 both provide it).
 - Attestation detects a compromised runtime after the fact; it does not prevent one.
 - Key compromise is out of scope here and named as its own workstream.

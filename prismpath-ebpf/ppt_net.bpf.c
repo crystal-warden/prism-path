@@ -32,17 +32,26 @@
 
 #define NET_FIELDS 8          /* the canonical schema length */
 
-/* ---- PPT table maps (identical layout to ppt_xdp.bpf.c so the loader populates them the same way) ---- */
+/* ---- PPT table maps — DOUBLE-BUFFERED for atomic live hot-swap (net program only).
+ * Two banks per table map: bank b occupies indices [b*MAX_X, (b+1)*MAX_X). A packet reads the
+ * ACTIVE bank once (bank_map, below) and evaluates entirely from it; the loader writes the INACTIVE
+ * bank in full, then flips bank_map in a single aligned store (the only atomic commit point). A
+ * packet therefore sees the old table whole or the new table whole — never a torn mix. ppt_xdp
+ * (the conformance program) stays single-bank; its 124/124 cert is unaffected. ---- */
 struct { __uint(type, BPF_MAP_TYPE_ARRAY); __type(key, __u32); __type(value, struct ppt_atom);
-         __uint(max_entries, MAX_ATOMS); } atoms_map SEC(".maps");
+         __uint(max_entries, 2 * MAX_ATOMS); } atoms_map SEC(".maps");
 struct { __uint(type, BPF_MAP_TYPE_ARRAY); __type(key, __u32); __type(value, struct ppt_node);
-         __uint(max_entries, MAX_NODES); } nodes_map SEC(".maps");
+         __uint(max_entries, 2 * MAX_NODES); } nodes_map SEC(".maps");
 struct { __uint(type, BPF_MAP_TYPE_ARRAY); __type(key, __u32); __type(value, struct ppt_edge);
-         __uint(max_entries, MAX_EDGES); } edges_map SEC(".maps");
+         __uint(max_entries, 2 * MAX_EDGES); } edges_map SEC(".maps");
 struct { __uint(type, BPF_MAP_TYPE_ARRAY); __type(key, __u32); __type(value, __u16);
-         __uint(max_entries, MAX_PROG_WORDS); } prog_map SEC(".maps");
+         __uint(max_entries, 2 * MAX_PROG_WORDS); } prog_map SEC(".maps");
 struct { __uint(type, BPF_MAP_TYPE_ARRAY); __type(key, __u32); __type(value, struct ppt_config);
-         __uint(max_entries, 1); } config_map SEC(".maps");
+         __uint(max_entries, 2); } config_map SEC(".maps");     /* per-bank: start_node + drop_mask */
+/* The atomic commit point: a single __u32 selecting the active bank (0|1). An aligned 4-byte store
+ * is atomic on x86_64/aarch64, so the reader's single load sees the old or new bank, never torn. */
+struct { __uint(type, BPF_MAP_TYPE_ARRAY); __type(key, __u32); __type(value, __u32);
+         __uint(max_entries, 1); } bank_map SEC(".maps");
 struct { __uint(type, BPF_MAP_TYPE_ARRAY); __type(key, __u32); __type(value, struct ppt_result);
          __uint(max_entries, 1); } result_map SEC(".maps");
 
@@ -103,18 +112,18 @@ static __always_inline void st_put(__u8 *st, __u32 i, __u8 v)
                  case 3: st[3]=v; break; default: break; }
 }
 
-struct prog_ctx { __u32 prog_off; __u32 prog_cnt; __u32 n_fields; __u8 st[STACK_MAX]; __u32 sp; };
+struct prog_ctx { __u32 prog_off; __u32 prog_cnt; __u32 n_fields; __u32 bank; __u8 st[STACK_MAX]; __u32 sp; };
 
 static long prog_word_cb(__u32 i, void *ctx_ptr)
 {
     struct prog_ctx *c = ctx_ptr;
     if (i >= c->prog_cnt) return 1;
-    __u32 p_idx = (c->prog_off + i) & (MAX_PROG_WORDS - 1);
+    __u32 p_idx = (c->bank & 1) * MAX_PROG_WORDS + ((c->prog_off + i) & (MAX_PROG_WORDS - 1));
     __u16 *w_ptr = bpf_map_lookup_elem(&prog_map, &p_idx);
     if (!w_ptr) return 1;
     __u16 w = *w_ptr;
     if (w < 0x8000) {
-        __u32 atom_idx = w & (MAX_ATOMS - 1);
+        __u32 atom_idx = (c->bank & 1) * MAX_ATOMS + (w & (MAX_ATOMS - 1));
         struct ppt_atom *atom = bpf_map_lookup_elem(&atoms_map, &atom_idx);
         __u8 res = atom ? (__u8)eval_atom(atom, c->n_fields) : 0;
         if (c->sp < STACK_MAX) { st_put(c->st, c->sp, res); c->sp++; }
@@ -133,29 +142,30 @@ static long prog_word_cb(__u32 i, void *ctx_ptr)
     return 0;
 }
 
-static __always_inline int eval_prog(const struct ppt_edge *e, __u32 n_fields)
+static __always_inline int eval_prog(const struct ppt_edge *e, __u32 n_fields, __u32 bank)
 {
     struct prog_ctx pc = {};
     pc.prog_off = e->prog_off;
     pc.prog_cnt = e->prog_cnt;
     if (pc.prog_cnt > MAX_PROG_PER_EDGE) pc.prog_cnt = MAX_PROG_PER_EDGE;
     pc.n_fields = n_fields;
+    pc.bank = bank & 1;
     pc.sp = 0;
     bpf_loop(MAX_PROG_PER_EDGE, prog_word_cb, &pc, 0);
     return (pc.sp > 0) ? st_get(pc.st, 0) : 0;
 }
 
-struct eval_loop_ctx { __u32 edge_off; __u32 edge_cnt; __u32 n_fields;
+struct eval_loop_ctx { __u32 edge_off; __u32 edge_cnt; __u32 n_fields; __u32 bank;
                        __s32 matched_edge; __s32 target_node; };
 
 static long edge_loop_cb(__u32 i, void *ctx_ptr)
 {
     struct eval_loop_ctx *c = ctx_ptr;
     if (i >= c->edge_cnt) return 1;
-    __u32 e_idx = (c->edge_off + i) & (MAX_EDGES - 1);
+    __u32 e_idx = (c->bank & 1) * MAX_EDGES + ((c->edge_off + i) & (MAX_EDGES - 1));
     struct ppt_edge *e = bpf_map_lookup_elem(&edges_map, &e_idx);
     if (!e) return 0;
-    if (eval_prog(e, c->n_fields)) {
+    if (eval_prog(e, c->n_fields, c->bank)) {
         c->matched_edge = (__s32)i;
         c->target_node = (__s32)e->target;
         return 1;
@@ -163,10 +173,10 @@ static long edge_loop_cb(__u32 i, void *ctx_ptr)
     return 0;
 }
 
-static __attribute__((noinline)) int evaluate(__u32 node_idx, __u32 n_fields,
+static __attribute__((noinline)) int evaluate(__u32 node_idx, __u32 n_fields, __u32 bank,
                     __s32 *out_matched_edge, __s32 *out_target_node)
 {
-    __u32 n_idx = node_idx & (MAX_NODES - 1);
+    __u32 n_idx = (bank & 1) * MAX_NODES + (node_idx & (MAX_NODES - 1));
     struct ppt_node *n = bpf_map_lookup_elem(&nodes_map, &n_idx);
     if (!n) { *out_matched_edge = -1; *out_target_node = -1; return -1; }
     __u32 edge_cnt = n->edge_cnt;
@@ -175,6 +185,7 @@ static __attribute__((noinline)) int evaluate(__u32 node_idx, __u32 n_fields,
     c.edge_off = n->edge_off;
     c.edge_cnt = edge_cnt;
     c.n_fields = n_fields;
+    c.bank = bank & 1;
     c.matched_edge = -1;
     c.target_node = -1;
     bpf_loop(MAX_EDGES_PER_NODE, edge_loop_cb, &c, 0);
@@ -240,12 +251,18 @@ int ppt_net_prog(struct xdp_md *ctx)
     set_reg(rf, 0, src_ip); set_reg(rf, 1, dst_ip); set_reg(rf, 2, sport); set_reg(rf, 3, dport);
     set_reg(rf, 4, proto);  set_reg(rf, 5, pkt_len); set_reg(rf, 6, tcp_flags); set_reg(rf, 7, ttl);
 
-    __u32 cfg_key = 0;
-    struct ppt_config *cfg = bpf_map_lookup_elem(&config_map, &cfg_key);
+    /* Read the active bank ONCE — a single aligned load, atomic against the loader's flip. Every
+     * table access below is confined to this bank; whichever value we read (old or new), the whole
+     * policy we evaluate is internally consistent. */
+    __u32 zero_key = 0;
+    __u32 *bank_ptr = bpf_map_lookup_elem(&bank_map, &zero_key);
+    __u32 bank = (bank_ptr ? *bank_ptr : 0) & 1;
+
+    struct ppt_config *cfg = bpf_map_lookup_elem(&config_map, &bank);   /* per-bank config */
     __u32 start_node = cfg ? cfg->start_node : 0;
 
     __s32 matched_edge = -1, target_node = -1;
-    int rc = evaluate(start_node, NET_FIELDS, &matched_edge, &target_node);
+    int rc = evaluate(start_node, NET_FIELDS, bank, &matched_edge, &target_node);
 
     /* observe-only: record the verdict, never drop */
     __u32 bucket = (rc == 0 && target_node >= 0) ? ((__u32)target_node & (MAX_NODES - 1))

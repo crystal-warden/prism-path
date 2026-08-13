@@ -246,6 +246,13 @@ latency via `BPF_PROG_TEST_RUN`), `netupdate <new.ppt> <iface>` (live policy hot
   uninterrupted instance. This is the FPGA "swap the map, change the policy, no reprogram" property on
   the kernel substrate: alter in-kernel line-rate behavior by editing Markdown. **Fixed without a
   reload:** the 8-field packet ABI and the table bounds; any in-bounds Level M table hot-swaps.
+  **Atomic (double-buffered):** the four table maps hold two banks; a packet reads a single `__u32`
+  bank selector once (an aligned load, atomic against the loader's aligned store) and evaluates
+  entirely within it. `netupdate` writes the *inactive* bank in full, then flips the selector in ONE
+  update — so a packet sees the old table whole or the new table whole, never a torn mix, and a
+  failed write is never committed. Proven by `loader netstorm <a> <b>`: **200,000 evaluations under
+  ~500k concurrent bank flips, zero torn reads, on both aarch64 and x86_64** (evidence #93). The
+  conformance program `ppt_xdp` stays single-bank — its 124/124 cert is unaffected.
 - **Secure hot-swap (trusted pre-loader, `net_swap.py`):** bare `netupdate` loads any
   structurally-valid image. `net_swap.py` puts the authorization + envelope gates in front of it —
   it verifies the signed policy pack against its signed envelope and monotonic-version floor

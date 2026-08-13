@@ -13,6 +13,7 @@
 #include <errno.h>
 #include <unistd.h>
 #include <net/if.h>
+#include <pthread.h>
 
 #ifndef NO_LIBBPF
 #include <bpf/libbpf.h>
@@ -232,6 +233,13 @@ static int populate_maps(struct bpf_object *obj, const Image *im) {
         for (uint32_t i = 0; i < im->prog_len; i++) {
             bpf_map_update_elem(bpf_map__fd(prog_map), &i, &im->prog[i], BPF_ANY);
         }
+    }
+
+    /* 6. bank_map (net program only): a fresh load populates bank 0 above, so select bank 0. */
+    struct bpf_map *bank_map = bpf_object__find_map_by_name(obj, "bank_map");
+    if (bank_map) {
+        uint32_t key = 0, bank0 = 0;
+        bpf_map_update_elem(bpf_map__fd(bank_map), &key, &bank0, BPF_ANY);
     }
 
     return 0;
@@ -694,58 +702,50 @@ static int net_bench(const char *ppt_path) {
     return 0;
 }
 
-/* Update ONE already-open map (by name, by fd) from a fresh image — the live hot-swap primitive. */
-/* Repopulate one named map from the image. Returns 1 on success, 0 if the name is not one we own,
- * and -1 (loud, with the map name + errno) if any element write fails — so a partial populate is a
- * hard error the caller aborts on, not a silently torn table. */
-#define UPD_OR_FAIL(mapname, key_ptr, val_ptr)                                             \
-    do { if (bpf_map_update_elem(fd, (key_ptr), (val_ptr), BPF_ANY) != 0) {                \
-        fprintf(stderr, "netupdate: %s write failed: %s\n", (mapname), strerror(errno));   \
-        return -1; } } while (0)
+/* ---- double-buffered live hot-swap ------------------------------------------------------------
+ * The old element-wise repopulate rewrote the ACTIVE table in place, so a packet mid-swap could
+ * read a torn mix of old and new rows. Now the swap writes the INACTIVE bank in full and commits
+ * with a single atomic store to bank_map — a packet sees the old table whole or the new table
+ * whole. `nfd` collects the map fds of the live program by name so we can address each by bank. */
+struct net_maps { int atoms, nodes, edges, prog, config, bank, verdict; };
 
-static int update_named_map(const char *name, int fd, const Image *im) {
-    if (!strcmp(name, "config_map")) {
-        struct ppt_config cfg = {
-            .n_fields = im->n_fields, .n_interns = im->n_interns, .n_atoms = im->n_atoms,
-            .n_nodes = im->n_nodes, .n_edges = im->n_edges, .prog_len = im->prog_len,
-            .start_node = im->start, .visits_idx = im->visits_idx,
-            .max_steps = im->max_steps, .max_stack = im->max_stack };
-        __u32 k = 0;
-        /* Carry inline enforcement across the swap: the designated initializer above zeroes
-         * drop_mask, so without this a hot-swap would silently drop an enforcing program back to
-         * observe-only. Preserve whatever was configured at attach time. */
-        struct ppt_config old;
-        if (bpf_map_lookup_elem(fd, &k, &old) == 0) cfg.drop_mask = old.drop_mask;
-        UPD_OR_FAIL("config_map", &k, &cfg);
-        return 1;
-    }
-    if (!strcmp(name, "atoms_map")) {
-        for (__u32 i = 0; i < im->n_atoms; i++) UPD_OR_FAIL("atoms_map", &i, &im->atoms[i]);
-        return 1;
-    }
-    if (!strcmp(name, "nodes_map")) {
-        for (__u32 i = 0; i < im->n_nodes; i++) UPD_OR_FAIL("nodes_map", &i, &im->nodes[i]);
-        return 1;
-    }
-    if (!strcmp(name, "edges_map")) {
-        for (__u32 i = 0; i < im->n_edges; i++) UPD_OR_FAIL("edges_map", &i, &im->edges[i]);
-        return 1;
-    }
-    if (!strcmp(name, "prog_map")) {
-        for (__u32 i = 0; i < im->prog_len; i++) UPD_OR_FAIL("prog_map", &i, &im->prog[i]);
-        return 1;
-    }
-    if (!strcmp(name, "verdict_map")) {            /* zero the histogram so post-swap counts are clean */
-        for (__u32 i = 0; i < MAX_NODES; i++) { __u64 z = 0; bpf_map_update_elem(fd, &i, &z, BPF_ANY); }
-        return 1;
+#define BANK_UPD(fd, base, i, val_ptr, mapname)                                                 \
+    do { __u32 _k = (base) + (i);                                                               \
+         if (bpf_map_update_elem((fd), &_k, (val_ptr), BPF_ANY) != 0) {                         \
+             fprintf(stderr, "netupdate: %s bank write failed at %u: %s\n",                     \
+                     (mapname), _k, strerror(errno)); return -1; }                              \
+    } while (0)
+
+/* Write the whole image into `bank` of the live maps. Returns 0 on success, -1 on any write error
+ * (a partial inactive-bank write is safe — it is never committed — but we still abort loudly). */
+static int write_bank(const struct net_maps *m, __u32 bank, const Image *im) {
+    __u32 ba = bank * MAX_ATOMS, bn = bank * MAX_NODES,
+          be = bank * MAX_EDGES, bp = bank * MAX_PROG_WORDS;
+    for (__u32 i = 0; i < im->n_atoms; i++) BANK_UPD(m->atoms, ba, i, &im->atoms[i], "atoms_map");
+    for (__u32 i = 0; i < im->n_nodes; i++) BANK_UPD(m->nodes, bn, i, &im->nodes[i], "nodes_map");
+    for (__u32 i = 0; i < im->n_edges; i++) BANK_UPD(m->edges, be, i, &im->edges[i], "edges_map");
+    for (__u32 i = 0; i < im->prog_len; i++) BANK_UPD(m->prog, bp, i, &im->prog[i], "prog_map");
+
+    /* per-bank config: full struct into config_map[bank], carrying drop_mask from the active bank */
+    struct ppt_config cfg = {
+        .n_fields = im->n_fields, .n_interns = im->n_interns, .n_atoms = im->n_atoms,
+        .n_nodes = im->n_nodes, .n_edges = im->n_edges, .prog_len = im->prog_len,
+        .start_node = im->start, .visits_idx = im->visits_idx,
+        .max_steps = im->max_steps, .max_stack = im->max_stack };
+    __u32 active = bank ^ 1u;
+    struct ppt_config old;
+    if (bpf_map_lookup_elem(m->config, &active, &old) == 0) cfg.drop_mask = old.drop_mask;
+    if (bpf_map_update_elem(m->config, &bank, &cfg, BPF_ANY) != 0) {
+        fprintf(stderr, "netupdate: config_map[%u] write failed: %s\n", bank, strerror(errno));
+        return -1;
     }
     return 0;
 }
 
-/* Hot-swap the policy of the LIVE program attached to <iface> with a fresh compiled table (<new.ppt>) —
- * NO detach, NO reload of the eBPF program. Reaches the running program's maps via its map-IDs and
- * repopulates the table in place; the next packet routes by the new policy. This is the "swap the map,
- * change the policy" property: alter the eBPF's behavior by editing an .md flow, live on the wire. */
+/* Hot-swap the policy of the LIVE program attached to <iface> with a fresh compiled table
+ * (<new.ppt>) — NO detach, NO reload. Writes the inactive bank in full, then flips bank_map in a
+ * single atomic store: the packet after the flip routes by the new policy, and no packet ever
+ * observes a torn table. */
 static int net_update(const char *new_ppt, const char *ifname) {
     unsigned int ifindex = if_nametoindex(ifname);
     if (!ifindex) { fprintf(stderr, "error: no such interface %s\n", ifname); return 2; }
@@ -765,29 +765,156 @@ static int net_update(const char *new_ppt, const char *ifname) {
         fprintf(stderr, "error: cannot read prog info\n"); close(prog_fd); return -1;
     }
 
-    Image im; load_image(new_ppt, &im);
-    int updated = 0;
+    /* collect the live map fds by name */
+    struct net_maps m = { -1, -1, -1, -1, -1, -1, -1 };
     for (__u32 i = 0; i < pinfo.nr_map_ids; i++) {
         int mfd = bpf_map_get_fd_by_id(map_ids[i]);
         if (mfd < 0) continue;
         struct bpf_map_info mi; memset(&mi, 0, sizeof(mi)); __u32 ml = sizeof(mi);
-        if (!bpf_obj_get_info_by_fd(mfd, &mi, &ml)) {
-            int rc = update_named_map(mi.name, mfd, &im);
-            if (rc < 0) {           /* a partial populate = a torn table; abort loudly, do not continue */
-                fprintf(stderr, "netupdate: aborting swap after a failed map write (%s)\n", mi.name);
-                close(mfd); close(prog_fd); free_image(&im);
-                return 1;
-            }
-            updated += rc;
-        }
-        close(mfd);
+        if (bpf_obj_get_info_by_fd(mfd, &mi, &ml)) { close(mfd); continue; }
+        if      (!strcmp(mi.name, "atoms_map"))   m.atoms = mfd;
+        else if (!strcmp(mi.name, "nodes_map"))   m.nodes = mfd;
+        else if (!strcmp(mi.name, "edges_map"))   m.edges = mfd;
+        else if (!strcmp(mi.name, "prog_map"))    m.prog = mfd;
+        else if (!strcmp(mi.name, "config_map"))  m.config = mfd;
+        else if (!strcmp(mi.name, "bank_map"))    m.bank = mfd;
+        else if (!strcmp(mi.name, "verdict_map")) m.verdict = mfd;
+        else close(mfd);
     }
     close(prog_fd);
-    printf("OK: hot-swapped the LIVE %s policy from %s — %d maps updated, NO detach.\n",
-           ifname, new_ppt, updated);
-    printf("     table now: %u nodes, %u edges, %u atoms, %u prog-words (histogram reset)\n",
+    if (m.atoms < 0 || m.nodes < 0 || m.edges < 0 || m.prog < 0 || m.config < 0 || m.bank < 0) {
+        fprintf(stderr, "error: attached program is missing a double-buffer map — rebuild + reattach\n");
+        return -1;
+    }
+
+    Image im; load_image(new_ppt, &im);
+
+    /* which bank is live now? default 0 if unreadable. Write the OTHER one. */
+    __u32 zero = 0, active = 0;
+    bpf_map_lookup_elem(m.bank, &zero, &active);
+    active &= 1;
+    __u32 target = active ^ 1u;
+
+    if (write_bank(&m, target, &im) != 0) {
+        /* the inactive bank is never read; abort without touching bank_map — active policy intact */
+        fprintf(stderr, "netupdate: aborting — active bank %u still live, no flip performed\n", active);
+        free_image(&im);
+        return 1;
+    }
+
+    /* THE COMMIT: one aligned store flips the active bank atomically. */
+    if (bpf_map_update_elem(m.bank, &zero, &target, BPF_ANY) != 0) {
+        fprintf(stderr, "netupdate: bank flip failed: %s (active bank %u still live)\n",
+                strerror(errno), active);
+        free_image(&im);
+        return 1;
+    }
+
+    /* histogram reset happens AFTER the flip (post-swap counts start clean; a couple of in-flight
+     * packets may land in the old bank's buckets, which is honest, not torn). */
+    if (m.verdict >= 0)
+        for (__u32 i = 0; i < MAX_NODES; i++) { __u64 z = 0; bpf_map_update_elem(m.verdict, &i, &z, BPF_ANY); }
+
+    printf("OK: hot-swapped the LIVE %s policy from %s — bank %u -> %u, NO detach.\n",
+           ifname, new_ppt, active, target);
+    printf("     table now: %u nodes, %u edges, %u atoms, %u prog-words (atomic double-buffer flip)\n",
            im.n_nodes, im.n_edges, im.n_atoms, im.prog_len);
-    return updated > 0 ? 0 : 1;
+    free_image(&im);
+    return 0;
+}
+
+/* ---- swap-storm concurrency proof ------------------------------------------------------------
+ * The atomicity claim, tested under adversarial concurrency: preload bank 0 = policy A and
+ * bank 1 = policy B (both fully written), spin a thread flipping bank_map 0<->1 as fast as it can,
+ * and on the main thread hammer BPF_PROG_TEST_RUN with one probe packet whose verdict differs
+ * between A and B. Every observed verdict must be EXACTLY policy A's tuple or policy B's tuple —
+ * a torn read (an edge from one bank with a target from the other, or an out-of-range node) would
+ * show up as a third value. Zero torn over the storm is the proof the flip is atomic. */
+struct storm_flip_arg { int bank_fd; volatile int *stop; unsigned long flips; };
+
+static void *storm_flipper(void *p) {
+    struct storm_flip_arg *a = p;
+    __u32 zero = 0, b = 0;
+    while (!*a->stop) {
+        b ^= 1u;
+        bpf_map_update_elem(a->bank_fd, &zero, &b, BPF_ANY);
+        a->flips++;
+    }
+    return NULL;
+}
+
+static int net_storm(const char *ppt_a, const char *ppt_b) {
+    struct bpf_object *obj = bpf_object__open_file("ppt_net.bpf.o", NULL);
+    if (!obj || bpf_object__load(obj)) {
+        fprintf(stderr, "error: open/load ppt_net.bpf.o failed (verifier / CAP_BPF).\n");
+        if (obj) bpf_object__close(obj);
+        return -1;
+    }
+    /* bank 0 = A (via populate_maps), bank 1 = B (manual) */
+    Image a, b; load_image(ppt_a, &a); load_image(ppt_b, &b);
+    populate_maps(obj, &a);                 /* writes bank 0 + bank_map=0 */
+    struct net_maps m = {
+        bpf_map__fd(bpf_object__find_map_by_name(obj, "atoms_map")),
+        bpf_map__fd(bpf_object__find_map_by_name(obj, "nodes_map")),
+        bpf_map__fd(bpf_object__find_map_by_name(obj, "edges_map")),
+        bpf_map__fd(bpf_object__find_map_by_name(obj, "prog_map")),
+        bpf_map__fd(bpf_object__find_map_by_name(obj, "config_map")),
+        bpf_map__fd(bpf_object__find_map_by_name(obj, "bank_map")),
+        bpf_map__fd(bpf_object__find_map_by_name(obj, "verdict_map")),
+    };
+    if (write_bank(&m, 1, &b) != 0) { bpf_object__close(obj); return -1; }
+
+    /* the probe packet + the two expected verdicts. Run once in each bank (flipper idle) to learn
+     * A's and B's ground-truth tuples, so the test is self-calibrating for any A/B pair. */
+    struct bpf_program *prog = bpf_object__find_program_by_name(obj, "ppt_net_prog");
+    int prog_fd = bpf_program__fd(prog);
+    __u32 zero = 0;
+    uint8_t frame[2048], out[2048];
+    int flen = build_ip_frame(frame, 6, 443, 64);      /* tcp/443 */
+    struct ppt_result rA, rB;
+    __u32 zerob = 0, oneb = 1;
+    struct bpf_test_run_opts o;
+    #define RUN() do { memset(&o,0,sizeof(o)); o.sz=sizeof(o); o.data_in=frame; o.data_size_in=flen; \
+                       o.data_out=out; o.data_size_out=sizeof(out); o.repeat=1; \
+                       bpf_prog_test_run_opts(prog_fd,&o); } while(0)
+    int result_fd = bpf_map__fd(bpf_object__find_map_by_name(obj, "result_map"));
+    __u32 rk = 0;
+    bpf_map_update_elem(m.bank, &zero, &zerob, BPF_ANY); RUN();
+    bpf_map_lookup_elem(result_fd, &rk, &rA);
+    bpf_map_update_elem(m.bank, &zero, &oneb, BPF_ANY); RUN();
+    bpf_map_lookup_elem(result_fd, &rk, &rB);
+    printf("[swap-storm] probe tcp/443 -> A(edge=%d,node=%d)  B(edge=%d,node=%d)\n",
+           rA.matched_edge, rA.target_node, rB.matched_edge, rB.target_node);
+    if (rA.matched_edge == rB.matched_edge && rA.target_node == rB.target_node) {
+        fprintf(stderr, "storm: A and B give the same verdict — pick policies that differ on the probe\n");
+        bpf_object__close(obj); return 2;
+    }
+
+    /* storm */
+    volatile int stop = 0;
+    struct storm_flip_arg fa = { m.bank, &stop, 0 };
+    pthread_t th; pthread_create(&th, NULL, storm_flipper, &fa);
+
+    const int N = 200000;
+    long nA = 0, nB = 0, torn = 0;
+    for (int i = 0; i < N; i++) {
+        RUN();
+        struct ppt_result r; __u32 rk = 0;
+        bpf_map_lookup_elem(result_fd, &rk, &r);
+        if (r.matched_edge == rA.matched_edge && r.target_node == rA.target_node) nA++;
+        else if (r.matched_edge == rB.matched_edge && r.target_node == rB.target_node) nB++;
+        else { torn++; if (torn <= 5) fprintf(stderr, "  TORN: edge=%d node=%d\n", r.matched_edge, r.target_node); }
+    }
+    stop = 1; pthread_join(th, NULL);
+    #undef RUN
+
+    printf("[swap-storm] %d evaluations under %lu concurrent bank flips: A=%ld B=%ld TORN=%ld\n",
+           N, fa.flips, nA, nB, torn);
+    printf("%s\n", torn == 0
+        ? "\xE2\x9C\x85 ATOMIC: every verdict was a consistent policy; zero torn reads under the storm"
+        : "\xE2\x9C\x97 TORN READS OBSERVED — the swap is NOT atomic");
+    bpf_object__close(obj); free_image(&a); free_image(&b);
+    return torn == 0 ? 0 : 1;
 }
 
 static int net_detach(const char *ifname) {
@@ -887,6 +1014,10 @@ int main(int argc, char **argv) {
     if (argc >= 4 && strcmp(argv[2], "netupdate") == 0) {
         if (getuid() != 0) { fprintf(stderr, "error: 'netupdate' needs root / CAP_BPF.\n"); return 2; }
         return net_update(ppt_path, argv[3]);            /* loader <new.ppt> netupdate <iface> */
+    }
+    if (argc >= 4 && strcmp(argv[2], "netstorm") == 0) {  /* loader <a.ppt> netstorm <b.ppt> */
+        if (getuid() != 0) { fprintf(stderr, "error: 'netstorm' needs root / CAP_BPF.\n"); return 2; }
+        return net_storm(ppt_path, argv[3]);
     }
 #endif
 
