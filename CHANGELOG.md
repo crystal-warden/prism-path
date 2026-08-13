@@ -57,6 +57,12 @@ spec-stable.
   byte-for-byte against the Python reference: Rust `test_crypto_agility` gates in `cargo test`
   (`durable` is default), and the JS twin (`node run_crypto_agility.mjs`) is a CI port-job step. So
   provable crypto-agility is now conformance-gated across Python, Rust, and JS.
+- **RP2350 cross-ISA substrate** (`prismpath-hw/rp2350/`; evidence #97, staged). The byte-exact
+  interpreter (`ppt_rp2350.c`, a USB-CDC port of the AVR's `ppt_uno.c`) decides the frozen corpus
+  **124/124 on BOTH cores of the RP2350 from one source** — the ARM Cortex-M33 and the Hazard3
+  RISC-V — with byte-identical exclusion reasons. One `.ppt`, two ISAs of one die, same decision:
+  cross-ISA conformance, not just cross-language. Built from a single Pico SDK CMake project
+  (`make arm` / `make riscv`); the ISA tag is chosen by the compiler.
 - **Context ledger — attest what a frozen model was conditioned on** (`prismpath/context_ledger.py`,
   mirrored in `prismpath-rs::durable::ContextLedger`; evidence #91). For a hardwired/frozen-weights
   model the context is the only mutable state, so it is the governance surface: an append-only
