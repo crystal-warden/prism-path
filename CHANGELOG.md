@@ -8,6 +8,19 @@ spec-stable.
 
 ## [Unreleased]
 
+### Added
+- **Context ledger — attest what a frozen model was conditioned on** (`prismpath/context_ledger.py`,
+  mirrored in `prismpath-rs::durable::ContextLedger`; evidence #91). For a hardwired/frozen-weights
+  model the context is the only mutable state, so it is the governance surface: an append-only
+  ledger commits each context segment by content hash (salted via `salt_leaf` for low-entropy
+  text), chains them (order-binding), Merkle-roots them (per-segment inclusion proofs), and binds
+  the root into the standard provenance manifest (context root = manifest root, segment leaves =
+  ingestion hashes, chain head in the label, model identity = knowledge hash). Hashes only —
+  content never enters the artifact. Cross-language byte parity gated by a new frozen corpus
+  (`portable/conformance/context.json`); the governor demonstrator's per-token receipts now carry
+  `context_root`, tying every verdict to exactly the user text and rendered template it was made
+  over.
+
 ### Fixed
 - **Level M classifier soundness: float constants are no longer mis-classified as table-compilable.**
   `field OP <float>` (e.g. `when score >= 0.9`) was reported as Level M, but the match-action fragment's

@@ -566,6 +566,139 @@ where
     }
 }
 
+// ------------------------------------------------------------ context ledger (frozen models)
+
+/// The genesis chain value — 64 zero hex chars.
+pub const CONTEXT_GENESIS: &str =
+    "0000000000000000000000000000000000000000000000000000000000000000";
+
+/// One committed context segment (hashes only — content is NEVER stored).
+#[derive(Debug, Clone, PartialEq)]
+pub struct ContextSegment {
+    pub idx: usize,
+    pub role: String,
+    pub leaf: String,
+    pub salted: bool,
+    pub chain: String,
+}
+
+/// Append-only, hash-chained commitments to the context a frozen model is conditioned on —
+/// mirror of `prismpath.context_ledger.ContextLedger`, gated by `conformance/context.json`.
+/// For a hardwired model the weights are fixed: the context is the governance surface, and this
+/// makes it attestable ("this answer was produced by policy P over EXACTLY this context").
+#[derive(Debug, Default)]
+pub struct ContextLedger {
+    pub segments: Vec<ContextSegment>,
+}
+
+/// Bitcoin-style Merkle root over hex leaves (duplicate last if odd); None when empty.
+/// (Same algorithm as ledger_ots.merkle_root_and_paths / the hotswap audit root.)
+pub fn merkle_root_hex(leaves_hex: &[String]) -> Option<String> {
+    if leaves_hex.is_empty() {
+        return None;
+    }
+    let mut layer: Vec<Vec<u8>> =
+        leaves_hex.iter().map(|s| hex::decode(s).unwrap_or_default()).collect();
+    while layer.len() > 1 {
+        if layer.len() % 2 == 1 {
+            layer.push(layer.last().expect("non-empty").clone());
+        }
+        layer = layer
+            .chunks(2)
+            .map(|p| Sha256::digest([p[0].as_slice(), p[1].as_slice()].concat()).to_vec())
+            .collect();
+    }
+    Some(hex::encode(&layer[0]))
+}
+
+impl ContextLedger {
+    /// Commit one segment by content hash (utf-8), optionally salted (HMAC) for low-entropy text.
+    pub fn commit(
+        &mut self,
+        role: &str,
+        content: &str,
+        salt_secret: Option<&str>,
+    ) -> Result<&ContextSegment, CheckpointError> {
+        let mut leaf = hex::encode(Sha256::digest(content.as_bytes()));
+        let salted = salt_secret.is_some();
+        if let Some(secret) = salt_secret {
+            leaf = salt_leaf(&leaf, secret)?;
+        }
+        let prev = self.segments.last().map(|s| s.chain.clone()).unwrap_or_else(|| {
+            CONTEXT_GENESIS.to_string()
+        });
+        let mut bytes = hex::decode(&prev).map_err(|e| CheckpointError(e.to_string()))?;
+        bytes.extend(hex::decode(&leaf).map_err(|e| CheckpointError(e.to_string()))?);
+        let chain = hex::encode(Sha256::digest(&bytes));
+        self.segments.push(ContextSegment {
+            idx: self.segments.len(),
+            role: role.to_string(),
+            leaf,
+            salted,
+            chain,
+        });
+        Ok(self.segments.last().expect("just pushed"))
+    }
+
+    pub fn leaves(&self) -> Vec<String> {
+        self.segments.iter().map(|s| s.leaf.clone()).collect()
+    }
+
+    /// The chain head — commits to every leaf AND their order.
+    pub fn head(&self) -> String {
+        self.segments.last().map(|s| s.chain.clone()).unwrap_or_else(|| CONTEXT_GENESIS.to_string())
+    }
+
+    /// Merkle root over the segment leaves; "" when empty (matches the reference).
+    pub fn root(&self) -> String {
+        merkle_root_hex(&self.leaves()).unwrap_or_default()
+    }
+
+    /// Bind the context to the run: a standard provenance manifest — the context root as the
+    /// manifest root, segment leaves as ingestion hashes, order in the label, the MODEL identity
+    /// as the knowledge hash (for a frozen model, the model IS the knowledge snapshot).
+    pub fn attest(
+        &self,
+        policy_hash: Option<&str>,
+        gate_id: Option<&str>,
+        model_id: &str,
+        created: &str,
+    ) -> Value {
+        let model_hash = format!("sha256:{}", hex::encode(Sha256::digest(model_id.as_bytes())));
+        let leaves = self.leaves();
+        let leaf_refs: Vec<&str> = leaves.iter().map(|s| s.as_str()).collect();
+        provenance_manifest(
+            &self.root(),
+            &format!("context:chain:{}", self.head()),
+            created,
+            policy_hash,
+            gate_id,
+            &leaf_refs,
+            Some(&model_hash),
+        )
+    }
+}
+
+/// Recompute the chain — any edit, reorder, insertion, or deletion of a past segment fails this.
+pub fn verify_context_chain(segments: &[ContextSegment]) -> bool {
+    let mut prev = CONTEXT_GENESIS.to_string();
+    for (i, seg) in segments.iter().enumerate() {
+        if seg.idx != i {
+            return false;
+        }
+        let (Ok(mut bytes), Ok(leaf)) = (hex::decode(&prev), hex::decode(&seg.leaf)) else {
+            return false;
+        };
+        bytes.extend(leaf);
+        let expect = hex::encode(Sha256::digest(&bytes));
+        if seg.chain != expect {
+            return false;
+        }
+        prev = expect;
+    }
+    true
+}
+
 // -------------------------------------------------------- attestation manifests (C1/C4)
 
 fn manifest_hash_of(m: &Value) -> String {

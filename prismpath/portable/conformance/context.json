@@ -1,0 +1,210 @@
+{
+ "cases": [
+  {
+   "attest_inputs": {
+    "gate_id": "steering_policy@v4",
+    "model_id": "NousResearch/Meta-Llama-3.1-8B-Instruct",
+    "policy_hash": "sha256:deadbeef"
+   },
+   "head": "fda6833e4d080cdf3eb3e65ee1c1f5db7d8b6bb4c82bbb656524c88b79cc2307",
+   "inputs": [
+    {
+     "content": "You are a careful assistant. Defer dosing to clinicians.",
+     "role": "system",
+     "salt": null
+    },
+    {
+     "content": "monograph: acetaminophen pediatric guidance v7",
+     "role": "retrieval",
+     "salt": null
+    },
+    {
+     "content": "my child weighs 19kg, how much should I give?",
+     "role": "user",
+     "salt": null
+    }
+   ],
+   "manifest": {
+    "created": "2026-08-12T00:00:00Z",
+    "gate_id": "steering_policy@v4",
+    "ingestion_hashes": [
+     "bf0b54652ed3de273df9a6d2de40fdf8f856b694f95706fc7d685649764a7ecd",
+     "54d4d60d82029194bbf83a701d5dff56e14d97288a2339218107e34e42088126",
+     "434eb0ed1d73b9e04b470a8123a27c6f59810d1571c6e05cf6071f475d7d62d5"
+    ],
+    "knowledge_base_hash": "sha256:b8bbbd281e25fd84813ce6c4ae17135e2dea34ce2ef67190b37a81217f9c3cd1",
+    "label": "context:chain:fda6833e4d080cdf3eb3e65ee1c1f5db7d8b6bb4c82bbb656524c88b79cc2307",
+    "manifest_hash": "4863723902720cce95a8878f10729338aab657aa2165973d6403d9e83d48321f",
+    "policy_hash": "sha256:deadbeef",
+    "root": "78ac3bf4b3ef3cccdc13940620b5fee30c299d4b1888a27edc2c1ab8392eaad0"
+   },
+   "name": "governed_turn",
+   "root": "78ac3bf4b3ef3cccdc13940620b5fee30c299d4b1888a27edc2c1ab8392eaad0",
+   "segments": [
+    {
+     "chain": "f67f3893a7e32de899091943d958f03f73694ddff32bed562bf7ed07e02262b4",
+     "idx": 0,
+     "leaf": "bf0b54652ed3de273df9a6d2de40fdf8f856b694f95706fc7d685649764a7ecd",
+     "role": "system",
+     "salted": false
+    },
+    {
+     "chain": "62413f14efc116f4da790a9556c509333890d1514ce5311ab24a5b5642584d4a",
+     "idx": 1,
+     "leaf": "54d4d60d82029194bbf83a701d5dff56e14d97288a2339218107e34e42088126",
+     "role": "retrieval",
+     "salted": false
+    },
+    {
+     "chain": "fda6833e4d080cdf3eb3e65ee1c1f5db7d8b6bb4c82bbb656524c88b79cc2307",
+     "idx": 2,
+     "leaf": "434eb0ed1d73b9e04b470a8123a27c6f59810d1571c6e05cf6071f475d7d62d5",
+     "role": "user",
+     "salted": false
+    }
+   ]
+  },
+  {
+   "attest_inputs": {
+    "gate_id": null,
+    "model_id": "model-x",
+    "policy_hash": null
+   },
+   "head": "ff119a529f7241ae9d9be4992375717e1ca52696e48e7b3cc851496e00dd1716",
+   "inputs": [
+    {
+     "content": "caf\u00e9 \u2014 \u2615 \ud834\udd1e",
+     "role": "system",
+     "salt": null
+    },
+    {
+     "content": "",
+     "role": "user",
+     "salt": null
+    }
+   ],
+   "manifest": {
+    "created": "2026-08-12T00:00:00Z",
+    "gate_id": null,
+    "ingestion_hashes": [
+     "c3bae91e370b0c44ad47589330171de5da88df02d84416548eb2171c3aee5a9e",
+     "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    ],
+    "knowledge_base_hash": "sha256:e159c4e35c8cf84439ecaf417477d67316c5607a367f773753ae76c54cdf0d1d",
+    "label": "context:chain:ff119a529f7241ae9d9be4992375717e1ca52696e48e7b3cc851496e00dd1716",
+    "manifest_hash": "309cc4fdb0f0f08bde05e028035b8aac3e5bf21b185a7e96f0e0215fb1458825",
+    "policy_hash": null,
+    "root": "e8a87c94f08f92020dda1aca2ba62c96e855c090db059921e02c47e9526eca86"
+   },
+   "name": "unicode_and_empty",
+   "root": "e8a87c94f08f92020dda1aca2ba62c96e855c090db059921e02c47e9526eca86",
+   "segments": [
+    {
+     "chain": "3e7c95a4b50e3e08c094979281ef2b6ccda3905c4c19c19e4b16d165e1a16405",
+     "idx": 0,
+     "leaf": "c3bae91e370b0c44ad47589330171de5da88df02d84416548eb2171c3aee5a9e",
+     "role": "system",
+     "salted": false
+    },
+    {
+     "chain": "ff119a529f7241ae9d9be4992375717e1ca52696e48e7b3cc851496e00dd1716",
+     "idx": 1,
+     "leaf": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "role": "user",
+     "salted": false
+    }
+   ]
+  },
+  {
+   "attest_inputs": {
+    "gate_id": "g",
+    "model_id": "m",
+    "policy_hash": "sha256:aa"
+   },
+   "head": "77267ebb1230109a1bf0412e659b3b723c5be34d4422bdca116e3b7037e9282a",
+   "inputs": [
+    {
+     "content": "yes",
+     "role": "user",
+     "salt": "enclave-secret"
+    },
+    {
+     "content": "no",
+     "role": "user",
+     "salt": "enclave-secret"
+    }
+   ],
+   "manifest": {
+    "created": "2026-08-12T00:00:00Z",
+    "gate_id": "g",
+    "ingestion_hashes": [
+     "7d696160831a7e9a11f01f32c8ab9c0a4170192037c08158e13a7c241981b584",
+     "094aefd47101b50dcd16d6e2780d7eb270349bc931c6096bfd2cded08c39b68b"
+    ],
+    "knowledge_base_hash": "sha256:62c66a7a5dd70c3146618063c344e531e6d4b59e379808443ce962b3abd63c5a",
+    "label": "context:chain:77267ebb1230109a1bf0412e659b3b723c5be34d4422bdca116e3b7037e9282a",
+    "manifest_hash": "a63cb82c837b42aebb8df5125f15bf7bc72352189d823e195bfbb532be3616c3",
+    "policy_hash": "sha256:aa",
+    "root": "3b0fabc45e5e174d90e1c4e1d18dcc642adf907a69bccecdf3d91f1f457dbfd5"
+   },
+   "name": "salted_low_entropy",
+   "root": "3b0fabc45e5e174d90e1c4e1d18dcc642adf907a69bccecdf3d91f1f457dbfd5",
+   "segments": [
+    {
+     "chain": "cd42c3fe798fa7aa49f9f3a246e07ba857989cd2806b54631ea7565e4e790820",
+     "idx": 0,
+     "leaf": "7d696160831a7e9a11f01f32c8ab9c0a4170192037c08158e13a7c241981b584",
+     "role": "user",
+     "salted": true
+    },
+    {
+     "chain": "77267ebb1230109a1bf0412e659b3b723c5be34d4422bdca116e3b7037e9282a",
+     "idx": 1,
+     "leaf": "094aefd47101b50dcd16d6e2780d7eb270349bc931c6096bfd2cded08c39b68b",
+     "role": "user",
+     "salted": true
+    }
+   ]
+  },
+  {
+   "attest_inputs": {
+    "gate_id": "g2",
+    "model_id": "m2",
+    "policy_hash": null
+   },
+   "head": "f199b4523ee089fb8cc5f5afad260d509c1305df0e39c9e48f1ee686748f9619",
+   "inputs": [
+    {
+     "content": "solo",
+     "role": "system",
+     "salt": null
+    }
+   ],
+   "manifest": {
+    "created": "2026-08-12T00:00:00Z",
+    "gate_id": "g2",
+    "ingestion_hashes": [
+     "5364f2f2fc4f54e9d47ad29cfb08ef430c8153394bf2a0dff5cbe77a0ffef861"
+    ],
+    "knowledge_base_hash": "sha256:29c1b289e7522195b362e44f54e05470b69ad20540ab60a18a05e5bf6951f13d",
+    "label": "context:chain:f199b4523ee089fb8cc5f5afad260d509c1305df0e39c9e48f1ee686748f9619",
+    "manifest_hash": "4db2a1ca446cedf2668d7c1fd43261860f3bcc5e9ad0c45bdc10417091defc55",
+    "policy_hash": null,
+    "root": "5364f2f2fc4f54e9d47ad29cfb08ef430c8153394bf2a0dff5cbe77a0ffef861"
+   },
+   "name": "single_segment",
+   "root": "5364f2f2fc4f54e9d47ad29cfb08ef430c8153394bf2a0dff5cbe77a0ffef861",
+   "segments": [
+    {
+     "chain": "f199b4523ee089fb8cc5f5afad260d509c1305df0e39c9e48f1ee686748f9619",
+     "idx": 0,
+     "leaf": "5364f2f2fc4f54e9d47ad29cfb08ef430c8153394bf2a0dff5cbe77a0ffef861",
+     "role": "system",
+     "salted": false
+    }
+   ]
+  }
+ ],
+ "note": "Context-ledger fixtures from the Python reference: the Rust mirror must reproduce every segment leaf/chain, head, root, and the bound manifest (created pinned) exactly.",
+ "version": 1
+}
