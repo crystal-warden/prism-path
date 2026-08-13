@@ -1,0 +1,209 @@
+{
+ "cells": [
+  {
+   "envelope_floor": 0,
+   "invariant_holds": true,
+   "p4": {
+    "classical_only": [
+     "tls13-aesgcm"
+    ],
+    "ok": false,
+    "phase_floor": 0,
+    "violations": [
+     {
+      "reachable": "yes",
+      "reason": "reachable",
+      "suite": "tls13-aesgcm"
+     }
+    ]
+   },
+   "policy_gate": 1
+  },
+  {
+   "envelope_floor": 1,
+   "invariant_holds": true,
+   "p4": {
+    "classical_only": [
+     "tls13-aesgcm"
+    ],
+    "ok": true,
+    "phase_floor": 1,
+    "violations": []
+   },
+   "policy_gate": 1
+  },
+  {
+   "envelope_floor": 2,
+   "invariant_holds": true,
+   "p4": {
+    "classical_only": [
+     "tls13-aesgcm"
+    ],
+    "ok": true,
+    "phase_floor": 2,
+    "violations": []
+   },
+   "policy_gate": 1
+  },
+  {
+   "envelope_floor": 3,
+   "invariant_holds": true,
+   "p4": {
+    "classical_only": [
+     "tls13-aesgcm"
+    ],
+    "ok": true,
+    "phase_floor": 3,
+    "violations": []
+   },
+   "policy_gate": 1
+  },
+  {
+   "envelope_floor": 0,
+   "invariant_holds": true,
+   "p4": {
+    "classical_only": [
+     "tls13-aesgcm"
+    ],
+    "ok": false,
+    "phase_floor": 0,
+    "violations": [
+     {
+      "reachable": "yes",
+      "reason": "reachable",
+      "suite": "tls13-aesgcm"
+     }
+    ]
+   },
+   "policy_gate": 2
+  },
+  {
+   "envelope_floor": 1,
+   "invariant_holds": true,
+   "p4": {
+    "classical_only": [
+     "tls13-aesgcm"
+    ],
+    "ok": false,
+    "phase_floor": 1,
+    "violations": [
+     {
+      "reachable": "yes",
+      "reason": "reachable",
+      "suite": "tls13-aesgcm"
+     }
+    ]
+   },
+   "policy_gate": 2
+  },
+  {
+   "envelope_floor": 2,
+   "invariant_holds": true,
+   "p4": {
+    "classical_only": [
+     "tls13-aesgcm"
+    ],
+    "ok": true,
+    "phase_floor": 2,
+    "violations": []
+   },
+   "policy_gate": 2
+  },
+  {
+   "envelope_floor": 3,
+   "invariant_holds": true,
+   "p4": {
+    "classical_only": [
+     "tls13-aesgcm"
+    ],
+    "ok": true,
+    "phase_floor": 3,
+    "violations": []
+   },
+   "policy_gate": 2
+  },
+  {
+   "envelope_floor": 0,
+   "invariant_holds": true,
+   "p4": {
+    "classical_only": [
+     "tls13-aesgcm"
+    ],
+    "ok": false,
+    "phase_floor": 0,
+    "violations": [
+     {
+      "reachable": "yes",
+      "reason": "reachable",
+      "suite": "tls13-aesgcm"
+     }
+    ]
+   },
+   "policy_gate": 3
+  },
+  {
+   "envelope_floor": 1,
+   "invariant_holds": true,
+   "p4": {
+    "classical_only": [
+     "tls13-aesgcm"
+    ],
+    "ok": false,
+    "phase_floor": 1,
+    "violations": [
+     {
+      "reachable": "yes",
+      "reason": "reachable",
+      "suite": "tls13-aesgcm"
+     }
+    ]
+   },
+   "policy_gate": 3
+  },
+  {
+   "envelope_floor": 2,
+   "invariant_holds": true,
+   "p4": {
+    "classical_only": [
+     "tls13-aesgcm"
+    ],
+    "ok": false,
+    "phase_floor": 2,
+    "violations": [
+     {
+      "reachable": "yes",
+      "reason": "reachable",
+      "suite": "tls13-aesgcm"
+     }
+    ]
+   },
+   "policy_gate": 3
+  },
+  {
+   "envelope_floor": 3,
+   "invariant_holds": true,
+   "p4": {
+    "classical_only": [
+     "tls13-aesgcm"
+    ],
+    "ok": true,
+    "phase_floor": 3,
+    "violations": []
+   },
+   "policy_gate": 3
+  }
+ ],
+ "floors": [
+  0,
+  1,
+  2,
+  3
+ ],
+ "format": "crypto-migration-conformance/1",
+ "gates": [
+  1,
+  2,
+  3
+ ],
+ "registry_hash": "374e1c666612b3c71e100f64c884c94b55f6a37609a6b85e61055ce49f77d20b"
+}

@@ -1,0 +1,277 @@
+{
+ "cases": [
+  {
+   "expected": {
+    "ok": true,
+    "proofs": {
+     "P1_envelope_closure": {
+      "offenders": [],
+      "ok": true,
+      "reachable_suites": {
+       "cnsa2-hybrid-1": "yes",
+       "tls13-aesgcm": "yes",
+       "tls13-hybrid-x25519mlkem": "yes"
+      }
+     },
+     "P2_totality": {
+      "nodes_without_catchall": [],
+      "ok": true
+     },
+     "P3_class_floor": {
+      "failures": [],
+      "ok": true
+     },
+     "P4_monotone_migration": {
+      "classical_only": [
+       "tls13-aesgcm"
+      ],
+      "ok": true,
+      "phase_floor": 2,
+      "violations": []
+     },
+     "P5_decidable": {
+      "non_member_edges": [],
+      "ok": true
+     }
+    }
+   },
+   "flow_text": "---\nname: crypto_agility_cnsa2\nstart: classify\n---\n\n## classify\nRoute each channel to an approved crypto suite by peer class, data classification, the peer's\ncapability floor, and the fleet's monotone migration phase. This flow SELECTS a symbolic suite; it\nnever implements a primitive (the registry binds symbol to provider, `spec-crypto-agility.md` \u00a77).\nCUI is adjudicated first and never falls below its floor; every branch below is total via an explicit\ncatch-all.\n-> cui-path: when data_class == \"cui\"\n-> public-path: when peer_class == \"public\"\n-> internal-path: else\n\n## cui-path\nControlled Unclassified Information always takes the highest approved suite, independent of peer or\nphase. The class floor made structural: CUI has exactly one reachable outcome.\n-> suite-cnsa2-hybrid-1: when always\n\n## public-path\nPublic peers. Once the fleet is past migration phase 2 the hybrid-PQC suite is mandatory (checked\nfirst, so nothing after it is reachable past the phase floor); before that, capable peers still get\nhybrid and only legacy peers fall to classical TLS.\n-> suite-tls13-hybrid-x25519mlkem: when migration_phase >= 2\n-> suite-tls13-hybrid-x25519mlkem: when hw_floor >= 1\n-> suite-tls13-aesgcm: else\n\n## internal-path\nInternal peers. Past phase 2 the CNSA-2 hybrid suite is mandatory (checked first); before that,\ncapable peers get hybrid and legacy peers fall to classical TLS.\n-> suite-cnsa2-hybrid-1: when migration_phase >= 2\n-> suite-tls13-hybrid-x25519mlkem: when hw_floor >= 1\n-> suite-tls13-aesgcm: else\n\n## suite-cnsa2-hybrid-1\nSelected suite: CNSA 2.0 hybrid (X25519+ML-KEM-1024 / ML-DSA-87 / AES-256-GCM).\n-> end: when always\n\n## suite-tls13-hybrid-x25519mlkem\nSelected suite: TLS 1.3 hybrid (X25519+ML-KEM-768 / Ed25519 / ChaCha20-Poly1305).\n-> end: when always\n\n## suite-tls13-aesgcm\nSelected suite: classical TLS 1.3 (X25519 / Ed25519 / AES-256-GCM). Quantum-vulnerable KEM;\npermitted only for public/internal legacy peers before migration phase 2.\n-> end: when always\n\n## end\nChannel suite selected.\n",
+   "name": "baseline_cnsa2",
+   "note": "all proofs hold"
+  },
+  {
+   "expected": {
+    "ok": false,
+    "proofs": {
+     "P1_envelope_closure": {
+      "offenders": [],
+      "ok": true,
+      "reachable_suites": {
+       "cnsa2-hybrid-1": "yes",
+       "tls13-aesgcm": "yes"
+      }
+     },
+     "P2_totality": {
+      "nodes_without_catchall": [],
+      "ok": true
+     },
+     "P3_class_floor": {
+      "failures": [
+       {
+        "class": "cui",
+        "floor": "cnsa2-hybrid-1",
+        "violations": [
+         {
+          "reachable": "yes",
+          "reason": "reachable",
+          "suite": "tls13-aesgcm"
+         }
+        ]
+       }
+      ],
+      "ok": false
+     },
+     "P4_monotone_migration": {
+      "classical_only": [
+       "tls13-aesgcm"
+      ],
+      "ok": false,
+      "phase_floor": 2,
+      "violations": [
+       {
+        "reachable": "yes",
+        "reason": "reachable",
+        "suite": "tls13-aesgcm"
+       }
+      ]
+     },
+     "P5_decidable": {
+      "non_member_edges": [],
+      "ok": true
+     }
+    }
+   },
+   "flow_text": "---\nname: ca_downgrade\nstart: classify\n---\n## classify\n-> suite-tls13-aesgcm: when data_class == \"cui\"\n-> suite-cnsa2-hybrid-1: else\n## suite-tls13-aesgcm\n-> end: when always\n## suite-cnsa2-hybrid-1\n-> end: when always\n## end\ndone\n",
+   "name": "downgrade_cui_to_classical",
+   "note": "P3 fails: CUI reaches a below-floor suite"
+  },
+  {
+   "expected": {
+    "ok": false,
+    "proofs": {
+     "P1_envelope_closure": {
+      "offenders": [],
+      "ok": true,
+      "reachable_suites": {
+       "cnsa2-hybrid-1": "yes",
+       "tls13-aesgcm": "yes"
+      }
+     },
+     "P2_totality": {
+      "nodes_without_catchall": [],
+      "ok": true
+     },
+     "P3_class_floor": {
+      "failures": [],
+      "ok": true
+     },
+     "P4_monotone_migration": {
+      "classical_only": [
+       "tls13-aesgcm"
+      ],
+      "ok": false,
+      "phase_floor": 2,
+      "violations": [
+       {
+        "reachable": "yes",
+        "reason": "reachable",
+        "suite": "tls13-aesgcm"
+       }
+      ]
+     },
+     "P5_decidable": {
+      "non_member_edges": [],
+      "ok": true
+     }
+    }
+   },
+   "flow_text": "---\nname: ca_lax_phase\nstart: classify\n---\n## classify\n-> suite-cnsa2-hybrid-1: when data_class == \"cui\"\n-> suite-tls13-aesgcm: else\n## suite-cnsa2-hybrid-1\n-> end: when always\n## suite-tls13-aesgcm\n-> end: when always\n## end\ndone\n",
+   "name": "classical_past_phase_floor",
+   "note": "P4 fails: classical suite reachable past phase 2"
+  },
+  {
+   "expected": {
+    "ok": false,
+    "proofs": {
+     "P1_envelope_closure": {
+      "offenders": [
+       {
+        "reachable": "yes",
+        "suite": "rot13-lol"
+       }
+      ],
+      "ok": false,
+      "reachable_suites": {
+       "cnsa2-hybrid-1": "yes",
+       "rot13-lol": "yes"
+      }
+     },
+     "P2_totality": {
+      "nodes_without_catchall": [],
+      "ok": true
+     },
+     "P3_class_floor": {
+      "failures": [],
+      "ok": true
+     },
+     "P4_monotone_migration": {
+      "classical_only": [
+       "tls13-aesgcm"
+      ],
+      "ok": true,
+      "phase_floor": 2,
+      "violations": []
+     },
+     "P5_decidable": {
+      "non_member_edges": [],
+      "ok": true
+     }
+    }
+   },
+   "flow_text": "---\nname: ca_unapproved\nstart: classify\n---\n## classify\n-> suite-rot13-lol: when data_class == \"cui\"\n-> suite-cnsa2-hybrid-1: else\n## suite-rot13-lol\n-> end: when always\n## suite-cnsa2-hybrid-1\n-> end: when always\n## end\ndone\n",
+   "name": "unapproved_suite",
+   "note": "P1 fails: a suite outside the approved set is reachable"
+  },
+  {
+   "expected": {
+    "ok": false,
+    "proofs": {
+     "P1_envelope_closure": {
+      "offenders": [],
+      "ok": true,
+      "reachable_suites": {
+       "cnsa2-hybrid-1": "yes"
+      }
+     },
+     "P2_totality": {
+      "nodes_without_catchall": [
+       "classify"
+      ],
+      "ok": false
+     },
+     "P3_class_floor": {
+      "failures": [],
+      "ok": true
+     },
+     "P4_monotone_migration": {
+      "classical_only": [
+       "tls13-aesgcm"
+      ],
+      "ok": true,
+      "phase_floor": 2,
+      "violations": []
+     },
+     "P5_decidable": {
+      "non_member_edges": [],
+      "ok": true
+     }
+    }
+   },
+   "flow_text": "---\nname: ca_non_total\nstart: classify\n---\n## classify\n-> suite-cnsa2-hybrid-1: when data_class == \"cui\"\n## suite-cnsa2-hybrid-1\n-> end: when always\n## end\ndone\n",
+   "name": "non_total_router",
+   "note": "P2 fails: a decision node has no catch-all"
+  }
+ ],
+ "envelope": {
+  "approved_suites": [
+   "cnsa2-hybrid-1",
+   "tls13-aesgcm",
+   "tls13-hybrid-x25519mlkem"
+  ],
+  "class_field": "data_class",
+  "envelope_id": "cnsa2-2026",
+  "fields": {
+   "data_class": "str",
+   "hw_floor": "int",
+   "migration_phase": "int",
+   "peer_class": "str"
+  },
+  "key_id": "0000000000000000000000000000000000000000000000000000000000000000",
+  "migration_phase_field": "migration_phase",
+  "migration_phase_floor": 2,
+  "min_suite_by_class": {
+   "cui": "cnsa2-hybrid-1"
+  },
+  "registry_hash": "374e1c666612b3c71e100f64c884c94b55f6a37609a6b85e61055ce49f77d20b",
+  "require_level_m": true
+ },
+ "format": "crypto-agility-conformance/1",
+ "registry": {
+  "format": "ppt-suite-registry/1",
+  "key_id": "0000000000000000000000000000000000000000000000000000000000000000",
+  "suites": {
+   "cnsa2-hybrid-1": {
+    "aead": "aes-256-gcm",
+    "kem": "x25519+ml-kem-1024",
+    "provider": "cryptography>=44",
+    "sig": "ml-dsa-87",
+    "strength_rank": 3
+   },
+   "tls13-aesgcm": {
+    "aead": "aes-256-gcm",
+    "kem": "x25519",
+    "provider": "cryptography",
+    "sig": "ed25519",
+    "strength_rank": 1
+   },
+   "tls13-hybrid-x25519mlkem": {
+    "aead": "chacha20poly1305",
+    "kem": "x25519+ml-kem-768",
+    "provider": "cryptography",
+    "sig": "ed25519",
+    "strength_rank": 2
+   }
+  }
+ },
+ "registry_hash": "374e1c666612b3c71e100f64c884c94b55f6a37609a6b85e61055ce49f77d20b"
+}

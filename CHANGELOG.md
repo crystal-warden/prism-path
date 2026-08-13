@@ -22,6 +22,26 @@ spec-stable.
   both architectures**.
 
 ### Added
+- **Crypto-agility control plane — govern *which* crypto suite is authorized to be live, provably**
+  (`prismpath/crypto_registry.py`, `crypto_agility.py`, `crypto_host.py`; spec
+  `docs/design/spec-crypto-agility.md`; evidence #94). A crypto-suite-selection policy is a Level M
+  match-action flow whose terminal nodes are the suites, so five machine-checked proofs turn
+  governed crypto-agility from a claim into a property: **P1** no reachable state selects an
+  unapproved suite, **P2** every context routes to a defined suite (no silent default cipher),
+  **P3** a data class never routes below its floor suite, **P4** once past a migration phase no
+  classical-only suite is reachable (algorithm-level anti-rollback, proven *statically* — the
+  matrix `crypto_migration.json` confirms P4 holds ⇔ floor ≥ gate in all 12 cells), **P5** the
+  policy is decidable. The runtime `CryptoHost` accepts a swap only when Authorized (signed pack) +
+  Envelope-bounded (declared suites ⊆ approved AND the pack's `registry_hash` matches the live
+  signed registry, so a swap can't re-point a suite id at a weaker primitive) + monotonic (version
+  floor) + provider-available, and **provider absence refuses rather than downgrades** — on a host
+  whose vetted `cryptography` lacks ML-KEM, the CNSA-2 policy swap is refused and the live classical
+  policy stays put, never silently weakened. Every attempt is one Merkle-logged audit event. 26
+  tests; four deliberate-fail conformance cases keep the proofs falsifiable. **Control plane, not
+  cipher:** PrismPath governs selection/proof/attestation and delegates every operation to a vetted
+  provider; ML-KEM/ML-DSA registry rows are inert-until-a-provider-ships-them, disclosed as prior
+  art now. Rust mirror + JS twin of the proofs, and the image-native eBPF/FPGA/MCU tiers, are named
+  follow-ons.
 - **Context ledger — attest what a frozen model was conditioned on** (`prismpath/context_ledger.py`,
   mirrored in `prismpath-rs::durable::ContextLedger`; evidence #91). For a hardwired/frozen-weights
   model the context is the only mutable state, so it is the governance surface: an append-only
