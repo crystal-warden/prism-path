@@ -1668,10 +1668,14 @@ where
     run_core(graph, &mut agent, Some((lock, &mut embed as &mut dyn FnMut(&str) -> Vec<f32>)), opts, on_step)
 }
 
+/// Optional semantic-routing context threaded through `run_core`: the semantic `Lock` plus the
+/// embedding callback. Aliased to keep the `run_core` signature under clippy's type-complexity bar.
+type SemanticCtx<'a, 'b> = (&'a Lock, &'b mut dyn FnMut(&str) -> Vec<f32>);
+
 fn run_core<F, O>(
     graph: &Graph,
     agent: &mut F,
-    mut semantic_ctx: Option<(&Lock, &mut dyn FnMut(&str) -> Vec<f32>)>,
+    mut semantic_ctx: Option<SemanticCtx<'_, '_>>,
     opts: RunOpts,
     mut on_step: O,
 ) -> Result<RunResult, EngineError>
@@ -1681,7 +1685,7 @@ where
 {
     let violations = portability_violations(graph);
     if !violations.is_empty() {
-        if let Some((ref lock, _)) = semantic_ctx {
+        if let Some((lock, _)) = semantic_ctx {
             for v in &violations {
                 if lock.condition_vec(&v.condition).is_none() {
                     return Err(EngineError::LockMissing(v.condition.clone()));
@@ -1852,7 +1856,7 @@ where
         }
 
         if target.is_none() {
-            if let Some((ref lock, ref mut embed_fn)) = semantic_ctx {
+            if let Some((lock, ref mut embed_fn)) = semantic_ctx {
                 let sem: Vec<(String, String)> = n.edges.iter()
                     .filter(|(_, c)| is_semantic(c))
                     .cloned()

@@ -75,9 +75,22 @@ def test_encryption_is_flat_per_packet_so_nearly_free_when_batched():
 
 
 def test_measured_crypto_cost_runs_on_this_host():
+    # `cryptography` is an OPTIONAL dep (the signing tier): present in the control-plane test job,
+    # absent in the bare adapters job. measure_crypto_cost honors that with a labeled loud-absence
+    # fallback, so the bench runs either way — assert the actual contract on whichever host we're on.
     cc = W.measure_crypto_cost(1005, iters=200)
-    assert cc["measured"] is True
-    assert cc["handshake_us"] > 0 and cc["encrypt_us_per_pkt"] > 0
+    assert cc["payload_len"] == 1005
+    try:
+        import cryptography  # noqa: F401
+        have_crypto = True
+    except Exception:
+        have_crypto = False
+    if have_crypto:
+        assert cc["measured"] is True
+        assert cc["handshake_us"] > 0 and cc["encrypt_us_per_pkt"] > 0
+    else:
+        assert cc["measured"] is False
+        assert cc["handshake_us"] is None and cc["encrypt_us_per_pkt"] is None
 
 
 def test_committed_wire_results_are_aggregate_only():

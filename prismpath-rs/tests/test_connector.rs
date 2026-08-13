@@ -187,7 +187,11 @@ fn emit_record_is_idempotent() {
 
 // ------------------------------------------------------------------ spawn/join fan-out
 
-fn scripted(script: Value) -> Box<dyn FnMut(&str, &str, &RunState) -> Result<V, String>> {
+/// A boxed agent callback (node, input, state) -> result — aliased to stay under clippy's
+/// type-complexity bar.
+type ScriptedAgent = Box<dyn FnMut(&str, &str, &RunState) -> Result<V, String>>;
+
+fn scripted(script: Value) -> ScriptedAgent {
     let mut used: HashMap<String, usize> = HashMap::new();
     Box::new(move |node: &str, _i: &str, _s: &RunState| {
         let Some(seq) = script.get(node).and_then(|s| s.as_array()) else {
