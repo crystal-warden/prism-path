@@ -17,7 +17,7 @@ spec-stable.
   the root into the standard provenance manifest (context root = manifest root, segment leaves =
   ingestion hashes, chain head in the label, model identity = knowledge hash). Hashes only —
   content never enters the artifact. Cross-language byte parity gated by a new frozen corpus
-  (`portable/conformance/context.json`); the governor demonstrator's per-token receipts now carry
+  (`portable/conformance/context.json`); the in-lab demonstrator's per-token receipts now carry
   `context_root`, tying every verdict to exactly the user text and rendered template it was made
   over.
 
