@@ -42,6 +42,15 @@ spec-stable.
   provider; ML-KEM/ML-DSA registry rows are inert-until-a-provider-ships-them, disclosed as prior
   art now. Rust mirror + JS twin of the proofs, and the image-native eBPF/FPGA/MCU tiers, are named
   follow-ons.
+- **OTLP baseline for the decision wire** (`adapters/fusion/bench/otlp_baseline.py`; evidence #95),
+  closing the named follow-on in #84. Encodes the same fused decision as a genuine, round-tripping
+  `opentelemetry.proto` LogRecord (OpenTelemetry — the wire observability pipelines actually speak)
+  and measures it against the decision stream: OTLP-faithful is **101.4 B/decision** vs the decision
+  wire's **1.5** → **67.6×**, and **4.8×** even against zstd-batched OTLP. Honest finding baked in:
+  OTLP is **1.49× larger than minimal JSON** for this payload (per-record timestamps + typed
+  attributes + repeated keys), so the win over it is structural — self-framing streamability,
+  tamper-evidence, decidability — not a compression trick. Test `importorskip`s `opentelemetry`, so
+  the bare adapters CI job skips it cleanly.
 - **Context ledger — attest what a frozen model was conditioned on** (`prismpath/context_ledger.py`,
   mirrored in `prismpath-rs::durable::ContextLedger`; evidence #91). For a hardwired/frozen-weights
   model the context is the only mutable state, so it is the governance surface: an append-only

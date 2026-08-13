@@ -1,0 +1,43 @@
+{
+ "n": 64484,
+ "epoch": 4096,
+ "note": "OTLP LogRecord (opentelemetry.proto), real round-tripping records; representative decision population (wire cost is field-shape-invariant, #84).",
+ "otlp_faithful": {
+  "marginal_bytes_per_record": 100,
+  "one_batch_total": 6535876,
+  "one_batch_per_decision": 101.357,
+  "epoched_total": 6536864,
+  "epoched_per_decision": 101.372,
+  "compressed_one_batch": {
+   "raw": 6535876,
+   "gzip": 598319,
+   "zlib9": 598307,
+   "zstd19": 461832
+  },
+  "gzip_per_decision": 9.279,
+  "zstd19_per_decision": 7.162
+ },
+ "otlp_minimal": {
+  "marginal_bytes_per_record": 40,
+  "one_batch_total": 2572262,
+  "one_batch_per_decision": 39.89,
+  "epoched_total": 2573250,
+  "epoched_per_decision": 39.905,
+  "compressed_one_batch": {
+   "raw": 2572262,
+   "gzip": 425531,
+   "zlib9": 425519,
+   "zstd19": 328417
+  },
+  "gzip_per_decision": 6.599,
+  "zstd19_per_decision": 5.093
+ },
+ "ratios": {
+  "otlp_faithful_B_per_decision": 101.372,
+  "o1_B_per_decision": 1.5,
+  "otlp_over_o1": 67.6,
+  "otlp_over_b2_json": 1.49,
+  "otlp_zstd_over_o1": 4.8,
+  "otlp_minimal_over_o2": 79.8
+ }
+}
