@@ -126,6 +126,21 @@ python3 -W ignore compile_flows.py
 - **Not yet earned**: the full **RTL** re-sweep to 124/1,079 is held for a hardware retest; until
   then the RTL stands at its 114/1,067 sweep. (Ledger #89.)
 
+**Day update (2026-08-12, late — the MCU substrate).**
+- **`avr/ppt_uno.c`**: the PPT v1 interpreter on an ATmega328P (a stock Arduino Uno R3) — a
+  byte-exact port of `interp.c`'s evaluator core (atoms → comparators over the register file,
+  RPN edge programs, first-true-edge priority encoder) evaluating the SAME certified images from
+  a 640-byte RAM buffer. 1,720 bytes of code, no dynamic allocation, bare avr-gcc (no Arduino
+  core). Tables and `encode_regs` payloads stream over serial (38400 8N1) — the identical bytes
+  `interp.c`'s eval mode reads.
+- **Certified, first run**: `avr/certify_uno.py` (the `run_vectors.cert_predicates` contract with
+  the subprocess swapped for the wire) — **124/124 in-subset predicate vectors, zero failures,
+  955 exclusions itemized identically to the C target**. Serial round-trip 3.5–12 ms/decision
+  (wire-dominated at 38400 baud; the point is WHERE the decision happens, not the baud rate).
+- That makes **seven substrates deciding identically** from one frozen corpus: Python, JS, Rust,
+  Go, eBPF (in-kernel), the Zynq fabric, and a $3 8-bit AVR. Engine-vector (multi-hop) support on
+  the AVR is a declared non-goal for v1 — predicate/single-hop decisions only, stated plainly.
+
 ## Backlog
 
 - [100 MHz fabric clock](backlog/100mhz-pipeline.md) — overlap prog fetch / atom eval;
