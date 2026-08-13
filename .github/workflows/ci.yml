@@ -55,6 +55,8 @@ jobs:
         run: node --test prismpath/editor/vscode/test/grammar.test.mjs
       - name: Frozen conformance vectors (port side)
         run: node prismpath/portable/run_vectors.mjs prismpath/portable/conformance
+      - name: Crypto-agility proofs (JS twin, byte-for-byte vs the frozen fixtures)
+        run: node prismpath/portable/run_crypto_agility.mjs
       - name: Frozen conformance vectors (reference-drift side)
         run: python -m pytest prismpath/tests/test_conformance_vectors.py -q
 

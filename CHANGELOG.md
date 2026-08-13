@@ -51,6 +51,12 @@ spec-stable.
   attributes + repeated keys), so the win over it is structural — self-framing streamability,
   tamper-evidence, decidability — not a compression trick. Test `importorskip`s `opentelemetry`, so
   the bare adapters CI job skips it cleanly.
+- **Crypto-agility proofs ported to the Rust and JS kernels** (`prismpath-rs/src/crypto_agility.rs`,
+  proofs in `prismpath/portable/prismpath.mjs`; evidence #96), closing the cross-language follow-on
+  named in #94. Both replay the two frozen fixtures (`crypto_agility.json` + `crypto_migration.json`)
+  byte-for-byte against the Python reference: Rust `test_crypto_agility` gates in `cargo test`
+  (`durable` is default), and the JS twin (`node run_crypto_agility.mjs`) is a CI port-job step. So
+  provable crypto-agility is now conformance-gated across Python, Rust, and JS.
 - **Context ledger — attest what a frozen model was conditioned on** (`prismpath/context_ledger.py`,
   mirrored in `prismpath-rs::durable::ContextLedger`; evidence #91). For a hardwired/frozen-weights
   model the context is the only mutable state, so it is the governance surface: an append-only

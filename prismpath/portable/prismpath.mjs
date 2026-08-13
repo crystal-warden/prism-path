@@ -26,6 +26,7 @@
  * No eval()/Function() anywhere: predicates go through a hand-rolled tokenizer +
  * recursive-descent parser onto a tiny AST, exactly mirroring the Python sandbox.
  */
+import { createHash } from "node:crypto";
 
 const ALWAYS = new Set(["always", "true", "else", "otherwise", "default", "_"]);
 const NEVER = new Set(["false", "never"]);
@@ -854,7 +855,7 @@ export function parse(text) {
 }
 
 // ---------------------------------------------------------------------- portability gate
-function reachable(graph) {
+export function reachable(graph) {
   const seen = new Set();
   const stack = [graph.start];
   while (stack.length) {
@@ -1113,4 +1114,187 @@ export function run(graph, agent, opts = {}) {
   }
   if (!res.stopped) res.stopped = "max_steps";
   return res;
+}
+
+// ---------------------------------------------------------------------- crypto agility proofs
+
+const SUITE_NODE_PREFIX = "suite-";
+const REACH_BOUND = 25;
+const PQ_KEM_TOKENS = ["ml-kem", "kyber"];
+
+export function pyCanonicalString(v) {
+  if (v === null || typeof v !== "object") return JSON.stringify(v);
+  if (Array.isArray(v)) return "[" + v.map(pyCanonicalString).join(",") + "]";
+  const keys = Object.keys(v).sort();
+  return "{" + keys.map((k) => JSON.stringify(k) + ":" + pyCanonicalString(v[k])).join(",") + "}";
+}
+
+export function registryHash(registry) {
+  return createHash("sha256").update(pyCanonicalString(registry), "utf-8").digest("hex");
+}
+
+export function strengthRank(registry, suiteId) {
+  const s = registry?.suites?.[suiteId];
+  return s ? Number(s.strength_rank) : null;
+}
+
+export function suiteIds(registry) {
+  return Object.keys(registry?.suites || {}).sort();
+}
+
+export function suitesBelow(registry, floorId) {
+  const floor = strengthRank(registry, floorId);
+  if (floor === null) throw new Error(`unknown floor suite: ${floorId}`);
+  const sids = suiteIds(registry);
+  return sids.filter((sid) => (strengthRank(registry, sid) ?? 0) < floor).sort();
+}
+
+export function isQuantumResistant(registry, suiteId) {
+  const s = registry?.suites?.[suiteId];
+  if (!s || typeof s.kem !== "string") return false;
+  const kem = s.kem.toLowerCase();
+  return PQ_KEM_TOKENS.some((tok) => kem.includes(tok));
+}
+
+export function classicalOnlyIds(registry) {
+  const sids = suiteIds(registry);
+  return sids.filter((sid) => !isQuantumResistant(registry, sid)).sort();
+}
+
+export function suiteNodes(graph) {
+  const out = {};
+  for (const name of Object.keys(graph.nodes)) {
+    if (name.startsWith(SUITE_NODE_PREFIX)) {
+      out[name] = name.slice(SUITE_NODE_PREFIX.length);
+    }
+  }
+  return out;
+}
+
+export function reachableSuites(graph, assume = null) {
+  const nodes = suiteNodes(graph);
+  const targetList = Object.keys(nodes);
+  const res = checkReach(graph, targetList, { assume, bound: REACH_BOUND });
+  const out = {};
+  for (const [node, sid] of Object.entries(nodes)) {
+    out[sid] = { reachable: res[node].reachable, proven: res[node].proven };
+  }
+  return out;
+}
+
+function forbiddenReachable(reach, forbidden) {
+  const bad = [];
+  const sortedForbidden = [...forbidden].sort();
+  for (const sid of sortedForbidden) {
+    const r = reach[sid];
+    if (!r) continue;
+    if (r.reachable !== "no") {
+      bad.push({ reachable: r.reachable, reason: "reachable", suite: sid });
+    } else if (!r.proven) {
+      bad.push({ reachable: "no", reason: "unproven (bound hit)", suite: sid });
+    }
+  }
+  return bad;
+}
+
+export function proveEnvelopeClosure(graph, envelope) {
+  const approved = new Set(envelope.approved_suites || []);
+  const reach = reachableSuites(graph);
+  const sids = Object.keys(reach).sort();
+  const offenders = [];
+  const reachable_suites = {};
+  for (const sid of sids) {
+    const r = reach[sid];
+    if (r.reachable !== "no") {
+      reachable_suites[sid] = r.reachable;
+      if (!approved.has(sid)) {
+        offenders.push({ reachable: r.reachable, suite: sid });
+      }
+    }
+  }
+  return {
+    offenders,
+    ok: offenders.length === 0,
+    reachable_suites,
+  };
+}
+
+export function isCatchall(cond) {
+  return ALWAYS.has(exprOf(cond).toLowerCase());
+}
+
+export function proveTotality(graph) {
+  const reachSet = new Set(reachable(graph));
+  const suites = new Set(Object.keys(suiteNodes(graph)));
+  const gaps = [];
+  const sortedReach = [...reachSet].sort();
+  for (const name of sortedReach) {
+    const node = graph.nodes[name];
+    if (!node || node.edges.length === 0 || suites.has(name)) continue;
+    const hasCatchall = node.edges.some(([, cond]) => isCatchall(cond));
+    if (!hasCatchall) gaps.push(name);
+  }
+  return {
+    nodes_without_catchall: gaps,
+    ok: gaps.length === 0,
+  };
+}
+
+export function proveClassFloor(graph, envelope, registry) {
+  const classField = envelope.class_field || "data_class";
+  const failures = [];
+  const minSuites = envelope.min_suite_by_class || {};
+  const sortedClasses = Object.keys(minSuites).sort();
+  for (const cls of sortedClasses) {
+    const floorId = minSuites[cls];
+    const below = suitesBelow(registry, floorId);
+    const assume = `when ${classField} == "${cls}"`;
+    const reach = reachableSuites(graph, assume);
+    const bad = forbiddenReachable(reach, below);
+    if (bad.length > 0) {
+      failures.push({ class: cls, floor: floorId, violations: bad });
+    }
+  }
+  return {
+    failures,
+    ok: failures.length === 0,
+  };
+}
+
+export function proveMonotoneMigration(graph, envelope, registry) {
+  const floor = envelope.migration_phase_floor;
+  const field = envelope.migration_phase_field || "migration_phase";
+  if (floor === undefined || floor === null) {
+    return { ok: true, skipped: "no migration_phase_floor in envelope" };
+  }
+  const classical = classicalOnlyIds(registry);
+  const assume = `when ${field} >= ${Math.trunc(floor)}`;
+  const reach = reachableSuites(graph, assume);
+  const bad = forbiddenReachable(reach, classical);
+  return {
+    classical_only: classical,
+    ok: bad.length === 0,
+    phase_floor: Number(floor),
+    violations: bad,
+  };
+}
+
+export function proveDecidable(graph) {
+  const lm = flowLevelM(graph);
+  return {
+    non_member_edges: lm.non_member_edges,
+    ok: lm.level_m,
+  };
+}
+
+export function proveAll(graph, envelope, registry) {
+  const proofs = {
+    P1_envelope_closure: proveEnvelopeClosure(graph, envelope),
+    P2_totality: proveTotality(graph),
+    P3_class_floor: proveClassFloor(graph, envelope, registry),
+    P4_monotone_migration: proveMonotoneMigration(graph, envelope, registry),
+    P5_decidable: proveDecidable(graph),
+  };
+  const ok = Object.values(proofs).every((p) => p.ok);
+  return { ok, proofs };
 }

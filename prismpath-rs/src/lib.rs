@@ -199,6 +199,16 @@ pub fn is_event(condition: &str) -> bool {
     c.starts_with("on event") || c.starts_with("on timeout")
 }
 
+pub fn is_catchall(condition: &str) -> bool {
+    let c = py_trim(condition);
+    let expr = if c.to_lowercase().starts_with("when ") {
+        py_trim(&c[5..])
+    } else {
+        c
+    };
+    ALWAYS.contains(&expr.to_lowercase().as_str())
+}
+
 pub fn event_name(condition: &str) -> String {
     let c = py_trim(condition);
     if c.to_lowercase().starts_with("on timeout") {
@@ -1156,7 +1166,7 @@ pub fn parse(text: &str) -> Graph {
 
 // ---------------------------------------------------------------------- portability gate
 
-fn reachable(graph: &Graph) -> Vec<String> {
+pub fn reachable(graph: &Graph) -> Vec<String> {
     let mut seen: Vec<String> = Vec::new();
     let mut stack = vec![graph.start.clone()];
     while let Some(cur) = stack.pop() {
@@ -1943,6 +1953,9 @@ pub mod connector;
 
 #[cfg(feature = "durable")]
 pub mod compose;
+
+#[cfg(feature = "durable")]
+pub mod crypto_agility;
 
 mod lm_reason {
     pub const CHAINED: &str = "chained-comparison";
