@@ -4,7 +4,7 @@
 verdict — negative results included. Written to survive a hostile read and to be merge-ready into the
 research paper (`docs/research/paper-routing-spectrum.md`) and engineering white paper
 (`docs/research/whitepaper-engineering.md`). All numbers first-party on the GB10 (Grace-Blackwell, unified
-memory). Consolidated 2026-07-21.*
+memory). Consolidated 2026-07-21; maintained through row #94 (2026-08-13).*
 
 > **Rule of use.** No claim ships without its row here (result + provenance + gap).
 >
@@ -16,8 +16,10 @@ memory). Consolidated 2026-07-21.*
 > here because the papers cite them; they are **not independently reproducible from this repo alone**,
 > and that limitation is stated rather than implied by a path that looks local.
 >
-> Rows citing [`prismpath-hw/`](../../prismpath-hw/README.md) (the hardware target, rows
-> #72–#76) are reproducible from **THIS repo** — the strongest class above — and their evidence
+> Rows citing [`prismpath-hw/`](../../prismpath-hw/README.md) or
+> [`prismpath-ebpf/`](../../prismpath-ebpf/README.md) (the hardware and in-kernel targets — rows
+> #72–#76 plus the later hardware/kernel rows #89–#90, #92–#93) are reproducible from **THIS repo**
+> — the strongest class above — and their evidence
 > set is additionally OTS-anchored (`prismpath-hw/evidence/SHA256SUMS` + `.ots`, Bitcoin block
 > 961390): rerun the gates, or verify the hashes.
 

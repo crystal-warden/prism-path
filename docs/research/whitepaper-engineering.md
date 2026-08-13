@@ -947,7 +947,11 @@ hashes are published and OpenTimestamps-anchored in `prismpath-hw/evidence/`; ch
 routing-lockfile hash into that same attestation remains open, as does the P4 emitter; the XDP/eBPF
 emitter, open when this was written, shipped in August 2026 as a verifier-accepted in-kernel program
 certified on the same declared subset (ledger rows #77–#80; re-certified at 124/1,079,
-both architectures — #90).
+both architectures — #90). The substrate ladder has since reached its floor: the same signed table
+images are decided by an **8-bit ATmega328P** (Arduino Uno R3, 16 MHz, 2 KB RAM), a 1,720-byte
+evaluator matching the reference **124/124** byte-for-byte (predicate/single-hop, #92); and the kernel
+swap is now **double-buffered** — a single-word atomic bank flip proven torn-free under a concurrent
+swap-storm on both architectures (#93).
 The routing spectrum's **physical latency hierarchy** is no longer a projection but a
 measurement: the fabric answers a deterministic routing decision in **5–21 cycles — a provable
 100–420 ns worst case** at the shipped 50 MHz clock, in 1,064 LUTs (2.0% of the part); the CPU
@@ -958,7 +962,7 @@ decisions about *where computation physically happens*. Confidence routes the wo
 of this required new authoring machinery — the fragment was pinned in the spec and vectors
 precisely so the compile chain could be built against a frozen target, and it was.
 
-Two further capabilities have since landed on the same decidable base. **Cyber-physical fusion**
+Several further capabilities have since landed on the same decidable base. **Cyber-physical fusion**
 (`adapters/fusion/`, August 2026) tessellates a SIEM's cyber verdict and a live IMU's physical posture
 into one Level M table, and measures the fused decision wire on the whole real triage backlog — ~1.5
 bytes per alert with its integrity apparatus (Merkle roots, epoch chaining, ACK channel) counted, run
@@ -967,7 +971,19 @@ policy hot-swap** (`prismpath/policy_pack.py` + `policy_host.py`, published as p
 `docs/design/spec-secure-hotswap.md`, August 2026) replaces a running Level M policy only when the pack is
 Ed25519-authorized, inside a signed envelope, monotonically versioned, atomically applied, and audited to
 a Merkle-rooted ledger — the same gate fronting the kernel eBPF `netupdate` as a host-side pre-loader.
-Ledger rows #82–#88.
+**Context attestation** (`prismpath/context_ledger.py`, mirrored in the Rust kernel, August 2026) makes
+what a frozen model was conditioned on checkable: an append-only, hash-chained, Merkle-rooted ledger of
+context segments (salted for low-entropy text, content never stored) bound into the standard provenance
+manifest — the context is the only mutable state a frozen model has, so it is the governance surface.
+**Provable crypto-agility** (`prismpath/crypto_agility.py` + `crypto_host.py`, prior art in
+`docs/design/spec-crypto-agility.md`, August 2026) applies the same governor to the choice of
+*cryptographic suite*: a suite-selection policy is a Level M flow whose terminals are the approved
+suites, and five machine-checked proofs establish that no reachable state selects an unapproved or
+below-floor suite and none downgrades past a migration phase (algorithm-level anti-rollback, proven
+statically); the runtime refuses a swap whose declared suite's provider is unavailable rather than
+weakening it, delegating every cryptographic operation to a vetted provider — a control plane, not a
+cipher.
+Ledger rows #82–#94.
 
 ---
 

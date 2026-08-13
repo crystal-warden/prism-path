@@ -54,14 +54,17 @@ reachability is decidable and a bounded model checker answers *"can this state b
 assumption?"* with a concrete witness (exact inside the fragment, soundly over-approximated outside
 it); and the ML-free subset is now certified by **three independent re-implementations** (JavaScript,
 Rust, Go) that each pass all 1,079 predicate and 27 engine conformance vectors — conformance
-refereed by re-implementation rather than asserted. The fragment now also runs on **two substrates
+refereed by re-implementation rather than asserted. The fragment now also runs on **three substrates
 below software**: a fixed FPGA interpreter circuit (Zynq-7020) that executes Level M flows as
-runtime-loaded table images with a provable 100–420 ns decision bound, and a **verifier-accepted
+runtime-loaded table images with a provable 100–420 ns decision bound; a **verifier-accepted
 in-kernel eBPF/XDP program** that classifies live network packets at 132–182 ns each
-(~5.5–7.6 Mpps/core) and hot-swaps its policy from an edited Markdown flow with no reload. Both are
+(~5.5–7.6 Mpps/core) and hot-swaps its policy from an edited Markdown flow with no reload; and an
+**8-bit ATmega328P microcontroller** (16 MHz, 2 KB RAM) that decides the same signed table images
+byte-identically (predicate/single-hop, #92). All three are
 certified against a *declared subset* of the frozen vectors, zero divergence (the FPGA C target
-124/1,079 predicate + 6/27 engine after the August 2026 negative-integer literals (#89), and the eBPF target
-the same 124/124 in-kernel, re-certified that day on both aarch64 and x86_64) (§7). We are explicit about the provenance of
+124/1,079 predicate + 6/27 engine after the August 2026 negative-integer literals (#89), the eBPF target
+the same 124/124 in-kernel, re-certified that day on both aarch64 and x86_64, and the MCU 124/124 of
+that subset) (§7). We are explicit about the provenance of
 the routing evaluation's labels; the once-open bounded-state critique is now closed (§6).
 
 ---
@@ -959,7 +962,7 @@ direction. **A risk-controlled operating point for decision memoization**: the �
 longer takes a hand-set similarity threshold but derives it, selecting the point that maximizes
 auto-resolution among those whose reuse-error rate a Wilson upper bound certifies below a stated
 risk — the same LTT/RCPS discipline as §4.3's τ, applied to caching, and it declines to choose when
-the evidence cannot clear the bound. **Targets below software (delivered, measured; FPGA and eBPF, August 2026)**: because a Level M flow *is* a match-action table, it compiles to a binary table
+the evidence cannot clear the bound. **Targets below software (delivered, measured; FPGA, eBPF, and an 8-bit MCU, August 2026)**: because a Level M flow *is* a match-action table, it compiles to a binary table
 image — the production SOC triage flow, unmodified, is 302 bytes — interpreted by one fixed
 circuit on a Zynq-7020, never re-synthesized per flow; the same frozen vectors became the hardware
 test bench **on a declared subset, stated plainly** (the C reference target passes 124/1,079 predicate
@@ -978,9 +981,13 @@ conformant *in-kernel* against the same frozen corpus (124/124 of the declared s
 reference, on both aarch64 and x86_64; re-certified on corpus v2 with the hardened loader, #90). Attached observe-only to a live-traffic mirror it classified real
 packets at **132–182 ns each (~5.5–7.6 Mpps/core)** and **hot-swapped its policy from an edited Markdown
 flow with no reload**, repopulating the running program's table maps in place: the "swap the map, change
-the policy" property carried onto the kernel substrate. Artifacts, evidence logs, and
+the policy" property carried onto the kernel substrate — and that swap is now **double-buffered**, a
+single-word atomic bank flip proven torn-free under a concurrent swap-storm on both architectures (#93).
+**The same signed table images also run on an 8-bit ATmega328P** (Arduino Uno R3, 16 MHz, 2 KB RAM): a
+1,720-byte evaluator decides the declared subset **124/124 byte-identically** to the reference
+(predicate/single-hop, #92) — the minimal-viable floor of the substrate ladder. Artifacts, evidence logs, and
 OpenTimestamps-anchored hashes: [`prismpath-hw/`](../../prismpath-hw/README.md) and
-[`prismpath-ebpf/`](../../prismpath-ebpf/README.md) (ledger rows #72–#80). **Decision-preserving
+[`prismpath-ebpf/`](../../prismpath-ebpf/README.md) (ledger rows #72–#93). **Decision-preserving
 telemetry (delivered, benchmark-gated; August 2026).** The same decidability has a consequence off the
 routing path: because a flow's routes are decidable functions of a few `field OP const` thresholds, the
 coarsest symbol that still resolves every decision is the *minimum sufficient statistic* for that flow's
@@ -1026,6 +1033,27 @@ atomicity is proven two ways, including an uncaught exception injected mid-pipel
 disclosed in full as prior art, no patent sought (`docs/design/spec-secure-hotswap.md`); the same gate
 fronts the kernel eBPF `netupdate` as a host-side pre-loader, so a tampered policy never reaches a map.
 Ledger rows #87–#88.
+
+**Context attestation for frozen models (delivered; August 2026).** For a frozen-weights model the
+context is the only mutable state, so it is the governance surface. An append-only ledger commits each
+context segment by content hash (salted for low-entropy text), chains them order-bindingly, Merkle-roots
+them, and binds the root into the same provenance manifest the rest of the attestation stack uses — so
+"this answer was produced over *exactly* this context" becomes a checkable statement, hashes only, no
+content stored. It is mirrored byte-for-byte in the Rust kernel against a frozen cross-language fixture.
+Honest scope: it attests the prompt-side context, not the KV-cache bytes — a cache-state attestation is
+the named follow-on. Ledger row #91.
+
+**Provable crypto-agility (delivered, published as prior art; August 2026).** The same governor pattern
+extends to the choice of *cryptographic suite*. A suite-selection policy is a Level M flow whose terminal
+nodes are the approved suites, so five machine-checked proofs turn governed crypto-agility into a
+property: no reachable state selects an unapproved suite, every context routes to a defined suite, no data
+class routes below its floor, and — once past a migration phase — no classical-only suite is reachable
+(algorithm-level anti-rollback, proven *statically* over the policy). The runtime governor admits a swap
+only when it is signed, in-envelope (declared suites ⊆ approved, with the signed suite-registry hash
+bound in), monotonic, and every declared suite's provider is available — and provider absence *refuses*
+rather than downgrades. It is a control plane, not a cipher: every cryptographic operation is delegated to
+a vetted provider, and the post-quantum suites bind the moment one ships them. Disclosed in full as prior
+art (`docs/design/spec-crypto-agility.md`). Ledger row #94.
 
 What remains genuinely open: (i) a larger, *human*-annotated routing benchmark across more flows and
 embedders, to test whether the frontier shape and the confident-error blind spot generalize; and (ii)
