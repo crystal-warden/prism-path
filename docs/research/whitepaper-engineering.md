@@ -931,23 +931,23 @@ would. Outside the fragment it over-approximates deliberately — semantic, erro
 predicate in that same match-action
 fragment (field-vs-constant comparisons, constant-set membership, boolean combinators, the
 `visits`/`error_count` counters) is not *like* hardware; it is the abstract description of one: each atom is a `(field-selector, operator, constant)` row, a node's ordered
-deterministic edges are a priority encoder, and the counters are registers. As of 2026-08-07
+deterministic edges are a priority encoder, and the counters are registers. As of August 2026
 that argument is an artifact ([`prismpath-hw/`](../../prismpath-hw/README.md),
 evidence rows #72–#76): a Level M flow compiles to a binary table image — the production SOC flow
 `wazuh_triage`, unmodified, is **302 bytes**; `incident_severity` is **136** — interpreted by
 **one fixed circuit** on a Zynq-7020, never re-synthesized per flow. The promised certification
 pattern held exactly: the same frozen conformance vectors that certify the software kernels became
 the hardware test bench, **on a declared subset, stated plainly** — the C target passes 124/1,079
-predicate + 6/27 engine vectors and the RTL 114/1,067 (its re-sweep to 124/1,079 for the 2026-08-12
-negative-integer literals is pending a hardware retest), each with zero divergence and a
+predicate + 6/27 engine vectors and the RTL 114/1,067 (its re-sweep to 124/1,079 for the negative-integer
+literals, #89, is pending a hardware retest), each with zero divergence and a
 machine-readable reason for every exclusion (this is the portability-tier pattern one level down, *not* full SPEC §8
 conformance), and the RTL reproduced 7,436 live sensor samples bit-for-bit against the C target.
 The promised hash-chain attestation is **partially delivered**: the table-image and bitstream
 hashes are published and OpenTimestamps-anchored in `prismpath-hw/evidence/`; chaining the
 routing-lockfile hash into that same attestation remains open, as does the P4 emitter; the XDP/eBPF
-emitter, open when this was written, shipped 2026-08-09 as a verifier-accepted in-kernel program
-certified on the same declared subset (ledger rows #77–#80; re-certified at 124/1,079 on 2026-08-12,
-both architectures).
+emitter, open when this was written, shipped in August 2026 as a verifier-accepted in-kernel program
+certified on the same declared subset (ledger rows #77–#80; re-certified at 124/1,079,
+both architectures — #90).
 The routing spectrum's **physical latency hierarchy** is no longer a projection but a
 measurement: the fabric answers a deterministic routing decision in **5–21 cycles — a provable
 100–420 ns worst case** at the shipped 50 MHz clock, in 1,064 LUTs (2.0% of the part); the CPU
@@ -959,12 +959,12 @@ of this required new authoring machinery — the fragment was pinned in the spec
 precisely so the compile chain could be built against a frozen target, and it was.
 
 Two further capabilities have since landed on the same decidable base. **Cyber-physical fusion**
-(`adapters/fusion/`, 2026-08-12) tessellates a SIEM's cyber verdict and a live IMU's physical posture
+(`adapters/fusion/`, August 2026) tessellates a SIEM's cyber verdict and a live IMU's physical posture
 into one Level M table, and measures the fused decision wire on the whole real triage backlog — ~1.5
 bytes per alert with its integrity apparatus (Merkle roots, epoch chaining, ACK channel) counted, run
 end to end on the live rig — where the high-value coincident bands stay honestly empty. **Secure signed
 policy hot-swap** (`prismpath/policy_pack.py` + `policy_host.py`, published as prior art in
-`docs/design/spec-secure-hotswap.md`, 2026-08-12) replaces a running Level M policy only when the pack is
+`docs/design/spec-secure-hotswap.md`, August 2026) replaces a running Level M policy only when the pack is
 Ed25519-authorized, inside a signed envelope, monotonically versioned, atomically applied, and audited to
 a Merkle-rooted ledger — the same gate fronting the kernel eBPF `netupdate` as a host-side pre-loader.
 Ledger rows #82–#88.

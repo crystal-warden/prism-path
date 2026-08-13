@@ -1,6 +1,6 @@
 # PrismPath: A Routing Spectrum for Human-Authored LLM-Agent Workflows — When Control Flow Is Data, Not Code
 
-*Preprint / workshop-style manuscript. Crystal Warden Labs, 2026-07-10 (rev. 2026-08-10).*
+*Preprint / workshop-style manuscript. Crystal Warden Labs, July 2026 (revised August 2026).*
 *Target venue class: an ICSE/FSE/NeurIPS-workshop or arXiv preprint (cs.SE / cs.AI).*
 
 ---
@@ -60,7 +60,7 @@ runtime-loaded table images with a provable 100–420 ns decision bound, and a *
 in-kernel eBPF/XDP program** that classifies live network packets at 132–182 ns each
 (~5.5–7.6 Mpps/core) and hot-swaps its policy from an edited Markdown flow with no reload. Both are
 certified against a *declared subset* of the frozen vectors, zero divergence (the FPGA C target
-124/1,079 predicate + 6/27 engine after the 2026-08-12 negative-integer literals, and the eBPF target
+124/1,079 predicate + 6/27 engine after the August 2026 negative-integer literals (#89), and the eBPF target
 the same 124/124 in-kernel, re-certified that day on both aarch64 and x86_64) (§7). We are explicit about the provenance of
 the routing evaluation's labels; the once-open bounded-state critique is now closed (§6).
 
@@ -959,13 +959,12 @@ direction. **A risk-controlled operating point for decision memoization**: the �
 longer takes a hand-set similarity threshold but derives it, selecting the point that maximizes
 auto-resolution among those whose reuse-error rate a Wilson upper bound certifies below a stated
 risk — the same LTT/RCPS discipline as §4.3's τ, applied to caching, and it declines to choose when
-the evidence cannot clear the bound. **Targets below software (delivered, measured; FPGA 2026-08-07,
-eBPF 2026-08-09)**: because a Level M flow *is* a match-action table, it compiles to a binary table
+the evidence cannot clear the bound. **Targets below software (delivered, measured; FPGA and eBPF, August 2026)**: because a Level M flow *is* a match-action table, it compiles to a binary table
 image — the production SOC triage flow, unmodified, is 302 bytes — interpreted by one fixed
 circuit on a Zynq-7020, never re-synthesized per flow; the same frozen vectors became the hardware
 test bench **on a declared subset, stated plainly** (the C reference target passes 124/1,079 predicate
-+ 6/27 engine vectors and the RTL 114/1,067 — its re-sweep to 124/1,079 for the 2026-08-12
-negative-integer literals is pending a hardware retest — each with zero divergence and a machine-readable
++ 6/27 engine vectors and the RTL 114/1,067 — its re-sweep to 124/1,079 for the negative-integer
+literals (#89) is pending a hardware retest — each with zero divergence and a machine-readable
 reason per exclusion — the portability-tier pattern one level down, deliberately not claimed as full
 conformance), the RTL additionally reproduced 7,436 live sensor samples bit-for-bit against the C
 target, and on the bench 2,985 live accelerometer samples were routed *in fabric* — a
@@ -973,16 +972,16 @@ target, and on the bench 2,985 live accelerometer samples were routed *in fabric
 (2.0% of the part). The target's first act was to surface a real soundness defect in the fragment
 classifier (`is`/`is not` accepted by classification, rejected by evaluation) — the
 vectors-as-referee pattern doing exactly its job on its first hardware consumer. **The same table also
-compiles to a verifier-accepted in-kernel eBPF/XDP program** (delivered 2026-08-09): the identical
+compiles to a verifier-accepted in-kernel eBPF/XDP program** (delivered August 2026): the identical
 decidability that fits Level M into FPGA block-RAM makes it pass the kernel verifier, and the program is
 conformant *in-kernel* against the same frozen corpus (124/124 of the declared subset, byte-matching the
-reference, on both aarch64 and x86_64; re-certified 2026-08-12 on corpus v2 with the hardened loader). Attached observe-only to a live-traffic mirror it classified real
+reference, on both aarch64 and x86_64; re-certified on corpus v2 with the hardened loader, #90). Attached observe-only to a live-traffic mirror it classified real
 packets at **132–182 ns each (~5.5–7.6 Mpps/core)** and **hot-swapped its policy from an edited Markdown
 flow with no reload**, repopulating the running program's table maps in place: the "swap the map, change
 the policy" property carried onto the kernel substrate. Artifacts, evidence logs, and
 OpenTimestamps-anchored hashes: [`prismpath-hw/`](../../prismpath-hw/README.md) and
 [`prismpath-ebpf/`](../../prismpath-ebpf/README.md) (ledger rows #72–#80). **Decision-preserving
-telemetry (delivered, benchmark-gated; 2026-08-09).** The same decidability has a consequence off the
+telemetry (delivered, benchmark-gated; August 2026).** The same decidability has a consequence off the
 routing path: because a flow's routes are decidable functions of a few `field OP const` thresholds, the
 coarsest symbol that still resolves every decision is the *minimum sufficient statistic* for that flow's
 telemetry. An adapter (`adapters/telemetry/`) extracts those cells from the flow, quantizes a reading to
@@ -1000,7 +999,7 @@ margin fails, and only partly built out: a word-packed byte format and the spira
 hardware shift-register codec and a vector-quantization tier are designed but not built. Its priority date
 is OpenTimestamps-anchored (`adapters/telemetry/evidence/`). Ledger row #81.
 
-**Cyber-physical fusion (delivered, measured on the live rig; 2026-08-12).** The same decidable
+**Cyber-physical fusion (delivered, measured on the live rig; August 2026).** The same decidable
 match-action fragment composes across *modalities*: a fusion adapter (`adapters/fusion/`) tessellates a
 SIEM's cyber verdict and a live IMU's physical posture into one Level M table whose bands are the joint
 decision, decidable the same way a single-modality flow is. Over the whole real triage backlog
@@ -1014,7 +1013,7 @@ on-chip classifier corroborating the derived posture 96.3% of the time — the h
 stayed empty across every session, which is the honest finding a rare-event detector should report, not a
 gap. Ledger rows #82–#86.
 
-**Secure signed policy hot-swap (delivered, published as prior art; 2026-08-12).** A frozen model or a
+**Secure signed policy hot-swap (delivered, published as prior art; August 2026).** A frozen model or a
 fixed circuit still needs its *governor* to change, and the swap is the attack surface. A policy pack is
 the Level M `.ppt` image plus a detached Ed25519-signed manifest, gated on load against a
 separately-signed *envelope* of what the qualified system may contain — signature, monotonic version,
