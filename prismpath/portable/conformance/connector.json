@@ -260,7 +260,345 @@
    "knowledge": "sha256:c63ccca1f1902394"
   }
  ],
- "note": "Connector-SDK + composition fixtures from the Python reference. Rust must reproduce hashes and prompt strings byte-for-byte, the attestation manifest exactly, and the fan-out final path/stopped with _children aggregated.",
+ "joins": [
+  {
+   "done": [
+    true,
+    true,
+    true
+   ],
+   "event": "all_done",
+   "join": "all_done",
+   "threshold": null
+  },
+  {
+   "done": [
+    true,
+    true,
+    false
+   ],
+   "event": null,
+   "join": "all_done",
+   "threshold": null
+  },
+  {
+   "done": [
+    true,
+    false,
+    false
+   ],
+   "event": null,
+   "join": "all_done",
+   "threshold": null
+  },
+  {
+   "done": [
+    false,
+    false,
+    false
+   ],
+   "event": null,
+   "join": "all_done",
+   "threshold": null
+  },
+  {
+   "done": [
+    true
+   ],
+   "event": "all_done",
+   "join": "all_done",
+   "threshold": null
+  },
+  {
+   "done": [
+    false
+   ],
+   "event": null,
+   "join": "all_done",
+   "threshold": null
+  },
+  {
+   "done": [
+    true,
+    true,
+    true
+   ],
+   "event": "any",
+   "join": "any",
+   "threshold": null
+  },
+  {
+   "done": [
+    true,
+    true,
+    false
+   ],
+   "event": "any",
+   "join": "any",
+   "threshold": null
+  },
+  {
+   "done": [
+    true,
+    false,
+    false
+   ],
+   "event": "any",
+   "join": "any",
+   "threshold": null
+  },
+  {
+   "done": [
+    false,
+    false,
+    false
+   ],
+   "event": null,
+   "join": "any",
+   "threshold": null
+  },
+  {
+   "done": [
+    true
+   ],
+   "event": "any",
+   "join": "any",
+   "threshold": null
+  },
+  {
+   "done": [
+    false
+   ],
+   "event": null,
+   "join": "any",
+   "threshold": null
+  },
+  {
+   "done": [
+    true,
+    true,
+    true
+   ],
+   "event": "quorum",
+   "join": "quorum:2",
+   "threshold": 2
+  },
+  {
+   "done": [
+    true,
+    true,
+    false
+   ],
+   "event": "quorum",
+   "join": "quorum:2",
+   "threshold": 2
+  },
+  {
+   "done": [
+    true,
+    false,
+    false
+   ],
+   "event": null,
+   "join": "quorum:2",
+   "threshold": 2
+  },
+  {
+   "done": [
+    false,
+    false,
+    false
+   ],
+   "event": null,
+   "join": "quorum:2",
+   "threshold": 2
+  },
+  {
+   "done": [
+    true
+   ],
+   "event": "quorum",
+   "join": "quorum:2",
+   "threshold": 1
+  },
+  {
+   "done": [
+    false
+   ],
+   "event": null,
+   "join": "quorum:2",
+   "threshold": 1
+  },
+  {
+   "done": [
+    true,
+    true,
+    true
+   ],
+   "event": "quorum",
+   "join": "quorum:0.6",
+   "threshold": 2
+  },
+  {
+   "done": [
+    true,
+    true,
+    false
+   ],
+   "event": "quorum",
+   "join": "quorum:0.6",
+   "threshold": 2
+  },
+  {
+   "done": [
+    true,
+    false,
+    false
+   ],
+   "event": null,
+   "join": "quorum:0.6",
+   "threshold": 2
+  },
+  {
+   "done": [
+    false,
+    false,
+    false
+   ],
+   "event": null,
+   "join": "quorum:0.6",
+   "threshold": 2
+  },
+  {
+   "done": [
+    true
+   ],
+   "event": "quorum",
+   "join": "quorum:0.6",
+   "threshold": 1
+  },
+  {
+   "done": [
+    false
+   ],
+   "event": null,
+   "join": "quorum:0.6",
+   "threshold": 1
+  },
+  {
+   "done": [
+    true,
+    true,
+    true
+   ],
+   "event": "quorum",
+   "join": "quorum:5",
+   "threshold": 3
+  },
+  {
+   "done": [
+    true,
+    true,
+    false
+   ],
+   "event": null,
+   "join": "quorum:5",
+   "threshold": 3
+  },
+  {
+   "done": [
+    true,
+    false,
+    false
+   ],
+   "event": null,
+   "join": "quorum:5",
+   "threshold": 3
+  },
+  {
+   "done": [
+    false,
+    false,
+    false
+   ],
+   "event": null,
+   "join": "quorum:5",
+   "threshold": 3
+  },
+  {
+   "done": [
+    true
+   ],
+   "event": "quorum",
+   "join": "quorum:5",
+   "threshold": 1
+  },
+  {
+   "done": [
+    false
+   ],
+   "event": null,
+   "join": "quorum:5",
+   "threshold": 1
+  },
+  {
+   "done": [
+    true,
+    true,
+    true
+   ],
+   "event": "quorum",
+   "join": "quorum:oops",
+   "threshold": 3
+  },
+  {
+   "done": [
+    true,
+    true,
+    false
+   ],
+   "event": null,
+   "join": "quorum:oops",
+   "threshold": 3
+  },
+  {
+   "done": [
+    true,
+    false,
+    false
+   ],
+   "event": null,
+   "join": "quorum:oops",
+   "threshold": 3
+  },
+  {
+   "done": [
+    false,
+    false,
+    false
+   ],
+   "event": null,
+   "join": "quorum:oops",
+   "threshold": 3
+  },
+  {
+   "done": [
+    true
+   ],
+   "event": "quorum",
+   "join": "quorum:oops",
+   "threshold": 1
+  },
+  {
+   "done": [
+    false
+   ],
+   "event": null,
+   "join": "quorum:oops",
+   "threshold": 1
+  }
+ ],
+ "note": "Connector-SDK + composition fixtures from the Python reference. Rust must reproduce hashes and prompt strings byte-for-byte, the attestation manifest exactly, the fan-out final path/stopped with _children aggregated, and the join-policy grid (composer._quorum_threshold/_join_event) value-for-value.",
  "prompts": [
   {
    "criteria": null,
@@ -306,5 +644,5 @@
    }
   }
  ],
- "version": 1
+ "version": 2
 }

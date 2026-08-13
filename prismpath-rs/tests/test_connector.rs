@@ -82,6 +82,79 @@ fn adjudicate_extracts_json_and_degrades_gracefully() {
 }
 
 #[test]
+fn join_policy_grid_matches_the_composer() {
+    use prismpath_rs::compose::{join_event, quorum_threshold};
+    let fx = fixtures();
+    let grid = fx["joins"].as_array().expect("regen connector.json (v2) for the joins grid");
+    for c in grid {
+        let join = c["join"].as_str().unwrap();
+        let done: Vec<bool> = c["done"].as_array().unwrap().iter().map(|d| d.as_bool().unwrap()).collect();
+        if let Some(thr) = c["threshold"].as_u64() {
+            assert_eq!(quorum_threshold(join, done.len()) as u64, thr, "threshold {join} {done:?}");
+        }
+        let expected = c["event"].as_str();
+        assert_eq!(join_event(join, &done), expected, "event for {join} {done:?}");
+    }
+    eprintln!("joins: {}/{} grid entries match composer", grid.len(), grid.len());
+}
+
+/// Bidirectional file-deferral parity: Python defers -> Rust lists + resumes -> Python reads the
+/// resolution (and the reverse). Skips cleanly without the venv.
+#[test]
+fn file_deferral_store_is_cross_runtime() {
+    use prismpath_rs::connector::FileDeferralStore;
+    let repo = format!("{}/..", env!("CARGO_MANIFEST_DIR"));
+    let python = format!("{repo}/.venv/bin/python");
+    if !std::path::Path::new(&python).exists() {
+        eprintln!("SKIP: no .venv python for the bidirectional leg");
+        return;
+    }
+    let dir = std::env::temp_dir().join(format!("pp_defer_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let store = FileDeferralStore::new(&dir).unwrap();
+    let py = |code: &str| {
+        let out = std::process::Command::new(&python).arg("-c").arg(code).output().unwrap();
+        assert!(out.status.success(), "python failed: {}", String::from_utf8_lossy(&out.stderr));
+        String::from_utf8_lossy(&out.stdout).trim().to_string()
+    };
+
+    // Python defers -> Rust sees it pending and resumes it -> Python reads the resolution
+    py(&format!(
+        "import sys; sys.path.insert(0, {repo:?})\n\
+         from prismpath.deferral import FileDeferralStore\n\
+         FileDeferralStore({d:?}).defer('wu:py', reason='needs evidence', state={{'n': 1}})",
+        repo = repo, d = dir.to_str().unwrap()
+    ));
+    let pending = store.pending();
+    assert_eq!(pending.len(), 1);
+    assert_eq!(pending[0]["unit_id"], "wu:py");
+    store.resume("wu:py", json!({"approved": true}), "auditor:rust").unwrap();
+    let verdict = py(&format!(
+        "import sys, json; sys.path.insert(0, {repo:?})\n\
+         from prismpath.deferral import FileDeferralStore\n\
+         r = FileDeferralStore({d:?}).get('wu:py')\n\
+         print(json.dumps([r['status'], r['actor'], len(FileDeferralStore({d:?}).pending())]))",
+        repo = repo, d = dir.to_str().unwrap()
+    ));
+    assert_eq!(verdict, r#"["resolved", "auditor:rust", 0]"#);
+
+    // Rust defers -> Python resumes -> Rust reads the resolution
+    store.defer("wu:rs", "human review", json!({"k": 2}), None).unwrap();
+    py(&format!(
+        "import sys; sys.path.insert(0, {repo:?})\n\
+         from prismpath.deferral import FileDeferralStore\n\
+         FileDeferralStore({d:?}).resume('wu:rs', {{'ok': True}}, 'auditor:py')",
+        repo = repo, d = dir.to_str().unwrap()
+    ));
+    let rec = store.get("wu:rs").unwrap();
+    assert_eq!(rec["status"], "resolved");
+    assert_eq!(rec["actor"], "auditor:py");
+    assert_eq!(store.pending().len(), 0);
+    eprintln!("file deferral: cross-runtime round-trips both ways");
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
 fn deferral_port_round_trip() {
     let mut store = MemDeferralStore::default();
     store.defer("u1", "needs evidence", json!({"k": 1}), None);

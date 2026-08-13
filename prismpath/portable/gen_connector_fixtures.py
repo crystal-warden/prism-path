@@ -102,6 +102,18 @@ def main() -> int:
     body = json.dumps({k: att[k] for k in att if k != "manifest_hash"}, sort_keys=True).encode()
     att["manifest_hash"] = hashlib.sha256(body).hexdigest()
 
+    # ---- join-policy grid: the composer's REAL threshold/event functions, frozen ----
+    from prismpath.composer import _join_event, _quorum_threshold
+    join_grid = []
+    for join in ["all_done", "any", "quorum:2", "quorum:0.6", "quorum:5", "quorum:oops"]:
+        for done in ([True, True, True], [True, True, False], [True, False, False],
+                     [False, False, False], [True], [False]):
+            join_grid.append({
+                "join": join, "done": done,
+                "threshold": _quorum_threshold(join, len(done)) if join.startswith("quorum") else None,
+                "event": _join_event({"join": join}, list(done)),
+            })
+
     # ---- spawn/join fan-out through the reference resume(event=...) path ----
     with tempfile.TemporaryDirectory(prefix="cw_conn_fx_") as td:
         td = Path(td)
@@ -135,16 +147,18 @@ def main() -> int:
                  "children_in_state": r2.state.get("_children")}
 
     doc = {
-        "version": 1,
+        "version": 2,
         "note": "Connector-SDK + composition fixtures from the Python reference. Rust must "
                 "reproduce hashes and prompt strings byte-for-byte, the attestation manifest "
-                "exactly, and the fan-out final path/stopped with _children aggregated.",
+                "exactly, the fan-out final path/stopped with _children aggregated, and the "
+                "join-policy grid (composer._quorum_threshold/_join_event) value-for-value.",
         "hashes": hashes,
         "prompts": prompts,
         "flatten": flat_cases,
         "attestation": {"outcome": outcome, "policy_hash": "sha256:deadbeef",
                         "gate_id": "wazuh_triage@v3", "ingestion_hashes": ["sha256:aa"],
                         "kb_hash": "sha256:kb", "manifest": att},
+        "joins": join_grid,
         "fanout": {"parent_flow": _FLOW_PARENT, "child_flow": _FLOW_CHILD,
                    "parent_script": parent_script, "child_script": child_script,
                    "items": items, "suspended": suspended, "children": children,

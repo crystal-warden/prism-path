@@ -9,8 +9,9 @@
 //! LLM, exactly like the reference.
 //!
 //! Deliberately minimal vs Python: the guard hook (content safety is delegated by design — see
-//! prismpath-rs/CONFORMANCE.md's scope boundary) and the file-backed deferral store (the port
-//! trait is here with an in-memory store; a byte-compatible file backend is a named follow-on).
+//! prismpath-rs/CONFORMANCE.md's scope boundary). The deferral port ships BOTH stores: in-memory
+//! and `FileDeferralStore`, byte-compatible with the reference's directory layout so either
+//! runtime can list and resume units the other deferred.
 
 use crate::durable::{flow_hash, provenance_manifest, py_canonical_string};
 use crate::{py_str, V};
@@ -186,6 +187,7 @@ pub trait Connector {
 
     /// Core attestation binding: outcome root + provenance manifest (durable::provenance_manifest,
     /// C1). `created` injected for determinism, as in the durable layer.
+    #[allow(clippy::too_many_arguments)] // mirrors the reference signature + injected `created`
     fn attest_decision(
         &self,
         outcome: &Value,
@@ -236,6 +238,113 @@ pub trait DeferralStore {
     fn defer(&mut self, unit_id: &str, reason: &str, state: Value, prior_output: Option<Value>);
     fn pending(&self) -> Vec<&Deferral>;
     fn resume(&mut self, unit_id: &str, resolution: Value, actor: &str) -> bool;
+}
+
+/// File-backed deferral store, BYTE-COMPATIBLE with the reference's `FileDeferralStore`
+/// (`prismpath/deferral.py`): one JSON record per unit at
+/// `<dir>/<sha256(unit_id)[:16]>.json` with the same field set and lifecycle
+/// (`status: pending -> resolved`, ISO-8601Z timestamps) — so a unit deferred by either runtime
+/// can be listed and resumed by the other against one shared directory.
+pub struct FileDeferralStore {
+    pub dir: std::path::PathBuf,
+}
+
+impl FileDeferralStore {
+    pub fn new(dir: impl Into<std::path::PathBuf>) -> std::io::Result<FileDeferralStore> {
+        let dir = dir.into();
+        std::fs::create_dir_all(&dir)?;
+        Ok(FileDeferralStore { dir })
+    }
+
+    fn path(&self, unit_id: &str) -> std::path::PathBuf {
+        let h = hex::encode(Sha256::digest(unit_id.as_bytes()));
+        self.dir.join(format!("{}.json", &h[..16]))
+    }
+
+    fn now_iso() -> String {
+        // %Y-%m-%dT%H:%M:%SZ, matching deferral._now()
+        let secs = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        let (days, h, m, s) = (secs / 86_400, (secs % 86_400) / 3600, (secs % 3600) / 60, secs % 60);
+        let z = days as i64 + 719_468;
+        let era = z.div_euclid(146_097);
+        let doe = z.rem_euclid(146_097);
+        let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+        let y = yoe + era * 400;
+        let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+        let mp = (5 * doy + 2) / 153;
+        let d = doy - (153 * mp + 2) / 5 + 1;
+        let mth = if mp < 10 { mp + 3 } else { mp - 9 };
+        let y = if mth <= 2 { y + 1 } else { y };
+        format!("{y:04}-{mth:02}-{d:02}T{h:02}:{m:02}:{s:02}Z")
+    }
+
+    pub fn defer(
+        &self,
+        unit_id: &str,
+        reason: &str,
+        state: Value,
+        prior_output: Option<Value>,
+    ) -> Result<Value, String> {
+        let rec = json!({
+            "unit_id": unit_id, "reason": reason, "state": state,
+            "prior_output": prior_output.unwrap_or(Value::Null),
+            "status": "pending", "deferred_at": Self::now_iso(),
+            "resolution": Value::Null, "actor": Value::Null, "resolved_at": Value::Null,
+        });
+        std::fs::write(
+            self.path(unit_id),
+            serde_json::to_string_pretty(&rec).map_err(|e| e.to_string())?,
+        )
+        .map_err(|e| e.to_string())?;
+        Ok(rec)
+    }
+
+    pub fn get(&self, unit_id: &str) -> Option<Value> {
+        std::fs::read_to_string(self.path(unit_id))
+            .ok()
+            .and_then(|t| serde_json::from_str(&t).ok())
+    }
+
+    pub fn pending(&self) -> Vec<Value> {
+        let mut names: Vec<_> = std::fs::read_dir(&self.dir)
+            .map(|rd| {
+                rd.filter_map(|e| e.ok())
+                    .map(|e| e.file_name().to_string_lossy().into_owned())
+                    .filter(|n| n.ends_with(".json"))
+                    .collect()
+            })
+            .unwrap_or_default();
+        names.sort();
+        names
+            .into_iter()
+            .filter_map(|n| {
+                let t = std::fs::read_to_string(self.dir.join(n)).ok()?;
+                let r: Value = serde_json::from_str(&t).ok()?;
+                (r.get("status").and_then(|s| s.as_str()) == Some("pending")).then_some(r)
+            })
+            .collect()
+    }
+
+    pub fn resume(&self, unit_id: &str, resolution: Value, actor: &str) -> Result<Value, String> {
+        let mut rec = self.get(unit_id).ok_or(format!("no deferred unit {unit_id}"))?;
+        let status = rec.get("status").and_then(|s| s.as_str()).unwrap_or("");
+        if status != "pending" {
+            return Err(format!("unit {unit_id} already {status}"));
+        }
+        rec["status"] = json!("resolved");
+        rec["resolution"] = resolution;
+        rec["actor"] = json!(actor);
+        rec["resolved_at"] = json!(Self::now_iso());
+        std::fs::write(
+            self.path(unit_id),
+            serde_json::to_string_pretty(&rec).map_err(|e| e.to_string())?,
+        )
+        .map_err(|e| e.to_string())?;
+        Ok(rec)
+    }
 }
 
 #[derive(Default)]
