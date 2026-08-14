@@ -15,3 +15,10 @@ pico_enable_stdio_usb(ppt_rp2350 1)
 pico_enable_stdio_uart(ppt_rp2350 0)
 
 pico_add_extra_outputs(ppt_rp2350)   # .uf2 + .hex + .bin + map
+
+# On-device sensor -> decision demo: reads a VL53L0X and runs the embedded proximity policy live.
+add_executable(ppt_tof ppt_tof.c vl53l0x.c)
+target_link_libraries(ppt_tof pico_stdlib hardware_i2c)
+pico_enable_stdio_usb(ppt_tof 1)
+pico_enable_stdio_uart(ppt_tof 0)
+pico_add_extra_outputs(ppt_tof)

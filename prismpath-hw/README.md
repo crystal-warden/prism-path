@@ -141,6 +141,33 @@ python3 -W ignore compile_flows.py
   Go, eBPF (in-kernel), the Zynq fabric, and a $3 8-bit AVR. Engine-vector (multi-hop) support on
   the AVR is a declared non-goal for v1 — predicate/single-hop decisions only, stated plainly.
 
+**Day update (August 2026 — the MCU-ISA sweep + the first on-device sensor decision).**
+- **`rp2350/` — the RP2350 (Pico 2), cross-ISA.** The byte-exact interpreter (`ppt_rp2350.c`, a
+  USB-CDC port of `ppt_uno.c`) certifies **124/124 on BOTH cores of the same chip from one source**:
+  the ARM Cortex-M33 (`make arm`) and the Hazard3 RISC-V (`make riscv`), the ISA tag chosen by the
+  compiler, byte-identical exclusion reasons. Cross-ISA conformance on one die, not just
+  cross-language. (Evidence #97.)
+- **`esp/` — the ESP32 (Xtensa LX6).** The same interpreter over ESP-IDF/UART, **124/124** — a third
+  MCU ISA. One ISA-generic ESP project (ident + UART pins chosen at compile time) targets `esp32`
+  (Xtensa) or `esp32c6` (RISC-V). (Evidence #98.)
+- **Four MCU ISAs now decide identically** from one frozen corpus — 8-bit AVR, ARM, RISC-V, Xtensa —
+  on top of the Python/JS/Rust/Go kernels, the in-kernel eBPF program, and the Zynq fabric.
+- **`rp2350/ppt_tof.c` — on-device sensor → decision.** The RP2350 reads a real VL53L0X ToF sensor
+  over I2C (`vl53l0x.c`), forms the field vector, and runs a signed proximity policy **on-device** —
+  distance → contact/near/mid/far live, flipping at the authored 100/300/800 mm thresholds, no host
+  in the loop. The policy `.ppt` is baked into flash from the same compiler. First physical-input
+  demo since the fabric. (Evidence #99.)
+
+**Day update (August 2026 — the mesh: coordinated fleet policy-swap).**
+- **`mesh/` — three ESP32s swap policy together over ESP-NOW.** `ppt_mesh.c` carries two baked
+  tables (permissive `level<300`, tightened `level<200`); poke one node with `R` and it runs a
+  two-phase commit — **PREPARE** broadcasts the target table, every follower **re-hashes it and
+  checks the id against a baked allowlist before staging** (refuse, don't downgrade), **ACK**s, then
+  on quorum a **COMMIT** applies the swap at a shared tick. `orchestrate.py` drives all three and
+  timestamps the flip: the fleet goes ALLOW→DENY together within **0.7 ms** (serial jitter included),
+  all on `epoch=1`. The multi-node analogue of the single-node hot-swap (#87/#88). FNV-1a id/allowlist
+  stands in for the signature — Ed25519-on-the-mesh is the named follow-on. (Evidence #100.)
+
 ## Backlog
 
 - [100 MHz fabric clock](backlog/100mhz-pipeline.md) — overlap prog fetch / atom eval;
