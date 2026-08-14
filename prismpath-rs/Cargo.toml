@@ -2,7 +2,11 @@
 name = "prismpath-rs"
 version = "0.1.0"
 edition = "2021"
-description = "A lightweight Rust-native P0 engine for PrismPath"
+description = "PrismPath P0 engine in native Rust: a decidable Markdown policy runtime (Level M match-action)."
+license = "Apache-2.0"
+repository = "https://github.com/crystal-warden/prism-path"
+keywords = ["policy", "control-plane", "decidable", "match-action", "embedded"]
+categories = ["algorithms", "embedded"]
 
 [features]
 # `durable` = checkpoint/resume + the content-addressed attestation manifests (sha2/hmac are tiny,
