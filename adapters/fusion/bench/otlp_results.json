@@ -34,10 +34,10 @@
  },
  "ratios": {
   "otlp_faithful_B_per_decision": 101.372,
-  "o1_B_per_decision": 1.5,
-  "otlp_over_o1": 67.6,
+  "o1_B_per_decision": 1.516,
+  "otlp_over_o1": 66.9,
   "otlp_over_b2_json": 1.49,
-  "otlp_zstd_over_o1": 4.8,
-  "otlp_minimal_over_o2": 79.8
+  "otlp_zstd_over_o1": 4.7,
+  "otlp_minimal_over_o2": 77.3
  }
 }

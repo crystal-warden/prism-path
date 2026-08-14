@@ -981,9 +981,9 @@ wire is now a named, normatively specified protocol: **Facet** (`Facet/1`), carr
 quantized** symbols whose codebook is agreed from the shared signed policy rather than transmitted; the
 specification is [`PROTOCOL.md`](../../PROTOCOL.md) and the companion paper is
 [`paper-facet-figueroa-quantization.md`](paper-facet-figueroa-quantization.md), which measures the wire
-against OTLP, the industry standard telemetry protocol: ~1.5 bytes per decision, 66.9× under OTLP
-protobuf and 4.7× under zstd compressed batched OTLP at the exact measured O1 of 1.516 B/alert (#95
-records 67.6× and 4.8× with O1 rounded to 1.5). **Secure signed
+against OTLP, the industry standard telemetry protocol: 1.516 bytes per decision with the integrity
+apparatus counted, 66.9× under OTLP protobuf and 4.7× under zstd compressed batched OTLP (#95's
+originally recorded 67.6×/4.8× divided by the payload only O1; the bench now emits exact ratios). **Secure signed
 policy hot swap** (`prismpath/policy_pack.py` + `policy_host.py`, published as prior art in
 `docs/design/spec-secure-hotswap.md`, August 2026) replaces a running Level M policy only when the pack is
 Ed25519 authorized, inside a signed envelope, monotonically versioned, atomically applied, and audited to

@@ -157,8 +157,12 @@ def main() -> int:
     # pull the decision-codec + JSON numbers to state the ratios in one place
     try:
         prev = json.loads((HERE / "results.json").read_text())
-        o1 = prev["o1"]["wire_bytes"] / prev["n"]
-        o2 = prev.get("o2", {}).get("wire_bytes", 0) / prev["n"] if prev.get("o2") else None
+        # wire_bytes_total counts the integrity apparatus (Merkle epoch roots + ACK), the same
+        # convention as the #84 headline; payload-only wire_bytes understates O1/O2 (1.50/0.50
+        # vs the true 1.516/0.516) and overstates every ratio built on them.
+        o1 = prev["o1"].get("wire_bytes_total", prev["o1"]["wire_bytes"]) / prev["n"]
+        o2 = (prev["o2"].get("wire_bytes_total", prev["o2"]["wire_bytes"]) / prev["n"]
+              if prev.get("o2") else None)
         b2 = prev["b2"]["median"]
         otlp_f = result["otlp_faithful"]["epoched_per_decision"]
         result["ratios"] = {
@@ -187,39 +191,41 @@ def main() -> int:
 def _write_md(r: dict) -> None:
     f = r["otlp_faithful"]
     ra = r.get("ratios", {})
-    md = f"""# OTLP baseline — the industry-standard telemetry wire vs the decision codec
+    md = f"""# OTLP baseline · the industry standard telemetry wire vs the decision codec
 
-The bandwidth story, measured against **OpenTelemetry (OTLP)** — the wire real observability
-pipelines speak — not just JSON. Records are genuine `opentelemetry.proto` `LogRecord`s (they
-round-trip). n = {r['n']:,} representative fused decisions; batched the way OTLP ships
-(ResourceLogs/ScopeLogs amortized over {r['epoch']}-record epochs).
+The bandwidth story, measured against **OpenTelemetry (OTLP)**, the wire real observability
+pipelines speak, not just JSON. Records are genuine `opentelemetry.proto` `LogRecord`s (they
+round trip). n = {r['n']:,} representative fused decisions; batched the way OTLP ships
+(ResourceLogs/ScopeLogs amortized over {r['epoch']} record epochs).
 
 | encoding | B / decision | note |
 |---|---:|---|
-| **OTLP faithful** (4 decision fields as attributes) | **{f['epoched_per_decision']}** | industry-standard telemetry envelope |
-| OTLP faithful + zstd-19 (batched) | {f.get('zstd19_per_decision', '—')} | |
+| **OTLP faithful** (4 decision fields as attributes) | **{f['epoched_per_decision']}** | industry standard telemetry envelope |
+| OTLP faithful + zstd-19 (batched) | {f.get('zstd19_per_decision', 'n/a')} | |
 | OTLP faithful + gzip-9 (batched) | {f['gzip_per_decision']} | |
-| B2 — minimal 4-field JSON | 68 | (from results.json) |
-| **O1 — the decision wire (per-field)** | **{ra.get('o1_B_per_decision', '—')}** | self-framing, tamper-evident |
+| B2: minimal 4 field JSON | 68 | (from results.json) |
+| **O1: the decision wire (per field)** | **{ra.get('o1_B_per_decision', 'n/a')}** | frames itself, tamper evident |
 | OTLP minimal (band only) | {r['otlp_minimal']['epoched_per_decision']} | vs O2 band stream |
 
-**Headline:** the decision wire is **{ra.get('otlp_over_o1', '—')}× smaller than OTLP-protobuf** per
-decision, and **{ra.get('otlp_zstd_over_o1', '—')}× smaller than zstd-compressed batched OTLP**.
+**Headline:** the decision wire is **{ra.get('otlp_over_o1', 'n/a')}× smaller than OTLP protobuf** per
+decision, and **{ra.get('otlp_zstd_over_o1', 'n/a')}× smaller than zstd compressed batched OTLP**.
+O1 and O2 here count their integrity apparatus (Merkle epoch roots + ACK channel), the same
+convention as the #84 headline; every ratio divides by the exact measured cost, not a rounded one.
 
 **Why OTLP is this size (honest):** OTLP is a general telemetry *envelope*, not a decision codec.
-Every record carries two per-record wall-clock timestamps (fixed64), typed attribute values, and
-repeated string keys — so it is ~{f['marginal_bytes_per_record']} B/record and actually **larger
-than minimal JSON** ({round(ra.get('otlp_over_b2_json', 0), 1)}× B2) for this payload. Compression
-recovers the repeated keys but not the per-record timestamps. The decision codec's advantage over
+Every record carries two per record wall clock timestamps (fixed64), typed attribute values, and
+repeated string keys; so it is ~{f['marginal_bytes_per_record']} B/record and actually **larger
+than minimal JSON** ({ra.get('otlp_over_b2_json', 'n/a')}× B2) for this payload. Compression
+recovers the repeated keys but not the per record timestamps. The decision codec's advantage over
 OTLP is therefore structural (it ships the decision, not a timestamped attribute bag), the same
-distinction the wire-mode analysis (#86) draws against JSON: we win on self-framing per-reading
-streamability, tamper-evidence, and decidability — and here, unlike against zstd-batched JSON, also
+distinction the wire mode analysis (#86) draws against JSON: we win on self framing per reading
+streamability, tamper evidence, and decidability; and here, unlike against zstd batched JSON, also
 decisively on raw size.
 
-**Honest scope:** decision-sufficient telemetry, not a lossless log record — OTLP carries a
+**Honest scope:** decision sufficient telemetry, not a lossless log record; OTLP carries a
 general event; our wire carries the routed decision. Representative population (wire cost is
-field-shape-invariant, #84). OTLP metrics (Sum/Gauge) would differ in constant overhead; the log
-signal is the apples-to-apples one for a discrete routed decision.
+field shape invariant, #84). OTLP metrics (Sum/Gauge) would differ in constant overhead; the log
+signal is the apples to apples one for a discrete routed decision.
 """
     (HERE / "otlp_results.md").write_text(md)
 

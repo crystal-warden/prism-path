@@ -15,8 +15,8 @@ sufficient statistic for that policy's decisions, which *cell* of each field's d
 occupies. We then define **Facet**, a wire protocol that carries Figueroa quantized symbols with a
 codebook that is *agreed from the shared signed policy rather than transmitted*, a symbol coding that
 frames itself, and tamper evidence anchored to an audit chain. On 64,484 representative fused decisions,
-the Facet wire is **1.5 bytes/decision, 66.9× smaller than OpenTelemetry (OTLP) protobuf** (exact
-measured O1 1.516 B/alert; 67.6× as recorded in the artifact, which rounds O1 to 1.5) and 4.7×
+the Facet wire is **1.516 bytes/decision (integrity apparatus counted), 66.9× smaller than
+OpenTelemetry (OTLP) protobuf** and 4.7×
 smaller than zstd compressed batched OTLP, while it still frames itself, streams, and shows tampering,
 none of which a compressed record format provides. The reduction is *structural*, not a compression
 trick: we transmit the decision, not a timestamped attribute bag. Decision preservation is machine
@@ -112,10 +112,11 @@ Over **n = 64,484** representative fused decisions, batched the way OTLP ships:
 | OTLP faithful + zstd level 19 (batched) | 7.162 | |
 | **Facet (O1, per field)** | **1.516** | frames itself, shows tampering |
 
-**Facet is 67.6× smaller than OTLP protobuf** and 4.8× smaller than zstd compressed batched OTLP (as
-recorded in `otlp_results.json`, which rounds O1 to 1.5 B/decision; the exact measured O1 of 1.516
-B/alert, `results.json` and ledger #84, gives the conservative **66.9×** and **4.7×**, the figures to
-quote under hostile review). The
+**Facet is 66.9× smaller than OTLP protobuf** and 4.7× smaller than zstd compressed batched OTLP.
+O1 counts its integrity apparatus (Merkle epoch roots and the ACK channel, the #84 convention), and
+every ratio divides by that exact measured cost. An earlier artifact revision divided by the payload
+only O1 of 1.5 and recorded 67.6× and 4.8×; ledger #95 keeps those recorded numbers with an
+annotation. The
 reduction is *structural*: OTLP ships a timestamped, typed attribute bag; Facet ships the decision. A
 general compressor on a verbose format narrows the raw byte gap but gives up framing, streaming, and
 tamper evidence; the differentiator is those properties, not the byte count alone.
