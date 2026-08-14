@@ -70,8 +70,9 @@ pinned to a `flow_sha256`, so a mapping bug anywhere flips a frozen entry and th
 
 ### 3.4 What is and isn't novel
 
-Sufficient statistics and quotienting a state space by decision equivalence are classical. The
-contribution is specific and mechanical: deriving that partition **directly and provably from a Level M
+Sufficient statistics and quotienting a state space by decision equivalence are classical. Unlike standard Vector Quantization (VQ) [Gray 1984], Figueroa quantization does not
+place its boundaries to minimize geometric distortion or mean squared error; it places them exactly where
+the policy's logic already cuts. The contribution is specific and mechanical: deriving that partition **directly and provably from a Level M
 match action policy** (the same atoms the model checker and compiler read), so the minimal decidable
 state code falls out of the policy itself with a machine checked guarantee it never mis-resolves a
 decision.
@@ -147,7 +148,24 @@ Facet's guarantees are precise, and the boundary is deliberate:
 *Sufficient statistics* (Fisher) and decision theoretic quotients are the conceptual root of §3.
 *Zeckendorf/Fibonacci coding* [Zeckendorf 1972] is the code that frames itself in §4. *OpenTelemetry/OTLP*
 is the general envelope baseline of §5. Self describing wire formats (protobuf, CBOR, JSON) frame per
-record; Facet frames per stream via a shared codebook. We are not aware of a prior system that derives a
+record; Facet frames per stream via a shared codebook.
+
+Two families of prior art sit closest to the quantization itself. Structurally, Figueroa quantization
+shares a clear operational kinship with Product Quantization (PQ) [Jégou et al. 2011] by decomposing a
+high dimensional state space into distinct, lower dimensional field subspaces and quantizing each
+independently to form a compact tuple. However, it subverts the traditional PQ paradigm: instead of
+learning codebooks via clustering algorithms to minimize reconstruction distortion, the codebook falls
+out natively from the governing policy, and the optimization objective is the preservation of the final
+decision rather than signal reconstruction.
+
+A superficial parallel also exists in supervised discretization techniques (e.g., Fayyad-Irani MDL
+binning [Fayyad and Irani 1993] or decision tree feature splitting), which also partition continuous
+axes at class boundaries. However, while supervised discretization estimates bins from a labeled training
+dataset to minimize empirical class entropy, Figueroa quantization extracts them deterministically from
+an explicit, signed match action policy. It requires no statistical fitting or historic corpus; it is
+exact by construction, yielding a machine checked proof that every potential decision is preserved.
+
+We are not aware of a prior system that derives a
 quantization that provably preserves decisions directly from a decidable match action policy and carries
 it over a codebook agreed from the signed policy. The individual ingredients are all standard; we claim
 only the composition and the machine checked quantization derived from the policy.
@@ -166,6 +184,9 @@ properties a compressed record format cannot offer.
 - É. Zeckendorf, "Représentation des nombres naturels par une somme de nombres de Fibonacci ou de nombres
   de Lucas," *Bull. Soc. Roy. Sci. Liège*, 1972.
 - R. A. Fisher, "On the mathematical foundations of theoretical statistics," 1922 (sufficient statistics).
+- R. M. Gray, "Vector Quantization," *IEEE ASSP Magazine*, 1984.
+- H. Jégou, M. Douze, and C. Schmid, "Product Quantization for Nearest Neighbor Search," *IEEE Trans. Pattern Anal. Mach. Intell.*, 2011.
+- U. M. Fayyad and K. B. Irani, "Multi-Interval Discretization of Continuous-Valued Attributes for Classification Learning," *Proc. IJCAI*, 1993.
 - OpenTelemetry Protocol (OTLP) specification.
 - PrismPath: `PROTOCOL.md` (Facet/1, normative), `SPEC.md` (flow format, Level M).
 
