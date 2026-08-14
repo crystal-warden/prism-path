@@ -1,4 +1,4 @@
-# prismpath-go — Go portable kernel for PrismPath
+# prismpath-go · Go portable kernel for PrismPath
 
 `prismpath-go` is a dependency-free Go implementation of the **PrismPath P0 Portable Kernel**. It allows high-performance Go applications, microservices, and network edge appliances to parse and execute Markdown agent workflows without machine learning runtime dependencies.
 

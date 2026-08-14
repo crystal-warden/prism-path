@@ -415,7 +415,7 @@ def _report(findings, as_json: bool) -> int:
     for f in findings:
         print(f)
     if not findings:
-        print("  clean ✅  — the flow compiles")
+        print("  clean ✅  · the flow compiles")
     else:
         summary = []
         if errors:

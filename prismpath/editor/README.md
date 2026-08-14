@@ -2,12 +2,12 @@
 
 Two complementary surfaces, both thin wrappers over the repo's own tooling:
 
-1. **`prismpath lsp`** — a Language Server (stdlib only, ships with the pip package) for any
+1. **`prismpath lsp`**: a Language Server (stdlib only, ships with the pip package) for any
    LSP-capable editor: live diagnostics (the full `validate` check set, anchored to the
    offending edge line), completion (edge targets, predicate fields derived from the flow's own
    `when` edges, tier keywords, annotations), hover (node/edge tier summaries), document
    symbols, and a custom `prismpath/graph` request returning Mermaid for graph previews.
-2. **The VS Code extension** (`vscode/`) — tier-aware TextMate highlighting injected into plain
+2. **The VS Code extension** (`vscode/`); tier-aware TextMate highlighting injected into plain
    Markdown, a live playground preview webview (the same JS kernel as the browser playground,
    no Python needed), and validate-on-save squiggles.
 
@@ -41,7 +41,7 @@ Servers → +*:
 
 The bundled extension (`vscode/`) already provides highlighting, the live preview, and
 validate-on-save without the LSP. To use the LSP instead (or in another VS Code-family editor),
-any generic LSP client extension works — point it at `prismpath lsp` for `markdown`.
+any generic LSP client extension works; point it at `prismpath lsp` for `markdown`.
 
 ## Zed / Helix / Sublime
 

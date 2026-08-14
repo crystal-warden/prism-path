@@ -15,7 +15,7 @@ labels: good first issue, lint
 **Severity.** error (breaks the run) or warning (likely mistake that still runs)?
 
 **Decidability check.** Confirm it stays inside the `when`-language fragment and produces **zero
-false positives** on the shipping flows — that's the bar (see CONTRIBUTING.md → "The perfect
+false positives** on the shipping flows; that's the bar (see CONTRIBUTING.md → "The perfect
 first contribution").
 
 _If you're claiming one of the ten in CONTRIBUTING.md, name it here._

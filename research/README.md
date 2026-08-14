@@ -1,8 +1,8 @@
-# research/ — reproducibility scripts behind the evidence ledger
+# research/ · reproducibility scripts behind the evidence ledger
 
 Scripts that regenerate the **routing-spectrum** measurements cited in
 [`docs/research/supporting-evidence.md`](../docs/research/supporting-evidence.md). Everything here is
-reproducible **from this repo** — the input corpus (`prismpath/benchmark/routing_bench.jsonl`) ships with
+reproducible **from this repo**: the input corpus (`prismpath/benchmark/routing_bench.jsonl`) ships with
 the repo, and each script writes its JSON result into [`benchmark/`](benchmark/).
 
 | Script | Produces | Backs (evidence ledger) |

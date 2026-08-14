@@ -1,10 +1,10 @@
-# Bandwidth — raw alert JSON vs the fused decision wire
+# Bandwidth · raw alert JSON vs the fused decision wire
 
 Source: live:wazuh-alerts-*  ·  population: rule.level >= 7, n = 64,484
 
 Task frame: the aggregator needs the fused verdict, auditably. Baselines ship the
 reading and decide centrally; ours decides at the edge and ships the decision code.
-The decision streams are decision-sufficient, not a lossless alert record: B2 is the
+The decision streams are decision sufficient, not a lossless alert record: B2 is the
 apples-to-apples ratio, B0 the fidelity-class one.
 
 | line | what | total bytes | bytes/alert |
@@ -16,7 +16,7 @@ apples-to-apples ratio, B0 the fidelity-class one.
 | B3 | zstd19_bytes over B0 NDJSON batch | 4,037,604 | 62.61 |
 | B3 | zlib9_bytes over B2 NDJSON batch | 20,147 | 0.31 |
 | B3 | zstd19_bytes over B2 NDJSON batch | 14,098 | 0.22 |
-| O1 | per-field decision stream + epoch apparatus | 97,752 | 1.516 |
+| O1 | per field decision stream + epoch apparatus | 97,752 | 1.516 |
 | O2 | band-ID stream + epoch apparatus | 33,280 | 0.516 |
 
 O1 detail: payload 773,808 bits, pad 16 bits, epochs 16 (Merkle+chain 1024 B, ACK return-channel 512 B).
@@ -39,7 +39,7 @@ O2 detail: payload 257,939 bits, pad 109 bits.
 - B3 note, stated before anyone else states it: the best batch compressor over the
   minimal JSON (0.22 B/alert) undercuts the streams on pure
   size. It requires buffering the whole batch before a byte ships, is not
-  self-framing or per-reading streamable, and carries no tamper-evidence — the
+  self framing or per reading streamable, and carries no tamper evidence; the
   buffered-batch bound, not a transport. The streams pay their integrity apparatus
   and still land within striking distance of it.
 - Overheads are itemized above and included in every ratio; the ACK line is the

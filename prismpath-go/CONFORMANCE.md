@@ -1,4 +1,4 @@
-# prismpath-go — conformance certification against the frozen kernel spec
+# prismpath-go · conformance certification against the frozen kernel spec
 
 **Date:** August 2026 · **Verdict: CONFORMANT (Go Implementation)**
 
@@ -27,4 +27,4 @@ go test -v ./...
 Kernel conformance ≠ the guard. The P0 content **guard** (`guard.py` / Journeyman's `guard.ts`) is an
 **optional** floor, not a kernel feature; this package implements **no content guard**, by design.
 Content safety is delegated to the model or an opt-in guardrail, while PrismPath owns provable routing
-and — where it runs code — governed execution (the code-node sandbox). A conformant kernel is not a content-guarded one. See `docs/design/spec-guard-onion.md` §1.5.
+and (where it runs code) governed execution (the code-node sandbox). A conformant kernel is not a content-guarded one. See `docs/design/spec-guard-onion.md` §1.5.

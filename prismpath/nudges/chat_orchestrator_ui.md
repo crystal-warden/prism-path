@@ -1,13 +1,13 @@
 # Build: a "plan → approve → execute" chat interface (browser app)
 
 GOAL: a single-page browser chat UI for a **non-technical person**. They type a rough idea in plain
-language; an AI agent replies conversationally — asking a clarifying question or two and proposing a
+language; an AI agent replies conversationally; asking a clarifying question or two and proposing a
 PLAN (like a calm planning mode). The user reviews the plan and clicks an **"Approve & Build"** button.
 The UI then shows live BUILD PROGRESS as the agents construct the thing, and finally a **Download**
-link for the result. It must feel calm and obvious to someone non-technical — one clear action per step.
+link for the result. It must feel calm and obvious to someone non-technical; one clear action per step.
 
 This is a thin FRONT-END over an existing backend (the "orchestrator"). Do NOT build your own server,
-auth, accounts, or model calls — talk ONLY to the orchestrator HTTP API below.
+auth, accounts, or model calls; talk ONLY to the orchestrator HTTP API below.
 
 ## Orchestrator API (base URL: http://127.0.0.1:8771)
 - `POST /api/session`               body `{"prompt": "<user text>"}`  → `{"session_id","phase","reply"}`
@@ -24,7 +24,7 @@ auth, accounts, or model calls — talk ONLY to the orchestrator HTTP API below.
 ## Phase → UI
 - **planning / awaiting_approval:** show the conversation; a text box to reply. When phase becomes
   `awaiting_approval`, reveal a prominent **Approve & Build** button (calls `/approve`).
-- **executing:** show a live build panel driven by `build_status` events — iteration, elapsed time,
+- **executing:** show a live build panel driven by `build_status` events; iteration, elapsed time,
   current files, pass/fail. If `help_open` > 0, show a friendly note: "the team hit a tricky part, a
   human is helping." (No jargon.)
 - **done:** show success + a **Download** button (artifact), and let them start a new idea.

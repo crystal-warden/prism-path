@@ -1,8 +1,8 @@
-# Tier 6 (spiral) — routing accuracy vs bits
+# Tier 6 (spiral) · routing accuracy vs bits
 
 N=20000 readings/scenario, seed=7, correlated multi-dim telemetry.
 
-## Set 1+2 — bits to route, and fidelity parity (per dimensionality k)
+## Set 1+2 · bits to route, and fidelity parity (per dimensionality k)
 
 | k | cells | bands | linear bits | decision bits | route win | progressive bits | fidelity ratio |
 |---:|---:|---:|---:|---:|---:|---:|---:|
@@ -11,16 +11,16 @@ N=20000 readings/scenario, seed=7, correlated multi-dim telemetry.
 | 3 | 64 | 4 | 8.35 | 3.01 | 2.78x | 7.31 | 0.88 |
 | 4 | 256 | 4 | 11.12 | 3.06 | 3.63x | 8.76 | 0.79 |
 
-*Route win* = linear bits / decision bits (both route 100% correctly — decision-lossless). *Fidelity ratio* = spiral progressive (full quantized magnitude) / linear: ~1x means the win is progressiveness, not dropped data.
+*Route win* = linear bits / decision bits (both route 100% correctly; decision lossless). *Fidelity ratio* = spiral progressive (full quantized magnitude) / linear: ~1x means the win is progressiveness, not dropped data.
 
-## Set 3 — correlation makes the decision stream cheaper (k=3)
+## Set 3 · correlation makes the decision stream cheaper (k=3)
 
 | telemetry | decision bits | band entropy (bits) |
 |---|---:|---:|
 | correlated | 3.01 | 1.59 |
 | uniform | 3.9 | 1.38 |
 
-## Set 4 — survival under burst loss (k=3, Gilbert-Elliott)
+## Set 4 · survival under burst loss (k=3, Gilbert-Elliott)
 
 | regime | linear routed % | spiral routed % |
 |---|---:|---:|

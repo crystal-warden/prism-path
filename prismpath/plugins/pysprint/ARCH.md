@@ -1,4 +1,4 @@
-# Architecture contract — Python module improvement (pysprint gate)
+# Architecture contract · Python module improvement (pysprint gate)
 
 You are improving a single Python module, test-first. The rules:
 
@@ -6,7 +6,7 @@ You are improving a single Python module, test-first. The rules:
   that file. Emit it whole: `FILE: <path>` on its own line, then a fenced code block.
 - **The tests are the gate, and they are frozen.** `test_*.py` files encode the definition of
   done. Never edit them. Make the current requirement's test pass without breaking any other.
-- **Keep it importable.** A syntax error or an import-time exception fails every test at once —
+- **Keep it importable.** A syntax error or an import-time exception fails every test at once;
   the module must import cleanly after every edit.
 - **Standard library only**, plus whatever the module already imports. Add no new dependencies.
 - **Preserve the security posture.** This module (Mission Control) is loopback-only by design,

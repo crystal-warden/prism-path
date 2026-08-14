@@ -1,23 +1,23 @@
 # App architecture contract (onion + hexagonal hybrid)
 
 You are building a single-page interactive browser app as a SMALL, LAYERED project of multiple
-ES-module files — never one big file. Every file you write must conform to this architecture.
+ES-module files; never one big file. Every file you write must conform to this architecture.
 
 ## The three rings (dependencies point INWARD only)
 
-1. **CORE — the concept (innermost).** Pure domain logic: state, rules, transitions, scoring.
+1. **CORE; the concept (innermost).** Pure domain logic: state, rules, transitions, scoring.
    Plain data + functions/classes. **No DOM, no canvas, no audio, no timers, no `window`, no
    I/O.** It imports nothing from the outer rings; it could run unchanged in plain Node. This is
    "the concept" and it must stay stable as features come and go.
 
-2. **ONION ABSTRACTION — ports + application services (the compatibility layer).** Wraps the
+2. **ONION ABSTRACTION; ports + application services (the compatibility layer).** Wraps the
    core. Defines **PORTS**: the contracts the core needs from the outside world (e.g. `Renderer`,
    `Input`, `Clock`, `Audio`, `Storage`) as JSDoc typedefs / documented shapes. Holds the
    **application service(s)** that drive the core through those ports. This ring exists to keep
    the core and the plugins COMPATIBLE: plugins can change freely as long as they honor the
    ports, and the core never has to change. Depends only on the core.
 
-3. **HEXAGONAL PLUGINS — adapters (outer ring).** Each adapter is a **plugin** that implements
+3. **HEXAGONAL PLUGINS; adapters (outer ring).** Each adapter is a **plugin** that implements
    ONE port with a concrete technology: `adapters/render.js` (canvas), `adapters/input.js`
    (keyboard/touch), `adapters/audio.js` (WebAudio), `adapters/storage.js` (localStorage), …
    Adapters depend on the ports (inward) and **never on each other or on the core's internals.**
@@ -29,17 +29,17 @@ service. Swapping a plugin (e.g. canvas → SVG renderer) must require touching 
 and the composition root.
 
 ## Rules (non-negotiable)
-- **Dependency rule:** imports point inward — `adapters → ports → core`. If the core needs
+- **Dependency rule:** imports point inward; `adapters → ports → core`. If the core needs
   anything external, define a PORT and let an adapter provide it. The core imports nothing outward.
 - **Plugins are swappable and isolated:** no adapter imports another adapter.
 - **Composition root only** wires concrete implementations.
 - Use native ES modules (`<script type="module" src="main.js">`, relative imports). NO external
-  resources / CDNs, NO backend, NO logins, NO payments — everything is local files.
+  resources / CDNs, NO backend, NO logins, NO payments; everything is local files.
 
-## Tech-debt rule (HARD — pause and pay it down)
+## Tech-debt rule (HARD · pause and pay it down)
 - Keep every file **focused and small**. **If ANY file exceeds ~4,000 tokens (~16 KB), STOP
-  adding features and REFACTOR FIRST**: split that file along an architecture seam — extract a
-  cohesive core sub-module, a port, or a separate adapter — so each file is small and
+  adding features and REFACTOR FIRST**: split that file along an architecture seam; extract a
+  cohesive core sub-module, a port, or a separate adapter; so each file is small and
   single-purpose. An oversized file is the #1 tech-debt signal; pay the debt before it compounds.
 - Prefer many small, single-responsibility files over a few large ones.
 
