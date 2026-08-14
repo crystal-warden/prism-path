@@ -1,4 +1,4 @@
-# Supporting Evidence — STAGING (pending rows)
+# Supporting Evidence · STAGING (pending rows)
 
 *Append boundary for ledger overhauls (see `LEDGER_STANDARDS.md` §6). While a docs session overhauls
 `supporting-evidence.md`, the **dev session appends new evidence rows here**, starting at the next

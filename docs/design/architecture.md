@@ -1,11 +1,11 @@
 # Architecture
 
-PrismPath is layered so the **engine stays platform-agnostic** and everything target-specific
+PrismPath is layered so the **engine stays platform agnostic** and everything target specific
 lives behind one plugin interface. Two layers, one seam.
 
 ## 1. The flow kernel
 
-A pure, dependency-light core that turns a markdown file into a routed agent run.
+A pure, dependency light core that turns a markdown file into a routed agent run.
 
 ```
 parser.py ──▶ Graph ──▶ engine.run(graph, agent, router) ──▶ RunResult
@@ -15,28 +15,28 @@ parser.py ──▶ Graph ──▶ engine.run(graph, agent, router) ──▶ R
                                      └─ embedder.py (bge), llm_local.py (LLM fallback)
 ```
 
-- **`parser.py`** — `## heading` → node; `-> target: condition` → edge; YAML front-matter (`name`,
+- **`parser.py`**: `## heading` → node; `-> target: condition` → edge; YAML front matter (`name`,
   `start`); terminal detection (a node with no outgoing edges).
-- **`predicates.py`** — evaluates `when <expr>` over the agent's structured outcome. **No calls,
+- **`predicates.py`**: evaluates `when <expr>` over the agent's structured outcome. **No calls,
   attribute access, or subscripts** are permitted in an expression, so a `when` clause can never
   execute arbitrary code.
-- **`router.py`** — resolves semantic edges. `HybridRouter` embeds the outcome against each edge
-  condition and only escalates to a 1-shot LLM when the top-1↔top-2 margin is below `margin`.
-- **`engine.py`** — at each node: evaluate deterministic edges in document order (first true wins);
+- **`router.py`**: resolves semantic edges. `HybridRouter` embeds the outcome against each edge
+  condition and only escalates to a 1 shot LLM when the top 1↔top 2 margin is below `margin`.
+- **`engine.py`**: at each node: evaluate deterministic edges in document order (first true wins);
   if none match, hand the semantic edges to the router. Records a `StepLog` per transition
   (`info["used"]` ∈ `{deterministic, embed, llm, single, semantic}`).
 
 The kernel knows nothing about sprints, gates, or build targets.
 
-### The portable kernels — one spec, four implementations
+### The portable kernels: one spec, four implementations
 
-The decidable subset of the kernel is re-implemented, dependency-free, in three more languages —
+The decidable subset of the kernel is reimplemented, dependency free, in three more languages:
 JavaScript ([`portable/prismpath.mjs`](../../prismpath/portable/prismpath.mjs), browser/edge/Node), Rust
-(`prismpath-rs/`, native + WASM), and Go (`prismpath-go/`) — each certified against the frozen
+(`prismpath-rs/`, native + WASM), and Go (`prismpath-go/`), each certified against the frozen
 conformance vectors ([`portable/conformance/`](../../prismpath/portable/conformance/README.md): 1,079 predicate
-cases + 27 engine fixtures, bit-for-bit). The Python kernel stays the reference (vectors are
+cases + 27 engine fixtures, bit for bit). The Python kernel stays the reference (vectors are
 generated from it); the ports are runtime surfaces, and the tooling (validate/verify/test/lock/
-ci-report/lsp) deliberately lives only on the reference side — an asymmetry, not a gap.
+ci-report/lsp) deliberately lives only on the reference side: an asymmetry, not a gap.
 
 ## 2. The control plane
 
@@ -64,20 +64,20 @@ ci-report/lsp) deliberately lives only on the reference side — an asymmetry, n
 
 Supporting services:
 
-- **`orchestrator.py`** — a FastAPI front for a chat UI: `planning → awaiting_approval → executing →
+- **`orchestrator.py`**: a FastAPI front for a chat UI: `planning → awaiting_approval → executing →
   done`, streaming build status over SSE; on approval it launches `run_sprint.py` as a subprocess.
-- **`mission_control.py`** — a loopback-only console (`127.0.0.1`) that auto-discovers live sprints,
-  can start/stop/pause them, and records an append-only **action log** (`audit_log.py`).
-- **`swarm_runner.py`** — `make_swarm_agent(spec, backend="auto")` returns a PrismPath agent backed by
+- **`mission_control.py`**: a loopback only console (`127.0.0.1`) that autodiscovers live sprints,
+  can start/stop/pause them, and records an append only **action log** (`audit_log.py`).
+- **`swarm_runner.py`**: `make_swarm_agent(spec, backend="auto")` returns a PrismPath agent backed by
   the real swarm, falling back to `llm_local` when no backend is up.
-- **`retriever.py`** — dense retrieval over a turbovec docs index to ground the coder in real APIs.
-  The engine is index-agnostic; the path comes from the active gate plugin's `RAG_INDEX`.
+- **`retriever.py`**: dense retrieval over a turbovec docs index to ground the coder in real APIs.
+  The engine is index agnostic; the path comes from the active gate plugin's `RAG_INDEX`.
 
 ### The roles and build modes
 
-The loop is a **5-role pipeline** with hard boundaries: an **architect** designs a `BLUEPRINT.md` (file
-manifest + port contracts, no code), a **coder** implements one critic-chosen feature per turn, a
-**test-author** owns the headless specs, the **gate** validates deterministically, a **fixer** makes the
+The loop is a **5 role pipeline** with hard boundaries: an **architect** designs a `BLUEPRINT.md` (file
+manifest + port contracts, no code), a **coder** implements one critic chosen feature per turn, a
+**test author** owns the headless specs, the **gate** validates deterministically, a **fixer** makes the
 smallest change to pass it, and a **critic** reviews quality and blueprint adherence, then picks the next
 step or says DONE. Two build modes:
 
@@ -86,28 +86,28 @@ step or says DONE. Two build modes:
   build exactly one node per pass (the first `pending` whose `depends_on` are all `done`), embedding only
   that requirement plus the glossary, named specs, and what's already built.
 
-## 3. The seam — the gate plugin interface
+## 3. The seam: the gate plugin interface
 
 `SPRINT_GATE` (and `ORCH_TARGET`) selects the target. `"browser"` is built in (`gates.py`); any other
 value resolves via `plugins/load_gate(name)` to an optional plugin. **This is the only place a target's
-specifics live** — extractable to a standalone package/image. A plugin module exposes:
+specifics live**, extractable to a standalone package/image. A plugin module exposes:
 
 | attribute | purpose |
 |---|---|
 | `validate(proj) -> dict` | the gate: `{valid, errs, oversized, biggest_file, ...}` |
-| `HAS_SPEC_LAYER` | whether the gate runs unit specs the test-author owns |
-| `ARCH_PATH` | the architecture-contract file injected into builder prompts |
-| `LESSONS_PATH` | hard-won target lessons injected into the coder |
+| `HAS_SPEC_LAYER` | whether the gate runs unit specs the test author owns |
+| `ARCH_PATH` | the architecture contract file injected into builder prompts |
+| `LESSONS_PATH` | hard won target lessons injected into the coder |
 | `RAG_INDEX` | the docs vector index for grounding (or unset) |
 | `FILE_EXTS` | source extensions the engine collects |
 | `SOURCE_DIRS` / `KG_SOURCE_DIRS` / `CORE_DIR` / `ENTRY_FILES` | project **layout** the coder edits ("focus") |
-| `SPEC_SUFFIXES` / `TESTABLE_DIRS` | how the test-author detects specs and headlessly-exercisable modules |
+| `SPEC_SUFFIXES` / `TESTABLE_DIRS` | how the test author detects specs and headlessly exercisable modules |
 | `PLANNER_NOTE` | appended to the planner's system prompt (orchestrator) |
 | `BUILD_RULES` / `BUILD_RULES_SPEC` | target build discipline injected into the coder |
 
 The engine reads these through `getattr` with safe defaults, so with **no plugin** (the browser path)
-it degrades to an empty, layout-agnostic configuration and runs entirely on the built-in gate. A
+it degrades to an empty, layout agnostic configuration and runs entirely on the built in gate. A
 gate plugin is any module exposing this table's attributes (discovered via `plugins/registry.py`).
 
 > Design property: because the seam is a narrow ports/adapters boundary, adding a build target is a
-> new plugin module — not a change to the engine.
+> new plugin module, not a change to the engine.
