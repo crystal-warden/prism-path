@@ -1,0 +1,5 @@
+# Each node owns UART0 for a clean status channel (uart driver), so disable the console and all logging
+# on it. Wi-Fi + ESP-NOW are on by default. Target set with `idf.py set-target esp32`.
+CONFIG_ESP_CONSOLE_UART_NONE=y
+CONFIG_BOOTLOADER_LOG_LEVEL_NONE=y
+CONFIG_LOG_DEFAULT_LEVEL_NONE=y
