@@ -60,6 +60,20 @@ jobs:
       - name: Frozen conformance vectors (reference-drift side)
         run: python -m pytest prismpath/tests/test_conformance_vectors.py -q
 
+  # Docs gates (LEDGER_STANDARDS §7): the evidence ledger holds its schema, and the doc tree
+  # has no dead links or brand residue. Blocking since the v2 overhaul brought both to zero.
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Evidence-ledger lint (strict)
+        run: python tools/ledger_lint.py docs/research/supporting-evidence.md --strict
+      - name: Docs health (dead links, brand residue)
+        run: python tools/docs_health.py
+
   # Mission Control is an optional control-plane extra (FastAPI). The main test job installs numpy-only
   # and skips its tests (pytest.importorskip); this job installs the extra so the shipped control plane
   # is actually exercised in CI — a collection error here previously masked the WHOLE suite.
