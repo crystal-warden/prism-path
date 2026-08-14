@@ -1,22 +1,38 @@
-# PrismPath: agent workflows as data
+# PrismPath: a control plane you can prove
 
 [![ci](https://github.com/crystal-warden/prism-path/actions/workflows/ci.yml/badge.svg)](https://github.com/crystal-warden/prism-path/actions/workflows/ci.yml)
 &nbsp;[![license: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 &nbsp;[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.21816125.svg)](https://doi.org/10.5281/zenodo.21816125)
 
-**The document your team reads is the graph the engine runs.** Not a diagram exported from the code, not a
-wiki page that drifts from it. The Markdown file *is* the program: one artifact, read by people and
-executed by a kernel.
+**One signed policy, authored as a Markdown document, that decides byte identically from a Linux kernel to
+an 8 bit MCU, coordinates a swap across a wireless fleet, and is tamper evident by construction.**
+PrismPath is a decidable match action control plane: the entire policy is one inspectable, signed
+artifact, so you can prove it, port it, sign it, and hot swap it, and every proof is machine checked in CI.
 
-That single choice, **control flow as data instead of a callback**, is the whole personality of the
-project. A workflow you can read is a workflow you can **diff, lint, test, lock, and prove**: five verbs,
-each a shipped command (and the toolchain has many more), none of which you can point at a Python callback. A routing change becomes a
-three-line prose diff a non-engineer approves in a pull request. And the routing itself is a **spectrum,
-not a model call at every hop**: exact, free predicates where the logic actually lives, an LLM only where
-intent does. *Logic where logic exists, intent where it doesn't.*
+Provability is the whole point. Every routing decision is total and decidable (Level M), every safety
+property is model checked, and the exact same signed table runs identically across a dozen substrates,
+from the kernel to an FPGA fabric to bare metal silicon. And because that policy is a document your team
+can read, a workflow you can read is one you can **diff, lint, test, lock, and prove**, five shipped
+commands with no Python callback in sight: a routing change lands as a prose diff a non engineer approves,
+which the engine renders as a live before and after graph in the pull request itself.
 
-**[Try it in your browser.](https://www.crystalwardenlabs.com/playground)** The kernel runs client-side:
+**[Try it in your browser.](https://www.crystalwardenlabs.com/playground)** The kernel runs client side;
 nothing to install, nothing you type leaves the page.
+
+## One signed policy, proven everywhere
+
+- **Every substrate, byte identical.** The same table decides identically from a Linux kernel (eBPF/XDP)
+  to an FPGA fabric to bare metal MCUs across four ISAs (8 bit AVR, ARM Cortex-M33, RISC-V, Xtensa),
+  124/124 on the conformance subset each.
+  [hardware](prismpath-hw/README.md) · [conformance](prismpath/portable/conformance/README.md)
+- **Swapped across a fleet, verified per node.** Three wireless nodes reverify a signed table (refuse, do
+  not downgrade) and flip together with sub millisecond simultaneity, behind a two phase commit.
+  [mesh demo](prismpath-hw/mesh/README.md)
+- **Decidable and tamper evident.** Every decision is provably total (Level M) and travels over the Facet
+  protocol, a decision wire 67.6x smaller than OTLP, anchored to a Merkle log plus OpenTimestamps.
+  [spec](PROTOCOL.md) · [paper](docs/research/paper-facet-figueroa-quantization.md)
+
+Everything above is reproducible from this repo; the evidence is timestamped to Bitcoin.
 
 ## The whole idea in one file
 
