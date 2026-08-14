@@ -1,0 +1,4 @@
+# Fusion-pod first light: analog field (pot) -> baked Level M policy -> onboard LED brightness by band.
+cmake_minimum_required(VERSION 3.16)
+include($ENV{IDF_PATH}/tools/cmake/project.cmake)
+project(ppt_pot)

@@ -1,0 +1,6 @@
+# The binary PPT wire owns UART0 (the CP2102 bridge), so disable the console and all logging on it —
+# otherwise ESP-IDF log lines would corrupt the protocol. We drive UART0 with the uart driver directly.
+# Target is chosen with `idf.py set-target <esp32|esp32c6|...>` — this project is ISA-generic.
+CONFIG_ESP_CONSOLE_UART_NONE=y
+CONFIG_BOOTLOADER_LOG_LEVEL_NONE=y
+CONFIG_LOG_DEFAULT_LEVEL_NONE=y

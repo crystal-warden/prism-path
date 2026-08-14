@@ -1,0 +1,25 @@
+{
+ "board": "ppt-rp2350/1 rp2350-arm PPTM-v1",
+ "port": "/dev/ttyACM0",
+ "total": 1079,
+ "in_subset": 124,
+ "pass": 124,
+ "fail": 0,
+ "excluded": {
+  "not-level-m:field-vs-field": 281,
+  "not-level-m:disallowed-or-unparseable": 251,
+  "not-level-m:non-literal-collection": 114,
+  "not-level-m:constant-only": 141,
+  "non-scalar-value": 11,
+  "not-level-m:string-ordering": 119,
+  "not-level-m:substring-in": 36,
+  "not-level-m:nested-container": 1,
+  "float-value": 1
+ },
+ "latency_us": {
+  "min": 146,
+  "median": 298,
+  "max": 1594
+ },
+ "failures": []
+}

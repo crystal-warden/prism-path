@@ -1,0 +1,4 @@
+# PrismPath PPT interpreter on ESP32-C6 (ESP-IDF project).
+cmake_minimum_required(VERSION 3.16)
+include($ENV{IDF_PATH}/tools/cmake/project.cmake)
+project(ppt_esp32)
