@@ -63,6 +63,25 @@ spec-stable.
   RISC-V — with byte-identical exclusion reasons. One `.ppt`, two ISAs of one die, same decision:
   cross-ISA conformance, not just cross-language. Built from a single Pico SDK CMake project
   (`make arm` / `make riscv`); the ISA tag is chosen by the compiler.
+- **ESP32 Xtensa substrate** (`prismpath-hw/esp/`; evidence #98, staged). The same byte-exact
+  interpreter certifies **124/124 on an ESP32 (ESP-WROOM-32, Xtensa LX6)** over its UART, adding
+  **Xtensa** as a third MCU ISA — so 8-bit AVR, ARM, RISC-V, and Xtensa now all decide the signed
+  policy identically. One ISA-generic ESP-IDF project (ident + UART pins chosen at compile time from
+  `CONFIG_IDF_TARGET`) targets esp32 or esp32c6.
+- **On-device sensor → decision demo** (`prismpath-hw/rp2350/ppt_tof.c` + `vl53l0x.c`; evidence #99,
+  staged). The RP2350 reads a real **VL53L0X** time-of-flight sensor over I2C, forms the field vector
+  itself, and runs a signed Level M proximity policy **on-device** — distance routes to
+  contact/near/mid/far live, no host in the loop, the decision flipping exactly at the authored
+  100/300/800 mm thresholds. The first physical-input demonstrator since the FPGA fabric; the policy
+  `.ppt` is baked into flash from the same compiler every substrate uses.
+- **Coordinated fleet policy-swap over ESP-NOW** (`prismpath-hw/mesh/`; evidence #100, staged). Three
+  ESP32 nodes swap policy **together**: one table is broadcast, **re-verified on every node before it
+  is staged** (each follower re-hashes it and checks the id against a baked allowlist — a mismatch is
+  refused, not swapped), committed only after a quorum ACKs, and applied at a shared tick so the fleet
+  flips within **0.7 ms** (host-observed, serial jitter included). The multi-node analogue of the
+  single-node hot-swap (#87/#88) — same verify-then-swap / refuse-don't-downgrade contract, extended
+  across a mesh with a two-phase commit so no node flips alone. FNV-1a id/allowlist stands in for the
+  signature (Ed25519-on-the-mesh is the named follow-on).
 - **Context ledger — attest what a frozen model was conditioned on** (`prismpath/context_ledger.py`,
   mirrored in `prismpath-rs::durable::ContextLedger`; evidence #91). For a hardwired/frozen-weights
   model the context is the only mutable state, so it is the governance surface: an append-only
