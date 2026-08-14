@@ -31,22 +31,38 @@ sys.path.insert(0, str(REPO))
 import ppt_compile as pc
 from prismpath.parser import parse
 
-# The fused posture. Field order follows first appearance: tof_a -> 0, tof_b -> 1, arm -> 2, which must
-# line up with the node slots below. Lower ToF band = closer; higher arm band = more armed. {ARM} is the
-# arming threshold the two policies differ on (A=2 permissive, B=3 tightened).
+# The fused posture, fail-operational. Field order follows first appearance: tof_a -> 0, tof_b -> 1,
+# arm -> 2, which must line up with the node slots below. A live sensor reads band 0..3 (lower ToF =
+# closer, higher arm = more armed); a slot the mesh has NOT heard within the freshness window reads the
+# STALE sentinel 8. A dark sensor is a signal, not silence: while the system is armed (or a live
+# rangefinder is at contact) a dark sensor escalates to TAMPER (possible defeat); otherwise it drops to
+# DEGRADED and the fleet keeps deciding on whatever remains. Never serial, never blank. The `arm <= 3`
+# bounds keep the sentinel (8) from reading as "armed" in the threshold rules; ToF `<= n` rules exclude
+# it naturally. {ARM} is the arming threshold the two policies differ on (A=2 permissive, B=3 tightened).
 FUSE_FLOW = """---
 name: fusion_mesh
 start: fuse
 ---
 ## fuse
-Two rangefinders and an arming knob fused into one posture. Critical needs BOTH sensors close AND the
-system armed, a region no single input reaches alone. Everything below is a decided band, not a fade.
--> critical: when tof_a <= 1 and tof_b <= 1 and arm >= {ARM}
+Two rangefinders and an arming knob fused into one posture, resilient to a node going dark. A live
+sensor reads a band 0..3; an unheard sensor reads the STALE sentinel 8. Critical needs BOTH rangefinders
+close AND the system armed. A dark sensor escalates to tamper while armed or while a live rangefinder is
+at contact, and degrades otherwise, so the decision never goes silent. Everything is a decided band.
+-> critical: when tof_a <= 1 and tof_b <= 1 and arm >= {ARM} and arm <= 3
+-> tamper: when tof_a == 8 and arm >= {ARM} and arm <= 3
+-> tamper: when tof_b == 8 and arm >= {ARM} and arm <= 3
+-> tamper: when arm == 8 and tof_a <= 0
+-> tamper: when arm == 8 and tof_b <= 0
+-> degraded: when tof_a == 8 or tof_b == 8 or arm == 8
 -> warn: when tof_a <= 0 or tof_b <= 0
--> warn: when tof_a <= 1 and arm >= 1
--> warn: when tof_b <= 1 and arm >= 1
+-> warn: when tof_a <= 1 and arm >= 1 and arm <= 3
+-> warn: when tof_b <= 1 and arm >= 1 and arm <= 3
 -> ok: else
 ## critical
+-> end: when always
+## tamper
+-> end: when always
+## degraded
 -> end: when always
 ## warn
 -> end: when always
@@ -57,7 +73,7 @@ done
 """
 
 # fuse-node edge index -> posture name (same edge structure for both policies)
-VERDICTS = ["CRITICAL", "WARN", "WARN", "WARN", "OK"]
+VERDICTS = ["CRITICAL", "TAMPER", "TAMPER", "TAMPER", "TAMPER", "DEGRADED", "WARN", "WARN", "WARN", "OK"]
 EXPECT_FIELDS = {"tof_a": 0, "tof_b": 1, "arm": 2}
 
 # Node roles: MAC (from `esptool read_mac`) -> (slot, kind, label). Slot must match the field index the

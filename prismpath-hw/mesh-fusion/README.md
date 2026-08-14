@@ -45,15 +45,28 @@ two-node quorum, and every node flips at its own `local_now + 120 ms`. (The FNV 
 an Ed25519 signature, the named follow-on.) Hold the sensors in an A-CRITICAL state and a swap to B
 re-fuses the whole fleet to WARN without a sensor moving.
 
-## Fail safe
+## Fail operational, not fail silent
 
-A node needs all three bands **fresh** (heard within 1500 ms) to fuse; otherwise it reports `waiting`
-and kills its LED rather than deciding on stale data. Two failure modes are exercised:
+A distributed decision should not behave like a series circuit, where one dropped node kills the whole
+verdict. A slot the mesh has not heard within 1500 ms reads a **STALE sentinel band (8)** instead of
+being removed, so the signed table keeps deciding on it as a first-class input:
 
-- **Node loss**: a node dies, the survivors drop to `waiting (2/3 fresh)` and recover when it returns.
-- **Interference**: a UART digit `0`..`9` drops that many tens of percent of received verdicts (`X` sets a
-  99% blackout; the PREPARE/COMMIT control plane is never dropped). Fusion holds through ~50% loss,
-  degrades gracefully, and fails safe under a blackout, then recovers. It never fuses on stale data.
+- **Escalate on loss**: a rangefinder going dark *while the system is armed* (or while a live
+  rangefinder is at contact) reads as a possible defeat and escalates to **TAMPER**. A dark sensor is a
+  signal, not silence.
+- **Degrade otherwise**: a node dark while the scene is quiet drops to **DEGRADED**, so a problem is
+  flagged and the fleet keeps fusing whatever remains.
+- Because each node decides on what *it* can still hear, disagreement between nodes **localizes the
+  fault** (an isolated node reports DEGRADED) rather than blanking the fleet.
+
+Two failure modes are exercised:
+
+- **Node loss**: a node dies, the survivors escalate to TAMPER (if armed) or DEGRADED, keep fusing the
+  remaining sensors, and recover when it returns.
+- **Interference**: a UART digit `0`..`9` drops that many tens of percent of received verdicts (`X` sets
+  a 99% blackout; the PREPARE/COMMIT control plane is never dropped). Fusion holds through ~50% loss;
+  beyond that, slots age into the STALE sentinel and the posture degrades or escalates rather than going
+  quiet, then recovers when loss clears.
 
 ## Build, flash, run
 

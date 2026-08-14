@@ -42,7 +42,8 @@
 #define STACK_MAX   64
 #define LED_GPIO    2
 #define BCAST_MS    200        /* sense + broadcast + re-fuse cadence */
-#define STALE_MS    1500       /* a slot unheard longer than this drops out of the fusion */
+#define STALE_MS    1500       /* a slot unheard longer than this reads the STALE sentinel band */
+#define STALE_BAND  8          /* decidable sentinel fed to the fusion table for an unheard slot */
 
 #define SDA_GPIO    21
 #define SCL_GPIO    22
@@ -302,9 +303,9 @@ void app_main(void){
     }
 
     for(int i=0;i<N_SLOTS;i++){ bands[i]=-1; band_seen_us[i]=0; }
-    emit("node %02x (%s) up — slot=%u kind=%s active=fusion-%s, mesh ready ('R' swaps the rule)\r\n",mac[5],my_label,my_slot,my_kind==KIND_TOF?"TOF":"POT",pname(active_id));
+    emit("node %02x (%s) up — slot=%u kind=%s active=fusion-%s, mesh ready ('R' swaps rule; band 8 = sensor dark)\r\n",mac[5],my_label,my_slot,my_kind==KIND_TOF?"TOF":"POT",pname(active_id));
 
-    uint16_t seq=0; int64_t next_bcast=0; bool warn_phase=false; int64_t last_wait_emit=0;
+    uint16_t seq=0; int64_t next_bcast=0; bool warn_phase=false;
     for(;;){
         int64_t now=esp_timer_get_time();
         /* USB commands: 'R' swaps the fusion rule; a digit d sets simulated interference to d*10% drop; 'X' = blackout */
@@ -344,20 +345,22 @@ void app_main(void){
         if(now>=next_bcast){ next_bcast=now+BCAST_MS*1000;
             int8_t own=read_own_band(); bands[my_slot]=own; band_seen_us[my_slot]=esp_timer_get_time();
             send_verdict(my_slot,own,++seq);
-            int fresh=0; for(int i=0;i<N_SLOTS;i++) if(bands[i]>=0 && (now-band_seen_us[i])<(int64_t)STALE_MS*1000) fresh++;
-            if(fresh==N_SLOTS){
-                memset(regs,0,sizeof regs);
-                for(int i=0;i<N_SLOTS;i++){ wr32(regs+4+8*i,TY_INT); wr32(regs+8+8*i,bands[i]); }
-                uint8_t err=0; int8_t edge=evaluate(0,&err);
-                const char *posture=(err||edge<0||edge>=VERDICTS_N)?"?":VERDICTS[edge];
-                /* onboard LED: CRITICAL solid, WARN blink, OK off — identical on every node */
-                int lv=0; if(!strcmp(posture,"CRITICAL")) lv=1; else if(!strcmp(posture,"WARN")){ warn_phase=!warn_phase; lv=warn_phase; } else lv=0;
-                gpio_set_level(LED_GPIO,lv);
-                emit("[%s] pol=%s tof_a=%d tof_b=%d arm=%d -> %s\r\n",my_label,pname(active_id),bands[0],bands[1],bands[2],posture);
-            } else if(now-last_wait_emit>1000000){ last_wait_emit=now;
-                gpio_set_level(LED_GPIO,0);
-                emit("[%s] waiting: bands a=%d b=%d arm=%d (%d/%d fresh)\r\n",my_label,bands[0],bands[1],bands[2],fresh,N_SLOTS);
+            /* fail-operational: a slot we have not heard within STALE_MS reads the STALE sentinel, a
+               first-class decidable band. The signed table escalates (TAMPER) or degrades on it, never
+               blanks, so a dropped node localizes the fault instead of silencing the fleet. */
+            int8_t in[N_SLOTS];
+            memset(regs,0,sizeof regs);
+            for(int i=0;i<N_SLOTS;i++){
+                in[i] = (bands[i]>=0 && (now-band_seen_us[i])<(int64_t)STALE_MS*1000) ? bands[i] : (int8_t)STALE_BAND;
+                wr32(regs+4+8*i,TY_INT); wr32(regs+8+8*i,in[i]);
             }
+            uint8_t err=0; int8_t edge=evaluate(0,&err);
+            const char *posture=(err||edge<0||edge>=VERDICTS_N)?"?":VERDICTS[edge];
+            /* onboard LED: CRITICAL/TAMPER solid, DEGRADED/WARN blink, OK off — identical on every node */
+            int lv; if(!strcmp(posture,"CRITICAL")||!strcmp(posture,"TAMPER")) lv=1;
+            else if(!strcmp(posture,"DEGRADED")||!strcmp(posture,"WARN")){ warn_phase=!warn_phase; lv=warn_phase; } else lv=0;
+            gpio_set_level(LED_GPIO,lv);
+            emit("[%s] pol=%s a=%d b=%d arm=%d -> %s\r\n",my_label,pname(active_id),in[0],in[1],in[2],posture);
         }
         vTaskDelay(pdMS_TO_TICKS(5));
     }
