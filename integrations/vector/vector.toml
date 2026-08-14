@@ -1,0 +1,22 @@
+# Live Vector pipeline for the Facet decision-telemetry demo. Run from this directory:
+#   python3 gen_events.py | vector -c vector.toml            # writes vector_out.ndjson
+#   cargo run -q --manifest-path facet-sink/Cargo.toml -- \
+#     ../../adapters/fusion/flows/fusion_triage.md < vector_out.ndjson
+# A native `type = "facet"` Vector sink would slot in where the file sink sits today.
+
+data_dir = "./vector-data"
+
+[sources.in]
+type = "stdin"
+
+[transforms.parse]
+type = "remap"
+inputs = ["in"]
+source = '. = parse_json!(.message)'
+
+[sinks.facet]
+type = "file"
+inputs = ["parse"]
+path = "./vector_out.ndjson"
+encoding.codec = "json"
+framing.method = "newline_delimited"

@@ -1,0 +1,24 @@
+kind: ZarfPackageConfig
+metadata:
+  name: prismpath-policy-tampered
+  version: 0.1.0
+  description: "Negative control: a byte-flipped policy carrying an AUTHENTIC signature. The onDeploy verify must fail closed and abort the deploy. Run ../zarf/build.sh first."
+
+components:
+  - name: deploy-tampered-policy
+    required: true
+    description: "Delivers a tampered .ppt with the original valid manifest+sig; verify must reject it."
+    files:
+      - source: ../zarf/policy.tampered.ppt
+        target: deployed-tampered/policy.ppt
+      - source: ../zarf/policy.ppt.manifest.json
+        target: deployed-tampered/policy.ppt.manifest.json
+      - source: ../zarf/policy.ppt.manifest.sig
+        target: deployed-tampered/policy.ppt.manifest.sig
+      - source: ../zarf/authority.pub
+        target: deployed-tampered/authority.pub
+    actions:
+      onDeploy:
+        after:
+          - description: "verify the delivered policy (EXPECTED TO FAIL: image tampered)"
+            cmd: prismpath swap verify --ppt deployed-tampered/policy.ppt --pub deployed-tampered/authority.pub

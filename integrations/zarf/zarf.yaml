@@ -1,0 +1,32 @@
+kind: ZarfPackageConfig
+metadata:
+  name: prismpath-policy
+  version: 0.1.0
+  description: "Air-gapped delivery of a signed PrismPath policy: verified, envelope-bounded, and swapped on arrival."
+
+components:
+  - name: deploy-signed-policy
+    required: true
+    description: "Delivers a signed .ppt pack + its signed envelope, then proves and swaps it. Files land in ./deployed relative to where you run the deploy."
+    files:
+      - source: policy.ppt
+        target: deployed/policy.ppt
+      - source: policy.ppt.manifest.json
+        target: deployed/policy.ppt.manifest.json
+      - source: policy.ppt.manifest.sig
+        target: deployed/policy.ppt.manifest.sig
+      - source: authority.pub
+        target: deployed/authority.pub
+      - source: env1.envelope.json
+        target: deployed/env1.envelope.json
+      - source: env1.envelope.sig
+        target: deployed/env1.envelope.sig
+    actions:
+      onDeploy:
+        before:
+          - cmd: mkdir -p deployed/state
+        after:
+          - description: "verify the pack signature (authority key)"
+            cmd: prismpath swap verify --ppt deployed/policy.ppt --pub deployed/authority.pub
+          - description: "atomic swap: enforce envelope caps + anti-rollback, emit the receipt"
+            cmd: prismpath swap swap --ppt deployed/policy.ppt --pub deployed/authority.pub --envelope deployed/env1.envelope --out deployed/state

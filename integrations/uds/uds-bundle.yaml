@@ -1,0 +1,11 @@
+kind: UDSBundle
+metadata:
+  name: prismpath-policy
+  description: "Signed PrismPath policy delivery, composed as a UDS bundle (rides on the Zarf package)."
+  version: 0.1.0
+
+packages:
+  # The local Zarf package built in ../zarf (run its build.sh + `zarf package create` first).
+  - name: prismpath-policy
+    path: ../zarf
+    ref: 0.1.0

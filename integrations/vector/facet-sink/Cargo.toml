@@ -1,0 +1,17 @@
+[package]
+name = "facet-vector-sink"
+version = "0.1.0"
+edition = "2021"
+description = "Consume Vector-shaped events and emit the Facet decision wire (prismpath-telemetry-rs), with a DIL self-heal simulator."
+
+[[bin]]
+name = "facet-vector-sink"
+path = "src/main.rs"
+
+[dependencies]
+prismpath-rs = { path = "../../../prismpath-rs" }
+prismpath-telemetry-rs = { path = "../../../prismpath-telemetry-rs" }
+serde_json = "1"
+
+# Standalone crate: do not join the repo-root workspace.
+[workspace]
