@@ -1,3 +1,4 @@
 build/
 sdkconfig
 sdkconfig.old
+authority_ed25519.key
