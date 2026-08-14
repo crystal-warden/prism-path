@@ -1,5 +1,7 @@
 # Supporting Evidence · Validated Results Ledger
 
+**Ledger v2 · rows #1 to #100 · August 2026**
+
 *Every claim in the PrismPath papers, backed by a measured result, its provenance, and an honest
 verdict; negative results included. Written to survive a hostile read and to be merge-ready into the
 research paper (`docs/research/paper-routing-spectrum.md`) and engineering white paper
@@ -497,3 +499,16 @@ served locally. No number here depends on a cloud API.
 **Method:** `prismpath-hw/mesh/`; three ESP-WROOM-32 boards flashed with `ppt_mesh.c`, all carrying two compiled `.ppt` images baked to flash (`gen_mesh_tables.py` → `tables.h`: **policy A** `level < 300` permissive, **policy B** `level < 200` tightened, each 84 bytes, each tagged with its FNV-1a-32 id; `A=0xb3d16ba0`, `B=0xa4fdc82f`). Nodes gossip status and coordinate over **ESP-NOW** (connectionless broadcast, no AP). Poking one node over USB with `R` makes it coordinator; it runs a two phase commit: **PREPARE** broadcasts the target table + id → each follower recomputes `fnv1a32(received)` and checks it equals the announced id **and** the id is in its baked allowlist `{A,B}`; only then does it stage the table and **ACK** → the coordinator waits `ACK_WIN=500 ms` and proceeds only with a quorum (2 ACKs), else **ABORT** → **COMMIT** carries a `FLIP_DELAY=120 ms`; every node applies the staged table at *its own* `local_now + 120 ms`, so the flip lands together without a shared global clock. A host script (`orchestrate.py`) opens all three ports, triggers the rollout, and timestamps every node's flip.
 
 **Result:** reproducible live; baseline all three at `active=A verdict=ALLOW epoch=0` (at the test field `level=250`, policy A → ALLOW); after one `R`, the log shows `PREPARE seq=1 target=B` → both followers `PREPARE ok … staged — ACK` → coordinator `2 ACKs — COMMIT` → all three `FLIP → policy B verdict=DENY epoch=1`, then steady `active=B verdict=DENY epoch=1`. Host-observed flip spread across the three nodes: **0.7 ms** (3/3 flipped); and that includes USB-serial read jitter, so the on device spread is tighter. **Honest scope:** a demonstrator, not a certified sweep. The per node check is an **FNV-1a-32 id/allowlist** (fast integrity + pre vetting), standing in for a real signature; **Ed25519-on-the-mesh is the named follow-on**, at which point the check becomes cryptographic rather than integrity-only; the two phase quorum is fixed at 2 followers; and "simultaneous" means *commit + fixed local delay* (bounded by ESP-NOW receipt jitter and negligible same-MCU clock skew over 120 ms), not PTP-style clock sync. Provenance: `prismpath-hw/mesh/` (`ppt_mesh.c`, `gen_mesh_tables.py`, `main/tables.h`, `orchestrate.py`); three ESP-WROOM-32 boards; ESP-IDF v5.4.
+
+---
+
+## Revision history
+
+- **v1** (July 2026 consolidation, maintained through row #96, August 2026): the original ledger.
+  Last anchored pre-overhaul in `prismpath/evidence/facet_mcu_2026-08-13.SHA256SUMS` (`.ots`
+  alongside; earlier states in `substrates_kv_2026-08-12` and `crypto_agility_2026-08-13`).
+- **v2** (August 2026): this overhaul. Month granularity dates, the full Claim / Method / Result /
+  Provenance schema on every row, honest scope caveats reconciled per `LEDGER_STANDARDS.md` §3,
+  rows #97 to #100 folded in from staging, house style applied. Anchored in
+  `prismpath/evidence/ledger_v2_2026-08-13.SHA256SUMS` (`.ots` alongside); the anchor, not this
+  prose, is the authoritative timestamp.

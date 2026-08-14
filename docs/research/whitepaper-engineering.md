@@ -515,9 +515,9 @@ above answers "was reuse safe *then*"; production needs the question answered *c
 `lookup(doc, sample_rate=r)` flags a fraction of cache **hits** for shadowing: the adapter reuses the
 verdict *and* runs the real adjudicator, then feeds the comparison to `record_shadow()`. The corpus
 accumulates a live **reuse-error rate** reported alongside the hit rate (`python -m prismpath.prefilter
-monitor <dir>`), and an entry whose disagreement crosses a bound — on the **cumulative** rate *or* a
+monitor <dir>`), and an entry whose disagreement crosses a bound (on the **cumulative** rate *or* a
 bounded **recent window**, so an entry that was stable for months and then drifts is pulled within a
-few samples rather than after its lifetime rate erodes; is **quarantined**: `_eligible()` drops it
+few samples rather than after its lifetime rate erodes) is **quarantined**: `_eligible()` drops it
 from matching without deleting the evidence, and one situation goes back to the LLM tier (fail safe:
 a false pull costs one call; a missed drift compounds). Invalidation is likewise structural, not TTL:
 `learn(..., policy_hash=h)` stamps each verdict with the flow it was adjudicated under (the SOC
