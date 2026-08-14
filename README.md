@@ -131,7 +131,7 @@ table, and the circuit or program never changes:
   in-kernel against the frozen corpus. On a live-traffic mirror it classifies real packets at **132 to 182
   ns/packet (~5.5 to 7.6 Mpps/core)**, and its **policy hot-swaps live from a Markdown edit**: repopulate
   the running program's maps, no detach, no reload. Each swap can be cryptographically **authorized,
-  envelope-checked, and audited** (secure hot-swap, published as prior art —
+  envelope-checked, and audited** (secure hot swap, published as prior art:
   [`docs/design/spec-secure-hotswap.md`](docs/design/spec-secure-hotswap.md)).
   ([`prismpath-ebpf/`](prismpath-ebpf/README.md))
 
@@ -216,7 +216,7 @@ same ports:
 - **Cyber-physical fusion** (`adapters/fusion/`): fuses a SIEM's cyber verdict with a live IMU's
   physical posture through one Level M tessellation, emitting a self-framing decision wire measured at
   ~45× under batched JSON (integrity apparatus counted) and proven end to end on the live rig
-  ([evidence #82–#86](docs/research/supporting-evidence.md)).
+  ([evidence #82 to #86](docs/research/supporting-evidence.md)).
 
 ## Where PrismPath is the wrong tool
 
