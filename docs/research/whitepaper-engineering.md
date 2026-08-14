@@ -951,7 +951,17 @@ both architectures — #90). The substrate ladder has since reached its floor: t
 images are decided by an **8-bit ATmega328P** (Arduino Uno R3, 16 MHz, 2 KB RAM), a 1,720-byte
 evaluator matching the reference **124/124** byte-for-byte (predicate/single-hop, #92); and the kernel
 swap is now **double-buffered** — a single-word atomic bank flip proven torn-free under a concurrent
-swap-storm on both architectures (#93).
+swap-storm on both architectures (#93). Three further MCU instruction sets then joined the floor tier:
+**ARM Cortex-M33 and RISC-V Hazard3**, both cores of one RP2350 die built from one source file (124/124
+each, #97), and **Xtensa LX6** on an ESP32 (124/124, #98). Four MCU ISAs now decide the same signed
+policy identically, on top of the language kernels, the in kernel eBPF target, and the FPGA fabric: the
+portability claim is no longer "the table runs everywhere we ported it" but "one signed table, byte
+identical decisions across every instruction set we can put it on." Two demonstrators ride that
+substrate and earn one sentence each: an RP2350 reads a real VL53L0X time of flight sensor over I2C and
+routes a signed proximity policy on device, the band flipping exactly at the authored thresholds (#99);
+and three ESP32s perform a coordinated fleet policy swap over ESP-NOW, each node re-verifying the
+received table before staging it, committed in two phases, the whole fleet flipping within 0.7 ms
+(#100).
 The routing spectrum's **physical latency hierarchy** is no longer a projection but a
 measurement: the fabric answers a deterministic routing decision in **5–21 cycles — a provable
 100–420 ns worst case** at the shipped 50 MHz clock, in 1,064 LUTs (2.0% of the part); the CPU
@@ -966,7 +976,14 @@ Several further capabilities have since landed on the same decidable base. **Cyb
 (`adapters/fusion/`, August 2026) tessellates a SIEM's cyber verdict and a live IMU's physical posture
 into one Level M table, and measures the fused decision wire on the whole real triage backlog — ~1.5
 bytes per alert with its integrity apparatus (Merkle roots, epoch chaining, ACK channel) counted, run
-end to end on the live rig — where the high-value coincident bands stay honestly empty. **Secure signed
+end to end on the live rig — where the high-value coincident bands stay honestly empty. That decision
+wire is now a named, normatively specified protocol: **Facet** (`Facet/1`), carrying **Figueroa
+quantized** symbols whose codebook is agreed from the shared signed policy rather than transmitted; the
+specification is [`PROTOCOL.md`](../../PROTOCOL.md) and the companion paper is
+[`paper-facet-figueroa-quantization.md`](paper-facet-figueroa-quantization.md), which measures the wire
+against OTLP, the industry standard telemetry protocol: ~1.5 bytes per decision, 66.9× under OTLP
+protobuf and 4.7× under zstd compressed batched OTLP at the exact measured O1 of 1.516 B/alert (#95
+records 67.6× and 4.8× with O1 rounded to 1.5). **Secure signed
 policy hot-swap** (`prismpath/policy_pack.py` + `policy_host.py`, published as prior art in
 `docs/design/spec-secure-hotswap.md`, August 2026) replaces a running Level M policy only when the pack is
 Ed25519-authorized, inside a signed envelope, monotonically versioned, atomically applied, and audited to
@@ -983,7 +1000,7 @@ below-floor suite and none downgrades past a migration phase (algorithm-level an
 statically); the runtime refuses a swap whose declared suite's provider is unavailable rather than
 weakening it, delegating every cryptographic operation to a vetted provider — a control plane, not a
 cipher.
-Ledger rows #82–#94.
+Ledger rows #82–#96.
 
 ---
 

@@ -43,7 +43,8 @@ bit-for-bit, **risk-controlled calibration** that *derives* the escalation thres
 finite-sample risk guarantee, a decidable
 **static-analysis** pass ("your flow compiles"), a **polarity lint** that catches the embedder's
 negation blind-spot at authoring time, **Markdown flow tests** that run without a model, a
-one-way **LangGraph importer**, and a benchmark-gated **decision-preserving telemetry** adapter that
+one-way **LangGraph importer**, and a benchmark-gated **decision preserving telemetry** adapter (the
+**Facet protocol**, [`PROTOCOL.md`](../../PROTOCOL.md)) that
 transmits only the minimum sufficient statistic for a flow's routing decisions. We further describe **durable, resumable execution** — atomic
 checkpoints with flow-hash-bound resume and a human-in-the-loop queue, and a **commit-as-state
 Flow-Ledger** in which each gate-green unit is a content-addressed git proof-commit and "done" is a
@@ -984,27 +985,35 @@ flow with no reload**, repopulating the running program's table maps in place: t
 the policy" property carried onto the kernel substrate — and that swap is now **double-buffered**, a
 single-word atomic bank flip proven torn-free under a concurrent swap-storm on both architectures (#93).
 **The same signed table images also run on an 8-bit ATmega328P** (Arduino Uno R3, 16 MHz, 2 KB RAM): a
-1,720-byte evaluator decides the declared subset **124/124 byte-identically** to the reference
-(predicate/single-hop, #92) — the minimal-viable floor of the substrate ladder. Artifacts, evidence logs, and
-OpenTimestamps-anchored hashes: [`prismpath-hw/`](../../prismpath-hw/README.md) and
-[`prismpath-ebpf/`](../../prismpath-ebpf/README.md) (ledger rows #72–#93). **Decision-preserving
-telemetry (delivered, benchmark-gated; August 2026).** The same decidability has a consequence off the
+1,720 byte evaluator decides the declared subset **124/124 byte for byte** against the reference
+(predicate/single hop, #92), the minimal viable floor of the substrate ladder. Three further MCU ISAs
+have since joined it: ARM Cortex-M33 and RISC-V Hazard3 (both cores of one RP2350 die, from one source
+file, 124/124 each, #97) and Xtensa LX6 (ESP32, 124/124, #98), so four MCU instruction sets now decide
+the same signed policy identically. Artifacts, evidence logs, and
+OpenTimestamps anchored hashes: [`prismpath-hw/`](../../prismpath-hw/README.md) and
+[`prismpath-ebpf/`](../../prismpath-ebpf/README.md) (ledger rows #72 to #100). **Decision preserving
+telemetry: the Facet protocol (delivered, benchmark gated; August 2026).** The same decidability has a
+consequence off the
 routing path: because a flow's routes are decidable functions of a few `field OP const` thresholds, the
 coarsest symbol that still resolves every decision is the *minimum sufficient statistic* for that flow's
-telemetry. An adapter (`adapters/telemetry/`) extracts those cells from the flow, quantizes a reading to
-one small symbol per decision-relevant field, and entropy-codes the stream on a self-framing Fibonacci
-wire; a frozen decisions-preserved corpus (boundary-probing readings routed identically through the
-wire's quantize/code/decode/reconstruct round-trip) guards the invariant the way the portable vectors
-guard the kernel. On modeled channels the decision stream holds ~2 bits per reading on a wide-range field
-independent of magnitude (~14–16× vs fixed-width, ~1.1–3.1× vs a delta+varint baseline); delivery
-self-heals over the repo's real Merkle primitive with selective retransmission multiples cheaper than a
-full resend under Gilbert-Elliott burst loss; and a Tier-6 decision-first spiral packs correlated
-multi-dimensional state so one band ID routes correctly at 1.9–3.6× fewer bits than the per-field wire for
-two-to-four dimensions (no win at one dimension, by design). We are explicit about its maturity: a Python
-reference validated on synthetic/modeled data (not field-proven), benchmark-gated so it stops cheaply if a
-margin fails, and only partly built out: a word-packed byte format and the spiral have landed, while a
-hardware shift-register codec and a vector-quantization tier are designed but not built. Its priority date
-is OpenTimestamps-anchored (`adapters/telemetry/evidence/`). Ledger row #81.
+telemetry. That map, from a reading to one small symbol per decision relevant field, is **Figueroa
+quantization**, and the wire that carries it is **the Facet protocol** (`Facet/1`); both are normatively
+specified in [`PROTOCOL.md`](../../PROTOCOL.md), with Zeckendorf (Fibonacci) coding as the symbol coding
+component, so this paper cites the terms rather than re-defining them. The reference implementation
+(`adapters/telemetry/`) extracts the cells from the flow and codes the stream on the self framing wire;
+a frozen decisions preserved corpus (boundary probing readings routed identically through the
+wire's quantize/code/decode/reconstruct round trip) guards the invariant the way the portable vectors
+guard the kernel. On modeled channels the decision stream holds ~2 bits per reading on a wide range field
+independent of magnitude (~14 to 16× vs fixed width, ~1.1 to 3.1× vs a delta+varint baseline); delivery
+self heals over the repo's real Merkle primitive with selective retransmission multiples cheaper than a
+full resend under Gilbert-Elliott burst loss; and a Tier 6 decision first spiral packs correlated
+multi dimensional state so one band ID routes correctly at 1.9 to 3.6× fewer bits than the per field wire
+for
+two to four dimensions (no win at one dimension, by design). We are explicit about its maturity: a Python
+reference validated on synthetic/modeled data (not field proven), benchmark gated so it stops cheaply if a
+margin fails, and only partly built out: a word packed byte format and the spiral have landed, while a
+hardware shift register codec and a vector quantization tier are designed but not built. Its priority date
+is OpenTimestamps anchored (`adapters/telemetry/evidence/`). Ledger row #81.
 
 **Cyber-physical fusion (delivered, measured on the live rig; August 2026).** The same decidable
 match-action fragment composes across *modalities*: a fusion adapter (`adapters/fusion/`) tessellates a
