@@ -29,7 +29,7 @@ nothing to install, nothing you type leaves the page.
   not downgrade) and flip together with sub millisecond simultaneity, behind a two phase commit.
   [mesh demo](prismpath-hw/mesh/README.md)
 - **Decidable and tamper evident.** Every decision is provably total (Level M) and travels over the Facet
-  protocol, a decision wire 67.6x smaller than OTLP, anchored to a Merkle log plus OpenTimestamps.
+  protocol, a decision wire 66.9x smaller than OTLP, anchored to a Merkle log plus OpenTimestamps.
   [spec](PROTOCOL.md) · [paper](docs/research/paper-facet-figueroa-quantization.md)
 
 Everything above is reproducible from this repo; the evidence is timestamped to Bitcoin.

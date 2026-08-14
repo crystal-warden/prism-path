@@ -73,6 +73,8 @@ jobs:
         run: python tools/ledger_lint.py docs/research/supporting-evidence.md --strict
       - name: Docs health (dead links, brand residue)
         run: python tools/docs_health.py
+      - name: Arithmetic lint (recompute cross-artifact ratios)
+        run: python tools/arith_lint.py --strict
 
   # Mission Control is an optional control-plane extra (FastAPI). The main test job installs numpy-only
   # and skips its tests (pytest.importorskip); this job installs the extra so the shipped control plane

@@ -82,5 +82,11 @@ To let a dedicated docs session overhaul the ledger while development continues:
 `python tools/ledger_lint.py docs/research/supporting-evidence.md` checks: month-granularity dates,
 contiguous/unique numbering, the mandatory row sections, and the unreconciled-caveat review list. It
 runs in report mode (exit 0) by default and `--strict` (nonzero on hard violations) for a
-definition-of-done target. It is wired into CI as a blocking gate **only once the current overhaul
-brings it to zero**: until then it is the worklist, not a red build.
+definition-of-done target.
+
+The CI `docs:` job now runs three blocking gates: `ledger_lint --strict` (this schema),
+`docs_health` (dead links, brand residue), and `arith_lint --strict`, which recomputes every
+cross-artifact numeric ratio from its canonical bench JSON and fails on any drift, honoring the
+append-only rule (the superseded pre-#84 ratios stay where an annotation keeps them). The arithmetic
+gate exists because a ratio can drift silently between two artifacts even when the schema and links
+are clean, exactly the way the OTLP ratio did before it was caught.
