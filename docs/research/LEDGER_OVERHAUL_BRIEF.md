@@ -33,6 +33,36 @@ history.** Specific guidance (verify against the rows before applying):
 
 Also fix the **11 schema gaps** the lint flags (rows missing a labelled `Provenance:` — #65–#71, #76–#78 — or `Result:` — #86): add the missing labelled section from the row's existing content.
 
+## Additional scope (added 2026-08-13 by the dev session)
+
+The dev session's work landed on `main` (2026-08-13; commits `64a76e7` hardware, `98f2807` Facet
+protocol; OTS-anchored via `prismpath/evidence/facet_mcu_2026-08-13.SHA256SUMS`). These items are now
+unblocked.
+
+1. **Adopt the final Facet / Figueroa-quantization vocabulary across `docs/research/`.** The dev session
+   added `PROTOCOL.md` (main) as the normative source of truth: **Figueroa quantization** (the primitive),
+   **the Facet protocol** (`Facet/1`), with Zeckendorf cited as the coding component. Papers cite
+   `PROTOCOL.md` rather than re-defining the terms.
+2. **Finalize the new paper** `docs/research/paper-facet-figueroa-quantization.md` (dev-session draft):
+   verify every cited number against its artifact, tighten, and cross-link from the engineering paper.
+3. **Substrate + demonstrator update to the engineering paper** — *only after the hardware work is
+   committed* (rows #97–#100 in `supporting-evidence.pending.md`): four MCU ISAs now decide identically
+   (AVR / ARM Cortex-M33 / RISC-V Hazard3 / Xtensa) on top of the language kernels, eBPF, and the FPGA
+   fabric — this strengthens the portability claim and belongs in the portability/substrate section. The
+   ToF (physical input → on-device decision) and the ESP-NOW coordinated fleet swap are *demonstrators*:
+   a sentence or a figure, not a section.
+4. **Style sweep, house rule (from the dev session, 2026-08-13): no em/en-dashes AND minimize hyphens.**
+   Sweep the whole committed doc corpus (the ledger rows `#1-#100`, `CHANGELOG.md`, the hardware READMEs,
+   and any other `docs/`): remove every em-dash and en-dash; open or reword hyphenated compound modifiers.
+   **Keep** a hyphen only where it is part of a proper name (`ChaCha20-Poly1305`, `ESP-NOW`, `SHA-256`,
+   `FNV-1a`), a code identifier, or math (subtraction). `PROTOCOL.md` and
+   `paper-facet-figueroa-quantization.md` are the finished style exemplars; match them. (The dev session
+   already applied this to those two files and the mesh README; the rest of the corpus is yours.)
+5. **Fix the 1.49 vs 1.5 rounding.** `adapters/fusion/bench/otlp_results.md` rounds the OTLP-over-JSON
+   ratio to "1.5x"; the true value (and the Facet paper) is **1.49x**. Correct the results doc.
+   (The fold-in of rows #97-#100 from `supporting-evidence.pending.md` is already covered under
+   Merge-back below; de-dash and de-hyphenate them as you fold them in.)
+
 ## Versioning deliverables (LEDGER_STANDARDS §5)
 
 1. Add a version header near the top: `**Ledger v2 · rows #1–#96 · <Month YYYY>**`.
