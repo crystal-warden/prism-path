@@ -6,6 +6,10 @@ change to this protocol after the first published run must be recorded in §7 wi
 
 *Crystal Warden Labs, 2026-07-29. Companion to `docs/design/spec-guard-onion.md`.*
 
+*Origin: this protocol and the guard it measures were first built and exercised in a separate first
+party project; PrismPath adopted them as its safety floor and measurement companion (see the ledger's
+"On origins" note). The evidence and numbers are unchanged.*
+
 ---
 
 ## 1. What is being measured, and why

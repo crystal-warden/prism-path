@@ -24,6 +24,20 @@ memory). Consolidated July 2026; maintained through row #100 (August 2026).*
 > (the strongest class above) and their evidence
 > set is additionally OTS-anchored (`prismpath-hw/evidence/SHA256SUMS` + `.ots`, Bitcoin block
 > 961390): rerun the gates, or verify the hashes.
+>
+> **On origins (cross-project lineage).** PrismPath did not grow in a vacuum, and the record does not
+> pretend it did. The author's earlier first party projects supplied several of the primitives measured
+> here: the retrieval port behind the knowledge library nodes, the guard safety layer and the bypass
+> measurement protocol built to test it, the vector compression ideas that became the decision wire,
+> and the hardware and kernel bases (the initial FPGA work, the eBPF kernel, and the Merkle ledger
+> machinery all trace to earlier projects, adjusted to carry PrismPath's tables and proofs), among
+> others. The hardware direction itself came from a design insight rather than a port: a Level M
+> decision table is already a lookup table. The PrismPath kernel and SDK are new, and every adapter
+> (SOC, compliance, telemetry, fusion) was built during PrismPath's development, after the initial SDK
+> existed. None of it was a simple lift and land; each borrowed primitive was reworked and re-proven
+> against PrismPath's frozen conformance gates to earn its row. The lineage is part of the validation:
+> primitives hardened in earlier projects, then proven again inside workloads and gates that did not
+> exist when they were written.
 
 ---
 
