@@ -1,4 +1,4 @@
-# Arty Z7-20 / PYNQ bring-up — days 6–7 quickstart
+# Arty Z7-20 / PYNQ bring-up · days 6 to 7 quickstart
 
 Everything above the board is already certified: same images, same protocol, spec → C →
 RTL → AXI, zero divergence. This is the remaining physical checklist.
@@ -8,7 +8,7 @@ RTL → AXI, zero divergence. This is the remaining physical checklist.
 1. microSD (PYNQ-Z1 v3.1.1, flashed + verified 2026-08-06) into the Arty's underside slot.
 2. **JP4 boot jumper → SD** (it was on JTAG for the day-5 probing).
 3. Ethernet from the Arty to the LAN; micro-USB stays connected (power + serial console).
-4. Power on. First boot takes ~1–2 min (filesystem resize). The DONE LED lights when the
+4. Power on. First boot takes ~1 to 2 min (filesystem resize). The DONE LED lights when the
    PYNQ base overlay configures; LD4/LD5 flash when Linux is up.
 5. Find the board: check the router's DHCP table for hostname `pynq`, or watch the serial
    console (115200) for the address. Login: the default PYNQ credentials.
@@ -30,7 +30,7 @@ Then start the field bridge pointed at the **board**:
 python3 field_bridge.py --host <board-ip> --port 9317
 ```
 
-The board console prints routed decisions with per-sample µs round-trips; edits deploy
+The board console prints routed decisions with per sample µs round-trips; edits deploy
 with `./deploy.sh` and hot-reload mid-stream (`*** TABLE RELOADED …`).
 
 ## Verification bundle inputs to record on demo day
