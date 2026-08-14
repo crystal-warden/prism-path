@@ -205,11 +205,10 @@ every other kernel uses, and can execute whole flows.
 - **`sudo ./loader <ppt> runbatch <records.bin> [names.txt]`**: the same, batched: one BPF load, many
   register files (e.g. one per real alert), each traced to a terminal and checked against the reference.
 
-**Real-flow evidence.** The 12-node Level M SOC flow `adapters/soc/flows/wazuh_triage.md` has been run
-through the eBPF router in kernel on a **live Wazuh alert stream** (`run_stream_demo.py` classifies each
-real alert with the live LLM, builds the routing register file, no synthetic values): 27/27 real alerts
-routed identically in kernel and by the reference, branching correctly (`benign` vs `stage_containment`)
-on real verdicts.
+**Real-flow evidence.** The 12-node Level M flow `prismpath/flows/wazuh_triage.md` has been run
+through the eBPF router in kernel on a real alert stream (`run_stream_demo.py` projects each real
+alert's level onto the flow's routing action and builds the register file): 27/27 real alerts
+routed identically in kernel and by the reference, branching correctly (`benign` vs `stage_containment`).
 
 ### Conformance framing (don't say "declared subset")
 

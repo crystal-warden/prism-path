@@ -17,8 +17,10 @@ Strategies:
   mtu         fill to the MTU, flush; also flush on a max-latency cap  (the hybrid, recommended)
 
     python adapters/fusion/bench/wire.py --imu            # steady ~6 Hz sensor corpus (on disk)
-    python adapters/fusion/bench/wire.py --live [--insecure] [--max-docs N]   # bursty SIEM
-    python adapters/fusion/bench/wire.py --from-fixture   # CI
+    python adapters/fusion/bench/wire.py --from-fixture   # CI (synthetic bursty stream)
+
+The bursty cyber arrival pattern is fed here from the synthetic fixture. Any decision source that
+yields (timestamp, level) events is a valid connector; the archived SIEM connector was the v1 example.
 """
 from __future__ import annotations
 
@@ -33,7 +35,7 @@ from typing import Callable, List, Tuple
 HERE = Path(__file__).resolve().parent
 ADAPTER = HERE.parent
 REPO = ADAPTER.parent.parent
-for p in (str(REPO / "adapters" / "telemetry"), str(REPO / "adapters" / "soc"), str(REPO), str(ADAPTER)):
+for p in (str(REPO / "adapters" / "telemetry"), str(REPO), str(ADAPTER)):
     if p not in sys.path:
         sys.path.insert(0, p)
 
@@ -88,39 +90,6 @@ def events_from_imu() -> List[Tuple[float, dict]]:
                 out.append((float(n["ts"]), pj.fused_reading(3, "ignore", n)))
     out.sort(key=lambda e: e[0])
     return out
-
-
-def events_from_live(src, min_level: int, max_docs) -> List[Tuple[float, dict]]:
-    """Real bursty SIEM stream: alert level + projected action, at real arrival timestamps."""
-    import datetime as dt
-    getattr(src, "_ensure_auth", lambda: None)()
-    import requests
-    out, after, seen = [], None, 0
-    while True:
-        body = {"size": 500, "query": {"range": {"rule.level": {"gte": min_level}}},
-                "sort": [{"timestamp": "asc"}, {"_id": "asc"}]}
-        if after is not None:
-            body["search_after"] = after
-        r = requests.post(f"{src.url}/{src.index}/_search", auth=src.auth, verify=src.verify,
-                          json=body, timeout=60)
-        r.raise_for_status()
-        hits = r.json()["hits"]["hits"]
-        if not hits:
-            break
-        for h in hits:
-            s = h["_source"]
-            ts = s.get("timestamp")
-            lvl = (s.get("rule") or {}).get("level")
-            if ts is None or lvl is None:
-                continue
-            epoch = dt.datetime.fromisoformat(ts.replace("Z", "+00:00")).timestamp()
-            out.append((epoch, pj.fused_reading(int(lvl), pj.soc_action_from_level(int(lvl)),
-                                                pj.ASSUME_STILL)))
-            seen += 1
-            if max_docs and seen >= max_docs:
-                return sorted(out, key=lambda e: e[0])
-        after = hits[-1]["sort"]
-    return sorted(out, key=lambda e: e[0])
 
 
 def events_from_fixture(n=2000, hz=6.0) -> List[Tuple[float, dict]]:
@@ -393,23 +362,15 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     src = ap.add_mutually_exclusive_group(required=True)
     src.add_argument("--imu", action="store_true")
-    src.add_argument("--live", action="store_true")
     src.add_argument("--from-fixture", action="store_true")
     ap.add_argument("--min-level", type=int, default=3)
     ap.add_argument("--max-docs", type=int, default=None)
     ap.add_argument("--overhead", choices=list(OVERHEAD), default="tcp_tls")
-    ap.add_argument("--insecure", action="store_true")
     ap.add_argument("--out", default=str(HERE))
     args = ap.parse_args(argv)
 
     if args.imu:
         events, corpus = events_from_imu(), "imu"
-    elif args.live:
-        if args.insecure:
-            import os
-            os.environ.setdefault("SIEM_VERIFY_TLS", "0")
-        from siem import source_from_env
-        events, corpus = events_from_live(source_from_env(), args.min_level, args.max_docs), "siem"
     else:
         events, corpus = events_from_fixture(), "fixture"
 

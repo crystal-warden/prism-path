@@ -35,31 +35,10 @@
     "connector.py"
   ],
   "adapters": {
-    "soc": {
-      "code": [
-        "../adapters/soc/wazuh_triage_agent.py",
-        "../adapters/soc/measure_prefilter.py"
-      ],
-      "flows": [
-        "../adapters/soc/flows/wazuh_triage.md",
-        "../adapters/soc/flows/wazuh_triage_decomposed.md"
-      ]
-    },
-    "compliance": {
-      "code": [
-        "../adapters/compliance/compliance_adapter.py",
-        "../adapters/compliance/emit.py",
-        "../adapters/compliance/rollup.py"
-      ],
-      "flows": [
-        "../adapters/compliance/flows/nist_800171_generic.md"
-      ]
-    },
     "fusion": {
       "code": [
         "../adapters/fusion/projection.py",
         "../adapters/fusion/census.py",
-        "../adapters/fusion/live_capture.py",
         "../adapters/fusion/bench/bandwidth.py"
       ],
       "flows": [
@@ -80,27 +59,6 @@
     "ledger_runner.py"
   ],
   "domain_nouns": {
-    "soc": [
-      "wazuh",
-      "etbert",
-      "et-bert",
-      "opnsense",
-      "suricata",
-      "mitre",
-      "lolbas",
-      "att&ck",
-      "threat_class",
-      "containment",
-      "malware"
-    ],
-    "compliance": [
-      "control_id",
-      "cmmc",
-      "800-171",
-      "poam",
-      "hipaa",
-      "soc2 control"
-    ],
     "tutor": [
       "learner",
       "pedagog",

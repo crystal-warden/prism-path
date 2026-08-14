@@ -4,12 +4,12 @@ Two cyber paths feed the SAME field contract:
 
 - `soc_action_from_level` — the DECIDABLE projection, used by the month-scale census where
   calling an adjudicator per alert is neither viable nor needed. Its constants are not invented
-  here: 12 is the wazuh_triage flow's own containment edge (`rule_level >= 12` ->
-  stage_containment), 7 is the SOC adapter's triage poll floor (`poll(min_level=7)`), and the
-  fallback mirrors the escalation-default. Artifacts fed by this path must say so.
-- `soc_action_from_verdict` — the REAL adjudicator path, mirroring the register-file mapping in
-  `prismpath-ebpf/run_stream_demo.py`: only `recommended_action` is consumed, and anything
-  missing or out-of-vocabulary clamps to "watch" (escalation-default, never silent-benign).
+  here: 12 is the triage flow's own containment edge (`rule_level >= 12` -> stage_containment),
+  7 is that flow's triage floor, and the fallback mirrors the escalation-default. Artifacts fed
+  by this path must say so.
+- `soc_action_from_verdict` — the adjudicator path, for any decision source that emits a
+  `recommended_action`: only that field is consumed, and anything missing or out-of-vocabulary
+  clamps to "watch" (escalation-default, never silent-benign).
 
 The IMU side normalizes the sensor bridge's NDJSON rows (`prismpath-hw/bridge/field_bridge.py`)
 across the observed schema drift: session1 predates the `dev_mg` field and uses the raw

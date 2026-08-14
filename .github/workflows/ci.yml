@@ -94,10 +94,9 @@ jobs:
   # The bounded adapters (adapters/*) are additive and arch-guard-isolated, each shipping its own test
   # suite. They are self-rooted — each adapter's tests put their own directory on sys.path — so a single
   # combined collection across adapters clashes; each adapter therefore runs as its own pytest invocation.
-  # Install stays lean: numpy + hypothesis (compliance property tests) + requests (soc SIEM client) +
-  # jsonschema (compliance emit-doc validation, a lazy import inside emit.py). The compliance
-  # semantic-retrieve path top-level-imports sentence-transformers, but no test exercises it, so the heavy
-  # ML extra is deliberately left out — CI stays fast and offline, like the main test job.
+  # Install stays lean: the telemetry and fusion offline suites need only numpy + pytest. The fusion
+  # bench's heavier extras (opentelemetry for the OTLP baseline, zstandard, cryptography) are lazy /
+  # importorskip, so a bare numpy+pytest environment still passes — CI stays fast and offline.
   adapters:
     runs-on: ubuntu-latest
     strategy:
@@ -110,13 +109,9 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install
-        run: pip install numpy pytest hypothesis requests jsonschema
+        run: pip install numpy pytest
       - name: Telemetry adapter tests
         run: python -m pytest adapters/telemetry -q
-      - name: SOC adapter tests
-        run: python -m pytest adapters/soc -q
-      - name: Compliance adapter tests
-        run: python -m pytest adapters/compliance -q
       - name: Fusion adapter tests
         run: python -m pytest adapters/fusion -q
 

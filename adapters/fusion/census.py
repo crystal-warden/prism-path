@@ -1,6 +1,6 @@
 """Band-population census for the fusion_triage tessellation.
 
-Weights every ring of the spiral with REAL data: the cyber axis from the live SIEM backlog
+Weights every ring of the spiral with REAL data: the cyber axis from an alert-level backlog
 (a level histogram — under the decidable projection the cyber marginal IS the level histogram,
 so one aggregation replaces a 64k document pull), the physical axis from the recorded sensor
 sessions in prismpath-hw/evidence/.
@@ -16,8 +16,10 @@ Two pairings, both labeled, neither time-coincident:
 Committed artifacts are aggregates only: no alert content, agent names, hostnames, or IPs
 (tests/test_census.py enforces this against the committed file).
 
-    python adapters/fusion/census.py --live [--insecure] [--min-level 7]
     python adapters/fusion/census.py --from-fixture [path]
+
+The cyber axis is fed here from an NDJSON level backlog. Any decision source that yields a
+`rule.level` histogram is a valid connector; the archived SIEM connector was the v1 example.
 """
 from __future__ import annotations
 
@@ -32,7 +34,7 @@ from typing import Dict, Iterable, Optional, Tuple
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parent.parent
-for p in (str(REPO / "adapters" / "telemetry"), str(REPO / "adapters" / "soc"), str(REPO), str(HERE)):
+for p in (str(REPO / "adapters" / "telemetry"), str(REPO), str(HERE)):
     if p not in sys.path:
         sys.path.insert(0, p)
 
@@ -52,8 +54,8 @@ POSTURE_SESSIONS = [
 ]
 
 PROJECTION_RULE = ("soc_action = 'contain' if rule_level >= 12 else 'watch' if rule_level >= 7 "
-                   "else 'ignore' (the wazuh_triage flow's own containment edge and the SOC "
-                   "adapter's poll floor; decidable, NOT an adjudicator verdict)")
+                   "else 'ignore' (the triage flow's own containment edge and triage floor; "
+                   "decidable, NOT an adjudicator verdict)")
 
 CAVEATS = [
     "The pairings are NOT time-coincident: cyber and physical streams were recorded in "
@@ -68,33 +70,6 @@ CAVEATS = [
 
 
 # --------------------------------------------------------------- cyber marginal
-
-def _agg(src, body: dict) -> dict:
-    """One read-only _search aggregation against the source's index."""
-    getattr(src, "_ensure_auth", lambda: None)()
-    import requests
-    r = requests.post(f"{src.url}/{src.index}/_search", auth=src.auth, verify=src.verify,
-                      json=body, timeout=60)
-    r.raise_for_status()
-    return r.json()
-
-
-def cyber_marginal_live(src) -> Tuple[Dict[int, int], dict]:
-    """Level histogram + query metadata. Under the projection this IS the cyber marginal."""
-    r = _agg(src, {"size": 0, "aggs": {
-        "levels": {"terms": {"field": "rule.level", "size": 50}},
-        "oldest": {"min": {"field": "timestamp"}},
-        "newest": {"max": {"field": "timestamp"}},
-    }})
-    hist = {int(b["key"]): int(b["doc_count"])
-            for b in r["aggregations"]["levels"]["buckets"]}
-    meta = {
-        "index_pattern": src.index,
-        "span": {"oldest": r["aggregations"]["oldest"].get("value_as_string"),
-                 "newest": r["aggregations"]["newest"].get("value_as_string")},
-    }
-    return hist, meta
-
 
 def cyber_marginal_ndjson(path: Path) -> Tuple[Dict[int, int], dict]:
     hist: Counter = Counter()
@@ -225,26 +200,16 @@ def build_artifact(cyber_hist: Dict[int, int], query_meta: dict, min_level: int,
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
-    mode = ap.add_mutually_exclusive_group(required=True)
-    mode.add_argument("--live", action="store_true", help="aggregate the live SIEM indexer (read-only)")
-    mode.add_argument("--from-fixture", nargs="?", const=str(HERE / "fixtures" / "alerts_synth.ndjson"),
-                      help="replay a flat NDJSON of {level: int} rows")
+    ap.add_argument("--from-fixture", nargs="?", const=str(HERE / "fixtures" / "alerts_synth.ndjson"),
+                    default=str(HERE / "fixtures" / "alerts_synth.ndjson"),
+                    help="replay a flat NDJSON of {level: int} rows (the alert-level backlog connector)")
     ap.add_argument("--min-level", type=int, default=7)
     ap.add_argument("--include-derived", action="store_true",
                     help="include session rows whose dev_mg is derived (instantaneous, not peak-hold)")
-    ap.add_argument("--insecure", action="store_true",
-                    help="SIEM_VERIFY_TLS=0 for the stock self-signed single-box install")
     ap.add_argument("--out", default=None, help="output path (default evidence/census_YYYY-MM.json)")
     args = ap.parse_args(argv)
 
-    if args.live:
-        if args.insecure:
-            import os
-            os.environ.setdefault("SIEM_VERIFY_TLS", "0")
-        from siem import source_from_env
-        cyber_hist, meta = cyber_marginal_live(source_from_env())
-    else:
-        cyber_hist, meta = cyber_marginal_ndjson(Path(args.from_fixture))
+    cyber_hist, meta = cyber_marginal_ndjson(Path(args.from_fixture))
 
     artifact = build_artifact(cyber_hist, meta, args.min_level,
                               include_derived=args.include_derived)

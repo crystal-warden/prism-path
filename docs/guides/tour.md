@@ -104,9 +104,9 @@ else:
 ```
 
 In a flow it's just a node with deterministic edges on the cached action; see
-[`prismpath/flows/wazuh_triage.md`](../../prismpath/flows/wazuh_triage.md) (`vector_prefilter`). **Measured live on SOC
+[`prismpath/flows/wazuh_triage.md`](../../prismpath/flows/wazuh_triage.md) (`vector_prefilter`). **Measured live on
 alert triage: ~59% of alerts auto resolve at threshold 0.97 → ~2.4× capacity** before the LLM
-tier is touched ([use case](../research/soc-triage-case-study.md)).
+tier is touched.
 
 This is **use as needed, not an engine default**: nothing invokes it implicitly. It pays off
 only when one node dominates cost, inputs genuinely recur, and a prior verdict is still valid

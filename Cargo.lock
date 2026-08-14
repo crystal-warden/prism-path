@@ -207,17 +207,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "prismpath-fusion-rs"
-version = "0.1.0"
-dependencies = [
- "hex",
- "prismpath-rs",
- "prismpath-telemetry-rs",
- "serde_json",
- "sha2",
-]
-
-[[package]]
 name = "prismpath-hotswap-rs"
 version = "0.1.0"
 dependencies = [

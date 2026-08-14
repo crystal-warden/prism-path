@@ -8,8 +8,8 @@ today. The decision streams carry the four fields at partition resolution only �
 sufficient telemetry, not a lossless alert record.
 
 Baselines (per alert):
-  B0  compact JSON of the full indexer _source        (what is shipped today)
-  B1  compact JSON of normalize_wazuh_hit(hit)        (the SOC adapter's slimmed alert)
+  B0  compact JSON of the full source record          (what is shipped today)
+  B1  compact JSON of the normalized alert            (the source's slimmed record)
   B2  compact JSON of the four fused decision fields  (same information, JSON-framed)
   B3  zlib-9 (and zstd-19 when importable) over the batch NDJSON of B0 and B2
       (the buffered-batch bound: batch compressors are not self-framing or line-rate)
@@ -25,8 +25,10 @@ Ours (per alert, overhead itemized, never hidden):
 Shared-config assumption (stated): the receiver holds the flow — the policy hash is the
 binding — so graph/partitions are not per-stream bytes.
 
-    python adapters/fusion/bench/bandwidth.py --live [--insecure] [--max-docs N]
     python adapters/fusion/bench/bandwidth.py --from-ndjson fixtures/alerts_synth.ndjson
+
+The alert stream is fed here from NDJSON. Any decision source that yields {level: int} records
+is a valid connector; the archived SIEM connector was the v1 example.
 """
 from __future__ import annotations
 
@@ -43,7 +45,7 @@ HERE = Path(__file__).resolve().parent
 ADAPTER = HERE.parent
 REPO = ADAPTER.parent.parent
 for p in (str(REPO / "adapters" / "telemetry"), str(REPO / "adapters" / "telemetry" / "bench"),
-          str(REPO / "adapters" / "soc"), str(REPO), str(ADAPTER)):
+          str(REPO), str(ADAPTER)):
     if p not in sys.path:
         sys.path.insert(0, p)
 
@@ -65,34 +67,6 @@ LOSS_REGIMES = (("light burst", 0.02, 0.5), ("heavy burst", 0.08, 0.3))
 
 
 # ---------------------------------------------------------------- ingestion
-
-def page_all(src, min_level: int = 7, page_size: int = 500,
-             max_docs: Optional[int] = None) -> Iterator[dict]:
-    """search_after pager (read-only). ElasticSource.search has no pagination and the index's
-    max_result_window defaults to 10k, so a full triage pull needs this."""
-    getattr(src, "_ensure_auth", lambda: None)()
-    import requests
-    seen = 0
-    after = None
-    while True:
-        body = {"size": page_size,
-                "query": {"range": {"rule.level": {"gte": min_level}}},
-                "sort": [{"timestamp": "asc"}, {"_id": "asc"}]}
-        if after is not None:
-            body["search_after"] = after
-        r = requests.post(f"{src.url}/{src.index}/_search", auth=src.auth,
-                          verify=src.verify, json=body, timeout=60)
-        r.raise_for_status()
-        hits = r.json()["hits"]["hits"]
-        if not hits:
-            return
-        for h in hits:
-            yield h
-            seen += 1
-            if max_docs is not None and seen >= max_docs:
-                return
-        after = hits[-1]["sort"]
-
 
 def hits_from_ndjson(path: Path, max_docs: Optional[int] = None) -> Iterator[dict]:
     """Fixture replay: each flat row acts as its own _source (mechanics only — fixture byte
@@ -273,12 +247,10 @@ def write_results(outdir: Path, data: dict) -> None:
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
-    mode = ap.add_mutually_exclusive_group(required=True)
-    mode.add_argument("--live", action="store_true")
-    mode.add_argument("--from-ndjson", type=str)
+    ap.add_argument("--from-ndjson", type=str, required=True,
+                    help="replay a flat NDJSON of {level: int} rows (the alert-level backlog connector)")
     ap.add_argument("--min-level", type=int, default=7)
     ap.add_argument("--max-docs", type=int, default=None)
-    ap.add_argument("--insecure", action="store_true")
     ap.add_argument("--out", type=str, default=None)
     args = ap.parse_args(argv)
 
@@ -287,21 +259,11 @@ def main(argv=None) -> int:
     parts = q.build_partitions(graph)
     layout = sp.SpiralLayout(graph, NODE)
 
-    if args.live:
-        if args.insecure:
-            import os
-            os.environ.setdefault("SIEM_VERIFY_TLS", "0")
-        from siem import normalize_wazuh_hit, source_from_env
-        src = source_from_env()
-        hits = page_all(src, min_level=args.min_level, max_docs=args.max_docs)
-        col = collect(hits, normalize_wazuh_hit)
-        source, synthetic = f"live:{src.index}", False
-    else:
-        path = Path(args.from_ndjson)
-        hits = (h for h in hits_from_ndjson(path, args.max_docs)
-                if int(h["_source"].get("level", 0)) >= args.min_level)
-        col = collect(hits, lambda h: h["_source"])
-        source, synthetic = f"fixture:{path.name}", True
+    path = Path(args.from_ndjson)
+    hits = (h for h in hits_from_ndjson(path, args.max_docs)
+            if int(h["_source"].get("level", 0)) >= args.min_level)
+    col = collect(hits, lambda h: h["_source"])
+    source, synthetic = f"fixture:{path.name}", True
 
     n = len(col["readings"])
     if n == 0:

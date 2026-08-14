@@ -8,6 +8,17 @@ spec stable.
 
 ## [Unreleased]
 
+### Removed
+- **Pruned two unvalidatable adapters and the redundant native crate; genericized fusion.** The
+  `adapters/soc/` and `adapters/compliance/` adapters and the `prismpath-fusion-rs` crate were archived
+  out of the shipped repo (preserved on device), along with the fusion adapter's `live_capture.py` live
+  capture harness and the `cw-triage` systemd poller units. The fusion adapter is reframed as **the
+  decision fusion plane**: it joins any N decision sources into one Level M decidable, provable fused
+  decision carried on the Facet wire, with the cyber plus IMU pairing kept as its v1 worked example and
+  the SIEM source demoted to one example connector (archived). The reference adapters are now telemetry
+  and fusion; CI drops the soc and compliance test steps and the fusion suite stays green. The removed
+  adapters' historical evidence rows are retained and annotated, not rewritten.
+
 ### Changed
 - **The eBPF live hot swap is now double buffered and proven atomic under concurrency** (evidence
   #93), closing the "still element-wise (not double-buffered)" caveat from #88. The `ppt_net`

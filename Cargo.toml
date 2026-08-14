@@ -1,11 +1,10 @@
 # Native (Python-free) PrismPath crates — the deployment path for where Python cannot run.
-# See prismpath-rs/CONFORMANCE.md for the parity story. Satellite crates (hot-swap, fusion) are
+# See prismpath-rs/CONFORMANCE.md for the parity story. Satellite crates (hot-swap) are
 # added to `members` as they are scaffolded.
 [workspace]
 resolver = "2"
 members = [
     "prismpath-rs",
     "prismpath-telemetry-rs",
-    "prismpath-fusion-rs",
     "prismpath-hotswap-rs",
 ]

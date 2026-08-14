@@ -1015,10 +1015,11 @@ margin fails, and only partly built out: a word packed byte format and the spira
 hardware shift register codec and a vector quantization tier are designed but not built. Its priority date
 is OpenTimestamps anchored (`adapters/telemetry/evidence/`). Ledger row #81.
 
-**Cyber-physical fusion (delivered, measured on the live rig; August 2026).** The same decidable
-match action fragment composes across *modalities*: a fusion adapter (`adapters/fusion/`) tessellates a
-SIEM's cyber verdict and a live IMU's physical posture into one Level M table whose bands are the joint
-decision, decidable the same way a single-modality flow is. Over the whole real triage backlog
+**The decision fusion plane (delivered, measured on the live rig; August 2026).** The same decidable
+match action fragment composes across *sources*: the fusion adapter (`adapters/fusion/`) joins any N
+decision sources into one Level M table whose bands are the joint decision, decidable the same way a
+single-source flow is. The v1 worked example tessellates a cyber triage verdict and a live IMU's
+physical posture. Over the whole real triage backlog
 (64,484 level-≥7 alerts) the fused decision wire measures ~1.5 bytes per alert with its integrity
 apparatus (Merkle roots, epoch chaining, ACK channel) counted; 1,992× under the raw alert JSON and 45×
 under a minimal four-field JSON on *payload*, and ~45× under batched JSON on the *wire* once per packet

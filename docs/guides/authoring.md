@@ -384,7 +384,7 @@ the checkpoint is reached, and **resumes from the ledger**: each pass seeds `sta
 from `done_set()`, so the flow's `observe`/`fetch` node skips items already proven in git: a run
 stopped mid-stream restarts at the first item with no green commit, with no processed-list to keep
 in sync. Make side effects idempotent with `upsert_jsonl(path, record, key=...)` so a replayed item
-never double-appends. Reference: `flows/wazuh_triage.md` + `wazuh_triage_agent.py` (`SPRINT_LEDGER=1`).
+never double-appends. Reference: `prismpath/flows/wazuh_triage.md` (`SPRINT_LEDGER=1`).
 
 ---
 
@@ -516,7 +516,7 @@ node's inputs recur near-identically, put a **prefilter node** in front of it ba
 A **hit requires two thresholds**: similarity ≥ `threshold` (default 0.97: same situation?) and
 the stored verdict's confidence ≥ `min_conf` (default 0.8: was the prior verdict trustworthy?).
 The reuse is logged with the matched key + similarity, so auto-resolutions stay auditable.
-Reference implementation: `flows/wazuh_triage.md` (`vector_prefilter`) + `wazuh_triage_agent.py`
+Reference implementation: `prismpath/flows/wazuh_triage.md` (`vector_prefilter`)
 (measured live: ~59% auto-resolve → ~2.4× capacity).
 
 **Use as needed: this is a pattern, not a default.** The engine never invokes it; you wire it

@@ -1,14 +1,4 @@
-# Out-of-band timers: Flow-Ledger anchoring + SOC triage
-
-## SOC triage poller (`cw-triage`)
-
-`cw-triage.service` + `cw-triage.timer` run one triage cycle every 5 minutes against the SIEM
-selected by `SIEM_KIND` (wazuh | elastic | ndjson | splunk; see `adapters/soc/siem.py`).
-Edit the `Environment=` lines in the service (SIEM endpoint/credentials, `SOC_STATE_DIR`, the
-LLM endpoint) before enabling; TLS verification to the indexer is **on by default**;
-`SIEM_CA_CERT` for a private CA, `SIEM_VERIFY_TLS=0` only for self-signed lab boxes. Install
-as user units exactly like the ledger timers below. With `SPRINT_LEDGER=1` each handled alert
-becomes a git proof-commit and the poller resumes from the ledger.
+# Out-of-band timers: Flow-Ledger anchoring
 
 # Flow-Ledger anchoring timers (out-of-band, #53)
 

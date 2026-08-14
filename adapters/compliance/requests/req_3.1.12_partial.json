@@ -1,1 +1,0 @@
-{"control_id":"3.1.12","boundary":"CUI enclave","evidence":[{"type":"config","source":"VPN export","text":"Remote access is via VPN with MFA; an allow-list identifies the permitted remote-access methods; VPN ACLs control which sessions are allowed. No evidence of remote-session logging, monitoring, or review was submitted."}]}

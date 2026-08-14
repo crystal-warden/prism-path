@@ -4,7 +4,7 @@
  "flow_sha256": "f7aa7328367caa5f573017cd536cb168d7444692d2b385cdd2df18174e83c47b",
  "node": "correlate",
  "query": {
-  "index_pattern": "wazuh-alerts-*",
+  "index_pattern": "alert-backlog",
   "span": {
    "oldest": "2026-07-09T17:10:57.332Z",
    "newest": "2026-08-12T05:19:19.084Z"
@@ -16,7 +16,7 @@
    "at_or_above_12": 3
   }
  },
- "projection_rule": "soc_action = 'contain' if rule_level >= 12 else 'watch' if rule_level >= 7 else 'ignore' (the wazuh_triage flow's own containment edge and the SOC adapter's poll floor; decidable, NOT an adjudicator verdict)",
+ "projection_rule": "soc_action = 'contain' if rule_level >= 12 else 'watch' if rule_level >= 7 else 'ignore' (the triage flow's own containment edge and triage floor; decidable, NOT an adjudicator verdict)",
  "cyber_marginal": {
   "7": 9950,
   "8": 51075,

@@ -126,19 +126,3 @@ def test_pure_routing_logs_are_excluded(fname):
         pytest.skip(f"{fname} not present in this checkout")
     rows = [json.loads(l) for l in path.read_text().splitlines() if l.strip()]
     assert all(pj.normalize_imu(r) is None for r in rows)
-
-
-# ------------------------------------------------------------------- live path
-
-@pytest.mark.live
-def test_live_adjudicator_verdict_feeds_the_same_field():
-    import sys
-    sys.path.insert(0, str(REPO / "adapters" / "soc"))
-    import wazuh_triage_agent as agent
-    from siem import source_from_env
-
-    alerts = source_from_env().poll(min_level=7, size=2)
-    assert alerts, "live SIEM returned no alerts"
-    for a in alerts:
-        verdict = agent.classify_verdict(a, f"rule {a['rule_id']} on agent {a['agent']}")
-        assert pj.soc_action_from_verdict(verdict) in pj.SOC_ACTIONS

@@ -249,7 +249,7 @@ The payoff is testability and reuse. The core is exercised with fake adapters an
 second use case is a new adapter rather than a fork.
 
 Six ports here: Ingestion, Retrieval, Adjudicator, Action/Sink, Attestation, Deferral. Two adapters
-prove the shape: [SOC alert triage](../adapters/soc/) and [compliance](../adapters/compliance/).
+prove the shape: [decision-preserving telemetry](../adapters/telemetry/) and [the decision fusion plane](../adapters/fusion/).
 
 **How it's enforced rather than merely intended:** [`tools/arch_guard.py`](../tools/arch_guard.py)
 scans the core for domain vocabulary. A word like `alert`, `SIEM`, or `learner` appearing in core
@@ -296,7 +296,7 @@ Where it lives: [`ledger.py`](../prismpath/ledger.py), [`ledger_ots.py`](../pris
 **Abstention**: a classifier declining to answer. Here: escalating to the LLM. See idea 3.
 
 **Adapter**: an implementation of a port, holding all the domain-specific knowledge.
-[SOC](../adapters/soc/) · [compliance](../adapters/compliance/) · [guide](../adapters/ADAPTER_GUIDE.md)
+[telemetry](../adapters/telemetry/) · [fusion](../adapters/fusion/) · [guide](../adapters/ADAPTER_GUIDE.md)
 
 **Air-gapped**: a machine deliberately kept off any network. Drives the RFC-3161 ledger tier.
 [`ledger_airgap.py`](../prismpath/ledger_airgap.py)
@@ -494,7 +494,6 @@ centroids make it few-shot.
 | [research/whitepaper-engineering.md](research/whitepaper-engineering.md) | the engineering white paper |
 | [research/supporting-evidence.md](research/supporting-evidence.md) | every claim → its measured result |
 | [research/bypass-measurement.md](research/bypass-measurement.md) | the pre registered safety protocol |
-| [research/soc-triage-case-study.md](research/soc-triage-case-study.md) | a measured deployment |
 
 ### The four kernels
 
@@ -589,8 +588,8 @@ prismpath lsp         # language server for editors
 | [`prismpath/editor/`](../prismpath/editor/README.md) | editor integrations |
 | [`prismpath/flows/`](../prismpath/flows/) | reference flows (program data) |
 | [`prismpath/policies/`](../prismpath/policies/) | the statutory floor + the P1 lockfile |
-| [`adapters/soc/`](../adapters/soc/) | SIEM alert triage |
-| [`adapters/compliance/`](../adapters/compliance/) | compliance adjudication |
+| [`adapters/telemetry/`](../adapters/telemetry/) | decision-preserving telemetry codec |
+| [`adapters/fusion/`](../adapters/fusion/) | the decision fusion plane |
 | [`tools/arch_guard.py`](../tools/arch_guard.py) | boundary enforcement (Signal-1) |
 | [`tools/docs_health.py`](../tools/docs_health.py) | doc/claim coverage checks |
 | [`research/`](../research/) | exploratory scripts behind the evidence ledger |
@@ -613,7 +612,7 @@ and the script that produced it; then the relevant paper section.
 **"I'm evaluating this for production."**
 [architecture](design/architecture.md) → [SPEC.md](../SPEC.md) →
 [portability levels](../prismpath/portable/README.md) (P0 flows have no ML dependency at all) →
-[SECURITY.md](../SECURITY.md) → [the SOC case study](research/soc-triage-case-study.md).
+[SECURITY.md](../SECURITY.md) → [the evidence ledger](research/supporting-evidence.md).
 
 **"I want to understand the safety story, including its limits."**
 [guard onion spec](design/spec-guard-onion.md) →

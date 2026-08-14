@@ -39,9 +39,9 @@ PrismPath is an open-source framework that treats **agent workflows as data**. O
 
 - [x] **Git Flow-Ledger (`ledger.py`)**: Gate-green proof-commits on dedicated orphan refs (`refs/prismpath/runs/*`).
 - [x] **Air-Gap Attestation Suite (`ledger_airgap.py`)**: Provenance manifests, human-override tracking, and OpenTimestamps / RFC-3161 anchoring.
-- [x] **NIST SP 800-171 Reference Adapter**: Dual catalog support (Rev 2 & official NIST OSCAL Rev 3) with schema-validated **OSCAL AR/POA&M** and **CycloneDX 1.6** emission.
-- [x] **SOC Triage Adapter Refinements**: Production SIEM integrations; a `SIEMSource` ingestion port with Elasticsearch/OpenSearch (env-configured, TLS-verified), Wazuh, and NDJSON file sources (Splunk best-effort) + systemd poller units; and automatic prefilter cache tuning (`prefilter.tune`, a Wilson-bound risk-certified operating point derived from the deployment's own adjudication history).
-- [x] **Third-Party Connector SDK**: `BaseConnector` covering all six hexagonal ports (Ingestion, Retrieval, Adjudicator, Action/Sink, Attestation, Deferral) + `PayloadFlattener` schema-flattening middleware + the one-line plugin-registry pattern; the SOC adapter is the migration proof.
+- [x] **NIST SP 800-171 Reference Adapter**: Dual catalog support (Rev 2 & official NIST OSCAL Rev 3) with schema-validated **OSCAL AR/POA&M** and **CycloneDX 1.6** emission. _(Adapter later archived out of the shipped repo; preserved on device.)_
+- [x] **SOC Triage Adapter Refinements**: Production SIEM integrations; a `SIEMSource` ingestion port with Elasticsearch/OpenSearch (env-configured, TLS-verified), Wazuh, and NDJSON file sources (Splunk best-effort) + systemd poller units; and automatic prefilter cache tuning (`prefilter.tune`, a Wilson-bound risk-certified operating point derived from the deployment's own adjudication history). _(Adapter later archived out of the shipped repo; preserved on device.)_
+- [x] **Third-Party Connector SDK**: `BaseConnector` covering all six hexagonal ports (Ingestion, Retrieval, Adjudicator, Action/Sink, Attestation, Deferral) + `PayloadFlattener` schema-flattening middleware + the one-line plugin-registry pattern; the SOC adapter was the migration proof.
 
 ### Phase 4: Documentation & Repo-Surface Hardening (Complete)
 

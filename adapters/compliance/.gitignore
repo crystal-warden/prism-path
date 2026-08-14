@@ -1,8 +1,0 @@
-__pycache__/
-*.pyc
-deferrals/
-out/
-out_reports/
-reports_live/
-.pytest_cache/
-.hypothesis/

@@ -47,7 +47,6 @@ committed artifact is [`tools/arch_scorecard.json`](../tools/arch_scorecard.json
 | [whitepaper-engineering.md](research/whitepaper-engineering.md) | the engineering white paper: format, runtime, data plane, control plane, operational lessons |
 | [supporting-evidence.md](research/supporting-evidence.md) | the results ledger: every claim mapped to a measured result and its provenance, negative results included |
 | [bypass-measurement.md](research/bypass-measurement.md) | the pre registered protocol for measuring the safety floor's bypass rates, with its amendment trail |
-| [soc-triage-case-study.md](research/soc-triage-case-study.md) | a measured deployment: blue team SOC triage over a live SIEM |
 
 ## What isn't here (and why)
 

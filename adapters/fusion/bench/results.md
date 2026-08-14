@@ -1,6 +1,6 @@
 # Bandwidth · raw alert JSON vs the fused decision wire
 
-Source: live:wazuh-alerts-*  ·  population: rule.level >= 7, n = 64,484
+Source: live:alert-backlog  ·  population: rule.level >= 7, n = 64,484
 
 Task frame: the aggregator needs the fused verdict, auditably. Baselines ship the
 reading and decide centrally; ours decides at the edge and ships the decision code.

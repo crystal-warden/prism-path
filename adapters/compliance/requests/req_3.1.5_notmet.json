@@ -1,1 +1,0 @@
-{"control_id":"3.1.5","boundary":"CUI enclave (10 hosts)","evidence":[{"type":"interview","source":"admin call notes","text":"Verbal attestation: 'we follow least privilege.' No PAM tooling, documented role matrix, privileged-account inventory, or security-function access restriction provided."}]}

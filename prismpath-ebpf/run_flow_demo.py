@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Prepare a REAL PrismPath flow to run through the eBPF target in-kernel.
 
-Compiles adapters/soc/flows/wazuh_triage.md (a 12-node, fully Level M SOC alert-triage flow) to a PPT
+Compiles prismpath/flows/wazuh_triage.md (a 12-node, fully Level M alert-triage flow) to a PPT
 table, sets a concrete alert scenario, writes the register file + a node-name sidecar, and computes the
 reference routing path with interp.c (no root). The loader's `run` mode then drives the flow hop-by-hop
 through the actual XDP program in-kernel and checks it takes the same path.
@@ -21,7 +21,7 @@ import ppt_compile as pc                                  # noqa: E402
 from prismpath.parser import parse_file                  # noqa: E402
 
 INTERP = HERE / "interp"
-FLOW = REPO / "adapters" / "soc" / "flows" / "wazuh_triage.md"
+FLOW = REPO / "prismpath" / "flows" / "wazuh_triage.md"
 
 # A concrete alert: a high-severity hit, not in the prefilter cache, that gets contained and staged OK.
 SCENARIO = {

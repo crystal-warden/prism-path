@@ -172,8 +172,8 @@ it.** Everything is therefore checkable.
   passed bit-for-bit by the Python reference *and* three independent re-implementations
   ([JS](prismpath/portable/README.md), [Rust](prismpath-rs/CONFORMANCE.md), [Go](prismpath-go/README.md)).
   Four kernels, four languages, one answer: the one check a plausible-looking codebase can't fake.
-- **~1,040 tests**: 649 in the kernel package, 370 across the four adapters (SOC, compliance, telemetry,
-  fusion), 18 in the Node kernel, plus a fuzz-hardened predicate sandbox. [Run them yourself](#running-the-tests).
+- **~890 tests**: 649 in the kernel package, 227 across the two adapters (telemetry, fusion), 18 in the
+  Node kernel, plus a fuzz-hardened predicate sandbox. [Run them yourself](#running-the-tests).
 - **[A reproducer for every measured number](docs/research/supporting-evidence.md)**: each claim maps to
   the script that made it, the benchmark table regenerates with one command, and the silicon and kernel
   rows (#72 to #78) are each anchored in Bitcoin via OpenTimestamps. **Check the artifact, not the
@@ -201,21 +201,17 @@ eight steps, each run before it was written down.
 
 The engine owns routing, attestation, and the toolchain; **domains plug in behind ports** (Ingestion,
 Retrieval, Adjudicator, Action/Sink, Attestation, Deferral) with **no domain vocabulary in the core**:
-`tools/arch_guard.py` fails the build if a domain noun leaks inward. Four reference adapters ride the
-same ports:
+`tools/arch_guard.py` fails the build if a domain noun leaks inward. Two reference adapters ride the
+same ports, both the deterministic no-LLM class where the Adjudicator is a Level M flow (a proof, not a
+model judgment):
 
-- **SOC triage** (`adapters/soc/`): decomposed alert triage with the prefilter cache, human-gated
-  containment, and Flow-Ledger proofs ([case study](docs/research/soc-triage-case-study.md)).
-- **Compliance, NIST SP 800-171** (`adapters/compliance/`): dual catalog (Rev 2 is 110 controls across 14
-  families with DoD SPRS weights; Rev 3 is 130 across 17, official NIST OSCAL), escalation-default
-  adjudication, a schema-validated OSCAL and CycloneDX emitter, and a ~130-test suite with a held-out
-  efficacy harness.
 - **Decision-preserving telemetry** (`adapters/telemetry/`): compress a flow's telemetry to the *minimum
   statistic that still reproduces its routing decisions*, entropy-coded on a self-framing wire and
   Merkle-verified end to end; benchmark-gated, arch-guard-isolated.
-- **Cyber-physical fusion** (`adapters/fusion/`): fuses a SIEM's cyber verdict with a live IMU's
-  physical posture through one Level M tessellation, emitting a self-framing decision wire measured at
-  ~45× under batched JSON (integrity apparatus counted) and proven end to end on the live rig
+- **The decision fusion plane** (`adapters/fusion/`): joins any N decision sources into one Level M
+  decidable, provable fused decision on a self-framing wire measured at ~45× under batched JSON
+  (integrity apparatus counted). The v1 worked example fuses a cyber triage verdict with a live IMU's
+  physical posture through one tessellation, proven end to end on the live rig
   ([evidence #82 to #86](docs/research/supporting-evidence.md)).
 
 ## Where PrismPath is the wrong tool
@@ -244,8 +240,8 @@ Flow-Ledger, OTS anchoring, and a signed, envelope-checked policy hot-swap); the
 kernels, the Python reference plus three independent re-implementations (JS, Rust, Go), each passing all
 **1,079 predicate + 27 flow vectors**. The Level M fragment additionally
 [runs in FPGA fabric and as an in-kernel eBPF/XDP program](#it-runs-all-the-way-down-to-the-fpga-and-inside-the-kernel),
-each certified on a declared subset. **649 Python + 18 Node kernel tests pass** (the four adapters add
-370 more, with adversarial attestation-tamper and property coverage); the format is specified in
+each certified on a declared subset. **649 Python + 18 Node kernel tests pass** (the two adapters add
+227 more, with adversarial attestation-tamper and property coverage); the format is specified in
 [SPEC.md](SPEC.md) (v1 draft). This repo is a curated export of an active research control plane. Licensed
 Apache-2.0.
 
@@ -285,8 +281,7 @@ and repo map (every borrowed term in plain language, and where every module, ker
 
 ```bash
 python -m pytest prismpath/tests -q               # kernel: parser, predicates, router, engine
-python -m pytest adapters/soc -q                  # each adapter is self-rooted, so run them separately
-python -m pytest adapters/compliance -q
-python -m pytest adapters/telemetry -q
+python -m pytest adapters/telemetry -q            # each adapter is self-rooted, so run them separately
+python -m pytest adapters/fusion -q
 node --test prismpath/portable/prismpath.test.mjs # the portable JS kernel
 ```

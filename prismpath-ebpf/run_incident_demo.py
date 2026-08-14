@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Route ONE real high-severity incident (the level-10 SSH brute-force alert) through the eBPF triage
-router in-kernel. Classify it with the live LLM (real verdict), build the routing register file, and
-print the reference path. The loader `run` mode then drives it hop-by-hop through the XDP program.
+router in-kernel. The routing action is the flow's own decidable projection of the alert level (the
+flow is the adjudicator, a proof not a judgment), and the loader `run` mode then drives it hop-by-hop
+through the XDP program, checking the in-kernel path matches the host reference.
 """
 import json
 import sys
@@ -11,19 +12,35 @@ HERE = Path(__file__).resolve().parent
 REPO = HERE.parent
 sys.path.insert(0, str(REPO / "prismpath-hw"))
 sys.path.insert(0, str(REPO))
-sys.path.insert(0, str(REPO / "adapters" / "soc"))
 import ppt_compile as pc                                  # noqa: E402
 from prismpath.parser import parse_file                  # noqa: E402
-import wazuh_triage_agent as agent                        # noqa: E402
-from siem import normalize_wazuh_hit                      # noqa: E402
 
-FLOW = REPO / "adapters" / "soc" / "flows" / "wazuh_triage.md"
+FLOW = REPO / "prismpath" / "flows" / "wazuh_triage.md"
 DECISION = {"contain": "stage_containment", "watch": "watchlist", "ignore": "benign"}
+
+
+def action_from_level(level: int) -> str:
+    """The flow's own containment edge (>=12) and triage floor (>=7); decidable, no adjudicator."""
+    return "contain" if level >= 12 else "watch" if level >= 7 else "ignore"
+
+
+def normalize(rec: dict) -> dict:
+    """Tolerant field pull from an alert record (raw-nested or already-flat)."""
+    rule = rec.get("rule") or {}
+    agent = rec.get("agent")
+    return {
+        "rule_id": rec.get("rule_id") or rule.get("id"),
+        "level": int(rec.get("level", rule.get("level", 0))),
+        "agent": agent if isinstance(agent, str) else (agent or {}).get("name"),
+        "srcip": rec.get("srcip") or (rec.get("data") or {}).get("srcip"),
+        "description": rec.get("description") or rule.get("description") or "",
+        "full_log": rec.get("full_log", ""),
+    }
 
 
 def main():
     raw = json.loads(open(HERE / "scratch" / "incident.ndjson").read().strip())
-    a = normalize_wazuh_hit(raw)
+    a = normalize(raw)
     print(f"INCIDENT: rule {a['rule_id']} level {a['level']} — {a['description']}")
     print(f"  agent={a['agent']}  srcip={a['srcip']}  log={a['full_log'][:90]}")
 
@@ -34,12 +51,8 @@ def main():
     (HERE / "scratch" / "wazuh.ppt").write_bytes(img.serialize())
     (HERE / "scratch" / "wazuh.names").write_text("\n".join(names) + "\n")
 
-    brief = f"rule {a['rule_id']} on agent {a['agent']}; srcip {a['srcip'] or 'n/a'}; {a['description']}"
-    verdict = agent.classify_verdict(a, brief)
-    rec = verdict.get("recommended_action") or "watch"
-    print(f"\nLIVE LLM verdict: {verdict.get('threat_class','?')} / active={verdict.get('is_active_threat')}"
-          f" / conf={verdict.get('confidence')} / action={rec}")
-    print(f"  rationale: {verdict.get('rationale','')[:200]}")
+    rec = action_from_level(a["level"])
+    print(f"\ndecidable projection: rule_level {a['level']} -> action={rec}")
 
     fields = {"no_alert": False, "cached_action": "none", "rule_level": a["level"],
               "recommended_action": rec, "staged_ok": True}

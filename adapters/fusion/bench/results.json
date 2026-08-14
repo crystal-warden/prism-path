@@ -1,5 +1,5 @@
 {
- "source": "live:wazuh-alerts-*",
+ "source": "live:alert-backlog",
  "synthetic": false,
  "min_level": 7,
  "n": 64484,

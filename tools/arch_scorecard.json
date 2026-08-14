@@ -11,22 +11,10 @@
   "signal_7_marginal_cost": {
     "adapters": [
       {
-        "adapter": "soc",
-        "code_loc": 816,
-        "flow_md_loc": 281,
-        "pct_logic_in_md": 0.256
-      },
-      {
-        "adapter": "compliance",
-        "code_loc": 776,
-        "flow_md_loc": 125,
-        "pct_logic_in_md": 0.139
-      },
-      {
         "adapter": "fusion",
-        "code_loc": 1039,
+        "code_loc": 614,
         "flow_md_loc": 93,
-        "pct_logic_in_md": 0.082
+        "pct_logic_in_md": 0.132
       }
     ],
     "note": "adapter #N should cost < #1; higher %_logic_in_md = logic stays in plain-English (good)."

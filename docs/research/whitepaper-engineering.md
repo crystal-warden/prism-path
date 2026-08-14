@@ -972,9 +972,10 @@ decisions about *where computation physically happens*. Confidence routes the wo
 of this required new authoring machinery; the fragment was pinned in the spec and vectors
 precisely so the compile chain could be built against a frozen target, and it was.
 
-Several further capabilities have since landed on the same decidable base. **Cyber-physical fusion**
-(`adapters/fusion/`, August 2026) tessellates a SIEM's cyber verdict and a live IMU's physical posture
-into one Level M table, and measures the fused decision wire on the whole real triage backlog; ~1.5
+Several further capabilities have since landed on the same decidable base. **The decision fusion plane**
+(`adapters/fusion/`, August 2026) joins any N decision sources into one Level M table; its v1 worked
+example tessellates a cyber triage verdict and a live IMU's physical posture, and measures the fused
+decision wire on the whole real triage backlog; ~1.5
 bytes per alert with its integrity apparatus (Merkle roots, epoch chaining, ACK channel) counted, run
 end to end on the live rig; where the high value coincident bands stay honestly empty. That decision
 wire is now a named, normatively specified protocol: **Facet** (`Facet/1`), carrying **Figueroa

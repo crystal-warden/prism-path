@@ -1,7 +1,10 @@
 # PrismPath Adapter Standard
 
 How we **create, stage, architect, develop, and verify** a domain adapter. Every use case follows this;
-the two reference adapters (`soc/`, `compliance/`) conform, and the next domain starts here.
+the two reference adapters (`fusion/`, `telemetry/`) show it in practice, and the next domain starts here.
+Both reference adapters are the **deterministic, no-LLM** class: the Adjudicator is a Level M flow (a
+proof, not a judgment), so they exercise the ports without a model in the decision path. An adapter whose
+Adjudicator IS a model wires the same ports through the Connector SDK (§2b).
 
 The thesis: **the engine is domain-agnostic; a domain is a set of small decisions plugged in behind
 ports.** If you find yourself adding domain vocabulary to the core, stop; it belongs in an adapter.
@@ -38,12 +41,13 @@ rows, but the boundary is the six ports above.
 `prismpath.connector.BaseConnector` implements all six ports as one subclassable surface, plus
 `PayloadFlattener` (the nested-payload → flat key/value middleware behind invariant §4.3) and
 node-handler dispatch that makes a connector instance a flow agent (with `_worker` provenance on
-every outcome). Both reference adapters consume it; `WazuhTriageConnector` (SOC) and
-`ComplianceConnector` (compliance); each keeping its module-level functions as the stable API and
-delegating to the connector, so an SDK upgrade lands in every adapter at once. A connector becomes
-a pip-installable plugin in one line: ``WORKERS = MyConnector().get_workers()`` under a
-``prismpath.plugins`` entry point. Start a new adapter by subclassing; override only the ports the
-domain actually bends.
+every outcome). It is the substrate for an **LLM-adjudicator** adapter: the domain keeps its
+module-level functions as the stable API and delegates to the connector, so an SDK upgrade lands in
+every such adapter at once. A connector becomes a pip-installable plugin in one line:
+``WORKERS = MyConnector().get_workers()`` under a ``prismpath.plugins`` entry point. Start a
+model-driven adapter by subclassing; override only the ports the domain actually bends. The
+deterministic reference adapters (`fusion/`, `telemetry/`) do not need it: their Adjudicator is a
+flow, not a model, so they wire the ports directly.
 
 ## 3. Standard directory layout
 
@@ -67,8 +71,8 @@ adapters/<domain>/
 1. **Escalation-default framing.** The safe outcome is the default: *NOT X unless the input positively
    demonstrates X.* (`not-met` unless evidenced; `contain/escalate` unless benign is shown.)
 2. **Decomposed flow, routed by a domain profile.** Narrow decision nodes beat a monolith (#54). Route
-   by the axis that changes the evidence bar; assessment-method profile (compliance), MITRE tactic
-   (SOC); into per-profile escalation default adjudicators.
+   by the axis that changes the evidence bar (assessment-method profile, attack tactic, sensor band, …),
+   into per-profile escalation default adjudicators.
 3. **FLAT adjudication schemas.** The served model degenerates on nested object-array JSON schemas;
    keep determination schemas flat (enums + string/array-of-string), with a concise-retry fallback.
 4. **Attestation reuses the core, never re-implements it.** `provenance_manifest` binds
@@ -86,7 +90,7 @@ adapters/<domain>/
    `docs/design/spec-guard-onion.md`.
 
 7. **A cheap gate before the expensive node, where inputs recur.** If one adjudication node dominates
-   cost and inputs repeat, put a `PrefilterCache` (SOC) or a retrieval/skip in front; measured, opt-in.
+   cost and inputs repeat, put a `PrefilterCache` or a retrieval/skip in front; measured, opt-in.
 
 ## 5. The development lifecycle (create → stage → architect → develop → verify)
 
@@ -119,20 +123,25 @@ adapters/<domain>/
 
 ## 7. The two reference adapters (how each maps the standard)
 
-| | **compliance** (NIST 800-171) | **soc** (blue-team triage) |
+Both are the **deterministic, no-LLM** class: the Adjudicator is a Level M flow (or a frozen codec
+table), so the decision is a proof, not a model judgment. They exercise a subset of the six ports and
+name the unused ones honestly rather than hand-waving them.
+
+| | **telemetry** (sensor decision codec) | **fusion** (the decision fusion plane) |
 |---|---|---|
-| Ingestion | control + evidence bundle | Wazuh alert (SIEM) |
-| Retrieval | dual catalog (Rev 2 / Rev 3), selectable | detection knowledge + prefilter corpus |
-| Route axis | assessment-method profile | MITRE ATT&CK tactic |
-| Adjudicator | met / partially-met / not-met | contain / watch / ignore |
-| Cheap gate | (none) | `PrefilterCache`: ~59% auto-resolve, measured |
-| Sink | OSCAL + CycloneDX + SPRS rollup | finding + staged (never applied) containment |
-| Attestation | provenance + override + OTS air gap | Flow-Ledger proof-commits |
-| Deferral | HITL override + evidence discovery | human-gated containment |
-| Tests | ~130 (det + adversarial + property + gemma) | flow-compile + structure + opt-in live-SIEM |
+| Ingestion | sensor reading stream (bridge NDJSON) | any N decision sources joined into one reading (SIEM + IMU is the v1 worked example) |
+| Retrieval | N/A (routes on fields alone) | N/A (routes on fields alone) |
+| Route axis | quantized reading band | the fused decision space (spiral tessellation) |
+| Adjudicator | the decidable band projection (no model) | the Level M `fusion_triage.md` flow itself (a proof) |
+| Cheap gate | (none) | (none) |
+| Sink | the packed decision wire + frozen corpus | census + bench + conformance artifacts (report-only) |
+| Attestation | frozen conformance vectors + byte-identical Rust-twin parity | `SHA256SUMS` (+ OTS anchor) content anchor |
+| Deferral | N/A | N/A in v1 (coincident-capture follow-on adds the human path) |
+| Tests | frozen-corpus + byte-identity parity + property | flow-Level-M + tessellation + census + bench, all offline |
 
 Both are escalation default, decomposed, and attested. They differ only where the *domain* differs;
-which is the whole point of the ports.
+which is the whole point of the ports. A model-driven adapter (LLM Adjudicator, Retrieval catalog,
+HITL Deferral) wires the same ports through the Connector SDK (§2b).
 
 ## 8. Registering a new adapter
 
