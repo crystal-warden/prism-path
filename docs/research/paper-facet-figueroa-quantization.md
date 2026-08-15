@@ -303,4 +303,8 @@ properties a compressed record format cannot offer.
 
 *Draft. Provenance: `adapters/telemetry/{quantizer,wire,zeckendorf,packed}.py`;
 `adapters/fusion/bench/{otlp_baseline.py,otlp_results.md,wire.py}`;
-`adapters/fusion/tests/{test_fusion_spiral,test_wire_tamper}.py`. Numbers: `otlp_results.md` (n = 64,484).*
+`adapters/fusion/tests/{test_fusion_spiral,test_wire_tamper}.py`. Numbers: `otlp_results.md` (n = 64,484).
+Deployed implementations, byte identical to the reference over the frozen corpus: `prismpath-rs` and
+`prismpath-telemetry-rs` on crates.io, and a Facet codec compiled into Vector (evidence ledger #103;
+55/55 fixture readings identical across all three implementations, integer exactness bounded at 2^53
+with threshold parity verified either side of it).*
