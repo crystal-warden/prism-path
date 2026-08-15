@@ -961,7 +961,13 @@ substrate and earn one sentence each: an RP2350 reads a real VL53L0X time of fli
 routes a signed proximity policy on device, the band flipping exactly at the authored thresholds (#99);
 and three ESP32s perform a coordinated fleet policy swap over ESP-NOW, each node re verifying the
 received table before staging it, committed in two phases, the whole fleet flipping within 0.7 ms
-(#100).
+(#100). The fleet then grew a decision of its own: three nodes each sensing one channel converge on
+one fused Level M posture, stay fail operational under node loss and a 99% interference blackout
+(never silent; a stale sensor reads a sentinel band the same signed table escalates or degrades on),
+and hot swap the fusion rule itself with the scene held physically constant, the fleet moving
+CRITICAL to WARN because the rule changed and the world did not (#101); and the fleet swap is now
+gated on device by an Ed25519 signature with a persisted anti rollback version floor that survived a
+true power cycle and refused a replay (#102).
 The routing spectrum's **physical latency hierarchy** is no longer a projection but a
 measurement: the fabric answers a deterministic routing decision in **5 to 21 cycles; a provable
 100 to 420 ns worst case** at the shipped 50 MHz clock, in 1,064 LUTs (2.0% of the part); the CPU
@@ -984,7 +990,14 @@ specification is [`PROTOCOL.md`](../../PROTOCOL.md) and the companion paper is
 [`paper-facet-figueroa-quantization.md`](paper-facet-figueroa-quantization.md), which measures the wire
 against OTLP, the industry standard telemetry protocol: 1.516 bytes per decision with the integrity
 apparatus counted, 66.9× under OTLP protobuf and 4.7× under zstd compressed batched OTLP (#95's
-originally recorded 67.6×/4.8× divided by the payload only O1; the bench now emits exact ratios). **Secure signed
+originally recorded 67.6×/4.8× divided by the payload only O1; the bench now emits exact ratios). The
+wire now ships beyond the reference: the `prismpath-rs` and `prismpath-telemetry-rs` crates are on
+crates.io, a Facet codec compiled into Vector round trips routed decisions byte identical to the
+reference over the frozen corpus at a measured 2.000 bytes per event (#103), and the adoption path is
+tooled end to end (a preflight that reports what the codec will do on a user's own events, in Python
+and as the `facet-preflight` crate; a drafter that transcribes an existing Vector config into a
+policy flow, the tool drafting and the author signing; and a canary recipe whose verifier proved
+route parity on live traffic before cutover). **Secure signed
 policy hot swap** (`prismpath/policy_pack.py` + `policy_host.py`, published as prior art in
 `docs/design/spec-secure-hotswap.md`, August 2026) replaces a running Level M policy only when the pack is
 Ed25519 authorized, inside a signed envelope, monotonically versioned, atomically applied, and audited to
@@ -1001,7 +1014,7 @@ below-floor suite and none downgrades past a migration phase (algorithm-level an
 statically); the runtime refuses a swap whose declared suite's provider is unavailable rather than
 weakening it, delegating every cryptographic operation to a vetted provider; a control plane, not a
 cipher.
-Ledger rows #82 to #96.
+Ledger rows #82 to #103.
 
 ---
 
