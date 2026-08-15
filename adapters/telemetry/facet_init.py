@@ -31,7 +31,14 @@ import keyword
 import re
 import subprocess
 import sys
-import tomllib
+
+try:
+    import tomllib                                       # Python 3.11+ stdlib
+except ImportError:                                      # 3.10: optional tomli fallback
+    try:
+        import tomli as tomllib  # type: ignore[no-redef]
+    except ImportError:
+        tomllib = None  # type: ignore[assignment]       # --vector-toml will refuse politely
 from collections import Counter
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -331,6 +338,9 @@ def main() -> int:
     report: List[str] = [f"# facet-init: {n} events scanned"]
 
     if args.vector_toml:
+        if tomllib is None:
+            print("--vector-toml needs Python 3.11+ (stdlib tomllib) or `pip install tomli`")
+            return 1
         config = tomllib.loads(Path(args.vector_toml).read_text())
         nodes, skipped, notes = build_nodes(config, fields)
         if not any(edges for _n, edges in nodes):

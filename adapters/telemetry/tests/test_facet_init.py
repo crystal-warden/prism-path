@@ -6,11 +6,16 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 _ADAPTER = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_ADAPTER))
 sys.path.insert(0, str(_ADAPTER.parent.parent))
 import facet_init as fi  # noqa: E402
 from prismpath.parser import parse_file  # noqa: E402
+
+_needs_toml = pytest.mark.skipif(
+    fi.tomllib is None, reason="tomllib needs Python 3.11+ (or tomli installed)")
 
 
 def _t(cond):
@@ -73,6 +78,7 @@ route.low = '.level < 7'
 """
 
 
+@_needs_toml
 def test_end_to_end_draft_parses_and_preflight_is_ready(tmp_path):
     toml, sample = _setup(tmp_path, _TOML, [{"level": v, "msg": "m"} for v in (1, 5, 9)])
     out = tmp_path / "draft.flow.md"
