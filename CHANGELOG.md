@@ -30,7 +30,9 @@ spec stable.
   surfaced a real value-model divergence the Python tool cannot see: the crates coerce a
   non-numeric string on a numeric field to 0 (the reference errors instead), so the Rust tool
   reports COERCED TO 0 per field and withholds READY. Seven integration tests against the
-  compiled binary, including the coercion case; clippy clean.
+  compiled binary, including the coercion case; clippy clean. Published to crates.io as
+  `facet-preflight 0.1.0` on the owner's go; the registry-installed binary verified end to end
+  (`cargo install facet-preflight`).
 - **facet-init, the migration drafter** (`adapters/telemetry/facet_init.py`). Reads the
   `vector.toml` an integrator already runs, transcribes every route and filter condition that is
   Level M expressible (`field OP const` under and/or/not, `includes([..], .field)` as `in`) into a

@@ -111,8 +111,10 @@ is COERCED TO 0 by the crates, where the reference errors; the Rust tool flags i
 READY). Running both on one sample is a free differential test of the whole stack; on the clean
 corpus their JSON reports are identical.
 ```
-cargo run -q -p facet-preflight -- <flow.md> <sample.ndjson> [same flags]
+cargo install facet-preflight        # published on crates.io
+facet-preflight <flow.md> <sample.ndjson> [same flags]
 ```
+(or `cargo run -q -p facet-preflight -- ...` from this repo without installing)
 
 ## Migrate from a Vector config you already run (`facet_init.py`)
 Your Vector routes ARE your codebook. `facet_init.py` reads a `vector.toml`, transcribes every
