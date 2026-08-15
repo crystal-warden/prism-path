@@ -61,6 +61,19 @@ partition that preserves every atom's truth. Three field kinds are auto detected
 intervals), boolean (two cells), categorical (one cell per constant plus a trailing "other"). Reference:
 `adapters/telemetry/quantizer.py`.
 
+**Boundary mechanics and precision.** Open versus closed never survives to the wire, because the
+comparison domain is discretized first. Non integer numerics are truncated toward zero before
+quantization (the reference and both deployed implementations share this conversion), so every
+comparison happens over the integers, where each strict cut converts exactly to a closed bound
+(`x < c` is `x <= c - 1`): cells are closed integer intervals, unbounded only at the extremes. The
+exactness window is that of the double precision integer range: values are exact through 2^53, and
+beyond it both endpoints round identically through f64, so decisions stay consistent while absolute
+integer exactness is out of scope. None of this is asserted from design alone: a frozen boundary
+corpus (`adapters/telemetry/conformance/boundary.json`) probes every threshold edge at t - 1, t,
+and t + 1 across cuts from 10^2 to 10^12, plus 2^53 - 1, 2^53, 2^53 + 2, and 10^15, and twin tests
+replay it in the Python reference and the Rust crates; a symbol drift on either side of any
+boundary in either implementation turns the suite red.
+
 ### 3.3 The guarantee: decision preservation
 
 **Reconstructing any representative of each cell and routing it through the policy reproduces every
@@ -213,7 +226,33 @@ byte handshake amortized over a 4096 reading epoch).
 Proven three ways against the frozen corpus (§3.3). Decision fidelity is invariant under batching,
 compression, and encryption; only temporal fidelity (freshness) varies with strategy.
 
-## 6. Trust boundary
+### 5.4 Coexistence with full fidelity telemetry
+
+Facet is the decision wire, not the archive, and dropping off policy fields is a per link choice
+rather than a system wide one. Where an operator needs raw events for forensics or debugging, Facet
+runs beside the existing pipeline, not instead of it: one source fans out to the unchanged raw sink
+and to a Facet sink, which is the shipped deployment pattern (`integrations/vector/CANARY.md`, with
+`canary_verify.py` proving route parity between the two legs on live traffic). The economics then
+sort themselves by link: where bandwidth affords raw, both flow and the raw leg remains the record
+of account; where it does not (contested, disconnected, or metered links), the decisions still flow
+at about two bytes each and the raw is retained at the source under its own retention policy. The
+privacy reading of §1 is the same fact seen from the other side: only what the decision needed ever
+leaves the node, unless the operator explicitly ships more.
+
+### 5.5 Cost on constrained hardware
+
+We separate what is measured from what is modeled. Measured: the decision *evaluate* path on
+constrained substrates, 5 to 21 cycles per decision in FPGA fabric (a provable 100 to 420 ns bound
+at 50 MHz) and byte identical table evaluation on four MCU instruction sets, with wire round trips
+dominated by the transport, not the decision (ledger rows #73 to #99). Modeled, and stated as such:
+the codec costs on a bare MCU. Zeckendorf coding of a Facet event is bit serial over roughly a
+dozen bits with a small addition table (78 entries cover the full 2^53 range, about 0.6 KB of
+constant data) and no multiplies or divisions on the hot path; Merkle commitment is one SHA-256 per
+block plus a logarithmic combine, and SHA-256 throughput on small cores is well characterized in
+the literature. Both are bounded and small by construction, but we have not yet measured them on
+bare metal: the hardware shift register codec (Phase C2) is the named, unbuilt artifact that will
+turn this paragraph from a cost model into numbers, and until it lands the lightweight claim for
+the codec on MCUs is a design argument, not a measurement.
 
 Facet's guarantees are precise, and the boundary is deliberate:
 

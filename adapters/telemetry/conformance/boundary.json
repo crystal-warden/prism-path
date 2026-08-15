@@ -1,0 +1,84 @@
+{
+ "comment": "FROZEN. Boundary parity: expected quantizer symbol at every threshold edge and the 2^53 f64 exactness edge. Both implementation twins replay this file.",
+ "flow": "---\nname: boundary_guard\nstart: classify\n---\n## classify\n-> tiny: when mag < 100\n-> small: when mag < 5000\n-> mid: when mag < 1000000\n-> large: when mag < 1000000000\n-> huge: when mag < 1000000000000\n-> extreme: else\n## tiny\n## small\n## mid\n## large\n## huge\n## extreme\n",
+ "field": "mag",
+ "cells": 6,
+ "probes": [
+  {
+   "value": 99,
+   "symbol": 0
+  },
+  {
+   "value": 100,
+   "symbol": 1
+  },
+  {
+   "value": 101,
+   "symbol": 1
+  },
+  {
+   "value": 4999,
+   "symbol": 1
+  },
+  {
+   "value": 5000,
+   "symbol": 2
+  },
+  {
+   "value": 5001,
+   "symbol": 2
+  },
+  {
+   "value": 999999,
+   "symbol": 2
+  },
+  {
+   "value": 1000000,
+   "symbol": 3
+  },
+  {
+   "value": 1000001,
+   "symbol": 3
+  },
+  {
+   "value": 999999999,
+   "symbol": 3
+  },
+  {
+   "value": 1000000000,
+   "symbol": 4
+  },
+  {
+   "value": 1000000001,
+   "symbol": 4
+  },
+  {
+   "value": 999999999999,
+   "symbol": 4
+  },
+  {
+   "value": 1000000000000,
+   "symbol": 5
+  },
+  {
+   "value": 1000000000001,
+   "symbol": 5
+  },
+  {
+   "value": 9007199254740991,
+   "symbol": 5
+  },
+  {
+   "value": 9007199254740992,
+   "symbol": 5
+  },
+  {
+   "value": 9007199254740994,
+   "symbol": 5
+  },
+  {
+   "value": 1000000000000000,
+   "symbol": 5
+  }
+ ]
+}
