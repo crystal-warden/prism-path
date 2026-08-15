@@ -61,11 +61,15 @@ runtime-loaded table images with a provable 100 to 420 ns decision bound; a **ve
 in kernel eBPF/XDP program** that classifies live network packets at 132 to 182 ns each
 (~5.5 to 7.6 Mpps/core) and hot swaps its policy from an edited Markdown flow with no reload; and an
 **8-bit ATmega328P microcontroller** (16 MHz, 2 KB RAM) that decides the same signed table images
-byte-identically (predicate/single-hop, #92). All three are
+byte-identically (predicate/single-hop, #92), since joined by three further MCU instruction sets
+(ARM Cortex-M33, RISC-V Hazard3, Xtensa LX6), so four MCU ISAs now decide the same signed policy
+identically, and by a three node ESP32 fleet that swaps one policy together under a two phase
+quorum commit, gated on device by an Ed25519 signature with an anti rollback version floor
+(#97 to #102). All are
 certified against a *declared subset* of the frozen vectors, zero divergence (the FPGA C target
 124/1,079 predicate + 6/27 engine after the August 2026 negative integer literals (#89), the eBPF target
-the same 124/124 in kernel, re certified that day on both aarch64 and x86_64, and the MCU 124/124 of
-that subset) (§7). We are explicit about the provenance of
+the same 124/124 in kernel, re certified that day on both aarch64 and x86_64, and each MCU ISA
+124/124 of that subset) (§7). We are explicit about the provenance of
 the routing evaluation's labels; the once-open bounded-state critique is now closed (§6).
 
 ---
@@ -989,9 +993,19 @@ single word atomic bank flip proven torn-free under a concurrent swap storm on b
 (predicate/single hop, #92), the minimal viable floor of the substrate ladder. Three further MCU ISAs
 have since joined it: ARM Cortex-M33 and RISC-V Hazard3 (both cores of one RP2350 die, from one source
 file, 124/124 each, #97) and Xtensa LX6 (ESP32, 124/124, #98), so four MCU instruction sets now decide
-the same signed policy identically. Artifacts, evidence logs, and
+the same signed policy identically. The story then extends from one node to a fleet: an RP2350 reads
+a real rangefinder and routes the signed proximity policy on device, no host in the loop, the routed
+band flipping exactly at the authored thresholds (#99); three ESP32s swap one policy together under a
+two phase quorum commit with per node re verification, flipping within milliseconds of each other
+(#100); three nodes each sensing one channel converge on one fused Level M posture, stay fail
+operational under node loss and a 99% interference blackout (never silent; the escalation is decided
+by the same signed table reading a stale sentinel, not an ad hoc code path), and hot swap the fusion
+rule itself with the scene held physically constant, the fleet moving CRITICAL to WARN because the
+rule changed and the world did not (#101); and the fleet swap is gated on device by an Ed25519
+signature with a persisted anti rollback version floor that survived a true power cycle and refused a
+replay (#102). Artifacts, evidence logs, and
 OpenTimestamps anchored hashes: [`prismpath-hw/`](../../prismpath-hw/README.md) and
-[`prismpath-ebpf/`](../../prismpath-ebpf/README.md) (ledger rows #72 to #100). **Decision preserving
+[`prismpath-ebpf/`](../../prismpath-ebpf/README.md) (ledger rows #72 to #103). **Decision preserving
 telemetry: the Facet protocol (delivered, benchmark gated; August 2026).** The same decidability has a
 consequence off the
 routing path: because a flow's routes are decidable functions of a few `field OP const` thresholds, the
@@ -1009,11 +1023,16 @@ self heals over the repo's real Merkle primitive with selective retransmission m
 full resend under Gilbert-Elliott burst loss; and a Tier 6 decision first spiral packs correlated
 multi dimensional state so one band ID routes correctly at 1.9 to 3.6× fewer bits than the per field wire
 for
-two to four dimensions (no win at one dimension, by design). We are explicit about its maturity: a Python
-reference validated on synthetic/modeled data (not field proven), benchmark gated so it stops cheaply if a
-margin fails, and only partly built out: a word packed byte format and the spiral have landed, while a
-hardware shift register codec and a vector quantization tier are designed but not built. Its priority date
-is OpenTimestamps anchored (`adapters/telemetry/evidence/`). Ledger row #81.
+two to four dimensions (no win at one dimension, by design). The map itself now has a formal statement
+(definition, decision preservation theorem, minimal sufficiency in the per field product sense, and a
+wire cost corollary) in the companion paper `paper-facet-figueroa-quantization.md`, and the reference is
+no longer alone: two deployed implementations are byte identical to it over the frozen corpus, the
+`prismpath-rs` and `prismpath-telemetry-rs` crates on crates.io and a Facet codec compiled into Vector
+that round trips routed decisions through a two instance pipeline at a measured 2.000 bytes per event
+(row #103). We stay explicit about its maturity: benchmark gated so it stops cheaply if a margin fails,
+not field proven, and only partly built out: a word packed byte format and the spiral have landed, while
+a hardware shift register codec and a vector quantization tier are designed but not built. Its priority
+date is OpenTimestamps anchored (`adapters/telemetry/evidence/`). Ledger rows #81 and #103.
 
 **The decision fusion plane (delivered, measured on the live rig; August 2026).** The same decidable
 match action fragment composes across *sources*: the fusion adapter (`adapters/fusion/`) joins any N
