@@ -130,3 +130,7 @@ jobs:
         run: cargo test --manifest-path prismpath-telemetry-rs/Cargo.toml -q
       - name: Telemetry port clippy
         run: cargo clippy --manifest-path prismpath-telemetry-rs/Cargo.toml --all-targets -- -D warnings
+      - name: Preflight tool (facet-preflight) — binary e2e incl. the string-coercion finding
+        run: cargo test --manifest-path facet-preflight/Cargo.toml -q
+      - name: Preflight tool clippy
+        run: cargo clippy --manifest-path facet-preflight/Cargo.toml --all-targets -- -D warnings

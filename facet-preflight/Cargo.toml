@@ -1,0 +1,15 @@
+[package]
+name = "facet-preflight"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.82"
+description = "Adoption gate for the Facet codec: report how a sample of real events fares under a policy flow, through the same crates the Vector codec runs."
+license = "Apache-2.0"
+repository = "https://github.com/crystal-warden/prism-path"
+keywords = ["telemetry", "quantization", "policy", "vector", "cli"]
+categories = ["command-line-utilities", "encoding"]
+
+[dependencies]
+prismpath-rs = { path = "../prismpath-rs", version = "0.1.0" }
+prismpath-telemetry-rs = { path = "../prismpath-telemetry-rs", version = "0.1.0" }
+serde_json = "1.0"

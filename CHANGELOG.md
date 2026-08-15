@@ -8,6 +8,52 @@ spec stable.
 
 ## [Unreleased]
 
+### Added
+- **facet-preflight, the adoption gate for the Facet codec** (`adapters/telemetry/preflight.py`).
+  One command takes a policy flow plus a sample of real events (NDJSON) and reports the derived
+  codebook, exactly which events encode and why the rest do not (missing fields, unmapped nested
+  paths via `--map`, out of partition values, float truncation), projected bytes per event next to
+  the raw JSON, and the route distribution at every branch point. Every encodable event is replayed
+  through the full round trip (quantize, Fibonacci-code, decode, reconstruct) and checked to route
+  identically to the original at every decision node, so decision preservation is verified on the
+  integrator's own data. Flags mirror the Vector codec exactly (`--map` = `field_paths`,
+  `--on-missing` = `on_missing`, one byte aligned reading per frame); exit 0 only when nothing needs
+  attention, so it drops into CI. Seven-case test suite; the stale Vector run commands in
+  `integrations/README.md` were corrected to the native two instance pipeline at the same time.
+- **facet-preflight in Rust** (`facet-preflight/`, new workspace member; binary
+  `facet-preflight`). The same contract as the Python tool (flags, report sections, JSON schema,
+  exit codes) running on the exact crates the Vector codec is built from, so its report is what
+  the codec will do by construction and it speaks the upstream audience's language
+  (`cargo run -p facet-preflight`). The two are deliberate twins: Python = the independent
+  reference oracle, Rust = the codec's own path; running both on one sample is a differential
+  test of the stack, and on the clean corpus their JSON reports are identical. The port also
+  surfaced a real value-model divergence the Python tool cannot see: the crates coerce a
+  non-numeric string on a numeric field to 0 (the reference errors instead), so the Rust tool
+  reports COERCED TO 0 per field and withholds READY. Seven integration tests against the
+  compiled binary, including the coercion case; clippy clean.
+- **facet-init, the migration drafter** (`adapters/telemetry/facet_init.py`). Reads the
+  `vector.toml` an integrator already runs, transcribes every route and filter condition that is
+  Level M expressible (`field OP const` under and/or/not, `includes([..], .field)` as `in`) into a
+  DRAFT flow with the transforms chained as nodes, maps nested event paths to codec `field_paths`
+  suggestions, and verifies the draft end to end through facet-preflight on the sample. Conditions
+  that do not transcribe (function calls, regex, VRL variables, field vs field, null, float
+  thresholds) are reported verbatim with the reason. No condition is ever learned from the sample:
+  the tool drafts and the author signs, preserving the derived-from-authored-policy property the
+  quantization paper's §3.4 rests on. Skeleton mode (no `vector.toml`) annotates discovered fields
+  and writes zero conditions. Six-case test suite covering transcription, refusal reasons, chain
+  stitching, and the end to end preflight-ready loop.
+- **Canary recipe for cutting over to Facet** (`integrations/vector/CANARY.md` +
+  `canary_verify.py`). Run Facet beside the pipeline you trust: one source fans out to the
+  existing sink unchanged and to a Facet sink, an aggregator decodes the wire, and the verifier
+  replays every raw event through the reference implementation to prove the decoded leg routes
+  identically (counts, every position, per route distributions; encoder dropped events keep
+  positions synchronized). Exit 0 only on parity, so the check drops into CI during the soak.
+  Live proven with the fork build: 400 events across seven routes, exact parity; a single
+  tampered threshold crossing is named by position and fails the run. The doc covers policy
+  pinning via `policy_sha256`, `field_paths`, cutover and rollback (the raw leg is the
+  parachute), and honest scope (representatives not magnitudes, ordering assumptions, the 2^53
+  bound). Five-case test suite.
+
 ### Removed
 - **Pruned two unvalidatable adapters and the redundant native crate; genericized fusion.** The
   `adapters/soc/` and `adapters/compliance/` adapters and the `prismpath-fusion-rs` crate were archived

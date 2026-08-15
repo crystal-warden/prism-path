@@ -87,6 +87,50 @@ runs lands here.
 - *(pending)* C2 FPGA shift-register codec (RTL + Verilator sim local; board synthesis hardware-gated,
   so it can't land without a real-board pass) and C4 optional turbovec-VQ. Not started.
 
+## Try it on your own events (`preflight.py` and `facet-preflight`)
+One command answers the adoption question before you touch a Vector config: point it at a policy flow
+and a sample of your real events (NDJSON), and it reports the derived codebook, how many events encode
+cleanly and exactly why the rest do not (missing fields, unmapped nested paths, values a partition
+cannot place, float truncation), the projected bytes per event next to your raw JSON, and how your
+traffic distributes over the flow's routes. Every encodable event is replayed through the full round
+trip (quantize, Fibonacci-code, decode, reconstruct) and checked to route **identically** to the
+original at every decision node, so decision preservation is verified on *your* data. Semantics match
+the Vector codec exactly (`--map` = `field_paths`, `--on-missing` = `on_missing`, one byte-aligned
+reading per frame). Exit 0 only when nothing needs attention, so it drops straight into CI.
+```
+python adapters/telemetry/preflight.py <flow.md> <sample.ndjson> \
+    [--map FIELD=json.dot.path] [--on-missing error|skip] [--route-node N] [--json report.json]
+```
+
+The tool ships as deliberate twins with one contract (same flags, same report sections, same JSON
+schema, same exit codes). The Python one above runs on the **reference implementation**, stock
+Python, no build. The Rust one (`facet-preflight/`, in the workspace) runs on the **same crates
+the Vector codec is built from**, so its report is what the codec will do by construction; it is
+also where the Rust value model's own behavior surfaces (a non-numeric string on a numeric field
+is COERCED TO 0 by the crates, where the reference errors; the Rust tool flags it and withholds
+READY). Running both on one sample is a free differential test of the whole stack; on the clean
+corpus their JSON reports are identical.
+```
+cargo run -q -p facet-preflight -- <flow.md> <sample.ndjson> [same flags]
+```
+
+## Migrate from a Vector config you already run (`facet_init.py`)
+Your Vector routes ARE your codebook. `facet_init.py` reads a `vector.toml`, transcribes every
+route and filter condition that is expressible in Level M (`field OP const` under and/or/not, plus
+`includes([..], .field)` as `in`) into a DRAFT flow, chains the transforms into nodes, maps nested
+event paths to codec `field_paths`, and then verifies the draft end to end through `preflight.py`
+on your sample. What does not transcribe (function calls, regex, VRL variables, field vs field,
+null, float thresholds) is reported verbatim with the reason for the author to resolve. **No
+condition is ever learned from the sample**: the codebook must derive from authored policy, so the
+tool drafts and the author signs; the banner in the emitted file says exactly that, and notes that
+Vector's route transform fans out to every match while a flow edge routes first match. Without
+`--vector-toml` it emits a skeleton annotated with the discovered fields and writes no conditions
+at all.
+```
+python adapters/telemetry/facet_init.py <sample.ndjson> \
+    [--vector-toml vector.toml] [--out DRAFT.flow.md] [--name NAME] [--no-check]
+```
+
 ## Roadmap (phased, benchmark-gated)
 - **Phase A** ✅; quantizer + codec + decisions-preserved test + go/no-go benchmarks (margins hold).
 - **Phase B** ✅; self heal via the repo's real Merkle (`ledger_ots`) + selective retransmission +
