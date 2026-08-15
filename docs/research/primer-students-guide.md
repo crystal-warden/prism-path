@@ -1,8 +1,9 @@
 # The Cheapest Question First: A Student's Guide to PrismPath (and Why It Also Catches Hackers)
 
-*An on-ramp to the two big papers in this folder; `docs/research/paper-routing-spectrum.md` (the research paper)
-and `docs/research/whitepaper-engineering.md` (the engineering white paper). No CS degree required. If you
-can follow a recipe and you've argued with a chatbot, you're qualified. ~20 minute read.*
+*An on-ramp to the big papers in this folder; `docs/research/paper-routing-spectrum.md` (the research paper),
+`docs/research/whitepaper-engineering.md` (the engineering white paper), and, once you have those two,
+`docs/research/paper-facet-figueroa-quantization.md` (where the ideas end up on a wire). No CS degree
+required. If you can follow a recipe and you've argued with a chatbot, you're qualified. ~20 minute read.*
 
 *Written for a bright high-schooler or first-year undergraduate; originally so the author could
 explain the project to his son. It survived into the repo because that audience turned out to be the
@@ -122,13 +123,19 @@ traffic **"sounds like"** malicious web traffic to the embedding. They land clos
 And the fix was the *same fix*: the detector only knew what **bad** looked like; it had no idea what
 **normal** looked like. So they built a library of *normal* traffic too, and changed the question from
 *"is this close to something bad?"* to *"is this closer to bad than it is to normal?"* Result
-(measured on the real system): false alarms dropped from ~2% to a **mathematically certified under
-0.053%**: while still catching the real malware it caught before. **Zero cost to detection, ~40× fewer
-false alarms.** (This is written up in the security track's contribution outlines, held with the strategy set.)
+(measured on the real system, over 93,956 real benign flows): false alarms dropped from about 2% raw
+to a **mathematically certified bound of 0.121%**, roughly **17× fewer false alarms**, while still
+catching exactly the malware it caught before. Zero cost to detection. (The numbers live in this
+folder's evidence ledger, `supporting-evidence.md`, with the artifact files they trace to.)
 
 That "mathematically certified" part is worth pausing on: instead of *guessing* a cutoff and hoping,
 they used statistics (a *Wilson bound*) to **prove** the error stays low *even on traffic they haven't
 seen yet.* Guessing a magic number is what amateurs do; proving a bound is what the field respects.
+
+And here's a bonus lesson in how science actually works: the *first* certified bound was even better
+(0.053%), but it rested on only 76 live samples. When 18× more live data arrived, the team re-ran the
+certification, got a slightly worse but far more defensible number, and **published the correction in
+the ledger instead of keeping the prettier one.** The bound got weaker; the claim got stronger.
 
 ---
 
@@ -147,7 +154,7 @@ seen yet.* Guessing a magic number is what amateurs do; proving a bound is what 
 | **Centroid** | Learn from past correct answers, not the AI's gut | Research §4.3 |
 | **Calibration / Wilson bound** | *Prove* the error rate is low, don't guess a cutoff | Research §4.3 |
 | **Gate** | A machine-checkable definition of "done" | Research §5 |
-| **False positive (FP)** | A false alarm | CONTRIB outlines |
+| **False positive (FP)** | A false alarm | `supporting-evidence.md` |
 | **Guardrail** | A safety rule the system must never break | Engineering paper |
 
 ---
@@ -181,14 +188,29 @@ These are real, unfinished, and student-sized on-ramps:
 2. **Catching *confident* mistakes, not just unsure ones.** The margin trick only catches "the AI is
    unsure." Confident-but-wrong is still open. Better detectors for it would be a real contribution.
 3. **Teaching a system "what's normal"; safely.** The malware fix depends on a good library of normal
-   traffic. How do you keep it fresh without an attacker sneaking "normal-looking" bad stuff in? (This
-   project is literally collecting that data right now; see task #35.)
+   traffic. How do you keep it fresh without an attacker sneaking "normal-looking" bad stuff in? (The
+   evidence ledger's re-certification entry shows exactly this being done: the bound was re-proven the
+   moment 18× more live data existed.)
 4. **Does it survive a language change? A different embedding model?** The papers test one English
    model. Nobody's checked others. Easy to start, genuinely useful.
 5. **When should a machine give up and ask a human?** "Route to a person" as a first class, well-timed
    move is barely explored (research §7).
 6. **The economics.** If one box can watch N networks, what's N, and what breaks first; the AI, the
    storage, the network? Measuring ceilings is unglamorous and extremely employable.
+
+---
+
+## Where the project went next (a teaser)
+
+Everything above is about *making* decisions well. The third paper in this folder is about what a
+decision *weighs*. Because the policy is decidable, the project can prove exactly which part of a
+sensor reading could ever change the decision, throw the rest away *without losing a single routing
+outcome*, and ship the decision in **about two bytes** on a wire of its own. The same proven policy
+now runs byte for byte identically in a browser, in Python and Rust, inside the Linux kernel, on an
+FPGA, and on four different microcontroller families, and every number behind that sentence traces to
+the evidence ledger. When you finish the two big papers, read
+`paper-facet-figueroa-quantization.md`: it is the "cheapest question first" idea applied to the
+question *"how many bits is a decision, really?"*
 
 ---
 
