@@ -1,22 +1,25 @@
-# Live Vector pipeline for the Facet decision-telemetry demo. Run from this directory:
-#   python3 gen_events.py | vector -c vector.toml            # writes vector_out.ndjson
-#   cargo run -q --manifest-path facet-sink/Cargo.toml -- \
-#     ../../adapters/fusion/flows/fusion_triage.md < vector_out.ndjson
-# A native `type = "facet"` Vector sink would slot in where the file sink sits today.
+# Facet as a NATIVE Vector codec (both directions), running in a crystal-warden build of Vector
+# (branch facet-codec off v0.57.0; encoder + decoder live in lib/codecs behind `codecs-facet`).
+# Instance A encodes decisions to the Facet wire; instance B ingests the wire and re-emits routed
+# JSON. One byte-aligned reading per length_delimited frame; ~2 B/decision on this 4 field policy.
+#
+#   # instance B (aggregator):  vector --config vector.toml   (this file)
+#   # instance A (edge):        gen_events.py | vector --config vector_edge.toml
+#
+# The standalone facet-sink crate here remains the DIL/self-heal simulator (Merkle-committed
+# blocks over a lossy link); for plain encoding it is superseded by the native codec.
 
-data_dir = "./vector-data"
+[sources.facet_in]
+type = "socket"
+mode = "tcp"
+address = "127.0.0.1:19310"
+decoding.codec = "facet"
+decoding.policy = "../../adapters/fusion/flows/fusion_triage.md"
+decoding.route_node = "intake"
+framing.method = "length_delimited"
+framing.length_delimited = {}
 
-[sources.in]
-type = "stdin"
-
-[transforms.parse]
-type = "remap"
-inputs = ["in"]
-source = '. = parse_json!(.message)'
-
-[sinks.facet]
-type = "file"
-inputs = ["parse"]
-path = "./vector_out.ndjson"
+[sinks.out]
+type = "console"
+inputs = ["facet_in"]
 encoding.codec = "json"
-framing.method = "newline_delimited"

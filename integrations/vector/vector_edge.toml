@@ -1,0 +1,12 @@
+# Instance A (edge): JSON events in, Facet decision wire out. Pair with vector.toml (instance B).
+[sources.events]
+type = "stdin"
+decoding.codec = "json"
+
+[sinks.facet_out]
+type = "socket"
+inputs = ["events"]
+mode = "tcp"
+address = "127.0.0.1:19310"
+encoding.codec = "facet"
+encoding.policy = "../../adapters/fusion/flows/fusion_triage.md"
