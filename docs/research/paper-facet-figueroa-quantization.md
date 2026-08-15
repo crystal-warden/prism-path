@@ -78,6 +78,73 @@ match action policy** (the same atoms the model checker and compiler read), so t
 state code falls out of the policy itself with a machine checked guarantee it never mis-resolves a
 decision.
 
+### 3.5 Formal statement
+
+Sections 3.1 to 3.3 stated precisely. A reading is `x = (x₁, …, x_N)` in the product domain
+`𝒳 = 𝒳₁ × … × 𝒳_N`, one coordinate per field. A Level M policy `𝒫` decomposes into a finite atom set
+
+```
+Atoms(𝒫) = { α₁, …, α_A }
+```
+
+where each atom `αⱼ` tests a single field `fⱼ` against a literal constant `cⱼ`, that is
+`αⱼ(x) = [ field fⱼ of x  ▷ⱼ  cⱼ ]`, with `▷ⱼ ∈ { <, ≤, >, ≥, =, ≠, ∈, ∉, truthy }` (comparisons that
+are field against field, or against a non literal, carry no cut and lie outside the fragment). The
+decision is a function of the atom truth vector,
+
+```
+D(x) = Δ( α₁(x), …, α_A(x) ),
+```
+
+where `Δ` is the flow's first match edge logic.
+
+**Definition (Figueroa quantization).** For each field `f` let `A_f` be the atoms over `f`, and define
+`u ~_f u'` iff `α(u) = α(u')` for every `α ∈ A_f`. Let
+
+```
+q_f : 𝒳_f → 𝒞_f = 𝒳_f / ~_f
+```
+
+send a value to its class. `q_f` is the coarsest partition of `𝒳_f` on which every atom of `A_f` is
+constant; for a numeric field it is a monotone step function that increments at each constant compared
+against `f`, with adjacent intervals of identical atom truth merged (§3.2). The Figueroa quantization is
+the product map over the decision relevant fields (a field with `A_f = ∅` is dropped, as it cannot
+change a decision):
+
+```
+𝒬_F : 𝒳 → 𝒞 = 𝒞₁ × … × 𝒞_N,      𝒬_F(x) = ( q₁(x₁), …, q_N(x_N) ).
+```
+
+**Theorem (decision preservation).** For all `x, x' ∈ 𝒳`,  `𝒬_F(x) = 𝒬_F(x')  ⟹  D(x) = D(x')`.
+
+*Proof.* `𝒬_F(x) = 𝒬_F(x')` gives `q_f(x_f) = q_f(x_f')` for every field `f`, so by the definition of
+`~_f` every atom agrees: `αⱼ(x) = αⱼ(x')` for all `j`. The atom truth vectors coincide, hence
+`D(x) = Δ(atoms(x)) = Δ(atoms(x')) = D(x')`. Equivalently `D` factors as `D = D̄ ∘ 𝒬_F` for a unique
+`D̄ : 𝒞 → actions`, whose image has `K ≤ |𝒞|` distinct actions, the decision classes the policy induces
+on the cell tuples. ∎
+
+This is exactly the property the §3.3 conformance suite checks on the frozen corpus: a mapping error
+would produce some `x, x'` with `𝒬_F(x) = 𝒬_F(x')` yet `D(x) ≠ D(x')`, flipping a pinned entry.
+
+**Minimal sufficiency.** `𝒬_F` is a sufficient statistic for `D` (the decision factors through it) and
+is minimal among per field product statistics that preserve every atom: each `q_f` is the coarsest `~_f`
+partition, so merging any two of its cells flips an atom and may flip a decision. A statistic strictly
+coarser than `𝒬_F` can exist only if two distinct cell tuples always yield the same action; collapsing
+those is a property of `D̄`, and computing it in general is the policy equivalence problem. Figueroa
+quantization stops at the per field cells because that layer is exact, field local, and composable
+across independently signed policies.
+
+**Corollary (wire cost).** Since `D = D̄ ∘ 𝒬_F`, transmitting `𝒬_F(x)` reproduces every decision, at a
+cost bounded by the cell counts alone:
+
+```
+bits(x) = ⌈ log₂ |Im 𝒬_F| ⌉  ≤  Σ_f ⌈ log₂ |𝒞_f| ⌉,
+```
+
+independent of the sensor's bit depth or sample rate. The map is decision lossless and magnitude lossy:
+`D̄` recovers the decision exactly, while only a cell representative, not the original value, is
+recoverable. Section 5 measures this bound on the reference corpus.
+
 ## 4. The Facet protocol
 
 Facet carries Figueroa quantized symbols. Its four design choices, specified normatively in
@@ -170,6 +237,27 @@ dataset to minimize empirical class entropy, Figueroa quantization extracts them
 an explicit, signed match action policy. It requires no statistical fitting or historic corpus; it is
 exact by construction, yielding a machine checked proof that every potential decision is preserved.
 
+Beyond the quantization mechanism, Facet's thesis (transmit only what can change the outcome) is the
+organizing idea of *semantic and goal oriented communications*, as old as Weaver's distinction between
+Level A, the symbols, and Level B, their meaning [Shannon and Weaver 1949], and resurgent in modern task
+oriented coding [Gündüz et al. 2023]. The difference is where relevance comes from. Those systems *learn*
+what matters from a task and a dataset, usually with trained neural encoders, so their relevance is
+statistical and approximate, with no guarantee that a given transmission preserves the receiver's
+decision. Facet's relevance is *derived* from an explicit signed decidable policy and carries a machine
+checked proof (§3.5) that no decision is mis-resolved: relevance that is exact and certified, not trained
+and estimated.
+
+On the mechanism side, reducing a decision structure to its essential cuts is classical in packet
+classification and logic synthesis. TCAM Razor minimizes a packet classifier's rule set for ternary CAM
+[Liu et al. 2010], and reduced ordered binary decision diagrams canonicalize and minimize Boolean
+functions [Bryant 1986]. Both exploit the property Figueroa quantization rests on, that a field matters
+only at the constants it is compared against, and packet classifiers even cut header fields into the same
+kind of ranges Level M atoms cut a field's domain into. The distinction is the object being compressed:
+TCAM Razor and BDDs compress the *classifier*, the on device matcher that evaluates the rules, while
+Figueroa quantization compresses the *reading*, the data on the wire, down to its decision sufficient
+cell and preserves the classifier's decisions by a proof rather than by reproducing the classifier. One
+shrinks the rule table; the other shrinks the telemetry that flows through it.
+
 We are not aware of a prior system that derives a
 quantization that provably preserves decisions directly from a decidable match action policy and carries
 it over a codebook agreed from the signed policy. The individual ingredients are all standard; we claim
@@ -192,6 +280,10 @@ properties a compressed record format cannot offer.
 - R. M. Gray, "Vector Quantization," *IEEE ASSP Magazine*, 1984.
 - H. Jégou, M. Douze, and C. Schmid, "Product Quantization for Nearest Neighbor Search," *IEEE Trans. Pattern Anal. Mach. Intell.*, 2011.
 - U. M. Fayyad and K. B. Irani, "Multi-Interval Discretization of Continuous-Valued Attributes for Classification Learning," *Proc. IJCAI*, 1993.
+- C. E. Shannon and W. Weaver, "The Mathematical Theory of Communication," University of Illinois Press, 1949.
+- D. Gündüz, Z. Qin, I. E. Aguerri, H. S. Dhillon, Z. Yang, A. Yener, K. K. Wong, and C.-B. Chae, "Beyond Transmitting Bits: Context, Semantics, and Task-Oriented Communications," *IEEE J. Sel. Areas Commun.*, 2023.
+- A. X. Liu, C. R. Meiners, and E. Torng, "TCAM Razor: A Systematic Approach Towards Minimizing Packet Classifiers in TCAMs," *IEEE/ACM Trans. Netw.*, 2010.
+- R. E. Bryant, "Graph-Based Algorithms for Boolean Function Manipulation," *IEEE Trans. Comput.*, 1986.
 - OpenTelemetry Protocol (OTLP) specification.
 - PrismPath: `PROTOCOL.md` (Facet/1, normative), `SPEC.md` (flow format, Level M).
 
