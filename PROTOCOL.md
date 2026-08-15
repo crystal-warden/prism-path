@@ -2,6 +2,9 @@
 
 *Facet is PrismPath's decision exchange protocol: it ships the decision, not the data.*
 
+*Naming note: Facet here is a wire protocol and is unrelated to the facet reflection crates in the
+Rust ecosystem. PrismPath's own crates live under the `prismpath-*` prefix on crates.io.*
+
 **Protocol version 1 (draft): `Facet/1`.** This document is the normative definition of how Facet
 carries decisions between endpoints: the **Figueroa quantization** (the primitive that turns a reading
 into a minimal symbol tuple that preserves the policy's decisions) and the framing, codebook agreement,
