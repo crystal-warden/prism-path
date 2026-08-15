@@ -167,6 +167,20 @@ Facet carries Figueroa quantized symbols. Its four design choices, specified nor
   binds readings into an audit chain that spans sessions; an optional layer composes X25519 ECDHE and
   ChaCha20-Poly1305 (TLS 1.3 primitives, rekeyed per epoch) for transports without their own TLS.
 
+Composing the two halves gives the guarantee the protocol exists to provide.
+
+**Proposition (end to end decision preservation).** Under the codebook agreed from the shared signed
+policy, Facet decodes a reading to exactly its Figueroa symbol `𝒬_F(x)`, so by the decision preservation
+theorem (§3.5) the decision the receiver computes, `D̄(𝒬_F(x))`, equals `D(x)`, the decision the source's
+reading produced. Transport corruption cannot silently change a decision: it is made evident by the per
+packet Merkle root, or rejected outright under the optional AEAD.
+
+*Proof.* Codebook agreement makes the decoder's partition identical to the encoder's, and the self
+framing symbol coding recovers the symbol tuple without ambiguity, so a decoded reading yields the same
+`𝒬_F(x)` that was sent. Theorem 3.5 gives `D = D̄ ∘ 𝒬_F`, hence `D̄(𝒬_F(x)) = D(x)`. A packet whose bytes
+were altered fails the per packet Merkle root check (evidence after the fact) or the AEAD tag (rejection
+on the hop), so an altered reading is never silently decoded to a different decision. ∎
+
 ## 5. Evaluation
 
 ### 5.1 Against OTLP (`adapters/fusion/bench/otlp_baseline.py`, `otlp_results.md`)
@@ -181,10 +195,8 @@ Over **n = 64,484** representative fused decisions, batched the way OTLP ships:
 
 **Facet is 66.9× smaller than OTLP protobuf** and 4.7× smaller than zstd compressed batched OTLP.
 O1 counts its integrity apparatus (Merkle epoch roots and the ACK channel, the #84 convention), and
-every ratio divides by that exact measured cost. An earlier artifact revision divided by the payload
-only O1 of 1.5 and recorded 67.6× and 4.8×; ledger #95 keeps those recorded numbers with an
-annotation. The
-reduction is *structural*: OTLP ships a timestamped, typed attribute bag; Facet ships the decision. A
+every ratio divides by that exact measured cost. The reduction is *structural*: OTLP ships a
+timestamped, typed attribute bag; Facet ships the decision. A
 general compressor on a verbose format narrows the raw byte gap but gives up framing, streaming, and
 tamper evidence; the differentiator is those properties, not the byte count alone.
 
@@ -255,8 +267,8 @@ only at the constants it is compared against, and packet classifiers even cut he
 kind of ranges Level M atoms cut a field's domain into. The distinction is the object being compressed:
 TCAM Razor and BDDs compress the *classifier*, the on device matcher that evaluates the rules, while
 Figueroa quantization compresses the *reading*, the data on the wire, down to its decision sufficient
-cell and preserves the classifier's decisions by a proof rather than by reproducing the classifier. One
-shrinks the rule table; the other shrinks the telemetry that flows through it.
+cell and preserves the classifier's decisions by a proof rather than by reproducing the classifier. TCAM Razor
+and BDDs shrink the rule table, while Figueroa quantization shrinks the telemetry that flows through it.
 
 We are not aware of a prior system that derives a
 quantization that provably preserves decisions directly from a decidable match action policy and carries

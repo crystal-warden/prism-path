@@ -1,0 +1,3 @@
+# PrismPath research papers: content anchor (priority-date stamp)
+# Verify from repo root:  sha256sum -c docs/research/evidence/SHA256SUMS
+904adff34bfd9373bc4de13fa315bc15fc768a23ea0a6a9243f9254a516acd6e  docs/research/paper-facet-figueroa-quantization.md
