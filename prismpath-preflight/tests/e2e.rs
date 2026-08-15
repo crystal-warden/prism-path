@@ -29,7 +29,7 @@ fn setup(name: &str, events: &[&str]) -> (PathBuf, PathBuf, PathBuf) {
 }
 
 fn run(args: &[&str]) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_facet-preflight")).args(args).output().unwrap()
+    Command::new(env!("CARGO_BIN_EXE_prismpath-preflight")).args(args).output().unwrap()
 }
 
 fn report(path: &PathBuf) -> serde_json::Value {

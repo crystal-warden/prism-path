@@ -995,7 +995,7 @@ wire now ships beyond the reference: the `prismpath-rs` and `prismpath-telemetry
 crates.io, a Facet codec compiled into Vector round trips routed decisions byte identical to the
 reference over the frozen corpus at a measured 2.000 bytes per event (#103), and the adoption path is
 tooled end to end (a preflight that reports what the codec will do on a user's own events, in Python
-and as the `facet-preflight` crate; a drafter that transcribes an existing Vector config into a
+and as the `prismpath-preflight` crate; a drafter that transcribes an existing Vector config into a
 policy flow, the tool drafting and the author signing; and a canary recipe whose verifier proved
 route parity on live traffic before cutover). **Secure signed
 policy hot swap** (`prismpath/policy_pack.py` + `policy_host.py`, published as prior art in

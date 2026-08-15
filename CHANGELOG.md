@@ -8,6 +8,15 @@ spec stable.
 
 ## [Unreleased]
 
+### Changed
+- **Crate renamed: `facet-preflight` is now `prismpath-preflight`.** The `facet-*` prefix on
+  crates.io belongs to the facet reflection ecosystem; the collision was flagged by r/rust and the
+  crate moved out of that namespace the same day (same code, same contract, binary renamed to
+  match; `facet-preflight 0.1.0` yanked so nothing new depends on it). The Python twin identifies
+  itself as `prismpath-preflight` too. The Facet *wire protocol* keeps its name in the papers and
+  `PROTOCOL.md`, namespaced in prose as PrismPath Facet: a protocol and a crates.io prefix are
+  different namespaces, and only the latter was trespassed.
+
 ### Added
 - **`prismpath-telemetry-rs 0.1.1`: fallible twins for the spiral (Tier 6) API.** Every panicking
   spiral method now has a `try_` variant returning `Result` (`try_cell`, `try_index`,
@@ -18,7 +27,7 @@ spec stable.
   and Err instead of panic on missing fields and out of range indices). One internal cleanup:
   the quantizer's remaining guarded `unwrap` became `is_none_or`. The codec path was already
   panic free; this closes the gap on the optional tier.
-- **facet-preflight, the adoption gate for the Facet codec** (`adapters/telemetry/preflight.py`).
+- **prismpath-preflight, the adoption gate for the Facet codec** (`adapters/telemetry/preflight.py`).
   One command takes a policy flow plus a sample of real events (NDJSON) and reports the derived
   codebook, exactly which events encode and why the rest do not (missing fields, unmapped nested
   paths via `--map`, out of partition values, float truncation), projected bytes per event next to
@@ -29,11 +38,11 @@ spec stable.
   `--on-missing` = `on_missing`, one byte aligned reading per frame); exit 0 only when nothing needs
   attention, so it drops into CI. Seven-case test suite; the stale Vector run commands in
   `integrations/README.md` were corrected to the native two instance pipeline at the same time.
-- **facet-preflight in Rust** (`facet-preflight/`, new workspace member; binary
-  `facet-preflight`). The same contract as the Python tool (flags, report sections, JSON schema,
+- **prismpath-preflight in Rust** (`prismpath-preflight/`, new workspace member; binary
+  `prismpath-preflight`). The same contract as the Python tool (flags, report sections, JSON schema,
   exit codes) running on the exact crates the Vector codec is built from, so its report is what
   the codec will do by construction and it speaks the upstream audience's language
-  (`cargo run -p facet-preflight`). The two are deliberate twins: Python = the independent
+  (`cargo run -p prismpath-preflight`). The two are deliberate twins: Python = the independent
   reference oracle, Rust = the codec's own path; running both on one sample is a differential
   test of the stack, and on the clean corpus their JSON reports are identical. The port also
   surfaced a real value-model divergence the Python tool cannot see: the crates coerce a
@@ -41,12 +50,13 @@ spec stable.
   reports COERCED TO 0 per field and withholds READY. Seven integration tests against the
   compiled binary, including the coercion case; clippy clean. Published to crates.io as
   `facet-preflight 0.1.0` on the owner's go; the registry-installed binary verified end to end
-  (`cargo install facet-preflight`).
+  (`cargo install facet-preflight`, the name at publish time; since renamed and yanked, see
+  Changed above).
 - **facet-init, the migration drafter** (`adapters/telemetry/facet_init.py`). Reads the
   `vector.toml` an integrator already runs, transcribes every route and filter condition that is
   Level M expressible (`field OP const` under and/or/not, `includes([..], .field)` as `in`) into a
   DRAFT flow with the transforms chained as nodes, maps nested event paths to codec `field_paths`
-  suggestions, and verifies the draft end to end through facet-preflight on the sample. Conditions
+  suggestions, and verifies the draft end to end through the preflight tool on the sample. Conditions
   that do not transcribe (function calls, regex, VRL variables, field vs field, null, float
   thresholds) are reported verbatim with the reason. No condition is ever learned from the sample:
   the tool drafts and the author signs, preserving the derived-from-authored-policy property the

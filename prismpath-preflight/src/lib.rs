@@ -1,4 +1,8 @@
-//! facet-preflight: will YOUR events survive the Facet codec? One command, one report.
+//! prismpath-preflight: will YOUR events survive the Facet codec? One command, one report.
+//!
+//! Formerly published as `facet-preflight` (0.1.0, yanked): the `facet-*` prefix belongs to the
+//! facet reflection ecosystem on crates.io, and this crate moved out of it the day that was
+//! flagged. Same code, same contract, new name.
 //!
 //! Same contract as the Python reference tool (`adapters/telemetry/preflight.py`), but running on
 //! the exact crates the Vector codec is built from — so what this reports IS what the codec will
@@ -283,7 +287,7 @@ pub fn run(cfg: &Config) -> Result<Outcome, String> {
     let mut md: Vec<String> = Vec::new();
     let flow_name = std::path::Path::new(&cfg.flow).file_name()
         .map(|s| s.to_string_lossy().into_owned()).unwrap_or_else(|| cfg.flow.clone());
-    md.push(format!("# facet-preflight: {flow_name} x {n_events} events"));
+    md.push(format!("# prismpath-preflight: {flow_name} x {n_events} events"));
     md.push(String::new());
 
     md.push("## Codebook (derived from the flow, nothing learned)".into());

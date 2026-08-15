@@ -16,7 +16,7 @@ python ../../adapters/telemetry/preflight.py <flow.md> <sample.ndjson>
 Or the Rust twin, which runs on the same crates the codec is built from:
 
 ```
-cargo run -q -p facet-preflight -- <flow.md> <sample.ndjson>
+cargo run -q -p prismpath-preflight -- <flow.md> <sample.ndjson>
 ```
 
 One command answers whether your events encode at all, what the wire will cost, and whether every

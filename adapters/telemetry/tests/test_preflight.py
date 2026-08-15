@@ -1,4 +1,4 @@
-"""facet-preflight is the adoption gate: it must tell an integrator the truth about their sample —
+"""prismpath-preflight is the adoption gate: it must tell an integrator the truth about their sample —
 every clean event encodes and routes identically after the round trip, every unencodable event is
 attributed to its exact cause, and the exit code is honest (0 only when nothing needs attention)."""
 import json

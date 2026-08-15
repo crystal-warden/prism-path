@@ -7,5 +7,5 @@ members = [
     "prismpath-rs",
     "prismpath-telemetry-rs",
     "prismpath-hotswap-rs",
-    "facet-preflight",
+    "prismpath-preflight",
 ]

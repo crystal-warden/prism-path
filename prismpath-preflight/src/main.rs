@@ -1,13 +1,13 @@
 use std::collections::HashMap;
 use std::process::ExitCode;
 
-use facet_preflight::{run, Config};
+use prismpath_preflight::{run, Config};
 
 const USAGE: &str = "\
-facet-preflight: report how a sample of real events fares under the Facet codec for a given flow.
+prismpath-preflight: report how a sample of real events fares under the Facet codec for a given flow.
 
 Usage:
-  facet-preflight FLOW.md SAMPLE.ndjson [--map FIELD=PATH ...] [--on-missing error|skip]
+  prismpath-preflight FLOW.md SAMPLE.ndjson [--map FIELD=PATH ...] [--on-missing error|skip]
                   [--route-node NODE] [--limit N] [--json OUT.json]
 
   FLOW.md          policy flow the codebook derives from
@@ -22,7 +22,7 @@ Usage:
 Exit status: 0 = ready (everything encodable, routes preserved), 1 = findings need attention.";
 
 fn usage_err(msg: &str) -> ExitCode {
-    eprintln!("facet-preflight: {msg}\n\n{USAGE}");
+    eprintln!("prismpath-preflight: {msg}\n\n{USAGE}");
     ExitCode::from(2)
 }
 
@@ -88,7 +88,7 @@ fn main() -> ExitCode {
             if let Some(path) = json_out {
                 let body = serde_json::to_string_pretty(&outcome.report).unwrap() + "\n";
                 if let Err(e) = std::fs::write(&path, body) {
-                    eprintln!("facet-preflight: cannot write {path:?}: {e}");
+                    eprintln!("prismpath-preflight: cannot write {path:?}: {e}");
                     return ExitCode::FAILURE;
                 }
                 println!("\nwrote {path}");

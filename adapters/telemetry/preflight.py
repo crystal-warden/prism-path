@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""facet-preflight: will YOUR events survive the Facet codec? One command, one report.
+"""prismpath-preflight: will YOUR events survive the Facet codec? One command, one report.
 
 Point it at a policy flow and a sample of your real events (NDJSON, one JSON object per line) and it
 answers the adoption questions before you touch a Vector config: which fields the flow makes
@@ -107,7 +107,7 @@ def _pct(part: int, whole: int) -> str:
 
 def main() -> int:
     ap = argparse.ArgumentParser(
-        prog="facet-preflight",
+        prog="prismpath-preflight",
         description="Report how a sample of real events fares under the Facet codec for a given flow.")
     ap.add_argument("flow", help="policy flow (.md) the codebook derives from")
     ap.add_argument("sample", help="sample events, NDJSON (one JSON object per line); '-' for stdin")
@@ -240,7 +240,7 @@ def main() -> int:
 
     # ------------------------------------------------------------- report
     md: List[str] = []
-    md += [f"# facet-preflight: {Path(args.flow).name} x {n_events} events", ""]
+    md += [f"# prismpath-preflight: {Path(args.flow).name} x {n_events} events", ""]
 
     md += ["## Codebook (derived from the flow, nothing learned)", "",
            "| field | kind | cells | decision cells |", "|---|---|---|---|"]

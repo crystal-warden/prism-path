@@ -6,7 +6,7 @@ Your Vector routes ARE your codebook. This tool reads a `vector.toml`, finds the
 (`field OP const` atoms under and/or/not, plus `includes([..], .field)` as `in`), and emits a DRAFT
 flow whose edges are those conditions. A sample of real events (NDJSON) is used for two things only:
 discovering field names/types to annotate the draft, and verifying the draft end to end through
-facet-preflight. **No condition is ever learned from the data** — the codebook must derive from
+the preflight tool. **No condition is ever learned from the data** — the codebook must derive from
 authored policy (that is the point), so the tool drafts and the author signs.
 
 What does not transcribe is reported verbatim with the reason (function calls, regex, VRL variables,
@@ -323,7 +323,7 @@ def main() -> int:
     ap.add_argument("--name", default=None, help="flow name (default: derived from --out)")
     ap.add_argument("--limit", type=int, default=None, metavar="N", help="scan at most N events")
     ap.add_argument("--no-check", action="store_true",
-                    help="skip the facet-preflight verification run on the finished draft")
+                    help="skip the preflight verification run on the finished draft")
     args = ap.parse_args()
 
     n, observed = discover(args.sample, args.limit)

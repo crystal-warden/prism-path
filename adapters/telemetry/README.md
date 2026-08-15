@@ -87,7 +87,7 @@ runs lands here.
 - *(pending)* C2 FPGA shift-register codec (RTL + Verilator sim local; board synthesis hardware-gated,
   so it can't land without a real-board pass) and C4 optional turbovec-VQ. Not started.
 
-## Try it on your own events (`preflight.py` and `facet-preflight`)
+## Try it on your own events (`preflight.py` and `prismpath-preflight`)
 One command answers the adoption question before you touch a Vector config: point it at a policy flow
 and a sample of your real events (NDJSON), and it reports the derived codebook, how many events encode
 cleanly and exactly why the rest do not (missing fields, unmapped nested paths, values a partition
@@ -104,17 +104,17 @@ python adapters/telemetry/preflight.py <flow.md> <sample.ndjson> \
 
 The tool ships as deliberate twins with one contract (same flags, same report sections, same JSON
 schema, same exit codes). The Python one above runs on the **reference implementation**, stock
-Python, no build. The Rust one (`facet-preflight/`, in the workspace) runs on the **same crates
+Python, no build. The Rust one (`prismpath-preflight/`, in the workspace) runs on the **same crates
 the Vector codec is built from**, so its report is what the codec will do by construction; it is
 also where the Rust value model's own behavior surfaces (a non-numeric string on a numeric field
 is COERCED TO 0 by the crates, where the reference errors; the Rust tool flags it and withholds
 READY). Running both on one sample is a free differential test of the whole stack; on the clean
 corpus their JSON reports are identical.
 ```
-cargo install facet-preflight        # published on crates.io
-facet-preflight <flow.md> <sample.ndjson> [same flags]
+cargo install prismpath-preflight        # published on crates.io
+prismpath-preflight <flow.md> <sample.ndjson> [same flags]
 ```
-(or `cargo run -q -p facet-preflight -- ...` from this repo without installing)
+(or `cargo run -q -p prismpath-preflight -- ...` from this repo without installing)
 
 ## Migrate from a Vector config you already run (`facet_init.py`)
 Your Vector routes ARE your codebook. `facet_init.py` reads a `vector.toml`, transcribes every
