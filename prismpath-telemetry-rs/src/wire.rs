@@ -6,7 +6,7 @@ use prismpath_rs::{Graph, V};
 use std::collections::HashMap;
 
 pub trait WireCodec {
-    fn encode_symbols(&self, symbols: &[usize]) -> String;
+    fn encode_symbols(&self, symbols: &[usize]) -> Result<String, String>;
     fn decode_symbols(&self, bits: &str) -> Vec<usize>;
 }
 
@@ -14,7 +14,7 @@ pub trait WireCodec {
 pub struct FibonacciWireCodec;
 
 impl WireCodec for FibonacciWireCodec {
-    fn encode_symbols(&self, symbols: &[usize]) -> String {
+    fn encode_symbols(&self, symbols: &[usize]) -> Result<String, String> {
         zeckendorf::encode_stream(symbols)
     }
 
@@ -50,9 +50,9 @@ pub fn encode_reading_with_codec<C: WireCodec>(
     if !missing.is_empty() {
         return Err(format!("reading missing decision fields: {:?}", missing));
     }
-    let syms = quantizer::quantize(parts, reading);
+    let syms = quantizer::quantize(parts, reading)?;
     let wire_vals: Vec<usize> = ord.iter().map(|f| syms[f] + 1).collect();
-    Ok(codec.encode_symbols(&wire_vals))
+    codec.encode_symbols(&wire_vals)
 }
 
 pub fn decode_reading(
@@ -76,11 +76,13 @@ pub fn decode_reading_with_codec<C: WireCodec>(
             ord.len()
         ));
     }
-    let syms: HashMap<String, usize> = ord
-        .into_iter()
-        .enumerate()
-        .map(|(i, f)| (f, wire[i] - 1))
-        .collect();
+    let mut syms: HashMap<String, usize> = HashMap::new();
+    for (i, f) in ord.into_iter().enumerate() {
+        let s = wire[i]
+            .checked_sub(1)
+            .ok_or_else(|| format!("invalid wire symbol 0 for field {f}"))?;
+        syms.insert(f, s);
+    }
     Ok(quantizer::reconstruct(parts, &syms))
 }
 

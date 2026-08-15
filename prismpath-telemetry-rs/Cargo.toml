@@ -2,6 +2,7 @@
 name = "prismpath-telemetry-rs"
 version = "0.1.0"
 edition = "2021"
+rust-version = "1.82"
 description = "Facet decision-telemetry wire for PrismPath: Figueroa quantization, Zeckendorf coding, and a self-healing Merkle transport."
 license = "Apache-2.0"
 repository = "https://github.com/crystal-warden/prism-path"

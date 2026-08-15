@@ -2,6 +2,7 @@
 name = "prismpath-rs"
 version = "0.1.0"
 edition = "2021"
+rust-version = "1.82"
 description = "PrismPath P0 engine in native Rust: a decidable Markdown policy runtime (Level M match-action)."
 license = "Apache-2.0"
 repository = "https://github.com/crystal-warden/prism-path"

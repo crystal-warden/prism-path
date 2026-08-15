@@ -54,11 +54,13 @@ pub fn decode(code: &str) -> Result<usize, String> {
 }
 
 /// Concatenate the codes; each code's trailing `"11"` frames the next — zero header, self-delimiting.
-pub fn encode_stream(values: &[usize]) -> String {
-    values
-        .iter()
-        .map(|&v| encode(v).expect("invalid integer for Fibonacci encoding"))
-        .collect()
+/// `Err` if any value is `< 1` (Fibonacci coding is for positive integers; the wire sends symbol+1).
+pub fn encode_stream(values: &[usize]) -> Result<String, String> {
+    let mut out = String::new();
+    for &v in values {
+        out.push_str(&encode(v)?);
+    }
+    Ok(out)
 }
 
 /// Split a concatenated stream at each self-framing `"11"` and decode each code.
@@ -82,4 +84,34 @@ pub fn decode_stream(bits: &str) -> Vec<usize> {
         }
     }
     out
+}
+
+/// Strict variant for a receiving codec: the lenient `decode_stream` silently drops an incomplete
+/// final frame, which is right for the self-heal/inspect paths but hides truncation from a decoder
+/// that must surface corruption. Here any leftover bits after the last complete code are an error
+/// unless they are all `'0'` — a run of zero bits is legitimate byte-alignment padding
+/// (`packed::pack`), while a leftover `'1'` means a truncated or corrupted final code.
+pub fn decode_stream_strict(bits: &str) -> Result<Vec<usize>, String> {
+    let mut out = Vec::new();
+    let chars: Vec<char> = bits.chars().collect();
+    let n = chars.len();
+    let mut start = 0;
+    let mut i = 0;
+    while i < n {
+        if chars[i] == '1' && i + 1 < n && chars[i + 1] == '1' {
+            let slice: String = chars[start..=i + 1].iter().collect();
+            out.push(decode(&slice)?);
+            i += 2;
+            start = i;
+        } else {
+            i += 1;
+        }
+    }
+    if chars[start..].contains(&'1') {
+        return Err(format!(
+            "truncated Fibonacci stream: {} trailing bits contain a '1' with no terminator",
+            n - start
+        ));
+    }
+    Ok(out)
 }

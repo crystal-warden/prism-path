@@ -3,7 +3,7 @@ use std::collections::HashSet;
 
 fn get_stream() -> (Vec<usize>, String) {
     let values: Vec<usize> = (1..501).collect();
-    let stream = z::encode_stream(&values);
+    let stream = z::encode_stream(&values).unwrap();
     (values, stream)
 }
 

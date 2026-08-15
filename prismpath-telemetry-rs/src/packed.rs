@@ -35,9 +35,9 @@ pub fn unpack(data: &[u8]) -> String {
     data.iter().map(|b| format!("{:08b}", b)).collect()
 }
 
-/// Positive ints -> Fibonacci-coded, word-packed bytes.
-pub fn encode(ints: &[usize], word_bits: usize) -> Vec<u8> {
-    pack(&zeckendorf::encode_stream(ints), word_bits)
+/// Positive ints -> Fibonacci-coded, word-packed bytes. `Err` if any int is `< 1`.
+pub fn encode(ints: &[usize], word_bits: usize) -> Result<Vec<u8>, String> {
+    Ok(pack(&zeckendorf::encode_stream(ints)?, word_bits))
 }
 
 /// Word-packed bytes -> ints (trailing zero pad is a partial frame and is dropped).
@@ -54,9 +54,9 @@ pub struct PaddingOverhead {
     pub pad_pct: f64,
 }
 
-pub fn padding_overhead(ints: &[usize], word_bits: usize) -> PaddingOverhead {
-    let actual_bits = zeckendorf::encode_stream(ints).len();
-    let wire = encode(ints, word_bits);
+pub fn padding_overhead(ints: &[usize], word_bits: usize) -> Result<PaddingOverhead, String> {
+    let actual_bits = zeckendorf::encode_stream(ints)?.len();
+    let wire = encode(ints, word_bits)?;
     let padded_bits = wire.len() * 8;
     let pad_bits = padded_bits - actual_bits;
     let pad_pct = if actual_bits > 0 {
@@ -64,11 +64,11 @@ pub fn padding_overhead(ints: &[usize], word_bits: usize) -> PaddingOverhead {
     } else {
         0.0
     };
-    PaddingOverhead {
+    Ok(PaddingOverhead {
         n: ints.len(),
         actual_bits,
         wire_bytes: wire.len(),
         pad_bits,
         pad_pct,
-    }
+    })
 }

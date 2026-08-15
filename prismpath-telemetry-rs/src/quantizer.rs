@@ -86,7 +86,11 @@ impl FieldPartition {
         FieldPartition { field, kind, cells, n }
     }
 
-    pub fn symbol(&self, value: &V) -> usize {
+    /// The cell index a value falls in. `Err` only for a value outside every cell of a numeric
+    /// partition — unreachable for partitions built by `build_partitions` (open ends), but a
+    /// hand-constructed partition can bound both ends, and a library consumer (e.g. a Vector
+    /// codec) must never be able to panic the encoder.
+    pub fn symbol(&self, value: &V) -> Result<usize, String> {
         match self.kind {
             FieldKind::Numeric => {
                 let v = v_to_i64(value);
@@ -94,24 +98,24 @@ impl FieldPartition {
                     let lo_ok = c.lo.is_none_or(|l| v >= l);
                     let hi_ok = c.hi.is_none_or(|h| v <= h);
                     if lo_ok && hi_ok {
-                        return i;
+                        return Ok(i);
                     }
                 }
-                panic!("{}={:?} fell outside its numeric partition", self.field, value);
+                Err(format!("{}={:?} fell outside its numeric partition", self.field, value))
             }
             FieldKind::Boolean => {
-                if prismpath_rs::py_truthy(value) { 1 } else { 0 }
+                Ok(if prismpath_rs::py_truthy(value) { 1 } else { 0 })
             }
             FieldKind::Categorical => {
                 let s = v_to_str(value);
                 for (i, c) in self.cells.iter().enumerate() {
                     if let Some(ref cv) = c.const_val {
                         if cv == &s {
-                            return i;
+                            return Ok(i);
                         }
                     }
                 }
-                self.n - 1 // trailing "other" cell
+                Ok(self.n - 1) // trailing "other" cell
             }
         }
     }
@@ -578,14 +582,14 @@ pub fn build_partitions(graph: &Graph) -> HashMap<String, FieldPartition> {
 pub fn quantize(
     parts: &HashMap<String, FieldPartition>,
     reading: &HashMap<String, V>,
-) -> HashMap<String, usize> {
+) -> Result<HashMap<String, usize>, String> {
     let mut out = HashMap::new();
     for (f, p) in parts {
         if let Some(v) = reading.get(f) {
-            out.insert(f.clone(), p.symbol(v));
+            out.insert(f.clone(), p.symbol(v)?);
         }
     }
-    out
+    Ok(out)
 }
 
 pub fn reconstruct(

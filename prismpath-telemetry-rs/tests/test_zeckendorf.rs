@@ -54,7 +54,7 @@ fn test_stream_round_trip() {
         (1..200).collect(),
     ];
     for values in cases {
-        assert_eq!(z::decode_stream(&z::encode_stream(&values)), values);
+        assert_eq!(z::decode_stream(&z::encode_stream(&values).unwrap()), values);
     }
 }
 
@@ -74,4 +74,25 @@ fn test_rejects_non_positive() {
 fn test_rejects_non_code() {
     assert!(z::decode("10").is_err());
     assert!(z::decode("1").is_err());
+}
+
+#[test]
+fn test_encode_stream_rejects_zero() {
+    assert!(z::encode_stream(&[3, 0, 5]).is_err());
+    assert!(z::encode(0).is_err());
+}
+
+#[test]
+fn test_decode_stream_strict_accepts_padding_and_rejects_truncation() {
+    let bits = z::encode_stream(&[4, 2, 7]).unwrap();
+    // clean stream decodes
+    assert_eq!(z::decode_stream_strict(&bits).unwrap(), vec![4, 2, 7]);
+    // trailing zeros = byte-alignment padding, accepted
+    let padded = format!("{bits}0000");
+    assert_eq!(z::decode_stream_strict(&padded).unwrap(), vec![4, 2, 7]);
+    // a trailing '1' with no terminator = truncated final code, rejected (the lenient
+    // decode_stream silently drops it — the exact difference the strict variant exists for)
+    let truncated = format!("{bits}010");
+    assert_eq!(z::decode_stream(&truncated), vec![4, 2, 7]);
+    assert!(z::decode_stream_strict(&truncated).is_err());
 }

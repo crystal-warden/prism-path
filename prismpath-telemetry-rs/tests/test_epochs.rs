@@ -3,7 +3,7 @@ use std::collections::HashSet;
 
 fn bits(seed: usize) -> String {
     let vals: Vec<usize> = (1 + seed..60 + seed).collect();
-    z::encode_stream(&vals)
+    z::encode_stream(&vals).unwrap()
 }
 
 #[test]

@@ -6,7 +6,7 @@ fn make_store(n: usize) -> e::EpochStore {
     let mut s = e::EpochStore::new(64, 9);
     for k in 0..n {
         let vals: Vec<usize> = (1 + k..60 + k).collect();
-        s.seal(&z::encode_stream(&vals));
+        s.seal(&z::encode_stream(&vals).unwrap());
     }
     s
 }

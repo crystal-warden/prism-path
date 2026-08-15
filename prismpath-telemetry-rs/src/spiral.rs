@@ -172,8 +172,17 @@ impl SpiralLayout {
         })
     }
 
+    /// Precondition (as with the `reading[f]` indexing): the reading carries every spiral field
+    /// with an in-partition value. The spiral is the Tier 6 layout layer, not the codec path.
     pub fn cell(&self, reading: &HashMap<String, V>) -> Vec<usize> {
-        self.fields.iter().map(|f| self.parts[f].symbol(&reading[f])).collect()
+        self.fields
+            .iter()
+            .map(|f| {
+                self.parts[f]
+                    .symbol(&reading[f])
+                    .expect("spiral reading value outside its partition")
+            })
+            .collect()
     }
 
     pub fn index(&self, reading: &HashMap<String, V>) -> usize {

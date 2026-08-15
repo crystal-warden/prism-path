@@ -68,7 +68,7 @@ fn assert_decisions_preserved(graph: &prismpath_rs::Graph, node: &str, readings:
     let parts = q::build_partitions(graph);
     for r in readings {
         let orig = route(graph, node, r);
-        let recon = route(graph, node, &q::reconstruct(&parts, &q::quantize(&parts, r)));
+        let recon = route(graph, node, &q::reconstruct(&parts, &q::quantize(&parts, r).unwrap()));
         assert_eq!(orig, recon, "decision changed for {:?}", r);
     }
 }
@@ -101,8 +101,8 @@ fn test_numeric_equality_keeps_the_point_cell() {
     let parts = q::build_partitions(&g);
     assert_eq!(parts["x"].kind, q::FieldKind::Numeric);
     assert_eq!(parts["x"].n, 4);
-    assert_ne!(parts["x"].symbol(&V::Num(5.0)), parts["x"].symbol(&V::Num(4.0)));
-    assert_ne!(parts["x"].symbol(&V::Num(7.0)), parts["x"].symbol(&V::Num(5.0)));
+    assert_ne!(parts["x"].symbol(&V::Num(5.0)).unwrap(), parts["x"].symbol(&V::Num(4.0)).unwrap());
+    assert_ne!(parts["x"].symbol(&V::Num(7.0)).unwrap(), parts["x"].symbol(&V::Num(5.0)).unwrap());
 }
 
 #[test]
@@ -159,8 +159,23 @@ fn test_symbols_are_small() {
     r.insert("data_at_risk".to_string(), V::Bool(true));
     r.insert("user_facing".to_string(), V::Bool(false));
     r.insert("error_rate".to_string(), V::Num(42.0));
-    let syms = q::quantize(&parts, &r);
+    let syms = q::quantize(&parts, &r).unwrap();
     for s in syms.values() {
         assert!(*s < 8);
     }
+}
+
+#[test]
+fn test_out_of_partition_numeric_is_err_not_panic() {
+    // build_partitions always leaves open ends, so construct a bounded partition by hand — the
+    // case a library consumer (e.g. a Vector codec) could feed; it must be an Err, never a panic.
+    let cells = vec![q::Cell { lo: Some(0), hi: Some(9), const_val: None, rep: V::Num(5.0) }];
+    let part = q::FieldPartition::new("x".into(), q::FieldKind::Numeric, cells);
+    assert!(part.symbol(&V::Num(5.0)).is_ok());
+    assert!(part.symbol(&V::Num(99.0)).is_err());
+    let mut parts = HashMap::new();
+    parts.insert("x".to_string(), part);
+    let mut r = HashMap::new();
+    r.insert("x".to_string(), V::Num(99.0));
+    assert!(q::quantize(&parts, &r).is_err());
 }
