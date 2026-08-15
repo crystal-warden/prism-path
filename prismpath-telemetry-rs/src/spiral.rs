@@ -172,36 +172,68 @@ impl SpiralLayout {
         })
     }
 
-    /// Precondition (as with the `reading[f]` indexing): the reading carries every spiral field
-    /// with an in-partition value. The spiral is the Tier 6 layout layer, not the codec path.
+    /// Panicking variant, std indexing style (`slice[i]` vs `slice.get(i)`); see [`Self::try_cell`].
+    /// Precondition: the reading carries every spiral field with an in-partition value. The spiral
+    /// is the Tier 6 layout layer, not the codec path.
     pub fn cell(&self, reading: &HashMap<String, V>) -> Vec<usize> {
+        self.try_cell(reading)
+            .expect("spiral reading value outside its partition")
+    }
+
+    /// Fallible twin of [`Self::cell`]: a missing spiral field or an out-of-partition value is an
+    /// `Err`, never a panic.
+    pub fn try_cell(&self, reading: &HashMap<String, V>) -> Result<Vec<usize>, String> {
         self.fields
             .iter()
             .map(|f| {
-                self.parts[f]
-                    .symbol(&reading[f])
-                    .expect("spiral reading value outside its partition")
+                let v = reading
+                    .get(f)
+                    .ok_or_else(|| format!("reading missing spiral field {f:?}"))?;
+                self.parts[f].symbol(v)
             })
             .collect()
     }
 
+    /// Panicking variant; see [`Self::try_index`].
     pub fn index(&self, reading: &HashMap<String, V>) -> usize {
-        self.n_of[&self.cell(reading)]
+        self.try_index(reading).expect("spiral reading value outside its partition")
     }
 
+    pub fn try_index(&self, reading: &HashMap<String, V>) -> Result<usize, String> {
+        let cell = self.try_cell(reading)?;
+        self.n_of
+            .get(&cell)
+            .copied()
+            .ok_or_else(|| format!("cell {cell:?} is not in the spiral layout"))
+    }
+
+    /// Panicking variant; see [`Self::try_band_id`].
     pub fn band_id(&self, reading: &HashMap<String, V>) -> usize {
-        let cell = self.cell(reading);
-        let route = route_of_cell(&self.graph, &self.node, &self.parts, &self.fields, &cell);
-        self.band_index[&route]
+        self.try_band_id(reading).expect("spiral reading value outside its partition")
     }
 
+    pub fn try_band_id(&self, reading: &HashMap<String, V>) -> Result<usize, String> {
+        let cell = self.try_cell(reading)?;
+        let route = route_of_cell(&self.graph, &self.node, &self.parts, &self.fields, &cell);
+        self.band_index
+            .get(&route)
+            .copied()
+            .ok_or_else(|| format!("route {route:?} is not in the band layout"))
+    }
+
+    /// Panicking variant; see [`Self::try_route_of`].
     pub fn route_of(&self, n: usize) -> Option<String> {
+        self.try_route_of(n).unwrap_or_else(|e| panic!("{}", e))
+    }
+
+    /// Fallible twin of [`Self::route_of`]: an index outside the spiral is an `Err`.
+    pub fn try_route_of(&self, n: usize) -> Result<Option<String>, String> {
         for b in 0..self.routes.len() {
             if n < self.band_base[b] + self.band_width[b] {
-                return self.routes[b].clone();
+                return Ok(self.routes[b].clone());
             }
         }
-        panic!("index {} outside the spiral ({} cells)", n, self.size);
+        Err(format!("index {} outside the spiral ({} cells)", n, self.size))
     }
 
     pub fn band_bounds(&self) -> Vec<(usize, usize, Option<String>)> {
@@ -216,17 +248,42 @@ impl SpiralLayout {
             .collect()
     }
 
+    /// Panicking variant; see [`Self::try_reconstruct_band`].
     pub fn reconstruct_band(&self, band_id: usize) -> HashMap<String, V> {
-        cell_reading(&self.parts, &self.fields, &self.cell_of[self.band_base[band_id]])
+        self.try_reconstruct_band(band_id)
+            .unwrap_or_else(|e| panic!("{}", e))
     }
 
+    pub fn try_reconstruct_band(&self, band_id: usize) -> Result<HashMap<String, V>, String> {
+        let base = *self
+            .band_base
+            .get(band_id)
+            .ok_or_else(|| format!("band {} outside the layout ({} bands)", band_id, self.routes.len()))?;
+        Ok(cell_reading(&self.parts, &self.fields, &self.cell_of[base]))
+    }
+
+    /// Panicking variant; see [`Self::try_reconstruct`].
     pub fn reconstruct(&self, n: usize) -> HashMap<String, V> {
-        cell_reading(&self.parts, &self.fields, &self.cell_of[n])
+        self.try_reconstruct(n).unwrap_or_else(|e| panic!("{}", e))
     }
 
+    pub fn try_reconstruct(&self, n: usize) -> Result<HashMap<String, V>, String> {
+        let cell = self
+            .cell_of
+            .get(n)
+            .ok_or_else(|| format!("index {} outside the spiral ({} cells)", n, self.size))?;
+        Ok(cell_reading(&self.parts, &self.fields, cell))
+    }
+
+    /// Panicking variant; see [`Self::try_encode_decision`].
     pub fn encode_decision(&self, reading: &HashMap<String, V>) -> String {
+        self.try_encode_decision(reading)
+            .expect("spiral reading value outside its partition")
+    }
+
+    pub fn try_encode_decision(&self, reading: &HashMap<String, V>) -> Result<String, String> {
         // band_id + 1 >= 1, and zeckendorf::encode only errs for inputs < 1 — infallible here.
-        zeckendorf::encode(self.band_id(reading) + 1).expect("band_id + 1 >= 1")
+        zeckendorf::encode(self.try_band_id(reading)? + 1)
     }
 
     pub fn decode_decision(&self, bits: &str) -> Result<Option<String>, String> {
@@ -241,15 +298,22 @@ impl SpiralLayout {
             .ok_or_else(|| format!("decoded band index {b} is outside the layout ({} bands)", self.routes.len()))
     }
 
+    /// Panicking variant; see [`Self::try_encode_progressive`].
     pub fn encode_progressive(&self, reading: &HashMap<String, V>) -> (String, String) {
-        let n = self.index(reading);
-        let b = self.band_index[&self.route_of(n)];
+        self.try_encode_progressive(reading)
+            .expect("spiral reading value outside its partition")
+    }
+
+    pub fn try_encode_progressive(&self, reading: &HashMap<String, V>) -> Result<(String, String), String> {
+        let n = self.try_index(reading)?;
+        let route = self.try_route_of(n)?;
+        let b = *self
+            .band_index
+            .get(&route)
+            .ok_or_else(|| format!("route {route:?} is not in the band layout"))?;
         let local = n - self.band_base[b];
-        (
-            // b + 1 and local + 1 are both >= 1; encode only errs for inputs < 1.
-            zeckendorf::encode(b + 1).expect("b + 1 >= 1"),
-            zeckendorf::encode(local + 1).expect("local + 1 >= 1"),
-        )
+        // b + 1 and local + 1 are both >= 1; encode only errs for inputs < 1.
+        Ok((zeckendorf::encode(b + 1)?, zeckendorf::encode(local + 1)?))
     }
 
     pub fn decode_progressive(

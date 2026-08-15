@@ -9,6 +9,15 @@ spec stable.
 ## [Unreleased]
 
 ### Added
+- **`prismpath-telemetry-rs 0.1.1`: fallible twins for the spiral (Tier 6) API.** Every panicking
+  spiral method now has a `try_` variant returning `Result` (`try_cell`, `try_index`,
+  `try_band_id`, `try_route_of`, `try_reconstruct`, `try_reconstruct_band`,
+  `try_encode_decision`, `try_encode_progressive`), std indexing style: the panicking form is the
+  documented convenience, the fallible form is the total function. Purely additive, behavior of
+  the existing API unchanged (two new tests pin `try_` == panicking on every frozen corpus probe,
+  and Err instead of panic on missing fields and out of range indices). One internal cleanup:
+  the quantizer's remaining guarded `unwrap` became `is_none_or`. The codec path was already
+  panic free; this closes the gap on the optional tier.
 - **facet-preflight, the adoption gate for the Facet codec** (`adapters/telemetry/preflight.py`).
   One command takes a policy flow plus a sample of real events (NDJSON) and reports the derived
   codebook, exactly which events encode and why the rest do not (missing fields, unmapped nested

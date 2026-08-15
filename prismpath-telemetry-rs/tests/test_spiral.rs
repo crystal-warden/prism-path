@@ -241,3 +241,52 @@ fn test_decision_stream_cheaper_than_linear_for_multidim() {
     let dec: usize = readings.iter().map(|rd| layout.encode_decision(rd).len()).sum();
     assert!(dec < lin);
 }
+
+// ---------------------------------------------------------------- 0.1.1: fallible twins
+// The `try_` variants must agree with the panicking API on every valid input (std's
+// `slice[i]` vs `slice.get(i)` contract) and return Err, never panic, on the inputs the
+// panicking API documents as preconditions.
+
+#[test]
+fn test_try_variants_agree_with_panicking_api_on_valid_inputs() {
+    let corpus = load_corpus();
+    let (_g, layout) = layout_from_corpus(&corpus);
+    for probe in corpus["probes"].as_array().unwrap() {
+        let reading: HashMap<String, V> = probe["reading"]
+            .as_object()
+            .unwrap()
+            .iter()
+            .map(|(k, v)| (k.clone(), V::from_json(v)))
+            .collect();
+        assert_eq!(layout.try_cell(&reading).unwrap(), layout.cell(&reading));
+        assert_eq!(layout.try_index(&reading).unwrap(), layout.index(&reading));
+        assert_eq!(layout.try_band_id(&reading).unwrap(), layout.band_id(&reading));
+        assert_eq!(
+            layout.try_encode_decision(&reading).unwrap(),
+            layout.encode_decision(&reading)
+        );
+        assert_eq!(
+            layout.try_encode_progressive(&reading).unwrap(),
+            layout.encode_progressive(&reading)
+        );
+        let n = layout.index(&reading);
+        assert_eq!(layout.try_route_of(n).unwrap(), layout.route_of(n));
+        assert_eq!(layout.try_reconstruct(n).unwrap(), layout.reconstruct(n));
+    }
+}
+
+#[test]
+fn test_try_variants_err_instead_of_panicking() {
+    let corpus = load_corpus();
+    let (_g, layout) = layout_from_corpus(&corpus);
+    let empty: HashMap<String, V> = HashMap::new();
+    assert!(layout.try_cell(&empty).unwrap_err().contains("missing spiral field"));
+    assert!(layout.try_index(&empty).is_err());
+    assert!(layout.try_band_id(&empty).is_err());
+    assert!(layout.try_encode_decision(&empty).is_err());
+    assert!(layout.try_encode_progressive(&empty).is_err());
+    let big = layout.size + 100;
+    assert!(layout.try_route_of(big).unwrap_err().contains("outside the spiral"));
+    assert!(layout.try_reconstruct(big).is_err());
+    assert!(layout.try_reconstruct_band(usize::MAX).unwrap_err().contains("outside the layout"));
+}

@@ -1,6 +1,6 @@
 [package]
 name = "prismpath-telemetry-rs"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 rust-version = "1.82"
 description = "Facet decision-telemetry wire for PrismPath: Figueroa quantization, Zeckendorf coding, and a self-healing Merkle transport."

@@ -183,7 +183,7 @@ fn numeric_partition(field: &str, atoms: &[Atom]) -> FieldPartition {
         let nxt = const_set.get(i + 1).copied();
         let lo = c + 1;
         let hi = nxt.map(|n| n - 1);
-        if hi.is_none() || lo <= hi.unwrap() {
+        if hi.is_none_or(|h| lo <= h) {
             fine.push((Some(lo), hi));
         }
     }
