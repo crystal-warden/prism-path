@@ -154,6 +154,25 @@ docstring ("Fidelity is deliberately ~70%"), not a measured statistic; between w
 and what needs a human: that heuristic boundary *is* the code-vs-data boundary made visible, and the
 importer doubles as an adoption wedge.
 
+**Config-first multi-agent orchestration.** Microsoft's Conductor (open sourced May 2026)
+independently arrives at two of this paper's commitments: the whole multi-agent workflow lives in
+one version-controlled file (YAML), and routing between agents is evaluated deterministically
+(Jinja2 templating and expression evaluation), with no LLM in the orchestration loop and no tokens
+spent deciding what runs next. We read the convergence as validation of control-flow-as-data and
+state the differences precisely, because they are differences in kind. Deterministic is not
+decidable: a Jinja2 expression evaluates the same way every time, but the language is not a
+fragment over which reachability, exhaustiveness, or unreachability-under-assumptions can be
+proved, and Conductor does not claim proofs; PrismPath's deterministic tier is deliberately
+restricted to Level M precisely so that `prismpath verify`'s answers are theorems (§3.3). Conductor's
+routing is two tier (expression or agent); the calibrated semantic middle tier, with its measured
+polarity failure mode and Wilson-guaranteed escalation threshold (§4.2 to §4.3), has no
+counterpart. And the artifact's reach differs: a Conductor workflow runs where Python 3.12 runs,
+while a Level M flow compiles to signed table images decided byte identically in kernel, on four
+MCU instruction sets, and in FPGA fabric (§7), with its decisions carried on the Facet wire. What
+Conductor offers that PrismPath does not attempt: provider-native integration with the GitHub
+Copilot and Anthropic agent SDKs, per agent model overrides, and sandboxed parallel execution
+groups with configurable failure modes.
+
 **Observability and evaluation platforms.** LangSmith, Langfuse, Arize Phoenix, and W&B Weave
 trace agent runs, evaluate outputs (often LLM-as-judge), queue traces for human annotation, and
 version prompts. The relationship to PrismPath is threefold rather than competitive. First, a
