@@ -241,18 +241,21 @@ leaves the node, unless the operator explicitly ships more.
 
 ### 5.5 Cost on constrained hardware
 
-We separate what is measured from what is modeled. Measured: the decision *evaluate* path on
-constrained substrates, 5 to 21 cycles per decision in FPGA fabric (a provable 100 to 420 ns bound
-at 50 MHz) and byte identical table evaluation on four MCU instruction sets, with wire round trips
-dominated by the transport, not the decision (ledger rows #73 to #99). Modeled, and stated as such:
-the codec costs on a bare MCU. Zeckendorf coding of a Facet event is bit serial over roughly a
-dozen bits with a small addition table (78 entries cover the full 2^53 range, about 0.6 KB of
-constant data) and no multiplies or divisions on the hot path; Merkle commitment is one SHA-256 per
-block plus a logarithmic combine, and SHA-256 throughput on small cores is well characterized in
-the literature. Both are bounded and small by construction, but we have not yet measured them on
-bare metal: the hardware shift register codec (Phase C2) is the named, unbuilt artifact that will
-turn this paragraph from a cost model into numbers, and until it lands the lightweight claim for
-the codec on MCUs is a design argument, not a measurement.
+Both halves of the constrained hardware story are now measured. The decision *evaluate* path:
+5 to 21 cycles per decision in FPGA fabric (a provable 100 to 420 ns bound at 50 MHz) and byte
+identical table evaluation on four MCU instruction sets, with wire round trips dominated by the
+transport, not the decision (ledger rows #73 to #99). The *codec*: a portable C implementation of
+the encoder (a 78 entry Fibonacci table covering the full 2^53 range, 624 bytes of constant data,
+no multiplies or divisions on the hot path), verified byte for byte on device against reference
+generated wire bytes before any timing, measured on the same four MCU instruction sets that decide
+the policy (ledger row #104). Per event, typical 4 field workload (2.281 B/event) and a 1,000 cell
+stress codebook (7.062 B/event): ATmega328P at 16 MHz, 463 us and 1.76 ms; Xtensa LX6 at 240 MHz,
+9.3 us and 27.9 us; Cortex-M33 at 150 MHz, 5.3 us and 14.9 us; Hazard3 RISC-V at 150 MHz, 4.6 us
+and 13.7 us. Even the 8 bit floor tier encodes a worst case event faster than any telemetry cadence
+it would serve, and the 32 bit cores spend roughly 700 to 2,200 cycles per typical event. Two
+items remain modeled rather than measured, stated as such: Merkle commitment (one SHA-256 per
+block plus a logarithmic combine, well characterized on small cores in the literature) and the
+FPGA shift register codec, the remaining unbuilt half of Phase C2.
 
 ## 6. Trust boundary
 

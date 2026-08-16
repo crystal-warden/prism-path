@@ -84,8 +84,9 @@ runs lands here.
   linear, so the win is progressiveness not dropped data), correlation makes the decision stream cheaper,
   and the one decision frame survives burst loss better than *k* frames. Frozen `conformance/spiral.json`
   (a mapping bug turns a test RED) + a decisions-preserved proof re-routing each probe three ways.
-- *(pending)* C2 FPGA shift-register codec (RTL + Verilator sim local; board synthesis hardware-gated,
-  so it can't land without a real-board pass) and C4 optional turbovec-VQ. Not started.
+- **C2 partial**: the C encoder is built and measured on four MCU instruction sets, verified byte
+  for byte against the reference before timing (`prismpath-hw/codec-bench/`, evidence #104); the
+  FPGA shift register half and C4 optional turbovec-VQ remain unbuilt.
 
 ## Try it on your own events (`preflight.py` and `prismpath-preflight`)
 One command answers the adoption question before you touch a Vector config: point it at a policy flow

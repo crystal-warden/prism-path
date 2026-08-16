@@ -18,6 +18,13 @@ spec stable.
   different namespaces, and only the latter was trespassed.
 
 ### Added
+- **C2a: the wire encoder measured on bare metal** (`prismpath-hw/codec-bench/`, evidence #104
+  staged). A portable C Zeckendorf encoder (78 entry table covering 2^53, 624 B constant data),
+  verified byte for byte on device against reference generated wire bytes before timing, then
+  measured on all four MCU instruction sets that decide policies: typical 4 field events in
+  4.6 to 9.3 us on the 32 bit cores and 463 us on the 8 bit AVR floor tier (stress 1,000 cell
+  codebook: 13.7 to 27.9 us and 1.76 ms). The FQ paper's §5.5 codec cost model is now a
+  measurement; Merkle and the FPGA shift register half stay modeled and named.
 - **`prismpath-telemetry-rs 0.1.1`: fallible twins for the spiral (Tier 6) API.** Every panicking
   spiral method now has a `try_` variant returning `Result` (`try_cell`, `try_index`,
   `try_band_id`, `try_route_of`, `try_reconstruct`, `try_reconstruct_band`,
