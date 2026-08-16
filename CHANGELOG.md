@@ -12,7 +12,7 @@ spec stable.
 - **Crate renamed: `facet-preflight` is now `prismpath-preflight`.** The `facet-*` prefix on
   crates.io belongs to the facet reflection ecosystem; the collision was flagged by r/rust and the
   crate moved out of that namespace the same day (same code, same contract, binary renamed to
-  match; `facet-preflight 0.1.0` yanked so nothing new depends on it). The Python twin identifies
+  match; `facet-preflight 0.1.0` deleted outright, inside the 72 hour window, so nothing of ours remains in that prefix). The Python twin identifies
   itself as `prismpath-preflight` too. The Facet *wire protocol* keeps its name in the papers and
   `PROTOCOL.md`, namespaced in prose as PrismPath Facet: a protocol and a crates.io prefix are
   different namespaces, and only the latter was trespassed.
@@ -57,8 +57,8 @@ spec stable.
   reports COERCED TO 0 per field and withholds READY. Seven integration tests against the
   compiled binary, including the coercion case; clippy clean. Published to crates.io as
   `facet-preflight 0.1.0` on the owner's go; the registry-installed binary verified end to end
-  (`cargo install facet-preflight`, the name at publish time; since renamed and yanked, see
-  Changed above).
+  (`cargo install facet-preflight`, the name at publish time; since renamed, and the old crate
+  deleted, see Changed above).
 - **facet-init, the migration drafter** (`adapters/telemetry/facet_init.py`). Reads the
   `vector.toml` an integrator already runs, transcribes every route and filter condition that is
   Level M expressible (`field OP const` under and/or/not, `includes([..], .field)` as `in`) into a
