@@ -21,7 +21,7 @@ sys.path.insert(0, str(HERE.parent))
 import ppt_compile as pc                                    # noqa: E402
 from prismpath.parser import parse                          # noqa: E402
 
-CONF = Path(pc._REPO) / "prismpath" / "portable" / "conformance"
+CONF = Path(pc._REPO) / "portable" / "conformance"   # pc._REPO is the package dir
 
 MAX_FIELDS, MAX_ATOMS, MAX_NODES, MAX_EDGES, MAX_PROG = 16, 64, 16, 48, 256
 
@@ -238,7 +238,7 @@ async def sensor_log_replay(dut):
     build/live_route_log.ndjson routed by the RTL must reproduce the decision the C target
     made live. Also records per-evaluate latency (the WCET evidence)."""
     log_path = HERE.parent / "build" / "live_route_log.ndjson"
-    flow_md = (Path(pc._REPO) / "prismpath" / "gallery" / "incident_severity"
+    flow_md = (Path(pc._REPO) / "gallery" / "incident_severity"
                / "incident_severity.md")
     from prismpath.parser import parse_file
     img = pc.compile_flow(parse_file(str(flow_md)))
