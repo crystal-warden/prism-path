@@ -18,6 +18,11 @@ spec stable.
   different namespaces, and only the latter was trespassed.
 
 ### Added
+- **Million decision soak** (`integrations/vector/soak/`, evidence #105 staged): two native codec
+  Vector pipelines ran unattended for 31 and 27 hours, 1,043,442 decisions decoded, zero errors
+  of any kind, flat memory, route distributions stable to a tenth of a point across inputs
+  spanning nine orders of magnitude; total wire for the entire run ~1.8 MB (2.000 and 1.466
+  B/event framed).
 - **C2a: the wire encoder measured on bare metal** (`prismpath-hw/codec-bench/`, evidence #104
   staged). A portable C Zeckendorf encoder (78 entry table covering 2^53, 624 B constant data),
   verified byte for byte on device against reference generated wire bytes before timing, then
