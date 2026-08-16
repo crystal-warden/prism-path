@@ -1,0 +1,11 @@
+{"decision": "deep_cold", "us": 107.4, "temp": -30}
+{"decision": "deep_cold", "us": 100.6, "temp": -20}
+{"decision": "cold", "us": 98.1, "temp": -19}
+{"decision": "cold", "us": 98.1, "temp": -10}
+{"decision": "cold", "us": 97.0, "temp": -6}
+{"decision": "cold", "us": 96.6, "temp": -5}
+{"decision": "warm", "us": 97.6, "temp": -4}
+{"decision": "warm", "us": 99.7, "temp": 0}
+{"decision": "warm", "us": 96.0, "temp": 20}
+{"decision": "deep_cold", "us": 98.3, "temp": -100}
+{"decision": "warm", "us": 99.2, "temp": 100}
