@@ -254,6 +254,8 @@ bare metal: the hardware shift register codec (Phase C2) is the named, unbuilt a
 turn this paragraph from a cost model into numbers, and until it lands the lightweight claim for
 the codec on MCUs is a design argument, not a measurement.
 
+## 6. Trust boundary
+
 Facet's guarantees are precise, and the boundary is deliberate:
 
 1. **Source authenticity (out of scope).** Whether a sensor read true or an upstream lied is the data
