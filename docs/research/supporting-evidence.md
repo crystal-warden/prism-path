@@ -18,6 +18,15 @@ memory). Consolidated July 2026; maintained through row #100 (August 2026).*
 > here because the papers cite them; they are **not independently reproducible from this repo alone**,
 > and that limitation is stated rather than implied by a path that looks local.
 >
+> **Archived class (added August 2026).** Rows **#65 to #71** (the compliance adapter) cite
+> `adapters/compliance/` paths that are **archived out of the shipped repo** and are **not** the
+> "strongest class" above: the adapter was removed as unready-for-production, so those rows are
+> **not reproducible from this repo** and their provenance is retained for the record only, not as a
+> live repo path. This class is called out explicitly because a backticked path is not a link and the
+> docs-health link check cannot flag it (`docs_health.py` now carries a separate backticked-path
+> advisory for exactly this drift). If the compliance work is ever republished, repoint these rows at
+> its new public home.
+>
 > Rows citing [`prismpath-hw/`](../../prismpath-hw/README.md) or
 > [`prismpath-ebpf/`](../../prismpath-ebpf/README.md) (the hardware and in kernel targets; rows
 > #72 to #76 plus the later hardware/kernel rows #89 to #90, #92 to #93) are reproducible from **THIS repo**
@@ -32,9 +41,14 @@ memory). Consolidated July 2026; maintained through row #100 (August 2026).*
 > and the hardware and kernel bases (the initial FPGA work, the eBPF kernel, and the Merkle ledger
 > machinery all trace to earlier projects, adjusted to carry PrismPath's tables and proofs), among
 > others. The hardware direction itself came from a design insight rather than a port: a Level M
-> decision table is already a lookup table. The PrismPath kernel and SDK are new, and every adapter
-> (SOC, compliance, telemetry, fusion) was built during PrismPath's development, after the initial SDK
-> existed. None of it was a simple lift and land; each borrowed primitive was reworked and re-proven
+> decision table is already a lookup table. That insight surfaced **while building the SOC-triage and
+> compliance adapters** — an early use case the author still runs in a personal homelab, never a
+> flagship result — where watching a routing policy reduce to a fixed table of `field OP const` atoms
+> is what turned attention to substrates below software. So the SOC adapter is best read as the
+> **origin of the hardware thread**, not a headline capability; it was later removed from the shipped
+> repo as unready for anyone's production (the Archived-class note above). The PrismPath kernel and SDK
+> are new, and every adapter (SOC, compliance, telemetry, fusion) was built during PrismPath's
+> development, after the initial SDK existed. None of it was a simple lift and land; each borrowed primitive was reworked and re-proven
 > against PrismPath's frozen conformance gates to earn its row. The lineage is part of the validation:
 > primitives hardened in earlier projects, then proven again inside workloads and gates that did not
 > exist when they were written.
@@ -48,6 +62,18 @@ memory). Consolidated July 2026; maintained through row #100 (August 2026).*
 | Centroid (learned prototypes) lifts routing | **0.827** overall (+0.14 vs embed), +0.23 polarity, 5-fold CV, leakage-audited | `benchmark/gaussian_route_eval.json` (centroid row) |
 | Hybrid frontier (LLM-on-doubt) | 0.837 @ 38% escalation → ~0.99 at higher budgets; margin has a **confident-error blind spot** | paper §4.3 |
 | Head to head vs LangGraph/CrewAI/LLM-router | 83.7% at **2.6× fewer LLM calls, ~2× lower median latency**; loses p95 tail (stated) | paper §4.4 |
+
+> **Validity annotation (added August 2026) — read before citing these as decision-quality numbers.**
+> Every figure in this table **recomputes** from committed artifacts (`research/*.py` over
+> `prismpath/benchmark/routing_bench.jsonl`), so it is reproducible as a *computation*. It is **not**
+> externally validated as *routing quality*: the N=301 suite is **author-authored and single-grader**
+> (inter-rater kappa 0.682 from the one independent grader), on **one embedder family**, with
+> **polarity at 0.52 (near-chance)**. So these establish an **internal benchmark**, not that embedding
+> routing can be trusted with real workflow decisions. The head-to-head row additionally has **no
+> committed comparison harness** in this repo (its numbers reproduce from the paper's own run, not a
+> gate here); treat "2.6× fewer calls / 2× lower latency" as indicative, not independently benchmarked.
+> Retiring this caveat needs a non-self-authored corpus or a second grader — a named follow-on, not a
+> commit.
 
 ## B. The density/geometry NEGATIVE result (NEW · publishable; strengthens "mean+margin wins at scale")
 Four pre registered experiments tested whether learned geometry beats the shrunk mean + cosine margin.

@@ -30,6 +30,21 @@ from pathlib import Path
 
 BASE = Path(__file__).resolve().parent.parent
 BENCH = BASE / "adapters" / "fusion" / "bench"
+LEDGER = BASE / "docs" / "research" / "supporting-evidence.md"
+PENDING = BASE / "docs" / "research" / "supporting-evidence.pending.md"
+
+
+def _ledger_numeric_mentions():
+    """A deliberately generous count of number-like tokens across the ledger + pending rows, so the
+    coverage line states the ORDER-OF-MAGNITUDE gap honestly rather than implying broad rigor. Dates
+    and `#NN` row ids are excluded; everything else (including counts) is kept, so this over-counts the
+    true 'numeric claim' surface, which is the safe direction for an honesty statement."""
+    txt = ""
+    for f in (LEDGER, PENDING):
+        if f.exists():
+            txt += f.read_text()
+    toks = re.findall(r"(?<![#\w.])\d[\d,]*(?:\.\d+)?", txt)
+    return sum(1 for t in toks if not re.fullmatch(r"(19|20)\d\d", t.replace(",", "")))
 
 
 def _load(name):
@@ -158,12 +173,23 @@ def main(argv):
     if "--json" in argv:
         print(json.dumps(rep, indent=1))
     else:
-        print(f"arith_lint: recomputed {len(rep['recomputed'])} canonical numbers; "
-              f"{len(rep['hard'])} hard")
+        n_rc = len(rep["recomputed"])
+        total = _ledger_numeric_mentions()
+        print(f"arith_lint: recomputed {n_rc} canonical numbers; {len(rep['hard'])} hard")
         for f in rep["hard"]:
             print(f"  HARD  {f['check']:<6} {f['detail']}")
         if not rep["hard"]:
             print("  clean — every source ratio recomputes and no superseded value is unannotated.")
+        print()
+        print("  COVERAGE (read this before trusting the green):")
+        print(f"    This lint recomputes {n_rc} cross-artifact ratios from the committed fusion")
+        print( "    benches — the only ledger numbers derived from two on-disk JSONs. It cannot and")
+        print( "    does not recompute the rest of the ledger's ~{} numeric mentions: those are"
+              .format(total))
+        print( "    single-source measurements (hardware runs, in-kernel certs, off-repo lab")
+        print( "    artifacts) whose integrity rests on provenance + OTS anchoring, NOT recomputation.")
+        print( "    Machine-checked coverage here is narrow by design; do not read it as ledger-wide.")
+        print( "    Recomputed: " + ", ".join(sorted(rep["recomputed"])))
     return 1 if (strict and rep["hard"]) else 0
 
 

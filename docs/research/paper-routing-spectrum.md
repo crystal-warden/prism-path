@@ -865,7 +865,11 @@ We are deliberately explicit here.
 - **Label subjectivity.** "The edge it should take" is a human judgment; some cases are genuinely
   ambiguous (which is *itself* an argument for a hybrid that expresses uncertainty).
 - **Domain coverage.** Flows are software-process / support / release / SOC-triage; generalization to
-  very different process families is untested.
+  very different process families is untested. The SOC-triage case is specifically an **early homelab
+  use case** (the author's own Wazuh instance, not a production SOC), and its adapter has since been
+  **removed from the shipped repo** as unready for production; it is reported as the use case that
+  seeded the hardware direction, not as a flagship result. What remains reusable in the repo is the
+  mechanism (the two-threshold `PrefilterCache`), not the domain adapter.
 - **Control-plane findings are anecdotal-empirical** (one substantial build), offered as operating
   lessons, not controlled experiments.
 - **Both critiques now closed.** *(closed) Field-only routing*; the

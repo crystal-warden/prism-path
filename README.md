@@ -275,8 +275,9 @@ and repo map (every borrowed term in plain language, and where every module, ker
 - Also: [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) · [SECURITY.md](SECURITY.md) · [ROADMAP.md](ROADMAP.md) ·
   [CHANGELOG.md](CHANGELOG.md) · [CITATION.cff](CITATION.cff).
 
-> **Commercial support and custom flows.** PrismPath is developed by Crystal Warden Labs; we build and
-> operate gated agent workflows (SOC triage, OT/edge policy enforcement) for clients.
+> **Commercial support and custom flows.** PrismPath is developed by Crystal Warden Labs; we build
+> custom decidable flows and stand up the provable control plane around them, from the kernel to the
+> FPGA to bare-metal MCUs, and support teams adopting it.
 
 ## Running the tests
 
