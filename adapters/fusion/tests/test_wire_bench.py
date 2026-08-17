@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """bench/wire.py — fixture-mode checks on the transmission-strategy simulator: schema, the
 batching-amortizes property, the self-framing-persists-in-batch property, latency ordering, the
 pure MTU-fill strategy (no cap), and the optional AEAD+ECDHE confidentiality layer's cost."""

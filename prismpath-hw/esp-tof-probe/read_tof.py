@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Read the tof-probe output from all three ESP32s at once.
 
     python read_tof.py [/dev/ttyUSB0 /dev/ttyUSB2 /dev/ttyUSB3]

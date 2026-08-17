@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """RTL Zeckendorf encoder vs the reference: same seed 42 corpus as the MCU bench (64 typical +
 64 stress events, 4 wire ints each); collected bits packed MSB first must equal the reference's
 packed wire bytes for every event."""

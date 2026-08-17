@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Mission Control — the FastAPI proving + observability console.
 
 Drives the app through fastapi.testclient (no network, no stdlib handler). The proving tests are the

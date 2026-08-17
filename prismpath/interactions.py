@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """The 'glass window' — an append-only JSONL log of every model interaction.
 
 Written at the three tap points where a prompt+output crosses the model boundary:

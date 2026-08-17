@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 Crystal Warden Supply Chain Labs LLC
 /* ppt_rp2350.c — the PPT v1 table interpreter on an RP2350 (Raspberry Pi Pico 2): the cross-ISA
  * MCU substrate.
  *

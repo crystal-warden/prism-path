@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 Crystal Warden Supply Chain Labs LLC
 // Certify the JS checkReach against the frozen reachability corpus (from Python
 // model_check.check_reach). Run: node prismpath/portable/run_reach.mjs
 import { readFileSync } from "node:fs";

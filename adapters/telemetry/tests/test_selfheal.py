@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Self-heal contract, pinned:
   * a lost block is a detected gap;
   * a forged or corrupted block is REJECTED (fails its Merkle proof), never silently accepted;

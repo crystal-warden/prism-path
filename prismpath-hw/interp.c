@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 Crystal Warden Supply Chain Labs LLC
 /* interp.c — PPT v1 reference interpreter: the C target.
  *
  * The behavioral twin of the Verilog interpreter: same table image, same register-file

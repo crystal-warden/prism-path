@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """3-arm routing eval (EMBED vs LLM vs HYBRID frontier), LLM = the already-served Gemma
 endpoint (no local model load, no GPU-memory risk). Reuses the real CASES + routers."""
 import requests

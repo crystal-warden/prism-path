@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Worker-contract derivation tests (roadmap item 1) — extract per-node output schemas from `when`
 edges, infer types, generate grammars, and type-gate worker outputs."""
 import os

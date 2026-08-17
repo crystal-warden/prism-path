@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Generate bench_data.h: two workloads of symbol tuples + expected wire bytes from the
 Python reference (zeckendorf.encode_stream -> packed.pack(bits, 8)). The firmware verifies
 byte identity on-device BEFORE timing, so the published number is the cost of a verified codec."""

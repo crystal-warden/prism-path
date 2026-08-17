@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Certify the Uno's PPT interpreter against the frozen predicate corpus, over serial.
 
 The EXACT contract of run_vectors.cert_predicates (the C target's certification), with the

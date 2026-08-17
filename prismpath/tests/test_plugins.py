@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """The plugin ecosystem — discovery/audit, @worker binding, dispatch provenance.
 
 Pins the contract: bundled plugins are discovered with their manifests; `@worker(plugin.name)`

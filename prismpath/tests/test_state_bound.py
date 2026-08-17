@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """@state_bound — the sliding-window bound on persisted state (the papers' open critique (2)).
 
 Pins the load-bearing guarantees: the transcript windows to the declared N with deterministic drop

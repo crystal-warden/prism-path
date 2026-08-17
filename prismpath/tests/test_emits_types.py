@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Follow-on to item #1: `@emits(x=type)` cross-checked against the predicate-inferred type
 (`emits-type-mismatch`, warning). The declaration and the node's own `when` edges must agree."""
 from prismpath.parser import parse

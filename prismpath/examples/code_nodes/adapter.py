@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Code-node worker example — a deterministic function as a flow worker, routing on its outcome.
 
 PrismPath governs the routing (the `->` edges in pipeline.md); the code node just returns fields.

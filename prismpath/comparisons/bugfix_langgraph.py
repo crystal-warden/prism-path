@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """bugfix_langgraph.py — the `bugfix` flow expressed in LangGraph, as an Area-5 baseline.
 
 Reference implementation (requires `pip install langgraph langchain-openai` and an OpenAI-compatible

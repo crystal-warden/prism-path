@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """gen_safety_conformance.py — freeze the guard's safety boundary as language-neutral vectors.
 
 `guard.py` is the security half of the onion. Journeyman needs the same boundary in TypeScript, and

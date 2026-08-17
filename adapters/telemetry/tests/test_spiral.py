@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Tier 6 spiral packing: Gray-locality, contiguous decision-bands, route-by-integer-compare, the
 decisions-preserved proof through the spiral map, and the frozen tessellation (a mapping bug -> RED)."""
 import json

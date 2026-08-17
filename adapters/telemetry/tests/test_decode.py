@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """The inspect path: decoding a captured bitstream against its flow reproduces each reading's routing
 decision (the .md is the decoder), renders categorical 'other' readably, and survives a partial final
 frame."""

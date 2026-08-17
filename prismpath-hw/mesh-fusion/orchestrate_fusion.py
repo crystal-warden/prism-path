@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Watch the 3-node ESP-NOW decision-fusion mesh, and optionally coordinate a fusion-rule swap.
 
 Opens all three nodes, resets them into the app, and streams their fused-posture lines with a host

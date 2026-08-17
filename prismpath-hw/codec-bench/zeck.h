@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 Crystal Warden Supply Chain Labs LLC
 /* Portable Zeckendorf (Fibonacci) wire encoder — the front half of Phase C2.
  * Bit-exact with the Python reference (zeckendorf.encode_stream -> packed.pack(bits, 8)):
  * each wire int n >= 1 emits bits for F2..Fk ascending then a terminator 1 (the self framing

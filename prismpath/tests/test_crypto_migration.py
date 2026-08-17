@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Fleet-migration replay (spec-crypto-agility.md §10.5): the monotone-migration property,
 characterized as a (policy-gate k x envelope-floor f) matrix and replayed from the frozen corpus.
 

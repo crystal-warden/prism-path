@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Prepare a REAL PrismPath flow to run through the eBPF target in-kernel.
 
 Compiles prismpath/flows/wazuh_triage.md (a 12-node, fully Level M alert-triage flow) to a PPT

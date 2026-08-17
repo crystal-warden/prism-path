@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 Crystal Warden Supply Chain Labs LLC
 // facet_decode.bpf.c — the kernel decode plane: XDP decode-and-rewrite for the Facet DATAGRAM
 // profile. A UDP datagram to FACET_PORT carrying one byte-aligned Facet frame is decoded
 // (self-delimiting Zeckendorf, policy independent) and its payload REWRITTEN in place to

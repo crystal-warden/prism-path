@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Compile the proximity policy to a .ppt and emit it as a C header for the ToF demo firmware.
 
 The MCU decides on-device from the SAME compiler and format every other substrate uses — the table is

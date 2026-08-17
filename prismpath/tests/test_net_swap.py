@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """eBPF trusted pre-loader (prismpath-ebpf/net_swap.py, spec-secure-hotswap §5): the kernel loader
 is reached ONLY after the host verifies the signed pack against its envelope and version floor.
 The loader call is injected, so the whole authorization gate is tested without root."""

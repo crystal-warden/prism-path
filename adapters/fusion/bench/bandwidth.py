@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Bandwidth: raw alert JSON vs the fused decision-code wire — measured, overhead counted.
 
 The task frame (stated so the comparison stays honest): *the aggregator needs the fused verdict,

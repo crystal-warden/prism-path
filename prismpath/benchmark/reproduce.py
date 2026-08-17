@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """reproduce.py — regenerate the routing-benchmark numbers with one command (Area 4).
 
     python prismpath/benchmark/reproduce.py

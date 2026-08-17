@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """census.py — fixture-mode end-to-end, pairing arithmetic, and the privacy regression
 against the ACTUAL committed evidence artifact."""
 import json

@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """ppt_pynq.py — board-side driver + field server for the PPT overlay (runs ON the Arty
 under PYNQ; Python 3, needs only `pynq`).
 

@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Air-gap attestation tier for the Flow-Ledger (task #53 / docs/design/spec-ledger-opentimestamps.md §4, §6).
 
 Extends the connected OTS engine (ledger_ots.py, #36) to disconnected deployments — the DIB/OT/

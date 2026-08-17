@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """prefilter.py — decision memoization for expensive agent calls (the cache tier).
 
 The routing spectrum resolves *transitions* cheaply; this module makes the expensive

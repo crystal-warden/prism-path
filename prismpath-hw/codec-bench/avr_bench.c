@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 Crystal Warden Supply Chain Labs LLC
 /* Codec bench on the ATmega328P (Arduino Uno R3, 16 MHz): verify the Zeckendorf wire encoder
  * byte for byte against the reference corpus, then time it. Timer1 /1024 (64 us tick, one
  * overflow tolerated per window); UART 38400 8N1, the harness baud the cert rig already uses. */

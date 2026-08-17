@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Freeze the boundary parity corpus: threshold behavior at every cut edge, including the 2^53 zone.
 
 For each threshold t in a wide range flow (10^2 up to 10^12) the corpus probes t-1, t, t+1; around

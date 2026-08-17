@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Certify the XDP decode plane via BPF_PROG_TEST_RUN: feed crafted UDP/IP/eth frames carrying
 Facet payloads, capture the rewritten output, and byte-compare the decoded cell array against the
 Python reference. No network. Positive corpus (reference generated) + negative matrix (corrupt,

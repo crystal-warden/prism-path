@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """The plugin registry — discovery, audit, and worker binding for the prismpath plugin ecosystem.
 
 The engine's purity non-goal stands untouched: plugins NEVER extend routing, predicates, or the

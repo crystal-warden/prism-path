@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """The make-or-break test: does embedding routing pick the RIGHT edge?
 
 For the bugfix flow we hand-label realistic agent outcomes with the edge they SHOULD take,

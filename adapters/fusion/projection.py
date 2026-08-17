@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Field projections for the fusion_triage flow — both cyber paths and the IMU normalization.
 
 Two cyber paths feed the SAME field contract:

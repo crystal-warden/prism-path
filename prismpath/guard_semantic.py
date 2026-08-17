@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """guard_semantic.py — the OPTIONAL P1 layer above the deterministic floor.
 
 P0 (`guard.py`) is a grammar: bypass is inexpressible, the guarantee is hardware-invariant, and every

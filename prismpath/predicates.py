@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Deterministic edge predicates — the layer that fixes negation/logic at the source.
 
 An edge condition that starts with `when ` (or is a bare `always`/`else`/`false`) is

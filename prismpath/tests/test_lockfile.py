@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Routing-lockfile tests (the reproducibility moat).
 
 Most run with a STUB embedder (monkeypatched — no model, CI-safe): they exercise build/verify/route

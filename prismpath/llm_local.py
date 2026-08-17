@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """A local LLM generate() for the agent + router's LLM-fallback. Self-contained (no repe dep).
 
 Handles plain bf16 models (Qwen2.5-Coder-7B) AND quantized ones (Qwen3.6-27B-NVFP4 via

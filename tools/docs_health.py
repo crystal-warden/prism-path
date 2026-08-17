@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Docs-health lint (Phase 6) + new-work capture audit (Phase 5). Runnable in CI.
 
 Scoped to THIS public repo (not the private sibling dirs, not vendored, not _retired, not gitignored caches):

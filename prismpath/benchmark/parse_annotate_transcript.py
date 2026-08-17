@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """parse_annotate_transcript.py — recover annotations from a saved `prismpath annotate` TERMINAL transcript.
 
 If an annotator pastes/saves the interactive session's scrollback (the prompts + their `pick>` lines)

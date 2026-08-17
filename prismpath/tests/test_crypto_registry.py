@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """crypto_registry — the signed suite registry (spec-crypto-agility.md §7).
 
 Pure-hash/strength tests run everywhere; signing tests importorskip `cryptography` (the optional

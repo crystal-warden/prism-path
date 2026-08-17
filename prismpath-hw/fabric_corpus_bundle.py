@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Compile the frozen predicate corpus for fabric certification: same subset filter as the
 C-target's run_vectors.cert_predicates, bundling in-subset (image, ctx, expect) for the board
 to eval on silicon. Exclusions itemized with reasons — the exclusion report is part of the cert."""

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """projection.py — the decidable cyber projection, the verdict clamp, IMU normalization,
 and an end-to-end pass over the REAL recorded sensor sessions (read-only, in-repo)."""
 import json

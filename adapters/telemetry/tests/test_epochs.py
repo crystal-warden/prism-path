@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Epoch chaining + retention contract:
   * chained roots link each epoch to the last (total ordering + tamper-evidence across time);
   * altering a sealed epoch breaks the chain;

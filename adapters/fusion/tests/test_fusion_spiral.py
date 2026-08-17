@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Frozen-corpus conformance for the fusion_triage tessellation.
 
 Referee pattern from adapters/telemetry: every probe must route identically three ways —

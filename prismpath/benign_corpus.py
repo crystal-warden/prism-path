@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """benign_corpus.py — text that must NEVER be denied. The hardening direction's control.
 
 The bypass corpus controls for false *invalidity* (denied seeds must stay denied). This controls for

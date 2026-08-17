@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """flow_test.py — `prismpath test`: assert a flow's routing from a Markdown fixture, no LLM needed.
 
 Authors can't otherwise test a flow without running agents. Here the fixture is itself Markdown — a

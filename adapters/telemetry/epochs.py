@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Daily-chained epochs + retention — bound what the edge stores without losing provability.
 
 Each epoch is a sealed window: its blocks get a Merkle root (via `selfheal`/`ledger_ots`), and its

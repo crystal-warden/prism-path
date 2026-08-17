@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Item #5 T1: the portability boundary — `analysis.portability` / `portability_tree`.
 
 A flow is PORTABLE (runs on the ML-free port) iff every edge on every REACHABLE node is decidable:

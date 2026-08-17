@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Parse a workflow markdown file into a graph.
 
 Format (human-authored, git-diffable):

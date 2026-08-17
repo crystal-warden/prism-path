@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Signed policy packs — the Authorized + Envelope-bounded half of the secure hot-swap.
 
 A pack is the byte-identical `.ppt` image plus a detached, signed manifest

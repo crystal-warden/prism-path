@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """gen_p1_conformance.py — freeze P1 (locked semantic routing) conformance vectors.
 
 Generates `portable/conformance/locked_flows.json`: flow fixtures with semantic edges,

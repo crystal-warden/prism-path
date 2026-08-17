@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """contract.py — derive each node's worker OUTPUT CONTRACT from the flow itself (roadmap item 1).
 
 The deterministic edges already tell you what a node's worker must emit: `when tests_pass` implies a

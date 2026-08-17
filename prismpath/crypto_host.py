@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Crypto-agility runtime governor (`spec-crypto-agility.md` §4) — the swap side of the control plane.
 
 Governs *which* crypto-suite-selection policy is authorized to be live and delegates every actual

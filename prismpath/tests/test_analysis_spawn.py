@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Tranche 4 of item #4: static analysis that CROSSES THE FLOW BOUNDARY (the data-not-code stress
 test — the whole composition tree is inspectable without running anything).
 

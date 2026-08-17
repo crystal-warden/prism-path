@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Certify the ESP32-C6's PPT interpreter against the frozen predicate corpus, over UART (CP2102).
 
 Identical contract to certify_uno.py (#92) / certify_rp2350.py (#97): the EXACT

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """run_comparison.py — the Area-5 head-to-head, measured (not vibed).
 
 Scores the four baselines on the labeled routing suite (`benchmark/routing_bench.jsonl`), the same

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """composer.py — the fan-out / sub-flow composition harness (roadmap item #4).
 
 The engine suspends a fan-out node as `waiting` and records a `spawn` DATA spec in the checkpoint

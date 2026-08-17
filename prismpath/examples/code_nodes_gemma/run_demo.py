@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Mixed md + code-node flow on LOCAL Gemma — proof that both worker kinds run together, governed.
 
   parse, decide        -> code nodes, executed in the bwrap SANDBOX (prismpath.sandbox.SandboxRunner),

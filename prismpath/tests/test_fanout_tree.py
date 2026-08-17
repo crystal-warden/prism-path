@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """composer.fanout_tree — the read-only fan-out observability surface (Mission Control's
 Flows tab). Built over a synthetic queue dir: a waiting parent with mixed-state children
 (terminal / waiting / error-with-reason), one nested fan-out, one gated join, and a

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 Crystal Warden Supply Chain Labs LLC
 // Certify the JS crypto-agility proofs against frozen conformance fixtures.
 // Run: node prismpath/portable/run_crypto_agility.mjs
 import { readFileSync } from "node:fs";

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Routers for prismpath: Embedding (cheap), LLM (accurate), Hybrid (embed-first, LLM-on-doubt).
 
 A router maps (outcome, edges, instruction) -> RouteDecision(target, info). The Hybrid router

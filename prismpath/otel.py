@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """otel.py — export a run as OpenTelemetry spans (critic capability #5).
 
 Each node execution and each semantic routing decision becomes a span with the scores/margins as

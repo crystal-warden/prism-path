@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Observability for the prismpath Hermes swarm — Prometheus metrics + a polished live "glass lens".
 
 Two surfaces, one stdlib http.server (no external deps), re-reading state on every request so it

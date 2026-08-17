@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Generate the frozen decisions-preserved corpus: a set of flows + boundary-probing reading grids, each
 reading tagged with the full-precision route at every decision node. `test_decisions_preserved.py` replays
 it two ways — the engine must still produce the frozen routes (drift guard), and the wire round-trip

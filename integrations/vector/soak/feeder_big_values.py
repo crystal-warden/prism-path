@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 import json, random, time
 while True:
     # log-uniform across 9 orders of magnitude, occasionally spiking into the >2^50 zone

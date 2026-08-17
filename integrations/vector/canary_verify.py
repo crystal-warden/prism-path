@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """canary_verify: prove the Facet leg of a canary routes exactly like the pipeline you trust.
 
 During a canary, one Vector source fans out to your existing JSON sink (the raw capture) and to a

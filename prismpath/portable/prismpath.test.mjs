@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 Crystal Warden Supply Chain Labs LLC
 // Unit tests for the portable kernel — `node --test portable/`. Zero dependencies.
 // The cross-language conformance suite (run_conformance.mjs) is the deeper check; these pin
 // the Python-exact predicate semantics and the engine loop's suspension shapes directly.

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Code-node handlers for the mixed md + code-node demo (alert_router.md).
 
 Importable by dotted path (a real module, no lambdas / __main__), so `prismpath.sandbox.SandboxRunner`

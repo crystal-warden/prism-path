@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Polarity-lint tests (Area 2a) — flag semantic conditions that differ only by logical polarity."""
 import numpy as np
 

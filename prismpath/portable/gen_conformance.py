@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """gen_conformance.py — freeze the portable-kernel spec as LANGUAGE-NEUTRAL conformance vectors.
 
 The cross-language conformance suite and the differential fuzzer proved the JS port routes

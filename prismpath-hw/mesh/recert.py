@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Re-certify the Ed25519-signed ESP-NOW swap mesh: one happy path + the negative matrix.
 
 Opens all three nodes, resets them, clears the anti-rollback floor, then drives:

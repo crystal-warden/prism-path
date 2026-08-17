@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Negative (and unary-plus) integer literals fold into the predicate language and the Level M
 fragment; a sign on a float or a field name stays outside it. check / eval / classifier / compiler
 must all agree (SPEC §4.3-§4.4)."""

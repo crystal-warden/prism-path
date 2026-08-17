@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """lsp.py — a Language Server for PrismPath flows (`prismpath lsp`). Stdlib only.
 
 Speaks LSP over stdio (JSON-RPC with Content-Length framing) so any LSP-capable editor —

@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """ledger_lint — enforce docs/research/LEDGER_STANDARDS.md on the evidence ledger.
 
 Checks the `### #N —` prose rows for:

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Human-readable inspect path — the answer to "opaque wire, no tcpdump".
 
 Point it at a captured telemetry bitstream + the flow `.md` and it decodes each reading back to its

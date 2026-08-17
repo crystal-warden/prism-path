@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """collect_blind.py — VERIFY a second annotator's blind answers and convert them to an annotation file.
 
 Reads the blind sheet (make_blind.py) and an answers file — one JSON object per line, each carrying an

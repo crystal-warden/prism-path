@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """annotate.py — blind human labeling of the routing benchmark for inter-annotator κ (gate zero).
 
 Steps a human through each benchmark case with the AI label HIDDEN: it shows the node's instruction,

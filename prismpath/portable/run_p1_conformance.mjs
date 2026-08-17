@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 Crystal Warden Supply Chain Labs LLC
 // run_p1_conformance.mjs — verify P1 (locked semantic routing) against frozen vectors.
 //
 //   node portable/run_p1_conformance.mjs [conformance-dir]

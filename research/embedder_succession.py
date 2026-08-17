@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Task #48 — embedder scouting harness + succession alignment.
 A) SCOUTING: score any candidate embedder on the N=301 routing suite (per-stratum centroid CV) vs
    the bge-base baseline. The 'upgrade engine' = tooling, not a model.

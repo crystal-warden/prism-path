@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """route_live.py — live sensor fields routed by the certified C table interpreter.
 
 Demo #1, strengthened: the router is not the Python engine — it is `build/interp eval` over

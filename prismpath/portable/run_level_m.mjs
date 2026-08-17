@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 Crystal Warden Supply Chain Labs LLC
 // Certify the JS flowLevelM against the frozen Level M vectors (generated from the Python reference
 // model_check.flow_level_m). Run: node prismpath/portable/run_level_m.mjs
 import { readFileSync } from "node:fs";

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """checkpoint.py — durable execution for prismpath (Area 6, Slice 0: the JSON checkpoint).
 
 The engine (engine.py) is pure and its `state` is ephemeral — thrown away when run() returns.

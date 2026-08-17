@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Codecs under comparison, each measured in BITS on a channel of integers. All the variable-length ones
 have a decode inverse (round-trip tested) so the sizes are trustworthy — a benchmark of a broken codec is
 worse than none.

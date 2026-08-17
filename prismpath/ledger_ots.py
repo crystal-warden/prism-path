@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """OpenTimestamps anchoring for the Flow-Ledger (task #36 / docs/design/spec-ledger-opentimestamps.md).
 
 Upgrades the ledger from ACCIDENT-tamper-evident to ADVERSARIAL temporal integrity: batches the

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """bench/otlp_baseline.py — the OTLP industry-baseline mechanics.
 
 Guards the claims the artifact makes so they can't silently rot: every record is a VALID

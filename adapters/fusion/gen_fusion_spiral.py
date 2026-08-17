@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Freeze the fusion_triage spiral tessellation + a decisions-preserved probe set.
 
 Mirrors adapters/telemetry/gen_spiral_corpus.py, with two deliberate differences: the flow is

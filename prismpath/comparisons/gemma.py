@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Shared LLM client for the Area-5 head-to-head, instrumented for the measured table.
 
 Every baseline that consults a model routes through the SAME local endpoint, the SAME model, and

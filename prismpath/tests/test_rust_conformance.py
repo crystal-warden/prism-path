@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """The Rust kernel must stay CONFORMANT — certification as a gate, not an event.
 
 `prismpath-rs` was certified against the frozen vectors on 2026-07-29 and re-verified on every run

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """CryptoHost (spec-crypto-agility.md §4) — the runtime swap governor.
 
 A swap is Authorized + Envelope-bounded (declared suites ⊆ approved, registry_hash bound) + monotonic

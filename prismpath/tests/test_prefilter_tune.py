@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """prefilter.tune — the risk-controlled operating point, on synthetic geometry.
 
 Corpus: two tight clusters (benign / malicious, cos > 0.99 internally) plus a handful of

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Confirm the BNO086 fusion suite streams SIMULTANEOUSLY on this rig (the capture needs it),
 and derive orientation from the quaternion. ~8s at 20 Hz with all features enabled at once.
 

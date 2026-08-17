@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """CI gate worker (Python). Read the build report from the [context] block on stdin, decide pass/coverage,
 print ONE JSON object, exit 0. A nonzero exit routes to the flow's error tier.
 Wire it in with:  cli_agent(["python", "ci_gate.py"], pass_state=["report"])"""

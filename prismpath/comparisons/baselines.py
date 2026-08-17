@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """The four Area-5 routing baselines, each making its decision the way that stack idiomatically does.
 
 Every baseline exposes:

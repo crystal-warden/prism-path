@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 Crystal Warden Supply Chain Labs LLC
 /* ppt_mesh.c — coordinated Level M policy hot-swap across an ESP-NOW mesh of ESP32 nodes.
  *
  * The physical realization of the crypto-migration fleet model (#94): every node holds two

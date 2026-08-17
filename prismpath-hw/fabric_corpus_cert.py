@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 import json, sys, time
 sys.path.insert(0, "/home/xilinx/ppt")
 from ppt_pynq import PptOverlay, PptImage

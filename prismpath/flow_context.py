@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Verified-flow-facts as agent context.
 
 PrismPath owns the control plane and can *prove* things about a flow graph — which nodes exist, how

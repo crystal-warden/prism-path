@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Freeze the spiral tessellation + a decisions-preserved probe set for the conformance test.
 
 Emits `conformance/spiral.json`: the integer cell->index/band/route map for a fixed flow (a mapping bug

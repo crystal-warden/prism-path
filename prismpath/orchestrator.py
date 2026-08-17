@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Agent orchestrator — plan -> approve -> execute backend for the chat UI.
 
 FastAPI service (binds 0.0.0.0:8771, CORS open for the :8773 chat UI). A non-technical user types

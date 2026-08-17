@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """ppt_compile.py — compile PrismPath Level M conditions/flows to PPT v1 table images.
 
 `compile --target table`, off-repo edition: uses the repo's own classifier

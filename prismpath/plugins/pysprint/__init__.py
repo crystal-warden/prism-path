@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """pysprint — a Python gate plugin for the sprint control plane.
 
 The browser gate (`gates.py`) proves a web app by loading it in a headless browser. This

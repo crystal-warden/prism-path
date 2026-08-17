@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """scheduler.py — a reference timer for `on timeout` edges (the piece that makes them fire).
 
 The engine is deliberately pure and does no I/O. When a worker returns `{"wait": True, "timeout_s": N}`

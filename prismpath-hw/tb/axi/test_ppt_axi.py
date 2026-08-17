@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """cocotb test for the AXI-Lite wrapper — the PS-eye view of the interpreter.
 
 Everything goes through real AXI4-Lite transactions, exactly as PYNQ MMIO will drive it:

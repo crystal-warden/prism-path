@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Build-flow resume-from-ledger (Area 6, Slice 3).
 
 A KG sprint records a git proof per gate-green node (Slice 1). If its `.kg.json` is wiped

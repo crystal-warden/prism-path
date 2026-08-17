@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 Crystal Warden Supply Chain Labs LLC
 /* ppt_esp32.c — the PPT v1 table interpreter on an ESP32-C6 (single-core RISC-V + Wi-Fi 6 / 802.15.4):
  * the wireless-capable RISC-V MCU substrate, and the intended node of the edge decision-fusion mesh.
  *

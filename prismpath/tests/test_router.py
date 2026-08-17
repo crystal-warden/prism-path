@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Router tests — exercise LLMRouter / HybridRouter WITHOUT loading any real model.
 
 ORIGIN: the swarm (Qwen2.5-Coder-7B) authored the first version; it had the right structure

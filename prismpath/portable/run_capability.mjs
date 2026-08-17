@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 Crystal Warden Supply Chain Labs LLC
 // Certify the JS capabilityReport against the frozen capability matrix (from Python
 // model_check.capability_report). Run: node prismpath/portable/run_capability.mjs
 import { readFileSync } from "node:fs";

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Compile the 2-field fusion policy to a .ppt and emit it as a C header for the fusion-pod firmware.
 
 Two independent analog fields fused into one decision: `level` (the potentiometer, 0-4095) and `light`

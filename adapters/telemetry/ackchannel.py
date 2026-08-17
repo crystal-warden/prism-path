@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Authenticated ACK / retransmission-control channel.
 
 Drop-on-ACK is a data-loss weapon if the control channel is unauthenticated: a forged "verified up to

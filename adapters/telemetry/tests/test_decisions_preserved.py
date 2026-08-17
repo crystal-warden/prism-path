@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """The differentiated proof, frozen. For every flow + reading in the corpus:
   * the engine still routes to the frozen target at every decision node (drift guard on flow + engine);
   * the wire round-trip — quantize -> Fibonacci-code -> decode -> reconstruct — routes to the SAME

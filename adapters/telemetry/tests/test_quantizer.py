@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Decision-preserving quantizer — the contract, pinned:
   * the partition is the coarsest that keeps every atom truth-invariant per cell (minimum sufficient
     statistic for the decisions);

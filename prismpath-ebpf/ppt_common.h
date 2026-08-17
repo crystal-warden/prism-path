@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 Crystal Warden Supply Chain Labs LLC
 /* ppt_common.h — PrismPath PPT v1 shared definitions for eBPF XDP & Loader */
 #ifndef PPT_COMMON_H
 #define PPT_COMMON_H

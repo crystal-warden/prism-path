@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """prismpath.sandbox — the runtime enforcement half of code nodes.
 
 `SandboxRunner` executes a code node's handler in a `bwrap` subprocess whose profile is derived from the

@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Fault injection proxy: edge sink connects to :19401, we forward to agg :19402, mangling per
 phase. Every injected fault is logged to faults.ndjson so the harvest can attribute damage."""
 import json, random, socket, threading, time

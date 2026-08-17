@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """The capability matrix, one frozen corpus, both engines. Python (model_check.capability_report) is
 pinned here; `node prismpath/portable/run_capability.mjs` pins the JS (capabilityReport) — so the CLI's
 answer and the playground's answer to "where does this flow run?" can never disagree."""

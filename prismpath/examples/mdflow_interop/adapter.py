@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """adapter.py — run Lindquist's `mdflow` tasks as PrismPath worker nodes.
 
 Thin layer over `prismpath.cli_worker`, specialized to mdflow's documented machine-facing

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """PolicyHost — the Attested + Audited-and-atomic half of the secure hot-swap
 (spec-secure-hotswap §3.3-§3.4).
 

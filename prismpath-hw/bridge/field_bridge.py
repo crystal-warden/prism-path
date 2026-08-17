@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """field_bridge.py — BNO086 -> PrismPath field dict, streamed as NDJSON over TCP.
 
 The Day-2 field bridge (runs on the Mac, under the Merkle-ledger venv whose adafruit_bno08x

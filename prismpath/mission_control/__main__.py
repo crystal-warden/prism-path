@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """`python -m prismpath.mission_control` — the loopback command center."""
 import uvicorn
 

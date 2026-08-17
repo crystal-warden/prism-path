@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """facet-init must transcribe faithfully and refuse honestly: every Level M-expressible VRL
 condition becomes an identical flow edge, everything else is reported verbatim with a reason, and
 no condition is ever invented from the sample (the tool drafts, the author signs)."""

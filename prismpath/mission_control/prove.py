@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Proving router — the primary-adapter headline.
 
 Text-in: callers POST a flow *document*, never a server-side path. That is what makes this a clean,

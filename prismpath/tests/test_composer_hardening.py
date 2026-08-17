@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Regression tests for the six bugs the adversarial pass found in item #4 (fan-out & composition).
 Each test fails against the pre-fix code and passes after. Stub agents; real durable runs on disk.
 """

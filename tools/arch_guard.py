@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """PrismPath architecture guard + per-adapter scorecard.
 
 Instruments the three highest-signal "is-it-really-general" failure modes (see ARCH persona memo):

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """OpenTelemetry-export tests (critic #5) — span records, no SDK required."""
 import numpy as np
 

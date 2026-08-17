@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Both engines, one frozen corpus. The Python reference (model_check.flow_level_m) and the JS
 kernel (prismpath.mjs flowLevelM) are each certified against portable/conformance/level_m.json —
 this pins the Python side; `node prismpath/portable/run_level_m.mjs` pins the JS side."""

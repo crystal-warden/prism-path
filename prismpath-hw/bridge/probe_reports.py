@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Empirically probe which BNO086 report channels actually stream on THIS MCP2221A rig.
 
 The field bridge is accelerometer-only on purpose: earlier bring-up found the rotation-vector

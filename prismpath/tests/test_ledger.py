@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Flow-Ledger tests (Area 6, Slice 1) — real git, throwaway bare repos, project repo untouched.
 
 Covers the Slice-1 DoD: done_set(commit_unit(...)) round-trips a known done-set; the git tree is a

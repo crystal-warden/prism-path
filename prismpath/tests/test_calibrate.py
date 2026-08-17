@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Risk-controlled calibration tests (Area 1) — derive τ with a finite-sample guarantee (LTT/RCPS,
 not conformal prediction) from labeled decisions."""
 import pytest

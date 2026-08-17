@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """audit_log now carries a real, tamper-evident Merkle root (via ledger_ots), behind the unchanged
 interface Mission Control + the guard ledger consume. Pin that."""
 import os

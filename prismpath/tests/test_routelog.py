@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Routing-decision-log tests (Sprint 0) — durable log of semantic decisions + label workbench."""
 import json
 

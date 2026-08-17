@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """context_ledger.py — attest WHAT a frozen model was conditioned on.
 
 For a hardwired / frozen-weights model, the weights are fixed silicon: the CONTEXT (system prompt,

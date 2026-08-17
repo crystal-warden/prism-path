@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Thin bge embedder for prismpath routing — mirrors pipeline/doc_rag.py conventions.
 
 CPU by default (bge-base is tiny; keeps the GPU free for other jobs). The agent's outcome

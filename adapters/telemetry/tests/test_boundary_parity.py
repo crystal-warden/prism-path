@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Boundary parity, frozen: the quantizer's symbol at every threshold edge (t-1, t, t+1 for cuts
 from 10^2 to 10^12) and at the f64 integer exactness edge (2^53-1, 2^53, 2^53+2, 10^15) must match
 the frozen corpus exactly. A drift on either side of any boundary is a decision change and goes red."""

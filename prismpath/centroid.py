@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """centroid.py — prototype routing: the escalation tier as a teacher (roadmap item 2).
 
 A zero-shot embedding router scores an outcome against the AUTHOR'S condition phrase and hopes real

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Mermaid-export tests (critic capability #4)."""
 from prismpath import graph_export
 from prismpath.parser import parse

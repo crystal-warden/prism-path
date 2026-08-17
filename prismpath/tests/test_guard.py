@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Tests for the security half of the onion (`prismpath/guard.py`).
 
 The load-bearing tests here are the ones that try to WEAKEN the floor. A safety layer that is merely

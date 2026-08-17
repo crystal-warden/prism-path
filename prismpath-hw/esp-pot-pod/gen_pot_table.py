@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Compile the knob-band policy to a .ppt and emit it as a C header for the pot-pod firmware.
 
 One analog field (`knob`, the potentiometer's 0-4095 ADC reading) routed into four decision bands at

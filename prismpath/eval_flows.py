@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Routing-accuracy mini-evals for the new example flows.
 
 For each flow we hand-label realistic agent outcomes with the SEMANTIC edge they should take

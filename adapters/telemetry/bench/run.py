@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Phase A go/no-go benchmarks. Set 1 = the bake-off (one scale, quick read). Set 2 = the parametric
 sweep (value regime x stream scale up to 100k, + retransmission), which shows convergence, the Fibonacci
 crossover, and that Set 1 isn't a small-N artifact. Writes results.md + results.json.

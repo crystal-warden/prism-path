@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Task #42 — learning-curve model: would MORE/differentiated data change results?
 Subsamples EXISTING data (no collection) and reads the slope near the top of our range.
   A) Routing: centroid & g_diag accuracy vs samples-per-edge  (does more labeled disposition help?)

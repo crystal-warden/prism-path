@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Wait-for-event tests (critic #7) — suspend on `{"wait": …}`, resume by delivering a signal/timer."""
 import pytest
 

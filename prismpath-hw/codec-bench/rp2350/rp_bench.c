@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 Crystal Warden Supply Chain Labs LLC
 /* Codec bench on the RP2350: one source, both ISAs (Cortex-M33 arm-s / Hazard3 riscv). */
 #include <stdio.h>
 #include "pico/stdlib.h"

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """prismpath lsp — the stdlib language server, driven in-process over byte pipes.
 
 Covers the protocol frame round-trip and each capability: initialize handshake, diagnostics

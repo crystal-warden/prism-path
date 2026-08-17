@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """guard_ledger.py — wire guard verdicts into the attested trail.
 
 This is where the onion's two halves meet: the **security** half (`guard.py`) decides, the

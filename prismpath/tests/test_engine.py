@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Engine tests — end-to-end run() with MOCK agents and a stub router (no real model).
 
 ORIGIN: the swarm (Qwen2.5-Coder-7B, driven by flows/build_prismpath.md) authored the first

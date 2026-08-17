@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Regression tests for fixes from the adversarial code review."""
 import numpy as np
 import pytest

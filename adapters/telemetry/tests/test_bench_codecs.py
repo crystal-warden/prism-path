@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """The benchmark measures nothing trustworthy unless its codecs are correct. Pin the round-trips."""
 import sys
 from pathlib import Path

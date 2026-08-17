@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Task #41 — PCA-reduced density routing + don't-know, PRE-REGISTERED bar.
 Per fold: PCA-fit on TRAIN outcomes (no leakage) -> k dims; per-edge mean + FULL shrunk covariance
 (now estimable); route by Gaussian log-likelihood. Don't-know = max log-lik under candidates.

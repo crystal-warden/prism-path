@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """run_vectors.py — certify the C target against the frozen conformance corpus.
 
 For every vector inside the declared v0 subset (TABLE_FORMAT.md), compile the condition/flow

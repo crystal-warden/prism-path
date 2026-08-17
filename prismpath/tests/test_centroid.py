@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Prototype/centroid routing tests (roadmap item 2). A stub embedder keeps them fast + deterministic;
 the real N=301 cross-validated result is measured separately (see `prismpath centroids`)."""
 import numpy as np

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """gen_p1_lockfile.py — freeze the P1 semantic layer's operating parameters.
 
 The layer is only trustworthy if the thing it consults is pinned. This emits everything a consumer

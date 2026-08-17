@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 Crystal Warden Supply Chain Labs LLC
 /* Codec bench on the ESP32 (Xtensa LX6, 240 MHz): verify then time, same core as every ISA. */
 #include <stdio.h>
 #include "esp_timer.h"

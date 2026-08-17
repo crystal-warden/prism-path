@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """compile_flows.py — table-compile every repo flow (the day-1 `compile --target table` sweep).
 
 For each flow in the repo: attempt a PPT image of its deterministic tier. Reports compilable

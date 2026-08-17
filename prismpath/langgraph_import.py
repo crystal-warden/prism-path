@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """langgraph_import.py — `prismpath import`: turn a LangGraph StateGraph into a skeleton flow.
 
 Migration tooling is the classic adoption wedge — and the import itself demonstrates the thesis:

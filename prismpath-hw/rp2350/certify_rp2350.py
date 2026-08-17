@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Certify the RP2350's PPT interpreter against the frozen predicate corpus, over USB-CDC serial.
 
 The EXACT contract of run_vectors.cert_predicates (the C target's certification) and identical to

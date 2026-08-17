@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """cli_worker.py — ANY command-line program as a flow worker (the generic subprocess contract).
 
 The engine's worker interface is `agent(node, instruction, state) -> str | dict`. This module

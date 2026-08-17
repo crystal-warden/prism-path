@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 # tests/test_predicates.py
 import pytest
 from prismpath.predicates import (

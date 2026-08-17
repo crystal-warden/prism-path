@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 Crystal Warden Supply Chain Labs LLC
 /* loader.c — PrismPath PPT v1 eBPF/XDP Userspace Loader
  *
  * Reads a PPT table image (.ppt binary format), populates BPF maps,

@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Task #39 — Gaussian-per-edge density routing vs cosine+centroid on the N=301 suite.
 
 Converts the escalation margin (a 'the embedder can't say how unsure it is' hack) into a native

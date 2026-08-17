@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """sprint_flow.py — the sprint loop AS A FLOW (roadmap item #6, the dogfood).
 
 `run_sprint.py`'s inner loop — pick unit, execute, gate, retry ×3, escalate — was a fixed

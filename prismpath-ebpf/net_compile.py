@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Compile a network-triage flow to a PPT table with the CANONICAL packet-field schema pre-seeded, so
 the compiled field indices line up with the fixed slots ppt_net.bpf.c fills from a real packet:
 

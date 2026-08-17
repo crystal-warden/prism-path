@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 Crystal Warden Supply Chain Labs LLC
 /* ppt_tof.c — on-device sensor -> decision demo on the RP2350.
  *
  * Beyond the substrate cert (where the host feeds register values), here the MCU reads a real

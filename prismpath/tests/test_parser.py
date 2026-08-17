@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 import pytest
 from prismpath.parser import parse, parse_file, Graph, Node, ParseError
 from prismpath import parser as _parser

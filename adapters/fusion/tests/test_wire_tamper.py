@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Tamper tests for the Facet wire — backs the trust-boundary tiers in PROTOCOL.md §6.
 
 Three claims, three tiers, one file:

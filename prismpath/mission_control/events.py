@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Events router — Server-Sent Events so the command center is live, not polled.
 
 Watches the followed sprint's artifacts on disk (status heartbeat, interactions lens, checkpoint) and

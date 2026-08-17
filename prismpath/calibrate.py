@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """calibrate.py — turn the escalation threshold δ into a *risk-controlled* τ with a guarantee (Area 1).
 
 The margin (top-1 − top-2 similarity) is a confidence score; escalating to the LLM is abstention.

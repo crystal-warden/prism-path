@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """fuzz_predicates.py — adversarial + random fuzzing of the `when` predicate sandbox.
 
 The sandbox's security claim (whitepaper §3.3): a flow is a Markdown file that may come from an

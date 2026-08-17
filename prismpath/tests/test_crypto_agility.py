@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """crypto_agility — the P1-P5 proofs + the frozen conformance fixture (spec-crypto-agility.md §5, §12).
 
 Replays `portable/conformance/crypto_agility.json`: every case's full proof output must reproduce

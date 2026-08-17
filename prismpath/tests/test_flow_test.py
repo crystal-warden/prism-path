@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Tests for `prismpath test` — the Markdown routing-fixture runner.
 
 Deterministic-tier cases need no model (and prove it — the router is never constructed). Embed-tier

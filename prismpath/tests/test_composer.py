@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Tranche 2 of item #4: the composer harness (fan-out spawn -> run -> join -> aggregate -> resume).
 
 All stub agents — no model, no network. Real durable child runs on disk under tmp_path. These pin the

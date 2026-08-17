@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 Crystal Warden Supply Chain Labs LLC
 // The grammar's tier classification IS the editor's claim about the format — pin it.
 // Each edge line must be captured by exactly the intended tier rule (rule ORDER in the grammar
 // resolves overlaps: error/event/deterministic/always before the semantic catch-all).

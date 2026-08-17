@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Bidirectional bridge for the frozen safety vectors.
 
 Enforces both directions on every run, the same discipline as `test_conformance_vectors.py`:

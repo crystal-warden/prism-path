@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 Crystal Warden Supply Chain Labs LLC
 /* prismpath VS Code extension — the editor surface for flow files.
  *
  * Three things, all thin (the real machinery is the repo's own tooling):

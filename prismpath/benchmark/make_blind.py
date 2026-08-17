@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """make_blind.py — emit a BLIND annotation sheet from the routing benchmark, for a second annotator.
 
 The gate-zero design (annotate.py) steps a human through each case with the AI label hidden. When a

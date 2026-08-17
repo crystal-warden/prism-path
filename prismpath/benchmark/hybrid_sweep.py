@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """hybrid_sweep.py — the two launch-gating measurements the reviewer asked for, in one harness:
 
   (1) RE-DERIVE the δ frontier at N=301 (the "knee near δ≈0.05" claim was measured at N=17 and

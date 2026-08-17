@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 Crystal Warden Supply Chain Labs LLC
 // run_conformance.mjs — replay conformance fixtures through the PORTABLE kernel.
 //
 // The cross-language check behind item #5's claim: the Python engine and this port route

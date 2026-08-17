@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 Crystal Warden Supply Chain Labs LLC
 /**
  * prismpath.mjs — the PORTABLE prismpath kernel (roadmap item #5): parser + safe predicate
  * evaluator + engine loop for the ML-FREE subset, in one dependency-free ES module.

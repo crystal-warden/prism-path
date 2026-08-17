@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Band-population census for the fusion_triage tessellation.
 
 Weights every ring of the spiral with REAL data: the cyber axis from an alert-level backlog

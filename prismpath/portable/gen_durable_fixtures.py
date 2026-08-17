@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Freeze cross-language fixtures for the DURABLE layer (checkpoint/resume + attestation
 manifests) so the Rust port is gated against what the Python reference actually produces —
 measured, not asserted (the same contract as predicates.json / spiral_fusion.json).

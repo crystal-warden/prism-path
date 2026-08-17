@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """model_check — Level M fragment classification + bounded reachability (`prismpath verify`).
 
 The checker's contract, pinned:

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """bugfix_crewai.py — the `bugfix` flow expressed in CrewAI, as an Area-5 baseline.
 
 Reference implementation (requires `pip install crewai`; NOT run in this repo's CI — it needs an

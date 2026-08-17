@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Trusted pre-loader for the eBPF policy hot-swap (spec-secure-hotswap §5, eBPF layer).
 
 The kernel `loader … netupdate` will happily repopulate maps from any structurally-valid image.

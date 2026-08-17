@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Tests for the optional P1 semantic layer.
 
 The embedder is injected as a stub throughout, deliberately: the properties that matter here are

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """mdflow interop — the paper's "composes naturally as a node's worker" claim, gated.
 
 Related Work (paper §2) says a task-level Markdown runner like Lindquist's `mdflow` "can serve

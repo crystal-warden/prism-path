@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """prismpath.code_nodes — code nodes as governed workers.
 
 A **code node** is a node whose worker is plain code (not an LLM, not mdflow). It is the same worker

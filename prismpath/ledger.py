@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """ledger.py — the git Flow-Ledger: gate-green proof-commits (Area 6, Slice 1).
 
 Where Slice 0 (checkpoint.py) makes a run *resumable*, the Flow-Ledger makes each completed unit

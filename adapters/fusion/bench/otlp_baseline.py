@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """OTLP baseline — the industry-standard telemetry wire, measured against the decision codec.
 
 Closes the named follow-on in evidence #84 ("protobuf/OTLP baseline not yet built"). The question a

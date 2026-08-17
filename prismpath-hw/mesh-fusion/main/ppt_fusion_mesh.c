@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 Crystal Warden Supply Chain Labs LLC
 /* ppt_fusion_mesh.c — distributed Level M decision fusion across an ESP-NOW mesh of three ESP32 nodes.
  *
  * Each node senses ONE channel, projects it to a small band, and broadcasts that band over ESP-NOW.

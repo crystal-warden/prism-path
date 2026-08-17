@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Control router — start/stop the sprint and resolve human-in-the-loop decisions."""
 import os
 

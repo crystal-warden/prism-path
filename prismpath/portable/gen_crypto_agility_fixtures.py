@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Freeze the crypto-agility conformance fixture (`spec-crypto-agility.md` §10.3).
 
 Emits `conformance/crypto_agility.json`: the signed-registry contents + its hash, the CNSA-2 envelope,

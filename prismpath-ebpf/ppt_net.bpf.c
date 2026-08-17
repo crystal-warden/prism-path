@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 Crystal Warden Supply Chain Labs LLC
 /* ppt_net.bpf.c — PrismPath PPT on REAL network packets (XDP), observe-only.
  *
  * Same verifier-accepted match-action back-end as ppt_xdp.bpf.c (eval_atom / eval_prog / evaluate over

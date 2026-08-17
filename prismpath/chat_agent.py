@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """chat_agent.py — any OpenAI-compatible chat endpoint as a flow worker, stdlib only.
 
 The five-minutes-after-clone path for people who already run local models:

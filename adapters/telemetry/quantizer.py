@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Decision-preserving quantizer — the differentiator.
 
 A flow's routing over a field changes truth only at the constants that field is compared against

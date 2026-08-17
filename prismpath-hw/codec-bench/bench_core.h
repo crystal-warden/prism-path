@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 Crystal Warden Supply Chain Labs LLC
 /* Verify then time. Any byte mismatch vs the reference generated corpus halts before timing:
  * the published number is the cost of a VERIFIED codec. now_us/print supplied per target. */
 #pragma once

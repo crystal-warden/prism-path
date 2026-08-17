@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Deferral / Resumption port (CORE) — suspend a unit-of-work and resume it later.
 
 Domain-neutral: human-in-the-loop review, missing-evidence discovery, or any handoff where automated

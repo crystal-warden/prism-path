@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Gilbert-Elliott burst-loss channel + retransmission accounting.
 
 Gilbert-Elliott is the standard 2-state (Good/Bad) model for bursty links (satellite/RF): in Good, loss

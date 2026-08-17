@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """cocotb testbench — certify the RTL interpreter against the frozen conformance corpus.
 
 THE gate (plan: days 3-4). Mirrors run_vectors.py exactly — same subset filter, same

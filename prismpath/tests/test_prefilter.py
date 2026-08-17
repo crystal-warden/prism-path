@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Prefilter tests — exercise PrefilterCache / match_arrays WITHOUT loading any real model.
 
 Every cache gets a stub embed_fn (list[str] -> [n,d] unit-normalized float32) and a tmp_path

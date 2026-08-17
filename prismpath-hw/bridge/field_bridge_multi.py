@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Multi-modal field bridge (v5): the proven accel-derived decision fields PLUS the BNO086's
 on-chip fusion outputs — orientation (quaternion -> roll/pitch/yaw/tilt) and the chip's own
 stability classifier — streamed as NDJSON.

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Authoring linter — the one *non-decidable* check, layered on top of static analysis.
 
 `prismpath.analysis` covers everything decidable (reachability, shadowing, stuck, cycles, dead

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Compile the 3-field distributed-fusion policy to a .ppt and emit it, with the node role map, as a
 C header for the ESP-NOW fusion mesh.
 

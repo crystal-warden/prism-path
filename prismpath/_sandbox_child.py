@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Child process for prismpath.sandbox — runs ONE code-node handler under a memory rlimit and reports
 the outcome as JSON. Invoked as `python -m prismpath._sandbox_child` INSIDE the bwrap sandbox; it reads
 a single JSON job on stdin: {module, func, node, instruction, state, mem_mb}.

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """prismpath.connector — The Connector SDK for PrismPath.
 
 A subclassable developer API for building domain connectors against all **six hexagonal

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """context_ledger — the attestable context surface for frozen models: chaining, Merkle root,
 manifest binding, tamper evidence, and the structural privacy property (hashes only, ever)."""
 import hashlib

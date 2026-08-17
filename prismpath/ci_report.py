@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """ci_report.py — the PR report: validate + fixtures + before/after Mermaid for changed flows.
 
 `prismpath ci-report --base <ref>` finds the flow files changed since `<ref>`, runs the decidable

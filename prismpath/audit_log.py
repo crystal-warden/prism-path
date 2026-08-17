@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """audit_log.py — an append-only action log for Mission Control, with a real (tamper-evident) Merkle root.
 
 Every control action (start/stop a sprint, edit a file, run an ad-hoc query, …) is appended as a line to

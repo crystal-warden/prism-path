@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 Crystal Warden Supply Chain Labs LLC
 // run_vectors.mjs — verify an implementation against the FROZEN conformance vectors.
 //
 //   node portable/run_vectors.mjs [conformance-dir]

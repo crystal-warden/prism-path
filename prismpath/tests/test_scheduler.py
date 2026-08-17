@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Reference-scheduler tests (critic #7) — `on timeout` edges only fire because something delivers
 `__timeout__`; this is that something."""
 import os

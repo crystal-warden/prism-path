@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Compile the two pre-vetted mesh policies, SIGN them with the fleet's Ed25519 authority key, and emit
 them as a C header for the ESP-NOW nodes.
 

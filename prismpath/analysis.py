@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """analysis.py — static analysis over the flow graph ("your flow compiles").
 
 Because the flow *is* the graph (a Markdown file, not code smeared across Python), the whole

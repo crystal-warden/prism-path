@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Route ONE real high-severity incident (the level-10 SSH brute-force alert) through the eBPF triage
 router in-kernel. The routing action is the flow's own decidable projection of the alert level (the
 flow is the adjudicator, a proof not a judgment), and the loader `run` mode then drives it hop-by-hop

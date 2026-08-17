@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Route a REAL alert stream through the eBPF triage router in-kernel.
 
 For each real alert (from scratch/real_alerts.ndjson): normalize it, project the alert level onto the

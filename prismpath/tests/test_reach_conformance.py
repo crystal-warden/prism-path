@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Three-valued reachability, one frozen corpus, both engines. Python (model_check.check_reach) is
 pinned here; `node prismpath/portable/run_reach.mjs` pins the JS (checkReach) against the same
 reach.json — so the CLI's reachability verdict and the playground's can never disagree. Witnesses are

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Wire prismpath -> the local agent swarm.
 
 `make_swarm_agent(...)` returns an prismpath-compatible agent callable

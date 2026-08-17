@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Error-edge tests (critic capability #3) — failure handling in the readable document.
 
 `-> t: on error` routes when the worker raises; `on error when error_count >= N` conditions on the

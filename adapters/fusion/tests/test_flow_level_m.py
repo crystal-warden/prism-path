@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """The fusion_triage flow: Level M proof + frozen structure + routing matrix.
 
 The structure inventory is frozen on purpose: the spiral band order derives from the first

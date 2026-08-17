@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 Crystal Warden Supply Chain Labs LLC
 /* ppt_uno.c — the PPT v1 table interpreter on an ATmega328P (Arduino Uno R3): the MCU substrate.
  *
  * The same certified `.ppt` images every other substrate holds (TABLE_FORMAT.md) are loaded over

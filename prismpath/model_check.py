@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """model_check.py — Level M fragment classification + bounded model checking (`prismpath verify`).
 
 Two capabilities over the decidable heart of a flow (SPEC §4.3, §7):

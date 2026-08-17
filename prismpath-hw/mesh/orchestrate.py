@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Watch the 3-node ESP-NOW mesh and trigger a coordinated policy swap.
 
 Opens all three nodes, prints their status with a host timestamp, then pokes ONE node with 'R' — it

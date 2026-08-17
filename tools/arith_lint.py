@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """arith_lint — recompute cross-artifact numeric ratios from the canonical fusion bench JSONs and
 fail when a stored ratio is internally inconsistent, two files disagree, or a doc quotes a superseded
 value without its append-only annotation.

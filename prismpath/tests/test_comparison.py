@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Structural tests for the Area-5 comparison harness.
 
 These do NOT hit the network or require langgraph/crewai — they assert the runner loads the labeled

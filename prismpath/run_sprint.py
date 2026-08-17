@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Generic TIMED + SUPERVISED agent build sprint — a 5-ROLE pipeline on the served model.
 
 Evolves the old builder+critic loop into separated roles with hard boundaries (the architect never

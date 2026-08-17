@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """pysprint gate plugin — the Python gate that runs pytest and reports the verdict.
 
 Function-level, no server, tmp_path — the suite's convention for a component like this.

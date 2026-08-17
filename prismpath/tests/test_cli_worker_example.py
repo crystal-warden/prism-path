@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """'Run any program as a worker' (docs/guides/workers.md), proven with four language workers across three
 jobs, all on one contract (read stdin, print one JSON object, exit 0; a nonzero exit -> error tier):
 

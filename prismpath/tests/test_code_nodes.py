@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Code nodes as governed workers: routing on a code outcome, the static envelope gate, and the
 fail-closed contract (no undeclared code, no un-governed execution)."""
 import pytest

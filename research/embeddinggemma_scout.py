@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Task #52 — fetch + scout EmbeddingGemma; cross-family succession + native-Matryoshka density.
 Robust to prompt/dim API differences. NEVER touches model-gemma (bge/egemma are small)."""
 import os, sys, json, numpy as np

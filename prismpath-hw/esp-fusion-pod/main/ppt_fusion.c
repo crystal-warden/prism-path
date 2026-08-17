@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 Crystal Warden Supply Chain Labs LLC
 /* ppt_fusion.c — the 2-field fusion pod: two independent analog fields (pot + photoresistor) fused into
  * one on-device decision by a baked Level M policy, shown as an RGB LED color.
  *

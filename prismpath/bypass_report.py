@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """bypass_report.py — run the stratified adversarial corpus against the P0 floor and report.
 
 Emits exactly the table pre-registered in `docs/research/bypass-measurement.md` §4: bypass rate per (rule,

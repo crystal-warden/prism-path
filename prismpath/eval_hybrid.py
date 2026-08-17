@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """3-arm routing eval: EMBED vs LLM vs HYBRID, with a confidence-threshold frontier.
 
 We compute, once per labeled case, the embedding decision (+ its top1↔top2 margin) and the LLM

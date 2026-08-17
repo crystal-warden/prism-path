@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Authenticated ACK contract:
   * a valid, advancing ACK applies drop-on-ACK;
   * a forged, tampered, wrong-secret, or replayed ACK is ignored — and CRUCIALLY drops no data

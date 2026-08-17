@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """canary_verify is the cutover gate: exit 0 only on perfect route parity between a canary's raw
 JSON leg and its decoded Facet leg, with any daylight named by position and route. It must also
 keep positions synchronized when the encoder legitimately dropped events (on_missing)."""

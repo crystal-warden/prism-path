@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Edit router — list/read/write flow files, the only write surface, path-contained and fail-closed."""
 import os
 

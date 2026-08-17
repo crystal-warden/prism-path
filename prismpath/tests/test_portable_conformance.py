@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Item #5 T3: CROSS-LANGUAGE conformance — the Python engine and portable/prismpath.mjs must route
 IDENTICALLY on the portable subset.
 

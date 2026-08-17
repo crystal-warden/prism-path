@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """mock_mdflow.py — a stand-in for Lindquist's `mdflow` task runner, for interop testing ONLY.
 
 This is NOT mdflow. It is a small deterministic stub that mimics mdflow's *documented* CLI

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """ci-report — the PR comment builder (validate + fixtures + before/after Mermaid).
 
 Runs against a REAL temp git repo: pins that changed-flow detection excludes fixtures/prose/

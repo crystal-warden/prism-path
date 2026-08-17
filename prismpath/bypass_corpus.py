@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """bypass_corpus.py — stratified adversarial variants of the seeds the P0 floor claims to deny.
 
 Protocol is pre-registered in `docs/research/bypass-measurement.md`; this module implements it and must not

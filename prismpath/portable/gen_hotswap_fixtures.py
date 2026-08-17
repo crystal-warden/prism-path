@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Freeze cross-language HOT-SWAP fixtures: a Python-signed pack + envelope + the full negative
 matrix, every expected verdict computed by RUNNING the Python reference gates (verify_pack /
 check_envelope) — so the Rust port is measured against what Python actually decides, reason

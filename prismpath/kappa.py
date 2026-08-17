@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """kappa.py — inter-annotator agreement (Cohen's κ) + adjudication for the routing benchmark.
 
 Gate zero for a release claim is a HUMAN-annotated benchmark with reported Cohen's κ: our N=301 labels

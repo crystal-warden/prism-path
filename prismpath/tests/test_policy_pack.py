@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Signed policy packs (spec-secure-hotswap §3.1-§3.2): the Authorized gate's negative matrix —
 unsigned, tampered image, tampered manifest, wrong key, revoked key — and the Envelope-bounded
 gate rejecting each violation class with a stable reason. Compiles a real flow through the real

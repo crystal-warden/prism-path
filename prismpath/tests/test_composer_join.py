@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Tranche 3 of item #4: join policies (all_done / any / quorum), gate-based child success, and the
 fan-out timeout — which reuses the EXISTING scheduler (a fan-out parent is just a `waiting` checkpoint
 with a timer, so scheduler.fire_due_timeouts delivers `__timeout__` and takes the `on timeout` edge).

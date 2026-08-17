@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Mission Control — the single-user engine.
 
 The reference deployment's control plane, re-scoped to **proving + observability over flows** for one

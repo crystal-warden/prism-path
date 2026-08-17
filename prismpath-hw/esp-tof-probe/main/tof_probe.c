@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 Crystal Warden Supply Chain Labs LLC
 /* tof_probe.c — throwaway ESP-IDF probe: I2C bus scan + VL53L0X ID check + live ranging on GPIO21/22.
  * Used to verify the three ToF sensors are wired to the three mesh ESP32s before folding the driver
  * into ppt_mesh.c. The VL53L0X init/ranging logic is a straight port of prismpath-hw/rp2350/vl53l0x.c

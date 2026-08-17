@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """The graph engine — a LangGraph replacement driven by a markdown graph.
 
 run(graph, agent): start at graph.start; at each node, hand the agent the node instruction

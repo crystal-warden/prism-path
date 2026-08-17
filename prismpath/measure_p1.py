@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """measure_p1.py — efficacy of the optional P1 semantic layer against the frozen corpus.
 
 Protocol: `docs/research/bypass-measurement.md` §5.4, recorded before this layer was written. The semantic strata

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Seeded, reproducible telemetry generators. Realistic in the way that matters for delta-differencing:
 consecutive samples are correlated (bounded random walks), not i.i.d. noise. The four regimes span the
 value dynamic range — the axis Fibonacci coding is sensitive to.

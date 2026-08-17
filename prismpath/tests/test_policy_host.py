@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """PolicyHost (spec-secure-hotswap §3.3-§3.4): a swap is authorized + in-envelope + monotonic +
 atomic, every attempt is one audit event, the swap chain reconstructs from the ledger, and a
 failure at any stage leaves the previous policy active. Uses the real compiler + real Ed25519."""

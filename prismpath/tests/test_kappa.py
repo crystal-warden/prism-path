@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Gate-zero tooling tests — Cohen's κ, adjudication, and blind benchmark annotation."""
 import json
 import os

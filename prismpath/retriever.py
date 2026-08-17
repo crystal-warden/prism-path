@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Dense retriever over a cwplatform-format turbovec docs index — grounds the coder in real docs.
 
 Generic by design: the index is whatever the active gate-plugin points at (its RAG_INDEX) — a

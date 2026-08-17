@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Wire-bytes benchmark — the honest transmission-cost model the payload benchmark deferred.
 
 `bandwidth.py` measured payload + attestation. This measures what actually goes on the wire:

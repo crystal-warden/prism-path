@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """The FROZEN conformance vectors (portable/conformance/) — the kernel spec as data.
 
 Two guarantees, enforced on every test run:

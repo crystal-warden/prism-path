@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Build the eBPF in-kernel conformance corpus from the FROZEN predicate vectors — the same
 `prismpath/portable/conformance/predicates.json` every kernel certifies against.
 

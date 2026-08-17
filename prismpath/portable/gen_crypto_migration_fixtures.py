@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Freeze the fleet-migration corpus (`spec-crypto-agility.md` §10.5, §12).
 
 A family of suite-selection policies `policy_k` each permit the classical suite only *below* migration

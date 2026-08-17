@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """graph_export.py — render a flow as a Mermaid diagram (`prismpath graph`).
 
 Because the flow *is* the graph, one command turns it into a picture that renders natively in a

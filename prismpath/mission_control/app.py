@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """The FastAPI app — mounts the routers under /api/v1 and serves the command center.
 
 Single-user, loopback. This is the reference control-plane deployment; nothing in the PrismPath

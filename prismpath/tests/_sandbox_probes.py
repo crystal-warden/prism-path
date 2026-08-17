@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Module-level probes for the sandbox behavioral test — they must be importable by dotted path so
 they can cross into the bwrap subprocess (a lambda/closure cannot)."""
 

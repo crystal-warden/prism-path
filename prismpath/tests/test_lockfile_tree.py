@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Tranche 5 of item #4: a parent lock pins its child locks (composition tree pinning — hard part 1).
 
 Stub embedder throughout (no model), reusing the pattern from test_lockfile.py: the point here is the

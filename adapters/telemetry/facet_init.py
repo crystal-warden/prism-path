@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """facet-init: draft a Facet policy flow from the Vector config you already run.
 
 Your Vector routes ARE your codebook. This tool reads a `vector.toml`, finds the `route` and

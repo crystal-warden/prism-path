@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Tranche 1 of roadmap item #4 (fan-out & sub-flow composition): the ENGINE side.
 
 The engine's whole contribution to fan-out is a single, pure passthrough: a worker that returns

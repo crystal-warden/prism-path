@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Observe router — read-only views over the followed sprint's on-disk artifacts."""
 import json
 import os

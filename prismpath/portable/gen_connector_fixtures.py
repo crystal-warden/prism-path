@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Freeze cross-language CONNECTOR-SDK + COMPOSITION fixtures — hashes, the flattened prompt
 surface, the attestation manifest, and a spawn/join fan-out run through the reference
 `checkpoint.resume(event=...)` path — so the Rust port is measured, not asserted.

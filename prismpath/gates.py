@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Reusable validation gates for the agent build loops.
 
 Factored out of run_creator2.py so the legacy creator loop AND the new timed/supervised

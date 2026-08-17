@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 Crystal Warden Supply Chain Labs LLC
 /* ppt_xdp.bpf.c — PrismPath PPT v1 Match-Action Table Interpreter in XDP/eBPF
  *
  * Reproduces exact interp.c semantics:

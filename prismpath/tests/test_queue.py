@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Human-queue tests (Area 6) — the Mission Control queue backend: list suspended runs, record a
 human's decision, and resume by applying it. No real model, no .md writes."""
 import json

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Routing-runner tests (Area 6, Slice 2) — per-item loop, proof-per-item, resume-from-ledger.
 
 DoD: a run stopped mid-stream resumes at the first item with no green commit; no duplicate proofs

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Item #6 (dogfood): the sprint loop as a flow — flows/sprint_loop.md + sprint_flow.py.
 
 Stub seams, REAL git ledger (throwaway state dir). These pin the loop semantics now living in

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """chat_agent — the `--agent ollama:MODEL` / `openai:MODEL@BASE` worker, against a stub endpoint.
 
 Pins the contract: JSON replies (bare or fenced) become field outcomes that route `when` edges;

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Drift guards — pin the numbers the FPGA/eBPF declared-subset claims derive from, so a corpus or
 classifier change turns a test RED instead of silently making a published number wrong.
 

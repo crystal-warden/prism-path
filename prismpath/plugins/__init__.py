@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """prismpath plugins — the harness-side extension ecosystem.
 
 A plugin packages non-core capability behind ONE uniform, auditable boundary so the engine stays

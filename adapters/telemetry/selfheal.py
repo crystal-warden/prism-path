@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Self-healing transport — Merkle-committed blocks + selective retransmission, reusing the repo's real
 Merkle primitive (`prismpath.ledger_ots`, which is also OTS/Bitcoin-anchorable). NOT a new subsystem.
 

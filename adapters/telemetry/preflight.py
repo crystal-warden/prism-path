@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """prismpath-preflight: will YOUR events survive the Facet codec? One command, one report.
 
 Point it at a policy flow and a sample of your real events (NDJSON, one JSON object per line) and it

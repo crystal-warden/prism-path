@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """routelog.py — a durable log of routing decisions (Sprint 0), and a labeling workbench.
 
 Every semantic-tier routing decision a run makes can be appended to a JSONL file: the outcome, the

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Zeckendorf/Fibonacci codec — the wire's contract, pinned:
   * exact round-trip over positive integers;
   * doc-faithful small-integer codes (1->11, 2->011, 3->0011, 4->1011);

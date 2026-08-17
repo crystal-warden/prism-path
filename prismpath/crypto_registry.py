@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Crypto-suite registry — the signed symbol->primitive binding (`spec-crypto-agility.md` §7).
 
 The control plane governs SELECTION over symbolic suite ids; this registry pins each id to a

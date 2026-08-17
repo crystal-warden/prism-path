@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """ledger_runner.py — drive a routing flow as a per-item loop with a git proof per item (Slice 2).
 
 The sprint control plane (run_sprint.py) already has a gate-green seam to hang the Flow-Ledger on.

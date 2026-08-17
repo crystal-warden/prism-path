@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 Crystal Warden Supply Chain Labs LLC
 /* blink_id.c — identify one physical board: blink the onboard LED (GPIO2) fast and forever.
  * Flashed to /dev/ttyUSB0 only, so the board that blinks is node A — the one with the dead sensor. */
 #include "freertos/FreeRTOS.h"

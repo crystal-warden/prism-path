@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Shadow-sampling / self-policing tests for PrefilterCache (item #3).
 
 Same stub-embedder discipline as test_prefilter.py: no model, no torch, no network. These exercise

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Wire glue — a reading <-> a self-framing Fibonacci bitstream, through the decision-preserving quantizer.
 
 Field order is canonical (sorted field names), so encode and decode agree with **zero header**. Symbols

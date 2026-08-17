@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """The code-node sandbox: the envelope is enforced (memory / timeout / network / filesystem), and
 absence is loud (refuse fail-closed; override runs un-sandboxed but stamps the outcome). Behavioral
 tests spawn bwrap; they skip cleanly where bwrap is unavailable."""

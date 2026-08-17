@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """The security half of the onion — a deterministic, non-weakenable safety boundary.
 
 PrismPath's onion is security + observability wrapped around the engine. The observability half

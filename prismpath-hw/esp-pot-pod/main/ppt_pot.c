@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 Crystal Warden Supply Chain Labs LLC
 /* ppt_pot.c — the fusion-pod first light: an analog field (potentiometer on GPIO34) decided on-device
  * by a baked Level M policy, driving the onboard LED (GPIO2) brightness by band.
  *

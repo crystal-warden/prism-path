@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Zeckendorf / Fibonacci codec — the self-framing wire for the decision-preserving telemetry stream.
 
 Every positive integer has a unique Zeckendorf representation (a sum of non-consecutive Fibonacci

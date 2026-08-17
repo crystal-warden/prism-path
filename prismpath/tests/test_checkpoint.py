@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Durable-execution tests (Area 6, Slice 0) — checkpoint + resume, no real model, no .md writes.
 
 The load-bearing guarantees:

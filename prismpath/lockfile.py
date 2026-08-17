@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """lockfile.py — the routing lockfile: package-lock.json for control flow.
 
 Semantic routing is a function of the embedder's exact numerics. A model update, a different ONNX

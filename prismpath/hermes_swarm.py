@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Hermes role-swarm — one memory-forming Hermes agent per role, all on local gemma4.
 
 Each role is a separate `$HERMES_HOME` (its own persistent memory / skills / sessions, seeded with a

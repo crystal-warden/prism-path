@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Tests for wiring guard verdicts into the attested trail.
 
 The load-bearing assertions are about what the trail *binds* and what it *refuses to leak*: an entry

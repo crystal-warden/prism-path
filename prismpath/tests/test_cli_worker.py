@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """The generic CLI-worker contract (cli_worker.py): any command-line program as a flow worker.
 
 A fake CLI (a tiny Python script written into tmp_path) exercises every leg: JSON-on-stdout ->

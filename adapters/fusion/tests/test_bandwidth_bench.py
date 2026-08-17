@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """bench/bandwidth.py — fixture-mode mechanics (the bench itself stays out of pytest;
 this drives main() on the synthetic fixture and checks the accounting identities)."""
 import json

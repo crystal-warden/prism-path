@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Tier 6 gate — routing accuracy vs bits received, on multi-dimensional correlated telemetry.
 
 The claim under test: packing a multi-var reading onto the decision-first spiral lets the edge transmit a
