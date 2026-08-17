@@ -396,15 +396,21 @@ def main() -> int:
         recon = {f: _reconstruction_bound(parts[f]) for f in order}
         branch = [n for n in nodes if len({t for t, _c in graph.nodes[n].edges}) > 1]
         agg = _aggregation_privacy(graph, parts, order, branch) if branch else None
-        md += ["## Privacy: reconstruction bound (measured, not asserted)", "",
-               "How precisely a raw reading is recoverable from what the wire carries. Privacy by "
-               "information loss: coarse cells hide, singleton cells leak.", "",
+        md += ["## Privacy audit", "",
+               "**Scope: this bounds what a single decision reveals about field _values_. It does "
+               "not measure what the decision _stream_ reveals over time.** Timing, activity level, "
+               "and state transition patterns are a behavioral signal that survives coarse cells, so "
+               "read the numbers below as a value reconstruction bound, not a claim that the stream "
+               "is private.", "",
+               "### Reconstruction bound (measured, not asserted)", "",
+               "How precisely a raw reading is recoverable from what the wire carries. Information "
+               "loss: coarse cells hide, singleton cells leak.", "",
                "| field | recoverable to |", "|---|---|"]
         for f in order:
             md.append(f"| `{f}` | {recon[f]['note']} |")
         md.append("")
         if agg and agg["enumerated"]:
-            md += ["## Privacy: aggregation (how much a verdict hides its inputs)", "",
+            md += ["### Aggregation (how much a verdict hides its inputs)", "",
                    f"Across {agg['joint_cells']} joint input cells, how many produce each verdict. "
                    "A verdict produced by many input cells hides which inputs made it (information "
                    "theoretic, holds even against a policy holder); one produced by a single cell "
@@ -419,7 +425,7 @@ def main() -> int:
                               f"cells{'  <-- most revealing' if cnt == worst else ''}")
                 md.append("")
         elif agg and not agg["enumerated"]:
-            md += ["## Privacy: aggregation", "",
+            md += ["### Aggregation", "",
                    f"Joint input space is {agg['joint_cells']} cells, too large to enumerate here "
                    "(a coarse policy would be small; a large space means fine cells, which leak "
                    "more, not less).", ""]
@@ -460,6 +466,9 @@ def main() -> int:
             "ready": ready,
         }
         if args.privacy:
+            report["privacy_scope"] = ("per-decision field-value recoverability only; does NOT "
+                                       "measure stream/behavioral leakage (timing, activity level, "
+                                       "state-transition patterns)")
             report["privacy_reconstruction"] = recon
             report["privacy_aggregation"] = agg
         Path(args.json_out).write_text(json.dumps(report, indent=1) + "\n")
