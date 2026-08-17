@@ -109,7 +109,10 @@ decision is a function of the atom truth vector,
 D(x) = Δ( α₁(x), …, α_A(x) ),
 ```
 
-where `Δ` is the flow's first match edge logic.
+where `Δ : {0,1}^A → actions` is the flow's first match edge logic: a deterministic map from the atom
+truth vector to a finite set of actions. Its domain is the *realizable* atom vectors, since threshold
+atoms over a shared field are not independent (`x > 5` and `x < 3` cannot both hold), so many points of
+`{0,1}^A` are unreachable and `Δ` is left unconstrained there.
 
 **Definition (Figueroa quantization).** For each field `f` let `A_f` be the atoms over `f`, and define
 `u ~_f u'` iff `α(u) = α(u')` for every `α ∈ A_f`. Let
@@ -139,13 +142,17 @@ on the cell tuples. ∎
 This is exactly the property the §3.3 conformance suite checks on the frozen corpus: a mapping error
 would produce some `x, x'` with `𝒬_F(x) = 𝒬_F(x')` yet `D(x) ≠ D(x')`, flipping a pinned entry.
 
-**Minimal sufficiency.** `𝒬_F` is a sufficient statistic for `D` (the decision factors through it) and
-is minimal among per field product statistics that preserve every atom: each `q_f` is the coarsest `~_f`
-partition, so merging any two of its cells flips an atom and may flip a decision. A statistic strictly
-coarser than `𝒬_F` can exist only if two distinct cell tuples always yield the same action; collapsing
-those is a property of `D̄`, and computing it in general is the policy equivalence problem. Figueroa
-quantization stops at the per field cells because that layer is exact, field local, and composable
-across independently signed policies.
+**Minimal atom-preserving sufficiency.** `𝒬_F` is a sufficient statistic for `D` (the decision factors
+through it), and it is the **minimal atom-preserving** one: each `q_f` is the coarsest `~_f` partition,
+so merging any two of its cells flips an atom and may flip a decision. It is deliberately *not* the
+absolute minimal sufficient statistic for `D`. A statistic strictly coarser than `𝒬_F` exists whenever
+two distinct cell tuples always yield the same action, but collapsing those is a property of the
+specific `D̄`, not of the fields: it is policy specific (computing it in general is the policy
+equivalence problem) and brittle under change. Merge two same action cells today, hot swap the policy so
+they route differently tomorrow, and a `D̄`-minimal wire can no longer tell them apart, breaking
+decision preservation across the swap. Atom preservation is the invariant that survives policy evolution
+over a fixed atom set, which is why Figueroa quantization stops at the per field cells: that layer is
+exact, field local, robust to hot swap, and composable across independently signed policies.
 
 **Corollary (wire cost).** Since `D = D̄ ∘ 𝒬_F`, transmitting `𝒬_F(x)` reproduces every decision, at a
 cost bounded by the cell counts alone:
