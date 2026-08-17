@@ -70,7 +70,8 @@ EXCLUDE_PREFIXES = [
     ".github/workflows/",      # CI is regenerated clean below
 ]
 EXCLUDE_SUFFIXES = [".deferrals"]           # empty top-level scratch files
-EXCLUDE_EXACT = {"docs_health_report.md", "tools/arch_scorecard.json"}  # generated reports
+EXCLUDE_EXACT = {"docs_health_report.md", "tools/arch_scorecard.json",  # generated reports
+                 "tools/mirror_readme.md"}  # the mirror's README SOURCE (used below, not shipped as a file)
 
 RESEARCH_REPO = "https://github.com/crystal-warden/prism-path/blob/main/"
 MIRROR_BANNER = (
@@ -264,9 +265,12 @@ def main():
         else:
             shutil.copy2(src, dst)
 
-    # generated README: mirror banner + link rewrite of the source README
-    readme = rewrite_markdown((root / "README.md").read_text(),
-                              "README.md", included_set, tracked, rewrites)
+    # generated README: mirror banner + link rewrite. Prefer the lean, hand-authored mirror template
+    # (tools/mirror_readme.md) if present; otherwise fall back to the research README. Either way the
+    # link rewriter redirects any stray relative link to excluded content at the research repo.
+    mirror_src = root / "tools" / "mirror_readme.md"
+    base_readme = (mirror_src if mirror_src.exists() else (root / "README.md")).read_text()
+    readme = rewrite_markdown(base_readme, "README.md", included_set, tracked, rewrites)
     lines = readme.split("\n")
     i = 1 if lines and lines[0].startswith("# ") else 0            # banner after the H1
     (out / "README.md").write_text("\n".join(lines[:i] + ["", MIRROR_BANNER.rstrip()] + lines[i:]))

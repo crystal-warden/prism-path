@@ -6,7 +6,8 @@ build-backend = "setuptools.build_meta"
 name = "prismpath"
 version = "0.1.0"
 description = "One Markdown file is the workflow: a routing spectrum (deterministic predicates -> embeddings -> LLM-on-doubt) for LLM-agent workflows, plus a gated sprint control plane."
-readme = "README.md"
+readme = "tools/mirror_readme.md"    # the lean product page renders on PyPI (absolute links); the
+                                     # dense research README stays the repo landing
 license = { text = "Apache-2.0" }
 authors = [{ name = "Crystal Warden Labs" }]
 requires-python = ">=3.10"
@@ -92,7 +93,8 @@ prismpath = ["flows/*.md",                    # example + reference flows
 "share/doc/prismpath/docs/research" = ["docs/research/*.md"]
 
 [project.urls]
-Repository = "https://github.com/crystal-warden/prism-path"
+Homepage = "https://github.com/crystal-warden/prismpath"     # the clean product mirror (browse + quickstart)
+Repository = "https://github.com/crystal-warden/prism-path"  # source, issues, PRs (the mirror is generated)
 "Getting Started" = "https://github.com/crystal-warden/prism-path/blob/main/GETTING_STARTED.md"
 Specification = "https://github.com/crystal-warden/prism-path/blob/main/SPEC.md"
 Changelog = "https://github.com/crystal-warden/prism-path/blob/main/CHANGELOG.md"
