@@ -18,6 +18,14 @@ spec stable.
   different namespaces, and only the latter was trespassed.
 
 ### Added
+- **`prismpath-preflight --privacy`: the privacy claim as a measurement, not an adjective.** Adds
+  a per-field reconstruction bound (numeric fields report worst-case cell width + unbounded/
+  singleton counts, booleans leak their bit, categoricals are exact on enumerated values and
+  collapse the rest) and, for fusion policies, an aggregation-privacy report: how many joint input
+  cells produce each verdict (a verdict made by many input cells hides which inputs made it,
+  information-theoretically, even against a policy holder; one made by a single cell pins them).
+  Opt-in, so the default report and the Python/Rust differential are unchanged; three new tests.
+  Turns "decision-lossless, not data-lossless" into a printable number per policy.
 - **Million decision soak** (`integrations/vector/soak/`, evidence #105 staged): two native codec
   Vector pipelines ran unattended for 31 and 27 hours, 1,043,442 decisions decoded, zero errors
   of any kind, flat memory, route distributions stable to a tenth of a point across inputs

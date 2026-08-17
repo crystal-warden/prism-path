@@ -97,10 +97,10 @@ traffic distributes over the flow's routes. Every encodable event is replayed th
 trip (quantize, Fibonacci-code, decode, reconstruct) and checked to route **identically** to the
 original at every decision node, so decision preservation is verified on *your* data. Semantics match
 the Vector codec exactly (`--map` = `field_paths`, `--on-missing` = `on_missing`, one byte-aligned
-reading per frame). Exit 0 only when nothing needs attention, so it drops straight into CI.
+reading per frame). Exit 0 only when nothing needs attention, so it drops straight into CI. `--privacy` adds a measured privacy audit: each field's reconstruction bound (how precisely a raw value is recoverable from its cell) and, for fusion policies, how many joint input cells produce each verdict (a verdict made by many input cells hides its inputs; one made by a single cell pins them).
 ```
 python adapters/telemetry/preflight.py <flow.md> <sample.ndjson> \
-    [--map FIELD=json.dot.path] [--on-missing error|skip] [--route-node N] [--json report.json]
+    [--map FIELD=json.dot.path] [--on-missing error|skip] [--route-node N] [--privacy] [--json report.json]
 ```
 
 The tool ships as deliberate twins with one contract (same flags, same report sections, same JSON

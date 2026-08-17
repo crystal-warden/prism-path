@@ -23,6 +23,7 @@ Exit status: 0 = ready (everything encodable, routes preserved), 1 = findings ne
 from __future__ import annotations
 
 import argparse
+import itertools
 import json
 import sys
 from collections import Counter
@@ -105,6 +106,63 @@ def _pct(part: int, whole: int) -> str:
     return f"{100.0 * part / whole:.1f}%" if whole else "n/a"
 
 
+# ----------------------------------------------------------------- privacy (measured, not asserted)
+def _reconstruction_bound(p: q.FieldPartition) -> dict:
+    """How precisely a raw reading is recoverable from the cell the wire carries. Privacy by
+    information loss: the wider the cells, the less an observer (even one holding the policy) can
+    recover. This measures it per field instead of asserting it."""
+    if p.kind == "boolean":
+        return {"kind": "boolean", "leak": "exact",
+                "note": "exact (1 bit): a boolean has no hidden information, the cell IS the value"}
+    if p.kind == "categorical":
+        enumerated = sum(1 for c in p.cells if c.get("const", q._OTHER) != q._OTHER)
+        return {"kind": "categorical", "leak": "mixed", "exact_values": enumerated,
+                "note": f"{enumerated} enumerated values exact; every other value collapses to the "
+                        f"'other' cell (an unbounded set, unrecoverable)"}
+    widths, unbounded, singletons = [], 0, 0
+    for c in p.cells:
+        lo, hi = c["lo"], c["hi"]
+        if lo is None or hi is None:
+            unbounded += 1
+        else:
+            w = hi - lo + 1
+            widths.append(w)
+            if w == 1:
+                singletons += 1
+    max_w = max(widths) if widths else None
+    leak = "coarse" if unbounded == p.n else "exact" if singletons == p.n else "bounded"
+    if max_w is None:
+        note = "only a >=/< threshold is learned (all cells unbounded); the value is not recoverable"
+    else:
+        parts_note = [f"recoverable to +/- {max_w} at worst (widest bounded cell)"]
+        if singletons:
+            parts_note.append(f"{singletons} cell(s) exact (leak the value)")
+        if unbounded:
+            parts_note.append(f"{unbounded} unbounded cell(s) (only a threshold learned)")
+        note = "; ".join(parts_note)
+    return {"kind": "numeric", "leak": leak, "max_bounded_width": max_w,
+            "unbounded_cells": unbounded, "singleton_cells": singletons, "note": note}
+
+
+def _aggregation_privacy(graph, parts, order, branch_nodes, cap: int = 200_000) -> dict:
+    """How many joint input cell-tuples produce each route at each decision node. A verdict
+    produced by many input tuples hides which inputs made it (high privacy); one produced by a
+    single tuple pins the inputs (a leak). Information-theoretic: holds even against a policy
+    holder, because a many-to-one fusion genuinely destroys which-input information."""
+    total = 1
+    for f in order:
+        total *= parts[f].n
+    if total > cap:
+        return {"joint_cells": total, "enumerated": False}
+    per_node: Dict[str, Counter] = {n: Counter() for n in branch_nodes}
+    for combo in itertools.product(*[range(parts[f].n) for f in order]):
+        reading = {f: parts[f].representative(combo[i]) for i, f in enumerate(order)}
+        for n in branch_nodes:
+            per_node[n][w.route_node(graph, n, reading) or "(no match)"] += 1
+    return {"joint_cells": total, "enumerated": True,
+            "per_node": {n: dict(c) for n, c in per_node.items()}}
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(
         prog="prismpath-preflight",
@@ -121,6 +179,9 @@ def main() -> int:
                          "decision node)")
     ap.add_argument("--limit", type=int, default=None, metavar="N",
                     help="scan at most N events")
+    ap.add_argument("--privacy", action="store_true",
+                    help="add a privacy audit: per-field reconstruction bound and, for fusion "
+                         "policies, how many joint input cells produce each verdict")
     ap.add_argument("--json", dest="json_out", default=None, metavar="OUT.json",
                     help="also write the full report as JSON")
     args = ap.parse_args()
@@ -328,6 +389,39 @@ def main() -> int:
                f"are not reconstructable from it): {top}"
                + (" ..." if len(non_decision_keys) > 12 else ""), ""]
 
+    recon = agg = None
+    if args.privacy:
+        recon = {f: _reconstruction_bound(parts[f]) for f in order}
+        branch = [n for n in nodes if len({t for t, _c in graph.nodes[n].edges}) > 1]
+        agg = _aggregation_privacy(graph, parts, order, branch) if branch else None
+        md += ["## Privacy: reconstruction bound (measured, not asserted)", "",
+               "How precisely a raw reading is recoverable from what the wire carries. Privacy by "
+               "information loss: coarse cells hide, singleton cells leak.", "",
+               "| field | recoverable to |", "|---|---|"]
+        for f in order:
+            md.append(f"| `{f}` | {recon[f]['note']} |")
+        md.append("")
+        if agg and agg["enumerated"]:
+            md += ["## Privacy: aggregation (how much a verdict hides its inputs)", "",
+                   f"Across {agg['joint_cells']} joint input cells, how many produce each verdict. "
+                   "A verdict produced by many input cells hides which inputs made it (information "
+                   "theoretic, holds even against a policy holder); one produced by a single cell "
+                   "pins the inputs.", ""]
+            for n, per in agg["per_node"].items():
+                if len(per) <= 1:
+                    continue
+                md.append(f"from `{n}`:")
+                worst = min(per.values())
+                for route, cnt in sorted(per.items(), key=lambda kv: -kv[1]):
+                    md.append(f"- `{route}`: consistent with {cnt} of {agg['joint_cells']} input "
+                              f"cells{'  <-- most revealing' if cnt == worst else ''}")
+                md.append("")
+        elif agg and not agg["enumerated"]:
+            md += ["## Privacy: aggregation", "",
+                   f"Joint input space is {agg['joint_cells']} cells, too large to enumerate here "
+                   "(a coarse policy would be small; a large space means fine cells, which leak "
+                   "more, not less).", ""]
+
     md += ["## Verdict", ""]
     if ready:
         skipped = (f" ({missing_events} skipped by on_missing=skip)"
@@ -363,6 +457,9 @@ def main() -> int:
             "non_decision_keys": dict(non_decision_keys),
             "ready": ready,
         }
+        if args.privacy:
+            report["privacy_reconstruction"] = recon
+            report["privacy_aggregation"] = agg
         Path(args.json_out).write_text(json.dumps(report, indent=1) + "\n")
         print(f"\nwrote {args.json_out}")
 

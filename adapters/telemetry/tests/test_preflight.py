@@ -115,3 +115,37 @@ def test_no_decision_fields_flow_fails_loud(tmp_path):
     sample.write_text('{"x": 1}\n')
     r = _run(flow, sample)
     assert r.returncode == 1 and "no decision-relevant fields" in r.stdout
+
+
+def test_privacy_reconstruction_bound(tmp_path):
+    flow, sample = _setup(tmp_path, [{"temp": 95, "armed": True}, {"temp": 10, "armed": False}])
+    out = tmp_path / "r.json"
+    r = _run(flow, sample, "--privacy", "--json", str(out))
+    assert r.returncode == 0, r.stdout + r.stderr
+    rep = json.loads(out.read_text())
+    recon = rep["privacy_reconstruction"]
+    assert recon["armed"]["leak"] == "exact"                 # a boolean leaks its 1 bit
+    assert recon["temp"]["kind"] == "numeric"
+    assert recon["temp"]["unbounded_cells"] == 2             # (-inf..49] and [90..+inf)
+    assert "recoverable" in recon["temp"]["note"] or "threshold" in recon["temp"]["note"]
+
+
+def test_privacy_aggregation_counts_sum_to_joint(tmp_path):
+    flow, sample = _setup(tmp_path, [{"temp": 95, "armed": True}])
+    out = tmp_path / "r.json"
+    r = _run(flow, sample, "--privacy", "--json", str(out))
+    rep = json.loads(out.read_text())
+    agg = rep["privacy_aggregation"]
+    assert agg["enumerated"] and agg["joint_cells"] == 6     # temp(3) x armed(2)
+    per = agg["per_node"]["classify"]
+    assert sum(per.values()) == 6                            # every joint cell routes somewhere
+    # critical needs temp>=90 AND armed: exactly one input cell (the leak); warn/ok hide more
+    assert per["critical"] == 1
+
+
+def test_privacy_absent_by_default(tmp_path):
+    flow, sample = _setup(tmp_path, [{"temp": 95, "armed": True}])
+    out = tmp_path / "r.json"
+    _run(flow, sample, "--json", str(out))
+    rep = json.loads(out.read_text())
+    assert "privacy_reconstruction" not in rep and "privacy_aggregation" not in rep
