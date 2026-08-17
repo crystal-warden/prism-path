@@ -61,19 +61,30 @@ memory). Consolidated July 2026; maintained through row #100 (August 2026).*
 | Embedding beats lexical, splits by stratum | ALL 0.69 vs 0.53 lexical; intent 0.81, abstraction 0.74, **polarity 0.52** (near-chance) | paper §4.2; `benchmark/reproduce.py` |
 | Centroid (learned prototypes) lifts routing | **0.827** overall (+0.14 vs embed), +0.23 polarity, 5-fold CV, leakage-audited | `benchmark/gaussian_route_eval.json` (centroid row) |
 | Hybrid frontier (LLM-on-doubt) | 0.837 @ 38% escalation → ~0.99 at higher budgets; margin has a **confident-error blind spot** | paper §4.3 |
-| Head to head vs LangGraph/CrewAI/LLM-router | 83.7% at **2.6× fewer LLM calls, ~2× lower median latency**; loses p95 tail (stated) | paper §4.4 |
+| Head to head vs LangGraph/CrewAI/LLM-router | 83.7% at **2.6× fewer LLM calls, ~2× lower median latency**; loses p95 tail (stated) | paper §4.4; `prismpath/comparisons/` (`results.json`, four runnable orchestrators) |
 
-> **Validity annotation (added August 2026) — read before citing these as decision-quality numbers.**
+> **Validity annotation (added August 2026, corrected — the first draft understated the grading).**
 > Every figure in this table **recomputes** from committed artifacts (`research/*.py` over
-> `prismpath/benchmark/routing_bench.jsonl`), so it is reproducible as a *computation*. It is **not**
-> externally validated as *routing quality*: the N=301 suite is **author-authored and single-grader**
-> (inter-rater kappa 0.682 from the one independent grader), on **one embedder family**, with
-> **polarity at 0.52 (near-chance)**. So these establish an **internal benchmark**, not that embedding
-> routing can be trusted with real workflow decisions. The head-to-head row additionally has **no
-> committed comparison harness** in this repo (its numbers reproduce from the paper's own run, not a
-> gate here); treat "2.6× fewer calls / 2× lower latency" as indicative, not independently benchmarked.
-> Retiring this caveat needs a non-self-authored corpus or a second grader — a named follow-on, not a
-> commit.
+> `prismpath/benchmark/routing_bench.jsonl`). The grading is **stronger than a first read (or the
+> reviewer's "single-grader kappa 0.682") suggests**: a maintainer **blind-relabeled all 301 cases**
+> with the AI gold hidden, at **human-vs-gold Cohen's kappa 0.961** ("almost perfect", every stratum
+> >= 0.945), on top of an AI second-labeler (0.979 IAA, agreements-only kept). That 0.961 is
+> **recomputed from `benchmark/gate_zero/` in CI** (`prismpath/tests/test_gate_zero_kappa.py`), not
+> asserted. The **0.682** figure is NOT the primary grading; it is a supplementary **cross-family model**
+> check (Gemini), and on 80 of its 89 disagreements the **human matches gold and the model is the lone
+> dissenter**, concentrated on the polarity stratum (the negation trap the benchmark exists to probe).
+> The head-to-head row also **does** have a committed, runnable harness: `prismpath/comparisons/` (four
+> real orchestrator implementations + `results.json` / `results_table.md`); re-running it needs a local
+> LLM, so it reproduces on an equipped box, not in bare CI.
+>
+> **What honestly remains open** (the strong grading must not paper over these): the **cases are still
+> author-generated / hand-crafted**, not sampled from an external production distribution, so
+> external-distribution validity is untested; **inter-HUMAN reliability** (a second independent human
+> annotator) is the release-gating measure and is still owed (`gate_zero/` flags it as future work);
+> polarity sits at **0.52 (near-chance) for a single embedder read**, which is the *argument for* the
+> deterministic + LLM tiers, not a solved problem; and the margin router's **confident-error blind spot**
+> stands. So: the labels are well-defined and human-verified, but "embedding routing can be trusted with
+> real-world decisions" is a **separate, still-open claim**.
 
 ## B. The density/geometry NEGATIVE result (NEW · publishable; strengthens "mean+margin wins at scale")
 Four pre registered experiments tested whether learned geometry beats the shrunk mean + cosine margin.
