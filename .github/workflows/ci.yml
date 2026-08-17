@@ -134,3 +134,59 @@ jobs:
         run: cargo test --manifest-path prismpath-preflight/Cargo.toml -q
       - name: Preflight tool clippy
         run: cargo clippy --manifest-path prismpath-preflight/Cargo.toml --all-targets -- -D warnings
+
+  # Substrate gates — the software-reproducible hardware/kernel proofs, run in CI so they cannot rot
+  # silently. They HAD rotted: the RTL testbench's corpus path bit-rotted on a repo-layout change and
+  # nothing caught it; the C-target had a doubled `prismpath/prismpath/` path; and `make -C tb`
+  # returned 0 even when a cocotb test FAILED (a fake gate). All three are fixed, and `make -C tb gate`
+  # now fails the build on any cocotb failure. ubuntu-24.04 ships Verilator 5.020 — the exact version
+  # the RTL was certified with (cocotb 1.9.2) — via apt, so the sim is reproducible here.
+  substrates:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Install (editable kernel pkg + sim/build toolchain)
+        run: |
+          pip install -e . cocotb==1.9.2
+          sudo apt-get update
+          sudo apt-get install -y verilator clang libbpf-dev
+      - name: C target — certify against the frozen corpus (declared subset)
+        run: make -C prismpath-hw cert
+      - name: RTL sim — conformance + live-sensor replay (REAL gate; fails on any cocotb failure)
+        run: make -C prismpath-hw/tb gate
+      - name: Hardware evidence integrity — the OTS-anchored hashes must still match
+        run: cd prismpath-hw/evidence && sha256sum -c SHA256SUMS
+      - name: eBPF — build + host-side interp cross-check (124/124 vs the reference, no kernel needed)
+        run: |
+          make -C prismpath-ebpf
+          python3 prismpath-ebpf/cert_corpus.py /tmp/cert_corpus.bin
+
+  # In-kernel eBPF conformance via BPF_PROG_TEST_RUN (needs root + a BPF-capable kernel). Split from
+  # `substrates` so a hosted-runner BPF limitation isolates HERE instead of reddening the whole gate.
+  # Verified locally with sudo on kernel 6.x; ubuntu-24.04 runners provide sudo + /sys/kernel/btf +
+  # a recent kernel, but the hosted-runner behavior for the in-kernel step is the one piece not tested
+  # from the dev box — if it is ever flaky, move this job to a self-hosted runner on the rig.
+  ebpf_kernel:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: |
+          pip install -e .
+          sudo apt-get update && sudo apt-get install -y clang libbpf-dev
+      - name: Build eBPF target + a seed image
+        run: |
+          make -C prismpath-ebpf
+          python3 prismpath-ebpf/cert_corpus.py /tmp/cert_corpus.bin
+          python3 prismpath-ebpf/net_compile.py prismpath-ebpf/net_triage.md \
+            prismpath-ebpf/build/seed.ppt prismpath-ebpf/build/seed.names
+      - name: In-kernel corpus conformance (124/124, BPF_PROG_TEST_RUN)
+        run: cd prismpath-ebpf && sudo ./loader build/seed.ppt certify /tmp/cert_corpus.bin
+      - name: In-kernel Facet decode-plane cert (250/250 byte-identical + negative matrix)
+        run: cd prismpath-ebpf && sudo -E env "PATH=$PATH" python3 facet_decode_cert.py

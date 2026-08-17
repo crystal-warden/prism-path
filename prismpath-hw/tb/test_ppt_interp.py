@@ -236,10 +236,12 @@ async def conformance(dut):
 
 @cocotb.test()
 async def sensor_log_replay(dut):
-    """Replay the banked Day-2 sensor session through the simulated fabric: every sample of
-    build/live_route_log.ndjson routed by the RTL must reproduce the decision the C target
-    made live. Also records per-evaluate latency (the WCET evidence)."""
-    log_path = HERE.parent / "build" / "live_route_log.ndjson"
+    """Replay a real committed sensor session through the simulated fabric: every sample of
+    evidence/fabric_session1.ndjson (the #75 on-silicon incident_severity capture) routed by the RTL
+    must reproduce the decision recorded live. Also records per-evaluate latency (the WCET evidence).
+    Uses a committed evidence log (not an uncommitted build/ capture) so this gate runs from a clean
+    checkout and cannot silently stop running."""
+    log_path = HERE.parent / "evidence" / "fabric_session1.ndjson"
     flow_md = (Path(pc._REPO) / "gallery" / "incident_severity"
                / "incident_severity.md")
     from prismpath.parser import parse_file

@@ -28,7 +28,7 @@ INTERP = BUILD / "interp"
 import ppt_compile as pc                                   # noqa: E402
 from prismpath.parser import parse                         # noqa: E402
 
-CONF = Path(pc._REPO) / "prismpath" / "portable" / "conformance"
+CONF = Path(pc._REPO) / "portable" / "conformance"    # pc._REPO is the package dir (matches tb/)
 
 
 def _subset_scalar_ok(v) -> str | None:
