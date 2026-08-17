@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 Crystal Warden Supply Chain Labs LLC
 //! compose.rs — the MINIMAL in-process fan-out driver (feature `durable`).
 //!
 //! The engine stays pure: a worker returning a `spawn` spec suspends the run `waiting` with the

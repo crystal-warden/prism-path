@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 Crystal Warden Supply Chain Labs LLC
 //! prismpath-preflight: will YOUR events survive the Facet codec? One command, one report.
 //!
 //! Formerly published as `facet-preflight` (0.1.0, yanked): the `facet-*` prefix belongs to the

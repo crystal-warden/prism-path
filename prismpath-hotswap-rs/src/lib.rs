@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 Crystal Warden Supply Chain Labs LLC
 //! prismpath-hotswap-rs — the secure policy hot-swap, natively.
 //!
 //! Faithful port of `prismpath/policy_pack.py` (Authorized + Envelope-bounded gates) and

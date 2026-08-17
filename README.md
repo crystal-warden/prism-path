@@ -244,7 +244,7 @@ kernels, the Python reference plus three independent re-implementations (JS, Rus
 each certified on a declared subset. **649 Python + 18 Node kernel tests pass** (the two adapters add
 227 more, with adversarial attestation-tamper and property coverage); the format is specified in
 [SPEC.md](SPEC.md) (v1 draft). This repo is a curated export of an active research control plane. Licensed
-Apache-2.0.
+Apache-2.0 (see [LICENSE](LICENSE) and [NOTICE](NOTICE)). You may fork it and ship it, including inside a proprietary product; a redistributor keeps the LICENSE and NOTICE files and marks changed files, and Apache-2.0 requires no user-facing attribution.
 
 **The launch is anchored.** The project that ships tamper-evident attestation pointed its own machinery at
 itself: the `v0.1.0` release artifact is OpenTimestamps-anchored in **Bitcoin block 961224** (2026-08-06).

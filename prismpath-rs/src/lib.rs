@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 Crystal Warden Supply Chain Labs LLC
 //! prismpath-rs — the portable PrismPath kernel, in Rust.
 //!
 //! A faithful port of `portable/prismpath.mjs` (itself a certified port of the Python reference:

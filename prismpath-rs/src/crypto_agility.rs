@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 Crystal Warden Supply Chain Labs LLC
 //! crypto_agility.rs — Crypto-agility proofs + envelope conformance (§4.2, §5).
 //!
 //! Replays the P1-P5 proofs over parsed flow graphs and signed registries, matching

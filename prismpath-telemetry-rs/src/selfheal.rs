@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 Crystal Warden Supply Chain Labs LLC
 //! Self-healing transport — Merkle-committed blocks + selective retransmission.
 
 use sha2::{Digest, Sha256};

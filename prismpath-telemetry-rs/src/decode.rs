@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 Crystal Warden Supply Chain Labs LLC
 //! Human-readable inspect path — decoding a captured telemetry bitstream against its flow.
 
 use crate::quantizer::{self, FieldPartition, OTHER};

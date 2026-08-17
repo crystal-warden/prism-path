@@ -1,0 +1,24 @@
+PrismPath
+Copyright 2026 Crystal Warden Supply Chain Labs LLC
+
+This product includes software developed by Crystal Warden Supply Chain Labs LLC
+(https://crystalwardenlabs.com).
+
+Licensed under the Apache License, Version 2.0; see the LICENSE file. If you
+redistribute this software, in source or binary form, including inside a larger
+or proprietary product, you must retain this NOTICE file, the LICENSE file, and
+any copyright or attribution notices present in the source. Apache-2.0 does not
+require any user-facing or advertising attribution.
+
+--- Third-party components (retain their own copyright and license) ---
+
+The Crystal Warden copyright above does NOT extend to the vendored components
+below; each is used under its own terms:
+
+  * Monocypher (prismpath-hw/mesh/main/monocypher*.{c,h}) -- an easy-to-use
+    cryptography library, dedicated to the public domain (CC0) with a 2-clause
+    BSD fallback, by Loup Vaillant and contributors.
+  * VL53L0X driver (prismpath-hw/rp2350/vl53l0x.{c,h}) -- derived from Pololu's
+    VL53L0X Arduino library.
+  * pico_sdk_import.cmake (prismpath-hw/*/pico_sdk_import.cmake) -- from the
+    Raspberry Pi Pico SDK.

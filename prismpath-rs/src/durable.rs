@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 Crystal Warden Supply Chain Labs LLC
 //! durable.rs — durable execution + attestation manifests, feature `durable`.
 //!
 //! Faithful port of the runtime-relevant parts of `prismpath/checkpoint.py` and

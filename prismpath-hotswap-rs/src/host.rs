@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 Crystal Warden Supply Chain Labs LLC
 //! PolicyHost + AuditLog — the Attested + Audited-and-atomic half (policy_host.py / audit_log.py).
 //!
 //! The audit log is append-only JSONL whose leaves are sha256 over each event's canonical form

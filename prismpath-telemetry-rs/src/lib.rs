@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 Crystal Warden Supply Chain Labs LLC
 //! `prismpath-telemetry-rs` — a faithful 1-1 Rust port of `adapters/telemetry/`.
 
 pub mod ackchannel;

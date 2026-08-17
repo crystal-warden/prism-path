@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 Crystal Warden Supply Chain Labs LLC
 //! connector.rs — the six-port Connector SDK, natively (feature `durable`).
 //!
 //! Faithful port of the PORT SURFACE of `prismpath/connector.py`: Ingestion, Retrieval,
