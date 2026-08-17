@@ -50,6 +50,7 @@ def compile_with_schema(graph, schema, max_steps=25):
 
 def main():
     flow_md, out_ppt, out_names = (Path(a) for a in sys.argv[1:4])
+    out_ppt.parent.mkdir(parents=True, exist_ok=True)   # build/ may not exist on a fresh checkout
     g = parse_file(str(flow_md))
     img = compile_with_schema(g, SCHEMA)
     names = [n for n, _ in img.nodes]

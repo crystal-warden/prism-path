@@ -5,6 +5,8 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+  schedule:
+    - cron: "0 7 * * *"   # nightly: the in-kernel eBPF cert (see ebpf_kernel, kept off the push badge)
 
 jobs:
   test:
@@ -164,12 +166,13 @@ jobs:
           make -C prismpath-ebpf
           python3 prismpath-ebpf/cert_corpus.py /tmp/cert_corpus.bin
 
-  # In-kernel eBPF conformance via BPF_PROG_TEST_RUN (needs root + a BPF-capable kernel). Split from
-  # `substrates` so a hosted-runner BPF limitation isolates HERE instead of reddening the whole gate.
-  # Verified locally with sudo on kernel 6.x; ubuntu-24.04 runners provide sudo + /sys/kernel/btf +
-  # a recent kernel, but the hosted-runner behavior for the in-kernel step is the one piece not tested
-  # from the dev box — if it is ever flaky, move this job to a self-hosted runner on the rig.
+  # In-kernel eBPF conformance via BPF_PROG_TEST_RUN (needs root + a BPF-capable kernel). Kept OFF
+  # push/PR and run NIGHTLY + on demand, so a hosted-runner BPF limitation can never redden the push
+  # badge; `substrates` already gates the reproducible-anywhere eBPF (build + host cross-check) on every
+  # push. Verified locally with sudo on kernel 6.x. To confirm hosted-runner support, trigger it once via
+  # the Actions "Run workflow" button (workflow_dispatch); if green, it can be promoted back onto push.
   ebpf_kernel:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
