@@ -64,6 +64,9 @@ EXCLUDE_PREFIXES = [
     "research/",               # embedder scouts, route-eval experiments
     "prismpath-hw/",           # hardware sprints  (flip to INCLUDE to ship substrates)
     "prismpath-ebpf/",         # kernel decode plane  (flip to INCLUDE to ship substrates)
+    "prismpath/evidence/",     # OTS anchors over the RESEARCH ledger/papers (docs/research/, absent
+                               # here) + hardware evidence — provenance is a research-repo concern, and
+                               # shipping anchors that reference files not in the mirror is a dangling ref
     ".github/workflows/",      # CI is regenerated clean below
 ]
 EXCLUDE_SUFFIXES = [".deferrals"]           # empty top-level scratch files
