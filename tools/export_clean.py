@@ -79,8 +79,11 @@ MIRROR_BANNER = (
 )
 
 
+ROOT = Path(__file__).resolve().parent.parent    # the source repo, wherever this is run from
+
+
 def tracked_files():
-    out = subprocess.check_output(["git", "ls-files"], text=True)
+    out = subprocess.check_output(["git", "ls-files"], text=True, cwd=ROOT)
     return [l for l in out.splitlines() if l]
 
 
@@ -226,7 +229,7 @@ def main():
                     help="make a local commit if --out is already a git repo (never pushes)")
     args = ap.parse_args()
 
-    root = Path(__file__).resolve().parent.parent
+    root = ROOT
     out = Path(args.out).resolve()
     if out == root:
         sys.exit("refusing to export onto the source repo")
