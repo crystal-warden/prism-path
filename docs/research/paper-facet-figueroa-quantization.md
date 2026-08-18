@@ -285,6 +285,16 @@ Facet's guarantees are precise, and the boundary is deliberate:
 is the general envelope baseline of §5. Self describing wire formats (protobuf, CBOR, JSON) frame per
 record; Facet frames per stream via a shared codebook.
 
+Conceptually, compressing to a decision sufficient statistic is both classical and active. The
+*information bottleneck* [Tishby, Pereira, and Bialek 1999] generalizes sufficient statistics to a soft,
+learned tradeoff between compression and task relevance; Figueroa quantization is its hard, exact, policy
+derived special case, where the tradeoff collapses because the policy fixes the partition and admits no
+distortion. Concurrent and independent work [Walsh 2026] formalizes the coarsest exactly decision
+sufficient compression as the quotient of a state space by policy equivalence, merging states that demand
+the same optimal action, and studies its approximate form as a rate distortion problem. That is the same
+conceptual core as §3, reached from information theory rather than from a policy compiler; it derives no
+partition from an explicit signed policy, carries no machine checked guarantee, and defines no wire.
+
 Two families of prior art sit closest to the quantization itself. Structurally, Figueroa quantization
 shares a clear operational kinship with Product Quantization (PQ) [Jégou et al. 2011] by decomposing a
 high dimensional state space into distinct, lower dimensional field subspaces and quantizing each
@@ -300,6 +310,12 @@ dataset to minimize empirical class entropy, Figueroa quantization extracts them
 an explicit, signed match action policy. It requires no statistical fitting or historic corpus; it is
 exact by construction, yielding a machine checked proof that every potential decision is preserved.
 
+The classical antecedent on the communication side is quantization for decentralized detection [Longo,
+Lookabaugh, and Gray 1990], which quantizes observations to preserve a hypothesis test decision under a
+rate budget. That work designs quantizers to minimize decision error probability under a probabilistic
+observation model; Figueroa quantization admits no error, placing boundaries exactly at the policy's own
+comparison constants.
+
 Beyond the quantization mechanism, Facet's thesis (transmit only what can change the outcome) is the
 organizing idea of *semantic and goal oriented communications*, as old as Weaver's distinction between
 Level A, the symbols, and Level B, their meaning [Shannon and Weaver 1949], and resurgent in modern task
@@ -308,7 +324,10 @@ what matters from a task and a dataset, usually with trained neural encoders, so
 statistical and approximate, with no guarantee that a given transmission preserves the receiver's
 decision. Facet's relevance is *derived* from an explicit signed decidable policy and carries a machine
 checked proof (§3.5) that no decision is mis-resolved: relevance that is exact and certified, not trained
-and estimated.
+and estimated. On the transmission side, sending only when a monitored quantity crosses a threshold is
+the send on delta and event triggered sampling tradition [Miskowicz 2006; Heemels et al. 2012]; Facet's
+stream, batch, and fill strategies (§5.2) sit in this lineage, the distinction being that what crosses is
+a decided cell boundary, not a raw signal delta.
 
 On the mechanism side, reducing a decision structure to its essential cuts is classical in packet
 classification and logic synthesis. TCAM Razor minimizes a packet classifier's rule set for ternary CAM
@@ -321,10 +340,22 @@ Figueroa quantization compresses the *reading*, the data on the wire, down to it
 cell and preserves the classifier's decisions by a proof rather than by reproducing the classifier. TCAM Razor
 and BDDs shrink the rule table, while Figueroa quantization shrinks the telemetry that flows through it.
 
-We are not aware of a prior system that derives a
-quantization that provably preserves decisions directly from a decidable match action policy and carries
-it over a codebook agreed from the signed policy. The individual ingredients are all standard; we claim
-only the composition and the machine checked quantization derived from the policy.
+We are not aware of a prior or concurrent *system* that derives a quantization provably preserving
+decisions directly from a decidable match action policy and carries it over a codebook agreed from the
+signed policy. The conceptual core is classical and, as noted above, independently under active study;
+the individual ingredients are all standard. We claim only the composition and the machine checked
+quantization derived from the policy.
+
+**Priority and independent origin.** The applied thesis behind this work, reducing an observation to a
+threshold decided verdict and transmitting only a signed, receipted decision over a resilient link, was
+filed as a US provisional patent application (Crystal Warden Supply Chain Labs LLC, 15 February 2026) in
+the context of an out of band supply chain verification device; the quantization method itself was held
+back and is not disclosed there. Figueroa quantization as formalized here was developed in mid 2026 and
+is contemporaneous with independent academic work on action sufficient compression [Walsh 2026]. We make
+no claim of priority over the general notion of quotienting a state space by decision equivalence, which
+is classical (Fisher; the information bottleneck) and actively studied. What we claim is the specific
+machine checked derivation of a decision preserving quantization from a signed decidable policy, and its
+realization as a byte identical wire across substrates.
 
 ## 8. Conclusion
 
@@ -340,11 +371,16 @@ properties a compressed record format cannot offer.
 - É. Zeckendorf, "Représentation des nombres naturels par une somme de nombres de Fibonacci ou de nombres
   de Lucas," *Bull. Soc. Roy. Sci. Liège*, 1972.
 - R. A. Fisher, "On the mathematical foundations of theoretical statistics," 1922 (sufficient statistics).
+- N. Tishby, F. C. Pereira, and W. Bialek, "The Information Bottleneck Method," *Proc. 37th Allerton Conf.*, 1999.
+- M. Walsh, "Support sufficiency as action-sufficient compression: a single-cycle rate-regret formulation," arXiv:2606.09858, 2026.
 - R. M. Gray, "Vector Quantization," *IEEE ASSP Magazine*, 1984.
+- G. Longo, T. D. Lookabaugh, and R. M. Gray, "Quantization for Decentralized Hypothesis Testing Under Communication Constraints," *IEEE Trans. Inf. Theory*, 36(2):241-255, 1990.
 - H. Jégou, M. Douze, and C. Schmid, "Product Quantization for Nearest Neighbor Search," *IEEE Trans. Pattern Anal. Mach. Intell.*, 2011.
 - U. M. Fayyad and K. B. Irani, "Multi-Interval Discretization of Continuous-Valued Attributes for Classification Learning," *Proc. IJCAI*, 1993.
 - C. E. Shannon and W. Weaver, "The Mathematical Theory of Communication," University of Illinois Press, 1949.
 - D. Gündüz, Z. Qin, I. E. Aguerri, H. S. Dhillon, Z. Yang, A. Yener, K. K. Wong, and C.-B. Chae, "Beyond Transmitting Bits: Context, Semantics, and Task-Oriented Communications," *IEEE J. Sel. Areas Commun.*, 2023.
+- M. Miskowicz, "Send-On-Delta Concept: An Event-Based Data Reporting Strategy," *Sensors*, 6(1):49-63, 2006.
+- W. P. M. H. Heemels, K. H. Johansson, and P. Tabuada, "An Introduction to Event-Triggered and Self-Triggered Control," *Proc. IEEE CDC*, 2012.
 - A. X. Liu, C. R. Meiners, and E. Torng, "TCAM Razor: A Systematic Approach Towards Minimizing Packet Classifiers in TCAMs," *IEEE/ACM Trans. Netw.*, 2010.
 - R. E. Bryant, "Graph-Based Algorithms for Boolean Function Manipulation," *IEEE Trans. Comput.*, 1986.
 - OpenTelemetry Protocol (OTLP) specification.
