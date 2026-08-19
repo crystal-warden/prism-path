@@ -178,7 +178,12 @@ Facet carries Figueroa quantized symbols. Its four design choices, specified nor
 - **A symbol coding that frames itself (§2.2).** Each symbol is sent as `symbol+1` under **Zeckendorf
   (Fibonacci) coding**, a standard code that delimits itself [Zeckendorf 1972]. With canonical field
   order, a reading carries no length header and no field tags. Zeckendorf coding is prior art, used, not
-  claimed.
+  claimed. Self delimiting also bounds how far damage travels: consecutive 1s cannot occur inside a
+  codeword, so the trailing `11` is the only place the pattern appears and a decoder realigns at the
+  next terminator past a corrupted region. Corruption is therefore local. It touches the symbols it
+  lands on and cannot desynchronize the remainder of a stream, and what it touches is caught rather
+  than trusted: the recovered symbol count must match or the stream is rejected, the packet's Merkle
+  root makes damage evident, and the optional AEAD rejects it outright.
 - **Lossless batching over any transport (§2.3).** Because it frames itself at the reading level,
   concatenation is lossless, so the `stream`, `batch:N`, and `mtu-fill` strategies trade only latency for
   bandwidth, never fidelity. Facet rides over TCP/TLS, UDP/DTLS, Thread, LoRa, ESP-NOW, or a bare MCU
@@ -227,6 +232,17 @@ Because Facet frames itself, the transport header per packet amortizes to ~0 as 
 over plain JSON because JSON keeps paying per record keys inside the batch. The optional AEAD layer adds
 less than a byte per decision when batched (a flat 16 byte tag amortized over a full packet, plus a 64
 byte handshake amortized over a 4096 reading epoch).
+
+Framing also sets the *unit of loss* under corruption, the operational half of the story on constrained
+or intermittent links. A length prefixed envelope that takes a hit in a header forfeits the remainder of
+its payload, so recovery means retransmitting the whole batch. A Facet decoder cannot desynchronize past
+the next `11` terminator (§4), so a hit costs the packet it lands in, and recovery, by whatever mechanism
+the deployment uses, has only that packet to cover. The localization is structural, from the coding; the
+detection half is machine checked (`adapters/fusion/tests/test_wire_tamper.py`: at the bare codec at
+least 90 percent of single bit flips are rejected or leave the decision statistic unchanged, the residual
+that decodes cleanly to a different verdict is exactly why the keyed layer exists, and under AEAD every
+single byte tamper tried is rejected). We state the retransmission reduction qualitatively: retry rates
+under injected loss on a degraded link are not yet benchmarked, and quantifying them is future work.
 
 ### 5.3 Decision preservation
 
