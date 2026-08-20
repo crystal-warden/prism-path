@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
-"""Decision-preserving quantizer — the differentiator.
+"""Figueroa quantization, the reference implementation (PROTOCOL.md §1): the decision preserving quantizer.
 
 A flow's routing over a field changes truth only at the constants that field is compared against
 (`field OP const`, the Level M fragment). Those constants partition the field's value domain into cells
