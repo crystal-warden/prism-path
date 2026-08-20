@@ -1,0 +1,27 @@
+{
+  "artifact": "openflow_port_2026-08-20",
+  "subject": "the PPT v1 interpreter (rtl/ppt_interp.sv, the conformance-certified + WCET-instrumented file, unmodified) synthesized and placed for a second FPGA family on a fully open toolchain",
+  "reproduce": {
+    "toolchain": "OSS CAD Suite linux-arm64 20260819: Yosys 0.68+86, nextpnr-0.11.1-7-g4d235150",
+    "synth": "yosys -p 'read_verilog -sv prismpath-hw/rtl/ppt_interp.sv; synth_ecp5 -top ppt_interp -json ppt_ecp5.json'",
+    "pnr": "nextpnr-ecp5 --85k --package CABGA381 --json ppt_ecp5.json --freq 25 --textcfg out.cfg"
+  },
+  "ecp5": {
+    "device": "LFE5U-85F CABGA381 (ULX3S-class board)",
+    "synthesis": {"LUT4": 1611, "PFUMX": 485, "L6MUX21": 167, "CCU2C": 71,
+                  "TRELLIS_FF": 400, "TRELLIS_DPR16X4": 168, "block_ram_DP16KD": 0},
+    "pnr_utilisation": {"TRELLIS_COMB": "2801/83640 (3%)", "TRELLIS_FF": "400/83640",
+                         "TRELLIS_RAMW": "168/10455 (1%)", "DP16KD": "0/208"},
+    "timing": {"constraint": "25 MHz PASS", "fmax": "31.60 MHz",
+               "fail_probe": "50 MHz constraint fails: the ECP5 fabric does not close the Artix-7 clock",
+               "bottleneck": "the single-cycle atom path (prog word -> atom row -> field register -> 32-bit compare), the same path the 100 MHz pipeline backlog item targets on Artix-7"},
+    "wcet_time_at_fmax": "cycle bounds unchanged by construction: universal 408 cycles = 12.9 us at 31.6 MHz; a one-cut policy 8 cycles = 253 ns (vs 8.16 us / 160 ns at the Zynq-7020's closed 50 MHz)"
+  },
+  "ice40_honest_negative": {
+    "finding": "synth_ice40 succeeds but the async-read table arrays balloon into flip-flops (no distributed RAM in the mapping): 9583 SB_LUT4, ~9900 DFF, 3 SB_RAM40_4K",
+    "consequence": "does not fit UP5K (5280 LUTs) or HX8K (7680) at the 48/256 caps; the low-cost iCE40 boards are out without a sync-read memory re-architecture; ECP5 is the open-flow target",
+    "not_attempted": "nextpnr-ice40 (pointless past the LUT budget)"
+  },
+  "comparison_artix7": {"LUT6": 1064, "FF": 995, "BRAM_tiles": 0.5, "closed_clock": "50 MHz, WNS +1.623"},
+  "claim_rung": "toolchain-level portability DEMONSTRATED (synthesizes + closes timing on a second family, fully open flow). NOT claimed: certified on second silicon; that requires the frozen corpus run on a physical ECP5 board."
+}

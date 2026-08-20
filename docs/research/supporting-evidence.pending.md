@@ -6,7 +6,7 @@ free number, instead of editing the main ledger. On merge, the docs session fold
 ledger with correct formatting and clears this file.*
 
 *Format each row exactly per `LEDGER_STANDARDS.md` §1 (Claim / Method / Result + Honest scope /
-Provenance) with a month granularity date. Next free number: **#112**.*
+Provenance) with a month granularity date. Next free number: **#113**.*
 
 ---
 
@@ -41,3 +41,13 @@ Provenance) with a month granularity date. Next free number: **#112**.*
 **Result:** the campaign surfaced and fixed **seven** induction counterexamples, one of them the `3E + P` formula correction now reflected in `wcet_cycles` (#110). The invariant's **base case is proven** (smtbmc yices, seconds: no reachable state violates the 408 cycle bound under the stated assumptions), and bounded model checking is clean through step 275 of a worst case evaluate with zero counterexamples. **Honest scope:** the UNBOUNDED induction step remains open. All counterexamples are eliminated (induction clears the shallow steps); the final step 0 query, which carries the ranking function's 48 term gated sum on both sides of a single transition, exceeded what the open solver portfolio closes within 30 minute budgets. The harness is complete and in-repo; an interpolation capable prover would likely close it as is (MathSAT is research licensed, so that is a deliberate decision, not a download). Until closed, the universal claim is stated as base case proven plus BMC evidenced, never as fully proven.
 
 **Provenance:** `prismpath-hw/rtl/ppt_interp.sv` (the `ifdef FORMAL` block), `prismpath-hw/tb/wcet/ppt_wcet.sby`, `prismpath-hw/evidence/wcet_formal_2026-08-20.json` (calibration table, assumption list, solver matrix); OSS CAD Suite linux arm64 20260819 (Yosys 0.68, SymbiYosys, boolector, yices, z3, abc, pono).
+
+### #112 — the interpreter ports to a second FPGA family on a fully open toolchain: ECP5 closes timing at 31.6 MHz, cycle bounds unchanged (August 2026)
+
+**Claim:** the interpreter RTL is target neutral in practice, not just by inspection: the exact conformance certified and WCET instrumented `ppt_interp.sv` (unmodified, the #109/#111 file) synthesizes and closes timing for a second FPGA family, Lattice ECP5, using a fully open toolchain (Yosys + nextpnr, no vendor tools anywhere in the flow). Cycle domain guarantees (#109, #111) carry to the new target unchanged by construction; only the time conversion moves with the closed clock.
+
+**Method:** `synth_ecp5` in Yosys on the unmodified RTL, then nextpnr-ecp5 place and route for the LFE5U-85F (CABGA381, the ULX3S class part) with a 25 MHz constraint; a 50 MHz probe run records where the family's fabric gives out. The iCE40 path (`synth_ice40`) was attempted for the lowest cost boards. Toolchain pinned: OSS CAD Suite linux arm64 20260819 (Yosys 0.68, nextpnr 0.11.1); the two reproduction commands are in the evidence JSON.
+
+**Result:** ECP5 synthesis is clean with **zero block RAM** (1,611 LUT4, 400 FF, 168 distributed RAM cells, 71 carry); place and route closes at **25 MHz with Fmax 31.60 MHz**, about 3% of the 85F (2,801/83,640 comb cells), so the design also fits the smallest parts of the family. The 50 MHz probe fails: the ECP5 fabric does not reach the Artix-7 clock, and the critical path is the same single cycle atom path the 100 MHz pipeline backlog item targets. Cycle bounds are unchanged: the universal envelope is 408 cycles = 12.9 us at Fmax (vs 8.16 us at the Zynq-7020's 50 MHz); a one cut policy is 8 cycles = 253 ns. **Honest scope:** this is toolchain level portability (synthesizes, places, routes, closes timing), NOT certification on second silicon; that requires the frozen corpus run on a physical ECP5 board. The iCE40 attempt is a real negative: with no distributed RAM in the mapping, the async read table arrays balloon to 9,583 LUT4s, over both UP5K and HX8K budgets at the 48/256 caps; the lowest cost boards are out without a sync read memory re-architecture. Time domain numbers are per target and stated only with that target's timing result, exactly the discipline #110 encodes by stamping cycles, not nanoseconds.
+
+**Provenance:** `prismpath-hw/rtl/ppt_interp.sv` (unmodified, byte identical to #109/#111), `prismpath-hw/evidence/openflow_port_2026-08-20.json` (full cell tables, utilization, timing, reproduction commands, toolchain pin).
