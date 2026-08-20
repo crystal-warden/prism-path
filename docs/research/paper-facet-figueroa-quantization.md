@@ -192,6 +192,18 @@ Facet carries Figueroa quantized symbols. Its four design choices, specified nor
   binds readings into an audit chain that spans sessions; an optional layer composes X25519 ECDHE and
   ChaCha20-Poly1305 (TLS 1.3 primitives, rekeyed per epoch) for transports without their own TLS.
 
+- **Correlated multi dimensional state: the decision first spiral (Tier 6, optional; §5.6).** When one
+  node routes on several correlated fields, the reference implementation offers a further tier: the
+  joint quantized cell space is packed onto a Fermat spiral index `n`, with bands laid out center
+  outward in route severity order (the baseline route at the dense center, the most specific branches
+  outward). Because the Fermat spiral has `r^2` proportional to `n`, membership in a radial band is a
+  pair of integer compares on `n`, itself a Level M atom; and the golden angle placement is a
+  deterministic function of `n` (one u32 multiply add on the edge, no trigonometry), so the wire still
+  carries a single ordered integer. The band ID alone routes correctly; a Gray ordered refinement
+  recovers the exact cell when the link affords it, so a collapsing link costs fidelity, never the
+  decision. The spiral is an option of the reference implementation for correlated multi field nodes,
+  not part of the normative Facet/1 core.
+
 Composing the two halves gives the guarantee the protocol exists to provide.
 
 **Proposition (end to end decision preservation).** Under the codebook agreed from the shared signed
@@ -280,6 +292,27 @@ items remain modeled rather than measured, stated as such: Merkle commitment (on
 block plus a logarithmic combine, well characterized on small cores in the literature) and the
 FPGA shift register codec, the remaining unbuilt half of Phase C2.
 
+### 5.6 The spiral, measured (`adapters/telemetry/bench/spiral_bench.py`, `spiral_results.md`)
+
+On 20,000 readings per scenario of correlated multi dimensional telemetry:
+
+| k (fields) | cells | route win vs per field wire | progressive fidelity ratio |
+|---:|---:|---:|---:|
+| 1 | 4 | 1.0x (none, by design) | 1.72 |
+| 2 | 16 | 1.9x | 1.07 |
+| 3 | 64 | 2.8x | 0.88 |
+| 4 | 256 | 3.6x | 0.79 |
+
+The route win (bits to route correctly, both sides at 100% routing accuracy) grows with
+dimensionality and is absent at k = 1 by design: the tier exists for correlated multi field state.
+Fidelity parity near 1x means the win is progressiveness, not dropped data: the refinement stream
+still delivers the full quantized magnitude. Correlation is the resource: the same k = 3 scenario
+routes at 3.01 bits correlated versus 3.9 uniform. Under Gilbert Elliott burst loss the spiral keeps
+routing where the per field wire cannot (96.4% versus 92.9% routed under light burst, 80.0% versus
+68.1% under heavy), because the decision needs one band frame to survive where the per field wire
+needs all k field frames. Hysteresis at band edges is deliberately the sampling edge's concern, not
+the codec's; the layout is pinned by a frozen tessellation corpus the same way the quantizer is.
+
 ## 6. Trust boundary
 
 Facet's guarantees are precise, and the boundary is deliberate:
@@ -356,6 +389,17 @@ Figueroa quantization compresses the *reading*, the data on the wire, down to it
 cell and preserves the classifier's decisions by a proof rather than by reproducing the classifier. TCAM Razor
 and BDDs shrink the rule table, while Figueroa quantization shrinks the telemetry that flows through it.
 
+*Space filling curves and spiral packings.* Morton and Hilbert curves are the standard mappings from
+a multi dimensional key to a one dimensional index, chosen for locality preservation. The spiral tier
+uses Vogel's phyllotaxis construction (a Fermat spiral with golden angle placement) instead, because
+locality is not the property the wire needs; route membership is. On the Fermat spiral a radial region
+is exactly an index interval, so the decision, which band, is two integer compares, a Level M atom,
+while a Hilbert or Morton range carries no such semantic meaning: the layout is chosen for
+decidability of region membership rather than locality alone. The placement constant is the golden
+ratio in fixed point (0x9E3779B9, the multiplicative constant of Fibonacci hashing), which the
+implementation shares with its Zeckendorf symbol coding as a small economy: the protocol's geometry
+and its framing both lean on the golden ratio's equidistribution.
+
 We are not aware of a prior or concurrent *system* that derives a quantization provably preserving
 decisions directly from a decidable match action policy and carries it over a codebook agreed from the
 signed policy. The conceptual core is classical and, as noted above, independently under active study;
@@ -399,6 +443,12 @@ properties a compressed record format cannot offer.
 - W. P. M. H. Heemels, K. H. Johansson, and P. Tabuada, "An Introduction to Event-Triggered and Self-Triggered Control," *Proc. IEEE CDC*, 2012.
 - A. X. Liu, C. R. Meiners, and E. Torng, "TCAM Razor: A Systematic Approach Towards Minimizing Packet Classifiers in TCAMs," *IEEE/ACM Trans. Netw.*, 2010.
 - R. E. Bryant, "Graph-Based Algorithms for Boolean Function Manipulation," *IEEE Trans. Comput.*, 1986.
+- H. Vogel, "A better way to construct the sunflower head," *Mathematical Biosciences*, 1979 (the
+  Fermat spiral with golden angle placement).
+- G. M. Morton, IBM technical report, 1966, and D. Hilbert, 1891 (space filling curves, the locality
+  preserving alternative the spiral tier deliberately departs from).
+- D. E. Knuth, *The Art of Computer Programming*, vol. 3 (Fibonacci hashing; the fixed point golden
+  ratio constant).
 - OpenTelemetry Protocol (OTLP) specification.
 - PrismPath: `PROTOCOL.md` (Facet/1, normative), `SPEC.md` (flow format, Level M).
 
