@@ -32,6 +32,7 @@ WORD = struct.Struct("<H")
 OPS = frozenset(range(7))                   # ==, !=, <, <=, >, >=, truthy
 TYPES = frozenset(range(4))                 # none, bool, int, str
 PROG_OPCODES = frozenset({0x8000, 0x8001, 0x8002, 0x8003, 0x8004})  # NOT AND OR TRUE FALSE
+FLAG_COLORS = 0x0001         # header flags bit0: per-node LED color section (nodes x uint16) appended
 
 PACK_FORMAT = "ppt-pack/1"
 
@@ -78,7 +79,8 @@ def read_ppt_header(data: bytes) -> dict:
         raise ValueError("image:bad-version")
     return {"fields": n_fields, "interns": n_interns, "atoms": n_atoms, "nodes": n_nodes,
             "edges": n_edges, "prog_words": prog_len, "start": start,
-            "visits_idx": visits_idx, "max_steps": max_steps, "max_stack": max_stack}
+            "visits_idx": visits_idx, "max_steps": max_steps, "max_stack": max_stack,
+            "flags": _rsvd}
 
 
 def validate_image(data: bytes, caps: Optional[dict] = None) -> Tuple[bool, List[str]]:
@@ -94,6 +96,8 @@ def validate_image(data: bytes, caps: Optional[dict] = None) -> Tuple[bool, List
 
     need = (HEADER.size + ATOM.size * h["atoms"] + NODE.size * h["nodes"]
             + EDGE.size * h["edges"] + WORD.size * h["prog_words"])
+    if h["flags"] & FLAG_COLORS:
+        need += WORD.size * h["nodes"]           # one uint16 LED color per node, appended last
     if len(data) != need:
         reasons.append("image:length-mismatch")
         return False, reasons
@@ -130,8 +134,33 @@ def validate_image(data: bytes, caps: Optional[dict] = None) -> Tuple[bool, List
             reasons.append(f"image:unknown-opcode:word{i}")
         if w < 0x8000 and w >= h["atoms"]:
             reasons.append(f"image:atom-index-oob:word{i}")
+    if h["flags"] & FLAG_COLORS:
+        for i in range(h["nodes"]):
+            (c,) = WORD.unpack_from(data, off)
+            off += WORD.size
+            if c > 0x3F:                          # 6-bit {LD5[2:0], LD4[2:0]}
+                reasons.append(f"image:color-oob:node{i}")
 
     return (not reasons), reasons
+
+
+def wcet_cycles(data: bytes) -> int:
+    """Per-evaluate worst-case cycle bound = max over nodes of (sum over its edges of
+    (2 + max(prog_words, 1))) + 2. Equals 2*E + P + 2 for compiler-emitted policies (every edge's
+    program is at least one word); the max(., 1) term keeps the bound exact for hand-crafted images
+    with zero-word edges, which still cost one S_RUN cycle each (the 3E+P adversarial case the
+    formal work surfaced). The interpreter is a fixed FSM with no micro-architecture, so this is
+    exact, not an over-approximation; calibrated + validated against the RTL in
+    prismpath-hw/tb/wcet. At clock f, the time bound is wcet_cycles / f."""
+    h = read_ppt_header(data)
+    off = HEADER.size + ATOM.size * h["atoms"]
+    node_recs = [NODE.unpack_from(data, off + i * NODE.size) for i in range(h["nodes"])]
+    off += NODE.size * h["nodes"]
+    edge_pcnt = [EDGE.unpack_from(data, off + i * EDGE.size)[2] for i in range(h["edges"])]
+    worst = 0
+    for eoff, ecnt in node_recs:                 # (edge_off, edge_cnt)
+        worst = max(worst, sum(2 + max(p, 1) for p in edge_pcnt[eoff:eoff + ecnt]) + 2)
+    return worst
 
 
 # ------------------------------------------------------------------ keys
@@ -189,6 +218,7 @@ def build_manifest(image: bytes, fields: Dict[str, str], version: int,
         "counts": {"atoms": h["atoms"], "nodes": h["nodes"], "edges": h["edges"],
                    "prog_words": h["prog_words"], "max_steps": h["max_steps"],
                    "max_stack": h["max_stack"]},
+        "wcet_cycles": wcet_cycles(image),       # per-evaluate worst case, signed with the policy
         "version": int(version),
         "envelope_id": envelope_id,
         "key_id": key_id,
@@ -259,6 +289,8 @@ def verify_pack(ppt_path: str, pubkey_paths: List[str],
     for k in ("atoms", "nodes", "edges", "prog_words", "max_steps", "max_stack"):
         if counts.get(k) != h[k]:
             return False, [f"manifest:count-mismatch:{k}"], manifest
+    if "wcet_cycles" in manifest and manifest["wcet_cycles"] != wcet_cycles(image):
+        return False, ["manifest:wcet-mismatch"], manifest   # recomputed from the image, independently
     return True, [], manifest
 
 

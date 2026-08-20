@@ -239,6 +239,112 @@ module ppt_interp #(
     else if (st == S_RUN)  ran <= 1'b1;
   end
 
+`ifdef FORMAL
+  // ---------------------------------------------------------------- WCET formal property
+  // For any VALID table (the only kind we ever sign + load), `done` follows an accepted `start`
+  // within N_MAX cycles. Per-evaluate cost = 2*E + P + 2 (E=node edges, P=its edges' total program
+  // words), calibrated on the RTL in tb/wcet. The envelope bound at the synthesized caps:
+  // True universal worst case is 3E+P (not 2E+P): every edge costs >=1 S_RUN cycle even with a
+  // zero-word program, so an adversarial table adds up to one extra cycle per edge. 2E+P is the
+  // bound for REAL policies (every edge's program >=1 word); this is the bound for ANY valid table.
+  localparam int N_MAX = 3*MAX_EDGES + MAX_PROG + 8;   // 408 at 48/256
+
+  // every trace starts from reset: clean control state, table arbitrary but count-bounded below
+  reg fv_reset_done = 1'b0;
+  always @(posedge clk) fv_reset_done <= 1'b1;
+  always @* if (!fv_reset_done) assume (rst);
+
+  integer fvk;
+  reg [31:0] fv_ecnt_total, fv_pcnt_total;
+  reg        fv_nodes_ok;
+  always @* begin
+    fv_ecnt_total = 0;
+    for (fvk = 0; fvk < MAX_NODES; fvk = fvk + 1) fv_ecnt_total = fv_ecnt_total + node_ecnt[fvk];
+    fv_pcnt_total = 0;
+    for (fvk = 0; fvk < MAX_EDGES; fvk = fvk + 1) fv_pcnt_total = fv_pcnt_total + edge_pcnt[fvk];
+    // every node's edge range stays within the edge array (what validate_image enforces): keeps the
+    // FSM's edge index in [0, MAX_EDGES), so what it reads is what fv_pcnt_total actually sums.
+    fv_nodes_ok = 1'b1;
+    for (fvk = 0; fvk < MAX_NODES; fvk = fvk + 1)
+      if (node_eoff[fvk] + node_ecnt[fvk] > MAX_EDGES) fv_nodes_ok = 1'b0;
+  end
+
+  reg [15:0] fv_cnt;
+  reg        fv_watch;
+  always @(posedge clk) begin
+    // validity: exactly what validate_image enforces on every shipped image (total edges + total
+    // program words within the caps), plus the protocol invariant (no table reload mid-evaluate).
+    assume (fv_ecnt_total <= MAX_EDGES);
+    assume (fv_pcnt_total <= MAX_PROG);
+    assume (fv_nodes_ok);
+    // no table reload across an evaluate (the whole watch window + the start cycle). Keyed off
+    // fv_watch, not busy, so it holds even in the induction's arbitrary states. Matches the protocol:
+    // the PS loads the table, THEN pulses start; the two never coincide.
+    if (fv_watch || (start && st == S_IDLE)) assume (!load_en);
+
+    if (rst) begin
+      fv_watch <= 1'b0; fv_cnt <= 16'd0;
+    end else if (start && st == S_IDLE) begin
+      fv_watch <= 1'b1; fv_cnt <= 16'd0;
+    end else if (fv_watch) begin
+      fv_cnt <= fv_cnt + 16'd1;
+      if (done) fv_watch <= 1'b0;
+    end
+
+    if (!rst && fv_watch) assert (fv_cnt <= N_MAX);   // never exceed the bound before done pulses
+    // strengthening: watch is only high mid-evaluate (busy) or at the done pulse — rules out the
+    // phantom watch=1/busy=0 states the induction step would otherwise explore.
+    if (!rst) assert (!fv_watch || busy || done);
+    // strengthening: idle-while-watching is only ever the done-pulse cycle (else fv_cnt could grow
+    // in a phantom idle state where the ranking function below is 0).
+    if (!rst) assert (!(fv_watch && st == S_IDLE) || done);
+    // strengthenings that pin the walk to the table (in-range work; also excludes the 16-bit
+    // cur_edge+1 wraparound the induction otherwise exploits from garbage states):
+    if (!rst && fv_watch && st != S_IDLE) assert (cur_edge <= fv_ecnt);
+    if (!rst && fv_watch && st == S_RUN) begin
+      assert (cur_edge < fv_ecnt);
+      assert ((fv_pcur == 0 && pc == 0) || pc < fv_pcur);
+    end
+    // the ranking invariant: counted cycles + worst-case cycles remaining never exceed the bound.
+    // R is a pure function of the current state, so induction only checks per-transition arithmetic.
+    if (!rst && fv_watch) assert ({16'd0, fv_cnt} + fv_R <= N_MAX);
+  end
+
+  // --- ranking function R: worst-case cycles until the done pulse, from the CURRENT state.
+  //     Computed combinationally from the FSM state and the table's count arrays (bounded loops) —
+  //     the prover never has to invent a sum, only verify that R decreases every watched cycle. ---
+  wire [15:0] fv_ecnt = node_ecnt[node_r[$clog2(MAX_NODES)-1:0]];
+  wire [15:0] fv_eoff = node_eoff[node_r[$clog2(MAX_NODES)-1:0]];
+  wire [15:0] fv_pcur = edge_pcnt[eidx[$clog2(MAX_EDGES)-1:0]];
+
+  // sum over future edges of (wmax(p_j) + 2), iterated over ABSOLUTE array positions so every
+  // edge_pcnt read has a CONSTANT index per unrolled iteration (no mux trees in the SMT formula —
+  // the variable-index form was the solver bottleneck). Same set: j-eoff in (cur_edge, ecnt).
+  integer fvj;
+  reg [31:0] fv_fut, fv_lo, fv_hi;
+  always @* begin
+    fv_lo  = {16'd0, fv_eoff} + {16'd0, cur_edge} + 32'd1;   // 32-bit math: no 16-bit wraparound
+    fv_hi  = {16'd0, fv_eoff} + {16'd0, fv_ecnt};
+    fv_fut = 0;
+    for (fvj = 0; fvj < MAX_EDGES; fvj = fvj + 1)
+      if (fvj >= fv_lo && fvj < fv_hi)
+        fv_fut = fv_fut + ((edge_pcnt[fvj] == 0) ? 32'd3 : (edge_pcnt[fvj] + 32'd2));
+  end
+
+  wire [31:0] fv_rdone = (cur_edge + 16'd1 < fv_ecnt) ? (32'd1 + fv_fut) : 32'd1;
+  reg [31:0] fv_R;
+  always @* begin
+    case (st)
+      S_IDLE: fv_R = 32'd0;                                             // only the done-pulse cycle
+      S_EDGE: fv_R = (cur_edge >= fv_ecnt) ? 32'd2                      // exhaustion: DONE, done
+                     : (32'd1 + ((fv_pcur == 0) ? 32'd1 : {16'd0, fv_pcur}) + fv_rdone);
+      S_RUN:  fv_R = ((fv_pcur == 0) ? 32'd1 : ({16'd0, fv_pcur} - {16'd0, pc})) + fv_rdone;
+      S_DONE: fv_R = fv_rdone;
+      default: fv_R = 32'd0;
+    endcase
+  end
+`endif
+
 endmodule
 
 `default_nettype wire

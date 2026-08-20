@@ -62,6 +62,7 @@ is preserved, and existing loaders keep reading the same file.
   "fields": {"<field name>": "<kind>"},
   "counts": {"atoms": 0, "nodes": 0, "edges": 0, "prog_words": 0,
               "max_steps": 0, "max_stack": 0},
+  "wcet_cycles": 0,
   "version": 1,
   "envelope_id": "<id of the envelope this pack targets>",
   "key_id": "<hex sha256 of the authority public key>",
@@ -74,6 +75,17 @@ the authority public key(s) plus a revocation list (a JSON set of `key_id`s) and
 any load. The manifest binds the **field schema** as well as the image hash: a valid signature
 over a schema mismatched image is impossible by construction, closing the pin the wrong schema
 routing hazard.
+
+`wcet_cycles` is this policy's worst case evaluate bound on the hardware tier: the maximum over
+nodes of the sum, across the node's edges, of `2 + max(prog_words, 1)` cycles, plus 2. For
+compiler emitted policies (every edge's program is at least one word) this equals `2E + P + 2`,
+where E is the node's edge count and P its total program words; the `max(., 1)` term keeps the
+bound exact for hand crafted images with zero word edges, which still cost one cycle each
+(formula calibrated cycle exact against the RTL; see the hardware repo's WCET record).
+The signer computes it from the image bytes and `verify_pack` recomputes it at load time, so the
+timing claim travels signed with the policy and a wrong claim fails verification even under a
+valid signature. Packs signed before this field exist without it; verification treats the field
+as optional and checks it only when present.
 
 **Anti rollback:** `version` is a monotonic integer. The runtime persists the active version
 (software tier: an fsync'd state file; hardware tiers: eFUSE / secure element counter) and refuses

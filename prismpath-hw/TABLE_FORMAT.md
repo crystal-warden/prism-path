@@ -69,12 +69,15 @@ header (28 bytes):
   u16  visits_idx   field register auto-written with the node's visits (0xFFFF: none)
   u16  max_steps    engine parity, default 25
   u16  max_stack    deepest program stack use (RTL sizing; compiler-computed)
-  u16  pad
+  u16  flags        bit0 COLORS: a per-node color section is appended (see below); else 0
 
 atoms  n_atoms × 8B:  u16 field_idx, u8 op, u8 const_type, i32 const_val
 nodes  n_nodes × 4B:  u16 edge_off, u16 edge_cnt          (edge_cnt 0 = terminal)
 edges  n_edges × 6B:  u16 target, u16 prog_off, u16 prog_cnt
 prog   prog_len × u16
+colors n_nodes × u16  ONLY when flags.COLORS: a 6-bit LED color per node. Additive: a flow
+                      with no color prose sets flags=0 and omits the section, so it stays
+                      byte identical to a pre-color build (the frozen corpus is untouched).
 ```
 
 Atom ops: `EQ=0 NE=1 LT=2 LE=3 GT=4 GE=5 TRUTHY=6`. Atoms are deduplicated flow-wide; in
@@ -87,6 +90,11 @@ Binary AND/OR, left-fold of the n-ary source form. A program's result is its lon
 
 Every image ships with a JSON **debug view** (field names, intern strings, readable atoms,
 disassembled programs, node names); the binary alone is what hardware sees.
+
+**WCET is derivable from the counts alone**: the interpreter's per-evaluate worst case is, per
+node, the sum across its edges of `2 + max(prog_cnt, 1)` cycles, plus 2 (calibrated cycle exact
+against the RTL; see the pack manifest's `wcet_cycles` in the secure hotswap spec and the WCET
+record in the hardware repo). Timing depends on the counts, never on atom or program contents.
 
 ## Companion input encodings (C target harness; the RTL testbench reuses them)
 

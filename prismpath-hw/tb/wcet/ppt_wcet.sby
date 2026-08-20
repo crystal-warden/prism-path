@@ -1,0 +1,29 @@
+# Formal WCET proof: `done` within N_MAX = 2*MAX_EDGES+MAX_PROG+2 of an accepted `start`, for any
+# count-valid table. Property + validity assumes + the hand-fed ghost-accumulator invariant live
+# under `ifdef FORMAL` in rtl/ppt_interp.sv. With the invariant supplied, this is k-inductive, so
+# plain k-induction closes it — no interpolation / MathSAT needed.
+#   sby -f tb/wcet/ppt_wcet.sby prove
+
+[tasks]
+bmc
+prove
+
+[options]
+bmc:   mode bmc
+bmc:   depth 40
+prove: mode prove
+prove: depth 2
+
+[engines]
+smtbmc yices
+
+[script]
+read_verilog -sv -formal ppt_interp.sv
+prep -top ppt_interp
+# WCET is data-independent (only edge/prog COUNTS drive timing). Free the stack (per-edge match) so
+# the program + atom memories drop out. Sound over-approximation: every match pattern is explored.
+cutpoint w:stk
+opt_clean
+
+[files]
+../../rtl/ppt_interp.sv

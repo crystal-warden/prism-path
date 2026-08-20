@@ -1,0 +1,56 @@
+{
+  "artifact": "wcet_formal_2026-08-20",
+  "subject": "per-evaluate WCET of the PPT v1 fabric interpreter (rtl/ppt_interp.sv)",
+  "formula": {
+    "exact_per_node": "sum over the node's edges of (2 + max(prog_words, 1)) cycles, plus 2",
+    "compiler_emitted_equivalent": "2*E + P + 2 (every compiler-emitted edge has >= 1 program word)",
+    "data_independence": "timing depends on table counts only, never on atom or program contents"
+  },
+  "calibration": {
+    "bench": "cocotb + Verilator, empty context forces the all-edges-tried worst case; start-to-done cycles counted on the RTL (bench off-repo; measurements reproduced here)",
+    "policies": [
+      {"shape": "one cut, two edges", "E": 2, "P": 2, "measured_cycles": 8},
+      {"shape": "three bands, three edges", "E": 3, "P": 3, "measured_cycles": 11},
+      {"shape": "five edges, fusion conjunctions", "E": 5, "P": 15, "measured_cycles": 27},
+      {"shape": "deep single-edge conjunction", "E": 2, "P": 10, "measured_cycles": 16},
+      {"shape": "wide six-edge fan-out", "E": 6, "P": 6, "measured_cycles": 20}
+    ],
+    "residual_vs_2E_plus_P": [2, 2, 2, 2, 2],
+    "residual_spread": 0
+  },
+  "universal_envelope": {
+    "caps": {"MAX_EDGES": 48, "MAX_PROG": 256},
+    "bound": "3*MAX_EDGES + MAX_PROG + 8 = 408 cycles = 8.16 us at 50 MHz",
+    "correction": "adversarial tables (words piled onto one edge, zero-word edges elsewhere) exceed 2E+P: each zero-word edge still costs one S_RUN cycle; found by the formal campaign, not by measurement",
+    "status": "base case proven + BMC evidenced; unbounded induction step open (see formal)"
+  },
+  "formal": {
+    "harness": "ifdef FORMAL in rtl/ppt_interp.sv (inert in sim/synth; conformance gate re-run green with it in place: 124 predicate + 6 engine vectors, 2985-sample replay, 0 mismatches) + tb/wcet/ppt_wcet.sby",
+    "property": "watchdog: done within N_MAX cycles of an accepted start; invariant fv_cnt + R <= N_MAX with R a combinational ranking function (worst-case cycles remaining from the current state)",
+    "assumptions_mirror_validate_image": [
+      "sum of node edge counts <= MAX_EDGES",
+      "sum of edge program counts <= MAX_PROG",
+      "every node's edge range within the edge array",
+      "no table load during an evaluate (matches the load-then-start protocol)"
+    ],
+    "basecase": "PROVEN (smtbmc yices, seconds): no reachable state violates the 408-cycle bound",
+    "bmc": "clean through step 275 of a worst-case evaluate (smtbmc boolector), zero counterexamples",
+    "induction_counterexamples_found_and_fixed": 7,
+    "notable_ctis": [
+      "zero-word-edge cost (the 3E+P formula correction)",
+      "table load during the start cycle",
+      "out-of-range node edge offsets",
+      "16-bit cur_edge wraparound from unreachable states"
+    ],
+    "unbounded_induction": "OPEN: all counterexamples eliminated (induction clears steps 2 and 1); the final step-0 query, carrying the ranking function's 48-term gated sum on both sides of one transition, exceeded the open-solver portfolio in 30-minute budgets",
+    "engines_tried": ["smtbmc boolector", "smtbmc yices", "smtbmc z3", "smtbmc --stbv yices",
+                       "abc pdr (with and without cutpoint data abstraction)", "pono mbic3 (array-free)"],
+    "toolchain": "OSS CAD Suite linux-arm64 20260819 (Yosys 0.68, SymbiYosys, boolector, yices, z3, abc, pono)"
+  },
+  "signed_stamping": {
+    "manifest_field": "wcet_cycles (docs/design/spec-secure-hotswap.md section 3.1)",
+    "signer": "policy_pack.build_manifest computes it from the image bytes",
+    "verifier": "verify_pack recomputes from the image and rejects on mismatch; field optional for pre-existing packs",
+    "tests": "prismpath/tests/test_policy_pack.py 22/22"
+  }
+}
