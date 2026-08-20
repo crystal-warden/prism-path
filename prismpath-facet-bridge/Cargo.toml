@@ -1,0 +1,11 @@
+[package]
+name = "prismpath-facet-bridge"
+version = "0.1.0"
+edition = "2021"
+
+[workspace]
+
+[dependencies]
+facet = "0.50.0-rc.6"
+prismpath-rs = { path = "../prismpath-rs" }
+prismpath-telemetry-rs = { path = "../prismpath-telemetry-rs" }
