@@ -6,295 +6,277 @@ committed artifact, cited inline; the reference implementation is `adapters/tele
 
 ## Abstract
 
-Telemetry systems ship *data* (timestamped, typed records that describe themselves) and then spend
-bandwidth, storage, and trust budget defending that data's integrity. We observe that for a system
-governed by a **decidable match action policy**, almost none of that data can change a decision, and the
-part that can is a small statistic we can characterize exactly. We define **Figueroa quantization**: the
-map, derived from the policy and provably preserving its decisions, from a reading to the minimum
-sufficient statistic for that policy's decisions, which *cell* of each field's domain the reading
-occupies. We then define **Facet**, a wire protocol that carries Figueroa quantized symbols with a
-codebook that is *agreed from the shared signed policy rather than transmitted*, a symbol coding that
-frames itself, and tamper evidence anchored to an audit chain. On 64,484 representative fused decisions,
-the Facet wire is **1.516 bytes/decision (integrity apparatus counted), 66.9× smaller than
-OpenTelemetry (OTLP) protobuf** and 4.7×
-smaller than zstd compressed batched OTLP, while it still frames itself, streams, and shows tampering,
-none of which a compressed record format provides. The reduction is *structural*, not a compression
-trick: we transmit the decision, not a timestamped attribute bag. Decision preservation is machine
-checked three ways against a frozen corpus.
+Telemetry systems ship data: timestamped, typed records that describe themselves, defended at real
+cost in bandwidth, storage, and trust. For a system governed by a decidable match action policy,
+almost none of that data can change a decision, and the part that can is a small statistic we can
+characterize exactly. We define **Figueroa quantization**, the map from a reading to the minimum
+sufficient statistic for a policy's decisions: which cell of each field's domain the reading
+occupies, derived from the policy itself and provably preserving every decision it can make. We then
+define **Facet**, a wire protocol that carries those symbols with a codebook agreed from the shared
+signed policy rather than transmitted, a symbol coding that frames itself, and tamper evidence
+anchored to an audit chain. On 64,484 representative fused decisions, the Facet wire costs 1.516
+bytes per decision with its integrity apparatus counted: 66.9 times smaller than OpenTelemetry
+(OTLP) protobuf and 4.7 times smaller than zstd compressed batched OTLP, while it still frames
+itself, streams, and shows tampering, none of which a compressed record format provides. The
+reduction is structural, not a compression trick: we transmit the decision, not a timestamped
+attribute bag. Decision preservation is machine checked three ways against a frozen corpus.
 
 ## 1. The problem: telemetry ships the wrong thing
 
 A general telemetry envelope such as OTLP carries, per record, a timestamp, typed attributes, and
-repeated string keys. For a fused decision payload this is ~100 bytes/record and is *larger* than
-minimal JSON (measured: 1.49×). This is not a defect of OTLP; it is a general observability envelope
-doing its job. But when the consumer of the telemetry is a **policy** (a control plane that will route
-each record to a decision), the envelope carries enormous redundancy: any two readings that route
-identically are, to the policy, the same event. The question this paper answers is: *what is the
-smallest thing you can send that preserves every decision, and can you send it without giving up
-framing, streaming, or tamper evidence?*
+repeated string keys. For a fused decision payload this is about 100 bytes per record, and it is
+larger than even a minimal JSON of the same fields (measured: 1.49 times). That is not a defect of
+OTLP; it is a general observability envelope doing its job. But when the consumer of the telemetry
+is a policy, a control plane that will route each record to a decision, the envelope carries
+enormous redundancy: any two readings that route identically are, to the policy, the same event.
 
-## 2. Background: Level M match action policies
+The setting that makes this exact is the Level M fragment. A PrismPath policy is an inert,
+inspectable document whose routing over a field changes truth only at the constants that field is
+compared against (`field OP const`; see `SPEC.md`). Because the policy's sensitivity to a field is
+confined to a finite set of published cuts, the question this paper answers has a precise form:
+what is the smallest thing a node can send that preserves every decision, and can it be sent
+without giving up framing, streaming, or tamper evidence?
 
-A PrismPath policy is an inert, inspectable document whose routing over a field changes truth only at
-the constants that field is compared against (`field OP const`, the Level M fragment; see `SPEC.md`).
-This is the property Figueroa quantization exploits, and it is what lets the quantization be *derived
-from the policy itself* rather than guessed.
+## 2. Figueroa quantization
 
-## 3. Figueroa quantization
+### 2.1 The definition
 
-### 3.1 Definition
-
-Given a Level M policy, the **Figueroa quantization** of a reading is the tuple of its per field **cell
-indices**, one symbol per decision relevant field, in canonical field order. A *cell* is a maximal set
-of values of a field on which every policy atom has constant truth; two values in one cell route
-identically through the entire policy. Fields the policy never tests are dropped: they cannot change a
-decision, so they cannot appear on the wire. The result is the **minimum sufficient statistic for the
-policy's decisions**: the classical notion of a sufficient statistic (Fisher), specialized to decision
-equivalence and, crucially, *derived mechanically from the policy*.
-
-### 3.2 Cell derivation
-
-For each decision relevant field, collect its atoms `field OP const` across all deterministic, non
-semantic edges. The constants cut the field's domain into fine intervals; evaluate a representative of
-each and **merge adjacent intervals with identical atom truth vectors**, yielding the *coarsest*
-partition that preserves every atom's truth. Three field kinds are auto detected: numeric (integer
-intervals), boolean (two cells), categorical (one cell per constant plus a trailing "other"). Reference:
-`adapters/telemetry/quantizer.py`.
-
-**Boundary mechanics and precision.** Open versus closed never survives to the wire, because the
-comparison domain is discretized first. Non integer numerics are truncated toward zero before
-quantization (the reference and both deployed implementations share this conversion), so every
-comparison happens over the integers, where each strict cut converts exactly to a closed bound
-(`x < c` is `x <= c - 1`): cells are closed integer intervals, unbounded only at the extremes. The
-exactness window is that of the double precision integer range: values are exact through 2^53, and
-beyond it both endpoints round identically through f64, so decisions stay consistent while absolute
-integer exactness is out of scope. None of this is asserted from design alone: a frozen boundary
-corpus (`adapters/telemetry/conformance/boundary.json`) probes every threshold edge at t - 1, t,
-and t + 1 across cuts from 10^2 to 10^12, plus 2^53 - 1, 2^53, 2^53 + 2, and 10^15, and twin tests
-replay it in the Python reference and the Rust crates; a symbol drift on either side of any
-boundary in either implementation turns the suite red.
-
-### 3.3 The guarantee: decision preservation
-
-**Reconstructing any representative of each cell and routing it through the policy reproduces every
-decision the original reading produced.** This is the property everything rests on, and it is machine
-checked three ways on a frozen corpus in `adapters/fusion/tests/test_fusion_spiral.py`: direct
-evaluation, the full quantize → wire round trip → reconstruct → evaluation, and cell index → route, all
-pinned to a `flow_sha256`, so a mapping bug anywhere flips a frozen entry and the suite goes red.
-
-### 3.4 What is and isn't novel
-
-Sufficient statistics and quotienting a state space by decision equivalence are classical. Unlike standard Vector Quantization (VQ) [Gray 1984], Figueroa quantization does not
-place its boundaries to minimize geometric distortion or mean squared error; it places them exactly where
-the policy's logic already cuts. The contribution is specific and mechanical: deriving that partition **directly and provably from a Level M
-match action policy** (the same atoms the model checker and compiler read), so the minimal decidable
-state code falls out of the policy itself with a machine checked guarantee it never mis-resolves a
-decision.
-
-### 3.5 Formal statement
-
-Sections 3.1 to 3.3 stated precisely. A reading is `x = (x₁, …, x_N)` in the product domain
-`𝒳 = 𝒳₁ × … × 𝒳_N`, one coordinate per field. A Level M policy `𝒫` decomposes into a finite atom set
+Fix a Level M policy. Its deterministic, non semantic edges decompose into a finite set of atoms,
+each testing one field against one literal constant:
 
 ```
-Atoms(𝒫) = { α₁, …, α_A }
+Atoms(𝒫) = { α₁, …, α_A },    αⱼ(x) = [ field fⱼ of x  ▷ⱼ  cⱼ ],    ▷ⱼ ∈ { <, ≤, >, ≥, =, ≠, ∈, ∉, truthy }.
 ```
 
-where each atom `αⱼ` tests a single field `fⱼ` against a literal constant `cⱼ`, that is
-`αⱼ(x) = [ field fⱼ of x  ▷ⱼ  cⱼ ]`, with `▷ⱼ ∈ { <, ≤, >, ≥, =, ≠, ∈, ∉, truthy }` (comparisons that
-are field against field, or against a non literal, carry no cut and lie outside the fragment). The
-decision is a function of the atom truth vector,
+Comparisons of field against field, or against a non literal, carry no cut and lie outside the
+fragment. The decision is a function of the atom truth vector alone, `D(x) = Δ(α₁(x), …, α_A(x))`,
+where `Δ` is the flow's first match edge logic over the realizable truth vectors (threshold atoms
+over one field are not independent, so much of `{0,1}^A` is unreachable and `Δ` is unconstrained
+there).
 
-```
-D(x) = Δ( α₁(x), …, α_A(x) ),
-```
-
-where `Δ : {0,1}^A → actions` is the flow's first match edge logic: a deterministic map from the atom
-truth vector to a finite set of actions. Its domain is the *realizable* atom vectors, since threshold
-atoms over a shared field are not independent (`x > 5` and `x < 3` cannot both hold), so many points of
-`{0,1}^A` are unreachable and `Δ` is left unconstrained there.
-
-**Definition (Figueroa quantization).** For each field `f` let `A_f` be the atoms over `f`, and define
-`u ~_f u'` iff `α(u) = α(u')` for every `α ∈ A_f`. Let
-
-```
-q_f : 𝒳_f → 𝒞_f = 𝒳_f / ~_f
-```
-
-send a value to its class. `q_f` is the coarsest partition of `𝒳_f` on which every atom of `A_f` is
-constant; for a numeric field it is a monotone step function that increments at each constant compared
-against `f`, with adjacent intervals of identical atom truth merged (§3.2). The Figueroa quantization is
-the product map over the decision relevant fields (a field with `A_f = ∅` is dropped, as it cannot
-change a decision):
+The constants compared against a field cut its domain into cells. Two values in one cell make every
+atom of that field agree, so they route identically through the entire policy. Formally, for each
+decision relevant field `f`, let `u ~_f u'` when every atom over `f` agrees on `u` and `u'`, and let
+`q_f` send a value to its equivalence class: the coarsest partition of the field's domain on which
+every atom is constant. For a numeric field, `q_f` is a monotone step function that increments at
+each published cut, with adjacent intervals of identical atom truth merged. Three field kinds are
+detected automatically: numeric (integer intervals), boolean (two cells), and categorical (one cell
+per constant plus a trailing other). The **Figueroa quantization** is the product map over the
+decision relevant fields, fields the policy never tests being dropped because they cannot change a
+decision:
 
 ```
 𝒬_F : 𝒳 → 𝒞 = 𝒞₁ × … × 𝒞_N,      𝒬_F(x) = ( q₁(x₁), …, q_N(x_N) ).
 ```
 
-**Theorem (decision preservation).** For all `x, x' ∈ 𝒳`,  `𝒬_F(x) = 𝒬_F(x')  ⟹  D(x) = D(x')`.
+The result is the minimum sufficient statistic for the policy's decisions: Fisher's classical
+notion, specialized to decision equivalence, and, crucially, derived mechanically from the policy
+rather than estimated from data. Reference: `adapters/telemetry/quantizer.py`.
 
-*Proof.* `𝒬_F(x) = 𝒬_F(x')` gives `q_f(x_f) = q_f(x_f')` for every field `f`, so by the definition of
-`~_f` every atom agrees: `αⱼ(x) = αⱼ(x')` for all `j`. The atom truth vectors coincide, hence
-`D(x) = Δ(atoms(x)) = Δ(atoms(x')) = D(x')`. Equivalently `D` factors as `D = D̄ ∘ 𝒬_F` for a unique
-`D̄ : 𝒞 → actions`, whose image has `K ≤ |𝒞|` distinct actions, the decision classes the policy induces
-on the cell tuples. ∎
+### 2.2 The guarantee
 
-This is exactly the property the §3.3 conformance suite checks on the frozen corpus: a mapping error
-would produce some `x, x'` with `𝒬_F(x) = 𝒬_F(x')` yet `D(x) ≠ D(x')`, flipping a pinned entry.
+**Theorem (decision preservation).** For all readings `x, x'`: if `𝒬_F(x) = 𝒬_F(x')` then
+`D(x) = D(x')`.
 
-**Minimal atom-preserving sufficiency.** `𝒬_F` is a sufficient statistic for `D` (the decision factors
-through it), and it is the **minimal atom-preserving** one: each `q_f` is the coarsest `~_f` partition,
-so merging any two of its cells flips an atom and may flip a decision. It is deliberately *not* the
-absolute minimal sufficient statistic for `D`. A statistic strictly coarser than `𝒬_F` exists whenever
-two distinct cell tuples always yield the same action, but collapsing those is a property of the
-specific `D̄`, not of the fields: it is policy specific (computing it in general is the policy
-equivalence problem) and brittle under change. Merge two same action cells today, hot swap the policy so
-they route differently tomorrow, and a `D̄`-minimal wire can no longer tell them apart, breaking
-decision preservation across the swap. Atom preservation is the invariant that survives policy evolution
-over a fixed atom set, which is why Figueroa quantization stops at the per field cells: that layer is
-exact, field local, robust to hot swap, and composable across independently signed policies.
+*Proof.* Equal quantizations give `q_f(x_f) = q_f(x_f')` for every field, so by the definition of
+`~_f` every atom agrees on `x` and `x'`. The atom truth vectors coincide, hence
+`D(x) = Δ(atoms(x)) = Δ(atoms(x')) = D(x')`. Equivalently, `D` factors as `D = D̄ ∘ 𝒬_F` for a
+unique `D̄ : 𝒞 → actions`. ∎
 
-**Corollary (wire cost).** Since `D = D̄ ∘ 𝒬_F`, transmitting `𝒬_F(x)` reproduces every decision, at a
-cost bounded by the cell counts alone:
+In words: reconstructing any representative of each cell and routing it through the policy
+reproduces every decision the original reading produced. This is the property everything else in
+the paper rests on, and it is machine checked three ways on a frozen corpus
+(`adapters/fusion/tests/test_fusion_spiral.py`): direct evaluation, the full quantize, wire round
+trip, reconstruct, evaluate path, and cell index to route, all pinned to a `flow_sha256`. A mapping
+error anywhere would produce two readings with equal symbols and different decisions, flipping a
+pinned entry and turning the suite red.
 
-```
-bits(x) = ⌈ log₂ |Im 𝒬_F| ⌉  ≤  Σ_f ⌈ log₂ |𝒞_f| ⌉,
-```
+**Corollary (wire cost).** Transmitting `𝒬_F(x)` reproduces every decision at a cost bounded by the
+cell counts alone, `bits(x) = ⌈log₂ |Im 𝒬_F|⌉ ≤ Σ_f ⌈log₂ |𝒞_f|⌉`, independent of the sensor's bit
+depth or sample rate. The map is decision lossless and magnitude lossy: the decision is recovered
+exactly, while only a cell representative of the original value is recoverable. Section 4 measures
+this bound.
 
-independent of the sensor's bit depth or sample rate. The map is decision lossless and magnitude lossy:
-`D̄` recovers the decision exactly, while only a cell representative, not the original value, is
-recoverable. Section 5 measures this bound on the reference corpus.
+### 2.3 Why the quantization stops at the atoms
 
-## 4. The Facet protocol
+`𝒬_F` is sufficient for `D`, and it is the minimal *atom preserving* statistic: each `q_f` is the
+coarsest partition on which every atom is constant, so merging any two cells flips some atom and may
+flip a decision. It is deliberately not the absolute minimal sufficient statistic. A strictly
+coarser statistic exists whenever two distinct cell tuples always yield the same action, but
+collapsing them is a property of the specific decision function, not of the fields: computing it in
+general is the policy equivalence problem, and the result is brittle under change. Merge two same
+action cells today, hot swap the policy so they route differently tomorrow, and the coarser wire can
+no longer tell them apart, breaking decision preservation across the swap. Atom preservation is the
+invariant that survives policy evolution over a fixed atom set. That is why Figueroa quantization
+stops at the per field cells: that layer is exact, field local, robust to hot swap, and composable
+across independently signed policies.
 
-Facet carries Figueroa quantized symbols. Its four design choices, specified normatively in
-`PROTOCOL.md`:
+### 2.4 Boundary mechanics and precision
 
-- **Codebook agreement, not codebook transmission (§2.1).** Both endpoints derive the identical codebook
-  by running the partitioner over the *same signed policy*. The only shared state is the policy, already
-  versioned and integrity bound by the PrismPath pack machinery. A decode is valid only under the exact
-  policy that produced the encode; a mismatch is rejected. This signed, versioned codebook, agreed out
-  of band, is what makes Facet a protocol rather than a mere encoding.
-- **A symbol coding that frames itself (§2.2).** Each symbol is sent as `symbol+1` under **Zeckendorf
-  (Fibonacci) coding**, a standard code that delimits itself [Zeckendorf 1972]. With canonical field
-  order, a reading carries no length header and no field tags. Zeckendorf coding is prior art, used, not
-  claimed. Self delimiting also bounds how far damage travels: consecutive 1s cannot occur inside a
-  codeword, so the trailing `11` is the only place the pattern appears and a decoder realigns at the
-  next terminator past a corrupted region. Corruption is therefore local. It touches the symbols it
-  lands on and cannot desynchronize the remainder of a stream, and what it touches is caught rather
-  than trusted: the recovered symbol count must match or the stream is rejected, the packet's Merkle
-  root makes damage evident, and the optional AEAD rejects it outright.
-- **Lossless batching over any transport (§2.3).** Because it frames itself at the reading level,
-  concatenation is lossless, so the `stream`, `batch:N`, and `mtu-fill` strategies trade only latency for
-  bandwidth, never fidelity. Facet rides over TCP/TLS, UDP/DTLS, Thread, LoRa, ESP-NOW, or a bare MCU
-  link. It is *not* a transport.
-- **Tamper evidence and optional confidentiality (§2.4 and §2.5).** A 32 byte Merkle root per packet
-  binds readings into an audit chain that spans sessions; an optional layer composes X25519 ECDHE and
-  ChaCha20-Poly1305 (TLS 1.3 primitives, rekeyed per epoch) for transports without their own TLS.
+Open versus closed never survives to the wire, because the comparison domain is discretized first.
+Non integer numerics are truncated toward zero before quantization (the reference and both deployed
+implementations share this conversion), so every comparison happens over the integers, where each
+strict cut converts exactly to a closed bound (`x < c` is `x <= c - 1`): cells are closed integer
+intervals, unbounded only at the extremes. The exactness window is that of double precision
+integers: values are exact through 2^53, and beyond it both endpoints round identically through f64,
+so decisions stay consistent while absolute integer exactness is out of scope. None of this is
+asserted from design alone. A frozen boundary corpus
+(`adapters/telemetry/conformance/boundary.json`) probes every threshold edge at t - 1, t, and t + 1
+across cuts from 10^2 to 10^12, plus 2^53 - 1, 2^53, 2^53 + 2, and 10^15, and twin tests replay it
+in the Python reference and the Rust crates; a symbol drift on either side of any boundary in either
+implementation turns the suite red.
 
-- **Correlated multi dimensional state: the decision first spiral (Tier 6, optional; §5.6).** When one
-  node routes on several correlated fields, the reference implementation offers a further tier: the
-  joint quantized cell space is packed onto a Fermat spiral index `n`, with bands laid out center
-  outward in route severity order (the baseline route at the dense center, the most specific branches
-  outward). Because the Fermat spiral has `r^2` proportional to `n`, membership in a radial band is a
-  pair of integer compares on `n`, itself a Level M atom; and the golden angle placement is a
-  deterministic function of `n` (one u32 multiply add on the edge, no trigonometry), so the wire still
-  carries a single ordered integer. The band ID alone routes correctly; a Gray ordered refinement
-  recovers the exact cell when the link affords it, so a collapsing link costs fidelity, never the
-  decision. The spiral is an option of the reference implementation for correlated multi field nodes,
-  not part of the normative Facet/1 core.
+### 2.5 What is and is not claimed
 
-Composing the two halves gives the guarantee the protocol exists to provide.
+Sufficient statistics and quotienting a state space by decision equivalence are classical. Unlike
+standard vector quantization, Figueroa quantization does not place its boundaries to minimize
+geometric distortion or mean squared error; it places them exactly where the policy's logic already
+cuts. The contribution is specific and mechanical: deriving the partition directly and provably from
+a Level M match action policy, the same atoms the model checker and compiler read, so the minimal
+decidable state code falls out of the policy itself with a machine checked guarantee that it never
+mis-resolves a decision. Section 6 situates this against the neighboring literature in detail.
 
-**Proposition (end to end decision preservation).** Under the codebook agreed from the shared signed
-policy, Facet decodes a reading to exactly its Figueroa symbol `𝒬_F(x)`, so by the decision preservation
-theorem (§3.5) the decision the receiver computes, `D̄(𝒬_F(x))`, equals `D(x)`, the decision the source's
-reading produced. Transport corruption cannot silently change a decision: it is made evident by the per
-packet Merkle root, or rejected outright under the optional AEAD.
+## 3. The Facet protocol
+
+Facet carries Figueroa quantized symbols. Four design choices define the core, specified
+normatively in `PROTOCOL.md`; a fifth mechanism is an option of the reference implementation.
+
+**Codebook agreement, not codebook transmission (§2.1).** Both endpoints derive the identical
+codebook by running the partitioner over the same signed policy. The only shared state is the
+policy, already versioned and integrity bound by the pack machinery. A decode is valid only under
+the exact policy that produced the encode; a mismatch is rejected. This signed, versioned codebook,
+agreed out of band, is what makes Facet a protocol rather than a mere encoding.
+
+**A symbol coding that frames itself (§2.2).** Each symbol is sent as `symbol + 1` under Zeckendorf
+(Fibonacci) coding, a standard code that delimits itself: consecutive 1s cannot occur inside a
+codeword, so the trailing `11` is the only place the pattern appears. With canonical field order, a
+reading carries no length header and no field tags. Self delimiting also bounds how far damage
+travels: a decoder realigns at the next terminator past a corrupted region, so corruption is local.
+It touches the symbols it lands on, cannot desynchronize the remainder of a stream, and what it
+touches is caught rather than trusted: the recovered symbol count must match or the stream is
+rejected, the packet's Merkle root makes damage evident, and the optional keyed layer rejects it
+outright. Zeckendorf coding is prior art, used, not claimed.
+
+**Lossless batching over any transport (§2.3).** Because the stream frames itself at the reading
+level, concatenation is lossless, so the `stream`, `batch:N`, and `mtu-fill` strategies trade only
+latency for bandwidth, never fidelity. Facet rides over TCP/TLS, UDP/DTLS, Thread, LoRa, ESP-NOW,
+or a bare MCU link. It is not a transport.
+
+**Tamper evidence and optional confidentiality (§2.4, §2.5).** A 32 byte Merkle root per packet
+binds readings into an audit chain that spans sessions. An optional layer composes X25519 ECDHE and
+ChaCha20-Poly1305 (TLS 1.3 primitives, rekeyed per epoch) for transports without their own TLS.
+
+**The decision first spiral (Tier 6, optional; §4.6).** When one node routes on several correlated
+fields, the reference implementation packs the joint cell space onto a Fermat spiral index `n`,
+bands laid out center outward in route severity order: the baseline route at the dense center, the
+most specific branches outward. Because the Fermat spiral has `r²` proportional to `n`, membership
+in a radial band is a pair of integer compares on `n`, itself a Level M atom; and the golden angle
+placement is a deterministic function of `n` (one u32 multiply add on the edge, no trigonometry),
+so the wire still carries a single ordered integer. The band ID alone routes correctly; a Gray
+ordered refinement recovers the exact cell when the link affords it, so a collapsing link costs
+fidelity, never the decision. The spiral is an option for correlated multi field nodes, not part of
+the normative Facet/1 core.
+
+Composing the quantization and the wire gives the guarantee the protocol exists to provide.
+
+**Proposition (end to end decision preservation).** Under the codebook agreed from the shared
+signed policy, Facet decodes a reading to exactly its Figueroa symbol, so by the theorem of §2.2
+the decision the receiver computes equals the decision the source's reading produced. Transport
+corruption cannot silently change a decision: it is made evident by the per packet Merkle root, or
+rejected outright under the optional keyed layer.
 
 *Proof.* Codebook agreement makes the decoder's partition identical to the encoder's, and the self
-framing symbol coding recovers the symbol tuple without ambiguity, so a decoded reading yields the same
-`𝒬_F(x)` that was sent. Theorem 3.5 gives `D = D̄ ∘ 𝒬_F`, hence `D̄(𝒬_F(x)) = D(x)`. A packet whose bytes
-were altered fails the per packet Merkle root check (evidence after the fact) or the AEAD tag (rejection
-on the hop), so an altered reading is never silently decoded to a different decision. ∎
+framing coding recovers the symbol tuple without ambiguity, so decoding yields the same `𝒬_F(x)`
+that was sent; the theorem gives `D̄(𝒬_F(x)) = D(x)`. A packet whose bytes were altered fails the
+Merkle root check (evidence after the fact) or the AEAD tag (rejection on the hop), so an altered
+reading is never silently decoded to a different decision. ∎
 
-## 5. Evaluation
+## 4. Measurements
 
-### 5.1 Against OTLP (`adapters/fusion/bench/otlp_baseline.py`, `otlp_results.md`)
+### 4.1 Against OTLP
 
-Over **n = 64,484** representative fused decisions, batched the way OTLP ships:
+Over 64,484 representative fused decisions, batched the way OTLP ships
+(`adapters/fusion/bench/otlp_baseline.py`, `otlp_results.md`):
 
-| wire | bytes/decision | notes |
+| wire | bytes per decision | notes |
 |---|---:|---|
 | OTLP faithful (protobuf) | 101.372 | industry standard telemetry envelope |
-| OTLP faithful + zstd level 19 (batched) | 7.162 | |
+| OTLP faithful + zstd level 19, batched | 7.162 | |
 | **Facet (O1, per field)** | **1.516** | frames itself, shows tampering |
 
-**Facet is 66.9× smaller than OTLP protobuf** and 4.7× smaller than zstd compressed batched OTLP.
-O1 counts its integrity apparatus (Merkle epoch roots and the ACK channel, the #84 convention), and
-every ratio divides by that exact measured cost. The reduction is *structural*: OTLP ships a
-timestamped, typed attribute bag; Facet ships the decision. A
-general compressor on a verbose format narrows the raw byte gap but gives up framing, streaming, and
-tamper evidence; the differentiator is those properties, not the byte count alone.
+Facet is 66.9 times smaller than OTLP protobuf and 4.7 times smaller than zstd compressed batched
+OTLP. The Facet figure counts its integrity apparatus (Merkle epoch roots and the ACK channel), and
+every ratio divides by that exact measured cost. The reduction is structural: OTLP ships a
+timestamped, typed attribute bag; Facet ships the decision. A general compressor on a verbose
+format narrows the raw byte gap but gives up framing, streaming, and tamper evidence; the
+differentiator is those properties, not the byte count alone.
 
-### 5.2 Framing and batching (`adapters/fusion/bench/wire.py`)
+### 4.2 Framing, batching, and the unit of loss
 
-Because Facet frames itself, the transport header per packet amortizes to ~0 as a packet fills, so the
-"header tax" is a latency choice, not a codec limit; batched against batched, Facet keeps its advantage
-over plain JSON because JSON keeps paying per record keys inside the batch. The optional AEAD layer adds
-less than a byte per decision when batched (a flat 16 byte tag amortized over a full packet, plus a 64
-byte handshake amortized over a 4096 reading epoch).
+Because Facet frames itself, the transport header per packet amortizes toward zero as a packet
+fills, so the header tax is a latency choice, not a codec limit; batched against batched, Facet
+keeps its advantage over plain JSON because JSON keeps paying per record keys inside the batch
+(`adapters/fusion/bench/wire.py`). The optional keyed layer adds less than a byte per decision when
+batched: a flat 16 byte tag amortized over a full packet, plus a 64 byte handshake amortized over a
+4,096 reading epoch.
 
-Framing also sets the *unit of loss* under corruption, the operational half of the story on constrained
-or intermittent links. A length prefixed envelope that takes a hit in a header forfeits the remainder of
-its payload, so recovery means retransmitting the whole batch. A Facet decoder cannot desynchronize past
-the next `11` terminator (§4), so a hit costs the packet it lands in, and recovery, by whatever mechanism
-the deployment uses, has only that packet to cover. The localization is structural, from the coding; the
-detection half is machine checked (`adapters/fusion/tests/test_wire_tamper.py`: at the bare codec at
-least 90 percent of single bit flips are rejected or leave the decision statistic unchanged, the residual
-that decodes cleanly to a different verdict is exactly why the keyed layer exists, and under AEAD every
-single byte tamper tried is rejected). We state the retransmission reduction qualitatively: retry rates
-under injected loss on a degraded link are not yet benchmarked, and quantifying them is future work.
+Framing also sets the unit of loss under corruption, the operational half of the story on
+constrained or intermittent links. A length prefixed envelope that takes a hit in a header forfeits
+the remainder of its payload, so recovery means retransmitting the whole batch. A Facet decoder
+cannot desynchronize past the next `11` terminator, so a hit costs the packet it lands in, and
+recovery has only that packet to cover. The localization is structural, from the coding; the
+detection half is machine checked (`adapters/fusion/tests/test_wire_tamper.py`): at the bare codec,
+at least 90 percent of single bit flips are rejected or leave the decision statistic unchanged, the
+residual that decodes cleanly to a different verdict is exactly why the keyed layer exists, and
+under the keyed layer every single byte tamper tried is rejected. The retransmission reduction is
+stated qualitatively: retry rates under injected loss on a degraded link are not yet benchmarked,
+and quantifying them is future work.
 
-### 5.3 Decision preservation
+### 4.3 Decision preservation
 
-Proven three ways against the frozen corpus (§3.3). Decision fidelity is invariant under batching,
-compression, and encryption; only temporal fidelity (freshness) varies with strategy.
+Proven three ways against the frozen corpus (§2.2). Decision fidelity is invariant under batching,
+compression, and encryption; only temporal fidelity, freshness, varies with strategy.
 
-### 5.4 Coexistence with full fidelity telemetry
+### 4.4 Coexistence with full fidelity telemetry
 
 Facet is the decision wire, not the archive, and dropping off policy fields is a per link choice
 rather than a system wide one. Where an operator needs raw events for forensics or debugging, Facet
 runs beside the existing pipeline, not instead of it: one source fans out to the unchanged raw sink
 and to a Facet sink, which is the shipped deployment pattern (`integrations/vector/CANARY.md`, with
 `canary_verify.py` proving route parity between the two legs on live traffic). The economics then
-sort themselves by link: where bandwidth affords raw, both flow and the raw leg remains the record
+sort themselves by link. Where bandwidth affords raw, both flow, and the raw leg remains the record
 of account; where it does not (contested, disconnected, or metered links), the decisions still flow
-at about two bytes each and the raw is retained at the source under its own retention policy. The
+at about 1.5 bytes each and the raw is retained at the source under its own retention policy. The
 privacy reading of §1 is the same fact seen from the other side: only what the decision needed ever
 leaves the node, unless the operator explicitly ships more.
 
-### 5.5 Cost on constrained hardware
+### 4.5 Cost on constrained hardware
 
-Both halves of the constrained hardware story are now measured. The decision *evaluate* path:
-5 to 21 cycles per decision in FPGA fabric (a provable 100 to 420 ns bound at 50 MHz) and byte
-identical table evaluation on four MCU instruction sets, with wire round trips dominated by the
-transport, not the decision (ledger rows #73 to #99). The *codec*: a portable C implementation of
-the encoder (a 78 entry Fibonacci table covering the full 2^53 range, 624 bytes of constant data,
-no multiplies or divisions on the hot path), verified byte for byte on device against reference
-generated wire bytes before any timing, measured on the same four MCU instruction sets that decide
-the policy (ledger row #104). Per event, typical 4 field workload (2.281 B/event) and a 1,000 cell
-stress codebook (7.062 B/event): ATmega328P at 16 MHz, 463 us and 1.76 ms; Xtensa LX6 at 240 MHz,
-9.3 us and 27.9 us; Cortex-M33 at 150 MHz, 5.3 us and 14.9 us; Hazard3 RISC-V at 150 MHz, 4.6 us
-and 13.7 us. Even the 8 bit floor tier encodes a worst case event faster than any telemetry cadence
-it would serve, and the 32 bit cores spend roughly 700 to 2,200 cycles per typical event. Two
-items remain modeled rather than measured, stated as such: Merkle commitment (one SHA-256 per
-block plus a logarithmic combine, well characterized on small cores in the literature) and the
-FPGA shift register codec, the remaining unbuilt half of Phase C2.
+Both halves of the constrained hardware story are measured. The decision evaluate path costs 5 to
+21 cycles per decision in FPGA fabric (a provable 100 to 420 ns bound at 50 MHz) and byte identical
+table evaluation on four MCU instruction sets, with wire round trips dominated by the transport,
+not the decision (ledger rows #73 to #99). The codec is a portable C implementation of the encoder:
+a 78 entry Fibonacci table covering the full 2^53 range, 624 bytes of constant data, no multiplies
+or divisions on the hot path, verified byte for byte on device against reference generated wire
+bytes before any timing (ledger row #104). Per event encode times:
 
-### 5.6 The spiral, measured (`adapters/telemetry/bench/spiral_bench.py`, `spiral_results.md`)
+| core | typical 4 field event (2.281 B) | 1,000 cell stress codebook (7.062 B) |
+|---|---:|---:|
+| ATmega328P, 16 MHz | 463 us | 1.76 ms |
+| Xtensa LX6, 240 MHz | 9.3 us | 27.9 us |
+| Cortex-M33, 150 MHz | 5.3 us | 14.9 us |
+| Hazard3 RISC-V, 150 MHz | 4.6 us | 13.7 us |
 
-On 20,000 readings per scenario of correlated multi dimensional telemetry:
+Even the 8 bit floor tier encodes a worst case event faster than any telemetry cadence it would
+serve, and the 32 bit cores spend roughly 700 to 2,200 cycles per typical event. Two items remain
+modeled rather than measured, stated as such: Merkle commitment (one SHA-256 per block plus a
+logarithmic combine, well characterized on small cores in the literature) and the FPGA shift
+register codec, the remaining unbuilt half of Phase C2.
+
+### 4.6 The spiral, measured
+
+On 20,000 readings per scenario of correlated multi dimensional telemetry
+(`adapters/telemetry/bench/spiral_bench.py`, `spiral_results.md`):
 
 | k (fields) | cells | route win vs per field wire | progressive fidelity ratio |
 |---:|---:|---:|---:|
@@ -303,150 +285,134 @@ On 20,000 readings per scenario of correlated multi dimensional telemetry:
 | 3 | 64 | 2.8x | 0.88 |
 | 4 | 256 | 3.6x | 0.79 |
 
-The route win (bits to route correctly, both sides at 100% routing accuracy) grows with
+The route win (bits to route correctly, both sides at 100 percent routing accuracy) grows with
 dimensionality and is absent at k = 1 by design: the tier exists for correlated multi field state.
 Fidelity parity near 1x means the win is progressiveness, not dropped data: the refinement stream
 still delivers the full quantized magnitude. Correlation is the resource: the same k = 3 scenario
-routes at 3.01 bits correlated versus 3.9 uniform. Under Gilbert Elliott burst loss the spiral keeps
-routing where the per field wire cannot (96.4% versus 92.9% routed under light burst, 80.0% versus
-68.1% under heavy), because the decision needs one band frame to survive where the per field wire
-needs all k field frames. Hysteresis at band edges is deliberately the sampling edge's concern, not
-the codec's; the layout is pinned by a frozen tessellation corpus the same way the quantizer is.
+routes at 3.01 bits correlated versus 3.9 uniform. Under Gilbert Elliott burst loss the spiral
+keeps routing where the per field wire cannot (96.4 versus 92.9 percent routed under light burst,
+80.0 versus 68.1 under heavy), because the decision needs one band frame to survive where the per
+field wire needs all k field frames. Hysteresis at band edges is deliberately the sampling edge's
+concern, not the codec's; the layout is pinned by a frozen tessellation corpus the same way the
+quantizer is.
 
-### 5.7 The profile on the air (`prismpath-hw/spiral-node/`, `prismpath-hw/spiral-mesh/`)
+### 4.7 The profile on the air
 
-The spiral profile's two materializations were then validated on hardware, in two steps. First the
-baked path alone: an ESP32 consuming the signed sidecar (a ~150 line table lookup consumer, no
-routing, no trigonometry, no floating point) quantized boundary probing readings and emitted band
-tier and refinement Zeckendorf frames bit identical to a host independently deriving the layout
-from the same flow, 20 of 20 vectors on the first flash. Then the wire itself: three ESP32 nodes
-braided their decision streams over ESP-NOW broadcast, stream identity riding the sender MAC (the
-braid's stream identity tax is zero on a transport that authenticates senders at layer 2), payloads
-of 3 to 5 bytes carrying `[class, tick, value]` as a self framing Zeckendorf stream. In a 30 second
-observed window: 1,891 frames received with zero corruption and zero wrong symbols; every one of
-444 band symbols on the air equal to the host re deriving the quantization from the signed flow,
-which closes an honest gap in the earlier mesh work, whose per channel bands were hand coded
-convention rather than derived artifacts; per link delivery 92 to 98 percent, a lost frame costing
-freshness, never a wrong decision. Each node also gossiped its fused posture, the k = 3 joint
-spiral cell, as a two byte coherence beacon: 80.8 percent of fully reported ticks showed three way
-agreement, and the remainder were the one tick band edge skew such a beacon exists to expose. Two
-scope notes carry over unchanged: the airborne frames in this run are unauthenticated (the pack is
-signed; per frame authentication on the mesh is the named follow on), and no airtime saving is
-claimed for single small frames, where fixed layer 2 overhead dominates; the airtime story belongs
-to batching and to duty cycle limited links, and will be measured, not asserted.
+The spiral's two materializations were validated on hardware in two steps
+(`prismpath-hw/spiral-node/`, `prismpath-hw/spiral-mesh/`). First, the baked path alone: an ESP32
+consuming the signed sidecar (a roughly 150 line table lookup consumer, no routing, no
+trigonometry, no floating point) quantized boundary probing readings and emitted band tier and
+refinement Zeckendorf frames bit identical to a host independently deriving the layout from the
+same flow, 20 of 20 vectors on the first flash. Then the wire itself: three ESP32 nodes braided
+their decision streams over ESP-NOW broadcast, stream identity riding the sender MAC (zero stream
+identity tax on a transport that authenticates senders at layer 2), payloads of 3 to 5 bytes
+carrying `[class, tick, value]` as a self framing Zeckendorf stream. In a 30 second observed
+window: 1,891 frames received with zero corruption and zero wrong symbols; every one of 444 band
+symbols on the air equal to the host re deriving the quantization from the signed flow, which
+closes an honest gap in the earlier mesh work, whose per channel bands were hand coded convention
+rather than derived artifacts; per link delivery 92 to 98 percent, a lost frame costing freshness,
+never a wrong decision. Each node also gossiped its fused posture, the k = 3 joint spiral cell, as
+a two byte coherence beacon: 80.8 percent of fully reported ticks showed three way agreement, and
+the remainder were the one tick band edge skew such a beacon exists to expose. Two scope notes
+carry over unchanged: the airborne frames in this run are unauthenticated (the pack is signed; per
+frame authentication on the mesh is the named follow on), and no airtime saving is claimed for
+single small frames, where fixed layer 2 overhead dominates; the airtime story belongs to batching
+and to duty cycle limited links, and will be measured, not asserted.
 
-## 6. Trust boundary
+## 5. Trust boundary
 
-Facet's guarantees are precise, and the boundary is deliberate:
+Facet's guarantees are precise, and the boundary is deliberate.
 
-1. **Source authenticity (out of scope).** Whether a sensor read true or an upstream lied is the data
-   provider's responsibility. Facet is a control plane wire, not a sensor.
-2. **Integrity after a value enters: tamper *evident*, not tamper *proof*.** A Merkle root anchored to
-   the audit chain makes alteration evident against a commitment no attacker can forge; the optional
-   keyed layer rejects a tampered packet on the hop; codebook binding rejects any stream that does not
-   decode under the exact signed policy. Without the keyed layer, integrity is evidence after the fact,
-   not rejection in real time. Measured in `adapters/fusion/tests/test_wire_tamper.py`.
-3. **Execution faithfulness (guaranteed).** For the input processed, the action provably matches the
-   quantization of that value (§3.3), checked for conformance across every substrate.
+1. **Source authenticity: out of scope.** Whether a sensor read true or an upstream lied is the
+   data provider's responsibility. Facet is a control plane wire, not a sensor.
+2. **Integrity after a value enters: tamper evident, not tamper proof.** A Merkle root anchored to
+   the audit chain makes alteration evident against a commitment no attacker can forge; the
+   optional keyed layer rejects a tampered packet on the hop; codebook binding rejects any stream
+   that does not decode under the exact signed policy. Without the keyed layer, integrity is
+   evidence after the fact, not rejection in real time. Measured in
+   `adapters/fusion/tests/test_wire_tamper.py`.
+3. **Execution faithfulness: guaranteed.** For the input processed, the action provably matches the
+   quantization of that value (§2.2), checked for conformance across every substrate.
 
-## 7. Related work
+## 6. Related work
 
-*Sufficient statistics* (Fisher) and decision theoretic quotients are the conceptual root of §3.
-*Zeckendorf/Fibonacci coding* [Zeckendorf 1972] is the code that frames itself in §4. *OpenTelemetry/OTLP*
-is the general envelope baseline of §5. Self describing wire formats (protobuf, CBOR, JSON) frame per
-record; Facet frames per stream via a shared codebook.
+The neighboring literature falls into three families: work this idea is a special case of, work it
+structurally resembles but differs from in objective, and work the protocol inherits from. One
+sentence pattern applies throughout: we name what is shared, then where the difference lies.
 
-Conceptually, compressing to a decision sufficient statistic is both classical and active. The
-*information bottleneck* [Tishby, Pereira, and Bialek 1999] generalizes sufficient statistics to a soft,
-learned tradeoff between compression and task relevance; Figueroa quantization is its hard, exact, policy
-derived special case, where the tradeoff collapses because the policy fixes the partition and admits no
-distortion. Concurrent and independent work [Walsh 2026] formalizes the coarsest exactly decision
-sufficient compression as the quotient of a state space by policy equivalence, merging states that demand
-the same optimal action, and studies its approximate form as a rate distortion problem. That is the same
-conceptual core as §3, reached from information theory rather than from a policy compiler; it derives no
-partition from an explicit signed policy, carries no machine checked guarantee, and defines no wire.
+**The idea's family: decision sufficient compression.** Sufficient statistics (Fisher) and decision
+theoretic quotients are the conceptual root. The information bottleneck [Tishby, Pereira, and
+Bialek 1999] generalizes sufficiency to a soft, learned tradeoff between compression and task
+relevance; Figueroa quantization is its hard, exact, policy derived special case, where the
+tradeoff collapses because the policy fixes the partition and admits no distortion. Concurrent and
+independent work [Walsh 2026] formalizes the coarsest exactly decision sufficient compression as
+the quotient of a state space by policy equivalence and studies its approximate form as a rate
+distortion problem: the same conceptual core as §2, reached from information theory rather than
+from a policy compiler; it derives no partition from an explicit signed policy, carries no machine
+checked guarantee, and defines no wire. The classical antecedent on the communication side is
+quantization for decentralized detection [Longo, Lookabaugh, and Gray 1990], which designs
+quantizers to minimize a hypothesis test's error probability under a rate budget; Figueroa
+quantization admits no error, placing boundaries exactly at the policy's own comparison constants.
 
-Two families of prior art sit closest to the quantization itself. Structurally, Figueroa quantization
-shares a clear operational kinship with Product Quantization (PQ) [Jégou et al. 2011] by decomposing a
-high dimensional state space into distinct, lower dimensional field subspaces and quantizing each
-independently to form a compact tuple. However, it subverts the traditional PQ paradigm: instead of
-learning codebooks via clustering algorithms to minimize reconstruction distortion, the codebook falls
-out natively from the governing policy, and the optimization objective is the preservation of the final
-decision rather than signal reconstruction.
+**Same shape, different objective.** Product quantization [Jégou et al. 2011] also decomposes a
+high dimensional space into per field subspaces quantized independently into a compact tuple, but
+learns its codebooks by clustering to minimize reconstruction distortion; here the codebook falls
+out of the governing policy, and the objective is preservation of the decision, not of the signal.
+Supervised discretization [Fayyad and Irani 1993] also cuts continuous axes at class boundaries,
+but estimates its bins from labeled data to reduce empirical entropy; Figueroa quantization
+extracts them deterministically from an explicit signed policy, with no statistical fitting and an
+exactness proof. On the mechanism side, TCAM Razor [Liu et al. 2010] and reduced ordered binary
+decision diagrams [Bryant 1986] exploit the same underlying property, that a field matters only at
+the constants it is compared against, but compress the classifier, the on device matcher; Figueroa
+quantization compresses the reading, the data on the wire, and preserves the classifier's decisions
+by a proof rather than by reproducing the classifier.
 
-A superficial parallel also exists in supervised discretization techniques (e.g., Fayyad-Irani MDL
-binning [Fayyad and Irani 1993] or decision tree feature splitting), which also partition continuous
-axes at class boundaries. However, while supervised discretization estimates bins from a labeled training
-dataset to minimize empirical class entropy, Figueroa quantization extracts them deterministically from
-an explicit, signed match action policy. It requires no statistical fitting or historic corpus; it is
-exact by construction, yielding a machine checked proof that every potential decision is preserved.
+**The protocol's lineage.** Facet's thesis, transmit only what can change the outcome, is the
+organizing idea of semantic and goal oriented communications, as old as Weaver's distinction
+between the symbols and their meaning [Shannon and Weaver 1949] and resurgent in task oriented
+coding [Gündüz et al. 2023]; those systems learn relevance from a task and a dataset, so their
+relevance is statistical and approximate, while Facet's is derived from an explicit signed policy
+and certified by the theorem of §2.2. Transmitting on threshold crossings is the send on delta and
+event triggered sampling tradition [Miskowicz 2006; Heemels et al. 2012]; Facet's stream, batch,
+and fill strategies sit in that lineage, the distinction being that what crosses is a decided cell
+boundary, not a raw signal delta. Zeckendorf coding [Zeckendorf 1972] supplies the self framing
+symbol code, used as prior art. And where the spiral tier maps a multi dimensional key to one
+index, the standard tools are Morton and Hilbert curves, chosen for locality; the spiral uses
+Vogel's phyllotaxis construction [Vogel 1979] instead, because route membership, not locality, is
+the property the wire needs: on the Fermat spiral a radial region is exactly an index interval, so
+the decision is two integer compares, a Level M atom, while a Hilbert or Morton range carries no
+such semantic meaning. The placement constant is the golden ratio in fixed point (0x9E3779B9, the
+multiplicative constant of Fibonacci hashing), which the implementation shares with its Zeckendorf
+coding as a small economy: the protocol's geometry and its framing both lean on the golden ratio's
+equidistribution.
 
-The classical antecedent on the communication side is quantization for decentralized detection [Longo,
-Lookabaugh, and Gray 1990], which quantizes observations to preserve a hypothesis test decision under a
-rate budget. That work designs quantizers to minimize decision error probability under a probabilistic
-observation model; Figueroa quantization admits no error, placing boundaries exactly at the policy's own
-comparison constants.
-
-Beyond the quantization mechanism, Facet's thesis (transmit only what can change the outcome) is the
-organizing idea of *semantic and goal oriented communications*, as old as Weaver's distinction between
-Level A, the symbols, and Level B, their meaning [Shannon and Weaver 1949], and resurgent in modern task
-oriented coding [Gündüz et al. 2023]. The difference is where relevance comes from. Those systems *learn*
-what matters from a task and a dataset, usually with trained neural encoders, so their relevance is
-statistical and approximate, with no guarantee that a given transmission preserves the receiver's
-decision. Facet's relevance is *derived* from an explicit signed decidable policy and carries a machine
-checked proof (§3.5) that no decision is mis-resolved: relevance that is exact and certified, not trained
-and estimated. On the transmission side, sending only when a monitored quantity crosses a threshold is
-the send on delta and event triggered sampling tradition [Miskowicz 2006; Heemels et al. 2012]; Facet's
-stream, batch, and fill strategies (§5.2) sit in this lineage, the distinction being that what crosses is
-a decided cell boundary, not a raw signal delta.
-
-On the mechanism side, reducing a decision structure to its essential cuts is classical in packet
-classification and logic synthesis. TCAM Razor minimizes a packet classifier's rule set for ternary CAM
-[Liu et al. 2010], and reduced ordered binary decision diagrams canonicalize and minimize Boolean
-functions [Bryant 1986]. Both exploit the property Figueroa quantization rests on, that a field matters
-only at the constants it is compared against, and packet classifiers even cut header fields into the same
-kind of ranges Level M atoms cut a field's domain into. The distinction is the object being compressed:
-TCAM Razor and BDDs compress the *classifier*, the on device matcher that evaluates the rules, while
-Figueroa quantization compresses the *reading*, the data on the wire, down to its decision sufficient
-cell and preserves the classifier's decisions by a proof rather than by reproducing the classifier. TCAM Razor
-and BDDs shrink the rule table, while Figueroa quantization shrinks the telemetry that flows through it.
-
-*Space filling curves and spiral packings.* Morton and Hilbert curves are the standard mappings from
-a multi dimensional key to a one dimensional index, chosen for locality preservation. The spiral tier
-uses Vogel's phyllotaxis construction (a Fermat spiral with golden angle placement) instead, because
-locality is not the property the wire needs; route membership is. On the Fermat spiral a radial region
-is exactly an index interval, so the decision, which band, is two integer compares, a Level M atom,
-while a Hilbert or Morton range carries no such semantic meaning: the layout is chosen for
-decidability of region membership rather than locality alone. The placement constant is the golden
-ratio in fixed point (0x9E3779B9, the multiplicative constant of Fibonacci hashing), which the
-implementation shares with its Zeckendorf symbol coding as a small economy: the protocol's geometry
-and its framing both lean on the golden ratio's equidistribution.
-
-We are not aware of a prior or concurrent *system* that derives a quantization provably preserving
-decisions directly from a decidable match action policy and carries it over a codebook agreed from the
-signed policy. The conceptual core is classical and, as noted above, independently under active study;
-the individual ingredients are all standard. We claim only the composition and the machine checked
+We are not aware of a prior or concurrent system that derives a quantization provably preserving
+decisions directly from a decidable match action policy and carries it over a codebook agreed from
+the signed policy. The conceptual core is classical and independently under active study; the
+individual ingredients are all standard. We claim only the composition and the machine checked
 quantization derived from the policy.
 
-**Priority and independent origin.** The applied thesis behind this work, reducing an observation to a
-threshold decided verdict and transmitting only a signed, receipted decision over a resilient link, was
-filed as a US provisional patent application (Crystal Warden Supply Chain Labs LLC, 15 February 2026) in
-the context of an out of band supply chain verification device; the quantization method itself was held
-back and is not disclosed there. Figueroa quantization as formalized here was developed in mid 2026 and
-is contemporaneous with independent academic work on action sufficient compression [Walsh 2026]. We make
-no claim of priority over the general notion of quotienting a state space by decision equivalence, which
-is classical (Fisher; the information bottleneck) and actively studied. What we claim is the specific
-machine checked derivation of a decision preserving quantization from a signed decidable policy, and its
+## 7. Origin and priority
+
+The applied thesis behind this work, reducing an observation to a threshold decided verdict and
+transmitting only a signed, receipted decision over a resilient link, was filed as a US provisional
+patent application (Crystal Warden Supply Chain Labs LLC, 15 February 2026) in the context of an
+out of band supply chain verification device; the quantization method itself was held back and is
+not disclosed there. Figueroa quantization as formalized here was developed in mid 2026 and is
+contemporaneous with independent academic work on action sufficient compression [Walsh 2026]. We
+make no claim of priority over the general notion of quotienting a state space by decision
+equivalence, which is classical and actively studied. What we claim is the specific machine checked
+derivation of a decision preserving quantization from a signed decidable policy, and its
 realization as a byte identical wire across substrates.
 
 ## 8. Conclusion
 
 For a system governed by a decidable policy, the decision sufficient statistic is small, exact, and
-derivable from the policy itself. Figueroa quantization computes it with a machine checked guarantee that
-it preserves decisions; Facet carries it over a wire that frames itself and shows tampering, whose
-codebook is agreed rather than transmitted. The result is a bandwidth reduction of more than an order of
-magnitude that is structural rather than a compression trick, with framing, streaming, and audit
-properties a compressed record format cannot offer.
+derivable from the policy itself. Figueroa quantization computes it with a machine checked
+guarantee that it preserves decisions; Facet carries it over a wire that frames itself and shows
+tampering, whose codebook is agreed rather than transmitted. The result is a bandwidth reduction of
+more than an order of magnitude that is structural rather than a compression trick, with framing,
+streaming, and audit properties a compressed record format cannot offer.
 
 ## References
 
@@ -468,13 +434,7 @@ properties a compressed record format cannot offer.
 - H. Vogel, "A better way to construct the sunflower head," *Mathematical Biosciences*, 1979 (the
   Fermat spiral with golden angle placement).
 - G. M. Morton, IBM technical report, 1966, and D. Hilbert, 1891 (space filling curves, the locality
-  preserving alternative the spiral tier deliberately departs from).
-- D. E. Knuth, *The Art of Computer Programming*, vol. 3 (Fibonacci hashing; the fixed point golden
-  ratio constant).
-- OpenTelemetry Protocol (OTLP) specification.
-- PrismPath: `PROTOCOL.md` (Facet/1, normative), `SPEC.md` (flow format, Level M).
-
----
+  preserving alternative).
 
 *Draft. Provenance: `adapters/telemetry/{quantizer,wire,zeckendorf,packed}.py`;
 `adapters/fusion/bench/{otlp_baseline.py,otlp_results.md,wire.py}`;
