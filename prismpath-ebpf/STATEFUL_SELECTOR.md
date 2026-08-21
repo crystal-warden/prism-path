@@ -99,10 +99,27 @@ raw index carry (idx 2) would have misread it as `elevated`; reset-to instead se
 `elevated` to B's fail-safe.
 
 The loader owns the swap as a primitive, `selector_hotswap` (read the resident state, `migrate_node`,
-swap the table, write the migrated node back under the state lock), which both `migrate_selector.c` and
-the `loader swapselector <new.ppt> <old.ppt>` command drive. Remaining for a live deployment: pinning
-`sel_state` on bpffs so it persists across loader invocations, and attaching the selector to a control
-interface (it is `BPF_PROG_TEST_RUN`-verified today, not NIC-attached).
+swap the table, write the migrated node back under the state lock), which `migrate_selector.c`, the
+`loader swapselector` command, and the live deployment all drive.
+
+## Deployment: attached, pinned, live
+
+`sel_state` is pinned on bpffs, so the resident posture persists across loader invocations and across a
+policy hot-swap (every load sets the pin path and libbpf reuses the pinned map). The loader commands are
+`selattach <policy> <iface>` (load with pinned state, clean start, attach XDP), `selstate` (read the
+pinned posture), `selsend <iface> <ev>` (inject a control event), `swapselector <new> <old> [iface]`
+(hot-swap + migrate), and `seldetach <iface>`. Verified end to end on this box (XDP SKB mode, a veth pair):
+
+1. `selattach migrate_A.ppt veth_sel` -> clean start (node 0); a fresh `selstate` process reads node 0,
+   so the state persists across invocations.
+2. Two live escalate packets (`selsend veth_selp 1`) drive the ATTACHED program: `selstate` -> node 2
+   (lockdown), gen 2 -> real packets advanced the resident FSM through XDP.
+3. `swapselector migrate_Bname.ppt migrate_A.ppt veth_sel` hot-swaps to the reindexed B: the persistent
+   lockdown (idx 2) is re-resolved by NAME to B's lockdown (idx 1), gen 2 is preserved (the SAME resident
+   state, migrated, not reset), and B is re-attached.
+
+Honest scope: XDP SKB (generic) mode on a veth on the dev box, not native mode on a production NIC / the
+Protectli; the OTS anchor of the receipt Merkle root is still held.
 
 ## Receipts + Merkle anchor (the stateful history, tamper-evident)
 

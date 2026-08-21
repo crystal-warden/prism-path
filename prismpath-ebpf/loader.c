@@ -15,6 +15,10 @@
 #include <errno.h>
 #include <unistd.h>
 #include <net/if.h>
+#include <sys/socket.h>
+#include <netpacket/packet.h>
+#include <net/ethernet.h>       /* ETH_P_ALL */
+#include <arpa/inet.h>          /* htons */
 #include <pthread.h>
 
 #ifndef NO_LIBBPF
@@ -28,6 +32,9 @@
 #define PIN_PATH "/sys/fs/bpf/ppt_result"   /* result_map pin: read back the in-kernel verdict */
 #define NET_VERDICT_PIN "/sys/fs/bpf/ppt_net_verdict"  /* real-packet per-target histogram */
 #define NET_RESULT_PIN  "/sys/fs/bpf/ppt_net_result"   /* real-packet last-verdict + pkt_count */
+#define SEL_STATE_PIN   "/sys/fs/bpf/ppt_sel_state"     /* resident selector posture, persists across loads */
+#define SEL_RESULT_PIN  "/sys/fs/bpf/ppt_sel_result"    /* selector last-decision + pkt_count */
+#define SEL_RECEIPT_PIN "/sys/fs/bpf/ppt_sel_receipts"  /* selector audit-receipt ringbuf (drainable) */
 
 typedef struct {
     uint16_t n_fields, n_interns, n_atoms, n_nodes, n_edges, prog_len,
@@ -317,39 +324,120 @@ static long selector_hotswap(struct bpf_object *obj, const Image *old_im, const 
     return (long)migrated;
 }
 
-/* loader <new.ppt> swapselector <old.ppt> — perform a resident selector hot-swap in-process: load the
- * selector, seed the resident posture to the OLD policy's fail-safe, then swap to the NEW policy via
- * selector_hotswap (by-name re-resolves the posture by name; reset-to -> the new fail-safe). No bpffs
- * pinning here, so the resident state does not persist across invocations — that is the deployment step. */
-static int selector_swap_cmd(const char *new_ppt, const char *old_ppt) {
+/* ---- resident selector deployment ------------------------------------------------------------
+ * sel_state is pinned on bpffs, so it survives across loader invocations and across a policy reload:
+ * every selector load sets the pin path, and libbpf REUSES the pinned map when it already exists. That
+ * is what makes the resident posture persist while the policy is hot-swapped. */
+
+/* Open + load ppt_select.bpf.o with sel_state (and result/receipt) pinned. A later load reuses the same
+ * resident-state map, persisting the posture. Populates the table maps with `im`. Returns obj or NULL. */
+static struct bpf_object *sel_open(const Image *im) {
+    struct bpf_object *obj = bpf_object__open_file("ppt_select.bpf.o", NULL);
+    if (!obj) { fprintf(stderr, "sel_open: cannot open ppt_select.bpf.o (run make)\n"); return NULL; }
+    struct bpf_map *m;
+    if ((m = bpf_object__find_map_by_name(obj, "sel_state_map"))) bpf_map__set_pin_path(m, SEL_STATE_PIN);
+    if ((m = bpf_object__find_map_by_name(obj, "result_map")))    bpf_map__set_pin_path(m, SEL_RESULT_PIN);
+    if ((m = bpf_object__find_map_by_name(obj, "receipt_map")))   bpf_map__set_pin_path(m, SEL_RECEIPT_PIN);
+    if (bpf_object__load(obj)) {
+        fprintf(stderr, "sel_open: load/verify failed\n"); bpf_object__close(obj); return NULL;
+    }
+    if (populate_maps(obj, im)) { bpf_object__close(obj); return NULL; }
+    return obj;
+}
+
+/* loader <policy.ppt> selattach <iface> — deploy the resident selector: load with pinned state, seed a
+ * clean start, attach in XDP SKB mode. The program + pinned state outlive this process. */
+static int sel_attach_cmd(const char *policy_ppt, const char *iface) {
+    long l; uint8_t *b = read_file(policy_ppt, &l);
+    Image im;
+    if (!b || parse_image_buf(b, l, &im)) { fprintf(stderr, "selattach: parse %s failed\n", policy_ppt); return 1; }
+    unsigned int ifindex = if_nametoindex(iface);
+    if (!ifindex) { fprintf(stderr, "selattach: unknown interface %s\n", iface); return 1; }
+    struct bpf_object *obj = sel_open(&im);
+    if (!obj) return 1;
+    int st_fd = bpf_map__fd(bpf_object__find_map_by_name(obj, "sel_state_map"));
+    struct sel_state s = { .cur_node = im.start, .inited = 1, .gen = 0 };   /* deliberate clean start */
+    __u32 k = 0;
+    if (st_fd < 0 || bpf_map_update_elem(st_fd, &k, &s, BPF_F_LOCK)) { fprintf(stderr, "selattach: seed failed\n"); return 1; }
+    int prog_fd = bpf_program__fd(bpf_object__find_program_by_name(obj, "ppt_select_prog"));
+    if (bpf_xdp_attach(ifindex, prog_fd, XDP_FLAGS_SKB_MODE, NULL)) {
+        fprintf(stderr, "selattach: XDP attach on %s failed (need root)\n", iface); return 1;
+    }
+    printf("OK: ppt_select attached to %s (SKB); sel_state pinned at %s; clean start = node %u.\n",
+           iface, SEL_STATE_PIN, im.start);
+    bpf_object__close(obj);   /* the XDP attach + the bpffs pins keep the program and state alive */
+    free_image(&im);
+    return 0;
+}
+
+/* loader x selstate — read the pinned resident posture (works in a fresh process). */
+static int sel_state_cmd(void) {
+    int fd = bpf_obj_get(SEL_STATE_PIN);
+    if (fd < 0) { fprintf(stderr, "selstate: no pinned state at %s (selattach first)\n", SEL_STATE_PIN); return 1; }
+    struct sel_state s; __u32 k = 0;
+    if (bpf_map_lookup_elem_flags(fd, &k, &s, BPF_F_LOCK)) { perror("selstate read"); close(fd); return 1; }
+    printf("SEL STATE: resident node=%u inited=%u gen=%u (pinned at %s)\n",
+           s.cur_node, s.inited, s.gen, SEL_STATE_PIN);
+    close(fd);
+    return 0;
+}
+
+/* loader x seldetach <iface> — detach the selector and remove its pins. */
+static int sel_detach_cmd(const char *iface) {
+    unsigned int ifindex = if_nametoindex(iface);
+    if (ifindex) bpf_xdp_detach(ifindex, XDP_FLAGS_SKB_MODE, NULL);
+    unlink(SEL_STATE_PIN); unlink(SEL_RESULT_PIN); unlink(SEL_RECEIPT_PIN);
+    printf("OK: ppt_select detached from %s; pins removed.\n", iface);
+    return 0;
+}
+
+/* loader x selsend <iface> <ev> — inject a raw control-event frame on <iface> (AF_PACKET). Sent out
+ * <iface>; on a veth pair it arrives at the peer where the selector XDP is attached, so the attached
+ * program advances the (pinned) resident posture from a real packet. */
+static int sel_send_cmd(const char *iface, int ev) {
+    unsigned int ifindex = if_nametoindex(iface);
+    if (!ifindex) { fprintf(stderr, "selsend: unknown interface %s\n", iface); return 1; }
+    int fd = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
+    if (fd < 0) { perror("selsend socket"); return 1; }
+    struct ppt_reg regs[1] = {{ TY_INT, ev }};
+    uint8_t frame[256]; int flen = build_frame(frame, 0, 1, regs);
+    struct sockaddr_ll sll; memset(&sll, 0, sizeof(sll));
+    sll.sll_family = AF_PACKET; sll.sll_ifindex = ifindex; sll.sll_halen = 6;
+    memcpy(sll.sll_addr, frame, 6);                  /* dest mac = the frame's eth dst (broadcast) */
+    int rc = (int)sendto(fd, frame, flen, 0, (struct sockaddr *)&sll, sizeof(sll));
+    close(fd);
+    if (rc < 0) { perror("selsend sendto"); return 1; }
+    printf("selsend: injected control event %d (%d bytes) on %s\n", ev, flen, iface);
+    return 0;
+}
+
+/* loader <new.ppt> swapselector <old.ppt> [iface] — hot-swap the LIVE selector policy while MIGRATING
+ * the persistent resident posture. Loads the new policy REUSING the pinned sel_state (so the old posture
+ * carries into this process), migrates it via selector_hotswap per the new policy's signed strategy, and
+ * (if iface given) attaches the new program, replacing the old. */
+static int selector_swap_cmd(const char *new_ppt, const char *old_ppt, const char *iface) {
     long lo, ln;
     uint8_t *bo = read_file(old_ppt, &lo), *bn = read_file(new_ppt, &ln);
-    if (!bo || !bn) { fprintf(stderr, "swapselector: read failed\n"); return 1; }
     Image O, N;
-    if (parse_image_buf(bo, lo, &O) || parse_image_buf(bn, ln, &N)) {
-        fprintf(stderr, "swapselector: parse failed\n"); return 1;
+    if (!bo || !bn || parse_image_buf(bo, lo, &O) || parse_image_buf(bn, ln, &N)) {
+        fprintf(stderr, "swapselector: read/parse failed\n"); return 1;
     }
-    struct bpf_object *obj = bpf_object__open_file("ppt_select.bpf.o", NULL);
-    if (!obj || bpf_object__load(obj)) { fprintf(stderr, "swapselector: load/verify failed\n"); return 1; }
-    if (populate_maps(obj, &O)) return 1;
-    int st_fd = bpf_map__fd(bpf_object__find_map_by_name(obj, "sel_state_map"));
-    struct sel_state s = { .cur_node = O.safe, .inited = 1, .gen = 0 };   /* seed the OLD resident posture */
-    __u32 k = 0;
-    if (st_fd < 0 || bpf_map_update_elem(st_fd, &k, &s, BPF_F_LOCK)) {
-        fprintf(stderr, "swapselector: seed failed\n"); return 1;
-    }
-    long migrated = selector_hotswap(obj, &O, &N);
+    struct bpf_object *obj = sel_open(&N);   /* reuse the pinned sel_state (holds the OLD posture) */
+    if (!obj) return 1;
+    long migrated = selector_hotswap(obj, &O, &N);   /* read persistent posture, migrate, swap table, write */
+    if (migrated < 0) { bpf_object__close(obj); return 1; }
     int by_name = (N.flags & PPT_FLAG_MIGRATE_BY_NAME) != 0;
-    printf("SELECTOR SWAP (in-process): old resident idx %u (%u-node policy) -> new resident idx %ld "
-           "(%u-node policy)\n", O.safe, O.n_nodes, migrated, N.n_nodes);
-    printf("  strategy: %s\n",
-           migrated < 0 ? "ERROR" :
-           by_name ? "by-name — re-resolved the posture by name in the new policy" :
-                     "reset-to — reset to the new fail-safe");
-    printf("  NOTE: no bpffs pinning here, so the resident state does not persist across invocations;\n");
-    printf("        pinning sel_state (and attaching the selector) is the remaining deployment step.\n");
+    if (iface) {
+        unsigned int ifindex = if_nametoindex(iface);
+        int prog_fd = bpf_program__fd(bpf_object__find_program_by_name(obj, "ppt_select_prog"));
+        if (!ifindex || bpf_xdp_attach(ifindex, prog_fd, XDP_FLAGS_SKB_MODE, NULL))
+            fprintf(stderr, "swapselector: re-attach on %s failed\n", iface);
+    }
+    printf("SELECTOR SWAP: resident posture migrated to node %ld via %s%s.\n",
+           migrated, by_name ? "by-name" : "reset-to", iface ? " (new policy re-attached)" : "");
+    printf("  sel_state persisted across the reload via the bpffs pin at %s.\n", SEL_STATE_PIN);
     bpf_object__close(obj); free_image(&O); free_image(&N);
-    return migrated < 0 ? 1 : 0;
+    return 0;
 }
 
 static int populate_and_attach_bpf(const Image *im, const char *ifname) {
@@ -1041,7 +1129,10 @@ int main(int argc, char **argv) {
         printf("usage: %s <image.ppt> [ifname] [input_regs.bin]\n", argv[0]);
         printf("       %s <image.ppt> readresult\n", argv[0]);
         printf("       %s <image.ppt> certify <packets.bin>   (in-kernel conformance; root)\n", argv[0]);
-        printf("       %s <new.ppt> swapselector <old.ppt>     (resident selector hot-swap migration; root)\n", argv[0]);
+        printf("       %s <policy.ppt> selattach <iface>       (deploy resident selector, pin state; root)\n", argv[0]);
+        printf("       %s x selstate                           (read the pinned resident posture)\n", argv[0]);
+        printf("       %s x seldetach <iface>                  (detach + remove pins; root)\n", argv[0]);
+        printf("       %s <new.ppt> swapselector <old.ppt> [iface]  (hot-swap + migrate posture; root)\n", argv[0]);
         return 2;
     }
 
@@ -1062,12 +1153,23 @@ int main(int argc, char **argv) {
         return certify_bpf(argv[3]);
     }
 
-    if (argc >= 4 && strcmp(argv[2], "swapselector") == 0) {   /* loader <new.ppt> swapselector <old.ppt> */
+    if (argc >= 4 && strcmp(argv[2], "selattach") == 0) {   /* loader <policy.ppt> selattach <iface> */
+        if (getuid() != 0) { fprintf(stderr, "error: 'selattach' needs root.\n"); return 2; }
+        return sel_attach_cmd(ppt_path, argv[3]);
+    }
+    if (argc >= 3 && strcmp(argv[2], "selstate") == 0)      /* loader x selstate */
+        return sel_state_cmd();
+    if (argc >= 5 && strcmp(argv[2], "selsend") == 0)       /* loader x selsend <iface> <ev> */
+        return sel_send_cmd(argv[3], atoi(argv[4]));
+    if (argc >= 4 && strcmp(argv[2], "seldetach") == 0)     /* loader x seldetach <iface> */
+        return sel_detach_cmd(argv[3]);
+
+    if (argc >= 4 && strcmp(argv[2], "swapselector") == 0) {   /* loader <new.ppt> swapselector <old.ppt> [iface] */
         if (getuid() != 0) {
             fprintf(stderr, "error: 'swapselector' loads the program into the kernel — run as root.\n");
             return 2;
         }
-        return selector_swap_cmd(ppt_path, argv[3]);
+        return selector_swap_cmd(ppt_path, argv[3], argc >= 5 ? argv[4] : NULL);
     }
 
     if (argc >= 4 && strcmp(argv[2], "run") == 0) {
