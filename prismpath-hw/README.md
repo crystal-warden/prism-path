@@ -168,6 +168,37 @@ python3 -W ignore compile_flows.py
   all on `epoch=1`. The multi node analogue of the single-node hot swap (#87/#88). FNV-1a id/allowlist
   stands in for the signature; Ed25519-on-the-mesh is the named follow-on. (Evidence #100.)
 
+**Day update (August 2026; the WCET campaign: from measured latency to a formula backed, signed,
+partially proven bound).**
+- Per evaluate cycle formula calibrated exact on the RTL (`2E + P + 2` for compiler emitted
+  policies; residual spread zero across five shape probing policies). Per policy WCET now ships
+  **signed in every pack manifest** (`wcet_cycles`, recomputed independently at verify). The formal
+  campaign **corrected the universal bound to `3E + P` (+8 framing) = 408 cycles = 8.16 us at
+  50 MHz** at the 48/256 caps: a zero word edge still costs a cycle, which measurement on real
+  policies could never surface. Invariant base case proven; the unbounded induction step is
+  honestly open (the ranking function's 48 term sum defeats the open solver portfolio). Harness in
+  `rtl/ppt_interp.sv` (`ifdef FORMAL`, inert in sim/synth) + `tb/wcet/ppt_wcet.sby`. (Evidence
+  #109 to #111.) Portability rung two: the unmodified interpreter synthesizes and closes timing on
+  **Lattice ECP5 via the fully open Yosys + nextpnr flow** (Fmax 31.6 MHz, ~3% of an 85F, zero
+  block RAM); cycles carry unchanged, time moves with the clock. iCE40 honestly does not fit at
+  these caps. (Evidence #112.)
+
+**Day update (August 2026; the decision loop entirely in fabric + Facet on the air).**
+- **The datapath overlay**: the certified interpreter wrapped with an auto mode mux; XADC DRP pot
+  read, evaluate, and per node LED color (carried INSIDE the signed image; see TABLE_FORMAT's
+  colors section) all in fabric. PS path re certified on the new bitstream (**124/124**, the #108
+  profile); then a minimal loader (`pynq/dp_load.py`) verified the signed pack on the board, armed
+  auto mode, and exited; with **zero interpreters running** the LED kept answering the knob.
+  Operational find: reprogramming the PL under an active auto design hard wedges the ARM; the
+  loader now quiesces first. (Evidence #113.)
+- **The spiral packing profile, machine to machine**: lint gated derivation, baked sidecar signed
+  into the pack, derived equals baked proven bit exact on an ESP32 (20/20 first flash), then
+  **three braided Facet streams over ESP-NOW**: 1,891 frames, zero corrupt, zero wrong symbols,
+  **derived equals air on 444/444 band symbols** (the mesh's hand coded bands replaced by
+  quantizers derived from the signed flow), posture gossip measuring fleet coherence at 80.8% of
+  ticks with the rest being the band edge skew it exists to expose. `spiral-node/`,
+  `spiral-mesh/`. (Evidence #114 to #116.)
+
 ## Backlog
 
 - [100 MHz fabric clock](backlog/100mhz-pipeline.md); overlap prog fetch / atom eval;

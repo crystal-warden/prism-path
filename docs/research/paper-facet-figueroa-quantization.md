@@ -313,6 +313,28 @@ routing where the per field wire cannot (96.4% versus 92.9% routed under light b
 needs all k field frames. Hysteresis at band edges is deliberately the sampling edge's concern, not
 the codec's; the layout is pinned by a frozen tessellation corpus the same way the quantizer is.
 
+### 5.7 The profile on the air (`prismpath-hw/spiral-node/`, `prismpath-hw/spiral-mesh/`)
+
+The spiral profile's two materializations were then validated on hardware, in two steps. First the
+baked path alone: an ESP32 consuming the signed sidecar (a ~150 line table lookup consumer, no
+routing, no trigonometry, no floating point) quantized boundary probing readings and emitted band
+tier and refinement Zeckendorf frames bit identical to a host independently deriving the layout
+from the same flow, 20 of 20 vectors on the first flash. Then the wire itself: three ESP32 nodes
+braided their decision streams over ESP-NOW broadcast, stream identity riding the sender MAC (the
+braid's stream identity tax is zero on a transport that authenticates senders at layer 2), payloads
+of 3 to 5 bytes carrying `[class, tick, value]` as a self framing Zeckendorf stream. In a 30 second
+observed window: 1,891 frames received with zero corruption and zero wrong symbols; every one of
+444 band symbols on the air equal to the host re deriving the quantization from the signed flow,
+which closes an honest gap in the earlier mesh work, whose per channel bands were hand coded
+convention rather than derived artifacts; per link delivery 92 to 98 percent, a lost frame costing
+freshness, never a wrong decision. Each node also gossiped its fused posture, the k = 3 joint
+spiral cell, as a two byte coherence beacon: 80.8 percent of fully reported ticks showed three way
+agreement, and the remainder were the one tick band edge skew such a beacon exists to expose. Two
+scope notes carry over unchanged: the airborne frames in this run are unauthenticated (the pack is
+signed; per frame authentication on the mesh is the named follow on), and no airtime saving is
+claimed for single small frames, where fixed layer 2 overhead dominates; the airtime story belongs
+to batching and to duty cycle limited links, and will be measured, not asserted.
+
 ## 6. Trust boundary
 
 Facet's guarantees are precise, and the boundary is deliberate:

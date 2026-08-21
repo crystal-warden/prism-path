@@ -87,6 +87,15 @@ timing claim travels signed with the policy and a wrong claim fails verification
 valid signature. Packs signed before this field exist without it; verification treats the field
 as optional and checks it only when present.
 
+`packing` (optional) declares a wire packing profile whose baked artifact rides the pack:
+`{"profile": "spiral", "sidecar_sha256": "<hex sha256 of the sidecar bytes>"}`. The sidecar file
+sits beside the image as `<name>.ppt.spiral` and carries the layout a small target cannot derive
+(see PROTOCOL.md section 2.6); the builder derives it from the signed flow and refuses convention
+violating flows at the lint gate. `verify_pack` re hashes the sidecar against the manifest, so a
+missing or tampered sidecar fails verification (`spiral:sidecar-missing`,
+`spiral:sidecar-hash-mismatch`) even under a valid signature, and an unknown profile name is
+rejected. The field is optional and checked only when present.
+
 **Anti rollback:** `version` is a monotonic integer. The runtime persists the active version
 (software tier: an fsync'd state file; hardware tiers: eFUSE / secure element counter) and refuses
 any pack whose `version` is ≤ the stored value: a revoked but signed policy cannot be replayed.

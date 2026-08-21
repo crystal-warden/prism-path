@@ -134,6 +134,40 @@ primitives run on a Cortex-M0+. These are TLS 1.3 building blocks used as is (co
 rolled), and are required precisely because a low entropy verdict (e.g. a 2 bit state) needs keyed AEAD,
 not salting, to be hidden on the wire.
 
+### 2.6 The spiral packing profile (optional capability, normative when declared)
+
+A stream MAY declare the Tier 6 spiral packing, which packs a node's joint quantized cell space
+onto a single ordered index whose contiguous ranges are the routes (band ID routes at one symbol;
+Gray ordered refinement adds magnitude when the link affords it). The profile is derivation, not
+configuration: the layout comes entirely from the signed policy, so it satisfies the founding
+principle (agreed from the shared policy, never transmitted) exactly as the codebook does.
+
+- **Declaration.** The flow declares `packing: spiral` in its frontmatter; the pack manifest
+  carries `"packing": {"profile": "spiral", "sidecar_sha256": ...}` under the signature (see the
+  secure hotswap spec §3.1).
+- **Authoring rules, checked.** Severity order IS edge declaration order (most severe first), and
+  the baseline catch all is the LAST deterministic edge of every packed node. Both are decidable
+  and enforced as lint ERRORS on declared flows (`spiral-no-baseline`,
+  `spiral-baseline-not-last`): a convention violating flow fails `validate` and cannot be baked,
+  in every materialization.
+- **Two materializations, one layout.** Capable endpoints DERIVE the layout from the signed policy
+  at load. Small targets receive the BAKED sidecar (v1, little endian: per node field partitions,
+  numeric and boolean only; band bases, widths, and route map; cell to index map in row major
+  order for O(1) lookup) inside the pack they already verify. Derived and baked MUST be byte
+  equal; the reference referee is `spiral_pack.verify_derived_equals_baked`, and `verify_pack`
+  re hashes the sidecar against the signed manifest at load, so a tampered or missing sidecar
+  fails closed.
+- **Tier classes.** Band tier frames are decision lossless and ride the highest priority; Gray
+  refinement frames are fidelity and yield first. The transport binding maps priority to the
+  link's scarcity: cadence on lossy datagram links (band every tick, refinement opportunistic),
+  queue precedence on reliable streams. A collapsing link costs fidelity, never the decision.
+- **Stream identity is a binding concern.** Where the transport authenticates or identifies the
+  sender (ESP-NOW sender MAC, a TCP connection), identity SHOULD ride the transport at zero frame
+  cost; where it does not (raw LoRa PHY, files), the binding puts an explicit stream tag in frame.
+  The reference datagram binding (ESP-NOW v1) is payload = a Zeckendorf stream of
+  `[class, tick, value]`, each offset by one; class 1 band tier, class 2 refinement, class 3
+  posture gossip (the joint cell as a fleet coherence beacon).
+
 ---
 
 ## 3. Normative invariants
