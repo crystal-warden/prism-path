@@ -17,8 +17,7 @@
 #undef main
 #include <openssl/sha.h>
 
-/* mirrors struct ppt_sel_state in ppt_select.bpf.c; the lock field rides the BPF_F_LOCK map ops */
-struct sel_state { struct bpf_spin_lock lock; __u32 cur_node; __u32 inited; __u32 gen; };
+/* struct sel_state is defined in loader.c (included above) */
 
 #define MAX_EV 4096
 static struct ppt_receipt g_rcpts[MAX_EV];

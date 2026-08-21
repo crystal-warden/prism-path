@@ -18,7 +18,7 @@
 #include "loader.c"
 #undef main
 
-struct sel_state { struct bpf_spin_lock lock; __u32 cur_node; __u32 inited; __u32 gen; };
+/* struct sel_state is defined in loader.c (included above) */
 
 static uint32_t fnv32(const char *s) {
     uint32_t h = 0x811c9dc5u;
@@ -75,10 +75,8 @@ int main(int argc, char **argv) {
     set_cur(A.start);
     run_ev(1); run_ev(1);                              /* normal -> elevated -> lockdown, in-kernel */
     uint32_t old = read_cur();                         /* A's lockdown index (2) */
-    uint32_t byname = migrate_node(&A, &Bname, old);   /* the loader's by-name migration */
-    populate_maps(obj, &Bname);                        /* the swap: the new policy into the maps */
-    set_cur(byname);                                   /* apply the migrated resident node */
-    int s1_ok = (byname < Bname.n_nodes) && (Bname.name_hashes[byname] == H_LOCK);
+    long byname = selector_hotswap(obj, &A, &Bname);   /* LOADER: read state, migrate by-name, swap table */
+    int s1_ok = (byname >= 0) && ((uint32_t)byname < Bname.n_nodes) && (Bname.name_hashes[byname] == H_LOCK);
     int naive_wrong = (old < Bname.n_nodes) && (Bname.name_hashes[old] == H_ELEV);
     int live = (run_ev(2) == 2);                        /* from B-lockdown, de-escalate -> B-elevated (2) */
 
@@ -87,20 +85,20 @@ int main(int argc, char **argv) {
     set_cur(A.start);
     run_ev(1);                                          /* normal -> elevated */
     uint32_t old2 = read_cur();                         /* A's elevated index (1) */
-    uint32_t reset = migrate_node(&A, &Breset, old2);   /* reset-to (no by-name bit) -> Breset.safe */
-    int s2_ok = (reset < Breset.n_nodes) && (Breset.name_hashes[reset] == H_LOCK);
+    long reset = selector_hotswap(obj, &A, &Breset);    /* LOADER: reset-to -> the new fail-safe */
+    int s2_ok = (reset >= 0) && ((uint32_t)reset < Breset.n_nodes) && (Breset.name_hashes[reset] == H_LOCK);
     uint32_t byname2 = migrate_node(&A, &Bname, old2);  /* contrast: by-name would keep elevated */
     int s2_contrast = (byname2 < Bname.n_nodes) && (Bname.name_hashes[byname2] == H_ELEV);
 
     int ok = s1_ok && naive_wrong && live && s2_ok && s2_contrast;
     printf("SELECTOR HOT-SWAP MIGRATION (loader-enforced, signed name-hashes):\n");
     printf("  by-name: A lockdown idx %u -> B idx %u (%s); a raw carry of idx %u -> B '%s'\n",
-           old, byname, s1_ok ? "lockdown preserved" : "WRONG",
+           old, (unsigned)byname, s1_ok ? "lockdown preserved" : "WRONG",
            old, naive_wrong ? "elevated = would misread" : "?");
     printf("  migrated state is live in-kernel: from B-lockdown a de-escalate routes to idx 2: %s\n",
            live ? "yes" : "NO");
     printf("  reset-to: A elevated idx %u -> B idx %u (%s); by-name would keep idx %u (%s)\n",
-           old2, reset, s2_ok ? "lockdown = fail-safe" : "WRONG",
+           old2, (unsigned)reset, s2_ok ? "lockdown = fail-safe" : "WRONG",
            byname2, s2_contrast ? "elevated" : "?");
     printf("%s\n", ok ? "PASS - by-name preserves the posture across reindexing; reset-to fails safe"
                       : "FAIL");

@@ -96,8 +96,13 @@ advances the resident posture to `lockdown` in-kernel under policy A (`normal=0,
 lockdown=2`), then swaps to a **reindexed** B (`normal=0, lockdown=1, elevated=2` — same names):
 by-name lands on B's `lockdown` (idx 1) and the migrated state drives B's FSM live in-kernel, where a
 raw index carry (idx 2) would have misread it as `elevated`; reset-to instead sends an in-flight
-`elevated` to B's fail-safe. Remaining: wiring `migrate_node` into the loader's production attach/swap
-path (the harness exercises the enforcement logic against the live kernel state).
+`elevated` to B's fail-safe.
+
+The loader owns the swap as a primitive, `selector_hotswap` (read the resident state, `migrate_node`,
+swap the table, write the migrated node back under the state lock), which both `migrate_selector.c` and
+the `loader swapselector <new.ppt> <old.ppt>` command drive. Remaining for a live deployment: pinning
+`sel_state` on bpffs so it persists across loader invocations, and attaching the selector to a control
+interface (it is `BPF_PROG_TEST_RUN`-verified today, not NIC-attached).
 
 ## Receipts + Merkle anchor (the stateful history, tamper-evident)
 

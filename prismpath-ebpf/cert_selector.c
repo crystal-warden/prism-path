@@ -11,8 +11,7 @@
 #include "loader.c"
 #undef main
 
-/* mirrors struct ppt_sel_state in ppt_select.bpf.c; the lock field rides the BPF_F_LOCK map ops */
-struct sel_state { struct bpf_spin_lock lock; __u32 cur_node; __u32 inited; __u32 gen; };
+/* struct sel_state is defined in loader.c (included above) */
 
 int main(int argc, char **argv) {
     const char *corpus = argc > 1 ? argv[1] : "selector_corpus.bin";

@@ -140,7 +140,8 @@ static int parse_image_buf(const uint8_t *b, long len, Image *im) {
  * hash in the new policy (fallback to the new fail-safe if the name is gone); reset-to (bit clear)
  * always returns the new fail-safe. Both name-hash sections ride the signed image, so the migration
  * is tamper-evident, and a raw index is never carried blindly across a reindexing swap. */
-/* unused by the loader binary itself until the production swap path calls it; the migrate harness does */
+/* Called by selector_hotswap (the loader's swap primitive) and the migrate harness; kept __unused so the
+ * NO_LIBBPF fallback build (which omits selector_hotswap) stays warning-clean. */
 static uint32_t __attribute__((unused))
 migrate_node(const Image *old_im, const Image *new_im, uint32_t old_cur) {
     if ((new_im->flags & PPT_FLAG_MIGRATE_BY_NAME) && old_im->name_hashes && new_im->name_hashes
@@ -290,6 +291,65 @@ static int populate_maps(struct bpf_object *obj, const Image *im) {
     }
 
     return 0;
+}
+
+/* Resident selector state (mirrors struct ppt_sel_state in ppt_select.bpf.c); the lock field rides the
+ * BPF_F_LOCK map ops. Defined here so every selector harness that #includes this file shares it. */
+struct sel_state { struct bpf_spin_lock lock; __u32 cur_node; __u32 inited; __u32 gen; };
+
+/* Production hot-swap primitive for the resident selector: migrate the resident state per the NEW
+ * policy's SIGNED strategy, then swap the table. Reads sel_state BEFORE the swap (so it resolves against
+ * the OLD policy's name-hashes), computes the migrated node via migrate_node (by-name re-resolves the
+ * current posture in the new policy; reset-to -> the new fail-safe), swaps the table maps
+ * (populate_maps), then writes the migrated resident node back under the state lock. Returns the new
+ * resident node, or -1. Single-config selector here; a live multi-CPU deployment would quiesce or bank
+ * this like net_hotswap, and pin sel_state on bpffs to persist across loader invocations. */
+static long selector_hotswap(struct bpf_object *obj, const Image *old_im, const Image *new_im) {
+    int st_fd = bpf_map__fd(bpf_object__find_map_by_name(obj, "sel_state_map"));
+    if (st_fd < 0) { fprintf(stderr, "selector_hotswap: no sel_state_map\n"); return -1; }
+    struct sel_state s; __u32 k = 0;
+    if (bpf_map_lookup_elem_flags(st_fd, &k, &s, BPF_F_LOCK)) { perror("sel_state read"); return -1; }
+    uint32_t cur = s.inited ? s.cur_node : old_im->safe;   /* uninited old state -> its fail-safe */
+    uint32_t migrated = migrate_node(old_im, new_im, cur);
+    if (populate_maps(obj, new_im)) return -1;             /* swap the table maps to the new policy */
+    s.cur_node = migrated; s.inited = 1;                   /* keep gen: monotonic across the swap */
+    if (bpf_map_update_elem(st_fd, &k, &s, BPF_F_LOCK)) { perror("sel_state write"); return -1; }
+    return (long)migrated;
+}
+
+/* loader <new.ppt> swapselector <old.ppt> — perform a resident selector hot-swap in-process: load the
+ * selector, seed the resident posture to the OLD policy's fail-safe, then swap to the NEW policy via
+ * selector_hotswap (by-name re-resolves the posture by name; reset-to -> the new fail-safe). No bpffs
+ * pinning here, so the resident state does not persist across invocations — that is the deployment step. */
+static int selector_swap_cmd(const char *new_ppt, const char *old_ppt) {
+    long lo, ln;
+    uint8_t *bo = read_file(old_ppt, &lo), *bn = read_file(new_ppt, &ln);
+    if (!bo || !bn) { fprintf(stderr, "swapselector: read failed\n"); return 1; }
+    Image O, N;
+    if (parse_image_buf(bo, lo, &O) || parse_image_buf(bn, ln, &N)) {
+        fprintf(stderr, "swapselector: parse failed\n"); return 1;
+    }
+    struct bpf_object *obj = bpf_object__open_file("ppt_select.bpf.o", NULL);
+    if (!obj || bpf_object__load(obj)) { fprintf(stderr, "swapselector: load/verify failed\n"); return 1; }
+    if (populate_maps(obj, &O)) return 1;
+    int st_fd = bpf_map__fd(bpf_object__find_map_by_name(obj, "sel_state_map"));
+    struct sel_state s = { .cur_node = O.safe, .inited = 1, .gen = 0 };   /* seed the OLD resident posture */
+    __u32 k = 0;
+    if (st_fd < 0 || bpf_map_update_elem(st_fd, &k, &s, BPF_F_LOCK)) {
+        fprintf(stderr, "swapselector: seed failed\n"); return 1;
+    }
+    long migrated = selector_hotswap(obj, &O, &N);
+    int by_name = (N.flags & PPT_FLAG_MIGRATE_BY_NAME) != 0;
+    printf("SELECTOR SWAP (in-process): old resident idx %u (%u-node policy) -> new resident idx %ld "
+           "(%u-node policy)\n", O.safe, O.n_nodes, migrated, N.n_nodes);
+    printf("  strategy: %s\n",
+           migrated < 0 ? "ERROR" :
+           by_name ? "by-name — re-resolved the posture by name in the new policy" :
+                     "reset-to — reset to the new fail-safe");
+    printf("  NOTE: no bpffs pinning here, so the resident state does not persist across invocations;\n");
+    printf("        pinning sel_state (and attaching the selector) is the remaining deployment step.\n");
+    bpf_object__close(obj); free_image(&O); free_image(&N);
+    return migrated < 0 ? 1 : 0;
 }
 
 static int populate_and_attach_bpf(const Image *im, const char *ifname) {
@@ -981,6 +1041,7 @@ int main(int argc, char **argv) {
         printf("usage: %s <image.ppt> [ifname] [input_regs.bin]\n", argv[0]);
         printf("       %s <image.ppt> readresult\n", argv[0]);
         printf("       %s <image.ppt> certify <packets.bin>   (in-kernel conformance; root)\n", argv[0]);
+        printf("       %s <new.ppt> swapselector <old.ppt>     (resident selector hot-swap migration; root)\n", argv[0]);
         return 2;
     }
 
@@ -999,6 +1060,14 @@ int main(int argc, char **argv) {
         }
         /* Each vector in the corpus file carries its own compiled table; argv[1] (ppt) is unused here. */
         return certify_bpf(argv[3]);
+    }
+
+    if (argc >= 4 && strcmp(argv[2], "swapselector") == 0) {   /* loader <new.ppt> swapselector <old.ppt> */
+        if (getuid() != 0) {
+            fprintf(stderr, "error: 'swapselector' loads the program into the kernel — run as root.\n");
+            return 2;
+        }
+        return selector_swap_cmd(ppt_path, argv[3]);
     }
 
     if (argc >= 4 && strcmp(argv[2], "run") == 0) {
