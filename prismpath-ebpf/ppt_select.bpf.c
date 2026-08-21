@@ -80,7 +80,14 @@ struct {
 /* The resident selector state: cur_node persists ACROSS packets — this is the whole trick. The start
  * node comes from here (config.start_node the first time), not the packet, and the decided target is
  * written back. A signed policy driving a stateful machine in the kernel, no userspace in the loop. */
-struct ppt_sel_state { __u32 cur_node; __u32 inited; };
+/* Resident selector state, shared across all CPUs. The bpf_spin_lock guards a torn-free
+ * snapshot/commit; gen is the generation counter for the commit CAS (see the RESIDENT block). */
+struct ppt_sel_state {
+    struct bpf_spin_lock lock;
+    __u32 cur_node;
+    __u32 inited;
+    __u32 gen;
+};
 struct {
     __uint(type, BPF_MAP_TYPE_ARRAY);
     __type(key, __u32);
@@ -407,39 +414,57 @@ int ppt_select_prog(struct xdp_md *ctx)
         }
     }
 
-    /* RESIDENT: the start node is the persisted cur_node, not pkt_hdr->node_idx. Each control packet
-     * is one discrete event; the map holds the state. FAIL-SAFE: inited==0 means the state was NOT
-     * deliberately set (crash, fresh/torn map), so fall to the MOST RESTRICTIVE posture (the last,
-     * highest-severity node), never the baseline — a forced reload must buy lockdown, not normal. A
-     * deliberate clean start is the loader writing {start_node, inited=1}; the program only sees
-     * inited==0 when something went wrong. (Convention: nodes ordered least->most restrictive, the
-     * severity order the spiral lint already enforces; an explicit signed safe_node is the follow-up.) */
+    /* RESIDENT + SERIALIZED. The start node is the persisted cur_node, not pkt_hdr->node_idx; each
+     * control packet is one discrete event and the map holds the state. FAIL-SAFE: inited==0 means the
+     * state was NOT deliberately set (crash, fresh/torn map), so fall to the MOST RESTRICTIVE posture
+     * (the last, highest-severity node), never the baseline — a forced reload must buy lockdown, not
+     * normal. A deliberate clean start is the loader writing {start_node, inited=1}; the program only
+     * sees inited==0 when something went wrong. (Nodes ordered least->most restrictive, the severity
+     * order the spiral lint enforces; an explicit signed safe_node is the follow-up.)
+     *
+     * CONCURRENCY: on a multi-queue NIC this program runs on several CPUs at once against the ONE
+     * shared sel_state_map. evaluate() calls map helpers, so it cannot run under a bpf_spin_lock;
+     * instead the read-modify-write is a generation-counter CAS — snapshot {cur,gen} under the lock,
+     * evaluate UNLOCKED, then commit under the lock only if gen is unchanged. A concurrent loser (the
+     * state advanced since our snapshot) is DROPPED, never applied from stale state, so the posture
+     * only ever steps along a real edge of its actual current value, never a phantom. Strict global
+     * ORDER for a multi-queue deployment is single-RX-queue steering (the kernel analog of the fabric
+     * clock); this lock gives integrity + no stale-misapply, which the concurrent smoke test measures. */
     __u32 zk = 0;
     struct ppt_sel_state *st = bpf_map_lookup_elem(&sel_state_map, &zk);
-    __u32 cur = 0;
+    struct ppt_config *scfg = bpf_map_lookup_elem(&config_map, &zk);
+    __u32 failsafe = (scfg && scfg->n_nodes) ? (scfg->n_nodes - 1) : 0;   /* most restrictive posture */
+    __u32 cur = 0, snap_gen = 0;
     if (st) {
-        if (st->inited) {
-            cur = st->cur_node;
-        } else {
-            struct ppt_config *cfg = bpf_map_lookup_elem(&config_map, &zk);
-            cur = (cfg && cfg->n_nodes) ? (cfg->n_nodes - 1) : 0;   /* fail-safe: most restrictive */
-        }
+        bpf_spin_lock(&st->lock);
+        cur = st->inited ? st->cur_node : failsafe;
+        snap_gen = st->gen;
+        bpf_spin_unlock(&st->lock);
     }
 
     __s32 matched_edge = -1;
     __s32 target_node = -1;
     int rc = evaluate(cur, n_fields, &matched_edge, &target_node);
 
-    if (st && rc == 0 && target_node >= 0) {          /* advance the resident posture */
-        st->cur_node = (__u32)target_node;
-        st->inited = 1;
+    __u32 posture = cur;                              /* the resident posture reported for this event */
+    if (st && rc == 0 && target_node >= 0) {          /* commit the advance iff no CAS race */
+        bpf_spin_lock(&st->lock);
+        if (st->gen == snap_gen) {
+            st->cur_node = (__u32)target_node;
+            st->inited = 1;
+            st->gen = snap_gen + 1;
+            posture = (__u32)target_node;
+        } else {
+            posture = st->cur_node;                   /* dropped: a concurrent event won; report it */
+        }
+        bpf_spin_unlock(&st->lock);
     }
 
     __u32 key = 0;
     struct ppt_result *res = bpf_map_lookup_elem(&result_map, &key);
     if (res) {
         res->matched_edge = matched_edge;
-        res->target_node = st ? (__s32)st->cur_node : target_node;   /* the NEW resident posture */
+        res->target_node = (__s32)posture;            /* the NEW resident posture after this event */
         res->eval_status = (rc == 0) ? 1 : 0;
         __sync_fetch_and_add(&res->pkt_count, 1);
     }

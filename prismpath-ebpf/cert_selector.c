@@ -11,7 +11,8 @@
 #include "loader.c"
 #undef main
 
-struct sel_state { __u32 cur_node; __u32 inited; };
+/* mirrors struct ppt_sel_state in ppt_select.bpf.c; the lock field rides the BPF_F_LOCK map ops */
+struct sel_state { struct bpf_spin_lock lock; __u32 cur_node; __u32 inited; __u32 gen; };
 
 int main(int argc, char **argv) {
     const char *corpus = argc > 1 ? argv[1] : "selector_corpus.bin";
@@ -37,8 +38,8 @@ int main(int argc, char **argv) {
     long ev_total = 0, ev_bad = 0; uint32_t streams_bad = 0;
     for (uint32_t s = 0; s < n_streams; s++) {
         uint32_t n_ev; memcpy(&n_ev, p, 4); p += 4;
-        struct sel_state clean = { (uint32_t)im.start, 1 };   /* deliberate clean start = loader init */
-        bpf_map_update_elem(st_fd, &k0, &clean, BPF_ANY);
+        struct sel_state clean = { .cur_node = (uint32_t)im.start, .inited = 1, .gen = 0 };
+        bpf_map_update_elem(st_fd, &k0, &clean, BPF_F_LOCK);  /* deliberate clean start = loader init */
         int stream_ok = 1;
         for (uint32_t e = 0; e < n_ev; e++) {
             int32_t ev, ref; memcpy(&ev, p, 4); p += 4; memcpy(&ref, p, 4); p += 4;
@@ -56,8 +57,8 @@ int main(int argc, char **argv) {
     }
     /* FAIL-SAFE: an UN-initialized state (crash / fresh map) must fall to the MOST restrictive
      * posture (the last node), not the baseline — a forced reload buys lockdown, never normal. */
-    struct sel_state crashed = {0, 0};
-    bpf_map_update_elem(st_fd, &k0, &crashed, BPF_ANY);
+    struct sel_state crashed = { .cur_node = 0, .inited = 0, .gen = 0 };
+    bpf_map_update_elem(st_fd, &k0, &crashed, BPF_F_LOCK);
     struct ppt_reg hold[1] = {{ TY_INT, 0 }};                 /* a benign hold event after the "crash" */
     uint8_t f2[256]; int l2 = build_frame(f2, 0, 1, hold);
     uint8_t o2[256];
