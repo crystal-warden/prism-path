@@ -108,7 +108,7 @@ swap the table, write the migrated node back under the state lock), which `migra
 policy hot-swap (every load sets the pin path and libbpf reuses the pinned map). The loader commands are
 `selattach <policy> <iface>` (load with pinned state, clean start, attach XDP), `selstate` (read the
 pinned posture), `selsend <iface> <ev>` (inject a control event), `swapselector <new> <old> [iface]`
-(hot-swap + migrate), and `seldetach <iface>`. Verified end to end on this box (XDP SKB mode, a veth pair):
+(hot-swap + migrate), and `seldetach <iface>`. Verified end to end on this box on a veth pair:
 
 1. `selattach migrate_A.ppt veth_sel` -> clean start (node 0); a fresh `selstate` process reads node 0,
    so the state persists across invocations.
@@ -118,8 +118,15 @@ pinned posture), `selsend <iface> <ev>` (inject a control event), `swapselector 
    lockdown (idx 2) is re-resolved by NAME to B's lockdown (idx 1), gen 2 is preserved (the SAME resident
    state, migrated, not reset), and B is re-attached.
 
-Honest scope: XDP SKB (generic) mode on a veth on the dev box, not native mode on a production NIC / the
-Protectli; the OTS anchor of the receipt Merkle root is still held.
+Both XDP modes are exercised: `selattach ... native` attaches on the **native/DRV driver hook**
+(confirmed `xdp`, not `xdpgeneric`, via `ip -d link show`) and the same two live packets advance the
+resident FSM to node 2 identically — the selector runs on the real driver XDP path, not the generic
+netstack fallback.
+
+Honest scope: a veth pair on the dev box (both SKB and native/DRV verified), not a physical production
+NIC — this box's only physical ethernet is its management lifeline, so attaching native XDP there risks
+the session; the Protectli / a production NIC is the next step. The OTS anchor of the receipt Merkle root
+is still held.
 
 ## Receipts + Merkle anchor (the stateful history, tamper-evident)
 

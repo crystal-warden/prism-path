@@ -347,7 +347,7 @@ static struct bpf_object *sel_open(const Image *im) {
 
 /* loader <policy.ppt> selattach <iface> — deploy the resident selector: load with pinned state, seed a
  * clean start, attach in XDP SKB mode. The program + pinned state outlive this process. */
-static int sel_attach_cmd(const char *policy_ppt, const char *iface) {
+static int sel_attach_cmd(const char *policy_ppt, const char *iface, __u32 xdp_flags) {
     long l; uint8_t *b = read_file(policy_ppt, &l);
     Image im;
     if (!b || parse_image_buf(b, l, &im)) { fprintf(stderr, "selattach: parse %s failed\n", policy_ppt); return 1; }
@@ -360,11 +360,13 @@ static int sel_attach_cmd(const char *policy_ppt, const char *iface) {
     __u32 k = 0;
     if (st_fd < 0 || bpf_map_update_elem(st_fd, &k, &s, BPF_F_LOCK)) { fprintf(stderr, "selattach: seed failed\n"); return 1; }
     int prog_fd = bpf_program__fd(bpf_object__find_program_by_name(obj, "ppt_select_prog"));
-    if (bpf_xdp_attach(ifindex, prog_fd, XDP_FLAGS_SKB_MODE, NULL)) {
-        fprintf(stderr, "selattach: XDP attach on %s failed (need root)\n", iface); return 1;
+    const char *mode = (xdp_flags & XDP_FLAGS_DRV_MODE) ? "native/DRV" : "SKB";
+    if (bpf_xdp_attach(ifindex, prog_fd, xdp_flags, NULL)) {
+        fprintf(stderr, "selattach: XDP %s attach on %s failed (need root / driver XDP support)\n", mode, iface);
+        return 1;
     }
-    printf("OK: ppt_select attached to %s (SKB); sel_state pinned at %s; clean start = node %u.\n",
-           iface, SEL_STATE_PIN, im.start);
+    printf("OK: ppt_select attached to %s (%s); sel_state pinned at %s; clean start = node %u.\n",
+           iface, mode, SEL_STATE_PIN, im.start);
     bpf_object__close(obj);   /* the XDP attach + the bpffs pins keep the program and state alive */
     free_image(&im);
     return 0;
@@ -1129,7 +1131,7 @@ int main(int argc, char **argv) {
         printf("usage: %s <image.ppt> [ifname] [input_regs.bin]\n", argv[0]);
         printf("       %s <image.ppt> readresult\n", argv[0]);
         printf("       %s <image.ppt> certify <packets.bin>   (in-kernel conformance; root)\n", argv[0]);
-        printf("       %s <policy.ppt> selattach <iface>       (deploy resident selector, pin state; root)\n", argv[0]);
+        printf("       %s <policy.ppt> selattach <iface> [native]  (deploy resident selector, pin state; root)\n", argv[0]);
         printf("       %s x selstate                           (read the pinned resident posture)\n", argv[0]);
         printf("       %s x seldetach <iface>                  (detach + remove pins; root)\n", argv[0]);
         printf("       %s <new.ppt> swapselector <old.ppt> [iface]  (hot-swap + migrate posture; root)\n", argv[0]);
@@ -1153,9 +1155,10 @@ int main(int argc, char **argv) {
         return certify_bpf(argv[3]);
     }
 
-    if (argc >= 4 && strcmp(argv[2], "selattach") == 0) {   /* loader <policy.ppt> selattach <iface> */
+    if (argc >= 4 && strcmp(argv[2], "selattach") == 0) {   /* loader <policy.ppt> selattach <iface> [native] */
         if (getuid() != 0) { fprintf(stderr, "error: 'selattach' needs root.\n"); return 2; }
-        return sel_attach_cmd(ppt_path, argv[3]);
+        __u32 f = (argc >= 5 && strcmp(argv[4], "native") == 0) ? XDP_FLAGS_DRV_MODE : XDP_FLAGS_SKB_MODE;
+        return sel_attach_cmd(ppt_path, argv[3], f);
     }
     if (argc >= 3 && strcmp(argv[2], "selstate") == 0)      /* loader x selstate */
         return sel_state_cmd();
