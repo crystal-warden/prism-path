@@ -1,6 +1,7 @@
 ---
 name: posture_selector
 start: normal
+safe: lockdown
 ---
 
 ## normal

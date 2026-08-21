@@ -31,7 +31,7 @@
 
 typedef struct {
     uint16_t n_fields, n_interns, n_atoms, n_nodes, n_edges, prog_len,
-             start, visits_idx, max_steps, max_stack;
+             start, visits_idx, max_steps, max_stack, safe;
     struct ppt_atom *atoms;
     struct ppt_node *nodes;
     struct ppt_edge *edges;
@@ -87,6 +87,7 @@ static int parse_image_buf(const uint8_t *b, long len, Image *im) {
     im->n_edges = rd16(b + 14);   im->prog_len = rd16(b + 16);
     im->start = rd16(b + 18);     im->visits_idx = rd16(b + 20);
     im->max_steps = rd16(b + 22);  im->max_stack = rd16(b + 24);
+    im->safe = rd16(b + 26) >> 8;   /* high byte of the flags word = signed fail-safe node (0 = undeclared) */
     long need = 28 + 8L * im->n_atoms + 4L * im->n_nodes + 6L * im->n_edges + 2L * im->prog_len;
     if (len < need) return -1;
     /* Capacity bounds: the kernel maps are sized to these MAX_* — an image over any of them would
@@ -200,6 +201,7 @@ static int populate_maps(struct bpf_object *obj, const Image *im) {
             .n_edges = im->n_edges,   .prog_len = im->prog_len,
             .start_node = im->start,  .visits_idx = im->visits_idx,
             .max_steps = im->max_steps, .max_stack = im->max_stack,
+            .safe_node = im->safe,
         };
         uint32_t key = 0;
         bpf_map_update_elem(bpf_map__fd(config_map), &key, &cfg, BPF_ANY);
@@ -733,7 +735,8 @@ static int write_bank(const struct net_maps *m, __u32 bank, const Image *im) {
         .n_fields = im->n_fields, .n_interns = im->n_interns, .n_atoms = im->n_atoms,
         .n_nodes = im->n_nodes, .n_edges = im->n_edges, .prog_len = im->prog_len,
         .start_node = im->start, .visits_idx = im->visits_idx,
-        .max_steps = im->max_steps, .max_stack = im->max_stack };
+        .max_steps = im->max_steps, .max_stack = im->max_stack,
+        .safe_node = im->safe };
     __u32 active = bank ^ 1u;
     struct ppt_config old;
     if (bpf_map_lookup_elem(m->config, &active, &old) == 0) cfg.drop_mask = old.drop_mask;

@@ -35,8 +35,11 @@ mechanism, and the signed table is the transition function.
   `{start_node, inited=1}`, so a fresh load begins at the baseline. But `inited==0` — a crash, a fresh
   or torn state map, any state the loader did not set — falls to the **most restrictive** posture (the
   last, highest-severity node), never the baseline. A forced reload must buy `lockdown`, not `normal`:
-  the resident FSM fails closed. (Nodes are ordered least-to-most restrictive, the severity order the
-  spiral lint already enforces; an explicit signed `safe_node` field is the hardening follow-up.)
+  the resident FSM fails closed. The fail-safe posture is a **signed `safe_node`** carried in the image
+  (the high byte of the header flags word at offset 26, so it rides the manifest signature — tampering
+  it fails `verify_pack` with an image-hash mismatch). A policy declares it with `safe: <node>` in its
+  frontmatter; an undeclared policy falls back to the last-node convention (nodes ordered
+  least-to-most restrictive, the severity order the spiral lint enforces).
 - **Discrete events simplify it.** The fabric switch-nav needed edge-detection + debounce because its
   input was a continuous *level* sampled fast. Packets are already discrete events, so the selector
   needs neither — just the resident `cur_node`. That contrast is the useful half of the "atomic
@@ -46,25 +49,29 @@ mechanism, and the signed table is the transition function.
 
 On a multi-queue NIC the program runs on several CPUs at once against the one shared `sel_state_map`.
 `evaluate()` calls map helpers, so it cannot run inside a `bpf_spin_lock` critical section; the
-read-modify-write is instead a **generation-counter CAS** — snapshot `{cur_node, gen}` under the lock,
-evaluate unlocked, then commit under the lock only if `gen` is unchanged. A concurrent loser (the
-state advanced since its snapshot) is **dropped, never applied from a stale snapshot**, so the
-resident posture only ever steps along a real edge of its actual current value, never a phantom.
+read-modify-write is instead a **generation-counter CAS with bounded retry** — snapshot `{cur_node,
+gen}` under the lock, evaluate unlocked, then commit under the lock only if `gen` is unchanged. On a
+lost commit it re-snapshots from the *new* state and re-evaluates, up to `SEL_MAX_RETRY` (4) times, so
+a contender turns a drop into a commit against fresh state rather than losing the event. Every
+re-evaluation is from the actual current posture, so a committed transition is **never applied from a
+stale snapshot** — the resident posture only ever steps along a real edge of its actual current value,
+never a phantom. Only pathological contention (all retries lose) drops. The bounded loop with a
+spinlock and `evaluate()` inside verifies clean on kernel 6.17.
 
 `smoke_selector.c` measures it: 8 threads run the loaded program via `BPF_PROG_TEST_RUN` on separate
 CPUs, all against the same map, 20 000 events each. Result on this box (kernel 6.17):
 
 - **160 000 concurrent events, the resident posture stayed a valid in-range state throughout, never
-  torn** — 41 299 committed advances, 118 701 CAS drops. The heavy drop rate is the *point*: it is an
-  adversarial worst case (8 CPUs, one shared cell, zero inter-event gap, no steering) and it proves
-  the safety invariant holds under maximum contention. It is not a deployment throughput figure.
+  torn** — 96 437 committed advances, 63 563 CAS drops with 4 retries (a single-shot CAS drops
+  118 701). The residual drops are the adversarial worst case (8 CPUs, one shared cell, zero
+  inter-event gap, no steering) and prove the safety invariant holds under maximum contention. It is
+  not a deployment throughput figure.
 
 The **serialization point for a real deployment** is single-RX-queue steering (RSS/ntuple) — the
 kernel analog of the fabric clock — which lands control events on one CPU and drives drops to zero;
 selector control events are naturally rare, so contention is near zero in practice. The in-program
-lock is the safety net that guarantees no corruption and no stale-misapply even when steering is
-absent. A bounded-retry CAS would convert most drops into commits at the cost of extra `evaluate()`
-work; it is the throughput follow-up if an un-steered deployment ever needs it.
+lock plus bounded retry is the safety net that guarantees no corruption and no stale-misapply even
+when steering is absent.
 
 ## Cross-substrate (the same signed policy, everywhere)
 

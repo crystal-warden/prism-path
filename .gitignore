@@ -29,3 +29,4 @@ docs_health_report.md
 prismpath-telemetry-rs/target/
 /target/
 /target/
+prismpath-ebpf/.sel_tmp/

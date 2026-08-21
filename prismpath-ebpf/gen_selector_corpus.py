@@ -58,9 +58,17 @@ def main():
     ppt_path, out_path = sys.argv[1], sys.argv[2]
     g = parse_file(str(HERE / "posture_selector.md"))
     img = pc.compile_flow(g)
-    tbl = img.serialize()
-    Path(ppt_path).write_bytes(tbl)
     names = [n for n, _ in img.nodes]
+    tbl = bytearray(img.serialize())
+    # Signed fail-safe: the policy declares `safe: <node>` in its frontmatter; stamp that node index
+    # into the HIGH byte of the flags word (offset 26, so byte 27 in LE) so the fail-safe posture rides
+    # inside the image — and thus the manifest signature — instead of an unsigned convention. Left 0
+    # when undeclared, in which case the reader falls back to the last (most-restrictive) node.
+    safe_name = g.meta.get("safe")
+    if safe_name is not None:
+        tbl[27] = names.index(safe_name) & 0xFF
+    tbl = bytes(tbl)
+    Path(ppt_path).write_bytes(tbl)
 
     def py_next(cur, ev):
         t, _ = first_deterministic(g.nodes[names[cur]].edges, {"ev": ev})

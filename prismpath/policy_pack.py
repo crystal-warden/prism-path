@@ -32,7 +32,14 @@ WORD = struct.Struct("<H")
 OPS = frozenset(range(7))                   # ==, !=, <, <=, >, >=, truthy
 TYPES = frozenset(range(4))                 # none, bool, int, str
 PROG_OPCODES = frozenset({0x8000, 0x8001, 0x8002, 0x8003, 0x8004})  # NOT AND OR TRUE FALSE
-FLAG_COLORS = 0x0001         # header flags bit0: per-node LED color section (nodes x uint16) appended
+# The 12th header word (offset 26) is split: low byte = flags, high byte = the optional signed
+# safe_node (a fail-safe node index; 0 = undeclared -> reader falls back to the last-node convention).
+# Flags bit 0 => a per-node ATTRIBUTE section (nodes x uint16) is appended after the program and signed
+# with the image. The format gives the attribute no meaning; the substrate MATERIALIZES it (an LED
+# color in the fabric, an skb mark / XDP verdict / traffic-class in the kernel, a UI label in
+# software). LED color is one materialization, hence the back-compat alias.
+FLAG_NODE_ATTR = 0x0001
+FLAG_COLORS = FLAG_NODE_ATTR   # back-compat alias: the fabric's LED-color materialization
 
 PACK_FORMAT = "ppt-pack/1"
 
@@ -68,11 +75,12 @@ def sha256_hex(data: bytes) -> str:
 # ------------------------------------------------------------------ image parsing
 
 def read_ppt_header(data: bytes) -> dict:
-    """Parse the 28-byte header. Raises ValueError on wrong magic/version/truncation."""
+    """Parse the 28-byte header. Raises ValueError on wrong magic/version/truncation. The 12th word
+    is split: low byte = flags (FLAG_NODE_ATTR et al.), high byte = safe_node (0 = undeclared)."""
     if len(data) < HEADER.size:
         raise ValueError("image:truncated-header")
     (magic, version, n_fields, n_interns, n_atoms, n_nodes, n_edges,
-     prog_len, start, visits_idx, max_steps, max_stack, _rsvd) = HEADER.unpack_from(data)
+     prog_len, start, visits_idx, max_steps, max_stack, flagword) = HEADER.unpack_from(data)
     if magic != MAGIC:
         raise ValueError("image:bad-magic")
     if version != FORMAT_VERSION:
@@ -80,7 +88,7 @@ def read_ppt_header(data: bytes) -> dict:
     return {"fields": n_fields, "interns": n_interns, "atoms": n_atoms, "nodes": n_nodes,
             "edges": n_edges, "prog_words": prog_len, "start": start,
             "visits_idx": visits_idx, "max_steps": max_steps, "max_stack": max_stack,
-            "flags": _rsvd}
+            "flags": flagword & 0x00FF, "safe_node": (flagword >> 8) & 0xFF}
 
 
 def validate_image(data: bytes, caps: Optional[dict] = None) -> Tuple[bool, List[str]]:
@@ -94,10 +102,13 @@ def validate_image(data: bytes, caps: Optional[dict] = None) -> Tuple[bool, List
     except ValueError as e:
         return False, [str(e)]
 
+    if h["safe_node"] and h["safe_node"] >= h["nodes"]:
+        reasons.append("image:safe-node-oob")    # signed fail-safe must name a real node
+
     need = (HEADER.size + ATOM.size * h["atoms"] + NODE.size * h["nodes"]
             + EDGE.size * h["edges"] + WORD.size * h["prog_words"])
-    if h["flags"] & FLAG_COLORS:
-        need += WORD.size * h["nodes"]           # one uint16 LED color per node, appended last
+    if h["flags"] & FLAG_NODE_ATTR:
+        need += WORD.size * h["nodes"]           # one uint16 per-node attribute, appended last
     if len(data) != need:
         reasons.append("image:length-mismatch")
         return False, reasons
@@ -134,12 +145,12 @@ def validate_image(data: bytes, caps: Optional[dict] = None) -> Tuple[bool, List
             reasons.append(f"image:unknown-opcode:word{i}")
         if w < 0x8000 and w >= h["atoms"]:
             reasons.append(f"image:atom-index-oob:word{i}")
-    if h["flags"] & FLAG_COLORS:
+    if h["flags"] & FLAG_NODE_ATTR:
         for i in range(h["nodes"]):
             (c,) = WORD.unpack_from(data, off)
             off += WORD.size
-            if c > 0x3F:                          # 6-bit {LD5[2:0], LD4[2:0]}
-                reasons.append(f"image:color-oob:node{i}")
+            if c > 0x3F:                          # fabric materialization envelope: 6-bit LED {LD5,LD4}
+                reasons.append(f"image:node-attr-oob:node{i}")
 
     return (not reasons), reasons
 

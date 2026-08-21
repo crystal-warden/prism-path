@@ -88,6 +88,11 @@ struct ppt_sel_state {
     __u32 inited;
     __u32 gen;
 };
+
+/* Bounded CAS retries before a contended event is dropped (see the RESIDENT block). Small: control
+ * events are rare, so contention is near zero under single-queue steering; this just keeps the
+ * un-steered worst case from dropping most events. */
+#define SEL_MAX_RETRY 4
 struct {
     __uint(type, BPF_MAP_TYPE_ARRAY);
     __type(key, __u32);
@@ -433,31 +438,47 @@ int ppt_select_prog(struct xdp_md *ctx)
     __u32 zk = 0;
     struct ppt_sel_state *st = bpf_map_lookup_elem(&sel_state_map, &zk);
     struct ppt_config *scfg = bpf_map_lookup_elem(&config_map, &zk);
-    __u32 failsafe = (scfg && scfg->n_nodes) ? (scfg->n_nodes - 1) : 0;   /* most restrictive posture */
-    __u32 cur = 0, snap_gen = 0;
-    if (st) {
-        bpf_spin_lock(&st->lock);
-        cur = st->inited ? st->cur_node : failsafe;
-        snap_gen = st->gen;
-        bpf_spin_unlock(&st->lock);
+    /* most restrictive posture: the policy's SIGNED safe_node if declared (offset-26 high byte, rides
+     * the manifest signature); else the last-node convention. 0 = undeclared, hence the fallback. */
+    __u32 failsafe = 0;
+    if (scfg) {
+        failsafe = scfg->safe_node ? scfg->safe_node
+                                   : (scfg->n_nodes ? (scfg->n_nodes - 1) : 0);
     }
-
+    /* Bounded-retry CAS: on a lost commit, re-snapshot from the NEW state and re-evaluate, up to
+     * SEL_MAX_RETRY times, so a concurrent contender turns a drop into a commit against fresh state
+     * rather than losing the event. Every re-evaluation is from the actual current posture, so a
+     * committed transition is never stale. Only pathological contention (all attempts lose) drops. */
     __s32 matched_edge = -1;
-    __s32 target_node = -1;
-    int rc = evaluate(cur, n_fields, &matched_edge, &target_node);
+    int rc = -1;
+    __u32 posture = failsafe;
+    int done = 0;
+    if (st) {
+        for (int attempt = 0; attempt < SEL_MAX_RETRY && !done; attempt++) {
+            __u32 cur, snap_gen;
+            bpf_spin_lock(&st->lock);
+            cur = st->inited ? st->cur_node : failsafe;
+            snap_gen = st->gen;
+            bpf_spin_unlock(&st->lock);
 
-    __u32 posture = cur;                              /* the resident posture reported for this event */
-    if (st && rc == 0 && target_node >= 0) {          /* commit the advance iff no CAS race */
-        bpf_spin_lock(&st->lock);
-        if (st->gen == snap_gen) {
-            st->cur_node = (__u32)target_node;
-            st->inited = 1;
-            st->gen = snap_gen + 1;
-            posture = (__u32)target_node;
-        } else {
-            posture = st->cur_node;                   /* dropped: a concurrent event won; report it */
+            __s32 target_node = -1;
+            matched_edge = -1;
+            rc = evaluate(cur, n_fields, &matched_edge, &target_node);
+            posture = cur;
+            if (rc != 0 || target_node < 0) { done = 1; break; }   /* nothing to commit */
+
+            bpf_spin_lock(&st->lock);
+            if (st->gen == snap_gen) {                             /* uncontended: commit the advance */
+                st->cur_node = (__u32)target_node;
+                st->inited = 1;
+                st->gen = snap_gen + 1;
+                posture = (__u32)target_node;
+                done = 1;
+            } else {
+                posture = st->cur_node;                           /* contended: report winner, retry */
+            }
+            bpf_spin_unlock(&st->lock);
         }
-        bpf_spin_unlock(&st->lock);
     }
 
     __u32 key = 0;

@@ -66,7 +66,9 @@ int main(int argc, char **argv) {
     fo.data_in = f2; fo.data_size_in = l2; fo.data_out = o2; fo.data_size_out = sizeof(o2);
     bpf_prog_test_run_opts(prog_fd, &fo);
     struct ppt_result fr; bpf_map_lookup_elem(res_fd, &k0, &fr);
-    int most_restrictive = (int)im.n_nodes - 1;
+    /* the SIGNED safe_node drives the fail-safe (offset-26 high byte); fall back to the last-node
+     * convention only when the policy leaves it undeclared, matching the program. */
+    int most_restrictive = im.safe ? (int)im.safe : (int)im.n_nodes - 1;
     int failsafe_ok = (fr.target_node == most_restrictive);
 
     free_image(&im);
