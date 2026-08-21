@@ -77,6 +77,11 @@ struct ppt_reg {
     __s32 val;
 };
 
+/* Header flags word (offset 26) low byte; the high byte carries safe_node. */
+#define PPT_FLAG_NODE_ATTR       0x01   /* per-node attribute section appended (fabric: LED color) */
+#define PPT_FLAG_MIGRATE_BY_NAME 0x02   /* resident-selector hot-swap: re-resolve by name (else reset-to) */
+#define PPT_FLAG_NODE_NAMES      0x04   /* per-node u32 name-hash section appended (for by-name migration) */
+
 struct ppt_config {
     __u16 n_fields;
     __u16 n_interns;

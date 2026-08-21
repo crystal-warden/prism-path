@@ -43,6 +43,9 @@ FLAG_COLORS = FLAG_NODE_ATTR   # back-compat alias: the fabric's LED-color mater
 FLAG_MIGRATE_BY_NAME = 0x0002  # flags bit1: resident-selector hot-swap migration mode — set = by-name
                                # (re-resolve the current node by name), clear = reset-to (the fail-safe).
                                # Meaningful only when safe_node is declared; signed with the image.
+FLAG_NODE_NAMES = 0x0004       # flags bit2: a per-node uint32 name-hash section (FNV-1a-32 of each node
+                               # name) is appended after the node-attr section — the signed identities the
+                               # loader matches for by-name migration across a hot-swap.
 
 PACK_FORMAT = "ppt-pack/1"
 
@@ -112,7 +115,9 @@ def validate_image(data: bytes, caps: Optional[dict] = None) -> Tuple[bool, List
     need = (HEADER.size + ATOM.size * h["atoms"] + NODE.size * h["nodes"]
             + EDGE.size * h["edges"] + WORD.size * h["prog_words"])
     if h["flags"] & FLAG_NODE_ATTR:
-        need += WORD.size * h["nodes"]           # one uint16 per-node attribute, appended last
+        need += WORD.size * h["nodes"]           # one uint16 per-node attribute
+    if h["flags"] & FLAG_NODE_NAMES:
+        need += 4 * h["nodes"]                   # one uint32 name-hash per node, appended after node-attr
     if len(data) != need:
         reasons.append("image:length-mismatch")
         return False, reasons

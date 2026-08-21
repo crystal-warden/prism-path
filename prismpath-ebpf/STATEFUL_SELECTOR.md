@@ -86,9 +86,18 @@ in the new table). So a stateful pack must declare how its state migrates, and t
 
 The **lint** (`analysis` code `stateful-migration-undeclared`) refuses a pack that declares a
 fail-safe (`safe:`) but no migration strategy — the author must decide, exactly as `packing: spiral`
-forces the baseline-last decision. `posture_selector` declares `migration: by-name`. The signed
-declaration and the authoring gate are what land here; the loader's swap-time *enforcement* of the
-declared strategy is the next step.
+forces the baseline-last decision. `posture_selector` declares `migration: by-name`.
+
+**The loader enforces it at swap time.** by-name needs node identities, so a stateful pack also carries
+a signed **per-node name-hash section** (FNV-1a-32 of each node name, appended under `FLAG_NODE_NAMES`,
+covered by the image hash). On a swap the loader's `migrate_node` re-resolves the resident node's name
+hash in the new policy (by-name) or resets to the new fail-safe (reset-to). `migrate_selector.c`
+advances the resident posture to `lockdown` in-kernel under policy A (`normal=0, elevated=1,
+lockdown=2`), then swaps to a **reindexed** B (`normal=0, lockdown=1, elevated=2` — same names):
+by-name lands on B's `lockdown` (idx 1) and the migrated state drives B's FSM live in-kernel, where a
+raw index carry (idx 2) would have misread it as `elevated`; reset-to instead sends an in-flight
+`elevated` to B's fail-safe. Remaining: wiring `migrate_node` into the loader's production attach/swap
+path (the harness exercises the enforcement logic against the live kernel state).
 
 ## Receipts + Merkle anchor (the stateful history, tamper-evident)
 

@@ -38,6 +38,8 @@ typedef struct {
     uint16_t *prog;
     const uint8_t *raw;    /* borrowed: raw table bytes, valid until the caller frees them */
     long raw_len;
+    uint16_t flags;        /* header flags word low byte (PPT_FLAG_*) */
+    uint32_t *name_hashes; /* per-node FNV-1a-32(name), or NULL if no PPT_FLAG_NODE_NAMES */
 } Image;
 
 static uint16_t rd16(const uint8_t *p) { return (uint16_t)(p[0] | (p[1] << 8)); }
@@ -90,6 +92,8 @@ static int parse_image_buf(const uint8_t *b, long len, Image *im) {
     im->start = rd16(b + 18);     im->visits_idx = rd16(b + 20);
     im->max_steps = rd16(b + 22);  im->max_stack = rd16(b + 24);
     im->safe = rd16(b + 26) >> 8;   /* high byte of the flags word = signed fail-safe node (0 = undeclared) */
+    im->flags = rd16(b + 26) & 0xFF;
+    im->name_hashes = NULL;
     im->raw = b; im->raw_len = len;  /* borrowed table bytes, hashed into policy_hash at populate time */
     long need = 28 + 8L * im->n_atoms + 4L * im->n_nodes + 6L * im->n_edges + 2L * im->prog_len;
     if (len < need) return -1;
@@ -120,12 +124,37 @@ static int parse_image_buf(const uint8_t *b, long len, Image *im) {
     }
     im->prog = malloc(sizeof(uint16_t) * (im->prog_len ? im->prog_len : 1));
     for (int i = 0; i < im->prog_len; i++, p += 2) im->prog[i] = rd16(p);
+    /* Signed per-node name-hash section (for by-name hot-swap migration), appended after the optional
+     * node-attribute section. Skip node-attr first so the offset is right regardless of that flag. */
+    if (im->flags & PPT_FLAG_NODE_NAMES) {
+        if (im->flags & PPT_FLAG_NODE_ATTR) p += 2L * im->n_nodes;
+        if (b + len < p + 4L * im->n_nodes) return -1;      /* names section truncated */
+        im->name_hashes = malloc(sizeof(uint32_t) * (im->n_nodes ? im->n_nodes : 1));
+        for (int i = 0; i < im->n_nodes; i++, p += 4) im->name_hashes[i] = rd32(p);
+    }
     return 0;
 }
 
+/* Swap-time migration: pick the resident cur_node in a NEW policy that replaces the old one, per the
+ * new policy's SIGNED strategy (PPT_FLAG_MIGRATE_BY_NAME). by-name re-resolves the old node's name
+ * hash in the new policy (fallback to the new fail-safe if the name is gone); reset-to (bit clear)
+ * always returns the new fail-safe. Both name-hash sections ride the signed image, so the migration
+ * is tamper-evident, and a raw index is never carried blindly across a reindexing swap. */
+/* unused by the loader binary itself until the production swap path calls it; the migrate harness does */
+static uint32_t __attribute__((unused))
+migrate_node(const Image *old_im, const Image *new_im, uint32_t old_cur) {
+    if ((new_im->flags & PPT_FLAG_MIGRATE_BY_NAME) && old_im->name_hashes && new_im->name_hashes
+        && old_cur < old_im->n_nodes) {
+        uint32_t want = old_im->name_hashes[old_cur];
+        for (uint32_t i = 0; i < new_im->n_nodes; i++)
+            if (new_im->name_hashes[i] == want) return i;   /* same posture, by name, in the new policy */
+    }
+    return new_im->safe;                                    /* reset-to, or a vanished name -> fail-safe */
+}
+
 static void free_image(Image *im) {
-    free(im->atoms); free(im->nodes); free(im->edges); free(im->prog);
-    im->atoms = NULL; im->nodes = NULL; im->edges = NULL; im->prog = NULL;
+    free(im->atoms); free(im->nodes); free(im->edges); free(im->prog); free(im->name_hashes);
+    im->atoms = NULL; im->nodes = NULL; im->edges = NULL; im->prog = NULL; im->name_hashes = NULL;
 }
 
 static void load_image(const char *path, Image *im) {
