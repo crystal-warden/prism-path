@@ -29,9 +29,14 @@ mechanism, and the signed table is the transition function.
 ## The design (minimal diff to the certified interpreter)
 
 - `ppt_select.bpf.c` = `ppt_xdp.bpf.c` + one `sel_state_map` (ARRAY, `{cur_node, inited}`) and, in the
-  program: read `cur` from the map (`config.start_node` the first packet), `evaluate(cur, …)`, write
-  the target back. The evaluator (`eval_atom`/`eval_prog`/`evaluate`) is byte-identical, so the
-  114/114 conformance carries.
+  program: read `cur` from the map, `evaluate(cur, …)`, write the target back. The evaluator
+  (`eval_atom`/`eval_prog`/`evaluate`) is byte-identical, so the 114/114 conformance carries.
+- **Fail-safe reset (fail closed, not open).** A deliberate clean start is the loader writing
+  `{start_node, inited=1}`, so a fresh load begins at the baseline. But `inited==0` — a crash, a fresh
+  or torn state map, any state the loader did not set — falls to the **most restrictive** posture (the
+  last, highest-severity node), never the baseline. A forced reload must buy `lockdown`, not `normal`:
+  the resident FSM fails closed. (Nodes are ordered least-to-most restrictive, the severity order the
+  spiral lint already enforces; an explicit signed `safe_node` field is the hardening follow-up.)
 - **Discrete events simplify it.** The fabric switch-nav needed edge-detection + debounce because its
   input was a continuous *level* sampled fast. Packets are already discrete events, so the selector
   needs neither — just the resident `cur_node`. That contrast is the useful half of the "atomic
@@ -69,7 +74,10 @@ resident state per stream, and diffs the kernel's trail against the frozen refer
   `selector_corpus.json` (readable) / `selector_corpus.bin` (frozen). C target agrees with Python at
   every one of the 624 steps.
 - **In-kernel cert: 624/624 events match, 49/49 streams clean, PASS** — the kernel reproduces the
-  frozen posture trail exactly (kernel 6.17, BPF_PROG_TEST_RUN).
+  frozen posture trail exactly (kernel 6.17, BPF_PROG_TEST_RUN). Each stream is reset with a
+  *deliberate* clean start (`{start_node, inited=1}`), and a separate fail-safe check confirms an
+  uninitialized state plus one event lands on the most-restrictive posture (`lockdown`), not the
+  baseline — the reset fails closed.
 
 Novelty vs SLSA/sigstore: those prove provenance *to* delivery; this drives runtime *state* with a
 signed policy in-kernel, conformance-certified — a governed, stateful control plane.

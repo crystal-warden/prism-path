@@ -407,9 +407,13 @@ int ppt_select_prog(struct xdp_md *ctx)
         }
     }
 
-    /* RESIDENT: the start node is the persisted cur_node (config.start_node the first packet), not
-     * pkt_hdr->node_idx. Each control packet is one discrete event, so no edge-detection or debounce
-     * is needed — the map holds the state. The decided target becomes the new resident posture. */
+    /* RESIDENT: the start node is the persisted cur_node, not pkt_hdr->node_idx. Each control packet
+     * is one discrete event; the map holds the state. FAIL-SAFE: inited==0 means the state was NOT
+     * deliberately set (crash, fresh/torn map), so fall to the MOST RESTRICTIVE posture (the last,
+     * highest-severity node), never the baseline — a forced reload must buy lockdown, not normal. A
+     * deliberate clean start is the loader writing {start_node, inited=1}; the program only sees
+     * inited==0 when something went wrong. (Convention: nodes ordered least->most restrictive, the
+     * severity order the spiral lint already enforces; an explicit signed safe_node is the follow-up.) */
     __u32 zk = 0;
     struct ppt_sel_state *st = bpf_map_lookup_elem(&sel_state_map, &zk);
     __u32 cur = 0;
@@ -418,7 +422,7 @@ int ppt_select_prog(struct xdp_md *ctx)
             cur = st->cur_node;
         } else {
             struct ppt_config *cfg = bpf_map_lookup_elem(&config_map, &zk);
-            cur = cfg ? cfg->start_node : 0;
+            cur = (cfg && cfg->n_nodes) ? (cfg->n_nodes - 1) : 0;   /* fail-safe: most restrictive */
         }
     }
 

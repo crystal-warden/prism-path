@@ -37,8 +37,8 @@ int main(int argc, char **argv) {
     long ev_total = 0, ev_bad = 0; uint32_t streams_bad = 0;
     for (uint32_t s = 0; s < n_streams; s++) {
         uint32_t n_ev; memcpy(&n_ev, p, 4); p += 4;
-        struct sel_state reset = {0, 0};
-        bpf_map_update_elem(st_fd, &k0, &reset, BPF_ANY);      /* fresh resident state per stream */
+        struct sel_state clean = { (uint32_t)im.start, 1 };   /* deliberate clean start = loader init */
+        bpf_map_update_elem(st_fd, &k0, &clean, BPF_ANY);
         int stream_ok = 1;
         for (uint32_t e = 0; e < n_ev; e++) {
             int32_t ev, ref; memcpy(&ev, p, 4); p += 4; memcpy(&ref, p, 4); p += 4;
@@ -54,9 +54,27 @@ int main(int argc, char **argv) {
         }
         if (!stream_ok) streams_bad++;
     }
+    /* FAIL-SAFE: an UN-initialized state (crash / fresh map) must fall to the MOST restrictive
+     * posture (the last node), not the baseline — a forced reload buys lockdown, never normal. */
+    struct sel_state crashed = {0, 0};
+    bpf_map_update_elem(st_fd, &k0, &crashed, BPF_ANY);
+    struct ppt_reg hold[1] = {{ TY_INT, 0 }};                 /* a benign hold event after the "crash" */
+    uint8_t f2[256]; int l2 = build_frame(f2, 0, 1, hold);
+    uint8_t o2[256];
+    struct bpf_test_run_opts fo; memset(&fo, 0, sizeof(fo)); fo.sz = sizeof(fo);
+    fo.data_in = f2; fo.data_size_in = l2; fo.data_out = o2; fo.data_size_out = sizeof(o2);
+    bpf_prog_test_run_opts(prog_fd, &fo);
+    struct ppt_result fr; bpf_map_lookup_elem(res_fd, &k0, &fr);
+    int most_restrictive = (int)im.n_nodes - 1;
+    int failsafe_ok = (fr.target_node == most_restrictive);
+
     free_image(&im);
     printf("SELECTOR CERT (in-kernel, BPF_PROG_TEST_RUN): %ld/%ld events match, %u/%u streams clean\n",
            ev_total - ev_bad, ev_total, n_streams - streams_bad, n_streams);
-    printf("%s\n", ev_bad == 0 ? "PASS - the kernel reproduces the frozen posture trail exactly" : "FAIL");
-    return ev_bad == 0 ? 0 : 1;
+    printf("FAIL-SAFE (uninitialized state + event): posture %d, most-restrictive %d -> %s\n",
+           fr.target_node, most_restrictive,
+           failsafe_ok ? "PASS (a forced reload buys lockdown, not normal)" : "FAIL");
+    int ok = (ev_bad == 0 && failsafe_ok);
+    printf("%s\n", ok ? "PASS - kernel reproduces the frozen trail AND fails safe" : "FAIL");
+    return ok ? 0 : 1;
 }
