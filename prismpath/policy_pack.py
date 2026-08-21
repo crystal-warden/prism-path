@@ -227,9 +227,14 @@ def build_manifest(image: bytes, fields: Dict[str, str], version: int,
 
 
 def build_pack(ppt_path: str, fields: Dict[str, str], version: int, envelope_id: str,
-               priv_path: str, pub_path: str) -> dict:
+               priv_path: str, pub_path: str, packing: Optional[dict] = None) -> dict:
     """Sign a `.ppt` into a pack: writes `<ppt>.manifest.json` + `<ppt>.manifest.sig`
-    beside the (untouched) image. Returns the manifest."""
+    beside the (untouched) image. Returns the manifest.
+
+    `packing` (optional) declares a wire-packing profile whose baked artifact rides the pack,
+    e.g. {"profile": "spiral", "sidecar_sha256": <hex of `<ppt>.spiral`>} — built by the
+    telemetry adapter's `spiral_pack.write_sidecar`, which lint-gates the flow. The manifest
+    signature then covers the declaration, and `verify_pack` re-hashes the sidecar at load."""
     with open(ppt_path, "rb") as f:
         image = f.read()
     ok, reasons = validate_image(image)
@@ -237,6 +242,11 @@ def build_pack(ppt_path: str, fields: Dict[str, str], version: int, envelope_id:
         raise ValueError("refusing to sign an invalid image: " + ",".join(reasons))
     _pub, key_id = load_public(pub_path)
     manifest = build_manifest(image, fields, version, envelope_id, key_id)
+    if packing is not None:
+        if packing.get("profile") != "spiral" or not packing.get("sidecar_sha256"):
+            raise ValueError("packing: only {'profile': 'spiral', 'sidecar_sha256': ...} is defined")
+        manifest["packing"] = {"profile": "spiral",
+                               "sidecar_sha256": packing["sidecar_sha256"]}
     priv = _load_private(priv_path)
     sig = priv.sign(canonical_bytes(manifest))
     with open(ppt_path + ".manifest.json", "w") as f:
@@ -291,6 +301,16 @@ def verify_pack(ppt_path: str, pubkey_paths: List[str],
             return False, [f"manifest:count-mismatch:{k}"], manifest
     if "wcet_cycles" in manifest and manifest["wcet_cycles"] != wcet_cycles(image):
         return False, ["manifest:wcet-mismatch"], manifest   # recomputed from the image, independently
+    if "packing" in manifest:
+        pk = manifest["packing"]
+        if pk.get("profile") != "spiral":
+            return False, ["packing:unknown-profile"], manifest
+        side_path = ppt_path + ".spiral"
+        if not os.path.exists(side_path):
+            return False, ["spiral:sidecar-missing"], manifest
+        with open(side_path, "rb") as f:
+            if sha256_hex(f.read()) != pk.get("sidecar_sha256"):
+                return False, ["spiral:sidecar-hash-mismatch"], manifest
     return True, [], manifest
 
 

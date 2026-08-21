@@ -194,3 +194,59 @@ def test_envelope_rejects_each_cap_exceeded(pack, envelope, cap):
     tight = dict(envelope, caps={**envelope["caps"], cap: 0})
     ok, reasons = pp.check_envelope(pack["manifest"], Path(pack["ppt"]).read_bytes(), tight)
     assert not ok and f"envelope:cap-exceeded:{cap}" in reasons
+
+
+# ---------------------------------------------------------------- packing profile (spiral sidecar)
+
+def _spiral_pack(tmp_path, sidecar: bytes):
+    """A pack that declares the spiral profile over an arbitrary sidecar blob."""
+    import hashlib
+    keys = pp.keygen(str(tmp_path / "skeys"))
+    img = pc.compile_flow(parse(FLOW)).serialize()
+    ppt = tmp_path / "spiral_fixture.ppt"
+    ppt.write_bytes(img)
+    (tmp_path / "spiral_fixture.ppt.spiral").write_bytes(sidecar)
+    manifest = pp.build_pack(str(ppt), FIELDS, version=1, envelope_id="env1",
+                             priv_path=keys["private"], pub_path=keys["public"],
+                             packing={"profile": "spiral",
+                                      "sidecar_sha256": hashlib.sha256(sidecar).hexdigest()})
+    return str(ppt), keys, manifest
+
+
+def test_packing_declared_and_verified(tmp_path):
+    ppt, keys, manifest = _spiral_pack(tmp_path, b"sidecar-bytes-v1")
+    assert manifest["packing"]["profile"] == "spiral"
+    ok, reasons, _ = pp.verify_pack(ppt, [keys["public"]])
+    assert ok and reasons == []
+
+
+def test_packing_tampered_sidecar_fails(tmp_path):
+    ppt, keys, _ = _spiral_pack(tmp_path, b"sidecar-bytes-v1")
+    with open(ppt + ".spiral", "wb") as f:
+        f.write(b"sidecar-bytes-v2")
+    ok, reasons, _ = pp.verify_pack(ppt, [keys["public"]])
+    assert not ok and "spiral:sidecar-hash-mismatch" in reasons
+
+
+def test_packing_missing_sidecar_fails(tmp_path):
+    ppt, keys, _ = _spiral_pack(tmp_path, b"sidecar-bytes-v1")
+    import os as _os
+    _os.remove(ppt + ".spiral")
+    ok, reasons, _ = pp.verify_pack(ppt, [keys["public"]])
+    assert not ok and "spiral:sidecar-missing" in reasons
+
+
+def test_packing_unknown_profile_refused_at_build(tmp_path):
+    keys = pp.keygen(str(tmp_path / "ukeys"))
+    img = pc.compile_flow(parse(FLOW)).serialize()
+    ppt = tmp_path / "u.ppt"
+    ppt.write_bytes(img)
+    with pytest.raises(ValueError, match="packing"):
+        pp.build_pack(str(ppt), FIELDS, version=1, envelope_id="env1",
+                      priv_path=keys["private"], pub_path=keys["public"],
+                      packing={"profile": "hilbert", "sidecar_sha256": "00"})
+
+
+def test_pack_without_packing_is_unaffected(pack):
+    ok, reasons, manifest = pp.verify_pack(pack["ppt"], [pack["keys"]["public"]])
+    assert ok and "packing" not in manifest
