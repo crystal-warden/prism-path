@@ -656,6 +656,35 @@ def _check_spiral_profile(graph) -> List[Finding]:
     return out
 
 
+_MIGRATION_STRATEGIES = ("by-name", "reset-to")
+
+
+def _check_stateful_migration(graph) -> List[Finding]:
+    """Hot-swap safety for RESIDENT selectors (fires ONLY when the flow declares ``safe:`` in its
+    frontmatter — i.e. it carries a fail-safe posture, so it drives resident state that survives a
+    signed hot-swap). A raw resident node INDEX carried into a new policy silently reinterprets the
+    posture, so such a pack must declare how its state migrates across a swap:
+
+      * ``migration: by-name`` — re-resolve the current node by NAME in the new policy (posture
+        continuity; a name that is gone falls back to the fail-safe);
+      * ``migration: reset-to`` — reset the resident state to the fail-safe node on swap (maximally
+        safe discontinuity).
+
+    The choice is signed (a flags bit in the image, like ``safe_node``) so the loader enforces it at
+    swap time and it is tamper-evident. Refusing a stateful pack that declares NEITHER is the gate —
+    the author must decide, exactly as ``packing: spiral`` forces the baseline-last decision."""
+    if not graph.meta.get("safe", "").strip():
+        return []                                        # stateless pack: migration is not applicable
+    mig = graph.meta.get("migration", "").strip().split("=", 1)[0].strip().lower()
+    if mig in _MIGRATION_STRATEGIES:
+        return []
+    return [Finding("error", "stateful-migration-undeclared", None,
+                    "a resident selector (declares `safe:`) must declare `migration: by-name` or "
+                    "`migration: reset-to` — a resident node index carried across a signed hot-swap "
+                    "reinterprets the posture; declare how state migrates (re-resolve by name) or "
+                    "resets (to the fail-safe) on swap")]
+
+
 def analyze(graph) -> List[Finding]:
     """Run every decidable, IN-GRAPH check and return all findings (errors first, then warnings).
     Cross-flow-boundary composition checks (which read child flow FILES) are in `analyze_composition`,
@@ -672,6 +701,7 @@ def analyze(graph) -> List[Finding]:
     findings += _check_field_only(graph)
     findings += _check_spawn(graph)
     findings += _check_spiral_profile(graph)
+    findings += _check_stateful_migration(graph)
     findings += _check_cycles(graph)
     findings += _check_dead_and_dup(graph)
     findings += _check_terminal_body(graph)

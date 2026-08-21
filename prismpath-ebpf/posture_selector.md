@@ -2,6 +2,7 @@
 name: posture_selector
 start: normal
 safe: lockdown
+migration: by-name
 ---
 
 ## normal

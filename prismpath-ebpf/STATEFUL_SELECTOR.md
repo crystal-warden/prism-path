@@ -73,6 +73,23 @@ selector control events are naturally rare, so contention is near zero in practi
 lock plus bounded retry is the safety net that guarantees no corruption and no stale-misapply even
 when steering is absent.
 
+## Hot-swap migration (a signed strategy, lint-gated)
+
+A resident selector's `cur_node` survives across a signed hot-swap of the policy — but a raw node
+*index* carried into a new policy silently reinterprets the posture (node 2 may be a different posture
+in the new table). So a stateful pack must declare how its state migrates, and the choice is signed:
+
+- `migration: by-name` — re-resolve the current node by NAME in the new policy (posture continuity; a
+  name that is gone falls back to the fail-safe). Rides flags bit 1 (`FLAG_MIGRATE_BY_NAME`) in the
+  image, so `verify_pack` covers it (same image-hash coverage as `safe_node`).
+- `migration: reset-to` — reset the resident state to the fail-safe node on swap (maximally safe).
+
+The **lint** (`analysis` code `stateful-migration-undeclared`) refuses a pack that declares a
+fail-safe (`safe:`) but no migration strategy — the author must decide, exactly as `packing: spiral`
+forces the baseline-last decision. `posture_selector` declares `migration: by-name`. The signed
+declaration and the authoring gate are what land here; the loader's swap-time *enforcement* of the
+declared strategy is the next step.
+
 ## Cross-substrate (the same signed policy, everywhere)
 
 The transition policy is Level M, so the *same* `.ppt` routes identically on fabric (`ppt_nav`), C

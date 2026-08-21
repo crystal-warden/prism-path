@@ -49,6 +49,7 @@ CORPUS = {
     "spiral_no_baseline.md": "spiral-no-baseline",
     "spiral_baseline_not_last.md": "spiral-baseline-not-last",
     "spiral_multi_baseline.md": "spiral-multi-baseline",
+    "stateful_migration_undeclared.md": "stateful-migration-undeclared",
 }
 
 

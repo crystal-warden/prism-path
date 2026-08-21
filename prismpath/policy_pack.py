@@ -40,6 +40,9 @@ PROG_OPCODES = frozenset({0x8000, 0x8001, 0x8002, 0x8003, 0x8004})  # NOT AND OR
 # software). LED color is one materialization, hence the back-compat alias.
 FLAG_NODE_ATTR = 0x0001
 FLAG_COLORS = FLAG_NODE_ATTR   # back-compat alias: the fabric's LED-color materialization
+FLAG_MIGRATE_BY_NAME = 0x0002  # flags bit1: resident-selector hot-swap migration mode — set = by-name
+                               # (re-resolve the current node by name), clear = reset-to (the fail-safe).
+                               # Meaningful only when safe_node is declared; signed with the image.
 
 PACK_FORMAT = "ppt-pack/1"
 
@@ -88,7 +91,8 @@ def read_ppt_header(data: bytes) -> dict:
     return {"fields": n_fields, "interns": n_interns, "atoms": n_atoms, "nodes": n_nodes,
             "edges": n_edges, "prog_words": prog_len, "start": start,
             "visits_idx": visits_idx, "max_steps": max_steps, "max_stack": max_stack,
-            "flags": flagword & 0x00FF, "safe_node": (flagword >> 8) & 0xFF}
+            "flags": flagword & 0x00FF, "safe_node": (flagword >> 8) & 0xFF,
+            "migrate_by_name": bool(flagword & FLAG_MIGRATE_BY_NAME)}
 
 
 def validate_image(data: bytes, caps: Optional[dict] = None) -> Tuple[bool, List[str]]:

@@ -67,6 +67,16 @@ def main():
     safe_name = g.meta.get("safe")
     if safe_name is not None:
         tbl[27] = names.index(safe_name) & 0xFF
+        # A resident selector (declares `safe:`) must also declare a signed hot-swap migration
+        # strategy — the stateful-migration lint. Enforce it at build, and stamp the mode into the
+        # flags low byte: `by-name` sets bit 1 (FLAG_MIGRATE_BY_NAME), `reset-to` leaves it clear
+        # (reset to the fail-safe on swap). Both ride the image, hence the manifest signature.
+        mig = (g.meta.get("migration") or "").strip().split("=", 1)[0].strip().lower()
+        if mig not in ("by-name", "reset-to"):
+            raise SystemExit("posture_selector declares `safe:` but no valid `migration:` — refusing "
+                             "to build (analysis code stateful-migration-undeclared)")
+        if mig == "by-name":
+            tbl[26] |= 0x02          # FLAG_MIGRATE_BY_NAME
     tbl = bytes(tbl)
     Path(ppt_path).write_bytes(tbl)
 
