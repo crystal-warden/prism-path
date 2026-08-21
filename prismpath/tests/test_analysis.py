@@ -46,6 +46,9 @@ CORPUS = {
     "unbounded_cycle.md": "unbounded-cycle",
     "always_false.md": "always-false-edge",
     "duplicate_condition.md": "duplicate-condition",
+    "spiral_no_baseline.md": "spiral-no-baseline",
+    "spiral_baseline_not_last.md": "spiral-baseline-not-last",
+    "spiral_multi_baseline.md": "spiral-multi-baseline",
 }
 
 
@@ -190,3 +193,124 @@ def test_findings_json_shape():
         d = f.as_dict()
         assert set(d) == {"severity", "code", "node", "message"}
         assert d["severity"] in ("error", "warning")
+
+
+# ---------------------------------------------------------------- spiral packing profile
+
+def _severities(graph):
+    return {f.code: f.severity for f in analysis.analyze(graph)}
+
+
+def test_spiral_gate_codes_are_errors_and_registered():
+    """The profile's gate rule (owner-mandated): a convention-violating flow FAILS validate and is
+    refused at bake in every materialization. That requires error severity + ERROR_CODES membership
+    — pinned here so a refactor cannot silently demote the gates to warnings again."""
+    assert "spiral-no-baseline" in analysis.ERROR_CODES
+    assert "spiral-baseline-not-last" in analysis.ERROR_CODES
+    g = parse("""---
+start: decide
+packing: spiral
+---
+## decide
+-> watch: else
+-> page: when level >= 300
+## page
+## watch
+""")
+    assert _severities(g).get("spiral-baseline-not-last") == "error"
+    g2 = parse("""---
+start: decide
+packing: spiral
+---
+## decide
+-> page: when level >= 300
+## page
+""")
+    assert _severities(g2).get("spiral-no-baseline") == "error"
+
+
+def test_spiral_profile_conformant_flow_is_clean():
+    g = parse("""---
+start: decide
+packing: spiral
+---
+## decide
+-> page: when level >= 300
+-> ticket: when level >= 200
+-> watch: else
+## page
+## ticket
+## watch
+""")
+    assert not [c for c in _codes(g) if c.startswith("spiral")]
+
+
+def test_spiral_profile_requires_baseline_last():
+    g = parse("""---
+start: decide
+packing: spiral
+---
+## decide
+-> watch: else
+-> page: when level >= 300
+## page
+## watch
+""")
+    assert "spiral-baseline-not-last" in _codes(g)
+
+
+def test_spiral_profile_requires_a_baseline():
+    g = parse("""---
+start: decide
+packing: spiral
+---
+## decide
+-> page: when level >= 300
+-> ticket: when level >= 200
+## page
+## ticket
+""")
+    assert "spiral-no-baseline" in _codes(g)
+
+
+def test_spiral_profile_multi_baseline_warns():
+    g = parse("""---
+start: decide
+packing: spiral
+---
+## decide
+-> page: when level >= 300
+-> watch: else
+-> hold: when always
+## page
+## watch
+## hold
+""")
+    assert "spiral-multi-baseline" in _codes(g)
+
+
+def test_spiral_rules_silent_without_declaration():
+    # the identical convention-violating flow, undeclared: profile rules must not fire
+    g = parse("""---
+start: decide
+---
+## decide
+-> page: when level >= 300
+-> ticket: when level >= 200
+## page
+## ticket
+""")
+    assert not [c for c in _codes(g) if c.startswith("spiral")]
+
+
+def test_graph_meta_carries_frontmatter():
+    g = parse("""---
+start: a
+packing: spiral
+---
+## a
+-> done: else
+## done
+""")
+    assert g.meta.get("packing") == "spiral"
+    assert g.meta.get("start") == "a"

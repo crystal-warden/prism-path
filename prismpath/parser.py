@@ -86,6 +86,7 @@ class Graph:
     name: str
     start: str
     nodes: Dict[str, Node]
+    meta: Dict[str, str] = field(default_factory=dict)  # frontmatter beyond name/start (e.g. packing)
 
     def validate(self) -> List[str]:
         """Backward-compatible error list. The full static analysis (errors + warnings) lives in
@@ -149,7 +150,7 @@ def parse(text: str) -> Graph:
     flush()
 
     start = meta.get("start") or (next(iter(nodes)) if nodes else "")
-    g = Graph(name=meta.get("name", "flow"), start=start, nodes=nodes)
+    g = Graph(name=meta.get("name", "flow"), start=start, nodes=nodes, meta=meta)
     return g
 
 

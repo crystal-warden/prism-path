@@ -437,7 +437,8 @@ def _check_dead_and_dup(graph) -> List[Finding]:
     return out
 
 
-ERROR_CODES = {"undefined-start", "undefined-target", "unsafe-predicate", "no-terminal"}
+ERROR_CODES = {"undefined-start", "undefined-target", "unsafe-predicate", "no-terminal",
+               "spiral-no-baseline", "spiral-baseline-not-last"}
 
 
 def _check_provenance(graph) -> List[Finding]:
@@ -595,6 +596,66 @@ def _check_spawn(graph) -> List[Finding]:
     return out
 
 
+def _check_terminal_body(graph) -> List[Finding]:
+    """A terminal node (no outgoing edges) with a non-trivial instruction body (prompt) is never
+    executed by the engine (run ends on arrival at a terminal node). Short outcome labels
+    (<= 200 chars) are permitted; longer worker prompts (> 200 chars) trigger a warning."""
+    out: List[Finding] = []
+    for name, n in graph.nodes.items():
+        if n.terminal:
+            body = n.instruction.strip()
+            if len(body) > 200:
+                out.append(Finding("warning", "terminal-with-body", name,
+                                   f"terminal node has a non-trivial instruction body ({len(body)} chars, "
+                                   f"threshold > 200 chars); terminal nodes are never executed by the engine"))
+    return out
+
+
+def _check_spiral_profile(graph) -> List[Finding]:
+    """The spiral packing profile's authoring rules (fires ONLY when the flow declares
+    ``packing: spiral`` in its frontmatter). The layout derivation (adapters/telemetry/spiral.py
+    ``_route_order``) REVERSES edge-declaration order so the baseline lands at the dense center and
+    severity radiates outward; that only means what it says if the flow honors two conventions,
+    promoted here to checked rules for every materialization (derived and baked alike):
+
+      * severity order IS edge-declaration order (most severe first) — definitional under this
+        profile; stated in the finding text so authors know what they are signing;
+      * the baseline catch-all is the LAST deterministic edge of every packed node — otherwise the
+        spiral's center is not the baseline and progressive transmission silently loses its meaning
+        (band membership still routes correctly; the CENTER-OUTWARD semantics are what degrade).
+
+    The two structural rules are ERRORS: the profile's gate rule is that a convention-violating
+    flow must fail `validate` and be refused at bake/admission in every materialization. The
+    filters mirror the derivation's own (`is_deterministic` + always-true detection) so the lint
+    and `_route_order` cannot disagree. Field-partition coverage is enforced at pack admission
+    where the partition builder lives — the core cannot import the telemetry adapter."""
+    if graph.meta.get("packing", "").strip().lower() != "spiral":
+        return []
+    out: List[Finding] = []
+    for name, n in graph.nodes.items():
+        det = [(t, c) for t, c in n.edges if predicates.is_deterministic(c)]
+        if not det:
+            continue                                     # terminal or host-tier node: nothing packed
+        baselines = [i for i, (_t, c) in enumerate(det) if _is_always_true(c)]
+        if not baselines:
+            out.append(Finding("error", "spiral-no-baseline", name,
+                               "packing: spiral requires a baseline catch-all as this node's last "
+                               "deterministic edge — without one the spiral's dense center is the "
+                               "last specific branch, not the baseline, and unrouted cells fall "
+                               "outermost (severity order is edge order under this profile)"))
+        elif baselines[-1] != len(det) - 1:
+            out.append(Finding("error", "spiral-baseline-not-last", name,
+                               f"packing: spiral requires the baseline catch-all LAST; edge "
+                               f"{baselines[-1] + 1} of {len(det)} is a catch-all with specific "
+                               f"branches after it — the layout reverses edge order, so a non-final "
+                               f"baseline puts a specific branch at the dense center"))
+        if len(baselines) > 1:
+            out.append(Finding("warning", "spiral-multi-baseline", name,
+                               "multiple catch-all edges: the earlier one shadows the later, and "
+                               "only the FINAL deterministic edge is the spiral's center band"))
+    return out
+
+
 def analyze(graph) -> List[Finding]:
     """Run every decidable, IN-GRAPH check and return all findings (errors first, then warnings).
     Cross-flow-boundary composition checks (which read child flow FILES) are in `analyze_composition`,
@@ -610,10 +671,13 @@ def analyze(graph) -> List[Finding]:
     findings += _check_emits_types(graph)
     findings += _check_field_only(graph)
     findings += _check_spawn(graph)
+    findings += _check_spiral_profile(graph)
     findings += _check_cycles(graph)
     findings += _check_dead_and_dup(graph)
+    findings += _check_terminal_body(graph)
     findings.sort(key=lambda f: (f.severity != "error", f.code, f.node or ""))
     return findings
+
 
 
 def _has_reachable_terminal(graph) -> bool:
