@@ -100,6 +100,13 @@ struct {
     __uint(max_entries, 1);
 } sel_state_map SEC(".maps");
 
+/* Audit receipts: one ppt_receipt per committed transition (see the RESIDENT block). Userspace drains
+ * it, checks the trail, and Merkle-anchors the batch — the stateful history the flat result_map drops. */
+struct {
+    __uint(type, BPF_MAP_TYPE_RINGBUF);
+    __uint(max_entries, 1 << 16);   /* 64 KiB: ~2000 receipts before a full ringbuf reserves NULL */
+} receipt_map SEC(".maps");
+
 /* Per-packet register file lives in a PER-CPU array, not on the stack. XDP runs to completion on one
  * CPU per packet, so a per-CPU slot is private to this run. Keeping regs off the stack is what lets the
  * bpf-to-bpf call chain stay under the 512-byte budget at large MAX_FIELDS_PER_PKT (embedding regs[] in
@@ -419,6 +426,10 @@ int ppt_select_prog(struct xdp_md *ctx)
         }
     }
 
+    __s32 ev_value = 0;                               /* the driving event (field 0) for the receipt */
+    if (rf && n_fields > 0)
+        ev_value = rf->r[0].val;
+
     /* RESIDENT + SERIALIZED. The start node is the persisted cur_node, not pkt_hdr->node_idx; each
      * control packet is one discrete event and the map holds the state. FAIL-SAFE: inited==0 means the
      * state was NOT deliberately set (crash, fresh/torn map), so fall to the MOST RESTRICTIVE posture
@@ -467,17 +478,35 @@ int ppt_select_prog(struct xdp_md *ctx)
             posture = cur;
             if (rc != 0 || target_node < 0) { done = 1; break; }   /* nothing to commit */
 
+            int committed = 0;
+            __u32 new_seq = 0;
             bpf_spin_lock(&st->lock);
             if (st->gen == snap_gen) {                             /* uncontended: commit the advance */
                 st->cur_node = (__u32)target_node;
                 st->inited = 1;
                 st->gen = snap_gen + 1;
+                new_seq = st->gen;
                 posture = (__u32)target_node;
+                committed = 1;
                 done = 1;
             } else {
                 posture = st->cur_node;                           /* contended: report winner, retry */
             }
             bpf_spin_unlock(&st->lock);
+
+            if (committed) {   /* AUDIT RECEIPT: one per committed transition, emitted lock-free */
+                struct ppt_receipt *rcpt = bpf_ringbuf_reserve(&receipt_map, sizeof(*rcpt), 0);
+                if (rcpt) {
+                    rcpt->seq = new_seq;
+                    rcpt->policy_hash = scfg ? scfg->policy_hash : 0;
+                    rcpt->prev_node = (__s32)cur;
+                    rcpt->event = ev_value;
+                    rcpt->next_node = target_node;
+                    rcpt->_pad = 0;
+                    bpf_ringbuf_submit(rcpt, 0);
+                }
+                break;
+            }
         }
     }
 

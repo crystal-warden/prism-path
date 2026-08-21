@@ -90,6 +90,32 @@ forces the baseline-last decision. `posture_selector` declares `migration: by-na
 declaration and the authoring gate are what land here; the loader's swap-time *enforcement* of the
 declared strategy is the next step.
 
+## Receipts + Merkle anchor (the stateful history, tamper-evident)
+
+The `result_map` holds only the current posture — a flat snapshot that loses the transition history.
+So each committed transition also emits a **receipt** to a ringbuf: `{seq, policy_hash, prev_node,
+event, next_node}`. It carries the PRE-state, so the whole stateful history is reconstructable from the
+log alone, and the `policy_hash` (low 64 bits of the loaded image's sha256 — the same bytes the signed
+manifest hashes) binds each receipt to the exact signed policy that produced it.
+
+`receipts_selector.c` drains the ringbuf while replaying the frozen corpus and checks the log against
+the certified reference:
+
+- **624 receipts for 624 committed transitions** (one per event — a complete log), **0 mismatches**:
+  every receipt's `next_node` reproduces the certified posture trail, its `prev_node` is the posture
+  before the event (chain continuity), its `event` is the driving field, and its `policy_hash` binds to
+  the loaded image.
+- A **Merkle root** over the receipt batch is deterministic across runs (`0858c133…`); that root is
+  what an OTS stamp anchors — the same held-for-publish step as the corpus manifest, via the
+  `ledger_ots` machinery. One stamp makes the whole batch tamper-evident; a single altered receipt
+  changes the root.
+
+This is the review's "receipts carrying pre-state": it restores the statefulness a current-state-only
+map flattens, and keeps the audit trail linear-to-write but tamper-evident in `O(log n)` via the tree.
+Honest scope: `policy_hash` is a 64-bit prefix of the image sha256 (enough to bind; the full hash is in
+the signed manifest), and the harness sets it from the verified table — wiring the loader's attach path
+to stamp it, and the OTS anchor of the root itself, are the remaining steps.
+
 ## Cross-substrate (the same signed policy, everywhere)
 
 The transition policy is Level M, so the *same* `.ppt` routes identically on fabric (`ppt_nav`), C

@@ -93,6 +93,21 @@ struct ppt_config {
      * XDP_PASS. 0 = observe-only (default). Covers node indices 0-63; the net program bounds the shift.
      * ppt_xdp (the conformance program) ignores this field — the 114/114 cert is unaffected. */
     __u64 drop_mask;
+    __u64 policy_hash;   /* low 64 bits of sha256(image): binds a selector receipt to the loaded policy */
+};
+
+/* Selector audit receipt: one per COMMITTED resident transition, emitted to a ringbuf. It carries the
+ * PRE-state (prev_node) so the stateful history is reconstructable from the log alone, plus the policy
+ * binding (policy_hash) so a receipt is tied to the exact signed image that produced it. A Merkle root
+ * over a batch of these anchors the audit trail (OTS), restoring the statefulness a flat current-state
+ * map would flatten. */
+struct ppt_receipt {
+    __u64 seq;          /* commit sequence = the new generation counter (monotonic per policy load) */
+    __u64 policy_hash;  /* low 64 bits of the loaded image's sha256 (loader-attested) */
+    __s32 prev_node;    /* the resident posture BEFORE this event */
+    __s32 event;        /* the driving event value (field 0) */
+    __s32 next_node;    /* the resident posture AFTER this event */
+    __s32 _pad;
 };
 
 /* On-wire context header in packet payload */
