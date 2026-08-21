@@ -49,7 +49,7 @@ facet_decode.bpf.o: facet_decode.bpf.c
 loader: loader.c ppt_common.h
 	@if [ $(LIBBPF_EXISTS) -eq 1 ]; then \
 		echo "Building loader with libbpf..."; \
-		$(CC) $(CFLAGS) loader.c $$(pkg-config --cflags --libs libbpf) -lelf -lz -lpthread -o loader; \
+		$(CC) $(CFLAGS) loader.c $$(pkg-config --cflags --libs libbpf) -lelf -lz -lpthread -lcrypto -o loader; \
 	else \
 		echo "Building loader (standalone/fallback -DNO_LIBBPF)..."; \
 		$(CC) $(CFLAGS) -DNO_LIBBPF loader.c -o loader; \

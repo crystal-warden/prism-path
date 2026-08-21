@@ -36,6 +36,8 @@ typedef struct {
     struct ppt_node *nodes;
     struct ppt_edge *edges;
     uint16_t *prog;
+    const uint8_t *raw;    /* borrowed: raw table bytes, valid until the caller frees them */
+    long raw_len;
 } Image;
 
 static uint16_t rd16(const uint8_t *p) { return (uint16_t)(p[0] | (p[1] << 8)); }
@@ -88,6 +90,7 @@ static int parse_image_buf(const uint8_t *b, long len, Image *im) {
     im->start = rd16(b + 18);     im->visits_idx = rd16(b + 20);
     im->max_steps = rd16(b + 22);  im->max_stack = rd16(b + 24);
     im->safe = rd16(b + 26) >> 8;   /* high byte of the flags word = signed fail-safe node (0 = undeclared) */
+    im->raw = b; im->raw_len = len;  /* borrowed table bytes, hashed into policy_hash at populate time */
     long need = 28 + 8L * im->n_atoms + 4L * im->n_nodes + 6L * im->n_edges + 2L * im->prog_len;
     if (len < need) return -1;
     /* Capacity bounds: the kernel maps are sized to these MAX_* — an image over any of them would
@@ -191,6 +194,16 @@ static int evaluate_host(const Image *im, uint16_t node, const struct ppt_reg *r
 
 #ifndef NO_LIBBPF
 /* Populate the five table maps from a PPT image. Shared by the attach path and the certify path. */
+#include <openssl/sha.h>   /* SHA256 for policy_hash; libbpf path only (inside NO_LIBBPF guard) */
+
+/* policy_hash = low 64 bits of sha256(image); binds selector receipts to the loaded policy, and matches
+ * policy_pack.py's manifest image_sha256 so an auditor can cross-reference the signed pack. */
+static uint64_t policy_hash_of(const Image *im) {
+    if (!im->raw) return 0;
+    uint8_t dg[32]; SHA256(im->raw, (size_t)im->raw_len, dg);
+    uint64_t ph; memcpy(&ph, dg, 8); return ph;
+}
+
 static int populate_maps(struct bpf_object *obj, const Image *im) {
     /* 1. config_map */
     struct bpf_map *config_map = bpf_object__find_map_by_name(obj, "config_map");
@@ -202,6 +215,7 @@ static int populate_maps(struct bpf_object *obj, const Image *im) {
             .start_node = im->start,  .visits_idx = im->visits_idx,
             .max_steps = im->max_steps, .max_stack = im->max_stack,
             .safe_node = im->safe,
+            .policy_hash = policy_hash_of(im),   /* stamped at load so receipts are policy-bound */
         };
         uint32_t key = 0;
         bpf_map_update_elem(bpf_map__fd(config_map), &key, &cfg, BPF_ANY);
@@ -736,7 +750,7 @@ static int write_bank(const struct net_maps *m, __u32 bank, const Image *im) {
         .n_nodes = im->n_nodes, .n_edges = im->n_edges, .prog_len = im->prog_len,
         .start_node = im->start, .visits_idx = im->visits_idx,
         .max_steps = im->max_steps, .max_stack = im->max_stack,
-        .safe_node = im->safe };
+        .safe_node = im->safe, .policy_hash = policy_hash_of(im) };
     __u32 active = bank ^ 1u;
     struct ppt_config old;
     if (bpf_map_lookup_elem(m->config, &active, &old) == 0) cfg.drop_mask = old.drop_mask;

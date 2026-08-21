@@ -112,9 +112,10 @@ the certified reference:
 
 This is the review's "receipts carrying pre-state": it restores the statefulness a current-state-only
 map flattens, and keeps the audit trail linear-to-write but tamper-evident in `O(log n)` via the tree.
-Honest scope: `policy_hash` is a 64-bit prefix of the image sha256 (enough to bind; the full hash is in
-the signed manifest), and the harness sets it from the verified table — wiring the loader's attach path
-to stamp it, and the OTS anchor of the root itself, are the remaining steps.
+Honest scope: `policy_hash` is a 64-bit prefix of the image sha256 (the full hash is in the signed
+manifest); the **loader stamps it at load** — `populate_maps` computes `sha256(image)`, and it matches
+`policy_pack`'s manifest `image_sha256` (verified), so a receipt cross-references the signed pack. The
+OTS anchor of the Merkle root is the remaining step.
 
 ## Cross-substrate (the same signed policy, everywhere)
 

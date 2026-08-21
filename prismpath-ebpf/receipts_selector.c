@@ -77,11 +77,15 @@ int main(int argc, char **argv) {
     int rb_fd   = bpf_map__fd(bpf_object__find_map_by_name(obj, "receipt_map"));
     if (prog_fd < 0 || st_fd < 0 || cfg_fd < 0 || rb_fd < 0) { fprintf(stderr, "prog/map missing\n"); return 1; }
 
-    /* stamp policy_hash into the config the program reads, so every receipt is bound to this image */
+    /* populate_maps already stamped policy_hash at LOAD (the attach-path behavior); confirm it matches
+     * sha256(table), so receipts are bound to exactly this image by the loader, not by this harness. */
     __u32 k0 = 0; struct ppt_config cfg;
     if (bpf_map_lookup_elem(cfg_fd, &k0, &cfg)) { perror("config read"); return 1; }
-    cfg.policy_hash = policy_hash;
-    if (bpf_map_update_elem(cfg_fd, &k0, &cfg, BPF_ANY)) { perror("config write"); return 1; }
+    if (cfg.policy_hash != policy_hash) {
+        fprintf(stderr, "policy_hash mismatch: loader stamped %016llx, expected %016llx\n",
+                (unsigned long long)cfg.policy_hash, (unsigned long long)policy_hash);
+        return 1;
+    }
 
     struct ring_buffer *rb = ring_buffer__new(rb_fd, rb_cb, NULL, NULL);
     if (!rb) { fprintf(stderr, "ringbuf open failed\n"); return 1; }
