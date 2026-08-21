@@ -111,13 +111,16 @@ int main(int argc, char **argv) {
     }
     ring_buffer__poll(rb, 100);                             /* final drain */
 
-    int mism = 0;
+    int mism = 0, nonmono = 0;
+    unsigned long long t_first = g_nr ? g_rcpts[0].t_ns : 0, t_last = t_first;
     for (int k = 0; k < g_nr && k < ne; k++) {
         if (g_rcpts[k].prev_node != exp_prev[k] || g_rcpts[k].event != exp_ev[k] ||
             g_rcpts[k].next_node != exp_next[k] || g_rcpts[k].policy_hash != policy_hash)
-            mism++;
+            mism++;                                            /* DECISION content = the deterministic oracle */
+        if (k > 0 && g_rcpts[k].t_ns < g_rcpts[k - 1].t_ns) nonmono++;   /* TIME only moves forward */
+        t_last = g_rcpts[k].t_ns;
     }
-    int ok = (g_nr == ne) && (mism == 0);
+    int ok = (g_nr == ne) && (mism == 0) && (nonmono == 0);
 
     uint8_t root[32]; merkle_root(g_rcpts, g_nr, root);
     char hex[65]; for (int i = 0; i < 32; i++) sprintf(hex + 2 * i, "%02x", root[i]);
@@ -126,11 +129,13 @@ int main(int argc, char **argv) {
     printf("SELECTOR RECEIPTS (in-kernel ringbuf, replaying the frozen corpus):\n");
     printf("  %d receipts for %d committed transitions (one per event) -> %s\n",
            g_nr, ne, g_nr == ne ? "complete log" : "MISSING RECEIPTS");
-    printf("  faithful trail + recorded pre-state + event + policy binding: %d mismatch(es)\n", mism);
+    printf("  DECISIONS (the oracle): faithful trail + pre-state + event + policy binding: %d mismatch(es)\n", mism);
+    printf("  TIME axis: %d non-monotonic timestamp(s); span %.3f ms across the batch\n",
+           nonmono, (double)(t_last - t_first) / 1e6);
     printf("  policy_hash (low64 of sha256 image): %016llx\n", (unsigned long long)policy_hash);
-    printf("  Merkle root over the receipt batch:  %s\n", hex);
+    printf("  Merkle root (decisions + signed time -> per-SESSION anchor): %s\n", hex);
     printf("  (OTS anchor of that root is the held-for-publish step, via the ledger_ots machinery)\n");
-    printf("%s\n", ok ? "PASS - receipts reproduce the certified trail, carry pre-state, and bind to the signed policy"
+    printf("%s\n", ok ? "PASS - receipts reproduce the certified DECISION trail, carry pre-state + signed TIME, bind to the policy"
                       : "FAIL");
     return ok ? 0 : 1;
 }

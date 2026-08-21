@@ -25,6 +25,7 @@ from prismpath.parser import parse_file               # noqa: E402
 
 FLAG_MIGRATE_BY_NAME = 0x02
 FLAG_NODE_NAMES = 0x04
+FLAG_STATEFUL = 0x08
 
 
 def fnv32(s: str) -> int:
@@ -42,6 +43,8 @@ def build(md: str, migration: str, out: str):
     safe = g.meta.get("safe")
     if safe is not None:
         tbl[27] = names.index(safe) & 0xFF                 # signed fail-safe node (flags-word high byte)
+    if str(g.meta.get("stateful", "")).strip().lower() in ("true", "1", "yes"):
+        tbl[26] |= FLAG_STATEFUL                            # declare the resident-FSM mode (signed)
     if migration == "by-name":
         tbl[26] |= FLAG_MIGRATE_BY_NAME
     tbl[26] |= FLAG_NODE_NAMES                              # append the signed per-node name-hash section

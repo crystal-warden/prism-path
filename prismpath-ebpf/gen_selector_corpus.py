@@ -64,6 +64,8 @@ def main():
     # into the HIGH byte of the flags word (offset 26, so byte 27 in LE) so the fail-safe posture rides
     # inside the image — and thus the manifest signature — instead of an unsigned convention. Left 0
     # when undeclared, in which case the reader falls back to the last (most-restrictive) node.
+    if str(g.meta.get("stateful", "")).strip().lower() in ("true", "1", "yes"):
+        tbl[26] |= 0x08              # FLAG_STATEFUL: declare the resident-FSM mode (signed, not negotiated)
     safe_name = g.meta.get("safe")
     if safe_name is not None:
         tbl[27] = names.index(safe_name) & 0xFF

@@ -81,6 +81,9 @@ struct ppt_reg {
 #define PPT_FLAG_NODE_ATTR       0x01   /* per-node attribute section appended (fabric: LED color) */
 #define PPT_FLAG_MIGRATE_BY_NAME 0x02   /* resident-selector hot-swap: re-resolve by name (else reset-to) */
 #define PPT_FLAG_NODE_NAMES      0x04   /* per-node u32 name-hash section appended (for by-name migration) */
+#define PPT_FLAG_STATEFUL        0x08   /* the policy DECLARES the resident-FSM layer (the mode is a signed
+                                         * property, not negotiated); absent = the stateless, self-healing
+                                         * base. Layer, don't fork: same evaluator + one conformance oracle. */
 
 struct ppt_config {
     __u16 n_fields;
@@ -108,6 +111,7 @@ struct ppt_config {
  * map would flatten. */
 struct ppt_receipt {
     __u64 seq;          /* commit sequence = the new generation counter (monotonic per policy load) */
+    __u64 t_ns;         /* bpf_ktime_get_ns() at commit: the TIME axis, signed into the tamper-evident record */
     __u64 policy_hash;  /* low 64 bits of the loaded image's sha256 (loader-attested) */
     __s32 prev_node;    /* the resident posture BEFORE this event */
     __s32 event;        /* the driving event value (field 0) */

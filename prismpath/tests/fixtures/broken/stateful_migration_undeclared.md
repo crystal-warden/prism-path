@@ -1,5 +1,6 @@
 ---
 start: normal
+stateful: true
 safe: lockdown
 ---
 

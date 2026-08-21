@@ -10,6 +10,32 @@ This is the switch-nav pattern (resident FSM + edge routing) carried down to the
 came out of the fully-in-fabric switch navigation: once the interpreter is a resident FSM on one
 substrate, it is one on all of them, because every target's evaluate takes an arbitrary start node.
 
+## An option, not the substrate (stateless stays the default)
+
+Statefulness is an **opt-in, signed profile**, exactly like `packing: spiral` — not a new substrate. The
+stateless `ppt_xdp` base is the default: every packet carries its own start node, the decision is
+re-derived from scratch, nothing persists, so a corrupted packet corrupts nothing downstream and a
+Zeckendorf-framed field self-heals on the next packet. `ppt_select` is that same evaluator (byte for
+byte) plus one resident-state *driver* — a **layer, never a fork**.
+
+The mode is a **signed property of the pack, declared not negotiated**: a policy writes `stateful: true`
+in its frontmatter, which stamps `FLAG_STATEFUL` (flags bit 3) into the image, so both endpoints derive
+the mode from the same signed policy with no runtime handshake. The authoring lint gates completeness (a
+`stateful: true` pack must declare `safe:` + `migration:`; a stateless pack carrying resident-state
+fields is a mode mismatch, warned) — the same author-time discipline as the spiral profile's
+baseline-last rule.
+
+**The invariant that keeps "both" one product, not two:** one signed policy, many materializations, all
+producing **byte-identical decisions against one conformance oracle**. An option may change *how* a
+decision is computed, transported, or stored — never *what* it is. Stateless-wire and stateful-wire must
+decode to the identical posture from the same policy, and the corpus proves it (the evaluator is shared,
+so the 124/124 predicate oracle carries unchanged). The moment a mode changed the decision it would be a
+fork, not an option. Cost stays flat by holding every axis to that one oracle and testing axes
+independently, not their cross-product (transition-coverage, not path-coverage), and by discipline:
+**build each option when a deployment forces it.** Stateless is built; node-state behind a stateless wire
+(this selector) is built. A stateful *wire* — send-on-delta/keyframe as a maintained transport — stays a
+*designed* profile until a bandwidth-starved regime earns it.
+
 ## Verified (in-kernel, this box: kernel 6.17, clang 18, BTF)
 
 `ppt_select.bpf.c` builds clean and loads past the verifier; driven with the signed
@@ -143,10 +169,14 @@ the certified reference:
   every receipt's `next_node` reproduces the certified posture trail, its `prev_node` is the posture
   before the event (chain continuity), its `event` is the driving field, and its `policy_hash` binds to
   the loaded image.
-- A **Merkle root** over the receipt batch is deterministic across runs (`0858c133…`); that root is
-  what an OTS stamp anchors — the same held-for-publish step as the corpus manifest, via the
-  `ledger_ots` machinery. One stamp makes the whole batch tamper-evident; a single altered receipt
-  changes the root.
+- Each receipt also carries a **signed time axis** — `bpf_ktime_get_ns()` at commit, inside the record
+  — so *when* each transition happened rides the tamper-evident object, not a side log. The harness
+  checks the timestamps are monotonic; the **decisions** stay the deterministic oracle (they reproduce
+  the frozen trail every run), while the **time** makes the full receipt per-session.
+- A **Merkle root** over the receipt batch (decisions + time) is therefore a per-session anchor; that
+  root is what an OTS stamp anchors — the same held-for-publish step as the corpus manifest, via the
+  `ledger_ots` machinery. One stamp makes the whole batch tamper-evident; a single altered receipt (or
+  timestamp) changes the root. This is the decision-delta trail: what was decided, in what order, *when*.
 
 This is the review's "receipts carrying pre-state": it restores the statefulness a current-state-only
 map flattens, and keeps the audit trail linear-to-write but tamper-evident in `O(log n)` via the tree.

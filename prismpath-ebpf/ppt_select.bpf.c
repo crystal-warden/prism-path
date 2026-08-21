@@ -498,6 +498,7 @@ int ppt_select_prog(struct xdp_md *ctx)
                 struct ppt_receipt *rcpt = bpf_ringbuf_reserve(&receipt_map, sizeof(*rcpt), 0);
                 if (rcpt) {
                     rcpt->seq = new_seq;
+                    rcpt->t_ns = bpf_ktime_get_ns();   /* the time axis, inside the tamper-evident record */
                     rcpt->policy_hash = scfg ? scfg->policy_hash : 0;
                     rcpt->prev_node = (__s32)cur;
                     rcpt->event = ev_value;

@@ -660,29 +660,30 @@ _MIGRATION_STRATEGIES = ("by-name", "reset-to")
 
 
 def _check_stateful_migration(graph) -> List[Finding]:
-    """Hot-swap safety for RESIDENT selectors (fires ONLY when the flow declares ``safe:`` in its
-    frontmatter — i.e. it carries a fail-safe posture, so it drives resident state that survives a
-    signed hot-swap). A raw resident node INDEX carried into a new policy silently reinterprets the
-    posture, so such a pack must declare how its state migrates across a swap:
-
-      * ``migration: by-name`` — re-resolve the current node by NAME in the new policy (posture
-        continuity; a name that is gone falls back to the fail-safe);
-      * ``migration: reset-to`` — reset the resident state to the fail-safe node on swap (maximally
-        safe discontinuity).
-
-    The choice is signed (a flags bit in the image, like ``safe_node``) so the loader enforces it at
-    swap time and it is tamper-evident. Refusing a stateful pack that declares NEITHER is the gate —
-    the author must decide, exactly as ``packing: spiral`` forces the baseline-last decision."""
-    if not graph.meta.get("safe", "").strip():
-        return []                                        # stateless pack: migration is not applicable
-    mig = graph.meta.get("migration", "").strip().split("=", 1)[0].strip().lower()
-    if mig in _MIGRATION_STRATEGIES:
-        return []
-    return [Finding("error", "stateful-migration-undeclared", None,
-                    "a resident selector (declares `safe:`) must declare `migration: by-name` or "
-                    "`migration: reset-to` — a resident node index carried across a signed hot-swap "
-                    "reinterprets the posture; declare how state migrates (re-resolve by name) or "
-                    "resets (to the fail-safe) on swap")]
+    """Statefulness is an OPT-IN signed profile, exactly like ``packing: spiral`` — not the default. A
+    policy declares ``stateful: true`` to take the resident-FSM LAYER over the stateless, self-healing
+    base; the evaluator is identical either way (one option, one conformance oracle), only state
+    management differs, so the mode must never change the decision. A stateful pack must be complete —
+    it declares a signed hot-swap migration strategy (``migration: by-name``/``reset-to``, alongside a
+    ``safe:`` fail-safe), because a resident node index carried across a reset or a reindexing swap
+    would otherwise reinterpret the posture. The default (no ``stateful:``) is the self-healing base and
+    needs neither; declaring resident-state fields there is a mode mismatch, flagged so the choice stays
+    explicit — declared, not negotiated."""
+    stateful = str(graph.meta.get("stateful", "")).strip().lower() in ("true", "1", "yes")
+    mig = str(graph.meta.get("migration", "")).strip().split("=", 1)[0].strip().lower()
+    has_resident = bool(str(graph.meta.get("safe", "")).strip()) or bool(mig)
+    if stateful:
+        if mig not in _MIGRATION_STRATEGIES:
+            return [Finding("error", "stateful-migration-undeclared", None,
+                            "a `stateful: true` policy must declare `migration: by-name` or "
+                            "`migration: reset-to` — a resident node index carried across a signed "
+                            "hot-swap reinterprets the posture; declare how state migrates or resets")]
+    elif has_resident:
+        return [Finding("warning", "stateless-with-resident-fields", None,
+                        "this policy is stateless (no `stateful: true`) but declares resident-state "
+                        "fields (`safe:`/`migration:`); they are inert on the self-healing base — remove "
+                        "them, or declare `stateful: true` to opt into the resident-FSM layer")]
+    return []
 
 
 def analyze(graph) -> List[Finding]:

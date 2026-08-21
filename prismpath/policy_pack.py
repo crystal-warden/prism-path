@@ -46,6 +46,10 @@ FLAG_MIGRATE_BY_NAME = 0x0002  # flags bit1: resident-selector hot-swap migratio
 FLAG_NODE_NAMES = 0x0004       # flags bit2: a per-node uint32 name-hash section (FNV-1a-32 of each node
                                # name) is appended after the node-attr section — the signed identities the
                                # loader matches for by-name migration across a hot-swap.
+FLAG_STATEFUL = 0x0008         # flags bit3: the policy DECLARES the resident-FSM (stateful) profile. The
+                               # mode is a signed property of the pack, derived by every endpoint from the
+                               # same policy (declared, not negotiated). Absent = the stateless self-healing
+                               # base. The evaluator is identical either way — one option, one oracle.
 
 PACK_FORMAT = "ppt-pack/1"
 
@@ -95,7 +99,8 @@ def read_ppt_header(data: bytes) -> dict:
             "edges": n_edges, "prog_words": prog_len, "start": start,
             "visits_idx": visits_idx, "max_steps": max_steps, "max_stack": max_stack,
             "flags": flagword & 0x00FF, "safe_node": (flagword >> 8) & 0xFF,
-            "migrate_by_name": bool(flagword & FLAG_MIGRATE_BY_NAME)}
+            "migrate_by_name": bool(flagword & FLAG_MIGRATE_BY_NAME),
+            "stateful": bool(flagword & FLAG_STATEFUL)}
 
 
 def validate_image(data: bytes, caps: Optional[dict] = None) -> Tuple[bool, List[str]]:

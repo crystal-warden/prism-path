@@ -1,6 +1,7 @@
 ---
 name: posture_selector_v2
 start: normal
+stateful: true
 safe: lockdown
 migration: by-name
 ---
