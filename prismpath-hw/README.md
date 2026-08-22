@@ -201,6 +201,5 @@ partially proven bound).**
 
 ## Backlog
 
-- [100 MHz fabric clock](backlog/100mhz-pipeline.md); overlap prog fetch / atom eval;
-  ~2× latency win for ~30 lines of RTL, acceptance gates included. Deferred deliberately;
-  PR-sized on purpose.
+- **100 MHz fabric clock**: overlap prog fetch / atom eval; ~2× latency win for ~30 lines of
+  RTL, acceptance gates included. Deferred deliberately; PR-sized on purpose.
