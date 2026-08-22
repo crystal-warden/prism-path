@@ -1,0 +1,72 @@
+{
+  "phase": "foil",
+  "seconds": 120,
+  "band_tier": {
+    "sent": 3564,
+    "delivered": 3448,
+    "delivery_pct": 96.7
+  },
+  "refinement": {
+    "sent": 714,
+    "delivered": 697,
+    "delivery_pct": 97.6
+  },
+  "burst_runlength_hist": {
+    "1": 100,
+    "2": 8
+  },
+  "max_burst": 2,
+  "mean_burst": 1.07,
+  "wrong_symbols": 0,
+  "coherence_pct": 64.1,
+  "links": [
+    {
+      "link": "2->0",
+      "sent": 594,
+      "delivered": 586,
+      "delivery_pct": 98.7,
+      "n_bursts": 7,
+      "max_burst": 2
+    },
+    {
+      "link": "1->0",
+      "sent": 595,
+      "delivered": 566,
+      "delivery_pct": 95.1,
+      "n_bursts": 27,
+      "max_burst": 2
+    },
+    {
+      "link": "1->2",
+      "sent": 595,
+      "delivered": 573,
+      "delivery_pct": 96.3,
+      "n_bursts": 22,
+      "max_burst": 1
+    },
+    {
+      "link": "0->2",
+      "sent": 593,
+      "delivered": 591,
+      "delivery_pct": 99.7,
+      "n_bursts": 2,
+      "max_burst": 1
+    },
+    {
+      "link": "0->1",
+      "sent": 593,
+      "delivered": 568,
+      "delivery_pct": 95.8,
+      "n_bursts": 23,
+      "max_burst": 2
+    },
+    {
+      "link": "2->1",
+      "sent": 594,
+      "delivered": 564,
+      "delivery_pct": 94.9,
+      "n_bursts": 27,
+      "max_burst": 2
+    }
+  ]
+}

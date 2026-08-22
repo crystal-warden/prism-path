@@ -1,0 +1,73 @@
+{
+  "phase": "recovery",
+  "seconds": 120,
+  "band_tier": {
+    "sent": 3554,
+    "delivered": 3466,
+    "delivery_pct": 97.5
+  },
+  "refinement": {
+    "sent": 714,
+    "delivered": 702,
+    "delivery_pct": 98.3
+  },
+  "burst_runlength_hist": {
+    "1": 67,
+    "2": 6,
+    "3": 3
+  },
+  "max_burst": 3,
+  "mean_burst": 1.16,
+  "wrong_symbols": 0,
+  "coherence_pct": 68.4,
+  "links": [
+    {
+      "link": "1->0",
+      "sent": 591,
+      "delivered": 576,
+      "delivery_pct": 97.5,
+      "n_bursts": 14,
+      "max_burst": 2
+    },
+    {
+      "link": "2->0",
+      "sent": 594,
+      "delivered": 576,
+      "delivery_pct": 97.0,
+      "n_bursts": 15,
+      "max_burst": 3
+    },
+    {
+      "link": "0->2",
+      "sent": 592,
+      "delivered": 577,
+      "delivery_pct": 97.5,
+      "n_bursts": 12,
+      "max_burst": 3
+    },
+    {
+      "link": "1->2",
+      "sent": 591,
+      "delivered": 577,
+      "delivery_pct": 97.6,
+      "n_bursts": 14,
+      "max_burst": 1
+    },
+    {
+      "link": "0->1",
+      "sent": 592,
+      "delivered": 573,
+      "delivery_pct": 96.8,
+      "n_bursts": 15,
+      "max_burst": 3
+    },
+    {
+      "link": "2->1",
+      "sent": 594,
+      "delivered": 587,
+      "delivery_pct": 98.8,
+      "n_bursts": 6,
+      "max_burst": 2
+    }
+  ]
+}

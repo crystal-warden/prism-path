@@ -1,0 +1,77 @@
+{
+  "phase": "microwave",
+  "seconds": 120,
+  "band_tier": {
+    "sent": 3564,
+    "delivered": 3311,
+    "delivery_pct": 92.9
+  },
+  "refinement": {
+    "sent": 714,
+    "delivered": 655,
+    "delivery_pct": 91.7
+  },
+  "burst_runlength_hist": {
+    "1": 135,
+    "2": 28,
+    "3": 9,
+    "4": 2,
+    "5": 1,
+    "6": 1,
+    "8": 2
+  },
+  "max_burst": 8,
+  "mean_burst": 1.42,
+  "wrong_symbols": 0,
+  "coherence_pct": 76.5,
+  "links": [
+    {
+      "link": "1->0",
+      "sent": 593,
+      "delivered": 534,
+      "delivery_pct": 90.1,
+      "n_bursts": 39,
+      "max_burst": 8
+    },
+    {
+      "link": "2->0",
+      "sent": 594,
+      "delivered": 585,
+      "delivery_pct": 98.5,
+      "n_bursts": 7,
+      "max_burst": 2
+    },
+    {
+      "link": "1->2",
+      "sent": 593,
+      "delivered": 526,
+      "delivery_pct": 88.7,
+      "n_bursts": 40,
+      "max_burst": 8
+    },
+    {
+      "link": "0->2",
+      "sent": 595,
+      "delivered": 588,
+      "delivery_pct": 98.8,
+      "n_bursts": 7,
+      "max_burst": 1
+    },
+    {
+      "link": "2->1",
+      "sent": 594,
+      "delivered": 526,
+      "delivery_pct": 88.6,
+      "n_bursts": 52,
+      "max_burst": 3
+    },
+    {
+      "link": "0->1",
+      "sent": 595,
+      "delivered": 552,
+      "delivery_pct": 92.8,
+      "n_bursts": 33,
+      "max_burst": 6
+    }
+  ]
+}
