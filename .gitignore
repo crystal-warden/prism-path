@@ -30,3 +30,5 @@ prismpath-telemetry-rs/target/
 /target/
 /target/
 prismpath-ebpf/.sel_tmp/
+# local Claude Code session settings
+.claude/
