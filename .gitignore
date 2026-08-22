@@ -30,5 +30,11 @@ prismpath-telemetry-rs/target/
 /target/
 /target/
 prismpath-ebpf/.sel_tmp/
+# Vivado build outputs (bitstreams/reports are regenerated from rtl/ + vivado/*.tcl)
+prismpath-hw/vivado/build_overlay*/
+prismpath-hw/codec-bench/rtl-tb/sim_build/
+prismpath-hw/codec-bench/rtl-tb/results.xml
+prismpath-hw/codec-bench/rtl-tb/__pycache__/
+
 # local Claude Code session settings
 .claude/

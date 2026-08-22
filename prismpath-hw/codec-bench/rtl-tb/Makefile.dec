@@ -1,0 +1,10 @@
+# cocotb tb: the RTL Zeckendorf decoder vs the same reference generated corpus the encoder used.
+#   make -f Makefile.dec
+SIM ?= verilator
+TOPLEVEL_LANG ?= verilog
+VERILOG_SOURCES = $(PWD)/../../rtl/zeck_dec.sv
+COCOTB_TOPLEVEL = zeck_dec
+COCOTB_TEST_MODULES = test_zeck_dec
+TOPLEVEL = $(COCOTB_TOPLEVEL)
+MODULE = $(COCOTB_TEST_MODULES)
+include $(shell cocotb-config --makefiles)/Makefile.sim

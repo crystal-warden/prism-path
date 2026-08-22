@@ -17,12 +17,20 @@ module zeck_enc #(
     output logic         out_bit,
     output logic         done
 );
-    logic [W-1:0] fib [NFIB];
-    initial begin
-        fib[0] = 32'd1;
-        fib[1] = 32'd2;
-        for (int j = 2; j < NFIB; j++) fib[j] = fib[j-1] + fib[j-2];
-    end
+    // F2..F46 as an explicit constant ROM. NOTE: an initial-block loop (fib[j]=fib[j-1]+fib[j-2])
+    // simulates correctly but Vivado evaluates the RHS against the un-updated array, zeroing fib[2..]
+    // on silicon — so the table is written out. (NFIB must stay 45 to match this pattern.)
+    localparam logic [W-1:0] fib [0:NFIB-1] = '{
+        32'd1, 32'd2, 32'd3, 32'd5, 32'd8,
+        32'd13, 32'd21, 32'd34, 32'd55, 32'd89,
+        32'd144, 32'd233, 32'd377, 32'd610, 32'd987,
+        32'd1597, 32'd2584, 32'd4181, 32'd6765, 32'd10946,
+        32'd17711, 32'd28657, 32'd46368, 32'd75025, 32'd121393,
+        32'd196418, 32'd317811, 32'd514229, 32'd832040, 32'd1346269,
+        32'd2178309, 32'd3524578, 32'd5702887, 32'd9227465, 32'd14930352,
+        32'd24157817, 32'd39088169, 32'd63245986, 32'd102334155, 32'd165580141,
+        32'd267914296, 32'd433494437, 32'd701408733, 32'd1134903170, 32'd1836311903
+    };
 
     typedef enum logic [1:0] {IDLE, SCAN, MARK, EMIT} st_t;
     st_t st;
