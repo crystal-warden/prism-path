@@ -697,6 +697,18 @@ served locally. No number here depends on a cloud API.
 
 ---
 
+### #117 — The control plane moves into the fabric: a signed table decides what the buttons mean, and the fabric hot-swaps signed policies with no processor, certified on silicon (August 2026)
+
+**Claim:** policy hot-swap without re-synthesis and without a processor. A resident fabric FSM (the pack loader) replays a baked, signed policy's load writes into the certified `ppt_axi` slave byte for byte as the PS would, so the certified interpreter and its conformance carry untouched. A second tiny match-action table (the control interpreter) governs the controls themselves: which policy a button installs, and what every button means, is signed policy rather than wiring, and a meta-swap flips the live profile and re-programs the decision policy in one press.
+
+**Method:** `prismpath-hw/rtl/` additions (`ppt_pack_loader`, `ppt_ctrl_interp`, `ppt_ctrl_plane`, `ppt_axi_wmux`, `ppt_field_ctrl`, `ctrl_in`, `ppt_datapath_finale`) on top of the untouched certified `ppt_interp`/`ppt_axi`; per module cocotb testbenches (`rtl-tb/`); `tools/gen_pack_svh.py` compiles the signed demo policies into the baked ROMs, gated by parse-back parity. Synthesis: Vivado 2023.2, all timing constraints met at 50 MHz. Silicon: `pynq/finale_cert.py` on the Arty Z7-20, button presses injected through a debug GPIO that ORs into the same conditioned path as the physical buttons, decisions read back over the certified PS evaluate path.
+
+**Result:** **15/15 silicon checks.** The headline: a fabric-initiated swap back to the baseline policy restored the PS-loaded decisions **exactly** (seven probes, decision-exact), so the loader's replay is indistinguishable from the processor's. The swap to the alternate pack changed decisions (the swap is real); an out-of-range swap request was refused by the loader's guard; the meta-swap walk passed end to end (profile flip, switches becoming severity, mute, color cycle, decision-arm reading the governed reference 200 and 1800 under severe bias). **Honest scope:** the baseline policy's probes returned a uniform decision, so the parity leg is proven under identical stimulus rather than across a diverse decision surface (the alternate pack leg supplies the behavioral difference). The baked packs were signature verified at generation time, not re-verified in fabric at swap time; in-fabric signature verification is the named follow on. Bring-up note, kept per discipline: one ARM wedge occurred during bring-up from an MMIO probe at a stale hardcoded address before an overlay load; recovered by power cycle; the rule (derive addresses from the current design's hardware handoff, never probe blind) is recorded in the bench runbook.
+
+**Provenance:** commit `17f1a48`: `prismpath-hw/rtl/` (modules above), `prismpath-hw/rtl-tb/`, `prismpath-hw/tools/gen_pack_svh.py`, `prismpath-hw/vivado/build_overlay_finale.tcl` + `finale.xdc`, `prismpath-hw/pynq/finale_cert.py`, `prismpath-hw/evidence/finale_cert_2026-08-23.{json,txt}`. Board: Digilent Arty Z7-20 (xc7z020clg400-1), PYNQ image.
+
+---
+
 ## Revision history
 
 - **v1** (July 2026 consolidation, maintained through row #96, August 2026): the original ledger.
