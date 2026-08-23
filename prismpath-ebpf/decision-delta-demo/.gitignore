@@ -1,0 +1,4 @@
+# build artifacts (rebuilt on the delivery box per RUNBOOK)
+sel_forward_receipts
+ppt_select.bpf.o
+*.out
