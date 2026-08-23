@@ -1,0 +1,10 @@
+# cocotb tb: ctrl_in (switch/button conditioning: sync + debounce + one-shot press).
+SIM ?= verilator
+TOPLEVEL_LANG ?= verilog
+VERILOG_SOURCES = $(PWD)/../rtl/ctrl_in.sv
+EXTRA_ARGS += -GTHRESH=8
+COCOTB_TOPLEVEL = ctrl_in
+COCOTB_TEST_MODULES = test_ctrl_in
+TOPLEVEL = $(COCOTB_TOPLEVEL)
+MODULE = $(COCOTB_TEST_MODULES)
+include $(shell cocotb-config --makefiles)/Makefile.sim

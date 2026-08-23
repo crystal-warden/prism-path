@@ -1,0 +1,21 @@
+== finale silicon cert ==
+overlay loaded, magic ok, gpio_dbg mapped
+  PASS  A0 reset state: profile 0, not loading  (status=0x00)
+  PASS  A1 PS-mode load + evaluate (certified path intact)  (decisions=[(4, 4), (4, 4), (4, 4), (4, 4), (4, 4), (4, 4), (4, 4)])
+  PASS  B1 loader ran and finished
+  PASS  B2 policy actually changed  ([(2, 0), (2, 0), (2, 0), (2, 0), (2, 0), (2, 0), (2, 0)] vs [(4, 4), (4, 4), (4, 4), (4, 4), (4, 4), (4, 4), (4, 4)])
+  PASS  C1 loader ran and finished
+  PASS  C2 HEADLINE: fabric-loaded == PS-loaded, decision-exact  ([(4, 4), (4, 4), (4, 4), (4, 4), (4, 4), (4, 4), (4, 4)] vs [(4, 4), (4, 4), (4, 4), (4, 4), (4, 4), (4, 4), (4, 4)])
+  PASS  E1 out-of-range swap refused (never loading)
+  PASS  D1 meta-swap: profile flipped by signed table
+  PASS  D2 switches now mean severity
+  PASS  D3 BTN1 now mutes
+  PASS  D4 mute releases
+  PASS  D5 BTN0 now cycles color
+  PASS  D6 decision-arm: POT_NOW = governed ref  (POT_NOW=200)
+  PASS  D7 armed + severe bias  (POT_NOW=1800)
+  PASS  D8 meta-swap back: profile 0
+
+CERT PASS: 15/15 checks
+FINALE_CERT {"pass": true, "checks": [["A0 reset state: profile 0, not loading", true], ["A1 PS-mode load + evaluate (certified path intact)", true], ["B1 loader ran and finished", true], ["B2 policy actually changed", true], ["C1 loader ran and finished", true], ["C2 HEADLINE: fabric-loaded == PS-loaded, decision-exact", true], ["E1 out-of-range swap refused (never loading)", true], ["D1 meta-swap: profile flipped by signed table", true], ["D2 switches now mean severity", true], ["D3 BTN1 now mutes", true], ["D4 mute releases", true], ["D5 BTN0 now cycles color", true], ["D6 decision-arm: POT_NOW = governed ref", true], ["D7 armed + severe bias", true], ["D8 meta-swap back: profile 0", true]]}
+EXIT=0

@@ -1,0 +1,14 @@
+{
+  "_comment": "The signed control table: (profile, button) -> action. Mirrors the sim-verified mock in ppt_ctrl_interp.sv exactly (BTN2 default kept: decision-input arm/release). META arg = {new_profile bit7, pack_index bits6:0}.",
+  "nbtn": 4,
+  "entries": [
+    {"profile": 0, "btn": 0, "act": "SWAP",  "arg": 0},
+    {"profile": 0, "btn": 1, "act": "SWAP",  "arg": 1},
+    {"profile": 0, "btn": 2, "act": "SWAP",  "arg": 2},
+    {"profile": 0, "btn": 3, "act": "META",  "arg": 129},
+    {"profile": 1, "btn": 0, "act": "COLOR", "arg": 0},
+    {"profile": 1, "btn": 1, "act": "MUTE",  "arg": 0},
+    {"profile": 1, "btn": 2, "act": "DECIN", "arg": 0},
+    {"profile": 1, "btn": 3, "act": "META",  "arg": 0}
+  ]
+}

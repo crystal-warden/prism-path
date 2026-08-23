@@ -1,0 +1,10 @@
+# cocotb tb: the fabric policy-pack loader (AXI master replaying a baked policy into ppt_axi).
+SIM ?= verilator
+TOPLEVEL_LANG ?= verilog
+VERILOG_SOURCES = $(PWD)/../rtl/ppt_pack_loader.sv
+COCOTB_TOPLEVEL = ppt_pack_loader
+COCOTB_TEST_MODULES = test_ppt_pack_loader
+TOPLEVEL = $(COCOTB_TOPLEVEL)
+MODULE = $(COCOTB_TEST_MODULES)
+EXTRA_ARGS += -I$(PWD)/../rtl
+include $(shell cocotb-config --makefiles)/Makefile.sim
