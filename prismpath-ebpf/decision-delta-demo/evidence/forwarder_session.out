@@ -1,0 +1,17 @@
+FORWARD(receipts): signed posture_selector deciding; events udp/9500 -> send-on-delta -> 10.10.10.2:9410 (180s)
+  policy_hash (loader-stamped, low64 of sha256 image): 207748442a7915c8
+  ev=1 -> DELTA normal->elevated  seq=1 t_ns=4568886233244793  sent
+  ev=0 -> hold  elevated->elevated  seq=2 t_ns=4568887733830337  send-on-delta: suppressed
+  ev=1 -> DELTA elevated->lockdown  seq=3 t_ns=4568889233931678  sent
+  ev=0 -> hold  lockdown->lockdown  seq=4 t_ns=4568890734235888  send-on-delta: suppressed
+  ev=0 -> hold  lockdown->lockdown  seq=5 t_ns=4568892234761953  send-on-delta: suppressed
+  ev=2 -> DELTA lockdown->elevated  seq=6 t_ns=4568893735138745  sent
+  ev=2 -> DELTA elevated->normal  seq=7 t_ns=4568895235401429  sent
+  ev=1 -> DELTA normal->elevated  seq=8 t_ns=4568896735793113  sent
+  ev=1 -> DELTA elevated->lockdown  seq=9 t_ns=4568898236392554  sent
+
+DECISION-DELTA SESSION (signed trail):
+  events=9  deltas_sent=6  holds_suppressed=3  stuck=0  receipts=9
+  policy_hash: 207748442a7915c8
+  Merkle root (decisions + signed t_ns -> per-session anchor): 624fb50d31df357f14a6a85775fa69192da6fcc0d182c5dac2a7d82b7ca3842a
+  (OTS anchor of that root is the held-for-publish step, owner-gated)

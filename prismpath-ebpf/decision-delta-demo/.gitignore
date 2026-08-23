@@ -1,4 +1,5 @@
-# build artifacts (rebuilt on the delivery box per RUNBOOK)
-sel_forward_receipts
-ppt_select.bpf.o
-*.out
+# build artifacts (rebuilt on the delivery box per RUNBOOK); scoped to top-level so frozen
+# evidence/ (incl. the forwarder_session.out session summary) is NOT ignored
+/sel_forward_receipts
+/ppt_select.bpf.o
+/*.out
