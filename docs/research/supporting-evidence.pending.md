@@ -6,13 +6,13 @@ free number, instead of editing the main ledger. On merge, the docs session fold
 ledger with correct formatting and clears this file.*
 
 *Format each row exactly per `LEDGER_STANDARDS.md` §1 (Claim / Method / Result + Honest scope /
-Provenance) with a month granularity date. Next free number: **#120**.*
+Provenance) with a month granularity date. Next free number: **#121**.*
 
 ---
 
 <!-- new rows go below this line -->
 
-### #117 — a signed policy drives a resident finite-state machine in the kernel: the stateful selector, conformance certified in-kernel 624/624 (August 2026)
+### #119 — a signed policy drives a resident finite-state machine in the kernel: the stateful selector, conformance certified in-kernel 624/624 (August 2026)
 
 **Claim:** the fixed in-kernel interpreter, unchanged, becomes a RESIDENT finite-state machine by holding its current node in a BPF map — so a signed policy is the *transition function* of a stateful kernel control plane, not just a per-packet decider. Each control packet is one discrete event; the resident posture persists across packets; no userspace is in the loop. This is the fabric switch-navigation pattern (a resident FSM whose transitions route on the policy) carried down to the eBPF decode plane.
 
@@ -22,7 +22,7 @@ Provenance) with a month granularity date. Next free number: **#120**.*
 
 **Provenance:** `prismpath-ebpf/ppt_select.bpf.c`, `prismpath-ebpf/posture_selector.md`, `prismpath-ebpf/gen_selector_corpus.py`, `prismpath-ebpf/cert_selector.c`, `prismpath-ebpf/smoke_selector.c`, `prismpath-ebpf/selector_corpus.json` + `.bin`, `prismpath-ebpf/STATEFUL_SELECTOR.md`, `prismpath-ebpf/loader.c` + `ppt_common.h` (safe_node plumbing), `prismpath/policy_pack.py` (signed `safe_node` + `FLAG_MIGRATE_BY_NAME` header fields + the generic per-node-attribute reframe of the former LED-only `FLAG_COLORS`), `prismpath/analysis.py` + `prismpath/tests/fixtures/broken/stateful_migration_undeclared.md` (the migration lint + its corpus fixture), `prismpath-ebpf/receipts_selector.c` + the `ppt_receipt` (now with the signed `t_ns` time axis) / `policy_hash` / `FLAG_STATEFUL` additions to `ppt_common.h` (ringbuf audit receipts + Merkle anchor + the opt-in signed stateful mode; mode-keyed lint reframe in `prismpath/analysis.py` + `FLAG_STATEFUL` in `policy_pack.py`), `prismpath-ebpf/posture_selector_v2.md` + `gen_migrate_fixtures.py` + `migrate_selector.c` + `migrate_{A,Bname,Breset}.ppt` with the `migrate_node` + `FLAG_NODE_NAMES` additions to `loader.c` / `policy_pack.py` (loader-enforced hot-swap migration); box Linux 6.17 / clang 18 / BTF; transition policy signed with the Ed25519 authority key_id `d519348f`.
 
-### #118 — the ESP-NOW spiral mesh holds integrity under real 2.4 GHz interference: 0 wrong symbols across 8 phases (August 2026)
+### #120 — the ESP-NOW spiral mesh holds integrity under real 2.4 GHz interference: 0 wrong symbols across 8 phases (August 2026)
 
 **Claim:** the decision-preserving spiral mesh (band tier every tick, magnitude refinement every 5th, over ESP-NOW) maintains **integrity** under real 2.4 GHz RF interference — across pulsed, sustained, and attenuating channels the band tier still carries the decision, liveness degrades gracefully, and **zero wrong symbols** are ever decoded. It is the physical, real-RF counterpart to #107's modeled Gilbert-Elliott burst soak.
 
