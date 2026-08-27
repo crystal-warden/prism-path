@@ -1,12 +1,12 @@
 # Supporting Evidence · Validated Results Ledger
 
-**Ledger v2 · rows #1 to #116 · August 2026**
+**Ledger v2 · rows #1 to #123 · August 2026**
 
 *Every claim in the PrismPath papers, backed by a measured result, its provenance, and an honest
 verdict; negative results included. Written to survive a hostile read and to be merge-ready into the
 research paper (`docs/research/paper-routing-spectrum.md`) and engineering white paper
 (`docs/research/whitepaper-engineering.md`). All numbers first party on the GB10 (Grace-Blackwell, unified
-memory). Consolidated July 2026; maintained through row #116 (August 2026).*
+memory). Consolidated July 2026; maintained through row #123 (August 2026).*
 
 > **Rule of use.** No claim ships without its row here (result + provenance + gap).
 >
@@ -755,6 +755,30 @@ served locally. No number here depends on a cloud API.
 
 ---
 
+### #122 — the signed WCET bound holds on silicon AND tracks the signed policy — LA2016 witnesses demo_input <=11 and demo_binary <=8 cycles on the pins (August 2026)
+
+**Claim:** the per-policy WCET bound the authority signs is honored on the physical fabric pins, and it **tracks the signed policy** — swap the signed rule and the signed timing envelope swaps with it, and the silicon honors whichever is loaded, measured on the pins across the full input range. This is the third independent WCET witness (beside the CI theorem prover Z3/BMC and the RTL simulation), extended here to show the witness follows a hot-swap.
+
+**Method:** a Kingst LA2016 logic analyzer taps the interpreter's own pins on Pmod JB — `wcet_tap = {fsm_start, core_done, core_busy, clk_fwd}` (JB1=W14=clk, JB2=Y14=busy, JB3=T11=done, JB4=T10=start, JB5=GND), sampled at 200 MSa/s = 4 samples/cycle on the 50 MHz fabric clock. Two independent per-evaluation cycle counts that must agree: (a) clk rising edges while `busy` is high (drift immune), (b) `busy` pulse width / samples-per-cycle (boundary stable). The method-agreement tolerance was corrected 3/4 -> 1.0 cycle to match the instrument's async 4-samples/cycle resolution (edge-count jitters +/-1 vs the stable width; 3/4 was tighter than the hardware can resolve; `la_wcet_check.py` commit `999b5e9`). Two SIGNED policies were loaded live on the tapped `ppt_datapath` overlay via `dp_load.py` and witnessed in turn: `demo_input` (3-band, signed `wcet_cycles=11`) then `demo_binary` (2-band, signed `wcet_cycles=8`). `sweep_wcet.py` drove repeated free-run captures across a manual pot sweep so the witness reached every branch (the sigrok build rejected `--trigger`; free-run still resolves complete busy windows for a max-cycle measurement).
+
+**Result:** **WCET-ON-PINS PASS for both signed policies.** `demo_input`: worst-case busy window = **9 cycles** (deterministic width) with edge-count <=10, inside the signed **11**-cycle bound, over 9,644 evaluations on silicon. `demo_binary`: global max **7 cycles** across **23,886 evaluations** (branch-coverage histogram spanning the input range: counts at 2/3/4/5/6/7 cycles, peak at 6), inside the signed **8**-cycle bound. The witness **tracks the signed policy**: the same physical instrument, on the same bitstream, reports a different measured envelope for each loaded signed table — a different signed bound, both honored on the pins. **Honest scope:** one board, one bench session; captures were free-run (no hardware trigger); the edge-count method carries +/-1 async-sampling jitter at 4 samples/cycle (the width measure is the authoritative count). The session's raw `.sr` captures were transient and were NOT retained — the recorded verdicts above are the in-session verdict record, and that limitation is stated rather than papered over; the analyzer tooling that produced them is committed, and the SAME rig and method were re-run for the `hyst_band` policy with its verdict record frozen to evidence (#123, `wcet_rewitness_hyst_band.log`). The wcet-pins tooling lives in the no-remote demo bench.
+
+**Provenance:** demo bench `prismpath-hw/wcet-pins/{la_wcet_check.py (commit 999b5e9), sweep_wcet.py, README.md}` (no remote); the tap in the bench `rtl/ppt_datapath.sv` (`wcet_tap`) + `datapath.xdc` (committed in the bench); board Digilent Arty Z7-20 (Zynq-7020) + Kingst LA2016 on Pmod JB; signed policies `demo_input` (`wcet=11`) and `demo_binary` (`wcet=8`), Ed25519 authority key_id `d519348f`. Companion to the original single-policy witness, the fabric hot-swap row #117, and the frozen-verdict successor witness in #123.
+
+---
+
+### #123 — the resident-FSM stateful selector runs fabric-native — a signed hysteresis policy holds a steady band on silicon, certified 4568/4568 against a frozen dual-reference sequence oracle, WCET witnessed on the pins (August 2026)
+
+**Claim:** the stateful selector (a resident FSM whose transition function is a signed policy) is now a **fabric materialization**: the Zynq PL holds the resident node in a register, feeds it back as each evaluate's start, and the decision mode itself (stateful flag + fail-safe node) **rides the signed pack**, never a runtime negotiation. Applied as a hysteresis band controller, the same physical dial that makes an exact stateless policy flicker at a threshold line (measured 7-count XADC noise straddling 665) holds one steady band under the signed deadbands — the flicker fix is a governed, signed, certified policy change, not display smoothing.
+
+**Method:** policy `hyst_band` (three resident bands; enter at +16/leave at -16 around the prior 665/1631 lines: guards 649/681/1615/1647), authored in Markdown with `stateful: true`, `safe: high`, `migration: reset-to`, signed key `d519348f`, analytic WCET 11 cycles in the manifest; the unified table compiler stamps FLAG_STATEFUL/safe-node into the image header byte-identical to the kernel format, and reproduces all three signed demo images byte-identically from their Markdown sources (the deterministic-recompile gate). RTL: one resident register in the finale evaluate FSM (`fsm_node_idx = stateful ? cur_node : start`) — the stateless path is byte-identical, verified by a demo_input regression; AUTO_CTRL gains the stateful+safe bits and a side-effect-free CUR_NODE readback (0x30) so LED and OLED read the same resident authority. Oracle: a frozen 41-stream/4568-event sequence corpus (boundary sweeps, parked-on-the-line jitter from both sides, deadband walks, seeded random, dwell-biased stress), every step agreed between the Python stepper and the certified C target, carrying both per-step and settled (fixpoint) trails. Certification chain: cocotb full-datapath simulation replays the corpus free-running (4568/4568 + stateless regression), synthesis timing-clean (WNS +1.754 ns, 0 failing endpoints), then **silicon**: PS-mode sequence replay through the live fabric interpreter (4568/4568), and a live operator sweep with a 120 s transition recorder — band entries/exits at the signed edges, multi-second parked holds, and a 10 s park check at the 649 exit line: 2000 samples, 6-count analog jitter, **zero band transitions**.
+
+**Result:** **fabric-native resident FSM CERTIFIED on silicon: 4568/4568 sequence events decision-exact + live no-flicker witness + WCET on the pins.** The baked pack ROM carries three signature-verified policies (exact / steady / nav) hot-swappable by button with no processor, each replay ending in its own signed arm word (a non-armed pack emits an explicit disarm — inherited mode is negotiated mode, refused). WCET re-witnessed on the tapped overlay armed from the worst 3-edge node: **16,009 evaluations across an operator pot sweep, global max 9 cycles, inside the signed 11-cycle bound**, 4-count branch histogram (5/6/8/9 cycles) confirming the sweep reached every policy arm, verdict record frozen. **Honest scope:** one board, one bench arc; the live-sweep transition log samples at 10 ms so logged crossing values carry sampler skew (the signed thresholds are proven by the replay legs, not the log); the free-running fabric realizes the settled trail (fixpoint under held input, convergence <= 2 steps proven), while one-step-per-event is the kernel materialization's trail — same signed policy, same single-step oracle; the WCET witness's raw captures were transient with the verdict record frozen (the same honest convention as #122).
+
+**Provenance:** in-repo `prismpath-hw/`: `demo/flows/hyst_band.{md,ppt,json,ppt.manifest.json,ppt.manifest.sig}` + `demo/flows/hyst_corpus.json` + `gen_hyst_corpus.py` (the frozen oracle and its dual-reference generator), `rtl/{ppt_axi.sv, ppt_datapath_finale.sv}` (the resident register + CUR_NODE), `rtl-tb/{Makefile.finale_hyst, test_finale_hyst.py}` (cocotb 4568/4568), `tools/{gen_pack_svh.py, finale_pack.json}` (signed arm words, manifest-relative), `ppt_compile.py` (the unified compiler, byte-identity gated), and `hyst-cert/` (the silicon cert harness, resident-band OLED driver, boot demo service, runners, and `evidence/` — a 33-file SHA256SUMS covering the certification chain, the guided-walkthrough take receipts, and the demo videos by hash; the posted take is `take4_IMG_1751.MOV` sha256 `aee428a5...`, fully receipt-covered). Landed in commits `e8174cb` (fabric arc), `72190e2` (unified compiler), `9ede5ba` (demo landing). Kernel-side companion: the in-kernel selector row #119 — one signed policy, resident state on kernel AND fabric.
+
+---
+
 ## Revision history
 
 - **v1** (July 2026 consolidation, maintained through row #96, August 2026): the original ledger.
@@ -779,10 +803,6 @@ served locally. No number here depends on a cloud API.
   #65 to #71 compliance rows; and the SOC-triage use case was demoted from a headline to its actual
   role as an early homelab origin of the hardware thread. Anchored in
   `prismpath/evidence/ledger_v2.2_2026-08-16.SHA256SUMS` (`.ots` alongside).
-- **v2.5** (August 2026): row #121 folded from staging — the decision-delta object run live across
-  three machines (dev station -> the certified eBPF selector deciding + draining signed t_ns receipts
-  -> the FPGA rendering the posture on its LEDs), send-on-delta, decision-exact. **Anchor pending**:
-  this fold post-dates the v2.4 stamp and rides the next OTS ceremony (not yet anchored).
 - **v2.4** (August 2026): rows #117 to #120 folded: the pure-fabric control plane
   silicon-certified 15/15 on the Arty Z7-20 (#117), the FPGA Zeckendorf codec measured on silicon
   closing Phase C2 (#118), the kernel stateful selector with signed fail-safe, loader-enforced
@@ -792,6 +812,14 @@ served locally. No number here depends on a cloud API.
   paper (the one-voice rewrite), whose hash changed with that revision. Anchored in
   `prismpath/evidence/ledger_v2.4_2026-08-23.SHA256SUMS` (`.ots` alongside); the anchor, not this
   prose, is the authoritative timestamp.
+- **v2.5** (August 2026): rows #121 to #123 folded from staging — the decision-delta object run
+  live across three machines (#121, send-on-delta, decision-exact, signed t_ns receipts), the
+  WCET-on-pins witness tracking a signed policy hot-swap (#122, both bounds honored on silicon,
+  transient-capture limitation stated), and the fabric-native resident-FSM stateful selector
+  (#123, hysteresis band controller certified 4568/4568 on silicon, live no-flicker witness, WCET
+  re-witnessed with the verdict record frozen, the guided demo capture receipted with the posted
+  video bound by hash). Anchored in `prismpath/evidence/ledger_v2.5_2026-08-27.SHA256SUMS`
+  (`.ots` alongside); the anchor, not this prose, is the authoritative timestamp.
 - **v2.3** (August 2026): rows #109 to #116 folded in from staging — the per-evaluate WCET formula
   calibrated cycle exact and signed into every pack manifest, its universal envelope formally
   attacked (the 3E + P correction, a proven base case, the unbounded induction step honestly open),
