@@ -45,3 +45,4 @@ prismpath-hw/hyst-cert/evidence/*.MOV
 prismpath-hw/demo/keys/*.key
 # ESP-IDF build trees
 prismpath-hw/walker-demo/*/build/
+prismpath-hw/hyst-cert/evidence/*.mp4
