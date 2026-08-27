@@ -18,7 +18,7 @@ from ppt_pynq import PptImage                                # noqa: E402
 MANIFEST = json.load(open(HERE / "finale_pack.json"))
 
 
-def golden_from_pptimage(ppt: str, jsn: str, colors_on: bool):
+def golden_from_pptimage(ppt: str, jsn: str, colors_on: bool, pol: dict | None = None):
     """The PS sequence, built from PptImage (independent parse) following load_image order."""
     img = PptImage(ppt, jsn)
     w = [(0x20, 1), (0x00, 0), (0x04, img.visits_idx)]
@@ -38,6 +38,16 @@ def golden_from_pptimage(ppt: str, jsn: str, colors_on: bool):
         if colors is not None:
             for ni, c in enumerate(colors):
                 w += [(0x00, (7 << 16) | ni), (0x04, c)]
+    if pol is not None:
+        # the arm/disarm tail, derived independently from the SIGNED header (stateful+safe) and
+        # the debug view's field index — the mode must ride the pack, never be inherited
+        h = g.policy_pack.read_ppt_header(open(ppt, "rb").read())
+        if pol.get("arm_field"):
+            fidx = json.load(open(jsn))["fields"][pol["arm_field"]]
+            w.append((0x28, ((h["safe_node"] & 0xFF) << 24) | ((fidx & 0xFF) << 16)
+                     | ((img.start & 0xFF) << 8) | (2 if h["stateful"] else 0) | 1))
+        elif pol.get("disarm"):
+            w.append((0x28, 0))
     return w
 
 
@@ -55,7 +65,7 @@ def test_pack_svh_matches_pptimage_golden():
     writes, starts, lens = parse_svh(svh)
     assert len(writes) == sum(lens)
     for idx, pol in enumerate(MANIFEST["policies"]):
-        golden = golden_from_pptimage(pol["ppt"], pol["json"], pol.get("colors", True))
+        golden = golden_from_pptimage(pol["ppt"], pol["json"], pol.get("colors", True), pol)
         got = writes[starts[idx]: starts[idx] + lens[idx]]
         assert got == golden, f"policy {idx}: emitted writes diverge from the PptImage golden"
 

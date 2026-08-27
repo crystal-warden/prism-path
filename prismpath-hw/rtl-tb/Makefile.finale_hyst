@@ -1,0 +1,17 @@
+# cocotb tb: the FULL finale datapath replaying the frozen hyst_band sequence corpus.
+# The tb is the PS: it replays the signed policy's load writes over the AXI face, arms with the
+# stateful bit, mocks the XADC over DRP, and asserts CUR_NODE (0x30) against trail_settled at
+# every corpus event — plus a stateless demo_input regression on the same silicon image.
+SIM ?= verilator
+TOPLEVEL_LANG ?= verilog
+RTL = $(PWD)/../rtl
+VERILOG_SOURCES = $(RTL)/ppt_interp.sv $(RTL)/ppt_axi.sv $(RTL)/uart_rx.sv \
+                  $(RTL)/zeck_dec.sv $(RTL)/zeck_frame_rx.sv $(RTL)/ctrl_in.sv \
+                  $(RTL)/ppt_ctrl_interp.sv $(RTL)/ppt_pack_loader.sv $(RTL)/ppt_ctrl_plane.sv \
+                  $(RTL)/ppt_axi_wmux.sv $(RTL)/ppt_field_ctrl.sv $(RTL)/ppt_datapath_finale.sv
+COCOTB_TOPLEVEL = ppt_datapath_finale
+COCOTB_TEST_MODULES = test_finale_hyst
+TOPLEVEL = $(COCOTB_TOPLEVEL)
+MODULE = $(COCOTB_TEST_MODULES)
+EXTRA_ARGS += -I$(RTL)
+include $(shell cocotb-config --makefiles)/Makefile.sim

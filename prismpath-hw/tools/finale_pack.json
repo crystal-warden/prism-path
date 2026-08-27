@@ -1,19 +1,27 @@
 {
-  "_comment": "Arc #4 pack manifest. Policy 0 = the SIGNED switch_nav demo policy (verified against the demo authority key). Policy 1 = the live pot policy (bench artifact, unsigned; swap in the signed finale policies when the demo set is finalized).",
+  "_comment": "Walkthrough pack roster (2026-08-26): BTN0 exact / BTN1 steady / BTN2 nav. 0 = demo_input (signed, stateless, pot-armed: the exact policy that flickers at a parked line). 1 = hyst_band (signed, STATEFUL resident band, pot-armed with stateful+safe bits from its header: the steady policy). 2 = switch_nav (signed display-page navigator; disarm: swap-in drops to PS mode so the dashboard driver runs the nav table on the switches).",
   "policies": [
+    {
+      "ppt": "/home/cwadmin/cwprojects/prismpath-hw/demo/flows/demo_input.ppt",
+      "json": "/home/cwadmin/cwprojects/prismpath-hw/demo/flows/demo_input.json",
+      "colors": true,
+      "arm_field": "pot",
+      "pubkeys": ["/home/cwadmin/cwprojects/prismpath-hw/demo/keys/demo_authority.pub"]
+    },
+    {
+      "ppt": "/home/cwadmin/cwprojects/prismpath-hw/demo/flows/hyst_band.ppt",
+      "json": "/home/cwadmin/cwprojects/prismpath-hw/demo/flows/hyst_band.json",
+      "colors": true,
+      "arm_field": "pot",
+      "pubkeys": ["/home/cwadmin/cwprojects/prismpath-hw/demo/keys/demo_authority.pub"]
+    },
     {
       "ppt": "/home/cwadmin/cwprojects/prismpath-hw/demo-display/switch_nav.ppt",
       "json": "/home/cwadmin/cwprojects/prismpath-hw/demo-display/switch_nav.json",
       "colors": true,
       "arm_field": null,
+      "disarm": true,
       "pubkeys": ["/home/cwadmin/cwprojects/prismpath-hw/demo/keys/demo_authority.pub"]
-    },
-    {
-      "ppt": "/home/cwadmin/cwprojects/prismpath-hw/build/live.ppt",
-      "json": "/home/cwadmin/cwprojects/prismpath-hw/build/live.json",
-      "colors": true,
-      "arm_field": null,
-      "pubkeys": null
     }
   ],
   "ctrl_table": "/home/cwadmin/cwprojects/prismpath/prismpath-hw/tools/ctrl_table.json"

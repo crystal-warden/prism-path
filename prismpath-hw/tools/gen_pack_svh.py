@@ -78,7 +78,9 @@ def load_writes(sel: int, addr: int, data: int) -> list[tuple[int, int]]:
     return [(R_SEL_ADDR, ((sel & 0xFFFF) << 16) | (addr & 0xFFFF)), (R_DATA, data & 0xFFFFFFFF)]
 
 
-def policy_writes(img: dict, colors: list[int] | None, arm: tuple[int, int] | None) -> list[tuple[int, int]]:
+def policy_writes(img: dict, colors: list[int] | None,
+                  arm: tuple[int, int, bool, int] | None,
+                  disarm: bool = False) -> list[tuple[int, int]]:
     """The full PS-identical load sequence for one policy."""
     w: list[tuple[int, int]] = [(R_SOFT_RST, 1)]
     w += load_writes(0, 0, img["visits_idx"])
@@ -96,8 +98,17 @@ def policy_writes(img: dict, colors: list[int] | None, arm: tuple[int, int] | No
         for ni, c in enumerate(colors):
             w += load_writes(7, ni, c)
     if arm is not None:
-        fidx, start = arm
-        w.append((R_AUTO_CTRL, ((fidx & 0xFFFF) << 16) | ((start & 0xFF) << 8) | 1))
+        fidx, start, stateful, safe = arm
+        # [31:24] safe_node, [23:16] pot_fidx, [15:8] start, [1] stateful, [0] enable — the
+        # stateful/safe bits come from the SIGNED image header (FLAG_STATEFUL + safe byte), so the
+        # resident-FSM mode rides the signed replay and a manifest cannot contradict the pack.
+        w.append((R_AUTO_CTRL, ((safe & 0xFF) << 24) | ((fidx & 0xFF) << 16)
+                  | ((start & 0xFF) << 8) | ((2 if stateful else 0)) | 1))
+    elif disarm:
+        # a pack that is not auto-armed DECLARES that too: swap-in drops to PS mode instead of
+        # inheriting the previous policy's arm word (mode inherited = mode negotiated — the hole
+        # the stateful bit must never fall into)
+        w.append((R_AUTO_CTRL, 0))
     return w
 
 
@@ -111,14 +122,16 @@ def emit_pack_svh(policies: list[dict], out: Path) -> None:
         arm = None
         if p.get("arm_field"):
             dbg = json.load(open(p["json"]))
-            arm = (dbg["fields"][p["arm_field"]], img["start"])
+            h = policy_pack.read_ppt_header(data)
+            arm = (dbg["fields"][p["arm_field"]], img["start"], h["stateful"], h["safe_node"])
+        disarm = bool(p.get("disarm"))
         verified = "UNSIGNED"
         if p.get("pubkeys"):
             ok, reasons, man = policy_pack.verify_pack(p["ppt"], p["pubkeys"])
             if not ok:
                 raise SystemExit(f"REFUSED: {p['ppt']} failed verification: {reasons}")
             verified = f"verified envelope={man['envelope_id']} v{man['version']} key={man['key_id'][:8]}"
-        w = policy_writes(img, colors, arm)
+        w = policy_writes(img, colors, arm, disarm)
         starts.append(len(all_writes))
         lens.append(len(w))
         all_writes += w

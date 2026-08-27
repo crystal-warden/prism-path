@@ -64,8 +64,8 @@ module ppt_datapath_finale #(
   localparam int   NB          = (MAX_NODES <= 1) ? 1 : $clog2(MAX_NODES);
 
   // --- hooks to/from ppt_axi ---
-  wire        auto_mode;
-  wire [15:0] auto_start_node, auto_pot_fidx;
+  wire        auto_mode, auto_stateful;
+  wire [15:0] auto_start_node, auto_pot_fidx, auto_safe_node;
   wire        core_done, core_match, core_busy;
   wire [15:0] core_target;
   wire        o_load_en;
@@ -168,7 +168,29 @@ module ppt_datapath_finale #(
   wire [15:0] fsm_fld_idx  = auto_pot_fidx;
   wire [1:0]  fsm_fld_type = TY_INT;
   wire [31:0] fsm_fld_val  = {20'd0, eff_field};
-  wire [15:0] fsm_node_idx = auto_start_node;
+
+  // --- the resident band: cur_node is the stateful selector's one state cell, fabric-native ---
+  // Stateless packs (AUTO_CTRL[1]=0, the reset default) bypass it entirely: fsm_node_idx =
+  // auto_start_node, the certified path byte for byte. Reset-to migration: mid-swap (cp_loading)
+  // parks the resident state on the SIGNED fail-safe, so an incomplete swap fails closed; a
+  // completed swap ends with the incoming pack's replayed arm write, and the rising auto-live edge
+  // performs the deliberate clean start from the incoming pack's signed start node.
+  reg  [15:0] cur_node;
+  reg         auto_live_d;
+  wire        auto_live = auto_mode && !cp_loading;
+  wire [15:0] fsm_node_idx = auto_stateful ? cur_node : auto_start_node;
+  always @(posedge clk) begin
+    if (!resetn) begin
+      cur_node <= 16'd0; auto_live_d <= 1'b0;
+    end else begin
+      auto_live_d <= auto_live;
+      if (auto_mode && cp_loading)        cur_node <= auto_safe_node;   // swap in flight: fail closed
+      else if (!auto_mode)                cur_node <= auto_start_node;  // disarmed: parked on start
+      else if (auto_live && !auto_live_d) cur_node <= auto_start_node;  // arm edge: deliberate start
+      else if (auto_stateful && core_done && core_match)
+                                          cur_node <= core_target;      // one step along a signed edge
+    end
+  end
 
   ppt_axi #(
     .MAX_FIELDS(MAX_FIELDS), .MAX_ATOMS(MAX_ATOMS), .MAX_NODES(MAX_NODES),
@@ -184,7 +206,10 @@ module ppt_datapath_finale #(
     .fsm_fld_we(fsm_fld_we), .fsm_fld_idx(fsm_fld_idx), .fsm_fld_type(fsm_fld_type),
     .fsm_fld_val(fsm_fld_val), .fsm_start(fsm_start), .fsm_node_idx(fsm_node_idx),
     .pot_now({4'd0, eff_field}),               // POT_NOW (0x2C) reflects the governed field
-    .auto_mode(auto_mode), .auto_start_node(auto_start_node), .auto_pot_fidx(auto_pot_fidx),
+    .dbg_cur_node(cur_node),                   // CUR_NODE (0x30): the resident band, PS-readable
+    .auto_mode(auto_mode), .auto_stateful(auto_stateful),
+    .auto_start_node(auto_start_node), .auto_pot_fidx(auto_pot_fidx),
+    .auto_safe_node(auto_safe_node),
     .core_busy(core_busy), .core_done(core_done), .core_match(core_match),
     .core_target(core_target),
     .o_load_en(o_load_en), .o_load_sel(o_load_sel), .o_load_addr(o_load_addr),
