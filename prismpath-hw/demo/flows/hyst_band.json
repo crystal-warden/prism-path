@@ -1,0 +1,120 @@
+{
+ "format": "PPT",
+ "version": 1,
+ "max_steps": 25,
+ "fields": {
+  "pot": 0
+ },
+ "intern": {
+  "": 0
+ },
+ "atoms": [
+  {
+   "i": 0,
+   "field": "pot",
+   "op": ">=",
+   "type": "int",
+   "val": 681
+  },
+  {
+   "i": 1,
+   "field": "pot",
+   "op": ">=",
+   "type": "int",
+   "val": 1647
+  },
+  {
+   "i": 2,
+   "field": "pot",
+   "op": ">=",
+   "type": "int",
+   "val": 649
+  },
+  {
+   "i": 3,
+   "field": "pot",
+   "op": ">=",
+   "type": "int",
+   "val": 1615
+  }
+ ],
+ "start": 0,
+ "colors_present": true,
+ "stateful": true,
+ "migration": "reset-to",
+ "safe_node": 2,
+ "wcet_cycles": 11,
+ "nodes": [
+  {
+   "i": 0,
+   "name": "low",
+   "color": 2,
+   "edges": [
+    {
+     "target": 1,
+     "condition": "when pot >= 681",
+     "program": [
+      "ATOM 0"
+     ]
+    },
+    {
+     "target": 0,
+     "condition": "else",
+     "program": [
+      "TRUE"
+     ]
+    }
+   ]
+  },
+  {
+   "i": 1,
+   "name": "mid",
+   "color": 4,
+   "edges": [
+    {
+     "target": 2,
+     "condition": "when pot >= 1647",
+     "program": [
+      "ATOM 1"
+     ]
+    },
+    {
+     "target": 1,
+     "condition": "when pot >= 649",
+     "program": [
+      "ATOM 2"
+     ]
+    },
+    {
+     "target": 0,
+     "condition": "else",
+     "program": [
+      "TRUE"
+     ]
+    }
+   ]
+  },
+  {
+   "i": 2,
+   "name": "high",
+   "color": 1,
+   "edges": [
+    {
+     "target": 2,
+     "condition": "when pot >= 1615",
+     "program": [
+      "ATOM 3"
+     ]
+    },
+    {
+     "target": 1,
+     "condition": "else",
+     "program": [
+      "TRUE"
+     ]
+    }
+   ]
+  }
+ ],
+ "host_side_edges": []
+}

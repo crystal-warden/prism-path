@@ -1,0 +1,20 @@
+{
+ "counts": {
+  "atoms": 4,
+  "edges": 7,
+  "max_stack": 1,
+  "max_steps": 25,
+  "nodes": 3,
+  "prog_words": 7
+ },
+ "created": "2026-08-26T21:25:03+00:00",
+ "envelope_id": "hyst_band",
+ "fields": {
+  "pot": "int"
+ },
+ "format": "ppt-pack/1",
+ "image_sha256": "b9c740b9bc1ab3e586144562174fa08c4123eb1c761d9da9f9255587c2484260",
+ "key_id": "d519348f46c4d15346c1968f10220e7ef20025f95455c65f4aaadaa65bdf5727",
+ "version": 1,
+ "wcet_cycles": 11
+}

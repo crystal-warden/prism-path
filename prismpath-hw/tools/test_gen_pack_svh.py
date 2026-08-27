@@ -16,6 +16,13 @@ import gen_pack_svh as g                                     # noqa: E402
 from ppt_pynq import PptImage                                # noqa: E402
 
 MANIFEST = json.load(open(HERE / "finale_pack.json"))
+# manifest paths are relative to the manifest file; resolve so the test is cwd-independent
+for _pol in MANIFEST["policies"]:
+    for _k in ("ppt", "json"):
+        if not Path(_pol[_k]).is_absolute():
+            _pol[_k] = str((HERE / _pol[_k]).resolve())
+if not Path(MANIFEST["ctrl_table"]).is_absolute():
+    MANIFEST["ctrl_table"] = str((HERE / MANIFEST["ctrl_table"]).resolve())
 
 
 def golden_from_pptimage(ppt: str, jsn: str, colors_on: bool, pol: dict | None = None):

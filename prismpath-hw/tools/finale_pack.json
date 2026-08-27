@@ -1,28 +1,34 @@
 {
-  "_comment": "Walkthrough pack roster (2026-08-26): BTN0 exact / BTN1 steady / BTN2 nav. 0 = demo_input (signed, stateless, pot-armed: the exact policy that flickers at a parked line). 1 = hyst_band (signed, STATEFUL resident band, pot-armed with stateful+safe bits from its header: the steady policy). 2 = switch_nav (signed display-page navigator; disarm: swap-in drops to PS mode so the dashboard driver runs the nav table on the switches).",
+  "_comment": "Walkthrough pack roster: BTN0 exact / BTN1 steady / BTN2 nav. Paths are relative to THIS file. 0 = demo_input (signed, stateless, pot-armed). 1 = hyst_band (signed, STATEFUL resident band, arm carries stateful+safe from its header). 2 = switch_nav (signed nav; disarm on swap-in).",
   "policies": [
     {
-      "ppt": "/home/cwadmin/cwprojects/prismpath-hw/demo/flows/demo_input.ppt",
-      "json": "/home/cwadmin/cwprojects/prismpath-hw/demo/flows/demo_input.json",
+      "ppt": "../demo/flows/demo_input.ppt",
+      "json": "../demo/flows/demo_input.json",
       "colors": true,
       "arm_field": "pot",
-      "pubkeys": ["/home/cwadmin/cwprojects/prismpath-hw/demo/keys/demo_authority.pub"]
+      "pubkeys": [
+        "../demo/keys/demo_authority.pub"
+      ]
     },
     {
-      "ppt": "/home/cwadmin/cwprojects/prismpath-hw/demo/flows/hyst_band.ppt",
-      "json": "/home/cwadmin/cwprojects/prismpath-hw/demo/flows/hyst_band.json",
+      "ppt": "../demo/flows/hyst_band.ppt",
+      "json": "../demo/flows/hyst_band.json",
       "colors": true,
       "arm_field": "pot",
-      "pubkeys": ["/home/cwadmin/cwprojects/prismpath-hw/demo/keys/demo_authority.pub"]
+      "pubkeys": [
+        "../demo/keys/demo_authority.pub"
+      ]
     },
     {
-      "ppt": "/home/cwadmin/cwprojects/prismpath-hw/demo-display/switch_nav.ppt",
-      "json": "/home/cwadmin/cwprojects/prismpath-hw/demo-display/switch_nav.json",
+      "ppt": "../demo-display/switch_nav.ppt",
+      "json": "../demo-display/switch_nav.json",
       "colors": true,
       "arm_field": null,
       "disarm": true,
-      "pubkeys": ["/home/cwadmin/cwprojects/prismpath-hw/demo/keys/demo_authority.pub"]
+      "pubkeys": [
+        "../demo/keys/demo_authority.pub"
+      ]
     }
   ],
-  "ctrl_table": "/home/cwadmin/cwprojects/prismpath/prismpath-hw/tools/ctrl_table.json"
+  "ctrl_table": "ctrl_table.json"
 }

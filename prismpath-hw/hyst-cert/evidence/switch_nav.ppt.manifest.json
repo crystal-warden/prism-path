@@ -1,0 +1,23 @@
+{
+ "counts": {
+  "atoms": 8,
+  "edges": 12,
+  "max_stack": 3,
+  "max_steps": 25,
+  "nodes": 4,
+  "prog_words": 60
+ },
+ "created": "2026-08-21T13:22:16+00:00",
+ "envelope_id": "switch_nav",
+ "fields": {
+  "sw1": "int",
+  "sw1_prev": "int",
+  "sw2": "int",
+  "sw2_prev": "int"
+ },
+ "format": "ppt-pack/1",
+ "image_sha256": "8d4348360286792bffa7412f632e7087198a6b6db5d82ceb3571e1cc2b47c817",
+ "key_id": "d519348f46c4d15346c1968f10220e7ef20025f95455c65f4aaadaa65bdf5727",
+ "version": 1,
+ "wcet_cycles": 23
+}

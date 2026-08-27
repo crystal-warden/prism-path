@@ -1,0 +1,106 @@
+{
+ "format": "PPT",
+ "version": 1,
+ "max_steps": 25,
+ "fields": {
+  "armed": 0,
+  "pot": 1,
+  "range": 2
+ },
+ "intern": {
+  "": 0
+ },
+ "atoms": [
+  {
+   "i": 0,
+   "field": "armed",
+   "op": "==",
+   "type": "int",
+   "val": 1
+  },
+  {
+   "i": 1,
+   "field": "pot",
+   "op": ">=",
+   "type": "int",
+   "val": 3000
+  },
+  {
+   "i": 2,
+   "field": "range",
+   "op": "<=",
+   "type": "int",
+   "val": 200
+  }
+ ],
+ "start": 0,
+ "nodes": [
+  {
+   "i": 0,
+   "name": "correlate",
+   "edges": [
+    {
+     "target": 1,
+     "condition": "when armed == 1 and pot >= 3000 and range <= 200",
+     "program": [
+      "ATOM 0",
+      "ATOM 1",
+      "AND",
+      "ATOM 2",
+      "AND"
+     ]
+    },
+    {
+     "target": 2,
+     "condition": "when pot >= 3000 and range <= 200",
+     "program": [
+      "ATOM 1",
+      "ATOM 2",
+      "AND"
+     ]
+    },
+    {
+     "target": 2,
+     "condition": "when armed == 1 and pot >= 3000",
+     "program": [
+      "ATOM 0",
+      "ATOM 1",
+      "AND"
+     ]
+    },
+    {
+     "target": 2,
+     "condition": "when armed == 1 and range <= 200",
+     "program": [
+      "ATOM 0",
+      "ATOM 2",
+      "AND"
+     ]
+    },
+    {
+     "target": 3,
+     "condition": "else",
+     "program": [
+      "TRUE"
+     ]
+    }
+   ]
+  },
+  {
+   "i": 1,
+   "name": "critical",
+   "edges": []
+  },
+  {
+   "i": 2,
+   "name": "warn",
+   "edges": []
+  },
+  {
+   "i": 3,
+   "name": "ok",
+   "edges": []
+  }
+ ],
+ "host_side_edges": []
+}

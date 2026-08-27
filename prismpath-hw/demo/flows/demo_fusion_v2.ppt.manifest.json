@@ -1,0 +1,21 @@
+{
+ "counts": {
+  "atoms": 3,
+  "edges": 5,
+  "max_stack": 2,
+  "max_steps": 25,
+  "nodes": 4,
+  "prog_words": 15
+ },
+ "created": "2026-08-19T04:56:26+00:00",
+ "envelope_id": "demo_fusion",
+ "fields": {
+  "armed": "int",
+  "pot": "int",
+  "range": "int"
+ },
+ "format": "ppt-pack/1",
+ "image_sha256": "55b4c64b4b25c4ef89f41dc1f7aa0fd37cf145a177a1a745f4678b4b05327267",
+ "key_id": "d519348f46c4d15346c1968f10220e7ef20025f95455c65f4aaadaa65bdf5727",
+ "version": 2
+}

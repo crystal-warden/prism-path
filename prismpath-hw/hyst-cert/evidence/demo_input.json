@@ -1,0 +1,79 @@
+{
+ "format": "PPT",
+ "version": 1,
+ "max_steps": 25,
+ "fields": {
+  "pot": 0
+ },
+ "intern": {
+  "": 0
+ },
+ "atoms": [
+  {
+   "i": 0,
+   "field": "pot",
+   "op": ">=",
+   "type": "int",
+   "val": 1631
+  },
+  {
+   "i": 1,
+   "field": "pot",
+   "op": ">=",
+   "type": "int",
+   "val": 665
+  }
+ ],
+ "start": 0,
+ "colors_present": true,
+ "wcet_cycles": 11,
+ "nodes": [
+  {
+   "i": 0,
+   "name": "decide",
+   "color": 0,
+   "edges": [
+    {
+     "target": 1,
+     "condition": "when pot >= 1631",
+     "program": [
+      "ATOM 0"
+     ]
+    },
+    {
+     "target": 2,
+     "condition": "when pot >= 665",
+     "program": [
+      "ATOM 1"
+     ]
+    },
+    {
+     "target": 3,
+     "condition": "else",
+     "program": [
+      "TRUE"
+     ]
+    }
+   ]
+  },
+  {
+   "i": 1,
+   "name": "high",
+   "color": 1,
+   "edges": []
+  },
+  {
+   "i": 2,
+   "name": "mid",
+   "color": 4,
+   "edges": []
+  },
+  {
+   "i": 3,
+   "name": "low",
+   "color": 2,
+   "edges": []
+  }
+ ],
+ "host_side_edges": []
+}

@@ -1,0 +1,20 @@
+{
+ "counts": {
+  "atoms": 1,
+  "edges": 2,
+  "max_stack": 1,
+  "max_steps": 25,
+  "nodes": 3,
+  "prog_words": 2
+ },
+ "created": "2026-08-20T03:17:05+00:00",
+ "envelope_id": "demo_binary",
+ "fields": {
+  "pot": "int"
+ },
+ "format": "ppt-pack/1",
+ "image_sha256": "4d22bbd966d0eb066bfaddf4ae962e5b52ed0f3c0f3a2f7020c6b0583d606a3a",
+ "key_id": "d519348f46c4d15346c1968f10220e7ef20025f95455c65f4aaadaa65bdf5727",
+ "version": 1,
+ "wcet_cycles": 8
+}

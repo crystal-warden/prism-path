@@ -112,22 +112,31 @@ def policy_writes(img: dict, colors: list[int] | None,
     return w
 
 
+_MANIFEST_DIR = Path('.')     # set by main() to the manifest file's parent
+
+
+def _rel(p: str) -> str:
+    """A manifest path, resolved relative to the manifest file (absolute passes through)."""
+    q = Path(p)
+    return str(q if q.is_absolute() else (_MANIFEST_DIR / q))
+
+
 def emit_pack_svh(policies: list[dict], out: Path) -> None:
     all_writes: list[tuple[int, int]] = []
     starts, lens, notes = [], [], []
     for p in policies:
-        data = Path(p["ppt"]).read_bytes()
+        data = Path(_rel(p["ppt"])).read_bytes()
         img = parse_ppt(data)
         colors = image_colors(data) if p.get("colors", True) else None
         arm = None
         if p.get("arm_field"):
-            dbg = json.load(open(p["json"]))
+            dbg = json.load(open(_rel(p["json"])))
             h = policy_pack.read_ppt_header(data)
             arm = (dbg["fields"][p["arm_field"]], img["start"], h["stateful"], h["safe_node"])
         disarm = bool(p.get("disarm"))
         verified = "UNSIGNED"
         if p.get("pubkeys"):
-            ok, reasons, man = policy_pack.verify_pack(p["ppt"], p["pubkeys"])
+            ok, reasons, man = policy_pack.verify_pack(_rel(p["ppt"]), [_rel(k) for k in p["pubkeys"]])
             if not ok:
                 raise SystemExit(f"REFUSED: {p['ppt']} failed verification: {reasons}")
             verified = f"verified envelope={man['envelope_id']} v{man['version']} key={man['key_id'][:8]}"
@@ -135,7 +144,7 @@ def emit_pack_svh(policies: list[dict], out: Path) -> None:
         starts.append(len(all_writes))
         lens.append(len(w))
         all_writes += w
-        notes.append(f"//   [{len(starts)-1}] {Path(p['ppt']).name}  sha256={hashlib.sha256(data).hexdigest()[:16]}"
+        notes.append(f"//   [{len(starts)-1}] {Path(_rel(p['ppt'])).name}  sha256={hashlib.sha256(data).hexdigest()[:16]}"
                      f"  writes={len(w)}  colors={'y' if colors else 'n'}  arm={'y' if arm else 'n'}  {verified}")
     npol, nw = len(policies), len(all_writes)
     lines = [
@@ -185,11 +194,13 @@ def main() -> int:
     ap.add_argument("manifest")
     ap.add_argument("-o", "--outdir", default=str(Path(__file__).resolve().parents[1] / "rtl"))
     a = ap.parse_args()
+    global _MANIFEST_DIR
+    _MANIFEST_DIR = Path(a.manifest).resolve().parent
     man = json.load(open(a.manifest))
     outdir = Path(a.outdir)
     emit_pack_svh(man["policies"], outdir / "ppt_pack.svh")
     if man.get("ctrl_table"):
-        emit_ctrl_svh(man["ctrl_table"], outdir / "ppt_ctrl_pack.svh")
+        emit_ctrl_svh(_rel(man["ctrl_table"]), outdir / "ppt_ctrl_pack.svh")
     return 0
 
 

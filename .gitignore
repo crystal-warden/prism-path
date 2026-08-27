@@ -38,3 +38,10 @@ prismpath-hw/codec-bench/rtl-tb/__pycache__/
 
 # local Claude Code session settings
 .claude/
+
+# demo bench artifacts: videos ride the receipt bundle (hashes in SHA256SUMS), never git
+prismpath-hw/hyst-cert/evidence/*.MOV
+# the demo authority PRIVATE key never enters the repo (the .pub does)
+prismpath-hw/demo/keys/*.key
+# ESP-IDF build trees
+prismpath-hw/walker-demo/*/build/

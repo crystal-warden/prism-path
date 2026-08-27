@@ -1,0 +1,45 @@
+// ppt_datapath_uart_top.v — plain-Verilog BD shim for the PL-native UART variant. Same as
+// ppt_datapath_top.v but exposes uart_rx_pin (the ESP-NOW bridge's serial) instead of wcet_tap.
+module ppt_datapath_uart_top (
+  input  wire        s_axi_aclk,      // named for BD AXI clock/reset inference (drives clk)
+  input  wire        s_axi_aresetn,
+  input  wire [7:0]  s_axi_awaddr,
+  input  wire        s_axi_awvalid,
+  output wire        s_axi_awready,
+  input  wire [31:0] s_axi_wdata,
+  input  wire [3:0]  s_axi_wstrb,
+  input  wire        s_axi_wvalid,
+  output wire        s_axi_wready,
+  output wire [1:0]  s_axi_bresp,
+  output wire        s_axi_bvalid,
+  input  wire        s_axi_bready,
+  input  wire [7:0]  s_axi_araddr,
+  input  wire        s_axi_arvalid,
+  output wire        s_axi_arready,
+  output wire [31:0] s_axi_rdata,
+  output wire [1:0]  s_axi_rresp,
+  output wire        s_axi_rvalid,
+  input  wire        s_axi_rready,
+  output wire        drp_den,
+  output wire [6:0]  drp_daddr,
+  output wire [15:0] drp_di,
+  output wire        drp_dwe,
+  input  wire [15:0] drp_do,
+  input  wire        drp_drdy,
+  input  wire [5:0]  ps_led,
+  output wire [5:0]  led_o,
+  input  wire        uart_rx_pin       // ESP-NOW bridge serial (115200 8N1) straight into the PL
+);
+  ppt_datapath_uart u_ppt_datapath (
+    .clk(s_axi_aclk), .resetn(s_axi_aresetn),
+    .s_axi_awaddr(s_axi_awaddr), .s_axi_awvalid(s_axi_awvalid), .s_axi_awready(s_axi_awready),
+    .s_axi_wdata(s_axi_wdata), .s_axi_wstrb(s_axi_wstrb), .s_axi_wvalid(s_axi_wvalid),
+    .s_axi_wready(s_axi_wready), .s_axi_bresp(s_axi_bresp), .s_axi_bvalid(s_axi_bvalid),
+    .s_axi_bready(s_axi_bready), .s_axi_araddr(s_axi_araddr), .s_axi_arvalid(s_axi_arvalid),
+    .s_axi_arready(s_axi_arready), .s_axi_rdata(s_axi_rdata), .s_axi_rresp(s_axi_rresp),
+    .s_axi_rvalid(s_axi_rvalid), .s_axi_rready(s_axi_rready),
+    .drp_den(drp_den), .drp_daddr(drp_daddr), .drp_di(drp_di), .drp_dwe(drp_dwe),
+    .drp_do(drp_do), .drp_drdy(drp_drdy),
+    .ps_led(ps_led), .led_o(led_o), .uart_rx_pin(uart_rx_pin)
+  );
+endmodule
