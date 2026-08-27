@@ -14,12 +14,26 @@ from __future__ import annotations
 import ast
 import json
 import os
+import re
 import struct
 import sys
 from pathlib import Path
 
-_REPO = os.environ.get("PRISMPATH_REPO",
-                       str(Path(__file__).resolve().parent.parent / "prismpath"))
+def _find_repo() -> str:
+    """The prismpath repo root: PRISMPATH_REPO env override, else the nearest ancestor that
+    holds the `prismpath` package (works from the in-repo tree and a sibling checkout alike)."""
+    env = os.environ.get("PRISMPATH_REPO")
+    if env:
+        return env
+    for anc in Path(__file__).resolve().parents:
+        if (anc / "prismpath" / "__init__.py").exists():
+            return str(anc)
+        if (anc / "prismpath" / "prismpath" / "__init__.py").exists():
+            return str(anc / "prismpath")
+    return str(Path(__file__).resolve().parent.parent)
+
+
+_REPO = _find_repo()
 if _REPO not in sys.path:
     sys.path.insert(0, _REPO)
 
@@ -40,6 +54,29 @@ _TY_NAME = {TY_NONE: "none", TY_BOOL: "bool", TY_INT: "int", TY_STR: "str"}
 _AST_OP = {ast.Eq: OP_EQ, ast.NotEq: OP_NE, ast.Lt: OP_LT, ast.LtE: OP_LE,
            ast.Gt: OP_GT, ast.GtE: OP_GE}
 _FLIP = {OP_LT: OP_GT, OP_LE: OP_GE, OP_GT: OP_LT, OP_GE: OP_LE, OP_EQ: OP_EQ, OP_NE: OP_NE}
+
+# Per-node LED color, authored in the node prose ("RGB LEDs <color>") and compiled INTO the signed
+# table so the fabric — not the host — drives the light. 6-bit code {LD5[2:0], LD4[2:0]}, each a
+# {R,G,B} bit; only LD4 (low 3 bits) is used today. Colors are additive: a flow with no LED prose
+# sets the header flags word to 0 and appends no color section, so it stays byte-identical to a
+# pre-color build (the frozen corpus is untouched). See TABLE_FORMAT.md.
+FLAG_COLORS = 0x0001
+# Resident-FSM (stateful selector) declarations, byte-identical to the kernel image flags
+# (prismpath-ebpf/ppt_common.h): the mode is a signed property of the pack, declared not negotiated.
+# safe_node rides the high byte of the same flags word (offset 26), covered by the image hash.
+FLAG_MIGRATE_BY_NAME = 0x0002
+FLAG_STATEFUL        = 0x0008
+_LED_COLORS = {"red": 0x01, "green": 0x02, "blue": 0x04, "yellow": 0x03, "amber": 0x03,
+               "cyan": 0x06, "magenta": 0x05, "purple": 0x05, "white": 0x07,
+               "off": 0x00, "none": 0x00}
+_LED_RE = re.compile(r"RGB\s+LEDs?\s+(\w+)", re.IGNORECASE)
+
+
+def parse_led_color(instruction: str) -> int:
+    """A node's LED color from its prose: the word after 'RGB LED(s)'. 0 (off) when absent —
+    non-outcome nodes never light. Unknown color words -> 0."""
+    m = _LED_RE.search(instruction or "")
+    return _LED_COLORS.get(m.group(1).lower(), 0) if m else 0
 
 
 class SubsetError(ValueError):
@@ -70,9 +107,9 @@ def encode_scalar(v, intern: dict) -> tuple:
     raise SubsetError("non-scalar-value", type(v).__name__)
 
 
-# _desugar_chains now lives in prismpath.model_check (imported above) — the ONE normalization the
-# classifier and this compiler share, so `verify --level-m` and the table compiler can never disagree
-# about chained comparisons (SPEC §4.3: tooling SHOULD desugar them).
+# _desugar_chains lives in prismpath.model_check (imported above) — the ONE normalization the
+# classifier and this compiler share, so `verify --level-m` and the table compiler can never
+# disagree about chained comparisons (SPEC §4.3: tooling SHOULD desugar them).
 
 
 class TableImage:
@@ -83,6 +120,10 @@ class TableImage:
         self.atoms: list = []                  # (field_idx, op, ty, val)
         self._atom_ix: dict = {}
         self.nodes: list = []                  # (name, [(target_idx, condition, program)])
+        self.node_colors: list = []            # 6-bit LED color per node (parallel to self.nodes)
+        self.stateful = False                  # frontmatter `stateful: true` -> FLAG_STATEFUL
+        self.migrate_by_name = False           # frontmatter `migration: by-name` -> FLAG_MIGRATE_BY_NAME
+        self.safe_node: int | None = None      # frontmatter `safe: <node>` -> flags[15:8]
         self.start = 0
         self.skipped_tiers: list = []          # host-side (error/event) edges, debug view only
 
@@ -186,10 +227,18 @@ class TableImage:
                 prog_blob.extend(prog)
                 max_stack = max(max_stack, self._stack_depth(prog))
         visits_idx = self.fields.get("visits", VISITS_NONE)
+        colors = (list(self.node_colors) + [0] * len(self.nodes))[:len(self.nodes)]
+        flags = FLAG_COLORS if any(colors) else 0            # 0 -> no color section (byte-identical)
+        if self.stateful:
+            flags |= FLAG_STATEFUL
+        if self.migrate_by_name:
+            flags |= FLAG_MIGRATE_BY_NAME
+        if self.safe_node is not None:
+            flags |= (self.safe_node & 0xFF) << 8            # signed fail-safe, rides the image hash
         out = struct.pack("<IHHHHHHHHHHHH", MAGIC, 1,
                           len(self.fields), len(self.intern), len(self.atoms),
                           len(self.nodes), len(edges), len(prog_blob),
-                          self.start, visits_idx, self.max_steps, max_stack, 0)
+                          self.start, visits_idx, self.max_steps, max_stack, flags)
         for fidx, op, ty, val in self.atoms:
             out += struct.pack("<HBBi", fidx, op, ty, val)
         for eo, ec in node_recs:
@@ -198,6 +247,9 @@ class TableImage:
             out += struct.pack("<HHH", t, po, pc)
         for w in prog_blob:
             out += struct.pack("<H", w)
+        if flags & FLAG_COLORS:                              # appended last: one uint16 color / node
+            for c in colors:
+                out += struct.pack("<H", c & 0xFFFF)
         return out
 
     def debug(self) -> dict:
@@ -206,6 +258,7 @@ class TableImage:
                      OPC_TRUE: "TRUE", OPC_FALSE: "FALSE"}
             return [f"ATOM {w}" if w < 0x8000 else names[w] for w in prog]
         inv_f = {v: k for k, v in self.fields.items()}
+        colors = (list(self.node_colors) + [0] * len(self.nodes))[:len(self.nodes)]
         return {
             "format": "PPT", "version": 1, "max_steps": self.max_steps,
             "fields": self.fields,
@@ -214,7 +267,14 @@ class TableImage:
                        "type": _TY_NAME[ty], "val": val}
                       for i, (f, op, ty, val) in enumerate(self.atoms)],
             "start": self.start,
-            "nodes": [{"i": i, "name": name,
+            "colors_present": bool(any(colors)),
+            "stateful": self.stateful,
+            "migration": ("by-name" if self.migrate_by_name else
+                          ("reset-to" if self.stateful else None)),
+            "safe_node": self.safe_node,
+            "wcet_cycles": (max(sum(2 + max(len(p), 1) for _, _, p in ne) + 2
+                                for _, ne in self.nodes) if self.nodes else 2),
+            "nodes": [{"i": i, "name": name, "color": colors[i],
                        "edges": [{"target": t, "condition": c, "program": dis(p)}
                                  for t, c, p in nedges]}
                       for i, (name, nedges) in enumerate(self.nodes)],
@@ -251,8 +311,24 @@ def compile_flow(graph, max_steps: int = 25) -> TableImage:
                 raise SubsetError("dangling-target", target)
             nedges.append((idx[target], cond, img.compile_condition(cond)))
         img.nodes.append((name, nedges))
+        img.node_colors.append(parse_led_color(graph.nodes[name].instruction))
     img.start = idx[graph.start]
     img.skipped_tiers = skipped
+    # Resident-FSM declarations (frontmatter beyond name/start rides graph.meta). Same author-time
+    # discipline as the kernel lint: a stateful pack must decide its fail-safe and its migration.
+    meta = getattr(graph, "meta", {}) or {}
+    img.stateful = str(meta.get("stateful", "")).strip().lower() in ("true", "yes", "1")
+    if img.stateful:
+        safe = str(meta.get("safe", "")).strip()
+        if not safe:
+            raise SubsetError("stateful-safe-undeclared", graph.start)
+        if safe not in idx:
+            raise SubsetError("dangling-safe-node", safe)
+        img.safe_node = idx[safe]
+        migration = str(meta.get("migration", "")).strip().lower()
+        if migration not in ("by-name", "reset-to"):
+            raise SubsetError("stateful-migration-undeclared", migration or "<missing>")
+        img.migrate_by_name = (migration == "by-name")
     return img
 
 
@@ -332,7 +408,7 @@ def main() -> int:
         Path(args.json_out).write_text(json.dumps(dbg, indent=1) + "\n")
     print(f"{out}: {len(blob)}B  fields={len(img.fields)} interns={len(img.intern)} "
           f"atoms={len(img.atoms)} nodes={len(img.nodes)} "
-          f"edges={sum(len(e) for _, e in img.nodes)}")
+          f"edges={sum(len(e) for _, e in img.nodes)}  wcet={dbg['wcet_cycles']}cyc")
     return 0
 
 
