@@ -19,23 +19,28 @@ import struct
 import sys
 from pathlib import Path
 
-def _find_repo() -> str:
-    """The prismpath repo root: PRISMPATH_REPO env override, else the nearest ancestor that
-    holds the `prismpath` package (works from the in-repo tree and a sibling checkout alike)."""
+def _find_pkg() -> str:
+    """The prismpath PACKAGE directory — the pc._REPO contract this tree's consumers rely on
+    (run_vectors and tb resolve `_REPO / "portable" / "conformance"`). PRISMPATH_REPO overrides
+    (point it at the package dir); else walk ancestors for a `prismpath` package, so the compiler
+    works from the in-repo tree and a sibling checkout alike."""
     env = os.environ.get("PRISMPATH_REPO")
     if env:
         return env
     for anc in Path(__file__).resolve().parents:
-        if (anc / "prismpath" / "__init__.py").exists():
-            return str(anc)
-        if (anc / "prismpath" / "prismpath" / "__init__.py").exists():
-            return str(anc / "prismpath")
-    return str(Path(__file__).resolve().parent.parent)
+        cand = anc / "prismpath"
+        if (cand / "__init__.py").exists():
+            return str(cand)
+        nested = anc / "prismpath" / "prismpath"
+        if (nested / "__init__.py").exists():
+            return str(nested)
+    return str(Path(__file__).resolve().parent.parent / "prismpath")
 
 
-_REPO = _find_repo()
-if _REPO not in sys.path:
-    sys.path.insert(0, _REPO)
+_REPO = _find_pkg()
+_ROOT = str(Path(_REPO).parent)
+if _ROOT not in sys.path:
+    sys.path.insert(0, _ROOT)
 
 from prismpath import predicates                     # noqa: E402
 from prismpath.analysis import _reachable            # noqa: E402

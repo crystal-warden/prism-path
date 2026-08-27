@@ -18,7 +18,7 @@ from prismpath.parser import parse_file
 
 HERE = Path(__file__).resolve().parent
 OUT = HERE / "build" / "flows"
-REPO = Path(pc._REPO)
+REPO = Path(pc._REPO).parent          # pc._REPO is the package dir; the repo root is its parent
 # the repo's real flows (mirrors the `verify --level-m` sweep): authored flows, the gallery,
 # the compliance adapter, the PR demo — not test fixtures, not doc snippets
 FLOW_DIRS = [
