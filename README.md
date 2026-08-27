@@ -20,7 +20,9 @@ being a dial at all and becomes a sensor carried across the room, deciding over 
 chip decodes itself. Every decision in the take wrote a receipt. The camera original is sha256
 `aee428a5...` and its decision stream, the signed policies, and the full certification chain (4568/4568
 silicon replay, live sweep witness, WCET on the pins) ship as one hashed manifest in
-`prismpath-hw/hyst-cert/evidence/`, OTS anchored into Bitcoin. Watch it, then verify it.
+`prismpath-hw/hyst-cert/evidence/`, OTS anchored into Bitcoin. Watch it, then verify it:
+[`prismpath-hw/hyst-cert/VERIFY.md`](prismpath-hw/hyst-cert/VERIFY.md) walks the whole chain in six
+commands, from the video hash down to the Bitcoin block.
 
 Provability is the whole point. Every routing decision is total and decidable (Level M), every safety
 property is model checked, and the exact same signed table runs identically across a dozen substrates,
