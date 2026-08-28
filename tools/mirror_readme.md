@@ -3,14 +3,21 @@
 [![PyPI](https://img.shields.io/pypi/v/prismpath.svg)](https://pypi.org/project/prismpath/)
 &nbsp;[![license: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](https://github.com/crystal-warden/prismpath/blob/main/LICENSE)
 
-**Control flow as data, not code.** Deterministic, diffable AI agent workflows written entirely in
-Markdown. One file is the graph: each `## heading` is a step, each `-> target: condition` an edge. A
-routing spectrum decides every transition at the cheapest tier that can, so you pay for a model only
-where meaning genuinely requires one.
+**A control plane you can prove.** Control flow is data, not code: the policy is one signed,
+diffable Markdown document. One file is the graph: each `## heading` is a step, each
+`-> target: condition` an edge, and every deterministic transition is decidable before anything
+runs. A routing spectrum decides each transition at the cheapest tier that can, so you pay for a
+model only where meaning genuinely requires one.
+
+PrismPath does not try to make a model trustworthy. It puts a small deterministic layer around
+the model, one you can inspect, sign, and prove, and that layer decides what runs, what routes,
+and what is refused. This package is that layer's Python engine and CLI, the reference
+materialization; the same signed table decides byte for byte identically from a Linux kernel to
+FPGA fabric and 8 bit MCUs, with the evidence in the research repo linked below.
 
 ## Use it for
 
-### Deciding what an agent does next, provably
+### Governing what an agent does next, provably
 
 The most common job: route an agent between steps, and be able to prove the routing before it runs.
 `-> t: when <expr>` is a free deterministic edge (first true wins, in document order) and `else` is the
