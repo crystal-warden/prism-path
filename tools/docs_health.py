@@ -59,6 +59,7 @@ for p in mds:
 residue = []
 brx = re.compile(r"\bmdflow\b", re.I)
 MDFLOW_OK = ("examples/mdflow_interop/", "examples/code_nodes/README.md", "docs/guides/code-nodes.md",
+             "docs/guides/tour.md",   # the interop-example citation moved here from the root README
              "docs/research/paper-routing-spectrum.md", "CHANGELOG.md", "ROADMAP.md")
 for p in mds:
     rel = os.path.relpath(p, BASE)
