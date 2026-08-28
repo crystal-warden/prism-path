@@ -202,6 +202,29 @@ milliseconds); the referee is `adapters/fusion/tests/test_refresh_profile.py`, w
 the unbounded wrong-state window without the profile, then proves I6 under single loss, burst loss,
 total blackout, and recovery.
 
+### 2.8 The replay window (normative for tick-carrying bindings)
+
+Replay is handled at three levels, and the honest statement of each is part of the spec. Under the
+keyed layer (§2.5), replay is dead on arrival: the AEAD nonce is implicit from epoch+index, so a
+replayed packet fails authentication. On a **bare-profile stream whose transport binding carries a
+per-frame tick** (the ESP-NOW spiral binding's `[class, tick, value]`, §2.6), a consumer MUST apply a
+tick window: a frame whose tick is not strictly newer than the highest accepted tick is rejected,
+except that a binding declaring a reorder tolerance of `W` accepts a late tick iff it lies within the
+last `W` ticks and has not been seen (the IPsec/DTLS sliding-window shape; default `W = 0`, exact for
+single-hop links that cannot reorder). Rejections carry a distinct cause, `replay-duplicate` or
+`replay-stale`, so a receipt can say which check refused the frame. And a **bare datagram stream with
+no tick-carrying binding has no replay protection at all**: the keyed layer is the answer there, and
+this specification does not pretend otherwise.
+
+The window composes with the refresh profile (§2.7): a captured keyframe replayed after the stream
+moved on would otherwise regress the consumer's mirrored state; behind the window it is rejected as
+`replay-stale`. The tick is the same monotonic counter the receipt trail carries as `seq` where both
+exist; a binding SHOULD NOT run two counters. The window is receiver-side state over bytes already on
+the wire: no frame format changes, stream conformance (§4) is unchanged. Not claimed: the window is
+replay rejection, not authentication — a forger who can construct valid frames can construct fresh
+ticks; origin trust remains the keyed layer's or the transport's job (§6). Reference implementation
+`adapters/telemetry/replay.py`; referee `adapters/fusion/tests/test_replay_window.py`.
+
 ---
 
 ## 3. Normative invariants
@@ -281,6 +304,10 @@ Facet's guarantees are precise, and its boundary is deliberate. Three tiers, fro
    In short: rejection in real time needs the keyed layer; non repudiation over time comes from the
    anchored root; the bare wire alone is self checking, not integrity. Never describe Facet as
    "tamper proof."
+
+   Replay sits in this tier and follows the same gradient (§2.8): the keyed layer rejects it
+   outright; a tick-carrying binding rejects it via the mandatory tick window; a bare datagram
+   stream with neither has no replay protection, and no claim to any.
 
 3. **Execution faithfulness (guaranteed).** For the input Facet processes, the action provably matches
    the Figueroa quantization of that value (I1, proven three ways in `test_fusion_spiral.py`), decided
