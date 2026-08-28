@@ -503,7 +503,7 @@ int ppt_select_prog(struct xdp_md *ctx)
                     rcpt->prev_node = (__s32)cur;
                     rcpt->event = ev_value;
                     rcpt->next_node = target_node;
-                    rcpt->_pad = 0;
+                    rcpt->cause = PPT_CAUSE_NONE;   /* ordinary committed transition */
                     bpf_ringbuf_submit(rcpt, 0);
                 }
                 break;

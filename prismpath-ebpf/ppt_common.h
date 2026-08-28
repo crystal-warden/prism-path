@@ -116,8 +116,13 @@ struct ppt_receipt {
     __s32 prev_node;    /* the resident posture BEFORE this event */
     __s32 event;        /* the driving event value (field 0) */
     __s32 next_node;    /* the resident posture AFTER this event */
-    __s32 _pad;
+    __s32 cause;        /* WHY, from the cause code registry (docs/design/spec-cause-codes.md):
+                         * 0 = PPT_CAUSE_NONE, an ordinary committed transition. Occupies the former
+                         * _pad slot (explicitly written 0 since introduction), so size, layout, and
+                         * every historical receipt byte are unchanged: old receipts read as cause 0. */
 };
+
+#define PPT_CAUSE_NONE 0   /* clean decision; nonzero values come from the registry (append-only) */
 
 /* On-wire context header in packet payload */
 struct ppt_packet_hdr {

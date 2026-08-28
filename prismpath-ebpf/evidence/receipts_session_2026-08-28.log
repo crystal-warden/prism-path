@@ -1,0 +1,13 @@
+SELECTOR CERT (in-kernel, BPF_PROG_TEST_RUN): 624/624 events match, 49/49 streams clean
+FAIL-SAFE (uninitialized state + event): posture 2, most-restrictive 2 -> PASS (a forced reload buys lockdown, not normal)
+PASS - kernel reproduces the frozen trail AND fails safe
+
+SELECTOR RECEIPTS (in-kernel ringbuf, replaying the frozen corpus):
+  624 receipts for 624 committed transitions (one per event) -> complete log
+  DECISIONS (the oracle): faithful trail + pre-state + event + policy binding: 0 mismatch(es)
+  TIME axis: 0 non-monotonic timestamp(s); span 0.675 ms across the batch
+  CAUSE field (spec-cause-codes.md): 0 receipt(s) with nonzero cause on a clean commit
+  policy_hash (low64 of sha256 image): 207748442a7915c8
+  Merkle root (decisions + signed time -> per-SESSION anchor): 58c025ba364c0c7427cb8aa0374bf2c8f45b9780a0c315469fb9c98d2479fa56
+  (OTS anchor of that root is the held-for-publish step, via the ledger_ots machinery)
+PASS - receipts reproduce the certified DECISION trail, carry pre-state + signed TIME, bind to the policy
