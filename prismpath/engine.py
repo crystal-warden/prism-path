@@ -30,6 +30,7 @@ from typing import Callable, List, Optional, Tuple
 
 from prismpath.parser import Graph
 from prismpath.router import EmbeddingRouter
+from prismpath import causes
 from prismpath import predicates
 
 
@@ -48,6 +49,10 @@ class RunResult:
     stopped: str = ""   # 'terminal'|'stuck'|'needs_human'|'waiting'|'max_steps'|'contract_violation'|''
     state: dict = field(default_factory=dict)
     pending: Optional[dict] = None   # set iff stopped=='needs_human': the decision awaiting a human
+    cause: int = causes.CAUSE_NONE   # WHY the run refused/parked/escalated (spec-cause-codes.md);
+                                     # 0 for clean outcomes (terminal, waiting). Finer than `stopped`:
+                                     # the two needs_human sites carry DIFFERENT causes
+                                     # (worker-requested vs below the calibrated floor).
 
 
 def _normalize(outcome) -> Tuple[str, dict]:
@@ -211,6 +216,7 @@ def run(graph: Graph, agent: Callable[[str, str, dict], object], router=None,
                           if p.startswith("type:")]
             if violations:
                 res.stopped = "contract_violation"
+                res.cause = causes.NAMES["route:contract-violation"]
                 res.pending = {"node": node, "reason": "worker output violates the derived contract",
                                "violations": violations}
                 checkpoint(node)
@@ -219,6 +225,7 @@ def run(graph: Graph, agent: Callable[[str, str, dict], object], router=None,
         # Worker-requested human handoff: suspend before routing (the worker owns this decision).
         if fields.get("needs_human"):
             res.stopped = "needs_human"
+            res.cause = causes.NAMES["route:needs-human"]
             res.pending = {"node": node, "reason": fields.get("reason") or text,
                            "candidates": [{"target": t, "condition": c} for t, c in n.edges]}
             checkpoint(node)
@@ -259,6 +266,7 @@ def run(graph: Graph, agent: Callable[[str, str, dict], object], router=None,
                 if human_floor is not None and score is not None and score < human_floor:
                     sims = d.info.get("sims", {})
                     res.stopped = "needs_human"
+                    res.cause = causes.NAMES["route:below-human-floor"]
                     res.pending = {
                         "node": node,
                         "reason": f"router confidence {score:.3f} < human_floor {human_floor}",
@@ -287,6 +295,7 @@ def run(graph: Graph, agent: Callable[[str, str, dict], object], router=None,
                         "label": None, "label_source": None})
             else:
                 res.stopped = "stuck"          # deterministic-only node, nothing matched
+                res.cause = causes.NAMES["route:stuck"]
                 checkpoint(node)
                 break
 
@@ -297,4 +306,5 @@ def run(graph: Graph, agent: Callable[[str, str, dict], object], router=None,
         res.path.append(node)
     else:
         res.stopped = "max_steps"
+        res.cause = causes.NAMES["route:max-steps"]
     return res
