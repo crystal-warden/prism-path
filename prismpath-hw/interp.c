@@ -14,6 +14,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "interp.h"
+
 enum { TY_NONE = 0, TY_BOOL = 1, TY_INT = 2, TY_STR = 3 };
 enum { OP_EQ = 0, OP_NE, OP_LT, OP_LE, OP_GT, OP_GE, OP_TRUTHY };
 enum { OPC_NOT = 0x8000, OPC_AND, OPC_OR, OPC_TRUE, OPC_FALSE };
@@ -194,6 +196,45 @@ static int mode_run(const Image *im, const char *script_path) {
     return 0;
 }
 
+/* ------------------------------------------------------------------ embeddable API
+ * The same certified core, callable from C or C++ (interp.h wraps these in extern "C").
+ * Nothing above this line changes: the API is a thin handle over load_image/evaluate,
+ * so the CLI and an embedding application run the identical certified code paths.
+ * Compile with -DPPT_INTERP_NO_MAIN to omit the CLI entry point when embedding.
+ * Contract notes: a malformed/truncated image exits(2) exactly as the CLI does
+ * (signature and envelope verification run UPSTREAM of this file, in the pack
+ * loader); ppt_reg is layout-identical to the internal register cell. */
+
+struct ppt_image { Image im; };
+
+_Static_assert(sizeof(ppt_reg) == sizeof(Reg), "ppt_reg must match the internal register cell");
+
+ppt_image *ppt_image_open(const char *path) {
+    ppt_image *h = malloc(sizeof *h);
+    if (!h) { fprintf(stderr, "out of memory\n"); exit(2); }
+    load_image(path, &h->im);
+    return h;
+}
+
+void ppt_image_close(ppt_image *h) {
+    if (!h) return;
+    free(h->im.atoms); free(h->im.nodes); free(h->im.edges); free(h->im.prog); free(h);
+}
+
+uint16_t ppt_image_start(const ppt_image *h)    { return h->im.start; }
+uint16_t ppt_image_n_fields(const ppt_image *h) { return h->im.n_fields; }
+uint16_t ppt_image_n_nodes(const ppt_image *h)  { return h->im.n_nodes; }
+
+int ppt_evaluate_node(const ppt_image *h, uint16_t node, const ppt_reg *regs,
+                      uint16_t *out_target) {
+    if (node >= h->im.n_nodes) return PPT_EVAL_BAD_NODE;
+    int e = evaluate(&h->im, node, (const Reg *)regs);
+    if (e >= 0 && out_target)
+        *out_target = h->im.edges[h->im.nodes[node].edge_off + e].target;
+    return e;
+}
+
+#ifndef PPT_INTERP_NO_MAIN
 int main(int argc, char **argv) {
     if (argc != 4 || (strcmp(argv[1], "eval") && strcmp(argv[1], "run"))) {
         fprintf(stderr, "usage: interp eval|run image.ppt input.bin\n");
@@ -203,3 +244,4 @@ int main(int argc, char **argv) {
     load_image(argv[2], &im);
     return strcmp(argv[1], "eval") == 0 ? mode_eval(&im, argv[3]) : mode_run(&im, argv[3]);
 }
+#endif
