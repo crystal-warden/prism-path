@@ -225,6 +225,35 @@ replay rejection, not authentication — a forger who can construct valid frames
 ticks; origin trust remains the keyed layer's or the transport's job (§6). Reference implementation
 `adapters/telemetry/replay.py`; referee `adapters/fusion/tests/test_replay_window.py`.
 
+### 2.9 The concentrator profile (optional capability for bridge uplinks)
+
+The honest arithmetic first: a 2 to 3 byte decision inside a 28 byte IP+UDP envelope is
+header-dominated, so on an unconstrained IP link the per-datagram win over a verbose format is
+smaller than the payload arithmetic suggests. The concentrator is the answer where fleets uplink
+through a bridge: records from many streams concatenate into ONE datagram, amortizing the envelope
+across the fleet. A concentrated frame is a sequence of records `[stream_id][reading]`, packed
+bit-contiguously and padded to the byte only at the datagram: the stream id is itself
+Zeckendorf-coded (ids from 1), and the reading carries no length because the stream's codebook fixes
+its field count — codebook binding (I3) does the framing, so the zero-header property survives
+aggregation. A stream MAY appear multiple times in one datagram (a burst since the last uplink tick).
+
+- **Registry.** The demultiplexer holds a registry mapping stream id to the stream's signed policy
+  (hence its field count and codebook), agreed out of band exactly as the codebook itself (§2.1). The
+  id-to-policy binding is bridge configuration and SHOULD ride a signed artifact.
+- **Strict, fail-closed, whole-datagram.** An unknown stream id or a record truncated mid-reading
+  rejects the ENTIRE datagram with a distinct cause (`concentrator-unknown-stream`,
+  `concentrator-truncated`); trailing zero pad is the only legal tail. Partial delivery is forbidden:
+  a datagram that demuxes differently at two consumers is worse than a lost one.
+- **Composition.** Inner records are the output of existing conforming encoders; this layer never
+  re-encodes, so the certified codec paths are untouched. The kernel decode plane (v1) does not parse
+  concentrated frames; they demux in userspace or in a future decode-plane revision.
+
+Measured, frozen in the referee (28 byte IP+UDP envelope; link-layer framing varies by medium and is
+excluded): a 3-field reading costs 30 bytes per reading as per-node datagrams at any fleet size,
+versus 15.50 at fleet 2, 4.30 at fleet 10, and 2.06 at fleet 50 concentrated. At fleet size one the
+concentrator is pure cost (the stream id buys nothing) and is not the profile's use case. Reference
+implementation `adapters/telemetry/concentrator.py`; referee `adapters/fusion/tests/test_concentrator.py`.
+
 ---
 
 ## 3. Normative invariants
