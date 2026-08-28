@@ -79,9 +79,12 @@ replay depth) that belongs beside the cause on the receipt, not inside the code 
    behavior anywhere changes.
 2. **Python receipts:** `audit_log` events and engine stop records adopt the `cause` field
    (`ENGINE_STOP_TO_CAUSE` is the mapping); additive, next Python-focused session.
-3. **Kernel:** the selector receipt struct gains the `cause` byte; touches the certified eBPF
-   path, so it lands with the next in-kernel re-certification (the same session that closes the
-   #119 receipt-root anchor).
+3. **Kernel: DONE (August 2026).** The selector receipt carries the `cause` byte in the former
+   pad slot (size, layout, and historical receipt bytes unchanged), stamped `PPT_CAUSE_NONE` on
+   clean commits and CHECKED by the receipts harness; re-certified 624/624 in-kernel in the same
+   session that anchored the #119 receipt root (staging row #128). Nonzero kernel causes arrive
+   with the paths that produce them (loader migration receipts, refusal emissions), named
+   follow-on.
 4. **Fabric:** the receipt render gains the byte; held for a hardware re-cert session per the
    standing rule.
 5. **Wire carriage:** a receipt-bearing Facet stream carries the code as a symbol; enters as an
