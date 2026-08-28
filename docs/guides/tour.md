@@ -211,6 +211,91 @@ ships an **attestation tier** that makes a decision *provable and tamper evident
   discovery and resume it later, recording the actor. One primitive serves both HITL override and
   evidence request loops.
 
+## A worked example: support triage, and a pull request as a process change
+
+```markdown
+---
+name: support_triage
+start: classify
+---
+
+## classify
+Read the incoming support ticket. Emit `category`, `amount`, and `sentiment`.
+-> human_review: when category == "billing_dispute" and amount > 500
+-> billing: when category in ("billing", "billing_dispute")
+-> outage: when category == "outage"
+-> retention: when sentiment == "angry"
+-> general: else
+
+## human_review
+A person decides. High-value billing disputes are never auto-routed.
+
+## billing
+Apply the standard billing workflow.
+
+## outage
+Page the on-call engineer.
+
+## retention
+Hand off to the retention team.
+
+## general
+Answer from the support knowledge base.
+```
+
+That file **is** the program. Here it is as the engine sees it, verbatim `prismpath graph` output, not a
+drawing:
+
+```mermaid
+flowchart TD
+    _start(( )) --> classify
+    classify["classify"]
+    human_review(["human_review"])
+    billing(["billing"])
+    outage(["outage"])
+    retention(["retention"])
+    general(["general"])
+    classify -->|"when category == 'billing_dispute' and amou…"| human_review
+    classify -->|"when category in ('billing', 'billing_dispu…"| billing
+    classify -->|"when category == 'outage'"| outage
+    classify -->|"when sentiment == 'angry'"| retention
+    classify -->|"else"| general
+    classDef terminal fill:#e6f7ec,stroke:#3aa76d;
+    class human_review,billing,outage,retention,general terminal;
+```
+
+Because the flow is data, **a pull request is a process change**: the `human_review` rule lands as a
+three-line prose diff, a fixture row asserts it in CI (milliseconds, no model), and merging changes
+production routing with no deploy and no engineer in the loop. **See it run:**
+[`examples/pr_demo/`](../../prismpath/examples/pr_demo/README.md).
+
+## The worker is yours; the control plane is PrismPath's
+
+A node's worker is whatever does the work: an LLM agent, a plain function (a
+[code node](code-nodes.md)), a shell script, or an entire tool run wrapped as a worker. The
+[mdflow interop example](../../prismpath/examples/mdflow_interop/pipeline.md) drives another task
+runner's tasks as PrismPath nodes. Pair PrismPath with a tool like that and you keep its open-ended,
+agentic expression while PrismPath decides *where the run goes next* (provably) and records *what
+happened* (the git Flow-Ledger). You don't trade agentic work for governance; you wrap one inside the
+other. Expression stays with the worker, control and observability stay with the kernel.
+
+## One engine, many domains
+
+The engine owns routing, attestation, and the toolchain; **domains plug in behind ports** (Ingestion,
+Retrieval, Adjudicator, Action/Sink, Attestation, Deferral) with **no domain vocabulary in the core**:
+[`tools/arch_guard.py`](../../tools/arch_guard.py) fails the build if a domain noun leaks inward. Two
+reference adapters ride the same ports, both the deterministic no-LLM class where the Adjudicator is a
+Level M flow (a proof, not a model judgment):
+
+- **Decision-preserving telemetry** (`adapters/telemetry/`): compress a flow's telemetry to the *minimum
+  statistic that still reproduces its routing decisions*, entropy-coded on a self-framing wire and
+  Merkle-verified end to end; benchmark-gated, arch-guard-isolated.
+- **The decision fusion plane** (`adapters/fusion/`): joins any N decision sources into one Level M
+  decidable, provable fused decision on a self-framing wire measured at ~45× under batched JSON
+  (integrity apparatus counted). The v1 worked example fuses a cyber triage verdict with a live IMU's
+  physical posture through one tessellation, proven end to end on the live rig
+  ([evidence #82 to #86](../research/supporting-evidence.md)).
+
 ## Command cheatsheet (kernel: no model required)
 
 ```bash

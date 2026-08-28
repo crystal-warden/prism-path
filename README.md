@@ -34,102 +34,49 @@ which the engine renders as a live before and after graph in the pull request it
 **[Try it in your browser.](https://www.crystalwardenlabs.com/playground)** The kernel runs client side;
 nothing to install, nothing you type leaves the page.
 
-## One signed policy, proven everywhere
+## The primitives, named and measured
 
-- **Every substrate, byte identical.** The same table decides identically from a Linux kernel (eBPF/XDP)
-  to an FPGA fabric to bare metal MCUs across four ISAs (8 bit AVR, ARM Cortex-M33, RISC-V, Xtensa),
-  124/124 on the conformance subset each.
-  [hardware](prismpath-hw/README.md) · [conformance](prismpath/portable/conformance/README.md)
-- **Swapped across a fleet, verified per node.** Three wireless nodes reverify a signed table (refuse, do
-  not downgrade) and flip together with sub millisecond simultaneity, behind a two phase commit.
+- **Figueroa quantization.** The policy derived mapping that reduces a reading to the minimum
+  sufficient statistic for the policy's decisions, with machine checked decision preservation:
+  reconstructing any representative of a cell routes identically to the original reading.
+  [PROTOCOL.md §1](PROTOCOL.md) · [paper](docs/research/paper-facet-figueroa-quantization.md)
+- **The Facet wire.** Decisions travel as self framing symbols with zero per reading header,
+  about a byte and a half per decision on the alert corpus and **66.9x smaller per decision than
+  an OpenTelemetry protobuf baseline** over a matched population; tamper evident via per packet
+  Merkle roots anchored through OpenTimestamps, and visible to standard network tooling through
+  the shipped Wireshark dissector.
+  [protocol](PROTOCOL.md) · [dissector](integrations/wireshark/README.md)
+- **Cause codes.** One byte on the receipt answers WHY the system refused, parked, or escalated,
+  drawn from a stable, append only registry, so identical surface refusals with different
+  structural causes present as the different situations they are.
+  [spec](docs/design/spec-cause-codes.md)
+- **The signed WCET bound.** Every policy manifest carries its worst case execution bound,
+  calibrated cycle exact on the RTL and witnessed on physical fabric pins (16,009 evaluations,
+  global max 9 cycles inside the signed 11 cycle bound).
+  [evidence ledger](docs/research/supporting-evidence.md)
+- **Every substrate, byte identical.** The same signed table decides identically from a Linux
+  kernel (eBPF/XDP) to an FPGA fabric to bare metal MCUs across four ISAs (8 bit AVR, ARM
+  Cortex-M33, RISC-V, Xtensa), 124/124 on the conformance subset each, and three wireless nodes
+  hot swap it together (reverify per node, refuse rather than downgrade) behind a two phase
+  commit.
+  [hardware](prismpath-hw/README.md) · [conformance](prismpath/portable/conformance/README.md) ·
   [mesh demo](prismpath-hw/mesh/README.md)
-- **Decidable and tamper evident.** Every decision is provably total (Level M) and travels over
-  Facet, PrismPath's decision wire protocol, 66.9x smaller than OTLP and anchored to a Merkle log
-  plus OpenTimestamps.
-  [spec](PROTOCOL.md) · [paper](docs/research/paper-facet-figueroa-quantization.md)
 
 Everything above is reproducible from this repo; the evidence is timestamped to Bitcoin.
 
-## The whole idea in one file
+## The whole idea in ten minutes
 
-```markdown
----
-name: support_triage
-start: classify
----
-
-## classify
-Read the incoming support ticket. Emit `category`, `amount`, and `sentiment`.
--> human_review: when category == "billing_dispute" and amount > 500
--> billing: when category in ("billing", "billing_dispute")
--> outage: when category == "outage"
--> retention: when sentiment == "angry"
--> general: else
-
-## human_review
-A person decides. High-value billing disputes are never auto-routed.
-
-## billing
-Apply the standard billing workflow.
-
-## outage
-Page the on-call engineer.
-
-## retention
-Hand off to the retention team.
-
-## general
-Answer from the support knowledge base.
-```
-
-That file **is** the program. Here it is as the engine sees it, verbatim `prismpath graph` output, not a
-drawing:
-
-```mermaid
-flowchart TD
-    _start(( )) --> classify
-    classify["classify"]
-    human_review(["human_review"])
-    billing(["billing"])
-    outage(["outage"])
-    retention(["retention"])
-    general(["general"])
-    classify -->|"when category == 'billing_dispute' and amou…"| human_review
-    classify -->|"when category in ('billing', 'billing_dispu…"| billing
-    classify -->|"when category == 'outage'"| outage
-    classify -->|"when sentiment == 'angry'"| retention
-    classify -->|"else"| general
-    classDef terminal fill:#e6f7ec,stroke:#3aa76d;
-    class human_review,billing,outage,retention,general terminal;
-```
-
-Because the flow is data, **a pull request is a process change**: the `human_review` rule lands as a
-three-line prose diff, a fixture row asserts it in CI (milliseconds, no model), and merging changes
-production routing with no deploy and no engineer in the loop. **See it run:**
-[`examples/pr_demo/`](prismpath/examples/pr_demo/README.md).
-
-## Routing is a spectrum the engine chooses, not the author
-
-| edge kind | syntax | how it routes | cost |
-|---|---|---|---|
-| **deterministic** | `-> t: when <expr>` (also `always` / `else` / `false`) | a safe predicate over the agent's structured outcome (plus a `visits` counter) | free, exact |
-| **semantic** | `-> t: <natural language>` | embed the outcome against the condition; escalate to a one-shot LLM only on low confidence | ~free, rare LLM |
-
-At a node, deterministic edges evaluate first, in document order, and **first true wins**; only if none
-match does a semantic edge reach the router. The engine picks the cheapest tier that can decide, so you
-pay a model exactly where meaning is genuinely required and nowhere else. The rest of the machinery (agent
-contract, prefilter cache, `verify`, fan-out, attestation, the portable kernels) is a ten-minute read:
-**[docs/guides/tour.md](docs/guides/tour.md)**.
-
-## The worker is yours; the control plane is PrismPath's
-
-A node's worker is whatever does the work: an LLM agent, a plain function (a
-[code node](docs/guides/code-nodes.md)), a shell script, or an entire tool run wrapped as a worker. The
-[mdflow interop example](prismpath/examples/mdflow_interop/pipeline.md) drives another task runner's tasks
-as PrismPath nodes. Pair PrismPath with a tool like that and you keep its open-ended, agentic expression
-while PrismPath decides *where the run goes next* (provably) and records *what happened* (the git
-Flow-Ledger). You don't trade agentic work for governance; you wrap one inside the other. Expression stays
-with the worker, control and observability stay with the kernel.
+One Markdown file is the program: each `## heading` is a step, each `-> target: condition` an edge,
+and every deterministic transition is decidable before anything runs. Routing is a spectrum the
+engine chooses, not the author: deterministic edges evaluate first and free, in document order,
+first true wins, and a semantic edge reaches an embedding router and a one shot model only where
+meaning genuinely requires one. The worker is yours (an LLM agent, a plain function, a shell
+script, another tool's task run); PrismPath decides *where the run goes next*, provably, and
+records *what happened*. And because the flow is data, **a pull request is a process change** a non
+engineer can approve, rendered as a live before and after graph in the PR itself
+([`examples/pr_demo/`](prismpath/examples/pr_demo/README.md)). The worked example, the routing
+spectrum, the worker boundary, the adapter ports, and the rest of the machinery are the ten minute
+tour: **[docs/guides/tour.md](docs/guides/tour.md)**.
 
 ## It runs all the way down: to the FPGA and inside the kernel
 
@@ -212,23 +159,6 @@ the portable kernel in your browser (it also ships offline at
 [`portable/playground.html`](prismpath/portable/playground.html)).
 **[GETTING_STARTED.md](GETTING_STARTED.md)** goes from clone to a real agent driving your own flow in
 eight steps, each run before it was written down.
-
-## One engine, many domains
-
-The engine owns routing, attestation, and the toolchain; **domains plug in behind ports** (Ingestion,
-Retrieval, Adjudicator, Action/Sink, Attestation, Deferral) with **no domain vocabulary in the core**:
-`tools/arch_guard.py` fails the build if a domain noun leaks inward. Two reference adapters ride the
-same ports, both the deterministic no-LLM class where the Adjudicator is a Level M flow (a proof, not a
-model judgment):
-
-- **Decision-preserving telemetry** (`adapters/telemetry/`): compress a flow's telemetry to the *minimum
-  statistic that still reproduces its routing decisions*, entropy-coded on a self-framing wire and
-  Merkle-verified end to end; benchmark-gated, arch-guard-isolated.
-- **The decision fusion plane** (`adapters/fusion/`): joins any N decision sources into one Level M
-  decidable, provable fused decision on a self-framing wire measured at ~45× under batched JSON
-  (integrity apparatus counted). The v1 worked example fuses a cyber triage verdict with a live IMU's
-  physical posture through one tessellation, proven end to end on the live rig
-  ([evidence #82 to #86](docs/research/supporting-evidence.md)).
 
 ## Where PrismPath is the wrong tool
 
