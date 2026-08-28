@@ -6,7 +6,7 @@ free number, instead of editing the main ledger. On merge, the docs session fold
 ledger with correct formatting and clears this file.*
 
 *Format each row exactly per `LEDGER_STANDARDS.md` §1 (Claim / Method / Result + Honest scope /
-Provenance) with a month granularity date. Next free number: **#124**.*
+Provenance) with a month granularity date. Next free number: **#128**.*
 
 ---
 

@@ -1,12 +1,12 @@
 # Supporting Evidence · Validated Results Ledger
 
-**Ledger v2 · rows #1 to #123 · August 2026**
+**Ledger v2 · rows #1 to #127 · August 2026**
 
 *Every claim in the PrismPath papers, backed by a measured result, its provenance, and an honest
 verdict; negative results included. Written to survive a hostile read and to be merge-ready into the
 research paper (`docs/research/paper-routing-spectrum.md`) and engineering white paper
 (`docs/research/whitepaper-engineering.md`). All numbers first party on the GB10 (Grace-Blackwell, unified
-memory). Consolidated July 2026; maintained through row #123 (August 2026).*
+memory). Consolidated July 2026; maintained through row #127 (August 2026).*
 
 > **Rule of use.** No claim ships without its row here (result + provenance + gap).
 >
@@ -779,6 +779,54 @@ served locally. No number here depends on a cloud API.
 
 ---
 
+### #124 — Facet frames dissect in the operator's own tools — a Wireshark dissector conformance-checked 18/18 against the reference decode on a committed pcap corpus (August 2026)
+
+**Claim:** Facet/1 datagram traffic is visible to standard network tooling: a Lua dissector renders the wire-level structure (wire integers, symbol indices, trailing pad, strict-decode verdicts with expert info) in Wireshark and tshark, and its output is machine-checked frame by frame against the reference codec, so the adoption surface ("your ops tools can see it") is a tested claim, not a promise.
+
+**Method:** the dissector mirrors the kernel decode plane's strict contract (no-terminator, dangling partial codeword, and u16 cell overflow flagged malformed, matching `facet_decode.bpf.c`'s DROP matrix) and recognizes both payload forms on UDP/4711 (raw frames and the decode plane's local `'F'`/count/u16le rewrite, detected by an exact length check). A deterministic 18-frame pcap corpus is generated from the reference codec (fixed timestamps, no randomness, byte-identical regeneration): positive vectors through the 16-field kernel cap, the kernel cert's negative matrix, both decoded-form frames, and a deliberate raw/decoded heuristic collision specimen. The harness runs tshark with the dissector over the corpus and compares every frame against expectations computed independently by the reference codec plus a strict-decode mirror.
+
+**Result:** **18/18 frames match the reference decode**, malformed classes included. **Honest scope:** wire-level structure only — symbol *semantics* require the signed policy (the codebook never travels, I3), and the optional field-name labels are a viewing preference, not decoded meaning; corruption that stays a syntactically valid stream decodes to a different valid value here exactly as everywhere (the Merkle layer's job, per the threat model); an empty payload never reaches a UDP subdissector (a Wireshark behavior, recorded in the corpus expectations rather than worked around); the decoded-form length heuristic can collide with a raw frame — the collision is committed as corpus frame 18 with an expert note, not hidden.
+
+**Provenance:** `integrations/wireshark/` (`facet.lua`, `gen_pcap_corpus.py`, `check_dissector.py`, `facet_corpus.pcap` + `facet_corpus.expected.json`, README with the tested commands). Commit `d3fc11e`.
+
+---
+
+### #125 — loss can no longer silently strand a stateful consumer — the refresh profile bounds staleness with cadence, never bytes (August 2026)
+
+**Claim:** for send-on-delta and resident-state streams, a lost change frame previously meant a consumer holding a *wrong* state for unbounded time, because silence and "unchanged" are indistinguishable on the wire. The refresh profile (PROTOCOL.md §2.7) closes this with a declared keyframe cadence and stale bound guaranteeing invariant **I6**: at any instant a declared consumer acts on the sender's current state, a state the sender held within the last `refresh_stale_ms`, or the policy's **signed fail-safe** — the same fail-safe the stateful migration path uses, now with a third trigger. The profile changes **cadence, never bytes**: a keyframe is byte-identical to any other frame, so stream conformance and the protocol version are untouched.
+
+**Method:** declaration is two frontmatter keys riding the signed flow document (`refresh_keyframe_ms`, `refresh_stale_ms`), gated by four new lint rules with broken-corpus fixtures (both keys required, positive integers, `stale >= keyframe` an error since a lossless link would otherwise trip stale between keyframes, `stale >= 2x keyframe` a warning since below it one lost keyframe parks the consumer). The reference implementation is clockless (callers pass monotonic milliseconds; a sender scheduler and a consumer staleness tracker with receiptable stale/recovered transitions). The referee first *demonstrates the gap* — no cadence, a naive last-value consumer, one lost change frame, wrong every tick to the end of the simulation — then asserts I6 literally per tick under deterministic loss masks: a single lost change frame, a one-second burst, a permanent blackout, and a blackout with recovery.
+
+**Result:** all referee tests and lint fixtures green (the full suite at this commit: 847 tests). Under single loss the wrong-state exposure is bounded by the next delivered keyframe (measured under one keyframe interval, never parking); under blackout the consumer parks on the signed fail-safe within `stale_ms` of the last delivery (within one tick of the bound) and recovers fresh on the first delivered emission, with exactly one stale/recovered transition pair recorded. **Honest scope:** proven at the symbol and simulation level, which is the right level — the profile is a cadence contract, orthogonal to the encoding by construction; carrying the two parameters inside the pack for markdown-blind baked targets is specified follow-up, not yet normative; certified-substrate senders that adopt keyframe emission re-certify under the standing hardware discipline before the change lands.
+
+**Provenance:** `PROTOCOL.md` §2.7 + invariant I6, `prismpath/analysis.py` (`_check_refresh_profile`), `prismpath/tests/fixtures/broken/refresh_*.md`, `adapters/telemetry/refresh.py`, `adapters/fusion/tests/test_refresh_profile.py`. Commit `c7eafb6`.
+
+---
+
+### #126 — replayed frames are refused with a named cause — a tick window over bytes already on the wire (August 2026)
+
+**Claim:** on bindings that carry a per-frame tick (the ESP-NOW spiral binding), the bare profile now refuses replayed and duplicated frames through a sliding window in the IPsec/DTLS shape, with **distinct refusal causes** (`replay-duplicate`, `replay-stale`) so a receipt can say which check refused the frame — and no frame format changes, because the window is receiver-side state over the tick the binding already carries. Composed with the refresh profile, the attack that motivated it is closed: a captured keyframe replayed after the stream moved on cannot regress a consumer's mirrored state. The spec states the three-level story plainly (PROTOCOL.md §2.8): the keyed layer kills replay outright via its implicit nonce; tick bindings get the mandatory window; a bare datagram stream with neither has **no replay protection**, and no claim to any.
+
+**Method:** `TickWindow` with a strict in-order default (`reorder=0`, exact for single-hop links that cannot reorder) and a declared reorder tolerance up to 64 via bitmask; a non-mutating `check` split from `observe`. The referee covers accept/duplicate/stale in both modes, late-but-unseen acceptance inside the window, duplicate-inside-window, beyond-window staleness, correct mask flush across large tick jumps, bound validation, and the refresh composition case (the replayed-keyframe regression attempt, asserted state-exact).
+
+**Result:** referee green (10 tests) and the threat model updated in the same change. **Honest scope:** replay *rejection*, not authentication — a forger who can construct valid frames can construct fresh ticks; origin trust remains the keyed layer's or the transport's job, stated in the spec; the tick SHOULD be the same counter the receipt trail carries as `seq` (one counter, not two), stated as a binding rule.
+
+**Provenance:** `PROTOCOL.md` §2.8 + §6, `adapters/telemetry/replay.py`, `adapters/fusion/tests/test_replay_window.py`. Commit `18d6878`.
+
+---
+
+### #127 — one datagram carries the fleet — the concentrator amortizes the IP envelope, measured 30 to 2.06 B/reading at fleet 50 (August 2026)
+
+**Claim:** the honest arithmetic of small decisions on IP links is that the 28-byte IP+UDP envelope dominates a 2-byte payload, so the per-datagram win over verbose formats shrinks on unconstrained links — stated first, because the concentrator (PROTOCOL.md §2.9) is the answer where it matters: a bridge uplinking a fleet packs records from many streams into ONE datagram as `[stream_id][reading]`, bit-contiguous, the stream id itself Zeckendorf-coded and the reading carrying **no length field** because the stream's codebook fixes its field count — codebook binding (I3) does the framing, so the zero-header property survives aggregation. Demux is strict and **whole-datagram fail-closed**: an unknown stream id or a record truncated mid-reading rejects the entire datagram with a named cause (`concentrator-unknown-stream`, `concentrator-truncated`); partial delivery is forbidden because a datagram that demuxes differently at two consumers is worse than a lost one.
+
+**Method:** reference concentrate/demux over a fleet registry mapping stream id to field count (derived in real use from each stream's signed policy). The referee covers round-trips including a repeated stream in one datagram (a burst since the last uplink tick), all rejection classes, the empty frame, input validation, and the measurement, which is **asserted, not narrated**: frozen per-reading uplink cost for a 3-field reading under a 28-byte IPv4+UDP envelope (link-layer framing varies by medium and is deliberately excluded, stated in the spec).
+
+**Result:** per-node datagrams cost **30 B/reading at any fleet size**; concentrated, **15.50 at fleet 2, 7.20 at fleet 5, 4.30 at fleet 10, 2.64 at fleet 25, 2.06 at fleet 50** — and at fleet size one the concentrator is **pure cost** (the stream id buys nothing), asserted in the referee so the profile is never sold for N=1. **Honest scope:** composes the outputs of existing conforming encoders and never re-encodes, so the certified codec paths are untouched; the kernel decode plane (v1) does not parse concentrated frames — they demux in userspace until a decode-plane revision; the id-to-policy registry is bridge configuration agreed out of band exactly like the codebook, and SHOULD ride a signed artifact.
+
+**Provenance:** `PROTOCOL.md` §2.9, `adapters/telemetry/concentrator.py`, `adapters/fusion/tests/test_concentrator.py` (the frozen measurement table prints under `-s`). Commit `7d81f4d`.
+
+---
+
 ## Revision history
 
 - **v1** (July 2026 consolidation, maintained through row #96, August 2026): the original ledger.
@@ -831,3 +879,14 @@ served locally. No number here depends on a cloud API.
   OTS-anchored and Bitcoin-confirmed (`prismpath-hw/evidence/{wcet,openflow,facet_mesh}_2026-08-20.SHA256SUMS.ots`,
   blocks 963303 to 963408). Anchored in
   `prismpath/evidence/ledger_v2.3_2026-08-21.SHA256SUMS` (`.ots` alongside).
+- **v2.6** (August 2026): rows #124 to #127 folded from staging — the wire sprint, all four
+  additions entering as optional declared profiles or receiver-side state with zero changes to
+  conforming stream bytes: the Wireshark dissector conformance-checked 18/18 against the
+  reference decode on a committed pcap corpus (#124), the refresh profile bounding staleness
+  under loss with cadence never bytes and the new invariant I6 (#125), the tick replay window
+  over bytes already on the wire with named refusal causes (#126), and the concentrator profile
+  with the measured fleet-uplink amortization, 30 to 2.06 B/reading at fleet 50 (#127). Per §3,
+  #119's receipt-root anchor caveat was reviewed and is confirmed still open (the receipt bundle
+  stamp remains scheduled work). Anchored in
+  `prismpath/evidence/ledger_v2.6_2026-08-28.SHA256SUMS` (`.ots` alongside); the anchor, not
+  this prose, is the authoritative timestamp.
