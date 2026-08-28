@@ -50,6 +50,10 @@ CORPUS = {
     "spiral_baseline_not_last.md": "spiral-baseline-not-last",
     "spiral_multi_baseline.md": "spiral-multi-baseline",
     "stateful_migration_undeclared.md": "stateful-migration-undeclared",
+    "refresh_missing_param.md": "refresh-missing-param",
+    "refresh_bad_param.md": "refresh-bad-param",
+    "refresh_stale_bound.md": "refresh-stale-bound",
+    "refresh_stale_tight.md": "refresh-stale-tight",
 }
 
 

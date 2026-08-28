@@ -438,7 +438,8 @@ def _check_dead_and_dup(graph) -> List[Finding]:
 
 
 ERROR_CODES = {"undefined-start", "undefined-target", "unsafe-predicate", "no-terminal",
-               "spiral-no-baseline", "spiral-baseline-not-last"}
+               "spiral-no-baseline", "spiral-baseline-not-last",
+               "refresh-missing-param", "refresh-bad-param", "refresh-stale-bound"}
 
 
 def _check_provenance(graph) -> List[Finding]:
@@ -656,6 +657,56 @@ def _check_spiral_profile(graph) -> List[Finding]:
     return out
 
 
+_REFRESH_KEYS = ("refresh_keyframe_ms", "refresh_stale_ms")
+
+
+def _check_refresh_profile(graph) -> List[Finding]:
+    """The refresh profile's declaration rules (PROTOCOL.md section 2.7; fires ONLY when a
+    ``refresh_*`` key is present in the frontmatter). The profile bounds staleness under loss for
+    send-on-delta and resident-state streams: the sender keyframes at least every
+    ``refresh_keyframe_ms`` and a consumer treats state older than ``refresh_stale_ms`` as stale,
+    acting on the policy's signed fail-safe instead. The declaration is only meaningful when both
+    parameters exist and the stale bound can actually be reached on a healthy link:
+
+      * both keys required (a cadence without a stale bound, or a bound without a cadence,
+        promises nothing a consumer can act on) — ERROR;
+      * positive integer milliseconds — ERROR;
+      * ``stale >= keyframe`` — otherwise a lossless link trips stale between keyframes — ERROR;
+      * ``stale >= 2 * keyframe`` SHOULD hold, so a single lost keyframe does not park the
+        consumer on the fail-safe — WARNING when violated."""
+    present = [k for k in _REFRESH_KEYS if k in graph.meta]
+    if not present:
+        return []
+    out: List[Finding] = []
+    missing = [k for k in _REFRESH_KEYS if k not in graph.meta]
+    if missing:
+        out.append(Finding("error", "refresh-missing-param", None,
+                           f"refresh profile declared but {missing[0]} is missing — both "
+                           f"refresh_keyframe_ms and refresh_stale_ms are required"))
+        return out
+    vals = {}
+    for k in _REFRESH_KEYS:
+        raw = graph.meta[k].strip()
+        if not raw.isdigit() or int(raw) <= 0:
+            out.append(Finding("error", "refresh-bad-param", None,
+                               f"{k} must be a positive integer (milliseconds); got {raw!r}"))
+        else:
+            vals[k] = int(raw)
+    if len(vals) == len(_REFRESH_KEYS):
+        kf, st = vals["refresh_keyframe_ms"], vals["refresh_stale_ms"]
+        if st < kf:
+            out.append(Finding("error", "refresh-stale-bound", None,
+                               f"refresh_stale_ms ({st}) < refresh_keyframe_ms ({kf}): a lossless "
+                               f"link would trip stale between keyframes — the bound is "
+                               f"unsatisfiable by a conforming sender"))
+        elif st < 2 * kf:
+            out.append(Finding("warning", "refresh-stale-tight", None,
+                               f"refresh_stale_ms ({st}) < 2 * refresh_keyframe_ms ({kf}): a "
+                               f"single lost keyframe parks the consumer on the fail-safe; "
+                               f"intended only for links where that aggressiveness is the point"))
+    return out
+
+
 _MIGRATION_STRATEGIES = ("by-name", "reset-to")
 
 
@@ -702,6 +753,7 @@ def analyze(graph) -> List[Finding]:
     findings += _check_field_only(graph)
     findings += _check_spawn(graph)
     findings += _check_spiral_profile(graph)
+    findings += _check_refresh_profile(graph)
     findings += _check_stateful_migration(graph)
     findings += _check_cycles(graph)
     findings += _check_dead_and_dup(graph)

@@ -115,7 +115,8 @@ together and trade only *latency vs. bandwidth*, never fidelity (I5): `stream` (
 decision), `batch:N` (flush every N), and `mtu-fill` (fill to the MTU, with an optional latency cap).
 Facet is transport agnostic: it rides over TCP/TLS, UDP/DTLS, 802.15.4/Thread, LoRa, ESP-NOW, or a bare
 MCU link. It is **not** a transport: it provides no delivery, ordering, or congestion control, and
-depends on the underlying transport for those.
+depends on the underlying transport for those. For send-on-delta and resident-state streams, where a
+lost frame is not merely a freshness cost, the refresh profile (§2.7) bounds the damage.
 
 ### 2.4 Tamper evidence
 
@@ -168,6 +169,39 @@ principle (agreed from the shared policy, never transmitted) exactly as the code
   `[class, tick, value]`, each offset by one; class 1 band tier, class 2 refinement, class 3
   posture gossip (the joint cell as a fleet coherence beacon).
 
+### 2.7 The refresh profile (bounded staleness under loss; optional capability, normative when declared)
+
+For a stateless per-reading stream, a lost frame costs freshness only (I5). For a **send-on-delta**
+stream, or any consumer mirroring a **resident state**, loss is sharper: a lost change frame leaves the
+consumer holding a *wrong* state, silently, for unbounded time, because silence and "unchanged" are
+indistinguishable on the wire. The refresh profile bounds that window. It changes **cadence, never
+bytes**: a keyframe is byte-identical to any other frame, so a stream under this profile is a valid
+`Facet/1` stream without it, stream conformance (§4) is unchanged, and the protocol version does not
+move.
+
+- **Declaration.** The flow declares two frontmatter keys, `refresh_keyframe_ms` and
+  `refresh_stale_ms` (positive integer milliseconds). Frontmatter is part of the signed document, so
+  the cadence contract rides under the signature like every other profile; nothing is derived or baked,
+  so no sidecar is needed. Checked as lint rules on declared flows: both keys required and integer
+  (`refresh-missing-param`, `refresh-bad-param`, ERROR), `stale >= keyframe` (`refresh-stale-bound`,
+  ERROR: otherwise a lossless link trips stale between keyframes), and `stale >= 2 * keyframe` SHOULD
+  hold (`refresh-stale-tight`, WARNING: below it a single lost keyframe parks the consumer on the
+  fail-safe).
+- **Sender contract.** A declared sender MUST emit its current full state at least every
+  `refresh_keyframe_ms`, even when unchanged, in addition to emitting on change.
+- **Consumer contract.** A declared consumer MUST treat received state older than `refresh_stale_ms`
+  as stale: it MUST NOT act on the last received value and MUST act on the policy's signed fail-safe
+  instead, the same fail-safe the stateful migration path uses. The next valid frame restores fresh
+  state. Both transitions (fresh to stale, stale to fresh) SHOULD be receipted with a distinct cause.
+- **Baked targets.** Carrying the two parameters inside the pack for targets that do not parse the
+  flow document is specified as follow-up work and is not yet normative; endpoints that adopt sender
+  emission changes on certified substrates re-certify under the usual discipline.
+
+The reference implementation is `adapters/telemetry/refresh.py` (clockless: callers pass monotonic
+milliseconds); the referee is `adapters/fusion/tests/test_refresh_profile.py`, which first demonstrates
+the unbounded wrong-state window without the profile, then proves I6 under single loss, burst loss,
+total blackout, and recovery.
+
 ---
 
 ## 3. Normative invariants
@@ -181,6 +215,10 @@ principle (agreed from the shared policy, never transmitted) exactly as the code
 - **I4 (tamper evidence).** Each packet's Merkle root binds its readings into the audit chain.
 - **I5 (strategy invariance).** Decision fidelity is invariant under batching, compression, and
   encryption; only temporal fidelity (freshness) varies with strategy.
+- **I6 (bounded staleness, refresh profile only).** Under a declared refresh profile, at any instant a
+  consumer's acting state is the sender's current state, a state the sender held within the last
+  `refresh_stale_ms`, or the policy's signed fail-safe. (Proven under injected loss:
+  `test_refresh_profile.py`.)
 
 ---
 
