@@ -14,7 +14,7 @@ REPO = ADAPTER.parent.parent
 sys.path.insert(0, str(REPO / "adapters" / "telemetry"))
 
 import quantizer as q                       # noqa: E402
-from profile import cell_profile, profile_wire_bytes  # noqa: E402
+from predicate_profile import cell_profile, profile_wire_bytes  # noqa: E402
 from prismpath.parser import parse          # noqa: E402
 
 FLOW = """
