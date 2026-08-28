@@ -1,0 +1,151 @@
+[
+  {
+    "form": "raw",
+    "malformed": 0,
+    "count": 1,
+    "wireints": "1",
+    "padbits": 6,
+    "frame": 1,
+    "name": "raw_1"
+  },
+  {
+    "form": "raw",
+    "malformed": 0,
+    "count": 1,
+    "wireints": "2",
+    "padbits": 5,
+    "frame": 2,
+    "name": "raw_2"
+  },
+  {
+    "form": "raw",
+    "malformed": 0,
+    "count": 3,
+    "wireints": "1,2,3",
+    "padbits": 7,
+    "frame": 3,
+    "name": "raw_1_2_3"
+  },
+  {
+    "form": "raw",
+    "malformed": 0,
+    "count": 3,
+    "wireints": "2,1,5",
+    "padbits": 6,
+    "frame": 4,
+    "name": "raw_2_1_5"
+  },
+  {
+    "form": "raw",
+    "malformed": 0,
+    "count": 4,
+    "wireints": "4,3,2,1",
+    "padbits": 3,
+    "frame": 5,
+    "name": "raw_4_3_2_1"
+  },
+  {
+    "form": "raw",
+    "malformed": 0,
+    "count": 16,
+    "wireints": "1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16",
+    "padbits": 2,
+    "frame": 6,
+    "name": "raw_1_2_3_4_5_6_7_8_9_10_11_12_13_14_15_16"
+  },
+  {
+    "form": "raw",
+    "malformed": 0,
+    "count": 1,
+    "wireints": "610",
+    "padbits": 1,
+    "frame": 7,
+    "name": "raw_610"
+  },
+  {
+    "form": "raw",
+    "malformed": 0,
+    "count": 1,
+    "wireints": "46368",
+    "padbits": 0,
+    "frame": 8,
+    "name": "raw_46368"
+  },
+  {
+    "form": "raw",
+    "malformed": 0,
+    "count": 1,
+    "wireints": "65535",
+    "padbits": 0,
+    "frame": 9,
+    "name": "raw_65535"
+  },
+  {
+    "form": "raw",
+    "malformed": 0,
+    "count": 3,
+    "wireints": "7,12,1",
+    "padbits": 3,
+    "frame": 10,
+    "name": "raw_7_12_1"
+  },
+  {
+    "form": "none",
+    "malformed": 1,
+    "reason": "empty",
+    "frame": 11,
+    "name": "neg_empty"
+  },
+  {
+    "form": "raw",
+    "malformed": 1,
+    "reason": "noterm",
+    "frame": 12,
+    "name": "neg_allzero"
+  },
+  {
+    "form": "raw",
+    "malformed": 1,
+    "reason": "dangling",
+    "frame": 13,
+    "name": "neg_dangling"
+  },
+  {
+    "form": "raw",
+    "malformed": 1,
+    "reason": "noterm",
+    "frame": 14,
+    "name": "neg_truncated"
+  },
+  {
+    "form": "raw",
+    "malformed": 1,
+    "reason": "overflow",
+    "frame": 15,
+    "name": "neg_overflow"
+  },
+  {
+    "form": "decoded",
+    "malformed": 0,
+    "count": 3,
+    "wireints": "2,1,5",
+    "frame": 16,
+    "name": "dec_2_1_5"
+  },
+  {
+    "form": "decoded",
+    "malformed": 0,
+    "count": 1,
+    "wireints": "1",
+    "frame": 17,
+    "name": "dec_1"
+  },
+  {
+    "form": "decoded",
+    "malformed": 0,
+    "count": 1,
+    "wireints": "3",
+    "frame": 18,
+    "name": "ambiguous_specimen"
+  }
+]
