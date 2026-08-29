@@ -1,0 +1,70 @@
+{
+  "version": 1,
+  "comment": "FROZEN. Receipt stream profile (PROTOCOL.md section 2.10) conformance vectors covering cause 0 (clean), cause 36 (route:stuck), wire-band cause 52 (replay-duplicate), and u8 maximum 255.",
+  "vectors": [
+    {
+      "name": "cause_0_clean",
+      "cause_code": 0,
+      "cause_name": null,
+      "fields": {
+        "cause": 0,
+        "event": 2,
+        "next_node": 1,
+        "prev_node": 0,
+        "seq": 1
+      },
+      "canonical_symbols": [0, 2, 1, 0, 1],
+      "wire_ints": [1, 3, 2, 1, 2],
+      "bits": "11001101111011",
+      "hex_bytes": "cdec"
+    },
+    {
+      "name": "cause_36_stuck",
+      "cause_code": 36,
+      "cause_name": "route:stuck",
+      "fields": {
+        "cause": 36,
+        "event": 0,
+        "next_node": 3,
+        "prev_node": 1,
+        "seq": 2
+      },
+      "canonical_symbols": [36, 0, 3, 1, 2],
+      "wire_ints": [37, 1, 4, 2, 3],
+      "bits": "0010000111110110110011",
+      "hex_bytes": "21f6cc"
+    },
+    {
+      "name": "cause_52_replay_duplicate",
+      "cause_code": 52,
+      "cause_name": "replay-duplicate",
+      "fields": {
+        "cause": 52,
+        "event": 1,
+        "next_node": 0,
+        "prev_node": 2,
+        "seq": 3
+      },
+      "canonical_symbols": [52, 1, 0, 2, 3],
+      "wire_ints": [53, 2, 1, 3, 4],
+      "bits": "1001010110111100111011",
+      "hex_bytes": "95bcec"
+    },
+    {
+      "name": "cause_255_u8_max",
+      "cause_code": 255,
+      "cause_name": null,
+      "fields": {
+        "cause": 255,
+        "event": 12,
+        "next_node": 8,
+        "prev_node": 5,
+        "seq": 10
+      },
+      "canonical_symbols": [255, 12, 8, 5, 10],
+      "wire_ints": [256, 13, 9, 6, 11],
+      "bits": "0100001000011000001110001110011001011",
+      "hex_bytes": "421838e658"
+    }
+  ]
+}
