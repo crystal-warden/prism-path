@@ -157,8 +157,34 @@ one Merkle root over all four leaves, policy_hash restamped across the swap (f24
 Roots differ across arches only by per-session t_ns, as designed. The eBPF program is byte-unchanged.
 
 **Honest scope.** The swap is driven over the forwarder's UDP control channel (a live delivery node
-owns its swaps); the standalone selector_swap_cmd CLI remains for one-shot admin swaps and passes
-NULL (no inline trail). Per-packet no-match refusals are still not emitted (flood).
+owns its swaps); the standalone selector_swap_cmd CLI for one-shot admin swaps is wired to a sealable
+journal in #134. Per-packet no-match refusals are still not emitted (flood).
 
 **Provenance.** prism-path main, merge 84ff3b9 (trail/forwarder-sink:
 prismpath-ebpf/decision-delta-demo/sel_forward_receipts.c). No push (owner-gated).
+
+#### #134: One-shot swap CLI writes migration receipts to a sealable journal, both arches (August 2026)
+
+**Claim.** An out-of-band admin swap (loader <new> swapselector <old>) now persists its migration
+receipt to an append-only receipt journal, so it joins the signed trail lineage instead of vanishing
+to stderr. A companion sealer Merkle-roots the journal with the same leaf format and canonical helper
+as every other PrismPath trail.
+
+**Method.** selector_swap_cmd captures the migration receipt via the same out-param seam the forwarder
+uses and, when PPT_RECEIPT_JOURNAL is set, appends the raw ppt_receipt to that journal and prints its
+Merkle leaf (unset leaves behavior unchanged). seal_receipts.c reads a journal of raw ppt_receipt
+records, decodes each, Merkle-roots them via the shared merkle.h, and flags a torn trailing partial
+record.
+
+**Result.** Both arches (aarch64 gx10 + x86_64 Protectli): two admin swaps (A to Breset reset-to,
+then Breset to Bname by-name) accumulate in one journal; seal_receipts reads 2 migration receipts
+(cause 66 then cause 0, event PPT_EVENT_MIGRATION, distinct policy hashes 48f24b8314e6e9a9 /
+aae3da26c64a29ec) and Merkle-roots both leaves; the CLI-printed leaf hashes match the sealed records.
+Decision content identical across arches; roots differ only by per-run t_ns. eBPF program unchanged.
+
+**Honest scope.** The journal is a persistent producer-side sink; a single unified deployment could
+point the live forwarder at the same journal for one cross-process trail (a further unification, not
+required for admin-swap auditability). Per-packet no-match refusals are still not emitted (flood).
+
+**Provenance.** prism-path main, merge ab92397 (trail/oneshot-journal: prismpath-ebpf/loader.c,
+seal_receipts.c new). No push (owner-gated).
