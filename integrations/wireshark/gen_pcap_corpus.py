@@ -23,8 +23,10 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
+sys.path.insert(0, str(REPO))
 sys.path.insert(0, str(REPO / "adapters" / "telemetry"))
 import packed  # noqa: E402
+import receipts  # noqa: E402
 import zeckendorf as z  # noqa: E402
 
 FACET_PORT = 4711
@@ -126,6 +128,9 @@ def build_corpus() -> list:
     out.append(("dec_1", decoded_payload([1])))
     # deliberate heuristic collision: raw parseable AND satisfies the decoded length check
     out.append(("ambiguous_specimen", bytes([0x46, 0x01, 0x03, 0x00])))
+    # receipt stream specimens
+    out.append(("rcpt_clean", receipts.encode_receipt(seq=1, prev_node=10, event=5, next_node=11, cause_val=0)))
+    out.append(("rcpt_stuck", receipts.encode_receipt(seq=2, prev_node=10, event=5, next_node=11, cause_val=36)))
     return out
 
 
