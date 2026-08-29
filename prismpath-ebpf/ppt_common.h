@@ -123,6 +123,10 @@ struct ppt_receipt {
 };
 
 #define PPT_CAUSE_NONE 0   /* clean decision; nonzero values come from the registry (append-only) */
+#define PPT_CAUSE_MIGRATION_RESET 66   /* state:migration-reset (docs/design/spec-cause-codes.md): a
+                                        * hot-swap reset-to strategy (or a vanished name under by-name)
+                                        * parked the resident posture on the new fail-safe rather than
+                                        * preserving it. Attested by the loader on the swap, not the kernel. */
 
 /* On-wire context header in packet payload */
 struct ppt_packet_hdr {
