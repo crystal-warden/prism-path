@@ -254,6 +254,20 @@ versus 15.50 at fleet 2, 4.30 at fleet 10, and 2.06 at fleet 50 concentrated. At
 concentrator is pure cost (the stream id buys nothing) and is not the profile's use case. Reference
 implementation `adapters/telemetry/concentrator.py`; referee `adapters/fusion/tests/test_concentrator.py`.
 
+### 2.10 Receipt streams (cause code carriage; optional capability, normative when declared)
+
+A receipt stream carries decision receipts over the wire, making refusal and deviation causes machine readable across endpoints. The profile carries the fields proven by the kernel receipt struct: decision identifiers (`prev_node`, `event`, `next_node`), the frame sequence tick (`seq`), and the refusal or deviation cause byte (`cause`) defined in the cause code registry (`docs/design/spec-cause-codes.md`).
+
+- **Declaration.** The flow declares `profile: receipt` in its frontmatter, binding cause carriage under the signed manifest.
+- **Canonical field order.** Fields ride in sorted field name order: `cause`, `event`, `next_node`, `prev_node`, `seq`.
+- **Cause carriage and density.** The cause byte (range 0 to 255) is carried as an ordinary symbol, encoded as `code + 1` under Zeckendorf coding. Cause 0 (a clean decision) maps to symbol 0 and wire integer 1 (`11`), so clean decisions are the densest symbol on the wire.
+- **Composition.** Receipt streams compose cleanly with existing declared profiles:
+  - **Replay window (§2.8).** The `seq` field serves as the tick counter. Receiver tick checking rejects duplicate or stale receipts with `replay-duplicate` or `replay-stale`.
+  - **Concentrator (§2.9).** Receipt readings aggregate into concentrated datagrams. Codebook binding and Zeckendorf self framing preserve zero header framing across aggregated receipt streams.
+- **Out of scope.** This profile is cause carriage on the wire, not a full audit log schema. Carrying per reading Merkle proof paths, raw 64 bit nanosecond timestamps (`t_ns`), 64 bit policy hashes, or raw sensor payloads on every frame is explicitly out of scope. Session integrity rides the Merkle root (§2.4) and policy binding rides codebook agreement (§2.1).
+
+Reference implementation `adapters/telemetry/receipts.py`; referee `adapters/fusion/tests/test_receipts.py`.
+
 ---
 
 ## 3. Normative invariants
