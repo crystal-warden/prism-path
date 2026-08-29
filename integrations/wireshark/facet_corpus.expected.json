@@ -147,5 +147,23 @@
     "wireints": "3",
     "frame": 18,
     "name": "ambiguous_specimen"
+  },
+  {
+    "form": "raw",
+    "malformed": 0,
+    "count": 5,
+    "wireints": "1,6,12,11,2",
+    "padbits": 2,
+    "frame": 19,
+    "name": "rcpt_clean"
+  },
+  {
+    "form": "raw",
+    "malformed": 0,
+    "count": 5,
+    "wireints": "37,6,12,11,3",
+    "padbits": 2,
+    "frame": 20,
+    "name": "rcpt_stuck"
   }
 ]
