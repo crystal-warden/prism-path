@@ -129,9 +129,36 @@ still 624/624 with zero mismatches on both arches (same policy_hash 207748442a79
 by per-session t_ns, as designed). The eBPF program is byte-unchanged; its 2-arch cert stands.
 
 **Honest scope.** The one-shot swap CLI passes NULL for the receipt (the harness and, in production,
-the forwarder that owns the trail capture it via the same out-param). Wiring the production
-selector_swap_cmd to a live forwarder sink is the remaining thread. Per-packet no-match refusals are
-still deliberately not emitted (they would flood the stream).
+the forwarder that owns the trail capture it via the same out-param). The live-forwarder sink is
+completed in #133. Per-packet no-match refusals are still deliberately not emitted (they would flood
+the stream).
 
 **Provenance.** prism-path main, merge 1d65dc8 (trail/migration-receipts: prismpath-ebpf/merkle.h new,
 ppt_common.h, loader.c, receipts_selector.c, migrate_selector.c). No push (owner-gated).
+
+#### #133: Live forwarder folds migration receipts into its signed trail, both arches (August 2026)
+
+**Claim.** The decision-delta delivery forwarder, a live UDP-driven node, now performs a policy
+hot-swap in-process and folds the loader migration receipt into the SAME per-session trail and
+Merkle root as the kernel data receipts it drains. Migration receipts are first-class leaves of the
+live signed trail, not a side channel.
+
+**Method.** sel_forward_receipts.c gains a UDP control command, SWAP <new_policy.ppt>, that runs an
+in-process selector_hotswap capturing the migration receipt via the out-param; the receipt is
+appended to the session batch (a Merkle leaf), written to the trail log with its cause and the
+PPT_EVENT_MIGRATION discriminator, and send-on-delta'd downstream as the posture change it is. The
+new policy is adopted (config_map restamps policy_hash). The forwarder's local merkle_root copy was
+removed in favour of the shared merkle.h, so every trail anchors with one implementation.
+
+**Result.** Live on BOTH arches (aarch64 gx10 + x86_64 Protectli): driving the forwarder over UDP
+with two events, a SWAP, and a follow-up event yields a trail carrying the migrate-reset receipt
+(prev=2, event=PPT_EVENT_MIGRATION, next=1, cause=66) between the data receipts, receipts=4 swaps=1,
+one Merkle root over all four leaves, policy_hash restamped across the swap (f24d59.. to 48f24b..).
+Roots differ across arches only by per-session t_ns, as designed. The eBPF program is byte-unchanged.
+
+**Honest scope.** The swap is driven over the forwarder's UDP control channel (a live delivery node
+owns its swaps); the standalone selector_swap_cmd CLI remains for one-shot admin swaps and passes
+NULL (no inline trail). Per-packet no-match refusals are still not emitted (flood).
+
+**Provenance.** prism-path main, merge 84ff3b9 (trail/forwarder-sink:
+prismpath-ebpf/decision-delta-demo/sel_forward_receipts.c). No push (owner-gated).
