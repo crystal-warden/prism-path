@@ -79,3 +79,30 @@ in facet.lua); noted for a follow on. No live system speaks this profile yet; it
 plus referee pair.
 
 **Provenance.** prism-path main, merge 053e13b (wire/receipts-profile), review fix 213a222.
+
+#### #131: Loader attests the hot-swap migration cause, both arches (August 2026)
+
+**Claim.** The first nonzero cause EMISSION in the kernel/loader plane (which until now only carried
+the byte, always clean). On a policy hot-swap the loader attests the migration cause: 0 when the
+resident posture is preserved by name, 66 (state:migration-reset) when a reset-to strategy or a
+vanished name parks it on the new fail-safe.
+
+**Method.** migrate_node gains a nullable out_cause; selector_hotswap emits a structured loader
+migration receipt line carrying it; PPT_CAUSE_MIGRATION_RESET (66) added to ppt_common.h from the
+registry; migrate_selector.c asserts both causes. Built and run on both certified arches.
+
+**Result.** migrate_selector PASS on aarch64 (gx10) and x86_64 (the Protectli), each printing
+cause=0 (clean) for by-name and cause=66 (state:migration-reset) for reset-to, the resident posture
+landing on the signed fail-safe. The eBPF program (ppt_select.bpf.c) is byte-unchanged, so its prior
+2-arch receipt cert stands.
+
+**Honest scope.** This is the loader-migration-receipt half of the kernel cause-emission follow-on:
+the loader now knows and attests the cause via a structured line; wiring migration receipts into the
+SIGNED audit trail alongside the kernel ringbuf stream is the next step. Per-packet no-match refusals
+are deliberately NOT emitted as receipts (that would flood the stream; a no-match stays a silent drop
+with the result-plane counters). Separately noted: gen_migrate_fixtures.py regenerates a
+migrate_Breset fixture that behaves differently from the committed one (a generator reproducibility
+gap, pre-existing, tracked for a follow-up); the committed fixtures are the certified inputs.
+
+**Provenance.** prism-path main, merge 2f9bd8c (kernel/migration-cause: prismpath-ebpf/loader.c,
+migrate_selector.c, ppt_common.h). No push (owner-gated).
