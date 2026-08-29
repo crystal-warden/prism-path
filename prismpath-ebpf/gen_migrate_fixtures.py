@@ -47,6 +47,8 @@ def build(md: str, migration: str, out: str):
         tbl[26] |= FLAG_STATEFUL                            # declare the resident-FSM mode (signed)
     if migration == "by-name":
         tbl[26] |= FLAG_MIGRATE_BY_NAME
+    else:
+        tbl[26] &= ~FLAG_MIGRATE_BY_NAME
     tbl[26] |= FLAG_NODE_NAMES                              # append the signed per-node name-hash section
     for nm in names:
         tbl += struct.pack("<I", fnv32(nm))
