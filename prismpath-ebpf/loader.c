@@ -149,15 +149,22 @@ static int parse_image_buf(const uint8_t *b, long len, Image *im) {
  * is tamper-evident, and a raw index is never carried blindly across a reindexing swap. */
 /* Called by selector_hotswap (the loader's swap primitive) and the migrate harness; kept __unused so the
  * NO_LIBBPF fallback build (which omits selector_hotswap) stays warning-clean. */
+/* out_cause (nullable) reports WHY the posture landed where it did: PPT_CAUSE_NONE when it was
+ * preserved by name, PPT_CAUSE_MIGRATION_RESET when a reset-to strategy (or a vanished name) parked
+ * it on the new fail-safe. This is the cause the loader attests on the swap (see selector_hotswap). */
 static uint32_t __attribute__((unused))
-migrate_node(const Image *old_im, const Image *new_im, uint32_t old_cur) {
+migrate_node(const Image *old_im, const Image *new_im, uint32_t old_cur, int *out_cause) {
     if ((new_im->flags & PPT_FLAG_MIGRATE_BY_NAME) && old_im->name_hashes && new_im->name_hashes
         && old_cur < old_im->n_nodes) {
         uint32_t want = old_im->name_hashes[old_cur];
         for (uint32_t i = 0; i < new_im->n_nodes; i++)
-            if (new_im->name_hashes[i] == want) return i;   /* same posture, by name, in the new policy */
+            if (new_im->name_hashes[i] == want) {           /* same posture, by name, in the new policy */
+                if (out_cause) *out_cause = PPT_CAUSE_NONE;
+                return i;
+            }
     }
-    return new_im->safe;                                    /* reset-to, or a vanished name -> fail-safe */
+    if (out_cause) *out_cause = PPT_CAUSE_MIGRATION_RESET;   /* reset-to, or a vanished name -> fail-safe */
+    return new_im->safe;
 }
 
 static void free_image(Image *im) {
@@ -317,7 +324,13 @@ static long selector_hotswap(struct bpf_object *obj, const Image *old_im, const 
     struct sel_state s; __u32 k = 0;
     if (bpf_map_lookup_elem_flags(st_fd, &k, &s, BPF_F_LOCK)) { perror("sel_state read"); return -1; }
     uint32_t cur = s.inited ? s.cur_node : old_im->safe;   /* uninited old state -> its fail-safe */
-    uint32_t migrated = migrate_node(old_im, new_im, cur);
+    int mig_cause = PPT_CAUSE_NONE;
+    uint32_t migrated = migrate_node(old_im, new_im, cur, &mig_cause);
+    /* Loader migration receipt: a swap is a userspace event, so the loader attests it here (the kernel
+     * ringbuf carries per-transition receipts; migrations are the loader's to record). A reset-to that
+     * parks the posture on the fail-safe is a state:migration-reset, distinct from a clean by-name carry. */
+    fprintf(stderr, "MIGRATION_RECEIPT prev=%u next=%u cause=%d (%s)\n", cur, migrated, mig_cause,
+            mig_cause == PPT_CAUSE_MIGRATION_RESET ? "state:migration-reset" : "clean");
     if (populate_maps(obj, new_im)) return -1;             /* swap the table maps to the new policy */
     s.cur_node = migrated; s.inited = 1;                   /* keep gen: monotonic across the swap */
     if (bpf_map_update_elem(st_fd, &k, &s, BPF_F_LOCK)) { perror("sel_state write"); return -1; }

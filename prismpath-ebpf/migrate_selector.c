@@ -87,10 +87,18 @@ int main(int argc, char **argv) {
     uint32_t old2 = read_cur();                         /* A's elevated index (1) */
     long reset = selector_hotswap(obj, &A, &Breset);    /* LOADER: reset-to -> the new fail-safe */
     int s2_ok = (reset >= 0) && ((uint32_t)reset < Breset.n_nodes) && (Breset.name_hashes[reset] == H_LOCK);
-    uint32_t byname2 = migrate_node(&A, &Bname, old2);  /* contrast: by-name would keep elevated */
+    uint32_t byname2 = migrate_node(&A, &Bname, old2, NULL);  /* contrast: by-name would keep elevated */
     int s2_contrast = (byname2 < Bname.n_nodes) && (Bname.name_hashes[byname2] == H_ELEV);
 
-    int ok = s1_ok && naive_wrong && live && s2_ok && s2_contrast;
+    /* migration cause attest: a by-name carry is clean (PPT_CAUSE_NONE); a reset-to that parks the
+     * posture on the new fail-safe is state:migration-reset (66), the same cause selector_hotswap
+     * records on its loader migration receipt. */
+    int c_byname = -1, c_reset = -1;
+    (void)migrate_node(&A, &Bname,  old,  &c_byname);
+    (void)migrate_node(&A, &Breset, old2, &c_reset);
+    int cause_ok = (c_byname == PPT_CAUSE_NONE) && (c_reset == PPT_CAUSE_MIGRATION_RESET);
+
+    int ok = s1_ok && naive_wrong && live && s2_ok && s2_contrast && cause_ok;
     printf("SELECTOR HOT-SWAP MIGRATION (loader-enforced, signed name-hashes):\n");
     printf("  by-name: A lockdown idx %u -> B idx %u (%s); a raw carry of idx %u -> B '%s'\n",
            old, (unsigned)byname, s1_ok ? "lockdown preserved" : "WRONG",
@@ -100,6 +108,9 @@ int main(int argc, char **argv) {
     printf("  reset-to: A elevated idx %u -> B idx %u (%s); by-name would keep idx %u (%s)\n",
            old2, (unsigned)reset, s2_ok ? "lockdown = fail-safe" : "WRONG",
            byname2, s2_contrast ? "elevated" : "?");
+    printf("  migration cause: by-name=%d (%s), reset-to=%d (%s)\n",
+           c_byname, c_byname == PPT_CAUSE_NONE ? "clean" : "?",
+           c_reset, c_reset == PPT_CAUSE_MIGRATION_RESET ? "state:migration-reset" : "?");
     printf("%s\n", ok ? "PASS - by-name preserves the posture across reindexing; reset-to fails safe"
                       : "FAIL");
     bpf_object__close(obj); free_image(&A); free_image(&Bname); free_image(&Breset);
