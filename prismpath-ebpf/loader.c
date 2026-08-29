@@ -443,10 +443,23 @@ static int sel_send_cmd(const char *iface, int ev) {
     return 0;
 }
 
+/* Append a receipt to the append-only receipt journal (raw ppt_receipt records). The journal is a
+ * persistent, sealable trail: seal_receipts Merkle-roots it with the shared merkle.h, so an OUT-OF-BAND
+ * admin swap becomes a first-class anchorable leaf in the SAME leaf format as every other trail, not
+ * just a console line. */
+static int append_receipt_journal(const char *path, const struct ppt_receipt *r) {
+    FILE *f = fopen(path, "ab");
+    if (!f) { fprintf(stderr, "receipt journal %s: %s\n", path, strerror(errno)); return -1; }
+    int ok = (fwrite(r, sizeof(*r), 1, f) == 1);
+    fclose(f);
+    return ok ? 0 : -1;
+}
+
 /* loader <new.ppt> swapselector <old.ppt> [iface] — hot-swap the LIVE selector policy while MIGRATING
  * the persistent resident posture. Loads the new policy REUSING the pinned sel_state (so the old posture
  * carries into this process), migrates it via selector_hotswap per the new policy's signed strategy, and
- * (if iface given) attaches the new program, replacing the old. */
+ * (if iface given) attaches the new program, replacing the old. If PPT_RECEIPT_JOURNAL is set, the
+ * migration receipt is appended there, so this out-of-band admin swap joins the sealable signed trail. */
 static int selector_swap_cmd(const char *new_ppt, const char *old_ppt, const char *iface) {
     long lo, ln;
     uint8_t *bo = read_file(old_ppt, &lo), *bn = read_file(new_ppt, &ln);
@@ -456,10 +469,17 @@ static int selector_swap_cmd(const char *new_ppt, const char *old_ppt, const cha
     }
     struct bpf_object *obj = sel_open(&N);   /* reuse the pinned sel_state (holds the OLD posture) */
     if (!obj) return 1;
-    /* NULL: this one-shot CLI does not build a trail inline; the forwarder that owns the trail captures
-     * the migration receipt via the out-param exactly as migrate_selector.c does (the proven seam). */
-    long migrated = selector_hotswap(obj, &O, &N, NULL);   /* read posture, migrate, swap table, write */
+    /* Capture the migration receipt only when a journal is configured; otherwise NULL keeps the seam
+     * cost-free. The receipt is the SAME leaf the forwarder folds into its live trail. */
+    const char *jpath = getenv("PPT_RECEIPT_JOURNAL");
+    struct ppt_receipt migr;
+    long migrated = selector_hotswap(obj, &O, &N, jpath ? &migr : NULL);   /* migrate, swap table, write */
     if (migrated < 0) { bpf_object__close(obj); return 1; }
+    if (jpath && append_receipt_journal(jpath, &migr) == 0) {
+        uint8_t leaf[32]; SHA256((const unsigned char *)&migr, sizeof(migr), leaf);
+        char lx[65]; for (int i = 0; i < 32; i++) sprintf(lx + 2 * i, "%02x", leaf[i]);
+        printf("  migration receipt appended to journal %s (cause=%d, leaf=%s)\n", jpath, migr.cause, lx);
+    }
     int by_name = (N.flags & PPT_FLAG_MIGRATE_BY_NAME) != 0;
     if (iface) {
         unsigned int ifindex = if_nametoindex(iface);
