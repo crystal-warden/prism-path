@@ -98,7 +98,7 @@ landing on the signed fail-safe. The eBPF program (ppt_select.bpf.c) is byte-unc
 
 **Honest scope.** This is the loader-migration-receipt half of the kernel cause-emission follow-on:
 the loader now knows and attests the cause via a structured line; wiring migration receipts into the
-SIGNED audit trail alongside the kernel ringbuf stream is the next step. Per-packet no-match refusals
+SIGNED audit trail alongside the kernel ringbuf stream is completed in #132. Per-packet no-match refusals
 are deliberately NOT emitted as receipts (that would flood the stream; a no-match stays a silent drop
 with the result-plane counters). Separately noted: gen_migrate_fixtures.py regenerates a
 migrate_Breset fixture that behaves differently from the committed one (a generator reproducibility
@@ -106,3 +106,32 @@ gap, pre-existing, tracked for a follow-up); the committed fixtures are the cert
 
 **Provenance.** prism-path main, merge 2f9bd8c (kernel/migration-cause: prismpath-ebpf/loader.c,
 migrate_selector.c, ppt_common.h). No push (owner-gated).
+
+#### #132: Migration receipts join the one signed audit trail, both arches (August 2026)
+
+**Claim.** A hot-swap migration now produces a first-class ppt_receipt that folds into the SAME
+Merkle-rooted, policy-bound trail as kernel transition receipts, not merely a stderr line. The
+migration receipt reuses the anchored ppt_receipt struct unchanged, marks itself with an event
+sentinel (PPT_EVENT_MIGRATION), and carries the migration cause (0 preserved by name, 66 reset park).
+
+**Method.** merkle.h extracts the receipt-trail Merkle root verbatim from receipts_selector.c into a
+shared header, so kernel and migration receipts anchor with one implementation (no drift);
+receipts_selector.c includes it. selector_hotswap gains a nullable out_migr ppt_receipt* (the trail
+seam) filled with seq, monotonic t_ns, the new policy hash, pre/post posture, the sentinel, and the
+cause. migrate_selector.c became a unified-trail proof: it drains the kernel data receipts, captures
+both migration receipts, folds all into one batch, Merkle-roots them, and asserts the migration
+receipts are well-formed, policy-bound (distinct non-zero hashes for by-name vs reset-to), and
+covered by the root (flip a cause, the root moves).
+
+**Result.** migrate_selector PASS on aarch64 (gx10) and x86_64 (the Protectli): 4 kernel + 2 migration
+receipts = 6 leaves, one root, tamper-evident. The Merkle refactor is non-regressive: receipts_selector
+still 624/624 with zero mismatches on both arches (same policy_hash 207748442a7915c8; roots differ only
+by per-session t_ns, as designed). The eBPF program is byte-unchanged; its 2-arch cert stands.
+
+**Honest scope.** The one-shot swap CLI passes NULL for the receipt (the harness and, in production,
+the forwarder that owns the trail capture it via the same out-param). Wiring the production
+selector_swap_cmd to a live forwarder sink is the remaining thread. Per-packet no-match refusals are
+still deliberately not emitted (they would flood the stream).
+
+**Provenance.** prism-path main, merge 1d65dc8 (trail/migration-receipts: prismpath-ebpf/merkle.h new,
+ppt_common.h, loader.c, receipts_selector.c, migrate_selector.c). No push (owner-gated).
