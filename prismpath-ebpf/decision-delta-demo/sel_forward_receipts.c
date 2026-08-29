@@ -29,6 +29,10 @@ static struct ppt_receipt g_rcpts[MAX_EV];
 static int g_nr = 0;
 static struct ppt_receipt g_last;
 static int g_got = 0;
+/* When PPT_RECEIPT_JOURNAL is set, EVERY receipt this node produces (kernel data receipts and the
+ * in-process migration receipts) is also appended to that append-only journal - the SAME sink the
+ * one-shot swap CLI writes to. seal_receipts over that one journal is the single cross-process trail. */
+static const char *g_journal = NULL;
 
 static int rb_cb(void *ctx, void *data, size_t sz) {
     (void)ctx;
@@ -36,6 +40,7 @@ static int rb_cb(void *ctx, void *data, size_t sz) {
         memcpy(&g_last, data, sizeof(struct ppt_receipt));
         g_got = 1;
         if (g_nr < MAX_EV) memcpy(&g_rcpts[g_nr++], data, sizeof(struct ppt_receipt));
+        if (g_journal) append_receipt_journal(g_journal, (const struct ppt_receipt *)data);
     }
     return 0;
 }
@@ -86,6 +91,9 @@ int main(int argc, char **argv) {
     FILE *tf = fopen(trailp, "a");
     if (tf) { fprintf(tf, "# recv_wall_s\tseq\tt_ns\tprev\tevent\tnext\taction\n"); fflush(tf); }
 
+    g_journal = getenv("PPT_RECEIPT_JOURNAL");   /* shared cross-process trail sink, if configured */
+    if (g_journal) printf("  unified trail: receipts also appended to journal %s (seal with seal_receipts)\n", g_journal);
+
     const char *NM[] = { "normal", "elevated", "lockdown" };
     printf("FORWARD(receipts): signed posture_selector deciding; events udp/%d -> send-on-delta -> %s:%d (%ds)\n",
            listen_port, fpga, fpga_port, duration);
@@ -120,6 +128,7 @@ int main(int argc, char **argv) {
             if (migrated < 0) { printf("  SWAP %s -> hotswap failed\n", newp); fflush(stdout);
                                 free_image(&nim); free(nb); continue; }
             if (g_nr < MAX_EV) g_rcpts[g_nr++] = migr;   /* the migration receipt is a trail leaf */
+            if (g_journal) append_receipt_journal(g_journal, &migr);   /* and into the unified trail */
             bpf_map_lookup_elem(cfg_fd, &k0, &cfg);      /* populate_maps restamped the new policy_hash */
             const char *mact = (migr.cause == PPT_CAUSE_MIGRATION_RESET) ? "migrate-reset" : "migrate-byname";
             printf("  SWAP -> %s: posture %d -> %d, cause=%d, new policy_hash=%016llx\n",
