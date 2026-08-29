@@ -14,6 +14,7 @@
 #include <stdbool.h>
 #include <errno.h>
 #include <unistd.h>
+#include <time.h>               /* clock_gettime for the migration receipt time axis */
 #include <net/if.h>
 #include <sys/socket.h>
 #include <netpacket/packet.h>
@@ -318,7 +319,13 @@ struct sel_state { struct bpf_spin_lock lock; __u32 cur_node; __u32 inited; __u3
  * (populate_maps), then writes the migrated resident node back under the state lock. Returns the new
  * resident node, or -1. Single-config selector here; a live multi-CPU deployment would quiesce or bank
  * this like net_hotswap, and pin sel_state on bpffs to persist across loader invocations. */
-static long selector_hotswap(struct bpf_object *obj, const Image *old_im, const Image *new_im) {
+/* out_migr (nullable) receives the migration as a first-class ppt_receipt — the SAME struct and leaf
+ * format as a kernel transition receipt, so the trail-builder (receipts_selector / the forwarder) folds
+ * it into the one Merkle-rooted, policy-bound audit trail. It reuses the anchored struct unchanged and
+ * marks itself PPT_EVENT_MIGRATION; its cause is the migration outcome. This out-param IS the seam that
+ * wires loader migration receipts into the signed trail. */
+static long selector_hotswap(struct bpf_object *obj, const Image *old_im, const Image *new_im,
+                             struct ppt_receipt *out_migr) {
     int st_fd = bpf_map__fd(bpf_object__find_map_by_name(obj, "sel_state_map"));
     if (st_fd < 0) { fprintf(stderr, "selector_hotswap: no sel_state_map\n"); return -1; }
     struct sel_state s; __u32 k = 0;
@@ -331,6 +338,16 @@ static long selector_hotswap(struct bpf_object *obj, const Image *old_im, const 
      * parks the posture on the fail-safe is a state:migration-reset, distinct from a clean by-name carry. */
     fprintf(stderr, "MIGRATION_RECEIPT prev=%u next=%u cause=%d (%s)\n", cur, migrated, mig_cause,
             mig_cause == PPT_CAUSE_MIGRATION_RESET ? "state:migration-reset" : "clean");
+    if (out_migr) {                                        /* the trail seam: a ppt_receipt leaf */
+        struct timespec ts; clock_gettime(CLOCK_MONOTONIC, &ts);
+        out_migr->seq         = s.gen;                     /* the generation at the swap boundary */
+        out_migr->t_ns        = (uint64_t)ts.tv_sec * 1000000000ull + (uint64_t)ts.tv_nsec;
+        out_migr->policy_hash = policy_hash_of(new_im);    /* bound to the policy migrated TO */
+        out_migr->prev_node   = (int32_t)cur;
+        out_migr->event       = PPT_EVENT_MIGRATION;       /* discriminator: a loader swap, not a packet */
+        out_migr->next_node   = (int32_t)migrated;
+        out_migr->cause       = mig_cause;
+    }
     if (populate_maps(obj, new_im)) return -1;             /* swap the table maps to the new policy */
     s.cur_node = migrated; s.inited = 1;                   /* keep gen: monotonic across the swap */
     if (bpf_map_update_elem(st_fd, &k, &s, BPF_F_LOCK)) { perror("sel_state write"); return -1; }
@@ -439,7 +456,9 @@ static int selector_swap_cmd(const char *new_ppt, const char *old_ppt, const cha
     }
     struct bpf_object *obj = sel_open(&N);   /* reuse the pinned sel_state (holds the OLD posture) */
     if (!obj) return 1;
-    long migrated = selector_hotswap(obj, &O, &N);   /* read persistent posture, migrate, swap table, write */
+    /* NULL: this one-shot CLI does not build a trail inline; the forwarder that owns the trail captures
+     * the migration receipt via the out-param exactly as migrate_selector.c does (the proven seam). */
+    long migrated = selector_hotswap(obj, &O, &N, NULL);   /* read posture, migrate, swap table, write */
     if (migrated < 0) { bpf_object__close(obj); return 1; }
     int by_name = (N.flags & PPT_FLAG_MIGRATE_BY_NAME) != 0;
     if (iface) {

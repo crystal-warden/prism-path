@@ -128,6 +128,13 @@ struct ppt_receipt {
                                         * parked the resident posture on the new fail-safe rather than
                                         * preserving it. Attested by the loader on the swap, not the kernel. */
 
+/* A migration receipt reuses the ppt_receipt struct (the anchored format is NEVER changed) and marks
+ * itself with this event sentinel: a loader-attested hot-swap, not a packet-driven transition. Its
+ * `cause` carries the migration outcome (0 preserved by name, PPT_CAUSE_MIGRATION_RESET on a reset
+ * park). The sentinel discriminates it from data receipts (which carry the real field-0 value) so both
+ * kinds live in ONE Merkle-rooted, policy-bound trail. */
+#define PPT_EVENT_MIGRATION (-2147483647 - 1)   /* INT32_MIN, no header dependency */
+
 /* On-wire context header in packet payload */
 struct ppt_packet_hdr {
     __u32 magic;     /* PPT_MAGIC (0x4D545050) */
