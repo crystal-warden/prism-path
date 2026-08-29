@@ -182,9 +182,36 @@ then Breset to Bname by-name) accumulate in one journal; seal_receipts reads 2 m
 aae3da26c64a29ec) and Merkle-roots both leaves; the CLI-printed leaf hashes match the sealed records.
 Decision content identical across arches; roots differ only by per-run t_ns. eBPF program unchanged.
 
-**Honest scope.** The journal is a persistent producer-side sink; a single unified deployment could
-point the live forwarder at the same journal for one cross-process trail (a further unification, not
-required for admin-swap auditability). Per-packet no-match refusals are still not emitted (flood).
+**Honest scope.** The journal is a persistent producer-side sink; pointing the live forwarder at the
+same journal for one cross-process trail is realized in #135. Per-packet no-match refusals are still
+not emitted (flood).
 
 **Provenance.** prism-path main, merge ab92397 (trail/oneshot-journal: prismpath-ebpf/loader.c,
 seal_receipts.c new). No push (owner-gated).
+
+#### #135: One unified cross-process trail, both arches (August 2026)
+
+**Claim.** Pointing the live forwarder at the same PPT_RECEIPT_JOURNAL the one-shot swap CLI writes to
+makes ONE append-only journal the single trail across every producer: out-of-band admin swaps,
+forwarder decisions, and forwarder in-process migrations. seal_receipts over that one journal is a
+single cross-process Merkle root.
+
+**Method.** sel_forward_receipts.c reads PPT_RECEIPT_JOURNAL; rb_cb appends each drained kernel receipt
+and the SWAP handler appends the in-process migration receipt, both via the shared
+append_receipt_journal helper. The per-session in-memory Merkle root is unchanged (a session view); the
+journal is the persistent unified trail.
+
+**Result.** Both arches (aarch64 gx10 + x86_64 Protectli): an out-of-band admin swap (A to Breset) then
+a live forwarder session (two data events, a SWAP, a follow-up event) deposit into one journal;
+seal_receipts reads 5 leaves from three producers - admin migration (cause 66, policy Breset), two
+forwarder data receipts (policy migrate_A), the forwarder in-process migration (cause 66, policy
+Breset), a post-swap data receipt (policy Breset) - 2 migration receipts among 5, one Merkle root.
+Decision content byte-identical across arches; roots differ only by per-run t_ns. eBPF unchanged.
+
+**Honest scope.** This closes the migration-receipt / kernel cause-emission arc (#131 to #135). The
+remaining named follow-ons are unchanged: per-packet no-match refusals stay unemitted (flood), and the
+two hardware-blocked edges (finale wrapper + stateful landing, WCET on-pins re-witness) await a stable
+board.
+
+**Provenance.** prism-path main, merge 426f088 (trail/unified-journal:
+prismpath-ebpf/decision-delta-demo/sel_forward_receipts.c). No push (owner-gated).
