@@ -30,26 +30,7 @@ static int rb_cb(void *ctx, void *data, size_t sz) {
     return 0;
 }
 
-/* Merkle root over the receipt leaves: leaf = sha256(receipt bytes), pairwise sha256 to the root,
- * duplicating the last node on an odd layer. The root anchors the whole batch with one OTS stamp. */
-static void merkle_root(const struct ppt_receipt *r, int n, uint8_t root[32]) {
-    if (n <= 0) { memset(root, 0, 32); return; }
-    uint8_t (*cur)[32] = malloc((size_t)n * 32);
-    for (int i = 0; i < n; i++) SHA256((const unsigned char *)&r[i], sizeof(r[i]), cur[i]);
-    int cnt = n;
-    while (cnt > 1) {
-        int half = (cnt + 1) / 2;
-        uint8_t (*nx)[32] = malloc((size_t)half * 32);
-        for (int i = 0; i < half; i++) {
-            uint8_t buf[64];
-            memcpy(buf, cur[2 * i], 32);
-            memcpy(buf + 32, cur[(2 * i + 1 < cnt) ? 2 * i + 1 : 2 * i], 32);   /* dup last if odd */
-            SHA256(buf, 64, nx[i]);
-        }
-        free(cur); cur = nx; cnt = half;
-    }
-    memcpy(root, cur[0], 32); free(cur);
-}
+#include "merkle.h"   /* the canonical receipt-trail Merkle root (leaf = sha256(receipt bytes)) */
 
 int main(int argc, char **argv) {
     const char *corpus = argc > 1 ? argv[1] : "selector_corpus.bin";
