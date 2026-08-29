@@ -20,6 +20,7 @@
 #include <arpa/inet.h>
 #include <time.h>
 #include <openssl/sha.h>
+#include "../merkle.h"   /* the one canonical receipt-trail Merkle root, shared across every trail */
 
 static double now(void) { struct timespec t; clock_gettime(CLOCK_REALTIME, &t); return t.tv_sec + t.tv_nsec / 1e9; }
 
@@ -39,25 +40,7 @@ static int rb_cb(void *ctx, void *data, size_t sz) {
     return 0;
 }
 
-/* Merkle root over receipt leaves (copied from receipts_selector.c): the per-session anchor. */
-static void merkle_root(const struct ppt_receipt *r, int n, uint8_t root[32]) {
-    if (n <= 0) { memset(root, 0, 32); return; }
-    uint8_t (*cur)[32] = malloc((size_t)n * 32);
-    for (int i = 0; i < n; i++) SHA256((const unsigned char *)&r[i], sizeof(r[i]), cur[i]);
-    int cnt = n;
-    while (cnt > 1) {
-        int half = (cnt + 1) / 2;
-        uint8_t (*nx)[32] = malloc((size_t)half * 32);
-        for (int i = 0; i < half; i++) {
-            uint8_t buf[64];
-            memcpy(buf, cur[2 * i], 32);
-            memcpy(buf + 32, cur[(2 * i + 1 < cnt) ? 2 * i + 1 : 2 * i], 32);
-            SHA256(buf, 64, nx[i]);
-        }
-        free(cur); cur = nx; cnt = half;
-    }
-    memcpy(root, cur[0], 32); free(cur);
-}
+/* merkle_root is the shared canonical helper from ../merkle.h (leaf = sha256(receipt bytes)). */
 
 int main(int argc, char **argv) {
     const char *corpus  = argc > 1 ? argv[1] : "selector_corpus.bin";
@@ -111,10 +94,53 @@ int main(int argc, char **argv) {
 
     int last = (int)im.start, sent = 0, held = 0, events = 0, stuck = 0;
     double t0 = now();
+    int swaps = 0;
     while (now() - t0 < duration) {
-        char buf[64]; int n = recvfrom(rx, buf, sizeof(buf) - 1, 0, NULL, NULL);
+        char buf[128]; int n = recvfrom(rx, buf, sizeof(buf) - 1, 0, NULL, NULL);
         if (n <= 0) continue;
-        buf[n] = 0; int ev = atoi(buf);
+        buf[n] = 0;
+
+        /* Control command: SWAP <new_policy.ppt> - hot-swap the live selector policy IN-PROCESS and
+         * fold the loader migration receipt into THIS session's trail (a leaf in the same Merkle root
+         * as the data receipts). This is the live-forwarder sink for migration receipts. */
+        if (strncmp(buf, "SWAP ", 5) == 0) {
+            const char *newp = buf + 5;
+            while (*newp == ' ') newp++;
+            char *nl = strchr(newp, '\n'); if (nl) *nl = 0;
+            long blen; uint8_t *nb = read_file(newp, &blen);
+            Image nim;
+            if (!nb || parse_image_buf(nb, blen, &nim)) {
+                printf("  SWAP %s -> read/parse failed\n", newp); fflush(stdout);
+                if (tf) { fprintf(tf, "%.6f\t-\t-\t%d\t-\t-\tswap-failed\n", now(), last); fflush(tf); }
+                free(nb);
+                continue;
+            }
+            struct ppt_receipt migr;
+            long migrated = selector_hotswap(obj, &im, &nim, &migr);   /* migrate posture, swap maps, attest */
+            if (migrated < 0) { printf("  SWAP %s -> hotswap failed\n", newp); fflush(stdout);
+                                free_image(&nim); free(nb); continue; }
+            if (g_nr < MAX_EV) g_rcpts[g_nr++] = migr;   /* the migration receipt is a trail leaf */
+            bpf_map_lookup_elem(cfg_fd, &k0, &cfg);      /* populate_maps restamped the new policy_hash */
+            const char *mact = (migr.cause == PPT_CAUSE_MIGRATION_RESET) ? "migrate-reset" : "migrate-byname";
+            printf("  SWAP -> %s: posture %d -> %d, cause=%d, new policy_hash=%016llx\n",
+                   mact, migr.prev_node, migr.next_node, migr.cause,
+                   (unsigned long long)cfg.policy_hash); fflush(stdout);
+            if (tf) { fprintf(tf, "%.6f\t%llu\t%llu\t%d\t%d\t%d\t%s\n", now(),
+                              (unsigned long long)migr.seq, (unsigned long long)migr.t_ns,
+                              migr.prev_node, migr.event, migr.next_node, mact); fflush(tf); }
+            if (migr.next_node != last) {                /* the migration is itself a posture delta */
+                char msg[64];
+                int mlen = snprintf(msg, sizeof(msg), "%d %llu %llu", migr.next_node,
+                                    (unsigned long long)migr.seq, (unsigned long long)migr.t_ns);
+                sendto(tx, msg, mlen, 0, (struct sockaddr *)&fa, sizeof(fa));
+                last = migr.next_node; sent++;
+            }
+            free_image(&im); im = nim;   /* adopt the new policy; nb is intentionally retained (backs im->raw) */
+            swaps++;
+            continue;
+        }
+
+        int ev = atoi(buf);
         events++;
 
         struct ppt_reg regs[1] = {{ TY_INT, ev }};
@@ -157,14 +183,15 @@ int main(int argc, char **argv) {
     uint8_t root[32]; merkle_root(g_rcpts, g_nr, root);
     char hex[65]; for (int i = 0; i < 32; i++) sprintf(hex + 2 * i, "%02x", root[i]);
     ring_buffer__free(rb); free_image(&im);
-    if (tf) { fprintf(tf, "# merkle_root=%s policy_hash=%016llx events=%d deltas=%d holds=%d receipts=%d\n",
-                      hex, (unsigned long long)cfg.policy_hash, events, sent, held, g_nr); fclose(tf); }
+    if (tf) { fprintf(tf, "# merkle_root=%s policy_hash=%016llx events=%d deltas=%d holds=%d swaps=%d receipts=%d\n",
+                      hex, (unsigned long long)cfg.policy_hash, events, sent, held, swaps, g_nr); fclose(tf); }
 
     printf("\nDECISION-DELTA SESSION (signed trail):\n");
-    printf("  events=%d  deltas_sent=%d  holds_suppressed=%d  stuck=%d  receipts=%d\n",
-           events, sent, held, stuck, g_nr);
+    printf("  events=%d  deltas_sent=%d  holds_suppressed=%d  stuck=%d  swaps=%d  receipts=%d\n",
+           events, sent, held, stuck, swaps, g_nr);
     printf("  policy_hash: %016llx\n", (unsigned long long)cfg.policy_hash);
-    printf("  Merkle root (decisions + signed t_ns -> per-session anchor): %s\n", hex);
-    printf("  (OTS anchor of that root is the held-for-publish step, owner-gated)\n");
+    printf("  Merkle root (decisions + migration receipts + signed t_ns -> per-session anchor): %s\n", hex);
+    printf("  (%d migration receipt(s) folded into the root; OTS anchor is the held-for-publish step, owner-gated)\n",
+           swaps);
     return 0;
 }
