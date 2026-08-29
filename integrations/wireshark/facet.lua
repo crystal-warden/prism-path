@@ -21,16 +21,18 @@
 
 local facet = Proto("facet", "Facet/1 decision wire")
 
-local f_form     = ProtoField.string("facet.form",     "Form")
-local f_count    = ProtoField.uint16("facet.count",    "Symbol count")
-local f_wireints = ProtoField.string("facet.wireints", "Wire integers")
-local f_symbols  = ProtoField.string("facet.symbols",  "Symbols (wire - 1)")
-local f_sym      = ProtoField.string("facet.sym",      "Symbol")
-local f_cell     = ProtoField.uint16("facet.cell",     "Cell (u16le wire int)")
-local f_padbits  = ProtoField.uint8 ("facet.padbits",  "Trailing zero pad (bits)")
-local f_mal      = ProtoField.uint8 ("facet.malformed","Malformed (strict decode)")
+local f_form       = ProtoField.string("facet.form",       "Form")
+local f_count      = ProtoField.uint16("facet.count",      "Symbol count")
+local f_wireints   = ProtoField.string("facet.wireints",   "Wire integers")
+local f_symbols    = ProtoField.string("facet.symbols",    "Symbols (wire - 1)")
+local f_sym        = ProtoField.string("facet.sym",        "Symbol")
+local f_cell       = ProtoField.uint16("facet.cell",       "Cell (u16le wire int)")
+local f_padbits    = ProtoField.uint8 ("facet.padbits",    "Trailing zero pad (bits)")
+local f_mal        = ProtoField.uint8 ("facet.malformed",  "Malformed (strict decode)")
+local f_cause      = ProtoField.uint8 ("facet.cause",      "Receipt cause")
+local f_cause_name = ProtoField.string("facet.cause_name", "Receipt cause name")
 
-facet.fields = { f_form, f_count, f_wireints, f_symbols, f_sym, f_cell, f_padbits, f_mal }
+facet.fields = { f_form, f_count, f_wireints, f_symbols, f_sym, f_cell, f_padbits, f_mal, f_cause, f_cause_name }
 
 local ef_empty    = ProtoExpert.new("facet.expert.empty",    "Empty Facet payload",
                                     expert.group.MALFORMED, expert.severity.ERROR)
@@ -44,13 +46,58 @@ local ef_declen   = ProtoExpert.new("facet.expert.declen",   "Decoded form lengt
                                     expert.group.MALFORMED, expert.severity.ERROR)
 local ef_ambig    = ProtoExpert.new("facet.expert.ambiguous","Payload also parses as a raw Facet frame; dissected as decoded (capture wire side of the XDP hook to see raw)",
                                     expert.group.PROTOCOL, expert.severity.NOTE)
+local ef_nonzero_cause = ProtoExpert.new("facet.expert.nonzero_cause",
+                                          "Receipt carries a nonzero cause (refusal/deviation)",
+                                          expert.group.PROTOCOL, expert.severity.NOTE)
 
-facet.experts = { ef_empty, ef_dangling, ef_noterm, ef_overflow, ef_declen, ef_ambig }
+facet.experts = { ef_empty, ef_dangling, ef_noterm, ef_overflow, ef_declen, ef_ambig, ef_nonzero_cause }
 
 facet.prefs.port   = Pref.uint("UDP port", 4711, "UDP port carrying Facet datagrams")
 facet.prefs.fields = Pref.string("Canonical field names", "",
     "Optional comma separated field names in canonical (sorted) order, used to label symbols. " ..
     "Labels are a viewing convenience only; real semantics live in the signed policy.")
+facet.prefs.interpret_receipts = Pref.bool("Interpret receipt streams", false,
+    "When true, 5-symbol frames are dissected as receipt streams with cause labels and expert notes.")
+
+-- Refusal and deviation cause code lookup table.
+-- Source of truth: prismpath/causes.py
+local cause_names = {
+  [0]  = "clean",
+  [1]  = "sig:missing",
+  [2]  = "sig:invalid",
+  [3]  = "sig:revoked-key",
+  [4]  = "manifest:key-id-mismatch",
+  [5]  = "manifest:bad-format",
+  [6]  = "image:sha256-mismatch",
+  [7]  = "manifest:count-mismatch",
+  [8]  = "manifest:wcet-mismatch",
+  [9]  = "image:version-replay",
+  [10] = "image:unsigned-refused",
+  [16] = "image:caps-exceeded",
+  [17] = "packing:unknown-profile",
+  [18] = "spiral:sidecar-missing",
+  [19] = "spiral:sidecar-hash-mismatch",
+  [32] = "route:no-matching-edge",
+  [33] = "route:below-human-floor",
+  [34] = "route:needs-human",
+  [35] = "route:max-steps",
+  [36] = "route:stuck",
+  [37] = "route:contract-violation",
+  [48] = "wire:no-terminator",
+  [49] = "wire:dangling-codeword",
+  [50] = "wire:symbol-overflow",
+  [51] = "wire:codebook-mismatch",
+  [52] = "replay-duplicate",
+  [53] = "replay-stale",
+  [54] = "concentrator-unknown-stream",
+  [55] = "concentrator-truncated",
+  [64] = "state:stale",
+  [65] = "state:recovered",
+  [66] = "state:migration-reset",
+  [67] = "state:swap-in-flight-park",
+}
+
+local receipt_field_names = { "cause", "event", "next_node", "prev_node", "seq" }
 
 -- Zeckendorf decode of one payload, strict contract (mirrors the kernel decode plane):
 -- returns { ints = {..}, spans = {{firstbit,lastbit}..}, pad_bits, malformed, reason }
@@ -127,6 +174,7 @@ function facet.dissector(tvb, pinfo, tree)
   pinfo.cols.protocol = "FACET"
   local subtree = tree:add(facet, tvb(), "Facet Frame")
   local names = split_fields(facet.prefs.fields)
+  local interpret_receipts = facet.prefs.interpret_receipts
 
   if len == 0 then
     subtree:add(f_form, tvb(0, 0), "raw")
@@ -140,16 +188,38 @@ function facet.dissector(tvb, pinfo, tree)
     local n = tvb(1, 1):uint()
     subtree:add(f_form, tvb(0, 1), "decoded")
     subtree:add(f_count, tvb(1, 1), n)
+    local is_receipt = interpret_receipts and (n == 5)
     local cells, syms = {}, {}
     for k = 0, n - 1 do
       local off = 2 + 2 * k
       local v = tvb(off, 2):le_uint()
+      local s = v - 1
       cells[#cells + 1] = tostring(v)
-      syms[#syms + 1] = tostring(v - 1)
-      local label = names[k + 1] and (names[k + 1] .. " ") or ""
-      subtree:add(f_cell, tvb(off, 2), v)
-             :append_text(string.format("  (%ssymbol %d)", label, v - 1))
+      syms[#syms + 1] = tostring(s)
+      local fn = names[k + 1]
+      if (not fn or fn == "") and is_receipt then
+        fn = receipt_field_names[k + 1]
+      end
+      local label = (fn and fn ~= "") and (fn .. " ") or ""
+      local item = subtree:add(f_cell, tvb(off, 2), v)
+      if is_receipt and k == 0 then
+        local cname = cause_names[s] or "unknown"
+        item:append_text(string.format("  (%ssymbol %d (%s))", label, s, cname))
+      else
+        item:append_text(string.format("  (%ssymbol %d)", label, s))
+      end
     end
+
+    if is_receipt then
+      local cause_code = tvb(2, 2):le_uint() - 1
+      local cname = cause_names[cause_code] or "unknown"
+      subtree:add(f_cause, tvb(2, 2), cause_code)
+      subtree:add(f_cause_name, tvb(2, 2), cname)
+      if cause_code ~= 0 then
+        subtree:add_proto_expert_info(ef_nonzero_cause)
+      end
+    end
+
     subtree:add(f_wireints, tvb(2, len - 2), table.concat(cells, ",")):set_generated()
     subtree:add(f_symbols, tvb(2, len - 2), table.concat(syms, ",")):set_generated()
     subtree:add(f_mal, tvb(0, 0), 0):set_generated()
@@ -166,17 +236,43 @@ function facet.dissector(tvb, pinfo, tree)
   local r = strict_decode(tvb, len)
   subtree:add(f_form, tvb(0, 0), "raw")
   subtree:add(f_count, tvb(0, 0), #r.ints):set_generated()
+  local is_receipt = interpret_receipts and (not r.malformed) and (#r.ints == 5)
   local ints, syms = {}, {}
   for k, v in ipairs(r.ints) do
     ints[#ints + 1] = tostring(v)
-    syms[#syms + 1] = tostring(v - 1)
+    local s = v - 1
+    syms[#syms + 1] = tostring(s)
     local b0 = math.floor(r.spans[k][1] / 8)
     local b1 = math.floor(r.spans[k][2] / 8)
-    local label = names[k] and (names[k] .. " ") or ""
-    subtree:add(f_sym, tvb(b0, b1 - b0 + 1),
-                string.format("%swire %d, symbol %d (bits %d..%d)",
-                              label, v, v - 1, r.spans[k][1], r.spans[k][2]))
+    local fn = names[k]
+    if (not fn or fn == "") and is_receipt then
+      fn = receipt_field_names[k]
+    end
+    local label = (fn and fn ~= "") and (fn .. " ") or ""
+    if is_receipt and k == 1 then
+      local cname = cause_names[s] or "unknown"
+      subtree:add(f_sym, tvb(b0, b1 - b0 + 1),
+                  string.format("%swire %d, symbol %d (%s) (bits %d..%d)",
+                                label, v, s, cname, r.spans[k][1], r.spans[k][2]))
+    else
+      subtree:add(f_sym, tvb(b0, b1 - b0 + 1),
+                  string.format("%swire %d, symbol %d (bits %d..%d)",
+                                label, v, s, r.spans[k][1], r.spans[k][2]))
+    end
   end
+
+  if is_receipt then
+    local cause_code = r.ints[1] - 1
+    local cname = cause_names[cause_code] or "unknown"
+    local b0 = math.floor(r.spans[1][1] / 8)
+    local b1 = math.floor(r.spans[1][2] / 8)
+    subtree:add(f_cause, tvb(b0, b1 - b0 + 1), cause_code)
+    subtree:add(f_cause_name, tvb(b0, b1 - b0 + 1), cname)
+    if cause_code ~= 0 then
+      subtree:add_proto_expert_info(ef_nonzero_cause)
+    end
+  end
+
   if #r.ints > 0 then
     subtree:add(f_wireints, tvb(0, len), table.concat(ints, ",")):set_generated()
     subtree:add(f_symbols, tvb(0, len), table.concat(syms, ",")):set_generated()
@@ -205,3 +301,4 @@ function facet.prefs_changed()
     if current_port > 0 then udp_table:add(current_port, facet) end
   end
 end
+
