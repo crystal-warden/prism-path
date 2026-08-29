@@ -7,9 +7,9 @@ A receipt reading carries the fields proven by the kernel receipt struct: decisi
 (``cause``) defined in the refusal and deviation cause code registry (docs/design/spec-cause-codes.md).
 
 Canonical field order is alphabetical: ``cause``, ``event``, ``next_node``, ``prev_node``, ``seq``.
-The cause byte (range 0..255) is carried as an ordinary symbol (code + 1 under Zeckendorf coding)
-so that cause 0 (a clean decision) maps to symbol 0 and wire integer 1 ("11"), making clean decisions
-the densest symbol on the wire.
+The cause code IS the symbol, carried under the standard symbol plus one wire mapping (PROTOCOL.md
+section 2.2) with no special casing: cause 0 (a clean decision) rides as wire integer 1 ("11"), the
+densest code on the wire, and the whole u8 registry space (0..255) is representable.
 
 Pure functions with tuple returns for structural rejections, following the exact house patterns of
 concentrator.py and replay.py.

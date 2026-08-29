@@ -258,15 +258,24 @@ implementation `adapters/telemetry/concentrator.py`; referee `adapters/fusion/te
 
 A receipt stream carries decision receipts over the wire, making refusal and deviation causes machine readable across endpoints. The profile carries the fields proven by the kernel receipt struct: decision identifiers (`prev_node`, `event`, `next_node`), the frame sequence tick (`seq`), and the refusal or deviation cause byte (`cause`) defined in the cause code registry (`docs/design/spec-cause-codes.md`).
 
-- **Declaration.** The flow declares `profile: receipt` in its frontmatter, binding cause carriage under the signed manifest.
+- **Declaration.** A receipt stream is declared the way every stream is declared: the stream's
+  signed codebook fixes exactly these five fields and their canonical order, agreed out of band
+  like the codebook itself (§2.1). No new frontmatter key and no new mechanism; a consumer whose
+  binding carries this field set applies this section's semantics.
 - **Canonical field order.** Fields ride in sorted field name order: `cause`, `event`, `next_node`, `prev_node`, `seq`.
-- **Cause carriage and density.** The cause byte (range 0 to 255) is carried as an ordinary symbol, encoded as `code + 1` under Zeckendorf coding. Cause 0 (a clean decision) maps to symbol 0 and wire integer 1 (`11`), so clean decisions are the densest symbol on the wire.
+- **Cause carriage and density.** The cause code IS the symbol, carried under the standard
+  symbol plus one wire mapping (§2.2) with no special casing. Cause 0 (a clean decision) therefore
+  rides as wire integer 1 (`11`), the densest code on the wire; the whole u8 registry space (0 to
+  255) is representable.
 - **Composition.** Receipt streams compose cleanly with existing declared profiles:
   - **Replay window (§2.8).** The `seq` field serves as the tick counter. Receiver tick checking rejects duplicate or stale receipts with `replay-duplicate` or `replay-stale`.
   - **Concentrator (§2.9).** Receipt readings aggregate into concentrated datagrams. Codebook binding and Zeckendorf self framing preserve zero header framing across aggregated receipt streams.
 - **Out of scope.** This profile is cause carriage on the wire, not a full audit log schema. Carrying per reading Merkle proof paths, raw 64 bit nanosecond timestamps (`t_ns`), 64 bit policy hashes, or raw sensor payloads on every frame is explicitly out of scope. Session integrity rides the Merkle root (§2.4) and policy binding rides codebook agreement (§2.1).
 
-Reference implementation `adapters/telemetry/receipts.py`; referee `adapters/fusion/tests/test_receipts.py`.
+Reference implementation `adapters/telemetry/receipts.py`; referees
+`adapters/telemetry/tests/test_receipts.py` (frozen vectors,
+`adapters/telemetry/conformance/receipts.json`) and
+`adapters/fusion/tests/test_receipts_profile.py` (profile composition).
 
 ---
 
