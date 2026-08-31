@@ -6,6 +6,18 @@ repo's gates. The claim, delivered and measured: a **fixed circuit** routes any 
 Level M flow loaded as a **BRAM table image**: the flow stays data all the way down to
 silicon.*
 
+## See it decide
+
+[![the demo rig: a signed hysteresis policy holding a steady band on silicon, the resident OLED readout agreeing with the LED](../docs/media/demo-poster.jpg)](https://github.com/crystal-warden/prism-path/releases/download/demo-2026-08/prismpath-demo-take4.mp4)
+
+**Two minutes, one take.** A button press swaps signed policies from a ROM inside the FPGA fabric, no
+processor in the loop; the exact rule flickers honestly on a knife edge threshold while the resident rule
+holds the same dial rock steady under signed deadbands, and then the input becomes a sensor carried across
+the room, deciding over a radio mesh the chip decodes itself. Every decision wrote a receipt, and the whole
+chain (4568/4568 silicon replay, a live sweep witness, the worst case bound on the pins) ships as one
+hashed, Bitcoin anchored manifest you can verify in six commands:
+[`hyst-cert/VERIFY.md`](hyst-cert/VERIFY.md).
+
 ## Layout
 
 | file | role |
