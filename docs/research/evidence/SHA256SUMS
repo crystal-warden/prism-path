@@ -1,3 +1,9 @@
-# PrismPath research papers: content anchor (priority-date stamp)
+# PrismPath evidence content anchor (priority-date stamp): ledger + papers + field-walk demo
 # Verify from repo root:  sha256sum -c docs/research/evidence/SHA256SUMS
-9de71bc518fbee6c2aabfd2476ed2667c68cee9295f5579ec172dfa84847b363  docs/research/paper-facet-figueroa-quantization.md
+222bba2a2b3aa3ea374c965e5edc534e0725c0eee94b296f5fc313dc434f59d8  docs/research/supporting-evidence.md
+ae44a9a2ce7aed48a4a207e8fea38748154c42b36a45f9c02058a11f47b0335b  docs/research/supporting-evidence.pending.md
+392f28a679e69d5f442999c14af08d8d88fd6249dd40f30704ea08226a219f22  docs/research/paper-facet-figueroa-quantization.md
+a24df469dcd0bb0dba3359d12d7b65e7b1d37726eed53e5e5762240722999e43  prismpath-hw/mesh-fusion/main/ppt_fusion_mesh.c
+c1d5ccbdbabaf710f703c019463dc341028c44c0d048636a3c315e2a3b6204f3  prismpath-hw/mesh-fusion/field_walk.py
+e8f3d205f6467042fac4a46abe15415fcc0f38e49173a4498891871ef7ae02e8  prismpath-hw/mesh-fusion/RESULTS-field-walk-2026-08-30.md
+da72fb8293ce084a66053697c7c43c8fcb3fed839ac3fd02c630426d9f260cac  prismpath-hw/mesh-fusion/trail-2026-08-30-field-walk.jsonl
