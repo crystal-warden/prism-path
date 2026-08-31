@@ -12,7 +12,7 @@ Control (from another shell, so the logger can run unattended while you walk):
     echo intf 4      > CTL      # set simulated interference on the primary node to 40% verdict drop
     echo blackout    > CTL      # 'X' -> ~99% drop on the primary node
     echo clearintf   > CTL      # back to 0% drop
-    echo mark mailbox 32ft > CTL   # stamp a free-text position/event mark onto the trail
+    echo mark 'waypoint 2, ~20 m' > CTL   # stamp a free-text position/event mark onto the trail
     echo quit        > CTL
 
     python3 field_walk.py --port /dev/ttyUSB0 [--port2 /dev/ttyUSB1] \
