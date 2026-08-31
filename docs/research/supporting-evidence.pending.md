@@ -6,7 +6,7 @@ free number, instead of editing the main ledger. On merge, the docs session fold
 ledger with correct formatting and clears this file.*
 
 *Format each row exactly per `LEDGER_STANDARDS.md` §1 (Claim / Method / Result + Honest scope /
-Provenance) with a month granularity date. Next free number: **#129**.*
+Provenance) with a month granularity date. Next free number: **#137**.*
 
 ---
 
@@ -215,3 +215,35 @@ board.
 
 **Provenance.** prism-path main, merge 426f088 (trail/unified-journal:
 prismpath-ebpf/decision-delta-demo/sel_forward_receipts.c). No push (owner-gated).
+
+#### #136: Field walk of the governed ESP-NOW mesh on real radios (August 2026)
+
+**Claim.** On real ESP-NOW radios, walked apart outdoors, a three node governed mesh commits a signed
+fusion-rule swap only on a live quorum and refuses otherwise, treats a partitioned node as a first-class
+STALE input that escalates the fused verdict while the surviving quorum keeps deciding, re-absorbs the
+node automatically on return, and degrades gracefully under injected packet loss.
+
+**Method.** Three ESP32 nodes ran one unmodified signed fusion table (ppt_fusion_mesh.c); one tethered
+node recorded the fused verdict to a single timestamped trail via field_walk.py while the third node was
+carried out to increasing range on battery. The two-phase rule swap was fired at in-range, edge, and
+partitioned positions; the receiver drop knob was swept 0/50/90/99 percent. 9069 fused verdicts over
+about 30 minutes on one continuous, replayable trail.
+
+**Result.** Swap matrix, only a quorum flips the fleet: 2/2 ACKs COMMIT (flip A to B, decisions
+unbroken), 1/2 ABORT at the range edge, 0/2 ABORT under partition, no split brain. Partition: present
+(band 0, OK) to STALE (band 8, DEGRADED) with the two fixed nodes' quorum held throughout, longest
+partition 589 verdicts (about 118 s). Rejoin: automatic within the 1.5 s freshness window, zero
+intervention. Interference: 50 percent loss fully tolerated (OK), 90 percent onset, 99 percent blackout a
+steady DEGRADED (the recorded node keeps its own reading and refuses a false healthy collective),
+auto-recover on clear.
+
+**Honest scope.** This is the on-device signed-table fusion plus two-phase quorum swap, a sibling of, not
+identical to, the host-side quorum-or-abstain prototype (flow-studio/pipeline/quorum.py). Single recorded
+vantage (no spatial-diversity observer); distances are owner estimates; no RSSI (connectivity measured by
+delivery and STALE transitions); the mobile node's sensor slot was unwired (radio and governance
+measured, not sensing); interference was injected at the receiver, not a real RF jammer.
+
+**Provenance.** prism-path, branch demo/field-walk-mesh, commit 3852c2c (prismpath-hw/mesh-fusion/:
+ppt_fusion_mesh.c, field_walk.py, RESULTS-field-walk-2026-08-30.md, sanitized trail
+trail-2026-08-30-field-walk.jsonl). Position marks sanitized for the public record; the raw trail with
+real location marks is kept private. No push (owner-gated).
