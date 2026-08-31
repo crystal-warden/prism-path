@@ -1,3 +1,3 @@
-build/
-sdkconfig
-sdkconfig.old
+# raw field-walk trail contains home-location marks: PRIVATE, never commit
+trail-20260830-200328.jsonl
+trail-*-raw.jsonl
