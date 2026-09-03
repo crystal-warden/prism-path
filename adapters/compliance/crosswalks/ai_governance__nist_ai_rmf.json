@@ -1,0 +1,81 @@
+{
+ "id": "ai_governance__nist_ai_rmf",
+ "a": "ai_governance",
+ "b": "nist_ai_rmf",
+ "complete": false,
+ "authority": "Curated mapping from the Crystal Warden AI-GOV controls to NIST AI RMF 1.0 subcategories (subcategory ids from the NIST AI RMF, sourced by agy). The four AI-GOV families are built ON the AI RMF functions (Govern/Map/Measure/Manage), so the function alignment is by design; the specific subcategory assignments are curated and should be verified against the NIST AI RMF Playbook. A subcategory is reported met only when every mapped AI-GOV control is met (fail closed).",
+ "edges": [
+  {
+   "a": "MP-1",
+   "b": [
+    "GOVERN 1.6",
+    "MAP 1.1"
+   ]
+  },
+  {
+   "a": "MP-2",
+   "b": [
+    "GOVERN 1.2"
+   ]
+  },
+  {
+   "a": "MP-3",
+   "b": [
+    "MAP 2.3"
+   ]
+  },
+  {
+   "a": "MP-4",
+   "b": [
+    "GOVERN 6.1",
+    "MAP 4.1"
+   ]
+  },
+  {
+   "a": "MP-5",
+   "b": [
+    "MAP 5.1"
+   ]
+  },
+  {
+   "a": "GV-1",
+   "b": [
+    "GOVERN 1.4",
+    "MEASURE 2.8"
+   ]
+  },
+  {
+   "a": "GV-2",
+   "b": [
+    "GOVERN 1.3"
+   ]
+  },
+  {
+   "a": "GV-3",
+   "b": [
+    "GOVERN 1.5",
+    "GOVERN 2.1"
+   ]
+  },
+  {
+   "a": "MG-1",
+   "b": [
+    "MANAGE 1.3"
+   ]
+  },
+  {
+   "a": "MG-2",
+   "b": [
+    "MANAGE 4.1",
+    "MANAGE 4.3"
+   ]
+  },
+  {
+   "a": "MS-1",
+   "b": [
+    "MEASURE 1.1",
+    "MANAGE 4.1"
+   ]
+  }
+ ]
+}

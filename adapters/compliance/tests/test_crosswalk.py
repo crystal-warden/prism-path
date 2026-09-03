@@ -55,6 +55,19 @@ def test_reverse_direction_and_unknown_framework_raises():
         cw.propagate(x, "iso_27001", {"a.5.1": "met"})
 
 
+def test_ai_governance_crosswalk_maps_to_ai_rmf():
+    import compliance_adapter as ca
+    ca.use_standard("ai_governance")
+    aig = set(ca._catalog()["controls"])
+    ca.use_standard("nist_800171_r2")
+    x = cw.load_crosswalk("ai_governance__nist_ai_rmf")
+    assert x["a"] == "ai_governance" and x["b"] == "nist_ai_rmf"
+    assert all(e["a"] in aig for e in x["edges"])              # every source is a real AI-GOV control
+    rep = cw.propagate(x, "ai_governance", {"MP-1": "met"})
+    assert rep["target_framework"] == "nist_ai_rmf"
+    assert rep["controls"]["GOVERN 1.6"]["verdict"] == "met"   # MP-1 (AI inventory) -> AI RMF GOVERN 1.6
+
+
 def test_every_source_id_in_the_800171_crosswalks_is_a_real_control():
     import compliance_adapter as ca
     ca.use_standard("nist_800171_r2")
