@@ -24,7 +24,6 @@ import os
 import sys
 import time
 
-import numpy as np
 import requests
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -52,6 +51,7 @@ def llm_choice(prompt: str, n_edges: int) -> int:
 
 
 def main() -> None:
+    import numpy as np
     records = [json.loads(l) for l in open(BENCH, encoding="utf-8") if l.strip()]
     graphs = load_graphs(records)
     items = _decision_items(records, graphs)

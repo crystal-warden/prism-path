@@ -14,8 +14,6 @@ from __future__ import annotations
 import re
 from collections import defaultdict
 
-import numpy as np
-
 from prismpath.parser import parse_file
 from prismpath import embedder
 
@@ -57,6 +55,7 @@ def lexical_route(outcome, edges):
 
 
 def embed_route(outcome, edges, cond_embs):
+    import numpy as np
     qe = embedder.embed([outcome], is_query=True)
     sims = embedder.cosine(qe, cond_embs)[0]
     return edges[int(np.argmax(sims))][0], sims

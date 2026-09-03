@@ -9,7 +9,6 @@ the query side only).
 from __future__ import annotations
 
 import os
-import numpy as np
 
 MODEL_NAME = os.environ.get("EMBED_MODEL", "BAAI/bge-base-en-v1.5")
 EMBED_DEVICE = os.environ.get("EMBED_DEVICE", "cpu")
@@ -39,6 +38,7 @@ def _embedder():
 
 
 def embed(texts, is_query=False):
+    import numpy as np
     if is_query:
         texts = [QUERY_INSTRUCTION + t for t in texts]
     v = _embedder().encode(texts, normalize_embeddings=True, show_progress_bar=False)
@@ -47,5 +47,6 @@ def embed(texts, is_query=False):
 
 def cosine(a, b):
     """a: [d] or [n,d], b: [m,d] (all unit-normalized) -> similarity matrix/vector."""
+    import numpy as np
     a = np.atleast_2d(a)
     return (a @ b.T)

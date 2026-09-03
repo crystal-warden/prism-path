@@ -20,15 +20,14 @@ comparison — the natural "does this new outcome look like the outcomes that to
 from __future__ import annotations
 
 import os
-from typing import Dict, List, Optional, Tuple
-
-import numpy as np
+from typing import Any, Dict, List, Optional, Tuple
 
 from prismpath import embedder, predicates
 from prismpath.router import EmbeddingRouter
 
 
-def _unit(v: np.ndarray) -> np.ndarray:
+def _unit(v):
+    import numpy as np
     n = float(np.linalg.norm(v))
     return v / n if n else v
 
@@ -38,7 +37,7 @@ class CentroidRouter(EmbeddingRouter):
     outcomes for that edge, falling back to the condition-string prior when history is thin. Drops into
     `HybridRouter(..., embed=CentroidRouter(...))` as the embed tier."""
 
-    def __init__(self, centroids: Dict[str, np.ndarray], counts: Dict[str, int],
+    def __init__(self, centroids: Dict[str, Any], counts: Dict[str, int],
                  prior_weight: float = 4.0):
         super().__init__()
         self._centroids = centroids          # {condition_text: unit mean-outcome vector}
@@ -50,6 +49,7 @@ class CentroidRouter(EmbeddingRouter):
         return embedder.cosine(qe, self._cond_embs(edges))[0]
 
     def _cond_embs(self, edges):
+        import numpy as np
         conds = [c for _, c in edges]
         priors = embedder.embed(conds, is_query=False)        # condition prior per edge (passage space)
         out = []
@@ -124,6 +124,7 @@ def cross_validate(records: List[dict], graphs: Optional[dict] = None, flows_dir
     passage-condition) against the CentroidRouter (trained on the other folds), per stratum. Centroids
     are built ONLY from the train split, so there is no leakage. All embeddings are computed once."""
     from collections import defaultdict
+    import numpy as np
     graphs = graphs if graphs is not None else load_graphs(records, flows_dir)
     items = _decision_items(records, graphs)
     if not items:
@@ -165,9 +166,10 @@ def cross_validate(records: List[dict], graphs: Optional[dict] = None, flows_dir
     return out
 
 
-def build_centroids(records: List[dict], graphs: dict) -> Tuple[Dict[str, np.ndarray], Dict[str, int]]:
+def build_centroids(records: List[dict], graphs: dict) -> Tuple[Dict[str, Any], Dict[str, int]]:
     """{condition: unit mean-outcome vector}, {condition: n} over labeled records. Only SEMANTIC
     conditions get centroids (deterministic/error/event edges don't route by embedding)."""
+    import numpy as np
     by_cond: Dict[str, List[str]] = {}
     for rec in records:
         cond = record_condition(rec, graphs)

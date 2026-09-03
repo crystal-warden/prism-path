@@ -25,8 +25,6 @@ import json
 import os
 from typing import Optional
 
-import numpy as np
-
 LOCK_VERSION = 1
 DEFAULT_DELTA = 0.05                 # mirrors HybridRouter's default margin
 LOCK_COSINE_MIN = 0.9999            # probe cosine below this ⇒ the embedder drifted
@@ -39,10 +37,20 @@ class LockError(Exception):
 
 # --- vector + flow encoding -------------------------------------------------------------
 def _encode_vec(v) -> str:
-    return base64.b64encode(np.asarray(v, dtype="<f4").tobytes()).decode("ascii")
+    try:
+        import numpy as np
+        b = np.asarray(v, dtype="<f4").tobytes()
+    except ImportError:
+        import struct
+        if isinstance(v, (list, tuple)):
+            b = struct.pack(f"<{len(v)}f", *v)
+        else:
+            raise
+    return base64.b64encode(b).decode("ascii")
 
 
-def _decode_vec(s: str) -> np.ndarray:
+def _decode_vec(s: str):
+    import numpy as np
     return np.frombuffer(base64.b64decode(s), dtype="<f4").astype("float32")
 
 
@@ -62,7 +70,7 @@ def _semantic_conditions(graph) -> list:
     conds = set()
     for n in graph.nodes.values():
         for _, c in n.edges:
-            if not predicates.is_deterministic(c):
+            if predicates.is_semantic(c):
                 conds.add(c)
     return sorted(conds)
 
@@ -78,26 +86,56 @@ def build_lock(flow_path, delta: Optional[float] = None, centroids: Optional[dic
     unit(prior_weight·condition + n·centroid) with `n` from `centroid_counts` — so the measured
     accuracy gain (+0.14 ALL / +0.23 polarity on the benchmark) becomes bit-for-bit reproducible:
     `locked_router` routes against these exact vectors, no corpus or recomputation at runtime."""
-    from prismpath import embedder
     from prismpath.parser import parse_file
     graph = parse_file(flow_path)
     conds = _semantic_conditions(graph)
-    vecs = embedder.embed(conds, is_query=False) if conds else np.zeros((0, 0), dtype="float32")
-    probe_vec = embedder.embed([_PROBE], is_query=False)[0]
-    dim = int(vecs.shape[1]) if conds else int(probe_vec.shape[0])
+    if conds:
+        from prismpath import embedder
+        vecs = embedder.embed(conds, is_query=False)
+        probe_vec = embedder.embed([_PROBE], is_query=False)[0]
+        dim = int(vecs.shape[1])
+        model_name = getattr(embedder, "MODEL_NAME", "unknown")
+        model_device = getattr(embedder, "EMBED_DEVICE", "unknown")
+        model_provider = getattr(embedder, "PROVIDER", "sentence-transformers")
+        model_precision = getattr(embedder, "PRECISION", "fp32")
+    else:
+        try:
+            from prismpath import embedder
+            probe_vec = embedder.embed([_PROBE], is_query=False)[0]
+            dim = int(probe_vec.shape[0])
+            model_name = getattr(embedder, "MODEL_NAME", "unknown")
+            model_device = getattr(embedder, "EMBED_DEVICE", "unknown")
+            model_provider = getattr(embedder, "PROVIDER", "sentence-transformers")
+            model_precision = getattr(embedder, "PRECISION", "fp32")
+            vecs = probe_vec[:0]
+        except Exception:
+            try:
+                import numpy as np
+                dim = 384
+                probe_vec = np.zeros((dim,), dtype="float32")
+                vecs = np.zeros((0, dim), dtype="float32")
+            except ImportError:
+                dim = 384
+                probe_vec = [0.0] * dim
+                vecs = []
+            model_name = "none"
+            model_device = "none"
+            model_provider = "none"
+            model_precision = "fp32"
+
     lock = {
         "version": LOCK_VERSION,
         "flow": graph.name,
         "flow_hash": _flow_hash(flow_path),
         "embedder": {
-            "name": getattr(embedder, "MODEL_NAME", "unknown"),
-            "device": getattr(embedder, "EMBED_DEVICE", "unknown"),
+            "name": model_name,
+            "device": model_device,
             # A lock is per-(model, provider, precision): the SAME weights under PyTorch fp32,
             # ONNX fp32, or a quantized WASM build produce slightly different vectors, and the
             # probe fingerprint will (correctly) refuse across them. Recording the provider
             # identity makes that boundary explicit instead of a mysterious drift failure.
-            "provider": getattr(embedder, "PROVIDER", "sentence-transformers"),
-            "precision": getattr(embedder, "PRECISION", "fp32"),
+            "provider": model_provider,
+            "precision": model_precision,
             "dim": dim,
             "probe": _PROBE,
             "probe_vec": _encode_vec(probe_vec),
@@ -106,6 +144,7 @@ def build_lock(flow_path, delta: Optional[float] = None, centroids: Optional[dic
         "conditions": {c: _encode_vec(vecs[i]) for i, c in enumerate(conds)},
     }
     if centroids:
+        import numpy as np
         pinned = {}
         counts = centroid_counts or {}
         for i, c in enumerate(conds):
@@ -143,17 +182,27 @@ def load_lock(path) -> dict:
 def probe_cosine(lock: dict) -> float:
     """Cosine between the locked fingerprint probe and the LOCAL embedder's probe embedding.
     ~1.0 ⇒ same numerics; lower ⇒ the embedder drifted."""
-    from prismpath import embedder
-    locked = _decode_vec(lock["embedder"]["probe_vec"])
-    local = embedder.embed([lock["embedder"].get("probe", _PROBE)], is_query=False)[0]
-    denom = (np.linalg.norm(locked) * np.linalg.norm(local)) or 1.0
-    return float(np.dot(locked, local) / denom)
+    import numpy as np
+    if not lock.get("conditions") and lock.get("embedder", {}).get("name") == "none":
+        return 1.0
+    try:
+        from prismpath import embedder
+        locked = _decode_vec(lock["embedder"]["probe_vec"])
+        local = embedder.embed([lock["embedder"].get("probe", _PROBE)], is_query=False)[0]
+        denom = (np.linalg.norm(locked) * np.linalg.norm(local)) or 1.0
+        return float(np.dot(locked, local) / denom)
+    except Exception:
+        if not lock.get("conditions"):
+            return 1.0
+        raise
 
 
 def verify_lock(lock: dict, policy: Optional[str] = None) -> bool:
     """Verify the local embedder reproduces the lock's fingerprint. Returns True if it matches.
     On mismatch, PRISMPATH_LOCK_POLICY (or `policy`) decides: 'refuse' (default — raise), 'warn'
     (print + return False), 'allow' (silent + return False)."""
+    if not lock.get("conditions") and lock.get("embedder", {}).get("name") == "none":
+        return True
     from prismpath import embedder
     policy = (policy or os.environ.get("PRISMPATH_LOCK_POLICY", "refuse")).lower()
     name_ok = getattr(embedder, "MODEL_NAME", None) == lock["embedder"]["name"]
