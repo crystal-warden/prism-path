@@ -1,0 +1,29 @@
+{
+  "boundary": "warden-node-01 CUI enclave host",
+  "host": "warden-node-01",
+  "provenance": {
+    "source": "example-scan",
+    "collector": "manual-config-export",
+    "collected_at": "2026-09-02T00:00:00Z"
+  },
+  "facts": {
+    "fips_validated_cryptography": true,
+    "account_lockout_threshold": 5,
+    "account_lockout_enforced": true,
+    "password_history_count": 24,
+    "password_history_enforced": true,
+    "session_termination_conditions_defined": true,
+    "session_auto_termination_enforced": true,
+    "session_lock_timeout_seconds": 900,
+    "session_lock_enforced": true,
+    "session_lock_pattern_hiding": true,
+    "password_complexity_defined": true,
+    "password_change_of_char_defined": true,
+    "password_complexity_enforced": true,
+    "password_change_of_char_enforced": true,
+    "privileged_accounts_identified": true,
+    "mfa_local_privileged": true,
+    "mfa_network_privileged": true,
+    "mfa_network_nonprivileged": false
+  }
+}

@@ -21,10 +21,11 @@ values, e.g. from a config scanner or an IdP / endpoint export:
     {"control_id": "3.1.8", "boundary": "...",
      "facts": {"account_lockout_threshold": 5, "account_lockout_enforced": true}}
 
-Each check is a pure predicate over that dict returning True (objective satisfied), False (refuted),
-or None (undeterminable). Extend CHECKS as connectors learn to emit more facts. This first cut seeds
-the canonical technical-configuration controls whose every 800-171A objective is decidable from
-configuration; procedural and operational objectives stay with the LLM adjudicator.
+Each objective maps to one fact key and one check kind (see CHECK_SPEC). `flag` reads a boolean fact;
+`defined` reads a threshold or count (present and > 0 means defined). A check returns True (satisfied),
+False (refuted), or None (undeterminable). Extend CHECK_SPEC as connectors learn to emit more facts.
+This first cut seeds the canonical technical-configuration controls whose every 800-171A objective is
+decidable from configuration; procedural and operational objectives stay with the LLM adjudicator.
 """
 from typing import Optional
 
@@ -48,41 +49,56 @@ def _defined(facts, key) -> Optional[bool]:
         return bool(v)
 
 
-# objective id -> predicate(facts) -> True | False | None
-CHECKS = {
+_KINDS = {"flag": _flag, "defined": _defined}
+
+# objective id -> (check kind, fact key). Declarative so both the predicate and the fact-key map
+# derive from one source. Seeded with technical-configuration controls whose every objective is
+# decidable from configuration.
+CHECK_SPEC = {
     # 3.13.11 Employ FIPS-validated cryptography to protect the confidentiality of CUI
-    "3.13.11[a]": lambda f: _flag(f, "fips_validated_cryptography"),
+    "3.13.11[a]": ("flag", "fips_validated_cryptography"),
 
     # 3.1.8 Limit unsuccessful logon attempts
-    "3.1.8[a]": lambda f: _defined(f, "account_lockout_threshold"),
-    "3.1.8[b]": lambda f: _flag(f, "account_lockout_enforced"),
+    "3.1.8[a]": ("defined", "account_lockout_threshold"),
+    "3.1.8[b]": ("flag", "account_lockout_enforced"),
 
     # 3.5.8 Prohibit password reuse for a specified number of generations
-    "3.5.8[a]": lambda f: _defined(f, "password_history_count"),
-    "3.5.8[b]": lambda f: _flag(f, "password_history_enforced"),
+    "3.5.8[a]": ("defined", "password_history_count"),
+    "3.5.8[b]": ("flag", "password_history_enforced"),
 
     # 3.1.11 Terminate (automatically) a user session after a defined condition
-    "3.1.11[a]": lambda f: _flag(f, "session_termination_conditions_defined"),
-    "3.1.11[b]": lambda f: _flag(f, "session_auto_termination_enforced"),
+    "3.1.11[a]": ("flag", "session_termination_conditions_defined"),
+    "3.1.11[b]": ("flag", "session_auto_termination_enforced"),
 
     # 3.1.10 Use session lock with pattern-hiding displays after a period of inactivity
-    "3.1.10[a]": lambda f: _defined(f, "session_lock_timeout_seconds"),
-    "3.1.10[b]": lambda f: _flag(f, "session_lock_enforced"),
-    "3.1.10[c]": lambda f: _flag(f, "session_lock_pattern_hiding"),
+    "3.1.10[a]": ("defined", "session_lock_timeout_seconds"),
+    "3.1.10[b]": ("flag", "session_lock_enforced"),
+    "3.1.10[c]": ("flag", "session_lock_pattern_hiding"),
 
     # 3.5.7 Enforce a minimum password complexity and change of characters
-    "3.5.7[a]": lambda f: _flag(f, "password_complexity_defined"),
-    "3.5.7[b]": lambda f: _flag(f, "password_change_of_char_defined"),
-    "3.5.7[c]": lambda f: _flag(f, "password_complexity_enforced"),
-    "3.5.7[d]": lambda f: _flag(f, "password_change_of_char_enforced"),
+    "3.5.7[a]": ("flag", "password_complexity_defined"),
+    "3.5.7[b]": ("flag", "password_change_of_char_defined"),
+    "3.5.7[c]": ("flag", "password_complexity_enforced"),
+    "3.5.7[d]": ("flag", "password_change_of_char_enforced"),
 
     # 3.5.3 Multifactor authentication for local/network access to privileged accounts and network
     # access to non-privileged accounts
-    "3.5.3[a]": lambda f: _flag(f, "privileged_accounts_identified"),
-    "3.5.3[b]": lambda f: _flag(f, "mfa_local_privileged"),
-    "3.5.3[c]": lambda f: _flag(f, "mfa_network_privileged"),
-    "3.5.3[d]": lambda f: _flag(f, "mfa_network_nonprivileged"),
+    "3.5.3[a]": ("flag", "privileged_accounts_identified"),
+    "3.5.3[b]": ("flag", "mfa_local_privileged"),
+    "3.5.3[c]": ("flag", "mfa_network_privileged"),
+    "3.5.3[d]": ("flag", "mfa_network_nonprivileged"),
 }
+
+
+def _make_check(kind, key):
+    fn = _KINDS[kind]
+    return lambda facts: fn(facts, key)
+
+
+# objective id -> predicate(facts) -> True | False | None
+CHECKS = {oid: _make_check(kind, key) for oid, (kind, key) in CHECK_SPEC.items()}
+# objective id -> the fact key it reads (what a scanner adapter must supply)
+FACT_KEYS = {oid: key for oid, (_kind, key) in CHECK_SPEC.items()}
 
 
 def machine_checkable(control) -> bool:
