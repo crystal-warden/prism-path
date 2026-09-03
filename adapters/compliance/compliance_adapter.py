@@ -25,6 +25,7 @@ STANDARDS = {
     "ai_safety_testing": os.path.join(HERE, "catalog", "ai_safety_testing.json"),  # AI safety testing (evidence/process)
     "soc2_tsc": os.path.join(HERE, "catalog", "soc2_tsc.json"),                # SOC 2 Trust Services Criteria (Common Criteria)
     "ai_governance": os.path.join(HERE, "catalog", "ai_governance.json"),      # AI governance (NIST AI RMF-structured)
+    "nist_800172": os.path.join(HERE, "catalog", "nist_800172.json"),          # NIST SP 800-172 enhanced reqs (CMMC L3 basis)
 }
 _ACTIVE = os.environ.get("PRISMPATH_STANDARD", "nist_800171_r2")
 _CAT_CACHE = {}

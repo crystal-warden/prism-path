@@ -1,0 +1,1016 @@
+{
+ "_meta": {
+  "standard": "nist_800172",
+  "revision": "2021",
+  "controls": 35,
+  "families": 14,
+  "source": "NIST SP 800-172 (Feb 2021) enhanced security requirements + SP 800-172A assessment procedures, from the NIST CSRC official CSVs. Sourced by agy, adapted to the adapter schema; verify against the NIST publication before assessment use.",
+  "note": "Enhanced requirements for CUI (the basis for CMMC Level 3). Numbering uses the 'e' suffix (e.g. 3.1.1e). No DoD SPRS point weights apply the way they do to Rev 2."
+ },
+ "families": {
+  "AC": "Access Control",
+  "AT": "Awareness and Training",
+  "AU": "Audit and Accountability",
+  "CM": "Configuration Management",
+  "IA": "Identification and Authentication",
+  "IR": "Incident Response",
+  "MA": "Maintenance",
+  "MP": "Media Protection",
+  "PS": "Personnel Security",
+  "PE": "Physical Protection",
+  "RA": "Risk Assessment",
+  "SA": "Security Assessment",
+  "SC": "System and Communications Protection",
+  "SI": "System and Information Integrity"
+ },
+ "controls": {
+  "3.1.1e": {
+   "family": "AC",
+   "family_name": "Access Control",
+   "title": "Employ dual authorization to execute critical or sensitive system and organizational operations",
+   "control": "Employ dual authorization to execute critical or sensitive system and organizational operations.",
+   "discussion": "Dual authorization, also known as two-person control, reduces risk related to insider threats. Dual authorization requires the approval of two authorized individuals to execute certain commands, actions, or functions. For example, organizations employ dual authorization to help ensure that changes to selected system components (i.e., hardware, software, and firmware) or information cannot occur unless two qualified individuals approve and implement such changes. These individuals possess the skills and expertise to determine if the proposed changes are correct implementations of the approved changes, and they are also accountable for those changes. Another example is employing dual authorization for the execution of privileged commands. To reduce the risk of collusion, organizations consider rotating assigned dual authorization duties to reduce the risk of an insider threat. Dual authorization can be implemented via either technical or procedural measures and can be carried out sequentially or in parallel.",
+   "evidence_types": [
+    "policy",
+    "procedure",
+    "operating-effectiveness",
+    "record"
+   ],
+   "methods": [
+    "Examine",
+    "Interview",
+    "Test"
+   ],
+   "objectives": [
+    {
+     "id": "3.1.1e[a]",
+     "text": "Employ dual authorization to execute critical or sensitive system and organizational operations.",
+     "discovery_query": "Provide evidence that employ dual authorization to execute critical or sensitive system and organizational operations.",
+     "examine": "[SELECT FROM: List of critical or sensitive system and organizational operations; access control policy; dual authorization policy; procedures addressing access enforcement and dual authorization; security plan; configuration management plan; system design documentation; system configuration settings and associated documentation; list of privilege access authorizations; commands requiring dual authorization; list of actions requiring dual authorization; system audit records; list of approved authorizations (user privileges); system generated list of dual authorization credentials or rules; logs or records of deletion or destruction of backup information; list of system media requiring dual authorization for sanitization; authorization records; media sanitization records; audit records; other relevant documents or records].",
+     "interview": "[SELECT FROM: System and network administrators; system developers; organizational personnel responsible for access enforcement, system backup, dual authorization enforcement for implementing system changes, system media sanitization, audit and accountability, and information security].",
+     "test": "[SELECT FROM: Mechanisms implementing the enforcement of dual authorization]."
+    }
+   ]
+  },
+  "3.1.2e": {
+   "family": "AC",
+   "family_name": "Access Control",
+   "title": "Restrict access to systems and system components to only those information resources that are own...",
+   "control": "Restrict access to systems and system components to only those information resources that are owned, provisioned, or issued by the organization.",
+   "discussion": "Information resources that are not owned, provisioned, or issued by the organization include systems or system components owned by other organizations and personally owned devices. Nonorganizational information resources present significant risks to the organization and complicate the ability to employ a \u201ccomply-to-connect\u201d policy or implement component or device attestation techniques to ensure the integrity of the organizational system.",
+   "evidence_types": [
+    "policy",
+    "procedure",
+    "operating-effectiveness",
+    "record"
+   ],
+   "methods": [
+    "Examine",
+    "Interview",
+    "Test"
+   ],
+   "objectives": [
+    {
+     "id": "3.1.2e[a]",
+     "text": "Restrict access to systems and system components to only those information resources that are owned, provisioned, or issued by the organization.",
+     "discovery_query": "Provide evidence that restrict access to systems and system components to only those information resources that are owned, provisioned, or issued by the organization.",
+     "examine": "[SELECT FROM: Access control policy; procedures addressing the use of external systems; list of information resources owned, provisioned, or issued by the organization; security plan; system design documentation; system configuration settings and associated documentation; system connection or processing agreements; system audit records; account management documents; other relevant documents or records].",
+     "interview": "[SELECT FROM: Organizational personnel responsible for restricting or prohibiting the use of non-organizationally owned systems, system components, or devices; system and network administrators; organizational personnel responsible for system security].",
+     "test": "[SELECT FROM: Mechanisms implementing restrictions on the use of nonorganizationally owned systems, components, or devices]."
+    }
+   ]
+  },
+  "3.1.3e": {
+   "family": "AC",
+   "family_name": "Access Control",
+   "title": "Employ [Assignment: organization-defined secure information transfer solutions] to control inform...",
+   "control": "Employ [Assignment: organization-defined secure information transfer solutions] to control information flows between security domains on connected systems.",
+   "discussion": "Organizations employ information flow control policies and enforcement mechanisms to control the flow of information between designated sources and destinations within systems and between connected systems. Flow control is based on the characteristics of the information and/or the information path. Enforcement occurs, for example, in boundary protection devices that employ rule sets or establish configuration settings that restrict system services, provide a packet-filtering capability based on header information, or provide a message-filtering capability based on message content. Organizations also consider the trustworthiness of filtering and inspection mechanisms (i.e., hardware, firmware, and software components) that are critical to information flow enforcement. Transferring information between systems in different security domains with different security policies introduces the risk that the transfers violate one or more domain security policies. In such situations, information owners or information stewards provide guidance at designated policy enforcement points between connected systems. Organizations mandate specific architectural solutions when required to enforce logical or physical separation between systems in different security domains. Enforcement includes prohibiting information transfers between connected systems, employing hardware mechanisms to enforce one-way information flows, verifying write permissions before accepting information from another security domain or connected system, and implementing trustworthy regrading mechanisms to reassign security attributes and labels. Secure information transfer solutions often include one or more of the following properties: use of cross-domain solutions when traversing security domains, mutual authentication of the sender and recipient (using hardware-based cryptography), encryption of data in transit and at rest, isolation from other domains, and logging of information transfers (e.g., title of file, file size, cryptographic hash of file, sender, recipient, transfer time and Internet Protocol [IP] address, receipt time, and IP address).",
+   "evidence_types": [
+    "policy",
+    "procedure",
+    "operating-effectiveness",
+    "record"
+   ],
+   "methods": [
+    "Examine",
+    "Interview",
+    "Test"
+   ],
+   "objectives": [
+    {
+     "id": "3.1.3e[a]",
+     "text": "Employ [Assignment: organization-defined secure information transfer solutions] to control information flows between security domains on connected systems.",
+     "discovery_query": "Provide evidence that employ [Assignment: organization-defined secure information transfer solutions] to control information flows between security domains on connected systems.",
+     "examine": "[SELECT FROM: Access control policy; procedures addressing the use of external systems; list of information resources owned, provisioned, or issued by the organization; security plan; system design documentation; system configuration settings and associated documentation; system connection or processing agreements; system audit records; account management documents; other relevant documents or records].",
+     "interview": "[SELECT FROM: Organizational personnel responsible for restricting or prohibiting the use of non-organizationally owned systems, system components, or devices; system and network administrators; organizational personnel responsible for system security].",
+     "test": "[SELECT FROM: Mechanisms implementing restrictions on the use of non-organizationally owned systems, components, or devices]."
+    },
+    {
+     "id": "3.1.3e[b]",
+     "text": "Employ [Assignment: organization-defined secure information transfer solutions] to control information flows between security domains on connected systems.",
+     "discovery_query": "Provide evidence that employ [Assignment: organization-defined secure information transfer solutions] to control information flows between security domains on connected systems.",
+     "examine": "[SELECT FROM: Access control policy; information flow control policies; procedures addressing information flow enforcement; system design documentation; security plan; system configuration settings and associated documentation; system audit records; system baseline configuration; list of information flow authorizations; other relevant documents or records].",
+     "interview": "[SELECT FROM: System and network administrators; organizational personnel responsible for information security; system developers].",
+     "test": "[SELECT FROM: Mechanisms implementing information flow enforcement policy; mechanisms implementing secure information transfer solutions]."
+    }
+   ]
+  },
+  "3.2.1e": {
+   "family": "AT",
+   "family_name": "Awareness and Training",
+   "title": "Provide awareness training [Assignment: organization-defined frequency] focused on recognizing an...",
+   "control": "Provide awareness training [Assignment: organization-defined frequency] focused on recognizing and responding to threats from social engineering, advanced persistent threat actors, breaches, and suspicious behaviors; update the training [Assignment: organization-defined frequency] or when there are significant changes to the threat.",
+   "discussion": "An effective method to detect APT activities and reduce the effectiveness of those activities is to provide specific awareness training for individuals. A well-trained and security-aware workforce provides another organizational safeguard that can be employed as part of a defense-in-depth strategy to protect organizations against malicious code injections via email or web applications. Threat awareness training includes educating individuals on the various ways that APTs can infiltrate organizations, including through websites, emails, advertisement pop-ups, articles, and social engineering. Training can include techniques for recognizing suspicious emails, the use of removable systems in non-secure settings, and the potential targeting of individuals by adversaries outside the workplace. Awareness training is assessed and updated periodically to ensure that the training is relevant and effective, particularly with respect to the threat since it is constantly, and often rapidly, evolving. [SP 800-50] provides guidance on security awareness and training programs.",
+   "evidence_types": [
+    "policy",
+    "procedure",
+    "operating-effectiveness",
+    "record"
+   ],
+   "methods": [
+    "Examine",
+    "Interview",
+    "Test"
+   ],
+   "objectives": [
+    {
+     "id": "3.2.1e[a]",
+     "text": "Provide awareness training [Assignment: organization-defined frequency] focused on recognizing and responding to threats from social engineering, advanced persistent threat actors, breaches, and suspicious behaviors; update the training [Assignment: organization-defined frequency] or when there are significant changes to the threat.",
+     "discovery_query": "Provide evidence that provide awareness training [Assignment: organization-defined frequency] focused on recognizing and responding to threats from social engineering, advanced persistent threat actors, breaches, and suspicious behaviors; update the training [Assignment: organization-defined frequency] or when there are significant changes to the threat.",
+     "examine": "[SELECT FROM: Awareness training policy; procedures addressing awareness training implementation; appropriate codes of federal regulations; awareness training curriculum; awareness training materials; security plan; training records; threat information on social engineering, advanced persistent threat actors, suspicious behaviors, and breaches; other relevant documents or records].",
+     "interview": "[SELECT FROM: Organizational personnel responsible for awareness training; organizational personnel responsible for information security; organizational personnel comprising the general system user community].",
+     "test": "[SELECT FROM: Mechanisms managing awareness training; mechanisms managing threat information]."
+    }
+   ]
+  },
+  "3.2.2e": {
+   "family": "AT",
+   "family_name": "Awareness and Training",
+   "title": "Include practical exercises in awareness training for [Assignment: organization-defined roles] th...",
+   "control": "Include practical exercises in awareness training for [Assignment: organization-defined roles] that are aligned with current threat scenarios and provide feedback to individuals involved in the training and their supervisors.",
+   "discussion": "Awareness training is most effective when it is complemented by practical exercises tailored to the tactics, techniques, and procedures (TTP) of the threat. Examples of practical exercises include unannounced social engineering attempts to gain unauthorized access, collect information, or simulate the adverse impact of opening malicious email attachments or invoking, via spear phishing attacks, malicious web links. Rapid feedback is essential to reinforce desired user behavior. Training results, especially failures of personnel in critical roles, can be indicative of a potentially serious problem. It is important that senior management are made aware of such situations so that they can take appropriate remediating actions. [SP 800-181] provides guidance on role-based security training, including a lexicon and taxonomy that describes cybersecurity work via work roles.",
+   "evidence_types": [
+    "policy",
+    "procedure",
+    "operating-effectiveness",
+    "record"
+   ],
+   "methods": [
+    "Examine",
+    "Interview",
+    "Test"
+   ],
+   "objectives": [
+    {
+     "id": "3.2.2e[a]",
+     "text": "Include practical exercises in awareness training for [Assignment: organization-defined roles] that are aligned with current threat scenarios and provide feedback to individuals involved in the training and their supervisors.",
+     "discovery_query": "Provide evidence that include practical exercises in awareness training for [Assignment: organization-defined roles] that are aligned with current threat scenarios and provide feedback to individuals involved in the training and their supervisors.",
+     "examine": "[SELECT FROM: Awareness training policy; procedures addressing awareness training implementation; appropriate codes of federal regulations; awareness training curriculum; awareness training materials; security plan; training records; threat information on social engineering, advanced persistent threat actors, suspicious behaviors, breaches, or other relevant adversary tactics, techniques, or procedures; feedback on practical exercises and awareness training; other relevant documents or records].",
+     "interview": "[SELECT FROM: Organizational personnel responsible for awareness training; organizational personnel responsible for information security; organizational personnel with roles identified for practical exercises; supervisors of personnel with roles identified for practical exercises].",
+     "test": "[SELECT FROM: Mechanisms managing awareness training; mechanisms managing threat information]."
+    }
+   ]
+  },
+  "3.4.1e": {
+   "family": "CM",
+   "family_name": "Configuration Management",
+   "title": "Establish and maintain an authoritative source and repository to provide a trusted source and acc...",
+   "control": "Establish and maintain an authoritative source and repository to provide a trusted source and accountability for approved and implemented system components.",
+   "discussion": "The establishment and maintenance of an authoritative source and repository includes a system component inventory of approved hardware, software, and firmware; approved system baseline configurations and configuration changes; and verified system software and firmware, as well as images and/or scripts. The authoritative source implements integrity controls to log changes or attempts to change software, configurations, or data in the repository. Additionally, changes to the repository are subject to change management procedures and require authentication of the user requesting the change. In certain situations, organizations may also require dual authorization for such changes. Software changes are routinely checked for integrity and authenticity to ensure that the changes are legitimate when updating the repository and when refreshing a system from the known, trusted source. The information in the repository is used to demonstrate adherence to or identify deviation from the established configuration baselines and to restore system components from a trusted source. From an automated assessment perspective, the system description provided by the authoritative source is referred to as the desired state. The desired state is compared to the actual state to check for compliance or deviations. [SP 80e-128] provides guidance on security configuration management, including security configuration settings and configuration change control. [IR 8011-1] provides guidance on automation support to assess system and system component configurations.",
+   "evidence_types": [
+    "policy",
+    "procedure",
+    "operating-effectiveness",
+    "record"
+   ],
+   "methods": [
+    "Examine",
+    "Interview",
+    "Test"
+   ],
+   "objectives": [
+    {
+     "id": "3.4.1e[a]",
+     "text": "Establish and maintain an authoritative source and repository to provide a trusted source and accountability for approved and implemented system components.",
+     "discovery_query": "Provide evidence that establish and maintain an authoritative source and repository to provide a trusted source and accountability for approved and implemented system components.",
+     "examine": "[SELECT FROM: Configuration management policy; procedures addressing the baseline configuration of the system; configuration management plan; enterprise architecture documentation; system design documentation; system architecture and configuration documentation; system configuration settings and associated documentation; change control records; system and system component inventory records; inventory reviews and update records; security plan; system audit records; change control audit and review reports; other relevant documents or records].",
+     "interview": "[SELECT FROM: Organizational personnel responsible for configuration management; organizational personnel responsible for system component inventory; organizational personnel responsible for configuration change control; organizational personnel responsible for information security; system/network administrators; members of a change control board or similar].",
+     "test": "[SELECT FROM: Mechanisms that implement configuration change control; mechanisms supporting configuration control of the baseline configuration; mechanisms supporting and/or implementing the system component inventory]."
+    }
+   ]
+  },
+  "3.4.2e": {
+   "family": "CM",
+   "family_name": "Configuration Management",
+   "title": "Employ automated mechanisms to detect misconfigured or unauthorized system components; after dete...",
+   "control": "Employ automated mechanisms to detect misconfigured or unauthorized system components; after detection, [Selection (one or more): remove the components; place the components in a quarantine or remediation network] to facilitate patching, re-configuration, or other mitigations.",
+   "discussion": "System components used to process, store, transmit, or protect CUI are monitored and checked against the authoritative source (i.e., hardware and software inventory and associated baseline configurations). From an automated assessment perspective, the system description provided by the authoritative source is referred to as the desired state. Using automated tools, the desired state is compared to the actual state to check for compliance or deviations. Security responses to system components that are unknown or that deviate from approved configurations can include removing the components; halting system functions or processing; placing the system components in a quarantine or remediation network that facilitates patching, re-configuration, or other mitigations; or issuing alerts and/or notifications to personnel when there is an unauthorized modification of an organization-defined configuration item. Responses can be automated, manual, or procedural. Components that are removed from the system are rebuilt from the trusted configuration baseline established by the authoritative source. [IR 8011-1] provides guidance on using automation support to assess system configurations.",
+   "evidence_types": [
+    "policy",
+    "procedure",
+    "operating-effectiveness",
+    "record"
+   ],
+   "methods": [
+    "Examine",
+    "Interview",
+    "Test"
+   ],
+   "objectives": [
+    {
+     "id": "3.4.2e[a]",
+     "text": "Employ automated mechanisms to detect misconfigured or unauthorized system components; after detection, [Selection (one or more): remove the components; place the components in a quarantine or remediation network] to facilitate patching, re-configuration, or other mitigations.",
+     "discovery_query": "Provide evidence that employ automated mechanisms to detect misconfigured or unauthorized system components; after detection, [Selection (one or more): remove the components; place the components in a quarantine or remediation network] to facilitate patching, re-configuration, or other mitigations.",
+     "examine": "[SELECT FROM: Configuration management policy; procedures addressing the baseline configuration of the system; configuration management plan; authoritative source or repository; enterprise architecture documentation; system design documentation; system architecture and configuration documentation; system procedures addressing system configuration change control; configuration settings and associated documentation; change control records; change control audit and review reports; agenda/minutes from configuration change control oversight meetings; alerts/notifications of unauthorized baseline configuration changes; security plan; system audit records; other relevant documents or records].",
+     "interview": "[SELECT FROM: Organizational personnel responsible for configuration management; organizational personnel responsible for information security; organizational personnel responsible for configuration change control; system developers; system/network administrators; members of a change control board or similar roles].",
+     "test": "[SELECT FROM: Automated mechanisms supporting configuration control of the baseline configuration; automated mechanisms that implement security responses to changes to the baseline configurations; automated mechanisms that implement configuration change control; automated mechanisms that detect misconfigured or unauthorized system components]."
+    }
+   ]
+  },
+  "3.4.3e": {
+   "family": "CM",
+   "family_name": "Configuration Management",
+   "title": "Employ automated discovery and management tools to maintain an up-to-date, complete, accurate, an...",
+   "control": "Employ automated discovery and management tools to maintain an up-to-date, complete, accurate, and readily available inventory of system components.",
+   "discussion": "The system component inventory includes system-specific information required for component accountability and to provide support to identify, control, monitor, and verify configuration items in accordance with the authoritative source. The information necessary for effective accountability of system components includes the system name, hardware and software component owners, hardware inventory specifications, software license information, software version numbers, and\u2014for networked components\u2014the machine names and network addresses. Inventory specifications include the manufacturer, supplier information, component type, date of receipt, cost, model, serial number, and physical location. Organizations also use automated mechanisms to implement and maintain authoritative (i.e., up-to-date, complete, accurate, and available) baseline configurations for systems that include hardware and software inventory tools, configuration management tools, and network management tools. Tools can be used to track version numbers on operating systems, applications, types of software installed, and current patch levels.",
+   "evidence_types": [
+    "policy",
+    "procedure",
+    "operating-effectiveness",
+    "record"
+   ],
+   "methods": [
+    "Examine",
+    "Interview",
+    "Test"
+   ],
+   "objectives": [
+    {
+     "id": "3.4.3e[a]",
+     "text": "Determine if",
+     "discovery_query": "Provide evidence that employ automated discovery and management tools to maintain an up-to-date, complete, accurate, and readily available inventory of system components.",
+     "examine": "[SELECT FROM: Configuration management policy; configuration management plan; procedures addressing system component inventory; procedures addressing the baseline configuration of the system; configuration management plan; system design documentation; system architecture and configuration documentation; security plan; system configuration settings and associated documentation; configuration change control records; system inventory records; change control records; system maintenance records; system audit records; other relevant documents or records].",
+     "interview": "[SELECT FROM: Organizational personnel responsible for information security; organizational personnel responsible for configuration management; organizational personnel responsible for managing the automated mechanisms implementing the system component inventory; system developers; system/network administrators].",
+     "test": "[SELECT FROM: Automated mechanisms implementing baseline configuration maintenance; automated mechanisms implementing the system component inventory]."
+    }
+   ]
+  },
+  "3.5.1e": {
+   "family": "IA",
+   "family_name": "Identification and Authentication",
+   "title": "Identify and authenticate [Assignment: organization-defined systems and system components] before...",
+   "control": "Identify and authenticate [Assignment: organization-defined systems and system components] before establishing a network connection using bidirectional authentication that is cryptographically based and replay resistant.",
+   "discussion": "Cryptographically-based and replay-resistant authentication between systems, components, and devices addresses the risk of unauthorized access from spoofing (i.e., claiming a false identity). The requirement applies to client-server authentication, server-server authentication, and device authentication (including mobile devices). The cryptographic key for authentication transactions is stored in suitably secure storage available to the authenticator application (e.g., keychain storage, Trusted Platform Module [TPM], Trusted Execution Environment [TEE], or secure element). Mandating authentication requirements at every connection point may not be practical, and therefore, such requirements may only be applied periodically or at the initial point of network connection. [SP 800-63-3] provides guidance on identity and authenticator management.",
+   "evidence_types": [
+    "policy",
+    "procedure",
+    "operating-effectiveness",
+    "record"
+   ],
+   "methods": [
+    "Examine",
+    "Interview",
+    "Test"
+   ],
+   "objectives": [
+    {
+     "id": "3.5.1e[a]",
+     "text": "Identify and authenticate [Assignment: organization-defined systems and system components] before establishing a network connection using bidirectional authentication that is cryptographically based and replay resistant.",
+     "discovery_query": "Provide evidence that identify and authenticate [Assignment: organization-defined systems and system components] before establishing a network connection using bidirectional authentication that is cryptographically based and replay resistant.",
+     "examine": "[SELECT FROM: Identification and authentication policy; procedures addressing device identification and authentication; network connection policy; security plan; system configuration settings and associated documentation; system design documentation; list of devices requiring unique identification and authentication; device connection reports; system audit records; list of privileged system accounts; other relevant documents or records].",
+     "interview": "[SELECT FROM: Organizational personnel responsible for system operations; organizational personnel responsible for account management; organizational personnel responsible for device identification and authentication; organizational personnel responsible for information security; system/network administrators; system developers].",
+     "test": "[SELECT FROM: Cryptographically-based bidirectional authentication mechanisms; mechanisms supporting and/or implementing network connection policy; mechanisms supporting and/or implementing replay-resistant authentication mechanisms; mechanisms supporting and/or implementing an identification and authentication capability; mechanisms supporting and/or implementing a device identification and authentication capability]."
+    }
+   ]
+  },
+  "3.5.2e": {
+   "family": "IA",
+   "family_name": "Identification and Authentication",
+   "title": "Employ automated mechanisms for the generation, protection, rotation, and management of passwords...",
+   "control": "Employ automated mechanisms for the generation, protection, rotation, and management of passwords for systems and system components that do not support multifactor authentication or complex account management.",
+   "discussion": "In situations where static passwords or personal identification numbers (PIN) are used (e.g., certain system components do not support multifactor authentication or complex account management, such as separate system accounts for each user and logging), automated mechanisms (e.g., password managers) can automatically generate, rotate, manage, and store strong and different passwords for users and device accounts. For example, a router might have one administrator account, but an organization typically has multiple network administrators. Therefore, access management and accountability are problematic. A password manager uses techniques such as automated password rotation (in this example, for the router password) to allow a specific user to temporarily gain access to a device by checking out a temporary password and then checking the password back in to end the access. The password manager simultaneously logs these actions. One of the risks in using password managers is that an adversary may target the collection of passwords that the device generates. Therefore, it is important that these passwords are secured. Methods for protecting passwords include the use of multi-factor authentication to the password manager, encryption, or secured hardware (e.g., a hardware security module). [SP 800-63-3] provides guidance on password generation and management.",
+   "evidence_types": [
+    "policy",
+    "procedure",
+    "operating-effectiveness",
+    "record"
+   ],
+   "methods": [
+    "Examine",
+    "Interview",
+    "Test"
+   ],
+   "objectives": [
+    {
+     "id": "3.5.2e[a]",
+     "text": "Employ automated mechanisms for the generation, protection, rotation, and management of passwords for systems and system components that do not support multifactor authentication or complex account management.",
+     "discovery_query": "Provide evidence that employ automated mechanisms for the generation, protection, rotation, and management of passwords for systems and system components that do not support multifactor authentication or complex account management.",
+     "examine": "[SELECT FROM: Identification and authentication policy; password policy; procedures addressing authenticator management; system design documentation; security plan; system configuration settings and associated documentation; list of system authenticator types; change control records associated with managing system authenticators; system audit records; password configurations and associated documentation; other relevant documents or records].",
+     "interview": "[SELECT FROM: Organizational personnel responsible for information security; organizational personnel responsible for authenticator management; system developers; system/network administrators].",
+     "test": "[SELECT FROM: Automated mechanisms supporting and/or implementing an authenticator management capability]."
+    }
+   ]
+  },
+  "3.5.3e": {
+   "family": "IA",
+   "family_name": "Identification and Authentication",
+   "title": "Employ automated or manual/procedural mechanisms to prohibit system components from connecting to...",
+   "control": "Employ automated or manual/procedural mechanisms to prohibit system components from connecting to organizational systems unless the components are known, authenticated, in a properly configured state, or in a trust profile.",
+   "discussion": "Identification and authentication of system components and component configurations can be determined, for example, via a cryptographic hash of the component. This is also known as device attestation and known operating state or trust profile. A trust profile based on factors such as the user, authentication method, device type, and physical location is used to make dynamic decisions on authorizations to data of varying types. If device attestation is the means of identification and authentication, then it is important that patches and updates to the device are handled via a configuration management process such that the patches and updates are done securely and do not disrupt the identification and authentication of other devices. [IR 8011-1] provides guidance on using automation support to assess system configurations.",
+   "evidence_types": [
+    "policy",
+    "procedure",
+    "operating-effectiveness",
+    "record"
+   ],
+   "methods": [
+    "Examine",
+    "Interview",
+    "Test"
+   ],
+   "objectives": [
+    {
+     "id": "3.5.3e[a]",
+     "text": "Employ automated or manual/procedural mechanisms to prohibit system components from connecting to organizational systems unless the components are known, authenticated, in a properly configured state, or in a trust profile.",
+     "discovery_query": "Provide evidence that employ automated or manual/procedural mechanisms to prohibit system components from connecting to organizational systems unless the components are known, authenticated, in a properly configured state, or in a trust profile.",
+     "examine": "[SELECT FROM: Configuration management policy; identification and authentication policy; system and information integrity policy; procedures addressing system component inventory; procedures addressing device identification and authentication; procedures addressing device configuration management; procedures addressing system monitoring tools and techniques; configuration management plan; security plan; system design documentation; system configuration settings and associated documentation; system inventory records; configuration management records; system monitoring records; alerts/notifications of unauthorized components within the system; change control records; system audit records; system monitoring tools and techniques documentation; documented authorization/approval of network services; notifications or alerts of unauthorized network services; system monitoring logs or records; other relevant documents or records].",
+     "interview": "[SELECT FROM: Organizational personnel responsible for managing the mechanisms implementing unauthorized system component detection; organizational personnel responsible for device identification and authentication; organizational personnel responsible for information security; organizational personnel responsible for installing, configuring, and/or maintaining the system; system/network administrators; organizational personnel responsible for monitoring the system; system developers].",
+     "test": "[SELECT FROM: Mechanisms implementing the detection of unauthorized system components; mechanisms supporting and/or implementing a device identification and authentication capability; mechanisms for providing alerts; mechanisms supporting and/or implementing configuration management; cryptographic mechanisms supporting device attestation; mechanisms supporting and/or implementing a system monitoring capability; mechanisms for auditing network services]."
+    }
+   ]
+  },
+  "3.6.1e": {
+   "family": "IR",
+   "family_name": "Incident Response",
+   "title": "Establish and maintain a security operations center capability that operates [Assignment: organiz...",
+   "control": "Establish and maintain a security operations center capability that operates [Assignment: organization-defined time period].",
+   "discussion": "A security operations center (SOC) is the focal point for security operations and computer network defense for an organization. The purpose of the SOC is to defend and monitor an organization\u2019s systems and networks (i.e., cyber infrastructure) on an ongoing basis. The SOC is also responsible for detecting, analyzing, and responding to cybersecurity incidents in a timely manner. The SOC is staffed with skilled technical and operational personnel (e.g., security analysts, incident response personnel, systems security engineers); in some instances operates 24 hours per day, seven days per week; and implements technical, management, and operational controls (e.g., monitoring, scanning, and forensics tools) to monitor, fuse, correlate, analyze, and respond to security-relevant event data from multiple sources. Sources of event data include perimeter defenses, network devices (e.g., gateways, routers, and switches), and endpoint agent data feeds. The SOC provides a holistic situational awareness capability to help organizations determine the security posture of the system and organization. An SOC capability can be obtained in many ways. Larger organizations may implement a dedicated SOC while smaller organizations may employ third-party organizations to provide such a capability. [SP 800-61] provides guidance on incident handling. [SP 800-86] and [SP 800-101] provide guidance on integrating forensic techniques into incident response. [SP 800-150] provides guidance on cyber threat information sharing. [SP 800-184] provides guidance on cybersecurity event recovery.",
+   "evidence_types": [
+    "policy",
+    "procedure",
+    "operating-effectiveness",
+    "record"
+   ],
+   "methods": [
+    "Examine",
+    "Interview",
+    "Test"
+   ],
+   "objectives": [
+    {
+     "id": "3.6.1e[a]",
+     "text": "Establish and maintain a security operations center capability that operates [Assignment: organization-defined time period].",
+     "discovery_query": "Provide evidence that establish and maintain a security operations center capability that operates [Assignment: organization-defined time period].",
+     "examine": "SELECT FROM: Incident response policy; contingency planning policy; procedures addressing incident handling; procedures addressing the security operations center operations; mechanisms supporting dynamic response capabilities; incident response plan; contingency plan; security plan; other relevant documents or records].",
+     "interview": "[SELECT FROM: Organizational personnel responsible for incident handling; organizational personnel responsible for contingency planning; security operations center personnel; organizational personnel responsible for information security].",
+     "test": "[SELECT FROM: Mechanisms that support and/or implement the security operations center capability; mechanisms that support and/or implement the incident handling process]."
+    }
+   ]
+  },
+  "3.6.2e": {
+   "family": "IR",
+   "family_name": "Incident Response",
+   "title": "Establish and maintain a cyber incident response team that can be deployed by the organization wi...",
+   "control": "Establish and maintain a cyber incident response team that can be deployed by the organization within [Assignment: organization-defined time period].",
+   "discussion": "A cyber incident response team (CIRT) is a team of experts that assesses, documents, and responds to cyber incidents so that organizational systems can recover quickly and implement the necessary controls to avoid future incidents. CIRT personnel include, for example, forensic analysts, malicious code analysts, systems security engineers, and real-time operations personnel. The incident handling capability includes performing rapid forensic preservation of evidence and analysis of and response to intrusions. The team members may or may not be full-time but need to be available to respond in the time period required. The size and specialties of the team are based on known and anticipated threats. The team is typically pre-equipped with the software and hardware (e.g., forensic tools) necessary for rapid identification, quarantine, mitigation, and recovery and is familiar with how to preserve evidence and maintain chain of custody for law enforcement or counterintelligence uses. For some organizations, the CIRT can be implemented as a cross-organizational entity or as part of the Security Operations Center (SOC). [SP 800-61] provides guidance on incident handling. [SP 800-86] and [SP 800-101] provide guidance on integrating forensic techniques into incident response. [SP 800-150] provides guidance on cyber threat information sharing. [SP 800-184] provides guidance on cybersecurity event recovery.",
+   "evidence_types": [
+    "policy",
+    "procedure",
+    "operating-effectiveness",
+    "record"
+   ],
+   "methods": [
+    "Examine",
+    "Interview",
+    "Test"
+   ],
+   "objectives": [
+    {
+     "id": "3.6.2e[a]",
+     "text": "Establish and maintain a cyber incident response team that can be deployed by the organization within [Assignment: organization-defined time period].",
+     "discovery_query": "Provide evidence that establish and maintain a cyber incident response team that can be deployed by the organization within [Assignment: organization-defined time period].",
+     "examine": "[SELECT FROM: Incident response policy; procedures addressing incident response; incident response plan; security plan; other relevant documents or records].",
+     "interview": "[SELECT FROM: Organizational personnel responsible for incident response; organizational personnel from the incident response team; organizational personnel responsible for information security].",
+     "test": "[SELECT FROM: Mechanisms supporting and/or implementing incident response]."
+    }
+   ]
+  },
+  "3.9.1e": {
+   "family": "PS",
+   "family_name": "Personnel Security",
+   "title": "Conduct [Assignment: organization-defined enhanced personnel screening] for individuals and reass...",
+   "control": "Conduct [Assignment: organization-defined enhanced personnel screening] for individuals and reassess individual positions and access to CUI [Assignment: organization-defined frequency].",
+   "discussion": "Personnel security is the discipline that provides a trusted workforce based on an evaluation or assessment of conduct, integrity, judgment, loyalty, reliability, and stability. The extent of the vetting is commensurate with the level of risk that individuals could bring about by their position and access to CUI. For individuals accessing Federal Government facilities and systems, the Federal Government employs resources, information, and technology in its vetting processes to ensure a trusted workforce. These screening processes may be extended all or in part to persons accessing federal information, including CUI that is resident in nonfederal systems and organizations through contractual vehicles or other agreements established between federal agencies and nonfederal organizations. Examples of enhanced personnel screening for security purposes include additional background checks. Personnel reassessment activities reflect applicable laws, executive orders, directives, policies, regulations, and specific criteria established for the level of access required for assigned positions.",
+   "evidence_types": [
+    "policy",
+    "procedure",
+    "operating-effectiveness",
+    "record"
+   ],
+   "methods": [
+    "Examine",
+    "Interview",
+    "Test"
+   ],
+   "objectives": [
+    {
+     "id": "3.9.1e[a]",
+     "text": "Conduct [Assignment: organization-defined enhanced personnel screening] for individuals and reassess individual positions and access to CUI [Assignment: organization-defined frequency].",
+     "discovery_query": "Provide evidence that conduct [Assignment: organization-defined enhanced personnel screening] for individuals and reassess individual positions and access to CUI [Assignment: organization-defined frequency].",
+     "examine": "[SELECT FROM: Personnel security policy; system and services acquisition policy; records of screened personnel; procedures addressing personnel screening; security plan; list of appropriate access authorizations required by developers of the system; personnel screening criteria and associated documentation; other relevant documents or records].",
+     "interview": "[SELECT FROM: Organizational personnel responsible for personnel security; organizational personnel responsible for information security; organizational personnel responsible for system and services acquisition; organizational personnel responsible for developer and personnel screening].",
+     "test": "[SELECT FROM: Organizational processes for personnel screening; organizational processes for developer screening; mechanisms supporting developer screening]."
+    }
+   ]
+  },
+  "3.9.2e": {
+   "family": "PS",
+   "family_name": "Personnel Security",
+   "title": "Ensure that organizational systems are protected if adverse information develops or is obtained a...",
+   "control": "Ensure that organizational systems are protected if adverse information develops or is obtained about individuals with access to CUI.",
+   "discussion": "If adverse information develops or is obtained about an individual with access to CUI which calls into question whether the individual should have continued access to systems containing CUI, actions are taken (e.g., preclude or limit further access by the individual, audit actions taken by the individual) to protect the CUI while the adverse information is resolved.",
+   "evidence_types": [
+    "policy",
+    "procedure",
+    "operating-effectiveness",
+    "record"
+   ],
+   "methods": [
+    "Examine",
+    "Interview",
+    "Test"
+   ],
+   "objectives": [
+    {
+     "id": "3.9.2e[a]",
+     "text": "Ensure that organizational systems are protected if adverse information develops or is obtained about individuals with access to CUI.",
+     "discovery_query": "Provide evidence that ensure that organizational systems are protected if adverse information develops or is obtained about individuals with access to CUI.",
+     "examine": "[SELECT FROM: Personnel security policy; system and services acquisition policy; procedures addressing personnel screening; records of screened personnel; enterprise architecture documentation; system design documentation; system architecture and configuration documentation; security plan; list of individuals who have been identified as posing an increased level of risk; list of appropriate access authorizations required for system personnel; personnel screening criteria and associated documentation; other relevant documents or records].",
+     "interview": "[SELECT FROM: Organizational personnel responsible for personnel security; organizational personnel responsible for information security; organizational personnel responsible for system and services acquisition; organizational personnel responsible for personnel screening].",
+     "test": "[SELECT FROM: Organizational processes for personnel screening; mechanisms supporting personnel screening]."
+    }
+   ]
+  },
+  "3.11.1e": {
+   "family": "RA",
+   "family_name": "Risk Assessment",
+   "title": "Employ [Assignment: organization-defined sources of threat intelligence] as part of a risk assess...",
+   "control": "Employ [Assignment: organization-defined sources of threat intelligence] as part of a risk assessment to guide and inform the development of organizational systems, security architectures, selection of security solutions, monitoring, threat hunting, and response and recovery activities.",
+   "discussion": "The constant evolution and increased sophistication of adversaries, especially the APT, makes it more likely that adversaries can successfully compromise or breach organizational systems. Accordingly, threat intelligence can be integrated into each step of the risk management process throughout the system development life cycle. This risk management process includes defining system security requirements, developing system and security architectures, selecting security solutions, monitoring (including threat hunting), and remediation efforts. [SP 800-30] provides guidance on risk assessments. [SP 800-39] provides guidance on the risk management process. [SP 800-160-1] provides guidance on security architectures and systems security engineering. [SP 800-150] provides guidance on cyber threat information sharing.",
+   "evidence_types": [
+    "policy",
+    "procedure",
+    "operating-effectiveness",
+    "record"
+   ],
+   "methods": [
+    "Examine",
+    "Interview",
+    "Test"
+   ],
+   "objectives": [
+    {
+     "id": "3.11.1e[a]",
+     "text": "Employ [Assignment: organization-defined sources of threat intelligence] as part of a risk assessment to guide and inform the development of organizational systems, security architectures, selection of security solutions, monitoring, threat hunting, and response and recovery activities.",
+     "discovery_query": "Provide evidence that employ [Assignment: organization-defined sources of threat intelligence] as part of a risk assessment to guide and inform the development of organizational systems, security architectures, selection of security solutions, monitoring, threat hunting, and response and recovery activities.",
+     "examine": "[SELECT FROM: Information security program plan; risk assessment policy; threat awareness program documentation; procedures for the threat awareness program; security planning policy and procedures; procedures addressing organizational assessments of risk; threat hunting program documentation; procedures for the threat hunting program; risk assessment results relevant to threat awareness; threat hunting results; list or other documentation on the cross-organization, information-sharing capability; security plan; risk assessment; risk assessment results; risk assessment reviews; risk assessment updates; contingency planning policy; contingency plan; incident response policy; incident response plan; other relevant documents or records].",
+     "interview": "[SELECT FROM: Organizational personnel responsible for information security program planning and plan implementation; organizational personnel responsible for the threat awareness and threat hunting programs; organizational personnel responsible for risk assessments; organizational personnel responsible for the cross-organization, information-sharing capability; organizational personnel responsible for information security; organizational personnel responsible for contingency planning; organizational personnel responsible for incident response; personnel with whom threat awareness information is shared by the organization].",
+     "test": "[SELECT FROM: Mechanisms supporting and/or implementing the threat awareness program; mechanisms supporting and/or implementing the cross-organization, information-sharing capability; mechanisms supporting and/or implementing the threat hunting program; mechanisms for conducting, documenting, reviewing, disseminating, and updating risk assessments; mechanisms supporting and/or implementing contingency plans; mechanisms supporting and/or implementing incident response plans]."
+    }
+   ]
+  },
+  "3.11.2e": {
+   "family": "RA",
+   "family_name": "Risk Assessment",
+   "title": "Conduct cyber threat hunting activities [Selection (one or more): [Assignment: organization-defin...",
+   "control": "Conduct cyber threat hunting activities [Selection (one or more): [Assignment: organization-defined frequency]; [Assignment: organization-defined event]] to search for indicators of compromise in [Assignment: organization-defined systems] and detect, track, and disrupt threats that evade existing controls.",
+   "discussion": "Threat hunting is an active means of defense that contrasts with traditional protection measures, such as firewalls, intrusion detection and prevention systems, quarantining malicious code in sandboxes, and Security Information and Event Management (SIEM) technologies and systems. Cyber threat hunting involves proactively searching organizational systems, networks, and infrastructure for advanced threats. The objective is to track and disrupt cyber adversaries as early as possible in the attack sequence and to measurably improve the speed and accuracy of organizational responses. Indicators of compromise are forensic artifacts from intrusions that are identified on organizational systems at the host or network level and can include unusual network traffic, unusual file changes, and the presence of malicious code. Threat hunting teams use existing threat intelligence and may create new threat information, which may be shared with peer organizations, Information Sharing and Analysis Organizations (ISAO), Information Sharing and Analysis Centers (ISAC), and relevant government departments and agencies. Threat indicators, signatures, tactics, techniques, procedures, and other indicators of compromise may be available via government and non-government cooperatives, including Forum of Incident Response and Security Teams, United States Computer Emergency Response Team, Defense Industrial Base Cybersecurity Information Sharing Program, and CERT Coordination Center. [SP 800-30] provides guidance on threat and risk assessments, risk analyses, and risk modeling. [SP 800-160-2] provides guidance on systems security engineering and cyber resiliency. [SP 800-150] provides guidance on cyber threat information sharing.",
+   "evidence_types": [
+    "policy",
+    "procedure",
+    "operating-effectiveness",
+    "record"
+   ],
+   "methods": [
+    "Examine",
+    "Interview",
+    "Test"
+   ],
+   "objectives": [
+    {
+     "id": "3.11.2e[a]",
+     "text": "Conduct cyber threat hunting activities [Selection (one or more): [Assignment: organization-defined frequency]; [Assignment: organization-defined event]] to search for indicators of compromise in [Assignment: organization-defined systems] and detect, track, and disrupt threats that evade existing controls.",
+     "discovery_query": "Provide evidence that conduct cyber threat hunting activities [Selection (one or more): [Assignment: organization-defined frequency]; [Assignment: organization-defined event]] to search for indicators of compromise in [Assignment: organization-defined systems] and detect, track, and disrupt threats that evade existing controls.",
+     "examine": "[SELECT FROM: System and information integrity policy; policy and procedures addressing system monitoring; threat hunting program documentation; procedures for the threat hunting program; threat hunting results; system design documentation; security plan; system monitoring tools and techniques documentation; security planning policy and procedures; system configuration settings and associated documentation; system monitoring logs or records; system audit records; other relevant documents or records].",
+     "interview": "[SELECT FROM: Organizational personnel responsible for threat hunting program; system/network administrators; organizational personnel responsible for information security; system developers; organizational personnel installing, configuring, and/or maintaining the system; organizational personnel responsible for monitoring the system and/or network].",
+     "test": "[SELECT FROM: Mechanisms supporting and/or implementing a threat hunting program; mechanisms supporting and/or implementing a system monitoring capability; mechanisms supporting and/or implementing the discovery, collection, distribution, and use of indicators of compromise]."
+    }
+   ]
+  },
+  "3.11.3e": {
+   "family": "RA",
+   "family_name": "Risk Assessment",
+   "title": "Employ advanced automation and analytics capabilities in support of analysts to predict and ident...",
+   "control": "Employ advanced automation and analytics capabilities in support of analysts to predict and identify risks to organizations, systems, and system components.",
+   "discussion": "A properly resourced Security Operations Center (SOC) or Computer Incident Response Team (CIRT) may be overwhelmed by the volume of information generated by the proliferation of security tools and appliances unless it employs advanced automation and analytics to analyze the data. Advanced automation and predictive analytics capabilities are typically supported by artificial intelligence concepts and machine learning. Examples include Automated Workflow Operations, Automated Threat Discovery and Response (which includes broad-based collection, context-based analysis, and adaptive response capabilities), and machine-assisted decision tools. [SP 800-30] provides guidance on risk assessments and risk analyses.",
+   "evidence_types": [
+    "policy",
+    "procedure",
+    "operating-effectiveness",
+    "record"
+   ],
+   "methods": [
+    "Examine",
+    "Interview",
+    "Test"
+   ],
+   "objectives": [
+    {
+     "id": "3.11.3e[a]",
+     "text": "Employ advanced automation and analytics capabilities in support of analysts to predict and identify risks to organizations, systems, and system components.",
+     "discovery_query": "Provide evidence that employ advanced automation and analytics capabilities in support of analysts to predict and identify risks to organizations, systems, and system components.",
+     "examine": "[SELECT FROM: System and information integrity policy; risk assessment policy; security planning policy and procedures; procedures addressing organizational assessments of risk; procedures addressing system monitoring; enterprise architecture documentation; system design documentation; system architecture and configuration documentation; system monitoring tools and techniques documentation; system configuration settings and associated documentation; system monitoring logs or records; system audit records; security plan; risk assessment artifacts; risk assessment results; risk assessment reviews; risk assessment updates; other relevant documents or records].",
+     "interview": "[SELECT FROM: Organizational personnel responsible for information security; organizational personnel responsible for risk assessments; risk analysts; system developers; organizational personnel installing, configuring, and/or maintaining the system; organizational personnel responsible for monitoring; system/network administrators].",
+     "test": "[SELECT FROM: Automated mechanisms supporting and/or implementing risk analytics capabilities; automated mechanisms supporting and/or implementing system monitoring capability; automated mechanisms supporting and/or implementing the discovery, collection, distribution, and use of indicators of compromise; automated mechanisms for conducting, documenting, reviewing, disseminating, and updating risk assessments]."
+    }
+   ]
+  },
+  "3.11.4e": {
+   "family": "RA",
+   "family_name": "Risk Assessment",
+   "title": "Document or reference in the system security plan the security solution selected, the rationale f...",
+   "control": "Document or reference in the system security plan the security solution selected, the rationale for the security solution, and the risk determination.",
+   "discussion": "System security plans relate security requirements to a set of security controls and solutions. The plans describe how the controls and solutions meet the security requirements. For the enhanced security requirements selected when the APT is a concern, the security plan provides traceability between threat and risk assessments and the risk-based selection of a security solution, including discussion of relevant analyses of alternatives and rationale for key security-relevant architectural and design decisions. This level of detail is important as the threat changes, requiring reassessment of the risk and the basis for previous security decisions. When incorporating external service providers into the system security plan, organizations state the type of service provided (e.g., software as a service, platform as a service), the point and type of connections (including ports and protocols), the nature and type of the information flows to and from the service provider, and the security controls implemented by the service provider. For safety critical systems, organizations document situations for which safety is the primary reason for not implementing a security solution (i.e., the solution is appropriate to address the threat but causes a safety concern). [SP 800-18] provides guidance on the development of system security plans.",
+   "evidence_types": [
+    "policy",
+    "procedure",
+    "operating-effectiveness",
+    "record"
+   ],
+   "methods": [
+    "Examine",
+    "Interview",
+    "Test"
+   ],
+   "objectives": [
+    {
+     "id": "3.11.4e[a]",
+     "text": "Document or reference in the system security plan the security solution selected, the rationale for the security solution, and the risk determination.",
+     "discovery_query": "Provide evidence that document or reference in the system security plan the security solution selected, the rationale for the security solution, and the risk determination.",
+     "examine": "[SELECT FROM: system security plan; records of security plan reviews and updates; system design documentation; security planning policy; procedures addressing security plan development; procedures addressing security plan reviews and updates; enterprise architecture documentation; enterprise security architecture documentation; system interconnection security agreements and other information exchange agreements; other relevant documents or records].",
+     "interview": "[SELECT FROM: Organizational personnel responsible for information security; organizational personnel responsible for developing, implementing, or approving system interconnection and information exchange agreements; personnel managing the systems to which the Interconnection Security Agreement/Information Exchange Agreement applies; system developers; organizational personnel responsible for security planning and plan implementation; organizational personnel responsible for boundary protection; system developers; system/network administrators].",
+     "test": "[SELECT FROM: Organizational processes for security plan development, review, update, and approval]."
+    }
+   ]
+  },
+  "3.11.5e": {
+   "family": "RA",
+   "family_name": "Risk Assessment",
+   "title": "Assess the effectiveness of security solutions [Assignment: organization-defined frequency] to ad...",
+   "control": "Assess the effectiveness of security solutions [Assignment: organization-defined frequency] to address anticipated risk to organizational systems and the organization based on current and accumulated threat intelligence.",
+   "discussion": "Threat awareness and risk assessment of the organization are dynamic, continuous, and inform system operations, security requirements for the system, and the security solutions employed to meet those requirements. Threat intelligence (i.e., threat information that has been aggregated, transformed, analyzed, interpreted, or enriched to help provide the necessary context for decision-making) is infused into the risk assessment processes and information security operations of the organization to identify any changes required to address the dynamic threat environment. [SP 800-30] provides guidance on risk assessments, threat assessments, and risk analyses.",
+   "evidence_types": [
+    "policy",
+    "procedure",
+    "operating-effectiveness",
+    "record"
+   ],
+   "methods": [
+    "Examine",
+    "Interview",
+    "Test"
+   ],
+   "objectives": [
+    {
+     "id": "3.11.5e[a]",
+     "text": "Assess the effectiveness of security solutions [Assignment: organization-defined frequency] to address anticipated risk to organizational systems and the organization based on current and accumulated threat intelligence.",
+     "discovery_query": "Provide evidence that assess the effectiveness of security solutions [Assignment: organization-defined frequency] to address anticipated risk to organizational systems and the organization based on current and accumulated threat intelligence.",
+     "examine": "[SELECT FROM: Risk assessment policy; security planning policy and procedures; security assessment policy and procedures; security assessment plans; security assessment results; procedures addressing organizational assessments of risk; security plan; risk assessment; risk assessment results; risk assessment reviews; risk assessment updates; threat intelligence information; other relevant documents or records].",
+     "interview": "[SELECT FROM: Organizational personnel responsible for security assessments; organizational personnel responsible for risk assessments; organizational personnel responsible for threat analysis; organizational personnel responsible for information security].",
+     "test": "[SELECT FROM: Mechanisms supporting, conducting, documenting, reviewing, disseminating, and updating risk assessments; mechanisms supporting and/or implementing security assessments]."
+    }
+   ]
+  },
+  "3.11.6e": {
+   "family": "RA",
+   "family_name": "Risk Assessment",
+   "title": "Assess, respond to, and monitor supply chain risks associated with organizational systems and sys...",
+   "control": "Assess, respond to, and monitor supply chain risks associated with organizational systems and system components.",
+   "discussion": "Supply chain events include disruption, use of defective components, insertion of counterfeits, theft, malicious development practices, improper delivery practices, and insertion of malicious code. These events can have a significant impact on a system and its information and, therefore, can also adversely impact organizational operations (i.e., mission, functions, image, or reputation), organizational assets, individuals, other organizations, and the Nation. The supply chain-related events may be unintentional or malicious and can occur at any point during the system life cycle. An analysis of supply chain risk can help an organization identify systems or components for which additional supply chain risk mitigations are required. [SP 800-30] provides guidance on risk assessments, threat assessments, and risk analyses. [SP 800-161] provides guidance on supply chain risk management.",
+   "evidence_types": [
+    "policy",
+    "procedure",
+    "operating-effectiveness",
+    "record"
+   ],
+   "methods": [
+    "Examine",
+    "Interview",
+    "Test"
+   ],
+   "objectives": [
+    {
+     "id": "3.11.6e[a]",
+     "text": "Assess, respond to, and monitor supply chain risks associated with organizational systems and system components.",
+     "discovery_query": "Provide evidence that assess, respond to, and monitor supply chain risks associated with organizational systems and system components.",
+     "examine": "[SELECT FROM: Risk assessment policy; procedures addressing organizational assessments of risk; security planning policy and procedures; supply chain risk management plan; security plan; risk assessment; risk assessment results; risk assessment reviews; risk assessment updates; threat intelligence information; other relevant documents or records].",
+     "interview": "[SELECT FROM: Organizational personnel responsible for information security; organizational personnel responsible for risk assessments; organizational personnel responsible for supply chain risk management].",
+     "test": "[SELECT FROM: Mechanisms supporting, conducting, documenting, reviewing, disseminating, and updating risk assessments]."
+    }
+   ]
+  },
+  "3.11.7e": {
+   "family": "RA",
+   "family_name": "Risk Assessment",
+   "title": "Develop a plan for managing supply chain risks associated with organizational systems and system ...",
+   "control": "Develop a plan for managing supply chain risks associated with organizational systems and system components; update the plan [Assignment: organization-defined frequency].",
+   "discussion": "The growing dependence on products, systems, and services from external providers, along with the nature of the relationships with those providers, present an increasing level of risk to an organization. Threat actions that may increase risk include the insertion or use of counterfeits, unauthorized production, tampering, theft, insertion of malicious software and hardware, and poor manufacturing and development practices in the supply chain. Supply chain risks can be endemic or systemic within a system element or component, a system, an organization, a sector, or the Nation. Managing supply chain risk is a multifaceted undertaking that requires a coordinated effort across an organization to build trust relationships and communicate with both internal and external stakeholders. Supply chain risk management (SCRM) activities involve identifying and assessing risks, determining appropriate mitigating actions, developing SCRM plans to document selected mitigating actions, and monitoring performance against plans. SCRM plans address requirements for developing trustworthy, secure, and resilient systems and system components, including the application of the security design principles implemented as part of life cycle-based systems security engineering processes. [SP 800-161] provides guidance on supply chain risk management.",
+   "evidence_types": [
+    "policy",
+    "procedure",
+    "operating-effectiveness",
+    "record"
+   ],
+   "methods": [
+    "Examine",
+    "Interview",
+    "Test"
+   ],
+   "objectives": [
+    {
+     "id": "3.11.7e[a]",
+     "text": "Develop a plan for managing supply chain risks associated with organizational systems and system components; update the plan [Assignment: organization-defined frequency].",
+     "discovery_query": "Provide evidence that develop a plan for managing supply chain risks associated with organizational systems and system components; update the plan [Assignment: organization-defined frequency].",
+     "examine": "[SELECT FROM: Risk assessment policy; supply chain risk management plan; security planning policy and procedures; procedures addressing organizational assessments of risk; security plan; risk assessment; risk assessment results; risk assessment reviews; risk assessment updates; threat intelligence information; other relevant documents or records].",
+     "interview": "[SELECT FROM: Organizational personnel responsible for information security; organizational personnel responsible for risk assessments; organizational personnel responsible for supply chain risk management].",
+     "test": "[SELECT FROM: Automated mechanisms supporting, conducting, documenting, reviewing, disseminating, and updating risk assessments]."
+    }
+   ]
+  },
+  "3.12.1e": {
+   "family": "SA",
+   "family_name": "Security Assessment",
+   "title": "Conduct penetration testing [Assignment: organization-defined frequency], leveraging automated sc...",
+   "control": "Conduct penetration testing [Assignment: organization-defined frequency], leveraging automated scanning tools and ad hoc tests using subject matter experts.",
+   "discussion": "Penetration testing is a specialized type of assessment conducted on systems or individual system components to identify vulnerabilities that could be exploited by adversaries. Penetration testing goes beyond automated vulnerability scanning. It is conducted by penetration testing agents and teams with particular skills and experience that include technical expertise in network, operating system, and application-level security. Penetration testing can be used to validate vulnerabilities or determine a system\u2019s penetration resistance to adversaries within specified constraints. Such constraints include time, resources, and skills. Organizations may also supplement penetration testing with red team exercises. Red teams attempt to duplicate the actions of adversaries in carrying out attacks against organizations and provide an in-depth analysis of security-related weaknesses or deficiencies. Organizations can use the results of vulnerability analyses to support penetration testing activities. Penetration testing can be conducted internally or externally on the hardware, software, or firmware components of a system and can exercise both physical and technical controls. A standard method for penetration testing includes pretest analysis based on full knowledge of the system, pretest identification of potential vulnerabilities based on the pretest analysis, and testing designed to determine the exploitability of vulnerabilities. All parties agree to the specified rules of engagement before the commencement of penetration testing. Organizations correlate the rules of engagement for penetration tests and red teaming exercises (if used) with the tools, techniques, and procedures that they anticipate adversaries may employ. The penetration testing or red team exercises may be organization-based or external to the organization. In either case, it is important that the team possesses the necessary skills and resources to do the job and is objective in its assessment. [SP 800-53A] provides guidance on conducting security assessments.",
+   "evidence_types": [
+    "policy",
+    "procedure",
+    "operating-effectiveness",
+    "record"
+   ],
+   "methods": [
+    "Examine",
+    "Interview",
+    "Test"
+   ],
+   "objectives": [
+    {
+     "id": "3.12.1e[a]",
+     "text": "Conduct penetration testing [Assignment: organization-defined frequency], leveraging automated scanning tools and ad hoc tests using subject matter experts.",
+     "discovery_query": "Provide evidence that conduct penetration testing [Assignment: organization-defined frequency], leveraging automated scanning tools and ad hoc tests using subject matter experts.",
+     "examine": "[SELECT FROM: Security assessment policy; procedures addressing penetration testing; security plan; security assessment plan; penetration test report; security assessment report; security assessment evidence; other relevant documents or records].",
+     "interview": "[SELECT FROM: Organizational personnel responsible for security assessments; penetration testing team; system/network administrators; organizational personnel responsible for information security].",
+     "test": "[SELECT FROM: Automated mechanisms supporting security assessments; automated mechanisms supporting penetration testing]."
+    }
+   ]
+  },
+  "3.13.1e": {
+   "family": "SC",
+   "family_name": "System and Communications Protection",
+   "title": "Create diversity in [Assignment: organization-defined system components] to reduce the extent of ...",
+   "control": "Create diversity in [Assignment: organization-defined system components] to reduce the extent of malicious code propagation.",
+   "discussion": "Organizations often use homogenous information technology environments to reduce costs and to simplify administration and use. However, a homogenous environment can also facilitate the work of the APT, as it allows for common mode failures and the propagation of malicious code across identical system components (i.e., hardware, software, and firmware). In these environments, adversary tactics, techniques, and procedures (TTP) that work on one instantiation of a system component will work equally well on other identical instantiations of the component regardless of how many times such components are replicated or how far away they may be placed in the architecture. Increasing diversity within organizational systems reduces the impact of potential exploitations or compromises of specific technologies. Such diversity protects against common mode failures, including those failures induced by supply chain attacks. Diversity also reduces the likelihood that the TTP adversaries use to compromise one system component will be effective against other system components, thus increasing the adversary\u2019s work factor to successfully complete the planned attacks. A heterogeneous or diverse information technology environment makes the task of propagating malicious code more difficult, as the adversary needs to develop and deploy different TTP for the diverse components. Satisfying this requirement does not mean that organizations need to acquire and manage multiple versions of operating systems, applications, tools, and communication protocols. However, the use of diversity in certain critical, organizationally determined system components can be an effective countermeasure against the APT. In addition, organizations may already be practicing diversity, although not to counter the APT. For example, it is common for organizations to employ diverse anti-virus products at different parts of their infrastructure simply because each vendor may issue updates to new malicious code patterns at different times and frequencies. Similarly, some organizations employ products from one vendor at the server level and products from another vendor at the end-user level. Another example of diversity occurs in products that provide address space layout randomization (ASLR). Such products introduce a form of synthetic diversity by transforming the implementations of common software to produce a variety of instances. Finally, organizations may choose to use multiple virtual private network (VPN) vendors, tunneling one vendor\u2019s VPN within another vendor\u2019s VPN. Smaller organizations may find that achieving diversity in system components is challenging and perhaps not practical. Organizations also consider the vulnerabilities that may be introduced into the system by the employment of diverse system components. [SP 800-160-1] provides guidance on security engineering practices and security design concepts. [SP 800-160-2] provides guidance on developing cyber resilient systems and system components. [SP 800-161] provides guidance on supply chain risk management.",
+   "evidence_types": [
+    "policy",
+    "procedure",
+    "operating-effectiveness",
+    "record"
+   ],
+   "methods": [
+    "Examine",
+    "Interview",
+    "Test"
+   ],
+   "objectives": [
+    {
+     "id": "3.13.1e[a]",
+     "text": "Create diversity in [Assignment: organization-defined system components] to reduce the extent of malicious code propagation.",
+     "discovery_query": "Provide evidence that create diversity in [Assignment: organization-defined system components] to reduce the extent of malicious code propagation.",
+     "examine": "[SELECT FROM: Security planning policy; procedures addressing information security architecture development; procedures addressing information security architecture reviews and updates; enterprise architecture documentation; information security architecture documentation; security plan; security CONOPS for the system; records of information security architecture reviews and updates; system and communications protection policy; system design documentation; system component inventory; list of technologies deployed in the system; acquisition documentation; acquisition contracts for system components or services; system audit records; system and services acquisition policy; enterprise architecture policy; procedures addressing developer security architecture and design specification for the system; solicitation documentation; service-level agreements; design specification and security architecture documentation for the system; other relevant documents or records].",
+     "interview": "[SELECT FROM: Organizational personnel responsible for information security; organizational personnel responsible for information security architecture design and development; organizational personnel responsible for system acquisition, development, and implementation; system/network administrators; system developers].",
+     "test": "[SELECT FROM: Mechanisms supporting and/or implementing the development, review, and update of the information security architecture; mechanisms supporting and/or implementing employment of a diverse set of information technologies]."
+    }
+   ]
+  },
+  "3.13.2e": {
+   "family": "SC",
+   "family_name": "System and Communications Protection",
+   "title": "Implement the following changes to organizational systems and system components to introduce a de...",
+   "control": "Implement the following changes to organizational systems and system components to introduce a degree of unpredictability into operations: [Assignment: organization-defined changes and frequency of changes by system and system component].",
+   "discussion": "Cyber-attacks by adversaries are predicated on the assumption of a certain degree of predictability and consistency regarding the attack surface. The attack surface is the set of points on the boundary of a system, a system element, or an environment where an attacker can try to enter, cause an effect on, or extract data from the system, system element, or environment. Changes to the attack surface reduce the predictability of the environment, making it difficult for adversaries to plan and carry out attacks, and can cause the adversaries to make miscalculations that can either impact the overall effectiveness of the attacks or increase the observability of the attackers. Unpredictability can be achieved by making changes in seemingly random times or circumstances (e.g., by randomly shortening the time when the credentials are valid). Randomness introduces increased levels of uncertainty for adversaries regarding the actions that organizations take to defend their systems against attacks. Such actions may impede the ability of adversaries to correctly target system components that support critical or essential organizational missions or business functions. Uncertainty may also cause adversaries to hesitate before initiating attacks or continuing attacks. Techniques involving randomness include performing certain routine actions at different times of day, employing different information technologies, using different suppliers, and rotating the roles and responsibilities of organizational personnel.",
+   "evidence_types": [
+    "policy",
+    "procedure",
+    "operating-effectiveness",
+    "record"
+   ],
+   "methods": [
+    "Examine",
+    "Interview",
+    "Test"
+   ],
+   "objectives": [
+    {
+     "id": "3.13.2e[a]",
+     "text": "Implement the following changes to organizational systems and system components to introduce a degree of unpredictability into operations: [Assignment: organization-defined changes and frequency of changes by system and system component].",
+     "discovery_query": "Provide evidence that implement the following changes to organizational systems and system components to introduce a degree of unpredictability into operations: [Assignment: organization-defined changes and frequency of changes by system and system component].",
+     "examine": "[SELECT FROM: System and communications protection policy; procedures addressing concealment and misdirection techniques for the system; system design documentation; security plan; system configuration settings and associated documentation; system change control documentation; system architecture documentation; list of techniques to be employed to introduce randomness into organizational operations and assets; system audit records; other relevant documents or records].",
+     "interview": "[SELECT FROM: Organizational personnel responsible for information security; organizational personnel responsible for change management; organizational personnel responsible for implementing concealment and misdirection techniques for systems; system/network administrators].",
+     "test": "[SELECT FROM: Mechanisms supporting and/or implementing randomness as a concealment and misdirection technique; mechanisms supporting and/or implementing change control for the system]."
+    }
+   ]
+  },
+  "3.13.3e": {
+   "family": "SC",
+   "family_name": "System and Communications Protection",
+   "title": "Employ [Assignment: organization-defined technical and procedural means] to confuse and mislead a...",
+   "control": "Employ [Assignment: organization-defined technical and procedural means] to confuse and mislead adversaries.",
+   "discussion": "There are many techniques and approaches that can be used to confuse and mislead adversaries, including misdirection, tainting, disinformation, or a combination thereof. Deception is used to confuse and mislead adversaries regarding the information that the adversaries use for decision-making, the value and authenticity of the information that the adversaries attempt to exfiltrate, or the environment in which the adversaries desire or need to operate. Such actions can impede the adversary\u2019s ability to conduct meaningful reconnaissance of the targeted organization, delay or degrade an adversary\u2019s ability to move laterally through a system or from one system to another system, divert the adversary away from systems or system components containing CUI, and increase observability of the adversary to the defender\u2014revealing the presence of the adversary along with its TTPs. Misdirection can be achieved through deception environments (e.g., deception nets), which provide virtual sandboxes into which malicious code can be diverted and adversary TTP can be safely examined. Tainting involves embedding data or information in an organizational system or system component which the organization desires adversaries to exfiltrate. Tainting allows organizations to determine that information has been exfiltrated or improperly removed from the organization and potentially provides the organization with information regarding the nature of exfiltration or adversary locations. Disinformation can be achieved by making false information intentionally available to adversaries regarding the state of the system or type of organizational defenses. Any disinformation activity is coordinated with the associated federal agency requiring such activity, and should include a plan to limit incidental exposure of the false CUI to authorized users. Disinformation can be employed both tactically (e.g., making available false credentials that the defender can use to track adversary actions) and strategically (e.g., interspersing false CUI with actual CUI, interfering with an adversary\u2019s re-use, reverse engineering and exploitation of legitimate CUI, thus undermining the adversary\u2019s confidence in the value of the exfiltrated information, and subsequently causing them to limit such exfiltration). [SP 800-160-2] provides guidance on developing cyber resilient systems and system components.",
+   "evidence_types": [
+    "policy",
+    "procedure",
+    "operating-effectiveness",
+    "record"
+   ],
+   "methods": [
+    "Examine",
+    "Interview",
+    "Test"
+   ],
+   "objectives": [
+    {
+     "id": "3.13.3e[a]",
+     "text": "Employ [Assignment: organization-defined technical and procedural means] to confuse and mislead adversaries.",
+     "discovery_query": "Provide evidence that employ [Assignment: organization-defined technical and procedural means] to confuse and mislead adversaries.",
+     "examine": "[SELECT FROM: System and communications protection policy; procedures addressing concealment and misdirection techniques for the system; list of concealment and misdirection techniques to be employed for organizational systems; system design documentation; procedures addressing the use of honeypots; security plan; system configuration settings and associated documentation; system design documentation; system architecture; list of techniques to be employed to introduce randomness into organizational operations and assets; system audit records; other relevant documents or records].",
+     "interview": "[SELECT FROM: Organizational personnel responsible for information security; system developers; system/network administrators; organizational personnel responsible for implementing concealment and misdirection techniques for systems].",
+     "test": "[SELECT FROM: Mechanisms supporting and/or implementing the concealment or randomization of communications patterns; mechanisms supporting and/or implementing alternative physical safeguards; mechanisms supporting and/or implementing honey pots; mechanisms supporting and/or implementing concealment and misdirection techniques]."
+    }
+   ]
+  },
+  "3.13.4e": {
+   "family": "SC",
+   "family_name": "System and Communications Protection",
+   "title": "Employ [Selection: (one or more): [Assignment: organization-defined physical isolation techniques...",
+   "control": "Employ [Selection: (one or more): [Assignment: organization-defined physical isolation techniques]; [Assignment: organization-defined logical isolation techniques]] in organizational systems and system components.",
+   "discussion": "A mix of physical and logical isolation techniques (described below) implemented as part of the system architecture can limit the unauthorized flow of CUI, reduce the system attack surface, constrain the number of system components that must be secure, and impede the movement of an adversary. When implemented with a set of managed interfaces, physical and logical isolation techniques for organizational systems and components can isolate CUI into separate security domains where additional protections can be implemented. Any communications across the managed interfaces (i.e., across security domains), including for management or administrative purposes, constitutes remote access even if the communications remain within the organization. Separating system components with boundary protection mechanisms allows for the increased protection of individual components and more effective control of information flows between those components. This enhanced protection limits the potential harm from and susceptibility to hostile cyber-attacks and errors. The degree of isolation can vary depending on the boundary protection mechanisms selected. Boundary protection mechanisms include routers, gateways, and firewalls separating system components into physically separate networks or subnetworks; virtualization and micro-virtualization techniques; encrypting information flows among system components using distinct encryption keys; cross-domain devices separating subnetworks; and complete physical separation (i.e., air gaps). System architectures include logical isolation, partial physical and logical isolation, or complete physical isolation between subsystems and at system boundaries between resources that store, process, transmit, or protect CUI and other resources. Examples include:\u2022 Logical isolation: Data tagging, digital rights management (DRM), and data loss prevention (DLP) that tags, monitors, and restricts the flow of CUI; virtual machines or containers that separate CUI and other information on hosts; and virtual local area networks (VLAN) that keep CUI and other information separate on networks.\u2022 Partial physical and logical isolation: Physically or cryptographically isolated networks, dedicated hardware in data centers, and secure clients that (a) may not directly access resources outside of the domain (i.e., all applications with cross-enclave connectivity execute as remote virtual applications hosted in a demilitarized zone [DMZ] or internal and protected enclave), (b) access via remote virtualized applications or virtual desktop with no file transfer capability other than with dual authorization, or (c) employ dedicated client hardware (e.g., a zero or thin client) or hardware approved for multi-level secure (MLS) usage. \u2022 Complete physical isolation: Dedicated (not shared) client and server hardware; physically isolated, stand-alone enclaves for clients and servers; and (a) logically separate network traffic (e.g., using a VLAN) with end-to-end encryption using Public Key Infrastructure (PKI)-based cryptography or (b) physical isolation from other networks. Isolation techniques are selected based on a risk management perspective that balances the threat, the information being protected, and the cost of the options for protection. Architectural and design decisions are guided and informed by the security requirements and selected solutions. Organizations consider the trustworthiness of the isolation techniques employed (e.g., the logical isolation relies on information technology that could be considered a high value target because of the function being performed), introducing its own set of vulnerabilities. [SP 800-160-1] provides guidance on developing trustworthy, secure, and cyber resilient systems using systems security engineering practices and security design concepts.",
+   "evidence_types": [
+    "policy",
+    "procedure",
+    "operating-effectiveness",
+    "record"
+   ],
+   "methods": [
+    "Examine",
+    "Interview",
+    "Test"
+   ],
+   "objectives": [
+    {
+     "id": "3.13.4e[a]",
+     "text": "Employ [Selection: (one or more): [Assignment: organization-defined physical isolation techniques]; [Assignment: organization-defined logical isolation techniques]] in organizational systems and system components.",
+     "discovery_query": "Provide evidence that employ [Selection: (one or more): [Assignment: organization-defined physical isolation techniques]; [Assignment: organization-defined logical isolation techniques]] in organizational systems and system components.",
+     "examine": "[SELECT FROM: System and communications protection policy; procedures addressing boundary protection; system design documentation; procedures addressing the use of thin nodes; list of key internal boundaries of the system; security plan; boundary protection hardware and software; system configuration settings and associated documentation; enterprise architecture documentation; system architecture; security architecture documentation; system audit records; system component inventory; list of security tools and support components to be isolated from other system components; other relevant documents or records].",
+     "interview": "[SELECT FROM: Organizational personnel responsible for information security; system/network administrators; system developers; organizational personnel responsible for boundary protection].",
+     "test": "[SELECT FROM: Mechanisms implementing the boundary protection capability; mechanisms implementing physical isolation techniques; mechanisms supporting and/or implementing the isolation of information security tools, mechanisms, and support components; mechanisms supporting and/or implementing the capability to separate system components supporting organizational missions and business functions; mechanisms implementing logical isolation techniques; mechanisms supporting or implementing separate network addresses/different subnets; mechanisms supporting and/or implementing thin nodes]."
+    }
+   ]
+  },
+  "3.13.5e": {
+   "family": "SC",
+   "family_name": "System and Communications Protection",
+   "title": "Distribute and relocate the following system functions or resources [Assignment: organization-def...",
+   "control": "Distribute and relocate the following system functions or resources [Assignment: organization-defined frequency]: [Assignment: organization-defined system functions or resources].",
+   "discussion": "Changing processing and storage locations (also referred to as moving target defense) addresses the APT by using techniques such as virtualization, distributed processing, and replication. This enables organizations to relocate system components that support critical missions and business functions. Changing the locations of processing activities or storage sites introduces a degree of uncertainty into the targeting activities of adversaries. Targeting uncertainty increases the work factor of adversaries making compromises or breaches to organizational systems more difficult and time-consuming. It also increases the chances that adversaries may inadvertently disclose aspects of their tradecraft while attempting to locate organizational resources. Other options for employing moving target defense include changing IP addresses, Domain Name System (DNS) names, or network topologies. Moving target defense can also increase the work factor for defenders who have a constantly changing system to defend. Accordingly, organizations update their management and security tools and train personnel to adapt to the additional work factor. Another way of addressing this requirement is by fragmentation. This involves taking information and fragmenting/partitioning it across multiple components (e.g., across a distributed database). Such actions mean that the compromise (unauthorized exfiltration) of any single component of the information data set will not result in the compromise of the entire data. To fully compromise the entire data set, the adversary would have to work harder to try to locate all of the data sets.",
+   "evidence_types": [
+    "policy",
+    "procedure",
+    "operating-effectiveness",
+    "record"
+   ],
+   "methods": [
+    "Examine",
+    "Interview",
+    "Test"
+   ],
+   "objectives": [
+    {
+     "id": "3.13.5e[a]",
+     "text": "Distribute and relocate the following system functions or resources [Assignment: organization-defined frequency]: [Assignment: organization-defined system functions or resources].",
+     "discovery_query": "Provide evidence that distribute and relocate the following system functions or resources [Assignment: organization-defined frequency]: [Assignment: organization-defined system functions or resources].",
+     "examine": "[SELECT FROM: System and communications protection policy; security plan; configuration management policy and procedures; procedures addressing concealment and misdirection techniques for the system; list of processing/storage locations to be changed at organizational time intervals; system component inventory; change control records; configuration management records; system audit records; other relevant documents or records].",
+     "interview": "[SELECT FROM: Organizational personnel responsible for information security; organizational personnel responsible for changing processing and/or storage locations; system/network administrators].",
+     "test": "[SELECT FROM: Mechanisms supporting and/or implementing changing processing and/or storage locations]."
+    }
+   ]
+  },
+  "3.14.1e": {
+   "family": "SI",
+   "family_name": "System and Information Integrity",
+   "title": "Verify the integrity of [Assignment: organization-defined security critical or essential software...",
+   "control": "Verify the integrity of [Assignment: organization-defined security critical or essential software] using root of trust mechanisms or cryptographic signatures.",
+   "discussion": "Verifying the integrity of the organization\u2019s security-critical or essential software is an important capability since corrupted software is the primary attack vector used by adversaries to undermine or disrupt the proper functioning of organizational systems. There are many ways to verify software integrity throughout the system development life cycle. Root of trust mechanisms (e.g., secure boot, trusted platform modules, Unified Extensible Firmware Interface [UEFI]), verify that only trusted code is executed during boot processes. This capability helps system components protect the integrity of boot firmware in organizational systems by verifying the integrity and authenticity of updates to the firmware prior to applying changes to the system component and preventing unauthorized processes from modifying the boot firmware. The employment of cryptographic signatures ensures the integrity and authenticity of critical and essential software that stores, processes, or transmits, CUI. Cryptographic signatures include digital signatures and the computation and application of signed hashes using asymmetric cryptography, protecting the confidentiality of the key used to generate the hash, and using the public key to verify the hash information. Hardware roots of trust are considered to be more secure. This requirement supports 3.4.1e and 3.4.3.e.[FIPS 140-3] provides security requirements for cryptographic modules. [FIPS 180-4] and [FIPS 202] provide secure hash standards. [FIPS 186-4] provides a digital signature standard. [SP 800-147] provides BIOS protection guidance. [NIST TRUST] provides guidance on the roots of trust project.",
+   "evidence_types": [
+    "policy",
+    "procedure",
+    "operating-effectiveness",
+    "record"
+   ],
+   "methods": [
+    "Examine",
+    "Interview",
+    "Test"
+   ],
+   "objectives": [
+    {
+     "id": "3.14.1e[a]",
+     "text": "Verify the integrity of [Assignment: organization-defined security critical or essential software] using root of trust mechanisms or cryptographic signatures.",
+     "discovery_query": "Provide evidence that verify the integrity of [Assignment: organization-defined security critical or essential software] using root of trust mechanisms or cryptographic signatures.",
+     "examine": "[SELECT FROM: System and information integrity policy; procedures addressing software, firmware, and information integrity; system design documentation; security plan; system configuration settings and associated documentation; system component inventory; integrity verification tools and associated documentation; records of integrity verification scans; system audit records; cryptographic mechanisms and associated documentation; records of detected unauthorized changes to software, firmware, and information; other relevant documents or records].",
+     "interview": "[SELECT FROM: Organizational personnel responsible for information security; organizational personnel responsible for software, firmware, and/or information integrity; system developers; system/network administrators].",
+     "test": "[SELECT FROM: Software, firmware, and information integrity verification tools; mechanisms supporting and/or implementing integrity verification of the boot process; mechanisms supporting and/or implementing protection of the integrity of boot firmware; cryptographic mechanisms implementing software, firmware, and information integrity; safeguards implementing protection of the integrity of boot firmware]."
+    }
+   ]
+  },
+  "3.14.2e": {
+   "family": "SI",
+   "family_name": "System and Information Integrity",
+   "title": "Monitor organizational systems and system components on an ongoing basis for anomalous or suspici...",
+   "control": "Monitor organizational systems and system components on an ongoing basis for anomalous or suspicious behavior.",
+   "discussion": "Monitoring is used to identify unusual, suspicious, or unauthorized activities or conditions related to organizational systems and system components. Such activities or conditions can include unusual internal systems communications traffic, unauthorized exporting of information, signaling to external systems, large file transfers, long-time persistent connections, attempts to access information from unexpected locations, unusual protocols and ports in use, and attempted communications with suspected malicious external addresses. The correlation of physical, time, or geolocation audit record information to the audit records from systems may assist organizations in identifying examples of anomalous behavior. For example, the correlation of an individual\u2019s identity for logical access to certain systems with the additional information that the individual was not present at the facility when the logical access occurred is indicative of anomalous behavior. [SP 800-61] provides guidance on incident handling. [SP 800-83] provides guidance for malicious code incident prevention and handling. [SP 800-92] provides guidance on computer security log management. [SP 800-94] provides guidance on intrusion detection and prevention. [SP 800-137] provides guidance on continuous monitoring of systems.",
+   "evidence_types": [
+    "policy",
+    "procedure",
+    "operating-effectiveness",
+    "record"
+   ],
+   "methods": [
+    "Examine",
+    "Interview",
+    "Test"
+   ],
+   "objectives": [
+    {
+     "id": "3.14.2e[a]",
+     "text": "Monitor organizational systems and system components on an ongoing basis for anomalous or suspicious behavior.",
+     "discovery_query": "Provide evidence that monitor organizational systems and system components on an ongoing basis for anomalous or suspicious behavior.",
+     "examine": "[SELECT FROM: Audit and accountability policy; procedures addressing audit review, analysis, and reporting; procedures addressing physical access monitoring; system design documentation; documentation providing evidence of correlated information obtained from audit records and physical access monitoring records; system configuration settings and associated documentation; procedures addressing system monitoring tools and techniques; system monitoring logs or records; system and information integrity policy; system monitoring tools and techniques documentation; system configuration settings and associated documentation; system protocols; system audit records; security plan; system component inventory; records of actions taken to terminate suspicious events; alerts/notifications generated based on detected suspicious events; network diagram; system monitoring logs or records; list of profiles representing common traffic patterns and/or events; system protocols documentation; list of acceptable thresholds for false positives and false negatives; list of individuals who have been identified as posing an increased level of risk; list of privileged users; other relevant documents or records].",
+     "interview": "[SELECT FROM: Organizational personnel responsible for audit review, analysis, and reporting; organizational personnel responsible for information security; organizational personnel responsible for physical access monitoring; organizational personnel responsible for installing, configuring, and/or maintaining the system; organizational personnel responsible for monitoring the system; organizational personnel responsible for the intrusion detection system; system/network administrators].",
+     "test": "[SELECT FROM: Mechanisms supporting and/or implementing the system monitoring capability; mechanisms supporting and/or implementing actions to terminate suspicious events; mechanisms supporting and/or implementing the monitoring of inbound/outbound communications traffic; mechanisms implementing the capability to correlate information from audit records with information from monitoring physical access; mechanisms supporting and/or implementing notifications to incident response personnel; mechanisms supporting and/or implementing analysis of outbound communications traffic; mechanisms supporting and/or implementing analysis of communications traffic/event patterns]."
+    }
+   ]
+  },
+  "3.14.3e": {
+   "family": "SI",
+   "family_name": "System and Information Integrity",
+   "title": "Ensure that [Assignment: organization-defined systems and system components] are included in the ...",
+   "control": "Ensure that [Assignment: organization-defined systems and system components] are included in the scope of the specified enhanced security requirements or are segregated in purpose-specific networks.",
+   "discussion": "Organizations may have a variety of systems and system components in their inventory, including Information Technology (IT), Internet of Things (IoT), Operational Technology (OT), and Industrial Internet of Things (IIoT). The convergence of IT, OT, IoT, and IIoT significantly increases the attack surface of organizations and provides attack vectors that are challenging to address. Compromised IoT, OT, and IIoT system components can serve as launching points for attacks on organizational IT systems that handle CUI. Some IoT, OT, and IIoT system components can store, transmit, or process CUI (e.g., specifications or parameters for objects manufactured in support of critical programs). Most of the current generation of IoT, OT, and IIoT system components are not designed with security as a foundational property and may not be able to be configured to support security functionality. Connections to and from such system components are generally not encrypted, do not provide the necessary authentication, are not monitored, and are not logged. Therefore, these components pose a significant cyber threat. Gaps in IoT, OT, and IIoT security capabilities may be addressed by employing intermediary system components that can provide encryption, authentication, security scanning, and logging capabilities\u2014thus, preventing the components from being accessible from the Internet. However, such mitigation options are not always available or practicable. The situation is further complicated because some of the IoT, OT, and IIoT devices may be needed for essential missions and business functions. In those instances, it is necessary for such devices to be isolated from the Internet to reduce the susceptibility to cyber-attacks. [SP 800-160-1] provides guidance on security engineering practices and security design concepts.",
+   "evidence_types": [
+    "policy",
+    "procedure",
+    "operating-effectiveness",
+    "record"
+   ],
+   "methods": [
+    "Examine",
+    "Interview",
+    "Test"
+   ],
+   "objectives": [
+    {
+     "id": "3.14.3e[a]",
+     "text": "Ensure that [Assignment: organization-defined systems and system components] are included in the scope of the specified enhanced security requirements or are segregated in purpose-specific networks.",
+     "discovery_query": "Provide evidence that ensure that [Assignment: organization-defined systems and system components] are included in the scope of the specified enhanced security requirements or are segregated in purpose-specific networks.",
+     "examine": "[SELECT FROM: Access control policy; information flow control policies; system and services acquisition policy; system and communications protection policy; procedures addressing security function isolation; procedures addressing application partitioning; procedures addressing security engineering principles used in the specification, design, development, implementation, and modification of the system; procedures addressing information flow enforcement; procedures addressing access enforcement; system architecture; system design documentation; security plan; system component inventory; system configuration settings and associated documentation; system baseline configuration; list of security functions to be isolated from non-security functions; system audit records; security requirements and specifications for the system; list of approved authorizations (user privileges); list of information flow authorizations; other relevant documents or records].",
+     "interview": "[SELECT FROM: Organizational personnel responsible for access enforcement; system/network administrators; organizational personnel responsible for information security; system developers; system integrators; organizational personnel responsible for acquisition/contracting; organizational personnel responsible for determining system security requirements; system security architects; enterprise architects; organizational personnel responsible for system specification, design, development, implementation, and modification].",
+     "test": "[SELECT FROM: Mechanisms implementing the access control policy; mechanisms implementing the information flow enforcement policy; mechanisms supporting the application of security engineering principles in system specification, design, development, implementation, and modification]."
+    }
+   ]
+  },
+  "3.14.4e": {
+   "family": "SI",
+   "family_name": "System and Information Integrity",
+   "title": "Refresh [Assignment: organization-defined systems and system components] from a known, trusted st...",
+   "control": "Refresh [Assignment: organization-defined systems and system components] from a known, trusted state [Assignment: organization-defined frequency].",
+   "discussion": "This requirement mitigates risk from the APT by reducing the targeting capability of adversaries (i.e., the window of opportunity for the attack). By implementing the concept of non-persistence for selected system components, organizations can provide a known state computing resource for a specific time period that does not give adversaries sufficient time to exploit vulnerabilities in organizational systems and the environments in which those systems operate. Since the APT is a high-end, sophisticated threat regarding capability, intent, and targeting, organizations assume that over an extended period, a percentage of attacks will be successful. Non-persistent system components and system services are activated as required using protected information and are terminated periodically or at the end of sessions. Non-persistence increases the work factor of adversaries attempting to compromise or breach systems. Non-persistence can be achieved by refreshing system components (e.g., periodically reimaging components or using a variety of common virtualization techniques). Non-persistent services can be implemented using \u201cInfrastructure as Code\u201d to automatically build, configure, test, deploy, and manage containers, virtual machines, or new instances of processes on physical machines (both persistent or non-persistent). Periodic refreshes of system components and services do not require organizations to determine whether compromises of components or services have occurred (something that may often be difficult to determine). The refresh of selected system components and services occurs with sufficient frequency to prevent the spread or intended impact of attacks but not with such frequency that it makes the system unstable. Refreshes may be done periodically to hinder the ability of adversaries to exploit optimum windows of vulnerabilities. The reimaging of system components includes the reinstallation of firmware, operating systems, and applications from a known, trusted source. Reimaging also includes the installation of patches, reapplication of configuration settings, and refresh of system or application data from a known, trusted source.",
+   "evidence_types": [
+    "policy",
+    "procedure",
+    "operating-effectiveness",
+    "record"
+   ],
+   "methods": [
+    "Examine",
+    "Interview",
+    "Test"
+   ],
+   "objectives": [
+    {
+     "id": "3.14.4e[a]",
+     "text": "Refresh [Assignment: organization-defined systems and system components] from a known, trusted state [Assignment: organization-defined frequency].",
+     "discovery_query": "Provide evidence that refresh [Assignment: organization-defined systems and system components] from a known, trusted state [Assignment: organization-defined frequency].",
+     "examine": "SELECT FROM: System and information integrity policy; procedures addressing non-persistence for system components and information; system design documentation; security plan; system component inventory; system configuration settings and associated documentation; system audit records; other relevant documents or records].",
+     "interview": "[SELECT FROM: Organizational personnel responsible for information security; organizational personnel responsible for non-persistence; system/network administrators; system developers].",
+     "test": "[SELECT FROM: Mechanisms supporting and/or implementing the initiation and termination of non-persistent components; mechanisms supporting and/or implementing component and service refreshes]."
+    }
+   ]
+  },
+  "3.14.5e": {
+   "family": "SI",
+   "family_name": "System and Information Integrity",
+   "title": "Conduct reviews of persistent organizational storage locations [Assignment: organization-defined ...",
+   "control": "Conduct reviews of persistent organizational storage locations [Assignment: organization-defined frequency] and remove CUI that is no longer needed.",
+   "discussion": "As programs, projects, and contracts evolve, some CUI may no longer be needed. Periodic and event-related (e.g., at project completion) reviews are conducted to ensure that CUI that is no longer required is securely removed from persistent storage. Removal is consistent with federal records retention policies and disposition schedules. Retaining information for longer than it is needed makes the information a potential target for adversaries searching for critical program or HVA information to exfiltrate. The unnecessary retention of system-related information provides adversaries information that can assist in their reconnaissance and lateral movement through organizational systems. Alternatively, information which must be retained but is not required for current activities is removed from online storage and stored offline in a secure location to eliminate the possibility of individuals gaining unauthorized access to the information through a network. The purging of CUI renders the information unreadable, indecipherable, and unrecoverable. [SP 800-88] provides guidance on media sanitization.",
+   "evidence_types": [
+    "policy",
+    "procedure",
+    "operating-effectiveness",
+    "record"
+   ],
+   "methods": [
+    "Examine",
+    "Interview",
+    "Test"
+   ],
+   "objectives": [
+    {
+     "id": "3.14.5e[a]",
+     "text": "Conduct reviews of persistent organizational storage locations [Assignment: organization-defined frequency] and remove CUI that is no longer needed.",
+     "discovery_query": "Provide evidence that conduct reviews of persistent organizational storage locations [Assignment: organization-defined frequency] and remove CUI that is no longer needed.",
+     "examine": "[SELECT FROM: System and communications protection policy; procedures addressing the protection of information at rest; system and information integrity policy; procedures addressing non-persistence for system components; system audit records; system design documentation; system configuration settings and associated documentation; security plan; cryptographic mechanisms and associated configuration documentation; offline storage locations for information at rest; system audit records; other relevant documents or records].",
+     "interview": "[SELECT FROM: System/network administrators; system developers; organizational personnel responsible for non-persistence; organizational personnel responsible for information security].",
+     "test": "[SELECT FROM: Mechanisms supporting and/or implementing the removal of information from online storage; mechanisms supporting and/or implementing the storage of information offline; mechanisms supporting and/or implementing the initiation and termination of non-persistent components]."
+    }
+   ]
+  },
+  "3.14.6e": {
+   "family": "SI",
+   "family_name": "System and Information Integrity",
+   "title": "Use threat indicator information and effective mitigations obtained from [Assignment: organizatio...",
+   "control": "Use threat indicator information and effective mitigations obtained from [Assignment: organization-defined external organizations] to guide and inform intrusion detection and threat hunting.",
+   "discussion": "Threat information related to specific threat events (e.g., TTPs, targets) that organizations have experienced, threat mitigations that organizations have found to be effective against certain types of threats, and threat intelligence (i.e., indications and warnings about threats that can occur) are sourced from and shared with trusted organizations. This threat information can be used by organizational Security Operations Centers (SOC) and incorporated into monitoring capabilities. Threat information sharing includes threat indicators, signatures, and adversary TTPs from organizations participating in threat-sharing consortia, government-commercial cooperatives, and government-government cooperatives (e.g., CERTCC, CISA/US-CERT, FIRST, ISAO, DIB CS Program). Unclassified indicators, based on classified information but which can be readily incorporated into organizational intrusion detection systems, are available to qualified nonfederal organizations from government sources.",
+   "evidence_types": [
+    "policy",
+    "procedure",
+    "operating-effectiveness",
+    "record"
+   ],
+   "methods": [
+    "Examine",
+    "Interview",
+    "Test"
+   ],
+   "objectives": [
+    {
+     "id": "3.14.6e[a]",
+     "text": "Use threat indicator information and effective mitigations obtained from [Assignment: organization-defined external organizations] to guide and inform intrusion detection and threat hunting.",
+     "discovery_query": "Provide evidence that use threat indicator information and effective mitigations obtained from [Assignment: organization-defined external organizations] to guide and inform intrusion detection and threat hunting.",
+     "examine": "[SELECT FROM: System and information integrity policy; information security program plan; procedures addressing security alerts, advisories, and directives; threat awareness program documentation; procedures addressing system monitoring; procedures for the threat awareness program; risk assessment results relevant to threat awareness; records of security alerts and advisories; system design documentation; security plan; system monitoring tools and techniques documentation; system configuration settings and associated documentation; system monitoring logs or records; system audit records; documentation on the cross-organization information-sharing capability; other relevant documents or records].",
+     "interview": "[SELECT FROM: Organizational personnel responsible for information security program planning and plan implementation; system/network administrators; organizational personnel responsible for the threat awareness program; organizational personnel responsible for the cross-organization information-sharing capability; organizational personnel responsible for information security; organizational personnel responsible for installing, configuring, and/or maintaining the system; organizational personnel responsible for monitoring system hosts; organizational personnel responsible for security alerts and advisories; organizational personnel responsible for implementing, operating, maintaining, and using the system; organizational personnel, organizational elements, and/or external organizations to whom alerts, advisories, and directives are to be disseminated; personnel with whom threat awareness information is shared by the organization; system developers].",
+     "test": "[SELECT FROM: Mechanisms supporting and/or implementing the threat awareness program; mechanisms supporting and/or implementing the cross-organization information-sharing capability; mechanisms supporting and/or implementing the system monitoring capability; mechanisms supporting and/or implementing the definition, receipt, generation, and dissemination of security alerts, advisories, and directives; mechanisms supporting and/or implementing security directives; mechanisms supporting and/or implementing threat hunting; mechanisms supporting and/or implementing intrusion detection; mechanisms supporting and/or implementing the discovery, collection, distribution, and use of indicators of compromise]."
+    }
+   ]
+  },
+  "3.14.7e": {
+   "family": "SI",
+   "family_name": "System and Information Integrity",
+   "title": "Verify the correctness of [Assignment: organization-defined security critical or essential softwa...",
+   "control": "Verify the correctness of [Assignment: organization-defined security critical or essential software, firmware, and hardware components] using [Assignment: organization-defined verification methods or techniques].",
+   "discussion": "Verification methods have varying degrees of rigor in determining the correctness of software, firmware, and hardware components. For example, formal verification involves proving that a software program satisfies some formal property or set of properties. The nature of formal verification is generally time-consuming and not employed for commercial operating systems and applications. Therefore, it would likely only be applied to some very limited uses, such as verifying cryptographic protocols. However, in cases where software, firmware, or hardware components exist with formal verification of the component\u2019s security properties, such components provide greater assurance and trustworthiness and are preferred over similar components that have not been formally verified. [SP 800-160-1] provides guidance on developing trustworthy, secure, and cyber resilient systems using systems security engineering practices and security design concepts.",
+   "evidence_types": [
+    "policy",
+    "procedure",
+    "operating-effectiveness",
+    "record"
+   ],
+   "methods": [
+    "Examine",
+    "Interview",
+    "Test"
+   ],
+   "objectives": [
+    {
+     "id": "3.14.7e[a]",
+     "text": "Verify the correctness of [Assignment: organization-defined security critical or essential software, firmware, and hardware components] using [Assignment: organization-defined verification methods or techniques].",
+     "discovery_query": "Provide evidence that verify the correctness of [Assignment: organization-defined security critical or essential software, firmware, and hardware components] using [Assignment: organization-defined verification methods or techniques].",
+     "examine": "[SELECT FROM: System and services acquisition policy; enterprise architecture policy; procedures addressing developer security architecture and design specifications for the system; solicitation documentation; acquisition documentation; service-level agreements; acquisition contracts for the system, system component, or system service; design specification and security architecture documentation for the system; system design documentation; security plan; system component inventory; system configuration settings and associated documentation; other relevant documents or records].",
+     "interview": "[SELECT FROM: Organizational personnel responsible for system and services acquisition; organizational personnel responsible for information security; system developers; organizational personnel responsible for security architecture and design].",
+     "test": "[SELECT FROM: Mechanisms supporting and/or implementing integrity verification methods or techniques]."
+    }
+   ]
+  }
+ }
+}

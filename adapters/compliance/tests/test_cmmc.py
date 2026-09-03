@@ -26,7 +26,7 @@ def test_level_membership_is_real():
     l1 = cmmc.level_controls(1)
     assert len(l1) == 17 and all(c in allc for c in l1)     # every L1 practice exists in the catalog
     assert len(cmmc.level_controls(2)) == 110               # L2 is the full Rev 2 set
-    assert cmmc.level_controls(3) is None                   # L3 needs 800-172
+    assert cmmc.level_controls(3) == cmmc.L3_800172_SUBSET and len(cmmc.level_controls(3)) == 24  # L3 enhanced
 
 
 def test_all_met_is_clean_at_both_levels(monkeypatch):
@@ -70,9 +70,21 @@ def test_only_one_point_open_can_be_conditional(monkeypatch):
     assert l2["status"] == "conditional" and l2["poam"]["eligible"] is True
 
 
-def test_level3_declares_its_dependency():
+def test_level3_is_assessable_against_800172():
     l3 = cmmc.assess_level(3, {"facts": {}})
-    assert l3["assessable"] is False and l3["depends_on"] == "nist_800172"
+    assert l3["assessable"] is True
+    assert l3["enhanced"]["standard"] == "nist_800172" and l3["enhanced"]["in_scope"] == 24
+    assert l3["status"] in ("met", "not-met") and "base_l2" in l3
+    ca.use_standard("nist_800171_r2")
+
+
+def test_level3_met_needs_l2_and_all_enhanced(monkeypatch):
+    # everything met at both catalogs -> L2 met and all 24 enhanced met -> L3 met
+    monkeypatch.setattr(cmmc._un, "full_determination", _fixed(default="met"))
+    l3 = cmmc.assess_level(3, {"facts": {}})
+    assert l3["base_l2"]["status"] == "met" and l3["enhanced"]["tally"]["met"] == 24
+    assert l3["status"] == "met"
+    ca.use_standard("nist_800171_r2")
 
 
 def test_assess_combines_levels_and_renders(monkeypatch):

@@ -31,6 +31,13 @@ L1_CONTROLS = ["3.1.1", "3.1.2", "3.1.20", "3.1.22", "3.5.1", "3.5.2", "3.8.3",
 POAM_MIN_SCORE = 88          # of 110 (>= 80%): the conditional-status floor. Verify vs 32 CFR Part 170.
 LEVEL_NAME = {1: "Foundational", 2: "Advanced", 3: "Expert"}
 
+# CMMC 2.0 Level 3 = all of Level 2 (the 110 Rev 2) PLUS 24 selected NIST SP 800-172 enhanced
+# requirements. Source: 32 CFR Part 170 s.170.14(c)(4), Table 1. Assessed against the nist_800172 catalog.
+L3_800172_SUBSET = ["3.1.2e", "3.1.3e", "3.2.1e", "3.2.2e", "3.4.1e", "3.4.2e", "3.4.3e", "3.5.1e",
+                    "3.5.3e", "3.6.1e", "3.6.2e", "3.9.2e", "3.11.1e", "3.11.2e", "3.11.3e", "3.11.4e",
+                    "3.11.5e", "3.11.6e", "3.11.7e", "3.12.1e", "3.13.4e", "3.14.1e", "3.14.3e", "3.14.6e"]
+L3_ENHANCED_STANDARD = "nist_800172"
+
 
 def _numkey(cid):
     return [int(p) for p in cid.split(".")]
@@ -48,7 +55,7 @@ def level_controls(level):
     if level == 2:
         return sorted(allc, key=_numkey)
     if level == 3:
-        return None
+        return list(L3_800172_SUBSET)      # the enhanced additions on top of Level 2; assessed vs 800-172
     raise ValueError("CMMC has levels 1, 2, 3; got %r" % (level,))
 
 
@@ -87,10 +94,31 @@ def assess_level(level, posture, completions=None, as_of=None, use_llm=False):
     """Assess one CMMC level over a scanned posture. Returns the level status, tally, and per-control
     verdicts, scored by that level's own rule. Deterministic given the verdicts."""
     if level == 3:
-        return {"level": 3, "name": LEVEL_NAME[3], "assessable": False, "status": "unavailable",
-                "depends_on": "nist_800172",
-                "reason": "CMMC Level 3 adds selected NIST SP 800-172 enhanced requirements; the 800-172 "
-                          "catalog is not yet loaded. Levels 1 and 2 are fully assessable."}
+        if "nist_800172" not in _ca.list_standards():
+            return {"level": 3, "name": LEVEL_NAME[3], "assessable": False, "status": "unavailable",
+                    "depends_on": "nist_800172",
+                    "reason": "CMMC Level 3 adds selected NIST SP 800-172 enhanced requirements; the "
+                              "800-172 catalog is not loaded. Levels 1 and 2 are fully assessable."}
+        prev = _ca.active_standard()
+        _ca.use_standard("nist_800171_r2")
+        base = assess_level(2, posture, completions, as_of, use_llm)          # the 110 Rev 2 base
+        boundary = (posture or {}).get("boundary", "(unspecified)")
+        req_base = {"facts": (posture or {}).get("facts") or {}, "boundary": boundary}
+        _ca.use_standard(L3_ENHANCED_STANDARD)
+        enh = _verdicts(L3_800172_SUBSET, req_base, completions, as_of, use_llm)  # the 24 enhanced
+        _ca.use_standard(prev)
+        enh_tally = _tally(enh)
+        status = "met" if (base["status"] == "met" and enh_tally["met"] == len(L3_800172_SUBSET)) else "not-met"
+        return {"level": 3, "name": LEVEL_NAME[3], "assessable": True, "status": status,
+                "standard": "nist_800171_r2 + nist_800172", "boundary": boundary,
+                "base_l2": {"status": base["status"], "sprs_score": base.get("sprs_score"),
+                            "requirements_met": base.get("requirements_met")},
+                "enhanced": {"standard": L3_ENHANCED_STANDARD, "in_scope": len(L3_800172_SUBSET),
+                             "tally": enh_tally,
+                             "controls": [{"control_id": c, "verdict": enh[c]} for c in L3_800172_SUBSET]},
+                "scoring": "Level 3 is met only when Level 2 is met and every one of the 24 selected NIST "
+                           "800-172 enhanced requirements is met. Insufficient is scored as not-met. The "
+                           "enhanced requirements are prose and resolve via SOPs, records, or the LLM."}
     facts = (posture or {}).get("facts") or {}
     boundary = (posture or {}).get("boundary", "(unspecified)")
     req_base = {"facts": facts, "boundary": boundary}
@@ -158,10 +186,15 @@ def render_text(report):
             extra = "" if lv["status"] == "met" else "  failing: " + ", ".join(lv["failing_practices"][:6])
             L.append("  L1 %-12s %-11s  %d/%d practices met%s"
                      % (lv["name"], lv["status"].upper(), lv["practices_met"], lv["practices_total"], extra))
-        else:
+        elif lv["level"] == 2:
             L.append("  L2 %-12s %-11s  SPRS %s/%s  %d/%d met  POA&M-eligible: %s"
                      % (lv["name"], lv["status"].upper(), lv["sprs_score"], lv["sprs_max"],
                         lv["requirements_met"], lv["in_scope"], lv["poam"]["eligible"]))
+        else:
+            enh = lv["enhanced"]
+            L.append("  L3 %-12s %-11s  L2 base %s, enhanced %d/%d met (800-172)"
+                     % (lv["name"], lv["status"].upper(), lv["base_l2"]["status"],
+                        enh["tally"].get("met", 0), enh["in_scope"]))
     return "\n".join(L)
 
 
