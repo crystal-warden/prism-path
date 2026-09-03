@@ -177,6 +177,20 @@ CHECK_SPEC = {
     # AST-4 Runtime input and output monitoring
     "AST-4[a]": ("flag", "io_baseline_comparison"),
     "AST-4[b]": ("flag", "drift_abstains_or_escalates"),
+
+    # --- AI Governance catalog (standard 'ai_governance') ---
+    # The inventory / register objectives are decidable from an AI-use register (ai_register connector);
+    # the policy and operating objectives stay with the SOP generator, the task records, and the LLM.
+    "MP-1[a]": ("flag", "ai_user_inventory_exists"),
+    "MP-1[b]": ("flag", "ai_process_inventory_exists"),
+    "MP-2[a]": ("flag", "approved_ai_tools_list_exists"),
+    "MP-2[b]": ("flag", "unapproved_ai_tool_use_controlled"),
+    "MP-3[a]": ("flag", "ai_data_inventory_exists"),
+    "MP-3[c]": ("flag", "ai_prohibited_data_controls_enforced"),
+    "MP-4[a]": ("flag", "ai_vendor_inventory_exists"),
+    "MP-5[a]": ("flag", "ai_decision_impact_classified"),
+    "MP-5[b]": ("flag", "ai_high_risk_uses_tiered"),
+    "MS-1[c]": ("flag", "ai_evidence_integrity_protected"),
 }
 
 
