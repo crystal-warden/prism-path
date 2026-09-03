@@ -59,5 +59,10 @@
     {"id": "system-maintenance-execution", "title": "Perform scheduled system maintenance",
      "objectives": ["3.7.1[a]"], "cadence_days": 90,
      "evidence": "a system maintenance log recording maintenance activities"}
+  ],
+  "AST-3": [
+    {"id": "safety-suite-run", "title": "Run the safety test suite",
+     "objectives": ["AST-3[d]"], "cadence_days": 7,
+     "evidence": "a safety test run record with the results and the model version tested"}
   ]
 }

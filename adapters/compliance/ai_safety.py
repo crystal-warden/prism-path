@@ -14,6 +14,7 @@ assumed. A deployed version with no bound determination is a gap, full stop.
 import compliance_adapter as _ca
 import posture_connector as _pc
 import ai_safety_receipts as _r
+import control_tasks as _ct
 
 STANDARD = "ai_safety_testing"
 
@@ -59,6 +60,20 @@ def measure(state, key, signed_at):
             "receipts": receipts}
 
 
+def operational_facts(state, as_of):
+    """Measure the 'performed' AST fact continuous_evaluation from an operational retest-task
+    completion record: it is True when the recurring safety-suite-run task (control_tasks, control
+    AST-3) is current, not overdue, as of `as_of`. The completions live in state['retest_completions'].
+    This is the operational mechanism, alongside the config comparator and the AI Safety Testing Plan
+    SOP, that gives the AST catalog the same three-way treatment as 800-171."""
+    completions = state.get("retest_completions", [])
+    tasks = _ct.tasks_for("AST-3")
+    if not tasks:
+        return {}
+    st = _ct.task_status(tasks[0], completions, as_of)
+    return {"continuous_evaluation": not st["overdue"]}
+
+
 def safety_posture(state, measured=None):
     """Assemble the AI-safety facts from a pipeline state:
         {boundary, versions: [...], determinations: [...], capabilities: {fact_key: bool}, provenance: {}}
@@ -80,21 +95,29 @@ def safety_posture(state, measured=None):
             "provenance": prov, "version_binding": vb}
 
 
-def assess(state, out_dir=None, key=None, signed_at=None):
-    """Grade the AI-safety-testing controls from a pipeline state. Selects the AI-safety catalog,
-    assembles the posture, and runs it through the deterministic posture connector, then restores the
-    previously active standard. When `key` and `signed_at` are supplied, the AST-2 and AST-3 facts are
-    MEASURED from real signed, anchored receipts rather than taken from the declared capabilities."""
+def assess(state, out_dir=None, key=None, signed_at=None, as_of=None):
+    """Grade the AI-safety-testing controls from a pipeline state, restoring the previously active
+    standard afterward. When `key` and `signed_at` are supplied, the AST-2 and AST-3 receipt and
+    fingerprint facts are MEASURED from real signed, anchored receipts. When `as_of` is supplied,
+    continuous_evaluation (AST-3[d]) is MEASURED from a current retest-task completion record. Anything
+    not measured falls back to the declared capabilities and defers if absent (fail-closed)."""
     prev = _ca.active_standard()
     _ca.use_standard(STANDARD)
     try:
-        measured = measure(state, key, signed_at) if (key is not None and signed_at is not None) else None
+        measured_facts, receipts = {}, []
+        if key is not None and signed_at is not None:
+            m = measure(state, key, signed_at)
+            measured_facts.update(m["measured_facts"])
+            receipts = m["receipts"]
+        if as_of is not None:
+            measured_facts.update(operational_facts(state, as_of))
+        measured = {"measured_facts": measured_facts} if measured_facts else None
         posture = safety_posture(state, measured=measured)
         result = _pc.assess(posture, out_dir=out_dir)
         result["version_binding"] = posture["version_binding"]
         result["measured"] = posture["provenance"]["measured_facts"]
-        if measured:
-            result["receipts"] = measured["receipts"]
+        if receipts:
+            result["receipts"] = receipts
         return result
     finally:
         _ca.use_standard(prev)
