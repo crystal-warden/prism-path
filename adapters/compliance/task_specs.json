@@ -1,0 +1,33 @@
+{
+  "_note": "Recurring operational tasks whose completion records EVIDENCE the 'performed' assessment objectives (tested, assessed, monitored, scanned, trained, reviewed). The sibling 'defined' objectives are documentation and belong to the SOP generator, not here. cadence_days is the required interval between completions.",
+  "3.6.3": [
+    {"id": "ir-capability-test", "title": "Test the incident response capability",
+     "objectives": ["3.6.3[a]"], "cadence_days": 365,
+     "evidence": "an after-action report from an incident response exercise"}
+  ],
+  "3.12.1": [
+    {"id": "security-control-assessment", "title": "Assess the security controls for effectiveness",
+     "objectives": ["3.12.1[b]"], "cadence_days": 365,
+     "evidence": "a security control assessment report"}
+  ],
+  "3.12.3": [
+    {"id": "ongoing-control-monitoring", "title": "Monitor security controls on an ongoing basis",
+     "objectives": ["3.12.3[a]"], "cadence_days": 30,
+     "evidence": "a monthly control-monitoring record"}
+  ],
+  "3.11.2": [
+    {"id": "vulnerability-scan", "title": "Scan systems and applications for vulnerabilities",
+     "objectives": ["3.11.2[b]", "3.11.2[c]"], "cadence_days": 30,
+     "evidence": "a vulnerability scan report covering systems and applications"}
+  ],
+  "3.2.2": [
+    {"id": "security-role-training", "title": "Train personnel on their assigned security duties",
+     "objectives": ["3.2.2[c]"], "cadence_days": 365,
+     "evidence": "training completion records for personnel with security duties"}
+  ],
+  "3.3.3": [
+    {"id": "audit-log-review", "title": "Review logged events and update logging",
+     "objectives": ["3.3.3[b]", "3.3.3[c]"], "cadence_days": 90,
+     "evidence": "a log review record noting any updates to the logged event types"}
+  ]
+}
