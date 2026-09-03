@@ -22,7 +22,7 @@ def test_reports_every_reachable_framework_from_one_assessment():
     # the crosswalked frameworks are reached, each labeled complete/partial
     reached = {f["framework"]: f for f in r["frameworks_reached"]}
     assert "cmmc" in reached and reached["cmmc"]["complete"] is True
-    assert "nist_800_53_r5" in reached and reached["nist_800_53_r5"]["complete"] is False
+    assert "nist_800_53_r5" in reached and reached["nist_800_53_r5"]["complete"] is True   # NIST CPRT table
     assert reached["nist_800_53_r5"]["authority"]                       # provenance carried through
 
 

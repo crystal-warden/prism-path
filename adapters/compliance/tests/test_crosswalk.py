@@ -33,24 +33,25 @@ def test_cmmc_crosswalk_complete_and_translates_ids():
     assert rep["controls"]["AC.L2-3.1.3"]["verdict"] == "not-met"  # 3.1.3 is L2
 
 
-def test_800_53_subset_is_partial_and_propagates_fail_closed():
+def test_800_53_is_the_authoritative_nist_table_and_fail_closed():
     x = cw.load_crosswalk("nist_800171_r2__nist_800_53_r5")
-    assert cw.coverage(x)["complete"] is False                  # honestly a subset, not the full mapping
-    # ac-3 is fed by both 3.1.1 and 3.1.2 -> met only when both are met
-    both_met = cw.propagate(x, "nist_800171_r2", {"3.1.1": "met", "3.1.2": "met"})
-    assert both_met["controls"]["ac-3"]["verdict"] == "met"
-    assert set(both_met["controls"]["ac-3"]["from"]) == {"3.1.1", "3.1.2"}
-    one_bad = cw.propagate(x, "nist_800171_r2", {"3.1.1": "not-met", "3.1.2": "met"})
-    assert one_bad["controls"]["ac-3"]["verdict"] == "not-met"
-    none = cw.propagate(x, "nist_800171_r2", {})
-    assert none["controls"]["ac-3"]["verdict"] == "insufficient"
+    assert cw.coverage(x)["complete"] is True                   # the NIST CPRT authoritative mapping
+    empty = cw.propagate(x, "nist_800171_r2", {})
+    multi = next(t for t, v in empty["controls"].items() if len(v["from"]) >= 2)   # a target with 2+ sources
+    srcs = empty["controls"][multi]["from"]
+    all_met = cw.propagate(x, "nist_800171_r2", {s: "met" for s in srcs})
+    assert all_met["controls"][multi]["verdict"] == "met"
+    one_bad = cw.propagate(x, "nist_800171_r2", dict({s: "met" for s in srcs}, **{srcs[0]: "not-met"}))
+    assert one_bad["controls"][multi]["verdict"] == "not-met"
+    assert empty["controls"][multi]["verdict"] == "insufficient"   # missing evidence fails closed
 
 
 def test_reverse_direction_and_unknown_framework_raises():
     x = cw.load_crosswalk("nist_800171_r2__nist_800_53_r5")
-    rev = cw.propagate(x, "nist_800_53_r5", {"sc-13": "met"})
+    single = next(e for e in x["edges"] if len(e["b"]) == 1)     # an a -> single-b edge
+    rev = cw.propagate(x, "nist_800_53_r5", {single["b"][0]: "met"})
     assert rev["target_framework"] == "nist_800171_r2"
-    assert rev["controls"]["3.13.11"]["verdict"] == "met"
+    assert rev["controls"][single["a"]]["verdict"] == "met"
     with pytest.raises(ValueError):
         cw.propagate(x, "iso_27001", {"a.5.1": "met"})
 
