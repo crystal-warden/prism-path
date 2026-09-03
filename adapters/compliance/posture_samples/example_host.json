@@ -44,6 +44,18 @@
     "antivirus_auto_update_enabled": true,
     "antivirus_scan_frequency_days": 7,
     "antivirus_periodic_scan_enforced": true,
-    "antivirus_realtime_scan_enforced": true
+    "antivirus_realtime_scan_enforced": true,
+    "login_banner_defined": true,
+    "login_banner_enforced": true,
+    "mobile_devices_identified": true,
+    "mobile_device_encryption_enforced": true,
+    "audit_timestamps_enabled": true,
+    "ntp_server_configured": true,
+    "ntp_sync_enabled": true,
+    "removable_media_controlled": true,
+    "unowned_portable_storage_prohibited": true,
+    "session_authenticity_protected": true,
+    "antivirus_locations_identified": true,
+    "antivirus_locations_protected": true
   }
 }

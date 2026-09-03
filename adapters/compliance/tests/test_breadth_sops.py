@@ -23,9 +23,11 @@ def test_new_sop_specs_verify_coverage_complete(doc_id):
 
 
 def test_all_sop_specs_are_complete():
+    import compliance_adapter as ca
     docs = sg.list_documents()
     assert len(docs) >= 4
     for doc_id in docs:
+        ca.use_standard("ai_safety_testing" if doc_id.startswith("ai_safety") else "nist_800171_r2")
         spec = sg.load_spec(doc_id)
         cov = sg.verify_coverage(spec)
         assert cov["complete"] is True, f"SOP spec {doc_id} failed coverage"
