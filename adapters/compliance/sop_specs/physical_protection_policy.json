@@ -1,0 +1,55 @@
+{
+  "doc_id": "physical_protection_policy",
+  "title": "Physical Protection Policy",
+  "family": "Physical Protection",
+  "controls": ["3.10.1", "3.10.3", "3.10.4", "3.10.5"],
+  "org_profile_keys": ["org_name", "system_name", "boundary", "cui_description"],
+  "sections": [
+    {
+      "id": "purpose",
+      "heading": "1. Purpose and Scope",
+      "objectives": [],
+      "questions": [],
+      "body": "This Physical Protection Policy defines the requirements for limiting, monitoring, and auditing physical access to facilities, equipment, and operating environments of {org_name} housing {system_name}. It protects the physical boundary of {boundary} containing Controlled Unclassified Information such as {cui_description}."
+    },
+    {
+      "id": "physical_access_control",
+      "heading": "2. Physical Access Control",
+      "objectives": ["3.10.1[a]", "3.10.1[b]", "3.10.1[c]", "3.10.1[d]"],
+      "questions": [
+        {"key": "authorized_physical_users", "prompt": "How are authorized individuals identified for physical access?"},
+        {"key": "physical_access_limits", "prompt": "How is physical access limited to authorized individuals across systems, equipment, and operating environments?"}
+      ],
+      "body": "Authorized individuals allowed physical access are identified by {authorized_physical_users}. Physical access to organizational systems, equipment, and operating environments is strictly limited to authorized individuals through {physical_access_limits}."
+    },
+    {
+      "id": "visitor_management",
+      "heading": "3. Visitor Escort and Monitoring",
+      "objectives": ["3.10.3[a]", "3.10.3[b]"],
+      "questions": [
+        {"key": "escort_procedures", "prompt": "How are visitors escorted within physical facilities?"},
+        {"key": "visitor_monitoring_procedures", "prompt": "How is visitor activity monitored during facility visits?"}
+      ],
+      "body": "Visitors entering facilities are escorted in accordance with {escort_procedures}. Visitor activity is continuously monitored using {visitor_monitoring_procedures}."
+    },
+    {
+      "id": "physical_audit_logs",
+      "heading": "4. Physical Access Audit Logging",
+      "objectives": ["3.10.4[a]"],
+      "questions": [
+        {"key": "physical_logging_method", "prompt": "How are audit logs of physical access maintained and reviewed?"}
+      ],
+      "body": "Audit logs of physical access to facilities and sensitive areas are maintained through {physical_logging_method}."
+    },
+    {
+      "id": "physical_access_devices",
+      "heading": "5. Control of Physical Access Devices",
+      "objectives": ["3.10.5[a]", "3.10.5[b]", "3.10.5[c]"],
+      "questions": [
+        {"key": "access_device_inventory", "prompt": "How are physical access devices such as keys and badges identified?"},
+        {"key": "access_device_control", "prompt": "How are physical access devices controlled and managed throughout their lifecycle?"}
+      ],
+      "body": "Physical access devices including keys, keycards, and badges are identified in {access_device_inventory}. Physical access devices are controlled and managed through {access_device_control}."
+    }
+  ]
+}

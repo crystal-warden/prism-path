@@ -132,6 +132,32 @@ CHECK_SPEC = {
     "3.14.5[b]": ("flag", "antivirus_periodic_scan_enforced"),
     "3.14.5[c]": ("flag", "antivirus_realtime_scan_enforced"),
 
+    # 3.1.9 Provide privacy and security notices
+    "3.1.9[a]": ("flag", "login_banner_defined"),
+    "3.1.9[b]": ("flag", "login_banner_enforced"),
+
+    # 3.1.19 Encrypt CUI on mobile devices and mobile computing platforms
+    "3.1.19[a]": ("flag", "mobile_devices_identified"),
+    "3.1.19[b]": ("flag", "mobile_device_encryption_enforced"),
+
+    # 3.3.7 Provide a system capability that compares and synchronizes internal system clocks
+    "3.3.7[a]": ("flag", "audit_timestamps_enabled"),
+    "3.3.7[b]": ("flag", "ntp_server_configured"),
+    "3.3.7[c]": ("flag", "ntp_sync_enabled"),
+
+    # 3.8.7 Control the use of removable media on system components
+    "3.8.7[a]": ("flag", "removable_media_controlled"),
+
+    # 3.8.8 Prohibit the use of portable storage devices when such devices have no identifiable owner
+    "3.8.8[a]": ("flag", "unowned_portable_storage_prohibited"),
+
+    # 3.13.15 Protect the authenticity of communications sessions
+    "3.13.15[a]": ("flag", "session_authenticity_protected"),
+
+    # 3.14.2 Provide protection from malicious code at designated locations
+    "3.14.2[a]": ("flag", "antivirus_locations_identified"),
+    "3.14.2[b]": ("flag", "antivirus_locations_protected"),
+
     # --- AI Safety Testing catalog (standard 'ai_safety_testing') ---
     # AST-1 Retest on every model change
     "AST-1[a]": ("flag", "test_suite_defined"),

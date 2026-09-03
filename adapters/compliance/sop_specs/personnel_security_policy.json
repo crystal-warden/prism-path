@@ -1,0 +1,36 @@
+{
+  "doc_id": "personnel_security_policy",
+  "title": "Personnel Security Policy",
+  "family": "Personnel Security",
+  "controls": ["3.9.1", "3.9.2"],
+  "org_profile_keys": ["org_name", "system_name", "boundary", "cui_description"],
+  "sections": [
+    {
+      "id": "purpose",
+      "heading": "1. Purpose and Scope",
+      "objectives": [],
+      "questions": [],
+      "body": "This Personnel Security Policy establishes screening and access termination requirements for personnel associated with {system_name} operated by {org_name}. It applies across the system boundary described as {boundary} to safeguard Controlled Unclassified Information including {cui_description}."
+    },
+    {
+      "id": "personnel_screening",
+      "heading": "2. Personnel Screening",
+      "objectives": ["3.9.1[a]"],
+      "questions": [
+        {"key": "screening_process", "prompt": "How are individuals screened prior to authorization for access to systems containing CUI?"}
+      ],
+      "body": "Individuals are screened prior to receiving authorization for access to organizational systems containing CUI through {screening_process}."
+    },
+    {
+      "id": "personnel_termination_and_transfer",
+      "heading": "3. Access Termination and Transfer Protection",
+      "objectives": ["3.9.2[a]", "3.9.2[b]", "3.9.2[c]"],
+      "questions": [
+        {"key": "termination_policy", "prompt": "What policy or process governs credential and access revocation upon personnel actions?"},
+        {"key": "revocation_enforcement", "prompt": "How are access and credentials revoked coincident with personnel termination or transfer?"},
+        {"key": "transfer_protection", "prompt": "How is the system protected during and after personnel transfer actions?"}
+      ],
+      "body": "A formal process for terminating access and credentials coincident with personnel actions is established in {termination_policy}. System access and credentials are revoked consistent with personnel actions such as termination or transfer via {revocation_enforcement}. System protection during and after personnel transfer actions is maintained through {transfer_protection}."
+    }
+  ]
+}

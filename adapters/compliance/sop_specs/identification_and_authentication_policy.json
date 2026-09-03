@@ -1,0 +1,46 @@
+{
+  "doc_id": "identification_and_authentication_policy",
+  "title": "Identification and Authentication Policy",
+  "family": "Identification and Authentication",
+  "controls": ["3.5.1", "3.5.2"],
+  "org_profile_keys": ["org_name", "system_name", "boundary", "cui_description"],
+  "sections": [
+    {
+      "id": "purpose",
+      "heading": "1. Purpose and Scope",
+      "objectives": [],
+      "questions": [],
+      "body": "This Identification and Authentication Policy establishes requirements for identifying and authenticating users, processes, and devices accessing {system_name} operated by {org_name}. It applies across the system boundary described as {boundary} and protects Controlled Unclassified Information including {cui_description}."
+    },
+    {
+      "id": "user_identification_and_authentication",
+      "heading": "2. User Identification and Authentication",
+      "objectives": ["3.5.1[a]", "3.5.2[a]"],
+      "questions": [
+        {"key": "user_id_method", "prompt": "How are system users uniquely identified?"},
+        {"key": "user_auth_method", "prompt": "How are system users authenticated before access is granted?"}
+      ],
+      "body": "System users are uniquely identified using {user_id_method}. User identity verification and authentication prior to system access is performed using {user_auth_method}."
+    },
+    {
+      "id": "process_identification_and_authentication",
+      "heading": "3. Process Identification and Authentication",
+      "objectives": ["3.5.1[b]", "3.5.2[b]"],
+      "questions": [
+        {"key": "process_id_method", "prompt": "How are processes acting on behalf of users identified?"},
+        {"key": "process_auth_method", "prompt": "How are processes acting on behalf of users authenticated?"}
+      ],
+      "body": "Processes acting on behalf of users are identified using {process_id_method}. Authentication of processes acting on behalf of users before system access is executed through {process_auth_method}."
+    },
+    {
+      "id": "device_identification_and_authentication",
+      "heading": "4. Device Identification and Authentication",
+      "objectives": ["3.5.1[c]", "3.5.2[c]"],
+      "questions": [
+        {"key": "device_id_method", "prompt": "How are devices accessing the system identified?"},
+        {"key": "device_auth_method", "prompt": "How are devices authenticated before connecting to the system?"}
+      ],
+      "body": "Devices accessing or connecting to the system are identified through {device_id_method}. Device identity is authenticated or verified prior to system connection using {device_auth_method}."
+    }
+  ]
+}

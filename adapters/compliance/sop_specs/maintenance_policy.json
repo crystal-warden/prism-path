@@ -1,0 +1,55 @@
+{
+  "doc_id": "maintenance_policy",
+  "title": "Maintenance Policy",
+  "family": "Maintenance",
+  "controls": ["3.7.1", "3.7.2", "3.7.3", "3.7.6"],
+  "org_profile_keys": ["org_name", "system_name", "boundary", "cui_description"],
+  "sections": [
+    {
+      "id": "purpose",
+      "heading": "1. Purpose and Scope",
+      "objectives": [],
+      "questions": [],
+      "body": "This Maintenance Policy governs maintenance activities on organizational systems for {system_name} at {org_name}. It applies within the system boundary described as {boundary} and protects Controlled Unclassified Information such as {cui_description}."
+    },
+    {
+      "id": "system_maintenance",
+      "heading": "2. Performance of System Maintenance",
+      "objectives": ["3.7.1[a]"],
+      "questions": [
+        {"key": "maintenance_performance", "prompt": "How is routine and emergency maintenance performed on organizational systems?"}
+      ],
+      "body": "System maintenance activities are performed and documented in accordance with {maintenance_performance}."
+    },
+    {
+      "id": "maintenance_controls",
+      "heading": "3. Control of Maintenance Tools, Techniques, Mechanisms, and Personnel",
+      "objectives": ["3.7.2[a]", "3.7.2[b]", "3.7.2[c]", "3.7.2[d]"],
+      "questions": [
+        {"key": "tool_controls", "prompt": "How are tools used for system maintenance controlled?"},
+        {"key": "technique_controls", "prompt": "How are techniques used for maintenance controlled?"},
+        {"key": "mechanism_controls", "prompt": "How are maintenance mechanisms controlled?"},
+        {"key": "personnel_controls", "prompt": "How are maintenance personnel controlled?"}
+      ],
+      "body": "Maintenance tools are controlled through {tool_controls}. Maintenance techniques are controlled through {technique_controls}. Maintenance mechanisms are controlled through {mechanism_controls}. Maintenance personnel are controlled through {personnel_controls}."
+    },
+    {
+      "id": "equipment_sanitization",
+      "heading": "4. Off Site Maintenance Equipment Sanitization",
+      "objectives": ["3.7.3[a]"],
+      "questions": [
+        {"key": "offsite_sanitization", "prompt": "How is equipment sanitized of CUI prior to removal for off site maintenance?"}
+      ],
+      "body": "Equipment removed from organizational spaces for off site maintenance is sanitized of any Controlled Unclassified Information using {offsite_sanitization}."
+    },
+    {
+      "id": "maintenance_supervision",
+      "heading": "5. Supervision of Maintenance Personnel",
+      "objectives": ["3.7.6[a]"],
+      "questions": [
+        {"key": "uncleared_supervision", "prompt": "How are maintenance personnel without required access authorization supervised during maintenance activities?"}
+      ],
+      "body": "Maintenance personnel who lack required access authorization are supervised during all maintenance activities using {uncleared_supervision}."
+    }
+  ]
+}
