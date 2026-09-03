@@ -1,0 +1,32 @@
+{
+ "id": "nist_800171_r2__nist_800_53_r5",
+ "a": "nist_800171_r2",
+ "b": "nist_800_53_r5",
+ "complete": false,
+ "authority": "Curated subset of the canonical NIST SP 800-171 Rev 2 to SP 800-53 Rev 5 derivation (each 800-171 requirement is tailored from specific 800-53 controls). This is NOT the full 110-control mapping; every edge must be verified against the NIST SP 800-171 Rev 2 control discussions before assessment use. Extend as edges are verified.",
+ "edges": [
+  {"a": "3.1.1", "b": ["ac-2", "ac-3", "ac-17"]},
+  {"a": "3.1.2", "b": ["ac-3", "ac-17"]},
+  {"a": "3.1.5", "b": ["ac-6", "ac-6(1)", "ac-6(5)"]},
+  {"a": "3.1.20", "b": ["ac-20", "ac-20(1)"]},
+  {"a": "3.1.22", "b": ["ac-22"]},
+  {"a": "3.3.1", "b": ["au-2", "au-3", "au-3(1)", "au-12"]},
+  {"a": "3.3.2", "b": ["au-2", "au-3", "au-12"]},
+  {"a": "3.4.1", "b": ["cm-2", "cm-8", "cm-8(1)"]},
+  {"a": "3.4.2", "b": ["cm-6", "cm-7"]},
+  {"a": "3.5.1", "b": ["ia-2", "ia-4", "ia-5"]},
+  {"a": "3.5.2", "b": ["ia-2", "ia-5"]},
+  {"a": "3.5.3", "b": ["ia-2(1)", "ia-2(2)"]},
+  {"a": "3.6.1", "b": ["ir-4", "ir-5", "ir-6", "ir-7"]},
+  {"a": "3.6.2", "b": ["ir-6", "ir-8"]},
+  {"a": "3.8.3", "b": ["mp-6"]},
+  {"a": "3.10.1", "b": ["pe-2", "pe-3", "pe-5"]},
+  {"a": "3.11.2", "b": ["ra-5", "ra-5(5)"]},
+  {"a": "3.12.1", "b": ["ca-2"]},
+  {"a": "3.13.1", "b": ["sc-7"]},
+  {"a": "3.13.11", "b": ["sc-13"]},
+  {"a": "3.14.1", "b": ["si-2"]},
+  {"a": "3.14.2", "b": ["si-3"]},
+  {"a": "3.14.4", "b": ["si-3"]}
+ ]
+}
