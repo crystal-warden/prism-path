@@ -16,7 +16,12 @@ import deterministic_checks as _dc
 import control_tasks as _ct
 
 
-def full_determination(control, req=None, completions=None, as_of=None):
+def full_determination(control, req=None, completions=None, as_of=None, use_llm=False):
+    """Merge config (facts) and operational (task completions), and, when use_llm is set, the
+    escalation-default LLM adjudicator for the objectives no other mechanism covers. Config and
+    operational verdicts are measured and always win; the LLM only fills the remaining prose
+    objectives. If the LLM is unreachable or errors, those objectives stay undetermined and the
+    control is INSUFFICIENT (fail-closed), never assumed. Same inputs, same result."""
     facts = (req or {}).get("facts") or {}
     per = {}   # objective_id -> {"met": bool, "by": mechanism}
 
@@ -28,7 +33,21 @@ def full_determination(control, req=None, completions=None, as_of=None):
             per.setdefault(oid, {"met": bool(ev["evidenced"]), "by": "operational"})
 
     objectives = [o["id"] for o in control.get("objectives", [])]
-    undetermined = sorted(oid for oid in objectives if oid not in per)
+    undetermined = [oid for oid in objectives if oid not in per]
+
+    if undetermined and use_llm:
+        import compliance_adapter as _ca
+        try:
+            det = _ca.adjudicate(control, req or {"control_id": control["id"]})
+        except Exception:
+            det = None
+        if det is not None:
+            unmet_llm = set(det.get("unmet_objective_ids", []))
+            for oid in undetermined:
+                per[oid] = {"met": oid not in unmet_llm, "by": "llm"}
+            undetermined = [oid for oid in objectives if oid not in per]
+
+    undetermined = sorted(undetermined)
     unmet = sorted(oid for oid, r in per.items() if not r["met"])
 
     if undetermined:
@@ -43,6 +62,7 @@ def full_determination(control, req=None, completions=None, as_of=None):
     coverage = {
         "config": sorted(o for o, r in per.items() if r["by"] == "config"),
         "operational": sorted(o for o, r in per.items() if r["by"] == "operational"),
+        "llm": sorted(o for o, r in per.items() if r["by"] == "llm"),
         "undetermined": undetermined,
     }
     return {"control_id": control["id"], "status": status,
