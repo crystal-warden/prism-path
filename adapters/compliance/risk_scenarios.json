@@ -1,25 +1,110 @@
 {
   "_note": "FAIR loss scenarios mapped to the NIST 800-171 controls that mitigate them. tef = threat event frequency (events per year), loss = loss magnitude per event (USD), each a min/likely/max range. THESE ESTIMATES ARE ILLUSTRATIVE and must be calibrated per organization before any real use. What is provable is the process, not the numbers: the control mapping is explicit and the vulnerability factor is computed from the deterministic compliance verdicts.",
   "scenarios": [
-    {"id": "cui-credential-exfil", "name": "CUI exfiltration via compromised credentials",
-     "controls": ["3.5.3", "3.1.8", "3.5.7", "3.5.8", "3.1.1"],
-     "tef": {"min": 1, "likely": 4, "max": 12},
-     "loss": {"min": 50000, "likely": 250000, "max": 2000000}},
-    {"id": "ransomware", "name": "Ransomware or malicious code outbreak",
-     "controls": ["3.14.4", "3.14.5", "3.13.16", "3.6.1"],
-     "tef": {"min": 1, "likely": 3, "max": 10},
-     "loss": {"min": 100000, "likely": 500000, "max": 5000000}},
-    {"id": "unauthorized-network-access", "name": "Unauthorized network access to the CUI enclave",
-     "controls": ["3.13.6", "3.13.1", "3.1.1", "3.1.5"],
-     "tef": {"min": 2, "likely": 8, "max": 30},
-     "loss": {"min": 25000, "likely": 150000, "max": 1000000}},
-    {"id": "cui-at-rest-disclosure", "name": "CUI at rest disclosed via a lost or stolen device",
-     "controls": ["3.13.16", "3.1.19", "3.8.7"],
-     "tef": {"min": 1, "likely": 2, "max": 6},
-     "loss": {"min": 20000, "likely": 100000, "max": 750000}},
-    {"id": "insider-misuse", "name": "Insider misuse of CUI access",
-     "controls": ["3.9.1", "3.1.5", "3.3.3"],
-     "tef": {"min": 1, "likely": 1, "max": 3},
-     "loss": {"min": 50000, "likely": 300000, "max": 1500000}}
+    {
+      "id": "cui-credential-exfil",
+      "name": "CUI exfiltration via compromised credentials",
+      "controls": ["3.5.3", "3.1.8", "3.5.7", "3.5.8", "3.1.1"],
+      "tef": {"min": 0.8, "likely": 3.5, "max": 11.5},
+      "loss": {"min": 45000, "likely": 240000, "max": 1850000}
+    },
+    {
+      "id": "ransomware",
+      "name": "Ransomware or malicious code outbreak in CUI enclave",
+      "controls": ["3.14.4", "3.14.5", "3.13.16", "3.6.1", "3.8.9"],
+      "tef": {"min": 0.5, "likely": 2.8, "max": 9.2},
+      "loss": {"min": 120000, "likely": 680000, "max": 4800000}
+    },
+    {
+      "id": "unauthorized-network-access",
+      "name": "Unauthorized network access to the CUI enclave",
+      "controls": ["3.13.6", "3.13.1", "3.1.1", "3.1.5", "3.13.7"],
+      "tef": {"min": 1.5, "likely": 7.2, "max": 28.0},
+      "loss": {"min": 28000, "likely": 165000, "max": 950000}
+    },
+    {
+      "id": "cui-at-rest-disclosure",
+      "name": "CUI at rest disclosed via lost or stolen media",
+      "controls": ["3.13.16", "3.1.19", "3.8.7", "3.8.8"],
+      "tef": {"min": 0.4, "likely": 1.8, "max": 5.5},
+      "loss": {"min": 22000, "likely": 115000, "max": 720000}
+    },
+    {
+      "id": "insider-misuse",
+      "name": "Malicious insider unauthorized exfiltration of CUI",
+      "controls": ["3.9.1", "3.1.5", "3.3.3", "3.9.2", "3.1.2"],
+      "tef": {"min": 0.2, "likely": 0.9, "max": 2.8},
+      "loss": {"min": 65000, "likely": 340000, "max": 1650000}
+    },
+    {
+      "id": "supply-chain-compromise",
+      "name": "Software supply-chain compromise of enclave dependencies",
+      "controls": ["3.4.1", "3.4.2", "3.4.8", "3.14.3", "3.11.2"],
+      "tef": {"min": 0.3, "likely": 1.2, "max": 4.5},
+      "loss": {"min": 150000, "likely": 750000, "max": 3800000}
+    },
+    {
+      "id": "unpatched-vulnerability-exploitation",
+      "name": "Exploitation of unpatched perimeter vulnerability",
+      "controls": ["3.11.2", "3.11.3", "3.14.1", "3.14.3", "3.12.1"],
+      "tef": {"min": 1.2, "likely": 5.4, "max": 18.0},
+      "loss": {"min": 85000, "likely": 420000, "max": 2400000}
+    },
+    {
+      "id": "cloud-misconfiguration-exposure",
+      "name": "Cloud storage bucket or enclave service misconfiguration exposure",
+      "controls": ["3.1.20", "3.4.1", "3.4.2", "3.13.1", "3.12.3"],
+      "tef": {"min": 0.6, "likely": 2.4, "max": 8.0},
+      "loss": {"min": 40000, "likely": 210000, "max": 1250000}
+    },
+    {
+      "id": "phishing-bec-compromise",
+      "name": "Phishing and Business Email Compromise targeting CUI handlers",
+      "controls": ["3.2.1", "3.14.6", "3.5.3", "3.13.8", "3.1.22"],
+      "tef": {"min": 2.5, "likely": 9.5, "max": 35.0},
+      "loss": {"min": 35000, "likely": 185000, "max": 1100000}
+    },
+    {
+      "id": "privileged-account-misuse",
+      "name": "Privileged administrative account abuse or compromise",
+      "controls": ["3.1.5", "3.1.6", "3.1.7", "3.5.3", "3.3.2"],
+      "tef": {"min": 0.25, "likely": 1.1, "max": 4.2},
+      "loss": {"min": 90000, "likely": 480000, "max": 2800000}
+    },
+    {
+      "id": "backup-recovery-failure",
+      "name": "Backup corruption or recovery failure during ransomware incident",
+      "controls": ["3.8.9", "3.12.3", "3.6.3", "3.8.7", "3.14.5"],
+      "tef": {"min": 0.15, "likely": 0.7, "max": 2.5},
+      "loss": {"min": 175000, "likely": 890000, "max": 5200000}
+    },
+    {
+      "id": "remote-access-compromise",
+      "name": "Compromise of remote access VPN or telework connection",
+      "controls": ["3.1.12", "3.1.13", "3.13.7", "3.5.3", "3.5.4"],
+      "tef": {"min": 0.7, "likely": 3.1, "max": 12.0},
+      "loss": {"min": 55000, "likely": 290000, "max": 1750000}
+    },
+    {
+      "id": "physical-intrusion-enclave",
+      "name": "Physical intrusion into server room or media storage facility",
+      "controls": ["3.10.1", "3.10.2", "3.10.3", "3.10.5", "3.8.3"],
+      "tef": {"min": 0.05, "likely": 0.3, "max": 1.5},
+      "loss": {"min": 30000, "likely": 140000, "max": 850000}
+    },
+    {
+      "id": "rogue-wireless-access-point",
+      "name": "Unauthorized wireless access point attached to CUI enclave network",
+      "controls": ["3.13.5", "3.13.2", "3.1.14", "3.1.15", "3.14.6"],
+      "tef": {"min": 0.2, "likely": 0.8, "max": 3.2},
+      "loss": {"min": 45000, "likely": 220000, "max": 1150000}
+    },
+    {
+      "id": "maintenance-tool-data-leakage",
+      "name": "CUI leakage via unverified third-party maintenance diagnostic tools",
+      "controls": ["3.7.1", "3.7.2", "3.7.3", "3.7.4", "3.7.5"],
+      "tef": {"min": 0.1, "likely": 0.5, "max": 2.0},
+      "loss": {"min": 35000, "likely": 175000, "max": 920000}
+    }
   ]
 }

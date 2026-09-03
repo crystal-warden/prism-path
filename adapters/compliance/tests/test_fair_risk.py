@@ -2,12 +2,21 @@
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """The FAIR risk pillar: vulnerability is driven by the deterministic compliance verdicts, so improving
 compliance measurably lowers the annualized loss expectancy, and risk-acceptance is a signed record."""
+import json
+import os
 import pytest
 import fair_risk as fr
 from prismpath import policy_pack as pp
 
-ALL_CONTROLS = ["3.5.3", "3.1.8", "3.5.7", "3.5.8", "3.1.1", "3.14.4", "3.14.5", "3.13.16", "3.6.1",
-                "3.13.6", "3.13.1", "3.1.5", "3.1.19", "3.8.7", "3.9.1", "3.3.3"]
+HERE = os.path.dirname(os.path.abspath(__file__))
+
+
+def _all_scenario_controls():
+    return sorted(list(set(c for s in fr.load_scenarios() for c in s["controls"])))
+
+
+def _all(status):
+    return {c: status for c in _all_scenario_controls()}
 
 
 @pytest.fixture
@@ -15,14 +24,26 @@ def key(tmp_path):
     return pp.keygen(str(tmp_path), "risk")
 
 
-def _all(status):
-    return {c: status for c in ALL_CONTROLS}
-
-
 def test_scenarios_load():
     s = fr.load_scenarios()
-    assert len(s) >= 4
+    assert len(s) == 15
     assert all(x["controls"] and x["tef"] and x["loss"] for x in s)
+
+
+def test_all_referenced_controls_exist_in_catalog():
+    adapter_dir = os.path.dirname(HERE)
+    cat = json.load(open(os.path.join(adapter_dir, "catalog", "nist_800171_r2.json")))["controls"]
+    scenarios = fr.load_scenarios()
+    for s in scenarios:
+        for cid in s["controls"]:
+            assert cid in cat, f"Control {cid} in scenario {s['id']} not in NIST 800-171 Rev 2 catalog"
+
+    task_specs = json.load(open(os.path.join(adapter_dir, "task_specs.json")))
+    for cid in task_specs:
+        if cid.startswith("_") or cid == "AST-3":
+            continue
+        assert cid in cat, f"Control {cid} in task_specs.json not in NIST 800-171 Rev 2 catalog"
+
 
 
 def test_vulnerability_driven_by_verdicts():

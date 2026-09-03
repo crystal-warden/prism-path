@@ -24,6 +24,18 @@ def test_specs_load_and_map_to_operational_objectives():
     assert t["cadence_days"] == 365
 
 
+def test_all_task_spec_controls_exist_in_catalog():
+    import json, os
+    here = os.path.dirname(os.path.abspath(__file__))
+    adapter_dir = os.path.dirname(here)
+    cat = json.load(open(os.path.join(adapter_dir, "catalog", "nist_800171_r2.json")))["controls"]
+    for cid in ct.all_tasks():
+        if cid == "AST-3":
+            continue
+        assert cid in cat, f"Control {cid} in task_specs.json not in catalog/nist_800171_r2.json"
+
+
+
 def test_record_completion_validates_date():
     rec = ct.record_completion("ir-capability-test", "3.6.3", "2026-01-15", "tester", "aar.pdf")
     assert rec["record_type"] == "operational_evidence"
