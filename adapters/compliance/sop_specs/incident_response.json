@@ -1,0 +1,63 @@
+{
+  "doc_id": "incident_response",
+  "title": "Incident Response Plan",
+  "family": "Incident Response",
+  "controls": ["3.6.1", "3.6.2", "3.6.3"],
+  "org_profile_keys": ["org_name", "system_name", "boundary", "cui_description"],
+  "sections": [
+    {
+      "id": "purpose",
+      "heading": "1. Purpose and Scope",
+      "objectives": [],
+      "questions": [],
+      "body": "This Incident Response Plan establishes the operational capability of {org_name} to prepare for, detect, analyze, contain, recover from, and respond to security incidents affecting {system_name}. It applies to the system boundary described as {boundary}, and to incidents involving Controlled Unclassified Information, specifically {cui_description}."
+    },
+    {
+      "id": "roles",
+      "heading": "2. Roles, Officials, and Authorities",
+      "objectives": ["3.6.2[c]", "3.6.2[d]"],
+      "questions": [
+        {"key": "ir_lead_role", "prompt": "Who directs incident response (role or title)?"},
+        {"key": "internal_officials", "prompt": "Which internal organizational officials must be notified of incidents (roles or titles)?"},
+        {"key": "external_authorities", "prompt": "Which external authorities must be notified (for example DoD DIBNet, FBI, US-CERT), and under what conditions is each one notified?"}
+      ],
+      "body": "Incident response is directed by {ir_lead_role}. The organizational officials to whom incidents are reported are {internal_officials}. The external authorities to whom incidents are reported, and the conditions under which each is notified, are {external_authorities}."
+    },
+    {
+      "id": "capability",
+      "heading": "3. Incident-Handling Capability",
+      "objectives": ["3.6.1[a]", "3.6.1[b]", "3.6.1[c]", "3.6.1[d]", "3.6.1[e]", "3.6.1[f]", "3.6.1[g]"],
+      "questions": [
+        {"key": "preparation", "prompt": "How does the organization prepare to handle incidents (training, tooling, runbooks, on-call)?"},
+        {"key": "detection", "prompt": "How are incidents detected (monitoring, alerting, user reports)?"},
+        {"key": "analysis", "prompt": "How are detected events analyzed and confirmed as incidents (triage, severity)?"},
+        {"key": "containment", "prompt": "How are incidents contained to limit impact?"},
+        {"key": "recovery", "prompt": "How are affected systems recovered to normal operation?"},
+        {"key": "user_response", "prompt": "What user response activities occur (how affected users are informed and directed)?"}
+      ],
+      "body": "{org_name} maintains an operational incident-handling capability spanning the full incident lifecycle. Preparation is carried out through {preparation}. Detection is performed through {detection}. Analysis and confirmation follow {analysis}. Containment is achieved through {containment}. Recovery is performed through {recovery}. User response activities consist of {user_response}."
+    },
+    {
+      "id": "reporting",
+      "heading": "4. Tracking, Documentation, and Reporting",
+      "objectives": ["3.6.2[a]", "3.6.2[b]", "3.6.2[e]", "3.6.2[f]"],
+      "questions": [
+        {"key": "tracking_system", "prompt": "Where are incidents tracked (ticketing system, register)?"},
+        {"key": "documentation_practice", "prompt": "What is documented for each incident (timeline, actions, evidence, disposition)?"},
+        {"key": "reporting_timeline", "prompt": "Within what timeline are officials and authorities notified after an incident is confirmed?"},
+        {"key": "reporting_method", "prompt": "By what method are officials and authorities notified (portal, email, phone)?"}
+      ],
+      "body": "All incidents are tracked in {tracking_system}. Each incident is documented as follows: {documentation_practice}. The identified organizational officials and external authorities are notified within {reporting_timeline}, using {reporting_method}."
+    },
+    {
+      "id": "testing",
+      "heading": "5. Testing and Improvement",
+      "objectives": ["3.6.3[a]"],
+      "questions": [
+        {"key": "test_frequency", "prompt": "How often is the incident response capability tested (for example annually)?"},
+        {"key": "test_method", "prompt": "How is it tested (tabletop exercise, functional exercise, simulation)?"}
+      ],
+      "body": "The incident response capability is tested {test_frequency} using {test_method}. The results of each test are recorded and used to improve this plan."
+    }
+  ]
+}
