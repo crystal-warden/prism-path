@@ -87,3 +87,7 @@ register("osquery", _osquery_parse)
 from scan_lynis import parse as _lynis_parse  # noqa: E402
 register("lynis", _lynis_parse)
 
+from scan_prowler import parse as _prowler_parse  # noqa: E402
+register("prowler", _prowler_parse)
+
+
