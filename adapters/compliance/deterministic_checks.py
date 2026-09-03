@@ -87,6 +87,50 @@ CHECK_SPEC = {
     "3.5.3[b]": ("flag", "mfa_local_privileged"),
     "3.5.3[c]": ("flag", "mfa_network_privileged"),
     "3.5.3[d]": ("flag", "mfa_network_nonprivileged"),
+
+    # 3.5.4 Employ replay-resistant authentication mechanisms
+    "3.5.4[a]": ("flag", "replay_resistant_auth_enforced"),
+
+    # 3.5.5 Prevent reuse of identifiers for a defined period
+    "3.5.5[a]": ("defined", "identifier_reuse_prohibited_days"),
+    "3.5.5[b]": ("flag", "identifier_reuse_prevention_enforced"),
+
+    # 3.5.6 Disable identifiers after a defined period of inactivity
+    "3.5.6[a]": ("defined", "inactive_identifier_disable_days"),
+    "3.5.6[b]": ("flag", "inactive_identifier_disable_enforced"),
+
+    # 3.5.9 Require immediate change of temporary passwords
+    "3.5.9[a]": ("flag", "force_change_temp_password_enforced"),
+
+    # 3.5.10 Store and transmit only cryptographically-protected passwords
+    "3.5.10[a]": ("flag", "password_storage_encrypted"),
+    "3.5.10[b]": ("flag", "password_transit_encrypted"),
+
+    # 3.5.11 Obscure feedback of authentication information
+    "3.5.11[a]": ("flag", "auth_feedback_obscured"),
+
+    # 3.13.6 Deny network communications traffic by default and allow by exception
+    "3.13.6[a]": ("flag", "default_deny_firewall_policy_enforced"),
+    "3.13.6[b]": ("flag", "firewall_allow_by_exception_enforced"),
+
+    # 3.13.7 Prevent remote devices from simultaneously establishing non-remote connections
+    "3.13.7[a]": ("flag", "split_tunneling_prohibited"),
+
+    # 3.13.9 Terminate network connections after inactivity or session end
+    "3.13.9[a]": ("defined", "network_session_timeout_seconds"),
+    "3.13.9[b]": ("flag", "network_session_termination_on_end"),
+    "3.13.9[c]": ("flag", "network_session_timeout_enforced"),
+
+    # 3.13.16 Protect confidentiality of CUI at rest
+    "3.13.16[a]": ("flag", "encryption_at_rest_enforced"),
+
+    # 3.14.4 Update malicious code protection mechanisms
+    "3.14.4[a]": ("flag", "antivirus_auto_update_enabled"),
+
+    # 3.14.5 Perform periodic and real-time malicious code scans
+    "3.14.5[a]": ("defined", "antivirus_scan_frequency_days"),
+    "3.14.5[b]": ("flag", "antivirus_periodic_scan_enforced"),
+    "3.14.5[c]": ("flag", "antivirus_realtime_scan_enforced"),
 }
 
 

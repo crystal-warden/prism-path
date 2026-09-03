@@ -24,6 +24,26 @@
     "privileged_accounts_identified": true,
     "mfa_local_privileged": true,
     "mfa_network_privileged": true,
-    "mfa_network_nonprivileged": false
+    "mfa_network_nonprivileged": false,
+    "replay_resistant_auth_enforced": true,
+    "identifier_reuse_prohibited_days": 90,
+    "identifier_reuse_prevention_enforced": true,
+    "inactive_identifier_disable_days": 90,
+    "inactive_identifier_disable_enforced": true,
+    "force_change_temp_password_enforced": true,
+    "password_storage_encrypted": true,
+    "password_transit_encrypted": true,
+    "auth_feedback_obscured": true,
+    "default_deny_firewall_policy_enforced": true,
+    "firewall_allow_by_exception_enforced": true,
+    "split_tunneling_prohibited": true,
+    "network_session_timeout_seconds": 900,
+    "network_session_termination_on_end": true,
+    "network_session_timeout_enforced": true,
+    "encryption_at_rest_enforced": true,
+    "antivirus_auto_update_enabled": true,
+    "antivirus_scan_frequency_days": 7,
+    "antivirus_periodic_scan_enforced": true,
+    "antivirus_realtime_scan_enforced": true
   }
 }

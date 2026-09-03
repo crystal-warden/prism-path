@@ -1,0 +1,48 @@
+{
+  "doc_id": "access_control_policy",
+  "title": "Access Control Policy",
+  "family": "Access Control",
+  "controls": ["3.1.1", "3.1.2"],
+  "org_profile_keys": ["org_name", "system_name", "boundary", "cui_description"],
+  "sections": [
+    {
+      "id": "purpose",
+      "heading": "1. Purpose and Scope",
+      "objectives": [],
+      "questions": [],
+      "body": "This Access Control Policy defines requirements for limiting access to {system_name} operated by {org_name}. It applies across the system boundary described as {boundary} and protects Controlled Unclassified Information including {cui_description}."
+    },
+    {
+      "id": "identification",
+      "heading": "2. User and System Identification",
+      "objectives": ["3.1.1[a]", "3.1.1[b]", "3.1.1[c]"],
+      "questions": [
+        {"key": "authorized_users_id", "prompt": "How are authorized users identified?"},
+        {"key": "authorized_processes_id", "prompt": "How are authorized processes acting for users identified?"},
+        {"key": "authorized_devices_id", "prompt": "How are authorized devices identified?"}
+      ],
+      "body": "Authorized users are identified through {authorized_users_id}. Processes acting on behalf of authorized users are identified through {authorized_processes_id}. System devices authorized to connect are identified through {authorized_devices_id}."
+    },
+    {
+      "id": "access_limitation",
+      "heading": "3. Access Limitation and Enforcement",
+      "objectives": ["3.1.1[d]", "3.1.1[e]", "3.1.1[f]"],
+      "questions": [
+        {"key": "user_access_enforcement", "prompt": "How is user system access limited to authorized users?"},
+        {"key": "process_access_enforcement", "prompt": "How is process access limited to authorized processes?"},
+        {"key": "device_access_enforcement", "prompt": "How is device access limited to authorized devices?"}
+      ],
+      "body": "System access for users is limited through {user_access_enforcement}. System access for processes is limited through {process_access_enforcement}. System access for devices is limited through {device_access_enforcement}."
+    },
+    {
+      "id": "transaction_limits",
+      "heading": "4. Permitted Transactions and Functions",
+      "objectives": ["3.1.2[a]", "3.1.2[b]"],
+      "questions": [
+        {"key": "permitted_transactions_def", "prompt": "How are permitted transaction and function types defined for authorized users?"},
+        {"key": "permitted_transactions_enf", "prompt": "How is system access limited to permitted transaction and function types?"}
+      ],
+      "body": "Permitted transaction and function types are defined by {permitted_transactions_def}. Enforcement of permitted transaction and function limits is performed by {permitted_transactions_enf}."
+    }
+  ]
+}

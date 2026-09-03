@@ -1,0 +1,40 @@
+{
+  "doc_id": "audit_and_accountability_policy",
+  "title": "Audit and Accountability Policy",
+  "family": "Audit and Accountability",
+  "controls": ["3.3.1", "3.3.2"],
+  "org_profile_keys": ["org_name", "system_name", "boundary", "cui_description"],
+  "sections": [
+    {
+      "id": "purpose",
+      "heading": "1. Purpose and Scope",
+      "objectives": [],
+      "questions": [],
+      "body": "This Audit and Accountability Policy establishes standards for logging system events and ensuring traceability within {system_name} operated by {org_name}. It applies to {boundary} handling {cui_description}."
+    },
+    {
+      "id": "audit_generation_retention",
+      "heading": "2. Audit Log Creation and Retention",
+      "objectives": ["3.3.1[a]", "3.3.1[b]", "3.3.1[c]", "3.3.1[d]", "3.3.1[e]", "3.3.1[f]"],
+      "questions": [
+        {"key": "event_types_logged", "prompt": "What event types are specified for audit logging?"},
+        {"key": "audit_record_content_def", "prompt": "What content is defined for audit records?"},
+        {"key": "audit_record_generation", "prompt": "How are audit records created by system components?"},
+        {"key": "audit_record_content_enf", "prompt": "How is audit record content enforced?"},
+        {"key": "retention_requirements_def", "prompt": "What retention requirements are defined for audit records?"},
+        {"key": "retention_enforcement", "prompt": "How are audit records retained in accordance with requirements?"}
+      ],
+      "body": "Audit event types to log are specified by {event_types_logged}. Required audit record content is defined by {audit_record_content_def}. System components create audit logs via {audit_record_generation}. Generated audit logs contain the required content per {audit_record_content_enf}. Audit record retention rules are specified in {retention_requirements_def}. Retention of records is executed through {retention_enforcement}."
+    },
+    {
+      "id": "user_traceability",
+      "heading": "3. User Action Traceability",
+      "objectives": ["3.3.2[a]", "3.3.2[b]"],
+      "questions": [
+        {"key": "traceability_content_def", "prompt": "What audit record content is defined to uniquely trace user actions?"},
+        {"key": "traceability_content_enf", "prompt": "How do created audit records support user action traceability?"}
+      ],
+      "body": "To uniquely trace actions of individual users audit content requirements are defined by {traceability_content_def}. Audit records contain the necessary unique user identification content as enforced by {traceability_content_enf}."
+    }
+  ]
+}

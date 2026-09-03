@@ -29,5 +29,35 @@
     {"id": "audit-log-review", "title": "Review logged events and update logging",
      "objectives": ["3.3.3[b]", "3.3.3[c]"], "cadence_days": 90,
      "evidence": "a log review record noting any updates to the logged event types"}
+  ],
+  "3.11.1": [
+    {"id": "periodic-risk-assessment", "title": "Perform periodic risk assessment",
+     "objectives": ["3.11.1[b]"], "cadence_days": 365,
+     "evidence": "a risk assessment report evaluating threats and vulnerabilities"}
+  ],
+  "3.1.22": [
+    {"id": "public-content-review", "title": "Review content on publicly accessible systems for CUI",
+     "objectives": ["3.1.22[d]"], "cadence_days": 180,
+     "evidence": "a public website content review log confirming absence of CUI"}
+  ],
+  "3.4.1": [
+    {"id": "baseline-inventory-review", "title": "Review and update baseline configuration and system inventory",
+     "objectives": ["3.4.1[c]", "3.4.1[f]"], "cadence_days": 180,
+     "evidence": "a baseline configuration and inventory audit sign-off record"}
+  ],
+  "3.12.4": [
+    {"id": "ssp-update-review", "title": "Review and update system security plan",
+     "objectives": ["3.12.4[h]"], "cadence_days": 365,
+     "evidence": "an updated System Security Plan document with approval log"}
+  ],
+  "3.14.3": [
+    {"id": "security-advisories-review", "title": "Monitor security alerts and advisories",
+     "objectives": ["3.14.3[b]"], "cadence_days": 30,
+     "evidence": "a monthly security advisory review log"}
+  ],
+  "3.7.1": [
+    {"id": "system-maintenance-execution", "title": "Perform scheduled system maintenance",
+     "objectives": ["3.7.1[a]"], "cadence_days": 90,
+     "evidence": "a system maintenance log recording maintenance activities"}
   ]
 }
