@@ -131,6 +131,26 @@ CHECK_SPEC = {
     "3.14.5[a]": ("defined", "antivirus_scan_frequency_days"),
     "3.14.5[b]": ("flag", "antivirus_periodic_scan_enforced"),
     "3.14.5[c]": ("flag", "antivirus_realtime_scan_enforced"),
+
+    # --- AI Safety Testing catalog (standard 'ai_safety_testing') ---
+    # AST-1 Retest on every model change
+    "AST-1[a]": ("flag", "test_suite_defined"),
+    "AST-1[b]": ("flag", "model_versions_hashed"),
+    "AST-1[c]": ("flag", "safety_determination_for_current_version"),   # computed by ai_safety.version_binding
+    "AST-1[d]": ("flag", "no_unretested_deployed_versions"),            # computed by ai_safety.version_binding
+    # AST-2 Detect stale tests
+    "AST-2[a]": ("flag", "tests_fingerprinted"),
+    "AST-2[b]": ("flag", "stale_tests_refused"),
+    "AST-2[c]": ("flag", "discrimination_margin_measured"),
+    "AST-2[d]": ("flag", "collapsed_margin_abstains"),
+    # AST-3 Continuous point-in-time proof
+    "AST-3[a]": ("flag", "determinations_signed"),
+    "AST-3[b]": ("flag", "receipts_anchored"),
+    "AST-3[c]": ("flag", "point_in_time_replayable"),
+    "AST-3[d]": ("flag", "continuous_evaluation"),
+    # AST-4 Runtime input and output monitoring
+    "AST-4[a]": ("flag", "io_baseline_comparison"),
+    "AST-4[b]": ("flag", "drift_abstains_or_escalates"),
 }
 
 

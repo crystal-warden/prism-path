@@ -22,6 +22,7 @@ STANDARDS = {
     "nist_800171_r2": os.path.join(HERE, "catalog", "nist_800171_r2.json"),   # CMMC's current basis (Rev 2)
     "nist_800171_r3": os.path.join(HERE, "catalog", "nist_800171_r3.json"),   # NIST's current official (Rev 3)
     "nist_800171_ac": os.path.join(HERE, "catalog", "nist_800171_ac.json"),   # legacy AC-only subset
+    "ai_safety_testing": os.path.join(HERE, "catalog", "ai_safety_testing.json"),  # AI safety testing (evidence/process)
 }
 _ACTIVE = os.environ.get("PRISMPATH_STANDARD", "nist_800171_r2")
 _CAT_CACHE = {}
