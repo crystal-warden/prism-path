@@ -134,9 +134,15 @@ _PROFILE_GUIDANCE = {
 }
 
 def adjudicate(control, req):
-    """Adjudicator port: the prompt is built by the connector (overridable seam); the call stays
-    on the module-level `_gemma` seam (schema-constrained; tests monkeypatch it); a None return
-    remains the failure contract."""
+    """Adjudicator port. Try the comparator (deterministic) adjudicator first: when every objective
+    of the control is machine-checkable from the request's `facts`, the determination is a pure
+    function of configuration with no model in the loop (the honest-hybrid seam). Otherwise fall back
+    to the escalation-default LLM adjudicator. The prompt is built by the connector (overridable
+    seam); the call stays on the module-level `_gemma` seam (schema-constrained; tests monkeypatch
+    it); a None return remains the failure contract."""
+    det = _det.adjudicate_deterministic(control, req)
+    if det is not None:
+        return det
     prompt = CONNECTOR.adjudication_prompt(req, criteria=control)
     return _gemma(prompt, DETERMINATION_SCHEMA, "determination")
 
@@ -237,6 +243,7 @@ CONNECTOR = ComplianceConnector()
 sys.path.insert(0, HERE)
 import emit as _emit      # pure serialization, adapter-local; carries the Flow-Ledger provenance into each report
 import rollup as _rollup  # system-level aggregation: partial SPRS + scope + rollup attestation
+import deterministic_checks as _det  # comparator Adjudicator for machine-checkable objectives (honest hybrid)
 
 def result_record(control, req, determination, manifest):
     """Normalize an adjudicated determination + its attestation manifest into an emit() record."""
