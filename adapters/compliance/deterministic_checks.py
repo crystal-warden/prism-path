@@ -107,6 +107,24 @@ def machine_checkable(control) -> bool:
     return bool(objs) and all(o["id"] in CHECKS for o in objs)
 
 
+def check_objectives(control, facts) -> dict:
+    """Per-objective config verdicts for the objectives this module can decide from `facts`. Returns
+    {objective_id: bool} for decided objectives only, skipping those with no check or a missing fact.
+    Unlike adjudicate_deterministic (all-or-defer), this is the partial view the unified adjudicator
+    merges with the other mechanisms."""
+    facts = facts or {}
+    out = {}
+    for o in control.get("objectives", []):
+        fn = CHECKS.get(o["id"])
+        if fn is None:
+            continue
+        r = fn(facts)
+        if r is None:
+            continue
+        out[o["id"]] = bool(r)
+    return out
+
+
 def adjudicate_deterministic(control, req) -> Optional[dict]:
     """Return a determination decided purely from configuration facts, or None to defer to the LLM.
 
