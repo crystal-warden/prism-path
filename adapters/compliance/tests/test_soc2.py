@@ -33,11 +33,13 @@ def test_soc2_crosswalk_ids_are_all_real():
 
 def test_soc2_criterion_is_fail_closed_over_its_800171_sources():
     x = cw.load_crosswalk("nist_800171_r2__soc2_tsc")
-    # CC6.1 is fed by 3.1.1, 3.5.1, 3.5.3 -> met only when all three are met
-    met = cw.propagate(x, "nist_800171_r2", {"3.1.1": "met", "3.5.1": "met", "3.5.3": "met"})
-    assert met["controls"]["CC6.1"]["verdict"] == "met"
-    one_bad = cw.propagate(x, "nist_800171_r2", {"3.1.1": "met", "3.5.1": "not-met", "3.5.3": "met"})
-    assert one_bad["controls"]["CC6.1"]["verdict"] == "not-met"
+    empty = cw.propagate(x, "nist_800171_r2", {})
+    multi = next(t for t, v in empty["controls"].items() if len(v["from"]) >= 2)   # a criterion with 2+ sources
+    srcs = empty["controls"][multi]["from"]
+    all_met = cw.propagate(x, "nist_800171_r2", {s: "met" for s in srcs})
+    assert all_met["controls"][multi]["verdict"] == "met"
+    one_bad = cw.propagate(x, "nist_800171_r2", dict({s: "met" for s in srcs}, **{srcs[0]: "not-met"}))
+    assert one_bad["controls"][multi]["verdict"] == "not-met"
 
 
 def test_multi_framework_now_reaches_soc2():
