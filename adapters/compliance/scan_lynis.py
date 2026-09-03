@@ -90,4 +90,17 @@ def parse(raw):
     if fw_exc is not None:
         facts["firewall_allow_by_exception_enforced"] = fw_exc
 
+    # 3.3.1[c] audit records are created (generated): a running audit daemon generates audit records.
+    # Only the "records are created" objective — what events to log, the record content, and retention
+    # are organization-defined and left to the documented/operational mechanisms, never inferred here.
+    auditd = _as_bool(_first(raw, "auditd_running", "audit_daemon_running", "auditd_enabled"))
+    if auditd is not None:
+        facts["audit_logging_enabled"] = auditd
+
+    # 3.8.7 control the use of removable media: an OS-level USB mass-storage restriction (USBGuard active,
+    # or the usb-storage kernel module blocked). A restriction present, not merely that USB devices exist.
+    usb = _as_bool(_first(raw, "usb_storage_disabled", "usbguard_active", "removable_media_restricted"))
+    if usb is not None:
+        facts["removable_media_controlled"] = usb
+
     return facts

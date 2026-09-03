@@ -58,4 +58,12 @@ def parse(raw):
         if grace is not None:
             facts["session_lock_timeout_seconds"] = grace      # 3.1.10[a]
 
+    # osquery `disk_encryption` table: column `encrypted` (0/1) per volume. CUI at rest (3.13.16) is
+    # protected only when every reported volume is encrypted; a single unencrypted volume refutes it.
+    de_rows = _rows(raw, "disk_encryption")
+    if de_rows:
+        states = [_as_bool(r.get("encrypted")) for r in de_rows]
+        if all(s is not None for s in states):
+            facts["encryption_at_rest_enforced"] = all(states)  # 3.13.16[a]
+
     return facts

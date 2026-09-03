@@ -140,6 +140,11 @@ CHECK_SPEC = {
     "3.1.19[a]": ("flag", "mobile_devices_identified"),
     "3.1.19[b]": ("flag", "mobile_device_encryption_enforced"),
 
+    # 3.3.1 Create and retain audit logs. Only [c] "audit records are created" is config-decidable
+    # (a running audit daemon generates records); the event-selection, content, and retention objectives
+    # are organization-defined and stay with the documented and operational mechanisms.
+    "3.3.1[c]": ("flag", "audit_logging_enabled"),
+
     # 3.3.7 Provide a system capability that compares and synchronizes internal system clocks
     "3.3.7[a]": ("flag", "audit_timestamps_enabled"),
     "3.3.7[b]": ("flag", "ntp_server_configured"),

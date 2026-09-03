@@ -29,6 +29,14 @@ def test_osquery_value_coercion():
     assert scan_osquery.parse({"os_version": [{"name": "macOS"}]}) == {}
 
 
+def test_osquery_disk_encryption_is_all_or_nothing():
+    # every volume encrypted -> CUI at rest protected (3.13.16); one unencrypted volume refutes it
+    assert scan_osquery.parse({"disk_encryption": [{"encrypted": "1"}, {"encrypted": "1"}]}) == {
+        "encryption_at_rest_enforced": True}
+    assert scan_osquery.parse({"disk_encryption": [{"encrypted": "1"}, {"encrypted": "0"}]}) == {
+        "encryption_at_rest_enforced": False}
+
+
 def test_to_posture_carries_source_and_boundary():
     raw = sc.load_sample("osquery_macos")
     posture = sc.to_posture("osquery", raw, "the Mac dev host", host="figue-mac")

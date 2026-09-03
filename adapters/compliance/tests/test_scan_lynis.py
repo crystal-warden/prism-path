@@ -29,6 +29,13 @@ def test_lynis_maps_only_what_it_reports():
         assert k not in facts
 
 
+def test_lynis_maps_auditd_and_removable_media():
+    facts = scan_lynis.parse({"auditd_running": "1", "usb_storage_disabled": "1"})
+    assert facts["audit_logging_enabled"] is True          # 3.3.1[c] audit records are created
+    assert facts["removable_media_controlled"] is True     # 3.8.7 removable media restricted
+    assert scan_lynis.parse({"auditd_running": "0"})["audit_logging_enabled"] is False  # fail closed
+
+
 def test_lynis_default_deny_not_inferred_from_firewall_active():
     # a running firewall is NOT a default-deny policy; without the real signal the fact stays absent
     assert "default_deny_firewall_policy_enforced" not in scan_lynis.parse({"firewall_active": "1"})
