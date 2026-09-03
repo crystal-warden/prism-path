@@ -1,0 +1,135 @@
+{
+ "id": "nist_800171_r2__soc2_tsc",
+ "a": "nist_800171_r2",
+ "b": "soc2_tsc",
+ "complete": false,
+ "authority": "Curated subset of the widely-published NIST SP 800-171 Rev 2 to SOC 2 Common Criteria correspondence. NOT complete; each edge must be verified against the AICPA TSC and your auditor's mapping before reliance. A SOC 2 criterion is reported met only when every mapped 800-171 control is met (fail closed).",
+ "edges": [
+  {
+   "a": "3.1.1",
+   "b": [
+    "CC6.1",
+    "CC6.2",
+    "CC6.3"
+   ]
+  },
+  {
+   "a": "3.1.2",
+   "b": [
+    "CC6.3"
+   ]
+  },
+  {
+   "a": "3.1.5",
+   "b": [
+    "CC6.3"
+   ]
+  },
+  {
+   "a": "3.1.12",
+   "b": [
+    "CC6.6",
+    "CC6.7"
+   ]
+  },
+  {
+   "a": "3.3.1",
+   "b": [
+    "CC7.2"
+   ]
+  },
+  {
+   "a": "3.4.1",
+   "b": [
+    "CC7.1",
+    "CC8.1"
+   ]
+  },
+  {
+   "a": "3.4.3",
+   "b": [
+    "CC8.1"
+   ]
+  },
+  {
+   "a": "3.5.1",
+   "b": [
+    "CC6.1"
+   ]
+  },
+  {
+   "a": "3.5.3",
+   "b": [
+    "CC6.1"
+   ]
+  },
+  {
+   "a": "3.6.1",
+   "b": [
+    "CC7.3",
+    "CC7.4"
+   ]
+  },
+  {
+   "a": "3.6.2",
+   "b": [
+    "CC7.4"
+   ]
+  },
+  {
+   "a": "3.10.1",
+   "b": [
+    "CC6.4"
+   ]
+  },
+  {
+   "a": "3.11.1",
+   "b": [
+    "CC3.1",
+    "CC3.2"
+   ]
+  },
+  {
+   "a": "3.11.2",
+   "b": [
+    "CC7.1"
+   ]
+  },
+  {
+   "a": "3.13.1",
+   "b": [
+    "CC6.6"
+   ]
+  },
+  {
+   "a": "3.13.6",
+   "b": [
+    "CC6.6"
+   ]
+  },
+  {
+   "a": "3.14.1",
+   "b": [
+    "CC7.1"
+   ]
+  },
+  {
+   "a": "3.14.2",
+   "b": [
+    "CC6.8"
+   ]
+  },
+  {
+   "a": "3.14.6",
+   "b": [
+    "CC7.2"
+   ]
+  },
+  {
+   "a": "3.14.7",
+   "b": [
+    "CC7.2"
+   ]
+  }
+ ]
+}

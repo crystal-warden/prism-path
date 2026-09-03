@@ -23,6 +23,7 @@ STANDARDS = {
     "nist_800171_r3": os.path.join(HERE, "catalog", "nist_800171_r3.json"),   # NIST's current official (Rev 3)
     "nist_800171_ac": os.path.join(HERE, "catalog", "nist_800171_ac.json"),   # legacy AC-only subset
     "ai_safety_testing": os.path.join(HERE, "catalog", "ai_safety_testing.json"),  # AI safety testing (evidence/process)
+    "soc2_tsc": os.path.join(HERE, "catalog", "soc2_tsc.json"),                # SOC 2 Trust Services Criteria (Common Criteria)
 }
 _ACTIVE = os.environ.get("PRISMPATH_STANDARD", "nist_800171_r2")
 _CAT_CACHE = {}

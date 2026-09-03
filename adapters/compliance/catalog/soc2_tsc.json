@@ -1,0 +1,782 @@
+{
+ "_meta": {
+  "standard": "soc2_tsc",
+  "revision": "2017 (rev. 2022)",
+  "controls": 33,
+  "families": 9,
+  "source": "AICPA Trust Services Criteria \u2014 Common Criteria (Security). Criterion text is a SUMMARY, not the verbatim AICPA TSC; verify against the official Trust Services Criteria before audit use. Only the required Common Criteria (CC series) are modeled; Availability/Confidentiality/Processing Integrity/Privacy are not yet included.",
+  "verification": "VERIFY criterion wording and scope against the AICPA TSC 2017 (rev. 2022)."
+ },
+ "families": {
+  "CC1": "Control Environment",
+  "CC2": "Communication and Information",
+  "CC3": "Risk Assessment",
+  "CC4": "Monitoring Activities",
+  "CC5": "Control Activities",
+  "CC6": "Logical and Physical Access Controls",
+  "CC7": "System Operations",
+  "CC8": "Change Management",
+  "CC9": "Risk Mitigation"
+ },
+ "controls": {
+  "CC1.1": {
+   "family": "CC1",
+   "family_name": "Control Environment",
+   "title": "Integrity and ethical values",
+   "control": "The entity demonstrates a commitment to integrity and ethical values.",
+   "evidence_types": [
+    "policy",
+    "procedure",
+    "operating-effectiveness"
+   ],
+   "methods": [
+    "Inspection",
+    "Inquiry",
+    "Observation"
+   ],
+   "objectives": [
+    {
+     "id": "CC1.1[a]",
+     "text": "The entity demonstrates a commitment to integrity and ethical values.",
+     "discovery_query": "Provide evidence that the entity demonstrates a commitment to integrity and ethical values."
+    }
+   ]
+  },
+  "CC1.2": {
+   "family": "CC1",
+   "family_name": "Control Environment",
+   "title": "Board oversight",
+   "control": "The board of directors demonstrates independence from management and exercises oversight of internal control.",
+   "evidence_types": [
+    "policy",
+    "procedure",
+    "operating-effectiveness"
+   ],
+   "methods": [
+    "Inspection",
+    "Inquiry",
+    "Observation"
+   ],
+   "objectives": [
+    {
+     "id": "CC1.2[a]",
+     "text": "The board of directors demonstrates independence from management and exercises oversight of internal control.",
+     "discovery_query": "Provide evidence that the board of directors demonstrates independence from management and exercises oversight of internal control."
+    }
+   ]
+  },
+  "CC1.3": {
+   "family": "CC1",
+   "family_name": "Control Environment",
+   "title": "Structure and authority",
+   "control": "Management establishes structures, reporting lines, and appropriate authorities and responsibilities.",
+   "evidence_types": [
+    "policy",
+    "procedure",
+    "operating-effectiveness"
+   ],
+   "methods": [
+    "Inspection",
+    "Inquiry",
+    "Observation"
+   ],
+   "objectives": [
+    {
+     "id": "CC1.3[a]",
+     "text": "Management establishes structures, reporting lines, and appropriate authorities and responsibilities.",
+     "discovery_query": "Provide evidence that management establishes structures, reporting lines, and appropriate authorities and responsibilities."
+    }
+   ]
+  },
+  "CC1.4": {
+   "family": "CC1",
+   "family_name": "Control Environment",
+   "title": "Competence",
+   "control": "The entity demonstrates a commitment to attract, develop, and retain competent individuals.",
+   "evidence_types": [
+    "policy",
+    "procedure",
+    "operating-effectiveness"
+   ],
+   "methods": [
+    "Inspection",
+    "Inquiry",
+    "Observation"
+   ],
+   "objectives": [
+    {
+     "id": "CC1.4[a]",
+     "text": "The entity demonstrates a commitment to attract, develop, and retain competent individuals.",
+     "discovery_query": "Provide evidence that the entity demonstrates a commitment to attract, develop, and retain competent individuals."
+    }
+   ]
+  },
+  "CC1.5": {
+   "family": "CC1",
+   "family_name": "Control Environment",
+   "title": "Accountability",
+   "control": "The entity holds individuals accountable for their internal control responsibilities.",
+   "evidence_types": [
+    "policy",
+    "procedure",
+    "operating-effectiveness"
+   ],
+   "methods": [
+    "Inspection",
+    "Inquiry",
+    "Observation"
+   ],
+   "objectives": [
+    {
+     "id": "CC1.5[a]",
+     "text": "The entity holds individuals accountable for their internal control responsibilities.",
+     "discovery_query": "Provide evidence that the entity holds individuals accountable for their internal control responsibilities."
+    }
+   ]
+  },
+  "CC2.1": {
+   "family": "CC2",
+   "family_name": "Communication and Information",
+   "title": "Quality information",
+   "control": "The entity obtains or generates relevant, quality information to support the functioning of internal control.",
+   "evidence_types": [
+    "policy",
+    "procedure",
+    "operating-effectiveness"
+   ],
+   "methods": [
+    "Inspection",
+    "Inquiry",
+    "Observation"
+   ],
+   "objectives": [
+    {
+     "id": "CC2.1[a]",
+     "text": "The entity obtains or generates relevant, quality information to support the functioning of internal control.",
+     "discovery_query": "Provide evidence that the entity obtains or generates relevant, quality information to support the functioning of internal control."
+    }
+   ]
+  },
+  "CC2.2": {
+   "family": "CC2",
+   "family_name": "Communication and Information",
+   "title": "Internal communication",
+   "control": "The entity internally communicates information, including control objectives and responsibilities.",
+   "evidence_types": [
+    "policy",
+    "procedure",
+    "operating-effectiveness"
+   ],
+   "methods": [
+    "Inspection",
+    "Inquiry",
+    "Observation"
+   ],
+   "objectives": [
+    {
+     "id": "CC2.2[a]",
+     "text": "The entity internally communicates information, including control objectives and responsibilities.",
+     "discovery_query": "Provide evidence that the entity internally communicates information, including control objectives and responsibilities."
+    }
+   ]
+  },
+  "CC2.3": {
+   "family": "CC2",
+   "family_name": "Communication and Information",
+   "title": "External communication",
+   "control": "The entity communicates with external parties about matters affecting internal control.",
+   "evidence_types": [
+    "policy",
+    "procedure",
+    "operating-effectiveness"
+   ],
+   "methods": [
+    "Inspection",
+    "Inquiry",
+    "Observation"
+   ],
+   "objectives": [
+    {
+     "id": "CC2.3[a]",
+     "text": "The entity communicates with external parties about matters affecting internal control.",
+     "discovery_query": "Provide evidence that the entity communicates with external parties about matters affecting internal control."
+    }
+   ]
+  },
+  "CC3.1": {
+   "family": "CC3",
+   "family_name": "Risk Assessment",
+   "title": "Objectives for risk",
+   "control": "The entity specifies objectives with sufficient clarity to enable identification and assessment of risks.",
+   "evidence_types": [
+    "policy",
+    "procedure",
+    "operating-effectiveness"
+   ],
+   "methods": [
+    "Inspection",
+    "Inquiry",
+    "Observation"
+   ],
+   "objectives": [
+    {
+     "id": "CC3.1[a]",
+     "text": "The entity specifies objectives with sufficient clarity to enable identification and assessment of risks.",
+     "discovery_query": "Provide evidence that the entity specifies objectives with sufficient clarity to enable identification and assessment of risks."
+    }
+   ]
+  },
+  "CC3.2": {
+   "family": "CC3",
+   "family_name": "Risk Assessment",
+   "title": "Identify and analyze risk",
+   "control": "The entity identifies risks to its objectives and analyzes them as a basis for how to manage them.",
+   "evidence_types": [
+    "policy",
+    "procedure",
+    "operating-effectiveness"
+   ],
+   "methods": [
+    "Inspection",
+    "Inquiry",
+    "Observation"
+   ],
+   "objectives": [
+    {
+     "id": "CC3.2[a]",
+     "text": "The entity identifies risks to its objectives and analyzes them as a basis for how to manage them.",
+     "discovery_query": "Provide evidence that the entity identifies risks to its objectives and analyzes them as a basis for how to manage them."
+    }
+   ]
+  },
+  "CC3.3": {
+   "family": "CC3",
+   "family_name": "Risk Assessment",
+   "title": "Fraud risk",
+   "control": "The entity considers the potential for fraud in assessing risks to objectives.",
+   "evidence_types": [
+    "policy",
+    "procedure",
+    "operating-effectiveness"
+   ],
+   "methods": [
+    "Inspection",
+    "Inquiry",
+    "Observation"
+   ],
+   "objectives": [
+    {
+     "id": "CC3.3[a]",
+     "text": "The entity considers the potential for fraud in assessing risks to objectives.",
+     "discovery_query": "Provide evidence that the entity considers the potential for fraud in assessing risks to objectives."
+    }
+   ]
+  },
+  "CC3.4": {
+   "family": "CC3",
+   "family_name": "Risk Assessment",
+   "title": "Assess change",
+   "control": "The entity identifies and assesses changes that could significantly impact internal control.",
+   "evidence_types": [
+    "policy",
+    "procedure",
+    "operating-effectiveness"
+   ],
+   "methods": [
+    "Inspection",
+    "Inquiry",
+    "Observation"
+   ],
+   "objectives": [
+    {
+     "id": "CC3.4[a]",
+     "text": "The entity identifies and assesses changes that could significantly impact internal control.",
+     "discovery_query": "Provide evidence that the entity identifies and assesses changes that could significantly impact internal control."
+    }
+   ]
+  },
+  "CC4.1": {
+   "family": "CC4",
+   "family_name": "Monitoring Activities",
+   "title": "Evaluate controls",
+   "control": "The entity selects, develops, and performs ongoing and separate evaluations of internal control.",
+   "evidence_types": [
+    "policy",
+    "procedure",
+    "operating-effectiveness"
+   ],
+   "methods": [
+    "Inspection",
+    "Inquiry",
+    "Observation"
+   ],
+   "objectives": [
+    {
+     "id": "CC4.1[a]",
+     "text": "The entity selects, develops, and performs ongoing and separate evaluations of internal control.",
+     "discovery_query": "Provide evidence that the entity selects, develops, and performs ongoing and separate evaluations of internal control."
+    }
+   ]
+  },
+  "CC4.2": {
+   "family": "CC4",
+   "family_name": "Monitoring Activities",
+   "title": "Communicate deficiencies",
+   "control": "The entity evaluates and communicates internal control deficiencies to those responsible for corrective action.",
+   "evidence_types": [
+    "policy",
+    "procedure",
+    "operating-effectiveness"
+   ],
+   "methods": [
+    "Inspection",
+    "Inquiry",
+    "Observation"
+   ],
+   "objectives": [
+    {
+     "id": "CC4.2[a]",
+     "text": "The entity evaluates and communicates internal control deficiencies to those responsible for corrective action.",
+     "discovery_query": "Provide evidence that the entity evaluates and communicates internal control deficiencies to those responsible for corrective action."
+    }
+   ]
+  },
+  "CC5.1": {
+   "family": "CC5",
+   "family_name": "Control Activities",
+   "title": "Control activities",
+   "control": "The entity selects and develops control activities that mitigate risks to acceptable levels.",
+   "evidence_types": [
+    "policy",
+    "procedure",
+    "operating-effectiveness"
+   ],
+   "methods": [
+    "Inspection",
+    "Inquiry",
+    "Observation"
+   ],
+   "objectives": [
+    {
+     "id": "CC5.1[a]",
+     "text": "The entity selects and develops control activities that mitigate risks to acceptable levels.",
+     "discovery_query": "Provide evidence that the entity selects and develops control activities that mitigate risks to acceptable levels."
+    }
+   ]
+  },
+  "CC5.2": {
+   "family": "CC5",
+   "family_name": "Control Activities",
+   "title": "Technology controls",
+   "control": "The entity selects and develops general control activities over technology.",
+   "evidence_types": [
+    "policy",
+    "procedure",
+    "operating-effectiveness"
+   ],
+   "methods": [
+    "Inspection",
+    "Inquiry",
+    "Observation"
+   ],
+   "objectives": [
+    {
+     "id": "CC5.2[a]",
+     "text": "The entity selects and develops general control activities over technology.",
+     "discovery_query": "Provide evidence that the entity selects and develops general control activities over technology."
+    }
+   ]
+  },
+  "CC5.3": {
+   "family": "CC5",
+   "family_name": "Control Activities",
+   "title": "Policies and procedures",
+   "control": "The entity deploys control activities through policies and procedures that put them into action.",
+   "evidence_types": [
+    "policy",
+    "procedure",
+    "operating-effectiveness"
+   ],
+   "methods": [
+    "Inspection",
+    "Inquiry",
+    "Observation"
+   ],
+   "objectives": [
+    {
+     "id": "CC5.3[a]",
+     "text": "The entity deploys control activities through policies and procedures that put them into action.",
+     "discovery_query": "Provide evidence that the entity deploys control activities through policies and procedures that put them into action."
+    }
+   ]
+  },
+  "CC6.1": {
+   "family": "CC6",
+   "family_name": "Logical and Physical Access Controls",
+   "title": "Logical access security",
+   "control": "The entity implements logical access security software, infrastructure, and architectures to protect information assets.",
+   "evidence_types": [
+    "policy",
+    "procedure",
+    "operating-effectiveness"
+   ],
+   "methods": [
+    "Inspection",
+    "Inquiry",
+    "Observation"
+   ],
+   "objectives": [
+    {
+     "id": "CC6.1[a]",
+     "text": "The entity implements logical access security software, infrastructure, and architectures to protect information assets.",
+     "discovery_query": "Provide evidence that the entity implements logical access security software, infrastructure, and architectures to protect information assets."
+    }
+   ]
+  },
+  "CC6.2": {
+   "family": "CC6",
+   "family_name": "Logical and Physical Access Controls",
+   "title": "Provisioning and review",
+   "control": "The entity registers and authorizes users, provisions and deprovisions access, and reviews access rights.",
+   "evidence_types": [
+    "policy",
+    "procedure",
+    "operating-effectiveness"
+   ],
+   "methods": [
+    "Inspection",
+    "Inquiry",
+    "Observation"
+   ],
+   "objectives": [
+    {
+     "id": "CC6.2[a]",
+     "text": "The entity registers and authorizes users, provisions and deprovisions access, and reviews access rights.",
+     "discovery_query": "Provide evidence that the entity registers and authorizes users, provisions and deprovisions access, and reviews access rights."
+    }
+   ]
+  },
+  "CC6.3": {
+   "family": "CC6",
+   "family_name": "Logical and Physical Access Controls",
+   "title": "Role-based least privilege",
+   "control": "The entity authorizes, modifies, or removes access to data and functions based on roles and least privilege.",
+   "evidence_types": [
+    "policy",
+    "procedure",
+    "operating-effectiveness"
+   ],
+   "methods": [
+    "Inspection",
+    "Inquiry",
+    "Observation"
+   ],
+   "objectives": [
+    {
+     "id": "CC6.3[a]",
+     "text": "The entity authorizes, modifies, or removes access to data and functions based on roles and least privilege.",
+     "discovery_query": "Provide evidence that the entity authorizes, modifies, or removes access to data and functions based on roles and least privilege."
+    }
+   ]
+  },
+  "CC6.4": {
+   "family": "CC6",
+   "family_name": "Logical and Physical Access Controls",
+   "title": "Physical access",
+   "control": "The entity restricts physical access to facilities and protected information assets.",
+   "evidence_types": [
+    "policy",
+    "procedure",
+    "operating-effectiveness"
+   ],
+   "methods": [
+    "Inspection",
+    "Inquiry",
+    "Observation"
+   ],
+   "objectives": [
+    {
+     "id": "CC6.4[a]",
+     "text": "The entity restricts physical access to facilities and protected information assets.",
+     "discovery_query": "Provide evidence that the entity restricts physical access to facilities and protected information assets."
+    }
+   ]
+  },
+  "CC6.5": {
+   "family": "CC6",
+   "family_name": "Logical and Physical Access Controls",
+   "title": "Secure disposal",
+   "control": "The entity discontinues protections over assets only after the ability to read or recover data has been removed.",
+   "evidence_types": [
+    "policy",
+    "procedure",
+    "operating-effectiveness"
+   ],
+   "methods": [
+    "Inspection",
+    "Inquiry",
+    "Observation"
+   ],
+   "objectives": [
+    {
+     "id": "CC6.5[a]",
+     "text": "The entity discontinues protections over assets only after the ability to read or recover data has been removed.",
+     "discovery_query": "Provide evidence that the entity discontinues protections over assets only after the ability to read or recover data has been removed."
+    }
+   ]
+  },
+  "CC6.6": {
+   "family": "CC6",
+   "family_name": "Logical and Physical Access Controls",
+   "title": "External threats",
+   "control": "The entity implements logical access measures to protect against threats from outside its system boundaries.",
+   "evidence_types": [
+    "policy",
+    "procedure",
+    "operating-effectiveness"
+   ],
+   "methods": [
+    "Inspection",
+    "Inquiry",
+    "Observation"
+   ],
+   "objectives": [
+    {
+     "id": "CC6.6[a]",
+     "text": "The entity implements logical access measures to protect against threats from outside its system boundaries.",
+     "discovery_query": "Provide evidence that the entity implements logical access measures to protect against threats from outside its system boundaries."
+    }
+   ]
+  },
+  "CC6.7": {
+   "family": "CC6",
+   "family_name": "Logical and Physical Access Controls",
+   "title": "Secure transmission",
+   "control": "The entity restricts the movement of information to authorized users and protects it during transmission and removal.",
+   "evidence_types": [
+    "policy",
+    "procedure",
+    "operating-effectiveness"
+   ],
+   "methods": [
+    "Inspection",
+    "Inquiry",
+    "Observation"
+   ],
+   "objectives": [
+    {
+     "id": "CC6.7[a]",
+     "text": "The entity restricts the movement of information to authorized users and protects it during transmission and removal.",
+     "discovery_query": "Provide evidence that the entity restricts the movement of information to authorized users and protects it during transmission and removal."
+    }
+   ]
+  },
+  "CC6.8": {
+   "family": "CC6",
+   "family_name": "Logical and Physical Access Controls",
+   "title": "Malicious software",
+   "control": "The entity implements controls to prevent or detect and act upon unauthorized or malicious software.",
+   "evidence_types": [
+    "policy",
+    "procedure",
+    "operating-effectiveness"
+   ],
+   "methods": [
+    "Inspection",
+    "Inquiry",
+    "Observation"
+   ],
+   "objectives": [
+    {
+     "id": "CC6.8[a]",
+     "text": "The entity implements controls to prevent or detect and act upon unauthorized or malicious software.",
+     "discovery_query": "Provide evidence that the entity implements controls to prevent or detect and act upon unauthorized or malicious software."
+    }
+   ]
+  },
+  "CC7.1": {
+   "family": "CC7",
+   "family_name": "System Operations",
+   "title": "Vulnerability detection",
+   "control": "The entity uses detection and monitoring to identify configuration changes and new vulnerabilities.",
+   "evidence_types": [
+    "policy",
+    "procedure",
+    "operating-effectiveness"
+   ],
+   "methods": [
+    "Inspection",
+    "Inquiry",
+    "Observation"
+   ],
+   "objectives": [
+    {
+     "id": "CC7.1[a]",
+     "text": "The entity uses detection and monitoring to identify configuration changes and new vulnerabilities.",
+     "discovery_query": "Provide evidence that the entity uses detection and monitoring to identify configuration changes and new vulnerabilities."
+    }
+   ]
+  },
+  "CC7.2": {
+   "family": "CC7",
+   "family_name": "System Operations",
+   "title": "Anomaly monitoring",
+   "control": "The entity monitors system components for anomalies indicative of malicious acts, errors, or disruptions.",
+   "evidence_types": [
+    "policy",
+    "procedure",
+    "operating-effectiveness"
+   ],
+   "methods": [
+    "Inspection",
+    "Inquiry",
+    "Observation"
+   ],
+   "objectives": [
+    {
+     "id": "CC7.2[a]",
+     "text": "The entity monitors system components for anomalies indicative of malicious acts, errors, or disruptions.",
+     "discovery_query": "Provide evidence that the entity monitors system components for anomalies indicative of malicious acts, errors, or disruptions."
+    }
+   ]
+  },
+  "CC7.3": {
+   "family": "CC7",
+   "family_name": "System Operations",
+   "title": "Evaluate events",
+   "control": "The entity evaluates security events to determine whether they could or did result in a failure to meet objectives.",
+   "evidence_types": [
+    "policy",
+    "procedure",
+    "operating-effectiveness"
+   ],
+   "methods": [
+    "Inspection",
+    "Inquiry",
+    "Observation"
+   ],
+   "objectives": [
+    {
+     "id": "CC7.3[a]",
+     "text": "The entity evaluates security events to determine whether they could or did result in a failure to meet objectives.",
+     "discovery_query": "Provide evidence that the entity evaluates security events to determine whether they could or did result in a failure to meet objectives."
+    }
+   ]
+  },
+  "CC7.4": {
+   "family": "CC7",
+   "family_name": "System Operations",
+   "title": "Incident response",
+   "control": "The entity responds to identified security incidents through a defined program to contain, remediate, and communicate.",
+   "evidence_types": [
+    "policy",
+    "procedure",
+    "operating-effectiveness"
+   ],
+   "methods": [
+    "Inspection",
+    "Inquiry",
+    "Observation"
+   ],
+   "objectives": [
+    {
+     "id": "CC7.4[a]",
+     "text": "The entity responds to identified security incidents through a defined program to contain, remediate, and communicate.",
+     "discovery_query": "Provide evidence that the entity responds to identified security incidents through a defined program to contain, remediate, and communicate."
+    }
+   ]
+  },
+  "CC7.5": {
+   "family": "CC7",
+   "family_name": "System Operations",
+   "title": "Recovery",
+   "control": "The entity identifies, develops, and implements activities to recover from identified security incidents.",
+   "evidence_types": [
+    "policy",
+    "procedure",
+    "operating-effectiveness"
+   ],
+   "methods": [
+    "Inspection",
+    "Inquiry",
+    "Observation"
+   ],
+   "objectives": [
+    {
+     "id": "CC7.5[a]",
+     "text": "The entity identifies, develops, and implements activities to recover from identified security incidents.",
+     "discovery_query": "Provide evidence that the entity identifies, develops, and implements activities to recover from identified security incidents."
+    }
+   ]
+  },
+  "CC8.1": {
+   "family": "CC8",
+   "family_name": "Change Management",
+   "title": "Change management",
+   "control": "The entity authorizes, designs, tests, approves, and implements changes to infrastructure, data, software, and procedures.",
+   "evidence_types": [
+    "policy",
+    "procedure",
+    "operating-effectiveness"
+   ],
+   "methods": [
+    "Inspection",
+    "Inquiry",
+    "Observation"
+   ],
+   "objectives": [
+    {
+     "id": "CC8.1[a]",
+     "text": "The entity authorizes, designs, tests, approves, and implements changes to infrastructure, data, software, and procedures.",
+     "discovery_query": "Provide evidence that the entity authorizes, designs, tests, approves, and implements changes to infrastructure, data, software, and procedures."
+    }
+   ]
+  },
+  "CC9.1": {
+   "family": "CC9",
+   "family_name": "Risk Mitigation",
+   "title": "Business disruption risk",
+   "control": "The entity identifies and develops risk mitigation activities for disruptions to business operations.",
+   "evidence_types": [
+    "policy",
+    "procedure",
+    "operating-effectiveness"
+   ],
+   "methods": [
+    "Inspection",
+    "Inquiry",
+    "Observation"
+   ],
+   "objectives": [
+    {
+     "id": "CC9.1[a]",
+     "text": "The entity identifies and develops risk mitigation activities for disruptions to business operations.",
+     "discovery_query": "Provide evidence that the entity identifies and develops risk mitigation activities for disruptions to business operations."
+    }
+   ]
+  },
+  "CC9.2": {
+   "family": "CC9",
+   "family_name": "Risk Mitigation",
+   "title": "Vendor risk",
+   "control": "The entity assesses and manages risks associated with vendors and business partners.",
+   "evidence_types": [
+    "policy",
+    "procedure",
+    "operating-effectiveness"
+   ],
+   "methods": [
+    "Inspection",
+    "Inquiry",
+    "Observation"
+   ],
+   "objectives": [
+    {
+     "id": "CC9.2[a]",
+     "text": "The entity assesses and manages risks associated with vendors and business partners.",
+     "discovery_query": "Provide evidence that the entity assesses and manages risks associated with vendors and business partners."
+    }
+   ]
+  }
+ }
+}
