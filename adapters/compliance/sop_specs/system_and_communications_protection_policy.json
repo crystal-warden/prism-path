@@ -1,0 +1,189 @@
+{
+ "doc_id": "system_and_communications_protection_policy",
+ "title": "System and Communications Protection Policy",
+ "family": "System and Communications Protection",
+ "controls": [
+  "3.13.1",
+  "3.13.2",
+  "3.13.3",
+  "3.13.4",
+  "3.13.5",
+  "3.13.6",
+  "3.13.7",
+  "3.13.8",
+  "3.13.9",
+  "3.13.10",
+  "3.13.11",
+  "3.13.12",
+  "3.13.13",
+  "3.13.14",
+  "3.13.15",
+  "3.13.16"
+ ],
+ "org_profile_keys": [
+  "org_name",
+  "system_name",
+  "boundary",
+  "cui_description"
+ ],
+ "sections": [
+  {
+   "id": "purpose",
+   "heading": "1. Purpose and Scope",
+   "objectives": [],
+   "questions": [],
+   "body": "This System and Communications Protection Policy defines the requirements for protecting the integrity and confidentiality of {system_name} operated by {org_name}. This policy applies to all system components within the boundary defined as {boundary} and specifically addresses the protection of {cui_description}."
+  },
+  {
+   "id": "boundary_protection",
+   "heading": "2. Boundary Protection and Network Control",
+   "objectives": [
+    "3.13.1[a]",
+    "3.13.1[b]",
+    "3.13.1[c]",
+    "3.13.1[d]",
+    "3.13.1[e]",
+    "3.13.1[f]",
+    "3.13.1[g]",
+    "3.13.1[h]",
+    "3.13.5[a]",
+    "3.13.5[b]",
+    "3.13.6[a]",
+    "3.13.6[b]"
+   ],
+   "questions": [
+    {
+     "key": "boundary_monitoring_method",
+     "prompt": "How are communications monitored and controlled at external and internal boundaries?"
+    },
+    {
+     "key": "public_subnet_config",
+     "prompt": "How are publicly accessible components logically or physically separated from internal networks?"
+    },
+    {
+     "key": "default_deny_implementation",
+     "prompt": "How is the 'deny by default' network traffic policy implemented?"
+    }
+   ],
+   "body": "Communications at external and internal boundaries are managed via {boundary_monitoring_method}. Publicly accessible components are isolated using {public_subnet_config}. Network traffic is restricted by {default_deny_implementation}."
+  },
+  {
+   "id": "system_design",
+   "heading": "3. Architectural Design and Functional Separation",
+   "objectives": [
+    "3.13.2[a]",
+    "3.13.2[b]",
+    "3.13.2[c]",
+    "3.13.2[d]",
+    "3.13.2[e]",
+    "3.13.2[f]",
+    "3.13.3[a]",
+    "3.13.3[b]",
+    "3.13.3[c]",
+    "3.13.4[a]"
+   ],
+   "questions": [
+    {
+     "key": "security_design_principles",
+     "prompt": "What architectural designs or engineering principles are used to promote security?"
+    },
+    {
+     "key": "mgmt_separation_method",
+     "prompt": "How is system management functionality separated from general user functionality?"
+    }
+   ],
+   "body": "The system employs {security_design_principles} to ensure effective information security. Separation of management and user functions is achieved through {mgmt_separation_method}, and shared resource information transfer is prevented by system design."
+  },
+  {
+   "id": "transmission_protection",
+   "heading": "4. Cryptography and Transmission Security",
+   "objectives": [
+    "3.13.8[a]",
+    "3.13.8[b]",
+    "3.13.8[c]",
+    "3.13.10[a]",
+    "3.13.10[b]",
+    "3.13.11[a]",
+    "3.13.15[a]"
+   ],
+   "questions": [
+    {
+     "key": "crypto_transmission_standard",
+     "prompt": "What cryptographic mechanisms protect CUI during transmission?"
+    },
+    {
+     "key": "key_management_process",
+     "prompt": "How are cryptographic keys established and managed?"
+    },
+    {
+     "key": "fips_validation_detail",
+     "prompt": "How is FIPS-validated cryptography employed for CUI confidentiality?"
+    }
+   ],
+   "body": "CUI in transit is protected by {crypto_transmission_standard}. Cryptographic keys are handled via {key_management_process}. Confidentiality is ensured using {fips_validation_detail} to meet FIPS requirements."
+  },
+  {
+   "id": "session_and_remote_access",
+   "heading": "5. Session Management and Remote Connectivity",
+   "objectives": [
+    "3.13.7[a]",
+    "3.13.9[a]",
+    "3.13.9[b]",
+    "3.13.9[c]"
+   ],
+   "questions": [
+    {
+     "key": "split_tunneling_prevention",
+     "prompt": "How is split tunneling prevented for remote devices?"
+    },
+    {
+     "key": "session_termination_policy",
+     "prompt": "What are the time-out periods or conditions for terminating network connections?"
+    }
+   ],
+   "body": "Remote connections are restricted to prevent split tunneling via {split_tunneling_prevention}. Network sessions are terminated based on {session_termination_policy}."
+  },
+  {
+   "id": "specialized_technologies",
+   "heading": "6. Specialized Technology Controls",
+   "objectives": [
+    "3.13.12[a]",
+    "3.13.12[b]",
+    "3.13.12[c]",
+    "3.13.13[a]",
+    "3.13.13[b]",
+    "3.13.14[a]",
+    "3.13.14[b]"
+   ],
+   "questions": [
+    {
+     "key": "collab_device_control",
+     "prompt": "How is remote activation of collaborative devices prohibited and indicated?"
+    },
+    {
+     "key": "mobile_code_monitoring",
+     "prompt": "How is the use of mobile code controlled and monitored?"
+    },
+    {
+     "key": "voip_monitoring",
+     "prompt": "How is the use of VoIP technologies controlled and monitored?"
+    }
+   ],
+   "body": "Collaborative devices are managed via {collab_device_control}. Mobile code usage is governed by {mobile_code_monitoring}, and VoIP technologies are monitored through {voip_monitoring}."
+  },
+  {
+   "id": "data_at_rest",
+   "heading": "7. Protection of Data at Rest",
+   "objectives": [
+    "3.13.16[a]"
+   ],
+   "questions": [
+    {
+     "key": "rest_confidentiality_method",
+     "prompt": "How is the confidentiality of CUI at rest protected?"
+    }
+   ],
+   "body": "The confidentiality of CUI at rest is maintained through {rest_confidentiality_method}."
+  }
+ ]
+}

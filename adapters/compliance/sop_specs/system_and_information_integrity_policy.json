@@ -1,0 +1,130 @@
+{
+ "doc_id": "system_and_information_integrity_policy",
+ "title": "System and Information Integrity Policy",
+ "family": "System and Information Integrity",
+ "controls": [
+  "3.14.1",
+  "3.14.2",
+  "3.14.3",
+  "3.14.4",
+  "3.14.5",
+  "3.14.6",
+  "3.14.7"
+ ],
+ "org_profile_keys": [
+  "org_name",
+  "system_name",
+  "boundary",
+  "cui_description"
+ ],
+ "sections": [
+  {
+   "id": "purpose",
+   "heading": "1. Purpose and Scope",
+   "objectives": [],
+   "questions": [],
+   "body": "This System and Information Integrity Policy establishes the requirements for ensuring the integrity of {system_name} operated by {org_name}. This policy applies to all components within the system boundary described as {boundary} to protect the confidentiality and integrity of {cui_description}."
+  },
+  {
+   "id": "flaw_remediation",
+   "heading": "2. System Flaw Remediation",
+   "objectives": [
+    "3.14.1[a]",
+    "3.14.1[b]",
+    "3.14.1[c]",
+    "3.14.1[d]",
+    "3.14.1[e]",
+    "3.14.1[f]"
+   ],
+   "questions": [
+    {
+     "key": "flaw_identification_process",
+     "prompt": "How are system flaws identified and reported?"
+    },
+    {
+     "key": "flaw_correction_timeline",
+     "prompt": "What is the timeline and process for correcting identified system flaws?"
+    }
+   ],
+   "body": "System flaws within {system_name} are identified and reported via {flaw_identification_process}. These flaws are corrected in a timely manner according to {flaw_correction_timeline}."
+  },
+  {
+   "id": "malicious_code_protection",
+   "heading": "3. Malicious Code Protection",
+   "objectives": [
+    "3.14.2[a]",
+    "3.14.2[b]",
+    "3.14.4[a]"
+   ],
+   "questions": [
+    {
+     "key": "malware_protection_tool",
+     "prompt": "What tools are used for malicious code protection at designated locations?"
+    },
+    {
+     "key": "malware_update_mechanism",
+     "prompt": "How are malicious code protection mechanisms updated when new releases are available?"
+    }
+   ],
+   "body": "Protection from malicious code is provided at designated locations using {malware_protection_tool}. These mechanisms are kept current through {malware_update_mechanism}."
+  },
+  {
+   "id": "scanning_and_monitoring",
+   "heading": "4. System Scanning and Monitoring",
+   "objectives": [
+    "3.14.5[a]",
+    "3.14.5[b]",
+    "3.14.5[c]"
+   ],
+   "questions": [
+    {
+     "key": "periodic_scan_schedule",
+     "prompt": "What is the schedule and method for periodic system scans?"
+    },
+    {
+     "key": "realtime_scan_process",
+     "prompt": "How are files from external sources scanned in real-time during download or execution?"
+    }
+   ],
+   "body": "Periodic scans of organizational systems are performed via {periodic_scan_schedule}. Real-time scanning of files from external sources is enforced through {realtime_scan_process}."
+  },
+  {
+   "id": "alert_and_traffic_analysis",
+   "heading": "5. Security Alerts and Traffic Analysis",
+   "objectives": [
+    "3.14.3[a]",
+    "3.14.3[b]",
+    "3.14.3[c]",
+    "3.14.6[a]",
+    "3.14.6[b]",
+    "3.14.6[c]"
+   ],
+   "questions": [
+    {
+     "key": "alert_monitoring_source",
+     "prompt": "Which sources are used to monitor security alerts and advisories?"
+    },
+    {
+     "key": "traffic_monitoring_tool",
+     "prompt": "How is inbound and outbound communications traffic monitored to detect attacks?"
+    }
+   ],
+   "body": "Security alerts and advisories are monitored via {alert_monitoring_source}. Inbound and outbound communications traffic is monitored to detect attacks and indicators of potential attacks using {traffic_monitoring_tool}."
+  },
+  {
+   "id": "unauthorized_use",
+   "heading": "6. Identification of Unauthorized Use",
+   "objectives": [
+    "3.14.7[a]",
+    "3.14.7[b]"
+   ],
+   "questions": [
+    {
+     "key": "unauthorized_use_detection",
+     "prompt": "How is unauthorized use of organizational systems identified?"
+    }
+   ],
+   "body": "Unauthorized use of organizational systems is identified and detected through {unauthorized_use_detection}."
+  }
+ ]
+}
