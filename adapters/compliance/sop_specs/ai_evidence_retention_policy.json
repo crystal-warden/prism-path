@@ -1,0 +1,47 @@
+{
+ "doc_id": "ai_evidence_retention_policy",
+ "title": "AI Evidence Retention Policy",
+ "family": "Measure",
+ "controls": [
+  "MS-1"
+ ],
+ "org_profile_keys": [
+  "org_name",
+  "system_name",
+  "boundary",
+  "cui_description"
+ ],
+ "sections": [
+  {
+   "id": "purpose",
+   "heading": "1. Purpose and Scope",
+   "objectives": [],
+   "questions": [],
+   "body": "This AI Evidence Retention Policy establishes the requirements for the preservation of evidence related to AI system operations within {system_name} operated by {org_name}. This policy applies to all data and logs within the system boundary defined as {boundary}, specifically protecting AI-generated outputs and training data containing {cui_description}."
+  },
+  {
+   "id": "retention_requirements",
+   "heading": "2. AI Evidence Retention Requirements",
+   "objectives": [
+    "MS-1[a]"
+   ],
+   "questions": [
+    {
+     "key": "evidence_types_defined",
+     "prompt": "What specific types of AI evidence (e.g., prompt logs, model versions, weights, audit trails) are kept?"
+    },
+    {
+     "key": "retention_period",
+     "prompt": "What is the defined retention period for this AI evidence?"
+    },
+    {
+     "key": "disposal_method",
+     "prompt": "How is AI evidence securely disposed of after the retention period expires?"
+    }
+   ],
+   "body": "To ensure accountability and auditability, {org_name} maintains the following AI evidence: {evidence_types_defined}. All identified evidence shall be retained for a period of {retention_period}. Upon expiration of the retention period, evidence will be handled via {disposal_method}."
+  }
+ ],
+ "standard": "ai_governance",
+ "coverage_mode": "partial"
+}

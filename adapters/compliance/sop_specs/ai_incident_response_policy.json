@@ -1,0 +1,47 @@
+{
+ "doc_id": "ai_incident_response_policy",
+ "title": "AI Incident Response Policy",
+ "family": "Manage",
+ "controls": [
+  "MG-2"
+ ],
+ "org_profile_keys": [
+  "org_name",
+  "system_name",
+  "boundary",
+  "cui_description"
+ ],
+ "sections": [
+  {
+   "id": "purpose",
+   "heading": "1. Purpose and Scope",
+   "objectives": [],
+   "questions": [],
+   "body": "This AI Incident Response Policy establishes the framework for detecting, reporting, and mitigating AI-related incidents within {system_name} operated by {org_name}. This policy applies to all components within the system boundary defined as {boundary} and ensures the protection of data including {cui_description}."
+  },
+  {
+   "id": "incident_process",
+   "heading": "2. AI Incident Response and Escalation",
+   "objectives": [
+    "MG-2[a]"
+   ],
+   "questions": [
+    {
+     "key": "incident_definition",
+     "prompt": "How does the organization define an AI-specific incident (e.g., model drift, adversarial attack, bias failure)?"
+    },
+    {
+     "key": "escalation_workflow",
+     "prompt": "What is the defined escalation path from detection to executive notification?"
+    },
+    {
+     "key": "response_team",
+     "prompt": "Who are the designated members of the AI Incident Response Team?"
+    }
+   ],
+   "body": "The organization manages AI incidents based on the following definition: {incident_definition}. Upon detection of an incident within {system_name}, the response is managed by {response_team} following the established escalation workflow: {escalation_workflow}."
+  }
+ ],
+ "standard": "ai_governance",
+ "coverage_mode": "partial"
+}

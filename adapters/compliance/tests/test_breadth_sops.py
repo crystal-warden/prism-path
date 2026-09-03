@@ -24,13 +24,13 @@ def test_new_sop_specs_verify_coverage_complete(doc_id):
 
 def test_all_sop_specs_are_complete():
     import compliance_adapter as ca
+    ca.use_standard("nist_800171_r2")            # default for specs without an explicit 'standard'
     docs = sg.list_documents()
     assert len(docs) >= 4
     for doc_id in docs:
-        ca.use_standard("ai_safety_testing" if doc_id.startswith("ai_safety") else "nist_800171_r2")
         spec = sg.load_spec(doc_id)
-        cov = sg.verify_coverage(spec)
-        assert cov["complete"] is True, f"SOP spec {doc_id} failed coverage"
+        cov = sg.verify_coverage(spec)           # standard-aware: resolves via spec['standard'] when present
+        assert cov["complete"] is True, f"SOP spec {doc_id} failed: missing={cov['missing']} extra={cov['extra']}"
 
 
 @pytest.mark.parametrize("doc_id", NEW_SOP_SPECS)

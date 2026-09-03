@@ -1,0 +1,47 @@
+{
+ "doc_id": "ai_human_review_policy",
+ "title": "AI Human Review Policy",
+ "family": "Govern",
+ "controls": [
+  "GV-1"
+ ],
+ "org_profile_keys": [
+  "org_name",
+  "system_name",
+  "boundary",
+  "cui_description"
+ ],
+ "sections": [
+  {
+   "id": "purpose",
+   "heading": "1. Purpose and Scope",
+   "objectives": [],
+   "questions": [],
+   "body": "This AI Human Review Policy establishes the requirements for human oversight of artificial intelligence outputs within {system_name} operated by {org_name}. This policy applies to all AI components within the system boundary defined as {boundary} and specifically addresses the protection and validation of {cui_description}."
+  },
+  {
+   "id": "review_requirements",
+   "heading": "2. Human Review Requirements by Risk Tier",
+   "objectives": [
+    "GV-1[a]"
+   ],
+   "questions": [
+    {
+     "key": "risk_tier_definitions",
+     "prompt": "How are AI risk tiers defined for this system?"
+    },
+    {
+     "key": "review_triggers",
+     "prompt": "What specific conditions or risk tiers trigger a mandatory human review of AI outputs?"
+    },
+    {
+     "key": "review_process_desc",
+     "prompt": "What is the process for conducting the human review and validating the output?"
+    }
+   ],
+   "body": "Human review of AI outputs is mandated based on the risk tiers defined by {risk_tier_definitions}. Mandatory human review is required when {review_triggers}. The validation of these outputs shall be performed according to the following process: {review_process_desc}."
+  }
+ ],
+ "standard": "ai_governance",
+ "coverage_mode": "partial"
+}

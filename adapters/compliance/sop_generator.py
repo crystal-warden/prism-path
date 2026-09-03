@@ -62,10 +62,35 @@ def _resolve_get_control(get_control):
     return compliance_adapter.get_control
 
 
+def _get_control_for(spec, get_control):
+    """Resolve controls against the spec's own standard, so a SOP for a non-800-171 framework (its
+    controls named in a different catalog) checks against the right catalog regardless of what is
+    active. Falls back to the active-standard get_control."""
+    if get_control is not None:
+        return get_control
+    import compliance_adapter as _ca
+    std = spec.get("standard")
+    if std and std != _ca.active_standard() and std in _ca.STANDARDS:
+        cat = json.load(open(_ca.STANDARDS[std]))["controls"]
+
+        def gc(cid):
+            c = cat.get(cid)
+            if not c:
+                raise KeyError("control %s not in catalog %s" % (cid, std))
+            return {"id": cid, **c}
+        return gc
+    return _ca.get_control
+
+
 def verify_coverage(spec, get_control=None):
-    """Machine-check that the spec maps every 800-171A objective of its controls to exactly one
-    section, against the active catalog. Returns the coverage report; `complete` is the guarantee."""
-    gc = _resolve_get_control(get_control)
+    """Machine-check the spec's objective coverage against its standard's catalog. In the default
+    coverage_mode 'full' the guarantee is objective-complete: every objective of the spec's controls
+    maps to exactly one section (the 800-171 policy guarantee). A spec may declare coverage_mode
+    'partial' when its controls split objectives across mechanisms (a policy documents only the
+    documentation objectives; the config and operational objectives are met by the register and task
+    records) — then unmapped objectives are reported but do not fail completeness, while extra or
+    duplicated mappings still do."""
+    gc = _get_control_for(spec, get_control)
     catalog_set = set()
     for cid in spec["controls"]:
         catalog_set.update(o["id"] for o in gc(cid)["objectives"])
@@ -74,9 +99,11 @@ def verify_coverage(spec, get_control=None):
     dupes = sorted({oid for oid in mapped_set if mapped.count(oid) > 1})
     missing = sorted(catalog_set - mapped_set)    # objectives no section addresses
     extra = sorted(mapped_set - catalog_set)      # mapped ids not in the catalog (spec drift)
+    mode = spec.get("coverage_mode", "full")
+    complete = not (extra or dupes) and (mode == "partial" or not missing)
     return {"controls": list(spec["controls"]), "n_objectives": len(catalog_set),
             "mapped": len(mapped_set), "missing": missing, "extra": extra, "duplicated": dupes,
-            "complete": not (missing or extra or dupes)}
+            "coverage_mode": mode, "complete": complete}
 
 
 def _prompt_map(spec):
@@ -128,8 +155,13 @@ def generate(spec, answers, get_control=None):
     cov = verify_coverage(spec, get_control)
     out.append("## Appendix A. Control Objective Coverage")
     out.append("")
-    out.append("Every assessment objective of %s is addressed by a section of this document."
-               % ", ".join(spec["controls"]))
+    if cov["coverage_mode"] == "partial":
+        out.append("This policy addresses the documentation objectives of %s. The remaining objectives of "
+                   "those controls are met by configuration evidence (the register) and operational "
+                   "records, not by this document." % ", ".join(spec["controls"]))
+    else:
+        out.append("Every assessment objective of %s is addressed by a section of this document."
+                   % ", ".join(spec["controls"]))
     out.append("")
     out.append("| Section | Objectives addressed |")
     out.append("|---|---|")
