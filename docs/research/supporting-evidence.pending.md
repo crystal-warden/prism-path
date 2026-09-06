@@ -6,7 +6,7 @@ free number, instead of editing the main ledger. On merge, the docs session fold
 ledger with correct formatting and clears this file.*
 
 *Format each row exactly per `LEDGER_STANDARDS.md` §1 (Claim / Method / Result + Honest scope /
-Provenance) with a month granularity date. Next free number: **#137**.*
+Provenance) with a month granularity date. Next free number: **#140**.*
 
 ---
 
@@ -247,3 +247,74 @@ measured, not sensing); interference was injected at the receiver, not a real RF
 ppt_fusion_mesh.c, field_walk.py, RESULTS-field-walk-2026-08-30.md, sanitized trail
 trail-2026-08-30-field-walk.jsonl). Position marks sanitized for the public record; the raw trail with
 real location marks is kept private. No push (owner-gated).
+
+#### #137: The deterministic GRC engine spans many frameworks, breadth measured (September 2026)
+
+**Claim.** The compliance adapter is a multi-framework deterministic GRC engine, not a single-checklist
+tool: it assesses NIST 800-171 R2/R3, 800-172 (CMMC Level 3), SOC 2, and an AI-governance catalog from
+one honest-hybrid core (config = deterministic checks, documented = LLM adjudication, operational =
+recorded task completions), with crosswalks to 800-53 and the NIST AI RMF, plus governance,
+three-lines-of-defense, obligations, SOP-generation, remediation/POA&M, and SSP-generation layers.
+
+**Method.** The layered adapter under adapters/compliance/ built out over a committed arc (18dd560
+multi-framework .. 5f648c5 SSP generator); breadth verified by its own pytest suite and arch_guard.
+
+**Result.** 314 compliance tests pass, arch_guard clean; 50 machine-checkable 800-171 controls decidable
+from posture facts alone (up from 26), the remainder adjudicated by the documented/operational
+mechanisms; multi-framework assess-once-report-to-many with authoritative-table crosswalks (800-53 from
+the NIST CPRT, AI RMF).
+
+**Honest scope.** Breadth is the claim here, not a clean-room external audit; the LLM-adjudicated path
+depends on the configured model (gemma), and the machine-checkable verdicts' trust rests on the evidence
+class of each fact (see #139). No customer C3PAO assessment has been run against this engine.
+
+**Provenance.** prism-path, branch feat/grc-compliance-adapter (adapters/compliance/: the layered
+modules + tests); commit range 18dd560..5f648c5. No push (owner-gated).
+
+#### #138: The GRC engine dogfooded on a real CUI enclave: an honest CMMC L2 self-assessment from -119 to +63 (September 2026)
+
+**Claim.** The engine assessed a purpose-built CUI enclave against all 110 NIST 800-171 R2 controls and
+raised the SPRS score from the -119 floor to +63/110 through real remediation and recorded evidence, with
+no gaming: every credited control is backed by verified configuration, a deployed control, an operational
+record, or a documented attestation, and INSUFFICIENT is scored as not-met.
+
+**Method.** A hardened Ubuntu 24.04 VM (LUKS + clevis-TPM2 auto-unlock, MFA, auditd/AIDE/ClamAV, ufw)
+was built on the org's virtualization host, isolated on its own default-deny network segment, and
+monitored by the org SIEM with a dedicated network boundary sensor. PrismPath ran the honest-hybrid
+assessment; gaps were remediated (least functionality, device access, account lifecycle) and operational
+evidence recorded (training attestation, IR tabletop, maintenance, reviews).
+
+**Result.** SPRS -119 -> +63/110; 72 controls met, 15 documented Not Applicable; every weight-5 control
+met except the physical family (locking cabinet pending hardware). Network boundary monitoring proven
+live (boundary-flow alerts observed in the SIEM from real enclave traffic); network admin path removed
+(SSH masked, console-only) closing device authentication; signed security-awareness training on file.
+
+**Honest scope.** A self-assessment, not a C3PAO assessment; the org handles no CUI yet (a readiness
+posture); several verdicts rest on documented attestation rather than a live scan (now disclosed per
+#139); the physical controls and the operational cadence accrue over time.
+
+**Provenance.** cmmc-self-assessment/ (posture-cui-enclave.json, assessment-cui-enclave-full.json,
+document-package/crystal-warden/, enclave-build-assets/); the dedicated CUI enclave VM;
+prism-path adapters/compliance. No push (owner-gated).
+
+#### #139: Evidence-typed compliance verdicts: the receipt cause-code pattern ported to GRC (September 2026)
+
+**Claim.** Every deterministic compliance verdict discloses HOW each fact was evidenced, tool-scanned vs
+documentation-attested, so an attested True is never silently equated with an independently verifiable
+one, the receipt-cause discipline of the fabric (#129/#130) applied to the GRC decision.
+
+**Method.** deterministic_checks.py gained an evidence class per fact (scanned | attested), an evidence
+rollup on each determination receipt (scanned/attested/mixed + per-class objective lists), and a typed
+per-objective view; all 124 registered facts were classified. Verified by a new provenance test.
+
+**Result.** 50 machine-checkable controls each carry an evidence rollup; the classification surfaced and
+fixed a real mis-mapping (3.8.8 unowned-portable-storage had been overwritten with 3.8.7's
+removable-media fact); full compliance suite green (314) including test_evidence_provenance.
+
+**Honest scope.** The class marks provenance, not correctness: an attested True still requires an
+assessor to verify the backing document; the engine only guarantees the verdict is deterministic given
+the posture and that its provenance is disclosed.
+
+**Provenance.** prism-path, branch feat/grc-compliance-adapter, commit 474d069
+(adapters/compliance/deterministic_checks.py: evidence_class, _evidence_rollup, check_objectives_typed;
+tests/test_evidence_provenance.py). No push (owner-gated).
