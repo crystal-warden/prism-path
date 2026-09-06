@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Posture ingest connector — layer 3, the bridge from a scanned machine posture to deterministic
 assessment.
 

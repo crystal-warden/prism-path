@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Retrieval Translation layer: catalog completeness, objective targeting, and the discovery-loop wiring."""
 import json, os
 import pytest

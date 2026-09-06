@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """AI governance assessment — run the AI-GOV catalog over an AI-use register.
 
 The AI-GOV catalog (catalog/ai_governance.json) encodes the organizational AI-governance questions

@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Compliance adapter runtime — the five ports wired end-to-end:
    Ingestion → Retrieval → Adjudicator → Action/Sink → Attestation.
 Analogous to wazuh_triage_agent.py for the SOC adapter; the interesting logic is in the flow + this

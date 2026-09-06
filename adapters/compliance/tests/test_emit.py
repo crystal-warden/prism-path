@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Emit port: schema validity across the status matrix, negative-schema tests (the gate must BITE),
 and the load-bearing invariants — provenance embedding, deterministic RFC-4122 v5 uuids, token-safe ids."""
 import json, re

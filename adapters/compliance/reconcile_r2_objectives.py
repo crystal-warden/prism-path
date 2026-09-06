@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Reconcile the R2 catalog's assessment objectives to the verified NIST SP 800-171 Rev 2
 corpus.
 

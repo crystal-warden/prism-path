@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Crosswalk engine — assess once, report to many frameworks.
 
 A crosswalk is authoritative mapping data (crosswalks/*.json) between two control frameworks: which

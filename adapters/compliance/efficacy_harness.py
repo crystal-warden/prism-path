@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Efficacy harness (#72): run the gemma adjudicator against the agy-generated held-out corpus and
 measure AGREEMENT with agy's reference labels — by difficulty and by method profile — then route every
 disagreement into the HITL/Deferral review queue.

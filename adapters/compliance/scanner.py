@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Scanner adapters — normalize heterogeneous scanner output into a posture (facts + provenance).
 
 Do not build scanners; ingest them. Each adapter has one job: turn one scanner's output into the fact

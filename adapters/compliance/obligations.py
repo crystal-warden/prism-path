@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Obligations layer — the external drivers at the top of the Compliance & Control layer.
 
 The alignment model maps laws, regulations, contracts, standards, and policies DOWN into controls. This

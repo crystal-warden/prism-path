@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Extract a stratified control set (with real 800-171A objectives) from the Rev 2 catalog to ground
 the agy-generated efficacy corpus. 3 controls per method profile x the difficulty tiers we ask agy for."""
 import os, sys, json

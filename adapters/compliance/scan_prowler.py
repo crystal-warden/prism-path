@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Prowler AWS scanner adapter — map Prowler JSON findings to posture facts.
 
 Input: a list of Prowler finding dicts (Prowler v3 or v4 JSON), each with a check ID under key

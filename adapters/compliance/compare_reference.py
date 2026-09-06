@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Differential: gemma's dispositions vs agy's independent verdicts on the IDENTICAL bundles.
 Agreement validates the adjudicator; disagreements (esp. gemma stricter than agy) are the calibration
 boundary and route to the HITL review queue. Neither is ground truth — this is a model-vs-model

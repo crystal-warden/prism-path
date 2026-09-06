@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """#66 proof: adjudicate the live bundles, attest each, then produce the SYSTEM rollup —
 partial SPRS score + assessment scope + a rollup attestation bound to the per-control manifests —
 and emit it into a schema-valid OSCAL AR + standalone summary."""

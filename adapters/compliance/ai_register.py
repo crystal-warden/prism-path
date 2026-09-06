@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """AI-use register connector — the fact source for the AI-governance inventory controls.
 
 Like the configuration scanners, this turns an organization's AI-use register (who uses AI, which tools

@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """#67 — enrich the NIST 800-171 AC catalog with the Translation layer (Gap 1):
 control-level `evidence_types` (what artifacts satisfy the control) and per-objective `discovery_query`
 (the specific ask routed to the client when that objective is not demonstrated). Idempotent: re-running

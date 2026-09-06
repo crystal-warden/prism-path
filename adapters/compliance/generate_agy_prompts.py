@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Emit one self-contained agy prompt per control (3 difficulty bundles each), grounded in the real
 objectives from spec.json. The loop driver feeds these to agy on a single --continue session."""
 import os, sys, json

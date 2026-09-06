@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Comparator-based Adjudicator for machine-checkable NIST 800-171 objectives (the honest-hybrid seam).
 
 The Adjudicator port does not assume an LLM (ADAPTER_CONTRACT.md: "the FPGA adapter will drive it

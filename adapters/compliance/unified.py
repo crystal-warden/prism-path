@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Unified adjudicator — merge the three honest-hybrid mechanisms into one per-control determination.
 
 For a single control, objectives are decided by whichever mechanism covers them:

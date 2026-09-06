@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Dump the EXACT (control, objectives, methods, retrieved-evidence) bundles gemma adjudicated, so agy
 can independently assess the identical inputs — an apples-to-apples reference for the differential test."""
 import os, sys, json

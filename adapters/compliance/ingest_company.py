@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Blind ingestion + disposition observation (#72).
 
 agy blindly authored a company documentation package (no control list, no labels). This is the REAL

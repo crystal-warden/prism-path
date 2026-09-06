@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """System-level rollup Sink (#66) — aggregate per-control determinations into a system artifact.
 
 Three outputs, all bound to the per-control attestations that fed them:

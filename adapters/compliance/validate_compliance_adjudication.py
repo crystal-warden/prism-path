@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """#62 — compliance adjudication efficacy (the #54 analogue for adapter #2).
 
 Runs hand-labeled NIST 800-171 Access Control evidence bundles through gemma two ways:

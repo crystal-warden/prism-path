@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Lynis scanner adapter — map Lynis audit report findings into posture facts.
 
 Input: a parsed Lynis report as a dict of key -> value (Lynis writes key=value pairs to its

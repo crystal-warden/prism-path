@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Sink dual-emitter (#65) — serialize compliance assessment results into standards-native reports.
 
 Two audiences, one attested source of truth:

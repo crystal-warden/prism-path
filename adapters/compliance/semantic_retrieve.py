@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Semantic retrieval with EmbeddingGemma (CPU — GPU/gemma untouched). Reads the r2 catalog + the blind
 company docs, embeds control-queries vs docs, writes efficacy/semantic_map.json = {control: [top-k docs]}.
 Runs under the ST env; decoupled from the adjudication step (which runs under the prismpath venv)."""

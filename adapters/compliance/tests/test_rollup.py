@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Rollup Sink: SPRS scoring math + honesty rails, scope binding, and the tamper property —
 the system rollup is bound to the EXACT per-control attestations, so swapping one changes the root."""
 import copy

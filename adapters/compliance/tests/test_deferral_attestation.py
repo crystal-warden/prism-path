@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Adversarial tests for the core primitives that carry the whole value proposition:
 the Flow-Ledger attestation (tamper-evidence, provable override chain) and the Deferral store.
 If these pass, 'attestable' is a claim the bytes actually support."""

@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Remediation planner — turn an assessment into a prioritized plan of action.
 
 Assessment answers "where do I stand." This answers "what do I fix first, why, and how" — the

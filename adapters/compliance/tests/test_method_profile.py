@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Adjudicator method-depth: each control is classified to an assessment-method profile (matching the
 generic flow's routing), and the profile's evidence guidance is injected into the adjudication prompt."""
 import pytest

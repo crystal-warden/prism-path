@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Runnable demonstration of the SOP generator: fill the Incident Response Plan template from a
 structured intake and print the objective-complete draft. Deterministic, no model in the loop.
 

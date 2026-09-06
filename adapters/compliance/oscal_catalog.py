@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """OSCAL Catalog Interoperability for Compliance Adapter.
 
 Provides import_oscal and export_oscal for translating between OSCAL catalog dicts

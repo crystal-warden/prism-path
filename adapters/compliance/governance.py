@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Governance & Direction layer — the top of the GRC Alignment Model.
 
 The model's top layer links organizational objectives, risk appetite, and oversight to the controls

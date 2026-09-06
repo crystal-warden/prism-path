@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Operational / evidence layer — recurring control tasks and the completion records that EVIDENCE
 the objectives a config scan cannot.
 

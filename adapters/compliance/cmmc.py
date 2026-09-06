@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """CMMC 2.0 level packaging over the NIST SP 800-171 engine.
 
 CMMC assesses the SAME 800-171 controls; the levels change the SCOPE and the SCORING rule, not the

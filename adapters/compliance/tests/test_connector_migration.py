@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """The Connector SDK migration — ComplianceConnector wraps the six ports; the module-level
 functions remain the stable API and route through it. Pins port parity, manifest parity
 (attest through the SDK produces the same bound fields + verifiable manifest), the prompt

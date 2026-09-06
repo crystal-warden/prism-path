@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """#69 — build the two runtime-selectable catalogs from their sources, normalized into the adapter schema.
 
   nist_800171_r2.json  <- tbusillo OSCAL mirror (UNOFFICIAL community transcription of NIST SP 800-171 Rev 2

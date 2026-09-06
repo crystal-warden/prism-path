@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Compliance adapter (#2) — the domain code behind PrismPath's ports for NIST 800-171 assessment.
 
 NO compliance vocabulary lives in the core engine; it lives HERE, behind the ports (ADAPTER_CONTRACT.md).

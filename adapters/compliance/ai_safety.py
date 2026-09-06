@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """AI-safety-testing support — the model-version binding and safety-posture assembly.
 
 The AI-safety catalog (catalog/ai_safety_testing.json) is assessed by the SAME engine as 800-171: its

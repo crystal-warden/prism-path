@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Path + fixture setup for the compliance-adapter test suite."""
 import os, sys
 import pytest

@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Three-lines-of-defense assurance — the Assurance & Enablement layer of the GRC Alignment Model.
 
 Traditional assurance has each line test the same controls independently: the first line (control owners)

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """The generic family-agnostic assessment flow: it compiles, routes by method profile, is
 escalation-default at every adjudicator, and the attestation binds the actual flow content."""
 import compliance_adapter as ca

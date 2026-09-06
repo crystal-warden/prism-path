@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """System Security Plan (SSP) generator — the master NIST SP 800-171 document.
 
 The SSP describes the system, its boundary, the CUI it handles, and how each of the 110 requirements is

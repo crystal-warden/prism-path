@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Real signed, anchored, replayable receipts for AI-safety determinations, so the AST-3 facts are
 MEASURED rather than declared.
 

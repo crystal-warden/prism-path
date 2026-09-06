@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """End-to-end #65 proof: adjudicate the live request bundles through gemma, attest each determination,
 then emit BOTH standards (OSCAL AR+POA&M and CycloneDX 1.6), schema-validated, and confirm every
 Flow-Ledger provenance hash is actually embedded in the reports it belongs in."""

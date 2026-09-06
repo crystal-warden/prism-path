@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """osquery scanner adapter — map osquery results to posture facts.
 
 Input: a dict of osquery query results, {query_name: [row, ...]}, as produced by running a pack of

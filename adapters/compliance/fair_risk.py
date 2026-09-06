@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """FAIR risk pillar — the R in GRC, driven by the deterministic compliance verdicts.
 
 Risk is estimative, not deterministic, and this module does not pretend otherwise: the threat event

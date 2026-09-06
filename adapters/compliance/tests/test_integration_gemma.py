@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Live-gemma integration (opt-in: `pytest -m gemma`). Exercises the real adjudicator end-to-end
 and asserts the emitted standards are schema-valid. Kept out of the default fast/deterministic run."""
 import os

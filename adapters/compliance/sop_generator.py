@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """SOP / policy document generator — the remediation half of the compliance adapter.
 
 When a control requires a documented policy or procedure the tenant does not have, this generates a

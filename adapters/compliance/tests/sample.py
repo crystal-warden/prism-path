@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Deterministic factories for the compliance-adapter test suite (no gemma)."""
 import hashlib
 from prismpath import ledger_airgap

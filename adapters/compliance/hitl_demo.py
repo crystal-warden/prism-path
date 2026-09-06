@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Demo — the Deferral/Review port + override attestation, both loops:
    (1) HITL override: AI says not-met, a senior auditor accepts a compensating control and overrides
        to met; the AI output is attested first (immutable), the override supersedes it (provable chain).

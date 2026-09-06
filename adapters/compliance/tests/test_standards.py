@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Dual-catalog coverage: the engine is catalog-agnostic and the assessor selects the standard.
 Rev 2 (CMMC's current basis, SPRS-scored) and Rev 3 (NIST's current official, not SPRS-scored)."""
 import pytest
