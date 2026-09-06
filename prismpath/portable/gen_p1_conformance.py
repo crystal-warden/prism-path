@@ -27,8 +27,6 @@ import struct
 import sys
 from pathlib import Path
 
-import numpy as np
-
 from prismpath.engine import run
 from prismpath.parser import parse
 from prismpath.router import LockedEmbeddingRouter
@@ -38,10 +36,12 @@ VERSION = 1
 
 
 def _encode_vec(v) -> str:
+    import numpy as np
     return base64.b64encode(np.asarray(v, dtype="<f4").tobytes()).decode("ascii")
 
 
 def _unit(v):
+    import numpy as np
     a = np.asarray(v, dtype="float32")
     n = np.linalg.norm(a)
     return a / n if n > 0 else a

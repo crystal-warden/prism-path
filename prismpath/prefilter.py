@@ -37,9 +37,7 @@ import random
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable, List, Optional
-
-import numpy as np
+from typing import Any, Callable, List, Optional
 
 DEFAULT_THRESHOLD = float(os.environ.get("PREFILTER_THRESHOLD", "0.97"))
 DEFAULT_MIN_CONF = float(os.environ.get("PREFILTER_MIN_CONF", "0.8"))
@@ -65,17 +63,19 @@ def _load_model():
     return _model
 
 
-def default_embed_fn(texts: List[str]) -> np.ndarray:
+def default_embed_fn(texts: List[str]):
     """The default embedder: `list[str] -> [n, d] unit-normalized float32`. THE swap
     point — pass any callable with this contract as `PrefilterCache(embed_fn=...)`
     to plug in a different modality encoder."""
+    import numpy as np
     m = _load_model()
     v = m.encode(list(texts), normalize_embeddings=True, show_progress_bar=False,
                  batch_size=64)
     return np.asarray(v, dtype="float32")
 
 
-def _normalize(vec: np.ndarray) -> np.ndarray:
+def _normalize(vec):
+    import numpy as np
     v = np.asarray(vec, dtype="float32").reshape(-1)
     n = np.linalg.norm(v)
     return v / n if n > 0 else v
@@ -94,10 +94,11 @@ def _migrate(record: dict) -> dict:
     return record
 
 
-def match_arrays(vec: np.ndarray, emb: np.ndarray, records: list,
+def match_arrays(vec, emb, records: list,
                  threshold: float, min_conf: float):
     """Pure-array form of the gate — for offline sweeps over thresholds/corpora
     (see measure_prefilter.py). Returns (hit, record|None, similarity)."""
+    import numpy as np
     if emb.shape[0] == 0:
         return False, None, 0.0
     v = _normalize(vec)
@@ -118,7 +119,7 @@ class CacheResult:
     hit: bool
     record: Optional[dict]
     similarity: float
-    vector: np.ndarray = field(repr=False, default=None)
+    vector: Any = field(repr=False, default=None)
     shadow: bool = False
 
 
@@ -137,7 +138,7 @@ class PrefilterCache:
     """
 
     def __init__(self, dir_path, threshold: float = None, min_conf: float = None,
-                 embed_fn: Callable[[List[str]], np.ndarray] = None):
+                 embed_fn: Callable[[List[str]], Any] = None):
         self.dir = Path(dir_path).expanduser()
         tuned = self._load_tuning()
         self.threshold, self._threshold_source = self._resolve(
@@ -179,6 +180,7 @@ class PrefilterCache:
     # --- store ------------------------------------------------------------------
     def load(self):
         """-> (embeddings [N,d] float32 unit-normalized, records list). Empty if none."""
+        import numpy as np
         if self._emb_path.exists() and self._meta_path.exists():
             emb = np.load(self._emb_path)
             meta = [_migrate(m) for m in json.loads(self._meta_path.read_text())]
@@ -186,9 +188,10 @@ class PrefilterCache:
                 return emb.astype("float32"), meta
         return np.zeros((0, 0), dtype="float32"), []
 
-    def _save(self, emb: np.ndarray, meta: list) -> None:
+    def _save(self, emb, meta: list) -> None:
         # Write both files via temp+rename so a crash mid-save leaves the OLD consistent pair, not a
         # torn one that load() would silently discard (losing a learned corpus). Meta renamed last.
+        import numpy as np
         self.dir.mkdir(parents=True, exist_ok=True)
         emb_tmp = str(self._emb_path) + ".tmp.npy"
         meta_tmp = str(self._meta_path) + ".tmp"
@@ -199,6 +202,7 @@ class PrefilterCache:
         os.replace(meta_tmp, self._meta_path)
 
     def clear(self) -> None:
+        import numpy as np
         self._save(np.zeros((0, 0), dtype="float32"), [])
 
     def __len__(self) -> int:
@@ -206,7 +210,7 @@ class PrefilterCache:
         return int(emb.shape[0])
 
     # --- the gate ----------------------------------------------------------------
-    def embed(self, texts: List[str]) -> np.ndarray:
+    def embed(self, texts: List[str]):
         return self.embed_fn(list(texts))
 
     def _eligible(self, record: dict, policy_hash: Optional[str]) -> bool:
@@ -220,7 +224,7 @@ class PrefilterCache:
             return False
         return True
 
-    def match(self, vec: np.ndarray, policy_hash: Optional[str] = None):
+    def match(self, vec, policy_hash: Optional[str] = None):
         """Cosine-match a pre-embedded vector against the ELIGIBLE corpus (non-quarantined, matching
         policy). Returns (hit, record|None, similarity). A hit requires similarity >= threshold AND the
         matched record's confidence >= min_conf."""
@@ -254,6 +258,7 @@ class PrefilterCache:
         `policy_hash` stamps the entry with the flow/policy it was adjudicated under. Pass the same
         value to `lookup()`/`match()` later and a policy edit auto-invalidates every verdict learned
         under the old hash — no manual cache purge."""
+        import numpy as np
         if isinstance(vec_or_doc, str):
             v = self.embed([vec_or_doc])[0]
         else:
@@ -439,7 +444,7 @@ def _wilson_upper(k: int, n: int, confidence: float = 0.95) -> float:
 def tune(dir_path, labels: Optional[List[dict]] = None, risk: float = 0.02,
          confidence: float = 0.95, thresholds: Optional[List[float]] = None,
          min_confs: Optional[List[float]] = None,
-         embed_fn: Callable[[List[str]], np.ndarray] = None, write: bool = True) -> dict:
+         embed_fn: Callable[[List[str]], Any] = None, write: bool = True) -> dict:
     """Derive the cache's operating point from evidence instead of a hand-picked constant —
     the same risk-controlled pattern as `prismpath calibrate` (τ), applied to the prefilter.
 
@@ -460,6 +465,7 @@ def tune(dir_path, labels: Optional[List[dict]] = None, risk: float = 0.02,
     point returns chosen=None with a warning — the honest answer is "don't enable reuse yet",
     never a guessed threshold."""
     import time
+    import numpy as np
     cache = PrefilterCache(dir_path, embed_fn=embed_fn)
     emb, meta = cache.load()
     n_corpus = int(emb.shape[0])

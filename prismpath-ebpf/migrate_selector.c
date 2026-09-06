@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 Crystal Warden Supply Chain Labs LLC
 /* Hot-swap migration enforcement for the stateful selector — the loader adjusts resident state on a
  * policy swap per the NEW policy's signed strategy, so a raw node index is never carried blindly across
  * a reindexing swap.

@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """cert_hyst_board.py — silicon re-cert: the frozen hyst_band sequence corpus on the real fabric.
 
 Runs ON the board (PYNQ, root + sourced env) against the loaded stateful finale overlay. Two legs:

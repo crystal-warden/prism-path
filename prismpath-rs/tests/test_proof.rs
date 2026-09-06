@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 Crystal Warden Supply Chain Labs LLC
 //! Conformance gate for the Rust proof layer — Level M classification + capability report.
 //! Gates byte-for-byte against the SAME frozen corpora the Python reference and the JS twin pass
 //! (`prismpath/portable/conformance/{level_m,capability}.json`). Parity is proven, not asserted.

@@ -1,0 +1,136 @@
+{
+ "doc_id": "ai_safety_testing_plan",
+ "title": "AI Safety Testing Plan",
+ "family": "AI Safety Testing",
+ "controls": [
+  "AST-1",
+  "AST-2",
+  "AST-3",
+  "AST-4"
+ ],
+ "org_profile_keys": [
+  "org_name",
+  "system_name"
+ ],
+ "sections": [
+  {
+   "id": "purpose",
+   "heading": "1. Purpose and Scope",
+   "objectives": [],
+   "questions": [],
+   "body": "This AI Safety Testing Plan documents how {org_name} tests, retests, and continuously evidences the safety of {system_name}. It covers the safety test suite, retesting on model change, detection of stale tests, the evidence record, and runtime monitoring. It certifies the testing process, not that the model is intrinsically safe."
+  },
+  {
+   "id": "suite_and_versioning",
+   "heading": "2. Safety Test Suite and Model Versioning",
+   "objectives": [
+    "AST-1[a]",
+    "AST-1[b]"
+   ],
+   "questions": [
+    {
+     "key": "test_suite_description",
+     "prompt": "What does the safety test suite consist of (categories, sources, pass criteria)?"
+    },
+    {
+     "key": "version_identification",
+     "prompt": "How is each model version and configuration change identified by a version hash?"
+    }
+   ],
+   "body": "The safety test suite is defined as follows: {test_suite_description}. Each model version and configuration change is identified by a version hash as follows: {version_identification}."
+  },
+  {
+   "id": "retest_on_change",
+   "heading": "3. Retesting on Model Change",
+   "objectives": [
+    "AST-1[c]",
+    "AST-1[d]"
+   ],
+   "questions": [
+    {
+     "key": "retest_trigger",
+     "prompt": "What triggers a retest, and how do you ensure the current model version has a safety-test determination?"
+    },
+    {
+     "key": "deploy_gate",
+     "prompt": "How do you prevent deploying a model version that has no safety-test determination bound to it?"
+    }
+   ],
+   "body": "A retest is performed as follows: {retest_trigger}. No model version is deployed without a bound determination, enforced by: {deploy_gate}."
+  },
+  {
+   "id": "freshness",
+   "heading": "4. Detecting Stale Tests",
+   "objectives": [
+    "AST-2[a]",
+    "AST-2[b]",
+    "AST-2[c]",
+    "AST-2[d]"
+   ],
+   "questions": [
+    {
+     "key": "fingerprinting",
+     "prompt": "How is each test bound to a fingerprint of the model, provider, and precision it was calibrated against?"
+    },
+    {
+     "key": "stale_handling",
+     "prompt": "How is a test whose fingerprint no longer matches refused and retested rather than counted as a pass?"
+    },
+    {
+     "key": "margin_measurement",
+     "prompt": "How is each passing test's discrimination margin measured against a calibrated floor, and what happens when it collapses?"
+    }
+   ],
+   "body": "Each test is fingerprinted as follows: {fingerprinting}. A test whose fingerprint no longer matches the current model is handled as follows: {stale_handling}. The discrimination margin is measured, and a collapsed margin abstains rather than being recorded as met, as follows: {margin_measurement}."
+  },
+  {
+   "id": "evidence",
+   "heading": "5. Evidence and Continuous Proof",
+   "objectives": [
+    "AST-3[a]",
+    "AST-3[b]",
+    "AST-3[c]",
+    "AST-3[d]"
+   ],
+   "questions": [
+    {
+     "key": "receipt_signing",
+     "prompt": "How is each safety-test determination recorded as a signed receipt, and with what key?"
+    },
+    {
+     "key": "anchoring",
+     "prompt": "How is each receipt timestamped and anchored to an independent time source?"
+    },
+    {
+     "key": "replay",
+     "prompt": "How can the safety posture for a past date be produced and its receipt verified and replayed?"
+    },
+    {
+     "key": "continuous_cadence",
+     "prompt": "On what cadence, and on which events, do safety evaluations run?"
+    }
+   ],
+   "body": "Each determination is recorded as a signed receipt: {receipt_signing}. Each receipt is timestamped and anchored: {anchoring}. The safety posture for a past date can be produced and verified: {replay}. Safety evaluations run continuously rather than only at launch: {continuous_cadence}."
+  },
+  {
+   "id": "runtime",
+   "heading": "6. Runtime Input and Output Monitoring",
+   "objectives": [
+    "AST-4[a]",
+    "AST-4[b]"
+   ],
+   "questions": [
+    {
+     "key": "io_baseline",
+     "prompt": "How are live inputs and outputs compared against the distribution the safety case was built on?"
+    },
+    {
+     "key": "drift_response",
+     "prompt": "What happens when live traffic drifts beyond the calibrated bound (abstain or escalate)?"
+    }
+   ],
+   "body": "Live inputs and outputs are compared against the safety-tested distribution: {io_baseline}. Traffic that drifts beyond the calibrated bound is handled as follows: {drift_response}."
+  }
+ ],
+ "standard": "ai_safety_testing"
+}

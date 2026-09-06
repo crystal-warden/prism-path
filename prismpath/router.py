@@ -12,9 +12,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from typing import Callable, Dict, List, Tuple
-
-import numpy as np
+from typing import Any, Callable, Dict, List, Tuple
 
 from prismpath import embedder
 
@@ -27,7 +25,7 @@ class RouteDecision:
 
 class EmbeddingRouter:
     def __init__(self):
-        self._cache: Dict[tuple, np.ndarray] = {}
+        self._cache: Dict[tuple, Any] = {}
 
     def _cond_embs(self, edges):
         key = tuple(c for _, c in edges)
@@ -40,6 +38,7 @@ class EmbeddingRouter:
         return embedder.cosine(qe, self._cond_embs(edges))[0]
 
     def route(self, outcome, edges, instruction="") -> RouteDecision:
+        import numpy as np
         if not edges:
             raise ValueError("route() called with no edges")
         sims = self.scores(outcome, edges)
@@ -57,11 +56,12 @@ class LockedEmbeddingRouter(EmbeddingRouter):
     reproducible across machines, installs, and embedder versions. The outcome is still embedded by
     the local embedder (which the lock's fingerprint verifies), and the recorded `margin`/`score`
     therefore reproduce exactly whenever the embedder matches the lock. See `prismpath.lockfile`."""
-    def __init__(self, conditions: Dict[str, np.ndarray]):
+    def __init__(self, conditions: Dict[str, Any]):
         super().__init__()
         self._locked = conditions      # {condition_text: unit-normalized np.ndarray}
 
     def _cond_embs(self, edges):
+        import numpy as np
         out = []
         for _, c in edges:
             v = self._locked.get(c)

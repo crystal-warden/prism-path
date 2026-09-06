@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """dp_load.py — the ENTIRE software footprint of the demo, then it exits.
 
     sudo python3 dp_load.py <pack.ppt> <debug.json> <authority.pub>

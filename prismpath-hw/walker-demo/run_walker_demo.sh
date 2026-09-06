@@ -1,4 +1,5 @@
 #!/bin/bash
+# SPDX-License-Identifier: Apache-2.0
 # The walker -> mesh -> FPGA -> LED demo, one command. Reads a FIXED mesh node's serial, extracts
 # the carried walker's motion band (heard over ESP-NOW), and pipes it to the board daemon, which
 # feeds each band to the FPGA interpreter and lights the RGB LED from the decision. Nothing is wired

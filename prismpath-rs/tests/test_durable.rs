@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 Crystal Warden Supply Chain Labs LLC
 //! Durable-layer conformance gate: replay `conformance/durable.json` — canonical JSON byte-exact,
 //! manifests re-addressed + verified (tamper must fail), salt vectors, and the checkpoint/resume
 //! scenarios run through the REAL Rust engine with scripted agents, compared against what the

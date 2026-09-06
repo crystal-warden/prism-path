@@ -1,0 +1,63 @@
+{
+ "doc_id": "ai_governance_oversight_policy",
+ "title": "AI Governance and Oversight Policy",
+ "family": "Govern",
+ "controls": [
+  "GV-3",
+  "MG-1"
+ ],
+ "org_profile_keys": [
+  "org_name",
+  "system_name",
+  "boundary",
+  "cui_description"
+ ],
+ "sections": [
+  {
+   "id": "purpose",
+   "heading": "1. Purpose and Scope",
+   "objectives": [],
+   "questions": [],
+   "body": "This AI Governance and Oversight Policy establishes the framework for managing AI risks and oversight for {system_name} operated by {org_name}. This policy applies to all AI components within the system boundary defined as {boundary} and ensures the protection of data including {cui_description}."
+  },
+  {
+   "id": "risk_reporting",
+   "heading": "2. AI Risk Reporting and Cadence",
+   "objectives": [
+    "GV-3[a]"
+   ],
+   "questions": [
+    {
+     "key": "risk_report_cadence",
+     "prompt": "What is the defined cadence for producing the AI risk report?"
+    },
+    {
+     "key": "risk_report_owner",
+     "prompt": "Who is responsible for the production and review of the AI risk report?"
+    }
+   ],
+   "body": "To ensure continuous oversight, an AI risk report is produced on a cadence of {risk_report_cadence}. The production and review of these reports are managed by {risk_report_owner}."
+  },
+  {
+   "id": "high_risk_management",
+   "heading": "3. High-Risk AI Use Identification and Control",
+   "objectives": [
+    "MG-1[a]",
+    "MG-1[b]"
+   ],
+   "questions": [
+    {
+     "key": "high_risk_criteria",
+     "prompt": "What are the defined criteria used to identify high-risk AI use cases?"
+    },
+    {
+     "key": "high_risk_controls",
+     "prompt": "What additional controls are applied specifically to high-risk AI uses?"
+    }
+   ],
+   "body": "AI use cases are classified as high-risk based on the following criteria: {high_risk_criteria}. For all AI uses meeting these criteria, the organization applies additional security and ethical controls consisting of {high_risk_controls}."
+  }
+ ],
+ "standard": "ai_governance",
+ "coverage_mode": "partial"
+}

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: Apache-2.0
 # smoke.sh — PrismPath PPT eBPF/XDP Spike Smoke Test
 #
 # REQUIRES ROOT / CAP_BPF / CAP_NET_ADMIN for full kernel veth XDP loading.

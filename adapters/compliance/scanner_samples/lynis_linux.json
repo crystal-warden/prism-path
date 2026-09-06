@@ -1,0 +1,12 @@
+{
+  "hostname": "protectli-ubuntu-vm",
+  "os_name": "Ubuntu 22.04",
+  "pam_faillock_deny": "5",
+  "pam_pwhistory_remember": "24",
+  "fips_mode_enabled": "1",
+  "luks_active": "1",
+  "login_banner_enabled": "1",
+  "freshclam_active": "1",
+  "firewall_default_policy_deny": "1",
+  "firewall_allow_by_exception": "1"
+}

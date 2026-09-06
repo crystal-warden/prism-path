@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: Apache-2.0
 # deploy_stateful_finale.sh — pull the stateful finale overlay from the Windows rig, land it on the
 # board with the signed hyst_band policy + cert kit, and run silicon re-cert leg 1.
 #

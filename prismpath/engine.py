@@ -29,7 +29,6 @@ from dataclasses import dataclass, field
 from typing import Callable, List, Optional, Tuple
 
 from prismpath.parser import Graph
-from prismpath.router import EmbeddingRouter
 from prismpath import causes
 from prismpath import predicates
 
@@ -127,6 +126,7 @@ def run(graph: Graph, agent: Callable[[str, str, dict], object], router=None,
         run_id: Optional[str] = None,
         _seed_path=None, _seed_steps=None) -> RunResult:
     if router is None:
+        from prismpath.router import EmbeddingRouter
         router = EmbeddingRouter()
     # type_gate: validate each worker's output against the contract derived from the node's `when`
     # edges (prismpath.contract) — a pure check, no I/O, so the engine stays pure. A wrong-TYPE emitted

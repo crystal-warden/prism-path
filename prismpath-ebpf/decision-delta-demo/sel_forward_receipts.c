@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 Crystal Warden Supply Chain Labs LLC
 /* sel_forward_receipts.c - the delivery node, with a SIGNED delta trail.
  *
  * Upgrade of sel_forward.c. Control EVENTS arrive from the dev station over UDP; each is run through

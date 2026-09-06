@@ -1,0 +1,108 @@
+{
+  "_note": "Recurring operational tasks whose completion records EVIDENCE the 'performed' assessment objectives (tested, assessed, monitored, scanned, trained, reviewed). The sibling 'defined' objectives are documentation and belong to the SOP generator, not here. cadence_days is the required interval between completions.",
+  "3.6.3": [
+    {"id": "ir-capability-test", "title": "Test the incident response capability",
+     "objectives": ["3.6.3[a]"], "cadence_days": 365,
+     "evidence": "an after-action report from an incident response exercise"}
+  ],
+  "3.12.1": [
+    {"id": "security-control-assessment", "title": "Assess the security controls for effectiveness",
+     "objectives": ["3.12.1[b]"], "cadence_days": 365,
+     "evidence": "a security control assessment report"}
+  ],
+  "3.12.3": [
+    {"id": "ongoing-control-monitoring", "title": "Monitor security controls on an ongoing basis",
+     "objectives": ["3.12.3[a]"], "cadence_days": 30,
+     "evidence": "a monthly control-monitoring record"}
+  ],
+  "3.11.2": [
+    {"id": "vulnerability-scan", "title": "Scan systems and applications for vulnerabilities",
+     "objectives": ["3.11.2[b]", "3.11.2[c]"], "cadence_days": 30,
+     "evidence": "a vulnerability scan report covering systems and applications"}
+  ],
+  "3.2.2": [
+    {"id": "security-role-training", "title": "Train personnel on their assigned security duties",
+     "objectives": ["3.2.2[c]"], "cadence_days": 365,
+     "evidence": "training completion records for personnel with security duties"}
+  ],
+  "3.3.3": [
+    {"id": "audit-log-review", "title": "Review logged events and update logging",
+     "objectives": ["3.3.3[b]", "3.3.3[c]"], "cadence_days": 90,
+     "evidence": "a log review record noting any updates to the logged event types"}
+  ],
+  "3.11.1": [
+    {"id": "periodic-risk-assessment", "title": "Perform periodic risk assessment",
+     "objectives": ["3.11.1[b]"], "cadence_days": 365,
+     "evidence": "a risk assessment report evaluating threats and vulnerabilities"}
+  ],
+  "3.1.22": [
+    {"id": "public-content-review", "title": "Review content on publicly accessible systems for CUI",
+     "objectives": ["3.1.22[d]"], "cadence_days": 180,
+     "evidence": "a public website content review log confirming absence of CUI"}
+  ],
+  "3.4.1": [
+    {"id": "baseline-inventory-review", "title": "Review and update baseline configuration and system inventory",
+     "objectives": ["3.4.1[c]", "3.4.1[f]"], "cadence_days": 180,
+     "evidence": "a baseline configuration and inventory audit sign-off record"}
+  ],
+  "3.12.4": [
+    {"id": "ssp-update-review", "title": "Review and update system security plan",
+     "objectives": ["3.12.4[h]"], "cadence_days": 365,
+     "evidence": "an updated System Security Plan document with approval log"}
+  ],
+  "3.14.3": [
+    {"id": "security-advisories-review", "title": "Monitor security alerts and advisories",
+     "objectives": ["3.14.3[b]"], "cadence_days": 30,
+     "evidence": "a monthly security advisory review log"}
+  ],
+  "3.7.1": [
+    {"id": "system-maintenance-execution", "title": "Perform scheduled system maintenance",
+     "objectives": ["3.7.1[a]"], "cadence_days": 90,
+     "evidence": "a system maintenance log recording maintenance activities"}
+  ],
+  "3.2.1": [
+    {"id": "security-awareness-training", "title": "Conduct security awareness training for managers and users",
+     "objectives": ["3.2.1[c]", "3.2.1[d]"], "cadence_days": 365,
+     "evidence": "a security awareness training roster and completion log for managers and users"}
+  ],
+  "3.11.3": [
+    {"id": "flaw-remediation-execution", "title": "Remediate identified system vulnerabilities in accordance with risk assessments",
+     "objectives": ["3.11.3[b]"], "cadence_days": 30,
+     "evidence": "a vulnerability remediation status report and patch verification log"}
+  ],
+  "3.6.2": [
+    {"id": "incident-tracking-review", "title": "Track, document, and report security incidents to designated officials",
+     "objectives": ["3.6.2[a]", "3.6.2[b]", "3.6.2[e]", "3.6.2[f]"], "cadence_days": 90,
+     "evidence": "a quarterly incident log audit report detailing tracked incidents and official notifications"}
+  ],
+  "3.4.3": [
+    {"id": "change-control-audit", "title": "Track, review, approve or disapprove, and log system changes",
+     "objectives": ["3.4.3[a]", "3.4.3[b]", "3.4.3[c]", "3.4.3[d]"], "cadence_days": 90,
+     "evidence": "a change advisory board (CAB) change request and approval audit log"}
+  ],
+  "3.7.2": [
+    {"id": "maintenance-tool-inspection", "title": "Inspect and control maintenance tools, techniques, and personnel",
+     "objectives": ["3.7.2[a]", "3.7.2[b]", "3.7.2[c]", "3.7.2[d]"], "cadence_days": 180,
+     "evidence": "a maintenance tool authorization log and off-site maintenance inspection record"}
+  ],
+  "3.8.9": [
+    {"id": "backup-cui-protection-audit", "title": "Verify confidentiality of backup CUI at storage locations",
+     "objectives": ["3.8.9[a]"], "cadence_days": 90,
+     "evidence": "an off-site backup storage security inspection log verifying CUI protection"}
+  ],
+  "3.3.1": [
+    {"id": "audit-log-retention-verification", "title": "Verify audit log creation and retention requirements",
+     "objectives": ["3.3.1[c]", "3.3.1[d]", "3.3.1[f]"], "cadence_days": 90,
+     "evidence": "an audit log generation and archive retention verification record"}
+  ],
+  "3.1.5": [
+    {"id": "least-privilege-review", "title": "Audit user and process access against least privilege requirements",
+     "objectives": ["3.1.5[b]", "3.1.5[d]"], "cadence_days": 90,
+     "evidence": "a quarterly privileged access review sign-off and least-privilege audit record"}
+  ],
+  "AST-3": [
+    {"id": "safety-suite-run", "title": "Run the safety test suite",
+     "objectives": ["AST-3[d]"], "cadence_days": 7,
+     "evidence": "a safety test run record with the results and the model version tested"}
+  ]
+}

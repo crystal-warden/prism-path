@@ -18,8 +18,6 @@ import re
 import sys
 from typing import List
 
-import numpy as np
-
 from prismpath.parser import parse_file
 from prismpath import analysis, embedder, predicates
 

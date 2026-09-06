@@ -1,0 +1,47 @@
+{
+ "doc_id": "ai_exception_management_policy",
+ "title": "AI Exception Management Policy",
+ "family": "Govern",
+ "controls": [
+  "GV-2"
+ ],
+ "org_profile_keys": [
+  "org_name",
+  "system_name",
+  "boundary",
+  "cui_description"
+ ],
+ "sections": [
+  {
+   "id": "purpose",
+   "heading": "1. Purpose and Scope",
+   "objectives": [],
+   "questions": [],
+   "body": "This AI Exception Management Policy establishes the framework for requesting, reviewing, and approving deviations from established AI governance standards for {system_name} operated by {org_name}. This policy applies to all AI components within the system boundary defined as {boundary} and ensures the continued protection of {cui_description} during exception periods."
+  },
+  {
+   "id": "exception_process",
+   "heading": "2. AI Exception and Waiver Process",
+   "objectives": [
+    "GV-2[a]"
+   ],
+   "questions": [
+    {
+     "key": "exception_request_method",
+     "prompt": "What is the formal process or tool used to submit an AI exception request?"
+    },
+    {
+     "key": "exception_approval_authority",
+     "prompt": "Who is the designated authority responsible for approving AI waivers?"
+    },
+    {
+     "key": "exception_review_cycle",
+     "prompt": "How often are approved AI exceptions reviewed for continued validity?"
+    }
+   ],
+   "body": "To ensure operational flexibility without compromising security, {org_name} utilizes {exception_request_method} to document and track AI exceptions. All waivers must be formally authorized by {exception_approval_authority}. To prevent permanent policy degradation, all granted exceptions are subject to a review cycle performed {exception_review_cycle}."
+  }
+ ],
+ "standard": "ai_governance",
+ "coverage_mode": "partial"
+}

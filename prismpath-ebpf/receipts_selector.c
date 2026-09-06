@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 Crystal Warden Supply Chain Labs LLC
 /* Receipts + Merkle anchor for the stateful selector — the audit trail the flat result_map drops.
  *
  * Each COMMITTED resident transition emits a ppt_receipt {seq, policy_hash, prev, event, next} to a

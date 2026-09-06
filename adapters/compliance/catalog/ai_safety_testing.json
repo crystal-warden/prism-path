@@ -1,0 +1,56 @@
+{
+  "_meta": {
+    "standard": "ai_safety_testing",
+    "revision": "1",
+    "families": 1,
+    "controls": 4,
+    "source": "Crystal Warden Supply Chain Labs, from the three continuous-evidence questions a real AI-compliance auditor asked (prismpath-grc/docs/AI-SAFETY-EVIDENCE.md).",
+    "provenance": "An evidence-and-process control set for AI safety TESTING, assessed by the same PrismPath engine as NIST 800-171. It certifies the process (tested, retested on change, non-stale, continuously proven), NOT that the model is intrinsically safe. The model provider and the red team own model safety.",
+    "sprs": "NOT SPRS-scored (SPRS is a NIST 800-171 Rev 2 construct)."
+  },
+  "families": {"AST": "AI Safety Testing"},
+  "controls": {
+    "AST-1": {
+      "family": "AST", "family_name": "AI Safety Testing",
+      "title": "Retest on every model change",
+      "control": "Re-test the safety of the model after every change to the model or its configuration.",
+      "objectives": [
+        {"id": "AST-1[a]", "text": "a safety test suite is defined."},
+        {"id": "AST-1[b]", "text": "each model version and configuration change is identified by a version hash."},
+        {"id": "AST-1[c]", "text": "a safety-test determination exists that was produced against the current model version."},
+        {"id": "AST-1[d]", "text": "no deployed model version lacks a safety-test determination bound to it."}
+      ]
+    },
+    "AST-2": {
+      "family": "AST", "family_name": "AI Safety Testing",
+      "title": "Detect stale tests",
+      "control": "Distinguish a test that passed because the model is safe from one that passed because the test itself became stale.",
+      "objectives": [
+        {"id": "AST-2[a]", "text": "each safety test is bound to a fingerprint of the model, provider, and precision it was calibrated against."},
+        {"id": "AST-2[b]", "text": "a test whose fingerprint no longer matches the current model is refused and re-tested rather than counted as a pass."},
+        {"id": "AST-2[c]", "text": "each passing test's discrimination margin is measured against a calibrated floor."},
+        {"id": "AST-2[d]", "text": "a pass whose discrimination margin has collapsed abstains rather than being recorded as met."}
+      ]
+    },
+    "AST-3": {
+      "family": "AST", "family_name": "AI Safety Testing",
+      "title": "Continuous point-in-time proof",
+      "control": "Produce continuous, signed, replayable proof of the current safety posture, not a launch snapshot.",
+      "objectives": [
+        {"id": "AST-3[a]", "text": "each safety-test determination is recorded as a signed receipt."},
+        {"id": "AST-3[b]", "text": "each receipt is timestamped and anchored to an independent time source."},
+        {"id": "AST-3[c]", "text": "the safety posture for a past date can be produced and its receipt verified and replayed."},
+        {"id": "AST-3[d]", "text": "safety evaluations run continuously, on a cadence and on every model change, not only at launch."}
+      ]
+    },
+    "AST-4": {
+      "family": "AST", "family_name": "AI Safety Testing",
+      "title": "Runtime input and output monitoring",
+      "control": "Monitor live inputs and outputs for drift from the safety-tested distribution and abstain or escalate.",
+      "objectives": [
+        {"id": "AST-4[a]", "text": "live inputs and outputs are compared against the distribution the safety case was built on."},
+        {"id": "AST-4[b]", "text": "traffic that drifts beyond the calibrated bound abstains or escalates rather than proceeding."}
+      ]
+    }
+  }
+}

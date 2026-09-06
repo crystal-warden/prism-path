@@ -1,0 +1,63 @@
+{
+ "doc_id": "ai_acceptable_use_policy",
+ "title": "AI Acceptable Use Policy",
+ "family": "Map",
+ "controls": [
+  "MP-2",
+  "MP-3"
+ ],
+ "org_profile_keys": [
+  "org_name",
+  "system_name",
+  "boundary",
+  "cui_description"
+ ],
+ "sections": [
+  {
+   "id": "purpose",
+   "heading": "1. Purpose and Scope",
+   "objectives": [],
+   "questions": [],
+   "body": "This AI Acceptable Use Policy establishes the governance framework for the deployment and utilization of artificial intelligence within {system_name} operated by {org_name}. This policy applies to all activities within the system boundary defined as {boundary} and specifically addresses the protection of {cui_description}."
+  },
+  {
+   "id": "tool_governance",
+   "heading": "2. Approved AI Tooling and Monitoring",
+   "objectives": [
+    "MP-2[a]",
+    "MP-2[b]"
+   ],
+   "questions": [
+    {
+     "key": "approved_tools_list_location",
+     "prompt": "Where is the approved AI tools list maintained?"
+    },
+    {
+     "key": "unapproved_tool_monitoring_method",
+     "prompt": "How is the use of unapproved AI tools monitored and detected?"
+    }
+   ],
+   "body": "To ensure security and compliance, only AI tools listed in the approved inventory located at {approved_tools_list_location} are permitted for use. The use of any AI tool not explicitly approved is strictly prohibited. Compliance with this restriction is enforced and monitored via {unapproved_tool_monitoring_method}."
+  },
+  {
+   "id": "data_integrity",
+   "heading": "3. Data Input and Privacy Restrictions",
+   "objectives": [
+    "MP-3[b]"
+   ],
+   "questions": [
+    {
+     "key": "prohibited_data_types",
+     "prompt": "What specific types of data are prohibited from being entered into AI systems?"
+    },
+    {
+     "key": "data_entry_guidelines",
+     "prompt": "What are the approved guidelines for entering data into AI systems?"
+    }
+   ],
+   "body": "The entry of data into AI systems must adhere to strict privacy and security standards. Specifically, {prohibited_data_types} must never be entered into any AI system. All authorized data entry shall be conducted according to the {data_entry_guidelines} to prevent the unauthorized disclosure of {cui_description}."
+  }
+ ],
+ "standard": "ai_governance",
+ "coverage_mode": "partial"
+}

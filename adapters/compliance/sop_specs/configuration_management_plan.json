@@ -1,0 +1,48 @@
+{
+  "doc_id": "configuration_management_plan",
+  "title": "Configuration Management Plan",
+  "family": "Configuration Management",
+  "controls": ["3.4.1", "3.4.2"],
+  "org_profile_keys": ["org_name", "system_name", "boundary", "cui_description"],
+  "sections": [
+    {
+      "id": "purpose",
+      "heading": "1. Purpose and Scope",
+      "objectives": [],
+      "questions": [],
+      "body": "This Configuration Management Plan establishes baseline standards and inventory controls for {system_name} operated by {org_name}. It applies within {boundary} to safeguard Controlled Unclassified Information including {cui_description}."
+    },
+    {
+      "id": "baseline_config",
+      "heading": "2. Baseline Configuration Establishment and Maintenance",
+      "objectives": ["3.4.1[a]", "3.4.1[b]", "3.4.1[c]"],
+      "questions": [
+        {"key": "baseline_establishment", "prompt": "How is the baseline configuration established?"},
+        {"key": "baseline_components", "prompt": "What hardware software firmware and documentation are included in the baseline?"},
+        {"key": "baseline_maintenance", "prompt": "How is the baseline configuration maintained throughout the system lifecycle?"}
+      ],
+      "body": "The system baseline configuration is established through {baseline_establishment}. The baseline includes hardware software firmware and documentation as specified by {baseline_components}. Maintenance of the baseline configuration occurs via {baseline_maintenance}."
+    },
+    {
+      "id": "system_inventory",
+      "heading": "3. System Inventory Control",
+      "objectives": ["3.4.1[d]", "3.4.1[e]", "3.4.1[f]"],
+      "questions": [
+        {"key": "inventory_establishment", "prompt": "How is the system inventory established?"},
+        {"key": "inventory_components", "prompt": "What hardware software firmware and documentation items are tracked in the inventory?"},
+        {"key": "inventory_maintenance", "prompt": "How is the system inventory maintained and updated?"}
+      ],
+      "body": "The system inventory is established by {inventory_establishment}. The inventory encompasses hardware software firmware and documentation detailing {inventory_components}. Updates and reviews of the inventory are performed through {inventory_maintenance}."
+    },
+    {
+      "id": "security_settings",
+      "heading": "4. Security Configuration Settings",
+      "objectives": ["3.4.2[a]", "3.4.2[b]"],
+      "questions": [
+        {"key": "security_settings_def", "prompt": "How are security configuration settings established and included in the baseline?"},
+        {"key": "security_settings_enf", "prompt": "How are security configuration settings enforced on information technology products?"}
+      ],
+      "body": "Security configuration settings for information technology products are established by {security_settings_def}. Enforcement of security configuration settings across system components is achieved through {security_settings_enf}."
+    }
+  ]
+}

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 Crystal Warden Supply Chain Labs LLC
 /* walker.c - BNO086 walker node. Reads linear acceleration via the CEVA SH-2 driver over the
  * i2c_master driver (0x4B, SDA=21, SCL=22, INT=25 gating reads; i2c_master rides the BNO08x clock
  * stretching), maps motion magnitude to a band symbol, and broadcasts it as a Facet frame

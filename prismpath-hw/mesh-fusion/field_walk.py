@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """field_walk.py - field-test logger for the mesh-fusion ESP-NOW mesh.
 
 Reads one (or two) tethered mesh-fusion node(s) over serial, timestamps every emitted line, parses the

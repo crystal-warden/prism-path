@@ -1,0 +1,104 @@
+{
+ "doc_id": "security_assessment_policy",
+ "title": "Security Assessment Policy",
+ "family": "Security Assessment",
+ "controls": [
+  "3.12.1",
+  "3.12.2",
+  "3.12.3",
+  "3.12.4"
+ ],
+ "org_profile_keys": [
+  "org_name",
+  "system_name",
+  "boundary",
+  "cui_description"
+ ],
+ "sections": [
+  {
+   "id": "purpose",
+   "heading": "1. Purpose and Scope",
+   "objectives": [],
+   "questions": [],
+   "body": "This Security Assessment Policy defines the requirements for evaluating and monitoring the effectiveness of security controls for {system_name} operated by {org_name}. This policy applies to the system boundary defined as {boundary} and ensures the protection of Controlled Unclassified Information, specifically {cui_description}."
+  },
+  {
+   "id": "control_assessment",
+   "heading": "2. Security Control Assessment",
+   "objectives": [
+    "3.12.1[a]",
+    "3.12.1[b]"
+   ],
+   "questions": [
+    {
+     "key": "assessment_frequency",
+     "prompt": "How often are security controls periodically assessed?"
+    },
+    {
+     "key": "assessment_method",
+     "prompt": "What methods are used to determine if controls are effective in their application?"
+    }
+   ],
+   "body": "Security controls for {system_name} are periodically assessed every {assessment_frequency}. The effectiveness of these controls is determined using {assessment_method}."
+  },
+  {
+   "id": "remediation_poam",
+   "heading": "3. Remediation and Plans of Action",
+   "objectives": [
+    "3.12.2[a]",
+    "3.12.2[b]",
+    "3.12.2[c]"
+   ],
+   "questions": [
+    {
+     "key": "poam_process",
+     "prompt": "How are plans of action developed to correct deficiencies?"
+    },
+    {
+     "key": "vulnerability_reduction",
+     "prompt": "How are these plans implemented to reduce or eliminate vulnerabilities?"
+    }
+   ],
+   "body": "Deficiencies identified during assessments are addressed through {poam_process}. These plans are implemented to reduce or eliminate vulnerabilities via {vulnerability_reduction}."
+  },
+  {
+   "id": "continuous_monitoring",
+   "heading": "4. Ongoing Security Monitoring",
+   "objectives": [
+    "3.12.3[a]"
+   ],
+   "questions": [
+    {
+     "key": "monitoring_mechanism",
+     "prompt": "What mechanisms are used to monitor security controls on an ongoing basis?"
+    }
+   ],
+   "body": "To ensure the continued effectiveness of security controls, {org_name} utilizes {monitoring_mechanism} for ongoing monitoring of {system_name}."
+  },
+  {
+   "id": "system_security_plan",
+   "heading": "5. System Security Plan (SSP) Management",
+   "objectives": [
+    "3.12.4[a]",
+    "3.12.4[b]",
+    "3.12.4[c]",
+    "3.12.4[d]",
+    "3.12.4[e]",
+    "3.12.4[f]",
+    "3.12.4[g]",
+    "3.12.4[h]"
+   ],
+   "questions": [
+    {
+     "key": "ssp_update_cycle",
+     "prompt": "How frequently is the System Security Plan (SSP) reviewed and updated?"
+    },
+    {
+     "key": "ssp_content_description",
+     "prompt": "How does the SSP describe the system boundaries, environments, and implementation of security requirements?"
+    }
+   ],
+   "body": "The System Security Plan for {system_name} is documented and updated {ssp_update_cycle}. The SSP provides a detailed description of the system boundary ({boundary}), the operational environment, and the implementation of security requirements as detailed in {ssp_content_description}."
+  }
+ ]
+}

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Gate for gen_pack_svh.py: the emitted SVH must equal the PS write sequence derived
 independently through ppt_pynq.PptImage (the parser the board actually uses)."""
 

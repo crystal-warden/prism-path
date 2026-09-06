@@ -1,0 +1,1 @@
+{"control_id":"3.1.11","boundary":"CUI enclave","evidence":[{"type":"config","source":"GPO report","text":"Session-termination condition defined at 30 minutes inactivity; GPO linked to the enclave OU forces logoff; a screenshot on an enclave workstation confirms the policy is applied and enforced."}]}

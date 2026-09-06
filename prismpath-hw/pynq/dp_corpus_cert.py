@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 # dp_corpus_cert.py — #108's fabric corpus certification, pointed at the DATAPATH overlay in
 # PS mode (auto_mode=0, the reset default): the certified AXI path must be intact on the new
 # bitstream. Paths adjusted for /home/xilinx flat layout.

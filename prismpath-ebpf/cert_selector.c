@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 Crystal Warden Supply Chain Labs LLC
 /* In-kernel conformance for the stateful selector: replay every frozen event stream through
  * ppt_select via BPF_PROG_TEST_RUN (resident state reset per stream) and diff the kernel's posture
  * trail against the C/Python reference frozen in the corpus. Reuses the loader's image parse + frame

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: Apache-2.0
 # deploy.sh — edit-to-silicon: <flow.md> → table image → board BRAM. No resynthesis,
 # bitstream hash unchanged; the board's watcher hot-reloads mid-stream.
 #   ./deploy.sh prismpath/gallery/incident_severity/incident_severity.md <board-ip>

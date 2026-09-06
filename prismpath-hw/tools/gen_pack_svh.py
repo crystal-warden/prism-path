@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """gen_pack_svh.py — arc task #4: bake signed policies into the fabric loader's ROM.
 
 Emits `ppt_pack.svh` (and `ppt_ctrl_pack.svh`) from real .ppt images, replacing the mock ROMs in

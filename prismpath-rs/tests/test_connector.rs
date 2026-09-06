@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 Crystal Warden Supply Chain Labs LLC
 //! Connector-SDK + composition gate: replay `conformance/connector.json` — hashes and prompt
 //! strings byte-for-byte, the attestation manifest exactly, and the spawn/join fan-out ending in
 //! the same final path/stopped with `_children` aggregated — against the Python reference.

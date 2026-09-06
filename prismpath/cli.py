@@ -225,6 +225,14 @@ def main(argv=None) -> int:
                              help='demo escape hatch: swap an unsigned image, stamped in the audit log')
     swap_parser.set_defaults(func=swap_cmd)
 
+    facet_parser = subparsers.add_parser(
+        'facet', help='Facet telemetry: decision-preserving quantization, wire encoding, and stream decoding')
+    facet_parser.add_argument('action', choices=['quantize', 'encode', 'decode'],
+                              help='facet action: quantize | encode | decode')
+    facet_parser.add_argument('flow_md', type=str, help='Path to the flow markdown file')
+    facet_parser.add_argument('payload', type=str, help='JSON reading or HEX string')
+    facet_parser.set_defaults(func=facet_cmd)
+
     args = parser.parse_args(argv)
     if not args.command:
         parser.print_help()
@@ -774,7 +782,6 @@ def compile_cmd(args) -> int:
     from prismpath.parser import parse_file
     from prismpath import analysis, lockfile
     import base64
-    import numpy as np
 
     # Check portability tier first
     graph = parse_file(args.flow_md)
@@ -796,6 +803,7 @@ def compile_cmd(args) -> int:
     # Load lock if P1
     embedded_lock_js = "null"
     if args.tier == "p1":
+        import numpy as np
         lp = lockfile.lock_path(args.flow_md)
         if not os.path.exists(lp):
             print(f"✗ Lockfile missing: {lp}. Please run `prismpath lock {args.flow_md}` first.")
@@ -1224,5 +1232,75 @@ def ledger_cmd(args):
     print('unknown ledger action: ' + str(a))
     return 2
 
+
+def _load_telemetry():
+    here = os.path.dirname(os.path.abspath(__file__))
+    telemetry_dir = os.path.abspath(os.path.join(here, "..", "adapters", "telemetry"))
+    if not os.path.exists(telemetry_dir):
+        telemetry_dir = os.path.abspath(os.path.join(here, "adapters", "telemetry"))
+    if telemetry_dir not in sys.path:
+        sys.path.insert(0, telemetry_dir)
+    import quantizer as q
+    import zeckendorf as z
+    import wire as w
+    import packed as p
+    return q, z, w, p
+
+
+def facet_cmd(args) -> int:
+    q, z, w, p = _load_telemetry()
+    graph = parse_file(args.flow_md)
+    parts = q.build_partitions(graph)
+    action = args.action
+
+    if action in ('quantize', 'encode'):
+        if os.path.exists(args.payload):
+            with open(args.payload, "r", encoding="utf-8") as f:
+                reading = json.load(f)
+        else:
+            reading = json.loads(args.payload)
+
+        order = sorted(parts.keys())
+        missing = [f for f in order if f not in reading]
+        if missing:
+            raise KeyError(f"reading missing decision fields: {missing}")
+
+        syms = q.quantize(parts, reading)
+
+        if action == 'quantize':
+            symbol_tuple = tuple(syms[f] for f in order)
+            print(symbol_tuple)
+            return 0
+        elif action == 'encode':
+            bits = w.encode_reading(parts, reading)
+            raw_bytes = p.pack(bits, 8)
+            print(raw_bytes.hex())
+            return 0
+
+    elif action == 'decode':
+        raw_bytes = bytes.fromhex(args.payload)
+        bits = p.unpack(raw_bytes)
+        recon_reading = w.decode_reading(parts, bits)
+
+        start_node = graph.start
+        next_node = None
+        cause = None
+
+        if start_node in graph.nodes:
+            from prismpath import predicates
+            for target, cond in graph.nodes[start_node].edges:
+                if predicates.is_deterministic(cond) and predicates.eval_condition(cond, recon_reading):
+                    next_node = target
+                    cause = cond
+                    break
+
+        print(f"Next node: {next_node}")
+        print(f"Cause: {cause}")
+        return 0
+
+    return 2
+
+
 if __name__ == '__main__':
     raise SystemExit(main())
+

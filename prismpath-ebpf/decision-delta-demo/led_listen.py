@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """led_listen.py - the FPGA render endpoint of the decision-delta pipeline.
 
 The dev station emits raw control EVENTS; the signed posture_selector on the Protectli DECIDES

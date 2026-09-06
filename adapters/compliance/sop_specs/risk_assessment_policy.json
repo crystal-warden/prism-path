@@ -1,0 +1,89 @@
+{
+ "doc_id": "risk_assessment_policy",
+ "title": "Risk Assessment Policy",
+ "family": "Risk Assessment",
+ "controls": [
+  "3.11.1",
+  "3.11.2",
+  "3.11.3"
+ ],
+ "org_profile_keys": [
+  "org_name",
+  "system_name",
+  "boundary",
+  "cui_description"
+ ],
+ "sections": [
+  {
+   "id": "purpose",
+   "heading": "1. Purpose and Scope",
+   "objectives": [],
+   "questions": [],
+   "body": "This Risk Assessment Policy defines the requirements for identifying, assessing, and remediating risks to {system_name} operated by {org_name}. This policy applies to all assets within the system boundary described as {boundary} and ensures the protection of Controlled Unclassified Information including {cui_description}."
+  },
+  {
+   "id": "risk_assessment_process",
+   "heading": "2. Periodic Risk Assessments",
+   "objectives": [
+    "3.11.1[a]",
+    "3.11.1[b]"
+   ],
+   "questions": [
+    {
+     "key": "risk_assessment_frequency",
+     "prompt": "How often are risk assessments performed for organizational operations and assets?"
+    },
+    {
+     "key": "risk_assessment_methodology",
+     "prompt": "What methodology is used to assess risks to mission, functions, image, or reputation resulting from CUI processing?"
+    }
+   ],
+   "body": "Risk assessments for organizational operations, assets, and individuals are performed {risk_assessment_frequency}. The process for assessing risks to mission, functions, image, or reputation resulting from the operation of {system_name} and the processing of CUI is conducted via {risk_assessment_methodology}."
+  },
+  {
+   "id": "vulnerability_scanning",
+   "heading": "3. Vulnerability Scanning",
+   "objectives": [
+    "3.11.2[a]",
+    "3.11.2[b]",
+    "3.11.2[c]",
+    "3.11.2[d]",
+    "3.11.2[e]"
+   ],
+   "questions": [
+    {
+     "key": "scan_schedule",
+     "prompt": "What is the schedule for periodic vulnerability scans of systems and applications?"
+    },
+    {
+     "key": "ad_hoc_scan_trigger",
+     "prompt": "How are scans triggered when new vulnerabilities are identified?"
+    },
+    {
+     "key": "scanning_tools",
+     "prompt": "Which tools are used to scan for vulnerabilities within the system boundary?"
+    }
+   ],
+   "body": "Vulnerability scans of systems and applications are conducted according to the following schedule: {scan_schedule}. In the event that new vulnerabilities are identified, additional scans are triggered by {ad_hoc_scan_trigger}. These activities are performed using {scanning_tools}."
+  },
+  {
+   "id": "vulnerability_remediation",
+   "heading": "4. Vulnerability Remediation",
+   "objectives": [
+    "3.11.3[a]",
+    "3.11.3[b]"
+   ],
+   "questions": [
+    {
+     "key": "remediation_workflow",
+     "prompt": "What is the process for remediating vulnerabilities based on risk assessment results?"
+    },
+    {
+     "key": "remediation_timeline",
+     "prompt": "What are the expected timelines for remediation based on risk levels?"
+    }
+   ],
+   "body": "Vulnerabilities identified during scanning and assessment are remediated in accordance with the risk assessment results via {remediation_workflow}. Remediation efforts are prioritized and completed according to the following timelines: {remediation_timeline}."
+  }
+ ]
+}

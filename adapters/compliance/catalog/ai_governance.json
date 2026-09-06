@@ -1,0 +1,394 @@
+{
+ "_meta": {
+  "standard": "ai_governance",
+  "revision": "1.0",
+  "controls": 11,
+  "families": 4,
+  "source": "Crystal Warden AI governance control set, structured on the NIST AI RMF functions (Govern/Map/Measure/Manage). Encodes the organizational AI-governance questions (inventory, approval, data, vendors, decision impact, human review, high-risk controls, exceptions, incidents, evidence retention, leadership visibility). Crosswalk to NIST AI RMF 1.0 subcategories and ISO/IEC 42001 is pending an authoritative source table."
+ },
+ "families": {
+  "GV": "Govern",
+  "MP": "Map",
+  "MS": "Measure",
+  "MG": "Manage"
+ },
+ "controls": {
+  "MP-1": {
+   "family": "MP",
+   "family_name": "Map",
+   "title": "AI use and process inventory",
+   "control": "The organization maintains a current inventory of who uses AI and which business processes use it.",
+   "evidence_types": [
+    "register",
+    "policy",
+    "procedure",
+    "record"
+   ],
+   "methods": [
+    "Examine",
+    "Inquiry",
+    "Test"
+   ],
+   "objectives": [
+    {
+     "id": "MP-1[a]",
+     "text": "An inventory of AI users and roles is maintained.",
+     "discovery_query": "Provide evidence that an inventory of AI users and roles is maintained.",
+     "mechanism": "config"
+    },
+    {
+     "id": "MP-1[b]",
+     "text": "An inventory of AI-enabled business processes is maintained.",
+     "discovery_query": "Provide evidence that an inventory of AI-enabled business processes is maintained.",
+     "mechanism": "config"
+    },
+    {
+     "id": "MP-1[c]",
+     "text": "The AI inventory is reviewed and updated on a defined cadence.",
+     "discovery_query": "Provide evidence that the AI inventory is reviewed and updated on a defined cadence.",
+     "mechanism": "operational"
+    }
+   ]
+  },
+  "MP-2": {
+   "family": "MP",
+   "family_name": "Map",
+   "title": "Approved AI tools",
+   "control": "The organization defines which AI tools are approved and controls the use of unapproved tools.",
+   "evidence_types": [
+    "register",
+    "policy",
+    "procedure",
+    "record"
+   ],
+   "methods": [
+    "Examine",
+    "Inquiry",
+    "Test"
+   ],
+   "objectives": [
+    {
+     "id": "MP-2[a]",
+     "text": "An approved-AI-tools list is defined and maintained.",
+     "discovery_query": "Provide evidence that an approved-AI-tools list is defined and maintained.",
+     "mechanism": "config"
+    },
+    {
+     "id": "MP-2[b]",
+     "text": "Use of unapproved AI tools is prohibited and monitored.",
+     "discovery_query": "Provide evidence that use of unapproved AI tools is prohibited and monitored.",
+     "mechanism": "config"
+    }
+   ]
+  },
+  "MP-3": {
+   "family": "MP",
+   "family_name": "Map",
+   "title": "AI data governance",
+   "control": "The organization governs what data is entered into AI systems and controls prohibited data.",
+   "evidence_types": [
+    "register",
+    "policy",
+    "procedure",
+    "record"
+   ],
+   "methods": [
+    "Examine",
+    "Inquiry",
+    "Test"
+   ],
+   "objectives": [
+    {
+     "id": "MP-3[a]",
+     "text": "The data entered into AI systems is inventoried.",
+     "discovery_query": "Provide evidence that the data entered into AI systems is inventoried.",
+     "mechanism": "config"
+    },
+    {
+     "id": "MP-3[b]",
+     "text": "A policy defines what data may and may not be entered into AI systems.",
+     "discovery_query": "Provide evidence that a policy defines what data may and may not be entered into AI systems.",
+     "mechanism": "documented"
+    },
+    {
+     "id": "MP-3[c]",
+     "text": "Controls prevent prohibited data such as CUI or PII from entering AI systems.",
+     "discovery_query": "Provide evidence that controls prevent prohibited data such as CUI or PII from entering AI systems.",
+     "mechanism": "config"
+    }
+   ]
+  },
+  "MP-4": {
+   "family": "MP",
+   "family_name": "Map",
+   "title": "Embedded and vendor AI inventory",
+   "control": "The organization inventories vendors and products that provide embedded AI capabilities.",
+   "evidence_types": [
+    "register",
+    "policy",
+    "procedure",
+    "record"
+   ],
+   "methods": [
+    "Examine",
+    "Inquiry",
+    "Test"
+   ],
+   "objectives": [
+    {
+     "id": "MP-4[a]",
+     "text": "An inventory of vendor-provided and embedded AI is maintained.",
+     "discovery_query": "Provide evidence that an inventory of vendor-provided and embedded AI is maintained.",
+     "mechanism": "config"
+    },
+    {
+     "id": "MP-4[b]",
+     "text": "Vendor AI is reviewed for risk on a defined cadence.",
+     "discovery_query": "Provide evidence that vendor AI is reviewed for risk on a defined cadence.",
+     "mechanism": "operational"
+    }
+   ]
+  },
+  "MP-5": {
+   "family": "MP",
+   "family_name": "Map",
+   "title": "Decision-impact classification",
+   "control": "The organization classifies each AI use by whether its outputs influence decisions and tiers risk accordingly.",
+   "evidence_types": [
+    "register",
+    "policy",
+    "procedure",
+    "record"
+   ],
+   "methods": [
+    "Examine",
+    "Inquiry",
+    "Test"
+   ],
+   "objectives": [
+    {
+     "id": "MP-5[a]",
+     "text": "Each AI use records whether its outputs influence decisions.",
+     "discovery_query": "Provide evidence that each AI use records whether its outputs influence decisions.",
+     "mechanism": "config"
+    },
+    {
+     "id": "MP-5[b]",
+     "text": "AI uses are assigned a risk tier based on decision impact.",
+     "discovery_query": "Provide evidence that AI uses are assigned a risk tier based on decision impact.",
+     "mechanism": "config"
+    }
+   ]
+  },
+  "GV-1": {
+   "family": "GV",
+   "family_name": "Govern",
+   "title": "Human review of AI outputs",
+   "control": "The organization defines when human review of AI outputs is required and retains evidence of it.",
+   "evidence_types": [
+    "register",
+    "policy",
+    "procedure",
+    "record"
+   ],
+   "methods": [
+    "Examine",
+    "Inquiry",
+    "Test"
+   ],
+   "objectives": [
+    {
+     "id": "GV-1[a]",
+     "text": "A policy defines when human review of AI outputs is required, by risk tier.",
+     "discovery_query": "Provide evidence that a policy defines when human review of AI outputs is required, by risk tier.",
+     "mechanism": "documented"
+    },
+    {
+     "id": "GV-1[b]",
+     "text": "High-risk AI uses require documented human review before the output is acted on.",
+     "discovery_query": "Provide evidence that high-risk AI uses require documented human review before the output is acted on.",
+     "mechanism": "operational"
+    },
+    {
+     "id": "GV-1[c]",
+     "text": "Evidence of human review is retained.",
+     "discovery_query": "Provide evidence that evidence of human review is retained.",
+     "mechanism": "operational"
+    }
+   ]
+  },
+  "GV-2": {
+   "family": "GV",
+   "family_name": "Govern",
+   "title": "AI exception approval",
+   "control": "AI policy exceptions are approved through a defined process and recorded as signed decisions.",
+   "evidence_types": [
+    "register",
+    "policy",
+    "procedure",
+    "record"
+   ],
+   "methods": [
+    "Examine",
+    "Inquiry",
+    "Test"
+   ],
+   "objectives": [
+    {
+     "id": "GV-2[a]",
+     "text": "An AI exception and waiver process is defined.",
+     "discovery_query": "Provide evidence that an AI exception and waiver process is defined.",
+     "mechanism": "documented"
+    },
+    {
+     "id": "GV-2[b]",
+     "text": "Exceptions are approved by an accountable owner.",
+     "discovery_query": "Provide evidence that exceptions are approved by an accountable owner.",
+     "mechanism": "operational"
+    },
+    {
+     "id": "GV-2[c]",
+     "text": "Exception decisions are recorded as signed, dated records and retained.",
+     "discovery_query": "Provide evidence that exception decisions are recorded as signed, dated records and retained.",
+     "mechanism": "operational"
+    }
+   ]
+  },
+  "GV-3": {
+   "family": "GV",
+   "family_name": "Govern",
+   "title": "Leadership AI risk visibility",
+   "control": "Leadership receives periodic reporting on AI risk.",
+   "evidence_types": [
+    "register",
+    "policy",
+    "procedure",
+    "record"
+   ],
+   "methods": [
+    "Examine",
+    "Inquiry",
+    "Test"
+   ],
+   "objectives": [
+    {
+     "id": "GV-3[a]",
+     "text": "An AI risk report is produced on a defined cadence.",
+     "discovery_query": "Provide evidence that an AI risk report is produced on a defined cadence.",
+     "mechanism": "documented"
+    },
+    {
+     "id": "GV-3[b]",
+     "text": "The AI risk report is delivered to accountable leadership.",
+     "discovery_query": "Provide evidence that the AI risk report is delivered to accountable leadership.",
+     "mechanism": "operational"
+    }
+   ]
+  },
+  "MG-1": {
+   "family": "MG",
+   "family_name": "Manage",
+   "title": "Controls for high-risk AI",
+   "control": "High-risk AI uses have defined additional controls.",
+   "evidence_types": [
+    "register",
+    "policy",
+    "procedure",
+    "record"
+   ],
+   "methods": [
+    "Examine",
+    "Inquiry",
+    "Test"
+   ],
+   "objectives": [
+    {
+     "id": "MG-1[a]",
+     "text": "Criteria for high-risk AI use are defined.",
+     "discovery_query": "Provide evidence that criteria for high-risk AI use are defined.",
+     "mechanism": "documented"
+    },
+    {
+     "id": "MG-1[b]",
+     "text": "Additional controls are applied to high-risk AI uses.",
+     "discovery_query": "Provide evidence that additional controls are applied to high-risk AI uses.",
+     "mechanism": "documented"
+    }
+   ]
+  },
+  "MG-2": {
+   "family": "MG",
+   "family_name": "Manage",
+   "title": "AI incident escalation",
+   "control": "AI incidents are detected, escalated, and handled through a defined process.",
+   "evidence_types": [
+    "register",
+    "policy",
+    "procedure",
+    "record"
+   ],
+   "methods": [
+    "Examine",
+    "Inquiry",
+    "Test"
+   ],
+   "objectives": [
+    {
+     "id": "MG-2[a]",
+     "text": "An AI incident-response and escalation process is defined.",
+     "discovery_query": "Provide evidence that an AI incident-response and escalation process is defined.",
+     "mechanism": "documented"
+    },
+    {
+     "id": "MG-2[b]",
+     "text": "AI incidents are escalated through the defined path.",
+     "discovery_query": "Provide evidence that AI incidents are escalated through the defined path.",
+     "mechanism": "operational"
+    },
+    {
+     "id": "MG-2[c]",
+     "text": "AI incident records are retained.",
+     "discovery_query": "Provide evidence that AI incident records are retained.",
+     "mechanism": "operational"
+    }
+   ]
+  },
+  "MS-1": {
+   "family": "MS",
+   "family_name": "Measure",
+   "title": "AI evidence retention",
+   "control": "AI-related evidence is retained for a defined period with its integrity protected.",
+   "evidence_types": [
+    "register",
+    "policy",
+    "procedure",
+    "record"
+   ],
+   "methods": [
+    "Examine",
+    "Inquiry",
+    "Test"
+   ],
+   "objectives": [
+    {
+     "id": "MS-1[a]",
+     "text": "A retention policy defines what AI evidence is kept and for how long.",
+     "discovery_query": "Provide evidence that a retention policy defines what AI evidence is kept and for how long.",
+     "mechanism": "documented"
+    },
+    {
+     "id": "MS-1[b]",
+     "text": "AI evidence is retained for the defined period.",
+     "discovery_query": "Provide evidence that AI evidence is retained for the defined period.",
+     "mechanism": "operational"
+    },
+    {
+     "id": "MS-1[c]",
+     "text": "The integrity and authenticity of retained AI evidence is protected by signing or timestamping.",
+     "discovery_query": "Provide evidence that the integrity and authenticity of retained AI evidence is protected by signing or timestamping.",
+     "mechanism": "config"
+    }
+   ]
+  }
+ }
+}

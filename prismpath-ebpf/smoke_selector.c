@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 Crystal Warden Supply Chain Labs LLC
 /* Concurrency smoke test for the stateful selector — measured shut, not argued shut.
  *
  * The cert (cert_selector) replays streams serially through BPF_PROG_TEST_RUN, so it never exercises
