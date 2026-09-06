@@ -121,10 +121,13 @@ def _method_profile(control):
     return "general"
 
 _PROFILE_GUIDANCE = {
-    "technical": ("This family is assessed chiefly by EXAMINING and TESTING enforcing configuration. Treat an "
-                  "objective as satisfied ONLY when the evidence shows the control CONFIGURED AND ENFORCED on the "
-                  "boundary (settings, policy-as-code, screenshots of enforced state, scan/test output). A written "
-                  "policy that merely describes intent does NOT satisfy a technical objective."),
+    "technical": ("This family is assessed chiefly by EXAMINING and TESTING enforcing configuration. Distinguish the "
+                  "two kinds of objective. An ENFORCE/IMPLEMENT/LIMIT/PROTECT/CONTROL objective is satisfied ONLY when "
+                  "the evidence shows the control CONFIGURED AND ENFORCED on the boundary (settings, policy-as-code, "
+                  "scan/test output); a written policy that merely describes intent does NOT satisfy it. But a "
+                  "DEFINE/SPECIFY/DOCUMENT/IDENTIFY objective (it only requires that something be defined, specified, "
+                  "documented, or identified) IS satisfied by a current documented policy, SSP, or configuration that "
+                  "states it; it does not additionally require enforcement evidence."),
     "procedural": ("This family is assessed chiefly by EXAMINING policy/procedure AND INTERVIEWING personnel. Treat "
                    "an objective as satisfied ONLY when a CURRENT documented policy/procedure exists AND there is "
                    "corroboration it is operative (interview notes, records of the process being performed). A policy "

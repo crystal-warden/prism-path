@@ -31,7 +31,7 @@ def test_breadth2_total_machine_checkable_control_count():
     ca.use_standard("nist_800171_r2")
     cat = ca._catalog()
     checkable = [cid for cid, c in cat["controls"].items() if dc.machine_checkable({"id": cid, **c})]
-    assert len(checkable) == 26
+    assert len(checkable) == 50   # grew from 26 as the check registry was extended (see test_posture_connector.CHECKABLE)
     for cid in NEWLY_COVERED_CONTROLS_BREADTH2:
         assert cid in checkable
 

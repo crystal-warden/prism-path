@@ -196,6 +196,152 @@ CHECK_SPEC = {
     "MP-5[a]": ("flag", "ai_decision_impact_classified"),
     "MP-5[b]": ("flag", "ai_high_risk_uses_tiered"),
     "MS-1[c]": ("flag", "ai_evidence_integrity_protected"),
+
+    # --- NIST 800-171 R2 config-coverage extension ---
+    # Objectives an OS/network scan can decide from real configuration. Each fact is emitted by a
+    # connector only after verifying it reflects actual enforcement; the companion identify/define
+    # objectives stay with the documented (policy) mechanism, and objectives that need network
+    # boundary monitoring (e.g. 3.13.1[c][d]) are intentionally NOT claimed until that is in place.
+    "3.1.1[d]": ("flag", "access_enforcement_configured"),
+    "3.1.1[e]": ("flag", "access_enforcement_configured"),
+    "3.1.1[f]": ("flag", "access_enforcement_configured"),
+    "3.1.2[b]": ("flag", "least_privilege_enforced"),
+    "3.5.1[a]": ("flag", "unique_identification_configured"),
+    "3.5.1[b]": ("flag", "unique_identification_configured"),
+    "3.5.1[c]": ("flag", "unique_identification_configured"),
+    "3.4.2[b]": ("flag", "config_baseline_enforced"),
+    "3.13.1[e]": ("flag", "boundary_control_enforced"),
+    "3.13.1[f]": ("flag", "boundary_control_enforced"),
+    "3.13.1[g]": ("flag", "boundary_protection_enforced"),
+    "3.13.1[h]": ("flag", "boundary_protection_enforced"),
+    "3.14.1[b]": ("flag", "flaw_remediation_automated"),
+    "3.14.1[f]": ("flag", "flaw_remediation_automated"),
+    "3.3.2[b]": ("flag", "audit_trace_to_user"),
+    "3.8.2[a]": ("flag", "cui_media_access_limited"),
+    # (3.8.8[a] is correctly mapped above to unowned_portable_storage_prohibited, not re-mapped here)
+    # define/identify objectives evidenced by the actual system config (the ruleset IS the definition):
+    "3.1.1[a]": ("flag", "unique_identification_configured"),
+    "3.1.1[b]": ("flag", "unique_identification_configured"),
+    "3.1.1[c]": ("flag", "unique_identification_configured"),
+    "3.1.2[a]": ("flag", "least_privilege_enforced"),
+    "3.3.1[a]": ("flag", "audit_events_defined"),
+    "3.3.1[b]": ("flag", "audit_events_defined"),
+    "3.3.1[e]": ("flag", "audit_retention_defined"),
+    "3.3.2[a]": ("flag", "audit_events_defined"),
+    "3.4.2[a]": ("flag", "config_baseline_established"),
+    "3.13.1[a]": ("flag", "boundary_defined"),
+    "3.13.1[b]": ("flag", "boundary_defined"),
+    "3.14.1[a]": ("flag", "flaw_remediation_automated"),
+    # remote access, transmission, unauthorized-use monitoring (enforce objectives; define go to policy):
+    "3.1.12[c]": ("flag", "remote_access_controlled"),
+    "3.1.12[d]": ("flag", "remote_access_controlled"),
+    "3.1.13[b]": ("flag", "remote_access_encrypted"),
+    "3.13.8[c]": ("flag", "transmission_confidentiality_enforced"),
+    "3.14.7[b]": ("flag", "unauthorized_use_monitored"),
+    # audit-family + access-model enforce objectives (verified config; define go to policy):
+    "3.1.6[b]": ("flag", "nonprivileged_use_enforced"),
+    "3.1.7[c]": ("flag", "privileged_execution_controlled"),
+    "3.1.7[d]": ("flag", "privileged_execution_controlled"),
+    "3.3.4[c]": ("flag", "audit_failure_alerting"),
+    "3.3.6[a]": ("flag", "audit_reduction_reporting"),
+    "3.3.6[b]": ("flag", "audit_reduction_reporting"),
+    "3.3.8[a]": ("flag", "audit_info_protected"),
+    "3.3.8[b]": ("flag", "audit_info_protected"),
+    "3.3.8[c]": ("flag", "audit_info_protected"),
+    "3.3.8[d]": ("flag", "audit_info_protected"),
+    "3.3.8[e]": ("flag", "audit_info_protected"),
+    "3.3.8[f]": ("flag", "audit_info_protected"),
+    "3.3.9[b]": ("flag", "audit_management_restricted"),
+    "3.13.3[c]": ("flag", "nonprivileged_use_enforced"),
+    "3.13.4[a]": ("flag", "shared_resource_isolation"),
+    "3.13.5[a]": ("flag", "no_public_components"),
+    "3.13.5[b]": ("flag", "no_public_components"),
+    "3.4.9[b]": ("flag", "user_software_controlled"),
+    "3.4.9[c]": ("flag", "user_software_controlled"),
+    # flow control, remote-access routing, external connections, key mgmt, mobile code, remote maint:
+    "3.1.3[e]": ("flag", "cui_flow_enforced"),
+    "3.1.14[a]": ("flag", "remote_access_controlled"),
+    "3.1.14[b]": ("flag", "remote_access_controlled"),
+    "3.1.15[c]": ("flag", "remote_access_controlled"),
+    "3.1.20[c]": ("flag", "external_connections_controlled"),
+    "3.1.20[e]": ("flag", "external_connections_controlled"),
+    "3.1.20[f]": ("flag", "external_connections_controlled"),
+    "3.13.10[a]": ("flag", "crypto_keys_managed"),
+    "3.13.10[b]": ("flag", "crypto_keys_managed"),
+    "3.13.13[a]": ("flag", "mobile_code_controlled"),
+    "3.13.13[b]": ("flag", "mobile_code_controlled"),
+    "3.7.5[a]": ("flag", "remote_access_controlled"),
+    "3.7.5[b]": ("flag", "session_auto_termination_enforced"),
+    # least functionality (3.4.6/3.4.7): define objectives credit from the documented
+    # essential-capabilities baseline; enforce objectives require nonessential services off.
+    "3.4.6[a]": ("flag", "essential_capabilities_defined"),
+    "3.4.6[b]": ("flag", "least_functionality_enforced"),
+    "3.4.7[a]": ("flag", "essential_capabilities_defined"),
+    "3.4.7[b]": ("flag", "essential_capabilities_defined"),
+    "3.4.7[c]": ("flag", "least_functionality_enforced"),
+    "3.4.7[d]": ("flag", "essential_capabilities_defined"),
+    "3.4.7[e]": ("flag", "essential_capabilities_defined"),
+    "3.4.7[f]": ("flag", "least_functionality_enforced"),
+    "3.4.7[g]": ("flag", "essential_capabilities_defined"),
+    "3.4.7[h]": ("flag", "essential_capabilities_defined"),
+    "3.4.7[i]": ("flag", "least_functionality_enforced"),
+    "3.4.7[j]": ("flag", "essential_capabilities_defined"),
+    "3.4.7[k]": ("flag", "essential_capabilities_defined"),
+    "3.4.7[l]": ("flag", "least_functionality_enforced"),
+    "3.4.7[m]": ("flag", "essential_capabilities_defined"),
+    "3.4.7[n]": ("flag", "essential_capabilities_defined"),
+    "3.4.7[o]": ("flag", "least_functionality_enforced"),
+    # software execution control (3.4.8): allow/deny policy documented; enforcement via
+    # signed-repo-only installs, non-privileged users, AppArmor, and noexec shared memory.
+    "3.4.8[a]": ("flag", "software_execution_policy_defined"),
+    "3.4.8[b]": ("flag", "software_execution_policy_defined"),
+    "3.4.8[c]": ("flag", "unauthorized_software_prevented"),
+    # boundary + attack monitoring (Zeek sensor on the enclave segment -> Wazuh SIEM):
+    "3.13.1[c]": ("flag", "boundary_monitoring_enforced"),
+    "3.13.1[d]": ("flag", "boundary_monitoring_enforced"),
+    "3.14.6[a]": ("flag", "attack_monitoring_enforced"),
+    "3.14.6[b]": ("flag", "attack_monitoring_enforced"),
+    "3.14.6[c]": ("flag", "attack_monitoring_enforced"),
+    # baseline + inventory establishment (maintenance objectives [c][f] come from operational review):
+    "3.4.1[a]": ("flag", "config_baseline_established"),
+    "3.4.1[b]": ("flag", "config_baseline_established"),
+    "3.4.1[d]": ("flag", "system_inventory_established"),
+    "3.4.1[e]": ("flag", "system_inventory_established"),
+    # defined audit-review process ([b][c] come from operational audit-log-review):
+    "3.3.3[a]": ("flag", "audit_review_process_defined"),
+    # vulnerability identification ([b] remediation comes from operational flaw-remediation):
+    "3.11.3[a]": ("flag", "vuln_identification_enforced"),
+    # publicly-accessible content control ([d] review comes from operational public-content-review):
+    "3.1.22[a]": ("flag", "public_content_controlled"),
+    "3.1.22[b]": ("flag", "public_content_controlled"),
+    "3.1.22[c]": ("flag", "public_content_controlled"),
+    "3.1.22[e]": ("flag", "public_content_controlled"),
+    # authentication (3.5.2): users via MFA, processes via authenticated user context,
+    # devices via console-only management (no network device access path):
+    "3.5.2[a]": ("flag", "user_authentication_enforced"),
+    "3.5.2[b]": ("flag", "process_authentication_verified"),
+    "3.5.2[c]": ("flag", "network_device_access_disabled"),
+    # security architecture + engineering (3.13.2): documented designs/techniques/principles employed
+    "3.13.2[a]": ("flag", "security_architecture_employed"),
+    "3.13.2[b]": ("flag", "security_architecture_employed"),
+    "3.13.2[c]": ("flag", "security_architecture_employed"),
+    "3.13.2[d]": ("flag", "security_architecture_employed"),
+    "3.13.2[e]": ("flag", "security_architecture_employed"),
+    "3.13.2[f]": ("flag", "security_architecture_employed"),
+    # flaw-remediation report/correct timeframes (3.14.1[a][b][f] already covered):
+    "3.14.1[c]": ("flag", "flaw_timeframes_defined"),
+    "3.14.1[d]": ("flag", "flaws_reported_enforced"),
+    "3.14.1[e]": ("flag", "flaw_timeframes_defined"),
+    # security alerts/advisories (3.14.3): [b] monitored via operational security-advisories-review
+    "3.14.3[a]": ("flag", "security_advisory_response_defined"),
+    "3.14.3[c]": ("flag", "security_advisory_actions_taken"),
+    # media sanitization (3.8.3): LUKS cryptographic erase per NIST SP 800-88
+    "3.8.3[a]": ("flag", "media_sanitization_defined"),
+    "3.8.3[b]": ("flag", "media_sanitization_defined"),
+    # personnel action / access termination + transfer protection (3.9.2)
+    "3.9.2[a]": ("flag", "personnel_action_process_defined"),
+    "3.9.2[b]": ("flag", "personnel_action_process_defined"),
+    "3.9.2[c]": ("flag", "personnel_action_process_defined"),
 }
 
 
@@ -208,6 +354,42 @@ def _make_check(kind, key):
 CHECKS = {oid: _make_check(kind, key) for oid, (kind, key) in CHECK_SPEC.items()}
 # objective id -> the fact key it reads (what a scanner adapter must supply)
 FACT_KEYS = {oid: key for oid, (_kind, key) in CHECK_SPEC.items()}
+
+# --- Evidence provenance (the cause-code layer, ported from the fabric receipt) ---
+# A deterministic verdict is only as trustworthy as HOW its fact was evidenced. Every fact carries an
+# evidence class so a determination receipt discloses its provenance, the way the interpreter fabric
+# stamps a cause byte per evaluate (supporting-evidence #129/#130). Two classes here:
+#   "scanned"  - a tool/command reads the running configuration (services, ports, PAM, crypto, firewall,
+#                kernel, processes). Independently verifiable; the strongest deterministic evidence.
+#   "attested" - the organization asserts the fact, backed by a policy/plan/register/inventory that a
+#                scanner cannot read. Deterministic given the posture, but an assessor must verify the
+#                backing document. NOT tool-verifiable, and the receipt says so.
+# (Operational evidence - a recurring task actually performed - is the control_tasks mechanism, not here.)
+# Default is "scanned"; the ATTESTED set below is the honest minority that rests on documentation.
+ATTESTED_FACTS = frozenset({
+    # organizational programs, plans, and architecture (documented, not scannable)
+    "security_architecture_employed", "personnel_action_process_defined", "media_sanitization_defined",
+    "essential_capabilities_defined", "software_execution_policy_defined", "config_baseline_established",
+    "system_inventory_established", "audit_review_process_defined", "flaw_timeframes_defined",
+    "security_advisory_response_defined", "security_advisory_actions_taken", "public_content_controlled",
+    "identifier_reuse_prohibited_days", "identifier_reuse_prevention_enforced", "flaws_reported_enforced",
+    "session_termination_conditions_defined", "crypto_keys_managed", "mobile_code_controlled",
+    "no_public_components", "shared_resource_isolation",
+    # AI-governance inventories and classifications (org-maintained records, not scannable)
+    "ai_data_inventory_exists", "ai_process_inventory_exists", "ai_user_inventory_exists",
+    "ai_vendor_inventory_exists", "ai_decision_impact_classified", "ai_high_risk_uses_tiered",
+    "ai_prohibited_data_controls_enforced", "approved_ai_tools_list_exists",
+    "unapproved_ai_tool_use_controlled",
+})
+
+
+def evidence_class(objective_id) -> Optional[str]:
+    """The evidence class of the fact backing an objective's check: 'scanned' (tool-verifiable) or
+    'attested' (documentation-backed). None if the objective has no registered check."""
+    key = FACT_KEYS.get(objective_id)
+    if key is None:
+        return None
+    return "attested" if key in ATTESTED_FACTS else "scanned"
 
 
 def machine_checkable(control) -> bool:
@@ -232,6 +414,28 @@ def check_objectives(control, facts) -> dict:
             continue
         out[o["id"]] = bool(r)
     return out
+
+
+def check_objectives_typed(control, facts) -> dict:
+    """Like check_objectives but each decided objective carries its evidence provenance:
+    {objective_id: {"met": bool, "evidence": "scanned"|"attested"}}."""
+    return {oid: {"met": met, "evidence": evidence_class(oid)}
+            for oid, met in check_objectives(control, facts).items()}
+
+
+def _evidence_rollup(objective_ids) -> dict:
+    """Summarize the evidence provenance across a determination's objectives: the per-class objective
+    lists and a single rollup class (weakest-link: 'attested' if any objective rests on attestation)."""
+    by_class = {}
+    for oid in objective_ids:
+        by_class.setdefault(evidence_class(oid) or "unknown", []).append(oid)
+    if "attested" in by_class and len(by_class) > 1:
+        rollup = "mixed"
+    elif "attested" in by_class:
+        rollup = "attested"
+    else:
+        rollup = "scanned"
+    return {"class": rollup, "by_class": {k: sorted(v) for k, v in by_class.items()}}
 
 
 def adjudicate_deterministic(control, req) -> Optional[dict]:
@@ -263,4 +467,4 @@ def adjudicate_deterministic(control, req) -> Optional[dict]:
     else:
         status, gap = "not-met", "no objectives satisfied by configuration facts"
     return {"status": status, "unmet_objective_ids": unmet, "gap_summary": gap,
-            "method": "deterministic"}
+            "method": "deterministic", "evidence": _evidence_rollup(results.keys())}

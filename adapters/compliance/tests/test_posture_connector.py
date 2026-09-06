@@ -7,13 +7,22 @@ import compliance_adapter as ca
 import deterministic_checks as dc
 import posture_connector as pc
 
+# The reviewed machine-checkable set. Grew from 26 to 50 as the deterministic check registry was
+# extended (access control, audit, config mgmt, identification, least functionality, boundary
+# monitoring, device access, media, personnel, flaw remediation). Each control's verdict is decidable
+# from posture facts alone; deterministic_checks.evidence_class() discloses whether each fact is
+# tool-scanned or documentation-attested.
 CHECKABLE = {
-    "3.1.8", "3.1.9", "3.1.10", "3.1.11", "3.1.19",
-    "3.3.7",
-    "3.5.3", "3.5.4", "3.5.5", "3.5.6", "3.5.7", "3.5.8", "3.5.9", "3.5.10", "3.5.11",
-    "3.8.7", "3.8.8",
-    "3.13.6", "3.13.7", "3.13.9", "3.13.11", "3.13.15", "3.13.16",
-    "3.14.2", "3.14.4", "3.14.5"
+    "3.1.1", "3.1.2", "3.1.8", "3.1.9", "3.1.10", "3.1.11", "3.1.14", "3.1.19",
+    "3.3.2", "3.3.6", "3.3.7", "3.3.8",
+    "3.4.2", "3.4.6", "3.4.7", "3.4.8",
+    "3.5.1", "3.5.2", "3.5.3", "3.5.4", "3.5.5", "3.5.6", "3.5.7", "3.5.8", "3.5.9", "3.5.10", "3.5.11",
+    "3.7.5",
+    "3.8.2", "3.8.3", "3.8.7", "3.8.8",
+    "3.9.2",
+    "3.13.1", "3.13.2", "3.13.4", "3.13.5", "3.13.6", "3.13.7", "3.13.9", "3.13.10", "3.13.11",
+    "3.13.13", "3.13.15", "3.13.16",
+    "3.14.1", "3.14.2", "3.14.4", "3.14.5", "3.14.6"
 }
 
 
