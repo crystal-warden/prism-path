@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 # arm_uart_auto.py - board-side: load the PL-native UART overlay, load the demo policy + its per-node
 # colors into the fabric, and ARM auto mode. After this the fabric closes the whole loop in the PL:
 # a byte on Pmod JA1 (from the ESP-NOW bridge) -> uart_rx -> field -> Level M interpreter -> per-node

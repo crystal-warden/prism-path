@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: Apache-2.0
 # wcet_rewitness.sh — WCET-on-pins for hyst_band (the last gate before the commits + row #123).
 #
 # The finale bitstream has no tap pins, so this runs on the TAPPED ppt_datapath overlay (Pmod JB

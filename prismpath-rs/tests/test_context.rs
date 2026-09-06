@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: Apache-2.0
+// Copyright 2026 Crystal Warden Supply Chain Labs LLC
 //! Context-ledger cross-language gate: replay `conformance/context.json` — every segment
 //! leaf/chain, head, Merkle root, and the bound manifest must match the Python reference
 //! byte-for-byte; tamper and privacy properties re-proven on this side.

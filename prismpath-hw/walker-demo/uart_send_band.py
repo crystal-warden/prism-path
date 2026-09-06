@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 # uart_send_band.py - standalone byte source for the PL-native UART demo. Sends band bytes over a
 # serial port at 115200 8N1 - the SAME bytes the ESP-NOW bridge sends - so the fabric's UART decode
 # can be proven WITHOUT the mesh: wire any USB-serial TX to Arty Z7-20 Pmod JA1 (Y18) + a JA GND pin.

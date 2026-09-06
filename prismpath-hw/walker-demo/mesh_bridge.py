@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 # mesh_bridge.py - gx10 side of the walker -> mesh -> FPGA hop. Reads a FIXED mesh node's serial,
 # pulls the WALKER's band out of its "R 2 c1 t<tick> v<band>" receive lines (role 2 = walker,
 # class 1 = band tier), and prints the band to stdout on change - to be piped into the board's

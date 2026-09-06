@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 # sim_motion.py - overnight stand-in for shaking the walker: emit a band sweep (0..4 and back) so
 # the full board pipe (led_from_band.py) exercises every decision + LED color end to end. Replaces
 # the bridge in the pipe; the bridge itself is separately proven to emit the walker's real band.

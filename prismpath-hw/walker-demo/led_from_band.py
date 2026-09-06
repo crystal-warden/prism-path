@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 # led_from_band.py - the FPGA end of the walker->mesh->FPGA hop. Reads walker motion BAND values
 # (0..4) on stdin (one per line, relayed by gx10 off a fixed mesh node), maps each to a pot-field
 # value, evaluates it through the datapath overlay's Level M interpreter IN THE FABRIC (PS-mode

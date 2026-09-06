@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 # measure_zeck_codec.py — board-side: MEASURE the native Zeckendorf codec on the physical Zynq fabric,
 # closing C2's "FPGA shift-register codec unbuilt" caveat. Loads ppt_zeck.bit and:
 #   (1) runs the in-fabric self-test sweep n=1..MAX  -> decode(encode(n))==n, counted in the PL;

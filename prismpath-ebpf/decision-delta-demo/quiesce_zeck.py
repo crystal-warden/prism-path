@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Wedge-safe quiesce: disarm a resident auto-mode PPT design before a different overlay is loaded.
 
 Reprogramming the PL while an auto-mode design is actively mastering the AXI bus hard-wedges the ARM

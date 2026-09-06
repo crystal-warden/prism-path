@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """drive_scenario.py - the dev-station end of the decision-delta pipeline.
 
 Sends raw control EVENTS over UDP to the Protectli forwarder (which runs the signed selector and

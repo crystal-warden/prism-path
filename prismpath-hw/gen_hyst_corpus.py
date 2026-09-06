@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """gen_hyst_corpus.py — freeze the hyst_band sequence corpus (the fabric resident-FSM oracle).
 
 The stateful selector discipline applied to a continuous level: a stream of pot samples is one

@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 # read_field.py - read the native overlay's POT_NOW register (the ACTUAL field the fabric decides on:
 # the fabric-decoded band value once the walker's frames arrive over JA1, else the XADC pot). Pure
 # MMIO read, no overlay reload, so it does not disturb the armed auto loop.

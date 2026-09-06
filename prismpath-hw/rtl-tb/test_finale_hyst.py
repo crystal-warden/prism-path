@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """test_finale_hyst.py — the fabric-native resident FSM vs the frozen hyst_band corpus.
 
 The tb plays the PS role against the full finale datapath: it replays the signed policy's exact

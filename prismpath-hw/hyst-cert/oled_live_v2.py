@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """oled_live_v2.py — the OLED decision readout, resident-band aware.
 
 v2 reads the band from CUR_NODE (0x30) when the fabric is armed stateful, so the glass shows the

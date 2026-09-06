@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 # standalone_hyst_demo.py - DEMO boot: the stateful finale from nothing but power. v2: the OLED is
 # rendered IN-PROCESS (import oled_live_v2), so exactly ONE process touches the PL — no concurrent
 # MMIO pollers (mitigation for the bench wedge pattern seen with two pollers running).
