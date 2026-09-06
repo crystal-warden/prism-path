@@ -59,7 +59,7 @@ def test_full_posture_assesses_all_checkable_none_deferred():
     assert by_id["3.5.3"]["status"] == "partially-met"
     assert by_id["3.5.3"]["unmet_objective_ids"] == ["3.5.3[d]"]
     assert all(r["method"] == "deterministic" for r in res["results"])
-    assert res["boundary"] == "warden-node-01 CUI enclave host"
+    assert res["boundary"] == "example-host CUI enclave host"
     assert res["provenance"]["source"] == "example-scan"
 
 

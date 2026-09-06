@@ -15,7 +15,7 @@ def _ir():
 FULL_ANSWERS = {
     "org_name": "Crystal Warden Supply Chain Labs LLC",
     "system_name": "PrismPath CUI Enclave",
-    "boundary": "the two-VM enclave on warden-node-01",
+    "boundary": "the CUI enclave on example-host",
     "cui_description": "controlled technical data under DFARS 252.204-7012",
     "ir_lead_role": "the Security Lead",
     "internal_officials": "the Owner and the Security Lead",

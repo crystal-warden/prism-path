@@ -1,6 +1,6 @@
 {
-  "boundary": "warden-node-01 CUI enclave host",
-  "host": "warden-node-01",
+  "boundary": "example-host CUI enclave host",
+  "host": "example-host",
   "provenance": {
     "source": "example-scan",
     "collector": "manual-config-export",
