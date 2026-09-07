@@ -1,0 +1,52 @@
+{
+  "doc_id": "texas_ai_oversight_accountability_policy",
+  "title": "AI Oversight, Inventory, and Accountability Policy (Texas)",
+  "family": "TX-OVS",
+  "standard": "texas_ai",
+  "coverage_mode": "partial",
+  "controls": ["TX-INV-1", "TX-OVS-1", "TX-ACCT-1", "TX-ACCT-3"],
+  "org_profile_keys": ["org_name", "system_name", "boundary"],
+  "sections": [
+    {
+      "id": "purpose",
+      "heading": "1. Purpose and Scope",
+      "objectives": [],
+      "questions": [],
+      "body": "This policy governs AI inventory, human oversight of consequential decisions, and accountability reporting for {org_name} within {boundary}, aligned to Texas SB 1964. Aligned to the statute; not legal advice."
+    },
+    {
+      "id": "inventory",
+      "heading": "2. AI System Inventory",
+      "objectives": ["TX-INV-1[a]"],
+      "questions": [
+        {"key": "inventory_owner", "prompt": "Who maintains the AI system inventory?"}
+      ],
+      "body": "{org_name} maintains an inventory of the AI systems it develops, procures, or deploys, recording for each an owner, purpose, and risk classification. The inventory is maintained by {inventory_owner}."
+    },
+    {
+      "id": "human_oversight",
+      "heading": "3. Human Oversight of Consequential Decisions",
+      "objectives": ["TX-OVS-1[a]"],
+      "questions": [
+        {"key": "oversight_threshold", "prompt": "What defines a consequential decision requiring meaningful human review in your context?"}
+      ],
+      "body": "For consequential decisions ({oversight_threshold}), AI output is not the sole principal basis: a meaningful human review, oversight, or escalation path is defined and required. Where the enforcement layer determines that an AI output falls outside authorized conditions, it abstains or escalates to human review rather than deciding autonomously."
+    },
+    {
+      "id": "accountability_reporting",
+      "heading": "4. Accountability Reporting",
+      "objectives": ["TX-ACCT-1[a]"],
+      "questions": [
+        {"key": "acct_report_cadence", "prompt": "On what cadence are AI accountability reports produced?"}
+      ],
+      "body": "Accountability reports describing the use of, limitations of, and safeguards for {org_name}'s AI systems are produced on a cadence of {acct_report_cadence}."
+    },
+    {
+      "id": "violation_reporting",
+      "heading": "5. Violation Reporting (governmental)",
+      "objectives": ["TX-ACCT-3[a]"],
+      "questions": [],
+      "body": "Where {org_name} is a governmental entity, AI-related violations are reported to the Department of Information Resources and the Office of the Attorney General as required by law."
+    }
+  ]
+}

@@ -1,0 +1,55 @@
+{
+  "doc_id": "texas_ai_risk_management_policy",
+  "title": "AI Risk-Management and Impact-Assessment Policy (Texas)",
+  "family": "TX-RISK",
+  "standard": "texas_ai",
+  "coverage_mode": "partial",
+  "controls": ["TX-RISK-1", "TX-RISK-2", "TX-RISK-3", "TX-SAFE-1", "TX-SAFE-2"],
+  "org_profile_keys": ["org_name", "system_name", "boundary"],
+  "sections": [
+    {
+      "id": "purpose",
+      "heading": "1. Purpose and Scope",
+      "objectives": [],
+      "questions": [],
+      "body": "This policy establishes how {org_name} manages AI risk and assesses AI systems before deployment for {system_name} within {boundary}, aligned to Texas SB 1964 and to the NIST AI Risk Management Framework (the TRAIGA safe-harbor standard). Aligned to the statutes; not legal advice."
+    },
+    {
+      "id": "impact_assessment",
+      "heading": "2. Pre-deployment Impact Assessment",
+      "objectives": ["TX-RISK-1[a]", "TX-RISK-1[b]", "TX-RISK-1[c]", "TX-RISK-2[a]", "TX-RISK-2[c]"],
+      "questions": [
+        {"key": "assessment_owner", "prompt": "Who conducts and signs off the pre-deployment AI impact assessment?"},
+        {"key": "assessment_template", "prompt": "What template or method is used for the impact assessment?"}
+      ],
+      "body": "Before an AI system is deployed, {assessment_owner} completes an impact assessment using {assessment_template} that documents: risks of unlawful harm; the system's limitations; the information-governance practices applied; and, for heightened-scrutiny systems, the known security risks and the transparency measures in place. The assessment is retained and confidential to the extent permitted by law."
+    },
+    {
+      "id": "risk_framework",
+      "heading": "3. Risk-Management Framework and Acceptable Use",
+      "objectives": ["TX-RISK-3[a]", "TX-RISK-3[b]"],
+      "questions": [
+        {"key": "rmf_standard", "prompt": "Which risk-management framework is adopted (for example, NIST AI RMF 1.0)?"}
+      ],
+      "body": "{org_name} adopts {rmf_standard} as its AI risk-management framework and maintains an AI acceptable-use policy that governs which AI uses are permitted, restricted, or prohibited."
+    },
+    {
+      "id": "safe_harbor",
+      "heading": "4. Recognized-Standard Adoption (Safe-Harbor Posture)",
+      "objectives": ["TX-SAFE-1[a]"],
+      "questions": [
+        {"key": "adoption_authority", "prompt": "Who formally approved adoption of the recognized standard, and when?"}
+      ],
+      "body": "{org_name} has formally adopted the NIST AI Risk Management Framework (or a comparable recognized standard), approved by {adoption_authority}, and operates its AI governance under it. Operation is evidenced by a completed governance assessment mapped to the standard, establishing the safe-harbor posture that TRAIGA rewards."
+    },
+    {
+      "id": "continuous_evaluation",
+      "heading": "5. Continuous Evaluation Cadence",
+      "objectives": ["TX-SAFE-2[a]"],
+      "questions": [
+        {"key": "eval_cadence", "prompt": "On what cadence are deployed AI systems re-evaluated (for example, quarterly, or on each material change)?"}
+      ],
+      "body": "{org_name} re-evaluates its deployed AI systems on a cadence of {eval_cadence}, and documents the improvements made as a result. This satisfies the SB 1964 expectation of a defined evaluation frequency with documented improvement."
+    }
+  ]
+}

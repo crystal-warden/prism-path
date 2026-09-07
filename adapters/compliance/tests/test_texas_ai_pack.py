@@ -98,3 +98,15 @@ def test_standard_notice_marks_unvalidated():
     ca.use_standard("texas_ai")
     n = ca.standard_notice()
     assert n["validated"] is False and "REVIEW ASSISTANCE" in n["notice"]
+
+
+def test_documented_plane_is_complete():
+    """Every documented objective in the catalog has a policy template covering it (the pack ships a
+    template for all of its documentation duties, not a subset)."""
+    tx = json.load(open(os.path.join(HERE, "catalog", "texas_ai.json")))["controls"]
+    docobj = {o["id"] for c in tx.values() for o in c["objectives"] if o["mechanism"] == "documented"}
+    covered = set()
+    for f in glob.glob(os.path.join(HERE, "sop_specs", "texas_*.json")):
+        for sec in json.load(open(f))["sections"]:
+            covered |= set(sec.get("objectives", []))
+    assert docobj <= covered, f"documented objectives without a template: {sorted(docobj - covered)}"
