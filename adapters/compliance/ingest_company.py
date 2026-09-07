@@ -14,10 +14,16 @@ import os, sys, re, math, json, collections
 HERE = os.path.dirname(os.path.abspath(__file__)); sys.path.insert(0, HERE)
 import compliance_adapter as ca
 
-ca.use_standard("nist_800171_r2")
-COMPANY = os.path.join(HERE, "efficacy", "company")
-TOPK = 3
-MAX_EXCERPT = 1600
+# ============================================================================
+# CONFIGURE -- point COMPANY at your own free-form company-docs directory, then run.
+# ============================================================================
+COMPANY = os.path.join(HERE, "efficacy", "company")  # your company documentation directory (SAMPLE default)
+STANDARD = "nist_800171_r2"                           # the control catalog to map against
+TOPK = 3                                              # top-K control matches per doc (tuning)
+MAX_EXCERPT = 1600                                    # excerpt length (tuning)
+# ============================================================================
+
+ca.use_standard(STANDARD)
 STOP = set("the a an and or of to in for on with is are be as by at from this that your you we our it "
            "will shall must should may can not no all any each per via which who whom whose into within "
            "system information data policy procedure control controls access".split())

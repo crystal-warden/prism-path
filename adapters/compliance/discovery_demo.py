@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
-"""#67 proof (deterministic — no gemma): the discovery loop now generates catalog-driven,
+"""(SAMPLE, fixed illustration) #67 proof (deterministic — no gemma): the discovery loop now generates catalog-driven,
 objective-specific evidence requests from the Translation layer.
   (1) empty bundle for 3.1.7 -> a request per objective, built from the catalog.
   (2) partial case: only the unmet objectives of 3.1.12 -> a targeted subset."""
