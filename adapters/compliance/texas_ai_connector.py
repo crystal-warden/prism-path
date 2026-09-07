@@ -5,8 +5,9 @@
 runtime evidence, not a hand-typed posture.
 
 The seven config objectives of the Texas AI pack are the ones PrismPath can *prove* at the decision
-boundary. This connector runs a governance decision flow through the real engine and reads the
-resulting RunResult causes (prismpath.causes) to emit the facts the deterministic checks consume:
+boundary. This connector reads real decision receipts (or runs a governance flow through the real
+engine to produce them) and reads the resulting RunResult causes to emit the facts the deterministic
+checks consume:
 
   human_oversight_escalation_enforced <- a consequential request stops as needs_human (route:needs-human
                                           or route:below-human-floor): AI output is not the sole basis.
@@ -18,7 +19,25 @@ resulting RunResult causes (prismpath.causes) to emit the facts the deterministi
 Facts PrismPath does not natively enforce (generative guardrails, disclosure delivery) are deliberately
 NOT emitted here; they remain the org's attestation via other tooling. Honest by omission.
 """
-import os, sys
+import os, sys, json
+
+# ============================================================================
+# CONFIGURE — set these to your own environment, then run. Nothing below this
+# block needs editing to point the connector at your own decision engine.
+# ----------------------------------------------------------------------------
+# Path to YOUR decision-receipt stream: one JSON object per line (.ndjson), each with at least
+# {"stopped": ..., "version": ...} (and optionally "cause"). None -> produce receipts by running the
+# flow below through the real engine (the built-in demo).
+RECEIPTS_PATH = None
+# Path to YOUR governance decision flow (.md, PrismPath flow syntax). Used only when RECEIPTS_PATH is
+# None. None -> use the built-in demo flow (DEMO_FLOW).
+GOVERNANCE_FLOW_PATH = None
+# The governing flow/policy version stamped on receipts (also used to tag demo-flow receipts).
+FLOW_VERSION = "tx-governance-flow@1"
+# Is the governing version authorized/signed before use in your environment?
+VERSION_AUTHORIZED = True
+# ============================================================================
+
 _ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
@@ -26,19 +45,16 @@ from prismpath.parser import parse
 from prismpath.engine import run
 from prismpath import causes
 
-# A minimal governance decision flow: authorized low-risk actions proceed; anything else falls
-# through to default-deny (refused). A consequential decision is escalated to a human by the worker
-# itself (route:needs-human), so AI output is never the sole basis for a consequential decision.
-GOVERNANCE_FLOW = """
+# --- Built-in demo (SAMPLE) below: a minimal governance decision flow used only when you have not
+#     pointed RECEIPTS_PATH/GOVERNANCE_FLOW_PATH at your own artifacts. ---
+DEMO_FLOW = """
 ## intake
 Classify and route the AI-influenced decision request.
 -> permit: when action in ("read", "summarize", "notify")
 ## permit
 The authorized low-risk action proceeds.
 """
-
-# Representative requests that exercise permit / escalate / refuse.
-SAMPLE_REQUESTS = [
+DEMO_REQUESTS = [
     {"label": "authorized-low-risk", "action": "summarize", "consequential": False},
     {"label": "consequential-decision", "action": "approve_benefit", "consequential": True},
     {"label": "prohibited-or-unrecognized", "action": "exfiltrate", "consequential": False},
@@ -46,8 +62,8 @@ SAMPLE_REQUESTS = [
 
 
 def _agent_for(request):
-    """Worker stub: emits the request fields so the deterministic guards can route. For a
-    consequential decision the worker explicitly requests a human (route:needs-human), so the AI
+    """Worker stub for the demo flow: emits the request fields so the deterministic guards can route.
+    For a consequential decision the worker explicitly requests a human (route:needs-human), so the AI
     output is not the sole principal basis for the decision."""
     def agent(node, instruction, state):
         if request.get("consequential"):
@@ -56,44 +72,51 @@ def _agent_for(request):
     return agent
 
 
-def collect_receipts(flow=GOVERNANCE_FLOW, version="tx-governance-flow@1"):
-    """Run each sample request through the real engine; return signed-style receipts."""
+def _receipts_from_demo(flow, version):
     g = parse(flow)
     receipts = []
-    for req in SAMPLE_REQUESTS:
+    for req in DEMO_REQUESTS:
         r = run(g, _agent_for(req))
-        receipts.append({
-            "label": req["label"],
-            "stopped": r.stopped,
-            "cause": r.cause,
-            "cause_name": causes.name(r.cause) if hasattr(causes, "name") else None,
-            "cause_class": causes.cause_class(r.cause),
-            "version": version,          # the governing flow version travels on the receipt
-            "path": r.path,
-        })
+        receipts.append({"label": req["label"], "stopped": r.stopped, "cause": r.cause,
+                         "cause_class": causes.cause_class(r.cause), "version": version,
+                         "path": r.path})
     return receipts
 
 
-def derive_facts(flow=GOVERNANCE_FLOW, version="tx-governance-flow@1", authorized=True):
-    """Derive the Texas config facts from real RunResults. Returns (facts, receipts)."""
-    receipts = collect_receipts(flow, version)
-    escalated = any(r["stopped"] == "needs_human" for r in receipts)
-    refused = any(r["stopped"] == "stuck" for r in receipts)
+def _receipts_from_file(path):
+    with open(path) as fh:
+        return [json.loads(line) for line in fh if line.strip()]
+
+
+def collect_receipts():
+    """Return the receipt stream from your configured source: your receipts file, else your flow run
+    through the real engine, else the built-in demo flow."""
+    if RECEIPTS_PATH:
+        return _receipts_from_file(RECEIPTS_PATH)
+    flow = open(GOVERNANCE_FLOW_PATH).read() if GOVERNANCE_FLOW_PATH else DEMO_FLOW
+    return _receipts_from_demo(flow, FLOW_VERSION)
+
+
+def derive_facts():
+    """Derive the Texas config facts from the configured receipt source. Returns (facts, receipts)."""
+    receipts = collect_receipts()
+    escalated = any(r.get("stopped") == "needs_human" for r in receipts)
+    refused = any(r.get("stopped") == "stuck" for r in receipts)
     facts = {
         "human_oversight_escalation_enforced": escalated,
         "prohibited_use_refusal_enforced": refused,
         "decision_version_attribution": bool(receipts) and all(r.get("version") for r in receipts),
-        "governing_version_authorized": bool(version) and bool(authorized),
+        "governing_version_authorized": bool(FLOW_VERSION) and bool(VERSION_AUTHORIZED),
     }
     return facts, receipts
 
 
 if __name__ == "__main__":
-    import json
     facts, receipts = derive_facts()
-    print("=== receipts from the real engine ===")
+    src = RECEIPTS_PATH or GOVERNANCE_FLOW_PATH or "built-in demo flow"
+    print(f"=== receipts (source: {src}) ===")
     for r in receipts:
-        print(f"  {r['label']:26} stopped={r['stopped']:11} cause={r['cause']} "
-              f"({r['cause_class']}) version={r['version']}")
+        print(f"  {r.get('label',''):26} stopped={r.get('stopped'):11} cause={r.get('cause')} "
+              f"({r.get('cause_class')}) version={r.get('version')}")
     print("\n=== derived Texas config facts ===")
     print(json.dumps(facts, indent=2))

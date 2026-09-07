@@ -64,6 +64,20 @@ differentiator**, the controls PrismPath can actually enforce and prove, not jus
 `ai_governance__nist_ai_rmf`). Running the `ai_governance` assessment and mapping it forward evidences the
 recognized-standard adoption that TRAIGA rewards with safe-harbor protection (TX-SAFE-1).
 
+## Configuring for your environment (sample vs. generic)
+
+Scripts that an adopter is meant to adapt expose their inputs the same way the policy templates do:
+a labelled `CONFIGURE` block at the top of the file, so you change a few variables and run, without
+chasing through the code. When a variable is left unset, the script falls back to a clearly-labelled
+built-in **sample** so it still runs out of the box.
+
+- `texas_ai_connector.py` — `CONFIGURE` block: point `RECEIPTS_PATH` at your own decision-receipt
+  stream, or `GOVERNANCE_FLOW_PATH` at your own flow; set `FLOW_VERSION` / `VERSION_AUTHORIZED`.
+  Unset → the built-in demo flow runs through the real engine.
+- `assess_texas.py` — `CONFIGURE` block: set `ORG`, point `OPERATIONAL_COMPLETIONS_PATH` at your
+  performed-task records, choose `ACTORS`. Unset → the built-in sample record.
+- `demo_texas_ai.py` — a **SAMPLE** with fixed values (not configurable); illustration only.
+
 ## Status
 
 Built: the control catalog (`catalog/texas_ai.json`, 21 controls / 9 families, registered as standard

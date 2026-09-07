@@ -1,43 +1,61 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
-"""Complete Texas AI Governance Pack assessment: the whole pack working across all three planes,
-for a commercial deployer and a governmental entity.
+"""Complete Texas AI Governance Pack assessment across all three planes, for the actor(s) you choose.
 
   applicability  -> which controls bind this actor (the rest N/A, justified)
-  config plane   -> facts DERIVED from real PrismPath engine runs (texas_ai_connector)
-  operational    -> performed-task records (sample below)
-  documented     -> the pack's policy templates, generated for the org
+  config plane   -> facts DERIVED from real PrismPath engine runs / your receipts (texas_ai_connector)
+  operational    -> your performed-task records
+  documented     -> the pack's policy templates, generated for your org
 
-Every objective is scored by its declared mechanism, and its evidence provenance is reported
-(engine-proven / operational-record / policy-provided). Output is a per-actor verdict tally plus the
-review-assistance notice. Nothing here is a legal determination; see the notice.
+Every objective is scored by its declared mechanism, and its evidence provenance is reported. Output
+is a per-actor verdict tally plus the review-assistance notice. Nothing here is a legal determination.
 
 Run:  python adapters/compliance/assess_texas.py
 """
 import os, sys, json, glob
+
+# ============================================================================
+# CONFIGURE — set these to your organization, then run. To point the config plane
+# at your own decision engine, edit the CONFIGURE block in texas_ai_connector.py.
+# ----------------------------------------------------------------------------
+# Your organization profile (fills the generated policy templates).
+ORG = {"org_name": "Example Org",
+       "system_name": "the AI decision service",
+       "boundary": "the AI decision boundary"}
+# Path to YOUR operational-completions file: a JSON list of performed operational objective ids,
+# e.g. ["TX-INV-1[b]", "TX-RISK-1[d]", ...]. None -> use the built-in SAMPLE set below.
+OPERATIONAL_COMPLETIONS_PATH = None
+# Which actor(s) to assess. Choose from the pack's actor types (commercial / healthcare /
+# government / gov_vendor).
+ACTORS = ("commercial", "government")
+# Built-in SAMPLE operational record (used only when OPERATIONAL_COMPLETIONS_PATH is None).
+# Deliberately not exhaustive, so the sample assessment shows honest partials rather than all-green.
+SAMPLE_OPERATIONAL_PERFORMED = [
+    "TX-PROHIB-2[b]", "TX-INV-1[b]", "TX-RISK-1[d]", "TX-RISK-2[b]",
+    "TX-ACCT-1[b]", "TX-ACCT-2[b]", "TX-VEND-1[b]", "TX-SAFE-1[b]", "TX-OVS-1[c]",
+]
+# ============================================================================
+
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import compliance_adapter as ca
 import deterministic_checks as dc
 import sop_generator as sg
 import texas_ai_connector as tx
 
-ORG = {"org_name": "Example Org", "system_name": "the AI decision service",
-       "boundary": "the AI decision boundary"}
+_HERE = os.path.dirname(os.path.abspath(__file__))
 
-# A sample record of operational objectives this org has performed and evidenced. Deliberately not
-# exhaustive: a couple are left open so the assessment shows honest partials, not all-green.
-OPERATIONAL_PERFORMED = {
-    "TX-PROHIB-2[b]", "TX-INV-1[b]", "TX-RISK-1[d]", "TX-RISK-2[b]",
-    "TX-ACCT-1[b]", "TX-ACCT-2[b]", "TX-VEND-1[b]", "TX-SAFE-1[b]", "TX-OVS-1[c]",
-    # left OPEN (not yet performed): TX-DISC-3[b], TX-CHG-1[b], TX-SAFE-2[b]
-}
+
+def operational_performed():
+    if OPERATIONAL_COMPLETIONS_PATH:
+        return set(json.load(open(OPERATIONAL_COMPLETIONS_PATH)))
+    return set(SAMPLE_OPERATIONAL_PERFORMED)
 
 
 def documented_coverage():
     """Controls covered by a generated policy template (the documented plane)."""
     covered = set()
-    for f in glob.glob(os.path.join(os.path.dirname(os.path.abspath(__file__)), "sop_specs", "texas_*.json")):
+    for f in glob.glob(os.path.join(_HERE, "sop_specs", "texas_*.json")):
         covered |= set(json.load(open(f))["controls"])
     return covered
 
@@ -62,13 +80,13 @@ def assess_control(cid, config_facts, documented, operational):
     return status, objs
 
 
-def assess_actor(actor, config_facts, documented):
+def assess_actor(actor, config_facts, documented, operational):
     ca.use_standard("texas_ai")
     appl = ca.applicability_determination(actor)
     tally = {"met": 0, "partially-met": 0, "not-met": 0, "not-applicable": appl["counts"]["not_applicable"]}
     rows = []
     for cid in appl["applicable"]:
-        status, objs = assess_control(cid, config_facts, documented, OPERATIONAL_PERFORMED)
+        status, objs = assess_control(cid, config_facts, documented, operational)
         tally[status] += 1
         rows.append((cid, status, objs))
     return appl, tally, rows
@@ -79,31 +97,24 @@ def main():
     notice = ca.standard_notice()
     print("#" * 78); print(notice["notice"]); print("#" * 78)
 
-    # documented plane: confirm the policy templates actually generate for this org
     documented = documented_coverage()
-    print(f"\nDocumented plane: {len(documented)} controls covered by generated policy templates "
-          f"{sorted(documented)}")
-    sample = sg.generate(json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)),
-             "sop_specs", "texas_material_change_policy.json"))),
-             {**ORG, "material_change_criteria": "a model version change, a new data source, or an "
-              "expanded decision scope", "reassessment_owner": "the AI system owner"})
-    print(f"  (sample generated policy '{sample['markdown'].splitlines()[0]}', "
-          f"{len(sample['markdown'].splitlines())} lines, unanswered={sample['unanswered']})")
+    operational = operational_performed()
+    print(f"\nDocumented plane: {len(documented)} controls covered by generated policy templates")
+    print(f"Operational plane: {len(operational)} performed objective(s) "
+          f"({'your file' if OPERATIONAL_COMPLETIONS_PATH else 'built-in sample'})")
 
-    # config plane: derive from the real engine
     config_facts, receipts = tx.derive_facts()
-    print(f"\nConfig plane (engine-derived): {sum(1 for v in config_facts.values() if v)} facts proven "
-          f"from {len(receipts)} real engine receipts")
+    print(f"Config plane (engine-derived): {sum(1 for v in config_facts.values() if v)} facts proven "
+          f"from {len(receipts)} receipt(s)")
 
-    for actor in ("commercial", "government"):
-        appl, tally, rows = assess_actor(actor, config_facts, documented)
-        print(f"\n{'='*78}\nACTOR: {actor}")
-        print(f"  {tally}")
+    for actor in ACTORS:
+        appl, tally, rows = assess_actor(actor, config_facts, documented, operational)
+        print(f"\n{'='*78}\nACTOR: {actor}   {tally}")
         for cid, status, objs in rows:
             prov = ",".join(sorted({ev for _, ev in objs.values()}))
             print(f"    {cid:14} {status:14} [{prov}]")
     print(f"\n{'='*78}\nReview assistance only. Documented objectives shown as policy-provided still "
-          "require\nLLM/human adjudication of the policy content in production; counsel review is the gate.")
+          "require\nadjudication of the policy content in production; counsel review is the gate.")
 
 
 if __name__ == "__main__":

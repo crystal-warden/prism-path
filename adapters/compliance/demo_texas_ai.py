@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
-"""Texas AI Governance Pack demo, end to end: the config facts are DERIVED from real PrismPath
-engine runs (texas_ai_connector), not a hand-typed posture. Shows, for two actors:
+"""Texas AI Governance Pack demo (SAMPLE) -- fixed sample values, no configuration. For a
+CONFIGURABLE assessment against your own org and evidence, use assess_texas.py (edit its CONFIGURE
+block at the top). This file exists to illustrate the pack end to end.
+
+End to end: the config facts are DERIVED from real PrismPath engine runs (texas_ai_connector), not a
+hand-typed posture. Shows, for two actors:
 
   1. The release notice (review assistance, not validated).
   2. Real engine receipts and the config facts they prove (oversight escalation, prohibited-use
