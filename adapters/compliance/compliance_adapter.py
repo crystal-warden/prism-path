@@ -78,6 +78,28 @@ def actor_types():
     catalog is not applicability-tagged (all controls then apply to every actor)."""
     return _catalog().get("_meta", {}).get("actor_types", {})
 
+# Standing release notice for review-assistance catalogs (e.g. the Texas AI pack). Any report or
+# demo that runs an assessment should surface this so the not-validated status travels with output.
+REVIEW_ASSISTANCE_NOTICE = (
+    "NOTICE: This assessment is REVIEW ASSISTANCE ONLY. It is NOT a determination of legal "
+    "compliance and NOT legal advice. Controls, statutory citations, and applicability are curated "
+    "and NOT fully validated; they must be verified against the enrolled statutes and qualified "
+    "legal counsel before any reliance or external use. The organization, its counsel, and its "
+    "assessors remain accountable for compliance."
+)
+
+def standard_notice():
+    """The release/legal notice for the active standard: the standing review-assistance banner plus
+    the catalog's own disclaimer and authority statement. Reports and demos should emit this."""
+    meta = _catalog().get("_meta", {})
+    return {
+        "standard": _ACTIVE,
+        "notice": REVIEW_ASSISTANCE_NOTICE,
+        "disclaimer": meta.get("disclaimer"),
+        "authority": meta.get("authority"),
+        "validated": False,
+    }
+
 def applicable_controls(actor=None):
     """Control ids in the active catalog that apply to `actor`, per each control's `applies_to` tag.
     A control with no `applies_to` is universal (applies to every actor). actor=None returns all."""

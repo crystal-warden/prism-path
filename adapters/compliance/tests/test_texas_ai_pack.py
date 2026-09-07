@@ -79,3 +79,22 @@ def test_policy_specs_reference_real_objectives():
         for sec in s["sections"]:
             for oid in sec.get("objectives", []):
                 assert oid in allobj, f"{s['doc_id']} references unknown objective {oid}"
+
+
+def test_runtime_connector_derives_config_facts_from_real_engine_runs():
+    import texas_ai_connector as tx
+    facts, receipts = tx.derive_facts()
+    # three representative outcomes actually came out of the real engine
+    stops = {r["stopped"] for r in receipts}
+    assert {"terminal", "needs_human", "stuck"} <= stops
+    # and they derive the four decision-control config facts (not hand-typed)
+    assert facts["human_oversight_escalation_enforced"] is True   # a needs_human receipt exists
+    assert facts["prohibited_use_refusal_enforced"] is True       # a stuck (default-deny) receipt exists
+    assert facts["decision_version_attribution"] is True
+    assert facts["governing_version_authorized"] is True
+
+
+def test_standard_notice_marks_unvalidated():
+    ca.use_standard("texas_ai")
+    n = ca.standard_notice()
+    assert n["validated"] is False and "REVIEW ASSISTANCE" in n["notice"]

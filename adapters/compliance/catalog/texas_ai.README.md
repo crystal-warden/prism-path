@@ -1,5 +1,11 @@
 # PrismPath Texas AI Governance Pack
 
+> **NOTICE — REVIEW ASSISTANCE ONLY, NOT VALIDATED.** This pack is a work aid for operationalizing and
+> reviewing AI-governance controls. It is **not a determination of legal compliance and not legal
+> advice.** Control text, statutory citations, and applicability are curated and **not fully
+> validated**; verify them against the enrolled statutes and qualified legal counsel before any
+> reliance or external use. Released in this state deliberately, to assist review, not to certify.
+
 Operationalizes controls aligned to Texas AI governance law and produces evidence of how they were
 applied. A content pack on the PrismPath deterministic GRC engine, not a separate product.
 
