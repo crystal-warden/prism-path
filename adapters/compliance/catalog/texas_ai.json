@@ -1,0 +1,306 @@
+{
+  "_meta": {
+    "standard": "texas_ai",
+    "revision": "v0.1-draft",
+    "title": "Texas AI Governance (TRAIGA HB 149 + SB 1964)",
+    "controls": 21,
+    "families": 9,
+    "authority": "Operational control catalog aligned to the Texas Responsible Artificial Intelligence Governance Act (HB 149, effective 2026-01-01) and Texas SB 1964 public-sector AI governance (effective 2025-09-01). Drafted from primary and authoritative secondary sources; section-level citations and applicability are curated and MUST be verified against the enrolled statutes and legal counsel before reliance. This catalog operationalizes controls aligned to the statutes and produces evidence of how they were applied; it does not determine legal compliance and is not legal advice.",
+    "disclaimer": "Not legal advice. Aligned-to, not certified-against. Applicability is actor-dependent (see applies_to on each control) and must be confirmed for the specific organization; several TRAIGA provisions bind government entities or healthcare providers only, and SB 1964 binds governmental entities and their vendors.",
+    "actor_types": {
+      "commercial": "A private person or entity that develops or deploys AI in connection with business in Texas or products/services used by Texas residents (non-healthcare, non-governmental).",
+      "healthcare": "A healthcare provider subject to TRAIGA's affirmative patient AI-use disclosure duty.",
+      "government": "A Texas state agency or local government subject to TRAIGA's governmental provisions and SB 1964.",
+      "gov_vendor": "A vendor that procures, develops, or deploys AI systems under contract with a Texas governmental entity (SB 1964 contractual reach)."
+    },
+    "safe_harbor_note": "TRAIGA provides an affirmative defense / safe-harbor posture for entities that adopt and operate under the NIST AI Risk Management Framework or a comparable recognized standard. The TX-SAFE family and the crosswalks to ai_governance and nist_ai_rmf establish and evidence that posture.",
+    "differentiator_note": "SB 1964 Sec. 2054.703(b) requires re-assessment and documentation at each material change to a heightened-scrutiny system, its data, or its intended use. The TX-CHG family maps this to signed policy/model versioning and recertification receipts (which policy version governed which decisions), a capability most GRC tooling cannot evidence."
+  },
+  "families": {
+    "TX-PROHIB": "Prohibited Uses",
+    "TX-DISC": "Disclosure and Transparency",
+    "TX-INV": "AI Inventory and Registration",
+    "TX-RISK": "Risk Management and Impact Assessment",
+    "TX-OVS": "Human Oversight and Control",
+    "TX-CHG": "Material Change and Re-evaluation",
+    "TX-ACCT": "Accountability and Redress",
+    "TX-VEND": "Vendor Governance",
+    "TX-SAFE": "Safe-Harbor Alignment"
+  },
+  "controls": {
+    "TX-PROHIB-1": {
+      "family": "TX-PROHIB", "family_name": "Prohibited Uses",
+      "title": "No AI use intended to incite self-harm, harm, or criminal activity",
+      "statute": "TRAIGA HB 149 (prohibited intentional uses)",
+      "applies_to": ["commercial", "healthcare", "government", "gov_vendor"],
+      "control": "The organization does not develop or deploy AI systems with the intent to unlawfully incite or encourage a person to self-harm, to harm another, or to engage in criminal activity, and enforces a policy boundary that refuses such uses.",
+      "evidence_types": ["policy", "record", "config", "attestation"],
+      "methods": ["Examine", "Inquiry", "Test"],
+      "objectives": [
+        {"id": "TX-PROHIB-1[a]", "text": "A policy prohibits AI uses intended to incite self-harm, harm, or criminal activity.", "discovery_query": "Provide the acceptable-use / prohibited-use policy naming these prohibitions.", "mechanism": "documented"},
+        {"id": "TX-PROHIB-1[b]", "text": "The prohibition is enforced at the decision boundary (unauthorized uses are refused/abstained, not merely discouraged).", "discovery_query": "Provide evidence that the enforcement layer refuses or abstains on the prohibited-use conditions.", "mechanism": "config"}
+      ]
+    },
+    "TX-PROHIB-2": {
+      "family": "TX-PROHIB", "family_name": "Prohibited Uses",
+      "title": "No AI use for unlawful discrimination",
+      "statute": "TRAIGA HB 149 (intentional unlawful discrimination)",
+      "applies_to": ["commercial", "healthcare", "government", "gov_vendor"],
+      "control": "The organization does not deploy AI to intentionally unlawfully discriminate against a protected class, and evaluates deployed systems for unlawful discriminatory effect.",
+      "evidence_types": ["policy", "evaluation", "record"],
+      "methods": ["Examine", "Inquiry", "Test"],
+      "objectives": [
+        {"id": "TX-PROHIB-2[a]", "text": "A policy prohibits intentional unlawful discrimination through AI.", "discovery_query": "Provide the anti-discrimination policy covering AI-driven decisions.", "mechanism": "documented"},
+        {"id": "TX-PROHIB-2[b]", "text": "Deployed decision systems are evaluated for unlawful discriminatory effect, and results are recorded.", "discovery_query": "Provide fairness/disparate-impact evaluation records for AI decision systems.", "mechanism": "operational"}
+      ]
+    },
+    "TX-PROHIB-3": {
+      "family": "TX-PROHIB", "family_name": "Prohibited Uses",
+      "title": "No unlawful synthetic sexually explicit or deceptive media",
+      "statute": "TRAIGA HB 149 (prohibited sexually explicit / deepfake / child-related uses)",
+      "applies_to": ["commercial", "healthcare", "government", "gov_vendor"],
+      "control": "The organization does not produce unlawful sexually explicit synthetic media, unlawful deepfakes, or child-related prohibited content, and controls generative capabilities to prevent such output.",
+      "evidence_types": ["policy", "config", "record"],
+      "methods": ["Examine", "Inquiry", "Test"],
+      "objectives": [
+        {"id": "TX-PROHIB-3[a]", "text": "A policy prohibits the unlawful synthetic-media uses named by the statute.", "discovery_query": "Provide the policy prohibiting these generative uses.", "mechanism": "documented"},
+        {"id": "TX-PROHIB-3[b]", "text": "Generative capabilities are constrained to prevent the prohibited output.", "discovery_query": "Provide the content-control configuration or guardrail evidence.", "mechanism": "config"}
+      ]
+    },
+    "TX-PROHIB-4": {
+      "family": "TX-PROHIB", "family_name": "Prohibited Uses",
+      "title": "No AI social scoring (governmental)",
+      "statute": "TRAIGA HB 149 (governmental social-scoring prohibition)",
+      "applies_to": ["government"],
+      "control": "The governmental entity does not use AI to evaluate or classify persons based on social behavior in the prohibited social-scoring manner.",
+      "evidence_types": ["policy", "record"],
+      "methods": ["Examine", "Inquiry"],
+      "objectives": [
+        {"id": "TX-PROHIB-4[a]", "text": "Policy prohibits prohibited governmental social-scoring uses of AI.", "discovery_query": "Provide the policy prohibiting AI social scoring.", "mechanism": "documented"}
+      ]
+    },
+    "TX-PROHIB-5": {
+      "family": "TX-PROHIB", "family_name": "Prohibited Uses",
+      "title": "No biometric identification without consent (governmental)",
+      "statute": "TRAIGA HB 149 (governmental biometric-identification prohibition)",
+      "applies_to": ["government"],
+      "control": "The governmental entity does not use AI to perform prohibited biometric identification or capture without the consent required by law.",
+      "evidence_types": ["policy", "record", "config"],
+      "methods": ["Examine", "Inquiry", "Test"],
+      "objectives": [
+        {"id": "TX-PROHIB-5[a]", "text": "Policy prohibits non-consented biometric identification via AI.", "discovery_query": "Provide the biometric-use policy and consent controls.", "mechanism": "documented"}
+      ]
+    },
+    "TX-DISC-1": {
+      "family": "TX-DISC", "family_name": "Disclosure and Transparency",
+      "title": "Healthcare AI-use disclosure to patients",
+      "statute": "TRAIGA HB 149 (healthcare provider AI disclosure duty)",
+      "applies_to": ["healthcare"],
+      "control": "A healthcare provider discloses to the patient (or their representative) that AI is used in their care as required, before or at the time of the interaction.",
+      "evidence_types": ["policy", "config", "record"],
+      "methods": ["Examine", "Inquiry", "Test"],
+      "objectives": [
+        {"id": "TX-DISC-1[a]", "text": "A disclosure policy defines when and how patients are informed of AI use.", "discovery_query": "Provide the patient AI-disclosure policy.", "mechanism": "documented"},
+        {"id": "TX-DISC-1[b]", "text": "The disclosure is actually presented at the point of care (evidence the notice is delivered).", "discovery_query": "Provide evidence the AI-use disclosure is presented to patients.", "mechanism": "config"}
+      ]
+    },
+    "TX-DISC-2": {
+      "family": "TX-DISC", "family_name": "Disclosure and Transparency",
+      "title": "Consumer notice before interacting with a government AI system",
+      "statute": "TRAIGA HB 149 (governmental consumer-disclosure) / SB 1964 public-facing notice",
+      "applies_to": ["government"],
+      "control": "The governmental entity provides a clear, plain-language notice that a consumer is interacting with an AI system, before the interaction.",
+      "evidence_types": ["policy", "config", "record"],
+      "methods": ["Examine", "Inquiry", "Test"],
+      "objectives": [
+        {"id": "TX-DISC-2[a]", "text": "A disclosure policy requires plain-language AI-interaction notice to consumers.", "discovery_query": "Provide the consumer AI-disclosure policy.", "mechanism": "documented"},
+        {"id": "TX-DISC-2[b]", "text": "The notice is presented at each consumer-facing AI interaction point.", "discovery_query": "Provide evidence the notice is delivered on the consumer-facing channel.", "mechanism": "config"}
+      ]
+    },
+    "TX-DISC-3": {
+      "family": "TX-DISC", "family_name": "Disclosure and Transparency",
+      "title": "Standardized notice for public-facing or high-risk systems",
+      "statute": "SB 1964 (standardized notice; public disclosure for public-facing systems)",
+      "applies_to": ["government", "gov_vendor"],
+      "control": "Public-facing or heightened-scrutiny AI systems carry the standardized notice and public disclosure required by the framework.",
+      "evidence_types": ["policy", "record", "config"],
+      "methods": ["Examine", "Inquiry", "Test"],
+      "objectives": [
+        {"id": "TX-DISC-3[a]", "text": "The standardized notice content is defined and adopted.", "discovery_query": "Provide the standardized-notice template and adoption record.", "mechanism": "documented"},
+        {"id": "TX-DISC-3[b]", "text": "The notice/disclosure is published for each public-facing or high-risk system.", "discovery_query": "Provide evidence the disclosure is published per system.", "mechanism": "operational"}
+      ]
+    },
+    "TX-INV-1": {
+      "family": "TX-INV", "family_name": "AI Inventory and Registration",
+      "title": "Inventory of AI systems",
+      "statute": "SB 1964 Sec. 2054 (AI inventory in IT infrastructure review); good practice for all actors",
+      "applies_to": ["commercial", "healthcare", "government", "gov_vendor"],
+      "control": "The organization maintains a current inventory of AI systems it develops, procures, or deploys, including owner, purpose, and risk classification, reviewed on a defined cadence.",
+      "evidence_types": ["register", "record"],
+      "methods": ["Examine", "Inquiry"],
+      "objectives": [
+        {"id": "TX-INV-1[a]", "text": "An inventory of AI systems with owner, purpose, and risk classification is maintained.", "discovery_query": "Provide the AI system inventory/register.", "mechanism": "documented"},
+        {"id": "TX-INV-1[b]", "text": "The inventory is reviewed and updated on a defined cadence.", "discovery_query": "Provide records of periodic inventory review.", "mechanism": "operational"}
+      ]
+    },
+    "TX-RISK-1": {
+      "family": "TX-RISK", "family_name": "Risk Management and Impact Assessment",
+      "title": "AI impact assessment before deployment",
+      "statute": "SB 1964 (impact assessments: risks of unlawful harm, system limitations, information governance)",
+      "applies_to": ["government", "gov_vendor"],
+      "control": "Before deploying an AI system, the organization conducts and documents an impact assessment covering risks of unlawful harm, system limitations, and information governance practices.",
+      "evidence_types": ["assessment", "record"],
+      "methods": ["Examine", "Inquiry"],
+      "objectives": [
+        {"id": "TX-RISK-1[a]", "text": "An impact assessment identifies risks of unlawful harm.", "discovery_query": "Provide the AI impact assessment's unlawful-harm risk analysis.", "mechanism": "documented"},
+        {"id": "TX-RISK-1[b]", "text": "The assessment documents system limitations.", "discovery_query": "Provide the documented system-limitations section.", "mechanism": "documented"},
+        {"id": "TX-RISK-1[c]", "text": "The assessment documents information governance practices.", "discovery_query": "Provide the information-governance section.", "mechanism": "documented"},
+        {"id": "TX-RISK-1[d]", "text": "An impact assessment is completed before each covered deployment.", "discovery_query": "Provide records that assessments precede deployments.", "mechanism": "operational"}
+      ]
+    },
+    "TX-RISK-2": {
+      "family": "TX-RISK", "family_name": "Risk Management and Impact Assessment",
+      "title": "Pre-deployment documentation for heightened-scrutiny systems",
+      "statute": "SB 1964 Sec. 2054.703(b) (heightened-scrutiny minimum standards)",
+      "applies_to": ["government", "gov_vendor"],
+      "control": "For heightened-scrutiny systems (autonomously making or controlling a consequential decision), the organization assesses and documents known security risks, performance metrics, and transparency measures before deployment.",
+      "evidence_types": ["assessment", "metric", "record"],
+      "methods": ["Examine", "Inquiry", "Test"],
+      "objectives": [
+        {"id": "TX-RISK-2[a]", "text": "Known security risks are assessed and documented before deployment.", "discovery_query": "Provide the documented security-risk assessment for the system.", "mechanism": "documented"},
+        {"id": "TX-RISK-2[b]", "text": "Performance metrics are established and documented before deployment.", "discovery_query": "Provide the documented pre-deployment performance metrics.", "mechanism": "operational"},
+        {"id": "TX-RISK-2[c]", "text": "Transparency measures are documented before deployment.", "discovery_query": "Provide the documented transparency measures.", "mechanism": "documented"}
+      ]
+    },
+    "TX-RISK-3": {
+      "family": "TX-RISK", "family_name": "Risk Management and Impact Assessment",
+      "title": "Risk-management framework and acceptable-use policy",
+      "statute": "SB 1964 (risk management frameworks and acceptable use policies)",
+      "applies_to": ["commercial", "government", "gov_vendor"],
+      "control": "The organization adopts a risk-management framework and an AI acceptable-use policy, aligned to a recognized standard (NIST AI RMF).",
+      "evidence_types": ["policy", "framework"],
+      "methods": ["Examine", "Inquiry"],
+      "objectives": [
+        {"id": "TX-RISK-3[a]", "text": "A documented AI risk-management framework is adopted.", "discovery_query": "Provide the adopted AI risk-management framework.", "mechanism": "documented"},
+        {"id": "TX-RISK-3[b]", "text": "An AI acceptable-use policy is adopted and maintained.", "discovery_query": "Provide the AI acceptable-use policy.", "mechanism": "documented"}
+      ]
+    },
+    "TX-OVS-1": {
+      "family": "TX-OVS", "family_name": "Human Oversight and Control",
+      "title": "Meaningful human review for consequential decisions",
+      "statute": "SB 1964 (principal basis: no consequential decision made on AI output without meaningful human review)",
+      "applies_to": ["government", "gov_vendor"],
+      "control": "For consequential decisions, the AI output is not the sole principal basis: a defined human-review, oversight, or escalation path exists, and the system abstains or escalates when its output falls outside authorized conditions rather than deciding autonomously.",
+      "evidence_types": ["policy", "config", "record"],
+      "methods": ["Examine", "Inquiry", "Test"],
+      "objectives": [
+        {"id": "TX-OVS-1[a]", "text": "A human-oversight/escalation policy defines where meaningful human review is required.", "discovery_query": "Provide the human-oversight policy for consequential decisions.", "mechanism": "documented"},
+        {"id": "TX-OVS-1[b]", "text": "The enforcement layer abstains or escalates to human review when output is outside authorized conditions (the output is not the sole basis).", "discovery_query": "Provide evidence the decision layer escalates/abstains rather than auto-deciding on out-of-bounds output.", "mechanism": "config"},
+        {"id": "TX-OVS-1[c]", "text": "Human-review actions on escalated decisions are recorded.", "discovery_query": "Provide records of human review on escalated consequential decisions.", "mechanism": "operational"}
+      ]
+    },
+    "TX-CHG-1": {
+      "family": "TX-CHG", "family_name": "Material Change and Re-evaluation",
+      "title": "Re-assessment at each material change",
+      "statute": "SB 1964 Sec. 2054.703(b) (re-assessment on material change to system, data, or intended use)",
+      "applies_to": ["government", "gov_vendor"],
+      "control": "At each material change to a heightened-scrutiny system, its underlying data, or its intended use, the organization re-assesses and documents known security risks, performance metrics, and transparency measures.",
+      "evidence_types": ["assessment", "record"],
+      "methods": ["Examine", "Inquiry"],
+      "objectives": [
+        {"id": "TX-CHG-1[a]", "text": "Material change is defined and a re-assessment is triggered on each occurrence.", "discovery_query": "Provide the material-change definition and re-assessment trigger.", "mechanism": "documented"},
+        {"id": "TX-CHG-1[b]", "text": "Re-assessment of security risks, performance, and transparency is completed and recorded at each material change.", "discovery_query": "Provide re-assessment records tied to material changes.", "mechanism": "operational"}
+      ]
+    },
+    "TX-CHG-2": {
+      "family": "TX-CHG", "family_name": "Material Change and Re-evaluation",
+      "title": "Versioned governance trail across changes",
+      "statute": "SB 1964 (accountability across changes) + operational best practice",
+      "applies_to": ["commercial", "government", "gov_vendor"],
+      "control": "The organization maintains a verifiable record of which authorized policy/model version governed which decisions across changes, so a transition can be shown as authorized and the system re-certified.",
+      "evidence_types": ["receipt", "record", "config"],
+      "methods": ["Examine", "Test"],
+      "objectives": [
+        {"id": "TX-CHG-2[a]", "text": "Policy/model versions are signed/authorized before activation.", "discovery_query": "Provide evidence that governing versions are authorized before use.", "mechanism": "config"},
+        {"id": "TX-CHG-2[b]", "text": "Decisions carry the governing version, so version-to-decision attribution is reconstructable.", "discovery_query": "Provide decision receipts that attribute each decision to a governing version.", "mechanism": "config"}
+      ]
+    },
+    "TX-ACCT-1": {
+      "family": "TX-ACCT", "family_name": "Accountability and Redress",
+      "title": "Accountability measures and reporting",
+      "statute": "SB 1964 (accountability measures: reports of use, limitations, safeguards)",
+      "applies_to": ["government", "gov_vendor"],
+      "control": "The organization establishes accountability measures, including reports describing the use of, limitations of, and safeguards for its AI systems.",
+      "evidence_types": ["report", "record"],
+      "methods": ["Examine", "Inquiry"],
+      "objectives": [
+        {"id": "TX-ACCT-1[a]", "text": "Accountability reports describe use, limitations, and safeguards.", "discovery_query": "Provide the AI accountability report(s).", "mechanism": "documented"},
+        {"id": "TX-ACCT-1[b]", "text": "Reports are produced and retained on a defined cadence.", "discovery_query": "Provide records showing accountability reports are produced on cadence.", "mechanism": "operational"}
+      ]
+    },
+    "TX-ACCT-2": {
+      "family": "TX-ACCT", "family_name": "Accountability and Redress",
+      "title": "Redress mechanism",
+      "statute": "SB 1964 (public and internal redress, accountability and liability)",
+      "applies_to": ["government", "gov_vendor"],
+      "control": "The organization provides public and internal redress paths for persons affected by AI-influenced decisions, including a route to human review or complaint.",
+      "evidence_types": ["policy", "record"],
+      "methods": ["Examine", "Inquiry"],
+      "objectives": [
+        {"id": "TX-ACCT-2[a]", "text": "A redress policy defines how affected persons seek review or file complaints.", "discovery_query": "Provide the AI redress/complaint policy.", "mechanism": "documented"},
+        {"id": "TX-ACCT-2[b]", "text": "Redress requests are logged and resolved on record.", "discovery_query": "Provide the redress/complaint log with resolutions.", "mechanism": "operational"}
+      ]
+    },
+    "TX-ACCT-3": {
+      "family": "TX-ACCT", "family_name": "Accountability and Redress",
+      "title": "Violation reporting to DIR and the Attorney General",
+      "statute": "SB 1964 (report violations to DIR and the AG)",
+      "applies_to": ["government"],
+      "control": "The governmental entity reports AI-related violations to DIR and the Office of the Attorney General as required.",
+      "evidence_types": ["policy", "record"],
+      "methods": ["Examine", "Inquiry"],
+      "objectives": [
+        {"id": "TX-ACCT-3[a]", "text": "A procedure defines when and how violations are reported to DIR and the AG.", "discovery_query": "Provide the violation-reporting procedure.", "mechanism": "documented"}
+      ]
+    },
+    "TX-VEND-1": {
+      "family": "TX-VEND", "family_name": "Vendor Governance",
+      "title": "Contractual AI risk-mitigation requirements",
+      "statute": "SB 1964 (contractual vendor requirements for risk mitigation)",
+      "applies_to": ["government"],
+      "control": "The governmental entity imposes contractual AI risk-mitigation requirements on vendors that procure, develop, or deploy AI systems on its behalf.",
+      "evidence_types": ["contract", "policy", "record"],
+      "methods": ["Examine", "Inquiry"],
+      "objectives": [
+        {"id": "TX-VEND-1[a]", "text": "Standard contract language imposes AI risk-mitigation obligations on vendors.", "discovery_query": "Provide the AI vendor contract clauses.", "mechanism": "documented"},
+        {"id": "TX-VEND-1[b]", "text": "Vendor AI obligations are tracked and evidenced per contract.", "discovery_query": "Provide records tracking vendor AI obligations.", "mechanism": "operational"}
+      ]
+    },
+    "TX-SAFE-1": {
+      "family": "TX-SAFE", "family_name": "Safe-Harbor Alignment",
+      "title": "Adopt and operate under NIST AI RMF (safe-harbor posture)",
+      "statute": "TRAIGA HB 149 (affirmative defense / safe harbor for recognized-standard adoption)",
+      "applies_to": ["commercial", "healthcare", "government", "gov_vendor"],
+      "control": "The organization adopts and operates its AI governance under the NIST AI Risk Management Framework (or a comparable recognized standard) and can evidence that operation, establishing the statutory safe-harbor posture.",
+      "evidence_types": ["framework", "record", "crosswalk"],
+      "methods": ["Examine", "Inquiry", "Test"],
+      "objectives": [
+        {"id": "TX-SAFE-1[a]", "text": "The NIST AI RMF (or comparable standard) is formally adopted.", "discovery_query": "Provide the adoption record referencing the recognized standard.", "mechanism": "documented"},
+        {"id": "TX-SAFE-1[b]", "text": "Operation under the standard is evidenced by a completed governance assessment mapped to the standard.", "discovery_query": "Provide the ai_governance / nist_ai_rmf assessment results and crosswalk.", "mechanism": "operational"}
+      ]
+    },
+    "TX-SAFE-2": {
+      "family": "TX-SAFE", "family_name": "Safe-Harbor Alignment",
+      "title": "Continuous evaluation and documented improvement",
+      "statute": "SB 1964 (frequency of evaluations and documentation of improvements)",
+      "applies_to": ["commercial", "government", "gov_vendor"],
+      "control": "The organization defines an evaluation frequency for its AI systems and documents improvements made as a result.",
+      "evidence_types": ["policy", "record"],
+      "methods": ["Examine", "Inquiry"],
+      "objectives": [
+        {"id": "TX-SAFE-2[a]", "text": "An evaluation cadence for AI systems is defined.", "discovery_query": "Provide the AI evaluation-frequency policy.", "mechanism": "documented"},
+        {"id": "TX-SAFE-2[b]", "text": "Evaluations are performed on cadence and resulting improvements documented.", "discovery_query": "Provide evaluation records and documented improvements.", "mechanism": "operational"}
+      ]
+    }
+  }
+}

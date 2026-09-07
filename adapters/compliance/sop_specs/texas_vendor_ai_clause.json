@@ -1,0 +1,29 @@
+{
+  "doc_id": "texas_vendor_ai_clause",
+  "title": "AI Vendor Governance Clause (Texas)",
+  "family": "TX-VEND",
+  "standard": "texas_ai",
+  "coverage_mode": "partial",
+  "controls": ["TX-VEND-1"],
+  "org_profile_keys": ["org_name", "system_name", "boundary"],
+  "sections": [
+    {
+      "id": "purpose",
+      "heading": "1. Purpose and Scope",
+      "objectives": [],
+      "questions": [],
+      "body": "This clause set defines the AI risk-mitigation obligations that {org_name}, as a governmental entity, imposes on vendors that procure, develop, or deploy AI systems on its behalf within {boundary}, operationalizing the contractual vendor requirements of Texas SB 1964. Aligned to the statute; not legal advice, and contract language should be reviewed by counsel."
+    },
+    {
+      "id": "vendor_obligations",
+      "heading": "2. Vendor AI Risk-Mitigation Obligations",
+      "objectives": ["TX-VEND-1[a]"],
+      "questions": [
+        {"key": "vendor_risk_standard", "prompt": "Which risk-management standard must vendors align to (for example, NIST AI RMF)?"},
+        {"key": "vendor_evidence", "prompt": "What evidence must vendors provide (for example, impact assessments, performance metrics, material-change notices)?"},
+        {"key": "vendor_flowdown", "prompt": "Which obligations must the vendor flow down to any sub-processors or model providers?"}
+      ],
+      "body": "A vendor providing AI systems to {org_name} shall: align its AI risk management to {vendor_risk_standard}; provide {vendor_evidence} on request and before deployment; notify {org_name} of any material change to the system, its data, or its intended use; and flow down {vendor_flowdown} to sub-processors. These obligations are tracked per contract and evidenced during the relationship."
+    }
+  ]
+}

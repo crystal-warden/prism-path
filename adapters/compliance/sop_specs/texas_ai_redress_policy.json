@@ -1,0 +1,29 @@
+{
+  "doc_id": "texas_ai_redress_policy",
+  "title": "AI Redress and Complaint Policy (Texas)",
+  "family": "TX-ACCT",
+  "standard": "texas_ai",
+  "coverage_mode": "partial",
+  "controls": ["TX-ACCT-2"],
+  "org_profile_keys": ["org_name", "system_name", "boundary"],
+  "sections": [
+    {
+      "id": "purpose",
+      "heading": "1. Purpose and Scope",
+      "objectives": [],
+      "questions": [],
+      "body": "This policy establishes public and internal redress paths for persons affected by AI-influenced decisions made by {org_name} within {boundary}, operationalizing the redress and accountability dimension of Texas SB 1964. Aligned to the statute; not legal advice."
+    },
+    {
+      "id": "redress_paths",
+      "heading": "2. Redress and Complaint Paths",
+      "objectives": ["TX-ACCT-2[a]"],
+      "questions": [
+        {"key": "redress_intake", "prompt": "How does an affected person request review or file a complaint about an AI-influenced decision (intake channel)?"},
+        {"key": "redress_review", "prompt": "Who reviews redress requests and what is the target response time?"},
+        {"key": "redress_escalation", "prompt": "What is the escalation path, including the route to meaningful human review of the decision?"}
+      ],
+      "body": "A person affected by an AI-influenced decision may seek review or file a complaint via {redress_intake}. Requests are reviewed by {redress_review}. Each request routes to {redress_escalation}, ensuring a path to meaningful human review of the contested decision. Redress requests and their resolutions are logged."
+    }
+  ]
+}
