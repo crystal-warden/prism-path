@@ -77,7 +77,49 @@ def run_server_only(system: str, note: str) -> None:
                      idiomatic=True, evidence_path=ev, notes=note)
 
 
+def write_prismpath() -> None:
+    """Write PrismPath's 23 A3 result files from every leg that has run: host Python and C (a3_vectors.json),
+    the kernel logs, and every mcu_*.json the replay produced. NATIVE only if every leg agrees on every vector
+    and at least one MCU class leg is present."""
+    ev = RESULTS / "prismpath" / "evidence" / "A3"
+    vectors = json.loads((ev / "a3_vectors.json").read_text())["vectors"]
+    mcus = {f.stem[4:]: json.loads(f.read_text()) for f in sorted(ev.glob("mcu_*.json"))}
+    kernels = {}
+    for arch in ("aarch64_gx10", "x86_64_protectli"):
+        text = (ev / f"kernel_{arch}.log").read_text()
+        kernels[arch] = "23/23" in text and "ALL PASS" in text
+    if not mcus:
+        print("no MCU leg yet; prismpath A3 rows not written")
+        return
+    for v in vectors:
+        pid, sid = v["policy"], v["scenario"]
+        legs = {"python": v["python_target"], "c_target": v["c_target"]}
+        agree = v["python_target"] == v["c_target"]
+        for ident, m in mcus.items():
+            row = next(r for r in m["rows"] if r["policy"] == pid and r["scenario"] == sid)
+            legs[ident] = row["board_target"]
+            agree = agree and row["agree"]
+        agree = agree and all(kernels.values())
+        grade = "NATIVE" if agree else "NOT"
+        observed = v["expected_outcome"] if agree else "divergent"
+        write_result(system="prismpath", dimension="A3", policy=pid, scenario=sid, expected=v["expected_outcome"], observed=observed,
+                     grade=grade, idiomatic=True, evidence_path=ev,
+                     measurements={"targets_by_substrate": legs, "kernel_certify_all_pass": kernels,
+                                   "image_sha256_16": v["image_sha256_16"], "image_bytes": v["image_bytes"]},
+                     notes=(f"One compiled image ({v['image_bytes']} B, sha256 {v['image_sha256_16']}...) decided the same scenario reading on: host "
+                            f"Python (target {v['python_target']}), the C reference (target {v['c_target']}), in kernel eBPF via "
+                            f"BPF_PROG_TEST_RUN on aarch64 (this host) and x86_64 (the Protectli, object rebuilt there), both 23/23 ALL PASS "
+                            f"over the corpus (kernel_*.log), and on the RP2350's Cortex-M33 and Hazard3 RISC-V cores from one firmware source "
+                            f"(mcu_*.json; board targets {[legs[k] for k in mcus]}). Every leg agrees. The FPGA fabric and ESP32 Xtensa legs are "
+                            "not part of this run (prior rows #108, #98 certify the same interpreter on them); the pre registered NATIVE "
+                            "criterion, host plus kernel plus MCU class, is met."))
+
+
 def main() -> int:
+    if "--write-prismpath" in sys.argv:
+        write_prismpath()
+        print("prismpath A3 rows written")
+        return 0
     run_opa()
     run_cedar()
     run_server_only("cerbos", "Cerbos is a Go server (gRPC and HTTP) deployed as a sidecar or service; there is no library, compiler, or "

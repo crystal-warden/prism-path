@@ -1,0 +1,31 @@
+{
+  "dimension": "A3",
+  "evidence_path": "prismpath/comparisons/results/prismpath/evidence/A3",
+  "expected": "observe",
+  "glue": null,
+  "grade": "NATIVE",
+  "harness_commit": "e9dd59d",
+  "idiomatic": true,
+  "match": true,
+  "measurements": {
+    "image_bytes": 224,
+    "image_sha256_16": "024378df1341d7c7",
+    "kernel_certify_all_pass": {
+      "aarch64_gx10": true,
+      "x86_64_protectli": true
+    },
+    "targets_by_substrate": {
+      "c_target": 7,
+      "ppt-rp2350_1_rp2350-arm_PPTM-v1": 7,
+      "ppt-rp2350_1_rp2350-riscv_PPTM-v1": 7,
+      "python": 7
+    }
+  },
+  "notes": "One compiled image (224 B, sha256 024378df1341d7c7...) decided the same scenario reading on: host Python (target 7), the C reference (target 7), in kernel eBPF via BPF_PROG_TEST_RUN on aarch64 (this host) and x86_64 (the Protectli, object rebuilt there), both 23/23 ALL PASS over the corpus (kernel_*.log), and on the RP2350's Cortex-M33 and Hazard3 RISC-V cores from one firmware source (mcu_*.json; board targets [7, 7]). Every leg agrees. The FPGA fabric and ESP32 Xtensa legs are not part of this run (prior rows #108, #98 certify the same interpreter on them); the pre registered NATIVE criterion, host plus kernel plus MCU class, is met.",
+  "observed": "observe",
+  "policy": "network_admission",
+  "run_at": "2026-09-08T23:41:45Z",
+  "scenario": "observe_jumbo_1",
+  "system": "prismpath",
+  "system_version": "repo@e9dd59d"
+}

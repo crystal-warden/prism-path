@@ -1540,6 +1540,98 @@
       "sha256": "7eee613aa374c8b179873c89cbb53b818762ff12405a64831a764815cd346e78"
     },
     {
+      "path": "prismpath/A3__network_admission__allow_dns_small_1.json",
+      "sha256": "31c5cf7d18be9203238898a072019758e223b5d69b21b356d2d56ad274c7c26d"
+    },
+    {
+      "path": "prismpath/A3__network_admission__allow_https_1.json",
+      "sha256": "b99bc9498c90d1d464968309e60f55447fcd075c68f82153923d2de451469a9d"
+    },
+    {
+      "path": "prismpath/A3__network_admission__allow_icmp_1.json",
+      "sha256": "41c9d46512799e419659039e1bcbfa4acb47698025bd7ec85d3e851d50c2502a"
+    },
+    {
+      "path": "prismpath/A3__network_admission__allow_internal_ssh_1.json",
+      "sha256": "62f70b5029f812c8700fd75c77ed5a1186856f36ed62f6b61fdfdfa2242e3cdc"
+    },
+    {
+      "path": "prismpath/A3__network_admission__boundary_dns_512.json",
+      "sha256": "396285ca6e64df469c6204de74f93df5532e878d0bd258b6f0a4b01701834939"
+    },
+    {
+      "path": "prismpath/A3__network_admission__boundary_dns_513.json",
+      "sha256": "15520623b5e8294b34ed9513137677afb488d45555c728941e34e5d624b1ba91"
+    },
+    {
+      "path": "prismpath/A3__network_admission__boundary_jumbo_1399.json",
+      "sha256": "d8bd3709749e8428c190081453c83aef76315c7ebad37c45c9803bc83a4fb0e6"
+    },
+    {
+      "path": "prismpath/A3__network_admission__boundary_jumbo_1400.json",
+      "sha256": "4cf351b0870615519583155d7ddeb8b45316d199e411d92d3c685f44d6d1e059"
+    },
+    {
+      "path": "prismpath/A3__network_admission__deny_dns_large_1.json",
+      "sha256": "79d7d14a46dc4bf639f63709a218a1583f9752c4bd3396abc6cc7560d62db054"
+    },
+    {
+      "path": "prismpath/A3__network_admission__deny_external_ssh_1.json",
+      "sha256": "5ec6ccdf3c54a5312f582a5fa14494413e30fb28bb121ef686313266dbff5cdc"
+    },
+    {
+      "path": "prismpath/A3__network_admission__deny_telnet_1.json",
+      "sha256": "600c68ba79833b2f56fb40ea1f0fb343c12ff95df481099f4161bf37b3eae955"
+    },
+    {
+      "path": "prismpath/A3__network_admission__observe_jumbo_1.json",
+      "sha256": "91f960872a3811d43521df3b520141740f3e441c0548a40074d54033e563b9da"
+    },
+    {
+      "path": "prismpath/A3__network_admission__observe_other_1.json",
+      "sha256": "2e043e08653215f069ba4f3ab0bebb8f100017dcf3f235474e809ae018179146"
+    },
+    {
+      "path": "prismpath/A3__sensor_interlock__allow_armed_nominal_1.json",
+      "sha256": "87f991d18977910c4a9ab98f27871acbb6adeafa9db05db3a57b045874b50e24"
+    },
+    {
+      "path": "prismpath/A3__sensor_interlock__allow_nominal_1.json",
+      "sha256": "50c547ca9d417c0beb1d2493661f56d87983cf46d7f1a3cd0e980f5209789b36"
+    },
+    {
+      "path": "prismpath/A3__sensor_interlock__boundary_nominal_119_749.json",
+      "sha256": "23277e25eab064b11d552307b6aecccf2e0fd5ce37d9c59b0122f81f3a1baf5e"
+    },
+    {
+      "path": "prismpath/A3__sensor_interlock__boundary_temp_120.json",
+      "sha256": "db5db0f02df8bd09034cd85de1ec4ddaccfeeb2a4f8aefa603df1379c817669e"
+    },
+    {
+      "path": "prismpath/A3__sensor_interlock__boundary_temp_149.json",
+      "sha256": "35d5cdfd3c84801d70c32420ca3dcb53e7a86ce90278e42649d1cd590ca24baa"
+    },
+    {
+      "path": "prismpath/A3__sensor_interlock__boundary_temp_150.json",
+      "sha256": "072e53bcdf61ab43c7dd602af32ef62c55a2bf92a08706243ec00844eec827fc"
+    },
+    {
+      "path": "prismpath/A3__sensor_interlock__deny_pressure_1.json",
+      "sha256": "14a41f058babd84f635faf1c21980f832f1cd11bb60c256053c15f7d52ec98b6"
+    },
+    {
+      "path": "prismpath/A3__sensor_interlock__deny_temp_1.json",
+      "sha256": "5c39f4df5c5fefffb9d129efaa77a3069e78f4353bf710cb041b145318c9d0d6"
+    },
+    {
+      "path": "prismpath/A3__sensor_interlock__escalation_sensor_dark_armed_1.json",
+      "sha256": "7e60bfd6d6974c0546fa1350d69cc031cd6558e0e7d3afa898d5bc5bc0f1abfe"
+    },
+    {
+      "path": "prismpath/A3__sensor_interlock__observe_temp_1.json",
+      "sha256": "1fb466c6ab9f18cf658c6aa926816ca73ad2312adf68a46ced093a2d0dacedb9"
+    },
+    {
       "path": "prismpath/A4__ai_action_gate__carries_cause.json",
       "sha256": "5a24add164af0404153aa52156ea774a7e2fd8b98f406d7bd2e8a904a907d871"
     },
@@ -2111,12 +2203,36 @@
       },
       "prismpath": {
         "counts": {
-          "NATIVE": 0,
+          "NATIVE": 23,
           "NOT": 0,
           "WITH-WORK": 0
         },
-        "files": [],
-        "grade": "UNTESTED",
+        "files": [
+          "prismpath/A3__network_admission__allow_dns_small_1.json",
+          "prismpath/A3__network_admission__allow_https_1.json",
+          "prismpath/A3__network_admission__allow_icmp_1.json",
+          "prismpath/A3__network_admission__allow_internal_ssh_1.json",
+          "prismpath/A3__network_admission__boundary_dns_512.json",
+          "prismpath/A3__network_admission__boundary_dns_513.json",
+          "prismpath/A3__network_admission__boundary_jumbo_1399.json",
+          "prismpath/A3__network_admission__boundary_jumbo_1400.json",
+          "prismpath/A3__network_admission__deny_dns_large_1.json",
+          "prismpath/A3__network_admission__deny_external_ssh_1.json",
+          "prismpath/A3__network_admission__deny_telnet_1.json",
+          "prismpath/A3__network_admission__observe_jumbo_1.json",
+          "prismpath/A3__network_admission__observe_other_1.json",
+          "prismpath/A3__sensor_interlock__allow_armed_nominal_1.json",
+          "prismpath/A3__sensor_interlock__allow_nominal_1.json",
+          "prismpath/A3__sensor_interlock__boundary_nominal_119_749.json",
+          "prismpath/A3__sensor_interlock__boundary_temp_120.json",
+          "prismpath/A3__sensor_interlock__boundary_temp_149.json",
+          "prismpath/A3__sensor_interlock__boundary_temp_150.json",
+          "prismpath/A3__sensor_interlock__deny_pressure_1.json",
+          "prismpath/A3__sensor_interlock__deny_temp_1.json",
+          "prismpath/A3__sensor_interlock__escalation_sensor_dark_armed_1.json",
+          "prismpath/A3__sensor_interlock__observe_temp_1.json"
+        ],
+        "grade": "NATIVE",
         "mismatches": 0
       }
     },
@@ -3057,7 +3173,7 @@
   "verdicts": {
     "A1": "NOT-DISTINCT",
     "A2": "NOT-DISTINCT",
-    "A3": "OPEN",
+    "A3": "DISTINCT",
     "A4": "NOT-DISTINCT",
     "A5": "NOT-DISTINCT",
     "A6": "NOT-DISTINCT",

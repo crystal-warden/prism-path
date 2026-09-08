@@ -366,3 +366,43 @@ graded from documentation as a boundary. Group B and the verdict document are no
 **Provenance.** Branch comparisons/phase0-prereg: prismpath/comparisons/groupa/*.py, results/<system>/
 (one JSON per scenario, evidence under results/<system>/evidence/), MATRIX.md and matrix.json
 regenerated, groupa/HARDWARE_LEGS.md. No push (owner gated).
+
+#### #145: A3 closes DISTINCT: one compiled policy image decides 23 scenario readings identically on host Python, the C reference, in kernel on aarch64 and x86_64, and on both ISAs of an RP2350, while every comparator's MCU path fails or does not exist (September 2026)
+
+**Claim.** The pre registered "cross substrate byte exact decisions" dimension of the layer comparison
+is the one Group A dimension where PrismPath grades NATIVE and every comparator and Openlane grades
+NOT, so under the frozen criterion (PREREGISTRATION.md section 9) PrismPath is a distinct layer on this
+dimension, with the comparator attempts made and recorded rather than dismissed.
+
+**Method.** groupa/a3_corpus.py compiles network_admission and sensor_interlock once (168 B and a second
+image, sha256 prefixes recorded) and frames the 23 complete scenario readings as table per vector records
+with the host Python route as the expected target, cross checked against the C reference. Kernel legs:
+loader certify via BPF_PROG_TEST_RUN on this host (aarch64, Linux 6.17.0, clang 18) and on the Protectli
+(x86_64, Linux 6.17.2, program object rebuilt there with clang 19 from the identical source). MCU legs:
+groupa/a3_mcu.py replays the corpus over the unchanged RP2350 certification firmware's USB-CDC contract
+(I, L, V), one Pico 2 W flashed first with the Cortex-M33 build then, after a 1200 baud reset into the
+bootloader, with the Hazard3 RISC-V build, both from the one source rebuilt this session (Pico SDK 2.1.1,
+gcc-arm-none-eabi 13.2, riscv32-unknown-elf gcc). groupa/a3.py --write-prismpath writes the 23 result
+files from every leg. Comparator attempts (groupa/a3.py): OPA compiled to WebAssembly and the module
+measured; the Cedar core built for thumbv8m.main-none-eabi in a no_std crate; Cerbos and OpenFGA
+documented as servers.
+
+**Result.** 23/23 agree on all six legs: python, C, kernel aarch64 (ALL PASS), kernel x86_64 (ALL PASS),
+rp2350-arm (USB-CDC round trip median 370 us), rp2350-riscv (median 551 us). PrismPath A3 NATIVE 23/23.
+OPA NOT: the wasm module is 135,831 B (75,456 B code, 7 host imports, 128 KB minimum imported memory grown
+at runtime), a host class runtime form; not run on an MCU. Cedar NOT: cargo fails at memchr requiring std,
+cedar-policy 4.12.0 has no no_std feature. Cerbos, OpenFGA, Openlane NOT: server or cloud only. matrix.py
+verdict A3 DISTINCT; the full Group A matrix: A3 DISTINCT, A1 A2 A4 A5 A6 A7 A8 NOT-DISTINCT.
+
+**Honest scope.** One MCU family this run (RP2350, two ISAs); the ESP32 Xtensa and the Zynq fabric legs
+were not rerun here (prior rows #98 and #108 certify the same interpreter on them against the frozen
+predicate corpus, not this policy corpus). The OPA on MCU attempt stops at module facts and inference
+about the ESP-WROOM-32's memory; running WAMR on an ESP32-S3 with PSRAM is named for the LoRa board
+session and could move OPA's cell only if it runs identically there. The Pico was returned to nothing
+in particular (it carried nothing to preserve). The pins witness for these images (A7) is still pending;
+A7's PrismPath grade is unaffected by this row.
+
+**Provenance.** Branch comparisons/phase0-prereg: groupa/a3_corpus.py, groupa/a3_mcu.py, groupa/a3.py,
+results/prismpath/evidence/A3/ (a3.packets.bin, a3_vectors.json, *.ppt, kernel_aarch64_gx10.log,
+kernel_x86_64_protectli.log, mcu_ppt-rp2350_1_rp2350-arm_PPTM-v1.json, mcu_ppt-rp2350_1_rp2350-riscv_PPTM-v1.json),
+results/prismpath/A3__*.json (23), MATRIX.md. Board: Raspberry Pi Pico 2 W. No push (owner gated).

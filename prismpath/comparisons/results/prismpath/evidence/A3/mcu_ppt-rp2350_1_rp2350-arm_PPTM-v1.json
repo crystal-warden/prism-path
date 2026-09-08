@@ -1,0 +1,220 @@
+{
+ "ident": "ppt-rp2350/1 rp2350-arm PPTM-v1",
+ "port": "/dev/ttyACM0",
+ "vectors": 23,
+ "mismatches": 0,
+ "usb_cdc_round_trip_us": {
+  "min": 321.7,
+  "median": 370.1,
+  "max": 693.6
+ },
+ "rows": [
+  {
+   "policy": "network_admission",
+   "scenario": "allow_https_1",
+   "board_target": 6,
+   "board_edge": 5,
+   "python_target": 6,
+   "c_target": 6,
+   "agree": true
+  },
+  {
+   "policy": "network_admission",
+   "scenario": "deny_telnet_1",
+   "board_target": 1,
+   "board_edge": 0,
+   "python_target": 1,
+   "c_target": 1,
+   "agree": true
+  },
+  {
+   "policy": "network_admission",
+   "scenario": "allow_internal_ssh_1",
+   "board_target": 2,
+   "board_edge": 1,
+   "python_target": 2,
+   "c_target": 2,
+   "agree": true
+  },
+  {
+   "policy": "network_admission",
+   "scenario": "deny_external_ssh_1",
+   "board_target": 3,
+   "board_edge": 2,
+   "python_target": 3,
+   "c_target": 3,
+   "agree": true
+  },
+  {
+   "policy": "network_admission",
+   "scenario": "allow_dns_small_1",
+   "board_target": 4,
+   "board_edge": 3,
+   "python_target": 4,
+   "c_target": 4,
+   "agree": true
+  },
+  {
+   "policy": "network_admission",
+   "scenario": "deny_dns_large_1",
+   "board_target": 5,
+   "board_edge": 4,
+   "python_target": 5,
+   "c_target": 5,
+   "agree": true
+  },
+  {
+   "policy": "network_admission",
+   "scenario": "boundary_dns_512",
+   "board_target": 4,
+   "board_edge": 3,
+   "python_target": 4,
+   "c_target": 4,
+   "agree": true
+  },
+  {
+   "policy": "network_admission",
+   "scenario": "boundary_dns_513",
+   "board_target": 5,
+   "board_edge": 4,
+   "python_target": 5,
+   "c_target": 5,
+   "agree": true
+  },
+  {
+   "policy": "network_admission",
+   "scenario": "observe_jumbo_1",
+   "board_target": 7,
+   "board_edge": 6,
+   "python_target": 7,
+   "c_target": 7,
+   "agree": true
+  },
+  {
+   "policy": "network_admission",
+   "scenario": "boundary_jumbo_1399",
+   "board_target": 9,
+   "board_edge": 8,
+   "python_target": 9,
+   "c_target": 9,
+   "agree": true
+  },
+  {
+   "policy": "network_admission",
+   "scenario": "boundary_jumbo_1400",
+   "board_target": 7,
+   "board_edge": 6,
+   "python_target": 7,
+   "c_target": 7,
+   "agree": true
+  },
+  {
+   "policy": "network_admission",
+   "scenario": "allow_icmp_1",
+   "board_target": 8,
+   "board_edge": 7,
+   "python_target": 8,
+   "c_target": 8,
+   "agree": true
+  },
+  {
+   "policy": "network_admission",
+   "scenario": "observe_other_1",
+   "board_target": 9,
+   "board_edge": 8,
+   "python_target": 9,
+   "c_target": 9,
+   "agree": true
+  },
+  {
+   "policy": "sensor_interlock",
+   "scenario": "allow_nominal_1",
+   "board_target": 4,
+   "board_edge": 3,
+   "python_target": 4,
+   "c_target": 4,
+   "agree": true
+  },
+  {
+   "policy": "sensor_interlock",
+   "scenario": "allow_armed_nominal_1",
+   "board_target": 4,
+   "board_edge": 3,
+   "python_target": 4,
+   "c_target": 4,
+   "agree": true
+  },
+  {
+   "policy": "sensor_interlock",
+   "scenario": "observe_temp_1",
+   "board_target": 3,
+   "board_edge": 2,
+   "python_target": 3,
+   "c_target": 3,
+   "agree": true
+  },
+  {
+   "policy": "sensor_interlock",
+   "scenario": "deny_temp_1",
+   "board_target": 2,
+   "board_edge": 1,
+   "python_target": 2,
+   "c_target": 2,
+   "agree": true
+  },
+  {
+   "policy": "sensor_interlock",
+   "scenario": "deny_pressure_1",
+   "board_target": 2,
+   "board_edge": 1,
+   "python_target": 2,
+   "c_target": 2,
+   "agree": true
+  },
+  {
+   "policy": "sensor_interlock",
+   "scenario": "boundary_temp_149",
+   "board_target": 3,
+   "board_edge": 2,
+   "python_target": 3,
+   "c_target": 3,
+   "agree": true
+  },
+  {
+   "policy": "sensor_interlock",
+   "scenario": "boundary_temp_150",
+   "board_target": 2,
+   "board_edge": 1,
+   "python_target": 2,
+   "c_target": 2,
+   "agree": true
+  },
+  {
+   "policy": "sensor_interlock",
+   "scenario": "boundary_nominal_119_749",
+   "board_target": 4,
+   "board_edge": 3,
+   "python_target": 4,
+   "c_target": 4,
+   "agree": true
+  },
+  {
+   "policy": "sensor_interlock",
+   "scenario": "boundary_temp_120",
+   "board_target": 3,
+   "board_edge": 2,
+   "python_target": 3,
+   "c_target": 3,
+   "agree": true
+  },
+  {
+   "policy": "sensor_interlock",
+   "scenario": "escalation_sensor_dark_armed_1",
+   "board_target": 1,
+   "board_edge": 0,
+   "python_target": 1,
+   "c_target": 1,
+   "agree": true
+  }
+ ]
+}
