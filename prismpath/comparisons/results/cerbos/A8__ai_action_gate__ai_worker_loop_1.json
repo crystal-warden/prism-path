@@ -1,0 +1,17 @@
+{
+  "dimension": "A8",
+  "evidence_path": "prismpath/comparisons/results/cerbos/evidence/A8",
+  "expected": "allow,allow,deny,abstain,escalate_human,escalate_human",
+  "glue": null,
+  "grade": "NOT",
+  "harness_commit": "e7b050b",
+  "idiomatic": true,
+  "match": true,
+  "notes": "cerbos server with audit.backend=file and decisionLogsEnabled; one CheckResources per proposal. The four outcomes ride each rule's output block as {outcome, rule} (rules=['r6', 'r7', 'r3', 'r5', 'r4', 'r1']); Cerbos's own answer is EFFECT_ALLOW or EFFECT_DENY, so abstain and human routing are output metadata (WITH-WORK on A1/A2 grounds). Receipts: Cerbos wrote 6 decision audit records, one per check, with call id, timestamp, inputs, effects, and outputs (decision_audit.jsonl): per decision yes, carries the why via outputs, not signed, not tamper evident (append only file). Open source Cerbos has no signing key or anchor (policy signing is a Cerbos Hub feature), so a signed receipt trail would introduce a new trust anchor, which the pre registered budget grades NOT. Prediction was WITH-WORK; the budget rule decides otherwise and the prediction is recorded as wrong.",
+  "observed": "allow,allow,deny,abstain,escalate_human,escalate_human",
+  "policy": "ai_action_gate",
+  "run_at": "2026-09-08T22:27:55Z",
+  "scenario": "ai_worker_loop_1",
+  "system": "cerbos",
+  "system_version": "0.55.0"
+}

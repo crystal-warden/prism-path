@@ -1,0 +1,17 @@
+{
+  "dimension": "A8",
+  "evidence_path": "prismpath/comparisons/results/cedar/evidence/A8",
+  "expected": "allow,allow,deny,abstain,escalate_human,escalate_human",
+  "glue": null,
+  "grade": "NOT",
+  "harness_commit": "e7b050b",
+  "idiomatic": true,
+  "match": true,
+  "notes": "cedar authorize -v once per proposal. Cedar's decision is ALLOW or DENY; the four outcomes are carried by the @outcome annotation of the one permit that applied, read back from the verbose diagnostics (authorize_outputs.txt), so abstain and human routing are an annotation convention, not a returned decision (WITH-WORK on A1/A2 grounds alone). Receipts: none. Cedar is a library and CLI with no decision log, no signing key, and no anchor; a receipt trail would have to be built entirely outside it and would introduce a new trust anchor, which the pre registered budget grades NOT. The outcomes themselves match the corpus on all six steps.",
+  "observed": "allow,allow,deny,abstain,escalate_human,escalate_human",
+  "policy": "ai_action_gate",
+  "run_at": "2026-09-08T22:27:52Z",
+  "scenario": "ai_worker_loop_1",
+  "system": "cedar",
+  "system_version": "4.12.0"
+}

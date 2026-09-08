@@ -1,0 +1,17 @@
+{
+  "receipt_root": "4bf5be0c107434b54c514fad04bcf2cc44ed43bce03c8765a9f075779e57d65b",
+  "policy_hash": "2e35f8effd124fd930a06415ca0a0c424e9cc5979c04629d1f82f9654039db6b",
+  "count": 6,
+  "key_id": "67721772046da62688088b696e476334bd4dadcfe896d0c2ea66e0f14823ea56",
+  "signature_hex": "d2519e22f332e180c0308609c79a9078c203d3d0fda0cf5171fab244af4d2101e8931b661e277790d923b230f1f66bb60c518fe9579e661f50364e4b3dc1630f",
+  "verify_log": true,
+  "inclusion_proof_leaf3_verified": true,
+  "causes": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    34
+  ]
+}

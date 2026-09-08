@@ -1,0 +1,46 @@
+
+ALLOW
+
+note: this decision was due to the following policies:
+  r6
+
+
+=====
+
+ALLOW
+
+note: this decision was due to the following policies:
+  r7
+
+
+=====
+
+ALLOW
+
+note: this decision was due to the following policies:
+  r3
+
+
+=====
+
+ALLOW
+
+note: this decision was due to the following policies:
+  r5
+
+
+=====
+
+ALLOW
+
+note: this decision was due to the following policies:
+  r4
+
+
+=====
+
+ALLOW
+
+note: this decision was due to the following policies:
+  r1
+

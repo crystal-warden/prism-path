@@ -1,0 +1,1 @@
+Not expressible: a Check returns one boolean for one relation; no ordered rules, no multi outcome decision, no decision log. See systems/openfga TRANSLATION.json.

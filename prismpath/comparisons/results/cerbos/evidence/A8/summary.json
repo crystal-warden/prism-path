@@ -1,0 +1,19 @@
+{
+  "observed": [
+    "allow",
+    "allow",
+    "deny",
+    "abstain",
+    "escalate_human",
+    "escalate_human"
+  ],
+  "rules": [
+    "r6",
+    "r7",
+    "r3",
+    "r5",
+    "r4",
+    "r1"
+  ],
+  "audit_records": 6
+}

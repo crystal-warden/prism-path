@@ -14,7 +14,28 @@
     "B4",
     "B5"
   ],
-  "generated_from": [],
+  "generated_from": [
+    {
+      "path": "cedar/A8__ai_action_gate__ai_worker_loop_1.json",
+      "sha256": "a4a533396207688246980f23f022c2ae5984297b7212b7c7c1825da16cabd936"
+    },
+    {
+      "path": "cerbos/A8__ai_action_gate__ai_worker_loop_1.json",
+      "sha256": "447a069ac8962e6be4ccf5b882dae70e4e9474b543db2007cfe72c8b6c7a7439"
+    },
+    {
+      "path": "opa/A8__ai_action_gate__ai_worker_loop_1.json",
+      "sha256": "7841a1e0a5f55de726893da9a57813e499bd9f6567fc1c3f4c7f7612586a0c6e"
+    },
+    {
+      "path": "openfga/A8__ai_action_gate__ai_worker_loop_1.json",
+      "sha256": "2eb3de482a70d8a7ea210b0b913594fb28049925435f5d222f5148fd404b474c"
+    },
+    {
+      "path": "prismpath/A8__ai_action_gate__ai_worker_loop_1.json",
+      "sha256": "df43458a92463777a75f43ef393d3a7da4dc9d97db3dec269522e05a723ce457"
+    }
+  ],
   "matrix": {
     "A1": {
       "cedar": {
@@ -454,42 +475,50 @@
       "cedar": {
         "counts": {
           "NATIVE": 0,
-          "NOT": 0,
+          "NOT": 1,
           "WITH-WORK": 0
         },
-        "files": [],
-        "grade": "UNTESTED",
+        "files": [
+          "cedar/A8__ai_action_gate__ai_worker_loop_1.json"
+        ],
+        "grade": "NOT",
         "mismatches": 0
       },
       "cerbos": {
         "counts": {
           "NATIVE": 0,
-          "NOT": 0,
+          "NOT": 1,
           "WITH-WORK": 0
         },
-        "files": [],
-        "grade": "UNTESTED",
+        "files": [
+          "cerbos/A8__ai_action_gate__ai_worker_loop_1.json"
+        ],
+        "grade": "NOT",
         "mismatches": 0
       },
       "opa": {
         "counts": {
           "NATIVE": 0,
           "NOT": 0,
-          "WITH-WORK": 0
+          "WITH-WORK": 1
         },
-        "files": [],
-        "grade": "UNTESTED",
+        "files": [
+          "opa/A8__ai_action_gate__ai_worker_loop_1.json"
+        ],
+        "grade": "WITH-WORK",
         "mismatches": 0
       },
       "openfga": {
         "counts": {
           "NATIVE": 0,
-          "NOT": 0,
+          "NOT": 1,
           "WITH-WORK": 0
         },
-        "files": [],
-        "grade": "UNTESTED",
-        "mismatches": 0
+        "files": [
+          "openfga/A8__ai_action_gate__ai_worker_loop_1.json"
+        ],
+        "grade": "NOT",
+        "mismatches": 1
       },
       "openlane": {
         "counts": {
@@ -503,12 +532,14 @@
       },
       "prismpath": {
         "counts": {
-          "NATIVE": 0,
+          "NATIVE": 1,
           "NOT": 0,
           "WITH-WORK": 0
         },
-        "files": [],
-        "grade": "UNTESTED",
+        "files": [
+          "prismpath/A8__ai_action_gate__ai_worker_loop_1.json"
+        ],
+        "grade": "NATIVE",
         "mismatches": 0
       }
     },

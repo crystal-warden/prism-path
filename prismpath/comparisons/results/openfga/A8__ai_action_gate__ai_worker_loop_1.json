@@ -1,0 +1,17 @@
+{
+  "dimension": "A8",
+  "evidence_path": "prismpath/comparisons/results/openfga/evidence/A8",
+  "expected": "allow,allow,deny,abstain,escalate_human,escalate_human",
+  "glue": null,
+  "grade": "NOT",
+  "harness_commit": "e7b050b",
+  "idiomatic": true,
+  "match": false,
+  "notes": "The gate policy is not expressible in OpenFGA (translator: a Check is one boolean for one relation; conditions on tuples could gate a single allow relation but cannot yield deny, abstain, and escalate_human as distinct results). No decision log facility either. The loop cannot be closed.",
+  "observed": "not_expressible",
+  "policy": "ai_action_gate",
+  "run_at": "2026-09-08T22:27:55Z",
+  "scenario": "ai_worker_loop_1",
+  "system": "openfga",
+  "system_version": "1.19.0"
+}
