@@ -55,13 +55,13 @@ theorem mem_numConsts {atoms : List NumAtom} {c : Int}
     | nil => simp at hraw
     | cons _ _ => rfl
   simp only [hemp, Bool.false_eq_true, if_false]
-  rw [List.mem_eraseDups, List.mem_mergeSort]
+  rw [List.mem_dedup, List.mem_mergeSort]
   exact hraw
 
 theorem mem_boundaries {consts : List Int} {c : Int} (h : c ∈ consts) :
     c ∈ boundaries consts ∧ c + 1 ∈ boundaries consts := by
   unfold boundaries
-  rw [List.mem_eraseDups, List.mem_mergeSort, List.mem_eraseDups, List.mem_mergeSort]
+  rw [List.mem_dedup, List.mem_mergeSort, List.mem_dedup, List.mem_mergeSort]
   constructor <;> exact List.mem_flatMap.mpr ⟨c, h, by simp⟩
 
 /-! ## Truth changes only at boundaries -/
@@ -343,7 +343,7 @@ theorem mem_catConsts {atomsF : List Cond} {a : Cond} {op : Op} {l : List String
     ∀ c ∈ l, c ∈ catConsts (atomsF.filterMap toCatAtom) := by
   intro c hc
   unfold catConsts
-  rw [List.mem_eraseDups, List.mem_flatMap]
+  rw [List.mem_dedup, List.mem_flatMap]
   exact ⟨(op, l), List.mem_filterMap.mpr ⟨a, ha, hcat⟩, hc⟩
 
 theorem any_strs_false {l : List Value} {cs : List String} {s : String}
@@ -450,7 +450,7 @@ theorem partition_mem {Action : Type} {p : Policy Action} {g : String} {a : Cond
   rw [List.mem_map]
   refine ⟨g, ?_, rfl⟩
   unfold fieldsOf
-  rw [List.mem_eraseDups, List.mem_map]
+  rw [List.mem_dedup, List.mem_map]
   exact ⟨(g, a), h, rfl⟩
 
 /-- Equal quantizations give equal symbols on every partition. -/
@@ -507,6 +507,28 @@ theorem atoms_agree {Action : Type} (p : Policy Action) (x x' : Reading)
       | bool _ => rw [hw] at htx'; simp at htx'
     | int _ => rw [hv] at htx; simp at htx
     | bool _ => rw [hv] at htx; simp at htx
+
+/-! ## I1b: the coarsest interval partition
+
+The numeric cells are intervals (contiguous integer ranges between consecutive retained boundaries),
+and no two adjacent cells can be merged: across every retained boundary the atom truth vector changes.
+Together with `symbolCount_eq_truthVec` (cells refine atom truth) this is the paper's "coarsest
+partition on which every atom is constant", made precise: coarsest among INTERVAL partitions. A
+partition allowed to merge non adjacent cells could be coarser (with `x == 5` the values 4 and 6 share
+a truth vector but sit in different cells); the implementation and the paper's monotone step function
+`q_f` both keep intervals, so the interval qualifier is the honest statement. -/
+
+theorem retained_separates {atoms : List NumAtom} {b : Int} (hb : b ∈ retained atoms) :
+    truthVec atoms (b - 1) ≠ truthVec atoms b := by
+  unfold retained at hb
+  rw [List.mem_filter] at hb
+  simpa using hb.2
+
+/-- Every retained boundary separates two adjacent cells with different truth vectors: the cell
+immediately below `b` (containing `b - 1`) and the cell starting at `b` differ in symbol and in truth. -/
+theorem coarsest_interval {atoms : List NumAtom} {b : Int} (hb : b ∈ retained atoms) :
+    symbolCount atoms (b - 1) < symbolCount atoms b ∧ truthVec atoms (b - 1) ≠ truthVec atoms b :=
+  ⟨countP_lt_of_mem hb (by omega) (le_refl b), retained_separates hb⟩
 
 /-- **Theorem I1 (decision preservation).** For a Level M policy and two well typed readings with the
 same Figueroa quantization, the policy routes them identically. -/

@@ -1,6 +1,7 @@
 -- SPDX-License-Identifier: Apache-2.0
 -- Copyright 2026 Crystal Warden Supply Chain Labs LLC
 import FQ.Syntax
+import Mathlib.Data.List.Dedup
 /-!
 # Figueroa quantization: the per field partitions
 
@@ -51,7 +52,7 @@ def numConsts (atoms : List NumAtom) : List Int :=
     | .nmem cs => cs ++ acc
     | .truthy  => 0 :: acc) []
   let base := if raw.isEmpty then [0] else raw
-  (base.mergeSort (· ≤ ·)).eraseDups
+  (base.mergeSort (· ≤ ·)).dedup
 
 /-! ## The reference algorithm: fine grid, then merge -/
 
@@ -110,7 +111,7 @@ def repAlg (atoms : List NumAtom) (s : Nat) : Int :=
 
 /-- Fine boundaries: every constant and its successor. -/
 def boundaries (consts : List Int) : List Int :=
-  ((consts.flatMap (fun c => [c, c + 1])).mergeSort (· ≤ ·)).eraseDups
+  ((consts.flatMap (fun c => [c, c + 1])).mergeSort (· ≤ ·)).dedup
 
 /-- A boundary is retained when the truth vector differs across it. -/
 def retained (atoms : List NumAtom) : List Int :=
@@ -127,7 +128,7 @@ def repBool (s : Nat) : Bool := s == 1
 
 /-- The named constants in first appearance order; the trailing cell is `other`. -/
 def catConsts (atoms : List (Op × List String)) : List String :=
-  (atoms.flatMap (·.2)).eraseDups
+  (atoms.flatMap (·.2)).dedup
 
 /-- Index of the first matching constant, or `consts.length` for the trailing `other` cell. -/
 def symbolCat : List String → String → Nat
@@ -186,7 +187,7 @@ def policyAtoms {Action : Type} (p : Policy Action) : List (String × Cond) :=
   p.flatMap (fun r => condAtoms r.cond)
 
 def fieldsOf {Action : Type} (p : Policy Action) : List String :=
-  ((policyAtoms p).map (·.1)).eraseDups
+  ((policyAtoms p).map (·.1)).dedup
 
 def ints : List Value → List Int
   | [] => []
