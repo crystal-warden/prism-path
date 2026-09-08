@@ -1,0 +1,95 @@
+apiVersion: api.cerbos.dev/v1
+resourcePolicy:
+  version: default
+  resource: network_admission
+  rules:
+    - name: r1
+      actions: ["decide"]
+      effect: EFFECT_DENY
+      roles: ["*"]
+      condition:
+        match:
+          expr: "(has(request.resource.attr.dst_port) && request.resource.attr.dst_port == 23)"
+      output:
+        when:
+          ruleActivated: "{\"outcome\": \"deny\", \"rule\": \"r1\"}"
+    - name: r2
+      actions: ["decide"]
+      effect: EFFECT_ALLOW
+      roles: ["*"]
+      condition:
+        match:
+          expr: "((has(request.resource.attr.dst_port) && request.resource.attr.dst_port == 22) && (has(request.resource.attr.src_internal) && request.resource.attr.src_internal == true)) && !(has(request.resource.attr.dst_port) && request.resource.attr.dst_port == 23)"
+      output:
+        when:
+          ruleActivated: "{\"outcome\": \"allow\", \"rule\": \"r2\"}"
+    - name: r3
+      actions: ["decide"]
+      effect: EFFECT_DENY
+      roles: ["*"]
+      condition:
+        match:
+          expr: "(has(request.resource.attr.dst_port) && request.resource.attr.dst_port == 22) && !(has(request.resource.attr.dst_port) && request.resource.attr.dst_port == 23) && !((has(request.resource.attr.dst_port) && request.resource.attr.dst_port == 22) && (has(request.resource.attr.src_internal) && request.resource.attr.src_internal == true))"
+      output:
+        when:
+          ruleActivated: "{\"outcome\": \"deny\", \"rule\": \"r3\"}"
+    - name: r4
+      actions: ["decide"]
+      effect: EFFECT_ALLOW
+      roles: ["*"]
+      condition:
+        match:
+          expr: "((has(request.resource.attr.dst_port) && request.resource.attr.dst_port == 53) && (has(request.resource.attr.pkt_len) && request.resource.attr.pkt_len <= 512)) && !(has(request.resource.attr.dst_port) && request.resource.attr.dst_port == 23) && !((has(request.resource.attr.dst_port) && request.resource.attr.dst_port == 22) && (has(request.resource.attr.src_internal) && request.resource.attr.src_internal == true)) && !(has(request.resource.attr.dst_port) && request.resource.attr.dst_port == 22)"
+      output:
+        when:
+          ruleActivated: "{\"outcome\": \"allow\", \"rule\": \"r4\"}"
+    - name: r5
+      actions: ["decide"]
+      effect: EFFECT_DENY
+      roles: ["*"]
+      condition:
+        match:
+          expr: "((has(request.resource.attr.dst_port) && request.resource.attr.dst_port == 53) && (has(request.resource.attr.pkt_len) && request.resource.attr.pkt_len > 512)) && !(has(request.resource.attr.dst_port) && request.resource.attr.dst_port == 23) && !((has(request.resource.attr.dst_port) && request.resource.attr.dst_port == 22) && (has(request.resource.attr.src_internal) && request.resource.attr.src_internal == true)) && !(has(request.resource.attr.dst_port) && request.resource.attr.dst_port == 22) && !((has(request.resource.attr.dst_port) && request.resource.attr.dst_port == 53) && (has(request.resource.attr.pkt_len) && request.resource.attr.pkt_len <= 512))"
+      output:
+        when:
+          ruleActivated: "{\"outcome\": \"deny\", \"rule\": \"r5\"}"
+    - name: r6
+      actions: ["decide"]
+      effect: EFFECT_ALLOW
+      roles: ["*"]
+      condition:
+        match:
+          expr: "(has(request.resource.attr.dst_port) && request.resource.attr.dst_port == 443) && !(has(request.resource.attr.dst_port) && request.resource.attr.dst_port == 23) && !((has(request.resource.attr.dst_port) && request.resource.attr.dst_port == 22) && (has(request.resource.attr.src_internal) && request.resource.attr.src_internal == true)) && !(has(request.resource.attr.dst_port) && request.resource.attr.dst_port == 22) && !((has(request.resource.attr.dst_port) && request.resource.attr.dst_port == 53) && (has(request.resource.attr.pkt_len) && request.resource.attr.pkt_len <= 512)) && !((has(request.resource.attr.dst_port) && request.resource.attr.dst_port == 53) && (has(request.resource.attr.pkt_len) && request.resource.attr.pkt_len > 512))"
+      output:
+        when:
+          ruleActivated: "{\"outcome\": \"allow\", \"rule\": \"r6\"}"
+    - name: r7
+      actions: ["decide"]
+      effect: EFFECT_ALLOW
+      roles: ["*"]
+      condition:
+        match:
+          expr: "(has(request.resource.attr.pkt_len) && request.resource.attr.pkt_len >= 1400) && !(has(request.resource.attr.dst_port) && request.resource.attr.dst_port == 23) && !((has(request.resource.attr.dst_port) && request.resource.attr.dst_port == 22) && (has(request.resource.attr.src_internal) && request.resource.attr.src_internal == true)) && !(has(request.resource.attr.dst_port) && request.resource.attr.dst_port == 22) && !((has(request.resource.attr.dst_port) && request.resource.attr.dst_port == 53) && (has(request.resource.attr.pkt_len) && request.resource.attr.pkt_len <= 512)) && !((has(request.resource.attr.dst_port) && request.resource.attr.dst_port == 53) && (has(request.resource.attr.pkt_len) && request.resource.attr.pkt_len > 512)) && !(has(request.resource.attr.dst_port) && request.resource.attr.dst_port == 443)"
+      output:
+        when:
+          ruleActivated: "{\"outcome\": \"observe\", \"rule\": \"r7\"}"
+    - name: r8
+      actions: ["decide"]
+      effect: EFFECT_ALLOW
+      roles: ["*"]
+      condition:
+        match:
+          expr: "(has(request.resource.attr.protocol) && request.resource.attr.protocol == 1) && !(has(request.resource.attr.dst_port) && request.resource.attr.dst_port == 23) && !((has(request.resource.attr.dst_port) && request.resource.attr.dst_port == 22) && (has(request.resource.attr.src_internal) && request.resource.attr.src_internal == true)) && !(has(request.resource.attr.dst_port) && request.resource.attr.dst_port == 22) && !((has(request.resource.attr.dst_port) && request.resource.attr.dst_port == 53) && (has(request.resource.attr.pkt_len) && request.resource.attr.pkt_len <= 512)) && !((has(request.resource.attr.dst_port) && request.resource.attr.dst_port == 53) && (has(request.resource.attr.pkt_len) && request.resource.attr.pkt_len > 512)) && !(has(request.resource.attr.dst_port) && request.resource.attr.dst_port == 443) && !(has(request.resource.attr.pkt_len) && request.resource.attr.pkt_len >= 1400)"
+      output:
+        when:
+          ruleActivated: "{\"outcome\": \"allow\", \"rule\": \"r8\"}"
+    - name: r9
+      actions: ["decide"]
+      effect: EFFECT_ALLOW
+      roles: ["*"]
+      condition:
+        match:
+          expr: "true && !(has(request.resource.attr.dst_port) && request.resource.attr.dst_port == 23) && !((has(request.resource.attr.dst_port) && request.resource.attr.dst_port == 22) && (has(request.resource.attr.src_internal) && request.resource.attr.src_internal == true)) && !(has(request.resource.attr.dst_port) && request.resource.attr.dst_port == 22) && !((has(request.resource.attr.dst_port) && request.resource.attr.dst_port == 53) && (has(request.resource.attr.pkt_len) && request.resource.attr.pkt_len <= 512)) && !((has(request.resource.attr.dst_port) && request.resource.attr.dst_port == 53) && (has(request.resource.attr.pkt_len) && request.resource.attr.pkt_len > 512)) && !(has(request.resource.attr.dst_port) && request.resource.attr.dst_port == 443) && !(has(request.resource.attr.pkt_len) && request.resource.attr.pkt_len >= 1400) && !(has(request.resource.attr.protocol) && request.resource.attr.protocol == 1)"
+      output:
+        when:
+          ruleActivated: "{\"outcome\": \"observe\", \"rule\": \"r9\"}"

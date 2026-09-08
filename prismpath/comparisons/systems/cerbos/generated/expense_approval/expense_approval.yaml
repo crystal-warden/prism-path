@@ -1,0 +1,75 @@
+apiVersion: api.cerbos.dev/v1
+resourcePolicy:
+  version: default
+  resource: expense_approval
+  rules:
+    - name: r1
+      actions: ["decide"]
+      effect: EFFECT_DENY
+      roles: ["*"]
+      condition:
+        match:
+          expr: "(has(request.resource.attr.vendor_risk) && request.resource.attr.vendor_risk == \"high\")"
+      output:
+        when:
+          ruleActivated: "{\"outcome\": \"deny\", \"rule\": \"r1\"}"
+    - name: r2
+      actions: ["decide"]
+      effect: EFFECT_DENY
+      roles: ["*"]
+      condition:
+        match:
+          expr: "(!has(request.resource.attr.receipt_present) || (has(request.resource.attr.receipt_present) && request.resource.attr.receipt_present == false)) && !(has(request.resource.attr.vendor_risk) && request.resource.attr.vendor_risk == \"high\")"
+      output:
+        when:
+          ruleActivated: "{\"outcome\": \"abstain\", \"rule\": \"r2\"}"
+    - name: r3
+      actions: ["decide"]
+      effect: EFFECT_DENY
+      roles: ["*"]
+      condition:
+        match:
+          expr: "(has(request.resource.attr.amount_cents) && request.resource.attr.amount_cents > 1000000) && !(has(request.resource.attr.vendor_risk) && request.resource.attr.vendor_risk == \"high\") && !(!has(request.resource.attr.receipt_present) || (has(request.resource.attr.receipt_present) && request.resource.attr.receipt_present == false))"
+      output:
+        when:
+          ruleActivated: "{\"outcome\": \"escalate_human\", \"rule\": \"r3\"}"
+    - name: r4
+      actions: ["decide"]
+      effect: EFFECT_DENY
+      roles: ["*"]
+      condition:
+        match:
+          expr: "((has(request.resource.attr.category) && request.resource.attr.category == \"other\") && (has(request.resource.attr.amount_cents) && request.resource.attr.amount_cents > 50000)) && !(has(request.resource.attr.vendor_risk) && request.resource.attr.vendor_risk == \"high\") && !(!has(request.resource.attr.receipt_present) || (has(request.resource.attr.receipt_present) && request.resource.attr.receipt_present == false)) && !(has(request.resource.attr.amount_cents) && request.resource.attr.amount_cents > 1000000)"
+      output:
+        when:
+          ruleActivated: "{\"outcome\": \"escalate_human\", \"rule\": \"r4\"}"
+    - name: r5
+      actions: ["decide"]
+      effect: EFFECT_ALLOW
+      roles: ["*"]
+      condition:
+        match:
+          expr: "(has(request.resource.attr.amount_cents) && request.resource.attr.amount_cents <= 50000) && !(has(request.resource.attr.vendor_risk) && request.resource.attr.vendor_risk == \"high\") && !(!has(request.resource.attr.receipt_present) || (has(request.resource.attr.receipt_present) && request.resource.attr.receipt_present == false)) && !(has(request.resource.attr.amount_cents) && request.resource.attr.amount_cents > 1000000) && !((has(request.resource.attr.category) && request.resource.attr.category == \"other\") && (has(request.resource.attr.amount_cents) && request.resource.attr.amount_cents > 50000))"
+      output:
+        when:
+          ruleActivated: "{\"outcome\": \"allow\", \"rule\": \"r5\"}"
+    - name: r6
+      actions: ["decide"]
+      effect: EFFECT_ALLOW
+      roles: ["*"]
+      condition:
+        match:
+          expr: "((has(request.resource.attr.requester_role) && request.resource.attr.requester_role in [\"manager\", \"director\"]) && (has(request.resource.attr.amount_cents) && request.resource.attr.amount_cents <= 1000000)) && !(has(request.resource.attr.vendor_risk) && request.resource.attr.vendor_risk == \"high\") && !(!has(request.resource.attr.receipt_present) || (has(request.resource.attr.receipt_present) && request.resource.attr.receipt_present == false)) && !(has(request.resource.attr.amount_cents) && request.resource.attr.amount_cents > 1000000) && !((has(request.resource.attr.category) && request.resource.attr.category == \"other\") && (has(request.resource.attr.amount_cents) && request.resource.attr.amount_cents > 50000)) && !(has(request.resource.attr.amount_cents) && request.resource.attr.amount_cents <= 50000)"
+      output:
+        when:
+          ruleActivated: "{\"outcome\": \"allow\", \"rule\": \"r6\"}"
+    - name: r7
+      actions: ["decide"]
+      effect: EFFECT_DENY
+      roles: ["*"]
+      condition:
+        match:
+          expr: "true && !(has(request.resource.attr.vendor_risk) && request.resource.attr.vendor_risk == \"high\") && !(!has(request.resource.attr.receipt_present) || (has(request.resource.attr.receipt_present) && request.resource.attr.receipt_present == false)) && !(has(request.resource.attr.amount_cents) && request.resource.attr.amount_cents > 1000000) && !((has(request.resource.attr.category) && request.resource.attr.category == \"other\") && (has(request.resource.attr.amount_cents) && request.resource.attr.amount_cents > 50000)) && !(has(request.resource.attr.amount_cents) && request.resource.attr.amount_cents <= 50000) && !((has(request.resource.attr.requester_role) && request.resource.attr.requester_role in [\"manager\", \"director\"]) && (has(request.resource.attr.amount_cents) && request.resource.attr.amount_cents <= 1000000))"
+      output:
+        when:
+          ruleActivated: "{\"outcome\": \"escalate_human\", \"rule\": \"r7\"}"

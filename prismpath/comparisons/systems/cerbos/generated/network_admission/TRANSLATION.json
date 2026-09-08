@@ -1,0 +1,21 @@
+{
+  "citations": [
+    "https://docs.cerbos.dev/cerbos/latest/policies/resource_policies (how Cerbos evaluates requests: ALLOW+DENY -> DENY; roles '*')",
+    "https://docs.cerbos.dev/cerbos/latest/policies/conditions (CEL conditions; has() for optional attributes)",
+    "https://docs.cerbos.dev/cerbos/latest/policies/outputs (output expressions per rule)",
+    "https://docs.cerbos.dev/cerbos/latest/policies/derived_roles (parentRoles for role hierarchies)",
+    "https://docs.cerbos.dev/cerbos/latest/api/index (CheckResources)"
+  ],
+  "dropped_rules": [],
+  "expressible": true,
+  "files": [
+    "network_admission.yaml"
+  ],
+  "idiomatic": true,
+  "notes": [
+    "first match emulated by conjoining the negation of every earlier rule's condition (Cerbos has no ordered evaluation: ALLOW and DENY matching together resolve to DENY); every attribute read is has() guarded so absence is unsatisfied, not a logged CEL evaluation error",
+    "outcomes beyond allow/deny ride the rule's output block as {outcome, rule}; the effect is EFFECT_ALLOW for allow and observe, EFFECT_DENY otherwise"
+  ],
+  "policy": "network_admission",
+  "system": "cerbos"
+}

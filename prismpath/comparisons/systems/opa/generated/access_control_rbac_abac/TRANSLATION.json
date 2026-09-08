@@ -1,0 +1,26 @@
+{
+  "citations": [
+    "https://www.openpolicyagent.org/docs/latest/policy-language/#else-keyword",
+    "https://www.openpolicyagent.org/docs/latest/policy-language/#undefined-values",
+    "https://www.openpolicyagent.org/docs/latest/policy-language/#membership-in",
+    "https://www.openpolicyagent.org/docs/latest/policy-language/#negation-not",
+    "https://www.openpolicyagent.org/docs/latest/policy-language/#logical-or",
+    "https://www.openpolicyagent.org/docs/latest/policy-language/#sets",
+    "https://www.openpolicyagent.org/docs/latest/policy-language/#functions-built-in-graphreachable"
+  ],
+  "dropped_rules": [],
+  "expressible": true,
+  "files": [
+    "data.json",
+    "policy.rego"
+  ],
+  "idiomatic": true,
+  "notes": [
+    "Ordered first-match rules are encoded idiomatically using Rego's `else` chain (`decision := ... if { ... } else := ...`), with the final `else` without a body serving as the catch-all when present.",
+    "Missing input fields in `cmp` or `in` make expressions undefined, causing rule body evaluation to fail (unsatisfied), which reproduces neutral semantics.",
+    "Role hierarchy is encoded natively via a rank map in data.json (`data.hierarchy`) compared with the `>=` operator.",
+    "Guarded not_in with input.field != null so missing fields yield unsatisfied rather than true."
+  ],
+  "policy": "access_control_rbac_abac",
+  "system": "opa"
+}

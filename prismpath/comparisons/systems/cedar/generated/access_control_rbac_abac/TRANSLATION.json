@@ -1,0 +1,23 @@
+{
+  "citations": [
+    "https://docs.cedarpolicy.com/policies/syntax-policy.html (permit/forbid, when/unless, annotations)",
+    "https://docs.cedarpolicy.com/auth/authorization.html (forbid overrides permit; no ordering; ALLOW only when a permit applies)",
+    "https://docs.cedarpolicy.com/policies/syntax-operators.html (has, in, contains, containsAny)",
+    "https://docs.cedarpolicy.com/overview/terminology.html#term-entity-hierarchy (entity hierarchy, `in`)",
+    "https://docs.cedarpolicy.com/policies/templates.html (templates linked per relationship)"
+  ],
+  "dropped_rules": [],
+  "expressible": true,
+  "files": [
+    "access_control_rbac_abac.cedar",
+    "roles.entities.json"
+  ],
+  "idiomatic": true,
+  "notes": [
+    "first match emulated by conjoining the negation of every earlier rule's condition (Cedar has no policy ordering and forbid would override regardless of position); every context read is `context has` guarded so absence is unsatisfied, not an evaluation error",
+    "the outcome is not a Cedar decision: it rides the @outcome annotation of the one policy that applies, read from `cedar authorize -v`; Cedar itself answers ALLOW (a rule applied) or DENY",
+    "role hierarchy as the entity hierarchy: Role::admin is a child of Role::manager and so on, the principal's parent is its role, and role_at_least is `principal in Role::floor` (native)"
+  ],
+  "policy": "access_control_rbac_abac",
+  "system": "cedar"
+}

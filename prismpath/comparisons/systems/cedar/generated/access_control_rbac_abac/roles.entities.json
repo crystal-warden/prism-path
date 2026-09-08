@@ -1,0 +1,49 @@
+[
+  {
+    "uid": {
+      "type": "Role",
+      "id": "contractor"
+    },
+    "attrs": {},
+    "parents": []
+  },
+  {
+    "uid": {
+      "type": "Role",
+      "id": "employee"
+    },
+    "attrs": {},
+    "parents": [
+      {
+        "type": "Role",
+        "id": "contractor"
+      }
+    ]
+  },
+  {
+    "uid": {
+      "type": "Role",
+      "id": "manager"
+    },
+    "attrs": {},
+    "parents": [
+      {
+        "type": "Role",
+        "id": "employee"
+      }
+    ]
+  },
+  {
+    "uid": {
+      "type": "Role",
+      "id": "admin"
+    },
+    "attrs": {},
+    "parents": [
+      {
+        "type": "Role",
+        "id": "manager"
+      }
+    ]
+  }
+]

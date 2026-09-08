@@ -1,0 +1,21 @@
+{
+  "citations": [
+    "https://docs.cedarpolicy.com/policies/syntax-policy.html (permit/forbid, when/unless, annotations)",
+    "https://docs.cedarpolicy.com/auth/authorization.html (forbid overrides permit; no ordering; ALLOW only when a permit applies)",
+    "https://docs.cedarpolicy.com/policies/syntax-operators.html (has, in, contains, containsAny)",
+    "https://docs.cedarpolicy.com/overview/terminology.html#term-entity-hierarchy (entity hierarchy, `in`)",
+    "https://docs.cedarpolicy.com/policies/templates.html (templates linked per relationship)"
+  ],
+  "dropped_rules": [],
+  "expressible": true,
+  "files": [
+    "ai_action_gate.cedar"
+  ],
+  "idiomatic": true,
+  "notes": [
+    "first match emulated by conjoining the negation of every earlier rule's condition (Cedar has no policy ordering and forbid would override regardless of position); every context read is `context has` guarded so absence is unsatisfied, not an evaluation error",
+    "the outcome is not a Cedar decision: it rides the @outcome annotation of the one policy that applies, read from `cedar authorize -v`; Cedar itself answers ALLOW (a rule applied) or DENY"
+  ],
+  "policy": "ai_action_gate",
+  "system": "cedar"
+}

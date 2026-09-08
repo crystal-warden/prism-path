@@ -1,0 +1,22 @@
+{
+  "citations": [
+    "https://docs.cedarpolicy.com/policies/syntax-policy.html (permit/forbid, when/unless, annotations)",
+    "https://docs.cedarpolicy.com/auth/authorization.html (forbid overrides permit; no ordering; ALLOW only when a permit applies)",
+    "https://docs.cedarpolicy.com/policies/syntax-operators.html (has, in, contains, containsAny)",
+    "https://docs.cedarpolicy.com/overview/terminology.html#term-entity-hierarchy (entity hierarchy, `in`)",
+    "https://docs.cedarpolicy.com/policies/templates.html (templates linked per relationship)"
+  ],
+  "dropped_rules": [],
+  "expressible": true,
+  "files": [
+    "document_sharing_rebac.cedar",
+    "entities.json"
+  ],
+  "idiomatic": true,
+  "notes": [
+    "relationships as Cedar's sharing idiom: group membership and folder parentage are the entity hierarchy, each viewer tuple is one policy `permit(principal in <subject>, action == view, resource in <object>)` (the expansion of a linked template instance per tuple); inheritance to documents comes from `resource in Folder` through the hierarchy",
+    "the corpus allow rule is r1, the catch all is the Cedar default DENY"
+  ],
+  "policy": "document_sharing_rebac",
+  "system": "cedar"
+}

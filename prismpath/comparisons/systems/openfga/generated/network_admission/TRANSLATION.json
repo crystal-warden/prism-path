@@ -1,0 +1,18 @@
+{
+  "citations": [
+    "https://openfga.dev/docs/modeling/direct-access (directly related user types)",
+    "https://openfga.dev/docs/modeling/user-groups (group#member as an assignable subject)",
+    "https://openfga.dev/docs/modeling/parent-child (relation from parent: tuple to userset)",
+    "https://openfga.dev/docs/modeling/conditions (conditions on tuples; why the decision policies are not expressible)",
+    "https://openfga.dev/api/service (Check, WriteAuthorizationModel, Write)"
+  ],
+  "dropped_rules": [],
+  "expressible": false,
+  "files": [],
+  "idiomatic": true,
+  "notes": [
+    "not expressible: a Check returns one boolean for one relation; the policy needs 3 distinct outcomes (allow, deny, observe) selected by ordered first match rules. Conditions on tuples could gate a single allow relation on the request context, which is the Phase 5 combination test, not a translation."
+  ],
+  "policy": "network_admission",
+  "system": "openfga"
+}

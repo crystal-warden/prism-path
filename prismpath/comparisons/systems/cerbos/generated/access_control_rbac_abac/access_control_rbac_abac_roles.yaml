@@ -1,0 +1,12 @@
+apiVersion: api.cerbos.dev/v1
+derivedRoles:
+  name: access_control_rbac_abac_roles
+  definitions:
+    - name: at_least_contractor
+      parentRoles: ["contractor", "employee", "manager", "admin"]
+    - name: at_least_employee
+      parentRoles: ["employee", "manager", "admin"]
+    - name: at_least_manager
+      parentRoles: ["manager", "admin"]
+    - name: at_least_admin
+      parentRoles: ["admin"]

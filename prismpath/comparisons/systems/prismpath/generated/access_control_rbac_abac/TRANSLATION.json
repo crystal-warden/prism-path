@@ -1,0 +1,24 @@
+{
+  "citations": [
+    "SPEC.md section 2 (edges, tiers), section 3 (routing: deterministic first, document order, first true)",
+    "SPEC.md section 4 (predicate language), section 4.3 (Level M fragment)",
+    "SPEC.md section 5.5 (reserved worker outcome fields: needs_human)"
+  ],
+  "dropped_rules": [
+    "r3",
+    "r4"
+  ],
+  "expressible": true,
+  "files": [
+    "access_control_rbac_abac.md"
+  ],
+  "idiomatic": true,
+  "notes": [
+    "r3 dropped: eq_fields: outside the predicate language (SPEC section 4)",
+    "r4 dropped: intersects: outside the predicate language (SPEC section 4)",
+    "r5: role hierarchy flattened at authoring into an explicit in list (WITH-WORK); the policy states the consequence, not the hierarchy",
+    "Level M: yes"
+  ],
+  "policy": "access_control_rbac_abac",
+  "system": "prismpath"
+}
