@@ -29,7 +29,7 @@ def _cases():
 
 def test_corpus_pinned():
     cases = _cases()
-    assert len(cases) == 4
+    assert len(cases) == 7                      # v2: the three cut point regression flows joined the four originals
     assert sum(len(c["readings"]) for c in cases) >= 50
 
 

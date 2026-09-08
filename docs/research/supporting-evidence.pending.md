@@ -6,7 +6,7 @@ free number, instead of editing the main ledger. On merge, the docs session fold
 ledger with correct formatting and clears this file.*
 
 *Format each row exactly per `LEDGER_STANDARDS.md` §1 (Claim / Method / Result + Honest scope /
-Provenance) with a month granularity date. Next free number: **#140**.*
+Provenance) with a month granularity date. Next free number: **#141**.*
 
 ---
 
@@ -318,3 +318,56 @@ the posture and that its provenance is disclosed.
 **Provenance.** prism-path, branch feat/grc-compliance-adapter, commit 474d069
 (adapters/compliance/deterministic_checks.py: evidence_class, _evidence_rollup, check_objectives_typed;
 tests/test_evidence_provenance.py). No push (owner-gated).
+
+#### #140: Theorem I1 proven in Lean 4, and stating it found three decision preservation defects in the reference quantizer (September 2026)
+
+**Claim.** Figueroa quantization's decision preservation (PROTOCOL.md invariant I1, the paper's
+Theorem 2.2) is now a machine checked theorem over a Lean 4 model of the Level M fragment, for
+policies with integer, boolean, and string fields and well typed total readings; and the act of
+stating that theorem against the reference implementation exposed three atom forms on which the
+reference violated I1, each now fixed in the Python reference and the Rust mirror and pinned by the
+frozen corpus.
+
+**Method.** Lean 4.33.1 with Mathlib v4.33.1 (formal/TOOLCHAIN.md). formal/FQ models conditions,
+first match routing, and the per field partitions derived from the policy; the numeric partition is
+given both as the reference algorithm (fine grid of point and gap cells, adjacent merge by atom truth
+vector) and as a canonical count of retained boundaries, and FQ/Bridge.lean checks by evaluation
+that the two agree on integer ranges. FQ/I1.lean proves decision_preservation: equal quantization
+implies equal route. The argument is that an atom's truth changes between k and k+1 only when k+1
+is a constant or a constant's successor, such a boundary is retained exactly when the truth vector
+changes across it, and the symbol counts retained boundaries at or below the value, so equal
+symbols leave no retained boundary between two values. Booleans are two cells; two strings with
+one symbol are either equal or both unnamed, and every string constant is named. While writing the
+partition definitions the reference's constant collection was compared with the model and tested
+directly by routing readings and their reconstructed representatives through the engine.
+
+**Result.** decision_preservation compiles with zero sorry; #print axioms lists propext,
+Classical.choice, Quot.sound only. The three reference defects, each demonstrated on a one line
+policy before the fix: numeric `x in (3, 5)` (readings 3 and 4 shared a symbol and routed
+differently), numeric `x not in (7,)` (7 and 8), and bare truthiness `x` alongside `x >= 5`
+(0 and 1); a fourth, string truthiness `name` alongside `name == 'root'` ("" and an unnamed
+string), was found from the model. Cause: `_numeric_partition` used only ordering and equality
+constants as cut points, and `_categorical_partition` had no "" constant; the Rust mirror carried
+the same omission and additionally evaluated `in` and `not in` as false in its merge. Fixed in
+adapters/telemetry/quantizer.py and prismpath-telemetry-rs/src/quantizer.rs; regression test
+adapters/telemetry/tests/test_quantizer_cut_points.py (6 tests); decisions.json frozen corpus v2
+adds three flows (numin, truthynum, strtruthy: 17 readings) with the four original flows byte
+identical in readings, routes, and Python wire bits (a new gen_wire_parity.py freezes the latter for
+the Rust cross implementation test); boundary and spiral corpora regenerate byte identically.
+Suites: prismpath/tests 723 passed, telemetry 154, fusion 153, Rust workspace 110, arch_guard clean.
+
+**Honest scope.** No shipped or measured flow uses the affected forms (every bare truthiness edge in
+the repo is on a boolean field, no numeric in list exists), so no ledger number moves; the defect
+was latent in exactly the atom forms the frozen corpus never exercised, which is the point of the
+row: implementations agreeing across substrates showed they agreed with each other, not with the
+definition. The theorem is stated over the canonical boundary count form and over well typed total
+readings; the reference algorithm's equality with that form is checked by evaluation on ranges, not
+yet proven; the generated vector bridge to the frozen corpus (milestone 2), the coarsest partition
+claim (I1b), and the reconstruct corollary (route of the representative equals route of the reading,
+which needs the retained boundaries proven sorted and duplicate free) remain open and named. The
+README and paper keep the wording "machine checked" until the vector bridge lands. Lean is not in
+the CI matrix; lake build is a documented local gate.
+
+**Provenance.** Branch formal/lean-fq, commit d3701ca (formal/FQ/{Syntax,Partition,Bridge,I1,Axioms}.lean,
+formal/TOOLCHAIN.md, formal/HANDOFF.md section 0); branch fix/quantizer-cut-points (the reference
+fix, corpus v2, regression tests, gen_wire_parity.py). No push (owner gated).

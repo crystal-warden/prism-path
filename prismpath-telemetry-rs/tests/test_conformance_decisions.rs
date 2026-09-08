@@ -21,7 +21,7 @@ fn json_obj_to_reading(obj: &serde_json::Map<String, Value>) -> HashMap<String, 
 fn test_corpus_pinned() {
     let corpus = load_decisions_corpus();
     let cases = corpus["cases"].as_array().unwrap();
-    assert_eq!(cases.len(), 4);
+    assert_eq!(cases.len(), 7); // v2: three cut point regression flows joined the four originals
     let total_readings: usize = cases
         .iter()
         .map(|c| c["readings"].as_array().unwrap().len())
