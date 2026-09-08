@@ -1,0 +1,17 @@
+{
+  "dimension": "A4",
+  "evidence_path": "prismpath/comparisons/results/cerbos/evidence/A8",
+  "expected": "true",
+  "glue": null,
+  "grade": "NOT",
+  "harness_commit": "fcbabc5",
+  "idiomatic": true,
+  "match": false,
+  "notes": "Sub property signed, from the A8 loop run of ai_action_gate/ai_worker_loop_1: open source Cerbos has no signing key or anchor (policy signing is a Cerbos Hub feature); signing would introduce a new trust anchor.",
+  "observed": "false",
+  "policy": "ai_action_gate",
+  "run_at": "2026-09-08T22:30:21Z",
+  "scenario": "signed",
+  "system": "cerbos",
+  "system_version": "0.55.0"
+}

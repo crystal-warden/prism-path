@@ -1,0 +1,17 @@
+{
+  "dimension": "A4",
+  "evidence_path": "prismpath/comparisons/results/prismpath/evidence/A8",
+  "expected": "true",
+  "glue": null,
+  "grade": "NATIVE",
+  "harness_commit": "fcbabc5",
+  "idiomatic": true,
+  "match": true,
+  "notes": "Sub property tamper_evident, from the A8 loop run of ai_action_gate/ai_worker_loop_1: sha256 Merkle leaves over canonical events, verify_log true, inclusion proof for leaf 3 verified (audit_log, ledger_ots primitives).",
+  "observed": "true",
+  "policy": "ai_action_gate",
+  "run_at": "2026-09-08T22:30:21Z",
+  "scenario": "tamper_evident",
+  "system": "prismpath",
+  "system_version": "repo@fcbabc5"
+}

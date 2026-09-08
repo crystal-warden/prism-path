@@ -16,20 +16,360 @@
   ],
   "generated_from": [
     {
+      "path": "cedar/A1__ai_action_gate__abstain_low_confidence_1.json",
+      "sha256": "d9c9edd2417a4d2e69fe4820bf3e8ac494d6dfff8e5f7c4030386b529b69a2e3"
+    },
+    {
+      "path": "cedar/A1__ai_action_gate__undeclared_missing_1.json",
+      "sha256": "48fd4cac5be63b62a139848bad128a16d75034aaedd2a9a5c4ed96cdb89b95cf"
+    },
+    {
+      "path": "cedar/A1__expense_approval__insufficient_1.json",
+      "sha256": "003a8997cbb0af9615f4dbf44ba1ea78c4671b8f1b715592c4478a1619aedcc0"
+    },
+    {
+      "path": "cedar/A1__expense_approval__insufficient_2.json",
+      "sha256": "d87df781415418dcf3993861211332abe7912d10f2e7f46d8a59903020abb5bc"
+    },
+    {
+      "path": "cedar/A1__expense_approval__undeclared_missing_1.json",
+      "sha256": "5394c504c6c3bb8882488b72552b8127206175ee92e4e0e05a5147cadd442e83"
+    },
+    {
+      "path": "cedar/A1__sensor_interlock__undeclared_missing_1.json",
+      "sha256": "981ec3d0f1a308ab149f3d3dd96aa1b9e25093709404c7d5bc3ea1388b918963"
+    },
+    {
+      "path": "cedar/A1__sensor_interlock__undeclared_missing_2.json",
+      "sha256": "713034f114469a05cd20d1d95e44e34f9456cf405fca1e6d2eabe75ed437092e"
+    },
+    {
+      "path": "cedar/A2__ai_action_gate__escalate_execute_confidential_1.json",
+      "sha256": "52ba2c2b05e4c6a2c3edd43525859b5f052f7489b35c01c73ef05e658b99fb7a"
+    },
+    {
+      "path": "cedar/A2__ai_action_gate__escalate_human_requested_1.json",
+      "sha256": "a506573b1872024a746f1809d72d75b679a6ddea95d097fd543403fa7983658d"
+    },
+    {
+      "path": "cedar/A2__ai_action_gate__escalate_org_write_1.json",
+      "sha256": "6f7a408346859cc9fe2e28e3b5a112d8e5c8d47a7a828df17e1294049c8a3994"
+    },
+    {
+      "path": "cedar/A2__expense_approval__escalation_1.json",
+      "sha256": "2a1afbeaa6dca0b7dfdc5ee3a87daf6c12d6405952498bf0b7080717327b6ec2"
+    },
+    {
+      "path": "cedar/A2__expense_approval__escalation_2.json",
+      "sha256": "66a2b123058e9280beec449c833d3160cc585cd12189660ca14fed39a0f96560"
+    },
+    {
+      "path": "cedar/A2__expense_approval__escalation_3.json",
+      "sha256": "0ee18df7a97d333af7ac9cc5336659c491c0cc026b6def094e45d5ebf9baf41b"
+    },
+    {
+      "path": "cedar/A4__ai_action_gate__carries_cause.json",
+      "sha256": "767133f5e56703d5aa819834f0c293d57f3ea76cf79ac384cd469154cf2158ad"
+    },
+    {
+      "path": "cedar/A4__ai_action_gate__per_decision.json",
+      "sha256": "315dcacac1cb31992ba8948dc26267ceb23010ec27a94a1170490a4a4b2e0b4d"
+    },
+    {
+      "path": "cedar/A4__ai_action_gate__signed.json",
+      "sha256": "635aa1e4a67d6302281091324bf054899d8f733b905d338f7bf5a24335fb310e"
+    },
+    {
+      "path": "cedar/A4__ai_action_gate__tamper_evident.json",
+      "sha256": "c294e8564ac770ac2a864342b7ce6a4b463ad8986ec8d1ce75716453c0f6f14c"
+    },
+    {
       "path": "cedar/A8__ai_action_gate__ai_worker_loop_1.json",
       "sha256": "a4a533396207688246980f23f022c2ae5984297b7212b7c7c1825da16cabd936"
+    },
+    {
+      "path": "cerbos/A1__ai_action_gate__abstain_low_confidence_1.json",
+      "sha256": "53eda53a0ee4b87b7f88d562521b1a2d7fda5fa79564f85abfe01d7d2b5187f8"
+    },
+    {
+      "path": "cerbos/A1__ai_action_gate__undeclared_missing_1.json",
+      "sha256": "3ad8e3ffb5029db91ad9271baeec59d37286db8ed6bedc179c0a3bd24b212ad5"
+    },
+    {
+      "path": "cerbos/A1__expense_approval__insufficient_1.json",
+      "sha256": "232b4dcd3dc59bc85caced123073b6e5d3b55aca97ff5cb0ba388d86443574b7"
+    },
+    {
+      "path": "cerbos/A1__expense_approval__insufficient_2.json",
+      "sha256": "8efc97825f9ea30dc00f20bb277c28564541b900d5c46c3553ca4628dd7d387a"
+    },
+    {
+      "path": "cerbos/A1__expense_approval__undeclared_missing_1.json",
+      "sha256": "86b100e60a9d3ce5a37cb30836ce8511e942fd3f6508e542b95364fceac77b42"
+    },
+    {
+      "path": "cerbos/A1__sensor_interlock__undeclared_missing_1.json",
+      "sha256": "d7022027a37f5fdb2c1dcc6b5894249d7f2649c7b302c6be5dc4e531bf0d3fc6"
+    },
+    {
+      "path": "cerbos/A1__sensor_interlock__undeclared_missing_2.json",
+      "sha256": "f995669131bf7aa8583365eb5f141b8207715879bbc9db2a28e03b0143b74cd4"
+    },
+    {
+      "path": "cerbos/A2__ai_action_gate__escalate_execute_confidential_1.json",
+      "sha256": "d5e07ab7c3341fbcb7c8e49df83b9db55b97ef36a528ffdc5218a6192fcaa5ce"
+    },
+    {
+      "path": "cerbos/A2__ai_action_gate__escalate_human_requested_1.json",
+      "sha256": "2545259833354577af79938f23cedcf3d8765d72d99ba98029c4070d1eeeef8e"
+    },
+    {
+      "path": "cerbos/A2__ai_action_gate__escalate_org_write_1.json",
+      "sha256": "1754135b98e3ae4a1616f08bfa13ffbee28e61d1ad3624c438440552c435d317"
+    },
+    {
+      "path": "cerbos/A2__expense_approval__escalation_1.json",
+      "sha256": "0ea0229634dcd6403b457f4c6884a383ee92cb29174c02d3bc5bc82a152958e8"
+    },
+    {
+      "path": "cerbos/A2__expense_approval__escalation_2.json",
+      "sha256": "e98b189b737eb4f509a2cec02f0f72bc6cc3c319d9ccddb848e78b445639d499"
+    },
+    {
+      "path": "cerbos/A2__expense_approval__escalation_3.json",
+      "sha256": "9303cc70fb22c4465e0a0edfd0ad6d8a64012a6c39b6fd604bec503887394671"
+    },
+    {
+      "path": "cerbos/A4__ai_action_gate__carries_cause.json",
+      "sha256": "8b72dc6cedd65fe917e9ce325c809a19d77bf0cbd066b24d907c570e557f7169"
+    },
+    {
+      "path": "cerbos/A4__ai_action_gate__per_decision.json",
+      "sha256": "8381c7414844b99b0ab474cea4e82db9efabde3351656e779db769280f410287"
+    },
+    {
+      "path": "cerbos/A4__ai_action_gate__signed.json",
+      "sha256": "cd2cdeb12e3b371ce0757d1d2490fd19daf51b4be861796a95156fe87a07c110"
+    },
+    {
+      "path": "cerbos/A4__ai_action_gate__tamper_evident.json",
+      "sha256": "2f539913b44fb8842b60aeb096db068e0b75ee33aa924407323889afea56e93d"
     },
     {
       "path": "cerbos/A8__ai_action_gate__ai_worker_loop_1.json",
       "sha256": "447a069ac8962e6be4ccf5b882dae70e4e9474b543db2007cfe72c8b6c7a7439"
     },
     {
+      "path": "opa/A1__ai_action_gate__abstain_low_confidence_1.json",
+      "sha256": "9c877c3d7853b21c6ebb8f23a701312883b08b37c8cfa0a41f6bdf2cc57129c4"
+    },
+    {
+      "path": "opa/A1__ai_action_gate__undeclared_missing_1.json",
+      "sha256": "91b4585b5b72855445d9b6b5250780c99c4cec981d620a867c91bde46932d4d6"
+    },
+    {
+      "path": "opa/A1__expense_approval__insufficient_1.json",
+      "sha256": "a2710b34d77a5e3979638a55d4598afa350bdb4a4547c84f11072abff4b7c301"
+    },
+    {
+      "path": "opa/A1__expense_approval__insufficient_2.json",
+      "sha256": "9918dcbda380366297d7ebd7a70c0e729857fb41b0e6ae9d9803d3d2cc6da5f7"
+    },
+    {
+      "path": "opa/A1__expense_approval__undeclared_missing_1.json",
+      "sha256": "bd0d437ed507e0fa74964f2fa922f5c92ae7bb82fcaf1e23a6428e17f497ba6f"
+    },
+    {
+      "path": "opa/A1__sensor_interlock__undeclared_missing_1.json",
+      "sha256": "ead76814df1b4445918dae8f4055c19046c6bb6e655f98a53289b61766062e3b"
+    },
+    {
+      "path": "opa/A1__sensor_interlock__undeclared_missing_2.json",
+      "sha256": "1ee23c3124a2dcea9616bbdf4482b49cf90fa91372b9cc4d1a1cc8d16108777a"
+    },
+    {
+      "path": "opa/A2__ai_action_gate__escalate_execute_confidential_1.json",
+      "sha256": "267b73063321159910846f8c5664183b58d7d3f3f693908ef97dda63d38cacf9"
+    },
+    {
+      "path": "opa/A2__ai_action_gate__escalate_human_requested_1.json",
+      "sha256": "337585081e37adab1fcbfadcfc99ac419a83aa00d2b5299378ca479d1566a15e"
+    },
+    {
+      "path": "opa/A2__ai_action_gate__escalate_org_write_1.json",
+      "sha256": "d18029a81ddc0b22d445c47bcd8936f55686d042fd04de5434bae216f7f0c708"
+    },
+    {
+      "path": "opa/A2__expense_approval__escalation_1.json",
+      "sha256": "9fbddb35e0511597b949f9c453e5fce50e8c3191c10faba355d74b6046f7d0bc"
+    },
+    {
+      "path": "opa/A2__expense_approval__escalation_2.json",
+      "sha256": "c5d6d879c21dcc25aaf481977c2a37fad7398d0525afe29f293ec4eceda961a1"
+    },
+    {
+      "path": "opa/A2__expense_approval__escalation_3.json",
+      "sha256": "2afab25620b70452eedc6af1f39c37774cfac147a8dcae78f5d0805dd9801e8b"
+    },
+    {
+      "path": "opa/A4__ai_action_gate__carries_cause.json",
+      "sha256": "66ac940891d59dc06b972f55130880e7c82e73c86b9bed489e2073b243df86ef"
+    },
+    {
+      "path": "opa/A4__ai_action_gate__per_decision.json",
+      "sha256": "495e89950fd4d15c94afe6653e59f714ac83d22f4bb1d04eb4c8f8b213004fa1"
+    },
+    {
+      "path": "opa/A4__ai_action_gate__signed.json",
+      "sha256": "986df75b2758490d0335395e45d0a9ffb9b727e5cfcd5149175e76d686212975"
+    },
+    {
+      "path": "opa/A4__ai_action_gate__tamper_evident.json",
+      "sha256": "52ca0d697994766c7c23d27a12fa75587cb57fb97c2dbc874176df4551f973a4"
+    },
+    {
       "path": "opa/A8__ai_action_gate__ai_worker_loop_1.json",
       "sha256": "7841a1e0a5f55de726893da9a57813e499bd9f6567fc1c3f4c7f7612586a0c6e"
     },
     {
+      "path": "openfga/A1__ai_action_gate__abstain_low_confidence_1.json",
+      "sha256": "87aba2940b9e45ae38be2492ddaf67851dc7dfa54252e3723bfd555444f49465"
+    },
+    {
+      "path": "openfga/A1__ai_action_gate__undeclared_missing_1.json",
+      "sha256": "962c7581cdec998b2dbdac16482a8e6f61e4b07cc16e731e960bf438ed476cf6"
+    },
+    {
+      "path": "openfga/A1__expense_approval__insufficient_1.json",
+      "sha256": "22f33b48182d9ece4ef02404b5daed0a2abd1732e1ed27e0dd00cd6781a430a8"
+    },
+    {
+      "path": "openfga/A1__expense_approval__insufficient_2.json",
+      "sha256": "e192a289913aec277d77f8b8594c5cdeca775136b06c4e5139bb1f686d70818c"
+    },
+    {
+      "path": "openfga/A1__expense_approval__undeclared_missing_1.json",
+      "sha256": "c595be3f74f2138bd463dc6d5137f0b62c4f5d2e2b18cf21936706bd03837b2e"
+    },
+    {
+      "path": "openfga/A1__sensor_interlock__undeclared_missing_1.json",
+      "sha256": "907e5135205422c395864247e7ce6be787151e221e902a91f81564b25052fe90"
+    },
+    {
+      "path": "openfga/A1__sensor_interlock__undeclared_missing_2.json",
+      "sha256": "5901da006e545c42d94318c447d4e37bee0139a7a3de8cfc9f720a6172dadea1"
+    },
+    {
+      "path": "openfga/A2__ai_action_gate__escalate_execute_confidential_1.json",
+      "sha256": "bde2fed1d0bee0121bcf018a9b43051f7eb71f3d2285e6f3477bed0ba2bcfa0b"
+    },
+    {
+      "path": "openfga/A2__ai_action_gate__escalate_human_requested_1.json",
+      "sha256": "1026cd9f6e06de913c2dfe42eb25c1096670e9978458bd8975404e8906ba656c"
+    },
+    {
+      "path": "openfga/A2__ai_action_gate__escalate_org_write_1.json",
+      "sha256": "360e8ad588414df16a19473a08043fb6994f3666b374a8891491a90ff4a3e3d3"
+    },
+    {
+      "path": "openfga/A2__expense_approval__escalation_1.json",
+      "sha256": "d893104882b5dc3cc611c42a946332bcda440c410109d1296a80e377c5810193"
+    },
+    {
+      "path": "openfga/A2__expense_approval__escalation_2.json",
+      "sha256": "70e5860bc10eec7ef7c8299f29460f084cb7a50f1a7faa8fe33cdc28888619a3"
+    },
+    {
+      "path": "openfga/A2__expense_approval__escalation_3.json",
+      "sha256": "80637e7963ee2a18f97c7f7f1f1e7e421c3982eae9c27dfc5ab51db86f7d5b55"
+    },
+    {
+      "path": "openfga/A4__ai_action_gate__carries_cause.json",
+      "sha256": "0a99f342022840a2e13e8b92ddf683a9dbd72138cf166fb628f5351f9f2ad376"
+    },
+    {
+      "path": "openfga/A4__ai_action_gate__per_decision.json",
+      "sha256": "dd50098b51d63a7a9b8943ac934315e4d99d40c7614b77b3c3fb5c5be25ea516"
+    },
+    {
+      "path": "openfga/A4__ai_action_gate__signed.json",
+      "sha256": "a02b1f1ef786c68390603624f77a1a3ee936c3a89ca64b26ade42e6b087b2306"
+    },
+    {
+      "path": "openfga/A4__ai_action_gate__tamper_evident.json",
+      "sha256": "0098be173d8652ed1dac103ab8ee0b678ce25c315dbff3a476d0727e8e7c598e"
+    },
+    {
       "path": "openfga/A8__ai_action_gate__ai_worker_loop_1.json",
       "sha256": "2eb3de482a70d8a7ea210b0b913594fb28049925435f5d222f5148fd404b474c"
+    },
+    {
+      "path": "prismpath/A1__ai_action_gate__abstain_low_confidence_1.json",
+      "sha256": "07653d1b149288df71e9860b75cc1a848990cf232974c924abdab6bb1727f015"
+    },
+    {
+      "path": "prismpath/A1__ai_action_gate__undeclared_missing_1.json",
+      "sha256": "1e2c74ac7e8c788758b89d2b07792112baef1caf72d65635d1d0f8ce70a994d7"
+    },
+    {
+      "path": "prismpath/A1__expense_approval__insufficient_1.json",
+      "sha256": "6563fe84c2ffe912dc00d18be1bf28d4571463b5f4f05034e1aa491751295fbd"
+    },
+    {
+      "path": "prismpath/A1__expense_approval__insufficient_2.json",
+      "sha256": "56a2aa1794f350a341226b7cfa3079e7145c13db37c78b9fa9d5668c052c8707"
+    },
+    {
+      "path": "prismpath/A1__expense_approval__undeclared_missing_1.json",
+      "sha256": "14d50d029196945a746cf20d6e8c7f238bbd79dd7c60a1851a8f9d022cc5f52a"
+    },
+    {
+      "path": "prismpath/A1__sensor_interlock__undeclared_missing_1.json",
+      "sha256": "bba55a5e63807a4882670b274cb05fefe140e6dd2a3fd08bc3e984da79f9daa0"
+    },
+    {
+      "path": "prismpath/A1__sensor_interlock__undeclared_missing_2.json",
+      "sha256": "8c09537128e1e507a896cbf5d10352e9a045d556273ae49046ed790207d5a0f0"
+    },
+    {
+      "path": "prismpath/A2__ai_action_gate__escalate_execute_confidential_1.json",
+      "sha256": "768377d5b9dd64a109f74487c8e069a986c36c552af7250ce21888fbbad92348"
+    },
+    {
+      "path": "prismpath/A2__ai_action_gate__escalate_human_requested_1.json",
+      "sha256": "b036f4580ee2ea051d748fa4187909ca0ad8f68d688c4b0a1cff7fc5b20f10bb"
+    },
+    {
+      "path": "prismpath/A2__ai_action_gate__escalate_org_write_1.json",
+      "sha256": "adba323a994e4e36be598fab652171e4dff72d1dcfd9011a6acb9626121f8160"
+    },
+    {
+      "path": "prismpath/A2__expense_approval__escalation_1.json",
+      "sha256": "14ee16f4928a6ee3e449028550d85bdada3b5dd11c3ae34b592deab2c7299d74"
+    },
+    {
+      "path": "prismpath/A2__expense_approval__escalation_2.json",
+      "sha256": "3342f38137cfcf578e28fddc0e953510c0a4c39e20ef266b7d33a9eef54e582c"
+    },
+    {
+      "path": "prismpath/A2__expense_approval__escalation_3.json",
+      "sha256": "7eee613aa374c8b179873c89cbb53b818762ff12405a64831a764815cd346e78"
+    },
+    {
+      "path": "prismpath/A4__ai_action_gate__carries_cause.json",
+      "sha256": "5a24add164af0404153aa52156ea774a7e2fd8b98f406d7bd2e8a904a907d871"
+    },
+    {
+      "path": "prismpath/A4__ai_action_gate__per_decision.json",
+      "sha256": "bdf9e6f80f822adc14592a6fbf5deedb0532f530aeb0ca52788aa4110dca4752"
+    },
+    {
+      "path": "prismpath/A4__ai_action_gate__signed.json",
+      "sha256": "eaac2c0cb6042a02e266383088938dca4b358a9f12cd3cdabb05599aba63fbba"
+    },
+    {
+      "path": "prismpath/A4__ai_action_gate__tamper_evident.json",
+      "sha256": "264c7084277c4bbd62a5265a256b88d784988b382030de58ff93b627e0bac902"
     },
     {
       "path": "prismpath/A8__ai_action_gate__ai_worker_loop_1.json",
@@ -42,41 +382,73 @@
         "counts": {
           "NATIVE": 0,
           "NOT": 0,
-          "WITH-WORK": 0
+          "WITH-WORK": 7
         },
-        "files": [],
-        "grade": "UNTESTED",
+        "files": [
+          "cedar/A1__ai_action_gate__abstain_low_confidence_1.json",
+          "cedar/A1__ai_action_gate__undeclared_missing_1.json",
+          "cedar/A1__expense_approval__insufficient_1.json",
+          "cedar/A1__expense_approval__insufficient_2.json",
+          "cedar/A1__expense_approval__undeclared_missing_1.json",
+          "cedar/A1__sensor_interlock__undeclared_missing_1.json",
+          "cedar/A1__sensor_interlock__undeclared_missing_2.json"
+        ],
+        "grade": "WITH-WORK",
         "mismatches": 0
       },
       "cerbos": {
         "counts": {
           "NATIVE": 0,
           "NOT": 0,
-          "WITH-WORK": 0
+          "WITH-WORK": 7
         },
-        "files": [],
-        "grade": "UNTESTED",
+        "files": [
+          "cerbos/A1__ai_action_gate__abstain_low_confidence_1.json",
+          "cerbos/A1__ai_action_gate__undeclared_missing_1.json",
+          "cerbos/A1__expense_approval__insufficient_1.json",
+          "cerbos/A1__expense_approval__insufficient_2.json",
+          "cerbos/A1__expense_approval__undeclared_missing_1.json",
+          "cerbos/A1__sensor_interlock__undeclared_missing_1.json",
+          "cerbos/A1__sensor_interlock__undeclared_missing_2.json"
+        ],
+        "grade": "WITH-WORK",
         "mismatches": 0
       },
       "opa": {
         "counts": {
-          "NATIVE": 0,
+          "NATIVE": 7,
           "NOT": 0,
           "WITH-WORK": 0
         },
-        "files": [],
-        "grade": "UNTESTED",
-        "mismatches": 0
+        "files": [
+          "opa/A1__ai_action_gate__abstain_low_confidence_1.json",
+          "opa/A1__ai_action_gate__undeclared_missing_1.json",
+          "opa/A1__expense_approval__insufficient_1.json",
+          "opa/A1__expense_approval__insufficient_2.json",
+          "opa/A1__expense_approval__undeclared_missing_1.json",
+          "opa/A1__sensor_interlock__undeclared_missing_1.json",
+          "opa/A1__sensor_interlock__undeclared_missing_2.json"
+        ],
+        "grade": "NATIVE",
+        "mismatches": 2
       },
       "openfga": {
         "counts": {
           "NATIVE": 0,
-          "NOT": 0,
+          "NOT": 7,
           "WITH-WORK": 0
         },
-        "files": [],
-        "grade": "UNTESTED",
-        "mismatches": 0
+        "files": [
+          "openfga/A1__ai_action_gate__abstain_low_confidence_1.json",
+          "openfga/A1__ai_action_gate__undeclared_missing_1.json",
+          "openfga/A1__expense_approval__insufficient_1.json",
+          "openfga/A1__expense_approval__insufficient_2.json",
+          "openfga/A1__expense_approval__undeclared_missing_1.json",
+          "openfga/A1__sensor_interlock__undeclared_missing_1.json",
+          "openfga/A1__sensor_interlock__undeclared_missing_2.json"
+        ],
+        "grade": "NOT",
+        "mismatches": 7
       },
       "openlane": {
         "counts": {
@@ -90,12 +462,20 @@
       },
       "prismpath": {
         "counts": {
-          "NATIVE": 0,
+          "NATIVE": 7,
           "NOT": 0,
           "WITH-WORK": 0
         },
-        "files": [],
-        "grade": "UNTESTED",
+        "files": [
+          "prismpath/A1__ai_action_gate__abstain_low_confidence_1.json",
+          "prismpath/A1__ai_action_gate__undeclared_missing_1.json",
+          "prismpath/A1__expense_approval__insufficient_1.json",
+          "prismpath/A1__expense_approval__insufficient_2.json",
+          "prismpath/A1__expense_approval__undeclared_missing_1.json",
+          "prismpath/A1__sensor_interlock__undeclared_missing_1.json",
+          "prismpath/A1__sensor_interlock__undeclared_missing_2.json"
+        ],
+        "grade": "NATIVE",
         "mismatches": 0
       }
     },
@@ -104,41 +484,69 @@
         "counts": {
           "NATIVE": 0,
           "NOT": 0,
-          "WITH-WORK": 0
+          "WITH-WORK": 6
         },
-        "files": [],
-        "grade": "UNTESTED",
+        "files": [
+          "cedar/A2__ai_action_gate__escalate_execute_confidential_1.json",
+          "cedar/A2__ai_action_gate__escalate_human_requested_1.json",
+          "cedar/A2__ai_action_gate__escalate_org_write_1.json",
+          "cedar/A2__expense_approval__escalation_1.json",
+          "cedar/A2__expense_approval__escalation_2.json",
+          "cedar/A2__expense_approval__escalation_3.json"
+        ],
+        "grade": "WITH-WORK",
         "mismatches": 0
       },
       "cerbos": {
         "counts": {
           "NATIVE": 0,
           "NOT": 0,
-          "WITH-WORK": 0
+          "WITH-WORK": 6
         },
-        "files": [],
-        "grade": "UNTESTED",
+        "files": [
+          "cerbos/A2__ai_action_gate__escalate_execute_confidential_1.json",
+          "cerbos/A2__ai_action_gate__escalate_human_requested_1.json",
+          "cerbos/A2__ai_action_gate__escalate_org_write_1.json",
+          "cerbos/A2__expense_approval__escalation_1.json",
+          "cerbos/A2__expense_approval__escalation_2.json",
+          "cerbos/A2__expense_approval__escalation_3.json"
+        ],
+        "grade": "WITH-WORK",
         "mismatches": 0
       },
       "opa": {
         "counts": {
-          "NATIVE": 0,
+          "NATIVE": 6,
           "NOT": 0,
           "WITH-WORK": 0
         },
-        "files": [],
-        "grade": "UNTESTED",
+        "files": [
+          "opa/A2__ai_action_gate__escalate_execute_confidential_1.json",
+          "opa/A2__ai_action_gate__escalate_human_requested_1.json",
+          "opa/A2__ai_action_gate__escalate_org_write_1.json",
+          "opa/A2__expense_approval__escalation_1.json",
+          "opa/A2__expense_approval__escalation_2.json",
+          "opa/A2__expense_approval__escalation_3.json"
+        ],
+        "grade": "NATIVE",
         "mismatches": 0
       },
       "openfga": {
         "counts": {
           "NATIVE": 0,
-          "NOT": 0,
+          "NOT": 6,
           "WITH-WORK": 0
         },
-        "files": [],
-        "grade": "UNTESTED",
-        "mismatches": 0
+        "files": [
+          "openfga/A2__ai_action_gate__escalate_execute_confidential_1.json",
+          "openfga/A2__ai_action_gate__escalate_human_requested_1.json",
+          "openfga/A2__ai_action_gate__escalate_org_write_1.json",
+          "openfga/A2__expense_approval__escalation_1.json",
+          "openfga/A2__expense_approval__escalation_2.json",
+          "openfga/A2__expense_approval__escalation_3.json"
+        ],
+        "grade": "NOT",
+        "mismatches": 6
       },
       "openlane": {
         "counts": {
@@ -152,12 +560,19 @@
       },
       "prismpath": {
         "counts": {
-          "NATIVE": 0,
+          "NATIVE": 6,
           "NOT": 0,
           "WITH-WORK": 0
         },
-        "files": [],
-        "grade": "UNTESTED",
+        "files": [
+          "prismpath/A2__ai_action_gate__escalate_execute_confidential_1.json",
+          "prismpath/A2__ai_action_gate__escalate_human_requested_1.json",
+          "prismpath/A2__ai_action_gate__escalate_org_write_1.json",
+          "prismpath/A2__expense_approval__escalation_1.json",
+          "prismpath/A2__expense_approval__escalation_2.json",
+          "prismpath/A2__expense_approval__escalation_3.json"
+        ],
+        "grade": "NATIVE",
         "mismatches": 0
       }
     },
@@ -227,42 +642,62 @@
       "cedar": {
         "counts": {
           "NATIVE": 0,
-          "NOT": 0,
-          "WITH-WORK": 0
+          "NOT": 1,
+          "WITH-WORK": 3
         },
-        "files": [],
-        "grade": "UNTESTED",
-        "mismatches": 0
+        "files": [
+          "cedar/A4__ai_action_gate__carries_cause.json",
+          "cedar/A4__ai_action_gate__per_decision.json",
+          "cedar/A4__ai_action_gate__signed.json",
+          "cedar/A4__ai_action_gate__tamper_evident.json"
+        ],
+        "grade": "NOT",
+        "mismatches": 4
       },
       "cerbos": {
         "counts": {
-          "NATIVE": 0,
-          "NOT": 0,
-          "WITH-WORK": 0
+          "NATIVE": 2,
+          "NOT": 1,
+          "WITH-WORK": 1
         },
-        "files": [],
-        "grade": "UNTESTED",
-        "mismatches": 0
+        "files": [
+          "cerbos/A4__ai_action_gate__carries_cause.json",
+          "cerbos/A4__ai_action_gate__per_decision.json",
+          "cerbos/A4__ai_action_gate__signed.json",
+          "cerbos/A4__ai_action_gate__tamper_evident.json"
+        ],
+        "grade": "NOT",
+        "mismatches": 2
       },
       "opa": {
         "counts": {
-          "NATIVE": 0,
+          "NATIVE": 2,
           "NOT": 0,
-          "WITH-WORK": 0
+          "WITH-WORK": 2
         },
-        "files": [],
-        "grade": "UNTESTED",
-        "mismatches": 0
+        "files": [
+          "opa/A4__ai_action_gate__carries_cause.json",
+          "opa/A4__ai_action_gate__per_decision.json",
+          "opa/A4__ai_action_gate__signed.json",
+          "opa/A4__ai_action_gate__tamper_evident.json"
+        ],
+        "grade": "WITH-WORK",
+        "mismatches": 2
       },
       "openfga": {
         "counts": {
           "NATIVE": 0,
-          "NOT": 0,
+          "NOT": 4,
           "WITH-WORK": 0
         },
-        "files": [],
-        "grade": "UNTESTED",
-        "mismatches": 0
+        "files": [
+          "openfga/A4__ai_action_gate__carries_cause.json",
+          "openfga/A4__ai_action_gate__per_decision.json",
+          "openfga/A4__ai_action_gate__signed.json",
+          "openfga/A4__ai_action_gate__tamper_evident.json"
+        ],
+        "grade": "NOT",
+        "mismatches": 4
       },
       "openlane": {
         "counts": {
@@ -276,12 +711,17 @@
       },
       "prismpath": {
         "counts": {
-          "NATIVE": 0,
+          "NATIVE": 4,
           "NOT": 0,
           "WITH-WORK": 0
         },
-        "files": [],
-        "grade": "UNTESTED",
+        "files": [
+          "prismpath/A4__ai_action_gate__carries_cause.json",
+          "prismpath/A4__ai_action_gate__per_decision.json",
+          "prismpath/A4__ai_action_gate__signed.json",
+          "prismpath/A4__ai_action_gate__tamper_evident.json"
+        ],
+        "grade": "NATIVE",
         "mismatches": 0
       }
     },

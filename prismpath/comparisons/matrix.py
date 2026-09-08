@@ -30,7 +30,7 @@ def validate_and_load_results(
     """Scan results_dir, validate files against SCHEMA.md, return consumed files and systems."""
     errors: List[str] = []
     consumed_files: List[Tuple[str, Path, Dict[str, Any], str]] = []
-    scenario_expected_map: Dict[str, Tuple[Optional[str], str]] = {}
+    scenario_expected_map: Dict[Tuple[str, str], Tuple[Optional[str], str]] = {}   # keyed by (policy, scenario): scenario ids repeat across policies
     extra_systems: List[str] = []
 
     if not results_dir.exists() or not results_dir.is_dir():
@@ -187,16 +187,18 @@ def validate_and_load_results(
 
             # Same-scenario expected consistency
             scen = data.get("scenario")
+            pol = data.get("policy")
             exp = data.get("expected")
-            if scen and isinstance(scen, str):
-                if scen in scenario_expected_map:
-                    prev_exp, prev_file = scenario_expected_map[scen]
+            if scen and isinstance(scen, str) and isinstance(pol, str):
+                key = (pol, scen)
+                if key in scenario_expected_map:
+                    prev_exp, prev_file = scenario_expected_map[key]
                     if exp != prev_exp:
                         errors.append(
-                            f"Scenario '{scen}' has conflicting 'expected' values: '{prev_exp}' ({prev_file}) vs '{exp}' ({rel_path})."
+                            f"Scenario '{pol}/{scen}' has conflicting 'expected' values: '{prev_exp}' ({prev_file}) vs '{exp}' ({rel_path})."
                         )
                 else:
-                    scenario_expected_map[scen] = (exp, rel_path)
+                    scenario_expected_map[key] = (exp, rel_path)
 
             if not errors:
                 consumed_files.append((rel_path, file_path, data, sha256))

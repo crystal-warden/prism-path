@@ -1,0 +1,17 @@
+{
+  "dimension": "A4",
+  "evidence_path": "prismpath/comparisons/results/opa/evidence/A8",
+  "expected": "true",
+  "glue": null,
+  "grade": "NATIVE",
+  "harness_commit": "fcbabc5",
+  "idiomatic": true,
+  "match": true,
+  "notes": "Sub property carries_cause, from the A8 loop run of ai_action_gate/ai_worker_loop_1: the record carries the result document the policy returned, here {outcome, rule}: a machine readable reason distinct from the outcome, authored by the policy.",
+  "observed": "true",
+  "policy": "ai_action_gate",
+  "run_at": "2026-09-08T22:30:21Z",
+  "scenario": "carries_cause",
+  "system": "opa",
+  "system_version": "1.20.2"
+}

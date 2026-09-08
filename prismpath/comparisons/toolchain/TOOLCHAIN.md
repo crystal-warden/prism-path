@@ -25,12 +25,16 @@ exact `system_version` strings result files must carry.*
 | cerbos | 0.55.0 | github.com/cerbos/cerbos release v0.55.0, `cerbos_0.55.0_Linux_arm64.tar.gz` | 838c9d1339a69e078fccb1f30e5bfd85662c3b3b6d42a142c336bb34d1e5e3a3 | 93aa51dddc0de4881039622fd75d989abc57fd65cd5703dbb812f26918336870 |
 | cerbosctl | 0.55.0 | same release, `cerbosctl_0.55.0_Linux_arm64.tar.gz` | 4544d02d20e01fb9a915ce62f7b46f4243adea6dd5236095ce79411c9f139ef0 | 7faf53be8b8adea38abaabe7a3ed57bea480640960f0ac961c04b5ba8190a0ab |
 | openfga | 1.19.0 | github.com/openfga/openfga release v1.19.0, `openfga_1.19.0_linux_arm64.tar.gz` | 067e09ef5f1894e4f292bcc265da0063e7d6d763f2eb53cdebc8c3337adf0f64 | 68123b0d40e38b9e17668355fbabe6474b865012ed0f1be8e4c0c342702ca9de |
+| cedarpy (Python binding, in process Cedar for A7) | 4.8.7 | PyPI `cedarpy` 4.8.7 installed into `./.venv` in Phase 3 (pip, wheel verified by pip); the Cedar CLI stays the Phase 2 translator target | pip resolved | n/a |
 | openlane | docs only | graded from documentation and API surface in Phase 4; nothing installed by design (PREREGISTRATION section 3) | n/a | n/a |
 
 Each was the latest stable release of its project on the install date (release dates: OPA
 2026-09-03, Cedar 2026-07-28, Cerbos 2026-08-13, OpenFGA 2026-08-25). The Cerbos and OpenFGA
 releases also ship sigstore signatures over their checksum files; the installer verifies the
 sha256 only, and that limitation is stated rather than implied.
+
+Phase 3 addition: `cedarpy` 4.8.7 gives Cedar an in process embedding so the A7 latency measurement compares
+libraries where a library exists; the CLI remains the idiomatic translation target from Phase 2.
 
 ## Smoke (`toolchain/smoke.sh`, output verbatim)
 

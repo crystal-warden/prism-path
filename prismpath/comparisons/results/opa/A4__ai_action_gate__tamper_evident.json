@@ -1,0 +1,25 @@
+{
+  "dimension": "A4",
+  "evidence_path": "prismpath/comparisons/results/opa/evidence/A8",
+  "expected": "true",
+  "glue": {
+    "components": [
+      "log consumer",
+      "sha256 chain"
+    ],
+    "description": "Merkle root or hash chain over the decision log records",
+    "hours": 2,
+    "loc": 80
+  },
+  "grade": "WITH-WORK",
+  "harness_commit": "fcbabc5",
+  "idiomatic": true,
+  "match": false,
+  "notes": "Sub property tamper_evident, from the A8 loop run of ai_action_gate/ai_worker_loop_1: no hash chain or Merkle root over decision log records; a sidecar computing one is glue (no key needed).",
+  "observed": "false",
+  "policy": "ai_action_gate",
+  "run_at": "2026-09-08T22:30:21Z",
+  "scenario": "tamper_evident",
+  "system": "opa",
+  "system_version": "1.20.2"
+}

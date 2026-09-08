@@ -1,0 +1,7 @@
+{
+  "carrier": "first_class",
+  "carrier_note": "a routed terminal node named for the outcome, the outcome on the receipt with a cause code",
+  "absence": "unsatisfied",
+  "absence_note": "a missing field is null; a comparison over it is unsatisfied (SPEC 4); on a policy with no catch all the run stops as stuck with cause 36 route:stuck on the receipt (reported as: refused, nothing routed, cause named)",
+  "human_distinct": "cause 34 route:needs-human on the worker's own request vs cause 0 on a policy selected escalation, stamped by the engine (A8 causes [0,0,0,0,0,34])"
+}

@@ -1,0 +1,17 @@
+{
+  "dimension": "A2",
+  "evidence_path": "prismpath/comparisons/systems/openfga/generated",
+  "expected": "escalate_human",
+  "glue": null,
+  "grade": "NOT",
+  "harness_commit": "fcbabc5",
+  "idiomatic": true,
+  "match": false,
+  "notes": "Observed by the real system in the Phase 2 conformance run: not_expressible (expected escalate_human). Carrier: boolean_only (a Check returns one boolean for one relation; the decision policies are not expressible). Worker requested vs policy selected escalation: not expressible.",
+  "observed": "not_expressible",
+  "policy": "expense_approval",
+  "run_at": "2026-09-08T22:30:21Z",
+  "scenario": "escalation_2",
+  "system": "openfga",
+  "system_version": "1.19.0"
+}

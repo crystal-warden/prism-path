@@ -1,0 +1,7 @@
+{
+  "carrier": "output_field",
+  "carrier_note": "Cerbos decides EFFECT_ALLOW or EFFECT_DENY per action; the outcome rides the rule's output block {outcome, rule} in the response",
+  "absence": "guarded",
+  "absence_note": "a CEL read of a missing attribute is an evaluation error logged as a warning and the rule does not match (default EFFECT_DENY); the translation wrote has() guards on every read",
+  "human_distinct": "only by the rule id in the output block; no system level cause"
+}

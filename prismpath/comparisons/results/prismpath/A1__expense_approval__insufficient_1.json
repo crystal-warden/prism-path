@@ -1,0 +1,17 @@
+{
+  "dimension": "A1",
+  "evidence_path": "prismpath/comparisons/systems/prismpath/generated",
+  "expected": "abstain",
+  "glue": null,
+  "grade": "NATIVE",
+  "harness_commit": "fcbabc5",
+  "idiomatic": true,
+  "match": true,
+  "notes": "Observed by the real system in the Phase 2 conformance run: abstain (expected abstain). Carrier: first_class (a routed terminal node named for the outcome, the outcome on the receipt with a cause code). Absence: unsatisfied (a missing field is null; a comparison over it is unsatisfied (SPEC 4); on a policy with no catch all the run stops as stuck with cause 36 route:stuck on the receipt (reported as: refused, nothing routed, cause named)).",
+  "observed": "abstain",
+  "policy": "expense_approval",
+  "run_at": "2026-09-08T22:30:21Z",
+  "scenario": "insufficient_1",
+  "system": "prismpath",
+  "system_version": "repo@fcbabc5"
+}

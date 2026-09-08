@@ -1,0 +1,26 @@
+{
+  "dimension": "A1",
+  "evidence_path": "prismpath/comparisons/systems/cerbos/generated",
+  "expected": "no_match",
+  "glue": {
+    "components": [
+      "response parser",
+      "outcome mapping",
+      "has guards in the translation"
+    ],
+    "description": "a client wrapper that reads the outcome carrier (Cedar's applying policy annotation from the verbose diagnostics, or Cerbos's output block) and returns it as the decision, plus the absence guards the translator already writes",
+    "hours": 1,
+    "loc": 40
+  },
+  "grade": "WITH-WORK",
+  "harness_commit": "fcbabc5",
+  "idiomatic": true,
+  "match": true,
+  "notes": "Observed by the real system in the Phase 2 conformance run: no_match (expected no_match; a probe scenario: the observed value is the measurement). Carrier: output_field (Cerbos decides EFFECT_ALLOW or EFFECT_DENY per action; the outcome rides the rule's output block {outcome, rule} in the response). Absence: guarded (a CEL read of a missing attribute is an evaluation error logged as a warning and the rule does not match (default EFFECT_DENY); the translation wrote has() guards on every read).",
+  "observed": "no_match",
+  "policy": "sensor_interlock",
+  "run_at": "2026-09-08T22:30:21Z",
+  "scenario": "undeclared_missing_2",
+  "system": "cerbos",
+  "system_version": "0.55.0"
+}

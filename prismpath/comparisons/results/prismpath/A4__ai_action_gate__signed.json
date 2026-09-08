@@ -1,0 +1,17 @@
+{
+  "dimension": "A4",
+  "evidence_path": "prismpath/comparisons/results/prismpath/evidence/A8",
+  "expected": "true",
+  "glue": null,
+  "grade": "NATIVE",
+  "harness_commit": "fcbabc5",
+  "idiomatic": true,
+  "match": true,
+  "notes": "Sub property signed, from the A8 loop run of ai_action_gate/ai_worker_loop_1: the receipt Merkle root is bound to the policy authority key with policy_pack's Ed25519 canonical signing and verified (receipt_root.json); the same primitive signs policies.",
+  "observed": "true",
+  "policy": "ai_action_gate",
+  "run_at": "2026-09-08T22:30:21Z",
+  "scenario": "signed",
+  "system": "prismpath",
+  "system_version": "repo@fcbabc5"
+}

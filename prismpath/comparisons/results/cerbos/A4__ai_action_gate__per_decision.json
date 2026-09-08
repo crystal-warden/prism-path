@@ -1,0 +1,17 @@
+{
+  "dimension": "A4",
+  "evidence_path": "prismpath/comparisons/results/cerbos/evidence/A8",
+  "expected": "true",
+  "glue": null,
+  "grade": "NATIVE",
+  "harness_commit": "fcbabc5",
+  "idiomatic": true,
+  "match": true,
+  "notes": "Sub property per_decision, from the A8 loop run of ai_action_gate/ai_worker_loop_1: audit backend file wrote 6 decision records for 6 checks with call id, timestamp, inputs, effects, outputs (decision_audit.jsonl).",
+  "observed": "true",
+  "policy": "ai_action_gate",
+  "run_at": "2026-09-08T22:30:21Z",
+  "scenario": "per_decision",
+  "system": "cerbos",
+  "system_version": "0.55.0"
+}
