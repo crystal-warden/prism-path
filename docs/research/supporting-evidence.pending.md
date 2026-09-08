@@ -318,3 +318,51 @@ the posture and that its provenance is disclosed.
 **Provenance.** prism-path, branch feat/grc-compliance-adapter, commit 474d069
 (adapters/compliance/deterministic_checks.py: evidence_class, _evidence_rollup, check_objectives_typed;
 tests/test_evidence_provenance.py). No push (owner-gated).
+
+#### #144: The layer comparison, Group A software results: seven of eight pre registered dimensions run against OPA, Cedar, Cerbos, OpenFGA, and Openlane, six computed NOT-DISTINCT as predicted, one computed NOT-DISTINCT against the prediction, one open on hardware (September 2026)
+
+**Claim.** Under the pre registered protocol (prismpath/comparisons/PREREGISTRATION.md, freeze 54f05739)
+the Group A matrix is generated from result files produced by the real systems at pinned versions
+(OPA 1.20.2, Cedar CLI 4.12.0 with cedarpy 4.8.7 for timing, Cerbos 0.55.0, OpenFGA 1.19.0, Openlane
+from documentation), and the computed verdicts are: A1, A2, A4, A5, A6, A8 NOT-DISTINCT as predicted;
+A7 NOT-DISTINCT where DISTINCT was predicted; A3 OPEN pending an MCU class leg.
+
+**Method.** prismpath/comparisons/groupa/: a8 (six proposal loop with receipts), a1a2a4 (graded from
+the Phase 2 conformance rows and the A8 receipt evidence against declared outcome carriers), a5 (bytes
+at the application payload layer from live servers), a6 (real PolicyHost swaps and real RS256 signed
+OPA bundles at the agent), a7 (100,000 decisions per scenario in each system's fastest embedding on
+this host), a3_corpus and a3 (23 vectors compiled once, host Python, C reference, in kernel on aarch64
+and x86_64; OPA to WebAssembly measured; Cedar no_std build attempted), openlane (documentation). The
+grading criteria and the glue budget (300 lines, 8 hours, no new trust anchor) were fixed before
+installation; matrix.py aggregates by minimum grade and computes the verdicts.
+
+**Result.** PrismPath NATIVE on every Group A cell run. A8: OPA WITH-WORK (first class outcomes, six
+unsigned console decision log records; a 150 line sidecar reusing the bundle signing key estimated),
+Cedar and Cerbos NOT (a signed receipt trail would be a new trust anchor), OpenFGA not expressible.
+A1/A2: OPA NATIVE (Rego returns any document), Cedar and Cerbos WITH-WORK (annotation and output
+block carriers, guards for absence), OpenFGA NOT. A4: OPA WITH-WORK, Cedar and Cerbos NOT on signed.
+A5, 23 readings: PrismPath 4 to 6 B request plus receipt (30 B with a 28 B IP+UDP envelope at fleet
+1, 3.24 B per reading at fleet 50 concentrated), OPA 113 to 125 B, Cedar 233 to 238 B, Cerbos 506 to
+516 B; Cerbos WITH-WORK (native gRPC), others NOT. A6: PrismPath refused stale
+(version:not-monotonic:1<=2), tampered (image:sha256-mismatch), unsigned (sig:missing) at the point;
+OPA refused tampered and unsigned bundles at the agent and accepted an older signed revision
+(WITH-WORK); Cedar, Cerbos, OpenFGA NOT. A7, medians over 100,000: PrismPath Python 11.6 to 96.4 us
+(signed fabric bounds 35 and 24 cycles, 700 and 480 ns at 50 MHz), Cedar in process 31.1 to 38.6 us,
+OPA loopback HTTP 302 to 333 us (max 20.5 ms), Cerbos loopback HTTP 710 to 872 us (max 15.0 ms);
+comparators WITH-WORK under the rubric's "documented way to cap work" (timeouts; Cedar's bounded
+evaluation). A3: host, C, kernel aarch64, kernel x86_64 agree 23/23; OPA's wasm module 135,831 B with
+128 KB minimum memory, not run on an MCU; Cedar's core fails to build for Cortex-M at memchr requiring
+std; Cerbos and OpenFGA server only.
+
+**Honest scope.** A7's prediction was wrong on the rubric, not the measurement: a request timeout caps
+wall time rather than bounding work, but the pre registered WITH-WORK text counts "a documented way
+to cap work", so the verdict is NOT-DISTINCT and the distinction between cap and bound is for the
+verdict prose. PrismPath's A7 NATIVE rests on the signed bound honored on the pins for other signed
+policies (#122, #123); the pins witness for these two images is the hardware session, and the cell
+drops to WITH-WORK without it. A3 needs an MCU class leg (RP2350 or ESP32 boards) before PrismPath's
+rows are written. The WITH-WORK glue estimates are estimates until Phase 5 builds them. Openlane is
+graded from documentation as a boundary. Group B and the verdict document are not yet written.
+
+**Provenance.** Branch comparisons/phase0-prereg: prismpath/comparisons/groupa/*.py, results/<system>/
+(one JSON per scenario, evidence under results/<system>/evidence/), MATRIX.md and matrix.json
+regenerated, groupa/HARDWARE_LEGS.md. No push (owner gated).

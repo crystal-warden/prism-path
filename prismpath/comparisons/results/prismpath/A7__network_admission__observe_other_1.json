@@ -1,0 +1,29 @@
+{
+  "dimension": "A7",
+  "evidence_path": "prismpath/comparisons/results/prismpath/evidence/A7",
+  "expected": "observe",
+  "glue": null,
+  "grade": "NATIVE",
+  "harness_commit": "3b878c9",
+  "idiomatic": true,
+  "match": true,
+  "measurements": {
+    "latency_ns": {
+      "max": 190288,
+      "median": 96432,
+      "min": 94864,
+      "n": 100000,
+      "p95": 98752
+    },
+    "transport": "python in process (engine.run)",
+    "wcet_cycles_signed": 35,
+    "wcet_ns_at_50MHz_fabric": 700
+  },
+  "notes": "Python engine in process, 100000 runs: min/median/p95/max ns 94864/96432/98752/190288 (the reference tier, no bound claimed for it). The signed bound travels with the policy: this policy's compiled image has wcet_cycles=35 (700 ns at the shipped 50 MHz fabric clock), recomputed at verify from the image bytes (policy_pack, ledger #110; formula calibrated cycle exact on the RTL, #109; universal envelope base case proven, #111). Honored by measurement on the pins for signed policies in ledger #122 and #123 on the same interpreter and bitstream; the pins witness for THIS image is scheduled in the A3 hardware session and this cell drops to WITH-WORK if that witness cannot be taken. Kernel tier compute cost on this interpreter class: 132 to 182 ns per evaluation (ledger #78, #80).",
+  "observed": "observe",
+  "policy": "network_admission",
+  "run_at": "2026-09-08T22:40:27Z",
+  "scenario": "observe_other_1",
+  "system": "prismpath",
+  "system_version": "repo@3b878c9"
+}

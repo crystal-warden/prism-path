@@ -1,0 +1,301 @@
+[
+ {
+  "policy": "network_admission",
+  "scenario": "allow_https_1",
+  "python_ns": {
+   "min": 75792,
+   "median": 78704,
+   "p95": 80401,
+   "max": 139504,
+   "n": 100000
+  },
+  "wcet_cycles_signed": 35,
+  "wcet_ns_at_50MHz": 700
+ },
+ {
+  "policy": "network_admission",
+  "scenario": "deny_telnet_1",
+  "python_ns": {
+   "min": 11120,
+   "median": 11584,
+   "p95": 11936,
+   "max": 440144,
+   "n": 100000
+  },
+  "wcet_cycles_signed": 35,
+  "wcet_ns_at_50MHz": 700
+ },
+ {
+  "policy": "network_admission",
+  "scenario": "allow_internal_ssh_1",
+  "python_ns": {
+   "min": 24736,
+   "median": 25440,
+   "p95": 25808,
+   "max": 89616,
+   "n": 100000
+  },
+  "wcet_cycles_signed": 35,
+  "wcet_ns_at_50MHz": 700
+ },
+ {
+  "policy": "network_admission",
+  "scenario": "deny_external_ssh_1",
+  "python_ns": {
+   "min": 32944,
+   "median": 33712,
+   "p95": 34192,
+   "max": 105889,
+   "n": 100000
+  },
+  "wcet_cycles_signed": 35,
+  "wcet_ns_at_50MHz": 700
+ },
+ {
+  "policy": "network_admission",
+  "scenario": "allow_dns_small_1",
+  "python_ns": {
+   "min": 50416,
+   "median": 51776,
+   "p95": 53008,
+   "max": 131648,
+   "n": 100000
+  },
+  "wcet_cycles_signed": 35,
+  "wcet_ns_at_50MHz": 700
+ },
+ {
+  "policy": "network_admission",
+  "scenario": "deny_dns_large_1",
+  "python_ns": {
+   "min": 68400,
+   "median": 70224,
+   "p95": 72144,
+   "max": 143312,
+   "n": 100000
+  },
+  "wcet_cycles_signed": 35,
+  "wcet_ns_at_50MHz": 700
+ },
+ {
+  "policy": "network_admission",
+  "scenario": "boundary_dns_512",
+  "python_ns": {
+   "min": 50560,
+   "median": 51904,
+   "p95": 53312,
+   "max": 109920,
+   "n": 100000
+  },
+  "wcet_cycles_signed": 35,
+  "wcet_ns_at_50MHz": 700
+ },
+ {
+  "policy": "network_admission",
+  "scenario": "boundary_dns_513",
+  "python_ns": {
+   "min": 68240,
+   "median": 70112,
+   "p95": 72160,
+   "max": 139552,
+   "n": 100000
+  },
+  "wcet_cycles_signed": 35,
+  "wcet_ns_at_50MHz": 700
+ },
+ {
+  "policy": "network_admission",
+  "scenario": "observe_jumbo_1",
+  "python_ns": {
+   "min": 84928,
+   "median": 87088,
+   "p95": 89360,
+   "max": 150048,
+   "n": 100000
+  },
+  "wcet_cycles_signed": 35,
+  "wcet_ns_at_50MHz": 700
+ },
+ {
+  "policy": "network_admission",
+  "scenario": "boundary_jumbo_1399",
+  "python_ns": {
+   "min": 93808,
+   "median": 96144,
+   "p95": 98496,
+   "max": 151761,
+   "n": 100000
+  },
+  "wcet_cycles_signed": 35,
+  "wcet_ns_at_50MHz": 700
+ },
+ {
+  "policy": "network_admission",
+  "scenario": "boundary_jumbo_1400",
+  "python_ns": {
+   "min": 86416,
+   "median": 87968,
+   "p95": 90160,
+   "max": 518384,
+   "n": 100000
+  },
+  "wcet_cycles_signed": 35,
+  "wcet_ns_at_50MHz": 700
+ },
+ {
+  "policy": "network_admission",
+  "scenario": "allow_icmp_1",
+  "python_ns": {
+   "min": 94576,
+   "median": 96320,
+   "p95": 98544,
+   "max": 525168,
+   "n": 100000
+  },
+  "wcet_cycles_signed": 35,
+  "wcet_ns_at_50MHz": 700
+ },
+ {
+  "policy": "network_admission",
+  "scenario": "observe_other_1",
+  "python_ns": {
+   "min": 94864,
+   "median": 96432,
+   "p95": 98752,
+   "max": 190288,
+   "n": 100000
+  },
+  "wcet_cycles_signed": 35,
+  "wcet_ns_at_50MHz": 700
+ },
+ {
+  "policy": "sensor_interlock",
+  "scenario": "allow_nominal_1",
+  "python_ns": {
+   "min": 72560,
+   "median": 73792,
+   "p95": 75856,
+   "max": 125280,
+   "n": 100000
+  },
+  "wcet_cycles_signed": 24,
+  "wcet_ns_at_50MHz": 480
+ },
+ {
+  "policy": "sensor_interlock",
+  "scenario": "allow_armed_nominal_1",
+  "python_ns": {
+   "min": 71824,
+   "median": 73680,
+   "p95": 75728,
+   "max": 157489,
+   "n": 100000
+  },
+  "wcet_cycles_signed": 24,
+  "wcet_ns_at_50MHz": 480
+ },
+ {
+  "policy": "sensor_interlock",
+  "scenario": "observe_temp_1",
+  "python_ns": {
+   "min": 51296,
+   "median": 52736,
+   "p95": 54208,
+   "max": 119440,
+   "n": 100000
+  },
+  "wcet_cycles_signed": 24,
+  "wcet_ns_at_50MHz": 480
+ },
+ {
+  "policy": "sensor_interlock",
+  "scenario": "deny_temp_1",
+  "python_ns": {
+   "min": 33504,
+   "median": 34544,
+   "p95": 35152,
+   "max": 96304,
+   "n": 100000
+  },
+  "wcet_cycles_signed": 24,
+  "wcet_ns_at_50MHz": 480
+ },
+ {
+  "policy": "sensor_interlock",
+  "scenario": "deny_pressure_1",
+  "python_ns": {
+   "min": 33632,
+   "median": 34592,
+   "p95": 35232,
+   "max": 84928,
+   "n": 100000
+  },
+  "wcet_cycles_signed": 24,
+  "wcet_ns_at_50MHz": 480
+ },
+ {
+  "policy": "sensor_interlock",
+  "scenario": "boundary_temp_149",
+  "python_ns": {
+   "min": 51248,
+   "median": 52736,
+   "p95": 53968,
+   "max": 118848,
+   "n": 100000
+  },
+  "wcet_cycles_signed": 24,
+  "wcet_ns_at_50MHz": 480
+ },
+ {
+  "policy": "sensor_interlock",
+  "scenario": "boundary_temp_150",
+  "python_ns": {
+   "min": 33904,
+   "median": 34736,
+   "p95": 35232,
+   "max": 464929,
+   "n": 100000
+  },
+  "wcet_cycles_signed": 24,
+  "wcet_ns_at_50MHz": 480
+ },
+ {
+  "policy": "sensor_interlock",
+  "scenario": "boundary_nominal_119_749",
+  "python_ns": {
+   "min": 72688,
+   "median": 73968,
+   "p95": 76001,
+   "max": 506433,
+   "n": 100000
+  },
+  "wcet_cycles_signed": 24,
+  "wcet_ns_at_50MHz": 480
+ },
+ {
+  "policy": "sensor_interlock",
+  "scenario": "boundary_temp_120",
+  "python_ns": {
+   "min": 51760,
+   "median": 52816,
+   "p95": 54225,
+   "max": 484320,
+   "n": 100000
+  },
+  "wcet_cycles_signed": 24,
+  "wcet_ns_at_50MHz": 480
+ },
+ {
+  "policy": "sensor_interlock",
+  "scenario": "escalation_sensor_dark_armed_1",
+  "python_ns": {
+   "min": 15808,
+   "median": 16304,
+   "p95": 16576,
+   "max": 70512,
+   "n": 100000
+  },
+  "wcet_cycles_signed": 24,
+  "wcet_ns_at_50MHz": 480
+ }
+]

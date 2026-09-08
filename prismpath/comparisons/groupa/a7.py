@@ -109,11 +109,11 @@ def run_cedar(n: int) -> None:
     for pid in POLICIES:
         policy = policy_by_id(pid)
         policies_text = (gen_dir_for("cedar", pid) / f"{pid}.cedar").read_text()
-        pset = policies_text          # cedarpy parses the policy text per call; PolicySet has no public constructor
+        pset = cedarpy.PolicySet.from_str(policies_text)   # parsed once; per call parsing would measure the parser (425 us vs 38 us here)
         for sid, inp, exp in complete_steps(policy):
             ctx = {k: v for k, v in inp.items() if v is not None}
             req = {"principal": 'User::"requester"', "action": 'Action::"decide"', "resource": 'Request::"r"', "context": ctx}
-            res0 = cedarpy.is_authorized(req, pset, [], verbose=True)
+            res0 = cedarpy.is_authorized(req, pset, [])
             st = stats(timed(lambda: cedarpy.is_authorized(req, pset, []), n))
             table.append({"policy": pid, "scenario": sid, "cedarpy_ns": st, "decision": str(res0.decision)})
             write_result(system="cedar", dimension="A7", policy=pid, scenario=sid, expected=exp["outcome"],

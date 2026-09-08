@@ -1,0 +1,34 @@
+{
+  "dimension": "A7",
+  "evidence_path": "prismpath/comparisons/results/opa/evidence/A7",
+  "expected": "escalate_human",
+  "glue": {
+    "components": [
+      "server configuration"
+    ],
+    "description": "configure the server's request timeout (a cap on wall time, not a bound on work)",
+    "hours": 0,
+    "loc": 0
+  },
+  "grade": "WITH-WORK",
+  "harness_commit": "eeb9706",
+  "idiomatic": true,
+  "match": true,
+  "measurements": {
+    "latency_ns": {
+      "max": 1973843,
+      "median": 307392,
+      "min": 97008,
+      "n": 100000,
+      "p95": 536177
+    },
+    "transport": "loopback HTTP to opa run --server (includes TCP and JSON, no in process Python embedding exists)"
+  },
+  "notes": "opa run --server over loopback HTTP, 100000 requests: min/median/p95/max ns 97008/307392/536177/1973843; includes the HTTP round trip and JSON on both sides. Rego evaluation has no stated worst case bound and no bound travels with a policy; a request timeout caps wall time, which the pre registered rubric counts as WITH-WORK.",
+  "observed": "escalate_human",
+  "policy": "sensor_interlock",
+  "run_at": "2026-09-08T23:00:13Z",
+  "scenario": "escalation_sensor_dark_armed_1",
+  "system": "opa",
+  "system_version": "1.20.2"
+}

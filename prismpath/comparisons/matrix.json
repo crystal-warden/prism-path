@@ -68,6 +68,98 @@
       "sha256": "0ee18df7a97d333af7ac9cc5336659c491c0cc026b6def094e45d5ebf9baf41b"
     },
     {
+      "path": "cedar/A3__network_admission__allow_dns_small_1.json",
+      "sha256": "a492a2a2b3359dbfa400fb0721a10107d1acef8626f0b2af31813d270a6da19a"
+    },
+    {
+      "path": "cedar/A3__network_admission__allow_https_1.json",
+      "sha256": "4c3f0cd42f27a8f3b4f5e7d5cacc86b590eca3f179bec36fe6bdd8339864cd54"
+    },
+    {
+      "path": "cedar/A3__network_admission__allow_icmp_1.json",
+      "sha256": "df607e5383f419de278de5950650fc7f89135262bdcd372229b28f2fde5b3254"
+    },
+    {
+      "path": "cedar/A3__network_admission__allow_internal_ssh_1.json",
+      "sha256": "d5db6e1920bc604253199f4673fe782d9ed71b7a7d405b4ff12d19b92a986a29"
+    },
+    {
+      "path": "cedar/A3__network_admission__boundary_dns_512.json",
+      "sha256": "8765170648074a6803689c2627d71883e50e8867a4e9d14d90e6f4711d655a8a"
+    },
+    {
+      "path": "cedar/A3__network_admission__boundary_dns_513.json",
+      "sha256": "02a37efe06842aa49a01681328bac444bfd9ef25d8f45df1215f944e575fba80"
+    },
+    {
+      "path": "cedar/A3__network_admission__boundary_jumbo_1399.json",
+      "sha256": "88063fc685a160df74d5b86a76c0ee728cb64b4a5f6b78a73e2e8e90d344d79d"
+    },
+    {
+      "path": "cedar/A3__network_admission__boundary_jumbo_1400.json",
+      "sha256": "074fca1dca8eb00553c4cd730a709bb3f9b4f08828114d64cbecb3abe23b6195"
+    },
+    {
+      "path": "cedar/A3__network_admission__deny_dns_large_1.json",
+      "sha256": "f061bb3873490de59ff39fdfeee840ad119591e763d550b84cb731f5f724a038"
+    },
+    {
+      "path": "cedar/A3__network_admission__deny_external_ssh_1.json",
+      "sha256": "b4af87faf7c39f75b6f192ae890332c9e47b304860f5cb14ed4cdab5a78e3594"
+    },
+    {
+      "path": "cedar/A3__network_admission__deny_telnet_1.json",
+      "sha256": "e79f5fdc2a42507574d9c77eb7210d78552e769452ba3a204c54e91ed99cf597"
+    },
+    {
+      "path": "cedar/A3__network_admission__observe_jumbo_1.json",
+      "sha256": "971077d7a400a102a948e5c4db2867373eb621759c1224c3690520e2d4448eab"
+    },
+    {
+      "path": "cedar/A3__network_admission__observe_other_1.json",
+      "sha256": "13a4902b59f4c725b5a7f1e345d1f40853ac53f6c272f46513631511152c59e5"
+    },
+    {
+      "path": "cedar/A3__sensor_interlock__allow_armed_nominal_1.json",
+      "sha256": "2ad1b7077fcae5499699d85419a6f807aba09c28182d12674781a285cf8e0dfa"
+    },
+    {
+      "path": "cedar/A3__sensor_interlock__allow_nominal_1.json",
+      "sha256": "a82abae2111ea6cdfb62dc29f0c69d3535cf31ef83264d24f72f3593b3061bd2"
+    },
+    {
+      "path": "cedar/A3__sensor_interlock__boundary_nominal_119_749.json",
+      "sha256": "ec01f8d21ac2c23d866d0d40dc2d6cfe0f50a8479b2f6e88234ca8b2acacdf4b"
+    },
+    {
+      "path": "cedar/A3__sensor_interlock__boundary_temp_120.json",
+      "sha256": "cf603daa74209965d0279f756af2f2eb960d6880a9bb4abbce19cf19d908d097"
+    },
+    {
+      "path": "cedar/A3__sensor_interlock__boundary_temp_149.json",
+      "sha256": "49b48a7b2a218560b2ee618dc762aacb857bdc44890db1e6f822747848357672"
+    },
+    {
+      "path": "cedar/A3__sensor_interlock__boundary_temp_150.json",
+      "sha256": "736fadc61367239b1f4ba408fca67d397a6c7bba9d1ec8ad3165199a3800e998"
+    },
+    {
+      "path": "cedar/A3__sensor_interlock__deny_pressure_1.json",
+      "sha256": "b5e0f7caf9d5c33a61f5c52a681ce8524098b3173d41d635b6b8acf9009636dd"
+    },
+    {
+      "path": "cedar/A3__sensor_interlock__deny_temp_1.json",
+      "sha256": "17358d98a12399279a9384a15818e7085b01b336231a6d55cd0f597a0261efaf"
+    },
+    {
+      "path": "cedar/A3__sensor_interlock__escalation_sensor_dark_armed_1.json",
+      "sha256": "fefd304c349eb0fdd36b12f7528b382844c908e7b0af02f5478c034a8414ce69"
+    },
+    {
+      "path": "cedar/A3__sensor_interlock__observe_temp_1.json",
+      "sha256": "87b2a59705dd1eac602b8a694602b7080cdbbf1cc78d3e6098db4f9d6978a8cc"
+    },
+    {
       "path": "cedar/A4__ai_action_gate__carries_cause.json",
       "sha256": "767133f5e56703d5aa819834f0c293d57f3ea76cf79ac384cd469154cf2158ad"
     },
@@ -188,6 +280,98 @@
       "sha256": "79d451fb68afd363ced180bb8798ddc3a376b39d2e0dd323b67588a5aafdc1f1"
     },
     {
+      "path": "cedar/A7__network_admission__allow_dns_small_1.json",
+      "sha256": "ac2c38c8fd72ead213ed6249f778652cf4d8ab85f2c6c9f9d16436aed1f5160a"
+    },
+    {
+      "path": "cedar/A7__network_admission__allow_https_1.json",
+      "sha256": "0953b85892abc1bb585f36d6bb18090ff12c4ce3b6709fa3ac6dbddf350a4e3b"
+    },
+    {
+      "path": "cedar/A7__network_admission__allow_icmp_1.json",
+      "sha256": "ef755b303e3cc7cd4a8eb68fca716e682abf0c02997a40733bdcc742572009f0"
+    },
+    {
+      "path": "cedar/A7__network_admission__allow_internal_ssh_1.json",
+      "sha256": "6dbc7026653db946e14d3bd02ab6a43994a2aae199eee45c7e11f79c757ea539"
+    },
+    {
+      "path": "cedar/A7__network_admission__boundary_dns_512.json",
+      "sha256": "8c0db0895e4d1aaa9f777593d393b91ecad35cf2e5f4ee36c31e26feae42b765"
+    },
+    {
+      "path": "cedar/A7__network_admission__boundary_dns_513.json",
+      "sha256": "b9c45516a09181563c41c752a424eafd32f8f80a5ca83e37835147267150f3ee"
+    },
+    {
+      "path": "cedar/A7__network_admission__boundary_jumbo_1399.json",
+      "sha256": "b72ac3379b126e9ce6453aeea67258f28de81e22b54a1ee5140501940509ab55"
+    },
+    {
+      "path": "cedar/A7__network_admission__boundary_jumbo_1400.json",
+      "sha256": "ccb5eb63b83faf3549b21bdfda25ff9e1c6eee656a4c2564f431bff2b4913e4b"
+    },
+    {
+      "path": "cedar/A7__network_admission__deny_dns_large_1.json",
+      "sha256": "606ccf4322f19b34d6ca815540cdfeba1f737ba18069b9df9869fcd2ca601c72"
+    },
+    {
+      "path": "cedar/A7__network_admission__deny_external_ssh_1.json",
+      "sha256": "c0cadfaef150a82e9e0edd58262381ddf37e18aaf90fd94906fcf521cb28e659"
+    },
+    {
+      "path": "cedar/A7__network_admission__deny_telnet_1.json",
+      "sha256": "08977b7393eddc087d5bf26fdefa1224e2e3478d81a92f61f791de6741c245b8"
+    },
+    {
+      "path": "cedar/A7__network_admission__observe_jumbo_1.json",
+      "sha256": "df971437c0ef9c613a54fdb0ec81d199847c1a02b0b0d750ceab186cdb56cfc0"
+    },
+    {
+      "path": "cedar/A7__network_admission__observe_other_1.json",
+      "sha256": "935fb5f59f7f46d3e61e2033b83bb7cdaacb37a0bc1fefd739388a58c624590b"
+    },
+    {
+      "path": "cedar/A7__sensor_interlock__allow_armed_nominal_1.json",
+      "sha256": "8d76aa8d8417cf0d81fae696f4d34eb2a48235bd4dff67750713e236f51e06ac"
+    },
+    {
+      "path": "cedar/A7__sensor_interlock__allow_nominal_1.json",
+      "sha256": "f9a70eac1998aafe56305dc2fb4b5c1dd132e75c6892e36865b789aad9647416"
+    },
+    {
+      "path": "cedar/A7__sensor_interlock__boundary_nominal_119_749.json",
+      "sha256": "d205c3dad70fffbbc33c6b29bacfc757cc609aec230ba220ccab2fb70302b810"
+    },
+    {
+      "path": "cedar/A7__sensor_interlock__boundary_temp_120.json",
+      "sha256": "41341f036f481978ab58c128ac89071ade7f6b57e2c0d86165eb762598631294"
+    },
+    {
+      "path": "cedar/A7__sensor_interlock__boundary_temp_149.json",
+      "sha256": "858d7db5703a32f4c0c90a8c70d33ced8654b8d9c7638e1fc7275a22c7a91546"
+    },
+    {
+      "path": "cedar/A7__sensor_interlock__boundary_temp_150.json",
+      "sha256": "5ab2b9b1428dedca9c6377619d9cf307a91265e7333fe2e77ea89fa4b19aec63"
+    },
+    {
+      "path": "cedar/A7__sensor_interlock__deny_pressure_1.json",
+      "sha256": "029ae1ec42e407dadc75947dae659a90521c41252893e0780ea1ce96964b3428"
+    },
+    {
+      "path": "cedar/A7__sensor_interlock__deny_temp_1.json",
+      "sha256": "79f7fa2f567c66a8da61d98c17903e6c4275a77826c57452a442118e57ac5d31"
+    },
+    {
+      "path": "cedar/A7__sensor_interlock__escalation_sensor_dark_armed_1.json",
+      "sha256": "7bef8857f267c6e87b73811dd9434061b47b57938e69988944e88d9921b71d8c"
+    },
+    {
+      "path": "cedar/A7__sensor_interlock__observe_temp_1.json",
+      "sha256": "2ba02849e81210c6d7baa715111c8dceae0081b0612d847fd0f32439a5923832"
+    },
+    {
       "path": "cedar/A8__ai_action_gate__ai_worker_loop_1.json",
       "sha256": "a4a533396207688246980f23f022c2ae5984297b7212b7c7c1825da16cabd936"
     },
@@ -242,6 +426,98 @@
     {
       "path": "cerbos/A2__expense_approval__escalation_3.json",
       "sha256": "9303cc70fb22c4465e0a0edfd0ad6d8a64012a6c39b6fd604bec503887394671"
+    },
+    {
+      "path": "cerbos/A3__network_admission__allow_dns_small_1.json",
+      "sha256": "5da8a8990c6aad0de26404ff20b6ae4e99acad237b9eb9836b3e05952ef502a4"
+    },
+    {
+      "path": "cerbos/A3__network_admission__allow_https_1.json",
+      "sha256": "1f88a1ebf77391144308ccbf390c8cd39cdce18c148d7b88bd9dc5d3b33b3911"
+    },
+    {
+      "path": "cerbos/A3__network_admission__allow_icmp_1.json",
+      "sha256": "2aa8ec18d5786523274fddd081546aa0108085f31022ef483099b9de5df1a738"
+    },
+    {
+      "path": "cerbos/A3__network_admission__allow_internal_ssh_1.json",
+      "sha256": "b299e4a0e69efec2dd1814be46c14a07d6b1a8f357c19465fe5c7ccf2bc6e26e"
+    },
+    {
+      "path": "cerbos/A3__network_admission__boundary_dns_512.json",
+      "sha256": "893b0900c2f1fbcb5259059733585b1969ec4549db0f211895a55e320ba5a707"
+    },
+    {
+      "path": "cerbos/A3__network_admission__boundary_dns_513.json",
+      "sha256": "1c4442317be5b36009907807154788bc7bb632b3703515c6cd4002b42598c0d5"
+    },
+    {
+      "path": "cerbos/A3__network_admission__boundary_jumbo_1399.json",
+      "sha256": "e5fc42e9be554bc320c8ecf2cbc7d83915fa67a13fd6f22efeaadbc11a6da301"
+    },
+    {
+      "path": "cerbos/A3__network_admission__boundary_jumbo_1400.json",
+      "sha256": "03e402268339c9b7cb6f5f4416c9cb759aa6dec46b9fddc7336a8482d3e1dbba"
+    },
+    {
+      "path": "cerbos/A3__network_admission__deny_dns_large_1.json",
+      "sha256": "b2eed10c4c459e9de3e192e09e86f6ba5eec9a5682e6c093fb6370ddafc62b22"
+    },
+    {
+      "path": "cerbos/A3__network_admission__deny_external_ssh_1.json",
+      "sha256": "4a920a2ed92ea4a2c5fe94eb3dd4980e7dbc98d6ce9bfc94aac8de4dc1159b7c"
+    },
+    {
+      "path": "cerbos/A3__network_admission__deny_telnet_1.json",
+      "sha256": "306c6ee1787f5b1c038dcab52cd1b73b181ae701f84b6675a26f0f653764ba71"
+    },
+    {
+      "path": "cerbos/A3__network_admission__observe_jumbo_1.json",
+      "sha256": "1d91d80429ae6cf9ff0ef5f517f9810e55d980e2320240e6b775c88b845af3d2"
+    },
+    {
+      "path": "cerbos/A3__network_admission__observe_other_1.json",
+      "sha256": "1cb93536a7f40783d637668d696a81d53bd3f7d8ee83c6e7ca8489bce737cc61"
+    },
+    {
+      "path": "cerbos/A3__sensor_interlock__allow_armed_nominal_1.json",
+      "sha256": "f774dbb64e9246c6703c828b317c39e919acbd5ada1fc5fadba5c4e1d4a24aaf"
+    },
+    {
+      "path": "cerbos/A3__sensor_interlock__allow_nominal_1.json",
+      "sha256": "3f6b31d30c3965979eb023b73e98b0a2d0fcdc16bc32fa2b9bc7b9e957e1b93f"
+    },
+    {
+      "path": "cerbos/A3__sensor_interlock__boundary_nominal_119_749.json",
+      "sha256": "6f31d33d528f5252d196cffd2a500043f5071909dc7c0613d69779f62902ff77"
+    },
+    {
+      "path": "cerbos/A3__sensor_interlock__boundary_temp_120.json",
+      "sha256": "9e2b45b9a29313ba8bec9dcb7107b6bbe3434557882944a11850c4e3028ae8d3"
+    },
+    {
+      "path": "cerbos/A3__sensor_interlock__boundary_temp_149.json",
+      "sha256": "fa0bc17bab1a59c66f8413f76deb66f07a4fd56c96d96431248f0c2b75fd081d"
+    },
+    {
+      "path": "cerbos/A3__sensor_interlock__boundary_temp_150.json",
+      "sha256": "3facc2dee82e9ba0a4f7a824bee1985e7c67b8e107c809cac9aec985ba22a39d"
+    },
+    {
+      "path": "cerbos/A3__sensor_interlock__deny_pressure_1.json",
+      "sha256": "24d4ca706c78d22535c36030d24293136bb95fe8c6d9185f457a6ff626ed687e"
+    },
+    {
+      "path": "cerbos/A3__sensor_interlock__deny_temp_1.json",
+      "sha256": "4fe1e8c0e20e8b6c9d70bfd615325d9f0c9b14bf6c8ec285bf7459e72dfff72e"
+    },
+    {
+      "path": "cerbos/A3__sensor_interlock__escalation_sensor_dark_armed_1.json",
+      "sha256": "9b3420535e0052abef874ed6a89e8be35e4f349b693e4f869f3cb9b90e5ec491"
+    },
+    {
+      "path": "cerbos/A3__sensor_interlock__observe_temp_1.json",
+      "sha256": "20e477ce747244eb2a185354812f4696e8c2a249005bd8d27219a30f6532ef1a"
     },
     {
       "path": "cerbos/A4__ai_action_gate__carries_cause.json",
@@ -364,6 +640,98 @@
       "sha256": "69ee852cc89217d666c2b8ceb78f9e9a0ad899abbf2eb73a81f273a4ca4829bd"
     },
     {
+      "path": "cerbos/A7__network_admission__allow_dns_small_1.json",
+      "sha256": "7236dab75cd14b828dc86c25a8ccce6758b835e0233d29bb132dafc83020e37e"
+    },
+    {
+      "path": "cerbos/A7__network_admission__allow_https_1.json",
+      "sha256": "2fa5e7409bc49cdc0a43ae467f50b4c883647e600399db6ce20f19df11f6b1db"
+    },
+    {
+      "path": "cerbos/A7__network_admission__allow_icmp_1.json",
+      "sha256": "72745821e130e59d2ebd49b704a59cb2001b2915adc1cd4bd1fc06abc4097c89"
+    },
+    {
+      "path": "cerbos/A7__network_admission__allow_internal_ssh_1.json",
+      "sha256": "5c95ec6edd0e47063308fcbfe1ae5d7b4a9c8ce996ad29fe4f2d2d01dc1a57fc"
+    },
+    {
+      "path": "cerbos/A7__network_admission__boundary_dns_512.json",
+      "sha256": "84838dbe57494d301ff2711a39e8eb9296f60008a174f1f4a1330859c59be55a"
+    },
+    {
+      "path": "cerbos/A7__network_admission__boundary_dns_513.json",
+      "sha256": "d68044de2568763afa8d9f692deec62f89581a02ec7cde4520bd1a7a7ca53295"
+    },
+    {
+      "path": "cerbos/A7__network_admission__boundary_jumbo_1399.json",
+      "sha256": "92b3051a5b46c5df43d49e559d58df2708d84316a603d6395acc3b2e04506cb9"
+    },
+    {
+      "path": "cerbos/A7__network_admission__boundary_jumbo_1400.json",
+      "sha256": "76621c9a46d7d279dfd5070a7637f4303c5b04684d4f3939bb1b8c50ad23098a"
+    },
+    {
+      "path": "cerbos/A7__network_admission__deny_dns_large_1.json",
+      "sha256": "171101d31644d1cde4908365a6321f13ea48eceaeb93ff6e7fb68a0ea9307bd8"
+    },
+    {
+      "path": "cerbos/A7__network_admission__deny_external_ssh_1.json",
+      "sha256": "921871fa3b0442f52949241272b5c0aa5121fa1665280f4f98cec88ff80dd8a6"
+    },
+    {
+      "path": "cerbos/A7__network_admission__deny_telnet_1.json",
+      "sha256": "f0cef59bbe23e638270e4a3b9eb29a3af6264e4b9136fb81d616ace808166dd6"
+    },
+    {
+      "path": "cerbos/A7__network_admission__observe_jumbo_1.json",
+      "sha256": "12146ec7e9085df7ee18fbab67b35fc649708c57b9a4765fd16b142a2089b2f2"
+    },
+    {
+      "path": "cerbos/A7__network_admission__observe_other_1.json",
+      "sha256": "a7be63c7358d86d0e929df4d51146bb566007d2ca9c4c26142a341c0e7797cfd"
+    },
+    {
+      "path": "cerbos/A7__sensor_interlock__allow_armed_nominal_1.json",
+      "sha256": "06863f690f0da7017cabde7dbb61b5988a04d3beab9793539f615c87275977f8"
+    },
+    {
+      "path": "cerbos/A7__sensor_interlock__allow_nominal_1.json",
+      "sha256": "4b06a0da2d2d3568c6628c93e6a449b23ead4f93f027410decb420c6f8e498b2"
+    },
+    {
+      "path": "cerbos/A7__sensor_interlock__boundary_nominal_119_749.json",
+      "sha256": "0546e6ea756469a273f3e19881e8ff7b25cac79964611c97110df4c1b9177ef9"
+    },
+    {
+      "path": "cerbos/A7__sensor_interlock__boundary_temp_120.json",
+      "sha256": "ea2a0e593cbb4aa77f6158aa46b218a22882040132667fd533e52b861bdd5501"
+    },
+    {
+      "path": "cerbos/A7__sensor_interlock__boundary_temp_149.json",
+      "sha256": "0706b485e25de4cca6423e3bf522436f28d5506a8bb1472d152914a91ebd2bf0"
+    },
+    {
+      "path": "cerbos/A7__sensor_interlock__boundary_temp_150.json",
+      "sha256": "b62e9c232a92d88fdf9ed7c5ad3b7e1072ca51ff2fade3e1affba94b0754f4a1"
+    },
+    {
+      "path": "cerbos/A7__sensor_interlock__deny_pressure_1.json",
+      "sha256": "ad4209c84b4f7df7c199ba43587d41d95dea8724542b568373da248c86718cdf"
+    },
+    {
+      "path": "cerbos/A7__sensor_interlock__deny_temp_1.json",
+      "sha256": "d7ab242db3c36367fbf64a3926529cd370dbfed512529c59191a6ec3d01be5a0"
+    },
+    {
+      "path": "cerbos/A7__sensor_interlock__escalation_sensor_dark_armed_1.json",
+      "sha256": "a544cbdbc5551b98b949759f38239972beda46ab5ffc3f7cd315f214de931c62"
+    },
+    {
+      "path": "cerbos/A7__sensor_interlock__observe_temp_1.json",
+      "sha256": "a8a59b83869f7a8a259880e951c388f3c4f2d11c52ae0df3f331822403110105"
+    },
+    {
       "path": "cerbos/A8__ai_action_gate__ai_worker_loop_1.json",
       "sha256": "447a069ac8962e6be4ccf5b882dae70e4e9474b543db2007cfe72c8b6c7a7439"
     },
@@ -418,6 +786,98 @@
     {
       "path": "opa/A2__expense_approval__escalation_3.json",
       "sha256": "2afab25620b70452eedc6af1f39c37774cfac147a8dcae78f5d0805dd9801e8b"
+    },
+    {
+      "path": "opa/A3__network_admission__allow_dns_small_1.json",
+      "sha256": "e9d215001ce6c58b2f82b1fccf7243f327ed1117c4a5049ba040b1404c463c77"
+    },
+    {
+      "path": "opa/A3__network_admission__allow_https_1.json",
+      "sha256": "ba292598f04d158148033385aa36d476ea4fc07a7d5b79a9c033112142be0e76"
+    },
+    {
+      "path": "opa/A3__network_admission__allow_icmp_1.json",
+      "sha256": "df3c88498f71d07bb9c3e73b8e13c88a8845bad31da908e73f4d5574d01f5a1c"
+    },
+    {
+      "path": "opa/A3__network_admission__allow_internal_ssh_1.json",
+      "sha256": "08ea41fa81e186f9c87fb8059a83608295c086ec486ed340f7d6b5f9e436800b"
+    },
+    {
+      "path": "opa/A3__network_admission__boundary_dns_512.json",
+      "sha256": "a211a3ef097efe499b7b35e13039c1fb5676193a2646e2668474008e4c5cbb76"
+    },
+    {
+      "path": "opa/A3__network_admission__boundary_dns_513.json",
+      "sha256": "9b3f1eb7364a491b49f86de884454c55d1a8ec008bf33667f6d5a43bdf410300"
+    },
+    {
+      "path": "opa/A3__network_admission__boundary_jumbo_1399.json",
+      "sha256": "36ee31c009e732261dfadafeb68c2543796b75941bdd4083cb10feee1ef40090"
+    },
+    {
+      "path": "opa/A3__network_admission__boundary_jumbo_1400.json",
+      "sha256": "6f14b438de1f3df1e99fe48ac7f6af153f47d46e12fb342a6828d1f1dfba0250"
+    },
+    {
+      "path": "opa/A3__network_admission__deny_dns_large_1.json",
+      "sha256": "4adeda2952ec212052cf824bd5007810d1e9f531faef3a21f0ee4c207640d205"
+    },
+    {
+      "path": "opa/A3__network_admission__deny_external_ssh_1.json",
+      "sha256": "9406d03ed48f43f1831e5e4948752719e3ea72ee294920821decdd04650d47e4"
+    },
+    {
+      "path": "opa/A3__network_admission__deny_telnet_1.json",
+      "sha256": "af0af24cba157beed0a3b41d7d4a6679631ea0a99eb5620536e105fb79ab54c3"
+    },
+    {
+      "path": "opa/A3__network_admission__observe_jumbo_1.json",
+      "sha256": "d5d9a6b91af1b5dd0fcffed6ad0ac89020968befe78c78c70fd1d612fe6c598d"
+    },
+    {
+      "path": "opa/A3__network_admission__observe_other_1.json",
+      "sha256": "56e7c526ff431f040303bf17aee43a8c1563fbda58ccee260bcc44141ab16f84"
+    },
+    {
+      "path": "opa/A3__sensor_interlock__allow_armed_nominal_1.json",
+      "sha256": "3f8309304728b99f25b92cfbe4b4c175a8fb56b1fbc01f112ca2ff036634830f"
+    },
+    {
+      "path": "opa/A3__sensor_interlock__allow_nominal_1.json",
+      "sha256": "4d9f311f36a23ac42c582fe31670a11bf397359e426ad5a5dc5f695e4f14d628"
+    },
+    {
+      "path": "opa/A3__sensor_interlock__boundary_nominal_119_749.json",
+      "sha256": "1cbdc3e38137f714f87881ec06d8f09e0d7abf054530841c0e8b6671d467ce3a"
+    },
+    {
+      "path": "opa/A3__sensor_interlock__boundary_temp_120.json",
+      "sha256": "f5c43a47144f57eba99aa93d1604298f914355b5e6a3ac7c96303e40dbaa8766"
+    },
+    {
+      "path": "opa/A3__sensor_interlock__boundary_temp_149.json",
+      "sha256": "7f3682f82a0875ae79a04658894da4755da672b2be6caa0cd459fb23e288ccc4"
+    },
+    {
+      "path": "opa/A3__sensor_interlock__boundary_temp_150.json",
+      "sha256": "54c5709b8318c100df94f069add40d4d7329dbdee9eabf7fcf92fc4c04b888ac"
+    },
+    {
+      "path": "opa/A3__sensor_interlock__deny_pressure_1.json",
+      "sha256": "8869b21346dff469d84406a1298b04476c118d056b8ed7262d31bf34e06e40c9"
+    },
+    {
+      "path": "opa/A3__sensor_interlock__deny_temp_1.json",
+      "sha256": "df614e3f9b13d16e7cd4210d22284a7c54de65170f1c492936c1e0e98fae1830"
+    },
+    {
+      "path": "opa/A3__sensor_interlock__escalation_sensor_dark_armed_1.json",
+      "sha256": "d6d34cdaa6d2328d8f67008cd0f10f4ef61b6bd2dc5887c3f0458d770e135c01"
+    },
+    {
+      "path": "opa/A3__sensor_interlock__observe_temp_1.json",
+      "sha256": "867da2385bd1e60e918bf8c88e02ccfa713c2360df6835a62361cdc5ea4c6a59"
     },
     {
       "path": "opa/A4__ai_action_gate__carries_cause.json",
@@ -540,6 +1000,98 @@
       "sha256": "8ffc28c9162ab6b867229970ac690eb25eb5e71921ac4956fb8759e107a7386e"
     },
     {
+      "path": "opa/A7__network_admission__allow_dns_small_1.json",
+      "sha256": "084b3b1acf345af53ba6e69572104bee8583e2de1d307d18cc23dc3176c26103"
+    },
+    {
+      "path": "opa/A7__network_admission__allow_https_1.json",
+      "sha256": "c5a67b1b96a2c7d25d90ce890ce6b8c6687220a1e68f21c20f66f12102aa7a9a"
+    },
+    {
+      "path": "opa/A7__network_admission__allow_icmp_1.json",
+      "sha256": "853280b16ec5d48a3ca7dbac24c6c55795a2a55820bdafb5968891a2fe924aa4"
+    },
+    {
+      "path": "opa/A7__network_admission__allow_internal_ssh_1.json",
+      "sha256": "aa00175f4ff742e04ddbc60f107bf97811a05babf90904743361fbf2f44fbafd"
+    },
+    {
+      "path": "opa/A7__network_admission__boundary_dns_512.json",
+      "sha256": "81144ddcba869e21fc61347ddc5a0cd6b3c70ca9031398ba7cb9ad93e381e992"
+    },
+    {
+      "path": "opa/A7__network_admission__boundary_dns_513.json",
+      "sha256": "cefbfaf526ec925a38bba9a5a11b29ed8735dfea1855d8a74b699f791884a588"
+    },
+    {
+      "path": "opa/A7__network_admission__boundary_jumbo_1399.json",
+      "sha256": "2a843d0a95cf33ba04d4f1396a789b038fe60d422f98173fa39d24931c21aa97"
+    },
+    {
+      "path": "opa/A7__network_admission__boundary_jumbo_1400.json",
+      "sha256": "7de8a5eab1524cb9a70016b8ebdef6e5ceeccb2f2253dd9fedc2c2c6c8a8a013"
+    },
+    {
+      "path": "opa/A7__network_admission__deny_dns_large_1.json",
+      "sha256": "866fc7ed827ee5e04b59f662c0bbe472a42a1d542d2fa258c25daa7d92813872"
+    },
+    {
+      "path": "opa/A7__network_admission__deny_external_ssh_1.json",
+      "sha256": "a7b30e96d4f29496cb823d40bc5a77368d2b5c7358b311b259c221180ddc781f"
+    },
+    {
+      "path": "opa/A7__network_admission__deny_telnet_1.json",
+      "sha256": "ae50c867188f8f1abda9093d757a2335e8c2146cf52c9bc0ce4e9252cb89581c"
+    },
+    {
+      "path": "opa/A7__network_admission__observe_jumbo_1.json",
+      "sha256": "352c8bb1807b0024b635c3af542a3885735eed1a495c84f4bafca9e93ad15e4d"
+    },
+    {
+      "path": "opa/A7__network_admission__observe_other_1.json",
+      "sha256": "67e97d391a4847bed4da0639ff5a92cecc5ed2ab23ca1862f541a234377588e1"
+    },
+    {
+      "path": "opa/A7__sensor_interlock__allow_armed_nominal_1.json",
+      "sha256": "c32580936e6433b4e04bfad7f1ef65a3019734f8484890a258d748ee8e244c31"
+    },
+    {
+      "path": "opa/A7__sensor_interlock__allow_nominal_1.json",
+      "sha256": "fea8346cc6bbf4e1641532d57aaf66034e4bb8dcccd4d17842e10f1fe381c432"
+    },
+    {
+      "path": "opa/A7__sensor_interlock__boundary_nominal_119_749.json",
+      "sha256": "94c2d98f35aa6470c3fde76102431e7a199e1226ad975f6b8f8d8179a6e5c4d5"
+    },
+    {
+      "path": "opa/A7__sensor_interlock__boundary_temp_120.json",
+      "sha256": "de89ac2b3503a4a36e1428412b8476ad21a381aa61c2b824dcf1067c5adb073a"
+    },
+    {
+      "path": "opa/A7__sensor_interlock__boundary_temp_149.json",
+      "sha256": "b5f9ef83394cad42b1c7f160c0113f96c8e1a634a22fc1762916d8fbad942a32"
+    },
+    {
+      "path": "opa/A7__sensor_interlock__boundary_temp_150.json",
+      "sha256": "a609dab9a31a37ac993d5d1bd9a599d67b5a00a9ab2a6b1e251004940f8312df"
+    },
+    {
+      "path": "opa/A7__sensor_interlock__deny_pressure_1.json",
+      "sha256": "eaf9809ea37493d8b156c26ae554283e3ce9f6455c8a25c27a0be96e35c92ce8"
+    },
+    {
+      "path": "opa/A7__sensor_interlock__deny_temp_1.json",
+      "sha256": "9deac7cd9449982c1f8a816237d6723770085dd3a005688f5ced9e1cd0fa4259"
+    },
+    {
+      "path": "opa/A7__sensor_interlock__escalation_sensor_dark_armed_1.json",
+      "sha256": "2c71ea471b3137bf066cadb7febad5a47e3542e67f9d75d045b20cf0a925b732"
+    },
+    {
+      "path": "opa/A7__sensor_interlock__observe_temp_1.json",
+      "sha256": "fbd78b827b8b9837ce5ad7fcc749907c935a579df8d360de107b8c604aae01e9"
+    },
+    {
       "path": "opa/A8__ai_action_gate__ai_worker_loop_1.json",
       "sha256": "7841a1e0a5f55de726893da9a57813e499bd9f6567fc1c3f4c7f7612586a0c6e"
     },
@@ -594,6 +1146,98 @@
     {
       "path": "openfga/A2__expense_approval__escalation_3.json",
       "sha256": "80637e7963ee2a18f97c7f7f1f1e7e421c3982eae9c27dfc5ab51db86f7d5b55"
+    },
+    {
+      "path": "openfga/A3__network_admission__allow_dns_small_1.json",
+      "sha256": "4e75827d20e860a512c5cd20851d552392fb6e3e108104a4b639de3c2c01b780"
+    },
+    {
+      "path": "openfga/A3__network_admission__allow_https_1.json",
+      "sha256": "23010db3c2783fa61710b20624b81e3a4c24746bf03393ad817ca5957313efab"
+    },
+    {
+      "path": "openfga/A3__network_admission__allow_icmp_1.json",
+      "sha256": "8432b67130921b368daecc08cce5c135e435ac5ab303377e72ef26011bc5539f"
+    },
+    {
+      "path": "openfga/A3__network_admission__allow_internal_ssh_1.json",
+      "sha256": "e1d0f4518190a4861f5859bd7b292acfaf6fa5c63068ce225af6bfd100d8d5ad"
+    },
+    {
+      "path": "openfga/A3__network_admission__boundary_dns_512.json",
+      "sha256": "e8a7c51f7fdd80610395250ece721859412733103ef4e31fa16718a51a0d1f03"
+    },
+    {
+      "path": "openfga/A3__network_admission__boundary_dns_513.json",
+      "sha256": "eed1aae05c66575a0b53f7484c115122a3fa13e260f1b5640cc8e3044e81b279"
+    },
+    {
+      "path": "openfga/A3__network_admission__boundary_jumbo_1399.json",
+      "sha256": "29282932ac8fadb0e6f95d864af0fed467836724d48ba4fc943f413cf566e234"
+    },
+    {
+      "path": "openfga/A3__network_admission__boundary_jumbo_1400.json",
+      "sha256": "9c7dcfd92a1cde9fa6e6df7d8890f58dc43a1079f3e86264511c9e81750e8e2c"
+    },
+    {
+      "path": "openfga/A3__network_admission__deny_dns_large_1.json",
+      "sha256": "88380b3a8b3e72819e0671bc5e643b3e3bb615241354067aa678674e48db71ac"
+    },
+    {
+      "path": "openfga/A3__network_admission__deny_external_ssh_1.json",
+      "sha256": "a7e5c150bf56f6f3344f5b16ef7ef3607cf1f3203da6ff26bedacbb514f3d365"
+    },
+    {
+      "path": "openfga/A3__network_admission__deny_telnet_1.json",
+      "sha256": "3de5b112a07a00e555b6da90c8be50a5ac1449fd1f8b51c77982e87099eb5c24"
+    },
+    {
+      "path": "openfga/A3__network_admission__observe_jumbo_1.json",
+      "sha256": "ba1172e09b5d15b640eed1454b7301cdaf8e096d00ced6eebaf4b02e81260701"
+    },
+    {
+      "path": "openfga/A3__network_admission__observe_other_1.json",
+      "sha256": "ac35514e709ecc1750d908cbe924a8d70f4ae638d21576040d12a556e8fe5439"
+    },
+    {
+      "path": "openfga/A3__sensor_interlock__allow_armed_nominal_1.json",
+      "sha256": "b5a30b8cd72a92d257a72613c8763827f3ea19226dc5ed1130259a3265ce2817"
+    },
+    {
+      "path": "openfga/A3__sensor_interlock__allow_nominal_1.json",
+      "sha256": "303391511ca99d369396741b62d76cad188f2fbca0b4f80f473cce1635c2201b"
+    },
+    {
+      "path": "openfga/A3__sensor_interlock__boundary_nominal_119_749.json",
+      "sha256": "19587db939e17b942a8a8c063cdb63f98cc61977728489d1bfb4ca1c6a76707d"
+    },
+    {
+      "path": "openfga/A3__sensor_interlock__boundary_temp_120.json",
+      "sha256": "5696c7d2fc679ce0a06464b7dbbe060940659e4e2a4fe146c2a76782818adb4f"
+    },
+    {
+      "path": "openfga/A3__sensor_interlock__boundary_temp_149.json",
+      "sha256": "bd79e7ec2d5f8a9c7e9fc1db1d1117f2ec87b51f5691001963c8425504870b90"
+    },
+    {
+      "path": "openfga/A3__sensor_interlock__boundary_temp_150.json",
+      "sha256": "f77eb36b90bbcd33473788fc597449a46d4d90bbfd000b77d59c9a407f0c18ba"
+    },
+    {
+      "path": "openfga/A3__sensor_interlock__deny_pressure_1.json",
+      "sha256": "72fab40b9b500c3f0753df078aedefd678f131857d119c13403e3358886fec25"
+    },
+    {
+      "path": "openfga/A3__sensor_interlock__deny_temp_1.json",
+      "sha256": "31ce3a501558fcd7ec0a6284dcc03cf46661c3bbc372b23d37ec09bdb3e0b619"
+    },
+    {
+      "path": "openfga/A3__sensor_interlock__escalation_sensor_dark_armed_1.json",
+      "sha256": "9c8fc0dc58fa650c75255c5b926489ce8c2e5d4f073634e297b7c5a2d8d73c79"
+    },
+    {
+      "path": "openfga/A3__sensor_interlock__observe_temp_1.json",
+      "sha256": "661b4df04478796a60c12c57df70b6ea1f6961cf93c752457b3dfb9b6ad46cd8"
     },
     {
       "path": "openfga/A4__ai_action_gate__carries_cause.json",
@@ -714,6 +1358,98 @@
     {
       "path": "openfga/A6__network_admission__unsigned_policy_1.json",
       "sha256": "ab8fd316f75ea73edf11efc86e7aa35d7bda9a720bb3131be2ebc50d44c23ef8"
+    },
+    {
+      "path": "openfga/A7__network_admission__allow_dns_small_1.json",
+      "sha256": "ddb7895c29e7c667facf9e40b22b1c717c7b6e5b088532b34f9822e14c1d54fd"
+    },
+    {
+      "path": "openfga/A7__network_admission__allow_https_1.json",
+      "sha256": "a8f9a69eda7ac99ab68dbdb540347e1f25b7cb7efb375824808eaa7ef9d522dd"
+    },
+    {
+      "path": "openfga/A7__network_admission__allow_icmp_1.json",
+      "sha256": "db8b1da675318744ecaf01321078a052d7332053f0e59924c9b1ba12aeaee2d2"
+    },
+    {
+      "path": "openfga/A7__network_admission__allow_internal_ssh_1.json",
+      "sha256": "50a7e7d51a3802f97c034a9a28a7416576393b905d5be25f838f2c0fcf42e1e6"
+    },
+    {
+      "path": "openfga/A7__network_admission__boundary_dns_512.json",
+      "sha256": "5ca05195af130017a9ed92f35093cf864014847bd839f58560b21033d42cd3f4"
+    },
+    {
+      "path": "openfga/A7__network_admission__boundary_dns_513.json",
+      "sha256": "53b14d178f8b6b6610e6fd4e5be9d1880f756c04c510c06a3df3df2bb94eab45"
+    },
+    {
+      "path": "openfga/A7__network_admission__boundary_jumbo_1399.json",
+      "sha256": "ae38a41f6ff4f65f4904fa272ba7549eff7f32af440d959807b60a67e3fcda86"
+    },
+    {
+      "path": "openfga/A7__network_admission__boundary_jumbo_1400.json",
+      "sha256": "d112327236da6a87afbe45086bdec9f50e0a14d52469847a3246f202abe21903"
+    },
+    {
+      "path": "openfga/A7__network_admission__deny_dns_large_1.json",
+      "sha256": "dc33298d6874f4c402910860488cc69071248b3471b1b5690bc0a26deaf5c1f7"
+    },
+    {
+      "path": "openfga/A7__network_admission__deny_external_ssh_1.json",
+      "sha256": "c8b7cc8c1fc9b563824c0a49420e4c528c8574a60dba70e5f6f82fb9fa4e26bb"
+    },
+    {
+      "path": "openfga/A7__network_admission__deny_telnet_1.json",
+      "sha256": "7764e860da4253dbe6e9d1c1e4dedd15adb3023bbbfe3c0021172848dc462102"
+    },
+    {
+      "path": "openfga/A7__network_admission__observe_jumbo_1.json",
+      "sha256": "27f273c7e972aa781ab77c3d793a8d853f68349ce14794ae2f0f691f9acd55f6"
+    },
+    {
+      "path": "openfga/A7__network_admission__observe_other_1.json",
+      "sha256": "03781da8846a97cd86850a48da9e2b5da4613092cd096857d5681f88eedbe21a"
+    },
+    {
+      "path": "openfga/A7__sensor_interlock__allow_armed_nominal_1.json",
+      "sha256": "27f236fbab9861e4f0836b9773f2d8c61f6afeb675b196277493894362d4fab8"
+    },
+    {
+      "path": "openfga/A7__sensor_interlock__allow_nominal_1.json",
+      "sha256": "9e32197da585d44e530825079cb548d7fe66e24fe3b907ede63c7b88a747b0ec"
+    },
+    {
+      "path": "openfga/A7__sensor_interlock__boundary_nominal_119_749.json",
+      "sha256": "f08beaa397230585027c1f96d24ce38f245bc1f3adc5d1699736007d31483b14"
+    },
+    {
+      "path": "openfga/A7__sensor_interlock__boundary_temp_120.json",
+      "sha256": "9bf1c5e6710fa3dd65bcf4f9604ee6e07f973634dc05300196fdc9296087a664"
+    },
+    {
+      "path": "openfga/A7__sensor_interlock__boundary_temp_149.json",
+      "sha256": "aa0fb078347f4dc15df38f59a1234b3b54358c156b74209449515467a87d8273"
+    },
+    {
+      "path": "openfga/A7__sensor_interlock__boundary_temp_150.json",
+      "sha256": "3b5c34afd8efba68fdb688fa4472449ffae09665f61a70baa627202a3179ec09"
+    },
+    {
+      "path": "openfga/A7__sensor_interlock__deny_pressure_1.json",
+      "sha256": "1049558846a486e105220ce66c5540bb6aa21d0cfbdd4dd5281354fef4341207"
+    },
+    {
+      "path": "openfga/A7__sensor_interlock__deny_temp_1.json",
+      "sha256": "aa1b4d384b625bc6d6651b57e5cd5975f9d190611d65f0e2f433d6cc47924300"
+    },
+    {
+      "path": "openfga/A7__sensor_interlock__escalation_sensor_dark_armed_1.json",
+      "sha256": "6c91de4fa4874658ffc49335fcc3a64d689876242011fcba22adb613c5c58785"
+    },
+    {
+      "path": "openfga/A7__sensor_interlock__observe_temp_1.json",
+      "sha256": "a26eb0e354a3471e2010155c7f2e00afc8bb03fa11b0f6cbba9422baaef19b4e"
     },
     {
       "path": "openfga/A8__ai_action_gate__ai_worker_loop_1.json",
@@ -922,6 +1658,98 @@
     {
       "path": "prismpath/A6__network_admission__unsigned_policy_1.json",
       "sha256": "c9bc78806475c555648be297fc75ded4fff1c98b9562e189eee8b701068833da"
+    },
+    {
+      "path": "prismpath/A7__network_admission__allow_dns_small_1.json",
+      "sha256": "262ea7cf347a2157feaac3471d7287815699359ed9f96ed3d0f8cdbb490bef0a"
+    },
+    {
+      "path": "prismpath/A7__network_admission__allow_https_1.json",
+      "sha256": "2043f789696c39e7c504f51b104f61305d4919577deb3f2496abda6dbb474490"
+    },
+    {
+      "path": "prismpath/A7__network_admission__allow_icmp_1.json",
+      "sha256": "91a42edeb6ce2e1ff305d1573859ecaf9939974e807d905f2fda1215fece23d1"
+    },
+    {
+      "path": "prismpath/A7__network_admission__allow_internal_ssh_1.json",
+      "sha256": "4355a21a2c3400a72c77a4a9743d0ac4659ccdd046b585089c9948766c201893"
+    },
+    {
+      "path": "prismpath/A7__network_admission__boundary_dns_512.json",
+      "sha256": "e6b21f79287a22c912409572fb8cfd2deee4b9d41a8326d631859f84263774de"
+    },
+    {
+      "path": "prismpath/A7__network_admission__boundary_dns_513.json",
+      "sha256": "79adf2f368c3f8b788d3dd0d8e5de367986299ac2dd2af03b7d5e5c59485ac16"
+    },
+    {
+      "path": "prismpath/A7__network_admission__boundary_jumbo_1399.json",
+      "sha256": "3f6a76b7d6de5250f73e983b85b416c36159d3ce172862c38ffa0e313726978c"
+    },
+    {
+      "path": "prismpath/A7__network_admission__boundary_jumbo_1400.json",
+      "sha256": "6c70e71a904f455d650a5dd7db2defafcb7ec3123be30318f9484d1c4a028b64"
+    },
+    {
+      "path": "prismpath/A7__network_admission__deny_dns_large_1.json",
+      "sha256": "6771662408524c06140c4460f69f28b6c9310f8e095cb8e7ba4b5d7f765d5659"
+    },
+    {
+      "path": "prismpath/A7__network_admission__deny_external_ssh_1.json",
+      "sha256": "9ae683d24a8a08a70f4c9989175c45176268ea205d471331e719f9e6f7e38323"
+    },
+    {
+      "path": "prismpath/A7__network_admission__deny_telnet_1.json",
+      "sha256": "81cbff41aedc1cb46c73268eaf83551ffcad45c0538a1df7375e48ffe5a87a9d"
+    },
+    {
+      "path": "prismpath/A7__network_admission__observe_jumbo_1.json",
+      "sha256": "9f77f918f08c0899170d9e877b998ca0742a8a43aed95d480ff497e7d0e60169"
+    },
+    {
+      "path": "prismpath/A7__network_admission__observe_other_1.json",
+      "sha256": "c6081927a0abe18bf3a76a2686cf43863a081f86c8d1a15759778e932ad916bb"
+    },
+    {
+      "path": "prismpath/A7__sensor_interlock__allow_armed_nominal_1.json",
+      "sha256": "65a66a3697704ac142f8332fe528cdd61997159ee8f4a7333e1515291576ddf0"
+    },
+    {
+      "path": "prismpath/A7__sensor_interlock__allow_nominal_1.json",
+      "sha256": "1ecbe5d13fe0c9ff46f9881b7079d3323a72d0cbca20986b8d01b017eb75010c"
+    },
+    {
+      "path": "prismpath/A7__sensor_interlock__boundary_nominal_119_749.json",
+      "sha256": "012d01bd6b515da3b345016ddbdb3aaeb7f9b9512ccc80a7b618c2846cc39791"
+    },
+    {
+      "path": "prismpath/A7__sensor_interlock__boundary_temp_120.json",
+      "sha256": "1917b5aca86d442cf26f3bb47f6164d86098e79800a341f499422587927015b5"
+    },
+    {
+      "path": "prismpath/A7__sensor_interlock__boundary_temp_149.json",
+      "sha256": "f8187760b1ddf7edc482b82f6267f63dd587ba68d423e40488b2d963b365d700"
+    },
+    {
+      "path": "prismpath/A7__sensor_interlock__boundary_temp_150.json",
+      "sha256": "cadb35619d4bceab478a9058dca03bb2490e80fa24c52f671cbb33dc1298cceb"
+    },
+    {
+      "path": "prismpath/A7__sensor_interlock__deny_pressure_1.json",
+      "sha256": "2342241ca3801cecc231010e31e7b1a42cf360e48da1c4c830a9d3442df5e041"
+    },
+    {
+      "path": "prismpath/A7__sensor_interlock__deny_temp_1.json",
+      "sha256": "45be2de09b29f8d0d62a652f7da2fa13973495cd0f435261becafff9f86d05be"
+    },
+    {
+      "path": "prismpath/A7__sensor_interlock__escalation_sensor_dark_armed_1.json",
+      "sha256": "ae654a025f732c32b3dca5c49648e99f61a2d9c01edb497ee39c036155fbd725"
+    },
+    {
+      "path": "prismpath/A7__sensor_interlock__observe_temp_1.json",
+      "sha256": "bb6370552dfab0ea51e0f26f8d0e49a7ae17c8a4d0400df5ebcd31b6440875e8"
     },
     {
       "path": "prismpath/A8__ai_action_gate__ai_worker_loop_1.json",
@@ -1136,42 +1964,138 @@
       "cedar": {
         "counts": {
           "NATIVE": 0,
-          "NOT": 0,
+          "NOT": 23,
           "WITH-WORK": 0
         },
-        "files": [],
-        "grade": "UNTESTED",
-        "mismatches": 0
+        "files": [
+          "cedar/A3__network_admission__allow_dns_small_1.json",
+          "cedar/A3__network_admission__allow_https_1.json",
+          "cedar/A3__network_admission__allow_icmp_1.json",
+          "cedar/A3__network_admission__allow_internal_ssh_1.json",
+          "cedar/A3__network_admission__boundary_dns_512.json",
+          "cedar/A3__network_admission__boundary_dns_513.json",
+          "cedar/A3__network_admission__boundary_jumbo_1399.json",
+          "cedar/A3__network_admission__boundary_jumbo_1400.json",
+          "cedar/A3__network_admission__deny_dns_large_1.json",
+          "cedar/A3__network_admission__deny_external_ssh_1.json",
+          "cedar/A3__network_admission__deny_telnet_1.json",
+          "cedar/A3__network_admission__observe_jumbo_1.json",
+          "cedar/A3__network_admission__observe_other_1.json",
+          "cedar/A3__sensor_interlock__allow_armed_nominal_1.json",
+          "cedar/A3__sensor_interlock__allow_nominal_1.json",
+          "cedar/A3__sensor_interlock__boundary_nominal_119_749.json",
+          "cedar/A3__sensor_interlock__boundary_temp_120.json",
+          "cedar/A3__sensor_interlock__boundary_temp_149.json",
+          "cedar/A3__sensor_interlock__boundary_temp_150.json",
+          "cedar/A3__sensor_interlock__deny_pressure_1.json",
+          "cedar/A3__sensor_interlock__deny_temp_1.json",
+          "cedar/A3__sensor_interlock__escalation_sensor_dark_armed_1.json",
+          "cedar/A3__sensor_interlock__observe_temp_1.json"
+        ],
+        "grade": "NOT",
+        "mismatches": 23
       },
       "cerbos": {
         "counts": {
           "NATIVE": 0,
-          "NOT": 0,
+          "NOT": 23,
           "WITH-WORK": 0
         },
-        "files": [],
-        "grade": "UNTESTED",
-        "mismatches": 0
+        "files": [
+          "cerbos/A3__network_admission__allow_dns_small_1.json",
+          "cerbos/A3__network_admission__allow_https_1.json",
+          "cerbos/A3__network_admission__allow_icmp_1.json",
+          "cerbos/A3__network_admission__allow_internal_ssh_1.json",
+          "cerbos/A3__network_admission__boundary_dns_512.json",
+          "cerbos/A3__network_admission__boundary_dns_513.json",
+          "cerbos/A3__network_admission__boundary_jumbo_1399.json",
+          "cerbos/A3__network_admission__boundary_jumbo_1400.json",
+          "cerbos/A3__network_admission__deny_dns_large_1.json",
+          "cerbos/A3__network_admission__deny_external_ssh_1.json",
+          "cerbos/A3__network_admission__deny_telnet_1.json",
+          "cerbos/A3__network_admission__observe_jumbo_1.json",
+          "cerbos/A3__network_admission__observe_other_1.json",
+          "cerbos/A3__sensor_interlock__allow_armed_nominal_1.json",
+          "cerbos/A3__sensor_interlock__allow_nominal_1.json",
+          "cerbos/A3__sensor_interlock__boundary_nominal_119_749.json",
+          "cerbos/A3__sensor_interlock__boundary_temp_120.json",
+          "cerbos/A3__sensor_interlock__boundary_temp_149.json",
+          "cerbos/A3__sensor_interlock__boundary_temp_150.json",
+          "cerbos/A3__sensor_interlock__deny_pressure_1.json",
+          "cerbos/A3__sensor_interlock__deny_temp_1.json",
+          "cerbos/A3__sensor_interlock__escalation_sensor_dark_armed_1.json",
+          "cerbos/A3__sensor_interlock__observe_temp_1.json"
+        ],
+        "grade": "NOT",
+        "mismatches": 23
       },
       "opa": {
         "counts": {
           "NATIVE": 0,
-          "NOT": 0,
+          "NOT": 23,
           "WITH-WORK": 0
         },
-        "files": [],
-        "grade": "UNTESTED",
-        "mismatches": 0
+        "files": [
+          "opa/A3__network_admission__allow_dns_small_1.json",
+          "opa/A3__network_admission__allow_https_1.json",
+          "opa/A3__network_admission__allow_icmp_1.json",
+          "opa/A3__network_admission__allow_internal_ssh_1.json",
+          "opa/A3__network_admission__boundary_dns_512.json",
+          "opa/A3__network_admission__boundary_dns_513.json",
+          "opa/A3__network_admission__boundary_jumbo_1399.json",
+          "opa/A3__network_admission__boundary_jumbo_1400.json",
+          "opa/A3__network_admission__deny_dns_large_1.json",
+          "opa/A3__network_admission__deny_external_ssh_1.json",
+          "opa/A3__network_admission__deny_telnet_1.json",
+          "opa/A3__network_admission__observe_jumbo_1.json",
+          "opa/A3__network_admission__observe_other_1.json",
+          "opa/A3__sensor_interlock__allow_armed_nominal_1.json",
+          "opa/A3__sensor_interlock__allow_nominal_1.json",
+          "opa/A3__sensor_interlock__boundary_nominal_119_749.json",
+          "opa/A3__sensor_interlock__boundary_temp_120.json",
+          "opa/A3__sensor_interlock__boundary_temp_149.json",
+          "opa/A3__sensor_interlock__boundary_temp_150.json",
+          "opa/A3__sensor_interlock__deny_pressure_1.json",
+          "opa/A3__sensor_interlock__deny_temp_1.json",
+          "opa/A3__sensor_interlock__escalation_sensor_dark_armed_1.json",
+          "opa/A3__sensor_interlock__observe_temp_1.json"
+        ],
+        "grade": "NOT",
+        "mismatches": 23
       },
       "openfga": {
         "counts": {
           "NATIVE": 0,
-          "NOT": 0,
+          "NOT": 23,
           "WITH-WORK": 0
         },
-        "files": [],
-        "grade": "UNTESTED",
-        "mismatches": 0
+        "files": [
+          "openfga/A3__network_admission__allow_dns_small_1.json",
+          "openfga/A3__network_admission__allow_https_1.json",
+          "openfga/A3__network_admission__allow_icmp_1.json",
+          "openfga/A3__network_admission__allow_internal_ssh_1.json",
+          "openfga/A3__network_admission__boundary_dns_512.json",
+          "openfga/A3__network_admission__boundary_dns_513.json",
+          "openfga/A3__network_admission__boundary_jumbo_1399.json",
+          "openfga/A3__network_admission__boundary_jumbo_1400.json",
+          "openfga/A3__network_admission__deny_dns_large_1.json",
+          "openfga/A3__network_admission__deny_external_ssh_1.json",
+          "openfga/A3__network_admission__deny_telnet_1.json",
+          "openfga/A3__network_admission__observe_jumbo_1.json",
+          "openfga/A3__network_admission__observe_other_1.json",
+          "openfga/A3__sensor_interlock__allow_armed_nominal_1.json",
+          "openfga/A3__sensor_interlock__allow_nominal_1.json",
+          "openfga/A3__sensor_interlock__boundary_nominal_119_749.json",
+          "openfga/A3__sensor_interlock__boundary_temp_120.json",
+          "openfga/A3__sensor_interlock__boundary_temp_149.json",
+          "openfga/A3__sensor_interlock__boundary_temp_150.json",
+          "openfga/A3__sensor_interlock__deny_pressure_1.json",
+          "openfga/A3__sensor_interlock__deny_temp_1.json",
+          "openfga/A3__sensor_interlock__escalation_sensor_dark_armed_1.json",
+          "openfga/A3__sensor_interlock__observe_temp_1.json"
+        ],
+        "grade": "NOT",
+        "mismatches": 23
       },
       "openlane": {
         "counts": {
@@ -1558,41 +2482,137 @@
         "counts": {
           "NATIVE": 0,
           "NOT": 0,
-          "WITH-WORK": 0
+          "WITH-WORK": 23
         },
-        "files": [],
-        "grade": "UNTESTED",
+        "files": [
+          "cedar/A7__network_admission__allow_dns_small_1.json",
+          "cedar/A7__network_admission__allow_https_1.json",
+          "cedar/A7__network_admission__allow_icmp_1.json",
+          "cedar/A7__network_admission__allow_internal_ssh_1.json",
+          "cedar/A7__network_admission__boundary_dns_512.json",
+          "cedar/A7__network_admission__boundary_dns_513.json",
+          "cedar/A7__network_admission__boundary_jumbo_1399.json",
+          "cedar/A7__network_admission__boundary_jumbo_1400.json",
+          "cedar/A7__network_admission__deny_dns_large_1.json",
+          "cedar/A7__network_admission__deny_external_ssh_1.json",
+          "cedar/A7__network_admission__deny_telnet_1.json",
+          "cedar/A7__network_admission__observe_jumbo_1.json",
+          "cedar/A7__network_admission__observe_other_1.json",
+          "cedar/A7__sensor_interlock__allow_armed_nominal_1.json",
+          "cedar/A7__sensor_interlock__allow_nominal_1.json",
+          "cedar/A7__sensor_interlock__boundary_nominal_119_749.json",
+          "cedar/A7__sensor_interlock__boundary_temp_120.json",
+          "cedar/A7__sensor_interlock__boundary_temp_149.json",
+          "cedar/A7__sensor_interlock__boundary_temp_150.json",
+          "cedar/A7__sensor_interlock__deny_pressure_1.json",
+          "cedar/A7__sensor_interlock__deny_temp_1.json",
+          "cedar/A7__sensor_interlock__escalation_sensor_dark_armed_1.json",
+          "cedar/A7__sensor_interlock__observe_temp_1.json"
+        ],
+        "grade": "WITH-WORK",
         "mismatches": 0
       },
       "cerbos": {
         "counts": {
           "NATIVE": 0,
           "NOT": 0,
-          "WITH-WORK": 0
+          "WITH-WORK": 23
         },
-        "files": [],
-        "grade": "UNTESTED",
+        "files": [
+          "cerbos/A7__network_admission__allow_dns_small_1.json",
+          "cerbos/A7__network_admission__allow_https_1.json",
+          "cerbos/A7__network_admission__allow_icmp_1.json",
+          "cerbos/A7__network_admission__allow_internal_ssh_1.json",
+          "cerbos/A7__network_admission__boundary_dns_512.json",
+          "cerbos/A7__network_admission__boundary_dns_513.json",
+          "cerbos/A7__network_admission__boundary_jumbo_1399.json",
+          "cerbos/A7__network_admission__boundary_jumbo_1400.json",
+          "cerbos/A7__network_admission__deny_dns_large_1.json",
+          "cerbos/A7__network_admission__deny_external_ssh_1.json",
+          "cerbos/A7__network_admission__deny_telnet_1.json",
+          "cerbos/A7__network_admission__observe_jumbo_1.json",
+          "cerbos/A7__network_admission__observe_other_1.json",
+          "cerbos/A7__sensor_interlock__allow_armed_nominal_1.json",
+          "cerbos/A7__sensor_interlock__allow_nominal_1.json",
+          "cerbos/A7__sensor_interlock__boundary_nominal_119_749.json",
+          "cerbos/A7__sensor_interlock__boundary_temp_120.json",
+          "cerbos/A7__sensor_interlock__boundary_temp_149.json",
+          "cerbos/A7__sensor_interlock__boundary_temp_150.json",
+          "cerbos/A7__sensor_interlock__deny_pressure_1.json",
+          "cerbos/A7__sensor_interlock__deny_temp_1.json",
+          "cerbos/A7__sensor_interlock__escalation_sensor_dark_armed_1.json",
+          "cerbos/A7__sensor_interlock__observe_temp_1.json"
+        ],
+        "grade": "WITH-WORK",
         "mismatches": 0
       },
       "opa": {
         "counts": {
           "NATIVE": 0,
           "NOT": 0,
-          "WITH-WORK": 0
+          "WITH-WORK": 23
         },
-        "files": [],
-        "grade": "UNTESTED",
+        "files": [
+          "opa/A7__network_admission__allow_dns_small_1.json",
+          "opa/A7__network_admission__allow_https_1.json",
+          "opa/A7__network_admission__allow_icmp_1.json",
+          "opa/A7__network_admission__allow_internal_ssh_1.json",
+          "opa/A7__network_admission__boundary_dns_512.json",
+          "opa/A7__network_admission__boundary_dns_513.json",
+          "opa/A7__network_admission__boundary_jumbo_1399.json",
+          "opa/A7__network_admission__boundary_jumbo_1400.json",
+          "opa/A7__network_admission__deny_dns_large_1.json",
+          "opa/A7__network_admission__deny_external_ssh_1.json",
+          "opa/A7__network_admission__deny_telnet_1.json",
+          "opa/A7__network_admission__observe_jumbo_1.json",
+          "opa/A7__network_admission__observe_other_1.json",
+          "opa/A7__sensor_interlock__allow_armed_nominal_1.json",
+          "opa/A7__sensor_interlock__allow_nominal_1.json",
+          "opa/A7__sensor_interlock__boundary_nominal_119_749.json",
+          "opa/A7__sensor_interlock__boundary_temp_120.json",
+          "opa/A7__sensor_interlock__boundary_temp_149.json",
+          "opa/A7__sensor_interlock__boundary_temp_150.json",
+          "opa/A7__sensor_interlock__deny_pressure_1.json",
+          "opa/A7__sensor_interlock__deny_temp_1.json",
+          "opa/A7__sensor_interlock__escalation_sensor_dark_armed_1.json",
+          "opa/A7__sensor_interlock__observe_temp_1.json"
+        ],
+        "grade": "WITH-WORK",
         "mismatches": 0
       },
       "openfga": {
         "counts": {
           "NATIVE": 0,
-          "NOT": 0,
+          "NOT": 23,
           "WITH-WORK": 0
         },
-        "files": [],
-        "grade": "UNTESTED",
-        "mismatches": 0
+        "files": [
+          "openfga/A7__network_admission__allow_dns_small_1.json",
+          "openfga/A7__network_admission__allow_https_1.json",
+          "openfga/A7__network_admission__allow_icmp_1.json",
+          "openfga/A7__network_admission__allow_internal_ssh_1.json",
+          "openfga/A7__network_admission__boundary_dns_512.json",
+          "openfga/A7__network_admission__boundary_dns_513.json",
+          "openfga/A7__network_admission__boundary_jumbo_1399.json",
+          "openfga/A7__network_admission__boundary_jumbo_1400.json",
+          "openfga/A7__network_admission__deny_dns_large_1.json",
+          "openfga/A7__network_admission__deny_external_ssh_1.json",
+          "openfga/A7__network_admission__deny_telnet_1.json",
+          "openfga/A7__network_admission__observe_jumbo_1.json",
+          "openfga/A7__network_admission__observe_other_1.json",
+          "openfga/A7__sensor_interlock__allow_armed_nominal_1.json",
+          "openfga/A7__sensor_interlock__allow_nominal_1.json",
+          "openfga/A7__sensor_interlock__boundary_nominal_119_749.json",
+          "openfga/A7__sensor_interlock__boundary_temp_120.json",
+          "openfga/A7__sensor_interlock__boundary_temp_149.json",
+          "openfga/A7__sensor_interlock__boundary_temp_150.json",
+          "openfga/A7__sensor_interlock__deny_pressure_1.json",
+          "openfga/A7__sensor_interlock__deny_temp_1.json",
+          "openfga/A7__sensor_interlock__escalation_sensor_dark_armed_1.json",
+          "openfga/A7__sensor_interlock__observe_temp_1.json"
+        ],
+        "grade": "NOT",
+        "mismatches": 23
       },
       "openlane": {
         "counts": {
@@ -1608,12 +2628,36 @@
       },
       "prismpath": {
         "counts": {
-          "NATIVE": 0,
+          "NATIVE": 23,
           "NOT": 0,
           "WITH-WORK": 0
         },
-        "files": [],
-        "grade": "UNTESTED",
+        "files": [
+          "prismpath/A7__network_admission__allow_dns_small_1.json",
+          "prismpath/A7__network_admission__allow_https_1.json",
+          "prismpath/A7__network_admission__allow_icmp_1.json",
+          "prismpath/A7__network_admission__allow_internal_ssh_1.json",
+          "prismpath/A7__network_admission__boundary_dns_512.json",
+          "prismpath/A7__network_admission__boundary_dns_513.json",
+          "prismpath/A7__network_admission__boundary_jumbo_1399.json",
+          "prismpath/A7__network_admission__boundary_jumbo_1400.json",
+          "prismpath/A7__network_admission__deny_dns_large_1.json",
+          "prismpath/A7__network_admission__deny_external_ssh_1.json",
+          "prismpath/A7__network_admission__deny_telnet_1.json",
+          "prismpath/A7__network_admission__observe_jumbo_1.json",
+          "prismpath/A7__network_admission__observe_other_1.json",
+          "prismpath/A7__sensor_interlock__allow_armed_nominal_1.json",
+          "prismpath/A7__sensor_interlock__allow_nominal_1.json",
+          "prismpath/A7__sensor_interlock__boundary_nominal_119_749.json",
+          "prismpath/A7__sensor_interlock__boundary_temp_120.json",
+          "prismpath/A7__sensor_interlock__boundary_temp_149.json",
+          "prismpath/A7__sensor_interlock__boundary_temp_150.json",
+          "prismpath/A7__sensor_interlock__deny_pressure_1.json",
+          "prismpath/A7__sensor_interlock__deny_temp_1.json",
+          "prismpath/A7__sensor_interlock__escalation_sensor_dark_armed_1.json",
+          "prismpath/A7__sensor_interlock__observe_temp_1.json"
+        ],
+        "grade": "NATIVE",
         "mismatches": 0
       }
     },
@@ -2017,7 +3061,7 @@
     "A4": "NOT-DISTINCT",
     "A5": "NOT-DISTINCT",
     "A6": "NOT-DISTINCT",
-    "A7": "OPEN",
+    "A7": "NOT-DISTINCT",
     "A8": "NOT-DISTINCT",
     "B1": "OPEN",
     "B2": "OPEN",

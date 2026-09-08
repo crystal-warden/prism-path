@@ -1,0 +1,17 @@
+{
+  "dimension": "A7",
+  "evidence_path": "prismpath/comparisons/results/openfga/evidence/A7",
+  "expected": "deny",
+  "glue": null,
+  "grade": "NOT",
+  "harness_commit": "eeb9706",
+  "idiomatic": true,
+  "match": false,
+  "notes": "The decision policies are not expressible in OpenFGA; no decision time to measure.",
+  "observed": "not_expressible",
+  "policy": "network_admission",
+  "run_at": "2026-09-08T23:29:26Z",
+  "scenario": "deny_dns_large_1",
+  "system": "openfga",
+  "system_version": "1.19.0"
+}
