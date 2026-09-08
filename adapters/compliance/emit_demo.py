@@ -8,9 +8,16 @@ import os, sys, json
 HERE = os.path.dirname(os.path.abspath(__file__)); sys.path.insert(0, HERE)
 import compliance_adapter as ca
 
+# ============================================================================
+# CONFIGURE -- point these at your own evidence-request bundles and output dir.
+# ============================================================================
+REQUESTS_DIR = os.path.join(HERE, "requests")   # your evidence-request bundles (SAMPLE default)
+OUT_DIR = os.path.join(HERE, "reports_live")    # where OSCAL + CycloneDX reports are written
+# ============================================================================
+
 recs = []
-for f in sorted(os.listdir(os.path.join(HERE, "requests"))):
-    req = ca.load_request(os.path.join(HERE, "requests", f))
+for f in sorted(os.listdir(REQUESTS_DIR)):
+    req = ca.load_request(os.path.join(REQUESTS_DIR, f))
     control = ca.get_control(req["control_id"])
     det = ca.adjudicate(control, req)
     if det is None:
@@ -18,7 +25,7 @@ for f in sorted(os.listdir(os.path.join(HERE, "requests"))):
     manifest = ca.attest(control, req, det)
     recs.append(ca.result_record(control, req, det, manifest))
 
-out = ca.emit_reports(recs, fmt="both", out_dir=os.path.join(HERE, "reports_live"))
+out = ca.emit_reports(recs, fmt="both", out_dir=OUT_DIR)
 
 def embedded_in(doc, hashes):
     t = json.dumps(doc)

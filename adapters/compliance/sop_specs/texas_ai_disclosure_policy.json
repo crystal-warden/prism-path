@@ -1,0 +1,47 @@
+{
+  "doc_id": "texas_ai_disclosure_policy",
+  "title": "AI Disclosure Policy (Texas)",
+  "family": "TX-DISC",
+  "standard": "texas_ai",
+  "coverage_mode": "partial",
+  "controls": ["TX-DISC-1", "TX-DISC-2", "TX-DISC-3"],
+  "org_profile_keys": ["org_name", "system_name", "boundary"],
+  "sections": [
+    {
+      "id": "purpose",
+      "heading": "1. Purpose and Scope",
+      "objectives": [],
+      "questions": [],
+      "body": "This AI Disclosure Policy defines when and how {org_name} informs people that they are interacting with, or being subject to, an artificial intelligence system, for {system_name} within {boundary}. It operationalizes disclosure duties aligned to the Texas Responsible Artificial Intelligence Governance Act (HB 149) and Texas SB 1964. It is aligned to those statutes and does not by itself establish legal compliance; applicability of each duty depends on the organization's actor type and must be confirmed with counsel."
+    },
+    {
+      "id": "healthcare_disclosure",
+      "heading": "2. Healthcare AI-Use Disclosure",
+      "objectives": ["TX-DISC-1[a]"],
+      "questions": [
+        {"key": "hc_disclosure_trigger", "prompt": "At what point is the AI-use disclosure presented to the patient (for example, before the interaction, at intake, or at the point of care)?"},
+        {"key": "hc_disclosure_method", "prompt": "By what method is the healthcare AI-use disclosure delivered (for example, written notice, verbal, patient portal)?"}
+      ],
+      "body": "Where {org_name} is a healthcare provider using AI in a patient's care, the patient (or the patient's representative) is informed that AI is used, {hc_disclosure_trigger}. The disclosure is delivered by {hc_disclosure_method}. This section applies only to healthcare providers subject to the TRAIGA healthcare disclosure duty."
+    },
+    {
+      "id": "consumer_disclosure",
+      "heading": "3. Consumer AI-Interaction Notice",
+      "objectives": ["TX-DISC-2[a]"],
+      "questions": [
+        {"key": "consumer_notice_text", "prompt": "What is the plain-language notice text presented before a consumer interacts with an AI system?"},
+        {"key": "consumer_notice_channels", "prompt": "On which consumer-facing channels is the notice presented (for example, web chat, phone IVR, kiosk)?"}
+      ],
+      "body": "Before a consumer interacts with an AI system operated by {org_name}, a clear, plain-language notice is presented: \"{consumer_notice_text}\". The notice is presented on {consumer_notice_channels}. This consumer-notice duty binds governmental entities under TRAIGA; a private entity should confirm whether it applies before relying on this section."
+    },
+    {
+      "id": "public_facing_notice",
+      "heading": "4. Standardized Notice for Public-Facing or High-Risk Systems",
+      "objectives": ["TX-DISC-3[a]"],
+      "questions": [
+        {"key": "standard_notice_owner", "prompt": "Who owns the standardized notice content and its publication?"}
+      ],
+      "body": "Public-facing or heightened-scrutiny AI systems carry the standardized notice and public disclosure required by the applicable framework. The standardized notice content is maintained and published by {standard_notice_owner} for each covered system, consistent with SB 1964's public-disclosure expectations."
+    }
+  ]
+}

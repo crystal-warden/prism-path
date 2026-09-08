@@ -1,0 +1,28 @@
+{
+  "doc_id": "texas_material_change_policy",
+  "title": "AI Material-Change and Re-evaluation Policy (Texas)",
+  "family": "TX-CHG",
+  "standard": "texas_ai",
+  "coverage_mode": "partial",
+  "controls": ["TX-CHG-1"],
+  "org_profile_keys": ["org_name", "system_name", "boundary"],
+  "sections": [
+    {
+      "id": "purpose",
+      "heading": "1. Purpose and Scope",
+      "objectives": [],
+      "questions": [],
+      "body": "This policy defines what constitutes a material change to an AI system operated by {org_name} within {boundary}, and requires re-assessment when one occurs. It operationalizes the re-assessment requirement of Texas SB 1964 Sec. 2054.703(b) for heightened-scrutiny systems, which requires documentation to be refreshed at each material change to the system, its data, or its intended use. Aligned to the statute; not legal advice."
+    },
+    {
+      "id": "material_change_definition",
+      "heading": "2. Definition of Material Change and Re-assessment Trigger",
+      "objectives": ["TX-CHG-1[a]"],
+      "questions": [
+        {"key": "material_change_criteria", "prompt": "What criteria define a material change to the AI system, its underlying data, or its intended use (for example, model version change, new training data source, expanded decision scope, new consequential-decision use)?"},
+        {"key": "reassessment_owner", "prompt": "Who is responsible for triggering and completing the re-assessment when a material change occurs?"}
+      ],
+      "body": "A material change to {system_name} is defined as any of: {material_change_criteria}. When a material change occurs, {reassessment_owner} triggers a re-assessment that refreshes the documented known security risks, performance metrics, and transparency measures before the changed system is placed back into operation. Each re-assessment is recorded and associated with the change that triggered it, so the governed transition is reconstructable."
+    }
+  ]
+}

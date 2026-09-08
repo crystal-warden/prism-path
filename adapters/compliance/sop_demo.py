@@ -6,10 +6,18 @@ structured intake and print the objective-complete draft. Deterministic, no mode
 
     PYTHONSAFEPATH=1 PYTHONPATH=<core>:<adapter> python -m sop_demo
 """
+import json
 import compliance_adapter as ca
 import sop_generator as sg
 
-SAMPLE_ANSWERS = {
+# ============================================================================
+# CONFIGURE -- point ANSWERS_PATH at your organization's intake JSON (same shape
+# as SAMPLE_ANSWERS below), then run. None -> the built-in SAMPLE.
+# ============================================================================
+ANSWERS_PATH = None
+# ============================================================================
+
+SAMPLE_ANSWERS = {   # built-in SAMPLE (used only when ANSWERS_PATH is None)
     "org_name": "Example Defense Supplier LLC",
     "system_name": "the CUI processing enclave",
     "boundary": "the isolated network segment that stores and processes CUI",
@@ -38,7 +46,8 @@ def main():
     cov = sg.verify_coverage(spec)
     print("# Coverage: %d/%d objectives mapped across %s; complete=%s\n"
           % (cov["mapped"], cov["n_objectives"], ", ".join(cov["controls"]), cov["complete"]))
-    res = sg.generate(spec, SAMPLE_ANSWERS)
+    answers = json.load(open(ANSWERS_PATH)) if ANSWERS_PATH else SAMPLE_ANSWERS
+    res = sg.generate(spec, answers)
     print(res["markdown"])
     print("\n# unanswered:", res["unanswered"])
     return 0

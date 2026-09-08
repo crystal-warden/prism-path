@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
-"""Governed worker demo: gates decide, claims are advisory, a lying worker is caught.
+"""Governed worker demo (SAMPLE) -- a fixed, scripted illustration (also a regression test), not a
+configure-and-run tool. Gates decide, claims are advisory, a lying worker is caught.
 
 Three simulated worker runs go through the governed_worker flow. No model, no network, fully
 deterministic; the "worker" is a stub whose claim and whose actual gate outcomes we script. The

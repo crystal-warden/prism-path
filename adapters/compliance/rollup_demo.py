@@ -8,17 +8,10 @@ import os, sys, json
 HERE = os.path.dirname(os.path.abspath(__file__)); sys.path.insert(0, HERE)
 import compliance_adapter as ca
 
-recs = []
-for f in sorted(os.listdir(os.path.join(HERE, "requests"))):
-    req = ca.load_request(os.path.join(HERE, "requests", f))
-    control = ca.get_control(req["control_id"])
-    det = ca.adjudicate(control, req)
-    if det is None:
-        print("adjudication failed:", f); continue
-    manifest = ca.attest(control, req, det)
-    recs.append(ca.result_record(control, req, det, manifest))
-
-scope_meta = {
+# ============================================================================
+# CONFIGURE -- set SCOPE to your assessment scope; point the dirs at your data.
+# ============================================================================
+SCOPE = {   # SAMPLE assessment scope (replace with your own)
     "system_name": "Acme Defense Widgets — CUI Enclave",
     "boundary": "CUI enclave (VLAN 40, 3 workstations + 1 file server)",
     "assets_sampled": ["ws-01", "ws-02", "fs-01"],
@@ -26,7 +19,21 @@ scope_meta = {
     "assessor": "PrismPath automated pre-assessment + human auditor review",
     "assessment_date": "2026-07-22",
 }
-out = ca.rollup_report(recs, scope_meta, out_dir=os.path.join(HERE, "reports_live"), fmt="both")
+REQUESTS_DIR = os.path.join(HERE, "requests")   # your evidence-request bundles
+OUT_DIR = os.path.join(HERE, "reports_live")    # where rollup reports are written
+# ============================================================================
+
+recs = []
+for f in sorted(os.listdir(REQUESTS_DIR)):
+    req = ca.load_request(os.path.join(REQUESTS_DIR, f))
+    control = ca.get_control(req["control_id"])
+    det = ca.adjudicate(control, req)
+    if det is None:
+        print("adjudication failed:", f); continue
+    manifest = ca.attest(control, req, det)
+    recs.append(ca.result_record(control, req, det, manifest))
+
+out = ca.rollup_report(recs, SCOPE, out_dir=OUT_DIR, fmt="both")
 
 # confirm the rollup attestation binds every per-control manifest
 per_control = {r["control_id"]: r["manifest"]["manifest_hash"] for r in recs}

@@ -28,6 +28,7 @@ STANDARDS = {
     "soc2_tsc": os.path.join(HERE, "catalog", "soc2_tsc.json"),                # SOC 2 Trust Services Criteria (Common Criteria)
     "ai_governance": os.path.join(HERE, "catalog", "ai_governance.json"),      # AI governance (NIST AI RMF-structured)
     "nist_800172": os.path.join(HERE, "catalog", "nist_800172.json"),          # NIST SP 800-172 enhanced reqs (CMMC L3 basis)
+    "texas_ai": os.path.join(HERE, "catalog", "texas_ai.json"),                # Texas AI governance (TRAIGA HB 149 + SB 1964), applicability-tagged
 }
 _ACTIVE = os.environ.get("PRISMPATH_STANDARD", "nist_800171_r2")
 _CAT_CACHE = {}
@@ -71,6 +72,66 @@ def catalog_hash():
 def catalog_weights():
     """DoD SPRS point values from the active catalog (Rev 2 only; empty for standards without weights)."""
     return {cid: c["dod_am_weight"] for cid, c in _catalog()["controls"].items() if "dod_am_weight" in c}
+
+def actor_types():
+    """The actor types this catalog's controls are scoped to (from _meta.actor_types), or {} if the
+    catalog is not applicability-tagged (all controls then apply to every actor)."""
+    return _catalog().get("_meta", {}).get("actor_types", {})
+
+# Standing release notice for review-assistance catalogs (e.g. the Texas AI pack). Any report or
+# demo that runs an assessment should surface this so the not-validated status travels with output.
+REVIEW_ASSISTANCE_NOTICE = (
+    "NOTICE: This assessment is REVIEW ASSISTANCE ONLY. It is NOT a determination of legal "
+    "compliance and NOT legal advice. Controls, statutory citations, and applicability are curated "
+    "and NOT fully validated; they must be verified against the enrolled statutes and qualified "
+    "legal counsel before any reliance or external use. The organization, its counsel, and its "
+    "assessors remain accountable for compliance."
+)
+
+def standard_notice():
+    """The release/legal notice for the active standard: the standing review-assistance banner plus
+    the catalog's own disclaimer and authority statement. Reports and demos should emit this."""
+    meta = _catalog().get("_meta", {})
+    return {
+        "standard": _ACTIVE,
+        "notice": REVIEW_ASSISTANCE_NOTICE,
+        "disclaimer": meta.get("disclaimer"),
+        "authority": meta.get("authority"),
+        "validated": False,
+    }
+
+def applicable_controls(actor=None):
+    """Control ids in the active catalog that apply to `actor`, per each control's `applies_to` tag.
+    A control with no `applies_to` is universal (applies to every actor). actor=None returns all."""
+    controls = _catalog()["controls"]
+    if actor is None:
+        return sorted(controls)
+    known = actor_types()
+    if known and actor not in known:
+        raise KeyError(f"unknown actor '{actor}' for {_ACTIVE}; choose from {sorted(known)}")
+    return sorted(cid for cid, c in controls.items()
+                  if c.get("applies_to") is None or actor in c["applies_to"])
+
+def applicability_determination(actor):
+    """Split the active catalog into applicable vs not-applicable for `actor`, with a written
+    justification for each N/A (actor outside the control's applies_to scope). This is the
+    applicability layer: an actor is never graded against provisions that do not bind it."""
+    controls = _catalog()["controls"]
+    known = actor_types()
+    if known and actor not in known:
+        raise KeyError(f"unknown actor '{actor}' for {_ACTIVE}; choose from {sorted(known)}")
+    applicable, na = [], []
+    for cid, c in sorted(controls.items()):
+        tags = c.get("applies_to")
+        if tags is None or actor in tags:
+            applicable.append(cid)
+        else:
+            na.append({"control_id": cid, "status": "not-applicable",
+                       "reason": (f"Control binds {sorted(tags)}; the assessed actor '{actor}' is "
+                                  f"outside its statutory scope.")})
+    return {"actor": actor, "standard": _ACTIVE,
+            "applicable": applicable, "not_applicable": na,
+            "counts": {"applicable": len(applicable), "not_applicable": len(na)}}
 
 # ---------- Ingestion port: control-assessment request (control id + evidence bundle) ----------
 def load_request(path):

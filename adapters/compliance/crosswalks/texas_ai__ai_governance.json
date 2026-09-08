@@ -1,0 +1,30 @@
+{
+  "id": "texas_ai__ai_governance",
+  "a": "texas_ai",
+  "b": "ai_governance",
+  "complete": false,
+  "authority": "Curated mapping from the Texas AI Governance controls (TRAIGA HB 149 + SB 1964) to the Crystal Warden AI-GOV controls, which are themselves NIST AI RMF-structured (see ai_governance__nist_ai_rmf). Chaining texas_ai -> ai_governance -> nist_ai_rmf establishes and evidences the TRAIGA safe-harbor posture (adoption of a recognized standard). Mappings are curated and should be verified; a target control is considered supporting evidence, not automatic satisfaction. Disclosure controls (TX-DISC) have no direct AI-GOV analog and map only partially. Fail-closed: a Texas control is not treated as met merely because a mapped AI-GOV control is met.",
+  "edges": [
+    {"a": "TX-PROHIB-1", "b": ["MG-1", "GV-2"]},
+    {"a": "TX-PROHIB-2", "b": ["MG-1", "MP-5"]},
+    {"a": "TX-PROHIB-3", "b": ["MG-1"]},
+    {"a": "TX-PROHIB-4", "b": ["MG-1"]},
+    {"a": "TX-PROHIB-5", "b": ["MG-1", "MP-3"]},
+    {"a": "TX-DISC-1", "b": ["GV-1"]},
+    {"a": "TX-DISC-2", "b": ["GV-1"]},
+    {"a": "TX-DISC-3", "b": ["GV-1", "MP-5"]},
+    {"a": "TX-INV-1", "b": ["MP-1", "MP-4"]},
+    {"a": "TX-RISK-1", "b": ["MP-5", "MG-1"]},
+    {"a": "TX-RISK-2", "b": ["MG-1", "MS-1"]},
+    {"a": "TX-RISK-3", "b": ["GV-3", "MP-2"]},
+    {"a": "TX-OVS-1", "b": ["GV-1", "MG-2"]},
+    {"a": "TX-CHG-1", "b": ["MG-1", "MS-1"]},
+    {"a": "TX-CHG-2", "b": ["MS-1", "MG-1"]},
+    {"a": "TX-ACCT-1", "b": ["GV-3", "MS-1"]},
+    {"a": "TX-ACCT-2", "b": ["GV-1", "MG-2"]},
+    {"a": "TX-ACCT-3", "b": ["MG-2"]},
+    {"a": "TX-VEND-1", "b": ["MP-4", "MP-2"]},
+    {"a": "TX-SAFE-1", "b": ["MP-1", "GV-3"]},
+    {"a": "TX-SAFE-2", "b": ["MS-1", "MG-1"]}
+  ]
+}

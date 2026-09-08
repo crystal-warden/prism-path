@@ -1,0 +1,34 @@
+{
+  "doc_id": "texas_prohibited_use_policy",
+  "title": "AI Prohibited-Use Policy (Texas)",
+  "family": "TX-PROHIB",
+  "standard": "texas_ai",
+  "coverage_mode": "partial",
+  "controls": ["TX-PROHIB-1", "TX-PROHIB-2", "TX-PROHIB-3", "TX-PROHIB-4", "TX-PROHIB-5"],
+  "org_profile_keys": ["org_name", "system_name", "boundary"],
+  "sections": [
+    {
+      "id": "purpose",
+      "heading": "1. Purpose and Scope",
+      "objectives": [],
+      "questions": [],
+      "body": "This policy prohibits the AI uses barred by the Texas Responsible Artificial Intelligence Governance Act (HB 149) for {org_name} within {boundary}. Aligned to the statute; not legal advice. The broadly-applicable prohibitions in Section 2 apply regardless of actor type; the provisions in Section 3 bind governmental entities."
+    },
+    {
+      "id": "prohibited_uses",
+      "heading": "2. Prohibited Uses (all actors)",
+      "objectives": ["TX-PROHIB-1[a]", "TX-PROHIB-2[a]", "TX-PROHIB-3[a]"],
+      "questions": [
+        {"key": "prohibited_use_owner", "prompt": "Who owns enforcement of the prohibited-use policy and reviews AI uses against it?"}
+      ],
+      "body": "{org_name} does not develop or deploy AI with the intent to: unlawfully incite or encourage self-harm, harm to others, or criminal activity; intentionally unlawfully discriminate against a protected class; or produce unlawful sexually explicit synthetic media, unlawful deepfakes, or prohibited child-related content. These prohibitions are enforced at the decision boundary where technically feasible and reviewed by {prohibited_use_owner}."
+    },
+    {
+      "id": "governmental_prohibitions",
+      "heading": "3. Additional Governmental Prohibitions",
+      "objectives": ["TX-PROHIB-4[a]", "TX-PROHIB-5[a]"],
+      "questions": [],
+      "body": "Where {org_name} is a governmental entity, it additionally does not use AI for prohibited social scoring, or for biometric identification or capture without the consent required by law."
+    }
+  ]
+}

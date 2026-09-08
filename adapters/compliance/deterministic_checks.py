@@ -344,6 +344,16 @@ CHECK_SPEC = {
     "3.9.2[a]": ("flag", "personnel_action_process_defined"),
     "3.9.2[b]": ("flag", "personnel_action_process_defined"),
     "3.9.2[c]": ("flag", "personnel_action_process_defined"),
+    # --- Texas AI Governance pack (texas_ai): the runtime-enforced objectives PrismPath can PROVE,
+    # not just document. These read from the policy engine's config and its signed decision receipts,
+    # so they are tool-verifiable (scanned), unlike the pack's documented/operational objectives. ---
+    "TX-PROHIB-1[b]": ("flag", "prohibited_use_refusal_enforced"),
+    "TX-PROHIB-3[b]": ("flag", "generative_guardrails_enforced"),
+    "TX-DISC-1[b]": ("flag", "healthcare_ai_disclosure_delivered"),
+    "TX-DISC-2[b]": ("flag", "consumer_ai_disclosure_delivered"),
+    "TX-OVS-1[b]": ("flag", "human_oversight_escalation_enforced"),
+    "TX-CHG-2[a]": ("flag", "governing_version_authorized"),
+    "TX-CHG-2[b]": ("flag", "decision_version_attribution"),
 }
 
 
