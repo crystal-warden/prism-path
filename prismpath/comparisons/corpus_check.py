@@ -101,8 +101,8 @@ def _related(model: Dict[str, Any], user: str, relation: str, obj: str,
         elif kind == "parent":
             via, prel = rule["via"], rule["parent_relation"]
             for s, r, o in tuples:
-                if s == obj and r == via:
-                    if _related(model, user, prel, o, seen):
+                if o == obj and r == via:          # (parent_object, via, child): subject first, like every tuple
+                    if _related(model, user, prel, s, seen):
                         return True
         else:
             raise CorpusError(f"unknown relation rule kind {kind!r}")

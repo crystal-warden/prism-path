@@ -246,4 +246,9 @@ a dated entry below stating what changed and why, and regenerating the lock with
 scenario or a translator facing ambiguity; they never add or drop a dimension or change a
 prediction after a result for that dimension exists.
 
-*(none yet)*
+- **Amendment 1 (September 2026, Phase 2, before any comparator result file existed).** The two `parent`
+  tuples in `corpus/document_sharing_rebac.json` were written child first while every other tuple was
+  subject first; OpenFGA's model rejected the translation and the ambiguity would have forced every
+  translator to special case one relation. All tuples are now `[subject, relation, object]`, the
+  reference evaluator's `parent` rule reads that order, and `corpus/README.md` states it. No scenario
+  expectation, dimension, or prediction changed.

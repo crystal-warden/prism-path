@@ -20,9 +20,9 @@
     "tuples": [
       ["user:alice", "member", "group:eng"],
       ["group:eng#member", "viewer", "folder:f1"],
-      ["doc:d1", "parent", "folder:f1"],
+      ["folder:f1", "parent", "doc:d1"],
       ["user:bob", "viewer", "doc:d2"],
-      ["doc:d2", "parent", "folder:f2"],
+      ["folder:f2", "parent", "doc:d2"],
       ["user:dana", "viewer", "folder:f2"]
     ]
   },
@@ -35,7 +35,7 @@
     "predicted_grade": "NOT"
   },
   "scenarios": [
-    {"id": "alice_view_d1", "kind": "relationship", "input": {"user": "user:alice", "relation": "viewer", "object": "doc:d1"}, "expected": {"outcome": "allow", "rule": "r1", "prismpath_cause": null}, "note": "alice is a member of eng, eng members view f1, d1 is in f1: two hops"},
+    {"id": "alice_view_d1", "kind": "relationship", "input": {"user": "user:alice", "relation": "viewer", "object": "doc:d1"}, "expected": {"outcome": "allow", "rule": "r1", "prismpath_cause": null}, "note": "alice is a member of eng, eng members view f1, f1 is the parent of d1: two hops"},
     {"id": "bob_view_d1", "kind": "relationship", "input": {"user": "user:bob", "relation": "viewer", "object": "doc:d1"}, "expected": {"outcome": "deny", "rule": "r2", "prismpath_cause": null}, "note": ""},
     {"id": "bob_view_d2", "kind": "relationship", "input": {"user": "user:bob", "relation": "viewer", "object": "doc:d2"}, "expected": {"outcome": "allow", "rule": "r1", "prismpath_cause": null}, "note": "direct tuple"},
     {"id": "dana_view_d2", "kind": "relationship", "input": {"user": "user:dana", "relation": "viewer", "object": "doc:d2"}, "expected": {"outcome": "allow", "rule": "r1", "prismpath_cause": null}, "note": "folder inheritance, one hop"},

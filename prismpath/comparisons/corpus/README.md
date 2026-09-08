@@ -55,6 +55,9 @@ field is exactly what dimension A1 measures, so translators must not paper over 
 | `{"intersects": ["list_field_a", "list_field_b"]}` | two list fields share at least one element |
 | `{"related": ["user", "relation", "object"]}` | the relationship graph, with declared inheritance, derives the tuple |
 
+Relationship tuples in a policy's `model.tuples` are always `[subject, relation, object]` in Zanzibar order, a
+`parent` tuple included: `["folder:f1", "parent", "doc:d1"]` says f1 is the parent of d1.
+
 ## Outcome vocabulary
 
 Decisions a policy may return: `allow`, `deny`, `observe` (admit and log), `abstain` (insufficient
