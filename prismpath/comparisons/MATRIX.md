@@ -2,14 +2,14 @@
 
 | Dimension | Verdict | prismpath | opa | cedar | cerbos | openfga | openlane |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| A1 | OPEN | NATIVE (N:7, W:0, X:0) | NATIVE (N:7, W:0, X:0) [mm:2] | WITH-WORK (N:0, W:7, X:0) | WITH-WORK (N:0, W:7, X:0) | NOT (N:0, W:0, X:7) [mm:7] | UNTESTED |
-| A2 | OPEN | NATIVE (N:6, W:0, X:0) | NATIVE (N:6, W:0, X:0) | WITH-WORK (N:0, W:6, X:0) | WITH-WORK (N:0, W:6, X:0) | NOT (N:0, W:0, X:6) [mm:6] | UNTESTED |
-| A3 | OPEN | UNTESTED | UNTESTED | UNTESTED | UNTESTED | UNTESTED | UNTESTED |
-| A4 | OPEN | NATIVE (N:4, W:0, X:0) | WITH-WORK (N:2, W:2, X:0) [mm:2] | NOT (N:0, W:3, X:1) [mm:4] | NOT (N:2, W:1, X:1) [mm:2] | NOT (N:0, W:0, X:4) [mm:4] | UNTESTED |
-| A5 | OPEN | NATIVE (N:23, W:0, X:0) | NOT (N:0, W:0, X:23) | NOT (N:0, W:0, X:23) | WITH-WORK (N:0, W:23, X:0) | NOT (N:0, W:0, X:23) [mm:23] | UNTESTED |
-| A6 | OPEN | NATIVE (N:3, W:0, X:0) | WITH-WORK (N:2, W:1, X:0) [mm:1] | NOT (N:0, W:0, X:3) [mm:3] | NOT (N:0, W:0, X:3) [mm:3] | NOT (N:0, W:0, X:3) [mm:3] | UNTESTED |
-| A7 | OPEN | UNTESTED | UNTESTED | UNTESTED | UNTESTED | UNTESTED | UNTESTED |
-| A8 | OPEN | NATIVE (N:1, W:0, X:0) | WITH-WORK (N:0, W:1, X:0) | NOT (N:0, W:0, X:1) | NOT (N:0, W:0, X:1) | NOT (N:0, W:0, X:1) [mm:1] | UNTESTED |
+| A1 | NOT-DISTINCT | NATIVE (N:7, W:0, X:0) | NATIVE (N:7, W:0, X:0) [mm:2] | WITH-WORK (N:0, W:7, X:0) | WITH-WORK (N:0, W:7, X:0) | NOT (N:0, W:0, X:7) [mm:7] | NOT (N:0, W:0, X:1) [mm:1] |
+| A2 | NOT-DISTINCT | NATIVE (N:6, W:0, X:0) | NATIVE (N:6, W:0, X:0) | WITH-WORK (N:0, W:6, X:0) | WITH-WORK (N:0, W:6, X:0) | NOT (N:0, W:0, X:6) [mm:6] | NOT (N:0, W:0, X:1) [mm:1] |
+| A3 | OPEN | UNTESTED | UNTESTED | UNTESTED | UNTESTED | UNTESTED | NOT (N:0, W:0, X:1) [mm:1] |
+| A4 | NOT-DISTINCT | NATIVE (N:4, W:0, X:0) | WITH-WORK (N:2, W:2, X:0) [mm:2] | NOT (N:0, W:3, X:1) [mm:4] | NOT (N:2, W:1, X:1) [mm:2] | NOT (N:0, W:0, X:4) [mm:4] | NOT (N:0, W:0, X:1) [mm:1] |
+| A5 | NOT-DISTINCT | NATIVE (N:23, W:0, X:0) | NOT (N:0, W:0, X:23) | NOT (N:0, W:0, X:23) | WITH-WORK (N:0, W:23, X:0) | NOT (N:0, W:0, X:23) [mm:23] | NOT (N:0, W:0, X:1) [mm:1] |
+| A6 | NOT-DISTINCT | NATIVE (N:3, W:0, X:0) | WITH-WORK (N:2, W:1, X:0) [mm:1] | NOT (N:0, W:0, X:3) [mm:3] | NOT (N:0, W:0, X:3) [mm:3] | NOT (N:0, W:0, X:3) [mm:3] | NOT (N:0, W:0, X:1) [mm:1] |
+| A7 | OPEN | UNTESTED | UNTESTED | UNTESTED | UNTESTED | UNTESTED | NOT (N:0, W:0, X:1) [mm:1] |
+| A8 | NOT-DISTINCT | NATIVE (N:1, W:0, X:0) | WITH-WORK (N:0, W:1, X:0) | NOT (N:0, W:0, X:1) | NOT (N:0, W:0, X:1) | NOT (N:0, W:0, X:1) [mm:1] | NOT (N:0, W:0, X:1) [mm:1] |
 | B1 | OPEN | UNTESTED | UNTESTED | UNTESTED | UNTESTED | UNTESTED | UNTESTED |
 | B2 | OPEN | UNTESTED | UNTESTED | UNTESTED | UNTESTED | UNTESTED | UNTESTED |
 | B3 | OPEN | UNTESTED | UNTESTED | UNTESTED | UNTESTED | UNTESTED | UNTESTED |
@@ -194,6 +194,14 @@
 - `openfga/A6__network_admission__tampered_policy_1.json`
 - `openfga/A6__network_admission__unsigned_policy_1.json`
 - `openfga/A8__ai_action_gate__ai_worker_loop_1.json`
+- `openlane/A1__none__matrix-row.json`
+- `openlane/A2__none__matrix-row.json`
+- `openlane/A3__none__matrix-row.json`
+- `openlane/A4__none__matrix-row.json`
+- `openlane/A5__none__matrix-row.json`
+- `openlane/A6__none__matrix-row.json`
+- `openlane/A7__none__matrix-row.json`
+- `openlane/A8__none__matrix-row.json`
 - `prismpath/A1__ai_action_gate__abstain_low_confidence_1.json`
 - `prismpath/A1__ai_action_gate__undeclared_missing_1.json`
 - `prismpath/A1__expense_approval__insufficient_1.json`

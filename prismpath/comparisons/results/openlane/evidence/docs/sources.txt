@@ -1,0 +1,4 @@
+https://github.com/theopenlane/core (README, features)
+https://docs.theopenlane.io/docs/platform/compliance-management/overview
+https://docs.theopenlane.io/docs/developers/security/overview (authorization model: OpenFGA)
+https://docs.theopenlane.io/docs/api
