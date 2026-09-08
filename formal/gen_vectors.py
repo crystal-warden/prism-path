@@ -241,6 +241,18 @@ def gen_spiral(lines: list, counts: dict) -> None:
         counts["spiral probes checked"] += 1
 
 
+def gen_zeckendorf(lines: list, counts: dict, upto: int = 300) -> None:
+    """The Lean Fibonacci code must equal the reference's bit string for every 1 <= n <= upto, and the
+    reference's decode must invert it (evaluated; the theorem covers all n)."""
+    import zeckendorf as z
+    lines.append(f"\n/-! ## zeckendorf.py: Lean encode == reference bits for 1..{upto} -/")
+    for n in range(1, upto + 1):
+        bits = z.encode(n)
+        lean_bits = "[" + ", ".join("true" if b == "1" else "false" for b in bits) + "]"
+        lines.append(f"#guard FQ.Zeck.encode {n} == {lean_bits}")
+        counts["zeckendorf codes checked against the reference"] += 1
+
+
 def main() -> int:
     from collections import Counter
     counts: Counter = Counter()
@@ -248,6 +260,7 @@ def main() -> int:
     gen_predicates(body, counts)
     gen_decisions(body, counts)
     gen_spiral(body, counts)
+    gen_zeckendorf(body, counts)
     header = [
         "-- SPDX-License-Identifier: Apache-2.0",
         "-- Copyright 2026 Crystal Warden Supply Chain Labs LLC",
@@ -257,6 +270,7 @@ def main() -> int:
         f"-- spiral_fusion.json sha256 {sha(SPI)}",
         "-- counts: " + ", ".join(f"{k} {v}" for k, v in sorted(counts.items())),
         "import FQ.Partition",
+        "import FQ.Zeckendorf",
         "",
         "namespace FQ.Vectors",
         "open FQ",
