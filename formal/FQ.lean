@@ -6,5 +6,6 @@ import FQ.Bridge
 import FQ.I1
 import FQ.Reconstruct
 import FQ.Zeckendorf
+import FQ.AlgEq
 import FQ.Axioms
 import FQ.Vectors

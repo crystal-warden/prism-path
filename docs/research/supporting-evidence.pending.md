@@ -6,7 +6,7 @@ free number, instead of editing the main ledger. On merge, the docs session fold
 ledger with correct formatting and clears this file.*
 
 *Format each row exactly per `LEDGER_STANDARDS.md` §1 (Claim / Method / Result + Honest scope /
-Provenance) with a month granularity date. Next free number: **#142**.*
+Provenance) with a month granularity date. Next free number: **#143**.*
 
 ---
 
@@ -413,4 +413,37 @@ theorems; Lean stays a documented local gate, not in the CI matrix.
 
 **Provenance.** Branch formal/lean-fq, commits b026a24 (bridge), a44df0a (reconstruct, I1b, dedup),
 3b06578 (Zeckendorf); formal/TOOLCHAIN.md (Lean 4.33.1, Mathlib v4.33.1 at 0df444a). No push (owner
+gated).
+
+#### #142: The reference quantizer algorithm is proven equal to the canonical form, so Theorem I1 holds of the shipped construction itself (September 2026)
+
+**Claim.** The Lean model's reference numeric partition, the fine grid of point and gap cells from the
+sorted constants with adjacent cells merged on equal truth vectors at their representatives and the
+symbol the index of the first containing cell, exactly as ported from adapters/telemetry/quantizer.py
+after the #140 correction, produces the same symbol as the canonical retained boundary count for every
+integer; therefore I1 (#140), the reconstruct corollary and I1b (#141) transfer to the reference
+algorithm without the evaluated range checks that stood in for this theorem.
+
+**Method.** formal/FQ/AlgEq.lean. Stage one: the fine grid of a strictly increasing constant list is a
+contiguous chain of integer intervals (an inductive Contig predicate; fineFrom_contig,
+fineGrid_contig). Stage two: no boundary of the constants lies strictly inside a fine cell
+(fineFrom_noInside, fineGrid_noInside), so with truth_step from I1.lean every atom is constant on a
+fine cell (truth_const_on_fine). Stage three: the merge invariant go_spec, by induction on the fine
+suffix, shows the output is a contiguous chain opening at the current cell whose later starts are
+exactly the fine starts across which the truth vector changes, using constancy to carry the truth at
+each merged cell's end. Stage four: the first containing cell of a contiguous chain is the count of
+starts at or below the value (findIdx_contig), transferred from fine cells to merged cells. Stage five:
+the merged starts and the retained boundaries have the same members (mem_fineFrom_starts against
+mem_boundaries_iff) and both are strictly increasing, so a permutation gives equal counts.
+
+**Result.** symbolAlg_eq_symbolCount and symbolAlg_eq_truthVec compile with zero sorry and depend only
+on propext, Classical.choice, Quot.sound (FQ/Axioms.lean). The Bridge range checks and the 164 corpus
+symbol checks against the Python reference stand as evaluated confirmation alongside the proof.
+
+**Honest scope.** The theorem is about the Lean port of the algorithm; the tie to the Python and Rust
+code remains the generated #guard bridge (164 symbols on the frozen corpus) and code review, not a
+verified translation. Well typed integer readings only, as throughout. The spiral band bijection is
+now the sole open formal item.
+
+**Provenance.** Branch formal/lean-fq, formal/FQ/AlgEq.lean (commit at fold time). No push (owner
 gated).

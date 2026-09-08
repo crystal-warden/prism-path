@@ -3,6 +3,7 @@
 import FQ.I1
 import FQ.Reconstruct
 import FQ.Zeckendorf
+import FQ.AlgEq
 /-! The axiom audit: the theorem must depend on nothing beyond Lean's three standard axioms. -/
 #print axioms FQ.decision_preservation
 #print axioms FQ.symbolCount_eq_truthVec
@@ -11,3 +12,5 @@ import FQ.Zeckendorf
 #print axioms FQ.Zeck.decode_encode
 #print axioms FQ.Zeck.takeCode_encode
 #print axioms FQ.Zeck.decodeStream_flatMap
+#print axioms FQ.symbolAlg_eq_symbolCount
+#print axioms FQ.symbolAlg_eq_truthVec
