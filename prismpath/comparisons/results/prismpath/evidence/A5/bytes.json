@@ -1,0 +1,324 @@
+[
+ {
+  "policy": "network_admission",
+  "scenario": "allow_https_1",
+  "request_bytes": 2,
+  "result_bytes": 2,
+  "total": 4,
+  "total_plus_envelope": 32,
+  "concentrated_per_reading_plus_envelope": {
+   "1": 30.0,
+   "10": 5.2,
+   "50": 3.24
+  },
+  "outcome": "allow"
+ },
+ {
+  "policy": "network_admission",
+  "scenario": "deny_telnet_1",
+  "request_bytes": 2,
+  "result_bytes": 2,
+  "total": 4,
+  "total_plus_envelope": 32,
+  "concentrated_per_reading_plus_envelope": {
+   "1": 30.0,
+   "10": 5.0,
+   "50": 3.12
+  },
+  "outcome": "deny"
+ },
+ {
+  "policy": "network_admission",
+  "scenario": "allow_internal_ssh_1",
+  "request_bytes": 2,
+  "result_bytes": 2,
+  "total": 4,
+  "total_plus_envelope": 32,
+  "concentrated_per_reading_plus_envelope": {
+   "1": 30.0,
+   "10": 4.9,
+   "50": 3.0
+  },
+  "outcome": "allow"
+ },
+ {
+  "policy": "network_admission",
+  "scenario": "deny_external_ssh_1",
+  "request_bytes": 2,
+  "result_bytes": 2,
+  "total": 4,
+  "total_plus_envelope": 32,
+  "concentrated_per_reading_plus_envelope": {
+   "1": 30.0,
+   "10": 4.8,
+   "50": 2.88
+  },
+  "outcome": "deny"
+ },
+ {
+  "policy": "network_admission",
+  "scenario": "allow_dns_small_1",
+  "request_bytes": 2,
+  "result_bytes": 2,
+  "total": 4,
+  "total_plus_envelope": 32,
+  "concentrated_per_reading_plus_envelope": {
+   "1": 30.0,
+   "10": 5.0,
+   "50": 3.12
+  },
+  "outcome": "allow"
+ },
+ {
+  "policy": "network_admission",
+  "scenario": "deny_dns_large_1",
+  "request_bytes": 2,
+  "result_bytes": 2,
+  "total": 4,
+  "total_plus_envelope": 32,
+  "concentrated_per_reading_plus_envelope": {
+   "1": 30.0,
+   "10": 5.2,
+   "50": 3.24
+  },
+  "outcome": "deny"
+ },
+ {
+  "policy": "network_admission",
+  "scenario": "boundary_dns_512",
+  "request_bytes": 2,
+  "result_bytes": 2,
+  "total": 4,
+  "total_plus_envelope": 32,
+  "concentrated_per_reading_plus_envelope": {
+   "1": 30.0,
+   "10": 5.0,
+   "50": 3.12
+  },
+  "outcome": "allow"
+ },
+ {
+  "policy": "network_admission",
+  "scenario": "boundary_dns_513",
+  "request_bytes": 2,
+  "result_bytes": 3,
+  "total": 5,
+  "total_plus_envelope": 33,
+  "concentrated_per_reading_plus_envelope": {
+   "1": 30.0,
+   "10": 5.2,
+   "50": 3.24
+  },
+  "outcome": "deny"
+ },
+ {
+  "policy": "network_admission",
+  "scenario": "observe_jumbo_1",
+  "request_bytes": 3,
+  "result_bytes": 3,
+  "total": 6,
+  "total_plus_envelope": 34,
+  "concentrated_per_reading_plus_envelope": {
+   "1": 31.0,
+   "10": 5.5,
+   "50": 3.62
+  },
+  "outcome": "observe"
+ },
+ {
+  "policy": "network_admission",
+  "scenario": "boundary_jumbo_1399",
+  "request_bytes": 2,
+  "result_bytes": 3,
+  "total": 5,
+  "total_plus_envelope": 33,
+  "concentrated_per_reading_plus_envelope": {
+   "1": 31.0,
+   "10": 5.4,
+   "50": 3.5
+  },
+  "outcome": "observe"
+ },
+ {
+  "policy": "network_admission",
+  "scenario": "boundary_jumbo_1400",
+  "request_bytes": 3,
+  "result_bytes": 3,
+  "total": 6,
+  "total_plus_envelope": 34,
+  "concentrated_per_reading_plus_envelope": {
+   "1": 31.0,
+   "10": 5.5,
+   "50": 3.62
+  },
+  "outcome": "observe"
+ },
+ {
+  "policy": "network_admission",
+  "scenario": "allow_icmp_1",
+  "request_bytes": 2,
+  "result_bytes": 3,
+  "total": 5,
+  "total_plus_envelope": 33,
+  "concentrated_per_reading_plus_envelope": {
+   "1": 30.0,
+   "10": 4.7,
+   "50": 2.74
+  },
+  "outcome": "allow"
+ },
+ {
+  "policy": "network_admission",
+  "scenario": "observe_other_1",
+  "request_bytes": 2,
+  "result_bytes": 3,
+  "total": 5,
+  "total_plus_envelope": 33,
+  "concentrated_per_reading_plus_envelope": {
+   "1": 30.0,
+   "10": 5.2,
+   "50": 3.24
+  },
+  "outcome": "observe"
+ },
+ {
+  "policy": "sensor_interlock",
+  "scenario": "allow_nominal_1",
+  "request_bytes": 2,
+  "result_bytes": 2,
+  "total": 4,
+  "total_plus_envelope": 32,
+  "concentrated_per_reading_plus_envelope": {
+   "1": 30.0,
+   "10": 4.5,
+   "50": 2.62
+  },
+  "outcome": "allow"
+ },
+ {
+  "policy": "sensor_interlock",
+  "scenario": "allow_armed_nominal_1",
+  "request_bytes": 2,
+  "result_bytes": 2,
+  "total": 4,
+  "total_plus_envelope": 32,
+  "concentrated_per_reading_plus_envelope": {
+   "1": 30.0,
+   "10": 4.7,
+   "50": 2.74
+  },
+  "outcome": "allow"
+ },
+ {
+  "policy": "sensor_interlock",
+  "scenario": "observe_temp_1",
+  "request_bytes": 2,
+  "result_bytes": 2,
+  "total": 4,
+  "total_plus_envelope": 32,
+  "concentrated_per_reading_plus_envelope": {
+   "1": 30.0,
+   "10": 4.8,
+   "50": 2.88
+  },
+  "outcome": "observe"
+ },
+ {
+  "policy": "sensor_interlock",
+  "scenario": "deny_temp_1",
+  "request_bytes": 2,
+  "result_bytes": 2,
+  "total": 4,
+  "total_plus_envelope": 32,
+  "concentrated_per_reading_plus_envelope": {
+   "1": 30.0,
+   "10": 4.9,
+   "50": 3.0
+  },
+  "outcome": "deny"
+ },
+ {
+  "policy": "sensor_interlock",
+  "scenario": "deny_pressure_1",
+  "request_bytes": 2,
+  "result_bytes": 2,
+  "total": 4,
+  "total_plus_envelope": 32,
+  "concentrated_per_reading_plus_envelope": {
+   "1": 30.0,
+   "10": 4.8,
+   "50": 2.88
+  },
+  "outcome": "deny"
+ },
+ {
+  "policy": "sensor_interlock",
+  "scenario": "boundary_temp_149",
+  "request_bytes": 2,
+  "result_bytes": 2,
+  "total": 4,
+  "total_plus_envelope": 32,
+  "concentrated_per_reading_plus_envelope": {
+   "1": 30.0,
+   "10": 4.7,
+   "50": 2.74
+  },
+  "outcome": "observe"
+ },
+ {
+  "policy": "sensor_interlock",
+  "scenario": "boundary_temp_150",
+  "request_bytes": 2,
+  "result_bytes": 2,
+  "total": 4,
+  "total_plus_envelope": 32,
+  "concentrated_per_reading_plus_envelope": {
+   "1": 30.0,
+   "10": 4.8,
+   "50": 2.88
+  },
+  "outcome": "deny"
+ },
+ {
+  "policy": "sensor_interlock",
+  "scenario": "boundary_nominal_119_749",
+  "request_bytes": 2,
+  "result_bytes": 3,
+  "total": 5,
+  "total_plus_envelope": 33,
+  "concentrated_per_reading_plus_envelope": {
+   "1": 30.0,
+   "10": 4.7,
+   "50": 2.74
+  },
+  "outcome": "allow"
+ },
+ {
+  "policy": "sensor_interlock",
+  "scenario": "boundary_temp_120",
+  "request_bytes": 2,
+  "result_bytes": 2,
+  "total": 4,
+  "total_plus_envelope": 32,
+  "concentrated_per_reading_plus_envelope": {
+   "1": 30.0,
+   "10": 4.8,
+   "50": 2.88
+  },
+  "outcome": "observe"
+ },
+ {
+  "policy": "sensor_interlock",
+  "scenario": "escalation_sensor_dark_armed_1",
+  "request_bytes": 2,
+  "result_bytes": 2,
+  "total": 4,
+  "total_plus_envelope": 32,
+  "concentrated_per_reading_plus_envelope": {
+   "1": 30.0,
+   "10": 4.5,
+   "50": 2.62
+  },
+  "outcome": "escalate_human"
+ }
+]

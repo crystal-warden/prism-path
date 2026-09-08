@@ -1,0 +1,1 @@
+Cedar is a library and CLI over policy files: no signature, no version, no integrity check at the point. A stale, tampered, or unsigned policy file is simply the policy in force. Verified by construction of the interface (cedar authorize --policies <file>); the translation directory is the only artifact.

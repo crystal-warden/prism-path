@@ -1,0 +1,26 @@
+{
+  "dimension": "A6",
+  "evidence_path": "prismpath/comparisons/results/opa/evidence/A6",
+  "expected": "refuse_policy",
+  "glue": {
+    "components": [
+      "manifest revision reader",
+      "fsync'd floor file",
+      "pre load check"
+    ],
+    "description": "persist the last accepted bundle revision on the agent host and refuse a bundle with a lower revision before opa loads it",
+    "hours": 2,
+    "loc": 60
+  },
+  "grade": "WITH-WORK",
+  "harness_commit": "1d8b6ac",
+  "idiomatic": true,
+  "match": false,
+  "notes": "opa run --server -b <bundle> --verification-key pub.pem (RS256 signed bundles, documented bundle signing). Observed: process alive=True, policy loaded and serving=True. OPA verifies the bundle signature at the agent (the enforcement point) but keeps no monotonic revision floor: an older signed revision loads and serves. A wrapper persisting the last accepted .manifest revision and refusing lower ones is glue without a new anchor. (bundle_results.json).",
+  "observed": "accepted",
+  "policy": "network_admission",
+  "run_at": "2026-09-08T22:35:32Z",
+  "scenario": "stale_policy_1",
+  "system": "opa",
+  "system_version": "1.20.2"
+}

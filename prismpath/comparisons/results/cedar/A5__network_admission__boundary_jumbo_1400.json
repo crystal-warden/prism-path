@@ -1,0 +1,23 @@
+{
+  "dimension": "A5",
+  "evidence_path": "prismpath/comparisons/results/cedar/evidence/A5",
+  "expected": "observe",
+  "glue": null,
+  "grade": "NOT",
+  "harness_commit": "1d8b6ac",
+  "idiomatic": true,
+  "match": true,
+  "measurements": {
+    "bytes_on_wire": 238,
+    "request_bytes": 169,
+    "result_bytes": 69,
+    "total_plus_envelope_28B": 266
+  },
+  "notes": "Request JSON in the --request-json shape 169 B (every context field), result = the verbose authorize output 69 B (the outcome annotation lives in the diagnostics, so the verbose form is what carries the decision). Cedar is a library; JSON is its documented interchange, no compact encoding.",
+  "observed": "observe",
+  "policy": "network_admission",
+  "run_at": "2026-09-08T22:35:21Z",
+  "scenario": "boundary_jumbo_1400",
+  "system": "cedar",
+  "system_version": "4.12.0"
+}

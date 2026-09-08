@@ -1,0 +1,30 @@
+{
+  "dimension": "A5",
+  "evidence_path": "prismpath/comparisons/results/cerbos/evidence/A5",
+  "expected": "deny",
+  "glue": {
+    "components": [
+      "gRPC client configuration"
+    ],
+    "description": "switch the client from the HTTP JSON API to the gRPC protobuf API Cerbos ships; compact binary, still every attribute, not decision sufficient",
+    "hours": 1,
+    "loc": 0
+  },
+  "grade": "WITH-WORK",
+  "harness_commit": "1d8b6ac",
+  "idiomatic": true,
+  "match": true,
+  "measurements": {
+    "bytes_on_wire": 507,
+    "request_bytes": 222,
+    "result_bytes": 285,
+    "total_plus_envelope_28B": 535
+  },
+  "notes": "HTTP CheckResources request body 222 B (compact JSON, every attribute), response body 285 B as returned (includeMeta off; the output block carries the outcome). Measured on the HTTP JSON API the study uses; Cerbos also serves gRPC protobuf natively, a compact encoding that is not decision sufficient, hence WITH-WORK with configuration as the glue (protobuf sizes not measured here).",
+  "observed": "deny",
+  "policy": "network_admission",
+  "run_at": "2026-09-08T22:35:21Z",
+  "scenario": "deny_telnet_1",
+  "system": "cerbos",
+  "system_version": "0.55.0"
+}

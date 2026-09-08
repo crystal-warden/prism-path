@@ -1,0 +1,17 @@
+{
+  "dimension": "A6",
+  "evidence_path": "prismpath/comparisons/results/cerbos/evidence/A6",
+  "expected": "refuse_policy",
+  "glue": null,
+  "grade": "NOT",
+  "harness_commit": "1d8b6ac",
+  "idiomatic": true,
+  "match": false,
+  "notes": "Open source Cerbos loads policies from a disk, git, or blob store with no signature or monotonic version at the PDP; a stale, tampered, or unsigned policy file is the policy in force (policy signing and bundle verification are Cerbos Hub features, out of the open source field).",
+  "observed": "accepted",
+  "policy": "network_admission",
+  "run_at": "2026-09-08T22:35:32Z",
+  "scenario": "tampered_policy_1",
+  "system": "cerbos",
+  "system_version": "0.55.0"
+}

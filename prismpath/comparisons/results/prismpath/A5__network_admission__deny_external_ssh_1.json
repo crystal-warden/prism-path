@@ -1,0 +1,28 @@
+{
+  "dimension": "A5",
+  "evidence_path": "prismpath/comparisons/results/prismpath/evidence/A5",
+  "expected": "deny",
+  "glue": null,
+  "grade": "NATIVE",
+  "harness_commit": "1d8b6ac",
+  "idiomatic": true,
+  "match": true,
+  "measurements": {
+    "bytes_on_wire": 4,
+    "concentrated_per_reading_plus_envelope": {
+      "1": 30.0,
+      "10": 4.8,
+      "50": 2.88
+    },
+    "request_bytes": 2,
+    "result_bytes": 2,
+    "total_plus_envelope_28B": 32
+  },
+  "notes": "Facet reading frame 2 B (quantize -> Zeckendorf -> byte packed, self framing) plus receipt stream frame 2 B (cause, event, next_node, prev_node, seq as symbols, PROTOCOL 2.10). With a 28 B IPv4+UDP envelope 32 B; concentrated per reading at fleet 1/10/50: {'1': 30.0, '10': 4.8, '50': 2.88}. Decision sufficient by I1 (formal/FQ), not a lossless record.",
+  "observed": "deny",
+  "policy": "network_admission",
+  "run_at": "2026-09-08T22:35:18Z",
+  "scenario": "deny_external_ssh_1",
+  "system": "prismpath",
+  "system_version": "repo@1d8b6ac"
+}

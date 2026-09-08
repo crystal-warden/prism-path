@@ -1,0 +1,35 @@
+{
+  "baseline_v2": {
+    "ok": true,
+    "active": "024378df1341d7c7a4fbc915fa8a497c2180bc6e2f0b4b9d785c7917672dae5a",
+    "version": 2,
+    "since": "2026-09-08T22:35:26+00:00",
+    "unsigned": false,
+    "envelope_id": "comparison-a6"
+  },
+  "stale_policy_1": {
+    "ok": false,
+    "reasons": [
+      "version:not-monotonic:1<=2"
+    ]
+  },
+  "tampered_policy_1": {
+    "ok": false,
+    "reasons": [
+      "image:sha256-mismatch"
+    ]
+  },
+  "unsigned_policy_1": {
+    "ok": false,
+    "reasons": [
+      "sig:missing"
+    ]
+  },
+  "active_after": {
+    "active": "024378df1341d7c7a4fbc915fa8a497c2180bc6e2f0b4b9d785c7917672dae5a",
+    "version": 2,
+    "since": "2026-09-08T22:35:26+00:00",
+    "unsigned": false,
+    "envelope_id": "comparison-a6"
+  }
+}

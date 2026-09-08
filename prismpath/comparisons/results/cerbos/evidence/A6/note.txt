@@ -1,0 +1,1 @@
+Open source Cerbos loads policies from a disk, git, or blob store with no signature or monotonic version at the PDP; a stale, tampered, or unsigned policy file is the policy in force (policy signing and bundle verification are Cerbos Hub features, out of the open source field).

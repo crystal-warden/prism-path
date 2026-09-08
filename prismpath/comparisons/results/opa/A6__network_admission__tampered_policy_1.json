@@ -1,0 +1,17 @@
+{
+  "dimension": "A6",
+  "evidence_path": "prismpath/comparisons/results/opa/evidence/A6",
+  "expected": "refuse_policy",
+  "glue": null,
+  "grade": "NATIVE",
+  "harness_commit": "1d8b6ac",
+  "idiomatic": true,
+  "match": true,
+  "notes": "opa run --server -b <bundle> --verification-key pub.pem (RS256 signed bundles, documented bundle signing). Observed: process alive=False, policy loaded and serving=False. the agent refused a bundle whose policy.rego was altered after signing (signature verification at the point, no server) (bundle_results.json).",
+  "observed": "refuse_policy",
+  "policy": "network_admission",
+  "run_at": "2026-09-08T22:35:32Z",
+  "scenario": "tampered_policy_1",
+  "system": "opa",
+  "system_version": "1.20.2"
+}

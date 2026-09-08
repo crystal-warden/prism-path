@@ -1,0 +1,163 @@
+[
+ {
+  "policy": "network_admission",
+  "scenario": "allow_https_1",
+  "request_bytes": 168,
+  "response_bytes": 69,
+  "total": 237
+ },
+ {
+  "policy": "network_admission",
+  "scenario": "deny_telnet_1",
+  "request_bytes": 165,
+  "response_bytes": 69,
+  "total": 234
+ },
+ {
+  "policy": "network_admission",
+  "scenario": "allow_internal_ssh_1",
+  "request_bytes": 166,
+  "response_bytes": 69,
+  "total": 235
+ },
+ {
+  "policy": "network_admission",
+  "scenario": "deny_external_ssh_1",
+  "request_bytes": 167,
+  "response_bytes": 69,
+  "total": 236
+ },
+ {
+  "policy": "network_admission",
+  "scenario": "allow_dns_small_1",
+  "request_bytes": 167,
+  "response_bytes": 69,
+  "total": 236
+ },
+ {
+  "policy": "network_admission",
+  "scenario": "deny_dns_large_1",
+  "request_bytes": 169,
+  "response_bytes": 69,
+  "total": 238
+ },
+ {
+  "policy": "network_admission",
+  "scenario": "boundary_dns_512",
+  "request_bytes": 168,
+  "response_bytes": 69,
+  "total": 237
+ },
+ {
+  "policy": "network_admission",
+  "scenario": "boundary_dns_513",
+  "request_bytes": 168,
+  "response_bytes": 69,
+  "total": 237
+ },
+ {
+  "policy": "network_admission",
+  "scenario": "observe_jumbo_1",
+  "request_bytes": 169,
+  "response_bytes": 69,
+  "total": 238
+ },
+ {
+  "policy": "network_admission",
+  "scenario": "boundary_jumbo_1399",
+  "request_bytes": 169,
+  "response_bytes": 69,
+  "total": 238
+ },
+ {
+  "policy": "network_admission",
+  "scenario": "boundary_jumbo_1400",
+  "request_bytes": 169,
+  "response_bytes": 69,
+  "total": 238
+ },
+ {
+  "policy": "network_admission",
+  "scenario": "allow_icmp_1",
+  "request_bytes": 164,
+  "response_bytes": 69,
+  "total": 233
+ },
+ {
+  "policy": "network_admission",
+  "scenario": "observe_other_1",
+  "request_bytes": 169,
+  "response_bytes": 69,
+  "total": 238
+ },
+ {
+  "policy": "sensor_interlock",
+  "scenario": "allow_nominal_1",
+  "request_bytes": 167,
+  "response_bytes": 69,
+  "total": 236
+ },
+ {
+  "policy": "sensor_interlock",
+  "scenario": "allow_armed_nominal_1",
+  "request_bytes": 166,
+  "response_bytes": 69,
+  "total": 235
+ },
+ {
+  "policy": "sensor_interlock",
+  "scenario": "observe_temp_1",
+  "request_bytes": 167,
+  "response_bytes": 69,
+  "total": 236
+ },
+ {
+  "policy": "sensor_interlock",
+  "scenario": "deny_temp_1",
+  "request_bytes": 167,
+  "response_bytes": 69,
+  "total": 236
+ },
+ {
+  "policy": "sensor_interlock",
+  "scenario": "deny_pressure_1",
+  "request_bytes": 167,
+  "response_bytes": 69,
+  "total": 236
+ },
+ {
+  "policy": "sensor_interlock",
+  "scenario": "boundary_temp_149",
+  "request_bytes": 168,
+  "response_bytes": 69,
+  "total": 237
+ },
+ {
+  "policy": "sensor_interlock",
+  "scenario": "boundary_temp_150",
+  "request_bytes": 168,
+  "response_bytes": 69,
+  "total": 237
+ },
+ {
+  "policy": "sensor_interlock",
+  "scenario": "boundary_nominal_119_749",
+  "request_bytes": 167,
+  "response_bytes": 69,
+  "total": 236
+ },
+ {
+  "policy": "sensor_interlock",
+  "scenario": "boundary_temp_120",
+  "request_bytes": 167,
+  "response_bytes": 69,
+  "total": 236
+ },
+ {
+  "policy": "sensor_interlock",
+  "scenario": "escalation_sensor_dark_armed_1",
+  "request_bytes": 167,
+  "response_bytes": 69,
+  "total": 236
+ }
+]
