@@ -5,3 +5,4 @@ import FQ.Partition
 import FQ.Bridge
 import FQ.I1
 import FQ.Axioms
+import FQ.Vectors
