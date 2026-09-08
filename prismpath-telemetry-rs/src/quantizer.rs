@@ -150,6 +150,14 @@ fn atom_true(op: &str, const_val: &AtomConst, v: i64) -> bool {
         AtomConst::Num(n) => *n,
         _ => 0,
     };
+    // `in` / `not in` over a numeric list: membership of the value in the list's integers. The
+    // first version returned false for both, so list atoms never influenced the merge (September
+    // 2026, found by the Lean formalization of I1 alongside the missing cut points below).
+    let in_list = || match const_val {
+        AtomConst::List(l) => l.iter().any(|x| matches!(x, AtomConst::Num(n) if *n == v)),
+        AtomConst::Num(n) => *n == v,
+        _ => false,
+    };
     match op {
         "<" => v < c,
         "<=" => v <= c,
@@ -157,20 +165,42 @@ fn atom_true(op: &str, const_val: &AtomConst, v: i64) -> bool {
         ">=" => v >= c,
         "==" => v == c,
         "!=" => v != c,
+        "in" => in_list(),
+        "not in" => !in_list(),
         "truthy" => v != 0,
         _ => false,
     }
 }
 
 fn numeric_partition(field: &str, atoms: &[Atom]) -> FieldPartition {
+    // Every value at which an atom can change truth is a cut point: ordering and equality
+    // constants, every integer in an `in` / `not in` list, and 0 for a bare truthiness atom.
+    // Mirrors quantizer.py `_numeric_partition` after the September 2026 correction.
     let mut const_set: Vec<i64> = Vec::new();
     for a in atoms {
-        if matches!(a.op.as_str(), "<" | "<=" | ">" | ">=" | "==" | "!=") {
-            if let AtomConst::Num(n) = a.const_val {
-                if !const_set.contains(&n) {
-                    const_set.push(n);
+        match a.op.as_str() {
+            "<" | "<=" | ">" | ">=" | "==" | "!=" => {
+                if let AtomConst::Num(n) = a.const_val {
+                    if !const_set.contains(&n) {
+                        const_set.push(n);
+                    }
                 }
             }
+            "in" | "not in" => {
+                for x in a.const_val.flat_consts() {
+                    if let AtomConst::Num(n) = x {
+                        if !const_set.contains(&n) {
+                            const_set.push(n);
+                        }
+                    }
+                }
+            }
+            "truthy" => {
+                if !const_set.contains(&0) {
+                    const_set.push(0);
+                }
+            }
+            _ => {}
         }
     }
     const_set.sort();
@@ -232,13 +262,18 @@ fn boolean_partition(field: &str) -> FieldPartition {
 fn categorical_partition(field: &str, atoms: &[Atom]) -> FieldPartition {
     let mut consts: Vec<String> = Vec::new();
     for a in atoms {
-        let vals = match &a.const_val {
-            AtomConst::List(l) => l.iter().filter_map(|x| match x {
-                AtomConst::Str(s) => Some(s.clone()),
-                _ => None,
-            }).collect(),
-            AtomConst::Str(s) => vec![s.clone()],
-            _ => vec![],
+        // str truthiness is `s != ""`: the empty string is a named constant (September 2026).
+        let vals: Vec<String> = if a.op == "truthy" {
+            vec![String::new()]
+        } else {
+            match &a.const_val {
+                AtomConst::List(l) => l.iter().filter_map(|x| match x {
+                    AtomConst::Str(s) => Some(s.clone()),
+                    _ => None,
+                }).collect(),
+                AtomConst::Str(s) => vec![s.clone()],
+                _ => vec![],
+            }
         };
         for v in vals {
             if !consts.contains(&v) {

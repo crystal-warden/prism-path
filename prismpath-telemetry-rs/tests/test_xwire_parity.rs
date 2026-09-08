@@ -44,5 +44,5 @@ fn test_wire_bytes_match_python_and_decode_cross_impl() {
             n += 1;
         }
     }
-    assert_eq!(n, 55, "expected 55 readings across the corpus");
+    assert_eq!(n, 72, "expected 72 readings across the corpus (v2)");
 }

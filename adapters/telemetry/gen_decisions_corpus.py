@@ -69,6 +69,47 @@ start: intake
 ## normal
 """
 
+# Regression flows (September 2026): the atom forms whose constants the first quantizer did not use as
+# cut points. Found while stating I1 in Lean (formal/FQ); each violated decision preservation.
+NUMIN = """---
+name: numin
+start: classify
+---
+## classify
+-> listed: when x in (3, 5)
+-> excluded: when x not in (7, 9)
+-> rest: else
+## listed
+## excluded
+## rest
+"""
+
+TRUTHYNUM = """---
+name: truthynum
+start: classify
+---
+## classify
+-> high: when x >= 5
+-> nonzero: when x
+-> zero: else
+## high
+## nonzero
+## zero
+"""
+
+STRTRUTHY = """---
+name: strtruthy
+start: classify
+---
+## classify
+-> root: when name == 'root'
+-> named: when name
+-> anonymous: else
+## root
+## named
+## anonymous
+"""
+
 MAX_READINGS = 250            # per-flow cap; strided deterministically if the grid is larger
 
 
@@ -114,6 +155,9 @@ def main():
         "cat": (parse(CAT), CAT),
         "numeq": (parse(NUMEQ), NUMEQ),
         "pipeline": (parse(PIPELINE), PIPELINE),
+        "numin": (parse(NUMIN), NUMIN),
+        "truthynum": (parse(TRUTHYNUM), TRUTHYNUM),
+        "strtruthy": (parse(STRTRUTHY), STRTRUTHY),
     }
     cases = []
     for name, (graph, text) in flows.items():
@@ -121,8 +165,8 @@ def main():
         c["flow"] = text
         cases.append(c)
     doc = {
-        "version": 1,
-        "note": "Decisions-preserved corpus. Each reading is tagged with the full-precision route at every "
+        "version": 2,
+        "note": "Decisions-preserved corpus (v2 adds numin, truthynum, strtruthy: the cut point regression flows). Each reading is tagged with the full-precision route at every "
                 "decision node; the engine must reproduce it (drift) and the quantize->Fibonacci->decode-> "
                 "reconstruct wire round-trip must too (decision preservation).",
         "cases": cases,
