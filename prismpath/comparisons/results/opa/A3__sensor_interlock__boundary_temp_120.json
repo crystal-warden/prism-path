@@ -1,0 +1,23 @@
+{
+  "dimension": "A3",
+  "evidence_path": "prismpath/comparisons/results/opa/evidence/A3",
+  "expected": "observe",
+  "glue": null,
+  "grade": "NOT",
+  "harness_commit": "3b878c9",
+  "idiomatic": true,
+  "match": false,
+  "measurements": {
+    "wasm_code_section_bytes": 75456,
+    "wasm_imports": 7,
+    "wasm_memory_min_bytes": 131072,
+    "wasm_module_bytes": 135831
+  },
+  "notes": "opa build -t wasm compiles the policy to a 135831 B module (75456 B of code, 7 host imports, an imported linear memory of at least 131072 B that the module grows at runtime); that is the documented compiler to a second execution form, and it runs identically under a host WebAssembly runtime (same class as the host tier). Reaching an MCU class target would need a WebAssembly runtime ported to the board (WAMR or wasm3 on ESP-IDF) plus the module and its heap: on the ESP-WROOM-32 (520 KB SRAM, about 300 KB usable) 136 KB of module plus 128 KB of minimum memory plus the runtime does not leave a working heap; an ESP32-S3 with PSRAM is the plausible target. Not attempted on hardware in this session (no boards attached), so the grade is NOT on the evidence in hand and the attempt is named for the hardware session. The PrismPath comparison point: the same policy is a 168 B table image decided by a 1.7 KB interpreter on an 8 bit AVR (ledger #92).",
+  "observed": "not_run_on_mcu",
+  "policy": "sensor_interlock",
+  "run_at": "2026-09-08T22:43:39Z",
+  "scenario": "boundary_temp_120",
+  "system": "opa",
+  "system_version": "1.20.2"
+}

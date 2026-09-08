@@ -1,0 +1,17 @@
+{
+  "module_bytes": 135831,
+  "memory_pages_min": 2,
+  "memory_min_bytes": 131072,
+  "memory_max_pages": null,
+  "memory_kind": "imported",
+  "imports": [
+    "env.opa_builtin0",
+    "env.opa_builtin1",
+    "env.opa_builtin2",
+    "env.opa_builtin3",
+    "env.opa_builtin4",
+    "env.opa_abort",
+    "env.memory"
+  ],
+  "code_section_bytes": 75456
+}

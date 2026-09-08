@@ -1,0 +1,258 @@
+{
+ "vectors": [
+  {
+   "policy": "network_admission",
+   "scenario": "allow_https_1",
+   "expected_outcome": "allow",
+   "python_target": 6,
+   "python_node": "r6_allow",
+   "c_target": 6,
+   "c_out": "match 5 6",
+   "image_sha256_16": "024378df1341d7c7",
+   "image_bytes": 224
+  },
+  {
+   "policy": "network_admission",
+   "scenario": "deny_telnet_1",
+   "expected_outcome": "deny",
+   "python_target": 1,
+   "python_node": "r1_deny",
+   "c_target": 1,
+   "c_out": "match 0 1",
+   "image_sha256_16": "024378df1341d7c7",
+   "image_bytes": 224
+  },
+  {
+   "policy": "network_admission",
+   "scenario": "allow_internal_ssh_1",
+   "expected_outcome": "allow",
+   "python_target": 2,
+   "python_node": "r2_allow",
+   "c_target": 2,
+   "c_out": "match 1 2",
+   "image_sha256_16": "024378df1341d7c7",
+   "image_bytes": 224
+  },
+  {
+   "policy": "network_admission",
+   "scenario": "deny_external_ssh_1",
+   "expected_outcome": "deny",
+   "python_target": 3,
+   "python_node": "r3_deny",
+   "c_target": 3,
+   "c_out": "match 2 3",
+   "image_sha256_16": "024378df1341d7c7",
+   "image_bytes": 224
+  },
+  {
+   "policy": "network_admission",
+   "scenario": "allow_dns_small_1",
+   "expected_outcome": "allow",
+   "python_target": 4,
+   "python_node": "r4_allow",
+   "c_target": 4,
+   "c_out": "match 3 4",
+   "image_sha256_16": "024378df1341d7c7",
+   "image_bytes": 224
+  },
+  {
+   "policy": "network_admission",
+   "scenario": "deny_dns_large_1",
+   "expected_outcome": "deny",
+   "python_target": 5,
+   "python_node": "r5_deny",
+   "c_target": 5,
+   "c_out": "match 4 5",
+   "image_sha256_16": "024378df1341d7c7",
+   "image_bytes": 224
+  },
+  {
+   "policy": "network_admission",
+   "scenario": "boundary_dns_512",
+   "expected_outcome": "allow",
+   "python_target": 4,
+   "python_node": "r4_allow",
+   "c_target": 4,
+   "c_out": "match 3 4",
+   "image_sha256_16": "024378df1341d7c7",
+   "image_bytes": 224
+  },
+  {
+   "policy": "network_admission",
+   "scenario": "boundary_dns_513",
+   "expected_outcome": "deny",
+   "python_target": 5,
+   "python_node": "r5_deny",
+   "c_target": 5,
+   "c_out": "match 4 5",
+   "image_sha256_16": "024378df1341d7c7",
+   "image_bytes": 224
+  },
+  {
+   "policy": "network_admission",
+   "scenario": "observe_jumbo_1",
+   "expected_outcome": "observe",
+   "python_target": 7,
+   "python_node": "r7_observe",
+   "c_target": 7,
+   "c_out": "match 6 7",
+   "image_sha256_16": "024378df1341d7c7",
+   "image_bytes": 224
+  },
+  {
+   "policy": "network_admission",
+   "scenario": "boundary_jumbo_1399",
+   "expected_outcome": "observe",
+   "python_target": 9,
+   "python_node": "r9_observe",
+   "c_target": 9,
+   "c_out": "match 8 9",
+   "image_sha256_16": "024378df1341d7c7",
+   "image_bytes": 224
+  },
+  {
+   "policy": "network_admission",
+   "scenario": "boundary_jumbo_1400",
+   "expected_outcome": "observe",
+   "python_target": 7,
+   "python_node": "r7_observe",
+   "c_target": 7,
+   "c_out": "match 6 7",
+   "image_sha256_16": "024378df1341d7c7",
+   "image_bytes": 224
+  },
+  {
+   "policy": "network_admission",
+   "scenario": "allow_icmp_1",
+   "expected_outcome": "allow",
+   "python_target": 8,
+   "python_node": "r8_allow",
+   "c_target": 8,
+   "c_out": "match 7 8",
+   "image_sha256_16": "024378df1341d7c7",
+   "image_bytes": 224
+  },
+  {
+   "policy": "network_admission",
+   "scenario": "observe_other_1",
+   "expected_outcome": "observe",
+   "python_target": 9,
+   "python_node": "r9_observe",
+   "c_target": 9,
+   "c_out": "match 8 9",
+   "image_sha256_16": "024378df1341d7c7",
+   "image_bytes": 224
+  },
+  {
+   "policy": "sensor_interlock",
+   "scenario": "allow_nominal_1",
+   "expected_outcome": "allow",
+   "python_target": 4,
+   "python_node": "r4_allow",
+   "c_target": 4,
+   "c_out": "match 3 4",
+   "image_sha256_16": "cca654bd300135c0",
+   "image_bytes": 172
+  },
+  {
+   "policy": "sensor_interlock",
+   "scenario": "allow_armed_nominal_1",
+   "expected_outcome": "allow",
+   "python_target": 4,
+   "python_node": "r4_allow",
+   "c_target": 4,
+   "c_out": "match 3 4",
+   "image_sha256_16": "cca654bd300135c0",
+   "image_bytes": 172
+  },
+  {
+   "policy": "sensor_interlock",
+   "scenario": "observe_temp_1",
+   "expected_outcome": "observe",
+   "python_target": 3,
+   "python_node": "r3_observe",
+   "c_target": 3,
+   "c_out": "match 2 3",
+   "image_sha256_16": "cca654bd300135c0",
+   "image_bytes": 172
+  },
+  {
+   "policy": "sensor_interlock",
+   "scenario": "deny_temp_1",
+   "expected_outcome": "deny",
+   "python_target": 2,
+   "python_node": "r2_deny",
+   "c_target": 2,
+   "c_out": "match 1 2",
+   "image_sha256_16": "cca654bd300135c0",
+   "image_bytes": 172
+  },
+  {
+   "policy": "sensor_interlock",
+   "scenario": "deny_pressure_1",
+   "expected_outcome": "deny",
+   "python_target": 2,
+   "python_node": "r2_deny",
+   "c_target": 2,
+   "c_out": "match 1 2",
+   "image_sha256_16": "cca654bd300135c0",
+   "image_bytes": 172
+  },
+  {
+   "policy": "sensor_interlock",
+   "scenario": "boundary_temp_149",
+   "expected_outcome": "observe",
+   "python_target": 3,
+   "python_node": "r3_observe",
+   "c_target": 3,
+   "c_out": "match 2 3",
+   "image_sha256_16": "cca654bd300135c0",
+   "image_bytes": 172
+  },
+  {
+   "policy": "sensor_interlock",
+   "scenario": "boundary_temp_150",
+   "expected_outcome": "deny",
+   "python_target": 2,
+   "python_node": "r2_deny",
+   "c_target": 2,
+   "c_out": "match 1 2",
+   "image_sha256_16": "cca654bd300135c0",
+   "image_bytes": 172
+  },
+  {
+   "policy": "sensor_interlock",
+   "scenario": "boundary_nominal_119_749",
+   "expected_outcome": "allow",
+   "python_target": 4,
+   "python_node": "r4_allow",
+   "c_target": 4,
+   "c_out": "match 3 4",
+   "image_sha256_16": "cca654bd300135c0",
+   "image_bytes": 172
+  },
+  {
+   "policy": "sensor_interlock",
+   "scenario": "boundary_temp_120",
+   "expected_outcome": "observe",
+   "python_target": 3,
+   "python_node": "r3_observe",
+   "c_target": 3,
+   "c_out": "match 2 3",
+   "image_sha256_16": "cca654bd300135c0",
+   "image_bytes": 172
+  },
+  {
+   "policy": "sensor_interlock",
+   "scenario": "escalation_sensor_dark_armed_1",
+   "expected_outcome": "escalate_human",
+   "python_target": 1,
+   "python_node": "r1_escalate_human",
+   "c_target": 1,
+   "c_out": "match 0 1",
+   "image_sha256_16": "cca654bd300135c0",
+   "image_bytes": 172
+  }
+ ],
+ "python_vs_c_disagreements": 0
+}

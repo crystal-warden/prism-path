@@ -1,0 +1,17 @@
+{
+  "dimension": "A3",
+  "evidence_path": "prismpath/comparisons/results/openfga/evidence/A3",
+  "expected": "allow",
+  "glue": null,
+  "grade": "NOT",
+  "harness_commit": "3b878c9",
+  "idiomatic": true,
+  "match": false,
+  "notes": "OpenFGA is a Go server with a datastore; the decision policies are not expressible in it in any case. Server only by architecture (documentation).",
+  "observed": "server_only",
+  "policy": "network_admission",
+  "run_at": "2026-09-08T22:43:39Z",
+  "scenario": "allow_internal_ssh_1",
+  "system": "openfga",
+  "system_version": "1.19.0"
+}

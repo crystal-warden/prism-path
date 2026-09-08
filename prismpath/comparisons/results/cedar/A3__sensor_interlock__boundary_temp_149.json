@@ -1,0 +1,17 @@
+{
+  "dimension": "A3",
+  "evidence_path": "prismpath/comparisons/results/cedar/evidence/A3",
+  "expected": "observe",
+  "glue": null,
+  "grade": "NOT",
+  "harness_commit": "3b878c9",
+  "idiomatic": true,
+  "match": false,
+  "notes": "A no_std staticlib crate depending on cedar-policy 4.12.0 with default features off, built for thumbv8m.main-none-eabi (the RP2350's Cortex-M33): cargo fails at the first dependency that requires std (memchr: can't find crate for `std`; build_attempt.log, Cargo.toml, lib.rs). cedar-policy exposes no no_std feature (crates.io feature list recorded in the attempt). The formally verified core is a Rust library for std hosts; an MCU port would be a fork of the crate and its dependency graph, not glue.",
+  "observed": "not_buildable_no_std",
+  "policy": "sensor_interlock",
+  "run_at": "2026-09-08T22:43:39Z",
+  "scenario": "boundary_temp_149",
+  "system": "cedar",
+  "system_version": "4.12.0"
+}

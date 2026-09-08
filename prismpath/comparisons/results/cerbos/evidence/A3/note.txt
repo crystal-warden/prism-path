@@ -1,0 +1,1 @@
+Cerbos is a Go server (gRPC and HTTP) deployed as a sidecar or service; there is no library, compiler, or runtime form for a kernel, MCU, or fabric. Server only by architecture (documentation).

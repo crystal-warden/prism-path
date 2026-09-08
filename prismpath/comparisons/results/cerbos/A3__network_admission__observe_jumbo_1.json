@@ -1,0 +1,17 @@
+{
+  "dimension": "A3",
+  "evidence_path": "prismpath/comparisons/results/cerbos/evidence/A3",
+  "expected": "observe",
+  "glue": null,
+  "grade": "NOT",
+  "harness_commit": "3b878c9",
+  "idiomatic": true,
+  "match": false,
+  "notes": "Cerbos is a Go server (gRPC and HTTP) deployed as a sidecar or service; there is no library, compiler, or runtime form for a kernel, MCU, or fabric. Server only by architecture (documentation).",
+  "observed": "server_only",
+  "policy": "network_admission",
+  "run_at": "2026-09-08T22:43:39Z",
+  "scenario": "observe_jumbo_1",
+  "system": "cerbos",
+  "system_version": "0.55.0"
+}

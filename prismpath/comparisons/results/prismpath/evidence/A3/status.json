@@ -1,0 +1,21 @@
+{
+  "legs_run": {
+    "python": "23/23 (a3_vectors.json, python_target)",
+    "c_target": "23/23 (python vs C disagreements 0)",
+    "kernel_aarch64_gx10": [
+      "eBPF in-kernel conformance: 23/23 vectors match the reference.",
+      "  ALL PASS \u2014 every in-fragment vector routed identically in-kernel and by the reference."
+    ],
+    "kernel_x86_64_protectli": [
+      "eBPF in-kernel conformance: 23/23 vectors match the reference.",
+      "  ALL PASS \u2014 every in-fragment vector routed identically in-kernel and by the reference."
+    ]
+  },
+  "legs_pending_hardware": [
+    "esp32 xtensa (certify_esp32 contract)",
+    "rp2350 arm + riscv (certify_rp2350 contract)",
+    "zynq-7020 fabric via the Protectli jump (fabric_corpus_cert contract)",
+    "LA2016 wcet on pins for these images (A7)"
+  ],
+  "result_files": "written only once an MCU class leg has run (pre registered NATIVE requires host + kernel + MCU)"
+}
