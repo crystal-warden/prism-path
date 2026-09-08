@@ -6,7 +6,7 @@ free number, instead of editing the main ledger. On merge, the docs session fold
 ledger with correct formatting and clears this file.*
 
 *Format each row exactly per `LEDGER_STANDARDS.md` §1 (Claim / Method / Result + Honest scope /
-Provenance) with a month granularity date. Next free number: **#141**.*
+Provenance) with a month granularity date. Next free number: **#142**.*
 
 ---
 
@@ -371,3 +371,46 @@ the CI matrix; lake build is a documented local gate.
 **Provenance.** Branch formal/lean-fq, commit d3701ca (formal/FQ/{Syntax,Partition,Bridge,I1,Axioms}.lean,
 formal/TOOLCHAIN.md, formal/HANDOFF.md section 0); branch fix/quantizer-cut-points (the reference
 fix, corpus v2, regression tests, gen_wire_parity.py). No push (owner gated).
+
+#### #141: The FQ formalization completes its bridge and its wire: reconstruct corollary, coarsest interval, Fibonacci code round trip and self framing proven; 623 generated checks tie the model to the frozen corpora and the corrected reference (September 2026)
+
+**Claim.** Beyond #140's Theorem I1, the Lean model now proves the paper's statement of I1 in words
+(routing the reconstructed representative reproduces the decision), the coarsest interval property
+(I1b), and PROTOCOL.md invariant I2 for the Fibonacci wire (round trip and self framing, including a
+whole stream); and the model is tied to the code by generated, build time evaluated checks against
+the frozen predicate, decisions, and spiral corpora and the corrected reference quantizer and codec.
+
+**Method.** formal/FQ/Reconstruct.lean: the retained boundaries are strictly increasing
+(pairwise_mergeSort, dedup_sublist, nodup_dedup), a count lemma on strictly increasing lists, the
+representative of a symbol quantizes to that symbol for all three kinds, a policy's partition fields
+are distinct, then decision_preservation applied to a reading and its representative.
+formal/FQ/I1.lean: coarsest_interval from the retained filter. formal/FQ/Zeckendorf.lean on Mathlib's
+Nat.zeckendorf: body bit i stands for fib (i + 2), a terminating 1; round trip by reindexing the
+position sum to the index list and Nat.sum_zeckendorf_fib; self framing from the gap of two between
+indices (no adjacent set bits) and the greatest index always being used (the body ends in 1); the
+stream theorem by induction with fuel. formal/gen_vectors.py emits FQ/Vectors.lean, one #guard per
+check, from predicates.json v2, decisions.json v2, spiral_fusion.json, and the reference codec.
+
+**Result.** Zero sorry; every theorem depends only on propext, Classical.choice, Quot.sound
+(FQ/Axioms.lean lists decision_preservation, symbolCount_eq_truthVec, reconstruct_route,
+coarsest_interval, Zeck.decode_encode, Zeck.takeCode_encode, Zeck.decodeStream_flatMap). Generated
+checks all pass at build: 35 Level M well typed predicate cases equal the frozen expectation, 90
+frozen routes and 164 canonical symbols equal the corrected reference quantizer's on every
+decisions.json reading, 34 spiral probes, 300 Fibonacci codes byte identical to the reference's
+strings; plus the hand written Bridge checks that the reference partition algorithm and the canonical
+form agree on integer ranges.
+
+**Honest scope.** I1b is coarsest among INTERVAL partitions: with x == 5 the values 4 and 6 share a
+truth vector but not a cell, and neither the implementation nor the paper's monotone step function
+merges non adjacent cells, so the paper's phrase "coarsest partition on which every atom is
+constant" should carry the interval qualifier. The predicate bridge covers 35 of the 136 Level M
+vectors: 72 are missing field cases (the model has total readings), 13 cross kind comparisons, 15
+non scalar or float constants, 1 shape not carried; each excluded class is a stated decision, not a
+gap in the theorem. Two items stay open, both day scale: the reference list algorithm equal to the
+canonical count as a theorem (today evaluated on ranges and on the corpus), and the spiral band
+bijection. README and paper keep "machine checked" wording until the owner decides how to cite the
+theorems; Lean stays a documented local gate, not in the CI matrix.
+
+**Provenance.** Branch formal/lean-fq, commits b026a24 (bridge), a44df0a (reconstruct, I1b, dedup),
+3b06578 (Zeckendorf); formal/TOOLCHAIN.md (Lean 4.33.1, Mathlib v4.33.1 at 0df444a). No push (owner
+gated).
