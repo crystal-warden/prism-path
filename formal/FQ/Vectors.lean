@@ -4,9 +4,10 @@
 -- predicates.json sha256 49e17b9ceb45b25fa47b8b2ac93c7c3b3a074c8ce843276eaf9a92894a0aba7b
 -- decisions.json   sha256 6b68a08de7f57cdd11bee07bd256587094dc353b959d1195473c6880472479c8
 -- spiral_fusion.json sha256 1d9dec55645adfe3a63ba7ee555fc45f2aae69d68c53542574876a96d844eaa4
--- counts: checked 35, cross kind comparison 13, non scalar or float constant 15, not Level M 943, referenced field missing or null 72, routes checked 90, shape not carried (non literal operand) 1, spiral probes checked 34, symbols checked against the reference 164, zeckendorf codes checked against the reference 300
+-- counts: checked 35, cross kind comparison 13, non scalar or float constant 15, not Level M 943, referenced field missing or null 72, routes checked 90, shape not carried (non literal operand) 1, spiral cells checked (index, route, band) 108, spiral gray order equals the reference 1, spiral probes checked 34, symbols checked against the reference 164, zeckendorf codes checked against the reference 300
 import FQ.Partition
 import FQ.Zeckendorf
+import FQ.Spiral
 
 namespace FQ.Vectors
 open FQ
@@ -359,6 +360,345 @@ def fusion_correlate : Policy String := [⟨(Cond.and (Cond.cmp "stability" .eq 
 #guard route fusion_correlate (readingOf [("dev_mg", .int 600), ("rule_level", .int 3), ("soc_action", .str "watch"), ("stability", .str "still")]) == some "tandem_watch"  -- probe 31
 #guard route fusion_correlate (readingOf [("dev_mg", .int 100), ("rule_level", .int 3), ("soc_action", .str "ignore"), ("stability", .str "moving")]) == some "physical_watch"  -- probe 32
 #guard route fusion_correlate (readingOf [("dev_mg", .int 400), ("rule_level", .int 3), ("soc_action", .str "ignore"), ("stability", .str "still")]) == some "all_quiet"  -- probe 33
+
+/-! ## spiral_fusion.json: the layout derived in Lean equals the frozen cell table (108 cells) -/
+open FQ.Spiral in
+def fusion_fields : List String := ["dev_mg", "rule_level", "soc_action", "stability"]
+def fusion_partFor (f : String) : Option FieldPartition := (buildPartitions fusion_correlate).find? (·.field == f)
+def fusion_radices : List Nat := fusion_fields.filterMap (fun f => (fusion_partFor f).map FQ.Spiral.cellCount)
+def fusion_cellReading (cell : FQ.Spiral.Cell) : Reading :=
+  readingOf (List.zipWith (fun f d => (f, match fusion_partFor f with | some p => representativeOf p d | none => .int 0)) fusion_fields cell)
+def fusion_routeOf (cell : FQ.Spiral.Cell) : Option String := route fusion_correlate (fusion_cellReading cell)
+def fusion_routes : List (Option String) := FQ.Spiral.routesFor fusion_correlate (FQ.Spiral.gray fusion_radices) fusion_routeOf
+def fusion_layout : List FQ.Spiral.Cell := FQ.Spiral.layout (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes
+#guard fusion_radices == [4, 3, 3, 3]
+#guard fusion_routes == [some "all_quiet", some "physical_watch", some "cyber_watch", some "tandem_watch", some "cyber_containment", some "physical_escalation", some "coincident_critical"]
+#guard fusion_layout.length == 108
+#guard FQ.Spiral.gray fusion_radices == [[0, 0, 0, 0], [0, 0, 0, 1], [0, 0, 0, 2], [0, 0, 1, 2], [0, 0, 1, 1], [0, 0, 1, 0], [0, 0, 2, 0], [0, 0, 2, 1], [0, 0, 2, 2], [0, 1, 2, 2], [0, 1, 2, 1], [0, 1, 2, 0], [0, 1, 1, 0], [0, 1, 1, 1], [0, 1, 1, 2], [0, 1, 0, 2], [0, 1, 0, 1], [0, 1, 0, 0], [0, 2, 0, 0], [0, 2, 0, 1], [0, 2, 0, 2], [0, 2, 1, 2], [0, 2, 1, 1], [0, 2, 1, 0], [0, 2, 2, 0], [0, 2, 2, 1], [0, 2, 2, 2], [1, 2, 2, 2], [1, 2, 2, 1], [1, 2, 2, 0], [1, 2, 1, 0], [1, 2, 1, 1], [1, 2, 1, 2], [1, 2, 0, 2], [1, 2, 0, 1], [1, 2, 0, 0], [1, 1, 0, 0], [1, 1, 0, 1], [1, 1, 0, 2], [1, 1, 1, 2], [1, 1, 1, 1], [1, 1, 1, 0], [1, 1, 2, 0], [1, 1, 2, 1], [1, 1, 2, 2], [1, 0, 2, 2], [1, 0, 2, 1], [1, 0, 2, 0], [1, 0, 1, 0], [1, 0, 1, 1], [1, 0, 1, 2], [1, 0, 0, 2], [1, 0, 0, 1], [1, 0, 0, 0], [2, 0, 0, 0], [2, 0, 0, 1], [2, 0, 0, 2], [2, 0, 1, 2], [2, 0, 1, 1], [2, 0, 1, 0], [2, 0, 2, 0], [2, 0, 2, 1], [2, 0, 2, 2], [2, 1, 2, 2], [2, 1, 2, 1], [2, 1, 2, 0], [2, 1, 1, 0], [2, 1, 1, 1], [2, 1, 1, 2], [2, 1, 0, 2], [2, 1, 0, 1], [2, 1, 0, 0], [2, 2, 0, 0], [2, 2, 0, 1], [2, 2, 0, 2], [2, 2, 1, 2], [2, 2, 1, 1], [2, 2, 1, 0], [2, 2, 2, 0], [2, 2, 2, 1], [2, 2, 2, 2], [3, 2, 2, 2], [3, 2, 2, 1], [3, 2, 2, 0], [3, 2, 1, 0], [3, 2, 1, 1], [3, 2, 1, 2], [3, 2, 0, 2], [3, 2, 0, 1], [3, 2, 0, 0], [3, 1, 0, 0], [3, 1, 0, 1], [3, 1, 0, 2], [3, 1, 1, 2], [3, 1, 1, 1], [3, 1, 1, 0], [3, 1, 2, 0], [3, 1, 2, 1], [3, 1, 2, 2], [3, 0, 2, 2], [3, 0, 2, 1], [3, 0, 2, 0], [3, 0, 1, 0], [3, 0, 1, 1], [3, 0, 1, 2], [3, 0, 0, 2], [3, 0, 0, 1], [3, 0, 0, 0]]
+#guard fusion_layout.idxOf [0, 0, 2, 2] == 0
+#guard fusion_routeOf [0, 0, 2, 2] == some "all_quiet"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 0 == some 0
+#guard fusion_layout.idxOf [1, 0, 2, 2] == 1
+#guard fusion_routeOf [1, 0, 2, 2] == some "all_quiet"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 1 == some 0
+#guard fusion_layout.idxOf [0, 0, 2, 1] == 2
+#guard fusion_routeOf [0, 0, 2, 1] == some "physical_watch"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 2 == some 1
+#guard fusion_layout.idxOf [1, 0, 2, 1] == 3
+#guard fusion_routeOf [1, 0, 2, 1] == some "physical_watch"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 3 == some 1
+#guard fusion_layout.idxOf [2, 0, 2, 1] == 4
+#guard fusion_routeOf [2, 0, 2, 1] == some "physical_watch"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 4 == some 1
+#guard fusion_layout.idxOf [2, 0, 2, 2] == 5
+#guard fusion_routeOf [2, 0, 2, 2] == some "physical_watch"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 5 == some 1
+#guard fusion_layout.idxOf [0, 0, 1, 2] == 6
+#guard fusion_routeOf [0, 0, 1, 2] == some "cyber_watch"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 6 == some 2
+#guard fusion_layout.idxOf [0, 0, 1, 1] == 7
+#guard fusion_routeOf [0, 0, 1, 1] == some "cyber_watch"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 7 == some 2
+#guard fusion_layout.idxOf [0, 1, 2, 2] == 8
+#guard fusion_routeOf [0, 1, 2, 2] == some "cyber_watch"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 8 == some 2
+#guard fusion_layout.idxOf [0, 1, 1, 2] == 9
+#guard fusion_routeOf [0, 1, 1, 2] == some "cyber_watch"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 9 == some 2
+#guard fusion_layout.idxOf [1, 1, 1, 2] == 10
+#guard fusion_routeOf [1, 1, 1, 2] == some "cyber_watch"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 10 == some 2
+#guard fusion_layout.idxOf [1, 1, 2, 2] == 11
+#guard fusion_routeOf [1, 1, 2, 2] == some "cyber_watch"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 11 == some 2
+#guard fusion_layout.idxOf [1, 0, 1, 1] == 12
+#guard fusion_routeOf [1, 0, 1, 1] == some "cyber_watch"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 12 == some 2
+#guard fusion_layout.idxOf [1, 0, 1, 2] == 13
+#guard fusion_routeOf [1, 0, 1, 2] == some "cyber_watch"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 13 == some 2
+#guard fusion_layout.idxOf [2, 1, 2, 2] == 14
+#guard fusion_routeOf [2, 1, 2, 2] == some "cyber_watch"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 14 == some 2
+#guard fusion_layout.idxOf [0, 1, 2, 1] == 15
+#guard fusion_routeOf [0, 1, 2, 1] == some "tandem_watch"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 15 == some 3
+#guard fusion_layout.idxOf [0, 1, 1, 1] == 16
+#guard fusion_routeOf [0, 1, 1, 1] == some "tandem_watch"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 16 == some 3
+#guard fusion_layout.idxOf [1, 1, 1, 1] == 17
+#guard fusion_routeOf [1, 1, 1, 1] == some "tandem_watch"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 17 == some 3
+#guard fusion_layout.idxOf [1, 1, 2, 1] == 18
+#guard fusion_routeOf [1, 1, 2, 1] == some "tandem_watch"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 18 == some 3
+#guard fusion_layout.idxOf [2, 0, 1, 2] == 19
+#guard fusion_routeOf [2, 0, 1, 2] == some "tandem_watch"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 19 == some 3
+#guard fusion_layout.idxOf [2, 0, 1, 1] == 20
+#guard fusion_routeOf [2, 0, 1, 1] == some "tandem_watch"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 20 == some 3
+#guard fusion_layout.idxOf [2, 1, 2, 1] == 21
+#guard fusion_routeOf [2, 1, 2, 1] == some "tandem_watch"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 21 == some 3
+#guard fusion_layout.idxOf [2, 1, 1, 1] == 22
+#guard fusion_routeOf [2, 1, 1, 1] == some "tandem_watch"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 22 == some 3
+#guard fusion_layout.idxOf [2, 1, 1, 2] == 23
+#guard fusion_routeOf [2, 1, 1, 2] == some "tandem_watch"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 23 == some 3
+#guard fusion_layout.idxOf [0, 0, 0, 1] == 24
+#guard fusion_routeOf [0, 0, 0, 1] == some "cyber_containment"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 24 == some 4
+#guard fusion_layout.idxOf [0, 0, 0, 2] == 25
+#guard fusion_routeOf [0, 0, 0, 2] == some "cyber_containment"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 25 == some 4
+#guard fusion_layout.idxOf [0, 1, 0, 2] == 26
+#guard fusion_routeOf [0, 1, 0, 2] == some "cyber_containment"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 26 == some 4
+#guard fusion_layout.idxOf [0, 1, 0, 1] == 27
+#guard fusion_routeOf [0, 1, 0, 1] == some "cyber_containment"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 27 == some 4
+#guard fusion_layout.idxOf [0, 2, 0, 1] == 28
+#guard fusion_routeOf [0, 2, 0, 1] == some "cyber_containment"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 28 == some 4
+#guard fusion_layout.idxOf [0, 2, 0, 2] == 29
+#guard fusion_routeOf [0, 2, 0, 2] == some "cyber_containment"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 29 == some 4
+#guard fusion_layout.idxOf [0, 2, 1, 2] == 30
+#guard fusion_routeOf [0, 2, 1, 2] == some "cyber_containment"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 30 == some 4
+#guard fusion_layout.idxOf [0, 2, 1, 1] == 31
+#guard fusion_routeOf [0, 2, 1, 1] == some "cyber_containment"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 31 == some 4
+#guard fusion_layout.idxOf [0, 2, 2, 1] == 32
+#guard fusion_routeOf [0, 2, 2, 1] == some "cyber_containment"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 32 == some 4
+#guard fusion_layout.idxOf [0, 2, 2, 2] == 33
+#guard fusion_routeOf [0, 2, 2, 2] == some "cyber_containment"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 33 == some 4
+#guard fusion_layout.idxOf [1, 1, 0, 1] == 34
+#guard fusion_routeOf [1, 1, 0, 1] == some "cyber_containment"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 34 == some 4
+#guard fusion_layout.idxOf [1, 1, 0, 2] == 35
+#guard fusion_routeOf [1, 1, 0, 2] == some "cyber_containment"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 35 == some 4
+#guard fusion_layout.idxOf [1, 0, 0, 2] == 36
+#guard fusion_routeOf [1, 0, 0, 2] == some "cyber_containment"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 36 == some 4
+#guard fusion_layout.idxOf [1, 0, 0, 1] == 37
+#guard fusion_routeOf [1, 0, 0, 1] == some "cyber_containment"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 37 == some 4
+#guard fusion_layout.idxOf [2, 0, 0, 1] == 38
+#guard fusion_routeOf [2, 0, 0, 1] == some "cyber_containment"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 38 == some 4
+#guard fusion_layout.idxOf [2, 0, 0, 2] == 39
+#guard fusion_routeOf [2, 0, 0, 2] == some "cyber_containment"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 39 == some 4
+#guard fusion_layout.idxOf [2, 1, 0, 2] == 40
+#guard fusion_routeOf [2, 1, 0, 2] == some "cyber_containment"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 40 == some 4
+#guard fusion_layout.idxOf [2, 1, 0, 1] == 41
+#guard fusion_routeOf [2, 1, 0, 1] == some "cyber_containment"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 41 == some 4
+#guard fusion_layout.idxOf [0, 0, 1, 0] == 42
+#guard fusion_routeOf [0, 0, 1, 0] == some "physical_escalation"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 42 == some 5
+#guard fusion_layout.idxOf [0, 0, 2, 0] == 43
+#guard fusion_routeOf [0, 0, 2, 0] == some "physical_escalation"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 43 == some 5
+#guard fusion_layout.idxOf [0, 1, 2, 0] == 44
+#guard fusion_routeOf [0, 1, 2, 0] == some "physical_escalation"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 44 == some 5
+#guard fusion_layout.idxOf [0, 1, 1, 0] == 45
+#guard fusion_routeOf [0, 1, 1, 0] == some "physical_escalation"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 45 == some 5
+#guard fusion_layout.idxOf [1, 1, 1, 0] == 46
+#guard fusion_routeOf [1, 1, 1, 0] == some "physical_escalation"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 46 == some 5
+#guard fusion_layout.idxOf [1, 1, 2, 0] == 47
+#guard fusion_routeOf [1, 1, 2, 0] == some "physical_escalation"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 47 == some 5
+#guard fusion_layout.idxOf [1, 0, 2, 0] == 48
+#guard fusion_routeOf [1, 0, 2, 0] == some "physical_escalation"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 48 == some 5
+#guard fusion_layout.idxOf [1, 0, 1, 0] == 49
+#guard fusion_routeOf [1, 0, 1, 0] == some "physical_escalation"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 49 == some 5
+#guard fusion_layout.idxOf [2, 0, 1, 0] == 50
+#guard fusion_routeOf [2, 0, 1, 0] == some "physical_escalation"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 50 == some 5
+#guard fusion_layout.idxOf [2, 0, 2, 0] == 51
+#guard fusion_routeOf [2, 0, 2, 0] == some "physical_escalation"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 51 == some 5
+#guard fusion_layout.idxOf [2, 1, 2, 0] == 52
+#guard fusion_routeOf [2, 1, 2, 0] == some "physical_escalation"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 52 == some 5
+#guard fusion_layout.idxOf [2, 1, 1, 0] == 53
+#guard fusion_routeOf [2, 1, 1, 0] == some "physical_escalation"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 53 == some 5
+#guard fusion_layout.idxOf [3, 1, 1, 2] == 54
+#guard fusion_routeOf [3, 1, 1, 2] == some "physical_escalation"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 54 == some 5
+#guard fusion_layout.idxOf [3, 1, 1, 1] == 55
+#guard fusion_routeOf [3, 1, 1, 1] == some "physical_escalation"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 55 == some 5
+#guard fusion_layout.idxOf [3, 1, 1, 0] == 56
+#guard fusion_routeOf [3, 1, 1, 0] == some "physical_escalation"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 56 == some 5
+#guard fusion_layout.idxOf [3, 1, 2, 0] == 57
+#guard fusion_routeOf [3, 1, 2, 0] == some "physical_escalation"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 57 == some 5
+#guard fusion_layout.idxOf [3, 1, 2, 1] == 58
+#guard fusion_routeOf [3, 1, 2, 1] == some "physical_escalation"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 58 == some 5
+#guard fusion_layout.idxOf [3, 1, 2, 2] == 59
+#guard fusion_routeOf [3, 1, 2, 2] == some "physical_escalation"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 59 == some 5
+#guard fusion_layout.idxOf [3, 0, 2, 2] == 60
+#guard fusion_routeOf [3, 0, 2, 2] == some "physical_escalation"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 60 == some 5
+#guard fusion_layout.idxOf [3, 0, 2, 1] == 61
+#guard fusion_routeOf [3, 0, 2, 1] == some "physical_escalation"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 61 == some 5
+#guard fusion_layout.idxOf [3, 0, 2, 0] == 62
+#guard fusion_routeOf [3, 0, 2, 0] == some "physical_escalation"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 62 == some 5
+#guard fusion_layout.idxOf [3, 0, 1, 0] == 63
+#guard fusion_routeOf [3, 0, 1, 0] == some "physical_escalation"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 63 == some 5
+#guard fusion_layout.idxOf [3, 0, 1, 1] == 64
+#guard fusion_routeOf [3, 0, 1, 1] == some "physical_escalation"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 64 == some 5
+#guard fusion_layout.idxOf [3, 0, 1, 2] == 65
+#guard fusion_routeOf [3, 0, 1, 2] == some "physical_escalation"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 65 == some 5
+#guard fusion_layout.idxOf [0, 0, 0, 0] == 66
+#guard fusion_routeOf [0, 0, 0, 0] == some "coincident_critical"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 66 == some 6
+#guard fusion_layout.idxOf [0, 1, 0, 0] == 67
+#guard fusion_routeOf [0, 1, 0, 0] == some "coincident_critical"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 67 == some 6
+#guard fusion_layout.idxOf [0, 2, 0, 0] == 68
+#guard fusion_routeOf [0, 2, 0, 0] == some "coincident_critical"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 68 == some 6
+#guard fusion_layout.idxOf [0, 2, 1, 0] == 69
+#guard fusion_routeOf [0, 2, 1, 0] == some "coincident_critical"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 69 == some 6
+#guard fusion_layout.idxOf [0, 2, 2, 0] == 70
+#guard fusion_routeOf [0, 2, 2, 0] == some "coincident_critical"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 70 == some 6
+#guard fusion_layout.idxOf [1, 2, 2, 2] == 71
+#guard fusion_routeOf [1, 2, 2, 2] == some "coincident_critical"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 71 == some 6
+#guard fusion_layout.idxOf [1, 2, 2, 1] == 72
+#guard fusion_routeOf [1, 2, 2, 1] == some "coincident_critical"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 72 == some 6
+#guard fusion_layout.idxOf [1, 2, 2, 0] == 73
+#guard fusion_routeOf [1, 2, 2, 0] == some "coincident_critical"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 73 == some 6
+#guard fusion_layout.idxOf [1, 2, 1, 0] == 74
+#guard fusion_routeOf [1, 2, 1, 0] == some "coincident_critical"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 74 == some 6
+#guard fusion_layout.idxOf [1, 2, 1, 1] == 75
+#guard fusion_routeOf [1, 2, 1, 1] == some "coincident_critical"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 75 == some 6
+#guard fusion_layout.idxOf [1, 2, 1, 2] == 76
+#guard fusion_routeOf [1, 2, 1, 2] == some "coincident_critical"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 76 == some 6
+#guard fusion_layout.idxOf [1, 2, 0, 2] == 77
+#guard fusion_routeOf [1, 2, 0, 2] == some "coincident_critical"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 77 == some 6
+#guard fusion_layout.idxOf [1, 2, 0, 1] == 78
+#guard fusion_routeOf [1, 2, 0, 1] == some "coincident_critical"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 78 == some 6
+#guard fusion_layout.idxOf [1, 2, 0, 0] == 79
+#guard fusion_routeOf [1, 2, 0, 0] == some "coincident_critical"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 79 == some 6
+#guard fusion_layout.idxOf [1, 1, 0, 0] == 80
+#guard fusion_routeOf [1, 1, 0, 0] == some "coincident_critical"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 80 == some 6
+#guard fusion_layout.idxOf [1, 0, 0, 0] == 81
+#guard fusion_routeOf [1, 0, 0, 0] == some "coincident_critical"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 81 == some 6
+#guard fusion_layout.idxOf [2, 0, 0, 0] == 82
+#guard fusion_routeOf [2, 0, 0, 0] == some "coincident_critical"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 82 == some 6
+#guard fusion_layout.idxOf [2, 1, 0, 0] == 83
+#guard fusion_routeOf [2, 1, 0, 0] == some "coincident_critical"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 83 == some 6
+#guard fusion_layout.idxOf [2, 2, 0, 0] == 84
+#guard fusion_routeOf [2, 2, 0, 0] == some "coincident_critical"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 84 == some 6
+#guard fusion_layout.idxOf [2, 2, 0, 1] == 85
+#guard fusion_routeOf [2, 2, 0, 1] == some "coincident_critical"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 85 == some 6
+#guard fusion_layout.idxOf [2, 2, 0, 2] == 86
+#guard fusion_routeOf [2, 2, 0, 2] == some "coincident_critical"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 86 == some 6
+#guard fusion_layout.idxOf [2, 2, 1, 2] == 87
+#guard fusion_routeOf [2, 2, 1, 2] == some "coincident_critical"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 87 == some 6
+#guard fusion_layout.idxOf [2, 2, 1, 1] == 88
+#guard fusion_routeOf [2, 2, 1, 1] == some "coincident_critical"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 88 == some 6
+#guard fusion_layout.idxOf [2, 2, 1, 0] == 89
+#guard fusion_routeOf [2, 2, 1, 0] == some "coincident_critical"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 89 == some 6
+#guard fusion_layout.idxOf [2, 2, 2, 0] == 90
+#guard fusion_routeOf [2, 2, 2, 0] == some "coincident_critical"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 90 == some 6
+#guard fusion_layout.idxOf [2, 2, 2, 1] == 91
+#guard fusion_routeOf [2, 2, 2, 1] == some "coincident_critical"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 91 == some 6
+#guard fusion_layout.idxOf [2, 2, 2, 2] == 92
+#guard fusion_routeOf [2, 2, 2, 2] == some "coincident_critical"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 92 == some 6
+#guard fusion_layout.idxOf [3, 2, 2, 2] == 93
+#guard fusion_routeOf [3, 2, 2, 2] == some "coincident_critical"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 93 == some 6
+#guard fusion_layout.idxOf [3, 2, 2, 1] == 94
+#guard fusion_routeOf [3, 2, 2, 1] == some "coincident_critical"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 94 == some 6
+#guard fusion_layout.idxOf [3, 2, 2, 0] == 95
+#guard fusion_routeOf [3, 2, 2, 0] == some "coincident_critical"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 95 == some 6
+#guard fusion_layout.idxOf [3, 2, 1, 0] == 96
+#guard fusion_routeOf [3, 2, 1, 0] == some "coincident_critical"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 96 == some 6
+#guard fusion_layout.idxOf [3, 2, 1, 1] == 97
+#guard fusion_routeOf [3, 2, 1, 1] == some "coincident_critical"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 97 == some 6
+#guard fusion_layout.idxOf [3, 2, 1, 2] == 98
+#guard fusion_routeOf [3, 2, 1, 2] == some "coincident_critical"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 98 == some 6
+#guard fusion_layout.idxOf [3, 2, 0, 2] == 99
+#guard fusion_routeOf [3, 2, 0, 2] == some "coincident_critical"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 99 == some 6
+#guard fusion_layout.idxOf [3, 2, 0, 1] == 100
+#guard fusion_routeOf [3, 2, 0, 1] == some "coincident_critical"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 100 == some 6
+#guard fusion_layout.idxOf [3, 2, 0, 0] == 101
+#guard fusion_routeOf [3, 2, 0, 0] == some "coincident_critical"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 101 == some 6
+#guard fusion_layout.idxOf [3, 1, 0, 0] == 102
+#guard fusion_routeOf [3, 1, 0, 0] == some "coincident_critical"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 102 == some 6
+#guard fusion_layout.idxOf [3, 1, 0, 1] == 103
+#guard fusion_routeOf [3, 1, 0, 1] == some "coincident_critical"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 103 == some 6
+#guard fusion_layout.idxOf [3, 1, 0, 2] == 104
+#guard fusion_routeOf [3, 1, 0, 2] == some "coincident_critical"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 104 == some 6
+#guard fusion_layout.idxOf [3, 0, 0, 2] == 105
+#guard fusion_routeOf [3, 0, 0, 2] == some "coincident_critical"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 105 == some 6
+#guard fusion_layout.idxOf [3, 0, 0, 1] == 106
+#guard fusion_routeOf [3, 0, 0, 1] == some "coincident_critical"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 106 == some 6
+#guard fusion_layout.idxOf [3, 0, 0, 0] == 107
+#guard fusion_routeOf [3, 0, 0, 0] == some "coincident_critical"
+#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) 107 == some 6
 
 /-! ## zeckendorf.py: Lean encode == reference bits for 1..300 -/
 #guard FQ.Zeck.encode 1 == [true, true]

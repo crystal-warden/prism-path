@@ -6,7 +6,7 @@ free number, instead of editing the main ledger. On merge, the docs session fold
 ledger with correct formatting and clears this file.*
 
 *Format each row exactly per `LEDGER_STANDARDS.md` §1 (Claim / Method / Result + Honest scope /
-Provenance) with a month granularity date. Next free number: **#143**.*
+Provenance) with a month granularity date. Next free number: **#144**.*
 
 ---
 
@@ -447,3 +447,48 @@ now the sole open formal item.
 
 **Provenance.** Branch formal/lean-fq, formal/FQ/AlgEq.lean (commit at fold time). No push (owner
 gated).
+
+#### #143: The FQ formal development is closed: spiral bijection proven, thirteen theorems audited to the standard axioms, independent kernel re-check, and the whole construction bridged to the frozen corpora (September 2026)
+
+**Claim.** The Lean formalization of Figueroa quantization now covers the full mathematical stack the
+paper and PROTOCOL.md claim for FQ and the Facet wire: the policy induces the partition, the partition
+preserves decisions, reconstruction preserves routing, the numeric partition is coarsest among interval
+partitions, the corrected reference algorithm computes the canonical partition, the spiral index is a
+bijection over the cell product whose bands determine routes, and the Fibonacci code round trips and
+frames itself; and the development is frozen with a plain statement of its boundary.
+
+**Method.** formal/FQ/Spiral.lean: the mixed radix product and the reflected Gray enumeration as
+recursive lists; gray_perm_product by pointwise permutation of the flatMap (reversal is a permutation);
+product_nodup by nodup_flatMap with disjoint heads; mem_product as Forall₂ (· < ·) against the radices;
+layout as the flatten of per route buckets; layout_perm by induction on the route list (the remaining
+buckets are unchanged once the first route's cells are removed, filter_append_perm closes); the
+bijection as nodup plus membership plus Nodup.idxOf_getElem and getElem_idxOf; bandOf by cumulative
+bucket lengths with flatten_mem_band; band_route from membership in the bucket's filter. The route
+order (reversed first appearance of the node's targets, unrouted last, only routes some cell takes)
+is defined in Lean (routesFor). Validation pass: lake build (every module, every #guard, the axiom
+audit), a grep for sorry, lake env leanchecker on every module (the toolchain's independent kernel
+re-check of the stored .olean proofs), the generated bridge regenerated from the frozen corpora, and
+the reference suites.
+
+**Result.** Thirteen theorems audited, all on propext, Classical.choice, Quot.sound only
+(gray_perm_product on propext and Quot.sound). Zero sorry in sources and none in the build log.
+Bridge, all passing at build: 35 Level M well typed predicate cases, 90 frozen routes, 164 canonical
+symbols equal to the corrected reference, 34 spiral probes, all 108 frozen spiral cells at the frozen
+index, band, and route with the layout derived inside Lean from the fusion policy, the Lean Gray order
+equal to the reference's iterative mixed_radix_gray on the frozen radices, and 300 Fibonacci codes
+byte identical to the reference. Reference suites on the branch: prismpath/tests 723 passed, telemetry
+154, fusion 153, cargo test --workspace 110. Kernel re-check: see the provenance commit message for
+the per module result.
+
+**Honest scope.** The Gray adjacency property (consecutive cells differ in one digit) is a locality
+optimization and is not proven; the bijection does not need it. The route order, cell routes, and
+radices are derived in Lean but the correspondence to the Python SpiralLayout rests on the 108 cell
+bridge, not a proof about the source. The whole development is over well typed integer readings and
+is not a verified translation of the Python or Rust code; formal/README.md states every boundary. The
+development is frozen at this row: nothing further is planned for FQ in Lean, and the wording change
+from "machine checked" to "proven" in the README, paper, and PROTOCOL is an owner decision at fold
+time, now unblocked.
+
+**Provenance.** Branch formal/lean-fq: formal/FQ/Spiral.lean, formal/FQ/Axioms.lean, formal/FQ/Vectors.lean
+(regenerated), formal/gen_vectors.py, formal/README.md (the freeze statement), formal/HANDOFF.md
+(status closed). No push (owner gated).

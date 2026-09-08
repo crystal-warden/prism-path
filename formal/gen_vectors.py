@@ -241,6 +241,42 @@ def gen_spiral(lines: list, counts: dict) -> None:
         counts["spiral probes checked"] += 1
 
 
+def gen_spiral_layout(lines: list, counts: dict) -> None:
+    """The Lean spiral layout, derived in Lean from the fusion policy (radices from the partitions, cell
+    routes from the representatives, route order from the rules), must place every frozen cell at the
+    frozen index and give it the frozen route and band, and the Lean Gray order must equal the
+    reference's iterative one on the frozen radices."""
+    sys.path.insert(0, str(REPO / "adapters" / "telemetry"))
+    import spiral as sp
+    doc = json.loads(SPI.read_text())
+    node = doc["node"]
+    fields = doc["fields"]
+    lines.append(f"\n/-! ## spiral_fusion.json: the layout derived in Lean equals the frozen cell table ({len(doc['cells'])} cells) -/")
+    lines.append("open FQ.Spiral in")
+    lines.append(f"def fusion_fields : List String := [{', '.join(lean_str(f) for f in fields)}]")
+    lines.append(f"def fusion_partFor (f : String) : Option FieldPartition := (buildPartitions fusion_{node}).find? (·.field == f)")
+    lines.append("def fusion_radices : List Nat := fusion_fields.filterMap (fun f => (fusion_partFor f).map FQ.Spiral.cellCount)")
+    lines.append("def fusion_cellReading (cell : FQ.Spiral.Cell) : Reading :=")
+    lines.append("  readingOf (List.zipWith (fun f d => (f, match fusion_partFor f with | some p => representativeOf p d | none => .int 0)) fusion_fields cell)")
+    lines.append(f"def fusion_routeOf (cell : FQ.Spiral.Cell) : Option String := route fusion_{node} (fusion_cellReading cell)")
+    lines.append(f"def fusion_routes : List (Option String) := FQ.Spiral.routesFor fusion_{node} (FQ.Spiral.gray fusion_radices) fusion_routeOf")
+    lines.append("def fusion_layout : List FQ.Spiral.Cell := FQ.Spiral.layout (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes")
+    lines.append(f"#guard fusion_radices == {doc['radices']}")
+    routes = ", ".join(f"some {lean_str(b['route'])}" if b["route"] is not None else "none" for b in doc["bands"])
+    lines.append(f"#guard fusion_routes == [{routes}]")
+    lines.append(f"#guard fusion_layout.length == {doc['size']}")
+    gray_py = [list(t) for t in sp.mixed_radix_gray(doc["radices"])]
+    lines.append(f"#guard FQ.Spiral.gray fusion_radices == {gray_py}")
+    counts["spiral gray order equals the reference"] += 1
+    for entry in doc["cells"]:
+        cell, n, band, route = entry["cell"], entry["n"], entry["band"], entry["route"]
+        r = f"some {lean_str(route)}" if route is not None else "none"
+        lines.append(f"#guard fusion_layout.idxOf {cell} == {n}")
+        lines.append(f"#guard fusion_routeOf {cell} == {r}")
+        lines.append(f"#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) {n} == some {band}")
+        counts["spiral cells checked (index, route, band)"] += 1
+
+
 def gen_zeckendorf(lines: list, counts: dict, upto: int = 300) -> None:
     """The Lean Fibonacci code must equal the reference's bit string for every 1 <= n <= upto, and the
     reference's decode must invert it (evaluated; the theorem covers all n)."""
@@ -260,6 +296,7 @@ def main() -> int:
     gen_predicates(body, counts)
     gen_decisions(body, counts)
     gen_spiral(body, counts)
+    gen_spiral_layout(body, counts)
     gen_zeckendorf(body, counts)
     header = [
         "-- SPDX-License-Identifier: Apache-2.0",
@@ -271,6 +308,7 @@ def main() -> int:
         "-- counts: " + ", ".join(f"{k} {v}" for k, v in sorted(counts.items())),
         "import FQ.Partition",
         "import FQ.Zeckendorf",
+        "import FQ.Spiral",
         "",
         "namespace FQ.Vectors",
         "open FQ",
