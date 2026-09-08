@@ -5,6 +5,31 @@ not installed on this machine yet; installing it is the first milestone. Read th
 `docs/research/paper-facet-figueroa-quantization.md` sections 2.1 to 2.3, then
 `adapters/telemetry/quantizer.py` end to end (about 220 lines). Those three are the specification.*
 
+## 0. Status (September 2026, same day as the handoff)
+
+The handing off session ended up executing milestones 0, 1, and 3 itself, so this document is now
+half record, half plan. Read `formal/FQ/` before this file:
+
+- Toolchain installed and pinned (`formal/TOOLCHAIN.md`); `lake build` is clean.
+- `FQ/Syntax.lean`, `FQ/Partition.lean`: the model. The numeric partition is given twice, as the
+  reference algorithm (`symbolAlg`) and as a canonical boundary count (`symbolCount`); `FQ/Bridge.lean`
+  checks by evaluation that they agree on ranges and that decision preservation holds on ranges.
+- `FQ/I1.lean`: **Theorem I1 is proven**, `decision_preservation`, zero `sorry`, axioms
+  `propext`, `Classical.choice`, `Quot.sound` only (`FQ/Axioms.lean`). It is stated over the canonical
+  form, for well typed total readings, with partitions derived from the policy by `buildPartitions`.
+- **Stating the theorem found three defects in the reference quantizer** (`adapters/telemetry/quantizer.py`
+  and its Rust mirror), all in atom forms the frozen corpus never exercised: numeric `in` and `not in`
+  constants were not cut points, the truthiness cut at zero was omitted when other constants existed,
+  and truthiness on a string field had no `""` constant. Each violates I1 on a one line policy. No
+  shipped flow uses those forms, so no measured artifact moves. The Lean model encodes the corrected
+  construction; the reference fix is a separate branch and a ledger row.
+
+Still open, in order: milestone 2 (generated `Vectors.lean` against the frozen corpus and the
+corrected reference), the algorithmic equivalence `symbolAlg = symbolCount` as a theorem (checked by
+evaluation today), I1b (coarsest), the reconstruct corollary (`route p (reconstruct (quantize x)) =
+route p x`, which needs the retained boundaries sorted and duplicate free), then spiral and
+Zeckendorf. Section 9 no longer applies: the uncompiled draft was superseded by the built files.
+
 ## 1. Goal
 
 Turn the paper's Theorem 2.2 from a tested statement into a machine checked one, for Figueroa
