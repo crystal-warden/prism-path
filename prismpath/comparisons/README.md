@@ -5,6 +5,16 @@ runnable** implementation; so the comparison is reproducible, not rhetorical. Th
 (routing accuracy, calls/1k, latency) are produced by `run_comparison.py` against the labeled suite
 and recorded in `results.json`; the **structural** comparison below stands on its own.*
 
+## Two harnesses live here
+
+This directory holds two separate comparisons. The rest of this README is the **routing accuracy
+head to head** (PrismPath vs LangGraph vs CrewAI vs a naive LLM router on the 301 case labeled
+suite). The **layer comparison** against policy decision engines (OPA, Cedar, Cerbos, OpenFGA, with
+Openlane as a documented reference layer) is pre registered in
+[PREREGISTRATION.md](PREREGISTRATION.md): its neutral corpus is under `corpus/`, its result
+contract is `results/SCHEMA.md`, `matrix.py` generates `MATRIX.md` from result files only, and
+`corpus_check.py` is the self consistency gate and the freeze. The two do not share numbers.
+
 ## The four baselines
 
 | baseline | what it is | where the control flow lives |

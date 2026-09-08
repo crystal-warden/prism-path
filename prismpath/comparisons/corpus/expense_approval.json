@@ -1,0 +1,37 @@
+{
+  "id": "expense_approval",
+  "title": "Expense approval: allow, deny, abstain on missing evidence, escalate to a person",
+  "dimensions": ["A1", "A2", "A4"],
+  "level_m_claim": true,
+  "fields": {
+    "amount_cents": {"type": "int", "note": "claimed amount in USD cents"},
+    "category": {"type": "string", "values": ["travel", "meals", "equipment", "software", "other"]},
+    "requester_role": {"type": "string", "values": ["employee", "manager", "director"]},
+    "receipt_present": {"type": "bool", "note": "absence or null means no receipt was attached"},
+    "vendor_risk": {"type": "string", "values": ["low", "medium", "high"]}
+  },
+  "outcomes": ["allow", "deny", "abstain", "escalate_human"],
+  "catch_all": true,
+  "rules": [
+    {"id": "r1", "if": {"cmp": ["vendor_risk", "==", "high"]}, "then": "deny", "why": "blocked vendor, no amount makes it acceptable"},
+    {"id": "r2", "if": {"any": [{"missing": "receipt_present"}, {"cmp": ["receipt_present", "==", false]}]}, "then": "abstain", "why": "insufficient evidence: no receipt, so nothing is decided and nothing is paid"},
+    {"id": "r3", "if": {"cmp": ["amount_cents", ">", 1000000]}, "then": "escalate_human", "why": "above ten thousand dollars a person signs"},
+    {"id": "r4", "if": {"all": [{"cmp": ["category", "==", "other"]}, {"cmp": ["amount_cents", ">", 50000]}]}, "then": "escalate_human", "why": "uncategorized spend above five hundred dollars needs a person"},
+    {"id": "r5", "if": {"cmp": ["amount_cents", "<=", 50000]}, "then": "allow", "why": "small, receipted, low risk"},
+    {"id": "r6", "if": {"all": [{"in": ["requester_role", ["manager", "director"]]}, {"cmp": ["amount_cents", "<=", 1000000]}]}, "then": "allow", "why": "managers self approve to ten thousand"},
+    {"id": "r7", "if": true, "then": "escalate_human", "why": "an employee above five hundred dollars goes to a manager; the catch all is the fail safe"}
+  ],
+  "scenarios": [
+    {"id": "clear_allow_1", "kind": "clear_allow", "input": {"amount_cents": 12000, "category": "meals", "requester_role": "employee", "receipt_present": true, "vendor_risk": "low"}, "expected": {"outcome": "allow", "rule": "r5", "prismpath_cause": 0}, "note": "small receipted meal"},
+    {"id": "clear_allow_2", "kind": "clear_allow", "input": {"amount_cents": 250000, "category": "equipment", "requester_role": "manager", "receipt_present": true, "vendor_risk": "low"}, "expected": {"outcome": "allow", "rule": "r6", "prismpath_cause": 0}, "note": "manager self approval band"},
+    {"id": "clear_allow_3", "kind": "clear_allow", "input": {"amount_cents": 80000, "category": "travel", "requester_role": "manager", "receipt_present": true, "vendor_risk": "low"}, "expected": {"outcome": "allow", "rule": "r6", "prismpath_cause": 0}, "note": "same amount as escalation_3, different role"},
+    {"id": "clear_deny_1", "kind": "clear_deny", "input": {"amount_cents": 12000, "category": "software", "requester_role": "employee", "receipt_present": true, "vendor_risk": "high"}, "expected": {"outcome": "deny", "rule": "r1", "prismpath_cause": 0}, "note": "blocked vendor"},
+    {"id": "clear_deny_2", "kind": "clear_deny", "input": {"amount_cents": 12000, "category": "software", "requester_role": "employee", "vendor_risk": "high"}, "expected": {"outcome": "deny", "rule": "r1", "prismpath_cause": 0}, "note": "ordering probe: deny outranks the missing receipt abstain"},
+    {"id": "insufficient_1", "kind": "insufficient", "input": {"amount_cents": 12000, "category": "meals", "requester_role": "employee", "vendor_risk": "low"}, "expected": {"outcome": "abstain", "rule": "r2", "prismpath_cause": 0}, "note": "receipt field absent entirely; the A1 probe"},
+    {"id": "insufficient_2", "kind": "insufficient", "input": {"amount_cents": 40000, "category": "travel", "requester_role": "employee", "receipt_present": false, "vendor_risk": "low"}, "expected": {"outcome": "abstain", "rule": "r2", "prismpath_cause": 0}, "note": "receipt explicitly false"},
+    {"id": "escalation_1", "kind": "escalation", "input": {"amount_cents": 1500000, "category": "equipment", "requester_role": "director", "receipt_present": true, "vendor_risk": "low"}, "expected": {"outcome": "escalate_human", "rule": "r3", "prismpath_cause": 0}, "note": "above the hard ceiling even for a director"},
+    {"id": "escalation_2", "kind": "escalation", "input": {"amount_cents": 60000, "category": "other", "requester_role": "employee", "receipt_present": true, "vendor_risk": "low"}, "expected": {"outcome": "escalate_human", "rule": "r4", "prismpath_cause": 0}, "note": "uncategorized above five hundred"},
+    {"id": "escalation_3", "kind": "escalation", "input": {"amount_cents": 80000, "category": "travel", "requester_role": "employee", "receipt_present": true, "vendor_risk": "low"}, "expected": {"outcome": "escalate_human", "rule": "r7", "prismpath_cause": 0}, "note": "employee above five hundred lands in the catch all"},
+    {"id": "undeclared_missing_1", "kind": "undeclared_missing", "input": {"category": "meals", "requester_role": "employee", "receipt_present": true, "vendor_risk": "low"}, "expected": {"outcome": "escalate_human", "rule": "r7", "prismpath_cause": 0}, "note": "amount absent: every amount rule is unsatisfied and the catch all escalates; records what each system does with a missing numeric field"}
+  ]
+}

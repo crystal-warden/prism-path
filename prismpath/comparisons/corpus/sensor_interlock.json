@@ -1,0 +1,37 @@
+{
+  "id": "sensor_interlock",
+  "title": "Plant interlock: integer thresholds, a sensor dark while armed escalates, and deliberately no catch all",
+  "dimensions": ["A1", "A3", "A5", "A7"],
+  "level_m_claim": true,
+  "fields": {
+    "temp_c": {"type": "int"},
+    "pressure_kpa": {"type": "int"},
+    "armed": {"type": "bool", "note": "the process is running"},
+    "sensor_ok": {"type": "bool", "note": "the sensor self test passed this tick"}
+  },
+  "outcomes": ["allow", "observe", "deny", "escalate_human"],
+  "catch_all": false,
+  "rules": [
+    {"id": "r1", "if": {"all": [{"cmp": ["sensor_ok", "==", false]}, {"cmp": ["armed", "==", true]}]}, "then": "escalate_human", "why": "a dark sensor while running is itself the alarm"},
+    {"id": "r2", "if": {"any": [{"cmp": ["temp_c", ">=", 150]}, {"cmp": ["pressure_kpa", ">=", 900]}]}, "then": "deny", "why": "shutdown line"},
+    {"id": "r3", "if": {"any": [{"cmp": ["temp_c", ">=", 120]}, {"cmp": ["pressure_kpa", ">=", 750]}]}, "then": "observe", "why": "warning band"},
+    {"id": "r4", "if": {"all": [{"cmp": ["temp_c", "<", 120]}, {"cmp": ["pressure_kpa", "<", 750]}, {"cmp": ["sensor_ok", "==", true]}]}, "then": "allow", "why": "nominal with a healthy sensor"}
+  ],
+  "lifecycle": [
+    {"id": "tampered_input_1", "kind": "tampered_input", "presented": {"request": "a valid encoded reading for allow_nominal_1 with one payload bit flipped in transit; integrity fields left as the sender computed them"}, "expected": {"outcome": "refuse_input", "reason": "tampered", "prismpath_cause": null}, "note": "same probe as network_admission; a syntactically valid stream that decodes to a different value is caught only by the integrity layer"}
+  ],
+  "scenarios": [
+    {"id": "allow_nominal_1", "kind": "clear_allow", "input": {"temp_c": 40, "pressure_kpa": 300, "armed": false, "sensor_ok": true}, "expected": {"outcome": "allow", "rule": "r4", "prismpath_cause": 0}, "note": ""},
+    {"id": "allow_armed_nominal_1", "kind": "clear_allow", "input": {"temp_c": 40, "pressure_kpa": 300, "armed": true, "sensor_ok": true}, "expected": {"outcome": "allow", "rule": "r4", "prismpath_cause": 0}, "note": ""},
+    {"id": "observe_temp_1", "kind": "clear_allow", "input": {"temp_c": 125, "pressure_kpa": 300, "armed": true, "sensor_ok": true}, "expected": {"outcome": "observe", "rule": "r3", "prismpath_cause": 0}, "note": ""},
+    {"id": "deny_temp_1", "kind": "clear_deny", "input": {"temp_c": 151, "pressure_kpa": 300, "armed": true, "sensor_ok": true}, "expected": {"outcome": "deny", "rule": "r2", "prismpath_cause": 0}, "note": ""},
+    {"id": "deny_pressure_1", "kind": "clear_deny", "input": {"temp_c": 60, "pressure_kpa": 950, "armed": false, "sensor_ok": true}, "expected": {"outcome": "deny", "rule": "r2", "prismpath_cause": 0}, "note": ""},
+    {"id": "boundary_temp_149", "kind": "clear_allow", "input": {"temp_c": 149, "pressure_kpa": 300, "armed": false, "sensor_ok": true}, "expected": {"outcome": "observe", "rule": "r3", "prismpath_cause": 0}, "note": ""},
+    {"id": "boundary_temp_150", "kind": "clear_deny", "input": {"temp_c": 150, "pressure_kpa": 300, "armed": false, "sensor_ok": true}, "expected": {"outcome": "deny", "rule": "r2", "prismpath_cause": 0}, "note": "inclusive shutdown line"},
+    {"id": "boundary_nominal_119_749", "kind": "clear_allow", "input": {"temp_c": 119, "pressure_kpa": 749, "armed": true, "sensor_ok": true}, "expected": {"outcome": "allow", "rule": "r4", "prismpath_cause": 0}, "note": "both one below the warning band"},
+    {"id": "boundary_temp_120", "kind": "clear_allow", "input": {"temp_c": 120, "pressure_kpa": 300, "armed": true, "sensor_ok": true}, "expected": {"outcome": "observe", "rule": "r3", "prismpath_cause": 0}, "note": ""},
+    {"id": "escalation_sensor_dark_armed_1", "kind": "escalation", "input": {"temp_c": 40, "pressure_kpa": 300, "armed": true, "sensor_ok": false}, "expected": {"outcome": "escalate_human", "rule": "r1", "prismpath_cause": 0}, "note": "fail operational, not fail silent"},
+    {"id": "undeclared_missing_1", "kind": "undeclared_missing", "input": {"temp_c": 40, "pressure_kpa": 300, "armed": false, "sensor_ok": false}, "expected": {"outcome": "no_match", "rule": null, "prismpath_cause": 36}, "note": "sensor dark while NOT armed: no rule covers it and there is no catch all; the neutral result is no_match and the question is what each system returns (undefined, error, default deny, or a named refusal)"},
+    {"id": "undeclared_missing_2", "kind": "undeclared_missing", "input": {"pressure_kpa": 300, "armed": false, "sensor_ok": true}, "expected": {"outcome": "no_match", "rule": null, "prismpath_cause": 36}, "note": "temperature absent: r4 needs it, so nothing matches"}
+  ]
+}

@@ -1,0 +1,45 @@
+{
+  "id": "document_sharing_rebac",
+  "title": "Relationship based access: viewer of a document through group membership and folder inheritance",
+  "dimensions": ["B3"],
+  "level_m_claim": false,
+  "fields": {
+    "user": {"type": "string"},
+    "relation": {"type": "string", "values": ["viewer"]},
+    "object": {"type": "string", "note": "typed id such as doc:d1"}
+  },
+  "outcomes": ["allow", "deny"],
+  "catch_all": true,
+  "model": {
+    "types": ["user", "group", "folder", "doc"],
+    "relations": {
+      "group": {"member": [{"kind": "direct"}]},
+      "folder": {"viewer": [{"kind": "direct"}, {"kind": "userset", "subject_type": "group", "subject_relation": "member"}]},
+      "doc": {"parent": [{"kind": "direct"}], "viewer": [{"kind": "direct"}, {"kind": "userset", "subject_type": "group", "subject_relation": "member"}, {"kind": "parent", "via": "parent", "parent_relation": "viewer"}]}
+    },
+    "tuples": [
+      ["user:alice", "member", "group:eng"],
+      ["group:eng#member", "viewer", "folder:f1"],
+      ["doc:d1", "parent", "folder:f1"],
+      ["user:bob", "viewer", "doc:d2"],
+      ["doc:d2", "parent", "folder:f2"],
+      ["user:dana", "viewer", "folder:f2"]
+    ]
+  },
+  "rules": [
+    {"id": "r1", "if": {"related": ["user", "relation", "object"]}, "then": "allow", "why": "the relation is derivable from the graph"},
+    {"id": "r2", "if": true, "then": "deny", "why": "default deny"}
+  ],
+  "prismpath_expressibility": {
+    "related": "NOT: PrismPath has no relationship graph and no data plane; every derived tuple would have to be precomputed by the caller into a boolean field, at which point the comparator is doing the work",
+    "predicted_grade": "NOT"
+  },
+  "scenarios": [
+    {"id": "alice_view_d1", "kind": "relationship", "input": {"user": "user:alice", "relation": "viewer", "object": "doc:d1"}, "expected": {"outcome": "allow", "rule": "r1", "prismpath_cause": null}, "note": "alice is a member of eng, eng members view f1, d1 is in f1: two hops"},
+    {"id": "bob_view_d1", "kind": "relationship", "input": {"user": "user:bob", "relation": "viewer", "object": "doc:d1"}, "expected": {"outcome": "deny", "rule": "r2", "prismpath_cause": null}, "note": ""},
+    {"id": "bob_view_d2", "kind": "relationship", "input": {"user": "user:bob", "relation": "viewer", "object": "doc:d2"}, "expected": {"outcome": "allow", "rule": "r1", "prismpath_cause": null}, "note": "direct tuple"},
+    {"id": "dana_view_d2", "kind": "relationship", "input": {"user": "user:dana", "relation": "viewer", "object": "doc:d2"}, "expected": {"outcome": "allow", "rule": "r1", "prismpath_cause": null}, "note": "folder inheritance, one hop"},
+    {"id": "alice_view_d2", "kind": "relationship", "input": {"user": "user:alice", "relation": "viewer", "object": "doc:d2"}, "expected": {"outcome": "deny", "rule": "r2", "prismpath_cause": null}, "note": ""},
+    {"id": "carol_view_d1", "kind": "relationship", "input": {"user": "user:carol", "relation": "viewer", "object": "doc:d1"}, "expected": {"outcome": "deny", "rule": "r2", "prismpath_cause": null}, "note": "no tuples at all"}
+  ]
+}

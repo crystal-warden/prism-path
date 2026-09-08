@@ -1,0 +1,849 @@
+{
+  "dimensions": [
+    "A1",
+    "A2",
+    "A3",
+    "A4",
+    "A5",
+    "A6",
+    "A7",
+    "A8",
+    "B1",
+    "B2",
+    "B3",
+    "B4",
+    "B5"
+  ],
+  "generated_from": [],
+  "matrix": {
+    "A1": {
+      "cedar": {
+        "counts": {
+          "NATIVE": 0,
+          "NOT": 0,
+          "WITH-WORK": 0
+        },
+        "files": [],
+        "grade": "UNTESTED",
+        "mismatches": 0
+      },
+      "cerbos": {
+        "counts": {
+          "NATIVE": 0,
+          "NOT": 0,
+          "WITH-WORK": 0
+        },
+        "files": [],
+        "grade": "UNTESTED",
+        "mismatches": 0
+      },
+      "opa": {
+        "counts": {
+          "NATIVE": 0,
+          "NOT": 0,
+          "WITH-WORK": 0
+        },
+        "files": [],
+        "grade": "UNTESTED",
+        "mismatches": 0
+      },
+      "openfga": {
+        "counts": {
+          "NATIVE": 0,
+          "NOT": 0,
+          "WITH-WORK": 0
+        },
+        "files": [],
+        "grade": "UNTESTED",
+        "mismatches": 0
+      },
+      "openlane": {
+        "counts": {
+          "NATIVE": 0,
+          "NOT": 0,
+          "WITH-WORK": 0
+        },
+        "files": [],
+        "grade": "UNTESTED",
+        "mismatches": 0
+      },
+      "prismpath": {
+        "counts": {
+          "NATIVE": 0,
+          "NOT": 0,
+          "WITH-WORK": 0
+        },
+        "files": [],
+        "grade": "UNTESTED",
+        "mismatches": 0
+      }
+    },
+    "A2": {
+      "cedar": {
+        "counts": {
+          "NATIVE": 0,
+          "NOT": 0,
+          "WITH-WORK": 0
+        },
+        "files": [],
+        "grade": "UNTESTED",
+        "mismatches": 0
+      },
+      "cerbos": {
+        "counts": {
+          "NATIVE": 0,
+          "NOT": 0,
+          "WITH-WORK": 0
+        },
+        "files": [],
+        "grade": "UNTESTED",
+        "mismatches": 0
+      },
+      "opa": {
+        "counts": {
+          "NATIVE": 0,
+          "NOT": 0,
+          "WITH-WORK": 0
+        },
+        "files": [],
+        "grade": "UNTESTED",
+        "mismatches": 0
+      },
+      "openfga": {
+        "counts": {
+          "NATIVE": 0,
+          "NOT": 0,
+          "WITH-WORK": 0
+        },
+        "files": [],
+        "grade": "UNTESTED",
+        "mismatches": 0
+      },
+      "openlane": {
+        "counts": {
+          "NATIVE": 0,
+          "NOT": 0,
+          "WITH-WORK": 0
+        },
+        "files": [],
+        "grade": "UNTESTED",
+        "mismatches": 0
+      },
+      "prismpath": {
+        "counts": {
+          "NATIVE": 0,
+          "NOT": 0,
+          "WITH-WORK": 0
+        },
+        "files": [],
+        "grade": "UNTESTED",
+        "mismatches": 0
+      }
+    },
+    "A3": {
+      "cedar": {
+        "counts": {
+          "NATIVE": 0,
+          "NOT": 0,
+          "WITH-WORK": 0
+        },
+        "files": [],
+        "grade": "UNTESTED",
+        "mismatches": 0
+      },
+      "cerbos": {
+        "counts": {
+          "NATIVE": 0,
+          "NOT": 0,
+          "WITH-WORK": 0
+        },
+        "files": [],
+        "grade": "UNTESTED",
+        "mismatches": 0
+      },
+      "opa": {
+        "counts": {
+          "NATIVE": 0,
+          "NOT": 0,
+          "WITH-WORK": 0
+        },
+        "files": [],
+        "grade": "UNTESTED",
+        "mismatches": 0
+      },
+      "openfga": {
+        "counts": {
+          "NATIVE": 0,
+          "NOT": 0,
+          "WITH-WORK": 0
+        },
+        "files": [],
+        "grade": "UNTESTED",
+        "mismatches": 0
+      },
+      "openlane": {
+        "counts": {
+          "NATIVE": 0,
+          "NOT": 0,
+          "WITH-WORK": 0
+        },
+        "files": [],
+        "grade": "UNTESTED",
+        "mismatches": 0
+      },
+      "prismpath": {
+        "counts": {
+          "NATIVE": 0,
+          "NOT": 0,
+          "WITH-WORK": 0
+        },
+        "files": [],
+        "grade": "UNTESTED",
+        "mismatches": 0
+      }
+    },
+    "A4": {
+      "cedar": {
+        "counts": {
+          "NATIVE": 0,
+          "NOT": 0,
+          "WITH-WORK": 0
+        },
+        "files": [],
+        "grade": "UNTESTED",
+        "mismatches": 0
+      },
+      "cerbos": {
+        "counts": {
+          "NATIVE": 0,
+          "NOT": 0,
+          "WITH-WORK": 0
+        },
+        "files": [],
+        "grade": "UNTESTED",
+        "mismatches": 0
+      },
+      "opa": {
+        "counts": {
+          "NATIVE": 0,
+          "NOT": 0,
+          "WITH-WORK": 0
+        },
+        "files": [],
+        "grade": "UNTESTED",
+        "mismatches": 0
+      },
+      "openfga": {
+        "counts": {
+          "NATIVE": 0,
+          "NOT": 0,
+          "WITH-WORK": 0
+        },
+        "files": [],
+        "grade": "UNTESTED",
+        "mismatches": 0
+      },
+      "openlane": {
+        "counts": {
+          "NATIVE": 0,
+          "NOT": 0,
+          "WITH-WORK": 0
+        },
+        "files": [],
+        "grade": "UNTESTED",
+        "mismatches": 0
+      },
+      "prismpath": {
+        "counts": {
+          "NATIVE": 0,
+          "NOT": 0,
+          "WITH-WORK": 0
+        },
+        "files": [],
+        "grade": "UNTESTED",
+        "mismatches": 0
+      }
+    },
+    "A5": {
+      "cedar": {
+        "counts": {
+          "NATIVE": 0,
+          "NOT": 0,
+          "WITH-WORK": 0
+        },
+        "files": [],
+        "grade": "UNTESTED",
+        "mismatches": 0
+      },
+      "cerbos": {
+        "counts": {
+          "NATIVE": 0,
+          "NOT": 0,
+          "WITH-WORK": 0
+        },
+        "files": [],
+        "grade": "UNTESTED",
+        "mismatches": 0
+      },
+      "opa": {
+        "counts": {
+          "NATIVE": 0,
+          "NOT": 0,
+          "WITH-WORK": 0
+        },
+        "files": [],
+        "grade": "UNTESTED",
+        "mismatches": 0
+      },
+      "openfga": {
+        "counts": {
+          "NATIVE": 0,
+          "NOT": 0,
+          "WITH-WORK": 0
+        },
+        "files": [],
+        "grade": "UNTESTED",
+        "mismatches": 0
+      },
+      "openlane": {
+        "counts": {
+          "NATIVE": 0,
+          "NOT": 0,
+          "WITH-WORK": 0
+        },
+        "files": [],
+        "grade": "UNTESTED",
+        "mismatches": 0
+      },
+      "prismpath": {
+        "counts": {
+          "NATIVE": 0,
+          "NOT": 0,
+          "WITH-WORK": 0
+        },
+        "files": [],
+        "grade": "UNTESTED",
+        "mismatches": 0
+      }
+    },
+    "A6": {
+      "cedar": {
+        "counts": {
+          "NATIVE": 0,
+          "NOT": 0,
+          "WITH-WORK": 0
+        },
+        "files": [],
+        "grade": "UNTESTED",
+        "mismatches": 0
+      },
+      "cerbos": {
+        "counts": {
+          "NATIVE": 0,
+          "NOT": 0,
+          "WITH-WORK": 0
+        },
+        "files": [],
+        "grade": "UNTESTED",
+        "mismatches": 0
+      },
+      "opa": {
+        "counts": {
+          "NATIVE": 0,
+          "NOT": 0,
+          "WITH-WORK": 0
+        },
+        "files": [],
+        "grade": "UNTESTED",
+        "mismatches": 0
+      },
+      "openfga": {
+        "counts": {
+          "NATIVE": 0,
+          "NOT": 0,
+          "WITH-WORK": 0
+        },
+        "files": [],
+        "grade": "UNTESTED",
+        "mismatches": 0
+      },
+      "openlane": {
+        "counts": {
+          "NATIVE": 0,
+          "NOT": 0,
+          "WITH-WORK": 0
+        },
+        "files": [],
+        "grade": "UNTESTED",
+        "mismatches": 0
+      },
+      "prismpath": {
+        "counts": {
+          "NATIVE": 0,
+          "NOT": 0,
+          "WITH-WORK": 0
+        },
+        "files": [],
+        "grade": "UNTESTED",
+        "mismatches": 0
+      }
+    },
+    "A7": {
+      "cedar": {
+        "counts": {
+          "NATIVE": 0,
+          "NOT": 0,
+          "WITH-WORK": 0
+        },
+        "files": [],
+        "grade": "UNTESTED",
+        "mismatches": 0
+      },
+      "cerbos": {
+        "counts": {
+          "NATIVE": 0,
+          "NOT": 0,
+          "WITH-WORK": 0
+        },
+        "files": [],
+        "grade": "UNTESTED",
+        "mismatches": 0
+      },
+      "opa": {
+        "counts": {
+          "NATIVE": 0,
+          "NOT": 0,
+          "WITH-WORK": 0
+        },
+        "files": [],
+        "grade": "UNTESTED",
+        "mismatches": 0
+      },
+      "openfga": {
+        "counts": {
+          "NATIVE": 0,
+          "NOT": 0,
+          "WITH-WORK": 0
+        },
+        "files": [],
+        "grade": "UNTESTED",
+        "mismatches": 0
+      },
+      "openlane": {
+        "counts": {
+          "NATIVE": 0,
+          "NOT": 0,
+          "WITH-WORK": 0
+        },
+        "files": [],
+        "grade": "UNTESTED",
+        "mismatches": 0
+      },
+      "prismpath": {
+        "counts": {
+          "NATIVE": 0,
+          "NOT": 0,
+          "WITH-WORK": 0
+        },
+        "files": [],
+        "grade": "UNTESTED",
+        "mismatches": 0
+      }
+    },
+    "A8": {
+      "cedar": {
+        "counts": {
+          "NATIVE": 0,
+          "NOT": 0,
+          "WITH-WORK": 0
+        },
+        "files": [],
+        "grade": "UNTESTED",
+        "mismatches": 0
+      },
+      "cerbos": {
+        "counts": {
+          "NATIVE": 0,
+          "NOT": 0,
+          "WITH-WORK": 0
+        },
+        "files": [],
+        "grade": "UNTESTED",
+        "mismatches": 0
+      },
+      "opa": {
+        "counts": {
+          "NATIVE": 0,
+          "NOT": 0,
+          "WITH-WORK": 0
+        },
+        "files": [],
+        "grade": "UNTESTED",
+        "mismatches": 0
+      },
+      "openfga": {
+        "counts": {
+          "NATIVE": 0,
+          "NOT": 0,
+          "WITH-WORK": 0
+        },
+        "files": [],
+        "grade": "UNTESTED",
+        "mismatches": 0
+      },
+      "openlane": {
+        "counts": {
+          "NATIVE": 0,
+          "NOT": 0,
+          "WITH-WORK": 0
+        },
+        "files": [],
+        "grade": "UNTESTED",
+        "mismatches": 0
+      },
+      "prismpath": {
+        "counts": {
+          "NATIVE": 0,
+          "NOT": 0,
+          "WITH-WORK": 0
+        },
+        "files": [],
+        "grade": "UNTESTED",
+        "mismatches": 0
+      }
+    },
+    "B1": {
+      "cedar": {
+        "counts": {
+          "NATIVE": 0,
+          "NOT": 0,
+          "WITH-WORK": 0
+        },
+        "files": [],
+        "grade": "UNTESTED",
+        "mismatches": 0
+      },
+      "cerbos": {
+        "counts": {
+          "NATIVE": 0,
+          "NOT": 0,
+          "WITH-WORK": 0
+        },
+        "files": [],
+        "grade": "UNTESTED",
+        "mismatches": 0
+      },
+      "opa": {
+        "counts": {
+          "NATIVE": 0,
+          "NOT": 0,
+          "WITH-WORK": 0
+        },
+        "files": [],
+        "grade": "UNTESTED",
+        "mismatches": 0
+      },
+      "openfga": {
+        "counts": {
+          "NATIVE": 0,
+          "NOT": 0,
+          "WITH-WORK": 0
+        },
+        "files": [],
+        "grade": "UNTESTED",
+        "mismatches": 0
+      },
+      "openlane": {
+        "counts": {
+          "NATIVE": 0,
+          "NOT": 0,
+          "WITH-WORK": 0
+        },
+        "files": [],
+        "grade": "UNTESTED",
+        "mismatches": 0
+      },
+      "prismpath": {
+        "counts": {
+          "NATIVE": 0,
+          "NOT": 0,
+          "WITH-WORK": 0
+        },
+        "files": [],
+        "grade": "UNTESTED",
+        "mismatches": 0
+      }
+    },
+    "B2": {
+      "cedar": {
+        "counts": {
+          "NATIVE": 0,
+          "NOT": 0,
+          "WITH-WORK": 0
+        },
+        "files": [],
+        "grade": "UNTESTED",
+        "mismatches": 0
+      },
+      "cerbos": {
+        "counts": {
+          "NATIVE": 0,
+          "NOT": 0,
+          "WITH-WORK": 0
+        },
+        "files": [],
+        "grade": "UNTESTED",
+        "mismatches": 0
+      },
+      "opa": {
+        "counts": {
+          "NATIVE": 0,
+          "NOT": 0,
+          "WITH-WORK": 0
+        },
+        "files": [],
+        "grade": "UNTESTED",
+        "mismatches": 0
+      },
+      "openfga": {
+        "counts": {
+          "NATIVE": 0,
+          "NOT": 0,
+          "WITH-WORK": 0
+        },
+        "files": [],
+        "grade": "UNTESTED",
+        "mismatches": 0
+      },
+      "openlane": {
+        "counts": {
+          "NATIVE": 0,
+          "NOT": 0,
+          "WITH-WORK": 0
+        },
+        "files": [],
+        "grade": "UNTESTED",
+        "mismatches": 0
+      },
+      "prismpath": {
+        "counts": {
+          "NATIVE": 0,
+          "NOT": 0,
+          "WITH-WORK": 0
+        },
+        "files": [],
+        "grade": "UNTESTED",
+        "mismatches": 0
+      }
+    },
+    "B3": {
+      "cedar": {
+        "counts": {
+          "NATIVE": 0,
+          "NOT": 0,
+          "WITH-WORK": 0
+        },
+        "files": [],
+        "grade": "UNTESTED",
+        "mismatches": 0
+      },
+      "cerbos": {
+        "counts": {
+          "NATIVE": 0,
+          "NOT": 0,
+          "WITH-WORK": 0
+        },
+        "files": [],
+        "grade": "UNTESTED",
+        "mismatches": 0
+      },
+      "opa": {
+        "counts": {
+          "NATIVE": 0,
+          "NOT": 0,
+          "WITH-WORK": 0
+        },
+        "files": [],
+        "grade": "UNTESTED",
+        "mismatches": 0
+      },
+      "openfga": {
+        "counts": {
+          "NATIVE": 0,
+          "NOT": 0,
+          "WITH-WORK": 0
+        },
+        "files": [],
+        "grade": "UNTESTED",
+        "mismatches": 0
+      },
+      "openlane": {
+        "counts": {
+          "NATIVE": 0,
+          "NOT": 0,
+          "WITH-WORK": 0
+        },
+        "files": [],
+        "grade": "UNTESTED",
+        "mismatches": 0
+      },
+      "prismpath": {
+        "counts": {
+          "NATIVE": 0,
+          "NOT": 0,
+          "WITH-WORK": 0
+        },
+        "files": [],
+        "grade": "UNTESTED",
+        "mismatches": 0
+      }
+    },
+    "B4": {
+      "cedar": {
+        "counts": {
+          "NATIVE": 0,
+          "NOT": 0,
+          "WITH-WORK": 0
+        },
+        "files": [],
+        "grade": "UNTESTED",
+        "mismatches": 0
+      },
+      "cerbos": {
+        "counts": {
+          "NATIVE": 0,
+          "NOT": 0,
+          "WITH-WORK": 0
+        },
+        "files": [],
+        "grade": "UNTESTED",
+        "mismatches": 0
+      },
+      "opa": {
+        "counts": {
+          "NATIVE": 0,
+          "NOT": 0,
+          "WITH-WORK": 0
+        },
+        "files": [],
+        "grade": "UNTESTED",
+        "mismatches": 0
+      },
+      "openfga": {
+        "counts": {
+          "NATIVE": 0,
+          "NOT": 0,
+          "WITH-WORK": 0
+        },
+        "files": [],
+        "grade": "UNTESTED",
+        "mismatches": 0
+      },
+      "openlane": {
+        "counts": {
+          "NATIVE": 0,
+          "NOT": 0,
+          "WITH-WORK": 0
+        },
+        "files": [],
+        "grade": "UNTESTED",
+        "mismatches": 0
+      },
+      "prismpath": {
+        "counts": {
+          "NATIVE": 0,
+          "NOT": 0,
+          "WITH-WORK": 0
+        },
+        "files": [],
+        "grade": "UNTESTED",
+        "mismatches": 0
+      }
+    },
+    "B5": {
+      "cedar": {
+        "counts": {
+          "NATIVE": 0,
+          "NOT": 0,
+          "WITH-WORK": 0
+        },
+        "files": [],
+        "grade": "UNTESTED",
+        "mismatches": 0
+      },
+      "cerbos": {
+        "counts": {
+          "NATIVE": 0,
+          "NOT": 0,
+          "WITH-WORK": 0
+        },
+        "files": [],
+        "grade": "UNTESTED",
+        "mismatches": 0
+      },
+      "opa": {
+        "counts": {
+          "NATIVE": 0,
+          "NOT": 0,
+          "WITH-WORK": 0
+        },
+        "files": [],
+        "grade": "UNTESTED",
+        "mismatches": 0
+      },
+      "openfga": {
+        "counts": {
+          "NATIVE": 0,
+          "NOT": 0,
+          "WITH-WORK": 0
+        },
+        "files": [],
+        "grade": "UNTESTED",
+        "mismatches": 0
+      },
+      "openlane": {
+        "counts": {
+          "NATIVE": 0,
+          "NOT": 0,
+          "WITH-WORK": 0
+        },
+        "files": [],
+        "grade": "UNTESTED",
+        "mismatches": 0
+      },
+      "prismpath": {
+        "counts": {
+          "NATIVE": 0,
+          "NOT": 0,
+          "WITH-WORK": 0
+        },
+        "files": [],
+        "grade": "UNTESTED",
+        "mismatches": 0
+      }
+    }
+  },
+  "systems": [
+    "prismpath",
+    "opa",
+    "cedar",
+    "cerbos",
+    "openfga",
+    "openlane"
+  ],
+  "verdicts": {
+    "A1": "OPEN",
+    "A2": "OPEN",
+    "A3": "OPEN",
+    "A4": "OPEN",
+    "A5": "OPEN",
+    "A6": "OPEN",
+    "A7": "OPEN",
+    "A8": "OPEN",
+    "B1": "OPEN",
+    "B2": "OPEN",
+    "B3": "OPEN",
+    "B4": "OPEN",
+    "B5": "OPEN"
+  }
+}
