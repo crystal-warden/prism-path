@@ -46,3 +46,6 @@ prismpath-hw/demo/keys/*.key
 # ESP-IDF build trees
 prismpath-hw/walker-demo/*/build/
 prismpath-hw/hyst-cert/evidence/*.mp4
+
+# layer comparison toolchain (installed by prismpath/comparisons/toolchain/install.sh, pinned)
+prismpath/comparisons/.toolchain/
