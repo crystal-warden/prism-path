@@ -56,3 +56,7 @@ prismpath/comparisons/groupa/opa_wasm_mcu/pico/build/
 prismpath/comparisons/groupa/opa_wasm_mcu/pico/wasm_*.h
 prismpath/comparisons/matrix.json
 prismpath/comparisons/results/**/opa_*.log
+
+# runtime state the connector writes beside the working directory (FileDeferralStore); never repo content
+*.deferrals/
+.hypothesis/
