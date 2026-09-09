@@ -575,10 +575,11 @@ A7 for OPA, Cedar, and Cerbos. What the cells support: PrismPath NATIVE on all e
 where no comparator exceeds two; OPA reaches the same row only with 391 lines of glue in three pieces
 that nobody ships; on the same MCU, 1.7 KB of interpreter class and 224 B images against about 60 KB
 of interpreter and 136 KB of module in 312 KB of RAM, sub millisecond against millisecond round trips,
-a signed and pin witnessed bound against none. Recommended public framing: a policy decision engine
-whose one compiled image decides identically from a Python process down to a 1.7 KB interpreter or a
-fabric, carries a signed worst case bound, and composes abstain, human routing, signed receipts with
-cause, and a byte sized wire as built in properties rather than as glue.
+a signed and pin witnessed bound against none. Framing, in reader order: a control plane for autonomous systems with receipts, one of many; it
+compiles an authored decision structure, never policy from prose; the decidable tabular fragment is why
+one image decides identically from Python to a 1.7 KB interpreter or a fabric with a signed bound; Facet
+is its own wire and composes with other engines; abstain, human routing, receipts, and anti rollback are
+built in where comparators need glue.
 
 **Honest scope.** The verdict follows the rubric even where the embedded reading of the same evidence
 would favor PrismPath (A7), because the rubric was fixed first. One MCU family was reached for the OPA
