@@ -47,14 +47,8 @@
     }
   },
   "unclassified_needs_triage": [
-    "run_sprint.py",
     "mission_control/",
     "analysis.py",
-    "swarm_runner.py",
-    "swarm_exporter.py",
-    "hermes_swarm.py",
-    "orchestrator.py",
-    "sprint_flow.py",
     "chat_agent.py",
     "ledger_runner.py"
   ],
@@ -78,5 +72,14 @@
       "coincident_critical"
     ]
   },
-  "_adapters_note": "Domain adapters live in ../adapters/<domain>/ (migrated 2026-07-23). The published prismpath/ package is core-only; Signal-1 scans core_modules for domain_nouns. Each adapter conforms to adapters/ADAPTER_GUIDE.md."
+  "_adapters_note": "Domain adapters live in ../adapters/<domain>/ (migrated 2026-07-23). The published prismpath/ package is core-only; Signal-1 scans core_modules for domain_nouns. Each adapter conforms to adapters/ADAPTER_GUIDE.md.",
+  "orchestration_fallback": [
+    "run_sprint.py",
+    "swarm_runner.py",
+    "swarm_exporter.py",
+    "hermes_swarm.py",
+    "orchestrator.py",
+    "sprint_flow.py"
+  ],
+  "_orchestration_note": "The sprint and swarm machinery: the fallback orchestration layer for an organisation without one of its own (docs/design/control-plane.md). Kept in the package deliberately; not core, not an adapter, not gated by Signal-1."
 }

@@ -5,7 +5,10 @@
 Everything above is the format: the spec, the kernel, the toolchain. Everything below is what
 we actually run on top of it: the control plane Crystal Warden Labs uses to build real software
 with a local agent swarm. None of it is required by the format; it's here as proof the format
-holds up under real use. Its examples (browser gates, the local swarm sprint loop) are specific to our
+holds up under real use, and as a fallback: an organisation that already has an orchestration
+layer keeps it and runs PrismPath underneath, and one that lacks one can start with the sprint and
+swarm machinery here (`run_sprint.py`, `swarm_runner.py`, `swarm_exporter.py`, `hermes_swarm.py`,
+`orchestrator.py`, `sprint_flow.py`, `gates.py`) until it outgrows it. Its examples (browser gates, the local swarm sprint loop) are specific to our
 setup, not yours.
 
 ## The two layers
