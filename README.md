@@ -49,6 +49,8 @@ to end: **[docs/guides/tour.md](docs/guides/tour.md)**.
 
 ## Go deeper
 
+- **The whole system on one page**: who touches what, where every part lives, and what keeps the many
+  implementations of one idea in agreement. [system map](docs/SYSTEM_MAP.md)
 - **Figueroa quantization**, the decision preserving map from a reading to its minimum sufficient statistic
   (any representative of a cell routes identically). [paper](docs/research/paper-facet-figueroa-quantization.md)
 - **The Facet wire**, self framing decision symbols with per packet Merkle roots, readable by standard

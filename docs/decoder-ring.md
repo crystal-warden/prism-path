@@ -534,7 +534,13 @@ prismpath plugins     # list gate plugins
 prismpath ci-report   # CI-shaped output
 prismpath ledger      # the Flow-Ledger (incl. anchoring)
 prismpath lsp         # language server for editors
+prismpath swap        # signed policy packs: keygen, pack, envelope, verify, swap, attest
+prismpath facet       # the Facet wire: quantize, encode, decode a reading against a flow
+prismpath context     # the proven facts about a flow, as grounding for an agent editing it
 ```
+
+`prismpath --help` prints these grouped by who runs them (process owner, engineer, operator,
+evaluator); [`docs/SYSTEM_MAP.md`](SYSTEM_MAP.md) is the map by persona.
 
 ### Python modules by subsystem
 
@@ -565,10 +571,10 @@ prismpath lsp         # language server for editors
 [`deferral.py`](../prismpath/deferral.py) · [`cli_worker.py`](../prismpath/cli_worker.py) ·
 [`llm_local.py`](../prismpath/llm_local.py) · [`otel.py`](../prismpath/otel.py)
 
-**Control plane**: [`run_sprint.py`](../prismpath/run_sprint.py) ·
-[`gates.py`](../prismpath/gates.py) · [`orchestrator.py`](../prismpath/orchestrator.py) ·
-[`mission_control/`](../prismpath/mission_control/) ·
-[`composer.py`](../prismpath/composer.py)
+**Control plane**: [`mission_control/`](../prismpath/mission_control/) (the operator's console:
+observe, control, events, prove; [API guide](guides/mission-control-api.md)) ·
+[`composer.py`](../prismpath/composer.py) · [`gates.py`](../prismpath/gates.py) ·
+[`run_sprint.py`](../prismpath/run_sprint.py) · [`orchestrator.py`](../prismpath/orchestrator.py)
 
 **Interop**: [`langgraph_import.py`](../prismpath/langgraph_import.py) ·
 [`graph_export.py`](../prismpath/graph_export.py) · [`lsp.py`](../prismpath/lsp.py)
@@ -584,14 +590,21 @@ prismpath lsp         # language server for editors
 | [`prismpath/examples/`](../prismpath/examples/README.md) | curated example flows |
 | [`prismpath/gallery/`](../prismpath/gallery/README.md) | templates for `prismpath init` |
 | [`prismpath/benchmark/`](../prismpath/benchmark/README.md) | the N=301 routing suite + reproducer |
-| [`prismpath/comparisons/`](../prismpath/comparisons/README.md) | the LangGraph/CrewAI head to head |
+| [`prismpath/comparisons/`](../prismpath/comparisons/README.md) | two harnesses: the LangGraph/CrewAI routing head to head, and the pre registered comparison against OPA, Cedar, Cerbos, OpenFGA, and Openlane ([verdict](../prismpath/comparisons/VERDICT.md)) |
 | [`prismpath/editor/`](../prismpath/editor/README.md) | editor integrations |
 | [`prismpath/flows/`](../prismpath/flows/) | reference flows (program data) |
 | [`prismpath/policies/`](../prismpath/policies/) | the statutory floor + the P1 lockfile |
 | [`adapters/telemetry/`](../adapters/telemetry/) | decision-preserving telemetry codec |
 | [`adapters/fusion/`](../adapters/fusion/) | the decision fusion plane |
+| [`adapters/compliance/`](../adapters/compliance/README.md) | the GRC adjudication adapter: machine checkable controls, evidence typed verdicts, OSCAL |
+| [`prismpath-hw/`](../prismpath-hw/README.md) | the C target, the `.ppt` compiler and format, the fabric RTL, four MCU ISAs, the mesh demos |
+| [`prismpath-ebpf/`](../prismpath-ebpf/README.md) | the interpreter in the Linux kernel (XDP and TC), the loader, receipt sealing |
+| [`prismpath-rs/`](../prismpath-rs/README.md), [`prismpath-telemetry-rs/`](../prismpath-telemetry-rs/README.md), [`prismpath-hotswap-rs/`](../prismpath-hotswap-rs/README.md), [`prismpath-preflight/`](../prismpath-preflight/README.md), [`prismpath-facet-bridge/`](../prismpath-facet-bridge/README.md) | the Rust crates: kernel, Facet wire, signed packs, the adoption gate, type bindings |
+| [`integrations/`](../integrations/README.md) | signed policy delivery (Zarf, UDS), the Vector codec, the Wireshark dissector, embedding the C target |
+| [`formal/`](../formal/README.md) | the Lean 4 development proving Figueroa quantization within its declared domain |
 | [`tools/arch_guard.py`](../tools/arch_guard.py) | boundary enforcement (Signal-1) |
 | [`tools/docs_health.py`](../tools/docs_health.py) | doc/claim coverage checks |
+| [`tools/ledger_lint.py`](../tools/ledger_lint.py), [`tools/arith_lint.py`](../tools/arith_lint.py) | the evidence ledger's schema gate and the cross artifact arithmetic gate |
 | [`research/`](../research/) | exploratory scripts behind the evidence ledger |
 
 ---
