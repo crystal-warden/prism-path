@@ -242,3 +242,20 @@ def _ev(node, ctx, depth: int):
     if isinstance(node, (ast.List, ast.Tuple)):   # literal collection, e.g. `x in [1,2,3]`
         return [_ev(e, ctx, depth + 1) for e in node.elts]
     raise PredicateError(f"unsupported predicate syntax near: {type(node).__name__}")
+
+
+def expr_ast(cond: str):
+    """The AST expression of a deterministic `when` condition, or None for keyword catch alls,
+    non deterministic conditions, and anything that does not parse. The one parse the analyzer,
+    the Level M classifier, and the model checker all share (it lives here so none of them has to
+    import the other)."""
+    import ast as _ast
+    if not is_deterministic(cond):
+        return None
+    expr = _expr_of(cond)
+    if expr.lower() in ALWAYS or expr.lower() in NEVER:
+        return None
+    try:
+        return fold_unary_signs(_ast.parse(expr, mode="eval").body)
+    except (SyntaxError, ValueError):
+        return None

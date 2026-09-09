@@ -88,12 +88,6 @@ class Graph:
     nodes: Dict[str, Node]
     meta: Dict[str, str] = field(default_factory=dict)  # frontmatter beyond name/start (e.g. packing)
 
-    def validate(self) -> List[str]:
-        """Backward-compatible error list. The full static analysis (errors + warnings) lives in
-        `prismpath.analysis.analyze`; this returns only the error-severity messages as strings."""
-        from prismpath import analysis   # local import: parser stays dependency-light
-        return [f"node '{f.node}': {f.message}" if f.node else f.message
-                for f in analysis.analyze(self) if f.severity == "error"]
 
 
 def parse(text: str) -> Graph:
@@ -163,3 +157,17 @@ def parse_file(path: str) -> Graph:
             f"PRISMPATH_MAX_FLOW_BYTES ({MAX_FLOW_BYTES})")
     with open(path, encoding="utf-8") as f:
         return parse(f.read())
+
+
+def reachable(graph) -> set:
+    """Node names reachable from the start node by any edge (graph traversal only, no predicate
+    evaluation). Shared by the analyzer, the Level M classifier, and the model checker."""
+    seen, stack = set(), [graph.start]
+    while stack:
+        cur = stack.pop()
+        if cur in seen or cur not in graph.nodes:
+            continue
+        seen.add(cur)
+        for target, _cond in graph.nodes[cur].edges:
+            stack.append(target)
+    return seen

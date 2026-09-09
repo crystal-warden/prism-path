@@ -16,6 +16,7 @@ from collections import defaultdict
 
 from prismpath.parser import parse_file
 from prismpath import embedder
+from prismpath import analysis
 
 # (current_node, outcome_text, expected_target)
 CASES = [
@@ -64,7 +65,7 @@ def embed_route(outcome, edges, cond_embs):
 def main():
     g = parse_file("prismpath/flows/bugfix.md")
     print("flow:", g.name, "| nodes:", list(g.nodes), "| start:", g.start)
-    print("validate:", g.validate() or "ok")
+    print("validate:", analysis.errors(g) or "ok")
 
     # precompute edge-condition embeddings per node
     cond_embs = {name: embedder.embed([c for _, c in n.edges], is_query=False)

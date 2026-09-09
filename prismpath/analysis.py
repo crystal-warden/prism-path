@@ -28,6 +28,8 @@ from dataclasses import dataclass
 from typing import Dict, List, Optional
 
 from prismpath import predicates
+from prismpath import level_m
+from prismpath import parser as parser_mod
 
 
 @dataclass
@@ -52,18 +54,7 @@ class Finding:
 # string; they return conservative answers — "unknown" collapses to "no finding".
 # --------------------------------------------------------------------------------------
 
-def _parse(cond: str):
-    """Return the AST expression for a deterministic `when` condition, or None (keyword
-    catch-alls / unparseable / not-deterministic)."""
-    if not predicates.is_deterministic(cond):
-        return None
-    expr = predicates._expr_of(cond)
-    if expr.lower() in predicates.ALWAYS or expr.lower() in predicates.NEVER:
-        return None
-    try:
-        return predicates.fold_unary_signs(ast.parse(expr, mode="eval").body)
-    except (SyntaxError, ValueError):
-        return None
+_parse = predicates.expr_ast          # shared with level_m and model_check (predicates.expr_ast)
 
 
 def _is_always_true(cond: str) -> bool:
@@ -191,17 +182,7 @@ def _is_always_false(cond: str) -> bool:
 # Graph helpers
 # --------------------------------------------------------------------------------------
 
-def _reachable(graph) -> set:
-    seen, stack = set(), [graph.start]
-    while stack:
-        cur = stack.pop()
-        if cur in seen or cur not in graph.nodes:
-            continue
-        seen.add(cur)
-        for tgt, _ in graph.nodes[cur].edges:
-            if tgt in graph.nodes and tgt not in seen:
-                stack.append(tgt)
-    return seen
+_reachable = parser_mod.reachable     # graph traversal lives in the parser
 
 
 def _upstream_nodes(graph, node_name: str) -> set:
@@ -924,7 +905,6 @@ def portability_tier(graph, flow_path) -> dict:
     lock: path|None, level_m: bool}. `level_m` marks the compile-to-hardware subset (SPEC §7):
     a P0 flow whose deterministic edges are all in the match-action fragment (§4.3). Decidable
     from the document + its sidecar lock — no model, no execution."""
-    from prismpath import model_check as _mc
     reach = _reachable(graph)
     semantic = []
     for name in sorted(reach):
@@ -934,7 +914,7 @@ def portability_tier(graph, flow_path) -> dict:
         for t, c in node.edges:
             if predicates.is_semantic(c):
                 semantic.append((name, t, c))
-    lm_all, _lm_bad = _mc.flow_level_m(graph)
+    lm_all, _lm_bad = level_m.flow_level_m(graph)
     if not semantic:
         return {"tier": "P0", "semantic_edges": [], "unlocked": [], "lock": None,
                 "level_m": lm_all}
@@ -985,3 +965,10 @@ def portability_tier_tree(graph, flow_path, _seen=None) -> dict:
         if order[sub["tier"]] > order[worst]:
             worst = sub["tier"]
     return {"tier": worst, "flows": flows}
+
+
+def errors(graph) -> list:
+    """The error severity findings as strings, the list `Graph.validate()` used to return before the
+    parser stopped importing the analyzer: `node 'x': message` or the bare message."""
+    return [f"node '{f.node}': {f.message}" if f.node else f.message
+            for f in analyze(graph) if f.severity == "error"]

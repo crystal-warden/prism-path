@@ -19,6 +19,7 @@ from collections import defaultdict
 from prismpath.parser import parse_file
 from prismpath.predicates import is_deterministic
 from prismpath.router import EmbeddingRouter
+from prismpath import analysis
 
 # flow file -> [(node, outcome_text, expected_target), ...]; only nodes whose chosen edge is
 # SEMANTIC are scored (a labeled target that is reached via a deterministic edge is dropped).
@@ -67,7 +68,7 @@ def main():
     grand = [0, 0]
     for flow_path, cases in CASES.items():
         g = parse_file(flow_path)
-        probs = g.validate()
+        probs = analysis.errors(g)
         print(f"\n=== {g.name} ({flow_path}) ===")
         if probs:
             print("  structural problems:", probs)

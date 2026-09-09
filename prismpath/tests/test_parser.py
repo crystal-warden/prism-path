@@ -3,6 +3,7 @@
 import pytest
 from prismpath.parser import parse, parse_file, Graph, Node, ParseError
 from prismpath import parser as _parser
+from prismpath import analysis
 
 def test_front_matter_parsing():
     text = """---
@@ -62,14 +63,14 @@ Instruction text.
 ## Next Node
 Done."""
     graph = parse(text)
-    assert graph.validate() == []
+    assert analysis.errors(graph) == []
 
     text = """## My Node
 Instruction text.
 -> next_node: always
 -> undefined_node: always"""
     graph = parse(text)
-    problems = graph.validate()
+    problems = analysis.errors(graph)
     assert problems  # non-empty: both targets are undefined
     assert any("undefined_node" in p for p in problems)
 

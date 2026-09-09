@@ -9,6 +9,13 @@ spec stable.
 ## [Unreleased]
 
 ### Changed
+- **`Graph.validate()` is gone; use `analysis.errors(graph)`.** The parser no longer imports the
+  analyzer (it was the one cycle in the kernel), the Level M classifier lives in its own module
+  `prismpath.level_m` (re exported from `model_check`, so `ppt_compile` and every caller keep their
+  names), and the shared parse and traversal helpers moved down to `predicates.expr_ast` and
+  `parser.reachable`. `prismpath.canon` holds the byte level helpers that were copied across
+  modules; nothing persisted or signed changed bytes (the frozen corpora regenerate identically).
+- **The Facet wire ships in the package as `prismpath.telemetry`** (moved from `adapters/telemetry`).
 - **Crate renamed: `facet-preflight` is now `prismpath-preflight`.** The `facet-*` prefix on
   crates.io belongs to the facet reflection ecosystem; the collision was flagged by r/rust and the
   crate moved out of that namespace the same day (same code, same contract, binary renamed to
