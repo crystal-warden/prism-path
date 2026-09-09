@@ -537,6 +537,7 @@ prismpath lsp         # language server for editors
 prismpath swap        # signed policy packs: keygen, pack, envelope, verify, swap, attest
 prismpath facet       # the Facet wire: quantize, encode, decode a reading against a flow
 prismpath context     # the proven facts about a flow, as grounding for an agent editing it
+prismpath trail       # summarise an audit log over a window: outcomes, rules, cause codes, swaps, root check
 ```
 
 `prismpath --help` prints these grouped by who runs them (process owner, engineer, operator,

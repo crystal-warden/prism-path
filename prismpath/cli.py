@@ -20,7 +20,7 @@ PERSONAS = (
      ("contract", "capability", "compile", "portable", "lock", "verify", "plugins", "ci-report", "lsp", "import",
       "calibrate", "label", "annotate", "kappa", "centroids")),
     ("Operator: run the system day to day, swap and attest policy (Mission Control is the console; this is the scripted path)",
-     ("run", "resume", "compose", "swap")),
+     ("run", "resume", "compose", "swap", "trail")),
     ("Evaluator: anchor, verify, and read the evidence",
      ("ledger", "facet")),
 )
@@ -260,9 +260,14 @@ def build_parser() -> argparse.ArgumentParser:
     swap_parser.add_argument('--envelope', help='envelope base path without .json/.sig (swap/attest)')
     swap_parser.add_argument('--caps', help='comma list k=v envelope caps (envelope), e.g. atoms=1024,nodes=256')
     swap_parser.add_argument('--revoked', help='revocation list JSON of key_ids (verify/swap)')
+    swap_parser.add_argument('--overlay-of', dest='overlay_of', default=None,
+                             help='pack: name the policy of record this pack temporarily overrides; attest shows it as overlay_of')
     swap_parser.add_argument('--allow-unsigned', dest='allow_unsigned', action='store_true',
                              help='demo escape hatch: swap an unsigned image, stamped in the audit log')
     swap_parser.set_defaults(func=swap_cmd)
+
+    from prismpath import trail as _trail
+    _trail.add_parser(subparsers)
 
     facet_parser = subparsers.add_parser(
         'facet', help='Facet telemetry: decision-preserving quantization, wire encoding, and stream decoding')
@@ -1177,7 +1182,7 @@ def swap_cmd(args):
                 print('pack needs --ppt --priv --pub', file=sys.stderr)
                 return 2
             m = pp.build_pack(args.ppt, _parse_fields(args.fields), args.version,
-                              args.envelope_id, args.priv, args.pub[0])
+                              args.envelope_id, args.priv, args.pub[0], overlay_of=args.overlay_of)
             print(_json.dumps(m, indent=1))
             return 0
         if a == 'verify':

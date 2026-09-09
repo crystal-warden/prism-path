@@ -74,20 +74,35 @@ Where this pattern does and does not reach:
   fail safe with cause 64. If you need a timed reversion on a device, the host performs the second
   swap when the timer fires; the scheduler can drive it.
 
-What is not yet there: nothing marks a pack as an operator overlay or tells the owner's policy of
-record that one is in force. The version floor means the owner's next version wins when it lands. An
-"overlay in force" line on `attest` is the open design item; until then, name your overlay flows so
-the trail reads plainly.
+Marking the overlay so the owner can see it: pack it with `--overlay-of <policy of record>`. The name
+rides the signed manifest, the host carries it into its active record, and `attest` prints it as
+`overlay_of`, so anyone reading the attestation or the trail sees that a short lived change is in
+force and which baseline it overrides. It changes nothing about verification or the version floor;
+the owner's next version still wins when it lands.
+
+```bash
+prismpath swap pack --ppt overlay.ppt --fields ... --version 2 --overlay-of network_admission --priv authority.priv --pub authority.pub
+```
 
 ## 4. Reading the trail
 
-Every decision leaves a receipt with its cause code, Merkle rooted per session and anchored. What you
-read today: the console's `/interactions` and `/prove/audit`, the kernel and fabric receipt journals
-sealed by `prismpath-ebpf/seal_receipts.c`, and the `ledger` commands the evaluator uses
-(`prismpath ledger verify`). What is missing for the operator specifically is a summarising verb, what
-decisions shifted over a window and why, in cause code terms; the decision delta trail in
-`prismpath-ebpf/decision-delta-demo/` is that signal, and a `trail` command over the audit log is the
-next thing this guide should be able to point at.
+Every decision leaves a receipt with its cause code, Merkle rooted per session and anchored. The
+operator's read side is `trail`:
+
+```bash
+prismpath trail run.audit.jsonl                  # everything: decisions by outcome, rule, cause; swaps; attestations
+prismpath trail run.audit.jsonl --last 200       # the most recent 200 events
+prismpath trail run.audit.jsonl --since 2026-09-09T00:00:00Z --json
+```
+
+It reads the append only log `prismpath.audit_log` writes, checks that the Merkle root still verifies,
+and summarises the window in cause code terms: how many decisions, which outcomes and rules, which
+causes (0 clean, 34 the worker asked for a human, 36 nothing matched, 64 state went stale, 66 a swap
+reset the resident state, and the rest of the registry), and every swap, refusal, rollback, and
+attestation with its overlay line. A cause that starts climbing is the signal to look at the policy;
+a root that no longer matches an anchored one is the signal that the log was edited. The console's
+`/interactions` and `/prove/audit`, the kernel and fabric receipt journals sealed by
+`prismpath-ebpf/seal_receipts.c`, and the evaluator's `ledger verify` sit beside it.
 
 ## 5. Feeding back to the owner
 

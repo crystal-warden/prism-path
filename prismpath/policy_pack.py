@@ -252,9 +252,15 @@ def build_manifest(image: bytes, fields: Dict[str, str], version: int,
 
 
 def build_pack(ppt_path: str, fields: Dict[str, str], version: int, envelope_id: str,
-               priv_path: str, pub_path: str, packing: Optional[dict] = None) -> dict:
+               priv_path: str, pub_path: str, packing: Optional[dict] = None,
+               overlay_of: Optional[str] = None) -> dict:
     """Sign a `.ppt` into a pack: writes `<ppt>.manifest.json` + `<ppt>.manifest.sig`
     beside the (untouched) image. Returns the manifest.
+
+    `overlay_of` (optional) names the policy of record this pack temporarily overrides (an
+    operator's short lived change). It rides the signed manifest, is carried into the host's
+    active record, and `attest` prints it, so the owner of the baseline can see an overlay is in
+    force. It changes nothing about verification or the version floor.
 
     `packing` (optional) declares a wire-packing profile whose baked artifact rides the pack,
     e.g. {"profile": "spiral", "sidecar_sha256": <hex of `<ppt>.spiral`>} — built by the
@@ -272,6 +278,8 @@ def build_pack(ppt_path: str, fields: Dict[str, str], version: int, envelope_id:
             raise ValueError("packing: only {'profile': 'spiral', 'sidecar_sha256': ...} is defined")
         manifest["packing"] = {"profile": "spiral",
                                "sidecar_sha256": packing["sidecar_sha256"]}
+    if overlay_of:
+        manifest["overlay_of"] = str(overlay_of)
     priv = _load_private(priv_path)
     sig = priv.sign(canonical_bytes(manifest))
     with open(ppt_path + ".manifest.json", "w") as f:

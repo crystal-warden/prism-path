@@ -119,6 +119,7 @@ class PolicyHost:
                           "key_id": manifest.get("key_id"),
                           "envelope_id": manifest.get("envelope_id"),
                           "unsigned": bool(manifest.get("unsigned")),
+                          "overlay_of": manifest.get("overlay_of"),
                           "counts": staged, "image": image, "since": _now(),
                           "ppt_path": os.path.abspath(ppt_path)}
             self._prev, self._active = self._active, new_active
@@ -129,7 +130,8 @@ class PolicyHost:
                 "from_hash": self._prev["sha256"] if self._prev else None,
                 "to_hash": to_hash, "version": manifest.get("version"),
                 "key_id": manifest.get("key_id"), "envelope_id": manifest.get("envelope_id"),
-                "unsigned": bool(manifest.get("unsigned")), "result": "accepted"})
+                "unsigned": bool(manifest.get("unsigned")), "overlay_of": manifest.get("overlay_of"),
+                "result": "accepted"})
             return {"ok": True, **self.active()}
 
     def active(self) -> dict:
@@ -137,7 +139,8 @@ class PolicyHost:
             return {"active": None}
         a = self._active
         return {"active": a["sha256"], "version": a["version"], "since": a["since"],
-                "unsigned": a["unsigned"], "envelope_id": a["envelope_id"]}
+                "unsigned": a["unsigned"], "envelope_id": a["envelope_id"],
+                "overlay_of": a.get("overlay_of")}
 
     def rollback(self) -> dict:
         """Restore the last-known-good policy (one deep). Audited; does NOT lower the version
@@ -155,7 +158,8 @@ class PolicyHost:
         """Append a point-in-time attestation of the active policy to the ledger."""
         a = self.active()
         self.audit.append("policy_host", "attestation",
-                          {"active": a.get("active"), "version": a.get("version"), "ts": _now()})
+                          {"active": a.get("active"), "version": a.get("version"),
+                           "overlay_of": a.get("overlay_of"), "ts": _now()})
         return a
 
     def anchor_attestations(self, out_dir: str, label: str) -> dict:

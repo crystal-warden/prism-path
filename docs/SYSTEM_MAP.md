@@ -39,7 +39,7 @@ is the same struct on the wire, in the kernel, and on the fabric.
 |---|---|---|---|
 | process owner | the policy of record, long term change management | the flow document, `prismpath/examples/`, `docs/guides/authoring.md` | `init`, `validate`, `test`, `graph`, `lint`, `context` |
 | engineer | establish the interface once, calibrate for deployment, deliver | `contract` output, the kernels, CI, the pack and envelope | `contract`, `capability`, `compile`, `portable`, `lock`, `verify`, `plugins`, `ci-report`, `lsp`, `import`, `calibrate`, `label`, `annotate`, `kappa`, `centroids`, `swap keygen`, `swap envelope`, `swap pack` |
-| operator | day to day: monitor, assess for policy mutation, author short lived changes | Mission Control (`prismpath/mission_control/`, `docs/guides/mission-control-api.md`), the PolicyHost | `run`, `resume`, `compose`, `swap swap`, `swap attest`; see `docs/guides/operator.md` |
+| operator | day to day: monitor, assess for policy mutation, author short lived changes | Mission Control (`prismpath/mission_control/`, `docs/guides/mission-control-api.md`), the PolicyHost | `run`, `resume`, `compose`, `swap swap`, `swap attest`, `trail`; see `docs/guides/operator.md` |
 | evaluator | after the fact: was the decision right, and can it be proven | receipts, the audit trail, ledger anchors | `ledger` (anchor, upgrade, verify, export-request, relay-stamp, import-proofs, rfc3161), `swap verify`, `facet decode` |
 
 `prismpath --help` prints the commands in these groups.
@@ -48,7 +48,7 @@ is the same struct on the wire, in the kernel, and on the fabric.
 
 | directory | what it is | persona |
 |---|---|---|
-| `prismpath/` | the Python reference: parser, predicates, engine, cause registry, static analysis and model checking, routing tiers, guard, signed pack and PolicyHost, audit log and ledgers, the CLI, Mission Control | all |
+| `prismpath/` | the Python reference: parser, predicates, engine, cause registry, static analysis and model checking, routing tiers, guard, signed pack and PolicyHost, audit log and ledgers, the CLI, Mission Control. Also the sprint and swarm machinery (`run_sprint.py`, `swarm_*.py`, `orchestrator.py`, `gates.py`): the fallback orchestration layer for an organisation without one of its own, not required by the format | all |
 | `prismpath/portable/` | the JS kernel and the frozen conformance corpus every kernel is judged by | engineer |
 | `prismpath-rs/`, `prismpath-go/` | the P0 kernel in Rust and Go | engineer |
 | `prismpath-hw/` | the C target `interp.c`, the `.ppt` compiler `ppt_compile.py`, `TABLE_FORMAT.md`, the fabric RTL, the MCU firmware for four ISAs, the mesh demos | engineer, operator |
@@ -122,7 +122,8 @@ swap migration (row #131). The registry is append only and its hash rides the re
 3. The operator swaps the pack in; the PolicyHost verifies the signature, the envelope, and the
    version floor, flips atomically, and writes one audit event either way. A short lived change is
    written as policy semantics with an `on timeout` edge back to the baseline rather than as pack
-   metadata; see `docs/guides/operator.md`.
+   expiry; the pack names the policy of record it overrides (`--overlay-of`) and `attest` shows it.
+   `trail` is the operator's read side of the receipts. See `docs/guides/operator.md`.
 4. The evaluator reads the receipts: every decision with its cause, Merkle rooted, anchored to a
    timestamp a third party can verify without trusting the emitter.
 
