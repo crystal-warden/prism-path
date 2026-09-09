@@ -1,0 +1,157 @@
+{
+ "format": "PPT",
+ "version": 1,
+ "max_steps": 25,
+ "fields": {
+  "sensor_ok": 0,
+  "armed": 1,
+  "temp_c": 2,
+  "pressure_kpa": 3
+ },
+ "intern": {
+  "": 0
+ },
+ "atoms": [
+  {
+   "i": 0,
+   "field": "sensor_ok",
+   "op": "==",
+   "type": "bool",
+   "val": 0
+  },
+  {
+   "i": 1,
+   "field": "armed",
+   "op": "truthy",
+   "type": "none",
+   "val": 0
+  },
+  {
+   "i": 2,
+   "field": "temp_c",
+   "op": ">=",
+   "type": "int",
+   "val": 150
+  },
+  {
+   "i": 3,
+   "field": "pressure_kpa",
+   "op": ">=",
+   "type": "int",
+   "val": 900
+  },
+  {
+   "i": 4,
+   "field": "temp_c",
+   "op": ">=",
+   "type": "int",
+   "val": 120
+  },
+  {
+   "i": 5,
+   "field": "pressure_kpa",
+   "op": ">=",
+   "type": "int",
+   "val": 750
+  },
+  {
+   "i": 6,
+   "field": "temp_c",
+   "op": "<",
+   "type": "int",
+   "val": 120
+  },
+  {
+   "i": 7,
+   "field": "pressure_kpa",
+   "op": "<",
+   "type": "int",
+   "val": 750
+  },
+  {
+   "i": 8,
+   "field": "sensor_ok",
+   "op": "truthy",
+   "type": "none",
+   "val": 0
+  }
+ ],
+ "start": 0,
+ "colors_present": false,
+ "stateful": false,
+ "migration": null,
+ "safe_node": null,
+ "wcet_cycles": 24,
+ "nodes": [
+  {
+   "i": 0,
+   "name": "decide",
+   "color": 0,
+   "edges": [
+    {
+     "target": 1,
+     "condition": "when (sensor_ok == False) and (armed)",
+     "program": [
+      "ATOM 0",
+      "ATOM 1",
+      "AND"
+     ]
+    },
+    {
+     "target": 2,
+     "condition": "when (temp_c >= 150) or (pressure_kpa >= 900)",
+     "program": [
+      "ATOM 2",
+      "ATOM 3",
+      "OR"
+     ]
+    },
+    {
+     "target": 3,
+     "condition": "when (temp_c >= 120) or (pressure_kpa >= 750)",
+     "program": [
+      "ATOM 4",
+      "ATOM 5",
+      "OR"
+     ]
+    },
+    {
+     "target": 4,
+     "condition": "when (temp_c < 120) and (pressure_kpa < 750) and (sensor_ok)",
+     "program": [
+      "ATOM 6",
+      "ATOM 7",
+      "AND",
+      "ATOM 8",
+      "AND"
+     ]
+    }
+   ]
+  },
+  {
+   "i": 1,
+   "name": "r1_escalate_human",
+   "color": 0,
+   "edges": []
+  },
+  {
+   "i": 2,
+   "name": "r2_deny",
+   "color": 0,
+   "edges": []
+  },
+  {
+   "i": 3,
+   "name": "r3_observe",
+   "color": 0,
+   "edges": []
+  },
+  {
+   "i": 4,
+   "name": "r4_allow",
+   "color": 0,
+   "edges": []
+  }
+ ],
+ "host_side_edges": []
+}

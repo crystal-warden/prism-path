@@ -4,7 +4,7 @@
   "expected": "allow",
   "glue": null,
   "grade": "NATIVE",
-  "harness_commit": "e9dd59d",
+  "harness_commit": "54cd707",
   "idiomatic": true,
   "match": true,
   "measurements": {
@@ -18,14 +18,15 @@
       "c_target": 4,
       "ppt-rp2350_1_rp2350-arm_PPTM-v1": 4,
       "ppt-rp2350_1_rp2350-riscv_PPTM-v1": 4,
-      "python": 4
+      "python": 4,
+      "zynq7020_fabric_finale_ps_path": 4
     }
   },
-  "notes": "One compiled image (172 B, sha256 cca654bd300135c0...) decided the same scenario reading on: host Python (target 4), the C reference (target 4), in kernel eBPF via BPF_PROG_TEST_RUN on aarch64 (this host) and x86_64 (the Protectli, object rebuilt there), both 23/23 ALL PASS over the corpus (kernel_*.log), and on the RP2350's Cortex-M33 and Hazard3 RISC-V cores from one firmware source (mcu_*.json; board targets [4, 4]). Every leg agrees. The FPGA fabric and ESP32 Xtensa legs are not part of this run (prior rows #108, #98 certify the same interpreter on them); the pre registered NATIVE criterion, host plus kernel plus MCU class, is met.",
+  "notes": "One compiled image (172 B, sha256 cca654bd300135c0...) decided the same scenario reading on: host Python (target 4), the C reference (target 4), in kernel eBPF via BPF_PROG_TEST_RUN on aarch64 (this host) and x86_64 (the Protectli, object rebuilt there), both 23/23 ALL PASS over the corpus (kernel_*.log), and on the RP2350's Cortex-M33 and Hazard3 RISC-V cores from one firmware source (mcu_*.json; board targets [4, 4]), and on the Zynq-7020 fabric through the certified PS evaluate path of the resident finale overlay (target 4, cause 0, attach without reconfiguration, fabric_finale_attach.log). Every leg agrees. The ESP32 Xtensa leg is not part of this run (row #98 certifies the same interpreter on it); the pre registered NATIVE criterion, host plus kernel plus MCU class, is met with the fabric as a sixth substrate class.",
   "observed": "allow",
   "policy": "sensor_interlock",
-  "run_at": "2026-09-08T23:41:45Z",
+  "run_at": "2026-09-09T00:07:24Z",
   "scenario": "allow_nominal_1",
   "system": "prismpath",
-  "system_version": "repo@e9dd59d"
+  "system_version": "repo@54cd707"
 }

@@ -1,0 +1,218 @@
+{
+ "format": "PPT",
+ "version": 1,
+ "max_steps": 25,
+ "fields": {
+  "dst_port": 0,
+  "src_internal": 1,
+  "pkt_len": 2,
+  "protocol": 3
+ },
+ "intern": {
+  "": 0
+ },
+ "atoms": [
+  {
+   "i": 0,
+   "field": "dst_port",
+   "op": "==",
+   "type": "int",
+   "val": 23
+  },
+  {
+   "i": 1,
+   "field": "dst_port",
+   "op": "==",
+   "type": "int",
+   "val": 22
+  },
+  {
+   "i": 2,
+   "field": "src_internal",
+   "op": "truthy",
+   "type": "none",
+   "val": 0
+  },
+  {
+   "i": 3,
+   "field": "dst_port",
+   "op": "==",
+   "type": "int",
+   "val": 53
+  },
+  {
+   "i": 4,
+   "field": "pkt_len",
+   "op": "<=",
+   "type": "int",
+   "val": 512
+  },
+  {
+   "i": 5,
+   "field": "pkt_len",
+   "op": ">",
+   "type": "int",
+   "val": 512
+  },
+  {
+   "i": 6,
+   "field": "dst_port",
+   "op": "==",
+   "type": "int",
+   "val": 443
+  },
+  {
+   "i": 7,
+   "field": "pkt_len",
+   "op": ">=",
+   "type": "int",
+   "val": 1400
+  },
+  {
+   "i": 8,
+   "field": "protocol",
+   "op": "==",
+   "type": "int",
+   "val": 1
+  }
+ ],
+ "start": 0,
+ "colors_present": false,
+ "stateful": false,
+ "migration": null,
+ "safe_node": null,
+ "wcet_cycles": 35,
+ "nodes": [
+  {
+   "i": 0,
+   "name": "decide",
+   "color": 0,
+   "edges": [
+    {
+     "target": 1,
+     "condition": "when dst_port == 23",
+     "program": [
+      "ATOM 0"
+     ]
+    },
+    {
+     "target": 2,
+     "condition": "when (dst_port == 22) and (src_internal)",
+     "program": [
+      "ATOM 1",
+      "ATOM 2",
+      "AND"
+     ]
+    },
+    {
+     "target": 3,
+     "condition": "when dst_port == 22",
+     "program": [
+      "ATOM 1"
+     ]
+    },
+    {
+     "target": 4,
+     "condition": "when (dst_port == 53) and (pkt_len <= 512)",
+     "program": [
+      "ATOM 3",
+      "ATOM 4",
+      "AND"
+     ]
+    },
+    {
+     "target": 5,
+     "condition": "when (dst_port == 53) and (pkt_len > 512)",
+     "program": [
+      "ATOM 3",
+      "ATOM 5",
+      "AND"
+     ]
+    },
+    {
+     "target": 6,
+     "condition": "when dst_port == 443",
+     "program": [
+      "ATOM 6"
+     ]
+    },
+    {
+     "target": 7,
+     "condition": "when pkt_len >= 1400",
+     "program": [
+      "ATOM 7"
+     ]
+    },
+    {
+     "target": 8,
+     "condition": "when protocol == 1",
+     "program": [
+      "ATOM 8"
+     ]
+    },
+    {
+     "target": 9,
+     "condition": "else",
+     "program": [
+      "TRUE"
+     ]
+    }
+   ]
+  },
+  {
+   "i": 1,
+   "name": "r1_deny",
+   "color": 0,
+   "edges": []
+  },
+  {
+   "i": 2,
+   "name": "r2_allow",
+   "color": 0,
+   "edges": []
+  },
+  {
+   "i": 3,
+   "name": "r3_deny",
+   "color": 0,
+   "edges": []
+  },
+  {
+   "i": 4,
+   "name": "r4_allow",
+   "color": 0,
+   "edges": []
+  },
+  {
+   "i": 5,
+   "name": "r5_deny",
+   "color": 0,
+   "edges": []
+  },
+  {
+   "i": 6,
+   "name": "r6_allow",
+   "color": 0,
+   "edges": []
+  },
+  {
+   "i": 7,
+   "name": "r7_observe",
+   "color": 0,
+   "edges": []
+  },
+  {
+   "i": 8,
+   "name": "r8_allow",
+   "color": 0,
+   "edges": []
+  },
+  {
+   "i": 9,
+   "name": "r9_observe",
+   "color": 0,
+   "edges": []
+  }
+ ],
+ "host_side_edges": []
+}

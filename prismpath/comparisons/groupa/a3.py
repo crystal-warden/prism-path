@@ -54,7 +54,7 @@ def run_opa() -> None:
                             "300 KB usable) 136 KB of module plus 128 KB of minimum memory plus the runtime does not leave a working heap; an "
                             "ESP32-S3 with PSRAM is the plausible target. Not attempted on hardware in this session (no boards attached), so the "
                             "grade is NOT on the evidence in hand and the attempt is named for the hardware session. The PrismPath comparison "
-                            "point: the same policy is a 168 B table image decided by a 1.7 KB interpreter on an 8 bit AVR (ledger #92)."))
+                            "point: the same policy is a 224 B table image decided by a 1.7 KB interpreter class on an 8 bit AVR (ledger #92)."))
 
 
 def run_cedar() -> None:
@@ -84,6 +84,13 @@ def write_prismpath() -> None:
     ev = RESULTS / "prismpath" / "evidence" / "A3"
     vectors = json.loads((ev / "a3_vectors.json").read_text())["vectors"]
     mcus = {f.stem[4:]: json.loads(f.read_text()) for f in sorted(ev.glob("mcu_*.json"))}
+    fabric = {}
+    fab_log = ev / "fabric_finale_attach.log"
+    if fab_log.exists():
+        for line in fab_log.read_text().splitlines():
+            if line.startswith("A3ROW "):
+                r = json.loads(line[6:])
+                fabric[(r["policy"], r["scenario"])] = r
     kernels = {}
     for arch in ("aarch64_gx10", "x86_64_protectli"):
         text = (ev / f"kernel_{arch}.log").read_text()
@@ -99,6 +106,10 @@ def write_prismpath() -> None:
             row = next(r for r in m["rows"] if r["policy"] == pid and r["scenario"] == sid)
             legs[ident] = row["board_target"]
             agree = agree and row["agree"]
+        if (pid, sid) in fabric:
+            fr = fabric[(pid, sid)]
+            legs["zynq7020_fabric_finale_ps_path"] = fr["fabric_target"]
+            agree = agree and fr["agree"]
         agree = agree and all(kernels.values())
         grade = "NATIVE" if agree else "NOT"
         observed = v["expected_outcome"] if agree else "divergent"
@@ -110,9 +121,13 @@ def write_prismpath() -> None:
                             f"Python (target {v['python_target']}), the C reference (target {v['c_target']}), in kernel eBPF via "
                             f"BPF_PROG_TEST_RUN on aarch64 (this host) and x86_64 (the Protectli, object rebuilt there), both 23/23 ALL PASS "
                             f"over the corpus (kernel_*.log), and on the RP2350's Cortex-M33 and Hazard3 RISC-V cores from one firmware source "
-                            f"(mcu_*.json; board targets {[legs[k] for k in mcus]}). Every leg agrees. The FPGA fabric and ESP32 Xtensa legs are "
-                            "not part of this run (prior rows #108, #98 certify the same interpreter on them); the pre registered NATIVE "
-                            "criterion, host plus kernel plus MCU class, is met."))
+                            f"(mcu_*.json; board targets {[legs[k] for k in mcus]})"
+                            + (f", and on the Zynq-7020 fabric through the certified PS evaluate path of the resident finale overlay "
+                               f"(target {legs['zynq7020_fabric_finale_ps_path']}, cause {fabric[(pid, sid)]['cause']}, attach without "
+                               "reconfiguration, fabric_finale_attach.log)" if (pid, sid) in fabric else "")
+                            + ". Every leg agrees. The ESP32 Xtensa leg is not part of this run (row #98 certifies the same interpreter on "
+                            "it); the pre registered NATIVE criterion, host plus kernel plus MCU class, is met with the fabric as a sixth "
+                            "substrate class."))
 
 
 def main() -> int:
