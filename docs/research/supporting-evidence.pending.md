@@ -319,176 +319,105 @@ the posture and that its provenance is disclosed.
 (adapters/compliance/deterministic_checks.py: evidence_class, _evidence_rollup, check_objectives_typed;
 tests/test_evidence_provenance.py). No push (owner-gated).
 
-#### #140: Theorem I1 proven in Lean 4, and stating it found three decision preservation defects in the reference quantizer (September 2026)
+#### #140: Figueroa quantization formalized in Lean 4: thirteen theorems from the policy induced partition to the self framing wire, zero sorry, standard axioms only, bridged to the frozen corpora by 623 evaluated checks (September 2026)
 
-**Claim.** Figueroa quantization's decision preservation (PROTOCOL.md invariant I1, the paper's
-Theorem 2.2) is now a machine checked theorem over a Lean 4 model of the Level M fragment, for
-policies with integer, boolean, and string fields and well typed total readings; and the act of
-stating that theorem against the reference implementation exposed three atom forms on which the
-reference violated I1, each now fixed in the Python reference and the Rust mirror and pinned by the
-frozen corpus.
+**Claim.** The mathematics PROTOCOL.md and the Facet paper claim for Figueroa quantization is a
+machine checked development in Lean 4, proven within a declared domain: the policy induces per field
+partitions; two well typed readings with the same quantization route identically (I1, the paper's
+Theorem 2.2); routing the reconstructed representative reproduces the decision; the numeric partition
+is the coarsest interval partition refining atom truth (I1b); the shipped reference algorithm computes
+that canonical partition on every integer; the spiral index is a bijection over the cell product whose
+bands determine routes; and the Fibonacci code round trips and frames itself, one code and a whole
+stream (I2). The development is frozen with its boundary stated in formal/README.md.
 
-**Method.** Lean 4.33.1 with Mathlib v4.33.1 (formal/TOOLCHAIN.md). formal/FQ models conditions,
-first match routing, and the per field partitions derived from the policy; the numeric partition is
-given both as the reference algorithm (fine grid of point and gap cells, adjacent merge by atom truth
-vector) and as a canonical count of retained boundaries, and FQ/Bridge.lean checks by evaluation
-that the two agree on integer ranges. FQ/I1.lean proves decision_preservation: equal quantization
-implies equal route. The argument is that an atom's truth changes between k and k+1 only when k+1
-is a constant or a constant's successor, such a boundary is retained exactly when the truth vector
-changes across it, and the symbol counts retained boundaries at or below the value, so equal
-symbols leave no retained boundary between two values. Booleans are two cells; two strings with
-one symbol are either equal or both unnamed, and every string constant is named. While writing the
-partition definitions the reference's constant collection was compared with the model and tested
-directly by routing readings and their reconstructed representatives through the engine.
-
-**Result.** decision_preservation compiles with zero sorry; #print axioms lists propext,
-Classical.choice, Quot.sound only. The three reference defects, each demonstrated on a one line
-policy before the fix: numeric `x in (3, 5)` (readings 3 and 4 shared a symbol and routed
-differently), numeric `x not in (7,)` (7 and 8), and bare truthiness `x` alongside `x >= 5`
-(0 and 1); a fourth, string truthiness `name` alongside `name == 'root'` ("" and an unnamed
-string), was found from the model. Cause: `_numeric_partition` used only ordering and equality
-constants as cut points, and `_categorical_partition` had no "" constant; the Rust mirror carried
-the same omission and additionally evaluated `in` and `not in` as false in its merge. Fixed in
-adapters/telemetry/quantizer.py and prismpath-telemetry-rs/src/quantizer.rs; regression test
-adapters/telemetry/tests/test_quantizer_cut_points.py (6 tests); decisions.json frozen corpus v2
-adds three flows (numin, truthynum, strtruthy: 17 readings) with the four original flows byte
-identical in readings, routes, and Python wire bits (a new gen_wire_parity.py freezes the latter for
-the Rust cross implementation test); boundary and spiral corpora regenerate byte identically.
-Suites: prismpath/tests 723 passed, telemetry 154, fusion 153, Rust workspace 110, arch_guard clean.
-
-**Honest scope.** No shipped or measured flow uses the affected forms (every bare truthiness edge in
-the repo is on a boolean field, no numeric in list exists), so no ledger number moves; the defect
-was latent in exactly the atom forms the frozen corpus never exercised, which is the point of the
-row: implementations agreeing across substrates showed they agreed with each other, not with the
-definition. The theorem is stated over the canonical boundary count form and over well typed total
-readings; the reference algorithm's equality with that form is checked by evaluation on ranges, not
-yet proven; the generated vector bridge to the frozen corpus (milestone 2), the coarsest partition
-claim (I1b), and the reconstruct corollary (route of the representative equals route of the reading,
-which needs the retained boundaries proven sorted and duplicate free) remain open and named. The
-README and paper keep the wording "machine checked" until the vector bridge lands. Lean is not in
-the CI matrix; lake build is a documented local gate.
-
-**Provenance.** Branch formal/lean-fq, commit d3701ca (formal/FQ/{Syntax,Partition,Bridge,I1,Axioms}.lean,
-formal/TOOLCHAIN.md, formal/HANDOFF.md section 0); branch fix/quantizer-cut-points (the reference
-fix, corpus v2, regression tests, gen_wire_parity.py). No push (owner gated).
-
-#### #141: The FQ formalization completes its bridge and its wire: reconstruct corollary, coarsest interval, Fibonacci code round trip and self framing proven; 623 generated checks tie the model to the frozen corpora and the corrected reference (September 2026)
-
-**Claim.** Beyond #140's Theorem I1, the Lean model now proves the paper's statement of I1 in words
-(routing the reconstructed representative reproduces the decision), the coarsest interval property
-(I1b), and PROTOCOL.md invariant I2 for the Fibonacci wire (round trip and self framing, including a
-whole stream); and the model is tied to the code by generated, build time evaluated checks against
-the frozen predicate, decisions, and spiral corpora and the corrected reference quantizer and codec.
-
-**Method.** formal/FQ/Reconstruct.lean: the retained boundaries are strictly increasing
-(pairwise_mergeSort, dedup_sublist, nodup_dedup), a count lemma on strictly increasing lists, the
-representative of a symbol quantizes to that symbol for all three kinds, a policy's partition fields
-are distinct, then decision_preservation applied to a reading and its representative.
-formal/FQ/I1.lean: coarsest_interval from the retained filter. formal/FQ/Zeckendorf.lean on Mathlib's
-Nat.zeckendorf: body bit i stands for fib (i + 2), a terminating 1; round trip by reindexing the
-position sum to the index list and Nat.sum_zeckendorf_fib; self framing from the gap of two between
-indices (no adjacent set bits) and the greatest index always being used (the body ends in 1); the
-stream theorem by induction with fuel. formal/gen_vectors.py emits FQ/Vectors.lean, one #guard per
-check, from predicates.json v2, decisions.json v2, spiral_fusion.json, and the reference codec.
-
-**Result.** Zero sorry; every theorem depends only on propext, Classical.choice, Quot.sound
-(FQ/Axioms.lean lists decision_preservation, symbolCount_eq_truthVec, reconstruct_route,
-coarsest_interval, Zeck.decode_encode, Zeck.takeCode_encode, Zeck.decodeStream_flatMap). Generated
-checks all pass at build: 35 Level M well typed predicate cases equal the frozen expectation, 90
-frozen routes and 164 canonical symbols equal the corrected reference quantizer's on every
-decisions.json reading, 34 spiral probes, 300 Fibonacci codes byte identical to the reference's
-strings; plus the hand written Bridge checks that the reference partition algorithm and the canonical
-form agree on integer ranges.
-
-**Honest scope.** I1b is coarsest among INTERVAL partitions: with x == 5 the values 4 and 6 share a
-truth vector but not a cell, and neither the implementation nor the paper's monotone step function
-merges non adjacent cells, so the paper's phrase "coarsest partition on which every atom is
-constant" should carry the interval qualifier. The predicate bridge covers 35 of the 136 Level M
-vectors: 72 are missing field cases (the model has total readings), 13 cross kind comparisons, 15
-non scalar or float constants, 1 shape not carried; each excluded class is a stated decision, not a
-gap in the theorem. Two items stay open, both day scale: the reference list algorithm equal to the
-canonical count as a theorem (today evaluated on ranges and on the corpus), and the spiral band
-bijection. README and paper keep "machine checked" wording until the owner decides how to cite the
-theorems; Lean stays a documented local gate, not in the CI matrix.
-
-**Provenance.** Branch formal/lean-fq, commits b026a24 (bridge), a44df0a (reconstruct, I1b, dedup),
-3b06578 (Zeckendorf); formal/TOOLCHAIN.md (Lean 4.33.1, Mathlib v4.33.1 at 0df444a). No push (owner
-gated).
-
-#### #142: The reference quantizer algorithm is proven equal to the canonical form, so Theorem I1 holds of the shipped construction itself (September 2026)
-
-**Claim.** The Lean model's reference numeric partition, the fine grid of point and gap cells from the
-sorted constants with adjacent cells merged on equal truth vectors at their representatives and the
-symbol the index of the first containing cell, exactly as ported from adapters/telemetry/quantizer.py
-after the #140 correction, produces the same symbol as the canonical retained boundary count for every
-integer; therefore I1 (#140), the reconstruct corollary and I1b (#141) transfer to the reference
-algorithm without the evaluated range checks that stood in for this theorem.
-
-**Method.** formal/FQ/AlgEq.lean. Stage one: the fine grid of a strictly increasing constant list is a
-contiguous chain of integer intervals (an inductive Contig predicate; fineFrom_contig,
-fineGrid_contig). Stage two: no boundary of the constants lies strictly inside a fine cell
-(fineFrom_noInside, fineGrid_noInside), so with truth_step from I1.lean every atom is constant on a
-fine cell (truth_const_on_fine). Stage three: the merge invariant go_spec, by induction on the fine
-suffix, shows the output is a contiguous chain opening at the current cell whose later starts are
-exactly the fine starts across which the truth vector changes, using constancy to carry the truth at
-each merged cell's end. Stage four: the first containing cell of a contiguous chain is the count of
-starts at or below the value (findIdx_contig), transferred from fine cells to merged cells. Stage five:
-the merged starts and the retained boundaries have the same members (mem_fineFrom_starts against
-mem_boundaries_iff) and both are strictly increasing, so a permutation gives equal counts.
-
-**Result.** symbolAlg_eq_symbolCount and symbolAlg_eq_truthVec compile with zero sorry and depend only
-on propext, Classical.choice, Quot.sound (FQ/Axioms.lean). The Bridge range checks and the 164 corpus
-symbol checks against the Python reference stand as evaluated confirmation alongside the proof.
-
-**Honest scope.** The theorem is about the Lean port of the algorithm; the tie to the Python and Rust
-code remains the generated #guard bridge (164 symbols on the frozen corpus) and code review, not a
-verified translation. Well typed integer readings only, as throughout. The spiral band bijection is
-now the sole open formal item.
-
-**Provenance.** Branch formal/lean-fq, formal/FQ/AlgEq.lean (commit at fold time). No push (owner
-gated).
-
-#### #143: The FQ formal development is closed: spiral bijection proven, thirteen theorems audited to the standard axioms, independent kernel re-check, and the whole construction bridged to the frozen corpora (September 2026)
-
-**Claim.** The Lean formalization of Figueroa quantization now covers the full mathematical stack the
-paper and PROTOCOL.md claim for FQ and the Facet wire: the policy induces the partition, the partition
-preserves decisions, reconstruction preserves routing, the numeric partition is coarsest among interval
-partitions, the corrected reference algorithm computes the canonical partition, the spiral index is a
-bijection over the cell product whose bands determine routes, and the Fibonacci code round trips and
-frames itself; and the development is frozen with a plain statement of its boundary.
-
-**Method.** formal/FQ/Spiral.lean: the mixed radix product and the reflected Gray enumeration as
-recursive lists; gray_perm_product by pointwise permutation of the flatMap (reversal is a permutation);
-product_nodup by nodup_flatMap with disjoint heads; mem_product as Forall₂ (· < ·) against the radices;
-layout as the flatten of per route buckets; layout_perm by induction on the route list (the remaining
-buckets are unchanged once the first route's cells are removed, filter_append_perm closes); the
-bijection as nodup plus membership plus Nodup.idxOf_getElem and getElem_idxOf; bandOf by cumulative
-bucket lengths with flatten_mem_band; band_route from membership in the bucket's filter. The route
-order (reversed first appearance of the node's targets, unrouted last, only routes some cell takes)
-is defined in Lean (routesFor). Validation pass: lake build (every module, every #guard, the axiom
-audit), a grep for sorry, lake env leanchecker on every module (the toolchain's independent kernel
-re-check of the stored .olean proofs), the generated bridge regenerated from the frozen corpora, and
+**Method.** Lean 4.33.1 with Mathlib v4.33.1 at 0df444a (formal/TOOLCHAIN.md); a documented local gate,
+not in the CI matrix. formal/FQ/ models the Level M fragment (field OP const over integer, boolean,
+and string constants; in and not in over scalar lists; bare truthiness; and, or, not), first match
+routing, and the partitions: Partition and I1 (a boundary is retained exactly where the atom truth
+vector changes, the symbol counts retained boundaries at or below the value, so equal symbols leave no
+retained boundary between two values); Reconstruct (retained boundaries strictly increasing, the
+representative of a symbol quantizes to that symbol for all three kinds); AlgEq (the reference fine
+grid, adjacent merge, first containing cell algorithm, ported from adapters/telemetry/quantizer.py,
+equals the canonical count by a five stage argument over contiguous integer chains); Spiral (mixed
+radix product, reflected Gray enumeration as a permutation, route bucketed layout, index of cell and
+cell of index inverting, band of index determining route); Zeckendorf (on Mathlib's Nat.zeckendorf,
+round trip by reindexing the position sum, self framing from the gap of two between indices, the
+stream theorem by induction with fuel). formal/gen_vectors.py emits FQ/Vectors.lean, one #guard per
+check evaluated at every build, from predicates.json v2, decisions.json v2, spiral_fusion.json, and
+the reference codec. Validation pass at the freeze: lake build of every module, a grep for sorry, the
+axiom audit printed by FQ/Axioms.lean, lake env leanchecker on every module (the toolchain's
+independent kernel re-check of the stored proofs), the bridge regenerated from the frozen corpora, and
 the reference suites.
 
-**Result.** Thirteen theorems audited, all on propext, Classical.choice, Quot.sound only
-(gray_perm_product on propext and Quot.sound). Zero sorry in sources and none in the build log.
-Bridge, all passing at build: 35 Level M well typed predicate cases, 90 frozen routes, 164 canonical
-symbols equal to the corrected reference, 34 spiral probes, all 108 frozen spiral cells at the frozen
-index, band, and route with the layout derived inside Lean from the fusion policy, the Lean Gray order
-equal to the reference's iterative mixed_radix_gray on the frozen radices, and 300 Fibonacci codes
-byte identical to the reference. Reference suites on the branch: prismpath/tests 723 passed, telemetry
-154, fusion 153, cargo test --workspace 110. Kernel re-check: see the provenance commit message for
-the per module result.
+**Result.** Thirteen theorems (decision_preservation, symbolCount_eq_truthVec, coarsest_interval,
+reconstruct_route, symbolAlg_eq_symbolCount, symbolAlg_eq_truthVec, Spiral.gray_perm_product,
+Spiral.spiral_bijection, Spiral.band_route, Spiral.band_eq_route_eq, Zeck.decode_encode,
+Zeck.takeCode_encode, Zeck.decodeStream_flatMap), zero sorry in sources and in the build log, every
+theorem depending only on propext, Classical.choice, Quot.sound (gray_perm_product on propext and
+Quot.sound). Bridge, all passing at build: 35 Level M well typed predicate cases equal the frozen
+expectation; 90 frozen routes and 164 canonical symbols equal the corrected reference quantizer on
+every decisions corpus reading; 34 spiral probes; all 108 frozen spiral cells at the frozen index,
+band, and route with the layout derived inside Lean from the fusion policy; the Lean Gray order equal
+to the reference's iterative mixed_radix_gray on the frozen radices; 300 Fibonacci codes byte
+identical to the reference. Reference suites on the branch: prismpath/tests 723 passed, telemetry
+154, fusion 153, cargo test --workspace 110, arch_guard clean.
 
-**Honest scope.** The Gray adjacency property (consecutive cells differ in one digit) is a locality
-optimization and is not proven; the bijection does not need it. The route order, cell routes, and
-radices are derived in Lean but the correspondence to the Python SpiralLayout rests on the 108 cell
-bridge, not a proof about the source. The whole development is over well typed integer readings and
-is not a verified translation of the Python or Rust code; formal/README.md states every boundary. The
-development is frozen at this row: nothing further is planned for FQ in Lean, and the wording change
-from "machine checked" to "proven" in the README, paper, and PROTOCOL is an owner decision at fold
-time, now unblocked.
+**Honest scope.** Proven within the declared domain, which is stated as plainly as the theorems: well
+typed integer readings with every policy field present. Readings with missing fields (72 of the 136
+Level M corpus vectors, the engine's null semantics), cross kind comparisons (13), and float readings
+(the reference casts with int) are outside the model by decision, not by gap. This is not a verified
+translation of the Python or Rust source: the Lean algorithm is a port read against quantizer.py, and
+its agreement with the code rests on the generated checks and review, not on a proof about the source
+text. I1b is coarsest among interval partitions only; with x == 5 the values 4 and 6 share a truth
+vector but not a cell, and neither the implementation nor the paper merges non adjacent cells, so the
+paper's "coarsest partition on which every atom is constant" carries the interval qualifier. The Gray
+adjacency property (consecutive cells differ in one digit) is a locality optimization and is not
+proven; the bijection does not need it. Nothing further is planned for FQ in Lean; the wording change
+from "machine checked" to "proven within the declared domain" in README, paper, and PROTOCOL is an
+owner decision.
 
-**Provenance.** Branch formal/lean-fq: formal/FQ/Spiral.lean, formal/FQ/Axioms.lean, formal/FQ/Vectors.lean
-(regenerated), formal/gen_vectors.py, formal/README.md (the freeze statement), formal/HANDOFF.md
-(status closed). No push (owner gated).
+**Provenance.** Branch formal/lean-fq, frozen at commit 2b265f8: formal/FQ/{Syntax,Partition,Bridge,
+I1,Reconstruct,AlgEq,Zeckendorf,Spiral,Vectors,Axioms}.lean, formal/FQ.lean, formal/gen_vectors.py,
+formal/README.md (the boundary statement), formal/TOOLCHAIN.md, formal/lakefile.toml, lean-toolchain,
+lake-manifest.json. No push (owner gated).
+
+#### #141: Stating Theorem I1 against the reference quantizer found three decision preservation defects the frozen corpus had never exercised; fixed in the Python reference and the Rust mirror, corpus v2 pins them (September 2026)
+
+**Claim.** The act of writing the formal partition definitions (#140) against the shipped reference
+exposed atom forms on which the reference violated I1: two readings shared a symbol and routed
+differently. Every substrate agreed with every other because they shared the omission; agreement
+across implementations had shown they agreed with each other, not with the definition.
+
+**Method.** While porting the constant collection into Lean the reference's cut points were compared
+with the model, then each suspect form was demonstrated on a one line policy by routing a reading and
+its reconstructed representative through the engine. Cause: adapters/telemetry/quantizer.py's
+_numeric_partition took only ordering and equality constants as cut points, so in and not in members
+and the 0 of bare truthiness were not boundaries, and _categorical_partition had no "" constant for
+string truthiness; prismpath-telemetry-rs/src/quantizer.rs carried the same omission and additionally
+evaluated in and not in as false in its merge. Fix on both: every atom constant is a cut point (in and
+not in members, 0 for numeric truthiness, "" for string truthiness), the Rust merge evaluates in and
+not in. Regression test adapters/telemetry/tests/test_quantizer_cut_points.py (6 tests).
+gen_decisions_corpus.py v2 adds three flows (numin, truthynum, strtruthy; 17 readings) to
+conformance/decisions.json with the four original flows byte identical in readings, routes, and wire
+bits; gen_wire_parity.py freezes the Python wire bits for the Rust cross implementation test; the
+boundary and spiral corpora regenerate byte identically; pins updated in test_decisions_preserved.py,
+test_conformance_decisions.rs, test_xwire_parity.rs.
+
+**Result.** Three defects demonstrated before the fix, one found from the model: numeric x in (3, 5)
+(readings 3 and 4 shared a symbol, routed differently), numeric x not in (7,) (7 and 8), bare
+truthiness x beside x >= 5 (0 and 1), and string truthiness name beside name == 'root' ("" and an
+unnamed string). After the fix the corpus v2 readings route identically through quantize, code,
+decode, reconstruct on both implementations, and the Lean bridge's 164 canonical symbols equal the
+corrected reference on every reading (#140).
+
+**Honest scope.** No shipped or measured flow uses the affected forms (every bare truthiness edge in
+the repo is on a boolean field; no numeric in list exists), so no ledger number moves; the defect was
+latent in exactly the atom forms the frozen corpus never exercised, which is the finding. The corpus
+now exercises them, and a fifth form of the same kind would be caught by the theorem's statement
+before by the corpus.
+
+**Provenance.** Branch fix/quantizer-cut-points, commit e76eaf5, merged into formal/lean-fq at ab55bf9:
+adapters/telemetry/quantizer.py, prismpath-telemetry-rs/src/quantizer.rs,
+adapters/telemetry/tests/test_quantizer_cut_points.py, adapters/telemetry/gen_decisions_corpus.py,
+adapters/telemetry/gen_wire_parity.py, conformance/decisions.json v2,
+prismpath-telemetry-rs/tests/fixtures/wire_parity.json. No push (owner gated).
