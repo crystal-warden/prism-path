@@ -451,3 +451,53 @@ results/prismpath/evidence/A3/ (fabric_finale_attach.log, fabric_datapath_run.lo
 results/prismpath/evidence/A7/ (pins_network_admission.json, pins_sensor_interlock.json, sweep_*.log),
 results/prismpath/A3__*.json and A7__*.json (23 each), MATRIX.md. Instruments: Kingst LA2016 on the gx10,
 sigrok-cli with the kingst-la2016 driver. No push (owner gated).
+
+#### #147: Group B of the layer comparison, where PrismPath loses, graded and computed LOSES on all five pre registered dimensions (September 2026)
+
+**Claim.** The mandatory "where we lose" half of the pre registered comparison is on the record with the
+same rubric, result contract, and matrix generator as the Group A claims: PrismPath loses on policy
+expressiveness, formal verification of the decision engine, relationship modeling, ecosystem, and
+maturity, exactly as predicted in PREREGISTRATION.md section 8, with one comparator prediction wrong in
+the comparators' favor (Cedar's ecosystem is NATIVE, not WITH-WORK).
+
+**Method.** groupb/b.py. B1 and B3 are graded per scenario from the Phase 2 conformance rows of every
+translator (systems/<id>/generated/conformance.json), so the grades come from the runs already made
+against the corpus: a MATCH with idiomatic constructs is NATIVE, a construct the translator had to
+flatten or a path documented and costed under the glue budget is WITH-WORK, a rule the translator dropped
+or a policy it declared not expressible with no evaluation left for the engine is NOT. B2, B4, and B5 are
+documentation rows; the grade bars were written into the module before any row (B2: machine checked
+semantics of the decision engine tied to the shipped implementation; B4: three of four integration
+classes or three implementations; B5: three years, thirty contributors, a foundation home or a named
+production operator) and the sources sit beside each result (sources.txt, facts.json from the GitHub API
+on 2026-09-09).
+
+**Result.** B1 LOSES: PrismPath NOT (owner_write_1, group_read_1, contractor_group_read_1 need field
+against field comparison or set intersection, both outside the predicate language and dropped;
+manager_hours_write_1 WITH-WORK through the hierarchy flattened at authoring; four NATIVE), OPA, Cedar,
+Cerbos NATIVE 8/8 (Cerbos idiomatic=false, derived roles cannot join the negation chain), OpenFGA
+WITH-WORK (conditions plus tuples plus a caller side rule ordering shim, 120 lines, 6 hours, costed not
+built), Openlane NOT. B2 LOSES: Cedar NATIVE (cedar-spec, definitional authorizer, validator, and symbolic
+compiler in Lean 4.33.1 with proven forbid overrides, explicit permit, default deny, order independence,
+sound slicing and typing, tied to Rust by differential testing); PrismPath NOT, with the record stated
+exactly: 13 machine checked theorems about Figueroa quantization, the spiral index, and the Zeckendorf
+wire (rows #140 to #143), the WCET base case (#111), conformance certification on every substrate, and
+no proof of the evaluator's semantics; OPA, Cerbos, OpenFGA, Openlane NOT. B3 LOSES: PrismPath NOT (not
+expressible, the caller would make the decision), OPA NATIVE (graph.reachable), Cedar NATIVE (entity
+hierarchy), OpenFGA NATIVE (its native question), Cerbos WITH-WORK (caller supplies the relationship data
+as a list, CEL tests membership, 40 lines, 2 hours), Openlane NOT. B4 LOSES: PrismPath WITH-WORK (Zarf,
+UDS, Vector codec, Wireshark dissector, kernel, MCU, FPGA, Rust and C libraries, GRC scanner adapters;
+no Kubernetes admission path, Envoy filter, Terraform provider, or package index release; a webhook or
+ext_authz shim costed at 200 lines, 8 hours), every comparator NATIVE. B5 LOSES: PrismPath NOT (public
+since 2026-07-19, 381 commits, one organization, one tag), OPA, Cedar, Cerbos, OpenFGA NATIVE, Openlane
+WITH-WORK (two years, about twenty contributors). matrix.py computes LOSES on all five.
+
+**Honest scope.** OpenFGA's B1 and Cerbos's B3 WITH-WORK cells rest on costed, documented paths, not
+executed glue, the same standard Group A applied to comparator glue; executing them could only raise
+those cells, never change LOSES. B4 and B5 are documentation rows with published bars, not measurements.
+The B2 note credits the quantization proofs without counting them, because the dimension is
+verification of the decision engine and the formal development itself states it is not a proof about the
+evaluator or the source text. The one wrong prediction (Cedar B4) is reported, not adjusted away.
+
+**Provenance.** Branch comparisons/phase0-prereg, commit d1ba764: groupb/b.py, results/<system>/B*.json
+(90 files), results/<system>/evidence/B{2,4,5}/, MATRIX.md, matrix.json, tests/test_comparisons_groupb.py.
+No push (owner gated).
