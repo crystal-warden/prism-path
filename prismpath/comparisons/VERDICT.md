@@ -33,10 +33,12 @@ Two of the thirteen verdict predictions were wrong, both in the comparators' fav
 dimensions the pre registration named as the expected survivors. Thirteen of seventy eight cell
 predictions were wrong; every one is listed in section 4.
 
-The pre registration also said, in its own words, that a "not distinct here" result is valid and that
-investor "control plane" language is only as strong as this table. This document takes that at face
-value. What PrismPath is, on the evidence, is stated in section 3, and it is a narrower and more
-defensible claim than "distinct layer".
+The pre registration also said, in its own words, that a "not distinct here" result is valid. This
+document takes that at face value. One correction to the pre registration's own framing is owed here:
+its section 1 tied "control plane" language to this table, which treated the category as something to
+be earned by the layer test. That was the study's construct, not a claim the project made. PrismPath is
+a control plane, one of many; the layer test asked whether it was a layer the others could not reach,
+and the answer is no. What PrismPath is, on the evidence, is stated in section 3.
 
 ## 2. Why the two expected survivors fell
 
@@ -121,12 +123,31 @@ What survives as a factual statement about PrismPath, from the cells:
    component proof and is credited in the B2 note, not counted); the ecosystem is narrow and
    substrate shaped; the project is two months old from one organization.
 
-The recommended framing for anything public, derived from the above: PrismPath is a policy decision
-engine whose one compiled image decides identically from a Python process down to a 1.7 KB
-interpreter on an 8 bit part or a fabric, carries a signed worst case bound, and composes abstain,
-human routing, signed receipts with cause, and a byte sized wire as built in properties rather than
-as glue. It is not a layer the existing engines cannot reach; it is the engine that arrives there
-without the glue, and on constrained hardware with two orders of magnitude less memory.
+The framing the evidence supports, in the order a reader needs it:
+
+1. **What it is.** PrismPath is a control plane for autonomous systems, a control plane with receipts.
+   It is one of many control planes; the comparison tested no claim to the category and refutes none.
+2. **What it does.** It turns the decision structure a human authored from governing policy, the
+   predicates and routes of a flow document, into decisions that govern what a system may do, and every
+   decision leaves a signed receipt carrying its cause. PrismPath does not compile policy from prose;
+   it compiles that authored structure into a table image.
+3. **What is unusual about the approach.** The decision structure is restricted to a decidable, tabular
+   fragment (Level M), so one image decides identically from a Python process down to a 1.7 KB
+   interpreter on an 8 bit part or a fabric, carries a signed worst case bound, and admits a decision
+   sufficient quantization. Both PrismPath and OPA on the Pico are a portable artifact plus a per
+   substrate runtime; the fragment is why one runtime is 1.7 KB and the other 60 KB, and why one has a
+   bound and the other does not. The semantic tier, where a model decides, stays on the host and is
+   best effort; the cross substrate claim is a claim about the fragment.
+4. **What is its own.** Facet, the wire format on top: 2 to 3 bytes per reading, decision sufficient by
+   the proven quantization, and shown in Phase 5 to compose with OPA as well as with PrismPath.
+5. **What is built in rather than glued.** Abstain (insufficient information, distinct from deny and
+   from the cause 36 refusal when nothing matches), human routing, receipts, and anti rollback at the
+   point. The comparators reach these WITH-WORK or not at all; that is a statement about integration,
+   not a moat, and the 391 lines that bring OPA to the same row are the measure of it.
+
+What the comparison retires is one sentence the project never wrote: that PrismPath is a layer the
+existing engines cannot reach. It is the engine that arrives at the same row without the glue, and on
+constrained hardware with two orders of magnitude less memory.
 
 ## 4. Predictions that were wrong
 
@@ -198,7 +219,7 @@ This is the owner's decision. The evidence and the honesty rules point one way: 
 comparison, verdict included, or none of it. Publishing the matrix without this verdict would be the
 inflation the pre registration was written to prevent; publishing the verdict is the strongest
 credibility signal the project can give, because it shows the claims are tested against a bar the
-project set for itself and reports the miss. The recommendation is to publish, with the section 3
-framing replacing "distinct layer" and "control plane" wherever those words appear in outward facing
-material, and with the A3 degree table as the embedded story. Held back until decided: nothing in
+project set for itself and reports the miss. The recommendation is to publish, with "distinct layer"
+retired as a claim in outward facing material, "control plane" kept as the category PrismPath is one
+of many in, the section 3 hierarchy as the description, and the A3 degree table as the embedded story. Held back until decided: nothing in
 this branch is pushed (owner gated), and the staged ledger rows #144 to #149 wait for the fold.
