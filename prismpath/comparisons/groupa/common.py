@@ -14,7 +14,8 @@ from prismpath.comparisons.harness import HERE, load_policies
 
 RESULTS = HERE / "results"
 SYSTEM_VERSION = {"prismpath": "repo@harness_commit", "opa": "1.20.2", "cedar": "4.12.0",
-                  "cerbos": "0.55.0", "openfga": "1.19.0", "openlane": "docs-only"}
+                  "cerbos": "0.55.0", "openfga": "1.19.0", "openlane": "docs-only",
+                  "opa+glue": "1.20.2+glue", "cedar+glue": "4.12.0+glue", "cerbos+glue": "0.55.0+glue"}
 GRADES = ("NATIVE", "WITH-WORK", "NOT")
 
 

@@ -26,12 +26,15 @@ exact `system_version` strings result files must carry.*
 | cerbosctl | 0.55.0 | same release, `cerbosctl_0.55.0_Linux_arm64.tar.gz` | 4544d02d20e01fb9a915ce62f7b46f4243adea6dd5236095ce79411c9f139ef0 | 7faf53be8b8adea38abaabe7a3ed57bea480640960f0ac961c04b5ba8190a0ab |
 | openfga | 1.19.0 | github.com/openfga/openfga release v1.19.0, `openfga_1.19.0_linux_arm64.tar.gz` | 067e09ef5f1894e4f292bcc265da0063e7d6d763f2eb53cdebc8c3337adf0f64 | 68123b0d40e38b9e17668355fbabe6474b865012ed0f1be8e4c0c342702ca9de |
 | cedarpy (Python binding, in process Cedar for A7) | 4.8.7 | PyPI `cedarpy` 4.8.7 installed into `./.venv` in Phase 3 (pip, wheel verified by pip); the Cedar CLI stays the Phase 2 translator target | pip resolved | n/a |
+| wasm3 (Phase 5, A3 combination) | commit 40e42cc (2026-09-06) | github.com/wasm3/wasm3 cloned into `.toolchain/src/wasm3`, MIT; built from source for Linux and the RP2350 by `groupa/opa_wasm_mcu/Makefile`, never vendored | git commit pin | n/a (source) |
 | openlane | docs only | graded from documentation and API surface in Phase 4; nothing installed by design (PREREGISTRATION section 3) | n/a | n/a |
 
 Each was the latest stable release of its project on the install date (release dates: OPA
 2026-09-03, Cedar 2026-07-28, Cerbos 2026-08-13, OpenFGA 2026-08-25). The Cerbos and OpenFGA
 releases also ship sigstore signatures over their checksum files; the installer verifies the
 sha256 only, and that limitation is stated rather than implied.
+
+Phase 5 addition: `wasm3` at commit 40e42cc is the MCU class WebAssembly interpreter used for the A3 combination test (OPA's compiled module on the RP2350, groupa/opa_wasm_mcu/). It is a third party MIT licensed runtime; only its source is pinned here.
 
 Phase 3 addition: `cedarpy` 4.8.7 gives Cedar an in process embedding so the A7 latency measurement compares
 libraries where a library exists; the CLI remains the idiomatic translation target from Phase 2.

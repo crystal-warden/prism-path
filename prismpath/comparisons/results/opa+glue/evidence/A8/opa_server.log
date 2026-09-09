@@ -1,0 +1,20 @@
+{"addrs":["127.0.0.1:18191"],"diagnostic-addrs":[],"fields.time":"2026-09-08T20:31:47.282203826-05:00","level":"info","msg":"Initializing server.","time":"2026-09-08T20:31:47-05:00"}
+{"fields.time":"2026-09-08T20:31:47.282256098-05:00","level":"info","msg":"Starting decision logger.","plugin":"decision_logs","time":"2026-09-08T20:31:47-05:00"}
+{"client_addr":"127.0.0.1:32924","level":"info","msg":"Received request.","req_id":1,"req_method":"POST","req_path":"/v1/data/comparison/ai_action_gate/decision","time":"2026-09-08T20:31:48-05:00"}
+{"client_addr":"127.0.0.1:32924","level":"info","msg":"Sent response.","req_id":1,"req_method":"POST","req_path":"/v1/data/comparison/ai_action_gate/decision","resp_bytes":96,"resp_duration":1.470853,"resp_status":200,"time":"2026-09-08T20:31:48-05:00"}
+{"client_addr":"127.0.0.1:32930","level":"info","msg":"Received request.","req_id":2,"req_method":"POST","req_path":"/v1/data/comparison/ai_action_gate/decision","time":"2026-09-08T20:31:48-05:00"}
+{"client_addr":"127.0.0.1:32930","level":"info","msg":"Sent response.","req_id":2,"req_method":"POST","req_path":"/v1/data/comparison/ai_action_gate/decision","resp_bytes":96,"resp_duration":0.284737,"resp_status":200,"time":"2026-09-08T20:31:48-05:00"}
+{"client_addr":"127.0.0.1:32938","level":"info","msg":"Received request.","req_id":3,"req_method":"POST","req_path":"/v1/data/comparison/ai_action_gate/decision","time":"2026-09-08T20:31:48-05:00"}
+{"client_addr":"127.0.0.1:32938","level":"info","msg":"Sent response.","req_id":3,"req_method":"POST","req_path":"/v1/data/comparison/ai_action_gate/decision","resp_bytes":95,"resp_duration":0.118032,"resp_status":200,"time":"2026-09-08T20:31:48-05:00"}
+{"client_addr":"127.0.0.1:32940","level":"info","msg":"Received request.","req_id":4,"req_method":"POST","req_path":"/v1/data/comparison/ai_action_gate/decision","time":"2026-09-08T20:31:48-05:00"}
+{"client_addr":"127.0.0.1:32940","level":"info","msg":"Sent response.","req_id":4,"req_method":"POST","req_path":"/v1/data/comparison/ai_action_gate/decision","resp_bytes":98,"resp_duration":0.13136,"resp_status":200,"time":"2026-09-08T20:31:48-05:00"}
+{"client_addr":"127.0.0.1:32942","level":"info","msg":"Received request.","req_id":5,"req_method":"POST","req_path":"/v1/data/comparison/ai_action_gate/decision","time":"2026-09-08T20:31:48-05:00"}
+{"client_addr":"127.0.0.1:32942","level":"info","msg":"Sent response.","req_id":5,"req_method":"POST","req_path":"/v1/data/comparison/ai_action_gate/decision","resp_bytes":105,"resp_duration":0.091632,"resp_status":200,"time":"2026-09-08T20:31:48-05:00"}
+{"client_addr":"127.0.0.1:32956","level":"info","msg":"Received request.","req_id":6,"req_method":"POST","req_path":"/v1/data/comparison/ai_action_gate/decision","time":"2026-09-08T20:31:48-05:00"}
+{"client_addr":"127.0.0.1:32956","level":"info","msg":"Sent response.","req_id":6,"req_method":"POST","req_path":"/v1/data/comparison/ai_action_gate/decision","resp_bytes":105,"resp_duration":0.275761,"resp_status":200,"time":"2026-09-08T20:31:48-05:00"}
+{"level":"info","msg":"Logs uploaded successfully.","plugin":"decision_logs","time":"2026-09-08T20:31:50-05:00"}
+{"level":"info","msg":"Shutting down...","time":"2026-09-08T20:31:50-05:00"}
+{"level":"info","msg":"Server shutdown.","time":"2026-09-08T20:31:50-05:00"}
+{"level":"info","msg":"Stopping decision logger.","plugin":"decision_logs","time":"2026-09-08T20:31:50-05:00"}
+{"level":"info","msg":"Flushing decision logs.","plugin":"decision_logs","time":"2026-09-08T20:31:50-05:00"}
+{"level":"info","msg":"All decisions in buffer uploaded.","plugin":"decision_logs","time":"2026-09-08T20:31:50-05:00"}

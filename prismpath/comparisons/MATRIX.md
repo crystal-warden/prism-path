@@ -1,20 +1,20 @@
 # Comparison Matrix
 
-| Dimension | Verdict | prismpath | opa | cedar | cerbos | openfga | openlane |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| A1 | NOT-DISTINCT | NATIVE (N:7, W:0, X:0) | NATIVE (N:7, W:0, X:0) [mm:2] | WITH-WORK (N:0, W:7, X:0) | WITH-WORK (N:0, W:7, X:0) | NOT (N:0, W:0, X:7) [mm:7] | NOT (N:0, W:0, X:1) [mm:1] |
-| A2 | NOT-DISTINCT | NATIVE (N:6, W:0, X:0) | NATIVE (N:6, W:0, X:0) | WITH-WORK (N:0, W:6, X:0) | WITH-WORK (N:0, W:6, X:0) | NOT (N:0, W:0, X:6) [mm:6] | NOT (N:0, W:0, X:1) [mm:1] |
-| A3 | DISTINCT | NATIVE (N:23, W:0, X:0) | NOT (N:0, W:0, X:23) [mm:23] | NOT (N:0, W:0, X:23) [mm:23] | NOT (N:0, W:0, X:23) [mm:23] | NOT (N:0, W:0, X:23) [mm:23] | NOT (N:0, W:0, X:1) [mm:1] |
-| A4 | NOT-DISTINCT | NATIVE (N:4, W:0, X:0) | WITH-WORK (N:2, W:2, X:0) [mm:2] | NOT (N:0, W:3, X:1) [mm:4] | NOT (N:2, W:1, X:1) [mm:2] | NOT (N:0, W:0, X:4) [mm:4] | NOT (N:0, W:0, X:1) [mm:1] |
-| A5 | NOT-DISTINCT | NATIVE (N:23, W:0, X:0) | NOT (N:0, W:0, X:23) | NOT (N:0, W:0, X:23) | WITH-WORK (N:0, W:23, X:0) | NOT (N:0, W:0, X:23) [mm:23] | NOT (N:0, W:0, X:1) [mm:1] |
-| A6 | NOT-DISTINCT | NATIVE (N:3, W:0, X:0) | WITH-WORK (N:2, W:1, X:0) [mm:1] | NOT (N:0, W:0, X:3) [mm:3] | NOT (N:0, W:0, X:3) [mm:3] | NOT (N:0, W:0, X:3) [mm:3] | NOT (N:0, W:0, X:1) [mm:1] |
-| A7 | NOT-DISTINCT | NATIVE (N:23, W:0, X:0) | WITH-WORK (N:0, W:23, X:0) | WITH-WORK (N:0, W:23, X:0) | WITH-WORK (N:0, W:23, X:0) | NOT (N:0, W:0, X:23) [mm:23] | NOT (N:0, W:0, X:1) [mm:1] |
-| A8 | NOT-DISTINCT | NATIVE (N:1, W:0, X:0) | WITH-WORK (N:0, W:1, X:0) | NOT (N:0, W:0, X:1) | NOT (N:0, W:0, X:1) | NOT (N:0, W:0, X:1) [mm:1] | NOT (N:0, W:0, X:1) [mm:1] |
-| B1 | LOSES | NOT (N:4, W:1, X:3) [mm:3] | NATIVE (N:8, W:0, X:0) | NATIVE (N:8, W:0, X:0) | NATIVE (N:8, W:0, X:0) | WITH-WORK (N:0, W:8, X:0) [mm:8] | NOT (N:0, W:0, X:1) [mm:1] |
-| B2 | LOSES | NOT (N:0, W:0, X:1) [mm:1] | NOT (N:0, W:0, X:1) [mm:1] | NATIVE (N:1, W:0, X:0) [mm:1] | NOT (N:0, W:0, X:1) [mm:1] | NOT (N:0, W:0, X:1) [mm:1] | NOT (N:0, W:0, X:1) [mm:1] |
-| B3 | LOSES | NOT (N:0, W:0, X:6) [mm:6] | NATIVE (N:6, W:0, X:0) | NATIVE (N:6, W:0, X:0) | WITH-WORK (N:0, W:6, X:0) [mm:6] | NATIVE (N:6, W:0, X:0) | NOT (N:0, W:0, X:1) [mm:1] |
-| B4 | LOSES | WITH-WORK (N:0, W:1, X:0) [mm:1] | NATIVE (N:1, W:0, X:0) [mm:1] | NATIVE (N:1, W:0, X:0) [mm:1] | NATIVE (N:1, W:0, X:0) [mm:1] | NATIVE (N:1, W:0, X:0) [mm:1] | NATIVE (N:1, W:0, X:0) [mm:1] |
-| B5 | LOSES | NOT (N:0, W:0, X:1) [mm:1] | NATIVE (N:1, W:0, X:0) [mm:1] | NATIVE (N:1, W:0, X:0) [mm:1] | NATIVE (N:1, W:0, X:0) [mm:1] | NATIVE (N:1, W:0, X:0) [mm:1] | WITH-WORK (N:0, W:1, X:0) [mm:1] |
+| Dimension | Verdict | prismpath | opa | cedar | cerbos | openfga | openlane | opa+glue |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| A1 | NOT-DISTINCT | NATIVE (N:7, W:0, X:0) | NATIVE (N:7, W:0, X:0) [mm:2] | WITH-WORK (N:0, W:7, X:0) | WITH-WORK (N:0, W:7, X:0) | NOT (N:0, W:0, X:7) [mm:7] | NOT (N:0, W:0, X:1) [mm:1] | NATIVE (N:7, W:0, X:0) [mm:2] |
+| A2 | NOT-DISTINCT | NATIVE (N:6, W:0, X:0) | NATIVE (N:6, W:0, X:0) | WITH-WORK (N:0, W:6, X:0) | WITH-WORK (N:0, W:6, X:0) | NOT (N:0, W:0, X:6) [mm:6] | NOT (N:0, W:0, X:1) [mm:1] | NATIVE (N:6, W:0, X:0) |
+| A3 | NOT-DISTINCT | NATIVE (N:23, W:0, X:0) | NOT (N:0, W:0, X:23) [mm:23] | NOT (N:0, W:0, X:23) [mm:23] | NOT (N:0, W:0, X:23) [mm:23] | NOT (N:0, W:0, X:23) [mm:23] | NOT (N:0, W:0, X:1) [mm:1] | WITH-WORK (N:0, W:23, X:0) |
+| A4 | NOT-DISTINCT | NATIVE (N:4, W:0, X:0) | WITH-WORK (N:2, W:2, X:0) [mm:2] | NOT (N:0, W:3, X:1) [mm:4] | NOT (N:2, W:1, X:1) [mm:2] | NOT (N:0, W:0, X:4) [mm:4] | NOT (N:0, W:0, X:1) [mm:1] | WITH-WORK (N:2, W:2, X:0) |
+| A5 | NOT-DISTINCT | NATIVE (N:23, W:0, X:0) | NOT (N:0, W:0, X:23) | NOT (N:0, W:0, X:23) | WITH-WORK (N:0, W:23, X:0) | NOT (N:0, W:0, X:23) [mm:23] | NOT (N:0, W:0, X:1) [mm:1] | WITH-WORK (N:0, W:23, X:0) |
+| A6 | NOT-DISTINCT | NATIVE (N:3, W:0, X:0) | WITH-WORK (N:2, W:1, X:0) [mm:1] | NOT (N:0, W:0, X:3) [mm:3] | NOT (N:0, W:0, X:3) [mm:3] | NOT (N:0, W:0, X:3) [mm:3] | NOT (N:0, W:0, X:1) [mm:1] | WITH-WORK (N:0, W:3, X:0) |
+| A7 | NOT-DISTINCT | NATIVE (N:23, W:0, X:0) | WITH-WORK (N:0, W:23, X:0) | WITH-WORK (N:0, W:23, X:0) | WITH-WORK (N:0, W:23, X:0) | NOT (N:0, W:0, X:23) [mm:23] | NOT (N:0, W:0, X:1) [mm:1] | WITH-WORK (N:0, W:23, X:0) |
+| A8 | NOT-DISTINCT | NATIVE (N:1, W:0, X:0) | WITH-WORK (N:0, W:1, X:0) | NOT (N:0, W:0, X:1) | NOT (N:0, W:0, X:1) | NOT (N:0, W:0, X:1) [mm:1] | NOT (N:0, W:0, X:1) [mm:1] | WITH-WORK (N:0, W:1, X:0) |
+| B1 | LOSES | NOT (N:4, W:1, X:3) [mm:3] | NATIVE (N:8, W:0, X:0) | NATIVE (N:8, W:0, X:0) | NATIVE (N:8, W:0, X:0) | WITH-WORK (N:0, W:8, X:0) [mm:8] | NOT (N:0, W:0, X:1) [mm:1] | UNTESTED |
+| B2 | LOSES | NOT (N:0, W:0, X:1) [mm:1] | NOT (N:0, W:0, X:1) [mm:1] | NATIVE (N:1, W:0, X:0) [mm:1] | NOT (N:0, W:0, X:1) [mm:1] | NOT (N:0, W:0, X:1) [mm:1] | NOT (N:0, W:0, X:1) [mm:1] | UNTESTED |
+| B3 | LOSES | NOT (N:0, W:0, X:6) [mm:6] | NATIVE (N:6, W:0, X:0) | NATIVE (N:6, W:0, X:0) | WITH-WORK (N:0, W:6, X:0) [mm:6] | NATIVE (N:6, W:0, X:0) | NOT (N:0, W:0, X:1) [mm:1] | UNTESTED |
+| B4 | LOSES | WITH-WORK (N:0, W:1, X:0) [mm:1] | NATIVE (N:1, W:0, X:0) [mm:1] | NATIVE (N:1, W:0, X:0) [mm:1] | NATIVE (N:1, W:0, X:0) [mm:1] | NATIVE (N:1, W:0, X:0) [mm:1] | NATIVE (N:1, W:0, X:0) [mm:1] | UNTESTED |
+| B5 | LOSES | NOT (N:0, W:0, X:1) [mm:1] | NATIVE (N:1, W:0, X:0) [mm:1] | NATIVE (N:1, W:0, X:0) [mm:1] | NATIVE (N:1, W:0, X:0) [mm:1] | NATIVE (N:1, W:0, X:0) [mm:1] | WITH-WORK (N:0, W:1, X:0) [mm:1] | UNTESTED |
 
 ## Evidence Files
 
@@ -232,6 +232,96 @@
 - `cerbos/B3__document_sharing_rebac__dana_view_d2.json`
 - `cerbos/B4__none__matrix-row.json`
 - `cerbos/B5__none__matrix-row.json`
+- `opa+glue/A1__ai_action_gate__abstain_low_confidence_1.json`
+- `opa+glue/A1__ai_action_gate__undeclared_missing_1.json`
+- `opa+glue/A1__expense_approval__insufficient_1.json`
+- `opa+glue/A1__expense_approval__insufficient_2.json`
+- `opa+glue/A1__expense_approval__undeclared_missing_1.json`
+- `opa+glue/A1__sensor_interlock__undeclared_missing_1.json`
+- `opa+glue/A1__sensor_interlock__undeclared_missing_2.json`
+- `opa+glue/A2__ai_action_gate__escalate_execute_confidential_1.json`
+- `opa+glue/A2__ai_action_gate__escalate_human_requested_1.json`
+- `opa+glue/A2__ai_action_gate__escalate_org_write_1.json`
+- `opa+glue/A2__expense_approval__escalation_1.json`
+- `opa+glue/A2__expense_approval__escalation_2.json`
+- `opa+glue/A2__expense_approval__escalation_3.json`
+- `opa+glue/A3__network_admission__allow_dns_small_1.json`
+- `opa+glue/A3__network_admission__allow_https_1.json`
+- `opa+glue/A3__network_admission__allow_icmp_1.json`
+- `opa+glue/A3__network_admission__allow_internal_ssh_1.json`
+- `opa+glue/A3__network_admission__boundary_dns_512.json`
+- `opa+glue/A3__network_admission__boundary_dns_513.json`
+- `opa+glue/A3__network_admission__boundary_jumbo_1399.json`
+- `opa+glue/A3__network_admission__boundary_jumbo_1400.json`
+- `opa+glue/A3__network_admission__deny_dns_large_1.json`
+- `opa+glue/A3__network_admission__deny_external_ssh_1.json`
+- `opa+glue/A3__network_admission__deny_telnet_1.json`
+- `opa+glue/A3__network_admission__observe_jumbo_1.json`
+- `opa+glue/A3__network_admission__observe_other_1.json`
+- `opa+glue/A3__sensor_interlock__allow_armed_nominal_1.json`
+- `opa+glue/A3__sensor_interlock__allow_nominal_1.json`
+- `opa+glue/A3__sensor_interlock__boundary_nominal_119_749.json`
+- `opa+glue/A3__sensor_interlock__boundary_temp_120.json`
+- `opa+glue/A3__sensor_interlock__boundary_temp_149.json`
+- `opa+glue/A3__sensor_interlock__boundary_temp_150.json`
+- `opa+glue/A3__sensor_interlock__deny_pressure_1.json`
+- `opa+glue/A3__sensor_interlock__deny_temp_1.json`
+- `opa+glue/A3__sensor_interlock__escalation_sensor_dark_armed_1.json`
+- `opa+glue/A3__sensor_interlock__observe_temp_1.json`
+- `opa+glue/A4__ai_action_gate__carries_cause.json`
+- `opa+glue/A4__ai_action_gate__per_decision.json`
+- `opa+glue/A4__ai_action_gate__signed.json`
+- `opa+glue/A4__ai_action_gate__tamper_evident.json`
+- `opa+glue/A5__network_admission__allow_dns_small_1.json`
+- `opa+glue/A5__network_admission__allow_https_1.json`
+- `opa+glue/A5__network_admission__allow_icmp_1.json`
+- `opa+glue/A5__network_admission__allow_internal_ssh_1.json`
+- `opa+glue/A5__network_admission__boundary_dns_512.json`
+- `opa+glue/A5__network_admission__boundary_dns_513.json`
+- `opa+glue/A5__network_admission__boundary_jumbo_1399.json`
+- `opa+glue/A5__network_admission__boundary_jumbo_1400.json`
+- `opa+glue/A5__network_admission__deny_dns_large_1.json`
+- `opa+glue/A5__network_admission__deny_external_ssh_1.json`
+- `opa+glue/A5__network_admission__deny_telnet_1.json`
+- `opa+glue/A5__network_admission__observe_jumbo_1.json`
+- `opa+glue/A5__network_admission__observe_other_1.json`
+- `opa+glue/A5__sensor_interlock__allow_armed_nominal_1.json`
+- `opa+glue/A5__sensor_interlock__allow_nominal_1.json`
+- `opa+glue/A5__sensor_interlock__boundary_nominal_119_749.json`
+- `opa+glue/A5__sensor_interlock__boundary_temp_120.json`
+- `opa+glue/A5__sensor_interlock__boundary_temp_149.json`
+- `opa+glue/A5__sensor_interlock__boundary_temp_150.json`
+- `opa+glue/A5__sensor_interlock__deny_pressure_1.json`
+- `opa+glue/A5__sensor_interlock__deny_temp_1.json`
+- `opa+glue/A5__sensor_interlock__escalation_sensor_dark_armed_1.json`
+- `opa+glue/A5__sensor_interlock__observe_temp_1.json`
+- `opa+glue/A6__network_admission__stale_policy_1.json`
+- `opa+glue/A6__network_admission__tampered_policy_1.json`
+- `opa+glue/A6__network_admission__unsigned_policy_1.json`
+- `opa+glue/A7__network_admission__allow_dns_small_1.json`
+- `opa+glue/A7__network_admission__allow_https_1.json`
+- `opa+glue/A7__network_admission__allow_icmp_1.json`
+- `opa+glue/A7__network_admission__allow_internal_ssh_1.json`
+- `opa+glue/A7__network_admission__boundary_dns_512.json`
+- `opa+glue/A7__network_admission__boundary_dns_513.json`
+- `opa+glue/A7__network_admission__boundary_jumbo_1399.json`
+- `opa+glue/A7__network_admission__boundary_jumbo_1400.json`
+- `opa+glue/A7__network_admission__deny_dns_large_1.json`
+- `opa+glue/A7__network_admission__deny_external_ssh_1.json`
+- `opa+glue/A7__network_admission__deny_telnet_1.json`
+- `opa+glue/A7__network_admission__observe_jumbo_1.json`
+- `opa+glue/A7__network_admission__observe_other_1.json`
+- `opa+glue/A7__sensor_interlock__allow_armed_nominal_1.json`
+- `opa+glue/A7__sensor_interlock__allow_nominal_1.json`
+- `opa+glue/A7__sensor_interlock__boundary_nominal_119_749.json`
+- `opa+glue/A7__sensor_interlock__boundary_temp_120.json`
+- `opa+glue/A7__sensor_interlock__boundary_temp_149.json`
+- `opa+glue/A7__sensor_interlock__boundary_temp_150.json`
+- `opa+glue/A7__sensor_interlock__deny_pressure_1.json`
+- `opa+glue/A7__sensor_interlock__deny_temp_1.json`
+- `opa+glue/A7__sensor_interlock__escalation_sensor_dark_armed_1.json`
+- `opa+glue/A7__sensor_interlock__observe_temp_1.json`
+- `opa+glue/A8__ai_action_gate__ai_worker_loop_1.json`
 - `opa/A1__ai_action_gate__abstain_low_confidence_1.json`
 - `opa/A1__ai_action_gate__undeclared_missing_1.json`
 - `opa/A1__expense_approval__insufficient_1.json`

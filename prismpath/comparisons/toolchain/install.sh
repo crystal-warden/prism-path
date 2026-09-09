@@ -96,6 +96,13 @@ if [ "${1:-}" != "--skip-cedar" ]; then
   fi
 fi
 
+echo "== wasm3 (Phase 5 A3 combination: OPA wasm on an MCU class interpreter)"
+WASM3_COMMIT=40e42cc0f33b24f1db3c632d82cec14084a3a83d
+mkdir -p "$ROOT/src"
+if [ ! -d "$ROOT/src/wasm3/.git" ]; then git clone -q https://github.com/wasm3/wasm3.git "$ROOT/src/wasm3"; fi
+git -C "$ROOT/src/wasm3" checkout -q "$WASM3_COMMIT"
+echo "  wasm3 $(git -C "$ROOT/src/wasm3" rev-parse --short HEAD) (MIT, source only, built by groupa/opa_wasm_mcu/Makefile)"
+
 echo "== installed"
 for b in opa cerbos cerbosctl openfga cedar; do
   [ -x "$BIN/$b" ] && printf "  %-10s %s\n" "$b" "$(sha256sum "$BIN/$b" | cut -c1-16)"

@@ -1,0 +1,6 @@
+{
+ "isa": "rp2350-riscv",
+ "attempt": "firmware built (text 424432 B, riscv32-unknown-elf gcc, Hazard3) and flashed; the board enumerated as CDC but never answered the ident request, so wasm3 hung or faulted during module open on the RISC-V core. Not diagnosed in this session; the likely cause is misaligned memory access (wasm3 assumes it, Hazard3 traps on it; wasm3 has no 32 bit RISC-V platform entry). The ARM core leg stands on its own; this leg is recorded as attempted and not achieved.",
+ "agree": null,
+ "total": 23
+}

@@ -1,0 +1,17 @@
+{
+  "dimension": "A4",
+  "evidence_path": "prismpath/comparisons/results/opa+glue/evidence/A8",
+  "expected": "true",
+  "glue": null,
+  "grade": "NATIVE",
+  "harness_commit": "592fa6d",
+  "idiomatic": true,
+  "match": true,
+  "notes": "Sub property per_decision: one record per decision from OPA itself. Built and run: OPA shipped 6 decision log records for 6 decisions to glue/opa_receipts.py over decision_logs.service; 6/6 receipts verify against the bundle verification key, an altered record is detected (True), a foreign key is rejected (True). Glue 131 lines, 1.0 h, within budget; the signing key is the bundle key the deployment already holds at the bundle service, so no new trust anchor; note that the sink must run where that private key lives, which is the bundle server, not the agent host.",
+  "observed": "true",
+  "policy": "ai_action_gate",
+  "run_at": "2026-09-09T01:31:50Z",
+  "scenario": "per_decision",
+  "system": "opa+glue",
+  "system_version": "1.20.2+glue"
+}

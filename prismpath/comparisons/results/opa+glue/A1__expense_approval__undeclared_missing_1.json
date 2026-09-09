@@ -1,0 +1,17 @@
+{
+  "dimension": "A1",
+  "evidence_path": "prismpath/comparisons/systems/opa/generated",
+  "expected": "escalate_human",
+  "glue": null,
+  "grade": "NATIVE",
+  "harness_commit": "592fa6d",
+  "idiomatic": true,
+  "match": true,
+  "notes": "OPA alone grades NATIVE on this dimension (Rego returns any document); the combination column carries the OPA result unchanged. OPA cell: Observed by the real system in the Phase 2 conformance run: escalate_human (expected escalate_human; a probe scenario: the observed value is the measurement). Carrier: first_class (the decision rule returns an arbitrary document {outcome, rule}). Absence: unsatisfied (a reference to a missing input field is undefined, so the rule body fails (documented undefined semantics); with no catch all the w",
+  "observed": "escalate_human",
+  "policy": "expense_approval",
+  "run_at": "2026-09-09T01:31:47Z",
+  "scenario": "undeclared_missing_1",
+  "system": "opa+glue",
+  "system_version": "1.20.2+glue"
+}

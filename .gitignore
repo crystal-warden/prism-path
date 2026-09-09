@@ -49,3 +49,5 @@ prismpath-hw/hyst-cert/evidence/*.mp4
 
 # layer comparison toolchain (installed by prismpath/comparisons/toolchain/install.sh, pinned)
 prismpath/comparisons/.toolchain/
+prismpath/comparisons/groupa/opa_wasm_mcu/build_linux/
+prismpath/comparisons/groupa/opa_wasm_mcu/pico/build/

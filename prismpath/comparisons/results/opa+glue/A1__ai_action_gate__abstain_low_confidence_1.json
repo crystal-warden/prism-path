@@ -1,0 +1,17 @@
+{
+  "dimension": "A1",
+  "evidence_path": "prismpath/comparisons/systems/opa/generated",
+  "expected": "abstain",
+  "glue": null,
+  "grade": "NATIVE",
+  "harness_commit": "592fa6d",
+  "idiomatic": true,
+  "match": true,
+  "notes": "OPA alone grades NATIVE on this dimension (Rego returns any document); the combination column carries the OPA result unchanged. OPA cell: Observed by the real system in the Phase 2 conformance run: abstain (expected abstain). Carrier: first_class (the decision rule returns an arbitrary document {outcome, rule}). Absence: unsatisfied (a reference to a missing input field is undefined, so the rule body fails (documented undefined semantics); with no catch all the whole decision is undefined and opa eval returns an empty result set wit",
+  "observed": "abstain",
+  "policy": "ai_action_gate",
+  "run_at": "2026-09-09T01:31:47Z",
+  "scenario": "abstain_low_confidence_1",
+  "system": "opa+glue",
+  "system_version": "1.20.2+glue"
+}
