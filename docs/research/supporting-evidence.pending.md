@@ -501,3 +501,55 @@ evaluator or the source text. The one wrong prediction (Cedar B4) is reported, n
 **Provenance.** Branch comparisons/phase0-prereg, commit d1ba764: groupb/b.py, results/<system>/B*.json
 (90 files), results/<system>/evidence/B{2,4,5}/, MATRIX.md, matrix.json, tests/test_comparisons_groupb.py.
 No push (owner gated).
+
+#### #148: Phase 5 combination tests built and run: OPA's compiled WebAssembly decides the corpus identically on an RP2350 under a 60 KB interpreter, and every other pre registered combination closes under budget, so no Group A dimension survives as DISTINCT (September 2026)
+
+**Claim.** The pre registered combination tests were executed rather than costed, and the honest result
+is that the layer test of PREREGISTRATION.md section 9 fails on every Group A dimension: the one
+dimension that was DISTINCT after Group A, cross substrate byte exact decisions, falls to NOT-DISTINCT
+because OPA compiled to WebAssembly runs on an MCU class target with identical decisions through a
+documented compiler and a third party interpreter under the glue budget.
+
+**Method.** One combination column, opa+glue, populated for A1 through A8. A3: groupa/opa_wasm_mcu/
+builds RP2350 firmware from the wasm3 interpreter (MIT, commit 40e42cc, pinned in toolchain/install.sh,
+source only) plus 171 lines of glue that supply the module's six imports (opa_abort, opa_builtin0..4)
+and drive OPA's documented ABI (opa_heap_ptr_get, opa_json_parse, opa_eval) over USB-CDC; both modules
+opa build -t wasm produced for network_admission (135,831 B) and sensor_interlock (135,954 B) live in
+flash, one runtime open at a time. groupa/a3_opa_mcu.py replays the 23 A3 corpus readings. A4 and A8:
+glue/opa_receipts.py receives OPA's decision_logs.service uploads, Merkle roots the records, signs the
+root RS256 with the bundle signing key OPA already trusts, and issues receipts with inclusion proofs.
+A5: glue/facet_opa_input.py quantizes the reading with PrismPath's partitions of the same policy, ships
+the Zeckendorf frame, reconstructs a representative at the receiver, and posts it as OPA's input. A6:
+glue/opa_revision_floor.py refuses a bundle below the persisted revision floor before OPA loads it.
+A1, A2, A7 mirror OPA's own cells. Two glue modules were drafted by agy and their gates re run here.
+
+**Result.** A3: 23/23 identical decisions, outcome and rule, on the Pico 2 W Cortex-M33 core; heap high
+water 311,636 B of 520 KB SRAM, 131,072 B linear memory, USB round trip 3.8 to 5.5 ms after the first
+evaluation (54 to 57 ms on the first evaluation after a module load, lazy compilation). Grade WITH-WORK
+(171 lines, about 1.5 h, no trust anchor); A3 verdict NOT-DISTINCT. The RISC-V build (424 KB text)
+flashed but never answered; recorded as attempted, not achieved. A4/A8: 6 of 6 records received, 6 of 6
+receipts verify against the bundle verification key, an altered record and a foreign key are rejected;
+131 lines, WITH-WORK. A5: 23/23 identical decisions on the reconstructed representative; the request
+shrinks from 70 to 75 B of JSON to a 2 or 3 B frame while the response stays OPA's 43 B document; 35
+lines, WITH-WORK, and the pre registered finding stands: Facet is a transport that composes with
+anyone. A6: stale refused by the floor, tampered and unsigned refused by OPA's own verification; 54
+lines, WITH-WORK. Matrix verdicts: A1 to A8 NOT-DISTINCT, B1 to B5 LOSES.
+
+**Honest scope.** The A3 result is the important one and it cuts against the headline: the substrate
+reach that the pre registration called the crown jewel is reachable by OPA with an afternoon of glue
+on a board with 520 KB of SRAM. What the comparison does not erase is recorded in the cells rather
+than argued: the OPA path needs about 312 KB of RAM, a 136 KB module per policy, and a 60 KB
+interpreter, against a 1.7 KB interpreter class and 160 to 224 B images; it decides in milliseconds
+over USB against sub millisecond; it has no stated bound, no per decision receipt without the sink,
+and no compact wire without the Facet glue. Those are differences of degree and of composition, not a
+distinct layer under the pre registered definition, and Phase 6 must say so. Only one MCU (RP2350
+ARM) was reached; the 8 bit AVR of #92 and the FPGA fabric were not attempted for OPA and would not
+change the verdict. The receipt sink signs where the bundle private key lives, the bundle service,
+not the agent host; the floor persists a revision before OPA verifies the signature, so a high
+revision tampered bundle could lock out later legitimate ones. Both caveats are in the result notes.
+
+**Provenance.** Branch comparisons/phase0-prereg, commit after d1ba764: groupa/opa_wasm_mcu/ (glue,
+firmware, Makefile), groupa/a3_opa_mcu.py, groupa/phase5.py, glue/{opa_receipts,opa_revision_floor,
+facet_opa_input}.py, tests/test_glue_*.py, results/opa+glue/ (A1..A8 result files and evidence:
+opa_wasm3_rp2350-arm.json, receipts.jsonl, bytes.json, floor_results.json), toolchain/install.sh and
+TOOLCHAIN.md (wasm3 pin), MATRIX.md, matrix.json. Board: Raspberry Pi Pico 2 W. No push (owner gated).
