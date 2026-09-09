@@ -73,9 +73,14 @@ To let a dedicated docs session overhaul the ledger while development continues:
   code or conformance fixtures.
 - The **dev session** does not edit `supporting-evidence.md` prose during an overhaul. New evidence
   rows it produces are appended to **`docs/research/supporting-evidence.pending.md`** (the staging
-  file), starting at the next free number.
+  file), created for the overhaul, starting at the next free number.
 - On merge, the docs session folds the staged rows into the ledger with correct formatting and
-  clears the staging file. Because the two sessions never edit the same region, conflicts are ~zero.
+  deletes the staging file. Between overhauls the staging file does not exist: the repo carries one
+  ledger, and a row written outside an overhaul is written into it directly and anchored at the next
+  fold. Because the two sessions never edit the same region, conflicts are ~zero.
+- Staged rows are drafts until folded. A row written while the work was in progress is rewritten once
+  from the finished state at the fold rather than folded with a chain of caveats; the append only rule
+  of §3 begins when a row enters the ledger.
 
 ## 7. The gate
 
