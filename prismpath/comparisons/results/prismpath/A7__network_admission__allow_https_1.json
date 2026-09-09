@@ -4,26 +4,31 @@
   "expected": "allow",
   "glue": null,
   "grade": "NATIVE",
-  "harness_commit": "3b878c9",
+  "harness_commit": "a568419",
   "idiomatic": true,
   "match": true,
   "measurements": {
     "latency_ns": {
-      "max": 139504,
-      "median": 78704,
-      "min": 75792,
+      "max": 137137,
+      "median": 78352,
+      "min": 76384,
       "n": 100000,
-      "p95": 80401
+      "p95": 80448
+    },
+    "pins_witness": {
+      "evaluations": 224,
+      "max_edge_cycles": 34,
+      "verdict": "PASS"
     },
     "transport": "python in process (engine.run)",
     "wcet_cycles_signed": 35,
     "wcet_ns_at_50MHz_fabric": 700
   },
-  "notes": "Python engine in process, 100000 runs: min/median/p95/max ns 75792/78704/80401/139504 (the reference tier, no bound claimed for it). The signed bound travels with the policy: this policy's compiled image has wcet_cycles=35 (700 ns at the shipped 50 MHz fabric clock), recomputed at verify from the image bytes (policy_pack, ledger #110; formula calibrated cycle exact on the RTL, #109; universal envelope base case proven, #111). Honored by measurement on the pins for signed policies in ledger #122 and #123 on the same interpreter and bitstream; the pins witness for THIS image is scheduled in the A3 hardware session and this cell drops to WITH-WORK if that witness cannot be taken. Kernel tier compute cost on this interpreter class: 132 to 182 ns per evaluation (ledger #78, #80).",
+  "notes": "Python engine in process, 100000 runs: min/median/p95/max ns 76384/78352/80448/137137 (the reference tier, no bound claimed for it). The signed bound travels with the policy: this policy's compiled image has wcet_cycles=35 (700 ns at the shipped 50 MHz fabric clock), recomputed at verify from the image bytes (policy_pack, ledger #110; formula calibrated cycle exact on the RTL, #109; universal envelope base case proven, #111). Honored by measurement on the pins for THIS image: LA2016 on Pmod JB of the Zynq-7020 tapped datapath overlay, 224 evaluations across 30 captures at 200mSa/s, longest busy window 34 cycles against the signed 35, 0 disagreements between the edge count and width methods (pins_network_admission.json; the same method as ledger #122 and #123). Kernel tier compute cost on this interpreter class: 132 to 182 ns per evaluation (ledger #78, #80).",
   "observed": "allow",
   "policy": "network_admission",
-  "run_at": "2026-09-08T22:39:09Z",
+  "run_at": "2026-09-09T00:42:04Z",
   "scenario": "allow_https_1",
   "system": "prismpath",
-  "system_version": "repo@3b878c9"
+  "system_version": "repo@a568419"
 }

@@ -11,12 +11,12 @@
 | kernel aarch64 (this host) | 23/23 in kernel | results/prismpath/evidence/A3/kernel_aarch64_gx10.log |
 | kernel x86_64 (Protectli) | 23/23 in kernel, object rebuilt there | results/prismpath/evidence/A3/kernel_x86_64_protectli.log |
 | ESP32 Xtensa | pending, no board attached | |
-| RP2350 ARM and RISC-V | pending, no board attached | |
-| Zynq-7020 fabric | pending, board via the Protectli jump | |
-| LA2016 WCET on pins for these two images (A7) | pending, analyzer and board | |
+| RP2350 ARM and RISC-V | 23/23 each, one Pico 2 W flashed twice | results/prismpath/evidence/A3/mcu_ppt-rp2350_*.json |
+| Zynq-7020 fabric | 23/23 on the resident finale overlay (attach, PS path) and 23/23 again on the tapped datapath overlay | results/prismpath/evidence/A3/fabric_finale_attach.log, fabric_datapath_run.log |
+| LA2016 WCET on pins for these two images (A7) | PASS, network_admission 34 of 35 cycles over 224 evaluations, sensor_interlock 23 of 24 over 216 | results/prismpath/evidence/A7/pins_*.json |
 
 The corpus is `results/prismpath/evidence/A3/a3.packets.bin` (23 records) with the two compiled
-images beside it (`network_admission.ppt` 168 B and `sensor_interlock.ppt`; sha256 prefixes in
+images beside it (`network_admission.ppt` 224 B and `sensor_interlock.ppt` 160 B; sha256 prefixes in
 a3_vectors.json). PrismPath's A3 result files are written by `groupa/a3.py` only after an MCU leg
 runs; the pre registered NATIVE criterion needs host plus kernel plus MCU.
 
@@ -47,12 +47,23 @@ pattern, hwh derived addresses, never a blind MMIO probe).
 
 ## A7 pins witness
 
-The signed bound for each image is already in the A7 result notes (`wcet_cycles` from the compiled
-image; network_admission is 35 cycles, 700 ns at 50 MHz). The pins witness follows ledger #122/#123:
-load the signed pack with `dp_load.py`, tap Pmod JB with the LA2016 at 200 MSa/s, sweep every scenario
-input, and check the maximum busy window against the signed bound with `la_wcet_check.py`. Freeze the
-verdict record to results/prismpath/evidence/A7/. If the witness cannot be taken, `groupa/a7.py`'s
-PrismPath grade drops to WITH-WORK per its own notes.
+Taken 2026-09-09, both images PASS. The signed bound for each image is in the A7 result notes
+(`wcet_cycles` from the compiled image; network_admission 35 cycles, sensor_interlock 24). The witness
+followed ledger #122/#123 with the comparison corpus as the stimulus: the tapped `ppt_datapath.bit` was
+loaded once on the board by `groupa/a3_fabric_run.py` (which also repeated the A3 leg, 23/23), then
+`groupa/a7_sweep_only.py <policy> <seconds>` attached to the resident overlay without reconfiguring and
+swept that policy's corpus readings continuously through the PS evaluate path, while on gx10
+`groupa/a7_pins.py --policy <id> --bound <wcet> --iters 30` took 30 free run captures on Pmod JB with
+the LA2016 (200 MSa/s, threshold passed to sigrok as the range literal `1.4-1.4`) and measured every
+busy window with `la_wcet_check.measure` (edge count and width methods, 0 disagreements). Longest
+windows: 34 cycles against the signed 35 (224 evaluations) and 23 against 24 (216 evaluations). One
+process drives the fabric at a time; when a second driver was started by mistake for 37 seconds the
+board survived, but kill by PID at once. `groupa/a7.py` reads `pins_<policy>.json` and grades NATIVE
+on PASS, WITH-WORK when the file is absent, NOT on FAIL, so the grade is data driven.
+
+The board's boot demo service (`prismpath-finale.service`) is disabled for this work, because it
+configures the PL at boot and spends the one configuration budgeted per power cycle. Re enable it
+when the board should self start the demo again.
 
 ## OPA WebAssembly on an MCU (the comparator attempt)
 

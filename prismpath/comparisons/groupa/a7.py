@@ -80,6 +80,24 @@ def run_prismpath(n: int) -> None:
         graph = parse(flow)
         image = ppt_compile.compile_flow(graph).serialize()
         wcet = policy_pack.wcet_cycles(image)
+        pins_path = ev / f"pins_{pid}.json"          # written by groupa/a7_pins.py in the hardware session
+        pins = json.loads(pins_path.read_text()) if pins_path.exists() else None
+        if pins is not None and pins["signed_wcet_cycles"] != wcet:
+            raise SystemExit(f"{pid}: pins witness taken against bound {pins['signed_wcet_cycles']} but the image says {wcet}")
+        witness_ok = pins is not None and pins["verdict"] == "PASS"
+        if pins is None:
+            pins_note = ("The pins witness for THIS image could not be taken in the hardware session, so this cell is graded "
+                         "WITH-WORK per the pre registered note (bound stated and recomputed at verify, honored on the pins only for "
+                         "the earlier images of ledger #122 and #123).")
+        elif witness_ok:
+            pins_note = (f"Honored by measurement on the pins for THIS image: LA2016 on Pmod JB of the Zynq-7020 tapped datapath overlay, "
+                         f"{pins['evaluations_measured']} evaluations across {pins['captures']} captures at {pins['samplerate']}Sa/s, "
+                         f"longest busy window {pins['global_max_edge_cycles']} cycles against the signed {wcet}, "
+                         f"{pins['method_disagreements']} disagreements between the edge count and width methods "
+                         f"(pins_{pid}.json; the same method as ledger #122 and #123).")
+        else:
+            pins_note = (f"The pins witness for THIS image FAILED: longest busy window {pins['global_max_edge_cycles']} cycles against the "
+                         f"signed {wcet} (pins_{pid}.json); graded NOT.")
         for sid, inp, exp in complete_steps(policy):
             fields = {k: v for k, v in inp.items() if v is not None}
             worker = lambda node, instr, ctx, f=fields: dict(f)
@@ -87,16 +105,17 @@ def run_prismpath(n: int) -> None:
             table.append({"policy": pid, "scenario": sid, "python_ns": st, "wcet_cycles_signed": wcet,
                           "wcet_ns_at_50MHz": wcet * 20})
             write_result(system="prismpath", dimension="A7", policy=pid, scenario=sid, expected=exp["outcome"], observed=exp["outcome"],
-                         grade="NATIVE", idiomatic=True, evidence_path=ev,
+                         grade="NATIVE" if witness_ok else ("WITH-WORK" if pins is None else "NOT"), idiomatic=True, evidence_path=ev,
                          measurements={"latency_ns": st, "transport": "python in process (engine.run)",
-                                       "wcet_cycles_signed": wcet, "wcet_ns_at_50MHz_fabric": wcet * 20},
+                                       "wcet_cycles_signed": wcet, "wcet_ns_at_50MHz_fabric": wcet * 20,
+                                       "pins_witness": None if pins is None else {
+                                           "max_edge_cycles": pins["global_max_edge_cycles"], "evaluations": pins["evaluations_measured"],
+                                           "verdict": pins["verdict"]}},
                          notes=(f"Python engine in process, {n} runs: min/median/p95/max ns {st['min']}/{st['median']}/{st['p95']}/{st['max']} "
                                 f"(the reference tier, no bound claimed for it). The signed bound travels with the policy: this policy's "
                                 f"compiled image has wcet_cycles={wcet} ({wcet * 20} ns at the shipped 50 MHz fabric clock), recomputed at "
                                 "verify from the image bytes (policy_pack, ledger #110; formula calibrated cycle exact on the RTL, #109; "
-                                "universal envelope base case proven, #111). Honored by measurement on the pins for signed policies in "
-                                "ledger #122 and #123 on the same interpreter and bitstream; the pins witness for THIS image is scheduled "
-                                "in the A3 hardware session and this cell drops to WITH-WORK if that witness cannot be taken. Kernel tier "
+                                "universal envelope base case proven, #111). " + pins_note + " Kernel tier "
                                 "compute cost on this interpreter class: 132 to 182 ns per evaluation (ledger #78, #80)."))
     (ev / "latency.json").write_text(json.dumps(table, indent=1) + "\n")
 

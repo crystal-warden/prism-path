@@ -2,7 +2,7 @@
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """A7 pins witness driver, run on the host the LA2016 is plugged into (gx10). While the board's single
 process sweeps a policy image's vectors on the tapped datapath overlay, take repeated free run
-captures on Pmod JB (CH0 clk, CH1 busy, CH2 done, CH3 start; 200 MSa/s, 1.4 V threshold) and measure
+captures on Pmod JB (CH0 clk, CH1 busy, CH2 done, CH3 start; 200 MSa/s, 1.4 V threshold, passed to sigrok as the range literal 1.4-1.4) and measure
 every evaluation's busy window against the image's signed wcet_cycles, exactly as ledger #122/#123
 did (prismpath-hw/wcet-pins on the bench workspace). Writes the verdict record to
 results/prismpath/evidence/A7/pins_<policy>.json.
@@ -41,7 +41,7 @@ def main(argv=None) -> int:
     ap.add_argument("--iters", type=int, default=12)
     ap.add_argument("--samples", type=int, default=400000)
     ap.add_argument("--rate", default="200m")
-    ap.add_argument("--threshold", default="1.4")
+    ap.add_argument("--threshold", default="1.4-1.4")  # kingst-la2016 takes a range literal; 1.4 V = 3V3 CMOS
     a = ap.parse_args(argv)
     ev = evidence_dir("prismpath", "A7")
     hist = collections.Counter(); gmax = 0; total = 0; disagree = 0; width_max = 0

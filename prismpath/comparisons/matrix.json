@@ -1753,95 +1753,95 @@
     },
     {
       "path": "prismpath/A7__network_admission__allow_dns_small_1.json",
-      "sha256": "262ea7cf347a2157feaac3471d7287815699359ed9f96ed3d0f8cdbb490bef0a"
+      "sha256": "9082ef84eb6b1fba755211585f5006287bdef2b97381d6f243e987e09391076d"
     },
     {
       "path": "prismpath/A7__network_admission__allow_https_1.json",
-      "sha256": "2043f789696c39e7c504f51b104f61305d4919577deb3f2496abda6dbb474490"
+      "sha256": "2a6db020d811e45eb239ea0e7dffd00619d9ccc3347436a092af3e356f8d8b4c"
     },
     {
       "path": "prismpath/A7__network_admission__allow_icmp_1.json",
-      "sha256": "91a42edeb6ce2e1ff305d1573859ecaf9939974e807d905f2fda1215fece23d1"
+      "sha256": "40b811b05c194da673cb85d7e48e8a2c51a5832df908d54b464934d3f26185d5"
     },
     {
       "path": "prismpath/A7__network_admission__allow_internal_ssh_1.json",
-      "sha256": "4355a21a2c3400a72c77a4a9743d0ac4659ccdd046b585089c9948766c201893"
+      "sha256": "2f574ad36b4a51c7cfdaddc9fdefbfe600ee4e0c8dfe82772b7b10bd4b891763"
     },
     {
       "path": "prismpath/A7__network_admission__boundary_dns_512.json",
-      "sha256": "e6b21f79287a22c912409572fb8cfd2deee4b9d41a8326d631859f84263774de"
+      "sha256": "25676d4e9b30ba9b082fede3d6adc108bc596b3ce20306a119373702bdf73e49"
     },
     {
       "path": "prismpath/A7__network_admission__boundary_dns_513.json",
-      "sha256": "79adf2f368c3f8b788d3dd0d8e5de367986299ac2dd2af03b7d5e5c59485ac16"
+      "sha256": "cf992a13fcc09ebc0b2084c9d672669234fc6fa8c0617cade75e61292f431b15"
     },
     {
       "path": "prismpath/A7__network_admission__boundary_jumbo_1399.json",
-      "sha256": "3f6a76b7d6de5250f73e983b85b416c36159d3ce172862c38ffa0e313726978c"
+      "sha256": "3fa2f1e20029bfae03dc12c10cbcb42f6426d11561fa8ff2636369fb037f623f"
     },
     {
       "path": "prismpath/A7__network_admission__boundary_jumbo_1400.json",
-      "sha256": "6c70e71a904f455d650a5dd7db2defafcb7ec3123be30318f9484d1c4a028b64"
+      "sha256": "da0365153fd26a2340683b4503c2fea253b68a7099f63e65d14a48cdc9016db5"
     },
     {
       "path": "prismpath/A7__network_admission__deny_dns_large_1.json",
-      "sha256": "6771662408524c06140c4460f69f28b6c9310f8e095cb8e7ba4b5d7f765d5659"
+      "sha256": "c8de1503a6a005953ea331435c67fc8c899f9b3291c04212776bb50cb04fb409"
     },
     {
       "path": "prismpath/A7__network_admission__deny_external_ssh_1.json",
-      "sha256": "9ae683d24a8a08a70f4c9989175c45176268ea205d471331e719f9e6f7e38323"
+      "sha256": "a234a42628b03515159509a2ae2a3cb17140ab41f62a8d7de428226c3dea7b82"
     },
     {
       "path": "prismpath/A7__network_admission__deny_telnet_1.json",
-      "sha256": "81cbff41aedc1cb46c73268eaf83551ffcad45c0538a1df7375e48ffe5a87a9d"
+      "sha256": "e27314b262cb8fb52802af8da78966fa5dc09199b3634c8f26e309c87aec2cd8"
     },
     {
       "path": "prismpath/A7__network_admission__observe_jumbo_1.json",
-      "sha256": "9f77f918f08c0899170d9e877b998ca0742a8a43aed95d480ff497e7d0e60169"
+      "sha256": "8d13a0212a61b26507dc25fc18063b3e45f790faeba53dc6c633a9505bee66ee"
     },
     {
       "path": "prismpath/A7__network_admission__observe_other_1.json",
-      "sha256": "c6081927a0abe18bf3a76a2686cf43863a081f86c8d1a15759778e932ad916bb"
+      "sha256": "218afa82248431ad014208e7dc8d86e039eb58326a97c2863806661074db7363"
     },
     {
       "path": "prismpath/A7__sensor_interlock__allow_armed_nominal_1.json",
-      "sha256": "65a66a3697704ac142f8332fe528cdd61997159ee8f4a7333e1515291576ddf0"
+      "sha256": "5dbc1ea8367779df7a56de43e49b7439738486b8b6486483a9ff60efe6607563"
     },
     {
       "path": "prismpath/A7__sensor_interlock__allow_nominal_1.json",
-      "sha256": "1ecbe5d13fe0c9ff46f9881b7079d3323a72d0cbca20986b8d01b017eb75010c"
+      "sha256": "10be8b74fc343567c82a63bee8cdaf69d55fb35fa9422d92a3e75c1378cdb52f"
     },
     {
       "path": "prismpath/A7__sensor_interlock__boundary_nominal_119_749.json",
-      "sha256": "012d01bd6b515da3b345016ddbdb3aaeb7f9b9512ccc80a7b618c2846cc39791"
+      "sha256": "c7b7ebe00c66c318b3cea0e20517cc5c4fb910dbbb0b57c5244c33d04acb7a50"
     },
     {
       "path": "prismpath/A7__sensor_interlock__boundary_temp_120.json",
-      "sha256": "1917b5aca86d442cf26f3bb47f6164d86098e79800a341f499422587927015b5"
+      "sha256": "51b10f9305caa1ec5f45d20ab132d85d159b5435d756a84bd89f852ac2d11b0a"
     },
     {
       "path": "prismpath/A7__sensor_interlock__boundary_temp_149.json",
-      "sha256": "f8187760b1ddf7edc482b82f6267f63dd587ba68d423e40488b2d963b365d700"
+      "sha256": "89a972110413a23319b9af1325ed5fc48f6e3040ee3034690a50be32d16ba292"
     },
     {
       "path": "prismpath/A7__sensor_interlock__boundary_temp_150.json",
-      "sha256": "cadb35619d4bceab478a9058dca03bb2490e80fa24c52f671cbb33dc1298cceb"
+      "sha256": "c25de318229d7dbf95bbf283bbeb927ed7dadcf920770b81a2aa6a8612ffa57d"
     },
     {
       "path": "prismpath/A7__sensor_interlock__deny_pressure_1.json",
-      "sha256": "2342241ca3801cecc231010e31e7b1a42cf360e48da1c4c830a9d3442df5e041"
+      "sha256": "6821a86257b043ecfeb271f6bc272a3941a637e2d8781b9a81e84104285eea86"
     },
     {
       "path": "prismpath/A7__sensor_interlock__deny_temp_1.json",
-      "sha256": "45be2de09b29f8d0d62a652f7da2fa13973495cd0f435261becafff9f86d05be"
+      "sha256": "31c7410ae15dee332ce6db3c0a3a77a498bec6c15d808c8359441e302b2dc640"
     },
     {
       "path": "prismpath/A7__sensor_interlock__escalation_sensor_dark_armed_1.json",
-      "sha256": "ae654a025f732c32b3dca5c49648e99f61a2d9c01edb497ee39c036155fbd725"
+      "sha256": "454979042bed1192342ba8e26e876f5cabda4a3ca1a31681683c2909989b5f14"
     },
     {
       "path": "prismpath/A7__sensor_interlock__observe_temp_1.json",
-      "sha256": "bb6370552dfab0ea51e0f26f8d0e49a7ae17c8a4d0400df5ebcd31b6440875e8"
+      "sha256": "03175660bbcc9a9f213b6eb547510338d5f54c2588250d77d9fcb28dbb8bd89d"
     },
     {
       "path": "prismpath/A8__ai_action_gate__ai_worker_loop_1.json",

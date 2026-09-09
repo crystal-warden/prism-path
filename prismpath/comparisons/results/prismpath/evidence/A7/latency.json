@@ -3,10 +3,10 @@
   "policy": "network_admission",
   "scenario": "allow_https_1",
   "python_ns": {
-   "min": 75792,
-   "median": 78704,
-   "p95": 80401,
-   "max": 139504,
+   "min": 76384,
+   "median": 78352,
+   "p95": 80448,
+   "max": 137137,
    "n": 100000
   },
   "wcet_cycles_signed": 35,
@@ -16,10 +16,10 @@
   "policy": "network_admission",
   "scenario": "deny_telnet_1",
   "python_ns": {
-   "min": 11120,
-   "median": 11584,
-   "p95": 11936,
-   "max": 440144,
+   "min": 10960,
+   "median": 11440,
+   "p95": 11664,
+   "max": 51760,
    "n": 100000
   },
   "wcet_cycles_signed": 35,
@@ -29,10 +29,10 @@
   "policy": "network_admission",
   "scenario": "allow_internal_ssh_1",
   "python_ns": {
-   "min": 24736,
-   "median": 25440,
-   "p95": 25808,
-   "max": 89616,
+   "min": 24832,
+   "median": 25520,
+   "p95": 26048,
+   "max": 87377,
    "n": 100000
   },
   "wcet_cycles_signed": 35,
@@ -42,10 +42,10 @@
   "policy": "network_admission",
   "scenario": "deny_external_ssh_1",
   "python_ns": {
-   "min": 32944,
-   "median": 33712,
-   "p95": 34192,
-   "max": 105889,
+   "min": 32432,
+   "median": 33552,
+   "p95": 34160,
+   "max": 122992,
    "n": 100000
   },
   "wcet_cycles_signed": 35,
@@ -55,10 +55,10 @@
   "policy": "network_admission",
   "scenario": "allow_dns_small_1",
   "python_ns": {
-   "min": 50416,
-   "median": 51776,
-   "p95": 53008,
-   "max": 131648,
+   "min": 50304,
+   "median": 51680,
+   "p95": 52977,
+   "max": 115520,
    "n": 100000
   },
   "wcet_cycles_signed": 35,
@@ -69,9 +69,9 @@
   "scenario": "deny_dns_large_1",
   "python_ns": {
    "min": 68400,
-   "median": 70224,
-   "p95": 72144,
-   "max": 143312,
+   "median": 70272,
+   "p95": 72145,
+   "max": 128544,
    "n": 100000
   },
   "wcet_cycles_signed": 35,
@@ -81,10 +81,10 @@
   "policy": "network_admission",
   "scenario": "boundary_dns_512",
   "python_ns": {
-   "min": 50560,
-   "median": 51904,
-   "p95": 53312,
-   "max": 109920,
+   "min": 50224,
+   "median": 51760,
+   "p95": 53136,
+   "max": 111168,
    "n": 100000
   },
   "wcet_cycles_signed": 35,
@@ -94,10 +94,10 @@
   "policy": "network_admission",
   "scenario": "boundary_dns_513",
   "python_ns": {
-   "min": 68240,
-   "median": 70112,
-   "p95": 72160,
-   "max": 139552,
+   "min": 69168,
+   "median": 70448,
+   "p95": 72336,
+   "max": 145761,
    "n": 100000
   },
   "wcet_cycles_signed": 35,
@@ -107,10 +107,10 @@
   "policy": "network_admission",
   "scenario": "observe_jumbo_1",
   "python_ns": {
-   "min": 84928,
-   "median": 87088,
-   "p95": 89360,
-   "max": 150048,
+   "min": 85776,
+   "median": 87296,
+   "p95": 89441,
+   "max": 165456,
    "n": 100000
   },
   "wcet_cycles_signed": 35,
@@ -120,10 +120,10 @@
   "policy": "network_admission",
   "scenario": "boundary_jumbo_1399",
   "python_ns": {
-   "min": 93808,
-   "median": 96144,
-   "p95": 98496,
-   "max": 151761,
+   "min": 94080,
+   "median": 95568,
+   "p95": 97840,
+   "max": 176064,
    "n": 100000
   },
   "wcet_cycles_signed": 35,
@@ -133,10 +133,10 @@
   "policy": "network_admission",
   "scenario": "boundary_jumbo_1400",
   "python_ns": {
-   "min": 86416,
-   "median": 87968,
-   "p95": 90160,
-   "max": 518384,
+   "min": 84864,
+   "median": 86864,
+   "p95": 89104,
+   "max": 202848,
    "n": 100000
   },
   "wcet_cycles_signed": 35,
@@ -146,10 +146,10 @@
   "policy": "network_admission",
   "scenario": "allow_icmp_1",
   "python_ns": {
-   "min": 94576,
-   "median": 96320,
-   "p95": 98544,
-   "max": 525168,
+   "min": 92976,
+   "median": 95216,
+   "p95": 97488,
+   "max": 157072,
    "n": 100000
   },
   "wcet_cycles_signed": 35,
@@ -159,10 +159,10 @@
   "policy": "network_admission",
   "scenario": "observe_other_1",
   "python_ns": {
-   "min": 94864,
-   "median": 96432,
-   "p95": 98752,
-   "max": 190288,
+   "min": 93088,
+   "median": 95377,
+   "p95": 97728,
+   "max": 520929,
    "n": 100000
   },
   "wcet_cycles_signed": 35,
@@ -172,10 +172,10 @@
   "policy": "sensor_interlock",
   "scenario": "allow_nominal_1",
   "python_ns": {
-   "min": 72560,
-   "median": 73792,
-   "p95": 75856,
-   "max": 125280,
+   "min": 72672,
+   "median": 74096,
+   "p95": 76128,
+   "max": 147536,
    "n": 100000
   },
   "wcet_cycles_signed": 24,
@@ -185,10 +185,10 @@
   "policy": "sensor_interlock",
   "scenario": "allow_armed_nominal_1",
   "python_ns": {
-   "min": 71824,
-   "median": 73680,
-   "p95": 75728,
-   "max": 157489,
+   "min": 71920,
+   "median": 73744,
+   "p95": 75760,
+   "max": 157200,
    "n": 100000
   },
   "wcet_cycles_signed": 24,
@@ -198,10 +198,10 @@
   "policy": "sensor_interlock",
   "scenario": "observe_temp_1",
   "python_ns": {
-   "min": 51296,
-   "median": 52736,
-   "p95": 54208,
-   "max": 119440,
+   "min": 51344,
+   "median": 52704,
+   "p95": 54032,
+   "max": 113376,
    "n": 100000
   },
   "wcet_cycles_signed": 24,
@@ -211,10 +211,10 @@
   "policy": "sensor_interlock",
   "scenario": "deny_temp_1",
   "python_ns": {
-   "min": 33504,
-   "median": 34544,
-   "p95": 35152,
-   "max": 96304,
+   "min": 33472,
+   "median": 34432,
+   "p95": 35040,
+   "max": 460497,
    "n": 100000
   },
   "wcet_cycles_signed": 24,
@@ -224,10 +224,10 @@
   "policy": "sensor_interlock",
   "scenario": "deny_pressure_1",
   "python_ns": {
-   "min": 33632,
-   "median": 34592,
-   "p95": 35232,
-   "max": 84928,
+   "min": 33136,
+   "median": 34464,
+   "p95": 35136,
+   "max": 96016,
    "n": 100000
   },
   "wcet_cycles_signed": 24,
@@ -237,10 +237,10 @@
   "policy": "sensor_interlock",
   "scenario": "boundary_temp_149",
   "python_ns": {
-   "min": 51248,
-   "median": 52736,
-   "p95": 53968,
-   "max": 118848,
+   "min": 51680,
+   "median": 52769,
+   "p95": 54208,
+   "max": 128400,
    "n": 100000
   },
   "wcet_cycles_signed": 24,
@@ -251,9 +251,9 @@
   "scenario": "boundary_temp_150",
   "python_ns": {
    "min": 33904,
-   "median": 34736,
-   "p95": 35232,
-   "max": 464929,
+   "median": 34800,
+   "p95": 35536,
+   "max": 107024,
    "n": 100000
   },
   "wcet_cycles_signed": 24,
@@ -263,10 +263,10 @@
   "policy": "sensor_interlock",
   "scenario": "boundary_nominal_119_749",
   "python_ns": {
-   "min": 72688,
+   "min": 72640,
    "median": 73968,
-   "p95": 76001,
-   "max": 506433,
+   "p95": 76016,
+   "max": 157745,
    "n": 100000
   },
   "wcet_cycles_signed": 24,
@@ -276,10 +276,10 @@
   "policy": "sensor_interlock",
   "scenario": "boundary_temp_120",
   "python_ns": {
-   "min": 51760,
-   "median": 52816,
-   "p95": 54225,
-   "max": 484320,
+   "min": 52224,
+   "median": 53280,
+   "p95": 54784,
+   "max": 135664,
    "n": 100000
   },
   "wcet_cycles_signed": 24,
@@ -289,10 +289,10 @@
   "policy": "sensor_interlock",
   "scenario": "escalation_sensor_dark_armed_1",
   "python_ns": {
-   "min": 15808,
-   "median": 16304,
-   "p95": 16576,
-   "max": 70512,
+   "min": 15584,
+   "median": 16272,
+   "p95": 16640,
+   "max": 76832,
    "n": 100000
   },
   "wcet_cycles_signed": 24,
