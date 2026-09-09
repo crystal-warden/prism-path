@@ -1,0 +1,17 @@
+{
+  "dimension": "B2",
+  "evidence_path": "prismpath/comparisons/results/opa/evidence/B2",
+  "expected": null,
+  "glue": null,
+  "grade": "NOT",
+  "harness_commit": "ecae31b",
+  "idiomatic": true,
+  "match": false,
+  "notes": "Rego has a written reference and an extensive test and fuzz corpus; no machine checked semantics or proofs about the evaluator are published. Sources: prismpath/comparisons/results/opa/evidence/B2/sources.txt.",
+  "observed": "not_applicable",
+  "policy": "none",
+  "run_at": "2026-09-09T01:04:30Z",
+  "scenario": "matrix-row",
+  "system": "opa",
+  "system_version": "1.20.2"
+}

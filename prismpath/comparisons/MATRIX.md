@@ -10,11 +10,11 @@
 | A6 | NOT-DISTINCT | NATIVE (N:3, W:0, X:0) | WITH-WORK (N:2, W:1, X:0) [mm:1] | NOT (N:0, W:0, X:3) [mm:3] | NOT (N:0, W:0, X:3) [mm:3] | NOT (N:0, W:0, X:3) [mm:3] | NOT (N:0, W:0, X:1) [mm:1] |
 | A7 | NOT-DISTINCT | NATIVE (N:23, W:0, X:0) | WITH-WORK (N:0, W:23, X:0) | WITH-WORK (N:0, W:23, X:0) | WITH-WORK (N:0, W:23, X:0) | NOT (N:0, W:0, X:23) [mm:23] | NOT (N:0, W:0, X:1) [mm:1] |
 | A8 | NOT-DISTINCT | NATIVE (N:1, W:0, X:0) | WITH-WORK (N:0, W:1, X:0) | NOT (N:0, W:0, X:1) | NOT (N:0, W:0, X:1) | NOT (N:0, W:0, X:1) [mm:1] | NOT (N:0, W:0, X:1) [mm:1] |
-| B1 | OPEN | UNTESTED | UNTESTED | UNTESTED | UNTESTED | UNTESTED | UNTESTED |
-| B2 | OPEN | UNTESTED | UNTESTED | UNTESTED | UNTESTED | UNTESTED | UNTESTED |
-| B3 | OPEN | UNTESTED | UNTESTED | UNTESTED | UNTESTED | UNTESTED | UNTESTED |
-| B4 | OPEN | UNTESTED | UNTESTED | UNTESTED | UNTESTED | UNTESTED | UNTESTED |
-| B5 | OPEN | UNTESTED | UNTESTED | UNTESTED | UNTESTED | UNTESTED | UNTESTED |
+| B1 | LOSES | NOT (N:4, W:1, X:3) [mm:3] | NATIVE (N:8, W:0, X:0) | NATIVE (N:8, W:0, X:0) | NATIVE (N:8, W:0, X:0) | WITH-WORK (N:0, W:8, X:0) [mm:8] | NOT (N:0, W:0, X:1) [mm:1] |
+| B2 | LOSES | NOT (N:0, W:0, X:1) [mm:1] | NOT (N:0, W:0, X:1) [mm:1] | NATIVE (N:1, W:0, X:0) [mm:1] | NOT (N:0, W:0, X:1) [mm:1] | NOT (N:0, W:0, X:1) [mm:1] | NOT (N:0, W:0, X:1) [mm:1] |
+| B3 | LOSES | NOT (N:0, W:0, X:6) [mm:6] | NATIVE (N:6, W:0, X:0) | NATIVE (N:6, W:0, X:0) | WITH-WORK (N:0, W:6, X:0) [mm:6] | NATIVE (N:6, W:0, X:0) | NOT (N:0, W:0, X:1) [mm:1] |
+| B4 | LOSES | WITH-WORK (N:0, W:1, X:0) [mm:1] | NATIVE (N:1, W:0, X:0) [mm:1] | NATIVE (N:1, W:0, X:0) [mm:1] | NATIVE (N:1, W:0, X:0) [mm:1] | NATIVE (N:1, W:0, X:0) [mm:1] | NATIVE (N:1, W:0, X:0) [mm:1] |
+| B5 | LOSES | NOT (N:0, W:0, X:1) [mm:1] | NATIVE (N:1, W:0, X:0) [mm:1] | NATIVE (N:1, W:0, X:0) [mm:1] | NATIVE (N:1, W:0, X:0) [mm:1] | NATIVE (N:1, W:0, X:0) [mm:1] | WITH-WORK (N:0, W:1, X:0) [mm:1] |
 
 ## Evidence Files
 
@@ -108,6 +108,23 @@
 - `cedar/A7__sensor_interlock__escalation_sensor_dark_armed_1.json`
 - `cedar/A7__sensor_interlock__observe_temp_1.json`
 - `cedar/A8__ai_action_gate__ai_worker_loop_1.json`
+- `cedar/B1__access_control_rbac_abac__admin_any_1.json`
+- `cedar/B1__access_control_rbac_abac__contractor_group_read_1.json`
+- `cedar/B1__access_control_rbac_abac__group_read_1.json`
+- `cedar/B1__access_control_rbac_abac__group_write_denied_1.json`
+- `cedar/B1__access_control_rbac_abac__high_sensitivity_owner_denied_1.json`
+- `cedar/B1__access_control_rbac_abac__manager_after_hours_1.json`
+- `cedar/B1__access_control_rbac_abac__manager_hours_write_1.json`
+- `cedar/B1__access_control_rbac_abac__owner_write_1.json`
+- `cedar/B2__none__matrix-row.json`
+- `cedar/B3__document_sharing_rebac__alice_view_d1.json`
+- `cedar/B3__document_sharing_rebac__alice_view_d2.json`
+- `cedar/B3__document_sharing_rebac__bob_view_d1.json`
+- `cedar/B3__document_sharing_rebac__bob_view_d2.json`
+- `cedar/B3__document_sharing_rebac__carol_view_d1.json`
+- `cedar/B3__document_sharing_rebac__dana_view_d2.json`
+- `cedar/B4__none__matrix-row.json`
+- `cedar/B5__none__matrix-row.json`
 - `cerbos/A1__ai_action_gate__abstain_low_confidence_1.json`
 - `cerbos/A1__ai_action_gate__undeclared_missing_1.json`
 - `cerbos/A1__expense_approval__insufficient_1.json`
@@ -198,6 +215,23 @@
 - `cerbos/A7__sensor_interlock__escalation_sensor_dark_armed_1.json`
 - `cerbos/A7__sensor_interlock__observe_temp_1.json`
 - `cerbos/A8__ai_action_gate__ai_worker_loop_1.json`
+- `cerbos/B1__access_control_rbac_abac__admin_any_1.json`
+- `cerbos/B1__access_control_rbac_abac__contractor_group_read_1.json`
+- `cerbos/B1__access_control_rbac_abac__group_read_1.json`
+- `cerbos/B1__access_control_rbac_abac__group_write_denied_1.json`
+- `cerbos/B1__access_control_rbac_abac__high_sensitivity_owner_denied_1.json`
+- `cerbos/B1__access_control_rbac_abac__manager_after_hours_1.json`
+- `cerbos/B1__access_control_rbac_abac__manager_hours_write_1.json`
+- `cerbos/B1__access_control_rbac_abac__owner_write_1.json`
+- `cerbos/B2__none__matrix-row.json`
+- `cerbos/B3__document_sharing_rebac__alice_view_d1.json`
+- `cerbos/B3__document_sharing_rebac__alice_view_d2.json`
+- `cerbos/B3__document_sharing_rebac__bob_view_d1.json`
+- `cerbos/B3__document_sharing_rebac__bob_view_d2.json`
+- `cerbos/B3__document_sharing_rebac__carol_view_d1.json`
+- `cerbos/B3__document_sharing_rebac__dana_view_d2.json`
+- `cerbos/B4__none__matrix-row.json`
+- `cerbos/B5__none__matrix-row.json`
 - `opa/A1__ai_action_gate__abstain_low_confidence_1.json`
 - `opa/A1__ai_action_gate__undeclared_missing_1.json`
 - `opa/A1__expense_approval__insufficient_1.json`
@@ -288,6 +322,23 @@
 - `opa/A7__sensor_interlock__escalation_sensor_dark_armed_1.json`
 - `opa/A7__sensor_interlock__observe_temp_1.json`
 - `opa/A8__ai_action_gate__ai_worker_loop_1.json`
+- `opa/B1__access_control_rbac_abac__admin_any_1.json`
+- `opa/B1__access_control_rbac_abac__contractor_group_read_1.json`
+- `opa/B1__access_control_rbac_abac__group_read_1.json`
+- `opa/B1__access_control_rbac_abac__group_write_denied_1.json`
+- `opa/B1__access_control_rbac_abac__high_sensitivity_owner_denied_1.json`
+- `opa/B1__access_control_rbac_abac__manager_after_hours_1.json`
+- `opa/B1__access_control_rbac_abac__manager_hours_write_1.json`
+- `opa/B1__access_control_rbac_abac__owner_write_1.json`
+- `opa/B2__none__matrix-row.json`
+- `opa/B3__document_sharing_rebac__alice_view_d1.json`
+- `opa/B3__document_sharing_rebac__alice_view_d2.json`
+- `opa/B3__document_sharing_rebac__bob_view_d1.json`
+- `opa/B3__document_sharing_rebac__bob_view_d2.json`
+- `opa/B3__document_sharing_rebac__carol_view_d1.json`
+- `opa/B3__document_sharing_rebac__dana_view_d2.json`
+- `opa/B4__none__matrix-row.json`
+- `opa/B5__none__matrix-row.json`
 - `openfga/A1__ai_action_gate__abstain_low_confidence_1.json`
 - `openfga/A1__ai_action_gate__undeclared_missing_1.json`
 - `openfga/A1__expense_approval__insufficient_1.json`
@@ -378,6 +429,23 @@
 - `openfga/A7__sensor_interlock__escalation_sensor_dark_armed_1.json`
 - `openfga/A7__sensor_interlock__observe_temp_1.json`
 - `openfga/A8__ai_action_gate__ai_worker_loop_1.json`
+- `openfga/B1__access_control_rbac_abac__admin_any_1.json`
+- `openfga/B1__access_control_rbac_abac__contractor_group_read_1.json`
+- `openfga/B1__access_control_rbac_abac__group_read_1.json`
+- `openfga/B1__access_control_rbac_abac__group_write_denied_1.json`
+- `openfga/B1__access_control_rbac_abac__high_sensitivity_owner_denied_1.json`
+- `openfga/B1__access_control_rbac_abac__manager_after_hours_1.json`
+- `openfga/B1__access_control_rbac_abac__manager_hours_write_1.json`
+- `openfga/B1__access_control_rbac_abac__owner_write_1.json`
+- `openfga/B2__none__matrix-row.json`
+- `openfga/B3__document_sharing_rebac__alice_view_d1.json`
+- `openfga/B3__document_sharing_rebac__alice_view_d2.json`
+- `openfga/B3__document_sharing_rebac__bob_view_d1.json`
+- `openfga/B3__document_sharing_rebac__bob_view_d2.json`
+- `openfga/B3__document_sharing_rebac__carol_view_d1.json`
+- `openfga/B3__document_sharing_rebac__dana_view_d2.json`
+- `openfga/B4__none__matrix-row.json`
+- `openfga/B5__none__matrix-row.json`
 - `openlane/A1__none__matrix-row.json`
 - `openlane/A2__none__matrix-row.json`
 - `openlane/A3__none__matrix-row.json`
@@ -386,6 +454,11 @@
 - `openlane/A6__none__matrix-row.json`
 - `openlane/A7__none__matrix-row.json`
 - `openlane/A8__none__matrix-row.json`
+- `openlane/B1__none__matrix-row.json`
+- `openlane/B2__none__matrix-row.json`
+- `openlane/B3__none__matrix-row.json`
+- `openlane/B4__none__matrix-row.json`
+- `openlane/B5__none__matrix-row.json`
 - `prismpath/A1__ai_action_gate__abstain_low_confidence_1.json`
 - `prismpath/A1__ai_action_gate__undeclared_missing_1.json`
 - `prismpath/A1__expense_approval__insufficient_1.json`
@@ -476,3 +549,20 @@
 - `prismpath/A7__sensor_interlock__escalation_sensor_dark_armed_1.json`
 - `prismpath/A7__sensor_interlock__observe_temp_1.json`
 - `prismpath/A8__ai_action_gate__ai_worker_loop_1.json`
+- `prismpath/B1__access_control_rbac_abac__admin_any_1.json`
+- `prismpath/B1__access_control_rbac_abac__contractor_group_read_1.json`
+- `prismpath/B1__access_control_rbac_abac__group_read_1.json`
+- `prismpath/B1__access_control_rbac_abac__group_write_denied_1.json`
+- `prismpath/B1__access_control_rbac_abac__high_sensitivity_owner_denied_1.json`
+- `prismpath/B1__access_control_rbac_abac__manager_after_hours_1.json`
+- `prismpath/B1__access_control_rbac_abac__manager_hours_write_1.json`
+- `prismpath/B1__access_control_rbac_abac__owner_write_1.json`
+- `prismpath/B2__none__matrix-row.json`
+- `prismpath/B3__document_sharing_rebac__alice_view_d1.json`
+- `prismpath/B3__document_sharing_rebac__alice_view_d2.json`
+- `prismpath/B3__document_sharing_rebac__bob_view_d1.json`
+- `prismpath/B3__document_sharing_rebac__bob_view_d2.json`
+- `prismpath/B3__document_sharing_rebac__carol_view_d1.json`
+- `prismpath/B3__document_sharing_rebac__dana_view_d2.json`
+- `prismpath/B4__none__matrix-row.json`
+- `prismpath/B5__none__matrix-row.json`

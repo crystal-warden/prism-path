@@ -1,0 +1,3 @@
+https://github.com/openfga/openfga
+https://www.cncf.io/blog/2025/11/11/openfga-becomes-a-cncf-incubating-project/
+https://openfga.dev/blog/incubation-announcement

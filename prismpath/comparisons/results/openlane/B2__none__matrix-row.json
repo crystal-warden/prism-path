@@ -1,0 +1,17 @@
+{
+  "dimension": "B2",
+  "evidence_path": "prismpath/comparisons/results/openlane/evidence/B2",
+  "expected": null,
+  "glue": null,
+  "grade": "NOT",
+  "harness_commit": "ecae31b",
+  "idiomatic": true,
+  "match": false,
+  "notes": "No decision engine, nothing to verify in this sense. Sources: prismpath/comparisons/results/openlane/evidence/B2/sources.txt.",
+  "observed": "not_applicable",
+  "policy": "none",
+  "run_at": "2026-09-09T01:04:30Z",
+  "scenario": "matrix-row",
+  "system": "openlane",
+  "system_version": "docs-only"
+}

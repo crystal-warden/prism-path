@@ -1,0 +1,2 @@
+https://www.openpolicyagent.org/docs/latest/policy-reference/ (Rego reference; no machine checked semantics or proofs are published)
+https://github.com/open-policy-agent/opa (Go implementation, tests and fuzzing, no proof artifacts)

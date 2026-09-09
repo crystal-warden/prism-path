@@ -1,0 +1,2 @@
+https://openfga.dev/docs/getting-started/install-sdk (SDKs for Node.js, Go, .NET, Python, Java; CLI; Docker images)
+https://github.com/openfga/helm-charts (Kubernetes deployment)

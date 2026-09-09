@@ -1,0 +1,17 @@
+{
+  "dimension": "B5",
+  "evidence_path": "prismpath/comparisons/results/cedar/evidence/B5",
+  "expected": null,
+  "glue": null,
+  "grade": "NATIVE",
+  "harness_commit": "ecae31b",
+  "idiomatic": true,
+  "match": false,
+  "notes": "Three years public, 63 contributors, a managed AWS service in production, regular releases. Pre registered NATIVE. Figures: prismpath/comparisons/results/cedar/evidence/B5/facts.json (GitHub API, 2026-09-09).",
+  "observed": "not_applicable",
+  "policy": "none",
+  "run_at": "2026-09-09T01:04:30Z",
+  "scenario": "matrix-row",
+  "system": "cedar",
+  "system_version": "4.12.0"
+}

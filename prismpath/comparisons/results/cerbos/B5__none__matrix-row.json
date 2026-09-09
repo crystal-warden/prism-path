@@ -1,0 +1,17 @@
+{
+  "dimension": "B5",
+  "evidence_path": "prismpath/comparisons/results/cerbos/evidence/B5",
+  "expected": null,
+  "glue": null,
+  "grade": "NATIVE",
+  "harness_commit": "ecae31b",
+  "idiomatic": true,
+  "match": false,
+  "notes": "Five years public, 35 contributors, a commercial operator, regular releases; the 0.x version line is noted. Pre registered NATIVE. Figures: prismpath/comparisons/results/cerbos/evidence/B5/facts.json (GitHub API, 2026-09-09).",
+  "observed": "not_applicable",
+  "policy": "none",
+  "run_at": "2026-09-09T01:04:30Z",
+  "scenario": "matrix-row",
+  "system": "cerbos",
+  "system_version": "0.55.0"
+}

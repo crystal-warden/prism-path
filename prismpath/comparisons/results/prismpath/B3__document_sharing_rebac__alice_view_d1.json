@@ -1,0 +1,17 @@
+{
+  "dimension": "B3",
+  "evidence_path": "prismpath/comparisons/systems/prismpath/generated/conformance.json",
+  "expected": "allow",
+  "glue": null,
+  "grade": "NOT",
+  "harness_commit": "ecae31b",
+  "idiomatic": true,
+  "match": false,
+  "notes": "PrismPath has no relationship graph and no data plane; the only way to answer the scenario is for the caller to derive the tuple and pass a boolean, at which point the caller made the decision. Recorded not expressible by the translator; pre registered NOT.",
+  "observed": "not-expressible",
+  "policy": "document_sharing_rebac",
+  "run_at": "2026-09-09T01:04:30Z",
+  "scenario": "alice_view_d1",
+  "system": "prismpath",
+  "system_version": "repo@ecae31b"
+}

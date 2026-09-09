@@ -1,0 +1,1 @@
+https://www.openpolicyagent.org/ecosystem (over 60 listed integrations: Kubernetes admission control and Gatekeeper, Envoy, Terraform and conftest, Spring Security, SDKs for JavaScript, Java, C#, Go, Swift, Clojure, Rust, PHP, Zig)

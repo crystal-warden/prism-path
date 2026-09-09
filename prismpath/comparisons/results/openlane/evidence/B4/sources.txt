@@ -1,0 +1,2 @@
+https://docs.theopenlane.io/docs/platform/integrations/overview (identity providers Authentik, Azure Entra ID, Google Workspace, Keycloak, Okta; AWS, Google Cloud SCC, Microsoft Defender for Cloud, Cloudflare; GitHub App, Slack, Microsoft Teams; Google Drive, OneDrive; Tailscale; email)
+https://docs.theopenlane.io/docs/api (GraphQL and REST API)

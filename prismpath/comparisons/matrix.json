@@ -376,6 +376,74 @@
       "sha256": "a4a533396207688246980f23f022c2ae5984297b7212b7c7c1825da16cabd936"
     },
     {
+      "path": "cedar/B1__access_control_rbac_abac__admin_any_1.json",
+      "sha256": "48892b757481e09952dfc258d98ccccf3ba455cfcf2f6b4a30ad5f8fd46c6ae3"
+    },
+    {
+      "path": "cedar/B1__access_control_rbac_abac__contractor_group_read_1.json",
+      "sha256": "f6f8cf07bf440b6d03e9abad79d7120e0278587ff405ed2a38c15fab0e60926a"
+    },
+    {
+      "path": "cedar/B1__access_control_rbac_abac__group_read_1.json",
+      "sha256": "fd51fc9a5d9dc207ced9bd8893cfa90909e76e327959628433dddb40df829b8a"
+    },
+    {
+      "path": "cedar/B1__access_control_rbac_abac__group_write_denied_1.json",
+      "sha256": "3e1b67ce28e36920fc874a0edc612aa6c9f0c7594d18854cc92dd019d540ed7e"
+    },
+    {
+      "path": "cedar/B1__access_control_rbac_abac__high_sensitivity_owner_denied_1.json",
+      "sha256": "8186f45aef0a2d4e36008042006cd38ed941276b1414f628564b4c54d10fc775"
+    },
+    {
+      "path": "cedar/B1__access_control_rbac_abac__manager_after_hours_1.json",
+      "sha256": "cf4d23aaed8fe194cecd292ac84dbd217b44673d0e134ebad89ded915ecb9451"
+    },
+    {
+      "path": "cedar/B1__access_control_rbac_abac__manager_hours_write_1.json",
+      "sha256": "9e96f25b423fb2d72c18eab82cb28b85161515746be9e9c2e0e8f79dc38085ee"
+    },
+    {
+      "path": "cedar/B1__access_control_rbac_abac__owner_write_1.json",
+      "sha256": "7bb7707957305a1439d076ba611b5a9f8de76f4c1c84f6c07744b0328ead181d"
+    },
+    {
+      "path": "cedar/B2__none__matrix-row.json",
+      "sha256": "aad8faa7cfa12c172aefc8ca698550d4646163a2f611e3e2ea59600fa6bac1d3"
+    },
+    {
+      "path": "cedar/B3__document_sharing_rebac__alice_view_d1.json",
+      "sha256": "01b9428ec67b51539a8559dbce165a7778a31cbd1e25f91ebe4c5a893837e33d"
+    },
+    {
+      "path": "cedar/B3__document_sharing_rebac__alice_view_d2.json",
+      "sha256": "3005edf5e0b0d38db3f4a9302c719271662c43d101004310d065458d31ffe1c0"
+    },
+    {
+      "path": "cedar/B3__document_sharing_rebac__bob_view_d1.json",
+      "sha256": "40d220f95363b4eda5538d3fe58a43548192f732af9f0f1dc6b5eb16f63fbd2e"
+    },
+    {
+      "path": "cedar/B3__document_sharing_rebac__bob_view_d2.json",
+      "sha256": "2d7c3bde9eee3bc367e01d96fae36acfb9fd24c64d5e7b5d70dce71514b75bbd"
+    },
+    {
+      "path": "cedar/B3__document_sharing_rebac__carol_view_d1.json",
+      "sha256": "230a0616b8952943e00e3e5f3461b1aaa78c6088b6a8b82aa8025ee03c32ba0c"
+    },
+    {
+      "path": "cedar/B3__document_sharing_rebac__dana_view_d2.json",
+      "sha256": "603cf5e522159673b9eb23b5ef111ab7c2fb6c1a9165643913fb98b6587865c2"
+    },
+    {
+      "path": "cedar/B4__none__matrix-row.json",
+      "sha256": "efd2462b7f494172d1e143ecbe9b6c0d17cd9c03b9547f3b0ee3ef8dd75b8494"
+    },
+    {
+      "path": "cedar/B5__none__matrix-row.json",
+      "sha256": "bc946baa662fbdef71c0b764f5adb803f9db21e1d0c80c2fdb710247bb02bcfe"
+    },
+    {
       "path": "cerbos/A1__ai_action_gate__abstain_low_confidence_1.json",
       "sha256": "53eda53a0ee4b87b7f88d562521b1a2d7fda5fa79564f85abfe01d7d2b5187f8"
     },
@@ -734,6 +802,74 @@
     {
       "path": "cerbos/A8__ai_action_gate__ai_worker_loop_1.json",
       "sha256": "447a069ac8962e6be4ccf5b882dae70e4e9474b543db2007cfe72c8b6c7a7439"
+    },
+    {
+      "path": "cerbos/B1__access_control_rbac_abac__admin_any_1.json",
+      "sha256": "762f82368c632bdc6ef48964e3ec694be777502f4721150b60e51a40617dd90c"
+    },
+    {
+      "path": "cerbos/B1__access_control_rbac_abac__contractor_group_read_1.json",
+      "sha256": "38c8fb30786fcba895e46716ac78676dcbe8b113b5001749d9a2b9d60d92a2c1"
+    },
+    {
+      "path": "cerbos/B1__access_control_rbac_abac__group_read_1.json",
+      "sha256": "4a798498408ace28ffc983a0d54b3d22fb3f1efd1da7ae86c4b5e5e64f137a5c"
+    },
+    {
+      "path": "cerbos/B1__access_control_rbac_abac__group_write_denied_1.json",
+      "sha256": "4914731affef78e607949082ccdb727a1bc9c55b09b0863a615170c94b87d8a6"
+    },
+    {
+      "path": "cerbos/B1__access_control_rbac_abac__high_sensitivity_owner_denied_1.json",
+      "sha256": "fc710cc3db7e25018ca44ce3d94e81ceed1b1e375be62603ff0cdb2db8f94335"
+    },
+    {
+      "path": "cerbos/B1__access_control_rbac_abac__manager_after_hours_1.json",
+      "sha256": "ff722b095da3b618f5156f2bb100e3a1ad7f1d5e4243f8901bd11b7aad14fe77"
+    },
+    {
+      "path": "cerbos/B1__access_control_rbac_abac__manager_hours_write_1.json",
+      "sha256": "f09f1928ac0dc1ad870da7c6b6bcf5587987220a98b4217fb6d5dbf31ca1f995"
+    },
+    {
+      "path": "cerbos/B1__access_control_rbac_abac__owner_write_1.json",
+      "sha256": "e342921a784016c1c219087bee8fd1e3160ac80796da8ceea0e1ba392abaef15"
+    },
+    {
+      "path": "cerbos/B2__none__matrix-row.json",
+      "sha256": "782ac4c47b8fbe5e1ae69cc856d6735a17037ca94e4f1b04a677368237062b64"
+    },
+    {
+      "path": "cerbos/B3__document_sharing_rebac__alice_view_d1.json",
+      "sha256": "a829045cdac0873ed4e1d9fb09632ec24b3416c17ba454b8d465c76bec5e729e"
+    },
+    {
+      "path": "cerbos/B3__document_sharing_rebac__alice_view_d2.json",
+      "sha256": "aa44eee21bdb04f1eb17c687dd22bf7ed368ea89688fdb2fa0b3c77458f8a49d"
+    },
+    {
+      "path": "cerbos/B3__document_sharing_rebac__bob_view_d1.json",
+      "sha256": "07b8222c4e73257f27924787344ae31c740deef729e9ff72e1f43a98e7a7554c"
+    },
+    {
+      "path": "cerbos/B3__document_sharing_rebac__bob_view_d2.json",
+      "sha256": "3d6e381af27b42199d4d74b0c2b442e0a3f8d97402ed11ea6cd918151cad487e"
+    },
+    {
+      "path": "cerbos/B3__document_sharing_rebac__carol_view_d1.json",
+      "sha256": "4414b060311f278ec5b4352b78e88ca1d29f8bfab21e30d8f7f91a7416023e3a"
+    },
+    {
+      "path": "cerbos/B3__document_sharing_rebac__dana_view_d2.json",
+      "sha256": "be0dde9132ad3bdcebbe118966691441524858730f31afa4d598667746ef78de"
+    },
+    {
+      "path": "cerbos/B4__none__matrix-row.json",
+      "sha256": "ccc8434ff37661ec6036c3f30ab09d64a48e63dab140784639a2dda3d56dfe48"
+    },
+    {
+      "path": "cerbos/B5__none__matrix-row.json",
+      "sha256": "878a6b20ef1db0946a9554ba5782d2b9382c5527dc7c7b373a827b7e9e8723e4"
     },
     {
       "path": "opa/A1__ai_action_gate__abstain_low_confidence_1.json",
@@ -1096,6 +1232,74 @@
       "sha256": "7841a1e0a5f55de726893da9a57813e499bd9f6567fc1c3f4c7f7612586a0c6e"
     },
     {
+      "path": "opa/B1__access_control_rbac_abac__admin_any_1.json",
+      "sha256": "99a77eb6928b5cd75e808fd88924f15e7f6e4b309e79568def4bc1208ffe1275"
+    },
+    {
+      "path": "opa/B1__access_control_rbac_abac__contractor_group_read_1.json",
+      "sha256": "3e45f519028ab65fd33dc126a499872773e3886aaea9cbdaede43166a9c53bc3"
+    },
+    {
+      "path": "opa/B1__access_control_rbac_abac__group_read_1.json",
+      "sha256": "b4da094dab6fa0fbbcd5f878b1729916252d093ba8e3d3e4a4609269bb39c23c"
+    },
+    {
+      "path": "opa/B1__access_control_rbac_abac__group_write_denied_1.json",
+      "sha256": "a8f7195dc52919ce16ce9fc55614c788a657cd5d5799c134cd85f5d6ee22e40c"
+    },
+    {
+      "path": "opa/B1__access_control_rbac_abac__high_sensitivity_owner_denied_1.json",
+      "sha256": "fc9a94a872efb0b319ccae678572e52934e9b820d8c1bfa8b9f37ea664fbb294"
+    },
+    {
+      "path": "opa/B1__access_control_rbac_abac__manager_after_hours_1.json",
+      "sha256": "a10d3105f6fb57c65793c98026c5631c0a13702cec3bb068900fd3a60eeb586e"
+    },
+    {
+      "path": "opa/B1__access_control_rbac_abac__manager_hours_write_1.json",
+      "sha256": "83c88342d151ad38a6d833e6ba9e3f8a91107179faabba7105442d5be315c3b1"
+    },
+    {
+      "path": "opa/B1__access_control_rbac_abac__owner_write_1.json",
+      "sha256": "89f069372ec1b3a4326dcf087cd1263fbbbf1495cac7dcb2d81e2d320df89502"
+    },
+    {
+      "path": "opa/B2__none__matrix-row.json",
+      "sha256": "1ded03e45955aebadf475434f3153099e66ece0350023aa4f1e85927d3a5ebe3"
+    },
+    {
+      "path": "opa/B3__document_sharing_rebac__alice_view_d1.json",
+      "sha256": "0f9d1fe4f45e2e5a977ab710f5127a9b8594db61e2bf6c39bb06f59963d29b03"
+    },
+    {
+      "path": "opa/B3__document_sharing_rebac__alice_view_d2.json",
+      "sha256": "6efc3eeeb32803bc46b478475ee3576a0c564071a8c8d9056563ba7e88d6c2ee"
+    },
+    {
+      "path": "opa/B3__document_sharing_rebac__bob_view_d1.json",
+      "sha256": "253848958be1341ae60121fa4e98e83cdde2d02a61ee99cc489367917224ffea"
+    },
+    {
+      "path": "opa/B3__document_sharing_rebac__bob_view_d2.json",
+      "sha256": "6c22c416be5d25c5ccbab43bf5e22346265c754ca7744e3f8f22447e585d8a00"
+    },
+    {
+      "path": "opa/B3__document_sharing_rebac__carol_view_d1.json",
+      "sha256": "c5873540d553b2e01ae630b55ce028d8409258355ed0154bf9299c925e103a43"
+    },
+    {
+      "path": "opa/B3__document_sharing_rebac__dana_view_d2.json",
+      "sha256": "9f2c5c5cd70bcf6f41c1ca076795b428fe8660e6b4f9826a6272133b21d128b6"
+    },
+    {
+      "path": "opa/B4__none__matrix-row.json",
+      "sha256": "21c71fe1f6d44d8e1b9916f811a689076ba77a065756e0707818ad16c888e8ae"
+    },
+    {
+      "path": "opa/B5__none__matrix-row.json",
+      "sha256": "381c201605f04cc21cd83a07892da481f4d9fa77de071e68c413e130e0b9c774"
+    },
+    {
       "path": "openfga/A1__ai_action_gate__abstain_low_confidence_1.json",
       "sha256": "87aba2940b9e45ae38be2492ddaf67851dc7dfa54252e3723bfd555444f49465"
     },
@@ -1456,6 +1660,74 @@
       "sha256": "2eb3de482a70d8a7ea210b0b913594fb28049925435f5d222f5148fd404b474c"
     },
     {
+      "path": "openfga/B1__access_control_rbac_abac__admin_any_1.json",
+      "sha256": "e911dd5fb8f6be974fc095ecc7d048688ab7d32c76a45a4f61cb9a96a3990d15"
+    },
+    {
+      "path": "openfga/B1__access_control_rbac_abac__contractor_group_read_1.json",
+      "sha256": "640442b932861f116bf473e28f2bcca683a8a624cd6f4816567cf7aca9ca211a"
+    },
+    {
+      "path": "openfga/B1__access_control_rbac_abac__group_read_1.json",
+      "sha256": "3344c8ed389ccb4f4b61ebb18bd2601ccfbd1ba61fbe59c4ae3e35c4166057ba"
+    },
+    {
+      "path": "openfga/B1__access_control_rbac_abac__group_write_denied_1.json",
+      "sha256": "e86ae367451c9d8a2a49a48377a7246b3386baecc9b0c3c456053744bb4bb202"
+    },
+    {
+      "path": "openfga/B1__access_control_rbac_abac__high_sensitivity_owner_denied_1.json",
+      "sha256": "528d9ec3f2fe3979a7a283cef30ea1b35accf51992d29591c6fdd98d406c76a5"
+    },
+    {
+      "path": "openfga/B1__access_control_rbac_abac__manager_after_hours_1.json",
+      "sha256": "ee37fb3e006f7fda7e63e5bbcfdd580130fe8061b359683a9d166971ef85e99b"
+    },
+    {
+      "path": "openfga/B1__access_control_rbac_abac__manager_hours_write_1.json",
+      "sha256": "8b5b11b88ac6be30119802c9403777e10c824123057d59e7c8f71223d778130f"
+    },
+    {
+      "path": "openfga/B1__access_control_rbac_abac__owner_write_1.json",
+      "sha256": "7ad011b43b5e3a46c1af80b1321b10080876c087d08dbab5cc241ecbb70502cf"
+    },
+    {
+      "path": "openfga/B2__none__matrix-row.json",
+      "sha256": "94c5315cc5f9347d4686942b39aeec8eb4001efc2737947e1d1ed2117b0b966c"
+    },
+    {
+      "path": "openfga/B3__document_sharing_rebac__alice_view_d1.json",
+      "sha256": "fed93124cf2ce67bc58f9ec5d754773f0cd80f9b7d53220fe628ab722805c81a"
+    },
+    {
+      "path": "openfga/B3__document_sharing_rebac__alice_view_d2.json",
+      "sha256": "03de024bb9348feee7b2f2a1cd2cfb5b5a6e2bd7051f1b22694766b974ef2061"
+    },
+    {
+      "path": "openfga/B3__document_sharing_rebac__bob_view_d1.json",
+      "sha256": "4456fb5aeb7e54c232563804074d2aac91c4d3ae4e9a6596d0191a31ea665452"
+    },
+    {
+      "path": "openfga/B3__document_sharing_rebac__bob_view_d2.json",
+      "sha256": "f19eb4b32e1b94898599706fe5b7bb7178a2071dde5af792ac196f6d1d276b6a"
+    },
+    {
+      "path": "openfga/B3__document_sharing_rebac__carol_view_d1.json",
+      "sha256": "4ba9540e94147079ea588977453f2150a579ce799f8c4a0b3f8ec09b24323ba6"
+    },
+    {
+      "path": "openfga/B3__document_sharing_rebac__dana_view_d2.json",
+      "sha256": "2b348969b2edb222290dc3aa10713e593b860004270329ab2b26f10b78be4b67"
+    },
+    {
+      "path": "openfga/B4__none__matrix-row.json",
+      "sha256": "f5c2140bcb8b27743bb355a6ae9f43ac622af5ab3f0ccf9a36b1b630ad9f8949"
+    },
+    {
+      "path": "openfga/B5__none__matrix-row.json",
+      "sha256": "2fe0390ff92738051812ae18cb5d6aca2caa264173ab1fd1305c1e74b50a1edf"
+    },
+    {
       "path": "openlane/A1__none__matrix-row.json",
       "sha256": "f2f88f73bef3fe03cf6ecfa95c7776c046f741288a0e621687deace7d8161473"
     },
@@ -1486,6 +1758,26 @@
     {
       "path": "openlane/A8__none__matrix-row.json",
       "sha256": "5c4e6ef826a1b7a2e9675dc8911d8bdeb96ecc17c479dd6a11cc0bb370bae8aa"
+    },
+    {
+      "path": "openlane/B1__none__matrix-row.json",
+      "sha256": "722a7ffa91373b1c4cf1f1c280dfd406ca87fd721f112efa9287934dd25f1e4a"
+    },
+    {
+      "path": "openlane/B2__none__matrix-row.json",
+      "sha256": "e337e7e78b9615616ee8d80af5591d08420842e5bd2ad6e2df7eb48d74248b8c"
+    },
+    {
+      "path": "openlane/B3__none__matrix-row.json",
+      "sha256": "7a52dd0de4e879c576ff47148f48d9a65281c15052ee533646e38c86741fdbad"
+    },
+    {
+      "path": "openlane/B4__none__matrix-row.json",
+      "sha256": "ca8fb570a0c387c227edb42370b235ee5ea0b9372ed209639f628d9d58a598bf"
+    },
+    {
+      "path": "openlane/B5__none__matrix-row.json",
+      "sha256": "8c21235430e5a0551126beac70ae95ba4df5345371a6579588a62191f2c66650"
     },
     {
       "path": "prismpath/A1__ai_action_gate__abstain_low_confidence_1.json",
@@ -1846,6 +2138,74 @@
     {
       "path": "prismpath/A8__ai_action_gate__ai_worker_loop_1.json",
       "sha256": "df43458a92463777a75f43ef393d3a7da4dc9d97db3dec269522e05a723ce457"
+    },
+    {
+      "path": "prismpath/B1__access_control_rbac_abac__admin_any_1.json",
+      "sha256": "569b2b868f0e62eff69d712e4128646f557618d1778419fc23a5f2b6c08d3763"
+    },
+    {
+      "path": "prismpath/B1__access_control_rbac_abac__contractor_group_read_1.json",
+      "sha256": "fa935138b4b73e314ac8424fe1effa82acb24f1c1f0dc15694f2a1e926d6bc7d"
+    },
+    {
+      "path": "prismpath/B1__access_control_rbac_abac__group_read_1.json",
+      "sha256": "c8e84533296da76ad8591d0225111b63015c1263eae14512b1d4431be4d6ec2e"
+    },
+    {
+      "path": "prismpath/B1__access_control_rbac_abac__group_write_denied_1.json",
+      "sha256": "1daf017c0723ed9ef71e03de295b526d400a153d4aa52033e4fa2b23d1803f29"
+    },
+    {
+      "path": "prismpath/B1__access_control_rbac_abac__high_sensitivity_owner_denied_1.json",
+      "sha256": "5a023246a691a1b0329d6b31fa1996754eb19fd8607f2d486856db4ff90e4578"
+    },
+    {
+      "path": "prismpath/B1__access_control_rbac_abac__manager_after_hours_1.json",
+      "sha256": "2395a490bba04bc2011aaca45a880e28367b14153cff1bdb0ab2f17858355246"
+    },
+    {
+      "path": "prismpath/B1__access_control_rbac_abac__manager_hours_write_1.json",
+      "sha256": "291024572a11af26bfaa3409a80ecbd3515586db8dd088334509961a78718d7f"
+    },
+    {
+      "path": "prismpath/B1__access_control_rbac_abac__owner_write_1.json",
+      "sha256": "63f03f7ad15eba5d55449c9692ebb753fef3cbc146c8d371435ce049af7ca487"
+    },
+    {
+      "path": "prismpath/B2__none__matrix-row.json",
+      "sha256": "ca5ec2c7285f98faede90820bce0480eee436642620e8494f6c036ac5514527b"
+    },
+    {
+      "path": "prismpath/B3__document_sharing_rebac__alice_view_d1.json",
+      "sha256": "63a4b19bc470f78bd1a90020827d954dfdf9758a6361a646b795682cc1f72002"
+    },
+    {
+      "path": "prismpath/B3__document_sharing_rebac__alice_view_d2.json",
+      "sha256": "b50a6ab609df3d677bf85778862c33cfcf4e691c72bfc838e66d3cca0f8af654"
+    },
+    {
+      "path": "prismpath/B3__document_sharing_rebac__bob_view_d1.json",
+      "sha256": "b38986c90ea7c4cd84b46d14bf8abc25e6c913ea4124c71a30fdbe1a6e1885b9"
+    },
+    {
+      "path": "prismpath/B3__document_sharing_rebac__bob_view_d2.json",
+      "sha256": "7dff18224c988594a659220a98f511e38ac51808c6234e18da42027203d07a17"
+    },
+    {
+      "path": "prismpath/B3__document_sharing_rebac__carol_view_d1.json",
+      "sha256": "a827188c434a0cd97342bcace272264d2f1005c8f151c479767d8bc98d65b151"
+    },
+    {
+      "path": "prismpath/B3__document_sharing_rebac__dana_view_d2.json",
+      "sha256": "949a4cdd1b0f5d2a647558837da590ee192dab306850d5863f9692eff3cdb492"
+    },
+    {
+      "path": "prismpath/B4__none__matrix-row.json",
+      "sha256": "4b0212b2caa187cc4e53f4d76b0baed6e7a17d85e22948ba1316c5cbb6e5f958"
+    },
+    {
+      "path": "prismpath/B5__none__matrix-row.json",
+      "sha256": "52b187f5c56d52443829dc482a4aa11517154581e87840900f7b1cb2042591a2"
     }
   ],
   "matrix": {
@@ -2854,311 +3214,431 @@
     "B1": {
       "cedar": {
         "counts": {
-          "NATIVE": 0,
+          "NATIVE": 8,
           "NOT": 0,
           "WITH-WORK": 0
         },
-        "files": [],
-        "grade": "UNTESTED",
+        "files": [
+          "cedar/B1__access_control_rbac_abac__admin_any_1.json",
+          "cedar/B1__access_control_rbac_abac__contractor_group_read_1.json",
+          "cedar/B1__access_control_rbac_abac__group_read_1.json",
+          "cedar/B1__access_control_rbac_abac__group_write_denied_1.json",
+          "cedar/B1__access_control_rbac_abac__high_sensitivity_owner_denied_1.json",
+          "cedar/B1__access_control_rbac_abac__manager_after_hours_1.json",
+          "cedar/B1__access_control_rbac_abac__manager_hours_write_1.json",
+          "cedar/B1__access_control_rbac_abac__owner_write_1.json"
+        ],
+        "grade": "NATIVE",
         "mismatches": 0
       },
       "cerbos": {
         "counts": {
-          "NATIVE": 0,
+          "NATIVE": 8,
           "NOT": 0,
           "WITH-WORK": 0
         },
-        "files": [],
-        "grade": "UNTESTED",
+        "files": [
+          "cerbos/B1__access_control_rbac_abac__admin_any_1.json",
+          "cerbos/B1__access_control_rbac_abac__contractor_group_read_1.json",
+          "cerbos/B1__access_control_rbac_abac__group_read_1.json",
+          "cerbos/B1__access_control_rbac_abac__group_write_denied_1.json",
+          "cerbos/B1__access_control_rbac_abac__high_sensitivity_owner_denied_1.json",
+          "cerbos/B1__access_control_rbac_abac__manager_after_hours_1.json",
+          "cerbos/B1__access_control_rbac_abac__manager_hours_write_1.json",
+          "cerbos/B1__access_control_rbac_abac__owner_write_1.json"
+        ],
+        "grade": "NATIVE",
         "mismatches": 0
       },
       "opa": {
         "counts": {
-          "NATIVE": 0,
+          "NATIVE": 8,
           "NOT": 0,
           "WITH-WORK": 0
         },
-        "files": [],
-        "grade": "UNTESTED",
+        "files": [
+          "opa/B1__access_control_rbac_abac__admin_any_1.json",
+          "opa/B1__access_control_rbac_abac__contractor_group_read_1.json",
+          "opa/B1__access_control_rbac_abac__group_read_1.json",
+          "opa/B1__access_control_rbac_abac__group_write_denied_1.json",
+          "opa/B1__access_control_rbac_abac__high_sensitivity_owner_denied_1.json",
+          "opa/B1__access_control_rbac_abac__manager_after_hours_1.json",
+          "opa/B1__access_control_rbac_abac__manager_hours_write_1.json",
+          "opa/B1__access_control_rbac_abac__owner_write_1.json"
+        ],
+        "grade": "NATIVE",
         "mismatches": 0
       },
       "openfga": {
         "counts": {
           "NATIVE": 0,
           "NOT": 0,
-          "WITH-WORK": 0
+          "WITH-WORK": 8
         },
-        "files": [],
-        "grade": "UNTESTED",
-        "mismatches": 0
+        "files": [
+          "openfga/B1__access_control_rbac_abac__admin_any_1.json",
+          "openfga/B1__access_control_rbac_abac__contractor_group_read_1.json",
+          "openfga/B1__access_control_rbac_abac__group_read_1.json",
+          "openfga/B1__access_control_rbac_abac__group_write_denied_1.json",
+          "openfga/B1__access_control_rbac_abac__high_sensitivity_owner_denied_1.json",
+          "openfga/B1__access_control_rbac_abac__manager_after_hours_1.json",
+          "openfga/B1__access_control_rbac_abac__manager_hours_write_1.json",
+          "openfga/B1__access_control_rbac_abac__owner_write_1.json"
+        ],
+        "grade": "WITH-WORK",
+        "mismatches": 8
       },
       "openlane": {
         "counts": {
           "NATIVE": 0,
-          "NOT": 0,
+          "NOT": 1,
           "WITH-WORK": 0
         },
-        "files": [],
-        "grade": "UNTESTED",
-        "mismatches": 0
+        "files": [
+          "openlane/B1__none__matrix-row.json"
+        ],
+        "grade": "NOT",
+        "mismatches": 1
       },
       "prismpath": {
         "counts": {
-          "NATIVE": 0,
-          "NOT": 0,
-          "WITH-WORK": 0
+          "NATIVE": 4,
+          "NOT": 3,
+          "WITH-WORK": 1
         },
-        "files": [],
-        "grade": "UNTESTED",
-        "mismatches": 0
+        "files": [
+          "prismpath/B1__access_control_rbac_abac__admin_any_1.json",
+          "prismpath/B1__access_control_rbac_abac__contractor_group_read_1.json",
+          "prismpath/B1__access_control_rbac_abac__group_read_1.json",
+          "prismpath/B1__access_control_rbac_abac__group_write_denied_1.json",
+          "prismpath/B1__access_control_rbac_abac__high_sensitivity_owner_denied_1.json",
+          "prismpath/B1__access_control_rbac_abac__manager_after_hours_1.json",
+          "prismpath/B1__access_control_rbac_abac__manager_hours_write_1.json",
+          "prismpath/B1__access_control_rbac_abac__owner_write_1.json"
+        ],
+        "grade": "NOT",
+        "mismatches": 3
       }
     },
     "B2": {
       "cedar": {
         "counts": {
-          "NATIVE": 0,
+          "NATIVE": 1,
           "NOT": 0,
           "WITH-WORK": 0
         },
-        "files": [],
-        "grade": "UNTESTED",
-        "mismatches": 0
+        "files": [
+          "cedar/B2__none__matrix-row.json"
+        ],
+        "grade": "NATIVE",
+        "mismatches": 1
       },
       "cerbos": {
         "counts": {
           "NATIVE": 0,
-          "NOT": 0,
+          "NOT": 1,
           "WITH-WORK": 0
         },
-        "files": [],
-        "grade": "UNTESTED",
-        "mismatches": 0
+        "files": [
+          "cerbos/B2__none__matrix-row.json"
+        ],
+        "grade": "NOT",
+        "mismatches": 1
       },
       "opa": {
         "counts": {
           "NATIVE": 0,
-          "NOT": 0,
+          "NOT": 1,
           "WITH-WORK": 0
         },
-        "files": [],
-        "grade": "UNTESTED",
-        "mismatches": 0
+        "files": [
+          "opa/B2__none__matrix-row.json"
+        ],
+        "grade": "NOT",
+        "mismatches": 1
       },
       "openfga": {
         "counts": {
           "NATIVE": 0,
-          "NOT": 0,
+          "NOT": 1,
           "WITH-WORK": 0
         },
-        "files": [],
-        "grade": "UNTESTED",
-        "mismatches": 0
+        "files": [
+          "openfga/B2__none__matrix-row.json"
+        ],
+        "grade": "NOT",
+        "mismatches": 1
       },
       "openlane": {
         "counts": {
           "NATIVE": 0,
-          "NOT": 0,
+          "NOT": 1,
           "WITH-WORK": 0
         },
-        "files": [],
-        "grade": "UNTESTED",
-        "mismatches": 0
+        "files": [
+          "openlane/B2__none__matrix-row.json"
+        ],
+        "grade": "NOT",
+        "mismatches": 1
       },
       "prismpath": {
         "counts": {
           "NATIVE": 0,
-          "NOT": 0,
+          "NOT": 1,
           "WITH-WORK": 0
         },
-        "files": [],
-        "grade": "UNTESTED",
-        "mismatches": 0
+        "files": [
+          "prismpath/B2__none__matrix-row.json"
+        ],
+        "grade": "NOT",
+        "mismatches": 1
       }
     },
     "B3": {
       "cedar": {
         "counts": {
-          "NATIVE": 0,
+          "NATIVE": 6,
           "NOT": 0,
           "WITH-WORK": 0
         },
-        "files": [],
-        "grade": "UNTESTED",
+        "files": [
+          "cedar/B3__document_sharing_rebac__alice_view_d1.json",
+          "cedar/B3__document_sharing_rebac__alice_view_d2.json",
+          "cedar/B3__document_sharing_rebac__bob_view_d1.json",
+          "cedar/B3__document_sharing_rebac__bob_view_d2.json",
+          "cedar/B3__document_sharing_rebac__carol_view_d1.json",
+          "cedar/B3__document_sharing_rebac__dana_view_d2.json"
+        ],
+        "grade": "NATIVE",
         "mismatches": 0
       },
       "cerbos": {
         "counts": {
           "NATIVE": 0,
           "NOT": 0,
-          "WITH-WORK": 0
+          "WITH-WORK": 6
         },
-        "files": [],
-        "grade": "UNTESTED",
-        "mismatches": 0
+        "files": [
+          "cerbos/B3__document_sharing_rebac__alice_view_d1.json",
+          "cerbos/B3__document_sharing_rebac__alice_view_d2.json",
+          "cerbos/B3__document_sharing_rebac__bob_view_d1.json",
+          "cerbos/B3__document_sharing_rebac__bob_view_d2.json",
+          "cerbos/B3__document_sharing_rebac__carol_view_d1.json",
+          "cerbos/B3__document_sharing_rebac__dana_view_d2.json"
+        ],
+        "grade": "WITH-WORK",
+        "mismatches": 6
       },
       "opa": {
         "counts": {
-          "NATIVE": 0,
+          "NATIVE": 6,
           "NOT": 0,
           "WITH-WORK": 0
         },
-        "files": [],
-        "grade": "UNTESTED",
+        "files": [
+          "opa/B3__document_sharing_rebac__alice_view_d1.json",
+          "opa/B3__document_sharing_rebac__alice_view_d2.json",
+          "opa/B3__document_sharing_rebac__bob_view_d1.json",
+          "opa/B3__document_sharing_rebac__bob_view_d2.json",
+          "opa/B3__document_sharing_rebac__carol_view_d1.json",
+          "opa/B3__document_sharing_rebac__dana_view_d2.json"
+        ],
+        "grade": "NATIVE",
         "mismatches": 0
       },
       "openfga": {
         "counts": {
-          "NATIVE": 0,
+          "NATIVE": 6,
           "NOT": 0,
           "WITH-WORK": 0
         },
-        "files": [],
-        "grade": "UNTESTED",
+        "files": [
+          "openfga/B3__document_sharing_rebac__alice_view_d1.json",
+          "openfga/B3__document_sharing_rebac__alice_view_d2.json",
+          "openfga/B3__document_sharing_rebac__bob_view_d1.json",
+          "openfga/B3__document_sharing_rebac__bob_view_d2.json",
+          "openfga/B3__document_sharing_rebac__carol_view_d1.json",
+          "openfga/B3__document_sharing_rebac__dana_view_d2.json"
+        ],
+        "grade": "NATIVE",
         "mismatches": 0
       },
       "openlane": {
         "counts": {
           "NATIVE": 0,
-          "NOT": 0,
+          "NOT": 1,
           "WITH-WORK": 0
         },
-        "files": [],
-        "grade": "UNTESTED",
-        "mismatches": 0
+        "files": [
+          "openlane/B3__none__matrix-row.json"
+        ],
+        "grade": "NOT",
+        "mismatches": 1
       },
       "prismpath": {
         "counts": {
           "NATIVE": 0,
-          "NOT": 0,
+          "NOT": 6,
           "WITH-WORK": 0
         },
-        "files": [],
-        "grade": "UNTESTED",
-        "mismatches": 0
+        "files": [
+          "prismpath/B3__document_sharing_rebac__alice_view_d1.json",
+          "prismpath/B3__document_sharing_rebac__alice_view_d2.json",
+          "prismpath/B3__document_sharing_rebac__bob_view_d1.json",
+          "prismpath/B3__document_sharing_rebac__bob_view_d2.json",
+          "prismpath/B3__document_sharing_rebac__carol_view_d1.json",
+          "prismpath/B3__document_sharing_rebac__dana_view_d2.json"
+        ],
+        "grade": "NOT",
+        "mismatches": 6
       }
     },
     "B4": {
       "cedar": {
         "counts": {
-          "NATIVE": 0,
+          "NATIVE": 1,
           "NOT": 0,
           "WITH-WORK": 0
         },
-        "files": [],
-        "grade": "UNTESTED",
-        "mismatches": 0
+        "files": [
+          "cedar/B4__none__matrix-row.json"
+        ],
+        "grade": "NATIVE",
+        "mismatches": 1
       },
       "cerbos": {
         "counts": {
-          "NATIVE": 0,
+          "NATIVE": 1,
           "NOT": 0,
           "WITH-WORK": 0
         },
-        "files": [],
-        "grade": "UNTESTED",
-        "mismatches": 0
+        "files": [
+          "cerbos/B4__none__matrix-row.json"
+        ],
+        "grade": "NATIVE",
+        "mismatches": 1
       },
       "opa": {
         "counts": {
-          "NATIVE": 0,
+          "NATIVE": 1,
           "NOT": 0,
           "WITH-WORK": 0
         },
-        "files": [],
-        "grade": "UNTESTED",
-        "mismatches": 0
+        "files": [
+          "opa/B4__none__matrix-row.json"
+        ],
+        "grade": "NATIVE",
+        "mismatches": 1
       },
       "openfga": {
         "counts": {
-          "NATIVE": 0,
+          "NATIVE": 1,
           "NOT": 0,
           "WITH-WORK": 0
         },
-        "files": [],
-        "grade": "UNTESTED",
-        "mismatches": 0
+        "files": [
+          "openfga/B4__none__matrix-row.json"
+        ],
+        "grade": "NATIVE",
+        "mismatches": 1
       },
       "openlane": {
         "counts": {
-          "NATIVE": 0,
+          "NATIVE": 1,
           "NOT": 0,
           "WITH-WORK": 0
         },
-        "files": [],
-        "grade": "UNTESTED",
-        "mismatches": 0
+        "files": [
+          "openlane/B4__none__matrix-row.json"
+        ],
+        "grade": "NATIVE",
+        "mismatches": 1
       },
       "prismpath": {
         "counts": {
           "NATIVE": 0,
           "NOT": 0,
-          "WITH-WORK": 0
+          "WITH-WORK": 1
         },
-        "files": [],
-        "grade": "UNTESTED",
-        "mismatches": 0
+        "files": [
+          "prismpath/B4__none__matrix-row.json"
+        ],
+        "grade": "WITH-WORK",
+        "mismatches": 1
       }
     },
     "B5": {
       "cedar": {
         "counts": {
-          "NATIVE": 0,
+          "NATIVE": 1,
           "NOT": 0,
           "WITH-WORK": 0
         },
-        "files": [],
-        "grade": "UNTESTED",
-        "mismatches": 0
+        "files": [
+          "cedar/B5__none__matrix-row.json"
+        ],
+        "grade": "NATIVE",
+        "mismatches": 1
       },
       "cerbos": {
         "counts": {
-          "NATIVE": 0,
+          "NATIVE": 1,
           "NOT": 0,
           "WITH-WORK": 0
         },
-        "files": [],
-        "grade": "UNTESTED",
-        "mismatches": 0
+        "files": [
+          "cerbos/B5__none__matrix-row.json"
+        ],
+        "grade": "NATIVE",
+        "mismatches": 1
       },
       "opa": {
         "counts": {
-          "NATIVE": 0,
+          "NATIVE": 1,
           "NOT": 0,
           "WITH-WORK": 0
         },
-        "files": [],
-        "grade": "UNTESTED",
-        "mismatches": 0
+        "files": [
+          "opa/B5__none__matrix-row.json"
+        ],
+        "grade": "NATIVE",
+        "mismatches": 1
       },
       "openfga": {
         "counts": {
-          "NATIVE": 0,
+          "NATIVE": 1,
           "NOT": 0,
           "WITH-WORK": 0
         },
-        "files": [],
-        "grade": "UNTESTED",
-        "mismatches": 0
+        "files": [
+          "openfga/B5__none__matrix-row.json"
+        ],
+        "grade": "NATIVE",
+        "mismatches": 1
       },
       "openlane": {
         "counts": {
           "NATIVE": 0,
           "NOT": 0,
-          "WITH-WORK": 0
+          "WITH-WORK": 1
         },
-        "files": [],
-        "grade": "UNTESTED",
-        "mismatches": 0
+        "files": [
+          "openlane/B5__none__matrix-row.json"
+        ],
+        "grade": "WITH-WORK",
+        "mismatches": 1
       },
       "prismpath": {
         "counts": {
           "NATIVE": 0,
-          "NOT": 0,
+          "NOT": 1,
           "WITH-WORK": 0
         },
-        "files": [],
-        "grade": "UNTESTED",
-        "mismatches": 0
+        "files": [
+          "prismpath/B5__none__matrix-row.json"
+        ],
+        "grade": "NOT",
+        "mismatches": 1
       }
     }
   },
@@ -3179,10 +3659,10 @@
     "A6": "NOT-DISTINCT",
     "A7": "NOT-DISTINCT",
     "A8": "NOT-DISTINCT",
-    "B1": "OPEN",
-    "B2": "OPEN",
-    "B3": "OPEN",
-    "B4": "OPEN",
-    "B5": "OPEN"
+    "B1": "LOSES",
+    "B2": "LOSES",
+    "B3": "LOSES",
+    "B4": "LOSES",
+    "B5": "LOSES"
   }
 }

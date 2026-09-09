@@ -1,0 +1,17 @@
+{
+  "dimension": "B3",
+  "evidence_path": "prismpath/comparisons/results/openlane/evidence/docs",
+  "expected": null,
+  "glue": null,
+  "grade": "NOT",
+  "harness_commit": "ecae31b",
+  "idiomatic": true,
+  "match": false,
+  "notes": "Graded from documentation: Openlane uses OpenFGA internally for its own objects and does not offer relationship checks on a caller's objects; a system of record, not a relationship decision service.",
+  "observed": "not_applicable",
+  "policy": "none",
+  "run_at": "2026-09-09T01:04:30Z",
+  "scenario": "matrix-row",
+  "system": "openlane",
+  "system_version": "docs-only"
+}

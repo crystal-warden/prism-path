@@ -1,0 +1,25 @@
+{
+  "dimension": "B4",
+  "evidence_path": "prismpath/comparisons/results/prismpath/evidence/B4",
+  "expected": null,
+  "glue": {
+    "components": [
+      "HTTP shim over engine.run or the C target",
+      "webhook or ext_authz deployment manifest"
+    ],
+    "description": "a Kubernetes admission webhook or an Envoy ext_authz adapter that fronts the Python engine or the C target over HTTP; neither exists today, and there is no Terraform provider and no package index release. Estimated within the section 4 budget",
+    "hours": 8,
+    "loc": 200
+  },
+  "grade": "WITH-WORK",
+  "harness_commit": "ecae31b",
+  "idiomatic": true,
+  "match": false,
+  "notes": "Integration surface exists but is narrow and substrate shaped: signed policy delivery through Zarf and UDS, a Vector codec, a Wireshark dissector, kernel programs, MCU and FPGA targets, Rust and C libraries, and GRC scanner adapters. No Kubernetes admission path, no Envoy filter, no Terraform provider, no SDKs beyond Python, Rust, and C, no package index publication. Pre registered WITH-WORK; the glue is costed. Sources: prismpath/comparisons/results/prismpath/evidence/B4/sources.txt.",
+  "observed": "not_applicable",
+  "policy": "none",
+  "run_at": "2026-09-09T01:04:30Z",
+  "scenario": "matrix-row",
+  "system": "prismpath",
+  "system_version": "repo@ecae31b"
+}

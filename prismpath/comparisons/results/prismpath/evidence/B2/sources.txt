@@ -1,0 +1,4 @@
+formal/README.md on branch formal/lean-fq (13 theorems on Figueroa quantization, the spiral index, and the Zeckendorf wire; Lean 4.33.1, Mathlib v4.33.1, zero sorry, standard axioms only)
+docs/research/supporting-evidence.md #111 (universal WCET envelope 3E + P: base case proven, induction open)
+docs/research/supporting-evidence.md #109, #110 (cycle exact WCET formula, signed wcet_cycles)
+prismpath/portable/conformance/ (frozen corpora certified on every target)

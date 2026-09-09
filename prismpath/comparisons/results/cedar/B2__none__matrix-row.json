@@ -1,0 +1,17 @@
+{
+  "dimension": "B2",
+  "evidence_path": "prismpath/comparisons/results/cedar/evidence/B2",
+  "expected": null,
+  "glue": null,
+  "grade": "NATIVE",
+  "harness_commit": "ecae31b",
+  "idiomatic": true,
+  "match": false,
+  "notes": "cedar-spec holds a definitional Lean model of the authorizer, validator, and a symbolic compiler with proven properties (forbid overrides permit, allow only when explicitly permitted, default deny, evaluation order and duplicate independence, sound policy slicing, sound type checking, sound level based slicing), tied to the shipped Rust implementation by differential random testing. Lean toolchain v4.33.1, the same as PrismPath's formal development. The pre registered NATIVE. Sources: prismpath/comparisons/results/cedar/evidence/B2/sources.txt.",
+  "observed": "not_applicable",
+  "policy": "none",
+  "run_at": "2026-09-09T01:04:30Z",
+  "scenario": "matrix-row",
+  "system": "cedar",
+  "system_version": "4.12.0"
+}

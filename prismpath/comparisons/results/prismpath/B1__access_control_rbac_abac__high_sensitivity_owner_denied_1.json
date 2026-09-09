@@ -1,0 +1,17 @@
+{
+  "dimension": "B1",
+  "evidence_path": "prismpath/comparisons/systems/prismpath/generated/conformance.json",
+  "expected": "deny",
+  "glue": null,
+  "grade": "NATIVE",
+  "harness_commit": "ecae31b",
+  "idiomatic": true,
+  "match": true,
+  "notes": "Rule r2 uses field OP const, in or not in lists, and the default catch all, all inside Level M; decision deny matches. Cell grade is the minimum over the 8 scenarios: NOT, as pre registered.",
+  "observed": "deny",
+  "policy": "access_control_rbac_abac",
+  "run_at": "2026-09-09T01:04:30Z",
+  "scenario": "high_sensitivity_owner_denied_1",
+  "system": "prismpath",
+  "system_version": "repo@ecae31b"
+}

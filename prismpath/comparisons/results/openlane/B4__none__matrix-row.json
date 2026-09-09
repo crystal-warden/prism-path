@@ -1,0 +1,17 @@
+{
+  "dimension": "B4",
+  "evidence_path": "prismpath/comparisons/results/openlane/evidence/B4",
+  "expected": null,
+  "glue": null,
+  "grade": "NATIVE",
+  "harness_commit": "ecae31b",
+  "idiomatic": true,
+  "match": false,
+  "notes": "Sixteen documented integrations across identity providers, cloud posture sources, code and collaboration tools, document stores, and network, with GraphQL and REST APIs. Pre registered NATIVE. Sources: prismpath/comparisons/results/openlane/evidence/B4/sources.txt.",
+  "observed": "not_applicable",
+  "policy": "none",
+  "run_at": "2026-09-09T01:04:30Z",
+  "scenario": "matrix-row",
+  "system": "openlane",
+  "system_version": "docs-only"
+}

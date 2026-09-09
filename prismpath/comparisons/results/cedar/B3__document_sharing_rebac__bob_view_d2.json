@@ -1,0 +1,17 @@
+{
+  "dimension": "B3",
+  "evidence_path": "prismpath/comparisons/systems/cedar/generated/conformance.json",
+  "expected": "allow",
+  "glue": null,
+  "grade": "NATIVE",
+  "harness_commit": "ecae31b",
+  "idiomatic": true,
+  "match": true,
+  "notes": "The corpus tuples become the entity store's parent hierarchy and one policy per direct relation; Cedar's entity hierarchy resolves the transitive viewer. 6/6 match.",
+  "observed": "allow",
+  "policy": "document_sharing_rebac",
+  "run_at": "2026-09-09T01:04:30Z",
+  "scenario": "bob_view_d2",
+  "system": "cedar",
+  "system_version": "4.12.0"
+}

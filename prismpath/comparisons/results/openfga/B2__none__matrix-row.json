@@ -1,0 +1,17 @@
+{
+  "dimension": "B2",
+  "evidence_path": "prismpath/comparisons/results/openfga/evidence/B2",
+  "expected": null,
+  "glue": null,
+  "grade": "NOT",
+  "harness_commit": "ecae31b",
+  "idiomatic": true,
+  "match": false,
+  "notes": "Model tests through the CLI; no formal verification documented. Sources: prismpath/comparisons/results/openfga/evidence/B2/sources.txt.",
+  "observed": "not_applicable",
+  "policy": "none",
+  "run_at": "2026-09-09T01:04:30Z",
+  "scenario": "matrix-row",
+  "system": "openfga",
+  "system_version": "1.19.0"
+}

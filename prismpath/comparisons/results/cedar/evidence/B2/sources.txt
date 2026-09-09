@@ -1,0 +1,3 @@
+https://github.com/cedar-policy/cedar-spec (cedar-lean: definitional authorizer, validator, and symbolic compiler in Lean 4.33.1; cedar-drt: differential random testing against the Rust implementation)
+https://github.com/cedar-policy/cedar-spec/blob/main/cedar-lean/README.md (verified properties: forbid overrides, explicit permit required, default deny, order and duplicate independence, sound policy slicing, sound type checking, sound level based entity slicing)
+https://github.com/cedar-policy/cedar-spec/tree/main/cedar-lean/Cedar/Thm
