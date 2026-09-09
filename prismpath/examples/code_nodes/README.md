@@ -1,7 +1,7 @@
 # Code nodes · a function as a governed flow worker
 
 A **code node** runs plain code instead of an LLM. It's the same worker seam mdflow uses
-(`prismpath/connector.py`), applied to a local function. The rule that keeps PrismPath's thesis intact:
+(`prismpath/workers/connector.py`), applied to a local function. The rule that keeps PrismPath's thesis intact:
 **the flow governs the routing; the code node is a leaf action that returns fields.** Branching lives on
 the `->` edges, never inside the code.
 

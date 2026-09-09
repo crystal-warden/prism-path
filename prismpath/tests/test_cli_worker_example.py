@@ -18,9 +18,9 @@ import sys
 
 import pytest
 
-from prismpath.parser import parse_file
-from prismpath.engine import run
-from prismpath.cli_worker import cli_agent
+from prismpath.kernel.parser import parse_file
+from prismpath.kernel.engine import run
+from prismpath.workers.cli_worker import cli_agent
 
 HERE = os.path.dirname(__file__)
 EX = os.path.abspath(os.path.join(HERE, "..", "examples", "cli_worker"))

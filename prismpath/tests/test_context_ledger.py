@@ -5,8 +5,8 @@ manifest binding, tamper evidence, and the structural privacy property (hashes o
 import hashlib
 import json
 
-from prismpath import ledger_airgap
-from prismpath.context_ledger import GENESIS, ContextLedger, verify_chain
+from prismpath.ledgers import ledger_airgap
+from prismpath.ledgers.context_ledger import GENESIS, ContextLedger, verify_chain
 
 
 def _ledger():

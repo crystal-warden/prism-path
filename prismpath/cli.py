@@ -5,11 +5,9 @@ import json
 import os
 import sys
 
-from prismpath.parser import parse_file
-from prismpath.engine import run
-from prismpath import analysis
-
-
+from prismpath.kernel.parser import parse_file
+from prismpath.kernel.engine import run
+from prismpath.kernel import analysis
 # The four people who touch a PrismPath deployment, and the commands that are theirs. The help text
 # is grouped by this table instead of one flat list; tests/test_cli_personas.py keeps every registered
 # subcommand in exactly one group.
@@ -203,7 +201,7 @@ def build_parser() -> argparse.ArgumentParser:
     from prismpath.ci_report import add_parser as _add_ci_report
     _add_ci_report(subparsers)
 
-    from prismpath.model_check import add_parser as _add_verify
+    from prismpath.kernel.model_check import add_parser as _add_verify
     _add_verify(subparsers)
 
     from prismpath.lsp import add_parser as _add_lsp
@@ -299,7 +297,7 @@ def run_flow(args) -> int:
     graph = parse_file(args.flow_md)
     agent = _mock_agent
     if getattr(args, "agent", None):
-        from prismpath.chat_agent import chat_agent
+        from prismpath.workers.chat_agent import chat_agent
         try:
             agent = chat_agent(args.agent)
         except ValueError as e:
@@ -395,7 +393,7 @@ def label_cmd(args) -> int:
 
 def test_flow(args) -> int:
     from prismpath import flow_test
-    from prismpath.parser import parse_file
+    from prismpath.kernel.parser import parse_file
     tests_path = args.tests_md or flow_test.default_tests_path(args.flow_md)
     if not __import__("os").path.exists(tests_path):
         print(f"no fixture found: {tests_path}")
@@ -440,7 +438,7 @@ def lock_flow(args) -> int:
     centroids = counts = None
     if getattr(args, "centroids", None):
         from prismpath import centroid
-        from prismpath.parser import parse_file as _pf
+        from prismpath.kernel.parser import parse_file as _pf
         recs = [json.loads(l) for l in open(args.centroids, encoding="utf-8") if l.strip()]
         graph = _pf(args.flow_md)
         centroids, counts = centroid.build_centroids(recs, {graph.name: graph})
@@ -830,7 +828,7 @@ def portable_cmd(args) -> int:
 
 def compile_cmd(args) -> int:
     """Compile the flow and its lock into a single-file portable JS bundle."""
-    from prismpath.parser import parse_file
+    from prismpath.kernel.parser import parse_file
     from prismpath import analysis, lockfile
     import base64
 
@@ -1151,7 +1149,7 @@ def lint_flow(args) -> int:
     findings = list(analysis.analyze(graph))
     findings += analysis.analyze_composition(graph, args.flow_md)   # cross-flow @spawn checks (item #4)
     # the non-decidable checks (need the embedder): near-ties, and polarity mirrors (the 0.82 class).
-    from prismpath.lint import semantic_ambiguity, polarity_mirror
+    from prismpath.kernel.lint import semantic_ambiguity, polarity_mirror
     findings += semantic_ambiguity(graph)
     findings += polarity_mirror(graph)
     findings.sort(key=lambda f: (f.severity != "error", f.code, f.node or ""))

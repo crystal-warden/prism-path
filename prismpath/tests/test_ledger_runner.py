@@ -9,10 +9,10 @@ import subprocess
 
 import pytest
 
-from prismpath.ledger import Ledger, sha256_files
-from prismpath.ledger_runner import run_ledgered_loop, upsert_jsonl, find_checkpoint
-from prismpath.parser import parse
-from prismpath import ledger_runner
+from prismpath.ledgers.ledger import Ledger, sha256_files
+from prismpath.ledgers.ledger_runner import run_ledgered_loop, upsert_jsonl, find_checkpoint
+from prismpath.kernel.parser import parse
+from prismpath.ledgers import ledger_runner
 
 HAS_GIT = subprocess.run(["git", "--version"], capture_output=True).returncode == 0
 pytestmark = pytest.mark.skipif(not HAS_GIT, reason="git not available")

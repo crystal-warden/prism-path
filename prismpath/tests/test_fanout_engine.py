@@ -10,10 +10,9 @@ that contract with stub agents (no model, no network, no child runs yet).
 """
 import json
 
-from prismpath.engine import run
-from prismpath.parser import parse
-from prismpath import checkpoint as ckpt
-
+from prismpath.kernel.engine import run
+from prismpath.kernel.parser import parse
+from prismpath.ledgers import checkpoint as ckpt
 # A parent flow whose fan-out node declares its structure with @spawn and its joins as event edges.
 PARENT = """---
 name: parent

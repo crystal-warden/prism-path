@@ -13,8 +13,8 @@ signature. Verification re-hashes the determination and checks the signature, so
 determination or a tampered receipt fails. anchor_receipt commits the root into a content-addressed
 manifest that verify_manifest re-derives offline.
 """
-from prismpath import policy_pack as _pp
-from prismpath import ledger_airgap as _lg
+from prismpath.hotswap import policy_pack as _pp
+from prismpath.ledgers import ledger_airgap as _lg
 
 _SIGNED_KEYS = ("kind", "determination_root", "signed_at", "key_id")
 

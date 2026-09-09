@@ -1,6 +1,6 @@
 # SPEC: the Guard: the security half of the onion
 
-*Formal design spec for `prismpath/guard.py`. Companion to `docs/design/spec-ledger-opentimestamps.md`, which
+*Formal design spec for `prismpath/safety/guard.py`. Companion to `docs/design/spec-ledger-opentimestamps.md`, which
 covers the observability half. Crystal Warden Labs, 2026-07-29.*
 
 ---

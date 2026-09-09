@@ -16,7 +16,7 @@ pip install pytest
 pytest -q                   # the Python suite
 node --test prismpath/portable/prismpath.test.mjs          # the portable-kernel unit tests (Node ≥ 18)
 node prismpath/portable/run_vectors.mjs                 # the frozen conformance vectors -> CONFORMANT
-python -m prismpath.fuzz_predicates -n 20000     # the sandbox gate: 0 exec / 0 crash, always
+python -m prismpath.safety.fuzz_predicates -n 20000     # the sandbox gate: 0 exec / 0 crash, always
 ```
 
 All four must pass before and after your change. If your change intentionally alters predicate
@@ -37,7 +37,7 @@ A lint rule is self-contained, decidable, corpus-driven, and immediately useful 
 The recipe (every existing check followed it):
 
 1. Pick a mistake a flow author actually makes.
-2. Write the check in `prismpath/analysis.py`; a function `Graph -> List[Finding]`, wired into
+2. Write the check in `prismpath/kernel/analysis.py`; a function `Graph -> List[Finding]`, wired into
    `analyze()`. Stay inside the decidable fragment: **no false positives** is the bar, and
    "unknown → no finding" is the rule (see the module docstring).
 3. Add a broken flow demonstrating it to `prismpath/tests/fixtures/broken/` and a test asserting the
@@ -68,7 +68,7 @@ Each of these is a self-contained afternoon. Claim one by opening an issue with 
 8. **`visits-cap-exceeds-max-steps`**: `when visits > N` where N ≥ the default `max_steps`:
    the guard can never fire under default configuration (warn, since `max_steps` is settable).
 9. **`duplicate-fixture-row`**: same (node, fields) asserted twice in a `.tests.md` file,
-   possibly with different expectations (lives in `prismpath/flow_test.py`).
+   possibly with different expectations (lives in `prismpath/kernel/flow_test.py`).
 10. **`fixture-expect-not-an-edge`**: a `.tests.md` row whose `expect` is not an edge target
     of its node: fails confusingly at run time, should fail clearly at parse time.
 

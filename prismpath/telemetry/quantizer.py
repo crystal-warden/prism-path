@@ -25,8 +25,8 @@ from __future__ import annotations
 import ast
 from typing import Any, Dict, List, Optional, Tuple
 
-from prismpath import predicates
-from prismpath.parser import parse_file  # noqa: F401  (re-exported for callers)
+from prismpath.kernel import predicates
+from prismpath.kernel.parser import parse_file  # noqa: F401  (re-exported for callers)
 
 _ORDER = {"Lt": "<", "LtE": "<=", "Gt": ">", "GtE": ">="}
 _FLIP = {"<": ">", "<=": ">=", ">": "<", ">=": "<=", "==": "==", "!=": "!="}

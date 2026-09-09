@@ -11,7 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent.parent))   
 from prismpath.telemetry import decode as dec    # noqa: E402
 from prismpath.telemetry import quantizer as q   # noqa: E402
 from prismpath.telemetry import wire as w        # noqa: E402
-from prismpath.parser import parse  # noqa: E402
+from prismpath.kernel.parser import parse  # noqa: E402
 
 CAT = """---
 name: cat

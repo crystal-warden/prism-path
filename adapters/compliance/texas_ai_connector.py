@@ -41,10 +41,9 @@ VERSION_AUTHORIZED = True
 _ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
-from prismpath.parser import parse
-from prismpath.engine import run
-from prismpath import causes
-
+from prismpath.kernel.parser import parse
+from prismpath.kernel.engine import run
+from prismpath.kernel import causes
 # --- Built-in demo (SAMPLE) below: a minimal governance decision flow used only when you have not
 #     pointed RECEIPTS_PATH/GOVERNANCE_FLOW_PATH at your own artifacts. ---
 DEMO_FLOW = """

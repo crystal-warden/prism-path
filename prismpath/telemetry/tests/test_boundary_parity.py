@@ -11,7 +11,7 @@ _ADAPTER = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_ADAPTER))
 sys.path.insert(0, str(_ADAPTER.parent.parent))
 from prismpath.telemetry import quantizer as q  # noqa: E402
-from prismpath.parser import parse  # noqa: E402
+from prismpath.kernel.parser import parse  # noqa: E402
 
 _CORPUS = _ADAPTER / "conformance" / "boundary.json"
 

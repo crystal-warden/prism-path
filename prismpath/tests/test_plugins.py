@@ -13,8 +13,8 @@ import types
 
 import pytest
 
-from prismpath.parser import parse
-from prismpath.engine import run
+from prismpath.kernel.parser import parse
+from prismpath.kernel.engine import run
 from prismpath.plugins import load_gate, registry
 
 FLOW = """---

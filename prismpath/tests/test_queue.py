@@ -6,7 +6,7 @@ import json
 
 import pytest
 
-from prismpath import checkpoint
+from prismpath.ledgers import checkpoint
 
 GATE = """---
 name: gate

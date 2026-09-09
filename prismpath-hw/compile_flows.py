@@ -14,7 +14,7 @@ import sys
 from pathlib import Path
 
 import ppt_compile as pc
-from prismpath.parser import parse_file
+from prismpath.kernel.parser import parse_file
 
 HERE = Path(__file__).resolve().parent
 OUT = HERE / "build" / "flows"

@@ -30,7 +30,7 @@ _spec.loader.exec_module(W)
 
 import packed as pk        # noqa: E402
 import zeckendorf as z     # noqa: E402
-from prismpath.ledger_ots import merkle_root_and_paths, verify_leaf   # noqa: E402
+from prismpath.ledgers.ledger_ots import merkle_root_and_paths, verify_leaf   # noqa: E402
 
 GRAPH = W.parse(W.FLOW.read_text())
 PARTS = W.q.build_partitions(GRAPH)

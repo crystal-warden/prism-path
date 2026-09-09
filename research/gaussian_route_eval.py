@@ -13,8 +13,8 @@ wrong ones? (AUC: P(wrong is farther than correct)). That's the principled repla
 """
 import os, sys, json, numpy as np
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from prismpath import embedder
-from prismpath.centroid import _decision_items, load_graphs, _unit
+from prismpath.routing import embedder
+from prismpath.routing.centroid import _decision_items, load_graphs, _unit
 from collections import defaultdict
 
 _REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

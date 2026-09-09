@@ -36,7 +36,7 @@ DATA = os.path.join(ROOT, "benchmark", "routing_bench.jsonl")
 
 def load_cases():
     """Return [(case_dict, instruction, outcome, edges)] for every labeled transition."""
-    from prismpath.parser import parse_file
+    from prismpath.kernel.parser import parse_file
     graphs, out = {}, []
     for line in open(DATA, encoding="utf-8"):
         if not line.strip():

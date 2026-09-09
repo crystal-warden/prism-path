@@ -11,8 +11,8 @@ frontier at matched escalation rate. Else park.
 import os, sys, json, numpy as np
 from collections import defaultdict
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from prismpath import embedder
-from prismpath.centroid import _decision_items, load_graphs, _unit
+from prismpath.routing import embedder
+from prismpath.routing.centroid import _decision_items, load_graphs, _unit
 
 _REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 K=32; LAM=0.3; folds=5

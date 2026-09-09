@@ -5,8 +5,8 @@ the Flow-Ledger attestation (tamper-evidence, provable override chain) and the D
 If these pass, 'attestable' is a claim the bytes actually support."""
 import hashlib
 import pytest
-from prismpath import ledger_airgap, deferral
-
+from prismpath.ledgers import ledger_airgap
+from prismpath.workers import deferral
 
 def mk(root="a" * 64, **kw):
     d = dict(root_hex=root, label="assess:x", policy_hash="sha256:pol", gate_id="gate@v0",

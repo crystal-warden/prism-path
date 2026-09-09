@@ -13,10 +13,10 @@ import json
 
 import pytest
 
-from prismpath.parser import parse_file
-from prismpath.engine import run, RunResult
-from prismpath.router import RouteDecision
-from prismpath import checkpoint
+from prismpath.kernel.parser import parse_file
+from prismpath.kernel.engine import run, RunResult
+from prismpath.routing.router import RouteDecision
+from prismpath.ledgers import checkpoint
 
 LINEAR = """---
 name: linear

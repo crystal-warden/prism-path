@@ -16,6 +16,14 @@ spec stable.
   `parser.reachable`. `prismpath.canon` holds the byte level helpers that were copied across
   modules; nothing persisted or signed changed bytes (the frozen corpora regenerate identically).
 - **The Facet wire ships in the package as `prismpath.telemetry`** (moved from `adapters/telemetry`).
+- **The package is grouped by concern.** `prismpath/kernel/` (parser, predicates, engine, causes,
+  contract, analysis, level_m, model_check, lint, graph_export, flow_context, flow_test),
+  `routing/`, `safety/`, `hotswap/`, `ledgers/`, `workers/`, `orchestration/`, `evals/`, beside
+  `telemetry/`. Every old flat name (`prismpath.engine`, `prismpath.checkpoint`, ...) stays
+  importable and is the same module object, so `from prismpath.checkpoint import _atomic_write`
+  and monkeypatching keep working; new code should use the grouped paths. `python -m` entry points
+  moved with their modules (`prismpath.safety.fuzz_predicates`, `prismpath.routing.prefilter`,
+  `prismpath.orchestration.run_sprint`).
 - **Crate renamed: `facet-preflight` is now `prismpath-preflight`.** The `facet-*` prefix on
   crates.io belongs to the facet reflection ecosystem; the collision was flagged by r/rust and the
   crate moved out of that namespace the same day (same code, same contract, binary renamed to

@@ -4,9 +4,9 @@
 fail-closed contract (no undeclared code, no un-governed execution)."""
 import pytest
 
-from prismpath import code_nodes as cn
-from prismpath.engine import run
-from prismpath.parser import parse
+from prismpath.workers import code_nodes as cn
+from prismpath.kernel.engine import run
+from prismpath.kernel.parser import parse
 
 DECLARED = ("---\nname: d\nstart: a\n---\n"
             "## a\n@code(net=false, fs=none, timeout_s=5, mem_mb=128)\nrun the code\n"

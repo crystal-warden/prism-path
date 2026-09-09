@@ -25,7 +25,7 @@ if _REPO not in sys.path:
     sys.path.insert(0, _REPO)
 
 from prismpath import policy_pack as pp          # noqa: E402
-from prismpath.audit_log import AuditLog          # noqa: E402
+from prismpath.ledgers.audit_log import AuditLog          # noqa: E402
 
 
 def _read_version(path: str) -> int:

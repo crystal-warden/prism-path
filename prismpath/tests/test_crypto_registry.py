@@ -6,7 +6,7 @@ Pure-hash/strength tests run everywhere; signing tests importorskip `cryptograph
 signing extra), matching the policy_pack convention."""
 import pytest
 
-from prismpath import crypto_registry as cr
+from prismpath.hotswap import crypto_registry as cr
 
 SUITES = {
     "cnsa2-hybrid-1":           {"kem": "x25519+ml-kem-1024", "sig": "ml-dsa-87", "aead": "aes-256-gcm",     "provider": "cryptography>=44", "strength_rank": 3},

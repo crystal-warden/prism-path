@@ -25,7 +25,7 @@ HERE = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(HERE))
 
 import ppt_compile as pc                               # noqa: E402
-from prismpath.parser import parse_file                # noqa: E402
+from prismpath.kernel.parser import parse_file                # noqa: E402
 
 DEFAULT_FLOW = (Path(pc._REPO) / "prismpath" / "gallery" / "incident_severity"
                 / "incident_severity.md")

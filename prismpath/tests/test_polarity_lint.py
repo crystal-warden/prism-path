@@ -3,8 +3,9 @@
 """Polarity-lint tests (Area 2a) — flag semantic conditions that differ only by logical polarity."""
 import numpy as np
 
-from prismpath import embedder, lint
-from prismpath.parser import parse
+from prismpath.routing import embedder
+from prismpath.kernel import lint
+from prismpath.kernel.parser import parse
 
 
 def test_polarity_signal_pure():

@@ -8,8 +8,8 @@ proof they were built to trip (the proofs stay falsifiable, not just green)."""
 import json
 from pathlib import Path
 
-from prismpath import crypto_agility as ca
-from prismpath.parser import parse
+from prismpath.hotswap import crypto_agility as ca
+from prismpath.kernel.parser import parse
 
 FIXTURE = Path(__file__).resolve().parent.parent / "portable" / "conformance" / "crypto_agility.json"
 DATA = json.loads(FIXTURE.read_text())

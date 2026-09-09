@@ -12,9 +12,9 @@ import json
 
 import pytest
 
-from prismpath.engine import run
-from prismpath.parser import parse
-from prismpath.checkpoint import run_durable, resume, load_checkpoint
+from prismpath.kernel.engine import run
+from prismpath.kernel.parser import parse
+from prismpath.ledgers.checkpoint import run_durable, resume, load_checkpoint
 
 LOOP = """---
 name: loop

@@ -1,3 +1,3 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
-from prismpath.connector import BaseConnector, node, PayloadFlattener
+from prismpath.workers.connector import BaseConnector, node, PayloadFlattener

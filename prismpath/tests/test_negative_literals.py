@@ -7,10 +7,8 @@ import ast
 
 import pytest
 
-from prismpath import predicates as P
-from prismpath import model_check as mc
-
-
+from prismpath.kernel import predicates as P
+from prismpath.kernel import model_check as mc
 @pytest.mark.parametrize("cond, ctx, expect", [
     ("when x >= -1282", {"x": -5}, True),
     ("when x >= -1282", {"x": -2000}, False),

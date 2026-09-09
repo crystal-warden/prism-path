@@ -18,8 +18,7 @@ from __future__ import annotations
 import hashlib
 from typing import Dict, List, Optional, Tuple
 
-from prismpath import ledger_ots as _mk
-
+from prismpath.ledgers import ledger_ots as _mk
 
 def chunk(bits: str, block_bits: int) -> List[str]:
     """Split a bitstream into fixed-size blocks (the retransmit unit). Always >= 1 block."""

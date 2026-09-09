@@ -10,7 +10,7 @@ CORRECTION: same intent, fixed to the real router contract. No sentence-transfor
 """
 import pytest
 
-from prismpath.router import LLMRouter, HybridRouter, RouteDecision
+from prismpath.routing.router import LLMRouter, HybridRouter, RouteDecision
 
 
 class StubEmbedRouter:

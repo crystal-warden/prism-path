@@ -4,8 +4,9 @@
 import json
 import os
 
-from prismpath import annotate, kappa
-from prismpath.parser import parse_file
+from prismpath.evals import annotate
+from prismpath.evals import kappa
+from prismpath.kernel.parser import parse_file
 
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BENCH = os.path.join(HERE, "benchmark", "routing_bench.jsonl")

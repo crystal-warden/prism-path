@@ -32,9 +32,9 @@ import random
 import sys
 from pathlib import Path
 
-from prismpath import predicates
-from prismpath.engine import run
-from prismpath.parser import parse
+from prismpath.kernel import predicates
+from prismpath.kernel.engine import run
+from prismpath.kernel.parser import parse
 
 OUT_DIR = Path(__file__).parent / "conformance"
 VERSION = 2   # v2: signed integer literals fold to constants (predicates.fold_unary_signs)

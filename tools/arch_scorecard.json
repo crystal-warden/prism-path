@@ -4,7 +4,7 @@
     "violations": []
   },
   "signal_3_core_churn": {
-    "core_total_loc": 7628,
+    "core_total_loc": 7626,
     "churn_since_baseline": null,
     "note": "track per-adapter; must DECAY. flat/rising = rebuilding, not generalizing."
   },
@@ -21,8 +21,8 @@
   },
   "unclassified_needs_triage": [
     "mission_control/",
-    "analysis.py",
-    "chat_agent.py",
-    "ledger_runner.py"
+    "kernel/analysis.py",
+    "workers/chat_agent.py",
+    "ledgers/ledger_runner.py"
   ]
 }

@@ -7,9 +7,9 @@ error context. No handler => the exception propagates (backward compatible).
 """
 import pytest
 
-from prismpath import predicates
-from prismpath.engine import run
-from prismpath.parser import parse
+from prismpath.kernel import predicates
+from prismpath.kernel.engine import run
+from prismpath.kernel.parser import parse
 
 RETRY = """---
 name: retry

@@ -11,8 +11,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-from prismpath import predicates
-
+from prismpath.kernel import predicates
 from prismpath.telemetry import quantizer as q
 from prismpath.telemetry import zeckendorf as z
 

@@ -514,7 +514,7 @@ cache stability.) Generative, novelty-heavy, or context-dependent nodes should n
 above answers "was reuse safe *then*"; production needs the question answered *continuously*.
 `lookup(doc, sample_rate=r)` flags a fraction of cache **hits** for shadowing: the adapter reuses the
 verdict *and* runs the real adjudicator, then feeds the comparison to `record_shadow()`. The corpus
-accumulates a live **reuse-error rate** reported alongside the hit rate (`python -m prismpath.prefilter
+accumulates a live **reuse-error rate** reported alongside the hit rate (`python -m prismpath.routing.prefilter
 monitor <dir>`), and an entry whose disagreement crosses a bound (on the **cumulative** rate *or* a
 bounded **recent window**, so an entry that was stable for months and then drifts is pulled within a
 few samples rather than after its lifetime rate erodes) is **quarantined**: `_eligible()` drops it
@@ -998,15 +998,15 @@ tooled end to end (a preflight that reports what the codec will do on a user's o
 and as the `prismpath-preflight` crate; a drafter that transcribes an existing Vector config into a
 policy flow, the tool drafting and the author signing; and a canary recipe whose verifier proved
 route parity on live traffic before cutover). **Secure signed
-policy hot swap** (`prismpath/policy_pack.py` + `policy_host.py`, published as prior art in
+policy hot swap** (`prismpath/hotswap/policy_pack.py` + `policy_host.py`, published as prior art in
 `docs/design/spec-secure-hotswap.md`, August 2026) replaces a running Level M policy only when the pack is
 Ed25519 authorized, inside a signed envelope, monotonically versioned, atomically applied, and audited to
 a Merkle rooted ledger; the same gate fronting the kernel eBPF `netupdate` as a host-side pre loader.
-**Context attestation** (`prismpath/context_ledger.py`, mirrored in the Rust kernel, August 2026) makes
+**Context attestation** (`prismpath/ledgers/context_ledger.py`, mirrored in the Rust kernel, August 2026) makes
 what a frozen model was conditioned on checkable: an append only, hash chained, Merkle rooted ledger of
 context segments (salted for low entropy text, content never stored) bound into the standard provenance
 manifest; the context is the only mutable state a frozen model has, so it is the governance surface.
-**Provable crypto-agility** (`prismpath/crypto_agility.py` + `crypto_host.py`, prior art in
+**Provable crypto-agility** (`prismpath/hotswap/crypto_agility.py` + `crypto_host.py`, prior art in
 `docs/design/spec-crypto-agility.md`, August 2026) applies the same governor to the choice of
 *cryptographic suite*: a suite-selection policy is a Level M flow whose terminals are the approved
 suites, and five machine checked proofs establish that no reachable state selects an unapproved or

@@ -28,7 +28,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent.parent))
 
 from prismpath import ledger_airgap as la          # noqa: E402
-from prismpath.checkpoint import run_durable, resume, load_checkpoint  # noqa: E402
+from prismpath.ledgers.checkpoint import run_durable, resume, load_checkpoint  # noqa: E402
 from prismpath import canon
 
 OUT = HERE / "conformance" / "durable.json"

@@ -31,7 +31,7 @@ jobs:
       # crash across ~23k adversarial + random predicate inputs. This is the check that guards the
       # "a `when` predicate cannot execute code, and cannot crash a run" claim in the papers.
       - name: Fuzz the predicate sandbox
-        run: python -m prismpath.fuzz_predicates -n 20000
+        run: python -m prismpath.safety.fuzz_predicates -n 20000
 
   # The conformance gate: the JS port must match the Python reference bit-for-bit on the FROZEN
   # vectors (portable/conformance/), and the committed vectors must match a fresh regeneration

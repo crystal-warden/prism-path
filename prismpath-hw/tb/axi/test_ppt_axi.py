@@ -130,7 +130,7 @@ async def axi_sensor_replay(dut):
     magic = await axi_read(dut, R_MAGIC)
     assert magic == 0x50505431, f"MAGIC mismatch: {magic:#x}"
 
-    from prismpath.parser import parse_file
+    from prismpath.kernel.parser import parse_file
     flow_md = (Path(pc._REPO) / "prismpath" / "gallery" / "incident_severity"
                / "incident_severity.md")
     img = pc.compile_flow(parse_file(str(flow_md)))

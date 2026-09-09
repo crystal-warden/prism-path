@@ -13,8 +13,9 @@ from collections import defaultdict, Counter
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # ---------- A) ROUTING ----------
-from prismpath import embedder
-from prismpath.centroid import _decision_items, load_graphs, _unit
+from prismpath.routing import embedder
+from prismpath.routing.centroid import _decision_items, load_graphs, _unit
+
 recs=[json.loads(l) for l in open(os.path.join(_REPO, "prismpath", "benchmark/routing_bench.jsonl"))]
 graphs=load_graphs(recs, flows_dir=os.path.join(_REPO, "prismpath", "flows"))
 items=_decision_items(recs, graphs)

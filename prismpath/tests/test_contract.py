@@ -4,8 +4,8 @@
 edges, infer types, generate grammars, and type-gate worker outputs."""
 import os
 
-from prismpath import contract
-from prismpath.parser import parse, parse_file
+from prismpath.kernel import contract
+from prismpath.kernel.parser import parse, parse_file
 
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -124,7 +124,7 @@ def test_validate_output_type_gate():
 
 
 def test_engine_type_gate_stops_on_wrong_type():
-    from prismpath.engine import run
+    from prismpath.kernel.engine import run
     g = parse("---\nname:t\nstart:work\n---\n## work\nGo.\n-> review: when tests_pass\n"
               "-> work: when not tests_pass\n## review\n## done\n")
 

@@ -4,7 +4,7 @@
 interface Mission Control + the guard ledger consume. Pin that."""
 import os
 
-from prismpath.audit_log import AuditLog, _leaf_hex, verify
+from prismpath.ledgers.audit_log import AuditLog, _leaf_hex, verify
 
 
 def _log(tmp_path, n=5):

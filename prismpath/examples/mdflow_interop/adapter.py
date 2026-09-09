@@ -23,7 +23,7 @@ from __future__ import annotations
 import json
 from typing import Dict, Sequence
 
-from prismpath.cli_worker import CliWorker, CliWorkerError
+from prismpath.workers.cli_worker import CliWorker, CliWorkerError
 
 
 class MdflowError(CliWorkerError):

@@ -38,7 +38,7 @@ def _lexical(outcome, edges):
 def main(dataset=None) -> dict:
     import numpy as np
     from prismpath import embedder, predicates
-    from prismpath.parser import parse_file
+    from prismpath.kernel.parser import parse_file
 
     dataset = dataset or os.path.join(HERE, "routing_bench.jsonl")
     cases = [json.loads(l) for l in open(dataset, encoding="utf-8") if l.strip()]

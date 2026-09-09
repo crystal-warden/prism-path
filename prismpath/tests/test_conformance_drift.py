@@ -25,8 +25,8 @@ it (reconciled to 114 to match the FPGA). These pins make the next such drift lo
 import json
 from pathlib import Path
 
-from prismpath import model_check as mc
-from prismpath.parser import parse_file
+from prismpath.kernel import model_check as mc
+from prismpath.kernel.parser import parse_file
 
 _CONF = Path(__file__).resolve().parent.parent / "portable" / "conformance"
 _GALLERY = Path(__file__).resolve().parent.parent / "gallery"

@@ -7,8 +7,8 @@ not frozen (BFS tie-order is an implementation detail); the {reachable, proven} 
 import json
 import os
 
-from prismpath import model_check as mc
-from prismpath.parser import parse
+from prismpath.kernel import model_check as mc
+from prismpath.kernel.parser import parse
 
 CORPUS = os.path.join(os.path.dirname(__file__), "..", "portable", "conformance", "reach.json")
 

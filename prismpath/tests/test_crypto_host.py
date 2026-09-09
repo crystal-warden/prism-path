@@ -15,7 +15,7 @@ pytest.importorskip("cryptography")
 from prismpath import crypto_host as ch  # noqa: E402
 from prismpath import crypto_registry as cr  # noqa: E402
 from prismpath import policy_pack as pp  # noqa: E402
-from prismpath.parser import parse  # noqa: E402
+from prismpath.kernel.parser import parse  # noqa: E402
 
 _hw = Path(__file__).resolve().parent.parent.parent / "prismpath-hw"
 if not (_hw / "ppt_compile.py").exists():

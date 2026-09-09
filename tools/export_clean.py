@@ -174,7 +174,7 @@ jobs:
       - name: Unit tests
         run: python -m pytest prismpath/tests -q
       - name: Fuzz the predicate sandbox
-        run: python -m prismpath.fuzz_predicates -n 20000
+        run: python -m prismpath.safety.fuzz_predicates -n 20000
 
   conformance:
     runs-on: ubuntu-latest

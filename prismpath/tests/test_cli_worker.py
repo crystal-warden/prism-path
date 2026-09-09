@@ -13,9 +13,9 @@ import textwrap
 
 import pytest
 
-from prismpath.cli_worker import CliWorker, CliWorkerError, cli_agent
-from prismpath.engine import run
-from prismpath.parser import parse
+from prismpath.workers.cli_worker import CliWorker, CliWorkerError, cli_agent
+from prismpath.kernel.engine import run
+from prismpath.kernel.parser import parse
 
 PY = sys.executable
 

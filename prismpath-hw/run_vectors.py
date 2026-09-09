@@ -26,7 +26,7 @@ BUILD = HERE / "build"
 INTERP = BUILD / "interp"
 
 import ppt_compile as pc                                   # noqa: E402
-from prismpath.parser import parse                         # noqa: E402
+from prismpath.kernel.parser import parse                         # noqa: E402
 
 CONF = Path(pc._REPO) / "portable" / "conformance"    # pc._REPO is the package dir (matches tb/)
 

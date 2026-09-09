@@ -31,7 +31,7 @@ FLOWS = HERE / "demo" / "flows"
 INTERP = HERE / "build" / "interp"
 
 import ppt_compile as pc                                    # noqa: E402
-from prismpath.parser import parse_file                     # noqa: E402
+from prismpath.kernel.parser import parse_file                     # noqa: E402
 
 T_LO_IN, T_LO_OUT = 681, 649        # mid entered from below at +H, left at -H (T_lo=665, H=16)
 T_HI_IN, T_HI_OUT = 1647, 1615      # high entered at +H, left at -H (T_hi=1631, H=16)

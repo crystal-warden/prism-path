@@ -2,7 +2,7 @@
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Deterministic factories for the compliance-adapter test suite (no gemma)."""
 import hashlib
-from prismpath import ledger_airgap
+from prismpath.ledgers import ledger_airgap
 
 FIXED_NOW = "2026-07-22T12:00:00+00:00"
 CATALOG_CIDS = ["3.1.1", "3.1.2", "3.1.4", "3.1.5", "3.1.7", "3.1.11", "3.1.12", "3.1.22"]

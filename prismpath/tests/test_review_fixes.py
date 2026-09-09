@@ -4,8 +4,11 @@
 import numpy as np
 import pytest
 
-from prismpath import checkpoint, flow_test, predicates, prefilter
-from prismpath.parser import parse, parse_file
+from prismpath.ledgers import checkpoint
+from prismpath.kernel import flow_test
+from prismpath.kernel import predicates
+from prismpath.routing import prefilter
+from prismpath.kernel.parser import parse, parse_file
 
 
 def test_utf8_flow_parses(tmp_path):
@@ -63,8 +66,8 @@ def test_ledger_gate_red_does_not_head_of_line_block(tmp_path):
     import subprocess
     if subprocess.run(["git", "--version"], capture_output=True).returncode != 0:
         pytest.skip("git")
-    from prismpath.ledger import Ledger
-    from prismpath.ledger_runner import run_ledgered_loop
+    from prismpath.ledgers.ledger import Ledger
+    from prismpath.ledgers.ledger_runner import run_ledgered_loop
     flow = tmp_path / "q.md"
     flow.write_text(ROUTE)
     led = Ledger(flow="q", run_id="01H", state_dir=tmp_path / "ledger")

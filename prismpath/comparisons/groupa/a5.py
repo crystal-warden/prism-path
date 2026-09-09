@@ -33,7 +33,7 @@ from typing import Any, Dict, List
 
 from prismpath.comparisons.groupa.common import evidence_dir, policy_by_id, write_result
 from prismpath.comparisons.harness import HERE, TOOLCHAIN_BIN, gen_dir_for, scenario_steps
-from prismpath.parser import parse
+from prismpath.kernel.parser import parse
 
 from prismpath.telemetry import concentrator  # noqa: E402
 from prismpath.telemetry import packed  # noqa: E402

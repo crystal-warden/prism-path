@@ -16,7 +16,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent.parent))
 
-from prismpath.context_ledger import ContextLedger, verify_chain  # noqa: E402
+from prismpath.ledgers.context_ledger import ContextLedger, verify_chain  # noqa: E402
 from prismpath import canon
 
 OUT = HERE / "conformance" / "context.json"

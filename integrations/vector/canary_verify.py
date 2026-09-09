@@ -33,7 +33,7 @@ sys.path.insert(0, str(_TELEMETRY.parent.parent))
 from prismpath.telemetry import preflight  # noqa: E402  (extract_reading + _codec_view: the codec's exact view of an event)
 from prismpath.telemetry import quantizer as q  # noqa: E402
 from prismpath.telemetry import wire as w  # noqa: E402
-from prismpath.parser import parse_file  # noqa: E402
+from prismpath.kernel.parser import parse_file  # noqa: E402
 
 
 def _read_ndjson(path: str) -> Tuple[List[dict], int]:

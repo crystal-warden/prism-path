@@ -39,7 +39,7 @@ import json
 import sys
 from pathlib import Path
 
-from prismpath.guard import INBOUND, OUTBOUND, compose, parse_policy, parse_policy_file
+from prismpath.safety.guard import INBOUND, OUTBOUND, compose, parse_policy, parse_policy_file
 
 OUT_PATH = Path(__file__).parent / "conformance" / "safety.json"
 POLICIES_DIR = Path(__file__).parent.parent / "policies"

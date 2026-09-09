@@ -6,9 +6,7 @@ import pytest
 import compliance_adapter as ca
 import ai_safety_receipts as r
 import ai_safety as ais
-from prismpath import policy_pack as pp
-
-
+from prismpath.hotswap import policy_pack as pp
 @pytest.fixture
 def key(tmp_path):
     return pp.keygen(str(tmp_path), "ai-safety-test")

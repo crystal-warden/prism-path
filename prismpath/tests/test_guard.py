@@ -11,7 +11,7 @@ import os
 
 import pytest
 
-from prismpath.guard import (
+from prismpath.safety.guard import (
     INBOUND,
     OUTBOUND,
     Guard,
@@ -335,7 +335,7 @@ def test_rationale_prose_is_retained_for_review():
 
 def test_denied_input_never_reaches_the_model():
     """The whole point of checking inbound BEFORE the call."""
-    from prismpath.guard import Blocked, guarded_exchange
+    from prismpath.safety.guard import Blocked, guarded_exchange
 
     calls = []
 
@@ -353,7 +353,7 @@ def test_denied_input_never_reaches_the_model():
 
 
 def test_denied_output_never_reaches_the_principal():
-    from prismpath.guard import Blocked, guarded_exchange
+    from prismpath.safety.guard import Blocked, guarded_exchange
 
     key = "AKIA" + "B" * 16
     g = compose([floor()])
@@ -364,7 +364,7 @@ def test_denied_output_never_reaches_the_principal():
 
 
 def test_an_allowed_exchange_passes_through_unchanged():
-    from prismpath.guard import guarded_exchange
+    from prismpath.safety.guard import guarded_exchange
 
     g = compose([floor()])
     out = guarded_exchange(g, "how do I write a for loop", lambda t: f"echo: {t}")
@@ -372,7 +372,7 @@ def test_an_allowed_exchange_passes_through_unchanged():
 
 
 def test_every_verdict_is_offered_to_the_observability_half():
-    from prismpath.guard import guarded_exchange
+    from prismpath.safety.guard import guarded_exchange
 
     seen = []
     g = compose([floor()])
@@ -391,7 +391,7 @@ def test_every_verdict_is_offered_to_the_observability_half():
 
 def test_a_blocked_exchange_raises_rather_than_returning_a_sentinel():
     """A caller that forgets to check cannot mistake a refusal for an answer."""
-    from prismpath.guard import Blocked, guarded_exchange
+    from prismpath.safety.guard import Blocked, guarded_exchange
 
     g = compose([floor()])
     try:

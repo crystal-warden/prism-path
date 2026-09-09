@@ -33,7 +33,8 @@ import urllib.request
 from pathlib import Path
 from typing import Any, Dict, List
 
-from prismpath import audit_log, policy_pack
+from prismpath.ledgers import audit_log
+from prismpath.hotswap import policy_pack
 from prismpath.comparisons.groupa.common import evidence_dir, policy_by_id, write_result
 from prismpath.comparisons.harness import TOOLCHAIN_BIN, gen_dir_for
 from prismpath.comparisons.systems import cedar as sys_cedar

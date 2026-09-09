@@ -20,7 +20,7 @@ REPO = HERE.parent
 sys.path.insert(0, str(REPO / "prismpath-hw"))
 sys.path.insert(0, str(REPO))
 import ppt_compile as pc                                  # noqa: E402
-from prismpath.parser import parse_file                  # noqa: E402
+from prismpath.kernel.parser import parse_file                  # noqa: E402
 
 INTERP = HERE / "interp"
 FLOW = REPO / "prismpath" / "flows" / "wazuh_triage.md"

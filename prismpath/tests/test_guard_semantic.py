@@ -13,8 +13,8 @@ import os
 
 import pytest
 
-from prismpath.guard import compose, parse_policy_file
-from prismpath.guard_semantic import (
+from prismpath.safety.guard import compose, parse_policy_file
+from prismpath.safety.guard_semantic import (
     PROHIBITED_INTENT_EXEMPLARS,
     LayeredGuard,
     SemanticLayer,

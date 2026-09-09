@@ -13,8 +13,8 @@ import json
 import numpy as np
 import pytest
 
-from prismpath import prefilter
-from prismpath.prefilter import PrefilterCache, tune
+from prismpath.routing import prefilter
+from prismpath.routing.prefilter import PrefilterCache, tune
 
 
 def _no_embed(texts):

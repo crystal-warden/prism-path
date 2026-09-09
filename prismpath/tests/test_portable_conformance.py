@@ -20,8 +20,8 @@ from pathlib import Path
 
 import pytest
 
-from prismpath.engine import run
-from prismpath.parser import parse
+from prismpath.kernel.engine import run
+from prismpath.kernel.parser import parse
 
 NODE = shutil.which("node")
 pytestmark = pytest.mark.skipif(NODE is None, reason="node not installed — portable port untested here")

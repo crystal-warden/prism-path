@@ -8,9 +8,9 @@ systematic ways (treated `result.steps` as an int instead of a list; used capita
 names that the parser lowercases; asserted on visits keys for never-entered nodes). This file
 is the post-loop CORRECTION: same intent and case coverage, fixed to the real engine contract.
 """
-from prismpath.engine import run, RunResult
-from prismpath.parser import parse
-from prismpath.router import RouteDecision
+from prismpath.kernel.engine import run, RunResult
+from prismpath.kernel.parser import parse
+from prismpath.routing.router import RouteDecision
 
 
 class FirstEdgeRouter:

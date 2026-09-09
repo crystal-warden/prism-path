@@ -4,10 +4,10 @@
 clean outcomes carry 0, and the showcase distinction holds — the two paths that both surface
 as stopped=='needs_human' carry DIFFERENT causes (worker-requested vs below the calibrated
 floor), which is the whole reason the cause layer exists."""
-from prismpath import causes
-from prismpath.engine import run
-from prismpath.parser import parse
-from prismpath.router import RouteDecision
+from prismpath.kernel import causes
+from prismpath.kernel.engine import run
+from prismpath.kernel.parser import parse
+from prismpath.routing.router import RouteDecision
 
 
 class ScoredRouter:

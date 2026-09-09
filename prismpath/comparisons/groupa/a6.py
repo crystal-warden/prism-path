@@ -26,10 +26,11 @@ import urllib.request
 from pathlib import Path
 from typing import Any, Dict
 
-from prismpath import policy_host, policy_pack
+from prismpath.hotswap import policy_host
+from prismpath.hotswap import policy_pack
 from prismpath.comparisons.groupa.common import evidence_dir, policy_by_id, write_result
 from prismpath.comparisons.harness import HERE, TOOLCHAIN_BIN, gen_dir_for
-from prismpath.parser import parse
+from prismpath.kernel.parser import parse
 
 sys.path.insert(0, str(HERE.parent.parent / "prismpath-hw"))
 import ppt_compile  # noqa: E402

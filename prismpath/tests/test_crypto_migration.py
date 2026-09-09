@@ -9,9 +9,9 @@ invariant must hold in every cell — so the suite can never silently degrade in
 import json
 from pathlib import Path
 
-from prismpath import crypto_agility as ca
-from prismpath import crypto_registry as cr
-from prismpath.parser import parse
+from prismpath.hotswap import crypto_agility as ca
+from prismpath.hotswap import crypto_registry as cr
+from prismpath.kernel.parser import parse
 from prismpath.portable.gen_crypto_migration_fixtures import SUITES, KEY_ID, phase_policy, _envelope
 
 FIXTURE = Path(__file__).resolve().parent.parent / "portable" / "conformance" / "crypto_migration.json"

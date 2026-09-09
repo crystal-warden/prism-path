@@ -12,7 +12,7 @@ import math
 
 import numpy as np
 
-from prismpath.prefilter import CacheResult, PrefilterCache, match_arrays
+from prismpath.routing.prefilter import CacheResult, PrefilterCache, match_arrays
 
 # hand-picked unit vectors: DOC_A/DOC_B are identical direction; DOC_NEAR is at a controlled
 # angle to DOC_A (cos ~0.95 — above 0.9, below 0.97); DOC_FAR is orthogonal.

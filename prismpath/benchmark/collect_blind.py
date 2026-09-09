@@ -17,7 +17,7 @@ import json
 import os
 import sys
 
-from prismpath.annotate import blind_cases
+from prismpath.evals.annotate import blind_cases
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 BENCH = os.path.join(HERE, "routing_bench.jsonl")

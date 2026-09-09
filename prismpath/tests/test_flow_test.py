@@ -10,8 +10,9 @@ import json
 import numpy as np
 import pytest
 
-from prismpath import embedder, flow_test
-from prismpath.router import EmbeddingRouter
+from prismpath.routing import embedder
+from prismpath.kernel import flow_test
+from prismpath.routing.router import EmbeddingRouter
 
 DET_FLOW = """---
 name: gate

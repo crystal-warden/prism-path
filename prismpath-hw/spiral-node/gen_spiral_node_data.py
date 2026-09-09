@@ -15,7 +15,7 @@ sys.path.insert(0, os.path.join(HERE, "..", ".."))
 
 from prismpath.telemetry import spiral as sp                      # noqa: E402
 from prismpath.telemetry import spiral_pack as spk                # noqa: E402
-from prismpath.parser import parse       # noqa: E402
+from prismpath.kernel.parser import parse       # noqa: E402
 
 FLOW = """---
 name: fusion

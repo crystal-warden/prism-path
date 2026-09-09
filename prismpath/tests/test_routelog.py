@@ -5,9 +5,10 @@ import json
 
 import numpy as np
 
-from prismpath import embedder, routelog
-from prismpath.parser import parse
-from prismpath.router import EmbeddingRouter
+from prismpath.routing import embedder
+from prismpath.routing import routelog
+from prismpath.kernel.parser import parse
+from prismpath.routing.router import EmbeddingRouter
 
 FLOW = """---
 name: triage

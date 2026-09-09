@@ -4,7 +4,8 @@
 `__timeout__`; this is that something."""
 import os
 
-from prismpath import checkpoint, scheduler
+from prismpath.ledgers import checkpoint
+from prismpath.workers import scheduler
 
 FLOW = """---
 name: order

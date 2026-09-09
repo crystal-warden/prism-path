@@ -6,8 +6,8 @@ this pins the Python side; `node prismpath/portable/run_level_m.mjs` pins the JS
 import json
 import os
 
-from prismpath import model_check
-from prismpath.parser import parse
+from prismpath.kernel import model_check
+from prismpath.kernel.parser import parse
 
 CORPUS = os.path.join(os.path.dirname(__file__), "..", "portable", "conformance", "level_m.json")
 

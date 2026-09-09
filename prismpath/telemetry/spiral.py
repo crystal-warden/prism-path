@@ -37,8 +37,7 @@ import ast
 import math
 from typing import Any, Dict, Iterator, List, Optional, Tuple
 
-from prismpath import predicates
-
+from prismpath.kernel import predicates
 from prismpath.telemetry import quantizer as q
 from prismpath.telemetry import wire as w
 from prismpath.telemetry import zeckendorf as z

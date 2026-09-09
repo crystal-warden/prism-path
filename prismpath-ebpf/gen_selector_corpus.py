@@ -26,8 +26,8 @@ sys.path.insert(0, str(HERE.parent / "prismpath-hw"))
 sys.path.insert(0, str(HERE.parent))
 os.environ.setdefault("PRISMPATH_REPO", str(HERE.parent))
 import ppt_compile as pc                              # noqa: E402
-from prismpath.parser import parse_file               # noqa: E402
-from prismpath.engine import first_deterministic       # noqa: E402
+from prismpath.kernel.parser import parse_file               # noqa: E402
+from prismpath.kernel.engine import first_deterministic       # noqa: E402
 
 INTERP = HERE / "interp"
 

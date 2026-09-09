@@ -5,7 +5,7 @@ to the baseline posture on the operator's stand down event or on the timer, thro
 suspend and resume machinery, with nothing added to the pack."""
 from pathlib import Path
 
-from prismpath import checkpoint
+from prismpath.ledgers import checkpoint
 
 FLOW = Path(__file__).resolve().parent.parent / "examples" / "operator_overlay" / "overlay.md"
 

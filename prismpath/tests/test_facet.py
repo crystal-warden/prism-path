@@ -3,8 +3,8 @@
 import json
 import os
 from prismpath.cli import main
-from prismpath.parser import parse_file
-from prismpath import predicates
+from prismpath.kernel.parser import parse_file
+from prismpath.kernel import predicates
 
 _INCIDENT = os.path.join(
     os.path.dirname(__file__), "..", "gallery", "incident_severity", "incident_severity.md"

@@ -22,7 +22,7 @@ sys.path.insert(0, str(REPO))
 
 from prismpath.telemetry import spiral as sp  # noqa: E402
 from prismpath.telemetry import wire as w     # noqa: E402
-from prismpath.parser import parse  # noqa: E402
+from prismpath.kernel.parser import parse  # noqa: E402
 
 FLOW_PATH = HERE / "flows" / "fusion_triage.md"
 NODE = "correlate"

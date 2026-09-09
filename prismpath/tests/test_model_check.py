@@ -10,9 +10,9 @@ The checker's contract, pinned:
 """
 import pytest
 
-from prismpath import model_check as mc
-from prismpath.parser import parse
-from prismpath.analysis import portability_tier
+from prismpath.kernel import model_check as mc
+from prismpath.kernel.parser import parse
+from prismpath.kernel.analysis import portability_tier
 
 
 # ---------------------------------------------------------------- Level M classification

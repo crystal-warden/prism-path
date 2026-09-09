@@ -3,9 +3,10 @@
 """OpenTelemetry-export tests (critic #5) — span records, no SDK required."""
 import numpy as np
 
-from prismpath import embedder, otel
-from prismpath.parser import parse
-from prismpath.router import EmbeddingRouter
+from prismpath.routing import embedder
+from prismpath.ledgers import otel
+from prismpath.kernel.parser import parse
+from prismpath.routing.router import EmbeddingRouter
 
 FLOW = """---
 name: triage

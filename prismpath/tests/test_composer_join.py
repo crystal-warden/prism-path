@@ -6,8 +6,9 @@ with a timer, so scheduler.fire_due_timeouts delivers `__timeout__` and takes th
 
 Stub agents throughout; real durable child runs on disk.
 """
-from prismpath import composer, scheduler
-from prismpath.checkpoint import run_durable, load_checkpoint
+from prismpath.workers import composer
+from prismpath.workers import scheduler
+from prismpath.ledgers.checkpoint import run_durable, load_checkpoint
 
 
 CHILD = """---

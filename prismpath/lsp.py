@@ -27,8 +27,9 @@ import json
 import sys
 from typing import Dict, List, Optional
 
-from prismpath import analysis, predicates
-from prismpath.parser import ANNO_RE, EDGE_RE, HEAD_RE, parse
+from prismpath.kernel import analysis
+from prismpath.kernel import predicates
+from prismpath.kernel.parser import ANNO_RE, EDGE_RE, HEAD_RE, parse
 
 # ------------------------------------------------------------------ framing
 
@@ -283,7 +284,7 @@ class Server:
             items = [{"label": k, "kind": 14} for k in _KEYWORDS]
             fields = {"visits", "error_count"}
             if graph is not None:
-                from prismpath.contract import derive_contract
+                from prismpath.kernel.contract import derive_contract
                 for spec in derive_contract(graph).values():
                     fields |= set(spec)
             items += [{"label": f, "kind": 5} for f in sorted(fields)]
@@ -354,7 +355,7 @@ class Server:
     def _graph(self, params: dict) -> dict:
         uri = params.get("uri") or params.get("textDocument", {}).get("uri", "")
         text = self.docs.get(uri, "")
-        from prismpath.graph_export import to_mermaid
+        from prismpath.kernel.graph_export import to_mermaid
         return {"mermaid": to_mermaid(parse(text))}
 
 

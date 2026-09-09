@@ -3,7 +3,6 @@
 """Every CLI subcommand belongs to exactly one persona group, and the grouped help renders them all."""
 from prismpath import cli
 
-
 def _registered(parser):
     for action in parser._actions:
         if hasattr(action, "choices") and isinstance(action.choices, dict):

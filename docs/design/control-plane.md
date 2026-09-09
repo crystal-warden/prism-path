@@ -36,7 +36,7 @@ Before the abstractions, here's the whole thing on a real task. You want a tip c
 control plane that one line of intent:
 
 ```bash
-SPRINT_PROJ=/tmp/tip SPRINT_GATE=browser SPRINT_NUDGE="a tip calculator" python -u prismpath/run_sprint.py
+SPRINT_PROJ=/tmp/tip SPRINT_GATE=browser SPRINT_NUDGE="a tip calculator" python -u prismpath/orchestration/run_sprint.py
 ```
 
 From there the loop runs on its own:
@@ -65,7 +65,7 @@ rest of this README is the two layers underneath that run.
 
 Above the kernel, PrismPath runs **spec driven feature sprints** against a local agent swarm.
 The loop's semantics are themselves a PrismPath flow ([`flows/sprint_loop.md`](../../prismpath/flows/sprint_loop.md),
-run with `SPRINT_FLOW=1` via [`sprint_flow.py`](../../prismpath/sprint_flow.py)): the gate routes on `when
+run with `SPRINT_FLOW=1` via [`sprint_flow.py`](../../prismpath/orchestration/sprint_flow.py)): the gate routes on `when
 gate_green`, the 3×-same-error rule is an `on error` edge, escalation is a `needs_human`
 suspension, and each gate green unit is a `@checkpoint` proof commit, the control plane that
 builds PrismPath is driven by a PrismPath document. The wall clock, pause, and heartbeat stay in the
@@ -114,7 +114,7 @@ driver, where harness concerns belong:
 # --- control plane (needs a served model / swarm) ---
 pip install -e .          # or: export PYTHONPATH=$PWD
 SPRINT_PROJ=/tmp/demo SPRINT_GATE=browser SPRINT_NUDGE="a tip calculator" \
-  python -u prismpath/run_sprint.py
+  python -u prismpath/orchestration/run_sprint.py
 pip install -e ".[control-plane]"        # Mission Control needs FastAPI/uvicorn (the control-plane extra)
 python -m prismpath.mission_control      # proving + observability command center at http://127.0.0.1:9109 (loopback)
 ```

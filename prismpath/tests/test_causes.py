@@ -7,7 +7,7 @@ the code it describes."""
 import re
 from pathlib import Path
 
-from prismpath import causes
+from prismpath.kernel import causes
 
 REPO = Path(__file__).resolve().parents[2]
 

@@ -8,8 +8,8 @@ import hashlib
 import json
 
 import compliance_adapter as ca
-from prismpath import ledger_airgap
-from prismpath.connector import BaseConnector
+from prismpath.ledgers import ledger_airgap
+from prismpath.workers.connector import BaseConnector
 
 
 REQ = {"control_id": "3.1.1", "boundary": "test-boundary",

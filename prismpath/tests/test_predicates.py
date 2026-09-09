@@ -2,7 +2,7 @@
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
 # tests/test_predicates.py
 import pytest
-from prismpath.predicates import (
+from prismpath.kernel.predicates import (
     is_deterministic, eval_condition, check_predicate, PredicateError,
 )
 

@@ -42,7 +42,7 @@ class PrismPathBaseline:
     available = True
 
     def __init__(self, margin: float = 0.05, temperature: float = 0.0):
-        from prismpath.router import EmbeddingRouter, HybridRouter, LLMRouter
+        from prismpath.routing.router import EmbeddingRouter, HybridRouter, LLMRouter
         self.gemma = Gemma(temperature=temperature)
         self._embed = EmbeddingRouter()
         self.router = HybridRouter(LLMRouter(self.gemma.generate), margin=margin, embed=self._embed)
@@ -66,7 +66,7 @@ class LLMRouterBaseline:
     available = True
 
     def __init__(self, temperature: float = 0.0):
-        from prismpath.router import LLMRouter
+        from prismpath.routing.router import LLMRouter
         self.gemma = Gemma(temperature=temperature)
         self.router = LLMRouter(self.gemma.generate)
 

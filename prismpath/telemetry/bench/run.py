@@ -24,7 +24,7 @@ from prismpath.telemetry.bench import datagen as D         # noqa: E402
 from prismpath.telemetry.bench import channel as CH        # noqa: E402
 from prismpath.telemetry import quantizer as q       # noqa: E402
 from prismpath.telemetry import wire as w            # noqa: E402
-from prismpath.parser import parse, parse_file  # noqa: E402
+from prismpath.kernel.parser import parse, parse_file  # noqa: E402
 
 _INCIDENT = ADAPTER.parent.parent / "prismpath" / "gallery" / "incident_severity" / "incident_severity.md"
 

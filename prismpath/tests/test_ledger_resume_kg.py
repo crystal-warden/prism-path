@@ -18,7 +18,7 @@ import pytest
 # minimal kernel CI env. Skip cleanly there; it runs in the full dev env.
 pytest.importorskip("requests", reason="control-plane test: run_sprint needs requests")
 
-from prismpath.ledger import Ledger
+from prismpath.ledgers.ledger import Ledger
 
 HAS_GIT = subprocess.run(["git", "--version"], capture_output=True).returncode == 0
 pytestmark = pytest.mark.skipif(not HAS_GIT, reason="git not available")
@@ -57,7 +57,7 @@ def _load(monkeypatch, proj, spec_file, ledger_dir, run_id):
     monkeypatch.setenv("SPRINT_ARCH",
                        os.path.join(os.path.dirname(__file__), "..", "nudges", "APP_ARCHITECTURE.md"))
     sys.modules.pop("run_sprint_uut", None)
-    path = os.path.join(os.path.dirname(__file__), "..", "run_sprint.py")
+    path = os.path.join(os.path.dirname(__file__), "..", "orchestration", "run_sprint.py")
     spec = importlib.util.spec_from_file_location("run_sprint_uut", path)
     m = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(m)

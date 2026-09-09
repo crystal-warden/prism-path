@@ -16,7 +16,6 @@ import json
 from typing import Dict
 from prismpath import canon
 
-
 def _canon(root: str, seq: int) -> bytes:
     return canon.canonical_compact({"root": root, "seq": seq})
 

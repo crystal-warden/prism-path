@@ -43,8 +43,8 @@ if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
 from prismpath import predicates                     # noqa: E402
-from prismpath.analysis import _reachable            # noqa: E402
-from prismpath.model_check import _classify, _desugar_chains   # noqa: E402
+from prismpath.kernel.analysis import _reachable            # noqa: E402
+from prismpath.kernel.model_check import _classify, _desugar_chains   # noqa: E402
 
 TY_NONE, TY_BOOL, TY_INT, TY_STR = 0, 1, 2, 3
 OP_EQ, OP_NE, OP_LT, OP_LE, OP_GT, OP_GE, OP_TRUTHY = range(7)
@@ -398,7 +398,7 @@ def main() -> int:
     ap.add_argument("--max-steps", type=int, default=25)
     args = ap.parse_args()
 
-    from prismpath.parser import parse_file
+    from prismpath.kernel.parser import parse_file
     graph = parse_file(args.flow_md)
     try:
         img = compile_flow(graph, args.max_steps)

@@ -11,9 +11,10 @@ import hashlib
 import numpy as np
 import pytest
 
-from prismpath import embedder, lockfile
-from prismpath.parser import parse
-from prismpath.router import LockedEmbeddingRouter, HybridRouter, LLMRouter
+from prismpath.routing import embedder
+from prismpath.routing import lockfile
+from prismpath.kernel.parser import parse
+from prismpath.routing.router import LockedEmbeddingRouter, HybridRouter, LLMRouter
 
 FLOW = """---
 name: triage
@@ -107,14 +108,14 @@ def test_verify_passes_when_embedder_matches(tmp_path, stub_embedder):
 
 
 def test_locked_router_composes_locked_vectors_with_calibrated_tau(tmp_path, stub_embedder):
-    from prismpath.router import LLMRouter
+    from prismpath.routing.router import LLMRouter
     flow = tmp_path / "triage.md"
     flow.write_text(FLOW)
     lock = lockfile.build_lock(str(flow), delta=0.05)     # lock commits δ=0.05
     # precedence: a calibrated τ overrides the lock's δ for escalation; the lock still governs vectors
     r = lockfile.locked_router(lock, LLMRouter(lambda p: "1"), margin=0.20)
     assert r.margin == 0.20                                # τ wins over the lock's δ
-    from prismpath.router import LockedEmbeddingRouter
+    from prismpath.routing.router import LockedEmbeddingRouter
     assert isinstance(r.embed, LockedEmbeddingRouter)      # vectors still come from the lock
     # no override -> falls back to the lock's committed δ
     r2 = lockfile.locked_router(lock, LLMRouter(lambda p: "1"))
@@ -176,7 +177,7 @@ def test_locked_router_builds_hybrid_at_locked_delta(tmp_path, stub_embedder):
 
 def test_committed_vectors_reproduce_live_routing():
     pytest.importorskip("sentence_transformers", reason="needs the real bge embedder")
-    from prismpath.router import EmbeddingRouter
+    from prismpath.routing.router import EmbeddingRouter
     g = parse(FLOW)
     import tempfile, os
     d = tempfile.mkdtemp()

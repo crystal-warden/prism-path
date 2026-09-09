@@ -20,9 +20,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from prismpath import crypto_agility as ca
-from prismpath import crypto_registry as cr
-from prismpath.parser import parse
+from prismpath.hotswap import crypto_agility as ca
+from prismpath.hotswap import crypto_registry as cr
+from prismpath.kernel.parser import parse
 
 HERE = Path(__file__).resolve().parent
 OUT = HERE / "conformance" / "crypto_migration.json"

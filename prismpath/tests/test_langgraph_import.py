@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """LangGraph-importer tests (critic #6) — AST-only, no langgraph install needed."""
-from prismpath import langgraph_import
-from prismpath.parser import parse
+from prismpath.workers import langgraph_import
+from prismpath.kernel.parser import parse
 
 SOURCE = '''
 from langgraph.graph import StateGraph, START, END

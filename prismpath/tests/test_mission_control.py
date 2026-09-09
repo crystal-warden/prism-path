@@ -14,7 +14,7 @@ import pytest
 pytest.importorskip("fastapi")  # Mission Control is an optional control-plane extra — skip on minimal installs (e.g. CI's numpy-only env)
 from fastapi.testclient import TestClient
 
-from prismpath import audit_log
+from prismpath.ledgers import audit_log
 from prismpath.mission_control import core
 from prismpath.mission_control.app import app
 

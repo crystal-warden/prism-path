@@ -3,9 +3,10 @@
 """Wait-for-event tests (critic #7) — suspend on `{"wait": …}`, resume by delivering a signal/timer."""
 import pytest
 
-from prismpath import checkpoint, predicates
-from prismpath.engine import run
-from prismpath.parser import parse
+from prismpath.ledgers import checkpoint
+from prismpath.kernel import predicates
+from prismpath.kernel.engine import run
+from prismpath.kernel.parser import parse
 
 FLOW = """---
 name: order

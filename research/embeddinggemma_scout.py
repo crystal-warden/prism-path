@@ -8,7 +8,7 @@ os.environ.pop("HF_HUB_OFFLINE", None)
 from collections import defaultdict
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from sentence_transformers import SentenceTransformer
-from prismpath.centroid import _decision_items, load_graphs, _unit
+from prismpath.routing.centroid import _decision_items, load_graphs, _unit
 
 _REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 recs=[json.loads(l) for l in open(os.path.join(_REPO, "prismpath", "benchmark/routing_bench.jsonl"))]

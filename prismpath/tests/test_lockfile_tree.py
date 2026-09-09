@@ -8,8 +8,8 @@ TREE logic (recursive build, child pins, drift detection), not the embedding num
 import numpy as np
 import pytest
 
-from prismpath import embedder, lockfile
-
+from prismpath.routing import embedder
+from prismpath.routing import lockfile
 
 def make_stub(tag=""):
     def stub(texts, is_query=False):

@@ -4,8 +4,8 @@
 not conformal prediction) from labeled decisions."""
 import pytest
 
-from prismpath import calibrate
-from prismpath.router import LLMRouter
+from prismpath.routing import calibrate
+from prismpath.routing.router import LLMRouter
 
 
 def _rec(margin, correct):

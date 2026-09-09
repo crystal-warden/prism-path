@@ -34,7 +34,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent.parent))   
 from prismpath.telemetry import spiral as sp   # noqa: E402
 from prismpath.telemetry import wire as w      # noqa: E402
 from prismpath.telemetry.bench.channel import lost_mask                 # noqa: E402
-from prismpath.parser import parse            # noqa: E402
+from prismpath.kernel.parser import parse            # noqa: E402
 
 SEVERITY = [("critical", 80), ("alarm", 45), ("caution", 20)]   # thresholds; any field triggers
 

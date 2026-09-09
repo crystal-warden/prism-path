@@ -5,9 +5,8 @@
 A flow is PORTABLE (runs on the ML-free port) iff every edge on every REACHABLE node is decidable:
 `when` predicates, error edges, event edges. Semantic edges are exactly the violations.
 """
-from prismpath.parser import parse, parse_file
-from prismpath import analysis
-
+from prismpath.kernel.parser import parse, parse_file
+from prismpath.kernel import analysis
 
 def test_deterministic_only_flow_is_portable():
     g = parse("""---

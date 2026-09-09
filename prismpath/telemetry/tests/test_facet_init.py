@@ -14,7 +14,7 @@ _ADAPTER = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_ADAPTER))
 sys.path.insert(0, str(_ADAPTER.parent.parent))
 from prismpath.telemetry import facet_init as fi  # noqa: E402
-from prismpath.parser import parse_file  # noqa: E402
+from prismpath.kernel.parser import parse_file  # noqa: E402
 
 _needs_toml = pytest.mark.skipif(
     fi.tomllib is None, reason="tomllib needs Python 3.11+ (or tomli installed)")

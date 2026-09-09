@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
 import pytest
-from prismpath.parser import parse, parse_file, Graph, Node, ParseError
-from prismpath import parser as _parser
-from prismpath import analysis
+from prismpath.kernel.parser import parse, parse_file, Graph, Node, ParseError
+from prismpath.kernel import parser as _parser
+from prismpath.kernel import analysis
 
 def test_front_matter_parsing():
     text = """---

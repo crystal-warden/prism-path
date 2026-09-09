@@ -7,8 +7,8 @@ import os
 
 import pytest
 
-from prismpath import sandbox as sb
-from prismpath.code_nodes import Envelope
+from prismpath.workers import sandbox as sb
+from prismpath.workers.code_nodes import Envelope
 from prismpath.tests import _sandbox_probes as probes
 
 requires_bwrap = pytest.mark.skipif(sb.find_bwrap() is None, reason="bwrap not available")

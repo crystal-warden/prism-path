@@ -20,7 +20,7 @@ from pathlib import Path
 
 from prismpath.comparisons.groupa.common import evidence_dir, policy_by_id
 from prismpath.comparisons.harness import HERE, gen_dir_for, scenario_steps
-from prismpath.parser import parse
+from prismpath.kernel.parser import parse
 
 REPO = HERE.parent.parent
 sys.path.insert(0, str(REPO / "prismpath-hw"))

@@ -28,7 +28,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO))
 from prismpath import model_check  # noqa: E402
-from prismpath.parser import parse  # noqa: E402
+from prismpath.kernel.parser import parse  # noqa: E402
 from prismpath.telemetry import quantizer as q  # noqa: E402
 
 PRED = REPO / "prismpath" / "portable" / "conformance" / "predicates.json"

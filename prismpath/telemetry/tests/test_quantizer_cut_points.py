@@ -11,8 +11,8 @@ Rust mirror is held to the same rule.
 """
 import pytest
 
-from prismpath import engine
-from prismpath.parser import parse
+from prismpath.kernel import engine
+from prismpath.kernel.parser import parse
 
 from prismpath.telemetry import quantizer as q
 

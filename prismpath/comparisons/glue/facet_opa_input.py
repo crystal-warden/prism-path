@@ -18,11 +18,11 @@ from pathlib import Path
 from typing import Any, Dict, Tuple
 
 REPO = Path(__file__).resolve().parents[3]
-from prismpath.telemetry from prismpath.telemetry import packed  # noqa: E402
+from prismpath.telemetry import packed  # noqa: E402
 from prismpath.telemetry import quantizer as q  # noqa: E402
 from prismpath.telemetry import wire as w  # noqa: E402
 
-from prismpath.parser import parse  # noqa: E402
+from prismpath.kernel.parser import parse  # noqa: E402
 
 
 def partitions_for(flow_markdown: str) -> Dict[str, Any]:

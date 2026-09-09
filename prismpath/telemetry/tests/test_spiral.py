@@ -14,7 +14,7 @@ sys.path.insert(0, str(_ADAPTER.parent.parent))            # repo root
 
 from prismpath.telemetry import spiral as sp   # noqa: E402
 from prismpath.telemetry import wire as w      # noqa: E402
-from prismpath.parser import parse            # noqa: E402
+from prismpath.kernel.parser import parse            # noqa: E402
 
 CORPUS = json.loads((_ADAPTER / "conformance" / "spiral.json").read_text())
 

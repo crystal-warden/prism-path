@@ -5,7 +5,7 @@ the system rollup is bound to the EXACT per-control attestations, so swapping on
 import copy
 import pytest
 import rollup
-from prismpath import ledger_airgap
+from prismpath.ledgers import ledger_airgap
 from sample import record
 
 CATALOG_HASH = "sha256:catalogtest"

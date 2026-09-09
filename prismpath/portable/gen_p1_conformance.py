@@ -27,9 +27,9 @@ import struct
 import sys
 from pathlib import Path
 
-from prismpath.engine import run
-from prismpath.parser import parse
-from prismpath.router import LockedEmbeddingRouter
+from prismpath.kernel.engine import run
+from prismpath.kernel.parser import parse
+from prismpath.routing.router import LockedEmbeddingRouter
 
 OUT_DIR = Path(__file__).parent / "conformance"
 VERSION = 1
@@ -246,7 +246,7 @@ FIXTURES.append({
 
 
 def _run_fixture(fx):
-    from prismpath.lockfile import _decode_vec
+    from prismpath.routing.lockfile import _decode_vec
 
     conds = {}
     for text, b64 in fx["lock"]["conditions"].items():

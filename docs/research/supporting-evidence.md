@@ -27,6 +27,10 @@ memory). Consolidated July 2026; maintained through row #143 (September 2026).*
 > advisory for exactly this drift). If the compliance work is ever republished, repoint these rows at
 > its new public home.
 >
+> *(September 2026.)* The package was regrouped into `prismpath/{kernel,routing,safety,hotswap,ledgers,
+> workers,orchestration,evals}/`; a row citing `prismpath/<module>.py` reproduces from the grouped path,
+> and the old import names remain as aliases of the same modules.
+>
 > *(September 2026.)* `adapters/telemetry/` moved into the package as `prismpath/telemetry/`; rows
 > citing the old path reproduce from the new one, file for file, and the frozen corpora under
 > `conformance/` moved with it unchanged.

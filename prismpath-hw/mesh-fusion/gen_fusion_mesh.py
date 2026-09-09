@@ -31,7 +31,7 @@ sys.path.insert(0, str(HW))
 sys.path.insert(0, str(REPO))
 
 import ppt_compile as pc
-from prismpath.parser import parse
+from prismpath.kernel.parser import parse
 
 # The fused posture, fail-operational. Field order follows first appearance: tof_a -> 0, tof_b -> 1,
 # arm -> 2, which must line up with the node slots below. A live sensor reads band 0..3 (lower ToF =

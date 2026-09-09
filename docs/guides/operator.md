@@ -57,7 +57,7 @@ suspension and both resumes. A `visits` cap on the baseline node keeps the hold 
 bounded, which the validator would otherwise flag.
 
 How the timer fires: the engine is pure and never fires timers itself. A run holding at `heightened`
-is checkpointed as `waiting` with its `timeout_s`; the reference scanner in `prismpath/scheduler.py`
+is checkpointed as `waiting` with its `timeout_s`; the reference scanner in `prismpath/workers/scheduler.py`
 (`fire_due_timeouts`) runs on a tick, a cron entry or a systemd timer, and delivers `__timeout__` to
 every due checkpoint, taking the `on timeout` edge. Your stand down is
 `checkpoint.resume(ckpt, agent, event="stand_down")`, or the same through Mission Control.

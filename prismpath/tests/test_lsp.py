@@ -11,7 +11,6 @@ import json
 
 from prismpath import lsp
 
-
 BROKEN_FLOW = """---
 name: broken
 start: a

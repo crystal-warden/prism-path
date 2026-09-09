@@ -39,7 +39,7 @@ sys.path.insert(0, str(HERE.parent.parent))              # repo root, for prismp
 from prismpath.telemetry import packed  # noqa: E402
 from prismpath.telemetry import quantizer as q  # noqa: E402
 from prismpath.telemetry import wire as w  # noqa: E402
-from prismpath.parser import parse_file  # noqa: E402
+from prismpath.kernel.parser import parse_file  # noqa: E402
 
 
 # ----------------------------------------------------------------- event -> reading

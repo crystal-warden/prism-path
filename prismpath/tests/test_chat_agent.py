@@ -12,9 +12,9 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import pytest
 
-from prismpath.chat_agent import ChatAgentError, chat_agent, parse_spec, _extract_json
-from prismpath.engine import run
-from prismpath.parser import parse
+from prismpath.workers.chat_agent import ChatAgentError, chat_agent, parse_spec, _extract_json
+from prismpath.kernel.engine import run
+from prismpath.kernel.parser import parse
 
 FLOW = """---
 name: t

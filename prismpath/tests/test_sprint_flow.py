@@ -10,11 +10,11 @@ import subprocess
 
 import pytest
 
-from prismpath import sprint_flow
-from prismpath.sprint_flow import GateRed, SprintSeams, run_sprint_flow
-from prismpath.ledger import Ledger
-from prismpath.parser import parse_file
-from prismpath import analysis
+from prismpath.orchestration import sprint_flow
+from prismpath.orchestration.sprint_flow import GateRed, SprintSeams, run_sprint_flow
+from prismpath.ledgers.ledger import Ledger
+from prismpath.kernel.parser import parse_file
+from prismpath.kernel import analysis
 
 HAS_GIT = subprocess.run(["git", "--version"], capture_output=True).returncode == 0
 pytestmark = pytest.mark.skipif(not HAS_GIT, reason="git not available")

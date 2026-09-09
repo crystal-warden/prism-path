@@ -18,7 +18,7 @@ sys.path.insert(0, str(REPO))
 
 from prismpath.telemetry import quantizer as q          # noqa: E402
 from prismpath.telemetry import wire as w              # noqa: E402
-from prismpath.parser import parse  # noqa: E402
+from prismpath.kernel.parser import parse  # noqa: E402
 
 
 def main():

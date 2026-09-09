@@ -6,7 +6,7 @@ import json
 import os
 import pytest
 import fair_risk as fr
-from prismpath import policy_pack as pp
+from prismpath.hotswap import policy_pack as pp
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 

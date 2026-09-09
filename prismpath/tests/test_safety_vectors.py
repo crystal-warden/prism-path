@@ -15,7 +15,7 @@ control is exactly what must never happen quietly.
 import json
 import os
 
-from prismpath.guard import compose, parse_policy
+from prismpath.safety.guard import compose, parse_policy
 from prismpath.portable import gen_safety_conformance as gen
 
 VECTORS = os.path.join(

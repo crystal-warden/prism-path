@@ -7,8 +7,7 @@ non-fan-out checkpoint that must be excluded. The builder must never write."""
 import json
 import os
 
-from prismpath import composer
-
+from prismpath.workers import composer
 
 def _write(path, doc):
     os.makedirs(os.path.dirname(path), exist_ok=True)

@@ -4,7 +4,7 @@
 import json
 import os
 
-from prismpath.parser import parse_file
+from prismpath.kernel.parser import parse_file
 
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA = os.path.join(HERE, "benchmark", "routing_bench.jsonl")

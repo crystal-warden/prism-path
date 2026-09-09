@@ -21,7 +21,6 @@ from typing import Any, Dict
 from prismpath.telemetry import quantizer as q
 from prismpath import canon
 
-
 def cell_profile(graph, parts: Dict[str, "q.FieldPartition"], field: str, symbol: int) -> dict:
     """The fuller predicate profile behind (field, symbol), derived from the signed policy.
 

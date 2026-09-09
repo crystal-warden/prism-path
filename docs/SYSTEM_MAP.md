@@ -48,7 +48,7 @@ is the same struct on the wire, in the kernel, and on the fabric.
 
 | directory | what it is | persona |
 |---|---|---|
-| `prismpath/` | the Python reference: parser, predicates, engine, cause registry, static analysis and model checking, routing tiers, guard, signed pack and PolicyHost, audit log and ledgers, the CLI, Mission Control. Also the sprint and swarm machinery (`run_sprint.py`, `swarm_*.py`, `orchestrator.py`, `gates.py`): the fallback orchestration layer for an organisation without one of its own, not required by the format | all |
+| `prismpath/` | the Python reference, grouped by concern: `kernel/` (parser, predicates, engine, cause registry, contract, static analysis, Level M, model checking), `routing/`, `safety/` (the guard and what measures it), `hotswap/` (signed packs and the PolicyHost), `ledgers/` (audit log, ledgers, checkpoints), `workers/` (connector SDK, code nodes, composition), `evals/`, `telemetry/` (Facet), plus the CLI and Mission Control at the top. The old flat names remain as aliases. Also `orchestration/`, the sprint and swarm machinery (`run_sprint.py`, `swarm_*.py`, `orchestrator.py`, `gates.py`): the fallback orchestration layer for an organisation without one of its own, not required by the format | all |
 | `prismpath/portable/` | the JS kernel and the frozen conformance corpus every kernel is judged by | engineer |
 | `prismpath-rs/`, `prismpath-go/` | the P0 kernel in Rust and Go | engineer |
 | `prismpath-hw/` | the C target `interp.c`, the `.ppt` compiler `ppt_compile.py`, `TABLE_FORMAT.md`, the fabric RTL, the MCU firmware for four ISAs, the mesh demos | engineer, operator |
@@ -74,7 +74,7 @@ runs on every push.
 
 | implementation | where | judged by | in CI |
 |---|---|---|---|
-| Python engine (reference of record, `SPEC.md`) | `prismpath/engine.py`, `predicates.py` | generates `prismpath/portable/conformance/` | yes |
+| Python engine (reference of record, `SPEC.md`) | `prismpath/kernel/engine.py`, `predicates.py` | generates `prismpath/portable/conformance/` | yes |
 | JS kernel | `prismpath/portable/prismpath.mjs` | `run_vectors.mjs` | yes |
 | Rust kernel | `prismpath-rs/` | `src/bin/conformance.rs`, 1079/1079 predicates, 27/27 flows | yes |
 | Go kernel | `prismpath-go/` | `conformance_test.go` | no |
@@ -101,14 +101,14 @@ target is the reference for the compiled image's execution, because the substrat
 
 | implementation | where | judged by | in CI |
 |---|---|---|---|
-| Python (reference) | `prismpath/policy_pack.py`, `policy_host.py` | `prismpath/portable/conformance/hotswap.json`, `crypto_agility.json`, `crypto_migration.json` | yes |
+| Python (reference) | `prismpath/hotswap/policy_pack.py`, `policy_host.py` | `prismpath/portable/conformance/hotswap.json`, `crypto_agility.json`, `crypto_migration.json` | yes |
 | Rust | `prismpath-hotswap-rs/` | a pack signed on either runtime verifies on the other | no |
 | MCU | `prismpath-hw/mesh/` (monocypher) | the mesh recertification and the field walk, rows #136 | no (hardware) |
 | kernel receipt sealing | `prismpath-ebpf/seal_receipts.c` | the unified trail rows #132 to #135 | yes |
 
 ### The cause code registry
 
-One registry, `prismpath/causes.py`, spec `docs/design/spec-cause-codes.md`. The byte is emitted by
+One registry, `prismpath/kernel/causes.py`, spec `docs/design/spec-cause-codes.md`. The byte is emitted by
 the Python engine (routing band), the pack verifier (authority and envelope bands), the fabric's
 CAUSE register (row #129), the receipt stream on the wire (row #130), and the kernel loader on a hot
 swap migration (row #131). The registry is append only and its hash rides the receipts.

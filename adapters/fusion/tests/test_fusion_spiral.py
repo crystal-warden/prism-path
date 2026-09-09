@@ -18,7 +18,7 @@ REPO = ADAPTER.parent.parent
 from prismpath.telemetry import quantizer as q  # noqa: E402
 from prismpath.telemetry import spiral as sp    # noqa: E402
 from prismpath.telemetry import wire as w       # noqa: E402
-from prismpath.parser import parse  # noqa: E402
+from prismpath.kernel.parser import parse  # noqa: E402
 
 CORPUS = json.loads((ADAPTER / "conformance" / "spiral_fusion.json").read_text())
 FLOW_PATH = ADAPTER / "flows" / "fusion_triage.md"

@@ -10,10 +10,10 @@ from pathlib import Path
 
 import pytest
 
-from prismpath import predicates
-from prismpath.model_check import flow_level_m
-from prismpath.parser import parse
-from prismpath import analysis
+from prismpath.kernel import predicates
+from prismpath.kernel.model_check import flow_level_m
+from prismpath.kernel.parser import parse
+from prismpath.kernel import analysis
 
 ADAPTER = Path(__file__).resolve().parent.parent
 FLOW_PATH = ADAPTER / "flows" / "fusion_triage.md"

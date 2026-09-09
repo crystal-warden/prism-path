@@ -1,6 +1,6 @@
 # Cause codes: the refusal/deviation registry
 
-*Design spec, v1. Reference: `prismpath/causes.py`; referee: `prismpath/tests/test_causes.py`.*
+*Design spec, v1. Reference: `prismpath/kernel/causes.py`; referee: `prismpath/tests/test_causes.py`.*
 
 ## 1. Why this layer exists
 
@@ -36,7 +36,7 @@ the emitted-string contract for zero semantic gain. New names introduced by this
 routing and state bands) use the colon style.
 
 Bands group codes by class for legibility; the **class** column is the semantic axis, the band
-arithmetic is not. See `prismpath/causes.py` for the full table: `authority` (1-15, the signature
+arithmetic is not. See `prismpath/kernel/causes.py` for the full table: `authority` (1-15, the signature
 chain and signed manifest), `envelope` (16-31, admission caps and profile artifacts), `routing`
 (32-47, the decision itself: no matching edge, below the calibrated floor, needs-human, max steps,
 stuck, contract violation), `wire` (48-63, strict decode, codebook binding, replay, concentrator),

@@ -4,7 +4,7 @@ import json
 import os
 import subprocess
 import pytest
-from prismpath.parser import parse
+from prismpath.kernel.parser import parse
 
 P0_FLOW = """---
 name: p0_flow

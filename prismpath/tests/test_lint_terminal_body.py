@@ -4,8 +4,8 @@
 import os
 import pytest
 
-from prismpath.parser import parse_file
-from prismpath import analysis
+from prismpath.kernel.parser import parse_file
+from prismpath.kernel import analysis
 
 HERE = os.path.dirname(__file__)
 REPO_ROOT = os.path.dirname(os.path.dirname(HERE))

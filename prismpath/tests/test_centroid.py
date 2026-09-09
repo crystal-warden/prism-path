@@ -5,9 +5,10 @@ the real N=301 cross-validated result is measured separately (see `prismpath cen
 import numpy as np
 import pytest
 
-from prismpath import centroid, embedder
-from prismpath.parser import parse
-from prismpath.router import EmbeddingRouter, HybridRouter, LLMRouter
+from prismpath.routing import centroid
+from prismpath.routing import embedder
+from prismpath.kernel.parser import parse
+from prismpath.routing.router import EmbeddingRouter, HybridRouter, LLMRouter
 
 _VEC = {"cond_a": [1, 0, 0], "cond_b": [0, 1, 0], "tricky": [0.7, 0.5, 0]}
 

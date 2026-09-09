@@ -21,7 +21,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent))
 
 import ppt_compile as pc                                    # noqa: E402
-from prismpath.parser import parse                          # noqa: E402
+from prismpath.kernel.parser import parse                          # noqa: E402
 
 CONF = Path(pc._REPO) / "portable" / "conformance"   # pc._REPO is the package dir
 
@@ -244,7 +244,7 @@ async def sensor_log_replay(dut):
     log_path = HERE.parent / "evidence" / "fabric_session1.ndjson"
     flow_md = (Path(pc._REPO) / "gallery" / "incident_severity"
                / "incident_severity.md")
-    from prismpath.parser import parse_file
+    from prismpath.kernel.parser import parse_file
     img = pc.compile_flow(parse_file(str(flow_md)))
     names = [n for n, _ in img.nodes]
 

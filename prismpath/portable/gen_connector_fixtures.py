@@ -17,8 +17,8 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent.parent))
 
-from prismpath.connector import BaseConnector, PayloadFlattener   # noqa: E402
-from prismpath.checkpoint import run_durable, resume, load_checkpoint  # noqa: E402
+from prismpath.workers.connector import BaseConnector, PayloadFlattener   # noqa: E402
+from prismpath.ledgers.checkpoint import run_durable, resume, load_checkpoint  # noqa: E402
 from prismpath import canon
 
 OUT = HERE / "conformance" / "connector.json"
@@ -105,7 +105,7 @@ def main() -> int:
     att["manifest_hash"] = canon.manifest_hash(att)
 
     # ---- join-policy grid: the composer's REAL threshold/event functions, frozen ----
-    from prismpath.composer import _join_event, _quorum_threshold
+    from prismpath.workers.composer import _join_event, _quorum_threshold
     join_grid = []
     for join in ["all_done", "any", "quorum:2", "quorum:0.6", "quorum:5", "quorum:oops"]:
         for done in ([True, True, True], [True, True, False], [True, False, False],
@@ -131,8 +131,8 @@ def main() -> int:
                      "spawn": (r1.pending or {}).get("spawn")}
 
         # children: run each in-process with state={'_item': item} (the minimal driver protocol)
-        from prismpath.engine import run as engine_run
-        from prismpath.parser import parse
+        from prismpath.kernel.engine import run as engine_run
+        from prismpath.kernel.parser import parse
         child_graph = parse(_FLOW_CHILD)
         child_script = {"work": [{"text": "worked"}], "finish": [{"text": "done"}]}
         children = []

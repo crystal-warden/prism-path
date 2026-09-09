@@ -11,9 +11,9 @@ use `prismpath.sandbox.SandboxRunner` instead — the same agent, governed at ru
 import os
 import re
 
-from prismpath.code_nodes import code_agent, in_process_runner
-from prismpath.engine import run
-from prismpath.parser import parse_file
+from prismpath.workers.code_nodes import code_agent, in_process_runner
+from prismpath.kernel.engine import run
+from prismpath.kernel.parser import parse_file
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 FLOW = os.path.join(HERE, "pipeline.md")

@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Tuple, Union
 
-from prismpath import causes
+from prismpath.kernel import causes
 from prismpath.telemetry import packed
 from prismpath.telemetry import zeckendorf as z
 

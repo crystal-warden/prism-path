@@ -15,7 +15,7 @@ router = APIRouter(prefix="/prove", tags=["prove"])
 
 
 def _graph(flow_text: str):
-    from prismpath.parser import parse
+    from prismpath.kernel.parser import parse
     if not (flow_text or "").strip():
         raise HTTPException(status_code=400, detail="flow is empty")
     try:

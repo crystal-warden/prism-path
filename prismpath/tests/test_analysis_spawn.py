@@ -8,9 +8,8 @@ Two layers:
   * cross-file (analysis.analyze_composition): the child flow must exist, parse, reach a terminal, and
     satisfy the parent's @expect against the child's @emits.
 """
-from prismpath.parser import parse, parse_file
-from prismpath import analysis
-
+from prismpath.kernel.parser import parse, parse_file
+from prismpath.kernel import analysis
 
 def _codes(findings):
     return {f.code for f in findings}

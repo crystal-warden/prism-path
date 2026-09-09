@@ -18,9 +18,10 @@ import subprocess
 import threading
 import time
 
-from prismpath import audit_log
+from prismpath.ledgers import audit_log
+
 try:
-    from prismpath.swarm_exporter import _fold                # reuse the prompt/output folder
+    from prismpath.orchestration.swarm_exporter import _fold                # reuse the prompt/output folder
 except Exception:                                             # pragma: no cover
     from swarm_exporter import _fold
 
@@ -346,7 +347,7 @@ def serialize_flow_graph(state, flow_path=None):
     """The flow topology the command center renders: nodes + tier-classified edges, plus the live
     checkpoint (active node, transcript, state vars). `flow_path` is resolved and CONTAINED to the
     followed project (or the bundled flows dir); it never reads an arbitrary path."""
-    from prismpath.parser import parse_file
+    from prismpath.kernel.parser import parse_file
     from prismpath import predicates
     proj = state["proj"]
     if not flow_path:

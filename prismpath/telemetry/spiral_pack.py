@@ -23,8 +23,7 @@ import hashlib
 import struct
 from typing import Dict, List, Optional
 
-from prismpath import analysis
-
+from prismpath.kernel import analysis
 from prismpath.telemetry import spiral as sp
 
 MAGIC = 0x4C535050            # "PPSL"

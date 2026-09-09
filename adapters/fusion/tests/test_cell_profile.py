@@ -13,7 +13,7 @@ ADAPTER = Path(__file__).resolve().parent.parent
 REPO = ADAPTER.parent.parent
 from prismpath.telemetry import quantizer as q                       # noqa: E402
 from prismpath.telemetry.predicate_profile import cell_profile, profile_wire_bytes  # noqa: E402
-from prismpath.parser import parse          # noqa: E402
+from prismpath.kernel.parser import parse          # noqa: E402
 
 FLOW = """
 ## decide

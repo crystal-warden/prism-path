@@ -11,7 +11,7 @@ import random
 
 import numpy as np
 
-from prismpath.prefilter import PrefilterCache
+from prismpath.routing.prefilter import PrefilterCache
 
 # doc a / doc a again share a direction (cosine 1.0); doc far is orthogonal.
 _VECS = {

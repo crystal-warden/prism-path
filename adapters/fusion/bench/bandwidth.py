@@ -57,7 +57,7 @@ from prismpath.telemetry import packed as P          # noqa: E402
 from prismpath.telemetry import quantizer as q       # noqa: E402
 from prismpath.telemetry import selfheal as sh       # noqa: E402
 from prismpath.telemetry import spiral as sp         # noqa: E402
-from prismpath.parser import parse  # noqa: E402
+from prismpath.kernel.parser import parse  # noqa: E402
 
 import projection as pj     # noqa: E402
 

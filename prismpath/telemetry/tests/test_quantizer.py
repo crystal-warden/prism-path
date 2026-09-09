@@ -17,7 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from prismpath.telemetry import quantizer as q  # noqa: E402
 
 from prismpath import predicates  # noqa: E402
-from prismpath.parser import parse, parse_file  # noqa: E402
+from prismpath.kernel.parser import parse, parse_file  # noqa: E402
 
 _INCIDENT = os.path.join(os.path.dirname(__file__), "..", "..", "..",
                          "prismpath", "gallery", "incident_severity", "incident_severity.md")

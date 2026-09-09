@@ -543,7 +543,7 @@ rates; if they're low, don't ship it.
 
 1. **Prefer `when` for anything logical.** Free, exact, and it's how you beat the embedding
    weakness (negation, counts, thresholds).
-2. **Make semantic conditions mutually distinct.** Run `python prismpath/lint.py flow.md`: it flags
+2. **Make semantic conditions mutually distinct.** Run `python prismpath/kernel/lint.py flow.md`: it flags
    conditions too similar to route between.
 3. **Phrase a semantic condition at the abstraction level of the agent's likely outcome** (the
    bench misroutes came from concrete outcomes vs abstractly-worded conditions).
@@ -565,7 +565,7 @@ rates; if they're low, don't ship it.
   features should not require changing agent signatures.
 - **Predicate safety** (Section 5): never add `eval`/attribute/call access to the evaluator.
   The allowlist (`predicates._ALLOWED_NODES`) is the security boundary; if you extend the grammar,
-  extend `check_predicate` and re-run `python -m prismpath.fuzz_predicates` (must stay 0 crashes, 0
+  extend `check_predicate` and re-run `python -m prismpath.safety.fuzz_predicates` (must stay 0 crashes, 0
   executions) and the `tests/test_predicates.py` hardening cases.
 - **Routing is the engine's choice, not the author's**: authors write conditions, not routing
   modes (beyond the `when` vs natural language distinction).

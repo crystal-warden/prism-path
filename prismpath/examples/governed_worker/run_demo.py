@@ -19,10 +19,10 @@ import sys
 
 import worker_handlers  # importable module (dotted path) so the sandbox child can load it
 
-from prismpath.code_nodes import code_agent
-from prismpath.engine import run
-from prismpath.parser import parse_file
-from prismpath.sandbox import SandboxRunner
+from prismpath.workers.code_nodes import code_agent
+from prismpath.kernel.engine import run
+from prismpath.kernel.parser import parse_file
+from prismpath.workers.sandbox import SandboxRunner
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 FLOW = os.path.join(HERE, "governed_worker.md")

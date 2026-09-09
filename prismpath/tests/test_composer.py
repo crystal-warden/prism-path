@@ -11,8 +11,8 @@ import json
 
 import pytest
 
-from prismpath import composer
-from prismpath.checkpoint import run_durable, load_checkpoint
+from prismpath.workers import composer
+from prismpath.ledgers.checkpoint import run_durable, load_checkpoint
 
 PARENT = """---
 name: parent

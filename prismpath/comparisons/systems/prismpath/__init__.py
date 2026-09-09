@@ -29,10 +29,10 @@ import json
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from prismpath import model_check
+from prismpath.kernel import model_check
 from prismpath.comparisons.harness import Decision, Translation
-from prismpath.engine import run
-from prismpath.parser import parse
+from prismpath.kernel.engine import run
+from prismpath.kernel.parser import parse
 
 SYSTEM = "prismpath"
 CITATIONS = [

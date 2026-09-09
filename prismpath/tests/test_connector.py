@@ -3,7 +3,7 @@
 import pytest
 from prismpath import BaseConnector, node
 from prismpath.plugins.registry import worker_agent
-from prismpath.parser import parse_file
+from prismpath.kernel.parser import parse_file
 
 class MockConnector(BaseConnector):
     def __init__(self):
@@ -139,7 +139,7 @@ def test_payload_flattener():
 
 
 def test_system_telemetry():
-    from prismpath.connector import SystemTelemetry
+    from prismpath.workers.connector import SystemTelemetry
     conn = SystemTelemetry()
     data = conn.ingest_payload()
     
@@ -213,7 +213,7 @@ def test_policy_hash_binds_the_flow_document(tmp_path):
     flow.write_text("## a\nDo.\n")
     h1 = BaseConnector.policy_hash_for(str(flow))
     assert h1.startswith("sha256:")
-    from prismpath.checkpoint import flow_hash, _flow_hash
+    from prismpath.ledgers.checkpoint import flow_hash, _flow_hash
     assert h1 == flow_hash(str(flow)) == _flow_hash(str(flow))  # public + back-compat alias
     flow.write_text("## a\nDo it differently.\n")
     assert BaseConnector.policy_hash_for(str(flow)) != h1, "an edited policy must change the hash"
@@ -226,7 +226,7 @@ def test_registry_glue_connector_as_plugin(tmp_path, monkeypatch):
     import types
     import importlib.metadata as ilmd
     from prismpath.plugins import registry
-    from prismpath.parser import parse
+    from prismpath.kernel.parser import parse
 
     conn = MockConnector()
     mod = types.ModuleType("fake_conn_plugin")

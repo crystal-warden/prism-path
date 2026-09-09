@@ -20,7 +20,7 @@ import os
 import re
 import sys
 
-from prismpath.annotate import blind_cases, _resolve
+from prismpath.evals.annotate import blind_cases, _resolve
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 BENCH = os.path.join(HERE, "routing_bench.jsonl")

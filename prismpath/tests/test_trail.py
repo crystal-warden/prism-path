@@ -4,8 +4,8 @@
 Merkle root checked; and the overlay line an attestation carries."""
 import json
 
-from prismpath import audit_log, trail
-
+from prismpath import trail
+from prismpath.ledgers import audit_log
 
 def _log(tmp_path):
     log = audit_log.AuditLog(str(tmp_path / "audit.jsonl"))

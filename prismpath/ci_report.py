@@ -26,10 +26,10 @@ import tempfile
 from dataclasses import dataclass, field
 from typing import List, Optional
 
-from prismpath import analysis
-from prismpath.parser import parse_file
-from prismpath.graph_export import to_mermaid
-from prismpath import flow_test
+from prismpath.kernel import analysis
+from prismpath.kernel.parser import parse_file
+from prismpath.kernel.graph_export import to_mermaid
+from prismpath.kernel import flow_test
 
 MARKER = "<!-- prismpath-ci-report -->"
 

@@ -19,7 +19,7 @@ sys.path.insert(0, str(HW))
 sys.path.insert(0, str(REPO))
 
 import ppt_compile as pc
-from prismpath.parser import parse
+from prismpath.kernel.parser import parse
 
 FLOW = """---
 name: fusion

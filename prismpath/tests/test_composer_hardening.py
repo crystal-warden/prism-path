@@ -3,8 +3,9 @@
 """Regression tests for the six bugs the adversarial pass found in item #4 (fan-out & composition).
 Each test fails against the pre-fix code and passes after. Stub agents; real durable runs on disk.
 """
-from prismpath import composer, checkpoint
-from prismpath.checkpoint import run_durable, load_checkpoint
+from prismpath.workers import composer
+from prismpath.ledgers import checkpoint
+from prismpath.ledgers.checkpoint import run_durable, load_checkpoint
 
 
 CHILD = """---

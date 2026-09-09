@@ -44,7 +44,7 @@ for p in (str(REPO / "prismpath" / "telemetry"), str(REPO), str(ADAPTER)):
 from prismpath.telemetry import packed as pk      # noqa: E402
 from prismpath.telemetry import quantizer as q    # noqa: E402
 from prismpath.telemetry import wire as w         # noqa: E402
-from prismpath.parser import parse  # noqa: E402
+from prismpath.kernel.parser import parse  # noqa: E402
 
 import projection as pj  # noqa: E402
 

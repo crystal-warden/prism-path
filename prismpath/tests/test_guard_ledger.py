@@ -11,9 +11,9 @@ import os
 
 import pytest
 
-from prismpath.audit_log import AuditLog
-from prismpath.guard import Blocked, compose, guarded_exchange, parse_policy_file
-from prismpath.guard_ledger import VERDICT_ACTION, attest_verdicts, verdict_recorder
+from prismpath.ledgers.audit_log import AuditLog
+from prismpath.safety.guard import Blocked, compose, guarded_exchange, parse_policy_file
+from prismpath.safety.guard_ledger import VERDICT_ACTION, attest_verdicts, verdict_recorder
 
 POLICIES_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "policies")
 FLOOR = os.path.join(POLICIES_DIR, "statutory_floor.md")

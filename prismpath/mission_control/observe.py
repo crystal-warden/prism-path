@@ -7,7 +7,7 @@ import os
 from fastapi import APIRouter, HTTPException, Query
 
 from . import core
-from prismpath import audit_log
+from prismpath.ledgers import audit_log
 
 router = APIRouter(tags=["observe"])
 

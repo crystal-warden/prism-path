@@ -13,8 +13,8 @@ import os
 
 import pytest
 
-from prismpath.parser import parse, parse_file
-from prismpath import analysis
+from prismpath.kernel.parser import parse, parse_file
+from prismpath.kernel import analysis
 
 HERE = os.path.dirname(__file__)
 BROKEN = os.path.join(HERE, "fixtures", "broken")
@@ -64,7 +64,7 @@ def test_broken_fixture_surfaces_its_check(fname, code):
 
 
 def test_error_edge_ordering(tmp_path):
-    from prismpath.parser import parse
+    from prismpath.kernel.parser import parse
     # correct order: conditional `on error when …` BEFORE the bare catch-all -> no shadowing
     ok = parse("---\nname: e\nstart: w\n---\n## w\nGo.\n-> d: it worked\n"
                "-> retry: on error when error_count < 3\n-> giveup: on error\n## retry\n-> w: always\n"

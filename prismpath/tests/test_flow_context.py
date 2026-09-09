@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """flow_context — the kernel publishes its own PROVEN facts about a flow as agent grounding."""
-from prismpath.parser import parse
-from prismpath.flow_context import flow_context, render_context
+from prismpath.kernel.parser import parse
+from prismpath.kernel.flow_context import flow_context, render_context
 
 _CLEAN = """---
 name: t

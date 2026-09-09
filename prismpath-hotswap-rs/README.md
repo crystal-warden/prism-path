@@ -3,8 +3,8 @@
 The secure policy hot swap, natively: Ed25519 signed policy packs, envelope bounded image
 validation, and the atomic, audited PolicyHost.
 
-**What it mirrors.** `prismpath/policy_pack.py` (the Authorized and Envelope bounded gates) and
-`prismpath/policy_host.py` (the Attested and Audited and atomic host), per
+**What it mirrors.** `prismpath/hotswap/policy_pack.py` (the Authorized and Envelope bounded gates) and
+`prismpath/hotswap/policy_host.py` (the Attested and Audited and atomic host), per
 `docs/design/spec-secure-hotswap.md`. The `.ppt` image is a read only input here as in Python;
 nothing in this crate touches the compiler or the image bytes, so the certified hashes stay exactly
 what the FPGA and eBPF evidence rows cite.

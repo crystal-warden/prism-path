@@ -44,7 +44,7 @@ EDGE = 2**53
 
 
 def main() -> int:
-    from prismpath.parser import parse
+    from prismpath.kernel.parser import parse
     parts = q.build_partitions(parse(FLOW))
     p = parts["mag"]
     probes = []

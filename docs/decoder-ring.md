@@ -38,7 +38,7 @@ options. If the top scores 0.71 and the next 0.44, the margin is 0.27 and the de
 The margin (not the raw score) is what the system uses to decide whether it needs help.
 
 **Why it matters here:** the margin is the cheap confidence signal that makes everything else
-possible. Where it lives: [`embedder.py`](../prismpath/embedder.py), [`router.py`](../prismpath/router.py).
+possible. Where it lives: [`embedder.py`](../prismpath/routing/embedder.py), [`router.py`](../prismpath/routing/router.py).
 
 ### 2. The routing spectrum, and the four tiers
 
@@ -62,8 +62,8 @@ where it is one of *logic* ("all tests pass" vs "three tests fail" are topically
 Logic is exactly what a `when` predicate does perfectly and for free. Neither tier is sufficient
 alone; the finding is the argument for composing them.
 
-Where it lives: [`parser.py`](../prismpath/parser.py) (tier classification),
-[`engine.py`](../prismpath/engine.py) (routing), [SPEC.md](../SPEC.md) (normative rules),
+Where it lives: [`parser.py`](../prismpath/kernel/parser.py) (tier classification),
+[`engine.py`](../prismpath/kernel/engine.py) (routing), [SPEC.md](../SPEC.md) (normative rules),
 [authoring guide](guides/authoring.md).
 
 ### 3. Escalation, abstention, and "selective classification"
@@ -83,8 +83,8 @@ Two symbols get used for that threshold and they are **not** the same thing:
 - **τ (tau)**: a threshold that was *derived from labeled data with a guarantee attached* (see
   idea 5). Same mechanism at runtime; the difference is entirely in where the number came from.
 
-Where it lives: [`router.py`](../prismpath/router.py) (`HybridRouter`; the δ version),
-[`calibrate.py`](../prismpath/calibrate.py) (`RiskControlledHybridRouter`; the τ version, which
+Where it lives: [`router.py`](../prismpath/routing/router.py) (`HybridRouter`; the δ version),
+[`calibrate.py`](../prismpath/routing/calibrate.py) (`RiskControlledHybridRouter`; the τ version, which
 subclasses it; the two differ only in where the threshold came from).
 
 ### 4. The Wilson score interval · why a lower bound, not an average
@@ -109,8 +109,8 @@ directions, on purpose:
 
 Both are the same discipline: state the worst case the data can't rule out.
 
-Where it lives: [`calibrate.py`](../prismpath/calibrate.py) (`_wilson_lower`),
-[`prefilter.py`](../prismpath/prefilter.py) (`_wilson_upper`).
+Where it lives: [`calibrate.py`](../prismpath/routing/calibrate.py) (`_wilson_lower`),
+[`prefilter.py`](../prismpath/routing/prefilter.py) (`_wilson_upper`).
 
 ### 5. Risk controlled calibration · and why it is *not* conformal prediction
 
@@ -139,7 +139,7 @@ distinction was pinned down.
 warns loudly; the router escalates *everything*, degrading to LLM-router cost rather than silently
 shipping an uncertified threshold.
 
-Where it lives: [`calibrate.py`](../prismpath/calibrate.py), `prismpath calibrate --alpha 0.05`.
+Where it lives: [`calibrate.py`](../prismpath/routing/calibrate.py), `prismpath calibrate --alpha 0.05`.
 
 ### 6. Centroids, prototypes, and shrinkage
 
@@ -162,7 +162,7 @@ Measured effect: overall routing 0.69 → 0.83, and on the polarity stratum 0.52
 number is the point; centroids repair the *confidently wrong* cases that a margin threshold can
 never catch, because the router isn't hesitating on those.
 
-Where it lives: [`centroid.py`](../prismpath/centroid.py), `prismpath centroids`.
+Where it lives: [`centroid.py`](../prismpath/routing/centroid.py), `prismpath centroids`.
 
 ### 7. Cohen's κ · agreement that isn't just luck
 
@@ -182,7 +182,7 @@ it is not **inter-annotator reliability**, which requires two independent people
 this in §4.1 and §6 rather than letting the number pass for more than it is. If you ever quote the
 0.961, quote the caveat with it.
 
-Where it lives: [`kappa.py`](../prismpath/kappa.py), [`annotate.py`](../prismpath/annotate.py),
+Where it lives: [`kappa.py`](../prismpath/evals/kappa.py), [`annotate.py`](../prismpath/evals/annotate.py),
 `prismpath kappa`.
 
 ### 8. Cross-validation, leakage, and ablation
@@ -233,7 +233,7 @@ happen. The consequence is an asymmetry you should internalize:
 Which is itself an argument for writing safety-critical branches as `when` predicates: the more of
 your flow lives in the fragment, the stronger an answer the tool can give you.
 
-Where it lives: [`model_check.py`](../prismpath/model_check.py), `prismpath verify`, SPEC §4.3;
+Where it lives: [`model_check.py`](../prismpath/kernel/model_check.py), `prismpath verify`, SPEC §4.3;
 and, since August 2026, in FPGA fabric:
 [`prismpath-hw/`](../prismpath-hw/README.md), the fragment's first hardware
 target (declared-subset certified).
@@ -256,7 +256,7 @@ scans the core for domain vocabulary. A word like `alert`, `SIEM`, or `learner` 
 code is **Signal-1**, a hard failure; the tripwire for domain knowledge leaking inward. (This is
 not theoretical: a docstring in `connector.py` once used "FPGA" and tripped it.)
 
-Where it lives: [`connector.py`](../prismpath/connector.py) (the SDK),
+Where it lives: [`connector.py`](../prismpath/workers/connector.py) (the SDK),
 [architecture](design/architecture.md), [adapter guide](../adapters/ADAPTER_GUIDE.md).
 
 ### 11. Content addressing, Merkle batching, and timestamping
@@ -283,8 +283,8 @@ Two more terms that show up around the ledger:
 - **Orphan ref**: a git branch with no shared history, a separate DAG in the same repository. The
   ledger lives on one so proof commits never touch your source history.
 
-Where it lives: [`ledger.py`](../prismpath/ledger.py), [`ledger_ots.py`](../prismpath/ledger_ots.py),
-[`ledger_airgap.py`](../prismpath/ledger_airgap.py),
+Where it lives: [`ledger.py`](../prismpath/ledgers/ledger.py), [`ledger_ots.py`](../prismpath/ledgers/ledger_ots.py),
+[`ledger_airgap.py`](../prismpath/ledgers/ledger_airgap.py),
 [ledger spec](design/spec-ledger-opentimestamps.md).
 
 ---
@@ -299,7 +299,7 @@ Where it lives: [`ledger.py`](../prismpath/ledger.py), [`ledger_ots.py`](../pris
 [telemetry](../prismpath/telemetry/) · [fusion](../adapters/fusion/) · [guide](../adapters/ADAPTER_GUIDE.md)
 
 **Air-gapped**: a machine deliberately kept off any network. Drives the RFC-3161 ledger tier.
-[`ledger_airgap.py`](../prismpath/ledger_airgap.py)
+[`ledger_airgap.py`](../prismpath/ledgers/ledger_airgap.py)
 
 **Annotation**: a directive on a node: `@emits` (declares output fields), `@field_only` (routes
 only on declared fields, never raw text), `@state_bound` (caps persisted state), `@spawn` (fan out).
@@ -312,7 +312,7 @@ question. See idea 9. `prismpath verify`
 
 **Checkpoint**: an atomic JSON snapshot of a run, letting it resume after a crash or a human pause.
 Resume is bound to a hash of the flow, so an edited flow can't silently resume into the wrong graph.
-[`checkpoint.py`](../prismpath/checkpoint.py)
+[`checkpoint.py`](../prismpath/ledgers/checkpoint.py)
 
 **Cohen's κ**: agreement between two labelers, corrected for chance. See idea 7.
 
@@ -345,7 +345,7 @@ construction; the semantic tier is deterministic *given a lockfile*.
 `shadowed-edge`, `always-false-edge`, `unbounded-cycle`, `duplicate-condition`, `no-terminal`,
 `unsafe-predicate`, `field-only-violation`, `undeclared-field`, `emits-type-mismatch`,
 `not-portable-edge`, `spawn-no-join-edge`, and others.
-[`analysis.py`](../prismpath/analysis.py) · `prismpath validate`
+[`analysis.py`](../prismpath/kernel/analysis.py) · `prismpath validate`
 
 **Edge tier**: which mechanism resolves a transition. See idea 2.
 
@@ -354,24 +354,24 @@ construction; the semantic tier is deterministic *given a lockfile*.
 **Escalation**: handing a low confidence decision to an LLM. See idea 3.
 
 **Fan out**: one node spawning parallel children that rejoin. `@spawn`.
-[`composer.py`](../prismpath/composer.py)
+[`composer.py`](../prismpath/workers/composer.py)
 
 **Fingerprint**: a probe-cosine signature that detects whether the embedder changed under you. A
 lockfile can *detect* embedder drift; it cannot repair it. See **lockfile**.
 
 **Gates**: machine checks that define "done": compiles, type-checks, builds, tests pass, and the
 code is reachable from a composition root. The operating rule is *never write a completeness claim a
-gate doesn't enforce*. [`gates.py`](../prismpath/gates.py) · [framework](design/framework.md)
+gate doesn't enforce*. [`gates.py`](../prismpath/orchestration/gates.py) · [framework](design/framework.md)
 
 **Guard onion**: the layered safety floor: a deterministic policy layer inherited by every adapter.
 Its grammar has **no verb for permitting**: a policy can only restrict, so layering cannot
 accidentally widen permission. [spec](design/spec-guard-onion.md) ·
-[`guard.py`](../prismpath/guard.py)
+[`guard.py`](../prismpath/safety/guard.py)
 
 **Hexagonal architecture**: ports and adapters. See idea 10.
 
 **Hybrid router**: embeddings first, LLM on low margin. See idea 3.
-[`router.py`](../prismpath/router.py)
+[`router.py`](../prismpath/routing/router.py)
 
 **Idempotent**: running it twice has the same effect as running it once. Required of sinks, so a
 resumed run can't double-send.
@@ -396,7 +396,7 @@ declared subset of the frozen vectors
 
 **Lockfile**: committed embeddings for every semantic condition, so semantic routing is
 reproducible bit for bit across machines. Promotes a flow from P2 to P1.
-[`lockfile.py`](../prismpath/lockfile.py) · `prismpath lock`
+[`lockfile.py`](../prismpath/routing/lockfile.py) · `prismpath lock`
 
 **Margin**: gap between the top-1 and top-2 similarity; the confidence signal. See idea 1.
 
@@ -413,7 +413,7 @@ restrictive direction.
 **Orphan ref**: a git ref with no shared history. See idea 11.
 
 **OpenTelemetry (OTel)**: the vendor-neutral standard for traces. Routing decisions are emitted as
-spans into whatever observability stack you already run. [`otel.py`](../prismpath/otel.py)
+spans into whatever observability stack you already run. [`otel.py`](../prismpath/ledgers/otel.py)
 
 **OpenTimestamps (OTS)**: trustless timestamping via Bitcoin. See idea 11.
 
@@ -426,13 +426,13 @@ edges as predicates promotes to P0. [portable kernel](../prismpath/portable/READ
 fail"). The stratum where embeddings collapse to 0.52. See idea 2.
 
 **Polarity lint**: an authoring time warning for sibling semantic conditions that look like a
-polarity trap, advising you demote them to `when` predicates. [`lint.py`](../prismpath/lint.py)
+polarity trap, advising you demote them to `when` predicates. [`lint.py`](../prismpath/kernel/lint.py)
 
 **Port**: an interface the core owns. Six of them. See idea 10.
 
 **Prefilter cache**: reuse a prior LLM verdict when a new input is embedding-near a past one *and*
 that verdict was confident. Two thresholds, because similarity asks "same situation?" and stored
-confidence asks "was the old answer any good?". [`prefilter.py`](../prismpath/prefilter.py)
+confidence asks "was the old answer any good?". [`prefilter.py`](../prismpath/routing/prefilter.py)
 
 **Projection over a log**: deriving current state by replaying an append only history rather than
 storing a status field. "Which units are done" is a projection over `git log`.
@@ -464,7 +464,7 @@ stratum is what surfaced the polarity collapse that an overall average would hav
 See idea 4.
 
 **Worker**: whatever executes a node's instruction: a mock, a CLI process, a local model, an API.
-[`cli_worker.py`](../prismpath/cli_worker.py) · [`llm_local.py`](../prismpath/llm_local.py)
+[`cli_worker.py`](../prismpath/workers/cli_worker.py) · [`llm_local.py`](../prismpath/routing/llm_local.py)
 
 **Zero shot**: working with no task-specific training examples. The default router is zero shot;
 centroids make it few-shot.
@@ -499,7 +499,7 @@ centroids make it few-shot.
 
 | kernel | where | role |
 |---|---|---|
-| Python | [`prismpath/engine.py`](../prismpath/engine.py) | reference implementation; the full engine |
+| Python | [`prismpath/kernel/engine.py`](../prismpath/kernel/engine.py) | reference implementation; the full engine |
 | JavaScript | [`prismpath/portable/`](../prismpath/portable/README.md) | browser/edge; powers the playground |
 | Rust | [`prismpath-rs/`](../prismpath-rs/CONFORMANCE.md) | native/embedded |
 | Go | [`prismpath-go/`](../prismpath-go/README.md) | services |
@@ -545,44 +545,48 @@ evaluator); [`docs/SYSTEM_MAP.md`](SYSTEM_MAP.md) is the map by persona.
 
 ### Python modules by subsystem
 
-**Kernel**: [`parser.py`](../prismpath/parser.py) · [`engine.py`](../prismpath/engine.py) ·
-[`predicates.py`](../prismpath/predicates.py) · [`analysis.py`](../prismpath/analysis.py) ·
-[`contract.py`](../prismpath/contract.py)
+The package is grouped this way on disk since September 2026 (`prismpath/kernel/`, `routing/`,
+`safety/`, `hotswap/`, `ledgers/`, `workers/`, `orchestration/`, `evals/`, `telemetry/`); every old
+flat name such as `prismpath.engine` still imports and is the same module.
 
-**Routing**: [`router.py`](../prismpath/router.py) · [`embedder.py`](../prismpath/embedder.py) ·
-[`centroid.py`](../prismpath/centroid.py) · [`lockfile.py`](../prismpath/lockfile.py) ·
-[`calibrate.py`](../prismpath/calibrate.py) · [`routelog.py`](../prismpath/routelog.py)
+**Kernel**: [`parser.py`](../prismpath/kernel/parser.py) · [`engine.py`](../prismpath/kernel/engine.py) ·
+[`predicates.py`](../prismpath/kernel/predicates.py) · [`analysis.py`](../prismpath/kernel/analysis.py) ·
+[`contract.py`](../prismpath/kernel/contract.py)
 
-**Verification**: [`model_check.py`](../prismpath/model_check.py) ·
-[`lint.py`](../prismpath/lint.py) · [`flow_test.py`](../prismpath/flow_test.py) ·
-[`fuzz_predicates.py`](../prismpath/fuzz_predicates.py)
+**Routing**: [`router.py`](../prismpath/routing/router.py) · [`embedder.py`](../prismpath/routing/embedder.py) ·
+[`centroid.py`](../prismpath/routing/centroid.py) · [`lockfile.py`](../prismpath/routing/lockfile.py) ·
+[`calibrate.py`](../prismpath/routing/calibrate.py) · [`routelog.py`](../prismpath/routing/routelog.py)
 
-**Durability**: [`checkpoint.py`](../prismpath/checkpoint.py) ·
-[`ledger.py`](../prismpath/ledger.py) · [`ledger_ots.py`](../prismpath/ledger_ots.py) ·
-[`ledger_airgap.py`](../prismpath/ledger_airgap.py) · [`scheduler.py`](../prismpath/scheduler.py)
+**Verification**: [`model_check.py`](../prismpath/kernel/model_check.py) ·
+[`lint.py`](../prismpath/kernel/lint.py) · [`flow_test.py`](../prismpath/kernel/flow_test.py) ·
+[`fuzz_predicates.py`](../prismpath/safety/fuzz_predicates.py)
 
-**Safety**: [`guard.py`](../prismpath/guard.py) ·
-[`guard_semantic.py`](../prismpath/guard_semantic.py) ·
-[`guard_ledger.py`](../prismpath/guard_ledger.py) ·
-[`bypass_corpus.py`](../prismpath/bypass_corpus.py) ·
-[`bypass_report.py`](../prismpath/bypass_report.py)
+**Durability**: [`checkpoint.py`](../prismpath/ledgers/checkpoint.py) ·
+[`ledger.py`](../prismpath/ledgers/ledger.py) · [`ledger_ots.py`](../prismpath/ledgers/ledger_ots.py) ·
+[`ledger_airgap.py`](../prismpath/ledgers/ledger_airgap.py) · [`scheduler.py`](../prismpath/workers/scheduler.py)
 
-**Integration**: [`connector.py`](../prismpath/connector.py) (the SDK) ·
-[`prefilter.py`](../prismpath/prefilter.py) · [`retriever.py`](../prismpath/retriever.py) ·
-[`deferral.py`](../prismpath/deferral.py) · [`cli_worker.py`](../prismpath/cli_worker.py) ·
-[`llm_local.py`](../prismpath/llm_local.py) · [`otel.py`](../prismpath/otel.py)
+**Safety**: [`guard.py`](../prismpath/safety/guard.py) ·
+[`guard_semantic.py`](../prismpath/safety/guard_semantic.py) ·
+[`guard_ledger.py`](../prismpath/safety/guard_ledger.py) ·
+[`bypass_corpus.py`](../prismpath/safety/bypass_corpus.py) ·
+[`bypass_report.py`](../prismpath/safety/bypass_report.py)
+
+**Integration**: [`connector.py`](../prismpath/workers/connector.py) (the SDK) ·
+[`prefilter.py`](../prismpath/routing/prefilter.py) · [`retriever.py`](../prismpath/orchestration/retriever.py) ·
+[`deferral.py`](../prismpath/workers/deferral.py) · [`cli_worker.py`](../prismpath/workers/cli_worker.py) ·
+[`llm_local.py`](../prismpath/routing/llm_local.py) · [`otel.py`](../prismpath/ledgers/otel.py)
 
 **Control plane**: [`mission_control/`](../prismpath/mission_control/) (the operator's console:
 observe, control, events, prove; [API guide](guides/mission-control-api.md)) ·
-[`composer.py`](../prismpath/composer.py) · [`gates.py`](../prismpath/gates.py) ·
-[`run_sprint.py`](../prismpath/run_sprint.py) · [`orchestrator.py`](../prismpath/orchestrator.py)
+[`composer.py`](../prismpath/workers/composer.py) · [`gates.py`](../prismpath/orchestration/gates.py) ·
+[`run_sprint.py`](../prismpath/orchestration/run_sprint.py) · [`orchestrator.py`](../prismpath/orchestration/orchestrator.py)
 
-**Interop**: [`langgraph_import.py`](../prismpath/langgraph_import.py) ·
-[`graph_export.py`](../prismpath/graph_export.py) · [`lsp.py`](../prismpath/lsp.py)
+**Interop**: [`langgraph_import.py`](../prismpath/workers/langgraph_import.py) ·
+[`graph_export.py`](../prismpath/kernel/graph_export.py) · [`lsp.py`](../prismpath/lsp.py)
 
-**Measurement**: [`eval_routing.py`](../prismpath/eval_routing.py) ·
-[`eval_hybrid.py`](../prismpath/eval_hybrid.py) · [`kappa.py`](../prismpath/kappa.py) ·
-[`annotate.py`](../prismpath/annotate.py) · [`measure_p1.py`](../prismpath/measure_p1.py)
+**Measurement**: [`eval_routing.py`](../prismpath/evals/eval_routing.py) ·
+[`eval_hybrid.py`](../prismpath/evals/eval_hybrid.py) · [`kappa.py`](../prismpath/evals/kappa.py) ·
+[`annotate.py`](../prismpath/evals/annotate.py) · [`measure_p1.py`](../prismpath/safety/measure_p1.py)
 
 ### Everything else
 
