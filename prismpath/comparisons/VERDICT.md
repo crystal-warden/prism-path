@@ -1,8 +1,9 @@
 # Verdict: where PrismPath stands against OPA, Cedar, Cerbos, OpenFGA and Openlane
 
 *Phase 6 of the pre registered comparison (PREREGISTRATION.md, freeze 54f05739). Written after every
-result file existed. Every grade, count, and per dimension verdict below is read from `matrix.json`,
-which `matrix.py` generates from the 638 result files under `results/` and from nothing else;
+result file existed. Every grade, count, and per dimension verdict below is read from the matrix
+`matrix.py` builds from the 638 result files under `results/` and from nothing else (`MATRIX.md` is
+its rendering; `matrix.json` is regenerated, not stored);
 `tests/test_comparisons_verdict.py` fails if this document and the matrix disagree. September 2026.*
 
 ## 1. What was asked, and what came back

@@ -51,3 +51,6 @@ prismpath-hw/hyst-cert/evidence/*.mp4
 prismpath/comparisons/.toolchain/
 prismpath/comparisons/groupa/opa_wasm_mcu/build_linux/
 prismpath/comparisons/groupa/opa_wasm_mcu/pico/build/
+prismpath/comparisons/groupa/opa_wasm_mcu/pico/wasm_*.h
+prismpath/comparisons/matrix.json
+prismpath/comparisons/results/**/opa_*.log

@@ -349,7 +349,7 @@ Phase 4 graded Group B from the same conformance rows and, for verification, eco
 from documentation with the grade bars written before the rows. Phase 5 built the combination column:
 OPA's module under wasm3 on a Pico 2 W (171 lines of glue), a decision log receipt sink signing with
 the bundle key OPA already trusts (131 lines), a Facet encoding of OPA's input (35 lines), a revision
-floor before bundle load (54 lines). Phase 6 wrote VERDICT.md from matrix.json, with a test that fails
+floor before bundle load (54 lines). Phase 6 wrote VERDICT.md from the generated matrix, with a test that fails
 if the two disagree on any verdict or if the wrong prediction table drifts from the cells. Two glue
 modules were drafted by agy and their gates re run here before they counted.
 
@@ -394,10 +394,11 @@ signature check. Publication is the owner's decision; the recommendation is the 
 verdict included, or none of it.
 
 **Provenance.** Branch comparisons/phase0-prereg, commits fc01f13 (Phase 0) through 7da9ed2 (the
-verdict): prismpath/comparisons/{PREREGISTRATION.md, PREREGISTRATION.lock, VERDICT.md, MATRIX.md,
-matrix.json, matrix.py, harness.py, corpus_check.py, check_translators.py}, corpus/, systems/<id>/
+verdict): prismpath/comparisons/{PREREGISTRATION.md, PREREGISTRATION.lock, VERDICT.md, MATRIX.md, matrix.py, harness.py, corpus_check.py, check_translators.py}, corpus/, systems/<id>/
 (translators, generated translations, conformance.json), groupa/, groupb/, glue/, toolchain/
-(install.sh with every pin including wasm3 40e42cc, TOOLCHAIN.md), results/<system>/ with evidence,
+(install.sh with every pin including wasm3 40e42cc, TOOLCHAIN.md), results/<system>/ with evidence
+(OPA's WebAssembly modules are rebuilt from policy.rego by groupa/opa_wasm_mcu/gen_wasm.py against the
+recorded sha256, not stored),
 prismpath/tests/test_comparisons_{prereg,matrix,toolchain,translators,groupb,verdict}.py and
 test_glue_*.py. Bench: the GX10 (aarch64), the Protectli (x86_64), a Raspberry Pi Pico 2 W, the Arty
 Z7-20. No push (owner gated).

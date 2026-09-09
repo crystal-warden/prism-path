@@ -1,1 +1,0 @@
-{"revision":"","roots":[""],"wasm":[{"entrypoint":"comparison/network_admission/decision","module":"/policy.wasm"}],"rego_version":1}

@@ -9,7 +9,12 @@ from pathlib import Path
 import pytest
 
 HERE = Path(__file__).resolve().parent.parent / "comparisons"
-pytestmark = pytest.mark.skipif(not (HERE / "matrix.json").exists(), reason="matrix not generated")
+pytestmark = pytest.mark.skipif(not (HERE / "results" / "prismpath").exists(), reason="results not generated")
+
+
+def _matrix():
+    from prismpath.comparisons.matrix import build_matrix
+    return build_matrix(HERE / "results")
 
 
 def _verdict_table():
@@ -23,7 +28,7 @@ def _verdict_table():
 
 
 def test_verdict_matches_matrix():
-    m = json.loads((HERE / "matrix.json").read_text())
+    m = _matrix()
     rows = _verdict_table()
     assert set(rows) == set(m["verdicts"]), (set(rows) ^ set(m["verdicts"]))
     for dim, (_pred, computed) in rows.items():
@@ -31,7 +36,7 @@ def test_verdict_matches_matrix():
 
 
 def test_wrong_predictions_are_all_listed():
-    m = json.loads((HERE / "matrix.json").read_text())
+    m = _matrix()
     pre = (HERE / "PREREGISTRATION.md").read_text()
     tbl = pre[pre.index("| dim | prismpath | opa |"):]
     pred = {}

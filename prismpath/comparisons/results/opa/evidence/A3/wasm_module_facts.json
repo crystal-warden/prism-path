@@ -13,5 +13,17 @@
     "env.opa_abort",
     "env.memory"
   ],
-  "code_section_bytes": 75456
+  "code_section_bytes": 75456,
+  "modules": {
+    "network_admission": {
+      "bytes": 135831,
+      "sha256": "21b6b95031a5a07a56a714aedb5093860fd1983ab594fcfa5d52bf74442d9965",
+      "built_by": "opa 1.20.2 build -t wasm; rebuilt on demand by groupa/opa_wasm_mcu/gen_wasm.py, not stored"
+    },
+    "sensor_interlock": {
+      "bytes": 135954,
+      "sha256": "b2b9d834c4dac9776028fd01ef73b194ca2a358572f334e87704167fcfc161cb",
+      "built_by": "opa 1.20.2 build -t wasm; rebuilt on demand by groupa/opa_wasm_mcu/gen_wasm.py, not stored"
+    }
+  }
 }

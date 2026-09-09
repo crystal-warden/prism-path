@@ -86,7 +86,7 @@ def run_receipts() -> None:
     cfg = tmp / "opa.yaml"
     cfg.write_text(f"services:\n  sink:\n    url: http://127.0.0.1:{sport}\ndecision_logs:\n  service: sink\n  reporting:\n    min_delay_seconds: 1\n    max_delay_seconds: 2\n")
     port = 18191
-    with open(ev8 / "opa_server.log", "w") as lf:
+    with open(tmp / "opa_server.log", "w") as lf:
         proc = start_opa(["-a", f"127.0.0.1:{port}", "-c", str(cfg), str(gen_dir_for("opa", "ai_action_gate") / "policy.rego")], lf)
         observed, rules, ids = [], [], []
         try:
@@ -153,7 +153,7 @@ def run_facet() -> None:
     for pid in ("network_admission", "sensor_interlock"):
         policy = policy_by_id(pid)
         parts = facet.partitions_for((gen_dir_for("prismpath", pid) / f"{pid}.md").read_text())
-        with open(ev / f"opa_{pid}.log", "w") as lf:
+        with open(Path(tempfile.mkdtemp(prefix="p5_facet_")) / f"opa_{pid}.log", "w") as lf:
             proc = start_opa(["-a", f"127.0.0.1:{port}", str(gen_dir_for("opa", pid) / "policy.rego")], lf)
             try:
                 time.sleep(1.5)
