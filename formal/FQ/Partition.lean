@@ -17,7 +17,7 @@ Two formulations of the numeric partition:
   and `c + 1`; a boundary is retained when the atom truth vector differs across it; the symbol is
   the number of retained boundaries at or below the value. `FQ.Bridge` checks the two agree.
 
-Specification decision 3 (HANDOFF section 4): "coarsest" (I1b) is a separate statement. Decision 4:
+Specification decision 3 (see Syntax.lean): "coarsest" (I1b) is a separate statement. Decision 4:
 the categorical partition ends in the `other` cell. Decision 5: booleans are two cells.
 -/
 

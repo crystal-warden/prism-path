@@ -11,7 +11,7 @@ The Level M fragment (SPEC.md section 4.3): boolean combinations of atoms `field
 substring `in`, string ordering, runtime collections, and nested containers are outside the fragment
 and outside this model.
 
-Specification decisions (formal/HANDOFF.md section 4):
+Specification decisions (recorded here; formal/README.md states the boundary they draw):
 1. Readings are integer valued on numeric fields. `Value.int` is `Int`; there is no float. The
    reference quantizer casts with `int()`; that projection is outside the theorem.
 2. Readings are total (`Reading := String → Value`) and, for the theorem, well typed: every field a
