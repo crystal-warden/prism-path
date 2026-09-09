@@ -4,6 +4,10 @@ Long form documentation lives here, in three groups. Start at the repo root if y
 [`README.md`](../README.md) is the front door and [`GETTING_STARTED.md`](../GETTING_STARTED.md)
 is the walk from "what's this?" to a running flow.
 
+> **[POSITION.md](POSITION.md)**: the public position: one sentence, the problem, the architecture in three
+> words, capability status, what the comparison established, the vocabulary contract, the claims we make
+> and the claims we do not. The README and the site are views over it.
+>
 > **[SYSTEM_MAP.md](SYSTEM_MAP.md)**: the whole system on one page: the four people who touch it,
 > where every part lives, and the conformance topology that keeps the many implementations of the
 > interpreter, the wire, and the signed pack in agreement.

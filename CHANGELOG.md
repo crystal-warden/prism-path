@@ -9,6 +9,13 @@ spec stable.
 ## [Unreleased]
 
 ### Changed
+- **The README is restructured around the public position.** `docs/POSITION.md` is the canonical
+  statement (one sentence, problem, prove/enforce/prove, capability status, what the comparison
+  established, vocabulary contract, claims made and not made); the README, the site, and the package
+  docstring are views over it. The hero says what PrismPath is, a control plane for autonomous systems,
+  one of many, and the approach is what is unusual; Figueroa quantization and Facet move out of the
+  hero into their own section; the comparison verdict is on the front page as the claim that did not
+  survive. `prismpath.__init__` describes the grouped layout and the reading order.
 - **`Graph.validate()` is gone; use `analysis.errors(graph)`.** The parser no longer imports the
   analyzer (it was the one cycle in the kernel), the Level M classifier lives in its own module
   `prismpath.level_m` (re exported from `model_check`, so `ppt_compile` and every caller keep their
