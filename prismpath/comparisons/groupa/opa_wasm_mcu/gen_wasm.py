@@ -54,14 +54,17 @@ def corpus_check(pid: str, wasm_path: Path) -> str:
     if not host.exists():
         return "host not built (make linux)"
     policy = json.loads((COMP / "corpus" / f"{pid}.json").read_text())
-    cases = [sc for sc in policy["scenarios"] if sc.get("input") and all(v is not None for v in sc["input"].values())]
+    cases = [sc for sc in policy["scenarios"] if sc.get("input") and sc.get("kind") != "undeclared_missing"
+             and all(v is not None for v in sc["input"].values())]
     args = [json.dumps(sc["input"], separators=(",", ":")) for sc in cases]
     out = subprocess.run([str(host), str(wasm_path)] + args, capture_output=True, text=True).stdout.splitlines()
     results = [l for l in out if l.startswith("RESULT ")]
     ok = 0
     for sc, line in zip(cases, results):
-        res = json.loads(line.split(" ", 1)[1].rsplit(" memory", 1)[0])[0]["result"]
-        ok += (res.get("outcome"), res.get("rule")) == (sc["expected"]["outcome"], sc["expected"].get("rule"))
+        doc = json.loads(line.split(" ", 1)[1].rsplit(" memory", 1)[0])
+        res = doc[0]["result"] if doc else {}          # an empty list is OPA's undefined: no rule matched
+        got = (res.get("outcome", "no_match"), res.get("rule"))
+        ok += got == (sc["expected"]["outcome"], sc["expected"].get("rule"))
     return f"{ok}/{len(cases)} identical to the corpus"
 
 
