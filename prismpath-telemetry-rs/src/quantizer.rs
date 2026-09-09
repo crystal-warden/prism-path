@@ -195,11 +195,7 @@ fn numeric_partition(field: &str, atoms: &[Atom]) -> FieldPartition {
                     }
                 }
             }
-            "truthy" => {
-                if !const_set.contains(&0) {
-                    const_set.push(0);
-                }
-            }
+            "truthy" if !const_set.contains(&0) => const_set.push(0),
             _ => {}
         }
     }
