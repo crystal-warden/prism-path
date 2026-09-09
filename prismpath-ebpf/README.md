@@ -1,6 +1,6 @@
-# PrismPath PPT eBPF/XDP Spike
+# PrismPath PPT in the Linux kernel (eBPF/XDP)
 
-This directory contains the proof-of-shape eBPF/XDP implementation for compiling and executing PrismPath "PPT" (Level M) decidable match action tables directly inside the Linux kernel network stack.
+This directory holds the eBPF/XDP implementation that executes PrismPath "PPT" (Level M) decidable match action tables inside the Linux kernel network stack. It began as a proof of shape and is now a certified target: CI loads the programs and replays the frozen corpus in kernel on every push (the `ebpf_kernel` job), and the ledger rows that cite it were measured on real hosts on both aarch64 and x86_64.
 
 ---
 
