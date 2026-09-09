@@ -10,9 +10,48 @@ from prismpath.engine import run
 from prismpath import analysis
 
 
-def main(argv=None) -> int:
-    parser = argparse.ArgumentParser(description='Command-line interface for prismpath')
-    subparsers = parser.add_subparsers(dest='command')
+# The four people who touch a PrismPath deployment, and the commands that are theirs. The help text
+# is grouped by this table instead of one flat list; tests/test_cli_personas.py keeps every registered
+# subcommand in exactly one group.
+PERSONAS = (
+    ("Process owner: author and test the policy of record",
+     ("init", "validate", "test", "graph", "lint", "context")),
+    ("Engineer: implement the interface once, calibrate for deployment, deliver",
+     ("contract", "capability", "compile", "portable", "lock", "verify", "plugins", "ci-report", "lsp", "import",
+      "calibrate", "label", "annotate", "kappa", "centroids")),
+    ("Operator: run the system day to day, swap and attest policy (Mission Control is the console; this is the scripted path)",
+     ("run", "resume", "compose", "swap")),
+    ("Evaluator: anchor, verify, and read the evidence",
+     ("ledger", "facet")),
+)
+
+
+def _grouped_help(subparsers) -> str:
+    """Render the subcommands grouped by persona, one line each, from the registered parsers."""
+    out = ["commands, by who runs them", ""]
+    for title, names in PERSONAS:
+        out.append(title + ":")
+        for name in names:
+            sub = subparsers.choices.get(name)
+            help_text = ""
+            if sub is not None:
+                for action in subparsers._choices_actions:
+                    if action.dest == name:
+                        help_text = (action.help or "").split(". ")[0].split(": ")[0]
+                        if len(help_text) > 88:
+                            help_text = help_text[:85].rsplit(" ", 1)[0] + "..."
+                        break
+            out.append(f"  {name:<12} {help_text}")
+        out.append("")
+    out.append("`swap` splits by action: keygen, envelope, and pack are the engineer's setup; swap and attest are the "
+               "operator's; verify is the evaluator's.")
+    return "\n".join(out)
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description='Command-line interface for prismpath',
+                                     formatter_class=argparse.RawDescriptionHelpFormatter)
+    subparsers = parser.add_subparsers(dest='command', metavar='<command>')
 
     run_parser = subparsers.add_parser('run', help='Parse the flow and run it (mock agent by default; '
                                                    '--agent ollama:MODEL for a real local model)')
@@ -233,6 +272,13 @@ def main(argv=None) -> int:
     facet_parser.add_argument('payload', type=str, help='JSON reading or HEX string')
     facet_parser.set_defaults(func=facet_cmd)
 
+    parser.epilog = _grouped_help(subparsers)
+    subparsers._choices_actions = []   # the flat list is replaced by the grouped epilog above
+    return parser
+
+
+def main(argv=None) -> int:
+    parser = build_parser()
     args = parser.parse_args(argv)
     if not args.command:
         parser.print_help()
