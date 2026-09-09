@@ -553,3 +553,38 @@ firmware, Makefile), groupa/a3_opa_mcu.py, groupa/phase5.py, glue/{opa_receipts,
 facet_opa_input}.py, tests/test_glue_*.py, results/opa+glue/ (A1..A8 result files and evidence:
 opa_wasm3_rp2350-arm.json, receipts.jsonl, bytes.json, floor_results.json), toolchain/install.sh and
 TOOLCHAIN.md (wasm3 pin), MATRIX.md, matrix.json. Board: Raspberry Pi Pico 2 W. No push (owner gated).
+
+#### #149: Phase 6 verdict of the pre registered layer comparison: PrismPath is not a distinct layer under its own bar, thirteen wrong cell predictions reported, and the claim the cells do support stated (September 2026)
+
+**Claim.** The comparison closes with a written verdict tested against the generated matrix: under the
+section 9 definition frozen before any install, no Group A dimension is DISTINCT and every Group B
+dimension LOSES, so the "distinct layer" and "control plane" language is retired in favor of what the
+result files show.
+
+**Method.** prismpath/comparisons/VERDICT.md reads every grade and verdict from matrix.json (638 result
+files) and compares the section 8 predictions cell by cell; tests/test_comparisons_verdict.py fails if
+the document and the matrix disagree on any verdict or if the wrong prediction table drifts from the
+computed cells. Public readiness is presented as the owner's decision with a recommendation.
+
+**Result.** Verdicts: A1 to A8 NOT-DISTINCT, B1 to B5 LOSES; predicted survivors A3 and A7 both fell,
+A3 because OPA's WebAssembly runs on the RP2350 under wasm3 with 171 lines of glue (#148) and A7
+because the rubric counts a request timeout as a documented way to cap work. Thirteen of seventy eight
+cell predictions were wrong: Cedar under rated on A1, A2, and B4; Cerbos and OpenFGA over rated on A4
+and A8 because a signature would need a trust anchor they do not have; Cerbos's gRPC on A5; timeouts on
+A7 for OPA, Cedar, and Cerbos. What the cells support: PrismPath NATIVE on all eight Group A dimensions
+where no comparator exceeds two; OPA reaches the same row only with 391 lines of glue in three pieces
+that nobody ships; on the same MCU, 1.7 KB of interpreter class and 224 B images against about 60 KB
+of interpreter and 136 KB of module in 312 KB of RAM, sub millisecond against millisecond round trips,
+a signed and pin witnessed bound against none. Recommended public framing: a policy decision engine
+whose one compiled image decides identically from a Python process down to a 1.7 KB interpreter or a
+fabric, carries a signed worst case bound, and composes abstain, human routing, signed receipts with
+cause, and a byte sized wire as built in properties rather than as glue.
+
+**Honest scope.** The verdict follows the rubric even where the embedded reading of the same evidence
+would favor PrismPath (A7), because the rubric was fixed first. One MCU family was reached for the OPA
+combination; wider attempts could widen the degree, not flip A3. Group B documentation rows are graded
+against published bars, not measured. The recommendation is to publish the whole comparison, verdict
+included, or none of it; the decision and the push are the owner's.
+
+**Provenance.** Branch comparisons/phase0-prereg: VERDICT.md, tests/test_comparisons_verdict.py,
+README.md pointer, MATRIX.md, matrix.json. Rows #144 to #148 hold the phases. No push (owner gated).
