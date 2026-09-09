@@ -406,3 +406,48 @@ A7's PrismPath grade is unaffected by this row.
 results/prismpath/evidence/A3/ (a3.packets.bin, a3_vectors.json, *.ppt, kernel_aarch64_gx10.log,
 kernel_x86_64_protectli.log, mcu_ppt-rp2350_1_rp2350-arm_PPTM-v1.json, mcu_ppt-rp2350_1_rp2350-riscv_PPTM-v1.json),
 results/prismpath/A3__*.json (23), MATRIX.md. Board: Raspberry Pi Pico 2 W. No push (owner gated).
+
+#### #146: The Zynq-7020 fabric joins A3 as a seventh substrate (23/23 twice) and the A7 bound is honored on the pins for both comparison images, 34 of 35 and 23 of 24 cycles (September 2026)
+
+**Claim.** The two hardware items left open by #145 are closed on the real board: the compiled comparison
+images decide the 23 corpus readings identically in the fabric interpreter, and the signed per policy
+worst case bound carried by each image is met by every evaluation the logic analyzer saw on the fabric
+pins, so PrismPath's A7 grade rests on a measurement of these images rather than on the earlier images of
+#122 and #123. Neither result moves a dimension verdict: A3 was already DISTINCT and A7 stays NOT-DISTINCT
+because the comparators hold WITH-WORK through request timeouts under the pre registered rubric.
+
+**Method.** Arty Z7-20 (PYNQ) reached through the Protectli jump after the CMMC hardening. The board's
+boot demo service had already spent the one PL configuration budgeted per power cycle on ppt_finale.bit,
+so the first leg attached to that resident overlay without reconfiguring (groupa/a3_fabric_attach.py:
+pynq Overlay with download off, base address from the running design's own hwh, auto mode off to the
+certified PS evaluate path of #117 and #123, service stopped), loaded both images through the AXI load
+port and evaluated the 23 readings. The board was then quiesced (auto off, soft reset) and the tapped
+ppt_datapath.bit loaded once from a single process (groupa/a3_fabric_run.py), which repeated the 23
+readings on that overlay and swept them continuously; groupa/a7_sweep_only.py continued the sweeps per
+policy for 400 s each while groupa/a7_pins.py on the gx10 took 30 free run LA2016 captures per policy on
+Pmod JB (200 MSa/s, 1.4 V threshold) and measured every busy window with the #122 bench code
+(la_wcet_check.measure, edge count and width methods). One process drove the fabric at a time except for
+a 37 s overlap caused by a process matching mistake, killed by PID; the board stayed up.
+
+**Result.** A3 fabric: 23/23 on the resident finale overlay (PS path round trip about 88 us, cause byte 0
+on every match) and 23/23 again on the tapped datapath overlay. A7 pins: network_admission longest busy
+window 34 cycles against the signed 35 over 224 measured evaluations (30 captures), sensor_interlock 23
+against the signed 24 over 216 evaluations, 0 disagreements between the two measurement methods, both
+PASS. groupa/a7.py now grades PrismPath from the witness record (NATIVE on PASS, WITH-WORK when absent,
+NOT on FAIL); the 23 PrismPath A7 rows carry the witness. PrismPath A3 now spans python, C, kernel
+aarch64, kernel x86_64, RP2350 ARM, RP2350 RISC-V and the Zynq-7020 fabric.
+
+**Honest scope.** The bounds are tight by one cycle on both images, which is what the cycle exact formula
+of #109 predicts, and the witness counts are hundreds of evaluations per image, not the sixteen thousand
+of #123; the captures are free run samples of a continuous sweep, so they are a random sample of the
+readings, not an exhaustive per reading pass. The fabric legs use the PS evaluate path, not the auto
+mode datapath, because the corpus is fed from registers. One warm reconfiguration succeeded this
+session after quiescing; that is one observation and does not lift the one configuration per power cycle
+rule. The boot demo service on the board is left disabled. The ESP32 Xtensa leg remains not rerun.
+
+**Provenance.** Branch comparisons/phase0-prereg, commits a568419 and da41b7c: groupa/a3_fabric_attach.py,
+groupa/a3_fabric_run.py, groupa/a7_sweep_only.py, groupa/a7_pins.py, groupa/a7.py, groupa/HARDWARE_LEGS.md,
+results/prismpath/evidence/A3/ (fabric_finale_attach.log, fabric_datapath_run.log, a3_fabric_bundle.json),
+results/prismpath/evidence/A7/ (pins_network_admission.json, pins_sensor_interlock.json, sweep_*.log),
+results/prismpath/A3__*.json and A7__*.json (23 each), MATRIX.md. Instruments: Kingst LA2016 on the gx10,
+sigrok-cli with the kingst-la2016 driver. No push (owner gated).
