@@ -1,6 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
-"""chat_agent.py — any OpenAI-compatible chat endpoint as a flow worker, stdlib only.
+"""prismpath.workers.chat_agent: any OpenAI-compatible chat endpoint as a flow worker, stdlib only.
+
+One of the workers group (cli_worker, mcp_agent, this): the things a flow routes between. The
+kernel never imports a worker; workers are handed to `engine.run` by the CLI.
 
 The five-minutes-after-clone path for people who already run local models:
 

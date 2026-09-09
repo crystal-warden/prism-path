@@ -5,7 +5,8 @@
 The reference deployment's control plane, re-scoped to **proving + observability over flows** for one
 local operator on loopback. This module is transport-agnostic: pure functions over a single followed
 sprint's on-disk artifacts (`status.json` heartbeat, `interactions.jsonl` glass lens, checkpoints,
-the audit log). The FastAPI routers in this package are thin adapters over these functions.
+the audit log, read through prismpath.ledgers). The FastAPI routers in this package are thin adapters
+over these functions.
 
 No multi-user identity, no chat, no model inference — PrismPath routes and proves; it does not serve
 models. See docs/design/control-plane.md.

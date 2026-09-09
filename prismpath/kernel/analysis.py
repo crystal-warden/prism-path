@@ -1,6 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
-"""analysis.py — static analysis over the flow graph ("your flow compiles").
+"""prismpath.kernel.analysis: static analysis over the flow graph ("your flow compiles").
+
+Lives in the kernel group with the parser, the predicates, the engine, the Level M classifier and
+the model checker; `errors(graph)` is the validation entry point the CLI and the tests call.
 
 Because the flow *is* the graph (a Markdown file, not code smeared across Python), the whole
 control structure is inspectable without running anything. This module is that inspection: a set

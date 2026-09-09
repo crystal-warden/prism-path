@@ -19,7 +19,19 @@ node prismpath/portable/run_vectors.mjs                 # the frozen conformance
 python -m prismpath.safety.fuzz_predicates -n 20000     # the sandbox gate: 0 exec / 0 crash, always
 ```
 
-All four must pass before and after your change. If your change intentionally alters predicate
+All four must pass before and after your change. The repository is more than the Python package:
+`prismpath/` is grouped by concern (`kernel`, `routing`, `safety`, `hotswap`, `ledgers`, `workers`,
+`orchestration`, `evals`, `telemetry`), `prismpath-rs`, `prismpath-go`, and the other crates are the
+kernels in other languages, `prismpath-hw` holds the C target, the compiled image format, the fabric
+RTL, and the microcontroller firmware, `prismpath-ebpf` the kernel target, `adapters/` the domain
+adapters, `formal/` the Lean development, and `prismpath/comparisons/` the pre registered comparison.
+`docs/SYSTEM_MAP.md` maps every directory to the four people who touch a deployment and lists every
+implementation of the interpreter, the wire, and the signed pack with the gate that keeps it in
+agreement. Work in one of those areas needs its toolchain: `cargo` for the crates, `go` for the Go
+kernel, `cmake` and a C compiler for the C target and the C++ embed, `clang` and `libbpf` for eBPF,
+`verilator` and `cocotb` for the RTL simulation, `elan` for Lean. CI runs each in its own job
+(`.github/workflows/ci.yml`, `formal.yml`); run the job's commands locally before opening the pull
+request. If your change intentionally alters predicate
 or engine *semantics*, the conformance test will fail by design; regenerate the vectors
 (`python prismpath/portable/gen_conformance.py`), commit the diff, and say so prominently in the PR: that
 diff **is** the spec-change review, and it bumps the spec version (SPEC.md §8).
@@ -43,7 +55,7 @@ The recipe (every existing check followed it):
 3. Add a broken flow demonstrating it to `prismpath/tests/fixtures/broken/` and a test asserting the
    finding (and asserting it does NOT fire on the shipping flows; they're the false-positive
    corpus).
-4. Add one row to the README's check table.
+4. Add one row to the check table in [docs/guides/authoring.md](docs/guides/authoring.md).
 
 ### Ten lint rules looking for an author
 

@@ -283,18 +283,62 @@ other. Expression stays with the worker, control and observability stay with the
 
 The engine owns routing, attestation, and the toolchain; **domains plug in behind ports** (Ingestion,
 Retrieval, Adjudicator, Action/Sink, Attestation, Deferral) with **no domain vocabulary in the core**:
-[`tools/arch_guard.py`](../../tools/arch_guard.py) fails the build if a domain noun leaks inward. Two
-reference adapters ride the same ports, both the deterministic no-LLM class where the Adjudicator is a
-Level M flow (a proof, not a model judgment):
+[`tools/arch_guard.py`](../../tools/arch_guard.py) fails the build if a domain noun leaks inward. The Facet
+wire itself ships in the package (`prismpath/telemetry/`, [PROTOCOL.md](../../PROTOCOL.md)) because it is
+core infrastructure every adapter uses: it compresses a flow's telemetry to the distinctions that still
+reproduce its routing decisions, entropy coded on a self framing wire and Merkle verified end to end. Two
+reference adapters ride the ports:
 
-- **Decision-preserving telemetry** (`prismpath/telemetry/`): compress a flow's telemetry to the *minimum
-  statistic that still reproduces its routing decisions*, entropy-coded on a self-framing wire and
-  Merkle-verified end to end; benchmark-gated, arch-guard-isolated.
 - **The decision fusion plane** (`adapters/fusion/`): joins any N decision sources into one Level M
-  decidable, provable fused decision on a self-framing wire measured at ~45× under batched JSON
+  decidable, provable fused decision on a self framing wire measured at about 45 times under batched JSON
   (integrity apparatus counted). The v1 worked example fuses a cyber triage verdict with a live IMU's
   physical posture through one tessellation, proven end to end on the live rig
   ([evidence #82 to #86](../research/supporting-evidence.md)).
+- **The GRC adjudication adapter** (`adapters/compliance/`): the class whose Adjudicator may be a model,
+  machine checkable controls deciding deterministically and prose objectives resolving fail closed, with
+  evidence typed verdicts ([evidence #137 to #139](../research/supporting-evidence.md)).
+
+## From a decision to a receipt
+
+Everything above proves what can happen and decides what may. The last step is the one an auditor cares
+about: what happened, in a form that verifies without trusting the process that wrote it. Run the triage
+flow twice, once above and once below the human review line, appending one receipt per decision to an
+append only audit log, then read the trail:
+
+```python
+from prismpath.kernel.parser import parse_file
+from prismpath.kernel.engine import run
+from prismpath.kernel import causes
+from prismpath.ledgers.audit_log import AuditLog
+
+graph = parse_file("prismpath/examples/pr_demo/triage.md")
+log = AuditLog("triage.audit.jsonl")
+
+for amount in (700, 200):                                  # the same ticket, above and below the line
+    def worker(node, instruction, state, amount=amount):   # stands in for your agent
+        return {"category": "billing_dispute", "amount": amount, "sentiment": "neutral"}
+    result = run(graph, worker)
+    cause = causes.code("route:stuck") if result.stopped == "stuck" else 0
+    for step in result.steps:
+        log.append("gate", "decision", {"node": step.node, "target": step.target, "how": step.info.get("used"),
+                                        "outcome": result.path[-1], "cause": cause})
+print("root", log.current_root()[:16], "verifies", log.verify_log())
+```
+
+```bash
+prismpath trail triage.audit.jsonl
+# trail: triage.audit.jsonl  events 2 of 2  root 0375d60c23703633  verifies True
+# decisions 2:
+#   outcomes: human_review 1, billing 1
+#   causes:   0 clean x2
+```
+
+Your root will differ, because the receipts carry their own timestamps; the shape will not.
+
+Two decisions, two receipts, one Merkle root. Anchor the root with `prismpath ledger anchor` and a third
+party can later show the log was not edited. The same shape holds when the decision was made by a kernel
+program or a fabric: the receipt struct is the same, the cause byte is the same, and the
+[operator's guide](operator.md) covers reading the trail day to day.
 
 ## Command cheatsheet (kernel: no model required)
 

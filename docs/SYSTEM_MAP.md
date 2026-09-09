@@ -37,10 +37,10 @@ is the same struct on the wire, in the kernel, and on the fabric.
 
 | persona | horizon | primary surface | commands |
 |---|---|---|---|
-| process owner | the policy of record, long term change management | the flow document, `prismpath/examples/`, `docs/guides/authoring.md` | `init`, `validate`, `test`, `graph`, `lint`, `context` |
-| engineer | establish the interface once, calibrate for deployment, deliver | `contract` output, the kernels, CI, the pack and envelope | `contract`, `capability`, `compile`, `portable`, `lock`, `verify`, `plugins`, `ci-report`, `lsp`, `import`, `calibrate`, `label`, `annotate`, `kappa`, `centroids`, `swap keygen`, `swap envelope`, `swap pack` |
+| process owner | the policy of record, long term change management | the flow document, `prismpath/examples/`, `docs/guides/process-owner.md` | `init`, `validate`, `test`, `graph`, `lint`, `context` |
+| engineer | establish the interface once, calibrate for deployment, deliver | `contract` output, the kernels, CI, the pack and envelope, `docs/guides/engineer.md` | `contract`, `capability`, `compile`, `portable`, `lock`, `verify`, `plugins`, `ci-report`, `lsp`, `import`, `calibrate`, `label`, `annotate`, `kappa`, `centroids`, `swap keygen`, `swap envelope`, `swap pack` |
 | operator | day to day: monitor, assess for policy mutation, author short lived changes | Mission Control (`prismpath/mission_control/`, `docs/guides/mission-control-api.md`), the PolicyHost | `run`, `resume`, `compose`, `swap swap`, `swap attest`, `trail`; see `docs/guides/operator.md` |
-| evaluator | after the fact: was the decision right, and can it be proven | receipts, the audit trail, ledger anchors | `ledger` (anchor, upgrade, verify, export-request, relay-stamp, import-proofs, rfc3161), `swap verify`, `facet decode` |
+| evaluator | after the fact: was the decision right, and can it be proven | receipts, the audit trail, ledger anchors, `docs/guides/evaluator.md` | `ledger` (anchor, upgrade, verify, export-request, relay-stamp, import-proofs, rfc3161), `swap verify`, `facet decode` |
 
 `prismpath --help` prints the commands in these groups.
 

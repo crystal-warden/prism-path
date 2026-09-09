@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
-"""ledger_runner.py — drive a routing flow as a per-item loop with a git proof per item (Slice 2).
+"""prismpath.ledgers.ledger_runner: drive a routing flow as a per-item loop with a git proof per item.
 
-The sprint control plane (run_sprint.py) already has a gate-green seam to hang the Flow-Ledger on.
+The sprint control plane (prismpath.orchestration.run_sprint) already has a gate-green seam to hang the Flow-Ledger on.
 A *routing* flow (SOC triage, ticket queues) doesn't — it runs `engine.run` once per item and
 edits no code. This runner gives those flows the same durable-proof + resume story:
 
