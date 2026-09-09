@@ -6,7 +6,7 @@ free number, instead of editing the main ledger. On merge, the docs session fold
 ledger with correct formatting and clears this file.*
 
 *Format each row exactly per `LEDGER_STANDARDS.md` §1 (Claim / Method / Result + Honest scope /
-Provenance) with a month granularity date. Next free number: **#140**.*
+Provenance) with a month granularity date. Next free number: **#144** (#140 and #141 are staged on branch formal/lean-fq).*
 
 ---
 
@@ -319,273 +319,142 @@ the posture and that its provenance is disclosed.
 (adapters/compliance/deterministic_checks.py: evidence_class, _evidence_rollup, check_objectives_typed;
 tests/test_evidence_provenance.py). No push (owner-gated).
 
-#### #144: The layer comparison, Group A software results: seven of eight pre registered dimensions run against OPA, Cedar, Cerbos, OpenFGA, and Openlane, six computed NOT-DISTINCT as predicted, one computed NOT-DISTINCT against the prediction, one open on hardware (September 2026)
+#### #142: The pre registered comparison against OPA, Cedar, Cerbos, OpenFGA, and Openlane, all six phases: PrismPath is native on every property it builds in, no comparator on more than two, and it is not a distinct layer under the bar the protocol set (September 2026)
 
-**Claim.** Under the pre registered protocol (prismpath/comparisons/PREREGISTRATION.md, freeze 54f05739)
-the Group A matrix is generated from result files produced by the real systems at pinned versions
-(OPA 1.20.2, Cedar CLI 4.12.0 with cedarpy 4.8.7 for timing, Cerbos 0.55.0, OpenFGA 1.19.0, Openlane
-from documentation), and the computed verdicts are: A1, A2, A4, A5, A6, A8 NOT-DISTINCT as predicted;
-A7 NOT-DISTINCT where DISTINCT was predicted; A3 OPEN pending an MCU class leg.
+**Claim.** A capability comparison fixed before any comparator was installed, run to the end on real
+systems and real hardware, and reported against its own predictions. On the eight properties PrismPath
+builds in, PrismPath grades native on all eight and no comparator grades native on more than two; OPA,
+the direct comparator, reaches the same eight only with 391 lines of glue in three pieces, built and
+run here rather than costed; Cedar, Cerbos, and OpenFGA cannot reach the receipts row at all under the
+budget. On the five properties where PrismPath was expected to lose, it loses as predicted. Under the
+protocol's strict bar, a property counts as a distinct layer only if every comparator including glue is
+NOT, and no property meets it: A3 falls because OPA's compiled WebAssembly runs on an RP2350 under a
+third party interpreter with identical decisions, A7 because the rubric grades a request timeout as a
+documented way to cap work. Thirteen of seventy eight cell predictions were wrong, every one listed
+with its reason, none adjusted.
 
-**Method.** prismpath/comparisons/groupa/: a8 (six proposal loop with receipts), a1a2a4 (graded from
-the Phase 2 conformance rows and the A8 receipt evidence against declared outcome carriers), a5 (bytes
-at the application payload layer from live servers), a6 (real PolicyHost swaps and real RS256 signed
-OPA bundles at the agent), a7 (100,000 decisions per scenario in each system's fastest embedding on
-this host), a3_corpus and a3 (23 vectors compiled once, host Python, C reference, in kernel on aarch64
-and x86_64; OPA to WebAssembly measured; Cedar no_std build attempted), openlane (documentation). The
-grading criteria and the glue budget (300 lines, 8 hours, no new trust anchor) were fixed before
-installation; matrix.py aggregates by minimum grade and computes the verdicts.
+**Method.** prismpath/comparisons/. Phase 0 froze the protocol (PREREGISTRATION.md, lock 54f05739,
+one recorded amendment before any comparator result existed): six neutral policies with 61 scenarios
+and 5 lifecycle entries, the grade vocabulary native, with work, not, a glue budget of 300 lines and
+8 hours with no new trust anchor, a prediction for every cell, and matrix.py generating MATRIX.md and
+matrix.json from result files only. Phase 1 pinned and checksum verified OPA 1.20.2, Cedar CLI 4.12.0
+with cedarpy 4.8.7 for in process timing, Cerbos 0.55.0, OpenFGA 1.19.0; Openlane from documentation.
+Phase 2 translated every policy into each system's idiom with the official construct cited per rule
+and re ran every translation against the corpus before any result file was written (PrismPath 52
+match, 3 dropped, 6 unexpressible; OPA and Cedar 61; Cerbos 55 with the role hierarchy flattened in
+CEL; OpenFGA 6). Phase 3 ran Group A: the six proposal AI worker loop with receipts, abstain and human
+routing from the conformance rows, wire bytes from live servers, lifecycle refusals at the agent with
+RS256 signed bundles, 100,000 timed decisions per scenario per system, and the substrate legs of #143.
+Phase 4 graded Group B from the same conformance rows and, for verification, ecosystem, and maturity,
+from documentation with the grade bars written before the rows. Phase 5 built the combination column:
+OPA's module under wasm3 on a Pico 2 W (171 lines of glue), a decision log receipt sink signing with
+the bundle key OPA already trusts (131 lines), a Facet encoding of OPA's input (35 lines), a revision
+floor before bundle load (54 lines). Phase 6 wrote VERDICT.md from matrix.json, with a test that fails
+if the two disagree on any verdict or if the wrong prediction table drifts from the cells. Two glue
+modules were drafted by agy and their gates re run here before they counted.
 
-**Result.** PrismPath NATIVE on every Group A cell run. A8: OPA WITH-WORK (first class outcomes, six
-unsigned console decision log records; a 150 line sidecar reusing the bundle signing key estimated),
-Cedar and Cerbos NOT (a signed receipt trail would be a new trust anchor), OpenFGA not expressible.
-A1/A2: OPA NATIVE (Rego returns any document), Cedar and Cerbos WITH-WORK (annotation and output
-block carriers, guards for absence), OpenFGA NOT. A4: OPA WITH-WORK, Cedar and Cerbos NOT on signed.
-A5, 23 readings: PrismPath 4 to 6 B request plus receipt (30 B with a 28 B IP+UDP envelope at fleet
-1, 3.24 B per reading at fleet 50 concentrated), OPA 113 to 125 B, Cedar 233 to 238 B, Cerbos 506 to
-516 B; Cerbos WITH-WORK (native gRPC), others NOT. A6: PrismPath refused stale
-(version:not-monotonic:1<=2), tampered (image:sha256-mismatch), unsigned (sig:missing) at the point;
-OPA refused tampered and unsigned bundles at the agent and accepted an older signed revision
-(WITH-WORK); Cedar, Cerbos, OpenFGA NOT. A7, medians over 100,000: PrismPath Python 11.6 to 96.4 us
-(signed fabric bounds 35 and 24 cycles, 700 and 480 ns at 50 MHz), Cedar in process 31.1 to 38.6 us,
-OPA loopback HTTP 302 to 333 us (max 20.5 ms), Cerbos loopback HTTP 710 to 872 us (max 15.0 ms);
-comparators WITH-WORK under the rubric's "documented way to cap work" (timeouts; Cedar's bounded
-evaluation). A3: host, C, kernel aarch64, kernel x86_64 agree 23/23; OPA's wasm module 135,831 B with
-128 KB minimum memory, not run on an MCU; Cedar's core fails to build for Cortex-M at memchr requiring
-std; Cerbos and OpenFGA server only.
+**Result.** Verdicts computed by matrix.py from 638 result files: A1 to A8 NOT-DISTINCT, B1 to B5
+LOSES. The map, PrismPath / OPA / Cedar / Cerbos / OpenFGA / OPA plus glue: abstain native / native /
+with work / with work / not / native; human routing the same; substrates native / not / not / not /
+not / with work; receipts native / with work / not / not / not / with work; compact wire native / not /
+not / with work / not / with work; anti rollback native / with work / not / not / not / with work;
+bounded time native / with work / with work / with work / not / with work; the AI worker loop native /
+with work / not / not / not / with work; Openlane not on all eight by boundary. Measured: wire bytes per
+reading 4 to 6 (PrismPath) against 117 (OPA), 237 (Cedar), 512 (Cerbos); decision medians over 100,000,
+PrismPath Python 12 to 96 us in process, Cedar 31 to 39 us in process, OPA 302 to 333 us over
+loopback HTTP, Cerbos 710 to 872 us; anti rollback, PrismPath refused stale, tampered, and unsigned
+at the point, OPA refused tampered and unsigned and accepted an older signed revision until the 54
+line floor; OPA's WebAssembly on the RP2350, 23 of 23 identical decisions at 311,636 B heap high
+water of 520 KB, 136 KB module per policy, 3.8 to 5.5 ms USB round trip (54 ms on first evaluation),
+against PrismPath's 1.7 KB interpreter class, 224 B and 160 B images, sub millisecond, with a signed
+bound; Facet over OPA, 2 to 3 B frames in place of 70 to 75 B JSON, 23 of 23 identical; receipts over
+OPA, 6 of 6 verified, an altered record and a foreign key rejected. Group B: PrismPath drops two of six
+rules of the RBAC plus ABAC policy (field against field, set intersection) where Rego, Cedar, and
+Cerbos match 8 of 8; cannot ask the sharing question OpenFGA, OPA, and Cedar answer 6 of 6; has no
+machine checked proof of its evaluator where Cedar's authorizer and validator are in Lean; a narrow,
+substrate shaped ecosystem; two months of public history. Wrong predictions: Cedar under rated on A1,
+A2, and B4; Cerbos and OpenFGA over rated on A4 and A8 because a signature needs a trust anchor they
+lack; Cerbos's gRPC on A5; timeouts on A7 for OPA, Cedar, and Cerbos; the A3 and A7 verdicts.
 
-**Honest scope.** A7's prediction was wrong on the rubric, not the measurement: a request timeout caps
-wall time rather than bounding work, but the pre registered WITH-WORK text counts "a documented way
-to cap work", so the verdict is NOT-DISTINCT and the distinction between cap and bound is for the
-verdict prose. PrismPath's A7 NATIVE rests on the signed bound honored on the pins for other signed
-policies (#122, #123); the pins witness for these two images is the hardware session, and the cell
-drops to WITH-WORK without it. A3 needs an MCU class leg (RP2350 or ESP32 boards) before PrismPath's
-rows are written. The WITH-WORK glue estimates are estimates until Phase 5 builds them. Openlane is
-graded from documentation as a boundary. Group B and the verdict document are not yet written.
+**Honest scope.** The layer bar was the protocol's construct, and its failure retires one claim,
+that PrismPath is a layer the existing engines cannot reach; it does not touch what PrismPath is, a
+control plane with receipts, one of many control planes, with an unusual approach and its own wire.
+Both PrismPath and OPA on the Pico are a portable artifact plus a per substrate runtime; the fragment
+PrismPath restricts decisions to is why its runtime is 1.7 KB where wasm3 is 60 KB, why a bound can be
+signed, and why B1 is a loss. The cross substrate claim is a claim about the Level M fragment; the
+semantic tier stays on the host. One MCU family was reached for OPA (RP2350 ARM; the RISC-V build
+hung, recorded as attempted); the 8 bit and FPGA targets were not attempted for OPA and would widen
+the degree, not change the map. A7's verdict follows a rubric that treats a timeout as a cap; the
+embedded reading of the same evidence is stated beside it. The receipts glue was built for OPA only.
+B4 and B5 are documentation rows against published bars. The corpus is small and neutral by design.
+The B2 note credits the FQ Lean development (#140) without counting it, because the dimension is
+verification of the decision engine. Two caveats on the glue are in its rows: the receipt sink must
+run where the bundle private key lives, and the revision floor persists a revision before OPA's
+signature check. Publication is the owner's decision; the recommendation is the whole comparison,
+verdict included, or none of it.
 
-**Provenance.** Branch comparisons/phase0-prereg: prismpath/comparisons/groupa/*.py, results/<system>/
-(one JSON per scenario, evidence under results/<system>/evidence/), MATRIX.md and matrix.json
-regenerated, groupa/HARDWARE_LEGS.md. No push (owner gated).
+**Provenance.** Branch comparisons/phase0-prereg, commits fc01f13 (Phase 0) through 7da9ed2 (the
+verdict): prismpath/comparisons/{PREREGISTRATION.md, PREREGISTRATION.lock, VERDICT.md, MATRIX.md,
+matrix.json, matrix.py, harness.py, corpus_check.py, check_translators.py}, corpus/, systems/<id>/
+(translators, generated translations, conformance.json), groupa/, groupb/, glue/, toolchain/
+(install.sh with every pin including wasm3 40e42cc, TOOLCHAIN.md), results/<system>/ with evidence,
+prismpath/tests/test_comparisons_{prereg,matrix,toolchain,translators,groupb,verdict}.py and
+test_glue_*.py. Bench: the GX10 (aarch64), the Protectli (x86_64), a Raspberry Pi Pico 2 W, the Arty
+Z7-20. No push (owner gated).
 
-#### #145: A3 closes DISTINCT: one compiled policy image decides 23 scenario readings identically on host Python, the C reference, in kernel on aarch64 and x86_64, and on both ISAs of an RP2350, while every comparator's MCU path fails or does not exist (September 2026)
+#### #143: The comparison corpus decided identically on seven substrates, and the signed worst case bound held on the fabric pins for both comparison images (September 2026)
 
-**Claim.** The pre registered "cross substrate byte exact decisions" dimension of the layer comparison
-is the one Group A dimension where PrismPath grades NATIVE and every comparator and Openlane grades
-NOT, so under the frozen criterion (PREREGISTRATION.md section 9) PrismPath is a distinct layer on this
-dimension, with the comparator attempts made and recorded rather than dismissed.
+**Claim.** The A3 and A7 legs of #142 on hardware: one compiled image per comparison policy decides
+the 23 corpus readings identically, outcome and rule, on host Python, the C reference, in kernel on
+aarch64 and x86_64, on both ISAs of an RP2350, and on the Zynq-7020 fabric; and the per policy
+worst case bound that travels signed with each image, recomputed at verify, was honored by every
+evaluation the logic analyzer saw on the fabric pins.
 
-**Method.** groupa/a3_corpus.py compiles network_admission and sensor_interlock once (168 B and a second
-image, sha256 prefixes recorded) and frames the 23 complete scenario readings as table per vector records
-with the host Python route as the expected target, cross checked against the C reference. Kernel legs:
-loader certify via BPF_PROG_TEST_RUN on this host (aarch64, Linux 6.17.0, clang 18) and on the Protectli
-(x86_64, Linux 6.17.2, program object rebuilt there with clang 19 from the identical source). MCU legs:
-groupa/a3_mcu.py replays the corpus over the unchanged RP2350 certification firmware's USB-CDC contract
-(I, L, V), one Pico 2 W flashed first with the Cortex-M33 build then, after a 1200 baud reset into the
-bootloader, with the Hazard3 RISC-V build, both from the one source rebuilt this session (Pico SDK 2.1.1,
-gcc-arm-none-eabi 13.2, riscv32-unknown-elf gcc). groupa/a3.py --write-prismpath writes the 23 result
-files from every leg. Comparator attempts (groupa/a3.py): OPA compiled to WebAssembly and the module
-measured; the Cedar core built for thumbv8m.main-none-eabi in a no_std crate; Cerbos and OpenFGA
-documented as servers.
+**Method.** groupa/a3_corpus.py compiles network_admission (224 B) and sensor_interlock (160 B) once
+through the untouched table compiler and frames the 23 complete scenario readings as table per vector
+records with the host Python route as the expected target, cross checked against the C reference.
+Kernel legs: loader certify via BPF_PROG_TEST_RUN on the GX10 (Linux 6.17.0, clang 18) and on the
+Protectli (Linux 6.17.2, program object rebuilt there with clang 19 from the identical source). MCU
+legs: groupa/a3_mcu.py replays the records over the unchanged RP2350 certification firmware's
+USB-CDC contract, one Pico 2 W flashed with the Cortex-M33 build and then, after a 1200 baud reset
+into the bootloader, with the Hazard3 RISC-V build, both rebuilt this session (Pico SDK 2.1.1,
+gcc-arm-none-eabi 13.2, riscv32-unknown-elf gcc). Fabric legs: groupa/a3_fabric_attach.py attached to
+the finale overlay the board's boot demo service had already loaded (pynq Overlay without download,
+address from the running design's own hwh, auto mode off to the certified PS evaluate path of #117
+and #123), loaded both images through the AXI load port, and evaluated the 23 readings; then, after
+quiescing, groupa/a3_fabric_run.py loaded the tapped ppt_datapath.bit once from a single process and
+repeated the 23. Pins witness: groupa/a7_sweep_only.py swept each policy's readings continuously
+through the PS path for 400 s while groupa/a7_pins.py on the GX10 took 30 free run LA2016 captures per
+policy on Pmod JB at 200 MSa/s (threshold 1.4 V, passed to sigrok as the range literal 1.4-1.4) and
+measured every busy window with the #122 bench code (la_wcet_check.measure, edge count and width
+methods). groupa/a3.py and groupa/a7.py write PrismPath's result files from the leg records; a7.py
+grades from the witness record (native on PASS, with work when absent, not on FAIL).
 
-**Result.** 23/23 agree on all six legs: python, C, kernel aarch64 (ALL PASS), kernel x86_64 (ALL PASS),
-rp2350-arm (USB-CDC round trip median 370 us), rp2350-riscv (median 551 us). PrismPath A3 NATIVE 23/23.
-OPA NOT: the wasm module is 135,831 B (75,456 B code, 7 host imports, 128 KB minimum imported memory grown
-at runtime), a host class runtime form; not run on an MCU. Cedar NOT: cargo fails at memchr requiring std,
-cedar-policy 4.12.0 has no no_std feature. Cerbos, OpenFGA, Openlane NOT: server or cloud only. matrix.py
-verdict A3 DISTINCT; the full Group A matrix: A3 DISTINCT, A1 A2 A4 A5 A6 A7 A8 NOT-DISTINCT.
+**Result.** 23 of 23 on every leg: python, C, kernel aarch64 (ALL PASS), kernel x86_64 (ALL PASS),
+rp2350-arm (USB-CDC round trip median 370 us), rp2350-riscv (median 551 us), Zynq-7020 fabric on the
+resident finale overlay (PS path round trip about 88 us, cause byte 0 on every match) and again on the
+tapped datapath overlay. Pins: network_admission longest busy window 34 cycles against the signed 35
+over 224 measured evaluations; sensor_interlock 23 against the signed 24 over 216; 0 disagreements
+between the two measurement methods; both PASS. PrismPath's A3 result files carry seven legs and its
+A7 result files carry the witness.
 
-**Honest scope.** One MCU family this run (RP2350, two ISAs); the ESP32 Xtensa and the Zynq fabric legs
-were not rerun here (prior rows #98 and #108 certify the same interpreter on them against the frozen
-predicate corpus, not this policy corpus). The OPA on MCU attempt stops at module facts and inference
-about the ESP-WROOM-32's memory; running WAMR on an ESP32-S3 with PSRAM is named for the LoRa board
-session and could move OPA's cell only if it runs identically there. The Pico was returned to nothing
-in particular (it carried nothing to preserve). The pins witness for these images (A7) is still pending;
-A7's PrismPath grade is unaffected by this row.
+**Honest scope.** One MCU family this run (RP2350, two ISAs); the ESP32 Xtensa leg was not rerun (row
+#98 certifies the same interpreter on it against the frozen predicate corpus, not this policy corpus).
+The fabric legs use the PS evaluate path, not the auto mode datapath, because the corpus is fed from
+registers. The bounds are tight by one cycle on both images, as the cycle exact formula of #109
+predicts; the witness counts are hundreds of evaluations per image sampled free run from a continuous
+sweep, not the sixteen thousand of #123 and not an exhaustive per reading pass. Board handling learned
+and recorded in groupa/HARDWARE_LEGS.md: the board's boot demo service configures the PL at boot and
+spends the one configuration budgeted per power cycle, so it was disabled for this work and is left
+disabled; one warm reconfiguration succeeded after quiescing, one observation that does not lift the
+rule; one process drives the fabric at a time, and a 37 s overlap caused by a process name match was
+ended by killing by PID with the board intact. The Pico was returned to nothing in particular.
 
-**Provenance.** Branch comparisons/phase0-prereg: groupa/a3_corpus.py, groupa/a3_mcu.py, groupa/a3.py,
-results/prismpath/evidence/A3/ (a3.packets.bin, a3_vectors.json, *.ppt, kernel_aarch64_gx10.log,
-kernel_x86_64_protectli.log, mcu_ppt-rp2350_1_rp2350-arm_PPTM-v1.json, mcu_ppt-rp2350_1_rp2350-riscv_PPTM-v1.json),
-results/prismpath/A3__*.json (23), MATRIX.md. Board: Raspberry Pi Pico 2 W. No push (owner gated).
-
-#### #146: The Zynq-7020 fabric joins A3 as a seventh substrate (23/23 twice) and the A7 bound is honored on the pins for both comparison images, 34 of 35 and 23 of 24 cycles (September 2026)
-
-**Claim.** The two hardware items left open by #145 are closed on the real board: the compiled comparison
-images decide the 23 corpus readings identically in the fabric interpreter, and the signed per policy
-worst case bound carried by each image is met by every evaluation the logic analyzer saw on the fabric
-pins, so PrismPath's A7 grade rests on a measurement of these images rather than on the earlier images of
-#122 and #123. Neither result moves a dimension verdict: A3 was already DISTINCT and A7 stays NOT-DISTINCT
-because the comparators hold WITH-WORK through request timeouts under the pre registered rubric.
-
-**Method.** Arty Z7-20 (PYNQ) reached through the Protectli jump after the CMMC hardening. The board's
-boot demo service had already spent the one PL configuration budgeted per power cycle on ppt_finale.bit,
-so the first leg attached to that resident overlay without reconfiguring (groupa/a3_fabric_attach.py:
-pynq Overlay with download off, base address from the running design's own hwh, auto mode off to the
-certified PS evaluate path of #117 and #123, service stopped), loaded both images through the AXI load
-port and evaluated the 23 readings. The board was then quiesced (auto off, soft reset) and the tapped
-ppt_datapath.bit loaded once from a single process (groupa/a3_fabric_run.py), which repeated the 23
-readings on that overlay and swept them continuously; groupa/a7_sweep_only.py continued the sweeps per
-policy for 400 s each while groupa/a7_pins.py on the gx10 took 30 free run LA2016 captures per policy on
-Pmod JB (200 MSa/s, 1.4 V threshold) and measured every busy window with the #122 bench code
-(la_wcet_check.measure, edge count and width methods). One process drove the fabric at a time except for
-a 37 s overlap caused by a process matching mistake, killed by PID; the board stayed up.
-
-**Result.** A3 fabric: 23/23 on the resident finale overlay (PS path round trip about 88 us, cause byte 0
-on every match) and 23/23 again on the tapped datapath overlay. A7 pins: network_admission longest busy
-window 34 cycles against the signed 35 over 224 measured evaluations (30 captures), sensor_interlock 23
-against the signed 24 over 216 evaluations, 0 disagreements between the two measurement methods, both
-PASS. groupa/a7.py now grades PrismPath from the witness record (NATIVE on PASS, WITH-WORK when absent,
-NOT on FAIL); the 23 PrismPath A7 rows carry the witness. PrismPath A3 now spans python, C, kernel
-aarch64, kernel x86_64, RP2350 ARM, RP2350 RISC-V and the Zynq-7020 fabric.
-
-**Honest scope.** The bounds are tight by one cycle on both images, which is what the cycle exact formula
-of #109 predicts, and the witness counts are hundreds of evaluations per image, not the sixteen thousand
-of #123; the captures are free run samples of a continuous sweep, so they are a random sample of the
-readings, not an exhaustive per reading pass. The fabric legs use the PS evaluate path, not the auto
-mode datapath, because the corpus is fed from registers. One warm reconfiguration succeeded this
-session after quiescing; that is one observation and does not lift the one configuration per power cycle
-rule. The boot demo service on the board is left disabled. The ESP32 Xtensa leg remains not rerun.
-
-**Provenance.** Branch comparisons/phase0-prereg, commits a568419 and da41b7c: groupa/a3_fabric_attach.py,
-groupa/a3_fabric_run.py, groupa/a7_sweep_only.py, groupa/a7_pins.py, groupa/a7.py, groupa/HARDWARE_LEGS.md,
-results/prismpath/evidence/A3/ (fabric_finale_attach.log, fabric_datapath_run.log, a3_fabric_bundle.json),
-results/prismpath/evidence/A7/ (pins_network_admission.json, pins_sensor_interlock.json, sweep_*.log),
-results/prismpath/A3__*.json and A7__*.json (23 each), MATRIX.md. Instruments: Kingst LA2016 on the gx10,
-sigrok-cli with the kingst-la2016 driver. No push (owner gated).
-
-#### #147: Group B of the layer comparison, where PrismPath loses, graded and computed LOSES on all five pre registered dimensions (September 2026)
-
-**Claim.** The mandatory "where we lose" half of the pre registered comparison is on the record with the
-same rubric, result contract, and matrix generator as the Group A claims: PrismPath loses on policy
-expressiveness, formal verification of the decision engine, relationship modeling, ecosystem, and
-maturity, exactly as predicted in PREREGISTRATION.md section 8, with one comparator prediction wrong in
-the comparators' favor (Cedar's ecosystem is NATIVE, not WITH-WORK).
-
-**Method.** groupb/b.py. B1 and B3 are graded per scenario from the Phase 2 conformance rows of every
-translator (systems/<id>/generated/conformance.json), so the grades come from the runs already made
-against the corpus: a MATCH with idiomatic constructs is NATIVE, a construct the translator had to
-flatten or a path documented and costed under the glue budget is WITH-WORK, a rule the translator dropped
-or a policy it declared not expressible with no evaluation left for the engine is NOT. B2, B4, and B5 are
-documentation rows; the grade bars were written into the module before any row (B2: machine checked
-semantics of the decision engine tied to the shipped implementation; B4: three of four integration
-classes or three implementations; B5: three years, thirty contributors, a foundation home or a named
-production operator) and the sources sit beside each result (sources.txt, facts.json from the GitHub API
-on 2026-09-09).
-
-**Result.** B1 LOSES: PrismPath NOT (owner_write_1, group_read_1, contractor_group_read_1 need field
-against field comparison or set intersection, both outside the predicate language and dropped;
-manager_hours_write_1 WITH-WORK through the hierarchy flattened at authoring; four NATIVE), OPA, Cedar,
-Cerbos NATIVE 8/8 (Cerbos idiomatic=false, derived roles cannot join the negation chain), OpenFGA
-WITH-WORK (conditions plus tuples plus a caller side rule ordering shim, 120 lines, 6 hours, costed not
-built), Openlane NOT. B2 LOSES: Cedar NATIVE (cedar-spec, definitional authorizer, validator, and symbolic
-compiler in Lean 4.33.1 with proven forbid overrides, explicit permit, default deny, order independence,
-sound slicing and typing, tied to Rust by differential testing); PrismPath NOT, with the record stated
-exactly: 13 machine checked theorems about Figueroa quantization, the spiral index, and the Zeckendorf
-wire (rows #140 to #143), the WCET base case (#111), conformance certification on every substrate, and
-no proof of the evaluator's semantics; OPA, Cerbos, OpenFGA, Openlane NOT. B3 LOSES: PrismPath NOT (not
-expressible, the caller would make the decision), OPA NATIVE (graph.reachable), Cedar NATIVE (entity
-hierarchy), OpenFGA NATIVE (its native question), Cerbos WITH-WORK (caller supplies the relationship data
-as a list, CEL tests membership, 40 lines, 2 hours), Openlane NOT. B4 LOSES: PrismPath WITH-WORK (Zarf,
-UDS, Vector codec, Wireshark dissector, kernel, MCU, FPGA, Rust and C libraries, GRC scanner adapters;
-no Kubernetes admission path, Envoy filter, Terraform provider, or package index release; a webhook or
-ext_authz shim costed at 200 lines, 8 hours), every comparator NATIVE. B5 LOSES: PrismPath NOT (public
-since 2026-07-19, 381 commits, one organization, one tag), OPA, Cedar, Cerbos, OpenFGA NATIVE, Openlane
-WITH-WORK (two years, about twenty contributors). matrix.py computes LOSES on all five.
-
-**Honest scope.** OpenFGA's B1 and Cerbos's B3 WITH-WORK cells rest on costed, documented paths, not
-executed glue, the same standard Group A applied to comparator glue; executing them could only raise
-those cells, never change LOSES. B4 and B5 are documentation rows with published bars, not measurements.
-The B2 note credits the quantization proofs without counting them, because the dimension is
-verification of the decision engine and the formal development itself states it is not a proof about the
-evaluator or the source text. The one wrong prediction (Cedar B4) is reported, not adjusted away.
-
-**Provenance.** Branch comparisons/phase0-prereg, commit d1ba764: groupb/b.py, results/<system>/B*.json
-(90 files), results/<system>/evidence/B{2,4,5}/, MATRIX.md, matrix.json, tests/test_comparisons_groupb.py.
-No push (owner gated).
-
-#### #148: Phase 5 combination tests built and run: OPA's compiled WebAssembly decides the corpus identically on an RP2350 under a 60 KB interpreter, and every other pre registered combination closes under budget, so no Group A dimension survives as DISTINCT (September 2026)
-
-**Claim.** The pre registered combination tests were executed rather than costed, and the honest result
-is that the layer test of PREREGISTRATION.md section 9 fails on every Group A dimension: the one
-dimension that was DISTINCT after Group A, cross substrate byte exact decisions, falls to NOT-DISTINCT
-because OPA compiled to WebAssembly runs on an MCU class target with identical decisions through a
-documented compiler and a third party interpreter under the glue budget.
-
-**Method.** One combination column, opa+glue, populated for A1 through A8. A3: groupa/opa_wasm_mcu/
-builds RP2350 firmware from the wasm3 interpreter (MIT, commit 40e42cc, pinned in toolchain/install.sh,
-source only) plus 171 lines of glue that supply the module's six imports (opa_abort, opa_builtin0..4)
-and drive OPA's documented ABI (opa_heap_ptr_get, opa_json_parse, opa_eval) over USB-CDC; both modules
-opa build -t wasm produced for network_admission (135,831 B) and sensor_interlock (135,954 B) live in
-flash, one runtime open at a time. groupa/a3_opa_mcu.py replays the 23 A3 corpus readings. A4 and A8:
-glue/opa_receipts.py receives OPA's decision_logs.service uploads, Merkle roots the records, signs the
-root RS256 with the bundle signing key OPA already trusts, and issues receipts with inclusion proofs.
-A5: glue/facet_opa_input.py quantizes the reading with PrismPath's partitions of the same policy, ships
-the Zeckendorf frame, reconstructs a representative at the receiver, and posts it as OPA's input. A6:
-glue/opa_revision_floor.py refuses a bundle below the persisted revision floor before OPA loads it.
-A1, A2, A7 mirror OPA's own cells. Two glue modules were drafted by agy and their gates re run here.
-
-**Result.** A3: 23/23 identical decisions, outcome and rule, on the Pico 2 W Cortex-M33 core; heap high
-water 311,636 B of 520 KB SRAM, 131,072 B linear memory, USB round trip 3.8 to 5.5 ms after the first
-evaluation (54 to 57 ms on the first evaluation after a module load, lazy compilation). Grade WITH-WORK
-(171 lines, about 1.5 h, no trust anchor); A3 verdict NOT-DISTINCT. The RISC-V build (424 KB text)
-flashed but never answered; recorded as attempted, not achieved. A4/A8: 6 of 6 records received, 6 of 6
-receipts verify against the bundle verification key, an altered record and a foreign key are rejected;
-131 lines, WITH-WORK. A5: 23/23 identical decisions on the reconstructed representative; the request
-shrinks from 70 to 75 B of JSON to a 2 or 3 B frame while the response stays OPA's 43 B document; 35
-lines, WITH-WORK, and the pre registered finding stands: Facet is a transport that composes with
-anyone. A6: stale refused by the floor, tampered and unsigned refused by OPA's own verification; 54
-lines, WITH-WORK. Matrix verdicts: A1 to A8 NOT-DISTINCT, B1 to B5 LOSES.
-
-**Honest scope.** The A3 result is the important one and it cuts against the headline: the substrate
-reach that the pre registration called the crown jewel is reachable by OPA with an afternoon of glue
-on a board with 520 KB of SRAM. What the comparison does not erase is recorded in the cells rather
-than argued: the OPA path needs about 312 KB of RAM, a 136 KB module per policy, and a 60 KB
-interpreter, against a 1.7 KB interpreter class and 160 to 224 B images; it decides in milliseconds
-over USB against sub millisecond; it has no stated bound, no per decision receipt without the sink,
-and no compact wire without the Facet glue. Those are differences of degree and of composition, not a
-distinct layer under the pre registered definition, and Phase 6 must say so. Only one MCU (RP2350
-ARM) was reached; the 8 bit AVR of #92 and the FPGA fabric were not attempted for OPA and would not
-change the verdict. The receipt sink signs where the bundle private key lives, the bundle service,
-not the agent host; the floor persists a revision before OPA verifies the signature, so a high
-revision tampered bundle could lock out later legitimate ones. Both caveats are in the result notes.
-
-**Provenance.** Branch comparisons/phase0-prereg, commit after d1ba764: groupa/opa_wasm_mcu/ (glue,
-firmware, Makefile), groupa/a3_opa_mcu.py, groupa/phase5.py, glue/{opa_receipts,opa_revision_floor,
-facet_opa_input}.py, tests/test_glue_*.py, results/opa+glue/ (A1..A8 result files and evidence:
-opa_wasm3_rp2350-arm.json, receipts.jsonl, bytes.json, floor_results.json), toolchain/install.sh and
-TOOLCHAIN.md (wasm3 pin), MATRIX.md, matrix.json. Board: Raspberry Pi Pico 2 W. No push (owner gated).
-
-#### #149: Phase 6 verdict of the pre registered layer comparison: PrismPath is not a distinct layer under its own bar, thirteen wrong cell predictions reported, and the claim the cells do support stated (September 2026)
-
-**Claim.** The comparison closes with a written verdict tested against the generated matrix: under the
-section 9 definition frozen before any install, no Group A dimension is DISTINCT and every Group B
-dimension LOSES, so the "distinct layer" and "control plane" language is retired in favor of what the
-result files show.
-
-**Method.** prismpath/comparisons/VERDICT.md reads every grade and verdict from matrix.json (638 result
-files) and compares the section 8 predictions cell by cell; tests/test_comparisons_verdict.py fails if
-the document and the matrix disagree on any verdict or if the wrong prediction table drifts from the
-computed cells. Public readiness is presented as the owner's decision with a recommendation.
-
-**Result.** Verdicts: A1 to A8 NOT-DISTINCT, B1 to B5 LOSES; predicted survivors A3 and A7 both fell,
-A3 because OPA's WebAssembly runs on the RP2350 under wasm3 with 171 lines of glue (#148) and A7
-because the rubric counts a request timeout as a documented way to cap work. Thirteen of seventy eight
-cell predictions were wrong: Cedar under rated on A1, A2, and B4; Cerbos and OpenFGA over rated on A4
-and A8 because a signature would need a trust anchor they do not have; Cerbos's gRPC on A5; timeouts on
-A7 for OPA, Cedar, and Cerbos. What the cells support: PrismPath NATIVE on all eight Group A dimensions
-where no comparator exceeds two; OPA reaches the same row only with 391 lines of glue in three pieces
-that nobody ships; on the same MCU, 1.7 KB of interpreter class and 224 B images against about 60 KB
-of interpreter and 136 KB of module in 312 KB of RAM, sub millisecond against millisecond round trips,
-a signed and pin witnessed bound against none. Framing, in reader order: a control plane for autonomous systems with receipts, one of many; it
-compiles an authored decision structure, never policy from prose; the decidable tabular fragment is why
-one image decides identically from Python to a 1.7 KB interpreter or a fabric with a signed bound; Facet
-is its own wire and composes with other engines; abstain, human routing, receipts, and anti rollback are
-built in where comparators need glue.
-
-**Honest scope.** The verdict follows the rubric even where the embedded reading of the same evidence
-would favor PrismPath (A7), because the rubric was fixed first. One MCU family was reached for the OPA
-combination; wider attempts could widen the degree, not flip A3. Group B documentation rows are graded
-against published bars, not measured. The recommendation is to publish the whole comparison, verdict
-included, or none of it; the decision and the push are the owner's.
-
-**Provenance.** Branch comparisons/phase0-prereg: VERDICT.md, tests/test_comparisons_verdict.py,
-README.md pointer, MATRIX.md, matrix.json. Rows #144 to #148 hold the phases. No push (owner gated).
+**Provenance.** Branch comparisons/phase0-prereg, commits 54cd707 (MCU legs), a568419 (fabric attach),
+da41b7c (pins witness): groupa/{a3_corpus,a3,a3_mcu,a3_fabric_attach,a3_fabric_run,a7_sweep_only,
+a7_pins,a7}.py, groupa/HARDWARE_LEGS.md, results/prismpath/evidence/A3/ (a3.packets.bin,
+a3_vectors.json, the two .ppt images, kernel_aarch64_gx10.log, kernel_x86_64_protectli.log,
+mcu_ppt-rp2350_*.json, fabric_finale_attach.log, fabric_datapath_run.log, a3_fabric_bundle.json),
+results/prismpath/evidence/A7/ (pins_network_admission.json, pins_sensor_interlock.json,
+sweep_*.log), results/prismpath/A3__*.json and A7__*.json (23 each). Boards: Raspberry Pi Pico 2 W,
+Arty Z7-20 (PYNQ) via the Protectli jump, Kingst LA2016 on the GX10. No push (owner gated).
