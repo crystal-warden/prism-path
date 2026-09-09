@@ -109,16 +109,18 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install
-        run: pip install numpy pytest
-      - name: Telemetry adapter tests
-        run: python -m pytest adapters/telemetry -q
+        run: pip install numpy pytest hypothesis
+      - name: Facet wire (prismpath.telemetry) tests
+        run: python -m pytest prismpath/telemetry -q
       - name: Fusion adapter tests
         run: python -m pytest adapters/fusion -q
+      - name: Compliance adapter tests (the GRC layer; hypothesis for its property tests)
+        run: python -m pytest adapters/compliance -q
 
   # The Rust crates: the P0 kernel port (prismpath-rs) and the 1-1 telemetry adapter port
   # (prismpath-telemetry-rs). ubuntu-latest ships a stable Rust toolchain, so no setup action is needed.
   # `cargo test` runs each test binary with its crate root as the working directory, so the telemetry
-  # conformance tests resolve their ../adapters/telemetry/conformance/ relative paths — they load the SAME
+  # conformance tests resolve their ../prismpath/telemetry/conformance/ relative paths — they load the SAME
   # frozen corpora as the Python adapter and prove decision-preservation + byte-identical wire output.
   rust:
     runs-on: ubuntu-latest
@@ -134,6 +136,25 @@ jobs:
         run: cargo test --manifest-path prismpath-preflight/Cargo.toml -q
       - name: Preflight tool clippy
         run: cargo clippy --manifest-path prismpath-preflight/Cargo.toml --all-targets -- -D warnings
+      - name: Hot swap port (prismpath-hotswap-rs) — a pack signed on either runtime verifies on the other
+        run: cargo test --manifest-path prismpath-hotswap-rs/Cargo.toml -q
+      - name: Hot swap port clippy
+        run: cargo clippy --manifest-path prismpath-hotswap-rs/Cargo.toml --all-targets -- -D warnings
+      - name: Reflect bindings (prismpath-reflect-bindings) — bind, reading round trip, bind time failures
+        run: cargo test --manifest-path prismpath-reflect-bindings/Cargo.toml -q
+      - name: Reflect bindings clippy
+        run: cargo clippy --manifest-path prismpath-reflect-bindings/Cargo.toml --all-targets -- -D warnings
+
+  # The Go kernel: the fourth language kernel, judged by the same frozen vectors.
+  go:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+      - name: Go kernel conformance
+        run: cd prismpath-go && go test ./... -v
 
   # Substrate gates — the software-reproducible hardware/kernel proofs, run in CI so they cannot rot
   # silently. They HAD rotted: the RTL testbench's corpus path bit-rotted on a repo-layout change and
@@ -157,6 +178,11 @@ jobs:
         run: make -C prismpath-hw cert
       - name: RTL sim — conformance + live-sensor replay (REAL gate; fails on any cocotb failure)
         run: make -C prismpath-hw/tb gate
+      - name: C++ embed (integrations/cpp) — the C target in process, 4568/4568 byte identical to the certified CLI
+        run: |
+          cmake -S integrations/cpp -B integrations/cpp/build -DCMAKE_BUILD_TYPE=Release
+          cmake --build integrations/cpp/build -j
+          cd integrations/cpp && python gen_fixture.py && ./build/ppt_replay ../../prismpath-hw/demo/flows/hyst_band.ppt hyst_fixture.bin
       - name: Hardware evidence integrity — the OTS-anchored hashes must still match
         run: cd prismpath-hw/evidence && sha256sum -c SHA256SUMS
       - name: eBPF — build + host-side interp cross-check (124/124 vs the reference, no kernel needed)

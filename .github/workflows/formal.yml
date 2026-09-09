@@ -1,0 +1,35 @@
+name: formal
+
+# The Lean 4 development proving Figueroa quantization (formal/). Mathlib's cache is large, so this
+# runs only when formal/ or the corpora it bridges to change, and on demand. Gate: every module builds,
+# every #guard bridge check evaluates, the axiom audit prints, and no sorry exists in the sources.
+on:
+  push:
+    branches: [main]
+    paths: ["formal/**", "prismpath/telemetry/conformance/**", ".github/workflows/formal.yml"]
+  pull_request:
+    paths: ["formal/**", "prismpath/telemetry/conformance/**", ".github/workflows/formal.yml"]
+  workflow_dispatch:
+
+jobs:
+  lean:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install elan (the Lean toolchain manager); the toolchain version comes from formal/lean-toolchain
+        run: |
+          curl -sSfL https://github.com/leanprover/elan/releases/latest/download/elan-x86_64-unknown-linux-gnu.tar.gz | tar xz
+          ./elan-init -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+      - name: Mathlib cache
+        run: cd formal && lake exe cache get
+      - name: Build (modules, #guard bridge checks, axiom audit)
+        run: cd formal && lake build
+      - name: No sorry in the sources
+        run: "! grep -rn --include=*.lean -w sorry formal/FQ formal/FQ.lean"
+      - name: Bridge vectors are byte identical to a fresh generation from the frozen corpora
+        run: |
+          pip install numpy
+          cp formal/FQ/Vectors.lean /tmp/Vectors.before.lean
+          python formal/gen_vectors.py
+          diff -q /tmp/Vectors.before.lean formal/FQ/Vectors.lean
