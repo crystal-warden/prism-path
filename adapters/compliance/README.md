@@ -1,6 +1,7 @@
 # Compliance adapter — NIST SP 800-171
 
-A PrismPath **domain adapter** (the second reference adapter after SOC triage). It plugs into the
+A PrismPath **domain adapter** (the reference adapter of the model adjudicated class; the SOC triage
+adapter that preceded it is archived and will be rebuilt on the same standard). It plugs into the
 engine's six ports with **no compliance vocabulary in the core** — see `ADAPTER_CONTRACT.md` for the
 port boundary and `TESTING.md` for how it's tested. Assessment claims are logged in the engine's
 `docs/research/supporting-evidence.md`.

@@ -1,10 +1,13 @@
 # PrismPath Adapter Standard
 
 How we **create, stage, architect, develop, and verify** a domain adapter. Every use case follows this;
-the two reference adapters (`fusion/`, `telemetry/`) show it in practice, and the next domain starts here.
-Both reference adapters are the **deterministic, no-LLM** class: the Adjudicator is a Level M flow (a
-proof, not a judgment), so they exercise the ports without a model in the decision path. An adapter whose
-Adjudicator IS a model wires the same ports through the Connector SDK (§2b).
+three reference adapters show it in practice, and the next domain starts here. `fusion/` and
+`telemetry/` are the **deterministic, no-LLM** class: the Adjudicator is a Level M flow (a proof, not a
+judgment), so they exercise the ports without a model in the decision path. `compliance/` (rebuilt
+September 2026) is the class whose Adjudicator may be a model: machine checkable controls decide
+deterministically and prose objectives resolve through the Connector SDK (§2b), fail closed, with
+evidence typed verdicts. The SOC triage adapter that preceded it is archived and will be rebuilt on
+this standard.
 
 The thesis: **the engine is domain-agnostic; a domain is a set of small decisions plugged in behind
 ports.** If you find yourself adding domain vocabulary to the core, stop; it belongs in an adapter.

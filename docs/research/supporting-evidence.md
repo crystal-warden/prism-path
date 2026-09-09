@@ -27,6 +27,11 @@ memory). Consolidated July 2026; maintained through row #143 (September 2026).*
 > advisory for exactly this drift). If the compliance work is ever republished, repoint these rows at
 > its new public home.
 >
+> *(September 2026.)* The compliance adapter was rebuilt on the adapter standard and republished at
+> `adapters/compliance/` (rows #137 to #139 measure the rebuilt version, reproducible from this repo).
+> Rows #65 to #71 still describe the archived version and stay in the archived class as written; the
+> SOC triage adapter that preceded it is archived on the same terms and will be rebuilt the same way.
+>
 > Rows citing [`prismpath-hw/`](../../prismpath-hw/README.md) or
 > [`prismpath-ebpf/`](../../prismpath-ebpf/README.md) (the hardware and in kernel targets; rows
 > #72 to #76 plus the later hardware/kernel rows #89 to #90, #92 to #93) are reproducible from **THIS repo**
@@ -160,6 +165,17 @@ In this repo:
 - **On-ramp:** `docs/research/primer-students-guide.md`.
 - **Use case:** `adapters/fusion/` (the decision fusion plane; joins N decision sources into one provable fused decision).
 - **Bypass protocol:** `docs/research/bypass-measurement.md` (pre registered, per-stratum rates).
+- **The wire (added September 2026):** `PROTOCOL.md` (Facet), `docs/research/paper-facet-figueroa-quantization.md`
+  (the paper), `adapters/telemetry/` (the reference codec and its frozen corpora), `prismpath-telemetry-rs/`
+  (the Rust port), `formal/` (the Lean development, rows #140 and #141).
+- **The substrates (added September 2026):** `prismpath-hw/` (C target, `.ppt` compiler and `TABLE_FORMAT.md`,
+  fabric RTL, MCU firmware; rows #72 to #76, #89 to #93, #97, #98, #108, #117 to #123, #129, #136, #143),
+  `prismpath-ebpf/` (the kernel target; rows #78 to #80, #128, #131 to #135), `integrations/` (signed policy
+  delivery, the Vector codec, the Wireshark dissector, the C++ embed; rows #124, #101 to #103).
+- **The comparison (added September 2026):** `prismpath/comparisons/` (`PREREGISTRATION.md`, `MATRIX.md`,
+  `VERDICT.md`; rows #142 and #143).
+- **The GRC layer (added September 2026):** `adapters/compliance/` (rows #137 to #139).
+- **The map:** `docs/SYSTEM_MAP.md` (every part, by persona, with the conformance topology).
 
 Not in this repo (first party, separate; see the provenance note at the top):
 - **Merge-ready paper outlines:** the ET-BERT research + engineering contribution outlines
@@ -172,7 +188,12 @@ Not in this repo (first party, separate; see the provenance note at the top):
 ## I. Reproducibility
 Scripts; **this repo** (reproducible here; the input corpus `prismpath/benchmark/routing_bench.jsonl` is
 included): `research/gaussian_route_eval.py`, `research/gaussian_route_pca.py`, `research/learning_curve.py`,
-`research/embedder_succession.py`, `research/embeddinggemma_scout.py`, `prismpath/ledger_ots.py`. **First-party
+`research/embedder_succession.py`, `research/embeddinggemma_scout.py`, `prismpath/ledger_ots.py`. The substrate
+rows reproduce with the certify scripts beside each target: `prismpath/portable/run_vectors.mjs` and
+`prismpath-rs/src/bin/conformance.rs` (kernels), `prismpath-hw/run_vectors.py` (C target),
+`prismpath-hw/tb/` (RTL simulation), `prismpath-ebpf/cert_corpus.py` with the loader's certify (kernel),
+`prismpath-hw/{avr,rp2350,esp}/certify_*.py` and `prismpath-hw/pynq/*_cert.py` (hardware attached), and the
+comparison with `python -m prismpath.comparisons.matrix`. **First-party
 `etbert-lab/` lab repo** (SOC-triage + pilot instruments; they need the private triage / knowledge-library /
 SIEM corpora and are not reproducible from this repo; see the provenance note above): `suppression.py`,
 `flywheel.py`, `shadow_agreement.py`, `validate_triage_*.py`, `lm_deepdive.py`, `agentic_investigate.py`,
@@ -1471,4 +1492,10 @@ Arty Z7-20 (PYNQ) via the Protectli jump, Kingst LA2016 on the GX10. No push (ow
   The staging file is retired with this fold (LEDGER_STANDARDS §6): one ledger in the repo, staging
   created only for the duration of an overhaul. Anchored in
   `prismpath/evidence/ledger_v2.8_2026-09-09.SHA256SUMS` (`.ots` alongside); the anchor, not this
+  prose, is the authoritative timestamp.
+- **v2.9** (September 2026): no rows changed. The header note on the compliance adapter annotated
+  with its September rebuild (rows #137 to #139), the §H document map extended to the wire, the
+  substrates, the comparison, the GRC layer, and the system map, and §I extended with the certify
+  scripts that reproduce the substrate rows. Anchored in
+  `prismpath/evidence/ledger_v2.9_2026-09-09.SHA256SUMS` (`.ots` alongside); the anchor, not this
   prose, is the authoritative timestamp.
