@@ -46,12 +46,7 @@
       ]
     }
   },
-  "unclassified_needs_triage": [
-    "mission_control/",
-    "kernel/analysis.py",
-    "workers/chat_agent.py",
-    "ledgers/ledger_runner.py"
-  ],
+  "unclassified_needs_triage": [],
   "domain_nouns": {
     "tutor": [
       "learner",
@@ -82,5 +77,10 @@
     "orchestration/sprint_flow.py"
   ],
   "_orchestration_note": "The sprint and swarm machinery: the fallback orchestration layer for an organisation without one of its own (docs/design/control-plane.md). Kept in the package deliberately; not core, not an adapter, not gated by Signal-1.",
-  "_layout_note": "Package layout (September 2026): kernel/, routing/, safety/, hotswap/, ledgers/, workers/, orchestration/, evals/, telemetry/; the old flat module names remain as shims that alias the same module objects."
+  "_layout_note": "Package layout (September 2026): kernel/, routing/, safety/, hotswap/, ledgers/, workers/, orchestration/, evals/, telemetry/; the old flat module names remain as shims that alias the same module objects.",
+  "console": [
+    "mission_control/"
+  ],
+  "_console_note": "Mission Control is the operator's console (observe, control, events, prove); it consumes the ledgers and the kernel and is not core.",
+  "_triage_resolved_note": "September 2026: analysis.py is kernel/ (static analysis), chat_agent.py is workers/ (a worker backend), ledger_runner.py is ledgers/ (a flow driven per item with a git proof), mission_control/ is the console."
 }

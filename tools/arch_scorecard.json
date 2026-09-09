@@ -19,10 +19,5 @@
     ],
     "note": "adapter #N should cost < #1; higher %_logic_in_md = logic stays in plain-English (good)."
   },
-  "unclassified_needs_triage": [
-    "mission_control/",
-    "kernel/analysis.py",
-    "workers/chat_agent.py",
-    "ledgers/ledger_runner.py"
-  ]
+  "unclassified_needs_triage": []
 }
