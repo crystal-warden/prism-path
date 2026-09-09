@@ -13,7 +13,9 @@ suite). The **layer comparison** against policy decision engines (OPA, Cedar, Ce
 Openlane as a documented reference layer) is pre registered in
 [PREREGISTRATION.md](PREREGISTRATION.md): its neutral corpus is under `corpus/`, its result
 contract is `results/SCHEMA.md`, `matrix.py` generates `MATRIX.md` from result files only, and
-`corpus_check.py` is the self consistency gate and the freeze. The two do not share numbers.
+`corpus_check.py` is the self consistency gate and the freeze. Its outcome is written in
+[VERDICT.md](VERDICT.md) (Phase 6): under the pre registered bar PrismPath is not a distinct layer,
+and the document says what the cells do support. The two harnesses do not share numbers.
 
 ## The four baselines
 
