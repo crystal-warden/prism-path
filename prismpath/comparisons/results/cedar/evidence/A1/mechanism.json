@@ -1,0 +1,7 @@
+{
+  "carrier": "annotation",
+  "carrier_note": "Cedar decides ALLOW or DENY; the outcome rides an @outcome annotation on the one permit that applied, read from `authorize -v` diagnostics",
+  "absence": "guarded",
+  "absence_note": "a reference to a missing context attribute is an evaluation error and the policy does not apply (default DENY); the translation wrote `context has f &&` guards on every read to obtain unsatisfied semantics",
+  "human_distinct": "only by the policy id in the diagnostics (r1 vs r4/r8); no system level cause"
+}

@@ -1,0 +1,531 @@
+[
+ {
+  "policy": "network_admission",
+  "scenario": "allow_https_1",
+  "frame_bytes": 2,
+  "json_request_bytes": 74,
+  "response_bytes": 43,
+  "direct": {
+   "outcome": "allow",
+   "rule": "r6"
+  },
+  "via_facet": {
+   "outcome": "allow",
+   "rule": "r6"
+  },
+  "representative": {
+   "dst_port": 443,
+   "pkt_len": 513,
+   "protocol": 2,
+   "src_internal": false
+  },
+  "identical": true,
+  "expected": "allow"
+ },
+ {
+  "policy": "network_admission",
+  "scenario": "deny_telnet_1",
+  "frame_bytes": 2,
+  "json_request_bytes": 71,
+  "response_bytes": 42,
+  "direct": {
+   "outcome": "deny",
+   "rule": "r1"
+  },
+  "via_facet": {
+   "outcome": "deny",
+   "rule": "r1"
+  },
+  "representative": {
+   "dst_port": 23,
+   "pkt_len": 511,
+   "protocol": 2,
+   "src_internal": true
+  },
+  "identical": true,
+  "expected": "deny"
+ },
+ {
+  "policy": "network_admission",
+  "scenario": "allow_internal_ssh_1",
+  "frame_bytes": 2,
+  "json_request_bytes": 72,
+  "response_bytes": 43,
+  "direct": {
+   "outcome": "allow",
+   "rule": "r2"
+  },
+  "via_facet": {
+   "outcome": "allow",
+   "rule": "r2"
+  },
+  "representative": {
+   "dst_port": 22,
+   "pkt_len": 511,
+   "protocol": 2,
+   "src_internal": true
+  },
+  "identical": true,
+  "expected": "allow"
+ },
+ {
+  "policy": "network_admission",
+  "scenario": "deny_external_ssh_1",
+  "frame_bytes": 2,
+  "json_request_bytes": 73,
+  "response_bytes": 42,
+  "direct": {
+   "outcome": "deny",
+   "rule": "r3"
+  },
+  "via_facet": {
+   "outcome": "deny",
+   "rule": "r3"
+  },
+  "representative": {
+   "dst_port": 22,
+   "pkt_len": 511,
+   "protocol": 2,
+   "src_internal": false
+  },
+  "identical": true,
+  "expected": "deny"
+ },
+ {
+  "policy": "network_admission",
+  "scenario": "allow_dns_small_1",
+  "frame_bytes": 2,
+  "json_request_bytes": 73,
+  "response_bytes": 43,
+  "direct": {
+   "outcome": "allow",
+   "rule": "r4"
+  },
+  "via_facet": {
+   "outcome": "allow",
+   "rule": "r4"
+  },
+  "representative": {
+   "dst_port": 53,
+   "pkt_len": 511,
+   "protocol": 2,
+   "src_internal": false
+  },
+  "identical": true,
+  "expected": "allow"
+ },
+ {
+  "policy": "network_admission",
+  "scenario": "deny_dns_large_1",
+  "frame_bytes": 2,
+  "json_request_bytes": 75,
+  "response_bytes": 42,
+  "direct": {
+   "outcome": "deny",
+   "rule": "r5"
+  },
+  "via_facet": {
+   "outcome": "deny",
+   "rule": "r5"
+  },
+  "representative": {
+   "dst_port": 53,
+   "pkt_len": 513,
+   "protocol": 2,
+   "src_internal": false
+  },
+  "identical": true,
+  "expected": "deny"
+ },
+ {
+  "policy": "network_admission",
+  "scenario": "boundary_dns_512",
+  "frame_bytes": 2,
+  "json_request_bytes": 74,
+  "response_bytes": 43,
+  "direct": {
+   "outcome": "allow",
+   "rule": "r4"
+  },
+  "via_facet": {
+   "outcome": "allow",
+   "rule": "r4"
+  },
+  "representative": {
+   "dst_port": 53,
+   "pkt_len": 511,
+   "protocol": 2,
+   "src_internal": false
+  },
+  "identical": true,
+  "expected": "allow"
+ },
+ {
+  "policy": "network_admission",
+  "scenario": "boundary_dns_513",
+  "frame_bytes": 2,
+  "json_request_bytes": 74,
+  "response_bytes": 42,
+  "direct": {
+   "outcome": "deny",
+   "rule": "r5"
+  },
+  "via_facet": {
+   "outcome": "deny",
+   "rule": "r5"
+  },
+  "representative": {
+   "dst_port": 53,
+   "pkt_len": 513,
+   "protocol": 2,
+   "src_internal": false
+  },
+  "identical": true,
+  "expected": "deny"
+ },
+ {
+  "policy": "network_admission",
+  "scenario": "observe_jumbo_1",
+  "frame_bytes": 3,
+  "json_request_bytes": 75,
+  "response_bytes": 45,
+  "direct": {
+   "outcome": "observe",
+   "rule": "r7"
+  },
+  "via_facet": {
+   "outcome": "observe",
+   "rule": "r7"
+  },
+  "representative": {
+   "dst_port": 444,
+   "pkt_len": 1400,
+   "protocol": 2,
+   "src_internal": true
+  },
+  "identical": true,
+  "expected": "observe"
+ },
+ {
+  "policy": "network_admission",
+  "scenario": "boundary_jumbo_1399",
+  "frame_bytes": 2,
+  "json_request_bytes": 75,
+  "response_bytes": 45,
+  "direct": {
+   "outcome": "observe",
+   "rule": "r9"
+  },
+  "via_facet": {
+   "outcome": "observe",
+   "rule": "r9"
+  },
+  "representative": {
+   "dst_port": 444,
+   "pkt_len": 513,
+   "protocol": 2,
+   "src_internal": true
+  },
+  "identical": true,
+  "expected": "observe"
+ },
+ {
+  "policy": "network_admission",
+  "scenario": "boundary_jumbo_1400",
+  "frame_bytes": 3,
+  "json_request_bytes": 75,
+  "response_bytes": 45,
+  "direct": {
+   "outcome": "observe",
+   "rule": "r7"
+  },
+  "via_facet": {
+   "outcome": "observe",
+   "rule": "r7"
+  },
+  "representative": {
+   "dst_port": 444,
+   "pkt_len": 1400,
+   "protocol": 2,
+   "src_internal": true
+  },
+  "identical": true,
+  "expected": "observe"
+ },
+ {
+  "policy": "network_admission",
+  "scenario": "allow_icmp_1",
+  "frame_bytes": 2,
+  "json_request_bytes": 70,
+  "response_bytes": 43,
+  "direct": {
+   "outcome": "allow",
+   "rule": "r8"
+  },
+  "via_facet": {
+   "outcome": "allow",
+   "rule": "r8"
+  },
+  "representative": {
+   "dst_port": 21,
+   "pkt_len": 511,
+   "protocol": 1,
+   "src_internal": true
+  },
+  "identical": true,
+  "expected": "allow"
+ },
+ {
+  "policy": "network_admission",
+  "scenario": "observe_other_1",
+  "frame_bytes": 2,
+  "json_request_bytes": 75,
+  "response_bytes": 45,
+  "direct": {
+   "outcome": "observe",
+   "rule": "r9"
+  },
+  "via_facet": {
+   "outcome": "observe",
+   "rule": "r9"
+  },
+  "representative": {
+   "dst_port": 444,
+   "pkt_len": 511,
+   "protocol": 2,
+   "src_internal": false
+  },
+  "identical": true,
+  "expected": "observe"
+ },
+ {
+  "policy": "sensor_interlock",
+  "scenario": "allow_nominal_1",
+  "frame_bytes": 2,
+  "json_request_bytes": 73,
+  "response_bytes": 43,
+  "direct": {
+   "outcome": "allow",
+   "rule": "r4"
+  },
+  "via_facet": {
+   "outcome": "allow",
+   "rule": "r4"
+  },
+  "representative": {
+   "armed": false,
+   "pressure_kpa": 749,
+   "sensor_ok": true,
+   "temp_c": 119
+  },
+  "identical": true,
+  "expected": "allow"
+ },
+ {
+  "policy": "sensor_interlock",
+  "scenario": "allow_armed_nominal_1",
+  "frame_bytes": 2,
+  "json_request_bytes": 72,
+  "response_bytes": 43,
+  "direct": {
+   "outcome": "allow",
+   "rule": "r4"
+  },
+  "via_facet": {
+   "outcome": "allow",
+   "rule": "r4"
+  },
+  "representative": {
+   "armed": true,
+   "pressure_kpa": 749,
+   "sensor_ok": true,
+   "temp_c": 119
+  },
+  "identical": true,
+  "expected": "allow"
+ },
+ {
+  "policy": "sensor_interlock",
+  "scenario": "observe_temp_1",
+  "frame_bytes": 2,
+  "json_request_bytes": 73,
+  "response_bytes": 45,
+  "direct": {
+   "outcome": "observe",
+   "rule": "r3"
+  },
+  "via_facet": {
+   "outcome": "observe",
+   "rule": "r3"
+  },
+  "representative": {
+   "armed": true,
+   "pressure_kpa": 749,
+   "sensor_ok": true,
+   "temp_c": 120
+  },
+  "identical": true,
+  "expected": "observe"
+ },
+ {
+  "policy": "sensor_interlock",
+  "scenario": "deny_temp_1",
+  "frame_bytes": 2,
+  "json_request_bytes": 73,
+  "response_bytes": 42,
+  "direct": {
+   "outcome": "deny",
+   "rule": "r2"
+  },
+  "via_facet": {
+   "outcome": "deny",
+   "rule": "r2"
+  },
+  "representative": {
+   "armed": true,
+   "pressure_kpa": 749,
+   "sensor_ok": true,
+   "temp_c": 150
+  },
+  "identical": true,
+  "expected": "deny"
+ },
+ {
+  "policy": "sensor_interlock",
+  "scenario": "deny_pressure_1",
+  "frame_bytes": 2,
+  "json_request_bytes": 73,
+  "response_bytes": 42,
+  "direct": {
+   "outcome": "deny",
+   "rule": "r2"
+  },
+  "via_facet": {
+   "outcome": "deny",
+   "rule": "r2"
+  },
+  "representative": {
+   "armed": false,
+   "pressure_kpa": 900,
+   "sensor_ok": true,
+   "temp_c": 119
+  },
+  "identical": true,
+  "expected": "deny"
+ },
+ {
+  "policy": "sensor_interlock",
+  "scenario": "boundary_temp_149",
+  "frame_bytes": 2,
+  "json_request_bytes": 74,
+  "response_bytes": 45,
+  "direct": {
+   "outcome": "observe",
+   "rule": "r3"
+  },
+  "via_facet": {
+   "outcome": "observe",
+   "rule": "r3"
+  },
+  "representative": {
+   "armed": false,
+   "pressure_kpa": 749,
+   "sensor_ok": true,
+   "temp_c": 120
+  },
+  "identical": true,
+  "expected": "observe"
+ },
+ {
+  "policy": "sensor_interlock",
+  "scenario": "boundary_temp_150",
+  "frame_bytes": 2,
+  "json_request_bytes": 74,
+  "response_bytes": 42,
+  "direct": {
+   "outcome": "deny",
+   "rule": "r2"
+  },
+  "via_facet": {
+   "outcome": "deny",
+   "rule": "r2"
+  },
+  "representative": {
+   "armed": false,
+   "pressure_kpa": 749,
+   "sensor_ok": true,
+   "temp_c": 150
+  },
+  "identical": true,
+  "expected": "deny"
+ },
+ {
+  "policy": "sensor_interlock",
+  "scenario": "boundary_nominal_119_749",
+  "frame_bytes": 2,
+  "json_request_bytes": 73,
+  "response_bytes": 43,
+  "direct": {
+   "outcome": "allow",
+   "rule": "r4"
+  },
+  "via_facet": {
+   "outcome": "allow",
+   "rule": "r4"
+  },
+  "representative": {
+   "armed": true,
+   "pressure_kpa": 749,
+   "sensor_ok": true,
+   "temp_c": 119
+  },
+  "identical": true,
+  "expected": "allow"
+ },
+ {
+  "policy": "sensor_interlock",
+  "scenario": "boundary_temp_120",
+  "frame_bytes": 2,
+  "json_request_bytes": 73,
+  "response_bytes": 45,
+  "direct": {
+   "outcome": "observe",
+   "rule": "r3"
+  },
+  "via_facet": {
+   "outcome": "observe",
+   "rule": "r3"
+  },
+  "representative": {
+   "armed": true,
+   "pressure_kpa": 749,
+   "sensor_ok": true,
+   "temp_c": 120
+  },
+  "identical": true,
+  "expected": "observe"
+ },
+ {
+  "policy": "sensor_interlock",
+  "scenario": "escalation_sensor_dark_armed_1",
+  "frame_bytes": 2,
+  "json_request_bytes": 73,
+  "response_bytes": 52,
+  "direct": {
+   "outcome": "escalate_human",
+   "rule": "r1"
+  },
+  "via_facet": {
+   "outcome": "escalate_human",
+   "rule": "r1"
+  },
+  "representative": {
+   "armed": true,
+   "pressure_kpa": 749,
+   "sensor_ok": false,
+   "temp_c": 119
+  },
+  "identical": true,
+  "expected": "escalate_human"
+ }
+]

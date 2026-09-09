@@ -1,0 +1,18 @@
+{
+  "citations": [
+    "SPEC.md section 2 (edges, tiers), section 3 (routing: deterministic first, document order, first true)",
+    "SPEC.md section 4 (predicate language), section 4.3 (Level M fragment)",
+    "SPEC.md section 5.5 (reserved worker outcome fields: needs_human)"
+  ],
+  "dropped_rules": [],
+  "expressible": true,
+  "files": [
+    "expense_approval.md"
+  ],
+  "idiomatic": true,
+  "notes": [
+    "Level M: yes"
+  ],
+  "policy": "expense_approval",
+  "system": "prismpath"
+}

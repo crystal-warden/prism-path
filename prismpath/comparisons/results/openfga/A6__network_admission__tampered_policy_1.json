@@ -1,0 +1,17 @@
+{
+  "dimension": "A6",
+  "evidence_path": "prismpath/comparisons/results/openfga/evidence/A6",
+  "expected": "refuse_policy",
+  "glue": null,
+  "grade": "NOT",
+  "harness_commit": "1d8b6ac",
+  "idiomatic": true,
+  "match": false,
+  "notes": "OpenFGA authorization models are immutable by id and written through the API with no signature; a client may check against any older model id, and a tampered model is simply a new model. No refusal facility at the point.",
+  "observed": "accepted",
+  "policy": "network_admission",
+  "run_at": "2026-09-08T22:35:32Z",
+  "scenario": "tampered_policy_1",
+  "system": "openfga",
+  "system_version": "1.19.0"
+}

@@ -1,0 +1,66 @@
+apiVersion: api.cerbos.dev/v1
+resourcePolicy:
+  version: default
+  resource: access_control_rbac_abac
+  importDerivedRoles: [access_control_rbac_abac_roles]
+  rules:
+    - name: r1
+      actions: ["decide"]
+      effect: EFFECT_ALLOW
+      roles: ["*"]
+      condition:
+        match:
+          expr: "(has(request.principal.attr.user_role) && request.principal.attr.user_role == \"admin\")"
+      output:
+        when:
+          ruleActivated: "{\"outcome\": \"allow\", \"rule\": \"r1\"}"
+    - name: r2
+      actions: ["decide"]
+      effect: EFFECT_DENY
+      roles: ["*"]
+      condition:
+        match:
+          expr: "((has(request.resource.attr.resource_sensitivity) && request.resource.attr.resource_sensitivity == \"high\") && (has(request.principal.attr.user_role) && !(request.principal.attr.user_role in [\"admin\", \"manager\"]))) && !(has(request.principal.attr.user_role) && request.principal.attr.user_role == \"admin\")"
+      output:
+        when:
+          ruleActivated: "{\"outcome\": \"deny\", \"rule\": \"r2\"}"
+    - name: r3
+      actions: ["decide"]
+      effect: EFFECT_ALLOW
+      roles: ["*"]
+      condition:
+        match:
+          expr: "(has(request.principal.attr.user_id) && has(request.resource.attr.resource_owner_id) && request.principal.attr.user_id == request.resource.attr.resource_owner_id) && !(has(request.principal.attr.user_role) && request.principal.attr.user_role == \"admin\") && !((has(request.resource.attr.resource_sensitivity) && request.resource.attr.resource_sensitivity == \"high\") && (has(request.principal.attr.user_role) && !(request.principal.attr.user_role in [\"admin\", \"manager\"])))"
+      output:
+        when:
+          ruleActivated: "{\"outcome\": \"allow\", \"rule\": \"r3\"}"
+    - name: r4
+      actions: ["decide"]
+      effect: EFFECT_ALLOW
+      roles: ["*"]
+      condition:
+        match:
+          expr: "((has(request.resource.attr.action) && request.resource.attr.action == \"read\") && (has(request.principal.attr.user_groups) && has(request.resource.attr.resource_groups) && request.principal.attr.user_groups.exists(g, g in request.resource.attr.resource_groups))) && !(has(request.principal.attr.user_role) && request.principal.attr.user_role == \"admin\") && !((has(request.resource.attr.resource_sensitivity) && request.resource.attr.resource_sensitivity == \"high\") && (has(request.principal.attr.user_role) && !(request.principal.attr.user_role in [\"admin\", \"manager\"]))) && !(has(request.principal.attr.user_id) && has(request.resource.attr.resource_owner_id) && request.principal.attr.user_id == request.resource.attr.resource_owner_id)"
+      output:
+        when:
+          ruleActivated: "{\"outcome\": \"allow\", \"rule\": \"r4\"}"
+    - name: r5
+      actions: ["decide"]
+      effect: EFFECT_ALLOW
+      roles: ["*"]
+      condition:
+        match:
+          expr: "(request.principal.roles.exists(r, r in [\"manager\", \"admin\"]) && (has(request.resource.attr.action) && request.resource.attr.action in [\"read\", \"write\"]) && (has(request.resource.attr.hour_utc) && request.resource.attr.hour_utc >= 8) && (has(request.resource.attr.hour_utc) && request.resource.attr.hour_utc < 18)) && !(has(request.principal.attr.user_role) && request.principal.attr.user_role == \"admin\") && !((has(request.resource.attr.resource_sensitivity) && request.resource.attr.resource_sensitivity == \"high\") && (has(request.principal.attr.user_role) && !(request.principal.attr.user_role in [\"admin\", \"manager\"]))) && !(has(request.principal.attr.user_id) && has(request.resource.attr.resource_owner_id) && request.principal.attr.user_id == request.resource.attr.resource_owner_id) && !((has(request.resource.attr.action) && request.resource.attr.action == \"read\") && (has(request.principal.attr.user_groups) && has(request.resource.attr.resource_groups) && request.principal.attr.user_groups.exists(g, g in request.resource.attr.resource_groups)))"
+      output:
+        when:
+          ruleActivated: "{\"outcome\": \"allow\", \"rule\": \"r5\"}"
+    - name: r6
+      actions: ["decide"]
+      effect: EFFECT_DENY
+      roles: ["*"]
+      condition:
+        match:
+          expr: "true && !(has(request.principal.attr.user_role) && request.principal.attr.user_role == \"admin\") && !((has(request.resource.attr.resource_sensitivity) && request.resource.attr.resource_sensitivity == \"high\") && (has(request.principal.attr.user_role) && !(request.principal.attr.user_role in [\"admin\", \"manager\"]))) && !(has(request.principal.attr.user_id) && has(request.resource.attr.resource_owner_id) && request.principal.attr.user_id == request.resource.attr.resource_owner_id) && !((has(request.resource.attr.action) && request.resource.attr.action == \"read\") && (has(request.principal.attr.user_groups) && has(request.resource.attr.resource_groups) && request.principal.attr.user_groups.exists(g, g in request.resource.attr.resource_groups))) && !(request.principal.roles.exists(r, r in [\"manager\", \"admin\"]) && (has(request.resource.attr.action) && request.resource.attr.action in [\"read\", \"write\"]) && (has(request.resource.attr.hour_utc) && request.resource.attr.hour_utc >= 8) && (has(request.resource.attr.hour_utc) && request.resource.attr.hour_utc < 18))"
+      output:
+        when:
+          ruleActivated: "{\"outcome\": \"deny\", \"rule\": \"r6\"}"

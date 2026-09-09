@@ -1,0 +1,17 @@
+{
+  "dimension": "A6",
+  "evidence_path": "prismpath/comparisons/results/prismpath/evidence/A6",
+  "expected": "refuse_policy",
+  "glue": null,
+  "grade": "NATIVE",
+  "harness_commit": "1d8b6ac",
+  "idiomatic": true,
+  "match": true,
+  "notes": "PolicyHost.swap at the enforcement point (no server): reasons='sig:missing'; active policy unchanged at version 2. Corpus expectation reason unsigned, predicted cause 1. The version floor is an fsync'd file on the point; every attempt, accepted or refused, is one Merkle logged audit event (swaps.log). The compiled image is the corpus flow through the untouched table compiler.",
+  "observed": "refuse_policy",
+  "policy": "network_admission",
+  "run_at": "2026-09-08T22:35:26Z",
+  "scenario": "unsigned_policy_1",
+  "system": "prismpath",
+  "system_version": "repo@1d8b6ac"
+}

@@ -1,0 +1,7 @@
+Building eBPF program clang...
+cb912099cdd50a16
+6.17.2-1-pve
+Debian clang version 19.1.7 (3+b1)
+
+eBPF in-kernel conformance: 23/23 vectors match the reference.
+  ALL PASS — every in-fragment vector routed identically in-kernel and by the reference.

@@ -1,0 +1,34 @@
+{
+  "dimension": "A5",
+  "evidence_path": "prismpath/comparisons/results/opa+glue/evidence/A5",
+  "expected": "allow",
+  "glue": {
+    "components": [
+      "quantizer partitions from the policy",
+      "Zeckendorf packed frame",
+      "decode to representative",
+      "OPA REST call"
+    ],
+    "description": "Facet frame from the sender (PrismPath's quantizer over the same policy), decoded to a representative reading and posted as OPA's input JSON; the response stays OPA's JSON result document",
+    "hours": 0.5,
+    "loc": 35
+  },
+  "grade": "WITH-WORK",
+  "harness_commit": "592fa6d",
+  "idiomatic": true,
+  "match": true,
+  "measurements": {
+    "bytes_on_wire": 45,
+    "json_request_bytes_direct": 74,
+    "request_bytes": 2,
+    "result_bytes": 43,
+    "total_plus_envelope_28B": 73
+  },
+  "notes": "Facet frame 2 B replaces OPA's 74 B JSON request; the receiver reconstructs {'dst_port': 53, 'pkt_len': 511, 'protocol': 2, 'src_internal': False} and OPA decides {'outcome': 'allow', 'rule': 'r4'}, identical to its decision on the original reading {'outcome': 'allow', 'rule': 'r4'}. The response stays OPA's 43 B JSON document, so the round trip is 45 B against PrismPath's 4 to 6 B frame plus receipt. Finding as pre registered: Facet is a transport that composes with OPA (glue 35 lines, 0.5 h), which is a real but different claim from a moat.",
+  "observed": "allow",
+  "policy": "network_admission",
+  "run_at": "2026-09-09T01:31:52Z",
+  "scenario": "boundary_dns_512",
+  "system": "opa+glue",
+  "system_version": "1.20.2+glue"
+}

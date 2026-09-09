@@ -1,0 +1,17 @@
+{
+  "dimension": "A1",
+  "evidence_path": "prismpath/comparisons/systems/opa/generated",
+  "expected": "abstain",
+  "glue": null,
+  "grade": "NATIVE",
+  "harness_commit": "fcbabc5",
+  "idiomatic": true,
+  "match": true,
+  "notes": "Observed by the real system in the Phase 2 conformance run: abstain (expected abstain). Carrier: first_class (the decision rule returns an arbitrary document {outcome, rule}). Absence: unsatisfied (a reference to a missing input field is undefined, so the rule body fails (documented undefined semantics); with no catch all the whole decision is undefined and opa eval returns an empty result set with exit 0 (observed on sensor_interlock probes)).",
+  "observed": "abstain",
+  "policy": "ai_action_gate",
+  "run_at": "2026-09-08T22:30:21Z",
+  "scenario": "abstain_low_confidence_1",
+  "system": "opa",
+  "system_version": "1.20.2"
+}

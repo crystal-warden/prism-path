@@ -1,0 +1,18 @@
+{
+  "citations": [
+    "https://docs.cerbos.dev/cerbos/latest/policies/resource_policies (how Cerbos evaluates requests: ALLOW+DENY -> DENY; roles '*')",
+    "https://docs.cerbos.dev/cerbos/latest/policies/conditions (CEL conditions; has() for optional attributes)",
+    "https://docs.cerbos.dev/cerbos/latest/policies/outputs (output expressions per rule)",
+    "https://docs.cerbos.dev/cerbos/latest/policies/derived_roles (parentRoles for role hierarchies)",
+    "https://docs.cerbos.dev/cerbos/latest/api/index (CheckResources)"
+  ],
+  "dropped_rules": [],
+  "expressible": false,
+  "files": [],
+  "idiomatic": true,
+  "notes": [
+    "not expressible: Cerbos has no relationship store; conditions see only the attributes the caller sends, so the caller would have to flatten group membership and folder inheritance into resource attributes first (a Phase 5 combination test, not a translation)"
+  ],
+  "policy": "document_sharing_rebac",
+  "system": "cerbos"
+}

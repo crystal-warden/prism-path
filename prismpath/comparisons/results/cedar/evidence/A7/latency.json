@@ -1,0 +1,278 @@
+[
+ {
+  "policy": "network_admission",
+  "scenario": "allow_https_1",
+  "cedarpy_ns": {
+   "min": 36128,
+   "median": 37504,
+   "p95": 38096,
+   "max": 162432,
+   "n": 100000
+  },
+  "decision": "Decision.Allow"
+ },
+ {
+  "policy": "network_admission",
+  "scenario": "deny_telnet_1",
+  "cedarpy_ns": {
+   "min": 34256,
+   "median": 34960,
+   "p95": 35440,
+   "max": 105728,
+   "n": 100000
+  },
+  "decision": "Decision.Allow"
+ },
+ {
+  "policy": "network_admission",
+  "scenario": "allow_internal_ssh_1",
+  "cedarpy_ns": {
+   "min": 35728,
+   "median": 36640,
+   "p95": 37200,
+   "max": 92672,
+   "n": 100000
+  },
+  "decision": "Decision.Allow"
+ },
+ {
+  "policy": "network_admission",
+  "scenario": "deny_external_ssh_1",
+  "cedarpy_ns": {
+   "min": 35952,
+   "median": 36528,
+   "p95": 37040,
+   "max": 109280,
+   "n": 100000
+  },
+  "decision": "Decision.Allow"
+ },
+ {
+  "policy": "network_admission",
+  "scenario": "allow_dns_small_1",
+  "cedarpy_ns": {
+   "min": 35936,
+   "median": 36880,
+   "p95": 37488,
+   "max": 109040,
+   "n": 100000
+  },
+  "decision": "Decision.Allow"
+ },
+ {
+  "policy": "network_admission",
+  "scenario": "deny_dns_large_1",
+  "cedarpy_ns": {
+   "min": 37584,
+   "median": 38320,
+   "p95": 38880,
+   "max": 161040,
+   "n": 100000
+  },
+  "decision": "Decision.Allow"
+ },
+ {
+  "policy": "network_admission",
+  "scenario": "boundary_dns_512",
+  "cedarpy_ns": {
+   "min": 36576,
+   "median": 37168,
+   "p95": 37664,
+   "max": 136352,
+   "n": 100000
+  },
+  "decision": "Decision.Allow"
+ },
+ {
+  "policy": "network_admission",
+  "scenario": "boundary_dns_513",
+  "cedarpy_ns": {
+   "min": 37696,
+   "median": 38352,
+   "p95": 38880,
+   "max": 123136,
+   "n": 100000
+  },
+  "decision": "Decision.Allow"
+ },
+ {
+  "policy": "network_admission",
+  "scenario": "observe_jumbo_1",
+  "cedarpy_ns": {
+   "min": 37088,
+   "median": 37984,
+   "p95": 38608,
+   "max": 105920,
+   "n": 100000
+  },
+  "decision": "Decision.Allow"
+ },
+ {
+  "policy": "network_admission",
+  "scenario": "boundary_jumbo_1399",
+  "cedarpy_ns": {
+   "min": 36160,
+   "median": 36768,
+   "p95": 37264,
+   "max": 111008,
+   "n": 100000
+  },
+  "decision": "Decision.Allow"
+ },
+ {
+  "policy": "network_admission",
+  "scenario": "boundary_jumbo_1400",
+  "cedarpy_ns": {
+   "min": 37200,
+   "median": 38080,
+   "p95": 38752,
+   "max": 106464,
+   "n": 100000
+  },
+  "decision": "Decision.Allow"
+ },
+ {
+  "policy": "network_admission",
+  "scenario": "allow_icmp_1",
+  "cedarpy_ns": {
+   "min": 38016,
+   "median": 38609,
+   "p95": 39136,
+   "max": 97024,
+   "n": 100000
+  },
+  "decision": "Decision.Allow"
+ },
+ {
+  "policy": "network_admission",
+  "scenario": "observe_other_1",
+  "cedarpy_ns": {
+   "min": 35697,
+   "median": 36560,
+   "p95": 37200,
+   "max": 463969,
+   "n": 100000
+  },
+  "decision": "Decision.Allow"
+ },
+ {
+  "policy": "sensor_interlock",
+  "scenario": "allow_nominal_1",
+  "cedarpy_ns": {
+   "min": 32208,
+   "median": 32752,
+   "p95": 33104,
+   "max": 100000,
+   "n": 100000
+  },
+  "decision": "Decision.Allow"
+ },
+ {
+  "policy": "sensor_interlock",
+  "scenario": "allow_armed_nominal_1",
+  "cedarpy_ns": {
+   "min": 31360,
+   "median": 32528,
+   "p95": 33040,
+   "max": 106576,
+   "n": 100000
+  },
+  "decision": "Decision.Allow"
+ },
+ {
+  "policy": "sensor_interlock",
+  "scenario": "observe_temp_1",
+  "cedarpy_ns": {
+   "min": 30816,
+   "median": 31456,
+   "p95": 31824,
+   "max": 84080,
+   "n": 100000
+  },
+  "decision": "Decision.Allow"
+ },
+ {
+  "policy": "sensor_interlock",
+  "scenario": "deny_temp_1",
+  "cedarpy_ns": {
+   "min": 30768,
+   "median": 31264,
+   "p95": 31600,
+   "max": 96560,
+   "n": 100000
+  },
+  "decision": "Decision.Allow"
+ },
+ {
+  "policy": "sensor_interlock",
+  "scenario": "deny_pressure_1",
+  "cedarpy_ns": {
+   "min": 30864,
+   "median": 31984,
+   "p95": 32512,
+   "max": 86929,
+   "n": 100000
+  },
+  "decision": "Decision.Allow"
+ },
+ {
+  "policy": "sensor_interlock",
+  "scenario": "boundary_temp_149",
+  "cedarpy_ns": {
+   "min": 30992,
+   "median": 31488,
+   "p95": 31856,
+   "max": 99424,
+   "n": 100000
+  },
+  "decision": "Decision.Allow"
+ },
+ {
+  "policy": "sensor_interlock",
+  "scenario": "boundary_temp_150",
+  "cedarpy_ns": {
+   "min": 29984,
+   "median": 31072,
+   "p95": 31552,
+   "max": 104752,
+   "n": 100000
+  },
+  "decision": "Decision.Allow"
+ },
+ {
+  "policy": "sensor_interlock",
+  "scenario": "boundary_nominal_119_749",
+  "cedarpy_ns": {
+   "min": 31648,
+   "median": 32480,
+   "p95": 33056,
+   "max": 467265,
+   "n": 100000
+  },
+  "decision": "Decision.Allow"
+ },
+ {
+  "policy": "sensor_interlock",
+  "scenario": "boundary_temp_120",
+  "cedarpy_ns": {
+   "min": 30896,
+   "median": 31488,
+   "p95": 31888,
+   "max": 93968,
+   "n": 100000
+  },
+  "decision": "Decision.Allow"
+ },
+ {
+  "policy": "sensor_interlock",
+  "scenario": "escalation_sensor_dark_armed_1",
+  "cedarpy_ns": {
+   "min": 31088,
+   "median": 31584,
+   "p95": 31936,
+   "max": 93712,
+   "n": 100000
+  },
+  "decision": "Decision.Allow"
+ }
+]

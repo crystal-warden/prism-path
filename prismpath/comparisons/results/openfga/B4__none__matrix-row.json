@@ -1,0 +1,17 @@
+{
+  "dimension": "B4",
+  "evidence_path": "prismpath/comparisons/results/openfga/evidence/B4",
+  "expected": null,
+  "glue": null,
+  "grade": "NATIVE",
+  "harness_commit": "ecae31b",
+  "idiomatic": true,
+  "match": false,
+  "notes": "Five SDKs, a CLI, Docker images, Helm charts, and CNCF incubation. Pre registered NATIVE. Sources: prismpath/comparisons/results/openfga/evidence/B4/sources.txt.",
+  "observed": "not_applicable",
+  "policy": "none",
+  "run_at": "2026-09-09T01:04:30Z",
+  "scenario": "matrix-row",
+  "system": "openfga",
+  "system_version": "1.19.0"
+}

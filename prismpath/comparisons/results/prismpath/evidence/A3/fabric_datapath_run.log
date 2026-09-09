@@ -1,0 +1,29 @@
+BOOT 2026-08-26T05:59:18
+LOADED ppt_datapath.bit magic ok
+A3ROW {"policy": "network_admission", "scenario": "allow_https_1", "fabric_target": 6, "fabric_edge": 5, "cause": 0, "python_target": 6, "agree": true, "round_trip_us": 110.1}
+A3ROW {"policy": "network_admission", "scenario": "deny_telnet_1", "fabric_target": 1, "fabric_edge": 0, "cause": 0, "python_target": 1, "agree": true, "round_trip_us": 98.8}
+A3ROW {"policy": "network_admission", "scenario": "allow_internal_ssh_1", "fabric_target": 2, "fabric_edge": 1, "cause": 0, "python_target": 2, "agree": true, "round_trip_us": 97.5}
+A3ROW {"policy": "network_admission", "scenario": "deny_external_ssh_1", "fabric_target": 3, "fabric_edge": 2, "cause": 0, "python_target": 3, "agree": true, "round_trip_us": 94.6}
+A3ROW {"policy": "network_admission", "scenario": "allow_dns_small_1", "fabric_target": 4, "fabric_edge": 3, "cause": 0, "python_target": 4, "agree": true, "round_trip_us": 93.9}
+A3ROW {"policy": "network_admission", "scenario": "deny_dns_large_1", "fabric_target": 5, "fabric_edge": 4, "cause": 0, "python_target": 5, "agree": true, "round_trip_us": 93.9}
+A3ROW {"policy": "network_admission", "scenario": "boundary_dns_512", "fabric_target": 4, "fabric_edge": 3, "cause": 0, "python_target": 4, "agree": true, "round_trip_us": 92.9}
+A3ROW {"policy": "network_admission", "scenario": "boundary_dns_513", "fabric_target": 5, "fabric_edge": 4, "cause": 0, "python_target": 5, "agree": true, "round_trip_us": 93.2}
+A3ROW {"policy": "network_admission", "scenario": "observe_jumbo_1", "fabric_target": 7, "fabric_edge": 6, "cause": 0, "python_target": 7, "agree": true, "round_trip_us": 93.6}
+A3ROW {"policy": "network_admission", "scenario": "boundary_jumbo_1399", "fabric_target": 9, "fabric_edge": 8, "cause": 0, "python_target": 9, "agree": true, "round_trip_us": 94.2}
+A3ROW {"policy": "network_admission", "scenario": "boundary_jumbo_1400", "fabric_target": 7, "fabric_edge": 6, "cause": 0, "python_target": 7, "agree": true, "round_trip_us": 94.7}
+A3ROW {"policy": "network_admission", "scenario": "allow_icmp_1", "fabric_target": 8, "fabric_edge": 7, "cause": 0, "python_target": 8, "agree": true, "round_trip_us": 100.6}
+A3ROW {"policy": "network_admission", "scenario": "observe_other_1", "fabric_target": 9, "fabric_edge": 8, "cause": 0, "python_target": 9, "agree": true, "round_trip_us": 94.7}
+A3ROW {"policy": "sensor_interlock", "scenario": "allow_nominal_1", "fabric_target": 4, "fabric_edge": 3, "cause": 0, "python_target": 4, "agree": true, "round_trip_us": 95.4}
+A3ROW {"policy": "sensor_interlock", "scenario": "allow_armed_nominal_1", "fabric_target": 4, "fabric_edge": 3, "cause": 0, "python_target": 4, "agree": true, "round_trip_us": 94.6}
+A3ROW {"policy": "sensor_interlock", "scenario": "observe_temp_1", "fabric_target": 3, "fabric_edge": 2, "cause": 0, "python_target": 3, "agree": true, "round_trip_us": 94.9}
+A3ROW {"policy": "sensor_interlock", "scenario": "deny_temp_1", "fabric_target": 2, "fabric_edge": 1, "cause": 0, "python_target": 2, "agree": true, "round_trip_us": 93.6}
+A3ROW {"policy": "sensor_interlock", "scenario": "deny_pressure_1", "fabric_target": 2, "fabric_edge": 1, "cause": 0, "python_target": 2, "agree": true, "round_trip_us": 94.1}
+A3ROW {"policy": "sensor_interlock", "scenario": "boundary_temp_149", "fabric_target": 3, "fabric_edge": 2, "cause": 0, "python_target": 3, "agree": true, "round_trip_us": 93.2}
+A3ROW {"policy": "sensor_interlock", "scenario": "boundary_temp_150", "fabric_target": 2, "fabric_edge": 1, "cause": 0, "python_target": 2, "agree": true, "round_trip_us": 93.1}
+A3ROW {"policy": "sensor_interlock", "scenario": "boundary_nominal_119_749", "fabric_target": 4, "fabric_edge": 3, "cause": 0, "python_target": 4, "agree": true, "round_trip_us": 94.1}
+A3ROW {"policy": "sensor_interlock", "scenario": "boundary_temp_120", "fabric_target": 3, "fabric_edge": 2, "cause": 0, "python_target": 3, "agree": true, "round_trip_us": 93.0}
+A3ROW {"policy": "sensor_interlock", "scenario": "escalation_sensor_dark_armed_1", "fabric_target": 1, "fabric_edge": 0, "cause": 0, "python_target": 1, "agree": true, "round_trip_us": 93.4}
+A3DONE 23/23 fabric targets equal the host Python targets
+SWEEP START network_admission wcet_cycles=35
+SWEEP END network_admission evaluations=536367
+SWEEP START sensor_interlock wcet_cycles=24

@@ -1,0 +1,17 @@
+{
+  "dimension": "B4",
+  "evidence_path": "prismpath/comparisons/results/cedar/evidence/B4",
+  "expected": null,
+  "glue": null,
+  "grade": "NATIVE",
+  "harness_commit": "ecae31b",
+  "idiomatic": true,
+  "match": false,
+  "notes": "Against the pre registered WITH-WORK: Rust, Java, and Go implementations plus WebAssembly, Kubernetes authorization and admission (cedar-access-control-for-k8s), a local agent, an Express.js integration, editor support, and a managed service (Amazon Verified Permissions). Three of the four integration classes and three implementations meet the NATIVE bar fixed above; the prediction was wrong and is reported as such. Sources: prismpath/comparisons/results/cedar/evidence/B4/sources.txt.",
+  "observed": "not_applicable",
+  "policy": "none",
+  "run_at": "2026-09-09T01:04:30Z",
+  "scenario": "matrix-row",
+  "system": "cedar",
+  "system_version": "4.12.0"
+}

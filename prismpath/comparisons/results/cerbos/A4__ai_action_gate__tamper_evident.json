@@ -1,0 +1,24 @@
+{
+  "dimension": "A4",
+  "evidence_path": "prismpath/comparisons/results/cerbos/evidence/A8",
+  "expected": "true",
+  "glue": {
+    "components": [
+      "sha256 chain"
+    ],
+    "description": "hash chain over the decision audit records",
+    "hours": 1,
+    "loc": 60
+  },
+  "grade": "WITH-WORK",
+  "harness_commit": "fcbabc5",
+  "idiomatic": true,
+  "match": false,
+  "notes": "Sub property tamper_evident, from the A8 loop run of ai_action_gate/ai_worker_loop_1: the audit file is append only JSON with no hash chain; a sidecar chain is glue without a key.",
+  "observed": "false",
+  "policy": "ai_action_gate",
+  "run_at": "2026-09-08T22:30:21Z",
+  "scenario": "tamper_evident",
+  "system": "cerbos",
+  "system_version": "0.55.0"
+}

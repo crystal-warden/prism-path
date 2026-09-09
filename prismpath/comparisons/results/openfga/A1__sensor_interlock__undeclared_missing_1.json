@@ -1,0 +1,17 @@
+{
+  "dimension": "A1",
+  "evidence_path": "prismpath/comparisons/systems/openfga/generated",
+  "expected": "no_match",
+  "glue": null,
+  "grade": "NOT",
+  "harness_commit": "fcbabc5",
+  "idiomatic": true,
+  "match": false,
+  "notes": "Observed by the real system in the Phase 2 conformance run: not_expressible (expected no_match; a probe scenario: the observed value is the measurement). Carrier: boolean_only (a Check returns one boolean for one relation; the decision policies are not expressible). Absence: n/a (not expressible).",
+  "observed": "not_expressible",
+  "policy": "sensor_interlock",
+  "run_at": "2026-09-08T22:30:21Z",
+  "scenario": "undeclared_missing_1",
+  "system": "openfga",
+  "system_version": "1.19.0"
+}

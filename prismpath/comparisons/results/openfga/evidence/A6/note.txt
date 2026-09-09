@@ -1,0 +1,1 @@
+OpenFGA authorization models are immutable by id and written through the API with no signature; a client may check against any older model id, and a tampered model is simply a new model. No refusal facility at the point.

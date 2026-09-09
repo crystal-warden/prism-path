@@ -1,0 +1,24 @@
+{
+  "dimension": "A4",
+  "evidence_path": "prismpath/comparisons/results/cedar/evidence/A8",
+  "expected": "true",
+  "glue": {
+    "components": [
+      "diagnostics parser"
+    ],
+    "description": "parse the verbose diagnostics for the applying policy id",
+    "hours": 1,
+    "loc": 30
+  },
+  "grade": "WITH-WORK",
+  "harness_commit": "fcbabc5",
+  "idiomatic": true,
+  "match": false,
+  "notes": "Sub property carries_cause, from the A8 loop run of ai_action_gate/ai_worker_loop_1: the applying policy id and the @outcome annotation are in the verbose diagnostics, readable by the wrapper.",
+  "observed": "false",
+  "policy": "ai_action_gate",
+  "run_at": "2026-09-08T22:30:21Z",
+  "scenario": "carries_cause",
+  "system": "cedar",
+  "system_version": "4.12.0"
+}

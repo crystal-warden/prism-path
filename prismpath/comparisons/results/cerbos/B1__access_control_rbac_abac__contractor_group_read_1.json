@@ -1,0 +1,17 @@
+{
+  "dimension": "B1",
+  "evidence_path": "prismpath/comparisons/systems/cerbos/generated/conformance.json",
+  "expected": "allow",
+  "glue": null,
+  "grade": "NATIVE",
+  "harness_commit": "ecae31b",
+  "idiomatic": false,
+  "match": true,
+  "notes": "Cerbos expresses every construct in CEL over principal and resource attributes. The idiomatic form for a role hierarchy is derived roles, but a derived role cannot join the negation chain that reproduces first match order, so the hierarchy is flattened in CEL; recorded idiomatic=false by the translator. 8/8 match.",
+  "observed": "allow",
+  "policy": "access_control_rbac_abac",
+  "run_at": "2026-09-09T01:04:30Z",
+  "scenario": "contractor_group_read_1",
+  "system": "cerbos",
+  "system_version": "0.55.0"
+}

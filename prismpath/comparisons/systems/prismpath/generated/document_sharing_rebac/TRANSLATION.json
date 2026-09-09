@@ -1,0 +1,16 @@
+{
+  "citations": [
+    "SPEC.md section 2 (edges, tiers), section 3 (routing: deterministic first, document order, first true)",
+    "SPEC.md section 4 (predicate language), section 4.3 (Level M fragment)",
+    "SPEC.md section 5.5 (reserved worker outcome fields: needs_human)"
+  ],
+  "dropped_rules": [],
+  "expressible": false,
+  "files": [],
+  "idiomatic": true,
+  "notes": [
+    "relationship graphs are outside PrismPath: no data plane, no relation model; every derived tuple would have to be precomputed by the caller into a boolean field"
+  ],
+  "policy": "document_sharing_rebac",
+  "system": "prismpath"
+}

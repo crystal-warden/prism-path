@@ -1,0 +1,17 @@
+{
+  "dimension": "B5",
+  "evidence_path": "prismpath/comparisons/results/prismpath/evidence/B5",
+  "expected": null,
+  "glue": null,
+  "grade": "NOT",
+  "harness_commit": "ecae31b",
+  "idiomatic": true,
+  "match": false,
+  "notes": "Under one year of public history from one organization, 381 commits since 2026-07-19, one tag, no package index release, no foundation, no external production operator; demand side signals exist and are not adoption. Pre registered NOT. Figures: prismpath/comparisons/results/prismpath/evidence/B5/facts.json (GitHub API, 2026-09-09).",
+  "observed": "not_applicable",
+  "policy": "none",
+  "run_at": "2026-09-09T01:04:30Z",
+  "scenario": "matrix-row",
+  "system": "prismpath",
+  "system_version": "repo@ecae31b"
+}

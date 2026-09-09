@@ -1,0 +1,26 @@
+{
+  "dimension": "A6",
+  "evidence_path": "prismpath/comparisons/results/opa+glue/evidence/A6",
+  "expected": "refuse_policy",
+  "glue": {
+    "components": [
+      "manifest revision reader",
+      "fsync'd floor file",
+      "opa run wrapper"
+    ],
+    "description": "a wrapper on the agent host that reads the bundle's .manifest revision, refuses anything below the persisted floor before opa loads it, persists the accepted revision with fsync, and only then starts opa with bundle verification on",
+    "hours": 0.5,
+    "loc": 54
+  },
+  "grade": "WITH-WORK",
+  "harness_commit": "592fa6d",
+  "idiomatic": true,
+  "match": true,
+  "notes": "the floor accepted revision 4 and OPA refused the unsigned bundle under --verification-key: floor_check=True (accepted: revision 4 (floor was 3)), opa_loaded=False. Baseline v2 loaded (True); floor after the sequence {'revision': '4'}. Glue 54 lines, 0.5 h, within budget, no new trust anchor (the verification key is OPA's own). Caveat recorded: the floor persists a revision before OPA verifies the signature, so a tampered bundle with a very high revision could raise the floor and lock out later legitimate bundles; ordering the floor after verification needs OPA to expose the verified manifest, which the wrapper does not have.",
+  "observed": "refuse_policy",
+  "policy": "network_admission",
+  "run_at": "2026-09-09T01:31:54Z",
+  "scenario": "unsigned_policy_1",
+  "system": "opa+glue",
+  "system_version": "1.20.2+glue"
+}

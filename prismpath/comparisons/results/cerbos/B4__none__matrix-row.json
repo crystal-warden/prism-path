@@ -1,0 +1,17 @@
+{
+  "dimension": "B4",
+  "evidence_path": "prismpath/comparisons/results/cerbos/evidence/B4",
+  "expected": null,
+  "glue": null,
+  "grade": "NATIVE",
+  "harness_commit": "ecae31b",
+  "idiomatic": true,
+  "match": false,
+  "notes": "Nine SDKs, Kubernetes service, sidecar, and daemonset patterns, a Helm chart, query plan adapters for six data layers, and Cerbos Hub. Pre registered NATIVE. Sources: prismpath/comparisons/results/cerbos/evidence/B4/sources.txt.",
+  "observed": "not_applicable",
+  "policy": "none",
+  "run_at": "2026-09-09T01:04:30Z",
+  "scenario": "matrix-row",
+  "system": "cerbos",
+  "system_version": "0.55.0"
+}

@@ -1,0 +1,2 @@
+https://github.com/cedar-policy (cedar Rust, cedar-java, cedar-go, cedar-wasm in the main repository, cedar-access-control-for-k8s for Kubernetes authorization and admission, cedar-local-agent, authorization-for-expressjs, vscode-cedar, cedar-for-agents)
+https://aws.amazon.com/verified-permissions/ (managed service built on Cedar)

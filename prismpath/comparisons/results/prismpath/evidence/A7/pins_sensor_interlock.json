@@ -1,0 +1,27 @@
+{
+  "policy": "sensor_interlock",
+  "signed_wcet_cycles": 24,
+  "evaluations_measured": 216,
+  "global_max_edge_cycles": 23,
+  "global_max_width_cycles": 22.0,
+  "method_disagreements": 0,
+  "cycle_histogram": {
+    "4": 4,
+    "5": 18,
+    "6": 1,
+    "9": 14,
+    "10": 46,
+    "14": 18,
+    "15": 44,
+    "16": 2,
+    "21": 17,
+    "22": 51,
+    "23": 1
+  },
+  "samplerate": "200m",
+  "threshold_v": "1.4-1.4",
+  "samples_per_capture": 400000,
+  "captures": 30,
+  "verdict": "PASS",
+  "instrument": "Kingst LA2016 on gx10 USB, sigrok-cli /usr/local/bin with kingst-la2016 driver"
+}

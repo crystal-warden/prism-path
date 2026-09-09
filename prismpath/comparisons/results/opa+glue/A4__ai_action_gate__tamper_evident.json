@@ -1,0 +1,27 @@
+{
+  "dimension": "A4",
+  "evidence_path": "prismpath/comparisons/results/opa+glue/evidence/A8",
+  "expected": "true",
+  "glue": {
+    "components": [
+      "decision_logs.service consumer",
+      "sha256 Merkle root and inclusion paths",
+      "RS256 signature with the existing bundle key",
+      "verifier"
+    ],
+    "description": "a decision log HTTP service that receives OPA's decision_logs uploads, Merkle roots the records, signs the root with the deployment's bundle signing key (RS256, the algorithm and key OPA bundle verification already trusts), and hands out per decision receipts with inclusion proofs that a third party verifies with the bundle verification public key",
+    "hours": 1.0,
+    "loc": 131
+  },
+  "grade": "WITH-WORK",
+  "harness_commit": "592fa6d",
+  "idiomatic": true,
+  "match": true,
+  "notes": "Sub property tamper_evident: Merkle inclusion proofs from the glue; the altered record failed verification. Built and run: OPA shipped 6 decision log records for 6 decisions to glue/opa_receipts.py over decision_logs.service; 6/6 receipts verify against the bundle verification key, an altered record is detected (True), a foreign key is rejected (True). Glue 131 lines, 1.0 h, within budget; the signing key is the bundle key the deployment already holds at the bundle service, so no new trust anchor; note that the sink must run where that private key lives, which is the bundle server, not the agent host.",
+  "observed": "true",
+  "policy": "ai_action_gate",
+  "run_at": "2026-09-09T01:31:50Z",
+  "scenario": "tamper_evident",
+  "system": "opa+glue",
+  "system_version": "1.20.2+glue"
+}

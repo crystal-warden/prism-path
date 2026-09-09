@@ -1,0 +1,2 @@
+https://openfga.dev/docs/modeling/testing (model tests with the CLI; no formal verification documented)
+https://github.com/openfga/openfga

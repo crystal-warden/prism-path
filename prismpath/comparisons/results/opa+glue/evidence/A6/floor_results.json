@@ -1,0 +1,25 @@
+{
+  "baseline_v2": {
+    "floor_check": true,
+    "floor_reason": "accepted: revision 2 (floor was none)",
+    "opa_loaded": true
+  },
+  "stale_policy_1": {
+    "floor_check": false,
+    "floor_reason": "refused: stale revision 1 below floor 2",
+    "opa_loaded": null
+  },
+  "tampered_policy_1": {
+    "floor_check": true,
+    "floor_reason": "accepted: revision 3 (floor was 2)",
+    "opa_loaded": false
+  },
+  "unsigned_policy_1": {
+    "floor_check": true,
+    "floor_reason": "accepted: revision 4 (floor was 3)",
+    "opa_loaded": false
+  },
+  "floor_state_after": {
+    "revision": "4"
+  }
+}

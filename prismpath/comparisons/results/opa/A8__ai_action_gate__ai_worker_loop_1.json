@@ -1,0 +1,27 @@
+{
+  "dimension": "A8",
+  "evidence_path": "prismpath/comparisons/results/opa/evidence/A8",
+  "expected": "allow,allow,deny,abstain,escalate_human,escalate_human",
+  "glue": {
+    "components": [
+      "decision_logs console or HTTP service consumer",
+      "sha256 Merkle over records",
+      "Ed25519 or RSA signature with the existing bundle key",
+      "verifier"
+    ],
+    "description": "a decision log sink that Merkle roots the console decision log records per session and signs the root with the deployment's bundle signing key (the key OPA bundle verification already trusts), producing a per session tamper evident, key bound receipt trail",
+    "hours": 3,
+    "loc": 150
+  },
+  "grade": "WITH-WORK",
+  "harness_commit": "e7b050b",
+  "idiomatic": true,
+  "match": true,
+  "notes": "opa run --server with decision_logs.console=true; one POST per proposal to /v1/data/comparison/ai_action_gate/decision. Outcomes are first class: the decision document is {outcome, rule} (rules=['r6', 'r7', 'r3', 'r5', 'r4', 'r1']); the worker requested escalation is distinguishable only because the policy author put the rule id in the result (r1 vs r4), not by a system level cause. Receipts: OPA emitted 6 decision log records, one per decision, each with decision_id, input, result, timestamp (server_decision_log.jsonl): per decision yes; carries the why as whatever the result document holds; not signed and not tamper evident (a console or HTTP shipped JSON stream). Grade WITH-WORK: the glue estimate reuses the bundle signing key OPA already trusts (documented bundle signing, dimension A6), so no new trust anchor; built and measured in Phase 5. If Phase 5 finds the glue exceeds 300 lines or 8 hours, this cell drops to NOT.",
+  "observed": "allow,allow,deny,abstain,escalate_human,escalate_human",
+  "policy": "ai_action_gate",
+  "run_at": "2026-09-08T22:27:52Z",
+  "scenario": "ai_worker_loop_1",
+  "system": "opa",
+  "system_version": "1.20.2"
+}

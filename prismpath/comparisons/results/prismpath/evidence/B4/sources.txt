@@ -1,0 +1,5 @@
+integrations/README.md (Zarf and UDS delivery of a signed policy, Vector codec both directions, C++ consumer, Wireshark dissector integrations/wireshark/facet.lua)
+prismpath-ebpf/ (XDP and TC programs, loader, kernel certify), prismpath-hw/ (Zynq overlay, RP2350 and ESP32 firmware)
+prismpath-telemetry-rs/ and prismpath-facet-bridge/ (Rust crates), prismpath/portable/ (C target)
+adapters/compliance/ (osquery, Lynis, Prowler scanner adapters, OSCAL catalog import and export)
+pyproject.toml (Python package prismpath 0.1.0, not published to a package index)

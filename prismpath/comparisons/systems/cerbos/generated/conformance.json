@@ -1,0 +1,1134 @@
+{
+ "rows": [
+  {
+   "class": "MATCH",
+   "expected": {
+    "outcome": "allow",
+    "prismpath_cause": 0,
+    "rule": "r1"
+   },
+   "kind": "expressiveness",
+   "observed": {
+    "cause": null,
+    "observed": "allow",
+    "raw": "{\"cerbosCallId\": \"01M22AEQZEYZV6QEECN6BBQW33\", \"requestId\": \"cmp\", \"results\": [{\"actions\": {\"decide\": \"EFFECT_ALLOW\"}, \"meta\": {\"actions\": {\"decide\": {\"matchedPolicy\": \"resource.access_control_rbac_abac.vdefault\"}}}, \"outputs\": [{\"action\": \"decide\", \"src\": \"resource.access_control_rbac_abac.vdefault#r1\", \"val\": {\"outcome\": \"allow\", \"rule\": \"r1\"}}], \"resource\": {\"id\": \"r1\", \"kind\": \"access_control_rbac_abac\"}}]}",
+    "rule": "r1"
+   },
+   "policy": "access_control_rbac_abac",
+   "scenario": "admin_any_1"
+  },
+  {
+   "class": "MATCH",
+   "expected": {
+    "outcome": "allow",
+    "prismpath_cause": null,
+    "rule": "r3"
+   },
+   "kind": "expressiveness",
+   "observed": {
+    "cause": null,
+    "observed": "allow",
+    "raw": "{\"cerbosCallId\": \"01M22AEQZQ0GEM6TMRM7E6946A\", \"requestId\": \"cmp\", \"results\": [{\"actions\": {\"decide\": \"EFFECT_ALLOW\"}, \"meta\": {\"actions\": {\"decide\": {\"matchedPolicy\": \"resource.access_control_rbac_abac.vdefault\"}}}, \"outputs\": [{\"action\": \"decide\", \"src\": \"resource.access_control_rbac_abac.vdefault#r3\", \"val\": {\"outcome\": \"allow\", \"rule\": \"r3\"}}], \"resource\": {\"id\": \"r1\", \"kind\": \"access_control_rbac_abac\"}}]}",
+    "rule": "r3"
+   },
+   "policy": "access_control_rbac_abac",
+   "scenario": "owner_write_1"
+  },
+  {
+   "class": "MATCH",
+   "expected": {
+    "outcome": "allow",
+    "prismpath_cause": null,
+    "rule": "r4"
+   },
+   "kind": "expressiveness",
+   "observed": {
+    "cause": null,
+    "observed": "allow",
+    "raw": "{\"cerbosCallId\": \"01M22AEQZSA3SHXTHH4GY8RR4Q\", \"requestId\": \"cmp\", \"results\": [{\"actions\": {\"decide\": \"EFFECT_ALLOW\"}, \"meta\": {\"actions\": {\"decide\": {\"matchedPolicy\": \"resource.access_control_rbac_abac.vdefault\"}}}, \"outputs\": [{\"action\": \"decide\", \"src\": \"resource.access_control_rbac_abac.vdefault#r4\", \"val\": {\"outcome\": \"allow\", \"rule\": \"r4\"}}], \"resource\": {\"id\": \"r1\", \"kind\": \"access_control_rbac_abac\"}}]}",
+    "rule": "r4"
+   },
+   "policy": "access_control_rbac_abac",
+   "scenario": "group_read_1"
+  },
+  {
+   "class": "MATCH",
+   "expected": {
+    "outcome": "deny",
+    "prismpath_cause": 0,
+    "rule": "r6"
+   },
+   "kind": "expressiveness",
+   "observed": {
+    "cause": null,
+    "observed": "deny",
+    "raw": "{\"cerbosCallId\": \"01M22AEQZTMDD5JC73W6836E67\", \"requestId\": \"cmp\", \"results\": [{\"actions\": {\"decide\": \"EFFECT_DENY\"}, \"meta\": {\"actions\": {\"decide\": {\"matchedPolicy\": \"resource.access_control_rbac_abac.vdefault\"}}}, \"outputs\": [{\"action\": \"decide\", \"src\": \"resource.access_control_rbac_abac.vdefault#r6\", \"val\": {\"outcome\": \"deny\", \"rule\": \"r6\"}}], \"resource\": {\"id\": \"r1\", \"kind\": \"access_control_rbac_abac\"}}]}",
+    "rule": "r6"
+   },
+   "policy": "access_control_rbac_abac",
+   "scenario": "group_write_denied_1"
+  },
+  {
+   "class": "MATCH",
+   "expected": {
+    "outcome": "allow",
+    "prismpath_cause": 0,
+    "rule": "r5"
+   },
+   "kind": "expressiveness",
+   "observed": {
+    "cause": null,
+    "observed": "allow",
+    "raw": "{\"cerbosCallId\": \"01M22AEQZVT0Q6205151K9F3FT\", \"requestId\": \"cmp\", \"results\": [{\"actions\": {\"decide\": \"EFFECT_ALLOW\"}, \"meta\": {\"actions\": {\"decide\": {\"matchedPolicy\": \"resource.access_control_rbac_abac.vdefault\"}}}, \"outputs\": [{\"action\": \"decide\", \"src\": \"resource.access_control_rbac_abac.vdefault#r5\", \"val\": {\"outcome\": \"allow\", \"rule\": \"r5\"}}], \"resource\": {\"id\": \"r1\", \"kind\": \"access_control_rbac_abac\"}}]}",
+    "rule": "r5"
+   },
+   "policy": "access_control_rbac_abac",
+   "scenario": "manager_hours_write_1"
+  },
+  {
+   "class": "MATCH",
+   "expected": {
+    "outcome": "deny",
+    "prismpath_cause": 0,
+    "rule": "r6"
+   },
+   "kind": "expressiveness",
+   "observed": {
+    "cause": null,
+    "observed": "deny",
+    "raw": "{\"cerbosCallId\": \"01M22AEQZVJACMZ3Q6E5PQPXPA\", \"requestId\": \"cmp\", \"results\": [{\"actions\": {\"decide\": \"EFFECT_DENY\"}, \"meta\": {\"actions\": {\"decide\": {\"matchedPolicy\": \"resource.access_control_rbac_abac.vdefault\"}}}, \"outputs\": [{\"action\": \"decide\", \"src\": \"resource.access_control_rbac_abac.vdefault#r6\", \"val\": {\"outcome\": \"deny\", \"rule\": \"r6\"}}], \"resource\": {\"id\": \"r1\", \"kind\": \"access_control_rbac_abac\"}}]}",
+    "rule": "r6"
+   },
+   "policy": "access_control_rbac_abac",
+   "scenario": "manager_after_hours_1"
+  },
+  {
+   "class": "MATCH",
+   "expected": {
+    "outcome": "deny",
+    "prismpath_cause": 0,
+    "rule": "r2"
+   },
+   "kind": "expressiveness",
+   "observed": {
+    "cause": null,
+    "observed": "deny",
+    "raw": "{\"cerbosCallId\": \"01M22AEQZWS14T2ZCARQ4WQ6CH\", \"requestId\": \"cmp\", \"results\": [{\"actions\": {\"decide\": \"EFFECT_DENY\"}, \"meta\": {\"actions\": {\"decide\": {\"matchedPolicy\": \"resource.access_control_rbac_abac.vdefault\"}}}, \"outputs\": [{\"action\": \"decide\", \"src\": \"resource.access_control_rbac_abac.vdefault#r2\", \"val\": {\"outcome\": \"deny\", \"rule\": \"r2\"}}], \"resource\": {\"id\": \"r1\", \"kind\": \"access_control_rbac_abac\"}}]}",
+    "rule": "r2"
+   },
+   "policy": "access_control_rbac_abac",
+   "scenario": "high_sensitivity_owner_denied_1"
+  },
+  {
+   "class": "MATCH",
+   "expected": {
+    "outcome": "allow",
+    "prismpath_cause": null,
+    "rule": "r4"
+   },
+   "kind": "expressiveness",
+   "observed": {
+    "cause": null,
+    "observed": "allow",
+    "raw": "{\"cerbosCallId\": \"01M22AEQZXSK1DYZC962EWH1PE\", \"requestId\": \"cmp\", \"results\": [{\"actions\": {\"decide\": \"EFFECT_ALLOW\"}, \"meta\": {\"actions\": {\"decide\": {\"matchedPolicy\": \"resource.access_control_rbac_abac.vdefault\"}}}, \"outputs\": [{\"action\": \"decide\", \"src\": \"resource.access_control_rbac_abac.vdefault#r4\", \"val\": {\"outcome\": \"allow\", \"rule\": \"r4\"}}], \"resource\": {\"id\": \"r1\", \"kind\": \"access_control_rbac_abac\"}}]}",
+    "rule": "r4"
+   },
+   "policy": "access_control_rbac_abac",
+   "scenario": "contractor_group_read_1"
+  },
+  {
+   "class": "MATCH",
+   "expected": {
+    "outcome": "allow",
+    "prismpath_cause": 0,
+    "rule": "r6"
+   },
+   "kind": "clear_allow",
+   "observed": {
+    "cause": null,
+    "observed": "allow",
+    "raw": "{\"cerbosCallId\": \"01M22AERPHQ78JQWHK7JM1CEMJ\", \"requestId\": \"cmp\", \"results\": [{\"actions\": {\"decide\": \"EFFECT_ALLOW\"}, \"meta\": {\"actions\": {\"decide\": {\"matchedPolicy\": \"resource.ai_action_gate.vdefault\"}}}, \"outputs\": [{\"action\": \"decide\", \"src\": \"resource.ai_action_gate.vdefault#r6\", \"val\": {\"outcome\": \"allow\", \"rule\": \"r6\"}}], \"resource\": {\"id\": \"r1\", \"kind\": \"ai_action_gate\"}}]}",
+    "rule": "r6"
+   },
+   "policy": "ai_action_gate",
+   "scenario": "allow_read_1"
+  },
+  {
+   "class": "MATCH",
+   "expected": {
+    "outcome": "deny",
+    "prismpath_cause": 0,
+    "rule": "r2"
+   },
+   "kind": "clear_deny",
+   "observed": {
+    "cause": null,
+    "observed": "deny",
+    "raw": "{\"cerbosCallId\": \"01M22AERS644YQ8CD0365Q15JX\", \"requestId\": \"cmp\", \"results\": [{\"actions\": {\"decide\": \"EFFECT_DENY\"}, \"meta\": {\"actions\": {\"decide\": {\"matchedPolicy\": \"resource.ai_action_gate.vdefault\"}}}, \"outputs\": [{\"action\": \"decide\", \"src\": \"resource.ai_action_gate.vdefault#r2\", \"val\": {\"outcome\": \"deny\", \"rule\": \"r2\"}}], \"resource\": {\"id\": \"r1\", \"kind\": \"ai_action_gate\"}}]}",
+    "rule": "r2"
+   },
+   "policy": "ai_action_gate",
+   "scenario": "deny_cui_external_1"
+  },
+  {
+   "class": "MATCH",
+   "expected": {
+    "outcome": "deny",
+    "prismpath_cause": 0,
+    "rule": "r3"
+   },
+   "kind": "clear_deny",
+   "observed": {
+    "cause": null,
+    "observed": "deny",
+    "raw": "{\"cerbosCallId\": \"01M22AERS7HC4GE62FVJSH3P44\", \"requestId\": \"cmp\", \"results\": [{\"actions\": {\"decide\": \"EFFECT_DENY\"}, \"meta\": {\"actions\": {\"decide\": {\"matchedPolicy\": \"resource.ai_action_gate.vdefault\"}}}, \"outputs\": [{\"action\": \"decide\", \"src\": \"resource.ai_action_gate.vdefault#r3\", \"val\": {\"outcome\": \"deny\", \"rule\": \"r3\"}}], \"resource\": {\"id\": \"r1\", \"kind\": \"ai_action_gate\"}}]}",
+    "rule": "r3"
+   },
+   "policy": "ai_action_gate",
+   "scenario": "deny_irreversible_delete_1"
+  },
+  {
+   "class": "MATCH",
+   "expected": {
+    "outcome": "escalate_human",
+    "prismpath_cause": 0,
+    "rule": "r4"
+   },
+   "kind": "escalation",
+   "observed": {
+    "cause": null,
+    "observed": "escalate_human",
+    "raw": "{\"cerbosCallId\": \"01M22AERS8QYMK47JY2RFBS2VE\", \"requestId\": \"cmp\", \"results\": [{\"actions\": {\"decide\": \"EFFECT_DENY\"}, \"meta\": {\"actions\": {\"decide\": {\"matchedPolicy\": \"resource.ai_action_gate.vdefault\"}}}, \"outputs\": [{\"action\": \"decide\", \"src\": \"resource.ai_action_gate.vdefault#r4\", \"val\": {\"outcome\": \"escalate_human\", \"rule\": \"r4\"}}], \"resource\": {\"id\": \"r1\", \"kind\": \"ai_action_gate\"}}]}",
+    "rule": "r4"
+   },
+   "policy": "ai_action_gate",
+   "scenario": "escalate_execute_confidential_1"
+  },
+  {
+   "class": "MATCH",
+   "expected": {
+    "outcome": "abstain",
+    "prismpath_cause": 0,
+    "rule": "r5"
+   },
+   "kind": "insufficient",
+   "observed": {
+    "cause": null,
+    "observed": "abstain",
+    "raw": "{\"cerbosCallId\": \"01M22AERS9V4ARKGNTNF0BAHWY\", \"requestId\": \"cmp\", \"results\": [{\"actions\": {\"decide\": \"EFFECT_DENY\"}, \"meta\": {\"actions\": {\"decide\": {\"matchedPolicy\": \"resource.ai_action_gate.vdefault\"}}}, \"outputs\": [{\"action\": \"decide\", \"src\": \"resource.ai_action_gate.vdefault#r5\", \"val\": {\"outcome\": \"abstain\", \"rule\": \"r5\"}}], \"resource\": {\"id\": \"r1\", \"kind\": \"ai_action_gate\"}}]}",
+    "rule": "r5"
+   },
+   "policy": "ai_action_gate",
+   "scenario": "abstain_low_confidence_1"
+  },
+  {
+   "class": "MATCH",
+   "expected": {
+    "outcome": "allow",
+    "prismpath_cause": 0,
+    "rule": "r7"
+   },
+   "kind": "clear_allow",
+   "observed": {
+    "cause": null,
+    "observed": "allow",
+    "raw": "{\"cerbosCallId\": \"01M22AERSAAFNFN5AMNHHP3NP5\", \"requestId\": \"cmp\", \"results\": [{\"actions\": {\"decide\": \"EFFECT_ALLOW\"}, \"meta\": {\"actions\": {\"decide\": {\"matchedPolicy\": \"resource.ai_action_gate.vdefault\"}}}, \"outputs\": [{\"action\": \"decide\", \"src\": \"resource.ai_action_gate.vdefault#r7\", \"val\": {\"outcome\": \"allow\", \"rule\": \"r7\"}}], \"resource\": {\"id\": \"r1\", \"kind\": \"ai_action_gate\"}}]}",
+    "rule": "r7"
+   },
+   "policy": "ai_action_gate",
+   "scenario": "allow_reversible_team_write_1"
+  },
+  {
+   "class": "MATCH",
+   "expected": {
+    "outcome": "escalate_human",
+    "prismpath_cause": 0,
+    "rule": "r8"
+   },
+   "kind": "escalation",
+   "observed": {
+    "cause": null,
+    "observed": "escalate_human",
+    "raw": "{\"cerbosCallId\": \"01M22AERSB0EJK84B6W5WWAAM1\", \"requestId\": \"cmp\", \"results\": [{\"actions\": {\"decide\": \"EFFECT_DENY\"}, \"meta\": {\"actions\": {\"decide\": {\"matchedPolicy\": \"resource.ai_action_gate.vdefault\"}}}, \"outputs\": [{\"action\": \"decide\", \"src\": \"resource.ai_action_gate.vdefault#r8\", \"val\": {\"outcome\": \"escalate_human\", \"rule\": \"r8\"}}], \"resource\": {\"id\": \"r1\", \"kind\": \"ai_action_gate\"}}]}",
+    "rule": "r8"
+   },
+   "policy": "ai_action_gate",
+   "scenario": "escalate_org_write_1"
+  },
+  {
+   "class": "MATCH",
+   "expected": {
+    "outcome": "escalate_human",
+    "prismpath_cause": 34,
+    "rule": "r1"
+   },
+   "kind": "escalation",
+   "observed": {
+    "cause": null,
+    "observed": "escalate_human",
+    "raw": "{\"cerbosCallId\": \"01M22AERSCRPE43010Z3D8V004\", \"requestId\": \"cmp\", \"results\": [{\"actions\": {\"decide\": \"EFFECT_DENY\"}, \"meta\": {\"actions\": {\"decide\": {\"matchedPolicy\": \"resource.ai_action_gate.vdefault\"}}}, \"outputs\": [{\"action\": \"decide\", \"src\": \"resource.ai_action_gate.vdefault#r1\", \"val\": {\"outcome\": \"escalate_human\", \"rule\": \"r1\"}}], \"resource\": {\"id\": \"r1\", \"kind\": \"ai_action_gate\"}}]}",
+    "rule": "r1"
+   },
+   "policy": "ai_action_gate",
+   "scenario": "escalate_human_requested_1"
+  },
+  {
+   "class": "PROBE",
+   "expected": {
+    "outcome": "allow",
+    "prismpath_cause": 0,
+    "rule": "r6"
+   },
+   "kind": "undeclared_missing",
+   "observed": {
+    "cause": null,
+    "observed": "allow",
+    "raw": "{\"cerbosCallId\": \"01M22AERSCXH01C4V6PKEHJAMJ\", \"requestId\": \"cmp\", \"results\": [{\"actions\": {\"decide\": \"EFFECT_ALLOW\"}, \"meta\": {\"actions\": {\"decide\": {\"matchedPolicy\": \"resource.ai_action_gate.vdefault\"}}}, \"outputs\": [{\"action\": \"decide\", \"src\": \"resource.ai_action_gate.vdefault#r6\", \"val\": {\"outcome\": \"allow\", \"rule\": \"r6\"}}], \"resource\": {\"id\": \"r1\", \"kind\": \"ai_action_gate\"}}]}",
+    "rule": "r6"
+   },
+   "policy": "ai_action_gate",
+   "scenario": "undeclared_missing_1"
+  },
+  {
+   "class": "MATCH",
+   "expected": {
+    "outcome": "allow",
+    "prismpath_cause": 0,
+    "rule": "r6"
+   },
+   "kind": "ai_worker_loop",
+   "observed": {
+    "cause": null,
+    "observed": "allow",
+    "raw": "{\"cerbosCallId\": \"01M22AERSD83C5Z5X7NQREARM9\", \"requestId\": \"cmp\", \"results\": [{\"actions\": {\"decide\": \"EFFECT_ALLOW\"}, \"meta\": {\"actions\": {\"decide\": {\"matchedPolicy\": \"resource.ai_action_gate.vdefault\"}}}, \"outputs\": [{\"action\": \"decide\", \"src\": \"resource.ai_action_gate.vdefault#r6\", \"val\": {\"outcome\": \"allow\", \"rule\": \"r6\"}}], \"resource\": {\"id\": \"r1\", \"kind\": \"ai_action_gate\"}}]}",
+    "rule": "r6"
+   },
+   "policy": "ai_action_gate",
+   "scenario": "ai_worker_loop_1[0]"
+  },
+  {
+   "class": "MATCH",
+   "expected": {
+    "outcome": "allow",
+    "prismpath_cause": 0,
+    "rule": "r7"
+   },
+   "kind": "ai_worker_loop",
+   "observed": {
+    "cause": null,
+    "observed": "allow",
+    "raw": "{\"cerbosCallId\": \"01M22AERSE643FTBMANEJ5K3Y7\", \"requestId\": \"cmp\", \"results\": [{\"actions\": {\"decide\": \"EFFECT_ALLOW\"}, \"meta\": {\"actions\": {\"decide\": {\"matchedPolicy\": \"resource.ai_action_gate.vdefault\"}}}, \"outputs\": [{\"action\": \"decide\", \"src\": \"resource.ai_action_gate.vdefault#r7\", \"val\": {\"outcome\": \"allow\", \"rule\": \"r7\"}}], \"resource\": {\"id\": \"r1\", \"kind\": \"ai_action_gate\"}}]}",
+    "rule": "r7"
+   },
+   "policy": "ai_action_gate",
+   "scenario": "ai_worker_loop_1[1]"
+  },
+  {
+   "class": "MATCH",
+   "expected": {
+    "outcome": "deny",
+    "prismpath_cause": 0,
+    "rule": "r3"
+   },
+   "kind": "ai_worker_loop",
+   "observed": {
+    "cause": null,
+    "observed": "deny",
+    "raw": "{\"cerbosCallId\": \"01M22AERSE2PZB0QGJG8DKKEJ1\", \"requestId\": \"cmp\", \"results\": [{\"actions\": {\"decide\": \"EFFECT_DENY\"}, \"meta\": {\"actions\": {\"decide\": {\"matchedPolicy\": \"resource.ai_action_gate.vdefault\"}}}, \"outputs\": [{\"action\": \"decide\", \"src\": \"resource.ai_action_gate.vdefault#r3\", \"val\": {\"outcome\": \"deny\", \"rule\": \"r3\"}}], \"resource\": {\"id\": \"r1\", \"kind\": \"ai_action_gate\"}}]}",
+    "rule": "r3"
+   },
+   "policy": "ai_action_gate",
+   "scenario": "ai_worker_loop_1[2]"
+  },
+  {
+   "class": "MATCH",
+   "expected": {
+    "outcome": "abstain",
+    "prismpath_cause": 0,
+    "rule": "r5"
+   },
+   "kind": "ai_worker_loop",
+   "observed": {
+    "cause": null,
+    "observed": "abstain",
+    "raw": "{\"cerbosCallId\": \"01M22AERSFXCWKGQZXBB06AGG6\", \"requestId\": \"cmp\", \"results\": [{\"actions\": {\"decide\": \"EFFECT_DENY\"}, \"meta\": {\"actions\": {\"decide\": {\"matchedPolicy\": \"resource.ai_action_gate.vdefault\"}}}, \"outputs\": [{\"action\": \"decide\", \"src\": \"resource.ai_action_gate.vdefault#r5\", \"val\": {\"outcome\": \"abstain\", \"rule\": \"r5\"}}], \"resource\": {\"id\": \"r1\", \"kind\": \"ai_action_gate\"}}]}",
+    "rule": "r5"
+   },
+   "policy": "ai_action_gate",
+   "scenario": "ai_worker_loop_1[3]"
+  },
+  {
+   "class": "MATCH",
+   "expected": {
+    "outcome": "escalate_human",
+    "prismpath_cause": 0,
+    "rule": "r4"
+   },
+   "kind": "ai_worker_loop",
+   "observed": {
+    "cause": null,
+    "observed": "escalate_human",
+    "raw": "{\"cerbosCallId\": \"01M22AERSG75XVJ1RXE709DWQ6\", \"requestId\": \"cmp\", \"results\": [{\"actions\": {\"decide\": \"EFFECT_DENY\"}, \"meta\": {\"actions\": {\"decide\": {\"matchedPolicy\": \"resource.ai_action_gate.vdefault\"}}}, \"outputs\": [{\"action\": \"decide\", \"src\": \"resource.ai_action_gate.vdefault#r4\", \"val\": {\"outcome\": \"escalate_human\", \"rule\": \"r4\"}}], \"resource\": {\"id\": \"r1\", \"kind\": \"ai_action_gate\"}}]}",
+    "rule": "r4"
+   },
+   "policy": "ai_action_gate",
+   "scenario": "ai_worker_loop_1[4]"
+  },
+  {
+   "class": "MATCH",
+   "expected": {
+    "outcome": "escalate_human",
+    "prismpath_cause": 34,
+    "rule": "r1"
+   },
+   "kind": "ai_worker_loop",
+   "observed": {
+    "cause": null,
+    "observed": "escalate_human",
+    "raw": "{\"cerbosCallId\": \"01M22AERSGT13Z27SS4FBYC285\", \"requestId\": \"cmp\", \"results\": [{\"actions\": {\"decide\": \"EFFECT_DENY\"}, \"meta\": {\"actions\": {\"decide\": {\"matchedPolicy\": \"resource.ai_action_gate.vdefault\"}}}, \"outputs\": [{\"action\": \"decide\", \"src\": \"resource.ai_action_gate.vdefault#r1\", \"val\": {\"outcome\": \"escalate_human\", \"rule\": \"r1\"}}], \"resource\": {\"id\": \"r1\", \"kind\": \"ai_action_gate\"}}]}",
+    "rule": "r1"
+   },
+   "policy": "ai_action_gate",
+   "scenario": "ai_worker_loop_1[5]"
+  },
+  {
+   "class": "UNEXPRESSIBLE",
+   "expected": {
+    "outcome": "allow",
+    "prismpath_cause": null,
+    "rule": "r1"
+   },
+   "kind": "relationship",
+   "observed": {
+    "cause": null,
+    "observed": "not_expressible",
+    "raw": "",
+    "rule": null
+   },
+   "policy": "document_sharing_rebac",
+   "scenario": "alice_view_d1"
+  },
+  {
+   "class": "UNEXPRESSIBLE",
+   "expected": {
+    "outcome": "deny",
+    "prismpath_cause": null,
+    "rule": "r2"
+   },
+   "kind": "relationship",
+   "observed": {
+    "cause": null,
+    "observed": "not_expressible",
+    "raw": "",
+    "rule": null
+   },
+   "policy": "document_sharing_rebac",
+   "scenario": "bob_view_d1"
+  },
+  {
+   "class": "UNEXPRESSIBLE",
+   "expected": {
+    "outcome": "allow",
+    "prismpath_cause": null,
+    "rule": "r1"
+   },
+   "kind": "relationship",
+   "observed": {
+    "cause": null,
+    "observed": "not_expressible",
+    "raw": "",
+    "rule": null
+   },
+   "policy": "document_sharing_rebac",
+   "scenario": "bob_view_d2"
+  },
+  {
+   "class": "UNEXPRESSIBLE",
+   "expected": {
+    "outcome": "allow",
+    "prismpath_cause": null,
+    "rule": "r1"
+   },
+   "kind": "relationship",
+   "observed": {
+    "cause": null,
+    "observed": "not_expressible",
+    "raw": "",
+    "rule": null
+   },
+   "policy": "document_sharing_rebac",
+   "scenario": "dana_view_d2"
+  },
+  {
+   "class": "UNEXPRESSIBLE",
+   "expected": {
+    "outcome": "deny",
+    "prismpath_cause": null,
+    "rule": "r2"
+   },
+   "kind": "relationship",
+   "observed": {
+    "cause": null,
+    "observed": "not_expressible",
+    "raw": "",
+    "rule": null
+   },
+   "policy": "document_sharing_rebac",
+   "scenario": "alice_view_d2"
+  },
+  {
+   "class": "UNEXPRESSIBLE",
+   "expected": {
+    "outcome": "deny",
+    "prismpath_cause": null,
+    "rule": "r2"
+   },
+   "kind": "relationship",
+   "observed": {
+    "cause": null,
+    "observed": "not_expressible",
+    "raw": "",
+    "rule": null
+   },
+   "policy": "document_sharing_rebac",
+   "scenario": "carol_view_d1"
+  },
+  {
+   "class": "MATCH",
+   "expected": {
+    "outcome": "allow",
+    "prismpath_cause": 0,
+    "rule": "r5"
+   },
+   "kind": "clear_allow",
+   "observed": {
+    "cause": null,
+    "observed": "allow",
+    "raw": "{\"cerbosCallId\": \"01M22AES9Y2YSQQ2G4AYV9TMNX\", \"requestId\": \"cmp\", \"results\": [{\"actions\": {\"decide\": \"EFFECT_ALLOW\"}, \"meta\": {\"actions\": {\"decide\": {\"matchedPolicy\": \"resource.expense_approval.vdefault\"}}}, \"outputs\": [{\"action\": \"decide\", \"src\": \"resource.expense_approval.vdefault#r5\", \"val\": {\"outcome\": \"allow\", \"rule\": \"r5\"}}], \"resource\": {\"id\": \"r1\", \"kind\": \"expense_approval\"}}]}",
+    "rule": "r5"
+   },
+   "policy": "expense_approval",
+   "scenario": "clear_allow_1"
+  },
+  {
+   "class": "MATCH",
+   "expected": {
+    "outcome": "allow",
+    "prismpath_cause": 0,
+    "rule": "r6"
+   },
+   "kind": "clear_allow",
+   "observed": {
+    "cause": null,
+    "observed": "allow",
+    "raw": "{\"cerbosCallId\": \"01M22AESBGMXFDVHJMVC5B2A9R\", \"requestId\": \"cmp\", \"results\": [{\"actions\": {\"decide\": \"EFFECT_ALLOW\"}, \"meta\": {\"actions\": {\"decide\": {\"matchedPolicy\": \"resource.expense_approval.vdefault\"}}}, \"outputs\": [{\"action\": \"decide\", \"src\": \"resource.expense_approval.vdefault#r6\", \"val\": {\"outcome\": \"allow\", \"rule\": \"r6\"}}], \"resource\": {\"id\": \"r1\", \"kind\": \"expense_approval\"}}]}",
+    "rule": "r6"
+   },
+   "policy": "expense_approval",
+   "scenario": "clear_allow_2"
+  },
+  {
+   "class": "MATCH",
+   "expected": {
+    "outcome": "allow",
+    "prismpath_cause": 0,
+    "rule": "r6"
+   },
+   "kind": "clear_allow",
+   "observed": {
+    "cause": null,
+    "observed": "allow",
+    "raw": "{\"cerbosCallId\": \"01M22AESBJHMMCDQHVMVDCA70E\", \"requestId\": \"cmp\", \"results\": [{\"actions\": {\"decide\": \"EFFECT_ALLOW\"}, \"meta\": {\"actions\": {\"decide\": {\"matchedPolicy\": \"resource.expense_approval.vdefault\"}}}, \"outputs\": [{\"action\": \"decide\", \"src\": \"resource.expense_approval.vdefault#r6\", \"val\": {\"outcome\": \"allow\", \"rule\": \"r6\"}}], \"resource\": {\"id\": \"r1\", \"kind\": \"expense_approval\"}}]}",
+    "rule": "r6"
+   },
+   "policy": "expense_approval",
+   "scenario": "clear_allow_3"
+  },
+  {
+   "class": "MATCH",
+   "expected": {
+    "outcome": "deny",
+    "prismpath_cause": 0,
+    "rule": "r1"
+   },
+   "kind": "clear_deny",
+   "observed": {
+    "cause": null,
+    "observed": "deny",
+    "raw": "{\"cerbosCallId\": \"01M22AESBKXA7Z7A8AZ68NFX1A\", \"requestId\": \"cmp\", \"results\": [{\"actions\": {\"decide\": \"EFFECT_DENY\"}, \"meta\": {\"actions\": {\"decide\": {\"matchedPolicy\": \"resource.expense_approval.vdefault\"}}}, \"outputs\": [{\"action\": \"decide\", \"src\": \"resource.expense_approval.vdefault#r1\", \"val\": {\"outcome\": \"deny\", \"rule\": \"r1\"}}], \"resource\": {\"id\": \"r1\", \"kind\": \"expense_approval\"}}]}",
+    "rule": "r1"
+   },
+   "policy": "expense_approval",
+   "scenario": "clear_deny_1"
+  },
+  {
+   "class": "MATCH",
+   "expected": {
+    "outcome": "deny",
+    "prismpath_cause": 0,
+    "rule": "r1"
+   },
+   "kind": "clear_deny",
+   "observed": {
+    "cause": null,
+    "observed": "deny",
+    "raw": "{\"cerbosCallId\": \"01M22AESBM430YF2F41V8QMDPV\", \"requestId\": \"cmp\", \"results\": [{\"actions\": {\"decide\": \"EFFECT_DENY\"}, \"meta\": {\"actions\": {\"decide\": {\"matchedPolicy\": \"resource.expense_approval.vdefault\"}}}, \"outputs\": [{\"action\": \"decide\", \"src\": \"resource.expense_approval.vdefault#r1\", \"val\": {\"outcome\": \"deny\", \"rule\": \"r1\"}}], \"resource\": {\"id\": \"r1\", \"kind\": \"expense_approval\"}}]}",
+    "rule": "r1"
+   },
+   "policy": "expense_approval",
+   "scenario": "clear_deny_2"
+  },
+  {
+   "class": "MATCH",
+   "expected": {
+    "outcome": "abstain",
+    "prismpath_cause": 0,
+    "rule": "r2"
+   },
+   "kind": "insufficient",
+   "observed": {
+    "cause": null,
+    "observed": "abstain",
+    "raw": "{\"cerbosCallId\": \"01M22AESBN8KDT4SBWNW4DNN8Z\", \"requestId\": \"cmp\", \"results\": [{\"actions\": {\"decide\": \"EFFECT_DENY\"}, \"meta\": {\"actions\": {\"decide\": {\"matchedPolicy\": \"resource.expense_approval.vdefault\"}}}, \"outputs\": [{\"action\": \"decide\", \"src\": \"resource.expense_approval.vdefault#r2\", \"val\": {\"outcome\": \"abstain\", \"rule\": \"r2\"}}], \"resource\": {\"id\": \"r1\", \"kind\": \"expense_approval\"}}]}",
+    "rule": "r2"
+   },
+   "policy": "expense_approval",
+   "scenario": "insufficient_1"
+  },
+  {
+   "class": "MATCH",
+   "expected": {
+    "outcome": "abstain",
+    "prismpath_cause": 0,
+    "rule": "r2"
+   },
+   "kind": "insufficient",
+   "observed": {
+    "cause": null,
+    "observed": "abstain",
+    "raw": "{\"cerbosCallId\": \"01M22AESBP0TXFXTQYM445TD3N\", \"requestId\": \"cmp\", \"results\": [{\"actions\": {\"decide\": \"EFFECT_DENY\"}, \"meta\": {\"actions\": {\"decide\": {\"matchedPolicy\": \"resource.expense_approval.vdefault\"}}}, \"outputs\": [{\"action\": \"decide\", \"src\": \"resource.expense_approval.vdefault#r2\", \"val\": {\"outcome\": \"abstain\", \"rule\": \"r2\"}}], \"resource\": {\"id\": \"r1\", \"kind\": \"expense_approval\"}}]}",
+    "rule": "r2"
+   },
+   "policy": "expense_approval",
+   "scenario": "insufficient_2"
+  },
+  {
+   "class": "MATCH",
+   "expected": {
+    "outcome": "escalate_human",
+    "prismpath_cause": 0,
+    "rule": "r3"
+   },
+   "kind": "escalation",
+   "observed": {
+    "cause": null,
+    "observed": "escalate_human",
+    "raw": "{\"cerbosCallId\": \"01M22AESBQG6E2919GKA9BK5BS\", \"requestId\": \"cmp\", \"results\": [{\"actions\": {\"decide\": \"EFFECT_DENY\"}, \"meta\": {\"actions\": {\"decide\": {\"matchedPolicy\": \"resource.expense_approval.vdefault\"}}}, \"outputs\": [{\"action\": \"decide\", \"src\": \"resource.expense_approval.vdefault#r3\", \"val\": {\"outcome\": \"escalate_human\", \"rule\": \"r3\"}}], \"resource\": {\"id\": \"r1\", \"kind\": \"expense_approval\"}}]}",
+    "rule": "r3"
+   },
+   "policy": "expense_approval",
+   "scenario": "escalation_1"
+  },
+  {
+   "class": "MATCH",
+   "expected": {
+    "outcome": "escalate_human",
+    "prismpath_cause": 0,
+    "rule": "r4"
+   },
+   "kind": "escalation",
+   "observed": {
+    "cause": null,
+    "observed": "escalate_human",
+    "raw": "{\"cerbosCallId\": \"01M22AESBRMNB4CNH3P3E2ADRX\", \"requestId\": \"cmp\", \"results\": [{\"actions\": {\"decide\": \"EFFECT_DENY\"}, \"meta\": {\"actions\": {\"decide\": {\"matchedPolicy\": \"resource.expense_approval.vdefault\"}}}, \"outputs\": [{\"action\": \"decide\", \"src\": \"resource.expense_approval.vdefault#r4\", \"val\": {\"outcome\": \"escalate_human\", \"rule\": \"r4\"}}], \"resource\": {\"id\": \"r1\", \"kind\": \"expense_approval\"}}]}",
+    "rule": "r4"
+   },
+   "policy": "expense_approval",
+   "scenario": "escalation_2"
+  },
+  {
+   "class": "MATCH",
+   "expected": {
+    "outcome": "escalate_human",
+    "prismpath_cause": 0,
+    "rule": "r7"
+   },
+   "kind": "escalation",
+   "observed": {
+    "cause": null,
+    "observed": "escalate_human",
+    "raw": "{\"cerbosCallId\": \"01M22AESBS6B6MJ4NKGFY3BMBY\", \"requestId\": \"cmp\", \"results\": [{\"actions\": {\"decide\": \"EFFECT_DENY\"}, \"meta\": {\"actions\": {\"decide\": {\"matchedPolicy\": \"resource.expense_approval.vdefault\"}}}, \"outputs\": [{\"action\": \"decide\", \"src\": \"resource.expense_approval.vdefault#r7\", \"val\": {\"outcome\": \"escalate_human\", \"rule\": \"r7\"}}], \"resource\": {\"id\": \"r1\", \"kind\": \"expense_approval\"}}]}",
+    "rule": "r7"
+   },
+   "policy": "expense_approval",
+   "scenario": "escalation_3"
+  },
+  {
+   "class": "PROBE",
+   "expected": {
+    "outcome": "escalate_human",
+    "prismpath_cause": 0,
+    "rule": "r7"
+   },
+   "kind": "undeclared_missing",
+   "observed": {
+    "cause": null,
+    "observed": "escalate_human",
+    "raw": "{\"cerbosCallId\": \"01M22AESBT3CY15K6CJSQTN14C\", \"requestId\": \"cmp\", \"results\": [{\"actions\": {\"decide\": \"EFFECT_DENY\"}, \"meta\": {\"actions\": {\"decide\": {\"matchedPolicy\": \"resource.expense_approval.vdefault\"}}}, \"outputs\": [{\"action\": \"decide\", \"src\": \"resource.expense_approval.vdefault#r7\", \"val\": {\"outcome\": \"escalate_human\", \"rule\": \"r7\"}}], \"resource\": {\"id\": \"r1\", \"kind\": \"expense_approval\"}}]}",
+    "rule": "r7"
+   },
+   "policy": "expense_approval",
+   "scenario": "undeclared_missing_1"
+  },
+  {
+   "class": "MATCH",
+   "expected": {
+    "outcome": "allow",
+    "prismpath_cause": 0,
+    "rule": "r6"
+   },
+   "kind": "clear_allow",
+   "observed": {
+    "cause": null,
+    "observed": "allow",
+    "raw": "{\"cerbosCallId\": \"01M22AESTGN99G9D2VJJV1T190\", \"requestId\": \"cmp\", \"results\": [{\"actions\": {\"decide\": \"EFFECT_ALLOW\"}, \"meta\": {\"actions\": {\"decide\": {\"matchedPolicy\": \"resource.network_admission.vdefault\"}}}, \"outputs\": [{\"action\": \"decide\", \"src\": \"resource.network_admission.vdefault#r6\", \"val\": {\"outcome\": \"allow\", \"rule\": \"r6\"}}], \"resource\": {\"id\": \"r1\", \"kind\": \"network_admission\"}}]}",
+    "rule": "r6"
+   },
+   "policy": "network_admission",
+   "scenario": "allow_https_1"
+  },
+  {
+   "class": "MATCH",
+   "expected": {
+    "outcome": "deny",
+    "prismpath_cause": 0,
+    "rule": "r1"
+   },
+   "kind": "clear_deny",
+   "observed": {
+    "cause": null,
+    "observed": "deny",
+    "raw": "{\"cerbosCallId\": \"01M22AESWMEKVFR0ESS1N85VEB\", \"requestId\": \"cmp\", \"results\": [{\"actions\": {\"decide\": \"EFFECT_DENY\"}, \"meta\": {\"actions\": {\"decide\": {\"matchedPolicy\": \"resource.network_admission.vdefault\"}}}, \"outputs\": [{\"action\": \"decide\", \"src\": \"resource.network_admission.vdefault#r1\", \"val\": {\"outcome\": \"deny\", \"rule\": \"r1\"}}], \"resource\": {\"id\": \"r1\", \"kind\": \"network_admission\"}}]}",
+    "rule": "r1"
+   },
+   "policy": "network_admission",
+   "scenario": "deny_telnet_1"
+  },
+  {
+   "class": "MATCH",
+   "expected": {
+    "outcome": "allow",
+    "prismpath_cause": 0,
+    "rule": "r2"
+   },
+   "kind": "clear_allow",
+   "observed": {
+    "cause": null,
+    "observed": "allow",
+    "raw": "{\"cerbosCallId\": \"01M22AESWP8Y0Z47HZ5RH8CZT0\", \"requestId\": \"cmp\", \"results\": [{\"actions\": {\"decide\": \"EFFECT_ALLOW\"}, \"meta\": {\"actions\": {\"decide\": {\"matchedPolicy\": \"resource.network_admission.vdefault\"}}}, \"outputs\": [{\"action\": \"decide\", \"src\": \"resource.network_admission.vdefault#r2\", \"val\": {\"outcome\": \"allow\", \"rule\": \"r2\"}}], \"resource\": {\"id\": \"r1\", \"kind\": \"network_admission\"}}]}",
+    "rule": "r2"
+   },
+   "policy": "network_admission",
+   "scenario": "allow_internal_ssh_1"
+  },
+  {
+   "class": "MATCH",
+   "expected": {
+    "outcome": "deny",
+    "prismpath_cause": 0,
+    "rule": "r3"
+   },
+   "kind": "clear_deny",
+   "observed": {
+    "cause": null,
+    "observed": "deny",
+    "raw": "{\"cerbosCallId\": \"01M22AESWQC88J3BBKGXPAZB8K\", \"requestId\": \"cmp\", \"results\": [{\"actions\": {\"decide\": \"EFFECT_DENY\"}, \"meta\": {\"actions\": {\"decide\": {\"matchedPolicy\": \"resource.network_admission.vdefault\"}}}, \"outputs\": [{\"action\": \"decide\", \"src\": \"resource.network_admission.vdefault#r3\", \"val\": {\"outcome\": \"deny\", \"rule\": \"r3\"}}], \"resource\": {\"id\": \"r1\", \"kind\": \"network_admission\"}}]}",
+    "rule": "r3"
+   },
+   "policy": "network_admission",
+   "scenario": "deny_external_ssh_1"
+  },
+  {
+   "class": "MATCH",
+   "expected": {
+    "outcome": "allow",
+    "prismpath_cause": 0,
+    "rule": "r4"
+   },
+   "kind": "clear_allow",
+   "observed": {
+    "cause": null,
+    "observed": "allow",
+    "raw": "{\"cerbosCallId\": \"01M22AESWRK9B4E759MBP571H2\", \"requestId\": \"cmp\", \"results\": [{\"actions\": {\"decide\": \"EFFECT_ALLOW\"}, \"meta\": {\"actions\": {\"decide\": {\"matchedPolicy\": \"resource.network_admission.vdefault\"}}}, \"outputs\": [{\"action\": \"decide\", \"src\": \"resource.network_admission.vdefault#r4\", \"val\": {\"outcome\": \"allow\", \"rule\": \"r4\"}}], \"resource\": {\"id\": \"r1\", \"kind\": \"network_admission\"}}]}",
+    "rule": "r4"
+   },
+   "policy": "network_admission",
+   "scenario": "allow_dns_small_1"
+  },
+  {
+   "class": "MATCH",
+   "expected": {
+    "outcome": "deny",
+    "prismpath_cause": 0,
+    "rule": "r5"
+   },
+   "kind": "clear_deny",
+   "observed": {
+    "cause": null,
+    "observed": "deny",
+    "raw": "{\"cerbosCallId\": \"01M22AESWSH5318XYMBTW4RZXV\", \"requestId\": \"cmp\", \"results\": [{\"actions\": {\"decide\": \"EFFECT_DENY\"}, \"meta\": {\"actions\": {\"decide\": {\"matchedPolicy\": \"resource.network_admission.vdefault\"}}}, \"outputs\": [{\"action\": \"decide\", \"src\": \"resource.network_admission.vdefault#r5\", \"val\": {\"outcome\": \"deny\", \"rule\": \"r5\"}}], \"resource\": {\"id\": \"r1\", \"kind\": \"network_admission\"}}]}",
+    "rule": "r5"
+   },
+   "policy": "network_admission",
+   "scenario": "deny_dns_large_1"
+  },
+  {
+   "class": "MATCH",
+   "expected": {
+    "outcome": "allow",
+    "prismpath_cause": 0,
+    "rule": "r4"
+   },
+   "kind": "clear_allow",
+   "observed": {
+    "cause": null,
+    "observed": "allow",
+    "raw": "{\"cerbosCallId\": \"01M22AESWTD046R57R9FVYYBBJ\", \"requestId\": \"cmp\", \"results\": [{\"actions\": {\"decide\": \"EFFECT_ALLOW\"}, \"meta\": {\"actions\": {\"decide\": {\"matchedPolicy\": \"resource.network_admission.vdefault\"}}}, \"outputs\": [{\"action\": \"decide\", \"src\": \"resource.network_admission.vdefault#r4\", \"val\": {\"outcome\": \"allow\", \"rule\": \"r4\"}}], \"resource\": {\"id\": \"r1\", \"kind\": \"network_admission\"}}]}",
+    "rule": "r4"
+   },
+   "policy": "network_admission",
+   "scenario": "boundary_dns_512"
+  },
+  {
+   "class": "MATCH",
+   "expected": {
+    "outcome": "deny",
+    "prismpath_cause": 0,
+    "rule": "r5"
+   },
+   "kind": "clear_deny",
+   "observed": {
+    "cause": null,
+    "observed": "deny",
+    "raw": "{\"cerbosCallId\": \"01M22AESWT783SEH3HEBZ7EYE5\", \"requestId\": \"cmp\", \"results\": [{\"actions\": {\"decide\": \"EFFECT_DENY\"}, \"meta\": {\"actions\": {\"decide\": {\"matchedPolicy\": \"resource.network_admission.vdefault\"}}}, \"outputs\": [{\"action\": \"decide\", \"src\": \"resource.network_admission.vdefault#r5\", \"val\": {\"outcome\": \"deny\", \"rule\": \"r5\"}}], \"resource\": {\"id\": \"r1\", \"kind\": \"network_admission\"}}]}",
+    "rule": "r5"
+   },
+   "policy": "network_admission",
+   "scenario": "boundary_dns_513"
+  },
+  {
+   "class": "MATCH",
+   "expected": {
+    "outcome": "observe",
+    "prismpath_cause": 0,
+    "rule": "r7"
+   },
+   "kind": "clear_allow",
+   "observed": {
+    "cause": null,
+    "observed": "observe",
+    "raw": "{\"cerbosCallId\": \"01M22AESWVT4V0F72CRTPW3S1V\", \"requestId\": \"cmp\", \"results\": [{\"actions\": {\"decide\": \"EFFECT_ALLOW\"}, \"meta\": {\"actions\": {\"decide\": {\"matchedPolicy\": \"resource.network_admission.vdefault\"}}}, \"outputs\": [{\"action\": \"decide\", \"src\": \"resource.network_admission.vdefault#r7\", \"val\": {\"outcome\": \"observe\", \"rule\": \"r7\"}}], \"resource\": {\"id\": \"r1\", \"kind\": \"network_admission\"}}]}",
+    "rule": "r7"
+   },
+   "policy": "network_admission",
+   "scenario": "observe_jumbo_1"
+  },
+  {
+   "class": "MATCH",
+   "expected": {
+    "outcome": "observe",
+    "prismpath_cause": 0,
+    "rule": "r9"
+   },
+   "kind": "clear_allow",
+   "observed": {
+    "cause": null,
+    "observed": "observe",
+    "raw": "{\"cerbosCallId\": \"01M22AESWWS8WX3K1AXSNHZ3T1\", \"requestId\": \"cmp\", \"results\": [{\"actions\": {\"decide\": \"EFFECT_ALLOW\"}, \"meta\": {\"actions\": {\"decide\": {\"matchedPolicy\": \"resource.network_admission.vdefault\"}}}, \"outputs\": [{\"action\": \"decide\", \"src\": \"resource.network_admission.vdefault#r9\", \"val\": {\"outcome\": \"observe\", \"rule\": \"r9\"}}], \"resource\": {\"id\": \"r1\", \"kind\": \"network_admission\"}}]}",
+    "rule": "r9"
+   },
+   "policy": "network_admission",
+   "scenario": "boundary_jumbo_1399"
+  },
+  {
+   "class": "MATCH",
+   "expected": {
+    "outcome": "observe",
+    "prismpath_cause": 0,
+    "rule": "r7"
+   },
+   "kind": "clear_allow",
+   "observed": {
+    "cause": null,
+    "observed": "observe",
+    "raw": "{\"cerbosCallId\": \"01M22AESWXQYAD9Y6A55PZD5A0\", \"requestId\": \"cmp\", \"results\": [{\"actions\": {\"decide\": \"EFFECT_ALLOW\"}, \"meta\": {\"actions\": {\"decide\": {\"matchedPolicy\": \"resource.network_admission.vdefault\"}}}, \"outputs\": [{\"action\": \"decide\", \"src\": \"resource.network_admission.vdefault#r7\", \"val\": {\"outcome\": \"observe\", \"rule\": \"r7\"}}], \"resource\": {\"id\": \"r1\", \"kind\": \"network_admission\"}}]}",
+    "rule": "r7"
+   },
+   "policy": "network_admission",
+   "scenario": "boundary_jumbo_1400"
+  },
+  {
+   "class": "MATCH",
+   "expected": {
+    "outcome": "allow",
+    "prismpath_cause": 0,
+    "rule": "r8"
+   },
+   "kind": "clear_allow",
+   "observed": {
+    "cause": null,
+    "observed": "allow",
+    "raw": "{\"cerbosCallId\": \"01M22AESWYZGK91KPJ1793845B\", \"requestId\": \"cmp\", \"results\": [{\"actions\": {\"decide\": \"EFFECT_ALLOW\"}, \"meta\": {\"actions\": {\"decide\": {\"matchedPolicy\": \"resource.network_admission.vdefault\"}}}, \"outputs\": [{\"action\": \"decide\", \"src\": \"resource.network_admission.vdefault#r8\", \"val\": {\"outcome\": \"allow\", \"rule\": \"r8\"}}], \"resource\": {\"id\": \"r1\", \"kind\": \"network_admission\"}}]}",
+    "rule": "r8"
+   },
+   "policy": "network_admission",
+   "scenario": "allow_icmp_1"
+  },
+  {
+   "class": "MATCH",
+   "expected": {
+    "outcome": "observe",
+    "prismpath_cause": 0,
+    "rule": "r9"
+   },
+   "kind": "clear_allow",
+   "observed": {
+    "cause": null,
+    "observed": "observe",
+    "raw": "{\"cerbosCallId\": \"01M22AESWZVBQN4HA9NN1MWNNM\", \"requestId\": \"cmp\", \"results\": [{\"actions\": {\"decide\": \"EFFECT_ALLOW\"}, \"meta\": {\"actions\": {\"decide\": {\"matchedPolicy\": \"resource.network_admission.vdefault\"}}}, \"outputs\": [{\"action\": \"decide\", \"src\": \"resource.network_admission.vdefault#r9\", \"val\": {\"outcome\": \"observe\", \"rule\": \"r9\"}}], \"resource\": {\"id\": \"r1\", \"kind\": \"network_admission\"}}]}",
+    "rule": "r9"
+   },
+   "policy": "network_admission",
+   "scenario": "observe_other_1"
+  },
+  {
+   "class": "PROBE",
+   "expected": {
+    "outcome": "observe",
+    "prismpath_cause": 0,
+    "rule": "r9"
+   },
+   "kind": "undeclared_missing",
+   "observed": {
+    "cause": null,
+    "observed": "observe",
+    "raw": "{\"cerbosCallId\": \"01M22AESX0VZG5B9G34EAZDPWW\", \"requestId\": \"cmp\", \"results\": [{\"actions\": {\"decide\": \"EFFECT_ALLOW\"}, \"meta\": {\"actions\": {\"decide\": {\"matchedPolicy\": \"resource.network_admission.vdefault\"}}}, \"outputs\": [{\"action\": \"decide\", \"src\": \"resource.network_admission.vdefault#r9\", \"val\": {\"outcome\": \"observe\", \"rule\": \"r9\"}}], \"resource\": {\"id\": \"r1\", \"kind\": \"network_admission\"}}]}",
+    "rule": "r9"
+   },
+   "policy": "network_admission",
+   "scenario": "undeclared_missing_1"
+  },
+  {
+   "class": "MATCH",
+   "expected": {
+    "outcome": "allow",
+    "prismpath_cause": 0,
+    "rule": "r4"
+   },
+   "kind": "clear_allow",
+   "observed": {
+    "cause": null,
+    "observed": "allow",
+    "raw": "{\"cerbosCallId\": \"01M22AETBT2RKWRQK513SD5XMR\", \"requestId\": \"cmp\", \"results\": [{\"actions\": {\"decide\": \"EFFECT_ALLOW\"}, \"meta\": {\"actions\": {\"decide\": {\"matchedPolicy\": \"resource.sensor_interlock.vdefault\"}}}, \"outputs\": [{\"action\": \"decide\", \"src\": \"resource.sensor_interlock.vdefault#r4\", \"val\": {\"outcome\": \"allow\", \"rule\": \"r4\"}}], \"resource\": {\"id\": \"r1\", \"kind\": \"sensor_interlock\"}}]}",
+    "rule": "r4"
+   },
+   "policy": "sensor_interlock",
+   "scenario": "allow_nominal_1"
+  },
+  {
+   "class": "MATCH",
+   "expected": {
+    "outcome": "allow",
+    "prismpath_cause": 0,
+    "rule": "r4"
+   },
+   "kind": "clear_allow",
+   "observed": {
+    "cause": null,
+    "observed": "allow",
+    "raw": "{\"cerbosCallId\": \"01M22AETDEJRRR7KYY6PKQRB2B\", \"requestId\": \"cmp\", \"results\": [{\"actions\": {\"decide\": \"EFFECT_ALLOW\"}, \"meta\": {\"actions\": {\"decide\": {\"matchedPolicy\": \"resource.sensor_interlock.vdefault\"}}}, \"outputs\": [{\"action\": \"decide\", \"src\": \"resource.sensor_interlock.vdefault#r4\", \"val\": {\"outcome\": \"allow\", \"rule\": \"r4\"}}], \"resource\": {\"id\": \"r1\", \"kind\": \"sensor_interlock\"}}]}",
+    "rule": "r4"
+   },
+   "policy": "sensor_interlock",
+   "scenario": "allow_armed_nominal_1"
+  },
+  {
+   "class": "MATCH",
+   "expected": {
+    "outcome": "observe",
+    "prismpath_cause": 0,
+    "rule": "r3"
+   },
+   "kind": "clear_allow",
+   "observed": {
+    "cause": null,
+    "observed": "observe",
+    "raw": "{\"cerbosCallId\": \"01M22AETDFZA8DY3HA802PES32\", \"requestId\": \"cmp\", \"results\": [{\"actions\": {\"decide\": \"EFFECT_ALLOW\"}, \"meta\": {\"actions\": {\"decide\": {\"matchedPolicy\": \"resource.sensor_interlock.vdefault\"}}}, \"outputs\": [{\"action\": \"decide\", \"src\": \"resource.sensor_interlock.vdefault#r3\", \"val\": {\"outcome\": \"observe\", \"rule\": \"r3\"}}], \"resource\": {\"id\": \"r1\", \"kind\": \"sensor_interlock\"}}]}",
+    "rule": "r3"
+   },
+   "policy": "sensor_interlock",
+   "scenario": "observe_temp_1"
+  },
+  {
+   "class": "MATCH",
+   "expected": {
+    "outcome": "deny",
+    "prismpath_cause": 0,
+    "rule": "r2"
+   },
+   "kind": "clear_deny",
+   "observed": {
+    "cause": null,
+    "observed": "deny",
+    "raw": "{\"cerbosCallId\": \"01M22AETDHF21CMW1B89GAVCQ6\", \"requestId\": \"cmp\", \"results\": [{\"actions\": {\"decide\": \"EFFECT_DENY\"}, \"meta\": {\"actions\": {\"decide\": {\"matchedPolicy\": \"resource.sensor_interlock.vdefault\"}}}, \"outputs\": [{\"action\": \"decide\", \"src\": \"resource.sensor_interlock.vdefault#r2\", \"val\": {\"outcome\": \"deny\", \"rule\": \"r2\"}}], \"resource\": {\"id\": \"r1\", \"kind\": \"sensor_interlock\"}}]}",
+    "rule": "r2"
+   },
+   "policy": "sensor_interlock",
+   "scenario": "deny_temp_1"
+  },
+  {
+   "class": "MATCH",
+   "expected": {
+    "outcome": "deny",
+    "prismpath_cause": 0,
+    "rule": "r2"
+   },
+   "kind": "clear_deny",
+   "observed": {
+    "cause": null,
+    "observed": "deny",
+    "raw": "{\"cerbosCallId\": \"01M22AETDJAC52K58M01G15T84\", \"requestId\": \"cmp\", \"results\": [{\"actions\": {\"decide\": \"EFFECT_DENY\"}, \"meta\": {\"actions\": {\"decide\": {\"matchedPolicy\": \"resource.sensor_interlock.vdefault\"}}}, \"outputs\": [{\"action\": \"decide\", \"src\": \"resource.sensor_interlock.vdefault#r2\", \"val\": {\"outcome\": \"deny\", \"rule\": \"r2\"}}], \"resource\": {\"id\": \"r1\", \"kind\": \"sensor_interlock\"}}]}",
+    "rule": "r2"
+   },
+   "policy": "sensor_interlock",
+   "scenario": "deny_pressure_1"
+  },
+  {
+   "class": "MATCH",
+   "expected": {
+    "outcome": "observe",
+    "prismpath_cause": 0,
+    "rule": "r3"
+   },
+   "kind": "clear_allow",
+   "observed": {
+    "cause": null,
+    "observed": "observe",
+    "raw": "{\"cerbosCallId\": \"01M22AETDJ0QTS0XXPY03PCN09\", \"requestId\": \"cmp\", \"results\": [{\"actions\": {\"decide\": \"EFFECT_ALLOW\"}, \"meta\": {\"actions\": {\"decide\": {\"matchedPolicy\": \"resource.sensor_interlock.vdefault\"}}}, \"outputs\": [{\"action\": \"decide\", \"src\": \"resource.sensor_interlock.vdefault#r3\", \"val\": {\"outcome\": \"observe\", \"rule\": \"r3\"}}], \"resource\": {\"id\": \"r1\", \"kind\": \"sensor_interlock\"}}]}",
+    "rule": "r3"
+   },
+   "policy": "sensor_interlock",
+   "scenario": "boundary_temp_149"
+  },
+  {
+   "class": "MATCH",
+   "expected": {
+    "outcome": "deny",
+    "prismpath_cause": 0,
+    "rule": "r2"
+   },
+   "kind": "clear_deny",
+   "observed": {
+    "cause": null,
+    "observed": "deny",
+    "raw": "{\"cerbosCallId\": \"01M22AETDKB7TBRC4G4JCM1HT6\", \"requestId\": \"cmp\", \"results\": [{\"actions\": {\"decide\": \"EFFECT_DENY\"}, \"meta\": {\"actions\": {\"decide\": {\"matchedPolicy\": \"resource.sensor_interlock.vdefault\"}}}, \"outputs\": [{\"action\": \"decide\", \"src\": \"resource.sensor_interlock.vdefault#r2\", \"val\": {\"outcome\": \"deny\", \"rule\": \"r2\"}}], \"resource\": {\"id\": \"r1\", \"kind\": \"sensor_interlock\"}}]}",
+    "rule": "r2"
+   },
+   "policy": "sensor_interlock",
+   "scenario": "boundary_temp_150"
+  },
+  {
+   "class": "MATCH",
+   "expected": {
+    "outcome": "allow",
+    "prismpath_cause": 0,
+    "rule": "r4"
+   },
+   "kind": "clear_allow",
+   "observed": {
+    "cause": null,
+    "observed": "allow",
+    "raw": "{\"cerbosCallId\": \"01M22AETDMC4MSQ75M9Y81MDF6\", \"requestId\": \"cmp\", \"results\": [{\"actions\": {\"decide\": \"EFFECT_ALLOW\"}, \"meta\": {\"actions\": {\"decide\": {\"matchedPolicy\": \"resource.sensor_interlock.vdefault\"}}}, \"outputs\": [{\"action\": \"decide\", \"src\": \"resource.sensor_interlock.vdefault#r4\", \"val\": {\"outcome\": \"allow\", \"rule\": \"r4\"}}], \"resource\": {\"id\": \"r1\", \"kind\": \"sensor_interlock\"}}]}",
+    "rule": "r4"
+   },
+   "policy": "sensor_interlock",
+   "scenario": "boundary_nominal_119_749"
+  },
+  {
+   "class": "MATCH",
+   "expected": {
+    "outcome": "observe",
+    "prismpath_cause": 0,
+    "rule": "r3"
+   },
+   "kind": "clear_allow",
+   "observed": {
+    "cause": null,
+    "observed": "observe",
+    "raw": "{\"cerbosCallId\": \"01M22AETDN7V3VNMY620T7EYZ3\", \"requestId\": \"cmp\", \"results\": [{\"actions\": {\"decide\": \"EFFECT_ALLOW\"}, \"meta\": {\"actions\": {\"decide\": {\"matchedPolicy\": \"resource.sensor_interlock.vdefault\"}}}, \"outputs\": [{\"action\": \"decide\", \"src\": \"resource.sensor_interlock.vdefault#r3\", \"val\": {\"outcome\": \"observe\", \"rule\": \"r3\"}}], \"resource\": {\"id\": \"r1\", \"kind\": \"sensor_interlock\"}}]}",
+    "rule": "r3"
+   },
+   "policy": "sensor_interlock",
+   "scenario": "boundary_temp_120"
+  },
+  {
+   "class": "MATCH",
+   "expected": {
+    "outcome": "escalate_human",
+    "prismpath_cause": 0,
+    "rule": "r1"
+   },
+   "kind": "escalation",
+   "observed": {
+    "cause": null,
+    "observed": "escalate_human",
+    "raw": "{\"cerbosCallId\": \"01M22AETDN75CBTHX5QSYSPJVK\", \"requestId\": \"cmp\", \"results\": [{\"actions\": {\"decide\": \"EFFECT_DENY\"}, \"meta\": {\"actions\": {\"decide\": {\"matchedPolicy\": \"resource.sensor_interlock.vdefault\"}}}, \"outputs\": [{\"action\": \"decide\", \"src\": \"resource.sensor_interlock.vdefault#r1\", \"val\": {\"outcome\": \"escalate_human\", \"rule\": \"r1\"}}], \"resource\": {\"id\": \"r1\", \"kind\": \"sensor_interlock\"}}]}",
+    "rule": "r1"
+   },
+   "policy": "sensor_interlock",
+   "scenario": "escalation_sensor_dark_armed_1"
+  },
+  {
+   "class": "PROBE",
+   "expected": {
+    "outcome": "no_match",
+    "prismpath_cause": 36,
+    "rule": null
+   },
+   "kind": "undeclared_missing",
+   "observed": {
+    "cause": null,
+    "observed": "no_match",
+    "raw": "{\"cerbosCallId\": \"01M22AETDPBQNSCMMNGG55Z397\", \"requestId\": \"cmp\", \"results\": [{\"actions\": {\"decide\": \"EFFECT_DENY\"}, \"meta\": {\"actions\": {\"decide\": {\"matchedPolicy\": \"resource.sensor_interlock.vdefault\"}}}, \"resource\": {\"id\": \"r1\", \"kind\": \"sensor_interlock\"}}]}",
+    "rule": null
+   },
+   "policy": "sensor_interlock",
+   "scenario": "undeclared_missing_1"
+  },
+  {
+   "class": "PROBE",
+   "expected": {
+    "outcome": "no_match",
+    "prismpath_cause": 36,
+    "rule": null
+   },
+   "kind": "undeclared_missing",
+   "observed": {
+    "cause": null,
+    "observed": "no_match",
+    "raw": "{\"cerbosCallId\": \"01M22AETDPW5TERAQW5B38YC5C\", \"requestId\": \"cmp\", \"results\": [{\"actions\": {\"decide\": \"EFFECT_DENY\"}, \"meta\": {\"actions\": {\"decide\": {\"matchedPolicy\": \"resource.sensor_interlock.vdefault\"}}}, \"resource\": {\"id\": \"r1\", \"kind\": \"sensor_interlock\"}}]}",
+    "rule": null
+   },
+   "policy": "sensor_interlock",
+   "scenario": "undeclared_missing_2"
+  }
+ ],
+ "summary": {
+  "DROPPED": 0,
+  "MATCH": 55,
+  "MISMATCH": 0,
+  "PROBE": 5,
+  "UNEXPRESSIBLE": 6
+ },
+ "system": "cerbos"
+}

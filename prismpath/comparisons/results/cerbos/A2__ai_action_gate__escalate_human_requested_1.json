@@ -1,0 +1,26 @@
+{
+  "dimension": "A2",
+  "evidence_path": "prismpath/comparisons/systems/cerbos/generated",
+  "expected": "escalate_human",
+  "glue": {
+    "components": [
+      "response parser",
+      "outcome mapping",
+      "has guards in the translation"
+    ],
+    "description": "a client wrapper that reads the outcome carrier (Cedar's applying policy annotation from the verbose diagnostics, or Cerbos's output block) and returns it as the decision, plus the absence guards the translator already writes",
+    "hours": 1,
+    "loc": 40
+  },
+  "grade": "WITH-WORK",
+  "harness_commit": "fcbabc5",
+  "idiomatic": true,
+  "match": true,
+  "notes": "Observed by the real system in the Phase 2 conformance run: escalate_human (expected escalate_human). Carrier: output_field (Cerbos decides EFFECT_ALLOW or EFFECT_DENY per action; the outcome rides the rule's output block {outcome, rule} in the response). Worker requested vs policy selected escalation: only by the rule id in the output block; no system level cause. This is the worker requested case; cause observed: None.",
+  "observed": "escalate_human",
+  "policy": "ai_action_gate",
+  "run_at": "2026-09-08T22:30:21Z",
+  "scenario": "escalate_human_requested_1",
+  "system": "cerbos",
+  "system_version": "0.55.0"
+}

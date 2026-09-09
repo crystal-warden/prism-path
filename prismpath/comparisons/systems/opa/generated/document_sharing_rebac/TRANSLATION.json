@@ -1,0 +1,27 @@
+{
+  "citations": [
+    "https://www.openpolicyagent.org/docs/latest/policy-language/#else-keyword",
+    "https://www.openpolicyagent.org/docs/latest/policy-language/#undefined-values",
+    "https://www.openpolicyagent.org/docs/latest/policy-language/#membership-in",
+    "https://www.openpolicyagent.org/docs/latest/policy-language/#negation-not",
+    "https://www.openpolicyagent.org/docs/latest/policy-language/#logical-or",
+    "https://www.openpolicyagent.org/docs/latest/policy-language/#sets",
+    "https://www.openpolicyagent.org/docs/latest/policy-language/#functions-built-in-graphreachable"
+  ],
+  "dropped_rules": [],
+  "expressible": true,
+  "files": [
+    "data.json",
+    "policy.rego"
+  ],
+  "idiomatic": true,
+  "notes": [
+    "Ordered first-match rules are encoded idiomatically using Rego's `else` chain (`decision := ... if { ... } else := ...`), with the final `else` without a body serving as the catch-all when present.",
+    "Missing input fields in `cmp` or `in` make expressions undefined, causing rule body evaluation to fail (unsatisfied), which reproduces neutral semantics.",
+    "Relationship reachability is computed natively using the `graph.reachable` built-in over `data.graph` compiled from model.tuples in data.json.",
+    "The model's three relation kinds become graph edges: direct and userset tuples (s, r, o) become edges s -> o#r; parent tuples (s, parent, o) become edges s#viewer -> o#viewer (parent viewer permits child viewer).",
+    "Compilation of the relation model into a reachability graph is handwritten for this model shape."
+  ],
+  "policy": "document_sharing_rebac",
+  "system": "opa"
+}

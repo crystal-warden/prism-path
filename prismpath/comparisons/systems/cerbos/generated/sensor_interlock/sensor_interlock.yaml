@@ -1,0 +1,45 @@
+apiVersion: api.cerbos.dev/v1
+resourcePolicy:
+  version: default
+  resource: sensor_interlock
+  rules:
+    - name: r1
+      actions: ["decide"]
+      effect: EFFECT_DENY
+      roles: ["*"]
+      condition:
+        match:
+          expr: "((has(request.resource.attr.sensor_ok) && request.resource.attr.sensor_ok == false) && (has(request.resource.attr.armed) && request.resource.attr.armed == true))"
+      output:
+        when:
+          ruleActivated: "{\"outcome\": \"escalate_human\", \"rule\": \"r1\"}"
+    - name: r2
+      actions: ["decide"]
+      effect: EFFECT_DENY
+      roles: ["*"]
+      condition:
+        match:
+          expr: "((has(request.resource.attr.temp_c) && request.resource.attr.temp_c >= 150) || (has(request.resource.attr.pressure_kpa) && request.resource.attr.pressure_kpa >= 900)) && !((has(request.resource.attr.sensor_ok) && request.resource.attr.sensor_ok == false) && (has(request.resource.attr.armed) && request.resource.attr.armed == true))"
+      output:
+        when:
+          ruleActivated: "{\"outcome\": \"deny\", \"rule\": \"r2\"}"
+    - name: r3
+      actions: ["decide"]
+      effect: EFFECT_ALLOW
+      roles: ["*"]
+      condition:
+        match:
+          expr: "((has(request.resource.attr.temp_c) && request.resource.attr.temp_c >= 120) || (has(request.resource.attr.pressure_kpa) && request.resource.attr.pressure_kpa >= 750)) && !((has(request.resource.attr.sensor_ok) && request.resource.attr.sensor_ok == false) && (has(request.resource.attr.armed) && request.resource.attr.armed == true)) && !((has(request.resource.attr.temp_c) && request.resource.attr.temp_c >= 150) || (has(request.resource.attr.pressure_kpa) && request.resource.attr.pressure_kpa >= 900))"
+      output:
+        when:
+          ruleActivated: "{\"outcome\": \"observe\", \"rule\": \"r3\"}"
+    - name: r4
+      actions: ["decide"]
+      effect: EFFECT_ALLOW
+      roles: ["*"]
+      condition:
+        match:
+          expr: "((has(request.resource.attr.temp_c) && request.resource.attr.temp_c < 120) && (has(request.resource.attr.pressure_kpa) && request.resource.attr.pressure_kpa < 750) && (has(request.resource.attr.sensor_ok) && request.resource.attr.sensor_ok == true)) && !((has(request.resource.attr.sensor_ok) && request.resource.attr.sensor_ok == false) && (has(request.resource.attr.armed) && request.resource.attr.armed == true)) && !((has(request.resource.attr.temp_c) && request.resource.attr.temp_c >= 150) || (has(request.resource.attr.pressure_kpa) && request.resource.attr.pressure_kpa >= 900)) && !((has(request.resource.attr.temp_c) && request.resource.attr.temp_c >= 120) || (has(request.resource.attr.pressure_kpa) && request.resource.attr.pressure_kpa >= 750))"
+      output:
+        when:
+          ruleActivated: "{\"outcome\": \"allow\", \"rule\": \"r4\"}"

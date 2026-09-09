@@ -1,0 +1,17 @@
+{
+  "dimension": "A6",
+  "evidence_path": "prismpath/comparisons/results/cedar/evidence/A6",
+  "expected": "refuse_policy",
+  "glue": null,
+  "grade": "NOT",
+  "harness_commit": "1d8b6ac",
+  "idiomatic": true,
+  "match": false,
+  "notes": "Cedar is a library and CLI over policy files: no signature, no version, no integrity check at the point. A stale, tampered, or unsigned policy file is simply the policy in force. Verified by construction of the interface (cedar authorize --policies <file>); the translation directory is the only artifact.",
+  "observed": "accepted",
+  "policy": "network_admission",
+  "run_at": "2026-09-08T22:35:32Z",
+  "scenario": "stale_policy_1",
+  "system": "cedar",
+  "system_version": "4.12.0"
+}

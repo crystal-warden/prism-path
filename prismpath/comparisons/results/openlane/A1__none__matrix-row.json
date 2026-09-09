@@ -1,0 +1,17 @@
+{
+  "dimension": "A1",
+  "evidence_path": "prismpath/comparisons/results/openlane/evidence/docs",
+  "expected": null,
+  "glue": null,
+  "grade": "NOT",
+  "harness_commit": "434bb37",
+  "idiomatic": true,
+  "match": false,
+  "notes": "Graded from documentation (results/openlane/evidence/docs/sources.txt): no policy evaluation language or decision API: nothing to return abstain from; objects have approval states, not decisions on requests. Openlane is the reference layer for who governs the compliance program, a channel candidate for the GRC adjudication layer, not a decision engine; NOT here is a boundary, not a defect.",
+  "observed": "not_applicable",
+  "policy": "none",
+  "run_at": "2026-09-08T22:37:41Z",
+  "scenario": "matrix-row",
+  "system": "openlane",
+  "system_version": "docs-only"
+}

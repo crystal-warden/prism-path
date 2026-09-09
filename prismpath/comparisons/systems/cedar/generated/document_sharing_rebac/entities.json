@@ -1,0 +1,81 @@
+[
+  {
+    "uid": {
+      "type": "User",
+      "id": "alice"
+    },
+    "attrs": {},
+    "parents": [
+      {
+        "type": "Group",
+        "id": "eng"
+      }
+    ]
+  },
+  {
+    "uid": {
+      "type": "Group",
+      "id": "eng"
+    },
+    "attrs": {},
+    "parents": []
+  },
+  {
+    "uid": {
+      "type": "Folder",
+      "id": "f1"
+    },
+    "attrs": {},
+    "parents": []
+  },
+  {
+    "uid": {
+      "type": "Doc",
+      "id": "d1"
+    },
+    "attrs": {},
+    "parents": [
+      {
+        "type": "Folder",
+        "id": "f1"
+      }
+    ]
+  },
+  {
+    "uid": {
+      "type": "Doc",
+      "id": "d2"
+    },
+    "attrs": {},
+    "parents": [
+      {
+        "type": "Folder",
+        "id": "f2"
+      }
+    ]
+  },
+  {
+    "uid": {
+      "type": "User",
+      "id": "bob"
+    },
+    "attrs": {},
+    "parents": []
+  },
+  {
+    "uid": {
+      "type": "Folder",
+      "id": "f2"
+    },
+    "attrs": {},
+    "parents": []
+  },
+  {
+    "uid": {
+      "type": "User",
+      "id": "dana"
+    },
+    "attrs": {},
+    "parents": []
+  }
+]

@@ -1,0 +1,255 @@
+[
+ {
+  "policy": "network_admission",
+  "scenario": "allow_https_1",
+  "http_ns": {
+   "min": 100784,
+   "median": 320424,
+   "p95": 545280,
+   "max": 2145874,
+   "n": 100000
+  }
+ },
+ {
+  "policy": "network_admission",
+  "scenario": "deny_telnet_1",
+  "http_ns": {
+   "min": 94496,
+   "median": 306128,
+   "p95": 537873,
+   "max": 20545493,
+   "n": 100000
+  }
+ },
+ {
+  "policy": "network_admission",
+  "scenario": "allow_internal_ssh_1",
+  "http_ns": {
+   "min": 99296,
+   "median": 311312,
+   "p95": 550801,
+   "max": 2377778,
+   "n": 100000
+  }
+ },
+ {
+  "policy": "network_admission",
+  "scenario": "deny_external_ssh_1",
+  "http_ns": {
+   "min": 99840,
+   "median": 316193,
+   "p95": 555632,
+   "max": 1495697,
+   "n": 100000
+  }
+ },
+ {
+  "policy": "network_admission",
+  "scenario": "allow_dns_small_1",
+  "http_ns": {
+   "min": 95568,
+   "median": 313840,
+   "p95": 547105,
+   "max": 1454241,
+   "n": 100000
+  }
+ },
+ {
+  "policy": "network_admission",
+  "scenario": "deny_dns_large_1",
+  "http_ns": {
+   "min": 101888,
+   "median": 315376,
+   "p95": 552673,
+   "max": 1644225,
+   "n": 100000
+  }
+ },
+ {
+  "policy": "network_admission",
+  "scenario": "boundary_dns_512",
+  "http_ns": {
+   "min": 99264,
+   "median": 314240,
+   "p95": 548192,
+   "max": 1461537,
+   "n": 100000
+  }
+ },
+ {
+  "policy": "network_admission",
+  "scenario": "boundary_dns_513",
+  "http_ns": {
+   "min": 99969,
+   "median": 307632,
+   "p95": 543009,
+   "max": 1721922,
+   "n": 100000
+  }
+ },
+ {
+  "policy": "network_admission",
+  "scenario": "observe_jumbo_1",
+  "http_ns": {
+   "min": 99617,
+   "median": 308977,
+   "p95": 544240,
+   "max": 1623426,
+   "n": 100000
+  }
+ },
+ {
+  "policy": "network_admission",
+  "scenario": "boundary_jumbo_1399",
+  "http_ns": {
+   "min": 100929,
+   "median": 311681,
+   "p95": 543697,
+   "max": 1452882,
+   "n": 100000
+  }
+ },
+ {
+  "policy": "network_admission",
+  "scenario": "boundary_jumbo_1400",
+  "http_ns": {
+   "min": 99776,
+   "median": 309953,
+   "p95": 545424,
+   "max": 1906642,
+   "n": 100000
+  }
+ },
+ {
+  "policy": "network_admission",
+  "scenario": "allow_icmp_1",
+  "http_ns": {
+   "min": 98048,
+   "median": 307952,
+   "p95": 544545,
+   "max": 1674706,
+   "n": 100000
+  }
+ },
+ {
+  "policy": "network_admission",
+  "scenario": "observe_other_1",
+  "http_ns": {
+   "min": 101008,
+   "median": 301984,
+   "p95": 540673,
+   "max": 1572898,
+   "n": 100000
+  }
+ },
+ {
+  "policy": "sensor_interlock",
+  "scenario": "allow_nominal_1",
+  "http_ns": {
+   "min": 104896,
+   "median": 333345,
+   "p95": 565953,
+   "max": 1605810,
+   "n": 100000
+  }
+ },
+ {
+  "policy": "sensor_interlock",
+  "scenario": "allow_armed_nominal_1",
+  "http_ns": {
+   "min": 104352,
+   "median": 329208,
+   "p95": 565921,
+   "max": 1417377,
+   "n": 100000
+  }
+ },
+ {
+  "policy": "sensor_interlock",
+  "scenario": "observe_temp_1",
+  "http_ns": {
+   "min": 103824,
+   "median": 321632,
+   "p95": 562689,
+   "max": 2127746,
+   "n": 100000
+  }
+ },
+ {
+  "policy": "sensor_interlock",
+  "scenario": "deny_temp_1",
+  "http_ns": {
+   "min": 96561,
+   "median": 314176,
+   "p95": 552641,
+   "max": 1589218,
+   "n": 100000
+  }
+ },
+ {
+  "policy": "sensor_interlock",
+  "scenario": "deny_pressure_1",
+  "http_ns": {
+   "min": 93360,
+   "median": 314065,
+   "p95": 552033,
+   "max": 1777858,
+   "n": 100000
+  }
+ },
+ {
+  "policy": "sensor_interlock",
+  "scenario": "boundary_temp_149",
+  "http_ns": {
+   "min": 104817,
+   "median": 324232,
+   "p95": 562384,
+   "max": 1747442,
+   "n": 100000
+  }
+ },
+ {
+  "policy": "sensor_interlock",
+  "scenario": "boundary_temp_150",
+  "http_ns": {
+   "min": 100848,
+   "median": 312704,
+   "p95": 550049,
+   "max": 1713858,
+   "n": 100000
+  }
+ },
+ {
+  "policy": "sensor_interlock",
+  "scenario": "boundary_nominal_119_749",
+  "http_ns": {
+   "min": 104848,
+   "median": 316560,
+   "p95": 560753,
+   "max": 1702994,
+   "n": 100000
+  }
+ },
+ {
+  "policy": "sensor_interlock",
+  "scenario": "boundary_temp_120",
+  "http_ns": {
+   "min": 105248,
+   "median": 323425,
+   "p95": 561121,
+   "max": 1617250,
+   "n": 100000
+  }
+ },
+ {
+  "policy": "sensor_interlock",
+  "scenario": "escalation_sensor_dark_armed_1",
+  "http_ns": {
+   "min": 97008,
+   "median": 307392,
+   "p95": 536177,
+   "max": 1973843,
+   "n": 100000
+  }
+ }
+]

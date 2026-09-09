@@ -1,0 +1,24 @@
+{
+  "dimension": "B1",
+  "evidence_path": "prismpath/comparisons/systems/prismpath/generated/conformance.json",
+  "expected": "allow",
+  "glue": {
+    "components": [
+      "authoring step"
+    ],
+    "description": "the role hierarchy is flattened at authoring into an explicit in list (user_role in (manager, admin)); the policy states the consequence of the hierarchy, not the hierarchy",
+    "hours": 0.1,
+    "loc": 1
+  },
+  "grade": "WITH-WORK",
+  "harness_commit": "ecae31b",
+  "idiomatic": true,
+  "match": true,
+  "notes": "Rule r5 uses role_at_least; the hierarchy contractor < employee < manager < admin is flattened at authoring into user_role in (manager, admin). Decision matches (allow), but the policy no longer states the hierarchy; pre registered WITH-WORK for this construct. Cell grade is the minimum over the 8 scenarios: NOT, as pre registered.",
+  "observed": "allow",
+  "policy": "access_control_rbac_abac",
+  "run_at": "2026-09-09T01:04:30Z",
+  "scenario": "manager_hours_write_1",
+  "system": "prismpath",
+  "system_version": "repo@ecae31b"
+}

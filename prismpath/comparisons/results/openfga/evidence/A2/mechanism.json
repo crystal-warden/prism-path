@@ -1,0 +1,7 @@
+{
+  "carrier": "boolean_only",
+  "carrier_note": "a Check returns one boolean for one relation; the decision policies are not expressible",
+  "absence": "n/a",
+  "absence_note": "not expressible",
+  "human_distinct": "not expressible"
+}

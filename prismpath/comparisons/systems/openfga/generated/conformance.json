@@ -1,0 +1,1134 @@
+{
+ "rows": [
+  {
+   "class": "UNEXPRESSIBLE",
+   "expected": {
+    "outcome": "allow",
+    "prismpath_cause": 0,
+    "rule": "r1"
+   },
+   "kind": "expressiveness",
+   "observed": {
+    "cause": null,
+    "observed": "not_expressible",
+    "raw": "",
+    "rule": null
+   },
+   "policy": "access_control_rbac_abac",
+   "scenario": "admin_any_1"
+  },
+  {
+   "class": "UNEXPRESSIBLE",
+   "expected": {
+    "outcome": "allow",
+    "prismpath_cause": null,
+    "rule": "r3"
+   },
+   "kind": "expressiveness",
+   "observed": {
+    "cause": null,
+    "observed": "not_expressible",
+    "raw": "",
+    "rule": null
+   },
+   "policy": "access_control_rbac_abac",
+   "scenario": "owner_write_1"
+  },
+  {
+   "class": "UNEXPRESSIBLE",
+   "expected": {
+    "outcome": "allow",
+    "prismpath_cause": null,
+    "rule": "r4"
+   },
+   "kind": "expressiveness",
+   "observed": {
+    "cause": null,
+    "observed": "not_expressible",
+    "raw": "",
+    "rule": null
+   },
+   "policy": "access_control_rbac_abac",
+   "scenario": "group_read_1"
+  },
+  {
+   "class": "UNEXPRESSIBLE",
+   "expected": {
+    "outcome": "deny",
+    "prismpath_cause": 0,
+    "rule": "r6"
+   },
+   "kind": "expressiveness",
+   "observed": {
+    "cause": null,
+    "observed": "not_expressible",
+    "raw": "",
+    "rule": null
+   },
+   "policy": "access_control_rbac_abac",
+   "scenario": "group_write_denied_1"
+  },
+  {
+   "class": "UNEXPRESSIBLE",
+   "expected": {
+    "outcome": "allow",
+    "prismpath_cause": 0,
+    "rule": "r5"
+   },
+   "kind": "expressiveness",
+   "observed": {
+    "cause": null,
+    "observed": "not_expressible",
+    "raw": "",
+    "rule": null
+   },
+   "policy": "access_control_rbac_abac",
+   "scenario": "manager_hours_write_1"
+  },
+  {
+   "class": "UNEXPRESSIBLE",
+   "expected": {
+    "outcome": "deny",
+    "prismpath_cause": 0,
+    "rule": "r6"
+   },
+   "kind": "expressiveness",
+   "observed": {
+    "cause": null,
+    "observed": "not_expressible",
+    "raw": "",
+    "rule": null
+   },
+   "policy": "access_control_rbac_abac",
+   "scenario": "manager_after_hours_1"
+  },
+  {
+   "class": "UNEXPRESSIBLE",
+   "expected": {
+    "outcome": "deny",
+    "prismpath_cause": 0,
+    "rule": "r2"
+   },
+   "kind": "expressiveness",
+   "observed": {
+    "cause": null,
+    "observed": "not_expressible",
+    "raw": "",
+    "rule": null
+   },
+   "policy": "access_control_rbac_abac",
+   "scenario": "high_sensitivity_owner_denied_1"
+  },
+  {
+   "class": "UNEXPRESSIBLE",
+   "expected": {
+    "outcome": "allow",
+    "prismpath_cause": null,
+    "rule": "r4"
+   },
+   "kind": "expressiveness",
+   "observed": {
+    "cause": null,
+    "observed": "not_expressible",
+    "raw": "",
+    "rule": null
+   },
+   "policy": "access_control_rbac_abac",
+   "scenario": "contractor_group_read_1"
+  },
+  {
+   "class": "UNEXPRESSIBLE",
+   "expected": {
+    "outcome": "allow",
+    "prismpath_cause": 0,
+    "rule": "r6"
+   },
+   "kind": "clear_allow",
+   "observed": {
+    "cause": null,
+    "observed": "not_expressible",
+    "raw": "",
+    "rule": null
+   },
+   "policy": "ai_action_gate",
+   "scenario": "allow_read_1"
+  },
+  {
+   "class": "UNEXPRESSIBLE",
+   "expected": {
+    "outcome": "deny",
+    "prismpath_cause": 0,
+    "rule": "r2"
+   },
+   "kind": "clear_deny",
+   "observed": {
+    "cause": null,
+    "observed": "not_expressible",
+    "raw": "",
+    "rule": null
+   },
+   "policy": "ai_action_gate",
+   "scenario": "deny_cui_external_1"
+  },
+  {
+   "class": "UNEXPRESSIBLE",
+   "expected": {
+    "outcome": "deny",
+    "prismpath_cause": 0,
+    "rule": "r3"
+   },
+   "kind": "clear_deny",
+   "observed": {
+    "cause": null,
+    "observed": "not_expressible",
+    "raw": "",
+    "rule": null
+   },
+   "policy": "ai_action_gate",
+   "scenario": "deny_irreversible_delete_1"
+  },
+  {
+   "class": "UNEXPRESSIBLE",
+   "expected": {
+    "outcome": "escalate_human",
+    "prismpath_cause": 0,
+    "rule": "r4"
+   },
+   "kind": "escalation",
+   "observed": {
+    "cause": null,
+    "observed": "not_expressible",
+    "raw": "",
+    "rule": null
+   },
+   "policy": "ai_action_gate",
+   "scenario": "escalate_execute_confidential_1"
+  },
+  {
+   "class": "UNEXPRESSIBLE",
+   "expected": {
+    "outcome": "abstain",
+    "prismpath_cause": 0,
+    "rule": "r5"
+   },
+   "kind": "insufficient",
+   "observed": {
+    "cause": null,
+    "observed": "not_expressible",
+    "raw": "",
+    "rule": null
+   },
+   "policy": "ai_action_gate",
+   "scenario": "abstain_low_confidence_1"
+  },
+  {
+   "class": "UNEXPRESSIBLE",
+   "expected": {
+    "outcome": "allow",
+    "prismpath_cause": 0,
+    "rule": "r7"
+   },
+   "kind": "clear_allow",
+   "observed": {
+    "cause": null,
+    "observed": "not_expressible",
+    "raw": "",
+    "rule": null
+   },
+   "policy": "ai_action_gate",
+   "scenario": "allow_reversible_team_write_1"
+  },
+  {
+   "class": "UNEXPRESSIBLE",
+   "expected": {
+    "outcome": "escalate_human",
+    "prismpath_cause": 0,
+    "rule": "r8"
+   },
+   "kind": "escalation",
+   "observed": {
+    "cause": null,
+    "observed": "not_expressible",
+    "raw": "",
+    "rule": null
+   },
+   "policy": "ai_action_gate",
+   "scenario": "escalate_org_write_1"
+  },
+  {
+   "class": "UNEXPRESSIBLE",
+   "expected": {
+    "outcome": "escalate_human",
+    "prismpath_cause": 34,
+    "rule": "r1"
+   },
+   "kind": "escalation",
+   "observed": {
+    "cause": null,
+    "observed": "not_expressible",
+    "raw": "",
+    "rule": null
+   },
+   "policy": "ai_action_gate",
+   "scenario": "escalate_human_requested_1"
+  },
+  {
+   "class": "UNEXPRESSIBLE",
+   "expected": {
+    "outcome": "allow",
+    "prismpath_cause": 0,
+    "rule": "r6"
+   },
+   "kind": "undeclared_missing",
+   "observed": {
+    "cause": null,
+    "observed": "not_expressible",
+    "raw": "",
+    "rule": null
+   },
+   "policy": "ai_action_gate",
+   "scenario": "undeclared_missing_1"
+  },
+  {
+   "class": "UNEXPRESSIBLE",
+   "expected": {
+    "outcome": "allow",
+    "prismpath_cause": 0,
+    "rule": "r6"
+   },
+   "kind": "ai_worker_loop",
+   "observed": {
+    "cause": null,
+    "observed": "not_expressible",
+    "raw": "",
+    "rule": null
+   },
+   "policy": "ai_action_gate",
+   "scenario": "ai_worker_loop_1[0]"
+  },
+  {
+   "class": "UNEXPRESSIBLE",
+   "expected": {
+    "outcome": "allow",
+    "prismpath_cause": 0,
+    "rule": "r7"
+   },
+   "kind": "ai_worker_loop",
+   "observed": {
+    "cause": null,
+    "observed": "not_expressible",
+    "raw": "",
+    "rule": null
+   },
+   "policy": "ai_action_gate",
+   "scenario": "ai_worker_loop_1[1]"
+  },
+  {
+   "class": "UNEXPRESSIBLE",
+   "expected": {
+    "outcome": "deny",
+    "prismpath_cause": 0,
+    "rule": "r3"
+   },
+   "kind": "ai_worker_loop",
+   "observed": {
+    "cause": null,
+    "observed": "not_expressible",
+    "raw": "",
+    "rule": null
+   },
+   "policy": "ai_action_gate",
+   "scenario": "ai_worker_loop_1[2]"
+  },
+  {
+   "class": "UNEXPRESSIBLE",
+   "expected": {
+    "outcome": "abstain",
+    "prismpath_cause": 0,
+    "rule": "r5"
+   },
+   "kind": "ai_worker_loop",
+   "observed": {
+    "cause": null,
+    "observed": "not_expressible",
+    "raw": "",
+    "rule": null
+   },
+   "policy": "ai_action_gate",
+   "scenario": "ai_worker_loop_1[3]"
+  },
+  {
+   "class": "UNEXPRESSIBLE",
+   "expected": {
+    "outcome": "escalate_human",
+    "prismpath_cause": 0,
+    "rule": "r4"
+   },
+   "kind": "ai_worker_loop",
+   "observed": {
+    "cause": null,
+    "observed": "not_expressible",
+    "raw": "",
+    "rule": null
+   },
+   "policy": "ai_action_gate",
+   "scenario": "ai_worker_loop_1[4]"
+  },
+  {
+   "class": "UNEXPRESSIBLE",
+   "expected": {
+    "outcome": "escalate_human",
+    "prismpath_cause": 34,
+    "rule": "r1"
+   },
+   "kind": "ai_worker_loop",
+   "observed": {
+    "cause": null,
+    "observed": "not_expressible",
+    "raw": "",
+    "rule": null
+   },
+   "policy": "ai_action_gate",
+   "scenario": "ai_worker_loop_1[5]"
+  },
+  {
+   "class": "MATCH",
+   "expected": {
+    "outcome": "allow",
+    "prismpath_cause": null,
+    "rule": "r1"
+   },
+   "kind": "relationship",
+   "observed": {
+    "cause": null,
+    "observed": "allow",
+    "raw": "{\"allowed\": true, \"resolution\": \"\"}",
+    "rule": "r1"
+   },
+   "policy": "document_sharing_rebac",
+   "scenario": "alice_view_d1"
+  },
+  {
+   "class": "MATCH",
+   "expected": {
+    "outcome": "deny",
+    "prismpath_cause": null,
+    "rule": "r2"
+   },
+   "kind": "relationship",
+   "observed": {
+    "cause": null,
+    "observed": "deny",
+    "raw": "{\"allowed\": false, \"resolution\": \"\"}",
+    "rule": "r2"
+   },
+   "policy": "document_sharing_rebac",
+   "scenario": "bob_view_d1"
+  },
+  {
+   "class": "MATCH",
+   "expected": {
+    "outcome": "allow",
+    "prismpath_cause": null,
+    "rule": "r1"
+   },
+   "kind": "relationship",
+   "observed": {
+    "cause": null,
+    "observed": "allow",
+    "raw": "{\"allowed\": true, \"resolution\": \"\"}",
+    "rule": "r1"
+   },
+   "policy": "document_sharing_rebac",
+   "scenario": "bob_view_d2"
+  },
+  {
+   "class": "MATCH",
+   "expected": {
+    "outcome": "allow",
+    "prismpath_cause": null,
+    "rule": "r1"
+   },
+   "kind": "relationship",
+   "observed": {
+    "cause": null,
+    "observed": "allow",
+    "raw": "{\"allowed\": true, \"resolution\": \"\"}",
+    "rule": "r1"
+   },
+   "policy": "document_sharing_rebac",
+   "scenario": "dana_view_d2"
+  },
+  {
+   "class": "MATCH",
+   "expected": {
+    "outcome": "deny",
+    "prismpath_cause": null,
+    "rule": "r2"
+   },
+   "kind": "relationship",
+   "observed": {
+    "cause": null,
+    "observed": "deny",
+    "raw": "{\"allowed\": false, \"resolution\": \"\"}",
+    "rule": "r2"
+   },
+   "policy": "document_sharing_rebac",
+   "scenario": "alice_view_d2"
+  },
+  {
+   "class": "MATCH",
+   "expected": {
+    "outcome": "deny",
+    "prismpath_cause": null,
+    "rule": "r2"
+   },
+   "kind": "relationship",
+   "observed": {
+    "cause": null,
+    "observed": "deny",
+    "raw": "{\"allowed\": false, \"resolution\": \"\"}",
+    "rule": "r2"
+   },
+   "policy": "document_sharing_rebac",
+   "scenario": "carol_view_d1"
+  },
+  {
+   "class": "UNEXPRESSIBLE",
+   "expected": {
+    "outcome": "allow",
+    "prismpath_cause": 0,
+    "rule": "r5"
+   },
+   "kind": "clear_allow",
+   "observed": {
+    "cause": null,
+    "observed": "not_expressible",
+    "raw": "",
+    "rule": null
+   },
+   "policy": "expense_approval",
+   "scenario": "clear_allow_1"
+  },
+  {
+   "class": "UNEXPRESSIBLE",
+   "expected": {
+    "outcome": "allow",
+    "prismpath_cause": 0,
+    "rule": "r6"
+   },
+   "kind": "clear_allow",
+   "observed": {
+    "cause": null,
+    "observed": "not_expressible",
+    "raw": "",
+    "rule": null
+   },
+   "policy": "expense_approval",
+   "scenario": "clear_allow_2"
+  },
+  {
+   "class": "UNEXPRESSIBLE",
+   "expected": {
+    "outcome": "allow",
+    "prismpath_cause": 0,
+    "rule": "r6"
+   },
+   "kind": "clear_allow",
+   "observed": {
+    "cause": null,
+    "observed": "not_expressible",
+    "raw": "",
+    "rule": null
+   },
+   "policy": "expense_approval",
+   "scenario": "clear_allow_3"
+  },
+  {
+   "class": "UNEXPRESSIBLE",
+   "expected": {
+    "outcome": "deny",
+    "prismpath_cause": 0,
+    "rule": "r1"
+   },
+   "kind": "clear_deny",
+   "observed": {
+    "cause": null,
+    "observed": "not_expressible",
+    "raw": "",
+    "rule": null
+   },
+   "policy": "expense_approval",
+   "scenario": "clear_deny_1"
+  },
+  {
+   "class": "UNEXPRESSIBLE",
+   "expected": {
+    "outcome": "deny",
+    "prismpath_cause": 0,
+    "rule": "r1"
+   },
+   "kind": "clear_deny",
+   "observed": {
+    "cause": null,
+    "observed": "not_expressible",
+    "raw": "",
+    "rule": null
+   },
+   "policy": "expense_approval",
+   "scenario": "clear_deny_2"
+  },
+  {
+   "class": "UNEXPRESSIBLE",
+   "expected": {
+    "outcome": "abstain",
+    "prismpath_cause": 0,
+    "rule": "r2"
+   },
+   "kind": "insufficient",
+   "observed": {
+    "cause": null,
+    "observed": "not_expressible",
+    "raw": "",
+    "rule": null
+   },
+   "policy": "expense_approval",
+   "scenario": "insufficient_1"
+  },
+  {
+   "class": "UNEXPRESSIBLE",
+   "expected": {
+    "outcome": "abstain",
+    "prismpath_cause": 0,
+    "rule": "r2"
+   },
+   "kind": "insufficient",
+   "observed": {
+    "cause": null,
+    "observed": "not_expressible",
+    "raw": "",
+    "rule": null
+   },
+   "policy": "expense_approval",
+   "scenario": "insufficient_2"
+  },
+  {
+   "class": "UNEXPRESSIBLE",
+   "expected": {
+    "outcome": "escalate_human",
+    "prismpath_cause": 0,
+    "rule": "r3"
+   },
+   "kind": "escalation",
+   "observed": {
+    "cause": null,
+    "observed": "not_expressible",
+    "raw": "",
+    "rule": null
+   },
+   "policy": "expense_approval",
+   "scenario": "escalation_1"
+  },
+  {
+   "class": "UNEXPRESSIBLE",
+   "expected": {
+    "outcome": "escalate_human",
+    "prismpath_cause": 0,
+    "rule": "r4"
+   },
+   "kind": "escalation",
+   "observed": {
+    "cause": null,
+    "observed": "not_expressible",
+    "raw": "",
+    "rule": null
+   },
+   "policy": "expense_approval",
+   "scenario": "escalation_2"
+  },
+  {
+   "class": "UNEXPRESSIBLE",
+   "expected": {
+    "outcome": "escalate_human",
+    "prismpath_cause": 0,
+    "rule": "r7"
+   },
+   "kind": "escalation",
+   "observed": {
+    "cause": null,
+    "observed": "not_expressible",
+    "raw": "",
+    "rule": null
+   },
+   "policy": "expense_approval",
+   "scenario": "escalation_3"
+  },
+  {
+   "class": "UNEXPRESSIBLE",
+   "expected": {
+    "outcome": "escalate_human",
+    "prismpath_cause": 0,
+    "rule": "r7"
+   },
+   "kind": "undeclared_missing",
+   "observed": {
+    "cause": null,
+    "observed": "not_expressible",
+    "raw": "",
+    "rule": null
+   },
+   "policy": "expense_approval",
+   "scenario": "undeclared_missing_1"
+  },
+  {
+   "class": "UNEXPRESSIBLE",
+   "expected": {
+    "outcome": "allow",
+    "prismpath_cause": 0,
+    "rule": "r6"
+   },
+   "kind": "clear_allow",
+   "observed": {
+    "cause": null,
+    "observed": "not_expressible",
+    "raw": "",
+    "rule": null
+   },
+   "policy": "network_admission",
+   "scenario": "allow_https_1"
+  },
+  {
+   "class": "UNEXPRESSIBLE",
+   "expected": {
+    "outcome": "deny",
+    "prismpath_cause": 0,
+    "rule": "r1"
+   },
+   "kind": "clear_deny",
+   "observed": {
+    "cause": null,
+    "observed": "not_expressible",
+    "raw": "",
+    "rule": null
+   },
+   "policy": "network_admission",
+   "scenario": "deny_telnet_1"
+  },
+  {
+   "class": "UNEXPRESSIBLE",
+   "expected": {
+    "outcome": "allow",
+    "prismpath_cause": 0,
+    "rule": "r2"
+   },
+   "kind": "clear_allow",
+   "observed": {
+    "cause": null,
+    "observed": "not_expressible",
+    "raw": "",
+    "rule": null
+   },
+   "policy": "network_admission",
+   "scenario": "allow_internal_ssh_1"
+  },
+  {
+   "class": "UNEXPRESSIBLE",
+   "expected": {
+    "outcome": "deny",
+    "prismpath_cause": 0,
+    "rule": "r3"
+   },
+   "kind": "clear_deny",
+   "observed": {
+    "cause": null,
+    "observed": "not_expressible",
+    "raw": "",
+    "rule": null
+   },
+   "policy": "network_admission",
+   "scenario": "deny_external_ssh_1"
+  },
+  {
+   "class": "UNEXPRESSIBLE",
+   "expected": {
+    "outcome": "allow",
+    "prismpath_cause": 0,
+    "rule": "r4"
+   },
+   "kind": "clear_allow",
+   "observed": {
+    "cause": null,
+    "observed": "not_expressible",
+    "raw": "",
+    "rule": null
+   },
+   "policy": "network_admission",
+   "scenario": "allow_dns_small_1"
+  },
+  {
+   "class": "UNEXPRESSIBLE",
+   "expected": {
+    "outcome": "deny",
+    "prismpath_cause": 0,
+    "rule": "r5"
+   },
+   "kind": "clear_deny",
+   "observed": {
+    "cause": null,
+    "observed": "not_expressible",
+    "raw": "",
+    "rule": null
+   },
+   "policy": "network_admission",
+   "scenario": "deny_dns_large_1"
+  },
+  {
+   "class": "UNEXPRESSIBLE",
+   "expected": {
+    "outcome": "allow",
+    "prismpath_cause": 0,
+    "rule": "r4"
+   },
+   "kind": "clear_allow",
+   "observed": {
+    "cause": null,
+    "observed": "not_expressible",
+    "raw": "",
+    "rule": null
+   },
+   "policy": "network_admission",
+   "scenario": "boundary_dns_512"
+  },
+  {
+   "class": "UNEXPRESSIBLE",
+   "expected": {
+    "outcome": "deny",
+    "prismpath_cause": 0,
+    "rule": "r5"
+   },
+   "kind": "clear_deny",
+   "observed": {
+    "cause": null,
+    "observed": "not_expressible",
+    "raw": "",
+    "rule": null
+   },
+   "policy": "network_admission",
+   "scenario": "boundary_dns_513"
+  },
+  {
+   "class": "UNEXPRESSIBLE",
+   "expected": {
+    "outcome": "observe",
+    "prismpath_cause": 0,
+    "rule": "r7"
+   },
+   "kind": "clear_allow",
+   "observed": {
+    "cause": null,
+    "observed": "not_expressible",
+    "raw": "",
+    "rule": null
+   },
+   "policy": "network_admission",
+   "scenario": "observe_jumbo_1"
+  },
+  {
+   "class": "UNEXPRESSIBLE",
+   "expected": {
+    "outcome": "observe",
+    "prismpath_cause": 0,
+    "rule": "r9"
+   },
+   "kind": "clear_allow",
+   "observed": {
+    "cause": null,
+    "observed": "not_expressible",
+    "raw": "",
+    "rule": null
+   },
+   "policy": "network_admission",
+   "scenario": "boundary_jumbo_1399"
+  },
+  {
+   "class": "UNEXPRESSIBLE",
+   "expected": {
+    "outcome": "observe",
+    "prismpath_cause": 0,
+    "rule": "r7"
+   },
+   "kind": "clear_allow",
+   "observed": {
+    "cause": null,
+    "observed": "not_expressible",
+    "raw": "",
+    "rule": null
+   },
+   "policy": "network_admission",
+   "scenario": "boundary_jumbo_1400"
+  },
+  {
+   "class": "UNEXPRESSIBLE",
+   "expected": {
+    "outcome": "allow",
+    "prismpath_cause": 0,
+    "rule": "r8"
+   },
+   "kind": "clear_allow",
+   "observed": {
+    "cause": null,
+    "observed": "not_expressible",
+    "raw": "",
+    "rule": null
+   },
+   "policy": "network_admission",
+   "scenario": "allow_icmp_1"
+  },
+  {
+   "class": "UNEXPRESSIBLE",
+   "expected": {
+    "outcome": "observe",
+    "prismpath_cause": 0,
+    "rule": "r9"
+   },
+   "kind": "clear_allow",
+   "observed": {
+    "cause": null,
+    "observed": "not_expressible",
+    "raw": "",
+    "rule": null
+   },
+   "policy": "network_admission",
+   "scenario": "observe_other_1"
+  },
+  {
+   "class": "UNEXPRESSIBLE",
+   "expected": {
+    "outcome": "observe",
+    "prismpath_cause": 0,
+    "rule": "r9"
+   },
+   "kind": "undeclared_missing",
+   "observed": {
+    "cause": null,
+    "observed": "not_expressible",
+    "raw": "",
+    "rule": null
+   },
+   "policy": "network_admission",
+   "scenario": "undeclared_missing_1"
+  },
+  {
+   "class": "UNEXPRESSIBLE",
+   "expected": {
+    "outcome": "allow",
+    "prismpath_cause": 0,
+    "rule": "r4"
+   },
+   "kind": "clear_allow",
+   "observed": {
+    "cause": null,
+    "observed": "not_expressible",
+    "raw": "",
+    "rule": null
+   },
+   "policy": "sensor_interlock",
+   "scenario": "allow_nominal_1"
+  },
+  {
+   "class": "UNEXPRESSIBLE",
+   "expected": {
+    "outcome": "allow",
+    "prismpath_cause": 0,
+    "rule": "r4"
+   },
+   "kind": "clear_allow",
+   "observed": {
+    "cause": null,
+    "observed": "not_expressible",
+    "raw": "",
+    "rule": null
+   },
+   "policy": "sensor_interlock",
+   "scenario": "allow_armed_nominal_1"
+  },
+  {
+   "class": "UNEXPRESSIBLE",
+   "expected": {
+    "outcome": "observe",
+    "prismpath_cause": 0,
+    "rule": "r3"
+   },
+   "kind": "clear_allow",
+   "observed": {
+    "cause": null,
+    "observed": "not_expressible",
+    "raw": "",
+    "rule": null
+   },
+   "policy": "sensor_interlock",
+   "scenario": "observe_temp_1"
+  },
+  {
+   "class": "UNEXPRESSIBLE",
+   "expected": {
+    "outcome": "deny",
+    "prismpath_cause": 0,
+    "rule": "r2"
+   },
+   "kind": "clear_deny",
+   "observed": {
+    "cause": null,
+    "observed": "not_expressible",
+    "raw": "",
+    "rule": null
+   },
+   "policy": "sensor_interlock",
+   "scenario": "deny_temp_1"
+  },
+  {
+   "class": "UNEXPRESSIBLE",
+   "expected": {
+    "outcome": "deny",
+    "prismpath_cause": 0,
+    "rule": "r2"
+   },
+   "kind": "clear_deny",
+   "observed": {
+    "cause": null,
+    "observed": "not_expressible",
+    "raw": "",
+    "rule": null
+   },
+   "policy": "sensor_interlock",
+   "scenario": "deny_pressure_1"
+  },
+  {
+   "class": "UNEXPRESSIBLE",
+   "expected": {
+    "outcome": "observe",
+    "prismpath_cause": 0,
+    "rule": "r3"
+   },
+   "kind": "clear_allow",
+   "observed": {
+    "cause": null,
+    "observed": "not_expressible",
+    "raw": "",
+    "rule": null
+   },
+   "policy": "sensor_interlock",
+   "scenario": "boundary_temp_149"
+  },
+  {
+   "class": "UNEXPRESSIBLE",
+   "expected": {
+    "outcome": "deny",
+    "prismpath_cause": 0,
+    "rule": "r2"
+   },
+   "kind": "clear_deny",
+   "observed": {
+    "cause": null,
+    "observed": "not_expressible",
+    "raw": "",
+    "rule": null
+   },
+   "policy": "sensor_interlock",
+   "scenario": "boundary_temp_150"
+  },
+  {
+   "class": "UNEXPRESSIBLE",
+   "expected": {
+    "outcome": "allow",
+    "prismpath_cause": 0,
+    "rule": "r4"
+   },
+   "kind": "clear_allow",
+   "observed": {
+    "cause": null,
+    "observed": "not_expressible",
+    "raw": "",
+    "rule": null
+   },
+   "policy": "sensor_interlock",
+   "scenario": "boundary_nominal_119_749"
+  },
+  {
+   "class": "UNEXPRESSIBLE",
+   "expected": {
+    "outcome": "observe",
+    "prismpath_cause": 0,
+    "rule": "r3"
+   },
+   "kind": "clear_allow",
+   "observed": {
+    "cause": null,
+    "observed": "not_expressible",
+    "raw": "",
+    "rule": null
+   },
+   "policy": "sensor_interlock",
+   "scenario": "boundary_temp_120"
+  },
+  {
+   "class": "UNEXPRESSIBLE",
+   "expected": {
+    "outcome": "escalate_human",
+    "prismpath_cause": 0,
+    "rule": "r1"
+   },
+   "kind": "escalation",
+   "observed": {
+    "cause": null,
+    "observed": "not_expressible",
+    "raw": "",
+    "rule": null
+   },
+   "policy": "sensor_interlock",
+   "scenario": "escalation_sensor_dark_armed_1"
+  },
+  {
+   "class": "UNEXPRESSIBLE",
+   "expected": {
+    "outcome": "no_match",
+    "prismpath_cause": 36,
+    "rule": null
+   },
+   "kind": "undeclared_missing",
+   "observed": {
+    "cause": null,
+    "observed": "not_expressible",
+    "raw": "",
+    "rule": null
+   },
+   "policy": "sensor_interlock",
+   "scenario": "undeclared_missing_1"
+  },
+  {
+   "class": "UNEXPRESSIBLE",
+   "expected": {
+    "outcome": "no_match",
+    "prismpath_cause": 36,
+    "rule": null
+   },
+   "kind": "undeclared_missing",
+   "observed": {
+    "cause": null,
+    "observed": "not_expressible",
+    "raw": "",
+    "rule": null
+   },
+   "policy": "sensor_interlock",
+   "scenario": "undeclared_missing_2"
+  }
+ ],
+ "summary": {
+  "DROPPED": 0,
+  "MATCH": 6,
+  "MISMATCH": 0,
+  "PROBE": 0,
+  "UNEXPRESSIBLE": 60
+ },
+ "system": "openfga"
+}

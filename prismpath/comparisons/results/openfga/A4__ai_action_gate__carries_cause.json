@@ -1,0 +1,17 @@
+{
+  "dimension": "A4",
+  "evidence_path": "prismpath/comparisons/results/openfga/evidence/A8",
+  "expected": "true",
+  "glue": null,
+  "grade": "NOT",
+  "harness_commit": "fcbabc5",
+  "idiomatic": true,
+  "match": false,
+  "notes": "Sub property carries_cause, from the A8 loop run of ai_action_gate/ai_worker_loop_1: not expressible; a Check returns a boolean.",
+  "observed": "false",
+  "policy": "ai_action_gate",
+  "run_at": "2026-09-08T22:30:21Z",
+  "scenario": "carries_cause",
+  "system": "openfga",
+  "system_version": "1.19.0"
+}

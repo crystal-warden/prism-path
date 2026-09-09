@@ -1,0 +1,24 @@
+{
+  "graph": {
+    "doc:d1#viewer": [],
+    "doc:d2#viewer": [],
+    "folder:f1#viewer": [
+      "doc:d1#viewer"
+    ],
+    "folder:f2#viewer": [
+      "doc:d2#viewer"
+    ],
+    "group:eng#member": [
+      "folder:f1#viewer"
+    ],
+    "user:alice": [
+      "group:eng#member"
+    ],
+    "user:bob": [
+      "doc:d2#viewer"
+    ],
+    "user:dana": [
+      "folder:f2#viewer"
+    ]
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "dimension": "A5",
+  "evidence_path": "prismpath/comparisons/results/openfga/evidence/A5",
+  "expected": "allow",
+  "glue": null,
+  "grade": "NOT",
+  "harness_commit": "1d8b6ac",
+  "idiomatic": true,
+  "match": false,
+  "notes": "The decision policies are not expressible in OpenFGA (translator); no wire to measure.",
+  "observed": "not_expressible",
+  "policy": "sensor_interlock",
+  "run_at": "2026-09-08T22:35:22Z",
+  "scenario": "boundary_nominal_119_749",
+  "system": "openfga",
+  "system_version": "1.19.0"
+}

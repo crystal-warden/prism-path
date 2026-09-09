@@ -1,0 +1,7 @@
+{
+  "carrier": "first_class",
+  "carrier_note": "the decision rule returns an arbitrary document {outcome, rule}",
+  "absence": "unsatisfied",
+  "absence_note": "a reference to a missing input field is undefined, so the rule body fails (documented undefined semantics); with no catch all the whole decision is undefined and opa eval returns an empty result set with exit 0 (observed on sensor_interlock probes)",
+  "human_distinct": "only by the rule id the policy author put in the result document (r1 vs r4/r8); no system level cause"
+}

@@ -1,0 +1,17 @@
+{
+  "dimension": "B5",
+  "evidence_path": "prismpath/comparisons/results/openfga/evidence/B5",
+  "expected": null,
+  "glue": null,
+  "grade": "NATIVE",
+  "harness_commit": "ecae31b",
+  "idiomatic": true,
+  "match": false,
+  "notes": "Four years public, 117 contributors, CNCF incubating since October 2025, Okta FGA in production. Pre registered NATIVE. Figures: prismpath/comparisons/results/openfga/evidence/B5/facts.json (GitHub API, 2026-09-09).",
+  "observed": "not_applicable",
+  "policy": "none",
+  "run_at": "2026-09-09T01:04:30Z",
+  "scenario": "matrix-row",
+  "system": "openfga",
+  "system_version": "1.19.0"
+}

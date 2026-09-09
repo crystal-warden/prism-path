@@ -1,0 +1,34 @@
+{
+  "dimension": "A7",
+  "evidence_path": "prismpath/comparisons/results/opa/evidence/A7",
+  "expected": "allow",
+  "glue": {
+    "components": [
+      "server configuration"
+    ],
+    "description": "configure the server's request timeout (a cap on wall time, not a bound on work)",
+    "hours": 0,
+    "loc": 0
+  },
+  "grade": "WITH-WORK",
+  "harness_commit": "eeb9706",
+  "idiomatic": true,
+  "match": true,
+  "measurements": {
+    "latency_ns": {
+      "max": 1454241,
+      "median": 313840,
+      "min": 95568,
+      "n": 100000,
+      "p95": 547105
+    },
+    "transport": "loopback HTTP to opa run --server (includes TCP and JSON, no in process Python embedding exists)"
+  },
+  "notes": "opa run --server over loopback HTTP, 100000 requests: min/median/p95/max ns 95568/313840/547105/1454241; includes the HTTP round trip and JSON on both sides. Rego evaluation has no stated worst case bound and no bound travels with a policy; a request timeout caps wall time, which the pre registered rubric counts as WITH-WORK.",
+  "observed": "allow",
+  "policy": "network_admission",
+  "run_at": "2026-09-08T22:49:57Z",
+  "scenario": "allow_dns_small_1",
+  "system": "opa",
+  "system_version": "1.20.2"
+}

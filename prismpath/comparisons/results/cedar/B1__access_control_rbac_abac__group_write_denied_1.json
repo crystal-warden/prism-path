@@ -1,0 +1,17 @@
+{
+  "dimension": "B1",
+  "evidence_path": "prismpath/comparisons/systems/cedar/generated/conformance.json",
+  "expected": "deny",
+  "glue": null,
+  "grade": "NATIVE",
+  "harness_commit": "ecae31b",
+  "idiomatic": true,
+  "match": true,
+  "notes": "Cedar expresses ownership as principal == resource.owner, groups as entity membership with containsAny, the hierarchy through the entity store, and the hour window in context; one permit or forbid per rule with the prior negation carried in each policy so first match order holds. 8/8 match.",
+  "observed": "deny",
+  "policy": "access_control_rbac_abac",
+  "run_at": "2026-09-09T01:04:30Z",
+  "scenario": "group_write_denied_1",
+  "system": "cedar",
+  "system_version": "4.12.0"
+}

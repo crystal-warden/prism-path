@@ -1,0 +1,17 @@
+{
+  "dimension": "A3",
+  "evidence_path": "prismpath/comparisons/results/openfga/evidence/A3",
+  "expected": "deny",
+  "glue": null,
+  "grade": "NOT",
+  "harness_commit": "54cd707",
+  "idiomatic": true,
+  "match": false,
+  "notes": "OpenFGA is a Go server with a datastore; the decision policies are not expressible in it in any case. Server only by architecture (documentation).",
+  "observed": "server_only",
+  "policy": "network_admission",
+  "run_at": "2026-09-09T00:07:24Z",
+  "scenario": "deny_dns_large_1",
+  "system": "openfga",
+  "system_version": "1.19.0"
+}

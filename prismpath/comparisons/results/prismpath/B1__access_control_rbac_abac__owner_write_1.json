@@ -1,0 +1,17 @@
+{
+  "dimension": "B1",
+  "evidence_path": "prismpath/comparisons/systems/prismpath/generated/conformance.json",
+  "expected": "allow",
+  "glue": null,
+  "grade": "NOT",
+  "harness_commit": "ecae31b",
+  "idiomatic": true,
+  "match": false,
+  "notes": "Rule r3 is outside the predicate language (corpus prismpath_expressibility): field against field comparison (eq_fields). The translator dropped it (dropped_rules) rather than force it, so the flow falls through to the default deny; expected allow, observed deny. The caller would have to precompute a boolean field such as is_owner or shares_group, which moves the rule out of the policy; pre registered NOT. Cell grade is the minimum over the 8 scenarios: NOT, as pre registered.",
+  "observed": "deny",
+  "policy": "access_control_rbac_abac",
+  "run_at": "2026-09-09T01:04:30Z",
+  "scenario": "owner_write_1",
+  "system": "prismpath",
+  "system_version": "repo@ecae31b"
+}

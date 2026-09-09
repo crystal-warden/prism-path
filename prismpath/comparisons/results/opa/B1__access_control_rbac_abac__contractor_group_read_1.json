@@ -1,0 +1,17 @@
+{
+  "dimension": "B1",
+  "evidence_path": "prismpath/comparisons/systems/opa/generated/conformance.json",
+  "expected": "allow",
+  "glue": null,
+  "grade": "NATIVE",
+  "harness_commit": "ecae31b",
+  "idiomatic": true,
+  "match": true,
+  "notes": "Rego expresses every construct directly: field against field comparison, set intersection over runtime collections, the role hierarchy as data, and the hour window; first match order as an else chain. 8/8 match.",
+  "observed": "allow",
+  "policy": "access_control_rbac_abac",
+  "run_at": "2026-09-09T01:04:30Z",
+  "scenario": "contractor_group_read_1",
+  "system": "opa",
+  "system_version": "1.20.2"
+}

@@ -1,0 +1,22 @@
+{
+  "citations": [
+    "https://openfga.dev/docs/modeling/direct-access (directly related user types)",
+    "https://openfga.dev/docs/modeling/user-groups (group#member as an assignable subject)",
+    "https://openfga.dev/docs/modeling/parent-child (relation from parent: tuple to userset)",
+    "https://openfga.dev/docs/modeling/conditions (conditions on tuples; why the decision policies are not expressible)",
+    "https://openfga.dev/api/service (Check, WriteAuthorizationModel, Write)"
+  ],
+  "dropped_rules": [],
+  "expressible": true,
+  "files": [
+    "model.fga",
+    "model.json",
+    "tuples.json"
+  ],
+  "idiomatic": true,
+  "notes": [
+    "the corpus relation model maps one to one: direct -> assignable, userset -> group#member subject, parent -> 'viewer from parent'; model.json is generated directly in the schema 1.1 JSON the API takes and model.fga is the same model in the DSL for review"
+  ],
+  "policy": "document_sharing_rebac",
+  "system": "openfga"
+}

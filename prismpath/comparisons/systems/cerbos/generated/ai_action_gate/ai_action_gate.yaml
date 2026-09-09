@@ -1,0 +1,85 @@
+apiVersion: api.cerbos.dev/v1
+resourcePolicy:
+  version: default
+  resource: ai_action_gate
+  rules:
+    - name: r1
+      actions: ["decide"]
+      effect: EFFECT_DENY
+      roles: ["*"]
+      condition:
+        match:
+          expr: "(has(request.resource.attr.human_requested) && request.resource.attr.human_requested == true)"
+      output:
+        when:
+          ruleActivated: "{\"outcome\": \"escalate_human\", \"rule\": \"r1\"}"
+    - name: r2
+      actions: ["decide"]
+      effect: EFFECT_DENY
+      roles: ["*"]
+      condition:
+        match:
+          expr: "((has(request.resource.attr.data_class) && request.resource.attr.data_class == \"cui\") && (has(request.resource.attr.target_scope) && request.resource.attr.target_scope == \"external\")) && !(has(request.resource.attr.human_requested) && request.resource.attr.human_requested == true)"
+      output:
+        when:
+          ruleActivated: "{\"outcome\": \"deny\", \"rule\": \"r2\"}"
+    - name: r3
+      actions: ["decide"]
+      effect: EFFECT_DENY
+      roles: ["*"]
+      condition:
+        match:
+          expr: "((has(request.resource.attr.action_class) && request.resource.attr.action_class == \"delete\") && (has(request.resource.attr.reversible) && request.resource.attr.reversible == false) && (has(request.resource.attr.target_scope) && request.resource.attr.target_scope in [\"org\", \"external\"])) && !(has(request.resource.attr.human_requested) && request.resource.attr.human_requested == true) && !((has(request.resource.attr.data_class) && request.resource.attr.data_class == \"cui\") && (has(request.resource.attr.target_scope) && request.resource.attr.target_scope == \"external\"))"
+      output:
+        when:
+          ruleActivated: "{\"outcome\": \"deny\", \"rule\": \"r3\"}"
+    - name: r4
+      actions: ["decide"]
+      effect: EFFECT_DENY
+      roles: ["*"]
+      condition:
+        match:
+          expr: "((has(request.resource.attr.action_class) && request.resource.attr.action_class in [\"send_external\", \"execute\"]) && (has(request.resource.attr.data_class) && request.resource.attr.data_class in [\"confidential\", \"cui\"])) && !(has(request.resource.attr.human_requested) && request.resource.attr.human_requested == true) && !((has(request.resource.attr.data_class) && request.resource.attr.data_class == \"cui\") && (has(request.resource.attr.target_scope) && request.resource.attr.target_scope == \"external\")) && !((has(request.resource.attr.action_class) && request.resource.attr.action_class == \"delete\") && (has(request.resource.attr.reversible) && request.resource.attr.reversible == false) && (has(request.resource.attr.target_scope) && request.resource.attr.target_scope in [\"org\", \"external\"]))"
+      output:
+        when:
+          ruleActivated: "{\"outcome\": \"escalate_human\", \"rule\": \"r4\"}"
+    - name: r5
+      actions: ["decide"]
+      effect: EFFECT_DENY
+      roles: ["*"]
+      condition:
+        match:
+          expr: "(has(request.resource.attr.worker_confidence) && request.resource.attr.worker_confidence < 60) && !(has(request.resource.attr.human_requested) && request.resource.attr.human_requested == true) && !((has(request.resource.attr.data_class) && request.resource.attr.data_class == \"cui\") && (has(request.resource.attr.target_scope) && request.resource.attr.target_scope == \"external\")) && !((has(request.resource.attr.action_class) && request.resource.attr.action_class == \"delete\") && (has(request.resource.attr.reversible) && request.resource.attr.reversible == false) && (has(request.resource.attr.target_scope) && request.resource.attr.target_scope in [\"org\", \"external\"])) && !((has(request.resource.attr.action_class) && request.resource.attr.action_class in [\"send_external\", \"execute\"]) && (has(request.resource.attr.data_class) && request.resource.attr.data_class in [\"confidential\", \"cui\"]))"
+      output:
+        when:
+          ruleActivated: "{\"outcome\": \"abstain\", \"rule\": \"r5\"}"
+    - name: r6
+      actions: ["decide"]
+      effect: EFFECT_ALLOW
+      roles: ["*"]
+      condition:
+        match:
+          expr: "(has(request.resource.attr.action_class) && request.resource.attr.action_class == \"read\") && !(has(request.resource.attr.human_requested) && request.resource.attr.human_requested == true) && !((has(request.resource.attr.data_class) && request.resource.attr.data_class == \"cui\") && (has(request.resource.attr.target_scope) && request.resource.attr.target_scope == \"external\")) && !((has(request.resource.attr.action_class) && request.resource.attr.action_class == \"delete\") && (has(request.resource.attr.reversible) && request.resource.attr.reversible == false) && (has(request.resource.attr.target_scope) && request.resource.attr.target_scope in [\"org\", \"external\"])) && !((has(request.resource.attr.action_class) && request.resource.attr.action_class in [\"send_external\", \"execute\"]) && (has(request.resource.attr.data_class) && request.resource.attr.data_class in [\"confidential\", \"cui\"])) && !(has(request.resource.attr.worker_confidence) && request.resource.attr.worker_confidence < 60)"
+      output:
+        when:
+          ruleActivated: "{\"outcome\": \"allow\", \"rule\": \"r6\"}"
+    - name: r7
+      actions: ["decide"]
+      effect: EFFECT_ALLOW
+      roles: ["*"]
+      condition:
+        match:
+          expr: "((has(request.resource.attr.reversible) && request.resource.attr.reversible == true) && (has(request.resource.attr.target_scope) && request.resource.attr.target_scope in [\"own\", \"team\"])) && !(has(request.resource.attr.human_requested) && request.resource.attr.human_requested == true) && !((has(request.resource.attr.data_class) && request.resource.attr.data_class == \"cui\") && (has(request.resource.attr.target_scope) && request.resource.attr.target_scope == \"external\")) && !((has(request.resource.attr.action_class) && request.resource.attr.action_class == \"delete\") && (has(request.resource.attr.reversible) && request.resource.attr.reversible == false) && (has(request.resource.attr.target_scope) && request.resource.attr.target_scope in [\"org\", \"external\"])) && !((has(request.resource.attr.action_class) && request.resource.attr.action_class in [\"send_external\", \"execute\"]) && (has(request.resource.attr.data_class) && request.resource.attr.data_class in [\"confidential\", \"cui\"])) && !(has(request.resource.attr.worker_confidence) && request.resource.attr.worker_confidence < 60) && !(has(request.resource.attr.action_class) && request.resource.attr.action_class == \"read\")"
+      output:
+        when:
+          ruleActivated: "{\"outcome\": \"allow\", \"rule\": \"r7\"}"
+    - name: r8
+      actions: ["decide"]
+      effect: EFFECT_DENY
+      roles: ["*"]
+      condition:
+        match:
+          expr: "true && !(has(request.resource.attr.human_requested) && request.resource.attr.human_requested == true) && !((has(request.resource.attr.data_class) && request.resource.attr.data_class == \"cui\") && (has(request.resource.attr.target_scope) && request.resource.attr.target_scope == \"external\")) && !((has(request.resource.attr.action_class) && request.resource.attr.action_class == \"delete\") && (has(request.resource.attr.reversible) && request.resource.attr.reversible == false) && (has(request.resource.attr.target_scope) && request.resource.attr.target_scope in [\"org\", \"external\"])) && !((has(request.resource.attr.action_class) && request.resource.attr.action_class in [\"send_external\", \"execute\"]) && (has(request.resource.attr.data_class) && request.resource.attr.data_class in [\"confidential\", \"cui\"])) && !(has(request.resource.attr.worker_confidence) && request.resource.attr.worker_confidence < 60) && !(has(request.resource.attr.action_class) && request.resource.attr.action_class == \"read\") && !((has(request.resource.attr.reversible) && request.resource.attr.reversible == true) && (has(request.resource.attr.target_scope) && request.resource.attr.target_scope in [\"own\", \"team\"]))"
+      output:
+        when:
+          ruleActivated: "{\"outcome\": \"escalate_human\", \"rule\": \"r8\"}"

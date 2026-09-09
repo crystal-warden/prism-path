@@ -1,0 +1,26 @@
+{
+  "dimension": "B1",
+  "evidence_path": "prismpath/comparisons/systems/openfga/generated/conformance.json",
+  "expected": "allow",
+  "glue": {
+    "components": [
+      "authorization model with conditions",
+      "tuple writes",
+      "caller side rule ordering shim"
+    ],
+    "description": "an authorization model with owner and member relations, tuple writes for ownership and group membership, conditions (CEL) for the business hours window and the sensitivity guard, and a caller side shim that issues one Check per rule and applies the first match order; documented and costed, not built in Phase 2 because a Check answers one relation",
+    "hours": 6,
+    "loc": 120
+  },
+  "grade": "WITH-WORK",
+  "harness_commit": "ecae31b",
+  "idiomatic": false,
+  "match": false,
+  "notes": "The Phase 2 translator recorded the policy as not expressible: a Check answers one boolean for one relation, and this policy needs first match order over six rules mixing attributes and relations. OpenFGA 1.x conditions (CEL on tuples) and relation tuples make a path practical under the glue budget, so the cell is WITH-WORK with the glue costed, not executed; that matches the pre registered prediction and does not change the row verdict.",
+  "observed": "not-expressible",
+  "policy": "access_control_rbac_abac",
+  "run_at": "2026-09-09T01:04:30Z",
+  "scenario": "admin_any_1",
+  "system": "openfga",
+  "system_version": "1.19.0"
+}

@@ -1,0 +1,13 @@
+[package]
+name = "cedar_nostd_attempt"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["staticlib"]
+
+[dependencies]
+cedar-policy = { version = "=4.12.0", default-features = false }
+
+[profile.release]
+panic = "abort"

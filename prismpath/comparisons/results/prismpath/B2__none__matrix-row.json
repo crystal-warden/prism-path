@@ -1,0 +1,17 @@
+{
+  "dimension": "B2",
+  "evidence_path": "prismpath/comparisons/results/prismpath/evidence/B2",
+  "expected": null,
+  "glue": null,
+  "grade": "NOT",
+  "harness_commit": "ecae31b",
+  "idiomatic": true,
+  "match": false,
+  "notes": "No machine checked proof of the decision engine. What exists, stated exactly: (1) a Lean 4 development on branch formal/lean-fq proving that Figueroa quantization preserves decisions (I1), that the shipped reference algorithm computes the proven partition, that spiral indexing is a bijection, and that the Zeckendorf wire round trips and frames itself, 13 theorems, zero sorry, standard axioms only, bridged to the Python and Rust code by 623 evaluated conformance checks rather than by a proof about the source; (2) the WCET envelope's base case proven with the induction step open (#111) and the per policy bound calibrated cycle exact on the RTL (#109); (3) conformance certification of the interpreter on every substrate. None of that is a proof of the evaluator's semantics, so the pre registered NOT stands; the quantization proofs are a component proof and are recorded, not counted. Sources: prismpath/comparisons/results/prismpath/evidence/B2/sources.txt.",
+  "observed": "not_applicable",
+  "policy": "none",
+  "run_at": "2026-09-09T01:04:30Z",
+  "scenario": "matrix-row",
+  "system": "prismpath",
+  "system_version": "repo@ecae31b"
+}

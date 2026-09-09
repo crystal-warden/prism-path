@@ -1,0 +1,33 @@
+{
+  "dimension": "A3",
+  "evidence_path": "prismpath/comparisons/results/opa+glue/evidence/A3",
+  "expected": "deny",
+  "glue": {
+    "components": [
+      "wasm3 40e42cc (interpreter, not counted as glue lines)",
+      "opa_wasm_eval.c/.h (ABI glue)",
+      "pico/opa_pico.c (firmware and protocol)",
+      "pico/CMakeLists.txt"
+    ],
+    "description": "OPA's own compiler (opa build -t wasm) plus the wasm3 WebAssembly interpreter (third party, MIT) built into RP2350 firmware with a host layer that supplies the module's six imports, drives the documented opa_eval ABI, and carries JSON in and out over USB-CDC; both compiled modules live in flash, one runtime open at a time",
+    "hours": 1.5,
+    "loc": 171
+  },
+  "grade": "WITH-WORK",
+  "harness_commit": "592fa6d",
+  "idiomatic": true,
+  "match": true,
+  "measurements": {
+    "heap_high_water_bytes": 311636,
+    "isa": "rp2350-arm",
+    "linear_memory_bytes": 131072,
+    "round_trip_us": 4224.2
+  },
+  "notes": "OPA's WebAssembly module for this policy decided deny/r2 on the RP2350 (rp2350-arm) under wasm3, expected deny/r2: identical. Board evidence prismpath/comparisons/results/opa+glue/evidence/A3/opa_wasm3_rp2350-arm.json. The comparator reaches the MCU class through its documented compiler and a third party interpreter; the glue is 171 lines and about 1.5 h, within the section 4 budget, no trust anchor added. Memory on the board: 311636 B heap high water of 520 KB SRAM, 131072 B linear memory, 4224 us USB round trip. For scale, PrismPath's table image for the same policy is 224 B or 160 B under a 1.7 KB interpreter class.",
+  "observed": "deny",
+  "policy": "sensor_interlock",
+  "run_at": "2026-09-09T01:24:16Z",
+  "scenario": "deny_temp_1",
+  "system": "opa+glue",
+  "system_version": "1.20.2+glue"
+}

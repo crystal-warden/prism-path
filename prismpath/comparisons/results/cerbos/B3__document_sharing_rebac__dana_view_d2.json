@@ -1,0 +1,26 @@
+{
+  "dimension": "B3",
+  "evidence_path": "prismpath/comparisons/systems/cerbos/generated/conformance.json",
+  "expected": "allow",
+  "glue": {
+    "components": [
+      "caller side relationship resolver",
+      "resource attribute list",
+      "CEL membership condition"
+    ],
+    "description": "the caller resolves the document's parent chain and passes the set of principals who can view through it as a resource attribute list; a CEL condition tests membership. Cerbos evaluates the membership, the caller supplies the relationship data",
+    "hours": 2,
+    "loc": 40
+  },
+  "grade": "WITH-WORK",
+  "harness_commit": "ecae31b",
+  "idiomatic": false,
+  "match": false,
+  "notes": "Cerbos has no relationship store, so the translator recorded the policy as not expressible. The difference from PrismPath's NOT: a CEL condition can test membership in a list the caller supplies, so the caller provides relationship data and Cerbos still evaluates the rule; the glue is costed, not built. Pre registered WITH-WORK.",
+  "observed": "not-expressible",
+  "policy": "document_sharing_rebac",
+  "run_at": "2026-09-09T01:04:30Z",
+  "scenario": "dana_view_d2",
+  "system": "cerbos",
+  "system_version": "0.55.0"
+}

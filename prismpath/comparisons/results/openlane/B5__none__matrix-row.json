@@ -1,0 +1,26 @@
+{
+  "dimension": "B5",
+  "evidence_path": "prismpath/comparisons/results/openlane/evidence/B5",
+  "expected": null,
+  "glue": {
+    "components": [
+      "version pin",
+      "self hosting",
+      "upgrade ownership"
+    ],
+    "description": "an adopter pins a release, self hosts, and owns the upgrade path of a project two years old with a maintainer base of about twenty",
+    "hours": 4,
+    "loc": 0
+  },
+  "grade": "WITH-WORK",
+  "harness_commit": "ecae31b",
+  "idiomatic": true,
+  "match": false,
+  "notes": "Two years public, 20 contributors, a commercial operator, frequent releases; below the three year and thirty contributor bar fixed above, adoptable with the recorded mitigation. Pre registered WITH-WORK. Figures: prismpath/comparisons/results/openlane/evidence/B5/facts.json (GitHub API, 2026-09-09).",
+  "observed": "not_applicable",
+  "policy": "none",
+  "run_at": "2026-09-09T01:04:30Z",
+  "scenario": "matrix-row",
+  "system": "openlane",
+  "system_version": "docs-only"
+}

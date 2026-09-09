@@ -1,0 +1,32 @@
+[
+  {
+    "user": "user:alice",
+    "relation": "member",
+    "object": "group:eng"
+  },
+  {
+    "user": "group:eng#member",
+    "relation": "viewer",
+    "object": "folder:f1"
+  },
+  {
+    "user": "folder:f1",
+    "relation": "parent",
+    "object": "doc:d1"
+  },
+  {
+    "user": "user:bob",
+    "relation": "viewer",
+    "object": "doc:d2"
+  },
+  {
+    "user": "folder:f2",
+    "relation": "parent",
+    "object": "doc:d2"
+  },
+  {
+    "user": "user:dana",
+    "relation": "viewer",
+    "object": "folder:f2"
+  }
+]

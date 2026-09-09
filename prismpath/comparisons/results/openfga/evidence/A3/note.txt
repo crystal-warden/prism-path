@@ -1,0 +1,1 @@
+OpenFGA is a Go server with a datastore; the decision policies are not expressible in it in any case. Server only by architecture (documentation).

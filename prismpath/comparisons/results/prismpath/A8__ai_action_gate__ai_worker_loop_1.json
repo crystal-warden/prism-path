@@ -1,0 +1,17 @@
+{
+  "dimension": "A8",
+  "evidence_path": "prismpath/comparisons/results/prismpath/evidence/A8",
+  "expected": "allow,allow,deny,abstain,escalate_human,escalate_human",
+  "glue": null,
+  "grade": "NATIVE",
+  "harness_commit": "e7b050b",
+  "idiomatic": true,
+  "match": true,
+  "notes": "One engine run per proposal (systems/prismpath translator, the corpus flow as a Markdown policy). Outcomes present: ['abstain', 'allow', 'deny', 'escalate_human']. Worker requested escalation (step 6) carries cause 34 route:needs-human; the policy selected escalation (step 5) carries cause 0: causes=[0, 0, 0, 0, 0, 34]. Receipts: one audit_log event per decision with seq, outcome, rule, cause, policy_hash (receipts.jsonl); Merkle root 4bf5be0c107434b5..., verify_log=True, inclusion proof for leaf 3 verified=True; root bound to the policy authority key with policy_pack's Ed25519 canonical signing (receipt_root.json, key_id recorded, public key kept, private key deleted). All four receipt sub properties use the product's existing primitives; the harness only composes them, the same composition the kernel receipts harness uses. Note: the Python tier's per decision receipt is the audit_log event, not a struct on a ringbuf as in kernel (#119); the cause byte is the engine's RunResult.cause.",
+  "observed": "allow,allow,deny,abstain,escalate_human,escalate_human",
+  "policy": "ai_action_gate",
+  "run_at": "2026-09-08T22:27:51Z",
+  "scenario": "ai_worker_loop_1",
+  "system": "prismpath",
+  "system_version": "repo@e7b050b"
+}

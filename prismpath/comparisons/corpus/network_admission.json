@@ -1,0 +1,47 @@
+{
+  "id": "network_admission",
+  "title": "Packet admission: integer only match action, the cross substrate policy",
+  "dimensions": ["A3", "A5", "A6", "A7"],
+  "level_m_claim": true,
+  "fields": {
+    "protocol": {"type": "int", "note": "IP protocol number: 1 icmp, 6 tcp, 17 udp"},
+    "dst_port": {"type": "int"},
+    "pkt_len": {"type": "int", "note": "bytes"},
+    "src_internal": {"type": "bool", "note": "source address inside the site prefix"}
+  },
+  "outcomes": ["allow", "deny", "observe"],
+  "catch_all": true,
+  "rules": [
+    {"id": "r1", "if": {"cmp": ["dst_port", "==", 23]}, "then": "deny", "why": "telnet is never admitted"},
+    {"id": "r2", "if": {"all": [{"cmp": ["dst_port", "==", 22]}, {"cmp": ["src_internal", "==", true]}]}, "then": "allow", "why": "internal ssh"},
+    {"id": "r3", "if": {"cmp": ["dst_port", "==", 22]}, "then": "deny", "why": "external ssh"},
+    {"id": "r4", "if": {"all": [{"cmp": ["dst_port", "==", 53]}, {"cmp": ["pkt_len", "<=", 512]}]}, "then": "allow", "why": "ordinary dns"},
+    {"id": "r5", "if": {"all": [{"cmp": ["dst_port", "==", 53]}, {"cmp": ["pkt_len", ">", 512]}]}, "then": "deny", "why": "oversized dns, amplification shape"},
+    {"id": "r6", "if": {"cmp": ["dst_port", "==", 443]}, "then": "allow", "why": "tls"},
+    {"id": "r7", "if": {"cmp": ["pkt_len", ">=", 1400]}, "then": "observe", "why": "jumbo, admit and log"},
+    {"id": "r8", "if": {"cmp": ["protocol", "==", 1]}, "then": "allow", "why": "icmp"},
+    {"id": "r9", "if": true, "then": "observe", "why": "everything else admitted under observation"}
+  ],
+  "lifecycle": [
+    {"id": "stale_policy_1", "kind": "stale_policy", "presented": {"policy_version": 1, "enforcement_point_floor": 2, "signature": "valid"}, "expected": {"outcome": "refuse_policy", "reason": "stale", "prismpath_cause": 9}, "note": "an older signed version replayed at the enforcement point; the floor is on the point itself, no server in the loop"},
+    {"id": "tampered_policy_1", "kind": "tampered_policy", "presented": {"policy_version": 3, "enforcement_point_floor": 2, "image_bytes": "one byte flipped after signing", "signature": "valid for the original bytes"}, "expected": {"outcome": "refuse_policy", "reason": "tampered", "prismpath_cause": 6}, "note": "image hash differs from the signed manifest"},
+    {"id": "unsigned_policy_1", "kind": "tampered_policy", "presented": {"policy_version": 3, "enforcement_point_floor": 2, "signature": "absent"}, "expected": {"outcome": "refuse_policy", "reason": "unsigned", "prismpath_cause": 1}, "note": "no signature at all"},
+    {"id": "tampered_input_1", "kind": "tampered_input", "presented": {"request": "a valid encoded request for allow_https_1 with one payload bit flipped in transit; integrity fields left as the sender computed them"}, "expected": {"outcome": "refuse_input", "reason": "tampered", "prismpath_cause": null}, "note": "only an integrity layer on the decision wire can see this; the cause registry has no wire integrity code yet, the prediction is a Merkle block rejection in the self heal layer"}
+  ],
+  "scenarios": [
+    {"id": "allow_https_1", "kind": "clear_allow", "input": {"protocol": 6, "dst_port": 443, "pkt_len": 800, "src_internal": false}, "expected": {"outcome": "allow", "rule": "r6", "prismpath_cause": 0}, "note": ""},
+    {"id": "deny_telnet_1", "kind": "clear_deny", "input": {"protocol": 6, "dst_port": 23, "pkt_len": 60, "src_internal": true}, "expected": {"outcome": "deny", "rule": "r1", "prismpath_cause": 0}, "note": ""},
+    {"id": "allow_internal_ssh_1", "kind": "clear_allow", "input": {"protocol": 6, "dst_port": 22, "pkt_len": 120, "src_internal": true}, "expected": {"outcome": "allow", "rule": "r2", "prismpath_cause": 0}, "note": ""},
+    {"id": "deny_external_ssh_1", "kind": "clear_deny", "input": {"protocol": 6, "dst_port": 22, "pkt_len": 120, "src_internal": false}, "expected": {"outcome": "deny", "rule": "r3", "prismpath_cause": 0}, "note": "ordering: the internal allow must be tried first"},
+    {"id": "allow_dns_small_1", "kind": "clear_allow", "input": {"protocol": 17, "dst_port": 53, "pkt_len": 90, "src_internal": false}, "expected": {"outcome": "allow", "rule": "r4", "prismpath_cause": 0}, "note": ""},
+    {"id": "deny_dns_large_1", "kind": "clear_deny", "input": {"protocol": 17, "dst_port": 53, "pkt_len": 1200, "src_internal": false}, "expected": {"outcome": "deny", "rule": "r5", "prismpath_cause": 0}, "note": ""},
+    {"id": "boundary_dns_512", "kind": "clear_allow", "input": {"protocol": 17, "dst_port": 53, "pkt_len": 512, "src_internal": false}, "expected": {"outcome": "allow", "rule": "r4", "prismpath_cause": 0}, "note": "inclusive boundary"},
+    {"id": "boundary_dns_513", "kind": "clear_deny", "input": {"protocol": 17, "dst_port": 53, "pkt_len": 513, "src_internal": false}, "expected": {"outcome": "deny", "rule": "r5", "prismpath_cause": 0}, "note": "one past the boundary"},
+    {"id": "observe_jumbo_1", "kind": "clear_allow", "input": {"protocol": 6, "dst_port": 8080, "pkt_len": 1450, "src_internal": true}, "expected": {"outcome": "observe", "rule": "r7", "prismpath_cause": 0}, "note": ""},
+    {"id": "boundary_jumbo_1399", "kind": "clear_allow", "input": {"protocol": 6, "dst_port": 8080, "pkt_len": 1399, "src_internal": true}, "expected": {"outcome": "observe", "rule": "r9", "prismpath_cause": 0}, "note": "same outcome as jumbo by a different rule; the rule id is what the byte exact check compares"},
+    {"id": "boundary_jumbo_1400", "kind": "clear_allow", "input": {"protocol": 6, "dst_port": 8080, "pkt_len": 1400, "src_internal": true}, "expected": {"outcome": "observe", "rule": "r7", "prismpath_cause": 0}, "note": ""},
+    {"id": "allow_icmp_1", "kind": "clear_allow", "input": {"protocol": 1, "dst_port": 0, "pkt_len": 64, "src_internal": true}, "expected": {"outcome": "allow", "rule": "r8", "prismpath_cause": 0}, "note": ""},
+    {"id": "observe_other_1", "kind": "clear_allow", "input": {"protocol": 6, "dst_port": 8080, "pkt_len": 500, "src_internal": false}, "expected": {"outcome": "observe", "rule": "r9", "prismpath_cause": 0}, "note": ""},
+    {"id": "undeclared_missing_1", "kind": "undeclared_missing", "input": {"protocol": 6, "pkt_len": 500, "src_internal": true}, "expected": {"outcome": "observe", "rule": "r9", "prismpath_cause": 0}, "note": "dst_port absent: every port rule is unsatisfied and the catch all observes"}
+  ]
+}

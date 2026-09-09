@@ -1,0 +1,34 @@
+{
+  "dimension": "A7",
+  "evidence_path": "prismpath/comparisons/results/cerbos/evidence/A7",
+  "expected": "allow",
+  "glue": {
+    "components": [
+      "server or client configuration"
+    ],
+    "description": "configure request timeouts (a cap on wall time, not a bound on work)",
+    "hours": 0,
+    "loc": 0
+  },
+  "grade": "WITH-WORK",
+  "harness_commit": "eeb9706",
+  "idiomatic": true,
+  "match": true,
+  "measurements": {
+    "latency_ns": {
+      "max": 2848966,
+      "median": 735225,
+      "min": 257553,
+      "n": 100000,
+      "p95": 1174290
+    },
+    "transport": "loopback HTTP to cerbos server (gRPC also available; no in process Python embedding)"
+  },
+  "notes": "cerbos server over loopback HTTP, 100000 requests: min/median/p95/max ns 257553/735225/1174290/2848966; includes the HTTP round trip and JSON. CEL condition evaluation has no stated worst case bound and none travels with a policy; timeouts cap wall time, WITH-WORK under the pre registered rubric.",
+  "observed": "allow",
+  "policy": "sensor_interlock",
+  "run_at": "2026-09-08T23:26:59Z",
+  "scenario": "boundary_nominal_119_749",
+  "system": "cerbos",
+  "system_version": "0.55.0"
+}

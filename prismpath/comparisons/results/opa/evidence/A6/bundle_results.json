@@ -1,0 +1,22 @@
+{
+  "baseline_v2": {
+    "alive": true,
+    "loaded": true,
+    "log_tail": "r\":\"127.0.0.1:47438\",\"level\":\"info\",\"msg\":\"Received request.\",\"req_id\":1,\"req_method\":\"POST\",\"req_path\":\"/v1/data/comparison/network_admission/decision\",\"time\":\"2026-09-08T17:35:28-05:00\"}\n{\"client_addr\":\"127.0.0.1:47438\",\"level\":\"info\",\"msg\":\"Sent response.\",\"req_id\":1,\"req_method\":\"POST\",\"req_path\":\"/v1/data/comparison/network_admission/decision\",\"resp_bytes\":43,\"resp_duration\":0.399089,\"resp_status\":200,\"time\":\"2026-09-08T17:35:28-05:00\"}\n{\"level\":\"info\",\"msg\":\"Shutting down...\",\"time\":\"2026-09-08T17:35:28-05:00\"}\n{\"level\":\"info\",\"msg\":\"Server shutdown.\",\"time\":\"2026-09-08T17:35:28-05:00\"}\n"
+  },
+  "stale_policy_1": {
+    "alive": true,
+    "loaded": true,
+    "log_tail": "r\":\"127.0.0.1:36578\",\"level\":\"info\",\"msg\":\"Received request.\",\"req_id\":1,\"req_method\":\"POST\",\"req_path\":\"/v1/data/comparison/network_admission/decision\",\"time\":\"2026-09-08T17:35:29-05:00\"}\n{\"client_addr\":\"127.0.0.1:36578\",\"level\":\"info\",\"msg\":\"Sent response.\",\"req_id\":1,\"req_method\":\"POST\",\"req_path\":\"/v1/data/comparison/network_admission/decision\",\"resp_bytes\":43,\"resp_duration\":0.439552,\"resp_status\":200,\"time\":\"2026-09-08T17:35:29-05:00\"}\n{\"level\":\"info\",\"msg\":\"Shutting down...\",\"time\":\"2026-09-08T17:35:29-05:00\"}\n{\"level\":\"info\",\"msg\":\"Server shutdown.\",\"time\":\"2026-09-08T17:35:29-05:00\"}\n"
+  },
+  "tampered_policy_1": {
+    "alive": false,
+    "loaded": false,
+    "log_tail": "error: load error: bundle /tmp/opa_a6_r7ztukhc/v3_tampered.tar.gz: tmp/opa_a6_r7ztukhc/bundle_src/policy.rego: digest mismatch (want: 28deae15cfeacb8af3624f82868e4e26ae89758b9a1e36bbe16af8afd756720e, got: 38be848d58ce0c0f1f1b2cd3d00cd36bd785f36a33e05c4b215cfe441f0e0c99)\n"
+  },
+  "unsigned_policy_1": {
+    "alive": false,
+    "loaded": false,
+    "log_tail": "error: load error: bundle /tmp/opa_a6_r7ztukhc/unsigned.tar.gz: bundle missing .signatures.json file\n"
+  }
+}

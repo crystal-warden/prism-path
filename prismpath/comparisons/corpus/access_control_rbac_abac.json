@@ -1,0 +1,44 @@
+{
+  "id": "access_control_rbac_abac",
+  "title": "Expressiveness: role hierarchy, ownership, group intersection, and a time window in one policy",
+  "dimensions": ["B1"],
+  "level_m_claim": false,
+  "hierarchy": {"field": "user_role", "order": ["contractor", "employee", "manager", "admin"]},
+  "fields": {
+    "user_id": {"type": "string"},
+    "user_role": {"type": "string", "values": ["contractor", "employee", "manager", "admin"]},
+    "user_groups": {"type": "list"},
+    "resource_owner_id": {"type": "string"},
+    "resource_groups": {"type": "list"},
+    "resource_sensitivity": {"type": "string", "values": ["low", "high"]},
+    "action": {"type": "string", "values": ["read", "write", "delete"]},
+    "hour_utc": {"type": "int"}
+  },
+  "outcomes": ["allow", "deny"],
+  "catch_all": true,
+  "rules": [
+    {"id": "r1", "if": {"cmp": ["user_role", "==", "admin"]}, "then": "allow", "why": "admins do anything"},
+    {"id": "r2", "if": {"all": [{"cmp": ["resource_sensitivity", "==", "high"]}, {"not_in": ["user_role", ["admin", "manager"]]}]}, "then": "deny", "why": "high sensitivity is management only, ownership notwithstanding"},
+    {"id": "r3", "if": {"eq_fields": ["user_id", "resource_owner_id"]}, "then": "allow", "why": "owners act on their own resources"},
+    {"id": "r4", "if": {"all": [{"cmp": ["action", "==", "read"]}, {"intersects": ["user_groups", "resource_groups"]}]}, "then": "allow", "why": "shared group membership grants read"},
+    {"id": "r5", "if": {"all": [{"role_at_least": ["user_role", "manager"]}, {"in": ["action", ["read", "write"]]}, {"cmp": ["hour_utc", ">=", 8]}, {"cmp": ["hour_utc", "<", 18]}]}, "then": "allow", "why": "managers read and write in business hours"},
+    {"id": "r6", "if": true, "then": "deny", "why": "default deny"}
+  ],
+  "prismpath_expressibility": {
+    "cmp_in_not_in_time_window": "NATIVE: field OP const atoms and in lists are the predicate language",
+    "role_at_least": "WITH-WORK: the hierarchy is flattened at authoring into an explicit in list (in user_role [manager, admin]); the policy no longer states the hierarchy, only its consequence",
+    "eq_fields": "NOT: field against field comparison is outside the predicate language (SPEC section 4); the caller must precompute a boolean field such as is_owner, which moves the rule out of the policy",
+    "intersects": "NOT: runtime collections and set operations are outside the language; the caller must precompute a boolean such as shares_group",
+    "predicted_grade": "NOT"
+  },
+  "scenarios": [
+    {"id": "admin_any_1", "kind": "expressiveness", "input": {"user_id": "u1", "user_role": "admin", "user_groups": ["eng"], "resource_owner_id": "u9", "resource_groups": ["ops"], "resource_sensitivity": "high", "action": "delete", "hour_utc": 3}, "expected": {"outcome": "allow", "rule": "r1", "prismpath_cause": 0}, "note": ""},
+    {"id": "owner_write_1", "kind": "expressiveness", "input": {"user_id": "u1", "user_role": "employee", "user_groups": ["eng"], "resource_owner_id": "u1", "resource_groups": ["ops"], "resource_sensitivity": "low", "action": "write", "hour_utc": 3}, "expected": {"outcome": "allow", "rule": "r3", "prismpath_cause": null}, "note": "needs field against field"},
+    {"id": "group_read_1", "kind": "expressiveness", "input": {"user_id": "u2", "user_role": "employee", "user_groups": ["eng"], "resource_owner_id": "u9", "resource_groups": ["eng", "ops"], "resource_sensitivity": "low", "action": "read", "hour_utc": 3}, "expected": {"outcome": "allow", "rule": "r4", "prismpath_cause": null}, "note": "needs set intersection"},
+    {"id": "group_write_denied_1", "kind": "expressiveness", "input": {"user_id": "u2", "user_role": "employee", "user_groups": ["eng"], "resource_owner_id": "u9", "resource_groups": ["eng", "ops"], "resource_sensitivity": "low", "action": "write", "hour_utc": 3}, "expected": {"outcome": "deny", "rule": "r6", "prismpath_cause": 0}, "note": ""},
+    {"id": "manager_hours_write_1", "kind": "expressiveness", "input": {"user_id": "u3", "user_role": "manager", "user_groups": ["mgmt"], "resource_owner_id": "u9", "resource_groups": ["ops"], "resource_sensitivity": "low", "action": "write", "hour_utc": 10}, "expected": {"outcome": "allow", "rule": "r5", "prismpath_cause": 0}, "note": "hierarchy flattened, time window native"},
+    {"id": "manager_after_hours_1", "kind": "expressiveness", "input": {"user_id": "u3", "user_role": "manager", "user_groups": ["mgmt"], "resource_owner_id": "u9", "resource_groups": ["ops"], "resource_sensitivity": "low", "action": "write", "hour_utc": 20}, "expected": {"outcome": "deny", "rule": "r6", "prismpath_cause": 0}, "note": ""},
+    {"id": "high_sensitivity_owner_denied_1", "kind": "expressiveness", "input": {"user_id": "u1", "user_role": "employee", "user_groups": ["eng"], "resource_owner_id": "u1", "resource_groups": ["eng"], "resource_sensitivity": "high", "action": "read", "hour_utc": 10}, "expected": {"outcome": "deny", "rule": "r2", "prismpath_cause": 0}, "note": "ordering: the sensitivity deny outranks ownership"},
+    {"id": "contractor_group_read_1", "kind": "expressiveness", "input": {"user_id": "u4", "user_role": "contractor", "user_groups": ["vendors", "eng"], "resource_owner_id": "u9", "resource_groups": ["eng"], "resource_sensitivity": "low", "action": "read", "hour_utc": 22}, "expected": {"outcome": "allow", "rule": "r4", "prismpath_cause": null}, "note": ""}
+  ]
+}

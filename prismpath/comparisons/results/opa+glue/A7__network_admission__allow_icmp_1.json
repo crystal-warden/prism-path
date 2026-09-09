@@ -1,0 +1,24 @@
+{
+  "dimension": "A7",
+  "evidence_path": "prismpath/comparisons/results/opa/evidence/A7",
+  "expected": "allow",
+  "glue": {
+    "components": [
+      "server configuration"
+    ],
+    "description": "configure the server's request timeout (a cap on wall time, not a bound on work)",
+    "hours": 0,
+    "loc": 0
+  },
+  "grade": "WITH-WORK",
+  "harness_commit": "592fa6d",
+  "idiomatic": true,
+  "match": true,
+  "notes": "No glue can add a bound; the combination carries OPA's timeout configuration cell unchanged (WITH-WORK, zero lines). OPA cell: opa run --server over loopback HTTP, 100000 requests: min/median/p95/max ns 98048/307952/544545/1674706; includes the HTTP round trip and JSON on both sides. Rego evaluation has no stated worst case bound and no bound travels with a policy; a request timeout caps wall time, which the pre registered rubric counts as WITH-WORK.",
+  "observed": "allow",
+  "policy": "network_admission",
+  "run_at": "2026-09-09T01:31:47Z",
+  "scenario": "allow_icmp_1",
+  "system": "opa+glue",
+  "system_version": "1.20.2+glue"
+}

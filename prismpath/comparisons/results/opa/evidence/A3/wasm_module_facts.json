@@ -1,0 +1,33 @@
+{
+  "module_bytes": 135831,
+  "memory_pages_min": 2,
+  "memory_min_bytes": 131072,
+  "memory_max_pages": null,
+  "memory_kind": "imported",
+  "imports": [
+    "env.opa_builtin0",
+    "env.opa_builtin1",
+    "env.opa_builtin2",
+    "env.opa_builtin3",
+    "env.opa_builtin4",
+    "env.opa_abort",
+    "env.memory"
+  ],
+  "code_section_bytes": 75456,
+  "modules": {
+    "network_admission": {
+      "as_run_bytes": 135831,
+      "as_run_sha256": "21b6b95031a5a07a56a714aedb5093860fd1983ab594fcfa5d52bf74442d9965",
+      "rebuilt_bytes": 135785,
+      "rebuilt_sha256": "f499f0ade7065a38f5173c4e44d87f1139d222de8a75e41dce1ac2fa836a492d",
+      "note": "as_run is the module that executed on the RP2350 (Phase 5); rebuilt is opa 1.20.2 build -t wasm from bundle/policy.rego at a fixed relative path (gen_wasm.py). The two differ only in the source path opa embeds; neither is stored, the rebuild is byte reproducible."
+    },
+    "sensor_interlock": {
+      "as_run_bytes": 135954,
+      "as_run_sha256": "b2b9d834c4dac9776028fd01ef73b194ca2a358572f334e87704167fcfc161cb",
+      "rebuilt_bytes": 135850,
+      "rebuilt_sha256": "fb4484adb232b662cd556a3e82646a476495d2e817f30f419adcd1aed0382d94",
+      "note": "as_run is the module that executed on the RP2350 (Phase 5); rebuilt is opa 1.20.2 build -t wasm from bundle/policy.rego at a fixed relative path (gen_wasm.py). The two differ only in the source path opa embeds; neither is stored, the rebuild is byte reproducible."
+    }
+  }
+}

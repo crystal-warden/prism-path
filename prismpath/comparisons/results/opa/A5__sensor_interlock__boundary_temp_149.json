@@ -1,0 +1,23 @@
+{
+  "dimension": "A5",
+  "evidence_path": "prismpath/comparisons/results/opa/evidence/A5",
+  "expected": "observe",
+  "glue": null,
+  "grade": "NOT",
+  "harness_commit": "1d8b6ac",
+  "idiomatic": true,
+  "match": true,
+  "measurements": {
+    "bytes_on_wire": 119,
+    "request_bytes": 74,
+    "result_bytes": 45,
+    "total_plus_envelope_28B": 147
+  },
+  "notes": "HTTP POST /v1/data/... request body 74 B (compact JSON, every field), response body 45 B as returned by opa run --server (a result document; undefined gives {}). JSON over HTTP is the documented interface; no compact or decision sufficient encoding exists natively (the Facet encode of this input is the Phase 5 combination test).",
+  "observed": "observe",
+  "policy": "sensor_interlock",
+  "run_at": "2026-09-08T22:35:21Z",
+  "scenario": "boundary_temp_149",
+  "system": "opa",
+  "system_version": "1.20.2"
+}

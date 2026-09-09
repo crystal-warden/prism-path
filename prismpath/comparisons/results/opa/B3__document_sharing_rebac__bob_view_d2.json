@@ -1,0 +1,17 @@
+{
+  "dimension": "B3",
+  "evidence_path": "prismpath/comparisons/systems/opa/generated/conformance.json",
+  "expected": "allow",
+  "glue": null,
+  "grade": "NATIVE",
+  "harness_commit": "ecae31b",
+  "idiomatic": true,
+  "match": true,
+  "notes": "Relationship reachability is computed natively with the graph.reachable built in over data.graph compiled from the corpus tuples; the policy is one rule. 6/6 match.",
+  "observed": "allow",
+  "policy": "document_sharing_rebac",
+  "run_at": "2026-09-09T01:04:30Z",
+  "scenario": "bob_view_d2",
+  "system": "opa",
+  "system_version": "1.20.2"
+}

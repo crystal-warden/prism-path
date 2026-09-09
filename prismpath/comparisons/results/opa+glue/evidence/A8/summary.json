@@ -1,0 +1,30 @@
+{
+  "observed": [
+    "allow",
+    "allow",
+    "deny",
+    "abstain",
+    "escalate_human",
+    "escalate_human"
+  ],
+  "rules": [
+    "r6",
+    "r7",
+    "r3",
+    "r5",
+    "r4",
+    "r1"
+  ],
+  "records": 6,
+  "verified": [
+    true,
+    true,
+    true,
+    true,
+    true,
+    true
+  ],
+  "tamper_detected": true,
+  "wrong_key_rejected": true,
+  "signing": "RS256 with the bundle signing key (openssl RSA 2048, the key opa build --signing-key would use)"
+}

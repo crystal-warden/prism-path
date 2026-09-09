@@ -1,0 +1,2 @@
+SWEEP START network_admission wcet_cycles=35 secs=400.0
+SWEEP END network_admission evaluations=1437371

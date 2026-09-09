@@ -1,0 +1,1 @@
+https://docs.cerbos.dev/cerbos/latest/api/ (REST and gRPC APIs; SDKs for Go, Java, JavaScript, .NET, Laravel, PHP, Python, Ruby, Rust; Kubernetes service, sidecar, and daemonset deployments; Helm chart; Cerbos Hub; query plan adapters for Prisma, Drizzle, Mongoose, Convex, LangChain, SQLAlchemy; authentication recipes)

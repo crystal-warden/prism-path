@@ -1,0 +1,34 @@
+{
+  "dimension": "A7",
+  "evidence_path": "prismpath/comparisons/results/opa/evidence/A7",
+  "expected": "deny",
+  "glue": {
+    "components": [
+      "server configuration"
+    ],
+    "description": "configure the server's request timeout (a cap on wall time, not a bound on work)",
+    "hours": 0,
+    "loc": 0
+  },
+  "grade": "WITH-WORK",
+  "harness_commit": "eeb9706",
+  "idiomatic": true,
+  "match": true,
+  "measurements": {
+    "latency_ns": {
+      "max": 1495697,
+      "median": 316193,
+      "min": 99840,
+      "n": 100000,
+      "p95": 555632
+    },
+    "transport": "loopback HTTP to opa run --server (includes TCP and JSON, no in process Python embedding exists)"
+  },
+  "notes": "opa run --server over loopback HTTP, 100000 requests: min/median/p95/max ns 99840/316193/555632/1495697; includes the HTTP round trip and JSON on both sides. Rego evaluation has no stated worst case bound and no bound travels with a policy; a request timeout caps wall time, which the pre registered rubric counts as WITH-WORK.",
+  "observed": "deny",
+  "policy": "network_admission",
+  "run_at": "2026-09-08T22:49:23Z",
+  "scenario": "deny_external_ssh_1",
+  "system": "opa",
+  "system_version": "1.20.2"
+}
