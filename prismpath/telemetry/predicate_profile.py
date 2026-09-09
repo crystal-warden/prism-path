@@ -19,6 +19,7 @@ import json
 from typing import Any, Dict
 
 from prismpath.telemetry import quantizer as q
+from prismpath import canon
 
 
 def cell_profile(graph, parts: Dict[str, "q.FieldPartition"], field: str, symbol: int) -> dict:
@@ -45,4 +46,4 @@ def cell_profile(graph, parts: Dict[str, "q.FieldPartition"], field: str, symbol
 
 def profile_wire_bytes(profile: dict) -> int:
     """Canonical serialized size — the measured cost of promoting one symbol to its profile."""
-    return len(json.dumps(profile, sort_keys=True, separators=(",", ":")).encode())
+    return len(canon.canonical_compact(profile))

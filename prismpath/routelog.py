@@ -22,6 +22,7 @@ from __future__ import annotations
 import json
 import os
 from typing import Callable, List, Optional
+from prismpath import canon
 
 
 def jsonl_sink(path) -> Callable[[dict], None]:
@@ -59,11 +60,7 @@ def load_records(path) -> List[dict]:
 
 
 def save_records(path, records: List[dict]) -> None:
-    tmp = os.fspath(path) + ".tmp"
-    with open(tmp, "w") as f:
-        for r in records:
-            f.write(json.dumps(r) + "\n")
-    os.replace(tmp, os.fspath(path))
+    canon.atomic_write(path, "".join(json.dumps(r) + "\n" for r in records))
 
 
 def label_records(records: List[dict], ask: Callable[[dict, List[str]], Optional[str]],

@@ -32,6 +32,7 @@ import tempfile
 import time
 from pathlib import Path
 from typing import Dict, List, Optional
+from prismpath import canon
 
 # Identity + git dates are pinned so the plumbing is deterministic and never a source of run-to-run
 # nondeterminism from the git layer. Real green-time is recorded separately in the PrismPath-Wallclock
@@ -81,8 +82,7 @@ def new_run_id() -> str:
     return time.strftime("%Y%m%dT%H%M%SZ", time.gmtime()) + "-" + os.urandom(4).hex()
 
 
-def _safe(name: str) -> str:
-    return re.sub(r"[^A-Za-z0-9_.-]", "_", name) or "flow"
+_safe = canon.safe_name
 
 
 class Ledger:

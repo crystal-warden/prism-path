@@ -23,6 +23,7 @@ import os
 import re
 from abc import ABC
 from typing import Any, Dict, List, Callable, Optional, Union, Tuple
+from prismpath import canon
 
 # Decorator to register node handlers
 def node(name: str):
@@ -114,8 +115,7 @@ class BaseConnector(ABC):
 
     def compute_ingestion_hash(self, data: Dict[str, Any]) -> str:
         """Computes a content-addressable hash for ingestion payloads."""
-        body = json.dumps(data, sort_keys=True).encode()
-        return "sha256:" + hashlib.sha256(body).hexdigest()[:16]
+        return "sha256:" + canon.sha256_hex(canon.canonical_spaced(data))[:16]
 
     # --- RETRIEVAL PORT ---
     def retrieve_criteria(self, query: str) -> Any:
@@ -124,8 +124,7 @@ class BaseConnector(ABC):
 
     def compute_knowledge_hash(self, kb_data: Any) -> str:
         """Computes a content-addressable hash for knowledge base / catalog data."""
-        body = json.dumps(kb_data, sort_keys=True).encode()
-        return "sha256:" + hashlib.sha256(body).hexdigest()[:16]
+        return "sha256:" + canon.sha256_hex(canon.canonical_spaced(kb_data))[:16]
 
     # --- ADJUDICATOR PORT ---
     def adjudication_prompt(self, payload: Dict[str, Any], criteria: Any = None,
@@ -211,7 +210,7 @@ class BaseConnector(ABC):
         """Default core attestation binding using ledger_airgap. Pass
         `policy_hash_for(flow_path)` as `policy_hash` to bind the governing document."""
         from prismpath import ledger_airgap
-        root_hex = hashlib.sha256(json.dumps(outcome, sort_keys=True).encode()).hexdigest()
+        root_hex = canon.sha256_hex(canon.canonical_spaced(outcome))
         return ledger_airgap.provenance_manifest(
             root_hex=root_hex,
             label=label or f"{self.name}:decision",

@@ -14,10 +14,11 @@ import hashlib
 import hmac
 import json
 from typing import Dict
+from prismpath import canon
 
 
 def _canon(root: str, seq: int) -> bytes:
-    return json.dumps({"root": root, "seq": seq}, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return canon.canonical_compact({"root": root, "seq": seq})
 
 
 def sign_ack(secret: bytes, root: str, seq: int) -> str:

@@ -20,6 +20,7 @@ import os
 import struct
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Tuple
+from prismpath import canon
 
 # --- .ppt format facts (read-only mirror of ppt_compile.py / TABLE_FORMAT.md) ---
 MAGIC = 0x4D545050          # "PPTM"
@@ -74,12 +75,11 @@ def _ed25519():
 
 
 def canonical_bytes(obj) -> bytes:
-    """The one canonical JSON encoding signatures are computed over."""
-    return json.dumps(obj, sort_keys=True, separators=(",", ":")).encode()
+    """The one canonical JSON encoding signatures are computed over (prismpath.canon, compact form)."""
+    return canon.canonical_compact(obj)
 
 
-def sha256_hex(data: bytes) -> str:
-    return hashlib.sha256(data).hexdigest()
+sha256_hex = canon.sha256_hex
 
 
 # ------------------------------------------------------------------ image parsing

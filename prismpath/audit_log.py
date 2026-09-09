@@ -21,13 +21,13 @@ import threading
 import time
 
 from prismpath import ledger_ots as _mk
+from prismpath import canon as _canon
 
 
 def _leaf_hex(ev: dict) -> str:
     """A stable content hash of an event — its Merkle leaf. Commits to every field, so editing any past
     event changes its leaf and therefore the root."""
-    canon = json.dumps(ev, sort_keys=True, separators=(",", ":"))
-    return hashlib.sha256(canon.encode("utf-8")).hexdigest()
+    return _canon.sha256_hex(_canon.canonical_compact(ev))
 
 
 class AuditLog:

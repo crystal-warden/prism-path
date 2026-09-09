@@ -28,6 +28,7 @@ sys.path.insert(0, str(HERE.parent.parent))
 
 from prismpath import ledger_airgap as la          # noqa: E402
 from prismpath.checkpoint import run_durable, resume, load_checkpoint  # noqa: E402
+from prismpath import canon
 
 OUT = HERE / "conformance" / "durable.json"
 
@@ -184,15 +185,12 @@ def main() -> int:
                                    ingestion_hashes=["sha256:aa", "sha256:bb"],
                                    knowledge_base_hash="sha256:kb26e3")
     prior["created"] = "2026-08-12T00:00:00Z"          # re-pin created deterministically…
-    body = json.dumps({k: prior[k] for k in prior if k != "manifest_hash"}, sort_keys=True).encode()
-    import hashlib
-    prior["manifest_hash"] = hashlib.sha256(body).hexdigest()   # …and re-address
+    prior["manifest_hash"] = canon.manifest_hash(prior)   # …and re-address
 
     override = la.override_manifest(prior, "auditor:jsmith", "compensating control accepted",
                                     "c" * 64)
     override["created"] = "2026-08-12T00:00:01Z"
-    body = json.dumps({k: override[k] for k in override if k != "manifest_hash"}, sort_keys=True).encode()
-    override["manifest_hash"] = hashlib.sha256(body).hexdigest()
+    override["manifest_hash"] = canon.manifest_hash(override)
 
     tampered = dict(prior)
     tampered["root"] = "e" * 64                                  # bound field edited post-address

@@ -21,6 +21,7 @@ Only high-entropy Merkle ROOTS ever cross the boundary (SPEC §4.1 / C4). C1 pro
 custody is provable from ingestion, and *what logic ran* is bound, not just the output.
 """
 import os, json, hashlib, subprocess, shutil, tarfile, datetime
+from prismpath import canon
 
 _OTSENV = {**os.environ, "PATH": os.path.expanduser("~/.local/bin") + ":" + os.environ.get("PATH", "")}
 
@@ -58,8 +59,7 @@ def provenance_manifest(root_hex, label, policy_hash=None, gate_id=None, ingesti
          "policy_hash": policy_hash, "gate_id": gate_id, "knowledge_base_hash": knowledge_base_hash,
          "ingestion_hashes": list(ingestion_hashes or [])}
     # the manifest itself is content-addressed so it can't be silently edited post-anchor
-    body = json.dumps({k: m[k] for k in m if k != "manifest_hash"}, sort_keys=True).encode()
-    m["manifest_hash"] = hashlib.sha256(body).hexdigest()
+    m["manifest_hash"] = canon.manifest_hash(m)
     return m
 
 
@@ -80,8 +80,7 @@ def override_manifest(prior, overrider_id, rationale, new_root_hex, new_label=No
          "policy_hash": prior.get("policy_hash"), "gate_id": prior.get("gate_id"),
          "knowledge_base_hash": prior.get("knowledge_base_hash"),
          "ingestion_hashes": list(prior.get("ingestion_hashes", []))}
-    body = json.dumps({k: m[k] for k in m if k != "manifest_hash"}, sort_keys=True).encode()
-    m["manifest_hash"] = hashlib.sha256(body).hexdigest()
+    m["manifest_hash"] = canon.manifest_hash(m)
     return m
 
 
@@ -94,8 +93,7 @@ def verify_manifest(m):
     Any tampering with a bound field (root, policy_hash, gate_id, ingestion_hashes, knowledge_base_hash,
     supersedes, overrider_id, rationale, ...) flips this to False. This is what makes a manifest a
     tamper-evidence anchor rather than a mere label."""
-    body = json.dumps({k: m[k] for k in m if k != "manifest_hash"}, sort_keys=True).encode()
-    return hashlib.sha256(body).hexdigest() == m.get("manifest_hash")
+    return canon.manifest_hash(m) == m.get("manifest_hash")
 
 
 def export_stamp_request(roots, out_bundle, policy_hash=None, gate_id=None, ingestion_hashes=None):

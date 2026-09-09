@@ -51,6 +51,7 @@ import subprocess
 import time
 
 import requests
+from prismpath import canon
 
 try:                                    # glass-window interaction log (best-effort, never fatal)
     from prismpath import interactions as _ix
@@ -916,11 +917,7 @@ def _abs(p: str) -> str:
 
 def _kg_save(kg: dict):
     kp = _abs(KG_PATH)
-    os.makedirs(os.path.dirname(kp) or ".", exist_ok=True)
-    tmp = kp + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(kg, f, indent=2)
-    os.replace(tmp, kp)                                     # atomic
+    canon.atomic_write(kp, json.dumps(kg, indent=2))            # atomic, fsynced (prismpath.canon)
 
 
 def _kg_load() -> dict:

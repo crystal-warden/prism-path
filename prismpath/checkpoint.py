@@ -31,6 +31,7 @@ from typing import Optional
 
 from prismpath.engine import RunResult, StepLog, run
 from prismpath.parser import parse_file
+from prismpath import canon
 
 CHECKPOINT_VERSION = 1
 
@@ -41,8 +42,7 @@ def flow_hash(flow_path) -> str:
     attestation manifests so a decision is provably tied to the exact flow version that made it
     (the Connector SDK's `attest_decision` uses it as `policy_hash`)."""
     try:
-        with open(flow_path, "rb") as f:
-            return "sha256:" + hashlib.sha256(f.read()).hexdigest()
+        return canon.file_sha256_prefixed(flow_path)
     except OSError:
         return ""
 
@@ -54,16 +54,7 @@ class CheckpointError(Exception):
     pass
 
 
-def _atomic_write(path, data: str) -> None:
-    path = os.fspath(path)
-    d = os.path.dirname(os.path.abspath(path))
-    os.makedirs(d, exist_ok=True)
-    tmp = f"{path}.tmp"
-    with open(tmp, "w") as f:
-        f.write(data)
-        f.flush()
-        os.fsync(f.fileno())
-    os.replace(tmp, path)   # atomic on POSIX: a reader sees the old or new file, never a torn one
+_atomic_write = canon.atomic_write   # the shared recipe (prismpath.canon); the name stays for callers
 
 
 def save_checkpoint(path, flow_path, result: RunResult, pending_node: Optional[str],

@@ -24,6 +24,7 @@ import hashlib
 import json
 import os
 from typing import Optional
+from prismpath import canon
 
 LOCK_VERSION = 1
 DEFAULT_DELTA = 0.05                 # mirrors HybridRouter's default margin
@@ -55,8 +56,7 @@ def _decode_vec(s: str):
 
 
 def _flow_hash(flow_path) -> str:
-    with open(flow_path, "rb") as f:
-        return "sha256:" + hashlib.sha256(f.read()).hexdigest()
+    return canon.file_sha256_prefixed(flow_path)
 
 
 def lock_path(flow_path) -> str:
@@ -163,10 +163,7 @@ def build_lock(flow_path, delta: Optional[float] = None, centroids: Optional[dic
 
 def save_lock(flow_path, lock: dict) -> str:
     path = lock_path(flow_path)
-    tmp = path + ".tmp"
-    with open(tmp, "w") as f:
-        json.dump(lock, f, indent=2, sort_keys=True)
-    os.replace(tmp, path)
+    canon.atomic_write(path, json.dumps(lock, indent=2, sort_keys=True))
     return path
 
 
@@ -252,7 +249,7 @@ def _lock_hash(lock: dict) -> str:
     """Content hash of a lock (canonical JSON) — the pin a parent records for each child, so a child
     relocked or edited after the parent was pinned is detectable. The child's own `children` map is
     included, so the hash captures the whole subtree recursively."""
-    return "sha256:" + hashlib.sha256(json.dumps(lock, sort_keys=True).encode()).hexdigest()
+    return canon.sha256_prefixed(canon.canonical_spaced(lock))
 
 
 def lock_tree(flow_path, delta: Optional[float] = None, centroids: Optional[dict] = None,

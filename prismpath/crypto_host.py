@@ -26,6 +26,7 @@ from typing import List, Optional, Tuple
 from . import crypto_registry as cr
 from . import policy_pack as pp
 from .audit_log import AuditLog
+from prismpath import canon
 
 _PQ_KEM_TOKENS = ("ml-kem", "kyber")
 
@@ -157,10 +158,7 @@ class CryptoHost:
             return 0
 
     def _persist_version(self, version: int) -> None:
-        tmp = self._version_path + ".tmp"
-        with open(tmp, "w") as f:
-            f.write(str(version)); f.flush(); os.fsync(f.fileno())
-        os.replace(tmp, self._version_path)
+        canon.atomic_write(self._version_path, str(version))
 
     def _reject(self, to_hash, version, reasons: List[str], strict: bool) -> dict:
         self.audit.append("crypto_host", "swap_rejected", {

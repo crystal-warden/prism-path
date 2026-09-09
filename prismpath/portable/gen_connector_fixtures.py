@@ -19,6 +19,7 @@ sys.path.insert(0, str(HERE.parent.parent))
 
 from prismpath.connector import BaseConnector, PayloadFlattener   # noqa: E402
 from prismpath.checkpoint import run_durable, resume, load_checkpoint  # noqa: E402
+from prismpath import canon
 
 OUT = HERE / "conformance" / "connector.json"
 
@@ -101,8 +102,7 @@ def main() -> int:
     att = conn.attest_decision(outcome, "sha256:deadbeef", "wazuh_triage@v3",
                                ["sha256:aa"], "sha256:kb")
     att["created"] = "2026-08-12T00:00:00Z"
-    body = json.dumps({k: att[k] for k in att if k != "manifest_hash"}, sort_keys=True).encode()
-    att["manifest_hash"] = hashlib.sha256(body).hexdigest()
+    att["manifest_hash"] = canon.manifest_hash(att)
 
     # ---- join-policy grid: the composer's REAL threshold/event functions, frozen ----
     from prismpath.composer import _join_event, _quorum_threshold

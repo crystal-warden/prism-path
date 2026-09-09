@@ -36,8 +36,8 @@ import os
 from typing import List, Optional
 
 from prismpath import checkpoint, predicates
-from prismpath.checkpoint import load_checkpoint, run_durable, resume, _atomic_write
-from prismpath.ledger import _safe
+from prismpath.canon import atomic_write as _atomic_write, safe_name as _safe
+from prismpath.checkpoint import load_checkpoint, run_durable, resume
 
 
 # --- spec + identity ------------------------------------------------------------------

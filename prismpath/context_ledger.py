@@ -28,12 +28,12 @@ from typing import Dict, List, Optional
 
 from prismpath import ledger_airgap
 from prismpath import ledger_ots
+from prismpath import canon
 
 GENESIS = "0" * 64
 
 
-def _sha256_hex(data: bytes) -> str:
-    return hashlib.sha256(data).hexdigest()
+_sha256_hex = canon.sha256_hex
 
 
 class ContextLedger:
