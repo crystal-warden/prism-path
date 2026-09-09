@@ -1,6 +1,6 @@
 {
- "version": 1,
- "note": "Decisions-preserved corpus. Each reading is tagged with the full-precision route at every decision node; the engine must reproduce it (drift) and the quantize->Fibonacci->decode-> reconstruct wire round-trip must too (decision preservation).",
+ "version": 2,
+ "note": "Decisions-preserved corpus (v2 adds numin, truthynum, strtruthy: the cut point regression flows). Each reading is tagged with the full-precision route at every decision node; the engine must reproduce it (drift) and the quantize->Fibonacci->decode-> reconstruct wire round-trip must too (decision preservation).",
  "cases": [
   {
    "name": "incident_severity",
@@ -585,6 +585,169 @@
      "routes": {
       "intake": "reject",
       "triage": "urgent"
+     }
+    }
+   ]
+  },
+  {
+   "name": "numin",
+   "flow": "---\nname: numin\nstart: classify\n---\n## classify\n-> listed: when x in (3, 5)\n-> excluded: when x not in (7, 9)\n-> rest: else\n## listed\n## excluded\n## rest\n",
+   "decision_nodes": [
+    "classify"
+   ],
+   "readings": [
+    {
+     "reading": {
+      "x": 2
+     },
+     "routes": {
+      "classify": "excluded"
+     }
+    },
+    {
+     "reading": {
+      "x": 3
+     },
+     "routes": {
+      "classify": "listed"
+     }
+    },
+    {
+     "reading": {
+      "x": 4
+     },
+     "routes": {
+      "classify": "excluded"
+     }
+    },
+    {
+     "reading": {
+      "x": 5
+     },
+     "routes": {
+      "classify": "listed"
+     }
+    },
+    {
+     "reading": {
+      "x": 6
+     },
+     "routes": {
+      "classify": "excluded"
+     }
+    },
+    {
+     "reading": {
+      "x": 7
+     },
+     "routes": {
+      "classify": "rest"
+     }
+    },
+    {
+     "reading": {
+      "x": 8
+     },
+     "routes": {
+      "classify": "excluded"
+     }
+    },
+    {
+     "reading": {
+      "x": 9
+     },
+     "routes": {
+      "classify": "rest"
+     }
+    },
+    {
+     "reading": {
+      "x": 10
+     },
+     "routes": {
+      "classify": "excluded"
+     }
+    }
+   ]
+  },
+  {
+   "name": "truthynum",
+   "flow": "---\nname: truthynum\nstart: classify\n---\n## classify\n-> high: when x >= 5\n-> nonzero: when x\n-> zero: else\n## high\n## nonzero\n## zero\n",
+   "decision_nodes": [
+    "classify"
+   ],
+   "readings": [
+    {
+     "reading": {
+      "x": -1
+     },
+     "routes": {
+      "classify": "nonzero"
+     }
+    },
+    {
+     "reading": {
+      "x": 0
+     },
+     "routes": {
+      "classify": "zero"
+     }
+    },
+    {
+     "reading": {
+      "x": 1
+     },
+     "routes": {
+      "classify": "nonzero"
+     }
+    },
+    {
+     "reading": {
+      "x": 4
+     },
+     "routes": {
+      "classify": "nonzero"
+     }
+    },
+    {
+     "reading": {
+      "x": 5
+     },
+     "routes": {
+      "classify": "high"
+     }
+    }
+   ]
+  },
+  {
+   "name": "strtruthy",
+   "flow": "---\nname: strtruthy\nstart: classify\n---\n## classify\n-> root: when name == 'root'\n-> named: when name\n-> anonymous: else\n## root\n## named\n## anonymous\n",
+   "decision_nodes": [
+    "classify"
+   ],
+   "readings": [
+    {
+     "reading": {
+      "name": "root"
+     },
+     "routes": {
+      "classify": "root"
+     }
+    },
+    {
+     "reading": {
+      "name": ""
+     },
+     "routes": {
+      "classify": "anonymous"
+     }
+    },
+    {
+     "reading": {
+      "name": "__unlisted__"
+     },
+     "routes": {
+      "classify": "named"
      }
     }
    ]

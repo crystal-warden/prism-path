@@ -46,3 +46,6 @@ prismpath-hw/demo/keys/*.key
 # ESP-IDF build trees
 prismpath-hw/walker-demo/*/build/
 prismpath-hw/hyst-cert/evidence/*.mp4
+
+# Lean build products and the Mathlib cache (formal/, several GB)
+formal/.lake/

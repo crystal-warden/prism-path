@@ -127,8 +127,22 @@ def _atom_true(op: str, const: Any, v: Any) -> bool:
 
 
 def _numeric_partition(field: str, atoms: List[Tuple[str, Any]]) -> FieldPartition:
-    consts = sorted({int(c) for op, c in atoms if op in ("<", "<=", ">", ">=", "==", "!=")})
-    if not consts:                            # only "truthy" on an int -> split at 0
+    # Every value at which some atom can change truth is a cut point: the ordering and equality
+    # constants, every member of an `in` / `not in` list, and 0 when a bare truthiness atom is
+    # present (int truthiness flips exactly at 0). The September 2026 Lean formalization of I1
+    # found that the first version collected only the ordering/equality constants, so `x in (3, 5)`,
+    # `x not in (7,)`, and `x` alongside `x >= 5` each put values that route differently into one
+    # cell (adapters/telemetry/tests/test_quantizer_cut_points.py pins all three).
+    consts_set = set()
+    for op, c in atoms:
+        if op in ("<", "<=", ">", ">=", "==", "!="):
+            consts_set.add(int(c))
+        elif op in ("in", "not in"):
+            consts_set.update(int(v) for v in c if isinstance(v, int) and not isinstance(v, bool))
+        elif op == "truthy":
+            consts_set.add(0)
+    consts = sorted(consts_set)
+    if not consts:                            # cannot happen for a numeric field, kept as a guard
         consts = [0]
     # fine cells: each constant as a point + integer gaps between (drop empty gaps)
     fine: List[Tuple[Optional[int], Optional[int]]] = []
@@ -166,9 +180,12 @@ def _boolean_partition(field: str) -> FieldPartition:
 def _categorical_partition(field: str, atoms: List[Tuple[str, Any]]) -> FieldPartition:
     consts: List[Any] = []
     for op, c in atoms:
-        vals = c if op in ("in", "not in") else (c,)
+        if op == "truthy":
+            vals = ("",)                      # str truthiness is `s != ""`: the empty string is a named constant
+        else:
+            vals = c if op in ("in", "not in") else (c,)
         for v in vals:
-            if v not in consts:
+            if isinstance(v, str) and v not in consts:
                 consts.append(v)
     cells = [{"const": c, "rep": c} for c in consts] + [{"const": _OTHER, "rep": _OTHER}]
     return FieldPartition(field, "categorical", cells)

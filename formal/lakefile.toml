@@ -1,0 +1,10 @@
+name = "fq"
+defaultTargets = ["FQ"]
+
+[[require]]
+name = "mathlib"
+scope = "leanprover-community"
+rev = "v4.33.1"
+
+[[lean_lib]]
+name = "FQ"
