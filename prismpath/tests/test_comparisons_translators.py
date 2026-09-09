@@ -23,7 +23,7 @@ def _committed(system: str) -> dict:
 
 
 def test_prismpath_translator_conforms():
-    rep = ct.check_system("prismpath", load_policies())
+    rep = ct.check_system("prismpath", load_policies(), write=False)
     assert rep["summary"]["MISMATCH"] == 0, [r for r in rep["rows"] if r["class"] == "MISMATCH"]
     dropped = sorted({r["expected"]["rule"] for r in rep["rows"] if r["class"] == "DROPPED"})
     assert dropped == ["r3", "r4"], "only the pre registered inexpressible B1 rules may be dropped"
@@ -44,7 +44,7 @@ def test_prismpath_generated_flows_are_level_m():
 def test_comparator_translator_conforms(system):
     if not (TOOLCHAIN_BIN / BINARY[system]).exists():
         pytest.skip(f"{system} toolchain not installed")
-    rep = ct.check_system(system, load_policies())
+    rep = ct.check_system(system, load_policies(), write=False)
     assert rep["summary"]["MISMATCH"] == 0, [r for r in rep["rows"] if r["class"] == "MISMATCH"]
 
 

@@ -32,7 +32,7 @@ from prismpath.comparisons.harness import (SYSTEMS_DIR, Decision, gen_dir_for, l
 KNOWN = ("prismpath", "opa", "cedar", "cerbos", "openfga")
 
 
-def check_system(system: str, policies: List[Dict[str, Any]]) -> Dict[str, Any]:
+def check_system(system: str, policies: List[Dict[str, Any]], write: bool = True) -> Dict[str, Any]:
     mod = importlib.import_module(f"prismpath.comparisons.systems.{system}")
     rows, summary = [], {"MATCH": 0, "MISMATCH": 0, "PROBE": 0, "DROPPED": 0, "UNEXPRESSIBLE": 0}
     for pol in policies:
@@ -62,8 +62,9 @@ def check_system(system: str, policies: List[Dict[str, Any]]) -> Dict[str, Any]:
         finally:
             runner.close()
     report = {"system": system, "summary": summary, "rows": rows}
-    (SYSTEMS_DIR / system / "generated" / "conformance.json").write_text(
-        json.dumps(report, indent=1, sort_keys=True) + "\n", encoding="utf-8")
+    if write:   # the committed report is Phase 2 evidence; the test re derives without overwriting it
+        (SYSTEMS_DIR / system / "generated" / "conformance.json").write_text(
+            json.dumps(report, indent=1, sort_keys=True) + "\n", encoding="utf-8")
     return report
 
 
