@@ -54,7 +54,7 @@ is the same struct on the wire, in the kernel, and on the fabric.
 | `prismpath-hw/` | the C target `interp.c`, the `.ppt` compiler `ppt_compile.py`, `TABLE_FORMAT.md`, the fabric RTL, the MCU firmware for four ISAs, the mesh demos | engineer, operator |
 | `prismpath-ebpf/` | the interpreter as XDP and TC programs in the Linux kernel, the loader, receipt sealing, the decision delta demo | engineer, evaluator |
 | `adapters/telemetry/` | Facet, the reference: Figueroa quantization, Zeckendorf wire, self heal, epochs, concentrator, receipts, spiral | engineer |
-| `prismpath-telemetry-rs/`, `prismpath-preflight/`, `prismpath-facet-bridge/`, `integrations/vector/`, `integrations/wireshark/` | Facet in Rust, the adoption gate, type bindings, the Vector codec, the dissector | engineer, operator |
+| `prismpath-telemetry-rs/`, `prismpath-preflight/`, `prismpath-reflect-bindings/`, `integrations/vector/`, `integrations/wireshark/` | Facet in Rust, the adoption gate, type bindings, the Vector codec, the dissector | engineer, operator |
 | `prismpath-hotswap-rs/` | the signed pack and PolicyHost natively | operator |
 | `adapters/fusion/` | one Level M flow joining N decision sources | process owner |
 | `adapters/compliance/` | the GRC adjudication adapter: machine checkable controls, evidence typed verdicts, OSCAL | process owner, evaluator |

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 Crystal Warden Supply Chain Labs LLC
 
-//! `prismpath-facet-bridge` — Deriving PrismPath telemetry wire field bindings
+//! `prismpath-reflect-bindings` — Deriving PrismPath telemetry wire field bindings
 //! from types reflected with the `facet` reflection crate.
 
 use facet::{Facet, PrimitiveType, Type, UserType};

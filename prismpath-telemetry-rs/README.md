@@ -18,5 +18,5 @@ bit), `test_boundary_parity.rs`, `test_delivery_parity.rs`, `test_conformance_sp
 `packed.rs`, `selfheal.rs`, `epochs.rs`, `ackchannel.rs`, `spiral.rs`, `decode.rs`.
 
 **Where it is used.** The Vector codec build (`integrations/vector/`), `prismpath-preflight`, and
-`prismpath-facet-bridge` all build on this crate. The protocol itself is `PROTOCOL.md` at the repo
+`prismpath-reflect-bindings` all build on this crate. The protocol itself is `PROTOCOL.md` at the repo
 root; the paper is `docs/research/paper-facet-figueroa-quantization.md`.

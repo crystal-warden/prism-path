@@ -2,7 +2,7 @@
 // Copyright 2026 Crystal Warden Supply Chain Labs LLC
 
 use facet::Facet;
-use prismpath_facet_bridge::{bind, reading_from, BindError, FieldKind};
+use prismpath_reflect_bindings::{bind, reading_from, BindError, FieldKind};
 use prismpath_rs::{parse, V};
 use prismpath_telemetry_rs::{quantizer, wire};
 use std::collections::HashMap;

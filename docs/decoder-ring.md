@@ -599,7 +599,7 @@ observe, control, events, prove; [API guide](guides/mission-control-api.md)) ·
 | [`adapters/compliance/`](../adapters/compliance/README.md) | the GRC adjudication adapter: machine checkable controls, evidence typed verdicts, OSCAL |
 | [`prismpath-hw/`](../prismpath-hw/README.md) | the C target, the `.ppt` compiler and format, the fabric RTL, four MCU ISAs, the mesh demos |
 | [`prismpath-ebpf/`](../prismpath-ebpf/README.md) | the interpreter in the Linux kernel (XDP and TC), the loader, receipt sealing |
-| [`prismpath-rs/`](../prismpath-rs/README.md), [`prismpath-telemetry-rs/`](../prismpath-telemetry-rs/README.md), [`prismpath-hotswap-rs/`](../prismpath-hotswap-rs/README.md), [`prismpath-preflight/`](../prismpath-preflight/README.md), [`prismpath-facet-bridge/`](../prismpath-facet-bridge/README.md) | the Rust crates: kernel, Facet wire, signed packs, the adoption gate, type bindings |
+| [`prismpath-rs/`](../prismpath-rs/README.md), [`prismpath-telemetry-rs/`](../prismpath-telemetry-rs/README.md), [`prismpath-hotswap-rs/`](../prismpath-hotswap-rs/README.md), [`prismpath-preflight/`](../prismpath-preflight/README.md), [`prismpath-reflect-bindings/`](../prismpath-reflect-bindings/README.md) | the Rust crates: kernel, Facet wire, signed packs, the adoption gate, type bindings |
 | [`integrations/`](../integrations/README.md) | signed policy delivery (Zarf, UDS), the Vector codec, the Wireshark dissector, embedding the C target |
 | [`formal/`](../formal/README.md) | the Lean 4 development proving Figueroa quantization within its declared domain |
 | [`tools/arch_guard.py`](../tools/arch_guard.py) | boundary enforcement (Signal-1) |
