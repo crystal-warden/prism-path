@@ -105,5 +105,4 @@ The reference suites the bridge depends on: `pytest prismpath/tests`, `pytest ad
 | `FQ/Vectors.lean` | generated evaluated checks against the frozen corpora and the reference |
 | `FQ/Axioms.lean` | the axiom audit |
 | `gen_vectors.py` | generator for `FQ/Vectors.lean` |
-| `HANDOFF.md` | the original specification and the record of what was done against it |
 | `TOOLCHAIN.md` | exact Lean, Lake, Mathlib pins and host |
