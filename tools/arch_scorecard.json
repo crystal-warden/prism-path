@@ -4,7 +4,7 @@
     "violations": []
   },
   "signal_3_core_churn": {
-    "core_total_loc": 7380,
+    "core_total_loc": 7585,
     "churn_since_baseline": null,
     "note": "track per-adapter; must DECAY. flat/rising = rebuilding, not generalizing."
   },
@@ -12,9 +12,9 @@
     "adapters": [
       {
         "adapter": "fusion",
-        "code_loc": 614,
+        "code_loc": 620,
         "flow_md_loc": 93,
-        "pct_logic_in_md": 0.132
+        "pct_logic_in_md": 0.13
       }
     ],
     "note": "adapter #N should cost < #1; higher %_logic_in_md = logic stays in plain-English (good)."
