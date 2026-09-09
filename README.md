@@ -7,11 +7,12 @@
 **Define what an autonomous system is allowed to do. Enforce it where the system runs. Change it without
 rebuilding the system. Get a signed receipt for every decision.**
 
-PrismPath is a control plane for autonomous systems, one of many. What is unusual is the approach: the
-decision structure a person authors is restricted to a decidable, tabular fragment, so one compiled image
-decides identically from a Python process down to a 1.7 KB interpreter on a microcontroller or an FPGA
-fabric, carries a signed worst case bound, and admits a decision sufficient telemetry wire on top. The
-engine is open. The policy is inspectable. The decisions are proven before they run and receipted after.
+PrismPath is a control plane for autonomous systems, one of many. What is unusual is the approach. The
+decision structure a person authors is restricted to a decidable, tabular fragment. That fragment produces
+one compiled image that decides identically from a Python process down to a 1.7 KB interpreter on a
+microcontroller or an FPGA fabric, and the image carries a signed worst case bound. The same structure
+induces the decision sufficient representation the telemetry wire carries. The engine is open. The policy
+is inspectable. The decisions are proven before they run and receipted after.
 
 **[Try it in your browser](https://www.crystalwardenlabs.com/playground)** · **[Read the
 architecture](docs/SYSTEM_MAP.md)** · **[Run it](#try-it)**
@@ -43,8 +44,9 @@ model / agent / worker
   model checked by `verify`; `capability` says which targets the flow compiles to.
 - **During execution.** Deterministic edges decide first and free, in document order; an embedding
   router and a one shot model are reached only where meaning genuinely requires one, and low confidence
-  abstains or escalates to a person instead of guessing. The signed pack is verified, envelope checked
-  and version floored before it takes effect.
+  abstains or escalates to a person instead of guessing. A pack takes effect only after its signature,
+  its declared envelope and a monotonic version floor are checked; an unsigned pack is refused unless an
+  operator explicitly allows it for a test, and that is recorded.
 - **After execution.** Every decision leaves a receipt with a one byte cause code that says why it
   routed, refused, parked or escalated; receipts Merkle root per session and anchor to a timestamp a third
   party can verify without trusting the emitter.

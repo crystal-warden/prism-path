@@ -11,10 +11,12 @@ PrismPath is a control plane for autonomous systems, one of many. It lets people
 autonomous system is permitted to do, enforces those boundaries where the system actually runs, changes
 them without rebuilding the system, and leaves a signed receipt for every consequential decision.
 
-What is unusual is the approach, not the category: the decision structure a human authors is restricted
-to a decidable, tabular fragment, so one compiled image decides identically from a Python process down to
-a 1.7 KB interpreter on a microcontroller or a fabric, carries a signed worst case bound, and admits a
-decision sufficient telemetry wire, Facet, on top.
+What is unusual is the approach, not the category. The decision structure a person authors is
+restricted to a decidable, tabular fragment. That fragment produces one compiled image that decides
+identically from a Python process down to a 1.7 KB interpreter on a microcontroller or a fabric. The
+image carries a signed worst case bound. And the same decision structure induces the decision sufficient
+representation that Facet, the telemetry wire, carries. Routes that need a model stay on the host; only
+the fragment travels.
 
 ## 2. The problem
 
@@ -155,8 +157,10 @@ Use these words this way, everywhere.
 ## 11. Claims we make
 
 - One authored decision structure decides identically across the substrates listed in section 6.
-- Every policy is signed; every swap is authorized, version floored, and audited; every decision leaves a
-  receipt with a cause a third party can verify without trusting the emitter.
+- Every policy pack a governed host accepts is signed by a known, unrevoked key; a host refuses an unsigned
+  pack unless an operator explicitly allows it for a test, and then records `unsigned: true` in the active
+  record and the audit event. Every swap is authorized, version floored, and audited; every decision leaves
+  a receipt with a cause a third party can verify without trusting the emitter.
 - Deterministic transitions are proven before execution; a per policy worst case bound travels signed with
   the image and has been honored on silicon.
 - The wire ships the decision, not the data, and its decision preservation is proven within a declared
