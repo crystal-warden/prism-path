@@ -2,7 +2,7 @@
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Freeze the fusion_triage spiral tessellation + a decisions-preserved probe set.
 
-Mirrors adapters/telemetry/gen_spiral_corpus.py, with two deliberate differences: the flow is
+Mirrors prismpath/telemetry/gen_spiral_corpus.py, with two deliberate differences: the flow is
 read from flows/fusion_triage.md (not an inline string) and its sha256 is embedded so the frozen
 corpus detects flow drift. Only the integer mapping is frozen — build-time xy floats are
 excluded so the corpus stays platform-stable.
@@ -18,11 +18,10 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parent.parent
-sys.path.insert(0, str(REPO / "adapters" / "telemetry"))
 sys.path.insert(0, str(REPO))
 
-import spiral as sp  # noqa: E402
-import wire as w     # noqa: E402
+from prismpath.telemetry import spiral as sp  # noqa: E402
+from prismpath.telemetry import wire as w     # noqa: E402
 from prismpath.parser import parse  # noqa: E402
 
 FLOW_PATH = HERE / "flows" / "fusion_triage.md"

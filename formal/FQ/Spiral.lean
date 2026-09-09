@@ -3,7 +3,7 @@
 import Mathlib.Tactic
 import FQ.Partition
 /-!
-# The spiral layout (Tier 6 packing), `adapters/telemetry/spiral.py`
+# The spiral layout (Tier 6 packing), `prismpath/telemetry/spiral.py`
 
 A node's joint cell space is the mixed radix product of its fields' cell counts. The reference
 enumerates it in reflected Gray order, buckets the cells by the route their representative takes,

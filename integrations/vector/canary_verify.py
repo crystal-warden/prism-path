@@ -26,13 +26,13 @@ from collections import Counter
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-_TELEMETRY = Path(__file__).resolve().parent.parent.parent / "adapters" / "telemetry"
+_TELEMETRY = Path(__file__).resolve().parent.parent.parent / "prismpath" / "telemetry"
 sys.path.insert(0, str(_TELEMETRY))
 sys.path.insert(0, str(_TELEMETRY.parent.parent))
 
-import preflight  # noqa: E402  (extract_reading + _codec_view: the codec's exact view of an event)
-import quantizer as q  # noqa: E402
-import wire as w  # noqa: E402
+from prismpath.telemetry import preflight  # noqa: E402  (extract_reading + _codec_view: the codec's exact view of an event)
+from prismpath.telemetry import quantizer as q  # noqa: E402
+from prismpath.telemetry import wire as w  # noqa: E402
 from prismpath.parser import parse_file  # noqa: E402
 
 

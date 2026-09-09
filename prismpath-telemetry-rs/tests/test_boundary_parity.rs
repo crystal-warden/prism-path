@@ -6,7 +6,7 @@ use prismpath_telemetry_rs::quantizer;
 
 #[test]
 fn boundary_symbols_match_frozen_corpus() {
-    let path = std::path::Path::new("../adapters/telemetry/conformance/boundary.json");
+    let path = std::path::Path::new("../prismpath/telemetry/conformance/boundary.json");
     let corpus: serde_json::Value =
         serde_json::from_str(&std::fs::read_to_string(path).expect("read boundary.json"))
             .expect("parse boundary.json");

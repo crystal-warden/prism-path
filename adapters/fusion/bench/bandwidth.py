@@ -46,17 +46,17 @@ from typing import Dict, Iterator, List, Optional
 HERE = Path(__file__).resolve().parent
 ADAPTER = HERE.parent
 REPO = ADAPTER.parent.parent
-for p in (str(REPO / "adapters" / "telemetry"), str(REPO / "adapters" / "telemetry" / "bench"),
+for p in (str(REPO / "prismpath" / "telemetry"), str(REPO / "prismpath" / "telemetry" / "bench"),
           str(REPO), str(ADAPTER)):
     if p not in sys.path:
         sys.path.insert(0, p)
 
-import channel as CH        # noqa: E402  (telemetry's Gilbert-Elliott model)
-import decode as D          # noqa: E402
-import packed as P          # noqa: E402
-import quantizer as q       # noqa: E402
-import selfheal as sh       # noqa: E402
-import spiral as sp         # noqa: E402
+from prismpath.telemetry.bench import channel as CH        # noqa: E402  (telemetry's Gilbert-Elliott model)
+from prismpath.telemetry import decode as D          # noqa: E402
+from prismpath.telemetry import packed as P          # noqa: E402
+from prismpath.telemetry import quantizer as q       # noqa: E402
+from prismpath.telemetry import selfheal as sh       # noqa: E402
+from prismpath.telemetry import spiral as sp         # noqa: E402
 from prismpath.parser import parse  # noqa: E402
 
 import projection as pj     # noqa: E402

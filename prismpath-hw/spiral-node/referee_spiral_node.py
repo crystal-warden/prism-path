@@ -14,12 +14,11 @@ import sys
 import serial
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, os.path.join(HERE, "..", "..", "adapters", "telemetry"))
 sys.path.insert(0, os.path.join(HERE, "..", ".."))
 
-import packed                             # noqa: E402
-import spiral as sp                       # noqa: E402
-import zeckendorf as z                    # noqa: E402
+from prismpath.telemetry import packed                             # noqa: E402
+from prismpath.telemetry import spiral as sp                       # noqa: E402
+from prismpath.telemetry import zeckendorf as z                    # noqa: E402
 from prismpath.parser import parse        # noqa: E402
 from gen_spiral_node_data import FLOW, NODE, probes   # noqa: E402
 

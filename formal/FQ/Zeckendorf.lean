@@ -5,7 +5,7 @@ import Mathlib.Tactic
 /-!
 # The Fibonacci code (Zeckendorf wire), PROTOCOL.md invariant I2
 
-Mirrors `adapters/telemetry/zeckendorf.py`: a positive integer's code is its Zeckendorf bit vector,
+Mirrors `prismpath/telemetry/zeckendorf.py`: a positive integer's code is its Zeckendorf bit vector,
 bit `i` (from position 0) standing for the Fibonacci number `F(i+2)` in Mathlib's indexing
 (`fib 2 = 1, fib 3 = 2, fib 4 = 3, ...`, the reference's basis `[1, 2, 3, 5, ...]`), followed by a
 terminating `1`. Because a Zeckendorf representation never uses two consecutive Fibonacci numbers,

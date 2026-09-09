@@ -249,7 +249,7 @@ The payoff is testability and reuse. The core is exercised with fake adapters an
 second use case is a new adapter rather than a fork.
 
 Six ports here: Ingestion, Retrieval, Adjudicator, Action/Sink, Attestation, Deferral. Two adapters
-prove the shape: [decision-preserving telemetry](../adapters/telemetry/) and [the decision fusion plane](../adapters/fusion/).
+prove the shape: [decision-preserving telemetry](../prismpath/telemetry/) and [the decision fusion plane](../adapters/fusion/).
 
 **How it's enforced rather than merely intended:** [`tools/arch_guard.py`](../tools/arch_guard.py)
 scans the core for domain vocabulary. A word like `alert`, `SIEM`, or `learner` appearing in core
@@ -296,7 +296,7 @@ Where it lives: [`ledger.py`](../prismpath/ledger.py), [`ledger_ots.py`](../pris
 **Abstention**: a classifier declining to answer. Here: escalating to the LLM. See idea 3.
 
 **Adapter**: an implementation of a port, holding all the domain-specific knowledge.
-[telemetry](../adapters/telemetry/) · [fusion](../adapters/fusion/) · [guide](../adapters/ADAPTER_GUIDE.md)
+[telemetry](../prismpath/telemetry/) · [fusion](../adapters/fusion/) · [guide](../adapters/ADAPTER_GUIDE.md)
 
 **Air-gapped**: a machine deliberately kept off any network. Drives the RFC-3161 ledger tier.
 [`ledger_airgap.py`](../prismpath/ledger_airgap.py)
@@ -595,7 +595,7 @@ observe, control, events, prove; [API guide](guides/mission-control-api.md)) ·
 | [`prismpath/editor/`](../prismpath/editor/README.md) | editor integrations |
 | [`prismpath/flows/`](../prismpath/flows/) | reference flows (program data) |
 | [`prismpath/policies/`](../prismpath/policies/) | the statutory floor + the P1 lockfile |
-| [`adapters/telemetry/`](../adapters/telemetry/) | decision-preserving telemetry codec |
+| [`prismpath/telemetry/`](../prismpath/telemetry/) | decision-preserving telemetry codec |
 | [`adapters/fusion/`](../adapters/fusion/) | the decision fusion plane |
 | [`adapters/compliance/`](../adapters/compliance/README.md) | the GRC adjudication adapter: machine checkable controls, evidence typed verdicts, OSCAL |
 | [`prismpath-hw/`](../prismpath-hw/README.md) | the C target, the `.ppt` compiler and format, the fabric RTL, four MCU ISAs, the mesh demos |

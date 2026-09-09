@@ -11,10 +11,8 @@ import pytest
 
 ADAPTER = Path(__file__).resolve().parent.parent
 REPO = ADAPTER.parent.parent
-sys.path.insert(0, str(REPO / "adapters" / "telemetry"))
-
-import quantizer as q                       # noqa: E402
-from predicate_profile import cell_profile, profile_wire_bytes  # noqa: E402
+from prismpath.telemetry import quantizer as q                       # noqa: E402
+from prismpath.telemetry.predicate_profile import cell_profile, profile_wire_bytes  # noqa: E402
 from prismpath.parser import parse          # noqa: E402
 
 FLOW = """

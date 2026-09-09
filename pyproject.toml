@@ -60,6 +60,9 @@ packages = [
     "prismpath.plugins",
     "prismpath.plugins.pysprint",
     "prismpath.tests",
+    "prismpath.telemetry",         # Facet, the decision telemetry wire (moved from adapters/telemetry, September 2026)
+    "prismpath.telemetry.tests",
+    "prismpath.telemetry.bench",
 ]
 
 [tool.setuptools.package-data]
@@ -70,6 +73,7 @@ prismpath = ["flows/*.md",                    # example + reference flows
           "policies/*.md", "policies/*.json", # the guard's statutory floor + P1 lockfile
           "gallery/*.md", "gallery/*/*.md",   # `prismpath init --template` copies these
           "tests/fixtures/broken/*.md",       # the analyzer's broken-flow corpus (test_analysis)
+          "telemetry/conformance/*.json",     # the frozen Facet corpora every other implementation is judged by
           "*.html",
           "portable/*.mjs", "portable/*.html",
           "portable/conformance/*.json"]      # the frozen kernel spec

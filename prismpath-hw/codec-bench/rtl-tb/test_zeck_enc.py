@@ -12,9 +12,8 @@ from cocotb.clock import Clock
 from cocotb.triggers import RisingEdge
 
 HERE = Path(__file__).resolve().parent
-sys.path.insert(0, str(HERE.parent.parent.parent / "adapters" / "telemetry"))
-import packed  # noqa: E402
-import zeckendorf as z  # noqa: E402
+from prismpath.telemetry import packed  # noqa: E402
+from prismpath.telemetry import zeckendorf as z  # noqa: E402
 
 
 def corpus():

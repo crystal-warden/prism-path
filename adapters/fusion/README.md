@@ -42,7 +42,7 @@ python adapters/fusion/bench/wire.py --from-fixture           # synthetic bursty
 
 ## Dependencies (read only, unmodified)
 
-- `adapters/telemetry/` modules: quantizer / wire / packed / selfheal / epochs / decode / spiral
+- `prismpath/telemetry/` modules: quantizer / wire / packed / selfheal / epochs / decode / spiral
   (the codec and the Tier 6 packing; imported via the repo's self-rooted `sys.path` idiom).
 - `prismpath-hw/bridge/field_bridge.py`: schema + threshold provenance for the physical fields;
   `prismpath-hw/evidence/mac_bridge_*.ndjson`: real recorded IMU sessions (the physical marginal).

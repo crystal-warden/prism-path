@@ -1,6 +1,6 @@
 # SPEC: CBOR interop framing for decision preserving telemetry
 
-*Design spec for the standards based framing of the telemetry adapter (`adapters/telemetry/`,
+*Design spec for the standards based framing of the telemetry adapter (`prismpath/telemetry/`,
 `prismpath-telemetry-rs/`). Status: **spec only, not yet implemented**: the framing seam exists
 (`WireCodec` in Rust) but the CBOR codec behind it is the fast follow. Crystal Warden Labs, 2026-08-10.*
 
@@ -98,7 +98,7 @@ constrained devices, plain UDP/TCP, or a file. This spec defines the payload onl
 - **Not implemented yet.** This is the reviewable interop shape; the codec is the follow on behind the
   existing `WireCodec` seam.
 - **Verification plan (when built):** a CBOR round trip must route identically to the Fibonacci wire on the
-  same frozen corpora (`adapters/telemetry/conformance/`), and a cross language decode (Python encode →
+  same frozen corpora (`prismpath/telemetry/conformance/`), and a cross language decode (Python encode →
   Rust decode and back) must agree, the same referee by corpus discipline the rest of the adapter uses.
 
 ## 7. Status & next

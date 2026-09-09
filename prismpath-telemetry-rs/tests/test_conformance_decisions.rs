@@ -4,7 +4,7 @@ use serde_json::Value;
 use std::collections::HashMap;
 
 fn load_decisions_corpus() -> Value {
-    let path = std::path::Path::new("../adapters/telemetry/conformance/decisions.json");
+    let path = std::path::Path::new("../prismpath/telemetry/conformance/decisions.json");
     let content = std::fs::read_to_string(path).expect("read decisions.json");
     serde_json::from_str(&content).expect("parse decisions.json")
 }

@@ -287,7 +287,7 @@ Retrieval, Adjudicator, Action/Sink, Attestation, Deferral) with **no domain voc
 reference adapters ride the same ports, both the deterministic no-LLM class where the Adjudicator is a
 Level M flow (a proof, not a model judgment):
 
-- **Decision-preserving telemetry** (`adapters/telemetry/`): compress a flow's telemetry to the *minimum
+- **Decision-preserving telemetry** (`prismpath/telemetry/`): compress a flow's telemetry to the *minimum
   statistic that still reproduces its routing decisions*, entropy-coded on a self-framing wire and
   Merkle-verified end to end; benchmark-gated, arch-guard-isolated.
 - **The decision fusion plane** (`adapters/fusion/`): joins any N decision sources into one Level M

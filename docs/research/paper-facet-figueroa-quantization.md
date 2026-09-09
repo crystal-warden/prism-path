@@ -2,7 +2,7 @@
 
 **Draft for review.** A companion to the normative specification in [`../../PROTOCOL.md`](../../PROTOCOL.md)
 and the flow format spec in [`../../SPEC.md`](../../SPEC.md). Every number in this paper traces to a
-committed artifact, cited inline; the reference implementation is `adapters/telemetry/`.
+committed artifact, cited inline; the reference implementation is `prismpath/telemetry/`.
 
 ## Abstract
 
@@ -71,7 +71,7 @@ decision:
 
 The result is the minimum sufficient statistic for the policy's decisions: Fisher's classical
 notion, specialized to decision equivalence, and, crucially, derived mechanically from the policy
-rather than estimated from data. Reference: `adapters/telemetry/quantizer.py`.
+rather than estimated from data. Reference: `prismpath/telemetry/quantizer.py`.
 
 ### 2.2 The guarantee
 
@@ -121,7 +121,7 @@ intervals, unbounded only at the extremes. The exactness window is that of doubl
 integers: values are exact through 2^53, and beyond it both endpoints round identically through f64,
 so decisions stay consistent while absolute integer exactness is out of scope. None of this is
 asserted from design alone. A frozen boundary corpus
-(`adapters/telemetry/conformance/boundary.json`) probes every threshold edge at t - 1, t, and t + 1
+(`prismpath/telemetry/conformance/boundary.json`) probes every threshold edge at t - 1, t, and t + 1
 across cuts from 10^2 to 10^12, plus 2^53 - 1, 2^53, 2^53 + 2, and 10^15, and twin tests replay it
 in the Python reference and the Rust crates; a symbol drift on either side of any boundary in either
 implementation turns the suite red.
@@ -276,7 +276,7 @@ register codec, the remaining unbuilt half of Phase C2.
 ### 4.6 The spiral, measured
 
 On 20,000 readings per scenario of correlated multi dimensional telemetry
-(`adapters/telemetry/bench/spiral_bench.py`, `spiral_results.md`):
+(`prismpath/telemetry/bench/spiral_bench.py`, `spiral_results.md`):
 
 | k (fields) | cells | route win vs per field wire | progressive fidelity ratio |
 |---:|---:|---:|---:|
@@ -436,7 +436,7 @@ streaming, and audit properties a compressed record format cannot offer.
 - G. M. Morton, IBM technical report, 1966, and D. Hilbert, 1891 (space filling curves, the locality
   preserving alternative).
 
-*Draft. Provenance: `adapters/telemetry/{quantizer,wire,zeckendorf,packed}.py`;
+*Draft. Provenance: `prismpath/telemetry/{quantizer,wire,zeckendorf,packed}.py`;
 `adapters/fusion/bench/{otlp_baseline.py,otlp_results.md,wire.py}`;
 `adapters/fusion/tests/{test_fusion_spiral,test_wire_tamper}.py`. Numbers: `otlp_results.md` (n = 64,484).
 Deployed implementations, byte identical to the reference over the frozen corpus: `prismpath-rs` and

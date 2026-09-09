@@ -53,7 +53,7 @@ is the same struct on the wire, in the kernel, and on the fabric.
 | `prismpath-rs/`, `prismpath-go/` | the P0 kernel in Rust and Go | engineer |
 | `prismpath-hw/` | the C target `interp.c`, the `.ppt` compiler `ppt_compile.py`, `TABLE_FORMAT.md`, the fabric RTL, the MCU firmware for four ISAs, the mesh demos | engineer, operator |
 | `prismpath-ebpf/` | the interpreter as XDP and TC programs in the Linux kernel, the loader, receipt sealing, the decision delta demo | engineer, evaluator |
-| `adapters/telemetry/` | Facet, the reference: Figueroa quantization, Zeckendorf wire, self heal, epochs, concentrator, receipts, spiral | engineer |
+| `prismpath/telemetry/` | Facet, the reference: Figueroa quantization, Zeckendorf wire, self heal, epochs, concentrator, receipts, spiral | engineer |
 | `prismpath-telemetry-rs/`, `prismpath-preflight/`, `prismpath-reflect-bindings/`, `integrations/vector/`, `integrations/wireshark/` | Facet in Rust, the adoption gate, type bindings, the Vector codec, the dissector | engineer, operator |
 | `prismpath-hotswap-rs/` | the signed pack and PolicyHost natively | operator |
 | `adapters/fusion/` | one Level M flow joining N decision sources | process owner |
@@ -91,7 +91,7 @@ target is the reference for the compiled image's execution, because the substrat
 
 | implementation | where | judged by | in CI |
 |---|---|---|---|
-| Python (reference of record, `PROTOCOL.md`) | `adapters/telemetry/` | generates `adapters/telemetry/conformance/` | yes |
+| Python (reference of record, `PROTOCOL.md`) | `prismpath/telemetry/` | generates `prismpath/telemetry/conformance/` | yes |
 | Rust | `prismpath-telemetry-rs/` | parity tests against the same corpora, bit for bit wire | yes |
 | Lean model | `formal/FQ/` | proofs plus 623 evaluated bridge checks against the corpora | no (local gate) |
 | C and RTL Zeckendorf codec | `prismpath-hw/codec-bench/`, `rtl/zeck_*.sv` | codec bench testbenches, silicon round trips, ledger row #118 | yes (simulation) |

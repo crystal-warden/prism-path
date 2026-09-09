@@ -15,10 +15,8 @@ import pytest
 
 ADAPTER = Path(__file__).resolve().parent.parent
 REPO = ADAPTER.parent.parent
-sys.path.insert(0, str(REPO / "adapters" / "telemetry"))
-
-from refresh import StalenessTracker                          # noqa: E402
-from replay import (ACCEPT, REPLAY_DUPLICATE, REPLAY_STALE,   # noqa: E402
+from prismpath.telemetry.refresh import StalenessTracker                          # noqa: E402
+from prismpath.telemetry.replay import (ACCEPT, REPLAY_DUPLICATE, REPLAY_STALE,   # noqa: E402
                     TickWindow)
 
 

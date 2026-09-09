@@ -52,7 +52,7 @@ Plainly:
 ## What is not proven, stated as plainly
 
 - **This is not a verified translation of the Python or Rust source.** The Lean algorithm is a port
-  read against `adapters/telemetry/quantizer.py`; its agreement with the code rests on the generated
+  read against `prismpath/telemetry/quantizer.py`; its agreement with the code rests on the generated
   checks above and on review, not on a proof about the source text.
 - Readings with missing fields (the engine's null semantics, 72 of the 136 Level M corpus vectors),
   cross kind comparisons (13 vectors), and readings with floats (the reference casts with `int()`)
@@ -87,7 +87,7 @@ done
 cd .. && ./.venv/bin/python formal/gen_vectors.py   # regenerate FQ/Vectors.lean from the frozen corpora
 ```
 
-The reference suites the bridge depends on: `pytest prismpath/tests`, `pytest adapters/telemetry/tests`,
+The reference suites the bridge depends on: `pytest prismpath/tests`, `pytest prismpath/telemetry/tests`,
 `pytest adapters/fusion/tests`, `cargo test --workspace`.
 
 ## Layout

@@ -29,7 +29,7 @@ never been synthesized, only simulated, which is exactly the "modeled not measur
 ## Simulation conformance (`rtl-tb/`, cocotb + verilator)
 
 Every test drives the same seed-42 corpus (64 typical + 64 stress events, four wire ints each) and the
-same Python reference (`adapters/telemetry/zeckendorf.py` + `packed.py`) the MCU bench verified against.
+same Python reference (`prismpath/telemetry/zeckendorf.py` + `packed.py`) the MCU bench verified against.
 
 | test | result |
 |---|---|
@@ -59,7 +59,7 @@ Loads the overlay and runs two checks on the physical fabric, then prints N/N:
 1. **Self-test sweep** n=1..MAX entirely in the PL: decode(encode(n))==n, counted by the fabric.
 2. **PEEK** of the seed-42 corpus values: the fabric's encoded wire bits must equal the reference AND
    the in-fabric decode must return n. The reference is inlined (no board deps) and cross-checked
-   against `adapters/telemetry/zeckendorf.py` (0 mismatches over 1..2000).
+   against `prismpath/telemetry/zeckendorf.py` (0 mismatches over 1..2000).
 
 ```bash
 # on the dev box: stage to the board

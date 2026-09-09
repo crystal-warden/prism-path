@@ -1037,7 +1037,7 @@ telemetry. That map, from a reading to one small symbol per decision relevant fi
 quantization**, and the wire that carries it is **the Facet protocol** (`Facet/1`); both are normatively
 specified in [`PROTOCOL.md`](../../PROTOCOL.md), with Zeckendorf (Fibonacci) coding as the symbol coding
 component, so this paper cites the terms rather than re-defining them. The reference implementation
-(`adapters/telemetry/`) extracts the cells from the flow and codes the stream on the self framing wire;
+(`prismpath/telemetry/`) extracts the cells from the flow and codes the stream on the self framing wire;
 a frozen decisions preserved corpus (boundary probing readings routed identically through the
 wire's quantize/code/decode/reconstruct round trip) guards the invariant the way the portable vectors
 guard the kernel. On modeled channels the decision stream holds ~2 bits per reading on a wide range field
@@ -1055,7 +1055,7 @@ that round trips routed decisions through a two instance pipeline at a measured 
 (row #103). We stay explicit about its maturity: benchmark gated so it stops cheaply if a margin fails,
 not field proven, and only partly built out: a word packed byte format and the spiral have landed, while
 a hardware shift register codec and a vector quantization tier are designed but not built. Its priority
-date is OpenTimestamps anchored (`adapters/telemetry/evidence/`). Ledger rows #81 and #103.
+date is OpenTimestamps anchored (`prismpath/telemetry/evidence/`). Ledger rows #81 and #103.
 
 **The decision fusion plane (delivered, measured on the live rig; August 2026).** The same decidable
 match action fragment composes across *sources*: the fusion adapter (`adapters/fusion/`) joins any N

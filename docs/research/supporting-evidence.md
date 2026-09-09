@@ -27,6 +27,10 @@ memory). Consolidated July 2026; maintained through row #143 (September 2026).*
 > advisory for exactly this drift). If the compliance work is ever republished, repoint these rows at
 > its new public home.
 >
+> *(September 2026.)* `adapters/telemetry/` moved into the package as `prismpath/telemetry/`; rows
+> citing the old path reproduce from the new one, file for file, and the frozen corpora under
+> `conformance/` moved with it unchanged.
+>
 > *(September 2026.)* The compliance adapter was rebuilt on the adapter standard and republished at
 > `adapters/compliance/` (rows #137 to #139 measure the rebuilt version, reproducible from this repo).
 > Rows #65 to #71 still describe the archived version and stay in the archived class as written; the

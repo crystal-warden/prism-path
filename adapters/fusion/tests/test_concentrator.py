@@ -15,11 +15,9 @@ from pathlib import Path
 
 ADAPTER = Path(__file__).resolve().parent.parent
 REPO = ADAPTER.parent.parent
-sys.path.insert(0, str(REPO / "adapters" / "telemetry"))
-
-import packed                                          # noqa: E402
-import zeckendorf as z                                 # noqa: E402
-from concentrator import (CONCENTRATOR_TRUNCATED,      # noqa: E402
+from prismpath.telemetry import packed                                          # noqa: E402
+from prismpath.telemetry import zeckendorf as z                                 # noqa: E402
+from prismpath.telemetry.concentrator import (CONCENTRATOR_TRUNCATED,      # noqa: E402
                           CONCENTRATOR_UNKNOWN_STREAM, OK, concentrate, demux)
 
 IP_UDP = 28                                            # IPv4 (20) + UDP (8), per datagram

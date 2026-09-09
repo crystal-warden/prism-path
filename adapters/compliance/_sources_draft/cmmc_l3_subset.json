@@ -1,0 +1,35 @@
+{
+  "_meta": {
+    "standard": "cmmc_level_3",
+    "authority": "32 CFR Part 170 (Cybersecurity Maturity Model Certification Program), \u00a7 170.14(c)(4) Table 1",
+    "document": "32 CFR \u00a7 170.14 - CMMC Level 3 Security Requirements",
+    "section": "Table 1 to 32 CFR \u00a7 170.14(c)(4)",
+    "total_selected_requirements": 24
+  },
+  "requirement_ids": [
+    "3.1.2e",
+    "3.1.3e",
+    "3.2.1e",
+    "3.2.2e",
+    "3.4.1e",
+    "3.4.2e",
+    "3.4.3e",
+    "3.5.1e",
+    "3.5.3e",
+    "3.6.1e",
+    "3.6.2e",
+    "3.9.2e",
+    "3.11.1e",
+    "3.11.2e",
+    "3.11.3e",
+    "3.11.4e",
+    "3.11.5e",
+    "3.11.6e",
+    "3.11.7e",
+    "3.12.1e",
+    "3.13.4e",
+    "3.14.1e",
+    "3.14.3e",
+    "3.14.6e"
+  ]
+}

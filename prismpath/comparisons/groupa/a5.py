@@ -35,12 +35,11 @@ from prismpath.comparisons.groupa.common import evidence_dir, policy_by_id, writ
 from prismpath.comparisons.harness import HERE, TOOLCHAIN_BIN, gen_dir_for, scenario_steps
 from prismpath.parser import parse
 
-sys.path.insert(0, str(HERE.parent.parent / "adapters" / "telemetry"))
-import concentrator  # noqa: E402
-import packed  # noqa: E402
-import quantizer as q  # noqa: E402
-import receipts  # noqa: E402
-import wire as w  # noqa: E402
+from prismpath.telemetry import concentrator  # noqa: E402
+from prismpath.telemetry import packed  # noqa: E402
+from prismpath.telemetry import quantizer as q  # noqa: E402
+from prismpath.telemetry import receipts  # noqa: E402
+from prismpath.telemetry import wire as w  # noqa: E402
 
 POLICIES = ["network_admission", "sensor_interlock"]
 ENVELOPE = 28

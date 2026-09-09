@@ -23,10 +23,9 @@ import time
 import serial
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, os.path.join(HERE, "..", "..", "adapters", "telemetry"))
 sys.path.insert(0, os.path.join(HERE, "..", ".."))
 
-import spiral as sp                              # noqa: E402
+from prismpath.telemetry import spiral as sp                              # noqa: E402
 from prismpath.parser import parse               # noqa: E402
 from gen_spiral_mesh_data import FLOW, NODE, ROLES, synth   # noqa: E402
 

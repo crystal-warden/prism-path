@@ -36,12 +36,12 @@ from typing import Dict, Iterable, Optional, Tuple
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parent.parent
-for p in (str(REPO / "adapters" / "telemetry"), str(REPO), str(HERE)):
+for p in (str(REPO / "prismpath" / "telemetry"), str(REPO), str(HERE)):
     if p not in sys.path:
         sys.path.insert(0, p)
 
-import quantizer as q  # noqa: E402
-import spiral as sp    # noqa: E402
+from prismpath.telemetry import quantizer as q  # noqa: E402
+from prismpath.telemetry import spiral as sp    # noqa: E402
 from prismpath.parser import parse  # noqa: E402
 
 import projection as pj  # noqa: E402

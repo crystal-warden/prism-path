@@ -59,7 +59,7 @@ def test_verify_pack_failure_strings_are_registered():
 
 
 def test_wire_cause_strings_are_registered():
-    """The wire modules' emitted causes (adapters/telemetry replay + concentrator, gated by
+    """The wire modules' emitted causes (prismpath/telemetry replay + concentrator, gated by
     their own referees) appear verbatim in the registry."""
     for s in ("replay-duplicate", "replay-stale",
               "concentrator-unknown-stream", "concentrator-truncated"):

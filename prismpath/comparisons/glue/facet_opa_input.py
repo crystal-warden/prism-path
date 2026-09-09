@@ -18,10 +18,9 @@ from pathlib import Path
 from typing import Any, Dict, Tuple
 
 REPO = Path(__file__).resolve().parents[3]
-sys.path.insert(0, str(REPO / "adapters" / "telemetry"))
-import packed  # noqa: E402
-import quantizer as q  # noqa: E402
-import wire as w  # noqa: E402
+from prismpath.telemetry from prismpath.telemetry import packed  # noqa: E402
+from prismpath.telemetry import quantizer as q  # noqa: E402
+from prismpath.telemetry import wire as w  # noqa: E402
 
 from prismpath.parser import parse  # noqa: E402
 

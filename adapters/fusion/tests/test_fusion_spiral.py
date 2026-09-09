@@ -2,7 +2,7 @@
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Frozen-corpus conformance for the fusion_triage tessellation.
 
-Referee pattern from adapters/telemetry: every probe must route identically three ways —
+Referee pattern from prismpath/telemetry: every probe must route identically three ways —
 direct evaluation, quantize -> wire round-trip -> evaluation, and spiral index -> band
 reconstruction. A mapping bug anywhere flips a frozen entry and this file goes RED.
 """
@@ -15,11 +15,9 @@ import pytest
 
 ADAPTER = Path(__file__).resolve().parent.parent
 REPO = ADAPTER.parent.parent
-sys.path.insert(0, str(REPO / "adapters" / "telemetry"))
-
-import quantizer as q  # noqa: E402
-import spiral as sp    # noqa: E402
-import wire as w       # noqa: E402
+from prismpath.telemetry import quantizer as q  # noqa: E402
+from prismpath.telemetry import spiral as sp    # noqa: E402
+from prismpath.telemetry import wire as w       # noqa: E402
 from prismpath.parser import parse  # noqa: E402
 
 CORPUS = json.loads((ADAPTER / "conformance" / "spiral_fusion.json").read_text())

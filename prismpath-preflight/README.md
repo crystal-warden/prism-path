@@ -4,7 +4,7 @@ Will your events survive the Facet codec? One command, one report. The adoption 
 wire: take a sample of real events and a policy flow, and report how each field fares under
 quantization before anything is deployed.
 
-**What it mirrors.** `adapters/telemetry/preflight.py`, the Python reference tool, with the same
+**What it mirrors.** `prismpath/telemetry/preflight.py`, the Python reference tool, with the same
 contract. This binary runs on the exact crates the Vector codec is built from
 (`prismpath-telemetry-rs`, `prismpath-rs`), so what it reports is what the codec will do, by
 construction.

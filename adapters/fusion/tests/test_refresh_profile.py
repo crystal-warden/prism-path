@@ -14,9 +14,7 @@ from pathlib import Path
 
 ADAPTER = Path(__file__).resolve().parent.parent
 REPO = ADAPTER.parent.parent
-sys.path.insert(0, str(REPO / "adapters" / "telemetry"))
-
-from refresh import KeyframeScheduler, StalenessTracker  # noqa: E402
+from prismpath.telemetry.refresh import KeyframeScheduler, StalenessTracker  # noqa: E402
 
 TICK_MS = 100
 KEYFRAME_MS = 500

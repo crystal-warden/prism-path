@@ -5,7 +5,7 @@ import Mathlib.Data.List.Dedup
 /-!
 # Figueroa quantization: the per field partitions
 
-Mirrors `adapters/telemetry/quantizer.py` after the September 2026 correction (the reference used
+Mirrors `prismpath/telemetry/quantizer.py` after the September 2026 correction (the reference used
 only the ordering and equality constants as cut points; `in` and `not in` lists and the truthiness
 cut at zero were omitted, so I1 failed on those atoms; found while stating this file).
 

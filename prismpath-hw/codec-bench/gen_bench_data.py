@@ -9,9 +9,8 @@ import sys
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-sys.path.insert(0, str(HERE.parent.parent / "adapters" / "telemetry"))
-import packed  # noqa: E402
-import zeckendorf as z  # noqa: E402
+from prismpath.telemetry import packed  # noqa: E402
+from prismpath.telemetry import zeckendorf as z  # noqa: E402
 
 random.seed(42)
 N = 64

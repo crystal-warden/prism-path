@@ -4,7 +4,7 @@
 """Generate the committed Facet pcap corpus + expected decode results, deterministically.
 
 Every byte of the output is reproducible: fixed MACs/IPs/ports, fixed timestamps, and payloads
-produced by the reference codec (adapters/telemetry). The expected results are computed by a
+produced by the reference codec (prismpath/telemetry). The expected results are computed by a
 strict decode mirror of the kernel decode plane contract (facet_decode.bpf.c): structurally
 malformed frames (no terminator, dangling partial codeword, u16 overflow) are marked malformed;
 well formed frames carry their wire integers and trailing zero pad width.
@@ -24,10 +24,9 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
 sys.path.insert(0, str(REPO))
-sys.path.insert(0, str(REPO / "adapters" / "telemetry"))
-import packed  # noqa: E402
-import receipts  # noqa: E402
-import zeckendorf as z  # noqa: E402
+from prismpath.telemetry import packed  # noqa: E402
+from prismpath.telemetry import receipts  # noqa: E402
+from prismpath.telemetry import zeckendorf as z  # noqa: E402
 
 FACET_PORT = 4711
 TS_BASE = 1_787_200_000  # fixed epoch seconds; deterministic output is the point

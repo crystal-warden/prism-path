@@ -37,13 +37,13 @@ from typing import Callable, List, Tuple
 HERE = Path(__file__).resolve().parent
 ADAPTER = HERE.parent
 REPO = ADAPTER.parent.parent
-for p in (str(REPO / "adapters" / "telemetry"), str(REPO), str(ADAPTER)):
+for p in (str(REPO / "prismpath" / "telemetry"), str(REPO), str(ADAPTER)):
     if p not in sys.path:
         sys.path.insert(0, p)
 
-import packed as pk      # noqa: E402
-import quantizer as q    # noqa: E402
-import wire as w         # noqa: E402
+from prismpath.telemetry import packed as pk      # noqa: E402
+from prismpath.telemetry import quantizer as q    # noqa: E402
+from prismpath.telemetry import wire as w         # noqa: E402
 from prismpath.parser import parse  # noqa: E402
 
 import projection as pj  # noqa: E402

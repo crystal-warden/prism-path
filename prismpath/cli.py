@@ -1285,16 +1285,8 @@ def ledger_cmd(args):
 
 
 def _load_telemetry():
-    here = os.path.dirname(os.path.abspath(__file__))
-    telemetry_dir = os.path.abspath(os.path.join(here, "..", "adapters", "telemetry"))
-    if not os.path.exists(telemetry_dir):
-        telemetry_dir = os.path.abspath(os.path.join(here, "adapters", "telemetry"))
-    if telemetry_dir not in sys.path:
-        sys.path.insert(0, telemetry_dir)
-    import quantizer as q
-    import zeckendorf as z
-    import wire as w
-    import packed as p
+    """The Facet codec ships in the package (prismpath.telemetry); PROTOCOL.md is its specification."""
+    from prismpath.telemetry import packed as p, quantizer as q, wire as w, zeckendorf as z
     return q, z, w, p
 
 

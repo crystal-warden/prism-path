@@ -23,7 +23,7 @@ R_PEEK_BITS = 0x14; R_PEEK_LEN = 0x18; R_PEEK_DEC = 0x1C
 R_PASS = 0x20; R_TOTAL = 0x24; R_FIRST_FAIL = 0x28
 MAGIC = 0x5A434B31
 
-# --- inline Zeckendorf reference (matches zeck.h / adapters.telemetry.zeckendorf; no board deps) ---
+# --- inline Zeckendorf reference (matches zeck.h / prismpath.telemetry.zeckendorf; no board deps) ---
 FIB = [1, 2]
 while FIB[-1] < 2 ** 53:
     FIB.append(FIB[-1] + FIB[-2])

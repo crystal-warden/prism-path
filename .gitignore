@@ -27,7 +27,7 @@ docs/design/arch-scorecard.md
 docs_health_report.md
 *.ots.bak
 prismpath-telemetry-rs/target/
-/target/
+target/            # every crate's build output, at any depth
 /target/
 prismpath-ebpf/.sel_tmp/
 # Vivado build outputs (bitstreams/reports are regenerated from rtl/ + vivado/*.tcl)

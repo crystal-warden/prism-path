@@ -7,7 +7,7 @@ fails `lake build`. Nothing here is a proof; it is what ties the proven model to
 
 Sources (hashes recorded in the generated header):
   prismpath/portable/conformance/predicates.json   Level M cases: Lean evalCond == frozen expectation
-  adapters/telemetry/conformance/decisions.json    every reading: Lean route == frozen route, and Lean
+  prismpath/telemetry/conformance/decisions.json    every reading: Lean route == frozen route, and Lean
                                                    canonical symbols == the reference quantizer's symbols
   adapters/fusion/conformance/spiral_fusion.json   every probe: Lean route == frozen route
 
@@ -27,14 +27,12 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO))
-sys.path.insert(0, str(REPO / "adapters" / "telemetry"))
-
 from prismpath import model_check  # noqa: E402
 from prismpath.parser import parse  # noqa: E402
-import quantizer as q  # noqa: E402
+from prismpath.telemetry import quantizer as q  # noqa: E402
 
 PRED = REPO / "prismpath" / "portable" / "conformance" / "predicates.json"
-DEC = REPO / "adapters" / "telemetry" / "conformance" / "decisions.json"
+DEC = REPO / "prismpath" / "telemetry" / "conformance" / "decisions.json"
 SPI = REPO / "adapters" / "fusion" / "conformance" / "spiral_fusion.json"
 OUT = REPO / "formal" / "FQ" / "Vectors.lean"
 
@@ -246,7 +244,7 @@ def gen_spiral_layout(lines: list, counts: dict) -> None:
     routes from the representatives, route order from the rules), must place every frozen cell at the
     frozen index and give it the frozen route and band, and the Lean Gray order must equal the
     reference's iterative one on the frozen radices."""
-    sys.path.insert(0, str(REPO / "adapters" / "telemetry"))
+    sys.path.insert(0, str(REPO / "prismpath" / "telemetry"))
     import spiral as sp
     doc = json.loads(SPI.read_text())
     node = doc["node"]

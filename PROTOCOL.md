@@ -23,7 +23,7 @@ carries only what the policy makes decidable.** As in `SPEC.md`, the committed c
 the decision preservation tests are part of this specification: an implementation conforms to `Facet/1`
 iff it reproduces them bit for bit.
 
-The reference implementation is `adapters/telemetry/` (`quantizer.py`, `wire.py`, `zeckendorf.py`,
+The reference implementation is `prismpath/telemetry/` (`quantizer.py`, `wire.py`, `zeckendorf.py`,
 `packed.py`); the transmission model and the optional confidentiality layer are exercised in
 `adapters/fusion/bench/wire.py`; decision preservation is proven in `adapters/fusion/tests/test_fusion_spiral.py`.
 
@@ -197,7 +197,7 @@ move.
   flow document is specified as follow-up work and is not yet normative; endpoints that adopt sender
   emission changes on certified substrates re-certify under the usual discipline.
 
-The reference implementation is `adapters/telemetry/refresh.py` (clockless: callers pass monotonic
+The reference implementation is `prismpath/telemetry/refresh.py` (clockless: callers pass monotonic
 milliseconds); the referee is `adapters/fusion/tests/test_refresh_profile.py`, which first demonstrates
 the unbounded wrong-state window without the profile, then proves I6 under single loss, burst loss,
 total blackout, and recovery.
@@ -223,7 +223,7 @@ exist; a binding SHOULD NOT run two counters. The window is receiver-side state 
 the wire: no frame format changes, stream conformance (§4) is unchanged. Not claimed: the window is
 replay rejection, not authentication — a forger who can construct valid frames can construct fresh
 ticks; origin trust remains the keyed layer's or the transport's job (§6). Reference implementation
-`adapters/telemetry/replay.py`; referee `adapters/fusion/tests/test_replay_window.py`.
+`prismpath/telemetry/replay.py`; referee `adapters/fusion/tests/test_replay_window.py`.
 
 ### 2.9 The concentrator profile (optional capability for bridge uplinks)
 
@@ -252,7 +252,7 @@ Measured, frozen in the referee (28 byte IP+UDP envelope; link-layer framing var
 excluded): a 3-field reading costs 30 bytes per reading as per-node datagrams at any fleet size,
 versus 15.50 at fleet 2, 4.30 at fleet 10, and 2.06 at fleet 50 concentrated. At fleet size one the
 concentrator is pure cost (the stream id buys nothing) and is not the profile's use case. Reference
-implementation `adapters/telemetry/concentrator.py`; referee `adapters/fusion/tests/test_concentrator.py`.
+implementation `prismpath/telemetry/concentrator.py`; referee `adapters/fusion/tests/test_concentrator.py`.
 
 ### 2.10 Receipt streams (cause code carriage; optional capability, normative when declared)
 
@@ -272,9 +272,9 @@ A receipt stream carries decision receipts over the wire, making refusal and dev
   - **Concentrator (§2.9).** Receipt readings aggregate into concentrated datagrams. Codebook binding and Zeckendorf self framing preserve zero header framing across aggregated receipt streams.
 - **Out of scope.** This profile is cause carriage on the wire, not a full audit log schema. Carrying per reading Merkle proof paths, raw 64 bit nanosecond timestamps (`t_ns`), 64 bit policy hashes, or raw sensor payloads on every frame is explicitly out of scope. Session integrity rides the Merkle root (§2.4) and policy binding rides codebook agreement (§2.1).
 
-Reference implementation `adapters/telemetry/receipts.py`; referees
-`adapters/telemetry/tests/test_receipts.py` (frozen vectors,
-`adapters/telemetry/conformance/receipts.json`) and
+Reference implementation `prismpath/telemetry/receipts.py`; referees
+`prismpath/telemetry/tests/test_receipts.py` (frozen vectors,
+`prismpath/telemetry/conformance/receipts.json`) and
 `adapters/fusion/tests/test_receipts_profile.py` (profile composition).
 
 ---
@@ -303,7 +303,7 @@ An implementation conforms to `Facet/1` iff, for the committed policies and fixt
 byte identical codebook, (b) produces byte identical Facet streams (Figueroa quantization, then
 Zeckendorf coding and word packing), (c) round trips every reading with the decision preserved (I1),
 and (d) rejects the negative cases required by I2/I3. The reference implementation is the Python
-`adapters/telemetry/` kernel; conformance is defined against its committed outputs, exactly as `SPEC.md`
+`prismpath/telemetry/` kernel; conformance is defined against its committed outputs, exactly as `SPEC.md`
 defines flow format conformance against `prismpath/portable/conformance/`.
 
 ---
@@ -395,6 +395,6 @@ this list on purpose: they are the novel part.
 
 ---
 
-*Draft `Facet/1`. Provenance: `adapters/telemetry/{quantizer,wire,zeckendorf,packed}.py`,
+*Draft `Facet/1`. Provenance: `prismpath/telemetry/{quantizer,wire,zeckendorf,packed}.py`,
 `adapters/fusion/bench/wire.py`, `adapters/fusion/tests/{test_fusion_spiral,test_wire_tamper}.py`.
 Companion to `SPEC.md`.*

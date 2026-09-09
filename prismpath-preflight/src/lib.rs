@@ -6,7 +6,7 @@
 //! facet reflection ecosystem on crates.io, and this crate moved out of it the day that was
 //! flagged. Same code, same contract, new name.
 //!
-//! Same contract as the Python reference tool (`adapters/telemetry/preflight.py`), but running on
+//! Same contract as the Python reference tool (`prismpath/telemetry/preflight.py`), but running on
 //! the exact crates the Vector codec is built from — so what this reports IS what the codec will
 //! do, by construction, including the places the Rust value model differs from the reference
 //! (a non-numeric string on a numeric field is coerced to 0 here, where the reference errors;

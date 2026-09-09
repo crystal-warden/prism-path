@@ -23,7 +23,7 @@ HERE = Path(__file__).resolve().parent
 ADAPTER = HERE.parent
 
 # Load bench/wire.py under a distinct name (it is itself called wire.py); this also puts
-# adapters/telemetry on sys.path, so the codec modules import cleanly afterward.
+# prismpath/telemetry on sys.path, so the codec modules import cleanly afterward.
 _spec = importlib.util.spec_from_file_location("fusion_wire_bench", ADAPTER / "bench" / "wire.py")
 W = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(W)

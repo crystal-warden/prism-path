@@ -10,7 +10,7 @@ that the codebook you derived is the policy you already run.
 ## Step 0: preflight the sample (no Vector needed)
 
 ```
-python ../../adapters/telemetry/preflight.py <flow.md> <sample.ndjson>
+python ../../prismpath/telemetry/preflight.py <flow.md> <sample.ndjson>
 ```
 
 Or the Rust twin, which runs on the same crates the codec is built from:

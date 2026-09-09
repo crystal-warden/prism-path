@@ -20,7 +20,7 @@ cd ../zarf-tampered && zarf package create . --confirm && zarf package deploy za
 cd ../uds && uds create . --confirm && uds deploy uds-bundle-*.tar.zst --confirm
 
 # Vector, step 0: will YOUR events survive the codec? One command, stock Python, no Vector needed
-cd ../vector && python3 ../../adapters/telemetry/preflight.py ../../adapters/fusion/flows/fusion_triage.md your_sample.ndjson
+cd ../vector && python3 ../../prismpath/telemetry/preflight.py ../../adapters/fusion/flows/fusion_triage.md your_sample.ndjson
 
 # Vector: Facet as a native codec, both directions (build of crystal-warden/vector, branch facet-codec)
 vector -c vector.toml &                               # aggregator: socket source, decoding.codec = "facet"

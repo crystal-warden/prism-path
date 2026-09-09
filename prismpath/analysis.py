@@ -614,7 +614,7 @@ def _check_terminal_body(graph) -> List[Finding]:
 
 def _check_spiral_profile(graph) -> List[Finding]:
     """The spiral packing profile's authoring rules (fires ONLY when the flow declares
-    ``packing: spiral`` in its frontmatter). The layout derivation (adapters/telemetry/spiral.py
+    ``packing: spiral`` in its frontmatter). The layout derivation (prismpath/telemetry/spiral.py
     ``_route_order``) REVERSES edge-declaration order so the baseline lands at the dense center and
     severity radiates outward; that only means what it says if the flow honors two conventions,
     promoted here to checked rules for every materialization (derived and baked alike):
