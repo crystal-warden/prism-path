@@ -42,7 +42,7 @@ static void udp_task(void *arg)
 void app_main(void)
 {
     xiao_antenna_internal();
-    q = xQueueCreate(32, sizeof(msg_t)); txdone = xSemaphoreCreateBinary();
+    q = xQueueCreate(160, sizeof(msg_t)); txdone = xSemaphoreCreateBinary();   // deep enough for two cameras' keyframe bursts while the hop retries
     esp_err_t e = nvs_flash_init(); if (e == ESP_ERR_NVS_NO_FREE_PAGES || e == ESP_ERR_NVS_NEW_VERSION_FOUND) { nvs_flash_erase(); nvs_flash_init(); }
     esp_netif_init(); esp_event_loop_create_default(); esp_netif_create_default_wifi_ap();
     wifi_init_config_t wc = WIFI_INIT_CONFIG_DEFAULT(); esp_wifi_init(&wc); esp_wifi_set_storage(WIFI_STORAGE_RAM);
@@ -59,7 +59,7 @@ void app_main(void)
     ESP_LOGI(TAG, "scan: %u access points heard", n_ap);
     for (int i = 0; i < n_ap; i++) ESP_LOGI(TAG, "  ch %2d rssi %4d %s", recs[i].primary, recs[i].rssi, (const char *)recs[i].ssid);
 #endif
-    xTaskCreate(udp_task, "udp", 4096, NULL, 5, NULL);
+    xTaskCreate(udp_task, "udp", 4096, NULL, 10, NULL);   // above the forwarder, so datagrams are queued the moment they arrive
     uint8_t mac[6]; esp_wifi_get_mac(WIFI_IF_AP, mac);
     ESP_LOGI(TAG, "air relay %02x:%02x:%02x:%02x:%02x:%02x: AP '%s' open, UDP %d in, 802.15.4 channel %d out", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5], HOP_SSID, HOP_PORT, HOP_CHANNEL);
     static uint8_t frame[130]; static uint8_t sub[SUB_HDR + SUB_DATA]; uint8_t seq = 0; uint16_t id = 0; int64_t t_log = esp_timer_get_time();
@@ -78,7 +78,7 @@ void app_main(void)
                     if (attempt) { n_retry++; vTaskDelay(pdMS_TO_TICKS(2 + attempt)); }
                     last_acked = false;
                     if (esp_ieee802154_transmit(frame, false) != ESP_OK) continue;
-                    if (xSemaphoreTake(txdone, pdMS_TO_TICKS(30)) == pdTRUE) ok = last_acked;
+                    if (xSemaphoreTake(txdone, pdMS_TO_TICKS(12)) == pdTRUE) ok = last_acked;   // an ack arrives within a millisecond or not at all
                 }
                 if (ok) n_sub++; else n_given_up++;
 #else
