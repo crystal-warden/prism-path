@@ -157,6 +157,7 @@ void app_main(void)
         uint32_t seq, len; memcpy(&seq, hdr + 4, 4); memcpy(&len, hdr + 8, 4);
         if (len != W * H) { ESP_LOGE(TAG, "bad len %lu", (unsigned long)len); continue; }
         usb_read_all(cur, len);
+        if (seq == 0) frame_n = 0;   // a clip starts at seq 0: fresh previous frame and background, like a fresh Frontend() on the host
         int64_t t0 = esp_timer_get_time();
         int32_t motion_cells, dark, step, door_hit; front_end(&motion_cells, &dark, &step, &door_hit);
         memset(regs, 0, sizeof regs);
