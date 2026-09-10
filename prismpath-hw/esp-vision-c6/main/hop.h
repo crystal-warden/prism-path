@@ -36,12 +36,14 @@ static void hop_radio_init(uint16_t short_addr, bool promiscuous, bool rx_idle)
     esp_ieee802154_set_promiscuous(promiscuous); esp_ieee802154_set_rx_when_idle(rx_idle);
     if (rx_idle) esp_ieee802154_receive();
 }
-// Build a broadcast data frame around `data`; returns the buffer length written (frame[0] counts the FCS).
+#define HOP_HOST_ADDR 0x0002
+// Build a data frame around `data`, unicast to the host relay with an acknowledgement requested, so the
+// hardware acks it and the sender can retry; returns the buffer length written (frame[0] counts the FCS).
 static uint8_t hop_build(uint8_t *frame, uint8_t seq, uint16_t src, const uint8_t *data, uint8_t n)
 {
     uint8_t *m = frame + 1;
-    m[0] = 0x41; m[1] = 0x88;                 // data frame, PAN ID compression, short dst and src, 2003
-    m[2] = seq; m[3] = HOP_PANID & 0xff; m[4] = HOP_PANID >> 8; m[5] = 0xff; m[6] = 0xff; m[7] = src & 0xff; m[8] = src >> 8;
+    m[0] = 0x61; m[1] = 0x88;                 // data frame, ack request, PAN ID compression, short dst and src, 2003
+    m[2] = seq; m[3] = HOP_PANID & 0xff; m[4] = HOP_PANID >> 8; m[5] = HOP_HOST_ADDR & 0xff; m[6] = HOP_HOST_ADDR >> 8; m[7] = src & 0xff; m[8] = src >> 8;
     memcpy(m + MHR_LEN, data, n);
     frame[0] = (uint8_t)(MHR_LEN + n + 2);
     return (uint8_t)(1 + MHR_LEN + n);

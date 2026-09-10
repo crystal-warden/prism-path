@@ -22,9 +22,9 @@ static const char *TAG = "air";
 #define HOP_SSID "prismpath-hop"
 #define HOP_PORT 5050
 typedef struct { uint16_t len; uint8_t d[250]; } msg_t;
-static QueueHandle_t q; static SemaphoreHandle_t txdone; static uint32_t n_in = 0, n_sub = 0, n_fail = 0;
-void esp_ieee802154_transmit_done(const uint8_t *frame, const uint8_t *ack, esp_ieee802154_frame_info_t *ack_info) { (void)frame; (void)ack_info; if (ack) esp_ieee802154_receive_handle_done(ack); BaseType_t w = pdFALSE; xSemaphoreGiveFromISR(txdone, &w); }
-void esp_ieee802154_transmit_failed(const uint8_t *frame, esp_ieee802154_tx_error_t error) { (void)frame; (void)error; n_fail++; BaseType_t w = pdFALSE; xSemaphoreGiveFromISR(txdone, &w); }
+static QueueHandle_t q; static SemaphoreHandle_t txdone; static uint32_t n_in = 0, n_sub = 0, n_fail = 0, n_retry = 0, n_given_up = 0; static volatile bool last_acked;
+void esp_ieee802154_transmit_done(const uint8_t *frame, const uint8_t *ack, esp_ieee802154_frame_info_t *ack_info) { (void)frame; (void)ack_info; last_acked = (ack != NULL); if (ack) esp_ieee802154_receive_handle_done(ack); BaseType_t w = pdFALSE; xSemaphoreGiveFromISR(txdone, &w); }
+void esp_ieee802154_transmit_failed(const uint8_t *frame, esp_ieee802154_tx_error_t error) { (void)frame; (void)error; last_acked = false; n_fail++; BaseType_t w = pdFALSE; xSemaphoreGiveFromISR(txdone, &w); }
 void esp_ieee802154_receive_done(uint8_t *frame, esp_ieee802154_frame_info_t *info) { (void)info; esp_ieee802154_receive_handle_done(frame); }
 static void on_wifi(void *arg, esp_event_base_t base, int32_t id, void *data)
 {
@@ -72,12 +72,20 @@ void app_main(void)
                 sub[0] = 'S'; sub[1] = id & 0xff; sub[2] = id >> 8; sub[3] = i; sub[4] = total; memcpy(sub + SUB_HDR, m.d + off, n);
                 hop_build(frame, seq++, 0x0001, sub, (uint8_t)(SUB_HDR + n));
 #ifndef HOP_NO_154
-                if (esp_ieee802154_transmit(frame, false) == ESP_OK) { xSemaphoreTake(txdone, pdMS_TO_TICKS(50)); n_sub++; } else n_fail++;
+                // acknowledged unicast: up to 4 attempts per sub frame, so a 3 percent air loss becomes a per frame loss near zero
+                bool ok = false;
+                for (int attempt = 0; attempt < 4 && !ok; attempt++) {
+                    if (attempt) { n_retry++; vTaskDelay(pdMS_TO_TICKS(2 + attempt)); }
+                    last_acked = false;
+                    if (esp_ieee802154_transmit(frame, false) != ESP_OK) continue;
+                    if (xSemaphoreTake(txdone, pdMS_TO_TICKS(30)) == pdTRUE) ok = last_acked;
+                }
+                if (ok) n_sub++; else n_given_up++;
 #else
                 n_sub++;
 #endif
             }
         }
-        if (esp_timer_get_time() - t_log > 10000000) { t_log = esp_timer_get_time(); ESP_LOGI(TAG, "in %lu, sub frames %lu, tx failures %lu", (unsigned long)n_in, (unsigned long)n_sub, (unsigned long)n_fail); }
+        if (esp_timer_get_time() - t_log > 10000000) { t_log = esp_timer_get_time(); ESP_LOGI(TAG, "in %lu, sub frames acked %lu, retries %lu, given up %lu, raw tx failures %lu", (unsigned long)n_in, (unsigned long)n_sub, (unsigned long)n_retry, (unsigned long)n_given_up, (unsigned long)n_fail); }
     }
 }

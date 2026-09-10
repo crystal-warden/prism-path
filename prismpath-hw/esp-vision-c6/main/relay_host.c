@@ -25,7 +25,7 @@ void app_main(void)
     xiao_antenna_internal();
     q = xQueueCreate(64, sizeof(rx_t));
     usb_serial_jtag_driver_config_t ucfg = { .tx_buffer_size = 16384, .rx_buffer_size = 256 }; ESP_ERROR_CHECK(usb_serial_jtag_driver_install(&ucfg));
-    hop_radio_init(0x0002, true, true);
+    hop_radio_init(HOP_HOST_ADDR, false, true);   // not promiscuous: the hardware acks frames addressed to us
     static uint8_t asm_buf[256]; uint16_t asm_id = 0xffff; uint8_t asm_have = 0, asm_total = 0; uint16_t asm_len = 0; uint64_t asm_t = 0;
     rx_t r;
     while (1) {
@@ -33,7 +33,11 @@ void app_main(void)
         // r.d[0] = length incl. FCS; MHR at r.d[1..9]; payload after; the FCS is not delivered
         int plen = (int)r.d[0] - 2 - MHR_LEN; const uint8_t *p = r.d + 1 + MHR_LEN;
         if (plen < SUB_HDR || p[0] != 'S') continue;
+        // a retried sub frame that we acked but the sender did not hear arrives twice: same id, same idx
+        static uint16_t last_id = 0xffff; static uint8_t last_idx = 0xff;
         uint16_t id = p[1] | (p[2] << 8); uint8_t idx = p[3], total = p[4]; int n = plen - SUB_HDR;
+        if (id == last_id && idx == last_idx) continue;
+        last_id = id; last_idx = idx;
         if (id != asm_id) { asm_id = id; asm_have = 0; asm_total = total; asm_len = 0; asm_t = r.t; }
         if (idx != asm_have || (size_t)idx * SUB_DATA + n > sizeof asm_buf) { asm_id = 0xffff; continue; }   // out of order: drop the payload
         memcpy(asm_buf + (size_t)idx * SUB_DATA, p + SUB_HDR, n); asm_len = (uint16_t)(idx * SUB_DATA + n); asm_have++;
