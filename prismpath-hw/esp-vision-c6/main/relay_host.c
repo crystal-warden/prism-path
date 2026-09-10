@@ -25,7 +25,7 @@ void app_main(void)
     xiao_antenna_internal();
     q = xQueueCreate(64, sizeof(rx_t));
     usb_serial_jtag_driver_config_t ucfg = { .tx_buffer_size = 16384, .rx_buffer_size = 256 }; ESP_ERROR_CHECK(usb_serial_jtag_driver_install(&ucfg));
-    hop_radio_init(0x0002, true);
+    hop_radio_init(0x0002, true, true);
     static uint8_t asm_buf[256]; uint16_t asm_id = 0xffff; uint8_t asm_have = 0, asm_total = 0; uint16_t asm_len = 0; uint64_t asm_t = 0;
     rx_t r;
     while (1) {

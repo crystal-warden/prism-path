@@ -73,7 +73,7 @@ void app_main(void)
         uint64_t t_dec = (uint64_t)esp_timer_get_time();
         rdg_hdr_t rh = { {'R','D','G','1'}, seq, t_cap, t_dec, node, steps, wire_len };
         memcpy(pkt, &rh, sizeof rh); memcpy(pkt + sizeof rh, wirebuf, wire_len);
-        esp_now_send(BCAST, pkt, sizeof rh + wire_len);
+        esp_now_send(BCAST, pkt, sizeof rh + wire_len); hop_send(pkt, sizeof rh + wire_len);
         if (first || (refreshed && background_moved(last_sent))) send_keyframe(fb, seq, t_cap);
         esp_camera_fb_return(fb); seq++;
     }

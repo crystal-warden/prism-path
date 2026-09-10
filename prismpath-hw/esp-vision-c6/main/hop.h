@@ -15,14 +15,26 @@
 // Seeed XIAO ESP32C6: the RF switch is enabled by GPIO3 low, and GPIO14 low selects the on board antenna.
 static void xiao_antenna_internal(void)
 {
+#ifdef NO_ANT
+    return;   // leave the RF switch pins as the board powers up
+#endif
     gpio_config_t g = { .pin_bit_mask = (1ULL << 3) | (1ULL << 14), .mode = GPIO_MODE_OUTPUT }; gpio_config(&g);
-    gpio_set_level(3, 0); gpio_set_level(14, 0);
+#ifndef ANT3
+#define ANT3 0
+#endif
+#ifndef ANT14
+#define ANT14 0
+#endif
+    gpio_set_level(3, ANT3); gpio_set_level(14, ANT14);
 }
-static void hop_radio_init(uint16_t short_addr, bool promiscuous)
+// rx_idle false: a transmit only role leaves the 802.15.4 radio idle between bursts, so the Wi-Fi side keeps
+// its airtime (with continuous 802.15.4 receive the access point could not even complete an association).
+static void hop_radio_init(uint16_t short_addr, bool promiscuous, bool rx_idle)
 {
     ESP_ERROR_CHECK(esp_ieee802154_enable());
     esp_ieee802154_set_channel(HOP_CHANNEL); esp_ieee802154_set_panid(HOP_PANID); esp_ieee802154_set_short_address(short_addr);
-    esp_ieee802154_set_promiscuous(promiscuous); esp_ieee802154_set_rx_when_idle(true); esp_ieee802154_receive();
+    esp_ieee802154_set_promiscuous(promiscuous); esp_ieee802154_set_rx_when_idle(rx_idle);
+    if (rx_idle) esp_ieee802154_receive();
 }
 // Build a broadcast data frame around `data`; returns the buffer length written (frame[0] counts the FCS).
 static uint8_t hop_build(uint8_t *frame, uint8_t seq, uint16_t src, const uint8_t *data, uint8_t n)
