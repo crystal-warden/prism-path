@@ -4,7 +4,9 @@
 // rec: the corpus recorder. Grayscale 320x240 frames stream over the S3's native USB (the OTG port, the
 // USB Serial JTAG peripheral) as binary records; the UART console keeps the logs. Commands arrive on the
 // USB link: 'g' start streaming, 'x' stop, 's' one frame. Record framing, little endian:
-//   "FRM1" magic (4) | seq u32 | t_us u64 | w u16 | h u16 | len u32 | payload[len]
+//   "FRM2" magic (4) | seq u32 | t_cap_us u64 | t_send_us u64 | w u16 | h u16 | len u32 | payload[len]
+// t_cap_us is the driver's capture timestamp (VSYNC of this frame), t_send_us the moment the header
+// leaves; both on the node clock, so the host can split latency into capture to send and send to receive.
 // The host (rec.py) syncs on the magic, checks seq for drops, and writes the frozen corpus.
 #include <stdio.h>
 #include <string.h>
@@ -32,7 +34,7 @@ static const char *TAG = "rec";
 #define CAM_PCLK 13
 
 typedef struct __attribute__((packed)) {
-    char magic[4]; uint32_t seq; uint64_t t_us; uint16_t w, h; uint32_t len;
+    char magic[4]; uint32_t seq; uint64_t t_cap_us, t_send_us; uint16_t w, h; uint32_t len;
 } frame_hdr_t;
 
 // The driver hands each write to a ring buffer as one item, and an item larger than the buffer never
@@ -48,11 +50,15 @@ static void usb_write_all(const uint8_t *p, size_t n)
     }
 }
 
-static bool send_frame(uint32_t seq)
+static bool send_frame(uint32_t seq, bool fresh)
 {
+    if (fresh) {   // a single frame on request must be current: drain what the driver queued while idle
+        for (int i = 0; i < 3; i++) { camera_fb_t *old = esp_camera_fb_get(); if (old) esp_camera_fb_return(old); }
+    }
     camera_fb_t *fb = esp_camera_fb_get();
     if (!fb) return false;
-    frame_hdr_t h = { {'F','R','M','1'}, seq, (uint64_t)esp_timer_get_time(), (uint16_t)fb->width, (uint16_t)fb->height, (uint32_t)fb->len };
+    uint64_t t_cap = (uint64_t)fb->timestamp.tv_sec * 1000000ULL + (uint64_t)fb->timestamp.tv_usec;
+    frame_hdr_t h = { {'F','R','M','2'}, seq, t_cap, (uint64_t)esp_timer_get_time(), (uint16_t)fb->width, (uint16_t)fb->height, (uint32_t)fb->len };
     usb_write_all((const uint8_t *)&h, sizeof h);
     usb_write_all(fb->buf, fb->len);
     esp_camera_fb_return(fb);
@@ -79,9 +85,9 @@ void app_main(void)
         if (usb_serial_jtag_read_bytes(&ch, 1, 0) == 1) {
             if (ch == 'g') { streaming = true; seq = 0; sent = 0; t0 = esp_timer_get_time(); ESP_LOGI(TAG, "stream start"); }
             else if (ch == 'x') { streaming = false; double s = (esp_timer_get_time() - t0) / 1e6; ESP_LOGI(TAG, "stream stop: %lu frames in %.1f s = %.2f fps", (unsigned long)sent, s, sent / s); }
-            else if (ch == 's') { send_frame(0xFFFFFFFF); }
+            else if (ch == 's') { send_frame(0xFFFFFFFF, true); }
         }
-        if (streaming) { if (send_frame(seq++)) sent++; }
+        if (streaming) { if (send_frame(seq++, false)) sent++; }
         else vTaskDelay(pdMS_TO_TICKS(5));
     }
 }
