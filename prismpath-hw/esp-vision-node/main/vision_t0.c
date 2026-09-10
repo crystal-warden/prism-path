@@ -14,6 +14,7 @@
 #include "esp_heap_caps.h"
 #include "esp_log.h"
 #include "esp_timer.h"
+#include "mbedtls/base64.h"
 
 static const char *TAG = "t0";
 #ifndef T0_SECONDS
@@ -108,6 +109,23 @@ static void run_mode(const mode_t_ *m)
            frames ? (double)bytes / frames : 0.0, (unsigned long long)(frames ? bmin : 0), (unsigned long long)bmax,
            (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL), (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM),
            (unsigned)heap_caps_get_total_size(MALLOC_CAP_SPIRAM));
+    // One sample frame per mode, base64 over the console, so the record shows what was captured.
+    camera_fb_t *fb = esp_camera_fb_get();
+    if (fb) {
+        printf("T0 frame mode=\"%s\" fmt=%s w=%u h=%u len=%u\n", m->name,
+               fb->format == PIXFORMAT_JPEG ? "jpeg" : "gray", (unsigned)fb->width, (unsigned)fb->height, (unsigned)fb->len);
+        static char b64[4096];
+        for (size_t off = 0; off < fb->len; off += 2400) {
+            size_t chunk = fb->len - off < 2400 ? fb->len - off : 2400, olen = 0;
+            if (mbedtls_base64_encode((unsigned char *)b64, sizeof b64, &olen, fb->buf + off, chunk) == 0) {
+                fwrite(b64, 1, olen, stdout); fputc('\n', stdout);
+            }
+            vTaskDelay(1);   // let the idle task run so the task watchdog stays quiet during a long dump
+        }
+        printf("T0 frame end\n");
+        fflush(stdout);
+        esp_camera_fb_return(fb);
+    }
     esp_camera_deinit();
     vTaskDelay(pdMS_TO_TICKS(300));
 }
