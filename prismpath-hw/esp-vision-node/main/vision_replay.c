@@ -40,12 +40,12 @@ void app_main(void)
         uint32_t seq, len; memcpy(&seq, hdr + 4, 4); memcpy(&len, hdr + 8, 4);
         if (len != W * H) { ESP_LOGE(TAG, "bad len %lu", (unsigned long)len); continue; }
         usb_read_all(cur, len);
-        if (seq == 0) frame_n = 0;   // a clip starts at seq 0: fresh previous frame and background, like a fresh Frontend() on the host
+        if (seq == 0) frame_n = 0;   // the front end resets its own state when frame_n is 0   // a clip starts at seq 0: fresh previous frame and background, like a fresh Frontend() on the host
         int64_t t0 = esp_timer_get_time();
-        int32_t motion_cells, dark, step, door_hit; front_end(&motion_cells, &dark, &step, &door_hit);
+        int32_t motion_cells, dark, step, door_hit, scene; front_end(&motion_cells, &dark, &step, &door_hit, &scene);
         uint16_t node, steps; int64_t t1, t2;
         { memset(regs, 0, sizeof regs); }
-        decide(motion_cells, dark, step, door_hit, &node, &steps); t1 = esp_timer_get_time();   // decide includes register fill
+        decide(motion_cells, dark, step, door_hit, scene, &node, &steps); t1 = esp_timer_get_time();   // decide includes register fill
         t2 = t1;
         uint16_t wire_len = encode_reading(wirebuf, sizeof wirebuf);
         for (int i = 0; i < WIRE_N_FIELDS; i++) fields[i] = get_reg(WIRE_FIELDS[i].reg);

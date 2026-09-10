@@ -10,9 +10,10 @@ static bool refreshed;   // set by front_end on the frame the background was rep
 #define CH (H / R)
 #define MOTION_ON 16
 #define BACK_ON 24
-#define STEP_NUM 3
-#define STEP_DEN 4
-#define REFRESH 100
+#define JUMP_CELLS 32
+#define JUMP_FRAMES 5
+#define SCENE_CELLS ((R * C) * 3 / 4)
+#define SCENE_FRAMES 20
 static const uint8_t DOOR_R[] = {2, 3}; static const uint8_t DOOR_C0 = 2, DOOR_C1 = 7;   // cells 22 to 37
 
 // ---------------------------------------------------------------- the evaluator (byte exact copy)
@@ -82,6 +83,7 @@ static uint16_t node_edge_count(uint16_t node) { return rd16b(tbl + nodes_off + 
 
 // ---------------------------------------------------------------- the front end (matches frontend.py)
 static uint8_t *cur, *prev, *background; static uint32_t frame_n = 0;
+static int32_t dep_hist[JUMP_FRAMES + 1]; static int dep_n = 0; static int32_t departed_still = 0; static bool unstable = false, scene_changed = false;
 static int32_t m_cell[R][C], b_cell[R][C];
 static void cell_mad(const uint8_t *a, const uint8_t *b, int32_t out[R][C]) {
     for (int r = 0; r < R; r++) for (int c = 0; c < C; c++) {
@@ -93,20 +95,28 @@ static void cell_mad(const uint8_t *a, const uint8_t *b, int32_t out[R][C]) {
         out[r][c] = (int32_t)(s / (CW * CH));
     }
 }
-static void front_end(int32_t *motion_cells, int32_t *dark, int32_t *step, int32_t *door_hit) {
-    if (frame_n == 0) { memcpy(prev, cur, W * H); memcpy(background, cur, W * H); }
+static void adopt_normal(void) { memcpy(background, cur, W * H); refreshed = true; scene_changed = false; departed_still = 0; unstable = false; dep_n = 0; }
+static void front_end(int32_t *motion_cells, int32_t *dark, int32_t *step, int32_t *door_hit, int32_t *scene) {
+    if (frame_n == 0) { memcpy(prev, cur, W * H); memcpy(background, cur, W * H); dep_n = 0; departed_still = 0; unstable = false; scene_changed = false; }
     cell_mad(cur, prev, m_cell); cell_mad(cur, background, b_cell);
     int32_t mc = 0, departed = 0; uint32_t sum = 0;
     for (int r = 0; r < R; r++) for (int c = 0; c < C; c++) { if (m_cell[r][c] >= MOTION_ON) mc++; if (b_cell[r][c] >= BACK_ON) departed++; }
     for (uint32_t i = 0; i < W * H; i++) sum += cur[i];
-    *motion_cells = mc; *dark = (int32_t)(sum / (W * H)); *step = (departed * STEP_DEN >= STEP_NUM * R * C);
+    *motion_cells = mc; *dark = (int32_t)(sum / (W * H));
+    // the step: departed rose by JUMP_CELLS or more within JUMP_FRAMES frames (dep_hist holds the last JUMP_FRAMES + 1 counts)
+    if (dep_n < JUMP_FRAMES + 1) dep_hist[dep_n++] = departed; else { memmove(dep_hist, dep_hist + 1, JUMP_FRAMES * sizeof dep_hist[0]); dep_hist[JUMP_FRAMES] = departed; }
+    *step = (dep_n > JUMP_FRAMES && departed - dep_hist[0] >= JUMP_CELLS);
+    if (*step) unstable = true;
+    if (unstable && departed < SCENE_CELLS / 2) { unstable = false; departed_still = 0; }
+    departed_still = (unstable && mc == 0 && departed >= SCENE_CELLS) ? departed_still + 1 : 0;
+    if (departed_still >= SCENE_FRAMES) scene_changed = true;
+    *scene = scene_changed ? 1 : 0;
     int32_t dh = 0;
     for (unsigned k = 0; k < sizeof DOOR_R; k++) for (int c = DOOR_C0; c <= DOOR_C1; c++)
         if (m_cell[DOOR_R[k]][c] >= MOTION_ON && b_cell[DOOR_R[k]][c] >= BACK_ON) dh = 1;
     *door_hit = dh;
     frame_n++;
-    refreshed = false;
-    if (frame_n % REFRESH == 0 && mc == 0) { memcpy(background, cur, W * H); refreshed = true; }
+    refreshed = false;                                   // no refresh clock (T2): the normal changes only through adopt_normal()
     memcpy(prev, cur, W * H);
 }
 static void set_reg(uint16_t reg, int32_t v) { wr32(regs + 4 + 8 * (uint32_t)reg, TY_INT); wr32(regs + 8 + 8 * (uint32_t)reg, v); }
@@ -124,7 +134,7 @@ static void vision_core_init(void) {
     uint8_t rc = parse_table(POLICY_TABLE_LEN);
     if (rc) { printf("table parse failed rc=%u\n", rc); while (1) vTaskDelay(1000); }
 }
-static void decide(int32_t motion_cells, int32_t dark, int32_t step, int32_t door_hit, uint16_t *out_node, uint16_t *out_steps) {
+static void decide(int32_t motion_cells, int32_t dark, int32_t step, int32_t door_hit, int32_t scene, uint16_t *out_node, uint16_t *out_steps) {
     memset(regs, 0, sizeof regs);
     #define SETM(r, c) set_reg(REG_m_##r##c, m_cell[r][c]); set_reg(REG_b_##r##c, b_cell[r][c]);
     SETM(0,0) SETM(0,1) SETM(0,2) SETM(0,3) SETM(0,4) SETM(0,5) SETM(0,6) SETM(0,7)
@@ -133,7 +143,7 @@ static void decide(int32_t motion_cells, int32_t dark, int32_t step, int32_t doo
     SETM(3,0) SETM(3,1) SETM(3,2) SETM(3,3) SETM(3,4) SETM(3,5) SETM(3,6) SETM(3,7)
     SETM(4,0) SETM(4,1) SETM(4,2) SETM(4,3) SETM(4,4) SETM(4,5) SETM(4,6) SETM(4,7)
     SETM(5,0) SETM(5,1) SETM(5,2) SETM(5,3) SETM(5,4) SETM(5,5) SETM(5,6) SETM(5,7)
-    set_reg(REG_motion_cells, motion_cells); set_reg(REG_dark, dark); set_reg(REG_step, step); set_reg(REG_door_hit, door_hit);
+    set_reg(REG_motion_cells, motion_cells); set_reg(REG_dark, dark); set_reg(REG_step, step); set_reg(REG_door_hit, door_hit); set_reg(REG_scene_changed, scene);
     uint16_t node = start_node, target = 0, steps = 0; uint8_t err = 0;
     while (steps < max_steps && node_edge_count(node) > 0) { int8_t e = evaluate(node, &target, &err); if (e < 0 || err) break; node = target; steps++; }
     *out_node = node; *out_steps = steps;

@@ -83,8 +83,8 @@ void app_main(void)
         uint64_t t_cap = (uint64_t)fb->timestamp.tv_sec * 1000000ULL + (uint64_t)fb->timestamp.tv_usec;
         cur = fb->buf;
         bool first = (frame_n == 0);
-        int32_t motion_cells, dark, step, door_hit; front_end(&motion_cells, &dark, &step, &door_hit);
-        uint16_t node, steps; decide(motion_cells, dark, step, door_hit, &node, &steps);
+        int32_t motion_cells, dark, step, door_hit, scene; front_end(&motion_cells, &dark, &step, &door_hit, &scene);
+        uint16_t node, steps; decide(motion_cells, dark, step, door_hit, scene, &node, &steps);
         uint16_t wire_len = encode_reading(wirebuf, sizeof wirebuf);
         uint64_t t_dec = (uint64_t)esp_timer_get_time();
         rdg_hdr_t rh = { {'R','D','G','1'}, seq, t_cap, t_dec, node, steps, wire_len };
