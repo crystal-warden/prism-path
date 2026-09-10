@@ -8,6 +8,9 @@
 // t_cap_us is the driver's capture timestamp (VSYNC of this frame), t_send_us the moment the header
 // leaves; both on the node clock, so the host can split latency into capture to send and send to receive.
 // The host (rec.py) syncs on the magic, checks seq for drops, and writes the frozen corpus.
+// Exposure lock (T2): the sensor's auto exposure and gain settle for a few seconds after boot and are then
+// frozen, so a reading means the same thing from one frame to the next and a dark room reads dark.
+// Commands 'l' and 'u' lock and unlock again; 'e' prints what the sensor reports.
 #include <stdio.h>
 #include <string.h>
 #include "freertos/FreeRTOS.h"
@@ -78,7 +81,10 @@ void app_main(void)
     ESP_ERROR_CHECK(esp_camera_init(&c));
     usb_serial_jtag_driver_config_t ucfg = { .tx_buffer_size = 16384, .rx_buffer_size = 256 };
     ESP_ERROR_CHECK(usb_serial_jtag_driver_install(&ucfg));
-    ESP_LOGI(TAG, "recorder ready on USB: g=stream x=stop s=one frame");
+    vTaskDelay(pdMS_TO_TICKS(3000));                       // let auto exposure and gain settle on the scene
+    sensor_t *sen = esp_camera_sensor_get();
+    if (sen) { sen->set_exposure_ctrl(sen, 0); sen->set_gain_ctrl(sen, 0); ESP_LOGI(TAG, "exposure and gain locked: aec_value=%d agc_gain=%d", sen->status.aec_value, sen->status.agc_gain); }
+    ESP_LOGI(TAG, "recorder ready on USB: g=stream x=stop s=one frame l=lock u=unlock");
     bool streaming = false; uint32_t seq = 0; int64_t t0 = 0; uint32_t sent = 0;
     while (1) {
         uint8_t ch;
@@ -86,6 +92,8 @@ void app_main(void)
             if (ch == 'g') { streaming = true; seq = 0; sent = 0; t0 = esp_timer_get_time(); ESP_LOGI(TAG, "stream start"); }
             else if (ch == 'x') { streaming = false; double s = (esp_timer_get_time() - t0) / 1e6; ESP_LOGI(TAG, "stream stop: %lu frames in %.1f s = %.2f fps", (unsigned long)sent, s, sent / s); }
             else if (ch == 's') { send_frame(0xFFFFFFFF, true); }
+            else if (ch == 'l' && sen) { sen->set_exposure_ctrl(sen, 0); sen->set_gain_ctrl(sen, 0); ESP_LOGI(TAG, "locked"); }
+            else if (ch == 'u' && sen) { sen->set_exposure_ctrl(sen, 1); sen->set_gain_ctrl(sen, 1); ESP_LOGI(TAG, "unlocked"); }
         }
         if (streaming) { if (send_frame(seq++, false)) sent++; }
         else vTaskDelay(pdMS_TO_TICKS(5));
