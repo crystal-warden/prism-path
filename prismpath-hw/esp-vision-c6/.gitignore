@@ -1,0 +1,4 @@
+build_*/
+sdkconfig.air
+sdkconfig.host
+sdkconfig.old
