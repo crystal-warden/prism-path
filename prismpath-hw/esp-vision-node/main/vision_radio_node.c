@@ -34,14 +34,15 @@ static const char *TAG = "radio";
 #define CAM_HREF 7
 #define CAM_PCLK 13
 #define KEY_QUALITY 75
-typedef struct __attribute__((packed)) { char magic[4]; uint32_t seq; uint64_t t_cap, t_dec; uint16_t node, steps, wire_len; } rdg_hdr_t;
-typedef struct __attribute__((packed)) { char magic[4]; uint32_t seq; uint64_t t_cap; uint32_t len; } key_hdr_t;
+typedef struct __attribute__((packed)) { char magic[4]; uint16_t nid; uint32_t seq; uint64_t t_cap, t_dec; uint16_t node, steps, wire_len; } rdg_hdr_t;
+typedef struct __attribute__((packed)) { char magic[4]; uint16_t nid; uint32_t seq; uint64_t t_cap; uint32_t len; } key_hdr_t;
+static uint16_t node_id;
 static uint8_t *last_sent; static uint16_t frag_id = 0;
 static void send_keyframe(camera_fb_t *fb, uint32_t seq, uint64_t t_cap)
 {
     uint8_t *jpg = NULL; size_t jlen = 0;
     if (!frame2jpg(fb, KEY_QUALITY, &jpg, &jlen)) { ESP_LOGE(TAG, "frame2jpg failed"); return; }
-    uint8_t *msg = malloc(sizeof(key_hdr_t) + jlen); key_hdr_t kh = { {'K','E','Y','1'}, seq, t_cap, (uint32_t)jlen };
+    uint8_t *msg = malloc(sizeof(key_hdr_t) + jlen); key_hdr_t kh = { {'K','E','Y','2'}, node_id, seq, t_cap, (uint32_t)jlen };
     memcpy(msg, &kh, sizeof kh); memcpy(msg + sizeof kh, jpg, jlen); free(jpg);
     radio_send_fragmented(frag_id++, msg, sizeof kh + jlen); free(msg);
     memcpy(last_sent, fb->buf, W * H);
@@ -60,7 +61,7 @@ void app_main(void)
     };
     ESP_ERROR_CHECK(esp_camera_init(&c));
     radio_init(NULL);
-    uint8_t mac[6]; esp_wifi_get_mac(WIFI_IF_STA, mac);
+    uint8_t mac[6]; esp_wifi_get_mac(WIFI_IF_STA, mac); node_id = (uint16_t)((mac[4] << 8) | mac[5]);
     ESP_LOGI(TAG, "radio node %02x:%02x:%02x:%02x:%02x:%02x streaming over ESP-NOW", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
     uint32_t seq = 0; static uint8_t pkt[ESPNOW_MAX];
     while (1) {
@@ -71,7 +72,7 @@ void app_main(void)
         uint16_t node, steps; decide(motion_cells, dark, step, door_hit, &node, &steps);
         uint8_t wirebuf[128]; uint16_t wire_len = encode_reading(wirebuf, sizeof wirebuf);
         uint64_t t_dec = (uint64_t)esp_timer_get_time();
-        rdg_hdr_t rh = { {'R','D','G','1'}, seq, t_cap, t_dec, node, steps, wire_len };
+        rdg_hdr_t rh = { {'R','D','G','2'}, node_id, seq, t_cap, t_dec, node, steps, wire_len };
         memcpy(pkt, &rh, sizeof rh); memcpy(pkt + sizeof rh, wirebuf, wire_len);
         esp_now_send(BCAST, pkt, sizeof rh + wire_len); hop_send(pkt, sizeof rh + wire_len);
         if (first || (refreshed && background_moved(last_sent))) send_keyframe(fb, seq, t_cap);
