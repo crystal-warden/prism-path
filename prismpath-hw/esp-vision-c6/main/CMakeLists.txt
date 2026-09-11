@@ -1,5 +1,7 @@
 if(DEFINED ENV{C6_APP} AND "$ENV{C6_APP}" STREQUAL "host")
   idf_component_register(SRCS "relay_host.c" REQUIRES ieee802154 driver esp_timer)
+elseif(DEFINED ENV{C6_APP} AND "$ENV{C6_APP}" STREQUAL "replay")
+  idf_component_register(SRCS "relay_replay.c" REQUIRES driver esp_timer)
 else()
   idf_component_register(SRCS "relay_air.c" REQUIRES ieee802154 esp_wifi nvs_flash esp_netif esp_event esp_timer driver lwip)
 endif()
