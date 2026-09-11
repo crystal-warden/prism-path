@@ -61,6 +61,9 @@ static uint16_t policy_decide(int32_t gur, int32_t retry_pct, int32_t backoff, u
 #endif
 typedef struct { uint16_t len; uint8_t d[250]; } msg_t;
 static QueueHandle_t q, qbulk, qpwr; static SemaphoreHandle_t txdone;   // qpwr: the policy's own decision records, never dropped behind readings   // readings first: bulk (keyframe and evidence fragments) waits while readings are pending
+// a bench replay attacker in the relay's position: the last readings kept, and 'R' | n re-sends n of them as fresh sub frames
+#define REPLAY_RING 32
+static msg_t replay_ring[REPLAY_RING]; static int replay_i = 0, replay_n = 0;
 static void publish_key(void) { msg_t pm; memcpy(pm.d, "PUB1", 4); memcpy(pm.d + 4, relay_pk, 32); pm.len = 36; xQueueSend(qpwr, &pm, 0); }
 static uint32_t n_in = 0, n_sub = 0, n_fail = 0, n_retry = 0, n_given_up = 0; static volatile bool last_acked;
 // the downlink: a command frame heard in the receive window goes to the camera whose node id it names
@@ -86,6 +89,7 @@ static void cmd_task(void *arg)
         uint16_t nid = c.d[1] | (c.d[2] << 8); int sent = 0;
         if (nid == 0x0000) {   // for the relay itself
             if (c.d[3] == 'K') publish_key();   // a receiver that joined after boot asks for the relay's public key
+            else if (c.d[3] == 'R' && c.len >= 5) { int n = c.d[4] < replay_n ? c.d[4] : replay_n; for (int i = 0; i < n; i++) { msg_t *m_ = &replay_ring[(replay_i - n + i + REPLAY_RING) % REPLAY_RING]; xQueueSend(q, m_, 0); } ESP_LOGW(TAG, "REPLAY: %d earlier readings re-sent as fresh frames (bench attack)", n); }
             else if (c.d[3] == 'p' && c.len >= 5) { set_level((int8_t)c.d[4]); ESP_LOGI(TAG, "operator set transmit power %d dBm (now %d); the policy continues from here", (int8_t)c.d[4], esp_ieee802154_get_txpower()); }
             continue;
         }
@@ -148,6 +152,7 @@ void app_main(void)
         bool got = reading || (uxQueueMessagesWaiting(q) == 0 && xQueueReceive(qbulk, &m, pdMS_TO_TICKS(20)) == pdTRUE);
         if (got) {
             n_in++; uint8_t total = (uint8_t)((m.len + SUB_DATA - 1) / SUB_DATA); id++;
+            if (reading && !from_pwr && memcmp(m.d, "RDG", 3) == 0) { replay_ring[replay_i] = m; replay_i = (replay_i + 1) % REPLAY_RING; if (replay_n < REPLAY_RING) replay_n++; }
             for (uint8_t i = 0; i < total; i++) {
                 uint16_t off = i * SUB_DATA, n = m.len - off < SUB_DATA ? m.len - off : SUB_DATA;
                 sub[0] = 'S'; sub[1] = id & 0xff; sub[2] = id >> 8; sub[3] = i; sub[4] = total; memcpy(sub + SUB_HDR, m.d + off, n);
