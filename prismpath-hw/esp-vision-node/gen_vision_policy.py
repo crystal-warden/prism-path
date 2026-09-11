@@ -6,7 +6,7 @@ register map, the node names, and the wire codebook (wire order and cut points p
 quantizes and encodes exactly as prismpath.telemetry does. Everything the node needs about the policy
 comes from this one generated header; nothing is typed by hand.
 
-    python gen_vision_policy.py [flow.md]
+    python gen_vision_policy.py [flow.md] [door cells, e.g. 22-37 or 00-25,40-55]
 """
 import sys
 from pathlib import Path
@@ -17,6 +17,14 @@ from prismpath.kernel.parser import parse_file
 from prismpath.telemetry import quantizer as q, wire
 
 flow = sys.argv[1] if len(sys.argv) > 1 else str(REPO.parent / "cw-strategy" / "decision-sufficient-vision" / "occupancy_6x8.md")
+def _parse_cells(spec):
+    cells = []
+    for part in spec.split(","):
+        if "-" in part:
+            a, b = part.split("-"); cells += [(r, c) for r in range(int(a[0]), int(b[0]) + 1) for c in range(int(a[1]), int(b[1]) + 1)]
+        else: cells.append((int(part[0]), int(part[1])))
+    return cells
+door = _parse_cells(sys.argv[2]) if len(sys.argv) > 2 else [(r, c) for r in (2, 3) for c in range(2, 8)]
 g = parse_file(flow)
 img = pc.compile_flow(g, 25); blob = img.serialize()
 parts = q.build_partitions(g); order = wire._order(parts)
@@ -45,7 +53,9 @@ for f in order:
 lines.append("typedef struct { uint16_t reg; uint8_t n_cuts; int32_t cut[WIRE_MAX_CUTS]; } wire_field_t;")
 lines.append("static const wire_field_t WIRE_FIELDS[WIRE_N_FIELDS] = {\n" + ",\n".join(rows) + "\n};")
 lines.append("static const char *const WIRE_FIELD_NAMES[WIRE_N_FIELDS] = { " + ", ".join(f'"{f}"' for f in order) + " };")
+lines.append(f"#define DOOR_N {len(door)}")
+lines.append("static const uint8_t DOOR_CELLS[DOOR_N][2] = { " + ", ".join(f"{{{r}, {c}}}" for r, c in door) + " };")
 lines.append("#endif")
 Path(__file__).parent.joinpath("main", "vision_policy.h").write_text("\n".join(lines) + "\n")
-print(f"vision_policy.h: table {len(blob)} B, {len(img.fields)} registers, {len(names)} nodes, start {g.start}, wire fields {len(order)}, max cuts {maxcuts}")
+print(f"vision_policy.h: door cells {len(door)}, table {len(blob)} B, {len(img.fields)} registers, {len(names)} nodes, start {g.start}, wire fields {len(order)}, max cuts {maxcuts}")
 print("kinds:", {f: parts[f].kind for f in order if parts[f].kind != 'numeric'})

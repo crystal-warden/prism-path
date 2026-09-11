@@ -35,19 +35,31 @@ static const char *TAG = "radio";
 #define CAM_PCLK 13
 #define KEY_QUALITY 75
 #define KEY_RESEND_US 60000000ULL   // resend the background every minute so a receiver that joins late holds a normal
-typedef struct __attribute__((packed)) { char magic[4]; uint16_t nid; uint32_t seq; uint64_t t_cap, t_dec; uint16_t node, steps, wire_len; } rdg_hdr_t;
-typedef struct __attribute__((packed)) { char magic[4]; uint16_t nid; uint32_t seq; uint64_t t_cap; uint32_t len; } key_hdr_t;
+typedef struct __attribute__((packed)) { char magic[4]; uint16_t nid, norm; uint32_t seq; uint64_t t_cap, t_dec; uint16_t node, steps, wire_len; } rdg_hdr_t;
+typedef struct __attribute__((packed)) { char magic[4]; uint16_t nid, norm; uint32_t seq; uint64_t t_cap; uint32_t len; } key_hdr_t;
+typedef struct __attribute__((packed)) { char magic[4]; uint16_t nid, norm; uint32_t seq; uint64_t t_cap; uint16_t route; uint32_t len; } evd_hdr_t;
+#define EVIDENCE_GAP_US 10000000ULL
 static uint16_t node_id;
 static uint8_t *last_sent; static uint16_t frag_id = 0;
 static void send_keyframe(camera_fb_t *fb, uint32_t seq, uint64_t t_cap)
 {
     uint8_t *jpg = NULL; size_t jlen = 0;
     if (!frame2jpg(fb, KEY_QUALITY, &jpg, &jlen)) { ESP_LOGE(TAG, "frame2jpg failed"); return; }
-    uint8_t *msg = malloc(sizeof(key_hdr_t) + jlen); key_hdr_t kh = { {'K','E','Y','2'}, node_id, seq, t_cap, (uint32_t)jlen };
+    uint8_t *msg = malloc(sizeof(key_hdr_t) + jlen); key_hdr_t kh = { {'K','E','Y','3'}, node_id, normal_id, seq, t_cap, (uint32_t)jlen };
     memcpy(msg, &kh, sizeof kh); memcpy(msg + sizeof kh, jpg, jlen); free(jpg);
     radio_send_fragmented(node_id, frag_id++, msg, sizeof kh + jlen); free(msg);
     memcpy(last_sent, fb->buf, W * H);
-    ESP_LOGI(TAG, "keyframe %lu B in %u fragments", (unsigned long)(sizeof kh + jlen), (unsigned)((sizeof kh + jlen + FRAG_DATA - 1) / FRAG_DATA));
+    ESP_LOGI(TAG, "keyframe %lu B in %u fragments, normal %04x", (unsigned long)(sizeof kh + jlen), (unsigned)((sizeof kh + jlen + FRAG_DATA - 1) / FRAG_DATA), normal_id);
+}
+static bool escalates(uint16_t node) { const char *n = POLICY_NODE_NAMES[node]; return !strcmp(n, "tamper") || !strcmp(n, "evidence") || !strcmp(n, "door") || !strcmp(n, "scene_changed"); }
+static void send_evidence(camera_fb_t *fb, uint32_t seq, uint64_t t_cap, uint16_t route)
+{
+    uint8_t *jpg = NULL; size_t jlen = 0;
+    if (!frame2jpg(fb, KEY_QUALITY, &jpg, &jlen)) return;
+    uint8_t *msg = malloc(sizeof(evd_hdr_t) + jlen); evd_hdr_t eh = { {'E','V','D','1'}, node_id, normal_id, seq, t_cap, route, (uint32_t)jlen };
+    memcpy(msg, &eh, sizeof eh); memcpy(msg + sizeof eh, jpg, jlen); free(jpg);
+    radio_send_fragmented(node_id, frag_id++, msg, sizeof eh + jlen); free(msg);
+    ESP_LOGI(TAG, "evidence for %s: %lu B", POLICY_NODE_NAMES[route], (unsigned long)(sizeof eh + jlen));
 }
 void app_main(void)
 {
@@ -63,20 +75,29 @@ void app_main(void)
     ESP_ERROR_CHECK(esp_camera_init(&c));
     radio_init(NULL);
     uint8_t mac[6]; esp_wifi_get_mac(WIFI_IF_STA, mac); node_id = (uint16_t)((mac[4] << 8) | mac[5]);
+    // exposure lock (T2): the bands were tuned on a locked sensor; let auto exposure and gain settle on the scene, then
+    // freeze them, and only then start the front end, so the anchored normal is a settled frame
+    vTaskDelay(pdMS_TO_TICKS(3000));
+    { sensor_t *sen = esp_camera_sensor_get(); if (sen) { sen->set_exposure_ctrl(sen, 0); sen->set_gain_ctrl(sen, 0); ESP_LOGI(TAG, "exposure and gain locked: aec_value=%d agc_gain=%d", sen->status.aec_value, sen->status.agc_gain); } }
     ESP_LOGI(TAG, "radio node %02x:%02x:%02x:%02x:%02x:%02x streaming over ESP-NOW", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
-    uint32_t seq = 0; static uint8_t pkt[ESPNOW_MAX]; uint64_t t_key = 0;
+    uint32_t seq = 0; static uint8_t pkt[ESPNOW_MAX]; uint64_t t_key = 0, t_evd = 0; uint16_t last_normal = 0xffff; bool adopt_now = false;
+    usb_serial_jtag_driver_config_t ucfg = { .tx_buffer_size = 16384, .rx_buffer_size = 256 }; bool usb_ok = usb_serial_jtag_driver_install(&ucfg) == ESP_OK;   // the operator sends n to adopt the current frame as the normal
     while (1) {
+        uint8_t ch; if (usb_ok && usb_serial_jtag_read_bytes(&ch, 1, 0) == 1 && ch == 'n') { ESP_LOGI(TAG, "operator adopts the normal"); adopt_now = true; }
         camera_fb_t *fb = esp_camera_fb_get(); if (!fb) continue;
         uint64_t t_cap = (uint64_t)fb->timestamp.tv_sec * 1000000ULL + (uint64_t)fb->timestamp.tv_usec;
-        cur = fb->buf; bool first = (frame_n == 0);
+        cur = fb->buf;
+        if (adopt_now) { adopt_now = false; adopt_normal(); }
         int32_t motion_cells, dark, step, door_hit, scene; front_end(&motion_cells, &dark, &step, &door_hit, &scene);
         uint16_t node, steps; decide(motion_cells, dark, step, door_hit, scene, &node, &steps);
         uint8_t wirebuf[128]; uint16_t wire_len = encode_reading(wirebuf, sizeof wirebuf);
         uint64_t t_dec = (uint64_t)esp_timer_get_time();
-        rdg_hdr_t rh = { {'R','D','G','2'}, node_id, seq, t_cap, t_dec, node, steps, wire_len };
+        rdg_hdr_t rh = { {'R','D','G','3'}, node_id, normal_id, seq, t_cap, t_dec, node, steps, wire_len };
         memcpy(pkt, &rh, sizeof rh); memcpy(pkt + sizeof rh, wirebuf, wire_len);
         esp_now_send(BCAST, pkt, sizeof rh + wire_len); hop_send(pkt, sizeof rh + wire_len);
-        if (first || (refreshed && background_moved(last_sent)) || (t_dec - t_key > KEY_RESEND_US)) { send_keyframe(fb, seq, t_cap); t_key = t_dec; }
+        // a keyframe whenever the normal changed id (adoption, or the search for the first clean stretch ending), and every minute
+        if (normal_set && (normal_id != last_normal || t_dec - t_key > KEY_RESEND_US)) { send_keyframe(fb, seq, t_cap); t_key = t_dec; last_normal = normal_id; }
+        if (escalates(node) && t_dec - t_evd > EVIDENCE_GAP_US) { send_evidence(fb, seq, t_cap, node); t_evd = t_dec; }
         esp_camera_fb_return(fb); seq++;
     }
 }

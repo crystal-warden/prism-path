@@ -14,7 +14,6 @@ static bool refreshed;   // set by front_end on the frame the background was rep
 #define JUMP_FRAMES 5
 #define SCENE_CELLS ((R * C) * 3 / 4)
 #define SCENE_FRAMES 20
-static const uint8_t DOOR_R[] = {2, 3}; static const uint8_t DOOR_C0 = 2, DOOR_C1 = 7;   // cells 22 to 37
 
 // ---------------------------------------------------------------- the evaluator (byte exact copy)
 #define TBL_MAX   8192
@@ -84,6 +83,10 @@ static uint16_t node_edge_count(uint16_t node) { return rd16b(tbl + nodes_off + 
 // ---------------------------------------------------------------- the front end (matches frontend.py)
 static uint8_t *cur, *prev, *background; static uint32_t frame_n = 0;
 static int32_t dep_hist[JUMP_FRAMES + 1]; static int dep_n = 0; static int32_t departed_still = 0; static bool unstable = false, scene_changed = false;
+#define CLEAN_FRAMES 20
+static int32_t clean_run = 0; static bool normal_set = false; static uint16_t normal_id = 0;
+// the normal's id: FNV-1a over the background pixels, folded to 16 bits; every reading and keyframe names it
+static uint16_t normal_hash(void) { uint32_t h = 2166136261u; for (uint32_t i = 0; i < W * H; i++) { h ^= background[i]; h *= 16777619u; } return (uint16_t)(h ^ (h >> 16)); }
 static int32_t m_cell[R][C], b_cell[R][C];
 static void cell_mad(const uint8_t *a, const uint8_t *b, int32_t out[R][C]) {
     for (int r = 0; r < R; r++) for (int c = 0; c < C; c++) {
@@ -95,9 +98,9 @@ static void cell_mad(const uint8_t *a, const uint8_t *b, int32_t out[R][C]) {
         out[r][c] = (int32_t)(s / (CW * CH));
     }
 }
-static void adopt_normal(void) { memcpy(background, cur, W * H); refreshed = true; scene_changed = false; departed_still = 0; unstable = false; dep_n = 0; }
+static void adopt_normal(void) { memcpy(background, cur, W * H); normal_id = normal_hash(); normal_set = true; refreshed = true; scene_changed = false; departed_still = 0; unstable = false; dep_n = 0; clean_run = 0; }
 static void front_end(int32_t *motion_cells, int32_t *dark, int32_t *step, int32_t *door_hit, int32_t *scene) {
-    if (frame_n == 0) { memcpy(prev, cur, W * H); memcpy(background, cur, W * H); dep_n = 0; departed_still = 0; unstable = false; scene_changed = false; }
+    if (frame_n == 0) { memcpy(prev, cur, W * H); memcpy(background, cur, W * H); dep_n = 0; departed_still = 0; unstable = false; scene_changed = false; clean_run = 0; normal_set = false; normal_id = normal_hash(); }
     cell_mad(cur, prev, m_cell); cell_mad(cur, background, b_cell);
     int32_t mc = 0, departed = 0; uint32_t sum = 0;
     for (int r = 0; r < R; r++) for (int c = 0; c < C; c++) { if (m_cell[r][c] >= MOTION_ON) mc++; if (b_cell[r][c] >= BACK_ON) departed++; }
@@ -112,10 +115,15 @@ static void front_end(int32_t *motion_cells, int32_t *dark, int32_t *step, int32
     if (departed_still >= SCENE_FRAMES) scene_changed = true;
     *scene = scene_changed ? 1 : 0;
     int32_t dh = 0;
-    for (unsigned k = 0; k < sizeof DOOR_R; k++) for (int c = DOOR_C0; c <= DOOR_C1; c++)
-        if (m_cell[DOOR_R[k]][c] >= MOTION_ON && b_cell[DOOR_R[k]][c] >= BACK_ON) dh = 1;
+    for (int k = 0; k < DOOR_N; k++) { int r = DOOR_CELLS[k][0], c = DOOR_CELLS[k][1]; if (m_cell[r][c] >= MOTION_ON && b_cell[r][c] >= BACK_ON) dh = 1; }
     *door_hit = dh;
     frame_n++;
+    // the anchored normal: until the first clean stretch has passed, the background follows the frame (so b equals m)
+    // and the first CLEAN_FRAMES frames with no motion end the search; that frame is the normal
+    if (!normal_set) {
+        clean_run = (mc == 0) ? clean_run + 1 : 0;
+        if (clean_run >= CLEAN_FRAMES) adopt_normal(); else { memcpy(background, cur, W * H); normal_id = normal_hash(); }
+    }
     refreshed = false;                                   // no refresh clock (T2): the normal changes only through adopt_normal()
     memcpy(prev, cur, W * H);
 }
