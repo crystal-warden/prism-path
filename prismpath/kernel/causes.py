@@ -55,6 +55,7 @@ _REGISTRY: Tuple[Tuple[int, str, str, str], ...] = (
     (53, "replay-stale",                 "wire",      "tick beyond the replay window"),
     (54, "concentrator-unknown-stream",  "wire",      "concentrated record names an unregistered stream"),
     (55, "concentrator-truncated",       "wire",      "concentrated record cut mid-reading"),
+    (56, "wire:chain-broken",            "wire",      "reading's previous hash does not match the record before it (splice, not loss)"),
     # -- state: resident-state transitions that are not ordinary matches ---------------------
     (64, "state:stale",                  "state",     "refresh bound exceeded; parked on the signed fail-safe"),
     (65, "state:recovered",              "state",     "fresh state restored after a stale episode"),

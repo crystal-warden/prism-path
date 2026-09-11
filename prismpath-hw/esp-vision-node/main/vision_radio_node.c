@@ -12,6 +12,7 @@
 #include "esp_camera.h"
 #include "esp_timer.h"
 #include "esp_heap_caps.h"
+#include "mbedtls/sha256.h"
 #include "esp_log.h"
 #include "driver/usb_serial_jtag.h"
 #include "vision_policy.h"
@@ -35,7 +36,10 @@ static const char *TAG = "radio";
 #define CAM_PCLK 13
 #define KEY_QUALITY 75
 #define KEY_RESEND_US 60000000ULL   // resend the background every minute so a receiver that joins late holds a normal
-typedef struct __attribute__((packed)) { char magic[4]; uint16_t nid, norm; uint32_t seq; uint64_t t_cap, t_dec; uint16_t node, steps, wire_len; } rdg_hdr_t;
+// RDG4: the reading carries the first eight bytes of the SHA-256 of the previous reading record (header and wire), a hash
+// chain that binds the trail to the node: a receiver can tell a lost reading (a gap in sequence) from a spliced one
+typedef struct __attribute__((packed)) { char magic[4]; uint16_t nid, norm; uint32_t seq; uint64_t t_cap, t_dec; uint16_t node, steps, wire_len; uint64_t prev; } rdg_hdr_t;
+static uint64_t chain_prev = 0;
 typedef struct __attribute__((packed)) { char magic[4]; uint16_t nid, norm; uint32_t seq; uint64_t t_cap; uint32_t len; } key_hdr_t;
 typedef struct __attribute__((packed)) { char magic[4]; uint16_t nid, norm; uint32_t seq; uint64_t t_cap; uint16_t route; uint32_t len; } evd_hdr_t;
 #define EVIDENCE_GAP_US 10000000ULL
@@ -112,9 +116,10 @@ void app_main(void)
         uint16_t node, steps; decide(motion_cells, dark, step, door_hit, scene, &node, &steps);
         uint8_t wirebuf[128]; uint16_t wire_len = encode_reading(wirebuf, sizeof wirebuf);
         uint64_t t_dec = (uint64_t)esp_timer_get_time();
-        rdg_hdr_t rh = { {'R','D','G','3'}, node_id, normal_id, seq, t_cap, t_dec, node, steps, wire_len };
+        rdg_hdr_t rh = { {'R','D','G','4'}, node_id, normal_id, seq, t_cap, t_dec, node, steps, wire_len, chain_prev };
         memcpy(pkt, &rh, sizeof rh); memcpy(pkt + sizeof rh, wirebuf, wire_len);
         esp_now_send(BCAST, pkt, sizeof rh + wire_len); hop_send(pkt, sizeof rh + wire_len);
+        { uint8_t h[32]; mbedtls_sha256(pkt, sizeof rh + wire_len, h, 0); memcpy(&chain_prev, h, 8); }   // this record's hash is the next record's prev
         // a keyframe whenever the normal changed id (adoption, or the search for the first clean stretch ending), and every minute
         if (normal_set && (normal_id != last_normal || key_now || t_dec - t_key > KEY_RESEND_US)) { send_keyframe(fb, seq, t_cap); t_key = t_dec; last_normal = normal_id; key_now = false; }
         if (escalates(node) && t_dec - t_evd > EVIDENCE_GAP_US) { send_evidence(fb, seq, t_cap, node); t_evd = t_dec; }

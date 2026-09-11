@@ -21,6 +21,9 @@
 #include "esp_rom_sys.h"
 #include "hop_policy.h"
 #include "ppt_eval.h"
+#include "monocypher-ed25519.h"
+#include "nvs.h"
+#include "esp_random.h"
 static const char *TAG = "air";
 // The transmit power is a policy, not a knob (hop_power.md): once a second the relay evaluates the authored flow on
 // its own counters and sets the radio from the route. Code keeps only the mechanism and the floor: if the table
@@ -31,7 +34,18 @@ static const char *TAG = "air";
 #define WINDOW_S 10
 static bool policy_ok = false; static int8_t level = LEVEL_FULL; static uint16_t give_up_run = 0;
 static uint32_t win_retry[WINDOW_S], win_sub[WINDOW_S]; static int win_i = 0; static uint32_t last_retry = 0, last_sub = 0;
-typedef struct __attribute__((packed)) { char magic[4]; uint64_t t; uint16_t route, steps; int8_t level; uint16_t give_up_run, retry_pct; } pwr_t;
+// PWR2: the decision record signed by the relay's own Ed25519 key (generated once, kept in NVS, published as PUB1), so a
+// decision made with the control plane out of reach is evidence of the relay's authority when it arrives, not the receiver's
+typedef struct __attribute__((packed)) { char magic[4]; uint64_t t; uint16_t route, steps; int8_t level; uint16_t give_up_run, retry_pct; uint8_t sig[64]; } pwr_t;
+static uint8_t relay_sk[64], relay_pk[32]; static bool relay_key = false;
+static void relay_key_init(void)
+{
+    nvs_handle_t h; if (nvs_open("hop", NVS_READWRITE, &h) != ESP_OK) return;
+    size_t n = 64, m = 32;
+    if (nvs_get_blob(h, "sk", relay_sk, &n) == ESP_OK && n == 64 && nvs_get_blob(h, "pk", relay_pk, &m) == ESP_OK && m == 32) relay_key = true;
+    else { uint8_t seed[32]; esp_fill_random(seed, 32); crypto_ed25519_key_pair(relay_sk, relay_pk, seed); nvs_set_blob(h, "sk", relay_sk, 64); nvs_set_blob(h, "pk", relay_pk, 32); nvs_commit(h); relay_key = true; ESP_LOGI(TAG, "relay signing key generated and kept in NVS"); }
+    nvs_close(h);
+}
 static void set_level(int8_t l) { if (l > LEVEL_FULL) l = LEVEL_FULL; if (l < LEVEL_FLOOR) l = LEVEL_FLOOR; if (l != level) { level = l; esp_ieee802154_set_txpower(level); } }
 static uint16_t policy_decide(int32_t gur, int32_t retry_pct, int32_t backoff, uint16_t *steps_out)
 {
@@ -47,6 +61,7 @@ static uint16_t policy_decide(int32_t gur, int32_t retry_pct, int32_t backoff, u
 #endif
 typedef struct { uint16_t len; uint8_t d[250]; } msg_t;
 static QueueHandle_t q, qbulk, qpwr; static SemaphoreHandle_t txdone;   // qpwr: the policy's own decision records, never dropped behind readings   // readings first: bulk (keyframe and evidence fragments) waits while readings are pending
+static void publish_key(void) { msg_t pm; memcpy(pm.d, "PUB1", 4); memcpy(pm.d + 4, relay_pk, 32); pm.len = 36; xQueueSend(qpwr, &pm, 0); }
 static uint32_t n_in = 0, n_sub = 0, n_fail = 0, n_retry = 0, n_given_up = 0; static volatile bool last_acked;
 // the downlink: a command frame heard in the receive window goes to the camera whose node id it names
 typedef struct { uint8_t len; uint8_t d[32]; } cmd_t;
@@ -70,7 +85,8 @@ static void cmd_task(void *arg)
         if (xQueueReceive(qcmd, &c, portMAX_DELAY) != pdTRUE) continue;
         uint16_t nid = c.d[1] | (c.d[2] << 8); int sent = 0;
         if (nid == 0x0000) {   // for the relay itself
-            if (c.d[3] == 'p' && c.len >= 5) { set_level((int8_t)c.d[4]); ESP_LOGI(TAG, "operator set transmit power %d dBm (now %d); the policy continues from here", (int8_t)c.d[4], esp_ieee802154_get_txpower()); }
+            if (c.d[3] == 'K') publish_key();   // a receiver that joined after boot asks for the relay's public key
+            else if (c.d[3] == 'p' && c.len >= 5) { set_level((int8_t)c.d[4]); ESP_LOGI(TAG, "operator set transmit power %d dBm (now %d); the policy continues from here", (int8_t)c.d[4], esp_ieee802154_get_txpower()); }
             continue;
         }
         for (int i = 0; i < MAX_NODES; i++) if (nodes[i].set && (nodes[i].nid == nid || nid == 0xffff)) { sendto(usock, c.d, c.len, 0, (struct sockaddr *)&nodes[i].addr, sizeof nodes[i].addr); sent++; }
@@ -111,6 +127,7 @@ void app_main(void)
 #ifndef HOP_NO_154
     hop_radio_init(0x0001, false, false);
 #endif
+    relay_key_init(); publish_key();
     memcpy(tbl, POLICY_TABLE, POLICY_TABLE_LEN); { uint8_t rc = parse_table(POLICY_TABLE_LEN); policy_ok = (rc == 0); }
     esp_ieee802154_set_txpower(LEVEL_FULL); level = LEVEL_FULL;
     ESP_LOGI(TAG, "power policy %s: %u B table, %u nodes; transmit power %d dBm", policy_ok ? "loaded" : "FAILED TO PARSE, full power for good", POLICY_TABLE_LEN, POLICY_N_NODES, level);
@@ -168,7 +185,8 @@ void app_main(void)
                 if (!strcmp(name, "full_power")) set_level(LEVEL_FULL); else if (!strcmp(name, "step_up")) set_level(level + LEVEL_STEP); else if (!strcmp(name, "step_down")) set_level(level - LEVEL_STEP);
                 if (route != last_route || level != before || esp_timer_get_time() - t_pwr > STATS_US) {
                     // a decision with a cause: sent up the hop so the host sees why the power moved
-                    msg_t pm; pwr_t pw = { {'P','W','R','1'}, (uint64_t)esp_timer_get_time(), route, steps, level, give_up_run, (uint16_t)retry_pct };
+                    msg_t pm; pwr_t pw = { {'P','W','R','2'}, (uint64_t)esp_timer_get_time(), route, steps, level, give_up_run, (uint16_t)retry_pct, {0} };
+                    if (relay_key) crypto_ed25519_sign(pw.sig, relay_sk, (const uint8_t *)&pw, sizeof pw - 64);
                     memcpy(pm.d, &pw, sizeof pw); pm.len = sizeof pw; xQueueSend(qpwr, &pm, 0); t_pwr = esp_timer_get_time();
                     if (route != last_route || level != before) ESP_LOGI(TAG, "power policy: %s (give ups in a row %u, retries %ld%%, backoff %d dB) -> %d dBm", name, give_up_run, (long)retry_pct, LEVEL_FULL - before, level);
                 }
@@ -179,6 +197,7 @@ void app_main(void)
             // the counters also cross the hop, so a relay on a battery is still observed at the host
             msg_t sm; sta_t st = { {'S','T','A','1'}, (uint64_t)esp_timer_get_time(), n_in, n_sub, n_retry, n_given_up, n_fail, (uint16_t)uxQueueMessagesWaiting(q), (uint16_t)uxQueueMessagesWaiting(qbulk) };
             memcpy(sm.d, &st, sizeof st); sm.len = sizeof st; xQueueSend(q, &sm, 0);
+            { static int n_stat = 0; if (++n_stat % 6 == 0) publish_key(); }   // the public key rides along once a minute
             t_log = esp_timer_get_time(); ESP_LOGI(TAG, "in %lu, sub frames acked %lu, retries %lu, given up %lu, raw tx failures %lu", (unsigned long)n_in, (unsigned long)n_sub, (unsigned long)n_retry, (unsigned long)n_given_up, (unsigned long)n_fail); }
     }
 }
