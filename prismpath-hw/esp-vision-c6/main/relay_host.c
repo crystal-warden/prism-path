@@ -20,6 +20,7 @@ static volatile uint16_t rssi_n = 0; static volatile int32_t rssi_sum = 0; stati
 #define RSSI_US 2000000
 // a pending command: "CMD1" | nid u16 | len u8 | data[len] read from USB becomes 'C' | nid | data on the hop
 static uint8_t cmd[32]; static uint8_t cmd_len = 0; static bool cmd_pending = false; static uint16_t cmd_tries = 0;
+static int64_t mute_until = 0;
 #define CMD_MAX_TRIES 200
 void esp_ieee802154_receive_done(uint8_t *frame, esp_ieee802154_frame_info_t *info)
 {
@@ -39,7 +40,12 @@ static void poll_usb(void)
         if (ib_n < (int)sizeof ib) ib[ib_n++] = tmp[i];
         if (ib_n >= 7 && memcmp(ib, "CMD1", 4) == 0) {
             int len = ib[6];
-            if (ib_n >= 7 + len) { cmd[0] = 'C'; cmd[1] = ib[4]; cmd[2] = ib[5]; memcpy(cmd + 3, ib + 7, len); cmd_len = (uint8_t)(3 + len); cmd_pending = true; cmd_tries = 0; ib_n = 0; }
+            if (ib_n >= 7 + len) {
+                uint16_t nid = ib[4] | (ib[5] << 8);
+                if (nid == HOP_HOST_ADDR && len >= 2 && ib[7] == 'm') { mute_until = esp_timer_get_time() + (int64_t)ib[8] * 1000000; esp_ieee802154_sleep(); }   // a bench hook: this relay goes deaf for N seconds so the air relay's policy meets a run of give ups
+                else { cmd[0] = 'C'; cmd[1] = ib[4]; cmd[2] = ib[5]; memcpy(cmd + 3, ib + 7, len); cmd_len = (uint8_t)(3 + len); cmd_pending = true; cmd_tries = 0; }
+                ib_n = 0;
+            }
         } else if (ib_n >= 4 && memcmp(ib, "CMD1", 4) != 0) ib_n = 0;   // resync on anything that is not a command
     }
 }
@@ -64,6 +70,7 @@ void app_main(void)
     static uint8_t asm_buf[256]; uint16_t asm_id = 0xffff; uint8_t asm_have = 0, asm_total = 0; uint16_t asm_len = 0; uint64_t asm_t = 0;
     rx_t r;
     while (1) {
+        if (mute_until) { if (esp_timer_get_time() < mute_until) { poll_usb(); vTaskDelay(pdMS_TO_TICKS(10)); continue; } mute_until = 0; esp_ieee802154_receive(); }
         static int64_t t_rssi = 0;
         if (esp_timer_get_time() - t_rssi > RSSI_US) {
             t_rssi = esp_timer_get_time(); uint16_t n = rssi_n; int32_t sum = rssi_sum; int8_t mn = rssi_min, mx = rssi_max; rssi_n = 0; rssi_sum = 0; rssi_min = 127; rssi_max = -128;

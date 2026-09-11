@@ -19,14 +19,34 @@
 #include "lwip/sockets.h"
 #include "hop.h"
 #include "esp_rom_sys.h"
+#include "hop_policy.h"
+#include "ppt_eval.h"
 static const char *TAG = "air";
+// The transmit power is a policy, not a knob (hop_power.md): once a second the relay evaluates the authored flow on
+// its own counters and sets the radio from the route. Code keeps only the mechanism and the floor: if the table
+// does not parse the radio stays at full power and the policy never runs.
+#define LEVEL_FULL 20
+#define LEVEL_FLOOR (-24)
+#define LEVEL_STEP 6
+#define WINDOW_S 10
+static bool policy_ok = false; static int8_t level = LEVEL_FULL; static uint16_t give_up_run = 0;
+static uint32_t win_retry[WINDOW_S], win_sub[WINDOW_S]; static int win_i = 0; static uint32_t last_retry = 0, last_sub = 0;
+typedef struct __attribute__((packed)) { char magic[4]; uint64_t t; uint16_t route, steps; int8_t level; uint16_t give_up_run, retry_pct; } pwr_t;
+static void set_level(int8_t l) { if (l > LEVEL_FULL) l = LEVEL_FULL; if (l < LEVEL_FLOOR) l = LEVEL_FLOOR; if (l != level) { level = l; esp_ieee802154_set_txpower(level); } }
+static uint16_t policy_decide(int32_t gur, int32_t retry_pct, int32_t backoff, uint16_t *steps_out)
+{
+    memset(regs, 0, sizeof regs); set_reg(REG_give_up_run, gur); set_reg(REG_retry_pct, retry_pct); set_reg(REG_backoff, backoff);
+    uint16_t node = start_node, target = 0, steps = 0; uint8_t err = 0;
+    while (steps < max_steps && node_edge_count(node) > 0) { int8_t e = evaluate(node, &target, &err); if (e < 0 || err) break; node = target; steps++; }
+    *steps_out = steps; return node;
+}
 #define HOP_SSID "prismpath-hop"
 #define HOP_PORT 5050
 #ifndef WINDOW_US
 #define WINDOW_US 6000
 #endif
 typedef struct { uint16_t len; uint8_t d[250]; } msg_t;
-static QueueHandle_t q, qbulk; static SemaphoreHandle_t txdone;   // readings first: bulk (keyframe and evidence fragments) waits while readings are pending
+static QueueHandle_t q, qbulk, qpwr; static SemaphoreHandle_t txdone;   // qpwr: the policy's own decision records, never dropped behind readings   // readings first: bulk (keyframe and evidence fragments) waits while readings are pending
 static uint32_t n_in = 0, n_sub = 0, n_fail = 0, n_retry = 0, n_given_up = 0; static volatile bool last_acked;
 // the downlink: a command frame heard in the receive window goes to the camera whose node id it names
 typedef struct { uint8_t len; uint8_t d[32]; } cmd_t;
@@ -50,7 +70,7 @@ static void cmd_task(void *arg)
         if (xQueueReceive(qcmd, &c, portMAX_DELAY) != pdTRUE) continue;
         uint16_t nid = c.d[1] | (c.d[2] << 8); int sent = 0;
         if (nid == 0x0000) {   // for the relay itself
-            if (c.d[3] == 'p' && c.len >= 5) { int8_t dbm = (int8_t)c.d[4]; esp_err_t e = esp_ieee802154_set_txpower(dbm); ESP_LOGI(TAG, "802.15.4 transmit power %d dBm: %s (now %d)", dbm, esp_err_to_name(e), esp_ieee802154_get_txpower()); }
+            if (c.d[3] == 'p' && c.len >= 5) { set_level((int8_t)c.d[4]); ESP_LOGI(TAG, "operator set transmit power %d dBm (now %d); the policy continues from here", (int8_t)c.d[4], esp_ieee802154_get_txpower()); }
             continue;
         }
         for (int i = 0; i < MAX_NODES; i++) if (nodes[i].set && (nodes[i].nid == nid || nid == 0xffff)) { sendto(usock, c.d, c.len, 0, (struct sockaddr *)&nodes[i].addr, sizeof nodes[i].addr); sent++; }
@@ -81,7 +101,7 @@ static void udp_task(void *arg)
 void app_main(void)
 {
     xiao_antenna_internal();
-    q = xQueueCreate(64, sizeof(msg_t)); qbulk = xQueueCreate(160, sizeof(msg_t)); txdone = xSemaphoreCreateBinary(); qcmd = xQueueCreate(8, sizeof(cmd_t));   // readings never wait behind a keyframe burst
+    q = xQueueCreate(64, sizeof(msg_t)); qbulk = xQueueCreate(160, sizeof(msg_t)); txdone = xSemaphoreCreateBinary(); qcmd = xQueueCreate(8, sizeof(cmd_t)); qpwr = xQueueCreate(16, sizeof(msg_t));   // readings never wait behind a keyframe burst
     esp_err_t e = nvs_flash_init(); if (e == ESP_ERR_NVS_NO_FREE_PAGES || e == ESP_ERR_NVS_NEW_VERSION_FOUND) { nvs_flash_erase(); nvs_flash_init(); }
     esp_netif_init(); esp_event_loop_create_default(); esp_netif_create_default_wifi_ap();
     wifi_init_config_t wc = WIFI_INIT_CONFIG_DEFAULT(); esp_wifi_init(&wc); esp_wifi_set_storage(WIFI_STORAGE_RAM);
@@ -91,6 +111,9 @@ void app_main(void)
 #ifndef HOP_NO_154
     hop_radio_init(0x0001, false, false);
 #endif
+    memcpy(tbl, POLICY_TABLE, POLICY_TABLE_LEN); { uint8_t rc = parse_table(POLICY_TABLE_LEN); policy_ok = (rc == 0); }
+    esp_ieee802154_set_txpower(LEVEL_FULL); level = LEVEL_FULL;
+    ESP_LOGI(TAG, "power policy %s: %u B table, %u nodes; transmit power %d dBm", policy_ok ? "loaded" : "FAILED TO PARSE, full power for good", POLICY_TABLE_LEN, POLICY_N_NODES, level);
 #ifdef WIFI_SCAN
     // receive path check: can this radio hear anything at all? APSTA so the AP stays up while the STA scans
     wifi_scan_config_t sc = { .show_hidden = true }; esp_wifi_scan_start(&sc, true);
@@ -104,7 +127,7 @@ void app_main(void)
     static uint8_t frame[130]; static uint8_t sub[SUB_HDR + SUB_DATA]; uint8_t seq = 0; uint16_t id = 0; int64_t t_log = esp_timer_get_time();
     msg_t m;
     while (1) {
-        bool reading = (xQueueReceive(q, &m, 0) == pdTRUE);
+        bool from_pwr = (xQueueReceive(qpwr, &m, 0) == pdTRUE); bool reading = from_pwr || (xQueueReceive(q, &m, 0) == pdTRUE); bool all_ok = true;
         bool got = reading || (uxQueueMessagesWaiting(q) == 0 && xQueueReceive(qbulk, &m, pdMS_TO_TICKS(20)) == pdTRUE);
         if (got) {
             n_in++; uint8_t total = (uint8_t)((m.len + SUB_DATA - 1) / SUB_DATA); id++;
@@ -121,13 +144,35 @@ void app_main(void)
                     if (esp_ieee802154_transmit(frame, false) != ESP_OK) continue;
                     if (xSemaphoreTake(txdone, pdMS_TO_TICKS(12)) == pdTRUE) ok = last_acked;   // an ack arrives within a millisecond or not at all
                 }
-                if (ok) n_sub++; else n_given_up++;
+                if (ok) { n_sub++; give_up_run = 0; } else { n_given_up++; give_up_run++; }
+                if (!ok) all_ok = false;
                 // the downlink window: after a reading's sub frame was acked, listen a few milliseconds for a command
                 // frame from the host relay, then go quiet again so the access point keeps its airtime
                 if (ok && reading) { esp_ieee802154_receive(); esp_rom_delay_us(WINDOW_US); esp_ieee802154_sleep(); }
 #else
                 n_sub++;
 #endif
+            }
+            // a decision record outlives the outage it was made in: back to the front of its queue until it is acked
+            if (from_pwr && !all_ok) { xQueueSendToFront(qpwr, &m, 0); vTaskDelay(pdMS_TO_TICKS(200)); }
+        }
+        static int64_t t_tick = 0; static uint16_t last_route = 0xffff; static int64_t t_pwr = 0;
+        if (esp_timer_get_time() - t_tick > 1000000) {
+            t_tick = esp_timer_get_time();
+            uint32_t subs = n_sub + n_given_up; win_retry[win_i] = n_retry - last_retry; win_sub[win_i] = subs - last_sub; last_retry = n_retry; last_sub = subs; win_i = (win_i + 1) % WINDOW_S;
+            uint32_t r = 0, sf = 0; for (int i = 0; i < WINDOW_S; i++) { r += win_retry[i]; sf += win_sub[i]; }
+            int32_t retry_pct = (int32_t)(sf ? (100u * r) / sf : 0);
+            if (policy_ok) {
+                uint16_t steps; uint16_t route = policy_decide(give_up_run, retry_pct, LEVEL_FULL - level, &steps);
+                const char *name = POLICY_NODE_NAMES[route]; int8_t before = level;
+                if (!strcmp(name, "full_power")) set_level(LEVEL_FULL); else if (!strcmp(name, "step_up")) set_level(level + LEVEL_STEP); else if (!strcmp(name, "step_down")) set_level(level - LEVEL_STEP);
+                if (route != last_route || level != before || esp_timer_get_time() - t_pwr > STATS_US) {
+                    // a decision with a cause: sent up the hop so the host sees why the power moved
+                    msg_t pm; pwr_t pw = { {'P','W','R','1'}, (uint64_t)esp_timer_get_time(), route, steps, level, give_up_run, (uint16_t)retry_pct };
+                    memcpy(pm.d, &pw, sizeof pw); pm.len = sizeof pw; xQueueSend(qpwr, &pm, 0); t_pwr = esp_timer_get_time();
+                    if (route != last_route || level != before) ESP_LOGI(TAG, "power policy: %s (give ups in a row %u, retries %ld%%, backoff %d dB) -> %d dBm", name, give_up_run, (long)retry_pct, LEVEL_FULL - before, level);
+                }
+                last_route = route;
             }
         }
         if (esp_timer_get_time() - t_log > STATS_US) {
