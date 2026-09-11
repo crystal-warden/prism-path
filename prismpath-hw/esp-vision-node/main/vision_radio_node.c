@@ -43,8 +43,9 @@ static uint16_t node_id;
 static uint8_t *last_sent; static uint16_t frag_id = 0;
 static void send_keyframe(camera_fb_t *fb, uint32_t seq, uint64_t t_cap)
 {
-    uint8_t *jpg = NULL; size_t jlen = 0;
-    if (!frame2jpg(fb, KEY_QUALITY, &jpg, &jlen)) { ESP_LOGE(TAG, "frame2jpg failed"); return; }
+    // the keyframe is the normal itself, not the current frame: at adoption they are the same, at a resend or a request they are not
+    uint8_t *jpg = NULL; size_t jlen = 0; camera_fb_t bg = *fb; bg.buf = background; bg.len = W * H;
+    if (!frame2jpg(&bg, KEY_QUALITY, &jpg, &jlen)) { ESP_LOGE(TAG, "frame2jpg failed"); return; }
     uint8_t *msg = malloc(sizeof(key_hdr_t) + jlen); key_hdr_t kh = { {'K','E','Y','3'}, node_id, normal_id, seq, t_cap, (uint32_t)jlen };
     memcpy(msg, &kh, sizeof kh); memcpy(msg + sizeof kh, jpg, jlen); free(jpg);
     radio_send_fragmented(node_id, frag_id++, msg, sizeof kh + jlen); free(msg);
@@ -80,7 +81,7 @@ void app_main(void)
     vTaskDelay(pdMS_TO_TICKS(3000));
     { sensor_t *sen = esp_camera_sensor_get(); if (sen) { sen->set_exposure_ctrl(sen, 0); sen->set_gain_ctrl(sen, 0); ESP_LOGI(TAG, "exposure and gain locked: aec_value=%d agc_gain=%d", sen->status.aec_value, sen->status.agc_gain); } }
     ESP_LOGI(TAG, "radio node %02x:%02x:%02x:%02x:%02x:%02x streaming over ESP-NOW", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
-    uint32_t seq = 0; static uint8_t pkt[ESPNOW_MAX]; uint64_t t_key = 0, t_evd = 0; uint16_t last_normal = 0xffff; bool adopt_now = false;
+    uint32_t seq = 0; static uint8_t pkt[ESPNOW_MAX]; uint64_t t_key = 0, t_evd = 0; uint16_t last_normal = 0xffff; bool adopt_now = false, key_now = false;
     usb_serial_jtag_driver_config_t ucfg = { .tx_buffer_size = 16384, .rx_buffer_size = 256 }; bool usb_ok = usb_serial_jtag_driver_install(&ucfg) == ESP_OK;   // the operator sends n to adopt the current frame as the normal
     while (1) {
         uint8_t ch; if (usb_ok && usb_serial_jtag_read_bytes(&ch, 1, 0) == 1 && ch == 'n') { ESP_LOGI(TAG, "operator adopts the normal"); adopt_now = true; }
@@ -91,6 +92,7 @@ void app_main(void)
                 uint16_t to = cb[1] | (cb[2] << 8);
                 if (to == node_id || to == 0xffff) {
                     if (cb[3] == 'n') { ESP_LOGI(TAG, "adopt over the air"); adopt_now = true; }
+                    else if (cb[3] == 'k') { ESP_LOGI(TAG, "keyframe requested over the air"); key_now = true; }   // a receiver that joined mid stream asks for the normal
                     else if (cb[3] == 'r' && r >= 7) {   // repair: 'r' | id u16 | n u8 | idx[n]
                         uint16_t id = cb[4] | (cb[5] << 8); int cnt = cb[6]; if (cnt > r - 7) cnt = r - 7;
                         int done = radio_resend_fragments(node_id, id, cb + 7, cnt);
@@ -114,7 +116,7 @@ void app_main(void)
         memcpy(pkt, &rh, sizeof rh); memcpy(pkt + sizeof rh, wirebuf, wire_len);
         esp_now_send(BCAST, pkt, sizeof rh + wire_len); hop_send(pkt, sizeof rh + wire_len);
         // a keyframe whenever the normal changed id (adoption, or the search for the first clean stretch ending), and every minute
-        if (normal_set && (normal_id != last_normal || t_dec - t_key > KEY_RESEND_US)) { send_keyframe(fb, seq, t_cap); t_key = t_dec; last_normal = normal_id; }
+        if (normal_set && (normal_id != last_normal || key_now || t_dec - t_key > KEY_RESEND_US)) { send_keyframe(fb, seq, t_cap); t_key = t_dec; last_normal = normal_id; key_now = false; }
         if (escalates(node) && t_dec - t_evd > EVIDENCE_GAP_US) { send_evidence(fb, seq, t_cap, node); t_evd = t_dec; }
         esp_camera_fb_return(fb); seq++;
     }
