@@ -12,6 +12,44 @@
 #include "freertos/semphr.h"
 #include "esp_rom_sys.h"
 #include "hop.h"
+#include "ppt_eval.h"
+#include "fusion_policy.h"
+// Fusion on the relay (A4): the two cameras' last routes and the relay's own receive clock are the facts; the room's
+// verdict is a policy walk (room_fusion.md), and a camera that goes quiet is STALE, a state the policy decides on.
+// "FUS1" | t u64 | route u16 | a_fresh b_fresh a_occ b_occ a_tamper b_tamper (u8 each) | a_seq u32 | b_seq u32 | a_age_ms u16 | b_age_ms u16
+static void emit(const uint8_t *payload, uint16_t len);
+#define FRESH_US 1500000
+#define FUSION_TICK_US 250000
+#define FUSION_RESEND_US 2000000
+static struct { uint32_t seq; uint16_t node; int64_t t_rx; bool seen; } cam[2];
+static bool fusion_ok = false;
+static void fusion_note(const uint8_t *pl, uint16_t len)
+{
+    if (len < 30 || memcmp(pl, "RDG", 3) != 0 || pl[3] < '3') return;
+    uint16_t nid = pl[4] | (pl[5] << 8); uint32_t seq; memcpy(&seq, pl + 8, 4); uint16_t node = pl[28] | (pl[29] << 8);
+    int k = nid == FUSION_A ? 0 : nid == FUSION_B ? 1 : -1; if (k < 0) return;
+    cam[k].seq = seq; cam[k].node = node; cam[k].t_rx = esp_timer_get_time(); cam[k].seen = true;
+}
+static void fusion_tick(void)
+{
+    static int64_t t_tick = 0, t_sent = 0; static uint16_t last_route = 0xffff; int64_t now = esp_timer_get_time();
+    if (!fusion_ok || now - t_tick < FUSION_TICK_US) return;
+    t_tick = now;
+    int32_t f[2], o[2], tm[2]; uint16_t age[2];
+    for (int k = 0; k < 2; k++) {
+        int64_t a = cam[k].seen ? now - cam[k].t_rx : (int64_t)1 << 40; f[k] = cam[k].seen && a < FRESH_US;
+        o[k] = f[k] && ((CAM_OCC_MASK >> cam[k].node) & 1); tm[k] = f[k] && ((CAM_TAMPER_MASK >> cam[k].node) & 1); age[k] = (uint16_t)(a / 1000 > 65535 ? 65535 : a / 1000);
+    }
+    memset(regs, 0, sizeof regs); set_reg(FREG_a_fresh, f[0]); set_reg(FREG_b_fresh, f[1]); set_reg(FREG_a_occ, o[0]); set_reg(FREG_b_occ, o[1]); set_reg(FREG_a_tamper, tm[0]); set_reg(FREG_b_tamper, tm[1]);
+    uint16_t node = start_node, target = 0, steps = 0; uint8_t err = 0;
+    while (steps < max_steps && node_edge_count(node) > 0) { int8_t e = evaluate(node, &target, &err); if (e < 0 || err) break; node = target; steps++; }
+    if (node != last_route || now - t_sent > FUSION_RESEND_US) {
+        uint8_t rec[36]; memcpy(rec, "FUS1", 4); uint64_t t = (uint64_t)now; memcpy(rec + 4, &t, 8); memcpy(rec + 12, &node, 2);
+        rec[14] = f[0]; rec[15] = f[1]; rec[16] = o[0]; rec[17] = o[1]; rec[18] = tm[0]; rec[19] = tm[1];
+        memcpy(rec + 20, &cam[0].seq, 4); memcpy(rec + 24, &cam[1].seq, 4); memcpy(rec + 28, &age[0], 2); memcpy(rec + 30, &age[1], 2); uint16_t st = steps; memcpy(rec + 32, &st, 2); rec[34] = 0; rec[35] = 0;
+        emit(rec, sizeof rec); last_route = node; t_sent = now;
+    }
+}
 typedef struct { uint64_t t; uint8_t len; uint8_t d[128]; } rx_t;
 static QueueHandle_t q; static SemaphoreHandle_t txdone; static volatile bool last_acked;
 // received signal strength on the hop, summed in the receive callback and emitted every two seconds as
@@ -67,6 +105,7 @@ void app_main(void)
     q = xQueueCreate(64, sizeof(rx_t)); txdone = xSemaphoreCreateBinary();
     usb_serial_jtag_driver_config_t ucfg = { .tx_buffer_size = 16384, .rx_buffer_size = 256 }; ESP_ERROR_CHECK(usb_serial_jtag_driver_install(&ucfg));
     hop_radio_init(HOP_HOST_ADDR, false, true);   // not promiscuous: the hardware acks frames addressed to us
+    memcpy(tbl, FUSION_TABLE, FUSION_TABLE_LEN); fusion_ok = (parse_table(FUSION_TABLE_LEN) == 0);
     static uint8_t asm_buf[256]; uint16_t asm_id = 0xffff; uint8_t asm_have = 0, asm_total = 0; uint16_t asm_len = 0; uint64_t asm_t = 0;
     rx_t r;
     while (1) {
@@ -76,6 +115,7 @@ void app_main(void)
             t_rssi = esp_timer_get_time(); uint16_t n = rssi_n; int32_t sum = rssi_sum; int8_t mn = rssi_min, mx = rssi_max; rssi_n = 0; rssi_sum = 0; rssi_min = 127; rssi_max = -128;
             if (n) { uint8_t rec[20]; uint64_t t = (uint64_t)esp_timer_get_time(); memcpy(rec, "RSS1", 4); memcpy(rec + 4, &t, 8); memcpy(rec + 12, &n, 2); memcpy(rec + 14, &sum, 4); rec[18] = (uint8_t)mn; rec[19] = (uint8_t)mx; emit(rec, sizeof rec); }
         }
+        fusion_tick();
         if (xQueueReceive(q, &r, pdMS_TO_TICKS(10)) != pdTRUE) { poll_usb(); continue; }
         poll_usb();
         // r.d[0] = length incl. FCS; MHR at r.d[1..9]; payload after; the FCS is not delivered
@@ -92,7 +132,7 @@ void app_main(void)
         memcpy(asm_buf + (size_t)idx * SUB_DATA, p + SUB_HDR, n); asm_len = (uint16_t)(idx * SUB_DATA + n); asm_have++;
         if (asm_have == asm_total) {
             uint8_t hdr[14]; memcpy(hdr, "ENF1", 4); memcpy(hdr + 4, &asm_t, 8); memcpy(hdr + 12, &asm_len, 2);
-            usb_write_all(hdr, sizeof hdr); usb_write_all(asm_buf, asm_len); asm_id = 0xffff;
+            usb_write_all(hdr, sizeof hdr); usb_write_all(asm_buf, asm_len); fusion_note(asm_buf, asm_len); asm_id = 0xffff;
         }
     }
 }
