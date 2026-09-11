@@ -49,6 +49,10 @@ static void cmd_task(void *arg)
     while (1) {
         if (xQueueReceive(qcmd, &c, portMAX_DELAY) != pdTRUE) continue;
         uint16_t nid = c.d[1] | (c.d[2] << 8); int sent = 0;
+        if (nid == 0x0000) {   // for the relay itself
+            if (c.d[3] == 'p' && c.len >= 5) { int8_t dbm = (int8_t)c.d[4]; esp_err_t e = esp_ieee802154_set_txpower(dbm); ESP_LOGI(TAG, "802.15.4 transmit power %d dBm: %s (now %d)", dbm, esp_err_to_name(e), esp_ieee802154_get_txpower()); }
+            continue;
+        }
         for (int i = 0; i < MAX_NODES; i++) if (nodes[i].set && (nodes[i].nid == nid || nid == 0xffff)) { sendto(usock, c.d, c.len, 0, (struct sockaddr *)&nodes[i].addr, sizeof nodes[i].addr); sent++; }
         ESP_LOGI(TAG, "command '%c' for node %04x forwarded to %d camera(s)", c.d[3], nid, sent);
     }

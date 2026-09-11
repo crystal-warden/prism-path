@@ -14,12 +14,17 @@
 #include "hop.h"
 typedef struct { uint64_t t; uint8_t len; uint8_t d[128]; } rx_t;
 static QueueHandle_t q; static SemaphoreHandle_t txdone; static volatile bool last_acked;
+// received signal strength on the hop, summed in the receive callback and emitted every two seconds as
+// "RSS1" | t u64 | n u16 | sum i32 | min i8 | max i8, the instrument for range and attenuation tests
+static volatile uint16_t rssi_n = 0; static volatile int32_t rssi_sum = 0; static volatile int8_t rssi_min = 127, rssi_max = -128;
+#define RSSI_US 2000000
 // a pending command: "CMD1" | nid u16 | len u8 | data[len] read from USB becomes 'C' | nid | data on the hop
 static uint8_t cmd[32]; static uint8_t cmd_len = 0; static bool cmd_pending = false; static uint16_t cmd_tries = 0;
 #define CMD_MAX_TRIES 200
 void esp_ieee802154_receive_done(uint8_t *frame, esp_ieee802154_frame_info_t *info)
 {
-    (void)info; rx_t r; r.t = (uint64_t)esp_timer_get_time(); r.len = frame[0]; memcpy(r.d, frame, frame[0] + 1);
+    rx_t r; r.t = (uint64_t)esp_timer_get_time(); r.len = frame[0]; memcpy(r.d, frame, frame[0] + 1);
+    if (info) { rssi_n++; rssi_sum += info->rssi; if (info->rssi < rssi_min) rssi_min = info->rssi; if (info->rssi > rssi_max) rssi_max = info->rssi; }
     esp_ieee802154_receive_handle_done(frame); BaseType_t w = pdFALSE; xQueueSendFromISR(q, &r, &w);
 }
 void esp_ieee802154_transmit_done(const uint8_t *frame, const uint8_t *ack, esp_ieee802154_frame_info_t *ack_info) { (void)frame; (void)ack_info; last_acked = (ack != NULL); if (ack) esp_ieee802154_receive_handle_done(ack); BaseType_t w = pdFALSE; xSemaphoreGiveFromISR(txdone, &w); }
@@ -59,6 +64,11 @@ void app_main(void)
     static uint8_t asm_buf[256]; uint16_t asm_id = 0xffff; uint8_t asm_have = 0, asm_total = 0; uint16_t asm_len = 0; uint64_t asm_t = 0;
     rx_t r;
     while (1) {
+        static int64_t t_rssi = 0;
+        if (esp_timer_get_time() - t_rssi > RSSI_US) {
+            t_rssi = esp_timer_get_time(); uint16_t n = rssi_n; int32_t sum = rssi_sum; int8_t mn = rssi_min, mx = rssi_max; rssi_n = 0; rssi_sum = 0; rssi_min = 127; rssi_max = -128;
+            if (n) { uint8_t rec[20]; uint64_t t = (uint64_t)esp_timer_get_time(); memcpy(rec, "RSS1", 4); memcpy(rec + 4, &t, 8); memcpy(rec + 12, &n, 2); memcpy(rec + 14, &sum, 4); rec[18] = (uint8_t)mn; rec[19] = (uint8_t)mx; emit(rec, sizeof rec); }
+        }
         if (xQueueReceive(q, &r, pdMS_TO_TICKS(10)) != pdTRUE) { poll_usb(); continue; }
         poll_usb();
         // r.d[0] = length incl. FCS; MHR at r.d[1..9]; payload after; the FCS is not delivered

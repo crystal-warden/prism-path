@@ -87,7 +87,17 @@ void app_main(void)
         // the same command over the air: the relay forwards 'C' | nid | data to the camera it names (0xffff = all)
         if (hop_up && hop_sock >= 0) {
             uint8_t cb[32]; int r = recv(hop_sock, cb, sizeof cb, MSG_DONTWAIT);
-            if (r >= 4 && cb[0] == 'C') { uint16_t to = cb[1] | (cb[2] << 8); if ((to == node_id || to == 0xffff) && cb[3] == 'n') { ESP_LOGI(TAG, "adopt over the air"); adopt_now = true; } }
+            if (r >= 4 && cb[0] == 'C') {
+                uint16_t to = cb[1] | (cb[2] << 8);
+                if (to == node_id || to == 0xffff) {
+                    if (cb[3] == 'n') { ESP_LOGI(TAG, "adopt over the air"); adopt_now = true; }
+                    else if (cb[3] == 'r' && r >= 7) {   // repair: 'r' | id u16 | n u8 | idx[n]
+                        uint16_t id = cb[4] | (cb[5] << 8); int cnt = cb[6]; if (cnt > r - 7) cnt = r - 7;
+                        int done = radio_resend_fragments(node_id, id, cb + 7, cnt);
+                        ESP_LOGI(TAG, "repair for message %u: %d fragment(s) %s", id, cnt, done < 0 ? "no longer held" : "resent");
+                    }
+                }
+            }
         }
         camera_fb_t *fb = esp_camera_fb_get(); if (!fb) continue;
         uint64_t t_cap = (uint64_t)fb->timestamp.tv_sec * 1000000ULL + (uint64_t)fb->timestamp.tv_usec;

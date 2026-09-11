@@ -4,6 +4,7 @@
 #pragma once
 #include <string.h>
 #include "esp_wifi.h"
+#include "esp_heap_caps.h"
 #include "esp_now.h"
 #include "nvs_flash.h"
 #include "esp_netif.h"
@@ -51,8 +52,35 @@ static void radio_init(esp_now_recv_cb_t on_recv)
     esp_now_init(); if (on_recv) esp_now_register_recv_cb(on_recv);
     esp_now_peer_info_t peer = {0}; memcpy(peer.peer_addr, BCAST, 6); peer.ifidx = WIFI_IF_STA; peer.channel = 0; peer.encrypt = false; esp_now_add_peer(&peer);
 }
+// the last few fragmented messages stay in PSRAM so a repair request ('r' | id u16 | n u8 | idx[n]) can resend
+// exactly the fragments a receiver did not get; readings are acknowledged hop by hop, fragments are not
+#define KEEP_MSGS 3
+static struct { uint16_t id; uint8_t *data; size_t len; bool set; } kept[KEEP_MSGS]; static int kept_next = 0;
+static void radio_send_one_fragment(uint16_t nid, uint16_t id, const uint8_t *data, size_t len, uint16_t i)
+{
+    uint16_t total = (uint16_t)((len + FRAG_DATA - 1) / FRAG_DATA); if (i >= total) return; uint8_t pkt[ESPNOW_MAX];
+    size_t off = (size_t)i * FRAG_DATA, n = len - off < FRAG_DATA ? len - off : FRAG_DATA;
+    frag_hdr_t h = { {'F','R','G','2'}, nid, id, i, total }; memcpy(pkt, &h, sizeof h); memcpy(pkt + sizeof h, data + off, n);
+    hop_send(pkt, sizeof h + n);
+}
+static int radio_resend_fragments(uint16_t nid, uint16_t id, const uint8_t *idx, int n)
+{
+    for (int k = 0; k < KEEP_MSGS; k++) if (kept[k].set && kept[k].id == id) {
+        for (int j = 0; j < n; j++) { radio_send_one_fragment(nid, id, kept[k].data, kept[k].len, idx[j]); vTaskDelay(pdMS_TO_TICKS(8)); }
+        return n;
+    }
+    return -1;
+}
+static void radio_keep(uint16_t id, const uint8_t *data, size_t len)
+{
+    int k = kept_next; kept_next = (kept_next + 1) % KEEP_MSGS;
+    if (kept[k].set) free(kept[k].data);
+    kept[k].data = heap_caps_malloc(len, MALLOC_CAP_SPIRAM); if (!kept[k].data) { kept[k].set = false; return; }
+    memcpy(kept[k].data, data, len); kept[k].len = len; kept[k].id = id; kept[k].set = true;
+}
 static void radio_send_fragmented(uint16_t nid, uint16_t id, const uint8_t *data, size_t len)
 {
+    radio_keep(id, data, len);
     uint16_t total = (uint16_t)((len + FRAG_DATA - 1) / FRAG_DATA); uint8_t pkt[ESPNOW_MAX];
     for (uint16_t i = 0; i < total; i++) {
         size_t off = (size_t)i * FRAG_DATA, n = len - off < FRAG_DATA ? len - off : FRAG_DATA;
