@@ -61,6 +61,7 @@ _REGISTRY: Tuple[Tuple[int, str, str, str], ...] = (
     (65, "state:recovered",              "state",     "fresh state restored after a stale episode"),
     (66, "state:migration-reset",        "state",     "reset-to migration parked the resident state"),
     (67, "state:swap-in-flight-park",    "state",     "evaluate during swap parked on the fail-safe"),
+    (68, "state:normal-unheld",          "state",     "the reading names a shared normal this side does not hold: abstain, the state the policy needs is absent"),
 )
 
 CODES: Dict[int, Tuple[str, str, str]] = {c: (n, k, d) for c, n, k, d in _REGISTRY}
