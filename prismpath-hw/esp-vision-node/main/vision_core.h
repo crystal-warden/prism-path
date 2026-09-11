@@ -142,11 +142,13 @@ static void usb_write_all(const uint8_t *p, size_t n) {
 static void usb_read_all(uint8_t *p, size_t n) {
     while (n) { int r = usb_serial_jtag_read_bytes(p, n, pdMS_TO_TICKS(1000)); if (r <= 0) continue; p += r; n -= r; }
 }
+static void codebook_from_header(void);
 static void vision_core_init(void) {
     prev = heap_caps_malloc(W * H, MALLOC_CAP_SPIRAM); background = heap_caps_malloc(W * H, MALLOC_CAP_SPIRAM);
     memcpy(tbl, POLICY_TABLE, POLICY_TABLE_LEN);
     uint8_t rc = parse_table(POLICY_TABLE_LEN);
     if (rc) { printf("table parse failed rc=%u\n", rc); while (1) vTaskDelay(1000); }
+    codebook_from_header();
 }
 static void decide(int32_t motion_cells, int32_t dark, int32_t step, int32_t door_hit, int32_t scene, uint16_t *out_node, uint16_t *out_steps) {
     memset(regs, 0, sizeof regs);
@@ -162,11 +164,21 @@ static void decide(int32_t motion_cells, int32_t dark, int32_t step, int32_t doo
     while (steps < max_steps && node_edge_count(node) > 0) { int8_t e = evaluate(node, &target, &err); if (e < 0 || err) break; node = target; steps++; }
     *out_node = node; *out_steps = steps;
 }
+// the codebook in RAM: initialised from the generated header, replaced by a signed pack at a policy swap
+#define CB_MAX_CUTS 4
+#define CB_MAX_FIELDS 128
+typedef struct { uint16_t reg; uint8_t n_cuts; int32_t cut[CB_MAX_CUTS]; } cb_field_t;
+static cb_field_t wire_fields[CB_MAX_FIELDS]; static int wire_n = 0; static uint32_t esc_mask = 0; static uint32_t policy_version = 1;
+static void codebook_from_header(void) {
+    wire_n = WIRE_N_FIELDS;
+    for (int i = 0; i < WIRE_N_FIELDS; i++) { wire_fields[i].reg = WIRE_FIELDS[i].reg; wire_fields[i].n_cuts = WIRE_FIELDS[i].n_cuts; for (int k = 0; k < CB_MAX_CUTS; k++) wire_fields[i].cut[k] = k < WIRE_MAX_CUTS ? WIRE_FIELDS[i].cut[k] : 0x7fffffff; }
+    esc_mask = 0; for (int n = 0; n < POLICY_N_NODES; n++) { const char *nm = POLICY_NODE_NAMES[n]; if (!strcmp(nm, "tamper") || !strcmp(nm, "evidence") || !strcmp(nm, "door") || !strcmp(nm, "scene_changed")) esc_mask |= 1u << n; }
+}
 static uint16_t encode_reading(uint8_t *wirebuf, size_t buflen) {
     memset(wirebuf, 0, buflen); bitacc_t acc = { wirebuf, 0 };
-    for (int i = 0; i < WIRE_N_FIELDS; i++) {
-        int32_t v = get_reg(WIRE_FIELDS[i].reg); uint32_t sym = 0;
-        for (int k = 0; k < WIRE_FIELDS[i].n_cuts; k++) if (v >= WIRE_FIELDS[i].cut[k]) sym = k + 1;
+    for (int i = 0; i < wire_n; i++) {
+        int32_t v = get_reg(wire_fields[i].reg); uint32_t sym = 0;
+        for (int k = 0; k < wire_fields[i].n_cuts; k++) if (v >= wire_fields[i].cut[k]) sym = k + 1;
         zeck_encode(&acc, (uint64_t)sym + 1);
     }
     return (uint16_t)((acc.bitpos + 7u) >> 3);

@@ -13,6 +13,8 @@
 #include "esp_timer.h"
 #include "esp_heap_caps.h"
 #include "mbedtls/sha256.h"
+#include "monocypher-ed25519.h"
+#include "authority_pubkey.h"
 #include "esp_log.h"
 #include "driver/usb_serial_jtag.h"
 #include "vision_policy.h"
@@ -38,7 +40,7 @@ static const char *TAG = "radio";
 #define KEY_RESEND_US 60000000ULL   // resend the background every minute so a receiver that joins late holds a normal
 // RDG4: the reading carries the first eight bytes of the SHA-256 of the previous reading record (header and wire), a hash
 // chain that binds the trail to the node: a receiver can tell a lost reading (a gap in sequence) from a spliced one
-typedef struct __attribute__((packed)) { char magic[4]; uint16_t nid, norm; uint32_t seq; uint64_t t_cap, t_dec; uint16_t node, steps, wire_len; uint64_t prev; } rdg_hdr_t;
+typedef struct __attribute__((packed)) { char magic[4]; uint16_t nid, norm; uint32_t seq; uint64_t t_cap, t_dec; uint16_t node, steps, wire_len; uint64_t prev; uint16_t pver; } rdg_hdr_t;   // RDG5: names the policy version that decided
 static uint64_t chain_prev = 0;
 typedef struct __attribute__((packed)) { char magic[4]; uint16_t nid, norm; uint32_t seq; uint64_t t_cap; uint32_t len; } key_hdr_t;
 typedef struct __attribute__((packed)) { char magic[4]; uint16_t nid, norm; uint32_t seq; uint64_t t_cap; uint16_t route; uint32_t len; } evd_hdr_t;
@@ -56,7 +58,53 @@ static void send_keyframe(camera_fb_t *fb, uint32_t seq, uint64_t t_cap)
     memcpy(last_sent, fb->buf, W * H);
     ESP_LOGI(TAG, "keyframe %lu B in %u fragments, normal %04x", (unsigned long)(sizeof kh + jlen), (unsigned)((sizeof kh + jlen + FRAG_DATA - 1) / FRAG_DATA), normal_id);
 }
-static bool escalates(uint16_t node) { const char *n = POLICY_NODE_NAMES[node]; return !strcmp(n, "tamper") || !strcmp(n, "evidence") || !strcmp(n, "door") || !strcmp(n, "scene_changed"); }
+static bool escalates(uint16_t node) { return (esc_mask >> node) & 1u; }
+// ---- the signed policy swap: chunks arrive as 'S' | idx u16 | total u16 | data over the hop, 'X' verifies and commits.
+// Pack: "PPKV1" | key_id[4] | version u32 | image_len u16 | cb_len u16 | esc_mask u32 | sig[64] | image | codebook; the
+// signature covers the 21 byte header, the image and the codebook. Refusals carry the kernel's cause codes.
+#define PACK_MAX 16384
+#define CHUNK 24
+static uint8_t *staged, *vmsg, *tbl_backup; static uint16_t staged_total = 0; static uint8_t staged_have[128]; static uint32_t staged_len = 0, staged_count = 0;
+typedef struct __attribute__((packed)) { char magic[4]; uint16_t nid; uint32_t version; uint16_t cause; uint32_t verify_us; uint64_t image_hash; uint64_t t; } swp_t;
+static void swap_reset(void) { staged_total = 0; staged_len = 0; staged_count = 0; memset(staged_have, 0, sizeof staged_have); }
+static void swap_chunk(const uint8_t *d, int n)
+{
+    uint16_t idx = d[0] | (d[1] << 8), total = d[2] | (d[3] << 8); const uint8_t *data = d + 4; int dn = n - 4;
+    if (total != staged_total) { swap_reset(); staged_total = total; }
+    if (idx >= 1024 || dn < 0 || (uint32_t)idx * CHUNK + dn > PACK_MAX) return;
+    memcpy(staged + (uint32_t)idx * CHUNK, data, dn); if ((uint32_t)idx * CHUNK + dn > staged_len) staged_len = (uint32_t)idx * CHUNK + dn;
+    if (!((staged_have[idx >> 3] >> (idx & 7)) & 1)) { staged_have[idx >> 3] |= 1 << (idx & 7); staged_count++; }
+}
+static uint16_t swap_execute(uint32_t *out_version, uint64_t *out_hash, uint32_t *out_us)
+{
+    int64_t t0 = esp_timer_get_time(); uint16_t cause = 0; uint32_t version = 0; uint64_t ih = 0;
+    if (staged_total == 0 || staged_count != staged_total) cause = 5;                                   // manifest:bad-format (incomplete)
+    else if (staged_len < 85 || memcmp(staged, "PPKV1", 5) != 0 || memcmp(staged + 5, KEY_ID, 4) != 0) cause = 5;
+    else {
+        version = rd32(staged + 9); uint16_t image_len = rd16b(staged + 13), cb_len = rd16b(staged + 15); uint32_t esc = (uint32_t)rd32(staged + 17);
+        if (85u + image_len + cb_len != staged_len || cb_len % 19 != 0 || cb_len / 19 > CB_MAX_FIELDS || image_len > TBL_MAX) cause = 5;
+        else {
+            bool zero = true; for (int i = 0; i < 64; i++) if (staged[21 + i]) { zero = false; break; }
+            if (zero) cause = 1;                                                                            // sig:missing
+            else {
+                memcpy(vmsg, staged, 21); memcpy(vmsg + 21, staged + 85, image_len + cb_len);
+                if (crypto_ed25519_check(staged + 21, AUTHORITY_PUBKEY, vmsg, 21 + image_len + cb_len) != 0) cause = 2;   // sig:invalid
+                else if (version <= policy_version) cause = 9;                                              // image:version-replay
+                else {
+                    memcpy(tbl_backup, tbl, TBL_MAX); memcpy(tbl, staged + 85, image_len);
+                    if (parse_table(image_len) != 0) { memcpy(tbl, tbl_backup, TBL_MAX); parse_table(POLICY_TABLE_LEN); cause = 16; }   // image:caps-exceeded (does not parse)
+                    else {
+                        const uint8_t *cb = staged + 85 + image_len; wire_n = cb_len / 19;
+                        for (int i = 0; i < wire_n; i++) { wire_fields[i].reg = rd16b(cb + 19 * i); wire_fields[i].n_cuts = cb[19 * i + 2]; for (int k = 0; k < CB_MAX_CUTS; k++) wire_fields[i].cut[k] = rd32(cb + 19 * i + 3 + 4 * k); }
+                        esc_mask = esc; policy_version = version;
+                        uint8_t h[32]; mbedtls_sha256(staged + 85, image_len, h, 0); memcpy(&ih, h, 8);
+                    }
+                }
+            }
+        }
+    }
+    *out_version = version; *out_hash = ih; *out_us = (uint32_t)(esp_timer_get_time() - t0); swap_reset(); return cause;
+}
 static void send_evidence(camera_fb_t *fb, uint32_t seq, uint64_t t_cap, uint16_t route)
 {
     uint8_t *jpg = NULL; size_t jlen = 0;
@@ -69,6 +117,7 @@ static void send_evidence(camera_fb_t *fb, uint32_t seq, uint64_t t_cap, uint16_
 void app_main(void)
 {
     vision_core_init(); last_sent = heap_caps_malloc(W * H, MALLOC_CAP_SPIRAM);
+    staged = heap_caps_malloc(PACK_MAX, MALLOC_CAP_SPIRAM); vmsg = heap_caps_malloc(PACK_MAX, MALLOC_CAP_SPIRAM); tbl_backup = heap_caps_malloc(TBL_MAX, MALLOC_CAP_SPIRAM); swap_reset();
     camera_config_t c = {
         .pin_pwdn = -1, .pin_reset = -1, .pin_xclk = CAM_XCLK, .pin_sccb_sda = CAM_SIOD, .pin_sccb_scl = CAM_SIOC,
         .pin_d7 = CAM_D7, .pin_d6 = CAM_D6, .pin_d5 = CAM_D5, .pin_d4 = CAM_D4, .pin_d3 = CAM_D3, .pin_d2 = CAM_D2,
@@ -90,13 +139,20 @@ void app_main(void)
     while (1) {
         uint8_t ch; if (usb_ok && usb_serial_jtag_read_bytes(&ch, 1, 0) == 1 && ch == 'n') { ESP_LOGI(TAG, "operator adopts the normal"); adopt_now = true; }
         // the same command over the air: the relay forwards 'C' | nid | data to the camera it names (0xffff = all)
-        if (hop_up && hop_sock >= 0) {
-            uint8_t cb[32]; int r = recv(hop_sock, cb, sizeof cb, MSG_DONTWAIT);
+        for (int drained = 0; hop_up && hop_sock >= 0 && drained < 8; drained++) {   // drain every command that arrived since the last frame (pack chunks come faster than frames)
+            uint8_t cb[32]; int r = recv(hop_sock, cb, sizeof cb, MSG_DONTWAIT); if (r <= 0) break;
             if (r >= 4 && cb[0] == 'C') {
                 uint16_t to = cb[1] | (cb[2] << 8);
                 if (to == node_id || to == 0xffff) {
                     if (cb[3] == 'n') { ESP_LOGI(TAG, "adopt over the air"); adopt_now = true; }
                     else if (cb[3] == 'k') { ESP_LOGI(TAG, "keyframe requested over the air"); key_now = true; }   // a receiver that joined mid stream asks for the normal
+                    else if (cb[3] == 'S' && r >= 8) swap_chunk(cb + 4, r - 4);
+                    else if (cb[3] == 'X') {
+                        uint32_t ver, us; uint64_t ih; uint16_t cause = swap_execute(&ver, &ih, &us);
+                        swp_t sw = { {'S','W','P','1'}, node_id, ver, cause, us, ih, (uint64_t)esp_timer_get_time() };
+                        uint8_t sb[sizeof sw]; memcpy(sb, &sw, sizeof sw); esp_now_send(BCAST, sb, sizeof sb); hop_send(sb, sizeof sb);
+                        ESP_LOGI(TAG, "policy swap to version %lu: %s (cause %u) in %lu us; now version %lu", (unsigned long)ver, cause ? "REFUSED" : "committed", cause, (unsigned long)us, (unsigned long)policy_version);
+                    }
                     else if (cb[3] == 'r' && r >= 7) {   // repair: 'r' | id u16 | n u8 | idx[n]
                         uint16_t id = cb[4] | (cb[5] << 8); int cnt = cb[6]; if (cnt > r - 7) cnt = r - 7;
                         int done = radio_resend_fragments(node_id, id, cb + 7, cnt);
@@ -116,7 +172,7 @@ void app_main(void)
         uint16_t node, steps; decide(motion_cells, dark, step, door_hit, scene, &node, &steps);
         uint8_t wirebuf[128]; uint16_t wire_len = encode_reading(wirebuf, sizeof wirebuf);
         uint64_t t_dec = (uint64_t)esp_timer_get_time();
-        rdg_hdr_t rh = { {'R','D','G','4'}, node_id, normal_id, seq, t_cap, t_dec, node, steps, wire_len, chain_prev };
+        rdg_hdr_t rh = { {'R','D','G','5'}, node_id, normal_id, seq, t_cap, t_dec, node, steps, wire_len, chain_prev, (uint16_t)policy_version };
         memcpy(pkt, &rh, sizeof rh); memcpy(pkt + sizeof rh, wirebuf, wire_len);
         esp_now_send(BCAST, pkt, sizeof rh + wire_len); hop_send(pkt, sizeof rh + wire_len);
         { uint8_t h[32]; mbedtls_sha256(pkt, sizeof rh + wire_len, h, 0); memcpy(&chain_prev, h, 8); }   // this record's hash is the next record's prev
