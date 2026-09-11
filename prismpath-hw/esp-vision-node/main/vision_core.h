@@ -2,8 +2,14 @@
 #pragma once
 #include <stdbool.h>
 static bool refreshed;   // set by front_end on the frame the background was replaced
+// T6: the same policy, grid and wire over more pixels; VISION_VGA builds the front end at 640 by 480 (cells 80 by 60)
+#ifdef VISION_VGA
+#define W 640
+#define H 480
+#else
 #define W 320
 #define H 240
+#endif
 #define R 6
 #define C 8
 #define CW (W / C)

@@ -16,3 +16,8 @@ else()
   idf_component_register(SRCS "vision_t0.c" REQUIRES esp_timer mbedtls)
   target_compile_definitions(${COMPONENT_LIB} PRIVATE T0_SECONDS=15)
 endif()
+
+# build switches, e.g. VISION_DEFS="VISION_VGA"
+if(DEFINED ENV{VISION_DEFS})
+  target_compile_definitions(${COMPONENT_LIB} PRIVATE $ENV{VISION_DEFS})
+endif()

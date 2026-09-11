@@ -69,7 +69,7 @@ void app_main(void)
         .pin_d7 = CAM_D7, .pin_d6 = CAM_D6, .pin_d5 = CAM_D5, .pin_d4 = CAM_D4, .pin_d3 = CAM_D3, .pin_d2 = CAM_D2,
         .pin_d1 = CAM_D1, .pin_d0 = CAM_D0, .pin_vsync = CAM_VSYNC, .pin_href = CAM_HREF, .pin_pclk = CAM_PCLK,
         .xclk_freq_hz = 20000000, .ledc_timer = LEDC_TIMER_0, .ledc_channel = LEDC_CHANNEL_0,
-        .pixel_format = PIXFORMAT_GRAYSCALE, .frame_size = FRAMESIZE_QVGA, .jpeg_quality = 12,
+        .pixel_format = PIXFORMAT_GRAYSCALE, .frame_size = (W == 640 ? FRAMESIZE_VGA : FRAMESIZE_QVGA), .jpeg_quality = 12,
         .fb_count = 3, .fb_location = CAMERA_FB_IN_PSRAM, .grab_mode = CAMERA_GRAB_LATEST,
     };
     ESP_ERROR_CHECK(esp_camera_init(&c));
@@ -103,7 +103,10 @@ void app_main(void)
         uint64_t t_cap = (uint64_t)fb->timestamp.tv_sec * 1000000ULL + (uint64_t)fb->timestamp.tv_usec;
         cur = fb->buf;
         if (adopt_now) { adopt_now = false; adopt_normal(); }
+        int64_t t_fe0 = esp_timer_get_time();
         int32_t motion_cells, dark, step, door_hit, scene; front_end(&motion_cells, &dark, &step, &door_hit, &scene);
+        { static int64_t fe_sum = 0, fe_max = 0, t_fe_log = 0; static int fe_n = 0; int64_t dt = esp_timer_get_time() - t_fe0; fe_sum += dt; fe_n++; if (dt > fe_max) fe_max = dt;
+          if (esp_timer_get_time() - t_fe_log > 10000000) { ESP_LOGI(TAG, "front end %dx%d: mean %lld us, max %lld us over %d frames; free PSRAM %u B", W, H, (long long)(fe_sum / fe_n), (long long)fe_max, fe_n, (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM)); fe_sum = 0; fe_n = 0; fe_max = 0; t_fe_log = esp_timer_get_time(); } }
         uint16_t node, steps; decide(motion_cells, dark, step, door_hit, scene, &node, &steps);
         uint8_t wirebuf[128]; uint16_t wire_len = encode_reading(wirebuf, sizeof wirebuf);
         uint64_t t_dec = (uint64_t)esp_timer_get_time();
