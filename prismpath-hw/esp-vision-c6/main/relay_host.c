@@ -9,30 +9,62 @@
 #include "freertos/queue.h"
 #include "esp_timer.h"
 #include "driver/usb_serial_jtag.h"
+#include "freertos/semphr.h"
+#include "esp_rom_sys.h"
 #include "hop.h"
 typedef struct { uint64_t t; uint8_t len; uint8_t d[128]; } rx_t;
-static QueueHandle_t q;
+static QueueHandle_t q; static SemaphoreHandle_t txdone; static volatile bool last_acked;
+// a pending command: "CMD1" | nid u16 | len u8 | data[len] read from USB becomes 'C' | nid | data on the hop
+static uint8_t cmd[32]; static uint8_t cmd_len = 0; static bool cmd_pending = false; static uint16_t cmd_tries = 0;
+#define CMD_MAX_TRIES 200
 void esp_ieee802154_receive_done(uint8_t *frame, esp_ieee802154_frame_info_t *info)
 {
     (void)info; rx_t r; r.t = (uint64_t)esp_timer_get_time(); r.len = frame[0]; memcpy(r.d, frame, frame[0] + 1);
     esp_ieee802154_receive_handle_done(frame); BaseType_t w = pdFALSE; xQueueSendFromISR(q, &r, &w);
 }
-void esp_ieee802154_transmit_done(const uint8_t *frame, const uint8_t *ack, esp_ieee802154_frame_info_t *ack_info) { (void)frame; (void)ack_info; if (ack) esp_ieee802154_receive_handle_done(ack); }
-void esp_ieee802154_transmit_failed(const uint8_t *frame, esp_ieee802154_tx_error_t error) { (void)frame; (void)error; }
+void esp_ieee802154_transmit_done(const uint8_t *frame, const uint8_t *ack, esp_ieee802154_frame_info_t *ack_info) { (void)frame; (void)ack_info; last_acked = (ack != NULL); if (ack) esp_ieee802154_receive_handle_done(ack); BaseType_t w = pdFALSE; xSemaphoreGiveFromISR(txdone, &w); }
+void esp_ieee802154_transmit_failed(const uint8_t *frame, esp_ieee802154_tx_error_t error) { (void)frame; (void)error; last_acked = false; BaseType_t w = pdFALSE; xSemaphoreGiveFromISR(txdone, &w); }
 static void usb_write_all(const uint8_t *p, size_t n) { while (n) { int w = usb_serial_jtag_write_bytes(p, n < 2048 ? n : 2048, pdMS_TO_TICKS(1000)); if (w <= 0) { vTaskDelay(1); continue; } p += w; n -= w; } }
+static void emit(const uint8_t *payload, uint16_t len) { uint64_t t = (uint64_t)esp_timer_get_time(); uint8_t hdr[14]; memcpy(hdr, "ENF1", 4); memcpy(hdr + 4, &t, 8); memcpy(hdr + 12, &len, 2); usb_write_all(hdr, sizeof hdr); usb_write_all(payload, len); }
+static void poll_usb(void)
+{
+    static uint8_t ib[64]; static int ib_n = 0; uint8_t tmp[32];
+    int r = usb_serial_jtag_read_bytes(tmp, sizeof tmp, 0); if (r <= 0) return;
+    for (int i = 0; i < r; i++) {
+        if (ib_n < (int)sizeof ib) ib[ib_n++] = tmp[i];
+        if (ib_n >= 7 && memcmp(ib, "CMD1", 4) == 0) {
+            int len = ib[6];
+            if (ib_n >= 7 + len) { cmd[0] = 'C'; cmd[1] = ib[4]; cmd[2] = ib[5]; memcpy(cmd + 3, ib + 7, len); cmd_len = (uint8_t)(3 + len); cmd_pending = true; cmd_tries = 0; ib_n = 0; }
+        } else if (ib_n >= 4 && memcmp(ib, "CMD1", 4) != 0) ib_n = 0;   // resync on anything that is not a command
+    }
+}
+// the air relay listens for a few milliseconds right after it hears our ack: send the pending command then
+static void send_cmd(void)
+{
+    static uint8_t frame[64]; static uint8_t seq = 0;
+    esp_rom_delay_us(400);   // let the hardware ack go out and the air relay open its window
+    hop_build(frame, seq++, HOP_HOST_ADDR, HOP_AIR_ADDR, cmd, cmd_len); last_acked = false;
+    if (esp_ieee802154_transmit(frame, false) != ESP_OK) return;
+    if (xSemaphoreTake(txdone, pdMS_TO_TICKS(12)) == pdTRUE && last_acked) {
+        uint8_t rec[9]; memcpy(rec, "ACK1", 4); rec[4] = cmd[1]; rec[5] = cmd[2]; rec[6] = cmd[3]; memcpy(rec + 7, &cmd_tries, 2); emit(rec, sizeof rec); cmd_pending = false;
+    } else if (++cmd_tries >= CMD_MAX_TRIES) { uint8_t rec[9]; memcpy(rec, "NAK1", 4); rec[4] = cmd[1]; rec[5] = cmd[2]; rec[6] = cmd[3]; memcpy(rec + 7, &cmd_tries, 2); emit(rec, sizeof rec); cmd_pending = false; }
+    esp_ieee802154_receive();
+}
 void app_main(void)
 {
     xiao_antenna_internal();
-    q = xQueueCreate(64, sizeof(rx_t));
+    q = xQueueCreate(64, sizeof(rx_t)); txdone = xSemaphoreCreateBinary();
     usb_serial_jtag_driver_config_t ucfg = { .tx_buffer_size = 16384, .rx_buffer_size = 256 }; ESP_ERROR_CHECK(usb_serial_jtag_driver_install(&ucfg));
     hop_radio_init(HOP_HOST_ADDR, false, true);   // not promiscuous: the hardware acks frames addressed to us
     static uint8_t asm_buf[256]; uint16_t asm_id = 0xffff; uint8_t asm_have = 0, asm_total = 0; uint16_t asm_len = 0; uint64_t asm_t = 0;
     rx_t r;
     while (1) {
-        if (xQueueReceive(q, &r, portMAX_DELAY) != pdTRUE) continue;
+        if (xQueueReceive(q, &r, pdMS_TO_TICKS(10)) != pdTRUE) { poll_usb(); continue; }
+        poll_usb();
         // r.d[0] = length incl. FCS; MHR at r.d[1..9]; payload after; the FCS is not delivered
         int plen = (int)r.d[0] - 2 - MHR_LEN; const uint8_t *p = r.d + 1 + MHR_LEN;
         if (plen < SUB_HDR || p[0] != 'S') continue;
+        if (cmd_pending) send_cmd();   // the sender is listening right now
         // a retried sub frame that we acked but the sender did not hear arrives twice: same id, same idx
         static uint16_t last_id = 0xffff; static uint8_t last_idx = 0xff;
         uint16_t id = p[1] | (p[2] << 8); uint8_t idx = p[3], total = p[4]; int n = plen - SUB_HDR;

@@ -84,6 +84,11 @@ void app_main(void)
     usb_serial_jtag_driver_config_t ucfg = { .tx_buffer_size = 16384, .rx_buffer_size = 256 }; bool usb_ok = usb_serial_jtag_driver_install(&ucfg) == ESP_OK;   // the operator sends n to adopt the current frame as the normal
     while (1) {
         uint8_t ch; if (usb_ok && usb_serial_jtag_read_bytes(&ch, 1, 0) == 1 && ch == 'n') { ESP_LOGI(TAG, "operator adopts the normal"); adopt_now = true; }
+        // the same command over the air: the relay forwards 'C' | nid | data to the camera it names (0xffff = all)
+        if (hop_up && hop_sock >= 0) {
+            uint8_t cb[32]; int r = recv(hop_sock, cb, sizeof cb, MSG_DONTWAIT);
+            if (r >= 4 && cb[0] == 'C') { uint16_t to = cb[1] | (cb[2] << 8); if ((to == node_id || to == 0xffff) && cb[3] == 'n') { ESP_LOGI(TAG, "adopt over the air"); adopt_now = true; } }
+        }
         camera_fb_t *fb = esp_camera_fb_get(); if (!fb) continue;
         uint64_t t_cap = (uint64_t)fb->timestamp.tv_sec * 1000000ULL + (uint64_t)fb->timestamp.tv_usec;
         cur = fb->buf;
