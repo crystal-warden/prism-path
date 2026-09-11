@@ -22,7 +22,8 @@ static const char *TAG = "air";
 #define HOP_SSID "prismpath-hop"
 #define HOP_PORT 5050
 typedef struct { uint16_t len; uint8_t d[250]; } msg_t;
-static QueueHandle_t q; static SemaphoreHandle_t txdone; static uint32_t n_in = 0, n_sub = 0, n_fail = 0, n_retry = 0, n_given_up = 0; static volatile bool last_acked;
+static QueueHandle_t q, qbulk; static SemaphoreHandle_t txdone;   // readings first: bulk (keyframe and evidence fragments) waits while readings are pending
+static uint32_t n_in = 0, n_sub = 0, n_fail = 0, n_retry = 0, n_given_up = 0; static volatile bool last_acked;
 void esp_ieee802154_transmit_done(const uint8_t *frame, const uint8_t *ack, esp_ieee802154_frame_info_t *ack_info) { (void)frame; (void)ack_info; last_acked = (ack != NULL); if (ack) esp_ieee802154_receive_handle_done(ack); BaseType_t w = pdFALSE; xSemaphoreGiveFromISR(txdone, &w); }
 void esp_ieee802154_transmit_failed(const uint8_t *frame, esp_ieee802154_tx_error_t error) { (void)frame; (void)error; last_acked = false; n_fail++; BaseType_t w = pdFALSE; xSemaphoreGiveFromISR(txdone, &w); }
 void esp_ieee802154_receive_done(uint8_t *frame, esp_ieee802154_frame_info_t *info) { (void)info; esp_ieee802154_receive_handle_done(frame); }
@@ -37,12 +38,12 @@ static void udp_task(void *arg)
     struct sockaddr_in a = { .sin_family = AF_INET, .sin_port = htons(HOP_PORT), .sin_addr.s_addr = htonl(INADDR_ANY) };
     bind(s, (struct sockaddr *)&a, sizeof a);
     msg_t m;
-    while (1) { int n = recv(s, m.d, sizeof m.d, 0); if (n <= 0) continue; m.len = (uint16_t)n; xQueueSend(q, &m, 0); }
+    while (1) { int n = recv(s, m.d, sizeof m.d, 0); if (n <= 0) continue; m.len = (uint16_t)n; xQueueSend(memcmp(m.d, "FRG", 3) == 0 ? qbulk : q, &m, 0); }
 }
 void app_main(void)
 {
     xiao_antenna_internal();
-    q = xQueueCreate(160, sizeof(msg_t)); txdone = xSemaphoreCreateBinary();   // deep enough for two cameras' keyframe bursts while the hop retries
+    q = xQueueCreate(64, sizeof(msg_t)); qbulk = xQueueCreate(160, sizeof(msg_t)); txdone = xSemaphoreCreateBinary();   // readings never wait behind a keyframe burst
     esp_err_t e = nvs_flash_init(); if (e == ESP_ERR_NVS_NO_FREE_PAGES || e == ESP_ERR_NVS_NEW_VERSION_FOUND) { nvs_flash_erase(); nvs_flash_init(); }
     esp_netif_init(); esp_event_loop_create_default(); esp_netif_create_default_wifi_ap();
     wifi_init_config_t wc = WIFI_INIT_CONFIG_DEFAULT(); esp_wifi_init(&wc); esp_wifi_set_storage(WIFI_STORAGE_RAM);
@@ -65,7 +66,8 @@ void app_main(void)
     static uint8_t frame[130]; static uint8_t sub[SUB_HDR + SUB_DATA]; uint8_t seq = 0; uint16_t id = 0; int64_t t_log = esp_timer_get_time();
     msg_t m;
     while (1) {
-        if (xQueueReceive(q, &m, pdMS_TO_TICKS(1000)) == pdTRUE) {
+        bool got = (xQueueReceive(q, &m, 0) == pdTRUE) || (uxQueueMessagesWaiting(q) == 0 && xQueueReceive(qbulk, &m, pdMS_TO_TICKS(20)) == pdTRUE);
+        if (got) {
             n_in++; uint8_t total = (uint8_t)((m.len + SUB_DATA - 1) / SUB_DATA); id++;
             for (uint8_t i = 0; i < total; i++) {
                 uint16_t off = i * SUB_DATA, n = m.len - off < SUB_DATA ? m.len - off : SUB_DATA;
