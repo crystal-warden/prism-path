@@ -127,7 +127,8 @@ void app_main(void)
     wifi_init_config_t wc = WIFI_INIT_CONFIG_DEFAULT(); esp_wifi_init(&wc); esp_wifi_set_storage(WIFI_STORAGE_RAM);
     esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, on_wifi, NULL);
     wifi_config_t ap = { .ap = { .ssid = HOP_SSID, .ssid_len = strlen(HOP_SSID), .channel = 1, .authmode = WIFI_AUTH_OPEN, .max_connection = 4 } };
-    esp_wifi_set_mode(WIFI_MODE_APSTA); esp_wifi_set_config(WIFI_IF_AP, &ap); esp_wifi_start();   // APSTA: the S3 associated only once the station interface was up too
+    esp_wifi_set_mode(WIFI_MODE_APSTA); esp_wifi_set_config(WIFI_IF_AP, &ap); esp_wifi_start();
+    esp_wifi_set_ps(WIFI_PS_NONE);   // no modem sleep: on the C6 it can drop the PLL that clocks the USB serial JTAG block, and a relay that cannot be flashed has no buttons to fall back on   // APSTA: the S3 associated only once the station interface was up too
 #ifndef HOP_NO_154
     hop_radio_init(0x0001, false, false);
 #endif

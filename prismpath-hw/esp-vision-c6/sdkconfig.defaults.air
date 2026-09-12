@@ -1,2 +1,5 @@
 CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
 CONFIG_LWIP_UDP_RECVMBOX_SIZE=64
+# ESP_WIFI_STA_DISCONNECTED_PM_ENABLE is forced on by the Wi-Fi and 802.15.4 coexistence config and cannot be
+# turned off here; relay_air.c calls esp_wifi_set_ps(WIFI_PS_NONE) instead, because modem sleep on the C6 can drop
+# the clock of the USB serial JTAG block and a relay without buttons then cannot be flashed
