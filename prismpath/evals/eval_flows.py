@@ -61,7 +61,7 @@ def main():
     hybrid = None
     if use_hybrid:
         from prismpath.routing.router import HybridRouter, LLMRouter
-        from prismpath import llm_local
+        from prismpath.routing import llm_local
         hybrid = HybridRouter(LLMRouter(llm_local.generate))
 
     grand = [0, 0]

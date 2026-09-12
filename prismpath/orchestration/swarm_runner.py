@@ -78,7 +78,7 @@ def _swarm_generate_fn(base: Optional[str] = None, model: Optional[str] = None,
 
 
 def _local_generate_fn() -> Callable[[str, int], str]:
-    from prismpath import llm_local
+    from prismpath.routing import llm_local
 
     def generate(prompt: str, max_new_tokens: int = 1024) -> str:
         return llm_local.generate(prompt, max_new_tokens=max_new_tokens)

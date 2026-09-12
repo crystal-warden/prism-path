@@ -208,7 +208,7 @@ class BaseConnector(ABC):
     ) -> Dict[str, Any]:
         """Default core attestation binding using ledger_airgap. Pass
         `policy_hash_for(flow_path)` as `policy_hash` to bind the governing document."""
-        from prismpath import ledger_airgap
+        from prismpath.ledgers import ledger_airgap
         root_hex = canon.sha256_hex(canon.canonical_spaced(outcome))
         return ledger_airgap.provenance_manifest(
             root_hex=root_hex,

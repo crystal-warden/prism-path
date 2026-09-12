@@ -8,6 +8,9 @@ spec stable.
 
 ## [Unreleased]
 
+### Deprecated
+- **The flat module names under `prismpath/`** (`prismpath.policy_pack`, `prismpath.ledger_ots`, `prismpath.analysis` and the other 64 aliases left by the September regroup into `kernel/ routing/ safety/ hotswap/ ledgers/ workers/ orchestration/ evals/`) now emit a `DeprecationWarning` on import and go away in a later release. Every first party import already uses the grouped path; adopters should import from it too.
+
 ### Changed
 - **The README is restructured around the public position.** `docs/POSITION.md` is the canonical
   statement (one sentence, problem, prove/enforce/prove, capability status, what the comparison

@@ -61,7 +61,7 @@ def test_adjudication_prompt_lives_on_the_connector(monkeypatch):
 
 def test_deferral_backend_is_shared_by_default(tmp_path):
     conn = ca.ComplianceConnector(
-        deferral_store=__import__("prismpath.deferral", fromlist=["FileDeferralStore"])
+        deferral_store=__import__("prismpath.workers.deferral", fromlist=["FileDeferralStore"])
         .FileDeferralStore(str(tmp_path / "d")))
     conn.defer_decision("assess:3.1.1:test", "human_review: parity", {"control_id": "3.1.1"})
     assert [p["unit_id"] for p in conn.pending_deferrals()] == ["assess:3.1.1:test"]

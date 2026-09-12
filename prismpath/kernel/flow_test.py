@@ -120,7 +120,7 @@ def default_tests_path(flow_path) -> str:
 def _make_router(flow_path):
     """Embed-only router (no LLM). Uses the committed lockfile if one sits next to the flow, so
     tests are bit-for-bit reproducible; otherwise a live EmbeddingRouter."""
-    from prismpath import lockfile
+    from prismpath.routing import lockfile
     from prismpath.routing.router import EmbeddingRouter
     lp = lockfile.lock_path(flow_path)
     if os.path.exists(lp):

@@ -46,20 +46,20 @@ def get_retrievals():
 @router.get("/queue")
 def get_queue():
     """Runs suspended for a human decision (the Deferral port, surfaced)."""
-    from prismpath import checkpoint as _ckpt
+    from prismpath.ledgers import checkpoint as _ckpt
     return {"items": _ckpt.list_queue()}
 
 
 @router.get("/fanouts")
 def get_fanouts():
     """Fan-out composition trees (read-only)."""
-    from prismpath import composer as _composer
+    from prismpath.workers import composer as _composer
     return {"fanouts": _composer.fanout_tree()}
 
 
 @router.get("/fanout/ckpt")
 def get_fanout_ckpt(path: str = Query(...)):
-    from prismpath import checkpoint as _ckpt
+    from prismpath.ledgers import checkpoint as _ckpt
     qroot = os.path.realpath(_ckpt.queue_dir())
     rp = os.path.realpath(path)
     if not rp.startswith(qroot + os.sep) or not rp.endswith(".json"):

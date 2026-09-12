@@ -56,7 +56,7 @@ def sprint_resume():
 @router.post("/queue/decide")
 def queue_decide(req: QueueDecideReq):
     """Human picks an edge for a suspended run. `resolve_queue_item` confines the id to the queue dir."""
-    from prismpath import checkpoint as _ckpt
+    from prismpath.ledgers import checkpoint as _ckpt
     cpath = _ckpt.resolve_queue_item(req.id)
     _ckpt.record_decision(cpath, req.choose, decided_by=core.ACTOR)
     core.AUDIT.append(core.ACTOR, "queue.decide", {"id": req.id, "choose": req.choose})

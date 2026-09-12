@@ -23,7 +23,7 @@ import time
 from pathlib import Path
 
 try:                                    # glass-window interaction log (best-effort, never fatal)
-    from prismpath import interactions as _ix
+    from prismpath.ledgers import interactions as _ix
 except Exception:
     try:
         import interactions as _ix

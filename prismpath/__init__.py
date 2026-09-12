@@ -32,7 +32,7 @@ The package is grouped by concern:
     prismpath.portable       the JavaScript kernel and the frozen conformance corpora every kernel is judged by
 
 Every pre regroup name (prismpath.engine, prismpath.checkpoint, ...) still imports and is the same module
-object as its grouped counterpart. The reading order for "a flow becomes a decision" is kernel.parser,
+object as its grouped counterpart, with a DeprecationWarning; the aliases go away in a later release. The reading order for "a flow becomes a decision" is kernel.parser,
 kernel.predicates, kernel.engine, kernel.causes, kernel.analysis. Who the pieces are for: the process
 owner authors and tests the flow; the engineer establishes the contract once and delivers; the operator
 runs, swaps, attests, and reads the trail; the evaluator anchors and verifies the receipts.

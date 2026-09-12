@@ -47,7 +47,10 @@ def test_safe_name():
 
 
 def test_old_names_still_resolve():
-    from prismpath import checkpoint, ledger, policy_pack, context_ledger
+    import warnings
+    with warnings.catch_warnings():                       # the aliases warn on purpose; this test is about identity
+        warnings.simplefilter("ignore", DeprecationWarning)
+        from prismpath import checkpoint, ledger, policy_pack, context_ledger
     assert checkpoint._atomic_write is canon.atomic_write
     assert ledger._safe is canon.safe_name
     assert policy_pack.sha256_hex is canon.sha256_hex

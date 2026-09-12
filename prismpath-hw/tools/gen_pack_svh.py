@@ -37,7 +37,7 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]          # .../prismpath
 sys.path.insert(0, str(REPO))
-from prismpath import policy_pack                    # noqa: E402
+from prismpath.hotswap import policy_pack                    # noqa: E402
 
 R_SEL_ADDR, R_DATA, R_SOFT_RST, R_AUTO_CTRL = 0x00, 0x04, 0x20, 0x28
 

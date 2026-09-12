@@ -349,7 +349,7 @@ def serialize_flow_graph(state, flow_path=None):
     checkpoint (active node, transcript, state vars). `flow_path` is resolved and CONTAINED to the
     followed project (or the bundled flows dir); it never reads an arbitrary path."""
     from prismpath.kernel.parser import parse_file
-    from prismpath import predicates
+    from prismpath.kernel import predicates
     proj = state["proj"]
     if not flow_path:
         sp = os.path.join(proj, "status.json")

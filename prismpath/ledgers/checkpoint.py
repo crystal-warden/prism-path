@@ -155,7 +155,7 @@ def resume(checkpoint_path, agent, router=None, choose: Optional[str] = None,
     `type_gate` defaults to the value the checkpoint was saved with, so the gate is never silently
     dropped on resume; pass True/False to override.
     """
-    from prismpath import predicates
+    from prismpath.kernel import predicates
     cp = load_checkpoint(checkpoint_path)
     _check_flow_unchanged(cp)                           # refuse to resume against a silently-edited flow
     graph = parse_file(cp["flow_path"])                 # never written

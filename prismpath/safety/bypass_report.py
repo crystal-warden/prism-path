@@ -87,7 +87,7 @@ def measure_collisions() -> dict:
     on its own. Widening what a regex catches is how an education product starts refusing innocent
     questions, and that failure would be unpublished — strictly worse than the one being fixed.
     """
-    from prismpath import benign_corpus
+    from prismpath.safety import benign_corpus
 
     guard = _floor()
     per_stratum: dict[str, list[int]] = defaultdict(lambda: [0, 0])

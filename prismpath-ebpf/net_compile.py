@@ -18,7 +18,7 @@ sys.path.insert(0, str(REPO))
 import ppt_compile as pc                                  # noqa: E402
 from prismpath.kernel.parser import parse_file                  # noqa: E402
 from prismpath.kernel.analysis import _reachable                # noqa: E402
-from prismpath import predicates                         # noqa: E402
+from prismpath.kernel import predicates                         # noqa: E402
 
 SCHEMA = ["src_ip", "dst_ip", "src_port", "dst_port", "protocol", "pkt_len", "tcp_flags", "ttl"]
 

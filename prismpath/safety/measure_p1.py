@@ -45,7 +45,8 @@ def _load_embedder():
 
 
 def main() -> int:
-    from prismpath import benign_corpus, bypass_corpus
+    from prismpath.safety import benign_corpus
+    from prismpath.safety import bypass_corpus
     from prismpath.safety.guard import compose, parse_policy_file
     from prismpath.safety.guard_semantic import (
         PROHIBITED_INTENT_EXEMPLARS,

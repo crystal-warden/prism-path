@@ -144,7 +144,7 @@ def test_engine_type_gate_stops_on_wrong_type():
 
 
 def test_run_durable_passes_type_gate(tmp_path):
-    from prismpath import checkpoint
+    from prismpath.ledgers import checkpoint
     flow = tmp_path / "f.md"
     flow.write_text("---\nname:t\nstart:work\n---\n## work\nGo.\n-> done: when ok\n## done\n")
     res = checkpoint.run_durable(str(flow), lambda n, i, s: {"text": "x", "ok": 1}, str(tmp_path / "c.json"),
@@ -153,7 +153,7 @@ def test_run_durable_passes_type_gate(tmp_path):
 
 
 def _codes(flow):
-    from prismpath import analysis
+    from prismpath.kernel import analysis
     return sorted({f.code for f in analysis.analyze(parse(flow))})
 
 
@@ -192,7 +192,7 @@ def test_field_only_security_lint():
 
 def test_type_gate_survives_resume(tmp_path):
     # the gate must NOT be dropped when a run suspends and resumes (adversarial-review HIGH bug)
-    from prismpath import checkpoint
+    from prismpath.ledgers import checkpoint
     flow = tmp_path / "f.md"
     flow.write_text("---\nname:t\nstart:n\n---\n## n\nGo.\n-> m: when go\n## m\nDo it.\n"
                     "-> a: when tests_pass\n-> b: when not tests_pass\n## a\n## b\n")

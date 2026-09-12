@@ -34,7 +34,7 @@ def records():
 def iso_defer(tmp_path):
     """Isolate the adapter's module-level deferral store to a tmp dir so tests don't share state."""
     import compliance_adapter as ca
-    from prismpath import deferral
+    from prismpath.workers import deferral
     orig = ca._DEFER
     ca._DEFER = deferral.FileDeferralStore(str(tmp_path / "deferrals"))
     yield ca._DEFER

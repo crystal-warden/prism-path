@@ -11,7 +11,7 @@ import pytest
 
 pytest.importorskip("cryptography")
 
-from prismpath import policy_pack as pp  # noqa: E402
+from prismpath.hotswap import policy_pack as pp# noqa: E402
 from prismpath.kernel.parser import parse  # noqa: E402
 
 from prismpath.tests._repo import repo_file

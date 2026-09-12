@@ -54,7 +54,7 @@ import requests
 from prismpath import canon
 
 try:                                    # glass-window interaction log (best-effort, never fatal)
-    from prismpath import interactions as _ix
+    from prismpath.ledgers import interactions as _ix
 except Exception:
     try:
         import interactions as _ix
@@ -269,7 +269,7 @@ def retrieve_docs(query: str) -> str:
     if not RAG:
         return ""
     try:
-        from prismpath import retriever as _rtr
+        from prismpath.orchestration import retriever as _rtr
     except Exception:
         try:
             import retriever as _rtr
@@ -949,7 +949,7 @@ def _ledger():
     """Lazy Ledger for this sprint. SPRINT_LEDGER_RUN reuses a prior run's ref (resume the same
     proof chain); otherwise a fresh run id is minted."""
     global _LEDGER, _RUN_ID
-    from prismpath import ledger as _lg
+    from prismpath.ledgers import ledger as _lg
     if _RUN_ID is None:
         _RUN_ID = os.environ.get("SPRINT_LEDGER_RUN") or _lg.new_run_id()
     if _LEDGER is None:
@@ -991,7 +991,7 @@ def _ledger_commit(unit: str, files: dict, edge: str = None):
     off the critical path: any failure degrades to the existing .lastgood/.kg.json path — the
     ledger records progress, it never drives or breaks a sprint."""
     try:
-        from prismpath import ledger as _lg
+        from prismpath.ledgers import ledger as _lg
         led = _ledger()
         node = next((n for n in _kg_load().get("nodes", []) if n.get("id") == unit), {}) if KG_MODE else {}
         produces = node.get("produces", [])

@@ -15,7 +15,7 @@ Pure aggregation + attestation reuse. No LLM, no domain adjudication.
 """
 import os, sys, json, hashlib
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-from prismpath import ledger_airgap  # CORE attestation (adapter -> core is allowed)
+from prismpath.ledgers import ledger_airgap# CORE attestation (adapter -> core is allowed)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 WEIGHTS_PATH = os.path.join(HERE, "catalog", "sprs_weights.json")

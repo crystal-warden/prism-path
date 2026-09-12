@@ -258,7 +258,7 @@ def _run_fixture(fx):
 
     embed_map = {text: _decode_vec(b64) for text, b64 in fx["embedMap"].items()}
 
-    import prismpath.embedder as emb_mod
+    import prismpath.routing as emb_mod
     _orig_embed = emb_mod.embed
     def _stub_embed(texts, is_query=False):
         vecs = []

@@ -14,7 +14,7 @@ implementation — dependency-free, no daemon — not a production scheduler (wh
 leasing, and at-least-once delivery). See `on event`/`on timeout` in the engine and
 `checkpoint.resume(event=...)`.
 
-    from prismpath import scheduler
+    from prismpath.workers import scheduler
     fired = scheduler.fire_due_timeouts(agent)     # scan the default queue dir once; resume the due ones
 """
 from __future__ import annotations

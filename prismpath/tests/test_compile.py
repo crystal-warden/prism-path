@@ -93,7 +93,7 @@ def test_compile_p1(tmp_path):
         return arr / norms
         
     from prismpath.cli import main
-    with patch("prismpath.embedder.embed", side_effect=mock_embed):
+    with patch("prismpath.routing.embedder.embed", side_effect=mock_embed):
         rc_lock = main(["lock", str(flow_file)])
         assert rc_lock == 0
         

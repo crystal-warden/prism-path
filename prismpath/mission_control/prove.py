@@ -28,7 +28,7 @@ def _graph(flow_text: str):
 def prove_level_m(req: ProveLevelMReq):
     """Does the flow's deterministic tier compile to a hardware match-action table (SPEC §7, Level M)?
     Returns membership plus the offending edges when it does not."""
-    from prismpath import model_check
+    from prismpath.kernel import model_check
     all_in, bad = model_check.flow_level_m(_graph(req.flow))
     return {"level_m": all_in, "non_member_edges": bad}
 
@@ -37,7 +37,7 @@ def prove_level_m(req: ProveLevelMReq):
 def prove_reach(req: ProveReachReq):
     """Bounded reachability for each target node under an optional assumption. Verdicts are
     yes | may | no; `results` carries the witness path so the command center can paint it."""
-    from prismpath import model_check
+    from prismpath.kernel import model_check
     graph = _graph(req.flow)
     targets = list(dict.fromkeys((req.reach or []) + (req.forbid or [])))
     if not targets:

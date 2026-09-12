@@ -16,7 +16,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from prismpath.telemetry import quantizer as q  # noqa: E402
 
-from prismpath import predicates  # noqa: E402
+from prismpath.kernel import predicates  # noqa: E402
 from prismpath.kernel.parser import parse, parse_file  # noqa: E402
 
 _INCIDENT = os.path.join(os.path.dirname(__file__), "..", "..", "..",

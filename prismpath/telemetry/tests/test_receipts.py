@@ -21,7 +21,7 @@ REPO = ADAPTER.parent.parent
 sys.path.insert(0, str(ADAPTER))
 sys.path.insert(0, str(REPO))
 
-from prismpath import causes  # noqa: E402
+from prismpath.kernel import causes  # noqa: E402
 from prismpath.telemetry.receipts import (
     OK,
     RECEIPT_FIELD_MISMATCH,

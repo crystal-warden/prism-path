@@ -26,7 +26,7 @@ REPO = HERE.parents[1]
 def check_parity() -> bool:
     """Verify Lua cause code table in facet.lua matches prismpath/causes.py exactly."""
     sys.path.insert(0, str(REPO))
-    from prismpath import causes
+    from prismpath.kernel import causes
 
     py_map = {0: "clean"}
     py_map.update({code: name for code, name, _k, _d in causes._REGISTRY})

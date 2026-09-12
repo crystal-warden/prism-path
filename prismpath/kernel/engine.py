@@ -131,7 +131,7 @@ def run(graph: Graph, agent: Callable[[str, str, dict], object], router=None,
     # field stops the run with stopped='contract_violation' before routing acts on it.
     _contracts = {}
     if type_gate:
-        from prismpath import contract as _contract_mod
+        from prismpath.kernel import contract as _contract_mod
         _contracts = _contract_mod.derive_contract(graph)
     node = start if start is not None else graph.start
     if state is None:
@@ -209,7 +209,7 @@ def run(graph: Graph, agent: Callable[[str, str, dict], object], router=None,
         # Type gate (opt-in): a worker output whose field TYPE contradicts what this node's `when`
         # edges read is a contract violation — stop before routing acts on the malformed field.
         if type_gate:
-            from prismpath import contract as _contract_mod
+            from prismpath.kernel import contract as _contract_mod
             violations = [p for p in _contract_mod.validate_output(_contracts.get(node, {}), fields)
                           if p.startswith("type:")]
             if violations:

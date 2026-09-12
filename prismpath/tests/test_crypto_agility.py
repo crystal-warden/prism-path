@@ -29,7 +29,7 @@ def test_fixture_replays_byte_for_byte():
 
 
 def test_registry_hash_is_bound_into_the_envelope():
-    from prismpath import crypto_registry as cr
+    from prismpath.hotswap import crypto_registry as cr
     assert cr.registry_hash(REGISTRY) == DATA["registry_hash"] == ENVELOPE["registry_hash"]
 
 

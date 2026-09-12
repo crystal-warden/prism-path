@@ -11,7 +11,8 @@ the SDK — proving it is shared core, not re-implemented.
 """
 import os, sys, json, hashlib, requests
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-from prismpath import ledger_airgap, deferral  # CORE attestation + deferral ports (adapter→core OK; core→adapter is the leak)
+from prismpath.ledgers import ledger_airgap
+from prismpath.workers import deferral# CORE attestation + deferral ports (adapter→core OK; core→adapter is the leak)
 from prismpath.workers.connector import BaseConnector  # the Connector SDK — six-port base
 
 # Adjudicator LLM endpoint (OpenAI-compatible /v1/chat/completions). Env-overridable so the same

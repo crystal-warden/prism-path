@@ -11,7 +11,7 @@ Design: `span_records()` runs a flow and emits OTel-*shaped* span dicts to a `si
 testable with no OpenTelemetry installed. `to_otel_sink(tracer)` adapts those to real spans when the
 SDK is present; `console_tracer()` wires a console exporter for a quick demo.
 
-    from prismpath import otel
+    from prismpath.ledgers import otel
     otel.span_records(graph, agent, otel.to_otel_sink(otel.console_tracer()))
 """
 from __future__ import annotations

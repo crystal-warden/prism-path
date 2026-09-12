@@ -242,7 +242,7 @@ class Server:
                     pass
             if self.semantic:
                 try:
-                    from prismpath import lint
+                    from prismpath.kernel import lint
                     findings += lint.semantic_ambiguity(graph)
                     findings += lint.polarity_mirror(graph)
                 except Exception:                       # noqa: BLE001 - embedder extra absent

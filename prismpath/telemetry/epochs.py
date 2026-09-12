@@ -100,5 +100,5 @@ class EpochStore:
     def anchor(self, epoch: Epoch, out_dir: str, label: str):
         """OTS/Bitcoin-anchor a sealed epoch's chained root (reuses ledger_ots). Network side effect — not
         exercised in unit tests; this is the seam that makes the chain externally tamper-evident."""
-        from prismpath import ledger_ots
+        from prismpath.ledgers import ledger_ots
         return ledger_ots.anchor([epoch.chained_root], out_dir, label)

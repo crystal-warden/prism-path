@@ -428,7 +428,7 @@ def _check_provenance(graph) -> List[Finding]:
     """Field provenance (opt-in, per `@emits`): every field a node's `when` edges READ must be a field
     the node DECLARES its worker emits, OR declared by an upstream node. A field read but never declared
     means the worker won't produce it and it is not in the state, so those edges fall through."""
-    from prismpath import contract
+    from prismpath.kernel import contract
     out: List[Finding] = []
     contracts = contract.derive_contract(graph)
     for name, node in graph.nodes.items():
@@ -483,7 +483,7 @@ def _check_emits_types(graph) -> List[Finding]:
     edges actually read the field means one of them is wrong — and the type_gate would enforce the
     inferred one, so surface the drift at author time. Untyped (bare) tokens and unrecognized type
     words are skipped: no false positives."""
-    from prismpath import contract
+    from prismpath.kernel import contract
     out: List[Finding] = []
     contracts = contract.derive_contract(graph)
     for name, node in graph.nodes.items():
@@ -537,7 +537,7 @@ def _check_field_only(graph) -> List[Finding]:
     raw outcome text — the security property that keeps attacker-influenced free text out of routing. A
     semantic edge on such a node routes on raw text and is a violation; and its `when` fields must all be
     declared (an undeclared field would fall through to nothing)."""
-    from prismpath import contract
+    from prismpath.kernel import contract
     out: List[Finding] = []
     for name, node in graph.nodes.items():
         if "field_only" not in node.annotations:
@@ -920,7 +920,7 @@ def portability_tier(graph, flow_path) -> dict:
         return {"tier": "P0", "semantic_edges": [], "unlocked": [], "lock": None,
                 "level_m": lm_all}
     import os
-    from prismpath import lockfile as _lf
+    from prismpath.routing import lockfile as _lf
     lp = _lf.lock_path(flow_path)
     locked_conds = set()
     lock_found = None

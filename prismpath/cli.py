@@ -313,7 +313,7 @@ def run_flow(args) -> int:
 
 
 def resume_flow(args) -> int:
-    from prismpath import checkpoint
+    from prismpath.ledgers import checkpoint
     try:
         result = checkpoint.resume(args.checkpoint, _mock_agent, choose=args.choose)
     except checkpoint.CheckpointError as e:
@@ -328,7 +328,7 @@ def resume_flow(args) -> int:
 
 
 def import_cmd(args) -> int:
-    from prismpath import langgraph_import
+    from prismpath.workers import langgraph_import
     md = langgraph_import.import_langgraph(open(args.py_file).read(), name=args.name)
     if args.out:
         open(args.out, "w").write(md)
@@ -339,7 +339,8 @@ def import_cmd(args) -> int:
 
 
 def calibrate_cmd(args) -> int:
-    from prismpath import calibrate, routelog
+    from prismpath.routing import calibrate
+    from prismpath.routing import routelog
     recs = routelog.load_records(args.labels)
     cal = calibrate.calibrate(recs, alpha=args.alpha)
     print(f"n={cal['n']} labeled decisions; target risk α={cal['alpha']}")
@@ -356,7 +357,7 @@ def calibrate_cmd(args) -> int:
 
 
 def graph_flow(args) -> int:
-    from prismpath import graph_export
+    from prismpath.kernel import graph_export
     graph = parse_file(args.flow_md)
     out = (graph_export.to_mermaid_fenced if args.fenced else graph_export.to_mermaid)(graph, args.direction)
     print(out)
@@ -364,7 +365,7 @@ def graph_flow(args) -> int:
 
 
 def label_cmd(args) -> int:
-    from prismpath import routelog
+    from prismpath.routing import routelog
     records = routelog.load_records(args.log)
     if not records:
         print(f"no records in {args.log}")
@@ -392,7 +393,7 @@ def label_cmd(args) -> int:
 
 
 def test_flow(args) -> int:
-    from prismpath import flow_test
+    from prismpath.kernel import flow_test
     from prismpath.kernel.parser import parse_file
     tests_path = args.tests_md or flow_test.default_tests_path(args.flow_md)
     if not __import__("os").path.exists(tests_path):
@@ -418,7 +419,7 @@ def test_flow(args) -> int:
 
 
 def lock_flow(args) -> int:
-    from prismpath import lockfile
+    from prismpath.routing import lockfile
     if args.check:
         try:
             lock = lockfile.load_lock(lockfile.lock_path(args.flow_md))
@@ -437,7 +438,7 @@ def lock_flow(args) -> int:
     # commit the shrunk vectors (roadmap item #2 follow-on) — applies to the root flow only.
     centroids = counts = None
     if getattr(args, "centroids", None):
-        from prismpath import centroid
+        from prismpath.routing import centroid
         from prismpath.kernel.parser import parse_file as _pf
         recs = [json.loads(l) for l in open(args.centroids, encoding="utf-8") if l.strip()]
         graph = _pf(args.flow_md)
@@ -496,7 +497,7 @@ def validate_flow(args) -> int:
 def contract_cmd(args) -> int:
     """Print each node's derived worker output contract (the fields its `when` edges read, with
     inferred types). Non-zero exit iff a field is used two incompatible ways (a real authoring bug)."""
-    from prismpath import contract
+    from prismpath.kernel import contract
     graph = parse_file(args.flow_md)
     c = contract.derive_contract(graph)
     if args.json:
@@ -510,13 +511,13 @@ def contract_cmd(args) -> int:
 
 
 def annotate_cmd(args) -> int:
-    from prismpath import annotate
+    from prismpath.evals import annotate
     annotate.annotate_loop(args.benchmark, args.out, flows_dir=args.flows_dir, limit=args.limit)
     return 0
 
 
 def kappa_cmd(args) -> int:
-    from prismpath import kappa
+    from prismpath.evals import kappa
     a, b = kappa.load(args.a), kappa.load(args.b)
     rep = kappa.report(a, b, by_stratum=args.by_stratum)
     print(json.dumps(rep, indent=2))
@@ -533,7 +534,7 @@ def kappa_cmd(args) -> int:
 
 
 def centroids_cmd(args) -> int:
-    from prismpath import centroid
+    from prismpath.routing import centroid
     recs = [json.loads(l) for l in open(args.benchmark, encoding="utf-8") if l.strip()]
     res = centroid.cross_validate(recs, flows_dir=args.flows_dir, folds=args.folds, prior_weight=args.prior)
     print(json.dumps(res, indent=2))
@@ -602,7 +603,7 @@ def hello(node, instruction, state):
 
 
 # The 'any CLI is a worker' bridge — wrap a real tool in ~3 lines (uncomment + edit):
-#   from prismpath.cli_worker import CliWorker
+#   from prismpath.workers.cli_worker import CliWorker
 #   jq = CliWorker(["jq", "-c", ".summary", "{{instruction}}"])   # JSON stdout -> outcome fields
 WORKERS = {{"hello": hello}}
 ''')
@@ -829,7 +830,8 @@ def portable_cmd(args) -> int:
 def compile_cmd(args) -> int:
     """Compile the flow and its lock into a single-file portable JS bundle."""
     from prismpath.kernel.parser import parse_file
-    from prismpath import analysis, lockfile
+    from prismpath.kernel import analysis
+    from prismpath.routing import lockfile
     import base64
 
     # Check portability tier first
@@ -1129,7 +1131,7 @@ def compose_cmd(args) -> int:
     """Advance every pending fan-out in the queue by one tick: spawn/poll children and, where a join is
     ready, aggregate + resume the parent. The out-of-band harness a deployment runs on a schedule
     (mirrors the timeout scanner). Uses the mock agent, like `run`/`resume`."""
-    from prismpath import composer
+    from prismpath.workers import composer
     recs = composer.advance_fanouts(_mock_agent, qdir=args.queue)
     for r in recs:
         if r.get("error"):
@@ -1328,7 +1330,7 @@ def facet_cmd(args) -> int:
         cause = None
 
         if start_node in graph.nodes:
-            from prismpath import predicates
+            from prismpath.kernel import predicates
             for target, cond in graph.nodes[start_node].edges:
                 if predicates.is_deterministic(cond) and predicates.eval_condition(cond, recon_reading):
                     next_node = target

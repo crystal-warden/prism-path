@@ -27,7 +27,7 @@ import time
 import requests
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from prismpath import embedder                                          # noqa: E402
+from prismpath.routing import embedder# noqa: E402
 from prismpath.routing.centroid import _decision_items, _unit, load_graphs      # noqa: E402
 from prismpath.comparisons.gemma import routing_prompt                  # noqa: E402
 from prismpath.comparisons.baselines import _parse_choice               # noqa: E402

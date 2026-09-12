@@ -49,7 +49,7 @@ def test_classical_only_detection():
 
 
 def test_sign_verify_roundtrip_and_tamper(tmp_path):
-    from prismpath import policy_pack as pp
+    from prismpath.hotswap import policy_pack as pp
     pytest.importorskip("cryptography")
     keys = pp.keygen(str(tmp_path))
     _pub, key_id = pp.load_public(keys["public"])

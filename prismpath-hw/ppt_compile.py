@@ -42,7 +42,7 @@ _ROOT = str(Path(_REPO).parent)
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
-from prismpath import predicates                     # noqa: E402
+from prismpath.kernel import predicates                     # noqa: E402
 from prismpath.kernel.analysis import _reachable            # noqa: E402
 from prismpath.kernel.model_check import _classify, _desugar_chains   # noqa: E402
 

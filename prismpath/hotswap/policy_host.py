@@ -159,7 +159,7 @@ class PolicyHost:
 
     def anchor_attestations(self, out_dir: str, label: str) -> dict:
         """Anchor the audit trail's leaves to Bitcoin via OTS (delegates to ledger_ots)."""
-        from prismpath import ledger_ots
+        from prismpath.ledgers import ledger_ots
         return ledger_ots.anchor(list(self.audit.leaves), out_dir, label)
 
     def history(self) -> List[dict]:

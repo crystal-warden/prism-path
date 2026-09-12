@@ -73,7 +73,7 @@ def test_every_entry_binds_the_policy_hash(guard, log):
 
 def test_changing_the_normalization_changes_what_entries_attest_to(guard, log, monkeypatch):
     """A fold change must be visible in the trail, or the record misattributes past decisions."""
-    from prismpath import guard as guard_mod
+    from prismpath.safety import guard as guard_mod
 
     before = guard.policy_hash
     monkeypatch.setitem(guard_mod._LEET_UNAMBIGUOUS, "9", "g")

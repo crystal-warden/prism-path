@@ -20,7 +20,7 @@ engine already routes on). Sub-flow composition is the N==1 case of the same cod
 dedups child UNITS across parents for free (a child flow's per-unit proof is shared by every fan-out
 that spawns it — see ledger_runner).
 
-    from prismpath import composer
+    from prismpath.workers import composer
     acted = composer.advance_fanouts(agent)     # scan the default queue once; spawn/poll/join
 
 This is the reference harness (single process, sequential child stepping) — not a production

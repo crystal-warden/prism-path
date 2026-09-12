@@ -47,7 +47,7 @@ def test_root_and_inclusion_proof():
     assert len(root) == 64
     p = led.prove(1)
     assert p["root"] == root
-    from prismpath import ledger_ots
+    from prismpath.ledgers import ledger_ots
     assert ledger_ots.verify_leaf(p["leaf"], p["path"], root)
 
 

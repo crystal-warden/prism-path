@@ -18,7 +18,7 @@ REPO = ADAPTER.parent.parent
 sys.path.insert(0, str(REPO))
 
 from prismpath.telemetry.concentrator import concentrate, demux, OK as CONC_OK  # noqa: E402
-from prismpath import causes  # noqa: E402
+from prismpath.kernel import causes  # noqa: E402
 from prismpath.telemetry.receipts import (  # noqa: E402
     OK as RCPT_OK,
     decode_receipt,

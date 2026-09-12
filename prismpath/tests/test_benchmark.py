@@ -27,7 +27,7 @@ def test_dataset_wellformed_and_labels_are_real_edges():
 
 def test_reproduce_aggregates_with_stub_embedder(monkeypatch):
     import numpy as np
-    from prismpath import embedder
+    from prismpath.routing import embedder
     # a deterministic stub so the reproducer runs without the model; correctness of the numbers is
     # not asserted (that needs the real embedder) — only that aggregation runs and returns strata.
     monkeypatch.setattr(embedder, "embed",

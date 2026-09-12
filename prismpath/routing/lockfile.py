@@ -66,7 +66,7 @@ def lock_path(flow_path) -> str:
 
 # --- build / io -------------------------------------------------------------------------
 def _semantic_conditions(graph) -> list:
-    from prismpath import predicates
+    from prismpath.kernel import predicates
     conds = set()
     for n in graph.nodes.values():
         for _, c in n.edges:
@@ -90,7 +90,7 @@ def build_lock(flow_path, delta: Optional[float] = None, centroids: Optional[dic
     graph = parse_file(flow_path)
     conds = _semantic_conditions(graph)
     if conds:
-        from prismpath import embedder
+        from prismpath.routing import embedder
         vecs = embedder.embed(conds, is_query=False)
         probe_vec = embedder.embed([_PROBE], is_query=False)[0]
         dim = int(vecs.shape[1])
@@ -100,7 +100,7 @@ def build_lock(flow_path, delta: Optional[float] = None, centroids: Optional[dic
         model_precision = getattr(embedder, "PRECISION", "fp32")
     else:
         try:
-            from prismpath import embedder
+            from prismpath.routing import embedder
             probe_vec = embedder.embed([_PROBE], is_query=False)[0]
             dim = int(probe_vec.shape[0])
             model_name = getattr(embedder, "MODEL_NAME", "unknown")
@@ -183,7 +183,7 @@ def probe_cosine(lock: dict) -> float:
     if not lock.get("conditions") and lock.get("embedder", {}).get("name") == "none":
         return 1.0
     try:
-        from prismpath import embedder
+        from prismpath.routing import embedder
         locked = _decode_vec(lock["embedder"]["probe_vec"])
         local = embedder.embed([lock["embedder"].get("probe", _PROBE)], is_query=False)[0]
         denom = (np.linalg.norm(locked) * np.linalg.norm(local)) or 1.0
@@ -200,7 +200,7 @@ def verify_lock(lock: dict, policy: Optional[str] = None) -> bool:
     (print + return False), 'allow' (silent + return False)."""
     if not lock.get("conditions") and lock.get("embedder", {}).get("name") == "none":
         return True
-    from prismpath import embedder
+    from prismpath.routing import embedder
     policy = (policy or os.environ.get("PRISMPATH_LOCK_POLICY", "refuse")).lower()
     name_ok = getattr(embedder, "MODEL_NAME", None) == lock["embedder"]["name"]
     # provider/precision are part of the lock identity when recorded (older locks lack them and
