@@ -12,9 +12,16 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from collections import OrderedDict
 from typing import Any, Callable, Dict, List, Tuple
 
 from prismpath.routing import embedder
+
+# A long lived process routing many distinct flows must not grow without bound; 256 edge sets is far
+# more than one process routes in practice, and the cache is least recently used past it.
+CACHE_MAX = 256
+
+
 @dataclass
 class RouteDecision:
     target: str
@@ -23,12 +30,16 @@ class RouteDecision:
 
 class EmbeddingRouter:
     def __init__(self):
-        self._cache: Dict[tuple, Any] = {}
+        self._cache: OrderedDict[tuple, Any] = OrderedDict()
 
     def _cond_embs(self, edges):
         key = tuple(c for _, c in edges)
-        if key not in self._cache:
+        if key in self._cache:
+            self._cache.move_to_end(key)
+        else:
             self._cache[key] = embedder.embed(list(key), is_query=False)
+            while len(self._cache) > CACHE_MAX:
+                self._cache.popitem(last=False)
         return self._cache[key]
 
     def scores(self, outcome, edges):
