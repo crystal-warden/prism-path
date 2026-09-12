@@ -64,9 +64,9 @@ def make_agent(child_behaviour=None):
         if node == "review":
             item = state.get("_item", {})
             if child_behaviour is not None:
-                b = child_behaviour(item)
-                if b is not None:
-                    return b
+                behaviour = child_behaviour(item)
+                if behaviour is not None:
+                    return behaviour
             return {"text": f"reviewed {item.get('path')}", "verdict": "ok"}
         return {"text": f"ran {node}"}
     return agent
@@ -86,18 +86,18 @@ def test_fanout_spawns_children_joins_and_resumes_parent(tmp_path):
     qdir, parent_ckpt = _start_parent(tmp_path)
     recs = composer.advance_fanouts(make_agent(), qdir=str(qdir))
     assert len(recs) == 1
-    r = recs[0]
-    assert r["spawned"] == 3 and r["done"] == 3 and r["joined"] is True and r["event"] == "all_done"
+    record = recs[0]
+    assert record["spawned"] == 3 and record["done"] == 3 and record["joined"] is True and record["event"] == "all_done"
 
     parent = load_checkpoint(str(parent_ckpt))
     assert parent["stopped"] == "terminal"                # resumed through aggregate to a terminal node
     agg = parent["state"]["_spawned"]["dispatch"]
     assert agg["n"] == 3 and agg["done"] == 3
-    assert sorted(k["item_id"] for k in agg["children"]) == ["a.py", "b.py", "c.py"]
+    assert sorted(child["item_id"] for child in agg["children"]) == ["a.py", "b.py", "c.py"]
     # each child was seeded with its own item and produced its verdict
-    for k in agg["children"]:
-        assert k["stopped"] == "terminal"
-        assert any(o.get("verdict") == "ok" for o in k["outcomes"].values())
+    for child in agg["children"]:
+        assert child["stopped"] == "terminal"
+        assert any(outcome.get("verdict") == "ok" for outcome in child["outcomes"].values())
 
 
 def test_children_are_durable_on_disk_under_a_children_dir(tmp_path):
@@ -105,10 +105,10 @@ def test_children_are_durable_on_disk_under_a_children_dir(tmp_path):
     composer.advance_fanouts(make_agent(), qdir=str(qdir))
     child_dir = tmp_path / "queue" / "parent.children"
     assert child_dir.is_dir()
-    kids = sorted(p.name for p in child_dir.glob("*.json"))
+    kids = sorted(path.name for path in child_dir.glob("*.json"))
     assert kids == ["a.py.json", "b.py.json", "c.py.json"]
     # the parent scan globs queue/*.json (files) so it never sees the children subdir
-    assert "parent.children" not in [p.name for p in (tmp_path / "queue").glob("*.json")]
+    assert "parent.children" not in [path.name for path in (tmp_path / "queue").glob("*.json")]
 
 
 def test_scan_is_idempotent_no_double_spawn_or_double_resume(tmp_path):
@@ -117,10 +117,10 @@ def test_scan_is_idempotent_no_double_spawn_or_double_resume(tmp_path):
     assert first[0]["joined"] is True
     # capture child mtimes; a second scan must NOT re-run children or re-resume the (now terminal) parent
     child_dir = tmp_path / "queue" / "parent.children"
-    mtimes = {p.name: p.stat().st_mtime_ns for p in child_dir.glob("*.json")}
+    mtimes = {path.name: path.stat().st_mtime_ns for path in child_dir.glob("*.json")}
     second = composer.advance_fanouts(make_agent(), qdir=str(qdir))
     assert second == []                                   # parent no longer waiting -> nothing to do
-    assert {p.name: p.stat().st_mtime_ns for p in child_dir.glob("*.json")} == mtimes  # untouched
+    assert {path.name: path.stat().st_mtime_ns for path in child_dir.glob("*.json")} == mtimes  # untouched
 
 
 def test_deterministic_child_ids_reattach_not_respawn(tmp_path):
@@ -176,8 +176,8 @@ def test_single_child_composition_is_fanout_of_one(tmp_path):
 def test_item_id_precedence_field_scalar_hash():
     assert composer.item_id({"path": "x.py", "n": 1}, "path") == "x.py"   # field
     assert composer.item_id("ticket-7") == "ticket-7"                     # scalar
-    h = composer.item_id({"a": 1, "b": 2})                                # content hash (no field)
-    assert h.startswith("h") and h == composer.item_id({"b": 2, "a": 1})  # order-independent
+    content_id = composer.item_id({"a": 1, "b": 2})                                # content hash (no field)
+    assert content_id.startswith("h") and content_id == composer.item_id({"b": 2, "a": 1})  # order-independent
 
 
 def test_advance_fanouts_ignores_non_fanout_checkpoints(tmp_path):

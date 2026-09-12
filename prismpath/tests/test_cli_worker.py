@@ -33,8 +33,8 @@ def fake_cli(tmp_path, body: str) -> list:
 
 def test_json_stdout_becomes_dict_outcome(tmp_path):
     cmd = fake_cli(tmp_path, 'print(json.dumps({"text": "all green", "tests_pass": True}))')
-    w = CliWorker(cmd)
-    out = w("run_tests", "run the suite", {})
+    worker = CliWorker(cmd)
+    out = worker("run_tests", "run the suite", {})
     assert out["tests_pass"] is True and out["text"] == "all green"
 
 
@@ -83,8 +83,8 @@ def test_output_just_under_cap_still_returns(tmp_path):
 
 def test_instruction_and_state_arrive_on_stdin(tmp_path):
     cmd = fake_cli(tmp_path, 'print(json.dumps({"text": "echo", "got": data}))')
-    w = CliWorker(cmd, pass_state=["ticket"])
-    out = w("classify", "triage this ticket", {"ticket": {"id": 7}, "private": "hidden"})
+    worker = CliWorker(cmd, pass_state=["ticket"])
+    out = worker("classify", "triage this ticket", {"ticket": {"id": 7}, "private": "hidden"})
     assert "triage this ticket" in out["got"]
     assert '"id": 7' in out["got"]                        # requested state passed
     assert "hidden" not in out["got"]                     # unrequested state is NOT leaked
@@ -94,8 +94,8 @@ def test_argv_templating(tmp_path):
     marker = tmp_path / "seen.txt"
     script = tmp_path / "argv_cli.py"
     script.write_text("import sys\nopen(sys.argv[2], 'w').write(sys.argv[1])\nprint('ok')\n")
-    w = CliWorker([PY, str(script), "task-{node}", str(marker)], stdin=False)
-    assert w("review", "look at it", {}) == "ok"
+    worker = CliWorker([PY, str(script), "task-{node}", str(marker)], stdin=False)
+    assert worker("review", "look at it", {}) == "ok"
     assert marker.read_text() == "task-review"
 
 

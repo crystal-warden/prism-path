@@ -17,24 +17,24 @@ WAZUH_TRIAGE_PATH = os.path.join(REPO_ROOT, "prismpath", "flows", "wazuh_triage.
 
 
 def test_terminal_with_body_fires_on_broken_fixture():
-    g = parse_file(FIXTURE_PATH)
-    findings = [f for f in analysis.analyze(g) if f.code == "terminal-with-body"]
+    graph = parse_file(FIXTURE_PATH)
+    findings = [finding for finding in analysis.analyze(graph) if finding.code == "terminal-with-body"]
     assert len(findings) == 1
-    f = findings[0]
-    assert f.severity == "warning"
-    assert f.node == "end_node"
-    assert "end_node" in str(f)
-    assert "threshold > 200 chars" in f.message
+    finding = findings[0]
+    assert finding.severity == "warning"
+    assert finding.node == "end_node"
+    assert "end_node" in str(finding)
+    assert "threshold > 200 chars" in finding.message
 
 
 def test_terminal_with_body_does_not_fire_on_wazuh_triage():
-    g = parse_file(WAZUH_TRIAGE_PATH)
-    findings = [f for f in analysis.analyze(g) if f.code == "terminal-with-body"]
+    graph = parse_file(WAZUH_TRIAGE_PATH)
+    findings = [finding for finding in analysis.analyze(graph) if finding.code == "terminal-with-body"]
     assert len(findings) == 0
 
 
 def test_terminal_with_body_does_not_fire_on_alert_router():
     alert_router_path = str(repo_file("prismpath", "examples", "code_nodes_gemma", "alert_router.md"))
-    g = parse_file(alert_router_path)
-    findings = [f for f in analysis.analyze(g) if f.code == "terminal-with-body"]
+    graph = parse_file(alert_router_path)
+    findings = [finding for finding in analysis.analyze(graph) if finding.code == "terminal-with-body"]
     assert len(findings) == 0

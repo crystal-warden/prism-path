@@ -179,7 +179,7 @@ def test_adjudicator_port_callable_driven(tmp_path):
         conn.adjudicate({"x": 1})
 
     # a non-JSON reply degrades to text, never a crash
-    out2 = conn.adjudicate({"x": 1}, generate=lambda p: "no json here")
+    out2 = conn.adjudicate({"x": 1}, generate=lambda prompt: "no json here")
     assert out2 == {"text": "no json here"}
 
 
@@ -189,7 +189,7 @@ def test_deferral_port_default_store(tmp_path, monkeypatch):
     BaseConnector.__init__(conn, name="defer_me")
     conn.defer_decision("AC-2", "insufficient evidence", {"score": 0.4})
     pend = conn.pending_deferrals()
-    assert [p["unit_id"] for p in pend] == ["AC-2"]
+    assert [pending_item["unit_id"] for pending_item in pend] == ["AC-2"]
     conn.resume_decision("AC-2", {"verdict": "met"}, actor="auditor@example")
     assert conn.pending_deferrals() == []
     rec = conn.deferrals.get("AC-2")
@@ -204,8 +204,8 @@ def test_sink_default_idempotent_jsonl(tmp_path):
     conn.emit_record({"id": "a1", "verdict": "ok"}, dest)
     conn.emit_record({"id": "a1", "verdict": "ok"}, dest)      # replay — must not double-write
     conn.emit_record({"id": "a2", "verdict": "watch"}, dest)
-    lines = [_json.loads(l) for l in open(dest)]
-    assert [l["id"] for l in lines] == ["a1", "a2"]
+    lines = [_json.loads(line) for line in open(dest)]
+    assert [record["id"] for record in lines] == ["a1", "a2"]
 
 
 def test_policy_hash_binds_the_flow_document(tmp_path):

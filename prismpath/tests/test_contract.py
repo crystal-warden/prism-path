@@ -40,13 +40,13 @@ Do it.
 
 
 def test_type_inference_across_operators():
-    c = _c(TYPES_FLOW)
-    assert c["tests_pass"] == {"type": "boolean"}
-    assert c["blocked"] == {"type": "boolean"}              # `not blocked`
-    assert c["amount"] == {"type": "number"}               # `> 500` is a range -> no closed value set
-    assert c["priority"] == {"type": "number", "values": [3]}   # `== 3` is a numeric enum -> keep the value
-    assert c["action"]["type"] == "enum"
-    assert c["action"]["values"] == ["contain", "ignore", "watch"]   # accumulated + sorted across edges
+    field_types = _c(TYPES_FLOW)
+    assert field_types["tests_pass"] == {"type": "boolean"}
+    assert field_types["blocked"] == {"type": "boolean"}              # `not blocked`
+    assert field_types["amount"] == {"type": "number"}               # `> 500` is a range -> no closed value set
+    assert field_types["priority"] == {"type": "number", "values": [3]}   # `== 3` is a numeric enum -> keep the value
+    assert field_types["action"]["type"] == "enum"
+    assert field_types["action"]["values"] == ["contain", "ignore", "watch"]   # accumulated + sorted across edges
 
 
 def test_numeric_enum_vs_numeric_range():
@@ -65,12 +65,12 @@ def test_mixed_and_empty_in_lists_are_unknown_not_string_enum():
 
 
 def test_engine_fields_excluded():
-    c = _c(TYPES_FLOW)
-    assert "visits" not in c and "error_count" not in c     # engine-provided, not the worker's contract
+    field_types = _c(TYPES_FLOW)
+    assert "visits" not in field_types and "error_count" not in field_types     # engine-provided, not the worker's contract
 
 
 def test_conflict_flagged():
-    c = _c("""---
+    field_types = _c("""---
 name: t
 start: n
 ---
@@ -81,11 +81,11 @@ Do it.
 ## a
 ## b
 """)
-    assert c["done"].get("conflict")                        # used as boolean AND enum
+    assert field_types["done"].get("conflict")                        # used as boolean AND enum
 
 
 def test_nodes_without_deterministic_edges_are_empty():
-    c = contract.derive_contract(parse("""---
+    field_types = contract.derive_contract(parse("""---
 name: t
 start: n
 ---
@@ -96,7 +96,7 @@ Do it.
 ## a
 ## b
 """))
-    assert c["n"] == {}                                     # all semantic/error -> nothing to constrain
+    assert field_types["n"] == {}                                     # all semantic/error -> nothing to constrain
 
 
 def test_to_json_schema_is_a_constrained_grammar():
@@ -112,54 +112,54 @@ def test_validate_output_type_gate():
     node = _c(TYPES_FLOW)
     # a good output: right types, routed enum value
     good = {"tests_pass": True, "blocked": False, "action": "contain", "amount": 600, "priority": 3}
-    probs = [p for p in contract.validate_output(node, good) if p.startswith("type:")]
+    probs = [problem for problem in contract.validate_output(node, good) if problem.startswith("type:")]
     assert probs == []
     # wrong types -> hard `type:` problems
     bad = contract.validate_output(node, {"tests_pass": "yes", "amount": "600", "action": "contain"})
-    assert any("tests_pass" in p and p.startswith("type:") for p in bad)
-    assert any("amount" in p and p.startswith("type:") for p in bad)
+    assert any("tests_pass" in problem and problem.startswith("type:") for problem in bad)
+    assert any("amount" in problem and problem.startswith("type:") for problem in bad)
     # an enum value no edge routes on -> soft note (falls through), not a type error
     note = contract.validate_output(node, {"action": "escalate"})
-    assert any("escalate" in p and p.startswith("note:") for p in note)
+    assert any("escalate" in problem and problem.startswith("note:") for problem in note)
 
 
 def test_engine_type_gate_stops_on_wrong_type():
     from prismpath.kernel.engine import run
-    g = parse("---\nname:t\nstart:work\n---\n## work\nGo.\n-> review: when tests_pass\n"
+    graph = parse("---\nname:t\nstart:work\n---\n## work\nGo.\n-> review: when tests_pass\n"
               "-> work: when not tests_pass\n## review\n## done\n")
 
     def bad(node, instr, state):
         return {"text": "done", "tests_pass": "yes"}          # string where a boolean is read
 
-    r = run(g, bad, type_gate=True, max_steps=5)
-    assert r.stopped == "contract_violation"
-    assert any("tests_pass" in v for v in r.pending["violations"])
+    result = run(graph, bad, type_gate=True, max_steps=5)
+    assert result.stopped == "contract_violation"
+    assert any("tests_pass" in violation for violation in result.pending["violations"])
     # OFF: the string "yes" is truthy, so it SILENTLY routes to review — the bug the gate catches
-    assert run(g, bad, type_gate=False, max_steps=5).stopped == "terminal"
+    assert run(graph, bad, type_gate=False, max_steps=5).stopped == "terminal"
 
     def good(node, instr, state):
         return {"text": "done", "tests_pass": True} if node == "work" else {"text": node}
 
-    assert run(g, good, type_gate=True, max_steps=5).stopped == "terminal"
+    assert run(graph, good, type_gate=True, max_steps=5).stopped == "terminal"
 
 
 def test_run_durable_passes_type_gate(tmp_path):
     from prismpath.ledgers import checkpoint
     flow = tmp_path / "f.md"
     flow.write_text("---\nname:t\nstart:work\n---\n## work\nGo.\n-> done: when ok\n## done\n")
-    res = checkpoint.run_durable(str(flow), lambda n, i, s: {"text": "x", "ok": 1}, str(tmp_path / "c.json"),
+    res = checkpoint.run_durable(str(flow), lambda node, instruction, state: {"text": "x", "ok": 1}, str(tmp_path / "c.json"),
                                  type_gate=True)
     assert res.stopped == "contract_violation"                # ok=1 (int) where a boolean is read
 
 
 def _codes(flow):
     from prismpath.kernel import analysis
-    return sorted({f.code for f in analysis.analyze(parse(flow))})
+    return sorted({finding.code for finding in analysis.analyze(parse(flow))})
 
 
 def test_declared_emits_parsing():
-    g = parse("---\nname:t\nstart:n\n---\n## n\nGo.\n@emits(action, level=number)\n-> a: when action == \"go\"\n## a\n")
-    assert contract.declared_emits(g.nodes["n"]) == {"action", "level"}
+    graph = parse("---\nname:t\nstart:n\n---\n## n\nGo.\n@emits(action, level=number)\n-> a: when action == \"go\"\n## a\n")
+    assert contract.declared_emits(graph.nodes["n"]) == {"action", "level"}
     # a node with no @emits -> None (declarations are opt-in), not an empty set
     g2 = parse("---\nname:t\nstart:n\n---\n## n\nGo.\n-> a: when x\n## a\n")
     assert contract.declared_emits(g2.nodes["n"]) is None
@@ -214,17 +214,17 @@ def test_type_gate_survives_resume(tmp_path):
 
 def test_none_value_is_not_a_type_violation():
     node = _c(TYPES_FLOW)
-    assert [p for p in contract.validate_output(node, {"tests_pass": None}) if p.startswith("type:")] == []
+    assert [problem for problem in contract.validate_output(node, {"tests_pass": None}) if problem.startswith("type:")] == []
 
 
 def test_duplicate_emits_unions_and_empty_key_ignored():
-    g = parse("---\nname:t\nstart:n\n---\n## n\nGo.\n@emits(a)\n@emits(b, =junk)\n-> x: when a\n## x\n")
-    assert contract.declared_emits(g.nodes["n"]) == {"a", "b"}     # merged across lines, empty key dropped
+    graph = parse("---\nname:t\nstart:n\n---\n## n\nGo.\n@emits(a)\n@emits(b, =junk)\n-> x: when a\n## x\n")
+    assert contract.declared_emits(graph.nodes["n"]) == {"a", "b"}     # merged across lines, empty key dropped
 
 
 def test_recovers_the_soc_verdict_schema_from_the_real_flow():
     # the payoff: the wazuh flow's classify node re-derives the hand-written verdict enum
-    c = contract.derive_contract(parse_file(os.path.join(HERE, "flows", "wazuh_triage.md")))
-    classify = c["classify"]
+    field_types = contract.derive_contract(parse_file(os.path.join(HERE, "flows", "wazuh_triage.md")))
+    classify = field_types["classify"]
     assert classify["recommended_action"] == {"type": "enum",
                                               "values": ["contain", "ignore", "watch"]}

@@ -66,27 +66,27 @@ def test_changed_flow_detection_excludes_fixtures_and_prose(repo):
 def test_edge_edit_reports_before_and_after(repo):
     (repo / "flow.md").write_text(FLOW_V1.replace("-> c: when not ok", "-> retry: when not ok")
                                   .replace("## c\nFailed path.", "## retry\nTry again.\n-> a: always"))
-    r = report_flow("flow.md", "HEAD")
-    assert r.mermaid_before and r.mermaid_after and r.mermaid_before != r.mermaid_after
-    out = render([r])
+    report = report_flow("flow.md", "HEAD")
+    assert report.mermaid_before and report.mermaid_after and report.mermaid_before != report.mermaid_after
+    out = render([report])
     assert MARKER in out and "before" in out and "after" in out
     assert out.count("```mermaid") == 2
 
 def test_prose_only_edit_reports_topology_unchanged(repo):
     (repo / "flow.md").write_text(FLOW_V1.replace("Do the thing.", "Do the thing, carefully."))
-    r = report_flow("flow.md", "HEAD")
-    assert r.mermaid_before == r.mermaid_after
-    assert "Topology unchanged" in render([r])
+    report = report_flow("flow.md", "HEAD")
+    assert report.mermaid_before == report.mermaid_after
+    assert "Topology unchanged" in render([report])
 
 def test_new_flow_has_no_before(repo):
     (repo / "new.md").write_text(FLOW_V1.replace("name: t", "name: new"))
-    r = report_flow("new.md", "HEAD")
-    assert r.mermaid_before is None
-    assert "new flow" in render([r])
+    report = report_flow("new.md", "HEAD")
+    assert report.mermaid_before is None
+    assert "new flow" in render([report])
 
 def test_fixtures_run_and_gate(repo):
-    r = report_flow("flow.md", "HEAD")
-    assert (r.tests_passed, r.tests_total) == (2, 2) and r.ok
+    report = report_flow("flow.md", "HEAD")
+    assert (report.tests_passed, report.tests_total) == (2, 2) and report.ok
     (repo / "flow.tests.md").write_text(TESTS.replace("| a    | broke   | ok=false | c      |",
                                                       "| a    | broke   | ok=false | b      |"))
     r2 = report_flow("flow.md", "HEAD")
@@ -94,14 +94,14 @@ def test_fixtures_run_and_gate(repo):
     assert "✗ 1/2" in render([r2])
 
 def test_advisories_do_not_trip_the_gate():
-    class W:                                                   # a warning-severity finding
+    class WarningFinding:                                                   # a warning-severity finding
         severity, code, node, message = "warning", "possible-stuck", "a", "advisory only"
-    r = FlowReport(path="f.md", findings=[W()], tests_passed=2, tests_total=2,
+    report = FlowReport(path="f.md", findings=[WarningFinding()], tests_passed=2, tests_total=2,
                    mermaid_before="g", mermaid_after="g")
-    assert r.warnings and not r.errors and r.ok                # warnings alone never gate
-    assert "⚠" in render([r])
-    W.severity = "error"
-    assert not FlowReport(path="f.md", findings=[W()], mermaid_after="g").ok
+    assert report.warnings and not report.errors and report.ok                # warnings alone never gate
+    assert "⚠" in render([report])
+    WarningFinding.severity = "error"
+    assert not FlowReport(path="f.md", findings=[WarningFinding()], mermaid_after="g").ok
 
 def test_deleted_flow_is_skipped(repo):
     os.unlink(repo / "flow.md")

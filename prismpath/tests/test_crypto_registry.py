@@ -16,17 +16,17 @@ SUITES = {
 
 
 def test_build_is_canonical_and_hash_is_stable():
-    a = cr.build_registry(SUITES, key_id="k")
-    b = cr.build_registry(dict(reversed(list(SUITES.items()))), key_id="k")  # insertion order differs
-    assert cr.registry_hash(a) == cr.registry_hash(b)   # canonical JSON -> order-independent
+    registry = cr.build_registry(SUITES, key_id="k")
+    reordered_registry = cr.build_registry(dict(reversed(list(SUITES.items()))), key_id="k")  # insertion order differs
+    assert cr.registry_hash(registry) == cr.registry_hash(reordered_registry)   # canonical JSON -> order-independent
 
 
 def test_any_edit_flips_the_hash():
-    a = cr.build_registry(SUITES, key_id="k")
+    registry = cr.build_registry(SUITES, key_id="k")
     weakened = dict(SUITES)
     weakened["tls13-aesgcm"] = {**SUITES["tls13-aesgcm"], "aead": "aes-128-gcm"}
-    b = cr.build_registry(weakened, key_id="k")
-    assert cr.registry_hash(a) != cr.registry_hash(b)
+    weakened_registry = cr.build_registry(weakened, key_id="k")
+    assert cr.registry_hash(registry) != cr.registry_hash(weakened_registry)
 
 
 def test_missing_key_is_rejected():
@@ -55,16 +55,16 @@ def test_sign_verify_roundtrip_and_tamper(tmp_path):
     _pub, key_id = pp.load_public(keys["public"])
     reg = cr.build_registry(SUITES, key_id=key_id)
     reg_path = str(tmp_path / "registry.json")
-    h = cr.sign_registry(reg, keys["private"], reg_path)
-    assert h == cr.registry_hash(reg)
+    registry_digest = cr.sign_registry(reg, keys["private"], reg_path)
+    assert registry_digest == cr.registry_hash(reg)
 
     ok, reasons, loaded = cr.verify_registry(reg_path, [keys["public"]])
     assert ok, reasons
-    assert cr.registry_hash(loaded) == h
+    assert cr.registry_hash(loaded) == registry_digest
 
     # tamper: rewrite the file with a weakened suite, signature no longer matches
     weakened = cr.build_registry({**SUITES, "tls13-aesgcm": {**SUITES["tls13-aesgcm"], "aead": "aes-128-gcm"}}, key_id=key_id)
-    with open(reg_path, "wb") as f:
-        f.write(pp.canonical_bytes(weakened))
+    with open(reg_path, "wb") as registry_file:
+        registry_file.write(pp.canonical_bytes(weakened))
     ok2, reasons2, _ = cr.verify_registry(reg_path, [keys["public"]])
     assert ok2 is False and "registry:sig-invalid" in reasons2

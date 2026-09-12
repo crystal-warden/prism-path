@@ -9,7 +9,7 @@ from prismpath.kernel.parser import parse, parse_file
 from prismpath.kernel import analysis
 
 def test_deterministic_only_flow_is_portable():
-    g = parse("""---
+    graph = parse("""---
 name: p
 start: a
 ---
@@ -25,11 +25,11 @@ Done.
 -> a: on error
 -> b: on event ping
 """)
-    assert analysis.portability(g) == []
+    assert analysis.portability(graph) == []
 
 
 def test_semantic_edge_is_the_violation():
-    g = parse("""---
+    graph = parse("""---
 name: p
 start: a
 ---
@@ -44,14 +44,14 @@ Done.
 ## c
 Done.
 """)
-    f = analysis.portability(g)
-    assert len(f) == 1 and f[0].code == "not-portable-edge" and f[0].node == "a"
-    assert f[0].severity == "warning"                  # legal in the full engine, just not portable
+    findings = analysis.portability(graph)
+    assert len(findings) == 1 and findings[0].code == "not-portable-edge" and findings[0].node == "a"
+    assert findings[0].severity == "warning"                  # legal in the full engine, just not portable
 
 
 def test_unreachable_semantic_edge_does_not_count():
     # portability is about what can actually execute — a semantic edge on an unreachable node is moot
-    g = parse("""---
+    graph = parse("""---
 name: p
 start: a
 ---
@@ -65,7 +65,7 @@ Done.
 ## orphan
 -> b: it seems finished
 """)
-    assert analysis.portability(g) == []
+    assert analysis.portability(graph) == []
 
 
 def test_portability_tree_crosses_the_spawn_boundary(tmp_path):
@@ -96,9 +96,9 @@ start: d
 ## agg
 Done.
 """)
-    g = parse_file(str(tmp_path / "parent.md"))
-    assert analysis.portability(g) == []               # parent alone is portable
-    tree = analysis.portability_tree(g, str(tmp_path / "parent.md"))
+    graph = parse_file(str(tmp_path / "parent.md"))
+    assert analysis.portability(graph) == []               # parent alone is portable
+    tree = analysis.portability_tree(graph, str(tmp_path / "parent.md"))
     assert len(tree) == 1 and tree[0].code == "not-portable-edge"
     assert tree[0].node.startswith("child.md:")        # violation attributed to the child
 
@@ -128,8 +128,8 @@ start: d
 ## f
 Done.
 """)
-    g = parse_file(str(tmp_path / "a.md"))
-    assert analysis.portability_tree(g, str(tmp_path / "a.md")) == []   # terminates, no findings
+    graph = parse_file(str(tmp_path / "a.md"))
+    assert analysis.portability_tree(graph, str(tmp_path / "a.md")) == []   # terminates, no findings
 
 
 def test_shipping_soc_flow_is_portable():
@@ -138,8 +138,8 @@ def test_shipping_soc_flow_is_portable():
     # (path resolved relative to this test file so it works in both repo layouts)
     import pathlib
     flow = pathlib.Path(__file__).resolve().parent.parent / "flows" / "wazuh_triage.md"
-    g = parse_file(str(flow))
-    assert analysis.portability(g) == []
+    graph = parse_file(str(flow))
+    assert analysis.portability(graph) == []
 
 
 # --- tiered portability (P0/P1/P2) — a lint-computable flow property ----------------------
@@ -161,13 +161,13 @@ Done.
 
 
 def _write(tmp_path, name, body):
-    p = tmp_path / name
-    p.write_text(body)
-    return p
+    path = tmp_path / name
+    path.write_text(body)
+    return path
 
 
 def test_tier_p0_no_semantic_edges(tmp_path):
-    p = _write(tmp_path, "det.md", """---
+    flow_path = _write(tmp_path, "det.md", """---
 name: det
 start: a
 ---
@@ -182,46 +182,46 @@ Done.
 ## c
 Done.
 """)
-    d = analysis.portability_tier(parse_file(str(p)), str(p))
-    assert d["tier"] == "P0" and d["semantic_edges"] == [] and d["lock"] is None
+    tier = analysis.portability_tier(parse_file(str(flow_path)), str(flow_path))
+    assert tier["tier"] == "P0" and tier["semantic_edges"] == [] and tier["lock"] is None
 
 
 def test_tier_p2_semantic_without_lock(tmp_path):
-    p = _write(tmp_path, "sem.md", SEM_FLOW)
-    d = analysis.portability_tier(parse_file(str(p)), str(p))
-    assert d["tier"] == "P2"
-    assert d["unlocked"] == ["the change is correct and complete"]
+    flow_path = _write(tmp_path, "sem.md", SEM_FLOW)
+    tier = analysis.portability_tier(parse_file(str(flow_path)), str(flow_path))
+    assert tier["tier"] == "P2"
+    assert tier["unlocked"] == ["the change is correct and complete"]
 
 
 def test_tier_p1_semantic_fully_locked(tmp_path):
     import json
-    p = _write(tmp_path, "sem.md", SEM_FLOW)
+    flow_path = _write(tmp_path, "sem.md", SEM_FLOW)
     # a minimal lock covering the one reachable semantic condition (no embedder needed to test tiers)
     (tmp_path / "sem.lock").write_text(json.dumps({
         "version": 1, "flow": "sem", "flow_hash": "sha256:x",
         "embedder": {"name": "stub", "dim": 8, "probe": "p", "probe_vec": ""},
         "delta": 0.05,
         "conditions": {"the change is correct and complete": ""}}))
-    d = analysis.portability_tier(parse_file(str(p)), str(p))
-    assert d["tier"] == "P1" and d["unlocked"] == [] and d["lock"].endswith("sem.lock")
+    tier = analysis.portability_tier(parse_file(str(flow_path)), str(flow_path))
+    assert tier["tier"] == "P1" and tier["unlocked"] == [] and tier["lock"].endswith("sem.lock")
 
 
 def test_tier_p2_when_lock_is_partial(tmp_path):
     import json
     body = SEM_FLOW.replace("-> bad: when visits > 3", "-> bad: it is broken beyond repair")
-    p = _write(tmp_path, "sem.md", body)
+    flow_path = _write(tmp_path, "sem.md", body)
     (tmp_path / "sem.lock").write_text(json.dumps({
         "version": 1, "flow": "sem", "flow_hash": "sha256:x",
         "embedder": {"name": "stub", "dim": 8, "probe": "p", "probe_vec": ""},
         "delta": 0.05,
         "conditions": {"the change is correct and complete": ""}}))   # second condition missing
-    d = analysis.portability_tier(parse_file(str(p)), str(p))
-    assert d["tier"] == "P2" and d["unlocked"] == ["it is broken beyond repair"]
+    tier = analysis.portability_tier(parse_file(str(flow_path)), str(flow_path))
+    assert tier["tier"] == "P2" and tier["unlocked"] == ["it is broken beyond repair"]
 
 
 def test_tree_tier_is_the_worst_across_children(tmp_path):
     _write(tmp_path, "child.md", SEM_FLOW)                 # P2 (no lock)
-    p = _write(tmp_path, "parent.md", """---
+    flow_path = _write(tmp_path, "parent.md", """---
 name: parent
 start: d
 ---
@@ -233,7 +233,7 @@ start: d
 ## agg
 Done.
 """)
-    tree = analysis.portability_tier_tree(parse_file(str(p)), str(p))
+    tree = analysis.portability_tier_tree(parse_file(str(flow_path)), str(flow_path))
     assert tree["tier"] == "P2"                            # P0 parent + P2 child -> P2 deployment
-    tiers = {path.split("/")[-1]: d["tier"] for path, d in tree["flows"].items()}
+    tiers = {path.split("/")[-1]: tier["tier"] for path, tier in tree["flows"].items()}
     assert tiers["parent.md"] == "P0" and tiers["child.md"] == "P2"

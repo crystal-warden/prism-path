@@ -7,9 +7,9 @@ import os
 from prismpath.ledgers.audit_log import AuditLog, _leaf_hex, verify
 
 
-def _log(tmp_path, n=5):
+def _log(tmp_path, count=5):
     log = AuditLog(str(tmp_path / "audit.log"))
-    for i in range(n):
+    for i in range(count):
         log.append("tester", "act", {"n": i})
     return log
 
@@ -17,7 +17,7 @@ def _log(tmp_path, n=5):
 def test_root_is_a_real_hash(tmp_path):
     log = _log(tmp_path)
     root = log.current_root()
-    assert len(root) == 64 and all(c in "0123456789abcdef" for c in root)   # sha256 hex
+    assert len(root) == 64 and all(character in "0123456789abcdef" for character in root)   # sha256 hex
 
 
 def test_empty_log(tmp_path):
@@ -28,10 +28,10 @@ def test_empty_log(tmp_path):
 def test_every_leaf_proves_and_verifies(tmp_path):
     log = _log(tmp_path, 9)
     root = log.current_root()
-    for i in range(len(log.leaves)):
-        pr = log.prove(i)
+    for leaf_index in range(len(log.leaves)):
+        pr = log.prove(leaf_index)
         assert "path" in pr and "peaks" in pr
-        assert verify(log.leaves[i], pr, root)
+        assert verify(log.leaves[leaf_index], pr, root)
     assert log.verify_log() is True
 
 

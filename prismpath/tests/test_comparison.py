@@ -20,10 +20,10 @@ def test_load_cases_matches_labeled_suite():
     repo_file("prismpath", "benchmark", "routing_bench.jsonl")
     cases = load_cases()
     assert len(cases) >= 17
-    for c, instruction, outcome, edges in cases:
-        assert outcome == c["outcome"]
-        targets = [t for t, _ in edges]
-        assert c["label"] in targets, f"label {c['label']!r} not an edge of node {c['node']!r}"
+    for case, instruction, outcome, edges in cases:
+        assert outcome == case["outcome"]
+        targets = [target for target, _ in edges]
+        assert case["label"] in targets, f"label {case['label']!r} not an edge of node {case['node']!r}"
         assert isinstance(instruction, str)
 
 

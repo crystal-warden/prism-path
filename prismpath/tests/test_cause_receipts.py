@@ -17,41 +17,41 @@ class ScoredRouter:
 
     def route(self, outcome, edges, instruction=''):
         return RouteDecision(edges[0][0], {"used": "semantic", "score": self.score,
-                                           "sims": {t: self.score for t, _ in edges}})
+                                           "sims": {target: self.score for target, _ in edges}})
 
 
 def test_terminal_is_clean():
-    g = parse("""
+    graph = parse("""
 ## start
 -> done: when go
 ## done
 finished
 """)
-    res = run(g, lambda n, i, s: {"text": "x", "go": True})
+    res = run(graph, lambda node, instruction, state: {"text": "x", "go": True})
     assert res.stopped == "terminal" and res.cause == causes.CAUSE_NONE
 
 
 def test_stuck_carries_cause():
-    g = parse("""
+    graph = parse("""
 ## start
 -> done: when go
 ## done
 finished
 """)
-    res = run(g, lambda n, i, s: {"text": "x", "go": False})
+    res = run(graph, lambda node, instruction, state: {"text": "x", "go": False})
     assert res.stopped == "stuck"
     assert res.cause == causes.NAMES["route:stuck"]
     assert causes.cause_class(res.cause) == "routing"
 
 
 def test_max_steps_carries_cause():
-    g = parse("""
+    graph = parse("""
 ## a
 -> b: when True
 ## b
 -> a: when True
 """)
-    res = run(g, lambda n, i, s: {"text": "x"}, max_steps=5)
+    res = run(graph, lambda node, instruction, state: {"text": "x"}, max_steps=5)
     assert res.stopped == "max_steps"
     assert res.cause == causes.NAMES["route:max-steps"]
 
@@ -64,7 +64,7 @@ def test_worker_requested_human_vs_below_floor_differ():
 ## done
 finished
 """)
-    r1 = run(g1, lambda n, i, s: {"text": "x", "needs_human": True})
+    r1 = run(g1, lambda node, instruction, state: {"text": "x", "needs_human": True})
     assert r1.stopped == "needs_human"
     assert r1.cause == causes.NAMES["route:needs-human"]
 
@@ -75,7 +75,7 @@ finished
 ## done
 finished
 """)
-    r2 = run(g2, lambda n, i, s: {"text": "ambiguous"},
+    r2 = run(g2, lambda node, instruction, state: {"text": "ambiguous"},
              router=ScoredRouter(0.10), human_floor=0.55)
     assert r2.stopped == "needs_human"
     assert r2.cause == causes.NAMES["route:below-human-floor"]

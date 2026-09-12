@@ -33,9 +33,9 @@ done
 ## b
 done
 """
-    g = parse(text)
+    graph = parse(text)
     worker = lambda node, instruction, state: {"text": "anything", "go": True}
-    res = run(g, worker, router=FirstEdgeRouter())
+    res = run(graph, worker, router=FirstEdgeRouter())
     assert res.path == ["start", "a"]            # took the deterministic edge, not 'b'
     assert res.steps[0].info["used"] == "deterministic"
     assert res.stopped == "terminal"
@@ -52,9 +52,9 @@ end
 ## b
 end
 """
-    g = parse(text)
+    graph = parse(text)
     worker = lambda node, instruction, state: {"text": "x", "go": False}   # deterministic edge is False
-    res = run(g, worker, router=FirstEdgeRouter())
+    res = run(graph, worker, router=FirstEdgeRouter())
     assert res.path == ["start", "b"]
     assert res.steps[0].info["used"] == "semantic"
 
@@ -66,9 +66,9 @@ def test_terminal_node():
 ## end
 finish
 """
-    g = parse(text)
+    graph = parse(text)
     worker = lambda node, instruction, state: {"text": "ok"}
-    res = run(g, worker, router=FirstEdgeRouter())
+    res = run(graph, worker, router=FirstEdgeRouter())
     assert res.stopped == "terminal"
     assert res.path == ["start", "end"]
     assert isinstance(res.steps, list) and len(res.steps) == 1
@@ -84,9 +84,9 @@ def test_cycle_bounded_by_visits():
 ## done
 finished
 """
-    g = parse(text)
+    graph = parse(text)
     worker = lambda node, instruction, state: {"text": "spin"}
-    res = run(g, worker, router=FirstEdgeRouter(), max_steps=50)
+    res = run(graph, worker, router=FirstEdgeRouter(), max_steps=50)
     assert res.stopped == "terminal"
     assert res.path[-1] == "done"
     assert res.state["visits"]["loop"] == 3       # entered until visits>2 fired
@@ -98,9 +98,9 @@ def test_max_steps_enforced():
 ## loop
 -> loop: always
 """
-    g = parse(text)
+    graph = parse(text)
     worker = lambda node, instruction, state: {"text": "spin"}
-    res = run(g, worker, router=FirstEdgeRouter(), max_steps=3)
+    res = run(graph, worker, router=FirstEdgeRouter(), max_steps=3)
     assert res.stopped == "max_steps"
     assert res.state["visits"]["loop"] == 3
 
@@ -113,9 +113,9 @@ def test_stuck_on_deterministic_only_no_match():
 ## end
 finish
 """
-    g = parse(text)
+    graph = parse(text)
     worker = lambda node, instruction, state: {"text": "x"}          # 'never_true' is unknown -> None -> falsy
-    res = run(g, worker, router=FirstEdgeRouter())
+    res = run(graph, worker, router=FirstEdgeRouter())
     assert res.stopped == "stuck"
     assert res.path == ["start"]
 
@@ -131,9 +131,9 @@ r
 ## done
 d
 """
-    g = parse(text)
+    graph = parse(text)
     worker = lambda node, instruction, state: {"text": "all good", "ok": True}
-    res = run(g, worker, router=FirstEdgeRouter())
+    res = run(graph, worker, router=FirstEdgeRouter())
     assert res.path == ["start", "done"]
     assert res.steps[0].info["used"] == "deterministic"
 
@@ -150,9 +150,9 @@ o
 ## done
 d
 """
-    g = parse(text)
+    graph = parse(text)
     worker = lambda node, instruction, state: "just a string outcome"
-    res = run(g, worker, router=FirstEdgeRouter())
+    res = run(graph, worker, router=FirstEdgeRouter())
     assert res.path == ["start", "other"]
     assert res.steps[0].info["used"] == "semantic"
 
@@ -164,8 +164,8 @@ def test_run_result_shape():
 ## end
 e
 """
-    g = parse(text)
-    res = run(g, lambda node, instruction, state: {"text": "x"}, router=FirstEdgeRouter())
+    graph = parse(text)
+    res = run(graph, lambda node, instruction, state: {"text": "x"}, router=FirstEdgeRouter())
     assert isinstance(res, RunResult)
     assert isinstance(res.path, list)
     assert isinstance(res.steps, list)

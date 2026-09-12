@@ -20,7 +20,7 @@ def test_polarity_signal_pure():
 def _stub_high_sim(monkeypatch):
     # every condition embeds to nearly the same vector -> high cosine (topic-similar)
     monkeypatch.setattr(embedder, "embed",
-                        lambda texts, is_query=False: np.asarray([[1.0, 0.001 * i] for i in range(len(texts))],
+                        lambda texts, is_query=False: np.asarray([[1.0, 0.001 * index] for index in range(len(texts))],
                                                                  dtype="float32"))
 
 
@@ -56,7 +56,7 @@ Sort the request.
 def test_polarity_mirror_flags_pass_fail(monkeypatch):
     _stub_high_sim(monkeypatch)
     findings = lint.polarity_mirror(parse(POLAR))
-    assert any(f.code == "polarity-mirror" and f.node == "run_tests" for f in findings)
+    assert any(finding.code == "polarity-mirror" and finding.node == "run_tests" for finding in findings)
 
 
 def test_polarity_mirror_clean_on_distinct_topics(monkeypatch):

@@ -39,8 +39,8 @@ class _Stub(BaseHTTPRequestHandler):
     status = 200
 
     def do_POST(self):
-        n = int(self.headers.get("Content-Length", 0))
-        type(self).last_request = json.loads(self.rfile.read(n))
+        content_length = int(self.headers.get("Content-Length", 0))
+        type(self).last_request = json.loads(self.rfile.read(content_length))
         body = json.dumps({"choices": [{"message": {"content": type(self).reply}}]}).encode()
         self.send_response(type(self).status)
         self.send_header("Content-Type", "application/json")
@@ -49,15 +49,15 @@ class _Stub(BaseHTTPRequestHandler):
         if type(self).status == 200:
             self.wfile.write(body)
 
-    def log_message(self, *a):
+    def log_message(self, *args):
         pass
 
 
 @pytest.fixture()
 def stub():
     srv = HTTPServer(("127.0.0.1", 0), _Stub)
-    t = threading.Thread(target=srv.serve_forever, daemon=True)
-    t.start()
+    thread = threading.Thread(target=srv.serve_forever, daemon=True)
+    thread.start()
     _Stub.reply = json.dumps({"text": "it crashes", "kind": "bug"})
     _Stub.status = 200
     yield f"openai:testmodel@http://127.0.0.1:{srv.server_port}/v1"

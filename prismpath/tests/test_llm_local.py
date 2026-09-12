@@ -116,9 +116,9 @@ def test_load_quantized_and_bf16_paths(monkeypatch):
     monkeypatch.setitem(llm_local._state, "model", None)
     monkeypatch.setattr(llm_local, "_DEVICE", "cpu")
 
-    monkeypatch.setattr(transformers.AutoConfig, "from_pretrained", lambda *a, **k: DummyConfig(quantized=True))
-    monkeypatch.setattr(transformers.AutoTokenizer, "from_pretrained", lambda *a, **k: StubTokenizer())
-    monkeypatch.setattr(transformers.AutoModelForCausalLM, "from_pretrained", lambda *a, **k: StubModel())
+    monkeypatch.setattr(transformers.AutoConfig, "from_pretrained", lambda *args, **kwargs: DummyConfig(quantized=True))
+    monkeypatch.setattr(transformers.AutoTokenizer, "from_pretrained", lambda *args, **kwargs: StubTokenizer())
+    monkeypatch.setattr(transformers.AutoModelForCausalLM, "from_pretrained", lambda *args, **kwargs: StubModel())
 
     llm_local._load()
     assert llm_local._state["tok"] is not None
@@ -127,7 +127,7 @@ def test_load_quantized_and_bf16_paths(monkeypatch):
     # Test bf16 branch
     monkeypatch.setitem(llm_local._state, "tok", None)
     monkeypatch.setitem(llm_local._state, "model", None)
-    monkeypatch.setattr(transformers.AutoConfig, "from_pretrained", lambda *a, **k: DummyConfig(quantized=False))
+    monkeypatch.setattr(transformers.AutoConfig, "from_pretrained", lambda *args, **kwargs: DummyConfig(quantized=False))
 
     llm_local._load()
     assert llm_local._state["tok"] is not None

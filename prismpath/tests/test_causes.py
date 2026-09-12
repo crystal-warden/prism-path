@@ -15,27 +15,27 @@ REPO = Path(__file__).resolve().parents[2]
 
 # ------------------------------------------------------------------------------- structure
 def test_codes_and_names_unique():
-    codes = [c for c, *_ in causes._REGISTRY]
-    names = [n for _c, n, *_ in causes._REGISTRY]
+    codes = [code for code, *_ in causes._REGISTRY]
+    names = [name for _c, name, *_ in causes._REGISTRY]
     assert len(codes) == len(set(codes))
     assert len(names) == len(set(names))
     assert causes.CAUSE_NONE not in codes          # 0 is reserved for "clean decision"
 
 
 def test_codes_fit_one_byte():
-    assert all(1 <= c <= 255 for c, *_ in causes._REGISTRY)
+    assert all(1 <= code <= 255 for code, *_ in causes._REGISTRY)
 
 
 def test_classes_are_the_declared_set():
-    assert {k for _c, _n, k, _d in causes._REGISTRY} == {
+    assert {cause_class for _c, _n, cause_class, _d in causes._REGISTRY} == {
         "authority", "envelope", "routing", "wire", "state"}
 
 
 def test_lookups_round_trip():
-    for c, n, k, _d in causes._REGISTRY:
-        assert causes.code(n) == c
-        assert causes.name(c) == n
-        assert causes.cause_class(c) == k == causes.cause_class(n)
+    for code, name, cause_class, _d in causes._REGISTRY:
+        assert causes.code(name) == code
+        assert causes.name(code) == name
+        assert causes.cause_class(code) == cause_class == causes.cause_class(name)
     assert causes.name(0) is None and causes.code("no-such-cause") is None
 
 
@@ -85,13 +85,13 @@ def test_image_and_envelope_refusal_strings_are_registered():
 def test_wire_cause_strings_are_registered():
     """The wire modules' emitted causes (prismpath/telemetry replay + concentrator, gated by
     their own referees) appear verbatim in the registry."""
-    for s in ("replay-duplicate", "replay-stale",
+    for wire_cause in ("replay-duplicate", "replay-stale",
               "concentrator-unknown-stream", "concentrator-truncated"):
-        assert causes.code(s) is not None
+        assert causes.code(wire_cause) is not None
 
 
 def test_engine_stop_states_are_mapped():
-    for stop, c in causes.ENGINE_STOP_TO_CAUSE.items():
-        assert causes.name(c) is not None, f"engine stop {stop!r} maps to unknown code {c}"
+    for stop, code in causes.ENGINE_STOP_TO_CAUSE.items():
+        assert causes.name(code) is not None, f"engine stop {stop!r} maps to unknown code {code}"
     assert set(causes.ENGINE_STOP_TO_CAUSE) == {
         "stuck", "needs_human", "max_steps", "contract_violation"}

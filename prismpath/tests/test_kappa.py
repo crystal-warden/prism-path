@@ -26,8 +26,8 @@ def test_cohen_kappa_bounds():
     # worse-than-chance is negative
     assert kappa.cohen_kappa(["a", "b", "a", "b"], ["b", "a", "b", "a"]) < 0
     # a strong-but-imperfect case lands between 0 and 1
-    k = kappa.cohen_kappa(["a"] * 8 + ["b", "b"], ["a"] * 9 + ["b"])
-    assert 0.0 < k < 1.0
+    agreement = kappa.cohen_kappa(["a"] * 8 + ["b", "b"], ["a"] * 9 + ["b"])
+    assert 0.0 < agreement < 1.0
 
 
 def test_band_names():
@@ -44,43 +44,43 @@ def _rec(node, outcome, label, stratum="intent", flow="f"):
 
 
 def test_align_is_order_independent_and_drops_unmatched():
-    a = [_rec("n", "o1", "x"), _rec("n", "o2", "y"), _rec("n", "only_a", "z")]
-    b = [_rec("n", "o2", "y"), _rec("n", "o1", "w")]                          # reversed; missing only_a
-    pairs = kappa.align(a, b)
+    annotator_a = [_rec("n", "o1", "x"), _rec("n", "o2", "y"), _rec("n", "only_a", "z")]
+    annotator_b = [_rec("n", "o2", "y"), _rec("n", "o1", "w")]                          # reversed; missing only_a
+    pairs = kappa.align(annotator_a, annotator_b)
     assert len(pairs) == 2                                                    # only_a dropped
     assert {(ra["outcome"], ra["label"], rb["label"]) for ra, rb in pairs} == {("o1", "x", "w"), ("o2", "y", "y")}
 
 
 def test_adjudicate_splits_gold_and_disagreements():
-    a = [_rec("n", "o1", "x"), _rec("n", "o2", "y")]
-    b = [_rec("n", "o1", "x"), _rec("n", "o2", "z")]
-    gold, dis = kappa.adjudicate(a, b)
+    annotator_a = [_rec("n", "o1", "x"), _rec("n", "o2", "y")]
+    annotator_b = [_rec("n", "o1", "x"), _rec("n", "o2", "z")]
+    gold, dis = kappa.adjudicate(annotator_a, annotator_b)
     assert len(gold) == 1 and gold[0]["label"] == "x"                        # agreement -> gold, benchmark-shaped
     assert set(gold[0]) == {"flow", "node", "outcome", "label", "stratum"}
     assert len(dis) == 1 and dis[0]["label_a"] == "y" and dis[0]["label_b"] == "z"
 
 
 def test_report_shape_and_per_stratum():
-    a = [_rec("n", "o1", "x", "intent"), _rec("n", "o2", "y", "polarity")]
-    b = [_rec("n", "o1", "x", "intent"), _rec("n", "o2", "z", "polarity")]
-    rep = kappa.report(a, b, by_stratum=True)
+    annotator_a = [_rec("n", "o1", "x", "intent"), _rec("n", "o2", "y", "polarity")]
+    annotator_b = [_rec("n", "o1", "x", "intent"), _rec("n", "o2", "z", "polarity")]
+    rep = kappa.report(annotator_a, annotator_b, by_stratum=True)
     assert rep["n"] == 2 and rep["observed_agreement"] == 0.5
     assert "intent" in rep["per_stratum"] and "polarity" in rep["per_stratum"]
 
 
 def test_roundtrip_through_files(tmp_path):
-    a = [_rec("n", "o1", "x")]
-    kappa.dump(a, str(tmp_path / "a.jsonl"))
-    assert kappa.load(str(tmp_path / "a.jsonl")) == a
+    annotator_a = [_rec("n", "o1", "x")]
+    kappa.dump(annotator_a, str(tmp_path / "a.jsonl"))
+    assert kappa.load(str(tmp_path / "a.jsonl")) == annotator_a
 
 
 # --- blind annotation ------------------------------------------------------------------
 def test_blind_cases_strip_label_and_resolve_edges():
     cases = list(annotate.blind_cases(_bench()))
     assert len(cases) >= 300
-    c = cases[0]
-    assert "label" not in c and c["edges"] and c["targets"]                  # label hidden, edges resolved
-    assert all(t in c["targets"] for t, _ in c["edges"])
+    case = cases[0]
+    assert "label" not in case and case["edges"] and case["targets"]                  # label hidden, edges resolved
+    assert all(target in case["targets"] for target, _ in case["edges"])
 
 
 def test_resolve_pick():
@@ -92,12 +92,12 @@ def test_resolve_pick():
 
 def test_annotate_loop_writes_benchmark_shape_and_is_resumable(tmp_path):
     out = str(tmp_path / "ann.jsonl")
-    n1 = annotate.annotate_loop(_bench(), out, input_fn=lambda p: "1", print_fn=lambda *a: None, limit=5)
+    n1 = annotate.annotate_loop(_bench(), out, input_fn=lambda prompt: "1", print_fn=lambda *printed: None, limit=5)
     assert n1 == 5
-    recs = [json.loads(l) for l in open(out)]
-    assert all(set(r) == {"flow", "node", "outcome", "label", "stratum"} for r in recs)
+    recs = [json.loads(line) for line in open(out)]
+    assert all(set(record) == {"flow", "node", "outcome", "label", "stratum"} for record in recs)
     # resumable: a second run skips the 5 already done and labels the next 3
-    n2 = annotate.annotate_loop(_bench(), out, input_fn=lambda p: "1", print_fn=lambda *a: None, limit=3)
+    n2 = annotate.annotate_loop(_bench(), out, input_fn=lambda prompt: "1", print_fn=lambda *printed: None, limit=3)
     assert n2 == 3 and len([1 for _ in open(out)]) == 8
 
 
@@ -105,11 +105,11 @@ def test_gold_is_a_valid_benchmark_dataset(tmp_path):
     # two annotators who always agree -> gold whose labels are all REAL edges (drop-in for reproduce.py)
     out_a, out_b = str(tmp_path / "a.jsonl"), str(tmp_path / "b.jsonl")
     for out in (out_a, out_b):
-        annotate.annotate_loop(_bench(), out, input_fn=lambda p: "1", print_fn=lambda *a: None, limit=10)
+        annotate.annotate_loop(_bench(), out, input_fn=lambda prompt: "1", print_fn=lambda *printed: None, limit=10)
     gold, _ = kappa.adjudicate(kappa.load(out_a), kappa.load(out_b))
     assert gold
     graphs = {}
-    for g in gold:
-        graphs.setdefault(g["flow"], parse_file(os.path.join(HERE, "flows", f"{g['flow']}.md")))
-        targets = [t for t, _ in graphs[g["flow"]].nodes[g["node"]].edges]
-        assert g["label"] in targets
+    for gold_record in gold:
+        graphs.setdefault(gold_record["flow"], parse_file(os.path.join(HERE, "flows", f"{gold_record['flow']}.md")))
+        targets = [target for target, _ in graphs[gold_record["flow"]].nodes[gold_record["node"]].edges]
+        assert gold_record["label"] in targets

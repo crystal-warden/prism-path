@@ -32,11 +32,11 @@ def make_seams(units, gate_script=None):
 
     def pick(state):
         done_units = state.get("_done_units") or set()
-        for u in units:
-            if u not in done_units:
-                state["unit"] = {"id": u}
-                return {"text": f"next: {u}", "done": False,
-                        "instruction": f"build {u}", "target": f"{u}.js"}
+        for unit in units:
+            if unit not in done_units:
+                state["unit"] = {"id": unit}
+                return {"text": f"next: {unit}", "done": False,
+                        "instruction": f"build {unit}", "target": f"{unit}.js"}
         return {"text": "all proven", "done": True}
 
     def build(state):
@@ -44,14 +44,14 @@ def make_seams(units, gate_script=None):
         return {"text": f"built {state['unit']['id']}"}
 
     def gate(state):
-        u = state["unit"]["id"]
-        log["gated"].append(u)
-        script = (gate_script or {}).get(u, [True])
-        i = attempts.get(u, 0)
-        attempts[u] = i + 1
-        result = script[min(i, len(script) - 1)]
+        unit = state["unit"]["id"]
+        log["gated"].append(unit)
+        script = (gate_script or {}).get(unit, [True])
+        attempt = attempts.get(unit, 0)
+        attempts[unit] = attempt + 1
+        result = script[min(attempt, len(script) - 1)]
         if result is True:
-            state["gate_report"] = f"gate green for {u}"
+            state["gate_report"] = f"gate green for {unit}"
             return {"text": "green", "gate_green": True}
         raise GateRed(result)
 
@@ -67,8 +67,8 @@ def make_seams(units, gate_script=None):
 
 
 def test_flow_document_compiles():
-    g = parse_file(sprint_flow.DEFAULT_FLOW)
-    assert [f for f in analysis.analyze(g) if f.severity == "error"] == []
+    graph = parse_file(sprint_flow.DEFAULT_FLOW)
+    assert [finding for finding in analysis.analyze(graph) if finding.severity == "error"] == []
 
 
 def test_green_path_proves_every_unit(tmp_path):

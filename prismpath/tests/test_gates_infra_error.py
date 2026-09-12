@@ -19,12 +19,12 @@ from prismpath.orchestration import gates
 def test_gate_crash_is_a_failure_not_a_pass(tmp_path, monkeypatch):
     (tmp_path / "index.html").write_text("<html><body><button id='go'>go</button></body></html>")
 
-    def boom(*a, **k):
+    def boom(*args, **kwargs):
         raise RuntimeError("chromium exploded")
 
     import playwright.sync_api
     monkeypatch.setattr(playwright.sync_api, "sync_playwright", boom)
     errs = gates.behavioral_check(str(tmp_path))
     assert errs, "a crashed gate returned no errors"
-    assert any("infrastructure" in e or "infra" in e for e in errs)
-    assert any("chromium exploded" in e for e in errs)
+    assert any("infrastructure" in error or "infra" in error for error in errs)
+    assert any("chromium exploded" in error for error in errs)

@@ -51,9 +51,9 @@ start: fetch
 
 
 def _flow(tmp_path, text, name="queue.md"):
-    p = tmp_path / name
-    p.write_text(text)
-    return str(p)
+    path = tmp_path / name
+    path.write_text(text)
+    return str(path)
 
 
 def _led(tmp_path):
@@ -72,7 +72,7 @@ class QueueAgent:
     def __call__(self, node, instruction, state):
         if node in ("fetch",):
             done = state.get("_done_units", set())
-            nxt = next((i for i in self.items if i not in done), None)
+            nxt = next((item for item in self.items if item not in done), None)
             if nxt is None:
                 return {"text": "idle", "no_item": True}
             state["item_id"] = nxt
@@ -87,8 +87,8 @@ class QueueAgent:
 
 
 def test_finds_the_checkpoint_node(tmp_path):
-    g = parse(QUEUE)
-    node, ann = find_checkpoint(g)
+    graph = parse(QUEUE)
+    node, ann = find_checkpoint(graph)
     assert node == "handle"
     assert ann == {"unit": "item_id", "proof": "result"}
 
@@ -125,7 +125,7 @@ def test_no_duplicate_proof_on_replay(tmp_path):
     run_ledgered_loop(flow, QueueAgent(["a", "b"]), led)
     run_ledgered_loop(flow, QueueAgent(["a", "b"]), led)   # a full replay
     # each item has exactly one proof-commit — the replay is a no-op
-    units = [r["unit"] for r in led.log()]
+    units = [row["unit"] for row in led.log()]
     assert units == ["a", "b"]
 
 
@@ -147,17 +147,17 @@ def test_missing_checkpoint_is_an_error(tmp_path):
 # --- upsert_jsonl: idempotent side effects (the "no duplicate watchlist lines" DoD) ---
 
 def test_upsert_jsonl_dedupes_on_key(tmp_path):
-    p = tmp_path / "watchlist.jsonl"
-    assert upsert_jsonl(p, {"alert_id": "1", "rule": "5710", "note": "x"}, "alert_id") is True
-    assert upsert_jsonl(p, {"alert_id": "1", "rule": "5710", "note": "y"}, "alert_id") is False
-    assert upsert_jsonl(p, {"alert_id": "2", "rule": "5710"}, "alert_id") is True
-    lines = [l for l in p.read_text().splitlines() if l.strip()]
+    path = tmp_path / "watchlist.jsonl"
+    assert upsert_jsonl(path, {"alert_id": "1", "rule": "5710", "note": "x"}, "alert_id") is True
+    assert upsert_jsonl(path, {"alert_id": "1", "rule": "5710", "note": "y"}, "alert_id") is False
+    assert upsert_jsonl(path, {"alert_id": "2", "rule": "5710"}, "alert_id") is True
+    lines = [line for line in path.read_text().splitlines() if line.strip()]
     assert len(lines) == 2                       # replay of alert_id=1 did not add a line
 
 
 def test_upsert_jsonl_composite_key(tmp_path):
-    p = tmp_path / "w.jsonl"
-    upsert_jsonl(p, {"agent": "vm1", "rule": "10", "v": 1}, ("agent", "rule"))
-    upsert_jsonl(p, {"agent": "vm1", "rule": "10", "v": 2}, ("agent", "rule"))
-    upsert_jsonl(p, {"agent": "vm1", "rule": "20", "v": 3}, ("agent", "rule"))
-    assert len([l for l in p.read_text().splitlines() if l.strip()]) == 2
+    path = tmp_path / "w.jsonl"
+    upsert_jsonl(path, {"agent": "vm1", "rule": "10", "v": 1}, ("agent", "rule"))
+    upsert_jsonl(path, {"agent": "vm1", "rule": "10", "v": 2}, ("agent", "rule"))
+    upsert_jsonl(path, {"agent": "vm1", "rule": "20", "v": 3}, ("agent", "rule"))
+    assert len([line for line in path.read_text().splitlines() if line.strip()]) == 2

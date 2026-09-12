@@ -116,7 +116,7 @@ def test_pqc_provider_absence_refuses_never_downgrades(env):
         assert res["ok"] is True                                   # provider present -> accepted
     else:
         assert res["ok"] is False
-        assert any("pqc-kem-unavailable" in r for r in res["reasons"])
+        assert any("pqc-kem-unavailable" in reason for reason in res["reasons"])
         assert host.attest()["active"] == before                   # NOT downgraded; classical stays live
 
 
@@ -126,7 +126,7 @@ def test_anti_rollback_refuses_stale_version(env):
     assert host.swap(_pack(env, "v2", CLASSICAL_FLOW, fields, version=2, suites=["tls13-aesgcm"]))["ok"]
     stale = _pack(env, "v2again", CLASSICAL_FLOW, fields, version=2, suites=["tls13-aesgcm"])
     res = host.swap(stale)
-    assert res["ok"] is False and any("version:not-monotonic" in r for r in res["reasons"])
+    assert res["ok"] is False and any("version:not-monotonic" in reason for reason in res["reasons"])
 
 
 def test_registry_hash_mismatch_refused(env):

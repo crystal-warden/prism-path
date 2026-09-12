@@ -73,7 +73,7 @@ def test_swarm_endpoint_up(monkeypatch):
 def test_resolve_backend(monkeypatch):
     fake_agent_io = types.ModuleType("agent_io")
     fake_agent_io.DEFAULT_BASE = "http://127.0.0.1:8888"
-    fake_agent_io.run_task = lambda *a, **k: ("code", {})
+    fake_agent_io.run_task = lambda *args, **kwargs: ("code", {})
     fake_pipeline = types.ModuleType("pipeline")
     fake_pipeline.agent_io = fake_agent_io
 
@@ -106,7 +106,7 @@ def test_make_swarm_agent_workflow(tmp_path, monkeypatch):
     def fake_judge(prompt, max_new_tokens=64):
         return "the fix is clear, retry"
 
-    monkeypatch.setattr(swarm_runner, "resolve_backend", lambda b, base, m: (fake_generate, "mock"))
+    monkeypatch.setattr(swarm_runner, "resolve_backend", lambda backend, base, model: (fake_generate, "mock"))
 
     scratch_dir = str(tmp_path / "scratch")
     agent, label = swarm_runner.make_swarm_agent(
@@ -128,7 +128,7 @@ def test_make_swarm_agent_workflow(tmp_path, monkeypatch):
     assert os.path.exists(os.path.join(scratch_dir, "widget.py"))
 
     # 3. run_tests (monkeypatch run_pytest)
-    monkeypatch.setattr(swarm_runner, "run_pytest", lambda d, t: (True, 3, 0, "3 passed"))
+    monkeypatch.setattr(swarm_runner, "run_pytest", lambda test_dir, target: (True, 3, 0, "3 passed"))
     res_tests = agent("run_tests", "run tests", state)
     assert res_tests["tests_pass"] is True
     assert res_tests["n_pass"] == 3

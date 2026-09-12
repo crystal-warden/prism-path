@@ -27,16 +27,16 @@ def test_chain_binds_order_and_content():
 
 def test_edit_reorder_and_deletion_all_flip_the_chain():
     led = _ledger()
-    edited = [dict(s) for s in led.segments]
+    edited = [dict(segment) for segment in led.segments]
     edited[1]["leaf"] = hashlib.sha256(b"swapped monograph").hexdigest()
     assert not verify_chain(edited)
 
-    reordered = [dict(led.segments[i]) for i in (1, 0, 2)]
-    for i, s in enumerate(reordered):
-        s["idx"] = i
+    reordered = [dict(led.segments[index]) for index in (1, 0, 2)]
+    for index, segment in enumerate(reordered):
+        segment["idx"] = index
     assert not verify_chain(reordered)
 
-    deleted = [dict(led.segments[i]) for i in (0, 2)]
+    deleted = [dict(led.segments[index]) for index in (0, 2)]
     deleted[1]["idx"] = 1
     assert not verify_chain(deleted)
 
@@ -45,23 +45,23 @@ def test_root_and_inclusion_proof():
     led = _ledger()
     root = led.root()
     assert len(root) == 64
-    p = led.prove(1)
-    assert p["root"] == root
+    proof = led.prove(1)
+    assert proof["root"] == root
     from prismpath.ledgers import ledger_ots
-    assert ledger_ots.verify_leaf(p["leaf"], p["path"], root)
+    assert ledger_ots.verify_leaf(proof["leaf"], proof["path"], root)
 
 
 def test_attest_binds_policy_gate_model_and_verifies():
     led = _ledger()
-    m = led.attest("sha256:deadbeef", "steering_policy@v4", "NousResearch/Meta-Llama-3.1-8B-Instruct")
-    assert ledger_airgap.verify_manifest(m)
-    assert m["root"] == led.root()
-    assert m["ingestion_hashes"] == led.leaves
-    assert m["policy_hash"] == "sha256:deadbeef"
-    assert m["gate_id"] == "steering_policy@v4"
-    assert m["label"].endswith(led.head())          # order commitment rides in the label
+    manifest = led.attest("sha256:deadbeef", "steering_policy@v4", "NousResearch/Meta-Llama-3.1-8B-Instruct")
+    assert ledger_airgap.verify_manifest(manifest)
+    assert manifest["root"] == led.root()
+    assert manifest["ingestion_hashes"] == led.leaves
+    assert manifest["policy_hash"] == "sha256:deadbeef"
+    assert manifest["gate_id"] == "steering_policy@v4"
+    assert manifest["label"].endswith(led.head())          # order commitment rides in the label
     # tampering with any bound field breaks the content address
-    bad = dict(m)
+    bad = dict(manifest)
     bad["root"] = "e" * 64
     assert not ledger_airgap.verify_manifest(bad)
 

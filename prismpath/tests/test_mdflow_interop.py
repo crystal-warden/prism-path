@@ -67,8 +67,8 @@ def test_mdflow_task_failure_rides_the_error_tier():
     graph = parse_file(os.path.join(EX, "pipeline.md"))
     # a review task that does NOT approve, so routing reaches `revise` (the failing task)
     noapprove = os.path.join(TASKS, "review_noapprove.md")
-    with open(noapprove, "w", encoding="utf-8") as f:
-        f.write("---\nname: review\nmock_text: needs work\nmock_approved: false\n---\nreview\n")
+    with open(noapprove, "w", encoding="utf-8") as flow_file:
+        flow_file.write("---\nname: review\nmock_text: needs work\nmock_approved: false\n---\nreview\n")
     try:
         worker = cli_worker({
             "draft":  [sys.executable, MOCK, os.path.join(TASKS, "draft.md")],

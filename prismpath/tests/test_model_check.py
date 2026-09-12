@@ -61,7 +61,7 @@ def test_level_m_non_members(cond, reason):
 
 
 def test_flow_level_m_and_tier_wiring():
-    g = parse("""---
+    graph = parse("""---
 name: m
 start: a
 ---
@@ -75,9 +75,9 @@ start: a
 ## c
 Done.
 """)
-    all_in, bad = mc.flow_level_m(g)
+    all_in, bad = mc.flow_level_m(graph)
     assert all_in and bad == []
-    tier = portability_tier(g, "/nonexistent/m.md")
+    tier = portability_tier(graph, "/nonexistent/m.md")
     assert tier["tier"] == "P0" and tier["level_m"] is True
 
     g2 = parse("""---
@@ -98,7 +98,7 @@ start: a
 
 
 def test_level_m_report_covers_reachable_deterministic_edges():
-    g = parse("""---
+    graph = parse("""---
 name: r
 start: a
 ---
@@ -108,7 +108,7 @@ start: a
 
 ## b
 """)
-    rows = mc.level_m_report(g)
+    rows = mc.level_m_report(graph)
     assert len(rows) == 1 and rows[0]["level_m"] is True   # semantic edge not in the report
 
 
@@ -131,11 +131,11 @@ start: classify
 
 
 def test_reachable_with_concrete_witness():
-    g = parse(FLOW_GATE)
-    res = mc.check_reach(g, ["human_review"])
-    r = res["human_review"]
-    assert r.reachable == "yes"
-    step = r.witness[-1]
+    graph = parse(FLOW_GATE)
+    res = mc.check_reach(graph, ["human_review"])
+    reach_result = res["human_review"]
+    assert reach_result.reachable == "yes"
+    step = reach_result.witness[-1]
     assert step.certainty == "certain" and step.example is not None
     # the witness outcome genuinely takes the edge under first-match
     assert step.example.get("category") == "billing_dispute"
@@ -143,18 +143,18 @@ def test_reachable_with_concrete_witness():
 
 
 def test_assume_flips_reachability_to_proven_unreachable():
-    g = parse(FLOW_GATE)
-    res = mc.check_reach(g, ["human_review"], assume="amount <= 500")
-    r = res["human_review"]
-    assert r.reachable == "no" and r.proven, "amount<=500 must make the gate node unreachable, provably"
+    graph = parse(FLOW_GATE)
+    res = mc.check_reach(graph, ["human_review"], assume="amount <= 500")
+    reach_result = res["human_review"]
+    assert reach_result.reachable == "no" and reach_result.proven, "amount<=500 must make the gate node unreachable, provably"
     # and the other branches stay reachable under the same assumption
-    res2 = mc.check_reach(g, ["billing", "general"], assume="amount <= 500")
+    res2 = mc.check_reach(graph, ["billing", "general"], assume="amount <= 500")
     assert res2["billing"].reachable == "yes"
     assert res2["general"].reachable == "yes"
 
 
 def test_first_match_shadowing_respected():
-    g = parse("""---
+    graph = parse("""---
 name: shadow
 start: a
 ---
@@ -165,7 +165,7 @@ start: a
 ## b
 ## c
 """)
-    res = mc.check_reach(g, ["b", "c"])
+    res = mc.check_reach(graph, ["b", "c"])
     assert res["b"].reachable == "yes"
     assert res["c"].reachable == "no" and res["c"].proven, \
         "an earlier always-true edge makes the later edge dead — first match wins"
@@ -173,7 +173,7 @@ start: a
 
 def test_semantic_tier_gated_by_deterministic_failure():
     # with an `else` catch-all the deterministic tier can never fail -> semantic edge dead
-    g = parse("""---
+    graph = parse("""---
 name: semgate
 start: a
 ---
@@ -184,7 +184,7 @@ start: a
 ## b
 ## c
 """)
-    res = mc.check_reach(g, ["c"])
+    res = mc.check_reach(graph, ["c"])
     assert res["c"].reachable == "no" and res["c"].proven
 
     # without the catch-all the semantic edge is live, but only as "may" (router's choice)
@@ -204,7 +204,7 @@ start: a
 
 
 def test_visits_counter_modeled_with_saturation():
-    g = parse("""---
+    graph = parse("""---
 name: loop
 start: work
 ---
@@ -214,14 +214,14 @@ start: work
 
 ## done
 """)
-    res = mc.check_reach(g, ["done"])
-    r = res["done"]
-    assert r.reachable == "yes"
-    assert r.depth == 4, "needs exactly 4 entries of work before visits > 3 fires"
+    res = mc.check_reach(graph, ["done"])
+    reach_result = res["done"]
+    assert reach_result.reachable == "yes"
+    assert reach_result.depth == 4, "needs exactly 4 entries of work before visits > 3 fires"
 
 
 def test_error_and_event_paths_are_may_and_excludable():
-    g = parse("""---
+    graph = parse("""---
 name: err
 start: work
 ---
@@ -232,17 +232,17 @@ start: work
 ## recovered
 ## done
 """)
-    res = mc.check_reach(g, ["recovered"])
+    res = mc.check_reach(graph, ["recovered"])
     assert res["recovered"].reachable == "may"
     assert res["recovered"].witness[-1].via == "error"
-    res2 = mc.check_reach(g, ["recovered"], include_errors=False)
+    res2 = mc.check_reach(graph, ["recovered"], include_errors=False)
     assert res2["recovered"].reachable == "no" and res2["recovered"].proven
 
 
 def test_non_level_m_is_over_approximated_never_false_unreachable():
     # `a == b` (field-vs-field) is outside the fragment; candidate enumeration may or may not
     # find the coincidence — the edge must never be reported certainly-dead.
-    g = parse("""---
+    graph = parse("""---
 name: over
 start: s
 ---
@@ -251,14 +251,14 @@ start: s
 
 ## t
 """)
-    res = mc.check_reach(g, ["t"])
+    res = mc.check_reach(graph, ["t"])
     assert res["t"].reachable in ("yes", "may")
 
 
 def test_totality_rule_negation_includes_missing_field():
     # not(x > 5) is satisfied by a MISSING x (evaluator totality), so `b` is reachable with
     # an empty outcome — the classic "neither branch" trap the engine actually has.
-    g = parse("""---
+    graph = parse("""---
 name: tot
 start: a
 ---
@@ -271,13 +271,13 @@ start: a
 ## small
 ## neither
 """)
-    res = mc.check_reach(g, ["neither"])
+    res = mc.check_reach(graph, ["neither"])
     assert res["neither"].reachable == "yes", \
         "a missing x satisfies neither comparison — else must be provably takeable"
 
 
 def test_unreachable_node_with_no_inbound():
-    g = parse("""---
+    graph = parse("""---
 name: island
 start: a
 ---
@@ -288,7 +288,7 @@ start: a
 ## orphan
 Some unreferenced node.
 """)
-    res = mc.check_reach(g, ["orphan"])
+    res = mc.check_reach(graph, ["orphan"])
     assert res["orphan"].reachable == "no" and res["orphan"].proven
 
 
@@ -313,6 +313,6 @@ def test_verify_cli_json_shape(tmp_path, capsys):
     rc = main(["verify", str(flow), "--reach", "human_review", "--level-m", "--json"])
     out = _json.loads(capsys.readouterr().out)
     assert rc == 0 and out["ok"] is True
-    r = out["results"]["human_review"]
-    assert r["reachable"] == "yes" and r["witness"][-1]["example"]
+    reach_result = out["results"]["human_review"]
+    assert reach_result["reachable"] == "yes" and reach_result["witness"][-1]["example"]
     assert out["level_m"]["flow"] is True

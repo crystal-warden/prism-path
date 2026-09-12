@@ -18,7 +18,7 @@ from prismpath.ledgers import audit_log
 from prismpath.mission_control import core
 from prismpath.mission_control.app import app
 
-V = "/api/v1"
+API_V1 = "/api/v1"
 
 # A fully Level-M flow (every deterministic edge is field-OP-constant) -> level_m True, 0 bad.
 LM_OK = "---\nname: lm_ok\nstart: a\n---\n## a\n-> b: when score > 5\n-> c: else\n## b\nDone.\n## c\nDone.\n"
@@ -35,16 +35,16 @@ DEMO = ("---\nname: triage\nstart: intake\n---\n"
 
 @pytest.fixture
 def proj(tmp_path):
-    p = tmp_path / "proj"
-    (p / "flows").mkdir(parents=True)
-    (p / "flows" / "triage.md").write_text(DEMO, encoding="utf-8")
-    (p / "status.json").write_text(json.dumps(
-        {"iteration": 3, "valid": True, "flow_path": str(p / "flows" / "triage.md")}), encoding="utf-8")
-    (p / "interactions.jsonl").write_text(json.dumps(
+    project_dir = tmp_path / "proj"
+    (project_dir / "flows").mkdir(parents=True)
+    (project_dir / "flows" / "triage.md").write_text(DEMO, encoding="utf-8")
+    (project_dir / "status.json").write_text(json.dumps(
+        {"iteration": 3, "valid": True, "flow_path": str(project_dir / "flows" / "triage.md")}), encoding="utf-8")
+    (project_dir / "interactions.jsonl").write_text(json.dumps(
         {"kind": "retriever", "phase": "retrieve", "prompt": "classify severity", "hits": 1,
          "hits_meta": [{"source": "runbook", "path": "sev.md", "score": 0.8}]}) + "\n", encoding="utf-8")
-    (p / "checkpoint.json").write_text(json.dumps({"node": "classify", "state": {}}), encoding="utf-8")
-    return p
+    (project_dir / "checkpoint.json").write_text(json.dumps({"node": "classify", "state": {}}), encoding="utf-8")
+    return project_dir
 
 
 @pytest.fixture
@@ -57,99 +57,99 @@ def client(proj, monkeypatch):
 
 # ── proving: the un-gameable invariants ───────────────────────────────────────
 def test_level_m_distinguishes_flows(client):
-    ok = client.post(V + "/prove/level-m", json={"flow": LM_OK}).json()
+    ok = client.post(API_V1 + "/prove/level-m", json={"flow": LM_OK}).json()
     assert ok["level_m"] is True and ok["non_member_edges"] == []
-    bad = client.post(V + "/prove/level-m", json={"flow": LM_BAD}).json()
+    bad = client.post(API_V1 + "/prove/level-m", json={"flow": LM_BAD}).json()
     assert bad["level_m"] is False and bad["non_member_edges"]      # a hardcoded True fails here
 
 
 def test_reach_is_real_model_checking(client):
     # danger IS reachable with no assumption; a fake that always says "no" fails
-    r1 = client.post(V + "/prove/reach", json={"flow": BRANCH, "forbid": ["danger"]}).json()
+    r1 = client.post(API_V1 + "/prove/reach", json={"flow": BRANCH, "forbid": ["danger"]}).json()
     assert r1["verdicts"]["danger"] != "no"
     # danger is NOT reachable once amount <= 500; a fake that always says "yes" fails
-    r2 = client.post(V + "/prove/reach",
+    r2 = client.post(API_V1 + "/prove/reach",
                      json={"flow": BRANCH, "reach": ["danger"], "assume": "amount <= 500"}).json()
     assert r2["verdicts"]["danger"] == "no"
 
 
 def test_prove_audit_self_verify(client):
-    d = client.get(V + "/prove/audit").json()
-    assert d["valid"] is True and isinstance(d["n"], int)
+    audit = client.get(API_V1 + "/prove/audit").json()
+    assert audit["valid"] is True and isinstance(audit["n"], int)
 
 
 def test_prove_rejects_empty_and_no_targets(client):
-    assert client.post(V + "/prove/level-m", json={"flow": "   "}).status_code == 400
-    assert client.post(V + "/prove/reach", json={"flow": BRANCH}).status_code == 400
+    assert client.post(API_V1 + "/prove/level-m", json={"flow": "   "}).status_code == 400
+    assert client.post(API_V1 + "/prove/reach", json={"flow": BRANCH}).status_code == 400
 
 
 # ── observe ───────────────────────────────────────────────────────────────────
 def test_status_shape(client):
-    s = client.get(V + "/status").json()
-    assert "running" in s and "unbuffered" in s and s["iteration"] == 3
+    status = client.get(API_V1 + "/status").json()
+    assert "running" in status and "unbuffered" in status and status["iteration"] == 3
 
 
 def test_flow_graph_tiers_and_text(client):
-    g = client.get(V + "/flow/graph").json()
-    assert set(g["nodes"]) == {"intake", "classify", "triage", "escalate", "resolve"}
-    assert g["active_node"] == "classify" and g["flow_text"]        # text-in proving needs the source
-    tiers = {e["tier"] for n in g["nodes"].values() for e in n["edges"]}
+    graph = client.get(API_V1 + "/flow/graph").json()
+    assert set(graph["nodes"]) == {"intake", "classify", "triage", "escalate", "resolve"}
+    assert graph["active_node"] == "classify" and graph["flow_text"]        # text-in proving needs the source
+    tiers = {edge["tier"] for node in graph["nodes"].values() for edge in node["edges"]}
     assert {"deterministic", "semantic", "error", "event"} <= tiers
 
 
 def test_retrievals_are_structured(client):
-    r = client.get(V + "/retrievals").json()["retrievals"]
-    assert r and r[0]["hits"][0]["source"] == "runbook" and r[0]["hits"][0]["path"] == "sev.md"
+    retrievals = client.get(API_V1 + "/retrievals").json()["retrievals"]
+    assert retrievals and retrievals[0]["hits"][0]["source"] == "runbook" and retrievals[0]["hits"][0]["path"] == "sev.md"
 
 
 # ── edit containment (security) ───────────────────────────────────────────────
 def test_write_rejects_traversal(client, proj):
-    bad = client.post(V + "/file", json={"path": "../evil.txt", "content": "x"})
+    bad = client.post(API_V1 + "/file", json={"path": "../evil.txt", "content": "x"})
     assert bad.status_code == 400 and bad.json()["error"]["code"] == 400
     assert not (proj.parent / "evil.txt").exists()
-    ok = client.post(V + "/file", json={"path": "flows/note.txt", "content": "hi"})
+    ok = client.post(API_V1 + "/file", json={"path": "flows/note.txt", "content": "hi"})
     assert ok.status_code == 200 and (proj / "flows" / "note.txt").read_text() == "hi"
 
 
 def test_read_rejects_traversal(client):
-    assert client.get(V + "/file", params={"path": "../../etc/passwd"}).status_code == 400
+    assert client.get(API_V1 + "/file", params={"path": "../../etc/passwd"}).status_code == 400
 
 
 # ── contract ──────────────────────────────────────────────────────────────────
 def test_openapi_contract(client):
-    d = client.get("/openapi.json").json()
-    assert d["info"]["title"] == "PrismPath Mission Control"
-    assert "/api/v1/prove/level-m" in d["paths"] and "/api/v1/status" in d["paths"]
+    openapi = client.get("/openapi.json").json()
+    assert openapi["info"]["title"] == "PrismPath Mission Control"
+    assert "/api/v1/prove/level-m" in openapi["paths"] and "/api/v1/status" in openapi["paths"]
 
 
 def test_error_envelope_shape(client):
-    r = client.post(V + "/file", json={"path": "../x", "content": "y"})
-    assert r.status_code == 400 and set(r.json()["error"]) == {"code", "message"}
+    response = client.post(API_V1 + "/file", json={"path": "../x", "content": "y"})
+    assert response.status_code == 400 and set(response.json()["error"]) == {"code", "message"}
 
 
 def test_dropped_endpoints_are_gone(client):
     # chat, RAG-upload, and AGY were removed with the multi-user scope
-    assert client.post(V + "/chat", json={"message": "hi"}).status_code >= 400
-    assert client.get(V + "/agy/runs").status_code >= 400
-    assert client.post(V + "/upload", json={}).status_code >= 400
+    assert client.post(API_V1 + "/chat", json={"message": "hi"}).status_code >= 400
+    assert client.get(API_V1 + "/agy/runs").status_code >= 400
+    assert client.post(API_V1 + "/upload", json={}).status_code >= 400
 
 
 def test_index_is_served(client):
-    r = client.get("/")
-    assert r.status_code == 200 and "Mission Control" in r.text
+    response = client.get("/")
+    assert response.status_code == 200 and "Mission Control" in response.text
 
 
 # ── hardening: resource caps on the only network-facing surface ───────────────
 def test_file_size_cap(client, proj, monkeypatch):
     monkeypatch.setattr(core, "MAX_FILE_BYTES", 200)
-    assert client.post(V + "/file", json={"path": "flows/ok.md", "content": "x" * 50}).status_code == 200
-    assert client.post(V + "/file", json={"path": "flows/big.md", "content": "x" * 5000}).status_code == 413
+    assert client.post(API_V1 + "/file", json={"path": "flows/ok.md", "content": "x" * 50}).status_code == 200
+    assert client.post(API_V1 + "/file", json={"path": "flows/big.md", "content": "x" * 5000}).status_code == 413
     (proj / "flows" / "toobig.md").write_text("y" * 5000, encoding="utf-8")
-    assert client.get(V + "/file", params={"path": "flows/toobig.md"}).status_code == 413
+    assert client.get(API_V1 + "/file", params={"path": "flows/toobig.md"}).status_code == 413
 
 
 def test_file_tree_bounded(client, proj, monkeypatch):
     monkeypatch.setattr(core, "MAX_TREE_ENTRIES", 3)
     for i in range(10):
         (proj / "flows" / f"f{i}.md").write_text("hi", encoding="utf-8")
-    assert len(client.get(V + "/files").json()["files"]) <= 3
+    assert len(client.get(API_V1 + "/files").json()["files"]) <= 3

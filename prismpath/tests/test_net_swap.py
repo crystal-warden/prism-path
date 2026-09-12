@@ -36,11 +36,11 @@ class FakeLoader:
 
     def __call__(self, argv, capture_output=True, text=True):
         self.calls.append(argv)
-        class R:
+        class LoadResult:
             returncode = self.rc
             stdout = "OK: hot-swapped\n"
             stderr = ""
-        return R()
+        return LoadResult()
 
 
 @pytest.fixture()
@@ -62,8 +62,8 @@ def _swap(env, loader, **kw):
 
 def test_verified_pack_reaches_the_loader_once(env):
     loader = FakeLoader()
-    r = _swap(env, loader)
-    assert r["ok"] and len(loader.calls) == 1
+    swap_result = _swap(env, loader)
+    assert swap_result["ok"] and len(loader.calls) == 1
     assert loader.calls[0][1:] == [env["ppt"], "netupdate", "lo"]
 
 
@@ -71,9 +71,9 @@ def test_tampered_image_never_reaches_the_loader(env):
     raw = bytearray(Path(env["ppt"]).read_bytes()); raw[-1] ^= 1
     Path(env["ppt"]).write_bytes(bytes(raw))
     loader = FakeLoader()
-    r = _swap(env, loader)
-    assert not r["ok"] and loader.calls == []
-    assert r["reasons"] == ["image:sha256-mismatch"]
+    swap_result = _swap(env, loader)
+    assert not swap_result["ok"] and loader.calls == []
+    assert swap_result["reasons"] == ["image:sha256-mismatch"]
 
 
 def test_version_replay_never_reaches_the_loader(env):
@@ -83,17 +83,17 @@ def test_version_replay_never_reaches_the_loader(env):
     pp.build_pack(env["ppt"], FIELDS, version=1, envelope_id="env1",
                   priv_path=env["keys"]["private"], pub_path=env["keys"]["public"])
     loader2 = FakeLoader()
-    r = _swap(env, loader2)
-    assert not r["ok"] and loader2.calls == []
-    assert any("version:not-monotonic" in x for x in r["reasons"])
+    swap_result = _swap(env, loader2)
+    assert not swap_result["ok"] and loader2.calls == []
+    assert any("version:not-monotonic" in reason for reason in swap_result["reasons"])
 
 
 def test_loader_failure_is_audited(env):
     loader = FakeLoader(rc=2)
-    r = _swap(env, loader)
-    assert not r["ok"] and r["reasons"] == ["loader:failed"]
+    swap_result = _swap(env, loader)
+    assert not swap_result["ok"] and swap_result["reasons"] == ["loader:failed"]
     audit = ns.AuditLog(str(Path(env["state"]) / "net_swaps.log"))
-    assert any(e["action"] == "loader_failed" for e in audit.events)
+    assert any(event["action"] == "loader_failed" for event in audit.events)
 
 
 def test_unsigned_requires_flag_and_is_stamped(env):
@@ -103,6 +103,6 @@ def test_unsigned_requires_flag_and_is_stamped(env):
     blocked = _swap(env, loader)
     assert not blocked["ok"] and loader.calls == []      # signed path refuses
     loader2 = FakeLoader()
-    r = ns.preload_swap(env["ppt"], "lo", [env["keys"]["public"]], env["envbase"],
+    swap_result = ns.preload_swap(env["ppt"], "lo", [env["keys"]["public"]], env["envbase"],
                         env["state"], allow_unsigned=True, run=loader2)
-    assert r["ok"] and r["unsigned"] is True and len(loader2.calls) == 1
+    assert swap_result["ok"] and swap_result["unsigned"] is True and len(loader2.calls) == 1

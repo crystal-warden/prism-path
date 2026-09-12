@@ -50,8 +50,8 @@ def fanout_agent(node, instruction, state):
 
 
 def test_fanout_node_suspends_waiting_with_spawn_spec_in_pending():
-    g = parse(PARENT)
-    res = run(g, fanout_agent)
+    graph = parse(PARENT)
+    res = run(graph, fanout_agent)
     assert res.stopped == "waiting"
     assert res.pending["node"] == "dispatch"
     # the join events the node can be resumed by are surfaced from its event edges
@@ -87,10 +87,10 @@ Done.
 def test_engine_is_pure_spawn_spec_is_untouched_data(tmp_path):
     # The engine spawns nothing and writes nothing: it only records the spec. A nested/complex spec
     # survives byte-for-byte, and the run wrote no files of its own.
-    g = parse(PARENT)
-    before = set(p.name for p in tmp_path.iterdir())
-    res = run(g, fanout_agent)
-    after = set(p.name for p in tmp_path.iterdir())
+    graph = parse(PARENT)
+    before = set(path.name for path in tmp_path.iterdir())
+    res = run(graph, fanout_agent)
+    after = set(path.name for path in tmp_path.iterdir())
     assert before == after                              # run() touched the filesystem not at all
     assert res.pending["spawn"] is not None
     assert json.loads(json.dumps(res.pending["spawn"])) == SPAWN_SPEC   # pure JSON data, no objects
@@ -99,7 +99,7 @@ def test_engine_is_pure_spawn_spec_is_untouched_data(tmp_path):
 def test_spawn_spec_round_trips_through_the_checkpoint(tmp_path):
     # The durable checkpoint must carry the spawn spec (in pending_decision) so the harness can read it
     # after a crash without the parent's in-memory state.
-    g = parse(PARENT)
+    graph = parse(PARENT)
     cp_path = tmp_path / "parent.ckpt.json"
     flow_path = tmp_path / "parent.md"
     flow_path.write_text(PARENT)
@@ -110,7 +110,7 @@ def test_spawn_spec_round_trips_through_the_checkpoint(tmp_path):
         ckpt.save_checkpoint(cp_path, flow_path, res, pending_node)
         saved["last"] = pending_node
 
-    res = run(g, fanout_agent, on_step=on_step)
+    res = run(graph, fanout_agent, on_step=on_step)
     assert res.stopped == "waiting"
     cp = ckpt.load_checkpoint(cp_path)
     assert cp["stopped"] == "waiting"
@@ -121,21 +121,21 @@ def test_spawn_spec_round_trips_through_the_checkpoint(tmp_path):
 def test_spawn_implies_wait():
     # a worker returning `spawn` WITHOUT `wait` still suspends — fanning out is meaningless without
     # suspending for the join, so the footgun (spawn silently dropped) is closed at the engine.
-    g = parse(PARENT)
+    graph = parse(PARENT)
 
     def forgot_wait(node, instruction, state):
         if node == "dispatch":
             return {"text": "d", "spawn": SPAWN_SPEC}      # no "wait" key
         return {"text": node}
 
-    res = run(g, forgot_wait)
+    res = run(graph, forgot_wait)
     assert res.stopped == "waiting"
     assert res.pending["spawn"] == SPAWN_SPEC
 
 
 def test_single_child_composition_is_fanout_of_one():
     # sub-flow composition is just a fan-out whose item list has one element — identical code path.
-    g = parse(PARENT)
+    graph = parse(PARENT)
 
     def one_agent(node, instruction, state):
         if node == "dispatch":
@@ -143,6 +143,6 @@ def test_single_child_composition_is_fanout_of_one():
             return {"text": "one child", "wait": True, "spawn": spec}
         return {"text": node}
 
-    res = run(g, one_agent)
+    res = run(graph, one_agent)
     assert res.stopped == "waiting"
     assert len(res.pending["spawn"]["items"]) == 1

@@ -25,7 +25,7 @@ def _led(tmp_path, flow="demo", run="01HTEST"):
 def _ls_tree(led):
     out = subprocess.run(["git", "ls-tree", "-r", "--name-only", led.ref],
                          env={**os.environ, "GIT_DIR": str(led.repo)}, capture_output=True, text=True)
-    return sorted(l for l in out.stdout.splitlines() if l)
+    return sorted(line for line in out.stdout.splitlines() if line)
 
 
 def test_wallclock_trailer_records_real_green_time(tmp_path):
@@ -54,7 +54,7 @@ def test_cas_retries_on_a_concurrent_ref_move(tmp_path, monkeypatch):
     monkeypatch.setattr(led, "tip", flaky_tip)
     sha = led.commit_unit("b")                 # attempt 1 CAS-fails (stale parent), attempt 2 succeeds
     assert calls["n"] >= 2 and sha
-    units = [r["unit"] for r in led.log()]
+    units = [row["unit"] for row in led.log()]
     assert units == ["a", "b"]                 # both proofs on the chain, none dropped
 
 
@@ -108,28 +108,28 @@ def test_auto_seq_is_monotonic(tmp_path):
     led.commit_unit("a", files={"a": "1"})
     led.commit_unit("b", files={"b": "2"})
     led.commit_unit("c", files={"c": "3"})
-    assert [r["seq"] for r in led.log()] == [1, 2, 3]
+    assert [row["seq"] for row in led.log()] == [1, 2, 3]
 
 
 def test_commits_chain_on_one_orphan_ref(tmp_path):
     led = _led(tmp_path)
-    a = led.commit_unit("a", files={"a": "1"})
-    b = led.commit_unit("b", files={"b": "2"})
+    first_commit = led.commit_unit("a", files={"a": "1"})
+    second_commit = led.commit_unit("b", files={"b": "2"})
     env = {**os.environ, "GIT_DIR": str(led.repo)}
-    parent = subprocess.run(["git", "rev-parse", f"{b}^"], env=env, capture_output=True, text=True).stdout.strip()
-    assert parent == a                                              # linear chain
+    parent = subprocess.run(["git", "rev-parse", f"{second_commit}^"], env=env, capture_output=True, text=True).stdout.strip()
+    assert parent == first_commit                                              # linear chain
     # the ledger lives only under refs/prismpath/*, invisible to normal branch tooling
     heads = subprocess.run(["git", "for-each-ref", "refs/heads"], env=env, capture_output=True, text=True).stdout
     assert heads.strip() == ""
 
 
 def test_separate_runs_use_separate_refs(tmp_path):
-    a = _led(tmp_path, run="01HA")
-    b = _led(tmp_path, run="01HB")
-    a.commit_unit("x", files={"x": "1"})
-    b.commit_unit("y", files={"y": "2"})
-    assert set(a.done_set()) == {"x"}
-    assert set(b.done_set()) == {"y"}                              # no cross-run collision
+    first_ledger = _led(tmp_path, run="01HA")
+    second_ledger = _led(tmp_path, run="01HB")
+    first_ledger.commit_unit("x", files={"x": "1"})
+    second_ledger.commit_unit("y", files={"y": "2"})
+    assert set(first_ledger.done_set()) == {"x"}
+    assert set(second_ledger.done_set()) == {"y"}                              # no cross-run collision
 
 
 def test_repo_isolation_ambient_project_repo_untouched(tmp_path):

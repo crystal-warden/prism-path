@@ -21,9 +21,9 @@ REGISTRY = cr.build_registry(SUITES, key_id=KEY_ID)
 
 def test_matrix_replays_byte_for_byte():
     for cell in DATA["cells"]:
-        k, f = cell["policy_gate"], cell["envelope_floor"]
-        got = ca.prove_monotone_migration(parse(phase_policy(k)), _envelope(DATA["registry_hash"], f), REGISTRY)
-        assert got == cell["p4"], f"P4 drift at gate={k} floor={f}"
+        policy_gate, envelope_floor = cell["policy_gate"], cell["envelope_floor"]
+        got = ca.prove_monotone_migration(parse(phase_policy(policy_gate)), _envelope(DATA["registry_hash"], envelope_floor), REGISTRY)
+        assert got == cell["p4"], f"P4 drift at gate={policy_gate} floor={envelope_floor}"
 
 
 def test_monotone_invariant_holds_every_cell():
@@ -36,10 +36,10 @@ def test_monotone_invariant_holds_every_cell():
 def test_boundary_is_falsifiable():
     # a policy gating classical at phase 2, held to a stricter floor of 1, must FAIL (classical still
     # reachable at phase 1) — the proof is not vacuously green
-    below = next(c for c in DATA["cells"] if c["policy_gate"] == 2 and c["envelope_floor"] == 1)
+    below = next(cell for cell in DATA["cells"] if cell["policy_gate"] == 2 and cell["envelope_floor"] == 1)
     assert below["p4"]["ok"] is False
-    assert any(v["suite"] == "tls13-aesgcm" for v in below["p4"]["violations"])
-    at_floor = next(c for c in DATA["cells"] if c["policy_gate"] == 2 and c["envelope_floor"] == 2)
+    assert any(violation["suite"] == "tls13-aesgcm" for violation in below["p4"]["violations"])
+    at_floor = next(cell for cell in DATA["cells"] if cell["policy_gate"] == 2 and cell["envelope_floor"] == 2)
     assert at_floor["p4"]["ok"] is True
 
 

@@ -65,13 +65,13 @@ def test_empty_results_dir(tmp_path: Path):
     out_dir = tmp_path / "out"
 
     # (a) empty results dir yields matrix with UNTESTED cells and OPEN verdicts, exits 0
-    m = build_matrix(results_dir)
+    matrix = build_matrix(results_dir)
     assert all(
         cell["grade"] == "UNTESTED"
-        for dim in m["matrix"]
-        for cell in m["matrix"][dim].values()
+        for dim in matrix["matrix"]
+        for cell in matrix["matrix"][dim].values()
     )
-    assert all(v == "OPEN" for v in m["verdicts"].values())
+    assert all(verdict == "OPEN" for verdict in matrix["verdicts"].values())
 
     code = main(["--results", str(results_dir), "--out", str(out_dir)])
     assert code == 0
@@ -106,8 +106,8 @@ def test_not_scenario_overrides_native(tmp_path: Path):
     make_result_file(results_dir, system="prismpath", dimension="A1", policy="p1", scenario="s2", grade="NATIVE")
     make_result_file(results_dir, system="prismpath", dimension="A1", policy="p1", scenario="s3", grade="NOT")
 
-    m = build_matrix(results_dir)
-    cell = m["matrix"]["A1"]["prismpath"]
+    matrix = build_matrix(results_dir)
+    cell = matrix["matrix"]["A1"]["prismpath"]
     assert cell["grade"] == "NOT"
     assert cell["counts"] == {"NATIVE": 2, "WITH-WORK": 0, "NOT": 1}
 
@@ -183,5 +183,5 @@ def test_b1_cedar_native_prismpath_with_work_yields_loses(tmp_path: Path):
     make_result_file(results_dir, system="prismpath", dimension="B1", grade="WITH-WORK", glue=glue_obj)
     make_result_file(results_dir, system="cedar", dimension="B1", grade="NATIVE")
 
-    m = build_matrix(results_dir)
-    assert m["verdicts"]["B1"] == "LOSES"
+    matrix = build_matrix(results_dir)
+    assert matrix["verdicts"]["B1"] == "LOSES"

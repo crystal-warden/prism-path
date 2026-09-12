@@ -35,25 +35,25 @@ Decide what kind of request this is.
 """
 
 
-def _unit(v):
-    v = np.asarray(v, dtype="float32")
-    n = np.linalg.norm(v)
-    return v / n if n else v
+def _unit(vector):
+    vector = np.asarray(vector, dtype="float32")
+    norm = np.linalg.norm(vector)
+    return vector / norm if norm else vector
 
 
 def make_stub(vecmap=None, dim=8, tag=""):
     """Deterministic embedder: known texts map to fixed vectors; everything else hashes to one.
     `tag` perturbs the hash so two stubs model 'different embedder builds'."""
-    vecmap = {k: _unit(v) for k, v in (vecmap or {}).items()}
+    vecmap = {text: _unit(vector) for text, vector in (vecmap or {}).items()}
 
     def stub(texts, is_query=False):
         out = []
-        for t in texts:
-            if t in vecmap:
-                out.append(vecmap[t])
+        for text in texts:
+            if text in vecmap:
+                out.append(vecmap[text])
                 continue
-            h = hashlib.sha256((tag + ("q" if is_query else "p") + t).encode()).digest()
-            out.append(_unit(np.frombuffer(h[:dim * 2], dtype="<u2").astype("float32")))
+            digest = hashlib.sha256((tag + ("q" if is_query else "p") + text).encode()).digest()
+            out.append(_unit(np.frombuffer(digest[:dim * 2], dtype="<u2").astype("float32")))
         return np.asarray(out, dtype="float32")
     return stub
 
@@ -68,9 +68,9 @@ def stub_embedder(monkeypatch):
 # --- encoding / structure ---------------------------------------------------------------
 
 def test_vector_roundtrip_is_bit_exact():
-    v = np.array([0.1, -0.2, 0.333333, 1e-7, -3.5], dtype="float32")
-    back = lockfile._decode_vec(lockfile._encode_vec(v))
-    assert np.array_equal(v, back)
+    vector = np.array([0.1, -0.2, 0.333333, 1e-7, -3.5], dtype="float32")
+    back = lockfile._decode_vec(lockfile._encode_vec(vector))
+    assert np.array_equal(vector, back)
 
 
 def test_build_lock_structure(tmp_path, stub_embedder):
@@ -94,7 +94,7 @@ def test_save_load_roundtrip(tmp_path, stub_embedder):
     assert path == str(tmp_path / "triage.lock")
     lock = lockfile.load_lock(path)
     conds = lockfile.locked_conditions(lock)
-    assert set(conds) == set(lock["conditions"]) and all(v.dtype == np.float32 for v in conds.values())
+    assert set(conds) == set(lock["conditions"]) and all(vector.dtype == np.float32 for vector in conds.values())
 
 
 # --- verification (drift detection) -----------------------------------------------------
@@ -113,12 +113,12 @@ def test_locked_router_composes_locked_vectors_with_calibrated_tau(tmp_path, stu
     flow.write_text(FLOW)
     lock = lockfile.build_lock(str(flow), delta=0.05)     # lock commits δ=0.05
     # precedence: a calibrated τ overrides the lock's δ for escalation; the lock still governs vectors
-    r = lockfile.locked_router(lock, LLMRouter(lambda p: "1"), margin=0.20)
-    assert r.margin == 0.20                                # τ wins over the lock's δ
+    router = lockfile.locked_router(lock, LLMRouter(lambda prompt: "1"), margin=0.20)
+    assert router.margin == 0.20                                # τ wins over the lock's δ
     from prismpath.routing.router import LockedEmbeddingRouter
-    assert isinstance(r.embed, LockedEmbeddingRouter)      # vectors still come from the lock
+    assert isinstance(router.embed, LockedEmbeddingRouter)      # vectors still come from the lock
     # no override -> falls back to the lock's committed δ
-    r2 = lockfile.locked_router(lock, LLMRouter(lambda p: "1"))
+    r2 = lockfile.locked_router(lock, LLMRouter(lambda prompt: "1"))
     assert r2.margin == 0.05
 
 
@@ -143,24 +143,24 @@ def test_locked_router_uses_committed_vectors(monkeypatch):
     conds = {"cond a": _unit([1, 0, 0]), "cond b": _unit([0, 1, 0])}
     # outcome embeds (as query) close to cond a
     monkeypatch.setattr(embedder, "embed", make_stub({"outcome-a": [0.9, 0.1, 0]}))
-    r = LockedEmbeddingRouter(conds)
-    d = r.route("outcome-a", [("A", "cond a"), ("B", "cond b")])
-    assert d.target == "A" and d.info["locked"] is True
+    router = LockedEmbeddingRouter(conds)
+    decision = router.route("outcome-a", [("A", "cond a"), ("B", "cond b")])
+    assert decision.target == "A" and decision.info["locked"] is True
 
 
 def test_locked_router_flags_missing_condition(monkeypatch):
     monkeypatch.setattr(embedder, "embed", make_stub())
-    r = LockedEmbeddingRouter({"cond a": _unit([1, 0, 0])})
+    router = LockedEmbeddingRouter({"cond a": _unit([1, 0, 0])})
     with pytest.raises(KeyError):
-        r.route("x", [("A", "cond a"), ("B", "cond NOT in lock")])
+        router.route("x", [("A", "cond a"), ("B", "cond NOT in lock")])
 
 
 def test_hybrid_accepts_locked_embed_router(monkeypatch):
     conds = {"cond a": _unit([1, 0, 0]), "cond b": _unit([0, 1, 0])}
     monkeypatch.setattr(embedder, "embed", make_stub({"o": [0.95, 0.05, 0]}))
-    h = HybridRouter(LLMRouter(lambda p: "1"), embed=LockedEmbeddingRouter(conds))
-    d = h.route("o", [("A", "cond a"), ("B", "cond b")])
-    assert d.target == "A" and d.info["escalated"] is False and d.info["locked"] is True
+    hybrid_router = HybridRouter(LLMRouter(lambda prompt: "1"), embed=LockedEmbeddingRouter(conds))
+    decision = hybrid_router.route("o", [("A", "cond a"), ("B", "cond b")])
+    assert decision.target == "A" and decision.info["escalated"] is False and decision.info["locked"] is True
 
 
 def test_locked_router_builds_hybrid_at_locked_delta(tmp_path, stub_embedder):
@@ -168,9 +168,9 @@ def test_locked_router_builds_hybrid_at_locked_delta(tmp_path, stub_embedder):
     flow.write_text(FLOW)
     lock = lockfile.build_lock(str(flow))
     lock["delta"] = 0.11
-    h = lockfile.locked_router(lock, llm_router=LLMRouter(lambda p: "1"))
-    assert isinstance(h, HybridRouter) and h.margin == 0.11
-    assert isinstance(h.embed, LockedEmbeddingRouter)
+    hybrid_router = lockfile.locked_router(lock, llm_router=LLMRouter(lambda prompt: "1"))
+    assert isinstance(hybrid_router, HybridRouter) and hybrid_router.margin == 0.11
+    assert isinstance(hybrid_router.embed, LockedEmbeddingRouter)
 
 
 # --- the real thing: reproducible routing with the actual embedder ----------------------
@@ -178,14 +178,14 @@ def test_locked_router_builds_hybrid_at_locked_delta(tmp_path, stub_embedder):
 def test_committed_vectors_reproduce_live_routing():
     pytest.importorskip("sentence_transformers", reason="needs the real bge embedder")
     from prismpath.routing.router import EmbeddingRouter
-    g = parse(FLOW)
+    graph = parse(FLOW)
     import tempfile, os
-    d = tempfile.mkdtemp()
-    fp = os.path.join(d, "triage.md")
+    flow_dir = tempfile.mkdtemp()
+    fp = os.path.join(flow_dir, "triage.md")
     open(fp, "w").write(FLOW)
     lock = lockfile.build_lock(fp)
     assert lockfile.verify_lock(lock) is True                       # same machine reproduces
-    edges = g.nodes["classify"].edges
+    edges = graph.nodes["classify"].edges
     outcome = "the app crashes when I click save"
     live = EmbeddingRouter().route(outcome, edges)
     locked = lockfile.locked_router(lock).route(outcome, edges)

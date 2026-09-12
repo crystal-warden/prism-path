@@ -86,8 +86,8 @@ def test_compile_p1(tmp_path):
     import numpy as np
     
     def mock_embed(texts, is_query=False):
-        n = len(texts)
-        arr = np.random.randn(n, 384).astype("float32")
+        count = len(texts)
+        arr = np.random.randn(count, 384).astype("float32")
         norms = np.linalg.norm(arr, axis=1, keepdims=True)
         norms[norms == 0] = 1.0
         return arr / norms
