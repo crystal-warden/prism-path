@@ -59,6 +59,42 @@ static void send_keyframe(camera_fb_t *fb, uint32_t seq, uint64_t t_cap)
     ESP_LOGI(TAG, "keyframe %lu B in %u fragments, normal %04x", (unsigned long)(sizeof kh + jlen), (unsigned)((sizeof kh + jlen + FRAG_DATA - 1) / FRAG_DATA), normal_id);
 }
 static bool escalates(uint16_t node) { return (esc_mask >> node) & 1u; }
+// ---- refinement layer 3 on the air (owner's request 2026-09-11): for the cells the reading names (motion band 2 or
+// more, plus the door zone on the door route), 8 by 8 sub cells of 5 px at 16 gray bands, one nibble each; only the cells
+// whose 32 bytes changed since last sent, with every named cell resent every LAYER_REFRESH frames.
+//   "LAY3" | nid u16 | seq u32 | flags u8 (1 = full refresh) | n u8 | (cell u8 = r<<4|c, 32 B nibbles) x n
+#define LAYER_REFRESH 5
+static int layer_level = 0; static uint8_t layer_last[R * C][32]; static bool layer_have[R * C]; static uint32_t layer_frame = 0, layer_last_full = 0;
+static void layer3_cell(int r, int c, uint8_t out[32])
+{
+    const int sh = CH / 8, sw = CW / 8;
+    for (int i = 0; i < 8; i++) for (int j = 0; j < 8; j++) {
+        uint32_t s = 0; const uint8_t *base = cur + (r * CH + i * sh) * W + c * CW + j * sw;
+        for (int y = 0; y < sh; y++) for (int x = 0; x < sw; x++) s += base[y * W + x];
+        uint8_t band = (uint8_t)((s / (sh * sw)) >> 4); int k = i * 8 + j;
+        if (k & 1) out[k >> 1] |= band << 4; else out[k >> 1] = band;
+    }
+}
+static void send_layer3(uint32_t seq, uint16_t node, bool is_door)
+{
+    static uint8_t rec[8 + R * C * 33]; int n = 0; size_t off = 8;
+    bool full = (layer_frame - layer_last_full >= LAYER_REFRESH); if (full) layer_last_full = layer_frame;
+    layer_frame++;
+    for (int r = 0; r < R; r++) for (int c = 0; c < C; c++) {
+        bool named = m_cell[r][c] >= MOTION_ON;
+        if (is_door) for (int k = 0; k < DOOR_N; k++) if (DOOR_CELLS[k][0] == r && DOOR_CELLS[k][1] == c) named = true;
+        int idx = r * C + c; if (!named) { layer_have[idx] = false; continue; }
+        uint8_t syms[32]; layer3_cell(r, c, syms);
+        bool changed = !layer_have[idx] || memcmp(syms, layer_last[idx], 32) != 0; memcpy(layer_last[idx], syms, 32); layer_have[idx] = true;
+        if (!(full || changed)) continue;
+        rec[off++] = (uint8_t)((r << 4) | c); memcpy(rec + off, syms, 32); off += 32; n++;
+    }
+    if (n == 0) return;
+    memcpy(rec, "LAY3", 4); rec[4] = node_id & 0xff; rec[5] = node_id >> 8; memcpy(rec + 6, &seq, 4); uint8_t flags = full ? 1 : 0;
+    // the header is 4 + 2 + 4 + 1 + 1 = 12 bytes: shift the cells up by four to make room (the record was built at offset 8)
+    memmove(rec + 12, rec + 8, off - 8); rec[10] = flags; rec[11] = (uint8_t)n; off += 4;
+    radio_send_fragmented(node_id, frag_id++, rec, off);
+}
 // ---- the signed policy swap: chunks arrive as 'S' | idx u16 | total u16 | data over the hop, 'X' verifies and commits.
 // Pack: "PPKV1" | key_id[4] | version u32 | image_len u16 | cb_len u16 | esc_mask u32 | sig[64] | image | codebook; the
 // signature covers the 21 byte header, the image and the codebook. Refusals carry the kernel's cause codes.
@@ -146,6 +182,7 @@ void app_main(void)
                 if (to == node_id || to == 0xffff) {
                     if (cb[3] == 'n') { ESP_LOGI(TAG, "adopt over the air"); adopt_now = true; }
                     else if (cb[3] == 'k') { ESP_LOGI(TAG, "keyframe requested over the air"); key_now = true; }   // a receiver that joined mid stream asks for the normal
+                    else if (cb[3] == 'L' && r >= 5) { layer_level = cb[4]; ESP_LOGI(TAG, "refinement layer %d over the air", layer_level); memset(layer_have, 0, sizeof layer_have); }
                     else if (cb[3] == 'S' && r >= 8) swap_chunk(cb + 4, r - 4);
                     else if (cb[3] == 'X') {
                         uint32_t ver, us; uint64_t ih; uint16_t cause = swap_execute(&ver, &ih, &us);
@@ -179,6 +216,7 @@ void app_main(void)
         // a keyframe whenever the normal changed id (adoption, or the search for the first clean stretch ending), and every minute
         if (normal_set && (normal_id != last_normal || key_now || t_dec - t_key > KEY_RESEND_US)) { send_keyframe(fb, seq, t_cap); t_key = t_dec; last_normal = normal_id; key_now = false; }
         if (escalates(node) && t_dec - t_evd > EVIDENCE_GAP_US) { send_evidence(fb, seq, t_cap, node); t_evd = t_dec; }
+        if (layer_level >= 3) { const char *nm = POLICY_NODE_NAMES[node]; bool occ = !strcmp(nm, "occupied"), door = !strcmp(nm, "door"); if (occ || door) send_layer3(seq, node, door); else memset(layer_have, 0, sizeof layer_have); }
         esp_camera_fb_return(fb); seq++;
     }
 }
