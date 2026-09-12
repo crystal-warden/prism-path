@@ -35,15 +35,17 @@ class AuditLog:
         self._lock = threading.Lock()
         self.events: list = []
         self.leaves: list = []
+        self.skipped: list = []
         if path and os.path.exists(path):
             with open(path) as f:
-                for line in f:
+                for line_num, line in enumerate(f, 1):
                     line = line.strip()
                     if not line:
                         continue
                     try:
                         ev = json.loads(line)
                     except Exception:
+                        self.skipped.append(line_num)
                         continue
                     self.events.append(ev)
                     self.leaves.append(_leaf_hex(ev))
@@ -70,6 +72,9 @@ class AuditLog:
     def verify_log(self) -> bool:
         """Every leaf's inclusion proof verifies against the current root (structural integrity). Detecting
         tampering *over time* comes from anchoring `current_root()` and re-deriving it later."""
+        # A log with a line that cannot be read is not a log that verifies
+        if self.skipped:
+            return False
         if not self.leaves:
             return True
         root, paths = _mk.merkle_root_and_paths(self.leaves)
