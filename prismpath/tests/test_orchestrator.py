@@ -6,9 +6,11 @@ import io
 import os
 import zipfile
 import pytest
-import requests
-from fastapi.testclient import TestClient
-from prismpath.orchestration import orchestrator
+
+requests = pytest.importorskip("requests")          # the control plane extra: CI's bare job has neither
+fastapi = pytest.importorskip("fastapi")
+from fastapi.testclient import TestClient  # noqa: E402
+from prismpath.orchestration import orchestrator  # noqa: E402
 
 client = TestClient(orchestrator.app)
 

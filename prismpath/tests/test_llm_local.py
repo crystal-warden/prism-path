@@ -3,7 +3,10 @@
 """Tests for llm_local module."""
 
 import pytest
-from prismpath.routing import llm_local
+
+pytest.importorskip("torch")             # the llm-local extra: generation needs torch and transformers
+pytest.importorskip("transformers")
+from prismpath.routing import llm_local  # noqa: E402
 
 
 class StubTensor:

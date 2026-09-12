@@ -5,6 +5,8 @@
 import os
 import sys
 import types
+
+import pytest
 from prismpath.orchestration import swarm_runner
 
 
@@ -41,6 +43,7 @@ def test_blame_file_idx():
 
 
 def test_swarm_endpoint_up(monkeypatch):
+    pytest.importorskip("requests")           # the control plane extra
     class MockResponse:
         def __init__(self, status_code):
             self.status_code = status_code
