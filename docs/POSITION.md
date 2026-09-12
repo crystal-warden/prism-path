@@ -187,7 +187,7 @@ Use these words this way, everywhere.
 | process owner | the policy of record | the flow, `validate`, `test`, `graph` |
 | engineer | the interface once, calibration, delivery | `contract`, `capability`, `compile`, `lock`, the kernels, CI |
 | operator | day to day, short lived changes, the feedback wheel | Mission Control, `swap`, `attest`, `trail`, overlays |
-| evaluator | after the fact | receipts, `ledger`, the evidence ledger, the comparison |
+| assessor | after the fact | receipts, `ledger`, the evidence ledger, the comparison |
 
 `docs/SYSTEM_MAP.md` maps every directory to these people and holds the conformance topology.
 

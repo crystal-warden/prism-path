@@ -19,7 +19,7 @@ PERSONAS = (
       "calibrate", "label", "annotate", "kappa", "centroids")),
     ("Operator: run the system day to day, swap and attest policy (Mission Control is the console; this is the scripted path)",
      ("run", "resume", "compose", "swap", "trail")),
-    ("Evaluator: anchor, verify, and read the evidence",
+    ("Assessor: anchor, verify, and read the evidence",
      ("ledger", "facet")),
 )
 
@@ -42,7 +42,7 @@ def _grouped_help(subparsers) -> str:
             out.append(f"  {name:<12} {help_text}")
         out.append("")
     out.append("`swap` splits by action: keygen, envelope, and pack are the engineer's setup; swap and attest are the "
-               "operator's; verify is the evaluator's.")
+               "operator's; verify is the assessor's.")
     return "\n".join(out)
 
 
@@ -247,8 +247,8 @@ def _add_operator_commands(subparsers) -> None:
     _trail.add_parser(subparsers)
 
 
-def _add_evaluator_commands(subparsers) -> None:
-    # Adding evaluator commands for ledger timestamp anchoring and telemetry processing.
+def _add_assessor_commands(subparsers) -> None:
+    # Adding assessor commands for ledger timestamp anchoring and telemetry processing.
     ledger_parser = subparsers.add_parser(
         'ledger', help='Flow-Ledger attestation: OTS anchor/upgrade/verify + air-gap tier (#36/#53)')
     ledger_parser.add_argument('action', choices=[
@@ -289,7 +289,7 @@ def build_parser() -> argparse.ArgumentParser:
     _add_owner_commands(subparsers)
     _add_engineer_commands(subparsers)
     _add_operator_commands(subparsers)
-    _add_evaluator_commands(subparsers)
+    _add_assessor_commands(subparsers)
 
     parser.epilog = _grouped_help(subparsers)
     subparsers._choices_actions = []   # the flat list is replaced by the grouped epilog above

@@ -180,7 +180,7 @@ Four people touch a deployment, and the commands, the docs and the package layou
 **process owner** who authors and tests the policy of record; the **engineer** who establishes the
 interface once, calibrates for deployment and delivers; the **operator** who runs the system day to day,
 swaps and attests policy, authors short lived changes that expire by construction, and reads the trail;
-and the **evaluator** who anchors, verifies and reads the evidence. **[docs/SYSTEM_MAP.md](docs/SYSTEM_MAP.md)**
+and the **assessor** who anchors, verifies and reads the evidence. **[docs/SYSTEM_MAP.md](docs/SYSTEM_MAP.md)**
 maps every directory to them and holds the conformance topology that keeps the many implementations of
 one idea in agreement. The **[operator's guide](docs/guides/operator.md)** is the day to day view.
 

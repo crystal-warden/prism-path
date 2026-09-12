@@ -35,7 +35,7 @@ Every pre regroup name (prismpath.engine, prismpath.checkpoint, ...) still impor
 object as its grouped counterpart, with a DeprecationWarning; the aliases go away in a later release. The reading order for "a flow becomes a decision" is kernel.parser,
 kernel.predicates, kernel.engine, kernel.causes, kernel.analysis. Who the pieces are for: the process
 owner authors and tests the flow; the engineer establishes the contract once and delivers; the operator
-runs, swaps, attests, and reads the trail; the evaluator anchors and verifies the receipts.
+runs, swaps, attests, and reads the trail; the assessor anchors and verifies the receipts.
 
 This module re exports the connector SDK, which is what an adapter imports to plug a domain in behind the
 six ports (adapters/ADAPTER_GUIDE.md).

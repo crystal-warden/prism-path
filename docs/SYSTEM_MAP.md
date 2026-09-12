@@ -23,7 +23,7 @@ compiled table image (.ppt) + signed pack + envelope + wcet bound
         |
         | every decision leaves a receipt with a cause code, Merkle rooted, anchored
         v
-receipts, audit trail, ledger anchors                (the evaluator's side: ledger, swap verify, facet decode)
+receipts, audit trail, ledger anchors                (the assessor's side: ledger, swap verify, facet decode)
 
 readings ---- Facet: quantize to decision cells, Zeckendorf code, self framing ----> the same decision, on the wire
                                                      (the same policy induces the partition; the wire ships the decision, not the data)
@@ -40,7 +40,7 @@ is the same struct on the wire, in the kernel, and on the fabric.
 | process owner | the policy of record, long term change management | the flow document, `prismpath/examples/`, `docs/guides/process-owner.md` | `init`, `validate`, `test`, `graph`, `lint`, `context` |
 | engineer | establish the interface once, calibrate for deployment, deliver | `contract` output, the kernels, CI, the pack and envelope, `docs/guides/engineer.md` | `contract`, `capability`, `compile`, `portable`, `lock`, `verify`, `plugins`, `ci-report`, `lsp`, `import`, `calibrate`, `label`, `annotate`, `kappa`, `centroids`, `swap keygen`, `swap envelope`, `swap pack` |
 | operator | day to day: monitor, assess for policy mutation, author short lived changes | Mission Control (`prismpath/mission_control/`, `docs/guides/mission-control-api.md`), the PolicyHost | `run`, `resume`, `compose`, `swap swap`, `swap attest`, `trail`; see `docs/guides/operator.md` |
-| evaluator | after the fact: was the decision right, and can it be proven | receipts, the audit trail, ledger anchors, `docs/guides/evaluator.md` | `ledger` (anchor, upgrade, verify, export-request, relay-stamp, import-proofs, rfc3161), `swap verify`, `facet decode` |
+| assessor | after the fact: was the decision right, and can it be proven | receipts, the audit trail, ledger anchors, `docs/guides/assessor.md` | `ledger` (anchor, upgrade, verify, export-request, relay-stamp, import-proofs, rfc3161), `swap verify`, `facet decode` |
 
 `prismpath --help` prints the commands in these groups.
 
@@ -52,15 +52,15 @@ is the same struct on the wire, in the kernel, and on the fabric.
 | `prismpath/portable/` | the JS kernel and the frozen conformance corpus every kernel is judged by | engineer |
 | `prismpath-rs/`, `prismpath-go/` | the P0 kernel in Rust and Go | engineer |
 | `prismpath-hw/` | the C target `interp.c`, the `.ppt` compiler `ppt_compile.py`, `TABLE_FORMAT.md`, the fabric RTL, the MCU firmware for four ISAs, the mesh demos | engineer, operator |
-| `prismpath-ebpf/` | the interpreter as XDP and TC programs in the Linux kernel, the loader, receipt sealing, the decision delta demo | engineer, evaluator |
+| `prismpath-ebpf/` | the interpreter as XDP and TC programs in the Linux kernel, the loader, receipt sealing, the decision delta demo | engineer, assessor |
 | `prismpath/telemetry/` | Facet, the reference: Figueroa quantization, Zeckendorf wire, self heal, epochs, concentrator, receipts, spiral | engineer |
 | `prismpath-telemetry-rs/`, `prismpath-preflight/`, `prismpath-reflect-bindings/`, `integrations/vector/`, `integrations/wireshark/` | Facet in Rust, the adoption gate, type bindings, the Vector codec, the dissector | engineer, operator |
 | `prismpath-hotswap-rs/` | the signed pack and PolicyHost natively | operator |
 | `adapters/fusion/` | one Level M flow joining N decision sources | process owner |
-| `adapters/compliance/` | the GRC adjudication adapter: machine checkable controls, evidence typed verdicts, OSCAL | process owner, evaluator |
+| `adapters/compliance/` | the GRC adjudication adapter: machine checkable controls, evidence typed verdicts, OSCAL | process owner, assessor |
 | `integrations/zarf/`, `integrations/uds/`, `integrations/cpp/` | signed policy delivery, and embedding the C target | engineer |
-| `formal/` | the Lean 4 development proving Figueroa quantization within its declared domain | evaluator |
-| `prismpath/comparisons/` | the pre registered comparison against OPA, Cedar, Cerbos, OpenFGA, Openlane, and the routing head to head | evaluator |
+| `formal/` | the Lean 4 development proving Figueroa quantization within its declared domain | assessor |
+| `prismpath/comparisons/` | the pre registered comparison against OPA, Cedar, Cerbos, OpenFGA, Openlane, and the routing head to head | assessor |
 | `docs/research/` | the papers and the evidence ledger, `supporting-evidence.md`, every claim with its row | evaluator |
 | `tools/` | the gates: `arch_guard.py` (boundary), `ledger_lint.py`, `arith_lint.py`, `docs_health.py`, `export_clean.py` (the public mirror) | engineer |
 
@@ -124,7 +124,7 @@ swap migration (row #131). The registry is append only and its hash rides the re
    written as policy semantics with an `on timeout` edge back to the baseline rather than as pack
    expiry; the pack names the policy of record it overrides (`--overlay-of`) and `attest` shows it.
    `trail` is the operator's read side of the receipts. See `docs/guides/operator.md`.
-4. The evaluator reads the receipts: every decision with its cause, Merkle rooted, anchored to a
+4. The assessor reads the receipts: every decision with its cause, Merkle rooted, anchored to a
    timestamp a third party can verify without trusting the emitter.
 
 ## 6. Where to read next

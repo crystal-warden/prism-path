@@ -31,7 +31,7 @@ solved routing", "logic as data is a rules engine"), answered with the concessio
 | [frontier-agent-integration.md](guides/frontier-agent-integration.md) | pairing PrismPath with frontier agents and LLMs: CLI workers, API/local backends, auto unblock loops, `@spawn` swarms, human in the loop |
 | [process-owner.md](guides/process-owner.md) | the process owner's guide: the flow and its fixtures as the policy of record, how a change reaches production |
 | [engineer.md](guides/engineer.md) | the engineer's guide: the contract once, delivery, calibration, the kernels and the gates |
-| [evaluator.md](guides/evaluator.md) | the evaluator's guide: receipts, the trail, anchors, the evidence base |
+| [assessor.md](guides/assessor.md) | the assessor's guide: receipts, the trail, anchors, the evidence base |
 | [operator.md](guides/operator.md) | the operator's day: Mission Control, swap and attest, short lived policy changes that expire by construction, reading the trail |
 | [mission-control-api.md](guides/mission-control-api.md) | the Mission Control API: observe, control, events, prove |
 
@@ -39,8 +39,8 @@ solved routing", "logic as data is a rules engine"), answered with the concessio
 
 | doc | what it covers |
 |---|---|
-| [control-plane.md](design/control-plane.md) | the reference deployment: sprint loops, gates as the definition of done, Mission Control, the worked example |
-| [architecture.md](design/architecture.md) | the flow kernel, the portable kernels, the control plane, and the gate-plugin seam |
+| [orchestration.md](design/orchestration.md) | the reference deployment: the sprint loop, gates as the definition of done, Mission Control, the worked example |
+| [architecture.md](design/architecture.md) | the flow kernel, the portable kernels, the orchestration layer, and the gate-plugin seam |
 | [framework.md](design/framework.md) | the operating methodology: spec per module, gates as the definition of done, the hard won lessons |
 | [spec-guard-onion.md](design/spec-guard-onion.md) | formal design spec for the safety floor: the policy grammar with no verb for permitting |
 | [spec-ledger-opentimestamps.md](design/spec-ledger-opentimestamps.md) | formal design spec for Flow Ledger anchoring: OpenTimestamps, the air gap tier, and the honest caveats |

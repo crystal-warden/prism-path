@@ -41,7 +41,7 @@ in milliseconds and CI runs it on every pull request, rendering the before and a
 2. The pull request shows the diff of the document and the diff of the graph. That is the review.
 3. The engineer's `contract` says whether any interface moved. If not, nothing on their side changes.
 4. The engineer compiles and packs the deterministic fragment; the operator swaps it in and attests.
-5. The evaluator can later point at the receipt of any decision and at the version of your document that
+5. The assessor can later point at the receipt of any decision and at the version of your document that
    produced it.
 
 ## 4. Who you hand off to
@@ -49,7 +49,7 @@ in milliseconds and CI runs it on every pull request, rendering the before and a
 The [engineer](engineer.md) establishes the input schema once from your `@emits` declarations and owns
 calibration and delivery. The [operator](operator.md) runs the system day to day and may author short
 lived changes on top of your policy; those expire by construction and never replace the policy of
-record, and the trail shows when one is in force. The [evaluator](evaluator.md) reads the receipts.
+record, and the trail shows when one is in force. The [assessor](assessor.md) reads the receipts.
 
 ## 5. Where to look next
 

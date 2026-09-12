@@ -327,8 +327,10 @@ kernel claiming compatibility must pass all of them.
 **Content addressed**: named by the hash of its contents. See idea 11.
 
 **Control plane / data plane**: borrowed from networking. The data plane does the work (running a
-flow); the control plane decides what work happens and whether it's done (gates, sprints, ledger).
-[architecture](design/architecture.md)
+flow); the control plane decides what the autonomous system is permitted to do. PrismPath is one
+control plane among many, never "the" control plane. The sprint and swarm loop that builds software
+on top of it is **the orchestration layer**, which is a different thing.
+[architecture](design/architecture.md) [the orchestration layer](design/orchestration.md)
 
 **Cosine similarity**: how aligned two vectors are, 0.0 to 1.0. See idea 1.
 

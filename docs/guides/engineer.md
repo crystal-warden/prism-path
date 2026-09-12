@@ -39,7 +39,7 @@ prismpath swap pack     --ppt flow.ppt --fields temp:int,armed:bool --version 3 
 
 The envelope declares what a host will accept (fields, capabilities, size caps); the pack binds the
 image, its fields, its version, and its computed worst case bound to your key. The operator swaps and
-attests; the evaluator verifies. `docs/design/spec-secure-hotswap.md` is the specification.
+attests; the assessor verifies. `docs/design/spec-secure-hotswap.md` is the specification.
 
 ## 3. Calibration
 
@@ -67,4 +67,4 @@ CI gates it. `CONTRIBUTING.md` has the setup for each toolchain.
 ## 5. Who you hand off to
 
 The [process owner](process-owner.md) authors and tests the policy; the [operator](operator.md) runs
-the system and swaps packs you built; the [evaluator](evaluator.md) verifies what the receipts say.
+the system and swaps packs you built; the [assessor](assessor.md) verifies what the receipts say.

@@ -9,7 +9,7 @@ the audit log, read through prismpath.ledgers). The FastAPI routers in this pack
 over these functions.
 
 No multi-user identity, no chat, no model inference — PrismPath routes and proves; it does not serve
-models. See docs/design/control-plane.md.
+models. See docs/design/orchestration.md.
 """
 import glob as _glob
 import json

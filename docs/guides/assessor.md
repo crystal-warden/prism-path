@@ -1,4 +1,4 @@
-# The evaluator's guide
+# The assessor's guide
 
 You come after the fact. Was the decision right, was it the policy that was approved, and can either be
 shown to someone who does not trust the system that made it. Everything you need is designed to be
