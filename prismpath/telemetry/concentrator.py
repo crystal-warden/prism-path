@@ -52,21 +52,21 @@ def demux(frame: bytes, registry: Dict[int, int]) -> Tuple[List[Tuple[int, List[
     ``registry`` maps stream id -> field count (from the stream's signed policy). On any
     structural failure the WHOLE datagram is rejected: ``([], cause)``."""
     bits = packed.unpack(frame)
-    n = len(bits)
+    bit_count = len(bits)
     out: List[Tuple[int, List[int]]] = []
 
     def take_one(pos: int) -> Tuple[int, int]:
         """Decode one Fibonacci code starting at ``pos``; returns (value, next_pos).
         Returns (-1, -1) if no complete code exists at/after ``pos``."""
-        i = pos
-        while i < n - 1:
-            if bits[i] == "1" and bits[i + 1] == "1":
-                return zeck.decode(bits[pos:i + 2]), i + 2
-            i += 1
+        bit_index = pos
+        while bit_index < bit_count - 1:
+            if bits[bit_index] == "1" and bits[bit_index + 1] == "1":
+                return zeck.decode(bits[pos:bit_index + 2]), bit_index + 2
+            bit_index += 1
         return -1, -1
 
     pos = 0
-    while pos < n:
+    while pos < bit_count:
         if "1" not in bits[pos:]:
             break                                   # trailing zero pad: the only legal tail
         sid, nxt = take_one(pos)
@@ -77,10 +77,10 @@ def demux(frame: bytes, registry: Dict[int, int]) -> Tuple[List[Tuple[int, List[
         wire_ints: List[int] = []
         pos = nxt
         for _ in range(registry[sid]):
-            v, nxt = take_one(pos)
-            if v < 0:
+            value, nxt = take_one(pos)
+            if value < 0:
                 return [], CONCENTRATOR_TRUNCATED   # record cut mid-reading
-            wire_ints.append(v)
+            wire_ints.append(value)
             pos = nxt
         out.append((sid, wire_ints))
     return out, OK

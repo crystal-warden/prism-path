@@ -83,7 +83,7 @@ def encode_receipt_bits(
 ) -> str:
     """Encode receipt fields into a self-framing Zeckendorf bitstream."""
     syms = encode_receipt_symbols(seq, prev_node, event, next_node, cause_code)
-    wire_ints = [s + 1 for s in syms]
+    wire_ints = [symbol + 1 for symbol in syms]
     return zeck.encode_stream(wire_ints)
 
 
@@ -101,7 +101,7 @@ def encode_receipt(
 
 def encode_receipt_dict(receipt: Dict[str, Any]) -> bytes:
     """Encode a receipt dict containing cause, event, next_node, prev_node, seq into wire bytes."""
-    missing = [f for f in RECEIPT_FIELDS if f not in receipt]
+    missing = [field for field in RECEIPT_FIELDS if field not in receipt]
     if missing:
         raise KeyError(f"receipt missing required fields: {missing}")
     return encode_receipt(
@@ -130,7 +130,7 @@ def decode_receipt_bits(bits: str) -> DecodedReceipt:
             return DecodedReceipt(None, RECEIPT_TRUNCATED)
         return DecodedReceipt(None, RECEIPT_FIELD_MISMATCH)
 
-    syms = [w - 1 for w in wire_ints]
+    syms = [wire_int - 1 for wire_int in wire_ints]
     cause_code = syms[0]
     if not (0 <= cause_code <= 255):
         return DecodedReceipt(None, RECEIPT_INVALID_CAUSE)

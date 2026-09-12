@@ -24,7 +24,7 @@ def chunk(bits: str, block_bits: int) -> List[str]:
     """Split a bitstream into fixed-size blocks (the retransmit unit). Always >= 1 block."""
     if block_bits <= 0:
         raise ValueError("block_bits must be positive")
-    return [bits[i:i + block_bits] for i in range(0, len(bits), block_bits)] or [""]
+    return [bits[offset:offset + block_bits] for offset in range(0, len(bits), block_bits)] or [""]
 
 
 def _leaf(block: str) -> str:
@@ -33,7 +33,7 @@ def _leaf(block: str) -> str:
 
 def commit(blocks: List[str]) -> Tuple[str, List[list]]:
     """(root_hex, per-block inclusion proof) over the block hashes  -  reuses ledger_ots's Merkle."""
-    return merkle.merkle_root_and_paths([_leaf(b) for b in blocks])
+    return merkle.merkle_root_and_paths([_leaf(block) for block in blocks])
 
 
 def verify_block(block: str, proof: list, root: str) -> bool:
@@ -74,7 +74,7 @@ class Receiver:
         return True
 
     def missing(self) -> List[int]:
-        return [i for i in range(self.n) if i not in self._blocks]
+        return [block_index for block_index in range(self.n) if block_index not in self._blocks]
 
     def complete(self) -> bool:
         return len(self._blocks) == self.n
@@ -84,7 +84,7 @@ class Receiver:
         silent hole."""
         if not self.complete():
             raise ValueError(f"cannot assemble: blocks still missing (provable gap): {self.missing()}")
-        return "".join(self._blocks[i] for i in range(self.n))
+        return "".join(self._blocks[block_index] for block_index in range(self.n))
 
 
 def repair(sender: Sender, receiver: Receiver) -> List[int]:

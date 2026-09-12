@@ -46,25 +46,25 @@ EDGE = 2**53
 def main() -> int:
     from prismpath.kernel.parser import parse
     parts = quantizer.build_partitions(parse(FLOW))
-    p = parts["mag"]
+    partition = parts["mag"]
     probes = []
     values = []
-    for t in THRESHOLDS:
-        values += [t - 1, t, t + 1]
+    for threshold in THRESHOLDS:
+        values += [threshold - 1, threshold, threshold + 1]
     values += [EDGE - 1, EDGE, EDGE + 2, 10**15]
-    for v in values:
-        probes.append({"value": v, "symbol": p.symbol(v)})
+    for value in values:
+        probes.append({"value": value, "symbol": partition.symbol(value)})
     out = {
         "comment": "FROZEN. Boundary parity: expected quantizer symbol at every threshold edge "
                    "and the 2^53 f64 exactness edge. Both implementation twins replay this file.",
         "flow": FLOW,
         "field": "mag",
-        "cells": p.n,
+        "cells": partition.n,
         "probes": probes,
     }
     path = HERE / "conformance" / "boundary.json"
     path.write_text(json.dumps(out, indent=1) + "\n")
-    print(f"wrote {path}: {len(probes)} probes over {p.n} cells")
+    print(f"wrote {path}: {len(probes)} probes over {partition.n} cells")
     return 0
 
 

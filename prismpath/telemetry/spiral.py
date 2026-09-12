@@ -47,43 +47,44 @@ GOLDEN_ANGLE_DEG = 180.0 * (3.0 - math.sqrt(5.0))   # ~= 137.5077640; build-time
 
 
 # --------------------------------------------------------------- integer-only spiral geometry (edge path)
-def theta_u32(n: int) -> int:
+def theta_u32(point_index: int) -> int:
     """Golden angle of point ``n`` as a ``u32`` phase  -  a single multiply-add, overflow == mod 2*pi."""
-    return (n * GOLDEN_ANGLE_U32) & 0xFFFFFFFF
+    return (point_index * GOLDEN_ANGLE_U32) & 0xFFFFFFFF
 
 
-def radius2(n: int) -> int:
+def radius2(point_index: int) -> int:
     """Squared radius of point ``n`` (``r^2 = c^2 * n``, ``c = 1``): a radial ring ``r < R`` is ``n < R^2``."""
-    return n
+    return point_index
 
 
-def spiral_xy(n: int, c: float = 1.0) -> Tuple[float, float]:
+def spiral_xy(point_index: int, scale: float = 1.0) -> Tuple[float, float]:
     """Build-time Cartesian coords of point ``n`` (Vogel model). Floats  -  for tessellation/plots only."""
-    r = c * math.sqrt(n)
-    theta = math.radians(n * GOLDEN_ANGLE_DEG)
-    return (r * math.cos(theta), r * math.sin(theta))
+    radius = scale * math.sqrt(point_index)
+    theta = math.radians(point_index * GOLDEN_ANGLE_DEG)
+    return (radius * math.cos(theta), radius * math.sin(theta))
 
 
 # --------------------------------------------------------------- mixed-radix reflected Gray code
 def mixed_radix_gray(radices: List[int]) -> Iterator[Tuple[int, ...]]:
     """Yield every cell of a mixed-radix grid in reflected Gray order: **consecutive tuples differ by 1
     in exactly one field**. Locality ordering for the on-demand within-band refinement (small deltas)."""
-    n = len(radices)
-    digits = [0] * n
-    directions = [1] * n
+    field_count = len(radices)
+    digits = [0] * field_count
+    directions = [1] * field_count
     total = 1
-    for r in radices:
-        total *= r
+    for radix in radices:
+        total *= radix
     yield tuple(digits)
     for _ in range(total - 1):
-        i = n - 1
-        while i >= 0:
-            nd = digits[i] + directions[i]
-            if 0 <= nd < radices[i]:
-                digits[i] = nd
+        digit_index = field_count - 1
+        while digit_index >= 0:
+            nd = digits[digit_index] + directions[digit_index]
+            if 0 <= nd < radices[digit_index]:
+                digits[digit_index] = nd
                 break
-            directions[i] = -directions[i]     # reflect this wheel, carry to the next more-significant one
-            i -= 1
+            # reflect this wheel, carry to the next more-significant one
+            directions[digit_index] = -directions[digit_index]
+            digit_index -= 1
         yield tuple(digits)
 
 
@@ -123,7 +124,7 @@ class SpiralLayout:
         self.fields = _node_fields(graph, node, self.parts)
         if not self.fields:
             raise ValueError(f"node {node!r} routes on no decision-relevant fields  -  nothing to pack")
-        self.radices = [self.parts[f].n for f in self.fields]
+        self.radices = [self.parts[field].n for field in self.fields]
 
         # Route every joint cell; group cells by route in edge-declaration (severity) order, Gray-ordered
         # within each band -> contiguous, severity-ordered index ranges.
@@ -133,15 +134,16 @@ class SpiralLayout:
             route = self._route_of_cell(cell)
             buckets.setdefault(route, []).append(cell)
 
-        self.routes: List[Optional[str]] = sorted(buckets, key=lambda r: order.get(r, len(order)))
-        self.band_index: Dict[Optional[str], int] = {r: i for i, r in enumerate(self.routes)}
+        self.routes: List[Optional[str]] = sorted(buckets, key=lambda route: order.get(route, len(order)))
+        self.band_index: Dict[Optional[str], int] = {route: band_index
+                                                     for band_index, route in enumerate(self.routes)}
         self.band_base: List[int] = []
         self.band_width: List[int] = []
         self.cell_of: List[Tuple[int, ...]] = []          # n -> cell
         self.n_of: Dict[Tuple[int, ...], int] = {}        # cell -> n
         base = 0
-        for r in self.routes:
-            cells = buckets[r]
+        for route in self.routes:
+            cells = buckets[route]
             self.band_base.append(base)
             self.band_width.append(len(cells))
             for cell in cells:
@@ -159,10 +161,10 @@ class SpiralLayout:
         for target, cond in self.graph.nodes[self.node].edges:
             if predicates.is_deterministic(cond) and target not in appear:
                 appear.append(target)
-        return {t: i for i, t in enumerate(reversed(appear))}
+        return {target: rank for rank, target in enumerate(reversed(appear))}
 
     def _cell_reading(self, cell: Tuple[int, ...]) -> Dict[str, Any]:
-        return {f: self.parts[f].representative(s) for f, s in zip(self.fields, cell)}
+        return {field: self.parts[field].representative(symbol) for field, symbol in zip(self.fields, cell)}
 
     def _route_of_cell(self, cell: Tuple[int, ...]) -> Optional[str]:
         return wire.route_node(self.graph, self.node, self._cell_reading(cell))
@@ -170,7 +172,7 @@ class SpiralLayout:
     # -- packing (edge path) ------------------------------------------------
     def cell(self, reading: Dict[str, Any]) -> Tuple[int, ...]:
         """A reading -> its joint symbol tuple over this node's fields."""
-        return tuple(self.parts[f].symbol(reading[f]) for f in self.fields)
+        return tuple(self.parts[field].symbol(reading[field]) for field in self.fields)
 
     def index(self, reading: Dict[str, Any]) -> int:
         """A reading -> its spiral index ``n``."""
@@ -180,26 +182,26 @@ class SpiralLayout:
         """A reading -> its band (route) index  -  the cheap, decision-lossless wire symbol."""
         return self.band_index[self._route_of_cell(self.cell(reading))]
 
-    def route_of(self, n: int) -> Optional[str]:
+    def route_of(self, spiral_index: int) -> Optional[str]:
         """``n`` -> route, by integer band-boundary compares (``base <= n < base+width``: the Level M atom)."""
-        for b in range(len(self.routes)):
-            if n < self.band_base[b] + self.band_width[b]:   # ranges are contiguous & ascending
-                return self.routes[b]
-        raise ValueError(f"index {n} outside the spiral ({self.size} cells)")
+        for band in range(len(self.routes)):
+            if spiral_index < self.band_base[band] + self.band_width[band]:   # contiguous & ascending
+                return self.routes[band]
+        raise ValueError(f"index {spiral_index} outside the spiral ({self.size} cells)")
 
     def band_bounds(self) -> List[Tuple[int, int, Optional[str]]]:
         """``[(lo, hi_exclusive, route), ...]``  -  the contiguous decision-bands."""
-        return [(self.band_base[b], self.band_base[b] + self.band_width[b], self.routes[b])
-                for b in range(len(self.routes))]
+        return [(self.band_base[band], self.band_base[band] + self.band_width[band], self.routes[band])
+                for band in range(len(self.routes))]
 
     # -- reconstruct --------------------------------------------------------
     def reconstruct_band(self, band_id: int) -> Dict[str, Any]:
         """Band ID -> a representative reading of that band (routes to the band's route; magnitude-lossy)."""
         return self._cell_reading(self.cell_of[self.band_base[band_id]])
 
-    def reconstruct(self, n: int) -> Dict[str, Any]:
+    def reconstruct(self, spiral_index: int) -> Dict[str, Any]:
         """``n`` -> the exact cell's representative reading (full quantized magnitude)."""
-        return self._cell_reading(self.cell_of[n])
+        return self._cell_reading(self.cell_of[spiral_index])
 
     # -- wire codec ---------------------------------------------------------
     def encode_decision(self, reading: Dict[str, Any]) -> str:
@@ -212,28 +214,28 @@ class SpiralLayout:
 
     def encode_progressive(self, reading: Dict[str, Any]) -> Tuple[str, str]:
         """(decision bits, refinement bits): band ID first, then the within-band Gray local index."""
-        n = self.index(reading)
-        b = self.band_index[self.route_of(n)]
-        local = n - self.band_base[b]
-        return zeck.encode(b + 1), zeck.encode(local + 1)
+        spiral_index = self.index(reading)
+        band = self.band_index[self.route_of(spiral_index)]
+        local = spiral_index - self.band_base[band]
+        return zeck.encode(band + 1), zeck.encode(local + 1)
 
     def decode_progressive(self, decision_bits: str, refine_bits: str) -> Dict[str, Any]:
         """(decision, refinement) -> the exact cell's representative reading."""
-        b = zeck.decode(decision_bits) - 1
+        band = zeck.decode(decision_bits) - 1
         local = zeck.decode(refine_bits) - 1
-        return self.reconstruct(self.band_base[b] + local)
+        return self.reconstruct(self.band_base[band] + local)
 
     # -- conformance / inspection ------------------------------------------
     def tessellation(self) -> Dict[str, Any]:
         """A frozen-corpus view: every cell -> its ``n``, band index, route, and build-time xy."""
         cells = []
-        for n, cell in enumerate(self.cell_of):
-            x, y = spiral_xy(n)
-            cells.append({"cell": list(cell), "n": n,
-                          "band": self.band_index[self.route_of(n)],
-                          "route": self.route_of(n),
-                          "xy": [round(x, 6), round(y, 6)]})
+        for spiral_index, cell in enumerate(self.cell_of):
+            x_coord, y_coord = spiral_xy(spiral_index)
+            cells.append({"cell": list(cell), "n": spiral_index,
+                          "band": self.band_index[self.route_of(spiral_index)],
+                          "route": self.route_of(spiral_index),
+                          "xy": [round(x_coord, 6), round(y_coord, 6)]})
         return {"node": self.node, "fields": self.fields, "radices": self.radices,
-                "bands": [{"route": r, "base": self.band_base[i], "width": self.band_width[i]}
-                          for i, r in enumerate(self.routes)],
+                "bands": [{"route": route, "base": self.band_base[band], "width": self.band_width[band]}
+                          for band, route in enumerate(self.routes)],
                 "size": self.size, "cells": cells}

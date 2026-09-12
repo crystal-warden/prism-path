@@ -61,16 +61,16 @@ def _route(graph, node, reading):
 
 def _assert_decisions_preserved(graph, node, readings):
     parts = quantizer.build_partitions(graph)
-    for r in readings:
-        orig = _route(graph, node, r)
-        recon = _route(graph, node, quantizer.reconstruct(parts, quantizer.quantize(parts, r)))
-        assert orig == recon, f"decision changed for {r}: {orig} -> {recon}"
+    for reading in readings:
+        orig = _route(graph, node, reading)
+        recon = _route(graph, node, quantizer.reconstruct(parts, quantizer.quantize(parts, reading)))
+        assert orig == recon, f"decision changed for {reading}: {orig} -> {recon}"
 
 
 # ---------------------------------------------------------------- partition shape
 def test_incident_partition_is_minimal():
-    g = parse_file(_INCIDENT)
-    parts = quantizer.build_partitions(g)
+    graph = parse_file(_INCIDENT)
+    parts = quantizer.build_partitions(graph)
     # error_rate thresholds >=1,>=5,>=25 -> exactly 4 decision cells
     assert parts["error_rate"].kind == "numeric"
     assert parts["error_rate"].n == 4
@@ -80,16 +80,16 @@ def test_incident_partition_is_minimal():
 
 
 def test_categorical_partition_shape():
-    g = parse(CATEGORICAL)
-    parts = quantizer.build_partitions(g)
+    graph = parse(CATEGORICAL)
+    parts = quantizer.build_partitions(graph)
     # kind: urgent/nightly/weekly + other = 4 ; status: ok + other = 2
     assert parts["kind"].kind == "categorical" and parts["kind"].n == 4
     assert parts["status"].kind == "categorical" and parts["status"].n == 2
 
 
 def test_numeric_equality_keeps_the_point_cell():
-    g = parse(NUMERIC_EQ)
-    parts = quantizer.build_partitions(g)
+    graph = parse(NUMERIC_EQ)
+    parts = quantizer.build_partitions(graph)
     # x: {<5}, {5}, {6..9}, {>=10} -> 4 cells (the == carves out the singleton {5})
     assert parts["x"].kind == "numeric" and parts["x"].n == 4
     assert parts["x"].symbol(5) != parts["x"].symbol(4)
@@ -98,35 +98,35 @@ def test_numeric_equality_keeps_the_point_cell():
 
 # ---------------------------------------------------------------- the focused decision-preserving proof
 def test_incident_decisions_preserved():
-    g = parse_file(_INCIDENT)
+    graph = parse_file(_INCIDENT)
     readings = []
     for dar in (True, False):
         for uf in (True, False):
             for er in [-5, 0, 1, 2, 4, 5, 6, 24, 25, 26, 50, 100]:
                 readings.append({"data_at_risk": dar, "user_facing": uf, "error_rate": er})
-    _assert_decisions_preserved(g, "classify" if "classify" in g.nodes else "assess", readings)
+    _assert_decisions_preserved(graph, "classify" if "classify" in graph.nodes else "assess", readings)
 
 
 def test_categorical_decisions_preserved():
-    g = parse(CATEGORICAL)
-    readings = [{"kind": k, "status": s}
-                for k in ("urgent", "nightly", "weekly", "adhoc", "xyz")
-                for s in ("ok", "bad", "degraded")]
-    _assert_decisions_preserved(g, "classify", readings)
+    graph = parse(CATEGORICAL)
+    readings = [{"kind": kind, "status": status}
+                for kind in ("urgent", "nightly", "weekly", "adhoc", "xyz")
+                for status in ("ok", "bad", "degraded")]
+    _assert_decisions_preserved(graph, "classify", readings)
 
 
 def test_numeric_equality_decisions_preserved():
-    g = parse(NUMERIC_EQ)
-    _assert_decisions_preserved(g, "classify", [{"x": v} for v in range(-3, 20)])
+    graph = parse(NUMERIC_EQ)
+    _assert_decisions_preserved(graph, "classify", [{"x": value} for value in range(-3, 20)])
 
 
 # ---------------------------------------------------------------- symbols stay small
 def test_symbols_are_small():
-    g = parse_file(_INCIDENT)
-    parts = quantizer.build_partitions(g)
-    r = {"data_at_risk": True, "user_facing": False, "error_rate": 42}
-    syms = quantizer.quantize(parts, r)
-    assert all(0 <= s < 8 for s in syms.values())   # tiny -> 1-2 Fibonacci bytes each
+    graph = parse_file(_INCIDENT)
+    parts = quantizer.build_partitions(graph)
+    reading = {"data_at_risk": True, "user_facing": False, "error_rate": 42}
+    syms = quantizer.quantize(parts, reading)
+    assert all(0 <= symbol < 8 for symbol in syms.values())   # tiny -> 1-2 Fibonacci bytes each
 
 
 # ---------------------------------------------------------------- the promoted public API

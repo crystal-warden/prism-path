@@ -32,8 +32,8 @@ def test_round_trip_spot(n):
 
 
 def test_round_trip_dense_range():
-    for n in range(1, 5001):
-        assert zeck.decode(zeck.encode(n)) == n, f"round-trip failed at {n}"
+    for value in range(1, 5001):
+        assert zeck.decode(zeck.encode(value)) == value, f"round-trip failed at {value}"
 
 
 # ---------------------------------------------------------------- the self-framing invariant
@@ -58,7 +58,7 @@ def test_stream_round_trip(values):
 
 def test_small_ints_are_tiny():
     # delta-differenced telemetry lives on small ints; they must be short
-    assert all(len(zeck.encode(n)) <= 6 for n in range(1, 9))
+    assert all(len(zeck.encode(value)) <= 6 for value in range(1, 9))
 
 
 # ---------------------------------------------------------------- rejections

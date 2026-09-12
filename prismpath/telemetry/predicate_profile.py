@@ -26,17 +26,17 @@ def cell_profile(graph, parts: Dict[str, "q.FieldPartition"], field: str, symbol
 
     Raises KeyError for a field the policy never routes on, IndexError for a symbol outside
     the field's partition  -  a profile request must never invent a cell."""
-    p = parts[field]
-    if not (0 <= symbol < p.n):
-        raise IndexError(f"{field}: symbol {symbol} outside partition (n={p.n})")
-    cell = dict(p.cells[symbol])
+    partition = parts[field]
+    if not (0 <= symbol < partition.n):
+        raise IndexError(f"{field}: symbol {symbol} outside partition (n={partition.n})")
+    cell = dict(partition.cells[symbol])
     rep = cell["rep"]
     atoms = quantizer.flow_atoms(graph).get(field, [])
     return {
         "field": field,
-        "kind": p.kind,
+        "kind": partition.kind,
         "symbol": symbol,
-        "n_cells": p.n,
+        "n_cells": partition.n,
         "cell": cell,
         "atoms": [{"op": op, "const": const, "truth": quantizer.atom_true(op, const, rep)}
                   for op, const in atoms],

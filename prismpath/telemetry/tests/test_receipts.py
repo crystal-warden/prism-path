@@ -40,8 +40,8 @@ FIXTURE_PATH = ADAPTER / "conformance" / "receipts.json"
 
 
 def test_conformance_vectors_from_fixture():
-    with open(FIXTURE_PATH, "r", encoding="utf-8") as f:
-        data = json.load(f)
+    with open(FIXTURE_PATH, "r", encoding="utf-8") as fixture_file:
+        data = json.load(fixture_file)
 
     for vec in data["vectors"]:
         fields = vec["fields"]
@@ -59,7 +59,7 @@ def test_conformance_vectors_from_fixture():
         )
         assert syms == expected_syms, f"{vec['name']}: symbols {syms} != {expected_syms}"
 
-        wire_ints = [s + 1 for s in syms]
+        wire_ints = [symbol + 1 for symbol in syms]
         assert wire_ints == expected_wire_ints, f"{vec['name']}: wire_ints {wire_ints} != {expected_wire_ints}"
 
         bits = encode_receipt_bits(

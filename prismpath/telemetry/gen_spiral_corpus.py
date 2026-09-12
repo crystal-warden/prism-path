@@ -48,37 +48,38 @@ def _probes(graph, layout):
     seen = set()
     probes = []
     for field, cuts in thresholds.items():
-        for c in cuts:
-            for v in (c - 1, c, c + 1):
-                r = dict(base)
-                r[field] = max(0, v)
-                key = tuple(sorted(r.items()))
+        for cut in cuts:
+            for value in (cut - 1, cut, cut + 1):
+                reading = dict(base)
+                reading[field] = max(0, value)
+                key = tuple(sorted(reading.items()))
                 if key in seen:
                     continue
                 seen.add(key)
-                probes.append({"reading": r, "route": wire.route_node(graph, NODE, r)})
+                probes.append({"reading": reading, "route": wire.route_node(graph, NODE, reading)})
     return probes
 
 
 def main() -> int:
     graph = parse(FLOW)
-    L = spiral.SpiralLayout(graph, NODE)
+    layout = spiral.SpiralLayout(graph, NODE)
     corpus = {
         "flow": FLOW,
         "node": NODE,
-        "fields": L.fields,
-        "radices": L.radices,
-        "size": L.size,
-        "bands": [{"route": r, "base": L.band_base[i], "width": L.band_width[i]}
-                  for i, r in enumerate(L.routes)],
-        "cells": [{"cell": list(L.cell_of[n]), "n": n,
-                   "band": L.band_index[L.route_of(n)], "route": L.route_of(n)}
-                  for n in range(L.size)],
-        "probes": _probes(graph, L),
+        "fields": layout.fields,
+        "radices": layout.radices,
+        "size": layout.size,
+        "bands": [{"route": route, "base": layout.band_base[band], "width": layout.band_width[band]}
+                  for band, route in enumerate(layout.routes)],
+        "cells": [{"cell": list(layout.cell_of[spiral_index]), "n": spiral_index,
+                   "band": layout.band_index[layout.route_of(spiral_index)],
+                   "route": layout.route_of(spiral_index)}
+                  for spiral_index in range(layout.size)],
+        "probes": _probes(graph, layout),
     }
     out = Path(__file__).resolve().parent / "conformance" / "spiral.json"
     out.write_text(json.dumps(corpus, indent=1) + "\n")
-    print(f"wrote {out}  ({L.size} cells, {len(L.routes)} bands, {len(corpus['probes'])} probes)")
+    print(f"wrote {out}  ({layout.size} cells, {len(layout.routes)} bands, {len(corpus['probes'])} probes)")
     return 0
 
 

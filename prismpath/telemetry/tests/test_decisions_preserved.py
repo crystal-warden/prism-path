@@ -30,30 +30,30 @@ def _cases():
 def test_corpus_pinned():
     cases = _cases()
     assert len(cases) == 7                      # v2: the three cut point regression flows joined the four originals
-    assert sum(len(c["readings"]) for c in cases) >= 50
+    assert sum(len(case["readings"]) for case in cases) >= 50
 
 
-@pytest.mark.parametrize("case", _cases(), ids=lambda c: c["name"])
+@pytest.mark.parametrize("case", _cases(), ids=lambda case: case["name"])
 def test_engine_matches_frozen_routes(case):
     """Drift guard: the flow + engine still produce the recorded full-precision routes."""
-    g = parse(case["flow"])
+    graph = parse(case["flow"])
     for entry in case["readings"]:
         reading, routes = entry["reading"], entry["routes"]
         for node, target in routes.items():
-            got = wire.route_node(g, node, reading)
+            got = wire.route_node(graph, node, reading)
             assert got == target, f"[{case['name']}] engine drift at {node} on {reading}: {got} != {target}"
 
 
-@pytest.mark.parametrize("case", _cases(), ids=lambda c: c["name"])
+@pytest.mark.parametrize("case", _cases(), ids=lambda case: case["name"])
 def test_wire_round_trip_preserves_decisions(case):
     """The proof: quantize -> Fibonacci -> decode -> reconstruct routes identically at every node."""
-    g = parse(case["flow"])
-    parts = quantizer.build_partitions(g)
+    graph = parse(case["flow"])
+    parts = quantizer.build_partitions(graph)
     for entry in case["readings"]:
         reading, routes = entry["reading"], entry["routes"]
         recon = wire.decode_reading(parts, wire.encode_reading(parts, reading))
         for node, target in routes.items():
-            got = wire.route_node(g, node, recon)
+            got = wire.route_node(graph, node, recon)
             assert got == target, (
                 f"[{case['name']}] DECISION CHANGED at {node} on {reading} "
                 f"(reconstructed {recon}): {got} != {target}")
@@ -61,8 +61,8 @@ def test_wire_round_trip_preserves_decisions(case):
 
 def test_wire_round_trip_is_stable():
     """A reading's bitstream decodes to a reading that re-encodes to the same bits (idempotent wire)."""
-    g = parse(_cases()[0]["flow"])
-    parts = quantizer.build_partitions(g)
+    graph = parse(_cases()[0]["flow"])
+    parts = quantizer.build_partitions(graph)
     reading = _cases()[0]["readings"][0]["reading"]
     bits = wire.encode_reading(parts, reading)
     recon = wire.decode_reading(parts, bits)

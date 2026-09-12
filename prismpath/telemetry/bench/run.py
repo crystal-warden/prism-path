@@ -29,18 +29,18 @@ from prismpath.kernel.parser import parse, parse_file  # noqa: E402
 _INCIDENT = ADAPTER.parent.parent / "prismpath" / "gallery" / "incident_severity" / "incident_severity.md"
 
 
-def bakeoff(regime, n, seed=0):
-    xs = datagen.channel(regime, n, seed)
+def bakeoff(regime, sample_count, seed=0):
+    xs = datagen.channel(regime, sample_count, seed)
     out = {}
     for name, fn in codecs.CODECS.items():
-        b = fn(xs)
-        out[name] = None if b is None else b / n        # bits/sample
+        bits = fn(xs)
+        out[name] = None if bits is None else bits / sample_count        # bits/sample
     return out
 
 
 def _field_series_bits(series):
     """delta+zigzag+fib bits for a per-field integer series (bool -> 0/1)."""
-    xs = [int(v) for v in series]
+    xs = [int(value) for value in series]
     return codecs.bits_delta_zigzag_fib(xs)
 
 
@@ -48,40 +48,41 @@ def decision_stream(graph, readings):
     """Ours (quantized symbols, delta+fib) vs lossless raw (delta+fib)  -  bits per reading."""
     parts = quantizer.build_partitions(graph)
     fields = sorted(parts.keys())
-    n = len(readings)
+    reading_count = len(readings)
     ours = 0
-    for f in fields:
-        syms = [parts[f].symbol(r[f]) for r in readings]
+    for field in fields:
+        syms = [parts[field].symbol(reading[field]) for reading in readings]
         ours += _field_series_bits(syms)
     raw = 0
-    for f in fields:
-        raw += _field_series_bits([r[f] for r in readings])
-    raw_fixed = 32 * n * len(fields)
-    return {"fields": len(fields), "ours_bpr": ours / n, "raw_fib_bpr": raw / n,
-            "raw_fixed_bpr": raw_fixed / n, "shrink_vs_raw_fib": raw / ours if ours else 0,
+    for field in fields:
+        raw += _field_series_bits([reading[field] for reading in readings])
+    raw_fixed = 32 * reading_count * len(fields)
+    return {"fields": len(fields), "ours_bpr": ours / reading_count, "raw_fib_bpr": raw / reading_count,
+            "raw_fixed_bpr": raw_fixed / reading_count, "shrink_vs_raw_fib": raw / ours if ours else 0,
             "shrink_vs_raw_fixed": raw_fixed / ours if ours else 0}
 
 
 def crossover():
     """The value magnitude at which fib(raw) per-sample first exceeds fixed-width 32 bits."""
-    v = 1
-    while len(zeck.encode(v + 1)) <= 32:
-        v *= 2
-        if v > 1 << 40:
+    value = 1
+    while len(zeck.encode(value + 1)) <= 32:
+        value *= 2
+        if value > 1 << 40:
             break
-    return {"approx_value": v, "fib_bits_at_value": len(zeck.encode(v + 1))}
+    return {"approx_value": value, "fib_bits_at_value": len(zeck.encode(value + 1))}
 
 
-def retransmission(n, block_size, p, r, bytes_per_sample, seed=0):
-    mask = channel.lost_mask(n, p=p, r=r, seed=seed)
-    res = channel.retransmit_bytes(n, block_size, mask, bytes_per_sample)
-    res.update({"n": n, "block_size": block_size, "p": p, "r": r,
-                "lost_samples": int(mask.sum())})
+def retransmission(sample_count, block_size, loss_probability, recovery_probability, bytes_per_sample, seed=0):
+    mask = channel.lost_mask(sample_count, loss_probability=loss_probability,
+                             recovery_probability=recovery_probability, seed=seed)
+    res = channel.retransmit_bytes(sample_count, block_size, mask, bytes_per_sample)
+    res.update({"n": sample_count, "block_size": block_size, "p": loss_probability,
+                "r": recovery_probability, "lost_samples": int(mask.sum())})
     return res
 
 
-def _fmt(v):
-    return "n/a" if v is None else f"{v:.2f}"
+def _fmt(value):
+    return "n/a" if value is None else f"{value:.2f}"
 
 
 def main():
@@ -100,7 +101,8 @@ def main():
     for reg in datagen.REGIMES:
         row = bakeoff(reg, 10_000)
         set1[reg] = row
-        md.append("| " + reg + " | " + " | ".join(_fmt(row[c]) for c in codecs.CODECS) + " |")
+        md.append("| " + reg + " | "
+                  + " | ".join(_fmt(row[codec_name]) for codec_name in codecs.CODECS) + " |")
     results["set1_bakeoff_10k"] = set1
 
     # ---------- Set 1: decision stream ----------
@@ -122,16 +124,17 @@ def main():
 
     # ---------- Set 2: N sweep (convergence) ----------
     md += ["", "## Set 2  -  N sweep: delta+zz+fib bits/sample (convergence + regime spread)", ""]
-    md.append("| regime | " + " | ".join(f"N={n}" for n in Ns) + " |")
+    md.append("| regime | " + " | ".join(f"N={sample_count}" for sample_count in Ns) + " |")
     md.append("|" + "---|" * (len(Ns) + 1))
     sweep = {}
     for reg in datagen.REGIMES:
         vals = []
-        for n in Ns:
-            xs = datagen.channel(reg, n)
-            vals.append(codecs.bits_delta_zigzag_fib(xs) / n)
+        for sample_count in Ns:
+            xs = datagen.channel(reg, sample_count)
+            vals.append(codecs.bits_delta_zigzag_fib(xs) / sample_count)
         sweep[reg] = dict(zip(Ns, vals))
-        md.append("| " + reg + " | " + " | ".join(f"{v:.2f}" for v in vals) + " |")
+        md.append("| " + reg + " | "
+                  + " | ".join(f"{bits_per_sample:.2f}" for bits_per_sample in vals) + " |")
     results["set2_sweep"] = sweep
 
     # ---------- crossover ----------
@@ -147,10 +150,10 @@ def main():
     md.append("|---|---|---|---|---|---|")
     rt = []
     for block in (32, 128, 512):
-        for (p, r) in ((0.002, 0.2), (0.01, 0.1)):
-            res = retransmission(10_000, block, p, r, bytes_per_sample=2.0)
+        for (loss_probability, recovery_probability) in ((0.002, 0.2), (0.01, 0.1)):
+            res = retransmission(10_000, block, loss_probability, recovery_probability, bytes_per_sample=2.0)
             rt.append(res)
-            md.append(f"| {block} | {p} | {r} | {res['lost_samples']} | "
+            md.append(f"| {block} | {loss_probability} | {recovery_probability} | {res['lost_samples']} | "
                       f"{res['lost_blocks']}/{res['n_blocks']} | {res['ratio']:.3f} |")
     results["set2_retransmission"] = rt
 

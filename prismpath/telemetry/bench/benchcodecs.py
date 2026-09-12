@@ -31,49 +31,50 @@ except Exception:                       # pragma: no cover
 
 # --------------------------------------------------------------- transforms
 def delta(xs: List[int]) -> List[int]:
-    return [xs[0]] + [xs[i] - xs[i - 1] for i in range(1, len(xs))] if xs else []
+    return [xs[0]] + [xs[sample_index] - xs[sample_index - 1]
+                      for sample_index in range(1, len(xs))] if xs else []
 
 
 def undelta(ds: List[int]) -> List[int]:
     out: List[int] = []
-    for d in ds:
-        out.append(d if not out else out[-1] + d)
+    for delta_value in ds:
+        out.append(delta_value if not out else out[-1] + delta_value)
     return out
 
 
-def zigzag(n: int) -> int:
-    return 2 * n if n >= 0 else -2 * n - 1
+def zigzag(value: int) -> int:
+    return 2 * value if value >= 0 else -2 * value - 1
 
 
-def unzigzag(u: int) -> int:
-    return (u >> 1) if (u & 1) == 0 else -((u + 1) >> 1)
+def unzigzag(unsigned_value: int) -> int:
+    return (unsigned_value >> 1) if (unsigned_value & 1) == 0 else -((unsigned_value + 1) >> 1)
 
 
 def _unsigned_deltas(xs: List[int]) -> List[int]:
-    return [zigzag(d) for d in delta(xs)]
+    return [zigzag(delta_value) for delta_value in delta(xs)]
 
 
 # --------------------------------------------------------------- LEB128 uvarint
-def uvarint_encode(u: int) -> bytes:
-    if u < 0:
+def uvarint_encode(value: int) -> bytes:
+    if value < 0:
         raise ValueError("uvarint is unsigned")
     out = bytearray()
     while True:
-        b = u & 0x7F
-        u >>= 7
-        out.append(b | (0x80 if u else 0))
-        if not u:
+        low_bits = value & 0x7F
+        value >>= 7
+        out.append(low_bits | (0x80 if value else 0))
+        if not value:
             return bytes(out)
 
 
 def uvarint_decode_all(data: bytes) -> List[int]:
-    out, u, shift = [], 0, 0
+    out, value, shift = [], 0, 0
     for byte in data:
-        u |= (byte & 0x7F) << shift
+        value |= (byte & 0x7F) << shift
         if byte & 0x80:
             shift += 7
         else:
-            out.append(u); u, shift = 0, 0
+            out.append(value); value, shift = 0, 0
     return out
 
 
@@ -87,19 +88,19 @@ def bits_fixed32(xs: List[int]) -> int:
 
 
 def bits_uvarint(xs: List[int]) -> int:                    # requires xs >= 0
-    return 8 * sum(len(uvarint_encode(x)) for x in xs)
+    return 8 * sum(len(uvarint_encode(value)) for value in xs)
 
 
 def bits_fib(xs: List[int]) -> int:                        # xs >= 0; +1 offset for the positive codec
-    return sum(len(zeck.encode(x + 1)) for x in xs)
+    return sum(len(zeck.encode(value + 1)) for value in xs)
 
 
 def bits_delta_zigzag_uvarint(xs: List[int]) -> int:
-    return 8 * sum(len(uvarint_encode(u)) for u in _unsigned_deltas(xs))
+    return 8 * sum(len(uvarint_encode(unsigned_delta)) for unsigned_delta in _unsigned_deltas(xs))
 
 
 def bits_delta_zigzag_fib(xs: List[int]) -> int:
-    return sum(len(zeck.encode(u + 1)) for u in _unsigned_deltas(xs))
+    return sum(len(zeck.encode(unsigned_delta + 1)) for unsigned_delta in _unsigned_deltas(xs))
 
 
 def bits_zstd(xs: List[int], level: int = 19) -> Optional[int]:
@@ -130,20 +131,23 @@ CODECS = {
 
 # --------------------------------------------------------------- round-trip (for the correctness test)
 def roundtrip_uvarint(xs: List[int]) -> List[int]:
-    return uvarint_decode_all(b"".join(uvarint_encode(x) for x in xs))
+    return uvarint_decode_all(b"".join(uvarint_encode(value) for value in xs))
 
 
 def roundtrip_fib(xs: List[int]) -> List[int]:
-    return [w - 1 for w in zeck.decode_stream(zeck.encode_stream([x + 1 for x in xs]))]
+    return [encoded_value - 1
+            for encoded_value in zeck.decode_stream(zeck.encode_stream([value + 1 for value in xs]))]
 
 
 def roundtrip_delta_zigzag_fib(xs: List[int]) -> List[int]:
     us = _unsigned_deltas(xs)
-    back = [w - 1 for w in zeck.decode_stream(zeck.encode_stream([u + 1 for u in us]))]
-    return undelta([unzigzag(u) for u in back])
+    back = [encoded_value - 1
+            for encoded_value in zeck.decode_stream(
+                zeck.encode_stream([unsigned_delta + 1 for unsigned_delta in us]))]
+    return undelta([unzigzag(unsigned_delta) for unsigned_delta in back])
 
 
 def roundtrip_delta_zigzag_uvarint(xs: List[int]) -> List[int]:
     us = _unsigned_deltas(xs)
-    back = uvarint_decode_all(b"".join(uvarint_encode(u) for u in us))
-    return undelta([unzigzag(u) for u in back])
+    back = uvarint_decode_all(b"".join(uvarint_encode(unsigned_delta) for unsigned_delta in us))
+    return undelta([unzigzag(unsigned_delta) for unsigned_delta in back])

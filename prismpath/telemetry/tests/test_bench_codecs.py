@@ -25,8 +25,8 @@ def test_lossless_round_trips(regime):
 def test_transforms_invert():
     xs = [5, 5, 7, 3, 100, 100, 0, 42]
     assert codecs.undelta(codecs.delta(xs)) == xs
-    for n in (-50, -1, 0, 1, 2, 999):
-        assert codecs.unzigzag(codecs.zigzag(n)) == n
+    for value in (-50, -1, 0, 1, 2, 999):
+        assert codecs.unzigzag(codecs.zigzag(value)) == value
 
 
 def test_fib_beats_fixed_on_small_deltas():
@@ -37,5 +37,5 @@ def test_fib_beats_fixed_on_small_deltas():
 def test_all_codec_sizes_positive():
     xs = datagen.channel("moderate", 1000)
     for name, fn in codecs.CODECS.items():
-        b = fn(xs)
-        assert b is None or b > 0, name
+        bits = fn(xs)
+        assert bits is None or bits > 0, name

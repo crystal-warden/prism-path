@@ -73,7 +73,7 @@ class FieldMap:
         return tok
 
     def non_identity(self) -> Dict[str, str]:
-        return {t: p for p, t in self.by_path.items() if t != p}
+        return {token: path for path, token in self.by_path.items() if token != path}
 
 
 # ----------------------------------------------------------------- VRL -> Level M
@@ -90,13 +90,13 @@ def transcribe(cond: Any, fields: FieldMap) -> Tuple[Optional[str], Optional[str
     src = _vrl_source(cond)
     if src is None:
         return None, "condition is not a VRL string"
-    text = _PATH_RE.sub(lambda m: fields.token(m.group(1)), src.strip())
+    text = _PATH_RE.sub(lambda match: fields.token(match.group(1)), src.strip())
     text = text.replace("&&", " and ").replace("||", " or ")
     text = re.sub(r"!(?!=)", " not ", text)
     text = re.sub(r"\btrue\b", "True", text)
     text = re.sub(r"\bfalse\b", "False", text)
     text = re.sub(r"\bnull\b", "None", text)
-    text = _INCLUDES_RE.sub(lambda m: f"{m.group(2)} in {m.group(1)}", text)
+    text = _INCLUDES_RE.sub(lambda match: f"{match.group(2)} in {match.group(1)}", text)
     text = " ".join(text.split())
     try:
         tree = ast.parse(text, mode="eval").body
@@ -108,29 +108,30 @@ def transcribe(cond: Any, fields: FieldMap) -> Tuple[Optional[str], Optional[str
     return text, None
 
 
-def _level_m_reason(n: ast.AST, tokens: set) -> Optional[str]:
+def _level_m_reason(node: ast.AST, tokens: set) -> Optional[str]:
     """None when the expression is a Level M condition over known field tokens; else why not."""
-    if isinstance(n, ast.BoolOp):
-        for v in n.values:
-            r = _level_m_reason(v, tokens)
-            if r:
-                return r
+    if isinstance(node, ast.BoolOp):
+        for value in node.values:
+            reason = _level_m_reason(value, tokens)
+            if reason:
+                return reason
         return None
-    if isinstance(n, ast.UnaryOp) and isinstance(n.op, ast.Not):
-        return _level_m_reason(n.operand, tokens)
-    if isinstance(n, ast.Name):
-        return None if n.id in tokens else f"unrecognized identifier {n.id!r} (VRL variable or function)"
-    if isinstance(n, ast.Compare):
-        if len(n.ops) != 1:
+    if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.Not):
+        return _level_m_reason(node.operand, tokens)
+    if isinstance(node, ast.Name):
+        return None if node.id in tokens else \
+            f"unrecognized identifier {node.id!r} (VRL variable or function)"
+    if isinstance(node, ast.Compare):
+        if len(node.ops) != 1:
             return "chained comparison; split into two atoms joined with and"
-        op = type(n.ops[0]).__name__
+        op = type(node.ops[0]).__name__
         if op not in ("Lt", "LtE", "Gt", "GtE", "Eq", "NotEq", "In", "NotIn"):
             return f"comparison operator {op} is not Level M"
-        left, right = n.left, n.comparators[0]
+        left, right = node.left, node.comparators[0]
         if op in ("In", "NotIn"):
             if isinstance(left, ast.Name) and left.id in tokens \
                     and isinstance(right, (ast.List, ast.Tuple)) \
-                    and all(isinstance(e, ast.Constant) for e in right.elts):
+                    and all(isinstance(element, ast.Constant) for element in right.elts):
                 return None
             return "in wants field in [literal, ...]"
         for side in (left, right):
@@ -146,15 +147,15 @@ def _level_m_reason(n: ast.AST, tokens: set) -> Optional[str]:
         if isinstance(const.value, float):
             return "float threshold (the codec compares truncated integers; round it and review)"
         return None
-    return f"{type(n).__name__} is not Level M (only field OP const under and/or/not)"
+    return f"{type(node).__name__} is not Level M (only field OP const under and/or/not)"
 
 
 # ----------------------------------------------------------------- sample discovery
 def _flatten(obj: Any, prefix: str = "") -> List[Tuple[str, Any]]:
     if isinstance(obj, dict):
         out: List[Tuple[str, Any]] = []
-        for k, v in obj.items():
-            out += _flatten(v, f"{prefix}{k}." if isinstance(v, dict) else f"{prefix}{k}")
+        for key, value in obj.items():
+            out += _flatten(value, f"{prefix}{key}." if isinstance(value, dict) else f"{prefix}{key}")
         return out
     return [(prefix, obj)]
 
@@ -162,14 +163,14 @@ def _flatten(obj: Any, prefix: str = "") -> List[Tuple[str, Any]]:
 def discover(sample_path: str, limit: Optional[int]) -> Tuple[int, Dict[str, dict]]:
     """Per flattened path: types seen, presence count, numeric range, distinct strings (capped)."""
     fields: Dict[str, dict] = {}
-    n = 0
+    event_count = 0
     lines = sys.stdin if sample_path == "-" else open(sample_path, encoding="utf-8")
     try:
         for line in lines:
             line = line.strip()
             if not line:
                 continue
-            if limit is not None and n >= limit:
+            if limit is not None and event_count >= limit:
                 break
             try:
                 event = json.loads(line)
@@ -177,41 +178,41 @@ def discover(sample_path: str, limit: Optional[int]) -> Tuple[int, Dict[str, dic
                 continue
             if not isinstance(event, dict):
                 continue
-            n += 1
-            for path, v in _flatten(event):
+            event_count += 1
+            for path, value in _flatten(event):
                 info = fields.setdefault(path, {"count": 0, "types": Counter(),
                                                 "lo": None, "hi": None, "distinct": set()})
                 info["count"] += 1
-                if v is None:
+                if value is None:
                     info["types"]["null"] += 1
-                elif isinstance(v, bool):
+                elif isinstance(value, bool):
                     info["types"]["bool"] += 1
-                elif isinstance(v, (int, float)):
-                    info["types"]["float" if isinstance(v, float) else "int"] += 1
-                    info["lo"] = v if info["lo"] is None else min(info["lo"], v)
-                    info["hi"] = v if info["hi"] is None else max(info["hi"], v)
-                elif isinstance(v, str):
+                elif isinstance(value, (int, float)):
+                    info["types"]["float" if isinstance(value, float) else "int"] += 1
+                    info["lo"] = value if info["lo"] is None else min(info["lo"], value)
+                    info["hi"] = value if info["hi"] is None else max(info["hi"], value)
+                elif isinstance(value, str):
                     info["types"]["str"] += 1
                     if len(info["distinct"]) <= 12:
-                        info["distinct"].add(v)
+                        info["distinct"].add(value)
                 else:
-                    info["types"][type(v).__name__] += 1
+                    info["types"][type(value).__name__] += 1
     finally:
         if lines is not sys.stdin:
             lines.close()
-    return n, fields
+    return event_count, fields
 
 
-def _field_line(path: str, info: dict, n: int) -> str:
-    types = "/".join(t for t, _c in info["types"].most_common())
+def _field_line(path: str, info: dict, event_count: int) -> str:
+    types = "/".join(type_name for type_name, _c in info["types"].most_common())
     extra = ""
     if info["lo"] is not None:
         extra = f", range {info['lo']}..{info['hi']}"
     elif info["distinct"]:
         vals = sorted(info["distinct"])
-        shown = ", ".join(repr(v) for v in vals[:6])
+        shown = ", ".join(repr(value) for value in vals[:6])
         extra = f", values {shown}" + (" ..." if len(vals) > 6 else "")
-    return f"{path} ({types}, {info['count']}/{n} events{extra})"
+    return f"{path} ({types}, {info['count']}/{event_count} events{extra})"
 
 
 # ----------------------------------------------------------------- vector.toml -> draft nodes
@@ -223,23 +224,23 @@ def build_nodes(config: dict, fields: FieldMap):
     """Transcribe route/filter transforms into flow nodes. Returns (nodes, skipped, notes):
     nodes = [(name, [(target, cond_text_or_None_for_else)])] in emit order, leaves included."""
     transforms = config.get("transforms", {})
-    usable = {name: t for name, t in transforms.items()
-              if isinstance(t, dict) and t.get("type") in ("route", "filter")}
+    usable = {name: transform for name, transform in transforms.items()
+              if isinstance(transform, dict) and transform.get("type") in ("route", "filter")}
     skipped: List[str] = []
     notes: List[str] = []
-    for name, t in transforms.items():
-        if isinstance(t, dict) and name not in usable:
-            skipped.append(f"transform {name!r} (type {t.get('type', '?')}) is not route/filter; "
+    for name, transform in transforms.items():
+        if isinstance(transform, dict) and name not in usable:
+            skipped.append(f"transform {name!r} (type {transform.get('type', '?')}) is not route/filter; "
                            f"the chain stops there")
 
     # who consumes each output? route outputs are "T.route"; a filter's pass side is plain "T"
     consumers: Dict[str, List[str]] = {}
-    for name, t in usable.items():
-        for inp in t.get("inputs", []):
+    for name, transform in usable.items():
+        for inp in transform.get("inputs", []):
             consumers.setdefault(inp, []).append(name)
 
     def follow(output: str, leaf: str) -> str:
-        cs = [c for c in consumers.get(output, [])]
+        cs = [consumer for consumer in consumers.get(output, [])]
         if len(cs) == 1:
             return _sanitize(cs[0])
         if len(cs) > 1:
@@ -247,21 +248,22 @@ def build_nodes(config: dict, fields: FieldMap):
                          f"draft ends that path at leaf {leaf!r}")
         return leaf
 
-    entry = [name for name, t in usable.items()
-             if not any(i in usable or i.split(".")[0] in usable for i in t.get("inputs", []))]
+    entry = [name for name, transform in usable.items()
+             if not any(input_name in usable or input_name.split(".")[0] in usable
+                        for input_name in transform.get("inputs", []))]
     if len(entry) > 1:
         notes.append(f"multiple entry transforms {entry}; drafting from {entry[0]!r} "
                      f"(the rest still emit as nodes; re-point `start:` to change)")
 
     nodes: List[Tuple[str, List[Tuple[str, Optional[str]]]]] = []
     leaves: List[str] = []
-    order = entry + [n for n in usable if n not in entry]
+    order = entry + [transform_name for transform_name in usable if transform_name not in entry]
     for name in order:
-        t = usable[name]
+        transform = usable[name]
         node = _sanitize(name)
         edges: List[Tuple[str, Optional[str]]] = []
-        if t["type"] == "route":
-            for route, cond in t.get("route", {}).items():
+        if transform["type"] == "route":
+            for route, cond in transform.get("route", {}).items():
                 text, why = transcribe(cond, fields)
                 leaf = _sanitize(f"{name}_{route}")
                 if text is None:
@@ -271,7 +273,7 @@ def build_nodes(config: dict, fields: FieldMap):
                 edges.append((follow(f"{name}.{route}", leaf), text))
             edges.append((follow(f"{name}._unmatched", _sanitize(f"{name}_unmatched")), None))
         else:                                            # filter: keep side chains, drop side ends
-            text, why = transcribe(t.get("condition"), fields)
+            text, why = transcribe(transform.get("condition"), fields)
             keep = follow(name, _sanitize(f"{name}_pass"))
             if text is None:
                 skipped.append(f"filter {name}: {why} -> drafted as a pass-through to {keep!r}; "
@@ -282,7 +284,7 @@ def build_nodes(config: dict, fields: FieldMap):
                 edges.append((_sanitize(f"{name}_dropped"), None))
         nodes.append((node, edges))
         for tgt, _c in edges:
-            if tgt not in {_sanitize(n) for n in usable} and tgt not in leaves:
+            if tgt not in {_sanitize(transform_name) for transform_name in usable} and tgt not in leaves:
                 leaves.append(tgt)
     for leaf in leaves:
         nodes.append((leaf, []))
@@ -328,8 +330,8 @@ def main() -> int:
                     help="skip the preflight verification run on the finished draft")
     args = ap.parse_args()
 
-    n, observed = discover(args.sample, args.limit)
-    if n == 0:
+    event_count, observed = discover(args.sample, args.limit)
+    if event_count == 0:
         print("no events read from the sample; nothing to draft against")
         return 1
 
@@ -337,7 +339,7 @@ def main() -> int:
         (args.sample if args.sample != "-" else "draft").rsplit(".", 1)[0] + ".flow.md")
     name = args.name or _sanitize(out_path.stem.replace(".flow", ""))
     fields = FieldMap()
-    report: List[str] = [f"# facet-init: {n} events scanned"]
+    report: List[str] = [f"# facet-init: {event_count} events scanned"]
 
     if args.vector_toml:
         if tomllib is None:
@@ -361,15 +363,15 @@ def main() -> int:
                     report.append(f"- `{node} -> {target}` when `{cond}`")
         if skipped:
             report.append("\n## Needs the author (did not transcribe)")
-            report += [f"- {s}" for s in skipped]
+            report += [f"- {skipped_reason}" for skipped_reason in skipped]
         if notes:
             report.append("\n## Structure notes")
-            report += [f"- {s}" for s in notes]
+            report += [f"- {note}" for note in notes]
     else:
         origin = f" from {Path(args.sample).name} (no vector.toml: skeleton only)"
         banner_extra = ["", "Observed fields (annotations only; the author writes the conditions):"]
         for path in sorted(observed):
-            banner_extra.append(f"  {_field_line(path, observed[path], n)}")
+            banner_extra.append(f"  {_field_line(path, observed[path], event_count)}")
         nodes = [("classify", [("end", "always")]), ("end", [])]
         report.append("\n## Skeleton draft (no vector.toml given)")
         report.append("- one `classify -> end: always` edge keeps it parseable; replace it with "
@@ -377,30 +379,31 @@ def main() -> int:
 
     # only fields on edges that actually emitted count; a path registered during a FAILED
     # transcription is the author's problem, not part of the draft codebook
-    used_tokens = {t for _n, edges in nodes for _tgt, cond in edges if cond
-                   for t in re.findall(r"[A-Za-z_]\w*", cond) if t in fields.by_token}
-    used_paths = {fields.by_token[t] for t in used_tokens}
-    unused = [p for p in sorted(observed) if p not in used_paths]
+    used_tokens = {token for _n, edges in nodes for _tgt, cond in edges if cond
+                   for token in re.findall(r"[A-Za-z_]\w*", cond) if token in fields.by_token}
+    used_paths = {fields.by_token[token] for token in used_tokens}
+    unused = [path for path in sorted(observed) if path not in used_paths]
     if args.vector_toml and unused:
         report.append("\n## Observed in the sample, no authored condition (not transmitted)")
-        report += [f"- {_field_line(p, observed[p], n)}" for p in unused]
-    missing = [p for p in sorted(used_paths) if p not in observed]
+        report += [f"- {_field_line(path, observed[path], event_count)}" for path in unused]
+    missing = [path for path in sorted(used_paths) if path not in observed]
     if missing:
         report.append("\n## In your conditions but never seen in the sample")
-        report += [f"- `{p}` (wrong path, or the sample does not cover it)" for p in missing]
+        report += [f"- `{path}` (wrong path, or the sample does not cover it)" for path in missing]
 
     out_path.write_text(emit_flow(name, nodes, banner_extra, origin))
     report.append(f"\nwrote {out_path}")
 
-    maps = {t: p for t, p in fields.non_identity().items() if t in used_tokens}
-    map_args = [x for t, p in sorted(maps.items()) for x in ("--map", f"{t}={p}")]
+    maps = {token: path for token, path in fields.non_identity().items() if token in used_tokens}
+    map_args = [argument for token, path in sorted(maps.items()) for argument in ("--map", f"{token}={path}")]
     if maps:
         report.append("\n## Codec field paths (nested events)")
-        for t, p in sorted(maps.items()):
-            report.append(f'- `encoding.field_paths.{t} = "{p}"` (preflight: `--map {t}={p}`)')
+        for token, path in sorted(maps.items()):
+            report.append(f'- `encoding.field_paths.{token} = "{path}"` (preflight: `--map {token}={path}`)')
 
     check_cmd = [sys.executable, str(HERE / "preflight.py"), str(out_path), args.sample, *map_args]
-    report.append(f"\nFull report: `{' '.join(Path(c).name if i < 2 else c for i, c in enumerate(check_cmd))}`")
+    report.append(f"\nFull report: `"
+                  f"{' '.join(Path(part).name if position < 2 else part for position, part in enumerate(check_cmd))}`")
     print("\n".join(report))
 
     if args.no_check or args.sample == "-" or not args.vector_toml:

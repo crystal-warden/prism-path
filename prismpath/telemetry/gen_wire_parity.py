@@ -26,10 +26,10 @@ def main():
     out = {}
     for case in corpus["cases"]:
         parts = quantizer.build_partitions(parse(case["flow"]))
-        out[case["name"]] = [wire.encode_reading(parts, e["reading"]) for e in case["readings"]]
+        out[case["name"]] = [wire.encode_reading(parts, entry["reading"]) for entry in case["readings"]]
     dest = REPO / "prismpath-telemetry-rs" / "tests" / "fixtures" / "wire_parity.json"
     dest.write_text(json.dumps(out, indent=1) + "\n")
-    print(f"wrote {dest}  ({len(out)} flows, {sum(len(v) for v in out.values())} readings)")
+    print(f"wrote {dest}  ({len(out)} flows, {sum(len(bitstreams) for bitstreams in out.values())} readings)")
     return 0
 
 

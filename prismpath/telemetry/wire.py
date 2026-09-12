@@ -24,11 +24,11 @@ def encode_reading(parts: Dict[str, "q.FieldPartition"], reading: Dict[str, Any]
     """Reading -> bitstream. Requires every decision-relevant field present (missing-field handling is a
     later refinement)."""
     order = _order(parts)
-    missing = [f for f in order if f not in reading]
+    missing = [field for field in order if field not in reading]
     if missing:
         raise KeyError(f"reading missing decision fields: {missing}")
     syms = quantizer.quantize(parts, reading)
-    return zeck.encode_stream([syms[f] + 1 for f in order])
+    return zeck.encode_stream([syms[field] + 1 for field in order])
 
 
 def decode_reading(parts: Dict[str, "q.FieldPartition"], bits: str) -> Dict[str, Any]:
@@ -37,7 +37,7 @@ def decode_reading(parts: Dict[str, "q.FieldPartition"], bits: str) -> Dict[str,
     wire = zeck.decode_stream(bits)
     if len(wire) != len(order):
         raise ValueError(f"symbol count {len(wire)} != decision fields {len(order)}")
-    syms = {f: wire[i] - 1 for i, f in enumerate(order)}
+    syms = {field: wire[field_index] - 1 for field_index, field in enumerate(order)}
     return quantizer.reconstruct(parts, syms)
 
 
@@ -53,4 +53,4 @@ def route_node(graph, node: str, reading: Dict[str, Any]) -> Optional[str]:
 def decision_nodes(graph) -> List[str]:
     """Nodes with at least one deterministic (field-routing) edge."""
     return [name for name, node in graph.nodes.items()
-            if any(predicates.is_deterministic(c) for _t, c in node.edges)]
+            if any(predicates.is_deterministic(cond) for _t, cond in node.edges)]

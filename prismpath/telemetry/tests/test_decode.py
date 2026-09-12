@@ -30,32 +30,32 @@ start: classify
 
 
 def test_decode_reproduces_routes():
-    g = parse(CAT)
-    parts = quantizer.build_partitions(g)
+    graph = parse(CAT)
+    parts = quantizer.build_partitions(graph)
     readings = [{"kind": "urgent", "status": "ok"},
                 {"kind": "nightly", "status": "ok"},
                 {"kind": "adhoc", "status": "bad"},
                 {"kind": "weekly", "status": "degraded"}]
     bits = dec.encode_readings(parts, readings)
-    rep = dec.inspect(g, bits)
+    rep = dec.inspect(graph, bits)
     assert rep["n_readings"] == 4 and rep["trailing_ints"] == 0
     # each decoded reading routes exactly as the original did
     for orig, row in zip(readings, rep["readings"]):
-        assert row["routes"]["classify"] == wire.route_node(g, "classify", orig)
+        assert row["routes"]["classify"] == wire.route_node(graph, "classify", orig)
 
 
 def test_other_renders_readably():
-    g = parse(CAT)
-    parts = quantizer.build_partitions(g)
+    graph = parse(CAT)
+    parts = quantizer.build_partitions(graph)
     bits = dec.encode_readings(parts, [{"kind": "adhoc", "status": "bad"}])
-    rep = dec.inspect(g, bits)
+    rep = dec.inspect(graph, bits)
     # 'adhoc' is not a listed kind -> the reconstructed representative shows as <other>, not a control char
     assert rep["readings"][0]["reading"]["kind"] == "<other>"
 
 
 def test_partial_final_frame_is_reported_not_crashed():
-    g = parse(CAT)
-    parts = quantizer.build_partitions(g)
+    graph = parse(CAT)
+    parts = quantizer.build_partitions(graph)
     bits = dec.encode_readings(parts, [{"kind": "urgent", "status": "ok"}])
-    rep = dec.inspect(g, bits + "0")           # a dangling bit = incomplete final frame
+    rep = dec.inspect(graph, bits + "0")           # a dangling bit = incomplete final frame
     assert rep["n_readings"] == 1              # the complete reading still decodes

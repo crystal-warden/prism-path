@@ -23,22 +23,22 @@ def pack(bits: str, word_bits: int = WORD_BITS) -> bytes:
     """Bit-string -> bytes, MSB-first, flushing per `word_bits`-bit word; final word zero-padded right."""
     out = bytearray()
     acc = 0
-    n = 0
+    bit_count = 0
     for ch in bits:
         acc = (acc << 1) | (1 if ch == "1" else 0)
-        n += 1
-        if n == word_bits:
+        bit_count += 1
+        if bit_count == word_bits:
             out += acc.to_bytes(word_bits // 8, "big")
-            acc, n = 0, 0
-    if n:
-        acc <<= (word_bits - n)                      # left-align the partial word; low bits = zero pad
+            acc, bit_count = 0, 0
+    if bit_count:
+        acc <<= (word_bits - bit_count)       # left-align the partial word; low bits = zero pad
         out += acc.to_bytes(word_bits // 8, "big")
     return bytes(out)
 
 
 def unpack(data: bytes) -> str:
     """Bytes -> bit-string, MSB-first (includes any trailing zero pad  -  harmless, dropped on decode)."""
-    return "".join(format(b, "08b") for b in data)
+    return "".join(format(byte, "08b") for byte in data)
 
 
 def encode(ints: List[int], word_bits: int = WORD_BITS) -> bytes:
@@ -63,6 +63,7 @@ def padding_overhead(ints: List[int], word_bits: int = WORD_BITS) -> Dict:
 
 if __name__ == "__main__":                           # human-readable padding-overhead table
     print(f"{'N':>8} {'wire_bytes':>11} {'pad_bits':>9} {'pad_%':>7}")
-    for n in (10, 100, 1_000, 10_000, 100_000):
-        o = padding_overhead(list(range(1, n + 1)))
-        print(f"{o['n']:>8} {o['wire_bytes']:>11} {o['pad_bits']:>9} {o['pad_pct']:>6.3f}%")
+    for sample_count in (10, 100, 1_000, 10_000, 100_000):
+        overhead = padding_overhead(list(range(1, sample_count + 1)))
+        print(f"{overhead['n']:>8} {overhead['wire_bytes']:>11} {overhead['pad_bits']:>9} "
+              f"{overhead['pad_pct']:>6.3f}%")

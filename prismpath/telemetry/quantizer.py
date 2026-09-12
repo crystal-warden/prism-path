@@ -43,16 +43,16 @@ def atoms_of(expr_node) -> List[Tuple[str, str, Any]]:
     `not`/`and`/`or` add no cuts, only recursion. Field-vs-field / non-literal atoms are ignored (they
     are not Level M and carry no transmittable cut)."""
     out: List[Tuple[str, str, Any]] = []
-    n = expr_node
-    if isinstance(n, ast.BoolOp):
-        for v in n.values:
-            out += atoms_of(v)
-    elif isinstance(n, ast.UnaryOp) and isinstance(n.op, ast.Not):
-        out += atoms_of(n.operand)               # cut points unchanged by negation
-    elif isinstance(n, ast.Name):
-        out.append((n.id, "truthy", None))     # bare field -> truthiness
-    elif isinstance(n, ast.Compare) and len(n.ops) == 1:
-        left, op, right = n.left, n.ops[0], n.comparators[0]
+    node = expr_node
+    if isinstance(node, ast.BoolOp):
+        for operand in node.values:
+            out += atoms_of(operand)
+    elif isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.Not):
+        out += atoms_of(node.operand)               # cut points unchanged by negation
+    elif isinstance(node, ast.Name):
+        out.append((node.id, "truthy", None))     # bare field -> truthiness
+    elif isinstance(node, ast.Compare) and len(node.ops) == 1:
+        left, op, right = node.left, node.ops[0], node.comparators[0]
         opname = type(op).__name__
         if opname in _ORDER or opname in ("Eq", "NotEq"):
             sym = _ORDER.get(opname) or ("==" if opname == "Eq" else "!=")
@@ -62,7 +62,7 @@ def atoms_of(expr_node) -> List[Tuple[str, str, Any]]:
                 out.append((right.id, _FLIP[sym], left.value))
         elif opname in ("In", "NotIn") and isinstance(left, ast.Name) \
                 and isinstance(right, (ast.List, ast.Tuple)):
-            consts = tuple(e.value for e in right.elts if isinstance(e, ast.Constant))
+            consts = tuple(element.value for element in right.elts if isinstance(element, ast.Constant))
             if len(consts) == len(right.elts):
                 out.append((left.id, "in" if opname == "In" else "not in", consts))
     return out
@@ -104,37 +104,38 @@ class FieldPartition:
 
     def symbol(self, value: Any) -> int:
         if self.kind == "numeric":
-            v = int(value)
-            for i, c in enumerate(self.cells):
-                if (c["lo"] is None or v >= c["lo"]) and (c["hi"] is None or v <= c["hi"]):
-                    return i
+            integer_value = int(value)
+            for cell_index, cell in enumerate(self.cells):
+                if ((cell["lo"] is None or integer_value >= cell["lo"])
+                        and (cell["hi"] is None or integer_value <= cell["hi"])):
+                    return cell_index
             raise ValueError(f"{self.field}={value!r} fell outside its numeric partition")
         if self.kind == "boolean":
             return 1 if value else 0
         # categorical
-        for i, c in enumerate(self.cells):
-            if c.get("const", OTHER_CELL) == value:
-                return i
+        for cell_index, cell in enumerate(self.cells):
+            if cell.get("const", OTHER_CELL) == value:
+                return cell_index
         return self.n - 1                     # the trailing "other" cell
 
     def representative(self, symbol: int) -> Any:
         return self.cells[symbol]["rep"]
 
 
-def atom_true(op: str, const: Any, v: Any) -> bool:
+def atom_true(op: str, const: Any, value: Any) -> bool:
     """Evaluate one atom, the quantizer's own evaluator: is `value OP const` true?
 
     Public so a caller checking a cell (predicate_profile, and the fusion adapter's cell referee)
     asks the partition builder itself rather than reimplementing the comparison and drifting."""
-    if op == "<":  return v < const
-    if op == "<=": return v <= const
-    if op == ">":  return v > const
-    if op == ">=": return v >= const
-    if op == "==": return v == const
-    if op == "!=": return v != const
-    if op == "in": return v in const
-    if op == "not in": return v not in const
-    if op == "truthy": return bool(v)
+    if op == "<":  return value < const
+    if op == "<=": return value <= const
+    if op == ">":  return value > const
+    if op == ">=": return value >= const
+    if op == "==": return value == const
+    if op == "!=": return value != const
+    if op == "in": return value in const
+    if op == "not in": return value not in const
+    if op == "truthy": return bool(value)
     raise ValueError(op)
 
 
@@ -155,17 +156,17 @@ def _numeric_partition(field: str, atoms: List[Tuple[str, Any]]) -> FieldPartiti
     # `x not in (7,)`, and `x` alongside `x >= 5` each put values that route differently into one
     # cell (prismpath/telemetry/tests/test_quantizer_cut_points.py pins all three).
     consts_set = set()
-    for op, c in atoms:
+    for op, const in atoms:
         if op in ("<", "<=", ">", ">=", "==", "!="):
-            if isinstance(c, float):
-                _refuse_float(c)
-            consts_set.add(int(c))
+            if isinstance(const, float):
+                _refuse_float(const)
+            consts_set.add(int(const))
         elif op in ("in", "not in"):
-            for v in c:
-                if isinstance(v, float):
-                    _refuse_float(v)
-                if isinstance(v, int) and not isinstance(v, bool):
-                    consts_set.add(int(v))
+            for member in const:
+                if isinstance(member, float):
+                    _refuse_float(member)
+                if isinstance(member, int) and not isinstance(member, bool):
+                    consts_set.add(int(member))
         elif op == "truthy":
             consts_set.add(0)
     consts = sorted(consts_set)
@@ -174,10 +175,10 @@ def _numeric_partition(field: str, atoms: List[Tuple[str, Any]]) -> FieldPartiti
     # fine cells: each constant as a point + integer gaps between (drop empty gaps)
     fine: List[Tuple[Optional[int], Optional[int]]] = []
     fine.append((None, consts[0] - 1))
-    for i, c in enumerate(consts):
-        fine.append((c, c))
-        nxt = consts[i + 1] if i + 1 < len(consts) else None
-        lo = c + 1
+    for const_index, const in enumerate(consts):
+        fine.append((const, const))
+        nxt = consts[const_index + 1] if const_index + 1 < len(consts) else None
+        lo = const + 1
         hi = (nxt - 1) if nxt is not None else None
         if hi is None or lo <= hi:
             fine.append((lo, hi))
@@ -185,8 +186,8 @@ def _numeric_partition(field: str, atoms: List[Tuple[str, Any]]) -> FieldPartiti
         if lo is not None: return lo
         if hi is not None: return hi
         return 0
-    def truth(v):
-        return tuple(atom_true(op, c, v) for op, c in atoms)
+    def truth(value):
+        return tuple(atom_true(op, const, value) for op, const in atoms)
     # merge adjacent fine cells with identical atom-truth vectors -> coarsest decision partition
     cells: List[dict] = []
     prev_tv = object()
@@ -206,29 +207,29 @@ def _boolean_partition(field: str) -> FieldPartition:
 
 def _categorical_partition(field: str, atoms: List[Tuple[str, Any]]) -> FieldPartition:
     consts: List[Any] = []
-    for op, c in atoms:
+    for op, const in atoms:
         if op == "truthy":
             vals = ("",)                      # str truthiness is `s != ""`: the empty string is a named constant
         else:
-            vals = c if op in ("in", "not in") else (c,)
-        for v in vals:
-            if isinstance(v, str) and v not in consts:
-                consts.append(v)
-    cells = [{"const": c, "rep": c} for c in consts] + [{"const": OTHER_CELL, "rep": OTHER_CELL}]
+            vals = const if op in ("in", "not in") else (const,)
+        for member in vals:
+            if isinstance(member, str) and member not in consts:
+                consts.append(member)
+    cells = [{"const": const, "rep": const} for const in consts] + [{"const": OTHER_CELL, "rep": OTHER_CELL}]
     return FieldPartition(field, "categorical", cells)
 
 
 def _classify_kind(atoms: List[Tuple[str, Any]]) -> str:
-    consts = [c for op, c in atoms if op not in ("truthy",)]
+    consts = [const for op, const in atoms if op not in ("truthy",)]
     flat = []
-    for op, c in atoms:
-        flat += list(c) if op in ("in", "not in") else ([c] if op != "truthy" else [])
-    for v in flat:
-        if isinstance(v, float):
-            _refuse_float(v)
-    has_str = any(isinstance(v, str) for v in flat)
-    has_bool = any(isinstance(v, bool) for v in flat)
-    has_int = any(isinstance(v, int) and not isinstance(v, bool) for v in flat)
+    for op, const in atoms:
+        flat += list(const) if op in ("in", "not in") else ([const] if op != "truthy" else [])
+    for value in flat:
+        if isinstance(value, float):
+            _refuse_float(value)
+    has_str = any(isinstance(value, str) for value in flat)
+    has_bool = any(isinstance(value, bool) for value in flat)
+    has_int = any(isinstance(value, int) and not isinstance(value, bool) for value in flat)
     if has_str and (has_int):
         raise ValueError("field mixes string and numeric constants — not a Level M field")
     if has_str:
@@ -258,12 +259,12 @@ def build_partitions(graph) -> Dict[str, FieldPartition]:
 def quantize(parts: Dict[str, FieldPartition], reading: Dict[str, Any]) -> Dict[str, int]:
     """A reading -> one small symbol per decision-relevant field (fields the flow never routes on are
     dropped: they cannot change any decision)."""
-    return {f: p.symbol(reading[f]) for f, p in parts.items() if f in reading}
+    return {field: partition.symbol(reading[field]) for field, partition in parts.items() if field in reading}
 
 
 def reconstruct(parts: Dict[str, FieldPartition], symbols: Dict[str, int]) -> Dict[str, Any]:
     """Symbols -> a representative reading that routes identically to the original."""
-    return {f: parts[f].representative(s) for f, s in symbols.items() if f in parts}
+    return {field: parts[field].representative(symbol) for field, symbol in symbols.items() if field in parts}
 
 
 # ----------------------------------------------------------------- compatibility aliases

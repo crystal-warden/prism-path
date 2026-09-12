@@ -20,41 +20,43 @@ FLOW = "---\nname: t\nstart: s\n---\n## s\n@emits(x, name)\n{edges}\n## a\nA\n##
 
 
 class _NoRouter:
-    def route(self, *a, **k):
+    def route(self, *args, **kwargs):
         raise AssertionError("semantic routing in a deterministic fixture")
 
 
 def _route(graph, reading):
-    return engine.run(graph, lambda n, i, ctx: dict(reading), router=_NoRouter(), max_steps=5).path[-1]
+    return engine.run(graph, lambda node, instruction, ctx: dict(reading),
+                      router=_NoRouter(), max_steps=5).path[-1]
 
 
 def _preserved(edges, readings):
     graph = parse(FLOW.format(edges=edges))
     parts = quantizer.build_partitions(graph)
-    for r in readings:
-        rep = quantizer.reconstruct(parts, quantizer.quantize(parts, r))
-        assert _route(graph, r) == _route(graph, rep), (r, rep)
+    for reading in readings:
+        rep = quantizer.reconstruct(parts, quantizer.quantize(parts, reading))
+        assert _route(graph, reading) == _route(graph, rep), (reading, rep)
     return parts
 
 
 def test_numeric_in_list_members_are_cut_points():
-    parts = _preserved("-> a: when x in (3, 5)\n-> b: else", [{"x": v} for v in range(-2, 9)])
+    parts = _preserved("-> a: when x in (3, 5)\n-> b: else", [{"x": value} for value in range(-2, 9)])
     assert parts["x"].n == 5          # (..2] [3] [4] [5] [6..)
 
 
 def test_numeric_not_in_list_members_are_cut_points():
-    parts = _preserved("-> a: when x not in (7,)\n-> b: else", [{"x": v} for v in range(4, 10)])
+    parts = _preserved("-> a: when x not in (7,)\n-> b: else", [{"x": value} for value in range(4, 10)])
     assert parts["x"].n == 3
 
 
 def test_truthiness_cut_at_zero_survives_other_constants():
-    parts = _preserved("-> a: when x >= 5\n-> b: when x\n-> c: else", [{"x": v} for v in range(-3, 8)])
+    parts = _preserved("-> a: when x >= 5\n-> b: when x\n-> c: else",
+                       [{"x": value} for value in range(-3, 8)])
     assert parts["x"].n == 4          # (..-1] [0] [1..4] [5..)
 
 
 def test_string_truthiness_names_the_empty_string():
     parts = _preserved("-> a: when name == 'root'\n-> b: when name\n-> c: else",
-                       [{"name": s} for s in ["root", "", "zzz", "admin"]])
+                       [{"name": name} for name in ["root", "", "zzz", "admin"]])
     assert parts["name"].n == 3       # root, "", other
 
 
@@ -63,5 +65,5 @@ def test_string_truthiness_names_the_empty_string():
     ("-> a: when x == 5\n-> b: when x >= 10\n-> c: else", 4),
 ])
 def test_existing_shapes_unchanged(edges, n):
-    parts = _preserved(edges, [{"x": v} for v in range(-1, 30)])
+    parts = _preserved(edges, [{"x": value} for value in range(-1, 30)])
     assert parts["x"].n == n
