@@ -406,8 +406,13 @@ def add_parser(subparsers) -> None:
                         'agent authoring or editing it.')
     context_parser.add_argument('flow_md', type=str, help='Path to the flow markdown file')
     context_parser.add_argument('--json', action='store_true', help='machine-readable output')
-    context_parser.set_defaults(func=lambda args: __import__('prismpath.flow_context', fromlist=['context_cmd'])
-                    .context_cmd(args))
+    context_parser.set_defaults(func=_run_context_cmd)
+
+
+def _run_context_cmd(command_args) -> int:
+    # Importing directly from kernel.flow_context avoids deprecation warnings emitted by legacy root shims.
+    from prismpath.kernel.flow_context import context_cmd
+    return context_cmd(command_args)
 
 
 def verify_cmd(args) -> int:

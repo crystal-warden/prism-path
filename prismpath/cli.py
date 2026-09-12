@@ -46,28 +46,17 @@ def _grouped_help(subparsers) -> str:
     return "\n".join(out)
 
 
-def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description='Command-line interface for prismpath',
-                                     formatter_class=argparse.RawDescriptionHelpFormatter)
-    subparsers = parser.add_subparsers(dest='command', metavar='<command>')
-
-    run_parser = subparsers.add_parser('run', help='Parse the flow and run it (mock agent by default; '
-                                                   '--agent ollama:MODEL for a real local model)')
-    run_parser.add_argument('flow_md', type=str, help='Path to the flow markdown file')
-    run_parser.add_argument('--type-gate', action='store_true',
-                            help='validate each worker output against the derived contract (contract.py)')
-    run_parser.add_argument('--agent', default=None, metavar='SPEC',
-                            help='real worker instead of the mock: `ollama:llama3.2` (local Ollama) '
-                                 'or `openai:MODEL@BASE` (any OpenAI-compatible endpoint - vLLM, '
-                                 'LM Studio, llama.cpp). JSON replies feed `when` predicates; '
-                                 'failures ride the flow\'s `on error` edges')
-    run_parser.set_defaults(func=run_flow)
-
-    lint_parser = subparsers.add_parser(
-        'lint', help='Static analysis + semantic-ambiguity check (needs the embedder)')
-    lint_parser.add_argument('flow_md', type=str, help='Path to the flow markdown file')
-    lint_parser.add_argument('--json', action='store_true', help='machine-readable findings')
-    lint_parser.set_defaults(func=lint_flow)
+def _add_owner_commands(subparsers) -> None:
+    # Adding process owner commands for flow authoring, static analysis, and testing.
+    init_parser = subparsers.add_parser(
+        'init', help='Scaffold a starter flow - zero to a running, validated flow in two commands')
+    init_parser.add_argument('path', nargs='?', default=None,
+                             help='where to write the flow (default: ./flow.md, or ./<template>.md)')
+    init_parser.add_argument('--template', default=None, metavar='NAME',
+                             help="start from a gallery flow instead of the generic starter "
+                                  "(`--template list` shows what's available); copies the flow AND "
+                                  "its routing tests")
+    init_parser.set_defaults(func=init_cmd)
 
     validate_parser = subparsers.add_parser(
         'validate', help='Static analysis: does the flow compile? (fast, no model)')
@@ -75,12 +64,53 @@ def build_parser() -> argparse.ArgumentParser:
     validate_parser.add_argument('--json', action='store_true', help='machine-readable findings')
     validate_parser.set_defaults(func=validate_flow)
 
-    resume_parser = subparsers.add_parser(
-        'resume', help='Resume a suspended/crashed run from a JSON checkpoint (mock agent)')
-    resume_parser.add_argument('checkpoint', type=str, help='Path to the checkpoint JSON')
-    resume_parser.add_argument('--choose', default=None,
-                               help='the edge target a human picks (for a needs_human suspension)')
-    resume_parser.set_defaults(func=resume_flow)
+    test_parser = subparsers.add_parser(
+        'test', help='Assert a flow\'s routing from a Markdown fixture (no LLM)')
+    test_parser.add_argument('flow_md', type=str, help='Path to the flow markdown file')
+    test_parser.add_argument('tests_md', nargs='?', default=None,
+                             help='fixture file (default <flow>.tests.md)')
+    test_parser.add_argument('--json', action='store_true', help='machine-readable results')
+    test_parser.add_argument('--emit-labels', default=None, metavar='PATH',
+                             help='append each case as a labeled routing record (JSONL)')
+    test_parser.set_defaults(func=test_flow)
+
+    graph_parser = subparsers.add_parser(
+        'graph', help='Render the flow as a Mermaid diagram (solid=deterministic, dashed=semantic)')
+    graph_parser.add_argument('flow_md', type=str, help='Path to the flow markdown file')
+    graph_parser.add_argument('--direction', default='TD', choices=['TD', 'LR'], help='layout direction')
+    graph_parser.add_argument('--fenced', action='store_true', help='wrap in a ```mermaid fence for READMEs')
+    graph_parser.set_defaults(func=graph_flow)
+
+    lint_parser = subparsers.add_parser(
+        'lint', help='Static analysis + semantic-ambiguity check (needs the embedder)')
+    lint_parser.add_argument('flow_md', type=str, help='Path to the flow markdown file')
+    lint_parser.add_argument('--json', action='store_true', help='machine-readable findings')
+    lint_parser.set_defaults(func=lint_flow)
+
+
+def _add_engineer_commands(subparsers) -> None:
+    # Adding engineer commands for compilation, calibration, verification, and tooling integration.
+    contract_parser = subparsers.add_parser(
+        'contract', help="Derive each node's worker output schema from its `when` edges")
+    contract_parser.add_argument('flow_md', type=str, help='Path to the flow markdown file')
+    contract_parser.add_argument('--json', action='store_true',
+                                 help='emit the per-node schemas as JSON (constrained-decoding grammar)')
+    contract_parser.set_defaults(func=contract_cmd)
+
+    compile_parser = subparsers.add_parser(
+        'compile', help='Compile a flow and its lock into a single-file portable JS bundle')
+    compile_parser.add_argument('flow_md', type=str, help='Path to the flow markdown file')
+    compile_parser.add_argument('--tier', choices=['p0', 'p1'], required=True,
+                                help='portability tier to compile (p0: ML-free, p1: embedded locked vectors)')
+    compile_parser.add_argument('--out', default=None, help='output path for the .mjs bundle (default: <flow>.bundle.mjs)')
+    compile_parser.set_defaults(func=compile_cmd)
+
+    portable_parser = subparsers.add_parser(
+        'portable', help='Is this flow (and its @spawn children) in the ML-free portable subset? '
+                         'Portable flows run on portable/prismpath.mjs - browser/edge/appliance')
+    portable_parser.add_argument('flow_md', type=str, help='Path to the flow markdown file')
+    portable_parser.add_argument('--json', action='store_true', help='machine-readable findings')
+    portable_parser.set_defaults(func=portable_cmd)
 
     lock_parser = subparsers.add_parser(
         'lock', help='Write a routing lockfile (committed condition embeddings) for reproducible routing')
@@ -94,6 +124,18 @@ def build_parser() -> argparse.ArgumentParser:
                              help='centroid shrinkage prior weight (pseudo-count toward the '
                                   'zero-shot condition vector; default 4.0)')
     lock_parser.set_defaults(func=lock_flow)
+
+    plugins_parser = subparsers.add_parser(
+        'plugins', help='Audit the plugin ecosystem: list installed plugins, or verify a flow\'s '
+                        '@worker bindings all resolve (--check)')
+    plugins_parser.add_argument('--json', action='store_true', help='machine-readable listing (CI)')
+    plugins_parser.add_argument('--check', metavar='FLOW', default=None,
+                                help='verify every @worker binding in FLOW resolves; exit 1 otherwise')
+    plugins_parser.add_argument('--new', metavar='NAME', default=None,
+                                help='scaffold a pip-installable WORKER PACK: a package that '
+                                     'registers itself via the prismpath.plugins entry point - '
+                                     'pip install it and its workers are @worker-bindable')
+    plugins_parser.set_defaults(func=plugins_cmd)
 
     import_parser = subparsers.add_parser(
         'import', help='Import a LangGraph StateGraph (.py) as a skeleton flow (with TODO conditions)')
@@ -109,34 +151,10 @@ def build_parser() -> argparse.ArgumentParser:
     cal_parser.add_argument('--out', default=None, help='write calibration JSON to this path')
     cal_parser.set_defaults(func=calibrate_cmd)
 
-    graph_parser = subparsers.add_parser(
-        'graph', help='Render the flow as a Mermaid diagram (solid=deterministic, dashed=semantic)')
-    graph_parser.add_argument('flow_md', type=str, help='Path to the flow markdown file')
-    graph_parser.add_argument('--direction', default='TD', choices=['TD', 'LR'], help='layout direction')
-    graph_parser.add_argument('--fenced', action='store_true', help='wrap in a ```mermaid fence for READMEs')
-    graph_parser.set_defaults(func=graph_flow)
-
     label_parser = subparsers.add_parser(
         'label', help='Hand-label routing decisions in a JSONL log (calibration data)')
     label_parser.add_argument('log', type=str, help='routing-decision JSONL (from run_logged)')
     label_parser.set_defaults(func=label_cmd)
-
-    test_parser = subparsers.add_parser(
-        'test', help='Assert a flow\'s routing from a Markdown fixture (no LLM)')
-    test_parser.add_argument('flow_md', type=str, help='Path to the flow markdown file')
-    test_parser.add_argument('tests_md', nargs='?', default=None,
-                             help='fixture file (default <flow>.tests.md)')
-    test_parser.add_argument('--json', action='store_true', help='machine-readable results')
-    test_parser.add_argument('--emit-labels', default=None, metavar='PATH',
-                             help='append each case as a labeled routing record (JSONL)')
-    test_parser.set_defaults(func=test_flow)
-
-    contract_parser = subparsers.add_parser(
-        'contract', help="Derive each node's worker output schema from its `when` edges")
-    contract_parser.add_argument('flow_md', type=str, help='Path to the flow markdown file')
-    contract_parser.add_argument('--json', action='store_true',
-                                 help='emit the per-node schemas as JSON (constrained-decoding grammar)')
-    contract_parser.set_defaults(func=contract_cmd)
 
     annotate_parser = subparsers.add_parser(
         'annotate', help='Blind-label a benchmark (labels hidden) for inter-annotator kappa (gate zero)')
@@ -163,40 +181,6 @@ def build_parser() -> argparse.ArgumentParser:
     centroids_parser.add_argument('--flows-dir', default=None)
     centroids_parser.set_defaults(func=centroids_cmd)
 
-    compose_parser = subparsers.add_parser(
-        'compose', help='Advance pending fan-out/composition runs in the queue: spawn children, '
-                        'join, resume parents (the out-of-band harness tick - item #4)')
-    compose_parser.add_argument('--queue', default=None,
-                                help='queue dir to scan (default: the prismpath queue dir)')
-    compose_parser.set_defaults(func=compose_cmd)
-
-    portable_parser = subparsers.add_parser(
-        'portable', help='Is this flow (and its @spawn children) in the ML-free portable subset? '
-                         'Portable flows run on portable/prismpath.mjs - browser/edge/appliance')
-    portable_parser.add_argument('flow_md', type=str, help='Path to the flow markdown file')
-    portable_parser.add_argument('--json', action='store_true', help='machine-readable findings')
-    portable_parser.set_defaults(func=portable_cmd)
-
-    compile_parser = subparsers.add_parser(
-        'compile', help='Compile a flow and its lock into a single-file portable JS bundle')
-    compile_parser.add_argument('flow_md', type=str, help='Path to the flow markdown file')
-    compile_parser.add_argument('--tier', choices=['p0', 'p1'], required=True,
-                                help='portability tier to compile (p0: ML-free, p1: embedded locked vectors)')
-    compile_parser.add_argument('--out', default=None, help='output path for the .mjs bundle (default: <flow>.bundle.mjs)')
-    compile_parser.set_defaults(func=compile_cmd)
-
-    plugins_parser = subparsers.add_parser(
-        'plugins', help='Audit the plugin ecosystem: list installed plugins, or verify a flow\'s '
-                        '@worker bindings all resolve (--check)')
-    plugins_parser.add_argument('--json', action='store_true', help='machine-readable listing (CI)')
-    plugins_parser.add_argument('--check', metavar='FLOW', default=None,
-                                help='verify every @worker binding in FLOW resolves; exit 1 otherwise')
-    plugins_parser.add_argument('--new', metavar='NAME', default=None,
-                                help='scaffold a pip-installable WORKER PACK: a package that '
-                                     'registers itself via the prismpath.plugins entry point - '
-                                     'pip install it and its workers are @worker-bindable')
-    plugins_parser.set_defaults(func=plugins_cmd)
-
     from prismpath.ci_report import add_parser as _add_ci_report
     _add_ci_report(subparsers)
 
@@ -206,38 +190,34 @@ def build_parser() -> argparse.ArgumentParser:
     from prismpath.lsp import add_parser as _add_lsp
     _add_lsp(subparsers)
 
-    init_parser = subparsers.add_parser(
-        'init', help='Scaffold a starter flow - zero to a running, validated flow in two commands')
-    init_parser.add_argument('path', nargs='?', default=None,
-                             help='where to write the flow (default: ./flow.md, or ./<template>.md)')
-    init_parser.add_argument('--template', default=None, metavar='NAME',
-                             help="start from a gallery flow instead of the generic starter "
-                                  "(`--template list` shows what's available); copies the flow AND "
-                                  "its routing tests")
-    init_parser.set_defaults(func=init_cmd)
 
-    ledger_parser = subparsers.add_parser(
-        'ledger', help='Flow-Ledger attestation: OTS anchor/upgrade/verify + air-gap tier (#36/#53)')
-    ledger_parser.add_argument('action', choices=[
-        'anchor', 'upgrade', 'verify', 'export-request', 'relay-stamp', 'import-proofs', 'rfc3161'],
-        help='ledger attestation action')
-    ledger_parser.add_argument('--repo', help='ledger git repo (anchor: enumerate Output-Hash trailers)')
-    ledger_parser.add_argument('--out', help='output dir (anchor/upgrade/verify) or bundle path (air-gap)')
-    ledger_parser.add_argument('--label', default='v1', help='anchor label (default v1)')
-    ledger_parser.add_argument('--leaf', help='leaf hash hex (verify)')
-    ledger_parser.add_argument('--root', help='root file (rfc3161 / export-request)')
-    ledger_parser.add_argument('--request', help='stamp-request bundle (relay-stamp)')
-    ledger_parser.add_argument('--proofs', help='proof bundle (import-proofs)')
-    ledger_parser.add_argument('--dir', help='roots dir (import-proofs)')
-    ledger_parser.add_argument('--cafile', help='TSA CA cert (rfc3161 verify)')
-    ledger_parser.add_argument('--tsr', help='RFC-3161 response file to verify')
-    ledger_parser.add_argument('--policy-hash', dest='policy_hash', default=None,
-                               help='C1: bind the flow-definition hash to the anchored record')
-    ledger_parser.add_argument('--gate-id', dest='gate_id', default=None,
-                               help='C1: bind the gate identity that produced the record')
-    ledger_parser.add_argument('--ots', action='store_true',
-                               help='verify: include the full OTS/Bitcoin proof chain')
-    ledger_parser.set_defaults(func=ledger_cmd)
+def _add_operator_commands(subparsers) -> None:
+    # Adding operator commands for system execution, state resumption, hot swaps, and execution logs.
+    run_parser = subparsers.add_parser('run', help='Parse the flow and run it (mock agent by default; '
+                                                   '--agent ollama:MODEL for a real local model)')
+    run_parser.add_argument('flow_md', type=str, help='Path to the flow markdown file')
+    run_parser.add_argument('--type-gate', action='store_true',
+                            help='validate each worker output against the derived contract (contract.py)')
+    run_parser.add_argument('--agent', default=None, metavar='SPEC',
+                            help='real worker instead of the mock: `ollama:llama3.2` (local Ollama) '
+                                 'or `openai:MODEL@BASE` (any OpenAI-compatible endpoint - vLLM, '
+                                 'LM Studio, llama.cpp). JSON replies feed `when` predicates; '
+                                 'failures ride the flow\'s `on error` edges')
+    run_parser.set_defaults(func=run_flow)
+
+    resume_parser = subparsers.add_parser(
+        'resume', help='Resume a suspended/crashed run from a JSON checkpoint (mock agent)')
+    resume_parser.add_argument('checkpoint', type=str, help='Path to the checkpoint JSON')
+    resume_parser.add_argument('--choose', default=None,
+                               help='the edge target a human picks (for a needs_human suspension)')
+    resume_parser.set_defaults(func=resume_flow)
+
+    compose_parser = subparsers.add_parser(
+        'compose', help='Advance pending fan-out/composition runs in the queue: spawn children, '
+                        'join, resume parents (the out-of-band harness tick - item #4)')
+    compose_parser.add_argument('--queue', default=None,
+                                help='queue dir to scan (default: the prismpath queue dir)')
+    compose_parser.set_defaults(func=compose_cmd)
 
     swap_parser = subparsers.add_parser(
         'swap', help='Secure policy hot-swap: signed packs, envelope check, attested swap '
@@ -266,6 +246,32 @@ def build_parser() -> argparse.ArgumentParser:
     from prismpath import trail as _trail
     _trail.add_parser(subparsers)
 
+
+def _add_evaluator_commands(subparsers) -> None:
+    # Adding evaluator commands for ledger timestamp anchoring and telemetry processing.
+    ledger_parser = subparsers.add_parser(
+        'ledger', help='Flow-Ledger attestation: OTS anchor/upgrade/verify + air-gap tier (#36/#53)')
+    ledger_parser.add_argument('action', choices=[
+        'anchor', 'upgrade', 'verify', 'export-request', 'relay-stamp', 'import-proofs', 'rfc3161'],
+        help='ledger attestation action')
+    ledger_parser.add_argument('--repo', help='ledger git repo (anchor: enumerate Output-Hash trailers)')
+    ledger_parser.add_argument('--out', help='output dir (anchor/upgrade/verify) or bundle path (air-gap)')
+    ledger_parser.add_argument('--label', default='v1', help='anchor label (default v1)')
+    ledger_parser.add_argument('--leaf', help='leaf hash hex (verify)')
+    ledger_parser.add_argument('--root', help='root file (rfc3161 / export-request)')
+    ledger_parser.add_argument('--request', help='stamp-request bundle (relay-stamp)')
+    ledger_parser.add_argument('--proofs', help='proof bundle (import-proofs)')
+    ledger_parser.add_argument('--dir', help='roots dir (import-proofs)')
+    ledger_parser.add_argument('--cafile', help='TSA CA cert (rfc3161 verify)')
+    ledger_parser.add_argument('--tsr', help='RFC-3161 response file to verify')
+    ledger_parser.add_argument('--policy-hash', dest='policy_hash', default=None,
+                               help='C1: bind the flow-definition hash to the anchored record')
+    ledger_parser.add_argument('--gate-id', dest='gate_id', default=None,
+                               help='C1: bind the gate identity that produced the record')
+    ledger_parser.add_argument('--ots', action='store_true',
+                               help='verify: include the full OTS/Bitcoin proof chain')
+    ledger_parser.set_defaults(func=ledger_cmd)
+
     facet_parser = subparsers.add_parser(
         'facet', help='Facet telemetry: decision-preserving quantization, wire encoding, and stream decoding')
     facet_parser.add_argument('action', choices=['quantize', 'encode', 'decode'],
@@ -273,6 +279,17 @@ def build_parser() -> argparse.ArgumentParser:
     facet_parser.add_argument('flow_md', type=str, help='Path to the flow markdown file')
     facet_parser.add_argument('payload', type=str, help='JSON reading or HEX string')
     facet_parser.set_defaults(func=facet_cmd)
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description='Command-line interface for prismpath',
+                                     formatter_class=argparse.RawDescriptionHelpFormatter)
+    subparsers = parser.add_subparsers(dest='command', metavar='<command>')
+
+    _add_owner_commands(subparsers)
+    _add_engineer_commands(subparsers)
+    _add_operator_commands(subparsers)
+    _add_evaluator_commands(subparsers)
 
     parser.epilog = _grouped_help(subparsers)
     subparsers._choices_actions = []   # the flat list is replaced by the grouped epilog above
@@ -834,93 +851,95 @@ def portable_cmd(args) -> int:
     return 0 if tree["tier"] == "P0" else 1
 
 
-def compile_cmd(args) -> int:
-    """Compile the flow and its lock into a single-file portable JS bundle."""
+def _gather_compile_inputs(flow_md_path: str, target_tier: str):
+    """Gather and validate inputs for compiling a JS bundle."""
     from prismpath.kernel.parser import parse_file
     from prismpath.kernel import analysis
     from prismpath.routing import lockfile
     import base64
 
-    # Check portability tier first
-    graph = parse_file(args.flow_md)
-    tree = analysis.portability_tier_tree(graph, args.flow_md)
-    flow_tier = tree["tier"]
+    parsed_graph = parse_file(flow_md_path)
+    tier_tree = analysis.portability_tier_tree(parsed_graph, flow_md_path)
+    flow_tier = tier_tree["tier"]
 
-    if args.tier == "p0" and flow_tier != "P0":
+    if target_tier == "p0" and flow_tier != "P0":
         print(f"✗ Flow is not P0 (current tier: {flow_tier}). It has semantic edges. "
               f"Please rewrite them as deterministic 'when' predicates to compile for P0, "
               f"or compile for P1.")
-        return 1
-    
-    if args.tier == "p1" and flow_tier == "P2":
-        print(f"✗ Flow has unlocked semantic edges (current tier: P2). "
-              f"Please run `prismpath lock {args.flow_md}` first to commit routing vectors, "
-              f"or rewrite them to compile for P0.")
-        return 1
+        return None
 
-    # Load lock if P1
+    if target_tier == "p1" and flow_tier == "P2":
+        print(f"✗ Flow has unlocked semantic edges (current tier: P2). "
+              f"Please run `prismpath lock {flow_md_path}` first to commit routing vectors, "
+              f"or rewrite them to compile for P0.")
+        return None
+
     embedded_lock_js = "null"
-    if args.tier == "p1":
-        import numpy as np
-        lp = lockfile.lock_path(args.flow_md)
-        if not os.path.exists(lp):
-            print(f"✗ Lockfile missing: {lp}. Please run `prismpath lock {args.flow_md}` first.")
-            return 1
+    lock_data = {}
+    compressed_conditions = {}
+    if target_tier == "p1":
+        import numpy as numpy_module
+        lock_file_path = lockfile.lock_path(flow_md_path)
+        if not os.path.exists(lock_file_path):
+            print(f"✗ Lockfile missing: {lock_file_path}. Please run `prismpath lock {flow_md_path}` first.")
+            return None
         try:
-            lock = lockfile.load_lock(lp)
-        except Exception as exc:
-            print(f"✗ Failed to load lockfile {lp}: {exc}")
-            return 1
-        
-        # Compress vectors to float16 and base64
-        conds = {}
-        for cond, f32_b64 in lock.get("conditions", {}).items():
+            lock_data = lockfile.load_lock(lock_file_path)
+        except Exception as lock_exception:
+            print(f"✗ Failed to load lockfile {lock_file_path}: {lock_exception}")
+            return None
+
+        for condition_str, f32_b64 in lock_data.get("conditions", {}).items():
             f32_bytes = base64.b64decode(f32_b64)
-            arr = np.frombuffer(f32_bytes, dtype="<f4").astype(np.float32)
-            arr_f16 = arr.astype(np.float16)
-            conds[cond] = base64.b64encode(arr_f16.tobytes()).decode("ascii")
-        
+            array_f32 = numpy_module.frombuffer(f32_bytes, dtype="<f4").astype(numpy_module.float32)
+            array_f16 = array_f32.astype(numpy_module.float16)
+            compressed_conditions[condition_str] = base64.b64encode(array_f16.tobytes()).decode("ascii")
+
         embedded_lock_js = json.dumps({
-            "delta": lock.get("delta", 0.05),
-            "conditions": conds
+            "delta": lock_data.get("delta", 0.05),
+            "conditions": compressed_conditions
         }, indent=2)
 
-    # Read JS kernel
-    here = os.path.dirname(os.path.abspath(__file__))
-    kernel_path = os.path.join(here, "portable", "prismpath.mjs")
+    package_directory = os.path.dirname(os.path.abspath(__file__))
+    kernel_path = os.path.join(package_directory, "portable", "prismpath.mjs")
     try:
-        with open(kernel_path, "r", encoding="utf-8") as fh:
-            js_kernel = fh.read()
-    except Exception as exc:
-        print(f"✗ Failed to read JS kernel from {kernel_path}: {exc}")
-        return 1
+        with open(kernel_path, "r", encoding="utf-8") as file_handle:
+            js_kernel = file_handle.read()
+    except Exception as file_exception:
+        print(f"✗ Failed to read JS kernel from {kernel_path}: {file_exception}")
+        return None
 
-    # Pre-parse flow graph structure into JSON
     nodes_dict = {}
-    for name, node_obj in graph.nodes.items():
-        nodes_dict[name] = {
-            "name": name,
+    for node_name, node_obj in parsed_graph.nodes.items():
+        nodes_dict[node_name] = {
+            "name": node_name,
             "instruction": node_obj.instruction,
             "terminal": node_obj.terminal,
             "annotations": node_obj.annotations,
             "edges": node_obj.edges
         }
     parsed_graph_js = json.dumps({
-        "name": graph.name,
-        "start": graph.start,
+        "name": parsed_graph.name,
+        "start": parsed_graph.start,
         "nodes": nodes_dict
     }, indent=2)
 
-    # Compile the final bundle
-    out_path = args.out or (os.path.splitext(args.flow_md)[0] + ".bundle.mjs")
-    
-    parts = []
-    parts.append(f"// Auto-generated by prismpath compile --tier {args.tier}")
-    parts.append("// Single-file portable JS bundle ready for Node/Browser.\n")
-    parts.append(js_kernel)
-    parts.append(f"\nexport const GRAPH = {parsed_graph_js};\n")
-    parts.append(f"export const EMBEDDED_LOCK = {embedded_lock_js};\n")
-    
+    lock_info = {
+        "lock_data": lock_data,
+        "compressed_conditions": compressed_conditions
+    }
+    return js_kernel, parsed_graph_js, embedded_lock_js, lock_info
+
+
+def _build_compile_bundle(target_tier: str, js_kernel: str, parsed_graph_js: str, embedded_lock_js: str) -> str:
+    """Assemble the standalone JS bundle containing kernel and serialized graph."""
+    bundle_parts = []
+    bundle_parts.append(f"// Auto-generated by prismpath compile --tier {target_tier}")
+    bundle_parts.append("// Single-file portable JS bundle ready for Node/Browser.\n")
+    bundle_parts.append(js_kernel)
+    bundle_parts.append(f"\nexport const GRAPH = {parsed_graph_js};\n")
+    bundle_parts.append(f"export const EMBEDDED_LOCK = {embedded_lock_js};\n")
+
     js_helpers = """
 function decodeFloat16(b64) {
   const binary = atob(b64);
@@ -1115,22 +1134,37 @@ export async function runFlow(agent, opts = {}) {
   return res;
 }
 """
-    parts.append(js_helpers)
-    bundle_code = "\n".join(parts)
+    bundle_parts.append(js_helpers)
+    return "\n".join(bundle_parts)
 
-    with open(out_path, "w", encoding="utf-8") as fh:
-        fh.write(bundle_code)
-    
-    # Calculate sizes for user feedback
+
+def _write_compile_output(out_path: str, bundle_code: str, flow_md_path: str, target_tier: str, lock_info: dict) -> int:
+    """Write the compiled bundle code to disk and print status feedback."""
+    with open(out_path, "w", encoding="utf-8") as file_handle:
+        file_handle.write(bundle_code)
+
     f32_size = 0
     f16_size = 0
-    if args.tier == "p1":
-        f32_size = sum(len(vec_b64) for vec_b64 in lock.get("conditions", {}).values()) * 3 / 4 # base64 to raw ratio
-        f16_size = sum(len(vec_b64) for vec_b64 in conds.values()) * 3 / 4
+    if target_tier == "p1":
+        lock_data = lock_info.get("lock_data", {})
+        compressed_conditions = lock_info.get("compressed_conditions", {})
+        f32_size = sum(len(vector_b64) for vector_b64 in lock_data.get("conditions", {}).values()) * 3 / 4
+        f16_size = sum(len(vector_b64) for vector_b64 in compressed_conditions.values()) * 3 / 4
 
-    saving = f" (lock vectors compressed f32 -> f16: {f32_size/1024:.1f}KB -> {f16_size/1024:.1f}KB)" if args.tier == "p1" else ""
-    print(f"✓ compiled {args.flow_md} to {out_path}{saving}")
+    saving_message = f" (lock vectors compressed f32 -> f16: {f32_size/1024:.1f}KB -> {f16_size/1024:.1f}KB)" if target_tier == "p1" else ""
+    print(f"✓ compiled {flow_md_path} to {out_path}{saving_message}")
     return 0
+
+
+def compile_cmd(args) -> int:
+    """Compile the flow and its lock into a single-file portable JS bundle."""
+    gathered_inputs = _gather_compile_inputs(args.flow_md, args.tier)
+    if gathered_inputs is None:
+        return 1
+    js_kernel, parsed_graph_js, embedded_lock_js, lock_info = gathered_inputs
+    bundle_code = _build_compile_bundle(args.tier, js_kernel, parsed_graph_js, embedded_lock_js)
+    out_path = args.out or (os.path.splitext(args.flow_md)[0] + ".bundle.mjs")
+    return _write_compile_output(out_path, bundle_code, args.flow_md, args.tier, lock_info)
 
 
 def compose_cmd(args) -> int:
