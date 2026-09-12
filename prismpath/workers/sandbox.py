@@ -61,6 +61,8 @@ class SandboxRunner:
             cmd += ["--unshare-net"]                       # network namespace with no interfaces
         if env.fs == "rw" and self.scratch_dir:
             cmd += ["--bind", self.scratch_dir, self.scratch_dir]
+        if sys.prefix.startswith("/tmp"):
+            cmd += ["--ro-bind", sys.prefix, sys.prefix]
         # fs == none|ro: the root is bound read-only above; only /tmp (tmpfs) is writable.
         cmd += ["--", sys.executable, "-m", "prismpath.workers._sandbox_child"]
         return cmd

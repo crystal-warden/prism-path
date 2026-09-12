@@ -7,17 +7,17 @@ the model checker; `errors(graph)` is the validation entry point the CLI and the
 
 Because the flow *is* the graph (a Markdown file, not code smeared across Python), the whole
 control structure is inspectable without running anything. This module is that inspection: a set
-of **decidable** checks — no model, no embeddings, no execution — that catch the structural
+of **decidable** checks - no model, no embeddings, no execution - that catch the structural
 mistakes an author actually makes. It is the guarantee LangGraph structurally cannot give,
 because its graph only exists at runtime.
 
 Each check yields `Finding`s at one of two severities:
-  * **error**   — the flow is broken (won't run correctly): undefined targets, no reachable
+  * **error**   : the flow is broken (won't run correctly): undefined targets, no reachable
                   terminal, an unsafe/unparseable predicate. `validate` exits non-zero on these.
-  * **warning** — a likely authoring mistake that still "runs": unreachable nodes, a
+  * **warning** : a likely authoring mistake that still "runs": unreachable nodes, a
                   deterministic-only node that isn't provably exhaustive (can get stuck), an edge
                   shadowed by an earlier catch-all, an unbounded cycle, an always-false edge, or
-                  duplicate semantic conditions. Advisory — surfaced, not fatal.
+                  duplicate semantic conditions. Advisory: surfaced, not fatal.
 
 The predicate reasoning is deliberately confined to the tiny decidable fragment the `when`
 language allows (comparisons of a variable against literals, joined by and/or/not); anything
@@ -52,7 +52,7 @@ class Finding:
 
 # --------------------------------------------------------------------------------------
 # Predicate-fragment helpers (the decidable core). All operate on a deterministic condition
-# string; they return conservative answers — "unknown" collapses to "no finding".
+# string; they return conservative answers - "unknown" collapses to "no finding".
 # --------------------------------------------------------------------------------------
 
 _parse = predicates.expr_ast          # shared with level_m and model_check (predicates.expr_ast)
@@ -77,15 +77,15 @@ def _references_visits(cond: str) -> bool:
 
 
 def _negates(a: str, b: str) -> bool:
-    """True if deterministic conditions `a` and `b` are exact logical negations — the common
+    """True if deterministic conditions `a` and `b` are exact logical negations: the common
     `X` / `not X` (and comparison-operator) pairs that make a two-way branch exhaustive."""
     na, nb = _parse(a), _parse(b)
     if na is None or nb is None:
         return False
 
-    def _not_of(x, y):   # is x == `not (y)` ?
-        return isinstance(x, ast.UnaryOp) and isinstance(x.op, ast.Not) \
-            and ast.dump(x.operand) == ast.dump(y)
+    def _not_of(expr_x, expr_y):   # is expr_x == `not (expr_y)` ?
+        return isinstance(expr_x, ast.UnaryOp) and isinstance(expr_x.op, ast.Not) \
+            and ast.dump(expr_x.operand) == ast.dump(expr_y)
 
     if _not_of(na, nb) or _not_of(nb, na):
         return True
@@ -120,13 +120,13 @@ def _as_simple_compare(node):
 
 def _flatten_and(node) -> Optional[list]:
     """Flatten a pure conjunction into a list of conjuncts; None if any OR is present (we only
-    prove UNSAT over conjunctions — a disjunction can rescue satisfiability)."""
+    prove UNSAT over conjunctions: a disjunction can rescue satisfiability)."""
     if isinstance(node, ast.BoolOp) and isinstance(node.op, ast.Or):
         return None
     if isinstance(node, ast.BoolOp) and isinstance(node.op, ast.And):
         out = []
-        for v in node.values:
-            sub = _flatten_and(v)
+        for val in node.values:
+            sub = _flatten_and(val)
             if sub is None:
                 return None
             out.extend(sub)
@@ -146,35 +146,36 @@ def _is_always_false(cond: str) -> bool:
     conj = _flatten_and(node)
     if conj is None:
         return False
-    lo: Dict[str, tuple] = {}   # var -> (value, inclusive)  tightest lower bound
-    hi: Dict[str, tuple] = {}   # var -> (value, inclusive)  tightest upper bound
-    for c in conj:
-        parsed = _as_simple_compare(c)
+    lower: Dict[str, tuple] = {}   # var -> (value, inclusive)  tightest lower bound
+    upper: Dict[str, tuple] = {}   # var -> (value, inclusive)  tightest upper bound
+    for conjunct in conj:
+        parsed = _as_simple_compare(conjunct)
         if parsed is None:
             continue
         var, op, num = parsed
-        def tighten_lo(v, inc):
-            cur = lo.get(var)
-            if cur is None or v > cur[0] or (v == cur[0] and cur[1] and not inc):
-                lo[var] = (v, inc)
-        def tighten_hi(v, inc):
-            cur = hi.get(var)
-            if cur is None or v < cur[0] or (v == cur[0] and cur[1] and not inc):
-                hi[var] = (v, inc)
+        def tighten_lower(val, inc):
+            cur = lower.get(var)
+            if cur is None or val > cur[0] or (val == cur[0] and cur[1] and not inc):
+                lower[var] = (val, inc)
+        def tighten_upper(val, inc):
+            cur = upper.get(var)
+            if cur is None or val < cur[0] or (val == cur[0] and cur[1] and not inc):
+                upper[var] = (val, inc)
         if op is ast.Gt:
-            tighten_lo(num, False)
+            tighten_lower(num, False)
         elif op is ast.GtE:
-            tighten_lo(num, True)
+            tighten_lower(num, True)
         elif op is ast.Lt:
-            tighten_hi(num, False)
+            tighten_upper(num, False)
         elif op is ast.LtE:
-            tighten_hi(num, True)
+            tighten_upper(num, True)
         elif op is ast.Eq:
-            tighten_lo(num, True); tighten_hi(num, True)
+            tighten_lower(num, True)
+            tighten_upper(num, True)
         # `!=` doesn't tighten an interval (it punches a hole) -> ignored for UNSAT
-    for var in set(lo) & set(hi):
-        (lv, li), (hv, hi_inc) = lo[var], hi[var]
-        if lv > hv or (lv == hv and not (li and hi_inc)):
+    for var in set(lower) & set(upper):
+        (low_value, low_inclusive), (high_value, high_inclusive) = lower[var], upper[var]
+        if low_value > high_value or (low_value == high_value and not (low_inclusive and high_inclusive)):
             return True
     return False
 
@@ -189,8 +190,8 @@ _reachable = parser_mod.reachable     # graph traversal lives in the parser
 def _upstream_nodes(graph, node_name: str) -> set:
     """Returns the set of all node names that have a path to node_name and are reachable from start."""
     rev_adj = {}
-    for name, n in graph.nodes.items():
-        for tgt, _ in n.edges:
+    for name, node_obj in graph.nodes.items():
+        for tgt, _ in node_obj.edges:
             rev_adj.setdefault(tgt, set()).add(name)
             
     seen = set()
@@ -220,31 +221,31 @@ def _sccs(graph) -> List[set]:
     _old_limit = sys.getrecursionlimit()
     sys.setrecursionlimit(max(_old_limit, len(graph.nodes) * 4 + 100))
 
-    def strong(v):
-        index[v] = low[v] = counter[0]
+    def strong(node_name):
+        index[node_name] = low[node_name] = counter[0]
         counter[0] += 1
-        stack.append(v); onstack[v] = True
-        for tgt, _ in graph.nodes[v].edges:
+        stack.append(node_name); onstack[node_name] = True
+        for tgt, _ in graph.nodes[node_name].edges:
             if tgt not in graph.nodes:
                 continue
             if tgt not in index:
                 strong(tgt)
-                low[v] = min(low[v], low[tgt])
+                low[node_name] = min(low[node_name], low[tgt])
             elif onstack.get(tgt):
-                low[v] = min(low[v], index[tgt])
-        if low[v] == index[v]:
+                low[node_name] = min(low[node_name], index[tgt])
+        if low[node_name] == index[node_name]:
             comp = set()
             while True:
                 w = stack.pop(); onstack[w] = False
                 comp.add(w)
-                if w == v:
+                if w == node_name:
                     break
             out.append(comp)
 
     try:
-        for v in graph.nodes:
-            if v not in index:
-                strong(v)
+        for node_name in graph.nodes:
+            if node_name not in index:
+                strong(node_name)
     finally:
         sys.setrecursionlimit(_old_limit)
     return out
@@ -264,12 +265,12 @@ def _check_structure(graph) -> List[Finding]:
     if graph.start not in graph.nodes:
         out.append(Finding("error", "undefined-start", None,
                            f"start node '{graph.start}' is not defined"))
-    for name, n in graph.nodes.items():
-        for tgt, cond in n.edges:
-            if tgt not in graph.nodes:
+    for name, node_obj in graph.nodes.items():
+        for target, condition in node_obj.edges:
+            if target not in graph.nodes:
                 out.append(Finding("error", "undefined-target", name,
-                                   f"edge -> '{tgt}' points at an undefined node"))
-            for problem in predicates.check_predicate(cond):
+                                   f"edge -> '{target}' points at an undefined node"))
+            for problem in predicates.check_predicate(condition):
                 out.append(Finding("error", "unsafe-predicate", name, problem))
     return out
 
@@ -283,7 +284,7 @@ def _check_reachability(graph) -> List[Finding]:
            for name in graph.nodes if name not in reach]
     if not any(graph.nodes[name].terminal for name in reach):
         out.append(Finding("error", "no-terminal", None,
-                           "no terminal node is reachable from the start — the flow can only "
+                           "no terminal node is reachable from the start - the flow can only "
                            "end at max_steps"))
     return out
 
@@ -292,51 +293,51 @@ def _check_stuck(graph) -> List[Finding]:
     """A node whose edges are ALL deterministic and not provably exhaustive can halt as
     `stuck` at runtime. A complementary `X`/`not X` pair, or a catch-all, makes it total."""
     out: List[Finding] = []
-    for name, n in graph.nodes.items():
-        if n.terminal:
+    for name, node_obj in graph.nodes.items():
+        if node_obj.terminal:
             continue
-        det = [(t, c) for t, c in n.edges if predicates.is_deterministic(c)]
-        sem = [(t, c) for t, c in n.edges if predicates.is_semantic(c)]
+        det = [(target, condition) for target, condition in node_obj.edges if predicates.is_deterministic(condition)]
+        sem = [(target, condition) for target, condition in node_obj.edges if predicates.is_semantic(condition)]
         if sem or not det:
             continue  # a semantic edge always routes; a no-edge node is terminal
-        if any(_is_always_true(c) for _, c in det):
+        if any(_is_always_true(condition) for _, condition in det):
             continue
-        conds = [c for _, c in det]
-        exhaustive = any(_negates(conds[i], conds[j])
-                         for i in range(len(conds)) for j in range(i + 1, len(conds)))
+        conds = [condition for _, condition in det]
+        exhaustive = any(_negates(conds[earlier], conds[later])
+                         for earlier in range(len(conds)) for later in range(earlier + 1, len(conds)))
         if not exhaustive:
             out.append(Finding("warning", "possible-stuck", name,
                                "deterministic-only node whose conditions are not provably "
-                               "exhaustive — add an `else`/`always` edge (or a complementary "
+                               "exhaustive - add an `else`/`always` edge (or a complementary "
                                "`when not …`) so it can't halt as stuck"))
     return out
 
 
 def _check_shadowing(graph) -> List[Finding]:
     """Deterministic edges run first, in document order, first-true-wins. An always-true
-    deterministic edge makes every later deterministic edge — and ALL semantic edges — dead."""
+    deterministic edge makes every later deterministic edge - and ALL semantic edges - dead."""
     out: List[Finding] = []
-    for name, n in graph.nodes.items():
-        det = [(i, t, c) for i, (t, c) in enumerate(n.edges) if predicates.is_deterministic(c)]
-        first_true = next((i for (i, _t, c) in det if _is_always_true(c)), None)
+    for name, node_obj in graph.nodes.items():
+        det = [(earlier, target, condition) for earlier, (target, condition) in enumerate(node_obj.edges) if predicates.is_deterministic(condition)]
+        first_true = next((earlier for (earlier, _target, condition) in det if _is_always_true(condition)), None)
         if first_true is None:
             continue
-        for i, (t, c) in enumerate(n.edges):
-            if i == first_true:
+        for later, (target, condition) in enumerate(node_obj.edges):
+            if later == first_true:
                 continue
             # error/event edges route on their OWN tiers (a raise / a delivered event), so a
-            # deterministic catch-all never shadows them — only when-predicates and semantic
+            # deterministic catch-all never shadows them - only when-predicates and semantic
             # edges compete with it.
-            if predicates.is_error(c) or predicates.is_event(c):
+            if predicates.is_error(condition) or predicates.is_event(condition):
                 continue
-            is_det = predicates.is_deterministic(c)
-            if is_det and i > first_true:
+            is_det = predicates.is_deterministic(condition)
+            if is_det and later > first_true:
                 out.append(Finding("warning", "shadowed-edge", name,
-                                   f"edge -> '{t}' is unreachable: an earlier catch-all edge "
+                                   f"edge -> '{target}' is unreachable: an earlier catch-all edge "
                                    f"always matches first"))
             elif not is_det:
                 out.append(Finding("warning", "shadowed-edge", name,
-                                   f"semantic edge -> '{t}' is unreachable: a deterministic "
+                                   f"semantic edge -> '{target}' is unreachable: a deterministic "
                                    f"catch-all on this node always matches first"))
     return out
 
@@ -344,19 +345,19 @@ def _check_shadowing(graph) -> List[Finding]:
 def _check_error_shadowing(graph) -> List[Finding]:
     """Error edges are tried in document order, first-match-wins (the engine wraps the agent call and
     takes the first `on error` whose `when` holds). A BARE `on error` (no `when`) matches every
-    exception, so any later conditional `on error [when …]` on the same node is dead — the same
+    exception, so any later conditional `on error [when …]` on the same node is dead - the same
     first-match hazard as a deterministic catch-all, in the error tier."""
     out: List[Finding] = []
-    for name, n in graph.nodes.items():
-        err = [(i, t, c) for i, (t, c) in enumerate(n.edges) if predicates.is_error(c)]
-        first_bare = next((i for (i, _t, c) in err if not predicates.error_expr(c)), None)
+    for name, node_obj in graph.nodes.items():
+        err = [(earlier, target, condition) for earlier, (target, condition) in enumerate(node_obj.edges) if predicates.is_error(condition)]
+        first_bare = next((earlier for (earlier, _target, condition) in err if not predicates.error_expr(condition)), None)
         if first_bare is None:
             continue
-        for i, t, c in err:
-            if i > first_bare:
+        for later, target, condition in err:
+            if later > first_bare:
                 out.append(Finding("warning", "shadowed-error-edge", name,
-                                   f"error edge -> '{t}' is unreachable: an earlier unconditional "
-                                   f"`on error` always matches first — order `on error when …` edges "
+                                   f"error edge -> '{target}' is unreachable: an earlier unconditional "
+                                   f"`on error` always matches first - order `on error when …` edges "
                                    f"before the bare `on error` catch-all"))
     return out
 
@@ -364,21 +365,21 @@ def _check_error_shadowing(graph) -> List[Finding]:
 def _check_event_shadowing(graph) -> List[Finding]:
     """Event edges resume on a delivered signal, first-match-wins by event name (the engine's
     `eventTarget` returns the first `on event <name>` edge). Two edges on one node awaiting the SAME
-    event make the second unreachable — the same first-match hazard as a deterministic catch-all or a
+    event make the second unreachable - the same first-match hazard as a deterministic catch-all or a
     bare `on error`, in the event tier. (Surfaced by the Journeyman cross-kernel comparison.)"""
     out: List[Finding] = []
-    for name, n in graph.nodes.items():
+    for name, node_obj in graph.nodes.items():
         seen: Dict[str, str] = {}
-        for t, c in n.edges:
-            if not predicates.is_event(c):
+        for target, condition in node_obj.edges:
+            if not predicates.is_event(condition):
                 continue
-            ev = predicates.event_name(c)
+            ev = predicates.event_name(condition)
             if ev in seen:
                 out.append(Finding("warning", "shadowed-event-edge", name,
-                                   f"event edge -> '{t}' is unreachable: an earlier edge on this "
+                                   f"event edge -> '{target}' is unreachable: an earlier edge on this "
                                    f"node already awaits '{ev}' (first-match-wins)"))
             else:
-                seen[ev] = t
+                seen[ev] = target
     return out
 
 
@@ -386,34 +387,34 @@ def _check_cycles(graph) -> List[Finding]:
     """A cycle with no `visits`-based cap on any node in it is bounded only by max_steps."""
     out: List[Finding] = []
     for comp in _sccs(graph):
-        is_cycle = len(comp) > 1 or any(_has_self_loop(graph, v) for v in comp)
+        is_cycle = len(comp) > 1 or any(_has_self_loop(graph, node_name) for node_name in comp)
         if not is_cycle:
             continue
-        capped = any(_references_visits(c)
-                     for v in comp for _, c in graph.nodes[v].edges)
+        capped = any(_references_visits(condition)
+                     for node_name in comp for _, condition in graph.nodes[node_name].edges)
         if not capped:
             members = ", ".join(sorted(comp))
             out.append(Finding("warning", "unbounded-cycle", sorted(comp)[0],
-                               f"cycle ({members}) has no `visits`-based cap — it is bounded "
+                               f"cycle ({members}) has no `visits`-based cap - it is bounded "
                                f"only by max_steps; add e.g. `-> give_up: when visits > N`"))
     return out
 
 
 def _check_dead_and_dup(graph) -> List[Finding]:
     out: List[Finding] = []
-    for name, n in graph.nodes.items():
-        for t, c in n.edges:
-            if _is_always_false(c):
+    for name, node_obj in graph.nodes.items():
+        for target, condition in node_obj.edges:
+            if _is_always_false(condition):
                 out.append(Finding("warning", "always-false-edge", name,
-                                   f"edge -> '{t}' has a condition that is always false "
-                                   f"(dead edge): {c!r}"))
-        sem = [c for t, c in n.edges if predicates.is_semantic(c)]
+                                   f"edge -> '{target}' has a condition that is always false "
+                                   f"(dead edge): {condition!r}"))
+        sem = [condition for _target, condition in node_obj.edges if predicates.is_semantic(condition)]
         seen = set()
-        for c in sem:
-            key = c.strip().lower()
+        for condition in sem:
+            key = condition.strip().lower()
             if key in seen:
                 out.append(Finding("warning", "duplicate-condition", name,
-                                   f"duplicate semantic condition {c!r} — the two edges are a "
+                                   f"duplicate semantic condition {condition!r} - the two edges are a "
                                    f"guaranteed near-tie for the router"))
             seen.add(key)
     return out
@@ -445,9 +446,9 @@ def _check_provenance(graph) -> List[Finding]:
             if udec:
                 upstream_declared.update(udec)
                 
-        for f in sorted(set(contracts.get(name, {})) - node_declared - upstream_declared):
+        for field_name in sorted(set(contracts.get(name, {})) - node_declared - upstream_declared):
             out.append(Finding("warning", "undeclared-field", name,
-                               f"a `when` edge reads field {f!r}, but neither this node's `@emits` "
+                               f"a `when` edge reads field {field_name!r}, but neither this node's `@emits` "
                                f"nor any upstream node's `@emits` declares it"))
     return out
 
@@ -463,16 +464,16 @@ _EMIT_TYPE_FAMILY = {
 
 def _derived_family(spec: dict) -> Optional[str]:
     """Collapse a derived FieldSpec to a type family comparable with a declared token. An enum's
-    family is that of its value literals; mixed/unknown collapses to None (no finding — the
+    family is that of its value literals; mixed/unknown collapses to None (no finding - the
     analyzer never guesses)."""
-    t = spec.get("type")
-    if t in ("boolean", "number", "string"):
-        return t
-    if t == "enum":
+    spec_type = spec.get("type")
+    if spec_type in ("boolean", "number", "string"):
+        return spec_type
+    if spec_type == "enum":
         vals = spec.get("values") or []
-        if vals and all(isinstance(v, str) for v in vals):
+        if vals and all(isinstance(val, str) for val in vals):
             return "string"
-        if vals and all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in vals):
+        if vals and all(isinstance(val, (int, float)) and not isinstance(val, bool) for val in vals):
             return "number"
     return None
 
@@ -480,7 +481,7 @@ def _derived_family(spec: dict) -> Optional[str]:
 def _check_emits_types(graph) -> List[Finding]:
     """Cross-check a TYPED `@emits(x=bool, ...)` declaration against the type the node's own `when`
     predicates INFER for the field (contract.derive_contract). A declaration that contradicts how the
-    edges actually read the field means one of them is wrong — and the type_gate would enforce the
+    edges actually read the field means one of them is wrong - and the type_gate would enforce the
     inferred one, so surface the drift at author time. Untyped (bare) tokens and unrecognized type
     words are skipped: no false positives."""
     from prismpath.kernel import contract
@@ -491,10 +492,10 @@ def _check_emits_types(graph) -> List[Finding]:
         derived = contracts.get(name, {})
         for field_name, token in sorted(emits.items()):
             if not token:
-                continue                                   # bare @emits(x) — untyped, nothing to check
+                continue                                   # bare @emits(x) - untyped, nothing to check
             want = _EMIT_TYPE_FAMILY.get(str(token).strip().lower())
             if want is None:
-                continue                                   # unrecognized type word — don't guess
+                continue                                   # unrecognized type word - don't guess
             spec = derived.get(field_name)
             if not spec:
                 continue                                   # field not read by any predicate
@@ -502,7 +503,7 @@ def _check_emits_types(graph) -> List[Finding]:
             if have is not None and have != want:
                 out.append(Finding("warning", "emits-type-mismatch", name,
                                    f"`@emits({field_name}={token})` declares {want}, but this node's "
-                                   f"`when` edges read {field_name!r} as {have} — the declaration and "
+                                   f"`when` edges read {field_name!r} as {have} - the declaration and "
                                    f"the predicates disagree (the type_gate enforces the inferred "
                                    f"{have})"))
                                    
@@ -512,12 +513,12 @@ def _check_emits_types(graph) -> List[Finding]:
         for u in upstream:
             unode = graph.nodes[u]
             uemits = unode.annotations.get("emits") or {}
-            for f, token in uemits.items():
+            for field_name, token in uemits.items():
                 if token:
                     want = _EMIT_TYPE_FAMILY.get(str(token).strip().lower())
                     if want:
                         # Store type family and node name that declared it
-                        upstream_emits[f] = (want, u)
+                        upstream_emits[field_name] = (want, u)
                         
         for field_name, spec in derived.items():
             if field_name not in emits and field_name in upstream_emits:
@@ -526,7 +527,7 @@ def _check_emits_types(graph) -> List[Finding]:
                 if have is not None and have != want:
                     out.append(Finding("warning", "upstream-type-mismatch", name,
                                        f"a `when` edge reads field {field_name!r} as {have}, but upstream node "
-                                       f"'{u_node}' declares it as {want} via `@emits` — the downstream "
+                                       f"'{u_node}' declares it as {want} via `@emits` - the downstream "
                                        f"usage and upstream declaration disagree"))
     return out
 
@@ -534,7 +535,7 @@ def _check_emits_types(graph) -> List[Finding]:
 
 def _check_field_only(graph) -> List[Finding]:
     """Field-only nodes (`@field_only`) route ONLY on declared structured fields, never on the worker's
-    raw outcome text — the security property that keeps attacker-influenced free text out of routing. A
+    raw outcome text - the security property that keeps attacker-influenced free text out of routing. A
     semantic edge on such a node routes on raw text and is a violation; and its `when` fields must all be
     declared (an undeclared field would fall through to nothing)."""
     from prismpath.kernel import contract
@@ -542,15 +543,15 @@ def _check_field_only(graph) -> List[Finding]:
     for name, node in graph.nodes.items():
         if "field_only" not in node.annotations:
             continue
-        for t, c in node.edges:
-            if predicates.is_semantic(c):
+        for target, condition in node.edges:
+            if predicates.is_semantic(condition):
                 out.append(Finding("error", "field-only-violation", name,
                                    f"`@field_only` node routes on RAW TEXT via a semantic edge -> "
-                                   f"{t!r} ({c!r}); field-only nodes may route only on declared "
+                                   f"{target!r} ({condition!r}); field-only nodes may route only on declared "
                                    f"structured fields (`when`/error/event edges)"))
         if contract.declared_emits(node) is None:
             out.append(Finding("error", "field-only-violation", name,
-                               "`@field_only` node has no `@emits` declaration — nothing constrains "
+                               "`@field_only` node has no `@emits` declaration - nothing constrains "
                                "what the worker may emit, so 'field-only' cannot be enforced"))
     return out
 
@@ -558,7 +559,7 @@ def _check_field_only(graph) -> List[Finding]:
 def _check_spawn(graph) -> List[Finding]:
     """Fan-out / sub-flow composition checks decidable from THIS graph alone (roadmap item #4). A node
     that declares `@spawn(...)` will suspend awaiting its join event, so it MUST have the matching
-    `on event <join>` edge or it deadlocks forever — the highest-value cross-nothing check (a missing
+    `on event <join>` edge or it deadlocks forever - the highest-value cross-nothing check (a missing
     join edge is the classic fan-out deadlock). The cross-FILE checks (does the child flow exist / have
     a terminal / satisfy `@expect`) need I/O and live in `analyze_composition`."""
     out: List[Finding] = []
@@ -570,11 +571,11 @@ def _check_spawn(graph) -> List[Finding]:
             out.append(Finding("error", "spawn-no-child", name,
                                "`@spawn` requires `child=<flow.md>` naming the sub-flow to run per item"))
         want = predicates.spawn_join_event(spawn.get("join") or "all_done")
-        have = {predicates.event_name(c) for _, c in node.edges if predicates.is_event(c)}
+        have = {predicates.event_name(condition) for _, condition in node.edges if predicates.is_event(condition)}
         if want not in have:
             out.append(Finding("error", "spawn-no-join-edge", name,
                                f"`@spawn` declares join={spawn.get('join') or 'all_done'!r} but the node "
-                               f"has no `on event {want}` edge — it would suspend forever; add "
+                               f"has no `on event {want}` edge - it would suspend forever; add "
                                f"`-> <next>: on event {want}`"))
     return out
 
@@ -584,9 +585,9 @@ def _check_terminal_body(graph) -> List[Finding]:
     executed by the engine (run ends on arrival at a terminal node). Short outcome labels
     (<= 200 chars) are permitted; longer worker prompts (> 200 chars) trigger a warning."""
     out: List[Finding] = []
-    for name, n in graph.nodes.items():
-        if n.terminal:
-            body = n.instruction.strip()
+    for name, node_obj in graph.nodes.items():
+        if node_obj.terminal:
+            body = node_obj.instruction.strip()
             if len(body) > 200:
                 out.append(Finding("warning", "terminal-with-body", name,
                                    f"terminal node has a non-trivial instruction body ({len(body)} chars, "
@@ -601,9 +602,9 @@ def _check_spiral_profile(graph) -> List[Finding]:
     severity radiates outward; that only means what it says if the flow honors two conventions,
     promoted here to checked rules for every materialization (derived and baked alike):
 
-      * severity order IS edge-declaration order (most severe first) — definitional under this
+      * severity order IS edge-declaration order (most severe first) - definitional under this
         profile; stated in the finding text so authors know what they are signing;
-      * the baseline catch-all is the LAST deterministic edge of every packed node — otherwise the
+      * the baseline catch-all is the LAST deterministic edge of every packed node - otherwise the
         spiral's center is not the baseline and progressive transmission silently loses its meaning
         (band membership still routes correctly; the CENTER-OUTWARD semantics are what degrade).
 
@@ -611,26 +612,26 @@ def _check_spiral_profile(graph) -> List[Finding]:
     flow must fail `validate` and be refused at bake/admission in every materialization. The
     filters mirror the derivation's own (`is_deterministic` + always-true detection) so the lint
     and `_route_order` cannot disagree. Field-partition coverage is enforced at pack admission
-    where the partition builder lives — the core cannot import the telemetry adapter."""
+    where the partition builder lives - the core cannot import the telemetry adapter."""
     if graph.meta.get("packing", "").strip().lower() != "spiral":
         return []
     out: List[Finding] = []
-    for name, n in graph.nodes.items():
-        det = [(t, c) for t, c in n.edges if predicates.is_deterministic(c)]
+    for name, node_obj in graph.nodes.items():
+        det = [(target, condition) for target, condition in node_obj.edges if predicates.is_deterministic(condition)]
         if not det:
             continue                                     # terminal or host-tier node: nothing packed
-        baselines = [i for i, (_t, c) in enumerate(det) if _is_always_true(c)]
+        baselines = [index for index, (_target, condition) in enumerate(det) if _is_always_true(condition)]
         if not baselines:
             out.append(Finding("error", "spiral-no-baseline", name,
                                "packing: spiral requires a baseline catch-all as this node's last "
-                               "deterministic edge — without one the spiral's dense center is the "
+                               "deterministic edge - without one the spiral's dense center is the "
                                "last specific branch, not the baseline, and unrouted cells fall "
                                "outermost (severity order is edge order under this profile)"))
         elif baselines[-1] != len(det) - 1:
             out.append(Finding("error", "spiral-baseline-not-last", name,
                                f"packing: spiral requires the baseline catch-all LAST; edge "
                                f"{baselines[-1] + 1} of {len(det)} is a catch-all with specific "
-                               f"branches after it — the layout reverses edge order, so a non-final "
+                               f"branches after it - the layout reverses edge order, so a non-final "
                                f"baseline puts a specific branch at the dense center"))
         if len(baselines) > 1:
             out.append(Finding("warning", "spiral-multi-baseline", name,
@@ -651,35 +652,35 @@ def _check_refresh_profile(graph) -> List[Finding]:
     parameters exist and the stale bound can actually be reached on a healthy link:
 
       * both keys required (a cadence without a stale bound, or a bound without a cadence,
-        promises nothing a consumer can act on) — ERROR;
-      * positive integer milliseconds — ERROR;
-      * ``stale >= keyframe`` — otherwise a lossless link trips stale between keyframes — ERROR;
+        promises nothing a consumer can act on) - ERROR;
+      * positive integer milliseconds - ERROR;
+      * ``stale >= keyframe`` - otherwise a lossless link trips stale between keyframes - ERROR;
       * ``stale >= 2 * keyframe`` SHOULD hold, so a single lost keyframe does not park the
-        consumer on the fail-safe — WARNING when violated."""
-    present = [k for k in _REFRESH_KEYS if k in graph.meta]
+        consumer on the fail-safe - WARNING when violated."""
+    present = [key_name for key_name in _REFRESH_KEYS if key_name in graph.meta]
     if not present:
         return []
     out: List[Finding] = []
-    missing = [k for k in _REFRESH_KEYS if k not in graph.meta]
+    missing = [key_name for key_name in _REFRESH_KEYS if key_name not in graph.meta]
     if missing:
         out.append(Finding("error", "refresh-missing-param", None,
-                           f"refresh profile declared but {missing[0]} is missing — both "
+                           f"refresh profile declared but {missing[0]} is missing - both "
                            f"refresh_keyframe_ms and refresh_stale_ms are required"))
         return out
     vals = {}
-    for k in _REFRESH_KEYS:
-        raw = graph.meta[k].strip()
+    for key_name in _REFRESH_KEYS:
+        raw = graph.meta[key_name].strip()
         if not raw.isdigit() or int(raw) <= 0:
             out.append(Finding("error", "refresh-bad-param", None,
-                               f"{k} must be a positive integer (milliseconds); got {raw!r}"))
+                               f"{key_name} must be a positive integer (milliseconds); got {raw!r}"))
         else:
-            vals[k] = int(raw)
+            vals[key_name] = int(raw)
     if len(vals) == len(_REFRESH_KEYS):
         kf, st = vals["refresh_keyframe_ms"], vals["refresh_stale_ms"]
         if st < kf:
             out.append(Finding("error", "refresh-stale-bound", None,
                                f"refresh_stale_ms ({st}) < refresh_keyframe_ms ({kf}): a lossless "
-                               f"link would trip stale between keyframes — the bound is "
+                               f"link would trip stale between keyframes - the bound is "
                                f"unsatisfiable by a conforming sender"))
         elif st < 2 * kf:
             out.append(Finding("warning", "refresh-stale-tight", None,
@@ -693,15 +694,15 @@ _MIGRATION_STRATEGIES = ("by-name", "reset-to")
 
 
 def _check_stateful_migration(graph) -> List[Finding]:
-    """Statefulness is an OPT-IN signed profile, exactly like ``packing: spiral`` — not the default. A
+    """Statefulness is an OPT-IN signed profile, exactly like ``packing: spiral`` - not the default. A
     policy declares ``stateful: true`` to take the resident-FSM LAYER over the stateless, self-healing
     base; the evaluator is identical either way (one option, one conformance oracle), only state
-    management differs, so the mode must never change the decision. A stateful pack must be complete —
+    management differs, so the mode must never change the decision. A stateful pack must be complete -
     it declares a signed hot-swap migration strategy (``migration: by-name``/``reset-to``, alongside a
     ``safe:`` fail-safe), because a resident node index carried across a reset or a reindexing swap
     would otherwise reinterpret the posture. The default (no ``stateful:``) is the self-healing base and
     needs neither; declaring resident-state fields there is a mode mismatch, flagged so the choice stays
-    explicit — declared, not negotiated."""
+    explicit - declared, not negotiated."""
     stateful = str(graph.meta.get("stateful", "")).strip().lower() in ("true", "1", "yes")
     mig = str(graph.meta.get("migration", "")).strip().split("=", 1)[0].strip().lower()
     has_resident = bool(str(graph.meta.get("safe", "")).strip()) or bool(mig)
@@ -709,12 +710,12 @@ def _check_stateful_migration(graph) -> List[Finding]:
         if mig not in _MIGRATION_STRATEGIES:
             return [Finding("error", "stateful-migration-undeclared", None,
                             "a `stateful: true` policy must declare `migration: by-name` or "
-                            "`migration: reset-to` — a resident node index carried across a signed "
+                            "`migration: reset-to` - a resident node index carried across a signed "
                             "hot-swap reinterprets the posture; declare how state migrates or resets")]
     elif has_resident:
         return [Finding("warning", "stateless-with-resident-fields", None,
                         "this policy is stateless (no `stateful: true`) but declares resident-state "
-                        "fields (`safe:`/`migration:`); they are inert on the self-healing base — remove "
+                        "fields (`safe:`/`migration:`); they are inert on the self-healing base - remove "
                         "them, or declare `stateful: true` to opt into the resident-FSM layer")]
     return []
 
@@ -740,22 +741,21 @@ def analyze(graph) -> List[Finding]:
     findings += _check_cycles(graph)
     findings += _check_dead_and_dup(graph)
     findings += _check_terminal_body(graph)
-    findings.sort(key=lambda f: (f.severity != "error", f.code, f.node or ""))
+    findings.sort(key=lambda finding: (finding.severity != "error", finding.code, finding.node or ""))
     return findings
-
 
 
 def _has_reachable_terminal(graph) -> bool:
     reach = _reachable(graph)
-    return any(graph.nodes[n].terminal for n in reach if n in graph.nodes)
+    return any(graph.nodes[node_name].terminal for node_name in reach if node_name in graph.nodes)
 
 
 def _child_emitted_fields(graph) -> set:
     """The fields a child flow DECLARES it emits (union of every node's `@emits(...)`). Empty if the
-    child never declares — in which case the `@expect` cross-check stays silent (no false positives)."""
+    child never declares - in which case the `@expect` cross-check stays silent (no false positives)."""
     out: set = set()
-    for node in graph.nodes.values():
-        emits = node.annotations.get("emits")
+    for node_obj in graph.nodes.values():
+        emits = node_obj.annotations.get("emits")
         if emits:
             out |= set(emits.keys())
     return out
@@ -764,24 +764,24 @@ def _child_emitted_fields(graph) -> set:
 def _child_emitted_types(graph) -> Dict[str, str]:
     """Returns a dict of {field_name: type_family} declared in the child flow's nodes."""
     out = {}
-    for node in graph.nodes.values():
-        emits = node.annotations.get("emits") or {}
-        for f, t in emits.items():
-            if t:
-                family = _EMIT_TYPE_FAMILY.get(str(t).strip().lower())
+    for node_obj in graph.nodes.values():
+        emits = node_obj.annotations.get("emits") or {}
+        for field_name, token in emits.items():
+            if token:
+                family = _EMIT_TYPE_FAMILY.get(str(token).strip().lower())
                 if family:
-                    out[f] = family
+                    out[field_name] = family
     return out
 
 
 def analyze_composition(graph, flow_path) -> List[Finding]:
     """Cross-FLOW-BOUNDARY checks for `@spawn` nodes (roadmap item #4, hard part 2). Unlike the pure
-    `analyze()`, these do I/O — they resolve the child flow path (relative to `flow_path`'s dir), parse
+    `analyze()`, these do I/O - they resolve the child flow path (relative to `flow_path`'s dir), parse
     it, and reason across the two documents:
-      * spawn-missing-child / spawn-child-unparseable — the referenced sub-flow must exist and parse;
-      * spawn-child-no-terminal — the child must be able to REACH a terminal, else its runs never
+      * spawn-missing-child / spawn-child-unparseable - the referenced sub-flow must exist and parse;
+      * spawn-child-no-terminal - the child must be able to REACH a terminal, else its runs never
         finish and the parent's join event never fires (a cross-file deadlock);
-      * spawn-expect-unmet (warning) — a parent `@expect(fields)` must be covered by the child's
+      * spawn-expect-unmet (warning) - a parent `@expect(fields)` must be covered by the child's
         `@emits` declarations, so the composition contract is checkable across the boundary.
     Composition is the stress test of the data-not-code thesis: the whole call tree is inspectable
     statically, no run required."""
@@ -789,8 +789,8 @@ def analyze_composition(graph, flow_path) -> List[Finding]:
     from prismpath.kernel.parser import parse_file
     out: List[Finding] = []
     base = os.path.dirname(os.path.abspath(os.fspath(flow_path)))
-    for name, node in graph.nodes.items():
-        spawn = node.annotations.get("spawn")
+    for name, node_obj in graph.nodes.items():
+        spawn = node_obj.annotations.get("spawn")
         if spawn is None or not spawn.get("child"):
             continue
         child = spawn["child"]
@@ -801,61 +801,60 @@ def analyze_composition(graph, flow_path) -> List[Finding]:
             continue
         try:
             child_graph = parse_file(cpath)
-        except Exception as e:                        # noqa: BLE001
+        except Exception as exc:                        # noqa: BLE001
             out.append(Finding("error", "spawn-child-unparseable", name,
-                               f"child flow {child!r} failed to parse: {e}"))
+                               f"child flow {child!r} failed to parse: {exc}"))
             continue
         if not _has_reachable_terminal(child_graph):
             out.append(Finding("error", "spawn-child-no-terminal", name,
-                               f"child flow {child!r} has no reachable terminal node — its runs never "
+                               f"child flow {child!r} has no reachable terminal node - its runs never "
                                f"finish, so the join event never fires"))
-        expect = node.annotations.get("expect")
+        expect = node_obj.annotations.get("expect")
         emitted = _child_emitted_fields(child_graph)
         if expect and emitted:                        # only check when the child declares its outputs
-            missing = [f for f in expect if f not in emitted]
+            missing = [field_name for field_name in expect if field_name not in emitted]
             if missing:
                 out.append(Finding("warning", "spawn-expect-unmet", name,
                                    f"`@expect{tuple(expect)}` but child {child!r} never `@emits` "
-                                   f"{missing} — the composition contract is unmet (fix the field name "
+                                   f"{missing} - the composition contract is unmet (fix the field name "
                                    f"or declare it in the child)"))
             
             # Cross-check types (Task 3)
             child_types = _child_emitted_types(child_graph)
-            for f, token in expect.items():
-                if token and f in child_types:
+            for field_name, token in expect.items():
+                if token and field_name in child_types:
                     want = _EMIT_TYPE_FAMILY.get(str(token).strip().lower())
-                    have = child_types[f]
+                    have = child_types[field_name]
                     if want and have and want != have:
                         out.append(Finding("warning", "spawn-expect-type-mismatch", name,
-                                           f"`@expect({f}={token})` expects {want}, but child {child!r} "
-                                           f"declares {f!r} as {have} via `@emits` — the parent and child "
+                                           f"`@expect({field_name}={token})` expects {want}, but child {child!r} "
+                                           f"declares {field_name!r} as {have} via `@emits` - the parent and child "
                                            f"types disagree"))
     return out
 
 
-
 # --------------------------------------------------------------------------------------
 # Portability (roadmap item #5): the ML-free subset. A flow is PORTABLE iff every edge on
-# every REACHABLE node is decidable without a model — a `when` predicate, an error edge, or
+# every REACHABLE node is decidable without a model - a `when` predicate, an error edge, or
 # an event edge. Semantic (natural-language) edges need the embedder/LLM tier, so they are
 # exactly the portability violations. A portable flow runs on the reference port
-# (portable/prismpath.mjs — browser/edge/appliance) with routing identical to this engine.
+# (portable/prismpath.mjs - browser/edge/appliance) with routing identical to this engine.
 # --------------------------------------------------------------------------------------
 
 def portability(graph) -> List[Finding]:
     """Findings for every semantic edge on a reachable node (`not-portable-edge`, severity
-    "warning" — a semantic edge is perfectly legal in the full engine; it only excludes the
+    "warning" - a semantic edge is perfectly legal in the full engine; it only excludes the
     flow from the ML-free subset). Empty list == the flow is portable."""
     out: List[Finding] = []
     reach = _reachable(graph)
     for name in sorted(reach):
-        node = graph.nodes.get(name)
-        if node is None:
+        node_obj = graph.nodes.get(name)
+        if node_obj is None:
             continue
-        for t, c in node.edges:
-            if predicates.is_semantic(c):
+        for target, condition in node_obj.edges:
+            if predicates.is_semantic(condition):
                 out.append(Finding("warning", "not-portable-edge", name,
-                                   f"semantic edge -> {t!r} ({c!r}) needs the embedding/LLM tier; "
+                                   f"semantic edge -> {target!r} ({condition!r}) needs the embedding/LLM tier; "
                                    f"rewrite as a `when <field …>` predicate (see @emits/@field_only) "
                                    f"to keep the flow in the ML-free portable subset"))
     return out
@@ -875,8 +874,8 @@ def portability_tree(graph, flow_path, _seen=None) -> List[Finding]:
     _seen = _seen | {ap}
     out = list(portability(graph))
     base = os.path.dirname(ap)
-    for name, node in graph.nodes.items():
-        spawn = node.annotations.get("spawn")
+    for name, node_obj in graph.nodes.items():
+        spawn = node_obj.annotations.get("spawn")
         if spawn is None or not spawn.get("child"):
             continue
         child = spawn["child"]
@@ -885,36 +884,36 @@ def portability_tree(graph, flow_path, _seen=None) -> List[Finding]:
             child_graph = parse_file(cpath)
         except Exception:                             # noqa: BLE001 - analyze_composition owns this error
             continue
-        for f in portability_tree(child_graph, cpath, _seen):
-            out.append(Finding(f.severity, f.code, f"{child}:{f.node}" if f.node else child, f.message))
+        for finding in portability_tree(child_graph, cpath, _seen):
+            out.append(Finding(finding.severity, finding.code, f"{child}:{finding.node}" if finding.node else child, finding.message))
     return out
 
 
 def portability_tier(graph, flow_path) -> dict:
     """Stratify portability into the three deployment TIERS (a lint-computable flow property):
 
-      * **P0** — every reachable edge is decidable (when/error/event). Zero ML: runs on the
+      * **P0** - every reachable edge is decidable (when/error/event). Zero ML: runs on the
         reference port (portable/prismpath.mjs) anywhere JavaScript runs.
-      * **P1** — reachable semantic edges exist, but EVERY one of them is pinned in the flow's
+      * **P1** - reachable semantic edges exist, but EVERY one of them is pinned in the flow's
         routing lockfile: the condition side is committed vectors, so routing needs only an
-        OUTCOME-side embedder at runtime (an ONNX-able, ~35MB dependency) — portable to any
+        OUTCOME-side embedder at runtime (an ONNX-able, ~35MB dependency) - portable to any
         appliance/edge host that can run a small encoder. Escalation stays optional.
-      * **P2** — reachable semantic edges not fully covered by a lock: needs the full stack
+      * **P2** - reachable semantic edges not fully covered by a lock: needs the full stack
         (live condition embedding and/or LLM escalation).
 
     Returns {tier, semantic_edges: [(node, target, condition)], unlocked: [condition, ...],
     lock: path|None, level_m: bool}. `level_m` marks the compile-to-hardware subset (SPEC §7):
     a P0 flow whose deterministic edges are all in the match-action fragment (§4.3). Decidable
-    from the document + its sidecar lock — no model, no execution."""
+    from the document + its sidecar lock - no model, no execution."""
     reach = _reachable(graph)
     semantic = []
     for name in sorted(reach):
-        node = graph.nodes.get(name)
-        if node is None:
+        node_obj = graph.nodes.get(name)
+        if node_obj is None:
             continue
-        for t, c in node.edges:
-            if predicates.is_semantic(c):
-                semantic.append((name, t, c))
+        for target, condition in node_obj.edges:
+            if predicates.is_semantic(condition):
+                semantic.append((name, target, condition))
     lm_all, _lm_bad = level_m.flow_level_m(graph)
     if not semantic:
         return {"tier": "P0", "semantic_edges": [], "unlocked": [], "lock": None,
@@ -930,7 +929,7 @@ def portability_tier(graph, flow_path) -> dict:
             lock_found = lp
         except Exception:                             # noqa: BLE001 - unreadable lock == no lock
             pass
-    unlocked = sorted({c for _, _, c in semantic if c not in locked_conds})
+    unlocked = sorted({condition for _, _, condition in semantic if condition not in locked_conds})
     tier = "P1" if lock_found and not unlocked else "P2"
     return {"tier": tier, "semantic_edges": semantic, "unlocked": unlocked, "lock": lock_found,
             "level_m": False}       # Level M is a within-P0 stratum (SPEC §7)
@@ -938,7 +937,7 @@ def portability_tier(graph, flow_path) -> dict:
 
 def portability_tier_tree(graph, flow_path, _seen=None) -> dict:
     """The tier of a WHOLE composition tree: the max (worst) tier across this flow and,
-    recursively, every `@spawn` child — a P0 parent spawning a P2 child deploys as P2. Returns
+    recursively, every `@spawn` child - a P0 parent spawning a P2 child deploys as P2. Returns
     {tier, flows: {path_or_ref: per-flow tier dict}}. Cycle-guarded like portability_tree."""
     import os
     from prismpath.kernel.parser import parse_file
@@ -951,8 +950,8 @@ def portability_tier_tree(graph, flow_path, _seen=None) -> dict:
     mine = portability_tier(graph, flow_path)
     flows = {os.fspath(flow_path): mine}
     worst = mine["tier"]
-    for name, node in graph.nodes.items():
-        spawn = node.annotations.get("spawn")
+    for name, node_obj in graph.nodes.items():
+        spawn = node_obj.annotations.get("spawn")
         if spawn is None or not spawn.get("child"):
             continue
         child = spawn["child"]
@@ -971,5 +970,5 @@ def portability_tier_tree(graph, flow_path, _seen=None) -> dict:
 def errors(graph) -> list:
     """The error severity findings as strings, the list `Graph.validate()` used to return before the
     parser stopped importing the analyzer: `node 'x': message` or the bare message."""
-    return [f"node '{f.node}': {f.message}" if f.node else f.message
-            for f in analyze(graph) if f.severity == "error"]
+    return [f"node '{finding.node}': {finding.message}" if finding.node else finding.message
+            for finding in analyze(graph) if finding.severity == "error"]

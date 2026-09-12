@@ -1,21 +1,21 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
-"""prefilter.py — decision memoization for expensive agent calls (the cache tier).
+"""prefilter.py - decision memoization for expensive agent calls (the cache tier).
 
 The routing spectrum resolves *transitions* cheaply; this module makes the expensive
-*node* cheap. A `PrefilterCache` stores prior adjudications — (document → verdict)
-pairs — as L2-normalized embeddings plus metadata. Before an expensive call (an LLM
+*node* cheap. A `PrefilterCache` stores prior adjudications - (document -> verdict)
+pairs - as L2-normalized embeddings plus metadata. Before an expensive call (an LLM
 classification, a slow judge), look the incoming document up: a near-identical prior
-(cosine ≥ `threshold`) whose stored verdict carries `confidence ≥ min_conf` is a HIT
-— reuse the verdict and skip the call entirely. On a miss, make the call, then
+(cosine >= `threshold`) whose stored verdict carries `confidence >= min_conf` is a HIT
+- reuse the verdict and skip the call entirely. On a miss, make the call, then
 `learn()` the fresh verdict so the next near-identical input hits. The cache
 compounds: measured live on SOC alert triage, ~59% of alerts auto-resolved at
-threshold 0.97 (streaming, self-learning) — a ~2.4× capacity gain before the LLM
+threshold 0.97 (streaming, self-learning) - a ~2.4x capacity gain before the LLM
 tier is touched.
 
 Design:
-  * PLUGGABLE embedder. `embed_fn(list[str]) -> [n, d] float32, unit-normalized` is
-    the single swap point — the default is a small sentence-transformers model
+  * PLUGGABLE embedder. `embed_fn(list[str]) -> [count, dim] float32, unit-normalized` is
+    the single swap point - the default is a small sentence-transformers model
     (BAAI/bge-small-en-v1.5) on GPU, falling back to CPU on any load failure (the
     model is tiny). Any modality encoder satisfying the contract can feed the same
     gate (e.g. a traffic encoder for network flows).
@@ -49,15 +49,15 @@ _model = None
 
 def _load_model():
     """Load the default sentence-transformers model once. GPU by default; on CUDA
-    OOM (or any init failure) log it and fall back to CPU — the model is tiny."""
+    OOM (or any init failure) log it and fall back to CPU - the model is tiny."""
     global _model
     if _model is not None:
         return _model
     from sentence_transformers import SentenceTransformer
     try:
         _model = SentenceTransformer(EMBED_MODEL, device=EMBED_DEVICE)
-    except Exception as e:  # noqa: BLE001 - broad on purpose (CUDA OOM/init)
-        print(f"  [prefilter] embedder load on '{EMBED_DEVICE}' failed ({e!r}); "
+    except Exception as exc:  # noqa: BLE001 - broad on purpose (CUDA OOM/init)
+        print(f"  [prefilter] embedder load on '{EMBED_DEVICE}' failed ({exc!r}); "
               f"falling back to CPU")
         _model = SentenceTransformer(EMBED_MODEL, device="cpu")
     return _model
@@ -65,20 +65,20 @@ def _load_model():
 
 def default_embed_fn(texts: List[str]):
     """The default embedder: `list[str] -> [n, d] unit-normalized float32`. THE swap
-    point — pass any callable with this contract as `PrefilterCache(embed_fn=...)`
+    point - pass any callable with this contract as `PrefilterCache(embed_fn=...)`
     to plug in a different modality encoder."""
     import numpy as np
-    m = _load_model()
-    v = m.encode(list(texts), normalize_embeddings=True, show_progress_bar=False,
-                 batch_size=64)
-    return np.asarray(v, dtype="float32")
+    model = _load_model()
+    vecs = model.encode(list(texts), normalize_embeddings=True, show_progress_bar=False,
+                        batch_size=64)
+    return np.asarray(vecs, dtype="float32")
 
 
 def _normalize(vec):
     import numpy as np
-    v = np.asarray(vec, dtype="float32").reshape(-1)
-    n = np.linalg.norm(v)
-    return v / n if n > 0 else v
+    vec_arr = np.asarray(vec, dtype="float32").reshape(-1)
+    norm = np.linalg.norm(vec_arr)
+    return vec_arr / norm if norm > 0 else vec_arr
 
 
 def _migrate(record: dict) -> dict:
@@ -96,26 +96,26 @@ def _migrate(record: dict) -> dict:
 
 def match_arrays(vec, emb, records: list,
                  threshold: float, min_conf: float):
-    """Pure-array form of the gate — for offline sweeps over thresholds/corpora
+    """Pure-array form of the gate - for offline sweeps over thresholds/corpora
     (see measure_prefilter.py). Returns (hit, record|None, similarity)."""
     import numpy as np
     if emb.shape[0] == 0:
         return False, None, 0.0
-    v = _normalize(vec)
-    sims = emb @ v  # both unit-normalized -> cosine
-    i = int(np.argmax(sims))
-    best_sim = float(sims[i])
-    best = records[i]
-    hit = best_sim >= threshold and float(best.get("confidence", 0.0)) >= min_conf
-    return hit, best, best_sim
+    vector = _normalize(vec)
+    sims = emb @ vector  # both unit-normalized -> cosine
+    best_index = int(np.argmax(sims))
+    best_sim = float(sims[best_index])
+    best_record = records[best_index]
+    hit = best_sim >= threshold and float(best_record.get("confidence", 0.0)) >= min_conf
+    return hit, best_record, best_sim
 
 
 @dataclass
 class CacheResult:
-    """Result of a lookup. `vector` is the query embedding — pass it back to
+    """Result of a lookup. `vector` is the query embedding - pass it back to
     `learn()` after adjudication so the document isn't embedded twice. `shadow` is True when this hit
     was selected for a shadow-sample: reuse the verdict AND run the real adjudicator too, then feed the
-    comparison to `record_shadow()` — the cache's self-policing signal."""
+    comparison to `record_shadow()` - the cache's self-policing signal."""
     hit: bool
     record: Optional[dict]
     similarity: float
@@ -149,11 +149,11 @@ class PrefilterCache:
 
     def _load_tuning(self) -> dict:
         """The chosen operating point from a prior `tune()` run (`<corpus>/tuning.json`), if
-        any. Sits BELOW explicit args and env in precedence — a derived point never overrides
+        any. Sits BELOW explicit args and env in precedence - a derived point never overrides
         an operator's decision, it replaces the hardcoded default."""
         try:
-            with open(self.dir / "tuning.json") as f:
-                return (json.load(f) or {}).get("chosen") or {}
+            with open(self.dir / "tuning.json") as fh:
+                return (json.load(fh) or {}).get("chosen") or {}
         except (OSError, ValueError):
             return {}
 
@@ -183,7 +183,7 @@ class PrefilterCache:
         import numpy as np
         if self._emb_path.exists() and self._meta_path.exists():
             emb = np.load(self._emb_path)
-            meta = [_migrate(m) for m in json.loads(self._meta_path.read_text())]
+            meta = [_migrate(record) for record in json.loads(self._meta_path.read_text())]
             if len(meta) == emb.shape[0] and emb.shape[0] > 0:
                 return emb.astype("float32"), meta
         return np.zeros((0, 0), dtype="float32"), []
@@ -196,8 +196,8 @@ class PrefilterCache:
         emb_tmp = str(self._emb_path) + ".tmp.npy"
         meta_tmp = str(self._meta_path) + ".tmp"
         np.save(emb_tmp, emb.astype("float32"))
-        with open(meta_tmp, "w", encoding="utf-8") as f:
-            f.write(json.dumps(meta, indent=2))
+        with open(meta_tmp, "w", encoding="utf-8") as fh:
+            fh.write(json.dumps(meta, indent=2))
         os.replace(emb_tmp, self._emb_path)
         os.replace(meta_tmp, self._meta_path)
 
@@ -215,7 +215,7 @@ class PrefilterCache:
 
     def _eligible(self, record: dict, policy_hash: Optional[str]) -> bool:
         """An entry may be reused unless it is quarantined (a shadow-sample found it drifting) or it was
-        learned under a DIFFERENT policy hash than the current one — a policy/flow edit thereby
+        learned under a DIFFERENT policy hash than the current one - a policy/flow edit thereby
         auto-invalidates stale verdicts. Unversioned (policy_hash=None) entries are always eligible, so
         existing corpora and callers that don't version keep working unchanged."""
         if record.get("quarantined"):
@@ -231,42 +231,42 @@ class PrefilterCache:
         emb, meta = self.load()
         if emb.shape[0] == 0:
             return False, None, 0.0
-        idx = [i for i, m in enumerate(meta) if self._eligible(m, policy_hash)]
-        if not idx:
+        eligible_indices = [record_index for record_index, meta_item in enumerate(meta) if self._eligible(meta_item, policy_hash)]
+        if not eligible_indices:
             return False, None, 0.0
-        return match_arrays(vec, emb[idx], [meta[i] for i in idx], self.threshold, self.min_conf)
+        return match_arrays(vec, emb[eligible_indices], [meta[record_index] for record_index in eligible_indices], self.threshold, self.min_conf)
 
     def lookup(self, doc: str, policy_hash: Optional[str] = None, sample_rate: float = 0.0,
                rng=None) -> CacheResult:
         """Embed `doc` and match it against the eligible corpus. With `sample_rate > 0`, a hit is
-        flagged `shadow` with that probability — reuse it AND run the real adjudicator, then call
+        flagged `shadow` with that probability - reuse it AND run the real adjudicator, then call
         `record_shadow()`. The returned `vector` is reusable by `learn()`."""
         vec = self.embed([doc])[0]
         hit, record, sim = self.match(vec, policy_hash=policy_hash)
-        r = rng if rng is not None else random   # `rng or random` would swallow a seeded Random(0)-ish
-        shadow = bool(hit and sample_rate > 0 and r.random() < sample_rate)
+        rng_inst = rng if rng is not None else random   # `rng or random` would swallow a seeded Random(0)-ish
+        shadow = bool(hit and sample_rate > 0 and rng_inst.random() < sample_rate)
         return CacheResult(hit=hit, record=record, similarity=sim, vector=vec, shadow=shadow)
 
     # --- the learning loop --------------------------------------------------------
     def learn(self, vec_or_doc, action: str, confidence: float,
               key: str = "", description: str = "", policy_hash: Optional[str] = None) -> None:
         """Append one adjudication so future near-identical documents auto-resolve.
-        Accepts either the embedding from a prior `lookup()` (preferred — no
+        Accepts either the embedding from a prior `lookup()` (preferred - no
         re-embed) or the raw document string. Guarded by a cross-process lock so concurrent
         streaming learners don't lose updates (the read-modify-write is serialized).
 
         `policy_hash` stamps the entry with the flow/policy it was adjudicated under. Pass the same
         value to `lookup()`/`match()` later and a policy edit auto-invalidates every verdict learned
-        under the old hash — no manual cache purge."""
+        under the old hash - no manual cache purge."""
         import numpy as np
         if isinstance(vec_or_doc, str):
-            v = self.embed([vec_or_doc])[0]
+            vec = self.embed([vec_or_doc])[0]
         else:
-            v = vec_or_doc
-        v = _normalize(v)
+            vec = vec_or_doc
+        vec = _normalize(vec)
         with self._lock():
             emb, meta = self.load()
-            emb = v.reshape(1, -1) if emb.shape[0] == 0 else np.vstack([emb, v.reshape(1, -1)])
+            emb = vec.reshape(1, -1) if emb.shape[0] == 0 else np.vstack([emb, vec.reshape(1, -1)])
             rec = {
                 "action": action,
                 "confidence": float(confidence) if confidence is not None else 0.0,
@@ -282,7 +282,7 @@ class PrefilterCache:
         """Advisory cross-process lock over the corpus (POSIX flock; a no-op where unavailable)."""
         cache = self
 
-        class _L:
+        class _LockHandle:
             def __enter__(self):
                 self.fh = None
                 try:
@@ -296,14 +296,14 @@ class PrefilterCache:
                         self.fh = None
                 return self
 
-            def __exit__(self, *a):
+            def __exit__(self, *unused_args):
                 if self.fh:
                     try:
                         import fcntl
                         fcntl.flock(self.fh, fcntl.LOCK_UN)
                     finally:
                         self.fh.close()
-        return _L()
+        return _LockHandle()
 
     # --- self-policing (shadow sampling) --------------------------------------------
     @property
@@ -313,13 +313,13 @@ class PrefilterCache:
     def record_shadow(self, key: str, reused_action, oracle_action,
                       quarantine_bound: float = 0.5, min_samples: int = 2,
                       window: int = 8) -> dict:
-        """Feed one shadow-sample comparison back to the cache — the self-policing signal. `key` is the
+        """Feed one shadow-sample comparison back to the cache - the self-policing signal. `key` is the
         reused entry's stable key (CacheResult.record['key']); `reused_action` is the verdict that WAS
         reused, `oracle_action` the fresh adjudication run in shadow alongside it. Updates the entry's
         running (shadow_n, shadow_disagree) plus a bounded RECENT window, and QUARANTINES it when
         EITHER rate crosses `quarantine_bound` over >= `min_samples` samples:
-          * cumulative — shadow_disagree/shadow_n (the lifetime signal), or
-          * windowed  — disagreements within the last `window` samples, so an entry that was stable
+          * cumulative - shadow_disagree/shadow_n (the lifetime signal), or
+          * windowed - disagreements within the last `window` samples, so an entry that was stable
             for months and THEN drifts is pulled after a few recent disagreements instead of needing
             its lifetime rate dragged over the bound (detection lag ~window, not ~history).
         Thereafter `_eligible()` drops it, so a drifting verdict stops being reused without deleting
@@ -330,23 +330,23 @@ class PrefilterCache:
         n_after = 0
         with self._lock():
             emb, meta = self.load()
-            targets = [m for m in meta if m.get("key", "") == key] if key else []
-            for m in targets:
-                m["shadow_n"] = int(m.get("shadow_n", 0)) + 1
+            targets = [meta_item for meta_item in meta if meta_item.get("key", "") == key] if key else []
+            for meta_item in targets:
+                meta_item["shadow_n"] = int(meta_item.get("shadow_n", 0)) + 1
                 if not agree:
-                    m["shadow_disagree"] = int(m.get("shadow_disagree", 0)) + 1
-                recent = list(m.get("shadow_recent", []))
+                    meta_item["shadow_disagree"] = int(meta_item.get("shadow_disagree", 0)) + 1
+                recent = list(meta_item.get("shadow_recent", []))
                 recent.append(0 if agree else 1)
-                m["shadow_recent"] = recent[-max(1, int(window)):]
-                n_after = max(n_after, m["shadow_n"])   # dup keys can diverge; report the furthest along
-                dis = int(m.get("shadow_disagree", 0))
-                win = m["shadow_recent"]
-                cum_drift = m["shadow_n"] >= min_samples and dis / m["shadow_n"] >= quarantine_bound
+                meta_item["shadow_recent"] = recent[-max(1, int(window)):]
+                n_after = max(n_after, meta_item["shadow_n"])   # dup keys can diverge; report the furthest along
+                dis = int(meta_item.get("shadow_disagree", 0))
+                win = meta_item["shadow_recent"]
+                cum_drift = meta_item["shadow_n"] >= min_samples and dis / meta_item["shadow_n"] >= quarantine_bound
                 win_drift = len(win) >= min_samples and sum(win) / len(win) >= quarantine_bound
-                if not m.get("quarantined") and (cum_drift or win_drift):
-                    m["quarantined"] = True
-                    m["quarantine_reason"] = (f"shadow drift {dis}/{m['shadow_n']}" if cum_drift
-                                              else f"shadow window drift {sum(win)}/{len(win)} recent")
+                if not meta_item.get("quarantined") and (cum_drift or win_drift):
+                    meta_item["quarantined"] = True
+                    meta_item["quarantine_reason"] = (f"shadow drift {dis}/{meta_item['shadow_n']}" if cum_drift
+                                                      else f"shadow window drift {sum(win)}/{len(win)} recent")
                     q_count += 1
             if targets:
                 self._save(emb, meta)
@@ -358,19 +358,19 @@ class PrefilterCache:
 
     def quarantine(self, key: str, reason: str = "manual") -> int:
         """Force-quarantine every entry with `key` (e.g. an operator reversed an unsafe cached
-        downgrade — pull it immediately, don't wait for the shadow bound). Idempotent; returns how many
+        downgrade - pull it immediately, don't wait for the shadow bound). Idempotent; returns how many
         entries were newly quarantined."""
-        n = 0
+        quarantined_count = 0
         with self._lock():
             emb, meta = self.load()
-            for m in meta:
-                if key and m.get("key", "") == key and not m.get("quarantined"):
-                    m["quarantined"] = True
-                    m["quarantine_reason"] = reason
-                    n += 1
-            if n:
+            for meta_item in meta:
+                if key and meta_item.get("key", "") == key and not meta_item.get("quarantined"):
+                    meta_item["quarantined"] = True
+                    meta_item["quarantine_reason"] = reason
+                    quarantined_count += 1
+            if quarantined_count:
                 self._save(emb, meta)
-        return n
+        return quarantined_count
 
     def _bump_monitor(self, sampled: int, agree: int, disagree: int, quarantined_now: int) -> None:
         """Advance the corpus-level shadow counters in monitor.json. MUST run inside self._lock() (the
@@ -389,8 +389,8 @@ class PrefilterCache:
         cur["quarantined_total"] += quarantined_now
         self.dir.mkdir(parents=True, exist_ok=True)
         tmp = str(path) + ".tmp"
-        with open(tmp, "w", encoding="utf-8") as f:
-            f.write(json.dumps(cur, indent=2))
+        with open(tmp, "w", encoding="utf-8") as fh:
+            fh.write(json.dumps(cur, indent=2))
         os.replace(tmp, path)
 
     def monitor_stats(self) -> dict:
@@ -403,7 +403,7 @@ class PrefilterCache:
             except Exception:                         # noqa: BLE001
                 pass
         _, meta = self.load()
-        q_now = sum(1 for m in meta if m.get("quarantined"))
+        q_now = sum(1 for meta_item in meta if meta_item.get("quarantined"))
         rate = cur["disagreements"] / cur["sampled"] if cur["sampled"] else 0.0
         return {"sampled": cur["sampled"], "agreements": cur["agreements"],
                 "disagreements": cur["disagreements"], "reuse_error_rate": rate,
@@ -413,8 +413,8 @@ class PrefilterCache:
     def stats(self) -> dict:
         emb, meta = self.load()
         actions = {}
-        for m in meta:
-            actions[m["action"]] = actions.get(m["action"], 0) + 1
+        for meta_item in meta:
+            actions[meta_item["action"]] = actions.get(meta_item["action"], 0) + 1
         return {"entries": int(emb.shape[0]),
                 "dim": int(emb.shape[1]) if emb.shape[0] else 0,
                 "by_action": actions,
@@ -426,8 +426,9 @@ class PrefilterCache:
 
 # --- automatic tuning (risk-controlled operating point) -------------------------------
 def _wilson_upper(k: int, n: int, confidence: float = 0.95) -> float:
-    """High-probability UPPER bound on a binomial rate (Wilson score interval) — the mirror of
-    calibrate._wilson_lower, bounding the reuse-ERROR rate from above. No scipy."""
+    """High-probability UPPER bound on a binomial rate (Wilson score interval) - the mirror of
+    calibrate._wilson_lower, bounding the reuse-ERROR rate from above. No scipy.
+    k: successes, n: trials."""
     if n == 0:
         return 1.0                       # no evidence -> assume the worst; never certify on n=0
     import math
@@ -445,24 +446,24 @@ def tune(dir_path, labels: Optional[List[dict]] = None, risk: float = 0.02,
          confidence: float = 0.95, thresholds: Optional[List[float]] = None,
          min_confs: Optional[List[float]] = None,
          embed_fn: Callable[[List[str]], Any] = None, write: bool = True) -> dict:
-    """Derive the cache's operating point from evidence instead of a hand-picked constant —
-    the same risk-controlled pattern as `prismpath calibrate` (τ), applied to the prefilter.
+    """Derive the cache's operating point from evidence instead of a hand-picked constant -
+    the same risk-controlled pattern as `prismpath calibrate` (tau), applied to the prefilter.
 
-    Sweeps a (threshold × min_conf) grid via the pure `match_arrays` gate and selects the point
+    Sweeps a (threshold x min_conf) grid via the pure `match_arrays` gate and selects the point
     that MAXIMIZES the auto-resolve rate among points whose reuse-error rate is certified
-    ≤ `risk` by a Wilson upper bound at `confidence` (ties -> the higher threshold — the safer
+    <= `risk` by a Wilson upper bound at `confidence` (ties -> the higher threshold - the safer
     of two equal operating points). Evaluation stream:
 
-      * `labels` given — replayed labeled decisions: rows of {"doc": str | "vec": [...],
+      * `labels` given - replayed labeled decisions: rows of {"doc": str | "vec": [...],
         "action": <oracle>} (e.g. emitted by the SOC adapter's shadow audit);
-      * `labels` None — leave-one-out over the corpus itself: each stored entry is matched
+      * `labels` None - leave-one-out over the corpus itself: each stored entry is matched
         against the corpus minus itself and its own action is the oracle. Zero extra data, but
-        it measures self-consistency — prefer real labels when you have them.
+        it measures self-consistency - prefer real labels when you have them.
 
     Writes `<corpus>/tuning.json` (chosen point + the full grid + provenance) unless
     `write=False`; `PrefilterCache` then picks it up automatically (precedence: explicit arg >
     env > tuning.json > default). Returns the same dict it writes. A grid with NO certified
-    point returns chosen=None with a warning — the honest answer is "don't enable reuse yet",
+    point returns chosen=None with a warning - the honest answer is "don't enable reuse yet",
     never a guessed threshold."""
     import time
     import numpy as np
@@ -477,16 +478,16 @@ def tune(dir_path, labels: Optional[List[dict]] = None, risk: float = 0.02,
     if labels is not None:
         for row in labels:
             if row.get("vec") is not None:
-                v = _normalize(np.asarray(row["vec"], dtype=np.float32))
+                vector = _normalize(np.asarray(row["vec"], dtype=np.float32))
             elif row.get("doc"):
-                v = _normalize(cache.embed([row["doc"]])[0])
+                vector = _normalize(cache.embed([row["doc"]])[0])
             else:
                 continue
-            stream.append((v, row.get("action"), None))
+            stream.append((vector, row.get("action"), None))
         source = "labels"
     else:
-        for i in range(n_corpus):
-            stream.append((emb[i], meta[i].get("action"), i))
+        for record_index in range(n_corpus):
+            stream.append((emb[record_index], meta[record_index].get("action"), record_index))
         source = "leave-one-out"
 
     grid = []
@@ -494,15 +495,15 @@ def tune(dir_path, labels: Optional[List[dict]] = None, risk: float = 0.02,
     for thr in sorted(thresholds):
         for mc in sorted(min_confs):
             hits = errors = 0
-            for v, oracle, mask in stream:
+            for vector, oracle, mask in stream:
                 if mask is None:
-                    hit, rec, _sim = match_arrays(v, emb, meta, thr, mc)
+                    hit, rec, _sim = match_arrays(vector, emb, meta, thr, mc)
                 else:                       # leave-one-out: hide the entry's own row
                     if n_corpus < 2:
                         continue
                     sel = np.arange(n_corpus) != mask
-                    hit, rec, _sim = match_arrays(v, emb[sel],
-                                                  [m for j, m in enumerate(meta) if j != mask],
+                    hit, rec, _sim = match_arrays(vector, emb[sel],
+                                                  [meta_item for idx_val, meta_item in enumerate(meta) if idx_val != mask],
                                                   thr, mc)
                 if not hit:
                     continue
@@ -513,17 +514,17 @@ def tune(dir_path, labels: Optional[List[dict]] = None, risk: float = 0.02,
             auto = hits / n_eval if n_eval else 0.0
             err_rate = errors / hits if hits else 0.0
             upper = _wilson_upper(errors, hits, confidence)
-            row = {"threshold": thr, "min_conf": mc, "n_eval": n_eval, "hits": hits,
-                   "errors": errors, "auto_resolve": round(auto, 4),
-                   "reuse_error": round(err_rate, 4), "err_upper": round(upper, 4),
-                   "certified": bool(hits and upper <= risk)}
-            grid.append(row)
-            if row["certified"]:
-                eligible.append(row)
+            grid_row = {"threshold": thr, "min_conf": mc, "n_eval": n_eval, "hits": hits,
+                        "errors": errors, "auto_resolve": round(auto, 4),
+                        "reuse_error": round(err_rate, 4), "err_upper": round(upper, 4),
+                        "certified": bool(hits and upper <= risk)}
+            grid.append(grid_row)
+            if grid_row["certified"]:
+                eligible.append(grid_row)
 
     chosen = None
     if eligible:
-        chosen = max(eligible, key=lambda r: (r["auto_resolve"], r["threshold"], r["min_conf"]))
+        chosen = max(eligible, key=lambda row_item: (row_item["auto_resolve"], row_item["threshold"], row_item["min_conf"]))
     out = {
         "chosen": {"threshold": chosen["threshold"], "min_conf": chosen["min_conf"],
                    "auto_resolve": chosen["auto_resolve"], "reuse_error": chosen["reuse_error"],
@@ -533,14 +534,14 @@ def tune(dir_path, labels: Optional[List[dict]] = None, risk: float = 0.02,
         "n_eval": len(stream), "corpus_entries": n_corpus,
         "grid": grid, "generated_at": time.time(),
         "warning": None if chosen else
-        f"no grid point's reuse-error upper bound clears risk={risk} — keep reuse off or "
+        f"no grid point's reuse-error upper bound clears risk={risk} - keep reuse off or "
         f"gather more labeled decisions (evidence n grows the certifiable region)",
     }
     if write:
         cache.dir.mkdir(parents=True, exist_ok=True)
         tmp = cache.dir / "tuning.json.tmp"
-        with open(tmp, "w") as f:
-            json.dump(out, f, indent=2)
+        with open(tmp, "w") as fh:
+            json.dump(out, fh, indent=2)
         os.replace(tmp, cache.dir / "tuning.json")
     return out
 
@@ -550,20 +551,20 @@ def _info(dir_path: str) -> None:
     cache = PrefilterCache(dir_path)
     print(json.dumps(cache.stats(), indent=2))
     _, meta = cache.load()
-    for m in meta[:20]:
-        flag = " QUARANTINED" if m.get("quarantined") else ""
-        print(f"  [{m['action']:8s} c={m['confidence']:.2f}] "
-              f"{m['key']:40s} {m['description'][:60]}{flag}")
+    for meta_item in meta[:20]:
+        flag = " QUARANTINED" if meta_item.get("quarantined") else ""
+        print(f"  [{meta_item['action']:8s} c={meta_item['confidence']:.2f}] "
+              f"{meta_item['key']:40s} {meta_item['description'][:60]}{flag}")
 
 
 def _monitor(dir_path: str) -> None:
     cache = PrefilterCache(dir_path)
     print(json.dumps(cache.monitor_stats(), indent=2))
     _, meta = cache.load()
-    for m in meta:
-        if m.get("quarantined"):
-            print(f"  quarantined [{m['action']:8s}] {m['key']:40s} "
-                  f"{m.get('quarantine_reason', '')}")
+    for meta_item in meta:
+        if meta_item.get("quarantined"):
+            print(f"  quarantined [{meta_item['action']:8s}] {meta_item['key']:40s} "
+                  f"{meta_item.get('quarantine_reason', '')}")
 
 
 def _tune_cli(argv: List[str]) -> None:
@@ -578,12 +579,13 @@ def _tune_cli(argv: List[str]) -> None:
     args = ap.parse_args(argv)
     labels = None
     if args.labels:
-        labels = [json.loads(l) for l in open(args.labels) if l.strip()]
+        with open(args.labels) as fh:
+            labels = [json.loads(line) for line in fh if line.strip()]
     out = tune(args.corpus, labels=labels, risk=args.risk)
-    slim = {k: v for k, v in out.items() if k != "grid"}
+    slim = {key: val for key, val in out.items() if key != "grid"}
     print(json.dumps(slim, indent=2))
     print(f"grid: {len(out['grid'])} points swept; "
-          f"{sum(1 for r in out['grid'] if r['certified'])} certified at risk<={args.risk}")
+          f"{sum(1 for row in out['grid'] if row['certified'])} certified at risk<={args.risk}")
 
 
 if __name__ == "__main__":

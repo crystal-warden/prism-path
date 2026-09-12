@@ -44,16 +44,16 @@ def _atom_reason(node) -> Optional[str]:
     if isinstance(node, ast.Name):
         return None                                        # bare field (scalar truthiness)
     if isinstance(node, ast.Constant):
-        return _R_CONSTANT                                 # `when True` — no field, not a row
+        return _R_CONSTANT                                 # `when True`: no field, not a row
     if isinstance(node, ast.Compare):
         if len(node.ops) != 1:
             return _R_CHAINED                              # defensive: is_level_m desugars chains
             #                                                first (SPEC §4.3), so this is unreachable
-            #                                                on that path — kept so a raw _classify
+            #                                                on that path - kept so a raw _classify
             #                                                call can't silently read only ops[0].
         left, op, right = node.left, node.ops[0], node.comparators[0]
         if not isinstance(op, _ORDER_OPS + _EQ_OPS + (ast.In, ast.NotIn)):
-            return _R_SYNTAX                               # `is`/`is not` — eval rejects them too
+            return _R_SYNTAX                               # `is`/`is not`: eval rejects them too
         # membership: field in/not in [scalar literals]
         if isinstance(op, (ast.In, ast.NotIn)):
             if not isinstance(left, ast.Name):
@@ -61,10 +61,10 @@ def _atom_reason(node) -> Optional[str]:
             if isinstance(right, ast.Constant) and isinstance(right.value, str):
                 return _R_SUBSTRING                        # string RHS = substring test
             if isinstance(right, (ast.List, ast.Tuple)):
-                for e in right.elts:
-                    if isinstance(e, (ast.List, ast.Tuple)):
+                for elt in right.elts:
+                    if isinstance(elt, (ast.List, ast.Tuple)):
                         return _R_NESTED
-                    if not _scalar_const(e):
+                    if not _scalar_const(elt):
                         return _R_NONLITERAL
                 return None
             return _R_NONLITERAL                           # membership in a runtime collection
@@ -87,28 +87,28 @@ def _desugar_chains(node):
     """`a < b < c` -> `a < b and b < c`, recursively (SPEC §4.3: tooling SHOULD desugar chained
     comparisons before classifying/compiling). Exact under the engine's semantics: operands are pure
     (names/constants, evaluated identically each time), every pairwise comparison is total, and BoolOp
-    evaluates all operands — so the desugared form cannot diverge from Python's chain evaluation on any
+    evaluates all operands - so the desugared form cannot diverge from Python's chain evaluation on any
     context. This is the ONE desugar both the classifier (`is_level_m`) and the PPT compiler
     (`prismpath-hw/ppt_compile`, which imports this) use, so they can never disagree about chains."""
     if isinstance(node, ast.BoolOp):
-        return ast.BoolOp(op=node.op, values=[_desugar_chains(v) for v in node.values])
+        return ast.BoolOp(op=node.op, values=[_desugar_chains(val) for val in node.values])
     if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.Not):
         return ast.UnaryOp(op=node.op, operand=_desugar_chains(node.operand))
     if isinstance(node, ast.Compare) and len(node.ops) > 1:
         operands = [node.left] + list(node.comparators)
         return ast.BoolOp(op=ast.And(), values=[
-            ast.Compare(left=operands[i], ops=[node.ops[i]], comparators=[operands[i + 1]])
-            for i in range(len(node.ops))])
+            ast.Compare(left=operands[index], ops=[node.ops[index]], comparators=[operands[index + 1]])
+            for index in range(len(node.ops))])
     return node
 
 
 def _classify(node) -> Optional[str]:
     """None if the whole expression is a boolean combination of Level M atoms; else a reason."""
     if isinstance(node, ast.BoolOp):
-        for v in node.values:
-            r = _classify(v)
-            if r is not None:
-                return r
+        for val in node.values:
+            reason = _classify(val)
+            if reason is not None:
+                return reason
         return None
     if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.Not):
         return _classify(node.operand)
@@ -123,7 +123,7 @@ def is_level_m(cond: str) -> Tuple[bool, Optional[str]]:
         if predicates.is_error(cond):
             expr = predicates.error_expr(cond)             # '' | 'when <expr>'
             if not expr:
-                return True, None                          # bare `on error` — a table default row
+                return True, None                          # bare `on error`: a table default row
             if not expr.lower().startswith("when "):
                 expr = "when " + expr
             return is_level_m(expr)
@@ -148,11 +148,11 @@ def level_m_report(graph) -> List[dict]:
         node = graph.nodes.get(name)
         if node is None:
             continue
-        for t, c in node.edges:
-            if not predicates.is_deterministic(c):
+        for target, condition in node.edges:
+            if not predicates.is_deterministic(condition):
                 continue
-            ok, reason = is_level_m(c)
-            out.append({"node": name, "target": t, "condition": c,
+            ok, reason = is_level_m(condition)
+            out.append({"node": name, "target": target, "condition": condition,
                         "level_m": ok, "reason": reason})
     return out
 
@@ -161,5 +161,5 @@ def flow_level_m(graph) -> Tuple[bool, List[dict]]:
     """SPEC §7: within P0, Level M marks flows whose deterministic edges are ALL in the
     fragment. Returns (all_in_fragment, non-member rows)."""
     rows = level_m_report(graph)
-    bad = [r for r in rows if not r["level_m"]]
+    bad = [row for row in rows if not row["level_m"]]
     return (not bad), bad

@@ -5,7 +5,7 @@
 A router maps (outcome, edges, instruction) -> RouteDecision(target, info). The Hybrid router
 is the point of this design: embeddings settle the confident transitions for free, and a
 one-shot LLM is consulted ONLY when the embedding decision is low-confidence (small top-1↔top-2
-margin or low absolute score) — keeping LLM calls rare while fixing the cases embeddings get
+margin or low absolute score) - keeping LLM calls rare while fixing the cases embeddings get
 wrong (negation, abstraction mismatch, near-ties).
 """
 from __future__ import annotations
@@ -33,7 +33,7 @@ class EmbeddingRouter:
         self._cache: OrderedDict[tuple, Any] = OrderedDict()
 
     def _cond_embs(self, edges):
-        key = tuple(c for _, c in edges)
+        key = tuple(condition for _, condition in edges)
         if key in self._cache:
             self._cache.move_to_end(key)
         else:
@@ -56,12 +56,12 @@ class EmbeddingRouter:
         margin = float(sims[order[0]] - sims[order[1]]) if len(order) > 1 else 1.0
         return RouteDecision(edges[top1][0], {
             "used": "embed", "score": float(sims[top1]), "margin": margin,
-            "sims": {t: float(s) for (t, _), s in zip(edges, sims)}})
+            "sims": {target: float(score) for (target, _), score in zip(edges, sims)}})
 
 
 class LockedEmbeddingRouter(EmbeddingRouter):
     """EmbeddingRouter that routes conditions against **committed vectors from a routing lockfile**
-    instead of embedding them live — so the condition side of every decision is bit-for-bit
+    instead of embedding them live - so the condition side of every decision is bit-for-bit
     reproducible across machines, installs, and embedder versions. The outcome is still embedded by
     the local embedder (which the lock's fingerprint verifies), and the recorded `margin`/`score`
     therefore reproduce exactly whenever the embedder matches the lock. See `prismpath.lockfile`."""
@@ -72,17 +72,17 @@ class LockedEmbeddingRouter(EmbeddingRouter):
     def _cond_embs(self, edges):
         import numpy as np
         out = []
-        for _, c in edges:
-            v = self._locked.get(c)
-            if v is None:
-                raise KeyError(f"condition not in lock: {c!r} — the flow changed; re-run `prismpath lock`")
-            out.append(v)
+        for _, condition in edges:
+            vec = self._locked.get(condition)
+            if vec is None:
+                raise KeyError(f"condition not in lock: {condition!r} - the flow changed; re-run `prismpath lock`")
+            out.append(vec)
         return np.asarray(out, dtype="float32")
 
     def route(self, outcome, edges, instruction="") -> RouteDecision:
-        d = super().route(outcome, edges, instruction)
-        d.info["locked"] = True
-        return d
+        route_decision = super().route(outcome, edges, instruction)
+        route_decision.info["locked"] = True
+        return route_decision
 
 
 class LLMRouter:
@@ -90,7 +90,7 @@ class LLMRouter:
         self.generate = generate_fn
 
     def route(self, outcome, edges, instruction="") -> RouteDecision:
-        opts = "\n".join(f"{i+1}. {cond}" for i, (_, cond) in enumerate(edges))
+        opts = "\n".join(f"{idx + 1}. {cond}" for idx, (_, cond) in enumerate(edges))
         prompt = (
             "You route a workflow. Given the current step and the outcome of the work, pick "
             "the ONE option that best matches what should happen next.\n\n"
@@ -99,8 +99,8 @@ class LLMRouter:
             f"Options:\n{opts}\n\n"
             "Reply with ONLY the number of the best option.")
         raw = self.generate(prompt)
-        m = re.search(r"\d+", raw)
-        idx = (int(m.group()) - 1) if m else 0
+        match = re.search(r"\d+", raw)
+        idx = (int(match.group()) - 1) if match else 0
         idx = max(0, min(idx, len(edges) - 1))
         return RouteDecision(edges[idx][0],
                              {"used": "llm", "raw": raw, "picked": idx + 1})
@@ -116,19 +116,19 @@ class HybridRouter:
 
     def route(self, outcome, edges, instruction="") -> RouteDecision:
         if len(edges) == 1:
-            # One target, so there is nothing for the LLM to disambiguate — but we still SCORE the
+            # One target, so there is nothing for the LLM to disambiguate - but we still SCORE the
             # lone edge (absolute similarity) so a `human_floor` can suspend a barely-matching
             # outcome instead of blindly taking the only edge. `used="single"` records the tier.
-            d = self.embed.route(outcome, edges, instruction)
-            d.info["used"] = "single"
-            return d
-        d = self.embed.route(outcome, edges, instruction)
-        confident = d.info["margin"] >= self.margin and d.info["score"] >= self.min_score
+            route_decision = self.embed.route(outcome, edges, instruction)
+            route_decision.info["used"] = "single"
+            return route_decision
+        route_decision = self.embed.route(outcome, edges, instruction)
+        confident = route_decision.info["margin"] >= self.margin and route_decision.info["score"] >= self.min_score
         if confident:
-            d.info["escalated"] = False
-            return d
+            route_decision.info["escalated"] = False
+            return route_decision
         # low confidence -> consult the LLM
-        ld = self.llm.route(outcome, edges, instruction)
-        ld.info.update({"escalated": True, "embed_would_pick": d.target,
-                        "embed_margin": d.info["margin"], "embed_score": d.info["score"]})
-        return ld
+        locked_decision = self.llm.route(outcome, edges, instruction)
+        locked_decision.info.update({"escalated": True, "embed_would_pick": route_decision.target,
+                        "embed_margin": route_decision.info["margin"], "embed_score": route_decision.info["score"]})
+        return locked_decision

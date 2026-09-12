@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
-"""flow_test.py — `prismpath test`: assert a flow's routing from a Markdown fixture, no LLM needed.
+"""flow_test.py: `prismpath test`: assert a flow's routing from a Markdown fixture, no LLM needed.
 
-Authors can't otherwise test a flow without running agents. Here the fixture is itself Markdown — a
-table of (node, example outcome, fields, expected edge) — executed against the REAL router's
+Authors can't otherwise test a flow without running agents. Here the fixture is itself Markdown: a
+table of (node, example outcome, fields, expected edge) - executed against the REAL router's
 deterministic and embedding tiers (never the LLM). The PM writes the scenarios; CI asserts the
 routing; every past mis-route becomes a regression case. Because each row is a (outcome -> edge)
 judgement, `--emit-labels` drops out labeled routing data for calibration for free.
@@ -46,18 +46,18 @@ class TestReport:
     results: List[CaseResult] = field(default_factory=list)
     @property
     def passed(self):
-        return sum(1 for r in self.results if r.ok)
+        return sum(1 for res in self.results if res.ok)
     @property
     def failed(self):
-        return sum(1 for r in self.results if not r.ok)
+        return sum(1 for res in self.results if not res.ok)
     @property
     def ok(self):
         return self.failed == 0 and bool(self.results)
 
 
 # --- fixture parsing --------------------------------------------------------------------
-def _coerce(v: str):
-    s = v.strip()
+def _coerce(val_str: str):
+    s = val_str.strip()
     low = s.lower()
     if low in ("true", "false"):
         return low == "true"
@@ -76,8 +76,8 @@ def _parse_fields(cell: str) -> dict:
     out = {}
     for part in re.split(r"[;,]", cell):
         if "=" in part:
-            k, v = part.split("=", 1)
-            out[k.strip()] = _coerce(v)
+            key, val = part.split("=", 1)
+            out[key.strip()] = _coerce(val)
     return out
 
 
@@ -88,26 +88,26 @@ def parse_tests(text: str) -> List[dict]:
         return []
 
     def cells(line):
-        return [c.strip() for c in line.strip().strip("|").split("|")]
+        return [cell_item.strip() for cell_item in line.strip().strip("|").split("|")]
 
-    header = [h.lower() for h in cells(rows[0])]
+    header = [hdr.lower() for hdr in cells(rows[0])]
     if "node" not in header or "expect" not in header:
         return []
     idx = {name: header.index(name) for name in header}
     cases = []
-    # skip the GFM separator row (|---|---|) only if present — never drop a data row.
+    # skip the GFM separator row (|---|---|) only if present - never drop a data row.
     body = rows[1:]
     if body and all(re.fullmatch(r":?-{2,}:?", cc) for cc in cells(body[0]) if cc):
         body = body[1:]
     for line in body:
-        c = cells(line)
-        if len(c) < len(header):
+        row_cells = cells(line)
+        if len(row_cells) < len(header):
             continue
         cases.append({
-            "node": c[idx["node"]],
-            "outcome": c[idx["outcome"]] if "outcome" in idx else "",
-            "fields": _parse_fields(c[idx["fields"]]) if "fields" in idx else {},
-            "expect": c[idx["expect"]],
+            "node": row_cells[idx["node"]],
+            "outcome": row_cells[idx["outcome"]] if "outcome" in idx else "",
+            "fields": _parse_fields(row_cells[idx["fields"]]) if "fields" in idx else {},
+            "expect": row_cells[idx["expect"]],
         })
     return cases
 
@@ -134,8 +134,8 @@ def _make_router(flow_path):
 def run_tests(flow_path, tests_path=None, router=None) -> TestReport:
     graph = parse_file(flow_path)
     tests_path = tests_path or default_tests_path(flow_path)
-    with open(tests_path, encoding="utf-8") as _f:
-        cases = parse_tests(_f.read())
+    with open(tests_path, encoding="utf-8") as file_handle:
+        cases = parse_tests(file_handle.read())
     report = TestReport()
     lazy_router = router
 
@@ -150,7 +150,7 @@ def run_tests(flow_path, tests_path=None, router=None) -> TestReport:
         if dt is not None:
             got, how = dt, "deterministic"
         else:
-            sem = [(t, c) for t, c in node.edges if predicates.is_semantic(c)]
+            sem = [(edge_target, edge_cond) for edge_target, edge_cond in node.edges if predicates.is_semantic(edge_cond)]
             if not sem:
                 report.results.append(CaseResult(case["node"], case["outcome"], case["expect"],
                                                  None, False, "stuck", "no edge matched"))
@@ -165,12 +165,12 @@ def run_tests(flow_path, tests_path=None, router=None) -> TestReport:
 
 def emit_labels(report: TestReport, flow_name: str, path) -> int:
     """Write each case as a labeled routing record (the Sprint-0 / Area-4 label format)."""
-    n = 0
-    with open(path, "a", encoding="utf-8") as f:
-        for r in report.results:
-            f.write(json.dumps({
-                "flow": flow_name, "node": r.node, "outcome_text": r.outcome,
-                "chosen": r.got, "label": r.expect, "label_source": "flow_test",
-                "mechanism": r.how, "correct": r.ok}) + "\n")
-            n += 1
-    return n
+    count = 0
+    with open(path, "a", encoding="utf-8") as file_handle:
+        for result_item in report.results:
+            file_handle.write(json.dumps({
+                "flow": flow_name, "node": result_item.node, "outcome_text": result_item.outcome,
+                "chosen": result_item.got, "label": result_item.expect, "label_source": "flow_test",
+                "mechanism": result_item.how, "correct": result_item.ok}) + "\n")
+            count += 1
+    return count

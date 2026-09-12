@@ -1,17 +1,17 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
-"""model_check.py — Level M fragment classification + bounded model checking (`prismpath verify`).
+"""model_check.py: Level M fragment classification + bounded model checking (`prismpath verify`).
 
 Two capabilities over the decidable heart of a flow (SPEC §4.3, §7):
 
-1. **Level M membership** — per-edge classification into the match-action fragment: boolean
+1. **Level M membership**: per-edge classification into the match-action fragment: boolean
    combinations of `field OP constant`, `field in [scalar literals]`, and bare-`field` atoms.
    A P0 flow whose deterministic edges are all in the fragment compiles to table-driven
    targets; SPEC §4.3 says linters SHOULD report membership, and this module is that report.
 
-2. **Reachability / invariant checking** — "can node X ever be reached (under assumption Y)?",
+2. **Reachability / invariant checking**: "can node X ever be reached (under assumption Y)?",
    answered by explicit-state search where the *worker is adversarial*: at every node it may
-   emit any fields. Routing follows the engine exactly — deterministic edges first, in document
+   emit any fields. Routing follows the engine exactly - deterministic edges first, in document
    order, first true wins (an edge is takeable iff `assume ∧ pred_i ∧ ¬pred_1..i-1` is
    satisfiable); semantic edges only when no deterministic edge can match.
 
@@ -20,12 +20,12 @@ Two capabilities over the decidable heart of a flow (SPEC §4.3, §7):
    predicates the candidate partition is exhaustive and verdicts are exact; anything outside the
    fragment is *over-approximated* (treated as possibly-takeable), which keeps UNREACHABLE
    verdicts sound. Witness paths are labeled `certain` (every hop proven with a concrete
-   example outcome) or `may` (some hop crosses an over-approximated edge — a semantic edge, an
+   example outcome) or `may` (some hop crosses an over-approximated edge - a semantic edge, an
    error raise, or an event resume).
 
    `visits` counters are modeled exactly, with saturation at (largest compared constant + 2),
    which makes the state space finite: when the search exhausts it, UNREACHABLE holds for **all**
-   bounds, not just the explored depth. Human `choose=` overrides are out of scope — they bypass
+   bounds, not just the explored depth. Human `choose=` overrides are out of scope - they bypass
    routing by design and are recorded as overrides, not decisions this checker predicts.
 """
 from __future__ import annotations
@@ -45,7 +45,7 @@ from prismpath.kernel.parser import reachable as _reachable
 from prismpath.kernel.predicates import expr_ast as _parse
 
 def capability_report(graph) -> dict:
-    """Which targets a flow compiles to, and — for the ones it doesn't — the edges that push it out.
+    """Which targets a flow compiles to, and - for the ones it doesn't - the edges that push it out.
     Composes flow_level_m with a reachable-semantic-edge scan: a portable, verifiable answer to
     "where does this flow run?", turning "runs everywhere" into a per-flow, machine-checked matrix."""
     reach = _reachable(graph)
@@ -54,9 +54,9 @@ def capability_report(graph) -> dict:
         node = graph.nodes.get(name)
         if node is None:
             continue
-        for t, c in node.edges:
-            if predicates.is_semantic(c):
-                semantic.append({"node": name, "target": t, "condition": c})
+        for target, condition in node.edges:
+            if predicates.is_semantic(condition):
+                semantic.append({"node": name, "target": target, "condition": condition})
     p0 = not semantic
     lm_ok, lm_bad = flow_level_m(graph)
     hw_ok = p0 and lm_ok
@@ -65,13 +65,13 @@ def capability_report(graph) -> dict:
         "portable": {                                   # JS / Rust / Go portable kernels
             "status": "yes" if p0 else "needs-lockfile",
             "reason": None if p0 else
-                f"{len(semantic)} reachable semantic edge(s) — P0 runs unconditionally; lock them for P1",
+                f"{len(semantic)} reachable semantic edge(s) \u2014 P0 runs unconditionally; lock them for P1",
             "blocking_edges": [] if p0 else semantic,
         },
         "level_m_hardware": {                           # FPGA C-table (and the future eBPF target)
             "status": "yes" if hw_ok else "no",
             "reason": None if hw_ok else (
-                f"{len(semantic)} reachable semantic edge(s) — not deterministic" if not p0
+                f"{len(semantic)} reachable semantic edge(s) \u2014 not deterministic" if not p0
                 else f"{len(lm_bad)} deterministic edge(s) outside the match-action fragment"),
             "blocking_edges": semantic if not p0 else ([] if hw_ok else lm_bad),
         },
@@ -86,36 +86,36 @@ _FRESH_STR = "\x00fresh"          # a string equal to no authored literal
 
 def _constants(node) -> list:
     out = []
-    for n in ast.walk(node):
-        if isinstance(n, ast.Constant):
-            out.append(n.value)
+    for ast_node in ast.walk(node):
+        if isinstance(ast_node, ast.Constant):
+            out.append(ast_node.value)
     return out
 
 
 def _fields_of(node) -> set:
-    return {n.id for n in ast.walk(node) if isinstance(n, ast.Name)}
+    return {ast_node.id for ast_node in ast.walk(node) if isinstance(ast_node, ast.Name)}
 
 
 def _candidates(consts: list) -> list:
     """A finite candidate set that hits every truth-region a Level M atom set can carve out of
     one field's value space: each mentioned constant, numeric neighbours + midpoints (for strict
     /non-strict interval boundaries), the falsy/truthy poles, a fresh string, and None (the
-    missing-field case — central to the totality rule)."""
-    nums = sorted({c for c in consts if isinstance(c, (int, float)) and not isinstance(c, bool)})
+    missing-field case - central to the totality rule)."""
+    nums = sorted({constant for constant in consts if isinstance(constant, (int, float)) and not isinstance(constant, bool)})
     cands: list = [None, True, False, 0, 1, "", _FRESH_STR]
-    for c in consts:
-        cands.append(c)
-    for n in nums:
-        cands.extend([n - 1, n + 1])
+    for constant in consts:
+        cands.append(constant)
+    for num in nums:
+        cands.extend([num - 1, num + 1])
     for a, b in zip(nums, nums[1:]):
         cands.append((a + b) / 2)
-    # dedupe preserving order (values may repeat; bool/int collisions are fine — both present)
+    # dedupe preserving order (values may repeat; bool/int collisions are fine - both present)
     seen, out = set(), []
-    for v in cands:
-        k = (type(v).__name__, v if not isinstance(v, float) or v == v else "nan")
-        if k not in seen:
-            seen.add(k)
-            out.append(v)
+    for val in cands:
+        val_key = (type(val).__name__, val if not isinstance(val, float) or val == val else "nan")
+        if val_key not in seen:
+            seen.add(val_key)
+            out.append(val)
     return out
 
 
@@ -147,18 +147,18 @@ class _NodeSat:
 
 def _node_sat(graph, name: str, assume: Optional[str]) -> _NodeSat:
     node = graph.nodes[name]
-    det = [(i, t, c) for i, (t, c) in enumerate(node.edges) if predicates.is_deterministic(c)]
+    det = [(index, target, condition) for index, (target, condition) in enumerate(node.edges) if predicates.is_deterministic(condition)]
     consts: list = []
     fields: set = set()
     complete = True
-    exprs = [c for _, _, c in det] + ([assume] if assume else [])
-    for cond in exprs:
-        tree = _parse(cond)
+    exprs = [condition for _, _, condition in det] + ([assume] if assume else [])
+    for condition in exprs:
+        tree = _parse(condition)
         if tree is None:
             continue                        # keyword catch-alls carry no fields/constants
         consts.extend(_constants(tree))
         fields |= _fields_of(tree)
-        ok, _ = is_level_m(cond)
+        ok, _ = is_level_m(condition)
         if not ok:
             complete = False                # partition may miss regions -> over-approximate
     fields.discard("visits")                # modeled concretely by the search
@@ -190,20 +190,20 @@ def _edge_outcomes(sat: _NodeSat, assume: Optional[str], visits: int):
             except predicates.PredicateError:
                 continue
         matched = None
-        for idx, _t, cond in sat.det:
+        for index, _target, condition in sat.det:
             try:
-                hit = predicates.eval_condition(cond, ctx)
+                hit = predicates.eval_condition(condition, ctx)
             except predicates.PredicateError:
                 hit = False                 # unsafe predicate never matches (engine parity)
             if hit:
-                matched = idx
+                matched = index
                 break
         if matched is None:
             if none_match is None:
-                none_match = {k: v for k, v in ctx.items() if k != "visits"}
+                none_match = {key: val for key, val in ctx.items() if key != "visits"}
         elif matched not in takeable:
-            takeable[matched] = {k: v for k, v in ctx.items() if k != "visits"}
-    if not saw_ctx:                          # product cap tripped — nothing enumerated
+            takeable[matched] = {key: val for key, val in ctx.items() if key != "visits"}
+    if not saw_ctx:                          # product cap tripped - nothing enumerated
         return {}, None
     if sat.complete and none_match is None:
         none_match = False
@@ -236,9 +236,9 @@ class ReachResult:
     def as_dict(self) -> dict:
         return {"node": self.node, "reachable": self.reachable, "proven": self.proven,
                 "depth": self.depth,
-                "witness": [{"node": s.node, "target": s.target, "condition": s.condition,
-                             "via": s.via, "certainty": s.certainty, "example": s.example}
-                            for s in self.witness]}
+                "witness": [{"node": step.node, "target": step.target, "condition": step.condition,
+                             "via": step.via, "certainty": step.certainty, "example": step.example}
+                            for step in self.witness]}
 
 
 def _visit_caps(graph) -> Dict[str, int]:
@@ -248,10 +248,10 @@ def _visit_caps(graph) -> Dict[str, int]:
     caps: Dict[str, int] = {}
     for name, node in graph.nodes.items():
         best = None
-        for _t, c in node.edges:
-            cond = c
-            if predicates.is_error(c):
-                expr = predicates.error_expr(c)            # '' | 'when <expr>' | '<expr>'
+        for _target, condition in node.edges:
+            cond = condition
+            if predicates.is_error(condition):
+                expr = predicates.error_expr(condition)            # '' | 'when <expr>' | '<expr>'
                 if not expr:
                     continue
                 cond = expr if expr.lower().startswith("when ") else "when " + expr
@@ -260,10 +260,10 @@ def _visit_caps(graph) -> Dict[str, int]:
                 continue
             if "visits" not in _fields_of(tree):
                 continue
-            nums = [v for v in _constants(tree) if isinstance(v, (int, float))
-                    and not isinstance(v, bool)]
-            m = max(nums) if nums else 0
-            best = max(best or 0, int(m))
+            nums = [val for val in _constants(tree) if isinstance(val, (int, float))
+                    and not isinstance(val, bool)]
+            max_val = max(nums) if nums else 0
+            best = max(best or 0, int(max_val))
         if best is not None:
             caps[name] = best + 2
     return caps
@@ -282,9 +282,9 @@ def check_reach(graph, targets: List[str], assume: Optional[str] = None,
     def bump(counts: tuple, node: str) -> tuple:
         if node not in caps:
             return counts
-        d = dict(counts)
-        d[node] = min(d.get(node, 0) + 1, caps[node])
-        return tuple(sorted(d.items()))
+        counts_dict = dict(counts)
+        counts_dict[node] = min(counts_dict.get(node, 0) + 1, caps[node])
+        return tuple(sorted(counts_dict.items()))
 
     start_state = (graph.start, bump((), graph.start))
     # state -> best certainty seen; parents for witness reconstruction
@@ -302,34 +302,34 @@ def check_reach(graph, targets: List[str], assume: Optional[str] = None,
             continue
         node = graph.nodes.get(node_name)
         if node is None or not node.edges:
-            continue                        # terminal (or dangling target — analysis's problem)
+            continue                        # terminal (or dangling target - analysis's problem)
         visits = dict(counts).get(node_name, 1)
         sat = sats[node_name]
         takeable, none_match = _edge_outcomes(sat, assume, visits)
         my_cert = best[state]
 
         moves: List[Tuple[int, Step]] = []
-        for idx, ex in takeable.items():
-            t, c = node.edges[idx]
-            moves.append((idx, Step(node_name, t, c, "deterministic", my_cert, ex)))
+        for index, example_ctx in takeable.items():
+            target, condition = node.edges[index]
+            moves.append((index, Step(node_name, target, condition, "deterministic", my_cert, example_ctx)))
         if not sat.complete:
             # over-approximation: any det edge we couldn't prove takeable might still be
-            for idx, t, c in sat.det:
-                if idx not in takeable:
-                    moves.append((idx, Step(node_name, t, c, "deterministic", MAY, None)))
+            for index, target, condition in sat.det:
+                if index not in takeable:
+                    moves.append((index, Step(node_name, target, condition, "deterministic", MAY, None)))
         if none_match is not False:         # the deterministic tier can fail -> semantic tier
-            for i, (t, c) in enumerate(node.edges):
-                if predicates.is_semantic(c):
-                    moves.append((i, Step(node_name, t, c, "semantic", MAY,
+            for index, (target, condition) in enumerate(node.edges):
+                if predicates.is_semantic(condition):
+                    moves.append((index, Step(node_name, target, condition, "semantic", MAY,
                                           none_match if isinstance(none_match, dict) else None)))
         if include_errors:
-            for i, (t, c) in enumerate(node.edges):
-                if predicates.is_error(c):
-                    moves.append((i, Step(node_name, t, c, "error", MAY, None)))
+            for index, (target, condition) in enumerate(node.edges):
+                if predicates.is_error(condition):
+                    moves.append((index, Step(node_name, target, condition, "error", MAY, None)))
         if include_events:
-            for i, (t, c) in enumerate(node.edges):
-                if predicates.is_event(c):
-                    moves.append((i, Step(node_name, t, c, "event", MAY, None)))
+            for index, (target, condition) in enumerate(node.edges):
+                if predicates.is_event(condition):
+                    moves.append((index, Step(node_name, target, condition, "event", MAY, None)))
 
         for _idx, step in moves:
             if step.target not in graph.nodes:
@@ -346,11 +346,11 @@ def check_reach(graph, targets: List[str], assume: Optional[str] = None,
 
     results: Dict[str, ReachResult] = {}
     for target in targets:
-        hits = [(s, c) for s, c in best.items() if s[0] == target]
+        hits = [(state_item, cert_val) for state_item, cert_val in best.items() if state_item[0] == target]
         if not hits:
             results[target] = ReachResult(target, "no", proven=exhausted, depth=None)
             continue
-        cert_hit = next((s for s, c in hits if c == CERTAIN), None)
+        cert_hit = next((state_item for state_item, cert_val in hits if cert_val == CERTAIN), None)
         state = cert_hit or hits[0][0]
         verdict = "yes" if cert_hit else "may"
         # reconstruct the witness
@@ -369,45 +369,45 @@ def check_reach(graph, targets: List[str], assume: Optional[str] = None,
 # ------------------------------------------------------------------ CLI (`prismpath verify`)
 
 def add_parser(subparsers) -> None:
-    p = subparsers.add_parser(
+    verify_parser = subparsers.add_parser(
         'verify', help='Bounded model checking over the decidable tiers: can a node be reached '
                        '(under an assumption)? Exact over Level M; sound over-approximation '
                        'outside it. No model, no execution.')
-    p.add_argument('flow_md', type=str, help='Path to the flow markdown file')
-    p.add_argument('--reach', action='append', default=[], metavar='NODE',
-                   help='assert NODE is reachable (exit 1 if not); repeatable')
-    p.add_argument('--forbid', action='append', default=[], metavar='NODE',
-                   help='assert NODE can NEVER be reached (exit 1 if reachable or may-reachable); '
-                        'repeatable')
-    p.add_argument('--assume', default=None, metavar='EXPR',
-                   help='a `when`-style constraint every worker outcome satisfies, '
-                        'e.g. --assume "amount <= 500"')
-    p.add_argument('--bound', type=int, default=25,
-                   help='search depth limit in steps (default 25, the engine max_steps default)')
-    p.add_argument('--no-errors', action='store_true',
-                   help='exclude error-tier paths (assume workers never raise)')
-    p.add_argument('--no-events', action='store_true',
-                   help='exclude event-tier paths (assume suspended runs are never resumed)')
-    p.add_argument('--level-m', action='store_true',
-                   help='also report per-edge match-action fragment membership (SPEC §4.3)')
-    p.add_argument('--json', action='store_true', help='machine-readable output')
-    p.set_defaults(func=verify_cmd)
+    verify_parser.add_argument('flow_md', type=str, help='Path to the flow markdown file')
+    verify_parser.add_argument('--reach', action='append', default=[], metavar='NODE',
+                               help='assert NODE is reachable (exit 1 if not); repeatable')
+    verify_parser.add_argument('--forbid', action='append', default=[], metavar='NODE',
+                               help='assert NODE can NEVER be reached (exit 1 if reachable or may-reachable); '
+                                    'repeatable')
+    verify_parser.add_argument('--assume', default=None, metavar='EXPR',
+                               help='a `when`-style constraint every worker outcome satisfies, '
+                                    'e.g. --assume "amount <= 500"')
+    verify_parser.add_argument('--bound', type=int, default=25,
+                               help='search depth limit in steps (default 25, the engine max_steps default)')
+    verify_parser.add_argument('--no-errors', action='store_true',
+                               help='exclude error-tier paths (assume workers never raise)')
+    verify_parser.add_argument('--no-events', action='store_true',
+                               help='exclude event-tier paths (assume suspended runs are never resumed)')
+    verify_parser.add_argument('--level-m', action='store_true',
+                               help='also report per-edge match-action fragment membership (SPEC §4.3)')
+    verify_parser.add_argument('--json', action='store_true', help='machine-readable output')
+    verify_parser.set_defaults(func=verify_cmd)
 
-    cp = subparsers.add_parser(
+    capability_parser = subparsers.add_parser(
         'capability', help='Report which targets a flow compiles to (python / portable js-rust-go / '
                            'Level M hardware) and, for the ones it does not, the blocking edges.')
-    cp.add_argument('flow_md', type=str, help='Path to the flow markdown file')
-    cp.add_argument('--json', action='store_true', help='machine-readable output')
-    cp.set_defaults(func=capability_cmd)
+    capability_parser.add_argument('flow_md', type=str, help='Path to the flow markdown file')
+    capability_parser.add_argument('--json', action='store_true', help='machine-readable output')
+    capability_parser.set_defaults(func=capability_cmd)
 
-    xp = subparsers.add_parser(
+    context_parser = subparsers.add_parser(
         'context', help='Emit the verified facts PrismPath can PROVE about a flow (nodes, edges, '
                         'declared fields, reachability, Level M, capability) as grounding for an '
                         'agent authoring or editing it.')
-    xp.add_argument('flow_md', type=str, help='Path to the flow markdown file')
-    xp.add_argument('--json', action='store_true', help='machine-readable output')
-    xp.set_defaults(func=lambda a: __import__('prismpath.flow_context', fromlist=['context_cmd'])
-                    .context_cmd(a))
+    context_parser.add_argument('flow_md', type=str, help='Path to the flow markdown file')
+    context_parser.add_argument('--json', action='store_true', help='machine-readable output')
+    context_parser.set_defaults(func=lambda args: __import__('prismpath.flow_context', fromlist=['context_cmd'])
+                    .context_cmd(args))
 
 
 def verify_cmd(args) -> int:
@@ -418,16 +418,16 @@ def verify_cmd(args) -> int:
                           include_errors=not args.no_errors,
                           include_events=not args.no_events)
     ok = True
-    for n in args.reach:
-        if results[n].reachable == "no":
+    for node_name in args.reach:
+        if results[node_name].reachable == "no":
             ok = False
-    for n in args.forbid:
-        if results[n].reachable != "no":
+    for node_name in args.forbid:
+        if results[node_name].reachable != "no":
             ok = False
 
     lm_all, lm_bad = flow_level_m(graph)
     payload = {"ok": ok, "assume": args.assume, "bound": args.bound,
-               "results": {n: r.as_dict() for n, r in results.items()},
+               "results": {node_name: res.as_dict() for node_name, res in results.items()},
                "level_m": {"flow": lm_all, "non_member_edges": lm_bad}
                if args.level_m else None}
     if args.json:
@@ -435,27 +435,27 @@ def verify_cmd(args) -> int:
         return 0 if ok else 1
 
     for name in targets:
-        r = results[name]
-        mark = {"yes": "●", "may": "◐", "no": "○"}[r.reachable]
-        label = {"yes": "REACHABLE", "may": "MAY-REACH", "no": "UNREACHABLE"}[r.reachable]
-        proof = " (proven for all bounds)" if r.reachable == "no" and r.proven else \
-                (" (within bound only)" if r.reachable == "no" else "")
+        res = results[name]
+        mark = {"yes": "●", "may": "◐", "no": "○"}[res.reachable]
+        label = {"yes": "REACHABLE", "may": "MAY-REACH", "no": "UNREACHABLE"}[res.reachable]
+        proof = " (proven for all bounds)" if res.reachable == "no" and res.proven else \
+                (" (within bound only)" if res.reachable == "no" else "")
         flag = ""
-        if name in args.forbid and r.reachable != "no":
+        if name in args.forbid and res.reachable != "no":
             flag = "  ✗ FORBIDDEN"
-        if name in args.reach and r.reachable == "no":
+        if name in args.reach and res.reachable == "no":
             flag = "  ✗ REQUIRED"
         print(f"  {mark} {name}: {label}{proof}{flag}")
-        for s in r.witness:
-            ex = f"  e.g. {s.example}" if s.example else ""
-            print(f"      {s.node} -> {s.target}  [{s.via}, {s.certainty}] {s.condition!r}{ex}")
+        for step in res.witness:
+            example_str = f"  e.g. {step.example}" if step.example else ""
+            print(f"      {step.node} -> {step.target}  [{step.via}, {step.certainty}] {step.condition!r}{example_str}")
     if args.level_m:
         if lm_all:
             print("  ▦ Level M: every deterministic edge is in the match-action fragment")
         else:
             print(f"  ▦ Level M: {len(lm_bad)} edge(s) outside the fragment:")
-            for r in lm_bad:
-                print(f"      [{r['node']}] -> {r['target']}  {r['condition']!r}  ({r['reason']})")
+            for bad_item in lm_bad:
+                print(f"      [{bad_item['node']}] -> {bad_item['target']}  {bad_item['condition']!r}  ({bad_item['reason']})")
     print(f"  {'✅ verified' if ok else '✗ verification failed'}")
     return 0 if ok else 1
 
@@ -473,9 +473,9 @@ def capability_cmd(args) -> int:
     for key, tgt in rep["targets"].items():
         line = f"  {mark.get(tgt['status'], '?')} {names.get(key, key):34} {tgt['status']}"
         if tgt["reason"]:
-            line += f"  — {tgt['reason']}"
+            line += f"  - {tgt['reason']}"
         print(line)
-        for e in tgt.get("blocking_edges", []):
-            extra = f"  ({e['reason']})" if e.get("reason") else ""
-            print(f"        · {e['node']} -> {e['target']}: {e['condition']}{extra}")
+        for edge in tgt.get("blocking_edges", []):
+            extra = f"  ({edge['reason']})" if edge.get("reason") else ""
+            print(f"        · {edge['node']} -> {edge['target']}: {edge['condition']}{extra}")
     return 0
