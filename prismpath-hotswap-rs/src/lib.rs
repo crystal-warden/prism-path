@@ -141,7 +141,7 @@ pub fn validate_image(data: &[u8], caps: Option<&BTreeMap<String, u64>>) -> (boo
         for key in ["atoms", "nodes", "edges", "prog_words", "max_steps", "max_stack"] {
             let cap = caps.get(key).copied().unwrap_or_else(|| defaults[key]);
             if h.count(key) > cap {
-                reasons.push(format!("envelope:cap-exceeded:{key}"));
+                reasons.push(format!("image:caps-exceeded:{key}"));
             }
         }
     }

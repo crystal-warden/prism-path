@@ -9,6 +9,7 @@ Covers:
 - Density property: cause 0 encodes to symbol 0 / wire integer 1 ("11"), smallest possible.
 - Cause lookup flexibility: passing cause as name string ("route:stuck") or integer code.
 - Structural rejections: truncated frames, field mismatch, out-of-range cause codes.
+- The decode result's two halves: the carried cause code and the refusal cause, named apart.
 """
 import json
 import sys
@@ -54,7 +55,7 @@ def test_conformance_vectors_from_fixture():
             prev_node=fields["prev_node"],
             event=fields["event"],
             next_node=fields["next_node"],
-            cause_val=fields["cause"],
+            cause_code=fields["cause"],
         )
         assert syms == expected_syms, f"{vec['name']}: symbols {syms} != {expected_syms}"
 
@@ -66,7 +67,7 @@ def test_conformance_vectors_from_fixture():
             prev_node=fields["prev_node"],
             event=fields["event"],
             next_node=fields["next_node"],
-            cause_val=fields["cause"],
+            cause_code=fields["cause"],
         )
         assert bits == expected_bits, f"{vec['name']}: bits {bits} != {expected_bits}"
 
@@ -75,13 +76,13 @@ def test_conformance_vectors_from_fixture():
             prev_node=fields["prev_node"],
             event=fields["event"],
             next_node=fields["next_node"],
-            cause_val=fields["cause"],
+            cause_code=fields["cause"],
         )
         assert frame.hex() == expected_hex, f"{vec['name']}: hex {frame.hex()} != {expected_hex}"
 
         # Round trip test
-        decoded, status = decode_receipt(frame)
-        assert status == OK
+        decoded, refusal_cause = decode_receipt(frame)
+        assert refusal_cause == OK
         assert decoded is not None
         assert decoded["cause"] == fields["cause"]
         assert decoded["event"] == fields["event"]
@@ -96,32 +97,32 @@ def test_conformance_vectors_from_fixture():
 
 def test_cause_zero_density():
     """Cause 0 (clean decision) encodes as wire int 1 -> '11' (2 bits), densest symbol."""
-    syms = encode_receipt_symbols(seq=1, prev_node=0, event=0, next_node=0, cause_val=0)
+    syms = encode_receipt_symbols(seq=1, prev_node=0, event=0, next_node=0, cause_code=0)
     assert syms[0] == 0
-    bits = encode_receipt_bits(seq=1, prev_node=0, event=0, next_node=0, cause_val=0)
+    bits = encode_receipt_bits(seq=1, prev_node=0, event=0, next_node=0, cause_code=0)
     assert bits.startswith("11")  # First field 'cause' is '11'
 
 
 def test_encode_with_cause_name_string():
-    frame_code = encode_receipt(seq=1, prev_node=0, event=2, next_node=3, cause_val=36)
-    frame_name = encode_receipt(seq=1, prev_node=0, event=2, next_node=3, cause_val="route:stuck")
+    frame_code = encode_receipt(seq=1, prev_node=0, event=2, next_node=3, cause_code=36)
+    frame_name = encode_receipt(seq=1, prev_node=0, event=2, next_node=3, cause_code="route:stuck")
     assert frame_code == frame_name
 
-    decoded, status = decode_receipt(frame_name)
-    assert status == OK
+    decoded, refusal_cause = decode_receipt(frame_name)
+    assert refusal_cause == OK
     assert decoded["cause"] == 36
     assert decoded["cause_name"] == "route:stuck"
 
 
 def test_encode_validation_raises():
     with pytest.raises(ValueError):
-        encode_receipt(seq=1, prev_node=0, event=0, next_node=0, cause_val=256)
+        encode_receipt(seq=1, prev_node=0, event=0, next_node=0, cause_code=256)
     with pytest.raises(ValueError):
-        encode_receipt(seq=1, prev_node=0, event=0, next_node=0, cause_val=-1)
+        encode_receipt(seq=1, prev_node=0, event=0, next_node=0, cause_code=-1)
     with pytest.raises(ValueError):
-        encode_receipt(seq=1, prev_node=0, event=0, next_node=0, cause_val="invalid_name")
+        encode_receipt(seq=1, prev_node=0, event=0, next_node=0, cause_code="invalid_name")
     with pytest.raises(ValueError):
-        encode_receipt(seq=-1, prev_node=0, event=0, next_node=0, cause_val=0)
+        encode_receipt(seq=-1, prev_node=0, event=0, next_node=0, cause_code=0)
 
 
 def test_decode_rejections():
@@ -146,6 +147,18 @@ def test_decode_out_of_range_cause():
     bits = zeck.encode_stream(wire_ints)
     frame = packed.pack(bits, 8)
 
-    decoded, status = decode_receipt(frame)
+    decoded, refusal_cause = decode_receipt(frame)
     assert decoded is None
-    assert status == RECEIPT_INVALID_CAUSE
+    assert refusal_cause == RECEIPT_INVALID_CAUSE
+
+
+def test_decode_names_the_two_halves_apart():
+    """The u8 the frame carried and the string saying why a decode was refused are different
+    things that used to share the word cause. Callers that unpack a plain pair still work."""
+    frame = encode_receipt(seq=1, prev_node=0, event=2, next_node=3, cause_code="route:stuck")
+    decoded = decode_receipt(frame)
+    assert decoded.refusal_cause == OK
+    assert decoded.receipt["cause"] == 36
+    assert decoded.receipt["cause_name"] == "route:stuck"
+    assert tuple(decoded) == (decoded.receipt, decoded.refusal_cause)
+    assert decode_receipt(b"").refusal_cause == RECEIPT_TRUNCATED

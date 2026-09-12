@@ -9,8 +9,10 @@ certified image hash stays exactly what the FPGA/eBPF evidence rows cite.
 
 Crypto is Ed25519 via the `cryptography` library, an optional extra (`pip install
 prismpath[signing]`) with loud absence: verification unavailable -> refuse with the install
-message, never fall through (the otel.py pattern). All verdicts are `(ok, [stable-reason])`
-tuples so tests and audit rows pin exact failure classes.
+message, never fall through (the otel.py pattern). All checks return `(ok, [cause-name])`
+tuples, every name a row in the cause registry (prismpath/kernel/causes.py), so tests and audit
+rows pin exact failure classes. A parameterized check appends a `:<detail>` suffix to its
+registered name; the registry row is the part before that suffix.
 """
 from __future__ import annotations
 
@@ -131,7 +133,7 @@ def validate_image(data: bytes, caps: Optional[dict] = None) -> Tuple[bool, List
                              ("prog_words", "prog_words"), ("max_steps", "max_steps"),
                              ("max_stack", "max_stack")):
             if h[key] > caps.get(cap_key, DEFAULT_CAPS[cap_key]):
-                reasons.append(f"envelope:cap-exceeded:{cap_key}")
+                reasons.append(f"image:caps-exceeded:{cap_key}")   # cause 16, the registered name
 
     off = HEADER.size
     for i in range(h["atoms"]):

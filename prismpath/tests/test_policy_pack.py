@@ -193,7 +193,7 @@ def test_envelope_rejects_id_mismatch(pack, envelope):
 def test_envelope_rejects_each_cap_exceeded(pack, envelope, cap):
     tight = dict(envelope, caps={**envelope["caps"], cap: 0})
     ok, reasons = pp.check_envelope(pack["manifest"], Path(pack["ppt"]).read_bytes(), tight)
-    assert not ok and f"envelope:cap-exceeded:{cap}" in reasons
+    assert not ok and f"image:caps-exceeded:{cap}" in reasons
 
 
 # ---------------------------------------------------------------- packing profile (spiral sidecar)

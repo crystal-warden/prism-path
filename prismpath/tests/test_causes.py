@@ -7,6 +7,7 @@ the code it describes."""
 import re
 from pathlib import Path
 
+from prismpath.hotswap import policy_pack
 from prismpath.kernel import causes
 
 REPO = Path(__file__).resolve().parents[2]
@@ -43,19 +44,42 @@ def test_registry_frozen():
     """Append-only means this hash changes ONLY when rows are appended. If this test fails
     without an append, a shipped (code, name, class) was altered — that is the defect."""
     assert causes.registry_sha256() == (
-        "b5cffe8fe84ff9a1bdb64bb703f9d73653eb78c75b6c91f9799e1682dc77af89")
+        "74f1b33c52f426159612c9f16e32e5f798939715fe212001b726b89ef1125ffe")
 
 
 # ------------------------------------------------------------------- binding to the codebase
+# A registry name is `class:detail`. A parameterized emitter appends a second `:<detail>` the
+# registry does not carry, so the pattern deliberately stops at the second colon.
+_CAUSE_NAME = r"([a-z]+:[a-z0-9-]+)"
+
+
+def _verifier_source() -> str:
+    """The pack verifier's own text, resolved through the module object: `prismpath/policy_pack.py`
+    is now a deprecation shim, so path arithmetic from causes.py reads the wrong file and the
+    binding assertions below pass over an empty string."""
+    return Path(policy_pack.__file__).read_text()
+
+
 def test_verify_pack_failure_strings_are_registered():
     """Every `return False, ["..."]` failure string in policy_pack's verifier maps to a
     registry name (the parameterized count-mismatch matches its base name)."""
-    src = (Path(causes.__file__).resolve().parent.parent / "policy_pack.py").read_text()
-    emitted = set(re.findall(r'return False, \[f?"([a-z0-9:-]+)', src))
-    emitted.discard("")                                     # the generic str(e) return
-    for s in emitted:
-        base = s.rstrip(":")
-        assert causes.code(base) is not None, f"verifier emits {s!r}, registry lacks {base!r}"
+    emitted = set(re.findall(r'return False, \[f?"' + _CAUSE_NAME, _verifier_source()))
+    assert emitted, "the verifier source parsed to no refusal strings at all"
+    for emitted_name in emitted:
+        assert causes.code(emitted_name) is not None, f"verifier emits {emitted_name!r} unregistered"
+
+
+def test_image_and_envelope_refusal_strings_are_registered():
+    """The structural half of the verifier (read_ppt_header, validate_image, load_envelope,
+    check_envelope) refuses with free strings shaped exactly like registry names. They are rows,
+    so a refusal that reaches a receipt carries a cause code and not only prose."""
+    src = _verifier_source()
+    emitted = set(re.findall(r'reasons\.append\(f?"' + _CAUSE_NAME, src))
+    emitted |= set(re.findall(r'raise ValueError\("' + _CAUSE_NAME + r'"\)', src))
+    emitted |= set(re.findall(r'return None, \[f?"' + _CAUSE_NAME, src))
+    assert len(emitted) >= 19, f"expected the whole structural set, parsed {sorted(emitted)}"
+    for emitted_name in emitted:
+        assert causes.code(emitted_name) is not None, f"verifier emits {emitted_name!r} unregistered"
 
 
 def test_wire_cause_strings_are_registered():

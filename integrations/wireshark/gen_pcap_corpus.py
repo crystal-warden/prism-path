@@ -128,8 +128,8 @@ def build_corpus() -> list:
     # deliberate heuristic collision: raw parseable AND satisfies the decoded length check
     out.append(("ambiguous_specimen", bytes([0x46, 0x01, 0x03, 0x00])))
     # receipt stream specimens
-    out.append(("rcpt_clean", receipts.encode_receipt(seq=1, prev_node=10, event=5, next_node=11, cause_val=0)))
-    out.append(("rcpt_stuck", receipts.encode_receipt(seq=2, prev_node=10, event=5, next_node=11, cause_val=36)))
+    out.append(("rcpt_clean", receipts.encode_receipt(seq=1, prev_node=10, event=5, next_node=11, cause_code=0)))
+    out.append(("rcpt_stuck", receipts.encode_receipt(seq=2, prev_node=10, event=5, next_node=11, cause_code=36)))
     return out
 
 
