@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 Crystal Warden Supply Chain Labs LLC
 // relay_air: the C6 brings up a bench access point; the S3 camera node joins it and sends its records as
-// UDP datagrams (the same RDG1 and FRG1 payloads it broadcasts on ESP-NOW). Each datagram is forwarded
+// UDP datagrams (the same RDG6 and FRG1 payloads it broadcasts on ESP-NOW). Each datagram is forwarded
 // as one or more 802.15.4 sub frames on the hop. Console on native USB. An open AP, on purpose: it is a
 // bench link carrying decision symbols, and the policy's integrity story lives above the transport.
 #include <stdio.h>
@@ -227,7 +227,7 @@ static void udp_task(void *arg) {
             continue;
         m.len = (uint16_t)n;
         if (n >=
-            6) {  // RDG3, KEY3, EVD1 and FRG2 all carry the node id right after the magic: remember where that node speaks from
+            6) {  // RDG6, KEY3, EVD1 and FRG2 all carry the node id right after the magic: remember where that node speaks from
             uint16_t nid = m.d[4] | (m.d[5] << 8);
             int slot = -1;
             for (int i = 0; i < MAX_NODES; i++) {

@@ -16,7 +16,7 @@
 #include "fusion_policy.h"
 // Fusion on the relay (A4): the two cameras' last routes and the relay's own receive clock are the facts; the room's
 // verdict is a policy walk (room_fusion.md), and a camera that goes quiet is STALE, a state the policy decides on.
-// "FUS1" | t u64 | route u16 | a_fresh b_fresh a_occ b_occ a_tamper b_tamper (u8 each) | a_seq u32 | b_seq u32 | a_age_ms u16 | b_age_ms u16
+// "FUS2" | t u64 | route u16 | a_fresh b_fresh a_occ b_occ a_tamper b_tamper (u8 each) | a_seq u32 | b_seq u32 | a_age_ms u16 | b_age_ms u16 | steps u16 | flags u16 | a_occ_age_ms u16 | b_occ_age_ms u16
 static void emit(const uint8_t *payload, uint16_t len);
 #define FRESH_US 1500000
 #define FUSION_TICK_US 250000

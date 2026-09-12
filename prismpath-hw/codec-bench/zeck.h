@@ -73,7 +73,7 @@ static int8_t zeck_encode(bitacc_t *a, uint64_t n) {
     return 0;
 }
 
-/* One event: encode BENCH_FIELDS wire ints into buf (pre zeroed). Returns byte length. */
+/* One event: encode 4 wire ints into buf (pre zeroed). Returns byte length. */
 static uint8_t encode_event(const uint16_t *syms, uint8_t *buf, uint8_t buflen) {
     memset(buf, 0, buflen);
     bitacc_t a = { buf, 0 };

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 Crystal Warden Supply Chain Labs LLC
-/* ppt_xdp.bpf.c — PrismPath PPT v1 Match-Action Table Interpreter in XDP/eBPF
+/* ppt_select.bpf.c: PrismPath PPT resident stateful selector in eBPF (ppt_select)
  *
  * Reproduces exact interp.c semantics:
  * - eval_atom: totality rules (non-numeric unsatisfied, EQ/NE type matching, TRUTHY rule)
@@ -8,7 +8,7 @@
  * - evaluate: priority encoder over node edges
  *
  * Verifier-safe design:
- * - All loops statically unrolled (#pragma unroll) with fixed bounds
+ * - Uses bounded bpf_loop calls for verifier pass, as README.md section 4.2 records
  * - All map lookups NULL-checked
  * - All array index operations bitwise masked to map capacities
  * - Stack budget bounded to ~350 bytes (under 512-byte eBPF stack limit)

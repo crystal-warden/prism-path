@@ -2,7 +2,7 @@
 // Copyright 2026 Crystal Warden Supply Chain Labs LLC
 //
 // radio node: the camera node deciding live, readings over ESP-NOW instead of USB. One reading per
-// frame as one ESP-NOW frame ("RDG1" record, under 90 bytes); background keyframes as fragments.
+// frame as one ESP-NOW frame ("RDG6" record, under 90 bytes); background keyframes as fragments.
 // Streams from boot; nothing on USB. The UART console carries the log.
 #include <stdio.h>
 #include <string.h>
