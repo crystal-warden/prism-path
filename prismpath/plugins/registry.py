@@ -121,7 +121,7 @@ def _bound_ref(node) -> Optional[str]:
         return None
     if args.get("name"):
         return args["name"]
-    return next((k for k, v in args.items() if v is None), None)
+    return next((arg_name for arg_name, arg_value in args.items() if arg_value is None), None)
 
 
 def worker_for(graph, default: Optional[Callable] = None) -> Callable:
@@ -182,7 +182,7 @@ def audit(as_json: bool = False) -> str:
     """The human/CI-readable listing of everything installed and what each thing provides."""
     infos = discover()
     if as_json:
-        return json.dumps({k: v.summary() for k, v in sorted(infos.items())}, indent=2)
+        return json.dumps({plugin_name: plugin_info.summary() for plugin_name, plugin_info in sorted(infos.items())}, indent=2)
     if not infos:
         return "no plugins installed"
     lines = []

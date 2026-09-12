@@ -24,10 +24,10 @@ def _parse_since(text: Optional[str]) -> Optional[float]:
     if not text:
         return None
     normalized = text.replace("Z", "+00:00")
-    d = _dt.datetime.fromisoformat(normalized)
-    if d.tzinfo is None:
-        d = d.replace(tzinfo=_dt.timezone.utc)
-    return d.timestamp()
+    parsed_time = _dt.datetime.fromisoformat(normalized)
+    if parsed_time.tzinfo is None:
+        parsed_time = parsed_time.replace(tzinfo=_dt.timezone.utc)
+    return parsed_time.timestamp()
 
 
 def summarise(events: List[dict]) -> Dict[str, Any]:
@@ -48,18 +48,18 @@ def summarise(events: List[dict]) -> Dict[str, Any]:
     swaps = [ev for ev in events if ev.get("action") in ("swap", "swap_rejected", "rollback", "attestation")]
     swap_lines = []
     for ev in swaps:
-        d = ev.get("data") or {}
+        data = ev.get("data") or {}
         when = _dt.datetime.fromtimestamp(float(ev.get("ts", 0)), _dt.timezone.utc).isoformat(timespec="seconds")
         if ev["action"] == "swap":
-            swap_lines.append(f"{when} swap accepted -> version {d.get('version')} {str(d.get('to_hash'))[:12]}"
-                              + (f" overlay of {d['overlay_of']}" if d.get("overlay_of") else ""))
+            swap_lines.append(f"{when} swap accepted -> version {data.get('version')} {str(data.get('to_hash'))[:12]}"
+                              + (f" overlay of {data['overlay_of']}" if data.get("overlay_of") else ""))
         elif ev["action"] == "swap_rejected":
-            swap_lines.append(f"{when} swap refused: {','.join(d.get('reasons', []))}")
+            swap_lines.append(f"{when} swap refused: {','.join(data.get('reasons', []))}")
         elif ev["action"] == "rollback":
-            swap_lines.append(f"{when} rollback -> {str(d.get('to_hash'))[:12]}")
+            swap_lines.append(f"{when} rollback -> {str(data.get('to_hash'))[:12]}")
         else:
-            swap_lines.append(f"{when} attestation: version {d.get('version')}"
-                              + (f" overlay of {d['overlay_of']}" if d.get("overlay_of") else ""))
+            swap_lines.append(f"{when} attestation: version {data.get('version')}"
+                              + (f" overlay of {data['overlay_of']}" if data.get("overlay_of") else ""))
     first = min((float(ev.get("ts", 0)) for ev in events), default=None)
     last = max((float(ev.get("ts", 0)) for ev in events), default=None)
     return {"events": len(events), "decisions": len(decisions),

@@ -195,11 +195,11 @@ def resume(checkpoint_path, agent, router=None, choose: Optional[str] = None,
         wnode = (cp.get("pending_decision") or {}).get("node") or cp.get("pending_node")
         if wnode not in graph.nodes:
             raise CheckpointError(f"pending node {wnode!r} is not in the flow")
-        target = next((edge_target for edge_target, c in graph.nodes[wnode].edges
-                       if predicates.is_event(c) and predicates.event_name(c) == event), None)
+        target = next((edge_target for edge_target, condition in graph.nodes[wnode].edges
+                       if predicates.is_event(condition) and predicates.event_name(condition) == event), None)
         if target is None:
-            avail = [predicates.event_name(c) for _, c in graph.nodes[wnode].edges
-                     if predicates.is_event(c)]
+            avail = [predicates.event_name(condition) for _, condition in graph.nodes[wnode].edges
+                     if predicates.is_event(condition)]
             raise CheckpointError(f"no edge for event {event!r} on {wnode!r}; awaiting: {avail}")
         state.setdefault("transcript", []).append(
             {"node": wnode, "outcome": f"[event: {event}]", "event": event})
@@ -209,7 +209,7 @@ def resume(checkpoint_path, agent, router=None, choose: Optional[str] = None,
                    _seed_path=cp.get("path", []), _seed_steps=seed_steps)
 
     if stopped == "needs_human":
-        cands = [c.get("target") for c in (cp.get("pending_decision") or {}).get("candidates", [])]
+        cands = [candidate.get("target") for candidate in (cp.get("pending_decision") or {}).get("candidates", [])]
         raise CheckpointError(
             f"this run is suspended for a human decision — resume with choose=<edge> "
             f"(candidates: {cands})")
@@ -315,7 +315,7 @@ def record_decision(checkpoint_path, choose: str, decided_by: str = "human") -> 
     if cp.get("stopped") != "needs_human":
         raise CheckpointError(f"checkpoint is not awaiting a human (stopped={cp.get('stopped')!r})")
     pend = cp.get("pending_decision") or {}
-    cands = [c.get("target") for c in pend.get("candidates", [])]
+    cands = [candidate.get("target") for candidate in pend.get("candidates", [])]
     if choose not in cands:
         raise CheckpointError(f"choose {choose!r} is not a candidate edge; valid: {cands}")
     cp["decision"] = {"choose": choose, "decided_by": decided_by}

@@ -68,8 +68,8 @@ def lock_path(flow_path) -> str:
 def _semantic_conditions(graph) -> list:
     from prismpath.kernel import predicates
     conds = set()
-    for n in graph.nodes.values():
-        for _, condition in n.edges:
+    for flow_node in graph.nodes.values():
+        for _, condition in flow_node.edges:
             if predicates.is_semantic(condition):
                 conds.add(condition)
     return sorted(conds)
@@ -151,10 +151,10 @@ def build_lock(flow_path, delta: Optional[float] = None, centroids: Optional[dic
             cen = centroids.get(condition)
             if cen is None:
                 continue
-            n = int(counts.get(condition, 1))
-            blend = float(prior_weight) * vecs[index] + n * np.asarray(cen, dtype="float32")
+            centroid_count = int(counts.get(condition, 1))
+            blend = float(prior_weight) * vecs[index] + centroid_count * np.asarray(cen, dtype="float32")
             norm = np.linalg.norm(blend) or 1.0
-            pinned[condition] = {"vec": _encode_vec(blend / norm), "n": n}
+            pinned[condition] = {"vec": _encode_vec(blend / norm), "n": centroid_count}
         if pinned:
             lock["centroids"] = pinned
             lock["centroid_prior_weight"] = float(prior_weight)

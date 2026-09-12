@@ -63,17 +63,17 @@ def _under(path, base):
 
 def _safe(proj, rel):
     """Resolve `rel` against `proj`, refusing any path that escapes the project tree."""
-    p = os.path.abspath(os.path.join(proj, rel))
-    if not _under(p, proj):
+    resolved = os.path.abspath(os.path.join(proj, rel))
+    if not _under(resolved, proj):
         raise ValueError("path escapes project")
-    return p
+    return resolved
 
 
 # ----------------------------------------------------------------- fs helpers
 def file_tree(proj):
     out = []
     for dp, dns, fns in os.walk(proj):
-        dns[:] = [d for d in dns if d not in (".git", "tools", "__pycache__", "last-good")]
+        dns[:] = [dirname for dirname in dns if dirname not in (".git", "tools", "__pycache__", "last-good")]
         for fn in sorted(fns):
             if len(out) >= MAX_TREE_ENTRIES:
                 return out                        # bound the listing on a pathological tree
@@ -86,14 +86,14 @@ def file_tree(proj):
                     out.append({"path": rel, "size": stt.st_size, "mtime": stt.st_mtime})
                 except OSError:
                     pass
-    return sorted(out, key=lambda f: f["path"])
+    return sorted(out, key=lambda entry: entry["path"])
 
 
 def _registry_projs():
     try:
-        with open(MC_REGISTRY, encoding="utf-8") as f:
-            d = json.load(f)
-        return list(d.keys()) if isinstance(d, dict) else list(d)
+        with open(MC_REGISTRY, encoding="utf-8") as registry_file:
+            registry = json.load(registry_file)
+        return list(registry.keys()) if isinstance(registry, dict) else list(registry)
     except Exception:
         return []
 
@@ -106,20 +106,20 @@ def discover_sprints():
     for pat in MC_SCAN.split(os.pathsep):
         for sp in _glob.glob(pat):
             projs.add(os.path.dirname(os.path.abspath(sp)))
-    for p in _registry_projs():
-        projs.add(os.path.abspath(os.path.expanduser(p)))
+    for proj_dir in _registry_projs():
+        projs.add(os.path.abspath(os.path.expanduser(proj_dir)))
     projs.add(os.path.abspath(PROJ))
     now, out = time.time(), []
-    for p in projs:
-        sp = os.path.join(p, "status.json")
+    for proj_dir in projs:
+        sp = os.path.join(proj_dir, "status.json")
         try:
             age = now - os.path.getmtime(sp)
-            d = json.load(open(sp, encoding="utf-8"))
+            status_json = json.load(open(sp, encoding="utf-8"))
         except Exception:
             continue
-        out.append({"proj": p, "name": os.path.basename(p), "age": round(age, 1),
-                    "running": age < 120 and not d.get("done"),
-                    "iteration": d.get("iteration"), "valid": d.get("valid"), "done": d.get("done")})
+        out.append({"proj": proj_dir, "name": os.path.basename(proj_dir), "age": round(age, 1),
+                    "running": age < 120 and not status_json.get("done"),
+                    "iteration": status_json.get("iteration"), "valid": status_json.get("valid"), "done": status_json.get("done")})
     out.sort(key=lambda sprint_row: (not sprint_row["running"],
                                      sprint_row["age"]))   # running first, then freshest
     return out
@@ -136,8 +136,8 @@ def _sync_active(state):
 
 
 def sprint_running(state):
-    p = state["proc"]
-    if p and p.poll() is None:
+    proc = state["proc"]
+    if proc and proc.poll() is None:
         return True
     # also detect an EXTERNALLY-launched run_sprint via its live status.json heartbeat
     sp = os.path.join(state["proj"], "status.json")
@@ -177,17 +177,17 @@ def start_sprint(cfg, state):
         else:
             env.pop("PYTHONUNBUFFERED", None)
         argv = ["python"] + (["-u"] if unbuffered else []) + ["prismpath/run_sprint.py"]
-        for f in ("STOP", "PAUSE"):
+        for marker_name in ("STOP", "PAUSE"):
             try:
-                os.remove(os.path.join(proj, f))
+                os.remove(os.path.join(proj, marker_name))
             except OSError:
                 pass
         log = open(os.path.join(proj, "mc_sprint.log"), "a")
-        p = subprocess.Popen(argv, cwd=REPO_ROOT, env=env, stdout=log, stderr=subprocess.STDOUT)
+        proc = subprocess.Popen(argv, cwd=REPO_ROOT, env=env, stdout=log, stderr=subprocess.STDOUT)
         cfg = dict(cfg, unbuffered=unbuffered)
-        state.update({"proc": p, "proj": proj, "cfg": cfg, "pinned": True})   # follow the one we started
-    AUDIT.append(ACTOR, "sprint.start", {"proj": proj, "cfg": cfg, "pid": p.pid, "unbuffered": unbuffered})
-    return {"ok": True, "pid": p.pid, "proj": proj, "unbuffered": unbuffered}
+        state.update({"proc": proc, "proj": proj, "cfg": cfg, "pinned": True})   # follow the one we started
+    AUDIT.append(ACTOR, "sprint.start", {"proj": proj, "cfg": cfg, "pid": proc.pid, "unbuffered": unbuffered})
+    return {"ok": True, "pid": proc.pid, "proj": proj, "unbuffered": unbuffered}
 
 
 def _touch(proj, name, action):
@@ -254,7 +254,7 @@ def mc_interactions(state, limit=300):
                 event = json.loads(ln)
             except Exception:
                 continue
-            p, folded_output = _fold(event.get("prompt", "")), _fold(event.get("output", ""),
+            folded_prompt, folded_output = _fold(event.get("prompt", "")), _fold(event.get("output", ""),
                                                                     head=0, tail=2200)
             frm, to, sub = _route(event)
             events.append({"ts": event.get("ts"), "kind": event.get("kind", "?"),
@@ -263,7 +263,7 @@ def mc_interactions(state, limit=300):
                            "from": frm, "to": to, "substage": sub, "rc": event.get("rc"),
                            "prompt_len": event.get("prompt_len", 0),
                            "output_len": event.get("output_len", 0),
-                           "prompt": p["preview"], "output": folded_output["preview"]})
+                           "prompt": folded_prompt["preview"], "output": folded_output["preview"]})
     return {"summary": status(state), "events": events}
 
 
@@ -292,8 +292,8 @@ def balance_state(state):
     """The category-balance ledger + current weights — visualizes EVEN expansion across directions."""
     led = {}
     try:
-        with open(os.path.join(state["proj"], "category_balance.json"), encoding="utf-8") as f:
-            led = json.load(f)
+        with open(os.path.join(state["proj"], "category_balance.json"), encoding="utf-8") as balance_file:
+            led = json.load(balance_file)
     except Exception:
         led = {}
     cats = sorted(led)
@@ -362,8 +362,8 @@ def serialize_flow_graph(state, flow_path=None):
         sp = os.path.join(proj, "status.json")
         if os.path.isfile(sp):
             try:
-                with open(sp, encoding="utf-8") as f:
-                    st = json.load(f)
+                with open(sp, encoding="utf-8") as json_file:
+                    st = json.load(json_file)
                 flow_path = st.get("flow_path") or st.get("flow")
             except Exception:
                 pass
@@ -394,8 +394,8 @@ def serialize_flow_graph(state, flow_path=None):
     ckpt = os.path.join(proj, "checkpoint.json")
     if os.path.isfile(ckpt):
         try:
-            with open(ckpt, encoding="utf-8") as f:
-                active = json.load(f)
+            with open(ckpt, encoding="utf-8") as json_file:
+                active = json.load(json_file)
         except Exception:
             pass
     try:

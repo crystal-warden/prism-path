@@ -54,11 +54,11 @@ def parse_spec(spec: str):
 
 def _extract_json(text: str):
     """A JSON object in the reply (bare, or inside a ``` fence) -> dict, else None."""
-    m = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.S) or re.search(r"(\{.*\})", text, re.S)
-    if not m:
+    match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.S) or re.search(r"(\{.*\})", text, re.S)
+    if not match:
         return None
     try:
-        obj = json.loads(m.group(1))
+        obj = json.loads(match.group(1))
         return obj if isinstance(obj, dict) else None
     except ValueError:
         return None
@@ -89,14 +89,14 @@ def chat_agent(spec: str, timeout: float = DEFAULT_TIMEOUT, temperature: float =
         try:
             with urllib.request.urlopen(req, timeout=timeout) as resp:
                 reply = json.loads(resp.read().decode("utf-8"))
-        except urllib.error.URLError as e:
-            raise ChatAgentError(f"[{node}] {model} at {base}: {e.reason if hasattr(e, 'reason') else e}") from e
-        except TimeoutError as e:
-            raise ChatAgentError(f"[{node}] {model} at {base}: timeout after {timeout}s") from e
+        except urllib.error.URLError as error:
+            raise ChatAgentError(f"[{node}] {model} at {base}: {error.reason if hasattr(error, 'reason') else error}") from error
+        except TimeoutError as error:
+            raise ChatAgentError(f"[{node}] {model} at {base}: timeout after {timeout}s") from error
         try:
             text = reply["choices"][0]["message"]["content"]
-        except (KeyError, IndexError, TypeError) as e:
-            raise ChatAgentError(f"[{node}] malformed response from {base}: {e}") from e
+        except (KeyError, IndexError, TypeError) as error:
+            raise ChatAgentError(f"[{node}] malformed response from {base}: {error}") from error
         fields = _extract_json(text)
         if fields is not None:
             fields.setdefault("text", text.strip())

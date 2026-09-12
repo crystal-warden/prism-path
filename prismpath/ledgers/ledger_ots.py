@@ -61,9 +61,9 @@ def from_ledger(ledger_repo, ref="refs/prismpath/runs"):
         ["git", "for-each-ref", "--format=%(refname)", ref], capture_output=True, text=True, env=env
     ).stdout.split()
     out = []
-    for r in refs:
+    for ref_name in refs:
         log = subprocess.run(
-            ["git", "log", "--format=%(trailers:key=PrismPath-Output-Hash,valueonly)", r],
+            ["git", "log", "--format=%(trailers:key=PrismPath-Output-Hash,valueonly)", ref_name],
             capture_output=True,
             text=True,
             env=env,
@@ -79,30 +79,30 @@ def anchor(hashes, out_dir, label):
     rootfile = os.path.join(out_dir, f"root_{label}.txt")
     open(rootfile, "w").write(root + "\n")
     json.dump(
-        dict(label=label, root=root, n=len(hashes),
+        dict(label=label, root=root, leaf_count=len(hashes),
              leaves={hash_hex: paths[index] for index, hash_hex in enumerate(hashes)}),
         open(os.path.join(out_dir, f"manifest_{label}.json"), "w"),
         indent=2,
     )
-    r = subprocess.run(["ots", "stamp", rootfile], capture_output=True, text=True, env=_OTSENV)
+    ots_run = subprocess.run(["ots", "stamp", rootfile], capture_output=True, text=True, env=_OTSENV)
     return dict(
         root=root,
-        n=len(hashes),
+        leaf_count=len(hashes),
         rootfile=rootfile,
-        stamped=(r.returncode == 0 and os.path.exists(rootfile + ".ots")),
-        ots_rc=r.returncode,
-        ots_msg=(r.stdout + r.stderr).strip()[-200:],
+        stamped=(ots_run.returncode == 0 and os.path.exists(rootfile + ".ots")),
+        ots_rc=ots_run.returncode,
+        ots_msg=(ots_run.stdout + ots_run.stderr).strip()[-200:],
     )
 
 
 def upgrade(out_dir, label):
-    r = subprocess.run(
+    ots_run = subprocess.run(
         ["ots", "upgrade", os.path.join(out_dir, f"root_{label}.txt.ots")],
         capture_output=True,
         text=True,
         env=_OTSENV,
     )
-    return dict(ots_rc=r.returncode, ots_msg=(r.stdout + r.stderr).strip()[-200:])
+    return dict(ots_rc=ots_run.returncode, ots_msg=(ots_run.stdout + ots_run.stderr).strip()[-200:])
 
 
 def verify_unit(leaf_hex, out_dir, label):
@@ -112,7 +112,7 @@ def verify_unit(leaf_hex, out_dir, label):
     if path is None:
         return dict(merkle_ok=False, reason="output-hash not in this anchor batch")
     merkle_ok = verify_leaf(leaf_hex, path, manifest["root"])
-    r = subprocess.run(
+    ots_run = subprocess.run(
         ["ots", "verify", os.path.join(out_dir, f"root_{label}.txt.ots")],
         capture_output=True,
         text=True,
@@ -121,7 +121,7 @@ def verify_unit(leaf_hex, out_dir, label):
     return dict(
         merkle_ok=merkle_ok,
         root=manifest["root"],
-        ots_ok=(r.returncode == 0),
-        ots_rc=r.returncode,
-        ots_verify=(r.stdout + r.stderr).strip()[-300:],
+        ots_ok=(ots_run.returncode == 0),
+        ots_rc=ots_run.returncode,
+        ots_verify=(ots_run.stdout + ots_run.stderr).strip()[-300:],
     )

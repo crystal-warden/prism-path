@@ -104,18 +104,18 @@ class Ledger:
 
     def _git(self, args: List[str], *, env: dict, input: Optional[bytes] = None,
              check: bool = True) -> str:
-        p = subprocess.run(["git", *args], env=env, input=input, capture_output=True)
-        if check and p.returncode != 0:
-            raise LedgerError(f"git {' '.join(args[:2])} failed: {p.stderr.decode()[:200]}")
-        return p.stdout.decode()
+        git_run = subprocess.run(["git", *args], env=env, input=input, capture_output=True)
+        if check and git_run.returncode != 0:
+            raise LedgerError(f"git {' '.join(args[:2])} failed: {git_run.stderr.decode()[:200]}")
+        return git_run.stdout.decode()
 
     def init(self) -> None:
         if not (self.repo / "HEAD").exists():
             self.repo.parent.mkdir(parents=True, exist_ok=True)
-            r = subprocess.run(["git", "init", "--bare", "-q", str(self.repo)],
+            init_run = subprocess.run(["git", "init", "--bare", "-q", str(self.repo)],
                                capture_output=True)
-            if r.returncode != 0:
-                raise LedgerError(f"git init --bare failed: {r.stderr.decode()[:200]}")
+            if init_run.returncode != 0:
+                raise LedgerError(f"git init --bare failed: {init_run.stderr.decode()[:200]}")
 
     def tip(self) -> Optional[str]:
         env = self._env()
@@ -146,9 +146,9 @@ class Ledger:
     def _cas_update(self, new: str, old: Optional[str]) -> bool:
         # compare-and-swap: fails (returns False) if another writer moved the ref since we read the
         # tip. The caller re-reads and rebuilds on the new tip rather than dropping the proof.
-        p = subprocess.run(["git", "update-ref", self.ref, new, old or _ZERO],
+        update_run = subprocess.run(["git", "update-ref", self.ref, new, old or _ZERO],
                            env=self._env(), capture_output=True)
-        return p.returncode == 0
+        return update_run.returncode == 0
 
     # --- the API ----------------------------------------------------------------------
     def commit_unit(self, unit: str, *, node: Optional[str] = None, gate: str = "green",
@@ -167,8 +167,8 @@ class Ledger:
         proof."""
         self.init()
         fb: Dict[str, bytes] = {
-            p: (file_bytes if isinstance(file_bytes, (bytes, bytearray)) else str(file_bytes).encode())
-            for p, file_bytes in (files or {}).items()}
+            file_path: (file_bytes if isinstance(file_bytes, (bytes, bytearray)) else str(file_bytes).encode())
+            for file_path, file_bytes in (files or {}).items()}
         if output_hash is None:
             output_hash = sha256_files(fb)
         if wallclock is None:                       # real UTC green-time; the pinned git dates don't carry it
@@ -215,7 +215,7 @@ class Ledger:
         return self._write_tree({}, None)
 
     def _next_seq(self) -> int:
-        seqs = [r["seq"] for r in self.log() if isinstance(r.get("seq"), int)]
+        seqs = [record["seq"] for record in self.log() if isinstance(record.get("seq"), int)]
         return (max(seqs) + 1) if seqs else 1
 
     def log(self) -> List[dict]:
@@ -249,7 +249,7 @@ class Ledger:
         re-run of a unit supersedes the old proof. This is the ledger's replacement for the mutable
         `.kg.json` status field — progress derived from the log, never a separate pointer."""
         done: Dict[str, dict] = {}
-        for r in self.log():                    # oldest -> newest; later overwrites
-            if r.get("gate") == "green" and r.get("unit"):
-                done[r["unit"]] = r
+        for record in self.log():                    # oldest -> newest; later overwrites
+            if record.get("gate") == "green" and record.get("unit"):
+                done[record["unit"]] = record
         return done

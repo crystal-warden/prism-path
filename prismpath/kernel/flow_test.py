@@ -57,19 +57,19 @@ class TestReport:
 
 # --- fixture parsing --------------------------------------------------------------------
 def _coerce(val_str: str):
-    s = val_str.strip()
-    low = s.lower()
+    trimmed = val_str.strip()
+    low = trimmed.lower()
     if low in ("true", "false"):
         return low == "true"
     try:
-        return int(s)
+        return int(trimmed)
     except ValueError:
         pass
     try:
-        return float(s)
+        return float(trimmed)
     except ValueError:
         pass
-    return s.strip('"')
+    return trimmed.strip('"')
 
 
 def _parse_fields(cell: str) -> dict:

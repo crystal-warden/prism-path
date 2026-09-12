@@ -31,9 +31,9 @@ def span_records(graph, agent, sink: Callable[[dict], None], run_id: Optional[st
                "attributes": {"prismpath.flow": graph.name, "prismpath.node": node, "prismpath.seq": seq["i"]}}
         try:
             out = agent(node, instruction, state)
-        except Exception as e:
+        except Exception as error:
             rec["status"] = "error"
-            rec["attributes"]["prismpath.error"] = f"{type(e).__name__}: {e}"
+            rec["attributes"]["prismpath.error"] = f"{type(error).__name__}: {error}"
             sink(rec)
             raise
         text = out.get("text", "") if isinstance(out, dict) else str(out)
@@ -41,13 +41,13 @@ def span_records(graph, agent, sink: Callable[[dict], None], run_id: Optional[st
         sink(rec)
         return out
 
-    def on_decision(d: dict):
+    def on_decision(decision: dict):
         sink({"name": "prismpath.route", "status": "ok", "attributes": {
-            "prismpath.flow": d.get("flow"), "prismpath.node": d.get("node"),
-            "prismpath.chosen": d.get("chosen"), "prismpath.mechanism": d.get("mechanism"),
-            "prismpath.margin": d.get("margin"), "prismpath.top1": d.get("top1"),
-            "prismpath.top2": d.get("top2"), "prismpath.escalated": d.get("escalated"),
-            "prismpath.candidates": len(d.get("candidates", []))}})
+            "prismpath.flow": decision.get("flow"), "prismpath.node": decision.get("node"),
+            "prismpath.chosen": decision.get("chosen"), "prismpath.mechanism": decision.get("mechanism"),
+            "prismpath.margin": decision.get("margin"), "prismpath.top1": decision.get("top1"),
+            "prismpath.top2": decision.get("top2"), "prismpath.escalated": decision.get("escalated"),
+            "prismpath.candidates": len(decision.get("candidates", []))}})
 
     return run(graph, traced_agent, on_decision=on_decision, run_id=run_id, **run_kw)
 
@@ -58,9 +58,9 @@ def to_otel_sink(tracer) -> Callable[[dict], None]:
 
     def sink(rec: dict) -> None:
         with tracer.start_as_current_span(rec["name"]) as span:
-            for k, v in rec.get("attributes", {}).items():
-                if v is not None:
-                    span.set_attribute(k, v)
+            for attribute_name, attribute_value in rec.get("attributes", {}).items():
+                if attribute_value is not None:
+                    span.set_attribute(attribute_name, attribute_value)
             if rec.get("status") == "error":
                 span.set_status(Status(StatusCode.ERROR))
     return sink
@@ -72,8 +72,8 @@ def console_tracer(service_name: str = "prismpath"):
         from opentelemetry import trace
         from opentelemetry.sdk.trace import TracerProvider
         from opentelemetry.sdk.trace.export import ConsoleSpanExporter, SimpleSpanProcessor
-    except ImportError as e:
-        raise RuntimeError("OpenTelemetry export needs `pip install opentelemetry-sdk`") from e
+    except ImportError as error:
+        raise RuntimeError("OpenTelemetry export needs `pip install opentelemetry-sdk`") from error
     provider = TracerProvider()
     provider.add_span_processor(SimpleSpanProcessor(ConsoleSpanExporter()))
     trace.set_tracer_provider(provider)

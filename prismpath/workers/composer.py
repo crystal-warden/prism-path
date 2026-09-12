@@ -173,18 +173,18 @@ def _child_done(child_cp: dict, gate: Optional[str]) -> bool:
 import math
 
 
-def _quorum_threshold(join: str, n: int) -> int:
+def _quorum_threshold(join: str, child_count: int) -> int:
     """The number of done children a `quorum:X` join requires. X is an integer count (`quorum:2`) or a
-    fraction of N (`quorum:0.6` -> ceil(0.6*N)). Clamped to [1, n]; a malformed X falls back to N (i.e.
+    fraction of N (`quorum:0.6` -> ceil(0.6*N)). Clamped to [1, child_count]; a malformed X falls back to N (i.e.
     behaves like all_done rather than firing early on a typo)."""
     _, _, spec = join.partition(":")
     spec = spec.strip()
     try:
         quorum_value = float(spec)
     except ValueError:
-        return n
-    k = math.ceil(quorum_value * n) if 0 < quorum_value < 1 else int(quorum_value)
-    return max(1, min(n, k))
+        return child_count
+    threshold = math.ceil(quorum_value * child_count) if 0 < quorum_value < 1 else int(quorum_value)
+    return max(1, min(child_count, threshold))
 
 
 def _join_event(spec: dict, done_flags: List[bool]) -> Optional[str]:
@@ -198,12 +198,12 @@ def _join_event(spec: dict, done_flags: List[bool]) -> Optional[str]:
     if not done_flags:
         return None
     join = (spec.get("join") or "all_done").strip()
-    n, n_done = len(done_flags), sum(1 for done_flag in done_flags if done_flag)
+    child_count, n_done = len(done_flags), sum(1 for done_flag in done_flags if done_flag)
     name = predicates.spawn_join_event(join)             # shared with analysis.py — never drifts
     if name == "any":
         return name if n_done >= 1 else None
     if name == "quorum":
-        return name if n_done >= _quorum_threshold(join, n) else None
+        return name if n_done >= _quorum_threshold(join, child_count) else None
     return name if all(done_flags) else None             # all_done (and any unrecognized policy)
 
 
@@ -250,14 +250,14 @@ def _effective_spec(cp: dict, node: str, spec: dict):
     graph, ann = None, None
     try:
         graph = parse_file(cp.get("flow_path", ""))
-        n = graph.nodes.get(node) if node else None
-        ann = n.annotations.get("spawn") if n else None
+        flow_node = graph.nodes.get(node) if node else None
+        ann = flow_node.annotations.get("spawn") if flow_node else None
     except Exception:                                    # noqa: BLE001 - degrade to the runtime spec
         pass
     if ann:
-        for k in ("child", "join", "item_id", "gate"):
-            if ann.get(k) is not None:
-                eff[k] = ann[k]
+        for key in ("child", "join", "item_id", "gate"):
+            if ann.get(key) is not None:
+                eff[key] = ann[key]
         over = ann.get("over")
         if "items" not in eff and "item" not in eff and over:
             items = (cp.get("state") or {}).get(over)
@@ -307,7 +307,7 @@ def advance_fanout(parent_ckpt_path: str, agent, router=None,
         # aggregation on a deadlocked run. Guard here and record a clean error instead (analysis.py
         # flags this statically as spawn-no-join-edge when the join is declared in the annotation).
         edges = graph.nodes[node].edges if (graph and node in graph.nodes) else []
-        have = {predicates.event_name(c) for _, c in edges if predicates.is_event(c)}
+        have = {predicates.event_name(condition) for _, condition in edges if predicates.is_event(condition)}
         if event not in have:
             rec["error"] = f"join fired {event!r} but node {node!r} has no `on event {event}` edge"
             return rec
@@ -370,8 +370,8 @@ def _fanout_record(parent_path: str) -> Optional[dict]:
                 brief["fanout"] = nested
             children.append(brief)
 
-    n = len(children)
-    done = sum(1 for c in children if c["done"])
+    child_count = len(children)
+    done = sum(1 for child in children if child["done"])
     return {
         "path": parent_path,
         "flow": cp.get("flow_path"),
@@ -382,8 +382,8 @@ def _fanout_record(parent_path: str) -> Optional[dict]:
         "join_event": predicates.spawn_join_event(join),
         "gate": gate,
         "child_flow": eff.get("child"),
-        "progress": {"n": n, "done": done,
-                     "terminal": sum(1 for c in children if c["stopped"] == "terminal")},
+        "progress": {"n": child_count, "done": done,
+                     "terminal": sum(1 for child in children if child["stopped"] == "terminal")},
         "joined": bool(spawned_state),
         "children": children,
     }

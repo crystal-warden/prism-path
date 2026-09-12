@@ -116,8 +116,8 @@ def measure_suite_cost(suite_spec: dict, payload_len: int = 1024, iters: int = 5
     hs_iters = max(50, iters // 10)
     t0 = time.perf_counter()
     for _ in range(hs_iters):
-        a, b = X25519PrivateKey.generate(), X25519PrivateKey.generate()
-        a.exchange(b.public_key()); b.exchange(a.public_key())
+        initiator_key, responder_key = X25519PrivateKey.generate(), X25519PrivateKey.generate()
+        initiator_key.exchange(responder_key.public_key()); responder_key.exchange(initiator_key.public_key())
     handshake_us = (time.perf_counter() - t0) / hs_iters * 1e6
     aead_obj = (ChaCha20Poly1305(ChaCha20Poly1305.generate_key())
                 if "chacha20" in suite_spec.get("aead", "").lower()
@@ -235,9 +235,9 @@ class CryptoHost:
 
     def attest(self) -> dict:
         """The Attested property: what suite-selection policy is live, provably."""
-        a = self._active
-        if a is None:
+        active_policy = self._active
+        if active_policy is None:
             return {"active": None}
-        return {"active": a["sha256"], "version": a["version"], "since": a["since"],
-                "envelope_id": a["envelope_id"], "registry_hash": a["registry_hash"],
-                "suites": a["suites"], "audit_root": self.audit.current_root()}
+        return {"active": active_policy["sha256"], "version": active_policy["version"], "since": active_policy["since"],
+                "envelope_id": active_policy["envelope_id"], "registry_hash": active_policy["registry_hash"],
+                "suites": active_policy["suites"], "audit_root": self.audit.current_root()}

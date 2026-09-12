@@ -42,16 +42,16 @@ def measure() -> dict:
     strata_class: dict[str, str] = {}
     examples: dict[tuple[str, str], str] = {}
 
-    for v in variants:
-        key = (v["rule"], v["stratum"])
-        strata_class[v["stratum"]] = v["klass"]
-        verdict = guard.check(v["variant"], v["direction"])
+    for variant_case in variants:
+        key = (variant_case["rule"], variant_case["stratum"])
+        strata_class[variant_case["stratum"]] = variant_case["klass"]
+        verdict = guard.check(variant_case["variant"], variant_case["direction"])
         cells[key][1] += 1
         if verdict.allowed:
             cells[key][0] += 1
-            examples.setdefault(key, v["variant"])
+            examples.setdefault(key, variant_case["variant"])
 
-    rules = sorted({r for r, _ in cells})
+    rules = sorted({rule_name for rule_name, _ in cells})
     strata = sorted(strata_class, key=lambda stratum_name: (
         {bypass_corpus.CONTROL: 0, bypass_corpus.MECHANICAL: 1,
          bypass_corpus.SEMANTIC: 2}[strata_class[stratum_name]],
@@ -74,11 +74,11 @@ def measure() -> dict:
         "rules": rules,
         "strata": strata,
         "strata_class": strata_class,
-        "cells": {f"{r}|{stratum_name}": cells[(r, stratum_name)] for (r, stratum_name) in cells},
+        "cells": {f"{rule_name}|{stratum_name}": cells[(rule_name, stratum_name)] for (rule_name, stratum_name) in cells},
         "per_stratum": {stratum_name: per_stratum[stratum_name] for stratum_name in strata},
         "rollup": dict(rollup),
-        "examples": {f"{r}|{stratum_name}": example_text
-                     for (r, stratum_name), example_text in examples.items()},
+        "examples": {f"{rule_name}|{stratum_name}": example_text
+                     for (rule_name, stratum_name), example_text in examples.items()},
     }
 
 
@@ -113,8 +113,8 @@ def measure_collisions() -> dict:
                 })
                 break
 
-    total = sum(v[1] for v in per_stratum.values())
-    hits = sum(v[0] for v in per_stratum.values())
+    total = sum(stratum_counts[1] for stratum_counts in per_stratum.values())
+    hits = sum(stratum_counts[0] for stratum_counts in per_stratum.values())
     return {
         "cases": total,
         "false_matches": hits,

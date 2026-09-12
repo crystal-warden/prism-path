@@ -72,9 +72,9 @@ def _scan(text: str) -> dict:
             current = heading.group(1).strip().lower().replace(" ", "_")
             node_lines.setdefault(current, index)
             continue
-        e = EDGE_RE.match(line)
-        if e and current is not None:
-            edges.append({"node": current, "target": e.group(1), "condition": e.group(2),
+        edge_match = EDGE_RE.match(line)
+        if edge_match and current is not None:
+            edges.append({"node": current, "target": edge_match.group(1), "condition": edge_match.group(2),
                           "line": index, "text": line})
     return {"nodes": node_lines, "edges": edges}
 
@@ -87,12 +87,12 @@ def _line_range(index: int, text_line: str = "") -> dict:
 def _finding_range(finding, scan: dict, lines: List[str]) -> dict:
     """Best anchor for a finding: the edge line its message names, else the node heading."""
     if finding.node and finding.node in scan["nodes"]:
-        for e in scan["edges"]:
-            if e["node"] != finding.node:
+        for edge in scan["edges"]:
+            if edge["node"] != finding.node:
                 continue
-            if (f"-> {e['target']!r}" in finding.message or f"'{e['target']}'" in finding.message
-                    or repr(e["condition"]) in finding.message):
-                return _line_range(e["line"], e["text"])
+            if (f"-> {edge['target']!r}" in finding.message or f"'{edge['target']}'" in finding.message
+                    or repr(edge["condition"]) in finding.message):
+                return _line_range(edge["line"], edge["text"])
         index = scan["nodes"][finding.node]
         return _line_range(index, lines[index] if index < len(lines) else "")
     return _line_range(0, lines[0] if lines else "")
@@ -161,8 +161,8 @@ class Server:
         try:
             handler = {
                 "initialize": self._initialize,
-                "initialized": lambda p: None,
-                "shutdown": lambda p: None,
+                "initialized": lambda params: None,
+                "shutdown": lambda params: None,
                 "exit": self._exit,
                 "textDocument/didOpen": self._did_open,
                 "textDocument/didChange": self._did_change,
@@ -180,9 +180,9 @@ class Server:
             result = handler(params)
             if msg_id is not None and method != "exit":
                 self._reply(msg_id, result=result)
-        except Exception as e:                          # noqa: BLE001 - a server must not die mid-edit
+        except Exception as error:                          # noqa: BLE001 - a server must not die mid-edit
             if msg_id is not None:
-                self._reply(msg_id, error={"code": -32603, "message": str(e)})
+                self._reply(msg_id, error={"code": -32603, "message": str(error)})
 
     # -- lifecycle -----------------------------------------------------------
     def _initialize(self, params: dict) -> dict:
@@ -255,10 +255,10 @@ class Server:
                     "source": "prismpath",
                     "message": finding.message,
                 })
-        except Exception as e:                          # noqa: BLE001 - unparseable mid-edit
+        except Exception as error:                          # noqa: BLE001 - unparseable mid-edit
             diags.append({"range": _line_range(0, lines[0] if lines else ""),
                           "severity": 1, "code": "parse-error", "source": "prismpath",
-                          "message": str(e)})
+                          "message": str(error)})
         self._notify("textDocument/publishDiagnostics", {"uri": uri, "diagnostics": diags})
 
     # -- language features ---------------------------------------------------
@@ -309,10 +309,10 @@ class Server:
         line = lines[pos["line"]]
         scan = _scan(text)
 
-        e = EDGE_RE.match(line)
-        if e:
-            tier = _tier(e.group(2))
-            md = (f"**edge** `-> {e.group(1)}`  \n"
+        edge_match = EDGE_RE.match(line)
+        if edge_match:
+            tier = _tier(edge_match.group(2))
+            md = (f"**edge** `-> {edge_match.group(1)}`  \n"
                   f"tier: **{tier}** — {_TIER_BLURB[tier]}")
             return {"contents": {"kind": "markdown", "value": md},
                     "range": _line_range(pos["line"], line)}
@@ -372,11 +372,11 @@ def _uri_to_path(uri: str) -> Optional[str]:
 # ------------------------------------------------------------------ CLI (`prismpath lsp`)
 
 def add_parser(subparsers) -> None:
-    p = subparsers.add_parser(
+    parser = subparsers.add_parser(
         'lsp', help='Language Server over stdio: live diagnostics, completion, hover, and graph '
                     'preview in any LSP editor (Neovim, JetBrains via LSP4IJ, VS Code, …). '
                     'Stdlib only — see prismpath/editor/README.md for client setup.')
-    p.set_defaults(func=lsp_cmd)
+    parser.set_defaults(func=lsp_cmd)
 
 
 def lsp_cmd(args) -> int:

@@ -66,8 +66,8 @@ def get_fanout_ckpt(path: str = Query(...)):
         raise HTTPException(status_code=400, detail="path escapes the queue dir")
     if os.path.getsize(rp) > core.MAX_FILE_BYTES:
         raise HTTPException(status_code=413, detail="checkpoint exceeds MC_MAX_FILE_BYTES")
-    with open(rp, encoding="utf-8") as f:
-        return {"path": path, "checkpoint": json.load(f)}
+    with open(rp, encoding="utf-8") as checkpoint_file:
+        return {"path": path, "checkpoint": json.load(checkpoint_file)}
 
 
 @router.get("/audit")

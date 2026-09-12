@@ -16,8 +16,8 @@ import sys
 def main() -> int:
     try:
         job = json.loads(sys.stdin.read() or "{}")
-    except json.JSONDecodeError as e:
-        sys.stdout.write(json.dumps({"ok": False, "error": f"bad job: {e}"}))
+    except json.JSONDecodeError as error:
+        sys.stdout.write(json.dumps({"ok": False, "error": f"bad job: {error}"}))
         return 1
     mem_mb = int(job.get("mem_mb", 256))
     try:
@@ -31,8 +31,8 @@ def main() -> int:
         outcome = func(job.get("node", ""), job.get("instruction", ""), job.get("state") or {})
         sys.stdout.write(json.dumps({"ok": True, "outcome": outcome}))
         return 0
-    except BaseException as e:  # MemoryError is a BaseException subclass; catch it too
-        sys.stdout.write(json.dumps({"ok": False, "error": f"{type(e).__name__}: {str(e)[:200]}"}))
+    except BaseException as error:  # MemoryError is a BaseException subclass; catch it too
+        sys.stdout.write(json.dumps({"ok": False, "error": f"{type(error).__name__}: {str(error)[:200]}"}))
         return 1
 
 

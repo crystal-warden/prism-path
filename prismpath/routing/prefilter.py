@@ -425,20 +425,20 @@ class PrefilterCache:
 
 
 # --- automatic tuning (risk-controlled operating point) -------------------------------
-def _wilson_upper(k: int, n: int, confidence: float = 0.95) -> float:
+def _wilson_upper(successes: int, sample_count: int, confidence: float = 0.95) -> float:
     """High-probability UPPER bound on a binomial rate (Wilson score interval) - the mirror of
     calibrate._wilson_lower, bounding the reuse-ERROR rate from above. No scipy.
-    k: successes, n: trials."""
-    if n == 0:
+    successes: reuse errors seen, sample_count: reuse attempts."""
+    if sample_count == 0:
         return 1.0                       # no evidence -> assume the worst; never certify on n=0
     import math
-    z = 1.959963984540054 if confidence == 0.95 else {0.9: 1.6448536269514722,
+    z_score = 1.959963984540054 if confidence == 0.95 else {0.9: 1.6448536269514722,
                                                       0.99: 2.5758293035489004}.get(confidence,
                                                                                     1.959963984540054)
-    phat = k / n
-    denom = 1 + z * z / n
-    center = phat + z * z / (2 * n)
-    half = z * math.sqrt(phat * (1 - phat) / n + z * z / (4 * n * n))
+    phat = successes / sample_count
+    denom = 1 + z_score * z_score / sample_count
+    center = phat + z_score * z_score / (2 * sample_count)
+    half = z_score * math.sqrt(phat * (1 - phat) / sample_count + z_score * z_score / (4 * sample_count * sample_count))
     return min(1.0, (center + half) / denom)
 
 

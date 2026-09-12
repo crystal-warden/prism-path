@@ -40,11 +40,11 @@ def _words(text_str: str) -> set:
     return set(re.findall(r"[a-z']+", text_str.lower()))
 
 
-def _polarity_signal(a: str, b: str) -> bool:
+def _polarity_signal(first_condition: str, second_condition: str) -> bool:
     """True if two conditions differ mainly by logical polarity (one negated / an antonym flip)."""
-    wa, wb = _words(a), _words(b)
-    neg_a = bool(wa & _NEG) or any(w.endswith("n't") for w in wa)
-    neg_b = bool(wb & _NEG) or any(w.endswith("n't") for w in wb)
+    wa, wb = _words(first_condition), _words(second_condition)
+    neg_a = bool(wa & _NEG) or any(word.endswith("n't") for word in wa)
+    neg_b = bool(wb & _NEG) or any(word.endswith("n't") for word in wb)
     if neg_a != neg_b:
         return True
     for word1, word2 in _ANTONYMS:

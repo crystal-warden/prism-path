@@ -20,8 +20,8 @@ def _graph(flow_text: str):
         raise HTTPException(status_code=400, detail="flow is empty")
     try:
         return parse(flow_text)
-    except Exception as e:                       # a malformed flow is a client error, not a 500
-        raise HTTPException(status_code=400, detail=f"could not parse flow: {e}")
+    except Exception as error:                       # a malformed flow is a client error, not a 500
+        raise HTTPException(status_code=400, detail=f"could not parse flow: {error}")
 
 
 @router.post("/level-m")
@@ -43,8 +43,8 @@ def prove_reach(req: ProveReachReq):
     if not targets:
         raise HTTPException(status_code=400, detail="provide at least one node in reach or forbid")
     results = model_check.check_reach(graph, targets, assume=(req.assume or None))
-    return {"verdicts": {n: r.reachable for n, r in results.items()},
-            "results": {n: r.as_dict() for n, r in results.items()}}
+    return {"verdicts": {node_name: reach_result.reachable for node_name, reach_result in results.items()},
+            "results": {node_name: reach_result.as_dict() for node_name, reach_result in results.items()}}
 
 
 @router.get("/audit")

@@ -209,7 +209,7 @@ def run(graph: Graph, worker: Optional[Callable[[str, str, dict], object]] = Non
             state["transcript"].append({"node": node, "outcome": etext, "error": True})
             _bound_list(state, "transcript", bound)
             step_info = {"used": "error", "error_type": type(exc).__name__}
-            guard_errors = [g for g in state.get("_guard_errors", []) if g["node"] == node]
+            guard_errors = [guard_error for guard_error in state.get("_guard_errors", []) if guard_error["node"] == node]
             if guard_errors:
                 step_info["guard_errors"] = len(guard_errors)
             res.steps.append(StepLog(node, etext, etarget, step_info))
@@ -229,8 +229,8 @@ def run(graph: Graph, worker: Optional[Callable[[str, str, dict], object]] = Non
         # edges read is a contract violation - stop before routing acts on the malformed field.
         if type_gate:
             from prismpath.kernel import contract as _contract_mod
-            violations = [p for p in _contract_mod.validate_output(_contracts.get(node, {}), fields)
-                          if p.startswith("type:")]
+            violations = [problem for problem in _contract_mod.validate_output(_contracts.get(node, {}), fields)
+                          if problem.startswith("type:")]
             if violations:
                 res.stopped = "contract_violation"
                 res.cause = causes.NAMES["route:contract-violation"]

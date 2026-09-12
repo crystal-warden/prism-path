@@ -29,7 +29,7 @@ import ppt_compile as pc                    # noqa: E402
 
 OUT = HERE / "conformance" / "hotswap.json"
 
-b64 = lambda b: base64.b64encode(b).decode()
+b64 = lambda raw_bytes: base64.b64encode(raw_bytes).decode()
 
 
 def main() -> int:
@@ -56,17 +56,17 @@ def main() -> int:
 
         def record(name, image_b, manifest_obj, sig_b, pubs, revoked, check_env=True):
             """Write the variant to disk, run the real gates, freeze verdicts."""
-            d = td / f"case_{name}"
-            d.mkdir()
-            p = d / "policy.ppt"
-            p.write_bytes(image_b)
-            (d / "policy.ppt.manifest.json").write_text(json.dumps(manifest_obj, indent=1,
+            case_dir = td / f"case_{name}"
+            case_dir.mkdir()
+            pack_path = case_dir / "policy.ppt"
+            pack_path.write_bytes(image_b)
+            (case_dir / "policy.ppt.manifest.json").write_text(json.dumps(manifest_obj, indent=1,
                                                                    sort_keys=True) + "\n")
-            (d / "policy.ppt.manifest.sig").write_bytes(sig_b)
-            ok, reasons, _m = pp.verify_pack(str(p), pubs, frozenset(revoked))
+            (case_dir / "policy.ppt.manifest.sig").write_bytes(sig_b)
+            ok, reasons, _m = pp.verify_pack(str(pack_path), pubs, frozenset(revoked))
             entry = {"name": name, "image_b64": b64(image_b), "manifest": manifest_obj,
                      "sig_hex": sig_b.hex(),
-                     "pubs": [Path(x).read_bytes().hex() for x in pubs],
+                     "pubs": [Path(pub_path).read_bytes().hex() for pub_path in pubs],
                      "revoked": list(revoked),
                      "verify": {"ok": ok, "reasons": reasons}}
             if ok and check_env:
@@ -102,9 +102,9 @@ def main() -> int:
         # injected out-of-fragment opcode: patch a prog word to 0x9999, re-sign over the
         # TAMPERED image (bypassing build_pack's refusal) -> verify ok (sig+hash match), the
         # image-native opcode walk catches it at envelope check
-        h = pp.read_ppt_header(image)
-        prog_off = (pp.HEADER.size + pp.ATOM.size * h["atoms"] + pp.NODE.size * h["nodes"]
-                    + pp.EDGE.size * h["edges"])
+        header = pp.read_ppt_header(image)
+        prog_off = (pp.HEADER.size + pp.ATOM.size * header["atoms"] + pp.NODE.size * header["nodes"]
+                    + pp.EDGE.size * header["edges"])
         bad_img = bytearray(image)
         struct.pack_into("<H", bad_img, prog_off, 0x9999)
         bad_img = bytes(bad_img)

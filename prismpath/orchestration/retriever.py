@@ -51,13 +51,13 @@ def _load(index_path):
     if index_path not in _cache:
         import turbovec
         idx = turbovec.IdMapIndex.load(index_path)
-        meta = {int(k): meta_value
-                for k, meta_value in json.load(open(index_path + ".meta.json")).items()}
+        meta = {int(chunk_id): meta_value
+                for chunk_id, meta_value in json.load(open(index_path + ".meta.json")).items()}
         _cache[index_path] = (idx, meta)
     return _cache[index_path]
 
 
-def retrieve(query, k=4, index_path=None):
+def retrieve(query, top_k=4, index_path=None):
     """Top-k doc chunks for `query` -> [{score, source, path, text}]. Never raises."""
     global _warned
     index_path = index_path or os.environ.get("SPRINT_RAG_INDEX") or _DEFAULT_INDEX
@@ -71,7 +71,7 @@ def retrieve(query, k=4, index_path=None):
         vec = _embedder().encode([_QUERY_INSTRUCTION + query], normalize_embeddings=True)
         # Over-fetch, then diversify: cap chunks per (source,path) so one doc can't monopolize top-k
         # (a lightweight MMR-style spread — keeps the canonical class AND its neighbours in view).
-        scores, ids = idx.search(np.asarray(vec, dtype="float32"), k=max(k * 8, 32))
+        scores, ids = idx.search(np.asarray(vec, dtype="float32"), k=max(top_k * 8, 32))
         out, seen = [], {}
         for score, chunk_id in zip(np.asarray(scores)[0], np.asarray(ids)[0]):
             meta_record = meta.get(int(chunk_id))
@@ -87,7 +87,7 @@ def retrieve(query, k=4, index_path=None):
             seen[key] = seen.get(key, 0) + 1
             out.append({"score": float(score), "source": mm.get("source", ""),
                         "path": mm.get("path", ""), "text": text})
-            if len(out) >= k:
+            if len(out) >= top_k:
                 break
         return out
     except Exception as exc:

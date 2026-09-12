@@ -300,7 +300,7 @@ class Rule:
         silently weaken the floor.
         """
         folded = normalize(text)
-        return any(p.search(text) or p.search(folded) for p in self.patterns)
+        return any(pattern.search(text) or pattern.search(folded) for pattern in self.patterns)
 
 
 @dataclass(frozen=True)
@@ -384,11 +384,11 @@ def _parse_directions(raw: str, rule_name: str) -> tuple[str, ...]:
     value = raw.strip().lower()
     if value in ("both", "", "*"):
         return _DIRECTIONS
-    parts = tuple(p.strip() for p in value.replace(",", " ").split() if p.strip())
-    for p in parts:
-        if p not in _DIRECTIONS:
+    parts = tuple(part.strip() for part in value.replace(",", " ").split() if part.strip())
+    for direction in parts:
+        if direction not in _DIRECTIONS:
             raise PolicyError(
-                f"rule '{rule_name}': unknown direction '{p}' "
+                f"rule '{rule_name}': unknown direction '{direction}' "
                 f"(expected {INBOUND}, {OUTBOUND}, or both)"
             )
     return parts or _DIRECTIONS
@@ -528,9 +528,9 @@ class Guard:
         attested verdict must commit to *which* normalization produced it, not only which rules ran.
         """
         hasher = hashlib.sha256()
-        for p in sorted(self.policies, key=lambda p: p.name):
-            hasher.update(p.name.encode("utf-8"))
-            hasher.update(p.source_hash.encode("utf-8"))
+        for policy in sorted(self.policies, key=lambda policy: policy.name):
+            hasher.update(policy.name.encode("utf-8"))
+            hasher.update(policy.source_hash.encode("utf-8"))
         hasher.update(normalization_hash().encode("utf-8"))
         return hasher.hexdigest()
 
@@ -561,7 +561,7 @@ class Guard:
         return self.check(text, OUTBOUND)
 
     def rule_names(self) -> tuple[str, ...]:
-        return tuple(f"{r.policy}/{r.name}" for r in self.rules)
+        return tuple(f"{rule.policy}/{rule.name}" for rule in self.rules)
 
 
 def compose(policies: Iterable[Policy] | Sequence[Policy]) -> Guard:
@@ -574,7 +574,7 @@ def compose(policies: Iterable[Policy] | Sequence[Policy]) -> Guard:
     pols = tuple(policies)
     if not pols:
         raise PolicyError("a guard needs at least one policy")
-    if not any(p.is_floor for p in pols):
+    if not any(policy.is_floor for policy in pols):
         raise PolicyError(
             "a guard needs at least one 'precedence: floor' policy. Running with only "
             "augmentations would mean the statutory baseline is absent — refusing rather than "
@@ -582,13 +582,13 @@ def compose(policies: Iterable[Policy] | Sequence[Policy]) -> Guard:
         )
 
     seen: set[str] = set()
-    for p in pols:
-        if p.name in seen:
-            raise PolicyError(f"duplicate policy name '{p.name}'")
-        seen.add(p.name)
+    for policy in pols:
+        if policy.name in seen:
+            raise PolicyError(f"duplicate policy name '{policy.name}'")
+        seen.add(policy.name)
 
-    floor = [r for p in pols if p.is_floor for r in p.rules]
-    extra = [r for p in pols if not p.is_floor for r in p.rules]
+    floor = [rule for policy in pols if policy.is_floor for rule in policy.rules]
+    extra = [rule for policy in pols if not policy.is_floor for rule in policy.rules]
     return Guard(policies=pols, rules=tuple(floor + extra))
 
 

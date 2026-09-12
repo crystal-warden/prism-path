@@ -21,8 +21,8 @@ from prismpath.kernel.parser import parse_file
 _FLOWS = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "flows")
 
 
-def _key(c: dict):
-    return (c.get("flow", ""), c.get("node", ""), (c.get("outcome") or "").strip())
+def _key(case: dict):
+    return (case.get("flow", ""), case.get("node", ""), (case.get("outcome") or "").strip())
 
 
 def blind_cases(benchmark_path: str, flows_dir: Optional[str] = None) -> Iterator[dict]:
@@ -33,12 +33,12 @@ def blind_cases(benchmark_path: str, flows_dir: Optional[str] = None) -> Iterato
     for line in open(benchmark_path, encoding="utf-8"):
         if not line.strip():
             continue
-        c = json.loads(line)
-        flow = c["flow"]
+        case = json.loads(line)
+        flow = case["flow"]
         if flow not in graphs:
             graphs[flow] = parse_file(os.path.join(flows_dir, f"{flow}.md"))
-        node = graphs[flow].nodes[c["node"]]
-        yield {"flow": flow, "node": c["node"], "outcome": c["outcome"], "stratum": c.get("stratum"),
+        node = graphs[flow].nodes[case["node"]]
+        yield {"flow": flow, "node": case["node"], "outcome": case["outcome"], "stratum": case.get("stratum"),
                "instruction": node.instruction, "edges": list(node.edges),
                "targets": [edge_target for edge_target, _ in node.edges]}
 
@@ -64,8 +64,8 @@ def present(case: dict) -> str:
              f"  instruction: {case['instruction'][:200]}",
              f"  OUTCOME: {case['outcome']}",
              "  which edge should this route to?"]
-    for edge_index, (edge_target, c) in enumerate(case["edges"], 1):
-        lines.append(f"    {edge_index}. -> {edge_target}: {c}")
+    for edge_index, (edge_target, condition) in enumerate(case["edges"], 1):
+        lines.append(f"    {edge_index}. -> {edge_target}: {condition}")
     return "\n".join(lines)
 
 
@@ -76,7 +76,7 @@ def annotate_loop(benchmark_path: str, out_path: str, flows_dir: Optional[str] =
     skips a case, 'q' saves and quits. Returns the number of cases labeled this session."""
     cases = list(blind_cases(benchmark_path, flows_dir))
     done = _done_keys(out_path)
-    todo = [c for c in cases if _key(c) not in done]
+    todo = [case for case in cases if _key(case) not in done]
     if limit is not None:
         todo = todo[:limit]
     print_fn(f"{len(done)} already labeled, {len(todo)} to go ({len(cases)} total). "

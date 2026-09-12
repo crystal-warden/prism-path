@@ -47,11 +47,11 @@ class FlowReport:
 
     @property
     def errors(self):
-        return [f for f in self.findings if f.severity == "error"]
+        return [finding for finding in self.findings if finding.severity == "error"]
 
     @property
     def warnings(self):
-        return [f for f in self.findings if f.severity != "error"]
+        return [finding for finding in self.findings if finding.severity != "error"]
 
     @property
     def ok(self):
@@ -72,17 +72,17 @@ def changed_flows(base: str, cwd: str = ".") -> List[str]:
     for rel in sorted(set(out.split())):
         if rel.endswith(".tests.md"):
             continue
-        p = os.path.join(cwd, rel)
-        if not os.path.isfile(p):
+        flow_path = os.path.join(cwd, rel)
+        if not os.path.isfile(flow_path):
             continue                                       # deleted in this PR
         try:
-            with open(p, encoding="utf-8") as f:
-                head = f.read(512)
+            with open(flow_path, encoding="utf-8") as flow_file:
+                head = flow_file.read(512)
             # a flow BEGINS with front-matter declaring its start node; prose docs that merely
             # EMBED flow snippets in code fences (GETTING_STARTED and kin) fail this bar.
             if not (head.startswith("---") and "start:" in head.split("---")[1]):
                 continue
-            parsed_graph = parse_file(p)
+            parsed_graph = parse_file(flow_path)
             if any(flow_node.edges for flow_node in parsed_graph.nodes.values()):
                 flows.append(rel)
         except Exception:
@@ -95,9 +95,9 @@ def _base_mermaid(base: str, rel: str, cwd: str = ".") -> Optional[str]:
         text = _git(["show", f"{base}:{rel}"], cwd)
     except subprocess.CalledProcessError:
         return None                                        # new flow in this PR
-    with tempfile.NamedTemporaryFile("w", suffix=".md", delete=False, encoding="utf-8") as f:
-        f.write(text)
-        tmp = f.name
+    with tempfile.NamedTemporaryFile("w", suffix=".md", delete=False, encoding="utf-8") as tmp_file:
+        tmp_file.write(text)
+        tmp = tmp_file.name
     try:
         return to_mermaid(parse_file(tmp))
     except Exception:
@@ -108,19 +108,19 @@ def _base_mermaid(base: str, rel: str, cwd: str = ".") -> Optional[str]:
 
 def report_flow(rel: str, base: str, cwd: str = ".") -> FlowReport:
     report = FlowReport(path=rel)
-    p = os.path.join(cwd, rel)
+    flow_path = os.path.join(cwd, rel)
     try:
-        graph = parse_file(p)
+        graph = parse_file(flow_path)
     except Exception as exc:
         report.parse_error = str(exc)
         return report
-    report.findings = list(analysis.analyze(graph)) + analysis.analyze_composition(graph, p)
+    report.findings = list(analysis.analyze(graph)) + analysis.analyze_composition(graph, flow_path)
     report.mermaid_after = to_mermaid(graph)
     report.mermaid_before = _base_mermaid(base, rel, cwd)
-    tests_path = flow_test.default_tests_path(p)
+    tests_path = flow_test.default_tests_path(flow_path)
     if os.path.isfile(tests_path):
         try:
-            tr = flow_test.run_tests(p, tests_path)
+            tr = flow_test.run_tests(flow_path, tests_path)
             report.tests_passed, report.tests_total = tr.passed, len(tr.results)
         except ImportError:
             report.tests_skipped = "fixture rows need the embedding tier — install the [embeddings] extra"
@@ -155,9 +155,9 @@ def render(reports: List[FlowReport]) -> str:
         if report.parse_error:
             lines += [f"```\nparse failed: {report.parse_error}\n```"]
             continue
-        for f in report.findings:
-            icon = "✗" if f.severity == "error" else "⚠"
-            lines.append(f"- {icon} **{f.code}** [{f.node}] {f.message}")
+        for finding in report.findings:
+            icon = "✗" if finding.severity == "error" else "⚠"
+            lines.append(f"- {icon} **{finding.code}** [{finding.node}] {finding.message}")
         if report.tests_skipped:
             lines.append(f"- ⏭ {report.tests_skipped}")
         if report.mermaid_before is None:
@@ -179,17 +179,17 @@ def ci_report_cmd(args) -> int:
     reports = [report_flow(rel, args.base) for rel in changed_flows(args.base)]
     text = render(reports)
     if args.out:
-        with open(args.out, "w", encoding="utf-8") as f:
-            f.write(text + "\n")
+        with open(args.out, "w", encoding="utf-8") as out_file:
+            out_file.write(text + "\n")
     else:
         print(text)
     return 0 if all(report.ok for report in reports) else 1
 
 
 def add_parser(subparsers) -> None:
-    p = subparsers.add_parser(
+    parser = subparsers.add_parser(
         'ci-report', help='Markdown PR report for changed flows: validate + fixtures + '
                           'before/after Mermaid (the Action posts it as a sticky comment)')
-    p.add_argument('--base', required=True, help='git ref to diff against (the PR base sha/branch)')
-    p.add_argument('--out', default=None, help='write the report here instead of stdout')
-    p.set_defaults(func=ci_report_cmd)
+    parser.add_argument('--base', required=True, help='git ref to diff against (the PR base sha/branch)')
+    parser.add_argument('--out', default=None, help='write the report here instead of stdout')
+    parser.set_defaults(func=ci_report_cmd)

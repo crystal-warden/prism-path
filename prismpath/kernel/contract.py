@@ -53,17 +53,17 @@ class FieldSpec:
         self.ranged: bool = False         # compared with an ordering operator -> not a closed enum
         self.conflict: Optional[str] = None
 
-    def add(self, t: str, values=None, ranged: bool = False):
+    def add(self, field_type: str, values=None, ranged: bool = False):
         if values:
             self.values.update(values)
         if ranged:
             self.ranged = True
-        if t == "unknown":
+        if field_type == "unknown":
             return                        # a `== name` / mixed list gives no type signal; don't clobber
         if self.type == "unknown":
-            self.type = t
-        elif self.type != t and self.conflict is None:
-            self.conflict = f"used as both {self.type} and {t}"
+            self.type = field_type
+        elif self.type != field_type and self.conflict is None:
+            self.conflict = f"used as both {self.type} and {field_type}"
 
     def _routed_values(self):
         """The closed value set to expose, or None (booleans, ranged numbers, or no literals)."""

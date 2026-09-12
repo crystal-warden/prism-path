@@ -37,9 +37,9 @@ _IMP_BARE = re.compile(r"import\s*['\"]([^'\"]+)['\"]")
 
 
 def _exports(src: str):
-    names = set(m.group(1) for m in _EXP_DECL.finditer(src))
-    for m in _EXP_BRACE.finditer(src):
-        for part in m.group(1).split(","):
+    names = set(match.group(1) for match in _EXP_DECL.finditer(src))
+    for match in _EXP_BRACE.finditer(src):
+        for part in match.group(1).split(","):
             part = part.strip()
             if part:
                 names.add(part.split(" as ")[-1].strip())
@@ -59,22 +59,22 @@ def link_check(proj: str) -> list:
         if not (spec.startswith(".") or spec.startswith("/")):
             return None, "external"
         base = os.path.dirname(importer) if spec.startswith(".") else proj
-        p = os.path.normpath(os.path.join(base, spec.lstrip("/")))
-        for cand in (p, p + ".js", p + ".mjs", os.path.join(p, "index.js")):
+        resolved_path = os.path.normpath(os.path.join(base, spec.lstrip("/")))
+        for cand in (resolved_path, resolved_path + ".js", resolved_path + ".mjs", os.path.join(resolved_path, "index.js")):
             if os.path.isfile(cand):
                 return os.path.abspath(cand), None
         return None, "missing"
 
     for js_path, src in src_cache.items():
         rel = os.path.relpath(js_path, proj)
-        for m in _IMP_NAMED.finditer(src):
-            names = [p.strip().split(" as ")[0].strip() for p in m.group(1).split(",") if p.strip()]
-            tgt, why = resolve(js_path, m.group(2))
+        for match in _IMP_NAMED.finditer(src):
+            names = [raw_name.strip().split(" as ")[0].strip() for raw_name in match.group(1).split(",") if raw_name.strip()]
+            tgt, why = resolve(js_path, match.group(2))
             if why == "external":
-                errs.append(f"{rel}: external import '{m.group(2)}' not allowed (no CDN/network)")
+                errs.append(f"{rel}: external import '{match.group(2)}' not allowed (no CDN/network)")
                 continue
             if why == "missing":
-                errs.append(f"{rel}: imports from '{m.group(2)}' which does not exist")
+                errs.append(f"{rel}: imports from '{match.group(2)}' which does not exist")
                 continue
             texp, _tdef, tstar = _exports(src_cache.get(tgt, ""))
             if tstar:
@@ -83,19 +83,19 @@ def link_check(proj: str) -> list:
                 if imported_name not in texp:
                     errs.append(f"{rel}: imports '{imported_name}' not exported by {os.path.relpath(tgt, proj)} "
                                 f"(it exports: {', '.join(sorted(texp)) or 'nothing'})")
-        for m in _IMP_DEFAULT.finditer(src):
-            tgt, why = resolve(js_path, m.group(2))
+        for match in _IMP_DEFAULT.finditer(src):
+            tgt, why = resolve(js_path, match.group(2))
             if why == "missing":
-                errs.append(f"{rel}: imports from '{m.group(2)}' which does not exist")
+                errs.append(f"{rel}: imports from '{match.group(2)}' which does not exist")
             elif why is None:
                 _, tdef, _ = _exports(src_cache.get(tgt, ""))
                 if not tdef:
                     errs.append(f"{rel}: default-imports from {os.path.relpath(tgt, proj)} which "
                                 f"has no `export default`")
-        for m in _IMP_BARE.finditer(src):
-            tgt, why = resolve(js_path, m.group(1))
+        for match in _IMP_BARE.finditer(src):
+            tgt, why = resolve(js_path, match.group(1))
             if why == "missing":
-                errs.append(f"{rel}: imports '{m.group(1)}' which does not exist")
+                errs.append(f"{rel}: imports '{match.group(1)}' which does not exist")
     return errs
 
 
@@ -116,9 +116,9 @@ def dom_check(proj: str) -> list:
         src = open(js_path, encoding="utf-8").read()
         refs = set(re.findall(r"getElementById\(\s*['\"]([^'\"]+)['\"]", src))
         refs |= set(re.findall(r"querySelector(?:All)?\(\s*['\"]#([A-Za-z0-9_\-]+)['\"]", src))
-        for r in refs:
-            if r not in ids:
-                errs.append(f"{rel}: references DOM id '#{r}' that does not exist in the HTML "
+        for dom_id in refs:
+            if dom_id not in ids:
+                errs.append(f"{rel}: references DOM id '#{dom_id}' that does not exist in the HTML "
                             f"(html ids: {', '.join(sorted(ids)) or 'none'})")
     return errs
 
@@ -146,17 +146,17 @@ def behavioral_check(proj: str) -> list:
     threading.Thread(target=httpd.serve_forever, daemon=True).start()
     errs = []
     try:
-        with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch(headless=True)
             pg = browser.new_page()
             cap = []
-            pg.on("pageerror", lambda e: cap.append(f"uncaught: {str(e)[:180]}"))
-            pg.on("console", lambda m: cap.append(f"console.error: {m.text[:180]}")
-                  if m.type == "error" else None)
-            pg.on("requestfailed", lambda r: cap.append(f"failed to load {r.url.split('/')[-1]}")
-                  if r.url.endswith((".js", ".mjs", ".css")) else None)
+            pg.on("pageerror", lambda error: cap.append(f"uncaught: {str(error)[:180]}"))
+            pg.on("console", lambda message: cap.append(f"console.error: {message.text[:180]}")
+                  if message.type == "error" else None)
+            pg.on("requestfailed", lambda request: cap.append(f"failed to load {request.url.split('/')[-1]}")
+                  if request.url.endswith((".js", ".mjs", ".css")) else None)
             net = []
-            pg.on("request", lambda r: net.append(r.url))
+            pg.on("request", lambda request: net.append(request.url))
             pg.add_init_script("window.__rej=[];addEventListener('unhandledrejection',"
                                "e=>window.__rej.push(String(e.reason&&e.reason.message||e.reason)));")
             pg.goto(f"http://127.0.0.1:{port}/", wait_until="load", timeout=15000)
@@ -194,10 +194,10 @@ def behavioral_check(proj: str) -> list:
                 cell = None
                 for sel in ("[data-index]", "[data-cell]", ".cell", "#board > *", ".board > *",
                             ".grid > *", "td"):
-                    for e in pg.query_selector_all(sel):
+                    for element in pg.query_selector_all(sel):
                         try:
-                            if e.is_visible():
-                                cell = e
+                            if element.is_visible():
+                                cell = element
                                 break
                         except Exception:
                             pass
@@ -212,8 +212,8 @@ def behavioral_check(proj: str) -> list:
                     pg.wait_for_timeout(1500)
                     after = pg.evaluate("document.body.innerText")
                     made_request = len(net) > net0
-            for r in pg.evaluate("window.__rej || []"):
-                cap.append(f"unhandledrejection: {str(r)[:180]}")
+            for rejection in pg.evaluate("window.__rej || []"):
+                cap.append(f"unhandledrejection: {str(rejection)[:180]}")
             if interacted and not has_canvas and after.strip() == before.strip() and not made_request:
                 cap.append("the primary control produced NO visible change and NO network request after "
                            "clicking it (button and a grid cell) — its handler is likely not wired. Check "
@@ -226,7 +226,7 @@ def behavioral_check(proj: str) -> list:
     finally:
         httpd.shutdown()
         httpd.server_close()
-    return [f"[behavioral] {e}" for e in errs]
+    return [f"[behavioral] {problem}" for problem in errs]
 
 
 def validate_browser(proj: str, tokens_max: int = TOKENS_MAX) -> dict:
@@ -235,18 +235,18 @@ def validate_browser(proj: str, tokens_max: int = TOKENS_MAX) -> dict:
     paths = (glob.glob(os.path.join(proj, "**", "*.html"), recursive=True)
              + glob.glob(os.path.join(proj, "**", "*.js"), recursive=True)
              + glob.glob(os.path.join(proj, "**", "*.mjs"), recursive=True))
-    if not any(p.endswith("index.html") for p in paths):
+    if not any(path.endswith("index.html") for path in paths):
         errs.append("missing index.html")
-    for p in paths:
-        rel = os.path.relpath(p, proj)
-        src = open(p, encoding="utf-8").read()
+    for path in paths:
+        rel = os.path.relpath(path, proj)
+        src = open(path, encoding="utf-8").read()
         tk = token_est(src)
         if tk > biggest:
             biggest, biggest_file = tk, rel
         if tk > tokens_max and (oversized_file is None
                                 or tk > token_est(open(os.path.join(proj, oversized_file)).read())):
             oversized_file = rel
-        if p.endswith(".html"):
+        if path.endswith(".html"):
             if src.lower().count("<script") != src.lower().count("</script>"):
                 errs.append(f"{rel}: unclosed <script> (truncated?)")
             if "</html>" not in src.lower():
@@ -254,11 +254,11 @@ def validate_browser(proj: str, tokens_max: int = TOKENS_MAX) -> dict:
             import html.parser
             try:
                 html.parser.HTMLParser().feed(src)
-            except Exception as e:
-                errs.append(f"{rel}: HTML parse error {str(e)[:120]}")
+            except Exception as error:
+                errs.append(f"{rel}: HTML parse error {str(error)[:120]}")
         else:
             if shutil.which("node"):
-                pj = subprocess.run(["node", "--check", p], capture_output=True, text=True,
+                pj = subprocess.run(["node", "--check", path], capture_output=True, text=True,
                                     timeout=25, cwd=proj)
                 if pj.returncode != 0:
                     errs.append(f"{rel}: JS syntax {pj.stderr.strip()[:200]}")

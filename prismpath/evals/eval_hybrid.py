@@ -34,9 +34,9 @@ def main():
                      ed.info["score"], llm_t, len(edges)))
 
     total_cases = len(recs)
-    multi = [r for r in recs if r[7] > 1]
-    a_embed = sum(r[3] == r[2] for r in recs) / total_cases
-    a_llm = sum(r[6] == r[2] for r in recs) / total_cases
+    multi = [record for record in recs if record[7] > 1]
+    a_embed = sum(record[3] == record[2] for record in recs) / total_cases
+    a_llm = sum(record[6] == record[2] for record in recs) / total_cases
     print(f"=== arms on {total_cases} cases ({len(multi)} multi-edge) ===")
     print(f"  EMBED-only : acc={a_embed:.2f}   (0 LLM calls)")
     print(f"  LLM-only   : acc={a_llm:.2f}   ({len(multi)} LLM calls)")

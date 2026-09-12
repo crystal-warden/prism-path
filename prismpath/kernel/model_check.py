@@ -107,8 +107,8 @@ def _candidates(consts: list) -> list:
         cands.append(constant)
     for num in nums:
         cands.extend([num - 1, num + 1])
-    for a, b in zip(nums, nums[1:]):
-        cands.append((a + b) / 2)
+    for lower, upper in zip(nums, nums[1:]):
+        cands.append((lower + upper) / 2)
     # dedupe preserving order (values may repeat; bool/int collisions are fine - both present)
     seen, out = set(), []
     for val in cands:

@@ -79,8 +79,8 @@ def flow_context(graph) -> dict:
         })
 
     reach = check_reach(graph, sorted(graph.nodes))
-    reachability = {node: {"reachable": r.reachable, "proven": r.proven, "depth": r.depth}
-                    for node, r in reach.items()}
+    reachability = {node: {"reachable": reach_result.reachable, "proven": reach_result.proven, "depth": reach_result.depth}
+                    for node, reach_result in reach.items()}
     lm_ok, lm_bad = flow_level_m(graph)
 
     return {
@@ -92,8 +92,8 @@ def flow_context(graph) -> dict:
         "fields": sorted(fields),
         "terminal_nodes": sorted(node for node, nd in graph.nodes.items() if nd.terminal),
         "reachability": reachability,
-        "unreachable_nodes": sorted(node for node, r in reachability.items()
-                                    if r["reachable"] == "no"),
+        "unreachable_nodes": sorted(node for node, reach_result in reachability.items()
+                                    if reach_result["reachable"] == "no"),
         "level_m": {"flow": lm_ok, "non_member_edges": lm_bad},
         "capability": capability_report(graph),
         "findings": [finding.as_dict() for finding in analyze(graph)],
@@ -120,9 +120,9 @@ def render_context(facts: dict) -> str:
     lines.append("")
     lines.append("Reachability (adversarial-worker analysis, proven):")
     mark = {"yes": "reachable", "may": "may be reachable", "no": "UNREACHABLE"}
-    for flow_node, r in facts["reachability"].items():
-        proof = " (proven for all bounds)" if r["reachable"] == "no" and r["proven"] else ""
-        lines.append(f"  {flow_node}: {mark[r['reachable']]}{proof}")
+    for flow_node, record in facts["reachability"].items():
+        proof = " (proven for all bounds)" if record["reachable"] == "no" and record["proven"] else ""
+        lines.append(f"  {flow_node}: {mark[record['reachable']]}{proof}")
     if facts["unreachable_nodes"]:
         lines.append("  -> unreachable nodes: " + ", ".join(facts["unreachable_nodes"]))
     lines.append("")
@@ -131,8 +131,8 @@ def render_context(facts: dict) -> str:
         lines.append("Level M: YES — every deterministic edge is in the hardware match-action fragment.")
     else:
         lines.append(f"Level M: NO — {len(lm['non_member_edges'])} deterministic edge(s) outside the fragment:")
-        for r in lm["non_member_edges"]:
-            lines.append(f"  [{r['node']}] -> {r['target']}  {r['condition']!r}  ({r['reason']})")
+        for record in lm["non_member_edges"]:
+            lines.append(f"  [{record['node']}] -> {record['target']}  {record['condition']!r}  ({record['reason']})")
     cap = facts["capability"]
     lines.append(f"Compiles to: tier {cap['tier']} — "
                  + ", ".join(f"{target_name}={target_status['status']}"

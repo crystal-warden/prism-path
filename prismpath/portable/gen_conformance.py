@@ -184,20 +184,20 @@ def _gen_fuzz(rng: random.Random, case_count: int):
         return comparison(depth)
 
     def ctx():
-        c = {}
+        context = {}
         for name in rng.sample(names, rng.randint(0, 6)):
             draw = rng.random()
             if draw < 0.3:
-                c[name] = rng.choice(nums)
+                context[name] = rng.choice(nums)
             elif draw < 0.5:
-                c[name] = rng.choice(strings)
+                context[name] = rng.choice(strings)
             elif draw < 0.65:
-                c[name] = rng.choice([True, False, None])
+                context[name] = rng.choice([True, False, None])
             elif draw < 0.85:
-                c[name] = [rng.choice(nums + strings) for _ in range(rng.randint(0, 3))]
+                context[name] = [rng.choice(nums + strings) for _ in range(rng.randint(0, 3))]
             else:
-                c[name] = {"k": rng.choice(nums)}
-        return c
+                context[name] = {"k": rng.choice(nums)}
+        return context
 
     return [(f"when {expr()}", ctx()) for _ in range(case_count)]
 
@@ -239,7 +239,7 @@ def generate() -> dict:
         "version": VERSION, "seed": SEED,
         "note": "expect: true|false = eval_condition result; 'ERROR' = PredicateError "
                 "(edge non-matching at run time). Any implementation must match every case.",
-        "cases": [{"cond": c, "ctx": ctx, "expect": _expect(c, ctx)} for c, ctx in cases],
+        "cases": [{"cond": condition, "ctx": ctx, "expect": _expect(condition, ctx)} for condition, ctx in cases],
     }
     flows_doc = {
         "version": VERSION,

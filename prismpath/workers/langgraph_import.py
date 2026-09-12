@@ -22,8 +22,8 @@ import re
 from typing import List, Optional, Tuple
 
 
-def _san(s: str) -> str:
-    return re.sub(r"[^a-z0-9_]", "", s.strip().lower().replace(" ", "_").replace("-", "_")) or "node"
+def _san(raw_name: str) -> str:
+    return re.sub(r"[^a-z0-9_]", "", raw_name.strip().lower().replace(" ", "_").replace("-", "_")) or "node"
 
 
 def _is_ref(node, names) -> bool:
@@ -122,8 +122,8 @@ def import_langgraph(source: str, name: str = "imported") -> str:
     # emit
     out = [f"---\nname: {name}\nstart: {start or 'start'}\n---\n"]
     outgoing = {}
-    for s, dest_node, condition in edges:
-        outgoing.setdefault(s, []).append((dest_node, condition))
+    for source_node, dest_node, condition in edges:
+        outgoing.setdefault(source_node, []).append((dest_node, condition))
     for nm in order:
         out.append(f"## {nm}")
         fn = nodes.get(nm)

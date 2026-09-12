@@ -61,16 +61,16 @@ class FileDeferralStore(DeferralStore):
         return rec
 
     def get(self, unit_id):
-        p = self._path(unit_id)
-        return json.load(open(p)) if os.path.exists(p) else None
+        deferral_path = self._path(unit_id)
+        return json.load(open(deferral_path)) if os.path.exists(deferral_path) else None
 
     def pending(self):
         out = []
-        for f in sorted(os.listdir(self.dir)):
-            if f.endswith(".json"):
-                r = json.load(open(os.path.join(self.dir, f)))
-                if r.get("status") == "pending":
-                    out.append(r)
+        for filename in sorted(os.listdir(self.dir)):
+            if filename.endswith(".json"):
+                record = json.load(open(os.path.join(self.dir, filename)))
+                if record.get("status") == "pending":
+                    out.append(record)
         return out
 
     def resume(self, unit_id, resolution, actor):
@@ -87,22 +87,22 @@ class FileDeferralStore(DeferralStore):
 if __name__ == "__main__":
     import tempfile, shutil
 
-    d = tempfile.mkdtemp(prefix="cw_defer_")
-    s = FileDeferralStore(d)
-    s.defer(
+    temp_dir = tempfile.mkdtemp(prefix="cw_defer_")
+    store = FileDeferralStore(temp_dir)
+    store.defer(
         "wu:001",
         reason="human_review: compensating control claimed",
         state={"flow": "x", "node": "adjudicate"},
         prior_output={"status": "not-met"},
     )
-    out = {"deferred_pending": len(s.pending()) == 1}
-    rec = s.resume(
+    out = {"deferred_pending": len(store.pending()) == 1}
+    rec = store.resume(
         "wu:001",
         resolution={"status": "met", "note": "compensating control accepted"},
         actor="reviewer:jsmith",
     )
     out["resume_records_actor"] = rec["actor"] == "reviewer:jsmith" and rec["status"] == "resolved"
     out["prior_output_preserved"] = rec["prior_output"]["status"] == "not-met"
-    out["no_longer_pending"] = len(s.pending()) == 0
+    out["no_longer_pending"] = len(store.pending()) == 0
     print(json.dumps(out, indent=1))
-    shutil.rmtree(d, ignore_errors=True)
+    shutil.rmtree(temp_dir, ignore_errors=True)

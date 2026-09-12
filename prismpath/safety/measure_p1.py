@@ -125,16 +125,16 @@ def main() -> int:
         print(line)
 
     print("\n--- against the pre-registered bands (§5.4) ---")
-    zero_fp = [r for r in rows if r["benign_false_matches"] == 0]
+    zero_fp = [row for row in rows if row["benign_false_matches"] == 0]
     print("\n--- what the HOLDOUT says about the threshold chosen on dev (amendment 9) ---")
-    at75 = next((r for r in rows if abs(r["threshold"] - 0.75) < 1e-9), None)
+    at75 = next((row for row in rows if abs(row["threshold"] - 0.75) < 1e-9), None)
     if at75:
         print(f"  threshold 0.75 was selected by reading the OLD 41-case dev set.")
         print(f"  on the held-out {sum(1 for probe_case in benign if probe_case['split']=='holdout')} cases it produces "
               f"{at75['fp_holdout']} false matches.")
         for ex in at75["fp_examples"]:
             print(f"    [{ex['split']}/{ex['stratum']}] {ex['text'][:66]!r}")
-    best = min(zero_fp, key=lambda r: sum(r["strata"].values())) if zero_fp else None
+    best = min(zero_fp, key=lambda row: sum(row["strata"].values())) if zero_fp else None
 
     if best is None:
         print("  NO threshold in the sweep holds the ZERO benign bound.")

@@ -40,8 +40,8 @@ def seconds_until_due(cp: dict, now: Optional[float] = None) -> Optional[float]:
 
 
 def is_due(cp: dict, now: Optional[float] = None) -> bool:
-    d = seconds_until_due(cp, now)
-    return d is not None and d <= 0
+    seconds_left = seconds_until_due(cp, now)
+    return seconds_left is not None and seconds_left <= 0
 
 
 def fire_due_timeouts(agent, qdir: Optional[str] = None, now: Optional[float] = None,

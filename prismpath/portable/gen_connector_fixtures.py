@@ -71,9 +71,9 @@ def _scripted(script):
         seq = script.get(node)
         if seq is None:
             return {"text": node}
-        i = used.get(node, 0)
-        used[node] = i + 1
-        return seq[min(i, len(seq) - 1)]
+        visit_count = used.get(node, 0)
+        used[node] = visit_count + 1
+        return seq[min(visit_count, len(seq) - 1)]
 
     return agent
 
@@ -81,9 +81,9 @@ def _scripted(script):
 def main() -> int:
     conn = _Echo()
 
-    hashes = [{"data": p,
-               "ingestion": conn.compute_ingestion_hash(p),
-               "knowledge": conn.compute_knowledge_hash(p)} for p in _PAYLOADS]
+    hashes = [{"data": payload,
+               "ingestion": conn.compute_ingestion_hash(payload),
+               "knowledge": conn.compute_knowledge_hash(payload)} for payload in _PAYLOADS]
 
     prompts = [
         {"payload": _PAYLOADS[0], "criteria": None, "schema": None,
@@ -96,7 +96,7 @@ def main() -> int:
              _PAYLOADS[2], schema={"properties": {"verdict": {}, "reason": {}}})},
     ]
 
-    flat_cases = [{"data": p, "flat": PayloadFlattener().flatten(p)} for p in _PAYLOADS]
+    flat_cases = [{"data": payload, "flat": PayloadFlattener().flatten(payload)} for payload in _PAYLOADS]
 
     outcome = {"verdict": "contain", "score": 0.93}
     att = conn.attest_decision(outcome, "sha256:deadbeef", "wazuh_triage@v3",

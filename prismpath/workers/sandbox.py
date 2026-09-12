@@ -86,15 +86,15 @@ class SandboxRunner:
         child_env = dict(os.environ)
         child_env["PYTHONPATH"] = _REPO_ROOT + os.pathsep + child_env.get("PYTHONPATH", "")
         try:
-            p = subprocess.run(self._profile(env), input=job, capture_output=True, text=True,
+            child = subprocess.run(self._profile(env), input=job, capture_output=True, text=True,
                                timeout=env.timeout_s + 2, env=child_env)
         except subprocess.TimeoutExpired:
             raise SandboxError(f"code node {node!r}: exceeded timeout_s={env.timeout_s}")
         try:
-            res = json.loads(p.stdout or "{}")
+            res = json.loads(child.stdout or "{}")
         except json.JSONDecodeError:
             raise SandboxError(f"code node {node!r}: sandbox produced no result "
-                               f"(rc={p.returncode}): {(p.stderr or p.stdout or '')[:200]}")
+                               f"(rc={child.returncode}): {(child.stderr or child.stdout or '')[:200]}")
         if not res.get("ok"):
             raise SandboxError(f"code node {node!r}: {res.get('error', 'sandbox error')}")
         return res["outcome"]

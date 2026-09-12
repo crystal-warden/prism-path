@@ -127,16 +127,16 @@ def read_interactions(limit=MAX_EVENTS):
             lines = []
         for ln in lines[-limit:]:
             try:
-                e = json.loads(ln)
+                event = json.loads(ln)
             except Exception:
                 continue
-            folded_prompt, folded_output = _fold(e.get("prompt", "")), _fold(e.get("output", ""), head=0, tail=2200)
+            folded_prompt, folded_output = _fold(event.get("prompt", "")), _fold(event.get("output", ""), head=0, tail=2200)
             events.append({
-                "ts": e.get("ts"), "kind": e.get("kind", "?"), "role": e.get("role", ""),
-                "phase": e.get("phase", ""), "dur_ms": e.get("dur_ms", 0),
-                "prompt_len": e.get("prompt_len", len(e.get("prompt", ""))),
-                "output_len": e.get("output_len", len(e.get("output", ""))),
-                "rc": e.get("rc"), "focus": e.get("focus", ""),
+                "ts": event.get("ts"), "kind": event.get("kind", "?"), "role": event.get("role", ""),
+                "phase": event.get("phase", ""), "dur_ms": event.get("dur_ms", 0),
+                "prompt_len": event.get("prompt_len", len(event.get("prompt", ""))),
+                "output_len": event.get("output_len", len(event.get("output", ""))),
+                "rc": event.get("rc"), "focus": event.get("focus", ""),
                 "prompt": folded_prompt["preview"], "prompt_full": folded_prompt["full"],
                 "output": folded_output["preview"], "output_full": folded_output["full"],
             })
@@ -294,8 +294,8 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(GLASS_HTML, "text/html; charset=utf-8")
             else:
                 self._send("prismpath exporter -> / (glass lens) · /metrics · /interactions\n", "text/plain")
-        except Exception as e:
-            self._send(f"# exporter error: {e}\nswarm_up 0\n", "text/plain")
+        except Exception as error:
+            self._send(f"# exporter error: {error}\nswarm_up 0\n", "text/plain")
 
     def log_message(self, *ignored_args):
         pass

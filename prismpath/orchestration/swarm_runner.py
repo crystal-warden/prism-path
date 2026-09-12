@@ -124,14 +124,14 @@ def run_pytest(test_dir: str, target: str = "", timeout: int = 600):
     env = dict(os.environ)
     env.setdefault("EMBED_DEVICE", "cpu")
     try:
-        p = subprocess.run(args, cwd=repo_root, capture_output=True, text=True,
+        pytest_run = subprocess.run(args, cwd=repo_root, capture_output=True, text=True,
                            timeout=timeout, env=env)
     except subprocess.TimeoutExpired:
         return False, 0, 0, "pytest timed out"
-    log = (p.stdout + "\n" + p.stderr).strip()
+    log = (pytest_run.stdout + "\n" + pytest_run.stderr).strip()
     n_pass = _count(log, r"(\d+) passed")
     n_fail = _count(log, r"(\d+) failed") + _count(log, r"(\d+) error")
-    passed = p.returncode == 0 and n_fail == 0
+    passed = pytest_run.returncode == 0 and n_fail == 0
     return passed, n_pass, n_fail, log
 
 
@@ -202,7 +202,7 @@ def make_swarm_agent(spec: dict, backend: str = "auto", base: Optional[str] = No
             prior_block = ""
             if prior:
                 prior_block = "\n\n## Files already written (keep them consistent):\n" + \
-                    "\n".join(f"- {p}" for p in prior)
+                    "\n".join(f"- {written_path}" for written_path in prior)
             err = state.get("last_error", "")
             if err and state.get("last_file") == file_spec["name"]:
                 prompt = (f"{goal}\n\n{ctx}\n\nFile to (re)write: `{file_spec['path']}`\n"

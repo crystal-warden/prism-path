@@ -119,8 +119,8 @@ MEMORY_CAP = int(os.environ.get("HERMES_MEMORY_CAP", "6000"))   # max chars of l
 
 # Roles that run on the qwen25 coder server (:8889) instead of gemma4 (:8888): the product-steering voices
 # and the consistency auditor. setup_roles() patches their config.yaml to the qwen endpoint (idempotent).
-QWEN_ROLES = {r.strip() for r in os.environ.get(
-    "HERMES_QWEN_ROLES", "product-manager,engagement-manager,auditor").split(",") if r.strip()}
+QWEN_ROLES = {role_name.strip() for role_name in os.environ.get(
+    "HERMES_QWEN_ROLES", "product-manager,engagement-manager,auditor").split(",") if role_name.strip()}
 
 _sem = threading.Semaphore(MAX_CONCURRENCY)
 

@@ -56,14 +56,14 @@ def _as_bool(value, key: str, problems: List[str]) -> Optional[bool]:
 
 def _as_pos_int(value, key: str, problems: List[str]) -> Optional[int]:
     try:
-        n = int(str(value).strip())
+        parsed_int = int(str(value).strip())
     except (TypeError, ValueError):
         problems.append(f"{key}={value!r} is not an integer")
         return None
-    if n <= 0:
+    if parsed_int <= 0:
         problems.append(f"{key}={value!r} must be positive")
         return None
-    return n
+    return parsed_int
 
 
 def parse_envelope(anno: Optional[dict]) -> Tuple[Optional[Envelope], List[str]]:
@@ -88,13 +88,13 @@ def parse_envelope(anno: Optional[dict]) -> Tuple[Optional[Envelope], List[str]]
         else:
             problems.append(f"fs={anno['fs']!r} must be one of none|ro|rw")
     if "timeout_s" in anno:
-        n = _as_pos_int(anno["timeout_s"], "timeout_s", problems)
-        if n is not None:
-            kw["timeout_s"] = n
+        limit = _as_pos_int(anno["timeout_s"], "timeout_s", problems)
+        if limit is not None:
+            kw["timeout_s"] = limit
     if "mem_mb" in anno:
-        n = _as_pos_int(anno["mem_mb"], "mem_mb", problems)
-        if n is not None:
-            kw["mem_mb"] = n
+        limit = _as_pos_int(anno["mem_mb"], "mem_mb", problems)
+        if limit is not None:
+            kw["mem_mb"] = limit
     if problems:
         return None, problems
     return Envelope(**kw), []
@@ -143,8 +143,8 @@ def code_agent(graph, handlers: Dict[str, Callable], runner: Optional[Runner] = 
         handler = handlers.get(node)
         if handler is None:
             return base(node, instruction, state) if base else {"text": node}
-        n = graph.nodes.get(node)
-        anno = n.annotations.get("code") if n else None
+        flow_node = graph.nodes.get(node)
+        anno = flow_node.annotations.get("code") if flow_node else None
         env, problems = parse_envelope(anno)
         if env is None:
             raise CodeNodeError(f"code node {node!r}: {'; '.join(problems)}")
