@@ -78,15 +78,18 @@ static void radio_keep(uint16_t id, const uint8_t *data, size_t len)
     kept[k].data = heap_caps_malloc(len, MALLOC_CAP_SPIRAM); if (!kept[k].data) { kept[k].set = false; return; }
     memcpy(kept[k].data, data, len); kept[k].len = len; kept[k].id = id; kept[k].set = true;
 }
-static void radio_send_fragmented(uint16_t nid, uint16_t id, const uint8_t *data, size_t len)
+// keep = true: a message worth repairing (keyframe, evidence), kept for resend and framed FRG2; keep = false: a message the
+// next frame supersedes (a refinement layer), framed FRG3 so the receiver never asks for its missing fragments
+static void radio_send_fragmented_ex(uint16_t nid, uint16_t id, const uint8_t *data, size_t len, bool keep)
 {
-    radio_keep(id, data, len);
+    if (keep) radio_keep(id, data, len);
     uint16_t total = (uint16_t)((len + FRAG_DATA - 1) / FRAG_DATA); uint8_t pkt[ESPNOW_MAX];
     for (uint16_t i = 0; i < total; i++) {
         size_t off = (size_t)i * FRAG_DATA, n = len - off < FRAG_DATA ? len - off : FRAG_DATA;
-        frag_hdr_t h = { {'F','R','G','2'}, nid, id, i, total }; memcpy(pkt, &h, sizeof h); memcpy(pkt + sizeof h, data + off, n);
+        frag_hdr_t h = { {'F','R','G', keep ? '2' : '3'}, nid, id, i, total }; memcpy(pkt, &h, sizeof h); memcpy(pkt + sizeof h, data + off, n);
         while (esp_now_send(BCAST, pkt, sizeof h + n) != ESP_OK) vTaskDelay(1);
         hop_send(pkt, sizeof h + n);
         vTaskDelay(pdMS_TO_TICKS(8));   // pace the burst: a keyframe is not latency critical and the transmit buffers are finite
     }
 }
+static void radio_send_fragmented(uint16_t nid, uint16_t id, const uint8_t *data, size_t len) { radio_send_fragmented_ex(nid, id, data, len, true); }

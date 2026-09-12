@@ -93,7 +93,7 @@ static void send_layer3(uint32_t seq, uint16_t node, bool is_door)
     memcpy(rec, "LAY3", 4); rec[4] = node_id & 0xff; rec[5] = node_id >> 8; memcpy(rec + 6, &seq, 4); uint8_t flags = full ? 1 : 0;
     // the header is 4 + 2 + 4 + 1 + 1 = 12 bytes: shift the cells up by four to make room (the record was built at offset 8)
     memmove(rec + 12, rec + 8, off - 8); rec[10] = flags; rec[11] = (uint8_t)n; off += 4;
-    radio_send_fragmented(node_id, frag_id++, rec, off);
+    radio_send_fragmented_ex(node_id, frag_id++, rec, off, false);   // superseded by the next frame: never repaired
 }
 // ---- the signed policy swap: chunks arrive as 'S' | idx u16 | total u16 | data over the hop, 'X' verifies and commits.
 // Pack: "PPKV1" | key_id[4] | version u32 | image_len u16 | cb_len u16 | esc_mask u32 | sig[64] | image | codebook; the
