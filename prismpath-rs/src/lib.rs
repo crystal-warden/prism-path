@@ -2936,4 +2936,14 @@ mod tests {
             assert!((a - b).abs() < 1e-6, "{a} != {b}");
         }
     }
+
+    #[test]
+    fn nan_truthiness_and_chained_comparison_short_circuit() {
+        let c_nan = ctx(&[("x", V::Num(f64::NAN))]);
+        assert!(eval_condition("when x", &c_nan).unwrap());
+
+        let deep_expr = format!("when 1 < 0 < {}", "[".repeat(49) + "1" + &"]".repeat(49));
+        let c_empty = ctx(&[]);
+        assert!(!eval_condition(&deep_expr, &c_empty).unwrap());
+    }
 }

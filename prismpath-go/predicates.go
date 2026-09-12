@@ -165,18 +165,19 @@ func (n *chainedCmpNode) eval(ctx map[string]interface{}, depth int) (interface{
 	if depth > 50 {
 		return nil, newPredErr("expression nested too deeply (depth > 50)")
 	}
-	vals := make([]interface{}, len(n.exprs))
-	for i, e := range n.exprs {
-		v, err := e.eval(ctx, depth+1)
-		if err != nil {
-			return nil, err
-		}
-		vals[i] = v
+	if len(n.exprs) == 0 {
+		return true, nil
+	}
+	left, err := n.exprs[0].eval(ctx, depth+1)
+	if err != nil {
+		return nil, err
 	}
 	for i := 0; i < len(n.ops); i++ {
 		op := n.ops[i]
-		left := vals[i]
-		right := vals[i+1]
+		right, err := n.exprs[i+1].eval(ctx, depth+1)
+		if err != nil {
+			return nil, err
+		}
 		var match bool
 		switch op {
 		case "==":
@@ -204,6 +205,7 @@ func (n *chainedCmpNode) eval(ctx map[string]interface{}, depth int) (interface{
 		if !match {
 			return false, nil
 		}
+		left = right
 	}
 	return true, nil
 }
@@ -256,7 +258,7 @@ func pyTruthy(v interface{}) bool {
 	case int64:
 		return val != 0
 	case float64:
-		return val != 0 && !math.IsNaN(val)
+		return val != 0
 	case string:
 		return len(val) > 0
 	case []interface{}:

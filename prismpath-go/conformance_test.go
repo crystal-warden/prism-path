@@ -3,9 +3,11 @@ package prismpath
 import (
 	"encoding/json"
 	"errors"
+	"math"
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -145,4 +147,42 @@ func TestFlowsConformance(t *testing.T) {
 	}
 
 	t.Logf("flows: %d/%d passed", passed, len(corpus.Cases))
+}
+
+func TestPredicateSemanticsFixes(t *testing.T) {
+	deepExpr := "when 1 < 0 < " + strings.Repeat("[", 49) + "1" + strings.Repeat("]", 49)
+	tests := []struct {
+		name    string
+		cond    string
+		ctx     map[string]interface{}
+		want    bool
+		wantErr bool
+	}{
+		{
+			name:    "nan is truthy in bare truthiness predicate",
+			cond:    "when x",
+			ctx:     map[string]interface{}{"x": math.NaN()},
+			want:    true,
+			wantErr: false,
+		},
+		{
+			name:    "chained comparison short circuits on first false without evaluating errored second comparison",
+			cond:    deepExpr,
+			ctx:     map[string]interface{}{},
+			want:    false,
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := EvalCondition(tt.cond, tt.ctx)
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("EvalCondition(%q) error = %v, wantErr %v", tt.cond, err, tt.wantErr)
+			}
+			if got != tt.want {
+				t.Errorf("EvalCondition(%q) got = %v, want %v", tt.cond, got, tt.want)
+			}
+		})
+	}
 }
