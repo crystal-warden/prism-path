@@ -12,7 +12,7 @@ HW = Path(__file__).resolve().parent.parent; REPO = HW.parent
 sys.path.insert(0, str(HW)); sys.path.insert(0, str(REPO))
 import ppt_compile as pc
 from prismpath.kernel.parser import parse_file
-if len(sys.argv) < 2: sys.exit("usage: gen_hop_policy.py <flow.md>   (the authored flow lives with the deployment, not in this repository)")
+if len(sys.argv) < 2: sys.exit("usage: gen_hop_policy.py <flow.md>   (the flow this bench ran is flows/hop_power.md)")
 flow = sys.argv[1]
 g = parse_file(flow); img = pc.compile_flow(g, 25); blob = img.serialize(); names = [n for n, _ in img.nodes]
 hexb = ",\n  ".join(", ".join(f"0x{b:02x}" for b in blob[i:i + 16]) for i in range(0, len(blob), 16))

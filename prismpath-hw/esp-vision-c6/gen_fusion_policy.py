@@ -11,7 +11,7 @@ HW = Path(__file__).resolve().parent.parent; REPO = HW.parent
 sys.path.insert(0, str(HW)); sys.path.insert(0, str(REPO))
 import ppt_compile as pc
 from prismpath.kernel.parser import parse_file
-if len(sys.argv) < 3: sys.exit("usage: gen_fusion_policy.py <fusion flow.md> <camera flow.md>   (the authored flows live with the deployment, not in this repository)")
+if len(sys.argv) < 3: sys.exit("usage: gen_fusion_policy.py <fusion flow.md> <camera flow.md>   (this bench ran flows/room_fusion.md over esp-vision-node/flows/occupancy_6x8.md)")
 flow, cam = sys.argv[1], sys.argv[2]
 g = parse_file(flow); img = pc.compile_flow(g, 25); blob = img.serialize(); names = [n for n, _ in img.nodes]
 cg = parse_file(cam); cimg = pc.compile_flow(cg, 25); cnames = [n for n, _ in cimg.nodes]
