@@ -72,6 +72,8 @@ static void emit(const char *fmt, ...) {
     if (n > 0) uart_write_bytes(UART, b, n);
 }
 
+enum { OP_EQ = 0, OP_NE, OP_LT, OP_LE, OP_GT, OP_GE, OP_TRUTHY };
+enum { OPC_NOT = 0x8000, OPC_AND, OPC_OR, OPC_TRUE, OPC_FALSE };
 /* ---------------- evaluator core: a local copy of interp.c's core, pending conversion to ../ppt_eval.h (eval_copies_check.py) ---------------- */
 static uint8_t tbl[TBL_MAX], regs[REGS_MAX];
 static uint16_t n_fields, n_atoms, n_nodes, n_edges, prog_len;
@@ -91,16 +93,16 @@ static uint8_t eval_atom(uint16_t ai){
     const uint8_t *r=regs+4+8*(uint32_t)f; int32_t rty=rd32(r),rv=rd32(r+4);
     uint8_t ln=(rty==TY_BOOL||rty==TY_INT), rn=(aty==TY_BOOL||aty==TY_INT);
     switch(op){
-    case 0: case 1:{ uint8_t eq; if(ln&&rn) eq=(rv==av); else if(rty==TY_STR&&aty==TY_STR) eq=(rv==av); else if(rty==TY_NONE&&aty==TY_NONE) eq=1; else eq=0; return op==0?eq:(uint8_t)!eq; }
-    case 2: case 3: case 4: case 5: if(!(ln&&rn)) return 0; switch(op){case 2:return rv<av;case 3:return rv<=av;case 4:return rv>av;default:return rv>=av;}
-    case 6: return rty==TY_NONE?0:(rv!=0);
+    case OP_EQ: case OP_NE:{ uint8_t eq; if(ln&&rn) eq=(rv==av); else if(rty==TY_STR&&aty==TY_STR) eq=(rv==av); else if(rty==TY_NONE&&aty==TY_NONE) eq=1; else eq=0; return op==OP_EQ?eq:(uint8_t)!eq; }
+    case OP_LT: case OP_LE: case OP_GT: case OP_GE: if(!(ln&&rn)) return 0; switch(op){case OP_LT:return rv<av;case OP_LE:return rv<=av;case OP_GT:return rv>av;default:return rv>=av;}
+    case OP_TRUTHY: return rty==TY_NONE?0:(rv!=0);
     } return 0;
 }
 static int8_t eval_prog(uint16_t off,uint16_t cnt,uint8_t *err){
     uint8_t st[STACK_MAX]; int8_t sp=0;
     for(uint16_t i=0;i<cnt;i++){ uint16_t w=rd16(tbl+prog_base+2*(uint32_t)(off+i));
-        if(w<0x8000){ if(sp>=STACK_MAX){*err=7;return 0;} st[sp++]=eval_atom(w); }
-        else switch(w){ case 0x8000: st[sp-1]=(uint8_t)!st[sp-1]; break; case 0x8001: sp--; st[sp-1]=(uint8_t)(st[sp-1]&&st[sp]); break; case 0x8002: sp--; st[sp-1]=(uint8_t)(st[sp-1]||st[sp]); break; case 0x8003: if(sp>=STACK_MAX){*err=7;return 0;} st[sp++]=1; break; case 0x8004: if(sp>=STACK_MAX){*err=7;return 0;} st[sp++]=0; break; default: *err=8; return 0; } }
+        if(w<OPC_NOT){ if(sp>=STACK_MAX){*err=7;return 0;} st[sp++]=eval_atom(w); }
+        else switch(w){ case OPC_NOT: st[sp-1]=(uint8_t)!st[sp-1]; break; case OPC_AND: sp--; st[sp-1]=(uint8_t)(st[sp-1]&&st[sp]); break; case OPC_OR: sp--; st[sp-1]=(uint8_t)(st[sp-1]||st[sp]); break; case OPC_TRUE: if(sp>=STACK_MAX){*err=7;return 0;} st[sp++]=1; break; case OPC_FALSE: if(sp>=STACK_MAX){*err=7;return 0;} st[sp++]=0; break; default: *err=8; return 0; } }
     return (int8_t)st[0];
 }
 static int8_t evaluate(uint16_t node,uint8_t *err){
