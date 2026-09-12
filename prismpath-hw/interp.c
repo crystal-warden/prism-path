@@ -114,20 +114,21 @@ static int eval_atom(const Atom *a, const Reg *regs) {
     return 0;
 }
 
+static void overflow(void) { fprintf(stderr, "stack overflow\n"); exit(2); }   /* checked before the write, never after it */
+
 static int eval_prog(const Image *im, const Edge *e, const Reg *regs) {
     uint8_t stack[STACK_MAX]; int sp = 0;
     for (int i = 0; i < e->prog_cnt; i++) {
         uint16_t w = im->prog[e->prog_off + i];
-        if (w < 0x8000) stack[sp++] = (uint8_t)eval_atom(&im->atoms[w], regs);
+        if (w < 0x8000) { if (sp >= STACK_MAX) overflow(); stack[sp++] = (uint8_t)eval_atom(&im->atoms[w], regs); }
         else switch (w) {
         case OPC_NOT:   stack[sp - 1] = !stack[sp - 1]; break;
         case OPC_AND:   sp--; stack[sp - 1] = (uint8_t)(stack[sp - 1] && stack[sp]); break;
         case OPC_OR:    sp--; stack[sp - 1] = (uint8_t)(stack[sp - 1] || stack[sp]); break;
-        case OPC_TRUE:  stack[sp++] = 1; break;
-        case OPC_FALSE: stack[sp++] = 0; break;
+        case OPC_TRUE:  if (sp >= STACK_MAX) overflow(); stack[sp++] = 1; break;
+        case OPC_FALSE: if (sp >= STACK_MAX) overflow(); stack[sp++] = 0; break;
         default: fprintf(stderr, "bad opcode 0x%04x\n", w); exit(2);
         }
-        if (sp > STACK_MAX) { fprintf(stderr, "stack overflow\n"); exit(2); }
     }
     return stack[0];
 }
