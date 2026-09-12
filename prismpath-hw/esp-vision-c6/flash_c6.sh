@@ -1,4 +1,6 @@
 #!/bin/bash
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 # usage: flash_c6.sh <air|host|replay> <port>
 set -e; cd "$(dirname "$0")"; source ~/cwprojects/esp-idf/export.sh >/dev/null 2>&1
 export C6_APP=$1

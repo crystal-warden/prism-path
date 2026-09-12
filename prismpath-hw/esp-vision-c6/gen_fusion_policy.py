@@ -11,8 +11,8 @@ HW = Path(__file__).resolve().parent.parent; REPO = HW.parent
 sys.path.insert(0, str(HW)); sys.path.insert(0, str(REPO))
 import ppt_compile as pc
 from prismpath.kernel.parser import parse_file
-V = REPO.parent / "cw-strategy" / "decision-sufficient-vision"
-flow = sys.argv[1] if len(sys.argv) > 1 else str(V / "room_fusion.md"); cam = sys.argv[2] if len(sys.argv) > 2 else str(V / "occupancy_6x8.md")
+if len(sys.argv) < 3: sys.exit("usage: gen_fusion_policy.py <fusion flow.md> <camera flow.md>   (the authored flows live with the deployment, not in this repository)")
+flow, cam = sys.argv[1], sys.argv[2]
 g = parse_file(flow); img = pc.compile_flow(g, 25); blob = img.serialize(); names = [n for n, _ in img.nodes]
 cg = parse_file(cam); cimg = pc.compile_flow(cg, 25); cnames = [n for n, _ in cimg.nodes]
 occ = sum(1 << i for i, n in enumerate(cnames) if n in ("occupied", "door", "evidence")); tam = sum(1 << i for i, n in enumerate(cnames) if n == "tamper")

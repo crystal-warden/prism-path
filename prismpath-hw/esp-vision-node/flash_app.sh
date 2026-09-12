@@ -1,4 +1,6 @@
 #!/bin/bash
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 # Build one entry point and flash it. usage: flash_app.sh <t0|snap|rec|replay|live|radio|relay> <uart port>
 # The entry point is chosen at CMake configure time, so every switch reconfigures; a plain build after a
 # change of VISION_APP keeps the previous app (learned 2026-09-10 when both boards came up as radio nodes).

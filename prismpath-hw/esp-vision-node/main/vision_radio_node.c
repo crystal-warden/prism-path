@@ -83,7 +83,7 @@ static void send_keyframe(camera_fb_t *fb, uint32_t seq, uint64_t t_cap)
     ESP_LOGI(TAG, "keyframe %lu B in %u fragments, normal %04x", (unsigned long)(sizeof kh + jlen), (unsigned)((sizeof kh + jlen + FRAG_DATA - 1) / FRAG_DATA), normal_id);
 }
 static bool escalates(uint16_t node) { return (esc_mask >> node) & 1u; }
-// ---- refinement layer 3 on the air (owner's request 2026-09-11): for the cells the reading names (motion band 2 or
+// ---- refinement layer 3 on the air: for the cells the reading names (motion band 2 or
 // more, plus the door zone on the door route), 8 by 8 sub cells of 5 px at 16 gray bands, one nibble each; only the cells
 // whose 32 bytes changed since last sent, with every named cell resent every LAYER_REFRESH frames.
 //   "LAY3" | nid u16 | seq u32 | flags u8 (1 = full refresh) | n u8 | (cell u8 = r<<4|c, 32 B nibbles) x n

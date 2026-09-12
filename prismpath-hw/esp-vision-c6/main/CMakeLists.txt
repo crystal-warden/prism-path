@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 if(DEFINED ENV{C6_APP} AND "$ENV{C6_APP}" STREQUAL "host")
   idf_component_register(SRCS "relay_host.c" REQUIRES ieee802154 driver esp_timer)
 elseif(DEFINED ENV{C6_APP} AND "$ENV{C6_APP}" STREQUAL "sniff")

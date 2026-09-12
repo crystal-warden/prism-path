@@ -16,7 +16,8 @@ import ppt_compile as pc
 from prismpath.kernel.parser import parse_file
 from prismpath.telemetry import quantizer as q, wire
 
-flow = sys.argv[1] if len(sys.argv) > 1 else str(REPO.parent / "cw-strategy" / "decision-sufficient-vision" / "occupancy_6x8.md")
+if len(sys.argv) < 2: sys.exit("usage: gen_vision_policy.py <flow.md> [door cells]   (the authored flow lives with the deployment, not in this repository)")
+flow = sys.argv[1]
 def _parse_cells(spec):
     cells = []
     for part in spec.split(","):

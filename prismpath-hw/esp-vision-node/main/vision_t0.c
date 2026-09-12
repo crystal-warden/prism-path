@@ -5,7 +5,7 @@
 // Walks a list of capture modes, holds each for T0_SECONDS, and prints one summary line per mode:
 // achieved frames per second, frame interval min/mean/max, bytes per frame (JPEG modes vary), and
 // free internal and PSRAM heap. Nothing is decided here; this is the measurement the design is
-// re-parameterized against. The board pin map is prismpath-hw/../cw-strategy BOARD.md until it moves.
+// re-parameterized against. The board pin map is the FORIOT ESP32-S3-CAM vendor diagram, verified on first capture.
 #include <stdio.h>
 #include <string.h>
 #include "freertos/FreeRTOS.h"

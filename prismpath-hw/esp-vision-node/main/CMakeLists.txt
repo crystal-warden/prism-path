@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
 # Entry points in one firmware directory, selected by VISION_APP: t0 (capture envelope, default), snap
 # (the aiming tool on the console), rec (the corpus recorder over native USB).
 if(DEFINED ENV{VISION_APP} AND "$ENV{VISION_APP}" STREQUAL "snap")

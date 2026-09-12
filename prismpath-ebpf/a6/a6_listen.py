@@ -1,4 +1,6 @@
-"""A6 listener on the Protectli: a socket above the stack that only reads. Each packet was decided by the XDP program on
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
+"""A6 listener on the kernel host: a socket above the stack that only reads. Each packet was decided by the XDP program on
 the NIC path, which rewrote node_idx to the verdict. The trailer the sender appended (after the registers) carries the
 sender's sequence and the verdict the relay reached, so agreement is measured here with no application in the decision.
 usage: a6_listen.py PORT names.json LOG"""
