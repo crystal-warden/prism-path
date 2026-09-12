@@ -30,6 +30,8 @@ type token struct {
 	str  string
 }
 
+const maxPredicateDepth = 50 // the same bound the Python kernel enforces
+
 // AST Node interface
 type node interface {
 	eval(ctx map[string]interface{}, depth int) (interface{}, error)
@@ -38,7 +40,7 @@ type node interface {
 type constNode struct{ val interface{} }
 
 func (n *constNode) eval(ctx map[string]interface{}, depth int) (interface{}, error) {
-	if depth > 50 {
+	if depth > maxPredicateDepth {
 		return nil, newPredErr("expression nested too deeply (depth > 50)")
 	}
 	return n.val, nil
@@ -47,7 +49,7 @@ func (n *constNode) eval(ctx map[string]interface{}, depth int) (interface{}, er
 type varNode struct{ name string }
 
 func (n *varNode) eval(ctx map[string]interface{}, depth int) (interface{}, error) {
-	if depth > 50 {
+	if depth > maxPredicateDepth {
 		return nil, newPredErr("expression nested too deeply (depth > 50)")
 	}
 	if v, ok := ctx[n.name]; ok {
@@ -59,7 +61,7 @@ func (n *varNode) eval(ctx map[string]interface{}, depth int) (interface{}, erro
 type notNode struct{ child node }
 
 func (n *notNode) eval(ctx map[string]interface{}, depth int) (interface{}, error) {
-	if depth > 50 {
+	if depth > maxPredicateDepth {
 		return nil, newPredErr("expression nested too deeply (depth > 50)")
 	}
 	v, err := n.child.eval(ctx, depth+1)
@@ -76,7 +78,7 @@ type binOpNode struct {
 }
 
 func (n *binOpNode) eval(ctx map[string]interface{}, depth int) (interface{}, error) {
-	if depth > 50 {
+	if depth > maxPredicateDepth {
 		return nil, newPredErr("expression nested too deeply (depth > 50)")
 	}
 	switch n.op {
@@ -162,7 +164,7 @@ type chainedCmpNode struct {
 }
 
 func (n *chainedCmpNode) eval(ctx map[string]interface{}, depth int) (interface{}, error) {
-	if depth > 50 {
+	if depth > maxPredicateDepth {
 		return nil, newPredErr("expression nested too deeply (depth > 50)")
 	}
 	if len(n.exprs) == 0 {
@@ -213,7 +215,7 @@ func (n *chainedCmpNode) eval(ctx map[string]interface{}, depth int) (interface{
 type listNode struct{ elems []node }
 
 func (n *listNode) eval(ctx map[string]interface{}, depth int) (interface{}, error) {
-	if depth > 50 {
+	if depth > maxPredicateDepth {
 		return nil, newPredErr("expression nested too deeply (depth > 50)")
 	}
 	res := make([]interface{}, len(n.elems))
@@ -230,7 +232,7 @@ func (n *listNode) eval(ctx map[string]interface{}, depth int) (interface{}, err
 type tupleNode struct{ elems []node }
 
 func (n *tupleNode) eval(ctx map[string]interface{}, depth int) (interface{}, error) {
-	if depth > 50 {
+	if depth > maxPredicateDepth {
 		return nil, newPredErr("expression nested too deeply (depth > 50)")
 	}
 	res := make([]interface{}, len(n.elems))
