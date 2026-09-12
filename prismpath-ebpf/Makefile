@@ -19,11 +19,12 @@ LIBBPF_EXISTS := $(shell pkg-config --exists libbpf 2>/dev/null && echo 1 || ech
 all: ppt_xdp.bpf.o ppt_net.bpf.o facet_decode.bpf.o ppt_select.bpf.o a6/ppt_xdp.bpf.o loader interp tools
 
 # the stateful selector and the decode and rewrite variant (a6) are built too, so a clang or header change that
-# breaks them fails the build instead of waiting for the next bench session
-ppt_select.bpf.o: ppt_select.bpf.c ppt_common.h
+# breaks them fails the build instead of waiting for the next bench session; all four XDP programs share the
+# one evaluator in ppt_eval_bpf.h, so every one of them lists it as a prerequisite
+ppt_select.bpf.o: ppt_select.bpf.c ppt_common.h ppt_eval_bpf.h
 	@if [ $(CLANG_EXISTS) -eq 1 ]; then $(CLANG) $(BPF_CFLAGS) -c ppt_select.bpf.c -o ppt_select.bpf.o; else echo "[NOTICE] $(CLANG) not found"; fi
 
-a6/ppt_xdp.bpf.o: a6/ppt_xdp.bpf.c ppt_common.h
+a6/ppt_xdp.bpf.o: a6/ppt_xdp.bpf.c ppt_common.h ppt_eval_bpf.h
 	@if [ $(CLANG_EXISTS) -eq 1 ]; then $(CLANG) $(BPF_CFLAGS) -c a6/ppt_xdp.bpf.c -o a6/ppt_xdp.bpf.o; else echo "[NOTICE] $(CLANG) not found"; fi
 
 # host tools for the selector sessions (need libbpf; skipped without it, like the loader's fallback)
@@ -36,7 +37,7 @@ $(TOOLS): %: %.c ppt_common.h
 interp: $(INTERP_SRC)
 	$(CC) $(CFLAGS) -o interp $(INTERP_SRC)
 
-ppt_xdp.bpf.o: ppt_xdp.bpf.c ppt_common.h
+ppt_xdp.bpf.o: ppt_xdp.bpf.c ppt_common.h ppt_eval_bpf.h
 	@if [ $(CLANG_EXISTS) -eq 1 ]; then \
 		echo "Building eBPF program $(CLANG)..."; \
 		$(CLANG) $(BPF_CFLAGS) -c ppt_xdp.bpf.c -o ppt_xdp.bpf.o; \
@@ -44,7 +45,7 @@ ppt_xdp.bpf.o: ppt_xdp.bpf.c ppt_common.h
 		echo "[NOTICE] $(CLANG) not found — install clang/llvm/libbpf-dev to build the BPF object."; \
 	fi
 
-ppt_net.bpf.o: ppt_net.bpf.c ppt_common.h
+ppt_net.bpf.o: ppt_net.bpf.c ppt_common.h ppt_eval_bpf.h
 	@if [ $(CLANG_EXISTS) -eq 1 ]; then \
 		echo "Building eBPF real-packet program $(CLANG)..."; \
 		$(CLANG) $(BPF_CFLAGS) -c ppt_net.bpf.c -o ppt_net.bpf.o; \

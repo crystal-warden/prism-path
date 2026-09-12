@@ -1,13 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 Crystal Warden Supply Chain Labs LLC
-/* ppt_net.bpf.c — PrismPath PPT on REAL network packets (XDP), observe-only.
+/* ppt_net.bpf.c: PrismPath PPT on REAL network packets (XDP), observe-only by default.
  *
- * Same verifier-accepted match-action back-end as ppt_xdp.bpf.c (eval_atom / eval_prog / evaluate over
- * the PPT table maps), but the FRONT-END parses a live Ethernet/IPv4/TCP-UDP packet instead of a crafted
- * PPT packet. It fills a FIXED canonical register file from the packet's real fields, evaluates the
- * flow's start node in-kernel, and records the verdict into a per-target histogram. It NEVER drops:
- * always XDP_PASS. Meant for an observe-only attach on a mirror (span0), where a mirror cannot be
- * back-pressured and a bug cannot harm production traffic.
+ * The evaluator it runs (eval_atom, eval_prog, evaluate over the PPT table maps) is the shared
+ * ppt_eval_bpf.h, the same text ppt_xdp.bpf.c certifies. What is this program's own is the FRONT-END,
+ * which parses a live Ethernet/IPv4/TCP-UDP packet instead of a crafted PPT packet: it fills a FIXED
+ * canonical register file from the packet's real fields, evaluates the flow's start node in-kernel,
+ * and records the verdict into a per-target histogram. It is also the only program here that holds
+ * TWO banks of the table, which is how a policy swap commits atomically under live traffic. Its
+ * default verdict is XDP_PASS and only a decision node named in the signed drop_mask turns into an
+ * XDP_DROP. Meant for an attach on a mirror (span0), where a mirror cannot be back-pressured and a
+ * bug cannot harm production traffic.
  *
  * Canonical field ABI (must match the pre-seeded schema the flow is compiled with):
  *   0 src_ip   1 dst_ip   2 src_port   3 dst_port   4 protocol   5 pkt_len   6 tcp_flags   7 ttl
@@ -62,145 +65,19 @@ struct { __uint(type, BPF_MAP_TYPE_ARRAY); __type(key, __u32); __type(value, str
 struct { __uint(type, BPF_MAP_TYPE_ARRAY); __type(key, __u32); __type(value, __u64);
          __uint(max_entries, MAX_NODES); } verdict_map SEC(".maps");
 
-struct ppt_regfile { struct ppt_reg r[MAX_FIELDS_PER_PKT]; };
-struct { __uint(type, BPF_MAP_TYPE_PERCPU_ARRAY); __type(key, __u32); __type(value, struct ppt_regfile);
-         __uint(max_entries, 1); } regs_map SEC(".maps");
+/* Two banks of every table map above, so the evaluator must offset each index by a whole bank; the
+ * other three programs hold one bank and this switch compiles that arithmetic away for them. */
+#define PPT_EVAL_BANKED 1
 
-/* ------------------------------------------------------------------ eval back-end (mirror of ppt_xdp.bpf.c) */
-static __always_inline int eval_atom(const struct ppt_atom *a, __u32 n_fields)
-{
-    struct ppt_reg r;
-    __u32 zero = 0;
-    struct ppt_regfile *rf = bpf_map_lookup_elem(&regs_map, &zero);
-    if (rf && a->field < MAX_FIELDS_PER_PKT && a->field < n_fields) {
-        r = rf->r[a->field & (MAX_FIELDS_PER_PKT - 1)];
-    } else { r.ty = TY_NONE; r.val = 0; }
-
-    int lnum = (r.ty == TY_BOOL || r.ty == TY_INT);
-    int rnum = (a->ty == TY_BOOL || a->ty == TY_INT);
-    switch (a->op) {
-    case OP_EQ:
-    case OP_NE: {
-        int eq;
-        if (lnum && rnum) eq = (r.val == a->val);
-        else if (r.ty == TY_STR && a->ty == TY_STR) eq = (r.val == a->val);
-        else if (r.ty == TY_NONE && a->ty == TY_NONE) eq = 1;
-        else eq = 0;
-        return (a->op == OP_EQ) ? eq : !eq;
-    }
-    case OP_LT: case OP_LE: case OP_GT: case OP_GE:
-        if (!(lnum && rnum)) return 0;
-        switch (a->op) {
-        case OP_LT: return r.val <  a->val;
-        case OP_LE: return r.val <= a->val;
-        case OP_GT: return r.val >  a->val;
-        case OP_GE: return r.val >= a->val;
-        default: return 0;
-        }
-    case OP_TRUTHY:
-        return (r.ty == TY_NONE) ? 0 : (r.val != 0);
-    default: return 0;
-    }
-}
-
-static __always_inline __u8 st_get(const __u8 *st, __u32 i)
-{
-    switch (i) { case 0: return st[0]; case 1: return st[1]; case 2: return st[2];
-                 case 3: return st[3]; default: return 0; }
-}
-static __always_inline void st_put(__u8 *st, __u32 i, __u8 v)
-{
-    switch (i) { case 0: st[0]=v; break; case 1: st[1]=v; break; case 2: st[2]=v; break;
-                 case 3: st[3]=v; break; default: break; }
-}
-
-struct prog_ctx { __u32 prog_off; __u32 prog_cnt; __u32 n_fields; __u32 bank; __u8 st[STACK_MAX]; __u32 sp; };
-
-static long prog_word_cb(__u32 i, void *ctx_ptr)
-{
-    struct prog_ctx *c = ctx_ptr;
-    if (i >= c->prog_cnt) return 1;
-    __u32 p_idx = (c->bank & 1) * MAX_PROG_WORDS + ((c->prog_off + i) & (MAX_PROG_WORDS - 1));
-    __u16 *w_ptr = bpf_map_lookup_elem(&prog_map, &p_idx);
-    if (!w_ptr) return 1;
-    __u16 w = *w_ptr;
-    if (w < 0x8000) {
-        __u32 atom_idx = (c->bank & 1) * MAX_ATOMS + (w & (MAX_ATOMS - 1));
-        struct ppt_atom *atom = bpf_map_lookup_elem(&atoms_map, &atom_idx);
-        __u8 res = atom ? (__u8)eval_atom(atom, c->n_fields) : 0;
-        if (c->sp < STACK_MAX) { st_put(c->st, c->sp, res); c->sp++; }
-    } else {
-        switch (w) {
-        case OPC_NOT: if (c->sp >= 1) st_put(c->st, c->sp-1, !st_get(c->st, c->sp-1)); break;
-        case OPC_AND: if (c->sp >= 2) { __u8 b=st_get(c->st,c->sp-1), a=st_get(c->st,c->sp-2);
-                          c->sp--; st_put(c->st, c->sp-1, (__u8)(a && b)); } break;
-        case OPC_OR:  if (c->sp >= 2) { __u8 b=st_get(c->st,c->sp-1), a=st_get(c->st,c->sp-2);
-                          c->sp--; st_put(c->st, c->sp-1, (__u8)(a || b)); } break;
-        case OPC_TRUE:  if (c->sp < STACK_MAX) { st_put(c->st, c->sp, 1); c->sp++; } break;
-        case OPC_FALSE: if (c->sp < STACK_MAX) { st_put(c->st, c->sp, 0); c->sp++; } break;
-        default: break;
-        }
-    }
-    return 0;
-}
-
-static __always_inline int eval_prog(const struct ppt_edge *e, __u32 n_fields, __u32 bank)
-{
-    struct prog_ctx pc = {};
-    pc.prog_off = e->prog_off;
-    pc.prog_cnt = e->prog_cnt;
-    if (pc.prog_cnt > MAX_PROG_PER_EDGE) pc.prog_cnt = MAX_PROG_PER_EDGE;
-    pc.n_fields = n_fields;
-    pc.bank = bank & 1;
-    pc.sp = 0;
-    bpf_loop(MAX_PROG_PER_EDGE, prog_word_cb, &pc, 0);
-    return (pc.sp > 0) ? st_get(pc.st, 0) : 0;
-}
-
-struct eval_loop_ctx { __u32 edge_off; __u32 edge_cnt; __u32 n_fields; __u32 bank;
-                       __s32 matched_edge; __s32 target_node; };
-
-static long edge_loop_cb(__u32 i, void *ctx_ptr)
-{
-    struct eval_loop_ctx *c = ctx_ptr;
-    if (i >= c->edge_cnt) return 1;
-    __u32 e_idx = (c->bank & 1) * MAX_EDGES + ((c->edge_off + i) & (MAX_EDGES - 1));
-    struct ppt_edge *e = bpf_map_lookup_elem(&edges_map, &e_idx);
-    if (!e) return 0;
-    if (eval_prog(e, c->n_fields, c->bank)) {
-        c->matched_edge = (__s32)i;
-        c->target_node = (__s32)e->target;
-        return 1;
-    }
-    return 0;
-}
-
-static __attribute__((noinline)) int evaluate(__u32 node_idx, __u32 n_fields, __u32 bank,
-                    __s32 *out_matched_edge, __s32 *out_target_node)
-{
-    __u32 n_idx = (bank & 1) * MAX_NODES + (node_idx & (MAX_NODES - 1));
-    struct ppt_node *n = bpf_map_lookup_elem(&nodes_map, &n_idx);
-    if (!n) { *out_matched_edge = -1; *out_target_node = -1; return -1; }
-    __u32 edge_cnt = n->edge_cnt;
-    if (edge_cnt > MAX_EDGES_PER_NODE) edge_cnt = MAX_EDGES_PER_NODE;
-    struct eval_loop_ctx c = {};
-    c.edge_off = n->edge_off;
-    c.edge_cnt = edge_cnt;
-    c.n_fields = n_fields;
-    c.bank = bank & 1;
-    c.matched_edge = -1;
-    c.target_node = -1;
-    bpf_loop(MAX_EDGES_PER_NODE, edge_loop_cb, &c, 0);
-    *out_matched_edge = c.matched_edge;
-    *out_target_node = c.target_node;
-    return (c.matched_edge >= 0) ? 0 : -1;
-}
+/* The evaluator, the per-packet register file and the verifier rationale behind their shape: one
+ * text for all four XDP programs here. Include it AFTER the table maps it reads. */
+#include "ppt_eval_bpf.h"
 
 /* ------------------------------------------------------------------ real-packet front-end */
-static __always_inline void set_reg(struct ppt_regfile *rf, __u32 slot, __s32 val)
+static __always_inline void set_reg(struct ppt_regfile *regfile, __u32 slot, __s32 val)
 {
-    rf->r[slot & (MAX_FIELDS_PER_PKT - 1)].ty = TY_INT;
-    rf->r[slot & (MAX_FIELDS_PER_PKT - 1)].val = val;
+    regfile->reg[slot & (MAX_FIELDS_PER_PKT - 1)].ty = TY_INT;
+    regfile->reg[slot & (MAX_FIELDS_PER_PKT - 1)].val = val;
 }
 
 SEC("xdp")
@@ -241,17 +118,22 @@ int ppt_net_prog(struct xdp_md *ctx)
         }
     }
 
-    __u32 zero = 0;
-    struct ppt_regfile *rf = bpf_map_lookup_elem(&regs_map, &zero);
-    if (!rf) return XDP_PASS;
+    struct ppt_regfile *regfile = ppt_regs();
+    if (!regfile) return XDP_PASS;
     /* fill the fixed canonical schema; slots >= NET_FIELDS default to NONE */
     #pragma unroll
-    for (__u32 i = 0; i < MAX_FIELDS_PER_PKT; i++) {
-        rf->r[i & (MAX_FIELDS_PER_PKT - 1)].ty = TY_NONE;
-        rf->r[i & (MAX_FIELDS_PER_PKT - 1)].val = 0;
+    for (__u32 field_index = 0; field_index < MAX_FIELDS_PER_PKT; field_index++) {
+        regfile->reg[field_index & (MAX_FIELDS_PER_PKT - 1)].ty = TY_NONE;
+        regfile->reg[field_index & (MAX_FIELDS_PER_PKT - 1)].val = 0;
     }
-    set_reg(rf, 0, src_ip); set_reg(rf, 1, dst_ip); set_reg(rf, 2, sport); set_reg(rf, 3, dport);
-    set_reg(rf, 4, proto);  set_reg(rf, 5, pkt_len); set_reg(rf, 6, tcp_flags); set_reg(rf, 7, ttl);
+    set_reg(regfile, 0, src_ip);
+    set_reg(regfile, 1, dst_ip);
+    set_reg(regfile, 2, sport);
+    set_reg(regfile, 3, dport);
+    set_reg(regfile, 4, proto);
+    set_reg(regfile, 5, pkt_len);
+    set_reg(regfile, 6, tcp_flags);
+    set_reg(regfile, 7, ttl);
 
     /* Read the active bank ONCE — a single aligned load, atomic against the loader's flip. Every
      * table access below is confined to this bank; whichever value we read (old or new), the whole
