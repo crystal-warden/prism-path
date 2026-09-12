@@ -2,7 +2,7 @@
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """cli_worker.py — ANY command-line program as a flow worker (the generic subprocess contract).
 
-The engine's worker interface is `agent(node, instruction, state) -> str | dict`. This module
+The engine's worker interface is `worker(node, instruction, state) -> str | dict`. This module
 adapts the most stable interface in software — a process with stdin/stdout/exit-code — onto it,
 so a Claude/Gemini/aider CLI, a task-file runner, or a shell script can be a node's worker with
 no Python written by the flow author. The contract:
@@ -23,13 +23,13 @@ the ROUTING layer (the `when` predicate evaluator executes no worker-influenced 
 is not, and cannot be, a claim that your workers are safe. Choose your commands like you choose
 your dependencies.
 
-    from prismpath.workers.cli_worker import CliWorker, cli_agent
+    from prismpath.workers.cli_worker import CliWorker, cli_worker
 
     # every node runs the same CLI, prompt on stdin:
-    agent = cli_agent(["claude", "-p"])
+    worker = cli_worker(["claude", "-p"])
 
     # or per-node commands, with templating ({node}/{instruction} in args; state via stdin JSON):
-    agent = cli_agent({
+    worker = cli_worker({
         "implement": ["md", "tasks/implement.claude.md"],
         "review":    ["md", "tasks/review.gemini.md"],
     }, default=["claude", "-p"])
@@ -43,6 +43,7 @@ from __future__ import annotations
 import json
 import subprocess
 import threading
+import warnings
 from typing import Dict, List, Optional, Sequence, Union
 
 DEFAULT_TIMEOUT = 600.0
@@ -210,22 +211,31 @@ class CliWorker:
         return _outcome_from_stdout(p.stdout)
 
 
-def cli_agent(commands: Union[Sequence[str], Dict[str, Sequence[str]]],
-              default: Optional[Sequence[str]] = None, **kw):
-    """Build an engine-ready agent from CLI command(s).
+def cli_worker(commands: Union[Sequence[str], Dict[str, Sequence[str]]],
+               default: Optional[Sequence[str]] = None, **kw):
+    """Build an engine-ready worker from CLI command(s).
 
     * a single argv list -> every node runs that command;
     * a {node_name: argv} dict -> per-node commands (engine-heterogeneous routing), with
       `default` for unmapped nodes (no default -> unmapped nodes raise, landing on error edges).
     Extra kwargs (timeout, stdin, pass_state, cwd, env) apply to every constructed worker."""
     if isinstance(commands, dict):
-        workers = {n: CliWorker(cmd, **kw) for n, cmd in commands.items()}
+        workers = {name: CliWorker(cmd, **kw) for name, cmd in commands.items()}
         fallback = CliWorker(default, **kw) if default else None
 
-        def agent(node: str, instruction: str, state: dict):
-            w = workers.get(node) or fallback
-            if w is None:
+        def worker(node: str, instruction: str, state: dict):
+            chosen = workers.get(node) or fallback
+            if chosen is None:
                 raise CliWorkerError(f"no CLI command mapped for node {node!r} and no default")
-            return w(node, instruction, state)
-        return agent
+            return chosen(node, instruction, state)
+        return worker
     return CliWorker(commands, **kw)
+
+
+def cli_agent(commands: Union[Sequence[str], Dict[str, Sequence[str]]],
+              default: Optional[Sequence[str]] = None, **kw):
+    """What `cli_worker` was called before the rename, kept importable so code written against
+    the old name keeps running."""
+    warnings.warn("cli_agent is now cli_worker; the old name goes away in a later release",
+                  DeprecationWarning, stacklevel=2)
+    return cli_worker(commands, default=default, **kw)

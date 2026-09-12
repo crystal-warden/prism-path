@@ -46,13 +46,13 @@ The most decoupled worker pattern uses processes. PrismPath’s [`cli_worker.py`
 ```python
 from prismpath.parser import parse_file
 from prismpath.engine import run
-from prismpath.cli_worker import cli_agent
+from prismpath.cli_worker import cli_worker
 
 # Use any CLI agent backend (Claude Code, Gemini CLI, Aider, custom scripts)
-agent = cli_agent(["claude", "-p"])
+worker = cli_worker(["claude", "-p"])
 
 # Run the flow: the CLI handles node execution, PrismPath handles routing
-res = run(parse_file("workflow.md"), agent)
+res = run(parse_file("workflow.md"), worker)
 ```
 
 * **Outcome Contract**: If the CLI prints JSON (`{"text": "...", "tests_pass": true}`), PrismPath exposes those fields directly to safe `when` AST predicates (`-> done: when tests_pass`).

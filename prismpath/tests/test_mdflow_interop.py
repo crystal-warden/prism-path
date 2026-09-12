@@ -19,7 +19,7 @@ import pytest
 
 from prismpath.kernel.parser import parse_file
 from prismpath.kernel.engine import run
-from prismpath.workers.cli_worker import cli_agent
+from prismpath.workers.cli_worker import cli_worker
 
 from prismpath.tests._repo import repo_file
 
@@ -29,9 +29,9 @@ MOCK = os.path.join(EX, "mock_mdflow.py")
 TASKS = os.path.join(EX, "tasks")
 
 
-def _agent():
+def _worker():
     # per-node commands: each PrismPath node's worker is an mdflow task run through the CLI seam
-    return cli_agent({
+    return cli_worker({
         "draft":  [sys.executable, MOCK, os.path.join(TASKS, "draft.md")],
         "review": [sys.executable, MOCK, os.path.join(TASKS, "review.md")],
         "revise": [sys.executable, MOCK, os.path.join(TASKS, "flaky.md")],
@@ -55,7 +55,7 @@ def test_mock_mdflow_contract_directly():
 def test_flow_routes_between_mdflow_tasks():
     """A PrismPath flow routes BETWEEN mdflow-task workers on the fields they emit."""
     graph = parse_file(os.path.join(EX, "pipeline.md"))
-    res = run(graph, _agent(), max_steps=10)
+    res = run(graph, _worker(), max_steps=10)
     # draft (drafted=true) -> review (approved=true) -> done, all decided by task-emitted fields
     assert res.path == ["draft", "review", "done"]
     assert res.stopped == "terminal"
@@ -70,12 +70,12 @@ def test_mdflow_task_failure_rides_the_error_tier():
     with open(noapprove, "w", encoding="utf-8") as f:
         f.write("---\nname: review\nmock_text: needs work\nmock_approved: false\n---\nreview\n")
     try:
-        agent = cli_agent({
+        worker = cli_worker({
             "draft":  [sys.executable, MOCK, os.path.join(TASKS, "draft.md")],
             "review": [sys.executable, MOCK, noapprove],
             "revise": [sys.executable, MOCK, os.path.join(TASKS, "flaky.md")],
         })
-        res = run(graph, agent, max_steps=12)
+        res = run(graph, worker, max_steps=12)
         # revise's task fails -> error tier: `-> draft: on error when error_count < 2` loops,
         # then `-> abandoned: on error` — the failure is handled as document-level edges
         assert "revise" in res.path

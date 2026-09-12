@@ -26,13 +26,13 @@ stdin and print stdout is a worker.
 ```python
 from prismpath.parser import parse_file
 from prismpath.engine import run
-from prismpath.cli_worker import cli_agent
+from prismpath.cli_worker import cli_worker
 
-agent = cli_agent(["python", "ci_gate.py"], pass_state=["report"])
-# agent = cli_agent(["node", "log_alert.js"], pass_state=["line"])   # a JS worker
-# agent = cli_agent(["./release_gate"], pass_state=["from", "to"])   # a built Go or Rust binary
+worker = cli_worker(["python", "ci_gate.py"], pass_state=["report"])
+# worker = cli_worker(["node", "log_alert.js"], pass_state=["line"])   # a JS worker
+# worker = cli_worker(["./release_gate"], pass_state=["from", "to"])   # a built Go or Rust binary
 
-run(parse_file("ci_gate.md"), agent, state={"report": "tests=48 failed=0 coverage=91"})
+run(parse_file("ci_gate.md"), worker, state={"report": "tests=48 failed=0 coverage=91"})
 ```
 
 `pass_state` lists the run-state fields to hand the worker; they arrive as a JSON `[context]` block
@@ -108,7 +108,7 @@ Map each node to its own command (unmapped nodes fall back to `default`, or rout
 there is none):
 
 ```python
-cli_agent({"gate": ["python", "ci_gate.py"], "alert": ["node", "log_alert.js"]}, default=["./release_gate"])
+cli_worker({"gate": ["python", "ci_gate.py"], "alert": ["node", "log_alert.js"]}, default=["./release_gate"])
 ```
 
 A cheap engine's outcome can decide, on a `when` edge, whether its work stands or escalates to an

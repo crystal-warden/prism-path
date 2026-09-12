@@ -31,6 +31,7 @@ from __future__ import annotations
 import importlib
 import json
 import pkgutil
+import warnings
 from dataclasses import dataclass, field
 from typing import Callable, Dict, List, Optional
 
@@ -123,19 +124,19 @@ def _bound_ref(node) -> Optional[str]:
     return next((k for k, v in args.items() if v is None), None)
 
 
-def worker_agent(graph, default: Optional[Callable] = None) -> Callable:
-    """A harness agent for `graph` that dispatches `@worker`-annotated nodes to registry workers and
+def worker_for(graph, default: Optional[Callable] = None) -> Callable:
+    """A harness worker for `graph` that dispatches `@worker`-annotated nodes to registry workers and
     everything else to `default`. Bindings resolve at CONSTRUCTION (one registry pass, fail-fast —
     a missing tool is discovered before the run starts, not at hop 40). The dispatched outcome (when
     a dict) gains a `_worker` provenance field, so the transcript and `_outcomes` record which
     installed tool produced each hop — the audit trail the binding annotation promises."""
     bound: Dict[str, tuple] = {}
-    for name, n in graph.nodes.items():
-        ref = _bound_ref(n)
+    for name, node_obj in graph.nodes.items():
+        ref = _bound_ref(node_obj)
         if ref is not None:
             bound[name] = (ref, resolve_worker(ref))       # raises KeyError up front if unresolvable
 
-    def agent(node, instruction, state):
+    def worker(node, instruction, state):
         hit = bound.get(node)
         if hit is None:
             if default is None:
@@ -146,7 +147,15 @@ def worker_agent(graph, default: Optional[Callable] = None) -> Callable:
         if isinstance(out, dict):
             out.setdefault("_worker", ref)
         return out
-    return agent
+    return worker
+
+
+def worker_agent(graph, default: Optional[Callable] = None) -> Callable:
+    """What `worker_for` was called before the rename, kept importable so code written against the
+    old name keeps running."""
+    warnings.warn("worker_agent is now worker_for; the old name goes away in a later release",
+                  DeprecationWarning, stacklevel=2)
+    return worker_for(graph, default=default)
 
 
 def check_flow(graph) -> List[str]:

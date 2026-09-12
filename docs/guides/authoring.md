@@ -2,7 +2,7 @@
 
 A workflow is **one markdown file**. The kernel (~700 LOC across parser/predicates/router/
 engine; hard dep: numpy; the embedder is the optional `[embeddings]` extra, transformers only
-for the LLM-fallback router) reads it and drives any agent through it. No code defines the
+for the LLM-fallback router) reads it and drives any worker through it. No code defines the
 graph; no framework state objects. This doc is the authoring contract: the normative format
 definition lives in [SPEC.md](../../SPEC.md); read both before extending.
 
@@ -18,7 +18,7 @@ start: triage         # optional; defaults to the first node
 
 ## triage                                   # a NODE (heading -> node name, lowercased,
 Read the bug report and decide what to do.  # spaces->underscores). Prose = the node's
--> implement: the root cause is clear       # INSTRUCTION handed to the agent.
+-> implement: the root cause is clear       # INSTRUCTION handed to the worker.
 -> gather_info: more information is needed   # EDGES: `-> target: condition`
 -> close: it is a duplicate or invalid
 
@@ -55,12 +55,12 @@ edges are inert during normal routing; they only fire on a raise (error) or on r
 
 ---
 
-## 3. The agent contract
+## 3. The worker contract
 
-The engine is agent-agnostic. You pass `run(graph, agent, ...)` where:
+The engine is worker agnostic. You pass `run(graph, worker, ...)` where:
 
 ```python
-agent(node_name: str, instruction: str, state: dict) -> outcome
+worker(node_name: str, instruction: str, state: dict) -> outcome
 ```
 
 `outcome` is either:
@@ -72,14 +72,14 @@ Example: a `run_tests` node returns `{"tests_pass": True, "text": "all tests pas
 edge `-> done: when tests_pass` fires deterministically while `-> debug: tests look wrong` stays
 semantic.
 
-The agent owns its own working memory via `state` (persists across the whole run), e.g. it
+The worker owns its own working memory via `state` (persists across the whole run), e.g. it
 stashes `state["code"]`, `state["last_error"]`. The engine never inspects those; only the
 fields you *return* are exposed to predicates.
 
 
 ### Any CLI as a worker (`prismpath.cli_worker`)
 
-The most stable worker interface is a process: `cli_agent(["claude", "-p"])` runs a CLI per node
+The most stable worker interface is a process: `cli_worker(["claude", "-p"])` runs a CLI per node
 (prompt on stdin), a `{node: argv}` map runs a **different engine per node**, and the contract is
 data all the way down: JSON on stdout becomes the dict outcome (`when` predicates read its
 fields), plain stdout is the outcome text, **nonzero exit and timeouts raise onto the error
@@ -119,7 +119,7 @@ always   |   else   |   false      # bare catch-alls
 
 **Fail-safe semantics (so a predicate never crashes a run):**
 - A **missing or type mismatched field in a comparison is *unsatisfied***: `when score >= 0.9`
-  is simply `False` when the agent didn't emit `score`, not an error. (`==`/`!=` are exact:
+  is simply `False` when the worker didn't emit `score`, not an error. (`==`/`!=` are exact:
   a missing field compares unequal to a value, equal to another missing field.)
 - An **unsafe or unparseable predicate is caught by `validate`/`lint`** before the flow ever
   runs (see §9): `when foo.bar`, `when score >=`, `when open(x)` are compile time errors, not
@@ -149,11 +149,11 @@ ever writing the read-only `.md`, the checkpoint layer serializes the run to a J
 ```python
 from prismpath import checkpoint
 # run, persisting a checkpoint at every step:
-res = checkpoint.run_durable("flows/soc.md", agent, "run.ckpt.json")
+res = checkpoint.run_durable("flows/soc.md", worker, "run.ckpt.json")
 # after a crash, continue from the pending node (deterministic, re-runs only the unfinished node):
-res = checkpoint.resume("run.ckpt.json", agent)
+res = checkpoint.resume("run.ckpt.json", worker)
 # after a needs_human suspension, apply the human's chosen edge:
-res = checkpoint.resume("run.ckpt.json", agent, choose="stage_containment")
+res = checkpoint.resume("run.ckpt.json", worker, choose="stage_containment")
 ```
 
 **Two ways a run suspends as `needs_human`** (a dedicated stop reason: the run is *suspended*, not
@@ -192,7 +192,7 @@ Wait for the payment webhook (or a timeout).
 -> cancelled: on timeout
 ```
 
-Deliver the signal to continue: `checkpoint.resume(ckpt, agent, event="payment_confirmed")` (or
+Deliver the signal to continue: `checkpoint.resume(ckpt, worker, event="payment_confirmed")` (or
 `event="__timeout__"`). This generalizes suspension to timers and webhooks: Temporal-lite, but the
 waiting logic is readable in the flow. Combined with the checkpoint, a run can pause for days and
 resume deterministically.
@@ -215,10 +215,10 @@ Retrieve the customer record for this request.
 
 ```python
 from prismpath.plugins import registry
-agent = registry.worker_agent(graph, default=my_agent)   # bound nodes -> plugin; rest -> yours
+worker = registry.worker_for(graph, default=my_worker)   # bound nodes -> plugin; rest -> yours
 ```
 
-Three auditability guarantees back the binding: `worker_agent` resolves every binding at
+Three auditability guarantees back the binding: `worker_for` resolves every binding at
 **construction** (a missing tool fails before the run, not at hop 40); `prismpath plugins --check
 flow.md` is the same verification as a CI gate; and every dispatched outcome carries a `_worker`
 provenance field, so the transcript records which installed tool produced each hop. `prismpath plugins
@@ -282,7 +282,7 @@ compiled clean.
   `timeout_s`: the ordinary scheduler delivers `on timeout` if the join never completes.
 - **Sub flow composition is the N=1 case**: a single child is a fan out over a one item list; identical
   code path.
-- **The harness** `prismpath.composer.advance_fanouts(agent)` (CLI: `prismpath compose`) is a restartable
+- **The harness** `prismpath.composer.advance_fanouts(worker)` (CLI: `prismpath compose`) is a restartable
   scan, exactly like the timeout scanner: it spawns each child under a **deterministic** id
   (`parent.node.item_id`, no timestamp/randomness), so a re-scan re-attaches to existing children and
   **never double-spawns**; when the join is ready it aggregates the children into
@@ -325,7 +325,7 @@ its evidence packet: flow, node, the reason it escalated, and the candidate edge
 scores that asked for a human*. An operator picks an edge; `checkpoint.record_decision(path, choose)`
 writes the choice into the checkpoint (`decided_by`), and the owning run's next `resume(...)` (no
 explicit `choose`) applies it. So the UI decision and the execution are decoupled: the console never
-needs the flow's agent. Backing calls: `checkpoint.list_queue()` and `record_decision()`; every
+needs the flow's worker. Backing calls: `checkpoint.list_queue()` and `record_decision()`; every
 decision is logged to the Mission Control audit.
 
 ### The git Flow Ledger (`prismpath.ledger`): proof commits, opt in
@@ -379,7 +379,7 @@ Write the triage report and mark the alert processed.
   is `prismpath-Output-Hash`. Defaults to the checkpoint node's outcome text.
 - **`gate`** (optional): an outcome field of the checkpoint node that must be truthy to commit.
 
-`run_ledgered_loop(flow, agent, ledger)` runs the flow once per item, writes one proof-commit when
+`run_ledgered_loop(flow, worker, ledger)` runs the flow once per item, writes one proof-commit when
 the checkpoint is reached, and **resumes from the ledger**: each pass seeds `state['_done_units']`
 from `done_set()`, so the flow's `observe`/`fetch` node skips items already proven in git: a run
 stopped mid-stream restarts at the first item with no green commit, with no processed-list to keep
@@ -471,7 +471,7 @@ outcome. `lint` can require every node to carry an error path if you want failur
 
 ---
 
-## 7. Routers (pluggable; `run(graph, agent, router=...)`)
+## 7. Routers (pluggable; `run(graph, worker, router=...)`)
 
 - `EmbeddingRouter()`: cosine only (cheap, weakest; ~0.82 on the bench).
 - `LLMRouter(generate_fn)`: a 1 shot LLM picks the edge (accurate, costs a call).
@@ -545,7 +545,7 @@ rates; if they're low, don't ship it.
    weakness (negation, counts, thresholds).
 2. **Make semantic conditions mutually distinct.** Run `python prismpath/kernel/lint.py flow.md`: it flags
    conditions too similar to route between.
-3. **Phrase a semantic condition at the abstraction level of the agent's likely outcome** (the
+3. **Phrase a semantic condition at the abstraction level of the worker's likely outcome** (the
    bench misroutes came from concrete outcomes vs abstractly-worded conditions).
 4. **Always give a node an exit**: a terminal target, a catch-all `-> x: else`, or a
    `when visits > N` escape, or a cycle can only end at `max_steps`.
@@ -561,8 +561,8 @@ rates; if they're low, don't ship it.
 - **The MD file stays the single source of the workflow**: no control flow in code.
 - **Deterministic before semantic precedence** (Section 2): keep it; it's what makes flows
   predictable.
-- **The agent contract** (Section 3): `(node, instruction, state) -> str | {text, ...}`. New
-  features should not require changing agent signatures.
+- **The worker contract** (Section 3): `(node, instruction, state) -> str | {text, ...}`. New
+  features should not require changing worker signatures.
 - **Predicate safety** (Section 5): never add `eval`/attribute/call access to the evaluator.
   The allowlist (`predicates._ALLOWED_NODES`) is the security boundary; if you extend the grammar,
   extend `check_predicate` and re-run `python -m prismpath.safety.fuzz_predicates` (must stay 0 crashes, 0

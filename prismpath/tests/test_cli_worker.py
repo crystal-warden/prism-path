@@ -13,7 +13,7 @@ import textwrap
 
 import pytest
 
-from prismpath.workers.cli_worker import CliWorker, CliWorkerError, cli_agent
+from prismpath.workers.cli_worker import CliWorker, CliWorkerError, cli_worker
 from prismpath.kernel.engine import run
 from prismpath.kernel.parser import parse
 
@@ -100,12 +100,12 @@ def test_argv_templating(tmp_path):
 
 
 def test_per_node_map_and_default(tmp_path):
-    a = fake_cli(tmp_path, 'print(json.dumps({"text": "engine A", "engine": "a"}))')
+    engine_a = fake_cli(tmp_path, 'print(json.dumps({"text": "engine A", "engine": "a"}))')
     (tmp_path / "b.py").write_text('print("engine B")')
-    agent = cli_agent({"implement": a}, default=[PY, str(tmp_path / "b.py")])
-    assert agent("implement", "x", {})["engine"] == "a"
-    assert agent("review", "x", {}) == "engine B"
-    strict = cli_agent({"implement": a})                  # no default -> unmapped raises (error tier)
+    worker = cli_worker({"implement": engine_a}, default=[PY, str(tmp_path / "b.py")])
+    assert worker("implement", "x", {})["engine"] == "a"
+    assert worker("review", "x", {}) == "engine B"
+    strict = cli_worker({"implement": engine_a})          # no default -> unmapped raises (error tier)
     with pytest.raises(CliWorkerError):
         strict("review", "x", {})
 
@@ -137,6 +137,6 @@ Done.
 ## gave_up
 Escalated.
 """)
-    res = run(flow, cli_agent(cmd))
+    res = run(flow, cli_worker(cmd))
     assert res.stopped == "terminal" and res.path[-1] == "done"
     assert state_file.read_text() == "3"                  # failed twice, succeeded third — as edges

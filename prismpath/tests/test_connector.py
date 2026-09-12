@@ -2,7 +2,7 @@
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
 import pytest
 from prismpath import BaseConnector, node
-from prismpath.plugins.registry import worker_agent
+from prismpath.plugins.registry import worker_for
 from prismpath.kernel.parser import parse_file
 
 class MockConnector(BaseConnector):
@@ -221,7 +221,7 @@ def test_policy_hash_binds_the_flow_document(tmp_path):
 
 def test_registry_glue_connector_as_plugin(tmp_path, monkeypatch):
     """The one-line plugin pattern: WORKERS = MyConnector().get_workers() — resolvable through
-    the real registry, dispatched through worker_agent with _worker provenance."""
+    the real registry, dispatched through worker_for with _worker provenance."""
     import sys
     import types
     import importlib.metadata as ilmd
@@ -257,7 +257,8 @@ Watch.
 ## done
 """)
     assert registry.check_flow(graph) == []
-    agent = registry.worker_agent(graph, default=lambda n, i, s: {"text": n})
-    out = agent("observe", "Watch.", {})
+    worker = registry.worker_for(graph,
+                                 default=lambda node, instruction, state: {"text": node})
+    out = worker("observe", "Watch.", {})
     assert out["text"] == "observed alert"
     assert out["_worker"] == "mock_connector.observe", "provenance from the connector dispatch"

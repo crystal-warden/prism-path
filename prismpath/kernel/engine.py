@@ -2,8 +2,8 @@
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """The graph engine: a LangGraph replacement driven by a markdown graph.
 
-run(graph, agent): start at graph.start; at each node, hand the agent the node instruction
-and running state; the agent returns an OUTCOME (a string, or a dict with structured fields
+run(graph, worker): start at graph.start; at each node, hand the worker the node instruction
+and running state; the worker returns an OUTCOME (a string, or a dict with structured fields
 plus 'text'). Routing then chooses the next node by a SPECTRUM:
   1. DETERMINISTIC edges (`-> target: condition`) are evaluated against the outcome fields (+ a
      `visits` counter) - first match wins. Logic where logic exists.
@@ -11,8 +11,10 @@ plus 'text'). Routing then chooses the next node by a SPECTRUM:
      the outcome text. Intent where logic doesn't.
 Repeat until a terminal node (no edges), a stuck state, needs_human, or max_steps.
 
-The agent is any callable (node, instruction, state) -> outcome, so the engine is independent
+The worker is any callable (node, instruction, state) -> outcome, so the engine is independent
 of who runs the work (a real LLM agent, the swarm, a pipeline coder, a mock, a shell step).
+The second parameter was called `agent` before the dictionary settled on worker; `agent=` still
+works as a deprecated keyword alias, and no first party caller uses it.
 
 Suspension (durable execution: see prismpath.checkpoint). The engine is PURE (no I/O of its own):
   * A run suspends with stopped=='needs_human' when the worker asks for a human (it returns a
@@ -25,6 +27,7 @@ Suspension (durable execution: see prismpath.checkpoint). The engine is PURE (no
 """
 from __future__ import annotations
 
+import warnings
 from dataclasses import dataclass, field
 from typing import Callable, List, Optional, Tuple
 
@@ -114,7 +117,7 @@ def _bound_list(state: dict, key: str, keep: Optional[int]) -> None:
         state[key] = seq[-keep:]
 
 
-def run(graph: Graph, agent: Callable[[str, str, dict], object], router=None,
+def run(graph: Graph, worker: Optional[Callable[[str, str, dict], object]] = None, router=None,
         max_steps: int = 25, verbose: bool = False, *,
         start: Optional[str] = None, state: Optional[dict] = None,
         human_floor: Optional[float] = None, type_gate: bool = False,
@@ -122,7 +125,17 @@ def run(graph: Graph, agent: Callable[[str, str, dict], object], router=None,
         on_step: Optional[Callable[["RunResult", Optional[str]], None]] = None,
         on_decision: Optional[Callable[[dict], None]] = None,
         run_id: Optional[str] = None,
+        agent: Optional[Callable[[str, str, dict], object]] = None,
         _seed_path=None, _seed_steps=None) -> RunResult:
+    # `agent` is what `worker` was called before the rename, kept so an outside caller written
+    # against the old signature keeps running instead of raising on an unexpected keyword.
+    if agent is not None:
+        warnings.warn("run(agent=...) is now run(worker=...); the agent keyword goes away in a "
+                      "later release", DeprecationWarning, stacklevel=2)
+        if worker is None:
+            worker = agent
+    if worker is None:
+        raise TypeError("run() needs a worker: run(graph, worker)")
     if router is None:
         from prismpath.routing.router import EmbeddingRouter
         router = EmbeddingRouter()
@@ -170,7 +183,7 @@ def run(graph: Graph, agent: Callable[[str, str, dict], object], router=None,
         state["visits"][node] = state["visits"].get(node, 0) + 1
 
         try:
-            outcome = agent(node, node_obj.instruction, state)
+            outcome = worker(node, node_obj.instruction, state)
         except Exception as exc:                 # error tier: `-> target: on error [when …]`
             error_counts = state.setdefault("_errors", {})
             error_counts[node] = error_counts.get(node, 0) + 1

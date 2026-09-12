@@ -20,7 +20,7 @@ import pytest
 
 from prismpath.kernel.parser import parse_file
 from prismpath.kernel.engine import run
-from prismpath.workers.cli_worker import cli_agent
+from prismpath.workers.cli_worker import cli_worker
 
 from prismpath.tests._repo import repo_file
 
@@ -29,8 +29,8 @@ EX = str(repo_file("prismpath", "examples", "cli_worker", "ci_gate.rs").parent)
 
 
 def _route(flow, cmd, pass_state, seed):
-    agent = cli_agent(cmd, pass_state=pass_state)
-    return run(parse_file(os.path.join(EX, flow)), agent, state=seed, max_steps=5).path[-1]
+    worker = cli_worker(cmd, pass_state=pass_state)
+    return run(parse_file(os.path.join(EX, flow)), worker, state=seed, max_steps=5).path[-1]
 
 
 def test_python_ci_gate():

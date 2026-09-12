@@ -3,7 +3,7 @@
 """trail: the operator's read side of the receipts. Summarise an append only audit log (the JSONL
 `prismpath.audit_log` writes: decisions, swaps, attestations) over a window, in cause code terms, and
 say whether the log's Merkle root still verifies. What decisions have been shifting, and why, is the
-input to "should the policy change today"; the evaluator uses the same verb after the fact.
+input to "should the policy change today"; the assessor uses the same verb after the fact.
 
     prismpath trail run.audit.jsonl                 # everything, by action, outcome, and cause
     prismpath trail run.audit.jsonl --last 200      # the most recent 200 events

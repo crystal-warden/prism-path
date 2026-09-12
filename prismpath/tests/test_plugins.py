@@ -3,7 +3,7 @@
 """The plugin ecosystem — discovery/audit, @worker binding, dispatch provenance.
 
 Pins the contract: bundled plugins are discovered with their manifests; `@worker(plugin.name)`
-bindings resolve strictly and fail fast (at agent construction / in `prismpath plugins --check`, never
+bindings resolve strictly and fail fast (at worker construction / in `prismpath plugins --check`, never
 at hop 40); dispatched outcomes carry `_worker` provenance; and the old seams (`load_gate`) still
 work unchanged.
 """
@@ -96,14 +96,14 @@ def test_check_flow_clean_and_broken():
     assert len(problems) == 1 and "absent" in problems[0]
 
 
-def test_worker_agent_fails_fast_on_unresolvable():
+def test_worker_for_fails_fast_on_unresolvable():
     with pytest.raises(KeyError, match="no worker"):
-        registry.worker_agent(parse(FLOW.replace("dummy.roll", "dummy.gone")))
+        registry.worker_for(parse(FLOW.replace("dummy.roll", "dummy.gone")))
 
 
 # --- dispatch + provenance ---------------------------------------------------------------
 
-def test_worker_agent_dispatches_with_provenance_and_fallback():
+def test_worker_for_dispatches_with_provenance_and_fallback():
     graph = parse(FLOW)
     seen = []
 
@@ -111,10 +111,10 @@ def test_worker_agent_dispatches_with_provenance_and_fallback():
         seen.append(node)
         return {"text": "default"}
 
-    agent = registry.worker_agent(graph, default=default)
+    worker = registry.worker_for(graph, default=default)
     state = {"transcript": [], "visits": {}, "round_key": 7,
              "files": {"a.js": "let x = 1"}, "votes": {"v1": "combat", "v2": "combat"}}
-    res = run(graph, agent, state=state)
+    res = run(graph, worker, state=state)
     assert res.stopped == "terminal"
     assert seen == []                                    # every node was bound; fallback untouched
     outs = res.state["_outcomes"]
@@ -123,11 +123,11 @@ def test_worker_agent_dispatches_with_provenance_and_fallback():
     assert outs["tally"]["winner"] == "combat"
 
 
-def test_worker_agent_requires_default_for_unbound_nodes():
+def test_worker_for_requires_default_for_unbound_nodes():
     graph = parse(FLOW.replace("@worker(dummy.roll)\n", ""))   # steer is now unbound
-    agent = registry.worker_agent(graph)                        # no default
+    worker = registry.worker_for(graph)                         # no default
     with pytest.raises(KeyError, match="no default agent"):
-        agent("steer", "x", {})
+        worker("steer", "x", {})
 
 
 # --- the old seams stay unchanged --------------------------------------------------------
