@@ -30,7 +30,7 @@ import sys
 import threading
 import time
 
-PORTS = ["/dev/ttyUSB2", "/dev/ttyUSB3", "/dev/ttyUSB4"]
+PORTS = os.environ.get("SPIRAL_PORTS", "/dev/ttyUSB2,/dev/ttyUSB3,/dev/ttyUSB4").split(",")   # the three bench ports
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 

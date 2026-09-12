@@ -21,8 +21,10 @@ from collections import Counter
 from pathlib import Path
 from typing import Dict, List
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))   # repo root, for prismpath
+try:
+    import prismpath  # noqa: F401  installed or already on the path: leave sys.path alone
+except ImportError:  # run as a loose script from a clone: make the repo root importable
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 from prismpath.telemetry import quantizer as q   # noqa: E402
 from prismpath.telemetry import wire as w        # noqa: E402

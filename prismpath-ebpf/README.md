@@ -61,7 +61,7 @@ The XDP program inspects incoming packets for a PrismPath context payload. It su
 When an XDP frame arrives:
 1. The parser verifies bounds against `ctx->data_end`.
 2. It checks for `PPT_MAGIC` (0x4D545050) either directly at payload start or following UDP header (port 9999).
-3. Up to `MAX_FIELDS_PER_PKT` (8) registers are copied into bounded local stack storage for high-speed evaluation.
+3. Up to `MAX_FIELDS_PER_PKT` (32) registers are copied into bounded local stack storage for high-speed evaluation. A packet declaring more fields is not refused: the fill loop stops at the cap and the remaining fields are unset, so a policy that names more than 32 fields (the vision class table names 128) does not belong on this substrate as built.
 
 ---
 

@@ -33,8 +33,10 @@ from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
 HERE = Path(__file__).resolve().parent
-sys.path.insert(0, str(HERE))
-sys.path.insert(0, str(HERE.parent.parent))              # repo root, for prismpath
+try:
+    import prismpath  # noqa: F401  installed or already on the path: leave sys.path alone
+except ImportError:  # run as a loose script from a clone: make the repo root importable
+    sys.path.insert(0, str(HERE.parent.parent))
 
 from prismpath.telemetry import packed  # noqa: E402
 from prismpath.telemetry import quantizer as q  # noqa: E402

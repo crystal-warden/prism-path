@@ -13,13 +13,14 @@ The payload BYTES are measured off the wire logs; only the multiplication is com
 
     python3 referee_batch.py 60
 """
+import os
 import sys
 import threading
 import time
 
 import serial
 
-PORTS = ["/dev/ttyUSB2", "/dev/ttyUSB3", "/dev/ttyUSB4"]
+PORTS = os.environ.get("SPIRAL_PORTS", "/dev/ttyUSB2,/dev/ttyUSB3,/dev/ttyUSB4").split(",")   # the three bench ports
 PLCP_US = 192.0
 OVERHEAD_B = 43
 

@@ -15,9 +15,12 @@ require any user-facing or advertising attribution.
 The Crystal Warden copyright above does NOT extend to the vendored components
 below; each is used under its own terms:
 
-  * Monocypher (prismpath-hw/mesh/main/monocypher*.{c,h}) -- an easy-to-use
-    cryptography library, dedicated to the public domain (CC0) with a 2-clause
-    BSD fallback, by Loup Vaillant and contributors.
+  * Monocypher (prismpath-hw/mesh/main/monocypher*.{c,h},
+    prismpath-hw/esp-vision-node/main/monocypher*.{c,h},
+    prismpath-hw/esp-vision-c6/main/monocypher*.{c,h}; three identical copies,
+    taken from the upstream git tree of the 4.0 series, version string __git__)
+    -- an easy-to-use cryptography library, dedicated to the public domain (CC0)
+    with a 2-clause BSD fallback, by Loup Vaillant and contributors.
   * VL53L0X driver (prismpath-hw/rp2350/vl53l0x.{c,h}) -- derived from Pololu's
     VL53L0X Arduino library.
   * pico_sdk_import.cmake (prismpath-hw/*/pico_sdk_import.cmake) -- from the

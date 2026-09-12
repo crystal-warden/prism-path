@@ -5,3 +5,10 @@ interp
 smoke.out
 scratch/
 *.o
+# host tools built from the *_selector.c and seal_receipts.c sources (see Makefile)
+cert_selector
+migrate_selector
+receipts_selector
+seal_receipts
+smoke_selector
+*.bpf.o

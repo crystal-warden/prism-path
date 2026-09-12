@@ -7,3 +7,8 @@ results.xml
 dump.fst
 dump.vcd
 *.log
+# ESP-IDF generated per checkout; sdkconfig.defaults is the tracked configuration
+sdkconfig
+sdkconfig.old
+build_*/
+managed_components/
