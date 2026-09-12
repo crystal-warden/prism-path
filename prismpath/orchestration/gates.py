@@ -220,8 +220,8 @@ def behavioral_check(proj: str) -> list:
             errs = cap
             b.close()
     except Exception as e:
-        print(f"    [behavioral] gate infra error (skipped): {str(e)[:140]}", flush=True)
-        errs = []
+        print(f"    [behavioral] gate infra error (FAILED): {str(e)[:140]}", flush=True)
+        errs = [f"gate infrastructure error: {str(e)[:140]}"]
     finally:
         httpd.shutdown()
         httpd.server_close()
