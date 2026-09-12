@@ -13,8 +13,8 @@ Same template/instance model as the policy generator: with no profile and no ver
 reusable blank (every field a TODO); with a filled profile and a real assessment it renders the
 organization's SSP. A generated SSP is a living document to maintain, not evidence by itself.
 """
-import compliance_adapter as _ca
-import sop_generator as _sg
+from adapters.compliance import compliance_adapter as _ca
+from adapters.compliance import sop_generator as _sg
 
 _OWNER = {"technical": "System / Security Administrator", "procedural": "ISSM / Policy Owner",
           "operational": "Operations / Process Owner", "general": "ISSM"}

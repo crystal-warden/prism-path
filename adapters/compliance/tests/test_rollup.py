@@ -4,9 +4,9 @@
 the system rollup is bound to the EXACT per-control attestations, so swapping one changes the root."""
 import copy
 import pytest
-import rollup
+from adapters.compliance import rollup
 from prismpath.ledgers import ledger_airgap
-from sample import record
+from adapters.compliance.tests.sample import record
 
 CATALOG_HASH = "sha256:catalogtest"
 SCOPE = {"system_name": "Sys", "boundary": "enclave", "assets_sampled": ["a"],

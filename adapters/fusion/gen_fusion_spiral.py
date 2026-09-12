@@ -7,22 +7,20 @@ read from flows/fusion_triage.md (not an inline string) and its sha256 is embedd
 corpus detects flow drift. Only the integer mapping is frozen  -  build-time xy floats are
 excluded so the corpus stays platform-stable.
 
-    python adapters/fusion/gen_fusion_spiral.py
+    python -m adapters.fusion.gen_fusion_spiral
 """
 from __future__ import annotations
 
 import hashlib
 import json
-import sys
 from pathlib import Path
+
+from prismpath.kernel.parser import parse
+from prismpath.telemetry import spiral
+from prismpath.telemetry import wire
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parent.parent
-sys.path.insert(0, str(REPO))
-
-from prismpath.telemetry import spiral  # noqa: E402
-from prismpath.telemetry import wire     # noqa: E402
-from prismpath.kernel.parser import parse  # noqa: E402
 
 FLOW_PATH = HERE / "flows" / "fusion_triage.md"
 NODE = "correlate"

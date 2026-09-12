@@ -3,9 +3,9 @@
 """Real signed, anchored receipts for AI-safety determinations, and the payoff: with a key, the AST-2
 and AST-3 facts are MEASURED from actual crypto rather than taken from a declaration."""
 import pytest
-import compliance_adapter as ca
-import ai_safety_receipts as r
-import ai_safety as ais
+from adapters.compliance import compliance_adapter as ca
+from adapters.compliance import ai_safety_receipts as r
+from adapters.compliance import ai_safety as ais
 from prismpath.hotswap import policy_pack as pp
 @pytest.fixture
 def key(tmp_path):

@@ -14,8 +14,8 @@ met only when every objective is met, partially-met / not-met when some or all a
 INSUFFICIENT (fail-closed) whenever any objective is still undetermined. Nothing is assumed satisfied.
 Given the same facts, completions, and date, the result is reproducible.
 """
-import deterministic_checks as _dc
-import control_tasks as _ct
+from adapters.compliance import deterministic_checks as _dc
+from adapters.compliance import control_tasks as _ct
 
 
 def full_determination(control, req=None, completions=None, as_of=None, use_llm=False):
@@ -38,7 +38,7 @@ def full_determination(control, req=None, completions=None, as_of=None, use_llm=
     undetermined = [oid for oid in objectives if oid not in per]
 
     if undetermined and use_llm:
-        import compliance_adapter as _ca
+        from adapters.compliance import compliance_adapter as _ca
         try:
             det = _ca.adjudicate(control, req or {"control_id": control["id"]})
         except Exception:

@@ -9,12 +9,7 @@ instant a declared consumer acts on the sender's current state, a state the send
 the last stale_ms, or the signed fail-safe (I6) — under single loss, burst loss, and total
 blackout. Loss masks are deterministic; no randomness, no wall clock.
 """
-import sys
-from pathlib import Path
-
-ADAPTER = Path(__file__).resolve().parent.parent
-REPO = ADAPTER.parent.parent
-from prismpath.telemetry.refresh import KeyframeScheduler, StalenessTracker  # noqa: E402
+from prismpath.telemetry.refresh import KeyframeScheduler, StalenessTracker
 
 TICK_MS = 100
 KEYFRAME_MS = 500

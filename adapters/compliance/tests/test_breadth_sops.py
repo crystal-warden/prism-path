@@ -2,7 +2,7 @@
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Breadth tests for newly added SOP specification documents."""
 import pytest
-import sop_generator as sg
+from adapters.compliance import sop_generator as sg
 
 NEW_SOP_SPECS = [
     "access_control_policy",
@@ -23,7 +23,7 @@ def test_new_sop_specs_verify_coverage_complete(doc_id):
 
 
 def test_all_sop_specs_are_complete():
-    import compliance_adapter as ca
+    from adapters.compliance import compliance_adapter as ca
     ca.use_standard("nist_800171_r2")            # default for specs without an explicit 'standard'
     docs = sg.list_documents()
     assert len(docs) >= 4

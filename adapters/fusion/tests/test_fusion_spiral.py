@@ -8,17 +8,16 @@ reconstruction. A mapping bug anywhere flips a frozen entry and this file goes R
 """
 import hashlib
 import json
-import sys
 from pathlib import Path
 
 import pytest
 
+from prismpath.kernel.parser import parse
+from prismpath.telemetry import quantizer
+from prismpath.telemetry import spiral
+from prismpath.telemetry import wire
+
 ADAPTER = Path(__file__).resolve().parent.parent
-REPO = ADAPTER.parent.parent
-from prismpath.telemetry import quantizer  # noqa: E402
-from prismpath.telemetry import spiral    # noqa: E402
-from prismpath.telemetry import wire       # noqa: E402
-from prismpath.kernel.parser import parse  # noqa: E402
 
 CORPUS = json.loads((ADAPTER / "conformance" / "spiral_fusion.json").read_text())
 FLOW_PATH = ADAPTER / "flows" / "fusion_triage.md"

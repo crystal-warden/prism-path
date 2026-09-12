@@ -83,13 +83,13 @@ def load_sample(name):
 
 
 # Register the bundled adapters. Each concrete adapter is a standalone module exposing parse(raw).
-from scan_osquery import parse as _osquery_parse  # noqa: E402
+from adapters.compliance.scan_osquery import parse as _osquery_parse  # noqa: E402
 register("osquery", _osquery_parse)
 
-from scan_lynis import parse as _lynis_parse  # noqa: E402
+from adapters.compliance.scan_lynis import parse as _lynis_parse  # noqa: E402
 register("lynis", _lynis_parse)
 
-from scan_prowler import parse as _prowler_parse  # noqa: E402
+from adapters.compliance.scan_prowler import parse as _prowler_parse  # noqa: E402
 register("prowler", _prowler_parse)
 
 

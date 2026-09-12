@@ -3,8 +3,8 @@
 """The connectivity graph joins what we already hold — controls, objectives, crosswalks, FAIR risk, and
 ownership — so one control's assurance chain is a single query: what it satisfies across frameworks, what
 risk it mitigates, and who owns it. No new data, just the connections made explicit."""
-import compliance_adapter as ca
-import assurance_graph as g
+from adapters.compliance import compliance_adapter as ca
+from adapters.compliance import assurance_graph as g
 
 
 def test_graph_summary_links_the_pieces():

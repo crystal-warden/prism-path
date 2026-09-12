@@ -4,7 +4,7 @@
 import json
 import os
 import pytest
-from oscal_catalog import export_oscal, import_oscal
+from adapters.compliance.oscal_catalog import export_oscal, import_oscal
 
 
 def test_oscal_roundtrip_nist_800171_r2():

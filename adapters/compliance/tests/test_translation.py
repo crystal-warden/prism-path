@@ -3,7 +3,7 @@
 """Retrieval Translation layer: catalog completeness, objective targeting, and the discovery-loop wiring."""
 import json, os
 import pytest
-import compliance_adapter as ca
+from adapters.compliance import compliance_adapter as ca
 
 CIDS = ["3.1.1", "3.1.2", "3.1.4", "3.1.5", "3.1.7", "3.1.11", "3.1.12", "3.1.22"]
 

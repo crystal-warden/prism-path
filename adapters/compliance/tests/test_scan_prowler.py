@@ -2,10 +2,10 @@
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Prowler scanner adapter tests — verify exact, honest mapping of AWS findings to posture facts.
 Asserts that only mapped facts are produced, MFA/lockout facts remain absent, and posture_connector processes the posture."""
-import compliance_adapter as ca
-import scanner as sc
-import scan_prowler
-import posture_connector as pc
+from adapters.compliance import compliance_adapter as ca
+from adapters.compliance import scanner as sc
+from adapters.compliance import scan_prowler
+from adapters.compliance import posture_connector as pc
 
 FULLY_MAPPED_FACTS = {
     "encryption_at_rest_enforced",

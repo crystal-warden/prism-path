@@ -2,9 +2,9 @@
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """The unified adjudicator merges config, operational, and undetermined evidence into one per-control
 determination, with per-objective provenance and honest INSUFFICIENT."""
-import compliance_adapter as ca
-import control_tasks as ct
-import unified as un
+from adapters.compliance import compliance_adapter as ca
+from adapters.compliance import control_tasks as ct
+from adapters.compliance import unified as un
 
 
 def _c(cid):

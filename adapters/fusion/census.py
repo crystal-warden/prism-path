@@ -18,7 +18,7 @@ Two pairings, both labeled, neither time-coincident:
 Committed artifacts are aggregates only: no alert content, agent names, hostnames, or IPs
 (tests/test_census.py enforces this against the committed file).
 
-    python adapters/fusion/census.py --from-fixture [path]
+    python -m adapters.fusion.census --from-fixture [path]
 
 The cyber axis is fed here from an NDJSON level backlog. Any decision source that yields a
 `rule.level` histogram is a valid connector; the archived SIEM connector was the v1 example.
@@ -29,22 +29,17 @@ import argparse
 import datetime as _dt
 import hashlib
 import json
-import sys
 from collections import Counter
 from pathlib import Path
 from typing import Dict, Iterable, Optional, Tuple
 
+from adapters.fusion import projection
+from prismpath.kernel.parser import parse
+from prismpath.telemetry import quantizer
+from prismpath.telemetry import spiral
+
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parent.parent
-for p in (str(REPO / "prismpath" / "telemetry"), str(REPO), str(HERE)):
-    if p not in sys.path:
-        sys.path.insert(0, p)
-
-from prismpath.telemetry import quantizer  # noqa: E402
-from prismpath.telemetry import spiral    # noqa: E402
-from prismpath.kernel.parser import parse  # noqa: E402
-
-import projection  # noqa: E402
 
 FLOW_PATH = HERE / "flows" / "fusion_triage.md"
 NODE = "correlate"

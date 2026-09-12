@@ -3,7 +3,7 @@
 """Adjudicator method-depth: each control is classified to an assessment-method profile (matching the
 generic flow's routing), and the profile's evidence guidance is injected into the adjudication prompt."""
 import pytest
-import compliance_adapter as ca
+from adapters.compliance import compliance_adapter as ca
 
 
 @pytest.mark.parametrize("family_name,expected", [

@@ -3,8 +3,8 @@
 """Texas AI Governance Pack (TRAIGA + SB 1964): catalog, applicability scoping, the config-enforced
 objectives, crosswalk integrity, and policy-template coverage."""
 import json, glob, os
-import compliance_adapter as ca
-import deterministic_checks as dc
+from adapters.compliance import compliance_adapter as ca
+from adapters.compliance import deterministic_checks as dc
 
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -82,7 +82,7 @@ def test_policy_specs_reference_real_objectives():
 
 
 def test_runtime_connector_derives_config_facts_from_real_engine_runs():
-    import texas_ai_connector as tx
+    from adapters.compliance import texas_ai_connector as tx
     facts, receipts = tx.derive_facts()
     # three representative outcomes actually came out of the real engine
     stops = {r["stopped"] for r in receipts}

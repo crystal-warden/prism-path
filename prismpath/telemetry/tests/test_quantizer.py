@@ -127,3 +127,25 @@ def test_symbols_are_small():
     r = {"data_at_risk": True, "user_facing": False, "error_rate": 42}
     syms = quantizer.quantize(parts, r)
     assert all(0 <= s < 8 for s in syms.values())   # tiny -> 1-2 Fibonacci bytes each
+
+
+# ---------------------------------------------------------------- the promoted public API
+def test_public_api_and_its_compatibility_aliases():
+    """OTHER_CELL, flow_atoms, atom_true and atoms_of are what other modules were already calling
+    through their underscore spellings, so the public name and the alias must stay the same object."""
+    assert quantizer._OTHER is quantizer.OTHER_CELL
+    assert quantizer._flow_atoms is quantizer.flow_atoms
+    assert quantizer._atom_true is quantizer.atom_true
+    assert quantizer._atoms is quantizer.atoms_of
+
+
+def test_flow_atoms_reports_the_cuts_the_partition_is_built_from():
+    graph = parse(CATEGORICAL)
+    atoms = quantizer.flow_atoms(graph)
+    assert ("==", "urgent") in atoms["kind"]
+    assert quantizer.atom_true("==", "urgent", "urgent") is True
+    assert quantizer.atom_true("==", "urgent", "nightly") is False
+    # The catch-all cell is the one no listed constant names, and OTHER_CELL is how a caller spots it.
+    cells = quantizer.build_partitions(graph)["kind"].cells
+    assert cells[-1]["const"] == quantizer.OTHER_CELL
+    assert all(cell["const"] != quantizer.OTHER_CELL for cell in cells[:-1])

@@ -3,9 +3,9 @@
 """Layer 3: a scanned machine posture grades every control it can fully decide, deterministically,
 and defers (never assumes) the rest."""
 import json
-import compliance_adapter as ca
-import deterministic_checks as dc
-import posture_connector as pc
+from adapters.compliance import compliance_adapter as ca
+from adapters.compliance import deterministic_checks as dc
+from adapters.compliance import posture_connector as pc
 
 # The reviewed machine-checkable set. Grew from 26 to 50 as the deterministic check registry was
 # extended (access control, audit, config mgmt, identification, least functionality, boundary

@@ -4,10 +4,10 @@
 The osquery adapter maps only what osquery reports, so the posture_connector grades what it covers and
 defers the rest."""
 import pytest
-import compliance_adapter as ca
-import scanner as sc
-import scan_osquery
-import posture_connector as pc
+from adapters.compliance import compliance_adapter as ca
+from adapters.compliance import scanner as sc
+from adapters.compliance import scan_osquery
+from adapters.compliance import posture_connector as pc
 
 
 def test_osquery_registered():

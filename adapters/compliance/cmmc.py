@@ -20,9 +20,9 @@ verification against the current CMMC scoping guidance and 32 CFR Part 170. Noth
 a level status is a deterministic function of the per-control verdicts, and insufficient is scored as
 not-met (fail closed), never assumed met.
 """
-import compliance_adapter as _ca
-import unified as _un
-import rollup as _rollup
+from adapters.compliance import compliance_adapter as _ca
+from adapters.compliance import unified as _un
+from adapters.compliance import rollup as _rollup
 
 # CMMC 2.0 Level 1 = FAR 52.204-21(b)(1) basic safeguarding, expressed as NIST SP 800-171 Rev 2 control
 # ids. 17 practices. Verify against the current CMMC Level 1 scoping guidance.
@@ -167,8 +167,8 @@ def assess(posture, completions=None, as_of=None, use_llm=False, levels=(1, 2, 3
 
 def demo(use_llm=False):
     """Assess CMMC L1/L2/L3 over the sample host posture plus a few task completions."""
-    import posture_connector as _pc
-    import control_tasks as _ct
+    from adapters.compliance import posture_connector as _pc
+    from adapters.compliance import control_tasks as _ct
     _ca.use_standard("nist_800171_r2")
     posture = _pc.load_sample("example_host")
     completions = [

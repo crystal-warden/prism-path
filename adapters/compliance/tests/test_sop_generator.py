@@ -3,8 +3,8 @@
 """The SOP generator: objective-grounded templates, coverage machine-checked against the catalog,
 honest TODO markers, no fabrication."""
 import copy
-import compliance_adapter as ca
-import sop_generator as sg
+from adapters.compliance import compliance_adapter as ca
+from adapters.compliance import sop_generator as sg
 
 
 def _ir():

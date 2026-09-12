@@ -15,7 +15,7 @@ appetite); a realistic sample drives the demo and tests. Exposure is computed fr
 and the live control verdicts, so improving the controls measurably moves an objective back inside
 appetite.
 """
-import fair_risk as _fr
+from adapters.compliance import fair_risk as _fr
 
 # Each objective: what the organization is trying to achieve, who owns it, the risk scenarios that
 # threaten it, and the risk appetite = the maximum annual loss expectancy (likely) the board will accept.
@@ -78,9 +78,9 @@ def assess_governance(verdicts, objectives=None):
 
 
 def demo(use_llm=False):
-    import compliance_adapter as _ca
-    import unified as _un
-    import posture_connector as _pc
+    from adapters.compliance import compliance_adapter as _ca
+    from adapters.compliance import unified as _un
+    from adapters.compliance import posture_connector as _pc
     _ca.use_standard("nist_800171_r2")
     posture = _pc.load_sample("example_host")
     req_base = {"facts": posture.get("facts", {}), "boundary": posture.get("boundary")}

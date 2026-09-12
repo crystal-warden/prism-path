@@ -3,10 +3,10 @@
 """The AST catalog's three-mechanism treatment: a documented AI Safety Testing Plan (SOP), a recurring
 retest task whose completion evidences continuous evaluation (operational), alongside the config
 comparator and measured receipts."""
-import compliance_adapter as ca
-import control_tasks as ct
-import sop_generator as sg
-import ai_safety as ais
+from adapters.compliance import compliance_adapter as ca
+from adapters.compliance import control_tasks as ct
+from adapters.compliance import sop_generator as sg
+from adapters.compliance import ai_safety as ais
 
 _CAPS_NO_CONTINUOUS = {
     "test_suite_defined": True, "model_versions_hashed": True,

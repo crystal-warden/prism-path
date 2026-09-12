@@ -8,8 +8,8 @@ from pathlib import Path
 
 import pytest
 
-import census as cs
-import projection
+from adapters.fusion import census as cs
+from adapters.fusion import projection
 
 ADAPTER = Path(__file__).resolve().parent.parent
 FIXTURE = ADAPTER / "fixtures" / "alerts_synth.ndjson"

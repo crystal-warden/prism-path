@@ -4,8 +4,9 @@
 not just the three hand-picked demo records."""
 import json
 from hypothesis import given, strategies as st, settings
-import emit, rollup
-from sample import record
+from adapters.compliance import emit
+from adapters.compliance import rollup
+from adapters.compliance.tests.sample import record
 
 CIDS = ["3.1.1", "3.1.2", "3.1.4", "3.1.5", "3.1.7", "3.1.11", "3.1.12", "3.1.22"]
 STATUS = ["met", "partially-met", "not-met"]

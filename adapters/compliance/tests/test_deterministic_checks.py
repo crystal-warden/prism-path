@@ -2,8 +2,8 @@
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """The honest-hybrid comparator adjudicator: machine-checkable controls resolve from configuration
 facts with no model in the loop, and fail closed to the LLM otherwise."""
-import deterministic_checks as dc
-import compliance_adapter as ca
+from adapters.compliance import deterministic_checks as dc
+from adapters.compliance import compliance_adapter as ca
 
 
 def _control(cid):

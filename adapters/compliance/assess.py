@@ -5,9 +5,9 @@
    Ingestion → Retrieval → Adjudicator → Action/Sink → Attestation.
 Analogous to wazuh_triage_agent.py for the SOC adapter; the interesting logic is in the flow + this
 thin port-wiring, not re-implemented engine machinery."""
-import os, sys, json
-HERE = os.path.dirname(os.path.abspath(__file__)); sys.path.insert(0, HERE)
-import compliance_adapter as ca
+import os, json
+HERE = os.path.dirname(os.path.abspath(__file__))
+from adapters.compliance import compliance_adapter as ca
 
 
 def assess_one(req, out_dir):

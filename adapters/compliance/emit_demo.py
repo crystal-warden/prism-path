@@ -4,9 +4,9 @@
 """End-to-end #65 proof: adjudicate the live request bundles through gemma, attest each determination,
 then emit BOTH standards (OSCAL AR+POA&M and CycloneDX 1.6), schema-validated, and confirm every
 Flow-Ledger provenance hash is actually embedded in the reports it belongs in."""
-import os, sys, json
-HERE = os.path.dirname(os.path.abspath(__file__)); sys.path.insert(0, HERE)
-import compliance_adapter as ca
+import os, json
+HERE = os.path.dirname(os.path.abspath(__file__))
+from adapters.compliance import compliance_adapter as ca
 
 # ============================================================================
 # CONFIGURE -- point these at your own evidence-request bundles and output dir.

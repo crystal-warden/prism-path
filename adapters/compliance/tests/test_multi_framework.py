@@ -3,7 +3,7 @@
 """One assessment, many frameworks: assess_environment runs the 800-171 determination once and reports
 the same verdicts as an 800-171 tally, the CMMC level statuses, and every crosswalked framework. A
 framework appears only if a stated-authority mapping reaches it, and partial mappings are labeled."""
-import multi_framework as mf
+from adapters.compliance import multi_framework as mf
 
 
 def test_reports_every_reachable_framework_from_one_assessment():

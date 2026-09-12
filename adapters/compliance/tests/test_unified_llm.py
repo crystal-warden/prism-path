@@ -4,8 +4,8 @@
 the escalation-default LLM adjudicator, config and operational verdicts still win, and an unreachable
 model fails closed rather than crashing or being assumed."""
 import pytest
-import compliance_adapter as ca
-import unified as un
+from adapters.compliance import compliance_adapter as ca
+from adapters.compliance import unified as un
 
 
 def _c(cid):

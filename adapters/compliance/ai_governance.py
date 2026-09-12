@@ -12,9 +12,9 @@ the policy and operating objectives resolve through SOPs, task records, and the 
 unproven fails closed to insufficient. Governing the USE of AI with signed, decidable evidence; not
 inspecting the model.
 """
-import compliance_adapter as _ca
-import unified as _un
-import ai_register as _reg
+from adapters.compliance import compliance_adapter as _ca
+from adapters.compliance import unified as _un
+from adapters.compliance import ai_register as _reg
 
 
 def assess(posture, completions=None, as_of=None, use_llm=False):

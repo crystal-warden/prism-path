@@ -3,8 +3,8 @@
 """Integrated assurance across the three lines of defense: one signed determination per control serves the
 first, second, and third lines and the governing body, instead of each line re-testing. The third line
 verifies the signed receipt rather than re-testing, so independence is preserved without duplication."""
-import compliance_adapter as ca
-import assurance_lines as al
+from adapters.compliance import compliance_adapter as ca
+from adapters.compliance import assurance_lines as al
 
 
 def test_summary_quantifies_the_deduplication():

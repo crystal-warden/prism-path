@@ -29,8 +29,8 @@ reported as `deferred` (they need the LLM adjudicator or more facts), never assu
 import os
 import json
 
-import compliance_adapter as _ca
-import deterministic_checks as _dc
+from adapters.compliance import compliance_adapter as _ca
+from adapters.compliance import deterministic_checks as _dc
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SAMPLE_DIR = os.path.join(HERE, "posture_samples")

@@ -12,7 +12,7 @@ ADAPTER = os.path.dirname(HERE)
 
 
 def test_live_end_to_end_emits_valid_standards():
-    import compliance_adapter as ca
+    from adapters.compliance import compliance_adapter as ca
     reqdir = os.path.join(ADAPTER, "requests")
     recs = []
     for f in sorted(os.listdir(reqdir)):
@@ -29,7 +29,7 @@ def test_live_end_to_end_emits_valid_standards():
 
 def test_rev3_adjudication_runs_end_to_end():
     """The adjudicator is catalog-agnostic: it runs against a Rev 3 control (22 objectives) too."""
-    import compliance_adapter as ca
+    from adapters.compliance import compliance_adapter as ca
     ca.use_standard("nist_800171_r3")
     try:
         c = ca.get_control("3.1.1")                            # Rev 3 Account Management
@@ -49,7 +49,7 @@ def test_rev3_adjudication_runs_end_to_end():
 ])
 def test_unambiguous_bundles_land_on_expected_status(fname, expected):
     """The two clear-cut curated bundles should adjudicate deterministically (temperature 0)."""
-    import compliance_adapter as ca
+    from adapters.compliance import compliance_adapter as ca
     req = ca.load_request(os.path.join(ADAPTER, "requests", fname))
     c = ca.get_control(req["control_id"])
     det = ca.adjudicate(c, req)

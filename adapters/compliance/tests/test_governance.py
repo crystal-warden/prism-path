@@ -4,8 +4,8 @@
 the risk scenarios that threaten it -> the controls -> the live verdicts -> the dollar exposure -> whether
 it sits inside the risk appetite the organization set. Improving controls moves an objective back inside
 appetite; unmet controls are the named drivers."""
-import fair_risk as fr
-import governance as gov
+from adapters.compliance import fair_risk as fr
+from adapters.compliance import governance as gov
 
 
 def test_all_met_keeps_objectives_within_appetite():

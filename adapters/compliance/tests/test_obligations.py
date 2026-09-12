@@ -4,8 +4,8 @@
 require, so 'are we meeting DFARS 252.204-7012, and which controls are the breach' is one query against
 the live verdicts. Required evidence can arrive through a crosswalk, so one assessment satisfies
 obligations across frameworks."""
-import compliance_adapter as ca
-import obligations as ob
+from adapters.compliance import compliance_adapter as ca
+from adapters.compliance import obligations as ob
 
 
 def test_obligation_resolves_required_controls():

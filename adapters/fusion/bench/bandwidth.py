@@ -27,7 +27,7 @@ Ours (per alert, overhead itemized, never hidden):
 Shared-config assumption (stated): the receiver holds the flow  -  the policy hash is the
 binding  -  so graph/partitions are not per-stream bytes.
 
-    python adapters/fusion/bench/bandwidth.py --from-ndjson fixtures/alerts_synth.ndjson
+    python -m adapters.fusion.bench.bandwidth --from-ndjson adapters/fusion/fixtures/alerts_synth.ndjson
 
 The alert stream is fed here from NDJSON. Any decision source that yields {level: int} records
 is a valid connector; the archived SIEM connector was the v1 example.
@@ -43,23 +43,18 @@ import zlib
 from pathlib import Path
 from typing import Dict, Iterator, List, Optional
 
+from adapters.fusion import projection
+from prismpath.kernel.parser import parse
+from prismpath.telemetry import decode
+from prismpath.telemetry import packed
+from prismpath.telemetry import quantizer
+from prismpath.telemetry import selfheal
+from prismpath.telemetry import spiral
+from prismpath.telemetry.bench import channel        # telemetry's Gilbert-Elliott loss model
+
 HERE = Path(__file__).resolve().parent
 ADAPTER = HERE.parent
 REPO = ADAPTER.parent.parent
-for p in (str(REPO / "prismpath" / "telemetry"), str(REPO / "prismpath" / "telemetry" / "bench"),
-          str(REPO), str(ADAPTER)):
-    if p not in sys.path:
-        sys.path.insert(0, p)
-
-from prismpath.telemetry.bench import channel        # noqa: E402  (telemetry's Gilbert-Elliott model)
-from prismpath.telemetry import decode as D          # noqa: E402
-from prismpath.telemetry import packed as P          # noqa: E402
-from prismpath.telemetry import quantizer       # noqa: E402
-from prismpath.telemetry import selfheal as sh       # noqa: E402
-from prismpath.telemetry import spiral         # noqa: E402
-from prismpath.kernel.parser import parse  # noqa: E402
-
-import projection     # noqa: E402
 
 FLOW_PATH = ADAPTER / "flows" / "fusion_triage.md"
 NODE = "correlate"
@@ -140,13 +135,13 @@ def _stream_stats(all_bits: List[str], n: int) -> dict:
         window = "".join(all_bits[e * EPOCH_READINGS:(e + 1) * EPOCH_READINGS])
         if not window:
             continue
-        data = P.pack(window)
+        data = packed.pack(window)
         payload_bits += len(window)
         wire_bytes += len(data)
         pad_bits += len(data) * 8 - len(window)
         # the epoch apparatus: Merkle root + chained root (selfheal/epochs semantics)
-        blocks = sh.chunk(window, BLOCK_BITS)
-        sh.commit(blocks)   # exercised for real; the wire cost is the 32 B root
+        blocks = selfheal.chunk(window, BLOCK_BITS)
+        selfheal.commit(blocks)   # exercised for real; the wire cost is the 32 B root
         roots += 1
     merkle_epoch_bytes = roots * 64          # 32 B Merkle root + 32 B chained root
     ack_bytes = roots * 32                   # authenticated ACK, return channel, itemized
@@ -158,7 +153,7 @@ def _stream_stats(all_bits: List[str], n: int) -> dict:
 
 
 def decision_stream_stats(parts, readings: List[dict]) -> dict:
-    bits = [D.encode_readings(parts, [r]) for r in readings]
+    bits = [decode.encode_readings(parts, [r]) for r in readings]
     return _stream_stats(bits, len(readings))
 
 

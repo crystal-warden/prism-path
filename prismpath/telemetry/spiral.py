@@ -100,7 +100,7 @@ def _node_fields(graph, node: str, parts: Dict[str, "q.FieldPartition"]) -> List
             body = ast.parse(expr, mode="eval").body
         except SyntaxError:
             continue
-        for field, _op, _const in quantizer._atoms(body):
+        for field, _op, _const in quantizer.atoms_of(body):
             if field in parts and field not in seen:
                 seen.append(field)
     return sorted(seen)

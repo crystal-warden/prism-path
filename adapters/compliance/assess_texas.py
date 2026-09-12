@@ -11,9 +11,9 @@
 Every objective is scored by its declared mechanism, and its evidence provenance is reported. Output
 is a per-actor verdict tally plus the review-assistance notice. Nothing here is a legal determination.
 
-Run:  python adapters/compliance/assess_texas.py
+Run:  python -m adapters.compliance.assess_texas
 """
-import os, sys, json, glob
+import os, json, glob
 
 # ============================================================================
 # CONFIGURE — set these to your organization, then run. To point the config plane
@@ -37,11 +37,10 @@ SAMPLE_OPERATIONAL_PERFORMED = [
 ]
 # ============================================================================
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import compliance_adapter as ca
-import deterministic_checks as dc
-import sop_generator as sg
-import texas_ai_connector as tx
+from adapters.compliance import compliance_adapter as ca
+from adapters.compliance import deterministic_checks as dc
+from adapters.compliance import sop_generator as sg
+from adapters.compliance import texas_ai_connector as tx
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 

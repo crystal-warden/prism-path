@@ -5,9 +5,9 @@
 objective-specific evidence requests from the Translation layer.
   (1) empty bundle for 3.1.7 -> a request per objective, built from the catalog.
   (2) partial case: only the unmet objectives of 3.1.12 -> a targeted subset."""
-import os, sys, json
-HERE = os.path.dirname(os.path.abspath(__file__)); sys.path.insert(0, HERE)
-import compliance_adapter as ca
+import os, json
+HERE = os.path.dirname(os.path.abspath(__file__))
+from adapters.compliance import compliance_adapter as ca
 
 out = {}
 

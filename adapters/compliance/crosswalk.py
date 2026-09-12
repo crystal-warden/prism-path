@@ -87,9 +87,9 @@ def coverage(cw):
 
 def demo():
     """Assess 800-171 once, then report the result against every crosswalk that starts from it."""
-    import compliance_adapter as _ca
-    import unified as _un
-    import posture_connector as _pc
+    from adapters.compliance import compliance_adapter as _ca
+    from adapters.compliance import unified as _un
+    from adapters.compliance import posture_connector as _pc
     _ca.use_standard("nist_800171_r2")
     posture = _pc.load_sample("example_host")
     req_base = {"facts": posture.get("facts", {}), "boundary": posture.get("boundary")}

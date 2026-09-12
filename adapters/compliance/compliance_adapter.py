@@ -9,8 +9,7 @@ Built on the **Connector SDK** (`prismpath.connector.BaseConnector` — the six 
 the SOC adapter's migration. The Attestation port REUSES the core `ledger_airgap` (#53) through
 the SDK — proving it is shared core, not re-implemented.
 """
-import os, sys, json, hashlib, requests
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+import os, json, hashlib, requests
 from prismpath.ledgers import ledger_airgap
 from prismpath.workers import deferral# CORE attestation + deferral ports (adapter→core OK; core→adapter is the leak)
 from prismpath.workers.connector import BaseConnector  # the Connector SDK — six-port base
@@ -311,10 +310,9 @@ class ComplianceConnector(BaseConnector):
 CONNECTOR = ComplianceConnector()
 
 # ---------- Sink port (report emitter): standards-native OSCAL + CycloneDX (#65) ----------
-sys.path.insert(0, HERE)
-import emit as _emit      # pure serialization, adapter-local; carries the Flow-Ledger provenance into each report
-import rollup as _rollup  # system-level aggregation: partial SPRS + scope + rollup attestation
-import deterministic_checks as _det  # comparator Adjudicator for machine-checkable objectives (honest hybrid)
+from adapters.compliance import emit as _emit      # pure serialization, adapter-local; carries the Flow-Ledger provenance into each report
+from adapters.compliance import rollup as _rollup  # system-level aggregation: partial SPRS + scope + rollup attestation
+from adapters.compliance import deterministic_checks as _det  # comparator Adjudicator for machine-checkable objectives (honest hybrid)
 
 def result_record(control, req, determination, manifest):
     """Normalize an adjudicated determination + its attestation manifest into an emit() record."""

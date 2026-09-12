@@ -11,8 +11,8 @@ labels — the signal is a VARIED spread (proving the nodes are not padded by me
 plus spot-checkable per-control dispositions and honest empty-retrieval (discovery) cases.
 """
 import os, sys, re, math, json, collections
-HERE = os.path.dirname(os.path.abspath(__file__)); sys.path.insert(0, HERE)
-import compliance_adapter as ca
+HERE = os.path.dirname(os.path.abspath(__file__))
+from adapters.compliance import compliance_adapter as ca
 
 # ============================================================================
 # CONFIGURE -- point COMPANY at your own free-form company-docs directory, then run.

@@ -41,7 +41,7 @@ map as follows, with the unimplemented ones named rather than hand-waved:
 ## Runtime
 
 Offline by default: tests, the census, and the benches all run on fixtures and the frozen corpus, so
-no external source is needed. Cross-adapter imports (telemetry codec modules) use the repo's
-self-rooted `sys.path` idiom; this adapter modifies neither. A live decision source is an external
+no external source is needed. Cross-adapter imports (telemetry codec modules) are plain package
+imports from the repository root; this adapter modifies neither. A live decision source is an external
 connector: the archived v1 SIEM connector was one example; any source that emits the reading contract
 in `projection.py` slots in without touching the join or its proofs.

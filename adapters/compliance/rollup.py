@@ -13,8 +13,7 @@ Three outputs, all bound to the per-control attestations that fed them:
 
 Pure aggregation + attestation reuse. No LLM, no domain adjudication.
 """
-import os, sys, json, hashlib
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+import os, json, hashlib
 from prismpath.ledgers import ledger_airgap# CORE attestation (adapter -> core is allowed)
 
 HERE = os.path.dirname(os.path.abspath(__file__))

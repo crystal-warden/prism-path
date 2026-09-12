@@ -1,14 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
-"""Path + fixture setup for the compliance-adapter test suite."""
-import os, sys
-import pytest
+"""Shared fixtures for the compliance-adapter test suite.
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-ADAPTER = os.path.dirname(HERE)
-for p in (os.path.dirname(os.path.dirname(ADAPTER)), ADAPTER, HERE):
-    if p not in sys.path:
-        sys.path.insert(0, p)
+The adapter is a package under the repository root, so the tests import it by its package path and
+this file no longer arranges sys.path.
+"""
+import pytest
 
 
 @pytest.fixture(autouse=True)
@@ -16,7 +13,7 @@ def _reset_standard():
     """Keep standard-switching tests from leaking the active catalog into others."""
     yield
     try:
-        import compliance_adapter as ca
+        from adapters.compliance import compliance_adapter as ca
         ca._ACTIVE = "nist_800171_r2"
     except Exception:
         pass
@@ -24,7 +21,7 @@ def _reset_standard():
 
 @pytest.fixture
 def records():
-    from sample import record
+    from adapters.compliance.tests.sample import record
     return [record("3.1.1", "Access Control Policy", "met"),
             record("3.1.5", "Least Privilege", "not-met", ["3.1.5[a]", "3.1.5[b]"]),
             record("3.1.12", "Monitor Remote Access", "partially-met", ["3.1.12[b]"])]
@@ -33,7 +30,7 @@ def records():
 @pytest.fixture
 def iso_defer(tmp_path):
     """Isolate the adapter's module-level deferral store to a tmp dir so tests don't share state."""
-    import compliance_adapter as ca
+    from adapters.compliance import compliance_adapter as ca
     from prismpath.workers import deferral
     orig = ca._DEFER
     ca._DEFER = deferral.FileDeferralStore(str(tmp_path / "deferrals"))

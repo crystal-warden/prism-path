@@ -5,7 +5,7 @@ fail closed: a target is met only when every mapped source is met, a single not-
 a missing verdict makes it insufficient. Partial crosswalks report only what they map, so coverage is
 visible instead of silently assumed complete."""
 import pytest
-import crosswalk as cw
+from adapters.compliance import crosswalk as cw
 
 
 def test_combine_is_fail_closed():
@@ -57,7 +57,7 @@ def test_reverse_direction_and_unknown_framework_raises():
 
 
 def test_ai_governance_crosswalk_maps_to_ai_rmf():
-    import compliance_adapter as ca
+    from adapters.compliance import compliance_adapter as ca
     ca.use_standard("ai_governance")
     aig = set(ca._catalog()["controls"])
     ca.use_standard("nist_800171_r2")
@@ -70,7 +70,7 @@ def test_ai_governance_crosswalk_maps_to_ai_rmf():
 
 
 def test_every_source_id_in_the_800171_crosswalks_is_a_real_control():
-    import compliance_adapter as ca
+    from adapters.compliance import compliance_adapter as ca
     ca.use_standard("nist_800171_r2")
     allc = set(ca._catalog()["controls"])
     for name in ("nist_800171_r2__cmmc", "nist_800171_r2__nist_800_53_r5"):

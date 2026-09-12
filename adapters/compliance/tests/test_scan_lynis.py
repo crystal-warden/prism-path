@@ -2,10 +2,10 @@
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Lynis scanner adapter: it maps only what Lynis genuinely reports, so it grades a handful of host
 controls and honestly DEFERS the ones it cannot establish (MFA, screen lock, password complexity)."""
-import compliance_adapter as ca
-import scanner as sc
-import scan_lynis
-import posture_connector as pc
+from adapters.compliance import compliance_adapter as ca
+from adapters.compliance import scanner as sc
+from adapters.compliance import scan_lynis
+from adapters.compliance import posture_connector as pc
 
 FULLY_GRADED = {"3.1.8", "3.5.8", "3.13.11", "3.13.16", "3.1.9", "3.14.4", "3.13.6"}
 

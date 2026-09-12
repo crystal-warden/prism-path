@@ -4,9 +4,9 @@
 """#66 proof: adjudicate the live bundles, attest each, then produce the SYSTEM rollup —
 partial SPRS score + assessment scope + a rollup attestation bound to the per-control manifests —
 and emit it into a schema-valid OSCAL AR + standalone summary."""
-import os, sys, json
-HERE = os.path.dirname(os.path.abspath(__file__)); sys.path.insert(0, HERE)
-import compliance_adapter as ca
+import os, json
+HERE = os.path.dirname(os.path.abspath(__file__))
+from adapters.compliance import compliance_adapter as ca
 
 # ============================================================================
 # CONFIGURE -- set SCOPE to your assessment scope; point the dirs at your data.

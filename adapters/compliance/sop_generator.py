@@ -60,7 +60,7 @@ def load_spec(doc_id):
 def _resolve_get_control(get_control):
     if get_control is not None:
         return get_control
-    import compliance_adapter
+    from adapters.compliance import compliance_adapter
     return compliance_adapter.get_control
 
 
@@ -70,7 +70,7 @@ def _get_control_for(spec, get_control):
     active. Falls back to the active-standard get_control."""
     if get_control is not None:
         return get_control
-    import compliance_adapter as _ca
+    from adapters.compliance import compliance_adapter as _ca
     std = spec.get("standard")
     if std and std != _ca.active_standard() and std in _ca.STANDARDS:
         cat = json.load(open(_ca.STANDARDS[std]))["controls"]

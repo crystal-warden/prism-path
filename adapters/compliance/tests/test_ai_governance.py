@@ -4,9 +4,9 @@
 the NIST AI RMF functions) assessed through the same unified determination. Inventory objectives decide
 deterministically from the AI-use register; policy/operating objectives fail closed to insufficient
 without adopted SOPs and records. A missing inventory reads as not-met, never assumed met."""
-import compliance_adapter as ca
-import ai_register as reg
-import ai_governance as aig
+from adapters.compliance import compliance_adapter as ca
+from adapters.compliance import ai_register as reg
+from adapters.compliance import ai_governance as aig
 
 
 def test_ai_governance_is_registered_and_covers_the_questions():

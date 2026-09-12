@@ -30,11 +30,15 @@ from prismpath.kernel.parser import parse_file  # noqa: F401  (re-exported for c
 
 _ORDER = {"Lt": "<", "LtE": "<=", "Gt": ">", "GtE": ">="}
 _FLIP = {"<": ">", "<=": ">=", ">": "<", ">=": "<=", "==": "==", "!=": "!="}
-_OTHER = "\x00__other__"          # a sentinel string equal to no real categorical constant
+# The categorical partition's trailing cell: every value the flow never names. Public because a
+# caller cannot tell an enumerated cell from the catch-all without it, and five modules already ask
+# (decode, preflight, gen_decisions_corpus). The value is a sentinel string equal to no real
+# categorical constant, so it can never collide with one the author wrote.
+OTHER_CELL = "\x00__other__"
 
 
 # ----------------------------------------------------------------- atom extraction
-def _atoms(expr_node) -> List[Tuple[str, str, Any]]:
+def atoms_of(expr_node) -> List[Tuple[str, str, Any]]:
     """Collect (field, op, const) atoms from a predicate AST. `op` in {<,<=,>,>=,==,!=,in,not in,truthy}.
     `not`/`and`/`or` add no cuts, only recursion. Field-vs-field / non-literal atoms are ignored (they
     are not Level M and carry no transmittable cut)."""
@@ -42,9 +46,9 @@ def _atoms(expr_node) -> List[Tuple[str, str, Any]]:
     n = expr_node
     if isinstance(n, ast.BoolOp):
         for v in n.values:
-            out += _atoms(v)
+            out += atoms_of(v)
     elif isinstance(n, ast.UnaryOp) and isinstance(n.op, ast.Not):
-        out += _atoms(n.operand)               # cut points unchanged by negation
+        out += atoms_of(n.operand)               # cut points unchanged by negation
     elif isinstance(n, ast.Name):
         out.append((n.id, "truthy", None))     # bare field -> truthiness
     elif isinstance(n, ast.Compare) and len(n.ops) == 1:
@@ -64,8 +68,12 @@ def _atoms(expr_node) -> List[Tuple[str, str, Any]]:
     return out
 
 
-def _flow_atoms(graph) -> Dict[str, List[Tuple[str, Any]]]:
-    """Every field's (op, const) atoms across all deterministic, non-semantic edges in the flow."""
+def flow_atoms(graph) -> Dict[str, List[Tuple[str, Any]]]:
+    """Every field's (op, const) atoms across all deterministic, non-semantic edges in the flow.
+
+    The cut points of one flow, keyed by field: what `build_partitions` turns into cells and what a
+    profile reports for a single field. Edges that route on a model, or on always/never, contribute
+    nothing, because no value of any field changes their truth."""
     fields: Dict[str, List[Tuple[str, Any]]] = {}
     for node in graph.nodes.values():
         for _target, cond in node.edges:
@@ -78,7 +86,7 @@ def _flow_atoms(graph) -> Dict[str, List[Tuple[str, Any]]]:
                 body = ast.parse(expr, mode="eval").body
             except SyntaxError:
                 continue
-            for field, op, const in _atoms(body):
+            for field, op, const in atoms_of(body):
                 fields.setdefault(field, []).append((op, const))
     return fields
 
@@ -105,7 +113,7 @@ class FieldPartition:
             return 1 if value else 0
         # categorical
         for i, c in enumerate(self.cells):
-            if c.get("const", _OTHER) == value:
+            if c.get("const", OTHER_CELL) == value:
                 return i
         return self.n - 1                     # the trailing "other" cell
 
@@ -113,7 +121,11 @@ class FieldPartition:
         return self.cells[symbol]["rep"]
 
 
-def _atom_true(op: str, const: Any, v: Any) -> bool:
+def atom_true(op: str, const: Any, v: Any) -> bool:
+    """Evaluate one atom, the quantizer's own evaluator: is `value OP const` true?
+
+    Public so a caller checking a cell (predicate_profile, and the fusion adapter's cell referee)
+    asks the partition builder itself rather than reimplementing the comparison and drifting."""
     if op == "<":  return v < const
     if op == "<=": return v <= const
     if op == ">":  return v > const
@@ -174,7 +186,7 @@ def _numeric_partition(field: str, atoms: List[Tuple[str, Any]]) -> FieldPartiti
         if hi is not None: return hi
         return 0
     def truth(v):
-        return tuple(_atom_true(op, c, v) for op, c in atoms)
+        return tuple(atom_true(op, c, v) for op, c in atoms)
     # merge adjacent fine cells with identical atom-truth vectors -> coarsest decision partition
     cells: List[dict] = []
     prev_tv = object()
@@ -202,7 +214,7 @@ def _categorical_partition(field: str, atoms: List[Tuple[str, Any]]) -> FieldPar
         for v in vals:
             if isinstance(v, str) and v not in consts:
                 consts.append(v)
-    cells = [{"const": c, "rep": c} for c in consts] + [{"const": _OTHER, "rep": _OTHER}]
+    cells = [{"const": c, "rep": c} for c in consts] + [{"const": OTHER_CELL, "rep": OTHER_CELL}]
     return FieldPartition(field, "categorical", cells)
 
 
@@ -231,7 +243,7 @@ def _classify_kind(atoms: List[Tuple[str, Any]]) -> str:
 def build_partitions(graph) -> Dict[str, FieldPartition]:
     """Per decision-relevant field, the coarsest partition that preserves every routing decision."""
     parts: Dict[str, FieldPartition] = {}
-    for field, atoms in _flow_atoms(graph).items():
+    for field, atoms in flow_atoms(graph).items():
         kind = _classify_kind(atoms)
         if kind == "numeric":
             parts[field] = _numeric_partition(field, atoms)
@@ -252,3 +264,12 @@ def quantize(parts: Dict[str, FieldPartition], reading: Dict[str, Any]) -> Dict[
 def reconstruct(parts: Dict[str, FieldPartition], symbols: Dict[str, int]) -> Dict[str, Any]:
     """Symbols -> a representative reading that routes identically to the original."""
     return {f: parts[f].representative(s) for f, s in symbols.items() if f in parts}
+
+
+# ----------------------------------------------------------------- compatibility aliases
+# The underscore spellings these four names used to carry are kept so an out of tree caller that
+# reached for the private API still resolves. New code uses the public names above.
+_OTHER = OTHER_CELL
+_atoms = atoms_of
+_flow_atoms = flow_atoms
+_atom_true = atom_true

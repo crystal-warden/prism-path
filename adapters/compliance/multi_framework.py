@@ -15,12 +15,12 @@ Nothing is re-derived twice by hand and nothing is faked: a framework appears on
 stated authority reaches it, and a mapping that is partial says so. Add a crosswalk file and that
 framework joins the report automatically.
 """
-import compliance_adapter as _ca
-import unified as _un
-import cmmc as _cmmc
-import crosswalk as _cw
-import rollup as _rollup
-import fair_risk as _fr
+from adapters.compliance import compliance_adapter as _ca
+from adapters.compliance import unified as _un
+from adapters.compliance import cmmc as _cmmc
+from adapters.compliance import crosswalk as _cw
+from adapters.compliance import rollup as _rollup
+from adapters.compliance import fair_risk as _fr
 
 
 def assess_environment(posture, completions=None, as_of=None, use_llm=False):
@@ -71,8 +71,8 @@ def assess_environment(posture, completions=None, as_of=None, use_llm=False):
 
 
 def demo(use_llm=False):
-    import posture_connector as _pc
-    import control_tasks as _ct
+    from adapters.compliance import posture_connector as _pc
+    from adapters.compliance import control_tasks as _ct
     _ca.use_standard("nist_800171_r2")
     posture = _pc.load_sample("example_host")
     completions = [

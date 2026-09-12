@@ -19,7 +19,7 @@ checks consume:
 Facts PrismPath does not natively enforce (generative guardrails, disclosure delivery) are deliberately
 NOT emitted here; they remain the org's attestation via other tooling. Honest by omission.
 """
-import os, sys, json
+import os, json
 
 # ============================================================================
 # CONFIGURE — set these to your own environment, then run. Nothing below this
@@ -38,9 +38,6 @@ FLOW_VERSION = "tx-governance-flow@1"
 VERSION_AUTHORIZED = True
 # ============================================================================
 
-_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-if _ROOT not in sys.path:
-    sys.path.insert(0, _ROOT)
 from prismpath.kernel.parser import parse
 from prismpath.kernel.engine import run
 from prismpath.kernel import causes

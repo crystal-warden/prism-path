@@ -3,8 +3,8 @@
 """Operational / evidence layer: recurring tasks, due/overdue status from cadence, and completion
 records that evidence the 'performed' objectives. Fail-closed and clock-free (dates passed in)."""
 import pytest
-import compliance_adapter as ca
-import control_tasks as ct
+from adapters.compliance import compliance_adapter as ca
+from adapters.compliance import control_tasks as ct
 
 
 def _control(cid):

@@ -3,9 +3,9 @@
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Extract a stratified control set (with real 800-171A objectives) from the Rev 2 catalog to ground
 the agy-generated efficacy corpus. 3 controls per method profile x the difficulty tiers we ask agy for."""
-import os, sys, json
-HERE = os.path.dirname(os.path.abspath(__file__)); sys.path.insert(0, HERE)
-import compliance_adapter as ca
+import os, json
+HERE = os.path.dirname(os.path.abspath(__file__))
+from adapters.compliance import compliance_adapter as ca
 
 ca.use_standard("nist_800171_r2")
 

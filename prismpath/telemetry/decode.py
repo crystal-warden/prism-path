@@ -33,7 +33,7 @@ from prismpath.kernel.parser import parse  # noqa: E402
 
 
 def _show(v):
-    return "<other>" if v == quantizer._OTHER else v
+    return "<other>" if v == quantizer.OTHER_CELL else v
 
 
 def encode_readings(parts, readings: List[dict]) -> str:

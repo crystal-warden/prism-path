@@ -8,24 +8,17 @@ Covers:
 - Composition with the concentrator profile (section 2.9): receipt stream readings aggregate into
   concentrated datagrams alongside other telemetry streams and demux cleanly.
 """
-import sys
-from pathlib import Path
-
 import pytest
 
-ADAPTER = Path(__file__).resolve().parent.parent
-REPO = ADAPTER.parent.parent
-sys.path.insert(0, str(REPO))
-
-from prismpath.telemetry.concentrator import concentrate, demux, OK as CONC_OK  # noqa: E402
-from prismpath.kernel import causes  # noqa: E402
-from prismpath.telemetry.receipts import (  # noqa: E402
+from prismpath.kernel import causes
+from prismpath.telemetry.concentrator import concentrate, demux, OK as CONC_OK
+from prismpath.telemetry.receipts import (
     OK as RCPT_OK,
     decode_receipt,
     encode_receipt,
     encode_receipt_symbols,
 )
-from prismpath.telemetry.replay import ACCEPT, REPLAY_DUPLICATE, REPLAY_STALE, TickWindow  # noqa: E402
+from prismpath.telemetry.replay import ACCEPT, REPLAY_DUPLICATE, REPLAY_STALE, TickWindow
 
 
 def test_receipt_stream_composition_with_replay_window():

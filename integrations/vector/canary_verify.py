@@ -26,14 +26,17 @@ from collections import Counter
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-_TELEMETRY = Path(__file__).resolve().parent.parent.parent / "prismpath" / "telemetry"
-sys.path.insert(0, str(_TELEMETRY))
-sys.path.insert(0, str(_TELEMETRY.parent.parent))
+# Imported as a module (python -m integrations.vector.canary_verify) the repository root is already
+# on sys.path. Run as a plain script against an uninstalled checkout it is not, and that is how the
+# verifier is invoked in the field, so the root goes on the path for that case.
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
 
-from prismpath.telemetry import preflight  # noqa: E402  (extract_reading + _codec_view: the codec's exact view of an event)
+from prismpath.kernel.parser import parse_file  # noqa: E402
+from prismpath.telemetry import preflight  # noqa: E402  (extract_reading + the codec's exact view of an event)
 from prismpath.telemetry import quantizer  # noqa: E402
 from prismpath.telemetry import wire  # noqa: E402
-from prismpath.kernel.parser import parse_file  # noqa: E402
 
 
 def _read_ndjson(path: str) -> Tuple[List[dict], int]:

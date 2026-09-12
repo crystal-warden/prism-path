@@ -126,7 +126,7 @@ def _field_values(p):
     if p.kind == "boolean":
         return [False, True]
     # categorical
-    return [c["const"] for c in p.cells if c["const"] != quantizer._OTHER] + ["__unlisted__"]
+    return [c["const"] for c in p.cells if c["const"] != quantizer.OTHER_CELL] + ["__unlisted__"]
 
 
 def _grid(parts):

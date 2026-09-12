@@ -6,9 +6,9 @@
        to met; the AI output is attested first (immutable), the override supersedes it (provable chain).
    (2) Missing-evidence discovery: empty bundle → an evidence request is routed (deferred, not failed);
        the client uploads → resume → re-adjudicate."""
-import os, sys, json
-HERE = os.path.dirname(os.path.abspath(__file__)); sys.path.insert(0, HERE)
-import compliance_adapter as ca
+import os, json
+HERE = os.path.dirname(os.path.abspath(__file__))
+from adapters.compliance import compliance_adapter as ca
 
 out = {}
 

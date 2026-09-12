@@ -10,7 +10,7 @@ hand-rolled approximation  -  every record round-trips) and measure bytes per de
 way OTLP is actually shipped (ResourceLogs/ScopeLogs amortized over an epoch), against the fused
 decision stream (O1/O2) and the JSON baselines (B2).
 
-    python adapters/fusion/bench/otlp_baseline.py            # -> otlp_results.{md,json}
+    python -m adapters.fusion.bench.otlp_baseline            # -> otlp_results.{md,json}
 
 Two encodings, matched to what each PrismPath stream carries:
   FAITHFUL   -  the four decision fields (stability, dev_mg, rule_level, soc_action) as OTLP
@@ -28,21 +28,18 @@ from __future__ import annotations
 
 import gzip
 import json
-import sys
 import zlib
 from pathlib import Path
 
-HERE = Path(__file__).resolve().parent
-REPO = HERE.parent.parent.parent
-sys.path.insert(0, str(REPO / "adapters" / "fusion"))
-sys.path.insert(0, str(REPO))
-
-import projection  # noqa: E402
-from opentelemetry.proto.common.v1.common_pb2 import InstrumentationScope, KeyValue  # noqa: E402
-from opentelemetry.proto.logs.v1.logs_pb2 import (  # noqa: E402
+from adapters.fusion import projection
+from opentelemetry.proto.common.v1.common_pb2 import InstrumentationScope, KeyValue
+from opentelemetry.proto.logs.v1.logs_pb2 import (
     LogRecord, LogsData, ResourceLogs, ScopeLogs,
 )
-from opentelemetry.proto.resource.v1.resource_pb2 import Resource  # noqa: E402
+from opentelemetry.proto.resource.v1.resource_pb2 import Resource
+
+HERE = Path(__file__).resolve().parent
+REPO = HERE.parent.parent.parent
 
 N = 64484                 # match the #84 population exactly
 EPOCH = 4096              # the decision codec's Merkle-committed epoch (#84)  -  amortization unit

@@ -10,14 +10,9 @@ deliberately excluded (stated in the spec). The win is header amortization on IP
 single-stream concentrated frame costs one extra byte over the bare frame (the stream id) and
 the bench asserts that too, because the profile should never be sold for N=1.
 """
-import sys
-from pathlib import Path
-
-ADAPTER = Path(__file__).resolve().parent.parent
-REPO = ADAPTER.parent.parent
-from prismpath.telemetry import packed                                          # noqa: E402
-from prismpath.telemetry import zeckendorf as zeck                                 # noqa: E402
-from prismpath.telemetry.concentrator import (CONCENTRATOR_TRUNCATED,      # noqa: E402
+from prismpath.telemetry import packed
+from prismpath.telemetry import zeckendorf as zeck
+from prismpath.telemetry.concentrator import (CONCENTRATOR_TRUNCATED,
                           CONCENTRATOR_UNKNOWN_STREAM, OK, concentrate, demux)
 
 IP_UDP = 28                                            # IPv4 (20) + UDP (8), per datagram

@@ -3,8 +3,8 @@
 """CMMC 2.0 levels are deterministic views over the 800-171 engine: L1 is met/not-met over the 17 FAR
 practices, L2 is the SPRS-scored 110 with POA&M eligibility, L3 declares its 800-172 dependency rather
 than guessing. Insufficient is always scored as not-met (fail closed), never assumed met."""
-import compliance_adapter as ca
-import cmmc
+from adapters.compliance import compliance_adapter as ca
+from adapters.compliance import cmmc
 
 
 def _fixed(status_by_id=None, default="met"):

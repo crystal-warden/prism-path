@@ -2,8 +2,8 @@
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Breadth2 tests for newly added machine-checkable technical configuration controls."""
 import pytest
-import deterministic_checks as dc
-import compliance_adapter as ca
+from adapters.compliance import deterministic_checks as dc
+from adapters.compliance import compliance_adapter as ca
 
 NEWLY_COVERED_CONTROLS_BREADTH2 = [
     "3.1.9",

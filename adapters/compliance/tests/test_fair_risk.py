@@ -5,7 +5,7 @@ compliance measurably lowers the annualized loss expectancy, and risk-acceptance
 import json
 import os
 import pytest
-import fair_risk as fr
+from adapters.compliance import fair_risk as fr
 from prismpath.hotswap import policy_pack as pp
 
 HERE = os.path.dirname(os.path.abspath(__file__))

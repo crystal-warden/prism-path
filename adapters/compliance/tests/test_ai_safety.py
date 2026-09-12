@@ -2,9 +2,9 @@
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """The AI-safety-testing catalog assessed by the same engine, and the model-version binding that makes
 'retested after every change' provable."""
-import compliance_adapter as ca
-import deterministic_checks as dc
-import ai_safety as ais
+from adapters.compliance import compliance_adapter as ca
+from adapters.compliance import deterministic_checks as dc
+from adapters.compliance import ai_safety as ais
 
 CAPS = {
     "test_suite_defined": True, "model_versions_hashed": True,

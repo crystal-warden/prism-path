@@ -10,9 +10,9 @@ ground truth. This measures gemma-vs-agy agreement, which is a differential/diff
 human-review trigger — not a certification of correctness. A ~100% agreement is a RED FLAG (corpus too
 easy or leakage); the expected, healthy shape is high on 'easy', lower on 'hard'.
 """
-import os, sys, json, collections
-HERE = os.path.dirname(os.path.abspath(__file__)); sys.path.insert(0, HERE)
-import compliance_adapter as ca
+import os, json, collections
+HERE = os.path.dirname(os.path.abspath(__file__))
+from adapters.compliance import compliance_adapter as ca
 
 ca.use_standard("nist_800171_r2")
 CORPUS = os.path.join(HERE, "efficacy", "corpus")

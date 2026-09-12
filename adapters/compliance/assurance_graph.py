@@ -19,9 +19,9 @@ touch, what breaks if it fails, who owns it, and which frameworks does it satisf
 the traceability the model asks for, built on the primitives we already ship — no new data, just the
 connections made explicit.
 """
-import compliance_adapter as _ca
-import crosswalk as _cw
-import fair_risk as _fr
+from adapters.compliance import compliance_adapter as _ca
+from adapters.compliance import crosswalk as _cw
+from adapters.compliance import fair_risk as _fr
 
 _OWNER = {"technical": "System / Security Administrator", "procedural": "ISSM / Policy Owner",
           "operational": "Operations / Process Owner", "general": "ISSM"}

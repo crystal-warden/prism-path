@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-import projection
+from adapters.fusion import projection
 
 REPO = Path(__file__).resolve().parents[3]
 HW_EVIDENCE = REPO / "prismpath-hw" / "evidence"

@@ -18,8 +18,8 @@ Strategies:
   batch:N     flush every N decisions                       (count-batched)
   mtu         fill to the MTU, flush; also flush on a max-latency cap  (the hybrid, recommended)
 
-    python adapters/fusion/bench/wire.py --imu            # steady ~6 Hz sensor corpus (on disk)
-    python adapters/fusion/bench/wire.py --from-fixture   # CI (synthetic bursty stream)
+    python -m adapters.fusion.bench.wire --imu            # steady ~6 Hz sensor corpus (on disk)
+    python -m adapters.fusion.bench.wire --from-fixture   # CI (synthetic bursty stream)
 
 The bursty cyber arrival pattern is fed here from the synthetic fixture. Any decision source that
 yields (timestamp, level) events is a valid connector; the archived SIEM connector was the v1 example.
@@ -34,19 +34,15 @@ import zlib
 from pathlib import Path
 from typing import Callable, List, Tuple
 
+from adapters.fusion import projection
+from prismpath.kernel.parser import parse
+from prismpath.telemetry import packed
+from prismpath.telemetry import quantizer
+from prismpath.telemetry import wire
+
 HERE = Path(__file__).resolve().parent
 ADAPTER = HERE.parent
 REPO = ADAPTER.parent.parent
-for p in (str(REPO / "prismpath" / "telemetry"), str(REPO), str(ADAPTER)):
-    if p not in sys.path:
-        sys.path.insert(0, p)
-
-from prismpath.telemetry import packed      # noqa: E402
-from prismpath.telemetry import quantizer    # noqa: E402
-from prismpath.telemetry import wire         # noqa: E402
-from prismpath.kernel.parser import parse  # noqa: E402
-
-import projection  # noqa: E402
 
 FLOW = ADAPTER / "flows" / "fusion_triage.md"
 HW = REPO / "prismpath-hw" / "evidence"

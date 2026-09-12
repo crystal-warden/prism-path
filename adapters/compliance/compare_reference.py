@@ -5,9 +5,9 @@
 Agreement validates the adjudicator; disagreements (esp. gemma stricter than agy) are the calibration
 boundary and route to the HITL review queue. Neither is ground truth — this is a model-vs-model
 differential, which is the honest signal available without a credentialed human assessor."""
-import os, sys, json, collections
-HERE = os.path.dirname(os.path.abspath(__file__)); sys.path.insert(0, HERE)
-import compliance_adapter as ca
+import os, json, collections
+HERE = os.path.dirname(os.path.abspath(__file__))
+from adapters.compliance import compliance_adapter as ca
 
 STAT = ["met", "partially-met", "not-met"]
 REF = os.path.join(HERE, "efficacy", "reference", "verdicts")

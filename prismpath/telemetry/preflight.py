@@ -103,7 +103,7 @@ def _cells_desc(partition: quantizer.FieldPartition) -> str:
         return " ".join(spans)
     if partition.kind == "boolean":
         return "[false] [true]"
-    consts = [repr(cell["const"]) for cell in partition.cells if "const" in cell and cell["const"] != quantizer._OTHER]
+    consts = [repr(cell["const"]) for cell in partition.cells if "const" in cell and cell["const"] != quantizer.OTHER_CELL]
     return " ".join(f"[{const_val}]" for const_val in consts) + " [other]"
 
 
@@ -120,7 +120,7 @@ def _reconstruction_bound(partition: quantizer.FieldPartition) -> dict:
         return {"kind": "boolean", "leak": "exact",
                 "note": "exact (1 bit): a boolean has no hidden information, the cell IS the value"}
     if partition.kind == "categorical":
-        enumerated = sum(1 for cell in partition.cells if cell.get("const", quantizer._OTHER) != quantizer._OTHER)
+        enumerated = sum(1 for cell in partition.cells if cell.get("const", quantizer.OTHER_CELL) != quantizer.OTHER_CELL)
         return {"kind": "categorical", "leak": "mixed", "exact_values": enumerated,
                 "note": f"{enumerated} enumerated values exact; every other value collapses to the "
                         f"'other' cell (an unbounded set, unrecoverable)"}

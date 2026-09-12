@@ -14,33 +14,29 @@ Three claims, three tiers, one file:
   * §2.4 Merkle root (I4): a tampered reading's leaf no longer verifies against the committed root.
 """
 import hashlib
-import importlib.util
 from pathlib import Path
 
 import pytest
 
+# The bench's own module is named wire.py; under its package path it no longer shadows the
+# telemetry codec of the same name, so both import side by side.
+from adapters.fusion.bench import wire as bench_wire
+from prismpath.ledgers.ledger_ots import merkle_root_and_paths, verify_leaf
+from prismpath.telemetry import packed
+from prismpath.telemetry import zeckendorf as zeck
+
 HERE = Path(__file__).resolve().parent
 ADAPTER = HERE.parent
 
-# Load bench/wire.py under a distinct name (it is itself called wire.py); this also puts
-# prismpath/telemetry on sys.path, so the codec modules import cleanly afterward.
-_spec = importlib.util.spec_from_file_location("fusion_wire_bench", ADAPTER / "bench" / "wire.py")
-W = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(W)
-
-import packed        # noqa: E402
-import zeckendorf as zeck     # noqa: E402
-from prismpath.ledgers.ledger_ots import merkle_root_and_paths, verify_leaf   # noqa: E402
-
-GRAPH = W.parse(W.FLOW.read_text())
-PARTS = W.quantizer.build_partitions(GRAPH)
+GRAPH = bench_wire.parse(bench_wire.FLOW.read_text())
+PARTS = bench_wire.quantizer.build_partitions(GRAPH)
 ORDER = sorted(PARTS.keys())
-NODE = W.wire.decision_nodes(GRAPH)[0]
-READINGS = [r for _t, r in W.events_from_fixture(n=300)]
+NODE = bench_wire.wire.decision_nodes(GRAPH)[0]
+READINGS = [r for _t, r in bench_wire.events_from_fixture(n=300)]
 
 
 def _symbols(reading):
-    s = W.quantizer.quantize(PARTS, reading)
+    s = bench_wire.quantizer.quantize(PARTS, reading)
     return [s[f] + 1 for f in ORDER]
 
 
@@ -50,7 +46,7 @@ def _flip_bit(bits, i):
 
 def _decision_stat(reading):
     """The quantized symbol tuple  -  by I1 this IS the decision-sufficient statistic the wire carries."""
-    s = W.quantizer.quantize(PARTS, reading)
+    s = bench_wire.quantizer.quantize(PARTS, reading)
     return tuple(s[f] for f in ORDER)
 
 
@@ -67,10 +63,10 @@ def test_bare_codec_self_frames_but_is_not_integrity():
     rejected = same = diff = 0
     for reading in READINGS[:80]:
         orig = _decision_stat(reading)
-        bits = W.wire.encode_reading(PARTS, reading)
+        bits = bench_wire.wire.encode_reading(PARTS, reading)
         for i in range(len(bits)):
             try:
-                got = _decision_stat(W.wire.decode_reading(PARTS, _flip_bit(bits, i)))
+                got = _decision_stat(bench_wire.wire.decode_reading(PARTS, _flip_bit(bits, i)))
             except Exception:
                 rejected += 1
                 continue
@@ -88,8 +84,8 @@ def test_bare_codec_self_frames_but_is_not_integrity():
     t1 = _decision_stat(READINGS[0])
     r2 = next((r for r in READINGS if _decision_stat(r) != t1), None)
     assert r2 is not None, "corpus lacks two distinct decision statistics"
-    forged = W.wire.encode_reading(PARTS, r2)          # a perfectly well-formed Facet stream
-    dec = W.wire.decode_reading(PARTS, forged)         # decodes with no error...
+    forged = bench_wire.wire.encode_reading(PARTS, r2)          # a perfectly well-formed Facet stream
+    dec = bench_wire.wire.decode_reading(PARTS, forged)         # decodes with no error...
     assert _decision_stat(dec) == _decision_stat(r2) != t1   # ...to a DIFFERENT decision statistic.
     print(f"[bare codec] forgery accepted: a valid stream carrying {_decision_stat(r2)} passes where "
           f"{t1} was expected  -  no origin integrity without the keyed layer.")

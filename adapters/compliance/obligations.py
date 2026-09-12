@@ -14,8 +14,8 @@ against SOC 2 can be answered from the 800-171 assessment — assess once, satis
 Obligations are organization-specific (the tenant's contracts and policies); a realistic DIB set drives
 the demo and tests.
 """
-import compliance_adapter as _ca
-import cmmc as _cmmc
+from adapters.compliance import compliance_adapter as _ca
+from adapters.compliance import cmmc as _cmmc
 
 # each obligation: what imposes it, the citation, and what it REQUIRES (a framework + a scope).
 # scope: "all" (every control of the framework) | "cmmc_l1" | "cmmc_l2" | an explicit list of control ids.
@@ -99,11 +99,11 @@ def breaches_for_control(control_id, obligations=None):
 def demo(use_llm=False):
     """Build one integrated picture: assess 800-171, propagate to SOC 2 via the crosswalk, assess AI
     governance from its register, then check every obligation against that connected evidence."""
-    import unified as _un
-    import posture_connector as _pc
-    import crosswalk as _cw
-    import ai_governance as _aig
-    import ai_register as _reg
+    from adapters.compliance import unified as _un
+    from adapters.compliance import posture_connector as _pc
+    from adapters.compliance import crosswalk as _cw
+    from adapters.compliance import ai_governance as _aig
+    from adapters.compliance import ai_register as _reg
     _ca.use_standard("nist_800171_r2")
     posture = _pc.load_sample("example_host")
     req_base = {"facts": posture.get("facts", {}), "boundary": posture.get("boundary")}

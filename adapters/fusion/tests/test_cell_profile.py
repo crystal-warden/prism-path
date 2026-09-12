@@ -4,16 +4,11 @@
 exactly what the codebook says, its atom truths match the quantizer's own evaluator, and the
 cell's representative routes back to the same symbol), refuses to invent cells, and its wire
 cost is measured, not asserted from vibes."""
-import sys
-from pathlib import Path
-
 import pytest
 
-ADAPTER = Path(__file__).resolve().parent.parent
-REPO = ADAPTER.parent.parent
-from prismpath.telemetry import quantizer                       # noqa: E402
-from prismpath.telemetry.predicate_profile import cell_profile, profile_wire_bytes  # noqa: E402
-from prismpath.kernel.parser import parse          # noqa: E402
+from prismpath.kernel.parser import parse
+from prismpath.telemetry import quantizer
+from prismpath.telemetry.predicate_profile import cell_profile, profile_wire_bytes
 
 FLOW = """
 ## decide
@@ -47,7 +42,7 @@ def test_profile_is_faithful_for_every_cell():
             assert p.symbol(prof["cell"]["rep"]) == sym
             # atom truths match the quantizer's own evaluator at the representative
             for a in prof["atoms"]:
-                assert a["truth"] == quantizer._atom_true(a["op"], a["const"], prof["cell"]["rep"])
+                assert a["truth"] == quantizer.atom_true(a["op"], a["const"], prof["cell"]["rep"])
 
 
 def test_adjacent_cells_differ_in_truth_vector():

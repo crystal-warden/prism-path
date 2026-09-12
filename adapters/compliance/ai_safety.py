@@ -13,10 +13,10 @@ version_binding answers that provably: given the model versions and the safety-t
 bound to a version hash, it reports which deployed versions have no determination (the gap). Nothing is
 assumed. A deployed version with no bound determination is a gap, full stop.
 """
-import compliance_adapter as _ca
-import posture_connector as _pc
-import ai_safety_receipts as _r
-import control_tasks as _ct
+from adapters.compliance import compliance_adapter as _ca
+from adapters.compliance import posture_connector as _pc
+from adapters.compliance import ai_safety_receipts as _r
+from adapters.compliance import control_tasks as _ct
 
 STANDARD = "ai_safety_testing"
 

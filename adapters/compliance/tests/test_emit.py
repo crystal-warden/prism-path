@@ -4,8 +4,8 @@
 and the load-bearing invariants — provenance embedding, deterministic RFC-4122 v5 uuids, token-safe ids."""
 import json, re
 import pytest
-import emit
-from sample import record, FIXED_NOW
+from adapters.compliance import emit
+from adapters.compliance.tests.sample import record, FIXED_NOW
 
 STATUSES = ["met", "partially-met", "not-met"]
 UUID_V5 = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")

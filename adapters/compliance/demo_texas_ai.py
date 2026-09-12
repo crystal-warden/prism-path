@@ -15,13 +15,12 @@ hand-typed posture. Shows, for two actors:
      governmental entity, with the rest Not Applicable and justified.
   4. Which config objectives PrismPath PROVES at the boundary vs. which remain org-attested.
 
-Run:  python adapters/compliance/demo_texas_ai.py
+Run:  python -m adapters.compliance.demo_texas_ai
 """
-import os, sys
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import compliance_adapter as ca
-import deterministic_checks as dc
-import texas_ai_connector as tx
+import os
+from adapters.compliance import compliance_adapter as ca
+from adapters.compliance import deterministic_checks as dc
+from adapters.compliance import texas_ai_connector as tx
 
 
 def _config_objs(control):

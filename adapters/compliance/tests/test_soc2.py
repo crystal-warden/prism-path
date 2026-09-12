@@ -4,9 +4,9 @@
 an 800-171 assessment through a curated crosswalk: a SOC 2 criterion is reported met only when every
 mapped 800-171 control is met (fail closed). The crosswalk is a labeled subset, and every id on both
 sides is real."""
-import compliance_adapter as ca
-import crosswalk as cw
-import multi_framework as mf
+from adapters.compliance import compliance_adapter as ca
+from adapters.compliance import crosswalk as cw
+from adapters.compliance import multi_framework as mf
 
 
 def test_soc2_is_a_registered_standard():

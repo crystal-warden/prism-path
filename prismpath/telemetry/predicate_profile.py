@@ -31,14 +31,14 @@ def cell_profile(graph, parts: Dict[str, "q.FieldPartition"], field: str, symbol
         raise IndexError(f"{field}: symbol {symbol} outside partition (n={p.n})")
     cell = dict(p.cells[symbol])
     rep = cell["rep"]
-    atoms = quantizer._flow_atoms(graph).get(field, [])
+    atoms = quantizer.flow_atoms(graph).get(field, [])
     return {
         "field": field,
         "kind": p.kind,
         "symbol": symbol,
         "n_cells": p.n,
         "cell": cell,
-        "atoms": [{"op": op, "const": const, "truth": quantizer._atom_true(op, const, rep)}
+        "atoms": [{"op": op, "const": const, "truth": quantizer.atom_true(op, const, rep)}
                   for op, const in atoms],
     }
 

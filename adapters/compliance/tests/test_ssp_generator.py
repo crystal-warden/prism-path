@@ -4,8 +4,8 @@
 control-implementation section from the live assessment (status per verdict, responsible role, governing
 policy). Blank profile + no verdicts = the reusable template; a filled profile + real verdicts = the
 organization's SSP, consistent with the actual posture."""
-import compliance_adapter as ca
-import ssp_generator as ssp
+from adapters.compliance import compliance_adapter as ca
+from adapters.compliance import ssp_generator as ssp
 
 
 def test_template_ssp_is_blank_and_complete():

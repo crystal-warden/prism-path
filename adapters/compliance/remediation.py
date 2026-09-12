@@ -17,14 +17,14 @@ attaches the remediation PATH (fix the configuration, adopt the policy, perform 
 evidence), and emits an OSCAL POA&M in priority order. This closes the loop: assess -> prioritize ->
 remediate -> prove -> re-assess.
 """
-import compliance_adapter as _ca
-import fair_risk as _fr
-import obligations as _ob
-import governance as _gov
-import control_tasks as _ct
-import deterministic_checks as _dc
-import sop_generator as _sg
-import emit as _emit
+from adapters.compliance import compliance_adapter as _ca
+from adapters.compliance import fair_risk as _fr
+from adapters.compliance import obligations as _ob
+from adapters.compliance import governance as _gov
+from adapters.compliance import control_tasks as _ct
+from adapters.compliance import deterministic_checks as _dc
+from adapters.compliance import sop_generator as _sg
+from adapters.compliance import emit as _emit
 
 
 def _sop_index():
@@ -129,8 +129,8 @@ def to_poam(plan, now=None):
 
 
 def demo(use_llm=False, top=8):
-    import unified as _un
-    import posture_connector as _pc
+    from adapters.compliance import unified as _un
+    from adapters.compliance import posture_connector as _pc
     _ca.use_standard("nist_800171_r2")
     posture = _pc.load_sample("example_host")
     req_base = {"facts": posture.get("facts", {}), "boundary": posture.get("boundary")}

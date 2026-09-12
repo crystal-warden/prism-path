@@ -13,7 +13,7 @@ independence preserved precisely because the evidence is cryptographically signe
 verifiable — the third line verifies the receipt rather than re-running the test. This module makes that
 concrete: it assigns each control's assurance across the four lines and quantifies the de-duplication.
 """
-import compliance_adapter as _ca
+from adapters.compliance import compliance_adapter as _ca
 
 _OWNER = {"technical": "System / Security Administrator", "procedural": "ISSM / Policy Owner",
           "operational": "Operations / Process Owner", "general": "ISSM"}
@@ -67,8 +67,8 @@ def assurance_summary(n_controls, n_signed):
 
 
 def demo(use_llm=False):
-    import unified as _un
-    import posture_connector as _pc
+    from adapters.compliance import unified as _un
+    from adapters.compliance import posture_connector as _pc
     _ca.use_standard("nist_800171_r2")
     posture = _pc.load_sample("example_host")
     req_base = {"facts": posture.get("facts", {}), "boundary": posture.get("boundary")}

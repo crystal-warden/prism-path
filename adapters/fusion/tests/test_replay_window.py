@@ -8,15 +8,10 @@ inside the window, duplicate-inside-window rejected, beyond-window rejected as s
 check/observe split (check never mutates), and the interaction that motivated the window: a
 replayed old keyframe must not regress a refresh-profile consumer's state.
 """
-import sys
-from pathlib import Path
-
 import pytest
 
-ADAPTER = Path(__file__).resolve().parent.parent
-REPO = ADAPTER.parent.parent
-from prismpath.telemetry.refresh import StalenessTracker                          # noqa: E402
-from prismpath.telemetry.replay import (ACCEPT, REPLAY_DUPLICATE, REPLAY_STALE,   # noqa: E402
+from prismpath.telemetry.refresh import StalenessTracker
+from prismpath.telemetry.replay import (ACCEPT, REPLAY_DUPLICATE, REPLAY_STALE,
                     TickWindow)
 
 

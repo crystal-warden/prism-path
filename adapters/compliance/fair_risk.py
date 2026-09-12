@@ -16,7 +16,7 @@ so improving compliance measurably reduces risk, and a control gap shows up as e
 """
 import os
 import json
-import ai_safety_receipts as _sig   # reuse the engine's Ed25519 receipt signing (generic over any record)
+from adapters.compliance import ai_safety_receipts as _sig   # reuse the engine's Ed25519 receipt signing (generic over any record)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SCEN_PATH = os.path.join(HERE, "risk_scenarios.json")

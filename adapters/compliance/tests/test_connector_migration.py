@@ -7,7 +7,7 @@ seam, and the shared deferral backend."""
 import hashlib
 import json
 
-import compliance_adapter as ca
+from adapters.compliance import compliance_adapter as ca
 from prismpath.ledgers import ledger_airgap
 from prismpath.workers.connector import BaseConnector
 

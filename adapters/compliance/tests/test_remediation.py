@@ -3,8 +3,8 @@
 """The remediation planner turns an assessment into a prioritized plan: each gap ranked by a transparent
 blend of SPRS points, FAIR dollar reduction, obligations unblocked, and objectives helped, with the fix
 path attached, and emitted as an OSCAL POA&M in priority order. Assess -> prioritize -> remediate."""
-import compliance_adapter as ca
-import remediation as rem
+from adapters.compliance import compliance_adapter as ca
+from adapters.compliance import remediation as rem
 
 
 def test_plan_ranks_gaps_and_rolls_up():

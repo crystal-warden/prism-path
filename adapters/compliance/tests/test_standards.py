@@ -3,8 +3,8 @@
 """Dual-catalog coverage: the engine is catalog-agnostic and the assessor selects the standard.
 Rev 2 (CMMC's current basis, SPRS-scored) and Rev 3 (NIST's current official, not SPRS-scored)."""
 import pytest
-import compliance_adapter as ca
-from sample import record
+from adapters.compliance import compliance_adapter as ca
+from adapters.compliance.tests.sample import record
 
 
 def test_list_standards_shows_both_revisions():
