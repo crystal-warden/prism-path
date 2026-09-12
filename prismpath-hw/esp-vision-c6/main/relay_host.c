@@ -21,7 +21,7 @@ static void emit(const uint8_t *payload, uint16_t len);
 #define FRESH_US 1500000
 #define FUSION_TICK_US 250000
 #define FUSION_RESEND_US 2000000
-static struct { uint32_t seq; uint16_t node; int64_t t_rx; bool seen; } cam[2];
+static struct { uint32_t seq; uint16_t node; int64_t t_rx, t_occ; bool seen; } cam[2];   // t_occ: when the camera last said someone is there (the hold is the policy's)
 static bool fusion_ok = false;
 static void fusion_note(const uint8_t *pl, uint16_t len)
 {
@@ -29,24 +29,26 @@ static void fusion_note(const uint8_t *pl, uint16_t len)
     uint16_t nid = pl[4] | (pl[5] << 8); uint32_t seq; memcpy(&seq, pl + 8, 4); uint16_t node = pl[28] | (pl[29] << 8);
     int k = nid == FUSION_A ? 0 : nid == FUSION_B ? 1 : -1; if (k < 0) return;
     cam[k].seq = seq; cam[k].node = node; cam[k].t_rx = esp_timer_get_time(); cam[k].seen = true;
+    if ((CAM_OCC_MASK >> node) & 1) cam[k].t_occ = cam[k].t_rx;
 }
 static void fusion_tick(void)
 {
     static int64_t t_tick = 0, t_sent = 0; static uint16_t last_route = 0xffff; int64_t now = esp_timer_get_time();
     if (!fusion_ok || now - t_tick < FUSION_TICK_US) return;
     t_tick = now;
-    int32_t f[2], o[2], tm[2]; uint16_t age[2];
+    int32_t f[2], o[2], tm[2]; uint16_t age[2], occ_age[2];
     for (int k = 0; k < 2; k++) {
         int64_t a = cam[k].seen ? now - cam[k].t_rx : (int64_t)1 << 40; f[k] = cam[k].seen && a < FRESH_US;
-        o[k] = f[k] && ((CAM_OCC_MASK >> cam[k].node) & 1); tm[k] = f[k] && ((CAM_TAMPER_MASK >> cam[k].node) & 1); age[k] = (uint16_t)(a / 1000 > 65535 ? 65535 : a / 1000);
+        int64_t oa = cam[k].t_occ ? now - cam[k].t_occ : (int64_t)1 << 40; occ_age[k] = (uint16_t)(oa / 1000 > 65535 ? 65535 : oa / 1000); o[k] = occ_age[k];
+        tm[k] = f[k] && ((CAM_TAMPER_MASK >> cam[k].node) & 1); age[k] = (uint16_t)(a / 1000 > 65535 ? 65535 : a / 1000);
     }
-    memset(regs, 0, sizeof regs); set_reg(FREG_a_fresh, f[0]); set_reg(FREG_b_fresh, f[1]); set_reg(FREG_a_occ, o[0]); set_reg(FREG_b_occ, o[1]); set_reg(FREG_a_tamper, tm[0]); set_reg(FREG_b_tamper, tm[1]);
+    memset(regs, 0, sizeof regs); set_reg(FREG_a_fresh, f[0]); set_reg(FREG_b_fresh, f[1]); set_reg(FREG_a_occ_age, o[0]); set_reg(FREG_b_occ_age, o[1]); set_reg(FREG_a_tamper, tm[0]); set_reg(FREG_b_tamper, tm[1]);
     uint16_t node = start_node, target = 0, steps = 0; uint8_t err = 0;
     while (steps < max_steps && node_edge_count(node) > 0) { int8_t e = evaluate(node, &target, &err); if (e < 0 || err) break; node = target; steps++; }
     if (node != last_route || now - t_sent > FUSION_RESEND_US) {
-        uint8_t rec[36]; memcpy(rec, "FUS1", 4); uint64_t t = (uint64_t)now; memcpy(rec + 4, &t, 8); memcpy(rec + 12, &node, 2);
-        rec[14] = f[0]; rec[15] = f[1]; rec[16] = o[0]; rec[17] = o[1]; rec[18] = tm[0]; rec[19] = tm[1];
-        memcpy(rec + 20, &cam[0].seq, 4); memcpy(rec + 24, &cam[1].seq, 4); memcpy(rec + 28, &age[0], 2); memcpy(rec + 30, &age[1], 2); uint16_t st = steps; memcpy(rec + 32, &st, 2); rec[34] = 0; rec[35] = 0;
+        uint8_t rec[40]; memcpy(rec, "FUS2", 4); uint64_t t = (uint64_t)now; memcpy(rec + 4, &t, 8); memcpy(rec + 12, &node, 2);   // FUS2 = FUS1 with the two occupied ages appended
+        rec[14] = f[0]; rec[15] = f[1]; rec[16] = occ_age[0] < 2000; rec[17] = occ_age[1] < 2000; rec[18] = tm[0]; rec[19] = tm[1];
+        memcpy(rec + 20, &cam[0].seq, 4); memcpy(rec + 24, &cam[1].seq, 4); memcpy(rec + 28, &age[0], 2); memcpy(rec + 30, &age[1], 2); uint16_t st = steps; memcpy(rec + 32, &st, 2); rec[34] = 0; rec[35] = 0; memcpy(rec + 36, &occ_age[0], 2); memcpy(rec + 38, &occ_age[1], 2);
         emit(rec, sizeof rec); last_route = node; t_sent = now;
     }
 }
