@@ -1,12 +1,12 @@
 # Supporting Evidence · Validated Results Ledger
 
-**Ledger v2 · rows #1 to #143 · September 2026**
+**Ledger v2 · rows #1 to #157 · September 2026**
 
 *Every claim in the PrismPath papers, backed by a measured result, its provenance, and an honest
 verdict; negative results included. Written to survive a hostile read and to be merge-ready into the
 research paper (`docs/research/paper-routing-spectrum.md`) and engineering white paper
 (`docs/research/whitepaper-engineering.md`). All numbers first party on the GB10 (Grace-Blackwell, unified
-memory). Consolidated July 2026; maintained through row #143 (September 2026).*
+memory). Consolidated July 2026; maintained through row #157 (September 2026).*
 
 > **Rule of use.** No claim ships without its row here (result + provenance + gap).
 >
@@ -1419,6 +1419,328 @@ results/prismpath/evidence/A7/ (pins_network_admission.json, pins_sensor_interlo
 sweep_*.log), results/prismpath/A3__*.json and A7__*.json (23 each). Boards: Raspberry Pi Pico 2 W,
 Arty Z7-20 (PYNQ) via the Protectli jump, Kingst LA2016 on the GX10. No push (owner gated).
 
+
+### Rows #144 to #157: one system, progressively closed
+
+Rows #144 to #157 are one control loop closed in four layers, and the
+ledger should read them that way. The sentence for the paper: the camera detects, the policy decides, the
+decision becomes authority, the authority crosses the link as evidence, the actuator verifies before it
+acts. The architecture under it:
+
+```
+detect  ->  decide  ->  authorize  ->  transport  ->  verify  ->  act  ->  receipt
+```
+
+**1. Produce the decision** (#144, #145, #146, #147). Sensor state reduced to fields, quantized by the
+policy's own constants, evaluated byte exact across substrates, carried over a constrained link measured
+to its edge, and costed as the pixels scale.
+
+**2. Establish decision authority** (#148, #149). The decision as evidence: chained at the source with a
+signed head, signed by the relay, re-derived and sealed at the receiver; and the policy itself changed
+only by a signed pack, refused otherwise, its version persisted and named on every reading.
+
+**3. Decide whether a transported decision is admissible** (#150, #151, #152, #153, #154). Admission as a
+policy with abstention as an outcome; a quiet source as a state; replayed frames and replayed boots
+refused; the fused decision decided again in a kernel on the NIC path; what left as pixels held to a
+data handling control with wire evidence.
+
+**4. Cause and verify a physical effect** (#155, #157). An independent observation of the wire by a device
+with no authority, and then the decision, having survived every boundary above, becoming execution
+authority that moves an actuator which verifies before it acts and refuses what it cannot verify.
+
+#156, the refinement ladder against a codec, sits outside the progression as the refinement experiment
+that priced pictures and placed the codec.
+
+The earlier rows establish that the system can preserve, transport, verify, refuse and record decisions.
+#157 establishes that the physical world changes only after the decision has survived those boundaries.
+It moved because the control plane authorized it, not because the sensor guessed correctly, because a
+packet happened to arrive, or because an application chose to honor a policy.
+
+**What PrismPath guarantees and what the actuator trusts.** PrismPath guarantees the decision: formed
+under a decidable policy, byte exact on every certified substrate, admitted or refused by a policy with a
+cause, chained and signed at its boundaries, re-derivable at the receiver, sealed in a trail. The actuator
+in #157 trusts absolutely two things it did not decide: the fleet authority's public key baked into its
+firmware, and the receiver's admission, since it acts on the authority's signature over an admission it
+cannot re-derive. What it verifies for itself is the signature, that it is the addressee, that the
+admission was authorized, and that the counter is new. That line is the honest boundary of the claim and
+the paper should draw it in those words.
+
+### #144 — A camera node ships decision state, not images: the grid front end byte exact on two Xtensa boards, live at 108 ms, over an acknowledged 802.15.4 hop with zero reading loss (September 2026)
+
+**Claim:** An ESP32-S3 with an OV3660 reduces each 320 by 240 grayscale frame to a 6 by 8 grid of
+integer fields (motion against the previous frame and departure from a shared background per cell, plus
+motion_cells, dark, step and door_hit), decides under a generated Level M policy with the certified
+table interpreter, and encodes the reading as a Facet wire of 26 to 50 bytes whatever the scene does;
+the front end is byte exact between the numpy reference and the C on Xtensa on a frozen frame corpus; a
+second board agrees as an independent witness; the node decides live from its own sensor at eleven
+frames a second, 108 ms from capture to decision; and the readings cross Wi-Fi to a C6 air relay and
+802.15.4 to a C6 host relay with acknowledged sub frames and zero reading loss for two cameras.
+
+**Method:** T0 measured the sensor's envelope (gray QVGA 11.1 fps, zero drops; JPEG 2.8 to 8.0 KB per
+frame at the board's quality 10) before any wire work. `gen_vision_flow.py 6 8 <door cells>` writes the
+flow (routes tamper, relight, evidence, scene_changed, door, occupied, map, idle; a codebook anchor
+edge carries every threshold on every cell so Figueroa quantization gives every cell the same partition);
+`gen_vision_policy.py` compiles it to the table image and emits the register map, node names and wire
+codebook as one generated header. Five clips (3,999 frames) were recorded raw over native USB by the same
+sensor (`tools/rec.py`, FRM2 framing), hashed, and replayed frame by frame through the node
+(`vision_replay.c`, RPL1/RES1 over USB, `tools/replay_corpus.sh`) and through the host reference
+(`frontend.py`, the engine, `prismpath.telemetry`); fields, decisions and wire bytes compared per frame.
+The second S3 replayed the same corpus as the witness. The live target decides on the board and sends
+readings and background keyframes; ESP-NOW between the two S3s first, then the hop: S3 to C6 air relay
+over an open bench access point as UDP, air relay to host relay as 802.15.4 channel 25 sub frames,
+unicast with hardware acknowledgement and four attempts, host relay to the receiver over USB (`ENF1`
+records with a relay timestamp); `tools/radio_live.py` decodes, routes, measures loss by sequence and
+latency by the capture and relay timestamps, and paints both receivers' views from the wire alone.
+
+**Result:** Replay 3,999 of 3,999 frames byte exact on fields, decisions and wire bytes; witness board
+3,999 of 3,999. Node cost per frame 17 ms (front end 16.6, policy 0.55, encode 0.18). Wire 25 to 50
+bytes per frame; codebook 100 fields, four bands per cell field, image 3,812 bytes. Live: capture to
+decision 108 ms median (90 ms frame release plus 17 ms compute), about 290 B/s at rest. ESP-NOW between
+the S3s: 1 lost in 867, air jitter 0.3 ms median. The hop with two cameras: 0 readings lost of 939 and
+of 1,699 in two takes, hop latency above the fastest 16 to 28 ms median, keyframes complete, evidence
+frames bound to their readings arriving every ten seconds on the tamper route with the room dark, and the
+frames were black. Readings ahead of keyframe bursts in the air relay cut the worst reading delay behind
+a burst from 2.5 s to under 0.3 s.
+
+**Honest scope:** The T1 pass conditions as first written were not met: the wire ceiling was 50 bytes,
+not the 40 the plan guessed, and the evidence route fired on an ordinary crossing because the crowd
+threshold of 12 cells trips at close range with the 120 degree lens (both retuned in #145). One room,
+one camera model, one lens. The C6 never received ESP-NOW from the S3 in any configuration tried, so the
+first leg is Wi-Fi UDP, not ESP-NOW; the access point is open on purpose, a bench link carrying decision
+symbols. The receiver's picture is the shared background with departures drawn on it, never
+reconstructed video, and that is the claim, not a limitation.
+
+**Provenance:** prismpath, prismpath-hw/esp-vision-node/ (commits 5340495 T0, 6494273 recorder, d2d7890
+replay harness and generator, 7d58cbb, b92e126 live target, 1660e69 radio, 11c33a7, c41c2fb, ed346f8,
+8e061b5, c94f033) and prismpath-hw/esp-vision-c6/ (823e850 and the commits under #146); the shared
+evaluator in vision_core.h is the fusion pod's copy. Design, plan, board notes, generator, host
+reference, receiver tools, corpus hashes (corpus/SHA256SUMS) and evidence logs (evidence/t0, t1, viewer)
+in the private strategy folder decision-sufficient-vision/ (T0_capture.md, T1_conformance.md), whose hashes
+are anchored in `prismpath-hw/evidence/vision_2026-09-11.SHA256SUMS` (`.ots` alongside). Boards: two FORIOT
+ESP32-S3-CAM (OV3660), two Seeed XIAO ESP32C6. Pushed 2026-09-11 (ca1c4db).
+
+### #145 — The envelope: seven scenes, the bands tuned on a locked sensor, the anchored normal, the C front end re-certified on 23,993 frames byte exact; fusion on the wire decided by a pre written rule (September 2026)
+
+**Claim:** The front end's failure modes were found on purpose and priced: auto exposure defeats the
+dark test, a background refresh clock absorbs a seated person, one person can light as many cells as
+three at this grid, and a seated person is as still and as departed as a moved camera. The bands were
+retuned on a locked sensor, the refresh clock removed in favour of an anchored normal that only an
+explicit decision replaces, and the C front end re-certified against the host on the whole corpus.
+Separately, a dictionary of layer 1 patterns learned from three clips does not generalise and is out,
+while a route index plus changed cells is in.
+
+**Method:** Seven scenes recorded with exposure and gain locked three seconds after boot (static room,
+one person, lights toggled, camera bumped, three people, a static wall, two nodes on one room), plus
+three held out clips; `tools/t2_envelope.py` measured each knob against ground truth from the takes;
+thresholds were set from the measurements and the flow regenerated. The anchored normal: after the lock
+the background follows the frame until twenty frames pass with no motion, that frame is the normal,
+afterwards only an adopt command replaces it; every normal has a sixteen bit id carried by every reading
+and keyframe, and the receiver paints a reading only over the normal it names. Evidence: one JPEG of the
+frame on the tamper, evidence, door and scene_changed routes, at most one every ten seconds, bound to
+the reading's sequence and route. Re-certification: all seventeen takes replayed through the node
+against the host reference. T7 (`tools/t7_fusion.py`): a dictionary of layer 1 sub cell patterns
+learned on clips 2 to 4 was scored on three held out clips against a go/no go rule written before the
+data was looked at (go at 60 percent held out coverage); route index plus changed cells and send on
+change were costed on the same corpus.
+
+**Result:** Bands after T2: motion cuts 4, 16, 48; departure cuts 6, 24, 64; dark under 70 (lit reads
+95 to 138 locked, off 47 to 89); evidence at 28 or more moving cells (one person never lit more than 27,
+three people never more than 25); step is a departure jump of 32 cells or more within five frames
+(persons at most 28, a camera move 45, lights 33 to 48); scene_changed follows a step with 36 cells
+departed and no motion for twenty frames, sticky until adopt. A refresh clock at 100 frames read a still
+occupant as at rest 70 percent of the time and at 1,200 frames 11 percent; never refreshing, nobody.
+Two nodes on one room agreed 83 percent on the route and 94 percent on presence. Re-certified:
+23,993 of 23,993 frames byte exact on fields, decisions and wire bytes across seventeen takes, and again
+23,993 of 23,993 after the anchored normal landed. The anchored search settles at frame 19 in fourteen
+of seventeen takes and on a seated person in three. T7: the dictionary covered 54 percent in sample and
+34 percent held out, no go by the rule; route index plus changed cells takes a moving frame from 85 to
+67 bytes and is in; send on change does not pay at ten frames a second.
+
+**Honest scope:** Motion area does not count people, and the cheapest detector field (blobs of moving
+cells on the grid) was tried and failed: one person and three people give the same distribution of one
+to three blobs a frame; a count needs pixels and a model, and that is a download for the owner to
+approve. Trees in wind were not run (no window at this desk). A take that opens with a person who then
+sits still anchors on them by design, and the operator's adopt is the remedy, not a cleverer clock. The
+dictionary was learned from one room. The two node agreement is one room from two angles, not a
+calibration.
+
+**Provenance:** prismpath, prismpath-hw/esp-vision-node/ commits 11c33a7 (exposure lock), c41c2fb (the T2
+front end), 8e061b5 (anchored normal, evidence, per camera doors). Private strategy folder
+decision-sufficient-vision/: T2_envelope.md, T7_fusion.md, frontend.py, tools/t2_envelope.py,
+tools/t7_fusion.py, corpus/SHA256SUMS (seventeen takes), evidence/t2_recert_2026-09-10.log,
+evidence/t2_recert_anchored_2026-09-10.log, evidence/t2_envelope_2026-09-10.txt,
+evidence/t7_fusion_2026-09-10.txt; hashes anchored in `prismpath-hw/evidence/vision_2026-09-11.SHA256SUMS`.
+
+### #146 — The hop to its edge: loss under two percent down to about minus 94 dBm, fragment repair over a downlink that rides on acknowledgements, and transmit power as a PrismPath policy evaluated on the relay, RISC-V certified 123,165 of 123,165 (September 2026)
+
+**Claim:** On the real hop, wireless, the house is inside the link's comfortable range at full power;
+the edge was found by turning the transmitter down instead of moving walls, and it is sharp: the
+acknowledged link holds reading loss under two percent while retries climb from ten to forty percent,
+then falls off a cliff in the last four decibels near minus 100 dBm. Readings survive on acknowledgement
+alone; keyframes and evidence survive because the receiver asks for missing fragments over a downlink
+that opens for six milliseconds after each acknowledged reading and the camera resends them. The relay's
+transmit power is not a knob but a second authored Level M flow the relay evaluates once a second on its
+own counters with the same byte exact evaluator as the camera, which makes the C6 the fifth instruction
+set on the conformance table; the policy returns to full power on a run of give ups, delivered a
+decision made inside an outage after it, and chose its own level on a walk with nobody sending commands.
+
+**Method:** Relay B and camera two on a bank and a wall charger, relay A on the host, every take two
+minutes with an adopt command at 30 s: desk, far bedroom, garage far end (dark, lit, interior doors
+closed), a bowl over the relay, the relay wrapped in foil under the foiled bowl, a microwave with a mug on
+the path (on, then off from the same spot) and the pair beside the running microwave. The host relay
+gained a signal strength record (RSSI of every frame summed every two seconds) and the air relay a power
+command over the downlink; the ladder was walked from 20 to minus 24 dBm in 40 s steps at the desk, the
+bedroom and the garage. The downlink: the host relay sends a pending command as one acknowledged frame in
+the window the air relay opens after hearing an ack; the air relay forwards it over Wi-Fi to the camera
+by node id, or acts on it itself (node 0000); delivery is reported over USB with the try count. Repair:
+a stalled fragment set gets a request naming up to 24 missing fragments, three times at most; the camera
+keeps its last three fragmented messages in PSRAM and resends exactly those. The policy: `hop_power.md`
+(fields give_up_run, retry_pct over ten seconds, backoff below full power; routes full_power at eight
+give ups in a row, step_up past 30 percent retries, step_down at 5 or under with room below, hold, else
+full power) compiled by `gen_hop_policy.py` to a 144 byte table; `ppt_eval.h` is `vision_core.h`'s
+evaluator copied line for line; a table that fails to parse leaves the radio at full power with the
+policy off; decisions cross the hop as PWR1 records in their own queue, retried until acked. Outage
+test: the host relay's bench mute command (deaf for twelve seconds mid take). Certification: a replay
+build of the relay (`relay_replay.c`, `tools/c6_replay.py`) decided the whole input grid (give ups 0 to
+16, retries 0 to 160 percent, backoff 0 to 44 dB, 123,165 cases) against the host engine on the same
+flow.
+
+**Result:** Range at full power: desk, far bedroom and garage 0 to 1 readings lost per 1,300, hop
+latency 8 to 13 ms median, adopt on the first try, retries 8 to 20 percent (the dark garage doubled the
+retry rate by shipping evidence every ten seconds; bulk retries more than readings). Foil and bowl: no
+effect on the hop (retries 3.7 percent, the lowest of the day; the power cable carries the signal out)
+and a measurable one on the short Wi-Fi leg (keyframe fragments lost, which is what exposed the repair
+gap). Microwave on the path: retries 11.8 percent against 3.7 and 5.7 percent off, two readings lost in
+1,179; beside it, unwrapped, zero loss and 9.5 percent retries. The edge: bedroom 20 dBm about minus 79
+dBm at the host and 0 lost; 14 dBm minus 86, 25 percent retries, 1.2 percent lost; 8 dBm minus 92, 27,
+0.2; 4 dBm minus 94, 36, 1.7; 0 dBm minus 99, 99 percent lost. Garage 20 dBm minus 85, 44 percent
+retries, 2.0 percent lost; 14 dBm minus 93.5, 135 percent retries (more than one per sub frame), 13.6
+lost; 8 dBm minus 98, 98 lost. From the desk, minus 24 dBm (minus 16 to minus 53 dBm at the host) still
+lost nothing. Repair: every keyframe on the slope completed after one to three requests, including three
+of 37 fragments each at the garage with one reading in seven lost. The downlink delivered a full power
+command at 8 dBm in the garage on the seventh ack that landed, twenty seconds in, and the link recovered
+in place. The policy on the desk: clean link to the minus 24 floor within ten seconds, retries at 43 to
+80 percent from the floor to full power in eight seconds; through the twelve second mute, full_power
+decided at ten give ups in a row and delivered first when the host came back; on the garage walk with no
+commands, held full power at 22 percent retries, stepped down to 14 dBm at 5 percent, stepped back up at
+30, camera two lost 1 of 1,607. Certification: 123,165 of 123,165 routes and step counts identical
+(66,253 full_power, 46,112 step_up, 8,688 hold, 2,112 step_down).
+
+**Honest scope:** One house, one channel each side (Wi-Fi channel 1, 802.15.4 channel 25); distances
+are not measured, the signal at the host is the axis. The retry percentages are counted over all sub
+frames including keyframe and evidence bulk, so a take with more bulk reads worse. A relay left at low
+power cannot be told to come back up when no ack lands at all, and needed a power cycle twice before the
+policy existed; the policy covers that case and the command covers every case where any ack lands. The
+power setting is lost on reboot. The adopt and power commands are unsigned bench commands; a signed
+action over a constrained link is the LoRa action wire's subject. Camera one, on the desk with its Wi-Fi
+leg across the house, lost 7 percent with 330 ms median latency during the walk: at range the Wi-Fi leg
+is the weaker link and the acknowledged hop is not, and that leg has only the repair path. The relay's
+evaluator is certified on the input grid of this flow, not on the vision corpus. A power bank that cuts
+off on the relay's 100 mA draw looks exactly like a dead radio; the wall charger never did. Relay A came
+back from a replug wedged once; the receiver now resets it on open.
+
+**Provenance:** prismpath, prismpath-hw/esp-vision-c6/ commits 2b74855 (downlink, stats over the air),
+9fe0076 (repair, power command, RSSI record), a992eae (the power policy on the relay, mute hook),
+78f66b1 (replay build); prismpath-hw/esp-vision-node/ 9fe0076 (fragment resend). Private strategy
+folder decision-sufficient-vision/: hop_power.md, T3_loss.md (the offline pricing), T3_hop.md,
+tools/radio_live.py, tools/hop_cmd.py, tools/c6_replay.py, evidence/t3/ (takes 01 to 21 as mp4 with
+evidence frames, c6_replay_2026-09-11.log, SHA256SUMS); hashes anchored in
+`prismpath-hw/evidence/vision_2026-09-11.SHA256SUMS`. Boards: two XIAO ESP32C6, two ESP32-S3-CAM.
+
+### #147 — Front end scaling: four times the pixels cost four times the front end and nothing on the wire (September 2026)
+
+**Claim:** With the same policy, grid and wire, raising the camera from 320 by 240 to 640 by 480
+scales the front end's cost with the pixels and leaves the reading's cost where the policy put it.
+
+**Method:** Camera one on the desk through the hop, 60 s at each resolution on the same firmware
+(`VISION_VGA` build switch, cells 80 by 60 instead of 40 by 40), the node logging its own front end time
+and free PSRAM every ten seconds, the receiver tallying wire bytes per reading and capture to decision.
+
+**Result:** Front end 17.5 ms mean at 320 by 240 and 71.2 ms at 640 by 480 (4.07 times for 4.0 times
+the pixels); frames decided per second 10.55 and 4.82 (the sensor halves its rate at VGA in grayscale,
+T0); capture to decision 108 and 253 ms; wire bytes per reading 26 idle and 32 to 41 with departures at
+320 by 240, 26 idle at 640 by 480, the same codebook and the same per state cost; keyframe 5.9 KB in 25
+fragments against 16.0 KB in 68; free PSRAM 7.90 against 6.48 MB.
+
+**Honest scope:** The two takes did not see the same scene state (one anchored with departed cells on the
+map, the other sat idle), so the claim is the same codebook and per state cost, not the same byte from
+two rooms. The keyframe is the one thing on the wire that grows with the pixels and at 68 fragments it
+needed the repair path on the desk. The fabric leg of scaling (T5) was not run and is left open by name.
+
+**Provenance:** prismpath, prismpath-hw/esp-vision-node/ commit 1ce7235. Private strategy folder
+decision-sufficient-vision/: T6_scaling.md, evidence/t3/20_t6_qvga_2026-09-11.mp4,
+21_t6_vga_2026-09-11.mp4, SHA256SUMS; hashes anchored in `prismpath-hw/evidence/vision_2026-09-11.SHA256SUMS`.
+
+### #148 — Every camera decision on the wire is a receipt: registry causes, a hash chain and a signed chain head on the camera, the relay's signature on its own decisions through an outage, the receiver's re-derivation of every route, a sealed trail (September 2026)
+
+**Claim:** Every record that crosses the hop becomes an event in the product's audit log shape with a cause from the kernel's registry, and nothing the receiver will not act on is dropped silently. The camera chains its readings and signs the chain head once a minute with a key it generated and keeps; the air relay signs its power decisions with its own key; the receiver re-derives each route from the bands on the wire and records agreement; each take is sealed by the receiver's key and reads with `prismpath trail`.
+
+**Method:** `tools/receipts.py` over `prismpath.ledgers.audit_log` and `prismpath.hotswap.policy_pack`; RDG6 readings carry the previous record's hash, the policy version and a boot nonce; CHN1 carries the signed head; the relay's PWR2 records are Ed25519 signed (monocypher) and retried until acked; the receiver holds one flow per node and walks it on band representatives (decision preservation under quantization, the Lean result) to re-derive the route. Registry appends: 56 wire:chain-broken, 68 state:normal-unheld.
+
+**Result:** A twelve second outage take: 17 of 17 relay decisions verified including two full_power decisions made inside the outage; chains 859 and 855 linked, 0 spliced; routes re-derived 861 of 861 and 863 of 863; 1,815 events sealed and verified. The signed chain head matched the receiver's own hash of the named sequence; a first key of zeros was caught by the check.
+
+**Honest scope:** Readings are chained, not individually signed. The trail's receipts are written at the receiver from the wire; the node's own bindings are the chain and its signed head. Provenance: prismpath commits 73439cd, a9a7098; private strategy folder RECEIPTS.md, evidence/t3/23_*, 34_*, 36_*.
+
+### #149 — A signed policy pack crosses the hop, is verified on the camera and refused with the registry's causes, survives a reboot, and changes a decision a person made (September 2026)
+
+**Claim:** Policy change on a constrained node is governed on the same path its decisions travel: a pack carrying the table, its wire codebook and an escalation mask, signed by the fleet authority, is verified against a key baked in the firmware, refused unsigned, corrupted, truncated or replayed with registry causes, committed with its version on every reading, kept in the camera's flash and re-verified at boot.
+
+**Result:** Five outcomes in one take: sig:missing 38 µs, sig:invalid 45.7 ms, manifest:bad-format 29 µs, committed 46 ms (20 s end to end over 243 chunks), image:version-replay 45.8 ms; readings never stopped. With a person up close on version 2, 8 readings at 20 or more moving cells and 7 evidence decisions where version 1's threshold of 28 would have escalated none. After a reset, every reading still named version 2.
+
+**Honest scope:** One camera at a time, no quorum; the authority key is the mesh's bench key. Provenance: prismpath c805c80, a9a7098; SWAP.md, evidence/t3/24_*, 28_*, 29_*, 36_*.
+
+### #150 — Admission at the receiver is a policy with three outcomes, authorized, refused, abstain, and abstention is a cause (September 2026)
+
+**Claim and result:** Six facts about a reading walk `receiver_admission.md` to one of seven routes. Live, 13 abstains until keyframes arrived then 804 authorized; 817 receipts replayed with zero disagreement; tampered four ways, 817 of 817 refused with the right cause each time. Cause 68 state:normal-unheld appended for the abstain.
+
+**Honest scope:** Evaluated by the host engine at the receiver, not on the relay. Provenance: prismpath eade0e7; ABSTAIN.md, evidence/t3/25_*, admission_check_*.
+
+### #151 — Two cameras fused into a room verdict on the relay, with STALE as a state and a presence hold as the flow's constant (September 2026)
+
+**Claim and result:** `room_fusion.md` on the host relay (the fifth instruction set) with freshness on the relay's own clock. A camera reset was declared STALE at 1,552 ms and the room read degraded_clear, rejoined in three seconds. With a person: clear, conflict, present, conflict, clear in the order walked; version 2 of the flow with a two second hold on the occupied fact cut verdict changes from 36 in 98 s to 15 in 67 s. The relay's evaluator was certified 123,165 of 123,165 against the host engine on the power policy's grid.
+
+**Honest scope:** Verdicts are not signed by the host relay; the receiver's seal binds them. Provenance: prismpath 398b4eb, 30f5fdd; FUSION.md, evidence/t3/26_*, 29_*, 30_*.
+
+### #152 — The replay window refused replayed frames on the air, a replayed boot is refused by nonce, and the concentrator and refresh profiles were costed on live symbols (September 2026)
+
+**Claim and result:** A bench replay from the relay's position, 20 readings re-sent as fresh frames, 20 refused (9 stale and 1 duplicate per camera); 32 readings replayed across a camera restart, 21 refused as a replayed boot by nonce, 74 by the window, no false epoch. Concentrated framing computed and round tripped on 1,915 live readings: 37.8 bytes a reading against 38.0 bare and 82.0 as carried with receipts, the finding being that the receipt header costs more than the reading. Send on change with a five second keyframe in a still room: 7 to 12 percent of readings.
+
+**Honest scope:** Concentration and refresh computed, not transmitted. Provenance: prismpath 7196bfa, a9a7098; CONCENTRATOR.md, evidence/t3/27_*, 35_*.
+
+### #153 — The room verdict decided in XDP on a Linux box from the same table image, 47 of 47 agreeing with the relay, with malformed packets refused after a first run decided them (September 2026)
+
+**Claim and result:** The fused facts as PPT packets to the Protectli's bridge, decided by a decode and rewrite variant of the conformance XDP program with the verdict written into the packet; a socket that only reads compared: 47 of 47 live and 5 of 5 hand made agree. Malformed packets were decided (else route over TY_NONE) until the program checked the image's field count; then refused, wrong magic passed untouched.
+
+**Honest scope:** The camera reading exceeds the program's 32 field cap; the kernel decided the fused policy after the relay, fed over UDP. Provenance: prismpath 5653df3; KERNEL.md, evidence/t3/31_*.
+
+### #154 — A privacy control expressed at the execution boundary and evidenced by the wire: no pixels leave unless a route decided so, as a signed, anchored determination (September 2026)
+
+**Claim and result:** VIS-PRIV-1 over sealed trails: keyframes explained by adoption, request or resend; evidence by an escalating decision of the same sequence; layers by an operator command and an occupied or door reading. Three takes pass, one fails on an evidence frame whose reading the receiver never admitted, and an injected frame is caught; every determination signed with `ai_safety_receipts` and anchored.
+
+**Honest scope:** Decided at the receiver over the trail; constants in the tool. Provenance: PRIVACY.md, evidence/t3/privacy_control_*, *.privacy.json.
+
+### #155 — An independent witness with no authority heard the hop and agreed with the receiver on every admitted reading (September 2026)
+
+**Claim and result:** Relay C promiscuous on the channel, no policy, no acks; 2,971 frames in 105 s to a pcap; 1,231 readings on the air in two boot epochs; 916 on the air and in the trail with identical wire bytes, 916 of 916; 0 in the trail not heard; the 59 replays heard twice are refused receipts.
+
+**Honest scope:** Witness on the desk; its record unsigned. Provenance: prismpath a9a7098 (relay_sniff.c); WITNESS.md, evidence/t3/34_witness_*.
+
+### #156 — The refinement ladder to the pixel against H.264 on the same cells: parity costs seven times the bits, layer 3 is the knee, and a chroma rung costs a third on top of luma (September 2026)
+
+**Claim and result:** Seven rungs priced with changed cell savings against x264 at 100 to 500 kbit/s on the same named cells: H.264 at 100 kbit/s reaches 41 dB at 1,200 bytes a frame; the ladder needs about 700 kbit/s to match; rung 3 is 27.8 dB at 34 kbit/s; a JPEG crop at quality 4 matches rung 3 for fewer bytes. Live, layer 3 on one camera is inside the hop's budget (3.7 KB/s) and on two it is not. Color: 10 px, 8 bands buys four decibels in RGB for a third more bytes; four bands buy nothing. The far sighted impression is perceptual; per pixel error falls as the subject nears.
+
+**Honest scope:** A negative result for the ladder as a codec and a design decision to spend codecs on evidence. Provenance: prismpath cab1ccd, 0bd8173, db12bab; LAYERS_LADDER.md, evidence/layers_ladder_*, layers_vs_jpeg_*, color_layers_*, corpus/color1_*.
+
+### #157 — Decision gated execution over the constrained link: an admitted camera decision, signed by the authority, moved an actuator on another node, and the actuator refused it replayed, spliced, unsigned, or on a refused admission (September 2026)
+
+**Claim:** A decision formed at a sensor under a policy, admitted by the receiver's policy, signed by the fleet authority as an action bound to the sensor's sequence, normal id and policy version, crosses the downlink and moves an actuator that verifies the action itself and answers with its own record; the actuator does not move on a refused admission, a replayed action, a spliced action or an unsigned one, each refused with a registry cause.
+
+**Method:** Camera one senses, the receiver admits (`receiver_admission.md`) and signs (mesh authority key), camera two is the actuator (on board LED) with the authority's public key baked in and a counter floor in flash; actions travel as chunks over the downlink; four negative cases sent on cue.
+
+**Result:** Nine authorized actions issued, 8 of 8 delivered moved the LED; refused admission: route:contract-violation; replay: replay-duplicate; spliced: sig:invalid; unsigned: sig:missing; none moved. 2,329 events sealed with 13 action and 12 actuation receipts bound to policy version 2, the normal, the decision and the outcome. Action delivery 0.3 to 1.7 s, actuator answer within 0.2 s.
+
+**Honest scope:** The actuator trusts the authority's key and the receiver's admission; its own refusals are signature, addressee, admission and counter. The LED state reported in three negative answers reflects a preceding authorized action still lit. Provenance: prismpath 6900c00 (the camera as actuator), ACTUATOR.md, evidence/t3/37_*; hashes anchored in `prismpath-hw/evidence/vision_2026-09-11.SHA256SUMS`. The published flows are in prismpath-hw/esp-vision-node/flows/ and prismpath-hw/esp-vision-c6/flows/.
+
 ## Revision history
 
 - **v1** (July 2026 consolidation, maintained through row #96, August 2026): the original ledger.
@@ -1507,3 +1829,12 @@ Arty Z7-20 (PYNQ) via the Protectli jump, Kingst LA2016 on the GX10. No push (ow
   scripts that reproduce the substrate rows. Anchored in
   `prismpath/evidence/ledger_v2.9_2026-09-09.SHA256SUMS` (`.ots` alongside); the anchor, not this
   prose, is the authoritative timestamp.
+- **v2.10** (September 2026): rows #144 to #157 folded in from the decision sufficient vision arcs of
+  2026-09-10 and 2026-09-11, on the owner's go, framed as one control loop closed in four layers rather
+  than fourteen experiments: produce the decision (#144 to #147), establish decision authority (#148,
+  #149), decide admissibility (#150 to #154), cause and verify a physical effect (#155, #157), with
+  #156 the refinement experiment outside the progression. The rows' recordings, trails, corpus and notes
+  are held in the private strategy folder and their hashes are anchored in
+  `prismpath-hw/evidence/vision_2026-09-11.SHA256SUMS` (`.ots` alongside); the flows the bench ran are
+  published beside the firmware. Anchored in `prismpath/evidence/ledger_v2.10_2026-09-11.SHA256SUMS`
+  (`.ots` alongside); the anchor, not this prose, is the authoritative timestamp.
