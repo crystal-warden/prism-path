@@ -18,14 +18,15 @@ memory). Consolidated July 2026; maintained through row #157 (September 2026).*
 > here because the papers cite them; they are **not independently reproducible from this repo alone**,
 > and that limitation is stated rather than implied by a path that looks local.
 >
-> **Archived class (added August 2026).** Rows **#65 to #71** (the compliance adapter) cite
-> `adapters/compliance/` paths that are **archived out of the shipped repo** and are **not** the
-> "strongest class" above: the adapter was removed as unready-for-production, so those rows are
-> **not reproducible from this repo** and their provenance is retained for the record only, not as a
-> live repo path. This class is called out explicitly because a backticked path is not a link and the
-> docs-health link check cannot flag it (`docs_health.py` now carries a separate backticked-path
-> advisory for exactly this drift). If the compliance work is ever republished, repoint these rows at
-> its new public home.
+> **Archived class (added August 2026, amended September 2026).** Rows **#65 to #71** (the compliance
+> adapter) were measured on the adapter's first build, which was removed from the tree on 2026-08-14
+> as unready for production (commit e396f95; the last tree holding it is d56f779) and rebuilt on the
+> adapter standard in September 2026 (commit 136080b, rows #137 to #139). The rebuilt adapter ships at
+> `adapters/compliance/` and its tests run in CI, and the file names those rows cite exist again in
+> it, but the numbers in #65 to #71 were measured on the first build and have not been re-measured on
+> the rebuild. Those rows therefore reproduce from git history at d56f779, not from the working tree,
+> and their provenance says so. `docs_health.py` carries a backticked-path advisory for paths that
+> look repo-local and do not resolve; `adapters/compliance/` is checked like any live path again.
 >
 > *(September 2026.)* The package was regrouped into `prismpath/{kernel,routing,safety,hotswap,ledgers,
 > workers,orchestration,evals}/`; a row citing `prismpath/<module>.py` reproduces from the grouped path,
@@ -37,8 +38,9 @@ memory). Consolidated July 2026; maintained through row #157 (September 2026).*
 >
 > *(September 2026.)* The compliance adapter was rebuilt on the adapter standard and republished at
 > `adapters/compliance/` (rows #137 to #139 measure the rebuilt version, reproducible from this repo).
-> Rows #65 to #71 still describe the archived version and stay in the archived class as written; the
-> SOC triage adapter that preceded it is archived on the same terms and will be rebuilt the same way.
+> Rows #65 to #71 describe the first build and stay in the archived class, with their provenance marked
+> as the first build; the SOC triage adapter that preceded it is archived on the same terms and will be
+> rebuilt the same way.
 >
 > Rows citing [`prismpath-hw/`](../../prismpath-hw/README.md) or
 > [`prismpath-ebpf/`](../../prismpath-ebpf/README.md) (the hardware and in kernel targets; rows
@@ -155,7 +157,7 @@ Provenance: `benchmark/learning_curve.json`. This *justifies* the corpus-collect
 | Enrich-lift (#2): does correlated context help? **NEGATIVE.** | Injecting up to 8 same-file correlated events (naive, unordered, unweighted) **lowered** escalation 0.902→0.77 and **raised** under-calls 6→14 (net +8). Only 2 flipped ignore→contain (real multi event chains); ~10 flipped contain→ignore as benign noise **diluted** the malicious signal. LM barely moved (7/8→6/8): the #3 "context helps LM most" prediction **refuted**. **Lesson: raw context hurts; context must be ranked/ordered with the anchor event marked, not dumped.** *Caveat: tiny n (5-8/tactic); bounds the naive approach only.* | `triage-corpus/enrich_lift_v0.json` |
 | Sequence 3-arm (#1): does ENGINEERED context recover the loss? **STRONG NEGATIVE.** | On 52 paired multi event cases: escalation A single-event **0.904** > B naive-bag **0.788** > C engineered kill-chain-timeline **0.538**; under-calls 5 / 11 / **24**. `C_recovers_over_B=-0.25`: engineered framing was the WORST arm, monotonically across nearly every tactic. C talked itself out of escalating mimikatz, DCSync, LSASS hashdump, security-log-clearing (1102), and a live CVE-2018-15982 exploit; the ‘look for a progression / a lone event may be benign’ framing handed the model an off-ramp it took. **Conclusion (converges with #2/#3): in prompt context DEGRADES single shot triage; the more reasoning room, the more the LLM rationalizes benign. Correlation belongs UPSTREAM as a deterministic layer, NOT as free-text the triage LLM weighs. Validates the 3-layer architecture.** *Caveat: noisy real-capture timelines (bounds the production regime), single model, temp 0, by-construction all-malicious labels.* | `triage-corpus/sequence_lift_v0.json`, `triage_sequence_corpus.jsonl` (249 seqs) |
 | Decomposed graph (#54): does a DECISION-GRAPH beat single shot? **POSITIVE: double win.** | Same 64 malicious + 48 benign, arm A single shot vs arm D decomposed (signature-gate -> tactic-router -> escalation defaulted narrow node). D raised malicious-recall **0.844 -> 0.969** (+12.5pts, under-calls 10->2) AND benign-correct **0.792 -> 0.938** (+14.6pts, over-calls 10->3): improved BOTH ends, not a recall/precision trade. Signature gate resolved **8/64 (12.5%) deterministically, 0 benign FP** (mimikatz/NTDS/DCSync/LSASS/log-clear/encoded-PS). **Completes the arc: monolithic prompt + more context = WORSE (#1/#2/#3); same prompt split into narrow nodes = BETTER on both axes. The lever is DECISION STRUCTURE, not context volume; PrismPath's thesis, validated.** *Caveat: D routed on the corpus's built-in _tactic label (a production router must EARN that classification -> #56); the label-independent, robust gains are the signature gate + escalation default framing. Small n, by-construction labels.* | `triage-corpus/decomposed_v0.json`, `etbert-lab/validate_triage_decomposed.py` |
-| Compliance adapter #2 (#60-62): PrismPath generalizes to a 2nd domain | Decomposed NIST 800-171 control-assessment flow (validates clean, 27-edge graph) reuses the SOC patterns (per control nodes, escalation default = the auditor's burden of proof, retrieval-as-criteria). On 8 labeled Access-Control evidence bundles gemma scored **8/8, 0 over-pass, 0 rubber-stamps** including the intent-only / absent-evidence / out-of-boundary failure modes. HEXAGONAL BOUNDARY PROVEN: adding the adapter touched ZERO core files; after extracting the pre existing SOC leak (measure_prefilter + wazuh_triage_agent) the arch_guard **Signal-1 PASSES (0 violations, core domain-clean, 6019 LOC)**. Caveat: escalation default vs neutral not separated on this explicit set (needs ambiguous bundles). | `adapters/compliance/` (archived out of tree), `tools/arch_guard.py` |
+| Compliance adapter #2 (#60-62): PrismPath generalizes to a 2nd domain | Decomposed NIST 800-171 control-assessment flow (validates clean, 27-edge graph) reuses the SOC patterns (per control nodes, escalation default = the auditor's burden of proof, retrieval-as-criteria). On 8 labeled Access-Control evidence bundles gemma scored **8/8, 0 over-pass, 0 rubber-stamps** including the intent-only / absent-evidence / out-of-boundary failure modes. HEXAGONAL BOUNDARY PROVEN: adding the adapter touched ZERO core files; after extracting the pre existing SOC leak (measure_prefilter + wazuh_triage_agent) the arch_guard **Signal-1 PASSES (0 violations, core domain-clean, 6019 LOC)**. Caveat: escalation default vs neutral not separated on this explicit set (needs ambiguous bundles). | `adapters/compliance/` (first build, at d56f779 in git history; rebuilt as rows #137 to #139), `tools/arch_guard.py` |
 | Embedder-routed graph (#56): does the #54 win survive WITHOUT the free tactic label? **YES: unconfounded.** | EmbeddingGemma routes each alert to a decision node by similarity to TRAIN-split centroids (leading 'Tactic |' prefix STRIPPED so it routes on event content, not the label). Routing: binary attack-vs-benign gate **64/64 + 48/48 = 100%** (0 malicious->benign, 0 benign->attack); fine exact-tactic only 45% but HARMLESS (every attack node shares the escalation default framing, so a mis-tactic'd alert still escalates). End-to-end **D_embed recall 0.984 / benign 0.938**: matches D_oracle (0.969/0.938), both crush single shot A (0.844/0.792). **The decomposition win rides on a binary attack/benign separation a learned embedder does perfectly from event content: NOT on the ground-truth label. Production-realizable.** | `triage-corpus/embed_routed_v0.json`, `etbert-lab/validate_triage_embed_routed.py` |
 | Agentic PULL node (#55): mechanism validated, efficacy gated on telemetry | Bounded ReAct loop (manual, via structured output: gemma4 tool-calling reliable after concise-retry) lets the triage LLM PULL specific facts via tools instead of us PUSHing a noise-bag. On 3 residual hard cases: **PULL 3/3 correct vs single shot 2/3**: fixed the wuauclt LotL masquerade under-call by pulling process-lineage (launched by cmd.exe from C:\Users\Public) + host-baseline (never seen); correctly DE-escalated benign DCOM 10016 by pulling related-alerts (no supporting activity). **HONEST: PUSH-all also 3/3 here**: the demo's small/clean evidence stores do NOT exercise PULL's anti-dilution advantage, which only appears with LARGE/noisy real telemetry (the #2/#1 regime). So PULL>PUSH stays GATED on real telemetry (pilot / Tier-1 / probe signals). Deliverable = the working mechanism + production-shaped tool interface (binds to Wazuh/Zeek/baseline/probes), NOT a corpus-wide lift. | `triage-corpus/agentic_pull_demo.json`, `etbert-lab/agentic_investigate.py` |
 | ET-BERT live-heavy re-cert (#35): hardened FP claim | Prior τ=0 FP ≤0.053% rested on only 76 live samples (small-sample artifact). Re-certified on **93,956 live captured benign flows**: τ=0 observed FP **0.102%**, Wilson-95% **≤0.121%**, certifies at α=0.01 (LB 0.99879). 18× more data, live distribution: slightly higher but far more defensible; operating point holds at scale. | `etbert-lab/benign_corpus/eval/step4_recert_livepool.json` |
@@ -224,7 +226,7 @@ served locally. No number here depends on a cloud API.
 
 **Caveat:** `partially-met` maps to CycloneDX conformance 0.0 (not fractional); CycloneDX conformance is a claim of full conformance; partial is treated as non-conformant with the gap detailed in the OSCAL POA&M.
 
-**Provenance:** `adapters/compliance/` (archived out of the shipped repo; `emit.py`, `emit_demo.py`); schemas cached from NIST OSCAL v1.1.3 (POA&M + AR) and CycloneDX bom-1.6.
+**Provenance:** `adapters/compliance/` (first build, at d56f779 in git history, rebuilt as rows #137 to #139; `emit.py`, `emit_demo.py`); schemas cached from NIST OSCAL v1.1.3 (POA&M + AR) and CycloneDX bom-1.6.
 
 ### #66 — System rollup Sink: partial SPRS + scope + rollup attestation (July 2026)
 
@@ -242,7 +244,7 @@ served locally. No number here depends on a cloud API.
 
 **Honesty rails:** partially-met scored as NOT MET (no AC partial-credit exception); weights provisional with explicit verify-before-submission caveat; no 110-based score claimed on a 3-control subset.
 
-**Provenance:** `adapters/compliance/` (archived out of the shipped repo; `rollup.py`, `rollup_demo.py`, `catalog/sprs_weights.json`).
+**Provenance:** `adapters/compliance/` (first build, at d56f779 in git history, rebuilt as rows #137 to #139; `rollup.py`, `rollup_demo.py`, `catalog/sprs_weights.json`).
 
 ### #67 — Catalog Translation layer: evidence-types + discovery queries (July 2026)
 
@@ -252,7 +254,7 @@ served locally. No number here depends on a cloud API.
 
 **Result:** 8 controls / 29 objectives enriched. `discovery_demo.py`: empty bundle for 3.1.7 → 4 objective-specific asks + the control evidence_types; partial 3.1.12 with unmet=[b,d] → only those 2 asks targeted. All 8 controls translate cleanly (one non-empty ask per objective). Backward-compat: a hand written `missing` string still works. arch_guard Signal-1 PASS, 0 violations; Retrieval-port enrichment, zero core touch.
 
-**Provenance:** `adapters/compliance/` (archived out of the shipped repo; `enrich_catalog.py`, `discovery_demo.py`, the enriched 800-171 AC catalog).
+**Provenance:** `adapters/compliance/` (first build, at d56f779 in git history, rebuilt as rows #137 to #139; `enrich_catalog.py`, `discovery_demo.py`, the enriched 800-171 AC catalog).
 
 ### #68 — Testing methodology: pytest env + adversarial-depth adapter suite (July 2026)
 
@@ -268,7 +270,7 @@ served locally. No number here depends on a cloud API.
 
 **Value delivered:** the suite immediately caught a real production bug; POA&M emitted an empty `observations` array when all controls were met (OSCAL rejects it); never exposed by the not-met demos. Fixed by omitting empty optional arrays.
 
-**Provenance:** (adapter archived out of the shipped repo) `adapters/compliance/tests/` (5 deterministic files + 1 opt-in gemma file), `adapters/compliance/TESTING.md`; core verifier `prismpath/ledger_airgap.py` (`verify_manifest`).
+**Provenance:** (first build, at d56f779 in git history, rebuilt as rows #137 to #139) `adapters/compliance/tests/` (5 deterministic files + 1 opt-in gemma file), `adapters/compliance/TESTING.md`; core verifier `prismpath/ledger_airgap.py` (`verify_manifest`).
 
 ### #69 — Dual runtime-selectable catalog: full 800-171 breadth, Rev 2 + Rev 3 (July 2026)
 
@@ -284,7 +286,7 @@ served locally. No number here depends on a cloud API.
 
 **Honesty rails:** Rev 2 provenance flagged unofficial in `_meta`; Rev 3 marked not-SPRS-scored; methods are control-level for R2 (union across objects). Follow-ups: generic per family flow (current flow is AC-specific), assessment-method depth (adjudicator does document-Examine only), and CPRT verification of the Rev 2 transcription.
 
-**Provenance:** `adapters/compliance/` (archived out of the shipped repo; `build_catalogs.py`); catalog sources: the tbusillo OSCAL mirror (Rev 2, unofficial community transcription) and usnistgov/oscal-content (Rev 3, official NIST OSCAL).
+**Provenance:** `adapters/compliance/` (first build, at d56f779 in git history, rebuilt as rows #137 to #139; `build_catalogs.py`); catalog sources: the tbusillo OSCAL mirror (Rev 2, unofficial community transcription) and usnistgov/oscal-content (Rev 3, official NIST OSCAL).
 
 ### #70 — Family-agnostic assessment flow (July 2026)
 
@@ -294,7 +296,7 @@ served locally. No number here depends on a cloud API.
 
 **Result:** compiles clean (12 nodes / 26 edges); attest binds policy_hash == active_flow_hash (gate nist_800171_generic@v1). Adapter suite now 100 (96 deterministic + 4 gemma), all green; `test_flow.py` asserts compile, method-profile routing, escalation-default-to-POA&M, and the flow-hash binding. arch_guard Signal-1 PASS. AC flow retained as legacy. Follow-up: the adjudicator prompt still emphasizes document-Examine; wiring per family method emphasis into the runtime prompt is the next depth step.
 
-**Provenance:** `adapters/compliance/` (archived out of the shipped repo; `flows/nist_800171_generic.md`, `tests/test_flow.py`; `active_flow_hash()` wired into `attest()`).
+**Provenance:** `adapters/compliance/` (first build, at d56f779 in git history, rebuilt as rows #137 to #139; `flows/nist_800171_generic.md`, `tests/test_flow.py`; `active_flow_hash()` wired into `attest()`).
 
 ### #71 — Adjudicator method-depth (July 2026)
 
@@ -304,7 +306,7 @@ served locally. No number here depends on a cloud API.
 
 **Result:** zero general-leak across both catalogs (R2 83/8/19, R3 88/18/24). Adapter suite now 129 (125 deterministic + 4 gemma), all green; test_method_profile.py covers classification, risk-vs-security-assessment disambiguation, full-catalog no-leak, and prompt-injection (monkeypatched, no gemma). Gemma regression: unambiguous determinations unchanged. arch_guard PASS. Follow-up: the profile still shapes the PROMPT only; a future step could route to distinct decision nodes per profile (true graph decomposition) and score interview/test evidence sufficiency explicitly.
 
-**Provenance:** `adapters/compliance/` (archived out of the shipped repo; `_method_profile` in the adjudicator, `tests/test_method_profile.py`).
+**Provenance:** `adapters/compliance/` (first build, at d56f779 in git history, rebuilt as rows #137 to #139; `_method_profile` in the adjudicator, `tests/test_method_profile.py`).
 
 ### agy-authored map · engine generalization proof (July 2026)
 
@@ -592,7 +594,7 @@ served locally. No number here depends on a cloud API.
 
 **Claim:** the coordinated fleet policy swap of #100 now authorizes each pushed policy with an Ed25519 signature verified on-device, plus a monotonic version floor that rejects rollback and replay. A follower stages a pushed table only if the signature verifies against the baked authority public key AND the version exceeds its persisted floor; the two-phase commit, quorum, and atomic flip are otherwise unchanged. This is the cryptographic gate the FNV-1a id/allowlist explicitly stood in for.
 
-**Method:** `prismpath-hw/mesh/`. `gen_mesh_tables.py` is the fleet authority signer: it signs each policy's `"PPTM1" || key_id || version || len || table` message with an Ed25519 key (private seed `authority_ed25519.key`, gitignored, created on first run) and bakes the 32-byte public key, a per-table 64-byte signature, and a monotonic version (A=1 permissive, B=2 tightened) into `tables.h`. On the node, `ppt_mesh.c` reconstructs that message and verifies it with vendored Monocypher 4.0.2 (`crypto_ed25519_check`, RFC 8032, public domain) against the baked pubkey, and requires the version to exceed an NVS-persisted floor; the PREPARE frame carries the version and 64-byte signature (about 161 bytes for the 84-byte demo table, under the 250-byte ESP-NOW cap). Before flashing, a host cross-check confirmed the Python signer and the vendored Monocypher agree byte for byte (real signatures verify; a tampered table, a corrupted signature, and a version mismatch all fail). Re-cert harness `recert.py`; the main task stack was raised to 8192 for the verify.
+**Method:** `prismpath-hw/mesh/`. `gen_mesh_tables.py` is the fleet authority signer: it signs each policy's `"PPTM1" || key_id || version || len || table` message with an Ed25519 key (private seed `authority_ed25519.key`, gitignored, created on first run) and bakes the 32-byte public key, a per-table 64-byte signature, and a monotonic version (A=1 permissive, B=2 tightened) into `tables.h`. On the node, `ppt_mesh.c` reconstructs that message and verifies it with vendored Monocypher (4.0 series, taken from the upstream git tree; `crypto_ed25519_check`, RFC 8032, public domain) against the baked pubkey, and requires the version to exceed an NVS-persisted floor; the PREPARE frame carries the version and 64-byte signature (about 161 bytes for the 84-byte demo table, under the 250-byte ESP-NOW cap). Before flashing, a host cross-check confirmed the Python signer and the vendored Monocypher agree byte for byte (real signatures verify; a tampered table, a corrupted signature, and a version mismatch all fail). Re-cert harness `recert.py`; the main task stack was raised to 8192 for the verify.
 
 **Result:** re-certified live on the three ESP-WROOM-32s. The signed tighten A(v1) -> B(v2) is accepted (signature valid, version fresh), acknowledged by a two-node quorum, and the fleet flips together to B v2 at a host observed spread of 4.5 ms (3/3). The negative matrix all rejects with the fleet held on B: a rollback B -> A (v1 <= floor v2) is refused as `rollback/replay`, a byte-flipped table is refused as `bad Ed25519 signature`, and a corrupted signature is refused as `bad Ed25519 signature`; no unexpected flip occurs. The version floor survived a true overnight power cycle: after all three boards were fully unplugged, both followers still refused a replayed B(v2) as `rollback/replay` against their NVS floor. **Honest scope:** a demonstrator, not a certified sweep: one authority key and two policies; the version floor is a single monotonic u32 in NVS (a `Z` test command clears it for a repeatable run); the negative injections are driven from one node by test commands (`T`/`W`) rather than a distinct rogue radio; and the 4.5 ms spread is the commit-plus-fixed-delay cadence, not a clock-synced bound. The fusion mesh's rule-swap (`mesh-fusion/`, #101) still uses the FNV allowlist; porting this gate there is the named follow-on. Provenance: `prismpath-hw/mesh/` (`gen_mesh_tables.py`, `main/ppt_mesh.c`, `main/tables.h`, `main/monocypher*.{c,h}`, `recert.py`); three ESP-WROOM-32 boards; ESP-IDF v5.4; Monocypher 4.0.2.
 
@@ -1873,3 +1875,11 @@ decision-sufficient-vision/: T6_scaling.md, evidence/t3/20_t6_qvga_2026-09-11.mp
   sections the schema requires and `tools/ledger_lint.py --strict` passes again. Anchored in
   `prismpath/evidence/ledger_v2.11_2026-09-11.SHA256SUMS` (`.ots` alongside); the anchor, not this
   prose, is the authoritative timestamp.
+- **v2.12** (September 2026): no numbers changed. The Archived class note and the provenance of rows
+  #65 to #71 now say what happened to the compliance adapter: measured on the first build, removed on
+  2026-08-14, rebuilt and shipped in September as rows #137 to #139, reproducible from git history at
+  d56f779 rather than from the working tree; `adapters/compliance/` is a live path again and
+  `docs_health.py` checks it as one. Row #102's Monocypher citation reads 4.0 series from the upstream
+  git tree, which is what the vendored copies carry, rather than the release number 4.0.2 the tree
+  does not substantiate. Anchored in `prismpath/evidence/ledger_v2.12_2026-09-11.SHA256SUMS` (`.ots`
+  alongside); the anchor, not this prose, is the authoritative timestamp.

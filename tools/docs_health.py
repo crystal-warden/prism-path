@@ -92,7 +92,8 @@ LOCAL_PREFIXES = ("prismpath/", "prismpath-rs/", "prismpath-telemetry-rs/", "pri
                   "adapters/", "integrations/", "tools/", "docs/", "research/")
 # Declared archived or separate first-party lab locations (see the ledger provenance taxonomy). These
 # are legitimately absent from this repo; the ledger names them as such, so they are not drift.
-ARCHIVED_EXTERNAL = ("adapters/compliance/", "etbert-lab/", "triage-corpus/", "triage-7b-lab/",
+# adapters/compliance/ left this list in September 2026 when the adapter was rebuilt and shipped again.
+ARCHIVED_EXTERNAL = ("etbert-lab/", "triage-corpus/", "triage-7b-lab/",
                      "knowledge-lib/", "governor-lab/", "benign_corpus/",
                      "adapters/fusion/live_capture.py")
 btickrx = re.compile(r"`([A-Za-z0-9_][A-Za-z0-9_./\-]*)`")
