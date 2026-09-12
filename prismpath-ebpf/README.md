@@ -73,6 +73,8 @@ distinct techniques; the failed attempts are documented here because they are th
 show *why* the final design is the way it is. All numbers are from kernel **6.17** (aarch64), libbpf
 1.3, SKB/generic XDP.
 
+Read [EVALUATOR_WALKTHROUGH.md](EVALUATOR_WALKTHROUGH.md) beside the code: the shared evaluator in [`ppt_eval_bpf.h`](./ppt_eval_bpf.h) and the four programs' front ends in plain language, one paragraph per function, with the pseudocode this section's techniques replaced, a worked trace, the bank arithmetic and the selector's compare and swap commit, and the invariants a change must preserve.
+
 ### 4.1 The core problem: the verifier explores STATES, not just instructions
 
 The verifier symbolically walks every reachable path. A stack machine indexed by a runtime stack
