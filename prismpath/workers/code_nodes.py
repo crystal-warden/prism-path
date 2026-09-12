@@ -44,24 +44,24 @@ class Envelope:
     mem_mb: int = 256
 
 
-def _as_bool(v, key: str, problems: List[str]) -> Optional[bool]:
-    s = str(v).strip().lower()
-    if s in _TRUE:
+def _as_bool(value, key: str, problems: List[str]) -> Optional[bool]:
+    normalized = str(value).strip().lower()
+    if normalized in _TRUE:
         return True
-    if s in _FALSE:
+    if normalized in _FALSE:
         return False
-    problems.append(f"{key}={v!r} is not a boolean")
+    problems.append(f"{key}={value!r} is not a boolean")
     return None
 
 
-def _as_pos_int(v, key: str, problems: List[str]) -> Optional[int]:
+def _as_pos_int(value, key: str, problems: List[str]) -> Optional[int]:
     try:
-        n = int(str(v).strip())
+        n = int(str(value).strip())
     except (TypeError, ValueError):
-        problems.append(f"{key}={v!r} is not an integer")
+        problems.append(f"{key}={value!r} is not an integer")
         return None
     if n <= 0:
-        problems.append(f"{key}={v!r} must be positive")
+        problems.append(f"{key}={value!r} must be positive")
         return None
     return n
 
@@ -78,13 +78,13 @@ def parse_envelope(anno: Optional[dict]) -> Tuple[Optional[Envelope], List[str]]
         problems.append(f"unknown @code key(s): {', '.join(sorted(unknown))}")
     kw: dict = {}
     if "net" in anno:
-        b = _as_bool(anno["net"], "net", problems)
-        if b is not None:
-            kw["net"] = b
+        net_allowed = _as_bool(anno["net"], "net", problems)
+        if net_allowed is not None:
+            kw["net"] = net_allowed
     if "fs" in anno:
-        m = str(anno["fs"]).strip().lower()
-        if m in _FS_MODES:
-            kw["fs"] = _FS_MODES[m]
+        fs_mode = str(anno["fs"]).strip().lower()
+        if fs_mode in _FS_MODES:
+            kw["fs"] = _FS_MODES[fs_mode]
         else:
             problems.append(f"fs={anno['fs']!r} must be one of none|ro|rw")
     if "timeout_s" in anno:
@@ -116,7 +116,7 @@ def check_code_nodes(graph) -> List[str]:
         if anno is None:
             continue
         _env, probs = parse_envelope(anno)
-        problems.extend(f"code node {name!r}: {p}" for p in probs)
+        problems.extend(f"code node {name!r}: {problem}" for problem in probs)
     return problems
 
 

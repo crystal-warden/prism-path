@@ -5,8 +5,8 @@ const API = "/api/v1";
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const esc = s => (s == null ? "" : String(s)).replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
-const jget = async u => (await fetch(API + u)).json();
-const jpost = async (u, b) => (await fetch(API + u, {
+const jget = async url => (await fetch(API + url)).json();
+const jpost = async (url, b) => (await fetch(API + url, {
   method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(b || {})
 })).json();
 let TAB = "graph", cy = null, GRAPH = null, RETR = [];
@@ -86,15 +86,15 @@ const STYLE = [
   { selector: "edge.nonm", style: { "line-style": "dashed", "line-color": "#e07b39", "target-arrow-color": "#e07b39", width: 3 } },
 ];
 
-function buildElements(d) {
+function buildElements(payload) {
   const els = [];
-  for (const [name, n] of Object.entries(d.nodes || {})) {
+  for (const [name, n] of Object.entries(payload.nodes || {})) {
     const cls = [];
-    if (name === d.start) cls.push("start");
+    if (name === payload.start) cls.push("start");
     if (n.terminal) cls.push("terminal");
     els.push({ data: { id: name, label: name, instr: n.instruction || "" }, classes: cls.join(" ") });
   }
-  for (const [name, n] of Object.entries(d.nodes || {})) {
+  for (const [name, n] of Object.entries(payload.nodes || {})) {
     (n.edges || []).forEach((e, i) => els.push({ data: {
       id: name + "→" + e.target + "#" + i, source: name, target: e.target,
       cond: e.condition || "", label: short(e.condition) }, classes: e.tier }));
@@ -103,25 +103,25 @@ function buildElements(d) {
 }
 
 async function loadGraph(full) {
-  let d; try { d = await jget("/flow/graph"); } catch { return; }
-  if (d.error) { $("#cy").innerHTML = "<div class=muted style='padding:20px'>" + esc(d.error) + "</div>"; return; }
-  const sameShape = GRAPH && cy && JSON.stringify(Object.keys(d.nodes || {})) === JSON.stringify(Object.keys(GRAPH.nodes || {}));
-  GRAPH = d;
-  $("#g-name").textContent = d.name || d.flow_path || "flow";
+  let payload; try { payload = await jget("/flow/graph"); } catch { return; }
+  if (payload.error) { $("#cy").innerHTML = "<div class=muted style='padding:20px'>" + esc(payload.error) + "</div>"; return; }
+  const sameShape = GRAPH && cy && JSON.stringify(Object.keys(payload.nodes || {})) === JSON.stringify(Object.keys(GRAPH.nodes || {}));
+  GRAPH = payload;
+  $("#g-name").textContent = payload.name || payload.flow_path || "flow";
   // populate reach targets
-  const sel = $("#r-targets"); sel.innerHTML = Object.keys(d.nodes || {}).map(n => `<option>${esc(n)}</option>`).join("");
+  const sel = $("#r-targets"); sel.innerHTML = Object.keys(payload.nodes || {}).map(n => `<option>${esc(n)}</option>`).join("");
   if (full || !sameShape) {
-    cy = cytoscape({ container: $("#cy"), elements: buildElements(d), style: STYLE, wheelSensitivity: 0.2 });
-    cy.layout({ name: "breadthfirst", directed: true, roots: cy.getElementById(d.start), spacingFactor: 1.35, padding: 24 }).run();
+    cy = cytoscape({ container: $("#cy"), elements: buildElements(payload), style: STYLE, wheelSensitivity: 0.2 });
+    cy.layout({ name: "breadthfirst", directed: true, roots: cy.getElementById(payload.start), spacingFactor: 1.35, padding: 24 }).run();
     cy.on("tap", "node", ev => showNode(ev.target.id()));
   }
   refreshActivePaint();
 }
 async function refreshActive() {   // light update: active node only, no re-layout
-  let d; try { d = await jget("/flow/graph"); } catch { return; }
-  if (d.error) return;
-  const sameShape = GRAPH && JSON.stringify(Object.keys(d.nodes || {})) === JSON.stringify(Object.keys(GRAPH.nodes || {}));
-  GRAPH = d;
+  let payload; try { payload = await jget("/flow/graph"); } catch { return; }
+  if (payload.error) return;
+  const sameShape = GRAPH && JSON.stringify(Object.keys(payload.nodes || {})) === JSON.stringify(Object.keys(GRAPH.nodes || {}));
+  GRAPH = payload;
   if (!sameShape) return loadGraph(true);
   refreshActivePaint();
 }
@@ -146,7 +146,7 @@ async function proveLevelM() {
 
 async function proveReach() {
   if (!GRAPH || !GRAPH.flow_text) return;
-  const targets = $$("#r-targets option").filter(o => o.selected).map(o => o.value);
+  const targets = $$("#r-targets option").filter(optionEl => optionEl.selected).map(optionEl => optionEl.value);
   if (!targets.length) { toast("select a target node"); return; }
   const assume = $("#r-assume").value.trim();
   const r = await jpost("/prove/reach", { flow: GRAPH.flow_text, reach: targets, assume: assume || undefined });
@@ -165,12 +165,12 @@ function showNode(name) {
   const body = $("#nd-body"); body.classList.remove("hidden");
   const edges = (n.edges || []).map(e =>
     `<div class="edge"><b>→ ${esc(e.target)}</b> <span class="muted">[${e.tier}]</span><br>${esc(e.condition || "(default)")}</div>`).join("");
-  const q = name.toLowerCase();
-  const hits = RETR.filter(r => (r.query || "").toLowerCase().includes(q))
+  const nameQuery = name.toLowerCase();
+  const hits = RETR.filter(r => (r.query || "").toLowerCase().includes(nameQuery))
     .flatMap(r => r.hits || []).slice(0, 6);
   const retr = hits.length
     ? `<label class=muted style="margin-top:8px;display:block">RAG docs pulled</label>` +
-      hits.map(h => `<div class="retr">[${(h.score ?? 0).toFixed ? h.score.toFixed(2) : h.score}] ${esc(h.source)}/${esc(h.path)}</div>`).join("")
+      hits.map(hit => `<div class="retr">[${(hit.score ?? 0).toFixed ? hit.score.toFixed(2) : hit.score}] ${esc(hit.source)}/${esc(hit.path)}</div>`).join("")
     : `<div class="retr" style="margin-top:8px">no matched retrievals</div>`;
   body.innerHTML = `<div style="color:#7fd1ff;font-weight:600">${esc(name)}</div>
     <div class="instr">${esc(n.instruction || "")}</div>${edges}${retr}`;
@@ -181,16 +181,16 @@ async function loadRetrievals() { try { RETR = (await jget("/retrievals")).retri
 /* ---------------- files ---------------- */
 let CURFILE = null;
 async function loadFiles() {
-  const d = await jget("/files");
-  $("#filelist").innerHTML = (d.files || []).map(f =>
+  const payload = await jget("/files");
+  $("#filelist").innerHTML = (payload.files || []).map(f =>
     `<div class="f" data-p="${esc(f.path)}"><span>${esc(f.path)}</span><span class="sz">${f.size}</span></div>`).join("");
   $$("#filelist .f").forEach(el => el.onclick = () => openFile(el.dataset.p, el));
 }
 async function openFile(path, el) {
   $$("#filelist .f").forEach(f => f.classList.remove("sel")); if (el) el.classList.add("sel");
-  const d = await jget("/file?path=" + encodeURIComponent(path));
-  if (d.error) { toast(d.error.message || "error"); return; }
-  CURFILE = path; $("#ed-path").textContent = path; $("#ed-body").value = d.content; $("#ed-save").disabled = false;
+  const payload = await jget("/file?path=" + encodeURIComponent(path));
+  if (payload.error) { toast(payload.error.message || "error"); return; }
+  CURFILE = path; $("#ed-path").textContent = path; $("#ed-body").value = payload.content; $("#ed-save").disabled = false;
 }
 async function saveFile() {
   if (!CURFILE) return;
@@ -200,10 +200,10 @@ async function saveFile() {
 
 /* ---------------- audit ---------------- */
 async function loadAudit() {
-  const d = await jget("/audit");
-  const vc = $("#a-verify"); vc.textContent = d.verify ? "verified ✓" : "TAMPERED ✗"; vc.className = "chip " + (d.verify ? "ok" : "bad");
-  $("#a-meta").textContent = `root ${(d.root || "").slice(0, 20)} · ${d.n} events`;
-  $("#a-events").innerHTML = (d.events || []).slice().reverse().map(e =>
+  const payload = await jget("/audit");
+  const vc = $("#a-verify"); vc.textContent = payload.verify ? "verified ✓" : "TAMPERED ✗"; vc.className = "chip " + (payload.verify ? "ok" : "bad");
+  $("#a-meta").textContent = `root ${(payload.root || "").slice(0, 20)} · ${payload.n} events`;
+  $("#a-events").innerHTML = (payload.events || []).slice().reverse().map(e =>
     `<div class="row"><span class="a">${esc(e.actor || "")}·${esc(e.action || "")}</span>` +
     `<span class="muted">${e.ts ? new Date(e.ts * 1000).toLocaleTimeString() : ""}</span>` +
     `<span class="muted">${esc(JSON.stringify(e.data || {}).slice(0, 120))}</span></div>`).join("");
@@ -211,8 +211,8 @@ async function loadAudit() {
 
 /* ---------------- queue (HITL) ---------------- */
 async function loadQueue() {
-  const d = await jget("/queue");
-  const items = d.items || [];
+  const payload = await jget("/queue");
+  const items = payload.items || [];
   $("#q-items").innerHTML = items.length ? items.map((it, i) => {
     const opts = (it.options || it.choices || []);
     const id = it.id || it.path || String(i);
@@ -231,9 +231,9 @@ async function loadQueue() {
 
 /* ---------------- flows (fan-outs) ---------------- */
 async function loadFlows() {
-  const d = await jget("/fanouts");
-  $("#f-tree").innerHTML = (d.fanouts && d.fanouts.length)
-    ? `<pre class="tree">${esc(JSON.stringify(d.fanouts, null, 2))}</pre>`
+  const payload = await jget("/fanouts");
+  $("#f-tree").innerHTML = (payload.fanouts && payload.fanouts.length)
+    ? `<pre class="tree">${esc(JSON.stringify(payload.fanouts, null, 2))}</pre>`
     : "<div class=muted>no fan-out compositions.</div>";
 }
 

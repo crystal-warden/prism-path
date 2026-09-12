@@ -67,13 +67,13 @@ def default_state_dir() -> Path:
 
 def sha256_files(mapping: Dict[str, object]) -> str:
     """Content hash of a {path: content} mapping — order-independent, the per-unit output proof."""
-    h = hashlib.sha256()
+    hasher = hashlib.sha256()
     for path in sorted(mapping):
-        c = mapping[path]
-        c = c if isinstance(c, (bytes, bytearray)) else str(c).encode()
-        h.update(path.encode() + b"\0")
-        h.update(c + b"\0")
-    return "sha256:" + h.hexdigest()
+        file_bytes = mapping[path]
+        file_bytes = file_bytes if isinstance(file_bytes, (bytes, bytearray)) else str(file_bytes).encode()
+        hasher.update(path.encode() + b"\0")
+        hasher.update(file_bytes + b"\0")
+    return "sha256:" + hasher.hexdigest()
 
 
 def new_run_id() -> str:
@@ -167,8 +167,8 @@ class Ledger:
         proof."""
         self.init()
         fb: Dict[str, bytes] = {
-            p: (c if isinstance(c, (bytes, bytearray)) else str(c).encode())
-            for p, c in (files or {}).items()}
+            p: (file_bytes if isinstance(file_bytes, (bytes, bytearray)) else str(file_bytes).encode())
+            for p, file_bytes in (files or {}).items()}
         if output_hash is None:
             output_hash = sha256_files(fb)
         if wallclock is None:                       # real UTC green-time; the pinned git dates don't carry it
@@ -199,7 +199,8 @@ class Ledger:
             body = subject + "\n\n"
             if summary:
                 body += summary.strip() + "\n\n"
-            body += "\n".join(f"{k}: {v}" for k, v in trailers) + "\n"
+            body += "\n".join(f"{trailer_key}: {trailer_value}"
+                              for trailer_key, trailer_value in trailers) + "\n"
 
             args = ["commit-tree", tree]
             if parent:
@@ -230,16 +231,16 @@ class Ledger:
             sha, _, bodytext = chunk.partition("\n")
             rec: dict = {"commit": sha.strip()}
             for line in bodytext.splitlines():
-                m = re.match(r"^PrismPath-([A-Za-z-]+):\s*(.*)$", line)
-                if m:
-                    rec[m.group(1).lower().replace("-", "_")] = m.group(2).strip()
+                trailer_match = re.match(r"^PrismPath-([A-Za-z-]+):\s*(.*)$", line)
+                if trailer_match:
+                    rec[trailer_match.group(1).lower().replace("-", "_")] = trailer_match.group(2).strip()
             if "seq" in rec:
                 try:
                     rec["seq"] = int(rec["seq"])
                 except ValueError:
                     pass
             if "depends" in rec:
-                rec["depends"] = [d for d in rec["depends"].split(",") if d]
+                rec["depends"] = [dependency for dependency in rec["depends"].split(",") if dependency]
             records.append(rec)
         return records
 

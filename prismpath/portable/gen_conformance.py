@@ -143,7 +143,7 @@ CURATED = [
 
 
 # ------------------------------------------------------------------- seeded grammar fuzz
-def _gen_fuzz(rng: random.Random, n: int):
+def _gen_fuzz(rng: random.Random, case_count: int):
     """A compact generator over the ALLOWED grammar, biased toward the tricky classes. Purely
     seeded — same seed, same corpus."""
     names = ["x", "y", "n", "flag", "items", "text", "action", "score", "ok", "true", "visits"]
@@ -151,14 +151,14 @@ def _gen_fuzz(rng: random.Random, n: int):
     nums = [0, 1, 2, 3, -0.0, 0.5, 1.0, 10, 1000]
 
     def value(depth=0):
-        r = rng.random()
-        if r < 0.25:
+        draw = rng.random()
+        if draw < 0.25:
             return rng.choice(names)
-        if r < 0.45:
+        if draw < 0.45:
             return repr(rng.choice(strings))
-        if r < 0.6:
+        if draw < 0.6:
             return repr(rng.choice(nums)) if rng.random() < 0.9 else rng.choice(["True", "False", "None"])
-        if r < 0.75 and depth < 2:
+        if draw < 0.75 and depth < 2:
             elts = ", ".join(value(depth + 1) for _ in range(rng.randint(0, 3)))
             return f"[{elts}]"
         return rng.choice(names)
@@ -173,33 +173,33 @@ def _gen_fuzz(rng: random.Random, n: int):
         return " ".join(parts)
 
     def expr(depth=0):
-        r = rng.random()
-        if r < 0.15 and depth < 3:
+        draw = rng.random()
+        if draw < 0.15 and depth < 3:
             return f"not {expr(depth + 1)}"
-        if r < 0.4 and depth < 3:
+        if draw < 0.4 and depth < 3:
             joiner = rng.choice([" and ", " or "])
             return joiner.join(expr(depth + 1) for _ in range(2))
-        if r < 0.5 and depth < 3:
+        if draw < 0.5 and depth < 3:
             return f"({expr(depth + 1)})"
         return comparison(depth)
 
     def ctx():
         c = {}
         for name in rng.sample(names, rng.randint(0, 6)):
-            r = rng.random()
-            if r < 0.3:
+            draw = rng.random()
+            if draw < 0.3:
                 c[name] = rng.choice(nums)
-            elif r < 0.5:
+            elif draw < 0.5:
                 c[name] = rng.choice(strings)
-            elif r < 0.65:
+            elif draw < 0.65:
                 c[name] = rng.choice([True, False, None])
-            elif r < 0.85:
+            elif draw < 0.85:
                 c[name] = [rng.choice(nums + strings) for _ in range(rng.randint(0, 3))]
             else:
                 c[name] = {"k": rng.choice(nums)}
         return c
 
-    return [(f"when {expr()}", ctx()) for _ in range(n)]
+    return [(f"when {expr()}", ctx()) for _ in range(case_count)]
 
 
 def _expect(cond: str, ctx: dict):
@@ -259,8 +259,8 @@ def main() -> int:
         path = OUT_DIR / name
         path.write_text(json.dumps(doc, indent=1, sort_keys=True, ensure_ascii=False) + "\n",
                         encoding="utf-8")
-        n = len(doc["cases"])
-        print(f"wrote {path}  ({n} cases)")
+        case_count = len(doc["cases"])
+        print(f"wrote {path}  ({case_count} cases)")
     return 0
 
 

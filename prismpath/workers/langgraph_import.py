@@ -54,15 +54,15 @@ def import_langgraph(source: str, name: str = "imported") -> str:
     start: Optional[str] = None
     has_end = False
 
-    def see(n):
-        if n and n not in order:
-            order.append(n)
+    def see(node_name):
+        if node_name and node_name not in order:
+            order.append(node_name)
 
     for call in ast.walk(tree):
         if not (isinstance(call, ast.Call) and isinstance(call.func, ast.Attribute)):
             continue
-        m, args = call.func.attr, call.args
-        if m == "add_node" and args:
+        method, args = call.func.attr, call.args
+        if method == "add_node" and args:
             if isinstance(args[0], ast.Constant) and isinstance(args[0].value, str):
                 nm = _san(args[0].value)
                 fn = args[1] if len(args) > 1 else None
@@ -72,25 +72,25 @@ def import_langgraph(source: str, name: str = "imported") -> str:
             if nm:
                 nodes[nm] = fnname
                 see(nm)
-        elif m in ("set_entry_point", "set_conditional_entry_point") and args:
+        elif method in ("set_entry_point", "set_conditional_entry_point") and args:
             start = _node_name(args[0])
-        elif m == "set_finish_point" and args:
+        elif method == "set_finish_point" and args:
             src = _node_name(args[0])
             has_end = True
             edges.append((src, "done", "when always"))
-        elif m == "add_edge" and len(args) >= 2:
-            a, b = args[0], args[1]
-            if _is_ref(a, _START):
-                start = _node_name(b)
-            elif _is_ref(b, _END):
+        elif method == "add_edge" and len(args) >= 2:
+            source_arg, target_arg = args[0], args[1]
+            if _is_ref(source_arg, _START):
+                start = _node_name(target_arg)
+            elif _is_ref(target_arg, _END):
                 has_end = True
-                edges.append((_node_name(a), "done", "when always"))
-                see(_node_name(a))
+                edges.append((_node_name(source_arg), "done", "when always"))
+                see(_node_name(source_arg))
             else:
-                sa, sb = _node_name(a), _node_name(b)
+                sa, sb = _node_name(source_arg), _node_name(target_arg)
                 edges.append((sa, sb, "when always"))
                 see(sa); see(sb)
-        elif m == "add_conditional_edges" and args:
+        elif method == "add_conditional_edges" and args:
             src = _node_name(args[0])
             see(src)
             pm = args[2] if len(args) > 2 else None
@@ -99,15 +99,15 @@ def import_langgraph(source: str, name: str = "imported") -> str:
                     pm = kw.value
             pairs: List[Tuple[Optional[str], Optional[object]]] = []
             if isinstance(pm, ast.Dict):
-                for k, v in zip(pm.keys, pm.values):
-                    key = k.value if isinstance(k, ast.Constant) else None
-                    if _is_ref(v, _END):
+                for key_node, value_node in zip(pm.keys, pm.values):
+                    key = key_node.value if isinstance(key_node, ast.Constant) else None
+                    if _is_ref(value_node, _END):
                         pairs.append(("done", key)); has_end = True
                     else:
-                        pairs.append((_node_name(v), key))
+                        pairs.append((_node_name(value_node), key))
             elif isinstance(pm, (ast.List, ast.Tuple)):
-                for v in pm.elts:
-                    pairs.append((_node_name(v), None))
+                for value_node in pm.elts:
+                    pairs.append((_node_name(value_node), None))
             for tgt, key in pairs:
                 cond = (f"TODO write the condition (router returned {key!r})"
                         if key is not None else "TODO write the condition")
@@ -122,8 +122,8 @@ def import_langgraph(source: str, name: str = "imported") -> str:
     # emit
     out = [f"---\nname: {name}\nstart: {start or 'start'}\n---\n"]
     outgoing = {}
-    for s, d, c in edges:
-        outgoing.setdefault(s, []).append((d, c))
+    for s, dest_node, condition in edges:
+        outgoing.setdefault(s, []).append((dest_node, condition))
     for nm in order:
         out.append(f"## {nm}")
         fn = nodes.get(nm)
@@ -133,7 +133,7 @@ def import_langgraph(source: str, name: str = "imported") -> str:
             out.append(f"TODO: describe this step (was LangGraph node `{fn}`).")
         else:
             out.append("TODO: describe this step.")
-        for d, c in outgoing.get(nm, []):
-            out.append(f"-> {d}: {c}")
+        for dest_node, condition in outgoing.get(nm, []):
+            out.append(f"-> {dest_node}: {condition}")
         out.append("")
     return "\n".join(out).rstrip() + "\n"

@@ -101,7 +101,7 @@ class BaseConnector(ABC):
         Returns a dictionary of workers compatible with the prismpath plugins registry.
         """
         return {
-            node_name: lambda n, inst, s, name=node_name: self.agent(name, inst, s)
+            node_name: lambda node_arg, inst, run_state, name=node_name: self.agent(name, inst, run_state)
             for node_name in self._handlers
         }
 
@@ -134,7 +134,7 @@ class BaseConnector(ABC):
         Override to shape domain prompts; the flat discipline is the part worth keeping."""
         flat = PayloadFlattener().flatten(payload) if isinstance(payload, (dict, list)) \
             else {"input": payload}
-        lines = [f"{k}: {v}" for k, v in sorted(flat.items())]
+        lines = [f"{field_name}: {field_value}" for field_name, field_value in sorted(flat.items())]
         parts = ["\n".join(lines)]
         if criteria is not None:
             parts.append(f"CRITERIA:\n{criteria}")
@@ -163,10 +163,10 @@ class BaseConnector(ABC):
             reply = guarded_exchange(guard, prompt, generate)
         else:
             reply = generate(prompt)
-        m = re.search(r"\{.*\}", reply or "", re.S)
-        if m:
+        matched = re.search(r"\{.*\}", reply or "", re.S)
+        if matched:
             try:
-                out = json.loads(m.group(0))
+                out = json.loads(matched.group(0))
                 if isinstance(out, dict):
                     out.setdefault("text", (reply or "").strip())
                     return out
@@ -183,8 +183,8 @@ class BaseConnector(ABC):
         from prismpath.ledgers.ledger_runner import upsert_jsonl
         os.makedirs(os.path.dirname(destination) or ".", exist_ok=True)
         if result.get(key) is None:
-            with open(destination, "a") as f:
-                f.write(json.dumps(result, sort_keys=True) + "\n")
+            with open(destination, "a") as handle:
+                handle.write(json.dumps(result, sort_keys=True) + "\n")
             return True
         return upsert_jsonl(destination, result, key=key)
 
@@ -260,9 +260,9 @@ class PayloadFlattener:
         """
         flat = {}
         if isinstance(data, dict):
-            for k, v in data.items():
-                new_key = f"{prefix}{k}" if not prefix else f"{prefix}{self.delimiter}{k}"
-                flat.update(self.flatten(v, new_key))
+            for field_name, field_value in data.items():
+                new_key = f"{prefix}{field_name}" if not prefix else f"{prefix}{self.delimiter}{field_name}"
+                flat.update(self.flatten(field_value, new_key))
         elif isinstance(data, list):
             if prefix:
                 flat[prefix] = ", ".join(str(item) for item in data if not isinstance(item, (dict, list)))
@@ -383,8 +383,8 @@ class SystemTelemetry(BaseConnector):
         ram_gb = 8.0
         try:
             if os.path.exists("/proc/meminfo"):
-                with open("/proc/meminfo", "r") as f:
-                    for line in f:
+                with open("/proc/meminfo", "r") as handle:
+                    for line in handle:
                         if line.startswith("MemTotal:"):
                             parts = line.split()
                             if len(parts) >= 2:

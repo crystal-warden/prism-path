@@ -29,80 +29,83 @@ _BANDS = [(-1.0, "poor"), (0.0, "slight"), (0.21, "fair"), (0.41, "moderate"),
           (0.61, "substantial"), (0.81, "almost perfect")]
 
 
-def band(k: Optional[float]) -> str:
-    if k is None:
+def band(kappa_value: Optional[float]) -> str:
+    if kappa_value is None:
         return "n/a"
     name = "poor"
     for lo, nm in _BANDS:
-        if k >= lo:
+        if kappa_value >= lo:
             name = nm
     return name
 
 
 def load(path: str) -> List[dict]:
-    return [json.loads(l) for l in open(path, encoding="utf-8") if l.strip()]
+    return [json.loads(line) for line in open(path, encoding="utf-8") if line.strip()]
 
 
-def _key(r: dict) -> Tuple[str, str, str]:
-    return (r.get("flow", ""), r.get("node", ""), (r.get("outcome") or "").strip())
+def _key(record: dict) -> Tuple[str, str, str]:
+    return (record.get("flow", ""), record.get("node", ""), (record.get("outcome") or "").strip())
 
 
-def align(a: List[dict], b: List[dict]) -> List[Tuple[dict, dict]]:
+def align(records_a: List[dict], records_b: List[dict]) -> List[Tuple[dict, dict]]:
     """Pair records that describe the SAME decision (flow, node, outcome). Order-independent; unmatched
     records on either side are dropped (κ is only defined over co-labeled items)."""
     bi = {}
-    for r in b:
-        bi.setdefault(_key(r), r)
-    return [(ra, bi[_key(ra)]) for ra in a if _key(ra) in bi]
+    for record in records_b:
+        bi.setdefault(_key(record), record)
+    return [(ra, bi[_key(ra)]) for ra in records_a if _key(ra) in bi]
 
 
 def cohen_kappa(labels_a: List[str], labels_b: List[str]) -> Optional[float]:
     """Cohen's κ for two aligned label sequences. None if empty; 1.0 if both are the single same label
     (perfect + degenerate marginals); may be negative for worse-than-chance agreement."""
-    n = len(labels_a)
-    if n == 0:
+    count = len(labels_a)
+    if count == 0:
         return None
     ca, cb = Counter(labels_a), Counter(labels_b)
-    po = sum(1 for x, y in zip(labels_a, labels_b) if x == y) / n
-    pe = sum((ca[c] / n) * (cb[c] / n) for c in set(ca) | set(cb))
+    po = sum(1 for a_side, b_side in zip(labels_a, labels_b) if a_side == b_side) / count
+    pe = sum((ca[category] / count) * (cb[category] / count) for category in set(ca) | set(cb))
     if pe >= 1.0:                                    # both annotators used exactly one (same) category
         return 1.0 if po >= 1.0 else 0.0
     return (po - pe) / (1.0 - pe)
 
 
-def report(a: List[dict], b: List[dict], by_stratum: bool = False) -> dict:
-    pairs = align(a, b)
+def report(records_a: List[dict], records_b: List[dict], by_stratum: bool = False) -> dict:
+    pairs = align(records_a, records_b)
     la = [ra.get("label") for ra, _ in pairs]
     lb = [rb.get("label") for _, rb in pairs]
-    k = cohen_kappa(la, lb)
-    confusion = Counter((x, y) for x, y in zip(la, lb) if x != y)
+    kappa_value = cohen_kappa(la, lb)
+    confusion = Counter((a_side, b_side) for a_side, b_side in zip(la, lb) if a_side != b_side)
     out = {
         "n": len(pairs),
-        "n_a": len(a), "n_b": len(b),
-        "observed_agreement": round(sum(1 for x, y in zip(la, lb) if x == y) / len(pairs), 4)
+        "n_a": len(records_a), "n_b": len(records_b),
+        "observed_agreement": round(sum(1 for a_side, b_side in zip(la, lb)
+                                        if a_side == b_side) / len(pairs), 4)
         if pairs else None,
-        "kappa": round(k, 4) if k is not None else None,
-        "band": band(k),
-        "disagreements": [f"{x} vs {y}: {n}" for (x, y), n in confusion.most_common()],
+        "kappa": round(kappa_value, 4) if kappa_value is not None else None,
+        "band": band(kappa_value),
+        "disagreements": [f"{a_side} vs {b_side}: {count}"
+                          for (a_side, b_side), count in confusion.most_common()],
     }
     if by_stratum:
         strata: Dict[str, List[Tuple[dict, dict]]] = {}
         for ra, rb in pairs:
             strata.setdefault(ra.get("stratum", "?"), []).append((ra, rb))
         out["per_stratum"] = {
-            s: {"n": len(ps),
+            stratum: {"n": len(ps),
                 "kappa": (lambda kk: round(kk, 4) if kk is not None else None)(
-                    cohen_kappa([x.get("label") for x, _ in ps], [y.get("label") for _, y in ps]))}
-            for s, ps in sorted(strata.items())}
+                    cohen_kappa([a_side.get("label") for a_side, _ in ps],
+                                [b_side.get("label") for _, b_side in ps]))}
+            for stratum, ps in sorted(strata.items())}
     return out
 
 
-def adjudicate(a: List[dict], b: List[dict]) -> Tuple[List[dict], List[dict]]:
+def adjudicate(records_a: List[dict], records_b: List[dict]) -> Tuple[List[dict], List[dict]]:
     """Split aligned cases into GOLD (the two annotators agree -> a benchmark-shaped record whose label
     is the agreed edge) and DISAGREEMENTS (need a third pass; both picks retained). Cases only one
     annotator labeled are not adjudicable and are omitted from both."""
     gold, disagree = [], []
-    for ra, rb in align(a, b):
+    for ra, rb in align(records_a, records_b):
         if ra.get("label") == rb.get("label"):
             gold.append({"flow": ra.get("flow"), "node": ra.get("node"), "outcome": ra.get("outcome"),
                          "label": ra.get("label"), "stratum": ra.get("stratum")})
@@ -114,6 +117,6 @@ def adjudicate(a: List[dict], b: List[dict]) -> Tuple[List[dict], List[dict]]:
 
 
 def dump(records: List[dict], path: str) -> None:
-    with open(path, "w", encoding="utf-8") as f:
-        for r in records:
-            f.write(json.dumps(r) + "\n")
+    with open(path, "w", encoding="utf-8") as handle:
+        for record in records:
+            handle.write(json.dumps(record) + "\n")

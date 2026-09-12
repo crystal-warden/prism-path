@@ -70,8 +70,8 @@ def _ed25519():
             Ed25519PrivateKey, Ed25519PublicKey)
         from cryptography.hazmat.primitives import serialization
         from cryptography.exceptions import InvalidSignature
-    except ImportError as e:                                   # pragma: no cover
-        raise RuntimeError(_INSTALL_MSG) from e
+    except ImportError as exc:                                   # pragma: no cover
+        raise RuntimeError(_INSTALL_MSG) from exc
     return Ed25519PrivateKey, Ed25519PublicKey, serialization, InvalidSignature
 
 
@@ -111,19 +111,19 @@ def validate_image(data: bytes, caps: Optional[dict] = None) -> Tuple[bool, List
     membership at build time; this re-verifies the shipped artifact at load time."""
     reasons: List[str] = []
     try:
-        h = read_ppt_header(data)
-    except ValueError as e:
-        return False, [str(e)]
+        header = read_ppt_header(data)
+    except ValueError as exc:
+        return False, [str(exc)]
 
-    if h["safe_node"] and h["safe_node"] >= h["nodes"]:
+    if header["safe_node"] and header["safe_node"] >= header["nodes"]:
         reasons.append("image:safe-node-oob")    # signed fail-safe must name a real node
 
-    need = (HEADER.size + ATOM.size * h["atoms"] + NODE.size * h["nodes"]
-            + EDGE.size * h["edges"] + WORD.size * h["prog_words"])
-    if h["flags"] & FLAG_NODE_ATTR:
-        need += WORD.size * h["nodes"]           # one uint16 per-node attribute
-    if h["flags"] & FLAG_NODE_NAMES:
-        need += 4 * h["nodes"]                   # one uint32 name-hash per node, appended after node-attr
+    need = (HEADER.size + ATOM.size * header["atoms"] + NODE.size * header["nodes"]
+            + EDGE.size * header["edges"] + WORD.size * header["prog_words"])
+    if header["flags"] & FLAG_NODE_ATTR:
+        need += WORD.size * header["nodes"]      # one uint16 per-node attribute
+    if header["flags"] & FLAG_NODE_NAMES:
+        need += 4 * header["nodes"]      # one uint32 name-hash per node, after the node-attr section
     if len(data) != need:
         reasons.append("image:length-mismatch")
         return False, reasons
@@ -132,40 +132,40 @@ def validate_image(data: bytes, caps: Optional[dict] = None) -> Tuple[bool, List
         for key, cap_key in (("atoms", "atoms"), ("nodes", "nodes"), ("edges", "edges"),
                              ("prog_words", "prog_words"), ("max_steps", "max_steps"),
                              ("max_stack", "max_stack")):
-            if h[key] > caps.get(cap_key, DEFAULT_CAPS[cap_key]):
+            if header[key] > caps.get(cap_key, DEFAULT_CAPS[cap_key]):
                 reasons.append(f"image:caps-exceeded:{cap_key}")   # cause 16, the registered name
 
     off = HEADER.size
-    for i in range(h["atoms"]):
+    for index in range(header["atoms"]):
         fidx, op, ty, _val = ATOM.unpack_from(data, off)
         off += ATOM.size
         if op not in OPS:
-            reasons.append(f"image:unknown-op:atom{i}")
+            reasons.append(f"image:unknown-op:atom{index}")
         if ty not in TYPES:
-            reasons.append(f"image:unknown-type:atom{i}")
-        if fidx >= h["fields"]:
-            reasons.append(f"image:field-index-oob:atom{i}")
-    off += NODE.size * h["nodes"]
-    for i in range(h["edges"]):
+            reasons.append(f"image:unknown-type:atom{index}")
+        if fidx >= header["fields"]:
+            reasons.append(f"image:field-index-oob:atom{index}")
+    off += NODE.size * header["nodes"]
+    for index in range(header["edges"]):
         target, po, pc = EDGE.unpack_from(data, off)
         off += EDGE.size
-        if target >= h["nodes"]:
-            reasons.append(f"image:edge-target-oob:edge{i}")
-        if po + pc > h["prog_words"]:
-            reasons.append(f"image:edge-prog-oob:edge{i}")
-    for i in range(h["prog_words"]):
-        (w,) = WORD.unpack_from(data, off)
+        if target >= header["nodes"]:
+            reasons.append(f"image:edge-target-oob:edge{index}")
+        if po + pc > header["prog_words"]:
+            reasons.append(f"image:edge-prog-oob:edge{index}")
+    for index in range(header["prog_words"]):
+        (word,) = WORD.unpack_from(data, off)
         off += WORD.size
-        if w >= 0x8000 and w not in PROG_OPCODES:
-            reasons.append(f"image:unknown-opcode:word{i}")
-        if w < 0x8000 and w >= h["atoms"]:
-            reasons.append(f"image:atom-index-oob:word{i}")
-    if h["flags"] & FLAG_NODE_ATTR:
-        for i in range(h["nodes"]):
-            (c,) = WORD.unpack_from(data, off)
+        if word >= 0x8000 and word not in PROG_OPCODES:
+            reasons.append(f"image:unknown-opcode:word{index}")
+        if word < 0x8000 and word >= header["atoms"]:
+            reasons.append(f"image:atom-index-oob:word{index}")
+    if header["flags"] & FLAG_NODE_ATTR:
+        for index in range(header["nodes"]):
+            (attr_value,) = WORD.unpack_from(data, off)
             off += WORD.size
-            if c > 0x3F:                          # fabric materialization envelope: 6-bit LED {LD5,LD4}
-                reasons.append(f"image:node-attr-oob:node{i}")
+            if attr_value > 0x3F:        # fabric materialization envelope: 6-bit LED {LD5,LD4}
+                reasons.append(f"image:node-attr-oob:node{index}")
 
     return (not reasons), reasons
 
@@ -178,14 +178,14 @@ def wcet_cycles(data: bytes) -> int:
     formal work surfaced). The interpreter is a fixed FSM with no micro-architecture, so this is
     exact, not an over-approximation; calibrated + validated against the RTL in
     prismpath-hw/tb/wcet. At clock f, the time bound is wcet_cycles / f."""
-    h = read_ppt_header(data)
-    off = HEADER.size + ATOM.size * h["atoms"]
-    node_recs = [NODE.unpack_from(data, off + i * NODE.size) for i in range(h["nodes"])]
-    off += NODE.size * h["nodes"]
-    edge_pcnt = [EDGE.unpack_from(data, off + i * EDGE.size)[2] for i in range(h["edges"])]
+    header = read_ppt_header(data)
+    off = HEADER.size + ATOM.size * header["atoms"]
+    node_recs = [NODE.unpack_from(data, off + index * NODE.size) for index in range(header["nodes"])]
+    off += NODE.size * header["nodes"]
+    edge_pcnt = [EDGE.unpack_from(data, off + index * EDGE.size)[2] for index in range(header["edges"])]
     worst = 0
     for eoff, ecnt in node_recs:                 # (edge_off, edge_cnt)
-        worst = max(worst, sum(2 + max(p, 1) for p in edge_pcnt[eoff:eoff + ecnt]) + 2)
+        worst = max(worst, sum(2 + max(pred_words, 1) for pred_words in edge_pcnt[eoff:eoff + ecnt]) + 2)
     return worst
 
 
@@ -201,26 +201,26 @@ def keygen(out_dir: str, name: str = "authority") -> dict:
     pub_path = os.path.join(out_dir, f"{name}.pub")
     pem = priv.private_bytes(ser.Encoding.PEM, ser.PrivateFormat.PKCS8, ser.NoEncryption())
     fd = os.open(priv_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    with os.fdopen(fd, "wb") as f:
-        f.write(pem)
+    with os.fdopen(fd, "wb") as handle:
+        handle.write(pem)
     raw = priv.public_key().public_bytes(ser.Encoding.Raw, ser.PublicFormat.Raw)
-    with open(pub_path, "wb") as f:
-        f.write(raw)
+    with open(pub_path, "wb") as handle:
+        handle.write(raw)
     return {"private": priv_path, "public": pub_path, "key_id": sha256_hex(raw)}
 
 
 def _load_private(path: str):
     Priv, _Pub, ser, _Inv = _ed25519()
-    with open(path, "rb") as f:
-        key = ser.load_pem_private_key(f.read(), password=None)
+    with open(path, "rb") as handle:
+        key = ser.load_pem_private_key(handle.read(), password=None)
     return key
 
 
 def load_public(path: str) -> Tuple[object, str]:
     """Load a raw-32-byte Ed25519 public key file -> (key, key_id)."""
     _Priv, Pub, _ser, _Inv = _ed25519()
-    with open(path, "rb") as f:
-        raw = f.read()
+    with open(path, "rb") as handle:
+        raw = handle.read()
     return Pub.from_public_bytes(raw), sha256_hex(raw)
 
 
@@ -228,22 +228,22 @@ def load_revoked(path: Optional[str]) -> frozenset:
     """Revocation list: a JSON array of key_id hex strings. Missing path -> empty set."""
     if not path or not os.path.exists(path):
         return frozenset()
-    with open(path) as f:
-        return frozenset(json.load(f))
+    with open(path) as handle:
+        return frozenset(json.load(handle))
 
 
 # ------------------------------------------------------------------ manifest / pack
 
 def build_manifest(image: bytes, fields: Dict[str, str], version: int,
                    envelope_id: str, key_id: str) -> dict:
-    h = read_ppt_header(image)
+    header = read_ppt_header(image)
     return {
         "format": PACK_FORMAT,
         "image_sha256": sha256_hex(image),
         "fields": dict(fields),
-        "counts": {"atoms": h["atoms"], "nodes": h["nodes"], "edges": h["edges"],
-                   "prog_words": h["prog_words"], "max_steps": h["max_steps"],
-                   "max_stack": h["max_stack"]},
+        "counts": {"atoms": header["atoms"], "nodes": header["nodes"], "edges": header["edges"],
+                   "prog_words": header["prog_words"], "max_steps": header["max_steps"],
+                   "max_stack": header["max_stack"]},
         "wcet_cycles": wcet_cycles(image),       # per-evaluate worst case, signed with the policy
         "version": int(version),
         "envelope_id": envelope_id,
@@ -267,8 +267,8 @@ def build_pack(ppt_path: str, fields: Dict[str, str], version: int, envelope_id:
     e.g. {"profile": "spiral", "sidecar_sha256": <hex of `<ppt>.spiral`>} — built by the
     telemetry adapter's `spiral_pack.write_sidecar`, which lint-gates the flow. The manifest
     signature then covers the declaration, and `verify_pack` re-hashes the sidecar at load."""
-    with open(ppt_path, "rb") as f:
-        image = f.read()
+    with open(ppt_path, "rb") as handle:
+        image = handle.read()
     ok, reasons = validate_image(image)
     if not ok:
         raise ValueError("refusing to sign an invalid image: " + ",".join(reasons))
@@ -283,11 +283,11 @@ def build_pack(ppt_path: str, fields: Dict[str, str], version: int, envelope_id:
         manifest["overlay_of"] = str(overlay_of)
     priv = _load_private(priv_path)
     sig = priv.sign(canonical_bytes(manifest))
-    with open(ppt_path + ".manifest.json", "w") as f:
-        json.dump(manifest, f, indent=1, sort_keys=True)
-        f.write("\n")
-    with open(ppt_path + ".manifest.sig", "wb") as f:
-        f.write(sig)
+    with open(ppt_path + ".manifest.json", "w") as handle:
+        json.dump(manifest, handle, indent=1, sort_keys=True)
+        handle.write("\n")
+    with open(ppt_path + ".manifest.sig", "wb") as handle:
+        handle.write(sig)
     return manifest
 
 
@@ -300,10 +300,10 @@ def verify_pack(ppt_path: str, pubkey_paths: List[str],
     man_path, sig_path = ppt_path + ".manifest.json", ppt_path + ".manifest.sig"
     if not os.path.exists(man_path) or not os.path.exists(sig_path):
         return False, ["sig:missing"], None
-    with open(man_path) as f:
-        manifest = json.load(f)
-    with open(sig_path, "rb") as f:
-        sig = f.read()
+    with open(man_path) as handle:
+        manifest = json.load(handle)
+    with open(sig_path, "rb") as handle:
+        sig = handle.read()
     if manifest.get("format") != PACK_FORMAT:
         return False, ["manifest:bad-format"], manifest
 
@@ -324,15 +324,15 @@ def verify_pack(ppt_path: str, pubkey_paths: List[str],
     if manifest.get("key_id") != signer_id:
         return False, ["manifest:key-id-mismatch"], manifest
 
-    with open(ppt_path, "rb") as f:
-        image = f.read()
+    with open(ppt_path, "rb") as handle:
+        image = handle.read()
     if sha256_hex(image) != manifest.get("image_sha256"):
         return False, ["image:sha256-mismatch"], manifest
-    h = read_ppt_header(image)
+    header = read_ppt_header(image)
     counts = manifest.get("counts", {})
-    for k in ("atoms", "nodes", "edges", "prog_words", "max_steps", "max_stack"):
-        if counts.get(k) != h[k]:
-            return False, [f"manifest:count-mismatch:{k}"], manifest
+    for count_key in ("atoms", "nodes", "edges", "prog_words", "max_steps", "max_stack"):
+        if counts.get(count_key) != header[count_key]:
+            return False, [f"manifest:count-mismatch:{count_key}"], manifest
     if "wcet_cycles" in manifest and manifest["wcet_cycles"] != wcet_cycles(image):
         return False, ["manifest:wcet-mismatch"], manifest   # recomputed from the image, independently
     if "packing" in manifest:
@@ -342,8 +342,8 @@ def verify_pack(ppt_path: str, pubkey_paths: List[str],
         side_path = ppt_path + ".spiral"
         if not os.path.exists(side_path):
             return False, ["spiral:sidecar-missing"], manifest
-        with open(side_path, "rb") as f:
-            if sha256_hex(f.read()) != pk.get("sidecar_sha256"):
+        with open(side_path, "rb") as handle:
+            if sha256_hex(handle.read()) != pk.get("sidecar_sha256"):
                 return False, ["spiral:sidecar-hash-mismatch"], manifest
     return True, [], manifest
 
@@ -360,11 +360,11 @@ def build_envelope(envelope_id: str, fields: Dict[str, str], caps: Optional[dict
     sig = _load_private(priv_path).sign(canonical_bytes(env))
     os.makedirs(out_dir, exist_ok=True)
     base = os.path.join(out_dir, f"{envelope_id}.envelope")
-    with open(base + ".json", "w") as f:
-        json.dump(env, f, indent=1, sort_keys=True)
-        f.write("\n")
-    with open(base + ".sig", "wb") as f:
-        f.write(sig)
+    with open(base + ".json", "w") as handle:
+        json.dump(env, handle, indent=1, sort_keys=True)
+        handle.write("\n")
+    with open(base + ".sig", "wb") as handle:
+        handle.write(sig)
     return env
 
 
@@ -372,10 +372,10 @@ def load_envelope(base_path: str, pubkey_paths: List[str]) -> Tuple[Optional[dic
     """Load + signature-verify an envelope (`base_path` without .json/.sig suffix)."""
     _Priv, _Pub, _ser, InvalidSignature = _ed25519()
     try:
-        with open(base_path + ".json") as f:
-            env = json.load(f)
-        with open(base_path + ".sig", "rb") as f:
-            sig = f.read()
+        with open(base_path + ".json") as handle:
+            env = json.load(handle)
+        with open(base_path + ".sig", "rb") as handle:
+            sig = handle.read()
     except FileNotFoundError:
         return None, ["envelope:missing"]
     payload = canonical_bytes(env)

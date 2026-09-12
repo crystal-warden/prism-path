@@ -35,7 +35,8 @@ _CMP = {
     ast.Eq: operator.eq, ast.NotEq: operator.ne,
     ast.Lt: operator.lt, ast.LtE: operator.le,
     ast.Gt: operator.gt, ast.GtE: operator.ge,
-    ast.In: lambda a, b: a in b, ast.NotIn: lambda a, b: a not in b,
+    ast.In: lambda field_value, constant_list: field_value in constant_list,
+    ast.NotIn: lambda field_value, constant_list: field_value not in constant_list,
 }
 
 # The complete set of AST node types the predicate grammar is allowed to contain. Anything else
@@ -122,10 +123,10 @@ def spawn_join_event(join: str) -> str:
     """The event NAME a fan-out `@spawn(join=…)` policy resolves to — the single source of truth so the
     composer (which DELIVERS the event) and the static analyzer (which REQUIRES the matching
     `on event <name>` edge) can never drift: `all_done` | `any` | `quorum`."""
-    j = (join or "all_done").strip().lower()
-    if j.startswith("quorum"):
+    join_policy = (join or "all_done").strip().lower()
+    if join_policy.startswith("quorum"):
         return "quorum"
-    if j == "any":
+    if join_policy == "any":
         return "any"
     return "all_done"
 
@@ -169,15 +170,16 @@ def check_predicate(condition: str) -> List[str]:
         problems.append(f"predicate {condition!r} is nested too deeply (> {_MAX_DEPTH})")
     # de-dup while preserving order (walk can flag the same disallowed kind repeatedly)
     seen, out = set(), []
-    for p in problems:
-        if p not in seen:
-            seen.add(p); out.append(p)
+    for problem in problems:
+        if problem not in seen:
+            seen.add(problem); out.append(problem)
     return out
 
 
-def _depth(node, d: int = 0) -> int:
+def _depth(node, depth_so_far: int = 0) -> int:
     children = list(ast.iter_child_nodes(node))
-    return d if not children else max(_depth(c, d + 1) for c in children)
+    return depth_so_far if not children else max(_depth(c, depth_so_far + 1)
+                                                 for c in children)
 
 
 def eval_condition(condition: str, ctx: Dict[str, Any]) -> bool:

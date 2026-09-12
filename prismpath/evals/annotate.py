@@ -40,13 +40,14 @@ def blind_cases(benchmark_path: str, flows_dir: Optional[str] = None) -> Iterato
         node = graphs[flow].nodes[c["node"]]
         yield {"flow": flow, "node": c["node"], "outcome": c["outcome"], "stratum": c.get("stratum"),
                "instruction": node.instruction, "edges": list(node.edges),
-               "targets": [t for t, _ in node.edges]}
+               "targets": [edge_target for edge_target, _ in node.edges]}
 
 
 def _done_keys(out_path: str) -> set:
     if not os.path.exists(out_path):
         return set()
-    return {_key(json.loads(l)) for l in open(out_path, encoding="utf-8") if l.strip()}
+    return {_key(json.loads(raw_line)) for raw_line in open(out_path, encoding="utf-8")
+            if raw_line.strip()}
 
 
 def _resolve(raw: str, targets: List[str]) -> Optional[str]:
@@ -63,8 +64,8 @@ def present(case: dict) -> str:
              f"  instruction: {case['instruction'][:200]}",
              f"  OUTCOME: {case['outcome']}",
              "  which edge should this route to?"]
-    for i, (t, c) in enumerate(case["edges"], 1):
-        lines.append(f"    {i}. -> {t}: {c}")
+    for edge_index, (edge_target, c) in enumerate(case["edges"], 1):
+        lines.append(f"    {edge_index}. -> {edge_target}: {c}")
     return "\n".join(lines)
 
 
@@ -80,8 +81,8 @@ def annotate_loop(benchmark_path: str, out_path: str, flows_dir: Optional[str] =
         todo = todo[:limit]
     print_fn(f"{len(done)} already labeled, {len(todo)} to go ({len(cases)} total). "
              f"Enter the edge number (or name); blank = skip, q = save & quit.")
-    n = 0
-    with open(out_path, "a", encoding="utf-8") as f:
+    labeled_count = 0
+    with open(out_path, "a", encoding="utf-8") as handle:
         for case in todo:
             print_fn("\n" + present(case))
             raw = input_fn("pick> ")
@@ -91,9 +92,10 @@ def annotate_loop(benchmark_path: str, out_path: str, flows_dir: Optional[str] =
             if pick is None:
                 print_fn("  (skipped)")
                 continue
-            f.write(json.dumps({"flow": case["flow"], "node": case["node"], "outcome": case["outcome"],
+            handle.write(json.dumps({"flow": case["flow"], "node": case["node"],
+                                     "outcome": case["outcome"],
                                 "label": pick, "stratum": case.get("stratum")}) + "\n")
-            f.flush()
-            n += 1
-    print_fn(f"\nlabeled {n} case(s) this session -> {out_path}")
-    return n
+            handle.flush()
+            labeled_count += 1
+    print_fn(f"\nlabeled {labeled_count} case(s) this session -> {out_path}")
+    return labeled_count

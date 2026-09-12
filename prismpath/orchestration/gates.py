@@ -25,8 +25,8 @@ import subprocess
 TOKENS_MAX = 4000   # tech-debt threshold (~16KB), single-sourced here
 
 
-def token_est(s: str) -> int:
-    return len(s) // 4
+def token_est(source_text: str) -> int:
+    return len(source_text) // 4
 
 
 _EXP_DECL = re.compile(r"export\s+(?:async\s+)?(?:function|class|const|let|var)\s+([A-Za-z_$][\w$]*)")
@@ -52,8 +52,8 @@ def link_check(proj: str) -> list:
     src_cache = {}
     js = glob.glob(os.path.join(proj, "**", "*.js"), recursive=True) + \
         glob.glob(os.path.join(proj, "**", "*.mjs"), recursive=True)
-    for f in js:
-        src_cache[os.path.abspath(f)] = open(f, encoding="utf-8").read()
+    for js_path in js:
+        src_cache[os.path.abspath(js_path)] = open(js_path, encoding="utf-8").read()
 
     def resolve(importer, spec):
         if not (spec.startswith(".") or spec.startswith("/")):
@@ -65,11 +65,11 @@ def link_check(proj: str) -> list:
                 return os.path.abspath(cand), None
         return None, "missing"
 
-    for f, src in src_cache.items():
-        rel = os.path.relpath(f, proj)
+    for js_path, src in src_cache.items():
+        rel = os.path.relpath(js_path, proj)
         for m in _IMP_NAMED.finditer(src):
             names = [p.strip().split(" as ")[0].strip() for p in m.group(1).split(",") if p.strip()]
-            tgt, why = resolve(f, m.group(2))
+            tgt, why = resolve(js_path, m.group(2))
             if why == "external":
                 errs.append(f"{rel}: external import '{m.group(2)}' not allowed (no CDN/network)")
                 continue
@@ -79,12 +79,12 @@ def link_check(proj: str) -> list:
             texp, _tdef, tstar = _exports(src_cache.get(tgt, ""))
             if tstar:
                 continue
-            for n in names:
-                if n not in texp:
-                    errs.append(f"{rel}: imports '{n}' not exported by {os.path.relpath(tgt, proj)} "
+            for imported_name in names:
+                if imported_name not in texp:
+                    errs.append(f"{rel}: imports '{imported_name}' not exported by {os.path.relpath(tgt, proj)} "
                                 f"(it exports: {', '.join(sorted(texp)) or 'nothing'})")
         for m in _IMP_DEFAULT.finditer(src):
-            tgt, why = resolve(f, m.group(2))
+            tgt, why = resolve(js_path, m.group(2))
             if why == "missing":
                 errs.append(f"{rel}: imports from '{m.group(2)}' which does not exist")
             elif why is None:
@@ -93,7 +93,7 @@ def link_check(proj: str) -> list:
                     errs.append(f"{rel}: default-imports from {os.path.relpath(tgt, proj)} which "
                                 f"has no `export default`")
         for m in _IMP_BARE.finditer(src):
-            tgt, why = resolve(f, m.group(1))
+            tgt, why = resolve(js_path, m.group(1))
             if why == "missing":
                 errs.append(f"{rel}: imports '{m.group(1)}' which does not exist")
     return errs
@@ -105,15 +105,15 @@ def dom_check(proj: str) -> list:
     html_files = glob.glob(os.path.join(proj, "**", "*.html"), recursive=True)
     if not html_files:
         return errs
-    html = "\n".join(open(h, encoding="utf-8").read() for h in html_files)
+    html = "\n".join(open(html_path, encoding="utf-8").read() for html_path in html_files)
     ids = set(re.findall(r"id\s*=\s*['\"]([^'\"]+)['\"]", html))
     js = glob.glob(os.path.join(proj, "**", "*.js"), recursive=True)
-    alljs = "\n".join(open(f, encoding="utf-8").read() for f in js)
+    alljs = "\n".join(open(js_path, encoding="utf-8").read() for js_path in js)
     ids |= set(re.findall(r"\.id\s*=\s*['\"]([^'\"]+)['\"]", alljs))
     ids |= set(re.findall(r"setAttribute\(\s*['\"]id['\"]\s*,\s*['\"]([^'\"]+)['\"]", alljs))
-    for f in js:
-        rel = os.path.relpath(f, proj)
-        src = open(f, encoding="utf-8").read()
+    for js_path in js:
+        rel = os.path.relpath(js_path, proj)
+        src = open(js_path, encoding="utf-8").read()
         refs = set(re.findall(r"getElementById\(\s*['\"]([^'\"]+)['\"]", src))
         refs |= set(re.findall(r"querySelector(?:All)?\(\s*['\"]#([A-Za-z0-9_\-]+)['\"]", src))
         for r in refs:
@@ -139,7 +139,7 @@ def behavioral_check(proj: str) -> list:
     class Quiet(socketserver.ThreadingTCPServer):
         allow_reuse_address = True
 
-        def handle_error(self, *a):
+        def handle_error(self, *ignored_args):
             pass
     httpd = Quiet(("127.0.0.1", 0), handler)
     port = httpd.server_address[1]
@@ -147,8 +147,8 @@ def behavioral_check(proj: str) -> list:
     errs = []
     try:
         with sync_playwright() as p:
-            b = p.chromium.launch(headless=True)
-            pg = b.new_page()
+            browser = p.chromium.launch(headless=True)
+            pg = browser.new_page()
             cap = []
             pg.on("pageerror", lambda e: cap.append(f"uncaught: {str(e)[:180]}"))
             pg.on("console", lambda m: cap.append(f"console.error: {m.text[:180]}")
@@ -165,8 +165,9 @@ def behavioral_check(proj: str) -> list:
             before = pg.evaluate("document.body.innerText")
             btn = None
             for b_ in pg.query_selector_all("button"):
-                t = (b_.inner_text() or "").lower()
-                if any(k in t for k in ("send", "submit", "go", "start", "play", "run", "ok", "enter", "approve")):
+                button_text = (b_.inner_text() or "").lower()
+                if any(keyword in button_text for keyword in
+                       ("send", "submit", "go", "start", "play", "run", "ok", "enter", "approve")):
                     btn = b_
                     break
             btns = pg.query_selector_all("button")
@@ -218,7 +219,7 @@ def behavioral_check(proj: str) -> list:
                            "clicking it (button and a grid cell) — its handler is likely not wired. Check "
                            "the composition root (input adapter -> app service -> transport/renderer).")
             errs = cap
-            b.close()
+            browser.close()
     except Exception as e:
         print(f"    [behavioral] gate infra error (FAILED): {str(e)[:140]}", flush=True)
         errs = [f"gate infrastructure error: {str(e)[:140]}"]

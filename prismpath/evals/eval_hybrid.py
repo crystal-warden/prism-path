@@ -16,14 +16,14 @@ from prismpath.evals.eval_routing import CASES
 
 
 def main():
-    g = parse_file("prismpath/flows/bugfix.md")
+    graph = parse_file("prismpath/flows/bugfix.md")
     embed = EmbeddingRouter()
     llm = LLMRouter(llm_local.generate)
 
     recs = []  # (expected, embed_target, margin, score, llm_target, n_edges)
     for node, outcome, expected in CASES:
-        edges = g.nodes[node].edges
-        instr = g.nodes[node].instruction
+        edges = graph.nodes[node].edges
+        instr = graph.nodes[node].instruction
         ed = embed.route(outcome, edges, instr)
         if len(edges) > 1:
             ld = llm.route(outcome, edges, instr)
@@ -33,11 +33,11 @@ def main():
         recs.append((node, outcome, expected, ed.target, ed.info["margin"],
                      ed.info["score"], llm_t, len(edges)))
 
-    N = len(recs)
+    total_cases = len(recs)
     multi = [r for r in recs if r[7] > 1]
-    a_embed = sum(r[3] == r[2] for r in recs) / N
-    a_llm = sum(r[6] == r[2] for r in recs) / N
-    print(f"=== arms on {N} cases ({len(multi)} multi-edge) ===")
+    a_embed = sum(r[3] == r[2] for r in recs) / total_cases
+    a_llm = sum(r[6] == r[2] for r in recs) / total_cases
+    print(f"=== arms on {total_cases} cases ({len(multi)} multi-edge) ===")
     print(f"  EMBED-only : acc={a_embed:.2f}   (0 LLM calls)")
     print(f"  LLM-only   : acc={a_llm:.2f}   ({len(multi)} LLM calls)")
 
@@ -51,18 +51,18 @@ def main():
             else:
                 pick = et
             ok += pick == exp
-        print(f"  {delta:5.2f}  {ok/N:5.2f}  {calls:9d}  {calls/len(multi):8.0%}")
+        print(f"  {delta:5.2f}  {ok/total_cases:5.2f}  {calls:9d}  {calls/len(multi):8.0%}")
 
     # detail at a sensible δ
     delta = 0.12
     print(f"\n=== detail at δ={delta} (which cases escalate / get fixed) ===")
-    for (n, o, exp, et, margin, score, lt, ne) in recs:
+    for (node_name, outcome_text, exp, et, margin, score, lt, ne) in recs:
         if ne > 1 and margin < delta:
             verdict = "LLM✓" if lt == exp else "LLM✗"
-            print(f"  ESCALATE [{n}] margin={margin:.2f} embed={et}({'ok' if et==exp else 'X'})"
-                  f" -> llm={lt} {verdict}  | {o[:50]!r}")
+            print(f"  ESCALATE [{node_name}] margin={margin:.2f} embed={et}({'ok' if et==exp else 'X'})"
+                  f" -> llm={lt} {verdict}  | {outcome_text[:50]!r}")
         elif et != exp:
-            print(f"  MISS(no-escalate) [{n}] margin={margin:.2f} embed={et} exp={exp} | {o[:50]!r}")
+            print(f"  MISS(no-escalate) [{node_name}] margin={margin:.2f} embed={et} exp={exp} | {outcome_text[:50]!r}")
 
 
 if __name__ == "__main__":

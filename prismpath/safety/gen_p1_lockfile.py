@@ -40,9 +40,10 @@ FINGERPRINT_PROBE = "the quick brown fox jumps over the lazy dog"
 THRESHOLD = 0.75
 
 
-def _cos(a, b) -> float:
+def _cos(left_vector, right_vector) -> float:
     """Both arguments are unit-length here, so the dot product IS the cosine."""
-    return float(sum(x * y for x, y in zip(a, b)))
+    return float(sum(component * other_component
+                     for component, other_component in zip(left_vector, right_vector)))
 
 
 def _load_embedder():
@@ -65,7 +66,7 @@ def generate() -> dict:
     # The exemplars must not appear in the acceptance corpus. Checked, not remembered.
     corpus = json.loads(CORPUS.read_text(encoding="utf-8"))
     SemanticLayer(centroids={}, threshold=0, embedder_id="x").assert_disjoint_from(
-        [c["text"] for c in corpus["cases"]]
+        [centroid["text"] for centroid in corpus["cases"]]
     )
 
     embed = _load_embedder()
@@ -80,9 +81,9 @@ def generate() -> dict:
         # the correct one. Cosine is scale-invariant, so this changes no measured number -- it only
         # removes a trap. Caught by a Rust consumer scoring 0.67 where the reference scored 0.85.
         norm = float((mean @ mean) ** 0.5)
-        centroids[rule] = [round(float(x) / norm, 8) for x in mean]
+        centroids[rule] = [round(float(component) / norm, 8) for component in mean]
 
-    fingerprint = [round(float(x), 8) for x in embed([FINGERPRINT_PROBE])[0]]
+    fingerprint = [round(float(component), 8) for component in embed([FINGERPRINT_PROBE])[0]]
 
     # Reference scores for real corpus cases, so a consumer proves it reproduces the DECISIONS.
     # The fingerprint alone does not: it passed while the centroid bug was live.
@@ -93,7 +94,7 @@ def generate() -> dict:
         for stratum in ("paraphrase", "euphemism"):
             for text in strata.get(stratum, [])[:2]:
                 vec = embed([text])[0]
-                scores = {r: _cos(vec, c) for r, c in centroids.items()}
+                scores = {rule_name: _cos(vec, centroid) for rule_name, centroid in centroids.items()}
                 best = max(scores, key=scores.get)
                 probes.append({
                     "text": text, "stratum": stratum, "targets": rule,
@@ -110,11 +111,11 @@ def generate() -> dict:
     parity = []
     for text in parity_texts:
         vec = embed([text])[0]
-        scores = {r: _cos(vec, c) for r, c in centroids.items()}
+        scores = {rule_name: _cos(vec, centroid) for rule_name, centroid in centroids.items()}
         best = max(scores, key=scores.get)
         parity.append({
             "text": text,
-            "embedding": [round(float(x), 8) for x in vec],
+            "embedding": [round(float(component), 8) for component in vec],
             "nearest": best,
             "score": round(scores[best], 6),
             "denied": scores[best] >= THRESHOLD,
@@ -160,8 +161,8 @@ def main() -> int:
 
     try:
         data = generate()
-    except ImportError as e:
-        print(f"needs sentence-transformers to regenerate ({e}).")
+    except ImportError as exc:
+        print(f"needs sentence-transformers to regenerate ({exc}).")
         return 2
 
     text = json.dumps(data, indent=1, sort_keys=True) + "\n"

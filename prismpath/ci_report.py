@@ -82,8 +82,8 @@ def changed_flows(base: str, cwd: str = ".") -> List[str]:
             # EMBED flow snippets in code fences (GETTING_STARTED and kin) fail this bar.
             if not (head.startswith("---") and "start:" in head.split("---")[1]):
                 continue
-            g = parse_file(p)
-            if any(n.edges for n in g.nodes.values()):
+            parsed_graph = parse_file(p)
+            if any(flow_node.edges for flow_node in parsed_graph.nodes.values()):
                 flows.append(rel)
         except Exception:
             continue                                       # ordinary markdown, not a flow
@@ -107,24 +107,24 @@ def _base_mermaid(base: str, rel: str, cwd: str = ".") -> Optional[str]:
 
 
 def report_flow(rel: str, base: str, cwd: str = ".") -> FlowReport:
-    r = FlowReport(path=rel)
+    report = FlowReport(path=rel)
     p = os.path.join(cwd, rel)
     try:
         graph = parse_file(p)
-    except Exception as e:
-        r.parse_error = str(e)
-        return r
-    r.findings = list(analysis.analyze(graph)) + analysis.analyze_composition(graph, p)
-    r.mermaid_after = to_mermaid(graph)
-    r.mermaid_before = _base_mermaid(base, rel, cwd)
+    except Exception as exc:
+        report.parse_error = str(exc)
+        return report
+    report.findings = list(analysis.analyze(graph)) + analysis.analyze_composition(graph, p)
+    report.mermaid_after = to_mermaid(graph)
+    report.mermaid_before = _base_mermaid(base, rel, cwd)
     tests_path = flow_test.default_tests_path(p)
     if os.path.isfile(tests_path):
         try:
             tr = flow_test.run_tests(p, tests_path)
-            r.tests_passed, r.tests_total = tr.passed, len(tr.results)
+            report.tests_passed, report.tests_total = tr.passed, len(tr.results)
         except ImportError:
-            r.tests_skipped = "fixture rows need the embedding tier — install the [embeddings] extra"
-    return r
+            report.tests_skipped = "fixture rows need the embedding tier — install the [embeddings] extra"
+    return report
 
 
 def render(reports: List[FlowReport]) -> str:
@@ -134,42 +134,42 @@ def render(reports: List[FlowReport]) -> str:
     if not reports:
         return "\n".join(lines + ["No flow files changed in this PR."])
     lines += ["| flow | compiles | fixtures |", "|---|---|---|"]
-    for r in reports:
-        if r.parse_error:
+    for report in reports:
+        if report.parse_error:
             compiles = "💥 parse failed"
-        elif r.errors:
-            compiles = f"✗ {len(r.errors)} error(s)"
-        elif r.warnings:
-            compiles = f"⚠ {len(r.warnings)} advisory(ies)"
+        elif report.errors:
+            compiles = f"✗ {len(report.errors)} error(s)"
+        elif report.warnings:
+            compiles = f"⚠ {len(report.warnings)} advisory(ies)"
         else:
             compiles = "✅ clean"
-        if r.tests_total is not None:
-            fixtures = f"{'✅' if r.tests_passed == r.tests_total else '✗'} {r.tests_passed}/{r.tests_total}"
-        elif r.tests_skipped:
+        if report.tests_total is not None:
+            fixtures = f"{'✅' if report.tests_passed == report.tests_total else '✗'} {report.tests_passed}/{report.tests_total}"
+        elif report.tests_skipped:
             fixtures = "⏭ skipped"
         else:
             fixtures = "— none"
-        lines.append(f"| `{r.path}` | {compiles} | {fixtures} |")
-    for r in reports:
-        lines += ["", f"### `{r.path}`"]
-        if r.parse_error:
-            lines += [f"```\nparse failed: {r.parse_error}\n```"]
+        lines.append(f"| `{report.path}` | {compiles} | {fixtures} |")
+    for report in reports:
+        lines += ["", f"### `{report.path}`"]
+        if report.parse_error:
+            lines += [f"```\nparse failed: {report.parse_error}\n```"]
             continue
-        for f in r.findings:
+        for f in report.findings:
             icon = "✗" if f.severity == "error" else "⚠"
             lines.append(f"- {icon} **{f.code}** [{f.node}] {f.message}")
-        if r.tests_skipped:
-            lines.append(f"- ⏭ {r.tests_skipped}")
-        if r.mermaid_before is None:
+        if report.tests_skipped:
+            lines.append(f"- ⏭ {report.tests_skipped}")
+        if report.mermaid_before is None:
             lines += ["", "<details><summary><b>Topology (new flow)</b></summary>", "",
-                      "```mermaid", r.mermaid_after, "```", "", "</details>"]
-        elif r.mermaid_before == r.mermaid_after:
+                      "```mermaid", report.mermaid_after, "```", "", "</details>"]
+        elif report.mermaid_before == report.mermaid_after:
             lines += ["", "<details><summary>Topology unchanged (worker prose / condition text edits only)</summary>",
-                      "", "```mermaid", r.mermaid_after, "```", "", "</details>"]
+                      "", "```mermaid", report.mermaid_after, "```", "", "</details>"]
         else:
             lines += ["", "<details open><summary><b>Topology changed — before → after</b></summary>",
-                      "", "**before**", "```mermaid", r.mermaid_before, "```",
-                      "", "**after**", "```mermaid", r.mermaid_after, "```", "", "</details>"]
+                      "", "**before**", "```mermaid", report.mermaid_before, "```",
+                      "", "**after**", "```mermaid", report.mermaid_after, "```", "", "</details>"]
     lines += ["", "_`prismpath ci-report` — validate + fixture tables are model-free; "
                   "the diagrams above are the actual routing topology, not an illustration._"]
     return "\n".join(lines)
@@ -183,7 +183,7 @@ def ci_report_cmd(args) -> int:
             f.write(text + "\n")
     else:
         print(text)
-    return 0 if all(r.ok for r in reports) else 1
+    return 0 if all(report.ok for report in reports) else 1
 
 
 def add_parser(subparsers) -> None:

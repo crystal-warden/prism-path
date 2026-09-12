@@ -166,7 +166,7 @@ def _child_done(child_cp: dict, gate: Optional[str]) -> bool:
     if not gate:
         return True
     outcomes = (child_cp.get("state") or {}).get("_outcomes", {})
-    return any(bool(o.get(gate)) for o in outcomes.values())
+    return any(bool(outcome.get(gate)) for outcome in outcomes.values())
 
 
 # --- join policy ----------------------------------------------------------------------
@@ -180,10 +180,10 @@ def _quorum_threshold(join: str, n: int) -> int:
     _, _, spec = join.partition(":")
     spec = spec.strip()
     try:
-        v = float(spec)
+        quorum_value = float(spec)
     except ValueError:
         return n
-    k = math.ceil(v * n) if 0 < v < 1 else int(v)
+    k = math.ceil(quorum_value * n) if 0 < quorum_value < 1 else int(quorum_value)
     return max(1, min(n, k))
 
 
@@ -198,7 +198,7 @@ def _join_event(spec: dict, done_flags: List[bool]) -> Optional[str]:
     if not done_flags:
         return None
     join = (spec.get("join") or "all_done").strip()
-    n, n_done = len(done_flags), sum(1 for d in done_flags if d)
+    n, n_done = len(done_flags), sum(1 for done_flag in done_flags if done_flag)
     name = predicates.spawn_join_event(join)             # shared with analysis.py — never drifts
     if name == "any":
         return name if n_done >= 1 else None
@@ -425,8 +425,8 @@ def advance_fanouts(agent, qdir: Optional[str] = None, router=None,
             continue
         try:
             out.append(advance_fanout(path, agent, router=router, human_floor=human_floor))
-        except Exception as e:                        # noqa: BLE001 - one malformed fan-out (e.g. a
+        except Exception as exc:                        # noqa: BLE001 - one malformed fan-out (e.g. a
             # missing `on event` join edge — caught statically by analysis.py) must not abort the whole
             # scan; record it and move on, like scheduler.fire_due_timeouts skips bad checkpoints.
-            out.append({"path": path, "error": repr(e), "joined": False})
+            out.append({"path": path, "error": repr(exc), "joined": False})
     return out

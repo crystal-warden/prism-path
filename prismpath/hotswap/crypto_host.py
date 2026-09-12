@@ -46,8 +46,8 @@ def build_crypto_pack(ppt_path: str, fields: dict, version: int, envelope_id: st
                       priv_path: str, pub_path: str) -> dict:
     """Sign a `.ppt` into a crypto pack: the generic manifest plus the crypto binding (`suites`,
     `registry_hash`), both covered by the same Ed25519 signature over the canonical manifest."""
-    with open(ppt_path, "rb") as f:
-        image = f.read()
+    with open(ppt_path, "rb") as handle:
+        image = handle.read()
     ok, reasons = pp.validate_image(image)
     if not ok:
         raise ValueError("refusing to sign an invalid image: " + ",".join(reasons))
@@ -57,11 +57,11 @@ def build_crypto_pack(ppt_path: str, fields: dict, version: int, envelope_id: st
     manifest["registry_hash"] = registry_hash
     priv = pp._load_private(priv_path)
     sig = priv.sign(pp.canonical_bytes(manifest))
-    with open(ppt_path + ".manifest.json", "w") as f:
-        json.dump(manifest, f, indent=1, sort_keys=True)
-        f.write("\n")
-    with open(ppt_path + ".manifest.sig", "wb") as f:
-        f.write(sig)
+    with open(ppt_path + ".manifest.json", "w") as handle:
+        json.dump(manifest, handle, indent=1, sort_keys=True)
+        handle.write("\n")
+    with open(ppt_path + ".manifest.sig", "wb") as handle:
+        handle.write(sig)
     return manifest
 
 
@@ -152,8 +152,8 @@ class CryptoHost:
 
     def _stored_version(self) -> int:
         try:
-            with open(self._version_path) as f:
-                return int(f.read().strip() or "0")
+            with open(self._version_path) as handle:
+                return int(handle.read().strip() or "0")
         except (FileNotFoundError, ValueError):
             return 0
 
@@ -173,8 +173,8 @@ class CryptoHost:
         if manifest.get("registry_hash") != self.registry_hash:
             reasons.append("crypto:registry-hash-mismatch")
         approved = set(self.envelope.get("approved_suites", []))
-        for s in sorted(set(manifest.get("suites", [])) - approved):
-            reasons.append(f"crypto:unapproved-suite:{s}")
+        for suite in sorted(set(manifest.get("suites", [])) - approved):
+            reasons.append(f"crypto:unapproved-suite:{suite}")
         return (not reasons), reasons
 
     def _resolve_all(self, suites: List[str]) -> Tuple[bool, List[str]]:
@@ -195,10 +195,10 @@ class CryptoHost:
         full success, and provider absence refuses rather than downgrades."""
         with self._lock:
             try:
-                with open(ppt_path, "rb") as f:
-                    image = f.read()
-            except OSError as e:
-                return self._reject(None, None, [f"image:unreadable:{e.errno}"], strict)
+                with open(ppt_path, "rb") as handle:
+                    image = handle.read()
+            except OSError as exc:
+                return self._reject(None, None, [f"image:unreadable:{exc.errno}"], strict)
             to_hash = pp.sha256_hex(image)
 
             ok, reasons, manifest = pp.verify_pack(ppt_path, self.pubkey_paths, self.revoked)

@@ -128,34 +128,34 @@ def _looks_catastrophic(body: str) -> bool:
     (no inner quantifier), so false positives on ordinary patterns are rare. It is not exhaustive —
     it does not catch every ReDoS shape (open-ended `{n,}` nesting, overlapping alternation) — it
     catches the common footgun so the author sees it at parse time, not as a hang."""
-    def _has_unbounded(s: str) -> bool:
-        k = 0
-        while k < len(s):
-            if s[k] == "\\":
-                k += 2
+    def _has_unbounded(pattern_text: str) -> bool:
+        cursor = 0
+        while cursor < len(pattern_text):
+            if pattern_text[cursor] == "\\":
+                cursor += 2
                 continue
-            if s[k] in "*+":
+            if pattern_text[cursor] in "*+":
                 return True
-            k += 1
+            cursor += 1
         return False
 
     stack: list[int] = []
-    i, n = 0, len(body)
-    while i < n:
-        c = body[i]
-        if c == "\\":
-            i += 2
+    index, body_len = 0, len(body)
+    while index < body_len:
+        char = body[index]
+        if char == "\\":
+            index += 2
             continue
-        if c == "(":
-            stack.append(i)
-        elif c == ")" and stack:
+        if char == "(":
+            stack.append(index)
+        elif char == ")" and stack:
             open_i = stack.pop()
-            nxt = body[i + 1] if i + 1 < n else ""
+            nxt = body[index + 1] if index + 1 < body_len else ""
             # tuple membership, not `in "*+"`: "" is a substring of every str, so `"" in "*+"` is
             # True — a group at the very end of the pattern would false-positive.
-            if nxt in ("*", "+") and _has_unbounded(body[open_i + 1:i]):
+            if nxt in ("*", "+") and _has_unbounded(body[open_i + 1:index]):
                 return True
-        i += 1
+        index += 1
     return False
 
 
@@ -235,8 +235,8 @@ def _fold_leet(text: str) -> str:
 
 
 def _collapse_spaced_runs(text: str) -> str:
-    def join(m: re.Match[str]) -> str:
-        return re.sub(r"[ .\-_]", "", m.group(0))
+    def join(matched: re.Match[str]) -> str:
+        return re.sub(r"[ .\-_]", "", matched.group(0))
 
     return _SPACED_RUN_RE.sub(join, text)
 
@@ -260,13 +260,13 @@ def normalization_hash() -> str:
     Hashes the TABLES rather than this module's source, so reformatting or a comment edit does not
     churn the identity of every attested verdict — but changing what folding actually does, does.
     """
-    h = hashlib.sha256()
-    h.update(str(NORMALIZATION_VERSION).encode())
-    h.update(json.dumps(sorted(_INVISIBLE), ensure_ascii=False).encode("utf-8"))
-    h.update(json.dumps(_CONFUSABLES, sort_keys=True, ensure_ascii=False).encode("utf-8"))
-    h.update(json.dumps(_LEET_UNAMBIGUOUS, sort_keys=True, ensure_ascii=False).encode("utf-8"))
-    h.update(_SPACED_RUN_RE.pattern.encode("utf-8"))
-    return h.hexdigest()
+    hasher = hashlib.sha256()
+    hasher.update(str(NORMALIZATION_VERSION).encode())
+    hasher.update(json.dumps(sorted(_INVISIBLE), ensure_ascii=False).encode("utf-8"))
+    hasher.update(json.dumps(_CONFUSABLES, sort_keys=True, ensure_ascii=False).encode("utf-8"))
+    hasher.update(json.dumps(_LEET_UNAMBIGUOUS, sort_keys=True, ensure_ascii=False).encode("utf-8"))
+    hasher.update(_SPACED_RUN_RE.pattern.encode("utf-8"))
+    return hasher.hexdigest()
 
 
 @dataclass(frozen=True)
@@ -346,17 +346,17 @@ def _parse_pattern(raw: str, rule_name: str) -> re.Pattern[str]:
     if not value:
         raise PolicyError(f"rule '{rule_name}': empty deny pattern")
 
-    m = _REGEX_LITERAL_RE.match(value)
-    if m:
-        body, flags = m.group(1), m.group(2)
-        f = 0
+    matched = _REGEX_LITERAL_RE.match(value)
+    if matched:
+        body, flags = matched.group(1), matched.group(2)
+        flag_bits = 0
         for ch in flags:
             if ch == "i":
-                f |= re.IGNORECASE
+                flag_bits |= re.IGNORECASE
             elif ch == "s":
-                f |= re.DOTALL
+                flag_bits |= re.DOTALL
             elif ch == "m":
-                f |= re.MULTILINE
+                flag_bits |= re.MULTILINE
             else:
                 raise PolicyError(f"rule '{rule_name}': unknown regex flag '{ch}'")
         if len(body) > _MAX_PATTERN_LEN:
@@ -369,9 +369,9 @@ def _parse_pattern(raw: str, rule_name: str) -> re.Pattern[str]:
                 f"quantified group (the (a+)+ family), which can backtrack catastrophically (ReDoS) "
                 f"and hang the guard. Rewrite without the nested quantifier, or use a bare phrase.")
         try:
-            return re.compile(body, f)
-        except re.error as e:
-            raise PolicyError(f"rule '{rule_name}': invalid regex /{body}/: {e}") from e
+            return re.compile(body, flag_bits)
+        except re.error as exc:
+            raise PolicyError(f"rule '{rule_name}': invalid regex /{body}/: {exc}") from exc
 
     if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
         value = value[1:-1]
@@ -396,12 +396,12 @@ def _parse_directions(raw: str, rule_name: str) -> tuple[str, ...]:
 
 def parse_policy(text: str) -> Policy:
     """Parse a policy document. Raises `PolicyError` on anything malformed."""
-    m = _FRONTMATTER_RE.match(text)
-    if not m:
+    matched = _FRONTMATTER_RE.match(text)
+    if not matched:
         raise PolicyError("policy document must open with a --- frontmatter block")
 
     meta: dict[str, str] = {}
-    for line in m.group(1).splitlines():
+    for line in matched.group(1).splitlines():
         line = line.strip()
         if not line or line.startswith("#"):
             continue
@@ -447,7 +447,7 @@ def parse_policy(text: str) -> Policy:
             )
         )
 
-    for line in m.group(2).splitlines():
+    for line in matched.group(2).splitlines():
         heading = _HEADING_RE.match(line)
         if heading:
             flush()
@@ -527,12 +527,12 @@ class Guard:
         The folding tables change what a rule catches, so they are part of the policy's identity: an
         attested verdict must commit to *which* normalization produced it, not only which rules ran.
         """
-        h = hashlib.sha256()
+        hasher = hashlib.sha256()
         for p in sorted(self.policies, key=lambda p: p.name):
-            h.update(p.name.encode("utf-8"))
-            h.update(p.source_hash.encode("utf-8"))
-        h.update(normalization_hash().encode("utf-8"))
-        return h.hexdigest()
+            hasher.update(p.name.encode("utf-8"))
+            hasher.update(p.source_hash.encode("utf-8"))
+        hasher.update(normalization_hash().encode("utf-8"))
+        return hasher.hexdigest()
 
     def check(self, text: str, direction: str) -> Verdict:
         """Evaluate one crossing. Floor rules are checked first so they win attribution."""
@@ -606,8 +606,8 @@ class Blocked(Exception):
     verdict: Verdict
 
     def __str__(self) -> str:  # pragma: no cover - trivial
-        v = self.verdict
-        return f"blocked {v.direction} by {v.policy}/{v.rule}"
+        blocked_verdict = self.verdict
+        return f"blocked {blocked_verdict.direction} by {blocked_verdict.policy}/{blocked_verdict.rule}"
 
 
 def guarded_exchange(guard: Guard, text: str, call, *, on_verdict=None) -> str:

@@ -56,8 +56,8 @@ def main() -> int:
 
     try:
         embed = _load_embedder()
-    except Exception as e:  # pragma: no cover - environment dependent
-        print(f"no embedder available ({type(e).__name__}: {e}).")
+    except Exception as exc:  # pragma: no cover - environment dependent
+        print(f"no embedder available ({type(exc).__name__}: {exc}).")
         print("P1 is tier-conditional by design; this is the expected state on the floor tier.")
         return 2
 
@@ -66,24 +66,24 @@ def main() -> int:
 
     # Centroids from exemplars authored independently of the corpus. Disjointness is CHECKED.
     corpus = json.loads(CORPUS.read_text(encoding="utf-8"))
-    probe_texts = [c["text"] for c in corpus["cases"]]
+    probe_texts = [probe_case["text"] for probe_case in corpus["cases"]]
     SemanticLayer(centroids={}, threshold=0, embedder_id="x").assert_disjoint_from(probe_texts)
 
     centroids = {}
     for rule, exemplars in PROHIBITED_INTENT_EXEMPLARS.items():
         vecs = embed(exemplars)
-        centroids[rule] = [float(x) for x in (sum(vecs) / len(vecs))]
+        centroids[rule] = [float(component) for component in (sum(vecs) / len(vecs))]
 
     variants = bypass_corpus.generate()
-    semantic_variants = [v for v in variants if v["klass"] == "semantic"]
+    semantic_variants = [variant for variant in variants if variant["klass"] == "semantic"]
     benign = benign_corpus.generate()
 
     print("=== P1 SEMANTIC LAYER — THRESHOLD SWEEP ===")
     print(f"protocol: docs/research/bypass-measurement.md §5.4 (pre-registered)   embedder: {EMBED_MODEL}")
     print(f"semantic variants: {len(semantic_variants)}   benign cases: {len(benign)}\n")
 
-    strata = sorted({v["stratum"] for v in semantic_variants})
-    header = "thresh  " + "".join(s[:11].ljust(13) for s in strata) + "benign false matches"
+    strata = sorted({variant["stratum"] for variant in semantic_variants})
+    header = "thresh  " + "".join(stratum[:11].ljust(13) for stratum in strata) + "benign false matches"
     print(header)
     print("-" * len(header))
 
@@ -94,11 +94,11 @@ def main() -> int:
         )
         layered = LayeredGuard(floor=floor, semantic=layer)
 
-        per = {s: [0, 0] for s in strata}
-        for v in semantic_variants:
-            per[v["stratum"]][1] += 1
-            if layered.check(v["variant"], v["direction"]).allowed:
-                per[v["stratum"]][0] += 1
+        per = {stratum: [0, 0] for stratum in strata}
+        for variant in semantic_variants:
+            per[variant["stratum"]][1] += 1
+            if layered.check(variant["variant"], variant["direction"]).allowed:
+                per[variant["stratum"]][0] += 1
 
         fp = {"dev": 0, "holdout": 0}
         hits = []
@@ -107,18 +107,20 @@ def main() -> int:
                 fp[case["split"]] += 1
                 hits.append(case)
 
-        n_dev = sum(1 for c in benign if c["split"] == "dev")
+        n_dev = sum(1 for probe_case in benign if probe_case["split"] == "dev")
         n_hold = len(benign) - n_dev
         row = {"threshold": threshold,
-               "strata": {s: round(per[s][0] / per[s][1], 2) for s in strata},
+               "strata": {stratum: round(per[stratum][0] / per[stratum][1], 2) for stratum in strata},
                "benign_false_matches": fp["dev"] + fp["holdout"],
                "fp_dev": fp["dev"], "fp_holdout": fp["holdout"],
-               "fp_examples": [{"split": c["split"], "stratum": c["stratum"], "text": c["text"]}
-                               for c in hits[:4]]}
+               "fp_examples": [{"split": probe_case["split"],
+                                "stratum": probe_case["stratum"],
+                                "text": probe_case["text"]}
+                               for probe_case in hits[:4]]}
         rows.append(row)
         line = f"{threshold:.2f}    "
-        for s in strata:
-            line += f"{row['strata'][s]:.2f}".ljust(13)
+        for stratum in strata:
+            line += f"{row['strata'][stratum]:.2f}".ljust(13)
         line += f"{fp['dev']}/{n_dev} dev  {fp['holdout']}/{n_hold} HOLDOUT"
         print(line)
 
@@ -128,7 +130,7 @@ def main() -> int:
     at75 = next((r for r in rows if abs(r["threshold"] - 0.75) < 1e-9), None)
     if at75:
         print(f"  threshold 0.75 was selected by reading the OLD 41-case dev set.")
-        print(f"  on the held-out {sum(1 for c in benign if c['split']=='holdout')} cases it produces "
+        print(f"  on the held-out {sum(1 for probe_case in benign if probe_case['split']=='holdout')} cases it produces "
               f"{at75['fp_holdout']} false matches.")
         for ex in at75["fp_examples"]:
             print(f"    [{ex['split']}/{ex['stratum']}] {ex['text'][:66]!r}")
@@ -138,11 +140,11 @@ def main() -> int:
         print("  NO threshold in the sweep holds the ZERO benign bound.")
     else:
         print(f"  Best threshold holding the ZERO benign bound: {best['threshold']:.2f}")
-        for s in strata:
-            lo, hi = BANDS.get(s, (0.0, 1.0))
-            got = best["strata"][s]
+        for stratum in strata:
+            lo, hi = BANDS.get(stratum, (0.0, 1.0))
+            got = best["strata"][stratum]
             verdict = "HIT" if lo <= got <= hi else ("MISS (high)" if got > hi else "MISS (low)")
-            print(f"    {s.ljust(13)}band {lo:.2f}-{hi:.2f}   measured {got:.2f}   {verdict}")
+            print(f"    {stratum.ljust(13)}band {lo:.2f}-{hi:.2f}   measured {got:.2f}   {verdict}")
 
     print("\n--- the prediction that mattered (§5.4) ---")
     print("  predicted: P1 FAILS the zero benign bound at any threshold that moves paraphrase")

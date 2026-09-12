@@ -33,14 +33,14 @@ INTER_PATH = os.path.join(PROJ, "interactions.jsonl")
 MAX_EVENTS = int(os.environ.get("SWARM_LENS_EVENTS", "300"))
 
 
-def _esc(s):
-    return str(s).replace("\\", "\\\\").replace('"', '\\"').replace("\n", " ")[:160]
+def _esc(value):
+    return str(value).replace("\\", "\\\\").replace('"', '\\"').replace("\n", " ")[:160]
 
 
 def collect():
     out = []
 
-    def g(name, val, labels=""):
+    def gauge(name, val, labels=""):
         out.append(f'{name}{{{labels}}} {val}' if labels else f'{name} {val}')
 
     st = {}
@@ -50,31 +50,31 @@ def collect():
             st = json.load(open(sp))
         except Exception:
             st = {}
-    g("swarm_iteration", st.get("iteration", 0) or 0)
-    g("swarm_elapsed_seconds", st.get("elapsed_s", 0) or 0)
-    g("swarm_valid", 1 if st.get("valid") else 0)
-    g("swarm_done", 1 if st.get("done") else 0)
-    g("swarm_files", len(st.get("files", []) or []))
-    g("swarm_biggest_tokens", st.get("biggest_tok", 0) or 0)
-    g("swarm_help_count_total", st.get("help_count", 0) or 0)
+    gauge("swarm_iteration", st.get("iteration", 0) or 0)
+    gauge("swarm_elapsed_seconds", st.get("elapsed_s", 0) or 0)
+    gauge("swarm_valid", 1 if st.get("valid") else 0)
+    gauge("swarm_done", 1 if st.get("done") else 0)
+    gauge("swarm_files", len(st.get("files", []) or []))
+    gauge("swarm_biggest_tokens", st.get("biggest_tok", 0) or 0)
+    gauge("swarm_help_count_total", st.get("help_count", 0) or 0)
 
     log = ""
     lp = os.path.join(PROJ, "sprint.log")
     if os.path.isfile(lp):
         log = open(lp, errors="ignore").read()
     for kind in _PHASES:
-        g("swarm_log_events", log.count(f"[{kind}]"), f'kind="{kind}"')
+        gauge("swarm_log_events", log.count(f"[{kind}]"), f'kind="{kind}"')
     phases = re.findall(r"\[(" + "|".join(_PHASES) + r")\]", log)
     phase = phases[-1] if phases else "init"
     decisions = re.findall(r"\[(?:review)\][^\n]*?([\w./\-]+\.(?:js|mjs|html|css))", log)
     target = decisions[-1] if decisions else ((st.get("files") or ["—"])[-1])
-    g("swarm_current", 1,
+    gauge("swarm_current", 1,
       f'phase="{_esc(phase)}",target="{_esc(target)}",last_error="{_esc(st.get("last_error") or "none")}"')
 
     hp = os.path.join(PROJ, "HELP.md")
     htxt = open(hp, errors="ignore").read() if os.path.isfile(hp) else ""
-    g("swarm_help_open", htxt.count("- [ ]"))
-    g("swarm_help_resolved", htxt.count("- [x]"))
+    gauge("swarm_help_open", htxt.count("- [ ]"))
+    gauge("swarm_help_resolved", htxt.count("- [x]"))
 
     now = time.time()
     for role in ROLES:
@@ -82,14 +82,15 @@ def collect():
         mem = os.path.join(home, "memories", "MEMORY.md")
         lessons = sum(1 for ln in open(mem, errors="ignore") if ln.strip().startswith("- ")) \
             if os.path.isfile(mem) else 0
-        g("swarm_role_lessons", lessons, f'role="{role}"')
+        gauge("swarm_role_lessons", lessons, f'role="{role}"')
         db = os.path.join(home, "state.db")
-        g("swarm_role_sessions_bytes", os.path.getsize(db) if os.path.isfile(db) else 0, f'role="{role}"')
+        gauge("swarm_role_sessions_bytes",
+              os.path.getsize(db) if os.path.isfile(db) else 0, f'role="{role}"')
         mtime = os.path.getmtime(db) if os.path.isfile(db) else (
             os.path.getmtime(home) if os.path.isdir(home) else now)
-        g("swarm_role_idle_seconds", int(now - mtime), f'role="{role}"')
+        gauge("swarm_role_idle_seconds", int(now - mtime), f'role="{role}"')
 
-    g("swarm_up", 1)
+    gauge("swarm_up", 1)
     return "\n".join(out) + "\n"
 
 
@@ -103,11 +104,11 @@ _BOILER = re.compile(r"(PROJECT GOAL|APPROVED BLUEPRINT|architecture contract|"
 def _fold(text, head=220, tail=1100):
     """Collapse a long, boilerplate-heavy prompt: keep a short head + the task-bearing tail."""
     text = text or ""
-    n = len(text)
-    if n <= head + tail + 40:
+    text_len = len(text)
+    if text_len <= head + tail + 40:
         return {"preview": text, "folded": 0, "full": text[:9000]}
-    return {"preview": text[:head] + f"\n\n   …[{n - head - tail} chars of context folded]…\n\n" + text[-tail:],
-            "folded": n - head - tail, "full": text[:9000]}
+    return {"preview": text[:head] + f"\n\n   …[{text_len - head - tail} chars of context folded]…\n\n" + text[-tail:],
+            "folded": text_len - head - tail, "full": text[:9000]}
 
 
 def read_interactions(limit=MAX_EVENTS):
@@ -129,15 +130,15 @@ def read_interactions(limit=MAX_EVENTS):
                 e = json.loads(ln)
             except Exception:
                 continue
-            p, o = _fold(e.get("prompt", "")), _fold(e.get("output", ""), head=0, tail=2200)
+            folded_prompt, folded_output = _fold(e.get("prompt", "")), _fold(e.get("output", ""), head=0, tail=2200)
             events.append({
                 "ts": e.get("ts"), "kind": e.get("kind", "?"), "role": e.get("role", ""),
                 "phase": e.get("phase", ""), "dur_ms": e.get("dur_ms", 0),
                 "prompt_len": e.get("prompt_len", len(e.get("prompt", ""))),
                 "output_len": e.get("output_len", len(e.get("output", ""))),
                 "rc": e.get("rc"), "focus": e.get("focus", ""),
-                "prompt": p["preview"], "prompt_full": p["full"],
-                "output": o["preview"], "output_full": o["full"],
+                "prompt": folded_prompt["preview"], "prompt_full": folded_prompt["full"],
+                "output": folded_output["preview"], "output_full": folded_output["full"],
             })
     summary = {
         "iteration": st.get("iteration", 0), "valid": bool(st.get("valid")),
@@ -296,7 +297,7 @@ class Handler(BaseHTTPRequestHandler):
         except Exception as e:
             self._send(f"# exporter error: {e}\nswarm_up 0\n", "text/plain")
 
-    def log_message(self, *a):
+    def log_message(self, *ignored_args):
         pass
 
 

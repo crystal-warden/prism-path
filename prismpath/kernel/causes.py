@@ -86,8 +86,9 @@ _REGISTRY: Tuple[Tuple[int, str, str, str], ...] = (
     (86, "envelope:field-kind-mismatch", "envelope",  "manifest field kind differs from the envelope's"),
 )
 
-CODES: Dict[int, Tuple[str, str, str]] = {c: (n, k, d) for c, n, k, d in _REGISTRY}
-NAMES: Dict[str, int] = {n: c for c, n, _k, _d in _REGISTRY}
+CODES: Dict[int, Tuple[str, str, str]] = {cause_code: (canonical_name, class_name, description)
+                                          for cause_code, canonical_name, class_name, description in _REGISTRY}
+NAMES: Dict[str, int] = {canonical_name: cause_code for cause_code, canonical_name, _k, _d in _REGISTRY}
 
 # The engine's stop vocabulary (engine.py `stopped`), mapped onto the registry. 'terminal'
 # and 'waiting' are clean outcomes and deliberately have no cause code.
@@ -109,13 +110,14 @@ def code(cause_name: str) -> Optional[int]:
 
 
 def cause_class(code_or_name) -> Optional[str]:
-    c = NAMES.get(code_or_name) if isinstance(code_or_name, str) else code_or_name
-    entry = CODES.get(c) if c is not None else None
+    cause_code = NAMES.get(code_or_name) if isinstance(code_or_name, str) else code_or_name
+    entry = CODES.get(cause_code) if cause_code is not None else None
     return entry[1] if entry else None
 
 
 def registry_sha256() -> str:
     """A stable hash over (code, name, class) triples — the frozen-value anchor the tests pin.
     Descriptions may be edited for clarity; codes, names, and classes may not."""
-    blob = "\n".join(f"{c}|{n}|{k}" for c, n, k, _d in _REGISTRY).encode()
+    blob = "\n".join(f"{cause_code}|{canonical_name}|{class_name}"
+                     for cause_code, canonical_name, class_name, _d in _REGISTRY).encode()
     return hashlib.sha256(blob).hexdigest()

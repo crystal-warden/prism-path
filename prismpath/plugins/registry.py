@@ -80,10 +80,10 @@ def discover() -> Dict[str, PluginInfo]:
     the audit listing makes that visible rather than silent)."""
     found: Dict[str, PluginInfo] = {}
     import prismpath.plugins as _pkg
-    for m in pkgutil.iter_modules(_pkg.__path__):
-        if not m.ispkg and m.name in ("registry",):
+    for module_info in pkgutil.iter_modules(_pkg.__path__):
+        if not module_info.ispkg and module_info.name in ("registry",):
             continue
-        info = _inspect(m.name, f"prismpath.plugins.{m.name}", "bundled")
+        info = _inspect(module_info.name, f"prismpath.plugins.{module_info.name}", "bundled")
         if info:
             found[info.name] = info
     try:
@@ -163,18 +163,18 @@ def check_flow(graph) -> List[str]:
     registry. Returns problems (empty = clean). This is the ecosystem's `validate` counterpart —
     run it in CI so a flow never reaches a host missing the tools it names."""
     problems = []
-    for name, n in graph.nodes.items():
-        args = n.annotations.get("worker")
+    for name, flow_node in graph.nodes.items():
+        args = flow_node.annotations.get("worker")
         if args is None:
             continue
-        ref = _bound_ref(n)
+        ref = _bound_ref(flow_node)
         if not ref:
             problems.append(f"node {name!r}: @worker has no name")
             continue
         try:
             resolve_worker(ref)
-        except KeyError as e:
-            problems.append(f"node {name!r}: {e.args[0]}")
+        except KeyError as exc:
+            problems.append(f"node {name!r}: {exc.args[0]}")
     return problems
 
 
@@ -186,9 +186,9 @@ def audit(as_json: bool = False) -> str:
     if not infos:
         return "no plugins installed"
     lines = []
-    for name, i in sorted(infos.items()):
-        provides = ([f"workers: {', '.join(i.workers)}"] if i.workers else []) \
-                 + (["gate"] if i.is_gate else []) + (["cli"] if i.has_cli else [])
-        lines.append(f"{name} {i.version} [{i.source}] — {i.description or i.module}")
+    for name, plugin_info in sorted(infos.items()):
+        provides = ([f"workers: {', '.join(plugin_info.workers)}"] if plugin_info.workers else []) \
+                 + (["gate"] if plugin_info.is_gate else []) + (["cli"] if plugin_info.has_cli else [])
+        lines.append(f"{name} {plugin_info.version} [{plugin_info.source}] — {plugin_info.description or plugin_info.module}")
         lines.append(f"    provides: {'; '.join(provides) or '(nothing declared)'}")
     return "\n".join(lines)

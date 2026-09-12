@@ -16,40 +16,41 @@ import hashlib, os, json, subprocess, glob
 _OTSENV = {**os.environ, "PATH": os.path.expanduser("~/.local/bin") + ":" + os.environ.get("PATH", "")}
 
 
-def _h(b):
-    return hashlib.sha256(b).digest()
+def _h(payload):
+    return hashlib.sha256(payload).digest()
 
 
 def merkle_root_and_paths(leaves_hex):
     """Bitcoin-style Merkle (duplicate last if odd). -> (root_hex, [path per leaf])."""
     if not leaves_hex:
         return None, []
-    layers = [[bytes.fromhex(h) for h in leaves_hex]]
+    layers = [[bytes.fromhex(hash_hex) for hash_hex in leaves_hex]]
     while len(layers[-1]) > 1:
         cur = layers[-1][:]
         if len(cur) % 2:
             cur = cur + [cur[-1]]
-        layers.append([_h(cur[i] + cur[i + 1]) for i in range(0, len(cur), 2)])
+        layers.append([_h(cur[index] + cur[index + 1]) for index in range(0, len(cur), 2)])
     root = layers[-1][0]
 
     def path(idx):
-        p = []
+        proof_path = []
         for lvl in range(len(layers) - 1):
-            L = layers[lvl][:]
-            if len(L) % 2:
-                L = L + [L[-1]]
-            p.append(("R", L[idx + 1].hex()) if idx % 2 == 0 else ("L", L[idx - 1].hex()))
+            layer = layers[lvl][:]
+            if len(layer) % 2:
+                layer = layer + [layer[-1]]
+            proof_path.append(("R", layer[idx + 1].hex()) if idx % 2 == 0
+                              else ("L", layer[idx - 1].hex()))
             idx //= 2
-        return p
+        return proof_path
 
-    return root.hex(), [path(i) for i in range(len(leaves_hex))]
+    return root.hex(), [path(index) for index in range(len(leaves_hex))]
 
 
 def verify_leaf(leaf_hex, path, root_hex):
     cur = bytes.fromhex(leaf_hex)
     for side, sib in path:
-        s = bytes.fromhex(sib)
-        cur = _h(cur + s) if side == "R" else _h(s + cur)
+        sibling = bytes.fromhex(sib)
+        cur = _h(cur + sibling) if side == "R" else _h(sibling + cur)
     return cur.hex() == root_hex
 
 
@@ -67,7 +68,7 @@ def from_ledger(ledger_repo, ref="refs/prismpath/runs"):
             text=True,
             env=env,
         ).stdout
-        out += [l.strip() for l in log.splitlines() if l.strip()]
+        out += [trailer_line.strip() for trailer_line in log.splitlines() if trailer_line.strip()]
     return out
 
 
@@ -78,7 +79,8 @@ def anchor(hashes, out_dir, label):
     rootfile = os.path.join(out_dir, f"root_{label}.txt")
     open(rootfile, "w").write(root + "\n")
     json.dump(
-        dict(label=label, root=root, n=len(hashes), leaves={h: paths[i] for i, h in enumerate(hashes)}),
+        dict(label=label, root=root, n=len(hashes),
+             leaves={hash_hex: paths[index] for index, hash_hex in enumerate(hashes)}),
         open(os.path.join(out_dir, f"manifest_{label}.json"), "w"),
         indent=2,
     )
@@ -105,11 +107,11 @@ def upgrade(out_dir, label):
 
 def verify_unit(leaf_hex, out_dir, label):
     """Full chain: Merkle path to the anchored root, then OTS-verify the root against Bitcoin."""
-    m = json.load(open(os.path.join(out_dir, f"manifest_{label}.json")))
-    path = m["leaves"].get(leaf_hex)
+    manifest = json.load(open(os.path.join(out_dir, f"manifest_{label}.json")))
+    path = manifest["leaves"].get(leaf_hex)
     if path is None:
         return dict(merkle_ok=False, reason="output-hash not in this anchor batch")
-    merkle_ok = verify_leaf(leaf_hex, path, m["root"])
+    merkle_ok = verify_leaf(leaf_hex, path, manifest["root"])
     r = subprocess.run(
         ["ots", "verify", os.path.join(out_dir, f"root_{label}.txt.ots")],
         capture_output=True,
@@ -118,7 +120,7 @@ def verify_unit(leaf_hex, out_dir, label):
     )
     return dict(
         merkle_ok=merkle_ok,
-        root=m["root"],
+        root=manifest["root"],
         ots_ok=(r.returncode == 0),
         ots_rc=r.returncode,
         ots_verify=(r.stdout + r.stderr).strip()[-300:],

@@ -73,13 +73,14 @@ def _references_visits(cond: str) -> bool:
     node = _parse(cond)
     if node is None:
         return False
-    return any(isinstance(n, ast.Name) and n.id == "visits" for n in ast.walk(node))
+    return any(isinstance(descendant, ast.Name) and descendant.id == "visits"
+               for descendant in ast.walk(node))
 
 
-def _negates(a: str, b: str) -> bool:
+def _negates(first_condition: str, second_condition: str) -> bool:
     """True if deterministic conditions `a` and `b` are exact logical negations: the common
     `X` / `not X` (and comparison-operator) pairs that make a two-way branch exhaustive."""
-    na, nb = _parse(a), _parse(b)
+    na, nb = _parse(first_condition), _parse(second_condition)
     if na is None or nb is None:
         return False
 
@@ -236,9 +237,9 @@ def _sccs(graph) -> List[set]:
         if low[node_name] == index[node_name]:
             comp = set()
             while True:
-                w = stack.pop(); onstack[w] = False
-                comp.add(w)
-                if w == node_name:
+                member = stack.pop(); onstack[member] = False
+                comp.add(member)
+                if member == node_name:
                     break
             out.append(comp)
 
@@ -440,9 +441,9 @@ def _check_provenance(graph) -> List[Finding]:
         # Collect upstream declared fields
         upstream = _upstream_nodes(graph, name)
         upstream_declared = set()
-        for u in upstream:
-            unode = graph.nodes[u]
-            udec = contract.declared_emits(unode)
+        for upstream_name in upstream:
+            upstream_node = graph.nodes[upstream_name]
+            udec = contract.declared_emits(upstream_node)
             if udec:
                 upstream_declared.update(udec)
                 
@@ -510,15 +511,15 @@ def _check_emits_types(graph) -> List[Finding]:
         # Upstream type checks (Task 3)
         upstream = _upstream_nodes(graph, name)
         upstream_emits = {}
-        for u in upstream:
-            unode = graph.nodes[u]
-            uemits = unode.annotations.get("emits") or {}
+        for upstream_name in upstream:
+            upstream_node = graph.nodes[upstream_name]
+            uemits = upstream_node.annotations.get("emits") or {}
             for field_name, token in uemits.items():
                 if token:
                     want = _EMIT_TYPE_FAMILY.get(str(token).strip().lower())
                     if want:
                         # Store type family and node name that declared it
-                        upstream_emits[field_name] = (want, u)
+                        upstream_emits[field_name] = (want, upstream_name)
                         
         for field_name, spec in derived.items():
             if field_name not in emits and field_name in upstream_emits:

@@ -120,7 +120,8 @@ def discover_sprints():
         out.append({"proj": p, "name": os.path.basename(p), "age": round(age, 1),
                     "running": age < 120 and not d.get("done"),
                     "iteration": d.get("iteration"), "valid": d.get("valid"), "done": d.get("done")})
-    out.sort(key=lambda s: (not s["running"], s["age"]))      # running first, then freshest
+    out.sort(key=lambda sprint_row: (not sprint_row["running"],
+                                     sprint_row["age"]))   # running first, then freshest
     return out
 
 
@@ -226,10 +227,10 @@ def _model_for(role):
     return "qwen25 (LLM)" if role in QWEN_ROLES else "gemma4 (LLM)"
 
 
-def _route(e):
+def _route(event):
     """Derive (from, to, substage): who sent the message and who received it. Every call is a
     role/cecli -> a served LLM (or the doc index), situated in propose->accept->build->test."""
-    kind, role, prompt = e.get("kind"), e.get("role", ""), e.get("prompt", "")
+    kind, role, prompt = event.get("kind"), event.get("role", ""), event.get("prompt", "")
     if kind == "retriever":
         return "retriever", "doc index", "retrieve"
 
@@ -250,16 +251,19 @@ def mc_interactions(state, limit=300):
     if os.path.isfile(path):
         for ln in open(path, errors="ignore").read().splitlines()[-limit:]:
             try:
-                e = json.loads(ln)
+                event = json.loads(ln)
             except Exception:
                 continue
-            p, o = _fold(e.get("prompt", "")), _fold(e.get("output", ""), head=0, tail=2200)
-            frm, to, sub = _route(e)
-            events.append({"ts": e.get("ts"), "kind": e.get("kind", "?"), "role": e.get("role", ""),
-                           "phase": e.get("phase", ""), "dur_ms": e.get("dur_ms", 0),
-                           "from": frm, "to": to, "substage": sub, "rc": e.get("rc"),
-                           "prompt_len": e.get("prompt_len", 0), "output_len": e.get("output_len", 0),
-                           "prompt": p["preview"], "output": o["preview"]})
+            p, folded_output = _fold(event.get("prompt", "")), _fold(event.get("output", ""),
+                                                                    head=0, tail=2200)
+            frm, to, sub = _route(event)
+            events.append({"ts": event.get("ts"), "kind": event.get("kind", "?"),
+                           "role": event.get("role", ""),
+                           "phase": event.get("phase", ""), "dur_ms": event.get("dur_ms", 0),
+                           "from": frm, "to": to, "substage": sub, "rc": event.get("rc"),
+                           "prompt_len": event.get("prompt_len", 0),
+                           "output_len": event.get("output_len", 0),
+                           "prompt": p["preview"], "output": folded_output["preview"]})
     return {"summary": status(state), "events": events}
 
 
@@ -273,14 +277,14 @@ def retrievals(state, limit=200):
     if os.path.isfile(path):
         for ln in open(path, errors="ignore").read().splitlines():
             try:
-                e = json.loads(ln)
+                event = json.loads(ln)
             except Exception:
                 continue
-            if e.get("kind") != "retriever" and e.get("phase") != "retrieve":
+            if event.get("kind") != "retriever" and event.get("phase") != "retrieve":
                 continue
-            out.append({"ts": e.get("ts"), "query": (e.get("prompt") or "")[:300],
-                        "n": e.get("hits", len(e.get("hits_meta", []) or [])),
-                        "hits": e.get("hits_meta", [])})
+            out.append({"ts": event.get("ts"), "query": (event.get("prompt") or "")[:300],
+                        "n": event.get("hits", len(event.get("hits_meta", []) or [])),
+                        "hits": event.get("hits_meta", [])})
     return {"retrievals": out[-limit:]}
 
 
@@ -293,10 +297,10 @@ def balance_state(state):
     except Exception:
         led = {}
     cats = sorted(led)
-    rows = [{"name": c, "count": int(led.get(c, 0)),
+    rows = [{"name": category, "count": int(led.get(category, 0)),
              "weight": 1.0}
-            for c in cats]
-    return {"total": sum(r["count"] for r in rows), "categories": rows}
+            for category in cats]
+    return {"total": sum(row["count"] for row in rows), "categories": rows}
 
 
 _FAIL_VALIDATE = re.compile(r"TypeError|Unknown|duplicate|missing|Expected|Argument", re.I)
@@ -336,9 +340,10 @@ def flow_state(state):
     lp = os.path.join(proj, "sprint.log")
     if os.path.isfile(lp):
         for ln in open(lp, errors="ignore").read().splitlines()[-40:]:
-            m = re.search(r"\[(rag|cecli|fix|HELP \d+|reflect)\]\s*(.*)", ln)
-            if m:
-                recent.append(m.group(0).split("] ", 1)[-1][:90] if "] " in m.group(0) else m.group(0)[:90])
+            line_match = re.search(r"\[(rag|cecli|fix|HELP \d+|reflect)\]\s*(.*)", ln)
+            if line_match:
+                recent.append(line_match.group(0).split("] ", 1)[-1][:90]
+                              if "] " in line_match.group(0) else line_match.group(0)[:90])
             elif re.search(r"\[it \d+ \|.*valid=", ln):
                 recent.append(ln.split("] ", 1)[-1][:90])
     return {"stage": stage, "gate_valid": valid, "iteration": st.get("iteration"),
@@ -370,9 +375,9 @@ def serialize_flow_graph(state, flow_path=None):
         return {"error": "flow path escapes project sandbox"}
     graph = parse_file(resolved)
     nodes_data = {}
-    for name, n in graph.nodes.items():
+    for name, flow_node in graph.nodes.items():
         edges = []
-        for target, cond in n.edges:
+        for target, cond in flow_node.edges:
             if predicates.is_error(cond):
                 tier = "error"
             elif predicates.is_event(cond):
@@ -382,8 +387,9 @@ def serialize_flow_graph(state, flow_path=None):
             else:
                 tier = "semantic"
             edges.append({"target": target, "condition": cond, "tier": tier})
-        nodes_data[name] = {"name": name, "instruction": n.instruction, "terminal": n.terminal,
-                            "annotations": n.annotations, "edges": edges}
+        nodes_data[name] = {"name": name, "instruction": flow_node.instruction,
+                            "terminal": flow_node.terminal,
+                            "annotations": flow_node.annotations, "edges": edges}
     active = {}
     ckpt = os.path.join(proj, "checkpoint.json")
     if os.path.isfile(ckpt):

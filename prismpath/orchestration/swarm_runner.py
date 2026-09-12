@@ -47,8 +47,8 @@ def _swarm_endpoint_up(base: Optional[str] = None, timeout: float = 4.0) -> bool
     base = (base or agent_io.DEFAULT_BASE).rstrip("/")
     for path in ("/models", "/models/"):
         try:
-            r = requests.get(base + path, timeout=timeout)
-            if r.status_code < 500:
+            response = requests.get(base + path, timeout=timeout)
+            if response.status_code < 500:
                 return True
         except Exception:
             pass
@@ -136,8 +136,8 @@ def run_pytest(test_dir: str, target: str = "", timeout: int = 600):
 
 
 def _count(log: str, pat: str) -> int:
-    m = re.search(pat, log)
-    return int(m.group(1)) if m else 0
+    count_match = re.search(pat, log)
+    return int(count_match.group(1)) if count_match else 0
 
 
 # --------------------------------------------------------------------------------------------
@@ -181,7 +181,7 @@ def make_swarm_agent(spec: dict, backend: str = "auto", base: Optional[str] = No
         # ---------------- plan ----------------
         if node == "plan":
             state.setdefault("file_idx", 0)
-            todo = ", ".join(f["name"] for f in files)
+            todo = ", ".join(file_spec["name"] for file_spec in files)
             return {"text": f"plan ready: will implement {todo}",
                     "files_total": len(files), "planned": True}
 
@@ -197,37 +197,37 @@ def make_swarm_agent(spec: dict, backend: str = "auto", base: Optional[str] = No
                 single = False
             if idx >= len(files):
                 return {"text": "all files already implemented", "more_files": False}
-            f = files[idx]
+            file_spec = files[idx]
             prior = state.get("written", {})
             prior_block = ""
             if prior:
                 prior_block = "\n\n## Files already written (keep them consistent):\n" + \
                     "\n".join(f"- {p}" for p in prior)
             err = state.get("last_error", "")
-            if err and state.get("last_file") == f["name"]:
-                prompt = (f"{goal}\n\n{ctx}\n\nFile to (re)write: `{f['path']}`\n"
-                          f"{f['brief']}\n{prior_block}\n\nYour previous version of this file "
+            if err and state.get("last_file") == file_spec["name"]:
+                prompt = (f"{goal}\n\n{ctx}\n\nFile to (re)write: `{file_spec['path']}`\n"
+                          f"{file_spec['brief']}\n{prior_block}\n\nYour previous version of this file "
                           f"failed:\n```\n{err[:1800]}\n```\nReturn the COMPLETE corrected file "
                           f"in ONE ```python code block, nothing else.")
             else:
-                prompt = (f"{goal}\n\n{ctx}\n\nWrite the file `{f['path']}`.\n{f['brief']}"
+                prompt = (f"{goal}\n\n{ctx}\n\nWrite the file `{file_spec['path']}`.\n{file_spec['brief']}"
                           f"{prior_block}\n\nReturn the COMPLETE file in ONE ```python code "
                           f"block, nothing else.")
-            raw = generate(prompt, f.get("max_new", max_new))
+            raw = generate(prompt, file_spec.get("max_new", max_new))
             code = extract_code(raw)
-            abspath = os.path.join(scratch_dir, f["path"])
+            abspath = os.path.join(scratch_dir, file_spec["path"])
             os.makedirs(os.path.dirname(abspath) or ".", exist_ok=True)
             with open(abspath, "w") as fh:
                 fh.write(code + ("\n" if not code.endswith("\n") else ""))
-            state.setdefault("written", {})[f["path"]] = abspath
-            state["last_file"] = f["name"]
+            state.setdefault("written", {})[file_spec["path"]] = abspath
+            state["last_file"] = file_spec["name"]
             if not single:
                 state["file_idx"] = idx + 1
             more = (not single) and state["file_idx"] < len(files)
-            _log(f"    [implement] wrote {f['path']} ({len(code)} chars) "
+            _log(f"    [implement] wrote {file_spec['path']} ({len(code)} chars) "
                  f"[{idx+1}/{len(files)}{' retry' if single else ''}]")
-            return {"text": f"wrote {f['path']} ({len(code)} chars)",
-                    "more_files": more, "wrote_file": f["path"]}
+            return {"text": f"wrote {file_spec['path']} ({len(code)} chars)",
+                    "more_files": more, "wrote_file": file_spec["path"]}
 
         # ---------------- run_tests (deterministic outcome) ----------------
         if node == "run_tests":
@@ -284,21 +284,22 @@ def _blame_file_idx(err: str, files, default_idx: int) -> int:
     test files) over an incidental stem match anywhere in the traceback (which previously
     mis-targeted, e.g. rewriting test_engine when test_predicates was failing)."""
     err = err or ""
-    by_base = {os.path.basename(f["path"]).lower(): i for i, f in enumerate(files)}
+    by_base = {os.path.basename(file_spec["path"]).lower(): file_index
+               for file_index, file_spec in enumerate(files)}
     # 1) tally files cited in FAILED/ERROR summary lines (most-implicated wins)
     counts = {}
     for path in re.findall(r"(?:FAILED|ERROR)\s+\S*?([A-Za-z0-9_./-]+\.py)", err):
-        i = by_base.get(os.path.basename(path).lower())
-        if i is not None:
-            counts[i] = counts.get(i, 0) + 1
+        file_index = by_base.get(os.path.basename(path).lower())
+        if file_index is not None:
+            counts[file_index] = counts.get(file_index, 0) + 1
     if counts:
         return max(counts, key=counts.get)
     # 2) else any filename mentioned anywhere (last match wins)
     err_low = err.lower()
     best = None
-    for base, i in by_base.items():
+    for base, file_index in by_base.items():
         if base in err_low:
-            best = i
+            best = file_index
     if best is not None:
         return best
     # 3) otherwise re-run the last file we touched (default_idx points one PAST it).

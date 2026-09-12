@@ -71,21 +71,21 @@ def save_checkpoint(path, flow_path, result: RunResult, pending_node: Optional[s
         "path": list(result.path),
         "state": result.state,
         "pending_decision": result.pending,        # the evidence packet for a human, if suspended
-        "steps": [{"node": s.node, "target": s.target, "used": s.info.get("used")}
-                  for s in result.steps],
+        "steps": [{"node": step.node, "target": step.target, "used": step.info.get("used")}
+                  for step in result.steps],
     }
     try:
         data = json.dumps(doc, indent=2)
-    except TypeError as e:
+    except TypeError as exc:
         raise CheckpointError(
-            f"run state is not JSON-serializable ({e}); keep checkpointed state to JSON types "
-            f"(str/int/float/bool/list/dict/None)") from e
+            f"run state is not JSON-serializable ({exc}); keep checkpointed state to JSON types "
+            f"(str/int/float/bool/list/dict/None)") from exc
     _atomic_write(path, data)
 
 
 def load_checkpoint(path) -> dict:
-    with open(path) as f:
-        cp = json.load(f)
+    with open(path) as handle:
+        cp = json.load(handle)
     if cp.get("version") != CHECKPOINT_VERSION:
         raise CheckpointError(f"unsupported checkpoint version {cp.get('version')!r} "
                               f"(this build expects {CHECKPOINT_VERSION})")
@@ -133,8 +133,8 @@ def run_durable(flow_path, agent, checkpoint_path, router=None, human_floor: Opt
             return
         try:
             save_checkpoint(checkpoint_path, flow_path, res, pending_node, type_gate=type_gate)
-        except CheckpointError as e:
-            print(f"  [checkpoint] disabled for this run — {e}")
+        except CheckpointError as exc:
+            print(f"  [checkpoint] disabled for this run — {exc}")
             disabled["v"] = True
 
     return run(graph, agent, router=router, human_floor=human_floor, type_gate=type_gate,
@@ -180,7 +180,7 @@ def resume(checkpoint_path, agent, router=None, choose: Optional[str] = None,
         dnode = decision.get("node", cp.get("pending_node"))
         if dnode not in graph.nodes:
             raise CheckpointError(f"pending node {dnode!r} is not in the flow")
-        valid = [t for t, _ in graph.nodes[dnode].edges]
+        valid = [edge_target for edge_target, _ in graph.nodes[dnode].edges]
         if choose not in valid:
             raise CheckpointError(
                 f"--choose {choose!r} is not an edge target of node {dnode!r}; valid: {valid}")
@@ -195,7 +195,7 @@ def resume(checkpoint_path, agent, router=None, choose: Optional[str] = None,
         wnode = (cp.get("pending_decision") or {}).get("node") or cp.get("pending_node")
         if wnode not in graph.nodes:
             raise CheckpointError(f"pending node {wnode!r} is not in the flow")
-        target = next((t for t, c in graph.nodes[wnode].edges
+        target = next((edge_target for edge_target, c in graph.nodes[wnode].edges
                        if predicates.is_event(c) and predicates.event_name(c) == event), None)
         if target is None:
             avail = [predicates.event_name(c) for _, c in graph.nodes[wnode].edges
@@ -232,8 +232,8 @@ def resume(checkpoint_path, agent, router=None, choose: Optional[str] = None,
 def _prior_steps(cp: dict):
     """Reconstruct lightweight StepLogs from a checkpoint's stored step summaries (outcome text is
     not persisted, so it's best-effort — enough to keep RunResult.path and .steps consistent)."""
-    return [StepLog(s.get("node"), "", s.get("target"), {"used": s.get("used")})
-            for s in cp.get("steps", [])]
+    return [StepLog(step.get("node"), "", step.get("target"), {"used": step.get("used")})
+            for step in cp.get("steps", [])]
 
 
 # --- the human queue (Mission Control) --------------------------------------------------
@@ -290,7 +290,7 @@ def list_queue(qdir=None) -> list:
                 "child_of": child_of,
                 "ts": os.path.getmtime(path),
             })
-    out.sort(key=lambda x: x["ts"], reverse=True)
+    out.sort(key=lambda entry: entry["ts"], reverse=True)
     return out
 
 
