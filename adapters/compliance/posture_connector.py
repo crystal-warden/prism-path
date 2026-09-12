@@ -76,8 +76,8 @@ def required_facts(get_control=None):
     gc = _resolve_get_control(get_control)
     out = {}
     for cid in machine_checkable_controls(get_control):
-        out[cid] = sorted({_dc.FACT_KEYS[o["id"]] for o in gc(cid)["objectives"]
-                           if o["id"] in _dc.FACT_KEYS})
+        out[cid] = sorted({_dc.FACT_KEYS[objective["id"]] for objective in gc(cid)["objectives"]
+                           if objective["id"] in _dc.FACT_KEYS})
     return out
 
 
@@ -91,7 +91,7 @@ def assess(posture, out_dir=None, get_control=None):
     provenance = posture.get("provenance", {})
 
     assessable = assessable_controls(facts, get_control)
-    deferred = [c for c in machine_checkable_controls(get_control) if c not in assessable]
+    deferred = [control_id for control_id in machine_checkable_controls(get_control) if control_id not in assessable]
 
     results = []
     tally = {"met": 0, "partially-met": 0, "not-met": 0}

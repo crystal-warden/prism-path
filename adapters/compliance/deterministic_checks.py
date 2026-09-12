@@ -34,21 +34,21 @@ from typing import Optional
 
 def _flag(facts, key) -> Optional[bool]:
     """A boolean configuration fact: True/False when present, None (unknown) when absent."""
-    v = facts.get(key)
-    return None if v is None else bool(v)
+    fact_value = facts.get(key)
+    return None if fact_value is None else bool(fact_value)
 
 
 def _defined(facts, key) -> Optional[bool]:
     """A 'requirement is defined' fact expressed as a threshold or count: present and > 0 means
     defined (True), present and <= 0 means not defined (False), absent means unknown (None). A
     non-numeric truthy value (e.g. a policy identifier) also counts as defined."""
-    v = facts.get(key)
-    if v is None:
+    fact_value = facts.get(key)
+    if fact_value is None:
         return None
     try:
-        return int(v) > 0
+        return int(fact_value) > 0
     except (TypeError, ValueError):
-        return bool(v)
+        return bool(fact_value)
 
 
 _KINDS = {"flag": _flag, "defined": _defined}
@@ -407,7 +407,7 @@ def evidence_class(objective_id) -> Optional[str]:
 def machine_checkable(control) -> bool:
     """True when every objective of the control has a registered deterministic check."""
     objs = control.get("objectives", [])
-    return bool(objs) and all(o["id"] in CHECKS for o in objs)
+    return bool(objs) and all(objective["id"] in CHECKS for objective in objs)
 
 
 def check_objectives(control, facts) -> dict:
@@ -417,14 +417,14 @@ def check_objectives(control, facts) -> dict:
     merges with the other mechanisms."""
     facts = facts or {}
     out = {}
-    for o in control.get("objectives", []):
-        fn = CHECKS.get(o["id"])
+    for objective in control.get("objectives", []):
+        fn = CHECKS.get(objective["id"])
         if fn is None:
             continue
-        r = fn(facts)
-        if r is None:
+        result = fn(facts)
+        if result is None:
             continue
-        out[o["id"]] = bool(r)
+        out[objective["id"]] = bool(result)
     return out
 
 
@@ -447,7 +447,7 @@ def _evidence_rollup(objective_ids) -> dict:
         rollup = "attested"
     else:
         rollup = "scanned"
-    return {"class": rollup, "by_class": {k: sorted(v) for k, v in by_class.items()}}
+    return {"class": rollup, "by_class": {evidence_class: sorted(objective_ids) for evidence_class, objective_ids in by_class.items()}}
 
 
 def adjudicate_deterministic(control, req) -> Optional[dict]:
@@ -462,15 +462,15 @@ def adjudicate_deterministic(control, req) -> Optional[dict]:
     if not objs:
         return None
     results = {}
-    for o in objs:
-        oid = o["id"]
+    for objective in objs:
+        oid = objective["id"]
         fn = CHECKS.get(oid)
         if fn is None:
             return None
-        r = fn(facts)
-        if r is None:
+        result = fn(facts)
+        if result is None:
             return None
-        results[oid] = r
+        results[oid] = result
     unmet = sorted(oid for oid, ok in results.items() if not ok)
     if not unmet:
         status, gap = "met", "all %d objectives satisfied by configuration facts" % len(results)

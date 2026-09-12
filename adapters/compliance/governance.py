@@ -38,7 +38,7 @@ ORG_OBJECTIVES = [
 
 
 def _scenarios_by_id():
-    return {s["id"]: s for s in _fr.load_scenarios()}
+    return {scenario["id"]: scenario for scenario in _fr.load_scenarios()}
 
 
 def objective_posture(objective, verdicts, scen_index=None):
@@ -48,27 +48,28 @@ def objective_posture(objective, verdicts, scen_index=None):
     scen_index = scen_index if scen_index is not None else _scenarios_by_id()
     rows = []
     for sid in objective["threatened_by"]:
-        s = scen_index.get(sid)
-        if not s:
+        scenario = scen_index.get(sid)
+        if not scenario:
             continue
-        rows.append({"scenario": sid, "name": s["name"], "ale_likely": _fr.ale(s, verdicts)["likely"],
-                     "unmet_controls": sorted(c for c in s.get("controls", []) if verdicts.get(c) != "met")})
-    exposure = sum(r["ale_likely"] for r in rows)
+        rows.append({"scenario": sid, "name": scenario["name"], "ale_likely": _fr.ale(scenario, verdicts)["likely"],
+                     "unmet_controls": sorted(control_id for control_id in scenario.get("controls", [])
+                                              if verdicts.get(control_id) != "met")})
+    exposure = sum(row["ale_likely"] for row in rows)
     appetite = objective["appetite_ale"]
     return {"objective": objective["id"], "statement": objective["statement"],
             "category": objective["category"], "owner": objective["owner"],
             "appetite_ale": appetite, "current_exposure": exposure,
             "within_appetite": exposure <= appetite, "over_by": max(0, exposure - appetite),
-            "scenarios": sorted(rows, key=lambda r: -r["ale_likely"]),
-            "driving_controls": sorted({c for r in rows for c in r["unmet_controls"]})}
+            "scenarios": sorted(rows, key=lambda row: -row["ale_likely"]),
+            "driving_controls": sorted({control_id for row in rows for control_id in row["unmet_controls"]})}
 
 
 def assess_governance(verdicts, objectives=None):
     """Every objective's posture plus a portfolio rollup, grounded in the live control verdicts."""
     objectives = objectives if objectives is not None else ORG_OBJECTIVES
     idx = _scenarios_by_id()
-    postures = [objective_posture(o, verdicts, idx) for o in objectives]
-    within = sum(1 for p in postures if p["within_appetite"])
+    postures = [objective_posture(objective, verdicts, idx) for objective in objectives]
+    within = sum(1 for posture in postures if posture["within_appetite"])
     return {"n_objectives": len(postures), "within_appetite": within,
             "over_appetite": len(postures) - within, "objectives": postures,
             "note": "Exposure is the summed likely ALE of the scenarios threatening each objective, driven "
@@ -89,19 +90,19 @@ def demo(use_llm=False):
     return assess_governance(verdicts)
 
 
-def render_text(r):
-    L = ["Governance & Direction  |  objectives within appetite: %d/%d"
-         % (r["within_appetite"], r["n_objectives"])]
-    for p in r["objectives"]:
-        flag = "WITHIN" if p["within_appetite"] else "OVER by $%s" % format(p["over_by"], ",")
-        L.append("  %s %-52s %s" % (p["objective"], p["statement"][:52], p["category"]))
-        L.append("      owner: %-26s exposure $%-10s appetite $%-9s  -> %s"
-                 % (p["owner"], format(p["current_exposure"], ","), format(p["appetite_ale"], ","), flag))
-        if not p["within_appetite"]:
-            top = p["scenarios"][0]
-            L.append("      top driver: %s ($%s)  unmet controls: %s"
-                     % (top["name"], format(top["ale_likely"], ","), ", ".join(p["driving_controls"][:8])))
-    return "\n".join(L)
+def render_text(assessment):
+    lines = ["Governance & Direction  |  objectives within appetite: %d/%d"
+             % (assessment["within_appetite"], assessment["n_objectives"])]
+    for posture in assessment["objectives"]:
+        flag = "WITHIN" if posture["within_appetite"] else "OVER by $%s" % format(posture["over_by"], ",")
+        lines.append("  %s %-52s %s" % (posture["objective"], posture["statement"][:52], posture["category"]))
+        lines.append("      owner: %-26s exposure $%-10s appetite $%-9s  -> %s"
+                     % (posture["owner"], format(posture["current_exposure"], ","), format(posture["appetite_ale"], ","), flag))
+        if not posture["within_appetite"]:
+            top = posture["scenarios"][0]
+            lines.append("      top driver: %s ($%s)  unmet controls: %s"
+                         % (top["name"], format(top["ale_likely"], ","), ", ".join(posture["driving_controls"][:8])))
+    return "\n".join(lines)
 
 
 if __name__ == "__main__":

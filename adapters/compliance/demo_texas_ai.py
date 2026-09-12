@@ -24,7 +24,7 @@ from adapters.compliance import texas_ai_connector as tx
 
 
 def _config_objs(control):
-    return [o["id"] for o in control["objectives"] if o["mechanism"] == "config"]
+    return [objective["id"] for objective in control["objectives"] if objective["mechanism"] == "config"]
 
 
 def print_actor(actor, facts):
@@ -36,16 +36,16 @@ def print_actor(actor, facts):
         print(f"  e.g. {ex['control_id']}: {ex['reason']}")
     proven, attested = [], []
     for cid in appl["applicable"]:
-        c = ca.get_control(cid)
-        decided = dc.check_objectives(c, facts)
-        for oid in _config_objs(c):
+        control = ca.get_control(cid)
+        decided = dc.check_objectives(control, facts)
+        for oid in _config_objs(control):
             (proven if decided.get(oid) is True else attested).append(oid)
     print(f"  config objectives ENGINE-PROVEN: {proven}")
     print(f"  config objectives still ORG-ATTESTED (outside the decision control plane): {attested}")
 
 
 if __name__ == "__main__":
-    n = ca.use_standard("texas_ai") and None
+    standard_selected = ca.use_standard("texas_ai") and None
     notice = ca.standard_notice()
     print("#" * 76)
     print(notice["notice"])
@@ -53,12 +53,12 @@ if __name__ == "__main__":
 
     facts, receipts = tx.derive_facts()
     print("\n=== real engine receipts (governance decision flow) ===")
-    for r in receipts:
-        print(f"  {r['label']:26} stopped={r['stopped']:11} cause={r['cause']}({r['cause_class']}) "
-              f"ver={r['version']}")
+    for receipt in receipts:
+        print(f"  {receipt['label']:26} stopped={receipt['stopped']:11} cause={receipt['cause']}({receipt['cause_class']}) "
+              f"ver={receipt['version']}")
     print("\n=== config facts derived from those receipts ===")
-    for k, v in facts.items():
-        print(f"  {k} = {v}")
+    for fact_name, fact_value in facts.items():
+        print(f"  {fact_name} = {fact_value}")
     print("  (generative_guardrails_enforced, *_ai_disclosure_delivered are NOT engine-derived:")
     print("   they are outside the decision control plane and remain org-attested.)")
 

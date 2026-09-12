@@ -54,28 +54,28 @@ def operational_performed():
 def documented_coverage():
     """Controls covered by a generated policy template (the documented plane)."""
     covered = set()
-    for f in glob.glob(os.path.join(_HERE, "sop_specs", "texas_*.json")):
-        covered |= set(json.load(open(f))["controls"])
+    for spec_path in glob.glob(os.path.join(_HERE, "sop_specs", "texas_*.json")):
+        covered |= set(json.load(open(spec_path))["controls"])
     return covered
 
 
 def assess_control(cid, config_facts, documented, operational):
-    c = ca.get_control(cid)
+    control = ca.get_control(cid)
     objs = {}
-    for o in c["objectives"]:
-        oid, mech = o["id"], o["mechanism"]
+    for objective in control["objectives"]:
+        oid, mech = objective["id"], objective["mechanism"]
         if mech == "config":
-            m = dc.check_objectives(c, config_facts).get(oid)
-            ev = "engine-proven" if m is True else ("engine-refuted" if m is False else "not-derived(attested)")
+            met = dc.check_objectives(control, config_facts).get(oid)
+            ev = "engine-proven" if met is True else ("engine-refuted" if met is False else "not-derived(attested)")
         elif mech == "operational":
-            m = oid in operational
-            ev = "operational-record" if m else "no-record"
+            met = oid in operational
+            ev = "operational-record" if met else "no-record"
         else:
-            m = cid in documented
-            ev = "policy-provided" if m else "policy-needed"
-        objs[oid] = (m, ev)
-    vals = [m for m, _ in objs.values()]
-    status = "met" if all(v is True for v in vals) else ("partially-met" if any(v is True for v in vals) else "not-met")
+            met = cid in documented
+            ev = "policy-provided" if met else "policy-needed"
+        objs[oid] = (met, ev)
+    vals = [met for met, _ in objs.values()]
+    status = "met" if all(met is True for met in vals) else ("partially-met" if any(met is True for met in vals) else "not-met")
     return status, objs
 
 
@@ -103,7 +103,7 @@ def main():
           f"({'your file' if OPERATIONAL_COMPLETIONS_PATH else 'built-in sample'})")
 
     config_facts, receipts = tx.derive_facts()
-    print(f"Config plane (engine-derived): {sum(1 for v in config_facts.values() if v)} facts proven "
+    print(f"Config plane (engine-derived): {sum(1 for fact_value in config_facts.values() if fact_value)} facts proven "
           f"from {len(receipts)} receipt(s)")
 
     for actor in ACTORS:

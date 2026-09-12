@@ -10,11 +10,11 @@ from adapters.compliance import cmmc
 def _fixed(status_by_id=None, default="met"):
     """A full_determination stand-in that returns a chosen status per control id (default otherwise)."""
     status_by_id = status_by_id or {}
-    def f(control, req, completions=None, as_of=None, use_llm=False):
+    def determination_stub(control, req, completions=None, as_of=None, use_llm=False):
         cid = req.get("control_id") or control.get("id")
         return {"status": status_by_id.get(cid, default), "coverage": {}, "objectives_total": 1,
                 "undetermined_objective_ids": [], "unmet_objective_ids": []}
-    return f
+    return determination_stub
 
 
 def setup_function(_):
@@ -24,7 +24,7 @@ def setup_function(_):
 def test_level_membership_is_real():
     allc = ca._catalog()["controls"]
     l1 = cmmc.level_controls(1)
-    assert len(l1) == 17 and all(c in allc for c in l1)     # every L1 practice exists in the catalog
+    assert len(l1) == 17 and all(control_id in allc for control_id in l1)     # every L1 practice exists in the catalog
     assert len(cmmc.level_controls(2)) == 110               # L2 is the full Rev 2 set
     assert cmmc.level_controls(3) == cmmc.L3_800172_SUBSET and len(cmmc.level_controls(3)) == 24  # L3 enhanced
 
@@ -51,7 +51,7 @@ def test_insufficient_scores_as_not_met(monkeypatch):
 def test_open_high_value_control_blocks_poam(monkeypatch):
     # everything met except one requirement worth more than 1 point -> no conditional status
     weights = ca.catalog_weights()
-    high = next(c for c, w in weights.items() if w and w > 1)
+    high = next(control_id for control_id, weight in weights.items() if weight and weight > 1)
     monkeypatch.setattr(cmmc._un, "full_determination", _fixed({high: "not-met"}, default="met"))
     l2 = cmmc.assess_level(2, {"facts": {}})
     assert l2["status"] != "met"
@@ -62,7 +62,7 @@ def test_open_high_value_control_blocks_poam(monkeypatch):
 def test_only_one_point_open_can_be_conditional(monkeypatch):
     # a single 1-point requirement open, score still >= 88 -> POA&M-eligible conditional status
     weights = ca.catalog_weights()
-    one = next(c for c, w in weights.items() if w == 1)
+    one = next(control_id for control_id, weight in weights.items() if weight == 1)
     monkeypatch.setattr(cmmc._un, "full_determination", _fixed({one: "not-met"}, default="met"))
     l2 = cmmc.assess_level(2, {"facts": {}})
     assert l2["poam"]["blocking_high_value_controls"] == []

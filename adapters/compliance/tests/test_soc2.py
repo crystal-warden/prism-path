@@ -24,25 +24,27 @@ def test_soc2_crosswalk_ids_are_all_real():
     ca.use_standard("soc2_tsc")
     tgt = set(ca._catalog()["controls"])
     ca.use_standard("nist_800171_r2")
-    x = cw.load_crosswalk("nist_800171_r2__soc2_tsc")
-    assert cw.coverage(x)["complete"] is False
-    bad_src = [e["a"] for e in x["edges"] if e["a"] not in src]
-    bad_tgt = [b for e in x["edges"] for b in e["b"] if b not in tgt]
+    crosswalk = cw.load_crosswalk("nist_800171_r2__soc2_tsc")
+    assert cw.coverage(crosswalk)["complete"] is False
+    bad_src = [edge["a"] for edge in crosswalk["edges"] if edge["a"] not in src]
+    bad_tgt = [target_control for edge in crosswalk["edges"] for target_control in edge["b"] if target_control not in tgt]
     assert bad_src == [] and bad_tgt == []
 
 
 def test_soc2_criterion_is_fail_closed_over_its_800171_sources():
-    x = cw.load_crosswalk("nist_800171_r2__soc2_tsc")
-    empty = cw.propagate(x, "nist_800171_r2", {})
-    multi = next(t for t, v in empty["controls"].items() if len(v["from"]) >= 2)   # a criterion with 2+ sources
+    crosswalk = cw.load_crosswalk("nist_800171_r2__soc2_tsc")
+    empty = cw.propagate(crosswalk, "nist_800171_r2", {})
+    # a criterion with 2+ sources
+    multi = next(target_control for target_control, propagated in empty["controls"].items()
+                 if len(propagated["from"]) >= 2)
     srcs = empty["controls"][multi]["from"]
-    all_met = cw.propagate(x, "nist_800171_r2", {s: "met" for s in srcs})
+    all_met = cw.propagate(crosswalk, "nist_800171_r2", {source_control: "met" for source_control in srcs})
     assert all_met["controls"][multi]["verdict"] == "met"
-    one_bad = cw.propagate(x, "nist_800171_r2", dict({s: "met" for s in srcs}, **{srcs[0]: "not-met"}))
+    one_bad = cw.propagate(crosswalk, "nist_800171_r2", dict({source_control: "met" for source_control in srcs}, **{srcs[0]: "not-met"}))
     assert one_bad["controls"][multi]["verdict"] == "not-met"
 
 
 def test_multi_framework_now_reaches_soc2():
-    r = mf.demo()
-    reached = {f["framework"] for f in r["frameworks_reached"]}
+    posture = mf.demo()
+    reached = {framework["framework"] for framework in posture["frameworks_reached"]}
     assert "soc2_tsc" in reached

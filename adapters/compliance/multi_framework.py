@@ -37,9 +37,9 @@ def assess_environment(posture, completions=None, as_of=None, use_llm=False):
         verdicts[cid] = det["status"]
 
     tally = {}
-    for v in verdicts.values():
-        tally[v] = tally.get(v, 0) + 1
-    records = [{"control_id": c, "status": v} for c, v in verdicts.items()]
+    for verdict in verdicts.values():
+        tally[verdict] = tally.get(verdict, 0) + 1
+    records = [{"control_id": control_id, "status": verdict} for control_id, verdict in verdicts.items()]
     weights = _ca.catalog_weights()
     sprs = _rollup.sprs_partial(records, weights) if weights else {}
     risk = _fr.risk_register(verdicts)
@@ -48,11 +48,11 @@ def assess_environment(posture, completions=None, as_of=None, use_llm=False):
 
     reached = []
     for name in _cw.list_crosswalks():
-        x = _cw.load_crosswalk(name)
-        if "nist_800171_r2" not in (x["a"], x["b"]):
+        crosswalk = _cw.load_crosswalk(name)
+        if "nist_800171_r2" not in (crosswalk["a"], crosswalk["b"]):
             continue
-        rep = _cw.propagate(x, "nist_800171_r2", verdicts)
-        cov = _cw.coverage(x)
+        rep = _cw.propagate(crosswalk, "nist_800171_r2", verdicts)
+        cov = _cw.coverage(crosswalk)
         reached.append({"framework": rep["target_framework"], "crosswalk": name,
                         "n_targets": rep["n_targets"], "tally": rep["tally"],
                         "complete": cov["complete"], "authority": cov["authority"]})
@@ -64,8 +64,8 @@ def assess_environment(posture, completions=None, as_of=None, use_llm=False):
         "sprs": {"score_if_all_assessed": sprs.get("ceiling_if_unassessed_all_met"),
                  "base": sprs.get("base"), "caveat": sprs.get("caveat")},
         "fair": {"aggregate_ale": risk["aggregate_ale"]},
-        "cmmc": [{"level": l["level"], "name": l["name"], "status": l["status"],
-                  "sprs_score": l.get("sprs_score")} for l in cmmc_levels],
+        "cmmc": [{"level": level["level"], "name": level["name"], "status": level["status"],
+                  "sprs_score": level.get("sprs_score")} for level in cmmc_levels],
         "frameworks_reached": reached,
     }
 
@@ -83,21 +83,22 @@ def demo(use_llm=False):
     return assess_environment(posture, completions=completions, as_of="2026-09-03", use_llm=use_llm)
 
 
-def render_text(r):
-    L = ["Multi-framework posture  |  boundary: %s  |  assessed: %s"
-         % (r["boundary"], r["assessed_standard"])]
-    t = r["nist_800171"]["tally"]
-    L.append("  NIST 800-171 R2 : %d controls  %s" % (r["nist_800171"]["n_controls"], t))
-    L.append("  SPRS            : %s / %s   |   FAIR aggregate ALE: $%s"
-             % (r["sprs"]["score_if_all_assessed"], r["sprs"].get("base"),
-                format(r["fair"]["aggregate_ale"]["likely"], ",")))
-    for c in r["cmmc"]:
-        extra = ("  SPRS %s" % c["sprs_score"]) if c["sprs_score"] is not None else ""
-        L.append("  CMMC L%-2d %-12s: %s%s" % (c["level"], c["name"], c["status"].upper(), extra))
-    for f in r["frameworks_reached"]:
-        L.append("  -> %-16s: %d controls reached  %s  [%s]"
-                 % (f["framework"], f["n_targets"], f["tally"], "complete" if f["complete"] else "partial"))
-    return "\n".join(L)
+def render_text(posture):
+    lines = ["Multi-framework posture  |  boundary: %s  |  assessed: %s"
+             % (posture["boundary"], posture["assessed_standard"])]
+    tally = posture["nist_800171"]["tally"]
+    lines.append("  NIST 800-171 R2 : %d controls  %s" % (posture["nist_800171"]["n_controls"], tally))
+    lines.append("  SPRS            : %s / %s   |   FAIR aggregate ALE: $%s"
+                 % (posture["sprs"]["score_if_all_assessed"], posture["sprs"].get("base"),
+                    format(posture["fair"]["aggregate_ale"]["likely"], ",")))
+    for level in posture["cmmc"]:
+        extra = ("  SPRS %s" % level["sprs_score"]) if level["sprs_score"] is not None else ""
+        lines.append("  CMMC L%-2d %-12s: %s%s" % (level["level"], level["name"], level["status"].upper(), extra))
+    for framework in posture["frameworks_reached"]:
+        lines.append("  -> %-16s: %d controls reached  %s  [%s]"
+                     % (framework["framework"], framework["n_targets"], framework["tally"],
+                        "complete" if framework["complete"] else "partial"))
+    return "\n".join(lines)
 
 
 if __name__ == "__main__":

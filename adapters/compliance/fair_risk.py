@@ -29,7 +29,7 @@ def load_scenarios():
 
 def verdicts_from_results(results):
     """Convenience: build {control_id: status} from a posture_connector / assessment result list."""
-    return {r["control_id"]: r["status"] for r in results}
+    return {result["control_id"]: result["status"] for result in results}
 
 
 def vulnerability(scenario, verdicts):
@@ -40,15 +40,15 @@ def vulnerability(scenario, verdicts):
     controls = scenario.get("controls", [])
     if not controls:
         return 1.0
-    unmet = sum(1 for c in controls if verdicts.get(c) != "met")
+    unmet = sum(1 for control_id in controls if verdicts.get(control_id) != "met")
     return max(RESIDUAL_VULN, round(unmet / len(controls), 4))
 
 
 def ale(scenario, verdicts):
     """Annualized Loss Expectancy range (min/likely/max) = TEF x Vulnerability x Loss Magnitude."""
-    v = vulnerability(scenario, verdicts)
+    vulnerability_factor = vulnerability(scenario, verdicts)
     tef, loss = scenario["tef"], scenario["loss"]
-    return {k: round(tef[k] * v * loss[k]) for k in ("min", "likely", "max")}
+    return {bound: round(tef[bound] * vulnerability_factor * loss[bound]) for bound in ("min", "likely", "max")}
 
 
 def risk_register(verdicts, scenarios=None):
@@ -56,11 +56,12 @@ def risk_register(verdicts, scenarios=None):
     verdicts: {control_id: status}. Reproducible given the same verdicts."""
     scenarios = scenarios if scenarios is not None else load_scenarios()
     rows = []
-    for s in scenarios:
-        rows.append({"id": s["id"], "name": s["name"],
-                     "vulnerability": vulnerability(s, verdicts), "ale": ale(s, verdicts),
-                     "unmet_controls": sorted(c for c in s.get("controls", []) if verdicts.get(c) != "met")})
-    agg = {k: sum(r["ale"][k] for r in rows) for k in ("min", "likely", "max")}
+    for scenario in scenarios:
+        rows.append({"id": scenario["id"], "name": scenario["name"],
+                     "vulnerability": vulnerability(scenario, verdicts), "ale": ale(scenario, verdicts),
+                     "unmet_controls": sorted(control_id for control_id in scenario.get("controls", [])
+                                              if verdicts.get(control_id) != "met")})
+    agg = {bound: sum(row["ale"][bound] for row in rows) for bound in ("min", "likely", "max")}
     return {"scenarios": rows, "aggregate_ale": agg,
             "note": "ALE is an estimate; TEF and loss magnitude require calibration. Vulnerability is "
                     "computed from the deterministic compliance verdicts, so the ranking is defensible "

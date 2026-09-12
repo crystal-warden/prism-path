@@ -25,14 +25,14 @@ CROSSWALK_DIR = os.path.join(HERE, "crosswalks")
 
 
 def list_crosswalks():
-    return sorted(os.path.basename(p)[:-5] for p in glob.glob(os.path.join(CROSSWALK_DIR, "*.json")))
+    return sorted(os.path.basename(path)[:-5] for path in glob.glob(os.path.join(CROSSWALK_DIR, "*.json")))
 
 
 def load_crosswalk(name):
     cw = json.load(open(os.path.join(CROSSWALK_DIR, name + ".json")))
-    for k in ("a", "b", "edges"):
-        if k not in cw:
-            raise ValueError("crosswalk %s missing required key %r" % (name, k))
+    for required_key in ("a", "b", "edges"):
+        if required_key not in cw:
+            raise ValueError("crosswalk %s missing required key %r" % (name, required_key))
     return cw
 
 
@@ -45,9 +45,9 @@ def _combine(statuses):
     (None) counts as unproven, i.e. insufficient, never met."""
     if not statuses:
         return "insufficient"
-    if any(s == "not-met" for s in statuses):
+    if any(status == "not-met" for status in statuses):
         return "not-met"
-    if any(s in (None, "insufficient", "partially-met") for s in statuses):
+    if any(status in (None, "insufficient", "partially-met") for status in statuses):
         return "insufficient"
     return "met"
 
@@ -55,22 +55,22 @@ def _combine(statuses):
 def propagate(cw, from_fw, verdicts):
     """Propagate verdicts on `from_fw` to the other framework in the crosswalk. Returns per mapped
     target {verdict, from: [source controls]} plus a tally, fail closed. Unmapped targets are omitted."""
-    a, b = cw["a"], cw["b"]
-    if from_fw == a:
-        target_fw, groups = b, {}
-        for e in cw["edges"]:
-            for bc in e["b"]:
-                groups.setdefault(bc, set()).add(e["a"])
-    elif from_fw == b:
-        target_fw = a
-        groups = {e["a"]: set(e["b"]) for e in cw["edges"]}
+    framework_a, framework_b = cw["a"], cw["b"]
+    if from_fw == framework_a:
+        target_fw, groups = framework_b, {}
+        for edge in cw["edges"]:
+            for bc in edge["b"]:
+                groups.setdefault(bc, set()).add(edge["a"])
+    elif from_fw == framework_b:
+        target_fw = framework_a
+        groups = {edge["a"]: set(edge["b"]) for edge in cw["edges"]}
     else:
-        raise ValueError("framework %r not in crosswalk %s (%s <-> %s)" % (from_fw, cw.get("id"), a, b))
+        raise ValueError("framework %r not in crosswalk %s (%s <-> %s)" % (from_fw, cw.get("id"), framework_a, framework_b))
     controls, tally = {}, {}
     for tgt, srcs in groups.items():
-        v = _combine([verdicts.get(s) for s in sorted(srcs)])
-        controls[tgt] = {"verdict": v, "from": sorted(srcs)}
-        tally[v] = tally.get(v, 0) + 1
+        verdict = _combine([verdicts.get(source_control) for source_control in sorted(srcs)])
+        controls[tgt] = {"verdict": verdict, "from": sorted(srcs)}
+        tally[verdict] = tally.get(verdict, 0) + 1
     return {"crosswalk": cw.get("id"), "authority": cw.get("authority"),
             "source_framework": from_fw, "target_framework": target_fw,
             "n_targets": len(controls), "tally": tally, "controls": controls}
@@ -78,8 +78,8 @@ def propagate(cw, from_fw, verdicts):
 
 def coverage(cw):
     """How much of each side the crosswalk touches, and whether it is complete against a known size."""
-    a_ctrls = {e["a"] for e in cw["edges"]}
-    b_ctrls = {b for e in cw["edges"] for b in e["b"]}
+    a_ctrls = {edge["a"] for edge in cw["edges"]}
+    b_ctrls = {target_control for edge in cw["edges"] for target_control in edge["b"]}
     return {"crosswalk": cw.get("id"), "authority": cw.get("authority"), "complete": cw.get("complete", False),
             "a": cw["a"], "a_controls_mapped": len(a_ctrls),
             "b": cw["b"], "b_controls_mapped": len(b_ctrls), "edges": len(cw["edges"])}
@@ -108,15 +108,15 @@ def demo():
     return out
 
 
-def render_text(d):
-    L = ["Crosswalk propagation from %s (%d controls assessed):" % (d["source"], d["assessed"])]
-    for r in d["reports"]:
-        cov = r["coverage"]
-        L.append("  -> %-18s %d targets  %s  [%s%s]"
-                 % (r["to"], r["n_targets"], r["tally"],
-                    "complete" if cov["complete"] else "partial",
-                    "" if cov["complete"] else " %d/%d mapped" % (cov["a_controls_mapped"], cov["b_controls_mapped"])))
-    return "\n".join(L)
+def render_text(report):
+    lines = ["Crosswalk propagation from %s (%d controls assessed):" % (report["source"], report["assessed"])]
+    for framework_report in report["reports"]:
+        cov = framework_report["coverage"]
+        lines.append("  -> %-18s %d targets  %s  [%s%s]"
+                     % (framework_report["to"], framework_report["n_targets"], framework_report["tally"],
+                        "complete" if cov["complete"] else "partial",
+                        "" if cov["complete"] else " %d/%d mapped" % (cov["a_controls_mapped"], cov["b_controls_mapped"])))
+    return "\n".join(lines)
 
 
 if __name__ == "__main__":

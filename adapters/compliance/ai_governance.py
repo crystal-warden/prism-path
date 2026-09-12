@@ -31,9 +31,9 @@ def assess(posture, completions=None, as_of=None, use_llm=False):
         det = _un.full_determination(control, dict(req_base, control_id=cid),
                                      completions=completions, as_of=as_of, use_llm=use_llm)
         tally[det["status"]] = tally.get(det["status"], 0) + 1
-        for m, objs in det["coverage"].items():
-            if m in by_mech:
-                by_mech[m] += len(objs)
+        for mechanism, objs in det["coverage"].items():
+            if mechanism in by_mech:
+                by_mech[mechanism] += len(objs)
         controls.append({"control_id": cid, "title": control["title"], "verdict": det["status"],
                          "coverage": det["coverage"]})
     return {"standard": "ai_governance", "boundary": boundary, "n_controls": len(controls),
@@ -49,14 +49,18 @@ def demo(use_llm=False):
     return assess(_reg.load_sample("example_org"), as_of="2026-09-03", use_llm=use_llm)
 
 
-def render_text(r):
-    L = ["AI governance assessment  |  boundary: %s" % r["boundary"]]
-    L.append("  controls: %d   verdicts: %s" % (r["n_controls"], r["tally"]))
-    L.append("  objectives decided by: %s" % r["by_mechanism"])
-    for c in r["controls"]:
-        cov = ", ".join("%s:%d" % (m, len(o)) for m, o in c["coverage"].items() if o and m != "undetermined")
-        L.append("  %-5s %-13s %-34s [%s]" % (c["control_id"], c["verdict"], c["title"][:34], cov or "no config/op evidence"))
-    return "\n".join(L)
+def render_text(assessment):
+    lines = ["AI governance assessment  |  boundary: %s" % assessment["boundary"]]
+    lines.append("  controls: %d   verdicts: %s" % (assessment["n_controls"], assessment["tally"]))
+    lines.append("  objectives decided by: %s" % assessment["by_mechanism"])
+    for control in assessment["controls"]:
+        cov = ", ".join("%s:%d" % (mechanism, len(objective_ids))
+                        for mechanism, objective_ids in control["coverage"].items()
+                        if objective_ids and mechanism != "undetermined")
+        lines.append("  %-5s %-13s %-34s [%s]"
+                     % (control["control_id"], control["verdict"], control["title"][:34],
+                        cov or "no config/op evidence"))
+    return "\n".join(lines)
 
 
 if __name__ == "__main__":

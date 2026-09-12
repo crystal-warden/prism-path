@@ -34,7 +34,7 @@ def full_determination(control, req=None, completions=None, as_of=None, use_llm=
         for oid, ev in _ct.operational_evidence(control["id"], completions, as_of).items():
             per.setdefault(oid, {"met": bool(ev["evidenced"]), "by": "operational"})
 
-    objectives = [o["id"] for o in control.get("objectives", [])]
+    objectives = [objective["id"] for objective in control.get("objectives", [])]
     undetermined = [oid for oid in objectives if oid not in per]
 
     if undetermined and use_llm:
@@ -50,7 +50,7 @@ def full_determination(control, req=None, completions=None, as_of=None, use_llm=
             undetermined = [oid for oid in objectives if oid not in per]
 
     undetermined = sorted(undetermined)
-    unmet = sorted(oid for oid, r in per.items() if not r["met"])
+    unmet = sorted(oid for oid, resolution in per.items() if not resolution["met"])
 
     if undetermined:
         status = "insufficient"
@@ -62,9 +62,9 @@ def full_determination(control, req=None, completions=None, as_of=None, use_llm=
         status = "not-met"
 
     coverage = {
-        "config": sorted(o for o, r in per.items() if r["by"] == "config"),
-        "operational": sorted(o for o, r in per.items() if r["by"] == "operational"),
-        "llm": sorted(o for o, r in per.items() if r["by"] == "llm"),
+        "config": sorted(objective_id for objective_id, resolution in per.items() if resolution["by"] == "config"),
+        "operational": sorted(objective_id for objective_id, resolution in per.items() if resolution["by"] == "operational"),
+        "llm": sorted(objective_id for objective_id, resolution in per.items() if resolution["by"] == "llm"),
         "undetermined": undetermined,
     }
     return {"control_id": control["id"], "status": status,

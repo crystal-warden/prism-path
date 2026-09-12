@@ -63,7 +63,7 @@ def obligation_status(obligation, verdicts_by_framework):
     naming the controls that breach it. verdicts_by_framework: {framework: {control_id: status}}."""
     fw, ctrls = _required_controls(obligation["requires"])
     verdicts = verdicts_by_framework.get(fw, {})
-    breaching = sorted(c for c in ctrls if verdicts.get(c) != "met")
+    breaching = sorted(control_id for control_id in ctrls if verdicts.get(control_id) != "met")
     return {"obligation": obligation["id"], "name": obligation["name"], "type": obligation["type"],
             "citation": obligation["citation"], "imposed_by": obligation["imposed_by"],
             "framework": fw, "required_controls": len(ctrls), "met": len(ctrls) - len(breaching),
@@ -76,8 +76,8 @@ def assess_obligations(verdicts_by_framework, obligations=None):
     """Every obligation's status plus a rollup. One assessment's verdicts (and their crosswalk
     propagations) can satisfy obligations across several frameworks."""
     obligations = obligations if obligations is not None else OBLIGATIONS
-    rows = [obligation_status(o, verdicts_by_framework) for o in obligations]
-    met = sum(1 for r in rows if r["status"] == "met")
+    rows = [obligation_status(obligation, verdicts_by_framework) for obligation in obligations]
+    met = sum(1 for row in rows if row["status"] == "met")
     return {"n_obligations": len(rows), "met": met, "breached": len(rows) - met, "obligations": rows,
             "note": "An obligation is met only when every control it requires is met. Required evidence "
                     "may arrive directly or through a crosswalk (e.g. a SOC 2 obligation answered from the "
@@ -89,10 +89,10 @@ def breaches_for_control(control_id, obligations=None):
     control shows the obligations at risk)."""
     obligations = obligations if obligations is not None else OBLIGATIONS
     out = []
-    for o in obligations:
-        fw, ctrls = _required_controls(o["requires"])
+    for obligation in obligations:
+        fw, ctrls = _required_controls(obligation["requires"])
         if fw == "nist_800171_r2" and control_id in ctrls:
-            out.append({"obligation": o["id"], "citation": o["citation"]})
+            out.append({"obligation": obligation["id"], "citation": obligation["citation"]})
     return out
 
 
@@ -110,20 +110,20 @@ def demo(use_llm=False):
     v171 = {cid: _un.full_determination(_ca.get_control(cid), dict(req_base, control_id=cid))["status"]
             for cid in _ca._catalog()["controls"]}
     soc2 = _cw.propagate(_cw.load_crosswalk("nist_800171_r2__soc2_tsc"), "nist_800171_r2", v171)
-    vsoc2 = {c: v["verdict"] for c, v in soc2["controls"].items()}
+    vsoc2 = {control_id: control_report["verdict"] for control_id, control_report in soc2["controls"].items()}
     aig = _aig.assess(_reg.load_sample("example_org"))
-    vaig = {c["control_id"]: c["verdict"] for c in aig["controls"]}
+    vaig = {control["control_id"]: control["verdict"] for control in aig["controls"]}
     _ca.use_standard("nist_800171_r2")
     return assess_obligations({"nist_800171_r2": v171, "soc2_tsc": vsoc2, "ai_governance": vaig})
 
 
-def render_text(r):
-    L = ["Obligations  |  met: %d/%d" % (r["met"], r["n_obligations"])]
-    for o in r["obligations"]:
-        flag = "MET" if o["status"] == "met" else "BREACHED (%d of %d controls open)" % (
-            o["required_controls"] - o["met"], o["required_controls"])
-        L.append("  %-14s %-8s %-30s %s" % (o["citation"], o["type"], o["name"][:30], flag))
-    return "\n".join(L)
+def render_text(assessment):
+    lines = ["Obligations  |  met: %d/%d" % (assessment["met"], assessment["n_obligations"])]
+    for obligation in assessment["obligations"]:
+        flag = "MET" if obligation["status"] == "met" else "BREACHED (%d of %d controls open)" % (
+            obligation["required_controls"] - obligation["met"], obligation["required_controls"])
+        lines.append("  %-14s %-8s %-30s %s" % (obligation["citation"], obligation["type"], obligation["name"][:30], flag))
+    return "\n".join(lines)
 
 
 if __name__ == "__main__":

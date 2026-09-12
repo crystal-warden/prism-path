@@ -12,10 +12,10 @@ def test_plan_ranks_gaps_and_rolls_up():
     assert plan["n_gaps"] > 0
     assert [it["rank"] for it in plan["items"]] == list(range(1, len(plan["items"]) + 1))  # contiguous ranks
     for it in plan["items"]:
-        assert it["remediation"] and all("mechanism" in p for p in it["remediation"])      # a fix path each
+        assert it["remediation"] and all("mechanism" in step for step in it["remediation"])      # a fix path each
         assert "priority_score" in it
-    r = plan["rollup"]
-    assert r["sprs_recoverable"] > 0 and r["ale_reducible_likely"] > 0
+    rollup = plan["rollup"]
+    assert rollup["sprs_recoverable"] > 0 and rollup["ale_reducible_likely"] > 0
 
 
 def test_priority_is_ordered_and_favors_value():
@@ -28,7 +28,7 @@ def test_priority_is_ordered_and_favors_value():
 
 def test_all_met_has_no_gaps():
     ca.use_standard("nist_800171_r2")
-    allmet = {c: "met" for c in ca._catalog()["controls"]}
+    allmet = {control_id: "met" for control_id in ca._catalog()["controls"]}
     plan = rem.remediation_plan(allmet)
     assert plan["n_gaps"] == 0 and plan["rollup"]["sprs_recoverable"] == 0
 

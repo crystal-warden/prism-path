@@ -45,7 +45,7 @@ def test_newly_covered_controls_are_machine_checkable(cid):
 def test_total_machine_checkable_control_count():
     ca.use_standard("nist_800171_r2")
     cat = ca._catalog()
-    checkable = [cid for cid, c in cat["controls"].items() if dc.machine_checkable({"id": cid, **c})]
+    checkable = [cid for cid, control in cat["controls"].items() if dc.machine_checkable({"id": cid, **control})]
     assert len(checkable) >= 17
     for cid in NEWLY_COVERED_CONTROLS + PREVIOUSLY_COVERED_CONTROLS:
         assert cid in checkable

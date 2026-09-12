@@ -18,17 +18,17 @@ UUID_V5 = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[
     ["met", "not-met", "partially-met"],
 ])
 def test_all_formats_valid(statuses):
-    recs = [record("3.1.%d" % (i + 1), "C%d" % i, s, [] if s == "met" else ["3.1.%d[a]" % (i + 1)])
-            for i, s in enumerate(statuses)]
+    recs = [record("3.1.%d" % (index + 1), "C%d" % index, status, [] if status == "met" else ["3.1.%d[a]" % (index + 1)])
+            for index, status in enumerate(statuses)]
     out = emit.emit(recs, fmt="both", now=FIXED_NOW)
-    for name, r in out.items():
-        assert r["valid"] is True, (name, r["errors"][:4])
+    for name, emission in out.items():
+        assert emission["valid"] is True, (name, emission["errors"][:4])
 
 
 def test_empty_results_still_valid():
     out = emit.emit([], fmt="both", now=FIXED_NOW)
-    for name, r in out.items():
-        assert r["valid"] is True, (name, r["errors"][:4])
+    for name, emission in out.items():
+        assert emission["valid"] is True, (name, emission["errors"][:4])
 
 
 def test_all_met_poam_has_placeholder_item():
@@ -77,30 +77,30 @@ def test_cdx_missing_bomformat_rejected(records):
 def test_ar_embeds_every_manifest(records):
     doc = emit.emit_oscal_ar(records, now=FIXED_NOW)
     blob = json.dumps(doc)
-    for r in records:
-        assert r["manifest"]["manifest_hash"] in blob
+    for record in records:
+        assert record["manifest"]["manifest_hash"] in blob
 
 
 def test_cdx_embeds_every_manifest(records):
     doc = emit.emit_cyclonedx(records, now=FIXED_NOW)
     blob = json.dumps(doc)
-    for r in records:
-        assert r["manifest"]["manifest_hash"] in blob
+    for record in records:
+        assert record["manifest"]["manifest_hash"] in blob
 
 
 def test_poam_embeds_only_open_controls(records):
     doc = emit.emit_oscal_poam(records, now=FIXED_NOW)
     blob = json.dumps(doc)
-    for r in records:
-        present = r["manifest"]["manifest_hash"] in blob
-        assert present == (r["status"] != "met")               # met controls excluded from POA&M
+    for record in records:
+        present = record["manifest"]["manifest_hash"] in blob
+        assert present == (record["status"] != "met")               # met controls excluded from POA&M
 
 
 # ---------------- uuid determinism + RFC-4122 v5 ----------------
 def test_emit_is_deterministic(records):
-    a = json.dumps(emit.emit(records, "both", now=FIXED_NOW, do_validate=False))
-    b = json.dumps(emit.emit(records, "both", now=FIXED_NOW, do_validate=False))
-    assert a == b
+    first = json.dumps(emit.emit(records, "both", now=FIXED_NOW, do_validate=False))
+    second = json.dumps(emit.emit(records, "both", now=FIXED_NOW, do_validate=False))
+    assert first == second
 
 
 def test_poam_uuid_is_v5(records):
@@ -111,23 +111,23 @@ def test_poam_uuid_is_v5(records):
 
 
 def test_different_records_different_uuid():
-    a = emit.emit_oscal_poam([record("3.1.1", "C", "not-met", ["x"])], now=FIXED_NOW)
-    b = emit.emit_oscal_poam([record("3.1.2", "C", "not-met", ["x"])], now=FIXED_NOW)
-    assert a["plan-of-action-and-milestones"]["uuid"] != b["plan-of-action-and-milestones"]["uuid"]
+    first = emit.emit_oscal_poam([record("3.1.1", "C", "not-met", ["x"])], now=FIXED_NOW)
+    second = emit.emit_oscal_poam([record("3.1.2", "C", "not-met", ["x"])], now=FIXED_NOW)
+    assert first["plan-of-action-and-milestones"]["uuid"] != second["plan-of-action-and-milestones"]["uuid"]
 
 
 # ---------------- token-safe finding target ids ----------------
 def test_finding_target_id_is_token_safe(records):
     doc = emit.emit_oscal_ar(records, now=FIXED_NOW)
-    for f in doc["assessment-results"]["results"][0]["findings"]:
-        tid = f["target"]["target-id"]
+    for finding in doc["assessment-results"]["results"][0]["findings"]:
+        tid = finding["target"]["target-id"]
         assert re.match(r"^[A-Za-z_]", tid), tid                # OSCAL TokenDatatype must not start with a digit
 
 
 # ---------------- cyclonedx conformance mapping ----------------
 def test_cdx_conformance_scores(records):
     doc = emit.emit_cyclonedx(records, now=FIXED_NOW)
-    by_req = {m["requirement"]: m["conformance"]["score"] for m in doc["declarations"]["attestations"][0]["map"]}
+    by_req = {mapping["requirement"]: mapping["conformance"]["score"] for mapping in doc["declarations"]["attestations"][0]["map"]}
     assert by_req["req-3.1.1"] == 1.0                            # met
     assert by_req["req-3.1.5"] == 0.0                            # not-met
     assert by_req["req-3.1.12"] == 0.0                           # partially-met -> non-conformant

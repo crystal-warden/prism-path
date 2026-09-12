@@ -28,6 +28,6 @@ def assess_one(req, out_dir):
 
 if __name__ == "__main__":
     req_dir = os.path.join(HERE, "requests"); out_dir = os.path.join(HERE, "out")
-    results = [assess_one(r, out_dir) for r in ca.iter_requests(req_dir)]
+    results = [assess_one(request, out_dir) for request in ca.iter_requests(req_dir)]
     print(json.dumps(results, indent=1))
     print("\ncatalog fingerprint:", ca.catalog_hash())

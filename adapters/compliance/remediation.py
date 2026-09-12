@@ -45,9 +45,9 @@ def _sop_index():
 def _ale_reduction_if_met(cid, verdicts, scenarios):
     """The marginal drop in likely annualized loss if this one control flips to met."""
     total = 0
-    for s in scenarios:
-        if cid in s.get("controls", []):
-            total += _fr.ale(s, verdicts)["likely"] - _fr.ale(s, dict(verdicts, **{cid: "met"}))["likely"]
+    for scenario in scenarios:
+        if cid in scenario.get("controls", []):
+            total += _fr.ale(scenario, verdicts)["likely"] - _fr.ale(scenario, dict(verdicts, **{cid: "met"}))["likely"]
     return total
 
 
@@ -55,12 +55,12 @@ def _remediation_path(cid, control, sop_idx):
     """How to close the gap: configuration (a scanner fact), a policy (a SOP), an operational task, or
     evidence for a prose objective. Multiple may apply for a mixed control."""
     paths = []
-    facts = sorted({_dc.FACT_KEYS[o["id"]] for o in control.get("objectives", []) if o["id"] in _dc.FACT_KEYS})
+    facts = sorted({_dc.FACT_KEYS[objective["id"]] for objective in control.get("objectives", []) if objective["id"] in _dc.FACT_KEYS})
     if facts:
         paths.append({"mechanism": "config", "action": "Set the configuration the scanner reads", "detail": facts})
     if cid in sop_idx:
         paths.append({"mechanism": "documented", "action": "Generate and adopt the policy", "detail": sop_idx[cid]})
-    tasks = [t["id"] for t in _ct.tasks_for(cid)]
+    tasks = [task["id"] for task in _ct.tasks_for(cid)]
     if tasks:
         paths.append({"mechanism": "operational", "action": "Perform the task and retain the record", "detail": tasks})
     if not paths:
@@ -76,9 +76,9 @@ def remediation_plan(verdicts, boundary="(unspecified)", top=None):
     scenarios = _fr.load_scenarios()
     sop_idx = _sop_index()
     obj_of_control = {}
-    for p in _gov.assess_governance(verdicts)["objectives"]:
-        for c in p["driving_controls"]:
-            obj_of_control.setdefault(c, []).append(p["objective"])
+    for posture in _gov.assess_governance(verdicts)["objectives"]:
+        for control_id in posture["driving_controls"]:
+            obj_of_control.setdefault(control_id, []).append(posture["objective"])
 
     items = []
     for cid, status in verdicts.items():
@@ -89,7 +89,7 @@ def remediation_plan(verdicts, boundary="(unspecified)", top=None):
             "control_id": cid, "title": control["title"], "status": status,
             "sprs_points": weights.get(cid, 0),
             "ale_reduction_likely": _ale_reduction_if_met(cid, verdicts, scenarios),
-            "obligations_unblocked": [b["obligation"] for b in _ob.breaches_for_control(cid)],
+            "obligations_unblocked": [breach["obligation"] for breach in _ob.breaches_for_control(cid)],
             "objectives_helped": obj_of_control.get(cid, []),
             "remediation": _remediation_path(cid, control, sop_idx),
         })
@@ -102,16 +102,16 @@ def remediation_plan(verdicts, boundary="(unspecified)", top=None):
         jn = min(1.0, len(it["objectives_helped"]) / 2.0)
         it["priority_score"] = round(0.45 * sn + 0.35 * an + 0.12 * on + 0.08 * jn, 4)
     items.sort(key=lambda it: (-it["priority_score"], -it["sprs_points"], -it["ale_reduction_likely"]))
-    for i, it in enumerate(items):
-        it["rank"] = i + 1
+    for index, it in enumerate(items):
+        it["rank"] = index + 1
     if top:
         items = items[:top]
 
     rollup = {"gaps": len(items),
               "sprs_recoverable": sum(it["sprs_points"] for it in items),
               "ale_reducible_likely": sum(it["ale_reduction_likely"] for it in items),
-              "obligations_touched": sorted({o for it in items for o in it["obligations_unblocked"]}),
-              "objectives_touched": sorted({o for it in items for o in it["objectives_helped"]})}
+              "obligations_touched": sorted({obligation_id for it in items for obligation_id in it["obligations_unblocked"]}),
+              "objectives_touched": sorted({objective_id for it in items for objective_id in it["objectives_helped"]})}
     return {"boundary": boundary, "n_gaps": len(items), "items": items, "rollup": rollup,
             "weighting": "priority = 0.45*SPRS + 0.35*FAIR$ + 0.12*obligations + 0.08*objectives, normalized"}
 
@@ -121,7 +121,7 @@ def to_poam(plan, now=None):
     results = [{"control_id": it["control_id"], "title": it["title"], "status": it["status"],
                 "boundary": plan.get("boundary"),
                 "gap_summary": "Priority %d. Fix via %s; recovers %d SPRS points, reduces $%s risk." % (
-                    it["rank"], "/".join(p["mechanism"] for p in it["remediation"]),
+                    it["rank"], "/".join(step["mechanism"] for step in it["remediation"]),
                     it["sprs_points"], format(it["ale_reduction_likely"], ",")),
                 "unmet_objective_ids": []}
                for it in plan["items"]]
@@ -140,17 +140,17 @@ def demo(use_llm=False, top=8):
 
 
 def render_text(plan):
-    r = plan["rollup"]
-    L = ["Remediation plan  |  %d gaps  |  fix all -> +%d SPRS, -$%s risk, closes %d obligations"
-         % (plan["n_gaps"], r["sprs_recoverable"], format(r["ale_reducible_likely"], ","),
-            len(r["obligations_touched"]))]
+    rollup = plan["rollup"]
+    lines = ["Remediation plan  |  %d gaps  |  fix all -> +%d SPRS, -$%s risk, closes %d obligations"
+             % (plan["n_gaps"], rollup["sprs_recoverable"], format(rollup["ale_reducible_likely"], ","),
+                len(rollup["obligations_touched"]))]
     for it in plan["items"]:
-        L.append("  #%-2d %-8s %-40s +%d SPRS  -$%-9s  %s"
-                 % (it["rank"], it["control_id"], it["title"][:40], it["sprs_points"],
-                    format(it["ale_reduction_likely"], ","), "/".join(p["mechanism"] for p in it["remediation"])))
+        lines.append("  #%-2d %-8s %-40s +%d SPRS  -$%-9s  %s"
+                     % (it["rank"], it["control_id"], it["title"][:40], it["sprs_points"],
+                        format(it["ale_reduction_likely"], ","), "/".join(step["mechanism"] for step in it["remediation"])))
         if it["obligations_unblocked"]:
-            L.append("        unblocks: %s" % ", ".join(it["obligations_unblocked"]))
-    return "\n".join(L)
+            lines.append("        unblocks: %s" % ", ".join(it["obligations_unblocked"]))
+    return "\n".join(lines)
 
 
 if __name__ == "__main__":

@@ -16,20 +16,20 @@ DIFF = ("Difficulty tiers: easy = unambiguous (fully evidenced -> met, OR irrele
         "sub-objective; or a plausible distractor that does not actually address the objectives.")
 
 order = []
-for c in spec["controls"]:
-    cid = c["control_id"]
-    objs = "\n".join("  %s: %s" % (o["id"], o["text"]) for o in c["objectives"])
-    p = f"""You are an independent senior NIST SP 800-171 Rev 2 assessor authoring HELD-OUT test evidence to
+for control in spec["controls"]:
+    cid = control["control_id"]
+    objs = "\n".join("  %s: %s" % (objective["id"], objective["text"]) for objective in control["objectives"])
+    prompt = f"""You are an independent senior NIST SP 800-171 Rev 2 assessor authoring HELD-OUT test evidence to
 evaluate a separate, weaker automated adjudicator. Do not try to make it pass — author realistic evidence
 and assign the HONEST determination.
 
 DOCUMENT-AUTHORING ONLY: do not start any model/inference server, do not use the GPU, do not touch port 8888.
 Write only JSON files under ./efficacy/corpus/ . Stay in this directory.
 
-Control {cid} — {c['title']}
-Family: {c['family_name']} ({c['method_profile']} assessment-method profile)
-Control statement: {c['control_statement']}
-Assessment methods (800-171A): {', '.join(c['methods'])}
+Control {cid} — {control['title']}
+Family: {control['family_name']} ({control['method_profile']} assessment-method profile)
+Control statement: {control['control_statement']}
+Assessment methods (800-171A): {', '.join(control['methods'])}
 Assessment objectives:
 {objs}
 
@@ -39,12 +39,12 @@ Each file is one JSON object:
   "_label":{{"status":"met|partially-met|not-met","decisive_objective_id":"<id from above>","rationale":"<2-3 sentences>","difficulty":"easy|medium|hard","trap":"<hard only: the fallacy; else empty>"}}}}
 
 {DIFF}
-Author evidence appropriate to the {c['method_profile']} profile (technical->config/scan/enforced-setting;
+Author evidence appropriate to the {control['method_profile']} profile (technical->config/scan/enforced-setting;
 procedural->policy+interview/records; operational->exercise records/logs/observations). Escalation-default:
 an objective is MET only when POSITIVELY demonstrated on the assessed boundary by the required method.
 For this control, make the easy file cleanly met OR cleanly not-met (your choice), medium partially-met, hard a trap.
 After writing the three files, print one line: {cid} done easy=<status> medium=<status> hard=<status>."""
-    open(os.path.join(pdir, f"{cid}.txt"), "w").write(p)
+    open(os.path.join(pdir, f"{cid}.txt"), "w").write(prompt)
     order.append(cid)
 
 json.dump(order, open(os.path.join(pdir, "_order.json"), "w"))

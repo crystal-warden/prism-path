@@ -33,7 +33,7 @@ def facts_from_register(reg):
         return bool(reg.get(section))
 
     def every_use_has(field):
-        return bool(uses) and all(field in u and u[field] not in (None, "") for u in uses)
+        return bool(uses) and all(field in use and use[field] not in (None, "") for use in uses)
 
     return {
         "ai_user_inventory_exists": present("users"),

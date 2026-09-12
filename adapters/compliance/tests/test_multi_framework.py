@@ -7,20 +7,20 @@ from adapters.compliance import multi_framework as mf
 
 
 def test_reports_every_reachable_framework_from_one_assessment():
-    r = mf.demo()
-    assert r["assessed_standard"] == "nist_800171_r2"
-    assert r["nist_800171"]["n_controls"] == 110
-    assert sum(r["nist_800171"]["tally"].values()) == 110
+    posture = mf.demo()
+    assert posture["assessed_standard"] == "nist_800171_r2"
+    assert posture["nist_800171"]["n_controls"] == 110
+    assert sum(posture["nist_800171"]["tally"].values()) == 110
     # SPRS and FAIR are real rollups of the same verdicts
-    assert isinstance(r["sprs"]["score_if_all_assessed"], int)
-    assert r["fair"]["aggregate_ale"]["likely"] > 0
+    assert isinstance(posture["sprs"]["score_if_all_assessed"], int)
+    assert posture["fair"]["aggregate_ale"]["likely"] > 0
     # all three CMMC levels reported; L1 and L2 have a concrete status
-    levels = {c["level"]: c for c in r["cmmc"]}
+    levels = {level["level"]: level for level in posture["cmmc"]}
     assert set(levels) == {1, 2, 3}
     assert levels[1]["status"] in ("met", "not-met")
     assert levels[2]["status"] in ("met", "conditional", "not-met")
     # the crosswalked frameworks are reached, each labeled complete/partial
-    reached = {f["framework"]: f for f in r["frameworks_reached"]}
+    reached = {framework["framework"]: framework for framework in posture["frameworks_reached"]}
     assert "cmmc" in reached and reached["cmmc"]["complete"] is True
     assert "nist_800_53_r5" in reached and reached["nist_800_53_r5"]["complete"] is True   # NIST CPRT table
     assert reached["nist_800_53_r5"]["authority"]                       # provenance carried through

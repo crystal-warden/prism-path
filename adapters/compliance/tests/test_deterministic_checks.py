@@ -65,7 +65,7 @@ def test_machine_checkable_predicate():
 
 
 def test_adjudicate_uses_deterministic_without_calling_model(monkeypatch):
-    def _boom(*a, **k):
+    def _boom(*args, **kwargs):
         raise AssertionError("the LLM must not be called when facts fully decide the control")
     monkeypatch.setattr(ca, "_gemma", _boom)
     det = ca.adjudicate(_control("3.13.11"),
@@ -76,6 +76,6 @@ def test_adjudicate_uses_deterministic_without_calling_model(monkeypatch):
 
 def test_adjudicate_falls_back_to_model_when_not_checkable(monkeypatch):
     sentinel = {"status": "not-met", "unmet_objective_ids": [], "gap_summary": "from llm"}
-    monkeypatch.setattr(ca, "_gemma", lambda *a, **k: sentinel)
+    monkeypatch.setattr(ca, "_gemma", lambda *args, **kwargs: sentinel)
     det = ca.adjudicate(_control("3.1.3"), {"control_id": "3.1.3", "evidence": []})
     assert det is sentinel

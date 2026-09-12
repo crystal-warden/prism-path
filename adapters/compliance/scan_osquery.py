@@ -15,8 +15,8 @@ security_profile_info for lockout and password policy).
 
 
 def _rows(raw, query):
-    v = raw.get(query)
-    return v if isinstance(v, list) else ([v] if v else [])
+    value = raw.get(query)
+    return value if isinstance(value, list) else ([value] if value else [])
 
 
 def _first(raw, query):
@@ -24,22 +24,22 @@ def _first(raw, query):
     return rows[0] if rows else None
 
 
-def _as_bool(v):
-    if isinstance(v, bool):
-        return v
-    if v is None:
+def _as_bool(raw_value):
+    if isinstance(raw_value, bool):
+        return raw_value
+    if raw_value is None:
         return None
-    s = str(v).strip().lower()
-    if s in ("1", "true", "yes", "on", "enabled"):
+    text = str(raw_value).strip().lower()
+    if text in ("1", "true", "yes", "on", "enabled"):
         return True
-    if s in ("0", "false", "no", "off", "disabled", ""):
+    if text in ("0", "false", "no", "off", "disabled", ""):
         return False
     return None
 
 
-def _as_int(v):
+def _as_int(raw_value):
     try:
-        return int(str(v).strip())
+        return int(str(raw_value).strip())
     except (TypeError, ValueError):
         return None
 
@@ -64,8 +64,8 @@ def parse(raw):
     # protected only when every reported volume is encrypted; a single unencrypted volume refutes it.
     de_rows = _rows(raw, "disk_encryption")
     if de_rows:
-        states = [_as_bool(r.get("encrypted")) for r in de_rows]
-        if all(s is not None for s in states):
+        states = [_as_bool(row.get("encrypted")) for row in de_rows]
+        if all(state is not None for state in states):
             facts["encryption_at_rest_enforced"] = all(states)  # 3.13.16[a]
 
     return facts

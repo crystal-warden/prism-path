@@ -29,23 +29,23 @@ STOP = set("the a an and or of to in for on with is are be as by at from this th
            "system information data policy procedure control controls access".split())
 
 
-def tokenize(t):
-    return [w for w in re.findall(r"[a-z0-9]+", t.lower()) if len(w) > 2 and w not in STOP]
+def tokenize(text):
+    return [word for word in re.findall(r"[a-z0-9]+", text.lower()) if len(word) > 2 and word not in STOP]
 
 
 def load_docs():
     docs = []
     if not os.path.isdir(COMPANY):
         return docs
-    for f in sorted(os.listdir(COMPANY)):
-        p = os.path.join(COMPANY, f)
-        if os.path.isfile(p) and not f.startswith("_"):
+    for filename in sorted(os.listdir(COMPANY)):
+        path = os.path.join(COMPANY, filename)
+        if os.path.isfile(path) and not filename.startswith("_"):
             try:
-                txt = open(p, errors="ignore").read()
+                txt = open(path, errors="ignore").read()
             except Exception:
                 continue
             if txt.strip():
-                docs.append({"name": f, "text": txt, "tf": collections.Counter(tokenize(txt))})
+                docs.append({"name": filename, "text": txt, "tf": collections.Counter(tokenize(txt))})
     return docs
 
 
@@ -53,74 +53,75 @@ def breadth_controls():
     """One representative control per family (lowest id), for cross-family spread."""
     cat = ca._catalog()["controls"]
     by_fam = {}
-    for cid, c in cat.items():
-        by_fam.setdefault(c["family"], []).append(cid)
+    for cid, control in cat.items():
+        by_fam.setdefault(control["family"], []).append(cid)
     def keyfn(cid):
-        return [int(x) for x in cid.split(".")]
-    return [sorted(v, key=keyfn)[0] for _, v in sorted(by_fam.items())]
+        return [int(part) for part in cid.split(".")]
+    return [sorted(family_controls, key=keyfn)[0] for _, family_controls in sorted(by_fam.items())]
 
 
-def _cos(a, b):
-    dot = sum(a.get(t, 0) * b.get(t, 0) for t in a)
-    na = math.sqrt(sum(v * v for v in a.values())); nb = math.sqrt(sum(v * v for v in b.values()))
+def _cos(left_vector, right_vector):
+    dot = sum(left_vector.get(term, 0) * right_vector.get(term, 0) for term in left_vector)
+    na = math.sqrt(sum(weight * weight for weight in left_vector.values()))
+    nb = math.sqrt(sum(weight * weight for weight in right_vector.values()))
     return dot / (na * nb) if na and nb else 0.0
 
 
 def retrieve(control, docs, idf):
     # query = objective text + title + family + evidence types; cosine (length-normalized) + filename boost
     qtok = tokenize(control["title"] + " " + control.get("family_name", "") + " " +
-                    " ".join(o["text"] for o in control["objectives"]) + " " +
+                    " ".join(objective["text"] for objective in control["objectives"]) + " " +
                     " ".join(control.get("evidence_types", [])))
-    qvec = {t: c * idf.get(t, 0) for t, c in collections.Counter(qtok).items()}
+    qvec = {term: count * idf.get(term, 0) for term, count in collections.Counter(qtok).items()}
     # tokens that most identify this control's topic — used to reward on-topic FILENAMES
     topic = set(tokenize(control["title"] + " " + control.get("family_name", "") + " " +
                          " ".join(control.get("evidence_types", []))))
     scored = []
-    for d in docs:
-        dvec = {t: c * idf.get(t, 0) for t, c in d["tf"].items()}
-        fname_tok = set(tokenize(d["name"]))
+    for document in docs:
+        dvec = {term: count * idf.get(term, 0) for term, count in document["tf"].items()}
+        fname_tok = set(tokenize(document["name"]))
         boost = 0.15 * len(fname_tok & topic)                  # a doc named for the control's topic wins
-        s = _cos(dvec, qvec) + boost
-        if s > 0:
-            scored.append((s, d))
-    scored.sort(key=lambda x: -x[0])
-    return [d for _, d in scored[:TOPK]]
+        score = _cos(dvec, qvec) + boost
+        if score > 0:
+            scored.append((score, document))
+    scored.sort(key=lambda scored_document: -scored_document[0])
+    return [document for _, document in scored[:TOPK]]
 
 
 def main(dry=False, map_path=None):
     docs = load_docs()
     if not docs:
         print(json.dumps({"error": "no company docs in " + COMPANY})); return
-    by_name = {d["name"]: d for d in docs}
+    by_name = {document["name"]: document for document in docs}
     smap = json.load(open(map_path)) if map_path else None     # precomputed semantic map {control: [docs]}
     df = collections.Counter()
-    for d in docs:
-        for t in d["tf"]:
-            df[t] += 1
-    idf = {t: math.log(1 + len(docs) / (1 + c)) for t, c in df.items()}
+    for document in docs:
+        for term in document["tf"]:
+            df[term] += 1
+    idf = {term: math.log(1 + len(docs) / (1 + document_frequency)) for term, document_frequency in df.items()}
     controls = breadth_controls()
 
     rows, dist = [], collections.Counter()
     empty = 0
     for cid in controls:
-        c = ca.get_control(cid)
-        hits = [by_name[n] for n in smap.get(cid, []) if n in by_name] if smap is not None \
-            else retrieve(c, docs, idf)
+        control = ca.get_control(cid)
+        hits = [by_name[doc_name] for doc_name in smap.get(cid, []) if doc_name in by_name] if smap is not None \
+            else retrieve(control, docs, idf)
         if not hits:
             empty += 1
-            rows.append({"control": cid, "family": c["family"], "top_docs": [], "disposition": "no-evidence-retrieved"})
+            rows.append({"control": cid, "family": control["family"], "top_docs": [], "disposition": "no-evidence-retrieved"})
             dist["not-met(empty)"] += 1
             continue
         if dry:
-            rows.append({"control": cid, "family": c["family"], "top_docs": [h["name"] for h in hits]})
+            rows.append({"control": cid, "family": control["family"], "top_docs": [hit["name"] for hit in hits]})
             continue
         req = {"control_id": cid, "boundary": "Meridian Aerospace CUI environment",
-               "evidence": [{"type": "document", "source": h["name"], "text": h["text"][:MAX_EXCERPT]} for h in hits]}
-        det = ca.adjudicate(c, req)
+               "evidence": [{"type": "document", "source": hit["name"], "text": hit["text"][:MAX_EXCERPT]} for hit in hits]}
+        det = ca.adjudicate(control, req)
         status = det["status"] if det else "ERROR"
         dist[status] += 1
-        rows.append({"control": cid, "family": c["family"], "profile": ca._method_profile(c),
-                     "top_docs": [h["name"] for h in hits], "disposition": status,
+        rows.append({"control": cid, "family": control["family"], "profile": ca._method_profile(control),
+                     "top_docs": [hit["name"] for hit in hits], "disposition": status,
                      "gap_summary": (det or {}).get("gap_summary", "")})
 
     report = {"n_docs": len(docs), "n_controls": len(controls), "empty_retrieval": empty,

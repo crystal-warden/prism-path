@@ -74,24 +74,26 @@ def demo(use_llm=False):
     req_base = {"facts": posture.get("facts", {}), "boundary": posture.get("boundary")}
     controls = _ca._catalog()["controls"]
     verdict_311 = _un.full_determination(_ca.get_control("3.1.1"), dict(req_base, control_id="3.1.1"))["status"]
-    n = len(controls)
-    return {"summary": assurance_summary(n, n),                       # every determination signed
+    control_count = len(controls)
+    return {"summary": assurance_summary(control_count, control_count),                       # every determination signed
             "example_control": assurance_for_control("3.1.1", verdict_311, signed=True)}
 
 
-def render_text(d):
-    s, c = d["summary"], d["example_control"]
-    L = ["Three-lines-of-defense assurance:"]
-    L.append("  %d controls -> %d signed determinations serve all 3 lines + the board"
-             % (s["controls"], s["signed_determinations"]))
-    L.append("  traditional (each line tests each control): %d assessments;  integrated: %d;  %s fewer"
-             % (s["traditional_line_assessments"], s["integrated_assessments"], s["reduction"]))
-    L.append("")
-    L.append("  %s (%s) — verdict %s, %s:" % (c["control_id"], c["title"][:44], c["verdict"], c["shared_evidence"]))
-    for ln in c["lines"]:
+def render_text(assurance):
+    summary, control = assurance["summary"], assurance["example_control"]
+    lines = ["Three-lines-of-defense assurance:"]
+    lines.append("  %d controls -> %d signed determinations serve all 3 lines + the board"
+                 % (summary["controls"], summary["signed_determinations"]))
+    lines.append("  traditional (each line tests each control): %d assessments;  integrated: %d;  %s fewer"
+                 % (summary["traditional_line_assessments"], summary["integrated_assessments"], summary["reduction"]))
+    lines.append("")
+    lines.append("  %s (%s) — verdict %s, %s:"
+                 % (control["control_id"], control["title"][:44], control["verdict"],
+                    control["shared_evidence"]))
+    for ln in control["lines"]:
         who = ("  [%s]" % ln["owner"]) if ln.get("owner") else ""
-        L.append("    %-42s %s%s" % (ln["name"], ln["responsibility"], who))
-    return "\n".join(L)
+        lines.append("    %-42s %s%s" % (ln["name"], ln["responsibility"], who))
+    return "\n".join(lines)
 
 
 if __name__ == "__main__":

@@ -27,12 +27,12 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 SPEC_PATH = os.path.join(HERE, "task_specs.json")
 
 
-def _date(s):
-    return datetime.date.fromisoformat(s)
+def _date(iso_date):
+    return datetime.date.fromisoformat(iso_date)
 
 
 def _load():
-    return {k: v for k, v in json.load(open(SPEC_PATH)).items() if not k.startswith("_")}
+    return {spec_key: spec_entry for spec_key, spec_entry in json.load(open(SPEC_PATH)).items() if not spec_key.startswith("_")}
 
 
 def all_tasks():
@@ -61,7 +61,7 @@ def task_status(task, completions, as_of):
     """Due/overdue status for one task, from its cadence and the most recent matching completion.
     completions: records (each with task_id and completed_on). as_of: ISO-8601 date string."""
     as_of_d = _date(as_of)
-    dates = [_date(c["completed_on"]) for c in completions if c.get("task_id") == task["id"]]
+    dates = [_date(completion["completed_on"]) for completion in completions if completion.get("task_id") == task["id"]]
     if not dates:
         return {"task_id": task["id"], "last_completed": None, "due_by": None,
                 "overdue": True, "days_until_due": None, "status": "never-done"}
@@ -95,11 +95,11 @@ def operational_evidence(control_id, completions, as_of):
             obj_tasks.setdefault(oid, []).append(st)
     out = {}
     for oid, statuses in obj_tasks.items():
-        current = [s for s in statuses if not s["overdue"]]
-        lasts = [s["last_completed"] for s in statuses if s["last_completed"]]
+        current = [status for status in statuses if not status["overdue"]]
+        lasts = [status["last_completed"] for status in statuses if status["last_completed"]]
         out[oid] = {"evidenced": bool(current),
-                    "tasks": [s["task_id"] for s in statuses],
-                    "current_tasks": [s["task_id"] for s in current],
+                    "tasks": [status["task_id"] for status in statuses],
+                    "current_tasks": [status["task_id"] for status in current],
                     "last_completed": max(lasts) if lasts else None}
     return out
 
@@ -111,7 +111,7 @@ def assess_operational(control, completions, as_of):
     Covers a SUBSET of the control's objectives; combine with the config and document determinations
     for the whole control."""
     ev = operational_evidence(control["id"], completions, as_of)
-    covered = [o["id"] for o in control["objectives"] if o["id"] in ev]
+    covered = [objective["id"] for objective in control["objectives"] if objective["id"] in ev]
     if not covered:
         return None
     unmet = sorted(oid for oid in covered if not ev[oid]["evidenced"])

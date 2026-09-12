@@ -16,29 +16,29 @@ OUT_DIR = os.path.join(HERE, "reports_live")    # where OSCAL + CycloneDX report
 # ============================================================================
 
 recs = []
-for f in sorted(os.listdir(REQUESTS_DIR)):
-    req = ca.load_request(os.path.join(REQUESTS_DIR, f))
+for filename in sorted(os.listdir(REQUESTS_DIR)):
+    req = ca.load_request(os.path.join(REQUESTS_DIR, filename))
     control = ca.get_control(req["control_id"])
     det = ca.adjudicate(control, req)
     if det is None:
-        print("adjudication failed:", f); continue
+        print("adjudication failed:", filename); continue
     manifest = ca.attest(control, req, det)
     recs.append(ca.result_record(control, req, det, manifest))
 
 out = ca.emit_reports(recs, fmt="both", out_dir=OUT_DIR)
 
 def embedded_in(doc, hashes):
-    t = json.dumps(doc)
-    return {h[:16]: (h in t) for h in hashes}
+    serialized = json.dumps(doc)
+    return {provenance_hash[:16]: (provenance_hash in serialized) for provenance_hash in hashes}
 
-all_h = [r["manifest"]["manifest_hash"] for r in recs]
-open_h = [r["manifest"]["manifest_hash"] for r in recs if r["status"] != "met"]
-summary = {"determinations": [{"control": r["control_id"], "status": r["status"],
-                               "manifest": r["manifest"]["manifest_hash"][:16]} for r in recs]}
-for k, v in out.items():
-    want = open_h if k == "oscal_poam" else all_h
-    emb = embedded_in(v["doc"], want)
-    summary[k] = {"valid": v["valid"], "n_errors": len(v["errors"]), "errors": v["errors"][:4],
-                  "path": v["path"], "provenance_hashes_embedded": emb,
-                  "all_embedded": all(emb.values())}
+all_h = [record["manifest"]["manifest_hash"] for record in recs]
+open_h = [record["manifest"]["manifest_hash"] for record in recs if record["status"] != "met"]
+summary = {"determinations": [{"control": record["control_id"], "status": record["status"],
+                               "manifest": record["manifest"]["manifest_hash"][:16]} for record in recs]}
+for format_name, emission in out.items():
+    want = open_h if format_name == "oscal_poam" else all_h
+    emb = embedded_in(emission["doc"], want)
+    summary[format_name] = {"valid": emission["valid"], "n_errors": len(emission["errors"]), "errors": emission["errors"][:4],
+                            "path": emission["path"], "provenance_hashes_embedded": emb,
+                            "all_embedded": all(emb.values())}
 print(json.dumps(summary, indent=1))

@@ -20,7 +20,7 @@ out["empty_bundle_3.1.7"] = {
     "status": pend["status"],
     "evidence_types": req["evidence_types"],
     "n_requests": len(req["requests"]),
-    "requests": [{"objective_id": r["objective_id"], "ask": r["ask"]} for r in req["requests"]],
+    "requests": [{"objective_id": request["objective_id"], "ask": request["ask"]} for request in req["requests"]],
 }
 
 # (2) partial: only the unmet objectives get asked
@@ -29,8 +29,8 @@ part = {"control_id": "3.1.12", "boundary": "CUI enclave", "evidence": [{"type":
 pend2 = ca.defer_for_evidence(c12, part, unmet_ids=["3.1.12[b]", "3.1.12[d]"])
 req2 = pend2["request"]
 out["partial_3.1.12_unmet_only"] = {
-    "targeted_objectives": [r["objective_id"] for r in req2["requests"]],
-    "asks": [r["ask"] for r in req2["requests"]],
+    "targeted_objectives": [request["objective_id"] for request in req2["requests"]],
+    "asks": [request["ask"] for request in req2["requests"]],
 }
 
 print(json.dumps(out, indent=1))

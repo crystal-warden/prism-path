@@ -40,37 +40,37 @@ def trace(control_id, standard=None):
     std = _ca.active_standard()
     reach = []
     for name in _cw.list_crosswalks():
-        x = _cw.load_crosswalk(name)
-        if std == x["a"]:
-            tgts = sorted({b for e in x["edges"] if e["a"] == control_id for b in e["b"]})
+        crosswalk = _cw.load_crosswalk(name)
+        if std == crosswalk["a"]:
+            tgts = sorted({target_control for edge in crosswalk["edges"] if edge["a"] == control_id for target_control in edge["b"]})
             if tgts:
-                reach.append({"framework": x["b"], "controls": tgts, "crosswalk": name, "direction": "forward"})
-        elif std == x["b"]:
-            srcs = sorted({e["a"] for e in x["edges"] if control_id in e["b"]})
+                reach.append({"framework": crosswalk["b"], "controls": tgts, "crosswalk": name, "direction": "forward"})
+        elif std == crosswalk["b"]:
+            srcs = sorted({edge["a"] for edge in crosswalk["edges"] if control_id in edge["b"]})
             if srcs:
-                reach.append({"framework": x["a"], "controls": srcs, "crosswalk": name, "direction": "reverse"})
-    scen = [{"scenario": s["name"], "id": s["id"], "ale_likely": s["loss"]["likely"]}
-            for s in _fr.load_scenarios() if control_id in s.get("controls", [])]
+                reach.append({"framework": crosswalk["a"], "controls": srcs, "crosswalk": name, "direction": "reverse"})
+    scen = [{"scenario": scenario["name"], "id": scenario["id"], "ale_likely": scenario["loss"]["likely"]}
+            for scenario in _fr.load_scenarios() if control_id in scenario.get("controls", [])]
     return {"standard": std, "control_id": control_id, "title": control["title"],
-            "owner": _owner_of(control), "objectives": [o["id"] for o in control.get("objectives", [])],
+            "owner": _owner_of(control), "objectives": [objective["id"] for objective in control.get("objectives", [])],
             "crosswalk_reach": reach, "mitigates_risk": scen,
-            "frameworks_satisfied": sorted({r["framework"] for r in reach})}
+            "frameworks_satisfied": sorted({reached["framework"] for reached in reach})}
 
 
 def graph_summary(standard="nist_800171_r2"):
     """Node and edge counts of the connectivity graph anchored on one standard."""
     _ca.use_standard(standard)
     controls = _ca._catalog()["controls"]
-    n_obj = sum(len(c.get("objectives", [])) for c in controls.values())
+    n_obj = sum(len(control.get("objectives", [])) for control in controls.values())
     xw_edges, frameworks = 0, set()
     for name in _cw.list_crosswalks():
-        x = _cw.load_crosswalk(name)
-        if standard in (x["a"], x["b"]):
-            frameworks.add(x["b"] if standard == x["a"] else x["a"])
-            xw_edges += sum(len(e["b"]) for e in x["edges"])
+        crosswalk = _cw.load_crosswalk(name)
+        if standard in (crosswalk["a"], crosswalk["b"]):
+            frameworks.add(crosswalk["b"] if standard == crosswalk["a"] else crosswalk["a"])
+            xw_edges += sum(len(edge["b"]) for edge in crosswalk["edges"])
     scenarios = _fr.load_scenarios()
-    risk_links = sum(len(s.get("controls", [])) for s in scenarios)
-    owners = sorted({_owner_of({"family_name": c.get("family_name")}) for c in controls.values()})
+    risk_links = sum(len(scenario.get("controls", [])) for scenario in scenarios)
+    owners = sorted({_owner_of({"family_name": control.get("family_name")}) for control in controls.values()})
     return {"standard": standard,
             "nodes": {"controls": len(controls), "objectives": n_obj,
                       "frameworks_linked": sorted(frameworks), "risk_scenarios": len(scenarios)},
@@ -82,24 +82,24 @@ def demo():
     return {"summary": graph_summary("nist_800171_r2"), "example_trace": trace("3.1.1", "nist_800171_r2")}
 
 
-def render_text(d):
-    s, t = d["summary"], d["example_trace"]
-    L = ["Assurance connectivity graph (anchored on %s):" % s["standard"]]
-    L.append("  nodes: %d controls, %d objectives, %d risk scenarios; frameworks linked: %s"
-             % (s["nodes"]["controls"], s["nodes"]["objectives"], s["nodes"]["risk_scenarios"],
-                ", ".join(s["nodes"]["frameworks_linked"])))
-    L.append("  edges: %d crosswalk links, %d control->risk links; owners: %s"
-             % (s["edges"]["crosswalk_links"], s["edges"]["risk_links"], ", ".join(s["owners"])))
-    L.append("")
-    L.append("  trace %s (%s):" % (t["control_id"], t["title"]))
-    L.append("    owner: %s   objectives: %d" % (t["owner"], len(t["objectives"])))
-    L.append("    satisfies frameworks: %s" % ", ".join(t["frameworks_satisfied"]))
-    for r in t["crosswalk_reach"]:
-        L.append("      -> %-16s %s" % (r["framework"], ", ".join(r["controls"][:6])))
-    if t["mitigates_risk"]:
-        L.append("    mitigates: " + "; ".join("%s ($%s)" % (m["scenario"], format(m["ale_likely"], ","))
-                                                for m in t["mitigates_risk"][:4]))
-    return "\n".join(L)
+def render_text(graph):
+    summary, example_trace = graph["summary"], graph["example_trace"]
+    lines = ["Assurance connectivity graph (anchored on %s):" % summary["standard"]]
+    lines.append("  nodes: %d controls, %d objectives, %d risk scenarios; frameworks linked: %s"
+                 % (summary["nodes"]["controls"], summary["nodes"]["objectives"], summary["nodes"]["risk_scenarios"],
+                    ", ".join(summary["nodes"]["frameworks_linked"])))
+    lines.append("  edges: %d crosswalk links, %d control->risk links; owners: %s"
+                 % (summary["edges"]["crosswalk_links"], summary["edges"]["risk_links"], ", ".join(summary["owners"])))
+    lines.append("")
+    lines.append("  trace %s (%s):" % (example_trace["control_id"], example_trace["title"]))
+    lines.append("    owner: %s   objectives: %d" % (example_trace["owner"], len(example_trace["objectives"])))
+    lines.append("    satisfies frameworks: %s" % ", ".join(example_trace["frameworks_satisfied"]))
+    for reached in example_trace["crosswalk_reach"]:
+        lines.append("      -> %-16s %s" % (reached["framework"], ", ".join(reached["controls"][:6])))
+    if example_trace["mitigates_risk"]:
+        lines.append("    mitigates: " + "; ".join("%s ($%s)" % (mitigation["scenario"], format(mitigation["ale_likely"], ","))
+                                                for mitigation in example_trace["mitigates_risk"][:4]))
+    return "\n".join(lines)
 
 
 if __name__ == "__main__":

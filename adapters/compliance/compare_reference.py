@@ -14,35 +14,37 @@ REF = os.path.join(HERE, "efficacy", "reference", "verdicts")
 
 
 def main():
-    gem = {r["control"]: r["disposition"] for r in
+    gem = {row["control"]: row["disposition"] for row in
            json.load(open(os.path.join(HERE, "efficacy", "company_report.json")))["rows"]}
     if not os.path.isdir(REF) or not os.listdir(REF):
         print(json.dumps({"error": "no agy verdicts yet in " + REF})); return
     agy = {}
-    for f in os.listdir(REF):
-        if f.endswith(".json"):
-            v = json.load(open(os.path.join(REF, f)))
-            agy[v["control_id"]] = v
+    for filename in os.listdir(REF):
+        if filename.endswith(".json"):
+            result = json.load(open(os.path.join(REF, filename)))
+            agy[result["control_id"]] = result
     rows, conf, disagree = [], collections.Counter(), []
     for cid in sorted(gem):
-        g = gem[cid]
-        a = agy.get(cid, {}).get("status", "MISSING")
-        conf[(g, a)] += 1
-        agree = g == a
-        row = {"control": cid, "gemma": g, "agy": a, "agree": agree,
+        gemma_status = gem[cid]
+        agy_status = agy.get(cid, {}).get("status", "MISSING")
+        conf[(gemma_status, agy_status)] += 1
+        agree = gemma_status == agy_status
+        row = {"control": cid, "gemma": gemma_status, "agy": agy_status, "agree": agree,
                "agy_rationale": agy.get(cid, {}).get("rationale", "")}
         rows.append(row)
         if not agree:
             disagree.append(row)
-    n = len(rows); agreed = sum(r["agree"] for r in rows)
+    row_count = len(rows); agreed = sum(row["agree"] for row in rows)
     # "gemma stricter" = gemma not-met/partial where agy is more lenient
     order = {"not-met": 0, "partially-met": 1, "met": 2}
-    gemma_stricter = [r for r in disagree if order.get(r["gemma"], 0) < order.get(r["agy"], 0)]
+    gemma_stricter = [row for row in disagree if order.get(row["gemma"], 0) < order.get(row["agy"], 0)]
     report = {
-        "n": n, "agreement": round(agreed / n, 3),
+        "n": row_count, "agreement": round(agreed / row_count, 3),
         "gemma_distribution": dict(collections.Counter(gem.values())),
-        "agy_distribution": dict(collections.Counter(v["status"] for v in agy.values())),
-        "confusion_gemma_x_agy": {f"g:{g}|a:{a}": conf[(g, a)] for g in STAT for a in STAT if conf[(g, a)]},
+        "agy_distribution": dict(collections.Counter(result["status"] for result in agy.values())),
+        "confusion_gemma_x_agy": {f"g:{gemma_status}|a:{agy_status}": conf[(gemma_status, agy_status)]
+                                  for gemma_status in STAT for agy_status in STAT
+                                  if conf[(gemma_status, agy_status)]},
         "n_disagreements": len(disagree),
         "n_gemma_stricter": len(gemma_stricter),
         "disagreements": disagree,
@@ -54,12 +56,12 @@ def main():
     json.dump(report, open(os.path.join(HERE, "efficacy", "reference", "comparison.json"), "w"), indent=1)
     # close the loop: send disagreements to the HITL/Deferral port
     ca.use_standard("nist_800171_r2")
-    for r in disagree:
+    for disagreement in disagree:
         try:
-            c = ca.get_control(r["control"])
-            ca.defer_for_review(c, {"control_id": r["control"], "boundary": "Meridian", "evidence": []},
-                                {"status": r["gemma"], "unmet_objective_ids": [], "gap_summary": "efficacy differential"},
-                                reason=f"gemma={r['gemma']} vs agy={r['agy']}")
+            control = ca.get_control(disagreement["control"])
+            ca.defer_for_review(control, {"control_id": disagreement["control"], "boundary": "Meridian", "evidence": []},
+                                {"status": disagreement["gemma"], "unmet_objective_ids": [], "gap_summary": "efficacy differential"},
+                                reason=f"gemma={disagreement['gemma']} vs agy={disagreement['agy']}")
         except Exception:
             pass
     print(json.dumps(report, indent=1))

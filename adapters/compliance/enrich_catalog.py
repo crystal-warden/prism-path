@@ -58,11 +58,11 @@ cat = json.load(open(PATH))
 n_obj = 0
 for cid, ctl in cat["controls"].items():
     ctl["evidence_types"] = EVIDENCE_TYPES.get(cid, [])
-    for o in ctl["objectives"]:
-        q = DISCOVERY.get(o["id"])
-        if q is None:
-            q = "Provide evidence that %s." % o["text"]
-        o["discovery_query"] = q
+    for objective in ctl["objectives"]:
+        discovery_query = DISCOVERY.get(objective["id"])
+        if discovery_query is None:
+            discovery_query = "Provide evidence that %s." % objective["text"]
+        objective["discovery_query"] = discovery_query
         n_obj += 1
 cat["_meta"]["translation"] = ("Each control carries evidence_types; each objective carries a discovery_query. "
                                "The discovery loop (defer_for_evidence) uses these to generate catalog-driven, "
