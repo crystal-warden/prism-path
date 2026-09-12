@@ -1241,15 +1241,16 @@ def ledger_cmd(args):
         print(_json.dumps(res, indent=1))
         return 0 if res.get('stamped') else 1
     if a == 'upgrade':
-        print(_json.dumps(L.upgrade(args.out or '.', args.label), indent=1))
-        return 0
+        res = L.upgrade(args.out or '.', args.label)
+        print(_json.dumps(res, indent=1))
+        return 0 if res.get('ots_rc') == 0 else 1
     if a == 'verify':
         if not args.leaf:
             print('--leaf <hex> required for verify')
             return 2
         res = L.verify_unit(args.leaf, args.out or '.', args.label)
         print(_json.dumps(res, indent=1))
-        return 0 if res.get('merkle_ok') else 1
+        return 0 if res.get('merkle_ok') and res.get('ots_ok') else 1
     if a == 'export-request':
         if not (args.root and args.out):
             print('--root and --out required for export-request')

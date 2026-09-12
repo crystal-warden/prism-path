@@ -58,12 +58,12 @@ def anchor(hashes, out_dir, label):
     json.dump(dict(label=label, root=root, n=len(hashes), leaves={h:paths[i] for i,h in enumerate(hashes)}),
               open(os.path.join(out_dir,f"manifest_{label}.json"),"w"), indent=2)
     r=subprocess.run(["ots","stamp",rootfile],capture_output=True,text=True,env=_OTSENV)
-    return dict(root=root, n=len(hashes), rootfile=rootfile, stamped=os.path.exists(rootfile+".ots"),
-                ots_msg=(r.stdout+r.stderr).strip()[-200:])
+    return dict(root=root, n=len(hashes), rootfile=rootfile, stamped=(r.returncode == 0 and os.path.exists(rootfile+".ots")),
+                ots_rc=r.returncode, ots_msg=(r.stdout+r.stderr).strip()[-200:])
 
 def upgrade(out_dir, label):
     r=subprocess.run(["ots","upgrade",os.path.join(out_dir,f"root_{label}.txt.ots")],capture_output=True,text=True,env=_OTSENV)
-    return (r.stdout+r.stderr).strip()[-200:]
+    return dict(ots_rc=r.returncode, ots_msg=(r.stdout+r.stderr).strip()[-200:])
 
 def verify_unit(leaf_hex, out_dir, label):
     """Full chain: Merkle path to the anchored root, then OTS-verify the root against Bitcoin."""
@@ -72,4 +72,4 @@ def verify_unit(leaf_hex, out_dir, label):
     if path is None: return dict(merkle_ok=False, reason="output-hash not in this anchor batch")
     merkle_ok=verify_leaf(leaf_hex, path, m["root"])
     r=subprocess.run(["ots","verify",os.path.join(out_dir,f"root_{label}.txt.ots")],capture_output=True,text=True,env=_OTSENV)
-    return dict(merkle_ok=merkle_ok, root=m["root"], ots_verify=(r.stdout+r.stderr).strip()[-300:])
+    return dict(merkle_ok=merkle_ok, root=m["root"], ots_ok=(r.returncode == 0), ots_rc=r.returncode, ots_verify=(r.stdout+r.stderr).strip()[-300:])
