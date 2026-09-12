@@ -81,11 +81,15 @@ jobs:
   # is actually exercised in CI — a collection error here previously masked the WHOLE suite.
   mission_control:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]   # the 3.10 floor covers the control plane too, not only the kernel
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with:
-          python-version: "3.12"
+          python-version: ${{ matrix.python-version }}
       - name: Install (numpy + control-plane extra)
         run: pip install numpy pytest fastapi httpx
       - name: Mission Control tests
@@ -183,9 +187,9 @@ jobs:
           cmake -S integrations/cpp -B integrations/cpp/build -DCMAKE_BUILD_TYPE=Release
           cmake --build integrations/cpp/build -j
           cd integrations/cpp && python gen_fixture.py && ./build/ppt_replay ../../prismpath-hw/demo/flows/hyst_band.ppt hyst_fixture.bin
-      - name: Hardware evidence integrity — the OTS-anchored hashes must still match
-        run: cd prismpath-hw/evidence && sha256sum -c SHA256SUMS
-      - name: eBPF — build + host-side interp cross-check (124/124 vs the reference, no kernel needed)
+      - name: Evidence integrity — every artifact manifest in the tree still matches (snapshot manifests reported)
+        run: python tools/evidence_check.py
+      - name: eBPF — build every program and tool (xdp, net, decode plane, selector, a6 rewrite, host tools) + host-side interp cross-check (124/124 vs the reference, no kernel needed)
         run: |
           make -C prismpath-ebpf
           python3 prismpath-ebpf/cert_corpus.py /tmp/cert_corpus.bin
@@ -216,3 +220,20 @@ jobs:
         run: cd prismpath-ebpf && sudo ./loader build/seed.ppt certify /tmp/cert_corpus.bin
       - name: In-kernel Facet decode-plane cert (250/250 byte-identical + negative matrix)
         run: cd prismpath-ebpf && sudo -E env "PATH=$PATH" python3 facet_decode_cert.py
+
+  # The comparison glue against a real OPA: the receipt sink and the revision floor tests skip wherever the
+  # pinned comparator toolchain is absent, which used to be every CI run. This job installs the toolchain
+  # (pinned versions, published checksums; cedar skipped, it needs a cargo build) so those tests run.
+  comparisons_glue:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Install (kernel + the pinned comparators)
+        run: |
+          pip install numpy pytest cryptography
+          bash prismpath/comparisons/toolchain/install.sh --skip-cedar
+      - name: Toolchain pins and the OPA glue (receipt sink, revision floor)
+        run: python -m pytest prismpath/tests/test_comparisons_toolchain.py prismpath/tests/test_glue_opa_receipts.py prismpath/tests/test_glue_opa_revision_floor.py -q -rs
