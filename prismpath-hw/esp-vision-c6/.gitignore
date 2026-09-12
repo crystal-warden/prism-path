@@ -4,3 +4,4 @@ sdkconfig.host
 sdkconfig.old
 sdkconfig.sniff
 sdkconfig.replay
+sdkconfig.*.old
