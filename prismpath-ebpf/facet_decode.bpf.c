@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 Crystal Warden Supply Chain Labs LLC
-// facet_decode.bpf.c — the kernel decode plane: XDP decode-and-rewrite for the Facet DATAGRAM
+// facet_decode.bpf.c: the kernel decode plane: XDP decode-and-rewrite for the Facet DATAGRAM
 // profile. A UDP datagram to FACET_PORT carrying one byte-aligned Facet frame is decoded
 // (self-delimiting Zeckendorf, policy independent) and its payload REWRITTEN in place to
 //   [ 'F' ][ u8 count ][ u16le wire_int * count ]
@@ -26,12 +26,23 @@
 #define MAX_PAYLOAD 32
 #define MAX_SYMS 16
 
+/* IPv4 header length is checked as 5 (20 bytes), so L4 UDP payload starts at fixed offset 14 Ethernet + 20 IPv4 + 8 UDP. */
+#define L4_PAYLOAD_OFF (14 + 20 + 8)
+
+enum facet_stat_slot {
+    FACET_STAT_DECODED   = 0,
+    FACET_STAT_MALFORMED = 1,
+    FACET_STAT_BADLEN    = 2,
+    FACET_STAT_NOT_OURS  = 3
+};
+
 struct { __uint(type, BPF_MAP_TYPE_ARRAY); __uint(max_entries, 4);
          __type(key, __u32); __type(value, __u64); } facet_stats SEC(".maps");
 
-static __always_inline void bump(__u32 k) {
-    __u64 *v = bpf_map_lookup_elem(&facet_stats, &k);
-    if (v) __sync_fetch_and_add(v, 1);
+static __always_inline void bump(enum facet_stat_slot stat_slot) {
+    __u32 key_idx = (__u32)stat_slot;
+    __u64 *value_ptr = bpf_map_lookup_elem(&facet_stats, &key_idx);
+    if (value_ptr) __sync_fetch_and_add(value_ptr, 1);
 }
 
 struct decode_ctx {
@@ -83,30 +94,27 @@ int facet_decode(struct xdp_md *ctx) {
     if (ip->ihl != 5 || ip->protocol != IPPROTO_UDP) return XDP_PASS;
     struct udphdr *udp = (void *)(ip + 1);
     if ((void *)(udp + 1) > end) return XDP_PASS;
-    if (udp->dest != bpf_htons(FACET_PORT)) { bump(3); return XDP_PASS; }
+    if (udp->dest != bpf_htons(FACET_PORT)) { bump(FACET_STAT_NOT_OURS); return XDP_PASS; }
 
-    __u8 *p = (void *)(udp + 1);
     __u16 udp_total = bpf_ntohs(udp->len);
-    if (udp_total < 8) { bump(2); return XDP_DROP; }
+    if (udp_total < 8) { bump(FACET_STAT_BADLEN); return XDP_DROP; }
     __u32 plen = udp_total - 8;
-    if (plen == 0 || plen > MAX_PAYLOAD) { bump(2); return XDP_DROP; }
+    if (plen == 0 || plen > MAX_PAYLOAD) { bump(FACET_STAT_BADLEN); return XDP_DROP; }
 
-    /* Copy the payload off the packet into a stack buffer in one helper call, then decode purely
-       over the stack buffer: a masked stack read does not fork the verifier's packet-bounds
-       state the way a per-bit packet read does, so a single flat bit loop stays in budget while
-       carrying the accumulator across byte boundaries without a callback. */
+    /* Copy payload off packet into stack buffer in one helper call, then decode purely
+       over stack buffer: masked stack read bounds verifier packet state. */
     struct decode_ctx c = { .plen = plen, .fa = 1, .fb = 2 };
-    if (plen > MAX_PAYLOAD) { bump(2); return XDP_DROP; }   /* re-assert for the verifier */
-    if (bpf_xdp_load_bytes(ctx, 42, c.buf, plen)) { bump(1); return XDP_DROP; }
+    if (plen > MAX_PAYLOAD) { bump(FACET_STAT_BADLEN); return XDP_DROP; }   /* re-assert for verifier */
+    if (bpf_xdp_load_bytes(ctx, L4_PAYLOAD_OFF, c.buf, plen)) { bump(FACET_STAT_MALFORMED); return XDP_DROP; }
     bpf_loop(MAX_PAYLOAD * 8, bit_cb, &c, 0);
-    if (c.bad) { bump(1); return XDP_DROP; }
-    if (c.val != 0) { bump(1); return XDP_DROP; }          /* nonzero tail = truncated codeword */
-    if (c.n == 0) { bump(1); return XDP_DROP; }
+    if (c.bad) { bump(FACET_STAT_MALFORMED); return XDP_DROP; }
+    if (c.val != 0) { bump(FACET_STAT_MALFORMED); return XDP_DROP; }          /* nonzero tail = truncated codeword */
+    if (c.n == 0) { bump(FACET_STAT_MALFORMED); return XDP_DROP; }
 
     __u32 nn = c.n;
     __u32 new_plen = 2 + 2 * nn;
     int delta = (int)new_plen - (int)plen;
-    if (bpf_xdp_adjust_tail(ctx, delta)) { bump(1); return XDP_DROP; }
+    if (bpf_xdp_adjust_tail(ctx, delta)) { bump(FACET_STAT_MALFORMED); return XDP_DROP; }
 
     /* pointers invalidated: reparse */
     data = (void *)(long)ctx->data;
@@ -117,17 +125,17 @@ int facet_decode(struct xdp_md *ctx) {
     if ((void *)(ip + 1) > end) return XDP_DROP;
     udp = (void *)(ip + 1);
     if ((void *)(udp + 1) > end) return XDP_DROP;
-    p = (void *)(udp + 1);
-    if (p + 2 > (__u8 *)end) return XDP_DROP;
-    p[0] = 'F';
-    p[1] = (__u8)nn;
-    for (__u32 i = 0; i < MAX_SYMS; i++) {
-        if (i >= nn) break;
-        __u8 *q = p + 2 + 2 * i;
-        if (q + 2 > (__u8 *)end) return XDP_DROP;
-        __u16 v = c.out[i & (MAX_SYMS - 1)];
-        q[0] = (__u8)(v & 0xFF);                         /* little endian */
-        q[1] = (__u8)(v >> 8);
+    __u8 *payload_ptr = (void *)(udp + 1);
+    if (payload_ptr + 2 > (__u8 *)end) return XDP_DROP;
+    payload_ptr[0] = 'F';
+    payload_ptr[1] = (__u8)nn;
+    for (__u32 sym_idx = 0; sym_idx < MAX_SYMS; sym_idx++) {
+        if (sym_idx >= nn) break;
+        __u8 *slot_ptr = payload_ptr + 2 + 2 * sym_idx;
+        if (slot_ptr + 2 > (__u8 *)end) return XDP_DROP;
+        __u16 val_le = c.out[sym_idx & (MAX_SYMS - 1)];
+        slot_ptr[0] = (__u8)(val_le & 0xFF);                         /* little endian */
+        slot_ptr[1] = (__u8)(val_le >> 8);
     }
 
     /* fix lengths + checksums */
@@ -145,7 +153,7 @@ int facet_decode(struct xdp_md *ctx) {
     sum = (sum & 0xFFFF) + (sum >> 16);
     ip->check = (__u16)~sum;
 
-    bump(0);
+    bump(FACET_STAT_DECODED);
     return XDP_PASS;
 }
 

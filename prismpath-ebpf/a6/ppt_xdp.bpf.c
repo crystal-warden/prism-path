@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 Crystal Warden Supply Chain Labs LLC
-/* ppt_xdp.bpf.c (A6 decode and rewrite variant) — PrismPath PPT v1 Match-Action Table Interpreter in XDP/eBPF.
+/* ppt_xdp.bpf.c (A6 decode and rewrite variant): PrismPath PPT v1 Match-Action Table Interpreter in XDP/eBPF.
  * This variant writes the verdict INTO the packet (node_idx becomes the decided node, the UDP checksum is
  * cleared, which IPv4 permits) and passes it up, so a socket above the stack reads a decision the kernel
  * made on the NIC path and no application took part in.
@@ -83,9 +83,9 @@ struct {
 /* Per-packet register file lives in a PER-CPU array, not on the stack. XDP runs to completion on one
  * CPU per packet, so a per-CPU slot is private to this run. Keeping regs off the stack is what lets the
  * bpf-to-bpf call chain stay under the 512-byte budget at large MAX_FIELDS_PER_PKT (embedding regs[] in
- * every ctx overran it — "combined stack size ... Too large"). Map-driven, in the spirit of xdp-bfd. */
+ * every ctx overran it: "combined stack size ... Too large"). Map-driven, in the spirit of xdp-bfd. */
 /* The whole register file is ONE per-CPU map value (not one entry per field). That means a single
- * map lookup, then a call-free fill loop clang can unroll — a per-field lookup was a helper call x N
+ * map lookup, then a call-free fill loop clang can unroll: a per-field lookup was a helper call x N
  * that exploded the verifier's state exploration at large N. */
 struct ppt_regfile { struct ppt_reg r[MAX_FIELDS_PER_PKT]; };
 
@@ -98,7 +98,7 @@ struct {
 
 /* ------------------------------------------------------------------ Core Evaluator Engine */
 
-/* eval_atom — mirrors interp.c:eval_atom totality & comparison rules. Reads the register file from
+/* eval_atom: mirrors interp.c:eval_atom totality & comparison rules. Reads the register file from
  * regs_map (per-CPU) instead of a stack array. */
 static __always_inline int eval_atom(const struct ppt_atom *a, __u32 n_fields)
 {
@@ -241,7 +241,7 @@ static long prog_word_cb(__u32 i, void *ctx_ptr)
     return 0;                                      /* continue */
 }
 
-/* eval_prog — SAME RPN semantics as interp.c, evaluated via the prog_word_cb bpf_loop. Exact for any
+/* eval_prog: SAME RPN semantics as interp.c, evaluated via the prog_word_cb bpf_loop. Exact for any
  * predicate whose operand-stack depth stays <= STACK_MAX (the eBPF target's declared subset). */
 static __always_inline int eval_prog(const struct ppt_edge *e, __u32 n_fields)
 {
@@ -288,7 +288,7 @@ static long edge_loop_cb(__u32 i, void *ctx_ptr)
     return 0;                                  /* continue to the next edge */
 }
 
-/* evaluate — priority encoder: first matching edge wins (edge loop runs via bpf_loop). Forced
+/* evaluate: priority encoder: first matching edge wins (edge loop runs via bpf_loop). Forced
  * __noinline: it MUST be a separate sub-program so eval_loop_ctx gets its own 512-byte frame instead
  * of stacking on main's regs[] (inlining it overran the BPF stack limit). */
 static __attribute__((noinline)) int evaluate(__u32 node_idx,
@@ -379,21 +379,19 @@ int ppt_xdp_prog(struct xdp_md *ctx)
     __u32 n_fields = pkt_hdr->n_fields;
     if (n_fields > MAX_FIELDS_PER_PKT)
         n_fields = MAX_FIELDS_PER_PKT;
-    /* A6 refusal: a packet that carries fewer registers than the image declares, or is cut short of the registers it
-     * claims, is not decided at all; its node_idx becomes 0xFFFFFFFE (refused, short) and it passes up undecided. */
+    /* Incomplete register payloads pass up undecided so upstream listeners reject truncated packets. */
     {
         __u32 ck = 0; struct ppt_config *cfg = bpf_map_lookup_elem(&config_map, &ck);
         __u32 need = n_fields > MAX_FIELDS_PER_PKT ? MAX_FIELDS_PER_PKT : n_fields;
         if ((cfg && n_fields < cfg->n_fields) || payload_start + need * sizeof(struct ppt_reg) > data_end) {
-            if ((void *)(pkt_hdr + 1) <= data_end) pkt_hdr->node_idx = 0xFFFFFFFEu;
+            if ((void *)(pkt_hdr + 1) <= data_end) pkt_hdr->node_idx = PPT_A6_REFUSED_SHORT;
             if (udph_found && (void *)(udph_found + 1) <= data_end) udph_found->check = 0;
             return XDP_PASS;
         }
     }
 
-    /* Load the packet's register file into regs_map (per-CPU), not the program stack — that is what
-     * keeps the bpf-to-bpf call chain under the 512-byte budget regardless of MAX_FIELDS_PER_PKT.
-     * Every slot is written: present fields from the payload, the rest default to TY_NONE. */
+    /* Load packet register file into regs_map (per-CPU) to bound call chain stack usage.
+     * Every slot is written: present fields from payload, rest default to TY_NONE. */
     __u32 zero = 0;
     struct ppt_regfile *rf = bpf_map_lookup_elem(&regs_map, &zero);   /* one lookup for all fields */
     if (rf) {
@@ -426,8 +424,8 @@ int ppt_xdp_prog(struct xdp_md *ctx)
         res->eval_status = (rc == 0) ? 1 : 0;
         __sync_fetch_and_add(&res->pkt_count, 1);
     }
-    /* decode and rewrite: the decided node replaces node_idx in the packet; 0xFFFFFFFF when nothing matched */
-    if ((void *)(pkt_hdr + 1) <= data_end) pkt_hdr->node_idx = target_node >= 0 ? (__u32)target_node : 0xFFFFFFFFu;
+    /* Decided node or no-match sentinel is written into packet to inform upstream socket. */
+    if ((void *)(pkt_hdr + 1) <= data_end) pkt_hdr->node_idx = target_node >= 0 ? (__u32)target_node : PPT_A6_NO_MATCH;
     if (udph_found && (void *)(udph_found + 1) <= data_end) udph_found->check = 0;
 
     return XDP_PASS;
