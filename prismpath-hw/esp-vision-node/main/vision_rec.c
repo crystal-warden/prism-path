@@ -75,7 +75,12 @@ void app_main(void)
         .pin_d7 = CAM_D7, .pin_d6 = CAM_D6, .pin_d5 = CAM_D5, .pin_d4 = CAM_D4, .pin_d3 = CAM_D3, .pin_d2 = CAM_D2,
         .pin_d1 = CAM_D1, .pin_d0 = CAM_D0, .pin_vsync = CAM_VSYNC, .pin_href = CAM_HREF, .pin_pclk = CAM_PCLK,
         .xclk_freq_hz = 20000000, .ledc_timer = LEDC_TIMER_0, .ledc_channel = LEDC_CHANNEL_0,
-        .pixel_format = PIXFORMAT_GRAYSCALE, .frame_size = FRAMESIZE_QVGA, .jpeg_quality = 12,
+#ifdef VISION_RGB565
+        .pixel_format = PIXFORMAT_RGB565,       // a color take: 2 bytes per pixel, the host tool unpacks it
+#else
+        .pixel_format = PIXFORMAT_GRAYSCALE,
+#endif
+        .frame_size = FRAMESIZE_QVGA, .jpeg_quality = 12,
         .fb_count = 3, .fb_location = CAMERA_FB_IN_PSRAM, .grab_mode = CAMERA_GRAB_LATEST,
     };
     ESP_ERROR_CHECK(esp_camera_init(&c));
