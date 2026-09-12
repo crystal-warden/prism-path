@@ -16,6 +16,7 @@
 #include "monocypher-ed25519.h"
 #include "authority_pubkey.h"
 #include "nvs.h"
+#include "driver/gpio.h"
 #include "esp_random.h"
 #include "esp_log.h"
 #include "driver/usb_serial_jtag.h"
@@ -165,6 +166,35 @@ static uint16_t swap_execute(uint32_t *out_version, uint64_t *out_hash, uint32_t
     }
     *out_version = version; *out_hash = ih; *out_us = (uint32_t)(esp_timer_get_time() - t0); swap_reset(); return cause;
 }
+// ---- decision gated execution: this node is also an actuator (the board's LED). An action arrives as a staged pack
+// ('S' chunks, then 'Y'): "ACT1" | to u16 | from u16 | seq u32 | normal u16 | pver u16 | admission u8 | action u8 | counter u32 | sig[64],
+// the signature by the fleet authority over the 22 byte body. The actuator moves only on a body it verifies itself:
+// the signature, that it is the addressee, that the admission was authorized, and that the counter is new (kept in NVS).
+// It answers "ACT2" | nid u16 | counter u32 | outcome u16 | led u8 | t u64 whatever it decided.
+#define LED_GPIO 2
+#define ACT_LED_US 3000000
+static uint32_t act_counter_floor = 0; static int64_t t_led_off = 0; static bool led_on = false;
+static void act_led(bool on) { gpio_set_level(LED_GPIO, on ? 1 : 0); led_on = on; if (on) t_led_off = esp_timer_get_time() + ACT_LED_US; }
+static uint16_t act_execute(uint32_t *out_counter)
+{
+    uint16_t cause; uint32_t counter = 0;
+    if (staged_total == 0 || staged_count != staged_total || staged_len != 86 || memcmp(staged, "ACT1", 4) != 0) cause = 5;                 // manifest:bad-format
+    else {
+        uint16_t to = rd16b(staged + 4); uint8_t admission = staged[16], action = staged[17]; memcpy(&counter, staged + 18, 4);
+        bool zero = true; for (int i = 0; i < 64; i++) if (staged[22 + i]) { zero = false; break; }
+        if (zero) cause = 1;                                                                                                              // sig:missing
+        else if (crypto_ed25519_check(staged + 22, AUTHORITY_PUBKEY, staged, 22) != 0) cause = 2;                                        // sig:invalid
+        else if (to != node_id) cause = 32;                                                                                               // route:no-matching-edge (not for me)
+        else if (counter <= act_counter_floor) cause = 52;                                                                                // replay-duplicate
+        else if (admission != 1) cause = 37;                                                                                              // route:contract-violation (an action on an unauthorized decision)
+        else {
+            act_counter_floor = counter; { nvs_handle_t h; if (nvs_open("cam", NVS_READWRITE, &h) == ESP_OK) { nvs_set_u32(h, "act", counter); nvs_commit(h); nvs_close(h); } }
+            if (action == 1) act_led(true);
+            cause = 0;
+        }
+    }
+    *out_counter = counter; swap_reset(); return cause;
+}
 static void send_evidence(camera_fb_t *fb, uint32_t seq, uint64_t t_cap, uint16_t route)
 {
     uint8_t *jpg = NULL; size_t jlen = 0;
@@ -179,6 +209,7 @@ void app_main(void)
     vision_core_init(); last_sent = heap_caps_malloc(W * H, MALLOC_CAP_SPIRAM);
     staged = heap_caps_malloc(PACK_MAX, MALLOC_CAP_SPIRAM); vmsg = heap_caps_malloc(PACK_MAX, MALLOC_CAP_SPIRAM); tbl_backup = heap_caps_malloc(TBL_MAX, MALLOC_CAP_SPIRAM); swap_reset();
     boot_epoch = esp_random(); cam_key_init();
+    { gpio_config_t g = { .pin_bit_mask = 1ULL << LED_GPIO, .mode = GPIO_MODE_OUTPUT }; gpio_config(&g); gpio_set_level(LED_GPIO, 0); nvs_handle_t h; if (nvs_open("cam", NVS_READONLY, &h) == ESP_OK) { nvs_get_u32(h, "act", &act_counter_floor); nvs_close(h); } }
     {   // a pack accepted before the reboot is verified again and re-applied, so the swap and its version floor persist
         nvs_handle_t nh; if (nvs_open("cam", NVS_READONLY, &nh) == ESP_OK) {
             size_t plen = PACK_MAX; if (nvs_get_blob(nh, "pack", staged, &plen) == ESP_OK && plen > 85) {
@@ -220,6 +251,12 @@ void app_main(void)
                     else if (cb[3] == 'k') { ESP_LOGI(TAG, "keyframe requested over the air"); key_now = true; }   // a receiver that joined mid stream asks for the normal
                     else if (cb[3] == 'L' && r >= 5) { layer_level = cb[4]; ESP_LOGI(TAG, "refinement layer %d over the air", layer_level); memset(layer_have, 0, sizeof layer_have); }
                     else if (cb[3] == 'S' && r >= 8) swap_chunk(cb + 4, r - 4);
+                    else if (cb[3] == 'Y') {
+                        uint32_t ctr; uint16_t cause = act_execute(&ctr);
+                        uint8_t rec[17]; memcpy(rec, "ACT2", 4); rec[4] = node_id & 0xff; rec[5] = node_id >> 8; memcpy(rec + 6, &ctr, 4); memcpy(rec + 10, &cause, 2); rec[12] = led_on ? 1 : 0; uint32_t tl = (uint32_t)(esp_timer_get_time() / 1000); memcpy(rec + 13, &tl, 4);
+                        esp_now_send(BCAST, rec, sizeof rec); hop_send(rec, sizeof rec);
+                        ESP_LOGI(TAG, "action %lu: %s (cause %u), led %s", (unsigned long)ctr, cause ? "REFUSED" : "moved", cause, led_on ? "on" : "off");
+                    }
                     else if (cb[3] == 'X') {
                         uint32_t ver, us; uint64_t ih; uint16_t cause = swap_execute(&ver, &ih, &us);
                         swp_t sw = { {'S','W','P','1'}, node_id, ver, cause, us, ih, (uint64_t)esp_timer_get_time() };
@@ -234,6 +271,7 @@ void app_main(void)
                 }
             }
         }
+        if (led_on && esp_timer_get_time() > t_led_off) act_led(false);
         camera_fb_t *fb = esp_camera_fb_get(); if (!fb) continue;
         uint64_t t_cap = (uint64_t)fb->timestamp.tv_sec * 1000000ULL + (uint64_t)fb->timestamp.tv_usec;
         cur = fb->buf;
