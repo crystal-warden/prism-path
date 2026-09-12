@@ -18,9 +18,9 @@
  * The register file is `regs`: a 4 byte prefix (the node id in the regs.bin file format) then
  * 8 bytes per field, i32 type and i32 value, the layout the table image indexes directly.
  *
- * parse_table return codes: 0 ok, 1 bad magic or version, 3 short or truncated image or start
- * node out of range, 4 caps exceeded (fields, stack or bytes beyond what this firmware holds).
- * eval error codes written to *err: 7 operand stack overflow, 8 unknown opcode. */
+ * parse_table returns a ppt_parse_rc and eval_prog writes a ppt_eval_rc into *err. Both are this
+ * header's own namespace, kept small and stable since the first firmware: they are NOT registry cause
+ * codes (prismpath/kernel/causes.py) and a caller that puts a refusal on the wire maps them to one. */
 #pragma once
 #include <stdint.h>
 #include <string.h>
@@ -41,6 +41,8 @@
 enum { TY_NONE = 0, TY_BOOL = 1, TY_INT = 2, TY_STR = 3 };
 enum { OP_EQ = 0, OP_NE, OP_LT, OP_LE, OP_GT, OP_GE, OP_TRUTHY };
 enum { OPC_NOT = 0x8000, OPC_AND, OPC_OR, OPC_TRUE, OPC_FALSE };
+typedef enum { PPT_PARSE_OK = 0, PPT_PARSE_BAD_MAGIC = 1, PPT_PARSE_SHORT = 3, PPT_PARSE_CAPS = 4 } ppt_parse_rc;   /* 3: short, truncated or start node out of range; 4: fields, stack or bytes beyond this build */
+typedef enum { PPT_EVAL_OK = 0, PPT_EVAL_STACK_OVERFLOW = 7, PPT_EVAL_BAD_OPCODE = 8 } ppt_eval_rc;
 #define PPT_MAGIC 0x4D545050u
 #define PPT_VISITS_NONE 0xFFFFu
 
@@ -54,19 +56,19 @@ static inline void wr32(uint8_t *p, int32_t v) { memcpy(p, &v, 4); }
 
 /* parse the image already copied into tbl; len is the number of bytes the caller placed there */
 static inline uint8_t parse_table(uint16_t len) {
-    if (len < 28) return 3;
-    if ((uint32_t)rd32(tbl) != PPT_MAGIC || rd16b(tbl + 4) != 1) return 1;
+    if (len < 28) return PPT_PARSE_SHORT;
+    if ((uint32_t)rd32(tbl) != PPT_MAGIC || rd16b(tbl + 4) != 1) return PPT_PARSE_BAD_MAGIC;
     n_fields = rd16b(tbl + 6); n_interns = rd16b(tbl + 8); n_atoms = rd16b(tbl + 10); n_nodes = rd16b(tbl + 12);
     n_edges = rd16b(tbl + 14); prog_len = rd16b(tbl + 16); start_node = rd16b(tbl + 18); visits_idx = rd16b(tbl + 20);
     max_steps = rd16b(tbl + 22); max_stack = rd16b(tbl + 24); tbl_flags = rd16b(tbl + 26);
     uint32_t need = 28u + 8u * n_atoms + 4u * n_nodes + 6u * n_edges + 2u * prog_len;
     if (tbl_flags & 1u) need += 2u * n_nodes;                     /* the optional per node color section */
-    if (need > TBL_MAX || n_fields > PPT_MAX_FIELDS || max_stack > STACK_MAX) return 4;
-    if (need > len) return 3;
-    if (n_nodes == 0 || start_node >= n_nodes) return 3;
+    if (need > TBL_MAX || n_fields > PPT_MAX_FIELDS || max_stack > STACK_MAX) return PPT_PARSE_CAPS;
+    if (need > len) return PPT_PARSE_SHORT;
+    if (n_nodes == 0 || start_node >= n_nodes) return PPT_PARSE_SHORT;
     atoms_off = 28; nodes_off = (uint16_t)(atoms_off + 8u * n_atoms); edges_off = (uint16_t)(nodes_off + 4u * n_nodes);
     prog_off_base = (uint16_t)(edges_off + 6u * n_edges);
-    return 0;
+    return PPT_PARSE_OK;
 }
 
 /* atoms are the parallel comparators over the register file; interp.c eval_atom, line for line */
@@ -93,14 +95,14 @@ static inline int8_t eval_prog(uint16_t e_prog_off, uint16_t e_prog_cnt, uint8_t
     uint8_t stack[STACK_MAX]; int16_t sp = 0;
     for (uint16_t i = 0; i < e_prog_cnt; i++) {
         uint16_t w = rd16b(tbl + prog_off_base + 2 * (uint32_t)(e_prog_off + i));
-        if (w < 0x8000) { if (sp >= STACK_MAX) { *err = 7; return 0; } stack[sp++] = eval_atom(w); }
+        if (w < 0x8000) { if (sp >= STACK_MAX) { *err = PPT_EVAL_STACK_OVERFLOW; return 0; } stack[sp++] = eval_atom(w); }
         else switch (w) {
         case OPC_NOT:   stack[sp - 1] = (uint8_t)!stack[sp - 1]; break;
         case OPC_AND:   sp--; stack[sp - 1] = (uint8_t)(stack[sp - 1] && stack[sp]); break;
         case OPC_OR:    sp--; stack[sp - 1] = (uint8_t)(stack[sp - 1] || stack[sp]); break;
-        case OPC_TRUE:  if (sp >= STACK_MAX) { *err = 7; return 0; } stack[sp++] = 1; break;
-        case OPC_FALSE: if (sp >= STACK_MAX) { *err = 7; return 0; } stack[sp++] = 0; break;
-        default: *err = 8; return 0;
+        case OPC_TRUE:  if (sp >= STACK_MAX) { *err = PPT_EVAL_STACK_OVERFLOW; return 0; } stack[sp++] = 1; break;
+        case OPC_FALSE: if (sp >= STACK_MAX) { *err = PPT_EVAL_STACK_OVERFLOW; return 0; } stack[sp++] = 0; break;
+        default: *err = PPT_EVAL_BAD_OPCODE; return 0;
         }
     }
     return (int8_t)stack[0];
