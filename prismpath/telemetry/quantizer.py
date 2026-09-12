@@ -126,6 +126,15 @@ def _atom_true(op: str, const: Any, v: Any) -> bool:
     raise ValueError(op)
 
 
+def _refuse_float(value) -> None:
+    """A float comparison constant is the author's decision, not the codec's: the codec compares
+    integers, so a float threshold is refused here with the constant named, the same fact
+    facet_init reports as a float threshold. Found in the September 2026 review: before this check a
+    float fell through _classify_kind to "boolean" and _numeric_partition truncated it with int()."""
+    raise ValueError(f"float constant {value!r} in a comparison: the codec compares integers, "
+                     f"round the threshold in the flow (facet_init reports it as a float threshold)")
+
+
 def _numeric_partition(field: str, atoms: List[Tuple[str, Any]]) -> FieldPartition:
     # Every value at which some atom can change truth is a cut point: the ordering and equality
     # constants, every member of an `in` / `not in` list, and 0 when a bare truthiness atom is
@@ -136,9 +145,15 @@ def _numeric_partition(field: str, atoms: List[Tuple[str, Any]]) -> FieldPartiti
     consts_set = set()
     for op, c in atoms:
         if op in ("<", "<=", ">", ">=", "==", "!="):
+            if isinstance(c, float):
+                _refuse_float(c)
             consts_set.add(int(c))
         elif op in ("in", "not in"):
-            consts_set.update(int(v) for v in c if isinstance(v, int) and not isinstance(v, bool))
+            for v in c:
+                if isinstance(v, float):
+                    _refuse_float(v)
+                if isinstance(v, int) and not isinstance(v, bool):
+                    consts_set.add(int(v))
         elif op == "truthy":
             consts_set.add(0)
     consts = sorted(consts_set)
@@ -196,6 +211,9 @@ def _classify_kind(atoms: List[Tuple[str, Any]]) -> str:
     flat = []
     for op, c in atoms:
         flat += list(c) if op in ("in", "not in") else ([c] if op != "truthy" else [])
+    for v in flat:
+        if isinstance(v, float):
+            _refuse_float(v)
     has_str = any(isinstance(v, str) for v in flat)
     has_bool = any(isinstance(v, bool) for v in flat)
     has_int = any(isinstance(v, int) and not isinstance(v, bool) for v in flat)
