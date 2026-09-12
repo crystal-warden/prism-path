@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 Crystal Warden Supply Chain Labs LLC
-//! crypto_agility.rs — Crypto-agility proofs + envelope conformance (§4.2, §5).
+//! crypto_agility.rs: Crypto-agility proofs + envelope conformance (§4.2, §5).
 //!
 //! Replays the P1-P5 proofs over parsed flow graphs and signed registries, matching
 //! `prismpath/crypto_agility.py` byte-for-byte against frozen conformance fixtures.
@@ -35,7 +35,7 @@ pub fn strength_rank(registry: &Value, suite_id: &str) -> Option<i64> {
 /// Suite ids in the registry.
 pub fn suite_ids(registry: &Value) -> Vec<String> {
     let mut sids = Vec::new();
-    if let Some(suites) = registry.get("suites").and_then(|s| s.as_object()) {
+    if let Some(suites) = registry.get("suites").and_then(|obj_map| obj_map.as_object()) {
         for key in suites.keys() {
             sids.push(key.clone());
         }
@@ -49,9 +49,9 @@ pub fn suites_below(registry: &Value, floor_id: &str) -> Result<Vec<String>, Str
     let floor = strength_rank(registry, floor_id)
         .ok_or_else(|| format!("unknown floor suite: {floor_id}"))?;
     let mut below = Vec::new();
-    if let Some(suites) = registry.get("suites").and_then(|s| s.as_object()) {
+    if let Some(suites) = registry.get("suites").and_then(|obj_map| obj_map.as_object()) {
         for (sid, spec) in suites {
-            let rank = spec.get("strength_rank").and_then(|v| v.as_i64()).unwrap_or(0);
+            let rank = spec.get("strength_rank").and_then(|val| val.as_i64()).unwrap_or(0);
             if rank < floor {
                 below.push(sid.clone());
             }
@@ -65,9 +65,9 @@ pub fn suites_below(registry: &Value, floor_id: &str) -> Result<Vec<String>, Str
 pub fn is_quantum_resistant(registry: &Value, suite_id: &str) -> bool {
     let Some(kem) = registry
         .get("suites")
-        .and_then(|s| s.get(suite_id))
-        .and_then(|s| s.get("kem"))
-        .and_then(|k| k.as_str())
+        .and_then(|obj_map| obj_map.get(suite_id))
+        .and_then(|suite_val| suite_val.get("kem"))
+        .and_then(|kem_val| kem_val.as_str())
     else {
         return false;
     };
@@ -78,7 +78,7 @@ pub fn is_quantum_resistant(registry: &Value, suite_id: &str) -> bool {
 /// Suite ids with no post-quantum KEM component.
 pub fn classical_only_ids(registry: &Value) -> Vec<String> {
     let mut out = Vec::new();
-    if let Some(suites) = registry.get("suites").and_then(|s| s.as_object()) {
+    if let Some(suites) = registry.get("suites").and_then(|obj_map| obj_map.as_object()) {
         for sid in suites.keys() {
             if !is_quantum_resistant(registry, sid) {
                 out.push(sid.clone());
@@ -107,10 +107,10 @@ pub fn reachable_suites(graph: &Graph, assume: Option<&str>) -> Value {
     let res = check_reach(graph, &target_nodes, assume, REACH_BOUND, true, true);
     let mut map = Map::new();
     for (node_name, sid) in &nodes {
-        if let Some(r) = res.get(node_name) {
+        if let Some(reach_entry) = res.get(node_name) {
             let entry = json!({
-                "reachable": r.get("reachable").cloned().unwrap_or(Value::Null),
-                "proven": r.get("proven").cloned().unwrap_or(Value::Null),
+                "reachable": reach_entry.get("reachable").cloned().unwrap_or(Value::Null),
+                "proven": reach_entry.get("proven").cloned().unwrap_or(Value::Null),
             });
             map.insert(sid.clone(), entry);
         }
@@ -123,9 +123,9 @@ fn forbidden_reachable(reach: &Value, forbidden: &[String]) -> Vec<Value> {
     let mut sorted_forbidden = forbidden.to_vec();
     sorted_forbidden.sort();
     for sid in &sorted_forbidden {
-        let Some(r) = reach.get(sid) else { continue };
-        let reachable_str = r.get("reachable").and_then(|v| v.as_str()).unwrap_or("");
-        let proven = r.get("proven").and_then(|v| v.as_bool()).unwrap_or(false);
+        let Some(reach_entry) = reach.get(sid) else { continue };
+        let reachable_str = reach_entry.get("reachable").and_then(|val| val.as_str()).unwrap_or("");
+        let proven = reach_entry.get("proven").and_then(|val| val.as_bool()).unwrap_or(false);
         if reachable_str != "no" {
             bad.push(json!({
                 "reachable": reachable_str,
@@ -147,8 +147,8 @@ fn forbidden_reachable(reach: &Value, forbidden: &[String]) -> Vec<Value> {
 pub fn prove_envelope_closure(graph: &Graph, envelope: &Value) -> Value {
     let approved: HashSet<&str> = envelope
         .get("approved_suites")
-        .and_then(|v| v.as_array())
-        .map(|arr| arr.iter().filter_map(|x| x.as_str()).collect())
+        .and_then(|val| val.as_array())
+        .map(|arr| arr.iter().filter_map(|str_item| str_item.as_str()).collect())
         .unwrap_or_default();
     let reach = reachable_suites(graph, None);
     let reach_obj = reach.as_object().cloned().unwrap_or_default();
@@ -160,8 +160,8 @@ pub fn prove_envelope_closure(graph: &Graph, envelope: &Value) -> Value {
     let mut reachable_suites_map = Map::new();
 
     for sid in sids {
-        let r = &reach_obj[sid];
-        let reachable_str = r.get("reachable").and_then(|v| v.as_str()).unwrap_or("");
+        let reach_entry = &reach_obj[sid];
+        let reachable_str = reach_entry.get("reachable").and_then(|val| val.as_str()).unwrap_or("");
         if reachable_str != "no" {
             reachable_suites_map.insert(sid.clone(), Value::String(reachable_str.to_string()));
             if !approved.contains(sid.as_str()) {
@@ -194,7 +194,7 @@ pub fn prove_totality(graph: &Graph) -> Value {
         if node.edges.is_empty() || suites.contains(&name) {
             continue;
         }
-        let has_catchall = node.edges.iter().any(|(_t, c)| is_catchall(c));
+        let has_catchall = node.edges.iter().any(|(_target, cond)| is_catchall(cond));
         if !has_catchall {
             gaps.push(name);
         }
@@ -210,10 +210,10 @@ pub fn prove_totality(graph: &Graph) -> Value {
 pub fn prove_class_floor(graph: &Graph, envelope: &Value, registry: &Value) -> Value {
     let class_field = envelope
         .get("class_field")
-        .and_then(|v| v.as_str())
+        .and_then(|val| val.as_str())
         .unwrap_or("data_class");
     let mut failures = Vec::new();
-    if let Some(min_suite) = envelope.get("min_suite_by_class").and_then(|v| v.as_object()) {
+    if let Some(min_suite) = envelope.get("min_suite_by_class").and_then(|val| val.as_object()) {
         let mut classes: Vec<&String> = min_suite.keys().collect();
         classes.sort();
         for cls in classes {
@@ -239,10 +239,10 @@ pub fn prove_class_floor(graph: &Graph, envelope: &Value, registry: &Value) -> V
 
 /// P4: Monotone migration.
 pub fn prove_monotone_migration(graph: &Graph, envelope: &Value, registry: &Value) -> Value {
-    let floor = envelope.get("migration_phase_floor").and_then(|v| v.as_i64());
+    let floor = envelope.get("migration_phase_floor").and_then(|val| val.as_i64());
     let field = envelope
         .get("migration_phase_field")
-        .and_then(|v| v.as_str())
+        .and_then(|val| val.as_str())
         .unwrap_or("migration_phase");
 
     let Some(floor_val) = floor else {
