@@ -82,7 +82,7 @@ static uint8_t parse_table(uint16_t len) {
     return 0;
 }
 
-/* ------------------------------------------- the evaluator core (interp.c, byte-exact) */
+/* ------------------------------------------- the evaluator core: a local copy of interp.c's core, pending conversion to ../ppt_eval.h (eval_copies_check.py) */
 static uint8_t eval_atom(uint16_t atom_idx) {
     const uint8_t *a = tbl + atoms_off + 8 * (uint32_t)atom_idx;
     uint16_t field = rd16(a);

@@ -33,7 +33,7 @@ static uint8_t regs[REGS_MAX];
 static uint16_t n_fields, n_atoms, n_nodes, n_edges, prog_len;
 static uint16_t atoms_off, nodes_off, edges_off, prog_off_base;
 
-/* ---- the evaluator core (interp.c / ppt_rp2350.c, byte-exact) ---- */
+/* ---- the evaluator core: a local copy, pending conversion to ../ppt_eval.h (eval_copies_check.py) ---- */
 static uint16_t rd16(const uint8_t *p) { return (uint16_t)(p[0] | ((uint16_t)p[1] << 8)); }
 static int32_t rd32(const uint8_t *p) { int32_t v; memcpy(&v, p, 4); return v; }
 

@@ -72,7 +72,7 @@ static void emit(const char *fmt, ...) {
     if (n > 0) uart_write_bytes(UART, b, n);
 }
 
-/* ---------------- evaluator core (interp.c, byte-exact) ---------------- */
+/* ---------------- evaluator core: a local copy of interp.c's core, pending conversion to ../ppt_eval.h (eval_copies_check.py) ---------------- */
 static uint8_t tbl[TBL_MAX], regs[REGS_MAX];
 static uint16_t n_fields, n_atoms, n_nodes, n_edges, prog_len;
 static uint16_t atoms_off, nodes_off, edges_off, prog_base;

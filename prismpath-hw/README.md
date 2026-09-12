@@ -26,11 +26,14 @@ hashed, Bitcoin anchored manifest you can verify in six commands:
 | [ppt_compile.py](ppt_compile.py) | `compile --target table`: condition/flow → binary image + JSON debug view |
 | [interp.c](interp.c) | the C target: behavioral twin of the future RTL, same images |
 | [run_vectors.py](run_vectors.py) | certification: frozen conformance corpus → C target, subset-filtered with reasons |
+| [ppt_eval.h](ppt_eval.h) | the embedded evaluator every firmware includes: no allocation, static buffers sized by three macros, return codes instead of exits |
+| [interp_hdr.c](interp_hdr.c) | ppt_eval.h driven on the host with interp.c's command line, so `make cert` certifies the header against the same corpus |
+| [eval_copies_check.py](eval_copies_check.py) | which firmwares include ppt_eval.h and which still carry a local copy pending a hardware recertification |
 | [compile_flows.py](compile_flows.py) | sweep every repo flow; images land in `build/flows/` |
 
 ```sh
 make            # build the C interpreter
-make cert       # certify against the conformance vectors  (THE day-1 gate)
+make cert       # certify interp.c and ppt_eval.h against the conformance vectors, then check the firmware copies  (THE day-1 gate)
 python3 -W ignore compile_flows.py
 ```
 

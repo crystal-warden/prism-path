@@ -23,7 +23,9 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 BUILD = HERE / "build"
-INTERP = BUILD / "interp"
+INTERP = BUILD / "interp"                               # --interp <path> certifies another binary (interp_hdr)
+if "--interp" in sys.argv:
+    INTERP = Path(sys.argv[sys.argv.index("--interp") + 1]).resolve()
 
 import ppt_compile as pc                                   # noqa: E402
 from prismpath.kernel.parser import parse                         # noqa: E402
@@ -149,7 +151,7 @@ def cert_flows() -> tuple:
 def main() -> int:
     BUILD.mkdir(exist_ok=True)
     if not INTERP.exists():
-        print("build/interp missing — run `make` first", file=sys.stderr)
+        print(f"{INTERP} missing — run `make` first", file=sys.stderr)
         return 2
 
     pp, pf, pex, pfail = cert_predicates()
@@ -173,7 +175,7 @@ def main() -> int:
               f"               got path={gp} stopped={gs}")
 
     ok = (pf == 0 and ff == 0)
-    print(f"\n{'✅ C target CONFORMANT on the declared subset' if ok else '✗ NOT CONFORMANT'}")
+    print(f"\n{'✅ ' + INTERP.name + ' CONFORMANT on the declared subset' if ok else '✗ ' + INTERP.name + ' NOT CONFORMANT'}")
     return 0 if ok else 1
 
 

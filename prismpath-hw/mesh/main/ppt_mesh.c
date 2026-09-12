@@ -46,7 +46,7 @@ enum { TY_NONE = 0, TY_BOOL = 1, TY_INT = 2, TY_STR = 3 };
 enum { M_PREPARE = 1, M_ACK = 2, M_COMMIT = 3 };
 static const uint8_t BCAST[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
-/* ---------------- evaluator core (interp.c, byte-exact) ---------------- */
+/* ---------------- evaluator core: a local copy of interp.c's core, pending conversion to ../ppt_eval.h (eval_copies_check.py) ---------------- */
 static uint8_t tbl[TBL_MAX], regs[REGS_MAX];
 static uint16_t n_fields, n_atoms, n_nodes, n_edges, prog_len;
 static uint16_t atoms_off, nodes_off, edges_off, prog_base;

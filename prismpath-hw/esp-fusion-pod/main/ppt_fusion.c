@@ -4,7 +4,7 @@
  * one on-device decision by a baked Level M policy, shown as an RGB LED color.
  *
  * Field 0 `level` = potentiometer on GPIO15 (ADC2_CH3). Field 1 `light` = photoresistor on GPIO34
- * (ADC1_CH6). The evaluator core is a BYTE-EXACT copy of interp.c / ppt_esp32.c. The winning edge is the
+ * (ADC1_CH6). The evaluator core is a local copy of interp.c's core, pending conversion to ../ppt_eval.h (eval_copies_check.py). The winning edge is the
  * verdict: alert (red) fires only when BOTH fields say so (knob high AND dark) — a fused region neither
  * field reaches alone; warn (amber) when either alone; ok (green) otherwise. Console left on for status.
  */
