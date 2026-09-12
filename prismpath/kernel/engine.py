@@ -185,15 +185,21 @@ def run(graph: Graph, agent: Callable[[str, str, dict], object], router=None,
                     if not expr or predicates.eval_condition(expr, err_ctx):
                         etarget = t
                         break
-                except predicates.PredicateError:
-                    pass
+                except predicates.PredicateError as guard_err:
+                    # the guard itself cannot be evaluated: treated as not satisfied, like the deterministic
+                    # tier does, but recorded, so a handler that never fires is visible in the run's state
+                    state.setdefault("_guard_errors", []).append(
+                        {"node": node, "guard": expr, "error": str(guard_err)})
             if etarget is None:
                 raise                          # no handler -> propagate (backward compatible)
             etext = f"[error: {type(e).__name__}: {e}]"
             state["transcript"].append({"node": node, "outcome": etext, "error": True})
             _bound_list(state, "transcript", bound)
-            res.steps.append(StepLog(node, etext, etarget,
-                                     {"used": "error", "error_type": type(e).__name__}))
+            step_info = {"used": "error", "error_type": type(e).__name__}
+            guard_errors = [g for g in state.get("_guard_errors", []) if g["node"] == node]
+            if guard_errors:
+                step_info["guard_errors"] = len(guard_errors)
+            res.steps.append(StepLog(node, etext, etarget, step_info))
             if verbose:
                 print(f"  [{node}] --error--> {etarget}   | {etext[:70]!r}")
             node = etarget

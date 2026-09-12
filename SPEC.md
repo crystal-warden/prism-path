@@ -205,7 +205,7 @@ for suspended runs (node, reason/awaiting, candidate edges, scores where applica
 If the worker raises, the engine builds the error context `{error: true, error_type,
 error_message, error_count, visits}`; `error_count` counts raises of *this node* in *this run*
 ;  and takes the **first** error edge (document order) whose optional `when` clause is satisfied.
-No matching error edge ⇒ the exception propagates. `error_type` is the implementation-language
+A guard whose expression cannot be evaluated (a `PredicateError`) does not match, as in the deterministic tier, and the engine records it in the run state under `_guard_errors`. No matching error edge ⇒ the exception propagates. `error_type` is the implementation-language
 exception name and is therefore **not portable**; portable flows route on `error_count` or
 `error_message` content.
 
