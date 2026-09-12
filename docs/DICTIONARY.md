@@ -74,6 +74,8 @@ Ninety four entries, alphabetical. Each is written from the decision's point of 
 flow authoring, kernel evaluation, wire and transport, substrate execution, evidence and receipts,
 control plane, GRC. A term with no `Also called (deprecated)` line has no losing synonym today.
 
+**assessor**: the person who anchors, verifies and audits receipts; the fourth persona. Layer: control plane. Not to be confused with: evaluator (the certified routine). Also called (deprecated): evaluator (the persona sense, until September 2026).
+
 **abstain**: the decision to make no decision because the information required is absent. Distinct from a denial, which is a decision. Layer: kernel evaluation. Not to be confused with: deny, refusal with cause, escalate. Also called (deprecated): defer (in the kernel sense only; `defer` keeps its GRC and port meaning).
 
 **adapter**: an implementation of one or more ports that carries all of one domain's knowledge, so the core carries none. Layer: control plane. Not to be confused with: connector (the SDK base class an adapter subclasses), port (the interface the adapter implements).
@@ -148,7 +150,7 @@ control plane, GRC. A term with no `Also called (deprecated)` line has no losing
 
 **escalate**: to hand a decision to something more expensive because confidence is insufficient: to a model from the embedding router, or to a person from either. Not a refusal. Layer: kernel evaluation. Not to be confused with: abstain (the act of declining, which escalation is one response to), the firmware's `escalates(node)` bitmask, which marks target nodes that trigger evidence capture and should be renamed `captures_evidence`.
 
-**evaluator**: one call that takes a node index and a register file and returns the index of the first matching edge. The smallest unit of decision in the system. Layer: substrate execution. Not to be confused with: **the evaluator persona**, the person who anchors and verifies receipts. One of these two must be renamed; see section 6.
+**evaluator**: one call that takes a node index and a register file and returns the index of the first matching edge. The smallest unit of decision in the system. Layer: substrate execution. Not to be confused with: **assessor**, the person who anchors and verifies receipts (the persona was called the evaluator until September 2026 and was renamed because this routine is certified and cannot move).
 
 **evidence**: in this project's own operations, the committed artifact that backs a claim (hashes, stamps, reproduction scripts). In GRC, the material that supports a determination about a control. Always qualified. Layer: evidence and receipts, and GRC. Not to be confused with: the evidence ledger (a document), an `EVD1` record (a picture behind an escalating decision, which should be named `capture`), the payload in `pending` on a suspended run (which should be named `handoff`).
 
@@ -224,7 +226,7 @@ control plane, GRC. A term with no `Also called (deprecated)` line has no losing
 
 **park**: to hold on the signed fail safe rather than decide, because the state the policy needs is stale, absent or in flight. Always leaves a cause in the `state` class. Layer: substrate execution. Not to be confused with: abstain, refuse, deny. Also called (deprecated): hold.
 
-**persona**: one of the four people a deployment is organised around: process owner, engineer, operator, evaluator. The CLI groups its commands by them and the docs are indexed by them. Layer: control plane.
+**persona**: one of the four people a deployment is organised around: process owner, engineer, operator, assessor. The CLI groups its commands by them and the docs are indexed by them. Layer: control plane.
 
 **policy of record**: the authored decision structure a deployment is actually governed by, as against an overlay or a test pack. Layer: flow authoring. Not to be confused with: "policy" used loosely for the compiled image, for a competitor's rule file, or for a severity setting.
 
