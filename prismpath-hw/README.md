@@ -29,6 +29,7 @@ hashed, Bitcoin anchored manifest you can verify in six commands:
 | [ppt_eval.h](ppt_eval.h) | the embedded evaluator every firmware includes: no allocation, static buffers sized by three macros, return codes instead of exits |
 | [interp_hdr.c](interp_hdr.c) | ppt_eval.h driven on the host with interp.c's command line, so `make cert` certifies the header against the same corpus |
 | [eval_copies_check.py](eval_copies_check.py) | which firmwares include ppt_eval.h and which still carry a local copy pending a hardware recertification |
+| [esp-vision-node/WIRE.md](esp-vision-node/WIRE.md) | every record on the vision bench's links, camera, relays, sniffer and bench apps, in one contract |
 | [compile_flows.py](compile_flows.py) | sweep every repo flow; images land in `build/flows/` |
 
 ```sh
