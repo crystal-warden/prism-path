@@ -3,6 +3,9 @@
 """Unit tests for SprintConfig dataclass and from_env factory method."""
 
 import pytest
+import pytest
+
+pytest.importorskip("requests")   # the control plane extra: the bare CI job installs numpy, pytest and cryptography only
 from prismpath.orchestration.run_sprint import SprintConfig
 
 
