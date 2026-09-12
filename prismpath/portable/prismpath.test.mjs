@@ -10,7 +10,10 @@ import {
   isDeterministic, isError, isEvent, isSemantic, eventName, pyTruthy, PredicateError,
   lockedRoute, decodeVec,
 } from "./prismpath.mjs";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 
 // ------------------------------------------------------------------ condition tiers
 test("condition tier classification", () => {
@@ -250,4 +253,136 @@ test("lockedRoute (exported): routes one text against locked vectors, matching r
   assert.equal(decision.target, fixture.expect.path[1]); // the step run() routes to from start
   assert.ok(decision.info.locked && decision.info.score > 0);
   assert.ok(typeof decision.info.margin === "number");
+});
+
+// ------------------------------------------------------------------ the compiled bundle
+// `prismpath compile` emits this kernel, a serialized graph, an embedded lock and
+// bundle_engine.mjs as one file. Assembled the same way here (cli.py _build_compile_bundle is
+// the compiler of record) so the shipped engine is exercised in the shape it is shipped in.
+const STRIP_BEGIN = "// prismpath-bundle-strip-begin";
+const STRIP_END = "// prismpath-bundle-strip-end";
+
+function bundleEngineSource() {
+  const source = readFileSync(new URL("./bundle_engine.mjs", import.meta.url), "utf-8");
+  const beginIndex = source.indexOf(STRIP_BEGIN);
+  const endIndex = source.indexOf(STRIP_END);
+  assert.ok(beginIndex >= 0 && endIndex > beginIndex, "bundle_engine.mjs must carry its strip markers");
+  return source.slice(0, beginIndex) + source.slice(source.indexOf("\n", endIndex) + 1);
+}
+
+async function importBundle(graph, embeddedLock) {
+  const kernelSource = readFileSync(new URL("./prismpath.mjs", import.meta.url), "utf-8");
+  const bundleSource = [
+    kernelSource,
+    `\nexport const GRAPH = ${JSON.stringify(graph)};\n`,
+    `export const EMBEDDED_LOCK = ${JSON.stringify(embeddedLock)};\n`,
+    bundleEngineSource(),
+    "\nexport function runFlow(agent, opts = {}) {\n  return runCompiled(GRAPH, EMBEDDED_LOCK, agent, opts);\n}\n",
+  ].join("\n");
+  assert.ok(!bundleSource.includes('from "./prismpath.mjs"'), "a bundle is one file, it imports no kernel");
+  const bundlePath = join(mkdtempSync(join(tmpdir(), "prismpath-bundle-")), "flow.bundle.mjs");
+  writeFileSync(bundlePath, bundleSource, "utf-8");
+  return import(pathToFileURL(bundlePath).href);
+}
+
+function bundleNode(name, edges, instruction = "step") {
+  return { name, instruction, terminal: edges.length === 0, annotations: {}, edges };
+}
+
+// float16 bit patterns for the few exact values these fixtures use: the compiler stores lock
+// vectors as float16, and a test that writes the bytes by hand needs no encoder of its own.
+const HALF_BITS = new Map([[0, 0x0000], [0.25, 0x3400], [0.5, 0x3800], [1, 0x3c00]]);
+
+function halfVectorBase64(values) {
+  const bytes = Buffer.alloc(values.length * 2);
+  values.forEach((value, valueIndex) => {
+    const bits = HALF_BITS.get(value);
+    assert.ok(bits !== undefined, `fixture value ${value} has no float16 pattern here`);
+    bytes.writeUInt16LE(bits, valueIndex * 2);
+  });
+  return bytes.toString("base64");
+}
+
+test("compiled bundle: a P0 flow runs on the emitted file", async () => {
+  const graph = {
+    name: "p0_flow",
+    start: "first",
+    nodes: {
+      first: bundleNode("first", [["second", "when x == 1"], ["done", "else"]]),
+      second: bundleNode("second", [["done", "always"]]),
+      done: bundleNode("done", []),
+    },
+  };
+  const bundle = await importBundle(graph, null);
+  const result = await bundle.runFlow(async (node) => (node === "first" ? { x: 1 } : "always"));
+  assert.deepEqual(result.path, ["first", "second", "done"]);
+  assert.equal(result.stopped, "terminal");
+  assert.equal(result.steps[0].info.used, "deterministic");
+});
+
+test("compiled bundle: an async worker's throw takes the error edge", async () => {
+  const graph = {
+    name: "p0_error",
+    start: "work",
+    nodes: {
+      work: bundleNode("work", [["recover", "on error"], ["done", "always"]]),
+      recover: bundleNode("recover", [["done", "always"]]),
+      done: bundleNode("done", []),
+    },
+  };
+  const bundle = await importBundle(graph, null);
+  const result = await bundle.runFlow(async (node) => {
+    if (node === "work") throw new Error("worker down");
+    return "always";
+  });
+  assert.deepEqual(result.path, ["work", "recover", "done"]);
+  assert.equal(result.steps[0].info.used, "error");
+});
+
+test("compiled bundle: the embedded float16 lock routes a semantic edge", async () => {
+  const graph = {
+    name: "p1_flow",
+    start: "triage",
+    nodes: {
+      triage: bundleNode("triage", [["ship", "it worked"], ["escalate", "it failed"]]),
+      ship: bundleNode("ship", [["done", "always"]]),
+      escalate: bundleNode("escalate", [["done", "always"]]),
+      done: bundleNode("done", []),
+    },
+  };
+  const embeddedLock = {
+    delta: 0.05,
+    conditions: {
+      "it worked": halfVectorBase64([1, 0, 0, 0]),
+      "it failed": halfVectorBase64([0, 1, 0, 0]),
+    },
+  };
+  const bundle = await importBundle(graph, embeddedLock);
+  const worker = async () => "the build is green";
+  const embed = async () => Float32Array.from([1, 0, 0, 0]);
+
+  const routed = await bundle.runFlow(worker, { embed });
+  assert.deepEqual(routed.path, ["triage", "ship", "done"]);
+  assert.equal(routed.steps[0].info.locked, true);
+  assert.equal(routed.steps[0].info.score, 1);
+
+  // Same decision, below the absolute floor: engine.py suspends instead of guessing, and so does
+  // the bundle now. A narrow top1/top2 margin on its own is NOT a suspension in either engine.
+  const halved = await bundle.runFlow(worker, { embed: async () => Float32Array.from([0.5, 0, 0, 0]), humanFloor: 0.9 });
+  assert.equal(halved.stopped, "needs_human");
+  assert.equal(halved.pending.reason, "router confidence 0.500 < human_floor 0.9");
+  assert.equal(halved.pending.would_pick, "ship");
+});
+
+test("compiled bundle: a semantic flow refuses to run without an embedder", async () => {
+  const graph = {
+    name: "p1_no_embed",
+    start: "triage",
+    nodes: {
+      triage: bundleNode("triage", [["done", "it worked"]]),
+      done: bundleNode("done", []),
+    },
+  };
+  const bundle = await importBundle(graph, { delta: 0.05, conditions: { "it worked": halfVectorBase64([1, 0, 0, 0]) } });
+  await assert.rejects(() => bundle.runFlow(async () => "green"), /needs an embedder/);
 });

@@ -1145,6 +1145,32 @@ export function decodeVec(base64String) {
   return new Float32Array(byteArray.buffer);
 }
 
+// A compiled bundle halves its embedded lock by storing the committed vectors as float16, so the
+// decode lives here beside decodeVec rather than in a second copy inside the bundle.
+export function decodeVecF16(base64String) {
+  const byteArray = typeof Buffer !== "undefined"
+    ? Buffer.from(base64String, "base64")
+    : Uint8Array.from(atob(base64String), (character) => character.charCodeAt(0));
+  const view = new DataView(byteArray.buffer, byteArray.byteOffset, byteArray.byteLength);
+  const floats = new Float32Array(byteArray.byteLength / 2);
+  for (let halfIndex = 0; halfIndex < floats.length; halfIndex++) {
+    const half = view.getUint16(halfIndex * 2, true);
+    const sign = (half & 0x8000) >> 15;
+    const exponent = (half & 0x7c00) >> 10;
+    const fraction = half & 0x03ff;
+    let value;
+    if (exponent === 0) {
+      value = (sign ? -1 : 1) * Math.pow(2, -14) * (fraction / 1024);
+    } else if (exponent === 31) {
+      value = fraction ? NaN : (sign ? -Infinity : Infinity);
+    } else {
+      value = (sign ? -1 : 1) * Math.pow(2, exponent - 15) * (1 + fraction / 1024);
+    }
+    floats[halfIndex] = value;
+  }
+  return floats;
+}
+
 function cosine(vecA, vecB) {
   let dotProduct = 0;
   for (let vecIndex = 0; vecIndex < vecA.length; vecIndex++) {
@@ -1156,8 +1182,10 @@ function cosine(vecA, vecB) {
 function lockVec(lockfile, conditionText) {
   const centroidRec = lockfile.centroids?.[conditionText];
   if (centroidRec) return decodeVec(centroidRec.vec);
-  const conditionVecB64 = lockfile.conditions?.[conditionText];
-  if (conditionVecB64) return decodeVec(conditionVecB64);
+  const conditionVecEntry = lockfile.conditions?.[conditionText];
+  if (typeof conditionVecEntry === "string") return decodeVec(conditionVecEntry);
+  // A caller may hand in vectors it already decoded once at load (the compiled bundle does).
+  if (conditionVecEntry) return conditionVecEntry;
   return null;
 }
 
@@ -1201,7 +1229,7 @@ function pyRepr(val) {
   return pyStr(val);
 }
 
-function normalize(outcome) {
+export function normalize(outcome) {
   if (outcome !== null && typeof outcome === "object" && !Array.isArray(outcome)) {
     const textVal = "text" in outcome ? pyStr(outcome.text) : "";
     return [textVal, { ...outcome }];
@@ -1231,7 +1259,7 @@ export function eventTarget(graph, nodeName, eventNameVal) {
 }
 
 // Named helper: handles the error tier when worker execution throws
-function handleErrorTier(currentNode, nodeRec, runState, err, runResult) {
+export function handleErrorTier(currentNode, nodeRec, runState, err, runResult) {
   const errorCounts = (runState._errors = runState._errors || {});
   errorCounts[currentNode] = (errorCounts[currentNode] || 0) + 1;
   const errorCtx = {
@@ -1265,7 +1293,7 @@ function handleErrorTier(currentNode, nodeRec, runState, err, runResult) {
 }
 
 // Named helper: evaluates tier selection (deterministic vs locked semantic)
-function selectTier(nodeRec, outcomeText, fieldsObj, contextObj, lockfile, embedFn, humanFloor) {
+export function selectTier(nodeRec, outcomeText, fieldsObj, contextObj, lockfile, embedFn, humanFloor) {
   const [detTarget, detCondition] = firstDeterministic(nodeRec.edges, contextObj);
   if (detTarget !== null) {
     return { target: detTarget, info: { used: "deterministic", cond: detCondition } };
@@ -1293,8 +1321,34 @@ function selectTier(nodeRec, outcomeText, fieldsObj, contextObj, lockfile, embed
   return { stuck: true };
 }
 
+// The shape of `pending` when the worker asks for a human. Shared with the compiled bundle's
+// engine (bundle_engine.mjs) so a resumer sees one payload whichever engine suspended the run.
+export function pendingNeedsHuman(currentNode, nodeRec, fieldsObj, outcomeText) {
+  return {
+    node: currentNode,
+    reason: fieldsObj.reason || outcomeText,
+    candidates: nodeRec.edges.map(([targetName, conditionText]) => ({ target: targetName, condition: conditionText })),
+  };
+}
+
+// The shape of `pending` when the worker asks to wait for an event or to fan out.
+export function pendingWait(currentNode, nodeRec, fieldsObj) {
+  const eventEdges = nodeRec.edges.filter(([, conditionText]) => isEvent(conditionText));
+  const pending = {
+    node: currentNode,
+    wait: true,
+    awaiting: eventEdges.map(([, conditionText]) => eventName(conditionText)),
+    timeout_s: fieldsObj.timeout_s ?? null,
+    candidates: eventEdges.map(([targetName, conditionText]) => ({ target: targetName, condition: conditionText })),
+  };
+  if (fieldsObj.spawn != null) {
+    pending.spawn = fieldsObj.spawn;
+  }
+  return pending;
+}
+
 // Named helper: records a step into runResult
-function recordStep(runResult, currentNode, outcomeText, targetNode, stepInfo) {
+export function recordStep(runResult, currentNode, outcomeText, targetNode, stepInfo) {
   runResult.steps.push({ node: currentNode, outcome: outcomeText, target: targetNode, info: stepInfo });
   runResult.path.push(targetNode);
 }
@@ -1325,11 +1379,7 @@ function runStep(graph, currentNode, runState, agentFn, optionsObj, runResult) {
 
   if (pyTruthy(fieldsObj.needs_human)) {
     runResult.stopped = "needs_human";
-    runResult.pending = {
-      node: currentNode,
-      reason: fieldsObj.reason || outcomeText,
-      candidates: nodeRec.edges.map(([targetName, conditionText]) => ({ target: targetName, condition: conditionText })),
-    };
+    runResult.pending = pendingNeedsHuman(currentNode, nodeRec, fieldsObj, outcomeText);
     if (optionsObj.onStep) {
       optionsObj.onStep(runResult, currentNode);
     }
@@ -1337,18 +1387,8 @@ function runStep(graph, currentNode, runState, agentFn, optionsObj, runResult) {
   }
 
   if (pyTruthy(fieldsObj.wait) || fieldsObj.spawn != null) {
-    const eventEdges = nodeRec.edges.filter(([, conditionText]) => isEvent(conditionText));
     runResult.stopped = "waiting";
-    runResult.pending = {
-      node: currentNode,
-      wait: true,
-      awaiting: eventEdges.map(([, conditionText]) => eventName(conditionText)),
-      timeout_s: fieldsObj.timeout_s ?? null,
-      candidates: eventEdges.map(([targetName, conditionText]) => ({ target: targetName, condition: conditionText })),
-    };
-    if (fieldsObj.spawn != null) {
-      runResult.pending.spawn = fieldsObj.spawn;
-    }
+    runResult.pending = pendingWait(currentNode, nodeRec, fieldsObj);
     if (optionsObj.onStep) {
       optionsObj.onStep(runResult, currentNode);
     }

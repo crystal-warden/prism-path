@@ -931,6 +931,27 @@ def _gather_compile_inputs(flow_md_path: str, target_tier: str):
     return js_kernel, parsed_graph_js, embedded_lock_js, lock_info
 
 
+BUNDLE_ENGINE_FILE = "bundle_engine.mjs"
+# The engine source is a real module that imports the kernel; the bundle inlines the kernel instead,
+# so the import between these markers is dropped on the way in. The markers are the whole contract
+# between the compiler here and portable/bundle_engine.mjs (test_compile asserts both sides of it).
+BUNDLE_STRIP_BEGIN = "// prismpath-bundle-strip-begin"
+BUNDLE_STRIP_END = "// prismpath-bundle-strip-end"
+
+
+def _read_bundle_engine() -> str:
+    """Read portable/bundle_engine.mjs and drop the import of the kernel the bundle inlines."""
+    engine_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "portable", BUNDLE_ENGINE_FILE)
+    with open(engine_path, "r", encoding="utf-8") as file_handle:
+        engine_source = file_handle.read()
+    begin_index = engine_source.find(BUNDLE_STRIP_BEGIN)
+    end_index = engine_source.find(BUNDLE_STRIP_END)
+    if begin_index < 0 or end_index < begin_index:
+        raise RuntimeError(f"{engine_path} is missing its bundle strip markers")
+    end_of_line = engine_source.find("\n", end_index)
+    return engine_source[:begin_index] + engine_source[end_of_line + 1:]
+
+
 def _build_compile_bundle(target_tier: str, js_kernel: str, parsed_graph_js: str, embedded_lock_js: str) -> str:
     """Assemble the standalone JS bundle containing kernel and serialized graph."""
     bundle_parts = []
@@ -940,201 +961,13 @@ def _build_compile_bundle(target_tier: str, js_kernel: str, parsed_graph_js: str
     bundle_parts.append(f"\nexport const GRAPH = {parsed_graph_js};\n")
     bundle_parts.append(f"export const EMBEDDED_LOCK = {embedded_lock_js};\n")
 
-    js_helpers = """
-function decodeFloat16(b64) {
-  const binary = atob(b64);
-  const len = binary.length;
-  const bytes = new Uint8Array(len);
-  for (let i = 0; i < len; i++) {
-    bytes[i] = binary.charCodeAt(i);
-  }
-  const view = new DataView(bytes.buffer);
-  const floats = new Float32Array(len / 2);
-  for (let i = 0; i < len / 2; i++) {
-    const h = view.getUint16(i * 2, true);
-    const s = (h & 0x8000) >> 15;
-    const e = (h & 0x7c00) >> 10;
-    const f = h & 0x03ff;
-    let val;
-    if (e === 0) {
-      val = (s ? -1 : 1) * Math.pow(2, -14) * (f / 1024);
-    } else if (e === 31) {
-      val = f ? NaN : (s ? -Infinity : Infinity);
-    } else {
-      val = (s ? -1 : 1) * Math.pow(2, e - 15) * (1 + f / 1024);
-    }
-    floats[i] = val;
-  }
-  return floats;
-}
-
-function cosineSimilarity(a, b) {
-  let dot = 0;
-  let normA = 0;
-  let normB = 0;
-  for (let i = 0; i < a.length; i++) {
-    dot += a[i] * b[i];
-    normA += a[i] * a[i];
-    normB += b[i] * b[i];
-  }
-  return dot / (Math.sqrt(normA) * Math.sqrt(normB) || 1.0);
-}
-
-export async function runFlow(agent, opts = {}) {
-  const { maxSteps = 25, start = null, state: state0 = null, onStep = null, embed = null } = opts;
-  const graph = GRAPH;
-  
-  // Decompress the embedded lock conditions
-  const lockedVectors = {};
-  if (EMBEDDED_LOCK && EMBEDDED_LOCK.conditions) {
-    for (const [cond, b64] of Object.entries(EMBEDDED_LOCK.conditions)) {
-      lockedVectors[cond] = decodeFloat16(b64);
-    }
-  }
-  
-  let node = start !== null ? start : graph.start;
-  const state = state0 || {};
-  state.transcript = state.transcript || [];
-  state.visits = state.visits || {};
-  const res = { path: [node], steps: [], stopped: "", state, pending: null };
-  const checkpoint = (pendingNode) => { if (onStep) onStep(res, pendingNode); };
-
-  for (let step = 0; step < maxSteps; step++) {
-    const n = graph.nodes[node];
-    if (n.edges.length === 0) {
-      res.stopped = "terminal";
-      checkpoint(null);
-      break;
-    }
-    checkpoint(node);
-    state.visits[node] = (state.visits[node] || 0) + 1;
-
-    let outcome;
-    try {
-      outcome = await agent(node, n.instruction, state);
-    } catch (e) {
-      const ec = (state._errors = state._errors || {});
-      ec[node] = (ec[node] || 0) + 1;
-      const errCtx = {
-        error: true, error_type: e.constructor?.name || "Error", error_message: String(e.message ?? e),
-        error_count: ec[node], visits: state.visits[node],
-      };
-      let etarget = null;
-      for (const [t, c] of n.edges) {
-        if (!isError(c)) continue;
-        const expr = errorExpr(c);
-        try {
-          if (!expr || evalCondition(expr, errCtx)) { etarget = t; break; }
-        } catch (pe) { if (!(pe instanceof PredicateError)) throw pe; }
-      }
-      if (etarget === null) throw e;
-      const etext = `[error: ${errCtx.error_type}: ${errCtx.error_message}]`;
-      state.transcript.push({ node, outcome: etext, error: true });
-      res.steps.push({ node, outcome: etext, target: etarget, info: { used: "error", error_type: errCtx.error_type } });
-      node = etarget;
-      res.path.push(node);
-      continue;
-    }
-
-    const [text, fields] = normalize(outcome);
-    state.transcript.push({ node, outcome: text });
-    (state._outcomes = state._outcomes || {})[node] = { ...fields };
-
-    if (pyTruthy(fields.needs_human)) {
-      res.stopped = "needs_human";
-      res.pending = { node, reason: fields.reason || text,
-                      candidates: n.edges.map(([t, c]) => ({ target: t, condition: c })) };
-      checkpoint(node);
-      break;
-    }
-
-    if (pyTruthy(fields.wait) || fields.spawn != null) {
-      const events = n.edges.filter(([, c]) => isEvent(c));
-      res.stopped = "waiting";
-      res.pending = { node, wait: true,
-                      awaiting: events.map(([, c]) => eventName(c)),
-                      timeout_s: fields.timeout_s ?? null,
-                      candidates: events.map(([t, c]) => ({ target: t, condition: c })) };
-      if (fields.spawn != null) res.pending.spawn = fields.spawn;
-      checkpoint(node);
-      break;
-    }
-
-    const ctx = { ...fields, visits: state.visits[node] };
-    let [dt, dc] = firstDeterministic(n.edges, ctx);
-    let routingInfo = { used: "deterministic", cond: dc };
-    
-    if (dt === null) {
-      const semanticEdges = n.edges.filter(([, c]) => isSemantic(c));
-      if (semanticEdges.length > 0) {
-        if (!embed) {
-          throw new Error("embed function required for semantic routing");
-        }
-        const queryVec = await embed(text);
-        let bestTarget = null;
-        let bestCond = null;
-        let bestSim = -Infinity;
-        let secondSim = -Infinity;
-        const sims = {};
-        
-        for (const [target, cond] of semanticEdges) {
-          const lockedVec = lockedVectors[cond];
-          if (!lockedVec) {
-            throw new Error(`condition not in locked vectors: "${cond}"`);
-          }
-          const sim = cosineSimilarity(queryVec, lockedVec);
-          sims[target] = sim;
-          if (sim > bestSim) {
-            secondSim = bestSim;
-            bestSim = sim;
-            bestTarget = target;
-            bestCond = cond;
-          } else if (sim > secondSim) {
-            secondSim = sim;
-          }
-        }
-        
-        const margin = semanticEdges.length > 1 ? (bestSim - secondSim) : 1.0;
-        const delta = EMBEDDED_LOCK ? EMBEDDED_LOCK.delta : 0.05;
-        
-        if (margin >= delta) {
-          dt = bestTarget;
-          dc = bestCond;
-          routingInfo = {
-            used: "embed",
-            score: bestSim,
-            margin: margin,
-            sims: sims,
-            cond: dc,
-            locked: true
-          };
-        } else {
-          res.stopped = "needs_human";
-          res.pending = {
-            node,
-            reason: `escalated: semantic margin ${margin.toFixed(3)} < ${delta}`,
-            candidates: n.edges.map(([t, c]) => ({ target: t, condition: c }))
-          };
-          checkpoint(node);
-          break;
-        }
-      }
-    }
-
-    if (dt === null) {
-      res.stopped = "stuck";
-      checkpoint(node);
-      break;
-    }
-    res.steps.push({ node, outcome: text, target: dt, info: routingInfo });
-    node = dt;
-    res.path.push(node);
-  }
-  if (!res.stopped) res.stopped = "max_steps";
-  return res;
-}
-"""
-    bundle_parts.append(js_helpers)
+    bundle_parts.append(_read_bundle_engine())
+    # The engine takes the graph and the lock as arguments, so the bundle binds its own to the
+    # runFlow(agent, opts) entry point that compiled bundles have always exported.
+    bundle_parts.append(
+        "\nexport function runFlow(agent, opts = {}) {\n"
+        "  return runCompiled(GRAPH, EMBEDDED_LOCK, agent, opts);\n"
+        "}\n")
     return "\n".join(bundle_parts)
 
 
