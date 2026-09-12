@@ -81,8 +81,8 @@ static void send_layer3(uint32_t seq, uint16_t node, bool is_door)
     bool full = (layer_frame - layer_last_full >= LAYER_REFRESH); if (full) layer_last_full = layer_frame;
     layer_frame++;
     for (int r = 0; r < R; r++) for (int c = 0; c < C; c++) {
-        bool named = m_cell[r][c] >= MOTION_ON;
-        if (is_door) for (int k = 0; k < DOOR_N; k++) if (DOOR_CELLS[k][0] == r && DOOR_CELLS[k][1] == c) named = true;
+        bool named = m_cell[r][c] >= MOTION_ON;   // the layer follows motion only; the door zone is not refined for being a door (2026-09-11, the pane read as a pixelated photo)
+        (void)is_door;
         int idx = r * C + c; if (!named) { layer_have[idx] = false; continue; }
         uint8_t syms[32]; layer3_cell(r, c, syms);
         bool changed = !layer_have[idx] || memcmp(syms, layer_last[idx], 32) != 0; memcpy(layer_last[idx], syms, 32); layer_have[idx] = true;
