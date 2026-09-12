@@ -39,8 +39,8 @@ except ImportError:  # run as a loose script from a clone: make the repo root im
     sys.path.insert(0, str(HERE.parent.parent))
 
 from prismpath.telemetry import packed  # noqa: E402
-from prismpath.telemetry import quantizer as q  # noqa: E402
-from prismpath.telemetry import wire as w  # noqa: E402
+from prismpath.telemetry import quantizer  # noqa: E402
+from prismpath.telemetry import wire  # noqa: E402
 from prismpath.kernel.parser import parse_file  # noqa: E402
 
 
@@ -73,7 +73,7 @@ def extract_reading(event: dict, fields: List[str], field_paths: Dict[str, str]
     return reading, missing
 
 
-def _codec_view(parts: Dict[str, q.FieldPartition], reading: Dict[str, Any]
+def _codec_view(parts: Dict[str, quantizer.FieldPartition], reading: Dict[str, Any]
                 ) -> Tuple[Dict[str, Any], List[str]]:
     """The reading as the codec compares it (numeric fields truncate to int); also returns which
     fields lost a fractional part, since that truncation can flip a threshold."""
@@ -92,7 +92,7 @@ def _codec_view(parts: Dict[str, q.FieldPartition], reading: Dict[str, Any]
 
 
 # ----------------------------------------------------------------- report pieces
-def _cells_desc(p: q.FieldPartition) -> str:
+def _cells_desc(p: quantizer.FieldPartition) -> str:
     if p.kind == "numeric":
         spans = []
         for c in p.cells:
@@ -102,7 +102,7 @@ def _cells_desc(p: q.FieldPartition) -> str:
         return " ".join(spans)
     if p.kind == "boolean":
         return "[false] [true]"
-    consts = [repr(c["const"]) for c in p.cells if "const" in c and c["const"] != q._OTHER]
+    consts = [repr(c["const"]) for c in p.cells if "const" in c and c["const"] != quantizer._OTHER]
     return " ".join(f"[{c}]" for c in consts) + " [other]"
 
 
@@ -111,7 +111,7 @@ def _pct(part: int, whole: int) -> str:
 
 
 # ----------------------------------------------------------------- privacy (measured, not asserted)
-def _reconstruction_bound(p: q.FieldPartition) -> dict:
+def _reconstruction_bound(p: quantizer.FieldPartition) -> dict:
     """How precisely a raw reading is recoverable from the cell the wire carries. Privacy by
     information loss: the wider the cells, the less an observer (even one holding the policy) can
     recover. This measures it per field instead of asserting it."""
@@ -119,7 +119,7 @@ def _reconstruction_bound(p: q.FieldPartition) -> dict:
         return {"kind": "boolean", "leak": "exact",
                 "note": "exact (1 bit): a boolean has no hidden information, the cell IS the value"}
     if p.kind == "categorical":
-        enumerated = sum(1 for c in p.cells if c.get("const", q._OTHER) != q._OTHER)
+        enumerated = sum(1 for c in p.cells if c.get("const", quantizer._OTHER) != quantizer._OTHER)
         return {"kind": "categorical", "leak": "mixed", "exact_values": enumerated,
                 "note": f"{enumerated} enumerated values exact; every other value collapses to the "
                         f"'other' cell (an unbounded set, unrecoverable)"}
@@ -162,7 +162,7 @@ def _aggregation_privacy(graph, parts, order, branch_nodes, cap: int = 200_000) 
     for combo in itertools.product(*[range(parts[f].n) for f in order]):
         reading = {f: parts[f].representative(combo[i]) for i, f in enumerate(order)}
         for n in branch_nodes:
-            per_node[n][w.route_node(graph, n, reading) or "(no match)"] += 1
+            per_node[n][wire.route_node(graph, n, reading) or "(no match)"] += 1
     return {"joint_cells": total, "enumerated": True,
             "per_node": {n: dict(c) for n, c in per_node.items()}}
 
@@ -198,14 +198,14 @@ def main() -> int:
         field_paths[f] = p
 
     graph = parse_file(args.flow)
-    parts = q.build_partitions(graph)
+    parts = quantizer.build_partitions(graph)
     if not parts:
         print(f"NOT READY: policy {args.flow!r} yields no decision-relevant fields "
               f"(no `field OP const` conditions on deterministic edges).")
         return 1
     order = sorted(parts.keys())
 
-    nodes = w.decision_nodes(graph)
+    nodes = wire.decision_nodes(graph)
     if args.route_node is not None:
         if args.route_node not in nodes:
             ap.error(f"--route-node {args.route_node!r} is not a decision node "
@@ -273,7 +273,7 @@ def main() -> int:
             truncated_counts.update(truncated)
 
             try:
-                bits = w.encode_reading(parts, seen)
+                bits = wire.encode_reading(parts, seen)
             except ValueError:
                 for f in order:
                     try:
@@ -286,10 +286,10 @@ def main() -> int:
             wire_bits += len(bits)
             framed_bytes += len(packed.pack(bits, 8))    # the Vector wire: one byte-aligned reading per frame
 
-            rep = w.decode_reading(parts, bits)
+            rep = wire.decode_reading(parts, bits)
             for node in nodes:
-                orig_t = w.route_node(graph, node, seen)
-                rep_t = w.route_node(graph, node, rep)
+                orig_t = wire.route_node(graph, node, seen)
+                rep_t = wire.route_node(graph, node, rep)
                 route_dist[node][orig_t or "(no match)"] += 1
                 if orig_t != rep_t and len(mismatches) < 10:
                     mismatches.append({"node": node, "reading": reading,

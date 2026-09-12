@@ -20,7 +20,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 from prismpath.kernel import causes
 from prismpath.telemetry import packed
-from prismpath.telemetry import zeckendorf as z
+from prismpath.telemetry import zeckendorf as zeck
 
 RECEIPT_FIELDS = ("cause", "event", "next_node", "prev_node", "seq")
 
@@ -68,7 +68,7 @@ def encode_receipt_bits(
     """Encode receipt fields into a self-framing Zeckendorf bitstream."""
     syms = encode_receipt_symbols(seq, prev_node, event, next_node, cause_val)
     wire_ints = [s + 1 for s in syms]
-    return z.encode_stream(wire_ints)
+    return zeck.encode_stream(wire_ints)
 
 
 def encode_receipt(
@@ -106,7 +106,7 @@ def decode_receipt_bits(bits: str) -> Tuple[Optional[Dict[str, Any]], str]:
     if not bits:
         return None, RECEIPT_TRUNCATED
 
-    wire_ints = z.decode_stream(bits)
+    wire_ints = zeck.decode_stream(bits)
     if len(wire_ints) == 0:
         return None, RECEIPT_TRUNCATED
     if len(wire_ints) != len(RECEIPT_FIELDS):

@@ -5,7 +5,7 @@
   * a forged or corrupted block is REJECTED (fails its Merkle proof), never silently accepted;
   * selective retransmission fills exactly the gaps and reassembles the original stream bit-for-bit
     (verified through the codec round-trip);
-  * an unrecoverable block stays a PROVABLE gap — assemble() refuses rather than emit a silent hole.
+  * an unrecoverable block stays a PROVABLE gap  -  assemble() refuses rather than emit a silent hole.
 """
 import sys
 from pathlib import Path
@@ -16,10 +16,10 @@ _ADAPTER = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_ADAPTER))
 sys.path.insert(0, str(_ADAPTER.parent.parent))          # repo root, for prismpath
 from prismpath.telemetry import selfheal as sh   # noqa: E402
-from prismpath.telemetry import zeckendorf as z  # noqa: E402
+from prismpath.telemetry import zeckendorf as zeck  # noqa: E402
 
 VALUES = list(range(1, 501))                              # a real Fibonacci stream to protect
-STREAM = z.encode_stream(VALUES)
+STREAM = zeck.encode_stream(VALUES)
 BLOCK = 256
 
 
@@ -74,7 +74,7 @@ def test_selective_repair_restores_the_stream():
     assert set(retransmitted) == lost            # only the gaps were resent (selective, cf. the benchmark)
     assert r.complete()
     assert r.assemble() == STREAM                # bit-for-bit
-    assert z.decode_stream(r.assemble()) == VALUES   # and it decodes to the original telemetry
+    assert zeck.decode_stream(r.assemble()) == VALUES   # and it decodes to the original telemetry
 
 
 def test_unrecoverable_block_is_a_provable_gap():

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
-"""projection.py — the decidable cyber projection, the verdict clamp, IMU normalization,
+"""projection.py  -  the decidable cyber projection, the verdict clamp, IMU normalization,
 and an end-to-end pass over the REAL recorded sensor sessions (read-only, in-repo)."""
 import json
 import math
@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-import projection as pj
+import projection
 
 REPO = Path(__file__).resolve().parents[3]
 HW_EVIDENCE = REPO / "prismpath-hw" / "evidence"
@@ -30,14 +30,14 @@ NO_POSTURE_SESSIONS = ["fabric_recert_float_chained.ndjson", "fabric_hotswap_mid
     (12, "contain"), (15, "contain"),
 ])
 def test_projection_matrix(level, expected):
-    assert pj.soc_action_from_level(level) == expected
+    assert projection.soc_action_from_level(level) == expected
 
 
 def test_projection_is_monotone_in_severity():
     rank = {"ignore": 0, "watch": 1, "contain": 2}
     prev = -1
     for level in range(0, 20):
-        cur = rank[pj.soc_action_from_level(level)]
+        cur = rank[projection.soc_action_from_level(level)]
         assert cur >= prev
         prev = cur
 
@@ -52,14 +52,14 @@ def test_projection_is_monotone_in_severity():
     (None, "watch"),
 ])
 def test_verdict_clamp_is_escalation_default(verdict, expected):
-    assert pj.soc_action_from_verdict(verdict) == expected
+    assert projection.soc_action_from_verdict(verdict) == expected
 
 
 # ------------------------------------------------------------ IMU normalization
 
 def test_session1_label_drift_maps_to_still():
     row = {"stability": "On Table", "accel_mg": [66, -363, 9691], "ts": 1.0}
-    out = pj.normalize_imu(row)
+    out = projection.normalize_imu(row)
     assert out["stability"] == "still"
     assert out["derived"] is True
     expected = abs(int(round(math.sqrt(66**2 + 363**2 + 9691**2))) - 9806)
@@ -68,30 +68,30 @@ def test_session1_label_drift_maps_to_still():
 
 def test_canonical_row_passes_through_native_dev_mg():
     row = {"stability": "shaken", "dev_mg": 3100, "accel_mg": [0, 0, 9806], "ts": 2.0}
-    out = pj.normalize_imu(row)
+    out = projection.normalize_imu(row)
     assert out == {"stability": "shaken", "dev_mg": 3100, "ts": 2.0, "derived": False}
 
 
 def test_unknown_label_passes_through_lowercased_for_the_other_cell():
-    out = pj.normalize_imu({"stability": "In Motion", "dev_mg": 10})
+    out = projection.normalize_imu({"stability": "In Motion", "dev_mg": 10})
     assert out["stability"] == "in motion"   # not silently coerced; lands in OTHER
 
 
 def test_row_without_posture_is_none():
-    assert pj.normalize_imu({"decision": "watch", "us": 128.4, "error_rate": 0}) is None
+    assert projection.normalize_imu({"decision": "watch", "us": 128.4, "error_rate": 0}) is None
 
 
 # ------------------------------------------------------------- fused contract
 
 def test_fused_reading_contract():
     imu = {"stability": "still", "dev_mg": 0, "derived": False}
-    r = pj.fused_reading(8, "watch", imu)
+    r = projection.fused_reading(8, "watch", imu)
     assert r == {"stability": "still", "dev_mg": 0, "rule_level": 8, "soc_action": "watch"}
 
 
 def test_fused_reading_refuses_missing_dev_mg():
     with pytest.raises(ValueError):
-        pj.fused_reading(8, "watch", {"stability": "still", "dev_mg": None})
+        projection.fused_reading(8, "watch", {"stability": "still", "dev_mg": None})
 
 
 # ----------------------------------------- the real sessions, end to end (read-only)
@@ -106,12 +106,12 @@ def test_real_session_normalizes_fully(fname):
         line = line.strip()
         if not line:
             continue
-        out = pj.normalize_imu(json.loads(line))
+        out = projection.normalize_imu(json.loads(line))
         n += 1
         if out is None:
             dropped += 1
             continue
-        if out["stability"] not in pj.CANONICAL_STABILITY:
+        if out["stability"] not in projection.CANONICAL_STABILITY:
             uncanonical += 1
         if out["dev_mg"] is None:
             missing_dev += 1
@@ -127,4 +127,4 @@ def test_pure_routing_logs_are_excluded(fname):
     if not path.exists():
         pytest.skip(f"{fname} not present in this checkout")
     rows = [json.loads(l) for l in path.read_text().splitlines() if l.strip()]
-    assert all(pj.normalize_imu(r) is None for r in rows)
+    assert all(projection.normalize_imu(r) is None for r in rows)

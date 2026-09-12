@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
-"""Human-readable inspect path — the answer to "opaque wire, no tcpdump".
+"""Human-readable inspect path  -  the answer to "opaque wire, no tcpdump".
 
 Point it at a captured telemetry bitstream + the flow `.md` and it decodes each reading back to its
-symbols, the reconstructed representative values, and — the useful part — the **routing decision** the
+symbols, the reconstructed representative values, and  -  the useful part  -  the **routing decision** the
 policy makes on it. The `.md` IS the decoder: it defines both the field partition (how bits become
 symbols) and the routing (how symbols become a decision), so no bespoke, drifting tooling is needed.
 
@@ -26,34 +26,34 @@ try:
 except ImportError:  # run as a loose script from a clone: make the repo root importable
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
-from prismpath.telemetry import quantizer as q   # noqa: E402
-from prismpath.telemetry import wire as w        # noqa: E402
-from prismpath.telemetry import zeckendorf as z  # noqa: E402
+from prismpath.telemetry import quantizer   # noqa: E402
+from prismpath.telemetry import wire        # noqa: E402
+from prismpath.telemetry import zeckendorf as zeck  # noqa: E402
 from prismpath.kernel.parser import parse  # noqa: E402
 
 
 def _show(v):
-    return "<other>" if v == q._OTHER else v
+    return "<other>" if v == quantizer._OTHER else v
 
 
 def encode_readings(parts, readings: List[dict]) -> str:
     """The multi-reading wire: each reading's fields in canonical order, concatenated (zero header)."""
-    return "".join(w.encode_reading(parts, r) for r in readings)
+    return "".join(wire.encode_reading(parts, r) for r in readings)
 
 
 def inspect(graph, bits: str) -> Dict:
     """Decode a bitstream against a flow -> per-reading symbols, reconstructed values, and routes."""
-    parts = q.build_partitions(graph)
+    parts = quantizer.build_partitions(graph)
     fields = sorted(parts.keys())
-    nodes = w.decision_nodes(graph)
+    nodes = wire.decision_nodes(graph)
     nf = len(fields)
-    wire_ints = z.decode_stream(bits)
+    wire_ints = zeck.decode_stream(bits)
     n_complete = len(wire_ints) // nf if nf else 0
     rows = []
     for i in range(n_complete):
         syms = {fields[j]: wire_ints[i * nf + j] - 1 for j in range(nf)}
-        reading = q.reconstruct(parts, syms)
-        routes = {n: w.route_node(graph, n, reading) for n in nodes}
+        reading = quantizer.reconstruct(parts, syms)
+        routes = {n: wire.route_node(graph, n, reading) for n in nodes}
         rows.append({"symbols": syms,
                      "reading": {f: _show(v) for f, v in reading.items()},
                      "routes": routes})

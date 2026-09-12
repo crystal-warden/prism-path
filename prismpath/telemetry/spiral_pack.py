@@ -5,12 +5,12 @@ signed sidecar (`<pack>.spiral`) that small targets consume as data.
 
 One profile, two materializations. Capable endpoints DERIVE the layout from the signed policy
 (`spiral.SpiralLayout`); small instruction sets receive this sidecar inside the pack they already
-verify — band bases/widths and route map for the decision-lossless tier, per-field partitions to
+verify  -  band bases/widths and route map for the decision-lossless tier, per-field partitions to
 quantize raw readings, and the cell->index map for Gray refinement. The two materializations are
 bound by byte-equality fixtures: derived and baked must describe the identical layout.
 
 Fail-closed at build: the builder runs the static lint and REFUSES a flow that does not declare
-`packing: spiral` or that violates the profile's authoring rules — a convention-violating flow
+`packing: spiral` or that violates the profile's authoring rules  -  a convention-violating flow
 cannot become a baked pack. (The verifier's hash check is in `prismpath.policy_pack`; the semantic
 re-derivation lives here, where the adapter may import both halves.)
 
@@ -25,7 +25,7 @@ import struct
 from typing import Dict, List, Optional
 
 from prismpath.kernel import analysis
-from prismpath.telemetry import spiral as sp
+from prismpath.telemetry import spiral
 
 MAGIC = 0x4C535050  # "PPSL"
 VERSION = 1
@@ -46,7 +46,7 @@ def _packable_nodes(graph) -> List[str]:
     out = []
     for name in graph.nodes:
         try:
-            sp.SpiralLayout(graph, name)
+            spiral.SpiralLayout(graph, name)
         except ValueError:
             continue
         out.append(name)
@@ -61,7 +61,7 @@ def serialize_layouts(graph, nodes: Optional[List[str]] = None) -> bytes:
         raise ValueError("refusing to bake: no packable nodes (no decision-relevant fields)")
     out = bytearray(struct.pack("<IHH", MAGIC, VERSION, len(names)))
     for name in names:
-        L = sp.SpiralLayout(graph, name)
+        L = spiral.SpiralLayout(graph, name)
         nb = name.encode()
         out += struct.pack("<B", len(nb)) + nb
         out += struct.pack("<BB", len(L.fields), 0)
@@ -69,7 +69,7 @@ def serialize_layouts(graph, nodes: Optional[List[str]] = None) -> bytes:
             part = L.parts[f]
             if part.kind not in _KINDS:
                 raise ValueError(
-                    f"refusing to bake: field {f!r} is {part.kind} — "
+                    f"refusing to bake: field {f!r} is {part.kind}  -  "
                     f"sidecar v1 bakes numeric/boolean fields only"
                 )
             fb = f.encode()
@@ -173,7 +173,7 @@ def verify_derived_equals_baked(graph, data: bytes) -> List[str]:
     got = parse_sidecar(data)
     errs: List[str] = []
     for name, rec in got["nodes"].items():
-        L = sp.SpiralLayout(graph, name)
+        L = spiral.SpiralLayout(graph, name)
         if [f["field"] for f in rec["fields"]] != L.fields:
             errs.append(f"{name}: field set/order differs")
             continue

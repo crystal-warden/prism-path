@@ -3,16 +3,16 @@
 """Band-population census for the fusion_triage tessellation.
 
 Weights every ring of the spiral with REAL data: the cyber axis from an alert-level backlog
-(a level histogram — under the decidable projection the cyber marginal IS the level histogram,
+(a level histogram  -  under the decidable projection the cyber marginal IS the level histogram,
 so one aggregation replaces a 64k document pull), the physical axis from the recorded sensor
 sessions in prismpath-hw/evidence/.
 
 Two pairings, both labeled, neither time-coincident:
 
-- assume_still  — every alert fused with the baseline posture {still, 0}. The cyber axis is
+- assume_still   -  every alert fused with the baseline posture {still, 0}. The cyber axis is
   fully observed; the physical axis is a stated baseline. The fusion bands stay empty and that
   emptiness is the finding: without coincident capture there is no honest joint.
-- independence_expected — cyber marginal x IMU marginal, normalized to the cyber N. Marginals
+- independence_expected  -  cyber marginal x IMU marginal, normalized to the cyber N. Marginals
   measured, joint modeled. Expected counts under independence, explicitly not observations.
 
 Committed artifacts are aggregates only: no alert content, agent names, hostnames, or IPs
@@ -40,11 +40,11 @@ for p in (str(REPO / "prismpath" / "telemetry"), str(REPO), str(HERE)):
     if p not in sys.path:
         sys.path.insert(0, p)
 
-from prismpath.telemetry import quantizer as q  # noqa: E402
-from prismpath.telemetry import spiral as sp    # noqa: E402
+from prismpath.telemetry import quantizer  # noqa: E402
+from prismpath.telemetry import spiral    # noqa: E402
 from prismpath.kernel.parser import parse  # noqa: E402
 
-import projection as pj  # noqa: E402
+import projection  # noqa: E402
 
 FLOW_PATH = HERE / "flows" / "fusion_triage.md"
 NODE = "correlate"
@@ -99,7 +99,7 @@ def imu_marginal(parts, paths: Iterable[Path], include_derived: bool = False) ->
             if not line:
                 continue
             rows += 1
-            out = pj.normalize_imu(json.loads(line))
+            out = projection.normalize_imu(json.loads(line))
             if out is None:
                 continue
             if out["derived"] and not include_derived:
@@ -137,17 +137,17 @@ def band_census(layout, parts, pairing: str, cyber_hist: Dict[int, int], imu: di
         label = ("every alert fused with the baseline posture {still, dev_mg=0}; cyber axis "
                  "fully observed, physical axis a stated baseline")
         for level, count in cyber_hist.items():
-            reading = pj.fused_reading(level, pj.soc_action_from_level(level), pj.ASSUME_STILL)
+            reading = projection.fused_reading(level, projection.soc_action_from_level(level), projection.ASSUME_STILL)
             _band_add(layout, reading, count, bands, cells)
     elif pairing == "independence_expected":
         label = ("cyber marginal x IMU marginal normalized to cyber N; marginals measured, "
                  "joint modeled under an explicit independence assumption; NOT time-coincident")
         n_imu = sum(imu["counts"].values()) or 1
         for level, c_count in cyber_hist.items():
-            action = pj.soc_action_from_level(level)
+            action = projection.soc_action_from_level(level)
             for key, i_count in imu["counts"].items():
                 stability, dsym = key.split("|")
-                reading = pj.fused_reading(level, action,
+                reading = projection.fused_reading(level, action,
                                            {"stability": stability, "dev_mg": dev_rep[int(dsym)]})
                 _band_add(layout, reading, c_count * i_count / n_imu, bands, cells)
     else:
@@ -171,8 +171,8 @@ def build_artifact(cyber_hist: Dict[int, int], query_meta: dict, min_level: int,
                    include_derived: bool = False) -> dict:
     flow_text = FLOW_PATH.read_text()
     graph = parse(flow_text)
-    layout = sp.SpiralLayout(graph, NODE)
-    parts = q.build_partitions(graph)
+    layout = spiral.SpiralLayout(graph, NODE)
+    parts = quantizer.build_partitions(graph)
 
     filtered = {lvl: c for lvl, c in cyber_hist.items() if lvl >= min_level}
     imu = imu_marginal(parts, [HW_EVIDENCE / s for s in POSTURE_SESSIONS],

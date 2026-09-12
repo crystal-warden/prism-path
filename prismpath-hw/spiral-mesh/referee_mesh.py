@@ -4,13 +4,13 @@
 """Three-port referee for the spiral-mesh binding. Captures every node's serial for a window and
 judges four claims:
 
-  1. WIRE INTEGRITY  — every received frame's hex equals the sender's transmitted hex for that
+  1. WIRE INTEGRITY   -  every received frame's hex equals the sender's transmitted hex for that
      (role, class, tick): Facet frames crossed real RF bit-exactly.
-  2. DERIVED == BAKED == AIR — every band symbol on the air equals the host re-deriving the
+  2. DERIVED == BAKED == AIR  -  every band symbol on the air equals the host re-deriving the
      quantization from the signed flow (synthesis is deterministic, so every tick is checkable).
-  3. LOSS SEMANTICS  — per-link delivery counted; a lost frame may cost freshness, never a wrong
+  3. LOSS SEMANTICS   -  per-link delivery counted; a lost frame may cost freshness, never a wrong
      symbol (no received symbol ever disagrees with the sender's computation).
-  4. COHERENCE BEACON — posture gossip: fraction of observed ticks where all nodes report the
+  4. COHERENCE BEACON  -  posture gossip: fraction of observed ticks where all nodes report the
      same joint cell n (transient skew at band edges is expected and reported, not hidden).
 
     python3 referee_mesh.py 30            # seconds to observe
@@ -25,7 +25,7 @@ import serial
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", ".."))
 
-from prismpath.telemetry import spiral as sp                              # noqa: E402
+from prismpath.telemetry import spiral                              # noqa: E402
 from prismpath.kernel.parser import parse               # noqa: E402
 from gen_spiral_mesh_data import FLOW, NODE, ROLES, synth   # noqa: E402
 
@@ -55,7 +55,7 @@ def main():
     for t in threads: t.join()
 
     g = parse(FLOW)
-    L = sp.SpiralLayout(g, NODE)
+    L = spiral.SpiralLayout(g, NODE)
     fidx = {f: i for i, f in enumerate(L.fields)}
 
     tx = {}                    # (role, cls, tick) -> (value, hex)
@@ -90,7 +90,7 @@ def main():
     for obs, src, cls, tick, val, hx in rx:
         want = tx.get((src, cls, tick))
         if want is None:
-            continue                              # sender line lost on SERIAL, not RF — skip
+            continue                              # sender line lost on SERIAL, not RF  -  skip
         if want[1] != hx:
             bad_hex += 1
         elif want[0] != val:
@@ -126,7 +126,7 @@ def main():
           f"({100.0 * agree / len(full):.1f}%)" if full else "posture: no full ticks observed")
     ok = (bad_hex == 0 and wrong_sym == 0 and derive_bad == 0
           and matched > 0 and full and agree > 0)
-    print("REFEREE:", "PASS — Facet frames crossed RF bit-exactly; air == derived; "
+    print("REFEREE:", "PASS  -  Facet frames crossed RF bit-exactly; air == derived; "
                       "coherence beacon live" if ok else "FAIL")
     sys.exit(0 if ok else 1)
 

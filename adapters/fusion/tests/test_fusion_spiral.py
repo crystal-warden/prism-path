@@ -2,7 +2,7 @@
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Frozen-corpus conformance for the fusion_triage tessellation.
 
-Referee pattern from prismpath/telemetry: every probe must route identically three ways —
+Referee pattern from prismpath/telemetry: every probe must route identically three ways  - 
 direct evaluation, quantize -> wire round-trip -> evaluation, and spiral index -> band
 reconstruction. A mapping bug anywhere flips a frozen entry and this file goes RED.
 """
@@ -15,16 +15,16 @@ import pytest
 
 ADAPTER = Path(__file__).resolve().parent.parent
 REPO = ADAPTER.parent.parent
-from prismpath.telemetry import quantizer as q  # noqa: E402
-from prismpath.telemetry import spiral as sp    # noqa: E402
-from prismpath.telemetry import wire as w       # noqa: E402
+from prismpath.telemetry import quantizer  # noqa: E402
+from prismpath.telemetry import spiral    # noqa: E402
+from prismpath.telemetry import wire       # noqa: E402
 from prismpath.kernel.parser import parse  # noqa: E402
 
 CORPUS = json.loads((ADAPTER / "conformance" / "spiral_fusion.json").read_text())
 FLOW_PATH = ADAPTER / "flows" / "fusion_triage.md"
 GRAPH = parse(FLOW_PATH.read_text())
-LAYOUT = sp.SpiralLayout(GRAPH, CORPUS["node"])
-PARTS = q.build_partitions(GRAPH)
+LAYOUT = spiral.SpiralLayout(GRAPH, CORPUS["node"])
+PARTS = quantizer.build_partitions(GRAPH)
 
 SEVERITY_ORDER = [
     "all_quiet", "physical_watch", "cyber_watch", "tandem_watch",
@@ -71,11 +71,11 @@ def test_every_cell_routes():
 def test_probe_decisions_preserved(probe):
     reading, frozen_route = probe["reading"], probe["route"]
     # 1. direct evaluation
-    assert w.route_node(GRAPH, CORPUS["node"], reading) == frozen_route
+    assert wire.route_node(GRAPH, CORPUS["node"], reading) == frozen_route
     # 2. quantize -> wire -> decode -> evaluate
-    bits = w.encode_reading(PARTS, reading)
-    decoded = w.decode_reading(PARTS, bits)
-    assert w.route_node(GRAPH, CORPUS["node"], decoded) == frozen_route
+    bits = wire.encode_reading(PARTS, reading)
+    decoded = wire.decode_reading(PARTS, bits)
+    assert wire.route_node(GRAPH, CORPUS["node"], decoded) == frozen_route
     # 3. spiral index -> band -> route
     assert LAYOUT.route_of(LAYOUT.index(reading)) == frozen_route
     assert LAYOUT.routes[LAYOUT.band_id(reading)] == frozen_route
@@ -85,12 +85,12 @@ def test_probe_decisions_preserved(probe):
 
 def test_missing_field_raises():
     with pytest.raises(KeyError):
-        w.encode_reading(PARTS, {"stability": "still", "dev_mg": 0, "rule_level": 3})
+        wire.encode_reading(PARTS, {"stability": "still", "dev_mg": 0, "rule_level": 3})
 
 
 def test_other_collapse_is_decision_preserving():
     # "still" and the drifted "On Table" are not flow constants; both land in the OTHER cell
-    # and must quantize identically — the minimum-sufficient-statistic property, visible.
+    # and must quantize identically  -  the minimum-sufficient-statistic property, visible.
     s = PARTS["stability"]
     assert s.symbol("still") == s.symbol("On Table") == s.symbol("anything_else")
     a = PARTS["soc_action"]

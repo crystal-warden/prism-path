@@ -10,7 +10,7 @@ import pytest
 _ADAPTER = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_ADAPTER))
 from prismpath.telemetry import packed as p     # noqa: E402
-from prismpath.telemetry import zeckendorf as z  # noqa: E402
+from prismpath.telemetry import zeckendorf as zeck  # noqa: E402
 
 
 @pytest.mark.parametrize("word_bits", [8, 64])
@@ -29,7 +29,7 @@ def test_output_is_whole_words():
 
 
 def test_bits_survive_packing():
-    bits = z.encode_stream([4, 2, 7])
+    bits = zeck.encode_stream([4, 2, 7])
     unpacked = p.unpack(p.pack(bits, 64))
     assert unpacked.startswith(bits)                    # original bits recovered; remainder is zero pad
     assert set(unpacked[len(bits):]) <= {"0"}
@@ -44,7 +44,7 @@ def test_padding_amortizes():
 
 def test_wire_is_dense():
     ints = list(range(1, 1000))
-    bits = len(z.encode_stream(ints))
+    bits = len(zeck.encode_stream(ints))
     wire = p.encode(ints)
     # real bytes ~ bits/8 (vs the reference bit-string, which is one char per bit)
     assert len(wire) * 8 >= bits and len(wire) * 8 < bits + 64

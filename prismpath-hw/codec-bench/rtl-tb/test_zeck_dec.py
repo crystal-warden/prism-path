@@ -13,7 +13,7 @@ from cocotb.clock import Clock
 from cocotb.triggers import RisingEdge
 
 HERE = Path(__file__).resolve().parent
-from prismpath.telemetry import zeckendorf as z  # noqa: E402
+from prismpath.telemetry import zeckendorf as zeck  # noqa: E402
 
 
 def corpus():
@@ -48,7 +48,7 @@ async def conformance(dut):
     expected = []
     for ints in corpus():
         expected.extend(ints)
-        for ch in z.encode_stream(ints):     # one char per wire bit, terminators included
+        for ch in zeck.encode_stream(ints):     # one char per wire bit, terminators included
             dut.in_valid.value = 1
             dut.in_bit.value = int(ch)
             await RisingEdge(dut.clk)

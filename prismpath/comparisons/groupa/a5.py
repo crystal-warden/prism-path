@@ -38,9 +38,9 @@ from prismpath.kernel.parser import parse
 
 from prismpath.telemetry import concentrator  # noqa: E402
 from prismpath.telemetry import packed  # noqa: E402
-from prismpath.telemetry import quantizer as q  # noqa: E402
+from prismpath.telemetry import quantizer  # noqa: E402
 from prismpath.telemetry import receipts  # noqa: E402
-from prismpath.telemetry import wire as w  # noqa: E402
+from prismpath.telemetry import wire  # noqa: E402
 
 POLICIES = ["network_admission", "sensor_interlock"]
 ENVELOPE = 28
@@ -58,22 +58,22 @@ def run_prismpath() -> None:
         policy = policy_by_id(pid)
         flow = (gen_dir_for("prismpath", pid) / f"{pid}.md").read_text()
         graph = parse(flow)
-        parts = q.build_partitions(graph)
+        parts = quantizer.build_partitions(graph)
         node_names = list(graph.nodes)
         for seq, (sid, kind, inp, exp) in enumerate(scenario_steps(policy)):
             if kind == "undeclared_missing":
                 continue
             reading = {k: v for k, v in inp.items() if v is not None}
-            bits = w.encode_reading(parts, reading)
+            bits = wire.encode_reading(parts, reading)
             req = packed.pack(bits, 8)
-            target = w.route_node(graph, "decide", reading)   # the node name is r<n>_<outcome>; observed is the outcome the flow actually reached
+            target = wire.route_node(graph, "decide", reading)   # the node name is r<n>_<outcome>; observed is the outcome the flow actually reached
             cause = 0 if target is not None else 36
             nxt = node_names.index(target) if target else 0
             res = receipts.encode_receipt_dict({"cause": cause, "event": 0, "next_node": nxt, "prev_node": 0, "seq": seq})
             total = len(req) + len(res)
             # concentrator: the reading's wire ints, one stream per node in a fleet of N sharing one datagram
             conc = {}
-            symbols = q.quantize(parts, reading)
+            symbols = quantizer.quantize(parts, reading)
             order = sorted(parts)
             reading_ints = [symbols[f] + 1 for f in order]           # symbol plus one, the wire mapping
             for fleet in (1, 10, 50):

@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
-"""Decision-preserving quantizer — the contract, pinned:
+"""Decision-preserving quantizer  -  the contract, pinned:
   * the partition is the coarsest that keeps every atom truth-invariant per cell (minimum sufficient
     statistic for the decisions);
   * quantize -> reconstruct routes IDENTICALLY to the original reading, across numeric / boolean /
-    categorical fields (the differentiated claim, in miniature — the frozen cross-flow proof is next);
+    categorical fields (the differentiated claim, in miniature  -  the frozen cross-flow proof is next);
   * symbols are small ints (Fibonacci-friendly).
 """
 import os
@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from prismpath.telemetry import quantizer as q  # noqa: E402
+from prismpath.telemetry import quantizer  # noqa: E402
 
 from prismpath.kernel import predicates  # noqa: E402
 from prismpath.kernel.parser import parse, parse_file  # noqa: E402
@@ -60,17 +60,17 @@ def _route(graph, node, reading):
 
 
 def _assert_decisions_preserved(graph, node, readings):
-    parts = q.build_partitions(graph)
+    parts = quantizer.build_partitions(graph)
     for r in readings:
         orig = _route(graph, node, r)
-        recon = _route(graph, node, q.reconstruct(parts, q.quantize(parts, r)))
+        recon = _route(graph, node, quantizer.reconstruct(parts, quantizer.quantize(parts, r)))
         assert orig == recon, f"decision changed for {r}: {orig} -> {recon}"
 
 
 # ---------------------------------------------------------------- partition shape
 def test_incident_partition_is_minimal():
     g = parse_file(_INCIDENT)
-    parts = q.build_partitions(g)
+    parts = quantizer.build_partitions(g)
     # error_rate thresholds >=1,>=5,>=25 -> exactly 4 decision cells
     assert parts["error_rate"].kind == "numeric"
     assert parts["error_rate"].n == 4
@@ -81,7 +81,7 @@ def test_incident_partition_is_minimal():
 
 def test_categorical_partition_shape():
     g = parse(CATEGORICAL)
-    parts = q.build_partitions(g)
+    parts = quantizer.build_partitions(g)
     # kind: urgent/nightly/weekly + other = 4 ; status: ok + other = 2
     assert parts["kind"].kind == "categorical" and parts["kind"].n == 4
     assert parts["status"].kind == "categorical" and parts["status"].n == 2
@@ -89,7 +89,7 @@ def test_categorical_partition_shape():
 
 def test_numeric_equality_keeps_the_point_cell():
     g = parse(NUMERIC_EQ)
-    parts = q.build_partitions(g)
+    parts = quantizer.build_partitions(g)
     # x: {<5}, {5}, {6..9}, {>=10} -> 4 cells (the == carves out the singleton {5})
     assert parts["x"].kind == "numeric" and parts["x"].n == 4
     assert parts["x"].symbol(5) != parts["x"].symbol(4)
@@ -123,7 +123,7 @@ def test_numeric_equality_decisions_preserved():
 # ---------------------------------------------------------------- symbols stay small
 def test_symbols_are_small():
     g = parse_file(_INCIDENT)
-    parts = q.build_partitions(g)
+    parts = quantizer.build_partitions(g)
     r = {"data_at_risk": True, "user_facing": False, "error_rate": 42}
-    syms = q.quantize(parts, r)
+    syms = quantizer.quantize(parts, r)
     assert all(0 <= s < 8 for s in syms.values())   # tiny -> 1-2 Fibonacci bytes each

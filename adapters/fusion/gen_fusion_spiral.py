@@ -4,7 +4,7 @@
 
 Mirrors prismpath/telemetry/gen_spiral_corpus.py, with two deliberate differences: the flow is
 read from flows/fusion_triage.md (not an inline string) and its sha256 is embedded so the frozen
-corpus detects flow drift. Only the integer mapping is frozen — build-time xy floats are
+corpus detects flow drift. Only the integer mapping is frozen  -  build-time xy floats are
 excluded so the corpus stays platform-stable.
 
     python adapters/fusion/gen_fusion_spiral.py
@@ -20,8 +20,8 @@ HERE = Path(__file__).resolve().parent
 REPO = HERE.parent.parent
 sys.path.insert(0, str(REPO))
 
-from prismpath.telemetry import spiral as sp  # noqa: E402
-from prismpath.telemetry import wire as w     # noqa: E402
+from prismpath.telemetry import spiral  # noqa: E402
+from prismpath.telemetry import wire     # noqa: E402
 from prismpath.kernel.parser import parse  # noqa: E402
 
 FLOW_PATH = HERE / "flows" / "fusion_triage.md"
@@ -62,7 +62,7 @@ def _probes(graph) -> list:
         if key in seen:
             return
         seen.add(key)
-        probes.append({"reading": reading, "route": w.route_node(graph, NODE, reading)})
+        probes.append({"reading": reading, "route": wire.route_node(graph, NODE, reading)})
 
     for field, values in (("dev_mg", _DEV_VALUES), ("rule_level", _LEVEL_VALUES),
                           ("soc_action", _SOC_VALUES), ("stability", _STAB_VALUES)):
@@ -76,7 +76,7 @@ def _probes(graph) -> list:
 def main() -> int:
     flow_text = FLOW_PATH.read_text()
     graph = parse(flow_text)
-    L = sp.SpiralLayout(graph, NODE)
+    L = spiral.SpiralLayout(graph, NODE)
     corpus = {
         "version": 1,
         "note": "Frozen integer tessellation of fusion_triage@correlate. xy floats deliberately "

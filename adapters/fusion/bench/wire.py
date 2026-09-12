@@ -1,15 +1,15 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
-"""Wire-bytes benchmark — the honest transmission-cost model the payload benchmark deferred.
+"""Wire-bytes benchmark  -  the honest transmission-cost model the payload benchmark deferred.
 
 `bandwidth.py` measured payload + attestation. This measures what actually goes on the wire:
 per-PACKET transport framing (IP/TCP/TLS) under three transmission strategies, over two real
 arrival patterns (a bursty SIEM stream and a steady sensor stream), for our decision codec vs a
 JSON baseline, with and without per-packet compression. It answers the question a rigorous
-reviewer asks first: "the header tax eats your 1.5-byte payload — what's the real wire cost?"
+reviewer asks first: "the header tax eats your 1.5-byte payload  -  what's the real wire cost?"
 
 The point it proves: because the codec is self-framing (zero per-reading framing), batching is
-lossless, so the one per-packet transport header amortizes to near-zero as a packet fills — while
+lossless, so the one per-packet transport header amortizes to near-zero as a packet fills  -  while
 a batched JSON stream still carries its per-record keys. The header tax only bites in the
 unbatched per-event regime, which is a latency choice, not a codec limit.
 
@@ -41,12 +41,12 @@ for p in (str(REPO / "prismpath" / "telemetry"), str(REPO), str(ADAPTER)):
     if p not in sys.path:
         sys.path.insert(0, p)
 
-from prismpath.telemetry import packed as pk      # noqa: E402
-from prismpath.telemetry import quantizer as q    # noqa: E402
-from prismpath.telemetry import wire as w         # noqa: E402
+from prismpath.telemetry import packed      # noqa: E402
+from prismpath.telemetry import quantizer    # noqa: E402
+from prismpath.telemetry import wire         # noqa: E402
 from prismpath.kernel.parser import parse  # noqa: E402
 
-import projection as pj  # noqa: E402
+import projection  # noqa: E402
 
 FLOW = ADAPTER / "flows" / "fusion_triage.md"
 HW = REPO / "prismpath-hw" / "evidence"
@@ -87,9 +87,9 @@ def events_from_imu() -> List[Tuple[float, dict]]:
             line = line.strip()
             if not line:
                 continue
-            n = pj.normalize_imu(json.loads(line))
+            n = projection.normalize_imu(json.loads(line))
             if n and n.get("ts") is not None and n.get("dev_mg") is not None and not n["derived"]:
-                out.append((float(n["ts"]), pj.fused_reading(3, "ignore", n)))
+                out.append((float(n["ts"]), projection.fused_reading(3, "ignore", n)))
     out.sort(key=lambda e: e[0])
     return out
 
@@ -101,7 +101,7 @@ def events_from_fixture(n=2000, hz=6.0) -> List[Tuple[float, dict]]:
     for _ in range(n):
         t += 1.0 / hz
         lvl = rng.choice([3, 3, 3, 7, 8])
-        out.append((t, pj.fused_reading(lvl, pj.soc_action_from_level(lvl), pj.ASSUME_STILL)))
+        out.append((t, projection.fused_reading(lvl, projection.soc_action_from_level(lvl), projection.ASSUME_STILL)))
     return out
 
 
@@ -109,7 +109,7 @@ def events_from_fixture(n=2000, hz=6.0) -> List[Tuple[float, dict]]:
 
 def make_encoders(parts):
     def ours(reading) -> str:                       # bit-string, self-framing
-        return w.encode_reading(parts, reading)
+        return wire.encode_reading(parts, reading)
 
     def jsonb(reading) -> bytes:                    # compact 4-field JSON + newline
         return (json.dumps(reading, separators=(",", ":"), sort_keys=True) + "\n").encode()
@@ -127,7 +127,7 @@ def simulate(events, encode: Callable, is_bits: bool, mode: str, *, overhead: in
 
     def payload_bytes(idxs) -> int:
         if is_bits:
-            raw = pk.pack("".join(contribs[i] for i in idxs))
+            raw = packed.pack("".join(contribs[i] for i in idxs))
         else:
             raw = b"".join(contribs[i] for i in idxs)
         if compress:
@@ -227,7 +227,7 @@ def measure_crypto_cost(payload_len: int, iters: int = 4000) -> dict:
 
 def run(events, corpus: str, overhead_name: str, outdir: Path):
     graph = parse(FLOW.read_text())
-    parts = q.build_partitions(graph)
+    parts = quantizer.build_partitions(graph)
     ours, jsonb = make_encoders(parts)
     ov = OVERHEAD[overhead_name]
     n = len(events)
@@ -264,11 +264,11 @@ def run(events, corpus: str, overhead_name: str, outdir: Path):
     def mb_day(m):
         return m["bytes_per_day"] / 1e6
 
-    md = [f"# Wire-bytes benchmark — {corpus} corpus", "",
+    md = [f"# Wire-bytes benchmark  -  {corpus} corpus", "",
           f"n = {n:,} decisions over {span:.0f}s (~{n/span:.1f}/s). Transport overhead: "
           f"{overhead_name} ({ov} B/packet). MTU payload budget {MTU_PAYLOAD} B. Ours carries a "
           f"{ATTEST_BYTES} B Merkle root/packet (tamper-evident); JSON carries none.", "",
-          "## Full matrix — 4 formats x 4 strategies", "",
+          "## Full matrix  -  4 formats x 4 strategies", "",
           "| format | strategy | wire B/decision | packets/day | MB/day | p95 latency |",
           "|---|---|---|---|---|---|"]
     for fname, cname, m in rows:
@@ -276,9 +276,9 @@ def run(events, corpus: str, overhead_name: str, outdir: Path):
                   f"{mb_day(m):.3f} | {m['p95_latency_ms']} ms |")
 
     # ---- the three strategies over a 24-hour period (the product, ours O1) ----
-    md += ["", "## The three strategies over 24 hours (ours O1 — the product)", "",
+    md += ["", "## The three strategies over 24 hours (ours O1  -  the product)", "",
            "Same decisions, same fidelity; the operator picks the point on the bytes<->latency curve. "
-           "All three ship in the box — no commitment to one.", "",
+           "All three ship in the box  -  no commitment to one.", "",
            "| strategy | what triggers a send | packets/day | MB/day | p95 latency |",
            "|---|---|---|---|---|",
            f"| stream | every decision | {o1['stream']['packets_per_day']:,} | "
@@ -304,7 +304,7 @@ def run(events, corpus: str, overhead_name: str, outdir: Path):
            "**Decision fidelity is strategy-invariant and lossless.** Batching, compression, and "
            "encryption are packaging: the routed verdict reconstructs bit-for-bit regardless of how "
            "packets are cut (the quantizer is decision-preserving by construction; proven three ways "
-           "in `test_fusion_spiral.py`). The *only* axis a strategy trades is temporal fidelity — how "
+           "in `test_fusion_spiral.py`). The *only* axis a strategy trades is temporal fidelity  -  how "
            "fresh the decision is when it lands. So the choice is never 'accuracy vs bandwidth'; it is "
            "purely 'latency vs bandwidth', and the operator owns it.", ""]
 
@@ -314,7 +314,7 @@ def run(events, corpus: str, overhead_name: str, outdir: Path):
     cc = measure_crypto_cost(rep_len)
     enc_fill = enc["mtu-fill"]
     dbytes = enc_fill["bytes_per_event"] - o1["mtu-fill"]["bytes_per_event"]
-    md += ["## Optional confidentiality layer — AEAD + ECDHE (composed, not hand-rolled)", "",
+    md += ["## Optional confidentiality layer  -  AEAD + ECDHE (composed, not hand-rolled)", "",
            "TLS-1.3 primitives on top of the decision stream, for transports that do not already "
            "provide TLS (LoRa, 802.15.4/Thread, raw UDP, bare-metal MCU links). Over TCP+TLS this is "
            "redundant. Both primitives run on a Cortex-M0+.", "",
@@ -326,10 +326,10 @@ def run(events, corpus: str, overhead_name: str, outdir: Path):
            f"- **Compute cost (measured, this host, {rep_len} B representative packet):** "
            + (f"ECDHE handshake ~{cc['handshake_us']} us (both endpoints, once/epoch); "
               f"ChaCha20-Poly1305 ~{cc['encrypt_us_per_pkt']} us/packet ({cc['aead_mb_s']} MB/s)."
-              if cc["measured"] else "cryptography library unavailable — cost modeled, not measured."),
+              if cc["measured"] else "cryptography library unavailable  -  cost modeled, not measured."),
            "- **Confidentiality is the point, not integrity twice:** the AEAD tag secures the "
            "transport; the 32 B Merkle root is the persistent, cross-session audit chain. Different "
-           "jobs. And salting would not help here — a 2-bit verdict is low-entropy, so only keyed "
+           "jobs. And salting would not help here  -  a 2-bit verdict is low-entropy, so only keyed "
            "AEAD (semantic security) hides `all_quiet` from `coincident_critical` on the wire.", ""]
 
     # ---- reading ----
@@ -337,13 +337,13 @@ def run(events, corpus: str, overhead_name: str, outdir: Path):
     md += ["## Reading", "",
            f"- **The header tax is a batching choice, not a codec limit.** Ours goes from "
            f"**{ours_stream['bytes_per_event']} B/decision** unbatched to "
-           f"**{o1['mtu-fill']['bytes_per_event']} B/decision** at mtu-fill — the per-packet transport "
+           f"**{o1['mtu-fill']['bytes_per_event']} B/decision** at mtu-fill  -  the per-packet transport "
            f"header amortizes to ~0 because the codec is self-framing.",
            f"- **Batched-vs-batched, our advantage over plain JSON persists:** mtu-fill ours "
            f"{o1['mtu-fill']['bytes_per_event']} B vs JSON {json_fill['bytes_per_event']} B "
-           f"(**{json_fill['bytes_per_event']/o1['mtu-fill']['bytes_per_event']:.0f}x**) — JSON keeps "
+           f"(**{json_fill['bytes_per_event']/o1['mtu-fill']['bytes_per_event']:.0f}x**)  -  JSON keeps "
            f"paying per-record keys inside the batch; ours pays none.",
-           f"- **JSON + zstd batched is {jz_fill['bytes_per_event']} B/decision** — the honest "
+           f"- **JSON + zstd batched is {jz_fill['bytes_per_event']} B/decision**  -  the honest "
            f"'smallest bytes, but not streaming, not self-framing, no tamper-evidence' reference. Our "
            f"differentiation there is properties, not raw bytes; and our stream can be zstd'd too.",
            f"- **All three strategies are lossless and ship together.** The operator sets latency vs "

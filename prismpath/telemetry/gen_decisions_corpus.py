@@ -3,7 +3,7 @@
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Generate the frozen decisions-preserved corpus: a set of flows + boundary-probing reading grids, each
 reading tagged with the full-precision route at every decision node. `test_decisions_preserved.py` replays
-it two ways — the engine must still produce the frozen routes (drift guard), and the wire round-trip
+it two ways  -  the engine must still produce the frozen routes (drift guard), and the wire round-trip
 (quantize -> Fibonacci -> decode -> reconstruct) must reproduce them exactly (the differentiated proof).
 
 Usage: gen_decisions_corpus.py   # writes conformance/decisions.json
@@ -18,8 +18,8 @@ sys.path.insert(0, str(HERE))
 REPO = HERE.parent.parent
 sys.path.insert(0, str(REPO))
 
-from prismpath.telemetry import quantizer as q          # noqa: E402
-from prismpath.telemetry import wire as w              # noqa: E402
+from prismpath.telemetry import quantizer          # noqa: E402
+from prismpath.telemetry import wire              # noqa: E402
 from prismpath.kernel.parser import parse, parse_file  # noqa: E402
 
 _INCIDENT = REPO / "prismpath" / "gallery" / "incident_severity" / "incident_severity.md"
@@ -126,7 +126,7 @@ def _field_values(p):
     if p.kind == "boolean":
         return [False, True]
     # categorical
-    return [c["const"] for c in p.cells if c["const"] != q._OTHER] + ["__unlisted__"]
+    return [c["const"] for c in p.cells if c["const"] != quantizer._OTHER] + ["__unlisted__"]
 
 
 def _grid(parts):
@@ -140,11 +140,11 @@ def _grid(parts):
 
 
 def _case(name, graph):
-    parts = q.build_partitions(graph)
-    nodes = w.decision_nodes(graph)
+    parts = quantizer.build_partitions(graph)
+    nodes = wire.decision_nodes(graph)
     entries = []
     for reading in _grid(parts):
-        routes = {n: w.route_node(graph, n, reading) for n in nodes}
+        routes = {n: wire.route_node(graph, n, reading) for n in nodes}
         entries.append({"reading": reading, "routes": routes})
     return {"name": name, "flow": None, "decision_nodes": nodes, "readings": entries}
 

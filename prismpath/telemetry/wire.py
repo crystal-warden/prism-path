@@ -12,8 +12,8 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional
 
 from prismpath.kernel import predicates
-from prismpath.telemetry import quantizer as q
-from prismpath.telemetry import zeckendorf as z
+from prismpath.telemetry import quantizer
+from prismpath.telemetry import zeckendorf as zeck
 
 
 def _order(parts: Dict[str, "q.FieldPartition"]) -> List[str]:
@@ -27,23 +27,23 @@ def encode_reading(parts: Dict[str, "q.FieldPartition"], reading: Dict[str, Any]
     missing = [f for f in order if f not in reading]
     if missing:
         raise KeyError(f"reading missing decision fields: {missing}")
-    syms = q.quantize(parts, reading)
-    return z.encode_stream([syms[f] + 1 for f in order])
+    syms = quantizer.quantize(parts, reading)
+    return zeck.encode_stream([syms[f] + 1 for f in order])
 
 
 def decode_reading(parts: Dict[str, "q.FieldPartition"], bits: str) -> Dict[str, Any]:
     """Bitstream -> a representative reading that routes identically to the original."""
     order = _order(parts)
-    wire = z.decode_stream(bits)
+    wire = zeck.decode_stream(bits)
     if len(wire) != len(order):
         raise ValueError(f"symbol count {len(wire)} != decision fields {len(order)}")
     syms = {f: wire[i] - 1 for i, f in enumerate(order)}
-    return q.reconstruct(parts, syms)
+    return quantizer.reconstruct(parts, syms)
 
 
 # --------------------------------------------------------- reference routing (the deterministic tier)
 def route_node(graph, node: str, reading: Dict[str, Any]) -> Optional[str]:
-    """First-match deterministic routing from `node` over a reading — the engine's field-routing tier."""
+    """First-match deterministic routing from `node` over a reading  -  the engine's field-routing tier."""
     for target, cond in graph.nodes[node].edges:
         if predicates.is_deterministic(cond) and predicates.eval_condition(cond, reading):
             return target

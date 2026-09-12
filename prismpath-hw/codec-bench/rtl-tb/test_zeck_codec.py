@@ -3,7 +3,7 @@
 """RTL Zeckendorf CODEC on the fabric datapath: zeck_enc -> zeck_dec wired mouth-to-ear inside
 zeck_codec_core. Proves (a) PEEK: for a value n the captured wire equals the reference AND the
 in-fabric decode returns n; (b) SELF-TEST: a sweep n=1..MAX round-trips decode(encode(n))==n with
-pass_count==total and first_fail==0 — the exact tally the on-silicon measurement reads back."""
+pass_count==total and first_fail==0  -  the exact tally the on-silicon measurement reads back."""
 import sys
 from pathlib import Path
 
@@ -12,7 +12,7 @@ from cocotb.clock import Clock
 from cocotb.triggers import RisingEdge
 
 HERE = Path(__file__).resolve().parent
-from prismpath.telemetry import zeckendorf as z  # noqa: E402
+from prismpath.telemetry import zeckendorf as zeck  # noqa: E402
 
 
 def wire_bits(bits_int, length):
@@ -53,7 +53,7 @@ async def codec(dut):
     probes = list(range(1, 60)) + [100, 233, 1000, 6765, 99999]
     for n in probes:
         bits, length, dec = await peek(dut, n)
-        ref = z.encode_stream([n])
+        ref = zeck.encode_stream([n])
         got = wire_bits(bits, length)
         if got != ref or dec != n:
             fails += 1

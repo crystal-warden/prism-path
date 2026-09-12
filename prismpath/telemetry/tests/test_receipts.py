@@ -140,10 +140,10 @@ def test_decode_rejections():
 def test_decode_out_of_range_cause():
     # Construct wire ints with cause symbol = 300 (wire int 301)
     import packed
-    import zeckendorf as z
+    import zeckendorf as zeck
 
     wire_ints = [301, 1, 1, 1, 1]
-    bits = z.encode_stream(wire_ints)
+    bits = zeck.encode_stream(wire_ints)
     frame = packed.pack(bits, 8)
 
     decoded, status = decode_receipt(frame)

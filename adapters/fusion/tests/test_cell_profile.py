@@ -11,7 +11,7 @@ import pytest
 
 ADAPTER = Path(__file__).resolve().parent.parent
 REPO = ADAPTER.parent.parent
-from prismpath.telemetry import quantizer as q                       # noqa: E402
+from prismpath.telemetry import quantizer                       # noqa: E402
 from prismpath.telemetry.predicate_profile import cell_profile, profile_wire_bytes  # noqa: E402
 from prismpath.kernel.parser import parse          # noqa: E402
 
@@ -34,7 +34,7 @@ Terminal.
 """
 
 GRAPH = parse(FLOW)
-PARTS = q.build_partitions(GRAPH)
+PARTS = quantizer.build_partitions(GRAPH)
 
 
 def test_profile_is_faithful_for_every_cell():
@@ -47,12 +47,12 @@ def test_profile_is_faithful_for_every_cell():
             assert p.symbol(prof["cell"]["rep"]) == sym
             # atom truths match the quantizer's own evaluator at the representative
             for a in prof["atoms"]:
-                assert a["truth"] == q._atom_true(a["op"], a["const"], prof["cell"]["rep"])
+                assert a["truth"] == quantizer._atom_true(a["op"], a["const"], prof["cell"]["rep"])
 
 
 def test_adjacent_cells_differ_in_truth_vector():
     """The partition is the COARSEST decision-preserving one, so neighboring numeric cells
-    must disagree on at least one atom — the profile makes that visible."""
+    must disagree on at least one atom  -  the profile makes that visible."""
     p = PARTS["level"]
     vecs = []
     for sym in range(p.n):

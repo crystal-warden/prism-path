@@ -1,15 +1,15 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Codecs under comparison, each measured in BITS on a channel of integers. All the variable-length ones
-have a decode inverse (round-trip tested) so the sizes are trustworthy — a benchmark of a broken codec is
+have a decode inverse (round-trip tested) so the sizes are trustworthy  -  a benchmark of a broken codec is
 worse than none.
 
-  fixed32                  — 32 bits/sample, the naive baseline
-  uvarint                  — LEB128 (unsigned)
-  delta+zigzag+uvarint     — the standard streaming baseline
-  fib                      — Fibonacci/Zeckendorf on the raw values
-  delta+zigzag+fib         — our codec (lossless, on raw values)
-  zstd / zlib / lzma       — general-purpose baselines on the int32 byte array
+  fixed32                   -  32 bits/sample, the naive baseline
+  uvarint                   -  LEB128 (unsigned)
+  delta+zigzag+uvarint      -  the standard streaming baseline
+  fib                       -  Fibonacci/Zeckendorf on the raw values
+  delta+zigzag+fib          -  our codec (lossless, on raw values)
+  zstd / zlib / lzma        -  general-purpose baselines on the int32 byte array
 """
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import List, Optional
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from prismpath.telemetry import zeckendorf as z  # noqa: E402
+from prismpath.telemetry import zeckendorf as zeck  # noqa: E402
 
 try:
     import zstandard as _zstd
@@ -91,7 +91,7 @@ def bits_uvarint(xs: List[int]) -> int:                    # requires xs >= 0
 
 
 def bits_fib(xs: List[int]) -> int:                        # xs >= 0; +1 offset for the positive codec
-    return sum(len(z.encode(x + 1)) for x in xs)
+    return sum(len(zeck.encode(x + 1)) for x in xs)
 
 
 def bits_delta_zigzag_uvarint(xs: List[int]) -> int:
@@ -99,7 +99,7 @@ def bits_delta_zigzag_uvarint(xs: List[int]) -> int:
 
 
 def bits_delta_zigzag_fib(xs: List[int]) -> int:
-    return sum(len(z.encode(u + 1)) for u in _unsigned_deltas(xs))
+    return sum(len(zeck.encode(u + 1)) for u in _unsigned_deltas(xs))
 
 
 def bits_zstd(xs: List[int], level: int = 19) -> Optional[int]:
@@ -134,12 +134,12 @@ def roundtrip_uvarint(xs: List[int]) -> List[int]:
 
 
 def roundtrip_fib(xs: List[int]) -> List[int]:
-    return [w - 1 for w in z.decode_stream(z.encode_stream([x + 1 for x in xs]))]
+    return [w - 1 for w in zeck.decode_stream(zeck.encode_stream([x + 1 for x in xs]))]
 
 
 def roundtrip_delta_zigzag_fib(xs: List[int]) -> List[int]:
     us = _unsigned_deltas(xs)
-    back = [w - 1 for w in z.decode_stream(z.encode_stream([u + 1 for u in us]))]
+    back = [w - 1 for w in zeck.decode_stream(zeck.encode_stream([u + 1 for u in us]))]
     return undelta([unzigzag(u) for u in back])
 
 

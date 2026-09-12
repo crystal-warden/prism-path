@@ -10,7 +10,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 from prismpath.telemetry import packed  # noqa: E402
-from prismpath.telemetry import zeckendorf as z  # noqa: E402
+from prismpath.telemetry import zeckendorf as zeck  # noqa: E402
 
 random.seed(42)
 N = 64
@@ -20,7 +20,7 @@ def gen(workload, lo_hi):
     rows = []
     for _ in range(N):
         ints = [random.randint(*lo_hi) for _ in range(4)]     # 4 fields, wire ints (symbol+1)
-        wire = packed.pack(z.encode_stream(ints), 8)
+        wire = packed.pack(zeck.encode_stream(ints), 8)
         rows.append((ints, wire))
     return rows
 

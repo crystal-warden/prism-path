@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """The baked materialization's referee: derived and baked must describe the identical layout,
-the builder must be deterministic, and — per the profile's rule — a flow that fails the lint
+the builder must be deterministic, and  -  per the profile's rule  -  a flow that fails the lint
 or does not declare the profile must be REFUSED at bake time, not approximated."""
 import os
 import sys
@@ -11,7 +11,7 @@ import pytest
 HERE = os.path.dirname(__file__)
 sys.path.insert(0, os.path.dirname(HERE))
 
-from prismpath.telemetry import spiral as sp                    # noqa: E402
+from prismpath.telemetry import spiral                    # noqa: E402
 from prismpath.telemetry import spiral_pack as spk              # noqa: E402
 from prismpath.kernel.parser import parse     # noqa: E402
 
@@ -88,7 +88,7 @@ def test_band_tier_matches_derived_routing():
     """The decision-lossless tier: quantize a reading via the BAKED partitions, look up its band
     via the BAKED map, and the route must equal the derived layout's route for the same reading."""
     g = parse(FLOW)
-    L = sp.SpiralLayout(g, "decide")
+    L = spiral.SpiralLayout(g, "decide")
     blob = spk.serialize_layouts(g)
     rec = spk.parse_sidecar(blob)["nodes"]["decide"]
     radices = [f["n"] for f in rec["fields"]]

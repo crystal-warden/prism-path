@@ -1,16 +1,16 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
-"""Self-healing transport — Merkle-committed blocks + selective retransmission, reusing the repo's real
+"""Self-healing transport  -  Merkle-committed blocks + selective retransmission, reusing the repo's real
 Merkle primitive (`prismpath.ledger_ots`, which is also OTS/Bitcoin-anchorable). NOT a new subsystem.
 
-(The doc named `audit_log`'s MMR, but that is a stub in the open release — no roots/proofs. `ledger_ots`
+(The doc named `audit_log`'s MMR, but that is a stub in the open release  -  no roots/proofs. `ledger_ots`
 is the genuine one. A batch Merkle tree recomputed per window/epoch fits the daily-chained-epoch design;
 an append-only MMR with O(log n) peaks is a later streaming optimization.)
 
 The self-framing Fibonacci stream is chunked into fixed-size blocks (the retransmit + Merkle-leaf unit).
 The root commits to every block; a lost block is a known gap the receiver requests by index; a
 retransmitted (or first-delivery) block is accepted ONLY if its inclusion proof verifies against the
-trusted (anchored) root — so a forged or corrupted block is detected, never silently accepted. A block
+trusted (anchored) root  -  so a forged or corrupted block is detected, never silently accepted. A block
 that is never recoverable stays a *provable* gap: "detect + selectively repair + prove", not magic.
 """
 from __future__ import annotations
@@ -18,7 +18,7 @@ from __future__ import annotations
 import hashlib
 from typing import Dict, List, Optional, Tuple
 
-from prismpath.ledgers import ledger_ots as _mk
+from prismpath.ledgers import ledger_ots as merkle
 
 def chunk(bits: str, block_bits: int) -> List[str]:
     """Split a bitstream into fixed-size blocks (the retransmit unit). Always >= 1 block."""
@@ -32,12 +32,12 @@ def _leaf(block: str) -> str:
 
 
 def commit(blocks: List[str]) -> Tuple[str, List[list]]:
-    """(root_hex, per-block inclusion proof) over the block hashes — reuses ledger_ots's Merkle."""
-    return _mk.merkle_root_and_paths([_leaf(b) for b in blocks])
+    """(root_hex, per-block inclusion proof) over the block hashes  -  reuses ledger_ots's Merkle."""
+    return merkle.merkle_root_and_paths([_leaf(b) for b in blocks])
 
 
 def verify_block(block: str, proof: list, root: str) -> bool:
-    return _mk.verify_leaf(_leaf(block), proof, root)
+    return merkle.verify_leaf(_leaf(block), proof, root)
 
 
 class Sender:
@@ -56,8 +56,8 @@ class Sender:
 
 
 class Receiver:
-    """Holds only the trusted root (e.g. OTS-anchored) + accepted blocks. Every block — first delivery or
-    retransmit — must verify against the root before it is accepted."""
+    """Holds only the trusted root (e.g. OTS-anchored) + accepted blocks. Every block  -  first delivery or
+    retransmit  -  must verify against the root before it is accepted."""
 
     def __init__(self, root: str, n_blocks: int):
         self.root = root
@@ -80,7 +80,7 @@ class Receiver:
         return len(self._blocks) == self.n
 
     def assemble(self) -> str:
-        """The recovered bitstream. Raises if any block is still missing — a gap is provable, never a
+        """The recovered bitstream. Raises if any block is still missing  -  a gap is provable, never a
         silent hole."""
         if not self.complete():
             raise ValueError(f"cannot assemble: blocks still missing (provable gap): {self.missing()}")
@@ -89,7 +89,7 @@ class Receiver:
 
 def repair(sender: Sender, receiver: Receiver) -> List[int]:
     """Selective retransmission: fetch + verify only the blocks the receiver is missing. Returns the list
-    of block indices retransmitted (the selective-repair cost — cf. the Phase A benchmark)."""
+    of block indices retransmitted (the selective-repair cost  -  cf. the Phase A benchmark)."""
     retransmitted = []
     for idx in receiver.missing():
         block, proof = sender.serve(idx)

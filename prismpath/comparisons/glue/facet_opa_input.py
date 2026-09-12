@@ -19,24 +19,24 @@ from typing import Any, Dict, Tuple
 
 REPO = Path(__file__).resolve().parents[3]
 from prismpath.telemetry import packed  # noqa: E402
-from prismpath.telemetry import quantizer as q  # noqa: E402
-from prismpath.telemetry import wire as w  # noqa: E402
+from prismpath.telemetry import quantizer  # noqa: E402
+from prismpath.telemetry import wire  # noqa: E402
 
 from prismpath.kernel.parser import parse  # noqa: E402
 
 
 def partitions_for(flow_markdown: str) -> Dict[str, Any]:
-    return q.build_partitions(parse(flow_markdown))
+    return quantizer.build_partitions(parse(flow_markdown))
 
 
 def encode(parts: Dict[str, Any], reading: Dict[str, Any]) -> bytes:
     """Sender side: reading -> Facet frame bytes."""
-    return packed.pack(w.encode_reading(parts, reading), 8)
+    return packed.pack(wire.encode_reading(parts, reading), 8)
 
 
 def decode(parts: Dict[str, Any], frame: bytes) -> Dict[str, Any]:
     """Receiver side: Facet frame bytes -> representative reading for OPA's input document."""
-    return w.decode_reading(parts, packed.unpack(frame))
+    return wire.decode_reading(parts, packed.unpack(frame))
 
 
 def opa_decide(url: str, reading: Dict[str, Any]) -> Tuple[Dict[str, Any], int, int]:

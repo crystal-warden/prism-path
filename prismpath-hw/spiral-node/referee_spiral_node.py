@@ -4,7 +4,7 @@
 """Host referee for the spiral-node firmware: reset the board, capture its output, and diff every
 line against the DERIVED materialization (SpiralLayout from the same flow) + the Python Zeckendorf
 reference. PASS means baked-on-device and derived-on-host describe the same layout and produce
-bit-identical frames — the two-materializations contract, judged on silicon.
+bit-identical frames  -  the two-materializations contract, judged on silicon.
 
     python3 referee_spiral_node.py /dev/ttyUSB2
 """
@@ -17,15 +17,15 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", ".."))
 
 from prismpath.telemetry import packed                             # noqa: E402
-from prismpath.telemetry import spiral as sp                       # noqa: E402
-from prismpath.telemetry import zeckendorf as z                    # noqa: E402
+from prismpath.telemetry import spiral                       # noqa: E402
+from prismpath.telemetry import zeckendorf as zeck                    # noqa: E402
 from prismpath.kernel.parser import parse        # noqa: E402
 from gen_spiral_node_data import FLOW, NODE, probes   # noqa: E402
 
 
 def expected():
     g = parse(FLOW)
-    L = sp.SpiralLayout(g, NODE)
+    L = spiral.SpiralLayout(g, NODE)
     grids = [probes(L.parts[f]) for f in L.fields]
     readings = []
     def rec(i, cur):
@@ -52,8 +52,8 @@ def expected():
         band = next(i for i, (b, w) in enumerate(zip(L.band_base, L.band_width))
                     if b <= n < b + w)
         route = L.routes[band] or "?"
-        fb = packed.pack(z.encode_stream([band + 1]), 8).hex()
-        fn = packed.pack(z.encode_stream([n + 1]), 8).hex()
+        fb = packed.pack(zeck.encode_stream([band + 1]), 8).hex()
+        fn = packed.pack(zeck.encode_stream([n + 1]), 8).hex()
         out.append((band, n, route, fb, fn))
     return out
 
@@ -95,7 +95,7 @@ def main():
             if mism <= 5:
                 print(f"  MISMATCH v{i}: device={g} derived={e}")
     print(f"vectors expected={len(exp)} received={len(got)} mismatches={mism}")
-    print("REFEREE:", "PASS — baked(device) == derived(host), frames bit-identical"
+    print("REFEREE:", "PASS  -  baked(device) == derived(host), frames bit-identical"
           if mism == 0 and len(got) == len(exp) else "FAIL")
     sys.exit(0 if mism == 0 and len(got) == len(exp) else 1)
 

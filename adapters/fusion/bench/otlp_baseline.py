@@ -1,25 +1,25 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
-"""OTLP baseline — the industry-standard telemetry wire, measured against the decision codec.
+"""OTLP baseline  -  the industry-standard telemetry wire, measured against the decision codec.
 
 Closes the named follow-on in evidence #84 ("protobuf/OTLP baseline not yet built"). The question a
 reviewer asks is not "how does your codec compare to JSON" but "how does it compare to
-OpenTelemetry" — OTLP is *the* wire observability pipelines actually speak. So we encode the SAME
+OpenTelemetry"  -  OTLP is *the* wire observability pipelines actually speak. So we encode the SAME
 fused decision as a real OTLP LogRecord (using the genuine `opentelemetry.proto` definitions, not a
-hand-rolled approximation — every record round-trips) and measure bytes per decision, batched the
+hand-rolled approximation  -  every record round-trips) and measure bytes per decision, batched the
 way OTLP is actually shipped (ResourceLogs/ScopeLogs amortized over an epoch), against the fused
 decision stream (O1/O2) and the JSON baselines (B2).
 
     python adapters/fusion/bench/otlp_baseline.py            # -> otlp_results.{md,json}
 
 Two encodings, matched to what each PrismPath stream carries:
-  FAITHFUL  — the four decision fields (stability, dev_mg, rule_level, soc_action) as OTLP
+  FAITHFUL   -  the four decision fields (stability, dev_mg, rule_level, soc_action) as OTLP
               attributes: apples-to-apples with B2 (4-field JSON) and O1 (the per-field wire).
-  MINIMAL   — just the fused band verdict as one int attribute + a severity: apples-to-apples with
+  MINIMAL    -  just the fused band verdict as one int attribute + a severity: apples-to-apples with
               O2 (the band-ID stream).
 
 Honest framing baked into the output: OTLP is a general telemetry ENVELOPE (per-record wall-clock
-timestamps, typed attribute values, repeated string keys), not a decision codec — so it is larger
+timestamps, typed attribute values, repeated string keys), not a decision codec  -  so it is larger
 than even minimal JSON here, and the decision codec's win over it is structural, not a compression
 trick. The population's wire cost is field-shape-invariant (#84), so a representative decision
 population of the same size (n=64,484) is the honest comparison.
@@ -37,7 +37,7 @@ REPO = HERE.parent.parent.parent
 sys.path.insert(0, str(REPO / "adapters" / "fusion"))
 sys.path.insert(0, str(REPO))
 
-import projection as pj  # noqa: E402
+import projection  # noqa: E402
 from opentelemetry.proto.common.v1.common_pb2 import InstrumentationScope, KeyValue  # noqa: E402
 from opentelemetry.proto.logs.v1.logs_pb2 import (  # noqa: E402
     LogRecord, LogsData, ResourceLogs, ScopeLogs,
@@ -45,7 +45,7 @@ from opentelemetry.proto.logs.v1.logs_pb2 import (  # noqa: E402
 from opentelemetry.proto.resource.v1.resource_pb2 import Resource  # noqa: E402
 
 N = 64484                 # match the #84 population exactly
-EPOCH = 4096              # the decision codec's Merkle-committed epoch (#84) — amortization unit
+EPOCH = 4096              # the decision codec's Merkle-committed epoch (#84)  -  amortization unit
 BASE_TS = 1_700_000_000_000_000_000
 
 # OTLP severity numbers (real enum values): contain=ERROR, watch=WARN, ignore=INFO.
@@ -65,7 +65,7 @@ def _representative_population(n: int):
         stab = stabs[(i // 7) % len(stabs)]
         dev = devs[(i // 3) % len(devs)]
         imu = {"stability": stab, "dev_mg": dev, "derived": False}
-        out.append(pj.fused_reading(level, pj.soc_action_from_level(level), imu))
+        out.append(projection.fused_reading(level, projection.soc_action_from_level(level), imu))
     return out
 
 
@@ -89,7 +89,7 @@ def _log_record(reading: dict, ts: int, faithful: bool) -> LogRecord:
             kv.key = k
             _set_val(kv, reading[k])
     else:
-        # MINIMAL: one attribute — the band verdict the O2 stream carries (soc_action as the class)
+        # MINIMAL: one attribute  -  the band verdict the O2 stream carries (soc_action as the class)
         kv = lr.attributes.add()
         kv.key = "band"
         kv.value.string_value = reading["soc_action"]
@@ -97,7 +97,7 @@ def _log_record(reading: dict, ts: int, faithful: bool) -> LogRecord:
 
 
 def _logs_data(readings, faithful: bool) -> bytes:
-    """One OTLP LogsData batch (one Resource, one Scope, all records) — how a batch ships."""
+    """One OTLP LogsData batch (one Resource, one Scope, all records)  -  how a batch ships."""
     ld = LogsData()
     rl = ld.resource_logs.add()
     r = Resource()

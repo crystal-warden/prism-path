@@ -14,11 +14,11 @@ _ADAPTER = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_ADAPTER))
 sys.path.insert(0, str(_ADAPTER.parent.parent))         # repo root, for prismpath (via selfheal)
 from prismpath.telemetry import epochs as E      # noqa: E402
-from prismpath.telemetry import zeckendorf as z  # noqa: E402
+from prismpath.telemetry import zeckendorf as zeck  # noqa: E402
 
 
 def _bits(seed):
-    return z.encode_stream(list(range(1 + seed, 60 + seed)))
+    return zeck.encode_stream(list(range(1 + seed, 60 + seed)))
 
 
 def test_seal_and_chain():

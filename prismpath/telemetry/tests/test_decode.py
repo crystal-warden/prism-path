@@ -9,8 +9,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent.parent))   # repo root
 from prismpath.telemetry import decode as dec    # noqa: E402
-from prismpath.telemetry import quantizer as q   # noqa: E402
-from prismpath.telemetry import wire as w        # noqa: E402
+from prismpath.telemetry import quantizer   # noqa: E402
+from prismpath.telemetry import wire        # noqa: E402
 from prismpath.kernel.parser import parse  # noqa: E402
 
 CAT = """---
@@ -31,7 +31,7 @@ start: classify
 
 def test_decode_reproduces_routes():
     g = parse(CAT)
-    parts = q.build_partitions(g)
+    parts = quantizer.build_partitions(g)
     readings = [{"kind": "urgent", "status": "ok"},
                 {"kind": "nightly", "status": "ok"},
                 {"kind": "adhoc", "status": "bad"},
@@ -41,12 +41,12 @@ def test_decode_reproduces_routes():
     assert rep["n_readings"] == 4 and rep["trailing_ints"] == 0
     # each decoded reading routes exactly as the original did
     for orig, row in zip(readings, rep["readings"]):
-        assert row["routes"]["classify"] == w.route_node(g, "classify", orig)
+        assert row["routes"]["classify"] == wire.route_node(g, "classify", orig)
 
 
 def test_other_renders_readably():
     g = parse(CAT)
-    parts = q.build_partitions(g)
+    parts = quantizer.build_partitions(g)
     bits = dec.encode_readings(parts, [{"kind": "adhoc", "status": "bad"}])
     rep = dec.inspect(g, bits)
     # 'adhoc' is not a listed kind -> the reconstructed representative shows as <other>, not a control char
@@ -55,7 +55,7 @@ def test_other_renders_readably():
 
 def test_partial_final_frame_is_reported_not_crashed():
     g = parse(CAT)
-    parts = q.build_partitions(g)
+    parts = quantizer.build_partitions(g)
     bits = dec.encode_readings(parts, [{"kind": "urgent", "status": "ok"}])
     rep = dec.inspect(g, bits + "0")           # a dangling bit = incomplete final frame
     assert rep["n_readings"] == 1              # the complete reading still decodes

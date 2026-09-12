@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
-"""Tier 6 gate — routing accuracy vs bits received, on multi-dimensional correlated telemetry.
+"""Tier 6 gate  -  routing accuracy vs bits received, on multi-dimensional correlated telemetry.
 
 The claim under test: packing a multi-var reading onto the decision-first spiral lets the edge transmit a
 single **band ID** that routes correctly, where the linear per-field wire must transmit *every* field
@@ -31,8 +31,8 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent.parent))   # repo root
 
-from prismpath.telemetry import spiral as sp   # noqa: E402
-from prismpath.telemetry import wire as w      # noqa: E402
+from prismpath.telemetry import spiral   # noqa: E402
+from prismpath.telemetry import wire      # noqa: E402
 from prismpath.telemetry.bench.channel import lost_mask                 # noqa: E402
 from prismpath.kernel.parser import parse            # noqa: E402
 
@@ -81,10 +81,10 @@ def set1_and_2(ks: List[int], n: int, seed: int) -> List[Dict]:
     rows = []
     for k in ks:
         g = parse(make_flow(k))
-        parts = sp.q.build_partitions(g)
-        L = sp.SpiralLayout(g, "watch")
+        parts = spiral.q.build_partitions(g)
+        L = spiral.SpiralLayout(g, "watch")
         readings = gen(k, n, correlated=True, seed=seed + k)
-        linear = [w.encode_reading(parts, r) for r in readings]              # all k field symbols
+        linear = [wire.encode_reading(parts, r) for r in readings]              # all k field symbols
         decision = [L.encode_decision(r) for r in readings]                  # 1 band ID
         prog = [a + b for a, b in (L.encode_progressive(r) for r in readings)]
         # both linear and decision are decision-lossless -> routing is 100% correct at those bits
@@ -99,7 +99,7 @@ def set1_and_2(ks: List[int], n: int, seed: int) -> List[Dict]:
 
 def set3_correlation(k: int, n: int, seed: int) -> Dict:
     g = parse(make_flow(k))
-    L = sp.SpiralLayout(g, "watch")
+    L = spiral.SpiralLayout(g, "watch")
     out = {}
     for tag, corr in (("correlated", True), ("uniform", False)):
         readings = gen(k, n, correlated=corr, seed=seed)
@@ -113,7 +113,7 @@ def set4_loss(k: int, n: int, seed: int) -> List[Dict]:
     """Frames lost under Gilbert-Elliott. A reading routes iff all the frames its scheme needs survive:
     linear needs its k field frames, the spiral decision needs its 1 band frame."""
     g = parse(make_flow(k))
-    L = sp.SpiralLayout(g, "watch")
+    L = spiral.SpiralLayout(g, "watch")
     readings = gen(k, n, correlated=True, seed=seed)
     rows = []
     for label, p, r in (("light burst", 0.02, 0.5), ("heavy burst", 0.08, 0.3)):
@@ -158,22 +158,22 @@ def main() -> int:
     here = Path(__file__).resolve().parent
     (here / "spiral_results.json").write_text(json.dumps(out, indent=2) + "\n")
 
-    md = ["# Tier 6 (spiral) — routing accuracy vs bits", "",
+    md = ["# Tier 6 (spiral)  -  routing accuracy vs bits", "",
           f"N={n} readings/scenario, seed={seed}, correlated multi-dim telemetry.", "",
-          "## Set 1+2 — bits to route, and fidelity parity (per dimensionality k)", "",
+          "## Set 1+2  -  bits to route, and fidelity parity (per dimensionality k)", "",
           "| k | cells | bands | linear bits | decision bits | route win | progressive bits | fidelity ratio |",
           "|---:|---:|---:|---:|---:|---:|---:|---:|"]
     for r in s12:
         md.append(f"| {r['k']} | {r['cells']} | {r['bands']} | {r['linear_bits']} | {r['decision_bits']} "
                   f"| {r['route_win_x']}x | {r['progressive_bits']} | {r['fidelity_ratio']} |")
-    md += ["", "*Route win* = linear bits / decision bits (both route 100% correctly — decision-lossless). "
+    md += ["", "*Route win* = linear bits / decision bits (both route 100% correctly  -  decision-lossless). "
            "*Fidelity ratio* = spiral progressive (full quantized magnitude) / linear: ~1x means the win is "
            "progressiveness, not dropped data.", "",
-           "## Set 3 — correlation makes the decision stream cheaper (k=3)", "",
+           "## Set 3  -  correlation makes the decision stream cheaper (k=3)", "",
            "| telemetry | decision bits | band entropy (bits) |", "|---|---:|---:|"]
     for tag in ("correlated", "uniform"):
         md.append(f"| {tag} | {s3[tag]['decision_bits']} | {s3[tag]['band_entropy_bits']} |")
-    md += ["", "## Set 4 — survival under burst loss (k=3, Gilbert-Elliott)", "",
+    md += ["", "## Set 4  -  survival under burst loss (k=3, Gilbert-Elliott)", "",
            "| regime | linear routed % | spiral routed % |", "|---|---:|---:|"]
     for r in s4:
         md.append(f"| {r['regime']} | {r['linear_routed_pct']} | {r['spiral_routed_pct']} |")

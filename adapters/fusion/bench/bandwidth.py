@@ -1,12 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
-"""Bandwidth: raw alert JSON vs the fused decision-code wire — measured, overhead counted.
+"""Bandwidth: raw alert JSON vs the fused decision-code wire  -  measured, overhead counted.
 
 The task frame (stated so the comparison stays honest): *the aggregator needs the fused verdict,
 auditably.* Baselines ship the reading and decide centrally; ours decides at the edge and ships
 the decision code plus the integrity apparatus. B2 is the apples-to-apples comparator (the same
 four decision fields as JSON); B0 is the fidelity-class comparison against what the wire carries
-today. The decision streams carry the four fields at partition resolution only — decision-
+today. The decision streams carry the four fields at partition resolution only  -  decision-
 sufficient telemetry, not a lossless alert record.
 
 Baselines (per alert):
@@ -24,8 +24,8 @@ Ours (per alert, overhead itemized, never hidden):
       + a loss row: Gilbert-Elliott (the two regimes telemetry already benches),
         retransmitted block + 32*ceil(log2 n_blocks) B inclusion proof per served block
 
-Shared-config assumption (stated): the receiver holds the flow — the policy hash is the
-binding — so graph/partitions are not per-stream bytes.
+Shared-config assumption (stated): the receiver holds the flow  -  the policy hash is the
+binding  -  so graph/partitions are not per-stream bytes.
 
     python adapters/fusion/bench/bandwidth.py --from-ndjson fixtures/alerts_synth.ndjson
 
@@ -51,15 +51,15 @@ for p in (str(REPO / "prismpath" / "telemetry"), str(REPO / "prismpath" / "telem
     if p not in sys.path:
         sys.path.insert(0, p)
 
-from prismpath.telemetry.bench import channel as CH        # noqa: E402  (telemetry's Gilbert-Elliott model)
+from prismpath.telemetry.bench import channel        # noqa: E402  (telemetry's Gilbert-Elliott model)
 from prismpath.telemetry import decode as D          # noqa: E402
 from prismpath.telemetry import packed as P          # noqa: E402
-from prismpath.telemetry import quantizer as q       # noqa: E402
+from prismpath.telemetry import quantizer       # noqa: E402
 from prismpath.telemetry import selfheal as sh       # noqa: E402
-from prismpath.telemetry import spiral as sp         # noqa: E402
+from prismpath.telemetry import spiral         # noqa: E402
 from prismpath.kernel.parser import parse  # noqa: E402
 
-import projection as pj     # noqa: E402
+import projection     # noqa: E402
 
 FLOW_PATH = ADAPTER / "flows" / "fusion_triage.md"
 NODE = "correlate"
@@ -71,7 +71,7 @@ LOSS_REGIMES = (("light burst", 0.02, 0.5), ("heavy burst", 0.08, 0.3))
 # ---------------------------------------------------------------- ingestion
 
 def hits_from_ndjson(path: Path, max_docs: Optional[int] = None) -> Iterator[dict]:
-    """Fixture replay: each flat row acts as its own _source (mechanics only — fixture byte
+    """Fixture replay: each flat row acts as its own _source (mechanics only  -  fixture byte
     numbers are never published)."""
     n = 0
     for line in path.read_text().splitlines():
@@ -100,7 +100,7 @@ def _compact(obj) -> bytes:
 
 def collect(hits: Iterator[dict], normalize_hit) -> dict:
     """One pass: baseline sizes + the fused readings (assume-still posture; the physical
-    fields' wire cost is identical whichever pairing fills them — the wire is fixed-field)."""
+    fields' wire cost is identical whichever pairing fills them  -  the wire is fixed-field)."""
     b0, b1, b2 = [], [], []
     readings = []
     b0_batch, b2_batch = [], []
@@ -112,7 +112,7 @@ def collect(hits: Iterator[dict], normalize_hit) -> dict:
         norm = normalize_hit(h)
         b1.append(len(_compact(norm)))
         level = int(norm.get("level", src_doc.get("level", 0)))
-        reading = pj.fused_reading(level, pj.soc_action_from_level(level), pj.ASSUME_STILL)
+        reading = projection.fused_reading(level, projection.soc_action_from_level(level), projection.ASSUME_STILL)
         minimal = _compact(reading)
         b2.append(len(minimal))
         b2_batch.append(minimal)
@@ -174,7 +174,7 @@ def loss_scenario(stream: dict) -> List[dict]:
     proof_bytes = 32 * math.ceil(math.log2(n_blocks)) if n_blocks > 1 else 0
     rows = []
     for label, p_, r_ in LOSS_REGIMES:
-        mask = CH.lost_mask(n_blocks, p_, r_, seed=0)
+        mask = channel.lost_mask(n_blocks, p_, r_, seed=0)
         lost = int(mask.sum())
         rows.append({"regime": label, "p": p_, "r": r_, "n_blocks": n_blocks,
                      "lost_blocks": lost,
@@ -186,11 +186,11 @@ def loss_scenario(stream: dict) -> List[dict]:
 # -------------------------------------------------------------------- report
 
 def write_results(outdir: Path, data: dict) -> None:
-    md = ["# Bandwidth — raw alert JSON vs the fused decision wire", "",
+    md = ["# Bandwidth  -  raw alert JSON vs the fused decision wire", "",
           f"Source: {data['source']}  ·  population: rule.level >= {data['min_level']}, "
           f"n = {data['n']:,}", ""]
     if data.get("synthetic"):
-        md += ["**SYNTHETIC FIXTURE RUN — mechanics only; these numbers are never published.**", ""]
+        md += ["**SYNTHETIC FIXTURE RUN  -  mechanics only; these numbers are never published.**", ""]
     md += ["Task frame: the aggregator needs the fused verdict, auditably. Baselines ship the",
            "reading and decide centrally; ours decides at the edge and ships the decision code.",
            "The decision streams are decision-sufficient, not a lossless alert record: B2 is the",
@@ -235,7 +235,7 @@ def write_results(outdir: Path, data: dict) -> None:
            f"- B3 note, stated before anyone else states it: the best batch compressor over the",
            f"  minimal JSON ({best_batch / data['n']:.2f} B/alert) undercuts the streams on pure",
            "  size. It requires buffering the whole batch before a byte ships, is not",
-           "  self-framing or per-reading streamable, and carries no tamper-evidence — the",
+           "  self-framing or per-reading streamable, and carries no tamper-evidence  -  the",
            "  buffered-batch bound, not a transport. The streams pay their integrity apparatus",
            "  and still land within striking distance of it.",
            "- Overheads are itemized above and included in every ratio; the ACK line is the",
@@ -258,8 +258,8 @@ def main(argv=None) -> int:
 
     t0 = time.time()
     graph = parse(FLOW_PATH.read_text())
-    parts = q.build_partitions(graph)
-    layout = sp.SpiralLayout(graph, NODE)
+    parts = quantizer.build_partitions(graph)
+    layout = spiral.SpiralLayout(graph, NODE)
 
     path = Path(args.from_ndjson)
     hits = (h for h in hits_from_ndjson(path, args.max_docs)

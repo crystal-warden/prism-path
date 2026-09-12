@@ -14,7 +14,7 @@ import pytest
 from prismpath.kernel import engine
 from prismpath.kernel.parser import parse
 
-from prismpath.telemetry import quantizer as q
+from prismpath.telemetry import quantizer
 
 FLOW = "---\nname: t\nstart: s\n---\n## s\n@emits(x, name)\n{edges}\n## a\nA\n## b\nB\n## c\nC\n"
 
@@ -30,9 +30,9 @@ def _route(graph, reading):
 
 def _preserved(edges, readings):
     graph = parse(FLOW.format(edges=edges))
-    parts = q.build_partitions(graph)
+    parts = quantizer.build_partitions(graph)
     for r in readings:
-        rep = q.reconstruct(parts, q.quantize(parts, r))
+        rep = quantizer.reconstruct(parts, quantizer.quantize(parts, r))
         assert _route(graph, r) == _route(graph, rep), (r, rep)
     return parts
 

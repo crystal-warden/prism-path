@@ -18,7 +18,7 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE.parent.parent))
 
-from prismpath.telemetry import quantizer as q  # noqa: E402
+from prismpath.telemetry import quantizer  # noqa: E402
 
 FLOW = """---
 name: boundary_guard
@@ -45,7 +45,7 @@ EDGE = 2**53
 
 def main() -> int:
     from prismpath.kernel.parser import parse
-    parts = q.build_partitions(parse(FLOW))
+    parts = quantizer.build_partitions(parse(FLOW))
     p = parts["mag"]
     probes = []
     values = []

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
-"""Tier 6 — decision-first Fermat-spiral spatial packing (progressive, integer-only).
+"""Tier 6  -  decision-first Fermat-spiral spatial packing (progressive, integer-only).
 
 Packs a multi-variable reading into a **single ordered index** ``n`` whose contiguous ranges *are* the
 routes, so the cheap wire quantity is a band ID ("transmit the decision, not the magnitude"), with a
@@ -8,9 +8,9 @@ within-band refinement recovered on demand. Two properties the plain per-field w
 
   * **Decision-first layout.** The bands are the flow's own routes, laid out center-outward with the
     fallthrough/baseline (matched last in a first-match flow) at the dense center and the most-specific /
-    severe branches (declared first) outward — the doc's "center = baseline, outward = deviation". Band
+    severe branches (declared first) outward  -  the doc's "center = baseline, outward = deviation". Band
     membership is
-    ``band_base[b] <= n < band_base[b] + width[b]`` — two integer compares, a Level M atom — because a
+    ``band_base[b] <= n < band_base[b] + width[b]``  -  two integer compares, a Level M atom  -  because a
     Fermat/Vogel spiral has ``r^2 = c^2 * n``, so a radial ring ``r < R`` *is* ``n < K``. The golden angle
     ``theta = n * 137.5deg`` is a deterministic function of ``n`` (a ``u32`` add, ``0x9E3779B9``, no trig),
     so the wire quantity stays a single integer: a 1-D ordered index with uniform 2-D coverage, not 2-D
@@ -21,13 +21,13 @@ within-band refinement recovered on demand. Two properties the plain per-field w
     quantized cell (full magnitude) only when the link can afford it. On a degrading link you keep routing
     correctly and lose only fidelity.
 
-All continuous math (``sqrt``, the golden angle in degrees) lives at **build time** here — the edge path
+All continuous math (``sqrt``, the golden angle in degrees) lives at **build time** here  -  the edge path
 is integer table lookup + integer compares. This module builds the layout and the codec; the gate is the
 routing-accuracy-vs-bits benchmark (``bench/spiral_bench.py``) and the decisions-preserved + frozen
 tessellation conformance tests. Hysteresis at the band edges (anti-flap) is a sampling concern of the
 edge, deliberately outside this codec.
 
-Scope: an OPTION for *multi-dimensional, correlated* state where progressive refinement pays — not the
+Scope: an OPTION for *multi-dimensional, correlated* state where progressive refinement pays  -  not the
 default. Scalar channels stay on the layer-2 quantizer (``quantizer.py`` / ``wire.py``); O(1) here holds
 only after quantization to a bounded key space.
 """
@@ -38,9 +38,9 @@ import math
 from typing import Any, Dict, Iterator, List, Optional, Tuple
 
 from prismpath.kernel import predicates
-from prismpath.telemetry import quantizer as q
-from prismpath.telemetry import wire as w
-from prismpath.telemetry import zeckendorf as z
+from prismpath.telemetry import quantizer
+from prismpath.telemetry import wire
+from prismpath.telemetry import zeckendorf as zeck
 
 GOLDEN_ANGLE_U32 = 0x9E3779B9                 # golden ratio * 2^32; add-with-overflow == mod 2*pi, no trig
 GOLDEN_ANGLE_DEG = 180.0 * (3.0 - math.sqrt(5.0))   # ~= 137.5077640; build-time only (geometry/plots)
@@ -48,7 +48,7 @@ GOLDEN_ANGLE_DEG = 180.0 * (3.0 - math.sqrt(5.0))   # ~= 137.5077640; build-time
 
 # --------------------------------------------------------------- integer-only spiral geometry (edge path)
 def theta_u32(n: int) -> int:
-    """Golden angle of point ``n`` as a ``u32`` phase — a single multiply-add, overflow == mod 2*pi."""
+    """Golden angle of point ``n`` as a ``u32`` phase  -  a single multiply-add, overflow == mod 2*pi."""
     return (n * GOLDEN_ANGLE_U32) & 0xFFFFFFFF
 
 
@@ -58,7 +58,7 @@ def radius2(n: int) -> int:
 
 
 def spiral_xy(n: int, c: float = 1.0) -> Tuple[float, float]:
-    """Build-time Cartesian coords of point ``n`` (Vogel model). Floats — for tessellation/plots only."""
+    """Build-time Cartesian coords of point ``n`` (Vogel model). Floats  -  for tessellation/plots only."""
     r = c * math.sqrt(n)
     theta = math.radians(n * GOLDEN_ANGLE_DEG)
     return (r * math.cos(theta), r * math.sin(theta))
@@ -100,7 +100,7 @@ def _node_fields(graph, node: str, parts: Dict[str, "q.FieldPartition"]) -> List
             body = ast.parse(expr, mode="eval").body
         except SyntaxError:
             continue
-        for field, _op, _const in q._atoms(body):
+        for field, _op, _const in quantizer._atoms(body):
             if field in parts and field not in seen:
                 seen.append(field)
     return sorted(seen)
@@ -119,10 +119,10 @@ class SpiralLayout:
     def __init__(self, graph, node: str):
         self.graph = graph
         self.node = node
-        self.parts = q.build_partitions(graph)
+        self.parts = quantizer.build_partitions(graph)
         self.fields = _node_fields(graph, node, self.parts)
         if not self.fields:
-            raise ValueError(f"node {node!r} routes on no decision-relevant fields — nothing to pack")
+            raise ValueError(f"node {node!r} routes on no decision-relevant fields  -  nothing to pack")
         self.radices = [self.parts[f].n for f in self.fields]
 
         # Route every joint cell; group cells by route in edge-declaration (severity) order, Gray-ordered
@@ -165,7 +165,7 @@ class SpiralLayout:
         return {f: self.parts[f].representative(s) for f, s in zip(self.fields, cell)}
 
     def _route_of_cell(self, cell: Tuple[int, ...]) -> Optional[str]:
-        return w.route_node(self.graph, self.node, self._cell_reading(cell))
+        return wire.route_node(self.graph, self.node, self._cell_reading(cell))
 
     # -- packing (edge path) ------------------------------------------------
     def cell(self, reading: Dict[str, Any]) -> Tuple[int, ...]:
@@ -177,7 +177,7 @@ class SpiralLayout:
         return self.n_of[self.cell(reading)]
 
     def band_id(self, reading: Dict[str, Any]) -> int:
-        """A reading -> its band (route) index — the cheap, decision-lossless wire symbol."""
+        """A reading -> its band (route) index  -  the cheap, decision-lossless wire symbol."""
         return self.band_index[self._route_of_cell(self.cell(reading))]
 
     def route_of(self, n: int) -> Optional[str]:
@@ -188,7 +188,7 @@ class SpiralLayout:
         raise ValueError(f"index {n} outside the spiral ({self.size} cells)")
 
     def band_bounds(self) -> List[Tuple[int, int, Optional[str]]]:
-        """``[(lo, hi_exclusive, route), ...]`` — the contiguous decision-bands."""
+        """``[(lo, hi_exclusive, route), ...]``  -  the contiguous decision-bands."""
         return [(self.band_base[b], self.band_base[b] + self.band_width[b], self.routes[b])
                 for b in range(len(self.routes))]
 
@@ -204,23 +204,23 @@ class SpiralLayout:
     # -- wire codec ---------------------------------------------------------
     def encode_decision(self, reading: Dict[str, Any]) -> str:
         """The cheap stream: just the band ID (Fibonacci-coded). Routes correctly; carries no magnitude."""
-        return z.encode(self.band_id(reading) + 1)
+        return zeck.encode(self.band_id(reading) + 1)
 
     def decode_decision(self, bits: str) -> Optional[str]:
         """Cheap-stream bits -> the route."""
-        return self.routes[z.decode(bits) - 1]
+        return self.routes[zeck.decode(bits) - 1]
 
     def encode_progressive(self, reading: Dict[str, Any]) -> Tuple[str, str]:
         """(decision bits, refinement bits): band ID first, then the within-band Gray local index."""
         n = self.index(reading)
         b = self.band_index[self.route_of(n)]
         local = n - self.band_base[b]
-        return z.encode(b + 1), z.encode(local + 1)
+        return zeck.encode(b + 1), zeck.encode(local + 1)
 
     def decode_progressive(self, decision_bits: str, refine_bits: str) -> Dict[str, Any]:
         """(decision, refinement) -> the exact cell's representative reading."""
-        b = z.decode(decision_bits) - 1
-        local = z.decode(refine_bits) - 1
+        b = zeck.decode(decision_bits) - 1
+        local = zeck.decode(refine_bits) - 1
         return self.reconstruct(self.band_base[b] + local)
 
     # -- conformance / inspection ------------------------------------------

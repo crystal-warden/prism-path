@@ -2,7 +2,7 @@
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Authenticated ACK contract:
   * a valid, advancing ACK applies drop-on-ACK;
-  * a forged, tampered, wrong-secret, or replayed ACK is ignored — and CRUCIALLY drops no data
+  * a forged, tampered, wrong-secret, or replayed ACK is ignored  -  and CRUCIALLY drops no data
     (the data-loss-by-spoof attack the doc names is prevented).
 """
 import sys
@@ -13,7 +13,7 @@ sys.path.insert(0, str(_ADAPTER))
 sys.path.insert(0, str(_ADAPTER.parent.parent))          # repo root, for prismpath (via selfheal)
 from prismpath.telemetry import ackchannel as ack  # noqa: E402
 from prismpath.telemetry import epochs as E         # noqa: E402
-from prismpath.telemetry import zeckendorf as z     # noqa: E402
+from prismpath.telemetry import zeckendorf as zeck     # noqa: E402
 
 SECRET = b"edge<->ground shared secret"
 
@@ -21,7 +21,7 @@ SECRET = b"edge<->ground shared secret"
 def _store(n=3):
     s = E.EpochStore(block_bits=64, max_data_epochs=9)
     for k in range(n):
-        s.seal(z.encode_stream(list(range(1 + k, 60 + k))))
+        s.seal(zeck.encode_stream(list(range(1 + k, 60 + k))))
     return s
 
 

@@ -12,8 +12,8 @@ _ADAPTER = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_ADAPTER))
 sys.path.insert(0, str(_ADAPTER.parent.parent))            # repo root
 
-from prismpath.telemetry import spiral as sp   # noqa: E402
-from prismpath.telemetry import wire as w      # noqa: E402
+from prismpath.telemetry import spiral   # noqa: E402
+from prismpath.telemetry import wire      # noqa: E402
 from prismpath.kernel.parser import parse            # noqa: E402
 
 CORPUS = json.loads((_ADAPTER / "conformance" / "spiral.json").read_text())
@@ -21,13 +21,13 @@ CORPUS = json.loads((_ADAPTER / "conformance" / "spiral.json").read_text())
 
 def _layout():
     g = parse(CORPUS["flow"])
-    return g, sp.SpiralLayout(g, CORPUS["node"])
+    return g, spiral.SpiralLayout(g, CORPUS["node"])
 
 
 # ---------------------------------------------------------------- Gray-code locality
 @pytest.mark.parametrize("radices", [[2, 2], [3, 2], [3, 3, 3], [4, 2, 3]])
 def test_gray_sequence_is_single_step_and_complete(radices):
-    seq = list(sp.mixed_radix_gray(radices))
+    seq = list(spiral.mixed_radix_gray(radices))
     size = 1
     for r in radices:
         size *= r
@@ -65,7 +65,7 @@ def test_route_of_is_an_integer_band_compare():
                 expect = L.routes[b]
                 break
         assert L.route_of(n) == expect
-        assert isinstance(sp.radius2(n), int) and isinstance(sp.theta_u32(n), int)
+        assert isinstance(spiral.radius2(n), int) and isinstance(spiral.theta_u32(n), int)
 
 
 # ---------------------------------------------------------------- the core proof
@@ -73,8 +73,8 @@ def test_decisions_preserved_through_the_spiral():
     g, L = _layout()
     for probe in CORPUS["probes"]:
         r = probe["reading"]
-        direct = w.route_node(g, CORPUS["node"], r)            # the flow's own routing
-        via_band = w.route_node(g, CORPUS["node"], L.reconstruct_band(L.band_id(r)))
+        direct = wire.route_node(g, CORPUS["node"], r)            # the flow's own routing
+        via_band = wire.route_node(g, CORPUS["node"], L.reconstruct_band(L.band_id(r)))
         via_index = L.route_of(L.index(r))
         assert direct == probe["route"] == via_band == via_index
 
@@ -86,7 +86,7 @@ def test_progressive_round_trip_recovers_the_cell():
         db, rb = L.encode_progressive(r)
         rec = L.decode_progressive(db, rb)
         assert L.cell(rec) == L.cell(r)                        # exact quantized cell
-        assert w.route_node(g, CORPUS["node"], rec) == probe["route"]
+        assert wire.route_node(g, CORPUS["node"], rec) == probe["route"]
         # the cheap stream alone still decodes to the right route
         assert L.decode_decision(L.encode_decision(r)) == probe["route"]
 
@@ -108,11 +108,11 @@ def test_frozen_tessellation_matches():
 
 # ---------------------------------------------------------------- the win exists (sanity, not the benchmark)
 def test_decision_stream_cheaper_than_linear_for_multidim():
-    import quantizer as q
+    import quantizer
     g, L = _layout()
-    parts = q.build_partitions(g)
+    parts = quantizer.build_partitions(g)
     readings = [{"pitch": p, "roll": r, "vibration": v}
                 for p in (0, 25, 50) for r in (0, 25, 50) for v in (0, 50, 90)]
-    lin = sum(len(w.encode_reading(parts, rd)) for rd in readings)
+    lin = sum(len(wire.encode_reading(parts, rd)) for rd in readings)
     dec = sum(len(L.encode_decision(rd)) for rd in readings)
     assert dec < lin                                           # one band ID beats three field symbols

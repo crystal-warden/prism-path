@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
-"""census.py — fixture-mode end-to-end, pairing arithmetic, and the privacy regression
+"""census.py  -  fixture-mode end-to-end, pairing arithmetic, and the privacy regression
 against the ACTUAL committed evidence artifact."""
 import json
 import re
@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 import census as cs
-import projection as pj
+import projection
 
 ADAPTER = Path(__file__).resolve().parent.parent
 FIXTURE = ADAPTER / "fixtures" / "alerts_synth.ndjson"
@@ -76,7 +76,7 @@ def test_imu_marginal_uses_real_sessions(artifact):
     # All keys canonicalize: "stability|symbol"
     for key in imu["counts"]:
         stability, sym = key.split("|")
-        assert stability in pj.CANONICAL_STABILITY
+        assert stability in projection.CANONICAL_STABILITY
         assert 0 <= int(sym) <= 3
 
 

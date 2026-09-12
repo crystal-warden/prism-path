@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
-"""bench/wire.py — fixture-mode checks on the transmission-strategy simulator: schema, the
+"""bench/wire.py  -  fixture-mode checks on the transmission-strategy simulator: schema, the
 batching-amortizes property, the self-framing-persists-in-batch property, latency ordering, the
 pure MTU-fill strategy (no cap), and the optional AEAD+ECDHE confidentiality layer's cost."""
 import importlib.util
@@ -18,7 +18,7 @@ _spec.loader.exec_module(W)
 def _sim(mode, *, enc=False, **kw):
     events = W.events_from_fixture(n=1500, hz=6.0)
     graph = W.parse(W.FLOW.read_text())
-    parts = W.q.build_partitions(graph)
+    parts = W.quantizer.build_partitions(graph)
     ours, _ = W.make_encoders(parts)
     return W.simulate(
         events, ours, True, mode=mode, overhead=W.OVERHEAD["tcp_tls"], attest=W.ATTEST_BYTES,
@@ -49,7 +49,7 @@ def test_self_framing_advantage_persists_in_a_batch():
     # Batched JSON still pays its per-record keys; the self-framing codec pays none.
     events = W.events_from_fixture(n=1500, hz=6.0)
     graph = W.parse(W.FLOW.read_text())
-    _, jsonb = W.make_encoders(W.q.build_partitions(graph))
+    _, jsonb = W.make_encoders(W.quantizer.build_partitions(graph))
     json_fill = W.simulate(events, jsonb, False, mode="mtu", overhead=W.OVERHEAD["tcp_tls"])
     assert MTU_FILL["bytes_per_event"] < json_fill["bytes_per_event"] / 3
 
@@ -79,7 +79,7 @@ def test_encryption_is_flat_per_packet_so_nearly_free_when_batched():
 def test_measured_crypto_cost_runs_on_this_host():
     # `cryptography` is an OPTIONAL dep (the signing tier): present in the control-plane test job,
     # absent in the bare adapters job. measure_crypto_cost honors that with a labeled loud-absence
-    # fallback, so the bench runs either way — assert the actual contract on whichever host we're on.
+    # fallback, so the bench runs either way  -  assert the actual contract on whichever host we're on.
     cc = W.measure_crypto_cost(1005, iters=200)
     assert cc["payload_len"] == 1005
     try:
@@ -99,7 +99,7 @@ def test_committed_wire_results_are_aggregate_only():
     import json
     for f in (ADAPTER / "bench").glob("wire_*.json"):
         blob = json.loads(f.read_text())
-        # only counts/sizes/latencies/crypto-timings — no alert content ever enters this artifact
+        # only counts/sizes/latencies/crypto-timings  -  no alert content ever enters this artifact
         assert set(blob) <= {"corpus", "n", "span_s", "overhead", "crypto_cost", "rows"}
         for row in blob["rows"]:
             assert set(row) >= {"format", "strategy", "bytes_per_event", "packets"}

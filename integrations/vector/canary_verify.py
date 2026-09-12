@@ -31,8 +31,8 @@ sys.path.insert(0, str(_TELEMETRY))
 sys.path.insert(0, str(_TELEMETRY.parent.parent))
 
 from prismpath.telemetry import preflight  # noqa: E402  (extract_reading + _codec_view: the codec's exact view of an event)
-from prismpath.telemetry import quantizer as q  # noqa: E402
-from prismpath.telemetry import wire as w  # noqa: E402
+from prismpath.telemetry import quantizer  # noqa: E402
+from prismpath.telemetry import wire  # noqa: E402
 from prismpath.kernel.parser import parse_file  # noqa: E402
 
 
@@ -78,8 +78,8 @@ def main() -> int:
         field_paths[f] = p
 
     graph = parse_file(args.flow)
-    parts = q.build_partitions(graph)
-    if args.route_node not in w.decision_nodes(graph):
+    parts = quantizer.build_partitions(graph)
+    if args.route_node not in wire.decision_nodes(graph):
         ap.error(f"--route-node {args.route_node!r} is not a decision node of the flow")
     order = sorted(parts.keys())
 
@@ -96,12 +96,12 @@ def main() -> int:
             continue
         try:
             seen, _trunc = preflight._codec_view(parts, reading)
-            w.encode_reading(parts, seen)
+            wire.encode_reading(parts, seen)
         except (TypeError, ValueError, KeyError):
             unencodable += 1
             expected.append(None)
             continue
-        expected.append(w.route_node(graph, args.route_node, seen) or "(no match)")
+        expected.append(wire.route_node(graph, args.route_node, seen) or "(no match)")
 
     exp_routes = [r for r in expected if r is not None]
     got_routes = [str(ev.get(args.route_field, "(absent)")) for ev in decoded]
