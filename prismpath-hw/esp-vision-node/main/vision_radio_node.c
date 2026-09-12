@@ -15,6 +15,8 @@
 #include "mbedtls/sha256.h"
 #include "monocypher-ed25519.h"
 #include "authority_pubkey.h"
+#include "nvs.h"
+#include "esp_random.h"
 #include "esp_log.h"
 #include "driver/usb_serial_jtag.h"
 #include "vision_policy.h"
@@ -40,7 +42,28 @@ static const char *TAG = "radio";
 #define KEY_RESEND_US 60000000ULL   // resend the background every minute so a receiver that joins late holds a normal
 // RDG4: the reading carries the first eight bytes of the SHA-256 of the previous reading record (header and wire), a hash
 // chain that binds the trail to the node: a receiver can tell a lost reading (a gap in sequence) from a spliced one
-typedef struct __attribute__((packed)) { char magic[4]; uint16_t nid, norm; uint32_t seq; uint64_t t_cap, t_dec; uint16_t node, steps, wire_len; uint64_t prev; uint16_t pver; } rdg_hdr_t;   // RDG5: names the policy version that decided
+typedef struct __attribute__((packed)) { char magic[4]; uint16_t nid, norm; uint32_t seq; uint64_t t_cap, t_dec; uint16_t node, steps, wire_len; uint64_t prev; uint16_t pver; uint32_t epoch; } rdg_hdr_t;   // RDG6: the boot epoch nonce, so a replayed earlier boot is refusable
+// the camera's own key (generated once, kept in NVS, published as PUB2) signs the chain head once a minute:
+//   "CHN1" | nid u16 | epoch u32 | seq u32 | head u64 | pver u16 | sig[64]   over everything before sig
+static uint16_t node_id;   // defined below with the MAC
+static uint8_t cam_sk[64], cam_pk[32]; static bool cam_key = false; static uint32_t boot_epoch = 0;
+typedef struct __attribute__((packed)) { char magic[4]; uint16_t nid; uint32_t epoch, seq; uint64_t head; uint16_t pver; uint8_t sig[64]; } chn_t;
+static void cam_key_init(void)
+{
+    { esp_err_t e = nvs_flash_init(); if (e == ESP_ERR_NVS_NO_FREE_PAGES || e == ESP_ERR_NVS_NEW_VERSION_FOUND) { nvs_flash_erase(); nvs_flash_init(); } }   // NVS before the radio brings it up: the key is read first
+    nvs_handle_t h; if (nvs_open("cam", NVS_READWRITE, &h) != ESP_OK) { ESP_LOGE(TAG, "camera key: NVS open failed, readings will not be signed"); return; }
+    size_t n = 64, m = 32;
+    if (nvs_get_blob(h, "sk", cam_sk, &n) == ESP_OK && n == 64 && nvs_get_blob(h, "pk", cam_pk, &m) == ESP_OK && m == 32) cam_key = true;
+    else { uint8_t seed[32]; esp_fill_random(seed, 32); crypto_ed25519_key_pair(cam_sk, cam_pk, seed); nvs_set_blob(h, "sk", cam_sk, 64); nvs_set_blob(h, "pk", cam_pk, 32); nvs_commit(h); cam_key = true; ESP_LOGI(TAG, "camera signing key generated and kept in NVS"); }
+    nvs_close(h);
+}
+static void publish_cam_key(void) { uint8_t pm[38]; memcpy(pm, "PUB2", 4); pm[4] = node_id & 0xff; pm[5] = node_id >> 8; memcpy(pm + 6, cam_pk, 32); esp_now_send(BCAST, pm, sizeof pm); hop_send(pm, sizeof pm); }
+static void sign_chain_head(uint32_t seq, uint64_t head)
+{
+    if (!cam_key) return;
+    chn_t c; memset(&c, 0, sizeof c); memcpy(c.magic, "CHN1", 4); c.nid = node_id; c.epoch = boot_epoch; c.seq = seq; c.head = head; c.pver = (uint16_t)policy_version;
+    crypto_ed25519_sign(c.sig, cam_sk, (const uint8_t *)&c, sizeof c - 64); uint8_t b[sizeof c]; memcpy(b, &c, sizeof c); esp_now_send(BCAST, b, sizeof b); hop_send(b, sizeof b);
+}
 static uint64_t chain_prev = 0;
 typedef struct __attribute__((packed)) { char magic[4]; uint16_t nid, norm; uint32_t seq; uint64_t t_cap; uint32_t len; } key_hdr_t;
 typedef struct __attribute__((packed)) { char magic[4]; uint16_t nid, norm; uint32_t seq; uint64_t t_cap; uint16_t route; uint32_t len; } evd_hdr_t;
@@ -134,6 +157,7 @@ static uint16_t swap_execute(uint32_t *out_version, uint64_t *out_hash, uint32_t
                         for (int i = 0; i < wire_n; i++) { wire_fields[i].reg = rd16b(cb + 19 * i); wire_fields[i].n_cuts = cb[19 * i + 2]; for (int k = 0; k < CB_MAX_CUTS; k++) wire_fields[i].cut[k] = rd32(cb + 19 * i + 3 + 4 * k); }
                         esc_mask = esc; policy_version = version;
                         uint8_t h[32]; mbedtls_sha256(staged + 85, image_len, h, 0); memcpy(&ih, h, 8);
+                        { nvs_handle_t nh; if (nvs_open("cam", NVS_READWRITE, &nh) == ESP_OK) { nvs_set_blob(nh, "pack", staged, staged_len); nvs_set_u32(nh, "pver", version); nvs_commit(nh); nvs_close(nh); } }   // the version floor and the pack survive a reboot
                     }
                 }
             }
@@ -154,6 +178,17 @@ void app_main(void)
 {
     vision_core_init(); last_sent = heap_caps_malloc(W * H, MALLOC_CAP_SPIRAM);
     staged = heap_caps_malloc(PACK_MAX, MALLOC_CAP_SPIRAM); vmsg = heap_caps_malloc(PACK_MAX, MALLOC_CAP_SPIRAM); tbl_backup = heap_caps_malloc(TBL_MAX, MALLOC_CAP_SPIRAM); swap_reset();
+    boot_epoch = esp_random(); cam_key_init();
+    {   // a pack accepted before the reboot is verified again and re-applied, so the swap and its version floor persist
+        nvs_handle_t nh; if (nvs_open("cam", NVS_READONLY, &nh) == ESP_OK) {
+            size_t plen = PACK_MAX; if (nvs_get_blob(nh, "pack", staged, &plen) == ESP_OK && plen > 85) {
+                staged_len = plen; staged_total = (uint16_t)((plen + CHUNK - 1) / CHUNK); staged_count = staged_total; memset(staged_have, 0xff, sizeof staged_have);
+                uint32_t v; uint64_t ih; uint32_t us; uint16_t cause = swap_execute(&v, &ih, &us);
+                ESP_LOGI(TAG, "stored policy pack version %lu re-applied at boot: %s (cause %u)", (unsigned long)v, cause ? "REFUSED" : "committed", cause);
+            }
+            nvs_close(nh);
+        }
+    }
     camera_config_t c = {
         .pin_pwdn = -1, .pin_reset = -1, .pin_xclk = CAM_XCLK, .pin_sccb_sda = CAM_SIOD, .pin_sccb_scl = CAM_SIOC,
         .pin_d7 = CAM_D7, .pin_d6 = CAM_D6, .pin_d5 = CAM_D5, .pin_d4 = CAM_D4, .pin_d3 = CAM_D3, .pin_d2 = CAM_D2,
@@ -181,6 +216,7 @@ void app_main(void)
                 uint16_t to = cb[1] | (cb[2] << 8);
                 if (to == node_id || to == 0xffff) {
                     if (cb[3] == 'n') { ESP_LOGI(TAG, "adopt over the air"); adopt_now = true; }
+                    else if (cb[3] == 'K') { publish_cam_key(); sign_chain_head(seq, chain_prev); }   // the receiver asks for the camera's key and a signed chain head
                     else if (cb[3] == 'k') { ESP_LOGI(TAG, "keyframe requested over the air"); key_now = true; }   // a receiver that joined mid stream asks for the normal
                     else if (cb[3] == 'L' && r >= 5) { layer_level = cb[4]; ESP_LOGI(TAG, "refinement layer %d over the air", layer_level); memset(layer_have, 0, sizeof layer_have); }
                     else if (cb[3] == 'S' && r >= 8) swap_chunk(cb + 4, r - 4);
@@ -209,10 +245,11 @@ void app_main(void)
         uint16_t node, steps; decide(motion_cells, dark, step, door_hit, scene, &node, &steps);
         uint8_t wirebuf[128]; uint16_t wire_len = encode_reading(wirebuf, sizeof wirebuf);
         uint64_t t_dec = (uint64_t)esp_timer_get_time();
-        rdg_hdr_t rh = { {'R','D','G','5'}, node_id, normal_id, seq, t_cap, t_dec, node, steps, wire_len, chain_prev, (uint16_t)policy_version };
+        rdg_hdr_t rh = { {'R','D','G','6'}, node_id, normal_id, seq, t_cap, t_dec, node, steps, wire_len, chain_prev, (uint16_t)policy_version, boot_epoch };
         memcpy(pkt, &rh, sizeof rh); memcpy(pkt + sizeof rh, wirebuf, wire_len);
         esp_now_send(BCAST, pkt, sizeof rh + wire_len); hop_send(pkt, sizeof rh + wire_len);
         { uint8_t h[32]; mbedtls_sha256(pkt, sizeof rh + wire_len, h, 0); memcpy(&chain_prev, h, 8); }   // this record's hash is the next record's prev
+        { static uint64_t t_chn = 0; if (t_dec - t_chn > 60000000ULL) { publish_cam_key(); sign_chain_head(seq, chain_prev); t_chn = t_dec; } }   // the chain head, signed, once a minute, with the key beside it
         // a keyframe whenever the normal changed id (adoption, or the search for the first clean stretch ending), and every minute
         if (normal_set && (normal_id != last_normal || key_now || t_dec - t_key > KEY_RESEND_US)) { send_keyframe(fb, seq, t_cap); t_key = t_dec; last_normal = normal_id; key_now = false; }
         if (escalates(node) && t_dec - t_evd > EVIDENCE_GAP_US) { send_evidence(fb, seq, t_cap, node); t_evd = t_dec; }
