@@ -21,6 +21,7 @@ Usage: python -m prismpath.comparisons.groupa.a5
 from __future__ import annotations
 
 import json
+import re
 import os
 import signal
 import subprocess
@@ -65,7 +66,7 @@ def run_prismpath() -> None:
             reading = {k: v for k, v in inp.items() if v is not None}
             bits = w.encode_reading(parts, reading)
             req = packed.pack(bits, 8)
-            target = w.route_node(graph, "decide", reading)
+            target = w.route_node(graph, "decide", reading)   # the node name is r<n>_<outcome>; observed is the outcome the flow actually reached
             cause = 0 if target is not None else 36
             nxt = node_names.index(target) if target else 0
             res = receipts.encode_receipt_dict({"cause": cause, "event": 0, "next_node": nxt, "prev_node": 0, "seq": seq})
@@ -82,7 +83,7 @@ def run_prismpath() -> None:
                           "total": total, "total_plus_envelope": total + ENVELOPE,
                           "concentrated_per_reading_plus_envelope": conc, "outcome": exp["outcome"]})
             write_result(system="prismpath", dimension="A5", policy=pid, scenario=sid, expected=exp["outcome"],
-                         observed=exp["outcome"] if target else "no_match", grade="NATIVE", idiomatic=True,
+                         observed=re.sub(r"^r\d+_", "", target) if target else "no_match", grade="NATIVE", idiomatic=True,
                          evidence_path=ev,
                          measurements={"bytes_on_wire": total, "request_bytes": len(req), "result_bytes": len(res),
                                        "total_plus_envelope_28B": total + ENVELOPE,
