@@ -1,0 +1,21 @@
+{
+ "names": [
+  "room",
+  "blind",
+  "tamper",
+  "degraded_present",
+  "degraded_clear",
+  "conflict",
+  "present",
+  "clear"
+ ],
+ "fields": {
+  "a_fresh": 0,
+  "b_fresh": 1,
+  "a_tamper": 2,
+  "b_tamper": 3,
+  "b_occ_age": 4,
+  "a_occ_age": 5
+ },
+ "start": 0
+}
