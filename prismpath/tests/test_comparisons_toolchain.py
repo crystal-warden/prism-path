@@ -12,7 +12,9 @@ from pathlib import Path
 
 import pytest
 
-BIN = Path(__file__).resolve().parents[1] / "comparisons" / ".toolchain" / "bin"
+from prismpath.tests._repo import repo_file, REPO_ROOT
+
+BIN = REPO_ROOT / "prismpath" / "comparisons" / ".toolchain" / "bin"
 PINS = {"opa": "1.20.2", "cedar": "4.12.0", "cerbos": "0.55.0", "openfga": "1.19.0"}
 VERSION_ARGS = {"opa": ["version"], "cedar": ["--version"], "cerbos": ["--version"], "openfga": ["version"]}
 
@@ -33,7 +35,7 @@ def test_binary_reports_pinned_version(name):
 
 
 def test_install_script_pins_match_this_test():
-    script = (Path(__file__).resolve().parents[1] / "comparisons" / "toolchain" / "install.sh").read_text()
+    script = repo_file("prismpath", "comparisons", "toolchain", "install.sh").read_text()
     assert "OPA_VERSION=v" + PINS["opa"] in script
     assert "CEDAR_CLI_VERSION=" + PINS["cedar"] in script
     assert "CERBOS_VERSION=" + PINS["cerbos"] in script

@@ -12,9 +12,10 @@ import json
 from collections import Counter
 from pathlib import Path
 
-BASE = Path(__file__).resolve().parent.parent.parent
-BENCH = BASE / "prismpath" / "benchmark" / "routing_bench.jsonl"
-HUMAN = BASE / "prismpath" / "benchmark" / "gate_zero" / "annot_human.jsonl"
+from prismpath.tests._repo import repo_file
+
+BENCH = repo_file("prismpath", "benchmark", "routing_bench.jsonl")
+HUMAN = repo_file("prismpath", "benchmark", "gate_zero", "annot_human.jsonl")
 
 
 def _load(p):

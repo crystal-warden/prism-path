@@ -53,25 +53,12 @@ test = ["pytest"]
 [project.scripts]
 prismpath = "prismpath.cli:main"
 
-[tool.setuptools]
-packages = [
-    "prismpath",
-    "prismpath.mission_control",   # the control plane's proving + observability command center
-    "prismpath.plugins",
-    "prismpath.plugins.pysprint",
-    "prismpath.tests",
-    "prismpath.kernel",
-    "prismpath.routing",
-    "prismpath.safety",
-    "prismpath.hotswap",
-    "prismpath.ledgers",
-    "prismpath.workers",
-    "prismpath.orchestration",
-    "prismpath.evals",
-    "prismpath.telemetry",         # Facet, the decision telemetry wire (moved from adapters/telemetry, September 2026)
-    "prismpath.telemetry.tests",
-    "prismpath.telemetry.bench",
-]
+[tool.setuptools.packages.find]
+# Every package under prismpath/ ships, found by its __init__.py, so a subpackage added to the tree
+# cannot be left out of the wheel by hand: the shipped test suite imports prismpath.comparisons and
+# prismpath.portable, and a hand kept list once omitted both (September 2026).
+where = ["."]
+include = ["prismpath*"]
 
 [tool.setuptools.package-data]
 # Everything here is READ AT RUNTIME by shipped code — not documentation. The prose docs live in

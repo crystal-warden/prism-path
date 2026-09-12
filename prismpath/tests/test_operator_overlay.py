@@ -6,8 +6,9 @@ suspend and resume machinery, with nothing added to the pack."""
 from pathlib import Path
 
 from prismpath.ledgers import checkpoint
+from prismpath.tests._repo import repo_file
 
-FLOW = Path(__file__).resolve().parent.parent / "examples" / "operator_overlay" / "overlay.md"
+FLOW = repo_file("prismpath", "examples", "operator_overlay", "overlay.md")
 
 
 def _worker(fields):

@@ -34,9 +34,11 @@ def find_free_port() -> int:
         return s.getsockname()[1]
 
 
+from prismpath.tests._repo import repo_file, REPO_ROOT
+
+
 def test_glue_opa_revision_floor(tmp_path: Path) -> None:
-    repo_root = Path(__file__).resolve().parents[2]
-    opa_bin = repo_root / "prismpath" / "comparisons" / ".toolchain" / "bin" / "opa"
+    opa_bin = REPO_ROOT / "prismpath" / "comparisons" / ".toolchain" / "bin" / "opa"
     if not opa_bin.exists() or not os.access(opa_bin, os.X_OK):
         pytest.skip("OPA binary missing")
 
@@ -45,7 +47,7 @@ def test_glue_opa_revision_floor(tmp_path: Path) -> None:
     subprocess.run(["openssl", "genrsa", "-out", str(priv_pem), "2048"], check=True, capture_output=True)
     subprocess.run(["openssl", "rsa", "-in", str(priv_pem), "-pubout", "-out", str(pub_pem)], check=True, capture_output=True)
 
-    rego_src = repo_root / "prismpath" / "comparisons" / "systems" / "opa" / "generated" / "network_admission" / "policy.rego"
+    rego_src = repo_file("prismpath", "comparisons", "systems", "opa", "generated", "network_admission", "policy.rego")
     src_dir = tmp_path / "bundle_src"
     src_dir.mkdir()
     shutil.copy(rego_src, src_dir / "policy.rego")
@@ -127,6 +129,6 @@ def test_glue_opa_revision_floor(tmp_path: Path) -> None:
     proc_stale = opa_revision_floor.activate(v1_path, state_path, opa_bin, pub_pem, port)
     assert proc_stale is None
 
-    glue_file = repo_root / "prismpath" / "comparisons" / "glue" / "opa_revision_floor.py"
+    glue_file = repo_file("prismpath", "comparisons", "glue", "opa_revision_floor.py")
     line_count = count_non_blank_non_comment(glue_file)
     assert line_count <= 60, f"Line count {line_count} exceeds budget limit of 60"

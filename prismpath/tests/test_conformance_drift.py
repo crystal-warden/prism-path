@@ -56,10 +56,8 @@ def test_classifier_compiler_gap_pinned():
     back) — investigate, don't just re-pin. Skips if the hardware compiler isn't on the path (it lives
     outside the package)."""
     import sys as _sys
-    _hw = Path(__file__).resolve().parent.parent.parent / "prismpath-hw"
-    if not (_hw / "ppt_compile.py").exists():
-        import pytest as _pytest
-        _pytest.skip("prismpath-hw/ppt_compile not present")
+    from prismpath.tests._repo import repo_file
+    _hw = repo_file("prismpath-hw")
     _sys.path.insert(0, str(_hw))
     import ppt_compile as pc
 

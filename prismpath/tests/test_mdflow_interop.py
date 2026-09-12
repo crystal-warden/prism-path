@@ -21,8 +21,10 @@ from prismpath.kernel.parser import parse_file
 from prismpath.kernel.engine import run
 from prismpath.workers.cli_worker import cli_agent
 
+from prismpath.tests._repo import repo_file
+
 HERE = os.path.dirname(__file__)
-EX = os.path.abspath(os.path.join(HERE, "..", "examples", "mdflow_interop"))
+EX = str(repo_file("prismpath", "examples", "mdflow_interop", "pipeline.md").parent)
 MOCK = os.path.join(EX, "mock_mdflow.py")
 TASKS = os.path.join(EX, "tasks")
 
@@ -80,4 +82,5 @@ def test_mdflow_task_failure_rides_the_error_tier():
         assert res.path[-1] == "abandoned"
         assert res.stopped == "terminal"
     finally:
-        os.remove(noapprove)
+        if os.path.exists(noapprove):
+            os.remove(noapprove)

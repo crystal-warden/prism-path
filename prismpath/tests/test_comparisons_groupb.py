@@ -7,7 +7,9 @@ from pathlib import Path
 
 import pytest
 
-HERE = Path(__file__).resolve().parent.parent / "comparisons"
+from prismpath.tests._repo import repo_file
+
+HERE = repo_file("prismpath", "comparisons")
 RESULTS = HERE / "results"
 SYSTEMS = ("prismpath", "opa", "cedar", "cerbos", "openfga", "openlane")
 

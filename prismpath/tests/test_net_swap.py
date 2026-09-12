@@ -14,14 +14,13 @@ pytest.importorskip("cryptography")
 from prismpath import policy_pack as pp  # noqa: E402
 from prismpath.kernel.parser import parse  # noqa: E402
 
-_REPO = Path(__file__).resolve().parent.parent.parent
-_hw = _REPO / "prismpath-hw"
-if not (_hw / "ppt_compile.py").exists():
-    pytest.skip("prismpath-hw/ppt_compile not present", allow_module_level=True)
+from prismpath.tests._repo import repo_file
+
+_hw = repo_file("prismpath-hw")
 sys.path.insert(0, str(_hw))
 import ppt_compile as pc  # noqa: E402
 
-_spec = importlib.util.spec_from_file_location("net_swap", _REPO / "prismpath-ebpf" / "net_swap.py")
+_spec = importlib.util.spec_from_file_location("net_swap", repo_file("prismpath-ebpf", "net_swap.py"))
 ns = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(ns)
 

@@ -6,8 +6,10 @@ import os
 
 from prismpath.kernel.parser import parse_file
 
+from prismpath.tests._repo import repo_file
+
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DATA = os.path.join(HERE, "benchmark", "routing_bench.jsonl")
+DATA = str(repo_file("prismpath", "benchmark", "routing_bench.jsonl"))
 FLOWS = os.path.join(HERE, "flows")
 
 

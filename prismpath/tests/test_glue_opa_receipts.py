@@ -34,9 +34,11 @@ def find_free_port() -> int:
         return s.getsockname()[1]
 
 
+from prismpath.tests._repo import repo_file, REPO_ROOT
+
+
 def test_glue_opa_receipts(tmp_path: Path) -> None:
-    repo_root = Path(__file__).resolve().parents[2]
-    opa_bin = repo_root / "prismpath" / "comparisons" / ".toolchain" / "bin" / "opa"
+    opa_bin = REPO_ROOT / "prismpath" / "comparisons" / ".toolchain" / "bin" / "opa"
     if not opa_bin.exists() or not os.access(opa_bin, os.X_OK):
         pytest.skip("OPA binary missing")
 
@@ -68,7 +70,7 @@ decision_logs:
     config_path = tmp_path / "config.yaml"
     config_path.write_text(config_content, encoding="utf-8")
 
-    policy_path = repo_root / "prismpath" / "comparisons" / "systems" / "opa" / "generated" / "network_admission" / "policy.rego"
+    policy_path = repo_file("prismpath", "comparisons", "systems", "opa", "generated", "network_admission", "policy.rego")
     opa_port = find_free_port()
     cmd = [
         str(opa_bin),
@@ -154,7 +156,7 @@ decision_logs:
 
         assert opa_receipts.verify_receipt(receipts[0], pub2_pem) is False
 
-        glue_file = repo_root / "prismpath" / "comparisons" / "glue" / "opa_receipts.py"
+        glue_file = repo_file("prismpath", "comparisons", "glue", "opa_receipts.py")
         line_count = count_non_blank_non_comment(glue_file)
         assert line_count <= 150, f"Line count {line_count} exceeds 150 budget limit"
 

@@ -13,7 +13,11 @@ import pytest
 from prismpath.comparisons.run_comparison import load_cases, markdown_table
 
 
+from prismpath.tests._repo import repo_file
+
+
 def test_load_cases_matches_labeled_suite():
+    repo_file("prismpath", "benchmark", "routing_bench.jsonl")
     cases = load_cases()
     assert len(cases) >= 17
     for c, instruction, outcome, edges in cases:
@@ -56,7 +60,6 @@ def test_markdown_table_orders_and_formats():
 
 def test_reproducer_artifacts_committed():
     """The recorded measured numbers travel with the repo so the README table is auditable."""
-    here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    for name in ("comparisons/results.json", "comparisons/results_table.md",
-                 "comparisons/requirements.txt"):
-        assert os.path.exists(os.path.join(here, name)), f"missing {name}"
+    for name in ("prismpath/comparisons/results.json", "prismpath/comparisons/results_table.md",
+                 "prismpath/comparisons/requirements.txt"):
+        assert repo_file(name).exists(), f"missing {name}"

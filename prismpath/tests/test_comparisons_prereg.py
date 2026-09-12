@@ -13,8 +13,9 @@ import re
 from pathlib import Path
 
 from prismpath.comparisons import corpus_check as cc
+from prismpath.tests._repo import repo_file
 
-COMP = Path(cc.__file__).resolve().parent
+COMP = repo_file("prismpath", "comparisons", "PREREGISTRATION.lock").parent
 
 
 def test_corpus_is_self_consistent():

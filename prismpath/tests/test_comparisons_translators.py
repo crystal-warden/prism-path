@@ -14,15 +14,18 @@ import pytest
 
 from prismpath.comparisons import check_translators as ct
 from prismpath.comparisons.harness import SYSTEMS_DIR, TOOLCHAIN_BIN, load_policies
+from prismpath.tests._repo import repo_file
 
 BINARY = {"opa": "opa", "cedar": "cedar", "cerbos": "cerbos", "openfga": "openfga"}
 
 
 def _committed(system: str) -> dict:
-    return json.loads((SYSTEMS_DIR / system / "generated" / "conformance.json").read_text(encoding="utf-8"))
+    f = repo_file("prismpath", "comparisons", "systems", system, "generated", "conformance.json")
+    return json.loads(f.read_text(encoding="utf-8"))
 
 
 def test_prismpath_translator_conforms():
+    repo_file("prismpath", "comparisons", "systems", "prismpath", "generated", "conformance.json")
     rep = ct.check_system("prismpath", load_policies(), write=False)
     assert rep["summary"]["MISMATCH"] == 0, [r for r in rep["rows"] if r["class"] == "MISMATCH"]
     dropped = sorted({r["expected"]["rule"] for r in rep["rows"] if r["class"] == "DROPPED"})
@@ -34,6 +37,7 @@ def test_prismpath_translator_conforms():
 
 
 def test_prismpath_generated_flows_are_level_m():
+    repo_file("prismpath", "comparisons", "systems", "prismpath", "generated", "conformance.json")
     for meta in (SYSTEMS_DIR / "prismpath" / "generated").glob("*/TRANSLATION.json"):
         m = json.loads(meta.read_text(encoding="utf-8"))
         if m["expressible"]:
@@ -42,6 +46,7 @@ def test_prismpath_generated_flows_are_level_m():
 
 @pytest.mark.parametrize("system", sorted(BINARY))
 def test_comparator_translator_conforms(system):
+    repo_file("prismpath", "comparisons", "systems", system, "generated", "conformance.json")
     if not (TOOLCHAIN_BIN / BINARY[system]).exists():
         pytest.skip(f"{system} toolchain not installed")
     rep = ct.check_system(system, load_policies(), write=False)
@@ -58,6 +63,7 @@ def test_committed_conformance_report_is_clean(system):
 
 
 def test_every_translation_carries_citations_and_notes():
+    repo_file("prismpath", "comparisons", "systems", "prismpath", "generated", "conformance.json")
     for meta in SYSTEMS_DIR.glob("*/generated/*/TRANSLATION.json"):
         m = json.loads(meta.read_text(encoding="utf-8"))
         assert m["citations"], meta

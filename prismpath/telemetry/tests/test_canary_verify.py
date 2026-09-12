@@ -4,12 +4,15 @@
 JSON leg and its decoded Facet leg, with any daylight named by position and route. It must also
 keep positions synchronized when the encoder legitimately dropped events (on_missing)."""
 import json
+import pytest
 import subprocess
 import sys
 from pathlib import Path
 
 _REPO = Path(__file__).resolve().parent.parent.parent.parent
 _VERIFY = _REPO / "integrations" / "vector" / "canary_verify.py"
+if not _VERIFY.exists():                      # the integration script is only in a repo checkout, not the wheel
+    pytest.skip(f"{_VERIFY} is only in a repo checkout", allow_module_level=True)
 
 _FLOW = """---
 name: canary_guard

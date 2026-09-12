@@ -53,10 +53,8 @@ def test_fold_only_touches_signed_int_constants():
 
 def test_compiles_to_a_table():
     import sys
-    from pathlib import Path
-    hw = Path(__file__).resolve().parent.parent.parent / "prismpath-hw"
-    if not (hw / "ppt_compile.py").exists():
-        pytest.skip("prismpath-hw/ppt_compile not present")
+    from prismpath.tests._repo import repo_file
+    hw = repo_file("prismpath-hw")
     sys.path.insert(0, str(hw))
     import ppt_compile as pc
     img = pc.compile_predicate("when x >= -1282")        # no SubsetError

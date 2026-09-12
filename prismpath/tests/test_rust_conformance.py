@@ -20,8 +20,9 @@ import pytest
 CARGO = shutil.which("cargo")
 pytestmark = pytest.mark.skipif(CARGO is None, reason="cargo not installed — Rust kernel untested here")
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-CRATE = REPO_ROOT / "prismpath-rs"
+from prismpath.tests._repo import repo_file, REPO_ROOT
+
+CRATE = repo_file("prismpath-rs")
 CORPUS = REPO_ROOT / "prismpath" / "portable" / "conformance"
 
 

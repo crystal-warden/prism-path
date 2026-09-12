@@ -22,8 +22,10 @@ from prismpath.kernel.parser import parse_file
 from prismpath.kernel.engine import run
 from prismpath.workers.cli_worker import cli_agent
 
+from prismpath.tests._repo import repo_file
+
 HERE = os.path.dirname(__file__)
-EX = os.path.abspath(os.path.join(HERE, "..", "examples", "cli_worker"))
+EX = str(repo_file("prismpath", "examples", "cli_worker", "ci_gate.rs").parent)
 
 
 def _route(flow, cmd, pass_state, seed):

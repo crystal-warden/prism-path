@@ -50,7 +50,7 @@ def test_registry_frozen():
 def test_verify_pack_failure_strings_are_registered():
     """Every `return False, ["..."]` failure string in policy_pack's verifier maps to a
     registry name (the parameterized count-mismatch matches its base name)."""
-    src = (REPO / "prismpath" / "policy_pack.py").read_text()
+    src = (Path(causes.__file__).resolve().parent.parent / "policy_pack.py").read_text()
     emitted = set(re.findall(r'return False, \[f?"([a-z0-9:-]+)', src))
     emitted.discard("")                                     # the generic str(e) return
     for s in emitted:

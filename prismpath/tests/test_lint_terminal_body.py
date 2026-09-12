@@ -7,12 +7,13 @@ import pytest
 from prismpath.kernel.parser import parse_file
 from prismpath.kernel import analysis
 
+from prismpath.tests._repo import repo_file
+
 HERE = os.path.dirname(__file__)
 REPO_ROOT = os.path.dirname(os.path.dirname(HERE))
 
 FIXTURE_PATH = os.path.join(HERE, "fixtures", "broken", "terminal_with_body.md")
 WAZUH_TRIAGE_PATH = os.path.join(REPO_ROOT, "prismpath", "flows", "wazuh_triage.md")
-ALERT_ROUTER_PATH = os.path.join(REPO_ROOT, "prismpath", "examples", "code_nodes_gemma", "alert_router.md")
 
 
 def test_terminal_with_body_fires_on_broken_fixture():
@@ -33,6 +34,7 @@ def test_terminal_with_body_does_not_fire_on_wazuh_triage():
 
 
 def test_terminal_with_body_does_not_fire_on_alert_router():
-    g = parse_file(ALERT_ROUTER_PATH)
+    alert_router_path = str(repo_file("prismpath", "examples", "code_nodes_gemma", "alert_router.md"))
+    g = parse_file(alert_router_path)
     findings = [f for f in analysis.analyze(g) if f.code == "terminal-with-body"]
     assert len(findings) == 0

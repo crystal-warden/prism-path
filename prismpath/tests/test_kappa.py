@@ -8,8 +8,13 @@ from prismpath.evals import annotate
 from prismpath.evals import kappa
 from prismpath.kernel.parser import parse_file
 
+from prismpath.tests._repo import repo_file
+
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-BENCH = os.path.join(HERE, "benchmark", "routing_bench.jsonl")
+
+
+def _bench():
+    return str(repo_file("prismpath", "benchmark", "routing_bench.jsonl"))
 
 
 # --- Cohen's κ math --------------------------------------------------------------------
@@ -71,7 +76,7 @@ def test_roundtrip_through_files(tmp_path):
 
 # --- blind annotation ------------------------------------------------------------------
 def test_blind_cases_strip_label_and_resolve_edges():
-    cases = list(annotate.blind_cases(BENCH))
+    cases = list(annotate.blind_cases(_bench()))
     assert len(cases) >= 300
     c = cases[0]
     assert "label" not in c and c["edges"] and c["targets"]                  # label hidden, edges resolved
@@ -87,12 +92,12 @@ def test_resolve_pick():
 
 def test_annotate_loop_writes_benchmark_shape_and_is_resumable(tmp_path):
     out = str(tmp_path / "ann.jsonl")
-    n1 = annotate.annotate_loop(BENCH, out, input_fn=lambda p: "1", print_fn=lambda *a: None, limit=5)
+    n1 = annotate.annotate_loop(_bench(), out, input_fn=lambda p: "1", print_fn=lambda *a: None, limit=5)
     assert n1 == 5
     recs = [json.loads(l) for l in open(out)]
     assert all(set(r) == {"flow", "node", "outcome", "label", "stratum"} for r in recs)
     # resumable: a second run skips the 5 already done and labels the next 3
-    n2 = annotate.annotate_loop(BENCH, out, input_fn=lambda p: "1", print_fn=lambda *a: None, limit=3)
+    n2 = annotate.annotate_loop(_bench(), out, input_fn=lambda p: "1", print_fn=lambda *a: None, limit=3)
     assert n2 == 3 and len([1 for _ in open(out)]) == 8
 
 
@@ -100,7 +105,7 @@ def test_gold_is_a_valid_benchmark_dataset(tmp_path):
     # two annotators who always agree -> gold whose labels are all REAL edges (drop-in for reproduce.py)
     out_a, out_b = str(tmp_path / "a.jsonl"), str(tmp_path / "b.jsonl")
     for out in (out_a, out_b):
-        annotate.annotate_loop(BENCH, out, input_fn=lambda p: "1", print_fn=lambda *a: None, limit=10)
+        annotate.annotate_loop(_bench(), out, input_fn=lambda p: "1", print_fn=lambda *a: None, limit=10)
     gold, _ = kappa.adjudicate(kappa.load(out_a), kappa.load(out_b))
     assert gold
     graphs = {}
