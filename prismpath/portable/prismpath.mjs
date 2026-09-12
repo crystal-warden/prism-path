@@ -715,13 +715,13 @@ export function capabilityReport(graph) {
     portable: {
       status: isP0 ? "yes" : "needs-lockfile",
       reason: isP0 ? null
-        : `${semanticViolations.length} reachable semantic edge(s): P0 runs unconditionally; lock them for P1`,
+        : `${semanticViolations.length} reachable semantic edge(s) — P0 runs unconditionally; lock them for P1`,
       blocking_edges: isP0 ? [] : semanticViolations,
     },
     level_m_hardware: {
       status: hardwareOk ? "yes" : "no",
       reason: hardwareOk ? null
-        : (!isP0 ? `${semanticViolations.length} reachable semantic edge(s): not deterministic`
+        : (!isP0 ? `${semanticViolations.length} reachable semantic edge(s) — not deterministic`
                : `${levelMResult.non_member_edges.length} deterministic edge(s) outside the match-action fragment`),
       blocking_edges: !isP0 ? semanticViolations : (hardwareOk ? [] : levelMResult.non_member_edges),
     },
