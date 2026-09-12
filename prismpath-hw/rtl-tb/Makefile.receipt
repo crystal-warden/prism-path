@@ -1,5 +1,5 @@
 # cocotb tb: Fabric Decision Receipts (ppt_receipt -> uart_tx -> loopback uart_rx).
-#   make -f Makefile.receipt
+#   make -f Makefile.receipt     the gate: runs the sim, then fails on any cocotb failure
 SIM ?= verilator
 TOPLEVEL_LANG ?= verilog
 VERILOG_SOURCES = $(PWD)/../rtl/uart_tx.sv $(PWD)/../rtl/uart_rx.sv $(PWD)/../rtl/ppt_receipt.sv $(PWD)/ppt_receipt_tb.sv
@@ -7,4 +7,7 @@ COCOTB_TOPLEVEL = ppt_receipt_tb
 COCOTB_TEST_MODULES = test_ppt_receipt
 TOPLEVEL = $(COCOTB_TOPLEVEL)
 MODULE = $(COCOTB_TEST_MODULES)
+GATE_NAME = receipt
+GATE_EXPECTED = receipts
+include gate.mk
 include $(shell cocotb-config --makefiles)/Makefile.sim

@@ -1,3 +1,5 @@
+# cocotb tb: ppt_axi_wmux (the write mux arbitrating the PS and the in-fabric loader).
+#   make -f Makefile.wmux        the gate: runs the sim, then fails on any cocotb failure
 SIM ?= verilator
 TOPLEVEL_LANG ?= verilog
 VERILOG_SOURCES = $(PWD)/../rtl/ppt_axi_wmux.sv
@@ -5,4 +7,7 @@ COCOTB_TOPLEVEL = ppt_axi_wmux
 COCOTB_TEST_MODULES = test_ppt_axi_wmux
 TOPLEVEL = $(COCOTB_TOPLEVEL)
 MODULE = $(COCOTB_TEST_MODULES)
+GATE_NAME = wmux
+GATE_EXPECTED = wmux
+include gate.mk
 include $(shell cocotb-config --makefiles)/Makefile.sim

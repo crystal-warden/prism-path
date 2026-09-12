@@ -1,4 +1,5 @@
 # cocotb tb: ctrl_in (switch/button conditioning: sync + debounce + one-shot press).
+#   make -f Makefile.ctrl        the gate: runs the sim, then fails on any cocotb failure
 SIM ?= verilator
 TOPLEVEL_LANG ?= verilog
 VERILOG_SOURCES = $(PWD)/../rtl/ctrl_in.sv
@@ -7,4 +8,7 @@ COCOTB_TOPLEVEL = ctrl_in
 COCOTB_TEST_MODULES = test_ctrl_in
 TOPLEVEL = $(COCOTB_TOPLEVEL)
 MODULE = $(COCOTB_TEST_MODULES)
+GATE_NAME = ctrl
+GATE_EXPECTED = debounce
+include gate.mk
 include $(shell cocotb-config --makefiles)/Makefile.sim

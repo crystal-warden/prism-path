@@ -11,6 +11,7 @@ software references agreed on. A stateless demo_input pass on the same image the
 certified path is untouched (regression: AUTO_CTRL[1]=0 must behave exactly as today).
 """
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -19,7 +20,10 @@ from cocotb.clock import Clock
 from cocotb.triggers import ClockCycles, RisingEdge
 
 HERE = Path(__file__).resolve().parent
-BENCH = Path("/home/cwadmin/cwprojects/prismpath-hw")          # demo bench: flows + corpus live here
+# The flows and the frozen corpus this gate certifies against are committed here, so the gate runs
+# from a clean checkout on any machine. An external demo bench can still be pointed at through the
+# environment, but it has to be asked for; it is no longer what the certification silently reads.
+BENCH = Path(os.environ.get("PRISMPATH_HW_BENCH") or HERE.parent)
 sys.path.insert(0, str(HERE.parent / "tools"))
 import gen_pack_svh as gp                                       # noqa: E402
 
@@ -83,9 +87,9 @@ def policy_write_list(stem: str):
     dbg = json.load(open(FLOWS / f"{stem}.json"))
     img = gp.parse_ppt(data)
     colors = gp.image_colors(data)
-    h = gp.policy_pack.read_ppt_header(data)
-    arm = (dbg["fields"]["pot"], img["start"], h["stateful"], h["safe_node"])
-    return gp.policy_writes(img, colors, arm), h
+    header = gp.policy_pack.read_ppt_header(data)
+    arm = (dbg["fields"]["pot"], img["start"], header["stateful"], header["safe_node"])
+    return gp.policy_writes(img, colors, arm), header
 
 
 async def load_and_arm(dut, stem: str):
