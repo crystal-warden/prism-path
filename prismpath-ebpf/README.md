@@ -190,6 +190,20 @@ make
 sudo ./smoke.sh
 ```
 
+### The loader's verbs, and where its code lives
+
+`./loader help` prints every verb the binary answers to, generated from the one table that also
+dispatches them, so the help text cannot drift from what the loader actually does. The verb is
+`argv[2]`; `argv[1]` is the image path (or a placeholder such as `x` for the verbs that take none).
+
+The loader is three files. `ppt_image.c` reads, validates and evaluates a `.ppt` table on the host and
+builds the packet a kernel run needs; it has no libbpf dependency, so the fallback build uses it
+unchanged. `ppt_maps.c` fills the BPF maps of a loaded object, stamps the policy hash the receipts are
+bound to, carries the resident selector posture across a swap, and owns the one copy of the node names
+sidecar parser. `loader.c` is the command line over those two. The five host tools
+(`cert_selector`, `migrate_selector`, `receipts_selector`, `seal_receipts`, `smoke_selector`) link the
+two objects; they used to reach the same helpers by `#include "loader.c"`.
+
 ---
 
 ## 7. Conformance & flow execution · the loader's `certify` / `run` / `runbatch` modes

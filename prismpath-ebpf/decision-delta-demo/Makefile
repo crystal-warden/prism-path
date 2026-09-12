@@ -12,8 +12,10 @@ all: ppt_select.bpf.o sel_forward_receipts
 ppt_select.bpf.o: ../ppt_select.bpf.c ../ppt_common.h
 	$(CLANG) $(BPFCFL) -c $< -o $@
 
-sel_forward_receipts: sel_forward_receipts.c ../loader.c ../ppt_common.h
-	$(CC) $(CFLAGS) sel_forward_receipts.c -o $@ $(LIBS)
+# ../loader.c is still #included for the pin paths and the selector helpers around it; the parser,
+# the host evaluator and the map fill now live in ../ppt_image.c and ../ppt_maps.c, so link those too.
+sel_forward_receipts: sel_forward_receipts.c ../loader.c ../ppt_image.c ../ppt_maps.c ../ppt_common.h
+	$(CC) $(CFLAGS) sel_forward_receipts.c ../ppt_image.c ../ppt_maps.c -o $@ $(LIBS)
 
 clean:
 	rm -f sel_forward_receipts ppt_select.bpf.o

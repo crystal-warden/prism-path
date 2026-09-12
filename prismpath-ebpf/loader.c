@@ -5,16 +5,18 @@
  * Reads a PPT table image (.ppt binary format), populates BPF maps,
  * attaches the XDP program to a network interface (e.g. veth),
  * feeds input register files, and reads back classification verdicts.
+ *
+ * The reusable halves live next door: ppt_image.c reads, validates and evaluates a table on the
+ * host, ppt_maps.c fills the kernel maps and carries the resident selector posture across a policy
+ * swap. What is left here is the command line over those two, one row per verb in LOADER_COMMANDS.
  */
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
-#include <stdbool.h>
 #include <errno.h>
 #include <unistd.h>
-#include <time.h>               /* clock_gettime for the migration receipt time axis */
 #include <net/if.h>
 #include <sys/socket.h>
 #include <netpacket/packet.h>
@@ -29,6 +31,10 @@
 #endif
 
 #include "ppt_common.h"
+#include "ppt_image.h"       /* the image half: parse, free, the host reference evaluator, build_frame */
+#ifndef NO_LIBBPF
+#include "ppt_maps.h"        /* the kernel half: populate_maps, selector_hotswap, read_names */
+#endif
 
 #define PIN_PATH "/sys/fs/bpf/ppt_result"   /* result_map pin: read back the in-kernel verdict */
 #define NET_VERDICT_PIN "/sys/fs/bpf/ppt_net_verdict"  /* real-packet per-target histogram */
@@ -37,322 +43,10 @@
 #define SEL_RESULT_PIN  "/sys/fs/bpf/ppt_sel_result"    /* selector last-decision + pkt_count */
 #define SEL_RECEIPT_PIN "/sys/fs/bpf/ppt_sel_receipts"  /* selector audit-receipt ringbuf (drainable) */
 
-typedef struct {
-    uint16_t n_fields, n_interns, n_atoms, n_nodes, n_edges, prog_len,
-             start, visits_idx, max_steps, max_stack, safe;
-    struct ppt_atom *atoms;
-    struct ppt_node *nodes;
-    struct ppt_edge *edges;
-    uint16_t *prog;
-    const uint8_t *raw;    /* borrowed: raw table bytes, valid until the caller frees them */
-    long raw_len;
-    uint16_t flags;        /* header flags word low byte (PPT_FLAG_*) */
-    uint32_t *name_hashes; /* per-node FNV-1a-32(name), or NULL if no PPT_FLAG_NODE_NAMES */
-} Image;
-
-static uint16_t rd16(const uint8_t *p) { return (uint16_t)(p[0] | (p[1] << 8)); }
-static int32_t rd32(const uint8_t *p) {
-    return (int32_t)((uint32_t)p[0] | ((uint32_t)p[1] << 8) |
-                     ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24));
-}
-
-static uint8_t *read_file(const char *path, long *out_len) {
-    FILE *f = fopen(path, "rb");
-    if (!f) { fprintf(stderr, "error: cannot open %s\n", path); exit(2); }
-    fseek(f, 0, SEEK_END); long n = ftell(f); fseek(f, 0, SEEK_SET);
-    uint8_t *buf = malloc((size_t)n);
-    if (!buf || fread(buf, 1, (size_t)n, f) != (size_t)n) {
-        fprintf(stderr, "error: cannot read %s\n", path); exit(2);
-    }
-    fclose(f); *out_len = n; return buf;
-}
-
-/* Build an eth+ip+udp+ppt frame for evaluating `node_idx` with `regs` (matches smoke.sh / cert_*.py
- * framing: network-order L2/L3/L4 headers, little-endian PPT payload). Returns the frame length. */
-static int build_frame(uint8_t *out, uint16_t node_idx, uint16_t n_fields, const struct ppt_reg *regs) {
-    int ppt_len = 12 + 8 * n_fields;
-    int udp_len = 8 + ppt_len;
-    int ip_len = 20 + udp_len;
-    uint8_t *p = out;
-    memset(p, 0xff, 6); p += 6; memset(p, 0x02, 6); p += 6; *p++ = 0x08; *p++ = 0x00;   /* eth */
-    *p++ = 0x45; *p++ = 0x00; *p++ = (uint8_t)(ip_len >> 8); *p++ = (uint8_t)ip_len;     /* ip  */
-    *p++ = 0x12; *p++ = 0x34; *p++ = 0x00; *p++ = 0x00; *p++ = 64; *p++ = 17; *p++ = 0; *p++ = 0;
-    *p++ = 192; *p++ = 168; *p++ = 1; *p++ = 1;  *p++ = 192; *p++ = 168; *p++ = 1; *p++ = 2;
-    *p++ = 0x30; *p++ = 0x39; *p++ = 0x27; *p++ = 0x0f;                                  /* udp 12345->9999 */
-    *p++ = (uint8_t)(udp_len >> 8); *p++ = (uint8_t)udp_len; *p++ = 0; *p++ = 0;
-    uint32_t magic = PPT_MAGIC, ni = node_idx, nf = n_fields;
-    memcpy(p, &magic, 4); p += 4; memcpy(p, &ni, 4); p += 4; memcpy(p, &nf, 4); p += 4;  /* ppt_hdr (LE) */
-    for (int i = 0; i < n_fields; i++) {
-        memcpy(p, &regs[i].ty, 4); p += 4; memcpy(p, &regs[i].val, 4); p += 4;
-    }
-    return (int)(p - out);
-}
-
-/* Parse a PPT image already resident in memory. Mallocs im->atoms/nodes/edges/prog (free_image frees
- * them). Returns 0 on success, -1 on a malformed image (used by the certify loop, which must not exit). */
-static int parse_image_buf(const uint8_t *b, long len, Image *im) {
-    if (len < 28 || rd32(b) != (int32_t)PPT_MAGIC || rd16(b + 4) != 1) {
-        return -1;
-    }
-    im->n_fields = rd16(b + 6);   im->n_interns = rd16(b + 8);
-    im->n_atoms = rd16(b + 10);   im->n_nodes = rd16(b + 12);
-    im->n_edges = rd16(b + 14);   im->prog_len = rd16(b + 16);
-    im->start = rd16(b + 18);     im->visits_idx = rd16(b + 20);
-    im->max_steps = rd16(b + 22);  im->max_stack = rd16(b + 24);
-    im->safe = rd16(b + 26) >> 8;   /* high byte of the flags word = signed fail-safe node (0 = undeclared) */
-    im->flags = rd16(b + 26) & 0xFF;
-    im->name_hashes = NULL;
-    im->raw = b; im->raw_len = len;  /* borrowed table bytes, hashed into policy_hash at populate time */
-    long need = 28 + 8L * im->n_atoms + 4L * im->n_nodes + 6L * im->n_edges + 2L * im->prog_len;
-    if (len < need) return -1;
-    /* Capacity bounds: the kernel maps are sized to these MAX_* — an image over any of them would
-     * partially populate (higher indices silently dropped) and route wrong. Reject up front. */
-    if (im->n_atoms > MAX_ATOMS || im->n_nodes > MAX_NODES || im->n_edges > MAX_EDGES ||
-        im->prog_len > MAX_PROG_WORDS || im->n_fields > MAX_FIELDS_PER_PKT) {
-        fprintf(stderr, "parse_image: table exceeds a MAX_* capacity "
-                "(atoms=%u/%d nodes=%u/%d edges=%u/%d prog=%u/%d fields=%u/%d)\n",
-                im->n_atoms, MAX_ATOMS, im->n_nodes, MAX_NODES, im->n_edges, MAX_EDGES,
-                im->prog_len, MAX_PROG_WORDS, im->n_fields, MAX_FIELDS_PER_PKT);
-        return -1;
-    }
-    const uint8_t *p = b + 28;
-    im->atoms = malloc(sizeof(struct ppt_atom) * (im->n_atoms ? im->n_atoms : 1));
-    for (int i = 0; i < im->n_atoms; i++, p += 8) {
-        im->atoms[i].field = rd16(p); im->atoms[i].op = p[2]; im->atoms[i].ty = p[3];
-        im->atoms[i].val = rd32(p + 4);
-    }
-    im->nodes = malloc(sizeof(struct ppt_node) * (im->n_nodes ? im->n_nodes : 1));
-    for (int i = 0; i < im->n_nodes; i++, p += 4) {
-        im->nodes[i].edge_off = rd16(p); im->nodes[i].edge_cnt = rd16(p + 2);
-    }
-    im->edges = malloc(sizeof(struct ppt_edge) * (im->n_edges ? im->n_edges : 1));
-    for (int i = 0; i < im->n_edges; i++, p += 6) {
-        im->edges[i].target = rd16(p); im->edges[i].prog_off = rd16(p + 2);
-        im->edges[i].prog_cnt = rd16(p + 4);
-    }
-    im->prog = malloc(sizeof(uint16_t) * (im->prog_len ? im->prog_len : 1));
-    for (int i = 0; i < im->prog_len; i++, p += 2) im->prog[i] = rd16(p);
-    /* Signed per-node name-hash section (for by-name hot-swap migration), appended after the optional
-     * node-attribute section. Skip node-attr first so the offset is right regardless of that flag. */
-    if (im->flags & PPT_FLAG_NODE_NAMES) {
-        if (im->flags & PPT_FLAG_NODE_ATTR) p += 2L * im->n_nodes;
-        if (b + len < p + 4L * im->n_nodes) return -1;      /* names section truncated */
-        im->name_hashes = malloc(sizeof(uint32_t) * (im->n_nodes ? im->n_nodes : 1));
-        for (int i = 0; i < im->n_nodes; i++, p += 4) im->name_hashes[i] = rd32(p);
-    }
-    return 0;
-}
-
-/* Swap-time migration: pick the resident cur_node in a NEW policy that replaces the old one, per the
- * new policy's SIGNED strategy (PPT_FLAG_MIGRATE_BY_NAME). by-name re-resolves the old node's name
- * hash in the new policy (fallback to the new fail-safe if the name is gone); reset-to (bit clear)
- * always returns the new fail-safe. Both name-hash sections ride the signed image, so the migration
- * is tamper-evident, and a raw index is never carried blindly across a reindexing swap. */
-/* Called by selector_hotswap (the loader's swap primitive) and the migrate harness; kept __unused so the
- * NO_LIBBPF fallback build (which omits selector_hotswap) stays warning-clean. */
-/* out_cause (nullable) reports WHY the posture landed where it did: PPT_CAUSE_NONE when it was
- * preserved by name, PPT_CAUSE_MIGRATION_RESET when a reset-to strategy (or a vanished name) parked
- * it on the new fail-safe. This is the cause the loader attests on the swap (see selector_hotswap). */
-static uint32_t __attribute__((unused))
-migrate_node(const Image *old_im, const Image *new_im, uint32_t old_cur, int *out_cause) {
-    if ((new_im->flags & PPT_FLAG_MIGRATE_BY_NAME) && old_im->name_hashes && new_im->name_hashes
-        && old_cur < old_im->n_nodes) {
-        uint32_t want = old_im->name_hashes[old_cur];
-        for (uint32_t i = 0; i < new_im->n_nodes; i++)
-            if (new_im->name_hashes[i] == want) {           /* same posture, by name, in the new policy */
-                if (out_cause) *out_cause = PPT_CAUSE_NONE;
-                return i;
-            }
-    }
-    if (out_cause) *out_cause = PPT_CAUSE_MIGRATION_RESET;   /* reset-to, or a vanished name -> fail-safe */
-    return new_im->safe;
-}
-
-static void free_image(Image *im) {
-    free(im->atoms); free(im->nodes); free(im->edges); free(im->prog); free(im->name_hashes);
-    im->atoms = NULL; im->nodes = NULL; im->edges = NULL; im->prog = NULL; im->name_hashes = NULL;
-}
-
-static void load_image(const char *path, Image *im) {
-    long len; uint8_t *b = read_file(path, &len);
-    if (parse_image_buf(b, len, im) != 0) {
-        fprintf(stderr, "error: bad/truncated image %s\n", path); exit(2);
-    }
-    free(b);
-}
-
-/* Host reference evaluator (matches interp.c) */
-static int eval_atom_host(const struct ppt_atom *a, const struct ppt_reg *regs, uint32_t n_fields) {
-    struct ppt_reg r = (a->field < n_fields) ? regs[a->field] : (struct ppt_reg){TY_NONE, 0};
-    int lnum = (r.ty == TY_BOOL || r.ty == TY_INT);
-    int rnum = (a->ty == TY_BOOL || a->ty == TY_INT);
-    switch (a->op) {
-    case OP_EQ: case OP_NE: {
-        int eq;
-        if (lnum && rnum) eq = (r.val == a->val);
-        else if (r.ty == TY_STR && a->ty == TY_STR) eq = (r.val == a->val);
-        else if (r.ty == TY_NONE && a->ty == TY_NONE) eq = 1;
-        else eq = 0;
-        return a->op == OP_EQ ? eq : !eq;
-    }
-    case OP_LT: case OP_LE: case OP_GT: case OP_GE:
-        if (!(lnum && rnum)) return 0;
-        switch (a->op) {
-        case OP_LT: return r.val <  a->val;
-        case OP_LE: return r.val <= a->val;
-        case OP_GT: return r.val >  a->val;
-        default:    return r.val >= a->val;
-        }
-    case OP_TRUTHY:
-        return r.ty == TY_NONE ? 0 : (r.val != 0);
-    }
-    return 0;
-}
-
-static int eval_prog_host(const Image *im, const struct ppt_edge *e, const struct ppt_reg *regs) {
-    uint8_t stack[STACK_MAX]; int sp = 0;
-    for (int i = 0; i < e->prog_cnt; i++) {
-        uint16_t w = im->prog[e->prog_off + i];
-        if (w < 0x8000) stack[sp++] = (uint8_t)eval_atom_host(&im->atoms[w], regs, im->n_fields);
-        else switch (w) {
-        case OPC_NOT:   stack[sp - 1] = !stack[sp - 1]; break;
-        case OPC_AND:   sp--; stack[sp - 1] = (uint8_t)(stack[sp - 1] && stack[sp]); break;
-        case OPC_OR:    sp--; stack[sp - 1] = (uint8_t)(stack[sp - 1] || stack[sp]); break;
-        case OPC_TRUE:  stack[sp++] = 1; break;
-        case OPC_FALSE: stack[sp++] = 0; break;
-        default: break;
-        }
-    }
-    return sp > 0 ? stack[0] : 0;
-}
-
-static int evaluate_host(const Image *im, uint16_t node, const struct ppt_reg *regs, int *out_target) {
-    const struct ppt_node *n = &im->nodes[node];
-    for (int i = 0; i < n->edge_cnt; i++) {
-        if (eval_prog_host(im, &im->edges[n->edge_off + i], regs)) {
-            if (out_target) *out_target = im->edges[n->edge_off + i].target;
-            return i;
-        }
-    }
-    return -1;
-}
-
 #ifndef NO_LIBBPF
-/* Populate the five table maps from a PPT image. Shared by the attach path and the certify path. */
-#include <openssl/sha.h>   /* SHA256 for policy_hash; libbpf path only (inside NO_LIBBPF guard) */
-
-/* policy_hash = low 64 bits of sha256(image); binds selector receipts to the loaded policy, and matches
- * policy_pack.py's manifest image_sha256 so an auditor can cross-reference the signed pack. */
-static uint64_t policy_hash_of(const Image *im) {
-    if (!im->raw) return 0;
-    uint8_t dg[32]; SHA256(im->raw, (size_t)im->raw_len, dg);
-    uint64_t ph; memcpy(&ph, dg, 8); return ph;
-}
-
-static int populate_maps(struct bpf_object *obj, const Image *im) {
-    /* 1. config_map */
-    struct bpf_map *config_map = bpf_object__find_map_by_name(obj, "config_map");
-    if (config_map) {
-        struct ppt_config cfg = {
-            .n_fields = im->n_fields, .n_interns = im->n_interns,
-            .n_atoms = im->n_atoms,   .n_nodes = im->n_nodes,
-            .n_edges = im->n_edges,   .prog_len = im->prog_len,
-            .start_node = im->start,  .visits_idx = im->visits_idx,
-            .max_steps = im->max_steps, .max_stack = im->max_stack,
-            .safe_node = im->safe,
-            .policy_hash = policy_hash_of(im),   /* stamped at load so receipts are policy-bound */
-        };
-        uint32_t key = 0;
-        bpf_map_update_elem(bpf_map__fd(config_map), &key, &cfg, BPF_ANY);
-    }
-
-    /* 2. atoms_map */
-    struct bpf_map *atoms_map = bpf_object__find_map_by_name(obj, "atoms_map");
-    if (atoms_map) {
-        for (uint32_t i = 0; i < im->n_atoms; i++) {
-            bpf_map_update_elem(bpf_map__fd(atoms_map), &i, &im->atoms[i], BPF_ANY);
-        }
-    }
-
-    /* 3. nodes_map */
-    struct bpf_map *nodes_map = bpf_object__find_map_by_name(obj, "nodes_map");
-    if (nodes_map) {
-        for (uint32_t i = 0; i < im->n_nodes; i++) {
-            bpf_map_update_elem(bpf_map__fd(nodes_map), &i, &im->nodes[i], BPF_ANY);
-        }
-    }
-
-    /* 4. edges_map */
-    struct bpf_map *edges_map = bpf_object__find_map_by_name(obj, "edges_map");
-    if (edges_map) {
-        for (uint32_t i = 0; i < im->n_edges; i++) {
-            bpf_map_update_elem(bpf_map__fd(edges_map), &i, &im->edges[i], BPF_ANY);
-        }
-    }
-
-    /* 5. prog_map */
-    struct bpf_map *prog_map = bpf_object__find_map_by_name(obj, "prog_map");
-    if (prog_map) {
-        for (uint32_t i = 0; i < im->prog_len; i++) {
-            bpf_map_update_elem(bpf_map__fd(prog_map), &i, &im->prog[i], BPF_ANY);
-        }
-    }
-
-    /* 6. bank_map (net program only): a fresh load populates bank 0 above, so select bank 0. */
-    struct bpf_map *bank_map = bpf_object__find_map_by_name(obj, "bank_map");
-    if (bank_map) {
-        uint32_t key = 0, bank0 = 0;
-        bpf_map_update_elem(bpf_map__fd(bank_map), &key, &bank0, BPF_ANY);
-    }
-
-    return 0;
-}
-
-/* Resident selector state (mirrors struct ppt_sel_state in ppt_select.bpf.c); the lock field rides the
- * BPF_F_LOCK map ops. Defined here so every selector harness that #includes this file shares it. */
-struct sel_state { struct bpf_spin_lock lock; __u32 cur_node; __u32 inited; __u32 gen; };
-
-/* Production hot-swap primitive for the resident selector: migrate the resident state per the NEW
- * policy's SIGNED strategy, then swap the table. Reads sel_state BEFORE the swap (so it resolves against
- * the OLD policy's name-hashes), computes the migrated node via migrate_node (by-name re-resolves the
- * current posture in the new policy; reset-to -> the new fail-safe), swaps the table maps
- * (populate_maps), then writes the migrated resident node back under the state lock. Returns the new
- * resident node, or -1. Single-config selector here; a live multi-CPU deployment would quiesce or bank
- * this like net_hotswap, and pin sel_state on bpffs to persist across loader invocations. */
-/* out_migr (nullable) receives the migration as a first-class ppt_receipt — the SAME struct and leaf
- * format as a kernel transition receipt, so the trail-builder (receipts_selector / the forwarder) folds
- * it into the one Merkle-rooted, policy-bound audit trail. It reuses the anchored struct unchanged and
- * marks itself PPT_EVENT_MIGRATION; its cause is the migration outcome. This out-param IS the seam that
- * wires loader migration receipts into the signed trail. */
-static long selector_hotswap(struct bpf_object *obj, const Image *old_im, const Image *new_im,
-                             struct ppt_receipt *out_migr) {
-    int st_fd = bpf_map__fd(bpf_object__find_map_by_name(obj, "sel_state_map"));
-    if (st_fd < 0) { fprintf(stderr, "selector_hotswap: no sel_state_map\n"); return -1; }
-    struct sel_state s; __u32 k = 0;
-    if (bpf_map_lookup_elem_flags(st_fd, &k, &s, BPF_F_LOCK)) { perror("sel_state read"); return -1; }
-    uint32_t cur = s.inited ? s.cur_node : old_im->safe;   /* uninited old state -> its fail-safe */
-    int mig_cause = PPT_CAUSE_NONE;
-    uint32_t migrated = migrate_node(old_im, new_im, cur, &mig_cause);
-    /* Loader migration receipt: a swap is a userspace event, so the loader attests it here (the kernel
-     * ringbuf carries per-transition receipts; migrations are the loader's to record). A reset-to that
-     * parks the posture on the fail-safe is a state:migration-reset, distinct from a clean by-name carry. */
-    fprintf(stderr, "MIGRATION_RECEIPT prev=%u next=%u cause=%d (%s)\n", cur, migrated, mig_cause,
-            mig_cause == PPT_CAUSE_MIGRATION_RESET ? "state:migration-reset" : "clean");
-    if (out_migr) {                                        /* the trail seam: a ppt_receipt leaf */
-        struct timespec ts; clock_gettime(CLOCK_MONOTONIC, &ts);
-        out_migr->seq         = s.gen;                     /* the generation at the swap boundary */
-        out_migr->t_ns        = (uint64_t)ts.tv_sec * 1000000000ull + (uint64_t)ts.tv_nsec;
-        out_migr->policy_hash = policy_hash_of(new_im);    /* bound to the policy migrated TO */
-        out_migr->prev_node   = (int32_t)cur;
-        out_migr->event       = PPT_EVENT_MIGRATION;       /* discriminator: a loader swap, not a packet */
-        out_migr->next_node   = (int32_t)migrated;
-        out_migr->cause       = mig_cause;
-    }
-    if (populate_maps(obj, new_im)) return -1;             /* swap the table maps to the new policy */
-    s.cur_node = migrated; s.inited = 1;                   /* keep gen: monotonic across the swap */
-    if (bpf_map_update_elem(st_fd, &k, &s, BPF_F_LOCK)) { perror("sel_state write"); return -1; }
-    return (long)migrated;
-}
+/* SHA256 here is only the migration receipt leaf that swapselector prints; the policy hash itself
+ * is computed in ppt_maps.c. */
+#include <openssl/sha.h>
 
 /* ---- resident selector deployment ------------------------------------------------------------
  * sel_state is pinned on bpffs, so it survives across loader invocations and across a policy reload:
@@ -794,16 +488,17 @@ static int certify_bpf(const char *packets_path) {
 /* Derive the drop-node bitmask from the node-name sidecar (a node named "drop" or "block" => XDP_DROP)
  * and write it into config_map[0].drop_mask. names_path may be NULL => observe-only (mask stays 0).
  * Covers node indices 0-63 (the net program bounds the shift). */
-static void config_set_drop_mask(struct bpf_object *obj, const char *names_path) {
+/* The sidecar arrives already parsed (read_names, ppt_maps.c), so this function no longer re-reads the
+ * file that its caller just read; names_path is still taken because the two observe-only cases read
+ * differently to an operator, no sidecar asked for versus one that would not parse. */
+static void config_set_drop_mask(struct bpf_object *obj, const char *names_path,
+                                 char **names, int n_names) {
     if (!names_path) { printf("[loader] observe-only (no names sidecar given)\n"); return; }
-    long nlen; uint8_t *nb = read_file(names_path, &nlen);
-    if (!nb) { printf("[loader] observe-only (names sidecar unreadable)\n"); return; }
-    __u64 mask = 0; __u32 idx = 0;
-    for (char *tok = strtok((char *)nb, "\r\n"); tok; tok = strtok(NULL, "\r\n")) {
-        if (idx < 64 && (strcmp(tok, "drop") == 0 || strcmp(tok, "block") == 0)) mask |= (1ULL << idx);
-        idx++;
+    if (!names) { printf("[loader] observe-only (names sidecar unreadable)\n"); return; }
+    __u64 mask = 0;
+    for (int idx = 0; idx < n_names && idx < 64; idx++) {
+        if (strcmp(names[idx], "drop") == 0 || strcmp(names[idx], "block") == 0) mask |= (1ULL << idx);
     }
-    free(nb);
     struct bpf_map *cm = bpf_object__find_map_by_name(obj, "config_map");
     __u32 key = 0; struct ppt_config cfg;
     if (cm && bpf_map_lookup_elem(bpf_map__fd(cm), &key, &cfg) == 0) {
@@ -827,7 +522,10 @@ static int net_attach(const char *ppt_path, const char *ifname, const char *name
         return -1;
     }
     populate_maps(obj, &im);
-    config_set_drop_mask(obj, names_path);
+    int n_names = 0;
+    char **names = read_names(names_path, &n_names);
+    config_set_drop_mask(obj, names_path, names, n_names);
+    free_names(names, n_names);
 
     struct bpf_map *vmap = bpf_object__find_map_by_name(obj, "verdict_map");
     struct bpf_map *rmap = bpf_object__find_map_by_name(obj, "result_map");
@@ -1178,16 +876,177 @@ static int net_detach(const char *ifname) {
 }
 #endif
 
+/* ---- the verb table ---------------------------------------------------------------------------
+ * One row per subcommand: the word an operator types as argv[2], the argc that word needs, the
+ * refusal it prints when it needs privilege and does not have it, the handler, and the help line.
+ * `loader help` walks the rows, so the usage text cannot drift away from what main dispatches; the
+ * strcmp chain this replaces documented six of the fifteen verbs and hid the rest in README.md.
+ *
+ * argv[1] is the image path, so a handler reads its own arguments from argv[1] and argv[3] onward.
+ * A verb whose argc is short falls through to the plain image summary at the end of main, which is
+ * what the chain did too. */
+static void print_usage(const char *prog);
+
+#ifndef NO_LIBBPF
+struct loader_command {
+    const char *verb;
+    int min_argc;               /* argc this verb needs, argv[0] and the image path counted */
+    const char *root_refusal;   /* printed on stderr when not root; NULL = no privilege needed */
+    int (*handler)(int argc, char **argv);
+    const char *help;           /* the usage line, everything after the program name */
+};
+
+static int cmd_readresult(int argc, char **argv) {
+    (void)argc; (void)argv;
+    return read_pinned_result();
+}
+
+static int cmd_certify(int argc, char **argv) {
+    (void)argc;
+    /* Each vector in the corpus file carries its own compiled table; argv[1] (ppt) is unused here. */
+    return certify_bpf(argv[3]);
+}
+
+static int cmd_selattach(int argc, char **argv) {
+    __u32 xdp_flags = (argc >= 5 && strcmp(argv[4], "native") == 0) ? XDP_FLAGS_DRV_MODE
+                                                                   : XDP_FLAGS_SKB_MODE;
+    return sel_attach_cmd(argv[1], argv[3], xdp_flags);
+}
+
+static int cmd_selstate(int argc, char **argv) {
+    (void)argc; (void)argv;
+    return sel_state_cmd();
+}
+
+static int cmd_seldetach(int argc, char **argv) {
+    (void)argc;
+    return sel_detach_cmd(argv[3]);
+}
+
+static int cmd_selsend(int argc, char **argv) {
+    (void)argc;
+    return sel_send_cmd(argv[3], atoi(argv[4]));
+}
+
+static int cmd_swapselector(int argc, char **argv) {
+    return selector_swap_cmd(argv[1], argv[3], argc >= 5 ? argv[4] : NULL);
+}
+
+static int cmd_run(int argc, char **argv) {
+    int n_names = 0;
+    char **names = read_names(argc >= 5 ? argv[4] : NULL, &n_names);
+    int rc = run_flow(argv[1], argv[3], names, n_names);
+    free_names(names, n_names);
+    return rc;
+}
+
+static int cmd_runbatch(int argc, char **argv) {
+    int n_names = 0;
+    char **names = read_names(argc >= 5 ? argv[4] : NULL, &n_names);
+    int rc = runbatch_flow(argv[1], argv[3], names, n_names);
+    free_names(names, n_names);
+    return rc;
+}
+
+static int cmd_netattach(int argc, char **argv) {
+    return net_attach(argv[1], argv[3], argc >= 5 ? argv[4] : NULL);
+}
+
+static int cmd_netstats(int argc, char **argv) {
+    int n_names = 0;
+    char **names = read_names(argc >= 4 ? argv[3] : NULL, &n_names);
+    int rc = net_stats(names, n_names);
+    free_names(names, n_names);
+    return rc;
+}
+
+static int cmd_netdetach(int argc, char **argv) {
+    (void)argc;
+    return net_detach(argv[3]);
+}
+
+static int cmd_netbench(int argc, char **argv) {
+    (void)argc;
+    return net_bench(argv[1]);
+}
+
+static int cmd_netupdate(int argc, char **argv) {
+    (void)argc;
+    return net_update(argv[1], argv[3]);
+}
+
+static int cmd_netstorm(int argc, char **argv) {
+    (void)argc;
+    return net_storm(argv[1], argv[3]);
+}
+
+static int cmd_help(int argc, char **argv) {
+    (void)argc;
+    print_usage(argv[0]);
+    return 0;
+}
+
+static const struct loader_command LOADER_COMMANDS[] = {
+    { "readresult", 3, NULL,
+      cmd_readresult, "<image.ppt> readresult" },
+    { "certify", 4, "error: 'certify' loads the program into the kernel — run as root / CAP_BPF.\n",
+      cmd_certify, "<image.ppt> certify <packets.bin>   (in-kernel conformance; root)" },
+    { "selattach", 4, "error: 'selattach' needs root.\n",
+      cmd_selattach, "<policy.ppt> selattach <iface> [native]  (deploy resident selector, pin state; root)" },
+    { "selstate", 3, NULL,
+      cmd_selstate, "x selstate                           (read the pinned resident posture)" },
+    { "seldetach", 4, NULL,
+      cmd_seldetach, "x seldetach <iface>                  (detach + remove pins; root)" },
+    { "selsend", 5, NULL,
+      cmd_selsend, "x selsend <iface> <ev>               (inject one control event frame)" },
+    { "swapselector", 4, "error: 'swapselector' loads the program into the kernel — run as root.\n",
+      cmd_swapselector, "<new.ppt> swapselector <old.ppt> [iface]  (hot-swap + migrate posture; root)" },
+    { "run", 4, "error: 'run' loads the program into the kernel — run as root / CAP_BPF.\n",
+      cmd_run, "<image.ppt> run <regs.bin> [names]   (drive one flow hop by hop in kernel; root)" },
+    { "runbatch", 4, "error: 'runbatch' loads the program into the kernel — run as root / CAP_BPF.\n",
+      cmd_runbatch, "<image.ppt> runbatch <records.bin> [names]  (the same, many register files; root)" },
+    { "netattach", 4, "error: 'netattach' needs root / CAP_BPF.\n",
+      cmd_netattach, "<image.ppt> netattach <iface> [names]  (attach the real packet program; root)" },
+    { "netstats", 3, "error: 'netstats' needs root / CAP_BPF.\n",
+      cmd_netstats, "x netstats [names]                   (read the pinned real traffic histogram; root)" },
+    { "netdetach", 4, "error: 'netdetach' needs root / CAP_BPF.\n",
+      cmd_netdetach, "x netdetach <iface>                  (detach the real packet program; root)" },
+    { "netbench", 3, "error: 'netbench' needs root / CAP_BPF.\n",
+      cmd_netbench, "<image.ppt> netbench                 (per packet latency of the real packet path; root)" },
+    { "netupdate", 4, "error: 'netupdate' needs root / CAP_BPF.\n",
+      cmd_netupdate, "<new.ppt> netupdate <iface>          (hot swap the live policy, atomic bank flip; root)" },
+    { "netstorm", 4, "error: 'netstorm' needs root / CAP_BPF.\n",
+      cmd_netstorm, "<a.ppt> netstorm <b.ppt>             (bank flip atomicity under a swap storm; root)" },
+    { "help", 3, NULL,
+      cmd_help, "help                                 (print this list of verbs)" },
+};
+
+static const struct loader_command *find_command(const char *verb) {
+    if (!verb) return NULL;
+    for (unsigned row = 0; row < sizeof(LOADER_COMMANDS) / sizeof(LOADER_COMMANDS[0]); row++)
+        if (strcmp(LOADER_COMMANDS[row].verb, verb) == 0) return &LOADER_COMMANDS[row];
+    return NULL;
+}
+#endif
+
+static void print_usage(const char *prog) {
+    printf("usage: %s <image.ppt> [ifname] [input_regs.bin]\n", prog);
+#ifndef NO_LIBBPF
+    for (unsigned row = 0; row < sizeof(LOADER_COMMANDS) / sizeof(LOADER_COMMANDS[0]); row++)
+        printf("       %s %s\n", prog, LOADER_COMMANDS[row].help);
+#endif
+}
+
 int main(int argc, char **argv) {
     if (argc < 2) {
-        printf("usage: %s <image.ppt> [ifname] [input_regs.bin]\n", argv[0]);
-        printf("       %s <image.ppt> readresult\n", argv[0]);
-        printf("       %s <image.ppt> certify <packets.bin>   (in-kernel conformance; root)\n", argv[0]);
-        printf("       %s <policy.ppt> selattach <iface> [native]  (deploy resident selector, pin state; root)\n", argv[0]);
-        printf("       %s x selstate                           (read the pinned resident posture)\n", argv[0]);
-        printf("       %s x seldetach <iface>                  (detach + remove pins; root)\n", argv[0]);
-        printf("       %s <new.ppt> swapselector <old.ppt> [iface]  (hot-swap + migrate posture; root)\n", argv[0]);
+        print_usage(argv[0]);
         return 2;
+    }
+    /* `loader help` carries no image path for the dispatch below to key on, so answer it here. */
+    if (argc == 2 && (strcmp(argv[1], "help") == 0 || strcmp(argv[1], "-h") == 0 ||
+                      strcmp(argv[1], "--help") == 0)) {
+        print_usage(argv[0]);
+        return 0;
     }
 
     const char *ppt_path = argv[1];
@@ -1195,103 +1054,13 @@ int main(int argc, char **argv) {
     const char *regs_path = (argc >= 4) ? argv[3] : NULL;
 
 #ifndef NO_LIBBPF
-    if (argc >= 3 && strcmp(argv[2], "readresult") == 0)
-        return read_pinned_result();
-
-    if (argc >= 4 && strcmp(argv[2], "certify") == 0) {
-        if (getuid() != 0) {
-            fprintf(stderr, "error: 'certify' loads the program into the kernel — run as root / CAP_BPF.\n");
+    const struct loader_command *cmd = find_command(argc >= 3 ? argv[2] : NULL);
+    if (cmd && argc >= cmd->min_argc) {
+        if (cmd->root_refusal && getuid() != 0) {
+            fputs(cmd->root_refusal, stderr);
             return 2;
         }
-        /* Each vector in the corpus file carries its own compiled table; argv[1] (ppt) is unused here. */
-        return certify_bpf(argv[3]);
-    }
-
-    if (argc >= 4 && strcmp(argv[2], "selattach") == 0) {   /* loader <policy.ppt> selattach <iface> [native] */
-        if (getuid() != 0) { fprintf(stderr, "error: 'selattach' needs root.\n"); return 2; }
-        __u32 f = (argc >= 5 && strcmp(argv[4], "native") == 0) ? XDP_FLAGS_DRV_MODE : XDP_FLAGS_SKB_MODE;
-        return sel_attach_cmd(ppt_path, argv[3], f);
-    }
-    if (argc >= 3 && strcmp(argv[2], "selstate") == 0)      /* loader x selstate */
-        return sel_state_cmd();
-    if (argc >= 5 && strcmp(argv[2], "selsend") == 0)       /* loader x selsend <iface> <ev> */
-        return sel_send_cmd(argv[3], atoi(argv[4]));
-    if (argc >= 4 && strcmp(argv[2], "seldetach") == 0)     /* loader x seldetach <iface> */
-        return sel_detach_cmd(argv[3]);
-
-    if (argc >= 4 && strcmp(argv[2], "swapselector") == 0) {   /* loader <new.ppt> swapselector <old.ppt> [iface] */
-        if (getuid() != 0) {
-            fprintf(stderr, "error: 'swapselector' loads the program into the kernel — run as root.\n");
-            return 2;
-        }
-        return selector_swap_cmd(ppt_path, argv[3], argc >= 5 ? argv[4] : NULL);
-    }
-
-    if (argc >= 4 && strcmp(argv[2], "run") == 0) {
-        if (getuid() != 0) {
-            fprintf(stderr, "error: 'run' loads the program into the kernel — run as root / CAP_BPF.\n");
-            return 2;
-        }
-        char **names = NULL; int n_names = 0;
-        if (argc >= 5) {                                  /* optional: one node name per line, index order */
-            long nlen; uint8_t *nb = read_file(argv[4], &nlen);
-            names = malloc(sizeof(char *) * 512);
-            for (char *tok = strtok((char *)nb, "\r\n"); tok && n_names < 512;
-                 tok = strtok(NULL, "\r\n"))
-                names[n_names++] = strdup(tok);
-            free(nb);
-        }
-        return run_flow(ppt_path, argv[3], names, n_names);
-    }
-
-    if (argc >= 4 && strcmp(argv[2], "runbatch") == 0) {
-        if (getuid() != 0) {
-            fprintf(stderr, "error: 'runbatch' loads the program into the kernel — run as root / CAP_BPF.\n");
-            return 2;
-        }
-        char **names = NULL; int n_names = 0;
-        if (argc >= 5) {
-            long nlen; uint8_t *nb = read_file(argv[4], &nlen);
-            names = malloc(sizeof(char *) * 512);
-            for (char *tok = strtok((char *)nb, "\r\n"); tok && n_names < 512;
-                 tok = strtok(NULL, "\r\n"))
-                names[n_names++] = strdup(tok);
-            free(nb);
-        }
-        return runbatch_flow(ppt_path, argv[3], names, n_names);
-    }
-
-    if (argc >= 4 && strcmp(argv[2], "netattach") == 0) {
-        if (getuid() != 0) { fprintf(stderr, "error: 'netattach' needs root / CAP_BPF.\n"); return 2; }
-        return net_attach(ppt_path, argv[3], argc >= 5 ? argv[4] : NULL);  /* loader <ppt> netattach <iface> [names] */
-    }
-    if (argc >= 3 && strcmp(argv[2], "netstats") == 0) {
-        if (getuid() != 0) { fprintf(stderr, "error: 'netstats' needs root / CAP_BPF.\n"); return 2; }
-        char **names = NULL; int n_names = 0;
-        if (argc >= 4) {                                 /* loader <x> netstats <names> */
-            long nlen; uint8_t *nb = read_file(argv[3], &nlen);
-            names = malloc(sizeof(char *) * 512);
-            for (char *tok = strtok((char *)nb, "\r\n"); tok && n_names < 512; tok = strtok(NULL, "\r\n"))
-                names[n_names++] = strdup(tok);
-            free(nb);
-        }
-        return net_stats(names, n_names);
-    }
-    if (argc >= 4 && strcmp(argv[2], "netdetach") == 0) {
-        if (getuid() != 0) { fprintf(stderr, "error: 'netdetach' needs root / CAP_BPF.\n"); return 2; }
-        return net_detach(argv[3]);                      /* loader <x> netdetach <iface> */
-    }
-    if (argc >= 3 && strcmp(argv[2], "netbench") == 0) {
-        if (getuid() != 0) { fprintf(stderr, "error: 'netbench' needs root / CAP_BPF.\n"); return 2; }
-        return net_bench(ppt_path);                      /* loader <ppt> netbench */
-    }
-    if (argc >= 4 && strcmp(argv[2], "netupdate") == 0) {
-        if (getuid() != 0) { fprintf(stderr, "error: 'netupdate' needs root / CAP_BPF.\n"); return 2; }
-        return net_update(ppt_path, argv[3]);            /* loader <new.ppt> netupdate <iface> */
-    }
-    if (argc >= 4 && strcmp(argv[2], "netstorm") == 0) {  /* loader <a.ppt> netstorm <b.ppt> */
-        if (getuid() != 0) { fprintf(stderr, "error: 'netstorm' needs root / CAP_BPF.\n"); return 2; }
-        return net_storm(ppt_path, argv[3]);
+        return cmd->handler(argc, argv);
     }
 #endif
 

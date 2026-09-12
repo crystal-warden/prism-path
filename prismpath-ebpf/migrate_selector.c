@@ -13,15 +13,16 @@
  * Both policies' per-node name hashes ride the signed image, so the migration is tamper-evident.
  *
  *   python3 gen_migrate_fixtures.py     # writes migrate_A.ppt / migrate_Bname.ppt / migrate_Breset.ppt
- *   gcc -O2 -Wno-unused-function -I. migrate_selector.c -o migrate_selector -lcrypto $(pkg-config --libs libbpf)
+ *   gcc -O2 -I. migrate_selector.c ppt_image.c ppt_maps.c -o migrate_selector -lcrypto $(pkg-config --libs libbpf)
  *   sudo ./migrate_selector ppt_select.bpf.o
  */
-#define main loader_orig_main
-#include "loader.c"
-#undef main
-#include "merkle.h"   /* the one canonical receipt-trail Merkle root, shared with receipts_selector.c */
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
-/* struct sel_state is defined in loader.c (included above) */
+#include "ppt_image.h"   /* Image, parse_image_buf, build_frame, the host reference evaluator */
+#include "ppt_maps.h"    /* populate_maps, struct sel_state, selector_hotswap */
+#include "merkle.h"   /* the one canonical receipt-trail Merkle root, shared with receipts_selector.c */
 
 static uint32_t fnv32(const char *s) {
     uint32_t h = 0x811c9dc5u;
