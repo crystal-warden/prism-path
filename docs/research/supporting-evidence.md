@@ -1685,49 +1685,79 @@ decision-sufficient-vision/: T6_scaling.md, evidence/t3/20_t6_qvga_2026-09-11.mp
 
 **Claim:** Policy change on a constrained node is governed on the same path its decisions travel: a pack carrying the table, its wire codebook and an escalation mask, signed by the fleet authority, is verified against a key baked in the firmware, refused unsigned, corrupted, truncated or replayed with registry causes, committed with its version on every reading, kept in the camera's flash and re-verified at boot.
 
+**Method:** `tools/make_pack.py` builds a PPKV1 pack (table image, wire codebook, escalation mask, version, Ed25519 signature by the mesh authority) and the receiver ships it over the downlink in chunks (`S`), then commands the swap (`X`); the camera verifies with monocypher against `authority_pubkey.h`, answers SWP1 with the registry cause, persists the pack and version floor in NVS and re-applies it at boot. Five packs in one take: unsigned, wrong key, bad manifest, good version 2, then version 1 replayed; a person up close afterward with version 2's threshold of 20 moving cells against version 1's 28; a camera reset afterward.
+
 **Result:** Five outcomes in one take: sig:missing 38 µs, sig:invalid 45.7 ms, manifest:bad-format 29 µs, committed 46 ms (20 s end to end over 243 chunks), image:version-replay 45.8 ms; readings never stopped. With a person up close on version 2, 8 readings at 20 or more moving cells and 7 evidence decisions where version 1's threshold of 28 would have escalated none. After a reset, every reading still named version 2.
 
 **Honest scope:** One camera at a time, no quorum; the authority key is the mesh's bench key. Provenance: prismpath c805c80, a9a7098; SWAP.md, evidence/t3/24_*, 28_*, 29_*, 36_*.
 
 ### #150 — Admission at the receiver is a policy with three outcomes, authorized, refused, abstain, and abstention is a cause (September 2026)
 
-**Claim and result:** Six facts about a reading walk `receiver_admission.md` to one of seven routes. Live, 13 abstains until keyframes arrived then 804 authorized; 817 receipts replayed with zero disagreement; tampered four ways, 817 of 817 refused with the right cause each time. Cause 68 state:normal-unheld appended for the abstain.
+**Claim:** Admission of a transported reading at the receiver is itself a policy walk with three outcomes, authorized, refused with a registry cause, or abstain, and abstention is distinct from refusal: the reading is sound but the receiver lacks the shared normal the policy needs.
+
+**Method:** Six facts about each reading (in the take's window, fresh, policy held, chain intact, route re-derived agrees, normal held) walk `receiver_admission.md` through the host engine to one of seven routes; `tools/admission_check.py` replays a take's receipts through the flow untouched and tampered four ways. Cause 68 state:normal-unheld appended to the registry for the abstain.
+
+**Result:** Live, 13 abstains until the keyframes arrived, then 804 authorized; 817 receipts replayed with zero disagreement with the live outcomes; tampered four ways (route claimed differently, previous hash wrong, sequence repeated, policy version not held), 817 of 817 refused with the named cause each time.
 
 **Honest scope:** Evaluated by the host engine at the receiver, not on the relay. Provenance: prismpath eade0e7; ABSTAIN.md, evidence/t3/25_*, admission_check_*.
 
 ### #151 — Two cameras fused into a room verdict on the relay, with STALE as a state and a presence hold as the flow's constant (September 2026)
 
-**Claim and result:** `room_fusion.md` on the host relay (the fifth instruction set) with freshness on the relay's own clock. A camera reset was declared STALE at 1,552 ms and the room read degraded_clear, rejoined in three seconds. With a person: clear, conflict, present, conflict, clear in the order walked; version 2 of the flow with a two second hold on the occupied fact cut verdict changes from 36 in 98 s to 15 in 67 s. The relay's evaluator was certified 123,165 of 123,165 against the host engine on the power policy's grid.
+**Claim:** Two cameras are fused into one room verdict on the host relay under a policy of its own, a camera that goes quiet is a STALE state the policy decides on rather than a missing input, and the presence hold that stops the verdict flickering is the flow's constant, not the relay's code.
+
+**Method:** `room_fusion.md` compiled to the host relay (RISC-V, the fifth instruction set on the conformance table), walked every 250 ms with freshness and occupied ages measured on the relay's own clock; a camera reset over its own USB port mid take; a person walking out of frame, into one camera, into both, into the other, out; version 2 of the flow with a two second hold on the occupied fact. The relay's evaluator was certified against the host engine over the power policy's full input grid.
+
+**Result:** A reset camera was declared STALE at 1,552 ms and the room read degraded_clear, then clear again three seconds later when it rejoined as a new epoch. With a person the verdicts read clear, conflict, present, conflict, clear in the order walked. The hold cut verdict changes from 36 in 98 s to 15 in 67 s and dwells under a second from 19 to 2. Evaluator certification 123,165 of 123,165.
 
 **Honest scope:** Verdicts are not signed by the host relay; the receiver's seal binds them. Provenance: prismpath 398b4eb, 30f5fdd; FUSION.md, evidence/t3/26_*, 29_*, 30_*.
 
 ### #152 — The replay window refused replayed frames on the air, a replayed boot is refused by nonce, and the concentrator and refresh profiles were costed on live symbols (September 2026)
 
-**Claim and result:** A bench replay from the relay's position, 20 readings re-sent as fresh frames, 20 refused (9 stale and 1 duplicate per camera); 32 readings replayed across a camera restart, 21 refused as a replayed boot by nonce, 74 by the window, no false epoch. Concentrated framing computed and round tripped on 1,915 live readings: 37.8 bytes a reading against 38.0 bare and 82.0 as carried with receipts, the finding being that the receipt header costs more than the reading. Send on change with a five second keyframe in a still room: 7 to 12 percent of readings.
+**Claim:** The transport refuses replayed frames on the air and replayed boots by nonce, and the concentrator and refresh profiles, costed on live symbols, show that the receipt header now costs more than the decision it certifies.
+
+**Method:** The receiver's freshness fact is `prismpath.telemetry.replay.TickWindow` per camera and boot epoch; the air relay keeps its last 32 readings and a bench command re-sends them as fresh sub frames with new ids, which the host relay's duplicate drop cannot see; every reading carries a boot nonce and the receiver opens an epoch on an unseen nonce and refuses a seen one. The concentrator profile was applied to the live symbols with `concentrator.concentrate` and demuxed back; the refresh profile with `refresh.KeyframeScheduler`.
+
+**Result:** 20 readings replayed, 20 refused (9 stale and 1 duplicate per camera); 32 replayed across a camera restart, 21 refused as a replayed boot and 74 by the window, no false epoch, 3 readings lost. Concentrated framing on 1,915 live readings: 37.8 bytes a reading against 38.0 bare and 82.0 as carried with receipts, 0 of 855 frames wrong on round trip. Send on change with a five second keyframe in a still room: 7 to 12 percent of the readings.
 
 **Honest scope:** Concentration and refresh computed, not transmitted. Provenance: prismpath 7196bfa, a9a7098; CONCENTRATOR.md, evidence/t3/27_*, 35_*.
 
 ### #153 — The room verdict decided in XDP on a Linux box from the same table image, 47 of 47 agreeing with the relay, with malformed packets refused after a first run decided them (September 2026)
 
-**Claim and result:** The fused facts as PPT packets to the Protectli's bridge, decided by a decode and rewrite variant of the conformance XDP program with the verdict written into the packet; a socket that only reads compared: 47 of 47 live and 5 of 5 hand made agree. Malformed packets were decided (else route over TY_NONE) until the program checked the image's field count; then refused, wrong magic passed untouched.
+**Claim:** The same fusion table image that the relay walks decides the room verdict in the Linux kernel, on a box that is only forwarding the packets, with the verdict rewritten into the packet before user space sees it, and a malformed packet is refused rather than decided.
+
+**Method:** The relay's fused facts sent as PPT packets over UDP to the Protectli's bridge; `prismpath-ebpf/a6/ppt_xdp.bpf.c`, a decode and rewrite variant of the conformance XDP program, loads `room_fusion.ppt` and writes the route index into the packet; `a6_listen.py` on a plain socket compares the kernel's verdict with the relay's FUS2 verdict for the same tick, plus five hand made packets; short and field count mismatched packets sent after the first run.
+
+**Result:** 47 of 47 live ticks and 5 of 5 hand made packets agree with the relay. Malformed packets were decided (else route over TY_NONE) in the first run; after the program checked the image's field count and truncation they are refused with 0xFFFFFFFE and packets with the wrong magic pass untouched.
 
 **Honest scope:** The camera reading exceeds the program's 32 field cap; the kernel decided the fused policy after the relay, fed over UDP. Provenance: prismpath 5653df3; KERNEL.md, evidence/t3/31_*.
 
 ### #154 — A privacy control expressed at the execution boundary and evidenced by the wire: no pixels leave unless a route decided so, as a signed, anchored determination (September 2026)
 
-**Claim and result:** VIS-PRIV-1 over sealed trails: keyframes explained by adoption, request or resend; evidence by an escalating decision of the same sequence; layers by an operator command and an occupied or door reading. Three takes pass, one fails on an evidence frame whose reading the receiver never admitted, and an injected frame is caught; every determination signed with `ai_safety_receipts` and anchored.
+**Claim:** "No pixels leave a camera unless an authorized route decided so" is a machine checkable control: every record on the wire that carries pixels is explained by a decision or a command in the same sealed trail, and the determination is a signed, anchored artifact in the GRC adapter's shape.
+
+**Method:** `tools/privacy_control.py` decides VIS-PRIV-1 over a take's trail: keyframes explained by adoption, a request or the minute's resend; evidence by an escalating decision of the same sequence from the same node at most once per ten seconds; layers by an operator command and an occupied or door reading; readings pixel free by size. The determination is signed with `adapters/compliance/ai_safety_receipts.sign_receipt` and anchored with `anchor_receipt`, and both are verified back; one trail is tampered with an evidence frame no decision backs.
+
+**Result:** Three takes pass (1,470, 1,448 and 916 readings, every keyframe, evidence frame and layer record explained); one fails on a real evidence frame whose authorizing reading the receiver never admitted; the injected frame is caught. Every receipt and anchor verified.
 
 **Honest scope:** Decided at the receiver over the trail; constants in the tool. Provenance: PRIVACY.md, evidence/t3/privacy_control_*, *.privacy.json.
 
 ### #155 — An independent witness with no authority heard the hop and agreed with the receiver on every admitted reading (September 2026)
 
-**Claim and result:** Relay C promiscuous on the channel, no policy, no acks; 2,971 frames in 105 s to a pcap; 1,231 readings on the air in two boot epochs; 916 on the air and in the trail with identical wire bytes, 916 of 916; 0 in the trail not heard; the 59 replays heard twice are refused receipts.
+**Claim:** A device with no authority, no policy and no part in any decision heard the hop and its record agrees with the receiver's sealed trail on every admitted reading, byte for byte, so three independent records of one take exist: the camera's chain, the receiver's trail, and the air.
+
+**Method:** Relay C on the sniff firmware (`relay_sniff.c`), promiscuous on channel 25 with no address and no acknowledgements, every frame to the host with its own timestamp and signal; `tools/witness.py` writes a pcap (IEEE 802.15.4 without FCS), reassembles sub frames by the host relay's rule, and compares readings by boot nonce and sequence with the trail of the same take, which included a replay attack and a camera reset.
+
+**Result:** 2,971 frames heard in 105 s (1,338 acknowledgements, 1,391 sub frames, 7 downlink commands, 71 sub frames heard twice); 1,231 readings on the air in two boot epochs; 916 on the air and in the trail with identical wire bytes, 916 of 916; 204 on the air not admitted, 59 of them the refused replays; 0 in the trail not heard.
 
 **Honest scope:** Witness on the desk; its record unsigned. Provenance: prismpath a9a7098 (relay_sniff.c); WITNESS.md, evidence/t3/34_witness_*.
 
 ### #156 — The refinement ladder to the pixel against H.264 on the same cells: parity costs seven times the bits, layer 3 is the knee, and a chroma rung costs a third on top of luma (September 2026)
 
-**Claim and result:** Seven rungs priced with changed cell savings against x264 at 100 to 500 kbit/s on the same named cells: H.264 at 100 kbit/s reaches 41 dB at 1,200 bytes a frame; the ladder needs about 700 kbit/s to match; rung 3 is 27.8 dB at 34 kbit/s; a JPEG crop at quality 4 matches rung 3 for fewer bytes. Live, layer 3 on one camera is inside the hop's budget (3.7 KB/s) and on two it is not. Color: 10 px, 8 bands buys four decibels in RGB for a third more bytes; four bands buy nothing. The far sighted impression is perceptual; per pixel error falls as the subject nears.
+**Claim:** Refinement layers over the named cells are a codec in miniature and lose to a real codec above the third rung: parity with H.264 at 100 kbit/s costs about seven times the bits, so pictures at codec fidelity should be spent by a route as evidence in a codec, and the layers stop at the knee.
+
+**Method:** Seven rungs from 10 px at 4 bands to the pixels, each priced per moving frame with the changed cell savings (route index, changed cells, changed sub cells with a 500 ms refresh) on the corpus takes with people in them, fidelity as PSNR on the named cells; the same frames encoded with x264 at 100 to 500 kbit/s and measured on the same cells; a JPEG crop at the smallest quality reaching each rung's fidelity; layer 3 run live over the hop on one camera and on two; chroma rungs on a 60 s RGB565 take.
+
+**Result:** H.264 at 100 kbit/s reaches 41 dB at 1,200 bytes a frame; the ladder needs about 700 kbit/s to match; rung 3 is 27.8 dB at 34 kbit/s and rung 4 buys one decibel for half again the bytes; a JPEG crop at quality 4 matches rung 3 for fewer bytes than rung 4. Live, layer 3 on one camera costs 3.7 KB/s inside the hop's budget; on two cameras the weaker Wi-Fi leg lost 14 readings and went STALE. Chroma at 10 px and 8 bands buys four decibels in RGB for a third more bytes; four bands buy nothing. Per pixel error falls as the subject nears; the far sighted impression is perceptual.
 
 **Honest scope:** A negative result for the ladder as a codec and a design decision to spend codecs on evidence. Provenance: prismpath cab1ccd, 0bd8173, db12bab; LAYERS_LADDER.md, evidence/layers_ladder_*, layers_vs_jpeg_*, color_layers_*, corpus/color1_*.
 
@@ -1838,3 +1868,8 @@ decision-sufficient-vision/: T6_scaling.md, evidence/t3/20_t6_qvga_2026-09-11.mp
   `prismpath-hw/evidence/vision_2026-09-11.SHA256SUMS` (`.ots` alongside); the flows the bench ran are
   published beside the firmware. Anchored in `prismpath/evidence/ledger_v2.10_2026-09-11.SHA256SUMS`
   (`.ots` alongside); the anchor, not this prose, is the authoritative timestamp.
+- **v2.11** (September 2026): no numbers changed. Rows #149 to #153 had been written with a combined
+  claim and result section and #149 without a method; each now carries the Claim / Method / Result
+  sections the schema requires and `tools/ledger_lint.py --strict` passes again. Anchored in
+  `prismpath/evidence/ledger_v2.11_2026-09-11.SHA256SUMS` (`.ots` alongside); the anchor, not this
+  prose, is the authoritative timestamp.
