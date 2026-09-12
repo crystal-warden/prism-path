@@ -323,9 +323,11 @@ def flow_state(state):
                 continue
     valid = bool(st.get("valid"))
     err = st.get("last_error") or ""
+    # three kinds of failed sprint for the runtime view: the tests failed, the flow did not validate
+    # (the error text looks like a validator's), or the run itself failed at runtime
     fail_kind = None
     if not valid and err:
-        fail_kind = "test" if "lune test failed" in err else ("validate" if _FAIL_VALIDATE.search(err) else "validate")
+        fail_kind = "test" if "lune test failed" in err else ("validate" if _FAIL_VALIDATE.search(err) else "runtime")
     stage = {"retrieve": "build", "build": "build",
              "fix": "fix", "review": "validate"}.get(phase, "propose")
     if valid:
