@@ -16,7 +16,7 @@
 #include "fusion_policy.h"
 // Fusion on the relay (A4): the two cameras' last routes and the relay's own receive clock are the facts; the room's
 // verdict is a policy walk (room_fusion.md), and a camera that goes quiet is STALE, a state the policy decides on.
-// "FUS2" | t u64 | route u16 | a_fresh b_fresh a_occ b_occ a_tamper b_tamper (u8 each) | a_seq u32 | b_seq u32 | a_age_ms u16 | b_age_ms u16 | steps u16 | flags u16 | a_occ_age_ms u16 | b_occ_age_ms u16
+// "FUS2" | t u64 | target u16 | a_fresh b_fresh a_occ b_occ a_tamper b_tamper (u8 each) | a_seq u32 | b_seq u32 | a_age_ms u16 | b_age_ms u16 | steps u16 | flags u16 | a_occ_age_ms u16 | b_occ_age_ms u16
 static void emit(const uint8_t *payload, uint16_t len);
 #define FRESH_US 1500000
 #define FUSION_TICK_US 250000
@@ -31,11 +31,11 @@ static bool fusion_ok = false;
 static void fusion_note(const uint8_t *pl, uint16_t len) {
     if (len < 30 || memcmp(pl, "RDG", 3) != 0 || pl[3] < '3')
         return;
-    uint16_t nid = pl[4] | (pl[5] << 8);
+    uint16_t device_id = pl[4] | (pl[5] << 8);
     uint32_t seq;
     memcpy(&seq, pl + 8, 4);
     uint16_t node = pl[28] | (pl[29] << 8);
-    int cam_index = nid == FUSION_A ? 0 : nid == FUSION_B ? 1 : -1;
+    int cam_index = device_id == FUSION_A ? 0 : device_id == FUSION_B ? 1 : -1;
     if (cam_index < 0)
         return;
     cam[cam_index].seq = seq;
@@ -120,7 +120,7 @@ static volatile uint16_t rssi_n = 0;
 static volatile int32_t rssi_sum = 0;
 static volatile int8_t rssi_min = 127, rssi_max = -128;
 #define RSSI_US 2000000
-// a pending command: "CMD1" | nid u16 | len u8 | data[len] read from USB becomes 'C' | nid | data on the hop
+// a pending command: "CMD1" | device_id u16 | len u8 | data[len] read from USB becomes 'C' | device_id | data on the hop
 static uint8_t cmd[32];
 static uint8_t cmd_len = 0;
 static bool cmd_pending = false;
@@ -193,8 +193,8 @@ static void poll_usb(void) {
         if (ib_n >= 7 && memcmp(ib, "CMD1", 4) == 0) {
             int len = ib[6];
             if (ib_n >= 7 + len) {
-                uint16_t nid = ib[4] | (ib[5] << 8);
-                if (nid == HOP_HOST_ADDR && len >= 2 && ib[7] == 'm') {
+                uint16_t device_id = ib[4] | (ib[5] << 8);
+                if (device_id == HOP_HOST_ADDR && len >= 2 && ib[7] == 'm') {
                     mute_until = esp_timer_get_time() + (int64_t)ib[8] * 1000000;
                     esp_ieee802154_sleep();
                 }  // a bench hook: this relay goes deaf for N seconds so the air relay's policy meets a run of give ups

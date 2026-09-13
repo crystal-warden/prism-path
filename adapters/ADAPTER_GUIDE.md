@@ -6,7 +6,7 @@ two reference adapters show it in practice, and the next domain starts here. `fu
 exercises the ports without a model in the decision path. `compliance/` (rebuilt September 2026) is
 the class whose Adjudicator may be a model: machine checkable controls decide
 deterministically and prose objectives resolve through the Connector SDK (§2b), fail closed, with
-evidence typed verdicts. The SOC triage adapter that preceded it is archived and will be rebuilt on
+evidence typed determinations. The SOC triage adapter that preceded it is archived and will be rebuilt on
 this standard.
 
 The thesis: **the engine is domain-agnostic; a domain is a set of small decisions plugged in behind

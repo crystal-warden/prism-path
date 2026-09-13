@@ -6,7 +6,7 @@
  * interp.c semantics) is the shared ppt_eval_bpf.h, the same text ppt_xdp.bpf.c certifies, which is
  * why the frozen predicate conformance carries to this program unchanged; that header also records
  * which verifier limit forced which part of its shape. What is this program's own is the resident
- * layer: the start node is the posture persisted in sel_state_map rather than anything the packet
+ * layer: the start node is the resident node persisted in sel_state_map rather than anything the packet
  * says, the decided target is committed back under a generation-counter CAS, and every committed
  * transition emits an audit receipt. It holds ONE bank of the table.
  */
@@ -175,7 +175,7 @@ int ppt_select_prog(struct xdp_md *ctx)
 
     /* RESIDENT + SERIALIZED. The start node is the persisted cur_node, not pkt_hdr->node_idx; each
      * control packet is one discrete event and the map holds the state. FAIL-SAFE: inited==0 means the
-     * state was NOT deliberately set (crash, fresh/torn map), so fall to the MOST RESTRICTIVE posture
+     * state was NOT deliberately set (crash, fresh/torn map), so fall to the MOST RESTRICTIVE node
      * (the last, highest-severity node), never the baseline — a forced reload must buy lockdown, not
      * normal. A deliberate clean start is the loader writing {start_node, inited=1}; the program only
      * sees inited==0 when something went wrong. (Nodes ordered least->most restrictive, the severity
@@ -185,14 +185,14 @@ int ppt_select_prog(struct xdp_md *ctx)
      * shared sel_state_map. evaluate() calls map helpers, so it cannot run under a bpf_spin_lock;
      * instead the read-modify-write is a generation-counter CAS — snapshot {cur,gen} under the lock,
      * evaluate UNLOCKED, then commit under the lock only if gen is unchanged. A concurrent loser (the
-     * state advanced since our snapshot) is DROPPED, never applied from stale state, so the posture
+     * state advanced since our snapshot) is DROPPED, never applied from stale state, so the resident node
      * only ever steps along a real edge of its actual current value, never a phantom. Strict global
      * ORDER for a multi-queue deployment is single-RX-queue steering (the kernel analog of the fabric
      * clock); this lock gives integrity + no stale-misapply, which the concurrent smoke test measures. */
     __u32 zk = 0;
     struct ppt_sel_state *st = bpf_map_lookup_elem(&sel_state_map, &zk);
     struct ppt_config *scfg = bpf_map_lookup_elem(&config_map, &zk);
-    /* most restrictive posture: the policy's SIGNED safe_node if declared (offset-26 high byte, rides
+    /* most restrictive node: the policy's SIGNED safe_node if declared (offset-26 high byte, rides
      * the manifest signature); else the last-node convention. 0 = undeclared, hence the fallback. */
     __u32 failsafe = 0;
     if (scfg) {
@@ -201,11 +201,11 @@ int ppt_select_prog(struct xdp_md *ctx)
     }
     /* Bounded-retry CAS: on a lost commit, re-snapshot from the NEW state and re-evaluate, up to
      * SEL_MAX_RETRY times, so a concurrent contender turns a drop into a commit against fresh state
-     * rather than losing the event. Every re-evaluation is from the actual current posture, so a
+     * rather than losing the event. Every re-evaluation is from the actual current resident node, so a
      * committed transition is never stale. Only pathological contention (all attempts lose) drops. */
     __s32 matched_edge = -1;
     int rc = -1;
-    __u32 posture = failsafe;
+    __u32 resident_node = failsafe;
     int done = 0;
     if (st) {
         for (int attempt = 0; attempt < SEL_MAX_RETRY && !done; attempt++) {
@@ -218,7 +218,7 @@ int ppt_select_prog(struct xdp_md *ctx)
             __s32 target_node = -1;
             matched_edge = -1;
             rc = evaluate(cur, n_fields, PPT_BANK_SINGLE, &matched_edge, &target_node);
-            posture = cur;
+            resident_node = cur;
             if (rc != 0 || target_node < 0) { done = 1; break; }   /* nothing to commit */
 
             int committed = 0;
@@ -229,11 +229,11 @@ int ppt_select_prog(struct xdp_md *ctx)
                 st->inited = 1;
                 st->gen = snap_gen + 1;
                 new_seq = st->gen;
-                posture = (__u32)target_node;
+                resident_node = (__u32)target_node;
                 committed = 1;
                 done = 1;
             } else {
-                posture = st->cur_node;                           /* contended: report winner, retry */
+                resident_node = st->cur_node;                           /* contended: report winner, retry */
             }
             bpf_spin_unlock(&st->lock);
 
@@ -258,7 +258,7 @@ int ppt_select_prog(struct xdp_md *ctx)
     struct ppt_result *res = bpf_map_lookup_elem(&result_map, &key);
     if (res) {
         res->matched_edge = matched_edge;
-        res->target_node = (__s32)posture;            /* the NEW resident posture after this event */
+        res->target_node = (__s32)resident_node;            /* the NEW resident node after this event */
         res->eval_status = (rc == 0) ? 1 : 0;
         __sync_fetch_and_add(&res->pkt_count, 1);
     }

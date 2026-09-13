@@ -4,7 +4,7 @@
 
 Every positive integer has a unique Zeckendorf representation (a sum of non-consecutive Fibonacci
 numbers), so its bit pattern never contains ``11``. The Fibonacci code appends a terminal ``1``, making a
-trailing ``11`` that appears nowhere else — a permanent, data-agnostic frame boundary. Variable-length,
+trailing ``11`` that appears nowhere else — a permanent, data-agnostic codeword boundary. Variable-length,
 prefix-free, ``O(log n)``, and densest on small integers (``1 -> 11``, ``2 -> 011``, ``3 -> 0011``,
 ``4 -> 1011``), which is exactly where delta-differenced telemetry lives.
 
@@ -65,7 +65,7 @@ def decode_stream(bits: str) -> List[int]:
 
     Within a single code the only ``11`` is its terminator (Zeckendorf forbids consecutive 1s), so the
     first ``11`` at/after a code's start is its boundary. A trailing run of bits with no terminator is an
-    incomplete final frame and is dropped (the receiver requests it via the MMR self-heal, out of scope
+    incomplete final codeword and is dropped (the receiver requests it via the MMR self-heal, out of scope
     here).
     """
     out: List[int] = []

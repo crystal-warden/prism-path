@@ -4,7 +4,7 @@
 // the relay walks the same table image the air relay carries (hop_policy.h) with the same evaluator
 // (ppt_eval.h) and returns the route and step count for each, to be compared with the host engine.
 //   in:  "RPL2" | n u32 | (give_up_run i32, retry_pct i32, backoff i32) x n
-//   out: "RES2" | n u32 | (route u16, steps u16) x n
+//   out: "RES2" | n u32 | (target u16, steps u16) x n
 #include <stdio.h>
 #include <string.h>
 #include "freertos/FreeRTOS.h"

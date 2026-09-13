@@ -115,9 +115,9 @@ struct ppt_receipt {
     __u64 seq;          /* commit sequence = the new generation counter (monotonic per policy load) */
     __u64 t_ns;         /* bpf_ktime_get_ns() at commit: the TIME axis, signed into the tamper-evident record */
     __u64 policy_hash;  /* low 64 bits of the loaded image's sha256 (loader-attested) */
-    __s32 prev_node;    /* the resident posture BEFORE this event */
+    __s32 prev_node;    /* the resident node BEFORE this event */
     __s32 event;        /* the driving event value (field 0) */
-    __s32 next_node;    /* the resident posture AFTER this event */
+    __s32 next_node;    /* the resident node AFTER this event */
     __s32 cause;        /* WHY, from the cause code registry (docs/design/spec-cause-codes.md):
                          * 0 = PPT_CAUSE_NONE, an ordinary committed transition. Occupies the former
                          * _pad slot (explicitly written 0 since introduction), so size, layout, and
@@ -127,7 +127,7 @@ struct ppt_receipt {
 #define PPT_CAUSE_NONE 0   /* clean decision; nonzero values come from the registry (append-only) */
 #define PPT_CAUSE_MIGRATION_RESET 66   /* state:migration-reset (docs/design/spec-cause-codes.md): a
                                         * hot-swap reset-to strategy (or a vanished name under by-name)
-                                        * parked the resident posture on the new fail-safe rather than
+                                        * parked the resident node on the new fail-safe rather than
                                         * preserving it. Attested by the loader on the swap, not the kernel. */
 
 /* A migration receipt reuses the ppt_receipt struct (the anchored format is NEVER changed) and marks

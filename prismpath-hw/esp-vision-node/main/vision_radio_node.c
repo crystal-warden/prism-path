@@ -99,7 +99,7 @@ enum {
 /* RDG6: the reading record containing boot epoch nonce and hash chain prev anchor (WIRE.md). */
 typedef struct __attribute__((packed)) {
     char magic[4];
-    uint16_t nid;
+    uint16_t device_id;
     uint16_t norm;
     uint32_t seq;
     uint64_t t_cap;
@@ -121,7 +121,7 @@ static uint32_t boot_epoch = 0;
 /* CHN1: signed chain head record emitted periodically to attest trail sequence (WIRE.md). */
 typedef struct __attribute__((packed)) {
     char magic[4];
-    uint16_t nid;
+    uint16_t device_id;
     uint32_t epoch;
     uint32_t seq;
     uint64_t head;
@@ -175,7 +175,7 @@ static void sign_chain_head(uint32_t seq, uint64_t head) {
     chn_t chain_head;
     memset(&chain_head, 0, sizeof(chain_head));
     memcpy(chain_head.magic, "CHN1", 4);
-    chain_head.nid = node_id;
+    chain_head.device_id = node_id;
     chain_head.epoch = boot_epoch;
     chain_head.seq = seq;
     chain_head.head = head;
@@ -191,7 +191,7 @@ static uint64_t chain_prev = 0;
 
 typedef struct __attribute__((packed)) {
     char magic[4];
-    uint16_t nid;
+    uint16_t device_id;
     uint16_t norm;
     uint32_t seq;
     uint64_t t_cap;
@@ -200,11 +200,11 @@ typedef struct __attribute__((packed)) {
 
 typedef struct __attribute__((packed)) {
     char magic[4];
-    uint16_t nid;
+    uint16_t device_id;
     uint16_t norm;
     uint32_t seq;
     uint64_t t_cap;
-    uint16_t route;
+    uint16_t target;
     uint32_t len;
 } evd_hdr_t;
 
@@ -323,7 +323,7 @@ static uint32_t staged_count = 0;
 
 typedef struct __attribute__((packed)) {
     char magic[4];
-    uint16_t nid;
+    uint16_t device_id;
     uint32_t version;
     uint16_t cause;
     uint32_t verify_us;
@@ -497,20 +497,20 @@ static uint16_t act_execute(uint32_t *out_counter) {
     return cause;
 }
 
-static void send_evidence(camera_fb_t *fb, uint32_t seq, uint64_t t_cap, uint16_t route) {
+static void send_evidence(camera_fb_t *fb, uint32_t seq, uint64_t t_cap, uint16_t target) {
     uint8_t *jpg = NULL;
     size_t jlen = 0;
     if (!frame2jpg(fb, KEY_QUALITY, &jpg, &jlen)) {
         return;
     }
     uint8_t *msg = malloc(sizeof(evd_hdr_t) + jlen);
-    evd_hdr_t eh = {{'E', 'V', 'D', '1'}, node_id, normal_id, seq, t_cap, route, (uint32_t)jlen};
+    evd_hdr_t eh = {{'E', 'V', 'D', '1'}, node_id, normal_id, seq, t_cap, target, (uint32_t)jlen};
     memcpy(msg, &eh, sizeof(eh));
     memcpy(msg + sizeof(eh), jpg, jlen);
     free(jpg);
     radio_send_fragmented(node_id, frag_id++, msg, sizeof(eh) + jlen);
     free(msg);
-    ESP_LOGI(TAG, "evidence for %s: %lu B", POLICY_NODE_NAMES[route], (unsigned long)(sizeof(eh) + jlen));
+    ESP_LOGI(TAG, "evidence for %s: %lu B", POLICY_NODE_NAMES[target], (unsigned long)(sizeof(eh) + jlen));
 }
 
 /* The actuator LED at boot, plus the replay floor the last executed action left in flash. */

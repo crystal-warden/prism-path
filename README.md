@@ -139,7 +139,7 @@ with its integrity apparatus counted, 66.9 times under an OpenTelemetry record o
 | distributed policy update behind a quorum on real radios | demonstrated in the field |
 | Figueroa quantization | proven within the declared domain |
 | Facet wire, Vector codec, Wireshark dissector | implemented and measured |
-| GRC adjudication adapter: machine checkable controls, evidence typed verdicts, OSCAL | implemented, dogfooded on a real enclave |
+| GRC adjudication adapter: machine checkable controls, evidence typed determinations, OSCAL | implemented, dogfooded on a real enclave |
 | drift detection beyond the lockfile and staleness bound, authorized recovery, homeostatic control | research direction |
 | multimodal sensing, quantum assisted computation | research direction |
 

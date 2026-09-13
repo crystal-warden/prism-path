@@ -15,7 +15,7 @@ decision stream (O1/O2) and the JSON baselines (B2).
 Two encodings, matched to what each PrismPath stream carries:
   FAITHFUL   -  the four decision fields (stability, dev_mg, rule_level, soc_action) as OTLP
               attributes: apples-to-apples with B2 (4-field JSON) and O1 (the per-field wire).
-  MINIMAL    -  just the fused band verdict as one int attribute + a severity: apples-to-apples with
+  MINIMAL    -  just the fused route as one int attribute + a severity: apples-to-apples with
               O2 (the band-ID stream).
 
 Honest framing baked into the output: OTLP is a general telemetry ENVELOPE (per-record wall-clock
@@ -86,7 +86,7 @@ def _log_record(reading: dict, ts: int, faithful: bool) -> LogRecord:
             kv.key = field_name
             _set_val(kv, reading[field_name])
     else:
-        # MINIMAL: one attribute  -  the band verdict the O2 stream carries (soc_action as the class)
+        # MINIMAL: one attribute  -  the route the O2 stream carries as a band (soc_action as the class)
         kv = lr.attributes.add()
         kv.key = "band"
         kv.value.string_value = reading["soc_action"]

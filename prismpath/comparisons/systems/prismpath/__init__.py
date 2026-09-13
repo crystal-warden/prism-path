@@ -43,8 +43,12 @@ CITATIONS = [
 HUMAN_REQUEST_FIELD = "human_requested"
 
 
-class Inexpressible(Exception):
-    pass
+class NotExpressible(Exception):
+    """The policy, or one form inside it, is not expressible in this system.
+
+    One spelling for this concept across `prismpath/comparisons`: the adjective is `expressible`,
+    the outcome value is `not_expressible`, and this is the exception that reports it.
+    """
 
 
 def _lit(value: Any) -> str:
@@ -54,7 +58,7 @@ def _lit(value: Any) -> str:
         return str(value)
     if isinstance(value, str):
         return json.dumps(value)
-    raise Inexpressible(f"constant {value!r} has no predicate literal")
+    raise NotExpressible(f"constant {value!r} has no predicate literal")
 
 
 def _tuple(vals: List[Any]) -> str:
@@ -88,13 +92,13 @@ def render(cond: Any, policy: Dict[str, Any]) -> str:
         return f"not ({render(arg, policy)})"
     if form in ("missing", "present"):
         if policy["fields"].get(arg, {}).get("type") != "bool":
-            raise Inexpressible(f"{form} on a non bool field {arg!r}: null is only exactly spelled through truthiness for bools")
+            raise NotExpressible(f"{form} on a non bool field {arg!r}: null is only exactly spelled through truthiness for bools")
         return f"not {arg}" if form == "missing" else arg
     if form == "role_at_least":
         field, floor = arg
         order = policy["hierarchy"]["order"]
         return f"{field} in {_tuple(order[order.index(floor):])}"
-    raise Inexpressible(f"{form}: outside the predicate language (SPEC section 4)")
+    raise NotExpressible(f"{form}: outside the predicate language (SPEC section 4)")
 
 
 def translate(policy: Dict[str, Any]) -> Translation:
@@ -109,7 +113,7 @@ def translate(policy: Dict[str, Any]) -> Translation:
         node = f"{rule['id']}_{rule['then']}"
         try:
             cond = render(rule["if"], policy)
-        except Inexpressible as error:
+        except NotExpressible as error:
             tr.dropped_rules.append(rule["id"])
             tr.notes.append(f"{rule['id']} dropped: {error}")
             continue

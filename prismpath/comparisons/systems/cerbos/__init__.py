@@ -66,8 +66,12 @@ def _ref(field: str, policy: Dict[str, Any]) -> str:
     return f"request.resource.attr.{field}"
 
 
-class Inexpressible(Exception):
-    pass
+class NotExpressible(Exception):
+    """The policy, or one form inside it, is not expressible in this system.
+
+    One spelling for this concept across `prismpath/comparisons`: the adjective is `expressible`,
+    the outcome value is `not_expressible`, and this is the exception that reports it.
+    """
 
 
 def cel(cond: Any, policy: Dict[str, Any]) -> str:
@@ -107,7 +111,7 @@ def cel(cond: Any, policy: Dict[str, Any]) -> str:
         order = policy["hierarchy"]["order"]
         roles = ", ".join(json.dumps(role) for role in order[order.index(arg[1]):])
         return f"request.principal.roles.exists(r, r in [{roles}])"
-    raise Inexpressible(form)
+    raise NotExpressible(form)
 
 
 def translate(policy: Dict[str, Any]) -> Translation:

@@ -5,7 +5,7 @@ on the link).
 
 The Fibonacci bits are accumulated MSB-first into a 64-bit word register and flushed per word; the final
 partial word is zero-padded on the right. Because a code ends in a unique ``11`` and the pad is a run of
-0s, the padding is a partial frame with no terminator  -  ``decode_stream`` drops it  -  so the round-trip is
+0s, the padding is a partial codeword with no terminator  -  ``decode_stream`` drops it  -  so the round-trip is
 exact without carrying a bit count. (This is the doc's CPU/MCU path: accumulate-into-a-word for ~10-20x
 throughput on C/hardware; the Python reference here nails the *format* + correctness + padding cost, not
 the raw speed  -  that win lives in the C/FPGA codec, Phase C2.)
@@ -47,7 +47,7 @@ def encode(ints: List[int], word_bits: int = WORD_BITS) -> bytes:
 
 
 def decode(data: bytes) -> List[int]:
-    """Word-packed bytes -> ints (trailing zero pad is a partial frame and is dropped)."""
+    """Word-packed bytes -> ints (trailing zero pad is a partial codeword and is dropped)."""
     return zeck.decode_stream(unpack(data))
 
 

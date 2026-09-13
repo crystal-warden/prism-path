@@ -40,7 +40,7 @@ static void hop_radio_init(uint16_t short_addr, bool promiscuous, bool rx_idle)
 #define HOP_AIR_ADDR 0x0001
 // Build a data frame around `data`, unicast with an acknowledgement requested, so the hardware acks it and
 // the sender can retry; returns the buffer length written (frame[0] counts the FCS). Uplink: air to host,
-// sub frames 'S'. Downlink: host to air, commands 'C' | nid u16 | data, sent only in the air relay's receive
+// sub frames 'S'. Downlink: host to air, commands 'C' | device_id u16 | data, sent only in the air relay's receive
 // window right after it heard an ack, and forwarded to the camera with that node id over Wi-Fi.
 static uint8_t hop_build(uint8_t *frame, uint8_t seq, uint16_t src, uint16_t dst, const uint8_t *data, uint8_t n)
 {

@@ -9,9 +9,11 @@ Row classes:
   MISMATCH     they differ on a scenario the system should express: a translator defect, fails the gate
   PROBE        an `undeclared_missing` scenario: what the system returns there IS the measurement
                (dimension A1); recorded, never counted as a failure
-  DROPPED      the expected rule is one the translation declared it cannot express: measured
-               inexpressibility, recorded, not a failure
-  UNEXPRESSIBLE the whole policy is outside the system
+  DROPPED      the expected rule is one the translation declared it cannot express: measurably not
+               expressible, recorded, not a failure
+  UNEXPRESSIBLE the whole policy is not expressible in the system. The row class keeps this older
+               spelling of the word because committed conformance.json files carry it byte for byte;
+               everywhere else the spelling is `expressible` / `not_expressible` (see harness.py).
 Reports land in `systems/<id>/generated/conformance.json` and on stdout. Exit 1 on any MISMATCH.
 
 Usage: python -m prismpath.comparisons.check_translators [--system ID ...] [--policy ID ...]

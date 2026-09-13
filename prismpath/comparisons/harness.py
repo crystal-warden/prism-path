@@ -16,9 +16,16 @@ A system module exposes:
 `systems/<id>/generated/<policy_id>/` so the translated policy is a committed, reviewable artifact
 (it is the evidence pointer result files cite). `expressible=False` means the system cannot host
 this policy at all; `dropped_rules` names rules the translation had to leave out, so a scenario
-that expects one of them is recorded as DROPPED (measured inexpressibility), not as a translator
-defect. `Decision.observed` is in the neutral vocabulary (corpus/README.md), or one of the
-non decision results `undefined`, `error`, `not_expressible`, `no_match`.
+that expects one of them is recorded as DROPPED (the rule is measurably not expressible), not as a
+translator defect. `Decision.observed` is in the neutral vocabulary (corpus/README.md), or one of
+the non decision results `undefined`, `error`, `not_expressible`, `no_match`.
+
+One spelling for this concept across `prismpath/comparisons`: the adjective is `expressible`, the
+outcome value is `not_expressible`, the exception a translator raises is `NotExpressible`, and the
+prose says "not expressible". Two older spellings survive only because published result files
+already carry them byte for byte and those files are not rewritten: `not-expressible` as an
+`observed` value in `results/` (written by `groupb/b.py`, described in `results/SCHEMA.md`) and
+`UNEXPRESSIBLE` as a row class in `systems/<id>/generated/conformance.json`.
 """
 from __future__ import annotations
 

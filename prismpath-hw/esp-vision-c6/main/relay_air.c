@@ -43,7 +43,7 @@ static uint32_t last_retry = 0, last_sub = 0;
 typedef struct __attribute__((packed)) {
     char magic[4];
     uint64_t t_us;
-    uint16_t route, steps;
+    uint16_t target, steps;
     int8_t level;
     uint16_t give_up_run, retry_pct;
     uint8_t sig[64];
@@ -131,7 +131,7 @@ static QueueHandle_t qcmd;
 static int usock = -1;
 #define MAX_NODES 6
 static struct {
-    uint16_t nid;
+    uint16_t device_id;
     struct sockaddr_in addr;
     bool set;
 } nodes[MAX_NODES];
@@ -177,9 +177,9 @@ static void cmd_task(void *arg) {
     while (1) {
         if (xQueueReceive(qcmd, &command, portMAX_DELAY) != pdTRUE)
             continue;
-        uint16_t nid = command.data[1] | (command.data[2] << 8);
+        uint16_t device_id = command.data[1] | (command.data[2] << 8);
         int sent = 0;
-        if (nid == 0x0000) {  // for the relay itself
+        if (device_id == 0x0000) {  // for the relay itself
             if (command.data[3] == 'K')
                 publish_key();  // a receiver that joined after boot asks for the relay's public key
             else if (command.data[3] == 'R' && command.len >= 5) {
@@ -197,11 +197,11 @@ static void cmd_task(void *arg) {
             continue;
         }
         for (int entry_index = 0; entry_index < MAX_NODES; entry_index++)
-            if (nodes[entry_index].set && (nodes[entry_index].nid == nid || nid == 0xffff)) {
+            if (nodes[entry_index].set && (nodes[entry_index].device_id == device_id || device_id == 0xffff)) {
                 sendto(usock, command.data, command.len, 0, (struct sockaddr *)&nodes[entry_index].addr, sizeof nodes[entry_index].addr);
                 sent++;
             }
-        ESP_LOGI(TAG, "command '%c' for node %04x forwarded to %d camera(s)", command.data[3], nid, sent);
+        ESP_LOGI(TAG, "command '%c' for node %04x forwarded to %d camera(s)", command.data[3], device_id, sent);
     }
 }
 static void on_wifi(void *arg, esp_event_base_t base, int32_t id, void *data) {
@@ -228,10 +228,10 @@ static void udp_task(void *arg) {
         message.len = (uint16_t)received_len;
         if (received_len >=
             6) {  // RDG6, KEY3, EVD1 and FRG2 all carry the node id right after the magic: remember where that node speaks from
-            uint16_t nid = message.data[4] | (message.data[5] << 8);
+            uint16_t device_id = message.data[4] | (message.data[5] << 8);
             int slot = -1;
             for (int slot_index = 0; slot_index < MAX_NODES; slot_index++) {
-                if (nodes[slot_index].set && nodes[slot_index].nid == nid) {
+                if (nodes[slot_index].set && nodes[slot_index].device_id == device_id) {
                     slot = slot_index;
                     break;
                 }
@@ -239,7 +239,7 @@ static void udp_task(void *arg) {
                     slot = slot_index;
             }
             if (slot >= 0) {
-                nodes[slot].nid = nid;
+                nodes[slot].device_id = device_id;
                 nodes[slot].addr = from;
                 nodes[slot].set = true;
             }
@@ -379,7 +379,7 @@ void app_main(void) {
             }
         }
         static int64_t t_tick = 0;
-        static uint16_t last_route = 0xffff;
+        static uint16_t last_target = 0xffff;
         static int64_t t_pwr = 0;
         if (esp_timer_get_time() - t_tick > 1000000) {
             t_tick = esp_timer_get_time();
@@ -397,8 +397,8 @@ void app_main(void) {
             int32_t retry_pct = (int32_t)(sf ? (100u * retries) / sf : 0);
             if (policy_ok) {
                 uint16_t steps;
-                uint16_t route = policy_decide(give_up_run, retry_pct, LEVEL_FULL - level, &steps);
-                const char *name = POLICY_NODE_NAMES[route];
+                uint16_t target = policy_decide(give_up_run, retry_pct, LEVEL_FULL - level, &steps);
+                const char *name = POLICY_NODE_NAMES[target];
                 int8_t before = level;
                 if (!strcmp(name, "full_power"))
                     set_level(LEVEL_FULL);
@@ -406,12 +406,12 @@ void app_main(void) {
                     set_level(level + LEVEL_STEP);
                 else if (!strcmp(name, "step_down"))
                     set_level(level - LEVEL_STEP);
-                if (route != last_route || level != before || esp_timer_get_time() - t_pwr > STATS_US) {
+                if (target != last_target || level != before || esp_timer_get_time() - t_pwr > STATS_US) {
                     // a decision with a cause: sent up the hop so the host sees why the power moved
                     msg_t pm;
                     pwr_t pw = {{'P', 'W', 'R', '2'},
                                 (uint64_t)esp_timer_get_time(),
-                                route,
+                                target,
                                 steps,
                                 level,
                                 give_up_run,
@@ -423,11 +423,11 @@ void app_main(void) {
                     pm.len = sizeof pw;
                     xQueueSend(qpwr, &pm, 0);
                     t_pwr = esp_timer_get_time();
-                    if (route != last_route || level != before)
+                    if (target != last_target || level != before)
                         ESP_LOGI(TAG, "power policy: %s (give ups in a row %u, retries %ld%%, backoff %d dB) -> %d dBm",
                                  name, give_up_run, (long)retry_pct, LEVEL_FULL - before, level);
                 }
-                last_route = route;
+                last_target = target;
             }
         }
         if (esp_timer_get_time() - t_log > STATS_US) {

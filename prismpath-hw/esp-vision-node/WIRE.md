@@ -4,7 +4,7 @@ Every record the camera, the air relay, the host relay and the sniffer put on a 
 The firmware defines most of these as packed structs or comments beside the code that writes them;
 the receiver mirrors them by hand. Until a shared header replaces the hand copies (the firmware
 conversion waits for a bench recertification, see `../eval_copies_check.py` for how that is
-tracked), this file is the contract. All integers are little endian. `nid` is the camera's 16 bit
+tracked), this file is the contract. All integers are little endian. `device_id` is the camera's 16 bit
 node id (the low two bytes of its MAC), `seq` its reading counter, `epoch` its boot nonce, `norm`
 the 16 bit FNV id of the anchored normal, `pver` the policy version the reading was decided under.
 Timestamps `t*` are the sender's microsecond clock.
@@ -25,7 +25,7 @@ The version is the last character of the four byte magic. A reader that compares
 
 | record | layout | note |
 |---|---|---|
-| `FRG2` | `"FRG2"` \| nid u16 \| id u16 \| idx u16 \| total u16 \| data[] | kept on the camera for repair; keyframes and evidence |
+| `FRG2` | `"FRG2"` \| device_id u16 \| id u16 \| idx u16 \| total u16 \| data[] | kept on the camera for repair; keyframes and evidence |
 | `FRG3` | same layout | fire and forget; a refinement layer the next frame supersedes, never repaired |
 
 `FRAG_DATA` is 238 bytes (250 minus the 12 byte header). The host relay reassembles per node and id.
@@ -35,7 +35,7 @@ The version is the last character of the four byte magic. A reader that compares
 | direction | layout | note |
 |---|---|---|
 | uplink `'S'` | `'S'` \| id u16 \| idx u8 \| total u8 \| data[] | one ESP-NOW payload becomes sub frames of at most the hop's data size; the host reassembles by id |
-| downlink `'C'` | `'C'` \| nid u16 \| data[] | a command for the camera with that node id (nid 0x0000 addresses the air relay itself, 0x0002 the host relay); sent only in the air relay's receive window right after an ack |
+| downlink `'C'` | `'C'` \| device_id u16 \| data[] | a command for the camera with that node id (device_id 0x0000 addresses the air relay itself, 0x0002 the host relay); sent only in the air relay's receive window right after an ack |
 
 The 802.15.4 header is a 2003 data frame with acknowledgement requested and PAN ID compression: `61 88` \| seq u8 \| PAN u16 \| dst u16 \| src u16, then the payload above.
 
@@ -43,14 +43,14 @@ The 802.15.4 header is a 2003 data frame with acknowledgement requested and PAN 
 
 | record | layout | when |
 |---|---|---|
-| `RDG6` | `"RDG6"` \| nid u16 \| norm u16 \| seq u32 \| t_cap u64 \| t_dec u64 \| node u16 \| steps u16 \| wire_len u16 \| prev u64 \| pver u16 \| epoch u32 \| wire[wire_len] | every frame; `prev` is the first eight bytes of the SHA-256 of the previous reading record, header and wire, the hash chain |
-| `KEY3` | `"KEY3"` \| nid u16 \| norm u16 \| seq u32 \| t_cap u64 \| len u32 \| jpeg[len] | the anchored normal as a JPEG, on adoption, on request (`'k'`) and on the minute's resend; fragmented `FRG2` |
-| `EVD1` | `"EVD1"` \| nid u16 \| norm u16 \| seq u32 \| t_cap u64 \| route u16 \| len u32 \| jpeg[len] | the frame behind an escalating decision, at most one per ten seconds; fragmented `FRG2` |
-| `LAY3` | `"LAY3"` \| nid u16 \| seq u32 \| flags u8 (1 = full refresh) \| n u8 \| (cell u8 = r<<4 \| c, 32 bytes of nibbles) x n | refinement layer 3 for the named cells, only the cells whose 32 bytes changed, every named cell resent every five frames; fragmented `FRG3` |
-| `CHN1` | `"CHN1"` \| nid u16 \| epoch u32 \| seq u32 \| head u64 \| pver u16 \| sig[64] | the chain head signed by the camera's own Ed25519 key once a minute and on `'K'`; the signature covers everything before it |
-| `PUB2` | `"PUB2"` \| nid u16 \| pk[32] | the camera's public key, on `'K'` |
-| `SWP1` | `"SWP1"` \| nid u16 \| version u32 \| cause u16 \| verify_us u32 \| image_hash u64 \| t u64 | the outcome of a policy swap; cause is a registry code, 0 on commit |
-| `ACT2` | `"ACT2"` \| nid u16 \| counter u32 \| outcome u16 \| led u8 \| t u64 | the actuator's answer to an action, whatever it decided |
+| `RDG6` | `"RDG6"` \| device_id u16 \| norm u16 \| seq u32 \| t_cap u64 \| t_dec u64 \| node u16 \| steps u16 \| wire_len u16 \| prev u64 \| pver u16 \| epoch u32 \| wire[wire_len] | every frame; `prev` is the first eight bytes of the SHA-256 of the previous reading record, header and wire, the hash chain |
+| `KEY3` | `"KEY3"` \| device_id u16 \| norm u16 \| seq u32 \| t_cap u64 \| len u32 \| jpeg[len] | the anchored normal as a JPEG, on adoption, on request (`'k'`) and on the minute's resend; fragmented `FRG2` |
+| `EVD1` | `"EVD1"` \| device_id u16 \| norm u16 \| seq u32 \| t_cap u64 \| target u16 \| len u32 \| jpeg[len] | the frame behind an escalating decision, at most one per ten seconds; fragmented `FRG2` |
+| `LAY3` | `"LAY3"` \| device_id u16 \| seq u32 \| flags u8 (1 = full refresh) \| n u8 \| (cell u8 = r<<4 \| c, 32 bytes of nibbles) x n | refinement layer 3 for the named cells, only the cells whose 32 bytes changed, every named cell resent every five frames; fragmented `FRG3` |
+| `CHN1` | `"CHN1"` \| device_id u16 \| epoch u32 \| seq u32 \| head u64 \| pver u16 \| sig[64] | the chain head signed by the camera's own Ed25519 key once a minute and on `'K'`; the signature covers everything before it |
+| `PUB2` | `"PUB2"` \| device_id u16 \| pk[32] | the camera's public key, on `'K'` |
+| `SWP1` | `"SWP1"` \| device_id u16 \| version u32 \| cause u16 \| verify_us u32 \| image_hash u64 \| t u64 | the outcome of a policy swap; cause is a registry code, 0 on commit |
+| `ACT2` | `"ACT2"` \| device_id u16 \| counter u32 \| outcome u16 \| led u8 \| t u64 | the actuator's answer to an action, whatever it decided |
 
 ## Camera commands (the `data` of a downlink `'C'`)
 
@@ -73,11 +73,11 @@ normal u16 \| pver u16 \| admission u8 \| action u8 \| counter u32 \| sig[64], t
 authority over the 22 byte body; the actuator checks the signature, that it is the addressee, that
 admission is 1, and that the counter is above the floor it keeps in flash.
 
-## Air relay records (nid 0x0000)
+## Air relay records (device_id 0x0000)
 
 | record | layout | when |
 |---|---|---|
-| `PWR2` | `"PWR2"` \| t u64 \| route u16 \| steps u16 \| level i8 \| give_up_run u16 \| retry_pct u16 \| sig[64] | every transmit power decision of `hop_power.md`, signed by the relay's own key |
+| `PWR2` | `"PWR2"` \| t u64 \| target u16 \| steps u16 \| level i8 \| give_up_run u16 \| retry_pct u16 \| sig[64] | every transmit power decision of `hop_power.md`, signed by the relay's own key |
 | `PUB1` | `"PUB1"` \| pk[32] | the relay's public key, at boot and on `'K'` |
 | `STA1` | `"STA1"` \| t u64 \| n_in u32 \| n_sub u32 \| n_retry u32 \| n_given_up u32 \| n_fail u32 \| q_wait u16 \| qbulk_wait u16 | counters every ten seconds |
 
@@ -90,12 +90,12 @@ attacker).
 | record | layout | when |
 |---|---|---|
 | `ENF1` | `"ENF1"` \| t_rx u64 \| len u16 \| payload[len] | every reassembled hop payload, the record the receiver reads |
-| `FUS2` | `"FUS2"` \| t u64 \| route u16 \| a_fresh u8 \| b_fresh u8 \| a_occ u8 \| b_occ u8 \| a_tamper u8 \| b_tamper u8 \| a_seq u32 \| b_seq u32 \| a_age_ms u16 \| b_age_ms u16 \| steps u16 \| 0 u16 \| a_occ_age_ms u16 \| b_occ_age_ms u16 | the room verdict of `room_fusion.md`, on change and every resend period; 40 bytes |
+| `FUS2` | `"FUS2"` \| t u64 \| target u16 \| a_fresh u8 \| b_fresh u8 \| a_occ u8 \| b_occ u8 \| a_tamper u8 \| b_tamper u8 \| a_seq u32 \| b_seq u32 \| a_age_ms u16 \| b_age_ms u16 \| steps u16 \| 0 u16 \| a_occ_age_ms u16 \| b_occ_age_ms u16 | the room verdict of `room_fusion.md`, on change and every resend period; 40 bytes |
 | `RSS1` | `"RSS1"` \| t u64 \| n u16 \| sum i32 \| min i8 \| max i8 | received signal strength on the hop every two seconds |
-| `ACK1` / `NAK1` | magic \| nid u16 \| cmd u8 \| tries u16 | the fate of a downlink command: acknowledged by the air relay, or given up after 200 tries |
+| `ACK1` / `NAK1` | magic \| device_id u16 \| cmd u8 \| tries u16 | the fate of a downlink command: acknowledged by the air relay, or given up after 200 tries |
 
-Host relay input: `"CMD1"` \| nid u16 \| len u8 \| data[len]. One command is pending at a time; the
-next is read once the pending one is acked or given up. nid 0x0002 with `'m'` \| seconds u8 mutes
+Host relay input: `"CMD1"` \| device_id u16 \| len u8 \| data[len]. One command is pending at a time; the
+next is read once the pending one is acked or given up. device_id 0x0002 with `'m'` \| seconds u8 mutes
 this relay (a bench hook).
 
 ## Sniffer (relay C, no address, no policy)
@@ -108,7 +108,7 @@ counts the FCS as the radio reports it and the FCS is not delivered.
 | app | in | out |
 |---|---|---|
 | camera replay | `"RPL1"` \| seq u32 \| len u32 \| frame[len] (grayscale, the build's resolution) | `"RES1"` \| seq u32 \| t_fe u32 \| t_pol u32 \| t_enc u32 \| node u16 \| steps u16 \| n_fields u16 \| field[n_fields] i32 \| wire_len u16 \| wire[wire_len] |
-| relay replay | `"RPL2"` \| n u32 \| (give_up_run i32, retry_pct i32, backoff i32) x n | `"RES2"` \| n u32 \| (route u16, steps u16) x n |
+| relay replay | `"RPL2"` \| n u32 \| (give_up_run i32, retry_pct i32, backoff i32) x n | `"RES2"` \| n u32 \| (target u16, steps u16) x n |
 
 ## Known debts in these formats
 

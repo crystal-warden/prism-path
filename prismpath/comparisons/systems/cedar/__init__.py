@@ -48,8 +48,12 @@ NS_ROLE, NS_USER = "Role", "User"
 ROLE_FIELD = "user_role"
 
 
-class Inexpressible(Exception):
-    pass
+class NotExpressible(Exception):
+    """The policy, or one form inside it, is not expressible in this system.
+
+    One spelling for this concept across `prismpath/comparisons`: the adjective is `expressible`,
+    the outcome value is `not_expressible`, and this is the exception that reports it.
+    """
 
 
 def _lit(value: Any) -> str:
@@ -89,7 +93,7 @@ def cedar_cond(cond: Any, policy: Dict[str, Any]) -> str:
         return f"(context has {left_field} && context has {right_field} && context.{left_field}.containsAny(context.{right_field}))"
     if form == "role_at_least":
         return f'principal in {NS_ROLE}::{json.dumps(arg[1])}'
-    raise Inexpressible(form)
+    raise NotExpressible(form)
 
 
 def translate(policy: Dict[str, Any]) -> Translation:
