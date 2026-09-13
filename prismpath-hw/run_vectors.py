@@ -80,11 +80,12 @@ def cert_predicates() -> tuple:
         except pc.SubsetError as error:
             excluded[error.reason] += 1
             continue
+        if expect == "ERROR":       # unreachable: ERROR conds never classify as Level M. Checked BEFORE
+            # the run, because the run itself is the thing that should never have happened
+            raise RuntimeError(f"ERROR case survived the subset filter: {cond!r}")
         (BUILD / "pred_regs.bin").write_bytes(regs)
         out = run_interp("eval", BUILD / "pred.ppt", BUILD / "pred_regs.bin")
         got = out.startswith("match")
-        if expect == "ERROR":       # unreachable: ERROR conds never classify as Level M
-            raise RuntimeError(f"ERROR case survived the subset filter: {cond!r}")
         if got == expect:
             passed += 1
         else:

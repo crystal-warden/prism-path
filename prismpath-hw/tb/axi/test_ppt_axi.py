@@ -131,15 +131,17 @@ async def axi_sensor_replay(dut):
     assert magic == 0x50505431, f"MAGIC mismatch: {magic:#x}"
 
     from prismpath.kernel.parser import parse_file
-    flow_md = (Path(pc._REPO) / "prismpath" / "gallery" / "incident_severity"
-               / "incident_severity.md")
+    flow_md = (Path(pc._REPO) / "gallery" / "incident_severity"
+               / "incident_severity.md")   # pc._REPO is the package directory, the gallery is inside it
     img = pc.compile_flow(parse_file(str(flow_md)))
     names = [name for name, _ in img.nodes]
     await axi_write(dut, R_SOFT_RST, 1)
     await load_image_axi(dut, img)
     intern = dict(img.intern)
 
-    log_path = HERE.parent.parent / "build" / "live_route_log.ndjson"
+    # the committed capture, not an uncommitted build/ one, so this runs from a clean checkout and
+    # cannot silently stop running (tb/test_ppt_interp.py replays the same log through the core)
+    log_path = HERE.parent.parent / "evidence" / "fabric_session1.ndjson"
     lines = log_path.read_text().splitlines()
     step = max(1, len(lines) // 500)                       # ~500 spread samples
     sample_count = mismatches = 0

@@ -18,6 +18,9 @@ void app_main(void)
 {
     usb_serial_jtag_driver_config_t ucfg = { .tx_buffer_size = 16384, .rx_buffer_size = 16384 }; ESP_ERROR_CHECK(usb_serial_jtag_driver_install(&ucfg));
     memcpy(tbl, POLICY_TABLE, POLICY_TABLE_LEN); uint8_t rc = parse_table(POLICY_TABLE_LEN);
+    // A table that does not parse makes every vector answer 0xffff, which reads like a failed conformance run
+    // rather than a broken build. Say so on the console (UART on this board, so the USB data channel stays clean).
+    if (rc) printf("relay_replay: table parse failed rc=%u, every vector will answer 0xffff\n", rc);
     while (1) {
         uint8_t hdr[8]; usb_read_all(hdr, 4);
         if (memcmp(hdr, "RPL2", 4) != 0) continue;

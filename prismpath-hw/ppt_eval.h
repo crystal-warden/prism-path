@@ -18,6 +18,11 @@
  * The register file is `regs`: a 4 byte prefix (the node id in the regs.bin file format) then
  * 8 bytes per field, i32 type and i32 value, the layout the table image indexes directly.
  *
+ * Include this file in exactly ONE translation unit per firmware. `tbl`, `regs` and the ten header
+ * fields are file scope statics, so a second translation unit that includes it gets a second, empty
+ * table and register file, and the compiler says nothing: the firmware would decide on whichever
+ * copy the calling file happens to see. Every firmware here is a single .c file for that reason.
+ *
  * parse_table returns a ppt_parse_rc and eval_prog writes a ppt_eval_rc into *err. Both are this
  * header's own namespace, kept small and stable since the first firmware: they are NOT registry cause
  * codes (prismpath/kernel/causes.py) and a caller that puts a refusal on the wire maps them to one. */
@@ -105,7 +110,7 @@ static inline int8_t eval_prog(uint16_t e_prog_off, uint16_t e_prog_cnt, uint8_t
         default: *err = PPT_EVAL_BAD_OPCODE; return 0;
         }
     }
-    return (int8_t)stack[0];
+    return sp > 0 ? (int8_t)stack[0] : 0;   /* an empty program leaves nothing to read; the compiler never emits one */
 }
 
 /* the priority encoder: the first edge whose program is true wins; -1 when none (or on error) */
@@ -113,8 +118,9 @@ static inline int8_t evaluate(uint16_t node, uint16_t *out_target, uint8_t *err)
     const uint8_t *node_entry = tbl + nodes_off + 4 * (uint32_t)node; uint16_t edge_off = rd16b(node_entry), edge_cnt = rd16b(node_entry + 2);
     for (uint16_t edge_index = 0; edge_index < edge_cnt; edge_index++) {
         const uint8_t *edge_entry = tbl + edges_off + 6 * (uint32_t)(edge_off + edge_index);
-        if (eval_prog(rd16b(edge_entry + 2), rd16b(edge_entry + 4), err)) { *out_target = rd16b(edge_entry); return (int8_t)edge_index; }
-        if (*err) return -1;
+        int8_t matched = eval_prog(rd16b(edge_entry + 2), rd16b(edge_entry + 4), err);
+        if (*err) return -1;                                   /* the error is decided before the result is used, not after */
+        if (matched) { *out_target = rd16b(edge_entry); return (int8_t)edge_index; }
     }
     return -1;
 }

@@ -38,6 +38,9 @@ static void hop_send(const uint8_t *data, size_t length)
 static const uint8_t BCAST[6] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
 #define ESPNOW_MAX 250
 #define FRAG_DATA (ESPNOW_MAX - 12)
+// a full transmit queue drains in a tick or two, so this many one tick waits is backpressure; past it the
+// radio is wedged and the fragment is dropped rather than hanging the sender (a receiver can ask for it again)
+#define ESPNOW_SEND_TRIES 64
 typedef struct __attribute__((packed)) { char magic[4]; uint16_t device_id, id, idx, total; } frag_hdr_t;
 static void radio_init(esp_now_recv_cb_t on_recv)
 {
@@ -53,7 +56,10 @@ static void radio_init(esp_now_recv_cb_t on_recv)
     esp_now_peer_info_t peer = {0}; memcpy(peer.peer_addr, BCAST, 6); peer.ifidx = WIFI_IF_STA; peer.channel = 0; peer.encrypt = false; esp_now_add_peer(&peer);
 }
 // the last few fragmented messages stay in PSRAM so a repair request ('r' | id u16 | n u8 | idx[n]) can resend
-// exactly the fragments a receiver did not get; readings are acknowledged hop by hop, fragments are not
+// exactly the fragments a receiver did not get; readings are acknowledged hop by hop, fragments are not.
+// These slots are NOT locked: radio_keep frees the slot radio_resend_fragments may be reading. What makes that
+// safe is that both run on the node's app_main loop (sending a message and draining repair requests are steps of
+// the same pass, and no receive callback is registered). Calling either from a second task needs a lock first.
 #define KEEP_MSGS 3
 static struct { uint16_t id; uint8_t *data; size_t len; bool set; } kept[KEEP_MSGS]; static int kept_next = 0;
 static void radio_send_one_fragment(uint16_t device_id, uint16_t id, const uint8_t *data, size_t len, uint16_t frag_index)
@@ -87,7 +93,10 @@ static void radio_send_fragmented_ex(uint16_t device_id, uint16_t id, const uint
     for (uint16_t frag_index = 0; frag_index < total; frag_index++) {
         size_t off = (size_t)frag_index * FRAG_DATA, chunk_len = len - off < FRAG_DATA ? len - off : FRAG_DATA;
         frag_hdr_t header = { {'F','R','G', keep ? '2' : '3'}, device_id, id, frag_index, total }; memcpy(pkt, &header, sizeof header); memcpy(pkt + sizeof header, data + off, chunk_len);
-        while (esp_now_send(BCAST, pkt, sizeof header + chunk_len) != ESP_OK) vTaskDelay(1);
+        for (int attempt = 0; attempt < ESPNOW_SEND_TRIES; attempt++) {
+            if (esp_now_send(BCAST, pkt, sizeof header + chunk_len) == ESP_OK) break;
+            vTaskDelay(1);
+        }
         hop_send(pkt, sizeof header + chunk_len);
         vTaskDelay(pdMS_TO_TICKS(8));   // pace the burst: a keyframe is not latency critical and the transmit buffers are finite
     }

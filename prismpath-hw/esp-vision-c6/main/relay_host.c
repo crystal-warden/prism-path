@@ -131,7 +131,12 @@ void esp_ieee802154_receive_done(uint8_t *frame, esp_ieee802154_frame_info_t *in
     rx_t received;
     received.t_us = (uint64_t)esp_timer_get_time();
     received.len = frame[0];
-    memcpy(received.data, frame, frame[0] + 1);
+    /* the length byte arrives off the air: clamp the copy to the buffer, the way relay_sniff.c does */
+    size_t copy_len = (size_t)frame[0] + 1;
+    if (copy_len > sizeof received.data) {
+        copy_len = sizeof received.data;
+    }
+    memcpy(received.data, frame, copy_len);
     if (info) {
         rssi_n++;
         rssi_sum += info->rssi;

@@ -29,14 +29,6 @@ static bool refreshed; /* Set by front_end on the frame the background was repla
 #define CELL_W (FRAME_W / GRID_COLS) /* Cell width in pixels derived from frame geometry. */
 #define CELL_H (FRAME_H / GRID_ROWS) /* Cell height in pixels derived from frame geometry. */
 
-/* Backward compatibility aliases for existing geometry identifiers. */
-#define W FRAME_W
-#define H FRAME_H
-#define R GRID_ROWS
-#define C GRID_COLS
-#define CW CELL_W
-#define CH CELL_H
-
 /* Front end motion, background, and scene detection threshold constants. */
 #define MOTION_ON 16  /* Threshold for cell mean absolute difference to count as motion. */
 #define BACK_ON 24    /* Threshold for cell mean absolute difference against background. */
@@ -232,6 +224,14 @@ static void codebook_from_header(void);
 static void vision_core_init(void) {
     prev = heap_caps_malloc(FRAME_W * FRAME_H, MALLOC_CAP_SPIRAM);
     background = heap_caps_malloc(FRAME_W * FRAME_H, MALLOC_CAP_SPIRAM);
+    /* A node without its two reference frames cannot decide anything: stop loudly here rather than
+       write through a null pointer on the first frame (a VGA build needs twice the QVGA PSRAM). */
+    if (!prev || !background) {
+        printf("no PSRAM for the front end frames (%u B each)\n", (unsigned)(FRAME_W * FRAME_H));
+        while (1) {
+            vTaskDelay(1000);
+        }
+    }
     memcpy(tbl, POLICY_TABLE, POLICY_TABLE_LEN);
     uint8_t rc = parse_table(POLICY_TABLE_LEN);
     if (rc) {

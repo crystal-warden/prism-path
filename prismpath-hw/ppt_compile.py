@@ -217,7 +217,11 @@ class TableImage:
             elif word in (OPC_AND, OPC_OR):
                 depth -= 1
             peak = max(peak, depth)
-        assert depth == 1, f"malformed program (final depth {depth})"
+        # a raise, not an assert: this is the only check that a compiled program is well formed, and
+        # python -O drops asserts, which would let a malformed image reach every substrate unexamined.
+        # Depth 0 is the empty program the evaluators have nothing to return; depth above 1 is a leftover.
+        if depth != 1:
+            raise ValueError(f"malformed program (final depth {depth})")
         return peak
 
     def serialize(self) -> bytes:

@@ -43,7 +43,11 @@ static int32_t rd32(const uint8_t *bytes) {
 static uint8_t *read_file(const char *path, long *out_len) {
     FILE *stream = fopen(path, "rb");
     if (!stream) { fprintf(stderr, "cannot open %s\n", path); exit(2); }
-    fseek(stream, 0, SEEK_END); long length = ftell(stream); fseek(stream, 0, SEEK_SET);
+    /* the size has to come from the stream itself: an unseekable or empty file would otherwise reach
+     * malloc and fread with a junk length, and every caller of this function needs bytes to parse */
+    if (fseek(stream, 0, SEEK_END) != 0) { fprintf(stderr, "cannot size %s\n", path); exit(2); }
+    long length = ftell(stream);
+    if (length <= 0 || fseek(stream, 0, SEEK_SET) != 0) { fprintf(stderr, "cannot size %s\n", path); exit(2); }
     uint8_t *buf = malloc((size_t)length);
     if (!buf || fread(buf, 1, (size_t)length, stream) != (size_t)length) {
         fprintf(stderr, "cannot read %s\n", path); exit(2);
@@ -61,7 +65,11 @@ static void load_image(const char *path, Image *im) {
     im->n_edges = rd16(bytes + 14);  im->prog_len = rd16(bytes + 16);
     im->start = rd16(bytes + 18);    im->visits_idx = rd16(bytes + 20);
     im->max_steps = rd16(bytes + 22); im->max_stack = rd16(bytes + 24);
+    uint16_t flags = rd16(bytes + 26);
     long need = 28 + 8L * im->n_atoms + 4L * im->n_nodes + 6L * im->n_edges + 2L * im->prog_len;
+    /* the optional per node color section (TABLE_FORMAT.md flags bit0): this file never reads it, but the
+     * minimum length has to match the embedded evaluator's, or the two disagree on the same image */
+    if (flags & 1u) need += 2L * im->n_nodes;
     if (len < need) { fprintf(stderr, "truncated image %s\n", path); exit(2); }
     const uint8_t *cursor = bytes + 28;
     im->atoms = malloc(sizeof(Atom) * im->n_atoms);
@@ -130,7 +138,7 @@ static int eval_prog(const Image *im, const Edge *edge, const Reg *regs) {
         default: fprintf(stderr, "bad opcode 0x%04x\n", word); exit(2);
         }
     }
-    return stack[0];
+    return sp > 0 ? stack[0] : 0;   /* an empty program leaves nothing to read; the compiler never emits one */
 }
 
 /* evaluate(node, regs) -> matching edge index, or -1 (the priority encoder) */

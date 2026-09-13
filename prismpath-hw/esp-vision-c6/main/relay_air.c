@@ -315,10 +315,20 @@ void app_main(void) {
     int64_t t_log = esp_timer_get_time();
     msg_t message;
     while (1) {
-        bool from_pwr = (xQueueReceive(qpwr, &message, 0) == pdTRUE);
-        bool reading = from_pwr || (xQueueReceive(readings_q, &message, 0) == pdTRUE);
+        /* One message per pass, taken in priority order, and each queue is read only when the ones above it
+           came up empty: the power reply first, then a reading, then bulk (which also waits for the frame,
+           so an idle pass is a 20 ms block rather than a spin). Written as a chain because a read consumes. */
+        bool from_pwr = false;
+        bool reading = false;
+        bool got = false;
+        if (xQueueReceive(qpwr, &message, 0) == pdTRUE) {
+            from_pwr = reading = got = true;
+        } else if (xQueueReceive(readings_q, &message, 0) == pdTRUE) {
+            reading = got = true;
+        } else if (uxQueueMessagesWaiting(readings_q) == 0 && xQueueReceive(qbulk, &message, pdMS_TO_TICKS(20)) == pdTRUE) {
+            got = true;
+        }
         bool all_ok = true;
-        bool got = reading || (uxQueueMessagesWaiting(readings_q) == 0 && xQueueReceive(qbulk, &message, pdMS_TO_TICKS(20)) == pdTRUE);
         if (got) {
             n_in++;
             uint8_t total = (uint8_t)((message.len + SUB_DATA - 1) / SUB_DATA);

@@ -766,6 +766,15 @@ void app_main(void) {
     staged = heap_caps_malloc(PACK_MAX, MALLOC_CAP_SPIRAM);
     vmsg = heap_caps_malloc(PACK_MAX, MALLOC_CAP_SPIRAM);
     tbl_backup = heap_caps_malloc(TBL_MAX, MALLOC_CAP_SPIRAM);
+    /* Keyframes, staged packs and the rollback copy of the table all live in PSRAM. Without them a
+       policy swap would write through a null pointer, so stop here instead of running half armed. */
+    if (!last_sent || !staged || !vmsg || !tbl_backup) {
+        ESP_LOGE(TAG, "no PSRAM for the node buffers: keyframe %u B, pack %u B x 2, table %u B", (unsigned)(FRAME_W * FRAME_H),
+                 (unsigned)PACK_MAX, (unsigned)TBL_MAX);
+        while (1) {
+            vTaskDelay(1000);
+        }
+    }
     swap_reset();
     boot_epoch = esp_random();
     cam_key_init();
