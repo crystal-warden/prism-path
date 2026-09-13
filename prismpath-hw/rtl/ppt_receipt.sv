@@ -1,9 +1,13 @@
 // ppt_receipt.sv — Fabric Decision Receipts. On each decision the fabric emits a timestamped,
 // sequenced, FNV-chained receipt {seq, tstamp, policy_id, field, node, digest} out a UART pin, so the
 // ENTIRE decision chain is captured off-chip with no processor in the loop — a passive reader (a logic
-// analyzer or a serial capture) records it. The rolling FNV-1a-32 digest chains every receipt, so a
-// dropped or altered record is detectable off-chip. This is the fabric analog of the kernel selector's
-// ringbuf audit receipts (#117), carried onto the PL.
+// analyzer or a serial capture) records it. The rolling FNV-1a-32 digest chains every receipt, so an
+// altered or reordered record in the emitted stream is detectable off-chip. A DROP is different, and the
+// distinction matters for evidence: seq advances only when a receipt is actually emitted (see the commit
+// path below), so a decision that lands while the previous receipt is still shifting out is counted in
+// the `dropped` register but leaves NO gap in seq and NO break in the digest chain. It cannot be
+// reconstructed from the stream alone; off-chip drop accounting is the `dropped` register read, not the
+// stream. This is the fabric analog of the kernel selector's ringbuf audit receipts (#117), on the PL.
 //
 // Wire format per receipt (18 bytes, big-endian fields, gap-delimited by the inter-decision idle):
 //   0xA5 | seq[4] | tstamp[4] | policy_id[1] | field[2] | node[2] | digest[4]

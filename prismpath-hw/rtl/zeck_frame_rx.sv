@@ -25,25 +25,29 @@ module zeck_frame_rx #(
     wire        dec_rst = rst | gap;      // hold the decoder reset through the whole inter-frame gap
     wire [31:0] code_val;
     wire        code_valid;
+    wire        dec_err;                  // a value bit fell past the ROM: the code cannot be represented
     zeck_dec #(.W(32), .NFIB(45)) u_dec (
         .clk(clk), .rst(dec_rst),
         .in_valid(fed_valid), .in_bit(fed_bit),
-        .out_val(code_val), .out_valid(code_valid), .err()
+        .out_val(code_val), .out_valid(code_valid), .err(dec_err)
     );
 
     reg [1:0] code_idx;                   // 0=class+1, 1=tick+1, 2=band+1
+    reg       frame_bad;                  // latched if any code in this frame failed to decode cleanly
 
     always @(posedge clk) begin
         fed_valid  <= 1'b0;
         band_valid <= 1'b0;
         if (rst) begin
             sh <= 8'd0; nbits <= 4'd0; idle <= {25{1'b1}}; code_idx <= 2'd0; band <= 3'd0;
+            frame_bad <= 1'b0;
         end else begin
             // idle timer (saturates at GAP_TICKS)
             if (byte_valid)                   idle <= 25'd0;
             else if (idle < GAP_TICKS[24:0])  idle <= idle + 1'b1;
 
-            if (gap) code_idx <= 2'd0;        // realign: next frame starts at code 0
+            if (gap) begin code_idx <= 2'd0; frame_bad <= 1'b0; end   // realign: next frame starts at code 0
+            if (dec_err && !gap) frame_bad <= 1'b1;                   // a code this frame could not be represented
 
             // load a byte, then clock its bits out MSB-first (never during a gap)
             if (byte_valid) begin
@@ -61,9 +65,17 @@ module zeck_frame_rx #(
                     2'd0: code_idx <= 2'd1;
                     2'd1: code_idx <= 2'd2;
                     2'd2: begin
-                        band       <= (code_val != 32'd0) ? (code_val[2:0] - 3'd1) : 3'd0;
-                        band_valid <= 1'b1;
-                        code_idx   <= 2'd0;
+                        // band+1 must decode to 1..5 (bands 0..4). Reject anything else, and any frame
+                        // in which a code failed to decode, instead of emitting a band. The old code
+                        // took code_val[2:0]-1, which truncated: a decoded 9 became band 0, the same
+                        // value a genuine band 0 gives, so a malformed frame was indistinguishable
+                        // from a real one. Now a bad frame produces no band_valid strobe at all.
+                        if (!frame_bad && code_val >= 32'd1 && code_val <= 32'd5) begin
+                            band       <= code_val[2:0] - 3'd1;
+                            band_valid <= 1'b1;
+                        end
+                        code_idx  <= 2'd0;
+                        frame_bad <= 1'b0;
                     end
                     default: code_idx <= 2'd0;
                 endcase

@@ -138,6 +138,9 @@ module ppt_axi #(
     end else if (done) begin
       done_l <= 1'b1; match_l <= match; edge_l <= match_edge; target_l <= target;
     end else if (result_read || start) begin
+      // result_read is asserted in the read-channel block (the 0x07 result read, see below); done_l is
+      // cleared here in the status/latch block. The two live in different always blocks but the same
+      // clock domain, so the sticky-done clear on a result read is a same-clock handoff, not a CDC.
       done_l <= 1'b0;
     end
   end

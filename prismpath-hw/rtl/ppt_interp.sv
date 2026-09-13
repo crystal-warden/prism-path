@@ -172,8 +172,9 @@ module ppt_interp #(
   reg [15:0] node_r;
   reg [15:0] cur_edge;      // index within the node's edge list
   reg [15:0] pc;            // index within the current edge's program
-  reg [STACK_D-1:0] stk;    // 1-bit stack, stk[0] = top after final word
-  reg [$clog2(STACK_D):0] sp;
+  reg [STACK_D-1:0] stk;    // 1-bit operand stack, stk[0] = top; cleared per edge (see S_EDGE)
+  reg [$clog2(STACK_D):0] sp;   // operand-stack depth; the compiler guarantees 0 <= sp <= STACK_D
+                                // over any well-formed program, checked in simulation below
 
   wire [15:0] eidx  = node_eoff[node_r[$clog2(MAX_NODES)-1:0]] + cur_edge;
   wire [15:0] paddr = edge_poff[eidx[$clog2(MAX_EDGES)-1:0]] + pc;
@@ -192,7 +193,13 @@ module ppt_interp #(
           if (cur_edge >= node_ecnt[node_r[$clog2(MAX_NODES)-1:0]]) begin
             match <= 1'b0; st <= S_DONE;          // no edge matched (stuck / terminal)
           end else begin
-            pc <= 16'd0; sp <= '0; st <= S_RUN;
+            // Clear the operand stack on entry to every edge. The compiler bounds each program's
+            // stack depth to STACK_D and balances it, so a well-formed program only ever reads bits
+            // it pushed and this clear changes nothing for it. It removes the one hazard a malformed
+            // program had: an AND/OR/NOT reaching below its own pushes used to read a stale bit left
+            // in stk by the previous edge, so the result depended on evaluation history. Cleared, an
+            // underflowing fold reads a defined 0 and the outcome is a function of the program alone.
+            pc <= 16'd0; sp <= '0; stk <= '0; st <= S_RUN;
           end
         end
         S_RUN: begin
@@ -342,6 +349,20 @@ module ppt_interp #(
       S_DONE: fv_R = fv_rdone;
       default: fv_R = 32'd0;
     endcase
+  end
+`endif
+
+`ifndef SYNTHESIS
+  // Simulation-only guard on the operand-stack invariant. These are ignored by synthesis (no gate or
+  // timing effect) and hold for every well-formed table; if a program ever pushed past STACK_D or
+  // folded below its own pushes, one of these would fire instead of the fault going unnoticed.
+  always @(posedge clk) if (!rst && st == S_RUN) begin
+    if (pword < 16'h8000 || pword == OPC_TRUE || pword == OPC_FALSE)
+      assert (int'(sp) < STACK_D) else $error("ppt_interp: operand-stack overflow (sp=%0d, STACK_D=%0d)", sp, STACK_D);
+    if (pword == OPC_AND || pword == OPC_OR)
+      assert (int'(sp) >= 2) else $error("ppt_interp: operand-stack underflow on binary fold (sp=%0d)", sp);
+    if (pword == OPC_NOT)
+      assert (int'(sp) >= 1) else $error("ppt_interp: operand-stack underflow on NOT (sp=%0d)", sp);
   end
 `endif
 

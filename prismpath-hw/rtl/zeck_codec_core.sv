@@ -35,7 +35,10 @@ module zeck_codec_core #(
     zeck_enc #(.W(W), .NFIB(NFIB)) u_enc (
         .clk(clk), .rst(rst),
         .in_valid(e_in_valid), .in_val(e_in_val), .in_ready(e_in_ready),
-        .out_valid(e_out_valid), .out_bit(e_out_bit), .done(e_done)
+        .out_valid(e_out_valid), .out_bit(e_out_bit), .done(e_done), .err()
+        // .err() unconnected: this core only ever feeds cur >= 1 (peek values and the selftest sweep
+        // start at 1), so the zero refusal cannot fire here; the port exists for callers that feed
+        // arbitrary values and need to see a zero rejected rather than silently dropped.
     );
     zeck_dec #(.W(W), .NFIB(NFIB)) u_dec (
         .clk(clk), .rst(rst),
@@ -83,7 +86,11 @@ module zeck_codec_core #(
                     st <= RUN;
                 end
                 RUN: begin
-                    if (e_out_valid) begin        // stream the wire bits into the capture register
+                    if (e_out_valid && cap_len < W[6:0]) begin  // stream the wire bits into the capture
+                        // cap_bits is a W-bit diagnostic register (peek_bits) and cap_len its length.
+                        // Real symbol codes are far shorter than W, but stop capturing at W bits so a
+                        // pathological long code cannot shift the leading bits out while cap_len keeps
+                        // counting and peek_len reports a length the captured word no longer holds.
                         cap_bits <= (cap_bits << 1) | {{(W-1){1'b0}}, e_out_bit};
                         cap_len  <= cap_len + 7'd1;
                     end

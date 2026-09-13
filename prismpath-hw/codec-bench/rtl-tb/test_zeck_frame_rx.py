@@ -62,3 +62,46 @@ async def frames(dut):
 
     assert got == expected, f"got {got} != expected {expected}"
     dut._log.info(f"ZECK FRAME RX: {len(got)}/{len(expected)} walker frames decoded to band in the fabric")
+
+
+@cocotb.test()
+async def bad_band_dropped(dut):
+    # A frame whose band+1 decodes outside 1..5 is not a real band (bands are 0..4). The old code took
+    # code_val[2:0]-1, so a decoded 6 or 7 aliased onto a low band and was emitted as if genuine. It is
+    # now dropped: no band_valid strobe, and the surrounding good frames still decode.
+    cocotb.start_soon(Clock(dut.clk, 10, "ns").start())
+    dut.rst.value = 1
+    dut.byte_valid.value = 0
+    dut.byte_in.value = 0
+    for _ in range(5):
+        await RisingEdge(dut.clk)
+    dut.rst.value = 0
+    await RisingEdge(dut.clk)
+
+    got = []
+
+    async def mon():
+        while True:
+            await RisingEdge(dut.clk)
+            if dut.band_valid.value == 1:
+                got.append(int(dut.band.value))
+    cocotb.start_soon(mon())
+
+    INTER_BYTE = 12
+    INTER_FRAME = 200
+
+    def raw_frame(codes):
+        return packed.pack(z.encode_stream(codes), 8)
+
+    # good band 2, then a frame whose third code is 7 (band+1=7 -> would alias to band 6), then good band 3
+    frames = [raw_frame([2, 6, 3]),        # class+1=2, tick+1=6, band+1=3 -> band 2
+              raw_frame([2, 6, 7]),        # band+1=7: out of range, must be dropped
+              raw_frame([2, 43, 4])]       # class+1=2, tick+1=43, band+1=4 -> band 3
+    for frame in frames:
+        for b in frame:
+            await feed_byte(dut, b, INTER_BYTE)
+        for _ in range(INTER_FRAME):
+            await RisingEdge(dut.clk)
+
+    assert got == [2, 3], f"got {got}, expected [2, 3] (the out-of-range band dropped)"
+    dut._log.info("ZECK FRAME RX: out-of-range band dropped, good frames decoded")

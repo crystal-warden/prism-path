@@ -184,7 +184,11 @@ module ppt_datapath_finale #(
       cur_node <= 16'd0; auto_live_d <= 1'b0;
     end else begin
       auto_live_d <= auto_live;
-      if (auto_mode && cp_loading)        cur_node <= auto_safe_node;   // swap in flight: fail closed
+      // Swap in flight: fail closed onto auto_safe_node. That safe node is the one the OUTGOING (still
+      // resident) pack declared when it was armed; the incoming pack has not landed, so its safe node is
+      // not available yet. Parking on the outgoing pack's safe node is deliberate and load bearing: the
+      // fabric holds the last authority's fail-safe until the new authority is fully committed.
+      if (auto_mode && cp_loading)        cur_node <= auto_safe_node;
       else if (!auto_mode)                cur_node <= auto_start_node;  // disarmed: parked on start
       else if (auto_live && !auto_live_d) cur_node <= auto_start_node;  // arm edge: deliberate start
       else if (auto_stateful && core_done && core_match)

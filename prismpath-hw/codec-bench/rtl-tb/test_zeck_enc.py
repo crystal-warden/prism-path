@@ -62,3 +62,59 @@ async def conformance(dut):
             dut._log.error(f"event {n} {ints}: rtl {bytes(wire).hex()} != ref {expected.hex()}")
     assert failed == 0, f"{failed}/128 events diverged"
     dut._log.info("RTL ZECK ENCODER CONFORMANT: 128/128 events byte identical to the reference")
+
+
+@cocotb.test()
+async def zero_input_refused(dut):
+    # A zero has no Zeckendorf code (the encoding is defined for n >= 1). Presenting it while in_ready is
+    # high used to complete the producer's handshake and emit nothing, silently. The encoder now pulses
+    # err instead, and never claims a code for it.
+    cocotb.start_soon(Clock(dut.clk, 10, "ns").start())
+    dut.rst.value = 1
+    dut.in_valid.value = 0
+    dut.in_val.value = 0
+    for _ in range(3):
+        await RisingEdge(dut.clk)
+    dut.rst.value = 0
+    await RisingEdge(dut.clk)
+
+    dut.in_val.value = 0
+    dut.in_valid.value = 1
+    saw_err = False
+    saw_out = False
+    saw_done = False
+    for _ in range(12):
+        await RisingEdge(dut.clk)
+        if int(dut.err.value):
+            saw_err = True
+        if int(dut.out_valid.value):
+            saw_out = True
+        if int(dut.done.value):
+            saw_done = True
+    dut.in_valid.value = 0
+    assert saw_err, "encoder did not flag err on a zero input"
+    assert not saw_out, "encoder emitted a wire bit for a zero input"
+    assert not saw_done, "encoder claimed a completed code for a zero input"
+
+    # recovery: a real value after the refusal still encodes to the reference wire
+    expected = packed.pack(z.encode_stream([7]), 8)
+    dut.in_val.value = 7
+    dut.in_valid.value = 1
+    while True:
+        await RisingEdge(dut.clk)
+        if int(dut.in_ready.value):
+            break
+    dut.in_valid.value = 0
+    bits = []
+    while True:
+        await RisingEdge(dut.clk)
+        if int(dut.out_valid.value):
+            bits.append(int(dut.out_bit.value))
+        if int(dut.done.value):
+            break
+    wire = bytearray((len(bits) + 7) // 8)
+    for idx, b in enumerate(bits):
+        if b:
+            wire[idx >> 3] |= 0x80 >> (idx & 7)
+    assert bytes(wire) == expected, f"post-refusal encode {bytes(wire).hex()} != ref {expected.hex()}"
+    dut._log.info("RTL ZECK ENCODER: zero refused with err, non-zero still encodes")
