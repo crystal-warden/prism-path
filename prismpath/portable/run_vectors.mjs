@@ -17,21 +17,33 @@ const dir = process.argv[2] || join(dirname(fileURLToPath(import.meta.url)), "co
 let failures = 0;
 
 // ---- predicates -----------------------------------------------------------------------
+// The corpus README draws a line the report has to keep: a PredicateError is the sandbox REFUSING a
+// predicate, which is a legitimate frozen expectation ("ERROR"), while any other exception is the
+// evaluator itself crashing, which no expectation can ever equal. Folding the second into the first
+// as a mismatch hid the distinction, so a crash is now counted and printed as a crash.
 const preds = JSON.parse(readFileSync(join(dir, "predicates.json"), "utf-8"));
 let predPass = 0;
+let predCrash = 0;
 for (const predCase of preds.cases) {
   let got;
   try {
     got = evalCondition(predCase.cond, predCase.ctx);
   } catch (err) {
-    got = err instanceof PredicateError ? "ERROR" : `CRASH: ${err.message}`;
+    if (!(err instanceof PredicateError)) {
+      predCrash++;
+      failures++;
+      console.error(`PRED CRASH  cond=${JSON.stringify(predCase.cond)} ctx=${JSON.stringify(predCase.ctx)}`
+        + `\n  the evaluator threw ${err.name}: ${err.message}`);
+      continue;
+    }
+    got = "ERROR";
   }
   if (got === predCase.expect) { predPass++; continue; }
   failures++;
   console.error(`PRED MISMATCH  cond=${JSON.stringify(predCase.cond)} ctx=${JSON.stringify(predCase.ctx)}`
     + `\n  expect=${JSON.stringify(predCase.expect)} got=${JSON.stringify(got)}`);
 }
-console.log(`predicates: ${predPass}/${preds.cases.length}`);
+console.log(`predicates: ${predPass}/${preds.cases.length}${predCrash ? ` (${predCrash} evaluator crash(es))` : ""}`);
 
 // ---- flows ------------------------------------------------------------------------------
 const flows = JSON.parse(readFileSync(join(dir, "flows.json"), "utf-8"));

@@ -1008,6 +1008,9 @@ export function checkReach(graph, targets, opts = {}) {
     }
   }
 
+  // `proven` reads only on a "no" verdict, where it says the state space was exhausted rather than
+  // the bound hit; a reached target therefore always reports proven: false, which is not a weaker
+  // claim about the hit but a field that does not apply to it. The Python ReachResult says the same.
   const reachResults = {};
   for (const reachTarget of targets) {
     const matchingHits = [...bestCertainty.entries()].filter(([hitKey]) => stateMap.get(hitKey)[0] === reachTarget);
@@ -1171,7 +1174,14 @@ export function decodeVecF16(base64String) {
   return floats;
 }
 
+// Both sides are unit normalized when the lock is written, so the dot product IS the cosine. The
+// width check is what the Python reference gets for free from numpy: a locked vector of the wrong
+// width has to stop the run, because iterating the query's width alone reads past the shorter side
+// and scores that edge NaN, which then loses every comparison and silently reroutes the flow.
 function cosine(vecA, vecB) {
+  if (vecA.length !== vecB.length) {
+    throw new Error(`locked vector width ${vecB.length} does not match the embedding's ${vecA.length}: the lock was written by a different embedder; re-run \`prismpath lock\``);
+  }
   let dotProduct = 0;
   for (let vecIndex = 0; vecIndex < vecA.length; vecIndex++) {
     dotProduct += vecA[vecIndex] * vecB[vecIndex];
@@ -1423,6 +1433,11 @@ function runStep(graph, currentNode, runState, agentFn, optionsObj, runResult) {
  * structured fields + `text`. Options: {maxSteps=25, start=null, state=null, onStep=null}.
  * Returns {path, steps, stopped, state, pending} exactly like the Python RunResult.
  * REFUSES a non-portable flow (semantic edge on a reachable node) up front.
+ *
+ * A `state` passed in is MUTATED in place and also handed back on the result, exactly as the Python
+ * engine does it: transcript, visits and the error/outcome counters have to survive a suspension so
+ * a resume continues the same run. A caller that wants a fresh run must pass a fresh object; reusing
+ * one accumulates the previous run's history, which is the point when resuming and a bug otherwise.
  */
 export function run(graph, agent, opts = {}) {
   const {

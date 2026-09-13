@@ -235,6 +235,14 @@ function sameNodeSet(graph, previous) {
   return Boolean(previous) && JSON.stringify(Object.keys(graph.nodes || {})) === JSON.stringify(Object.keys(previous.nodes || {}));
 }
 
+function disposeGraphView() {
+  if (!state.cytoscapeView) {
+    return;
+  }
+  state.cytoscapeView.destroy();
+  state.cytoscapeView = null;
+}
+
 async function loadGraphScreen(relayout) {
   let graph;
   try {
@@ -243,6 +251,11 @@ async function loadGraphScreen(relayout) {
     return;
   }
   if (graph.error) {
+    // The message replaces the container's contents, which tears the rendering library's canvas out
+    // from under it. Dropping the handle too is what lets the graph come BACK: a live handle here
+    // reads as "already laid out", so the next good load would skip the rebuild and leave the
+    // message on screen for the rest of the session, and every repaint would address a dead view.
+    disposeGraphView();
     renderInto("#cy", html`<div class=muted style='padding:20px'>${graph.error}</div>`);
     return;
   }
@@ -299,7 +312,9 @@ function paintActiveNode() {
 }
 
 async function proveLevelM() {
-  if (!state.graph || !state.graph.flow_text) {
+  // Both proofs paint their verdict onto the rendered graph, so both need a graph AND a live view;
+  // either button is reachable before the first load lands, and after a load error there is no view.
+  if (!state.graph || !state.graph.flow_text || !state.cytoscapeView) {
     return;
   }
   const proof = await postJson("/prove/level-m", { flow: state.graph.flow_text });
@@ -325,7 +340,7 @@ async function proveLevelM() {
 }
 
 async function proveReachability() {
-  if (!state.graph || !state.graph.flow_text) {
+  if (!state.graph || !state.graph.flow_text || !state.cytoscapeView) {
     return;
   }
   const targets = selectAll("#r-targets option").filter(option => option.selected).map(option => option.value);

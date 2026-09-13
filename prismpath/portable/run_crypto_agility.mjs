@@ -62,7 +62,11 @@ for (const cell of migrationFx.cells) {
   }
 }
 
+// One check here really is over bytes: the registry hash above is SHA-256 over the canonical
+// serialization, so the registry is compared byte for byte. The proof cases are not: each compares
+// the JS verdict object against the frozen one as canonically ordered JSON, which is the parity
+// claim the corpus actually makes. Saying "byte-for-byte" of the whole run overstated it.
 const total = 1 + agilityFx.cases.length + migrationFx.cells.length;
 console.log(`crypto-agility: ${pass}/${total} checks passed`);
-console.log(fail ? "NOT CONFORMANT" : "CONFORMANT — JS crypto-agility proofs match reference byte-for-byte");
+console.log(fail ? "NOT CONFORMANT" : "CONFORMANT — registry hash exact, every JS proof verdict equal to the frozen reference");
 process.exit(fail ? 1 : 0);

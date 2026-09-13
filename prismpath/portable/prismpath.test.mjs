@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 Crystal Warden Supply Chain Labs LLC
-// Unit tests for the portable kernel: `node --test portable/`. Zero dependencies.
+// Unit tests for the portable kernel: `node --test portable/`. Zero installed dependencies, but not
+// standalone: three siblings in this directory have to be present, because the tests read
+// conformance/locked_flows.json, bundle_engine.mjs and prismpath.mjs itself from disk.
 // The cross-language conformance suite (run_conformance.mjs) is the deeper check; these pin
 // the Python-exact predicate semantics and the engine loop's suspension shapes directly.
 import { test } from "node:test";
@@ -253,6 +255,24 @@ test("lockedRoute (exported): routes one text against locked vectors, matching r
   assert.equal(decision.target, fixture.expect.path[1]); // the step run() routes to from start
   assert.ok(decision.info.locked && decision.info.score > 0);
   assert.ok(typeof decision.info.margin === "number");
+});
+
+test("lockedRoute refuses a locked vector of the wrong width instead of scoring it NaN", () => {
+  // A lock written by a different embedder is the realistic way the widths diverge. Before the
+  // check the loop read past the shorter side, the score came back NaN, NaN lost every comparison,
+  // and the flow routed somewhere the lock never endorsed with nothing reported anywhere.
+  const semanticEdges = [["approve", "the work is correct"], ["revise", "the work needs changes"]];
+  const lockfile = {
+    conditions: {
+      "the work is correct": new Float32Array([1, 0, 0, 0]),
+      "the work needs changes": new Float32Array([0, 1, 0]),   // one element short
+    },
+  };
+  const embed = () => new Float32Array([1, 0, 0, 0]);
+  assert.throws(
+    () => lockedRoute("it is correct", semanticEdges, lockfile, embed),
+    /locked vector width 3 does not match the embedding's 4/,
+  );
 });
 
 // ------------------------------------------------------------------ the compiled bundle

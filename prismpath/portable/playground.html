@@ -112,7 +112,7 @@
 </div>
 
 <script type="module">
-import { parse, run, checkPredicate, portabilityViolations,
+import { parse, run, checkPredicate, portabilityViolations, scriptedAgent,
          isDeterministic, isError, isEvent, isSemantic } from "./prismpath.mjs";
 
 // ------------------------------------------------------------------ presets
@@ -322,8 +322,16 @@ async function renderMermaid(g) {
   const def = mermaidDef(g);
   const out = $("mermaid-out");
   if (mermaidReady === null) {
+    // The flow text can arrive from the URL fragment, so the definition below is attacker shaped and
+    // `out.innerHTML = svg` is the one place on this page that does not escape. securityLevel is
+    // named rather than left to default so a future mermaid cannot loosen it underneath us: strict
+    // strips script and event handlers from the rendered SVG and does not honour inline HTML in a
+    // node label. The residual is the floating major in the URL, which is a deployment choice.
     mermaidReady = import("https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs")
-      .then((m) => { m.default.initialize({ startOnLoad: false, theme: "dark" }); return m.default; })
+      .then((m) => {
+        m.default.initialize({ startOnLoad: false, theme: "dark", securityLevel: "strict", htmlLabels: false });
+        return m.default;
+      })
       .catch(() => null);
   }
   const mermaid = await mermaidReady;
@@ -341,20 +349,10 @@ async function renderMermaid(g) {
 }
 
 // ------------------------------------------------------------------ the run simulator
-function scriptedAgent(script) {
-  const used = {};
-  return (node) => {
-    const seq = script[node];
-    if (seq === undefined) return { text: node };
-    const i = used[node] || 0;
-    used[node] = i + 1;
-    const outcome = seq[Math.min(i, seq.length - 1)];
-    if (outcome !== null && typeof outcome === "object" && "__raise__" in outcome) {
-      throw new Error(outcome.__raise__);
-    }
-    return outcome;
-  };
-}
+// The scripted worker is imported from the kernel rather than kept here: the page is a module and
+// already imports from ./prismpath.mjs, and the script box is the SAME corpus `script` field the
+// frozen runners replay, so the page must read it by exactly the runners' rules or it teaches a
+// contract the kernel does not honour.
 
 $("run").onclick = () => {
   const g = recheck();
@@ -436,9 +434,16 @@ $("share").onclick = async () => {
   const url = location.origin + location.pathname + "#s=" +
     b64u.enc(JSON.stringify({ f: flowEl.value, s: scriptEl.value }));
   history.replaceState(null, "", url);
-  try { await navigator.clipboard.writeText(url); } catch { /* clipboard needs a secure context */ }
+  // The address bar now holds the link either way, so the failure is not fatal - but the button
+  // must not claim a copy that did not happen; clipboard writes need a secure context.
+  let copied = true;
+  try {
+    await navigator.clipboard.writeText(url);
+  } catch {
+    copied = false;
+  }
   const btn = $("share"), old = btn.textContent;
-  btn.textContent = "✓ link copied";
+  btn.textContent = copied ? "✓ link copied" : "link is in the address bar";
   setTimeout(() => { btn.textContent = old; }, 1500);
 };
 window.addEventListener("hashchange", loadFromHash);

@@ -133,10 +133,14 @@ def to_cond(node, atoms: list) -> str:
 
 
 def translate(cond_text: str, atoms: list) -> str:
+    # The `when` prefix and the catch-all words are case insensitive to the kernel
+    # (kernel/predicates.py:141 and 153), so they have to be here too. Matching case sensitively
+    # sent a condition spelled "When x > 3" straight to ast.parse, which raises SyntaxError rather
+    # than Skip and so killed the generator instead of counting a skipped case.
     text = cond_text.strip()
-    if text.startswith("when "):
+    if text.lower().startswith("when "):
         text = text[5:].strip()
-    if text in CATCH_ALL:
+    if text.lower() in CATCH_ALL:
         return "Cond.tt"
     tree = ast.parse(text, mode="eval")
     return to_cond(tree.body, atoms)
@@ -311,11 +315,22 @@ def main() -> int:
         "namespace FQ.Vectors",
         "open FQ",
         "",
-        "/-- A total reading from an association list; absent fields read as 0 (never referenced by the",
-        "checked conditions, the generator filters those cases out). -/",
+        "/-- A total reading from an association list; absent fields read as 0. The predicate guards",
+        "never see one: check_typed skips a case whose condition references a missing or null field.",
+        "The route and symbol guards can, because they are emitted for every field of the partition;",
+        "there the 0 is not assumed harmless, it is pinned - each guard compares the Lean answer on",
+        "this reading against the reference implementation's answer on the same reading, so a field",
+        "the two treat differently fails `lake build` rather than passing quietly. -/",
         "def readingOf (l : List (String × Value)) : Reading := fun f => (l.lookup f).getD (.int 0)",
         "",
     ]
+    # Refusing to write an empty run is the point: the corpora are read by path, so a rename or a
+    # moved repo used to produce a Vectors.lean with a header, no guards and exit 0, which reads
+    # downstream as a clean build of a bridge that is no longer checking anything.
+    guards = sum(1 for line in body if line.startswith("#guard"))
+    if guards == 0:
+        print("gen_vectors: no #guard emitted, so FQ/Vectors.lean was NOT rewritten", file=sys.stderr)
+        return 1
     OUT.write_text("\n".join(header + body) + "\n\nend FQ.Vectors\n", encoding="utf-8")
     print(f"wrote {OUT}")
     for name, count in sorted(counts.items()):

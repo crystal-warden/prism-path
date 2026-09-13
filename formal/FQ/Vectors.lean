@@ -12,8 +12,12 @@ import FQ.Spiral
 namespace FQ.Vectors
 open FQ
 
-/-- A total reading from an association list; absent fields read as 0 (never referenced by the
-checked conditions, the generator filters those cases out). -/
+/-- A total reading from an association list; absent fields read as 0. The predicate guards
+never see one: check_typed skips a case whose condition references a missing or null field.
+The route and symbol guards can, because they are emitted for every field of the partition;
+there the 0 is not assumed harmless, it is pinned - each guard compares the Lean answer on
+this reading against the reference implementation's answer on the same reading, so a field
+the two treat differently fails `lake build` rather than passing quietly. -/
 def readingOf (l : List (String × Value)) : Reading := fun f => (l.lookup f).getD (.int 0)
 
 /-! ## predicates.json (version 2, 1079 cases): the Level M, well typed subset -/
