@@ -57,6 +57,11 @@ jobs:
         run: node prismpath/portable/run_vectors.mjs prismpath/portable/conformance
       - name: Crypto-agility proofs (JS twin, byte-for-byte vs the frozen fixtures)
         run: node prismpath/portable/run_crypto_agility.mjs
+      # The other four runners (capability, reach, Level M, P1) carried a parity claim that no test
+      # and no workflow step ever ran. The pytest suite spawns node on each of them and regenerates
+      # each corpus from the Python reference, so both sides of that claim are now checked here.
+      - name: The four remaining JavaScript runners, through their pytest wrappers
+        run: python -m pytest prismpath/tests/test_portable_runners.py -q
       - name: Frozen conformance vectors (reference-drift side)
         run: python -m pytest prismpath/tests/test_conformance_vectors.py -q
 
@@ -96,8 +101,9 @@ jobs:
         run: python -m pytest prismpath/tests/test_mission_control.py -q
 
   # The bounded adapters (adapters/*) are additive and arch-guard-isolated, each shipping its own test
-  # suite. They are self-rooted — each adapter's tests put their own directory on sys.path — so a single
-  # combined collection across adapters clashes; each adapter therefore runs as its own pytest invocation.
+  # suite. They are ordinary packages under the repository root now, imported by package path, so the
+  # sys.path rooting this comment used to describe is gone. Each adapter still runs as its own pytest
+  # invocation, so a red step names the adapter without anyone reading the log.
   # Install stays lean: the telemetry and fusion offline suites need only numpy + pytest. The fusion
   # bench's heavier extras (opentelemetry for the OTLP baseline, zstandard, cryptography) are lazy /
   # importorskip, so a bare numpy+pytest environment still passes — CI stays fast and offline.
@@ -182,6 +188,21 @@ jobs:
         run: make -C prismpath-hw cert
       - name: RTL sim — conformance + live-sensor replay (REAL gate; fails on any cocotb failure)
         run: make -C prismpath-hw/tb gate
+      # The step above used to be the only simulation CI ran, so the control plane, the pack loader,
+      # the write mux, the field front end, the receipt chain, the button conditioner, the finale
+      # datapath and the whole Zeckendorf codec suite were certified by hand only. The comment on
+      # this job records that this exact class of rot has already bitten here once. Every one of
+      # those testbenches now has a gate target through prismpath-hw/rtl-tb/gate.mk, so the loop
+      # below runs them all. It loops over the Makefiles rather than naming them, so a testbench
+      # added tomorrow is gated the day it lands; gate.mk is not a testbench and, not being named
+      # Makefile.something, is not picked up as one.
+      - name: RTL sim, every remaining testbench (rtl-tb and the codec bench), first red fails the job
+        run: |
+          for testbench_makefile in prismpath-hw/rtl-tb/Makefile.* \
+                                    prismpath-hw/codec-bench/rtl-tb/Makefile \
+                                    prismpath-hw/codec-bench/rtl-tb/Makefile.*; do
+            make -C "$(dirname "$testbench_makefile")" -f "$(basename "$testbench_makefile")" gate || exit 1
+          done
       - name: C++ embed (integrations/cpp) — the C target in process, 4568/4568 byte identical to the certified CLI
         run: |
           cmake -S integrations/cpp -B integrations/cpp/build -DCMAKE_BUILD_TYPE=Release
