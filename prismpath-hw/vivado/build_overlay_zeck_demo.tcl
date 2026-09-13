@@ -1,16 +1,25 @@
-# build_overlay_datapath.tcl — Stage-2 "decision datapath" overlay for the live fabric demo.
-# Board: Digilent Arty Z7-20 (xc7z020clg400-1) running the PYNQ image.
-#   vivado -mode batch -source build_overlay_datapath.tcl
-# Produces build_overlay_datapath/ppt_datapath.bit + .hwh — the pair PYNQ's Overlay() loads.
+# build_overlay_zeck_demo.tcl: the Stage 2 "decision datapath" overlay whose field arrives as a
+# Facet frame the fabric decodes itself. Board: Digilent Arty Z7-20 (xc7z020clg400-1) running the
+# PYNQ image.
+#   vivado -mode batch -source build_overlay_zeck_demo.tcl
+# Produces build_overlay_zeck_demo/ppt_datapath_zeck.bit + .hwh, the pair PYNQ's Overlay() loads.
 #
-# Difference from build_overlay_pathb.tcl: the interpreter cell is ppt_datapath_top (ppt_axi + the
-# untouched ppt_interp + the fabric FSM). In auto_mode the PL closes the whole loop with the PS out
-# of the hot path:
-#   - XADC reads Vaux1 (pot) over its DRP port -> the datapath FSM (NOT AXI anymore; PS reads POT_NOW)
-#   - the FSM writes the pot field, pulses evaluate, drives the RGB LEDs from the SIGNED per-node color
-#   - auto_mode=0 (reset default) is byte-identical to the pathb (PS-driven) overlay
-# gpio_out still exists (PS-mode LED source -> ps_led); the datapath's led_o drives the RGB pins.
-# Pins: datapath.xdc (= pathb.xdc with the RGB port renamed rgb_tri_o -> led).
+# The interpreter cell is ppt_datapath_zeck_top, the plain Verilog shim over ppt_datapath_zeck
+# (ppt_axi + the untouched ppt_interp + the fabric FSM + uart_rx + zeck_dec + zeck_frame_rx); a
+# block design module reference refuses a SystemVerilog top, which is why the shim exists. In
+# auto_mode the PL closes the whole loop with the PS out of the hot path:
+#   - uart_rx recovers the ESP-NOW bridge's bytes on a Pmod pin and zeck_frame_rx decodes the
+#     walker's [class, tick, band] frame; a small LUT maps band to the checkpoint's field value.
+#     Until a frame lands the FSM falls back to XADC Vaux1 (the pot) read over DRP, so the knob
+#     alone still drives the demo
+#   - the FSM writes the field, pulses evaluate, drives the RGB LEDs from the SIGNED per-node color
+#   - auto_mode=0 (the reset default) leaves the PS driven path in charge, as on the plain overlay
+# gpio_out still exists (PS mode LED source into ps_led); the datapath's led_o drives the RGB pins.
+# Pins: uart.xdc, the same pin file build_overlay_uart.tcl adds.
+#
+# This script and build_overlay_uart.tcl differ only in the output stem, the project and cell names,
+# and the two extra sources above; build_overlay_finale.tcl is this design plus the fabric control
+# plane.
 
 set here [file dirname [file normalize [info script]]]
 set out $here/build_overlay_zeck_demo

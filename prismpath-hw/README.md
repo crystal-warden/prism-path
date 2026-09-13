@@ -40,8 +40,18 @@ hashed, Bitcoin anchored manifest you can verify in six commands:
 ```sh
 make            # build the C interpreter
 make cert       # certify interp.c and ppt_eval.h against the conformance vectors, then check the firmware copies  (THE day-1 gate)
+make -C tb gate # certify rtl/ppt_interp.sv against the same corpus under Verilator and cocotb  (THE RTL gate)
 python3 -W ignore compile_flows.py
 ```
+
+The fabric is no longer one interpreter with one testbench. `rtl/` now holds the policy interpreter
+`ppt_interp.sv`, the control interpreter `ppt_ctrl_interp.sv` that drives it from buttons and a
+signed control table, and the loader, mux, field control and receipt modules around them; the eight
+cocotb testbenches in `rtl-tb/` cover them one module or composition at a time. Every Makefile there
+includes [rtl-tb/gate.mk](rtl-tb/gate.mk), so `make -f Makefile.<name>` runs the simulation **and**
+judges it, and [rtl-tb/README.md](rtl-tb/README.md) has the row and the command for each one. A bare
+`make sim` anywhere in this repository exits 0 even when a cocotb test fails, so it is a rendering
+step and never a pass or fail check.
 
 ## Day log
 
@@ -82,7 +92,7 @@ python3 -W ignore compile_flows.py
   load port, field register file, comparator atoms, per-edge stack machine, priority
   encoder, saturating visits bank) is **RTL CONFORMANT under Verilator + cocotb: 114
   predicate + 6 engine vectors, zero divergence**: the same counts as the C target, one
-  DUT build, every image loaded as data. `make -C tb` reproduces it.
+  DUT build, every image loaded as data. `make -C tb gate` reproduces it.
 - **Sensor-log replay**: all **7,436 live samples** from the banked Day-2 session routed
   through the simulated fabric reproduce the C target's decisions exactly; spec (Python)
   → C → RTL, three implementations, one behavior, physical data.

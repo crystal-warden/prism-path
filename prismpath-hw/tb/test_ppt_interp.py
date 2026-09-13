@@ -27,6 +27,22 @@ CONF = Path(pc._REPO) / "portable" / "conformance"   # pc._REPO is the package d
 
 MAX_FIELDS, MAX_ATOMS, MAX_NODES, MAX_EDGES, MAX_PROG = 16, 64, 16, 48, 256
 
+# The interpreter's own worst case execution bound, taken from the formal envelope in
+# rtl/ppt_interp.sv (the `ifdef FORMAL` block, localparam N_MAX): every one of a node's edges costs
+# at most three cycles even when its program is empty, every program word costs one more, and eight
+# cycles frame the accepted start and the done pulse. The module proves that done follows an
+# accepted start within N_MAX for any valid table, which is the only kind this testbench loads, so
+# waiting longer than N_MAX here could only mask a liveness defect in the hardware description.
+# The per evaluate cost of a real compiler emitted policy is the tighter 2*E + P + 2 calibrated in
+# EVALUATOR_WALKTHROUGH.md, and the sensor replay below measures single digit cycles; this constant
+# is the envelope any valid table must respect at the synthesized caps, not a figure to expect.
+WCET_CYCLES = 3 * MAX_EDGES + MAX_PROG + 8
+
+# Cross check against the figure ppt_interp.sv states beside N_MAX for these caps. Two documents
+# disagreeing about the worst case of one circuit is the defect this constant exists to close, so a
+# caps change that moves the envelope fails here rather than quietly widening a timeout.
+assert WCET_CYCLES == 408, f"WCET envelope is {WCET_CYCLES}; ppt_interp.sv documents 408 at 48/256"
+
 
 def fits(img: pc.TableImage) -> bool:
     n_edges = sum(len(node_edges) for _, node_edges in img.nodes)
@@ -84,7 +100,8 @@ async def evaluate(dut, node: int):
     dut.node_idx.value = node
     await tick(dut)
     dut.start.value = 0
-    for _ in range(4 * MAX_PROG + 8 * MAX_EDGES + 16):
+    # Waiting exactly the module's proven envelope, so a circuit that stalls is a failed gate.
+    for _ in range(WCET_CYCLES):
         await tick(dut)
         if dut.done.value:
             if dut.match.value:
