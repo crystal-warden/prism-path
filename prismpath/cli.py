@@ -826,7 +826,8 @@ def portable_cmd(args) -> int:
                "flows": {path_str: {"tier": details["tier"],
                              "semantic_edges": [{"node": node_name, "target": target, "condition": condition}
                                                 for node_name, target, condition in details["semantic_edges"]],
-                             "unlocked": details["unlocked"], "lock": details["lock"]}
+                             "unlocked": details["unlocked"], "lock": details["lock"],
+                             "lock_error": details.get("lock_error")}
                          for path_str, details in tree["flows"].items()}}
         print(json.dumps(out, indent=2))
         return 0 if tree["tier"] == "P0" else 1
@@ -845,6 +846,10 @@ def portable_cmd(args) -> int:
             continue
         extra = f" (lock: {details['lock']})" if details["lock"] else ""
         print(f"  {details['tier']}  {path_str}{extra}")
+        if details.get("lock_error"):
+            # a present but unreadable lock reads as P2 as well, so say why rather than let the
+            # operator conclude the flow was never locked
+            print(f"        ! lockfile could not be read, treated as no lock: {details['lock_error']}")
         for node_name, target, condition in details["semantic_edges"]:
             mark = "unlocked" if condition in details["unlocked"] else "locked"
             print(f"        [{node_name}] -> {target}: {condition!r}  ({mark})")
@@ -971,6 +976,14 @@ def _build_compile_bundle(target_tier: str, js_kernel: str, parsed_graph_js: str
     return "\n".join(bundle_parts)
 
 
+def _b64_decoded_size(vector_b64: str) -> int:
+    """The number of bytes a base64 payload decodes to, exactly. Three quarters of the encoded
+    length counts the padding as data, which is what turned the compile report's KB figure into an
+    estimate printed as a measurement."""
+    text = vector_b64.strip()
+    return len(text) * 3 // 4 - text.count("=")
+
+
 def _write_compile_output(out_path: str, bundle_code: str, flow_md_path: str, target_tier: str, lock_info: dict) -> int:
     """Write the compiled bundle code to disk and print status feedback."""
     with open(out_path, "w", encoding="utf-8") as file_handle:
@@ -981,8 +994,8 @@ def _write_compile_output(out_path: str, bundle_code: str, flow_md_path: str, ta
     if target_tier == "p1":
         lock_data = lock_info.get("lock_data", {})
         compressed_conditions = lock_info.get("compressed_conditions", {})
-        f32_size = sum(len(vector_b64) for vector_b64 in lock_data.get("conditions", {}).values()) * 3 / 4
-        f16_size = sum(len(vector_b64) for vector_b64 in compressed_conditions.values()) * 3 / 4
+        f32_size = sum(_b64_decoded_size(vector_b64) for vector_b64 in lock_data.get("conditions", {}).values())
+        f16_size = sum(_b64_decoded_size(vector_b64) for vector_b64 in compressed_conditions.values())
 
     saving_message = f" (lock vectors compressed f32 -> f16: {f32_size/1024:.1f}KB -> {f16_size/1024:.1f}KB)" if target_tier == "p1" else ""
     print(f"✓ compiled {flow_md_path} to {out_path}{saving_message}")

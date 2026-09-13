@@ -209,46 +209,60 @@ def _upstream_nodes(graph, node_name: str) -> set:
 
 
 def _sccs(graph) -> List[set]:
-    """Tarjan's strongly-connected components over the node graph."""
-    import sys
+    """Tarjan's strongly-connected components over the node graph.
+
+    The depth-first search carries its own stack instead of recursing, because a flow may hold a
+    single chain of PRISMPATH_MAX_NODES nodes and a Python recursion that deep overflows the
+    interpreter's C stack (a segfault, not a RecursionError) once the limit is raised to admit it.
+    The heap has no such cliff, so the parser's input bound is the only bound that matters here."""
     index = {}
     low = {}
     onstack = {}
     stack: List[str] = []
     out: List[set] = []
-    counter = [0]
-    # the recursion is one frame per node on a chain; raise the limit for very large flows so a
-    # long path can't overflow the stack (restored in the finally below).
-    _old_limit = sys.getrecursionlimit()
-    sys.setrecursionlimit(max(_old_limit, len(graph.nodes) * 4 + 100))
-
-    def strong(node_name):
-        index[node_name] = low[node_name] = counter[0]
-        counter[0] += 1
-        stack.append(node_name); onstack[node_name] = True
-        for tgt, _ in graph.nodes[node_name].edges:
-            if tgt not in graph.nodes:
-                continue
-            if tgt not in index:
-                strong(tgt)
-                low[node_name] = min(low[node_name], low[tgt])
-            elif onstack.get(tgt):
-                low[node_name] = min(low[node_name], index[tgt])
-        if low[node_name] == index[node_name]:
-            comp = set()
-            while True:
-                member = stack.pop(); onstack[member] = False
-                comp.add(member)
-                if member == node_name:
+    counter = 0
+    for root in graph.nodes:
+        if root in index:
+            continue
+        # each entry is the node being explored and the position of its next unvisited edge
+        work = [(root, 0)]
+        while work:
+            node_name, edge_pos = work[-1]
+            if edge_pos == 0:
+                index[node_name] = low[node_name] = counter
+                counter += 1
+                stack.append(node_name)
+                onstack[node_name] = True
+            edges = graph.nodes[node_name].edges
+            descended = False
+            while edge_pos < len(edges):
+                target = edges[edge_pos][0]
+                edge_pos += 1
+                if target not in graph.nodes:
+                    continue
+                if target not in index:
+                    work[-1] = (node_name, edge_pos)
+                    work.append((target, 0))
+                    descended = True
                     break
-            out.append(comp)
-
-    try:
-        for node_name in graph.nodes:
-            if node_name not in index:
-                strong(node_name)
-    finally:
-        sys.setrecursionlimit(_old_limit)
+                if onstack.get(target):
+                    low[node_name] = min(low[node_name], index[target])
+            if descended:
+                continue
+            work.pop()
+            if low[node_name] == index[node_name]:
+                comp = set()
+                while True:
+                    member = stack.pop()
+                    onstack[member] = False
+                    comp.add(member)
+                    if member == node_name:
+                        break
+                out.append(comp)
+            if work:
+                # the recursive form folded the child's low-link into the parent on return
+                parent = work[-1][0]
+                low[parent] = min(low[parent], low[node_name])
     return out
 
 
@@ -903,7 +917,9 @@ def portability_tier(graph, flow_path) -> dict:
         (live condition embedding and/or LLM escalation).
 
     Returns {tier, semantic_edges: [(node, target, condition)], unlocked: [condition, ...],
-    lock: path|None, level_m: bool}. `level_m` marks the compile-to-hardware subset (SPEC §7):
+    lock: path|None, lock_error: reason|None, level_m: bool}. `lock_error` is set when a lockfile
+    exists but could not be read: the tier degrades to P2 either way, and this says which of the two
+    reasons it was. `level_m` marks the compile-to-hardware subset (SPEC §7):
     a P0 flow whose deterministic edges are all in the match-action fragment (§4.3). Decidable
     from the document + its sidecar lock - no model, no execution."""
     reach = _reachable(graph)
@@ -918,21 +934,25 @@ def portability_tier(graph, flow_path) -> dict:
     lm_all, _lm_bad = level_m.flow_level_m(graph)
     if not semantic:
         return {"tier": "P0", "semantic_edges": [], "unlocked": [], "lock": None,
-                "level_m": lm_all}
+                "lock_error": None, "level_m": lm_all}
     import os
     from prismpath.routing import lockfile as _lf
     lp = _lf.lock_path(flow_path)
     locked_conds = set()
     lock_found = None
+    lock_error = None
     if os.path.exists(lp):
         try:
             locked_conds = set(_lf.load_lock(lp).get("conditions", {}))
             lock_found = lp
-        except Exception:                             # noqa: BLE001 - unreadable lock == no lock
-            pass
+        except Exception as exc:                      # noqa: BLE001 - unreadable lock == no lock
+            # the tier still degrades to P2, but a lock that is present and broken is not the same
+            # answer as no lock at all, so the reason travels with the verdict for the operator
+            lock_error = f"{lp}: {exc}"
     unlocked = sorted({condition for _, _, condition in semantic if condition not in locked_conds})
     tier = "P1" if lock_found and not unlocked else "P2"
     return {"tier": tier, "semantic_edges": semantic, "unlocked": unlocked, "lock": lock_found,
+            "lock_error": lock_error,
             "level_m": False}       # Level M is a within-P0 stratum (SPEC §7)
 
 

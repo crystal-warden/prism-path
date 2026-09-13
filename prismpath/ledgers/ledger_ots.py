@@ -11,7 +11,10 @@ walks: output-hash -> Merkle path -> root -> OTS proof -> Bitcoin block time. Ou
 immediately; `upgrade` promotes it to a full Bitcoin proof after ~1-6h.
 """
 
-import hashlib, os, json, subprocess, glob
+import hashlib
+import json
+import os
+import subprocess
 
 _OTSENV = {**os.environ, "PATH": os.path.expanduser("~/.local/bin") + ":" + os.environ.get("PATH", "")}
 

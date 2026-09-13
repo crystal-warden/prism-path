@@ -57,8 +57,10 @@ def _load_model():
     try:
         _model = SentenceTransformer(EMBED_MODEL, device=EMBED_DEVICE)
     except Exception as exc:  # noqa: BLE001 - broad on purpose (CUDA OOM/init)
+        # a diagnostic from a library, so it belongs on stderr: stdout is where the CLI writes the
+        # JSON its callers parse
         print(f"  [prefilter] embedder load on '{EMBED_DEVICE}' failed ({exc!r}); "
-              f"falling back to CPU")
+              f"falling back to CPU", file=sys.stderr)
         _model = SentenceTransformer(EMBED_MODEL, device="cpu")
     return _model
 
