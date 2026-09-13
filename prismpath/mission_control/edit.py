@@ -19,20 +19,20 @@ def list_files():
 
 @router.get("/file")
 def read_file(path: str = Query(...)):
-    fp = core._safe(core.STATE["proj"], path)      # ValueError on traversal -> 400 envelope
+    fp = core.safe_path(core.STATE["proj"], path)      # ValueError on traversal -> 400 envelope
     fst = os.stat(fp)
-    if fst.st_size > core.MAX_FILE_BYTES:
-        raise HTTPException(413, f"file exceeds MC_MAX_FILE_BYTES ({core.MAX_FILE_BYTES} bytes)")
+    if fst.st_size > core.SETTINGS.max_file_bytes:
+        raise HTTPException(413, f"file exceeds MC_MAX_FILE_BYTES ({core.SETTINGS.max_file_bytes} bytes)")
     return {"path": path, "content": open(fp, errors="ignore").read(),
             "mtime": fst.st_mtime, "size": fst.st_size}
 
 
 @router.post("/file")
 def write_file(req: FileWriteReq):
-    resolved = core._safe(core.STATE["proj"], req.path)   # ValueError on traversal -> 400 envelope
-    if len(req.content.encode("utf-8")) > core.MAX_FILE_BYTES:
-        raise HTTPException(413, f"content exceeds MC_MAX_FILE_BYTES ({core.MAX_FILE_BYTES} bytes)")
-    with core._FILE_LOCK:
+    resolved = core.safe_path(core.STATE["proj"], req.path)   # ValueError on traversal -> 400 envelope
+    if len(req.content.encode("utf-8")) > core.SETTINGS.max_file_bytes:
+        raise HTTPException(413, f"content exceeds MC_MAX_FILE_BYTES ({core.SETTINGS.max_file_bytes} bytes)")
+    with core.FILE_LOCK:
         open(resolved, "w", encoding="utf-8").write(req.content)
-    core.AUDIT.append(core.ACTOR, "file.edit", {"path": req.path, "bytes": len(req.content)})
+    core.audit.record("file.edit", {"path": req.path, "bytes": len(req.content)})
     return {"ok": True, "mtime": os.stat(resolved).st_mtime}

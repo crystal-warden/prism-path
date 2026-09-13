@@ -49,8 +49,8 @@ def proj(tmp_path):
 
 @pytest.fixture
 def client(proj, monkeypatch):
-    monkeypatch.setattr(core, "MC_SCAN", str(proj / "status.json"))
-    monkeypatch.setattr(core, "AUDIT", audit_log.AuditLog(str(proj / "audit.log")))  # don't touch the repo's log
+    monkeypatch.setattr(core.SETTINGS, "scan", str(proj / "status.json"))
+    monkeypatch.setattr(core.audit, "LOG", audit_log.AuditLog(str(proj / "audit.log")))  # don't touch the repo's log
     core.STATE.update({"proc": None, "proj": str(proj), "cfg": {}, "pinned": True})
     return TestClient(app)
 
@@ -141,7 +141,7 @@ def test_index_is_served(client):
 
 # ── hardening: resource caps on the only network-facing surface ───────────────
 def test_file_size_cap(client, proj, monkeypatch):
-    monkeypatch.setattr(core, "MAX_FILE_BYTES", 200)
+    monkeypatch.setattr(core.SETTINGS, "max_file_bytes", 200)
     assert client.post(API_V1 + "/file", json={"path": "flows/ok.md", "content": "x" * 50}).status_code == 200
     assert client.post(API_V1 + "/file", json={"path": "flows/big.md", "content": "x" * 5000}).status_code == 413
     (proj / "flows" / "toobig.md").write_text("y" * 5000, encoding="utf-8")
@@ -149,7 +149,7 @@ def test_file_size_cap(client, proj, monkeypatch):
 
 
 def test_file_tree_bounded(client, proj, monkeypatch):
-    monkeypatch.setattr(core, "MAX_TREE_ENTRIES", 3)
+    monkeypatch.setattr(core.SETTINGS, "max_tree_entries", 3)
     for i in range(10):
         (proj / "flows" / f"f{i}.md").write_text("hi", encoding="utf-8")
     assert len(client.get(API_V1 + "/files").json()["files"]) <= 3

@@ -19,7 +19,7 @@ def get_status():
 
 @router.get("/interactions")
 def get_interactions():
-    return core.mc_interactions(core.STATE)
+    return core.interactions(core.STATE)
 
 
 @router.get("/flow")
@@ -64,7 +64,7 @@ def get_fanout_ckpt(path: str = Query(...)):
     rp = os.path.realpath(path)
     if not rp.startswith(qroot + os.sep) or not rp.endswith(".json"):
         raise HTTPException(status_code=400, detail="path escapes the queue dir")
-    if os.path.getsize(rp) > core.MAX_FILE_BYTES:
+    if os.path.getsize(rp) > core.SETTINGS.max_file_bytes:
         raise HTTPException(status_code=413, detail="checkpoint exceeds MC_MAX_FILE_BYTES")
     with open(rp, encoding="utf-8") as checkpoint_file:
         return {"path": path, "checkpoint": json.load(checkpoint_file)}
@@ -72,15 +72,16 @@ def get_fanout_ckpt(path: str = Query(...)):
 
 @router.get("/audit")
 def get_audit():
-    return {"root": core.AUDIT.current_root(), "n": len(core.AUDIT.events),
-            "verify": core.AUDIT.verify_log(), "events": core.AUDIT.events[-100:]}
+    return {"root": core.audit.LOG.current_root(), "n": len(core.audit.LOG.events),
+            "verify": core.audit.LOG.verify_log(), "events": core.audit.LOG.events[-100:]}
 
 
 @router.get("/audit/proof")
 def get_audit_proof(i: int = Query(0)):
-    if not (0 <= i < len(core.AUDIT.leaves)):
+    log = core.audit.LOG
+    if not (0 <= i < len(log.leaves)):
         raise HTTPException(status_code=400, detail="bad index")
-    pr = core.AUDIT.prove(i)
+    pr = log.prove(i)
     return {"i": i, "path_len": len(pr["path"]), "peaks": len(pr["peaks"]),
-            "leaf": core.AUDIT.leaves[i][:16], "root": core.AUDIT.current_root()[:16],
-            "verified": audit_log.verify(core.AUDIT.leaves[i], pr, core.AUDIT.current_root())}
+            "leaf": log.leaves[i][:16], "root": log.current_root()[:16],
+            "verified": audit_log.verify(log.leaves[i], pr, log.current_root())}

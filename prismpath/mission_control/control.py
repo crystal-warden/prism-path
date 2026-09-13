@@ -29,18 +29,18 @@ def sprint_select(req: SprintSelectReq):
 def sprint_auto():
     """Resume auto-following whichever sprint is live."""
     core.STATE["pinned"] = False
-    core._sync_active(core.STATE)
+    core.follow_active_sprint(core.STATE)
     return {"ok": True, "proj": core.STATE["proj"], "pinned": False}
 
 
 @router.post("/sprint/stop")
 def sprint_stop():
-    return core._touch(core.STATE["proj"], "STOP", "sprint.stop")
+    return core.touch_marker(core.STATE["proj"], "STOP", "sprint.stop")
 
 
 @router.post("/sprint/pause")
 def sprint_pause():
-    return core._touch(core.STATE["proj"], "PAUSE", "sprint.pause")
+    return core.touch_marker(core.STATE["proj"], "PAUSE", "sprint.pause")
 
 
 @router.post("/sprint/resume")
@@ -49,7 +49,7 @@ def sprint_resume():
         os.remove(os.path.join(core.STATE["proj"], "PAUSE"))
     except OSError:
         pass
-    core.AUDIT.append(core.ACTOR, "sprint.resume", {"proj": core.STATE["proj"]})
+    core.audit.record("sprint.resume", {"proj": core.STATE["proj"]})
     return {"ok": True}
 
 
@@ -58,6 +58,6 @@ def queue_decide(req: QueueDecideReq):
     """Human picks an edge for a suspended run. `resolve_queue_item` confines the id to the queue dir."""
     from prismpath.ledgers import checkpoint as _ckpt
     cpath = _ckpt.resolve_queue_item(req.id)
-    _ckpt.record_decision(cpath, req.choose, decided_by=core.ACTOR)
-    core.AUDIT.append(core.ACTOR, "queue.decide", {"id": req.id, "choose": req.choose})
+    _ckpt.record_decision(cpath, req.choose, decided_by=core.audit.ACTOR)
+    core.audit.record("queue.decide", {"id": req.id, "choose": req.choose})
     return {"ok": True}

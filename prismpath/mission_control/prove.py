@@ -50,4 +50,4 @@ def prove_reach(req: ProveReachReq):
 @router.get("/audit")
 def prove_audit():
     """The console verifies its own append-only audit log (tamper-evidence, self-checked)."""
-    return {"valid": core.AUDIT.verify_log(), "n": len(core.AUDIT.events)}
+    return {"valid": core.audit.LOG.verify_log(), "n": len(core.audit.LOG.events)}
