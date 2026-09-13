@@ -296,7 +296,7 @@ reference adapters ride the ports:
   ([evidence #82 to #86](../research/supporting-evidence.md)).
 - **The GRC adjudication adapter** (`adapters/compliance/`): the class whose Adjudicator may be a model,
   machine checkable controls deciding deterministically and prose objectives resolving fail closed, with
-  evidence typed verdicts ([evidence #137 to #139](../research/supporting-evidence.md)).
+  evidence typed determinations ([evidence #137 to #139](../research/supporting-evidence.md)).
 
 ## From a decision to a receipt
 

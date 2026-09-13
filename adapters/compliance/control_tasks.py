@@ -116,13 +116,13 @@ def assess_operational(control, completions, as_of):
         return None
     unmet = sorted(oid for oid in covered if not ev[oid]["evidenced"])
     if not unmet:
-        status = "met"
+        determination = "met"
         gap = "all %d operationally-evidenced objectives are current" % len(covered)
     elif len(unmet) < len(covered):
-        status = "partially-met"
+        determination = "partially-met"
         gap = "operational tasks overdue or never done for: " + ", ".join(unmet)
     else:
-        status = "not-met"
+        determination = "not-met"
         gap = "no current operational evidence for: " + ", ".join(unmet)
-    return {"status": status, "unmet_objective_ids": unmet, "gap_summary": gap,
+    return {"status": determination, "unmet_objective_ids": unmet, "gap_summary": gap,
             "method": "operational-record", "covered_objectives": covered}

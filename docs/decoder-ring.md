@@ -603,7 +603,7 @@ observe, control, events, prove; [API guide](guides/mission-control-api.md)) ·
 | [`prismpath/policies/`](../prismpath/policies/) | the statutory floor + the P1 lockfile |
 | [`prismpath/telemetry/`](../prismpath/telemetry/) | decision-preserving telemetry codec |
 | [`adapters/fusion/`](../adapters/fusion/) | the decision fusion plane |
-| [`adapters/compliance/`](../adapters/compliance/README.md) | the GRC adjudication adapter: machine checkable controls, evidence typed verdicts, OSCAL |
+| [`adapters/compliance/`](../adapters/compliance/README.md) | the GRC adjudication adapter: machine checkable controls, evidence typed determinations, OSCAL |
 | [`prismpath-hw/`](../prismpath-hw/README.md) | the C target, the `.ppt` compiler and format, the fabric RTL, four MCU ISAs, the mesh demos |
 | [`prismpath-ebpf/`](../prismpath-ebpf/README.md) | the interpreter in the Linux kernel (XDP and TC), the loader, receipt sealing |
 | [`prismpath-rs/`](../prismpath-rs/README.md), [`prismpath-telemetry-rs/`](../prismpath-telemetry-rs/README.md), [`prismpath-hotswap-rs/`](../prismpath-hotswap-rs/README.md), [`prismpath-preflight/`](../prismpath-preflight/README.md), [`prismpath-reflect-bindings/`](../prismpath-reflect-bindings/README.md) | the Rust crates: kernel, Facet wire, signed packs, the adoption gate, type bindings |

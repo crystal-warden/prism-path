@@ -136,7 +136,7 @@ control plane, GRC. A term with no `Also called (deprecated)` line has no losing
 
 **deny**: the decision that an action is not authorized. A decision, not an absence of one. Layer: kernel evaluation. Not to be confused with: abstain (information absent), refusal with cause (nothing matched), park (holding on the fail safe).
 
-**determination**: the GRC layer's word for a decision about one control, met, partially met, or not met. Kept because assessors use it and it survives into OSCAL. Layer: GRC, and nowhere else. Not to be confused with: decision, verdict, finding. Also called (deprecated): "the determination doc", an off repository design document referenced at `prismpath/telemetry/README.md:8`.
+**determination**: the GRC layer's word for a decision about one control, met, partially met, or not met. Kept because assessors use it and it survives into OSCAL. Layer: GRC, and nowhere else. Not to be confused with: decision (the kernel's act), finding, an SSP implementation status. Also called (deprecated): verdict; status as the headline noun, which survives only as a JSON key that assessors, fixtures and OSCAL read; "the determination doc", an off repository design document referenced at `prismpath/telemetry/README.md:8`.
 
 **deterministic edge**: an edge whose condition begins with `when` or is one of the keyword catch alls, resolved by evaluating a predicate against the outcome fields, free and exact. Layer: flow authoring. Not to be confused with: semantic, error and event edges, which are the other three tiers.
 
@@ -258,6 +258,8 @@ control plane, GRC. A term with no `Also called (deprecated)` line has no losing
 
 **relay**: a device that forwards records between links without aggregating them. Always qualified when more than one exists: the air relay, the host relay. Layer: wire and transport. Not to be confused with: the concentrator (which aggregates), the air gap courier (which should be named courier).
 
+**route**: the outcome of routing, the one target node a decision picked for one reading. Layer: kernel evaluation. Not to be confused with: target (the destination an edge declares, which is the same node named as a part of the flow rather than as the result of deciding), band (the spiral range whose members all take one route), path (the sequence of routes a run walks). A struct field that stores an edge's declared destination is `target`; a value that holds what routing produced is `route`. Also called (deprecated): band verdict, next_node, verdict, chosen.
+
 **row**: one numbered claim in the evidence ledger, with its method, result, scope and provenance. Layer: evidence and receipts. Not to be confused with: a conformance case (a vector), a sensor line (a reading), a ledger entry, an atom.
 
 **run**: one traversal of a flow from its start node to a terminal, a refusal, a suspension or the step bound. Layer: kernel evaluation.
@@ -280,7 +282,7 @@ control plane, GRC. A term with no `Also called (deprecated)` line has no losing
 
 **table image**: see image. Use the full phrase on first mention in any document; `image` thereafter.
 
-**target**: the destination node of an edge. Layer: flow authoring, and carried unchanged into kernel evaluation and substrate execution. Not to be confused with: a substrate, a build target, a risk target, the Rust build directory. Also called (deprecated): route (as a node index), chosen.
+**target**: the destination node of an edge. Layer: flow authoring, and carried unchanged into kernel evaluation and substrate execution. Not to be confused with: a substrate, a build target, a risk target, the Rust build directory. Also called (deprecated): chosen, and `route` where the name holds an edge's declared destination rather than the outcome of a decision.
 
 **terminal node**: a node with no edges. Reaching one ends the run cleanly, with no cause code. Layer: flow authoring.
 

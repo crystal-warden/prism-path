@@ -151,7 +151,7 @@ def _reconstruction_bound(partition: quantizer.FieldPartition) -> dict:
 
 def _aggregation_privacy(graph: Any, parts: Dict[str, quantizer.FieldPartition],
                          order: List[str], branch_nodes: List[str], cap: int = 200_000) -> dict:
-    """How many joint input cell-tuples produce each route at each decision node. A verdict
+    """How many joint input cell-tuples produce each route at each decision node. A route
     produced by many input tuples hides which inputs made it (high privacy); one produced by a
     single tuple pins the inputs (a leak). Information-theoretic: holds even against a policy
     holder, because a many-to-one fusion genuinely destroys which-input information."""
@@ -455,9 +455,9 @@ def render_markdown(result: ScanResult) -> str:
             md.append(f"| `{field}` | {result.recon[field]['note']} |")
         md.append("")
         if result.agg and result.agg["enumerated"]:
-            md += ["### Aggregation (how much a verdict hides its inputs)", "",
-                   f"Across {result.agg['joint_cells']} joint input cells, how many produce each verdict. "
-                   "A verdict produced by many input cells hides which inputs made it (information "
+            md += ["### Aggregation (how much a route hides its inputs)", "",
+                   f"Across {result.agg['joint_cells']} joint input cells, how many produce each route. "
+                   "A route produced by many input cells hides which inputs made it (information "
                    "theoretic, holds even against a policy holder); one produced by a single cell "
                    "pins the inputs.", ""]
             for node, per in result.agg["per_node"].items():
@@ -548,7 +548,7 @@ def main() -> int:
                         help="scan at most N events")
     parser.add_argument("--privacy", action="store_true",
                         help="add a privacy audit: per-field reconstruction bound and, for fusion "
-                             "policies, how many joint input cells produce each verdict")
+                             "policies, how many joint input cells produce each route")
     parser.add_argument("--json", dest="json_out", default=None, metavar="OUT.json",
                         help="also write the full report as JSON")
     args = parser.parse_args()

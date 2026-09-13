@@ -9,9 +9,9 @@ from adapters.compliance import posture_connector as pc
 
 # The reviewed machine-checkable set. Grew from 26 to 50 as the deterministic check registry was
 # extended (access control, audit, config mgmt, identification, least functionality, boundary
-# monitoring, device access, media, personnel, flaw remediation). Each control's verdict is decidable
-# from posture facts alone; deterministic_checks.evidence_class() discloses whether each fact is
-# tool-scanned or documentation-attested.
+# monitoring, device access, media, personnel, flaw remediation). Each control's determination is
+# decidable from posture facts alone; deterministic_checks.evidence_class() discloses whether each
+# fact is tool-scanned or documentation-attested.
 CHECKABLE = {
     "3.1.1", "3.1.2", "3.1.8", "3.1.9", "3.1.10", "3.1.11", "3.1.14", "3.1.19",
     "3.3.2", "3.3.6", "3.3.7", "3.3.8",

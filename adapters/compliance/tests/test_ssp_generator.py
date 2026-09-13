@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """The SSP generator renders the master 800-171 document: system sections from the org profile, and the
-control-implementation section from the live assessment (status per verdict, responsible role, governing
-policy). Blank profile + no verdicts = the reusable template; a filled profile + real verdicts = the
+control-implementation section from the live assessment (status per determination, responsible role, governing
+policy). Blank profile + no determinations = the reusable template; a filled profile + real ones = the
 organization's SSP, consistent with the actual posture."""
 from adapters.compliance import compliance_adapter as ca
 from adapters.compliance import ssp_generator as ssp
@@ -22,11 +22,12 @@ def test_template_ssp_is_blank_and_complete():
 def test_instance_ssp_fills_profile_and_maps_status():
     ca.use_standard("nist_800171_r2")
     allc = ca._catalog()["controls"]
-    verdicts = {control_id: ("met" if control_id == "3.13.16" else "insufficient") for control_id in allc}   # FileVault met, rest open
+    determinations = {control_id: ("met" if control_id == "3.13.16" else "insufficient")   # FileVault met, rest open
+                      for control_id in allc}
     ssp_result = ssp.generate_ssp({"org_name": "Crystal Warden Supply Chain Labs LLC",
                                    "system_name": "Crystal Warden CUI enclave (company Mac)",
-                                   "sprs_score": "-119"}, verdicts)
+                                   "sprs_score": "-119"}, determinations)
     md = ssp_result["markdown"]
     assert "Crystal Warden Supply Chain Labs LLC" in md and "-119" in md
-    assert "Implemented" in md and "Planned (POA&M)" in md        # status mapped from the verdicts
+    assert "Implemented" in md and "Planned (POA&M)" in md        # status mapped from the determinations
     assert ssp_result["status_tally"].get("met") == 1

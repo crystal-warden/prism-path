@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """The Governance & Direction layer runs the assurance chain strategy-down: an organizational objective ->
-the risk scenarios that threaten it -> the controls -> the live verdicts -> the dollar exposure -> whether
+the risk scenarios that threaten it -> the controls -> the live determinations -> the dollar exposure -> whether
 it sits inside the risk appetite the organization set. Improving controls moves an objective back inside
 appetite; unmet controls are the named drivers."""
 from adapters.compliance import fair_risk as fr
@@ -9,8 +9,9 @@ from adapters.compliance import governance as gov
 
 
 def test_all_met_keeps_objectives_within_appetite():
-    verdicts = {control_id: "met" for scenario in fr.load_scenarios() for control_id in scenario["controls"]}   # everything met
-    assessment = gov.assess_governance(verdicts)
+    determinations = {control_id: "met"                                               # everything met
+                      for scenario in fr.load_scenarios() for control_id in scenario["controls"]}
+    assessment = gov.assess_governance(determinations)
     assert assessment["within_appetite"] == assessment["n_objectives"]                            # residual-only exposure
     assert all(posture["current_exposure"] < posture["appetite_ale"] for posture in assessment["objectives"])
 

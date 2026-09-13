@@ -4,13 +4,13 @@
 """Crosswalk engine — assess once, report to many frameworks.
 
 A crosswalk is authoritative mapping data (crosswalks/*.json) between two control frameworks: which
-requirements of framework A correspond to which requirements of framework B. Given verdicts on one
+requirements of framework A correspond to which requirements of framework B. Given determinations on one
 framework, the engine PROPAGATES them to the other, FAIL CLOSED:
 
   a target requirement is met only when EVERY source requirement mapped to it is met; a single not-met
   makes it not-met; anything missing or unproven makes it insufficient.
 
-So a propagated verdict is only ever as strong as the mapping and the source evidence, and the engine
+So a propagated determination is only ever as strong as the mapping and the source evidence, and the engine
 says which source controls each result rests on. Mappings are DATA with a stated authority, never
 model-generated; the engine trusts the mapping file and does no adjudication of its own. A crosswalk
 may be partial (not every target requirement is mapped); propagation reports only the mapped targets,
@@ -40,21 +40,22 @@ def frameworks(cw):
     return (cw["a"], cw["b"])
 
 
-def _combine(statuses):
-    """Fail-closed combine of the source verdicts feeding one target requirement. A missing verdict
+def _combine(source_determinations):
+    """Fail-closed combine of the source determinations feeding one target requirement. A missing one
     (None) counts as unproven, i.e. insufficient, never met."""
-    if not statuses:
+    if not source_determinations:
         return "insufficient"
-    if any(status == "not-met" for status in statuses):
+    if any(determination == "not-met" for determination in source_determinations):
         return "not-met"
-    if any(status in (None, "insufficient", "partially-met") for status in statuses):
+    if any(determination in (None, "insufficient", "partially-met") for determination in source_determinations):
         return "insufficient"
     return "met"
 
 
-def propagate(cw, from_fw, verdicts):
-    """Propagate verdicts on `from_fw` to the other framework in the crosswalk. Returns per mapped
-    target {verdict, from: [source controls]} plus a tally, fail closed. Unmapped targets are omitted."""
+def propagate(cw, from_fw, determinations):
+    """Propagate determinations on `from_fw` to the other framework in the crosswalk. Returns per mapped
+    target {verdict, from: [source controls]} plus a tally, fail closed. The `verdict` key is the wire
+    spelling assessors and fixtures read; the value is a determination. Unmapped targets are omitted."""
     framework_a, framework_b = cw["a"], cw["b"]
     if from_fw == framework_a:
         target_fw, groups = framework_b, {}
@@ -68,9 +69,9 @@ def propagate(cw, from_fw, verdicts):
         raise ValueError("framework %r not in crosswalk %s (%s <-> %s)" % (from_fw, cw.get("id"), framework_a, framework_b))
     controls, tally = {}, {}
     for tgt, srcs in groups.items():
-        verdict = _combine([verdicts.get(source_control) for source_control in sorted(srcs)])
-        controls[tgt] = {"verdict": verdict, "from": sorted(srcs)}
-        tally[verdict] = tally.get(verdict, 0) + 1
+        determination = _combine([determinations.get(source_control) for source_control in sorted(srcs)])
+        controls[tgt] = {"verdict": determination, "from": sorted(srcs)}
+        tally[determination] = tally.get(determination, 0) + 1
     return {"crosswalk": cw.get("id"), "authority": cw.get("authority"),
             "source_framework": from_fw, "target_framework": target_fw,
             "n_targets": len(controls), "tally": tally, "controls": controls}
@@ -93,15 +94,15 @@ def demo():
     _ca.use_standard("nist_800171_r2")
     posture = _pc.load_sample("example_host")
     req_base = {"facts": posture.get("facts", {}), "boundary": posture.get("boundary")}
-    verdicts = {}
+    determinations = {}
     for cid in _ca._catalog()["controls"]:
         det = _un.full_determination(_ca.get_control(cid), dict(req_base, control_id=cid))
-        verdicts[cid] = det["status"]
-    out = {"source": "nist_800171_r2", "assessed": len(verdicts), "reports": []}
+        determinations[cid] = det["status"]
+    out = {"source": "nist_800171_r2", "assessed": len(determinations), "reports": []}
     for name in list_crosswalks():
         cw = load_crosswalk(name)
         if "nist_800171_r2" in (cw["a"], cw["b"]):
-            rep = propagate(cw, "nist_800171_r2", verdicts)
+            rep = propagate(cw, "nist_800171_r2", determinations)
             out["reports"].append({"to": rep["target_framework"], "crosswalk": name,
                                    "n_targets": rep["n_targets"], "tally": rep["tally"],
                                    "coverage": coverage(cw)})

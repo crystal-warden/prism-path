@@ -5,7 +5,7 @@
 
 The alignment model maps laws, regulations, contracts, standards, and policies DOWN into controls. This
 module models those obligations explicitly and links each to the controls it requires (through a
-framework and a scope), so the chain runs obligation -> required controls -> live verdicts -> whether the
+framework and a scope), so the chain runs obligation -> required controls -> live determinations -> whether the
 obligation is satisfied, and a failing control names every obligation it breaches. Obligations are the
 'why' above the controls: not "is 3.1.1 met" but "are we meeting DFARS 252.204-7012, and if not, which
 controls are the breach." Because the required evidence can arrive through the crosswalks, an obligation
@@ -58,25 +58,26 @@ def _required_controls(req):
     return fw, ctrls
 
 
-def obligation_status(obligation, verdicts_by_framework):
-    """Resolve the obligation's required controls and report whether it is satisfied by the live verdicts,
-    naming the controls that breach it. verdicts_by_framework: {framework: {control_id: status}}."""
+def obligation_status(obligation, determinations_by_framework):
+    """Resolve the obligation's required controls and report whether it is satisfied by the live
+    determinations, naming the controls that breach it.
+    determinations_by_framework: {framework: {control_id: determination}}."""
     fw, ctrls = _required_controls(obligation["requires"])
-    verdicts = verdicts_by_framework.get(fw, {})
-    breaching = sorted(control_id for control_id in ctrls if verdicts.get(control_id) != "met")
+    determinations = determinations_by_framework.get(fw, {})
+    breaching = sorted(control_id for control_id in ctrls if determinations.get(control_id) != "met")
     return {"obligation": obligation["id"], "name": obligation["name"], "type": obligation["type"],
             "citation": obligation["citation"], "imposed_by": obligation["imposed_by"],
             "framework": fw, "required_controls": len(ctrls), "met": len(ctrls) - len(breaching),
             "status": "met" if not breaching else "not-met",
             "breaching_controls": breaching,
-            "evidence_present": bool(verdicts)}
+            "evidence_present": bool(determinations)}
 
 
-def assess_obligations(verdicts_by_framework, obligations=None):
-    """Every obligation's status plus a rollup. One assessment's verdicts (and their crosswalk
+def assess_obligations(determinations_by_framework, obligations=None):
+    """Every obligation's status plus a rollup. One assessment's determinations (and their crosswalk
     propagations) can satisfy obligations across several frameworks."""
     obligations = obligations if obligations is not None else OBLIGATIONS
-    rows = [obligation_status(obligation, verdicts_by_framework) for obligation in obligations]
+    rows = [obligation_status(obligation, determinations_by_framework) for obligation in obligations]
     met = sum(1 for row in rows if row["status"] == "met")
     return {"n_obligations": len(rows), "met": met, "breached": len(rows) - met, "obligations": rows,
             "note": "An obligation is met only when every control it requires is met. Required evidence "

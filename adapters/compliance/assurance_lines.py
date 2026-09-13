@@ -23,7 +23,7 @@ def _first_line_owner(control):
     return _OWNER.get(_ca._method_profile(control), "ISSM")
 
 
-def assurance_for_control(control_id, verdict, signed=False, standard=None):
+def assurance_for_control(control_id, determination, signed=False, standard=None):
     """How one control's single determination is assured across all four lines from the same evidence."""
     if standard:
         _ca.use_standard(standard)
@@ -31,7 +31,7 @@ def assurance_for_control(control_id, verdict, signed=False, standard=None):
     third = ("independently verifies the signed, replayable receipt (no re-test needed)" if signed
              else "must re-test, because there is no signed receipt to verify")
     return {
-        "control_id": control_id, "title": control["title"], "verdict": verdict, "signed": signed,
+        "control_id": control_id, "title": control["title"], "verdict": determination, "signed": signed,
         "shared_evidence": ("one signed determination" if signed else "one determination"),
         "lines": [
             {"line": "first_line", "name": "First Line (Management / Control Owner)",
@@ -73,10 +73,10 @@ def demo(use_llm=False):
     posture = _pc.load_sample("example_host")
     req_base = {"facts": posture.get("facts", {}), "boundary": posture.get("boundary")}
     controls = _ca._catalog()["controls"]
-    verdict_311 = _un.full_determination(_ca.get_control("3.1.1"), dict(req_base, control_id="3.1.1"))["status"]
+    determination_311 = _un.full_determination(_ca.get_control("3.1.1"), dict(req_base, control_id="3.1.1"))["status"]
     control_count = len(controls)
     return {"summary": assurance_summary(control_count, control_count),                       # every determination signed
-            "example_control": assurance_for_control("3.1.1", verdict_311, signed=True)}
+            "example_control": assurance_for_control("3.1.1", determination_311, signed=True)}
 
 
 def render_text(assurance):
@@ -87,7 +87,7 @@ def render_text(assurance):
     lines.append("  traditional (each line tests each control): %d assessments;  integrated: %d;  %s fewer"
                  % (summary["traditional_line_assessments"], summary["integrated_assessments"], summary["reduction"]))
     lines.append("")
-    lines.append("  %s (%s) — verdict %s, %s:"
+    lines.append("  %s (%s) — determination %s, %s:"
                  % (control["control_id"], control["title"][:44], control["verdict"],
                     control["shared_evidence"]))
     for ln in control["lines"]:

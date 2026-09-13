@@ -1200,18 +1200,18 @@ def facet_cmd(args) -> int:
         recon_reading = wire.decode_reading(parts, bits)
 
         start_node = graph.start
-        next_node = None
+        route = None
         cause = None
 
         if start_node in graph.nodes:
             from prismpath.kernel import predicates
             for target, cond in graph.nodes[start_node].edges:
                 if predicates.is_deterministic(cond) and predicates.eval_condition(cond, recon_reading):
-                    next_node = target
+                    route = target
                     cause = cond
                     break
 
-        print(f"Next node: {next_node}")
+        print(f"Next node: {route}")
         print(f"Cause: {cause}")
         return 0
 

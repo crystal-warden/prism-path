@@ -17,7 +17,7 @@ determination, so one assessment answers "what is my CMMC status" per level with
 
 Every mapping here is authoritative data (control membership, the scoring threshold), flagged for
 verification against the current CMMC scoping guidance and 32 CFR Part 170. Nothing is model-adjudicated:
-a level status is a deterministic function of the per-control verdicts, and insufficient is scored as
+a level status is a deterministic function of the per-control determinations, and insufficient is scored as
 not-met (fail closed), never assumed met.
 """
 from adapters.compliance import compliance_adapter as _ca
@@ -61,7 +61,7 @@ def level_controls(level):
     raise ValueError("CMMC has levels 1, 2, 3; got %r" % (level,))
 
 
-def _verdicts(cids, req_base, completions, as_of, use_llm):
+def _determinations(cids, req_base, completions, as_of, use_llm):
     out = {}
     for cid in cids:
         control = _ca.get_control(cid)
@@ -71,10 +71,10 @@ def _verdicts(cids, req_base, completions, as_of, use_llm):
     return out
 
 
-def _tally(verdicts):
+def _tally(determinations):
     tally = {"met": 0, "partially-met": 0, "not-met": 0, "insufficient": 0}
-    for verdict in verdicts.values():
-        tally[verdict] = tally.get(verdict, 0) + 1
+    for determination in determinations.values():
+        tally[determination] = tally.get(determination, 0) + 1
     return tally
 
 
@@ -94,7 +94,7 @@ def _poam(records, weights, score):
 
 def assess_level(level, posture, completions=None, as_of=None, use_llm=False):
     """Assess one CMMC level over a scanned posture. Returns the level status, tally, and per-control
-    verdicts, scored by that level's own rule. Deterministic given the verdicts."""
+    determinations, scored by that level's own rule. Deterministic given the determinations."""
     if level == 3:
         if "nist_800172" not in _ca.list_standards():
             return {"level": 3, "name": LEVEL_NAME[3], "assessable": False, "status": "unavailable",
@@ -107,7 +107,7 @@ def assess_level(level, posture, completions=None, as_of=None, use_llm=False):
         boundary = (posture or {}).get("boundary", "(unspecified)")
         req_base = {"facts": (posture or {}).get("facts") or {}, "boundary": boundary}
         _ca.use_standard(L3_ENHANCED_STANDARD)
-        enh = _verdicts(L3_800172_SUBSET, req_base, completions, as_of, use_llm)  # the 24 enhanced
+        enh = _determinations(L3_800172_SUBSET, req_base, completions, as_of, use_llm)  # the 24 enhanced
         _ca.use_standard(prev)
         enh_tally = _tally(enh)
         status = "met" if (base["status"] == "met" and enh_tally["met"] == len(L3_800172_SUBSET)) else "not-met"
@@ -125,21 +125,21 @@ def assess_level(level, posture, completions=None, as_of=None, use_llm=False):
     boundary = (posture or {}).get("boundary", "(unspecified)")
     req_base = {"facts": facts, "boundary": boundary}
     cids = level_controls(level)
-    verdicts = _verdicts(cids, req_base, completions, as_of, use_llm)
-    tally = _tally(verdicts)
+    determinations = _determinations(cids, req_base, completions, as_of, use_llm)
+    tally = _tally(determinations)
     report = {"level": level, "name": LEVEL_NAME[level], "assessable": True,
               "standard": _ca.active_standard(), "boundary": boundary,
               "in_scope": len(cids), "tally": tally,
-              "controls": [{"control_id": control_id, "verdict": verdicts[control_id]} for control_id in cids]}
+              "controls": [{"control_id": control_id, "verdict": determinations[control_id]} for control_id in cids]}
     if level == 1:
-        failing = sorted((control_id for control_id, verdict in verdicts.items() if verdict != "met"), key=_numkey)
+        failing = sorted((control_id for control_id, determination in determinations.items() if determination != "met"), key=_numkey)
         report.update({
             "status": "met" if not failing else "not-met",
             "practices_total": len(cids), "practices_met": tally["met"], "failing_practices": failing,
             "scoring": "Annual self-assessment: every practice must be met; POA&Ms are not permitted. "
                        "Insufficient is treated as not-met."})
     else:  # level 2 = all 110
-        records = [{"control_id": control_id, "status": verdict} for control_id, verdict in verdicts.items()]
+        records = [{"control_id": control_id, "status": determination} for control_id, determination in determinations.items()]
         weights = _ca.catalog_weights()
         sprs = _rollup.sprs_partial(records, weights) if weights else {}
         score = sprs.get("ceiling_if_unassessed_all_met")     # all 110 assessed -> this is the exact score

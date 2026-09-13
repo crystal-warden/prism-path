@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
-"""The crosswalk engine propagates one framework's verdicts to another from authoritative mapping data,
+"""The crosswalk engine propagates one framework's determinations to another from authoritative mapping data,
 fail closed: a target is met only when every mapped source is met, a single not-met makes it not-met, and
-a missing verdict makes it insufficient. Partial crosswalks report only what they map, so coverage is
+a missing determination makes it insufficient. Partial crosswalks report only what they map, so coverage is
 visible instead of silently assumed complete."""
 import pytest
 from adapters.compliance import crosswalk as cw
@@ -12,7 +12,7 @@ def test_combine_is_fail_closed():
     assert cw._combine(["met", "met"]) == "met"
     assert cw._combine(["met", "not-met"]) == "not-met"
     assert cw._combine(["met", "insufficient"]) == "insufficient"
-    assert cw._combine(["met", None]) == "insufficient"        # a missing source verdict is unproven
+    assert cw._combine(["met", None]) == "insufficient"        # a missing source determination is unproven
     assert cw._combine([]) == "insufficient"
 
 

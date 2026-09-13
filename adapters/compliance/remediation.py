@@ -42,12 +42,12 @@ def _sop_index():
     return idx
 
 
-def _ale_reduction_if_met(cid, verdicts, scenarios):
+def _ale_reduction_if_met(cid, determinations, scenarios):
     """The marginal drop in likely annualized loss if this one control flips to met."""
     total = 0
     for scenario in scenarios:
         if cid in scenario.get("controls", []):
-            total += _fr.ale(scenario, verdicts)["likely"] - _fr.ale(scenario, dict(verdicts, **{cid: "met"}))["likely"]
+            total += _fr.ale(scenario, determinations)["likely"] - _fr.ale(scenario, dict(determinations, **{cid: "met"}))["likely"]
     return total
 
 
@@ -68,27 +68,28 @@ def _remediation_path(cid, control, sop_idx):
     return paths
 
 
-def remediation_plan(verdicts, boundary="(unspecified)", top=None):
-    """Prioritized remediation for the gaps in `verdicts`. Ranks by a transparent blend of SPRS points,
-    FAIR dollar reduction, obligations unblocked, and objectives helped, with the components exposed."""
+def remediation_plan(determinations, boundary="(unspecified)", top=None):
+    """Prioritized remediation for the gaps in `determinations`. Ranks by a transparent blend of SPRS
+    points, FAIR dollar reduction, obligations unblocked, and objectives helped, with the components
+    exposed."""
     _ca.use_standard("nist_800171_r2")
     weights = _ca.catalog_weights()
     scenarios = _fr.load_scenarios()
     sop_idx = _sop_index()
     obj_of_control = {}
-    for posture in _gov.assess_governance(verdicts)["objectives"]:
+    for posture in _gov.assess_governance(determinations)["objectives"]:
         for control_id in posture["driving_controls"]:
             obj_of_control.setdefault(control_id, []).append(posture["objective"])
 
     items = []
-    for cid, status in verdicts.items():
-        if status == "met":
+    for cid, determination in determinations.items():
+        if determination == "met":
             continue
         control = _ca.get_control(cid)
         items.append({
-            "control_id": cid, "title": control["title"], "status": status,
+            "control_id": cid, "title": control["title"], "status": determination,
             "sprs_points": weights.get(cid, 0),
-            "ale_reduction_likely": _ale_reduction_if_met(cid, verdicts, scenarios),
+            "ale_reduction_likely": _ale_reduction_if_met(cid, determinations, scenarios),
             "obligations_unblocked": [breach["obligation"] for breach in _ob.breaches_for_control(cid)],
             "objectives_helped": obj_of_control.get(cid, []),
             "remediation": _remediation_path(cid, control, sop_idx),
@@ -134,9 +135,9 @@ def demo(use_llm=False, top=8):
     _ca.use_standard("nist_800171_r2")
     posture = _pc.load_sample("example_host")
     req_base = {"facts": posture.get("facts", {}), "boundary": posture.get("boundary")}
-    verdicts = {cid: _un.full_determination(_ca.get_control(cid), dict(req_base, control_id=cid))["status"]
-                for cid in _ca._catalog()["controls"]}
-    return remediation_plan(verdicts, boundary=posture.get("boundary", "(unspecified)"), top=top)
+    determinations = {cid: _un.full_determination(_ca.get_control(cid), dict(req_base, control_id=cid))["status"]
+                      for cid in _ca._catalog()["controls"]}
+    return remediation_plan(determinations, boundary=posture.get("boundary", "(unspecified)"), top=top)
 
 
 def render_text(plan):

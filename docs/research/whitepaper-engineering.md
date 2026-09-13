@@ -811,7 +811,7 @@ on the flow *as data*; hashing it, embedding its conditions, walking its edges, 
 decisions, translating a foreign graph into it. None is well-defined against a Python routing
 callback. The lockfile (§4.6) and risk controlled calibrator (§4.7) are two more members of this
 family; here are the rest. The unifying primitive is that routing is a pure function
-`(outcome_text, [(target, condition)], instruction) -> target`, shared verbatim by every tool via
+`(outcome_text, [(target, condition)], instruction) -> route`, shared verbatim by every tool via
 `engine.first_deterministic` and the `router.route` interface; so the picture, the test, and the run
 can never disagree on how a node routes.
 
@@ -866,7 +866,7 @@ code-vs-data boundary made visible. CLI: `prismpath import <py_file> [--name NAM
 ### 8.5 `prismpath label` · the routelog labeling workbench
 
 Every semantic-tier decision a run makes can be appended to a JSONL log via the engine's
-`on_decision` hook; outcome, candidate edges with scores, margin, chosen target, whether it escalated
+`on_decision` hook; outcome, candidate edges with scores, margin, the route, whether it escalated
 (`routelog.run_logged`/`jsonl_sink`, `routelog.py:25,38`). `prismpath label <log.jsonl>` is the workbench
 that turns those raw records into ground-truth training data: it prints each unlabeled decision's
 outcome and numbered candidates (marking the router's own choice) and prompts for the correct edge.

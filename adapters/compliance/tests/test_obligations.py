@@ -2,7 +2,7 @@
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """The obligations layer links external drivers (regulations, contracts, policies) to the controls they
 require, so 'are we meeting DFARS 252.204-7012, and which controls are the breach' is one query against
-the live verdicts. Required evidence can arrive through a crosswalk, so one assessment satisfies
+the live determinations. Required evidence can arrive through a crosswalk, so one assessment satisfies
 obligations across frameworks."""
 from adapters.compliance import compliance_adapter as ca
 from adapters.compliance import obligations as ob

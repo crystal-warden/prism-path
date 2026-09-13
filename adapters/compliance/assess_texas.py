@@ -9,7 +9,7 @@
   documented     -> the pack's policy templates, generated for your org
 
 Every objective is scored by its declared mechanism, and its evidence provenance is reported. Output
-is a per-actor verdict tally plus the review-assistance notice. Nothing here is a legal determination.
+is a per-actor determination tally plus the review-assistance notice. Nothing here is a legal opinion.
 
 Run:  python -m adapters.compliance.assess_texas
 """
@@ -75,8 +75,9 @@ def assess_control(cid, config_facts, documented, operational):
             ev = "policy-provided" if met else "policy-needed"
         objs[oid] = (met, ev)
     vals = [met for met, _ in objs.values()]
-    status = "met" if all(met is True for met in vals) else ("partially-met" if any(met is True for met in vals) else "not-met")
-    return status, objs
+    determination = ("met" if all(met is True for met in vals)
+                     else ("partially-met" if any(met is True for met in vals) else "not-met"))
+    return determination, objs
 
 
 def assess_actor(actor, config_facts, documented, operational):
@@ -85,9 +86,9 @@ def assess_actor(actor, config_facts, documented, operational):
     tally = {"met": 0, "partially-met": 0, "not-met": 0, "not-applicable": appl["counts"]["not_applicable"]}
     rows = []
     for cid in appl["applicable"]:
-        status, objs = assess_control(cid, config_facts, documented, operational)
-        tally[status] += 1
-        rows.append((cid, status, objs))
+        determination, objs = assess_control(cid, config_facts, documented, operational)
+        tally[determination] += 1
+        rows.append((cid, determination, objs))
     return appl, tally, rows
 
 
@@ -109,9 +110,9 @@ def main():
     for actor in ACTORS:
         appl, tally, rows = assess_actor(actor, config_facts, documented, operational)
         print(f"\n{'='*78}\nACTOR: {actor}   {tally}")
-        for cid, status, objs in rows:
+        for cid, determination, objs in rows:
             prov = ",".join(sorted({ev for _, ev in objs.values()}))
-            print(f"    {cid:14} {status:14} [{prov}]")
+            print(f"    {cid:14} {determination:14} [{prov}]")
     print(f"\n{'='*78}\nReview assistance only. Documented objectives shown as policy-provided still "
           "require\nadjudication of the policy content in production; counsel review is the gate.")
 

@@ -9,7 +9,7 @@ and the control-implementation section is generated from the live assessment —
 implementation status, the responsible role, and the policy that governs it — so the SSP stays
 consistent with the actual posture and regenerates whenever the assessment or the policies change.
 
-Same template/instance model as the policy generator: with no profile and no verdicts it renders a
+Same template/instance model as the policy generator: with no profile and no determinations it renders a
 reusable blank (every field a TODO); with a filled profile and a real assessment it renders the
 organization's SSP. A generated SSP is a living document to maintain, not evidence by itself.
 """
@@ -59,18 +59,18 @@ def _sop_index():
     return idx
 
 
-def _impl_note(verdict, sop_title):
-    if verdict == "met":
+def _impl_note(determination, sop_title):
+    if determination == "met":
         return "Implemented; determination met."
-    if verdict == "partially-met":
+    if determination == "partially-met":
         return "Partially implemented; remaining objectives tracked on the POA&M."
     if sop_title:
         return "Planned. Adopt and operate the %s, then retain records; tracked on the POA&M." % sop_title
     return "Planned; tracked on the POA&M."
 
 
-def generate_ssp(profile=None, verdicts=None):
-    """Render the SSP. profile fills the system sections (blank fields become TODO); verdicts drive the
+def generate_ssp(profile=None, determinations=None):
+    """Render the SSP. profile fills the system sections (blank fields become TODO); determinations drive the
     control-implementation section (absent -> a blank TODO structure, the reusable template)."""
     profile = profile or {}
     _ca.use_standard("nist_800171_r2")
@@ -108,18 +108,19 @@ def generate_ssp(profile=None, verdicts=None):
     tally = {}
     for cid in sorted(catalog, key=_numkey):
         control = _ca.get_control(cid)
-        verdict = (verdicts or {}).get(cid)
-        tally[verdict] = tally.get(verdict, 0) + 1
-        status = _STATUS.get(verdict, "[TODO: status]") if verdicts else "[TODO: status]"
+        determination = (determinations or {}).get(cid)
+        tally[determination] = tally.get(determination, 0) + 1
+        status = _STATUS.get(determination, "[TODO: status]") if determinations else "[TODO: status]"
         sop_title = sop_idx.get(cid, "")
-        impl = _impl_note(verdict, sop_title) if verdicts else "[TODO: describe how this requirement is implemented]"
+        impl = (_impl_note(determination, sop_title) if determinations
+                else "[TODO: describe how this requirement is implemented]")
         lines.append("| %s | %s | %s | %s | %s | %s |" % (
             cid, control["title"], status, _owner(control), sop_title or "(no policy mapped)", impl))
     lines += ["", "## 6. Assessment Status", ""]
-    if verdicts:
+    if determinations:
         lines.append("Current posture: "
-                     + ", ".join("%s %d" % (verdict_name, count)
-                                 for verdict_name, count in sorted(tally.items()) if verdict_name)
+                     + ", ".join("%s %d" % (determination_name, count)
+                                 for determination_name, count in sorted(tally.items()) if determination_name)
                      + ".")
         lines.append("SPRS score: %s. See the POA&M for the prioritized remediation path." % profile_value("sprs_score"))
     else:

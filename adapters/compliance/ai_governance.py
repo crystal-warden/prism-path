@@ -51,7 +51,7 @@ def demo(use_llm=False):
 
 def render_text(assessment):
     lines = ["AI governance assessment  |  boundary: %s" % assessment["boundary"]]
-    lines.append("  controls: %d   verdicts: %s" % (assessment["n_controls"], assessment["tally"]))
+    lines.append("  controls: %d   determinations: %s" % (assessment["n_controls"], assessment["tally"]))
     lines.append("  objectives decided by: %s" % assessment["by_mechanism"])
     for control in assessment["controls"]:
         cov = ", ".join("%s:%d" % (mechanism, len(objective_ids))

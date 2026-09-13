@@ -5,7 +5,7 @@
 the engine can reach.
 
 This is the campaign thesis made concrete. One pass of the unified determination over 800-171 produces
-the verdicts; from those same verdicts, without re-assessing, the report answers:
+the determinations; from those same determinations, without re-assessing, the report answers:
 
   * NIST SP 800-171 Rev 2 itself (the tally, the SPRS score, the FAIR risk),
   * the CMMC 2.0 level statuses (via cmmc, its own scoring rule per level), and
@@ -30,19 +30,20 @@ def assess_environment(posture, completions=None, as_of=None, use_llm=False):
     boundary = (posture or {}).get("boundary", "(unspecified)")
     req_base = {"facts": facts, "boundary": boundary}
 
-    verdicts = {}
+    determinations = {}
     for cid in _ca._catalog()["controls"]:
         det = _un.full_determination(_ca.get_control(cid), dict(req_base, control_id=cid),
                                      completions=completions, as_of=as_of, use_llm=use_llm)
-        verdicts[cid] = det["status"]
+        determinations[cid] = det["status"]
 
     tally = {}
-    for verdict in verdicts.values():
-        tally[verdict] = tally.get(verdict, 0) + 1
-    records = [{"control_id": control_id, "status": verdict} for control_id, verdict in verdicts.items()]
+    for determination in determinations.values():
+        tally[determination] = tally.get(determination, 0) + 1
+    records = [{"control_id": control_id, "status": determination}
+               for control_id, determination in determinations.items()]
     weights = _ca.catalog_weights()
     sprs = _rollup.sprs_partial(records, weights) if weights else {}
-    risk = _fr.risk_register(verdicts)
+    risk = _fr.risk_register(determinations)
 
     cmmc_levels = [_cmmc.assess_level(lv, posture, completions, as_of, use_llm) for lv in (1, 2, 3)]
 
@@ -51,7 +52,7 @@ def assess_environment(posture, completions=None, as_of=None, use_llm=False):
         crosswalk = _cw.load_crosswalk(name)
         if "nist_800171_r2" not in (crosswalk["a"], crosswalk["b"]):
             continue
-        rep = _cw.propagate(crosswalk, "nist_800171_r2", verdicts)
+        rep = _cw.propagate(crosswalk, "nist_800171_r2", determinations)
         cov = _cw.coverage(crosswalk)
         reached.append({"framework": rep["target_framework"], "crosswalk": name,
                         "n_targets": rep["n_targets"], "tally": rep["tally"],
@@ -60,7 +61,7 @@ def assess_environment(posture, completions=None, as_of=None, use_llm=False):
     return {
         "boundary": boundary,
         "assessed_standard": "nist_800171_r2",
-        "nist_800171": {"n_controls": len(verdicts), "tally": tally},
+        "nist_800171": {"n_controls": len(determinations), "tally": tally},
         "sprs": {"score_if_all_assessed": sprs.get("ceiling_if_unassessed_all_met"),
                  "base": sprs.get("base"), "caveat": sprs.get("caveat")},
         "fair": {"aggregate_ale": risk["aggregate_ale"]},

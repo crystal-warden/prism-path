@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
-"""The FAIR risk pillar: vulnerability is driven by the deterministic compliance verdicts, so improving
+"""The FAIR risk pillar: vulnerability is driven by the deterministic compliance determinations, so improving
 compliance measurably lowers the annualized loss expectancy, and risk-acceptance is a signed record."""
 import json
 import os
@@ -46,7 +46,7 @@ def test_all_referenced_controls_exist_in_catalog():
 
 
 
-def test_vulnerability_driven_by_verdicts():
+def test_vulnerability_driven_by_determinations():
     scen = fr.load_scenarios()[0]                                # 5 mitigating controls
     assert fr.vulnerability(scen, _all("met")) == fr.RESIDUAL_VULN     # fully mitigated -> residual
     assert fr.vulnerability(scen, {}) == 1.0                            # nothing met -> full exposure

@@ -57,7 +57,7 @@ is the same struct on the wire, in the kernel, and on the fabric.
 | `prismpath-telemetry-rs/`, `prismpath-preflight/`, `prismpath-reflect-bindings/`, `integrations/vector/`, `integrations/wireshark/` | Facet in Rust, the adoption gate, type bindings, the Vector codec, the dissector | engineer, operator |
 | `prismpath-hotswap-rs/` | the signed pack and PolicyHost natively | operator |
 | `adapters/fusion/` | one Level M flow joining N decision sources | process owner |
-| `adapters/compliance/` | the GRC adjudication adapter: machine checkable controls, evidence typed verdicts, OSCAL | process owner, assessor |
+| `adapters/compliance/` | the GRC adjudication adapter: machine checkable controls, evidence typed determinations, OSCAL | process owner, assessor |
 | `integrations/zarf/`, `integrations/uds/`, `integrations/cpp/` | signed policy delivery, and embedding the C target | engineer |
 | `formal/` | the Lean 4 development proving Figueroa quantization within its declared domain | assessor |
 | `prismpath/comparisons/` | the pre registered comparison against OPA, Cedar, Cerbos, OpenFGA, Openlane, and the routing head to head | assessor |

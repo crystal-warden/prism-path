@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """One assessment, many frameworks: assess_environment runs the 800-171 determination once and reports
-the same verdicts as an 800-171 tally, the CMMC level statuses, and every crosswalked framework. A
+the same determinations as an 800-171 tally, the CMMC level statuses, and every crosswalked framework. A
 framework appears only if a stated-authority mapping reaches it, and partial mappings are labeled."""
 from adapters.compliance import multi_framework as mf
 
@@ -11,7 +11,7 @@ def test_reports_every_reachable_framework_from_one_assessment():
     assert posture["assessed_standard"] == "nist_800171_r2"
     assert posture["nist_800171"]["n_controls"] == 110
     assert sum(posture["nist_800171"]["tally"].values()) == 110
-    # SPRS and FAIR are real rollups of the same verdicts
+    # SPRS and FAIR are real rollups of the same determinations
     assert isinstance(posture["sprs"]["score_if_all_assessed"], int)
     assert posture["fair"]["aggregate_ale"]["likely"] > 0
     # all three CMMC levels reported; L1 and L2 have a concrete status

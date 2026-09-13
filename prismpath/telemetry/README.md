@@ -20,7 +20,7 @@ runs lands here.
   differentiated proof, frozen: 4 flows × 55 boundary-probing readings, each tagged with its
   full-precision route at every decision node. The corpus is replayed two ways; the engine must
   reproduce the frozen routes (drift guard), and the **wire round-trip** (quantize → Fibonacci-code →
-  decode → reconstruct) must route to the same target at every node (decision preservation, end to end
+  decode → reconstruct) must take the same route at every node (decision preservation, end to end
   through the real codec). Regenerate with `gen_decisions_corpus.py`.
 - ✅ **Go/no-go benchmarks** (`bench/`, results in `bench/results.md`); **PASS**. Two sets: a codec
   bake-off and a parametric sweep (value regime × stream scale to 100k + Gilbert-Elliott retransmission).
@@ -97,7 +97,7 @@ traffic distributes over the flow's routes. Every encodable event is replayed th
 trip (quantize, Fibonacci-code, decode, reconstruct) and checked to route **identically** to the
 original at every decision node, so decision preservation is verified on *your* data. Semantics match
 the Vector codec exactly (`--map` = `field_paths`, `--on-missing` = `on_missing`, one byte-aligned
-reading per frame). Exit 0 only when nothing needs attention, so it drops straight into CI. `--privacy` adds a measured privacy audit: each field's reconstruction bound (how precisely a raw value is recoverable from its cell) and, for fusion policies, how many joint input cells produce each verdict (a verdict made by many input cells hides its inputs; one made by a single cell pins them).
+reading per frame). Exit 0 only when nothing needs attention, so it drops straight into CI. `--privacy` adds a measured privacy audit: each field's reconstruction bound (how precisely a raw value is recoverable from its cell) and, for fusion policies, how many joint input cells produce each route (a route made by many input cells hides its inputs; one made by a single cell pins them).
 ```
 python prismpath/telemetry/preflight.py <flow.md> <sample.ndjson> \
     [--map FIELD=json.dot.path] [--on-missing error|skip] [--route-node N] [--privacy] [--json report.json]

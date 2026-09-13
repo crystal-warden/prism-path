@@ -368,7 +368,7 @@ CHECKS = {oid: _make_check(kind, key) for oid, (kind, key) in CHECK_SPEC.items()
 FACT_KEYS = {oid: key for oid, (_kind, key) in CHECK_SPEC.items()}
 
 # --- Evidence provenance (the cause-code layer, ported from the fabric receipt) ---
-# A deterministic verdict is only as trustworthy as HOW its fact was evidenced. Every fact carries an
+# A deterministic determination is only as trustworthy as HOW its fact was evidenced. Every fact carries an
 # evidence class so a determination receipt discloses its provenance, the way the interpreter fabric
 # stamps a cause byte per evaluate (supporting-evidence #129/#130). Two classes here:
 #   "scanned"  - a tool/command reads the running configuration (services, ports, PAM, crypto, firewall,
@@ -411,7 +411,7 @@ def machine_checkable(control) -> bool:
 
 
 def check_objectives(control, facts) -> dict:
-    """Per-objective config verdicts for the objectives this module can decide from `facts`. Returns
+    """Per-objective config determinations for the objectives this module can decide from `facts`. Returns
     {objective_id: bool} for decided objectives only, skipping those with no check or a missing fact.
     Unlike adjudicate_deterministic (all-or-defer), this is the partial view the unified adjudicator
     merges with the other mechanisms."""
@@ -473,10 +473,10 @@ def adjudicate_deterministic(control, req) -> Optional[dict]:
         results[oid] = result
     unmet = sorted(oid for oid, ok in results.items() if not ok)
     if not unmet:
-        status, gap = "met", "all %d objectives satisfied by configuration facts" % len(results)
+        determination, gap = "met", "all %d objectives satisfied by configuration facts" % len(results)
     elif len(unmet) < len(results):
-        status, gap = "partially-met", "unsatisfied by configuration facts: " + ", ".join(unmet)
+        determination, gap = "partially-met", "unsatisfied by configuration facts: " + ", ".join(unmet)
     else:
-        status, gap = "not-met", "no objectives satisfied by configuration facts"
-    return {"status": status, "unmet_objective_ids": unmet, "gap_summary": gap,
+        determination, gap = "not-met", "no objectives satisfied by configuration facts"
+    return {"status": determination, "unmet_objective_ids": unmet, "gap_summary": gap,
             "method": "deterministic", "evidence": _evidence_rollup(results.keys())}

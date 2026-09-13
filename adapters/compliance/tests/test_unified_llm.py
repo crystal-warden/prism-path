@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """The LLM path in the unified adjudicator: prose objectives no other mechanism covers are resolved by
-the escalation-default LLM adjudicator, config and operational verdicts still win, and an unreachable
+the escalation-default LLM adjudicator, config and operational determinations still win, and an unreachable
 model fails closed rather than crashing or being assumed."""
 import pytest
 from adapters.compliance import compliance_adapter as ca
@@ -24,7 +24,7 @@ def test_llm_resolves_undetermined_prose_objectives(monkeypatch):
     assert all(resolution["by"] == "llm" for resolution in det["by_objective"].values())
 
 
-def test_llm_partial_verdict(monkeypatch):
+def test_llm_partial_determination(monkeypatch):
     objs = [objective["id"] for objective in _c("3.1.3")["objectives"]]
     monkeypatch.setattr(ca, "adjudicate",
                         lambda control, req: {"status": "partially-met", "unmet_objective_ids": [objs[0]], "gap_summary": "x"})

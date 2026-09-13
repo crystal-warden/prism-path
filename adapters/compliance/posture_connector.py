@@ -83,7 +83,7 @@ def required_facts(get_control=None):
 
 def assess(posture, out_dir=None, get_control=None):
     """Grade every control this posture can fully decide, deterministically. Returns per-control
-    determinations, the controls deferred for want of facts, and a status tally. Writes finding/POA&M
+    determinations, the controls deferred for want of facts, and a determination tally. Writes finding/POA&M
     records to out_dir when given."""
     gc = _resolve_get_control(get_control)
     facts = posture.get("facts", {}) or {}
