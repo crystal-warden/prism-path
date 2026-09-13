@@ -170,6 +170,41 @@ def test_byte_identical_regeneration(tmp_path: Path):
     assert md1 == md2
 
 
+def test_every_check_reports_in_one_message_in_a_fixed_order(tmp_path: Path):
+    """One file that trips a check in each group, so splitting the validator cannot reorder or drop one."""
+    results_dir = tmp_path / "results"
+
+    make_result_file(
+        results_dir,
+        system="prismpath",
+        dimension="A1",
+        policy="p1",
+        scenario="s1",
+        grade="WITH-WORK",
+        glue=None,
+        override_fields={
+            "system": 123,
+            "dimension": "A2",
+            "policy": 5,
+            "notes": 7,
+            "measurements": "not-an-object",
+        },
+    )
+
+    with pytest.raises(ValueError) as raised:
+        build_matrix(results_dir)
+
+    reported = [line.strip()[2:] for line in str(raised.value).splitlines()[1:]]
+    assert reported == [
+        "File 'prismpath/A1__p1__s1.json' field 'system' must be a string.",
+        "File 'prismpath/A1__p1__s1.json' field 'dimension' ('A2') disagrees with filename dimension ('A1').",
+        "File 'prismpath/A1__p1__s1.json' field 'policy' must be a string.",
+        "File 'prismpath/A1__p1__s1.json' field 'notes' must be a string.",
+        "File 'prismpath/A1__p1__s1.json' has grade 'WITH-WORK' but missing or non-object 'glue'.",
+        "File 'prismpath/A1__p1__s1.json' field 'measurements' must be an object.",
+    ]
+
+
 def test_b1_cedar_native_prismpath_with_work_yields_loses(tmp_path: Path):
     results_dir = tmp_path / "results"
 
