@@ -513,6 +513,253 @@ static void send_evidence(camera_fb_t *fb, uint32_t seq, uint64_t t_cap, uint16_
     ESP_LOGI(TAG, "evidence for %s: %lu B", POLICY_NODE_NAMES[route], (unsigned long)(sizeof(eh) + jlen));
 }
 
+/* The actuator LED at boot, plus the replay floor the last executed action left in flash. */
+static void init_actuator_led(void) {
+    gpio_config_t pins_config = {.pin_bit_mask = 1ULL << LED_GPIO, .mode = GPIO_MODE_OUTPUT};
+    gpio_config(&pins_config);
+    gpio_set_level(LED_GPIO, 0);
+    nvs_handle_t nvs_handle;
+    if (nvs_open("cam", NVS_READONLY, &nvs_handle) == ESP_OK) {
+        nvs_get_u32(nvs_handle, "act", &act_counter_floor);
+        nvs_close(nvs_handle);
+    }
+}
+
+/* A pack committed before the last reset is re-admitted here, so a swap survives power loss rather
+   than silently reverting the node to the built in policy (WIRE.md). */
+static void reapply_stored_pack(void) {
+    nvs_handle_t nvs_handle;
+    if (nvs_open("cam", NVS_READONLY, &nvs_handle) != ESP_OK) {
+        return;
+    }
+    size_t pack_len = PACK_MAX;
+    if (nvs_get_blob(nvs_handle, "pack", staged, &pack_len) == ESP_OK && pack_len > PACK_HDR_LEN) {
+        staged_len = pack_len;
+        staged_total = (uint16_t)((pack_len + CHUNK - 1) / CHUNK);
+        staged_count = staged_total;
+        memset(staged_have, 0xff, sizeof(staged_have));
+        uint32_t version;
+        uint64_t image_hash_val;
+        uint32_t verify_us;
+        uint16_t cause = swap_execute(&version, &image_hash_val, &verify_us);
+        ESP_LOGI(TAG, "stored policy pack version %lu re-applied at boot: %s (cause %u)", (unsigned long)version,
+                 cause ? "REFUSED" : "committed", cause);
+    }
+    nvs_close(nvs_handle);
+}
+
+/* The operator's key on the USB console. Reading is non blocking because the camera loop owns the task. */
+static void poll_console(bool usb_ok, bool *adopt_now) {
+    uint8_t console_byte;
+    if (usb_ok && usb_serial_jtag_read_bytes(&console_byte, 1, 0) == 1 && console_byte == 'n') {
+        ESP_LOGI(TAG, "operator adopts the normal");
+        *adopt_now = true;
+    }
+}
+
+/* The staged action, executed and answered with one ACT2 record carrying the cause either way, so a
+   refusal is as visible on the link as a move (WIRE.md). */
+static void run_actuator(void) {
+    uint32_t counter;
+    uint16_t cause = act_execute(&counter);
+    uint8_t rec[17];
+    memcpy(rec, "ACT2", 4);
+    rec[4] = node_id & 0xff;
+    rec[5] = node_id >> 8;
+    memcpy(rec + 6, &counter, 4);
+    memcpy(rec + 10, &cause, 2);
+    rec[12] = led_on ? 1 : 0;
+    uint32_t uptime_ms = (uint32_t)(esp_timer_get_time() / 1000);
+    memcpy(rec + 13, &uptime_ms, 4);
+    esp_now_send(BCAST, rec, sizeof(rec));
+    hop_send(rec, sizeof(rec));
+    ESP_LOGI(TAG, "action %lu: %s (cause %u), led %s", (unsigned long)counter, cause ? "REFUSED" : "moved", cause,
+             led_on ? "on" : "off");
+}
+
+/* The staged pack, admitted or refused, answered with one SWP1 record. The measured verify time rides
+   along because the swap has to fit inside a frame budget (WIRE.md). */
+static void run_policy_swap(void) {
+    uint32_t version;
+    uint32_t verify_us;
+    uint64_t image_hash_val;
+    uint16_t cause = swap_execute(&version, &image_hash_val, &verify_us);
+    swp_t swap_record = {{'S', 'W', 'P', '1'}, node_id,        version, cause, verify_us, image_hash_val,
+                         (uint64_t)esp_timer_get_time()};
+    uint8_t swap_bytes[sizeof(swap_record)];
+    memcpy(swap_bytes, &swap_record, sizeof(swap_record));
+    esp_now_send(BCAST, swap_bytes, sizeof(swap_bytes));
+    hop_send(swap_bytes, sizeof(swap_bytes));
+    ESP_LOGI(TAG, "policy swap to version %lu: %s (cause %u) in %lu us; now version %lu", (unsigned long)version,
+             cause ? "REFUSED" : "committed", cause, (unsigned long)verify_us, (unsigned long)policy_version);
+}
+
+/* A receiver names the fragments it never saw and the node resends only those, while it still holds them. */
+static void resend_requested_fragments(const uint8_t *cmd_buf, int n_read) {
+    uint16_t message_id = cmd_buf[4] | (cmd_buf[5] << 8);
+    int count = cmd_buf[6];
+    if (count > n_read - 7) {
+        count = n_read - 7;
+    }
+    int done = radio_resend_fragments(node_id, message_id, cmd_buf + 7, count);
+    ESP_LOGI(TAG, "repair for message %u: %d fragment(s) %s", message_id, count,
+             done < 0 ? "no longer held" : "resent");
+}
+
+/* One command already known to be addressed to this node. The command byte is cmd_buf[3] (WIRE.md). */
+static void handle_command(const uint8_t *cmd_buf, int n_read, uint32_t seq, bool *adopt_now, bool *key_now) {
+    if (cmd_buf[3] == 'n') {
+        ESP_LOGI(TAG, "adopt over the air");
+        *adopt_now = true;
+    } else if (cmd_buf[3] == 'K') {
+        publish_cam_key();
+        sign_chain_head(seq, chain_prev);
+    } else if (cmd_buf[3] == 'k') {
+        ESP_LOGI(TAG, "keyframe requested over the air");
+        *key_now = true;
+    } else if (cmd_buf[3] == 'L' && n_read >= 5) {
+        layer_level = cmd_buf[4];
+        ESP_LOGI(TAG, "refinement layer %d over the air", layer_level);
+        memset(layer_have, 0, sizeof(layer_have));
+    } else if (cmd_buf[3] == 'S' && n_read >= 8) {
+        swap_chunk(cmd_buf + 4, n_read - 4);
+    } else if (cmd_buf[3] == 'Y') {
+        run_actuator();
+    } else if (cmd_buf[3] == 'X') {
+        run_policy_swap();
+    } else if (cmd_buf[3] == 'r' && n_read >= 7) {
+        resend_requested_fragments(cmd_buf, n_read);
+    }
+}
+
+/* Commands arrive between frames. At most eight are taken per frame so a burst on the link cannot
+   starve the camera loop. */
+static void drain_hop_commands(uint32_t seq, bool *adopt_now, bool *key_now) {
+    for (int drained = 0; hop_up && hop_sock >= 0 && drained < 8; drained++) {
+        uint8_t cmd_buf[32];
+        int n_read = recv(hop_sock, cmd_buf, sizeof(cmd_buf), MSG_DONTWAIT);
+        if (n_read <= 0) {
+            break;
+        }
+        if (n_read < 4 || cmd_buf[0] != 'C') {
+            continue;
+        }
+        uint16_t target_node = cmd_buf[1] | (cmd_buf[2] << 8);
+        if (target_node != node_id && target_node != 0xffff) {
+            continue;
+        }
+        handle_command(cmd_buf, n_read, seq, adopt_now, key_now);
+    }
+}
+
+/* The actuator is a pulse, not a latch: the LED goes out on its own once the window has passed. */
+static void expire_actuator_led(void) {
+    if (led_on && esp_timer_get_time() > t_led_off) {
+        act_led(false);
+    }
+}
+
+/* The front end has to fit inside the frame budget, so it reports its own cost every ten seconds
+   rather than being measured only on the bench (FRONT_END.md). */
+static void log_front_end_timing(int64_t elapsed_us) {
+    static int64_t fe_sum = 0;
+    static int64_t fe_max = 0;
+    static int64_t t_fe_log = 0;
+    static int fe_n = 0;
+    fe_sum += elapsed_us;
+    fe_n++;
+    if (elapsed_us > fe_max) {
+        fe_max = elapsed_us;
+    }
+    if (esp_timer_get_time() - t_fe_log > 10000000) {
+        ESP_LOGI(TAG, "front end %dx%d: mean %lld us, max %lld us over %d frames; free PSRAM %u B", FRAME_W, FRAME_H,
+                 (long long)(fe_sum / fe_n), (long long)fe_max, fe_n,
+                 (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
+        fe_sum = 0;
+        fe_n = 0;
+        fe_max = 0;
+        t_fe_log = esp_timer_get_time();
+    }
+}
+
+/* The background subtraction pipeline on the current frame, timed (FRONT_END.md). */
+static void run_front_end(int32_t *motion_cells, int32_t *dark, int32_t *step, int32_t *door_hit, int32_t *scene) {
+    int64_t t_fe0 = esp_timer_get_time();
+    front_end(motion_cells, dark, step, door_hit, scene);
+    log_front_end_timing(esp_timer_get_time() - t_fe0);
+}
+
+/* One reading per frame as one ESP-NOW frame, then the hash chain advances over exactly the bytes that
+   went out, so a receiver detects a dropped or altered reading as cause 56 (WIRE.md). Returns the
+   decision timestamp the schedulers below are paced by. */
+static uint64_t send_reading(uint32_t seq, uint64_t t_cap, uint16_t node, uint16_t steps) {
+    static uint8_t pkt[ESPNOW_MAX];
+    uint8_t wirebuf[128];
+    uint16_t wire_len = encode_reading(wirebuf, sizeof(wirebuf));
+    uint64_t t_dec = (uint64_t)esp_timer_get_time();
+    rdg_hdr_t reading_header = {
+        {'R', 'D', 'G', '6'},     node_id,   normal_id, seq, t_cap, t_dec, node, steps, wire_len, chain_prev,
+        (uint16_t)policy_version, boot_epoch};
+    memcpy(pkt, &reading_header, sizeof(reading_header));
+    memcpy(pkt + sizeof(reading_header), wirebuf, wire_len);
+    esp_now_send(BCAST, pkt, sizeof(reading_header) + wire_len);
+    hop_send(pkt, sizeof(reading_header) + wire_len);
+    uint8_t hash_buf[32];
+    mbedtls_sha256(pkt, sizeof(reading_header) + wire_len, hash_buf, 0);
+    memcpy(&chain_prev, hash_buf, 8);
+    return t_dec;
+}
+
+/* The camera key travels with the signed head so a late joining receiver can check the chain it is
+   seeing for the first time. */
+static void sign_chain_head_if_due(uint32_t seq, uint64_t t_dec) {
+    static uint64_t t_chn = 0;
+    if (t_dec - t_chn > CHAIN_SIGN_US) {
+        publish_cam_key();
+        sign_chain_head(seq, chain_prev);
+        t_chn = t_dec;
+    }
+}
+
+/* A new normal is sent at once because every reading is read against it; the periodic resend is for
+   receivers that joined after the last one (WIRE.md). */
+static void send_keyframe_if_due(camera_fb_t *fb, uint32_t seq, uint64_t t_cap, uint64_t t_dec, bool *key_now) {
+    static uint64_t t_key = 0;
+    static uint16_t last_normal = 0xffff;
+    if (normal_set && (normal_id != last_normal || *key_now || t_dec - t_key > KEY_RESEND_US)) {
+        send_keyframe(fb, seq, t_cap);
+        t_key = t_dec;
+        last_normal = normal_id;
+        *key_now = false;
+    }
+}
+
+/* A picture behind an escalating decision, rate limited: the capture is the most expensive object on
+   the link and a sustained escalation would otherwise own the whole radio. */
+static void send_evidence_if_due(camera_fb_t *fb, uint32_t seq, uint64_t t_cap, uint64_t t_dec, uint16_t node) {
+    static uint64_t t_evd = 0;
+    if (escalates(node) && t_dec - t_evd > EVIDENCE_GAP_US) {
+        send_evidence(fb, seq, t_cap, node);
+        t_evd = t_dec;
+    }
+}
+
+/* The refinement layer is only meaningful where the decision says something is there, and the per cell
+   memory is dropped otherwise so the next run starts from a full send. */
+static void send_refinement_layer_if_enabled(uint32_t seq, uint16_t node) {
+    if (layer_level < 3) {
+        return;
+    }
+    const char *node_name = POLICY_NODE_NAMES[node];
+    bool occupied = !strcmp(node_name, "occupied");
+    bool door = !strcmp(node_name, "door");
+    if (occupied || door) {
+        send_layer3(seq, node, door);
+    } else {
+        memset(layer_have, 0, sizeof(layer_have));
+    }
+}
+
 void app_main(void) {
     vision_core_init();
     last_sent = heap_caps_malloc(FRAME_W * FRAME_H, MALLOC_CAP_SPIRAM);
@@ -522,35 +769,8 @@ void app_main(void) {
     swap_reset();
     boot_epoch = esp_random();
     cam_key_init();
-    {
-        gpio_config_t pins_config = {.pin_bit_mask = 1ULL << LED_GPIO, .mode = GPIO_MODE_OUTPUT};
-        gpio_config(&pins_config);
-        gpio_set_level(LED_GPIO, 0);
-        nvs_handle_t nvs_handle;
-        if (nvs_open("cam", NVS_READONLY, &nvs_handle) == ESP_OK) {
-            nvs_get_u32(nvs_handle, "act", &act_counter_floor);
-            nvs_close(nvs_handle);
-        }
-    }
-    {
-        nvs_handle_t nh;
-        if (nvs_open("cam", NVS_READONLY, &nh) == ESP_OK) {
-            size_t plen = PACK_MAX;
-            if (nvs_get_blob(nh, "pack", staged, &plen) == ESP_OK && plen > PACK_HDR_LEN) {
-                staged_len = plen;
-                staged_total = (uint16_t)((plen + CHUNK - 1) / CHUNK);
-                staged_count = staged_total;
-                memset(staged_have, 0xff, sizeof(staged_have));
-                uint32_t ver;
-                uint64_t image_hash_val;
-                uint32_t us;
-                uint16_t cause = swap_execute(&ver, &image_hash_val, &us);
-                ESP_LOGI(TAG, "stored policy pack version %lu re-applied at boot: %s (cause %u)", (unsigned long)ver,
-                         cause ? "REFUSED" : "committed", cause);
-            }
-            nvs_close(nh);
-        }
-    }
+    init_actuator_led();
+    reapply_stored_pack();
     camera_config_t cam_cfg = {
         .pin_pwdn = -1,
         .pin_reset = -1,
@@ -596,89 +816,14 @@ void app_main(void) {
     ESP_LOGI(TAG, "radio node %02x:%02x:%02x:%02x:%02x:%02x streaming over ESP-NOW", mac[0], mac[1], mac[2], mac[3],
              mac[4], mac[5]);
     uint32_t seq = 0;
-    static uint8_t pkt[ESPNOW_MAX];
-    uint64_t t_key = 0;
-    uint64_t t_evd = 0;
-    uint16_t last_normal = 0xffff;
     bool adopt_now = false;
     bool key_now = false;
-    usb_serial_jtag_driver_config_t ucfg = {.tx_buffer_size = 16384, .rx_buffer_size = 256};
-    bool usb_ok = usb_serial_jtag_driver_install(&ucfg) == ESP_OK;
+    usb_serial_jtag_driver_config_t usb_config = {.tx_buffer_size = 16384, .rx_buffer_size = 256};
+    bool usb_ok = usb_serial_jtag_driver_install(&usb_config) == ESP_OK;
     while (1) {
-        uint8_t ch;
-        if (usb_ok && usb_serial_jtag_read_bytes(&ch, 1, 0) == 1 && ch == 'n') {
-            ESP_LOGI(TAG, "operator adopts the normal");
-            adopt_now = true;
-        }
-        for (int drained = 0; hop_up && hop_sock >= 0 && drained < 8; drained++) {
-            uint8_t cmd_buf[32];
-            int n_read = recv(hop_sock, cmd_buf, sizeof(cmd_buf), MSG_DONTWAIT);
-            if (n_read <= 0) {
-                break;
-            }
-            if (n_read >= 4 && cmd_buf[0] == 'C') {
-                uint16_t target_node = cmd_buf[1] | (cmd_buf[2] << 8);
-                if (target_node == node_id || target_node == 0xffff) {
-                    if (cmd_buf[3] == 'n') {
-                        ESP_LOGI(TAG, "adopt over the air");
-                        adopt_now = true;
-                    } else if (cmd_buf[3] == 'K') {
-                        publish_cam_key();
-                        sign_chain_head(seq, chain_prev);
-                    } else if (cmd_buf[3] == 'k') {
-                        ESP_LOGI(TAG, "keyframe requested over the air");
-                        key_now = true;
-                    } else if (cmd_buf[3] == 'L' && n_read >= 5) {
-                        layer_level = cmd_buf[4];
-                        ESP_LOGI(TAG, "refinement layer %d over the air", layer_level);
-                        memset(layer_have, 0, sizeof(layer_have));
-                    } else if (cmd_buf[3] == 'S' && n_read >= 8) {
-                        swap_chunk(cmd_buf + 4, n_read - 4);
-                    } else if (cmd_buf[3] == 'Y') {
-                        uint32_t ctr;
-                        uint16_t cause = act_execute(&ctr);
-                        uint8_t rec[17];
-                        memcpy(rec, "ACT2", 4);
-                        rec[4] = node_id & 0xff;
-                        rec[5] = node_id >> 8;
-                        memcpy(rec + 6, &ctr, 4);
-                        memcpy(rec + 10, &cause, 2);
-                        rec[12] = led_on ? 1 : 0;
-                        uint32_t tl = (uint32_t)(esp_timer_get_time() / 1000);
-                        memcpy(rec + 13, &tl, 4);
-                        esp_now_send(BCAST, rec, sizeof(rec));
-                        hop_send(rec, sizeof(rec));
-                        ESP_LOGI(TAG, "action %lu: %s (cause %u), led %s", (unsigned long)ctr,
-                                 cause ? "REFUSED" : "moved", cause, led_on ? "on" : "off");
-                    } else if (cmd_buf[3] == 'X') {
-                        uint32_t ver, us;
-                        uint64_t image_hash_val;
-                        uint16_t cause = swap_execute(&ver, &image_hash_val, &us);
-                        swp_t sw = {{'S', 'W', 'P', '1'},          node_id, ver, cause, us, image_hash_val,
-                                    (uint64_t)esp_timer_get_time()};
-                        uint8_t sb[sizeof(sw)];
-                        memcpy(sb, &sw, sizeof(sw));
-                        esp_now_send(BCAST, sb, sizeof(sb));
-                        hop_send(sb, sizeof(sb));
-                        ESP_LOGI(TAG, "policy swap to version %lu: %s (cause %u) in %lu us; now version %lu",
-                                 (unsigned long)ver, cause ? "REFUSED" : "committed", cause, (unsigned long)us,
-                                 (unsigned long)policy_version);
-                    } else if (cmd_buf[3] == 'r' && n_read >= 7) {
-                        uint16_t id = cmd_buf[4] | (cmd_buf[5] << 8);
-                        int cnt = cmd_buf[6];
-                        if (cnt > n_read - 7) {
-                            cnt = n_read - 7;
-                        }
-                        int done = radio_resend_fragments(node_id, id, cmd_buf + 7, cnt);
-                        ESP_LOGI(TAG, "repair for message %u: %d fragment(s) %s", id, cnt,
-                                 done < 0 ? "no longer held" : "resent");
-                    }
-                }
-            }
-        }
-        if (led_on && esp_timer_get_time() > t_led_off) {
-            act_led(false);
-        }
+        poll_console(usb_ok, &adopt_now);
+        drain_hop_commands(seq, &adopt_now, &key_now);
+        expire_actuator_led();
         camera_fb_t *fb = esp_camera_fb_get();
         if (!fb) {
             continue;
@@ -689,75 +834,20 @@ void app_main(void) {
             adopt_now = false;
             adopt_normal();
         }
-        int64_t t_fe0 = esp_timer_get_time();
-        int32_t motion_cells, dark, step, door_hit, scene;
-        front_end(&motion_cells, &dark, &step, &door_hit, &scene);
-        {
-            static int64_t fe_sum = 0;
-            static int64_t fe_max = 0;
-            static int64_t t_fe_log = 0;
-            static int fe_n = 0;
-            int64_t dt = esp_timer_get_time() - t_fe0;
-            fe_sum += dt;
-            fe_n++;
-            if (dt > fe_max) {
-                fe_max = dt;
-            }
-            if (esp_timer_get_time() - t_fe_log > 10000000) {
-                ESP_LOGI(TAG, "front end %dx%d: mean %lld us, max %lld us over %d frames; free PSRAM %u B", FRAME_W,
-                         FRAME_H, (long long)(fe_sum / fe_n), (long long)fe_max, fe_n,
-                         (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
-                fe_sum = 0;
-                fe_n = 0;
-                fe_max = 0;
-                t_fe_log = esp_timer_get_time();
-            }
-        }
-        uint16_t node, steps;
+        int32_t motion_cells;
+        int32_t dark;
+        int32_t step;
+        int32_t door_hit;
+        int32_t scene;
+        run_front_end(&motion_cells, &dark, &step, &door_hit, &scene);
+        uint16_t node;
+        uint16_t steps;
         decide(motion_cells, dark, step, door_hit, scene, &node, &steps);
-        uint8_t wirebuf[128];
-        uint16_t wire_len = encode_reading(wirebuf, sizeof(wirebuf));
-        uint64_t t_dec = (uint64_t)esp_timer_get_time();
-        rdg_hdr_t rh = {
-            {'R', 'D', 'G', '6'},     node_id,   normal_id, seq, t_cap, t_dec, node, steps, wire_len, chain_prev,
-            (uint16_t)policy_version, boot_epoch};
-        memcpy(pkt, &rh, sizeof(rh));
-        memcpy(pkt + sizeof(rh), wirebuf, wire_len);
-        esp_now_send(BCAST, pkt, sizeof(rh) + wire_len);
-        hop_send(pkt, sizeof(rh) + wire_len);
-        {
-            uint8_t hash_buf[32];
-            mbedtls_sha256(pkt, sizeof(rh) + wire_len, hash_buf, 0);
-            memcpy(&chain_prev, hash_buf, 8);
-        }
-        {
-            static uint64_t t_chn = 0;
-            if (t_dec - t_chn > CHAIN_SIGN_US) {
-                publish_cam_key();
-                sign_chain_head(seq, chain_prev);
-                t_chn = t_dec;
-            }
-        }
-        if (normal_set && (normal_id != last_normal || key_now || t_dec - t_key > KEY_RESEND_US)) {
-            send_keyframe(fb, seq, t_cap);
-            t_key = t_dec;
-            last_normal = normal_id;
-            key_now = false;
-        }
-        if (escalates(node) && t_dec - t_evd > EVIDENCE_GAP_US) {
-            send_evidence(fb, seq, t_cap, node);
-            t_evd = t_dec;
-        }
-        if (layer_level >= 3) {
-            const char *nm = POLICY_NODE_NAMES[node];
-            bool occ = !strcmp(nm, "occupied");
-            bool door = !strcmp(nm, "door");
-            if (occ || door) {
-                send_layer3(seq, node, door);
-            } else {
-                memset(layer_have, 0, sizeof(layer_have));
-            }
-        }
+        uint64_t t_dec = send_reading(seq, t_cap, node, steps);
+        sign_chain_head_if_due(seq, t_dec);
+        send_keyframe_if_due(fb, seq, t_cap, t_dec, &key_now);
+        send_evidence_if_due(fb, seq, t_cap, t_dec, node);
+        send_refinement_layer_if_enabled(seq, node);
         esp_camera_fb_return(fb);
         seq++;
     }
