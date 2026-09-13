@@ -38,7 +38,7 @@ from adafruit_bno08x import (
 from adafruit_bno08x.i2c import BNO08X_I2C
 
 # --- derivation constants: identical to field_bridge.py v4 (do not drift) ---
-G = 9.81
+GRAVITY_MS2 = 9.81
 DEADBAND = 0.15
 SCALE = 20.0
 HOLD_S = 1.5
@@ -75,25 +75,25 @@ def init_sensor():
     return bno, rst
 
 
-def quat_to_orientation(x, y, z, w):
+def quat_to_orientation(quat_i, quat_j, quat_k, quat_real):
     """(i,j,k,real) -> {roll, pitch, yaw, tilt_deg} in degrees (tilt = angle off level)."""
-    roll = math.atan2(2 * (w * x + y * z), 1 - 2 * (x * x + y * y))
-    sp = max(-1.0, min(1.0, 2 * (w * y - z * x)))
-    pitch = math.asin(sp)
-    yaw = math.atan2(2 * (w * z + x * y), 1 - 2 * (y * y + z * z))
-    up_z = max(-1.0, min(1.0, 1 - 2 * (x * x + y * y)))
+    roll = math.atan2(2 * (quat_real * quat_i + quat_j * quat_k), 1 - 2 * (quat_i * quat_i + quat_j * quat_j))
+    sin_pitch = max(-1.0, min(1.0, 2 * (quat_real * quat_j - quat_k * quat_i)))
+    pitch = math.asin(sin_pitch)
+    yaw = math.atan2(2 * (quat_real * quat_k + quat_i * quat_j), 1 - 2 * (quat_j * quat_j + quat_k * quat_k))
+    up_z = max(-1.0, min(1.0, 1 - 2 * (quat_i * quat_i + quat_j * quat_j)))
     tilt = math.acos(up_z)
     return {"roll": round(math.degrees(roll), 1), "pitch": round(math.degrees(pitch), 1),
             "yaw": round(math.degrees(yaw), 1), "tilt_deg": round(math.degrees(tilt), 1)}
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--host", default=None)
-    ap.add_argument("--port", type=int, default=9317)
-    ap.add_argument("--hz", type=float, default=10.0)
-    ap.add_argument("--stdout", action="store_true")
-    args = ap.parse_args()
+    arg_parser = argparse.ArgumentParser()
+    arg_parser.add_argument("--host", default=None)
+    arg_parser.add_argument("--port", type=int, default=9317)
+    arg_parser.add_argument("--hz", type=float, default=10.0)
+    arg_parser.add_argument("--stdout", action="store_true")
+    args = arg_parser.parse_args()
 
     out = sys.stdout
     if not args.stdout:
@@ -120,7 +120,7 @@ def main() -> int:
     chip = None
 
     while True:
-        t = time.monotonic()
+        now = time.monotonic()
         try:
             signal.setitimer(signal.ITIMER_REAL, 1.5)
             ax, ay, az = bno.acceleration
@@ -135,11 +135,11 @@ def main() -> int:
                 pass
             signal.setitimer(signal.ITIMER_REAL, 0)
             errors = 0
-        except Exception as e:
+        except Exception as error:
             signal.setitimer(signal.ITIMER_REAL, 0)
             errors += 1
             if errors == 1 or errors % 20 == 0:
-                print(f"read error x{errors} (continuing): {e}", file=sys.stderr)
+                print(f"read error x{errors} (continuing): {error}", file=sys.stderr)
             if errors >= REINIT_AFTER:
                 try:
                     rst.deinit()
@@ -159,9 +159,9 @@ def main() -> int:
 
         if (ax, ay, az) != last_raw:
             last_raw = (ax, ay, az)
-            last_change = t
-        elif t - last_change > STALE_S:
-            last_change = t
+            last_change = now
+        elif now - last_change > STALE_S:
+            last_change = now
             try:
                 rst.deinit()
             except Exception:
@@ -175,20 +175,20 @@ def main() -> int:
                 time.sleep(1.0)
             continue
 
-        dev = abs(math.sqrt(ax * ax + ay * ay + az * az) - G)
-        if dev > SHAKE_DEV and (t - last_shake) > 0.5:
+        dev = abs(math.sqrt(ax * ax + ay * ay + az * az) - GRAVITY_MS2)
+        if dev > SHAKE_DEV and (now - last_shake) > 0.5:
             shake_count += 1
-            last_shake = t
-        if dev > peak_dev or (t - peak_at) > HOLD_S:
-            peak_dev, peak_at = dev, t
+            last_shake = now
+        if dev > peak_dev or (now - peak_at) > HOLD_S:
+            peak_dev, peak_at = dev, now
 
-        if t < next_emit:
+        if now < next_emit:
             time.sleep(0.005)
             continue
-        next_emit = t + period
+        next_emit = now + period
 
         eff = max(0.0, peak_dev - DEADBAND)
-        shaken = (t - last_shake) < SHAKE_HOLD_S and shake_count > 0
+        shaken = (now - last_shake) < SHAKE_HOLD_S and shake_count > 0
         moving = peak_dev > MOVE_DEV
         fields = {
             # --- decision fields: identical derivation to v4 ---

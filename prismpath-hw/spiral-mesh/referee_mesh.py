@@ -33,30 +33,30 @@ PORTS = ["/dev/ttyUSB2", "/dev/ttyUSB3", "/dev/ttyUSB4"]
 
 
 def capture(port, out, secs):
-    s = serial.Serial(port, 115200, timeout=2)
-    s.dtr = False; s.rts = True
+    serial_port = serial.Serial(port, 115200, timeout=2)
+    serial_port.dtr = False; serial_port.rts = True
     time.sleep(0.1)
-    s.rts = False
-    s.reset_input_buffer()
+    serial_port.rts = False
+    serial_port.reset_input_buffer()
     end = time.time() + secs
     while time.time() < end:
-        line = s.readline().decode(errors="replace").strip()
+        line = serial_port.readline().decode(errors="replace").strip()
         if line:
             out.append(line)
-    s.close()
+    serial_port.close()
 
 
 def main():
     secs = int(sys.argv[1]) if len(sys.argv) > 1 else 30
     logs = [[] for _ in PORTS]
-    threads = [threading.Thread(target=capture, args=(p, logs[i], secs))
-               for i, p in enumerate(PORTS)]
-    for t in threads: t.start()
-    for t in threads: t.join()
+    threads = [threading.Thread(target=capture, args=(port, logs[index], secs))
+               for index, port in enumerate(PORTS)]
+    for thread in threads: thread.start()
+    for thread in threads: thread.join()
 
-    g = parse(FLOW)
-    L = spiral.SpiralLayout(g, NODE)
-    fidx = {f: i for i, f in enumerate(L.fields)}
+    flow = parse(FLOW)
+    layout = spiral.SpiralLayout(flow, NODE)
+    fidx = {field: index for index, field in enumerate(layout.fields)}
 
     tx = {}                    # (role, cls, tick) -> (value, hex)
     rx = []                    # (observer, srcrole, cls, tick, value, hex)
@@ -64,25 +64,25 @@ def main():
     boots = []
     for role, log in enumerate(logs):
         for line in log:
-            p = line.split()
+            parts = line.split()
             try:
                 if line.startswith("BOOT"):
                     boots.append(f"node{role}: {line}")
                 elif line.startswith("T "):
-                    tick, cls = int(p[1]), int(p[2][1:])
-                    tx[(role, cls, tick)] = (int(p[3][1:]), p[4])
+                    tick, cls = int(parts[1]), int(parts[2][1:])
+                    tx[(role, cls, tick)] = (int(parts[3][1:]), parts[4])
                 elif line.startswith("R "):
-                    rx.append((role, int(p[1]), int(p[2][1:]), int(p[3][1:]),
-                               int(p[4][1:]), p[5]))
+                    rx.append((role, int(parts[1]), int(parts[2][1:]), int(parts[3][1:]),
+                               int(parts[4][1:]), parts[5]))
                 elif line.startswith("P "):
-                    tick = int(p[1])
-                    n = int(p[2].split("=")[1])
-                    postures.setdefault(tick, {})[role] = n
+                    tick = int(parts[1])
+                    posture_index = int(parts[2].split("=")[1])
+                    postures.setdefault(tick, {})[role] = posture_index
             except (ValueError, IndexError):
                 pass
 
-    for b in boots:
-        print(b)
+    for boot_line in boots:
+        print(boot_line)
 
     # 1+3: wire integrity + loss + no-wrong-symbol
     bad_hex = wrong_sym = 0
@@ -105,18 +105,18 @@ def main():
         if cls != 1:
             continue
         field = ROLES[role][1]
-        want = L.parts[field].symbol(synth(role, tick))
+        want = layout.parts[field].symbol(synth(role, tick))
         checked += 1
         if want != val:
             derive_bad += 1
 
     # 4: posture coherence over ticks where all three reported
-    full = {t: v for t, v in postures.items() if len(v) == len(PORTS)}
-    agree = sum(1 for v in full.values() if len(set(v.values())) == 1)
+    full = {tick: by_role for tick, by_role in postures.items() if len(by_role) == len(PORTS)}
+    agree = sum(1 for by_role in full.values() if len(set(by_role.values())) == 1)
 
     # loss accounting: band frames sent per role vs received per observer pair
-    sent1 = {r: sum(1 for (rr, c, _t) in tx if rr == r and c == 1) for r in range(len(PORTS))}
-    got1 = {r: sum(1 for (_o, s, c, *_x) in rx if s == r and c == 1) for r in range(len(PORTS))}
+    sent1 = {role: sum(1 for (tx_role, cls, _tick) in tx if tx_role == role and cls == 1) for role in range(len(PORTS))}
+    got1 = {role: sum(1 for (_observer, src_role, cls, *_rest) in rx if src_role == role and cls == 1) for role in range(len(PORTS))}
 
     print(f"tx_frames={len(tx)}  rx_frames={len(rx)}  rx_matched_bitexact={matched} "
           f"bad_hex={bad_hex} wrong_symbol={wrong_sym}")

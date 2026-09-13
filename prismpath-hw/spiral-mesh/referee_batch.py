@@ -30,25 +30,25 @@ def airtime_us(payload_b):
 
 
 def capture(port, out, secs):
-    s = serial.Serial(port, 115200, timeout=2)
-    s.dtr = False; s.rts = True
+    serial_port = serial.Serial(port, 115200, timeout=2)
+    serial_port.dtr = False; serial_port.rts = True
     time.sleep(0.1)
-    s.rts = False
-    s.reset_input_buffer()
+    serial_port.rts = False
+    serial_port.reset_input_buffer()
     end = time.time() + secs
     while time.time() < end:
-        line = s.readline().decode(errors="replace").strip()
+        line = serial_port.readline().decode(errors="replace").strip()
         if line:
             out.append(line)
-    s.close()
+    serial_port.close()
 
 
 def main():
     secs = int(sys.argv[1]) if len(sys.argv) > 1 else 60
     logs = [[] for _ in PORTS]
-    ts = [threading.Thread(target=capture, args=(p, logs[i], secs)) for i, p in enumerate(PORTS)]
-    for t in ts: t.start()
-    for t in ts: t.join()
+    ts = [threading.Thread(target=capture, args=(port, logs[index], secs)) for index, port in enumerate(PORTS)]
+    for thread in ts: thread.start()
+    for thread in ts: thread.join()
 
     total_frames = total_bytes = total_triples = 0
     rbad = 0
@@ -58,11 +58,11 @@ def main():
         frames = tbytes = triples = 0
         sizes = []
         for line in log:
-            p = line.split()
+            parts = line.split()
             try:
                 if line.startswith("X "):
-                    n = int(p[2].split("=")[1])
-                    frames += 1; tbytes += n; sizes.append(n)
+                    payload_bytes = int(parts[2].split("=")[1])
+                    frames += 1; tbytes += payload_bytes; sizes.append(payload_bytes)
                 elif line.startswith("T "):
                     triples += 1
                 elif line.startswith("R "):
@@ -81,7 +81,7 @@ def main():
                   f"payload B/frame min/avg/max={min(sizes)}/{tbytes/frames:.1f}/{max(sizes)} "
                   f"triples/frame={triples/frames:.2f}")
     if total_frames:
-        at = sum(airtime_us(b) for _f, tb, _t, ss in per_node for b in ss)
+        at = sum(airtime_us(size) for _frames, _tbytes, _triples, sizes in per_node for size in sizes)
         print(f"TOTAL: frames={total_frames} payload_bytes={total_bytes} triples={total_triples}")
         print(f"AIRTIME (measured sizes, stated constants): {at / 1e3:.1f} ms total, "
               f"{at / total_frames:.0f} us/frame, {at / max(total_triples, 1):.0f} us/decision-triple")

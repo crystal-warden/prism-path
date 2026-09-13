@@ -29,7 +29,7 @@ REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO))
 from prismpath import model_check  # noqa: E402
 from prismpath.kernel.parser import parse  # noqa: E402
-from prismpath.telemetry import quantizer as q  # noqa: E402
+from prismpath.telemetry import quantizer as quantizer  # noqa: E402
 
 PRED = REPO / "prismpath" / "portable" / "conformance" / "predicates.json"
 DEC = REPO / "prismpath" / "telemetry" / "conformance" / "decisions.json"
@@ -43,30 +43,30 @@ class Skip(Exception):
     pass
 
 
-def lean_str(s: str) -> str:
-    return json.dumps(s, ensure_ascii=False)
+def lean_str(text: str) -> str:
+    return json.dumps(text, ensure_ascii=False)
 
 
-def lean_int(n: int) -> str:
-    return f"({n})" if n < 0 else str(n)
+def lean_int(number: int) -> str:
+    return f"({number})" if number < 0 else str(number)
 
 
-def lean_value(v) -> str:
-    if isinstance(v, bool):
-        return ".bool true" if v else ".bool false"
-    if isinstance(v, int):
-        return f".int {lean_int(v)}"
-    if isinstance(v, str):
-        return f".str {lean_str(v)}"
+def lean_value(value) -> str:
+    if isinstance(value, bool):
+        return ".bool true" if value else ".bool false"
+    if isinstance(value, int):
+        return f".int {lean_int(value)}"
+    if isinstance(value, str):
+        return f".str {lean_str(value)}"
     raise Skip("non scalar or float value")
 
 
-def const_kind(v) -> str:
-    if isinstance(v, bool):
+def const_kind(value) -> str:
+    if isinstance(value, bool):
         return "bool"
-    if isinstance(v, int):
+    if isinstance(value, int):
         return "int"
-    if isinstance(v, str):
+    if isinstance(value, str):
         return "str"
     raise Skip("non scalar or float constant")
 
@@ -86,11 +86,11 @@ def _const(node):
 def to_cond(node, atoms: list) -> str:
     """Python AST (Level M) -> Lean Cond term. Records (field, kind) of every atom in `atoms`."""
     if isinstance(node, ast.BoolOp):
-        parts = [to_cond(v, atoms) for v in node.values]
+        parts = [to_cond(operand, atoms) for operand in node.values]
         op = ".and" if isinstance(node.op, ast.And) else ".or"
         out = parts[0]
-        for p in parts[1:]:
-            out = f"(Cond{op} {out} {p})"
+        for part in parts[1:]:
+            out = f"(Cond{op} {out} {part})"
         return out
     if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.Not):
         return f"(Cond.not {to_cond(node.operand, atoms)})"
@@ -101,18 +101,18 @@ def to_cond(node, atoms: list) -> str:
         # chained comparisons desugar to a conjunction, SPEC section 4.3
         operands = [node.left] + node.comparators
         terms = []
-        for i, op in enumerate(node.ops):
-            left, right = operands[i], operands[i + 1]
+        for index, op in enumerate(node.ops):
+            left, right = operands[index], operands[index + 1]
             if isinstance(op, (ast.In, ast.NotIn)):
                 if not isinstance(left, ast.Name) or not isinstance(right, (ast.Tuple, ast.List)):
                     raise Skip("shape not carried (membership operands)")
-                consts = [_const(e) for e in right.elts]
-                kinds = {const_kind(c) for c in consts}
+                consts = [_const(element) for element in right.elts]
+                kinds = {const_kind(constant) for constant in consts}
                 if len(kinds) > 1:
                     raise Skip("shape not carried (mixed kind list)")
                 atoms.append((left.id, kinds.pop() if kinds else None))
                 form = "Cond.mem" if isinstance(op, ast.In) else "Cond.nmem"
-                terms.append(f"({form} {lean_str(left.id)} [{', '.join(lean_value(c) for c in consts)}])")
+                terms.append(f"({form} {lean_str(left.id)} [{', '.join(lean_value(constant) for constant in consts)}])")
                 continue
             if type(op) not in OPS:
                 raise Skip("shape not carried (operator)")
@@ -126,8 +126,8 @@ def to_cond(node, atoms: list) -> str:
             atoms.append((field, const_kind(const)))
             terms.append(f"(Cond.cmp {lean_str(field)} {lop} ({lean_value(const)}))")
         out = terms[0]
-        for t in terms[1:]:
-            out = f"(Cond.and {out} {t})"
+        for term in terms[1:]:
+            out = f"(Cond.and {out} {term})"
         return out
     raise Skip("shape not carried")
 
@@ -146,14 +146,14 @@ def check_typed(ctx: dict, atoms: list) -> None:
     for field, kind in atoms:
         if field not in ctx or ctx[field] is None:
             raise Skip("referenced field missing or null")
-        v = ctx[field]
-        vk = const_kind(v)          # raises Skip on non scalar / float
-        if kind is not None and vk != kind:
+        value = ctx[field]
+        value_kind = const_kind(value)          # raises Skip on non scalar / float
+        if kind is not None and value_kind != kind:
             raise Skip("cross kind comparison")
 
 
 def reading_term(ctx: dict, fields) -> str:
-    items = ", ".join(f"({lean_str(f)}, {lean_value(ctx[f])})" for f in fields if f in ctx and ctx[f] is not None)
+    items = ", ".join(f"({lean_str(field)}, {lean_value(ctx[field])})" for field in fields if field in ctx and ctx[field] is not None)
     return f"(readingOf [{items}])"
 
 
@@ -164,7 +164,7 @@ def sha(path: Path) -> str:
 def gen_predicates(lines: list, counts: dict) -> None:
     doc = json.loads(PRED.read_text())
     lines.append(f"/-! ## predicates.json (version {doc['version']}, {len(doc['cases'])} cases): the Level M, well typed subset -/")
-    for i, case in enumerate(doc["cases"]):
+    for case_index, case in enumerate(doc["cases"]):
         cond, ctx, expect = case["cond"], case["ctx"], case["expect"]
         ok, _reason = model_check.is_level_m(cond)
         if not ok:
@@ -177,20 +177,20 @@ def gen_predicates(lines: list, counts: dict) -> None:
         try:
             term = translate(cond, atoms)
             check_typed(ctx, atoms)
-        except Skip as e:
-            counts[str(e)] += 1
+        except Skip as skipped:
+            counts[str(skipped)] += 1
             continue
-        fields = sorted({f for f, _ in atoms})
+        fields = sorted({field for field, _ in atoms})
         exp = "true" if expect else "false"
-        lines.append(f"#guard evalCond {reading_term(ctx, fields)} {term} == {exp}  -- case {i}: {cond}")
+        lines.append(f"#guard evalCond {reading_term(ctx, fields)} {term} == {exp}  -- case {case_index}: {cond}")
         counts["checked"] += 1
 
 
 def flow_policies(flow_text: str):
     """(all_edges_policy_term, {node: node_policy_term}) for a flow, or raise Skip."""
-    g = parse(flow_text)
+    flow = parse(flow_text)
     node_terms, all_rules = {}, []
-    for name, node in g.nodes.items():
+    for name, node in flow.nodes.items():
         if not node.edges:
             continue
         rules = []
@@ -208,23 +208,23 @@ def gen_decisions(lines: list, counts: dict) -> None:
     lines.append(f"\n/-! ## decisions.json (version {doc['version']}, {len(doc['cases'])} flows): routes and canonical symbols against the reference quantizer -/")
     for case in doc["cases"]:
         name = case["name"]
-        g = parse(case["flow"])
-        parts = q.build_partitions(g)
+        flow = parse(case["flow"])
+        parts = quantizer.build_partitions(flow)
         all_term, node_terms = flow_policies(case["flow"])
         lines.append(f"def {name}_all : Policy String := {all_term}")
         for node, term in node_terms.items():
             lines.append(f"def {name}_{node} : Policy String := {term}")
         fields = sorted(parts)
-        for j, entry in enumerate(case["readings"]):
+        for reading_index, entry in enumerate(case["readings"]):
             reading = entry["reading"]
-            r = reading_term(reading, fields)
+            reading_lean = reading_term(reading, fields)
             for node, target in entry["routes"].items():
                 exp = f"some {lean_str(target)}" if target is not None else "none"
-                lines.append(f"#guard route {name}_{node} {r} == {exp}  -- {name} reading {j}")
+                lines.append(f"#guard route {name}_{node} {reading_lean} == {exp}  -- {name} reading {reading_index}")
                 counts["routes checked"] += 1
-            py_syms = q.quantize(parts, reading)
-            for f in fields:
-                lines.append(f"#guard (quantize (buildPartitions {name}_all) {r}).lookup {lean_str(f)} == some {py_syms[f]}")
+            py_syms = quantizer.quantize(parts, reading)
+            for field in fields:
+                lines.append(f"#guard (quantize (buildPartitions {name}_all) {reading_lean}).lookup {lean_str(field)} == some {py_syms[field]}")
                 counts["symbols checked against the reference"] += 1
 
 
@@ -233,9 +233,9 @@ def gen_spiral(lines: list, counts: dict) -> None:
     lines.append(f"\n/-! ## spiral_fusion.json ({len(doc['probes'])} probes at node {doc['node']}) -/")
     all_term, node_terms = flow_policies(doc["flow"])
     lines.append(f"def fusion_{doc['node']} : Policy String := {node_terms[doc['node']]}")
-    for j, probe in enumerate(doc["probes"]):
-        r = reading_term(probe["reading"], sorted(probe["reading"]))
-        lines.append(f"#guard route fusion_{doc['node']} {r} == some {lean_str(probe['route'])}  -- probe {j}")
+    for probe_index, probe in enumerate(doc["probes"]):
+        reading_lean = reading_term(probe["reading"], sorted(probe["reading"]))
+        lines.append(f"#guard route fusion_{doc['node']} {reading_lean} == some {lean_str(probe['route'])}  -- probe {probe_index}")
         counts["spiral probes checked"] += 1
 
 
@@ -245,13 +245,13 @@ def gen_spiral_layout(lines: list, counts: dict) -> None:
     frozen index and give it the frozen route and band, and the Lean Gray order must equal the
     reference's iterative one on the frozen radices."""
     sys.path.insert(0, str(REPO / "prismpath" / "telemetry"))
-    import spiral as sp
+    import spiral as spiral_reference
     doc = json.loads(SPI.read_text())
     node = doc["node"]
     fields = doc["fields"]
     lines.append(f"\n/-! ## spiral_fusion.json: the layout derived in Lean equals the frozen cell table ({len(doc['cells'])} cells) -/")
     lines.append("open FQ.Spiral in")
-    lines.append(f"def fusion_fields : List String := [{', '.join(lean_str(f) for f in fields)}]")
+    lines.append(f"def fusion_fields : List String := [{', '.join(lean_str(field) for field in fields)}]")
     lines.append(f"def fusion_partFor (f : String) : Option FieldPartition := (buildPartitions fusion_{node}).find? (·.field == f)")
     lines.append("def fusion_radices : List Nat := fusion_fields.filterMap (fun f => (fusion_partFor f).map FQ.Spiral.cellCount)")
     lines.append("def fusion_cellReading (cell : FQ.Spiral.Cell) : Reading :=")
@@ -260,30 +260,30 @@ def gen_spiral_layout(lines: list, counts: dict) -> None:
     lines.append(f"def fusion_routes : List (Option String) := FQ.Spiral.routesFor fusion_{node} (FQ.Spiral.gray fusion_radices) fusion_routeOf")
     lines.append("def fusion_layout : List FQ.Spiral.Cell := FQ.Spiral.layout (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes")
     lines.append(f"#guard fusion_radices == {doc['radices']}")
-    routes = ", ".join(f"some {lean_str(b['route'])}" if b["route"] is not None else "none" for b in doc["bands"])
+    routes = ", ".join(f"some {lean_str(band['route'])}" if band["route"] is not None else "none" for band in doc["bands"])
     lines.append(f"#guard fusion_routes == [{routes}]")
     lines.append(f"#guard fusion_layout.length == {doc['size']}")
-    gray_py = [list(t) for t in sp.mixed_radix_gray(doc["radices"])]
+    gray_py = [list(digits) for digits in spiral_reference.mixed_radix_gray(doc["radices"])]
     lines.append(f"#guard FQ.Spiral.gray fusion_radices == {gray_py}")
     counts["spiral gray order equals the reference"] += 1
     for entry in doc["cells"]:
-        cell, n, band, route = entry["cell"], entry["n"], entry["band"], entry["route"]
-        r = f"some {lean_str(route)}" if route is not None else "none"
-        lines.append(f"#guard fusion_layout.idxOf {cell} == {n}")
-        lines.append(f"#guard fusion_routeOf {cell} == {r}")
-        lines.append(f"#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) {n} == some {band}")
+        cell, cell_index, band, route = entry["cell"], entry["n"], entry["band"], entry["route"]
+        route_lean = f"some {lean_str(route)}" if route is not None else "none"
+        lines.append(f"#guard fusion_layout.idxOf {cell} == {cell_index}")
+        lines.append(f"#guard fusion_routeOf {cell} == {route_lean}")
+        lines.append(f"#guard FQ.Spiral.bandOf (FQ.Spiral.bands (FQ.Spiral.gray fusion_radices) fusion_routeOf fusion_routes) {cell_index} == some {band}")
         counts["spiral cells checked (index, route, band)"] += 1
 
 
 def gen_zeckendorf(lines: list, counts: dict, upto: int = 300) -> None:
     """The Lean Fibonacci code must equal the reference's bit string for every 1 <= n <= upto, and the
     reference's decode must invert it (evaluated; the theorem covers all n)."""
-    import zeckendorf as z
+    import zeckendorf as zeckendorf_reference
     lines.append(f"\n/-! ## zeckendorf.py: Lean encode == reference bits for 1..{upto} -/")
-    for n in range(1, upto + 1):
-        bits = z.encode(n)
-        lean_bits = "[" + ", ".join("true" if b == "1" else "false" for b in bits) + "]"
-        lines.append(f"#guard FQ.Zeck.encode {n} == {lean_bits}")
+    for number in range(1, upto + 1):
+        bits = zeckendorf_reference.encode(number)
+        lean_bits = "[" + ", ".join("true" if bit == "1" else "false" for bit in bits) + "]"
+        lines.append(f"#guard FQ.Zeck.encode {number} == {lean_bits}")
         counts["zeckendorf codes checked against the reference"] += 1
 
 
@@ -303,7 +303,7 @@ def main() -> int:
         f"-- predicates.json sha256 {sha(PRED)}",
         f"-- decisions.json   sha256 {sha(DEC)}",
         f"-- spiral_fusion.json sha256 {sha(SPI)}",
-        "-- counts: " + ", ".join(f"{k} {v}" for k, v in sorted(counts.items())),
+        "-- counts: " + ", ".join(f"{name} {count}" for name, count in sorted(counts.items())),
         "import FQ.Partition",
         "import FQ.Zeckendorf",
         "import FQ.Spiral",
@@ -318,8 +318,8 @@ def main() -> int:
     ]
     OUT.write_text("\n".join(header + body) + "\n\nend FQ.Vectors\n", encoding="utf-8")
     print(f"wrote {OUT}")
-    for k, v in sorted(counts.items()):
-        print(f"  {k:45} {v}")
+    for name, count in sorted(counts.items()):
+        print(f"  {name:45} {count}")
     return 0
 
 

@@ -29,17 +29,17 @@ while FIB[-1] < 2 ** 53:
     FIB.append(FIB[-1] + FIB[-2])
 
 
-def zeck_bits(n):
+def zeck_bits(value):
     """The wire bit-string for n: F2..Fk value bits ascending, then the self-framing terminator 1."""
-    k = 0
-    while k + 1 < len(FIB) and FIB[k + 1] <= n:
-        k += 1
-    code = ['0'] * (k + 1)
-    rem = n
-    for i in range(k, -1, -1):
-        if FIB[i] <= rem:
-            code[i] = '1'
-            rem -= FIB[i]
+    top_index = 0
+    while top_index + 1 < len(FIB) and FIB[top_index + 1] <= value:
+        top_index += 1
+    code = ['0'] * (top_index + 1)
+    rem = value
+    for index in range(top_index, -1, -1):
+        if FIB[index] <= rem:
+            code[index] = '1'
+            rem -= FIB[index]
     return ''.join(code) + '1'
 
 
@@ -47,34 +47,34 @@ def zeck_bits(n):
 try:
     state = open("/sys/class/fpga_manager/fpga0/state").read().strip()
     if state == "operating":
-        m = MMIO(0x40000000, 0x10000)
-        if m.read(0x24) == 0x50505431:          # a live PPT1 datapath overlay
-            m.write(0x28, 0); m.write(0x20, 1)   # auto_ctrl=0, soft_rst
-        del m
-except Exception as e:
-    print(f"[zeck] quiesce skipped ({type(e).__name__})", file=sys.stderr)
+        mmio = MMIO(0x40000000, 0x10000)
+        if mmio.read(0x24) == 0x50505431:          # a live PPT1 datapath overlay
+            mmio.write(0x28, 0); mmio.write(0x20, 1)   # auto_ctrl=0, soft_rst
+        del mmio
+except Exception as error:
+    print(f"[zeck] quiesce skipped ({type(error).__name__})", file=sys.stderr)
 
-ol = Overlay(BIT)
-ipname = next(k for k in ol.ip_dict if "ppt" in k.lower())
-base = ol.ip_dict[ipname]["phys_addr"]
+overlay = Overlay(BIT)
+ipname = next(name for name in overlay.ip_dict if "ppt" in name.lower())
+base = overlay.ip_dict[ipname]["phys_addr"]
 io = MMIO(base, 0x100)
 got = io.read(R_MAGIC)
 assert got == MAGIC, f"overlay MAGIC {got:#x} != ZCK1 (0x5A434B31)"
 print(f"[zeck] overlay up @ {base:#x}, MAGIC=ZCK1")
 
 
-def peek(n):
-    io.write(R_PEEK_IN, n)
+def peek(value):
+    io.write(R_PEEK_IN, value)
     io.write(R_CTRL, 0x1)                        # peek_go pulse
     for _ in range(100000):
         if io.read(R_STATUS) & 0b0010:           # peek_done
             break
     else:
-        raise TimeoutError(f"peek({n}) never completed")
+        raise TimeoutError(f"peek({value}) never completed")
     bits = io.read(R_PEEK_BITS)
-    ln = io.read(R_PEEK_LEN) & 0x7F
+    bit_count = io.read(R_PEEK_LEN) & 0x7F
     dec = io.read(R_PEEK_DEC)
-    wire = "".join(str((bits >> (ln - 1 - j)) & 1) for j in range(ln))
+    wire = "".join(str((bits >> (bit_count - 1 - bit_index)) & 1) for bit_index in range(bit_count))
     return wire, dec
 
 
@@ -86,9 +86,9 @@ for _ in range(2000000):
         break
 else:
     raise TimeoutError("selftest never completed")
-pc = io.read(R_PASS); tot = io.read(R_TOTAL); ff = io.read(R_FIRST_FAIL)
+pass_count = io.read(R_PASS); tot = io.read(R_TOTAL); first_fail = io.read(R_FIRST_FAIL)
 err = (io.read(R_STATUS) >> 3) & 1
-print(f"[zeck] SELF-TEST on silicon: {pc}/{tot} round-trips decode(encode(n))==n  first_fail={ff} err={err}")
+print(f"[zeck] SELF-TEST on silicon: {pass_count}/{tot} round-trips decode(encode(n))==n  first_fail={first_fail} err={err}")
 
 # --- (2) per-value wire-exactness vs the reference, same seed-42 corpus as the MCU bench ---
 random.seed(42)
@@ -100,21 +100,21 @@ for lo, hi in ((1, 6), (1, 1001)):
 vals = sorted(vals)
 wire_ok = dec_ok = 0
 first_bad = None
-for n in vals:
-    wire, dec = peek(n)
-    if wire == zeck_bits(n):
+for value in vals:
+    wire, dec = peek(value)
+    if wire == zeck_bits(value):
         wire_ok += 1
     elif first_bad is None:
-        first_bad = (n, "wire", wire, zeck_bits(n))
-    if dec == n:
+        first_bad = (value, "wire", wire, zeck_bits(value))
+    if dec == value:
         dec_ok += 1
     elif first_bad is None:
-        first_bad = (n, "dec", dec, n)
+        first_bad = (value, "dec", dec, value)
 print(f"[zeck] PEEK on silicon: wire {wire_ok}/{len(vals)} bit-exact vs reference; "
       f"decode {dec_ok}/{len(vals)} == n")
 if first_bad:
     print(f"[zeck] first mismatch: {first_bad}")
 
-ok = (pc == tot == MAX and ff == 0 and err == 0 and wire_ok == len(vals) == dec_ok)
+ok = (pass_count == tot == MAX and first_fail == 0 and err == 0 and wire_ok == len(vals) == dec_ok)
 print("[zeck] === C2 MEASURED ON SILICON: PASS ===" if ok else "[zeck] === MEASUREMENT FAILED ===")
 sys.exit(0 if ok else 1)

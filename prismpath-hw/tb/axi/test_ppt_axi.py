@@ -80,24 +80,24 @@ async def load_image_axi(dut, img: pc.TableImage):
         await axi_write(dut, R_LOAD_SEL_ADDR, (sel << 16) | addr)
         await axi_write(dut, R_LOAD_DATA, data)
     await load(0, 0, img.fields.get("visits", 0xFFFF))
-    for i, (f, op, ty, val) in enumerate(img.atoms):
-        await load(1, i, (ty << 24) | (op << 16) | f)
-        await load(2, i, val & 0xFFFFFFFF)
+    for atom_index, (field_index, op, ty, val) in enumerate(img.atoms):
+        await load(1, atom_index, (ty << 24) | (op << 16) | field_index)
+        await load(2, atom_index, val & 0xFFFFFFFF)
     n_edges = 0
     n_prog = 0
-    for ni, (_name, nedges) in enumerate(img.nodes):
-        await load(3, ni, (len(nedges) << 16) | n_edges)
-        for tgt, _cond, prog in nedges:
-            await load(4, n_edges, (n_prog << 16) | tgt)
+    for node_index, (_name, nedges) in enumerate(img.nodes):
+        await load(3, node_index, (len(nedges) << 16) | n_edges)
+        for target, _cond, prog in nedges:
+            await load(4, n_edges, (n_prog << 16) | target)
             await load(5, n_edges, len(prog))
             n_edges += 1
-            for w in prog:
-                await load(6, n_prog, w)
+            for word in prog:
+                await load(6, n_prog, word)
                 n_prog += 1
 
 
 async def evaluate_axi(dut, img: pc.TableImage, node: int, ctx: dict, intern: dict):
-    for name, idx in sorted(img.fields.items(), key=lambda kv: kv[1]):
+    for name, idx in sorted(img.fields.items(), key=lambda field_entry: field_entry[1]):
         ty, val = pc.encode_scalar(ctx.get(name), intern)
         await axi_write(dut, R_FLD_IDX_TYPE, (ty << 16) | idx)
         await axi_write(dut, R_FLD_VAL, val & 0xFFFFFFFF)
@@ -134,7 +134,7 @@ async def axi_sensor_replay(dut):
     flow_md = (Path(pc._REPO) / "prismpath" / "gallery" / "incident_severity"
                / "incident_severity.md")
     img = pc.compile_flow(parse_file(str(flow_md)))
-    names = [n for n, _ in img.nodes]
+    names = [name for name, _ in img.nodes]
     await axi_write(dut, R_SOFT_RST, 1)
     await load_image_axi(dut, img)
     intern = dict(img.intern)
@@ -142,16 +142,16 @@ async def axi_sensor_replay(dut):
     log_path = HERE.parent.parent / "build" / "live_route_log.ndjson"
     lines = log_path.read_text().splitlines()
     step = max(1, len(lines) // 500)                       # ~500 spread samples
-    n = mismatches = 0
+    sample_count = mismatches = 0
     for line in lines[::step]:
         rec = json.loads(line)
         expect = rec.pop("decision")
         res = await evaluate_axi(dut, img, img.start, rec, intern)
         got = names[res[1]] if res else "<stuck>"
-        n += 1
+        sample_count += 1
         if got != expect:
             mismatches += 1
             if mismatches <= 5:
                 dut._log.error(f"  sample: AXI={got} live-C={expect} fields={rec}")
-    dut._log.info(f"AXI sensor replay: {n} samples, {mismatches} mismatches")
+    dut._log.info(f"AXI sensor replay: {sample_count} samples, {mismatches} mismatches")
     assert mismatches == 0

@@ -34,43 +34,43 @@ MAGIC           = 0x50505431
 try:
     state = open("/sys/class/fpga_manager/fpga0/state").read().strip()
     if state == "operating":
-        m = MMIO(0x40000000, 0x10000)
-        if m.read(R_MAGIC) == MAGIC:
-            m.write(R_AUTO_CTRL, 0); m.write(R_SOFT_RST, 1); time.sleep(0.05)
+        mmio = MMIO(0x40000000, 0x10000)
+        if mmio.read(R_MAGIC) == MAGIC:
+            mmio.write(R_AUTO_CTRL, 0); mmio.write(R_SOFT_RST, 1); time.sleep(0.05)
             print("[arm] quiesced prior auto design", file=sys.stderr)
-except Exception as e:
-    print(f"[arm] quiesce skipped ({type(e).__name__})", file=sys.stderr)
+except Exception as error:
+    print(f"[arm] quiesce skipped ({type(error).__name__})", file=sys.stderr)
 
 img = PptImage(PPT, JSON)
-ol  = PptOverlay(BIT)
-ol.load_image(img)                                       # routing program (sels 0..6)
+overlay = PptOverlay(BIT)
+overlay.load_image(img)                                       # routing program (sels 0..6)
 
 # --- per-node colors (sel=7) from the JSON's compiled colors: the signed table's own colors ---
-nodes  = sorted(json.load(open(JSON))["nodes"], key=lambda n: n["i"])
-colors = [n.get("color", 0) for n in nodes]
-for ni, c in enumerate(colors):
-    ol.io.write(R_LOAD_SEL_ADDR, (7 << 16) | ni)
-    ol.io.write(R_LOAD_DATA, c & 0xFFFFFFFF)
+nodes  = sorted(json.load(open(JSON))["nodes"], key=lambda node: node["i"])
+colors = [node.get("color", 0) for node in nodes]
+for node_index, color in enumerate(colors):
+    overlay.io.write(R_LOAD_SEL_ADDR, (7 << 16) | node_index)
+    overlay.io.write(R_LOAD_DATA, color & 0xFFFFFFFF)
 print("[arm] colors loaded: " + ", ".join(
-    f"{nodes[i]['name']}=0x{colors[i]:02x}" for i in range(len(nodes))))
+    f"{nodes[index]['name']}=0x{colors[index]:02x}" for index in range(len(nodes))))
 
 # --- arm auto: auto_mode=1, start_node=0, pot_field_idx=0 ---
-ol.io.write(R_AUTO_CTRL, 0x00000001)
-assert ol.io.read(R_MAGIC) == MAGIC, "overlay not alive after arm"
+overlay.io.write(R_AUTO_CTRL, 0x00000001)
+assert overlay.io.read(R_MAGIC) == MAGIC, "overlay not alive after arm"
 print("[arm] AUTO ARMED - the fabric now decides on UART bytes (Pmod JA1). Watch LD4/LD5.")
 print("[arm]   field cuts: >=1631 high(RED)  >=665 mid(BLUE)  else low(GREEN)")
 
 # --- live readback: POT_NOW reflects the ACTUAL field (UART byte<<4, or the pot until a byte lands) ---
-def label(f):
-    return "high/RED" if f >= 1631 else "mid/BLUE" if f >= 665 else "low/GREEN"
+def label(field_value):
+    return "high/RED" if field_value >= 1631 else "mid/BLUE" if field_value >= 665 else "low/GREEN"
 print("[arm] reading POT_NOW (Ctrl-C to leave it armed)...")
 last = None
 try:
     while True:
-        f = ol.io.read(R_POT_NOW) & 0xFFFF
-        if f != last:
-            print(f"[arm] field={f:5d} -> fabric lights {label(f)}")
-            last = f
+        field_value = overlay.io.read(R_POT_NOW) & 0xFFFF
+        if field_value != last:
+            print(f"[arm] field={field_value:5d} -> fabric lights {label(field_value)}")
+            last = field_value
         time.sleep(0.1)
 except KeyboardInterrupt:
     print("\n[arm] left armed. UART -> fabric -> LED loop is live.")

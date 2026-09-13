@@ -34,14 +34,14 @@ REPORT_US = 50_000
 # (feature id, human label, accessor) — each probed on its own so one wedging channel does not
 # mask the others.
 FEATURES = [
-    (BNO_REPORT_ACCELEROMETER, "accelerometer", lambda b: b.acceleration),
-    (BNO_REPORT_LINEAR_ACCELERATION, "linear_acceleration", lambda b: b.linear_acceleration),
-    (BNO_REPORT_GYROSCOPE, "gyroscope", lambda b: b.gyro),
-    (BNO_REPORT_MAGNETOMETER, "magnetometer", lambda b: b.magnetic),
-    (BNO_REPORT_ROTATION_VECTOR, "rotation_vector(quat)", lambda b: b.quaternion),
-    (BNO_REPORT_GAME_ROTATION_VECTOR, "game_rotation_vector", lambda b: b.game_quaternion),
-    (BNO_REPORT_STABILITY_CLASSIFIER, "stability_classifier", lambda b: b.stability_classification),
-    (BNO_REPORT_STEP_COUNTER, "step_counter", lambda b: b.steps),
+    (BNO_REPORT_ACCELEROMETER, "accelerometer", lambda sensor: sensor.acceleration),
+    (BNO_REPORT_LINEAR_ACCELERATION, "linear_acceleration", lambda sensor: sensor.linear_acceleration),
+    (BNO_REPORT_GYROSCOPE, "gyroscope", lambda sensor: sensor.gyro),
+    (BNO_REPORT_MAGNETOMETER, "magnetometer", lambda sensor: sensor.magnetic),
+    (BNO_REPORT_ROTATION_VECTOR, "rotation_vector(quat)", lambda sensor: sensor.quaternion),
+    (BNO_REPORT_GAME_ROTATION_VECTOR, "game_rotation_vector", lambda sensor: sensor.game_quaternion),
+    (BNO_REPORT_STABILITY_CLASSIFIER, "stability_classifier", lambda sensor: sensor.stability_classification),
+    (BNO_REPORT_STEP_COUNTER, "step_counter", lambda sensor: sensor.steps),
 ]
 
 
@@ -61,18 +61,18 @@ def probe_one(feat, label, accessor, seconds):
     try:
         try:
             bno.enable_feature(feat, report_interval=REPORT_US)
-        except Exception as e:
-            return {"label": label, "enabled": False, "error": f"enable: {type(e).__name__}: {e}"}
+        except Exception as error:
+            return {"label": label, "enabled": False, "error": f"enable: {type(error).__name__}: {error}"}
         time.sleep(0.5)
         ok = err = 0
         sample = None
         deadline = time.time() + seconds
         while time.time() < deadline:
             try:
-                v = accessor(bno)
-                if v is not None:
+                reading = accessor(bno)
+                if reading is not None:
                     ok += 1
-                    sample = v
+                    sample = reading
             except Exception:
                 err += 1
             time.sleep(0.05)
@@ -85,30 +85,30 @@ def probe_one(feat, label, accessor, seconds):
             pass
 
 
-def _fmt(v):
-    if v is None:
+def _fmt(value):
+    if value is None:
         return None
-    if isinstance(v, (tuple, list)):
-        return [round(float(x), 3) for x in v]
-    if isinstance(v, float):
-        return round(v, 3)
-    return v
+    if isinstance(value, (tuple, list)):
+        return [round(float(component), 3) for component in value]
+    if isinstance(value, float):
+        return round(value, 3)
+    return value
 
 
 def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--seconds", type=float, default=6.0)
-    args = ap.parse_args()
+    arg_parser = argparse.ArgumentParser()
+    arg_parser.add_argument("--seconds", type=float, default=6.0)
+    args = arg_parser.parse_args()
     print(f"probing {len(FEATURES)} BNO086 channels, {args.seconds}s each "
           f"(full reset between each)...\n")
     for feat, label, accessor in FEATURES:
-        r = probe_one(feat, label, accessor, args.seconds)
-        if not r.get("enabled"):
-            print(f"  {label:24s} ENABLE-FAIL  {r.get('error')}")
+        result = probe_one(feat, label, accessor, args.seconds)
+        if not result.get("enabled"):
+            print(f"  {label:24s} ENABLE-FAIL  {result.get('error')}")
         else:
-            verdict = "LIVE " if r["samples"] > 0 else "WEDGED"
-            print(f"  {label:24s} {verdict} samples={r['samples']:4d} errors={r['errors']:4d} "
-                  f"sample={r['sample']}")
+            verdict = "LIVE " if result["samples"] > 0 else "WEDGED"
+            print(f"  {label:24s} {verdict} samples={result['samples']:4d} errors={result['errors']:4d} "
+                  f"sample={result['sample']}")
         time.sleep(0.3)
 
 

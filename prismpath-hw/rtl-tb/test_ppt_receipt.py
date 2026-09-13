@@ -12,10 +12,10 @@ FNV_INIT = 2166136261
 FNV_PRIME = 16777619
 
 
-def fnv1a32(data, h):
-    for b in data:
-        h = ((h ^ b) * FNV_PRIME) & 0xFFFFFFFF
-    return h
+def fnv1a32(data, running_digest):
+    for byte in data:
+        running_digest = ((running_digest ^ byte) * FNV_PRIME) & 0xFFFFFFFF
+    return running_digest
 
 
 async def collect_bytes(dut, out):
@@ -55,37 +55,37 @@ async def receipts(dut):
     cocotb.start_soon(collect_bytes(dut, stream))
 
     decisions = [(200, 3, 1), (1000, 2, 1), (1631, 1, 2), (208, 3, 2), (2608, 1, 7)]
-    for f, n, p in decisions:
-        await commit_decision(dut, f, n, p)
+    for field_value, node_index, policy_id in decisions:
+        await commit_decision(dut, field_value, node_index, policy_id)
     for _ in range(200):
         await RisingEdge(dut.clk)
 
     # decisions are non-overlapping, so the stream is exactly N contiguous 18-byte records
     assert len(stream) == 18 * len(decisions), \
         f"got {len(stream)} bytes, expected {18 * len(decisions)} (dropped/garbled?)"
-    records = [stream[k * 18:(k + 1) * 18] for k in range(len(decisions))]
-    for k, rec in enumerate(records):
-        assert rec[0] == SYNC, f"record {k} not sync-framed: {rec[0]:#04x}"
+    records = [stream[record_index * 18:(record_index + 1) * 18] for record_index in range(len(decisions))]
+    for record_index, rec in enumerate(records):
+        assert rec[0] == SYNC, f"record {record_index} not sync-framed: {rec[0]:#04x}"
 
     running = FNV_INIT
     prev_ts = -1
-    for idx, (rec, (f, n, p)) in enumerate(zip(records, decisions)):
-        def be(bs):
-            v = 0
-            for b in bs:
-                v = (v << 8) | b
-            return v
+    for idx, (rec, (field_value, node_index, policy_id)) in enumerate(zip(records, decisions)):
+        def be(data_bytes):
+            value = 0
+            for byte in data_bytes:
+                value = (value << 8) | byte
+            return value
         seq = be(rec[1:5])
-        ts = be(rec[5:9])
+        tstamp = be(rec[5:9])
         pol = rec[9]
         field = be(rec[10:12])
         node = be(rec[12:14])
         digest = be(rec[14:18])
         assert seq == idx, f"receipt {idx}: seq {seq} != {idx}"
-        assert pol == p and field == f and node == n, \
-            f"receipt {idx}: got pol={pol} field={field} node={node}, expected {p}/{f}/{n}"
-        assert ts > prev_ts, f"receipt {idx}: tstamp not monotonic ({ts} <= {prev_ts})"
-        prev_ts = ts
+        assert pol == policy_id and field == field_value and node == node_index, \
+            f"receipt {idx}: got pol={pol} field={field} node={node}, expected {policy_id}/{field_value}/{node_index}"
+        assert tstamp > prev_ts, f"receipt {idx}: tstamp not monotonic ({tstamp} <= {prev_ts})"
+        prev_ts = tstamp
         running = fnv1a32(rec[1:14], running)   # FNV over the 13 content bytes, chained
         assert digest == running, f"receipt {idx}: digest {digest:#010x} != FNV {running:#010x}"
 

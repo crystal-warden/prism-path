@@ -29,8 +29,8 @@ MAX_FIELDS, MAX_ATOMS, MAX_NODES, MAX_EDGES, MAX_PROG = 16, 64, 16, 48, 256
 
 
 def fits(img: pc.TableImage) -> bool:
-    n_edges = sum(len(e) for _, e in img.nodes)
-    n_prog = sum(len(p) for _, es in img.nodes for _, _, p in es)
+    n_edges = sum(len(node_edges) for _, node_edges in img.nodes)
+    n_prog = sum(len(program) for _, node_edges in img.nodes for _, _, program in node_edges)
     return (len(img.fields) <= MAX_FIELDS and len(img.atoms) <= MAX_ATOMS
             and len(img.nodes) <= MAX_NODES and n_edges <= MAX_EDGES
             and n_prog <= MAX_PROG)
@@ -52,24 +52,24 @@ async def load_word(dut, sel: int, addr: int, data: int):
 async def load_image(dut, img: pc.TableImage):
     visits_idx = img.fields.get("visits", 0xFFFF)
     await load_word(dut, 0, 0, visits_idx)
-    for i, (f, op, ty, val) in enumerate(img.atoms):
-        await load_word(dut, 1, i, (ty << 24) | (op << 16) | f)
-        await load_word(dut, 2, i, val & 0xFFFFFFFF)
+    for atom_index, (field_index, op, ty, val) in enumerate(img.atoms):
+        await load_word(dut, 1, atom_index, (ty << 24) | (op << 16) | field_index)
+        await load_word(dut, 2, atom_index, val & 0xFFFFFFFF)
     edges_flat = []
     prog_flat = []
-    for ni, (_name, nedges) in enumerate(img.nodes):
-        await load_word(dut, 3, ni, (len(nedges) << 16) | len(edges_flat))
-        for tgt, _cond, prog in nedges:
-            await load_word(dut, 4, len(edges_flat), (len(prog_flat) << 16) | tgt)
+    for node_index, (_name, nedges) in enumerate(img.nodes):
+        await load_word(dut, 3, node_index, (len(nedges) << 16) | len(edges_flat))
+        for target, _cond, prog in nedges:
+            await load_word(dut, 4, len(edges_flat), (len(prog_flat) << 16) | target)
             await load_word(dut, 5, len(edges_flat), len(prog))
-            edges_flat.append(tgt)
-            for w in prog:
-                await load_word(dut, 6, len(prog_flat), w)
-                prog_flat.append(w)
+            edges_flat.append(target)
+            for word in prog:
+                await load_word(dut, 6, len(prog_flat), word)
+                prog_flat.append(word)
 
 
 async def write_fields(dut, img: pc.TableImage, ctx: dict, intern: dict):
-    for name, idx in sorted(img.fields.items(), key=lambda kv: kv[1]):
+    for name, idx in sorted(img.fields.items(), key=lambda field_entry: field_entry[1]):
         ty, val = pc.encode_scalar(ctx.get(name), intern)
         dut.fld_we.value = 1
         dut.fld_idx.value = idx
@@ -128,7 +128,7 @@ async def conformance(dut):
     failures = []
     img_cache: dict = {}
     loaded_cond = None
-    for i, case in enumerate(doc["cases"]):
+    for case_index, case in enumerate(doc["cases"]):
         cond, ctx, expect = case["cond"], case["ctx"], case["expect"]
         try:
             if cond not in img_cache:
@@ -138,9 +138,9 @@ async def conformance(dut):
                 oversize += 1
                 continue
             intern = dict(img.intern)
-            regs_ctx = {n: ctx.get(n) for n in img.fields}
-            for v in regs_ctx.values():          # subset check, same as encode would do
-                pc.encode_scalar(v, dict(intern))
+            regs_ctx = {field_name: ctx.get(field_name) for field_name in img.fields}
+            for value in regs_ctx.values():          # subset check, same as encode would do
+                pc.encode_scalar(value, dict(intern))
         except pc.SubsetError:
             excluded += 1
             continue
@@ -154,12 +154,12 @@ async def conformance(dut):
             passed += 1
         else:
             failed += 1
-            failures.append((i, cond, ctx, expect, got))
+            failures.append((case_index, cond, ctx, expect, got))
 
     dut._log.info(f"predicates: pass {passed} fail {failed} "
                   f"excluded {excluded} oversize {oversize}")
-    for f in failures[:10]:
-        dut._log.error(f"  ✗ {f}")
+    for failure in failures[:10]:
+        dut._log.error(f"  ✗ {failure}")
     assert failed == 0, f"{failed} predicate vectors diverged"
     assert oversize == 0, f"{oversize} images exceeded RTL parameters"
     pred_pass = passed
@@ -190,7 +190,7 @@ async def conformance(dut):
         loaded_cond = None
         await pulse_reset(dut)                   # fresh visits + field types per run
         dut.use_visits.value = 1
-        names = [n for n, _ in img.nodes]
+        names = [name for name, _ in img.nodes]
         node = img.start
         path = [names[node]]
         stopped = None
@@ -214,8 +214,8 @@ async def conformance(dut):
             if res is None:
                 stopped = "stuck"
                 break
-            _edge, tgt = res
-            node = tgt
+            _edge, target = res
+            node = target
             path.append(names[node])
         else:
             stopped = "max_steps"
@@ -227,8 +227,8 @@ async def conformance(dut):
             ffailures.append((case["name"], exp["path"], exp["stopped"], path, stopped))
 
     dut._log.info(f"flows: pass {fpassed} fail {ffailed} excluded {fexcluded}")
-    for f in ffailures:
-        dut._log.error(f"  ✗ {f}")
+    for failure in ffailures:
+        dut._log.error(f"  ✗ {failure}")
     assert ffailed == 0, f"{ffailed} engine vectors diverged"
 
     dut._log.info(f"RTL CONFORMANT: {pred_pass} predicate + {fpassed} engine vectors")
@@ -246,7 +246,7 @@ async def sensor_log_replay(dut):
                / "incident_severity.md")
     from prismpath.kernel.parser import parse_file
     img = pc.compile_flow(parse_file(str(flow_md)))
-    names = [n for n, _ in img.nodes]
+    names = [name for name, _ in img.nodes]
 
     cocotb.start_soon(Clock(dut.clk, 10, "ns").start())
     _init_inputs(dut)
@@ -255,22 +255,22 @@ async def sensor_log_replay(dut):
     dut.use_visits.value = 0
     intern = dict(img.intern)
 
-    n = mismatches = 0
+    sample_count = mismatches = 0
     lat_min, lat_max = 10**9, 0
     for line in log_path.read_text().splitlines():
         rec = json.loads(line)
         expect = rec.pop("decision")
         await write_fields(dut, img, rec, intern)
-        t0 = cocotb.utils.get_sim_time("ns")
+        start_ns = cocotb.utils.get_sim_time("ns")
         res = await evaluate(dut, img.start)
-        cycles = int((cocotb.utils.get_sim_time("ns") - t0) / 10)
+        cycles = int((cocotb.utils.get_sim_time("ns") - start_ns) / 10)
         lat_min, lat_max = min(lat_min, cycles), max(lat_max, cycles)
         got = names[res[1]] if res else "<stuck>"
-        n += 1
+        sample_count += 1
         if got != expect:
             mismatches += 1
             if mismatches <= 5:
-                dut._log.error(f"  sample {n}: RTL={got} live-C={expect} fields={rec}")
-    dut._log.info(f"sensor replay: {n} samples, {mismatches} mismatches, "
+                dut._log.error(f"  sample {sample_count}: RTL={got} live-C={expect} fields={rec}")
+    dut._log.info(f"sensor replay: {sample_count} samples, {mismatches} mismatches, "
                   f"evaluate latency {lat_min}-{lat_max} cycles")
     assert mismatches == 0

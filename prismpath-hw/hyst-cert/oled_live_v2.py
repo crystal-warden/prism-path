@@ -34,20 +34,20 @@ def reset_core():
 
 def i2c_write(payload, timeout=0.5):
     reset_core(); IIC.write(TXF, 0x100 | (ADDR << 1))
-    n = len(payload); i = 0; t0 = time.time()
-    while i < n:
+    byte_count = len(payload); byte_index = 0; start_time = time.time()
+    while byte_index < byte_count:
         if (IIC.read(SR) & 0x10) == 0:
-            IIC.write(TXF, (0x200 if i == n - 1 else 0) | (payload[i] & 0xFF)); i += 1
-        elif time.time() - t0 > timeout:
+            IIC.write(TXF, (0x200 if byte_index == byte_count - 1 else 0) | (payload[byte_index] & 0xFF)); byte_index += 1
+        elif time.time() - start_time > timeout:
             return False
-    t0 = time.time()
-    while (IIC.read(SR) & 0x04) and time.time() - t0 < timeout:
+    start_time = time.time()
+    while (IIC.read(SR) & 0x04) and time.time() - start_time < timeout:
         pass
     return True
 
 
-def cmd(l): return i2c_write([0x00] + list(l))
-def data(l): return i2c_write([0x40] + list(l))
+def cmd(command_bytes): return i2c_write([0x00] + list(command_bytes))
+def data(data_bytes): return i2c_write([0x40] + list(data_bytes))
 
 
 INIT = [0xAE, 0xDC, 0x00, 0x81, 0x2F, 0x20, 0xA0, 0xC0, 0xA8, 0x7F, 0xD3, 0x00,
@@ -55,65 +55,65 @@ INIT = [0xAE, 0xDC, 0x00, 0x81, 0x2F, 0x20, 0xA0, 0xC0, 0xA8, 0x7F, 0xD3, 0x00,
 
 
 def push(img):
-    px = img.load()
+    pixels = img.load()
     for page in range(16):
         cmd([0xB0 | page, 0x00, 0x10])
         row = []
         for col in range(128):
-            b = 0
+            byte_value = 0
             for bit in range(8):
-                if px[col, page * 8 + bit]:
-                    b |= (1 << bit)
-            row.append(b)
+                if pixels[col, page * 8 + bit]:
+                    byte_value |= (1 << bit)
+            row.append(byte_value)
         data(row)
 
 
-def stateless_decide(f):
-    if f >= 1631: return "HIGH", "RED"
-    if f >= 665: return "MID", "BLUE"
+def stateless_decide(pot):
+    if pot >= 1631: return "HIGH", "RED"
+    if pot >= 665: return "MID", "BLUE"
     return "LOW", "GREEN"
 
 
 def big(word, scale):
-    t = Image.new('1', (len(word) * 6 + 2, 9), 0)
-    ImageDraw.Draw(t).text((1, 0), word, fill=1)
-    return t.resize((t.width * scale, t.height * scale))
+    text_image = Image.new('1', (len(word) * 6 + 2, 9), 0)
+    ImageDraw.Draw(text_image).text((1, 0), word, fill=1)
+    return text_image.resize((text_image.width * scale, text_image.height * scale))
 
 
 def render(pot, band, color, mode):
-    img = Image.new('1', (128, 128), 0); d = ImageDraw.Draw(img)
-    d.text((30, 2), "PrismPath", fill=1); d.line([0, 13, 127, 13], fill=1)
-    w = big(band, 3); img.paste(w, (max(2, (128 - w.width) // 2), 20))
-    d.text((max(2, (128 - len(color) * 6) // 2), 52), color, fill=1)
-    x0, x1, y0, y1 = 4, 123, 72, 84
-    d.rectangle([x0, y0, x1, y1], outline=1)
+    img = Image.new('1', (128, 128), 0); draw = ImageDraw.Draw(img)
+    draw.text((30, 2), "PrismPath", fill=1); draw.line([0, 13, 127, 13], fill=1)
+    band_image = big(band, 3); img.paste(band_image, (max(2, (128 - band_image.width) // 2), 20))
+    draw.text((max(2, (128 - len(color) * 6) // 2), 52), color, fill=1)
+    left, right, top, bottom = 4, 123, 72, 84
+    draw.rectangle([left, top, right, bottom], outline=1)
     ticks = DEADBAND_TICKS if mode == "RESIDENT" else EXACT_TICKS
     for thr in ticks:
-        tx = x0 + int((x1 - x0) * thr / 4095); d.line([tx, y0 - 3, tx, y1 + 3], fill=1)
-    mx = x0 + int((x1 - x0) * min(pot, 4095) / 4095)
-    d.rectangle([mx - 1, y0, mx + 1, y1], fill=1)
-    d.text((14, 90), "pot %4d / 4095" % pot, fill=1)
-    d.line([0, 106, 127, 106], fill=1)
+        tick_x = left + int((right - left) * thr / 4095); draw.line([tick_x, top - 3, tick_x, bottom + 3], fill=1)
+    marker_x = left + int((right - left) * min(pot, 4095) / 4095)
+    draw.rectangle([marker_x - 1, top, marker_x + 1, bottom], fill=1)
+    draw.text((14, 90), "pot %4d / 4095" % pot, fill=1)
+    draw.line([0, 106, 127, 106], fill=1)
     # EXACT/LEGACY label stays generic: after a BTN2 nav swap the loaded table is not demo_input,
     # and the OLED must never claim a policy it cannot verify from the fabric registers
     label = {"RESIDENT": "hyst_band RESIDENT", "EXACT": "signed policy EXACT",
              "LEGACY": "signed policy"}[mode]
-    d.text((max(2, (128 - len(label) * 6) // 2), 110), label, fill=1)
+    draw.text((max(2, (128 - len(label) * 6) // 2), 110), label, fill=1)
     return img
 
 
 def read_band():
     """(pot, band, color, mode) from the fabric — the resident node when stateful."""
     pot = PPT.read(R_POT_NOW) & 0xFFF
-    cn = PPT.read(R_CUR_NODE)
-    if cn == 0xDEADBEEF:                                # old bitstream: no CUR_NODE register
-        b, c = stateless_decide(pot)
-        return pot, b, c, "LEGACY"
-    if (cn >> 16) & 1:                                  # armed stateful: the resident band IS the truth
-        band, color = NODES.get(cn & 0xFFFF, ("?%d" % (cn & 0xFFFF), "?"))
+    current_node = PPT.read(R_CUR_NODE)
+    if current_node == 0xDEADBEEF:                                # old bitstream: no CUR_NODE register
+        band, color = stateless_decide(pot)
+        return pot, band, color, "LEGACY"
+    if (current_node >> 16) & 1:                                  # armed stateful: the resident band IS the truth
+        band, color = NODES.get(current_node & 0xFFFF, ("?%d" % (current_node & 0xFFFF), "?"))
         return pot, band, color, "RESIDENT"
-    b, c = stateless_decide(pot)
-    return pot, b, c, "EXACT"
+    band, color = stateless_decide(pot)
+    return pot, band, color, "EXACT"
 
 
 def oled_init():
@@ -140,8 +140,8 @@ def main():
                 time.sleep(0.2); continue
             prev = oled_tick(prev)
             time.sleep(0.04)
-        except Exception as e:
-            open("/home/xilinx/oled_live.log", "a").write("ERR %s\n" % e); time.sleep(0.5)
+        except Exception as error:
+            open("/home/xilinx/oled_live.log", "a").write("ERR %s\n" % error); time.sleep(0.5)
 
 
 if __name__ == "__main__":

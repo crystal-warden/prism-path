@@ -41,20 +41,20 @@ RE_INTF = re.compile(r"interference: dropping (?P<pct>\d+)%")
 
 def classify(line):
     """Map a raw firmware line to a structured event dict (kind + fields), best-effort."""
-    m = RE_VERDICT.search(line)
-    if m:
-        d = m.groupdict()
-        a, b, arm = int(d["a"]), int(d["b"]), int(d["arm"])
-        stale = [s for s, v in (("office", a), ("door", b), ("walker", arm)) if v == STALE]
-        return {"kind": "verdict", "node": d["node"], "pol": d["pol"],
-                "a": a, "b": b, "arm": arm, "posture": d["posture"],
+    match = RE_VERDICT.search(line)
+    if match:
+        groups = match.groupdict()
+        range_a, range_b, arm = int(groups["a"]), int(groups["b"]), int(groups["arm"])
+        stale = [slot_label for slot_label, value in (("office", range_a), ("door", range_b), ("walker", arm)) if value == STALE]
+        return {"kind": "verdict", "node": groups["node"], "pol": groups["pol"],
+                "a": range_a, "b": range_b, "arm": arm, "posture": groups["posture"],
                 "stale": stale, "partitioned": bool(stale)}
     for rgx, kind in ((RE_PREPARE, "swap_prepare"), (RE_ACKTALLY, "swap_ack"),
                       (RE_ABORT, "swap_abort"), (RE_FLIP, "swap_flip"),
                       (RE_COMMIT, "swap_commit"), (RE_INTF, "interference")):
-        m = rgx.search(line)
-        if m:
-            return {"kind": kind, **m.groupdict()}
+        match = rgx.search(line)
+        if match:
+            return {"kind": kind, **match.groupdict()}
     if "up — slot=" in line or "mesh ready" in line:
         return {"kind": "boot"}
     return {"kind": "raw"}
@@ -65,8 +65,8 @@ def reader(port_name, label, ser, out_lock, out_fh, live):
     while True:
         try:
             chunk = ser.read(256)
-        except Exception as e:
-            _emit(out_lock, out_fh, {"kind": "error", "src": label, "err": str(e)})
+        except Exception as error:
+            _emit(out_lock, out_fh, {"kind": "error", "src": label, "err": str(error)})
             return
         if not chunk:
             continue
@@ -120,24 +120,24 @@ def main():
 
     def open_noreset(port):
         # attach to an already-running node without pulsing DTR/RTS (which would reset it into a blip)
-        s = serial.Serial()
-        s.port = port; s.baudrate = args.baud; s.timeout = 0.2
-        s.dtr = False; s.rts = False
-        s.open()
-        return s
+        serial_port = serial.Serial()
+        serial_port.port = port; serial_port.baudrate = args.baud; serial_port.timeout = 0.2
+        serial_port.dtr = False; serial_port.rts = False
+        serial_port.open()
+        return serial_port
 
     primary = open_noreset(args.port)
     ports = [(args.port, "office", primary)]
     if args.port2:
         ports.append((args.port2, "observer", open_noreset(args.port2)))
 
-    print(f"field_walk: logging {[p[0] for p in ports]} -> {out_path}", flush=True)
+    print(f"field_walk: logging {[port_entry[0] for port_entry in ports]} -> {out_path}", flush=True)
     print(f"control: echo swap|intf N|blackout|clearintf|mark <text>|quit > {args.ctl}", flush=True)
     _emit(out_lock, out_fh, {"t_ns": time.monotonic_ns(), "t_wall": time.time(),
-                             "kind": "session_start", "ports": [p[0] for p in ports]})
+                             "kind": "session_start", "ports": [port_entry[0] for port_entry in ports]})
 
-    for pn, label, ser in ports:
-        threading.Thread(target=reader, args=(pn, label, ser, out_lock, out_fh, True), daemon=True).start()
+    for port_name, label, ser in ports:
+        threading.Thread(target=reader, args=(port_name, label, ser, out_lock, out_fh, True), daemon=True).start()
 
     def send(byte, note):
         primary.write(byte)
@@ -148,16 +148,16 @@ def main():
     # poll the control file for commands; keeps the logger unattended while you walk
     while True:
         try:
-            with open(args.ctl) as f:
-                cmd = f.read().strip()
+            with open(args.ctl) as ctl_file:
+                cmd = ctl_file.read().strip()
             if cmd:
                 open(args.ctl, "w").close()  # consume
                 low = cmd.lower()
                 if low == "swap":
                     send(b"R", "swap (R): coordinate fusion-rule flip")
                 elif low.startswith("intf"):
-                    n = "".join(ch for ch in low if ch.isdigit()) or "0"
-                    send(str(int(n) % 10).encode(), f"interference {int(n)*10}% drop")
+                    digits = "".join(ch for ch in low if ch.isdigit()) or "0"
+                    send(str(int(digits) % 10).encode(), f"interference {int(digits)*10}% drop")
                 elif low == "blackout":
                     send(b"X", "blackout (~99% drop)")
                 elif low == "clearintf":
@@ -176,8 +176,8 @@ def main():
                     print(f"  ?? unknown command: {cmd}", flush=True)
         except FileNotFoundError:
             pass
-        except Exception as e:
-            print(f"  ctl error: {e}", flush=True)
+        except Exception as error:
+            print(f"  ctl error: {error}", flush=True)
         time.sleep(0.1)
 
 
