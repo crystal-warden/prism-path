@@ -12,20 +12,20 @@ pub fn pack(bits: &str, word_bits: usize) -> Vec<u8> {
     let bytes_per_word = word_bits / 8;
     let mut out = Vec::new();
     let mut acc: u128 = 0;
-    let mut n = 0;
+    let mut bits_in_word = 0;
     for ch in bits.chars() {
         let bit = if ch == '1' { 1 } else { 0 };
         acc = (acc << 1) | bit;
-        n += 1;
-        if n == word_bits {
+        bits_in_word += 1;
+        if bits_in_word == word_bits {
             let be_bytes = acc.to_be_bytes();
             out.extend_from_slice(&be_bytes[16 - bytes_per_word..]);
             acc = 0;
-            n = 0;
+            bits_in_word = 0;
         }
     }
-    if n > 0 {
-        acc <<= word_bits - n;
+    if bits_in_word > 0 {
+        acc <<= word_bits - bits_in_word;
         let be_bytes = acc.to_be_bytes();
         out.extend_from_slice(&be_bytes[16 - bytes_per_word..]);
     }
@@ -34,7 +34,7 @@ pub fn pack(bits: &str, word_bits: usize) -> Vec<u8> {
 
 /// Bytes -> bit-string, MSB-first (includes any trailing zero pad).
 pub fn unpack(data: &[u8]) -> String {
-    data.iter().map(|b| format!("{:08b}", b)).collect()
+    data.iter().map(|byte| format!("{:08b}", byte)).collect()
 }
 
 /// Positive ints -> Fibonacci-coded, word-packed bytes. `Err` if any int is `< 1`.

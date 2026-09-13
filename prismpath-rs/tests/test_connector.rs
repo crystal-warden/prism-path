@@ -24,19 +24,19 @@ fn fixtures() -> Value {
 fn hashes_and_flatten_match_python() {
     let fx = fixtures();
     let conn = EchoConnector { name: "echo".to_string() };
-    for c in fx["hashes"].as_array().unwrap() {
-        assert_eq!(conn.ingestion_hash(&c["data"]), c["ingestion"].as_str().unwrap());
-        assert_eq!(conn.knowledge_hash(&c["data"]), c["knowledge"].as_str().unwrap());
+    for case in fx["hashes"].as_array().unwrap() {
+        assert_eq!(conn.ingestion_hash(&case["data"]), case["ingestion"].as_str().unwrap());
+        assert_eq!(conn.knowledge_hash(&case["data"]), case["knowledge"].as_str().unwrap());
     }
-    for c in fx["flatten"].as_array().unwrap() {
+    for case in fx["flatten"].as_array().unwrap() {
         let mut flat = BTreeMap::new();
-        flatten(&c["data"], "", ".", &mut flat);
-        let expected = c["flat"].as_object().unwrap();
-        assert_eq!(flat.len(), expected.len(), "flatten arity for {}", c["data"]);
-        for (k, v) in expected {
+        flatten(&case["data"], "", ".", &mut flat);
+        let expected = case["flat"].as_object().unwrap();
+        assert_eq!(flat.len(), expected.len(), "flatten arity for {}", case["data"]);
+        for (key, value) in expected {
             // Python stores raw values; the prompt renders them str() — compare rendered.
-            let rendered = prismpath_rs::py_str(&V::from_json(v));
-            assert_eq!(flat.get(k), Some(&rendered), "flatten[{k}] for {}", c["data"]);
+            let rendered = prismpath_rs::py_str(&V::from_json(value));
+            assert_eq!(flat.get(key), Some(&rendered), "flatten[{key}] for {}", case["data"]);
         }
     }
 }
@@ -45,31 +45,31 @@ fn hashes_and_flatten_match_python() {
 fn prompt_surface_matches_python_byte_for_byte() {
     let fx = fixtures();
     let conn = EchoConnector { name: "echo".to_string() };
-    for c in fx["prompts"].as_array().unwrap() {
-        let criteria = c["criteria"].as_str();
-        let schema = c.get("schema").filter(|s| !s.is_null());
-        let got = conn.adjudication_prompt(&c["payload"], criteria, schema);
-        assert_eq!(got, c["prompt"].as_str().unwrap(), "prompt for {}", c["payload"]);
+    for case in fx["prompts"].as_array().unwrap() {
+        let criteria = case["criteria"].as_str();
+        let schema = case.get("schema").filter(|value| !value.is_null());
+        let got = conn.adjudication_prompt(&case["payload"], criteria, schema);
+        assert_eq!(got, case["prompt"].as_str().unwrap(), "prompt for {}", case["payload"]);
     }
 }
 
 #[test]
 fn attestation_manifest_matches_python() {
     let fx = fixtures();
-    let a = &fx["attestation"];
+    let attestation = &fx["attestation"];
     let conn = EchoConnector { name: "echo".to_string() };
     let ing: Vec<&str> =
-        a["ingestion_hashes"].as_array().unwrap().iter().map(|x| x.as_str().unwrap()).collect();
+        attestation["ingestion_hashes"].as_array().unwrap().iter().map(|entry| entry.as_str().unwrap()).collect();
     let got = conn.attest_decision(
-        &a["outcome"],
-        a["policy_hash"].as_str().unwrap(),
-        a["gate_id"].as_str().unwrap(),
+        &attestation["outcome"],
+        attestation["policy_hash"].as_str().unwrap(),
+        attestation["gate_id"].as_str().unwrap(),
         &ing,
-        a["kb_hash"].as_str().unwrap(),
+        attestation["kb_hash"].as_str().unwrap(),
         None,
-        a["manifest"]["created"].as_str().unwrap(),
+        attestation["manifest"]["created"].as_str().unwrap(),
     );
-    assert_eq!(got, a["manifest"], "attestation manifest");
+    assert_eq!(got, attestation["manifest"], "attestation manifest");
 }
 
 #[test]
@@ -78,7 +78,7 @@ fn adjudicate_extracts_json_and_degrades_gracefully() {
     let mut model = |_prompt: &str| r#"verdict follows {"verdict": "contain"} end"#.to_string();
     let out = conn.adjudicate(&json!({"x": 1}), &mut model, None, None);
     assert_eq!(out["verdict"], "contain");
-    let mut plain = |_p: &str| "no json here".to_string();
+    let mut plain = |_prompt: &str| "no json here".to_string();
     let out2 = conn.adjudicate(&json!({"x": 1}), &mut plain, None, None);
     assert_eq!(out2, json!({"text": "no json here"}));
 }
@@ -88,13 +88,13 @@ fn join_policy_grid_matches_the_composer() {
     use prismpath_rs::compose::{join_event, quorum_threshold};
     let fx = fixtures();
     let grid = fx["joins"].as_array().expect("regen connector.json (v2) for the joins grid");
-    for c in grid {
-        let join = c["join"].as_str().unwrap();
-        let done: Vec<bool> = c["done"].as_array().unwrap().iter().map(|d| d.as_bool().unwrap()).collect();
-        if let Some(thr) = c["threshold"].as_u64() {
+    for case in grid {
+        let join = case["join"].as_str().unwrap();
+        let done: Vec<bool> = case["done"].as_array().unwrap().iter().map(|entry| entry.as_bool().unwrap()).collect();
+        if let Some(thr) = case["threshold"].as_u64() {
             assert_eq!(quorum_threshold(join, done.len()) as u64, thr, "threshold {join} {done:?}");
         }
-        let expected = c["event"].as_str();
+        let expected = case["event"].as_str();
         assert_eq!(join_event(join, &done), expected, "event for {join} {done:?}");
     }
     eprintln!("joins: {}/{} grid entries match composer", grid.len(), grid.len());
@@ -114,14 +114,14 @@ fn file_deferral_store_is_cross_runtime() {
     let dir = std::env::temp_dir().join(format!("pp_defer_{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     let store = FileDeferralStore::new(&dir).unwrap();
-    let py = |code: &str| {
+    let run_python = |code: &str| {
         let out = std::process::Command::new(&python).arg("-c").arg(code).output().unwrap();
         assert!(out.status.success(), "python failed: {}", String::from_utf8_lossy(&out.stderr));
         String::from_utf8_lossy(&out.stdout).trim().to_string()
     };
 
     // Python defers -> Rust sees it pending and resumes it -> Python reads the resolution
-    py(&format!(
+    run_python(&format!(
         "import sys; sys.path.insert(0, {repo:?})\n\
          from prismpath.deferral import FileDeferralStore\n\
          FileDeferralStore({d:?}).defer('wu:py', reason='needs evidence', state={{'n': 1}})",
@@ -131,7 +131,7 @@ fn file_deferral_store_is_cross_runtime() {
     assert_eq!(pending.len(), 1);
     assert_eq!(pending[0]["unit_id"], "wu:py");
     store.resume("wu:py", json!({"approved": true}), "auditor:rust").unwrap();
-    let verdict = py(&format!(
+    let verdict = run_python(&format!(
         "import sys, json; sys.path.insert(0, {repo:?})\n\
          from prismpath.deferral import FileDeferralStore\n\
          r = FileDeferralStore({d:?}).get('wu:py')\n\
@@ -142,7 +142,7 @@ fn file_deferral_store_is_cross_runtime() {
 
     // Rust defers -> Python resumes -> Rust reads the resolution
     store.defer("wu:rs", "human review", json!({"k": 2}), None).unwrap();
-    py(&format!(
+    run_python(&format!(
         "import sys; sys.path.insert(0, {repo:?})\n\
          from prismpath.deferral import FileDeferralStore\n\
          FileDeferralStore({d:?}).resume('wu:rs', {{'ok': True}}, 'auditor:py')",
@@ -180,7 +180,7 @@ fn emit_record_is_idempotent() {
     let lines: Vec<Value> = std::fs::read_to_string(&dest)
         .unwrap()
         .lines()
-        .map(|l| serde_json::from_str(l).unwrap())
+        .map(|line| serde_json::from_str(line).unwrap())
         .collect();
     assert_eq!(lines.len(), 2, "replayed key must not double-write");
     assert_eq!(lines[0]["v"], 2);
@@ -195,30 +195,30 @@ type ScriptedAgent = Box<dyn FnMut(&str, &str, &RunState) -> Result<V, String>>;
 
 fn scripted(script: Value) -> ScriptedAgent {
     let mut used: HashMap<String, usize> = HashMap::new();
-    Box::new(move |node: &str, _i: &str, _s: &RunState| {
-        let Some(seq) = script.get(node).and_then(|s| s.as_array()) else {
+    Box::new(move |node: &str, _instr: &str, _state: &RunState| {
+        let Some(seq) = script.get(node).and_then(|value| value.as_array()) else {
             return Ok(V::Obj(vec![("text".to_string(), V::Str(node.to_string()))]));
         };
-        let i = *used.get(node).unwrap_or(&0);
-        used.insert(node.to_string(), i + 1);
-        Ok(V::from_json(&seq[i.min(seq.len() - 1)]))
+        let call_count = *used.get(node).unwrap_or(&0);
+        used.insert(node.to_string(), call_count + 1);
+        Ok(V::from_json(&seq[call_count.min(seq.len() - 1)]))
     })
 }
 
 #[test]
 fn fanout_matches_the_python_reference() {
     let fx = fixtures();
-    let f = &fx["fanout"];
+    let fanout = &fx["fanout"];
     let dir = std::env::temp_dir().join(format!("pp_fanout_{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let parent = dir.join("fx_parent.md");
-    std::fs::write(&parent, f["parent_flow"].as_str().unwrap()).unwrap();
+    std::fs::write(&parent, fanout["parent_flow"].as_str().unwrap()).unwrap();
     let ckpt = dir.join("fx_parent.ckpt.json");
 
-    let parent_script = f["parent_script"].clone();
-    let child_script = f["child_script"].clone();
-    let child_flow = f["child_flow"].as_str().unwrap().to_string();
+    let parent_script = fanout["parent_script"].clone();
+    let child_script = fanout["child_script"].clone();
+    let child_flow = fanout["child_flow"].as_str().unwrap().to_string();
 
     let (final_res, children) = run_fanout(
         parent.to_str().unwrap(),
@@ -238,16 +238,16 @@ fn fanout_matches_the_python_reference() {
     // children match the reference (item, path, stopped)
     let got_children: Vec<Value> = children
         .iter()
-        .map(|c| json!({"item": c.item, "path": c.path, "stopped": c.stopped}))
+        .map(|child| json!({"item": child.item, "path": child.path, "stopped": child.stopped}))
         .collect();
-    assert_eq!(json!(got_children), f["children"], "child results");
+    assert_eq!(json!(got_children), fanout["children"], "child results");
 
     // parent finishes on the same path with the aggregation visible in state
-    assert_eq!(json!(final_res.path), f["final"]["path"], "final path");
-    assert_eq!(final_res.stopped, f["final"]["stopped"].as_str().unwrap(), "final stopped");
+    assert_eq!(json!(final_res.path), fanout["final"]["path"], "final path");
+    assert_eq!(final_res.stopped, fanout["final"]["stopped"].as_str().unwrap(), "final stopped");
     let children_in_state =
         final_res.state.extra.get("_children").map(V::to_json).unwrap_or(Value::Null);
-    assert_eq!(children_in_state, f["final"]["children_in_state"], "_children in state");
+    assert_eq!(children_in_state, fanout["final"]["children_in_state"], "_children in state");
 
     eprintln!("fanout: {} children, final path {:?} — matches Python", children.len(), final_res.path);
     let _ = std::fs::remove_dir_all(&dir);

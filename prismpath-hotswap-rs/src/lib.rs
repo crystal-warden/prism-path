@@ -43,7 +43,7 @@ pub fn default_caps() -> BTreeMap<String, u64> {
     [("atoms", 1024u64), ("nodes", 256), ("edges", 1024), ("prog_words", 4096),
      ("max_steps", 25), ("max_stack", 16)]
         .into_iter()
-        .map(|(k, v)| (k.to_string(), v))
+        .map(|(name, limit)| (name.to_string(), limit))
         .collect()
 }
 
@@ -85,11 +85,11 @@ impl PptHeader {
     }
 }
 
-fn u16le(b: &[u8], off: usize) -> u16 {
-    u16::from_le_bytes([b[off], b[off + 1]])
+fn u16le(bytes: &[u8], off: usize) -> u16 {
+    u16::from_le_bytes([bytes[off], bytes[off + 1]])
 }
-fn u32le(b: &[u8], off: usize) -> u32 {
-    u32::from_le_bytes([b[off], b[off + 1], b[off + 2], b[off + 3]])
+fn u32le(bytes: &[u8], off: usize) -> u32 {
+    u32::from_le_bytes([bytes[off], bytes[off + 1], bytes[off + 2], bytes[off + 3]])
 }
 
 /// Parse the 28-byte header; stable-reason error strings match the reference exactly.
@@ -122,16 +122,16 @@ pub fn read_ppt_header(data: &[u8]) -> Result<PptHeader, String> {
 /// node/edge indices in range, and (when caps are given) every count within the envelope.
 pub fn validate_image(data: &[u8], caps: Option<&BTreeMap<String, u64>>) -> (bool, Vec<String>) {
     let mut reasons: Vec<String> = Vec::new();
-    let h = match read_ppt_header(data) {
-        Ok(h) => h,
-        Err(e) => return (false, vec![e]),
+    let header = match read_ppt_header(data) {
+        Ok(header) => header,
+        Err(error) => return (false, vec![error]),
     };
 
     let need = HEADER_SIZE
-        + ATOM_SIZE * h.atoms as usize
-        + NODE_SIZE * h.nodes as usize
-        + EDGE_SIZE * h.edges as usize
-        + WORD_SIZE * h.prog_words as usize;
+        + ATOM_SIZE * header.atoms as usize
+        + NODE_SIZE * header.nodes as usize
+        + EDGE_SIZE * header.edges as usize
+        + WORD_SIZE * header.prog_words as usize;
     if data.len() != need {
         return (false, vec!["image:length-mismatch".to_string()]);
     }
@@ -140,46 +140,46 @@ pub fn validate_image(data: &[u8], caps: Option<&BTreeMap<String, u64>>) -> (boo
         let defaults = default_caps();
         for key in ["atoms", "nodes", "edges", "prog_words", "max_steps", "max_stack"] {
             let cap = caps.get(key).copied().unwrap_or_else(|| defaults[key]);
-            if h.count(key) > cap {
+            if header.count(key) > cap {
                 reasons.push(format!("image:caps-exceeded:{key}"));
             }
         }
     }
 
     let mut off = HEADER_SIZE;
-    for i in 0..h.atoms as usize {
+    for atom_index in 0..header.atoms as usize {
         let (_fidx, op, ty) = (u16le(data, off), data[off + 2], data[off + 3]);
         let fidx = u16le(data, off);
         off += ATOM_SIZE;
         if op > 6 {
-            reasons.push(format!("image:unknown-op:atom{i}"));
+            reasons.push(format!("image:unknown-op:atom{atom_index}"));
         }
         if ty > 3 {
-            reasons.push(format!("image:unknown-type:atom{i}"));
+            reasons.push(format!("image:unknown-type:atom{atom_index}"));
         }
-        if fidx >= h.fields {
-            reasons.push(format!("image:field-index-oob:atom{i}"));
+        if fidx >= header.fields {
+            reasons.push(format!("image:field-index-oob:atom{atom_index}"));
         }
     }
-    off += NODE_SIZE * h.nodes as usize;
-    for i in 0..h.edges as usize {
+    off += NODE_SIZE * header.nodes as usize;
+    for edge_index in 0..header.edges as usize {
         let (target, po, pc) = (u16le(data, off), u16le(data, off + 2), u16le(data, off + 4));
         off += EDGE_SIZE;
-        if target >= h.nodes {
-            reasons.push(format!("image:edge-target-oob:edge{i}"));
+        if target >= header.nodes {
+            reasons.push(format!("image:edge-target-oob:edge{edge_index}"));
         }
-        if po as u32 + pc as u32 > h.prog_words as u32 {
-            reasons.push(format!("image:edge-prog-oob:edge{i}"));
+        if po as u32 + pc as u32 > header.prog_words as u32 {
+            reasons.push(format!("image:edge-prog-oob:edge{edge_index}"));
         }
     }
-    for i in 0..h.prog_words as usize {
-        let w = u16le(data, off);
+    for word_index in 0..header.prog_words as usize {
+        let word = u16le(data, off);
         off += WORD_SIZE;
-        if w >= 0x8000 && !PROG_OPCODES.contains(&w) {
-            reasons.push(format!("image:unknown-opcode:word{i}"));
+        if word >= 0x8000 && !PROG_OPCODES.contains(&word) {
+            reasons.push(format!("image:unknown-opcode:word{word_index}"));
         }
-        if w < 0x8000 && w >= h.atoms {
-            reasons.push(format!("image:atom-index-oob:word{i}"));
+        if word < 0x8000 && word >= header.atoms {
+            reasons.push(format!("image:atom-index-oob:word{word_index}"));
         }
     }
 
@@ -191,38 +191,38 @@ pub fn validate_image(data: &[u8], caps: Option<&BTreeMap<String, u64>>) -> (boo
 /// Generate an Ed25519 keypair: raw 32-byte seed (0600) + raw 32-byte public.
 /// Returns (private_path, public_path, key_id).
 pub fn keygen(out_dir: &str, name: &str) -> Result<(String, String, String), String> {
-    std::fs::create_dir_all(out_dir).map_err(|e| e.to_string())?;
+    std::fs::create_dir_all(out_dir).map_err(|error| error.to_string())?;
     let signing = SigningKey::generate(&mut rand::rngs::OsRng);
     let priv_path = format!("{out_dir}/{name}.key");
     let pub_path = format!("{out_dir}/{name}.pub");
     {
         use std::io::Write;
         use std::os::unix::fs::OpenOptionsExt;
-        let mut f = std::fs::OpenOptions::new()
+        let mut file = std::fs::OpenOptions::new()
             .write(true)
             .create(true)
             .truncate(true)
             .mode(0o600)
             .open(&priv_path)
-            .map_err(|e| e.to_string())?;
-        f.write_all(signing.to_bytes().as_ref()).map_err(|e| e.to_string())?;
+            .map_err(|error| error.to_string())?;
+        file.write_all(signing.to_bytes().as_ref()).map_err(|error| error.to_string())?;
     }
     let raw = signing.verifying_key().to_bytes();
-    std::fs::write(&pub_path, raw).map_err(|e| e.to_string())?;
+    std::fs::write(&pub_path, raw).map_err(|error| error.to_string())?;
     Ok((priv_path, pub_path, sha256_hex(&raw)))
 }
 
 pub fn load_private(path: &str) -> Result<SigningKey, String> {
-    let b = std::fs::read(path).map_err(|e| e.to_string())?;
-    let seed: [u8; 32] = b.as_slice().try_into().map_err(|_| "bad private key length")?;
+    let bytes = std::fs::read(path).map_err(|error| error.to_string())?;
+    let seed: [u8; 32] = bytes.as_slice().try_into().map_err(|_| "bad private key length")?;
     Ok(SigningKey::from_bytes(&seed))
 }
 
 /// Load a raw-32-byte Ed25519 public key file -> (key, key_id).
 pub fn load_public(path: &str) -> Result<(VerifyingKey, String), String> {
-    let b = std::fs::read(path).map_err(|e| e.to_string())?;
-    let raw: [u8; 32] = b.as_slice().try_into().map_err(|_| "bad public key length")?;
-    let key = VerifyingKey::from_bytes(&raw).map_err(|e| e.to_string())?;
+    let bytes = std::fs::read(path).map_err(|error| error.to_string())?;
+    let raw: [u8; 32] = bytes.as_slice().try_into().map_err(|_| "bad public key length")?;
+    let key = VerifyingKey::from_bytes(&raw).map_err(|error| error.to_string())?;
     Ok((key, sha256_hex(&raw)))
 }
 
@@ -231,7 +231,7 @@ pub fn load_revoked(path: Option<&str>) -> Vec<String> {
     let Some(path) = path else { return Vec::new() };
     std::fs::read_to_string(path)
         .ok()
-        .and_then(|t| serde_json::from_str::<Vec<String>>(&t).ok())
+        .and_then(|text| serde_json::from_str::<Vec<String>>(&text).ok())
         .unwrap_or_default()
 }
 
@@ -245,14 +245,14 @@ pub fn build_manifest(
     key_id: &str,
     created: &str,
 ) -> Result<Value, String> {
-    let h = read_ppt_header(image)?;
+    let header = read_ppt_header(image)?;
     Ok(json!({
         "format": PACK_FORMAT,
         "image_sha256": sha256_hex(image),
         "fields": fields,
-        "counts": {"atoms": h.atoms, "nodes": h.nodes, "edges": h.edges,
-                   "prog_words": h.prog_words, "max_steps": h.max_steps,
-                   "max_stack": h.max_stack},
+        "counts": {"atoms": header.atoms, "nodes": header.nodes, "edges": header.edges,
+                   "prog_words": header.prog_words, "max_steps": header.max_steps,
+                   "max_stack": header.max_stack},
         "version": version,
         "envelope_id": envelope_id,
         "key_id": key_id,
@@ -271,7 +271,7 @@ pub fn build_pack(
     pub_path: &str,
     created: &str,
 ) -> Result<Value, String> {
-    let image = std::fs::read(ppt_path).map_err(|e| e.to_string())?;
+    let image = std::fs::read(ppt_path).map_err(|error| error.to_string())?;
     let (ok, reasons) = validate_image(&image, None);
     if !ok {
         return Err(format!("refusing to sign an invalid image: {}", reasons.join(",")));
@@ -281,10 +281,10 @@ pub fn build_pack(
     let sig = load_private(priv_path)?.sign(&canonical_bytes(&manifest));
     std::fs::write(
         format!("{ppt_path}.manifest.json"),
-        serde_json::to_string_pretty(&manifest).map_err(|e| e.to_string())? + "\n",
+        serde_json::to_string_pretty(&manifest).map_err(|error| error.to_string())? + "\n",
     )
-    .map_err(|e| e.to_string())?;
-    std::fs::write(format!("{ppt_path}.manifest.sig"), sig.to_bytes()).map_err(|e| e.to_string())?;
+    .map_err(|error| error.to_string())?;
+    std::fs::write(format!("{ppt_path}.manifest.sig"), sig.to_bytes()).map_err(|error| error.to_string())?;
     Ok(manifest)
 }
 
@@ -304,7 +304,7 @@ pub fn verify_pack(
     let Ok(manifest) = serde_json::from_str::<Value>(&man_text) else {
         return (false, vec!["sig:missing".to_string()], None);
     };
-    if manifest.get("format").and_then(|f| f.as_str()) != Some(PACK_FORMAT) {
+    if manifest.get("format").and_then(|value| value.as_str()) != Some(PACK_FORMAT) {
         return (false, vec!["manifest:bad-format".to_string()], Some(manifest));
     }
 
@@ -327,24 +327,24 @@ pub fn verify_pack(
     if revoked.contains(&signer_id) {
         return (false, vec!["sig:revoked-key".to_string()], Some(manifest));
     }
-    if manifest.get("key_id").and_then(|k| k.as_str()) != Some(signer_id.as_str()) {
+    if manifest.get("key_id").and_then(|value| value.as_str()) != Some(signer_id.as_str()) {
         return (false, vec!["manifest:key-id-mismatch".to_string()], Some(manifest));
     }
 
     let Ok(image) = std::fs::read(ppt_path) else {
         return (false, vec!["image:sha256-mismatch".to_string()], Some(manifest));
     };
-    if manifest.get("image_sha256").and_then(|h| h.as_str()) != Some(sha256_hex(&image).as_str()) {
+    if manifest.get("image_sha256").and_then(|value| value.as_str()) != Some(sha256_hex(&image).as_str()) {
         return (false, vec!["image:sha256-mismatch".to_string()], Some(manifest));
     }
-    let h = match read_ppt_header(&image) {
-        Ok(h) => h,
-        Err(e) => return (false, vec![e], Some(manifest)),
+    let header = match read_ppt_header(&image) {
+        Ok(header) => header,
+        Err(error) => return (false, vec![error], Some(manifest)),
     };
-    for k in ["atoms", "nodes", "edges", "prog_words", "max_steps", "max_stack"] {
-        if manifest.get("counts").and_then(|c| c.get(k)).and_then(|v| v.as_u64()) != Some(h.count(k))
+    for count_name in ["atoms", "nodes", "edges", "prog_words", "max_steps", "max_stack"] {
+        if manifest.get("counts").and_then(|counts| counts.get(count_name)).and_then(|value| value.as_u64()) != Some(header.count(count_name))
         {
-            return (false, vec![format!("manifest:count-mismatch:{k}")], Some(manifest));
+            return (false, vec![format!("manifest:count-mismatch:{count_name}")], Some(manifest));
         }
     }
     (true, Vec::new(), Some(manifest))
@@ -363,9 +363,9 @@ pub fn build_envelope(
 ) -> Result<Value, String> {
     let (_pub, key_id) = load_public(pub_path)?;
     let mut merged = default_caps();
-    if let Some(c) = caps {
-        for (k, v) in c {
-            merged.insert(k.clone(), *v);
+    if let Some(overrides) = caps {
+        for (name, limit) in overrides {
+            merged.insert(name.clone(), *limit);
         }
     }
     let env = json!({
@@ -376,14 +376,14 @@ pub fn build_envelope(
         "key_id": key_id,
     });
     let sig = load_private(priv_path)?.sign(&canonical_bytes(&env));
-    std::fs::create_dir_all(out_dir).map_err(|e| e.to_string())?;
+    std::fs::create_dir_all(out_dir).map_err(|error| error.to_string())?;
     let base = format!("{out_dir}/{envelope_id}.envelope");
     std::fs::write(
         format!("{base}.json"),
-        serde_json::to_string_pretty(&env).map_err(|e| e.to_string())? + "\n",
+        serde_json::to_string_pretty(&env).map_err(|error| error.to_string())? + "\n",
     )
-    .map_err(|e| e.to_string())?;
-    std::fs::write(format!("{base}.sig"), sig.to_bytes()).map_err(|e| e.to_string())?;
+    .map_err(|error| error.to_string())?;
+    std::fs::write(format!("{base}.sig"), sig.to_bytes()).map_err(|error| error.to_string())?;
     Ok(env)
 }
 
@@ -421,8 +421,8 @@ pub fn check_envelope(manifest: &Value, image: &[u8], envelope: &Value) -> (bool
         reasons.push("envelope:id-mismatch".to_string());
     }
     let empty = serde_json::Map::new();
-    let env_fields = envelope.get("fields").and_then(|f| f.as_object()).unwrap_or(&empty);
-    if let Some(man_fields) = manifest.get("fields").and_then(|f| f.as_object()) {
+    let env_fields = envelope.get("fields").and_then(|value| value.as_object()).unwrap_or(&empty);
+    if let Some(man_fields) = manifest.get("fields").and_then(|value| value.as_object()) {
         for (name, kind) in man_fields {
             match env_fields.get(name) {
                 None => reasons.push(format!("envelope:unknown-field:{name}")),
@@ -435,8 +435,8 @@ pub fn check_envelope(manifest: &Value, image: &[u8], envelope: &Value) -> (bool
     }
     let caps: BTreeMap<String, u64> = envelope
         .get("caps")
-        .and_then(|c| c.as_object())
-        .map(|o| o.iter().filter_map(|(k, v)| v.as_u64().map(|n| (k.clone(), n))).collect())
+        .and_then(|caps_value| caps_value.as_object())
+        .map(|caps_object| caps_object.iter().filter_map(|(name, value)| value.as_u64().map(|limit| (name.clone(), limit))).collect())
         .unwrap_or_else(default_caps);
     let (ok, img_reasons) = validate_image(image, Some(&caps));
     reasons.extend(img_reasons);

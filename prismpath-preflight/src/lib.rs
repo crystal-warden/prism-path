@@ -41,18 +41,18 @@ pub struct Outcome {
 // and string coercion would show up as false round-trip mismatches.
 fn v_to_i64(value: &V) -> i64 {
     match value {
-        V::Num(n) => *n as i64,
-        V::Bool(b) => i64::from(*b),
-        V::Str(s) => s.parse::<i64>().unwrap_or(0),
+        V::Num(number) => *number as i64,
+        V::Bool(flag) => i64::from(*flag),
+        V::Str(text) => text.parse::<i64>().unwrap_or(0),
         _ => 0,
     }
 }
 
 fn v_to_str(value: &V) -> String {
     match value {
-        V::Str(s) => s.clone(),
-        V::Num(n) => n.to_string(),
-        V::Bool(b) => if *b { "True".into() } else { "False".into() },
+        V::Str(text) => text.clone(),
+        V::Num(number) => number.to_string(),
+        V::Bool(flag) => if *flag { "True".into() } else { "False".into() },
         _ => String::new(),
     }
 }
@@ -67,19 +67,19 @@ fn walk_path<'a>(event: &'a Value, path: &str) -> Option<&'a Value> {
     if cur.is_null() { None } else { Some(cur) }
 }
 
-fn cells_desc(p: &FieldPartition) -> String {
-    match p.kind {
-        FieldKind::Numeric => p.cells.iter()
-            .map(|c| format!("[{}..{}]",
-                c.lo.map_or("-inf".into(), |l| l.to_string()),
-                c.hi.map_or("+inf".into(), |h| h.to_string())))
+fn cells_desc(partition: &FieldPartition) -> String {
+    match partition.kind {
+        FieldKind::Numeric => partition.cells.iter()
+            .map(|cell| format!("[{}..{}]",
+                cell.lo.map_or("-inf".into(), |low| low.to_string()),
+                cell.hi.map_or("+inf".into(), |high| high.to_string())))
             .collect::<Vec<_>>().join(" "),
         FieldKind::Boolean => "[false] [true]".into(),
         FieldKind::Categorical => {
-            let mut out: Vec<String> = p.cells.iter()
-                .filter_map(|c| c.const_val.as_ref())
-                .filter(|s| !s.starts_with('\0'))       // drop the internal "other" sentinel cell
-                .map(|s| format!("['{s}']"))
+            let mut out: Vec<String> = partition.cells.iter()
+                .filter_map(|cell| cell.const_val.as_ref())
+                .filter(|constant| !constant.starts_with('\0'))       // drop the internal "other" sentinel cell
+                .map(|constant| format!("['{constant}']"))
                 .collect();
             out.push("[other]".into());
             out.join(" ")
@@ -87,8 +87,8 @@ fn cells_desc(p: &FieldPartition) -> String {
     }
 }
 
-fn kind_name(k: &FieldKind) -> &'static str {
-    match k {
+fn kind_name(kind: &FieldKind) -> &'static str {
+    match kind {
         FieldKind::Numeric => "numeric",
         FieldKind::Boolean => "boolean",
         FieldKind::Categorical => "categorical",
@@ -106,35 +106,35 @@ fn codec_view(parts: &HashMap<String, FieldPartition>, reading: &HashMap<String,
     let mut seen = HashMap::new();
     let mut truncated = Vec::new();
     let mut coerced = Vec::new();
-    for (f, v) in reading {
-        let p = &parts[f];
-        let out = match p.kind {
+    for (field, value) in reading {
+        let partition = &parts[field];
+        let out = match partition.kind {
             FieldKind::Numeric => {
-                if let V::Num(n) = v {
-                    if n.fract() != 0.0 {
-                        truncated.push(f.clone());
+                if let V::Num(number) = value {
+                    if number.fract() != 0.0 {
+                        truncated.push(field.clone());
                     }
                 }
-                if let V::Str(s) = v {
-                    if s.parse::<i64>().is_err() {
-                        coerced.push(f.clone());
+                if let V::Str(text) = value {
+                    if text.parse::<i64>().is_err() {
+                        coerced.push(field.clone());
                     }
                 }
-                V::Num(v_to_i64(v) as f64)
+                V::Num(v_to_i64(value) as f64)
             }
-            FieldKind::Boolean => V::Bool(py_truthy(v)),
-            FieldKind::Categorical => V::Str(v_to_str(v)),
+            FieldKind::Boolean => V::Bool(py_truthy(value)),
+            FieldKind::Categorical => V::Str(v_to_str(value)),
         };
-        seen.insert(f.clone(), out);
+        seen.insert(field.clone(), out);
     }
     (seen, truncated, coerced)
 }
 
 fn branch_nodes(graph: &Graph, nodes: &[String]) -> Vec<String> {
     let out: Vec<String> = nodes.iter()
-        .filter(|n| {
+        .filter(|node| {
             let targets: std::collections::HashSet<&str> =
-                graph.nodes[*n].edges.iter().map(|(t, _c)| t.as_str()).collect();
+                graph.nodes[*node].edges.iter().map(|(target, _cond)| target.as_str()).collect();
             targets.len() > 1
         })
         .cloned().collect();
@@ -143,7 +143,7 @@ fn branch_nodes(graph: &Graph, nodes: &[String]) -> Vec<String> {
 
 pub fn run(cfg: &Config) -> Result<Outcome, String> {
     let flow_text = std::fs::read_to_string(&cfg.flow)
-        .map_err(|e| format!("cannot read flow {:?}: {e}", cfg.flow))?;
+        .map_err(|error| format!("cannot read flow {:?}: {error}", cfg.flow))?;
     let graph = parse(&flow_text);
     let parts = quantizer::build_partitions(&graph);
     if parts.is_empty() {
@@ -167,7 +167,7 @@ pub fn run(cfg: &Config) -> Result<Outcome, String> {
         Box::new(std::io::BufReader::new(std::io::stdin()))
     } else {
         Box::new(std::io::BufReader::new(std::fs::File::open(&cfg.sample)
-            .map_err(|e| format!("cannot read sample {:?}: {e}", cfg.sample))?))
+            .map_err(|error| format!("cannot read sample {:?}: {error}", cfg.sample))?))
     };
     let (mut n_events, mut n_encoded, mut bad_json) = (0usize, 0usize, 0usize);
     let mut missing_events = 0usize;
@@ -179,13 +179,13 @@ pub fn run(cfg: &Config) -> Result<Outcome, String> {
     let mut field_seen: HashMap<String, usize> = HashMap::new();
     let (mut raw_bytes, mut wire_bits, mut framed_bytes) = (0usize, 0usize, 0usize);
     let mut route_dist: HashMap<String, HashMap<String, usize>> =
-        nodes.iter().map(|n| (n.clone(), HashMap::new())).collect();
+        nodes.iter().map(|node| (node.clone(), HashMap::new())).collect();
     let mut mismatches: Vec<Value> = Vec::new();
     let mut non_decision_keys: HashMap<String, usize> = HashMap::new();
 
     let mut n_lines = 0usize;
     for line in reader.lines() {
-        let line = line.map_err(|e| format!("read error: {e}"))?;
+        let line = line.map_err(|error| format!("read error: {error}"))?;
         let line = line.trim();
         if line.is_empty() {
             continue;
@@ -197,7 +197,7 @@ pub fn run(cfg: &Config) -> Result<Outcome, String> {
         }
         n_lines += 1;
         let event: Value = match serde_json::from_str(line) {
-            Ok(Value::Object(o)) => Value::Object(o),
+            Ok(Value::Object(object)) => Value::Object(object),
             _ => {
                 bad_json += 1;
                 continue;
@@ -205,49 +205,49 @@ pub fn run(cfg: &Config) -> Result<Outcome, String> {
         };
         n_events += 1;
         raw_bytes += line.len();
-        for k in event.as_object().unwrap().keys() {
-            let mapped = cfg.field_paths.get(k).map(String::as_str).unwrap_or(k);
-            if !parts.contains_key(k) && !parts.contains_key(mapped) {
-                *non_decision_keys.entry(k.clone()).or_default() += 1;
+        for key in event.as_object().unwrap().keys() {
+            let mapped = cfg.field_paths.get(key).map(String::as_str).unwrap_or(key);
+            if !parts.contains_key(key) && !parts.contains_key(mapped) {
+                *non_decision_keys.entry(key.clone()).or_default() += 1;
             }
         }
 
         let mut reading: HashMap<String, V> = HashMap::new();
         let mut missing: Vec<&str> = Vec::new();
-        for f in &order {
-            let path = cfg.field_paths.get(f).map(String::as_str).unwrap_or(f);
+        for field in &order {
+            let path = cfg.field_paths.get(field).map(String::as_str).unwrap_or(field);
             match walk_path(&event, path) {
-                Some(v) => {
-                    reading.insert(f.clone(), V::from_json(v));
-                    *field_seen.entry(f.clone()).or_default() += 1;
+                Some(value) => {
+                    reading.insert(field.clone(), V::from_json(value));
+                    *field_seen.entry(field.clone()).or_default() += 1;
                 }
-                None => missing.push(f),
+                None => missing.push(field),
             }
         }
         if !missing.is_empty() {
             missing_events += 1;
-            for f in missing {
-                *missing_counts.entry(f.to_string()).or_default() += 1;
+            for field in missing {
+                *missing_counts.entry(field.to_string()).or_default() += 1;
             }
             continue;
         }
 
         let (seen, truncated, coerced) = codec_view(&parts, &reading);
-        for f in truncated {
-            *truncated_counts.entry(f).or_default() += 1;
+        for field in truncated {
+            *truncated_counts.entry(field).or_default() += 1;
         }
-        for f in coerced {
-            *coerced_counts.entry(f).or_default() += 1;
+        for field in coerced {
+            *coerced_counts.entry(field).or_default() += 1;
         }
 
         let bits = match wire::encode_reading(&parts, &seen) {
-            Ok(b) => b,
+            Ok(encoded) => encoded,
             Err(_) => {
-                for f in &order {
-                    if parts[f].symbol(&seen[f]).is_err() {
-                        *out_of_partition.entry(f.clone()).or_default() += 1;
-                        oop_examples.entry(f.clone())
-                            .or_insert_with(|| format!("{:?}", reading[f]));
+                for field in &order {
+                    if parts[field].symbol(&seen[field]).is_err() {
+                        *out_of_partition.entry(field.clone()).or_default() += 1;
+                        oop_examples.entry(field.clone())
+                            .or_insert_with(|| format!("{:?}", reading[field]));
                     }
                 }
                 continue;
@@ -260,12 +260,12 @@ pub fn run(cfg: &Config) -> Result<Outcome, String> {
 
         // round trip through the same strict path the Vector decoder runs
         let syms = zeckendorf::decode_stream_strict(&packed::unpack(&frame))
-            .map_err(|e| format!("round-trip decode failed (should be impossible): {e}"))?;
+            .map_err(|error| format!("round-trip decode failed (should be impossible): {error}"))?;
         if syms.len() != order.len() {
             return Err("round-trip symbol count mismatch (should be impossible)".into());
         }
         let sym_map: HashMap<String, usize> =
-            order.iter().cloned().zip(syms.iter().map(|s| s - 1)).collect();
+            order.iter().cloned().zip(syms.iter().map(|symbol| symbol - 1)).collect();
         let rep = quantizer::reconstruct(&parts, &sym_map);
         for node in &nodes {
             let orig_t = wire::route_node(&graph, node, &seen);
@@ -280,7 +280,7 @@ pub fn run(cfg: &Config) -> Result<Outcome, String> {
         }
     }
 
-    let unseen: Vec<&String> = order.iter().filter(|f| !field_seen.contains_key(*f)).collect();
+    let unseen: Vec<&String> = order.iter().filter(|field| !field_seen.contains_key(*field)).collect();
     let codec_errors = if cfg.on_missing_skip { 0 } else { missing_events };
     let ready = n_encoded > 0 && mismatches.is_empty() && unseen.is_empty()
         && codec_errors == 0 && out_of_partition.is_empty() && coerced_counts.is_empty();
@@ -288,7 +288,7 @@ pub fn run(cfg: &Config) -> Result<Outcome, String> {
     // ------------------------------------------------------------- report
     let mut md: Vec<String> = Vec::new();
     let flow_name = std::path::Path::new(&cfg.flow).file_name()
-        .map(|s| s.to_string_lossy().into_owned()).unwrap_or_else(|| cfg.flow.clone());
+        .map(|name| name.to_string_lossy().into_owned()).unwrap_or_else(|| cfg.flow.clone());
     md.push(format!("# prismpath-preflight: {flow_name} x {n_events} events"));
     md.push(String::new());
 
@@ -297,10 +297,10 @@ pub fn run(cfg: &Config) -> Result<Outcome, String> {
     md.push("| field | kind | cells | decision cells |".into());
     md.push("|---|---|---|---|".into());
     let mut cell_product: u128 = 1;
-    for f in &order {
-        let p = &parts[f];
-        md.push(format!("| `{f}` | {} | {} | {} |", kind_name(&p.kind), p.n, cells_desc(p)));
-        cell_product *= p.n as u128;
+    for field in &order {
+        let partition = &parts[field];
+        md.push(format!("| `{field}` | {} | {} | {} |", kind_name(&partition.kind), partition.n, cells_desc(partition)));
+        cell_product *= partition.n as u128;
     }
     md.push(String::new());
     md.push(format!(
@@ -316,37 +316,37 @@ pub fn run(cfg: &Config) -> Result<Outcome, String> {
     md.push(format!("- encoded cleanly: {n_encoded} ({})", pct(n_encoded, n_events)));
     if missing_events > 0 {
         let mut detail: Vec<(&String, &usize)> = missing_counts.iter().collect();
-        detail.sort_by(|a, b| b.1.cmp(a.1).then(a.0.cmp(b.0)));
-        let detail: Vec<String> = detail.iter().map(|(f, c)| format!("`{f}` x{c}")).collect();
+        detail.sort_by(|left, right| right.1.cmp(left.1).then(left.0.cmp(right.0)));
+        let detail: Vec<String> = detail.iter().map(|(field, count)| format!("`{field}` x{count}")).collect();
         let verb = if cfg.on_missing_skip { "skip (event silently dropped)" }
                    else { "error (event dropped, error surfaced)" };
         md.push(format!("- missing decision fields: {missing_events} events -> \
                          on_missing={verb}: {}", detail.join(", ")));
     }
     let mut oop: Vec<(&String, &usize)> = out_of_partition.iter().collect();
-    oop.sort_by(|a, b| b.1.cmp(a.1).then(a.0.cmp(b.0)));
-    for (f, c) in oop {
-        md.push(format!("- out of partition on `{f}`: {c} events (example value: {}) -> \
-                         encoding error", oop_examples[f]));
+    oop.sort_by(|left, right| right.1.cmp(left.1).then(left.0.cmp(right.0)));
+    for (field, count) in oop {
+        md.push(format!("- out of partition on `{field}`: {count} events (example value: {}) -> \
+                         encoding error", oop_examples[field]));
     }
     if !truncated_counts.is_empty() {
         let mut detail: Vec<(&String, &usize)> = truncated_counts.iter().collect();
-        detail.sort_by(|a, b| b.1.cmp(a.1).then(a.0.cmp(b.0)));
-        let detail: Vec<String> = detail.iter().map(|(f, c)| format!("`{f}` x{c}")).collect();
+        detail.sort_by(|left, right| right.1.cmp(left.1).then(left.0.cmp(right.0)));
+        let detail: Vec<String> = detail.iter().map(|(field, count)| format!("`{field}` x{count}")).collect();
         md.push(format!("- float truncation: numeric fields compare on int(value); affected: {} \
                          (a 21.7 routes as 21; make thresholds integer-aware or scale the field)",
                         detail.join(", ")));
     }
     if !coerced_counts.is_empty() {
         let mut detail: Vec<(&String, &usize)> = coerced_counts.iter().collect();
-        detail.sort_by(|a, b| b.1.cmp(a.1).then(a.0.cmp(b.0)));
-        let detail: Vec<String> = detail.iter().map(|(f, c)| format!("`{f}` x{c}")).collect();
+        detail.sort_by(|left, right| right.1.cmp(left.1).then(left.0.cmp(right.0)));
+        let detail: Vec<String> = detail.iter().map(|(field, count)| format!("`{field}` x{count}")).collect();
         md.push(format!("- COERCED TO 0: non-numeric strings on numeric fields: {} (the codec \
                          quantizes them as 0, which is almost never what you meant; fix the \
                          field or map a different path)", detail.join(", ")));
     }
     if !unseen.is_empty() {
-        let names: Vec<String> = unseen.iter().map(|f| format!("`{f}`")).collect();
+        let names: Vec<String> = unseen.iter().map(|field| format!("`{field}`")).collect();
         md.push(format!("- NEVER SEEN in the sample: {} (is the field name right? try \
                          --map FIELD=your.json.path)", names.join(", ")));
     }
@@ -383,10 +383,10 @@ pub fn run(cfg: &Config) -> Result<Outcome, String> {
                 "**{}+ MISMATCHES** (original vs reconstructed route differs) - this should \
                  never happen; please report it with the flow + offending readings below:",
                 mismatches.len()));
-            for m in &mismatches {
+            for mismatch in &mismatches {
                 md.push(format!("- node `{}`: {:?} vs {:?} on {}",
-                    m["node"].as_str().unwrap_or("?"), m["original"], m["representative"],
-                    m["reading"]));
+                    mismatch["node"].as_str().unwrap_or("?"), mismatch["original"], mismatch["representative"],
+                    mismatch["reading"]));
             }
         }
         md.push(String::new());
@@ -399,15 +399,15 @@ pub fn run(cfg: &Config) -> Result<Outcome, String> {
             md.push(format!("from `{node}`:"));
             md.push(String::new());
             let mut dist: Vec<(&String, &usize)> = route_dist[node].iter().collect();
-            dist.sort_by(|a, b| b.1.cmp(a.1).then(a.0.cmp(b.0)));
-            for (target, c) in dist {
-                md.push(format!("- `{target}`: {c} ({})", pct(*c, n_encoded)));
+            dist.sort_by(|left, right| right.1.cmp(left.1).then(left.0.cmp(right.0)));
+            for (target, count) in dist {
+                md.push(format!("- `{target}`: {count} ({})", pct(*count, n_encoded)));
             }
             md.push(String::new());
         }
         let only_route: Vec<String> = branches.iter()
-            .filter(|n| route_dist[*n].len() == 1 && !route_dist[*n].contains_key("(no match)"))
-            .map(|n| format!("`{n}`")).collect();
+            .filter(|node| route_dist[*node].len() == 1 && !route_dist[*node].contains_key("(no match)"))
+            .map(|node| format!("`{node}`")).collect();
         if !only_route.is_empty() && n_encoded >= 20 {
             md.push(format!(
                 "Note: {} routed every sample event the same way. Fine if the sample is quiet; \
@@ -419,8 +419,8 @@ pub fn run(cfg: &Config) -> Result<Outcome, String> {
 
     if !non_decision_keys.is_empty() {
         let mut keys: Vec<(&String, &usize)> = non_decision_keys.iter().collect();
-        keys.sort_by(|a, b| b.1.cmp(a.1).then(a.0.cmp(b.0)));
-        let shown: Vec<String> = keys.iter().take(12).map(|(k, _c)| format!("`{k}`")).collect();
+        keys.sort_by(|left, right| right.1.cmp(left.1).then(left.0.cmp(right.0)));
+        let shown: Vec<String> = keys.iter().take(12).map(|(key, _count)| format!("`{key}`")).collect();
         md.push("## Not transmitted".into());
         md.push(String::new());
         md.push(format!(
@@ -448,9 +448,9 @@ pub fn run(cfg: &Config) -> Result<Outcome, String> {
         "flow": cfg.flow, "sample": cfg.sample,
         "field_paths": cfg.field_paths,
         "on_missing": if cfg.on_missing_skip { "skip" } else { "error" },
-        "codebook": order.iter().map(|f| (f.clone(), json!({
-            "kind": kind_name(&parts[f].kind), "cells": parts[f].n,
-            "desc": cells_desc(&parts[f])}))).collect::<serde_json::Map<_, _>>(),
+        "codebook": order.iter().map(|field| (field.clone(), json!({
+            "kind": kind_name(&parts[field].kind), "cells": parts[field].n,
+            "desc": cells_desc(&parts[field])}))).collect::<serde_json::Map<_, _>>(),
         "joint_cells": cell_product as u64,
         "events": n_events, "bad_json": bad_json, "encoded": n_encoded,
         "missing_events": missing_events, "missing_by_field": missing_counts,

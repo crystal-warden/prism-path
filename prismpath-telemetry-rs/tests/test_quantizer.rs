@@ -1,5 +1,5 @@
 use prismpath_rs::{parse, V};
-use prismpath_telemetry_rs::quantizer as q;
+use prismpath_telemetry_rs::quantizer;
 use std::collections::HashMap;
 
 const INCIDENT: &str = r#"---
@@ -52,8 +52,8 @@ start: classify
 "#;
 
 fn route(graph: &prismpath_rs::Graph, node: &str, reading: &HashMap<String, V>) -> Option<String> {
-    if let Some(n) = graph.nodes.get(node) {
-        for (target, cond) in &n.edges {
+    if let Some(flow_node) = graph.nodes.get(node) {
+        for (target, cond) in &flow_node.edges {
             if prismpath_rs::is_deterministic(cond) {
                 if let Ok(true) = prismpath_rs::eval_condition(cond, reading) {
                     return Some(target.clone());
@@ -65,41 +65,41 @@ fn route(graph: &prismpath_rs::Graph, node: &str, reading: &HashMap<String, V>) 
 }
 
 fn assert_decisions_preserved(graph: &prismpath_rs::Graph, node: &str, readings: &[HashMap<String, V>]) {
-    let parts = q::build_partitions(graph);
-    for r in readings {
-        let orig = route(graph, node, r);
-        let recon = route(graph, node, &q::reconstruct(&parts, &q::quantize(&parts, r).unwrap()));
-        assert_eq!(orig, recon, "decision changed for {:?}", r);
+    let parts = quantizer::build_partitions(graph);
+    for reading in readings {
+        let orig = route(graph, node, reading);
+        let recon = route(graph, node, &quantizer::reconstruct(&parts, &quantizer::quantize(&parts, reading).unwrap()));
+        assert_eq!(orig, recon, "decision changed for {:?}", reading);
     }
 }
 
 #[test]
 fn test_incident_partition_is_minimal() {
-    let g = parse(INCIDENT);
-    let parts = q::build_partitions(&g);
-    assert_eq!(parts["error_rate"].kind, q::FieldKind::Numeric);
+    let graph = parse(INCIDENT);
+    let parts = quantizer::build_partitions(&graph);
+    assert_eq!(parts["error_rate"].kind, quantizer::FieldKind::Numeric);
     assert_eq!(parts["error_rate"].n, 4);
-    assert_eq!(parts["data_at_risk"].kind, q::FieldKind::Boolean);
+    assert_eq!(parts["data_at_risk"].kind, quantizer::FieldKind::Boolean);
     assert_eq!(parts["data_at_risk"].n, 2);
-    assert_eq!(parts["user_facing"].kind, q::FieldKind::Boolean);
+    assert_eq!(parts["user_facing"].kind, quantizer::FieldKind::Boolean);
     assert_eq!(parts["user_facing"].n, 2);
 }
 
 #[test]
 fn test_categorical_partition_shape() {
-    let g = parse(CATEGORICAL);
-    let parts = q::build_partitions(&g);
-    assert_eq!(parts["kind"].kind, q::FieldKind::Categorical);
+    let graph = parse(CATEGORICAL);
+    let parts = quantizer::build_partitions(&graph);
+    assert_eq!(parts["kind"].kind, quantizer::FieldKind::Categorical);
     assert_eq!(parts["kind"].n, 4);
-    assert_eq!(parts["status"].kind, q::FieldKind::Categorical);
+    assert_eq!(parts["status"].kind, quantizer::FieldKind::Categorical);
     assert_eq!(parts["status"].n, 2);
 }
 
 #[test]
 fn test_numeric_equality_keeps_the_point_cell() {
-    let g = parse(NUMERIC_EQ);
-    let parts = q::build_partitions(&g);
-    assert_eq!(parts["x"].kind, q::FieldKind::Numeric);
+    let graph = parse(NUMERIC_EQ);
+    let parts = quantizer::build_partitions(&graph);
+    assert_eq!(parts["x"].kind, quantizer::FieldKind::Numeric);
     assert_eq!(parts["x"].n, 4);
     assert_ne!(parts["x"].symbol(&V::Num(5.0)).unwrap(), parts["x"].symbol(&V::Num(4.0)).unwrap());
     assert_ne!(parts["x"].symbol(&V::Num(7.0)).unwrap(), parts["x"].symbol(&V::Num(5.0)).unwrap());
@@ -107,61 +107,61 @@ fn test_numeric_equality_keeps_the_point_cell() {
 
 #[test]
 fn test_incident_decisions_preserved() {
-    let g = parse(INCIDENT);
+    let graph = parse(INCIDENT);
     let mut readings = Vec::new();
     for dar in [true, false] {
         for uf in [true, false] {
             for er in [-5, 0, 1, 2, 4, 5, 6, 24, 25, 26, 50, 100] {
-                let mut r = HashMap::new();
-                r.insert("data_at_risk".to_string(), V::Bool(dar));
-                r.insert("user_facing".to_string(), V::Bool(uf));
-                r.insert("error_rate".to_string(), V::Num(er as f64));
-                readings.push(r);
+                let mut reading = HashMap::new();
+                reading.insert("data_at_risk".to_string(), V::Bool(dar));
+                reading.insert("user_facing".to_string(), V::Bool(uf));
+                reading.insert("error_rate".to_string(), V::Num(er as f64));
+                readings.push(reading);
             }
         }
     }
-    assert_decisions_preserved(&g, "assess", &readings);
+    assert_decisions_preserved(&graph, "assess", &readings);
 }
 
 #[test]
 fn test_categorical_decisions_preserved() {
-    let g = parse(CATEGORICAL);
+    let graph = parse(CATEGORICAL);
     let mut readings = Vec::new();
-    for k in ["urgent", "nightly", "weekly", "adhoc", "xyz"] {
-        for s in ["ok", "bad", "degraded"] {
-            let mut r = HashMap::new();
-            r.insert("kind".to_string(), V::Str(k.to_string()));
-            r.insert("status".to_string(), V::Str(s.to_string()));
-            readings.push(r);
+    for kind in ["urgent", "nightly", "weekly", "adhoc", "xyz"] {
+        for status in ["ok", "bad", "degraded"] {
+            let mut reading = HashMap::new();
+            reading.insert("kind".to_string(), V::Str(kind.to_string()));
+            reading.insert("status".to_string(), V::Str(status.to_string()));
+            readings.push(reading);
         }
     }
-    assert_decisions_preserved(&g, "classify", &readings);
+    assert_decisions_preserved(&graph, "classify", &readings);
 }
 
 #[test]
 fn test_numeric_equality_decisions_preserved() {
-    let g = parse(NUMERIC_EQ);
+    let graph = parse(NUMERIC_EQ);
     let readings: Vec<HashMap<String, V>> = (-3..20)
-        .map(|v| {
-            let mut r = HashMap::new();
-            r.insert("x".to_string(), V::Num(v as f64));
-            r
+        .map(|value| {
+            let mut reading = HashMap::new();
+            reading.insert("x".to_string(), V::Num(value as f64));
+            reading
         })
         .collect();
-    assert_decisions_preserved(&g, "classify", &readings);
+    assert_decisions_preserved(&graph, "classify", &readings);
 }
 
 #[test]
 fn test_symbols_are_small() {
-    let g = parse(INCIDENT);
-    let parts = q::build_partitions(&g);
-    let mut r = HashMap::new();
-    r.insert("data_at_risk".to_string(), V::Bool(true));
-    r.insert("user_facing".to_string(), V::Bool(false));
-    r.insert("error_rate".to_string(), V::Num(42.0));
-    let syms = q::quantize(&parts, &r).unwrap();
-    for s in syms.values() {
-        assert!(*s < 8);
+    let graph = parse(INCIDENT);
+    let parts = quantizer::build_partitions(&graph);
+    let mut reading = HashMap::new();
+    reading.insert("data_at_risk".to_string(), V::Bool(true));
+    reading.insert("user_facing".to_string(), V::Bool(false));
+    reading.insert("error_rate".to_string(), V::Num(42.0));
+    let syms = quantizer::quantize(&parts, &reading).unwrap();
+    for symbol in syms.values() {
+        assert!(*symbol < 8);
     }
 }
 
@@ -169,13 +169,13 @@ fn test_symbols_are_small() {
 fn test_out_of_partition_numeric_is_err_not_panic() {
     // build_partitions always leaves open ends, so construct a bounded partition by hand — the
     // case a library consumer (e.g. a Vector codec) could feed; it must be an Err, never a panic.
-    let cells = vec![q::Cell { lo: Some(0), hi: Some(9), const_val: None, rep: V::Num(5.0) }];
-    let part = q::FieldPartition::new("x".into(), q::FieldKind::Numeric, cells);
+    let cells = vec![quantizer::Cell { lo: Some(0), hi: Some(9), const_val: None, rep: V::Num(5.0) }];
+    let part = quantizer::FieldPartition::new("x".into(), quantizer::FieldKind::Numeric, cells);
     assert!(part.symbol(&V::Num(5.0)).is_ok());
     assert!(part.symbol(&V::Num(99.0)).is_err());
     let mut parts = HashMap::new();
     parts.insert("x".to_string(), part);
-    let mut r = HashMap::new();
-    r.insert("x".to_string(), V::Num(99.0));
-    assert!(q::quantize(&parts, &r).is_err());
+    let mut reading = HashMap::new();
+    reading.insert("x".to_string(), V::Num(99.0));
+    assert!(quantizer::quantize(&parts, &reading).is_err());
 }

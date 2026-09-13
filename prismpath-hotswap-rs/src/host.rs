@@ -17,7 +17,7 @@ use std::io::Write;
 
 // -------------------------------------------------------------------- Merkle (ledger_ots.py)
 
-fn h(bytes: &[u8]) -> Vec<u8> {
+fn digest_bytes(bytes: &[u8]) -> Vec<u8> {
     Sha256::digest(bytes).to_vec()
 }
 
@@ -27,12 +27,12 @@ pub fn merkle_root(leaves_hex: &[String]) -> Option<String> {
         return None;
     }
     let mut layer: Vec<Vec<u8>> =
-        leaves_hex.iter().map(|s| hex::decode(s).unwrap_or_default()).collect();
+        leaves_hex.iter().map(|leaf| hex::decode(leaf).unwrap_or_default()).collect();
     while layer.len() > 1 {
         if layer.len() % 2 == 1 {
             layer.push(layer.last().expect("non-empty").clone());
         }
-        layer = layer.chunks(2).map(|p| h(&[p[0].as_slice(), p[1].as_slice()].concat())).collect();
+        layer = layer.chunks(2).map(|pair| digest_bytes(&[pair[0].as_slice(), pair[1].as_slice()].concat())).collect();
     }
     Some(hex::encode(&layer[0]))
 }
@@ -54,7 +54,7 @@ impl AuditLog {
     pub fn open(path: &str) -> AuditLog {
         let mut log = AuditLog { path: path.to_string(), events: Vec::new(), leaves: Vec::new() };
         if let Ok(text) = std::fs::read_to_string(path) {
-            for line in text.lines().filter(|l| !l.trim().is_empty()) {
+            for line in text.lines().filter(|line| !line.trim().is_empty()) {
                 if let Ok(ev) = serde_json::from_str::<Value>(line) {
                     log.leaves.push(leaf_hex(&ev));
                     log.events.push(ev);
@@ -76,10 +76,10 @@ impl AuditLog {
             if let Some(dir) = std::path::Path::new(&self.path).parent() {
                 let _ = std::fs::create_dir_all(dir);
             }
-            if let Ok(mut f) =
+            if let Ok(mut file) =
                 std::fs::OpenOptions::new().create(true).append(true).open(&self.path)
             {
-                let _ = writeln!(f, "{ev}");
+                let _ = writeln!(file, "{ev}");
             }
         }
         ev
@@ -102,7 +102,7 @@ impl AuditLog {
 fn now_epoch() -> f64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs_f64())
+        .map(|duration| duration.as_secs_f64())
         .unwrap_or(0.0)
 }
 
@@ -110,22 +110,22 @@ fn now_iso() -> String {
     // ISO-8601 UTC to the second, matching Python's isoformat(timespec="seconds") + "+00:00".
     let secs = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs())
+        .map(|duration| duration.as_secs())
         .unwrap_or(0);
     let days = secs / 86_400;
-    let (h, m, s) = ((secs % 86_400) / 3600, (secs % 3600) / 60, secs % 60);
+    let (hour, minute, second) = ((secs % 86_400) / 3600, (secs % 3600) / 60, secs % 60);
     // civil date from days-since-epoch (Howard Hinnant's algorithm)
-    let z = days as i64 + 719_468;
-    let era = z.div_euclid(146_097);
-    let doe = z.rem_euclid(146_097);
+    let shifted_days = days as i64 + 719_468;
+    let era = shifted_days.div_euclid(146_097);
+    let doe = shifted_days.rem_euclid(146_097);
     let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
-    let y = yoe + era * 400;
+    let year = yoe + era * 400;
     let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
     let mp = (5 * doy + 2) / 153;
-    let d = doy - (153 * mp + 2) / 5 + 1;
+    let day = doy - (153 * mp + 2) / 5 + 1;
     let mth = if mp < 10 { mp + 3 } else { mp - 9 };
-    let y = if mth <= 2 { y + 1 } else { y };
-    format!("{y:04}-{mth:02}-{d:02}T{h:02}:{m:02}:{s:02}+00:00")
+    let year = if mth <= 2 { year + 1 } else { year };
+    format!("{year:04}-{mth:02}-{day:02}T{hour:02}:{minute:02}:{second:02}+00:00")
 }
 
 // ---------------------------------------------------------------------------- PolicyHost
@@ -177,15 +177,15 @@ impl PolicyHost {
     fn stored_version(&self) -> i64 {
         std::fs::read_to_string(&self.version_path)
             .ok()
-            .and_then(|t| t.trim().parse().ok())
+            .and_then(|text| text.trim().parse().ok())
             .unwrap_or(0)
     }
 
     fn persist_version(&self, version: i64) {
         let tmp = format!("{}.tmp", self.version_path);
-        if let Ok(mut f) = std::fs::File::create(&tmp) {
-            let _ = f.write_all(version.to_string().as_bytes());
-            let _ = f.sync_all();
+        if let Ok(mut file) = std::fs::File::create(&tmp) {
+            let _ = file.write_all(version.to_string().as_bytes());
+            let _ = file.sync_all();
         }
         let _ = std::fs::rename(&tmp, &self.version_path);
     }
@@ -195,7 +195,7 @@ impl PolicyHost {
             "policy_host",
             "swap_rejected",
             json!({
-                "from_hash": self.active.as_ref().map(|a| a.sha256.clone()),
+                "from_hash": self.active.as_ref().map(|active| active.sha256.clone()),
                 "to_hash": to_hash, "version": version, "reasons": reasons,
                 "result": "rejected",
             }),
@@ -207,9 +207,9 @@ impl PolicyHost {
     /// full success; every outcome is one audit event.
     pub fn swap(&mut self, ppt_path: &str, allow_unsigned: bool) -> Value {
         let image = match std::fs::read(ppt_path) {
-            Ok(i) => i,
-            Err(e) => {
-                let code = e.raw_os_error().unwrap_or(0);
+            Ok(bytes) => bytes,
+            Err(error) => {
+                let code = error.raw_os_error().unwrap_or(0);
                 return self.reject(None, None, vec![format!("image:unreadable:{code}")]);
             }
         };
@@ -217,8 +217,8 @@ impl PolicyHost {
 
         let manifest: Value = if allow_unsigned {
             let caps: Option<BTreeMap<String, u64>> =
-                self.envelope.get("caps").and_then(|c| c.as_object()).map(|o| {
-                    o.iter().filter_map(|(k, v)| v.as_u64().map(|n| (k.clone(), n))).collect()
+                self.envelope.get("caps").and_then(|caps_value| caps_value.as_object()).map(|caps_object| {
+                    caps_object.iter().filter_map(|(name, value)| value.as_u64().map(|limit| (name.clone(), limit))).collect()
                 });
             let (ok, reasons) = validate_image(&image, caps.as_ref());
             if !ok {
@@ -234,10 +234,10 @@ impl PolicyHost {
             let manifest = manifest.expect("ok verify has a manifest");
             let (ok, reasons) = check_envelope(&manifest, &image, &self.envelope);
             if !ok {
-                let v = manifest.get("version").and_then(|v| v.as_i64());
-                return self.reject(Some(&to_hash), v, reasons);
+                let version = manifest.get("version").and_then(|value| value.as_i64());
+                return self.reject(Some(&to_hash), version, reasons);
             }
-            let version = manifest.get("version").and_then(|v| v.as_i64()).unwrap_or(0);
+            let version = manifest.get("version").and_then(|value| value.as_i64()).unwrap_or(0);
             let floor = self.stored_version();
             if version <= floor {
                 return self.reject(
@@ -250,36 +250,36 @@ impl PolicyHost {
         };
 
         // stage a shadow: fully parse before any flip
-        if let Err(e) = read_ppt_header(&image) {
-            let v = manifest.get("version").and_then(|v| v.as_i64());
-            return self.reject(Some(&to_hash), v, vec![e]);
+        if let Err(error) = read_ppt_header(&image) {
+            let version = manifest.get("version").and_then(|value| value.as_i64());
+            return self.reject(Some(&to_hash), version, vec![error]);
         }
 
         // atomic flip
         let new_active = ActivePolicy {
             sha256: to_hash.clone(),
-            version: manifest.get("version").and_then(|v| v.as_i64()),
-            key_id: manifest.get("key_id").and_then(|k| k.as_str()).map(|s| s.to_string()),
-            envelope_id: manifest.get("envelope_id").and_then(|e| e.as_str()).map(|s| s.to_string()),
-            unsigned: manifest.get("unsigned").and_then(|u| u.as_bool()).unwrap_or(false),
+            version: manifest.get("version").and_then(|value| value.as_i64()),
+            key_id: manifest.get("key_id").and_then(|value| value.as_str()).map(|text| text.to_string()),
+            envelope_id: manifest.get("envelope_id").and_then(|value| value.as_str()).map(|text| text.to_string()),
+            unsigned: manifest.get("unsigned").and_then(|value| value.as_bool()).unwrap_or(false),
             image,
             since: now_iso(),
         };
         self.prev = self.active.replace(new_active);
-        if let Some(v) = manifest.get("version").and_then(|v| v.as_i64()) {
-            self.persist_version(v);
+        if let Some(version) = manifest.get("version").and_then(|value| value.as_i64()) {
+            self.persist_version(version);
         }
 
         self.audit.append(
             "policy_host",
             "swap",
             json!({
-                "from_hash": self.prev.as_ref().map(|p| p.sha256.clone()),
+                "from_hash": self.prev.as_ref().map(|previous| previous.sha256.clone()),
                 "to_hash": to_hash,
                 "version": manifest.get("version"),
                 "key_id": manifest.get("key_id"),
                 "envelope_id": manifest.get("envelope_id"),
-                "unsigned": manifest.get("unsigned").and_then(|u| u.as_bool()).unwrap_or(false),
+                "unsigned": manifest.get("unsigned").and_then(|value| value.as_bool()).unwrap_or(false),
                 "result": "accepted",
             }),
         );
@@ -291,9 +291,9 @@ impl PolicyHost {
     pub fn active_info(&self) -> Value {
         match &self.active {
             None => json!({"active": null}),
-            Some(a) => json!({
-                "active": a.sha256, "version": a.version, "since": a.since,
-                "unsigned": a.unsigned, "envelope_id": a.envelope_id,
+            Some(active) => json!({
+                "active": active.sha256, "version": active.version, "since": active.since,
+                "unsigned": active.unsigned, "envelope_id": active.envelope_id,
             }),
         }
     }
@@ -304,11 +304,11 @@ impl PolicyHost {
             None => json!({"ok": false, "reasons": ["rollback:no-previous"]}),
             Some(prev) => {
                 self.active = Some(prev);
-                let a = self.active.as_ref().expect("just set");
+                let active = self.active.as_ref().expect("just set");
                 self.audit.append(
                     "policy_host",
                     "rollback",
-                    json!({"to_hash": a.sha256, "version": a.version, "result": "rolled_back"}),
+                    json!({"to_hash": active.sha256, "version": active.version, "result": "rolled_back"}),
                 );
                 let mut out = self.active_info();
                 out["ok"] = Value::Bool(true);
@@ -319,12 +319,12 @@ impl PolicyHost {
 
     /// Append a point-in-time attestation of the active policy to the ledger.
     pub fn attest(&mut self) -> Value {
-        let a = self.active_info();
+        let active = self.active_info();
         self.audit.append(
             "policy_host",
             "attestation",
-            json!({"active": a.get("active"), "version": a.get("version"), "ts": now_iso()}),
+            json!({"active": active.get("active"), "version": active.get("version"), "ts": now_iso()}),
         );
-        a
+        active
     }
 }

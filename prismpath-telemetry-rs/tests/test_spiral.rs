@@ -1,5 +1,5 @@
 use prismpath_rs::{parse, V};
-use prismpath_telemetry_rs::{quantizer as q, spiral as sp, wire as w, zeckendorf as z};
+use prismpath_telemetry_rs::{quantizer, spiral, wire, zeckendorf};
 use serde_json::Value;
 use std::collections::HashMap;
 
@@ -9,12 +9,12 @@ fn load_corpus() -> Value {
     serde_json::from_str(&content).expect("parse spiral.json")
 }
 
-fn layout_from_corpus(corpus: &Value) -> (prismpath_rs::Graph, sp::SpiralLayout) {
+fn layout_from_corpus(corpus: &Value) -> (prismpath_rs::Graph, spiral::SpiralLayout) {
     let flow = corpus["flow"].as_str().unwrap();
     let node = corpus["node"].as_str().unwrap();
-    let g = parse(flow);
-    let layout = sp::SpiralLayout::new(&g, node).unwrap();
-    (g, layout)
+    let graph = parse(flow);
+    let layout = spiral::SpiralLayout::new(&graph, node).unwrap();
+    (graph, layout)
 }
 
 #[test]
@@ -27,7 +27,7 @@ fn test_gray_sequence_is_single_step_and_complete() {
     ];
 
     for radices in test_radices {
-        let seq = sp::mixed_radix_gray(&radices);
+        let seq = spiral::mixed_radix_gray(&radices);
         let size: usize = radices.iter().product();
         assert_eq!(seq.len(), size);
 
@@ -35,12 +35,12 @@ fn test_gray_sequence_is_single_step_and_complete() {
         assert_eq!(unique.len(), size);
 
         for pair in seq.windows(2) {
-            let a = &pair[0];
-            let b = &pair[1];
-            let diffs: Vec<usize> = (0..radices.len()).filter(|&i| a[i] != b[i]).collect();
+            let previous = &pair[0];
+            let next = &pair[1];
+            let diffs: Vec<usize> = (0..radices.len()).filter(|&digit_index| previous[digit_index] != next[digit_index]).collect();
             assert_eq!(diffs.len(), 1);
             let idx = diffs[0];
-            let diff = (a[idx] as isize - b[idx] as isize).abs();
+            let diff = (previous[idx] as isize - next[idx] as isize).abs();
             assert_eq!(diff, 1);
         }
     }
@@ -68,7 +68,7 @@ fn test_baseline_route_sits_at_the_center() {
     let baseline_reading: HashMap<String, V> = layout
         .fields
         .iter()
-        .map(|f| (f.clone(), layout.parts[f].representative(0)))
+        .map(|field| (field.clone(), layout.parts[field].representative(0)))
         .collect();
     assert_eq!(layout.band_id(&baseline_reading), 0);
 }
@@ -77,36 +77,36 @@ fn test_baseline_route_sits_at_the_center() {
 fn test_route_of_is_an_integer_band_compare() {
     let corpus = load_corpus();
     let (_, layout) = layout_from_corpus(&corpus);
-    for n in 0..layout.size {
+    for spiral_index in 0..layout.size {
         let mut expect = None;
-        for b in 0..layout.routes.len() {
-            if n < layout.band_base[b] + layout.band_width[b] {
-                expect = layout.routes[b].clone();
+        for band in 0..layout.routes.len() {
+            if spiral_index < layout.band_base[band] + layout.band_width[band] {
+                expect = layout.routes[band].clone();
                 break;
             }
         }
-        assert_eq!(layout.route_of(n), expect);
-        let _ = sp::radius2(n as u32);
-        let _ = sp::theta_u32(n as u32);
+        assert_eq!(layout.route_of(spiral_index), expect);
+        let _ = spiral::radius2(spiral_index as u32);
+        let _ = spiral::theta_u32(spiral_index as u32);
     }
 }
 
 #[test]
 fn test_decisions_preserved_through_the_spiral() {
     let corpus = load_corpus();
-    let (g, layout) = layout_from_corpus(&corpus);
+    let (graph, layout) = layout_from_corpus(&corpus);
     let node = corpus["node"].as_str().unwrap();
 
     for probe in corpus["probes"].as_array().unwrap() {
         let r_obj = probe["reading"].as_object().unwrap();
         let mut reading = HashMap::new();
-        for (k, v) in r_obj {
-            reading.insert(k.clone(), V::Num(v.as_f64().unwrap()));
+        for (field, value) in r_obj {
+            reading.insert(field.clone(), V::Num(value.as_f64().unwrap()));
         }
-        let expected_route = probe["route"].as_str().map(|s| s.to_string());
+        let expected_route = probe["route"].as_str().map(|route| route.to_string());
 
-        let direct = w::route_node(&g, node, &reading);
-        let via_band = w::route_node(&g, node, &layout.reconstruct_band(layout.band_id(&reading)));
+        let direct = wire::route_node(&graph, node, &reading);
+        let via_band = wire::route_node(&graph, node, &layout.reconstruct_band(layout.band_id(&reading)));
         let via_index = layout.route_of(layout.index(&reading));
 
         assert_eq!(direct, expected_route);
@@ -118,22 +118,22 @@ fn test_decisions_preserved_through_the_spiral() {
 #[test]
 fn test_progressive_round_trip_recovers_the_cell() {
     let corpus = load_corpus();
-    let (g, layout) = layout_from_corpus(&corpus);
+    let (graph, layout) = layout_from_corpus(&corpus);
     let node = corpus["node"].as_str().unwrap();
 
     for probe in corpus["probes"].as_array().unwrap() {
         let r_obj = probe["reading"].as_object().unwrap();
         let mut reading = HashMap::new();
-        for (k, v) in r_obj {
-            reading.insert(k.clone(), V::Num(v.as_f64().unwrap()));
+        for (field, value) in r_obj {
+            reading.insert(field.clone(), V::Num(value.as_f64().unwrap()));
         }
-        let expected_route = probe["route"].as_str().map(|s| s.to_string());
+        let expected_route = probe["route"].as_str().map(|route| route.to_string());
 
-        let (db, rb) = layout.encode_progressive(&reading);
-        let rec = layout.decode_progressive(&db, &rb).unwrap();
+        let (decision_bits, refine_bits) = layout.encode_progressive(&reading);
+        let rec = layout.decode_progressive(&decision_bits, &refine_bits).unwrap();
 
         assert_eq!(layout.cell(&rec), layout.cell(&reading));
-        assert_eq!(w::route_node(&g, node, &rec), expected_route);
+        assert_eq!(wire::route_node(&graph, node, &rec), expected_route);
         assert_eq!(
             layout.decode_decision(&layout.encode_decision(&reading)).unwrap(),
             expected_route
@@ -148,7 +148,7 @@ fn test_decode_decision_rejects_out_of_range_bits_without_panicking() {
     let corpus = load_corpus();
     let (_, layout) = layout_from_corpus(&corpus);
 
-    let oob = z::encode(layout.routes.len() + 100).expect("encode a large index");
+    let oob = zeckendorf::encode(layout.routes.len() + 100).expect("encode a large index");
     let err = layout.decode_decision(&oob);
     assert!(err.is_err(), "out-of-range band index must be an error, got {err:?}");
     assert!(err.unwrap_err().contains("outside the layout"));
@@ -159,8 +159,8 @@ fn test_decode_decision_rejects_out_of_range_bits_without_panicking() {
     let corpus_probe = &corpus["probes"][0];
     if let Some(r_obj) = corpus_probe["reading"].as_object() {
         let mut reading = HashMap::new();
-        for (k, v) in r_obj {
-            reading.insert(k.clone(), V::Num(v.as_f64().unwrap()));
+        for (field, value) in r_obj {
+            reading.insert(field.clone(), V::Num(value.as_f64().unwrap()));
         }
         assert!(layout.decode_decision(&layout.encode_decision(&reading)).is_ok());
     }
@@ -175,7 +175,7 @@ fn test_frozen_tessellation_matches() {
         .as_array()
         .unwrap()
         .iter()
-        .map(|v| v.as_str().unwrap().to_string())
+        .map(|entry| entry.as_str().unwrap().to_string())
         .collect();
     assert_eq!(layout.fields, corpus_fields);
 
@@ -183,7 +183,7 @@ fn test_frozen_tessellation_matches() {
         .as_array()
         .unwrap()
         .iter()
-        .map(|v| v.as_u64().unwrap() as usize)
+        .map(|entry| entry.as_u64().unwrap() as usize)
         .collect();
     assert_eq!(layout.radices, corpus_radices);
     assert_eq!(layout.size, corpus["size"].as_u64().unwrap() as usize);
@@ -192,23 +192,23 @@ fn test_frozen_tessellation_matches() {
         .routes
         .iter()
         .enumerate()
-        .map(|(i, r)| {
+        .map(|(band, route)| {
             serde_json::json!({
-                "route": r,
-                "base": layout.band_base[i],
-                "width": layout.band_width[i]
+                "route": route,
+                "base": layout.band_base[band],
+                "width": layout.band_width[band]
             })
         })
         .collect();
     assert_eq!(got_bands, corpus["bands"].as_array().unwrap().clone());
 
     let got_cells: Vec<Value> = (0..layout.size)
-        .map(|n| {
+        .map(|spiral_index| {
             serde_json::json!({
-                "cell": layout.cell_of[n],
-                "n": n,
-                "band": layout.band_index[&layout.route_of(n)],
-                "route": layout.route_of(n)
+                "cell": layout.cell_of[spiral_index],
+                "n": spiral_index,
+                "band": layout.band_index[&layout.route_of(spiral_index)],
+                "route": layout.route_of(spiral_index)
             })
         })
         .collect();
@@ -218,27 +218,27 @@ fn test_frozen_tessellation_matches() {
 #[test]
 fn test_decision_stream_cheaper_than_linear_for_multidim() {
     let corpus = load_corpus();
-    let (g, layout) = layout_from_corpus(&corpus);
-    let parts = q::build_partitions(&g);
+    let (graph, layout) = layout_from_corpus(&corpus);
+    let parts = quantizer::build_partitions(&graph);
 
     let mut readings = Vec::new();
-    for p in [0.0, 25.0, 50.0] {
-        for r in [0.0, 25.0, 50.0] {
-            for v in [0.0, 50.0, 90.0] {
-                let mut rd = HashMap::new();
-                rd.insert("pitch".to_string(), V::Num(p));
-                rd.insert("roll".to_string(), V::Num(r));
-                rd.insert("vibration".to_string(), V::Num(v));
-                readings.push(rd);
+    for pitch in [0.0, 25.0, 50.0] {
+        for roll in [0.0, 25.0, 50.0] {
+            for vibration in [0.0, 50.0, 90.0] {
+                let mut reading = HashMap::new();
+                reading.insert("pitch".to_string(), V::Num(pitch));
+                reading.insert("roll".to_string(), V::Num(roll));
+                reading.insert("vibration".to_string(), V::Num(vibration));
+                readings.push(reading);
             }
         }
     }
 
     let lin: usize = readings
         .iter()
-        .map(|rd| w::encode_reading(&parts, rd).unwrap().len())
+        .map(|reading| wire::encode_reading(&parts, reading).unwrap().len())
         .sum();
-    let dec: usize = readings.iter().map(|rd| layout.encode_decision(rd).len()).sum();
+    let dec: usize = readings.iter().map(|reading| layout.encode_decision(reading).len()).sum();
     assert!(dec < lin);
 }
 
@@ -256,7 +256,7 @@ fn test_try_variants_agree_with_panicking_api_on_valid_inputs() {
             .as_object()
             .unwrap()
             .iter()
-            .map(|(k, v)| (k.clone(), V::from_json(v)))
+            .map(|(field, value)| (field.clone(), V::from_json(value)))
             .collect();
         assert_eq!(layout.try_cell(&reading).unwrap(), layout.cell(&reading));
         assert_eq!(layout.try_index(&reading).unwrap(), layout.index(&reading));
@@ -269,9 +269,9 @@ fn test_try_variants_agree_with_panicking_api_on_valid_inputs() {
             layout.try_encode_progressive(&reading).unwrap(),
             layout.encode_progressive(&reading)
         );
-        let n = layout.index(&reading);
-        assert_eq!(layout.try_route_of(n).unwrap(), layout.route_of(n));
-        assert_eq!(layout.try_reconstruct(n).unwrap(), layout.reconstruct(n));
+        let spiral_index = layout.index(&reading);
+        assert_eq!(layout.try_route_of(spiral_index).unwrap(), layout.route_of(spiral_index));
+        assert_eq!(layout.try_reconstruct(spiral_index).unwrap(), layout.reconstruct(spiral_index));
     }
 }
 

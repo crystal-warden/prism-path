@@ -18,33 +18,33 @@ fn fixtures() -> Value {
 }
 
 fn tmpdir(tag: &str) -> std::path::PathBuf {
-    let d = std::env::temp_dir().join(format!("pp_hotswap_{tag}_{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&d);
-    std::fs::create_dir_all(&d).unwrap();
-    d
+    let dir = std::env::temp_dir().join(format!("pp_hotswap_{tag}_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    dir
 }
 
 /// Write one fixture case's pack files to disk; returns (ppt_path, pub_paths).
-fn stage_case(dir: &std::path::Path, c: &Value) -> (String, Vec<String>) {
+fn stage_case(dir: &std::path::Path, case: &Value) -> (String, Vec<String>) {
     let image = base64::engine::general_purpose::STANDARD
-        .decode(c["image_b64"].as_str().unwrap())
+        .decode(case["image_b64"].as_str().unwrap())
         .unwrap();
     let ppt = dir.join("policy.ppt");
     std::fs::write(&ppt, &image).unwrap();
     std::fs::write(
         dir.join("policy.ppt.manifest.json"),
-        serde_json::to_string_pretty(&c["manifest"]).unwrap(),
+        serde_json::to_string_pretty(&case["manifest"]).unwrap(),
     )
     .unwrap();
     std::fs::write(
         dir.join("policy.ppt.manifest.sig"),
-        hex::decode(c["sig_hex"].as_str().unwrap()).unwrap(),
+        hex::decode(case["sig_hex"].as_str().unwrap()).unwrap(),
     )
     .unwrap();
     let mut pubs = Vec::new();
-    for (i, p) in c["pubs"].as_array().unwrap().iter().enumerate() {
-        let path = dir.join(format!("key{i}.pub"));
-        std::fs::write(&path, hex::decode(p.as_str().unwrap()).unwrap()).unwrap();
+    for (key_index, pubkey_hex) in case["pubs"].as_array().unwrap().iter().enumerate() {
+        let path = dir.join(format!("key{key_index}.pub"));
+        std::fs::write(&path, hex::decode(pubkey_hex.as_str().unwrap()).unwrap()).unwrap();
         pubs.push(path.to_str().unwrap().to_string());
     }
     (ppt.to_str().unwrap().to_string(), pubs)
@@ -55,28 +55,28 @@ fn python_signed_packs_verify_with_identical_verdicts() {
     let fx = fixtures();
     let envelope = &fx["envelope"];
     let cases = fx["cases"].as_array().unwrap();
-    for c in cases {
-        let name = c["name"].as_str().unwrap();
+    for case in cases {
+        let name = case["name"].as_str().unwrap();
         let dir = tmpdir(name);
-        let (ppt, pubs) = stage_case(&dir, c);
-        let revoked: Vec<String> = c["revoked"]
+        let (ppt, pubs) = stage_case(&dir, case);
+        let revoked: Vec<String> = case["revoked"]
             .as_array()
             .unwrap()
             .iter()
-            .map(|r| r.as_str().unwrap().to_string())
+            .map(|entry| entry.as_str().unwrap().to_string())
             .collect();
 
         let (ok, reasons, manifest) = verify_pack(&ppt, &pubs, &revoked);
-        assert_eq!(ok, c["verify"]["ok"].as_bool().unwrap(), "{name}: verify ok");
+        assert_eq!(ok, case["verify"]["ok"].as_bool().unwrap(), "{name}: verify ok");
         assert_eq!(
             serde_json::json!(reasons),
-            c["verify"]["reasons"],
+            case["verify"]["reasons"],
             "{name}: verify reasons"
         );
 
-        if let Some(env_check) = c.get("envelope_check").filter(|v| !v.is_null()) {
+        if let Some(env_check) = case.get("envelope_check").filter(|value| !value.is_null()) {
             let image = base64::engine::general_purpose::STANDARD
-                .decode(c["image_b64"].as_str().unwrap())
+                .decode(case["image_b64"].as_str().unwrap())
                 .unwrap();
             let (eok, ereasons) = check_envelope(manifest.as_ref().unwrap(), &image, envelope);
             assert_eq!(eok, env_check["ok"].as_bool().unwrap(), "{name}: envelope ok");
@@ -95,7 +95,7 @@ fn host_pipeline_floor_rollback_and_audit() {
         .as_array()
         .unwrap()
         .iter()
-        .find(|c| c["name"] == "valid")
+        .find(|case| case["name"] == "valid")
         .expect("valid case");
     let dir = tmpdir("host");
     let (ppt, pubs) = stage_case(&dir, valid);
@@ -105,9 +105,9 @@ fn host_pipeline_floor_rollback_and_audit() {
         PolicyHost::new(state.to_str().unwrap(), pubs.clone(), envelope.clone(), Vec::new());
 
     // 1) valid swap accepted, version floor persisted
-    let r = host.swap(&ppt, false);
-    assert_eq!(r["ok"], Value::Bool(true), "first swap must be accepted: {r}");
-    assert_eq!(r["version"].as_i64(), Some(3));
+    let swap_result = host.swap(&ppt, false);
+    assert_eq!(swap_result["ok"], Value::Bool(true), "first swap must be accepted: {swap_result}");
+    assert_eq!(swap_result["version"].as_i64(), Some(3));
 
     // 2) replaying the SAME pack must hit the monotonic floor with Python's reason format
     let r2 = host.swap(&ppt, false);
@@ -157,7 +157,7 @@ fn rust_signed_pack_verifies_in_python() {
         .as_array()
         .unwrap()
         .iter()
-        .find(|c| c["name"] == "valid")
+        .find(|case| case["name"] == "valid")
         .expect("valid case");
     let dir = tmpdir("bidir");
     let image = base64::engine::general_purpose::STANDARD
