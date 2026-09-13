@@ -1372,24 +1372,24 @@ aarch64 and x86_64, on both ISAs of an RP2350, and on the Zynq-7020 fabric; and 
 worst case bound that travels signed with each image, recomputed at verify, was honored by every
 evaluation the logic analyzer saw on the fabric pins.
 
-**Method:** groupa/cross_substrate_corpus.py compiles network_admission (224 B) and sensor_interlock (160 B) once
+**Method:** groupa/a3_corpus.py compiles network_admission (224 B) and sensor_interlock (160 B) once
 through the untouched table compiler and frames the 23 complete scenario readings as table per vector
 records with the host Python route as the expected target, cross checked against the C reference.
 Kernel legs: loader certify via BPF_PROG_TEST_RUN on the GX10 (Linux 6.17.0, clang 18) and on the
 Protectli (Linux 6.17.2, program object rebuilt there with clang 19 from the identical source). MCU
-legs: groupa/mcu_leg.py replays the records over the unchanged RP2350 certification firmware's
+legs: groupa/a3_mcu.py replays the records over the unchanged RP2350 certification firmware's
 USB-CDC contract, one Pico 2 W flashed with the Cortex-M33 build and then, after a 1200 baud reset
 into the bootloader, with the Hazard3 RISC-V build, both rebuilt this session (Pico SDK 2.1.1,
-gcc-arm-none-eabi 13.2, riscv32-unknown-elf gcc). Fabric legs: groupa/fabric_leg_attach.py attached to
+gcc-arm-none-eabi 13.2, riscv32-unknown-elf gcc). Fabric legs: groupa/a3_fabric_attach.py attached to
 the finale overlay the board's boot demo service had already loaded (pynq Overlay without download,
 address from the running design's own hwh, auto mode off to the certified PS evaluate path of #117
 and #123), loaded both images through the AXI load port, and evaluated the 23 readings; then, after
-quiescing, groupa/fabric_leg_run.py loaded the tapped ppt_datapath.bit once from a single process and
-repeated the 23. Pins witness: groupa/wcet_sweep_only.py swept each policy's readings continuously
-through the PS path for 400 s while groupa/wcet_pins_witness.py on the GX10 took 30 free run LA2016 captures per
+quiescing, groupa/a3_fabric_run.py loaded the tapped ppt_datapath.bit once from a single process and
+repeated the 23. Pins witness: groupa/a7_sweep_only.py swept each policy's readings continuously
+through the PS path for 400 s while groupa/a7_pins.py on the GX10 took 30 free run LA2016 captures per
 policy on Pmod JB at 200 MSa/s (threshold 1.4 V, passed to sigrok as the range literal 1.4-1.4) and
 measured every busy window with the #122 bench code (la_wcet_check.measure, edge count and width
-methods). groupa/cross_substrate_decisions.py and groupa/bounded_decision_time.py write PrismPath's result files from the leg records; bounded_decision_time.py
+methods). groupa/a3.py and groupa/a7.py write PrismPath's result files from the leg records; a7.py
 grades from the witness record (native on PASS, with work when absent, not on FAIL).
 
 **Result:** 23 of 23 on every leg: python, C, kernel aarch64 (ALL PASS), kernel x86_64 (ALL PASS),
