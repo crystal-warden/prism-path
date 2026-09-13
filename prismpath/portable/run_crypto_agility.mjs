@@ -33,27 +33,27 @@ if (rh === agilityFx.registry_hash && rh === migrationFx.registry_hash) {
 }
 
 // 2. Crypto agility cases
-for (const c of agilityFx.cases) {
-  const g = parse(c.flow_text);
-  const got = proveAll(g, agilityFx.envelope, agilityFx.registry);
-  if (JSON.stringify(got) === JSON.stringify(c.expected)) {
+for (const testCase of agilityFx.cases) {
+  const graph = parse(testCase.flow_text);
+  const got = proveAll(graph, agilityFx.envelope, agilityFx.registry);
+  if (JSON.stringify(got) === JSON.stringify(testCase.expected)) {
     pass++;
   } else {
     fail++;
-    console.error(`FAIL crypto_agility case ${c.name}\n  expected ${JSON.stringify(c.expected)}\n  got      ${JSON.stringify(got)}`);
+    console.error(`FAIL crypto_agility case ${testCase.name}\n  expected ${JSON.stringify(testCase.expected)}\n  got      ${JSON.stringify(got)}`);
   }
 }
 
 // 3. Crypto migration matrix
 const SUITES = ["cnsa2-hybrid-1", "tls13-aesgcm", "tls13-hybrid-x25519mlkem"];
-function phasePolicy(k) {
+function phasePolicy(phaseGate) {
   return `---
-name: ca_phase_${k}
+name: ca_phase_${phaseGate}
 start: classify
 ---
 ## classify
 -> cui-path: when data_class == "cui"
--> legacy-path: when migration_phase < ${k}
+-> legacy-path: when migration_phase < ${phaseGate}
 -> hybrid-path: else
 ## cui-path
 -> suite-cnsa2-hybrid-1: when always
@@ -85,9 +85,9 @@ function migrationEnvelope(hash, floor) {
 }
 
 for (const cell of migrationFx.cells) {
-  const g = parse(phasePolicy(cell.policy_gate));
+  const graph = parse(phasePolicy(cell.policy_gate));
   const env = migrationEnvelope(rh, cell.envelope_floor);
-  const p4 = proveMonotoneMigration(g, env, agilityFx.registry);
+  const p4 = proveMonotoneMigration(graph, env, agilityFx.registry);
   const matchP4 = JSON.stringify(p4) === JSON.stringify(cell.p4);
   const matchInv = (p4.ok === (cell.envelope_floor >= cell.policy_gate)) === cell.invariant_holds;
 

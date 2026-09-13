@@ -96,18 +96,18 @@ function activate(context) {
         try { report = JSON.parse(stdout); } catch { diagnostics.delete(doc.uri); return; }
         const lines = doc.getText().split("\n");
         const nodeLine = (node) => {
-          const i = lines.findIndex((l) => l.match(new RegExp(`^##\\s+${node}\\s*$`)));
-          return i >= 0 ? i : 0;
+          const lineIndex = lines.findIndex((textLine) => textLine.match(new RegExp(`^##\\s+${node}\\s*$`)));
+          return lineIndex >= 0 ? lineIndex : 0;
         };
-        diagnostics.set(doc.uri, (report.findings || []).map((f) => {
-          const line = nodeLine(f.node);
-          const d = new vscode.Diagnostic(
+        diagnostics.set(doc.uri, (report.findings || []).map((finding) => {
+          const line = nodeLine(finding.node);
+          const diagnostic = new vscode.Diagnostic(
             new vscode.Range(line, 0, line, lines[line].length),
-            `${f.message}`,
-            f.severity === "error" ? vscode.DiagnosticSeverity.Error : vscode.DiagnosticSeverity.Warning);
-          d.source = "prismpath validate";
-          d.code = f.code;
-          return d;
+            `${finding.message}`,
+            finding.severity === "error" ? vscode.DiagnosticSeverity.Error : vscode.DiagnosticSeverity.Warning);
+          diagnostic.source = "prismpath validate";
+          diagnostic.code = finding.code;
+          return diagnostic;
         }));
       });
   }));

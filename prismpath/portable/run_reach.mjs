@@ -11,17 +11,17 @@ const here = dirname(fileURLToPath(import.meta.url));
 const data = JSON.parse(readFileSync(join(here, "conformance", "reach.json"), "utf-8"));
 
 let pass = 0, fail = 0;
-for (const c of data.cases) {
-  const res = checkReach(parse(c.flow), c.targets, {
-    assume: c.assume, bound: c.bound,
-    includeErrors: c.include_errors, includeEvents: c.include_events,
+for (const testCase of data.cases) {
+  const res = checkReach(parse(testCase.flow), testCase.targets, {
+    assume: testCase.assume, bound: testCase.bound,
+    includeErrors: testCase.include_errors, includeEvents: testCase.include_events,
   });
   const got = {};
-  for (const t of c.targets) got[t] = { reachable: res[t].reachable, proven: res[t].proven };
-  if (JSON.stringify(got) === JSON.stringify(c.expected)) pass++;
+  for (const target of testCase.targets) got[target] = { reachable: res[target].reachable, proven: res[target].proven };
+  if (JSON.stringify(got) === JSON.stringify(testCase.expected)) pass++;
   else {
     fail++;
-    console.error(`FAIL ${c.key}\n  expected ${JSON.stringify(c.expected)}\n  got      ${JSON.stringify(got)}`);
+    console.error(`FAIL ${testCase.key}\n  expected ${JSON.stringify(testCase.expected)}\n  got      ${JSON.stringify(got)}`);
   }
 }
 console.log(`reach: ${pass}/${pass + fail} match the frozen verdicts`);

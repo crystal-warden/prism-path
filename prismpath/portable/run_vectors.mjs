@@ -19,17 +19,17 @@ let failures = 0;
 // ---- predicates -----------------------------------------------------------------------
 const preds = JSON.parse(readFileSync(join(dir, "predicates.json"), "utf-8"));
 let predPass = 0;
-for (const c of preds.cases) {
+for (const predCase of preds.cases) {
   let got;
   try {
-    got = evalCondition(c.cond, c.ctx);
-  } catch (e) {
-    got = e instanceof PredicateError ? "ERROR" : `CRASH: ${e.message}`;
+    got = evalCondition(predCase.cond, predCase.ctx);
+  } catch (err) {
+    got = err instanceof PredicateError ? "ERROR" : `CRASH: ${err.message}`;
   }
-  if (got === c.expect) { predPass++; continue; }
+  if (got === predCase.expect) { predPass++; continue; }
   failures++;
-  console.error(`PRED MISMATCH  cond=${JSON.stringify(c.cond)} ctx=${JSON.stringify(c.ctx)}`
-    + `\n  expect=${JSON.stringify(c.expect)} got=${JSON.stringify(got)}`);
+  console.error(`PRED MISMATCH  cond=${JSON.stringify(predCase.cond)} ctx=${JSON.stringify(predCase.ctx)}`
+    + `\n  expect=${JSON.stringify(predCase.expect)} got=${JSON.stringify(got)}`);
 }
 console.log(`predicates: ${predPass}/${preds.cases.length}`);
 
@@ -39,9 +39,9 @@ function scriptedAgent(script) {
   return (node) => {
     const seq = script[node];
     if (seq === undefined) return { text: node };
-    const i = used[node] || 0;
-    used[node] = i + 1;
-    const outcome = seq[Math.min(i, seq.length - 1)];
+    const callIndex = used[node] || 0;
+    used[node] = callIndex + 1;
+    const outcome = seq[Math.min(callIndex, seq.length - 1)];
     if (outcome !== null && typeof outcome === "object" && "__raise__" in outcome) {
       throw new Error(outcome.__raise__);
     }
@@ -61,8 +61,8 @@ for (const fx of flows.cases) {
     got = { path: res.path, stopped: res.stopped,
             pending_node: res.pending ? (res.pending.node ?? null) : null,
             spawn: res.pending ? (res.pending.spawn ?? null) : null };
-  } catch (e) {
-    got = { error: String(e.message ?? e) };
+  } catch (err) {
+    got = { error: String(err.message ?? err) };
   }
   const want = fx.expect;
   const same = JSON.stringify(got) === JSON.stringify(

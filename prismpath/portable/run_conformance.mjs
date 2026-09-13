@@ -20,9 +20,9 @@ function scriptedAgent(script) {
   return (node, _instruction, _state) => {
     const seq = script[node];
     if (seq === undefined) return { text: node };
-    const i = used[node] || 0;
-    used[node] = i + 1;
-    const outcome = seq[Math.min(i, seq.length - 1)];
+    const callIndex = used[node] || 0;
+    used[node] = callIndex + 1;
+    const outcome = seq[Math.min(callIndex, seq.length - 1)];
     if (outcome !== null && typeof outcome === "object" && "__raise__" in outcome) {
       throw new Error(outcome.__raise__);
     }
@@ -34,16 +34,16 @@ const fixtures = JSON.parse(readFileSync(process.argv[2], "utf-8"));
 const results = [];
 for (const fx of fixtures) {
   try {
-    const g = parse(fx.flow);
-    const res = run(g, scriptedAgent(fx.script || {}), {
+    const graph = parse(fx.flow);
+    const res = run(graph, scriptedAgent(fx.script || {}), {
       maxSteps: fx.maxSteps ?? 25,
       start: fx.start ?? null,
       state: fx.state ?? null,
     });
     results.push({ name: fx.name, path: res.path, stopped: res.stopped,
                    pending: res.pending ?? null });
-  } catch (e) {
-    results.push({ name: fx.name, error: String(e.message ?? e) });
+  } catch (err) {
+    results.push({ name: fx.name, error: String(err.message ?? err) });
   }
 }
 process.stdout.write(JSON.stringify(results, null, 1));

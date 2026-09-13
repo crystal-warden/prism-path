@@ -32,13 +32,13 @@ type RunOptions struct {
 type WorkerFn func(node string, instruction string, state map[string]interface{}) (interface{}, error)
 
 // PortabilityViolations checks if graph contains reachable semantic edges.
-func PortabilityViolations(g Graph) []string {
+func PortabilityViolations(graph Graph) []string {
 	var violations []string
-	for _, nName := range g.NodeOrder {
-		n := g.Nodes[nName]
-		for _, e := range n.Edges {
-			if IsSemantic(e.Condition) {
-				violations = append(violations, fmt.Sprintf("%s -> %s: %s", n.Name, e.Target, e.Condition))
+	for _, nodeName := range graph.NodeOrder {
+		flowNode := graph.Nodes[nodeName]
+		for _, edge := range flowNode.Edges {
+			if IsSemantic(edge.Condition) {
+				violations = append(violations, fmt.Sprintf("%s -> %s: %s", flowNode.Name, edge.Target, edge.Condition))
 			}
 		}
 	}
@@ -49,44 +49,44 @@ func PortabilityViolations(g Graph) []string {
 // routing predicates see. Differential fuzzing showed String() diverges on
 // exactly the values that then route differently: true -> "True", null -> "None",
 // [1,2] -> "[1, 2]". Numbers stay as Go renders them (cross-language ambiguous).
-func pyStr(v interface{}) string {
-	switch x := v.(type) {
+func pyStr(value interface{}) string {
+	switch typedValue := value.(type) {
 	case nil:
 		return "None"
 	case bool:
-		if x {
+		if typedValue {
 			return "True"
 		}
 		return "False"
 	case string:
-		return x
+		return typedValue
 	case []interface{}:
-		parts := make([]string, len(x))
-		for i, e := range x {
-			parts[i] = pyRepr(e)
+		parts := make([]string, len(typedValue))
+		for index, element := range typedValue {
+			parts[index] = pyRepr(element)
 		}
 		return "[" + strings.Join(parts, ", ") + "]"
 	case map[string]interface{}:
-		parts := make([]string, 0, len(x))
-		for k, val := range x {
-			parts = append(parts, "'"+k+"': "+pyRepr(val))
+		parts := make([]string, 0, len(typedValue))
+		for key, val := range typedValue {
+			parts = append(parts, "'"+key+"': "+pyRepr(val))
 		}
 		return "{" + strings.Join(parts, ", ") + "}"
 	default:
-		return fmt.Sprint(v)
+		return fmt.Sprint(value)
 	}
 }
 
-func pyRepr(v interface{}) string {
-	if s, ok := v.(string); ok {
-		return "'" + s + "'"
+func pyRepr(value interface{}) string {
+	if text, ok := value.(string); ok {
+		return "'" + text + "'"
 	}
-	return pyStr(v)
+	return pyStr(value)
 }
 
 // Run executes a P0 portable flow graph against a worker function.
-func Run(g Graph, worker WorkerFn, opts RunOptions) (RunResult, error) {
-	if violations := PortabilityViolations(g); len(violations) > 0 {
+func Run(graph Graph, worker WorkerFn, opts RunOptions) (RunResult, error) {
+	if violations := PortabilityViolations(graph); len(violations) > 0 {
 		return RunResult{}, fmt.Errorf("non-portable flow: contains semantic edges: %s", strings.Join(violations, "; "))
 	}
 
@@ -97,7 +97,7 @@ func Run(g Graph, worker WorkerFn, opts RunOptions) (RunResult, error) {
 
 	startNode := opts.Start
 	if startNode == "" {
-		startNode = g.Start
+		startNode = graph.Start
 	}
 
 	state := opts.State
@@ -128,13 +128,13 @@ func Run(g Graph, worker WorkerFn, opts RunOptions) (RunResult, error) {
 	stopped := ""
 
 	for step := 0; step < maxSteps; step++ {
-		node, exists := g.Nodes[curr]
+		flowNode, exists := graph.Nodes[curr]
 		if !exists {
 			stopped = "stuck"
 			break
 		}
 
-		if len(node.Edges) == 0 {
+		if len(flowNode.Edges) == 0 {
 			stopped = "terminal"
 			break
 		}
@@ -142,7 +142,7 @@ func Run(g Graph, worker WorkerFn, opts RunOptions) (RunResult, error) {
 		visits[curr]++
 
 		// Invoke worker
-		workerRes, workerErr := worker(curr, node.Instruction, state)
+		workerRes, workerErr := worker(curr, flowNode.Instruction, state)
 
 		// Error tier: a worker error routes on `on error` edges only, with a
 		// minimal error context (per-node error_count, visits).
@@ -156,19 +156,19 @@ func Run(g Graph, worker WorkerFn, opts RunOptions) (RunResult, error) {
 				"visits":        visits[curr],
 			}
 			matched := false
-			for _, e := range node.Edges {
-				if !IsError(e.Condition) {
+			for _, edge := range flowNode.Edges {
+				if !IsError(edge.Condition) {
 					continue
 				}
-				errExp := ErrorExpr(e.Condition)
+				errExp := ErrorExpr(edge.Condition)
 				if errExp == "" {
-					curr = e.Target
+					curr = edge.Target
 					matched = true
 					break
 				}
 				ok, evalErr := EvalCondition(errExp, errCtx)
 				if evalErr == nil && ok {
-					curr = e.Target
+					curr = edge.Target
 					matched = true
 					break
 				}
@@ -184,25 +184,25 @@ func Run(g Graph, worker WorkerFn, opts RunOptions) (RunResult, error) {
 		// outcome's own fields plus visits — never carried across nodes.
 		var outcomeDict map[string]interface{}
 		ctx := make(map[string]interface{})
-		switch v := workerRes.(type) {
+		switch workerValue := workerRes.(type) {
 		case map[string]interface{}:
-			outcomeDict = v
-			for k, val := range v {
-				ctx[k] = val
+			outcomeDict = workerValue
+			for key, val := range workerValue {
+				ctx[key] = val
 			}
 		case string:
-			outcomeDict = map[string]interface{}{"text": v}
-			ctx["text"] = v
+			outcomeDict = map[string]interface{}{"text": workerValue}
+			ctx["text"] = workerValue
 		default:
-			s := pyStr(v)
-			outcomeDict = map[string]interface{}{"text": s}
-			ctx["text"] = s
+			text := pyStr(workerValue)
+			outcomeDict = map[string]interface{}{"text": text}
+			ctx["text"] = text
 		}
 		ctx["visits"] = visits[curr]
 		outcomes[curr] = outcomeDict
 
 		// Human handoff
-		if nh, ok := outcomeDict["needs_human"].(bool); ok && nh {
+		if needsHuman, ok := outcomeDict["needs_human"].(bool); ok && needsHuman {
 			stopped = "needs_human"
 			pNode := curr
 			pendingNode = &pNode
@@ -210,14 +210,14 @@ func Run(g Graph, worker WorkerFn, opts RunOptions) (RunResult, error) {
 		}
 
 		// Fan-out / wait suspension
-		if sp, ok := outcomeDict["spawn"]; ok && sp != nil {
+		if spawnRequest, ok := outcomeDict["spawn"]; ok && spawnRequest != nil {
 			stopped = "waiting"
 			pNode := curr
 			pendingNode = &pNode
-			spawnVal = sp
+			spawnVal = spawnRequest
 			break
 		}
-		if wt, ok := outcomeDict["wait"].(bool); ok && wt {
+		if waitFlag, ok := outcomeDict["wait"].(bool); ok && waitFlag {
 			stopped = "waiting"
 			pNode := curr
 			pendingNode = &pNode
@@ -226,11 +226,11 @@ func Run(g Graph, worker WorkerFn, opts RunOptions) (RunResult, error) {
 
 		// Deterministic edges in document order
 		matched := false
-		for _, e := range node.Edges {
-			if IsDeterministic(e.Condition) {
-				match, evalErr := EvalCondition(e.Condition, ctx)
+		for _, edge := range flowNode.Edges {
+			if IsDeterministic(edge.Condition) {
+				match, evalErr := EvalCondition(edge.Condition, ctx)
 				if evalErr == nil && match {
-					curr = e.Target
+					curr = edge.Target
 					matched = true
 					break
 				}
