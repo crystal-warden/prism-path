@@ -18,7 +18,7 @@ against PREREGISTRATION.md section 5:
      worker requested one
   A4 four sub properties graded separately as scenarios; the cell is the minimum
 
-Usage: python -m prismpath.comparisons.groupa.a1a2a4
+Usage: python -m prismpath.comparisons.groupa.abstain_escalate_receipt
 """
 from __future__ import annotations
 

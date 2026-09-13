@@ -304,7 +304,7 @@ the offsets, the widths or the flag numbers. None of them can move alone.
 | [../prismpath-hotswap-rs/src/lib.rs](../prismpath-hotswap-rs/src/lib.rs) | the Rust mirror: the magic, the 28 byte header size, the header struct and the capped structural walk | the Rust consumers |
 | [../prismpath-ebpf/ppt_common.h](../prismpath-ebpf/ppt_common.h) | the kernel structs and the compile time maxima that `DEFAULT_CAPS` is a copy of | a kernel loader recertification on both architectures |
 | the firmware ports on the pending list in [eval_copies_check.py](eval_copies_check.py) | eight microcontroller firmwares still carrying a local copy of the evaluator, two of which switch on raw opcode literals rather than named constants | a hardware recertification each, on a board, which is why the conversion is tracked rather than done |
-| the corpus and certification scripts (`../prismpath-ebpf/cert_corpus.py`, `hyst-cert/cert_hyst_board.py`, `../prismpath/comparisons/groupa/a3_corpus.py`, `mesh/gen_mesh_tables.py`) | partial parses, each reading the fields it needs | the evidence each produces |
+| the corpus and certification scripts (`../prismpath-ebpf/cert_corpus.py`, `hyst-cert/cert_hyst_board.py`, `../prismpath/comparisons/groupa/cross_substrate_corpus.py`, `mesh/gen_mesh_tables.py`) | partial parses, each reading the fields it needs | the evidence each produces |
 
 The direction of travel is fewer of these, not more. `eval_copies_check.py` is the instrument for the
 firmware half of the list: it reports which firmwares include the one shared evaluator and which still

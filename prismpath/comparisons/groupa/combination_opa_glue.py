@@ -6,7 +6,7 @@ one combination column is OPA plus the glue built in comparisons/glue/, each pie
 and measured against the section 4 budget (300 lines, 8 hours, no new trust anchor):
 
   A1, A2  OPA alone is NATIVE; the combination adds nothing and the OPA rows are mirrored.
-  A3      written by groupa/a3_opa_mcu.py from the RP2350 run (OPA wasm under wasm3).
+  A3      written by groupa/opa_wasm_mcu_leg.py from the RP2350 run (OPA wasm under wasm3).
   A4, A8  glue/opa_receipts.py: OPA ships decision logs to the sink, which Merkle roots them and signs
           the root with the bundle signing key OPA already trusts; receipts verified, tamper detected.
   A5      glue/facet_opa_input.py: Facet frame in, representative reading to OPA, decision compared.
@@ -14,7 +14,7 @@ and measured against the section 4 budget (300 lines, 8 hours, no new trust anch
           signature check refuses the tampered and unsigned bundles.
   A7      OPA's timeout configuration mirrored (WITH-WORK with zero lines, the same as the OPA cell).
 
-Usage: python -m prismpath.comparisons.groupa.phase5
+Usage: python -m prismpath.comparisons.groupa.combination_opa_glue
 """
 from __future__ import annotations
 
@@ -267,7 +267,7 @@ def main(argv=None) -> int:
     mirror("A2", "OPA alone grades NATIVE on this dimension; the combination column carries the OPA result unchanged.")
     mirror("A7", "No glue can add a bound; the combination carries OPA's timeout configuration cell unchanged (WITH-WORK, zero lines).")
     run_receipts(); run_facet(); run_floor()
-    print("phase5 opa+glue rows written (A3 comes from groupa/a3_opa_mcu.py)")
+    print("phase5 opa+glue rows written (A3 comes from groupa/opa_wasm_mcu_leg.py)")
     return 0
 
 

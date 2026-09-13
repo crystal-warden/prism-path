@@ -24,7 +24,7 @@ One spelling for this concept across `prismpath/comparisons`: the adjective is `
 outcome value is `not_expressible`, the exception a translator raises is `NotExpressible`, and the
 prose says "not expressible". Two older spellings survive only because published result files
 already carry them byte for byte and those files are not rewritten: `not-expressible` as an
-`observed` value in `results/` (written by `groupb/b.py`, described in `results/SCHEMA.md`) and
+`observed` value in `results/` (written by `groupb/group_b_grades.py`, described in `results/SCHEMA.md`) and
 `UNEXPRESSIBLE` as a row class in `systems/<id>/generated/conformance.json`.
 """
 from __future__ import annotations

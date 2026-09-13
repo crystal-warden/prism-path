@@ -7,7 +7,7 @@ every evaluation's busy window against the image's signed wcet_cycles, exactly a
 did (prismpath-hw/wcet-pins on the bench workspace). Writes the verdict record to
 results/prismpath/evidence/A7/pins_<policy>.json.
 
-Usage: python -m prismpath.comparisons.groupa.a7_pins --policy network_admission --bound 35 --iters 12
+Usage: python -m prismpath.comparisons.groupa.wcet_pins_witness --policy network_admission --bound 35 --iters 12
 """
 from __future__ import annotations
 

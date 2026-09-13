@@ -7,7 +7,7 @@
 # the LA2016 on Pmod JB to witness busy windows (A7). Output is appended line by line to a file so a
 # dropped SSH loses nothing. No hardcoded MMIO probe before the overlay load.
 #
-# usage: python3 a3_fabric_run.py a3_fabric_bundle.json out.log [sweep_seconds]
+# usage: python3 fabric_leg_run.py a3_fabric_bundle.json out.log [sweep_seconds]
 import json, sys, time
 sys.path.insert(0, "/home/xilinx")
 from ppt_pynq import PptOverlay, PptImage

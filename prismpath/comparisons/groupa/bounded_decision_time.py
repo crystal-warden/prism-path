@@ -19,7 +19,7 @@ honored by measurement; WITH-WORK, a measured tail with no bound but a documente
 no cap. Both readings are reported: for cloud request paths the tail is what matters; for embedded
 and real time paths the bound is decisive.
 
-Usage: python -m prismpath.comparisons.groupa.a7 [--n 100000] [--system ID ...]
+Usage: python -m prismpath.comparisons.groupa.bounded_decision_time [--n 100000] [--system ID ...]
 """
 from __future__ import annotations
 
@@ -81,7 +81,7 @@ def run_prismpath(repeats: int) -> None:
         graph = parse(flow)
         image = ppt_compile.compile_flow(graph).serialize()
         wcet = policy_pack.wcet_cycles(image)
-        pins_path = ev / f"pins_{pid}.json"          # written by groupa/a7_pins.py in the hardware session
+        pins_path = ev / f"pins_{pid}.json"          # written by groupa/wcet_pins_witness.py in the hardware session
         pins = json.loads(pins_path.read_text()) if pins_path.exists() else None
         if pins is not None and pins["signed_wcet_cycles"] != wcet:
             raise SystemExit(f"{pid}: pins witness taken against bound {pins['signed_wcet_cycles']} but the image says {wcet}")

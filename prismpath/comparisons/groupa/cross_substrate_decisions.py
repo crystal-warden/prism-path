@@ -18,7 +18,7 @@ Comparators, the real attempts the pre registration requires:
           first dependency that requires std (memchr), with no no_std feature in cedar-policy 4.12.0
   Cerbos, OpenFGA   server only architectures (documented)
 
-Usage: python -m prismpath.comparisons.groupa.a3
+Usage: python -m prismpath.comparisons.groupa.cross_substrate_decisions
 """
 from __future__ import annotations
 

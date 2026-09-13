@@ -16,7 +16,7 @@ facility (recorded in the notes and the evidence):
   NOT        the loop cannot be closed without building a component that is itself the subject of A1,
              A2, or A4, or the glue would introduce a trust anchor the system does not already have
 
-Usage: python -m prismpath.comparisons.groupa.a8 [--system ID ...]
+Usage: python -m prismpath.comparisons.groupa.ai_worker_governance_loop [--system ID ...]
 """
 from __future__ import annotations
 

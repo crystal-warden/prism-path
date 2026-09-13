@@ -11,7 +11,7 @@ board decision, outcome and rule, with the corpus expectation. It writes the evi
 result files for the combination column opa+glue, graded WITH-WORK when every decision is identical
 and the glue stays under the section 4 budget, NOT otherwise.
 
-Usage: python -m prismpath.comparisons.groupa.a3_opa_mcu --port /dev/ttyACM0 [--hours 2.0]
+Usage: python -m prismpath.comparisons.groupa.opa_wasm_mcu_leg --port /dev/ttyACM0 [--hours 2.0]
 """
 from __future__ import annotations
 

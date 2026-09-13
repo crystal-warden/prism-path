@@ -16,7 +16,7 @@ WITH-WORK, a compact encoding can be layered on (Cerbos ships gRPC protobuf, com
 sufficient, so its cell is WITH-WORK with configuration as the glue); NOT, verbose text only. The
 Facet encode of an OPA input is the Phase 5 combination test.
 
-Usage: python -m prismpath.comparisons.groupa.a5
+Usage: python -m prismpath.comparisons.groupa.wire_byte_count
 """
 from __future__ import annotations
 

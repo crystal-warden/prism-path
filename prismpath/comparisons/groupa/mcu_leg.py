@@ -8,7 +8,7 @@ For each of the two compiled images the board loads the table once and evaluates
 scenario reading; the target it returns is recorded beside the host Python, C, and kernel targets.
 Writes results/prismpath/evidence/A3/mcu_<ident>.json and .log.
 
-Usage: python -m prismpath.comparisons.groupa.a3_mcu --port /dev/ttyACM0
+Usage: python -m prismpath.comparisons.groupa.mcu_leg --port /dev/ttyACM0
 """
 from __future__ import annotations
 

@@ -8,7 +8,7 @@ does. NATIVE: the point refuses all three with a named reason and no server in t
 refusal is available at a server or through configured bundle verification that a wrapper can extend
 with a monotonic floor. NOT: no signing or versioning at the point.
 
-Usage: python -m prismpath.comparisons.groupa.a6
+Usage: python -m prismpath.comparisons.groupa.policy_anti_rollback
 """
 from __future__ import annotations
 

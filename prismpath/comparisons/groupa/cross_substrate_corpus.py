@@ -9,7 +9,7 @@ reference interpreter before anything reaches a kernel or a board.
 
 Writes results/prismpath/evidence/A3/{a3.packets.bin, a3_vectors.json, <policy>.ppt}.
 
-Usage: python -m prismpath.comparisons.groupa.a3_corpus
+Usage: python -m prismpath.comparisons.groupa.cross_substrate_corpus
 """
 from __future__ import annotations
 

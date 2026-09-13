@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
-# Runs ON THE BOARD after a3_fabric_run.py has finished (ALLDONE). Register traffic only against the
+# Runs ON THE BOARD after fabric_leg_run.py has finished (ALLDONE). Register traffic only against the
 # already resident tapped datapath overlay: attach without reconfiguration, then sweep one policy's
 # corpus vectors for N seconds so the LA2016 can witness busy windows. Exactly one process may drive
 # the fabric at a time.

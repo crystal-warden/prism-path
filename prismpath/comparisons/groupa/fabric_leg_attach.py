@@ -5,7 +5,7 @@
 # address (memory fpga-board-access: never a hardcoded probe, one configuration per power cycle):
 # auto mode off (PS path, the certified evaluate path of #117/#123), then the A3 fabric leg: every
 # corpus vector on both compiled images, targets and cause byte recorded. Appends lines to a file.
-#   usage: python3 a3_fabric_attach.py a3_fabric_bundle.json out.log
+#   usage: python3 fabric_leg_attach.py a3_fabric_bundle.json out.log
 import json, sys, time
 sys.path.insert(0, "/home/xilinx")
 from pynq import Overlay, MMIO

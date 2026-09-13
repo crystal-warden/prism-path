@@ -24,7 +24,7 @@ Grade meanings on the documentation rows, fixed here before the rows were writte
       with mitigation (pin, self host, own the upgrade path); the mitigation is the recorded glue.
       NOT: under one year of public history from one organization with no external production use.
 
-Usage: python -m prismpath.comparisons.groupb.b
+Usage: python -m prismpath.comparisons.groupb.group_b_grades
 """
 from __future__ import annotations
 
