@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
-"""prismpath.connector — The Connector SDK for PrismPath.
+"""prismpath.workers.connector — The Connector SDK for PrismPath.
 
 A subclassable developer API for building domain connectors against all **six hexagonal
 ports** (adapters/ADAPTER_GUIDE.md): **Ingestion**, **Retrieval**, **Adjudicator**,
@@ -9,6 +9,11 @@ a connector instance into a flow agent, and `PayloadFlattener`, the schema-flatt
 middleware (nested API responses -> the FLAT key/value surface `when` predicates and guided
 decoding actually work over; see the compliance adapter's "keep it FLAT" lesson).
 
+One port, one class: each port below is a small mixin carrying only that port's methods and
+its own docstring, and `BaseConnector` is the composition of the six plus the dispatch glue.
+A connector author subclasses `BaseConnector` as before and overrides the ports the domain
+needs; every port ships a working default, so nothing is required.
+
 Registry glue: `get_workers()` returns the exact `{name: callable(node, instruction, state)}`
 shape the plugin registry consumes, so a pip-installable plugin module is one line —
 ``WORKERS = MyConnector().get_workers()`` — and every node bound with `@worker(plugin.name)`
@@ -16,15 +21,15 @@ carries `_worker` provenance in the transcript.
 """
 from __future__ import annotations
 
-import hashlib
-import json
 import inspect
+import json
 import os
 import re
 from abc import ABC
 from typing import Any, Dict, List, Callable, Optional, Union, Tuple
 from prismpath import canon
-# Decorator to register node handlers
+
+
 def node(name: str):
     """Decorator to mark a connector method as a node handler."""
     def decorator(func):
@@ -32,24 +37,10 @@ def node(name: str):
         return func
     return decorator
 
-class BaseConnector(ABC):
-    """
-    Base class for all PrismPath Connectors.
-    Abstracts the six ports (Ingestion, Retrieval, Adjudicator, Action/Sink, Attestation,
-    Deferral) and simplifies node handler registration and agent dispatching.
-    """
-    def __init__(self, name: str, version: str = "1.0.0", deferral_store=None):
-        self.name = name
-        self.version = version
-        self._handlers: Dict[str, Callable] = {}
-        self._deferrals = deferral_store         # lazy default — see the `deferrals` property
 
-        # Automatically discover methods decorated with @node
-        for attr_name in dir(self):
-            attr = getattr(self, attr_name)
-            if hasattr(attr, "_prismpath_node"):
-                node_name = getattr(attr, "_prismpath_node")
-                self._handlers[node_name] = attr
+class NodeDispatch:
+    """The SDK glue, not a port: handler registry plus the dispatch that lets a connector
+    instance stand in for a flow agent callable."""
 
     def register_handler(self, node_name: str, handler: Callable):
         """Programmatic registration of a handler function for a node."""
@@ -74,18 +65,18 @@ class BaseConnector(ABC):
         handler = self._handlers.get(node)
         if handler is None:
             return self.fallback(node, instruction, state)
-        
+
         sig = inspect.signature(handler)
         params = list(sig.parameters.keys())
         num_args = len(params)
-        
+
         if num_args == 1:
             res = handler(state)
         elif num_args == 2:
             res = handler(instruction, state)
         else:
             res = handler(node, instruction, state)
-            
+
         if isinstance(res, dict):
             res.setdefault("_worker", f"{self.name}.{node}")
         return res
@@ -105,7 +96,11 @@ class BaseConnector(ABC):
             for node_name in self._handlers
         }
 
-    # --- INGESTION PORT ---
+
+class IngestionPort:
+    """Ingestion port: pull the next unit of work in and hash what came in.
+    Override `ingest_payload` to parse or sanitize the domain's raw shape."""
+
     def ingest_payload(self, raw_data: Any) -> Dict[str, Any]:
         """Override to process, sanitize, or parse raw incoming data."""
         if isinstance(raw_data, dict):
@@ -116,7 +111,11 @@ class BaseConnector(ABC):
         """Computes a content-addressable hash for ingestion payloads."""
         return "sha256:" + canon.sha256_hex(canon.canonical_spaced(data))[:16]
 
-    # --- RETRIEVAL PORT ---
+
+class RetrievalPort:
+    """Retrieval port: the domain knowledge as decision criteria, one directional.
+    The default retrieves nothing, so a connector with no catalog stays honest."""
+
     def retrieve_criteria(self, query: str) -> Any:
         """Override to fetch domain knowledge or catalog criteria."""
         return None
@@ -125,7 +124,11 @@ class BaseConnector(ABC):
         """Computes a content-addressable hash for knowledge base / catalog data."""
         return "sha256:" + canon.sha256_hex(canon.canonical_spaced(kb_data))[:16]
 
-    # --- ADJUDICATOR PORT ---
+
+class AdjudicatorPort:
+    """Adjudicator port: payload in, structured outcome out, over any text to text callable.
+    Override `adjudication_prompt` for the domain's prompt; `adjudicate` drives the port."""
+
     def adjudication_prompt(self, payload: Dict[str, Any], criteria: Any = None,
                             schema: Optional[Dict[str, Any]] = None) -> str:
         """The default prompt surface: the payload FLATTENED to key/value lines (the
@@ -174,7 +177,11 @@ class BaseConnector(ABC):
                 pass
         return {"text": (reply or "").strip()}
 
-    # --- ACTION / SINK PORT ---
+
+class SinkPort:
+    """Action / Sink port: write the record or emit the standard artifact.
+    Override `emit_record` for an OSCAL, CycloneDX or webhook emitter."""
+
     def emit_record(self, result: Dict[str, Any], destination: str, key: str = "id") -> Any:
         """Default sink: idempotent JSONL append (`ledger_runner.upsert_jsonl`) keyed on `key`,
         so a replayed item never double-writes — the property `run_ledgered_loop` relies on.
@@ -188,7 +195,11 @@ class BaseConnector(ABC):
             return True
         return upsert_jsonl(destination, result, key=key)
 
-    # --- ATTESTATION PORT ---
+
+class AttestationPort:
+    """Attestation port: bind the decision to its inputs so the binding is tamper evident.
+    The default binds through `ledger_airgap.provenance_manifest`."""
+
     @staticmethod
     def policy_hash_for(flow_path: str) -> str:
         """The policy hash `attest_decision` should bind: the content hash of the governing
@@ -219,12 +230,16 @@ class BaseConnector(ABC):
             knowledge_base_hash=kb_hash
         )
 
-    # --- DEFERRAL PORT ---
+
+class DeferralPort:
+    """Deferral port: suspend a unit for a human or for more evidence, then resume it with the
+    actor recorded. The store behind it is injectable; the default is file backed."""
+
     @property
     def deferrals(self):
-        """The connector's DeferralStore (the port base in `prismpath.deferral`). Defaults to a
-        `FileDeferralStore` under `./<name>.deferrals` on first use; inject any backend via
-        `__init__(deferral_store=...)`."""
+        """The connector's DeferralStore (the port base in `prismpath.workers.deferral`).
+        Defaults to a `FileDeferralStore` under `./<name>.deferrals` on first use; inject any
+        backend via `__init__(deferral_store=...)`."""
         if self._deferrals is None:
             from prismpath.workers.deferral import FileDeferralStore
             self._deferrals = FileDeferralStore(f"{self.name}.deferrals")
@@ -238,10 +253,38 @@ class BaseConnector(ABC):
         return self.deferrals.defer(unit_id, reason, state, prior_output=prior_output)
 
     def resume_decision(self, unit_id: str, resolution: Dict[str, Any], actor: str):
+        """Close a deferred unit with the resolution and the actor who supplied it."""
         return self.deferrals.resume(unit_id, resolution, actor)
 
     def pending_deferrals(self):
+        """The records of every unit still suspended in the store."""
         return self.deferrals.pending()
+
+
+class BaseConnector(NodeDispatch, IngestionPort, RetrievalPort, AdjudicatorPort,
+                    SinkPort, AttestationPort, DeferralPort, ABC):
+    """
+    Base class for all PrismPath Connectors.
+    Abstracts the six ports (Ingestion, Retrieval, Adjudicator, Action/Sink, Attestation,
+    Deferral) and simplifies node handler registration and agent dispatching.
+
+    Every port method above is an OPTIONAL override with a working default, which is why no
+    method here carries `@abstractmethod`: the base is usable as it stands and the tests and
+    the fixture generators drive it directly. The port a domain must supply is documented in
+    adapters/ADAPTER_GUIDE.md, not enforced by the type system.
+    """
+    def __init__(self, name: str, version: str = "1.0.0", deferral_store=None):
+        self.name = name
+        self.version = version
+        self._handlers: Dict[str, Callable] = {}
+        self._deferrals = deferral_store         # lazy default — see the `deferrals` property
+
+        # Automatically discover methods decorated with @node
+        for attr_name in dir(self):
+            attr = getattr(self, attr_name)
+            if hasattr(attr, "_prismpath_node"):
+                node_name = getattr(attr, "_prismpath_node")
+                self._handlers[node_name] = attr
 
 
 class PayloadFlattener:
@@ -290,14 +333,14 @@ class PayloadFlattener:
                 source_path, transform = rule
             else:
                 source_path, transform = rule, None
-            
+
             # Resolve from raw nested structure first to preserve original types for transformers
             val = self._resolve_path(data, source_path)
             if val is None:
                 if flat_data is None:
                     flat_data = self.flatten(data)
                 val = flat_data.get(source_path)
-                
+
             if val is not None and transform is not None:
                 try:
                     val = transform(val)
@@ -305,7 +348,6 @@ class PayloadFlattener:
                     pass
             mapped[target] = val
         return mapped
-
 
     def _resolve_path(self, data: Any, path: str) -> Any:
         """Resolves a nested path manually in the original raw data structure."""
@@ -419,4 +461,3 @@ class SystemTelemetry(BaseConnector):
             "ram_source": "host",
             "unified": False
         }
-

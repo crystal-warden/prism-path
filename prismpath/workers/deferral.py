@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Deferral / Resumption port (CORE) — suspend a unit-of-work and resume it later.
@@ -12,38 +11,55 @@ file-backed reference store. The resume of a *review* resolution pairs with
 *evidence* resolution re-enters the flow with new inputs. No LLM, no domain vocabulary.
 """
 
-import os, json, hashlib, datetime
+import datetime
+import hashlib
+import json
+import os
+from abc import ABC
+from abc import abstractmethod
 
 
 def _now():
     return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-class DeferralStore:
+class DeferralStore(ABC):
     """The port. A backend implements defer / pending / get / resume."""
 
+    @abstractmethod
     def defer(self, unit_id, reason, state, prior_output=None):
+        """Suspend `unit_id`, keeping the state and any prior output, and return the record."""
         raise NotImplementedError
 
+    @abstractmethod
     def pending(self):
+        """The records of every unit still suspended."""
         raise NotImplementedError
 
+    @abstractmethod
     def get(self, unit_id):
+        """One unit's record, or None when the store has never seen it."""
         raise NotImplementedError
 
+    @abstractmethod
     def resume(self, unit_id, resolution, actor):
+        """Close a suspended unit with the resolution and the actor, and return the record."""
         raise NotImplementedError
 
 
 class FileDeferralStore(DeferralStore):
     """v1 reference adapter: one JSON per deferred unit under a directory."""
 
-    def __init__(self, dir_):
-        self.dir = dir_
-        os.makedirs(dir_, exist_ok=True)
+    def __init__(self, directory):
+        self.dir = directory
+        os.makedirs(directory, exist_ok=True)
 
     def _path(self, unit_id):
         return os.path.join(self.dir, hashlib.sha256(unit_id.encode()).hexdigest()[:16] + ".json")
+
+    def _write(self, record):
+        with open(self._path(record["unit_id"]), "w") as handle:
+            json.dump(record, handle, indent=1)
 
     def defer(self, unit_id, reason, state, prior_output=None):
         rec = {
@@ -57,20 +73,25 @@ class FileDeferralStore(DeferralStore):
             "actor": None,
             "resolved_at": None,
         }
-        json.dump(rec, open(self._path(unit_id), "w"), indent=1)
+        self._write(rec)
         return rec
 
     def get(self, unit_id):
         deferral_path = self._path(unit_id)
-        return json.load(open(deferral_path)) if os.path.exists(deferral_path) else None
+        if not os.path.exists(deferral_path):
+            return None
+        with open(deferral_path) as handle:
+            return json.load(handle)
 
     def pending(self):
         out = []
         for filename in sorted(os.listdir(self.dir)):
-            if filename.endswith(".json"):
-                record = json.load(open(os.path.join(self.dir, filename)))
-                if record.get("status") == "pending":
-                    out.append(record)
+            if not filename.endswith(".json"):
+                continue
+            with open(os.path.join(self.dir, filename)) as handle:
+                record = json.load(handle)
+            if record.get("status") == "pending":
+                out.append(record)
         return out
 
     def resume(self, unit_id, resolution, actor):
@@ -80,29 +101,5 @@ class FileDeferralStore(DeferralStore):
         if rec["status"] != "pending":
             raise ValueError(f"unit {unit_id} already {rec['status']}")
         rec.update(status="resolved", resolution=resolution, actor=actor, resolved_at=_now())
-        json.dump(rec, open(self._path(unit_id), "w"), indent=1)
+        self._write(rec)
         return rec
-
-
-if __name__ == "__main__":
-    import tempfile, shutil
-
-    temp_dir = tempfile.mkdtemp(prefix="cw_defer_")
-    store = FileDeferralStore(temp_dir)
-    store.defer(
-        "wu:001",
-        reason="human_review: compensating control claimed",
-        state={"flow": "x", "node": "adjudicate"},
-        prior_output={"status": "not-met"},
-    )
-    out = {"deferred_pending": len(store.pending()) == 1}
-    rec = store.resume(
-        "wu:001",
-        resolution={"status": "met", "note": "compensating control accepted"},
-        actor="reviewer:jsmith",
-    )
-    out["resume_records_actor"] = rec["actor"] == "reviewer:jsmith" and rec["status"] == "resolved"
-    out["prior_output_preserved"] = rec["prior_output"]["status"] == "not-met"
-    out["no_longer_pending"] = len(store.pending()) == 0
-    print(json.dumps(out, indent=1))
-    shutil.rmtree(temp_dir, ignore_errors=True)
