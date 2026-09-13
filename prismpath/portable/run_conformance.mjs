@@ -15,7 +15,15 @@
 import { readFileSync } from "node:fs";
 import { parse, run, scriptedAgent } from "./prismpath.mjs";
 
-const fixtures = JSON.parse(readFileSync(process.argv[2], "utf-8"));
+// The sibling runners default to the committed corpus when called bare; this one cannot, because the
+// fixture set is the whole argument. Say so and exit, rather than letting readFileSync throw an
+// ERR_INVALID_ARG_TYPE stack at someone who simply forgot the path.
+const fixturesPath = process.argv[2];
+if (!fixturesPath) {
+  process.stderr.write("usage: node run_conformance.mjs <fixtures.json>\n");
+  process.exit(2);
+}
+const fixtures = JSON.parse(readFileSync(fixturesPath, "utf-8"));
 const results = [];
 for (const fx of fixtures) {
   try {

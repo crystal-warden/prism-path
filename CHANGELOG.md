@@ -9,9 +9,49 @@ spec stable.
 ## [Unreleased]
 
 ### Deprecated
+- **`agent` as the name for whatever does a node's work; the word is `worker`.** `run(agent=...)`
+  is `run(worker=...)`, `prismpath.workers.cli_worker.cli_agent` is `cli_worker`,
+  `prismpath.plugins.registry.worker_agent` is `worker_for`, and the `prismpath run --agent SPEC`
+  flag is `--worker SPEC`. Every old spelling still works and still reaches the same code: the three
+  Python names raise a `DeprecationWarning`, and the flag is a hidden alias on the same destination,
+  so a script that passes `--agent` is undocumented rather than broken. They go away in a later
+  release. The dictionary's **worker** entry lists all four as deprecated synonyms; `WorkerFn` was
+  already the right name for the type.
 - **The flat module names under `prismpath/`** (`prismpath.policy_pack`, `prismpath.ledger_ots`, `prismpath.analysis` and the other 64 aliases left by the September regroup into `kernel/ routing/ safety/ hotswap/ ledgers/ workers/ orchestration/ evals/`) now emit a `DeprecationWarning` on import and go away in a later release. Every first party import already uses the grouped path; adopters should import from it too.
 
 ### Changed
+- **The readability refactor: the big files are split, the vocabulary is one word per thing, and no
+  public name moved.** What moved: `cli.py`'s embedded 193 line JavaScript engine left for
+  `prismpath/portable/bundle_engine.mjs`, where it reuses the kernel's tiers instead of disagreeing
+  with them, and one `scriptedAgent` exported from `prismpath.mjs` replaced three hand kept copies;
+  `prismpath/mission_control/core.py` became a facade over one module per job, with every path, port
+  and cap on one `Settings` object; the connector's six ports became six mixins behind an unchanged
+  `BaseConnector`, and `deferral.py`'s `__main__` self test became `prismpath/tests/test_deferral.py`;
+  the fusion and compliance adapters, the fusion bench and the Vector integration became packages, so
+  29 `sys.path` inserts went and the quantizer's four private helpers went public; `prismpath-rs`
+  split `lib.rs` into `parser`, `engine`, `condition`, `level_m`, `reach`, `value`, `compose`,
+  `connector`, `durable` and `crypto_agility`, all re exported from the crate root; the eBPF loader
+  split into `ppt_image.c` (read, validate and evaluate an image on the host, no libbpf) and
+  `ppt_maps.c` (fill the maps, stamp the policy hash, carry the selector's resident state across a
+  swap) under a `loader.c` that is now one command table; the four XDP programs include one evaluator,
+  `ppt_eval_bpf.h`, instead of four copies kept in step by hand; `rtl-tb/gate.mk` gave eleven
+  ungated cocotb testbenches a real pass or fail target; and six companion walkthrough documents
+  landed beside the code they explain (`prismpath-hw/EVALUATOR_WALKTHROUGH.md`,
+  `PPT_FORMAT_WALKTHROUGH.md`, `esp-vision-node/FRONT_END.md`, `esp-vision-c6/RELAY_WALKTHROUGH.md`,
+  `rtl-tb/README.md`, `prismpath-ebpf/EVALUATOR_WALKTHROUGH.md`). What was renamed, all of it against
+  `docs/DICTIONARY.md`: the routing outcome is a `route` and the GRC outcome is a `determination`; a
+  wire struct field holding an edge's declared destination is `target`; `nid` is `device_id`; a
+  selector's `posture` is its `resident_node`; the receipt decoder's two senses of cause are
+  `cause_code` and `refusal_cause`; the persona who reads receipts is the **assessor** and the build
+  loop is **orchestration**, not "the control plane"; the per node callable is a **worker**; and the
+  single letter locals across Python, the tests, telemetry, the compliance and fusion adapters, the
+  hardware harnesses, the firmware C, the eBPF sources, Rust, Go and JavaScript took dictionary
+  names, as did the vision firmware's one letter geometry macros (`FRAME_W`, `FRAME_H`). What a
+  caller must do: nothing. Every import path, CLI verb, wire byte, frozen corpus and signed image is
+  unchanged; the four renamed call surfaces keep their old spellings as deprecated aliases (see
+  Deprecated above); the certified bytes (`interp.c`, the RTL,
+  the eBPF programs, the cause registry) did not move, and the walkthrough documents exist because
+  they cannot.
 - **The README is restructured around the public position.** `docs/POSITION.md` is the canonical
   statement (one sentence, problem, prove/enforce/prove, capability status, what the comparison
   established, vocabulary contract, claims made and not made); the README, the site, and the package

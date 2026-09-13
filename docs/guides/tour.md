@@ -350,5 +350,6 @@ python -m prismpath.cli lint     prismpath/flows/triage_support.md   # validate 
 python -m prismpath.cli test     prismpath/flows/coding.md   # assert routing from coding.tests.md (a Markdown table, no LLM)
 python -m prismpath.cli lock     prismpath/flows/coding.md   # commit condition embeddings -> reproducible routing
 python -m prismpath.cli graph    prismpath/flows/coding.md --fenced   # -> a Mermaid diagram for your README
-python -m prismpath.cli run      prismpath/flows/coding.md   # run with a built-in mock agent; print path + stop reason
+python -m prismpath.cli run      prismpath/flows/coding.md   # run with a built-in mock worker; print path + stop reason
+python -m prismpath.cli run      prismpath/flows/coding.md --worker ollama:llama3.2   # a real local model instead of the mock (`--agent` is the old spelling, still accepted)
 ```

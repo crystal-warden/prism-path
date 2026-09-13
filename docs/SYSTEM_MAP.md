@@ -48,11 +48,11 @@ is the same struct on the wire, in the kernel, and on the fabric.
 
 | directory | what it is | persona |
 |---|---|---|
-| `prismpath/` | the Python reference, grouped by concern: `kernel/` (parser, predicates, engine, cause registry, contract, static analysis, Level M, model checking), `routing/`, `safety/` (the guard and what measures it), `hotswap/` (signed packs and the PolicyHost), `ledgers/` (audit log, ledgers, checkpoints), `workers/` (connector SDK, code nodes, composition), `evals/`, `telemetry/` (Facet), plus the CLI and Mission Control at the top. The old flat names remain as aliases. Also `orchestration/`, the sprint and swarm machinery (`run_sprint.py`, `swarm_*.py`, `orchestrator.py`, `gates.py`): the fallback orchestration layer for an organisation without one of its own, not required by the format | all |
-| `prismpath/portable/` | the JS kernel and the frozen conformance corpus every kernel is judged by | engineer |
-| `prismpath-rs/`, `prismpath-go/` | the P0 kernel in Rust and Go | engineer |
-| `prismpath-hw/` | the C target `interp.c`, the `.ppt` compiler `ppt_compile.py`, `TABLE_FORMAT.md`, the fabric RTL, the MCU firmware for four ISAs, the mesh demos | engineer, operator |
-| `prismpath-ebpf/` | the interpreter as XDP and TC programs in the Linux kernel, the loader, receipt sealing, the decision delta demo | engineer, assessor |
+| `prismpath/` | the Python reference, grouped by concern: `kernel/` (parser, predicates, engine, cause registry, contract, static analysis, Level M, model checking), `routing/`, `safety/` (the guard and what measures it), `hotswap/` (signed packs and the PolicyHost), `ledgers/` (audit log, ledgers, checkpoints), `workers/` (connector SDK, code nodes, composition), `evals/`, `telemetry/` (Facet), plus the CLI and Mission Control at the top. `mission_control/` is one module per job behind `core.py`, which stays the facade the console imports: `config.py` holds every path, port and cap on one `Settings` object, `state.py` the process registry, and `discovery.py`, `launch.py`, `control.py`, `status.py`, `observe.py`, `prove.py`, `audit.py`, `graph.py`, `edit.py`, `stage.py`, `balance.py`, `lens.py` and `files.py` each own one job. The old flat names remain as aliases. Also `orchestration/`, the sprint and swarm machinery (`run_sprint.py`, `swarm_*.py`, `orchestrator.py`, `gates.py`): the fallback orchestration layer for an organisation without one of its own, not required by the format | all |
+| `prismpath/portable/` | the JS kernel `prismpath.mjs`, `bundle_engine.mjs` (the run loop a compiled bundle carries, one copy, reusing the kernel's tiers), the `gen_*.py` generators and the `run_*.mjs` runners, and the frozen conformance corpus every kernel is judged by | engineer |
+| `prismpath-rs/`, `prismpath-go/` | the P0 kernel in Rust and Go. The Rust crate is one module per concern, `parser`, `engine`, `condition`, `level_m`, `reach`, `value`, plus the optional `durable`, `connector`, `compose` and `crypto_agility`, all re exported from the crate root so a caller's paths do not change | engineer |
+| `prismpath-hw/` | the C target `interp.c`, the embedded evaluator `ppt_eval.h` every firmware includes, the `.ppt` compiler `ppt_compile.py`, `TABLE_FORMAT.md`, the fabric RTL, the MCU firmware for four ISAs, the mesh demos. `rtl-tb/` holds the eight datapath testbenches and `rtl-tb/gate.mk`, the shared rule that makes every cocotb Makefile judge its own run rather than exit 0 on a failure | engineer, operator |
+| `prismpath-ebpf/` | the interpreter as XDP and TC programs in the Linux kernel, sharing one evaluator `ppt_eval_bpf.h`; the loader as three files (`ppt_image.c` reads, validates and evaluates an image on the host with no libbpf, `ppt_maps.c` fills the maps and carries the selector's resident state across a swap, `loader.c` is the command table over both); receipt sealing; the decision delta demo | engineer, assessor |
 | `prismpath/telemetry/` | Facet, the reference: Figueroa quantization, Zeckendorf wire, self heal, epochs, concentrator, receipts, spiral | engineer |
 | `prismpath-telemetry-rs/`, `prismpath-preflight/`, `prismpath-reflect-bindings/`, `integrations/vector/`, `integrations/wireshark/` | Facet in Rust, the adoption gate, type bindings, the Vector codec, the dissector | engineer, operator |
 | `prismpath-hotswap-rs/` | the signed pack and PolicyHost natively | operator |
@@ -61,7 +61,7 @@ is the same struct on the wire, in the kernel, and on the fabric.
 | `integrations/zarf/`, `integrations/uds/`, `integrations/cpp/` | signed policy delivery, and embedding the C target | engineer |
 | `formal/` | the Lean 4 development proving Figueroa quantization within its declared domain | assessor |
 | `prismpath/comparisons/` | the pre registered comparison against OPA, Cedar, Cerbos, OpenFGA, Openlane, and the routing head to head | assessor |
-| `docs/research/` | the papers and the evidence ledger, `supporting-evidence.md`, every claim with its row | evaluator |
+| `docs/research/` | the papers and the evidence ledger, `supporting-evidence.md`, every claim with its row | assessor |
 | `tools/` | the gates: `arch_guard.py` (boundary), `ledger_lint.py`, `arith_lint.py`, `docs_health.py`, `export_clean.py` (the public mirror) | engineer |
 
 ## 4. Conformance topology: the same idea, implemented many times, kept in agreement
@@ -129,7 +129,18 @@ swap migration (row #131). The registry is append only and its hash rides the re
 
 ## 6. Where to read next
 
+`docs/DICTIONARY.md` for the word this page uses for each thing, and why the losing synonym lost.
 `docs/decoder-ring.md` for every term and an index of every document, module, kernel, and command.
 `PROTOCOL.md` for Facet. `SPEC.md` for the flow format and Level M. `prismpath-hw/TABLE_FORMAT.md`
 for the image. `docs/design/spec-secure-hotswap.md` for the swap. `docs/research/supporting-evidence.md`
 for the row behind any number on this page.
+
+Where a source file is certified and so cannot be renamed into the dictionary's words, a walkthrough
+document sits beside it and reads it in plain language instead, one paragraph per function:
+`prismpath-hw/EVALUATOR_WALKTHROUGH.md` for `interp.c` and `ppt_eval.h`,
+`prismpath-ebpf/EVALUATOR_WALKTHROUGH.md` for the shared eBPF evaluator and the four programs' front
+ends, `prismpath-hw/PPT_FORMAT_WALKTHROUGH.md` for one signed policy followed from the compiler to the
+fabric, `prismpath-hw/esp-vision-node/FRONT_END.md` for the camera front end,
+`prismpath-hw/esp-vision-c6/RELAY_WALKTHROUGH.md` for the two relays as one story, and
+`prismpath-hw/rtl-tb/README.md` for the testbench index, a row per testbench with the command that
+gates it.

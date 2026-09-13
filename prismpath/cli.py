@@ -193,16 +193,21 @@ def _add_engineer_commands(subparsers) -> None:
 
 def _add_operator_commands(subparsers) -> None:
     # Adding operator commands for system execution, state resumption, hot swaps, and execution logs.
-    run_parser = subparsers.add_parser('run', help='Parse the flow and run it (mock agent by default; '
-                                                   '--agent ollama:MODEL for a real local model)')
+    run_parser = subparsers.add_parser('run', help='Parse the flow and run it (mock worker by default; '
+                                                   '--worker ollama:MODEL for a real local model)')
     run_parser.add_argument('flow_md', type=str, help='Path to the flow markdown file')
     run_parser.add_argument('--type-gate', action='store_true',
                             help='validate each worker output against the derived contract (contract.py)')
-    run_parser.add_argument('--agent', default=None, metavar='SPEC',
+    # The dictionary's word for whatever produces a node's outcome is worker, so that is the flag a
+    # reader meets. The dest keeps the older spelling on purpose: the hidden alias below has to land on
+    # the same attribute, and nothing downstream of the parser should move for a surface rename.
+    run_parser.add_argument('--worker', dest='agent', default=None, metavar='SPEC',
                             help='real worker instead of the mock: `ollama:llama3.2` (local Ollama) '
                                  'or `openai:MODEL@BASE` (any OpenAI-compatible endpoint - vLLM, '
                                  'LM Studio, llama.cpp). JSON replies feed `when` predicates; '
                                  'failures ride the flow\'s `on error` edges')
+    run_parser.add_argument('--agent', dest='agent', default=None, metavar='SPEC',
+                            help=argparse.SUPPRESS)
     run_parser.set_defaults(func=run_flow)
 
     resume_parser = subparsers.add_parser(

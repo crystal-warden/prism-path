@@ -146,7 +146,7 @@ before the rewrite now load with headroom (processed ~150k of the 1M-insn budget
 Run on kernel 6.17 (aarch64), clang 18, libbpf 1.3, via `sudo make smoke` (which captures `smoke.out`):
 
 1. **`interp.c` reference**: compiled; `regs1.bin → match 0 1`, `regs2.bin → match 2 2`.
-2. **Host semantics parity**: `loader.c`'s host evaluator matches `interp.c` on the sample table.
+2. **Host semantics parity**: `ppt_image.c`'s host evaluator matches `interp.c` on the sample table.
 3. **eBPF compile**: `clang -target bpf` produces a valid `ppt_xdp.bpf.o` (`xdp` section).
 4. **Kernel verifier; PASSED at 32/64/64.** `bpf_object__load` succeeds at the full bounds that overran
    the verifier three ways before the rewrite (8192-jump limit; 1M-insn un-unrolled; 1M-insn unrolled);
@@ -199,7 +199,7 @@ dispatches them, so the help text cannot drift from what the loader actually doe
 The loader is three files. `ppt_image.c` reads, validates and evaluates a `.ppt` table on the host and
 builds the packet a kernel run needs; it has no libbpf dependency, so the fallback build uses it
 unchanged. `ppt_maps.c` fills the BPF maps of a loaded object, stamps the policy hash the receipts are
-bound to, carries the resident selector posture across a swap, and owns the one copy of the node names
+bound to, carries the selector's resident node across a swap, and owns the one copy of the node names
 sidecar parser. `loader.c` is the command line over those two. The five host tools
 (`cert_selector`, `migrate_selector`, `receipts_selector`, `seal_receipts`, `smoke_selector`) link the
 two objects; they used to reach the same helpers by `#include "loader.c"`.
@@ -286,14 +286,16 @@ latency via `BPF_PROG_TEST_RUN`), `netupdate <new.ppt> <iface>` (live policy hot
   call). This is the eBPF layer of the secure-hot-swap composition; the full four-property mechanism
   (authorized / envelope bounded / attested / audited-atomic) and its software reference tier are
   specified in [`../docs/design/spec-secure-hotswap.md`](../docs/design/spec-secure-hotswap.md).
-- **Loader-side hardenings (staged, pending a privileged recert):** three `loader.c` fixes are built
-  but held until a root live-smoke passes (substrate-retest discipline); a `MAX_*` capacity check in
-  `parse_image_buf` (an oversized image previously partial-populated instead of being rejected),
-  checked `bpf_map_update_elem` returns (a partial populate aborts loudly instead of leaving a torn
-  table), and **preserving `drop_mask` across a swap**. That last one fixes a real bug: `netupdate`
-  rebuilds `config_map[0]` with a designated initializer that zeroes the enforcement mask, so a
-  hot swap silently drops an enforcing program back to observe only. It is **latent today** because
-  enforcement is observe only anyway (§9), but it must land before inline `DROP` does.
+- **Loader-side hardenings (landed, smoked on a live attach):** three fixes, now spread across the
+  three loader files by the split above. A `MAX_*` capacity check in `parse_image_buf`
+  (`ppt_image.c`): an oversized image used to partial-populate instead of being rejected. Checked
+  `bpf_map_update_elem` returns (`ppt_maps.c`, through one `map_put` that names the map and the
+  index): a partial populate aborts loudly instead of leaving a torn table the program would then
+  route on. And **preserving `drop_mask` across a swap** (`loader.c`, the per bank config write):
+  `netupdate` used to rebuild `config_map[bank]` with a designated initializer that zeroed the
+  enforcement mask, so a hot swap silently dropped an enforcing program back to observe only. The
+  over-`MAX_*`-rejection and drop_mask-survives-swap smokes went green on a live attach with the
+  124/124 in kernel recertification on both architectures (ledger #90).
 
 ## 9. Honest status · what is and isn't proven
 

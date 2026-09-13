@@ -70,11 +70,9 @@ assessment).
 
 ## Entries
 
-Ninety four entries, alphabetical. Each is written from the decision's point of view. `Layer` is one of
+One hundred and twenty entries, alphabetical. Each is written from the decision's point of view. `Layer` is one of
 flow authoring, kernel evaluation, wire and transport, substrate execution, evidence and receipts,
 control plane, GRC. A term with no `Also called (deprecated)` line has no losing synonym today.
-
-**assessor**: the person who anchors, verifies and audits receipts; the fourth persona. Layer: control plane. Not to be confused with: evaluator (the certified routine). Also called (deprecated): evaluator (the persona sense, until September 2026).
 
 **abstain**: the decision to make no decision because the information required is absent. Distinct from a denial, which is a decision. Layer: kernel evaluation. Not to be confused with: deny, refusal with cause, escalate. Also called (deprecated): defer (in the kernel sense only; `defer` keeps its GRC and port meaning).
 
@@ -87,6 +85,8 @@ control plane, GRC. A term with no `Also called (deprecated)` line has no losing
 **anchor**: to bind a Merkle root to a timestamp a third party can verify without trusting the emitter, by OpenTimestamps into Bitcoin or by an RFC 3161 authority. Layer: evidence and receipts. Not to be confused with: seal (closing an epoch, which happens first), attest (binding a claim to a key), the LSP sense of attaching a diagnostic to a line (`prismpath/tests/test_lsp.py:101`), and the identity sense at `prismpath/ledgers/ledger.py:21`.
 
 **annotation**: a line inside a node of the form `@name(args)` that declares something the toolchain acts on, such as `@emits`, `@field_only`, `@spawn`, `@state_bound`, `@checkpoint`, `@worker`. The engine parses annotations and never interprets the instruction prose. Layer: flow authoring. Not to be confused with: `prismpath annotate`, the blind relabelling command for agreement measurement.
+
+**assessor**: the person who anchors, verifies and audits receipts; the fourth persona. Layer: control plane. Not to be confused with: evaluator (the certified routine). Also called (deprecated): evaluator (the persona sense, until September 2026).
 
 **atom**: the irreducible unit of a predicate, a `(field, operator, constant)` triple or a bare field truthiness test. Every atom is total: it is satisfied or unsatisfied, never an error. Layer: kernel evaluation. Not to be confused with: atomic, which means indivisible in time (a pointer flip, a file write) and shares no root sense. Also called (deprecated): row (`ROADMAP.md:89`), comparator (keep only as the fabric materialization).
 
@@ -102,11 +102,13 @@ control plane, GRC. A term with no `Also called (deprecated)` line has no losing
 
 **catalog**: an ordered set of controls with their assessment objectives, content addressed and bound into every attestation made against it. Layer: GRC. Not to be confused with: an OSCAL catalog (an external document format this repository imports and exports), the SDK's generic "catalog criteria" (any retrievable knowledge base).
 
-**cause**: the registered reason a decision refused, parked or escalated, carried as one byte with a frozen canonical name and a class, identical in the engine, the pack verifier, the fabric register, the kernel loader and on the wire. Layer: evidence and receipts (defined in kernel evaluation). Not to be confused with: reason (human prose), diagnostic code (authoring time static analysis), error code (an implementation return value), stop state. Also called (deprecated): the unregistered `class:detail` strings in `prismpath/hotswap/policy_pack.py`.
+**cause**: the registered reason a decision refused, parked or escalated, carried as one byte with a frozen canonical name and a class, identical in the engine, the pack verifier, the fabric register, the kernel loader and on the wire. Layer: evidence and receipts (defined in kernel evaluation). Not to be confused with: reason (human prose), diagnostic code (authoring time static analysis), error code (an implementation return value), stop state. Also called (deprecated): the unregistered `class:detail` strings in `prismpath/hotswap/policy_pack.py`, which are registry rows now. The identifier is `cause_code` wherever a registry byte and a decoder status string are both in scope; the canonical wire field stays `cause` and carries the byte.
 
 **cell**: a maximal set of values of one field on which every atom of the policy has constant truth, so any two values in the same cell route identically. The unit Figueroa quantization derives and the wire transmits. Layer: wire and transport. Not to be confused with: a vision grid cell (a region of a picture), a register cell (one field's typed slot in the register file), a band.
 
 **certify**: to run a frozen corpus on one substrate and record the score against a declared subset, byte for byte. Layer: substrate execution. Not to be confused with: verify (checking a signature or a proof), validate (static analysis before anything runs), the statistical certificate that risk controlled calibration produces, an X.509 certificate.
+
+**codebook**: the whole set of cells a policy induces, every field with its cut points and the symbol each range maps to, derived from the policy text and printed by the adoption gate before anything encodes. The quantizer's output considered as a table rather than as an act. Layer: wire and transport. Not to be confused with: the image (the decision table, not the partition), a compression dictionary, the field dictionary in a pack manifest (which names and orders fields and holds no cut points).
 
 **codeword**: one self delimiting Zeckendorf code on the wire, ending in the unique `11` that closes it. Layer: wire and transport. Not to be confused with: symbol (the integer the codeword encodes), packet, record. Also called (deprecated): frame, in `prismpath/telemetry/zeckendorf.py` and `packed.py`.
 
@@ -139,6 +141,8 @@ control plane, GRC. A term with no `Also called (deprecated)` line has no losing
 **determination**: the GRC layer's word for a decision about one control, met, partially met, or not met. Kept because assessors use it and it survives into OSCAL. Layer: GRC, and nowhere else. Not to be confused with: decision (the kernel's act), finding, an SSP implementation status. Also called (deprecated): verdict; status as the headline noun, which survives only as a JSON key that assessors, fixtures and OSCAL read; "the determination doc", an off repository design document referenced at `prismpath/telemetry/README.md:8`.
 
 **deterministic edge**: an edge whose condition begins with `when` or is one of the keyword catch alls, resolved by evaluating a predicate against the outcome fields, free and exact. Layer: flow authoring. Not to be confused with: semantic, error and event edges, which are the other three tiers.
+
+**device_id**: the identifier of one physical board or host on a link, carried in a record so a receiver can say which device a reading came from. Layer: wire and transport. Not to be confused with: node (a step of a flow, never a device), a node index inside an image, a MAC address (which is one way to derive a `device_id`, not the term for it). Also called (deprecated): `nid`, and `node_id` where a device rather than a flow node was meant; rule 14 allows an abbreviation only for a term whose full form is in this dictionary, and `node` is not that term.
 
 **edge**: a line of the form `-> target: condition` inside a node, the authored transition. Document order is significant: the first true deterministic edge wins. Layer: flow authoring. Not to be confused with: a clock edge in RTL (`posedge`, `negedge`), an edge device, a graph edge in a rendering library.
 
@@ -214,6 +218,8 @@ control plane, GRC. A term with no `Also called (deprecated)` line has no losing
 
 **operator**: the person who runs a deployment day to day: monitors, swaps and attests policy, authors short lived changes, reads the trail. One of the four personas. Layer: control plane.
 
+**orchestration**: the build loop that decides which unit of work runs next and collects what came back: the sprint and swarm machinery in `prismpath/orchestration/`. A fallback for an organisation with no orchestrator of its own, never required by the format. Layer: control plane. Not to be confused with: the control plane (the category PrismPath belongs to, which is about what a system is permitted to do rather than what runs next), Mission Control (the console that can drive orchestration), the engine's run loop over one flow. Also called (deprecated): "the control plane", for this machinery.
+
 **outcome**: what a worker returns for one node: a text and a set of fields. The *input* to a routing decision, never its result. Layer: kernel evaluation. Not to be confused with: decision, stop state, the actuator's answer on the wire (which is an action result).
 
 **overlay**: a short lived policy pack that names the policy of record it temporarily overrides, so `attest` can show both. Layer: control plane. Not to be confused with: an FPGA overlay (a bitstream), which is always spelled bitstream.
@@ -232,7 +238,7 @@ control plane, GRC. A term with no `Also called (deprecated)` line has no losing
 
 **port**: an interface the core owns and the outside world implements, written in the core's own vocabulary. Six exist: Ingestion, Retrieval, Adjudicator, Action/Sink, Attestation, Deferral. Layer: control plane. Not to be confused with: a network or serial port, an RTL port, or "port" as a verb meaning reimplement. The verb is fine; the noun is reserved.
 
-**posture**: the assessed state of a boundary: a set of facts with their provenance. Layer: GRC. Not to be confused with: the resident node of a stateful selector, which is "the resident state" and must be renamed in the eBPF and RTL sources.
+**posture**: the assessed state of a boundary: a set of facts with their provenance. Layer: GRC, and nowhere else. Not to be confused with: the resident node of a stateful selector, which has its own entry; the eBPF selector says `resident_node` now, and the RTL and the frozen selector corpus keep the old spelling because they are certified and do not move for a rename.
 
 **predicate**: the restricted, side effect free expression after `when`, evaluated against the ctx. Total by construction: an impossible comparison is unsatisfied, never an error. Layer: kernel evaluation. Not to be confused with: condition (the broader raw string), guard.
 
@@ -252,11 +258,15 @@ control plane, GRC. A term with no `Also called (deprecated)` line has no losing
 
 **record**: a magic tagged, fixed layout struct on a link. Layer: wire and transport. Not to be confused with: reading (its payload), receipt, a compliance record, a route log entry.
 
+**refusal cause**: why a decoder rejected a frame outright, as a status string of its own: `receipt-truncated`, `receipt-field-mismatch`, `receipt-invalid-cause`, and `ok` when it did not. Never one of the registry's names: a registered cause explains a decision, a refusal cause explains why there was no decision to read. The identifier is `refusal_cause`, and a decode returns it as the named half of its result beside the receipt. Layer: wire and transport. Not to be confused with: cause (the registered byte, which the same decode returns under `cause_code`), reason (prose for a person), the `wire:` class of the registry, whose codes are decisions a receiving substrate made and did receipt.
+
 **refuse**: to decline to act and say why with a registered cause. In this system a refusal is a decision and carries a receipt; it is never silence. Layer: kernel evaluation. Not to be confused with: abstain, deny, park. Also called (deprecated): reject.
 
 **register**: one field's typed slot in the substrate's register file, `(type, i32)`. The compiled materialization of a field. Layer: substrate execution. Not to be confused with: the cause registry, a plugin registry, a pre registered study, an FPGA shift register. Also called (deprecated): "register image" (`prismpath-hw/TABLE_FORMAT.md:103`), which should be "register file".
 
 **relay**: a device that forwards records between links without aggregating them. Always qualified when more than one exists: the air relay, the host relay. Layer: wire and transport. Not to be confused with: the concentrator (which aggregates), the air gap courier (which should be named courier).
+
+**resident node**: the node a selector is currently sitting on, persisted across evaluations so the next decision starts from where the system already is. The identifier is `resident_node`, and the state that holds it is the resident state. Layer: substrate execution. Not to be confused with: posture (the GRC term, which is an assessed state of a boundary and never this), a start node (what an image declares), the fail safe (where a selector parks when it cannot decide). Also called (deprecated): posture, which the eBPF selector no longer says; the RTL and the certified corpora still carry it and do not move for a rename.
 
 **route**: the outcome of routing, the one target node a decision picked for one reading. Layer: kernel evaluation. Not to be confused with: target (the destination an edge declares, which is the same node named as a part of the flow rather than as the result of deciding), band (the spiral range whose members all take one route), path (the sequence of routes a run walks). A struct field that stores an edge's declared destination is `target`; a value that holds what routing produced is `route`. Also called (deprecated): band verdict, next_node, verdict, chosen.
 
@@ -300,7 +310,7 @@ control plane, GRC. A term with no `Also called (deprecated)` line has no losing
 
 **witness**: something that makes a claim checkable by observation: a concrete path for reachability, a pin measurement for a timing bound, a second sensor for a fused reading. Always qualified. Layer: varies.
 
-**worker**: whatever produces a candidate outcome for a node: a hosted model, a local model, a shell process, a function, another orchestration system, or a deterministic program. PrismPath does not own it. Layer: control plane. Not to be confused with: an LLM agent (one kind of worker), a server process. Also called (deprecated): agent (as the name of the port), executor, `WorkerFn` is correct.
+**worker**: whatever produces a candidate outcome for a node: a hosted model, a local model, a shell process, a function, another orchestration system, or a deterministic program. PrismPath does not own it. Layer: control plane. Not to be confused with: an LLM agent (one kind of worker), a server process. `WorkerFn` is the type. Also called (deprecated): agent, in every surface that still answers to it and warns or hides it, `run(agent=)`, `cli_agent`, `worker_agent` and `prismpath run --agent`; executor.
 
 **Zeckendorf coding**: the self delimiting Fibonacci integer code the wire uses, where every code ends in a unique `11` so a stream needs no header and no length field. Prior art, used here and not claimed. Layer: wire and transport.
 
