@@ -11,6 +11,7 @@ TOPLEVEL = $(COCOTB_TOPLEVEL)
 MODULE = $(COCOTB_TEST_MODULES)
 
 EXTRA_ARGS += --trace-fst
+EXTRA_ARGS += --assert            # run the ppt_interp operand-stack invariant checks (ifndef SYNTHESIS)
 
 # `make -C tb gate` is THE gate. Plain `make`/`make sim` returns 0 even when a cocotb test FAILS
 # (Makefile.sim reports failure in results.xml, not in the exit code), so a bare `make` must NEVER be

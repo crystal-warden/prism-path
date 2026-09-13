@@ -15,7 +15,9 @@ module zeck_enc #(
     output logic         in_ready,
     output logic         out_valid,
     output logic         out_bit,
-    output logic         done
+    output logic         done,
+    output logic         err         // 1-cycle strobe: a zero input, which has no Zeckendorf code
+                                      // (the encoding and its Lean theorem are defined for n >= 1)
 );
     // F2..F46 as an explicit constant ROM. NOTE: an initial-block loop (fib[j]=fib[j-1]+fib[j-2])
     // simulates correctly but Vivado evaluates the RHS against the un-updated array, zeroing fib[2..]
@@ -43,15 +45,23 @@ module zeck_enc #(
     always_ff @(posedge clk) begin
         out_valid <= 1'b0;
         done      <= 1'b0;
+        err       <= 1'b0;
         if (rst) begin
             st <= IDLE;
         end else begin
             case (st)
-                IDLE: if (in_valid && in_val != '0) begin
-                    rem  <= in_val;
-                    k    <= 6'd0;
-                    code <= '0;
-                    st   <= SCAN;
+                IDLE: if (in_valid) begin
+                    if (in_val != '0) begin
+                        rem  <= in_val;
+                        k    <= 6'd0;
+                        code <= '0;
+                        st   <= SCAN;
+                    end else begin
+                        // A zero was handed to the encoder while in_ready was high, so the producer's
+                        // handshake completed. Rather than swallow it and emit nothing, refuse it with
+                        // a strobe the caller can see; the decoder already has the symmetric err output.
+                        err <= 1'b1;
+                    end
                 end
                 SCAN: if ((k + 6'd1) < NFIB[5:0] && fib[k + 6'd1] <= rem) begin
                     k <= k + 6'd1;

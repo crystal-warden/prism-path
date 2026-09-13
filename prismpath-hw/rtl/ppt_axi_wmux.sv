@@ -56,7 +56,12 @@ module ppt_axi_wmux (
         end
     end
 
-    wire csel = busy ? sel : m_awvalid;             // loader-priority in the idle cycle
+    // Loader-priority in the idle cycle: when not busy, an in-flight loader write (m_awvalid) takes the
+    // channel over the PS. This is an operating assumption, not an interlock: it is safe because a policy
+    // swap is human-paced and the PS is quiet across it, so the PS and the loader do not contend for the
+    // write channel in the same cycle. A PS that wrote during a swap would still be steered correctly by
+    // `sel` while busy; the idle-cycle grant is the one window that trusts the quiet-PS assumption.
+    wire csel = busy ? sel : m_awvalid;
 
     assign o_awaddr  = csel ? m_awaddr  : s_awaddr;
     assign o_awvalid = csel ? m_awvalid : s_awvalid;
