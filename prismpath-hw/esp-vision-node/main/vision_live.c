@@ -51,14 +51,14 @@ static void send_keyframe(camera_fb_t *fb, uint32_t seq, uint64_t t_cap)
     if (!frame2jpg(fb, KEY_QUALITY, &jpg, &jlen)) { ESP_LOGE(TAG, "frame2jpg failed"); return; }
     key_hdr_t kh = { {'K','E','Y','1'}, seq, t_cap, (uint32_t)jlen };
     usb_write_all((const uint8_t *)&kh, sizeof kh); usb_write_all(jpg, jlen); free(jpg);
-    memcpy(last_sent, fb->buf, W * H);
+    memcpy(last_sent, fb->buf, FRAME_W * FRAME_H);
 }
 
 void app_main(void)
 {
     vision_core_init();
-    last_sent = heap_caps_malloc(W * H, MALLOC_CAP_SPIRAM);
-    camera_config_t c = {
+    last_sent = heap_caps_malloc(FRAME_W * FRAME_H, MALLOC_CAP_SPIRAM);
+    camera_config_t camera_cfg = {
         .pin_pwdn = -1, .pin_reset = -1, .pin_xclk = CAM_XCLK, .pin_sccb_sda = CAM_SIOD, .pin_sccb_scl = CAM_SIOC,
         .pin_d7 = CAM_D7, .pin_d6 = CAM_D6, .pin_d5 = CAM_D5, .pin_d4 = CAM_D4, .pin_d3 = CAM_D3, .pin_d2 = CAM_D2,
         .pin_d1 = CAM_D1, .pin_d0 = CAM_D0, .pin_vsync = CAM_VSYNC, .pin_href = CAM_HREF, .pin_pclk = CAM_PCLK,
@@ -66,16 +66,16 @@ void app_main(void)
         .pixel_format = PIXFORMAT_GRAYSCALE, .frame_size = FRAMESIZE_QVGA, .jpeg_quality = 12,
         .fb_count = 3, .fb_location = CAMERA_FB_IN_PSRAM, .grab_mode = CAMERA_GRAB_LATEST,
     };
-    ESP_ERROR_CHECK(esp_camera_init(&c));
+    ESP_ERROR_CHECK(esp_camera_init(&camera_cfg));
     usb_serial_jtag_driver_config_t ucfg = { .tx_buffer_size = 16384, .rx_buffer_size = 256 };
     ESP_ERROR_CHECK(usb_serial_jtag_driver_install(&ucfg));
     ESP_LOGI(TAG, "live: %u B table, %u fields; g=stream x=stop", POLICY_TABLE_LEN, n_fields);
     bool streaming = false; uint32_t seq = 0; static uint8_t wirebuf[256];
     while (1) {
-        uint8_t ch;
-        if (usb_serial_jtag_read_bytes(&ch, 1, 0) == 1) {
-            if (ch == 'g') { streaming = true; seq = 0; frame_n = 0; ESP_LOGI(TAG, "stream start"); }
-            else if (ch == 'x') { streaming = false; ESP_LOGI(TAG, "stream stop"); }
+        uint8_t command_byte;
+        if (usb_serial_jtag_read_bytes(&command_byte, 1, 0) == 1) {
+            if (command_byte == 'g') { streaming = true; seq = 0; frame_n = 0; ESP_LOGI(TAG, "stream start"); }
+            else if (command_byte == 'x') { streaming = false; ESP_LOGI(TAG, "stream stop"); }
         }
         if (!streaming) { vTaskDelay(pdMS_TO_TICKS(5)); continue; }
         camera_fb_t *fb = esp_camera_fb_get();

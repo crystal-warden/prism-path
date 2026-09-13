@@ -27,7 +27,7 @@ typedef struct __attribute__((packed)) { char magic[4]; uint32_t seq; uint32_t t
 
 void app_main(void)
 {
-    cur = heap_caps_malloc(W * H, MALLOC_CAP_SPIRAM); vision_core_init();
+    cur = heap_caps_malloc(FRAME_W * FRAME_H, MALLOC_CAP_SPIRAM); vision_core_init();
     usb_serial_jtag_driver_config_t ucfg = { .tx_buffer_size = 16384, .rx_buffer_size = 16384 };
     ESP_ERROR_CHECK(usb_serial_jtag_driver_install(&ucfg));
     ESP_LOGI(TAG, "replay ready: %u B table, %u fields, %u nodes, start %u", POLICY_TABLE_LEN, n_fields, n_nodes, start_node);
@@ -38,7 +38,7 @@ void app_main(void)
         if (memcmp(hdr, "RPL1", 4) != 0) continue;
         usb_read_all(hdr + 4, 8);
         uint32_t seq, len; memcpy(&seq, hdr + 4, 4); memcpy(&len, hdr + 8, 4);
-        if (len != W * H) { ESP_LOGE(TAG, "bad len %lu", (unsigned long)len); continue; }
+        if (len != FRAME_W * FRAME_H) { ESP_LOGE(TAG, "bad len %lu", (unsigned long)len); continue; }
         usb_read_all(cur, len);
         if (seq == 0) frame_n = 0;   // the front end resets its own state when frame_n is 0   // a clip starts at seq 0: fresh previous frame and background, like a fresh Frontend() on the host
         int64_t t0 = esp_timer_get_time();
@@ -48,7 +48,7 @@ void app_main(void)
         decide(motion_cells, dark, step, door_hit, scene, &node, &steps); t1 = esp_timer_get_time();   // decide includes register fill
         t2 = t1;
         uint16_t wire_len = encode_reading(wirebuf, sizeof wirebuf);
-        for (int i = 0; i < WIRE_N_FIELDS; i++) fields[i] = get_reg(WIRE_FIELDS[i].reg);
+        for (int field_index = 0; field_index < WIRE_N_FIELDS; field_index++) fields[field_index] = get_reg(WIRE_FIELDS[field_index].reg);
         int64_t t3 = esp_timer_get_time();
         res_hdr_t rh = { {'R','E','S','1'}, seq, (uint32_t)(t1 - t0), (uint32_t)(t2 - t1), (uint32_t)(t3 - t2), node, steps, WIRE_N_FIELDS };
         usb_write_all((const uint8_t *)&rh, sizeof rh);
