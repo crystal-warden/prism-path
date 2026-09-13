@@ -13,22 +13,7 @@
 // An outcome of {"__raise__": "msg"} makes the scripted worker THROW (exercises the error
 // tier). Result per fixture: {name, path, stopped, pending, error?}.
 import { readFileSync } from "node:fs";
-import { parse, run } from "./prismpath.mjs";
-
-function scriptedAgent(script) {
-  const used = {};
-  return (node, _instruction, _state) => {
-    const seq = script[node];
-    if (seq === undefined) return { text: node };
-    const callIndex = used[node] || 0;
-    used[node] = callIndex + 1;
-    const outcome = seq[Math.min(callIndex, seq.length - 1)];
-    if (outcome !== null && typeof outcome === "object" && "__raise__" in outcome) {
-      throw new Error(outcome.__raise__);
-    }
-    return outcome;
-  };
-}
+import { parse, run, scriptedAgent } from "./prismpath.mjs";
 
 const fixtures = JSON.parse(readFileSync(process.argv[2], "utf-8"));
 const results = [];

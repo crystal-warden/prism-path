@@ -11,6 +11,7 @@ import {
   proveAll,
   proveMonotoneMigration,
 } from "./prismpath.mjs";
+import { phasePolicy, migrationEnvelope } from "./crypto_migration_policy.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -44,49 +45,11 @@ for (const testCase of agilityFx.cases) {
   }
 }
 
-// 3. Crypto migration matrix
-const SUITES = ["cnsa2-hybrid-1", "tls13-aesgcm", "tls13-hybrid-x25519mlkem"];
-function phasePolicy(phaseGate) {
-  return `---
-name: ca_phase_${phaseGate}
-start: classify
----
-## classify
--> cui-path: when data_class == "cui"
--> legacy-path: when migration_phase < ${phaseGate}
--> hybrid-path: else
-## cui-path
--> suite-cnsa2-hybrid-1: when always
-## legacy-path
--> suite-tls13-aesgcm: when always
-## hybrid-path
--> suite-tls13-hybrid-x25519mlkem: when always
-## suite-cnsa2-hybrid-1
--> end: when always
-## suite-tls13-aesgcm
--> end: when always
-## suite-tls13-hybrid-x25519mlkem
--> end: when always
-## end
-done
-`;
-}
-
-function migrationEnvelope(hash, floor) {
-  return {
-    envelope_id: `floor-${floor}`,
-    approved_suites: SUITES,
-    class_field: "data_class",
-    migration_phase_field: "migration_phase",
-    migration_phase_floor: floor,
-    registry_hash: hash,
-    key_id: "0".repeat(64),
-  };
-}
-
+// 3. Crypto migration matrix. The policy text and the envelope come from
+// crypto_migration_policy.mjs, which explains how each is held to the generator's.
 for (const cell of migrationFx.cells) {
   const graph = parse(phasePolicy(cell.policy_gate));
-  const env = migrationEnvelope(rh, cell.envelope_floor);
+  const env = migrationEnvelope(agilityFx.registry, rh, cell.envelope_floor);
   const p4 = proveMonotoneMigration(graph, env, agilityFx.registry);
   const matchP4 = JSON.stringify(p4) === JSON.stringify(cell.p4);
   const matchInv = (p4.ok === (cell.envelope_floor >= cell.policy_gate)) === cell.invariant_holds;

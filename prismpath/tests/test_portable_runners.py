@@ -4,6 +4,8 @@
 
 Executes each JavaScript conformance runner using Node and asserts exit code zero.
 Validates that each generator reproduces the corresponding committed JSON corpus byte for byte.
+Pins the one input the migration corpus does not freeze, the policy text P4 was proved against,
+against the JavaScript rendering of it.
 """
 import importlib.util
 import json
@@ -72,6 +74,49 @@ def test_reach_generator_reproduces_committed_json():
     committed_bytes = (CONFORMANCE_DIRECTORY / "reach.json").read_bytes()
     assert generated_text.encode("utf-8") == committed_bytes, (
         "gen_reach.py output differs from committed reach.json file"
+    )
+
+
+@pytest.mark.skipif(NODE_EXECUTABLE is None, reason="node not installed - portable runners untested here")
+def test_crypto_migration_policy_matches_the_generator():
+    # The migration corpus freezes each cell's proof result but neither the policy text that was
+    # proved nor the approved suite list, so both sides of the port render them and nothing else
+    # would notice the two drifting apart.
+    generator_module = _load_generator("gen_crypto_migration_fixtures.py")
+    corpus_data = json.loads((CONFORMANCE_DIRECTORY / "crypto_migration.json").read_text())
+    policy_module_uri = (PORTABLE_DIRECTORY / "crypto_migration_policy.mjs").as_uri()
+    agility_corpus_path = json.dumps(str(CONFORMANCE_DIRECTORY / "crypto_agility.json"))
+    render_script = "\n".join([
+        'import { readFileSync } from "node:fs";',
+        f'import {{ phasePolicy, migrationEnvelope }} from "{policy_module_uri}";',
+        f'const agilityCorpus = JSON.parse(readFileSync({agility_corpus_path}, "utf-8"));',
+        f'const policyGates = {json.dumps(corpus_data["gates"])};',
+        "const policies = {};",
+        "for (const policyGate of policyGates) {",
+        "  policies[policyGate] = phasePolicy(policyGate);",
+        "}",
+        'const envelope = migrationEnvelope(agilityCorpus.registry, agilityCorpus.registry_hash, 0);',
+        "process.stdout.write(JSON.stringify({",
+        "  policies,",
+        "  approved_suites: envelope.approved_suites,",
+        "}));",
+    ])
+    process_result = subprocess.run(
+        [NODE_EXECUTABLE, "--input-type=module", "-e", render_script],
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    assert process_result.returncode == 0, (
+        f"rendering crypto_migration_policy.mjs failed:\nSTDERR:\n{process_result.stderr}"
+    )
+    rendered_data = json.loads(process_result.stdout)
+    for policy_gate in corpus_data["gates"]:
+        assert rendered_data["policies"][str(policy_gate)] == generator_module.phase_policy(policy_gate), (
+            f"JavaScript phasePolicy({policy_gate}) differs from the generator's phase_policy"
+        )
+    assert rendered_data["approved_suites"] == sorted(generator_module.SUITES), (
+        "the suite list the JavaScript envelope reads from the registry differs from the generator's"
     )
 
 

@@ -1469,6 +1469,34 @@ export function run(graph, agent, opts = {}) {
   return runResult;
 }
 
+/**
+ * Build the worker that replays a corpus fixture's `script` field.
+ *
+ * Every frozen corpus encodes its worker the same way: `script` maps a node name to a LIST of
+ * outcomes consumed in visit order, the last entry repeating once the visits outrun the list, and
+ * an outcome of {"__raise__": "message"} throws instead of returning so a fixture can drive the
+ * error tier. A node the script does not name answers with its own name.
+ *
+ * This reader lives beside run() because it is the wire contract of a corpus field rather than a
+ * detail of any one runner: it used to be hand kept in four files that had to be corrected together.
+ */
+export function scriptedAgent(script) {
+  const visitCounts = {};
+  return (node, _instruction, _state) => {
+    const outcomeList = script[node];
+    if (outcomeList === undefined) {
+      return { text: node };
+    }
+    const callIndex = visitCounts[node] || 0;
+    visitCounts[node] = callIndex + 1;
+    const outcome = outcomeList[Math.min(callIndex, outcomeList.length - 1)];
+    if (outcome !== null && typeof outcome === "object" && "__raise__" in outcome) {
+      throw new Error(outcome.__raise__);
+    }
+    return outcome;
+  };
+}
+
 // ---------------------------------------------------------------------- crypto agility proofs
 const SUITE_NODE_PREFIX = "suite-";
 const REACH_BOUND = 25;

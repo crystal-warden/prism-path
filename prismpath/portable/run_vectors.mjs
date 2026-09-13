@@ -11,7 +11,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { parse, run, evalCondition, PredicateError } from "./prismpath.mjs";
+import { parse, run, evalCondition, PredicateError, scriptedAgent } from "./prismpath.mjs";
 
 const dir = process.argv[2] || join(dirname(fileURLToPath(import.meta.url)), "conformance");
 let failures = 0;
@@ -34,21 +34,6 @@ for (const predCase of preds.cases) {
 console.log(`predicates: ${predPass}/${preds.cases.length}`);
 
 // ---- flows ------------------------------------------------------------------------------
-function scriptedAgent(script) {
-  const used = {};
-  return (node) => {
-    const seq = script[node];
-    if (seq === undefined) return { text: node };
-    const callIndex = used[node] || 0;
-    used[node] = callIndex + 1;
-    const outcome = seq[Math.min(callIndex, seq.length - 1)];
-    if (outcome !== null && typeof outcome === "object" && "__raise__" in outcome) {
-      throw new Error(outcome.__raise__);
-    }
-    return outcome;
-  };
-}
-
 const flows = JSON.parse(readFileSync(join(dir, "flows.json"), "utf-8"));
 let flowPass = 0;
 for (const fx of flows.cases) {

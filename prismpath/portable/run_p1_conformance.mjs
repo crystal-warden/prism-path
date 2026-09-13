@@ -10,28 +10,13 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { parse, run, decodeVec } from "./prismpath.mjs";
+import { parse, run, decodeVec, scriptedAgent } from "./prismpath.mjs";
 
 const dir = process.argv[2] || join(dirname(fileURLToPath(import.meta.url)), "conformance");
 let failures = 0;
 
 const doc = JSON.parse(readFileSync(join(dir, "locked_flows.json"), "utf-8"));
 let pass = 0;
-
-function scriptedAgent(script) {
-  const used = {};
-  return (node, _instruction, _state) => {
-    const seq = script[node];
-    if (seq === undefined) return { text: node };
-    const callIndex = used[node] || 0;
-    used[node] = callIndex + 1;
-    const outcome = seq[Math.min(callIndex, seq.length - 1)];
-    if (outcome !== null && typeof outcome === "object" && "__raise__" in outcome) {
-      throw new Error(outcome.__raise__);
-    }
-    return outcome;
-  };
-}
 
 for (const fx of doc.cases) {
   let got;
