@@ -28,30 +28,30 @@ FLAG_NODE_NAMES = 0x04
 FLAG_STATEFUL = 0x08
 
 
-def fnv32(s: str) -> int:
-    h = 0x811c9dc5
-    for b in s.encode():
-        h = ((h ^ b) * 0x01000193) & 0xFFFFFFFF
-    return h
+def fnv32(text: str) -> int:
+    hash_value = 0x811c9dc5
+    for byte_value in text.encode():
+        hash_value = ((hash_value ^ byte_value) * 0x01000193) & 0xFFFFFFFF
+    return hash_value
 
 
 def build(md: str, migration: str, out: str):
-    g = parse_file(str(HERE / md))
-    img = pc.compile_flow(g)
-    names = [n for n, _ in img.nodes]
+    graph = parse_file(str(HERE / md))
+    img = pc.compile_flow(graph)
+    names = [node_name for node_name, _ in img.nodes]
     tbl = bytearray(img.serialize())
-    safe = g.meta.get("safe")
+    safe = graph.meta.get("safe")
     if safe is not None:
         tbl[27] = names.index(safe) & 0xFF                 # signed fail-safe node (flags-word high byte)
-    if str(g.meta.get("stateful", "")).strip().lower() in ("true", "1", "yes"):
+    if str(graph.meta.get("stateful", "")).strip().lower() in ("true", "1", "yes"):
         tbl[26] |= FLAG_STATEFUL                            # declare the resident-FSM mode (signed)
     if migration == "by-name":
         tbl[26] |= FLAG_MIGRATE_BY_NAME
     else:
         tbl[26] &= ~FLAG_MIGRATE_BY_NAME
     tbl[26] |= FLAG_NODE_NAMES                              # append the signed per-node name-hash section
-    for nm in names:
-        tbl += struct.pack("<I", fnv32(nm))
+    for node_name in names:
+        tbl += struct.pack("<I", fnv32(node_name))
     (HERE / out).write_bytes(bytes(tbl))
     print(f"{out}: nodes={names} safe={safe}({names.index(safe) if safe else '-'}) "
           f"migration={migration} len={len(tbl)}")

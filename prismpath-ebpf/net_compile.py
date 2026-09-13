@@ -26,11 +26,11 @@ SCHEMA = ["src_ip", "dst_ip", "src_port", "dst_port", "protocol", "pkt_len", "tc
 def compile_with_schema(graph, schema, max_steps=25):
     """compile_flow, but with the field map pre-seeded to `schema` so indices are fixed by ABI."""
     img = pc.TableImage(max_steps)
-    for i, name in enumerate(schema):
-        img.fields[name] = i                              # pin canonical slots 0..N-1
+    for slot, name in enumerate(schema):
+        img.fields[name] = slot                           # pin canonical slots 0..N-1
     reach = _reachable(graph)
-    names = [n for n in graph.nodes if n in reach]
-    idx = {n: i for i, n in enumerate(names)}
+    names = [node_name for node_name in graph.nodes if node_name in reach]
+    idx = {node_name: node_index for node_index, node_name in enumerate(names)}
     if graph.start not in idx:
         raise pc.SubsetError("bad-start", graph.start)
     for name in names:
@@ -49,16 +49,16 @@ def compile_with_schema(graph, schema, max_steps=25):
 
 
 def main():
-    flow_md, out_ppt, out_names = (Path(a) for a in sys.argv[1:4])
+    flow_md, out_ppt, out_names = (Path(argument) for argument in sys.argv[1:4])
     out_ppt.parent.mkdir(parents=True, exist_ok=True)   # build/ may not exist on a fresh checkout
-    g = parse_file(str(flow_md))
-    img = compile_with_schema(g, SCHEMA)
-    names = [n for n, _ in img.nodes]
+    graph = parse_file(str(flow_md))
+    img = compile_with_schema(graph, SCHEMA)
+    names = [node_name for node_name, _ in img.nodes]
     out_ppt.write_bytes(img.serialize())
     out_names.write_text("\n".join(names) + "\n")
     # sanity: every referenced field must be within the canonical schema (else it silently reads NONE)
-    used = sorted(img.fields.items(), key=lambda kv: kv[1])
-    off_schema = [n for n, i in used if i >= len(SCHEMA)]
+    used = sorted(img.fields.items(), key=lambda field_entry: field_entry[1])
+    off_schema = [field_name for field_name, slot in used if slot >= len(SCHEMA)]
     print(f"flow={flow_md.name}  nodes={names}")
     print(f"fields (name->slot): {dict(used)}")
     if off_schema:

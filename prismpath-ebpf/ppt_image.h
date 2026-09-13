@@ -33,21 +33,21 @@ typedef struct {
     uint32_t *name_hashes; /* per-node FNV-1a-32(name), or NULL if no PPT_FLAG_NODE_NAMES */
 } Image;
 
-uint16_t rd16(const uint8_t *p);
-int32_t rd32(const uint8_t *p);
+uint16_t rd16(const uint8_t *bytes);
+int32_t rd32(const uint8_t *bytes);
 
 uint8_t *read_file(const char *path, long *out_len);
 
 int build_frame(uint8_t *out, uint16_t node_idx, uint16_t n_fields, const struct ppt_reg *regs);
 
-int parse_image_buf(const uint8_t *b, long len, Image *im);
+int parse_image_buf(const uint8_t *table_bytes, long len, Image *im);
 void load_image(const char *path, Image *im);
 void free_image(Image *im);
 
 uint32_t migrate_node(const Image *old_im, const Image *new_im, uint32_t old_cur, int *out_cause);
 
-int eval_atom_host(const struct ppt_atom *a, const struct ppt_reg *regs, uint32_t n_fields);
-int eval_prog_host(const Image *im, const struct ppt_edge *e, const struct ppt_reg *regs);
+int eval_atom_host(const struct ppt_atom *atom, const struct ppt_reg *regs, uint32_t n_fields);
+int eval_prog_host(const Image *im, const struct ppt_edge *edge, const struct ppt_reg *regs);
 int evaluate_host(const Image *im, uint16_t node, const struct ppt_reg *regs, int *out_target);
 
 #endif /* PPT_IMAGE_H */

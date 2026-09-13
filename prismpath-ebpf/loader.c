@@ -58,10 +58,13 @@
 static struct bpf_object *sel_open(const Image *im) {
     struct bpf_object *obj = bpf_object__open_file("ppt_select.bpf.o", NULL);
     if (!obj) { fprintf(stderr, "sel_open: cannot open ppt_select.bpf.o (run make)\n"); return NULL; }
-    struct bpf_map *m;
-    if ((m = bpf_object__find_map_by_name(obj, "sel_state_map"))) bpf_map__set_pin_path(m, SEL_STATE_PIN);
-    if ((m = bpf_object__find_map_by_name(obj, "result_map")))    bpf_map__set_pin_path(m, SEL_RESULT_PIN);
-    if ((m = bpf_object__find_map_by_name(obj, "receipt_map")))   bpf_map__set_pin_path(m, SEL_RECEIPT_PIN);
+    struct bpf_map *pinned_map;
+    if ((pinned_map = bpf_object__find_map_by_name(obj, "sel_state_map")))
+        bpf_map__set_pin_path(pinned_map, SEL_STATE_PIN);
+    if ((pinned_map = bpf_object__find_map_by_name(obj, "result_map")))
+        bpf_map__set_pin_path(pinned_map, SEL_RESULT_PIN);
+    if ((pinned_map = bpf_object__find_map_by_name(obj, "receipt_map")))
+        bpf_map__set_pin_path(pinned_map, SEL_RECEIPT_PIN);
     if (bpf_object__load(obj)) {
         fprintf(stderr, "sel_open: load/verify failed\n"); bpf_object__close(obj); return NULL;
     }
@@ -72,17 +75,21 @@ static struct bpf_object *sel_open(const Image *im) {
 /* loader <policy.ppt> selattach <iface> — deploy the resident selector: load with pinned state, seed a
  * clean start, attach in XDP SKB mode. The program + pinned state outlive this process. */
 static int sel_attach_cmd(const char *policy_ppt, const char *iface, __u32 xdp_flags) {
-    long l; uint8_t *b = read_file(policy_ppt, &l);
+    long image_len; uint8_t *image_bytes = read_file(policy_ppt, &image_len);
     Image im;
-    if (!b || parse_image_buf(b, l, &im)) { fprintf(stderr, "selattach: parse %s failed\n", policy_ppt); return 1; }
+    if (!image_bytes || parse_image_buf(image_bytes, image_len, &im)) {
+        fprintf(stderr, "selattach: parse %s failed\n", policy_ppt); return 1;
+    }
     unsigned int ifindex = if_nametoindex(iface);
     if (!ifindex) { fprintf(stderr, "selattach: unknown interface %s\n", iface); return 1; }
     struct bpf_object *obj = sel_open(&im);
     if (!obj) return 1;
     int st_fd = bpf_map__fd(bpf_object__find_map_by_name(obj, "sel_state_map"));
-    struct sel_state s = { .cur_node = im.start, .inited = 1, .gen = 0 };   /* deliberate clean start */
-    __u32 k = 0;
-    if (st_fd < 0 || bpf_map_update_elem(st_fd, &k, &s, BPF_F_LOCK)) { fprintf(stderr, "selattach: seed failed\n"); return 1; }
+    struct sel_state seed_posture = { .cur_node = im.start, .inited = 1, .gen = 0 };   /* deliberate clean start */
+    __u32 state_key = 0;
+    if (st_fd < 0 || bpf_map_update_elem(st_fd, &state_key, &seed_posture, BPF_F_LOCK)) {
+        fprintf(stderr, "selattach: seed failed\n"); return 1;
+    }
     int prog_fd = bpf_program__fd(bpf_object__find_program_by_name(obj, "ppt_select_prog"));
     const char *mode = (xdp_flags & XDP_FLAGS_DRV_MODE) ? "native/DRV" : "SKB";
     if (bpf_xdp_attach(ifindex, prog_fd, xdp_flags, NULL)) {
@@ -100,10 +107,12 @@ static int sel_attach_cmd(const char *policy_ppt, const char *iface, __u32 xdp_f
 static int sel_state_cmd(void) {
     int fd = bpf_obj_get(SEL_STATE_PIN);
     if (fd < 0) { fprintf(stderr, "selstate: no pinned state at %s (selattach first)\n", SEL_STATE_PIN); return 1; }
-    struct sel_state s; __u32 k = 0;
-    if (bpf_map_lookup_elem_flags(fd, &k, &s, BPF_F_LOCK)) { perror("selstate read"); close(fd); return 1; }
+    struct sel_state posture; __u32 state_key = 0;
+    if (bpf_map_lookup_elem_flags(fd, &state_key, &posture, BPF_F_LOCK)) {
+        perror("selstate read"); close(fd); return 1;
+    }
     printf("SEL STATE: resident node=%u inited=%u gen=%u (pinned at %s)\n",
-           s.cur_node, s.inited, s.gen, SEL_STATE_PIN);
+           posture.cur_node, posture.inited, posture.gen, SEL_STATE_PIN);
     close(fd);
     return 0;
 }
@@ -141,11 +150,11 @@ static int sel_send_cmd(const char *iface, int ev) {
  * persistent, sealable trail: seal_receipts Merkle-roots it with the shared merkle.h, so an OUT-OF-BAND
  * admin swap becomes a first-class anchorable leaf in the SAME leaf format as every other trail, not
  * just a console line. */
-static int append_receipt_journal(const char *path, const struct ppt_receipt *r) {
-    FILE *f = fopen(path, "ab");
-    if (!f) { fprintf(stderr, "receipt journal %s: %s\n", path, strerror(errno)); return -1; }
-    int ok = (fwrite(r, sizeof(*r), 1, f) == 1);
-    fclose(f);
+static int append_receipt_journal(const char *path, const struct ppt_receipt *receipt) {
+    FILE *journal = fopen(path, "ab");
+    if (!journal) { fprintf(stderr, "receipt journal %s: %s\n", path, strerror(errno)); return -1; }
+    int ok = (fwrite(receipt, sizeof(*receipt), 1, journal) == 1);
+    fclose(journal);
     return ok ? 0 : -1;
 }
 
@@ -157,24 +166,25 @@ static int append_receipt_journal(const char *path, const struct ppt_receipt *r)
 static int selector_swap_cmd(const char *new_ppt, const char *old_ppt, const char *iface) {
     long lo, ln;
     uint8_t *bo = read_file(old_ppt, &lo), *bn = read_file(new_ppt, &ln);
-    Image O, N;
-    if (!bo || !bn || parse_image_buf(bo, lo, &O) || parse_image_buf(bn, ln, &N)) {
+    Image old_image, new_image;
+    if (!bo || !bn || parse_image_buf(bo, lo, &old_image) || parse_image_buf(bn, ln, &new_image)) {
         fprintf(stderr, "swapselector: read/parse failed\n"); return 1;
     }
-    struct bpf_object *obj = sel_open(&N);   /* reuse the pinned sel_state (holds the OLD posture) */
+    struct bpf_object *obj = sel_open(&new_image);   /* reuse the pinned sel_state (holds the OLD posture) */
     if (!obj) return 1;
     /* Capture the migration receipt only when a journal is configured; otherwise NULL keeps the seam
      * cost-free. The receipt is the SAME leaf the forwarder folds into its live trail. */
     const char *jpath = getenv("PPT_RECEIPT_JOURNAL");
     struct ppt_receipt migr;
-    long migrated = selector_hotswap(obj, &O, &N, jpath ? &migr : NULL);   /* migrate, swap table, write */
+    /* migrate, swap table, write */
+    long migrated = selector_hotswap(obj, &old_image, &new_image, jpath ? &migr : NULL);
     if (migrated < 0) { bpf_object__close(obj); return 1; }
     if (jpath && append_receipt_journal(jpath, &migr) == 0) {
         uint8_t leaf[32]; SHA256((const unsigned char *)&migr, sizeof(migr), leaf);
         char lx[65]; for (int i = 0; i < 32; i++) sprintf(lx + 2 * i, "%02x", leaf[i]);
         printf("  migration receipt appended to journal %s (cause=%d, leaf=%s)\n", jpath, migr.cause, lx);
     }
-    int by_name = (N.flags & PPT_FLAG_MIGRATE_BY_NAME) != 0;
+    int by_name = (new_image.flags & PPT_FLAG_MIGRATE_BY_NAME) != 0;
     if (iface) {
         unsigned int ifindex = if_nametoindex(iface);
         int prog_fd = bpf_program__fd(bpf_object__find_program_by_name(obj, "ppt_select_prog"));
@@ -184,7 +194,7 @@ static int selector_swap_cmd(const char *new_ppt, const char *old_ppt, const cha
     printf("SELECTOR SWAP: resident posture migrated to node %ld via %s%s.\n",
            migrated, by_name ? "by-name" : "reset-to", iface ? " (new policy re-attached)" : "");
     printf("  sel_state persisted across the reload via the bpffs pin at %s.\n", SEL_STATE_PIN);
-    bpf_object__close(obj); free_image(&O); free_image(&N);
+    bpf_object__close(obj); free_image(&old_image); free_image(&new_image);
     return 0;
 }
 
@@ -252,13 +262,13 @@ static int read_pinned_result(void)
         return 2;
     }
     __u32 key = 0;
-    struct ppt_result r = {0};
-    if (bpf_map_lookup_elem(fd, &key, &r) != 0) {
+    struct ppt_result result = {0};
+    if (bpf_map_lookup_elem(fd, &key, &result) != 0) {
         fprintf(stderr, "error: result map lookup failed\n");
         return 2;
     }
     printf("KERNEL RESULT: matched_edge=%d target_node=%d eval_status=%u pkt_count=%llu\n",
-           r.matched_edge, r.target_node, r.eval_status, (unsigned long long)r.pkt_count);
+           result.matched_edge, result.target_node, result.eval_status, (unsigned long long)result.pkt_count);
     return 0;
 }
 
@@ -272,21 +282,24 @@ static int read_pinned_result(void)
  * one node name per line) makes the path human-readable. regs_path is encode_regs format. Root/CAP_BPF. */
 static int run_flow(const char *ppt_path, const char *regs_path, char **names, int n_names) {
     Image im; load_image(ppt_path, &im);
-    long len; uint8_t *b = read_file(regs_path, &len);
+    long len; uint8_t *regs_bytes = read_file(regs_path, &len);
     int nf = im.n_fields;
     struct ppt_reg *regs = calloc(nf ? nf : 1, sizeof(struct ppt_reg));
-    for (int i = 0; i < nf; i++) { regs[i].ty = rd32(b + 4 + 8 * i); regs[i].val = rd32(b + 8 + 8 * i); }
-    free(b);
+    for (int i = 0; i < nf; i++) {
+        regs[i].ty = rd32(regs_bytes + 4 + 8 * i);
+        regs[i].val = rd32(regs_bytes + 8 + 8 * i);
+    }
+    free(regs_bytes);
     int cap = im.max_steps ? im.max_steps : 64;
 
     #define NAME(ix) ((names && (ix) >= 0 && (ix) < n_names) ? names[ix] : NULL)
-    #define PRINTPATH(arr, cnt) do { for (int i = 0; i < (cnt); i++) { \
-            if (NAME(arr[i])) printf("%s%s", NAME(arr[i]), i + 1 < (cnt) ? " -> " : "\n"); \
-            else printf("%d%s", arr[i], i + 1 < (cnt) ? " -> " : "\n"); } } while (0)
+    #define PRINTPATH(arr, cnt) do { for (int hop = 0; hop < (cnt); hop++) { \
+            if (NAME(arr[hop])) printf("%s%s", NAME(arr[hop]), hop + 1 < (cnt) ? " -> " : "\n"); \
+            else printf("%d%s", arr[hop], hop + 1 < (cnt) ? " -> " : "\n"); } } while (0)
 
     /* host reference path */
     int hp[256], hn = 0, cur = im.start; hp[hn++] = cur;
-    for (int s = 0; s < cap && im.nodes[cur].edge_cnt; s++) {
+    for (int step = 0; step < cap && im.nodes[cur].edge_cnt; step++) {
         int tgt = -1;
         if (evaluate_host(&im, cur, regs, &tgt) < 0) { printf("  [host stuck]\n"); break; }
         cur = tgt; if (hn < 256) hp[hn++] = cur;
@@ -306,22 +319,22 @@ static int run_flow(const char *ppt_path, const char *regs_path, char **names, i
     /* in-kernel path */
     int kp[256], kn = 0; cur = im.start; kp[kn++] = cur;
     uint8_t frame[2048], out_buf[2048];
-    for (int s = 0; s < cap && im.nodes[cur].edge_cnt; s++) {
+    for (int step = 0; step < cap && im.nodes[cur].edge_cnt; step++) {
         int flen = build_frame(frame, (uint16_t)cur, im.n_fields, regs);
         struct bpf_test_run_opts opts; memset(&opts, 0, sizeof(opts));
         opts.sz = sizeof(opts); opts.data_in = frame; opts.data_size_in = flen;
         opts.data_out = out_buf; opts.data_size_out = sizeof(out_buf); opts.repeat = 1;
-        struct ppt_result r = {0}; __u32 key = 0;
+        struct ppt_result result = {0}; __u32 key = 0;
         if (bpf_prog_test_run_opts(prog_fd, &opts) != 0 ||
-            bpf_map_lookup_elem(res_fd, &key, &r) != 0 || r.eval_status != 1) {
+            bpf_map_lookup_elem(res_fd, &key, &result) != 0 || result.eval_status != 1) {
             printf("  [in-kernel stuck]\n"); break;
         }
-        cur = r.target_node; if (kn < 256) kp[kn++] = cur;
+        cur = result.target_node; if (kn < 256) kp[kn++] = cur;
     }
 
     printf("\n[Host reference path (evaluate_host == interp.c)]\n  "); PRINTPATH(hp, hn);
     printf("[In-kernel path (XDP program, hop-by-hop BPF_PROG_TEST_RUN)]\n  "); PRINTPATH(kp, kn);
-    int same = (hn == kn); for (int i = 0; i < hn && same; i++) same = (hp[i] == kp[i]);
+    int same = (hn == kn); for (int hop = 0; hop < hn && same; hop++) same = (hp[hop] == kp[hop]);
     printf("\n%s: the flow routed IN-KERNEL along the same path as the reference.\n",
            same ? "PASS" : "FAIL");
     free(regs); bpf_object__close(obj);
@@ -331,33 +344,33 @@ static int run_flow(const char *ppt_path, const char *regs_path, char **names, i
 /* Trace a flow to a terminal using the host reference evaluator (== interp.c). Fills out[] with the
  * node-index path, returns its length. */
 static int host_trace(const Image *im, const struct ppt_reg *regs, int *out, int cap) {
-    int n = 0, cur = im->start; out[n++] = cur;
+    int path_len = 0, cur = im->start; out[path_len++] = cur;
     int lim = im->max_steps ? im->max_steps : 64;
-    for (int s = 0; s < lim && im->nodes[cur].edge_cnt; s++) {
+    for (int step = 0; step < lim && im->nodes[cur].edge_cnt; step++) {
         int tgt = -1;
         if (evaluate_host(im, cur, regs, &tgt) < 0) break;
-        cur = tgt; if (n < cap) out[n++] = cur;
+        cur = tgt; if (path_len < cap) out[path_len++] = cur;
     }
-    return n;
+    return path_len;
 }
 
 /* Trace a flow to a terminal IN-KERNEL: evaluate each node via BPF_PROG_TEST_RUN, follow the target. */
 static int kernel_trace(const Image *im, const struct ppt_reg *regs, int prog_fd, int res_fd,
                         int *out, int cap) {
-    int n = 0, cur = im->start; out[n++] = cur;
+    int path_len = 0, cur = im->start; out[path_len++] = cur;
     int lim = im->max_steps ? im->max_steps : 64;
     uint8_t frame[2048], ob[2048];
-    for (int s = 0; s < lim && im->nodes[cur].edge_cnt; s++) {
+    for (int step = 0; step < lim && im->nodes[cur].edge_cnt; step++) {
         int flen = build_frame(frame, (uint16_t)cur, im->n_fields, regs);
-        struct bpf_test_run_opts o; memset(&o, 0, sizeof(o)); o.sz = sizeof(o);
-        o.data_in = frame; o.data_size_in = flen; o.data_out = ob; o.data_size_out = sizeof(ob);
-        o.repeat = 1;
-        struct ppt_result r = {0}; __u32 k = 0;
-        if (bpf_prog_test_run_opts(prog_fd, &o) != 0 ||
-            bpf_map_lookup_elem(res_fd, &k, &r) != 0 || r.eval_status != 1) break;
-        cur = r.target_node; if (n < cap) out[n++] = cur;
+        struct bpf_test_run_opts opts; memset(&opts, 0, sizeof(opts)); opts.sz = sizeof(opts);
+        opts.data_in = frame; opts.data_size_in = flen; opts.data_out = ob; opts.data_size_out = sizeof(ob);
+        opts.repeat = 1;
+        struct ppt_result result = {0}; __u32 result_key = 0;
+        if (bpf_prog_test_run_opts(prog_fd, &opts) != 0 ||
+            bpf_map_lookup_elem(res_fd, &result_key, &result) != 0 || result.eval_status != 1) break;
+        cur = result.target_node; if (path_len < cap) out[path_len++] = cur;
     }
-    return n;
+    return path_len;
 }
 
 /* Batch: route MANY register files (one per REAL alert) through the SAME flow table in-kernel, each
@@ -395,13 +408,13 @@ static int runbatch_flow(const char *ppt_path, const char *records_path, char **
         int hp[256], kp[256];
         int hn = host_trace(&im, regs, hp, 256);
         int kn = kernel_trace(&im, regs, prog_fd, res_fd, kp, 256);
-        int same = (hn == kn); for (int i = 0; i < hn && same; i++) same = (hp[i] == kp[i]);
+        int same = (hn == kn); for (int hop = 0; hop < hn && same; hop++) same = (hp[hop] == kp[hop]);
         passed += same;
         printf("  alert %3d [%s]  ", total, same ? "PASS" : "FAIL");
-        for (int i = 0; i < kn; i++) {
-            const char *nm = (names && kp[i] >= 0 && kp[i] < n_names) ? names[kp[i]] : NULL;
-            if (nm) printf("%s%s", nm, i + 1 < kn ? " -> " : "\n");
-            else printf("%d%s", kp[i], i + 1 < kn ? " -> " : "\n");
+        for (int hop = 0; hop < kn; hop++) {
+            const char *nm = (names && kp[hop] >= 0 && kp[hop] < n_names) ? names[kp[hop]] : NULL;
+            if (nm) printf("%s%s", nm, hop + 1 < kn ? " -> " : "\n");
+            else printf("%d%s", kp[hop], hop + 1 < kn ? " -> " : "\n");
         }
     }
     free(regs); free(buf); bpf_object__close(obj);
@@ -461,14 +474,14 @@ static int certify_bpf(const char *packets_path) {
         opts.data_out = out_buf; opts.data_size_out = sizeof(out_buf);
         opts.repeat = 1;
         int err = bpf_prog_test_run_opts(prog_fd, &opts);
-        struct ppt_result r = {0}; __u32 key = 0;
-        if (err == 0) bpf_map_lookup_elem(res_fd, &key, &r);
-        int got = (err == 0) ? r.target_node : -2;
+        struct ppt_result result = {0}; __u32 key = 0;
+        if (err == 0) bpf_map_lookup_elem(res_fd, &key, &result);
+        int got = (err == 0) ? result.target_node : -2;
         int ok = (got == expected);
         passed += ok;
         if (!ok) {
             printf("  vector %3d: FAIL  expected target=%d  in-kernel=%d (edge=%d status=%u ret=%u err=%d)\n",
-                   total, expected, got, r.matched_edge, r.eval_status, opts.retval, err);
+                   total, expected, got, result.matched_edge, result.eval_status, opts.retval, err);
             if (first_fail < 0) first_fail = total;
         }
         free_image(&im);
@@ -540,7 +553,10 @@ static int net_attach(const char *ppt_path, const char *ifname, const char *name
     }
     /* zero the histogram so counts reflect this attach only */
     int vfd = bpf_map__fd(vmap);
-    for (__u32 k = 0; k < MAX_NODES; k++) { __u64 z = 0; bpf_map_update_elem(vfd, &k, &z, BPF_ANY); }
+    for (__u32 node_index = 0; node_index < MAX_NODES; node_index++) {
+        __u64 zero_count = 0;
+        bpf_map_update_elem(vfd, &node_index, &zero_count, BPF_ANY);
+    }
 
     int err = bpf_xdp_attach(ifindex, bpf_program__fd(prog), XDP_FLAGS_SKB_MODE, NULL);
     if (err) {
@@ -567,14 +583,14 @@ static int net_stats(char **names, int n_names) {
     bpf_map_lookup_elem(rfd, &zero, &res);
     printf("\n[ppt_net — real-traffic classification histogram]\n");
     __u64 total = 0;
-    for (__u32 k = 0; k < MAX_NODES; k++) {
-        __u64 c = 0;
-        if (bpf_map_lookup_elem(vfd, &k, &c) != 0 || c == 0) continue;
-        const char *nm = (names && k < (unsigned)n_names) ? names[k]
-                        : (k == MAX_NODES - 1 ? "(no-match)" : NULL);
-        if (nm) printf("  %-14s %llu\n", nm, (unsigned long long)c);
-        else    printf("  node[%u]        %llu\n", k, (unsigned long long)c);
-        total += c;
+    for (__u32 node_index = 0; node_index < MAX_NODES; node_index++) {
+        __u64 count = 0;
+        if (bpf_map_lookup_elem(vfd, &node_index, &count) != 0 || count == 0) continue;
+        const char *nm = (names && node_index < (unsigned)n_names) ? names[node_index]
+                        : (node_index == MAX_NODES - 1 ? "(no-match)" : NULL);
+        if (nm) printf("  %-14s %llu\n", nm, (unsigned long long)count);
+        else    printf("  node[%u]        %llu\n", node_index, (unsigned long long)count);
+        total += count;
     }
     printf("  ----\n  total classified: %llu packets  (result_map pkt_count=%llu)\n",
            (unsigned long long)total, (unsigned long long)res.pkt_count);
@@ -585,25 +601,29 @@ static int net_stats(char **names, int n_names) {
 static int build_ip_frame(uint8_t *out, uint8_t proto, uint16_t dport, int app_bytes) {
     int l4 = (proto == 6) ? 20 : (proto == 17) ? 8 : 8;   /* tcp / udp / icmp header */
     int tot = 20 + l4 + app_bytes;
-    uint8_t *p = out;
-    memset(p, 0xff, 6); p += 6; memset(p, 0x02, 6); p += 6; *p++ = 0x08; *p++ = 0x00;   /* eth ipv4 */
-    *p++ = 0x45; *p++ = 0; *p++ = (uint8_t)(tot >> 8); *p++ = (uint8_t)tot;              /* ip */
-    *p++ = 0x00; *p++ = 0x01; *p++ = 0x00; *p++ = 0x00; *p++ = 64; *p++ = proto; *p++ = 0; *p++ = 0;
-    *p++ = 192; *p++ = 168; *p++ = 1; *p++ = 50;  *p++ = 192; *p++ = 168; *p++ = 1; *p++ = 60;
+    uint8_t *cursor = out;
+    memset(cursor, 0xff, 6); cursor += 6; memset(cursor, 0x02, 6); cursor += 6;
+    *cursor++ = 0x08; *cursor++ = 0x00;                                                  /* eth ipv4 */
+    *cursor++ = 0x45; *cursor++ = 0; *cursor++ = (uint8_t)(tot >> 8); *cursor++ = (uint8_t)tot;              /* ip */
+    *cursor++ = 0x00; *cursor++ = 0x01; *cursor++ = 0x00; *cursor++ = 0x00;
+    *cursor++ = 64; *cursor++ = proto; *cursor++ = 0; *cursor++ = 0;
+    *cursor++ = 192; *cursor++ = 168; *cursor++ = 1; *cursor++ = 50;
+    *cursor++ = 192; *cursor++ = 168; *cursor++ = 1; *cursor++ = 60;
     if (proto == 6) {                                    /* tcp */
-        *p++ = 0x30; *p++ = 0x39; *p++ = (uint8_t)(dport >> 8); *p++ = (uint8_t)dport;
-        memset(p, 0, 8); p += 8;                          /* seq + ack */
-        *p++ = 0x50; *p++ = 0x18;                         /* data offset 5, flags PSH|ACK */
-        *p++ = 0xff; *p++ = 0xff; *p++ = 0; *p++ = 0; *p++ = 0; *p++ = 0;
+        *cursor++ = 0x30; *cursor++ = 0x39; *cursor++ = (uint8_t)(dport >> 8); *cursor++ = (uint8_t)dport;
+        memset(cursor, 0, 8); cursor += 8;                          /* seq + ack */
+        *cursor++ = 0x50; *cursor++ = 0x18;                         /* data offset 5, flags PSH|ACK */
+        *cursor++ = 0xff; *cursor++ = 0xff; *cursor++ = 0; *cursor++ = 0; *cursor++ = 0; *cursor++ = 0;
     } else if (proto == 17) {                            /* udp */
         int ul = 8 + app_bytes;
-        *p++ = 0x30; *p++ = 0x39; *p++ = (uint8_t)(dport >> 8); *p++ = (uint8_t)dport;
-        *p++ = (uint8_t)(ul >> 8); *p++ = (uint8_t)ul; *p++ = 0; *p++ = 0;
+        *cursor++ = 0x30; *cursor++ = 0x39; *cursor++ = (uint8_t)(dport >> 8); *cursor++ = (uint8_t)dport;
+        *cursor++ = (uint8_t)(ul >> 8); *cursor++ = (uint8_t)ul; *cursor++ = 0; *cursor++ = 0;
     } else {                                             /* icmp echo */
-        *p++ = 8; *p++ = 0; *p++ = 0; *p++ = 0; *p++ = 0; *p++ = 0; *p++ = 0; *p++ = 0;
+        *cursor++ = 8; *cursor++ = 0; *cursor++ = 0; *cursor++ = 0;
+        *cursor++ = 0; *cursor++ = 0; *cursor++ = 0; *cursor++ = 0;
     }
-    for (int i = 0; i < app_bytes; i++) *p++ = 0x41;
-    return (int)(p - out);
+    for (int i = 0; i < app_bytes; i++) *cursor++ = 0x41;
+    return (int)(cursor - out);
 }
 
 /* Benchmark the real-packet path: for representative classes, BPF_PROG_TEST_RUN with a large repeat and
@@ -631,19 +651,19 @@ static int net_bench(const char *ppt_path) {
     const int REPEAT = 1000000;
     uint8_t frame[2048], out_buf[2048];
     printf("\n[ppt_net per-packet latency — BPF_PROG_TEST_RUN x %d, kernel-measured]\n", REPEAT);
-    for (unsigned c = 0; c < sizeof(cases) / sizeof(cases[0]); c++) {
-        int flen = build_ip_frame(frame, cases[c].proto, cases[c].dport, cases[c].app);
+    for (unsigned case_index = 0; case_index < sizeof(cases) / sizeof(cases[0]); case_index++) {
+        int flen = build_ip_frame(frame, cases[case_index].proto, cases[case_index].dport, cases[case_index].app);
         struct bpf_test_run_opts opts; memset(&opts, 0, sizeof(opts));
         opts.sz = sizeof(opts);
         opts.data_in = frame; opts.data_size_in = flen;
         opts.data_out = out_buf; opts.data_size_out = sizeof(out_buf);
         opts.repeat = REPEAT;
         int err = bpf_prog_test_run_opts(prog_fd, &opts);
-        if (err) { printf("  %-16s ERROR err=%d\n", cases[c].name, err); continue; }
+        if (err) { printf("  %-16s ERROR err=%d\n", cases[case_index].name, err); continue; }
         double ns = (double)opts.duration;                /* kernel returns avg ns per run */
         double mpps = ns > 0 ? 1000.0 / ns : 0;           /* million packets/sec on one core */
         printf("  %-16s %7.1f ns/pkt   ~%.2f Mpps/core   (xdp_ret=%u, %d B)\n",
-               cases[c].name, ns, mpps, opts.retval, flen);
+               cases[case_index].name, ns, mpps, opts.retval, flen);
     }
     bpf_object__close(obj);
     return 0;
@@ -656,22 +676,22 @@ static int net_bench(const char *ppt_path) {
  * whole. `nfd` collects the map fds of the live program by name so we can address each by bank. */
 struct net_maps { int atoms, nodes, edges, prog, config, bank, verdict; };
 
-#define BANK_UPD(fd, base, i, val_ptr, mapname)                                                 \
-    do { __u32 _k = (base) + (i);                                                               \
-         if (bpf_map_update_elem((fd), &_k, (val_ptr), BPF_ANY) != 0) {                         \
-             fprintf(stderr, "netupdate: %s bank write failed at %u: %s\n",                     \
-                     (mapname), _k, strerror(errno)); return -1; }                              \
+#define BANK_UPD(fd, base, slot, val_ptr, mapname)                                          \
+    do { __u32 _k = (base) + (slot);                                                        \
+         if (bpf_map_update_elem((fd), &_k, (val_ptr), BPF_ANY) != 0) {                     \
+             fprintf(stderr, "netupdate: %s bank write failed at %u: %s\n",                 \
+                     (mapname), _k, strerror(errno)); return -1; }                          \
     } while (0)
 
 /* Write the whole image into `bank` of the live maps. Returns 0 on success, -1 on any write error
  * (a partial inactive-bank write is safe — it is never committed — but we still abort loudly). */
-static int write_bank(const struct net_maps *m, __u32 bank, const Image *im) {
+static int write_bank(const struct net_maps *maps, __u32 bank, const Image *im) {
     __u32 ba = bank * MAX_ATOMS, bn = bank * MAX_NODES,
           be = bank * MAX_EDGES, bp = bank * MAX_PROG_WORDS;
-    for (__u32 i = 0; i < im->n_atoms; i++) BANK_UPD(m->atoms, ba, i, &im->atoms[i], "atoms_map");
-    for (__u32 i = 0; i < im->n_nodes; i++) BANK_UPD(m->nodes, bn, i, &im->nodes[i], "nodes_map");
-    for (__u32 i = 0; i < im->n_edges; i++) BANK_UPD(m->edges, be, i, &im->edges[i], "edges_map");
-    for (__u32 i = 0; i < im->prog_len; i++) BANK_UPD(m->prog, bp, i, &im->prog[i], "prog_map");
+    for (__u32 i = 0; i < im->n_atoms; i++) BANK_UPD(maps->atoms, ba, i, &im->atoms[i], "atoms_map");
+    for (__u32 i = 0; i < im->n_nodes; i++) BANK_UPD(maps->nodes, bn, i, &im->nodes[i], "nodes_map");
+    for (__u32 i = 0; i < im->n_edges; i++) BANK_UPD(maps->edges, be, i, &im->edges[i], "edges_map");
+    for (__u32 i = 0; i < im->prog_len; i++) BANK_UPD(maps->prog, bp, i, &im->prog[i], "prog_map");
 
     /* per-bank config: full struct into config_map[bank], carrying drop_mask from the active bank */
     struct ppt_config cfg = {
@@ -682,8 +702,8 @@ static int write_bank(const struct net_maps *m, __u32 bank, const Image *im) {
         .safe_node = im->safe, .policy_hash = policy_hash_of(im) };
     __u32 active = bank ^ 1u;
     struct ppt_config old;
-    if (bpf_map_lookup_elem(m->config, &active, &old) == 0) cfg.drop_mask = old.drop_mask;
-    if (bpf_map_update_elem(m->config, &bank, &cfg, BPF_ANY) != 0) {
+    if (bpf_map_lookup_elem(maps->config, &active, &old) == 0) cfg.drop_mask = old.drop_mask;
+    if (bpf_map_update_elem(maps->config, &bank, &cfg, BPF_ANY) != 0) {
         fprintf(stderr, "netupdate: config_map[%u] write failed: %s\n", bank, strerror(errno));
         return -1;
     }
@@ -714,23 +734,23 @@ static int net_update(const char *new_ppt, const char *ifname) {
     }
 
     /* collect the live map fds by name */
-    struct net_maps m = { -1, -1, -1, -1, -1, -1, -1 };
-    for (__u32 i = 0; i < pinfo.nr_map_ids; i++) {
-        int mfd = bpf_map_get_fd_by_id(map_ids[i]);
+    struct net_maps maps = { -1, -1, -1, -1, -1, -1, -1 };
+    for (__u32 map_slot = 0; map_slot < pinfo.nr_map_ids; map_slot++) {
+        int mfd = bpf_map_get_fd_by_id(map_ids[map_slot]);
         if (mfd < 0) continue;
         struct bpf_map_info mi; memset(&mi, 0, sizeof(mi)); __u32 ml = sizeof(mi);
         if (bpf_obj_get_info_by_fd(mfd, &mi, &ml)) { close(mfd); continue; }
-        if      (!strcmp(mi.name, "atoms_map"))   m.atoms = mfd;
-        else if (!strcmp(mi.name, "nodes_map"))   m.nodes = mfd;
-        else if (!strcmp(mi.name, "edges_map"))   m.edges = mfd;
-        else if (!strcmp(mi.name, "prog_map"))    m.prog = mfd;
-        else if (!strcmp(mi.name, "config_map"))  m.config = mfd;
-        else if (!strcmp(mi.name, "bank_map"))    m.bank = mfd;
-        else if (!strcmp(mi.name, "verdict_map")) m.verdict = mfd;
+        if      (!strcmp(mi.name, "atoms_map"))   maps.atoms = mfd;
+        else if (!strcmp(mi.name, "nodes_map"))   maps.nodes = mfd;
+        else if (!strcmp(mi.name, "edges_map"))   maps.edges = mfd;
+        else if (!strcmp(mi.name, "prog_map"))    maps.prog = mfd;
+        else if (!strcmp(mi.name, "config_map"))  maps.config = mfd;
+        else if (!strcmp(mi.name, "bank_map"))    maps.bank = mfd;
+        else if (!strcmp(mi.name, "verdict_map")) maps.verdict = mfd;
         else close(mfd);
     }
     close(prog_fd);
-    if (m.atoms < 0 || m.nodes < 0 || m.edges < 0 || m.prog < 0 || m.config < 0 || m.bank < 0) {
+    if (maps.atoms < 0 || maps.nodes < 0 || maps.edges < 0 || maps.prog < 0 || maps.config < 0 || maps.bank < 0) {
         fprintf(stderr, "error: attached program is missing a double-buffer map — rebuild + reattach\n");
         return -1;
     }
@@ -739,11 +759,11 @@ static int net_update(const char *new_ppt, const char *ifname) {
 
     /* which bank is live now? default 0 if unreadable. Write the OTHER one. */
     __u32 zero = 0, active = 0;
-    bpf_map_lookup_elem(m.bank, &zero, &active);
+    bpf_map_lookup_elem(maps.bank, &zero, &active);
     active &= 1;
     __u32 target = active ^ 1u;
 
-    if (write_bank(&m, target, &im) != 0) {
+    if (write_bank(&maps, target, &im) != 0) {
         /* the inactive bank is never read; abort without touching bank_map — active policy intact */
         fprintf(stderr, "netupdate: aborting — active bank %u still live, no flip performed\n", active);
         free_image(&im);
@@ -751,7 +771,7 @@ static int net_update(const char *new_ppt, const char *ifname) {
     }
 
     /* THE COMMIT: one aligned store flips the active bank atomically. */
-    if (bpf_map_update_elem(m.bank, &zero, &target, BPF_ANY) != 0) {
+    if (bpf_map_update_elem(maps.bank, &zero, &target, BPF_ANY) != 0) {
         fprintf(stderr, "netupdate: bank flip failed: %s (active bank %u still live)\n",
                 strerror(errno), active);
         free_image(&im);
@@ -760,8 +780,11 @@ static int net_update(const char *new_ppt, const char *ifname) {
 
     /* histogram reset happens AFTER the flip (post-swap counts start clean; a couple of in-flight
      * packets may land in the old bank's buckets, which is honest, not torn). */
-    if (m.verdict >= 0)
-        for (__u32 i = 0; i < MAX_NODES; i++) { __u64 z = 0; bpf_map_update_elem(m.verdict, &i, &z, BPF_ANY); }
+    if (maps.verdict >= 0)
+        for (__u32 i = 0; i < MAX_NODES; i++) {
+            __u64 zero_count = 0;
+            bpf_map_update_elem(maps.verdict, &i, &zero_count, BPF_ANY);
+        }
 
     printf("OK: hot-swapped the LIVE %s policy from %s — bank %u -> %u, NO detach.\n",
            ifname, new_ppt, active, target);
@@ -780,13 +803,13 @@ static int net_update(const char *new_ppt, const char *ifname) {
  * show up as a third value. Zero torn over the storm is the proof the flip is atomic. */
 struct storm_flip_arg { int bank_fd; volatile int *stop; unsigned long flips; };
 
-static void *storm_flipper(void *p) {
-    struct storm_flip_arg *a = p;
-    __u32 zero = 0, b = 0;
-    while (!*a->stop) {
-        b ^= 1u;
-        bpf_map_update_elem(a->bank_fd, &zero, &b, BPF_ANY);
-        a->flips++;
+static void *storm_flipper(void *raw_arg) {
+    struct storm_flip_arg *flip_arg = raw_arg;
+    __u32 zero = 0, bank_index = 0;
+    while (!*flip_arg->stop) {
+        bank_index ^= 1u;
+        bpf_map_update_elem(flip_arg->bank_fd, &zero, &bank_index, BPF_ANY);
+        flip_arg->flips++;
     }
     return NULL;
 }
@@ -799,9 +822,9 @@ static int net_storm(const char *ppt_a, const char *ppt_b) {
         return -1;
     }
     /* bank 0 = A (via populate_maps), bank 1 = B (manual) */
-    Image a, b; load_image(ppt_a, &a); load_image(ppt_b, &b);
-    populate_maps(obj, &a);                 /* writes bank 0 + bank_map=0 */
-    struct net_maps m = {
+    Image image_a, image_b; load_image(ppt_a, &image_a); load_image(ppt_b, &image_b);
+    populate_maps(obj, &image_a);                 /* writes bank 0 + bank_map=0 */
+    struct net_maps maps = {
         bpf_map__fd(bpf_object__find_map_by_name(obj, "atoms_map")),
         bpf_map__fd(bpf_object__find_map_by_name(obj, "nodes_map")),
         bpf_map__fd(bpf_object__find_map_by_name(obj, "edges_map")),
@@ -810,7 +833,7 @@ static int net_storm(const char *ppt_a, const char *ppt_b) {
         bpf_map__fd(bpf_object__find_map_by_name(obj, "bank_map")),
         bpf_map__fd(bpf_object__find_map_by_name(obj, "verdict_map")),
     };
-    if (write_bank(&m, 1, &b) != 0) { bpf_object__close(obj); return -1; }
+    if (write_bank(&maps, 1, &image_b) != 0) { bpf_object__close(obj); return -1; }
 
     /* the probe packet + the two expected verdicts. Run once in each bank (flipper idle) to learn
      * A's and B's ground-truth tuples, so the test is self-calibrating for any A/B pair. */
@@ -821,15 +844,15 @@ static int net_storm(const char *ppt_a, const char *ppt_b) {
     int flen = build_ip_frame(frame, 6, 443, 64);      /* tcp/443 */
     struct ppt_result rA, rB;
     __u32 zerob = 0, oneb = 1;
-    struct bpf_test_run_opts o;
-    #define RUN() do { memset(&o,0,sizeof(o)); o.sz=sizeof(o); o.data_in=frame; o.data_size_in=flen; \
-                       o.data_out=out; o.data_size_out=sizeof(out); o.repeat=1; \
-                       bpf_prog_test_run_opts(prog_fd,&o); } while(0)
+    struct bpf_test_run_opts opts;
+    #define RUN() do { memset(&opts,0,sizeof(opts)); opts.sz=sizeof(opts); opts.data_in=frame; opts.data_size_in=flen; \
+                       opts.data_out=out; opts.data_size_out=sizeof(out); opts.repeat=1; \
+                       bpf_prog_test_run_opts(prog_fd,&opts); } while(0)
     int result_fd = bpf_map__fd(bpf_object__find_map_by_name(obj, "result_map"));
     __u32 rk = 0;
-    bpf_map_update_elem(m.bank, &zero, &zerob, BPF_ANY); RUN();
+    bpf_map_update_elem(maps.bank, &zero, &zerob, BPF_ANY); RUN();
     bpf_map_lookup_elem(result_fd, &rk, &rA);
-    bpf_map_update_elem(m.bank, &zero, &oneb, BPF_ANY); RUN();
+    bpf_map_update_elem(maps.bank, &zero, &oneb, BPF_ANY); RUN();
     bpf_map_lookup_elem(result_fd, &rk, &rB);
     printf("[swap-storm] probe tcp/443 -> A(edge=%d,node=%d)  B(edge=%d,node=%d)\n",
            rA.matched_edge, rA.target_node, rB.matched_edge, rB.target_node);
@@ -840,28 +863,31 @@ static int net_storm(const char *ppt_a, const char *ppt_b) {
 
     /* storm */
     volatile int stop = 0;
-    struct storm_flip_arg fa = { m.bank, &stop, 0 };
+    struct storm_flip_arg fa = { maps.bank, &stop, 0 };
     pthread_t th; pthread_create(&th, NULL, storm_flipper, &fa);
 
-    const int N = 200000;
+    const int EVALUATIONS = 200000;
     long nA = 0, nB = 0, torn = 0;
-    for (int i = 0; i < N; i++) {
+    for (int evaluation_index = 0; evaluation_index < EVALUATIONS; evaluation_index++) {
         RUN();
-        struct ppt_result r; __u32 rk = 0;
-        bpf_map_lookup_elem(result_fd, &rk, &r);
-        if (r.matched_edge == rA.matched_edge && r.target_node == rA.target_node) nA++;
-        else if (r.matched_edge == rB.matched_edge && r.target_node == rB.target_node) nB++;
-        else { torn++; if (torn <= 5) fprintf(stderr, "  TORN: edge=%d node=%d\n", r.matched_edge, r.target_node); }
+        struct ppt_result result; __u32 rk = 0;
+        bpf_map_lookup_elem(result_fd, &rk, &result);
+        if (result.matched_edge == rA.matched_edge && result.target_node == rA.target_node) nA++;
+        else if (result.matched_edge == rB.matched_edge && result.target_node == rB.target_node) nB++;
+        else {
+            torn++;
+            if (torn <= 5) fprintf(stderr, "  TORN: edge=%d node=%d\n", result.matched_edge, result.target_node);
+        }
     }
     stop = 1; pthread_join(th, NULL);
     #undef RUN
 
     printf("[swap-storm] %d evaluations under %lu concurrent bank flips: A=%ld B=%ld TORN=%ld\n",
-           N, fa.flips, nA, nB, torn);
+           EVALUATIONS, fa.flips, nA, nB, torn);
     printf("%s\n", torn == 0
         ? "\xE2\x9C\x85 ATOMIC: every verdict was a consistent policy; zero torn reads under the storm"
         : "\xE2\x9C\x97 TORN READS OBSERVED — the swap is NOT atomic");
-    bpf_object__close(obj); free_image(&a); free_image(&b);
+    bpf_object__close(obj); free_image(&image_a); free_image(&image_b);
     return torn == 0 ? 0 : 1;
 }
 
@@ -1079,13 +1105,13 @@ int main(int argc, char **argv) {
     printf("Start Node : %u\n", im.start);
 
     if (regs_path) {
-        long len; uint8_t *b = read_file(regs_path, &len);
+        long len; uint8_t *regs_bytes = read_file(regs_path, &len);
         if (len == 4 + 8L * im.n_fields) {
-            uint16_t node = (uint16_t)rd32(b);
+            uint16_t node = (uint16_t)rd32(regs_bytes);
             struct ppt_reg *regs = malloc(sizeof(struct ppt_reg) * (im.n_fields ? im.n_fields : 1));
-            for (int i = 0; i < im.n_fields; i++) {
-                regs[i].ty = rd32(b + 4 + 8 * i);
-                regs[i].val = rd32(b + 8 + 8 * i);
+            for (int field_index = 0; field_index < im.n_fields; field_index++) {
+                regs[field_index].ty = rd32(regs_bytes + 4 + 8 * field_index);
+                regs[field_index].val = rd32(regs_bytes + 8 + 8 * field_index);
             }
             int target = -1;
             int matched_edge = evaluate_host(&im, node, regs, &target);
@@ -1098,7 +1124,7 @@ int main(int argc, char **argv) {
             }
             free(regs);
         }
-        free(b);
+        free(regs_bytes);
     }
 
     int load_rc = 0;
