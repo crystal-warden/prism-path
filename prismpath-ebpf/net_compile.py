@@ -54,15 +54,19 @@ def main():
     graph = parse_file(str(flow_md))
     img = compile_with_schema(graph, SCHEMA)
     names = [node_name for node_name, _ in img.nodes]
-    out_ppt.write_bytes(img.serialize())
-    out_names.write_text("\n".join(names) + "\n")
     # sanity: every referenced field must be within the canonical schema (else it silently reads NONE)
     used = sorted(img.fields.items(), key=lambda field_entry: field_entry[1])
     off_schema = [field_name for field_name, slot in used if slot >= len(SCHEMA)]
     print(f"flow={flow_md.name}  nodes={names}")
     print(f"fields (name->slot): {dict(used)}")
     if off_schema:
+        # ppt_net.bpf.c fills only the eight canonical slots, so an atom on a higher slot reads NONE
+        # in kernel for every packet. A warning with a zero exit let such a table be deployed.
         print(f"  WARNING: fields not in the packet schema (will read NONE in-kernel): {off_schema}")
+        print(f"  refusing to write {out_ppt}: compile the flow against the canonical schema")
+        return 2
+    out_ppt.write_bytes(img.serialize())
+    out_names.write_text("\n".join(names) + "\n")
     print(f"start slot: {img.start} ({names[img.start]})")
     print(f"wrote {out_ppt} + {out_names}")
     return 0

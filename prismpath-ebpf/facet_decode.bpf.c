@@ -71,7 +71,11 @@ static long bit_cb(__u32 bi, void *vctx) {
         c->n++; c->val = 0; c->fa = 1; c->fb = 2; c->prev = 0;
     } else {
         if (bit) {
-            if (c->val > 0xFFFF) { c->bad = 1; return 1; }
+            /* Bound the SUM before adding it, not the running value afterwards: a term past 0xFFFF
+               cannot appear in an in-range codeword at all, and after a long run of zero bits fa
+               itself wraps u32, which would let a wrapped term land back under the cap and decode
+               to a cell value the encoder never wrote. Either way the frame is malformed. */
+            if (c->fa > 0xFFFF || c->val > 0xFFFF - c->fa) { c->bad = 1; return 1; }
             c->val += c->fa;
         }
         __u32 next = c->fa + c->fb;                     /* advance the Fibonacci pair */

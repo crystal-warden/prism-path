@@ -25,8 +25,17 @@ int main(int argc, char **argv) {
     static struct ppt_receipt batch[MAX_J];
     int n = 0;
     while (n < MAX_J && fread(&batch[n], sizeof(struct ppt_receipt), 1, f) == 1) n++;
-    int trailing = (fgetc(f) != EOF);   /* a partial record at the tail = a torn write */
+    int more = (fgetc(f) != EOF);
+    int truncated = (more && n == MAX_J);   /* the array filled first: the rest of the journal is unread */
+    int trailing = (more && !truncated);    /* a partial record at the tail = a torn write */
     fclose(f);
+
+    /* Rooting a prefix and calling it the seal would anchor a trail that is not the trail. */
+    if (truncated) {
+        fprintf(stderr, "seal_receipts: %s holds more than %d receipts; this build cannot seal it\n",
+                jp, MAX_J);
+        return 3;
+    }
 
     printf("RECEIPT JOURNAL %s: %d receipt(s)%s\n", jp, n,
            trailing ? "  [WARNING: trailing partial record, torn write]" : "");

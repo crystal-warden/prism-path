@@ -6,6 +6,7 @@
  * ppt_maps.h for the boundary; the behaviour here is unchanged from the code it was lifted from.
  */
 
+#include <errno.h>              /* errno for the map write failures map_put reports */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -23,6 +24,18 @@ uint64_t policy_hash_of(const Image *im) {
     uint64_t ph; memcpy(&ph, dg, 8); return ph;
 }
 
+/* One checked map write. A dropped return code here used to leave a table half written while
+ * populate_maps still reported success, so the program would route on a mix of the new rows and
+ * whatever the map held before. Name the map and the index, and let the caller abort. */
+static int map_put(int map_fd, uint32_t index, const void *value, const char *map_name) {
+    if (bpf_map_update_elem(map_fd, &index, value, BPF_ANY) != 0) {
+        fprintf(stderr, "populate_maps: %s write failed at %u: %s\n",
+                map_name, index, strerror(errno));
+        return -1;
+    }
+    return 0;
+}
+
 /* Populate the five table maps from a PPT image. Shared by the attach path and the certify path. */
 int populate_maps(struct bpf_object *obj, const Image *im) {
     /* 1. config_map */
@@ -37,15 +50,14 @@ int populate_maps(struct bpf_object *obj, const Image *im) {
             .safe_node = im->safe,
             .policy_hash = policy_hash_of(im),   /* stamped at load so receipts are policy-bound */
         };
-        uint32_t key = 0;
-        bpf_map_update_elem(bpf_map__fd(config_map), &key, &cfg, BPF_ANY);
+        if (map_put(bpf_map__fd(config_map), 0, &cfg, "config_map")) return -1;
     }
 
     /* 2. atoms_map */
     struct bpf_map *atoms_map = bpf_object__find_map_by_name(obj, "atoms_map");
     if (atoms_map) {
         for (uint32_t i = 0; i < im->n_atoms; i++) {
-            bpf_map_update_elem(bpf_map__fd(atoms_map), &i, &im->atoms[i], BPF_ANY);
+            if (map_put(bpf_map__fd(atoms_map), i, &im->atoms[i], "atoms_map")) return -1;
         }
     }
 
@@ -53,7 +65,7 @@ int populate_maps(struct bpf_object *obj, const Image *im) {
     struct bpf_map *nodes_map = bpf_object__find_map_by_name(obj, "nodes_map");
     if (nodes_map) {
         for (uint32_t i = 0; i < im->n_nodes; i++) {
-            bpf_map_update_elem(bpf_map__fd(nodes_map), &i, &im->nodes[i], BPF_ANY);
+            if (map_put(bpf_map__fd(nodes_map), i, &im->nodes[i], "nodes_map")) return -1;
         }
     }
 
@@ -61,7 +73,7 @@ int populate_maps(struct bpf_object *obj, const Image *im) {
     struct bpf_map *edges_map = bpf_object__find_map_by_name(obj, "edges_map");
     if (edges_map) {
         for (uint32_t i = 0; i < im->n_edges; i++) {
-            bpf_map_update_elem(bpf_map__fd(edges_map), &i, &im->edges[i], BPF_ANY);
+            if (map_put(bpf_map__fd(edges_map), i, &im->edges[i], "edges_map")) return -1;
         }
     }
 
@@ -69,15 +81,15 @@ int populate_maps(struct bpf_object *obj, const Image *im) {
     struct bpf_map *prog_map = bpf_object__find_map_by_name(obj, "prog_map");
     if (prog_map) {
         for (uint32_t i = 0; i < im->prog_len; i++) {
-            bpf_map_update_elem(bpf_map__fd(prog_map), &i, &im->prog[i], BPF_ANY);
+            if (map_put(bpf_map__fd(prog_map), i, &im->prog[i], "prog_map")) return -1;
         }
     }
 
     /* 6. bank_map (net program only): a fresh load populates bank 0 above, so select bank 0. */
     struct bpf_map *bank_map = bpf_object__find_map_by_name(obj, "bank_map");
     if (bank_map) {
-        uint32_t key = 0, bank0 = 0;
-        bpf_map_update_elem(bpf_map__fd(bank_map), &key, &bank0, BPF_ANY);
+        uint32_t bank0 = 0;
+        if (map_put(bpf_map__fd(bank_map), 0, &bank0, "bank_map")) return -1;
     }
 
     return 0;
@@ -131,9 +143,17 @@ char **read_names(const char *path, int *out_n) {
     long nlen; uint8_t *nb = read_file(path, &nlen);
     char **names = malloc(sizeof(char *) * PPT_MAX_NAMES);
     int count = 0;
-    for (char *tok = strtok((char *)nb, "\r\n"); tok && count < PPT_MAX_NAMES;
-         tok = strtok(NULL, "\r\n"))
+    char *tok = strtok((char *)nb, "\r\n");
+    while (tok && count < PPT_MAX_NAMES) {
         names[count++] = strdup(tok);
+        tok = strtok(NULL, "\r\n");
+    }
+    /* Past the cap the sidecar and the node indices stop lining up, so every later name would be
+     * read against the wrong node. Say so rather than truncating quietly. */
+    if (tok) {
+        fprintf(stderr, "read_names: %s lists more than %d names; the rest are ignored\n",
+                path, PPT_MAX_NAMES);
+    }
     free(nb);
     *out_n = count;
     return names;

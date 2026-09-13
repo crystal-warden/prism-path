@@ -700,9 +700,17 @@ static int write_bank(const struct net_maps *maps, __u32 bank, const Image *im) 
         .start_node = im->start, .visits_idx = im->visits_idx,
         .max_steps = im->max_steps, .max_stack = im->max_stack,
         .safe_node = im->safe, .policy_hash = policy_hash_of(im) };
+    /* Inline enforcement lives in the active bank's config, so the new bank has to inherit it. A
+     * failed lookup used to leave drop_mask at 0, which quietly demoted a live enforcing program to
+     * observe-only at the flip. Refuse the swap instead: the old policy keeps enforcing. */
     __u32 active = bank ^ 1u;
     struct ppt_config old;
-    if (bpf_map_lookup_elem(maps->config, &active, &old) == 0) cfg.drop_mask = old.drop_mask;
+    if (bpf_map_lookup_elem(maps->config, &active, &old) != 0) {
+        fprintf(stderr, "netupdate: cannot read config_map[%u] to carry drop_mask forward: %s\n",
+                active, strerror(errno));
+        return -1;
+    }
+    cfg.drop_mask = old.drop_mask;
     if (bpf_map_update_elem(maps->config, &bank, &cfg, BPF_ANY) != 0) {
         fprintf(stderr, "netupdate: config_map[%u] write failed: %s\n", bank, strerror(errno));
         return -1;
@@ -732,10 +740,13 @@ static int net_update(const char *new_ppt, const char *ifname) {
     if (bpf_obj_get_info_by_fd(prog_fd, &pinfo, &len)) {
         fprintf(stderr, "error: cannot read prog info\n"); close(prog_fd); return -1;
     }
+    /* The kernel returns the program's TOTAL map count in nr_map_ids but fills only as many slots
+     * as we asked for, so a program with more than 32 maps would walk past the end of map_ids. */
+    __u32 n_map_ids = pinfo.nr_map_ids < 32 ? pinfo.nr_map_ids : 32;
 
     /* collect the live map fds by name */
     struct net_maps maps = { -1, -1, -1, -1, -1, -1, -1 };
-    for (__u32 map_slot = 0; map_slot < pinfo.nr_map_ids; map_slot++) {
+    for (__u32 map_slot = 0; map_slot < n_map_ids; map_slot++) {
         int mfd = bpf_map_get_fd_by_id(map_ids[map_slot]);
         if (mfd < 0) continue;
         struct bpf_map_info mi; memset(&mi, 0, sizeof(mi)); __u32 ml = sizeof(mi);

@@ -89,6 +89,24 @@ mod tests {
     }
 
     #[test]
+    fn locked_route_refuses_a_node_with_no_semantic_edges() {
+        let lock_json = serde_json::json!({"embedder": {"dim": 4}, "conditions": {}});
+        let lock = Lock::from_json(&lock_json).unwrap();
+        let mut embed = |_: &str| vec![0.0f32; 4];
+        let result = locked_route("anything", &[], &lock, &mut embed);
+        assert!(matches!(result, Err(EngineError::Unhandled(_))));
+    }
+
+    #[test]
+    fn decode_b64_f32_refuses_a_length_that_is_not_a_multiple_of_four() {
+        // "==" used to compute 0 - 2 for the output length before any length check ran.
+        for bad in ["==", "=", "A", "AAAAA"] {
+            assert!(decode_b64_f32(bad).is_err(), "{bad:?} should not decode");
+        }
+        assert_eq!(decode_b64_f32("").unwrap(), Vec::<f32>::new());
+    }
+
+    #[test]
     fn chained_comparison_and_membership() {
         let context = ctx(&[("x", Value::Num(3.0))]);
         assert!(eval_condition("when 1 < x < 5", &context).unwrap());

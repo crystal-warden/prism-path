@@ -23,6 +23,13 @@ uint8_t *read_file(const char *path, long *out_len) {
     FILE *stream = fopen(path, "rb");
     if (!stream) { fprintf(stderr, "error: cannot open %s\n", path); exit(2); }
     fseek(stream, 0, SEEK_END); long file_len = ftell(stream); fseek(stream, 0, SEEK_SET);
+    /* ftell returns -1 on an unseekable path (a directory, a pipe), and (size_t)(-1) is a 16 EB
+     * malloc whose failure only shows up as the generic read error below. Say which it was. */
+    if (file_len < 0) {
+        fprintf(stderr, "error: cannot size %s (not a regular file?)\n", path);
+        fclose(stream);
+        exit(2);
+    }
     uint8_t *buf = malloc((size_t)file_len);
     if (!buf || fread(buf, 1, (size_t)file_len, stream) != (size_t)file_len) {
         fprintf(stderr, "error: cannot read %s\n", path); exit(2);
@@ -176,17 +183,25 @@ int eval_atom_host(const struct ppt_atom *atom, const struct ppt_reg *regs, uint
     return 0;
 }
 
+/* The depth guards are the ones prog_word_cb (ppt_eval_bpf.h) applies: a push past STACK_MAX is
+ * dropped, and an operator with too few operands is a no-op. A well-formed program (the declared
+ * subset, depth <= STACK_MAX) never reaches any of them, so every certified vector is unaffected.
+ * Unguarded, a hand-made prog whose first word is OPC_AND indexed stack[-1] here, so the reference
+ * this target is certified against read outside its own frame on an image the parser accepts. */
 int eval_prog_host(const Image *im, const struct ppt_edge *edge, const struct ppt_reg *regs) {
     uint8_t stack[STACK_MAX]; int sp = 0;
     for (int word_index = 0; word_index < edge->prog_cnt; word_index++) {
         uint16_t word = im->prog[edge->prog_off + word_index];
-        if (word < 0x8000) stack[sp++] = (uint8_t)eval_atom_host(&im->atoms[word], regs, im->n_fields);
+        if (word < 0x8000) {
+            if (sp < STACK_MAX)
+                stack[sp++] = (uint8_t)eval_atom_host(&im->atoms[word], regs, im->n_fields);
+        }
         else switch (word) {
-        case OPC_NOT:   stack[sp - 1] = !stack[sp - 1]; break;
-        case OPC_AND:   sp--; stack[sp - 1] = (uint8_t)(stack[sp - 1] && stack[sp]); break;
-        case OPC_OR:    sp--; stack[sp - 1] = (uint8_t)(stack[sp - 1] || stack[sp]); break;
-        case OPC_TRUE:  stack[sp++] = 1; break;
-        case OPC_FALSE: stack[sp++] = 0; break;
+        case OPC_NOT:   if (sp >= 1) stack[sp - 1] = !stack[sp - 1]; break;
+        case OPC_AND:   if (sp >= 2) { sp--; stack[sp - 1] = (uint8_t)(stack[sp - 1] && stack[sp]); } break;
+        case OPC_OR:    if (sp >= 2) { sp--; stack[sp - 1] = (uint8_t)(stack[sp - 1] || stack[sp]); } break;
+        case OPC_TRUE:  if (sp < STACK_MAX) stack[sp++] = 1; break;
+        case OPC_FALSE: if (sp < STACK_MAX) stack[sp++] = 0; break;
         default: break;
         }
     }

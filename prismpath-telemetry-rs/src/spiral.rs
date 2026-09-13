@@ -60,10 +60,16 @@ pub fn mixed_radix_gray(radices: &[usize]) -> Vec<Vec<usize>> {
     out
 }
 
+/// The expression under a condition, trimmed the way the kernel trims.
+///
+/// Rust's `str::trim` strips Unicode White_Space, which is neither the kernel's set nor Python's:
+/// it keeps U+001C to U+001F and strips U+FEFF. A condition padded with one of those classifies as
+/// a `when` predicate in `is_deterministic` (which trims with py_trim) and would fall through to
+/// the raw-expression branch here, so the spiral layout would drop fields the kernel routes on.
 fn expr_of(cond: &str) -> String {
-    let text = cond.trim();
+    let text = prismpath_rs::py_trim(cond);
     if text.to_lowercase().starts_with("when ") {
-        text[5..].trim().to_string()
+        prismpath_rs::py_trim(&text[5..]).to_string()
     } else {
         text.to_string()
     }
@@ -410,4 +416,20 @@ fn route_of_cell(
 ) -> Option<String> {
     let reading = cell_reading(parts, fields, cell);
     wire::route_node(graph, node, &reading)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::expr_of;
+
+    #[test]
+    fn expr_of_trims_the_whitespace_the_kernel_trims() {
+        // U+001C is Python whitespace and so is stripped by is_deterministic's py_trim, but it is
+        // not Unicode White_Space, so str::trim used to leave it and hide the predicate.
+        let cond = "\u{1c}when temp > 50";
+        assert!(prismpath_rs::is_deterministic(cond));
+        assert_eq!(expr_of(cond), "temp > 50");
+        assert_eq!(expr_of("  when temp > 50  "), "temp > 50");
+        assert_eq!(expr_of("looks like a refund"), "looks like a refund");
+    }
 }

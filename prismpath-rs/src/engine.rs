@@ -365,6 +365,12 @@ pub fn decode_b64_f32(b64: &str) -> Result<Vec<f32>, String> {
     };
     let input = b64.as_bytes();
     let len = input.len();
+    // A length that is not a whole number of quartets has no valid decode, and one to three
+    // characters of padding would make `len / 4 * 3 - pad` underflow below before the decoded
+    // length is ever checked. Refuse the input instead of computing a bogus capacity.
+    if len % 4 != 0 {
+        return Err(format!("base64 string of {len} chars is not a multiple of 4"));
+    }
     let pad = if len >= 2 && input[len - 1] == b'=' {
         if input[len - 2] == b'=' { 2 } else { 1 }
     } else {
@@ -411,6 +417,14 @@ pub fn locked_route(
     lock: &Lock,
     embed: &mut dyn FnMut(&str) -> Vec<f32>,
 ) -> Result<RouteDecision, EngineError> {
+    // Exported, so a consumer outside this engine can reach it with a node that has no semantic
+    // edges. The in-engine caller guards on is_empty() first; without this the empty score list
+    // would index order[0] out of bounds and panic inside a library call.
+    if sem_edges.is_empty() {
+        return Err(EngineError::Unhandled(
+            "locked_route: no semantic edges to route".to_string(),
+        ));
+    }
     let query_vec = embed(text);
     let mut scores = Vec::with_capacity(sem_edges.len());
     let mut sims_map = HashMap::new();
