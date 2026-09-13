@@ -123,13 +123,22 @@ def dom_check(proj: str) -> list:
     return errs
 
 
-def behavioral_check(proj: str) -> list:
-    """Headless runtime gate: serve, load in chromium, capture JS errors, exercise the primary
-    control, assert the DOM reacts. Self-skips (returns []) if playwright is unavailable."""
-    try:
-        from playwright.sync_api import sync_playwright
-    except Exception:
-        return []
+LOAD_TIMEOUT_MS = 15000     # how long the page gets to fire `load`
+SETTLE_MS = 1200            # after load, before the first reading of the DOM
+CLICK_TIMEOUT_MS = 3000     # how long one control gets to become clickable
+REACTION_WAIT_MS = 2500     # after the button click, before the second reading
+CELL_REACTION_WAIT_MS = 1500    # after the grid cell click, before the third reading
+
+# Words that mark the button an app means as its primary action, in the order a reader would guess.
+PRIMARY_BUTTON_WORDS = ("send", "submit", "go", "start", "play", "run", "ok", "enter", "approve")
+
+# Grid and board apps take their primary interaction on a cell rather than on a button.
+CELL_SELECTORS = ("[data-index]", "[data-cell]", ".cell", "#board > *", ".board > *",
+                  ".grid > *", "td")
+
+
+def _serve(proj: str):
+    """Serve proj over loopback on an ephemeral port. Returns (server, port)."""
     import functools
     import http.server
     import socketserver
@@ -140,89 +149,137 @@ def behavioral_check(proj: str) -> list:
         allow_reuse_address = True
 
         def handle_error(self, *ignored_args):
+            # Deliberate silence: the gate judges the page, and a browser that abandons a request
+            # mid flight (navigation, closing) is normal traffic, not a finding about the app.
             pass
     httpd = Quiet(("127.0.0.1", 0), handler)
-    port = httpd.server_address[1]
     threading.Thread(target=httpd.serve_forever, daemon=True).start()
-    errs = []
+    return httpd, httpd.server_address[1]
+
+
+def _primary_button(page):
+    """The button the app means as its primary action, else the last button on the page."""
+    buttons = page.query_selector_all("button")
+    for candidate in buttons:
+        button_text = (candidate.inner_text() or "").lower()
+        if any(keyword in button_text for keyword in PRIMARY_BUTTON_WORDS):
+            return candidate
+    return buttons[-1] if buttons else None
+
+
+def _first_visible_cell(page):
+    """The first visible grid cell under any of the known board shapes, or None."""
+    from playwright.sync_api import Error as PlaywrightError
+    for selector in CELL_SELECTORS:
+        for element in page.query_selector_all(selector):
+            try:
+                if element.is_visible():
+                    return element
+            except PlaywrightError:
+                # Narrow skip: the element was re-rendered out from under the scan, so it is gone
+                # rather than broken, and the next candidate is an equally good probe.
+                continue
+    return None
+
+
+def _one_line(error) -> str:
+    """Playwright errors carry a stack and a call log; a finding wants them on one short line."""
+    return " ".join(str(error).split())[:180]
+
+
+def _inspect_dom(page, requests: list) -> list:
+    """Exercise the primary control and report when nothing in the DOM or the network moves."""
+    from playwright.sync_api import Error as PlaywrightError
+    findings = []
+    has_canvas = bool(page.query_selector("canvas"))
+    before = page.evaluate("document.body.innerText")
+    button = _primary_button(page)
+    field = page.query_selector("input, textarea")
+    interacted = False
+    requests_before = len(requests)
+    if button:
+        if field:
+            try:
+                field.fill("behavioral gate test")
+            except PlaywrightError:
+                # Narrow skip: a field that refuses typed text (readonly, hidden, a custom widget)
+                # is not itself a defect, and the click below is the actual probe.
+                pass
+        try:
+            button.click(timeout=CLICK_TIMEOUT_MS)
+            interacted = True
+        except PlaywrightError as error:
+            findings.append(f"the primary control could not be clicked: {_one_line(error)}")
+        page.wait_for_timeout(REACTION_WAIT_MS)
+    after = page.evaluate("document.body.innerText")
+    made_request = len(requests) > requests_before   # a fetch/XHR counts as wired (async backends)
+    if not has_canvas and after.strip() == before.strip() and not made_request:
+        cell = _first_visible_cell(page)
+        if cell:
+            try:
+                cell.click(timeout=CLICK_TIMEOUT_MS)
+                interacted = True
+            except PlaywrightError as error:
+                findings.append(f"a visible grid cell could not be clicked: {_one_line(error)}")
+            page.wait_for_timeout(CELL_REACTION_WAIT_MS)
+            after = page.evaluate("document.body.innerText")
+            made_request = len(requests) > requests_before
+    if interacted and not has_canvas and after.strip() == before.strip() and not made_request:
+        findings.append("the primary control produced NO visible change and NO network request after "
+                        "clicking it (button and a grid cell) — its handler is likely not wired. Check "
+                        "the composition root (input adapter -> app service -> transport/renderer).")
+    return findings
+
+
+def _drive_browser(sync_playwright, port: int) -> list:
+    """Load the served page in headless chromium and return everything that went wrong on it."""
+    findings = []
+    requests = []
+
+    def on_console(message):
+        if message.type == "error":
+            findings.append(f"console.error: {message.text[:180]}")
+
+    def on_request_failed(request):
+        # Only the code and stylesheets the page is built from; a missing favicon is not a defect.
+        if request.url.endswith((".js", ".mjs", ".css")):
+            findings.append(f"failed to load {request.url.split('/')[-1]}")
+
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        page = browser.new_page()
+        page.on("pageerror", lambda error: findings.append(f"uncaught: {str(error)[:180]}"))
+        page.on("console", on_console)
+        page.on("requestfailed", on_request_failed)
+        page.on("request", lambda request: requests.append(request.url))
+        page.add_init_script("window.__rej=[];addEventListener('unhandledrejection',"
+                             "e=>window.__rej.push(String(e.reason&&e.reason.message||e.reason)));")
+        page.goto(f"http://127.0.0.1:{port}/", wait_until="load", timeout=LOAD_TIMEOUT_MS)
+        page.wait_for_timeout(SETTLE_MS)
+        interaction = _inspect_dom(page, requests)
+        for rejection in page.evaluate("window.__rej || []"):
+            findings.append(f"unhandledrejection: {str(rejection)[:180]}")
+        findings += interaction
+        browser.close()
+    return findings
+
+
+def behavioral_check(proj: str) -> list:
+    """Headless runtime gate: serve, load in chromium, capture JS errors, exercise the primary
+    control, assert the DOM reacts. Self-skips (returns []) if playwright is unavailable."""
     try:
-        with sync_playwright() as playwright:
-            browser = playwright.chromium.launch(headless=True)
-            pg = browser.new_page()
-            cap = []
-            pg.on("pageerror", lambda error: cap.append(f"uncaught: {str(error)[:180]}"))
-            pg.on("console", lambda message: cap.append(f"console.error: {message.text[:180]}")
-                  if message.type == "error" else None)
-            pg.on("requestfailed", lambda request: cap.append(f"failed to load {request.url.split('/')[-1]}")
-                  if request.url.endswith((".js", ".mjs", ".css")) else None)
-            net = []
-            pg.on("request", lambda request: net.append(request.url))
-            pg.add_init_script("window.__rej=[];addEventListener('unhandledrejection',"
-                               "e=>window.__rej.push(String(e.reason&&e.reason.message||e.reason)));")
-            pg.goto(f"http://127.0.0.1:{port}/", wait_until="load", timeout=15000)
-            pg.wait_for_timeout(1200)
-            has_canvas = bool(pg.query_selector("canvas"))
-            before = pg.evaluate("document.body.innerText")
-            btn = None
-            for b_ in pg.query_selector_all("button"):
-                button_text = (b_.inner_text() or "").lower()
-                if any(keyword in button_text for keyword in
-                       ("send", "submit", "go", "start", "play", "run", "ok", "enter", "approve")):
-                    btn = b_
-                    break
-            btns = pg.query_selector_all("button")
-            btn = btn or (btns[-1] if btns else None)
-            inp = pg.query_selector("input, textarea")
-            interacted = False
-            net0 = len(net)
-            if btn:
-                if inp:
-                    try:
-                        inp.fill("behavioral gate test")
-                    except Exception:
-                        pass
-                try:
-                    btn.click(timeout=3000)
-                    interacted = True
-                except Exception:
-                    pass
-                pg.wait_for_timeout(2500)
-            after = pg.evaluate("document.body.innerText")
-            made_request = len(net) > net0   # a fetch/XHR counts as wired (async backends)
-            # grid/canvas apps: the primary interaction is clicking a CELL, not a button — try that too
-            if not has_canvas and after.strip() == before.strip() and not made_request:
-                cell = None
-                for sel in ("[data-index]", "[data-cell]", ".cell", "#board > *", ".board > *",
-                            ".grid > *", "td"):
-                    for element in pg.query_selector_all(sel):
-                        try:
-                            if element.is_visible():
-                                cell = element
-                                break
-                        except Exception:
-                            pass
-                    if cell:
-                        break
-                if cell:
-                    try:
-                        cell.click(timeout=3000)
-                        interacted = True
-                    except Exception:
-                        pass
-                    pg.wait_for_timeout(1500)
-                    after = pg.evaluate("document.body.innerText")
-                    made_request = len(net) > net0
-            for rejection in pg.evaluate("window.__rej || []"):
-                cap.append(f"unhandledrejection: {str(rejection)[:180]}")
-            if interacted and not has_canvas and after.strip() == before.strip() and not made_request:
-                cap.append("the primary control produced NO visible change and NO network request after "
-                           "clicking it (button and a grid cell) — its handler is likely not wired. Check "
-                           "the composition root (input adapter -> app service -> transport/renderer).")
-            errs = cap
-            browser.close()
-    except Exception as e:
-        print(f"    [behavioral] gate infra error (FAILED): {str(e)[:140]}", flush=True)
-        errs = [f"gate infrastructure error: {str(e)[:140]}"]
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        # Deliberate skip, not a failure: playwright is an optional dev dependency, so a checkout
+        # without it still gets the syntax, link and dom layers of the browser gate. Anything the
+        # harness raises once it HAS started is a failed gate, handled below.
+        return []
+    httpd, port = _serve(proj)
+    try:
+        errs = _drive_browser(sync_playwright, port)
+    except Exception as error:
+        print(f"    [behavioral] gate infra error (FAILED): {str(error)[:140]}", flush=True)
+        errs = [f"gate infrastructure error: {str(error)[:140]}"]
     finally:
         httpd.shutdown()
         httpd.server_close()
