@@ -75,13 +75,13 @@ enum {
 static uint8_t tbl[TBL_MAX], regs[REGS_MAX];
 static uint16_t n_fields, n_atoms, n_nodes, n_edges, prog_len;
 static uint16_t atoms_off, nodes_off, edges_off, prog_base;
-static uint16_t rd16(const uint8_t *p) {
-    return (uint16_t)(p[0] | ((uint16_t)p[1] << 8));
+static uint16_t rd16(const uint8_t *bytes) {
+    return (uint16_t)(bytes[0] | ((uint16_t)bytes[1] << 8));
 }
-static int32_t rd32(const uint8_t *p) {
-    int32_t v;
-    memcpy(&v, p, 4);
-    return v;
+static int32_t rd32(const uint8_t *bytes) {
+    int32_t value;
+    memcpy(&value, bytes, 4);
+    return value;
 }
 static uint8_t parse_table(uint16_t len) {
     if (len < 28)
@@ -100,12 +100,12 @@ static uint8_t parse_table(uint16_t len) {
     return (prog_base + 2 * prog_len != len) ? 3 : 0;
 }
 static uint8_t eval_atom(uint16_t ai) {
-    const uint8_t *a = tbl + atoms_off + 8 * (uint32_t)ai;
-    uint16_t f = rd16(a);
-    uint8_t op = a[2], aty = a[3];
-    int32_t av = rd32(a + 4);
-    const uint8_t *r = regs + 4 + 8 * (uint32_t)f;
-    int32_t rty = rd32(r), rv = rd32(r + 4);
+    const uint8_t *atom = tbl + atoms_off + 8 * (uint32_t)ai;
+    uint16_t field = rd16(atom);
+    uint8_t op = atom[2], aty = atom[3];
+    int32_t av = rd32(atom + 4);
+    const uint8_t *reg = regs + 4 + 8 * (uint32_t)field;
+    int32_t rty = rd32(reg), rv = rd32(reg + 4);
     uint8_t ln = (rty == TY_BOOL || rty == TY_INT), rn = (aty == TY_BOOL || aty == TY_INT);
     switch (op) {
         case OP_EQ:
@@ -145,16 +145,16 @@ static uint8_t eval_atom(uint16_t ai) {
 static int8_t eval_prog(uint16_t off, uint16_t cnt, uint8_t *err) {
     uint8_t st[STACK_MAX];
     int8_t sp = 0;
-    for (uint16_t i = 0; i < cnt; i++) {
-        uint16_t w = rd16(tbl + prog_base + 2 * (uint32_t)(off + i));
-        if (w < OPC_NOT) {
+    for (uint16_t word_index = 0; word_index < cnt; word_index++) {
+        uint16_t word = rd16(tbl + prog_base + 2 * (uint32_t)(off + word_index));
+        if (word < OPC_NOT) {
             if (sp >= STACK_MAX) {
                 *err = 7;
                 return 0;
             }
-            st[sp++] = eval_atom(w);
+            st[sp++] = eval_atom(word);
         } else
-            switch (w) {
+            switch (word) {
                 case OPC_NOT:
                     st[sp - 1] = (uint8_t)!st[sp - 1];
                     break;
@@ -188,12 +188,12 @@ static int8_t eval_prog(uint16_t off, uint16_t cnt, uint8_t *err) {
     return (int8_t)st[0];
 }
 static int8_t evaluate(uint16_t node, uint8_t *err) {
-    const uint8_t *n = tbl + nodes_off + 4 * (uint32_t)node;
-    uint16_t eo = rd16(n), ec = rd16(n + 2);
-    for (uint16_t i = 0; i < ec; i++) {
-        const uint8_t *e = tbl + edges_off + 6 * (uint32_t)(eo + i);
-        if (eval_prog(rd16(e + 2), rd16(e + 4), err))
-            return (int8_t)i;
+    const uint8_t *node_entry = tbl + nodes_off + 4 * (uint32_t)node;
+    uint16_t eo = rd16(node_entry), ec = rd16(node_entry + 2);
+    for (uint16_t edge_index = 0; edge_index < ec; edge_index++) {
+        const uint8_t *edge_entry = tbl + edges_off + 6 * (uint32_t)(eo + edge_index);
+        if (eval_prog(rd16(edge_entry + 2), rd16(edge_entry + 4), err))
+            return (int8_t)edge_index;
         if (*err)
             return -1;
     }
@@ -203,20 +203,20 @@ static int8_t evaluate(uint16_t node, uint8_t *err) {
    authority public key. 1 = valid. Must match gen_mesh_tables.py's signed_msg() byte for byte. */
 static uint8_t vmsg[15 + TBL_MAX];
 static int verify_pack(const uint8_t *table, uint16_t len, uint32_t version, const uint8_t *sig) {
-    int p = 0;
-    memcpy(vmsg + p, "PPTM1", 5);
-    p += 5;
-    memcpy(vmsg + p, KEY_ID, 4);
-    p += 4;
-    vmsg[p++] = version & 0xFF;
-    vmsg[p++] = (version >> 8) & 0xFF;
-    vmsg[p++] = (version >> 16) & 0xFF;
-    vmsg[p++] = (version >> 24) & 0xFF;
-    vmsg[p++] = len & 0xFF;
-    vmsg[p++] = len >> 8;
-    memcpy(vmsg + p, table, len);
-    p += len;
-    return crypto_ed25519_check(sig, AUTHORITY_PUBKEY, vmsg, p) == 0;
+    int cursor = 0;
+    memcpy(vmsg + cursor, "PPTM1", 5);
+    cursor += 5;
+    memcpy(vmsg + cursor, KEY_ID, 4);
+    cursor += 4;
+    vmsg[cursor++] = version & 0xFF;
+    vmsg[cursor++] = (version >> 8) & 0xFF;
+    vmsg[cursor++] = (version >> 16) & 0xFF;
+    vmsg[cursor++] = (version >> 24) & 0xFF;
+    vmsg[cursor++] = len & 0xFF;
+    vmsg[cursor++] = len >> 8;
+    memcpy(vmsg + cursor, table, len);
+    cursor += len;
+    return crypto_ed25519_check(sig, AUTHORITY_PUBKEY, vmsg, cursor) == 0;
 }
 
 /* ---------------- state ---------------- */
@@ -237,8 +237,8 @@ static int64_t ack_deadline_us = 0;
 static uint8_t acked[256];
 static int ack_n = 0;
 
-static void set_active(const uint8_t *t, uint16_t len, uint32_t id) {
-    memcpy(tbl, t, len);
+static void set_active(const uint8_t *table, uint16_t len, uint32_t id) {
+    memcpy(tbl, table, len);
     parse_table(len);
     active_id = id;
 }
@@ -247,116 +247,116 @@ static const char *pname(uint32_t id) {
 }
 /* the anti-rollback floor lives in NVS so it survives reboots ('Z' resets it for a fresh cert run) */
 static void floor_load(void) {
-    nvs_handle_t h;
-    if (nvs_open("ppt", NVS_READONLY, &h) == ESP_OK) {
-        uint32_t v;
-        if (nvs_get_u32(h, "vfloor", &v) == ESP_OK)
-            version_floor = v;
-        nvs_close(h);
+    nvs_handle_t handle;
+    if (nvs_open("ppt", NVS_READONLY, &handle) == ESP_OK) {
+        uint32_t stored_floor;
+        if (nvs_get_u32(handle, "vfloor", &stored_floor) == ESP_OK)
+            version_floor = stored_floor;
+        nvs_close(handle);
     }
 }
-static void floor_save(uint32_t v) {
-    nvs_handle_t h;
-    if (nvs_open("ppt", NVS_READWRITE, &h) == ESP_OK) {
-        nvs_set_u32(h, "vfloor", v);
-        nvs_commit(h);
-        nvs_close(h);
+static void floor_save(uint32_t version) {
+    nvs_handle_t handle;
+    if (nvs_open("ppt", NVS_READWRITE, &handle) == ESP_OK) {
+        nvs_set_u32(handle, "vfloor", version);
+        nvs_commit(handle);
+        nvs_close(handle);
     }
-    version_floor = v;
+    version_floor = version;
 }
 static void floor_reset(void) {
-    nvs_handle_t h;
-    if (nvs_open("ppt", NVS_READWRITE, &h) == ESP_OK) {
-        nvs_erase_key(h, "vfloor");
-        nvs_commit(h);
-        nvs_close(h);
+    nvs_handle_t handle;
+    if (nvs_open("ppt", NVS_READWRITE, &handle) == ESP_OK) {
+        nvs_erase_key(handle, "vfloor");
+        nvs_commit(handle);
+        nvs_close(handle);
     }
     version_floor = 0;
 }
 
 /* ---------------- UART I/O (own UART0, console disabled) ---------------- */
 static void emit(const char *fmt, ...) {
-    char b[160];
+    char line[160];
     va_list ap;
     va_start(ap, fmt);
-    int n = vsnprintf(b, sizeof b, fmt, ap);
+    int length = vsnprintf(line, sizeof line, fmt, ap);
     va_end(ap);
-    if (n > 0)
-        uart_write_bytes(UART, b, n);
+    if (length > 0)
+        uart_write_bytes(UART, line, length);
 }
 static QueueHandle_t rxq;
 typedef struct {
     uint8_t src[6];
     int len;
-    uint8_t d[TBL_MAX + 96];
+    uint8_t data[TBL_MAX + 96];
 } rxmsg_t; /* room for header + table + 64B sig */
 static void on_recv(const esp_now_recv_info_t *info, const uint8_t *data, int len) {
-    if (len > (int)sizeof(((rxmsg_t *)0)->d))
+    if (len > (int)sizeof(((rxmsg_t *)0)->data))
         return;
-    rxmsg_t m;
-    memcpy(m.src, info->src_addr, 6);
-    m.len = len;
-    memcpy(m.d, data, len);
-    xQueueSend(rxq, &m, 0);
+    rxmsg_t message;
+    memcpy(message.src, info->src_addr, 6);
+    message.len = len;
+    memcpy(message.data, data, len);
+    xQueueSend(rxq, &message, 0);
 }
 
-static void bcast(const uint8_t *d, int n) {
-    esp_now_send(BCAST, d, n);
+static void bcast(const uint8_t *data, int length) {
+    esp_now_send(BCAST, data, length);
 }
-static void send_prepare(uint32_t id, uint32_t version, const uint8_t *t, uint16_t len, const uint8_t *sig,
+static void send_prepare(uint32_t id, uint32_t version, const uint8_t *table, uint16_t len, const uint8_t *sig,
                          uint16_t seq) {
-    uint8_t b[TBL_MAX + 96];
-    int p = 0;
-    b[p++] = M_PREPARE;
-    b[p++] = seq & 0xFF;
-    b[p++] = seq >> 8;
-    memcpy(b + p, &id, 4);
-    p += 4;
-    memcpy(b + p, &version, 4);
-    p += 4;
-    b[p++] = len & 0xFF;
-    b[p++] = len >> 8;
-    memcpy(b + p, t, len);
-    p += len;
-    memcpy(b + p, sig, 64);
-    p += 64;
-    bcast(b, p);
+    uint8_t packet[TBL_MAX + 96];
+    int cursor = 0;
+    packet[cursor++] = M_PREPARE;
+    packet[cursor++] = seq & 0xFF;
+    packet[cursor++] = seq >> 8;
+    memcpy(packet + cursor, &id, 4);
+    cursor += 4;
+    memcpy(packet + cursor, &version, 4);
+    cursor += 4;
+    packet[cursor++] = len & 0xFF;
+    packet[cursor++] = len >> 8;
+    memcpy(packet + cursor, table, len);
+    cursor += len;
+    memcpy(packet + cursor, sig, 64);
+    cursor += 64;
+    bcast(packet, cursor);
 }
 static void send_ack(uint16_t seq) {
-    uint8_t b[4] = {M_ACK, seq & 0xFF, seq >> 8, node_id};
-    bcast(b, 4);
+    uint8_t packet[4] = {M_ACK, seq & 0xFF, seq >> 8, node_id};
+    bcast(packet, 4);
 }
 static void send_commit(uint16_t seq, uint16_t delay) {
-    uint8_t b[5] = {M_COMMIT, seq & 0xFF, seq >> 8, delay & 0xFF, delay >> 8};
-    bcast(b, 5);
+    uint8_t packet[5] = {M_COMMIT, seq & 0xFF, seq >> 8, delay & 0xFF, delay >> 8};
+    bcast(packet, 5);
 }
 
 static int verdict(void) {
     uint8_t err = 0;
-    int8_t e = evaluate(0, &err);
-    return e;
+    int8_t matched_edge = evaluate(0, &err);
+    return matched_edge;
 }
 
 static void start_rollout(void) {
     uint32_t target_id = (active_id == POLICY_ID_A) ? POLICY_ID_B : POLICY_ID_A;
-    const uint8_t *t;
+    const uint8_t *table;
     uint16_t len;
     uint32_t version;
     const uint8_t *sig;
     if (target_id == POLICY_ID_A) {
-        t = TABLE_A;
+        table = TABLE_A;
         len = TABLE_A_LEN;
         version = VERSION_A;
         sig = SIG_A;
     } else {
-        t = TABLE_B;
+        table = TABLE_B;
         len = TABLE_B_LEN;
         version = VERSION_B;
         sig = SIG_B;
     }
     rollout_seq++;
     /* stage locally (a node never hears its own broadcast) */
-    memcpy(staged, t, len);
+    memcpy(staged, table, len);
     staged_len = len;
     staged_id = target_id;
     staged_version = version;
@@ -365,7 +365,7 @@ static void start_rollout(void) {
     ack_n = 0;
     ack_deadline_us = esp_timer_get_time() + (int64_t)ACK_WIN_MS * 1000;
     coord = 1;
-    send_prepare(target_id, version, t, len, sig, rollout_seq);
+    send_prepare(target_id, version, table, len, sig, rollout_seq);
     emit("[coord] PREPARE seq=%u target=%s v%lu (Ed25519-signed) — collecting ACKs\r\n", rollout_seq, pname(target_id),
          (unsigned long)version);
 }
@@ -418,21 +418,21 @@ void app_main(void) {
     for (;;) {
         int64_t now = esp_timer_get_time();
         /* USB command: 'R' -> initiate a rollout (toggle the fleet's policy) */
-        uint8_t c;
-        if (uart_read_bytes(UART, &c, 1, 0) == 1) {
-            if (c == 'R' || c == 'r')
+        uint8_t command;
+        if (uart_read_bytes(UART, &command, 1, 0) == 1) {
+            if (command == 'R' || command == 'r')
                 start_rollout();
-            else if (c == 'Z' || c == 'z') {
+            else if (command == 'Z' || command == 'z') {
                 floor_reset();
                 emit("[test] version floor reset to v0\r\n");
-            } else if (c == 'T' || c == 't') {
+            } else if (command == 'T' || command == 't') {
                 uint8_t tt[TBL_MAX];
                 memcpy(tt, TABLE_B, TABLE_B_LEN);
                 tt[10] ^= 0xFF;
                 rollout_seq++;
                 send_prepare(POLICY_ID_B, VERSION_B, tt, TABLE_B_LEN, SIG_B, rollout_seq);
                 emit("[test] injected TAMPERED table seq=%u (expect all REJECT bad signature)\r\n", rollout_seq);
-            } else if (c == 'W' || c == 'w') {
+            } else if (command == 'W' || command == 'w') {
                 uint8_t ss[64];
                 memcpy(ss, SIG_B, 64);
                 ss[0] ^= 0xFF;
@@ -442,26 +442,26 @@ void app_main(void) {
             }
         }
         /* ESP-NOW messages */
-        rxmsg_t m;
-        while (xQueueReceive(rxq, &m, 0) == pdTRUE) {
-            uint8_t type = m.d[0];
-            if (type == M_PREPARE && m.len >= 13) {
-                uint16_t seq = m.d[1] | (m.d[2] << 8);
+        rxmsg_t message;
+        while (xQueueReceive(rxq, &message, 0) == pdTRUE) {
+            uint8_t type = message.data[0];
+            if (type == M_PREPARE && message.len >= 13) {
+                uint16_t seq = message.data[1] | (message.data[2] << 8);
                 uint32_t id;
-                memcpy(&id, m.d + 3, 4);
+                memcpy(&id, message.data + 3, 4);
                 uint32_t version;
-                memcpy(&version, m.d + 7, 4);
-                uint16_t len = m.d[11] | (m.d[12] << 8);
-                if (len <= TBL_MAX && 13 + (int)len + 64 <= m.len) {
-                    const uint8_t *t = m.d + 13;
-                    const uint8_t *sig = m.d + 13 + len;
-                    if (!verify_pack(t, len, version, sig))
+                memcpy(&version, message.data + 7, 4);
+                uint16_t len = message.data[11] | (message.data[12] << 8);
+                if (len <= TBL_MAX && 13 + (int)len + 64 <= message.len) {
+                    const uint8_t *table = message.data + 13;
+                    const uint8_t *sig = message.data + 13 + len;
+                    if (!verify_pack(table, len, version, sig))
                         emit("  PREPARE REJECT seq=%u (bad Ed25519 signature)\r\n", seq);
                     else if (version <= version_floor)
                         emit("  PREPARE REJECT seq=%u v%lu <= floor v%lu (rollback/replay)\r\n", seq,
                              (unsigned long)version, (unsigned long)version_floor);
                     else {
-                        memcpy(staged, t, len);
+                        memcpy(staged, table, len);
                         staged_len = len;
                         staged_id = id;
                         staged_version = version;
@@ -471,17 +471,17 @@ void app_main(void) {
                              (unsigned long)version);
                     }
                 }
-            } else if (type == M_ACK && m.len >= 4 && coord) {
-                uint16_t seq = m.d[1] | (m.d[2] << 8);
-                uint8_t nid = m.d[3];
+            } else if (type == M_ACK && message.len >= 4 && coord) {
+                uint16_t seq = message.data[1] | (message.data[2] << 8);
+                uint8_t nid = message.data[3];
                 if (seq == rollout_seq && !acked[nid]) {
                     acked[nid] = 1;
                     ack_n++;
                     emit("  [coord] ACK from %02x (%d/%d)\r\n", nid, ack_n, EXPECT_ACKS);
                 }
-            } else if (type == M_COMMIT && m.len >= 5) {
-                uint16_t seq = m.d[1] | (m.d[2] << 8);
-                uint16_t delay = m.d[3] | (m.d[4] << 8);
+            } else if (type == M_COMMIT && message.len >= 5) {
+                uint16_t seq = message.data[1] | (message.data[2] << 8);
+                uint16_t delay = message.data[3] | (message.data[4] << 8);
                 if (seq == staged_seq) {
                     flip_at_us = esp_timer_get_time() + (int64_t)delay * 1000;
                     emit("  COMMIT seq=%u -> flip in %ums\r\n", seq, delay);

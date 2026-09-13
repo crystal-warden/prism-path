@@ -34,9 +34,9 @@ static uint16_t n_fields, n_atoms, n_nodes, n_edges, prog_len;
 static uint16_t atoms_off, nodes_off, edges_off, prog_off_base;
 
 /* ------------------------------------------------------- buffer readers (little-endian, in place) */
-static uint16_t rd16(const uint8_t *p) { return (uint16_t)(p[0] | ((uint16_t)p[1] << 8)); }
-static int32_t rd32(const uint8_t *p) { int32_t v; memcpy(&v, p, 4); return v; }
-static void wr32(uint8_t *p, int32_t v) { memcpy(p, &v, 4); }
+static uint16_t rd16(const uint8_t *bytes) { return (uint16_t)(bytes[0] | ((uint16_t)bytes[1] << 8)); }
+static int32_t rd32(const uint8_t *bytes) { int32_t value; memcpy(&value, bytes, 4); return value; }
+static void wr32(uint8_t *bytes, int32_t value) { memcpy(bytes, &value, 4); }
 
 /* --------------------------------------------------------- table load */
 static uint8_t parse_table(uint16_t len) {
@@ -57,12 +57,12 @@ static uint8_t parse_table(uint16_t len) {
 
 /* ------------------------------------------- the evaluator core: a local copy of interp.c's core, pending conversion to ../ppt_eval.h (eval_copies_check.py) */
 static uint8_t eval_atom(uint16_t atom_idx) {
-    const uint8_t *a = tbl + atoms_off + 8 * (uint32_t)atom_idx;
-    uint16_t field = rd16(a);
-    uint8_t op = a[2], aty = a[3];
-    int32_t aval = rd32(a + 4);
-    const uint8_t *r = regs + 4 + 8 * (uint32_t)field;
-    int32_t rty = rd32(r), rval = rd32(r + 4);
+    const uint8_t *atom = tbl + atoms_off + 8 * (uint32_t)atom_idx;
+    uint16_t field = rd16(atom);
+    uint8_t op = atom[2], aty = atom[3];
+    int32_t aval = rd32(atom + 4);
+    const uint8_t *reg = regs + 4 + 8 * (uint32_t)field;
+    int32_t rty = rd32(reg), rval = rd32(reg + 4);
     uint8_t lnum = (rty == TY_BOOL || rty == TY_INT);
     uint8_t rnum = (aty == TY_BOOL || aty == TY_INT);
     switch (op) {
@@ -91,12 +91,12 @@ static uint8_t eval_atom(uint16_t atom_idx) {
 static int8_t eval_prog(uint16_t e_prog_off, uint16_t e_prog_cnt, uint8_t *err) {
     uint8_t stack[STACK_MAX];
     int8_t sp = 0;
-    for (uint16_t i = 0; i < e_prog_cnt; i++) {
-        uint16_t w = rd16(tbl + prog_off_base + 2 * (uint32_t)(e_prog_off + i));
-        if (w < 0x8000) {
+    for (uint16_t word_index = 0; word_index < e_prog_cnt; word_index++) {
+        uint16_t word = rd16(tbl + prog_off_base + 2 * (uint32_t)(e_prog_off + word_index));
+        if (word < 0x8000) {
             if (sp >= STACK_MAX) { *err = 7; return 0; }
-            stack[sp++] = eval_atom(w);
-        } else switch (w) {
+            stack[sp++] = eval_atom(word);
+        } else switch (word) {
         case 0x8000: stack[sp - 1] = (uint8_t)!stack[sp - 1]; break;
         case 0x8001: sp--; stack[sp - 1] = (uint8_t)(stack[sp - 1] && stack[sp]); break;
         case 0x8002: sp--; stack[sp - 1] = (uint8_t)(stack[sp - 1] || stack[sp]); break;
@@ -109,11 +109,11 @@ static int8_t eval_prog(uint16_t e_prog_off, uint16_t e_prog_cnt, uint8_t *err) 
 }
 
 static int8_t evaluate(uint16_t node, uint16_t *out_target, uint8_t *err) {
-    const uint8_t *n = tbl + nodes_off + 4 * (uint32_t)node;
-    uint16_t edge_off = rd16(n), edge_cnt = rd16(n + 2);
-    for (uint16_t i = 0; i < edge_cnt; i++) {
-        const uint8_t *e = tbl + edges_off + 6 * (uint32_t)(edge_off + i);
-        if (eval_prog(rd16(e + 2), rd16(e + 4), err)) { *out_target = rd16(e); return (int8_t)i; }
+    const uint8_t *node_entry = tbl + nodes_off + 4 * (uint32_t)node;
+    uint16_t edge_off = rd16(node_entry), edge_cnt = rd16(node_entry + 2);
+    for (uint16_t edge_index = 0; edge_index < edge_cnt; edge_index++) {
+        const uint8_t *edge_entry = tbl + edges_off + 6 * (uint32_t)(edge_off + edge_index);
+        if (eval_prog(rd16(edge_entry + 2), rd16(edge_entry + 4), err)) { *out_target = rd16(edge_entry); return (int8_t)edge_index; }
         if (*err) return -1;
     }
     return -1;
@@ -130,12 +130,12 @@ static void adc_setup(void) {
 }
 
 static void led_setup(void) {
-    ledc_timer_config_t t = { .speed_mode = LEDC_LOW_SPEED_MODE, .duty_resolution = LEDC_TIMER_8_BIT,
+    ledc_timer_config_t timer_config = { .speed_mode = LEDC_LOW_SPEED_MODE, .duty_resolution = LEDC_TIMER_8_BIT,
                               .timer_num = LEDC_TIMER_0, .freq_hz = 5000, .clk_cfg = LEDC_AUTO_CLK };
-    ledc_timer_config(&t);
-    ledc_channel_config_t c = { .gpio_num = LED_GPIO, .speed_mode = LEDC_LOW_SPEED_MODE,
+    ledc_timer_config(&timer_config);
+    ledc_channel_config_t channel_config = { .gpio_num = LED_GPIO, .speed_mode = LEDC_LOW_SPEED_MODE,
                                 .channel = LEDC_CHANNEL_0, .timer_sel = LEDC_TIMER_0, .duty = 0, .hpoint = 0 };
-    ledc_channel_config(&c);
+    ledc_channel_config(&channel_config);
 }
 
 static void led_set(uint8_t duty) {

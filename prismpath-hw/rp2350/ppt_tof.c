@@ -34,8 +34,8 @@ static uint16_t n_fields, n_atoms, n_nodes, n_edges, prog_len;
 static uint16_t atoms_off, nodes_off, edges_off, prog_off_base;
 
 /* ---- the evaluator core: a local copy, pending conversion to ../ppt_eval.h (eval_copies_check.py) ---- */
-static uint16_t rd16(const uint8_t *p) { return (uint16_t)(p[0] | ((uint16_t)p[1] << 8)); }
-static int32_t rd32(const uint8_t *p) { int32_t v; memcpy(&v, p, 4); return v; }
+static uint16_t rd16(const uint8_t *bytes) { return (uint16_t)(bytes[0] | ((uint16_t)bytes[1] << 8)); }
+static int32_t rd32(const uint8_t *bytes) { int32_t value; memcpy(&value, bytes, 4); return value; }
 
 static uint8_t parse_table(uint16_t len) {
     if (len < 28) return 3;
@@ -52,12 +52,12 @@ static uint8_t parse_table(uint16_t len) {
     return (prog_off_base + 2 * prog_len != len) ? 3 : 0;
 }
 static uint8_t eval_atom(uint16_t atom_idx) {
-    const uint8_t *a = tbl + atoms_off + 8 * (uint32_t)atom_idx;
-    uint16_t field = rd16(a);
-    uint8_t op = a[2], aty = a[3];
-    int32_t aval = rd32(a + 4);
-    const uint8_t *r = regs + 4 + 8 * (uint32_t)field;
-    int32_t rty = rd32(r), rval = rd32(r + 4);
+    const uint8_t *atom = tbl + atoms_off + 8 * (uint32_t)atom_idx;
+    uint16_t field = rd16(atom);
+    uint8_t op = atom[2], aty = atom[3];
+    int32_t aval = rd32(atom + 4);
+    const uint8_t *reg = regs + 4 + 8 * (uint32_t)field;
+    int32_t rty = rd32(reg), rval = rd32(reg + 4);
     uint8_t lnum = (rty == TY_BOOL || rty == TY_INT);
     uint8_t rnum = (aty == TY_BOOL || aty == TY_INT);
     switch (op) {
@@ -84,12 +84,12 @@ static uint8_t eval_atom(uint16_t atom_idx) {
 static int8_t eval_prog(uint16_t e_prog_off, uint16_t e_prog_cnt, uint8_t *err) {
     uint8_t stack[STACK_MAX];
     int8_t sp = 0;
-    for (uint16_t i = 0; i < e_prog_cnt; i++) {
-        uint16_t w = rd16(tbl + prog_off_base + 2 * (uint32_t)(e_prog_off + i));
-        if (w < 0x8000) {
+    for (uint16_t word_index = 0; word_index < e_prog_cnt; word_index++) {
+        uint16_t word = rd16(tbl + prog_off_base + 2 * (uint32_t)(e_prog_off + word_index));
+        if (word < 0x8000) {
             if (sp >= STACK_MAX) { *err = 7; return 0; }
-            stack[sp++] = eval_atom(w);
-        } else switch (w) {
+            stack[sp++] = eval_atom(word);
+        } else switch (word) {
         case 0x8000: stack[sp - 1] = (uint8_t)!stack[sp - 1]; break;
         case 0x8001: sp--; stack[sp - 1] = (uint8_t)(stack[sp - 1] && stack[sp]); break;
         case 0x8002: sp--; stack[sp - 1] = (uint8_t)(stack[sp - 1] || stack[sp]); break;
@@ -101,11 +101,11 @@ static int8_t eval_prog(uint16_t e_prog_off, uint16_t e_prog_cnt, uint8_t *err) 
     return (int8_t)stack[0];
 }
 static int8_t evaluate(uint16_t node, uint16_t *out_target, uint8_t *err) {
-    const uint8_t *n = tbl + nodes_off + 4 * (uint32_t)node;
-    uint16_t edge_off = rd16(n), edge_cnt = rd16(n + 2);
-    for (uint16_t i = 0; i < edge_cnt; i++) {
-        const uint8_t *e = tbl + edges_off + 6 * (uint32_t)(edge_off + i);
-        if (eval_prog(rd16(e + 2), rd16(e + 4), err)) { *out_target = rd16(e); return (int8_t)i; }
+    const uint8_t *node_entry = tbl + nodes_off + 4 * (uint32_t)node;
+    uint16_t edge_off = rd16(node_entry), edge_cnt = rd16(node_entry + 2);
+    for (uint16_t edge_index = 0; edge_index < edge_cnt; edge_index++) {
+        const uint8_t *edge_entry = tbl + edges_off + 6 * (uint32_t)(edge_off + edge_index);
+        if (eval_prog(rd16(edge_entry + 2), rd16(edge_entry + 4), err)) { *out_target = rd16(edge_entry); return (int8_t)edge_index; }
         if (*err) return -1;
     }
     return -1;
@@ -118,9 +118,9 @@ static const char *BANDS[] = {"contact", "near", "mid", "far"};
 static void scan_i2c(void) {
     printf("i2c scan (SDA=GP%d SCL=GP%d):", SDA_PIN, SCL_PIN);
     int found = 0;
-    for (uint8_t a = 0x08; a < 0x78; a++) {
-        uint8_t d;
-        if (i2c_read_blocking(I2C_PORT, a, &d, 1, false) >= 0) { printf(" 0x%02x", a); found++; }
+    for (uint8_t address = 0x08; address < 0x78; address++) {
+        uint8_t probe_byte;
+        if (i2c_read_blocking(I2C_PORT, address, &probe_byte, 1, false) >= 0) { printf(" 0x%02x", address); found++; }
     }
     printf("  -> %d device%s%s\r\n", found, found == 1 ? "" : "s",
            found == 0 ? "  (check power + SDA/SCL pins)" : "");
@@ -158,17 +158,17 @@ int main(void) {
             sleep_ms(800);
             continue;
         }
-        uint16_t d = vl53l0x_read_range_single(&tof);
-        int32_t v = (int32_t)d;
-        memcpy(regs + 8, &v, 4);                        /* field 0 value = distance */
+        uint16_t distance_mm = vl53l0x_read_range_single(&tof);
+        int32_t reading = (int32_t)distance_mm;
+        memcpy(regs + 8, &reading, 4);                        /* field 0 value = distance */
         uint8_t err = 0;
         uint16_t target = 0;
-        int8_t e = evaluate(0, &target, &err);
-        int band = (e >= 0 && e < 4) ? e : -1;
+        int8_t matched_edge = evaluate(0, &target, &err);
+        int band = (matched_edge >= 0 && matched_edge < 4) ? matched_edge : -1;
 #ifdef PICO_DEFAULT_LED_PIN
         gpio_put(PICO_DEFAULT_LED_PIN, band == 0 || band == 1);   /* lit when something is near */
 #endif
-        printf("dist=%5u mm  ->  band %d (%s)\r\n", d, band, band >= 0 ? BANDS[band] : "err");
+        printf("dist=%5u mm  ->  band %d (%s)\r\n", distance_mm, band, band >= 0 ? BANDS[band] : "err");
         sleep_ms(120);
     }
 }

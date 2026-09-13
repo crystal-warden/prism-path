@@ -41,11 +41,11 @@ static uint8_t loaded = 0;
 
 /* ---------------------------------------------------------------- uart I/O (UART0, driver) */
 static uint8_t rx(void) {
-    uint8_t b;
-    while (uart_read_bytes(UART, &b, 1, portMAX_DELAY) != 1) { /* retry */ }
-    return b;
+    uint8_t byte;
+    while (uart_read_bytes(UART, &byte, 1, portMAX_DELAY) != 1) { /* retry */ }
+    return byte;
 }
-static void tx(uint8_t b) { uart_write_bytes(UART, (const char *)&b, 1); }
+static void tx(uint8_t byte) { uart_write_bytes(UART, (const char *)&byte, 1); }
 static void tx_flush(void) { uart_wait_tx_done(UART, portMAX_DELAY); }
 static uint16_t get_u16(void) {
     uint16_t lo = rx();
@@ -53,11 +53,11 @@ static uint16_t get_u16(void) {
 }
 
 /* ------------------------------------------------------- buffer readers */
-static uint16_t rd16(const uint8_t *p) { return (uint16_t)(p[0] | ((uint16_t)p[1] << 8)); }
-static int32_t rd32(const uint8_t *p) {
-    int32_t v;
-    memcpy(&v, p, 4);
-    return v;
+static uint16_t rd16(const uint8_t *bytes) { return (uint16_t)(bytes[0] | ((uint16_t)bytes[1] << 8)); }
+static int32_t rd32(const uint8_t *bytes) {
+    int32_t value;
+    memcpy(&value, bytes, 4);
+    return value;
 }
 
 /* --------------------------------------------------------- table load */
@@ -80,12 +80,12 @@ static uint8_t parse_table(uint16_t len) {
 
 /* ------------------------------------------- the evaluator core: a local copy of interp.c's core, pending conversion to ../ppt_eval.h (eval_copies_check.py) */
 static uint8_t eval_atom(uint16_t atom_idx) {
-    const uint8_t *a = tbl + atoms_off + 8 * (uint32_t)atom_idx;
-    uint16_t field = rd16(a);
-    uint8_t op = a[2], aty = a[3];
-    int32_t aval = rd32(a + 4);
-    const uint8_t *r = regs + 4 + 8 * (uint32_t)field;
-    int32_t rty = rd32(r), rval = rd32(r + 4);
+    const uint8_t *atom = tbl + atoms_off + 8 * (uint32_t)atom_idx;
+    uint16_t field = rd16(atom);
+    uint8_t op = atom[2], aty = atom[3];
+    int32_t aval = rd32(atom + 4);
+    const uint8_t *reg = regs + 4 + 8 * (uint32_t)field;
+    int32_t rty = rd32(reg), rval = rd32(reg + 4);
     uint8_t lnum = (rty == TY_BOOL || rty == TY_INT);
     uint8_t rnum = (aty == TY_BOOL || aty == TY_INT);
     switch (op) {
@@ -114,12 +114,12 @@ static uint8_t eval_atom(uint16_t atom_idx) {
 static int8_t eval_prog(uint16_t e_prog_off, uint16_t e_prog_cnt, uint8_t *err) {
     uint8_t stack[STACK_MAX];
     int8_t sp = 0;
-    for (uint16_t i = 0; i < e_prog_cnt; i++) {
-        uint16_t w = rd16(tbl + prog_off_base + 2 * (uint32_t)(e_prog_off + i));
-        if (w < 0x8000) {
+    for (uint16_t word_index = 0; word_index < e_prog_cnt; word_index++) {
+        uint16_t word = rd16(tbl + prog_off_base + 2 * (uint32_t)(e_prog_off + word_index));
+        if (word < 0x8000) {
             if (sp >= STACK_MAX) { *err = 7; return 0; }
-            stack[sp++] = eval_atom(w);
-        } else switch (w) {
+            stack[sp++] = eval_atom(word);
+        } else switch (word) {
         case 0x8000: stack[sp - 1] = (uint8_t)!stack[sp - 1]; break;
         case 0x8001: sp--; stack[sp - 1] = (uint8_t)(stack[sp - 1] && stack[sp]); break;
         case 0x8002: sp--; stack[sp - 1] = (uint8_t)(stack[sp - 1] || stack[sp]); break;
@@ -132,13 +132,13 @@ static int8_t eval_prog(uint16_t e_prog_off, uint16_t e_prog_cnt, uint8_t *err) 
 }
 
 static int8_t evaluate(uint16_t node, uint16_t *out_target, uint8_t *err) {
-    const uint8_t *n = tbl + nodes_off + 4 * (uint32_t)node;
-    uint16_t edge_off = rd16(n), edge_cnt = rd16(n + 2);
-    for (uint16_t i = 0; i < edge_cnt; i++) {
-        const uint8_t *e = tbl + edges_off + 6 * (uint32_t)(edge_off + i);
-        if (eval_prog(rd16(e + 2), rd16(e + 4), err)) {
-            *out_target = rd16(e);
-            return (int8_t)i;
+    const uint8_t *node_entry = tbl + nodes_off + 4 * (uint32_t)node;
+    uint16_t edge_off = rd16(node_entry), edge_cnt = rd16(node_entry + 2);
+    for (uint16_t edge_index = 0; edge_index < edge_cnt; edge_index++) {
+        const uint8_t *edge_entry = tbl + edges_off + 6 * (uint32_t)(edge_off + edge_index);
+        if (eval_prog(rd16(edge_entry + 2), rd16(edge_entry + 4), err)) {
+            *out_target = rd16(edge_entry);
+            return (int8_t)edge_index;
         }
         if (*err) return -1;
     }
@@ -186,16 +186,16 @@ void app_main(void) {
         if (cmd == 'I') {
             tx('i');
             tx((uint8_t)(sizeof(IDENT) - 1));
-            for (uint8_t i = 0; i < sizeof(IDENT) - 1; i++) tx((uint8_t)IDENT[i]);
+            for (uint8_t byte_index = 0; byte_index < sizeof(IDENT) - 1; byte_index++) tx((uint8_t)IDENT[byte_index]);
             tx_flush();
         } else if (cmd == 'L') {
             uint16_t len = get_u16();
             if (len > TBL_MAX) {
-                for (uint16_t i = 0; i < len; i++) (void)rx();
+                for (uint16_t byte_index = 0; byte_index < len; byte_index++) (void)rx();
                 tx('E'); tx(2); tx_flush();
                 continue;
             }
-            for (uint16_t i = 0; i < len; i++) tbl[i] = rx();
+            for (uint16_t byte_index = 0; byte_index < len; byte_index++) tbl[byte_index] = rx();
             uint8_t rc = parse_table(len);
             loaded = (rc == 0);
             if (rc) { tx('E'); tx(rc); }
@@ -204,23 +204,23 @@ void app_main(void) {
         } else if (cmd == 'V') {
             uint16_t len = get_u16();
             if (len > REGS_MAX) {
-                for (uint16_t i = 0; i < len; i++) (void)rx();
+                for (uint16_t byte_index = 0; byte_index < len; byte_index++) (void)rx();
                 tx('E'); tx(5); tx_flush();
                 continue;
             }
-            for (uint16_t i = 0; i < len; i++) regs[i] = rx();
+            for (uint16_t byte_index = 0; byte_index < len; byte_index++) regs[byte_index] = rx();
             if (!loaded) { tx('E'); tx(6); tx_flush(); continue; }
             if (len != 4 + 8 * (uint32_t)n_fields) { tx('E'); tx(5); tx_flush(); continue; }
             uint16_t node = (uint16_t)rd32(regs);
             if (node >= n_nodes) { tx('E'); tx(4); tx_flush(); continue; }
             uint8_t err = 0;
             uint16_t target = 0;
-            int8_t e = evaluate(node, &target, &err);
+            int8_t matched_edge = evaluate(node, &target, &err);
             if (err)        { tx('E'); tx(err); }
-            else if (e < 0) { tx('N'); }
+            else if (matched_edge < 0) { tx('N'); }
             else {
                 tx('M');
-                tx((uint8_t)e);
+                tx((uint8_t)matched_edge);
                 tx((uint8_t)(target & 0xFF));
                 tx((uint8_t)(target >> 8));
             }

@@ -15,33 +15,34 @@
 #include "sidecar_blob.h"
 #include "test_vectors.h"
 
-static void print_hex(const uint8_t *b, uint8_t n) {
-    for (uint8_t i = 0; i < n; i++) printf("%02x", b[i]);
+static void print_hex(const uint8_t *bytes, uint8_t length) {
+    for (uint8_t byte_index = 0; byte_index < length; byte_index++) printf("%02x", bytes[byte_index]);
 }
 
 void app_main(void) {
-    static ssc_t S;
-    int rc = ssc_parse(SIDECAR, sizeof SIDECAR, &S);
+    static ssc_t sidecar;
+    int rc = ssc_parse(SIDECAR, sizeof SIDECAR, &sidecar);
     if (rc != 0) { printf("SSC PARSE FAIL %d\n", rc); return; }
-    const ssc_node_t *N = &S.nodes[0];
+    const ssc_node_t *node = &sidecar.nodes[0];
     printf("SSC OK node=%s k=%u bands=%u size=%lu\n",
-           N->name, N->k, N->n_bands, (unsigned long)N->size);
+           node->name, node->n_fields, node->n_bands, (unsigned long)node->size);
 
-    for (uint32_t i = 0; i < TV_N; i++) {
+    for (uint32_t vector_index = 0; vector_index < TV_N; vector_index++) {
         int syms[SSC_MAX_FIELDS];
-        for (uint8_t f = 0; f < N->k; f++) syms[f] = ssc_quantize(&N->fields[f], TV[i][f]);
-        int32_t n = ssc_n(N, syms);
-        int band = n >= 0 ? ssc_band(N, (uint32_t)n) : -1;
+        for (uint8_t field_index = 0; field_index < node->n_fields; field_index++)
+            syms[field_index] = ssc_quantize(&node->fields[field_index], TV[vector_index][field_index]);
+        int32_t spiral_index = ssc_n(node, syms);
+        int band = spiral_index >= 0 ? ssc_band(node, (uint32_t)spiral_index) : -1;
 
         uint8_t fb[16], fn[16];                 /* band-tier frame, refinement frame */
         memset(fb, 0, sizeof fb); memset(fn, 0, sizeof fn);
         bitacc_t ab = { fb, 0 }, an = { fn, 0 };
         (void)zeck_encode(&ab, (uint64_t)(band + 1));   /* wire ints are 1-based */
-        (void)zeck_encode(&an, (uint64_t)(n + 1));
+        (void)zeck_encode(&an, (uint64_t)(spiral_index + 1));
         uint8_t lb = (uint8_t)((ab.bitpos + 7u) >> 3), ln = (uint8_t)((an.bitpos + 7u) >> 3);
 
-        printf("V %lu band=%d n=%ld route=%s fb=", (unsigned long)i, band, (long)n,
-               band >= 0 ? N->bands[band].route : "?");
+        printf("V %lu band=%d n=%ld route=%s fb=", (unsigned long)vector_index, band, (long)spiral_index,
+               band >= 0 ? node->bands[band].route : "?");
         print_hex(fb, lb);
         printf(" fn=");
         print_hex(fn, ln);

@@ -77,13 +77,13 @@ static const uint8_t BCAST[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
 /* ---------------- UART status channel (own UART0, console disabled) ---------------- */
 static void emit(const char *fmt, ...) {
-    char b[160];
+    char line[160];
     va_list ap;
     va_start(ap, fmt);
-    int n = vsnprintf(b, sizeof b, fmt, ap);
+    int length = vsnprintf(line, sizeof line, fmt, ap);
     va_end(ap);
-    if (n > 0)
-        uart_write_bytes(UART, b, n);
+    if (length > 0)
+        uart_write_bytes(UART, line, length);
 }
 
 enum {
@@ -106,16 +106,16 @@ enum {
 static uint8_t tbl[TBL_MAX], regs[REGS_MAX];
 static uint16_t n_fields, n_atoms, n_nodes, n_edges, prog_len;
 static uint16_t atoms_off, nodes_off, edges_off, prog_base;
-static uint16_t rd16(const uint8_t *p) {
-    return (uint16_t)(p[0] | ((uint16_t)p[1] << 8));
+static uint16_t rd16(const uint8_t *bytes) {
+    return (uint16_t)(bytes[0] | ((uint16_t)bytes[1] << 8));
 }
-static int32_t rd32(const uint8_t *p) {
-    int32_t v;
-    memcpy(&v, p, 4);
-    return v;
+static int32_t rd32(const uint8_t *bytes) {
+    int32_t value;
+    memcpy(&value, bytes, 4);
+    return value;
 }
-static void wr32(uint8_t *p, int32_t v) {
-    memcpy(p, &v, 4);
+static void wr32(uint8_t *bytes, int32_t value) {
+    memcpy(bytes, &value, 4);
 }
 static uint8_t parse_table(uint16_t len) {
     if (len < 28)
@@ -134,12 +134,12 @@ static uint8_t parse_table(uint16_t len) {
     return (prog_base + 2 * prog_len != len) ? 3 : 0;
 }
 static uint8_t eval_atom(uint16_t ai) {
-    const uint8_t *a = tbl + atoms_off + 8 * (uint32_t)ai;
-    uint16_t f = rd16(a);
-    uint8_t op = a[2], aty = a[3];
-    int32_t av = rd32(a + 4);
-    const uint8_t *r = regs + 4 + 8 * (uint32_t)f;
-    int32_t rty = rd32(r), rv = rd32(r + 4);
+    const uint8_t *atom = tbl + atoms_off + 8 * (uint32_t)ai;
+    uint16_t field = rd16(atom);
+    uint8_t op = atom[2], aty = atom[3];
+    int32_t av = rd32(atom + 4);
+    const uint8_t *reg = regs + 4 + 8 * (uint32_t)field;
+    int32_t rty = rd32(reg), rv = rd32(reg + 4);
     uint8_t ln = (rty == TY_BOOL || rty == TY_INT), rn = (aty == TY_BOOL || aty == TY_INT);
     switch (op) {
         case OP_EQ:
@@ -179,16 +179,16 @@ static uint8_t eval_atom(uint16_t ai) {
 static int8_t eval_prog(uint16_t off, uint16_t cnt, uint8_t *err) {
     uint8_t st[STACK_MAX];
     int8_t sp = 0;
-    for (uint16_t i = 0; i < cnt; i++) {
-        uint16_t w = rd16(tbl + prog_base + 2 * (uint32_t)(off + i));
-        if (w < OPC_NOT) {
+    for (uint16_t word_index = 0; word_index < cnt; word_index++) {
+        uint16_t word = rd16(tbl + prog_base + 2 * (uint32_t)(off + word_index));
+        if (word < OPC_NOT) {
             if (sp >= STACK_MAX) {
                 *err = 7;
                 return 0;
             }
-            st[sp++] = eval_atom(w);
+            st[sp++] = eval_atom(word);
         } else
-            switch (w) {
+            switch (word) {
                 case OPC_NOT:
                     st[sp - 1] = (uint8_t)!st[sp - 1];
                     break;
@@ -222,23 +222,23 @@ static int8_t eval_prog(uint16_t off, uint16_t cnt, uint8_t *err) {
     return (int8_t)st[0];
 }
 static int8_t evaluate(uint16_t node, uint8_t *err) {
-    const uint8_t *n = tbl + nodes_off + 4 * (uint32_t)node;
-    uint16_t eo = rd16(n), ec = rd16(n + 2);
-    for (uint16_t i = 0; i < ec; i++) {
-        const uint8_t *e = tbl + edges_off + 6 * (uint32_t)(eo + i);
-        if (eval_prog(rd16(e + 2), rd16(e + 4), err))
-            return (int8_t)i;
+    const uint8_t *node_entry = tbl + nodes_off + 4 * (uint32_t)node;
+    uint16_t eo = rd16(node_entry), ec = rd16(node_entry + 2);
+    for (uint16_t edge_index = 0; edge_index < ec; edge_index++) {
+        const uint8_t *edge_entry = tbl + edges_off + 6 * (uint32_t)(eo + edge_index);
+        if (eval_prog(rd16(edge_entry + 2), rd16(edge_entry + 4), err))
+            return (int8_t)edge_index;
         if (*err)
             return -1;
     }
     return -1;
 }
-static uint32_t fnv1a32(const uint8_t *b, uint16_t n) {
-    uint32_t h = 0x811C9DC5u;
-    for (uint16_t i = 0; i < n; i++) {
-        h = (h ^ b[i]) * 0x01000193u;
+static uint32_t fnv1a32(const uint8_t *bytes, uint16_t length) {
+    uint32_t hash = 0x811C9DC5u;
+    for (uint16_t byte_index = 0; byte_index < length; byte_index++) {
+        hash = (hash ^ bytes[byte_index]) * 0x01000193u;
     }
-    return h;
+    return hash;
 }
 
 /* ---------------- fusion-rule swap state (two-phase commit, from ppt_mesh.c) ---------------- */
@@ -255,8 +255,8 @@ static uint16_t rollout_seq = 0;
 static int64_t ack_deadline_us = 0;
 static uint8_t acked[256];
 static int ack_n = 0;
-static void set_active(const uint8_t *t, uint16_t len, uint32_t id) {
-    memcpy(tbl, t, len);
+static void set_active(const uint8_t *table, uint16_t len, uint32_t id) {
+    memcpy(tbl, table, len);
     parse_table(len);
     active_id = id;
 }
@@ -287,119 +287,119 @@ typedef struct {
     bool did_timeout;
 } vl53l0x_t;
 
-static void v_wr8(vl53l0x_t *s, uint8_t reg, uint8_t val) {
-    uint8_t b[2] = {reg, val};
-    i2c_master_write_to_device(I2C_PORT, s->addr, b, 2, TO_TICKS);
+static void v_wr8(vl53l0x_t *sensor, uint8_t reg, uint8_t val) {
+    uint8_t payload[2] = {reg, val};
+    i2c_master_write_to_device(I2C_PORT, sensor->addr, payload, 2, TO_TICKS);
 }
-static uint8_t v_rd8(vl53l0x_t *s, uint8_t reg) {
-    uint8_t v = 0;
-    i2c_master_write_read_device(I2C_PORT, s->addr, &reg, 1, &v, 1, TO_TICKS);
-    return v;
+static uint8_t v_rd8(vl53l0x_t *sensor, uint8_t reg) {
+    uint8_t value = 0;
+    i2c_master_write_read_device(I2C_PORT, sensor->addr, &reg, 1, &value, 1, TO_TICKS);
+    return value;
 }
-static void v_wr16(vl53l0x_t *s, uint8_t reg, uint16_t val) {
-    uint8_t b[3] = {reg, (uint8_t)(val >> 8), (uint8_t)(val & 0xFF)};
-    i2c_master_write_to_device(I2C_PORT, s->addr, b, 3, TO_TICKS);
+static void v_wr16(vl53l0x_t *sensor, uint8_t reg, uint16_t val) {
+    uint8_t payload[3] = {reg, (uint8_t)(val >> 8), (uint8_t)(val & 0xFF)};
+    i2c_master_write_to_device(I2C_PORT, sensor->addr, payload, 3, TO_TICKS);
 }
-static uint16_t v_rd16(vl53l0x_t *s, uint8_t reg) {
-    uint8_t v[2] = {0, 0};
-    i2c_master_write_read_device(I2C_PORT, s->addr, &reg, 1, v, 2, TO_TICKS);
-    return ((uint16_t)v[0] << 8) | v[1];
+static uint16_t v_rd16(vl53l0x_t *sensor, uint8_t reg) {
+    uint8_t value_bytes[2] = {0, 0};
+    i2c_master_write_read_device(I2C_PORT, sensor->addr, &reg, 1, value_bytes, 2, TO_TICKS);
+    return ((uint16_t)value_bytes[0] << 8) | value_bytes[1];
 }
-static void v_wr_multi(vl53l0x_t *s, uint8_t reg, const uint8_t *src, uint8_t n) {
-    uint8_t b[16];
-    b[0] = reg;
-    memcpy(b + 1, src, n);
-    i2c_master_write_to_device(I2C_PORT, s->addr, b, n + 1, TO_TICKS);
+static void v_wr_multi(vl53l0x_t *sensor, uint8_t reg, const uint8_t *src, uint8_t count) {
+    uint8_t payload[16];
+    payload[0] = reg;
+    memcpy(payload + 1, src, count);
+    i2c_master_write_to_device(I2C_PORT, sensor->addr, payload, count + 1, TO_TICKS);
 }
-static void v_rd_multi(vl53l0x_t *s, uint8_t reg, uint8_t *dst, uint8_t n) {
-    i2c_master_write_read_device(I2C_PORT, s->addr, &reg, 1, dst, n, TO_TICKS);
+static void v_rd_multi(vl53l0x_t *sensor, uint8_t reg, uint8_t *dst, uint8_t count) {
+    i2c_master_write_read_device(I2C_PORT, sensor->addr, &reg, 1, dst, count, TO_TICKS);
 }
 
 static int64_t s_deadline_us;
-static void start_timeout(vl53l0x_t *s) {
-    s_deadline_us = esp_timer_get_time() + (int64_t)s->io_timeout_ms * 1000;
+static void start_timeout(vl53l0x_t *sensor) {
+    s_deadline_us = esp_timer_get_time() + (int64_t)sensor->io_timeout_ms * 1000;
 }
 static bool timed_out(void) {
     return esp_timer_get_time() > s_deadline_us;
 }
 
-static bool get_spad_info(vl53l0x_t *s, uint8_t *count, bool *type_is_aperture) {
-    v_wr8(s, 0x80, 0x01);
-    v_wr8(s, 0xFF, 0x01);
-    v_wr8(s, 0x00, 0x00);
-    v_wr8(s, 0xFF, 0x06);
-    v_wr8(s, 0x83, v_rd8(s, 0x83) | 0x04);
-    v_wr8(s, 0xFF, 0x07);
-    v_wr8(s, 0x81, 0x01);
-    v_wr8(s, 0x80, 0x01);
-    v_wr8(s, 0x94, 0x6b);
-    v_wr8(s, 0x83, 0x00);
-    start_timeout(s);
-    while (v_rd8(s, 0x83) == 0x00) {
+static bool get_spad_info(vl53l0x_t *sensor, uint8_t *count, bool *type_is_aperture) {
+    v_wr8(sensor, 0x80, 0x01);
+    v_wr8(sensor, 0xFF, 0x01);
+    v_wr8(sensor, 0x00, 0x00);
+    v_wr8(sensor, 0xFF, 0x06);
+    v_wr8(sensor, 0x83, v_rd8(sensor, 0x83) | 0x04);
+    v_wr8(sensor, 0xFF, 0x07);
+    v_wr8(sensor, 0x81, 0x01);
+    v_wr8(sensor, 0x80, 0x01);
+    v_wr8(sensor, 0x94, 0x6b);
+    v_wr8(sensor, 0x83, 0x00);
+    start_timeout(sensor);
+    while (v_rd8(sensor, 0x83) == 0x00) {
         if (timed_out())
             return false;
     }
-    v_wr8(s, 0x83, 0x01);
-    uint8_t tmp = v_rd8(s, 0x92);
+    v_wr8(sensor, 0x83, 0x01);
+    uint8_t tmp = v_rd8(sensor, 0x92);
     *count = tmp & 0x7f;
     *type_is_aperture = (tmp >> 7) & 0x01;
-    v_wr8(s, 0x81, 0x00);
-    v_wr8(s, 0xFF, 0x06);
-    v_wr8(s, 0x83, v_rd8(s, 0x83) & ~0x04);
-    v_wr8(s, 0xFF, 0x01);
-    v_wr8(s, 0x00, 0x01);
-    v_wr8(s, 0xFF, 0x00);
-    v_wr8(s, 0x80, 0x00);
+    v_wr8(sensor, 0x81, 0x00);
+    v_wr8(sensor, 0xFF, 0x06);
+    v_wr8(sensor, 0x83, v_rd8(sensor, 0x83) & ~0x04);
+    v_wr8(sensor, 0xFF, 0x01);
+    v_wr8(sensor, 0x00, 0x01);
+    v_wr8(sensor, 0xFF, 0x00);
+    v_wr8(sensor, 0x80, 0x00);
     return true;
 }
-static bool ref_calibration(vl53l0x_t *s, uint8_t vhv_init_byte) {
-    v_wr8(s, SYSRANGE_START, 0x01 | vhv_init_byte);
-    start_timeout(s);
-    while ((v_rd8(s, RESULT_INTERRUPT_STATUS) & 0x07) == 0) {
+static bool ref_calibration(vl53l0x_t *sensor, uint8_t vhv_init_byte) {
+    v_wr8(sensor, SYSRANGE_START, 0x01 | vhv_init_byte);
+    start_timeout(sensor);
+    while ((v_rd8(sensor, RESULT_INTERRUPT_STATUS) & 0x07) == 0) {
         if (timed_out())
             return false;
     }
-    v_wr8(s, SYSTEM_INTERRUPT_CLEAR, 0x01);
-    v_wr8(s, SYSRANGE_START, 0x00);
+    v_wr8(sensor, SYSTEM_INTERRUPT_CLEAR, 0x01);
+    v_wr8(sensor, SYSRANGE_START, 0x00);
     return true;
 }
-static bool vl53l0x_init(vl53l0x_t *s, uint8_t addr) {
-    s->addr = addr;
-    s->io_timeout_ms = 500;
-    s->did_timeout = false;
-    if (v_rd8(s, 0xC0) != 0xEE)
+static bool vl53l0x_init(vl53l0x_t *sensor, uint8_t addr) {
+    sensor->addr = addr;
+    sensor->io_timeout_ms = 500;
+    sensor->did_timeout = false;
+    if (v_rd8(sensor, 0xC0) != 0xEE)
         return false;
-    v_wr8(s, VHV_CONFIG_PAD_SCL_SDA__EXTSUP_HV, v_rd8(s, VHV_CONFIG_PAD_SCL_SDA__EXTSUP_HV) | 0x01);
-    v_wr8(s, 0x88, 0x00);
-    v_wr8(s, 0x80, 0x01);
-    v_wr8(s, 0xFF, 0x01);
-    v_wr8(s, 0x00, 0x00);
-    s->stop_variable = v_rd8(s, 0x91);
-    v_wr8(s, 0x00, 0x01);
-    v_wr8(s, 0xFF, 0x00);
-    v_wr8(s, 0x80, 0x00);
-    v_wr8(s, MSRC_CONFIG_CONTROL, v_rd8(s, MSRC_CONFIG_CONTROL) | 0x12);
-    v_wr16(s, FINAL_RANGE_CONFIG_MIN_COUNT_RATE_RTN_LIMIT, (uint16_t)(0.25 * (1 << 7)));
-    v_wr8(s, SYSTEM_SEQUENCE_CONFIG, 0xFF);
+    v_wr8(sensor, VHV_CONFIG_PAD_SCL_SDA__EXTSUP_HV, v_rd8(sensor, VHV_CONFIG_PAD_SCL_SDA__EXTSUP_HV) | 0x01);
+    v_wr8(sensor, 0x88, 0x00);
+    v_wr8(sensor, 0x80, 0x01);
+    v_wr8(sensor, 0xFF, 0x01);
+    v_wr8(sensor, 0x00, 0x00);
+    sensor->stop_variable = v_rd8(sensor, 0x91);
+    v_wr8(sensor, 0x00, 0x01);
+    v_wr8(sensor, 0xFF, 0x00);
+    v_wr8(sensor, 0x80, 0x00);
+    v_wr8(sensor, MSRC_CONFIG_CONTROL, v_rd8(sensor, MSRC_CONFIG_CONTROL) | 0x12);
+    v_wr16(sensor, FINAL_RANGE_CONFIG_MIN_COUNT_RATE_RTN_LIMIT, (uint16_t)(0.25 * (1 << 7)));
+    v_wr8(sensor, SYSTEM_SEQUENCE_CONFIG, 0xFF);
     uint8_t spad_count;
     bool spad_type_is_aperture;
-    if (!get_spad_info(s, &spad_count, &spad_type_is_aperture))
+    if (!get_spad_info(sensor, &spad_count, &spad_type_is_aperture))
         return false;
     uint8_t ref_spad_map[6];
-    v_rd_multi(s, GLOBAL_CONFIG_SPAD_ENABLES_REF_0, ref_spad_map, 6);
-    v_wr8(s, 0xFF, 0x01);
-    v_wr8(s, DYNAMIC_SPAD_REF_EN_START_OFFSET, 0x00);
-    v_wr8(s, DYNAMIC_SPAD_NUM_REQUESTED_REF_SPAD, 0x2C);
-    v_wr8(s, 0xFF, 0x00);
-    v_wr8(s, GLOBAL_CONFIG_REF_EN_START_SELECT, 0xB4);
+    v_rd_multi(sensor, GLOBAL_CONFIG_SPAD_ENABLES_REF_0, ref_spad_map, 6);
+    v_wr8(sensor, 0xFF, 0x01);
+    v_wr8(sensor, DYNAMIC_SPAD_REF_EN_START_OFFSET, 0x00);
+    v_wr8(sensor, DYNAMIC_SPAD_NUM_REQUESTED_REF_SPAD, 0x2C);
+    v_wr8(sensor, 0xFF, 0x00);
+    v_wr8(sensor, GLOBAL_CONFIG_REF_EN_START_SELECT, 0xB4);
     uint8_t first_spad = spad_type_is_aperture ? 12 : 0, enabled = 0;
-    for (uint8_t i = 0; i < 48; i++) {
-        if (i < first_spad || enabled == spad_count)
-            ref_spad_map[i / 8] &= ~(1 << (i % 8));
-        else if ((ref_spad_map[i / 8] >> (i % 8)) & 0x1)
+    for (uint8_t entry_index = 0; entry_index < 48; entry_index++) {
+        if (entry_index < first_spad || enabled == spad_count)
+            ref_spad_map[entry_index / 8] &= ~(1 << (entry_index % 8));
+        else if ((ref_spad_map[entry_index / 8] >> (entry_index % 8)) & 0x1)
             enabled++;
     }
-    v_wr_multi(s, GLOBAL_CONFIG_SPAD_ENABLES_REF_0, ref_spad_map, 6);
+    v_wr_multi(sensor, GLOBAL_CONFIG_SPAD_ENABLES_REF_0, ref_spad_map, 6);
     static const uint8_t tuning[] = {
         0xFF, 0x01, 0x00, 0x00, 0xFF, 0x00, 0x09, 0x00, 0x10, 0x00, 0x11, 0x00, 0x24, 0x01, 0x25, 0xFF, 0x75, 0x00,
         0xFF, 0x01, 0x4E, 0x2C, 0x48, 0x00, 0x30, 0x20, 0xFF, 0x00, 0x30, 0x09, 0x54, 0x00, 0x31, 0x04, 0x32, 0x03,
@@ -411,45 +411,45 @@ static bool vl53l0x_init(vl53l0x_t *s, uint8_t addr) {
         0x48, 0x28, 0x67, 0x00, 0x70, 0x04, 0x71, 0x01, 0x72, 0xFE, 0x76, 0x00, 0x77, 0x00, 0xFF, 0x01, 0x0D, 0x01,
         0xFF, 0x00, 0x80, 0x01, 0x01, 0xF8, 0xFF, 0x01, 0x8E, 0x01, 0x00, 0x01, 0xFF, 0x00, 0x80, 0x00,
     };
-    for (size_t i = 0; i < sizeof(tuning); i += 2)
-        v_wr8(s, tuning[i], tuning[i + 1]);
-    v_wr8(s, SYSTEM_INTERRUPT_CONFIG_GPIO, 0x04);
-    v_wr8(s, GPIO_HV_MUX_ACTIVE_HIGH, v_rd8(s, GPIO_HV_MUX_ACTIVE_HIGH) & ~0x10);
-    v_wr8(s, SYSTEM_INTERRUPT_CLEAR, 0x01);
-    v_wr8(s, SYSTEM_SEQUENCE_CONFIG, 0x01);
-    if (!ref_calibration(s, 0x40))
+    for (size_t entry_index = 0; entry_index < sizeof(tuning); entry_index += 2)
+        v_wr8(sensor, tuning[entry_index], tuning[entry_index + 1]);
+    v_wr8(sensor, SYSTEM_INTERRUPT_CONFIG_GPIO, 0x04);
+    v_wr8(sensor, GPIO_HV_MUX_ACTIVE_HIGH, v_rd8(sensor, GPIO_HV_MUX_ACTIVE_HIGH) & ~0x10);
+    v_wr8(sensor, SYSTEM_INTERRUPT_CLEAR, 0x01);
+    v_wr8(sensor, SYSTEM_SEQUENCE_CONFIG, 0x01);
+    if (!ref_calibration(sensor, 0x40))
         return false;
-    v_wr8(s, SYSTEM_SEQUENCE_CONFIG, 0x02);
-    if (!ref_calibration(s, 0x00))
+    v_wr8(sensor, SYSTEM_SEQUENCE_CONFIG, 0x02);
+    if (!ref_calibration(sensor, 0x00))
         return false;
-    v_wr8(s, SYSTEM_SEQUENCE_CONFIG, 0xE8);
+    v_wr8(sensor, SYSTEM_SEQUENCE_CONFIG, 0xE8);
     return true;
 }
-static uint16_t read_range_single(vl53l0x_t *s) {
-    v_wr8(s, 0x80, 0x01);
-    v_wr8(s, 0xFF, 0x01);
-    v_wr8(s, 0x00, 0x00);
-    v_wr8(s, 0x91, s->stop_variable);
-    v_wr8(s, 0x00, 0x01);
-    v_wr8(s, 0xFF, 0x00);
-    v_wr8(s, 0x80, 0x00);
-    v_wr8(s, SYSRANGE_START, 0x01);
-    start_timeout(s);
-    while (v_rd8(s, SYSRANGE_START) & 0x01) {
+static uint16_t read_range_single(vl53l0x_t *sensor) {
+    v_wr8(sensor, 0x80, 0x01);
+    v_wr8(sensor, 0xFF, 0x01);
+    v_wr8(sensor, 0x00, 0x00);
+    v_wr8(sensor, 0x91, sensor->stop_variable);
+    v_wr8(sensor, 0x00, 0x01);
+    v_wr8(sensor, 0xFF, 0x00);
+    v_wr8(sensor, 0x80, 0x00);
+    v_wr8(sensor, SYSRANGE_START, 0x01);
+    start_timeout(sensor);
+    while (v_rd8(sensor, SYSRANGE_START) & 0x01) {
         if (timed_out()) {
-            s->did_timeout = true;
+            sensor->did_timeout = true;
             return 65535;
         }
     }
-    start_timeout(s);
-    while ((v_rd8(s, RESULT_INTERRUPT_STATUS) & 0x07) == 0) {
+    start_timeout(sensor);
+    while ((v_rd8(sensor, RESULT_INTERRUPT_STATUS) & 0x07) == 0) {
         if (timed_out()) {
-            s->did_timeout = true;
+            sensor->did_timeout = true;
             return 65535;
         }
     }
-    uint16_t range = v_rd16(s, RESULT_RANGE_STATUS + 10);
-    v_wr8(s, SYSTEM_INTERRUPT_CLEAR, 0x01);
+    uint16_t range = v_rd16(sensor, RESULT_RANGE_STATUS + 10);
+    v_wr8(sensor, SYSTEM_INTERRUPT_CLEAR, 0x01);
     return range;
 }
 
@@ -487,54 +487,54 @@ static uint8_t drop_pct = 0; /* simulated interference: % of received verdicts t
 static QueueHandle_t rxq;
 typedef struct {
     int len;
-    uint8_t d[TBL_MAX + 16];
+    uint8_t data[TBL_MAX + 16];
 } rxmsg_t;
 static void on_recv(const esp_now_recv_info_t *info, const uint8_t *data, int len) {
     (void)info;
-    if (len <= 0 || len > (int)sizeof(((rxmsg_t *)0)->d))
+    if (len <= 0 || len > (int)sizeof(((rxmsg_t *)0)->data))
         return;
-    rxmsg_t m;
-    m.len = len;
-    memcpy(m.d, data, len);
-    xQueueSend(rxq, &m, 0);
+    rxmsg_t message;
+    message.len = len;
+    memcpy(message.data, data, len);
+    xQueueSend(rxq, &message, 0);
 }
-static void bcast(const uint8_t *d, int n) {
-    esp_now_send(BCAST, d, n);
+static void bcast(const uint8_t *data, int length) {
+    esp_now_send(BCAST, data, length);
 }
 static void send_verdict(uint8_t slot, int8_t band, uint16_t seq) {
-    uint8_t b[5] = {M_VERDICT, slot, (uint8_t)band, seq & 0xFF, seq >> 8};
-    bcast(b, 5);
+    uint8_t packet[5] = {M_VERDICT, slot, (uint8_t)band, seq & 0xFF, seq >> 8};
+    bcast(packet, 5);
 }
-static void send_prepare(uint32_t id, const uint8_t *t, uint16_t len, uint16_t seq) {
-    uint8_t b[TBL_MAX + 16];
-    int p = 0;
-    b[p++] = M_PREPARE;
-    b[p++] = seq & 0xFF;
-    b[p++] = seq >> 8;
-    memcpy(b + p, &id, 4);
-    p += 4;
-    b[p++] = len & 0xFF;
-    b[p++] = len >> 8;
-    memcpy(b + p, t, len);
-    p += len;
-    bcast(b, p);
+static void send_prepare(uint32_t id, const uint8_t *table, uint16_t len, uint16_t seq) {
+    uint8_t packet[TBL_MAX + 16];
+    int cursor = 0;
+    packet[cursor++] = M_PREPARE;
+    packet[cursor++] = seq & 0xFF;
+    packet[cursor++] = seq >> 8;
+    memcpy(packet + cursor, &id, 4);
+    cursor += 4;
+    packet[cursor++] = len & 0xFF;
+    packet[cursor++] = len >> 8;
+    memcpy(packet + cursor, table, len);
+    cursor += len;
+    bcast(packet, cursor);
 }
 static void send_ack(uint16_t seq) {
-    uint8_t b[4] = {M_ACK, seq & 0xFF, seq >> 8, node_id};
-    bcast(b, 4);
+    uint8_t packet[4] = {M_ACK, seq & 0xFF, seq >> 8, node_id};
+    bcast(packet, 4);
 }
 static void send_commit(uint16_t seq, uint16_t delay) {
-    uint8_t b[5] = {M_COMMIT, seq & 0xFF, seq >> 8, delay & 0xFF, delay >> 8};
-    bcast(b, 5);
+    uint8_t packet[5] = {M_COMMIT, seq & 0xFF, seq >> 8, delay & 0xFF, delay >> 8};
+    bcast(packet, 5);
 }
 
 /* poke over USB: coordinate a fleet-wide swap of the fusion RULE itself (toggle A<->B) */
 static void start_rollout(void) {
     uint32_t target_id = (active_id == POLICY_ID_A) ? POLICY_ID_B : POLICY_ID_A;
-    const uint8_t *t = (target_id == POLICY_ID_A) ? FUSE_TABLE_A : FUSE_TABLE_B;
+    const uint8_t *table = (target_id == POLICY_ID_A) ? FUSE_TABLE_A : FUSE_TABLE_B;
     uint16_t len = (target_id == POLICY_ID_A) ? FUSE_TABLE_A_LEN : FUSE_TABLE_B_LEN;
     rollout_seq++;
-    memcpy(staged, t, len);
+    memcpy(staged, table, len);
     staged_len = len;
     staged_id = target_id;
     staged_seq = rollout_seq; /* stage locally: a node never hears its own broadcast */
@@ -542,7 +542,7 @@ static void start_rollout(void) {
     ack_n = 0;
     ack_deadline_us = esp_timer_get_time() + (int64_t)ACK_WIN_MS * 1000;
     coord = 1;
-    send_prepare(target_id, t, len, rollout_seq);
+    send_prepare(target_id, table, len, rollout_seq);
     emit("[%s] coord PREPARE seq=%u target=fusion-%s, collecting ACKs\r\n", my_label, rollout_seq, pname(target_id));
 }
 
@@ -561,8 +561,8 @@ static int8_t read_own_band(void) {
 }
 
 static void led_setup(void) {
-    gpio_config_t g = {.pin_bit_mask = (1ULL << LED_GPIO), .mode = GPIO_MODE_OUTPUT};
-    gpio_config(&g);
+    gpio_config_t pins_config = {.pin_bit_mask = (1ULL << LED_GPIO), .mode = GPIO_MODE_OUTPUT};
+    gpio_config(&pins_config);
     gpio_set_level(LED_GPIO, 0);
 }
 
@@ -590,11 +590,11 @@ void app_main(void) {
     esp_wifi_get_mac(WIFI_IF_STA, mac);
 
     /* self-select role from the baked MAC map */
-    for (int i = 0; i < ROLES_N; i++)
-        if (memcmp(mac, ROLES[i].mac, 6) == 0) {
-            my_slot = ROLES[i].slot;
-            my_kind = ROLES[i].kind;
-            my_label = ROLES[i].label;
+    for (int entry_index = 0; entry_index < ROLES_N; entry_index++)
+        if (memcmp(mac, ROLES[entry_index].mac, 6) == 0) {
+            my_slot = ROLES[entry_index].slot;
+            my_kind = ROLES[entry_index].kind;
+            my_label = ROLES[entry_index].label;
             break;
         }
     if (my_slot == 0xFF) {
@@ -646,7 +646,7 @@ void app_main(void) {
                              .master.clk_speed = I2C_HZ};
         i2c_param_config(I2C_PORT, &conf);
         i2c_driver_install(I2C_PORT, I2C_MODE_MASTER, 0, 0, 0);
-        for (int a = 0; a < 3 && !tof_ok; a++) {
+        for (int attempt = 0; attempt < 3 && !tof_ok; attempt++) {
             tof_ok = vl53l0x_init(&tof, TOF_ADDR);
             if (!tof_ok)
                 vTaskDelay(pdMS_TO_TICKS(50));
@@ -655,9 +655,9 @@ void app_main(void) {
             emit("[%s] VL53L0X init FAILED — this node will report band 3 (far)\r\n", my_label);
     }
 
-    for (int i = 0; i < N_SLOTS; i++) {
-        bands[i] = -1;
-        band_seen_us[i] = 0;
+    for (int entry_index = 0; entry_index < N_SLOTS; entry_index++) {
+        bands[entry_index] = -1;
+        band_seen_us[entry_index] = 0;
     }
     emit("node %02x (%s) up — slot=%u kind=%s active=fusion-%s, mesh ready ('R' swaps rule; band 8 = sensor dark)\r\n",
          mac[5], my_label, my_slot, my_kind == KIND_TOF ? "TOF" : "POT", pname(active_id));
@@ -667,7 +667,7 @@ void app_main(void) {
     bool warn_phase = false;
     for (;;) {
         int64_t now = esp_timer_get_time();
-        /* USB commands: 'R' swaps the fusion rule; a digit d sets simulated interference to d*10% drop; 'X' = blackout */
+        /* USB commands: 'R' swaps the fusion rule; a digit sets simulated interference to that digit*10% drop; 'X' = blackout */
         uint8_t c;
         if (uart_read_bytes(UART, &c, 1, 0) == 1) {
             if (c == 'R' || c == 'r')
@@ -681,29 +681,29 @@ void app_main(void) {
             }
         }
         /* drain ESP-NOW: sensor bands (continuous) + the two-phase swap of the fusion rule */
-        rxmsg_t m;
-        while (xQueueReceive(rxq, &m, 0) == pdTRUE) {
-            uint8_t type = m.d[0];
-            if (type == M_VERDICT && m.len >= 3) {
+        rxmsg_t message;
+        while (xQueueReceive(rxq, &message, 0) == pdTRUE) {
+            uint8_t type = message.data[0];
+            if (type == M_VERDICT && message.len >= 3) {
                 if (drop_pct && (esp_random() % 100) < drop_pct) { /* dropped by simulated interference */
                 } else {
-                    uint8_t slot = m.d[1];
-                    int8_t band = (int8_t)m.d[2];
+                    uint8_t slot = message.data[1];
+                    int8_t band = (int8_t)message.data[2];
                     if (slot < N_SLOTS) {
                         bands[slot] = band;
                         band_seen_us[slot] = now;
                     }
                 }
-            } else if (type == M_PREPARE && m.len >= 10) {
-                uint16_t sq = m.d[1] | (m.d[2] << 8);
+            } else if (type == M_PREPARE && message.len >= 10) {
+                uint16_t sq = message.data[1] | (message.data[2] << 8);
                 uint32_t id;
-                memcpy(&id, m.d + 3, 4);
-                uint16_t len = m.d[7] | (m.d[8] << 8);
-                if (len <= TBL_MAX && 9 + len <= m.len) {
-                    const uint8_t *t = m.d + 9;
-                    uint32_t got = fnv1a32(t, len);
+                memcpy(&id, message.data + 3, 4);
+                uint16_t len = message.data[7] | (message.data[8] << 8);
+                if (len <= TBL_MAX && 9 + len <= message.len) {
+                    const uint8_t *table = message.data + 9;
+                    uint32_t got = fnv1a32(table, len);
                     if (got == id && (id == POLICY_ID_A || id == POLICY_ID_B)) {
-                        memcpy(staged, t, len);
+                        memcpy(staged, table, len);
                         staged_len = len;
                         staged_id = id;
                         staged_seq = sq;
@@ -712,17 +712,17 @@ void app_main(void) {
                     } else
                         emit("[%s] PREPARE REJECT seq=%u (hash/allowlist mismatch)\r\n", my_label, sq);
                 }
-            } else if (type == M_ACK && m.len >= 4 && coord) {
-                uint16_t sq = m.d[1] | (m.d[2] << 8);
-                uint8_t nid = m.d[3];
+            } else if (type == M_ACK && message.len >= 4 && coord) {
+                uint16_t sq = message.data[1] | (message.data[2] << 8);
+                uint8_t nid = message.data[3];
                 if (sq == rollout_seq && !acked[nid]) {
                     acked[nid] = 1;
                     ack_n++;
                     emit("[%s] coord ACK from %02x (%d/%d)\r\n", my_label, nid, ack_n, EXPECT_ACKS);
                 }
-            } else if (type == M_COMMIT && m.len >= 5) {
-                uint16_t sq = m.d[1] | (m.d[2] << 8);
-                uint16_t delay = m.d[3] | (m.d[4] << 8);
+            } else if (type == M_COMMIT && message.len >= 5) {
+                uint16_t sq = message.data[1] | (message.data[2] << 8);
+                uint16_t delay = message.data[3] | (message.data[4] << 8);
                 if (sq == staged_seq) {
                     flip_at_us = esp_timer_get_time() + (int64_t)delay * 1000;
                     emit("[%s] COMMIT seq=%u flip in %ums\r\n", my_label, sq, delay);
@@ -760,11 +760,11 @@ void app_main(void) {
                blanks, so a dropped node localizes the fault instead of silencing the fleet. */
             int8_t in[N_SLOTS];
             memset(regs, 0, sizeof regs);
-            for (int i = 0; i < N_SLOTS; i++) {
-                in[i] = (bands[i] >= 0 && (now - band_seen_us[i]) < (int64_t)STALE_MS * 1000) ? bands[i]
+            for (int entry_index = 0; entry_index < N_SLOTS; entry_index++) {
+                in[entry_index] = (bands[entry_index] >= 0 && (now - band_seen_us[entry_index]) < (int64_t)STALE_MS * 1000) ? bands[entry_index]
                                                                                               : (int8_t)STALE_BAND;
-                wr32(regs + 4 + 8 * i, TY_INT);
-                wr32(regs + 8 + 8 * i, in[i]);
+                wr32(regs + 4 + 8 * entry_index, TY_INT);
+                wr32(regs + 8 + 8 * entry_index, in[entry_index]);
             }
             uint8_t err = 0;
             int8_t edge = evaluate(0, &err);

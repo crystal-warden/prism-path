@@ -44,36 +44,36 @@
 
 static const uint8_t BCAST[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
-typedef struct { uint8_t src[6]; uint8_t len; uint8_t d[32]; } rxmsg_t;
+typedef struct { uint8_t src[6]; uint8_t len; uint8_t data[32]; } rxmsg_t;
 static QueueHandle_t rxq;
 
-static ssc_t S;
+static ssc_t sidecar;
 static int my_role = -1;
 static int slot_sym[N_ROLES];              /* latest symbol per slot; -1 = never seen */
 static int32_t peer_posture[N_ROLES];      /* latest posture n gossiped per role; -1 = none */
 
 /* ---- decode: the receive half zeck.h deliberately omitted (front half only) ---- */
 static uint64_t zeck_decode1(const uint8_t *buf, uint16_t nbits, uint16_t *pos) {
-    uint64_t v = 0; uint8_t prev = 0; uint8_t i = 0;
-    while (*pos < nbits && i < 78) {
-        uint8_t b = (buf[*pos >> 3] >> (7 - (*pos & 7))) & 1;
+    uint64_t value = 0; uint8_t prev = 0; uint8_t fib_index = 0;
+    while (*pos < nbits && fib_index < 78) {
+        uint8_t bit = (buf[*pos >> 3] >> (7 - (*pos & 7))) & 1;
         (*pos)++;
-        if (b && prev) return v;           /* "11" terminator */
-        if (b) v += fib_at(i);
-        prev = b; i++;
+        if (bit && prev) return value;           /* "11" terminator */
+        if (bit) value += fib_at(fib_index);
+        prev = bit; fib_index++;
     }
     return 0;                              /* malformed / padding overrun */
 }
 
 static void on_recv(const esp_now_recv_info_t *info, const uint8_t *data, int len) {
-    if (len > (int)sizeof(((rxmsg_t *)0)->d)) return;
-    rxmsg_t m; memcpy(m.src, info->src_addr, 6); m.len = (uint8_t)len; memcpy(m.d, data, len);
-    xQueueSend(rxq, &m, 0);
+    if (len > (int)sizeof(((rxmsg_t *)0)->data)) return;
+    rxmsg_t message; memcpy(message.src, info->src_addr, 6); message.len = (uint8_t)len; memcpy(message.data, data, len);
+    xQueueSend(rxq, &message, 0);
 }
 
 static int role_of(const uint8_t *mac) {
-    for (int r = 0; r < N_ROLES; r++)
-        if (memcmp(mac, ROLE_MAC[r], 6) == 0) return r;
+    for (int role_index = 0; role_index < N_ROLES; role_index++)
+        if (memcmp(mac, ROLE_MAC[role_index], 6) == 0) return role_index;
     return -1;
 }
 
@@ -82,12 +82,12 @@ static int32_t synth(int role, uint32_t tick) {
     int32_t period = ROLE_SYNTH[role][2], phase = ROLE_SYNTH[role][3];
     int32_t pos = (int32_t)((tick + (uint32_t)phase) % (uint32_t)period);
     int32_t half = period / 2;
-    int32_t x = pos <= half ? pos : period - pos;
-    return lo + (x * (hi - lo)) / half;
+    int32_t ramp = pos <= half ? pos : period - pos;
+    return lo + (ramp * (hi - lo)) / half;
 }
 
-static void print_hex(const uint8_t *b, uint8_t n) {
-    for (uint8_t i = 0; i < n; i++) printf("%02x", b[i]);
+static void print_hex(const uint8_t *bytes, uint8_t length) {
+    for (uint8_t byte_index = 0; byte_index < length; byte_index++) printf("%02x", bytes[byte_index]);
 }
 
 /* ---- TX accumulator: one triple per frame at BATCH_TICKS==1 (byte identical to the unbatched
@@ -97,9 +97,9 @@ static bitacc_t bat_acc = { bat_buf, 0 };
 
 static void bat_flush(uint32_t tick) {
     if (bat_acc.bitpos == 0) return;
-    uint8_t n = (uint8_t)((bat_acc.bitpos + 7u) >> 3);
-    esp_now_send(BCAST, bat_buf, n);
-    printf("X %lu len=%u ", (unsigned long)tick, n); print_hex(bat_buf, n); printf("\n");
+    uint8_t length = (uint8_t)((bat_acc.bitpos + 7u) >> 3);
+    esp_now_send(BCAST, bat_buf, length);
+    printf("X %lu len=%u ", (unsigned long)tick, length); print_hex(bat_buf, length); printf("\n");
     memset(bat_buf, 0, sizeof bat_buf);
     bat_acc.bitpos = 0;
 }
@@ -125,59 +125,59 @@ void app_main(void) {
     esp_now_add_peer(&peer);
 
     my_role = role_of(mac);
-    int prc = ssc_parse(SIDECAR, sizeof SIDECAR, &S);
-    const ssc_node_t *N = &S.nodes[0];
+    int prc = ssc_parse(SIDECAR, sizeof SIDECAR, &sidecar);
+    const ssc_node_t *node = &sidecar.nodes[0];
     printf("BOOT mac=%02x:%02x:%02x:%02x:%02x:%02x role=%d ssc=%d bands=%u size=%lu\n",
            mac[0], mac[1], mac[2], mac[3], mac[4], mac[5], my_role, prc,
-           N->n_bands, (unsigned long)N->size);
+           node->n_bands, (unsigned long)node->size);
     if (my_role < 0 || prc != 0) { printf("HALT\n"); return; }
-    for (int i = 0; i < N_ROLES; i++) { slot_sym[i] = -1; peer_posture[i] = -1; }
+    for (int slot_index = 0; slot_index < N_ROLES; slot_index++) { slot_sym[slot_index] = -1; peer_posture[slot_index] = -1; }
 
     for (uint32_t tick = 0;; tick++) {
         /* own channel: synthesize, quantize through the BAKED partition, band-tier TX */
         int32_t raw = synth(my_role, tick);
-        int sym = ssc_quantize(&N->fields[ROLE_FIELD[my_role]], raw);
+        int sym = ssc_quantize(&node->fields[ROLE_FIELD[my_role]], raw);
         slot_sym[my_role] = sym;
         tx_triple(1, tick, (uint32_t)sym);
         if (tick % REFINE_EVERY == 0)
             tx_triple(2, tick, (uint32_t)raw);
 
         /* drain RX: neighbors' band frames update slots; posture frames update the beacon view */
-        rxmsg_t m;
-        while (xQueueReceive(rxq, &m, 0) == pdTRUE) {
-            int r = role_of(m.src);
-            uint16_t pos = 0, nbits = (uint16_t)(m.len * 8u);
+        rxmsg_t message;
+        while (xQueueReceive(rxq, &message, 0) == pdTRUE) {
+            int role_index = role_of(message.src);
+            uint16_t pos = 0, nbits = (uint16_t)(message.len * 8u);
             int triples = 0;
             for (;;) {                          /* a frame carries 1..BATCH triples, self framing */
-                uint64_t c = zeck_decode1(m.d, nbits, &pos);
-                if (c == 0) break;              /* zero padding / end of stream */
-                uint64_t t = zeck_decode1(m.d, nbits, &pos);
-                uint64_t v = zeck_decode1(m.d, nbits, &pos);
-                if (r < 0 || t == 0 || v == 0) { triples = -1; break; }
-                printf("R %d c%llu t%llu v%llu ", r, (unsigned long long)(c - 1),
-                       (unsigned long long)(t - 1), (unsigned long long)(v - 1));
-                print_hex(m.d, m.len); printf("\n");
-                if (c - 1 == 1) slot_sym[r] = (int)(v - 1);
-                if (c - 1 == 3) peer_posture[r] = (int32_t)(v - 1);
+                uint64_t wire_class = zeck_decode1(message.data, nbits, &pos);
+                if (wire_class == 0) break;              /* zero padding / end of stream */
+                uint64_t wire_tick = zeck_decode1(message.data, nbits, &pos);
+                uint64_t wire_value = zeck_decode1(message.data, nbits, &pos);
+                if (role_index < 0 || wire_tick == 0 || wire_value == 0) { triples = -1; break; }
+                printf("R %d c%llu t%llu v%llu ", role_index, (unsigned long long)(wire_class - 1),
+                       (unsigned long long)(wire_tick - 1), (unsigned long long)(wire_value - 1));
+                print_hex(message.data, message.len); printf("\n");
+                if (wire_class - 1 == 1) slot_sym[role_index] = (int)(wire_value - 1);
+                if (wire_class - 1 == 3) peer_posture[role_index] = (int32_t)(wire_value - 1);
                 triples++;
             }
-            if (triples <= 0 && r >= 0 && m.len > 0 && triples < 0) {
-                printf("RBAD "); print_hex(m.d, m.len); printf("\n");
+            if (triples <= 0 && role_index >= 0 && message.len > 0 && triples < 0) {
+                printf("RBAD "); print_hex(message.data, message.len); printf("\n");
             } else if (triples == 0) {
-                printf("RBAD "); print_hex(m.d, m.len); printf("\n");
+                printf("RBAD "); print_hex(message.data, message.len); printf("\n");
             }
         }
 
         /* fused posture: the k=3 joint spiral cell over the latest symbols; gossip it */
         if (slot_sym[0] >= 0 && slot_sym[1] >= 0 && slot_sym[2] >= 0) {
             int syms[SSC_MAX_FIELDS];
-            for (int r = 0; r < N_ROLES; r++) syms[ROLE_FIELD[r]] = slot_sym[r];
-            int32_t pn = ssc_n(N, syms);
-            int band = pn >= 0 ? ssc_band(N, (uint32_t)pn) : -1;
+            for (int role_index = 0; role_index < N_ROLES; role_index++) syms[ROLE_FIELD[role_index]] = slot_sym[role_index];
+            int32_t pn = ssc_n(node, syms);
+            int band = pn >= 0 ? ssc_band(node, (uint32_t)pn) : -1;
             tx_triple(3, tick, (uint32_t)pn);
             printf("P %lu n=%ld band=%d route=%s peers=%ld,%ld,%ld\n",
                    (unsigned long)tick, (long)pn, band,
-                   band >= 0 ? N->bands[band].route : "?",
+                   band >= 0 ? node->bands[band].route : "?",
                    (long)peer_posture[0], (long)peer_posture[1], (long)peer_posture[2]);
         }
         if (BATCH_TICKS > 1 && tick % BATCH_TICKS == (uint32_t)(BATCH_TICKS - 1))

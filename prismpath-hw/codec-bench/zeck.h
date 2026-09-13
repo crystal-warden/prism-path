@@ -11,14 +11,14 @@
 #ifdef __AVR__
 #include <avr/pgmspace.h>
 #define TBL PROGMEM
-static inline uint64_t fib_at(uint8_t i);
-static inline uint16_t rd16(const uint16_t *p) { return pgm_read_word(p); }
-static inline uint8_t rd8(const uint8_t *p) { return pgm_read_byte(p); }
+static inline uint64_t fib_at(uint8_t fib_index);
+static inline uint16_t rd16(const uint16_t *source) { return pgm_read_word(source); }
+static inline uint8_t rd8(const uint8_t *source) { return pgm_read_byte(source); }
 #else
 #define TBL
-static inline uint64_t fib_at(uint8_t i);
-static inline uint16_t rd16(const uint16_t *p) { return *p; }
-static inline uint8_t rd8(const uint8_t *p) { return *p; }
+static inline uint64_t fib_at(uint8_t fib_index);
+static inline uint16_t rd16(const uint16_t *source) { return *source; }
+static inline uint8_t rd8(const uint8_t *source) { return *source; }
 #endif
 
 static const uint64_t TBL FIBS[78] = {
@@ -45,38 +45,38 @@ static const uint64_t TBL FIBS[78] = {
 };
 
 #ifdef __AVR__
-static inline uint64_t fib_at(uint8_t i) { uint64_t v; memcpy_P(&v, &FIBS[i], 8); return v; }
+static inline uint64_t fib_at(uint8_t fib_index) { uint64_t value; memcpy_P(&value, &FIBS[fib_index], 8); return value; }
 #else
-static inline uint64_t fib_at(uint8_t i) { return FIBS[i]; }
+static inline uint64_t fib_at(uint8_t fib_index) { return FIBS[fib_index]; }
 #endif
 
 typedef struct { uint8_t *buf; uint16_t bitpos; } bitacc_t;
 
-static inline void put_bit(bitacc_t *a, uint8_t b) {
-    if (b) a->buf[a->bitpos >> 3] |= (uint8_t)(0x80u >> (a->bitpos & 7u));
-    a->bitpos++;
+static inline void put_bit(bitacc_t *acc, uint8_t bit) {
+    if (bit) acc->buf[acc->bitpos >> 3] |= (uint8_t)(0x80u >> (acc->bitpos & 7u));
+    acc->bitpos++;
 }
 
-/* Append the Fibonacci code of wire int n (>= 1). Returns 0, or -1 for n == 0 (invalid). */
-static int8_t zeck_encode(bitacc_t *a, uint64_t n) {
-    if (n == 0) return -1;
-    uint8_t k = 0;
-    while (k + 1u < 78u && fib_at((uint8_t)(k + 1u)) <= n) k++;
+/* Append the Fibonacci code of wire int value (>= 1). Returns 0, or -1 for value == 0 (invalid). */
+static int8_t zeck_encode(bitacc_t *acc, uint64_t value) {
+    if (value == 0) return -1;
+    uint8_t top_index = 0;
+    while (top_index + 1u < 78u && fib_at((uint8_t)(top_index + 1u)) <= value) top_index++;
     uint8_t code[80];
-    memset(code, 0, (size_t)k + 1u);
-    for (int8_t i = (int8_t)k; i >= 0; i--) {
-        uint64_t f = fib_at((uint8_t)i);
-        if (f <= n) { code[i] = 1; n -= f; }
+    memset(code, 0, (size_t)top_index + 1u);
+    for (int8_t code_index = (int8_t)top_index; code_index >= 0; code_index--) {
+        uint64_t fib_value = fib_at((uint8_t)code_index);
+        if (fib_value <= value) { code[code_index] = 1; value -= fib_value; }
     }
-    for (uint8_t i = 0; i <= k; i++) put_bit(a, code[i]);
-    put_bit(a, 1);
+    for (uint8_t code_index = 0; code_index <= top_index; code_index++) put_bit(acc, code[code_index]);
+    put_bit(acc, 1);
     return 0;
 }
 
 /* One event: encode 4 wire ints into buf (pre zeroed). Returns byte length. */
 static uint8_t encode_event(const uint16_t *syms, uint8_t *buf, uint8_t buflen) {
     memset(buf, 0, buflen);
-    bitacc_t a = { buf, 0 };
-    for (uint8_t f = 0; f < 4; f++) (void)zeck_encode(&a, rd16(&syms[f]));
-    return (uint8_t)((a.bitpos + 7u) >> 3);
+    bitacc_t acc = { buf, 0 };
+    for (uint8_t field_index = 0; field_index < 4; field_index++) (void)zeck_encode(&acc, rd16(&syms[field_index]));
+    return (uint8_t)((acc.bitpos + 7u) >> 3);
 }

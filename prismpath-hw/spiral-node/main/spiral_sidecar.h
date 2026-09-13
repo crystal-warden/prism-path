@@ -24,7 +24,7 @@ typedef struct {                    /* one numeric cell: [lo, hi] with open-boun
 typedef struct {
     char    name[SSC_NAME_MAX];
     uint8_t kind;                   /* 0 numeric, 1 boolean */
-    uint16_t n;
+    uint16_t n_cells;
     ssc_cell_t cells[SSC_MAX_CELLS];
 } ssc_field_t;
 
@@ -35,12 +35,12 @@ typedef struct {
 
 typedef struct {
     char       name[SSC_NAME_MAX];
-    uint8_t    k;
+    uint8_t    n_fields;
     ssc_field_t fields[SSC_MAX_FIELDS];
     uint16_t   n_bands;
     ssc_band_t bands[SSC_MAX_BANDS];
     uint32_t   size;
-    uint32_t   cell_n[SSC_MAX_SIZE];  /* row-major linear cell index -> n */
+    uint32_t   cell_n[SSC_MAX_SIZE];  /* row-major linear cell index -> the joint spiral index */
 } ssc_node_t;
 
 typedef struct {
@@ -48,83 +48,86 @@ typedef struct {
     ssc_node_t nodes[SSC_MAX_NODES];
 } ssc_t;
 
-static inline uint16_t ssc_rd16(const uint8_t *p) { return (uint16_t)(p[0] | (p[1] << 8)); }
-static inline uint32_t ssc_rd32(const uint8_t *p) {
-    return (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24);
+static inline uint16_t ssc_rd16(const uint8_t *bytes) { return (uint16_t)(bytes[0] | (bytes[1] << 8)); }
+static inline uint32_t ssc_rd32(const uint8_t *bytes) {
+    return (uint32_t)bytes[0] | ((uint32_t)bytes[1] << 8) | ((uint32_t)bytes[2] << 16) | ((uint32_t)bytes[3] << 24);
 }
 
 /* Parse the v1 blob. Returns 0, or a negative stage code for truncation/cap/format faults. */
-static int ssc_parse(const uint8_t *d, uint32_t len, ssc_t *out) {
-    if (len < 8 || ssc_rd32(d) != 0x4C535050u || ssc_rd16(d + 4) != 1) return -1;
+static int ssc_parse(const uint8_t *blob, uint32_t len, ssc_t *out) {
+    if (len < 8 || ssc_rd32(blob) != 0x4C535050u || ssc_rd16(blob + 4) != 1) return -1;
     uint32_t off = 6;
-    out->n_nodes = ssc_rd16(d + off); off += 2;
+    out->n_nodes = ssc_rd16(blob + off); off += 2;
     if (out->n_nodes > SSC_MAX_NODES) return -2;
     for (uint16_t ni = 0; ni < out->n_nodes; ni++) {
-        ssc_node_t *N = &out->nodes[ni];
-        uint8_t nl = d[off++];
+        ssc_node_t *node = &out->nodes[ni];
+        uint8_t nl = blob[off++];
         if (nl >= SSC_NAME_MAX || off + nl > len) return -3;
-        memcpy(N->name, d + off, nl); N->name[nl] = 0; off += nl;
-        N->k = d[off]; off += 2;                       /* k + pad */
-        if (N->k > SSC_MAX_FIELDS) return -4;
-        for (uint8_t fi = 0; fi < N->k; fi++) {
-            ssc_field_t *F = &N->fields[fi];
-            uint8_t fl = d[off++];
+        memcpy(node->name, blob + off, nl); node->name[nl] = 0; off += nl;
+        node->n_fields = blob[off]; off += 2;                       /* n_fields + pad */
+        if (node->n_fields > SSC_MAX_FIELDS) return -4;
+        for (uint8_t fi = 0; fi < node->n_fields; fi++) {
+            ssc_field_t *field = &node->fields[fi];
+            uint8_t fl = blob[off++];
             if (fl >= SSC_NAME_MAX || off + fl > len) return -5;
-            memcpy(F->name, d + off, fl); F->name[fl] = 0; off += fl;
-            F->kind = d[off]; F->n = ssc_rd16(d + off + 1); off += 3;
-            if (F->n > SSC_MAX_CELLS) return -6;
-            if (F->kind == 0) {
-                for (uint16_t ci = 0; ci < F->n; ci++) {
+            memcpy(field->name, blob + off, fl); field->name[fl] = 0; off += fl;
+            field->kind = blob[off]; field->n_cells = ssc_rd16(blob + off + 1); off += 3;
+            if (field->n_cells > SSC_MAX_CELLS) return -6;
+            if (field->kind == 0) {
+                for (uint16_t ci = 0; ci < field->n_cells; ci++) {
                     if (off + 13 > len) return -7;
-                    uint8_t flags = d[off];
-                    F->cells[ci].lo_open = flags & 1; F->cells[ci].hi_open = (flags >> 1) & 1;
-                    F->cells[ci].lo = (int32_t)ssc_rd32(d + off + 1);
-                    F->cells[ci].hi = (int32_t)ssc_rd32(d + off + 5);
-                    F->cells[ci].rep = (int32_t)ssc_rd32(d + off + 9);
+                    uint8_t flags = blob[off];
+                    field->cells[ci].lo_open = flags & 1; field->cells[ci].hi_open = (flags >> 1) & 1;
+                    field->cells[ci].lo = (int32_t)ssc_rd32(blob + off + 1);
+                    field->cells[ci].hi = (int32_t)ssc_rd32(blob + off + 5);
+                    field->cells[ci].rep = (int32_t)ssc_rd32(blob + off + 9);
                     off += 13;
                 }
             }
         }
-        N->n_bands = ssc_rd16(d + off); off += 2;
-        if (N->n_bands > SSC_MAX_BANDS) return -8;
-        for (uint16_t bi = 0; bi < N->n_bands; bi++) {
+        node->n_bands = ssc_rd16(blob + off); off += 2;
+        if (node->n_bands > SSC_MAX_BANDS) return -8;
+        for (uint16_t bi = 0; bi < node->n_bands; bi++) {
             if (off + 9 > len) return -9;
-            N->bands[bi].base = ssc_rd32(d + off); N->bands[bi].width = ssc_rd32(d + off + 4);
-            uint8_t rl = d[off + 8]; off += 9;
+            node->bands[bi].base = ssc_rd32(blob + off); node->bands[bi].width = ssc_rd32(blob + off + 4);
+            uint8_t rl = blob[off + 8]; off += 9;
             if (rl >= SSC_NAME_MAX || off + rl > len) return -10;
-            memcpy(N->bands[bi].route, d + off, rl); N->bands[bi].route[rl] = 0; off += rl;
+            memcpy(node->bands[bi].route, blob + off, rl); node->bands[bi].route[rl] = 0; off += rl;
         }
         if (off + 4 > len) return -11;
-        N->size = ssc_rd32(d + off); off += 4;
-        if (N->size > SSC_MAX_SIZE || off + 4u * N->size > len) return -12;
-        for (uint32_t i = 0; i < N->size; i++) { N->cell_n[i] = ssc_rd32(d + off); off += 4; }
+        node->size = ssc_rd32(blob + off); off += 4;
+        if (node->size > SSC_MAX_SIZE || off + 4u * node->size > len) return -12;
+        for (uint32_t cell_index = 0; cell_index < node->size; cell_index++) {
+            node->cell_n[cell_index] = ssc_rd32(blob + off); off += 4;
+        }
     }
     return 0;
 }
 
 /* reading value -> the field's symbol. -1 when the value falls outside every cell. */
-static int ssc_quantize(const ssc_field_t *F, int32_t v) {
-    if (F->kind == 1) return v ? 1 : 0;
-    for (uint16_t i = 0; i < F->n; i++) {
-        const ssc_cell_t *c = &F->cells[i];
-        if ((c->lo_open || v >= c->lo) && (c->hi_open || v <= c->hi)) return (int)i;
+static int ssc_quantize(const ssc_field_t *field, int32_t reading) {
+    if (field->kind == 1) return reading ? 1 : 0;
+    for (uint16_t cell_index = 0; cell_index < field->n_cells; cell_index++) {
+        const ssc_cell_t *cell = &field->cells[cell_index];
+        if ((cell->lo_open || reading >= cell->lo) && (cell->hi_open || reading <= cell->hi)) return (int)cell_index;
     }
     return -1;
 }
 
 /* symbols -> n via the row-major cell map. */
-static int32_t ssc_n(const ssc_node_t *N, const int *syms) {
+static int32_t ssc_n(const ssc_node_t *node, const int *syms) {
     uint32_t lin = 0;
-    for (uint8_t f = 0; f < N->k; f++) {
-        if (syms[f] < 0) return -1;
-        lin = lin * N->fields[f].n + (uint32_t)syms[f];
+    for (uint8_t field_index = 0; field_index < node->n_fields; field_index++) {
+        if (syms[field_index] < 0) return -1;
+        lin = lin * node->fields[field_index].n_cells + (uint32_t)syms[field_index];
     }
-    return lin < N->size ? (int32_t)N->cell_n[lin] : -1;
+    return lin < node->size ? (int32_t)node->cell_n[lin] : -1;
 }
 
 /* n -> band id: two integer compares per band (the Level M atom, as data). */
-static int ssc_band(const ssc_node_t *N, uint32_t n) {
-    for (uint16_t b = 0; b < N->n_bands; b++)
-        if (n >= N->bands[b].base && n < N->bands[b].base + N->bands[b].width) return (int)b;
+static int ssc_band(const ssc_node_t *node, uint32_t spiral_index) {
+    for (uint16_t band_index = 0; band_index < node->n_bands; band_index++)
+        if (spiral_index >= node->bands[band_index].base &&
+            spiral_index < node->bands[band_index].base + node->bands[band_index].width) return (int)band_index;
     return -1;
 }

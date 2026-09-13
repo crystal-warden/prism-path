@@ -42,7 +42,7 @@ static uint32_t last_retry = 0, last_sub = 0;
 // decision made with the control plane out of reach is evidence of the relay's authority when it arrives, not the receiver's
 typedef struct __attribute__((packed)) {
     char magic[4];
-    uint64_t t;
+    uint64_t t_us;
     uint16_t route, steps;
     int8_t level;
     uint16_t give_up_run, retry_pct;
@@ -51,32 +51,32 @@ typedef struct __attribute__((packed)) {
 static uint8_t relay_sk[64], relay_pk[32];
 static bool relay_key = false;
 static void relay_key_init(void) {
-    nvs_handle_t h;
-    if (nvs_open("hop", NVS_READWRITE, &h) != ESP_OK)
+    nvs_handle_t handle;
+    if (nvs_open("hop", NVS_READWRITE, &handle) != ESP_OK)
         return;
-    size_t n = 64, m = 32;
-    if (nvs_get_blob(h, "sk", relay_sk, &n) == ESP_OK && n == 64 && nvs_get_blob(h, "pk", relay_pk, &m) == ESP_OK &&
-        m == 32)
+    size_t sk_len = 64, pk_len = 32;
+    if (nvs_get_blob(handle, "sk", relay_sk, &sk_len) == ESP_OK && sk_len == 64 && nvs_get_blob(handle, "pk", relay_pk, &pk_len) == ESP_OK &&
+        pk_len == 32)
         relay_key = true;
     else {
         uint8_t seed[32];
         esp_fill_random(seed, 32);
         crypto_ed25519_key_pair(relay_sk, relay_pk, seed);
-        nvs_set_blob(h, "sk", relay_sk, 64);
-        nvs_set_blob(h, "pk", relay_pk, 32);
-        nvs_commit(h);
+        nvs_set_blob(handle, "sk", relay_sk, 64);
+        nvs_set_blob(handle, "pk", relay_pk, 32);
+        nvs_commit(handle);
         relay_key = true;
         ESP_LOGI(TAG, "relay signing key generated and kept in NVS");
     }
-    nvs_close(h);
+    nvs_close(handle);
 }
-static void set_level(int8_t l) {
-    if (l > LEVEL_FULL)
-        l = LEVEL_FULL;
-    if (l < LEVEL_FLOOR)
-        l = LEVEL_FLOOR;
-    if (l != level) {
-        level = l;
+static void set_level(int8_t wanted_level) {
+    if (wanted_level > LEVEL_FULL)
+        wanted_level = LEVEL_FULL;
+    if (wanted_level < LEVEL_FLOOR)
+        wanted_level = LEVEL_FLOOR;
+    if (wanted_level != level) {
+        level = wanted_level;
         esp_ieee802154_set_txpower(level);
     }
 }
@@ -88,8 +88,8 @@ static uint16_t policy_decide(int32_t gur, int32_t retry_pct, int32_t backoff, u
     uint16_t node = start_node, target = 0, steps = 0;
     uint8_t err = 0;
     while (steps < max_steps && node_edge_count(node) > 0) {
-        int8_t e = evaluate(node, &target, &err);
-        if (e < 0 || err)
+        int8_t matched_edge = evaluate(node, &target, &err);
+        if (matched_edge < 0 || err)
             break;
         node = target;
         steps++;
@@ -104,9 +104,9 @@ static uint16_t policy_decide(int32_t gur, int32_t retry_pct, int32_t backoff, u
 #endif
 typedef struct {
     uint16_t len;
-    uint8_t d[250];
+    uint8_t data[250];
 } msg_t;
-static QueueHandle_t q, qbulk, qpwr;
+static QueueHandle_t readings_q, qbulk, qpwr;
 static SemaphoreHandle_t
     txdone;  // qpwr: the policy's own decision records, never dropped behind readings   // readings first: bulk (keyframe and evidence fragments) waits while readings are pending
 // a bench replay attacker in the relay's position: the last readings kept, and 'R' | n re-sends n of them as fresh sub frames
@@ -115,8 +115,8 @@ static msg_t replay_ring[REPLAY_RING];
 static int replay_i = 0, replay_n = 0;
 static void publish_key(void) {
     msg_t pm;
-    memcpy(pm.d, "PUB1", 4);
-    memcpy(pm.d + 4, relay_pk, 32);
+    memcpy(pm.data, "PUB1", 4);
+    memcpy(pm.data + 4, relay_pk, 32);
     pm.len = 36;
     xQueueSend(qpwr, &pm, 0);
 }
@@ -125,7 +125,7 @@ static volatile bool last_acked;
 // the downlink: a command frame heard in the receive window goes to the camera whose node id it names
 typedef struct {
     uint8_t len;
-    uint8_t d[32];
+    uint8_t data[32];
 } cmd_t;
 static QueueHandle_t qcmd;
 static int usock = -1;
@@ -138,7 +138,7 @@ static struct {
 #define STATS_US 10000000
 typedef struct __attribute__((packed)) {
     char magic[4];
-    uint64_t t;
+    uint64_t t_us;
     uint32_t n_in, n_sub, n_retry, n_given_up, n_fail;
     uint16_t q_wait, qbulk_wait;
 } sta_t;
@@ -148,95 +148,95 @@ void esp_ieee802154_transmit_done(const uint8_t *frame, const uint8_t *ack, esp_
     last_acked = (ack != NULL);
     if (ack)
         esp_ieee802154_receive_handle_done(ack);
-    BaseType_t w = pdFALSE;
-    xSemaphoreGiveFromISR(txdone, &w);
+    BaseType_t task_woken = pdFALSE;
+    xSemaphoreGiveFromISR(txdone, &task_woken);
 }
 void esp_ieee802154_transmit_failed(const uint8_t *frame, esp_ieee802154_tx_error_t error) {
     (void)frame;
     (void)error;
     last_acked = false;
     n_fail++;
-    BaseType_t w = pdFALSE;
-    xSemaphoreGiveFromISR(txdone, &w);
+    BaseType_t task_woken = pdFALSE;
+    xSemaphoreGiveFromISR(txdone, &task_woken);
 }
 void esp_ieee802154_receive_done(uint8_t *frame, esp_ieee802154_frame_info_t *info) {
     (void)info;
     int plen = (int)frame[0] - 2 - MHR_LEN;
-    const uint8_t *p = frame + 1 + MHR_LEN;
-    if (plen >= 4 && p[0] == 'C' && plen <= (int)sizeof(((cmd_t *)0)->d)) {
-        cmd_t c;
-        c.len = (uint8_t)plen;
-        memcpy(c.d, p, plen);
-        BaseType_t w = pdFALSE;
-        xQueueSendFromISR(qcmd, &c, &w);
+    const uint8_t *payload = frame + 1 + MHR_LEN;
+    if (plen >= 4 && payload[0] == 'C' && plen <= (int)sizeof(((cmd_t *)0)->data)) {
+        cmd_t command;
+        command.len = (uint8_t)plen;
+        memcpy(command.data, payload, plen);
+        BaseType_t task_woken = pdFALSE;
+        xQueueSendFromISR(qcmd, &command, &task_woken);
     }
     esp_ieee802154_receive_handle_done(frame);
 }
 static void cmd_task(void *arg) {
-    cmd_t c;
+    cmd_t command;
     while (1) {
-        if (xQueueReceive(qcmd, &c, portMAX_DELAY) != pdTRUE)
+        if (xQueueReceive(qcmd, &command, portMAX_DELAY) != pdTRUE)
             continue;
-        uint16_t nid = c.d[1] | (c.d[2] << 8);
+        uint16_t nid = command.data[1] | (command.data[2] << 8);
         int sent = 0;
         if (nid == 0x0000) {  // for the relay itself
-            if (c.d[3] == 'K')
+            if (command.data[3] == 'K')
                 publish_key();  // a receiver that joined after boot asks for the relay's public key
-            else if (c.d[3] == 'R' && c.len >= 5) {
-                int n = c.d[4] < replay_n ? c.d[4] : replay_n;
-                for (int i = 0; i < n; i++) {
-                    msg_t *m_ = &replay_ring[(replay_i - n + i + REPLAY_RING) % REPLAY_RING];
-                    xQueueSend(q, m_, 0);
+            else if (command.data[3] == 'R' && command.len >= 5) {
+                int replay_count = command.data[4] < replay_n ? command.data[4] : replay_n;
+                for (int entry_index = 0; entry_index < replay_count; entry_index++) {
+                    msg_t *m_ = &replay_ring[(replay_i - replay_count + entry_index + REPLAY_RING) % REPLAY_RING];
+                    xQueueSend(readings_q, m_, 0);
                 }
-                ESP_LOGW(TAG, "REPLAY: %d earlier readings re-sent as fresh frames (bench attack)", n);
-            } else if (c.d[3] == 'p' && c.len >= 5) {
-                set_level((int8_t)c.d[4]);
+                ESP_LOGW(TAG, "REPLAY: %d earlier readings re-sent as fresh frames (bench attack)", replay_count);
+            } else if (command.data[3] == 'p' && command.len >= 5) {
+                set_level((int8_t)command.data[4]);
                 ESP_LOGI(TAG, "operator set transmit power %d dBm (now %d); the policy continues from here",
-                         (int8_t)c.d[4], esp_ieee802154_get_txpower());
+                         (int8_t)command.data[4], esp_ieee802154_get_txpower());
             }
             continue;
         }
-        for (int i = 0; i < MAX_NODES; i++)
-            if (nodes[i].set && (nodes[i].nid == nid || nid == 0xffff)) {
-                sendto(usock, c.d, c.len, 0, (struct sockaddr *)&nodes[i].addr, sizeof nodes[i].addr);
+        for (int entry_index = 0; entry_index < MAX_NODES; entry_index++)
+            if (nodes[entry_index].set && (nodes[entry_index].nid == nid || nid == 0xffff)) {
+                sendto(usock, command.data, command.len, 0, (struct sockaddr *)&nodes[entry_index].addr, sizeof nodes[entry_index].addr);
                 sent++;
             }
-        ESP_LOGI(TAG, "command '%c' for node %04x forwarded to %d camera(s)", c.d[3], nid, sent);
+        ESP_LOGI(TAG, "command '%c' for node %04x forwarded to %d camera(s)", command.data[3], nid, sent);
     }
 }
 static void on_wifi(void *arg, esp_event_base_t base, int32_t id, void *data) {
     if (id == WIFI_EVENT_AP_STACONNECTED) {
-        wifi_event_ap_staconnected_t *e = data;
-        ESP_LOGI(TAG, "station joined: %02x:%02x:%02x:%02x:%02x:%02x", e->mac[0], e->mac[1], e->mac[2], e->mac[3],
-                 e->mac[4], e->mac[5]);
+        wifi_event_ap_staconnected_t *join_event = data;
+        ESP_LOGI(TAG, "station joined: %02x:%02x:%02x:%02x:%02x:%02x", join_event->mac[0], join_event->mac[1], join_event->mac[2], join_event->mac[3],
+                 join_event->mac[4], join_event->mac[5]);
     } else if (id == WIFI_EVENT_AP_STADISCONNECTED)
         ESP_LOGW(TAG, "station left");
 }
 static void udp_task(void *arg) {
-    int s = socket(AF_INET, SOCK_DGRAM, IPPROTO_IP);
-    struct sockaddr_in a = {.sin_family = AF_INET, .sin_port = htons(HOP_PORT), .sin_addr.s_addr = htonl(INADDR_ANY)};
-    bind(s, (struct sockaddr *)&a, sizeof a);
-    usock = s;
-    msg_t m;
+    int sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_IP);
+    struct sockaddr_in bind_addr = {.sin_family = AF_INET, .sin_port = htons(HOP_PORT), .sin_addr.s_addr = htonl(INADDR_ANY)};
+    bind(sock, (struct sockaddr *)&bind_addr, sizeof bind_addr);
+    usock = sock;
+    msg_t message;
     struct sockaddr_in from;
     socklen_t fl;
     while (1) {
         fl = sizeof from;
-        int n = recvfrom(s, m.d, sizeof m.d, 0, (struct sockaddr *)&from, &fl);
-        if (n <= 0)
+        int received_len = recvfrom(sock, message.data, sizeof message.data, 0, (struct sockaddr *)&from, &fl);
+        if (received_len <= 0)
             continue;
-        m.len = (uint16_t)n;
-        if (n >=
+        message.len = (uint16_t)received_len;
+        if (received_len >=
             6) {  // RDG6, KEY3, EVD1 and FRG2 all carry the node id right after the magic: remember where that node speaks from
-            uint16_t nid = m.d[4] | (m.d[5] << 8);
+            uint16_t nid = message.data[4] | (message.data[5] << 8);
             int slot = -1;
-            for (int i = 0; i < MAX_NODES; i++) {
-                if (nodes[i].set && nodes[i].nid == nid) {
-                    slot = i;
+            for (int slot_index = 0; slot_index < MAX_NODES; slot_index++) {
+                if (nodes[slot_index].set && nodes[slot_index].nid == nid) {
+                    slot = slot_index;
                     break;
                 }
-                if (!nodes[i].set && slot < 0)
-                    slot = i;
+                if (!nodes[slot_index].set && slot < 0)
+                    slot = slot_index;
             }
             if (slot >= 0) {
                 nodes[slot].nid = nid;
@@ -244,18 +244,18 @@ static void udp_task(void *arg) {
                 nodes[slot].set = true;
             }
         }
-        xQueueSend(memcmp(m.d, "FRG", 3) == 0 ? qbulk : q, &m, 0);
+        xQueueSend(memcmp(message.data, "FRG", 3) == 0 ? qbulk : readings_q, &message, 0);
     }
 }
 void app_main(void) {
     xiao_antenna_internal();
-    q = xQueueCreate(64, sizeof(msg_t));
+    readings_q = xQueueCreate(64, sizeof(msg_t));
     qbulk = xQueueCreate(160, sizeof(msg_t));
     txdone = xSemaphoreCreateBinary();
     qcmd = xQueueCreate(8, sizeof(cmd_t));
     qpwr = xQueueCreate(16, sizeof(msg_t));  // readings never wait behind a keyframe burst
-    esp_err_t e = nvs_flash_init();
-    if (e == ESP_ERR_NVS_NO_FREE_PAGES || e == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+    esp_err_t nvs_status = nvs_flash_init();
+    if (nvs_status == ESP_ERR_NVS_NO_FREE_PAGES || nvs_status == ESP_ERR_NVS_NEW_VERSION_FOUND) {
         nvs_flash_erase();
         nvs_flash_init();
     }
@@ -298,8 +298,8 @@ void app_main(void) {
     static wifi_ap_record_t recs[20];
     esp_wifi_scan_get_ap_records(&n_ap, recs);
     ESP_LOGI(TAG, "scan: %u access points heard", n_ap);
-    for (int i = 0; i < n_ap; i++)
-        ESP_LOGI(TAG, "  ch %2d rssi %4d %s", recs[i].primary, recs[i].rssi, (const char *)recs[i].ssid);
+    for (int entry_index = 0; entry_index < n_ap; entry_index++)
+        ESP_LOGI(TAG, "  ch %2d rssi %4d %s", recs[entry_index].primary, recs[entry_index].rssi, (const char *)recs[entry_index].ssid);
 #endif
     xTaskCreate(udp_task, "udp", 4096, NULL, 10, NULL);
     xTaskCreate(cmd_task, "cmd", 4096, NULL, 9,
@@ -313,31 +313,31 @@ void app_main(void) {
     uint8_t seq = 0;
     uint16_t id = 0;
     int64_t t_log = esp_timer_get_time();
-    msg_t m;
+    msg_t message;
     while (1) {
-        bool from_pwr = (xQueueReceive(qpwr, &m, 0) == pdTRUE);
-        bool reading = from_pwr || (xQueueReceive(q, &m, 0) == pdTRUE);
+        bool from_pwr = (xQueueReceive(qpwr, &message, 0) == pdTRUE);
+        bool reading = from_pwr || (xQueueReceive(readings_q, &message, 0) == pdTRUE);
         bool all_ok = true;
-        bool got = reading || (uxQueueMessagesWaiting(q) == 0 && xQueueReceive(qbulk, &m, pdMS_TO_TICKS(20)) == pdTRUE);
+        bool got = reading || (uxQueueMessagesWaiting(readings_q) == 0 && xQueueReceive(qbulk, &message, pdMS_TO_TICKS(20)) == pdTRUE);
         if (got) {
             n_in++;
-            uint8_t total = (uint8_t)((m.len + SUB_DATA - 1) / SUB_DATA);
+            uint8_t total = (uint8_t)((message.len + SUB_DATA - 1) / SUB_DATA);
             id++;
-            if (reading && !from_pwr && memcmp(m.d, "RDG", 3) == 0) {
-                replay_ring[replay_i] = m;
+            if (reading && !from_pwr && memcmp(message.data, "RDG", 3) == 0) {
+                replay_ring[replay_i] = message;
                 replay_i = (replay_i + 1) % REPLAY_RING;
                 if (replay_n < REPLAY_RING)
                     replay_n++;
             }
-            for (uint8_t i = 0; i < total; i++) {
-                uint16_t off = i * SUB_DATA, n = m.len - off < SUB_DATA ? m.len - off : SUB_DATA;
+            for (uint8_t entry_index = 0; entry_index < total; entry_index++) {
+                uint16_t off = entry_index * SUB_DATA, chunk_len = message.len - off < SUB_DATA ? message.len - off : SUB_DATA;
                 sub[0] = 'S';
                 sub[1] = id & 0xff;
                 sub[2] = id >> 8;
-                sub[3] = i;
+                sub[3] = entry_index;
                 sub[4] = total;
-                memcpy(sub + SUB_HDR, m.d + off, n);
-                hop_build(frame, seq++, HOP_AIR_ADDR, HOP_HOST_ADDR, sub, (uint8_t)(SUB_HDR + n));
+                memcpy(sub + SUB_HDR, message.data + off, chunk_len);
+                hop_build(frame, seq++, HOP_AIR_ADDR, HOP_HOST_ADDR, sub, (uint8_t)(SUB_HDR + chunk_len));
 #ifndef HOP_NO_154
                 // acknowledged unicast: up to 4 attempts per sub frame, so a 3 percent air loss becomes a per frame loss near zero
                 bool ok = false;
@@ -374,7 +374,7 @@ void app_main(void) {
             }
             // a decision record outlives the outage it was made in: back to the front of its queue until it is acked
             if (from_pwr && !all_ok) {
-                xQueueSendToFront(qpwr, &m, 0);
+                xQueueSendToFront(qpwr, &message, 0);
                 vTaskDelay(pdMS_TO_TICKS(200));
             }
         }
@@ -389,12 +389,12 @@ void app_main(void) {
             last_retry = n_retry;
             last_sub = subs;
             win_i = (win_i + 1) % WINDOW_S;
-            uint32_t r = 0, sf = 0;
-            for (int i = 0; i < WINDOW_S; i++) {
-                r += win_retry[i];
-                sf += win_sub[i];
+            uint32_t retries = 0, sf = 0;
+            for (int entry_index = 0; entry_index < WINDOW_S; entry_index++) {
+                retries += win_retry[entry_index];
+                sf += win_sub[entry_index];
             }
-            int32_t retry_pct = (int32_t)(sf ? (100u * r) / sf : 0);
+            int32_t retry_pct = (int32_t)(sf ? (100u * retries) / sf : 0);
             if (policy_ok) {
                 uint16_t steps;
                 uint16_t route = policy_decide(give_up_run, retry_pct, LEVEL_FULL - level, &steps);
@@ -419,7 +419,7 @@ void app_main(void) {
                                 {0}};
                     if (relay_key)
                         crypto_ed25519_sign(pw.sig, relay_sk, (const uint8_t *)&pw, sizeof pw - 64);
-                    memcpy(pm.d, &pw, sizeof pw);
+                    memcpy(pm.data, &pw, sizeof pw);
                     pm.len = sizeof pw;
                     xQueueSend(qpwr, &pm, 0);
                     t_pwr = esp_timer_get_time();
@@ -440,11 +440,11 @@ void app_main(void) {
                         n_retry,
                         n_given_up,
                         n_fail,
-                        (uint16_t)uxQueueMessagesWaiting(q),
+                        (uint16_t)uxQueueMessagesWaiting(readings_q),
                         (uint16_t)uxQueueMessagesWaiting(qbulk)};
-            memcpy(sm.d, &st, sizeof st);
+            memcpy(sm.data, &st, sizeof st);
             sm.len = sizeof st;
-            xQueueSend(q, &sm, 0);
+            xQueueSend(readings_q, &sm, 0);
             {
                 static int n_stat = 0;
                 if (++n_stat % 6 == 0)

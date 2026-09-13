@@ -35,15 +35,15 @@ static void fusion_note(const uint8_t *pl, uint16_t len) {
     uint32_t seq;
     memcpy(&seq, pl + 8, 4);
     uint16_t node = pl[28] | (pl[29] << 8);
-    int k = nid == FUSION_A ? 0 : nid == FUSION_B ? 1 : -1;
-    if (k < 0)
+    int cam_index = nid == FUSION_A ? 0 : nid == FUSION_B ? 1 : -1;
+    if (cam_index < 0)
         return;
-    cam[k].seq = seq;
-    cam[k].node = node;
-    cam[k].t_rx = esp_timer_get_time();
-    cam[k].seen = true;
+    cam[cam_index].seq = seq;
+    cam[cam_index].node = node;
+    cam[cam_index].t_rx = esp_timer_get_time();
+    cam[cam_index].seen = true;
     if ((CAM_OCC_MASK >> node) & 1)
-        cam[k].t_occ = cam[k].t_rx;
+        cam[cam_index].t_occ = cam[cam_index].t_rx;
 }
 static void fusion_tick(void) {
     static int64_t t_tick = 0, t_sent = 0;
@@ -52,29 +52,29 @@ static void fusion_tick(void) {
     if (!fusion_ok || now - t_tick < FUSION_TICK_US)
         return;
     t_tick = now;
-    int32_t f[2], o[2], tm[2];
+    int32_t fresh[2], occupied[2], tm[2];
     uint16_t age[2], occ_age[2];
-    for (int k = 0; k < 2; k++) {
-        int64_t a = cam[k].seen ? now - cam[k].t_rx : (int64_t)1 << 40;
-        f[k] = cam[k].seen && a < FRESH_US;
-        int64_t oa = cam[k].t_occ ? now - cam[k].t_occ : (int64_t)1 << 40;
-        occ_age[k] = (uint16_t)(oa / 1000 > 65535 ? 65535 : oa / 1000);
-        o[k] = occ_age[k];
-        tm[k] = f[k] && ((CAM_TAMPER_MASK >> cam[k].node) & 1);
-        age[k] = (uint16_t)(a / 1000 > 65535 ? 65535 : a / 1000);
+    for (int cam_index = 0; cam_index < 2; cam_index++) {
+        int64_t age_us = cam[cam_index].seen ? now - cam[cam_index].t_rx : (int64_t)1 << 40;
+        fresh[cam_index] = cam[cam_index].seen && age_us < FRESH_US;
+        int64_t oa = cam[cam_index].t_occ ? now - cam[cam_index].t_occ : (int64_t)1 << 40;
+        occ_age[cam_index] = (uint16_t)(oa / 1000 > 65535 ? 65535 : oa / 1000);
+        occupied[cam_index] = occ_age[cam_index];
+        tm[cam_index] = fresh[cam_index] && ((CAM_TAMPER_MASK >> cam[cam_index].node) & 1);
+        age[cam_index] = (uint16_t)(age_us / 1000 > 65535 ? 65535 : age_us / 1000);
     }
     memset(regs, 0, sizeof regs);
-    set_reg(FREG_a_fresh, f[0]);
-    set_reg(FREG_b_fresh, f[1]);
-    set_reg(FREG_a_occ_age, o[0]);
-    set_reg(FREG_b_occ_age, o[1]);
+    set_reg(FREG_a_fresh, fresh[0]);
+    set_reg(FREG_b_fresh, fresh[1]);
+    set_reg(FREG_a_occ_age, occupied[0]);
+    set_reg(FREG_b_occ_age, occupied[1]);
     set_reg(FREG_a_tamper, tm[0]);
     set_reg(FREG_b_tamper, tm[1]);
     uint16_t node = start_node, target = 0, steps = 0;
     uint8_t err = 0;
     while (steps < max_steps && node_edge_count(node) > 0) {
-        int8_t e = evaluate(node, &target, &err);
-        if (e < 0 || err)
+        int8_t matched_edge = evaluate(node, &target, &err);
+        if (matched_edge < 0 || err)
             break;
         node = target;
         steps++;
@@ -82,11 +82,11 @@ static void fusion_tick(void) {
     if (node != last_route || now - t_sent > FUSION_RESEND_US) {
         uint8_t rec[40];
         memcpy(rec, "FUS2", 4);
-        uint64_t t = (uint64_t)now;
-        memcpy(rec + 4, &t, 8);
+        uint64_t t_us = (uint64_t)now;
+        memcpy(rec + 4, &t_us, 8);
         memcpy(rec + 12, &node, 2);  // FUS2 = FUS1 with the two occupied ages appended
-        rec[14] = f[0];
-        rec[15] = f[1];
+        rec[14] = fresh[0];
+        rec[15] = fresh[1];
         rec[16] = occ_age[0] < 2000;
         rec[17] = occ_age[1] < 2000;
         rec[18] = tm[0];
@@ -107,11 +107,11 @@ static void fusion_tick(void) {
     }
 }
 typedef struct {
-    uint64_t t;
+    uint64_t t_us;
     uint8_t len;
-    uint8_t d[128];
+    uint8_t data[128];
 } rx_t;
-static QueueHandle_t q;
+static QueueHandle_t rx_queue;
 static SemaphoreHandle_t txdone;
 static volatile bool last_acked;
 // received signal strength on the hop, summed in the receive callback and emitted every two seconds as
@@ -128,10 +128,10 @@ static uint16_t cmd_tries = 0;
 static int64_t mute_until = 0;
 #define CMD_MAX_TRIES 200
 void esp_ieee802154_receive_done(uint8_t *frame, esp_ieee802154_frame_info_t *info) {
-    rx_t r;
-    r.t = (uint64_t)esp_timer_get_time();
-    r.len = frame[0];
-    memcpy(r.d, frame, frame[0] + 1);
+    rx_t received;
+    received.t_us = (uint64_t)esp_timer_get_time();
+    received.len = frame[0];
+    memcpy(received.data, frame, frame[0] + 1);
     if (info) {
         rssi_n++;
         rssi_sum += info->rssi;
@@ -141,8 +141,8 @@ void esp_ieee802154_receive_done(uint8_t *frame, esp_ieee802154_frame_info_t *in
             rssi_max = info->rssi;
     }
     esp_ieee802154_receive_handle_done(frame);
-    BaseType_t w = pdFALSE;
-    xQueueSendFromISR(q, &r, &w);
+    BaseType_t task_woken = pdFALSE;
+    xQueueSendFromISR(rx_queue, &received, &task_woken);
 }
 void esp_ieee802154_transmit_done(const uint8_t *frame, const uint8_t *ack, esp_ieee802154_frame_info_t *ack_info) {
     (void)frame;
@@ -150,32 +150,32 @@ void esp_ieee802154_transmit_done(const uint8_t *frame, const uint8_t *ack, esp_
     last_acked = (ack != NULL);
     if (ack)
         esp_ieee802154_receive_handle_done(ack);
-    BaseType_t w = pdFALSE;
-    xSemaphoreGiveFromISR(txdone, &w);
+    BaseType_t task_woken = pdFALSE;
+    xSemaphoreGiveFromISR(txdone, &task_woken);
 }
 void esp_ieee802154_transmit_failed(const uint8_t *frame, esp_ieee802154_tx_error_t error) {
     (void)frame;
     (void)error;
     last_acked = false;
-    BaseType_t w = pdFALSE;
-    xSemaphoreGiveFromISR(txdone, &w);
+    BaseType_t task_woken = pdFALSE;
+    xSemaphoreGiveFromISR(txdone, &task_woken);
 }
-static void usb_write_all(const uint8_t *p, size_t n) {
-    while (n) {
-        int w = usb_serial_jtag_write_bytes(p, n < 2048 ? n : 2048, pdMS_TO_TICKS(1000));
-        if (w <= 0) {
+static void usb_write_all(const uint8_t *bytes, size_t remaining) {
+    while (remaining) {
+        int written = usb_serial_jtag_write_bytes(bytes, remaining < 2048 ? remaining : 2048, pdMS_TO_TICKS(1000));
+        if (written <= 0) {
             vTaskDelay(1);
             continue;
         }
-        p += w;
-        n -= w;
+        bytes += written;
+        remaining -= written;
     }
 }
 static void emit(const uint8_t *payload, uint16_t len) {
-    uint64_t t = (uint64_t)esp_timer_get_time();
+    uint64_t t_us = (uint64_t)esp_timer_get_time();
     uint8_t hdr[14];
     memcpy(hdr, "ENF1", 4);
-    memcpy(hdr + 4, &t, 8);
+    memcpy(hdr + 4, &t_us, 8);
     memcpy(hdr + 12, &len, 2);
     usb_write_all(hdr, sizeof hdr);
     usb_write_all(payload, len);
@@ -184,12 +184,12 @@ static void poll_usb(void) {
     static uint8_t ib[64];
     static int ib_n = 0;
     uint8_t tmp[32];
-    int r = usb_serial_jtag_read_bytes(tmp, sizeof tmp, 0);
-    if (r <= 0)
+    int read_count = usb_serial_jtag_read_bytes(tmp, sizeof tmp, 0);
+    if (read_count <= 0)
         return;
-    for (int i = 0; i < r; i++) {
+    for (int byte_index = 0; byte_index < read_count; byte_index++) {
         if (ib_n < (int)sizeof ib)
-            ib[ib_n++] = tmp[i];
+            ib[ib_n++] = tmp[byte_index];
         if (ib_n >= 7 && memcmp(ib, "CMD1", 4) == 0) {
             int len = ib[6];
             if (ib_n >= 7 + len) {
@@ -245,7 +245,7 @@ static void send_cmd(void) {
 }
 void app_main(void) {
     xiao_antenna_internal();
-    q = xQueueCreate(64, sizeof(rx_t));
+    rx_queue = xQueueCreate(64, sizeof(rx_t));
     txdone = xSemaphoreCreateBinary();
     usb_serial_jtag_driver_config_t ucfg = {.tx_buffer_size = 16384, .rx_buffer_size = 256};
     ESP_ERROR_CHECK(usb_serial_jtag_driver_install(&ucfg));
@@ -257,7 +257,7 @@ void app_main(void) {
     uint8_t asm_have = 0, asm_total = 0;
     uint16_t asm_len = 0;
     uint64_t asm_t = 0;
-    rx_t r;
+    rx_t received;
     while (1) {
         if (mute_until) {
             if (esp_timer_get_time() < mute_until) {
@@ -280,9 +280,9 @@ void app_main(void) {
             rssi_max = -128;
             if (n) {
                 uint8_t rec[20];
-                uint64_t t = (uint64_t)esp_timer_get_time();
+                uint64_t t_us = (uint64_t)esp_timer_get_time();
                 memcpy(rec, "RSS1", 4);
-                memcpy(rec + 4, &t, 8);
+                memcpy(rec + 4, &t_us, 8);
                 memcpy(rec + 12, &n, 2);
                 memcpy(rec + 14, &sum, 4);
                 rec[18] = (uint8_t)mn;
@@ -291,23 +291,23 @@ void app_main(void) {
             }
         }
         fusion_tick();
-        if (xQueueReceive(q, &r, pdMS_TO_TICKS(10)) != pdTRUE) {
+        if (xQueueReceive(rx_queue, &received, pdMS_TO_TICKS(10)) != pdTRUE) {
             poll_usb();
             continue;
         }
         poll_usb();
-        // r.d[0] = length incl. FCS; MHR at r.d[1..9]; payload after; the FCS is not delivered
-        int plen = (int)r.d[0] - 2 - MHR_LEN;
-        const uint8_t *p = r.d + 1 + MHR_LEN;
-        if (plen < SUB_HDR || p[0] != 'S')
+        // received.data[0] = length incl. FCS; MHR at received.data[1..9]; payload after; the FCS is not delivered
+        int plen = (int)received.data[0] - 2 - MHR_LEN;
+        const uint8_t *payload = received.data + 1 + MHR_LEN;
+        if (plen < SUB_HDR || payload[0] != 'S')
             continue;
         if (cmd_pending)
             send_cmd();  // the sender is listening right now
         // a retried sub frame that we acked but the sender did not hear arrives twice: same id, same idx
         static uint16_t last_id = 0xffff;
         static uint8_t last_idx = 0xff;
-        uint16_t id = p[1] | (p[2] << 8);
-        uint8_t idx = p[3], total = p[4];
+        uint16_t id = payload[1] | (payload[2] << 8);
+        uint8_t idx = payload[3], total = payload[4];
         int n = plen - SUB_HDR;
         if (id == last_id && idx == last_idx)
             continue;
@@ -318,13 +318,13 @@ void app_main(void) {
             asm_have = 0;
             asm_total = total;
             asm_len = 0;
-            asm_t = r.t;
+            asm_t = received.t_us;
         }
         if (idx != asm_have || (size_t)idx * SUB_DATA + n > sizeof asm_buf) {
             asm_id = 0xffff;
             continue;
         }  // out of order: drop the payload
-        memcpy(asm_buf + (size_t)idx * SUB_DATA, p + SUB_HDR, n);
+        memcpy(asm_buf + (size_t)idx * SUB_DATA, payload + SUB_HDR, n);
         asm_len = (uint16_t)(idx * SUB_DATA + n);
         asm_have++;
         if (asm_have == asm_total) {

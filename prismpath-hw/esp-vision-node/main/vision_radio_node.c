@@ -246,17 +246,17 @@ static uint32_t layer_last_full = 0;
 static void layer3_cell(int row, int col, uint8_t out[32]) {
     const int sub_h = CELL_H / 8;
     const int sub_w = CELL_W / 8;
-    for (int i = 0; i < 8; i++) {
-        for (int j = 0; j < 8; j++) {
+    for (int sub_row = 0; sub_row < 8; sub_row++) {
+        for (int sub_col = 0; sub_col < 8; sub_col++) {
             uint32_t sum_val = 0;
-            const uint8_t *base = cur + (row * CELL_H + i * sub_h) * FRAME_W + col * CELL_W + j * sub_w;
+            const uint8_t *base = cur + (row * CELL_H + sub_row * sub_h) * FRAME_W + col * CELL_W + sub_col * sub_w;
             for (int y_pos = 0; y_pos < sub_h; y_pos++) {
                 for (int x_pos = 0; x_pos < sub_w; x_pos++) {
                     sum_val += base[y_pos * FRAME_W + x_pos];
                 }
             }
             uint8_t band = (uint8_t)((sum_val / (sub_h * sub_w)) >> 4);
-            int sub_idx = i * 8 + j;
+            int sub_idx = sub_row * 8 + sub_col;
             if (sub_idx & 1) {
                 out[sub_idx >> 1] |= band << 4;
             } else {
@@ -328,7 +328,7 @@ typedef struct __attribute__((packed)) {
     uint16_t cause;
     uint32_t verify_us;
     uint64_t image_hash;
-    uint64_t t;
+    uint64_t t_us;
 } swp_t;
 
 static void swap_reset(void) {
@@ -380,8 +380,8 @@ static uint16_t swap_execute(uint32_t *out_version, uint64_t *out_hash, uint32_t
             cause = CAUSE_MANIFEST_BAD_FORMAT;
         } else {
             bool zero = true;
-            for (int i = 0; i < PACK_SIG_LEN; i++) {
-                if (staged[PACK_SIG_OFF + i]) {
+            for (int entry_index = 0; entry_index < PACK_SIG_LEN; entry_index++) {
+                if (staged[PACK_SIG_OFF + entry_index]) {
                     zero = false;
                     break;
                 }
@@ -406,12 +406,12 @@ static uint16_t swap_execute(uint32_t *out_version, uint64_t *out_hash, uint32_t
                     } else {
                         const uint8_t *codebook = staged + PACK_HDR_LEN + image_len;
                         wire_n = cb_len / CODEBOOK_FIELD_LEN;
-                        for (int i = 0; i < wire_n; i++) {
-                            wire_fields[i].reg = rd16b(codebook + CODEBOOK_FIELD_LEN * i + CODEBOOK_REG_OFF);
-                            wire_fields[i].n_cuts = codebook[CODEBOOK_FIELD_LEN * i + CODEBOOK_CUTS_OFF];
-                            for (int k = 0; k < CB_MAX_CUTS; k++) {
-                                wire_fields[i].cut[k] = rd32(codebook + CODEBOOK_FIELD_LEN * i + CODEBOOK_CUT_BASE_OFF +
-                                                             CODEBOOK_CUT_BYTES * k);
+                        for (int entry_index = 0; entry_index < wire_n; entry_index++) {
+                            wire_fields[entry_index].reg = rd16b(codebook + CODEBOOK_FIELD_LEN * entry_index + CODEBOOK_REG_OFF);
+                            wire_fields[entry_index].n_cuts = codebook[CODEBOOK_FIELD_LEN * entry_index + CODEBOOK_CUTS_OFF];
+                            for (int cut_index = 0; cut_index < CB_MAX_CUTS; cut_index++) {
+                                wire_fields[entry_index].cut[cut_index] = rd32(codebook + CODEBOOK_FIELD_LEN * entry_index + CODEBOOK_CUT_BASE_OFF +
+                                                             CODEBOOK_CUT_BYTES * cut_index);
                             }
                         }
                         esc_mask = esc;
@@ -462,8 +462,8 @@ static uint16_t act_execute(uint32_t *out_counter) {
         uint8_t action = staged[ACT_ACTION_OFF];
         memcpy(&counter, staged + ACT_COUNTER_OFF, 4);
         bool zero = true;
-        for (int i = 0; i < ACT_SIG_LEN; i++) {
-            if (staged[ACT_SIG_OFF + i]) {
+        for (int sig_index = 0; sig_index < ACT_SIG_LEN; sig_index++) {
+            if (staged[ACT_SIG_OFF + sig_index]) {
                 zero = false;
                 break;
             }
@@ -523,8 +523,8 @@ void app_main(void) {
     boot_epoch = esp_random();
     cam_key_init();
     {
-        gpio_config_t g = {.pin_bit_mask = 1ULL << LED_GPIO, .mode = GPIO_MODE_OUTPUT};
-        gpio_config(&g);
+        gpio_config_t pins_config = {.pin_bit_mask = 1ULL << LED_GPIO, .mode = GPIO_MODE_OUTPUT};
+        gpio_config(&pins_config);
         gpio_set_level(LED_GPIO, 0);
         nvs_handle_t nvs_handle;
         if (nvs_open("cam", NVS_READONLY, &nvs_handle) == ESP_OK) {

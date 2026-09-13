@@ -38,9 +38,9 @@ static uint8_t regs[REGS_MAX];
 static uint16_t n_fields, n_atoms, n_nodes, n_edges, prog_len;
 static uint16_t atoms_off, nodes_off, edges_off, prog_off_base;
 
-static uint16_t rd16(const uint8_t *p) { return (uint16_t)(p[0] | ((uint16_t)p[1] << 8)); }
-static int32_t rd32(const uint8_t *p) { int32_t v; memcpy(&v, p, 4); return v; }
-static void wr32(uint8_t *p, int32_t v) { memcpy(p, &v, 4); }
+static uint16_t rd16(const uint8_t *bytes) { return (uint16_t)(bytes[0] | ((uint16_t)bytes[1] << 8)); }
+static int32_t rd32(const uint8_t *bytes) { int32_t value; memcpy(&value, bytes, 4); return value; }
+static void wr32(uint8_t *bytes, int32_t value) { memcpy(bytes, &value, 4); }
 
 static uint8_t parse_table(uint16_t len) {
     if (len < 28) return 3;
@@ -56,12 +56,12 @@ static uint8_t parse_table(uint16_t len) {
 }
 
 static uint8_t eval_atom(uint16_t atom_idx) {
-    const uint8_t *a = tbl + atoms_off + 8 * (uint32_t)atom_idx;
-    uint16_t field = rd16(a);
-    uint8_t op = a[2], aty = a[3];
-    int32_t aval = rd32(a + 4);
-    const uint8_t *r = regs + 4 + 8 * (uint32_t)field;
-    int32_t rty = rd32(r), rval = rd32(r + 4);
+    const uint8_t *atom = tbl + atoms_off + 8 * (uint32_t)atom_idx;
+    uint16_t field = rd16(atom);
+    uint8_t op = atom[2], aty = atom[3];
+    int32_t aval = rd32(atom + 4);
+    const uint8_t *reg = regs + 4 + 8 * (uint32_t)field;
+    int32_t rty = rd32(reg), rval = rd32(reg + 4);
     uint8_t lnum = (rty == TY_BOOL || rty == TY_INT);
     uint8_t rnum = (aty == TY_BOOL || aty == TY_INT);
     switch (op) {
@@ -90,12 +90,12 @@ static uint8_t eval_atom(uint16_t atom_idx) {
 static int8_t eval_prog(uint16_t e_prog_off, uint16_t e_prog_cnt, uint8_t *err) {
     uint8_t stack[STACK_MAX];
     int8_t sp = 0;
-    for (uint16_t i = 0; i < e_prog_cnt; i++) {
-        uint16_t w = rd16(tbl + prog_off_base + 2 * (uint32_t)(e_prog_off + i));
-        if (w < 0x8000) {
+    for (uint16_t word_index = 0; word_index < e_prog_cnt; word_index++) {
+        uint16_t word = rd16(tbl + prog_off_base + 2 * (uint32_t)(e_prog_off + word_index));
+        if (word < 0x8000) {
             if (sp >= STACK_MAX) { *err = 7; return 0; }
-            stack[sp++] = eval_atom(w);
-        } else switch (w) {
+            stack[sp++] = eval_atom(word);
+        } else switch (word) {
         case 0x8000: stack[sp - 1] = (uint8_t)!stack[sp - 1]; break;
         case 0x8001: sp--; stack[sp - 1] = (uint8_t)(stack[sp - 1] && stack[sp]); break;
         case 0x8002: sp--; stack[sp - 1] = (uint8_t)(stack[sp - 1] || stack[sp]); break;
@@ -108,11 +108,11 @@ static int8_t eval_prog(uint16_t e_prog_off, uint16_t e_prog_cnt, uint8_t *err) 
 }
 
 static int8_t evaluate(uint16_t node, uint16_t *out_target, uint8_t *err) {
-    const uint8_t *n = tbl + nodes_off + 4 * (uint32_t)node;
-    uint16_t edge_off = rd16(n), edge_cnt = rd16(n + 2);
-    for (uint16_t i = 0; i < edge_cnt; i++) {
-        const uint8_t *e = tbl + edges_off + 6 * (uint32_t)(edge_off + i);
-        if (eval_prog(rd16(e + 2), rd16(e + 4), err)) { *out_target = rd16(e); return (int8_t)i; }
+    const uint8_t *node_entry = tbl + nodes_off + 4 * (uint32_t)node;
+    uint16_t edge_off = rd16(node_entry), edge_cnt = rd16(node_entry + 2);
+    for (uint16_t edge_index = 0; edge_index < edge_cnt; edge_index++) {
+        const uint8_t *edge_entry = tbl + edges_off + 6 * (uint32_t)(edge_off + edge_index);
+        if (eval_prog(rd16(edge_entry + 2), rd16(edge_entry + 4), err)) { *out_target = rd16(edge_entry); return (int8_t)edge_index; }
         if (*err) return -1;
     }
     return -1;
@@ -126,24 +126,24 @@ static void adc_setup(void) {
     adc_oneshot_unit_init_cfg_t u2 = { .unit_id = ADC_UNIT_2 };
     adc_oneshot_new_unit(&u1, &adc1);
     adc_oneshot_new_unit(&u2, &adc2);
-    adc_oneshot_chan_cfg_t c = { .atten = ADC_ATTEN_DB_12, .bitwidth = ADC_BITWIDTH_12 };
-    adc_oneshot_config_channel(adc1, LIGHT_ADC_CHAN, &c);
-    adc_oneshot_config_channel(adc2, LEVEL_ADC_CHAN, &c);
+    adc_oneshot_chan_cfg_t channel_config = { .atten = ADC_ATTEN_DB_12, .bitwidth = ADC_BITWIDTH_12 };
+    adc_oneshot_config_channel(adc1, LIGHT_ADC_CHAN, &channel_config);
+    adc_oneshot_config_channel(adc2, LEVEL_ADC_CHAN, &channel_config);
 }
 
 static void rgb_setup(void) {
-    gpio_config_t g = { .pin_bit_mask = (1ULL << LED_R) | (1ULL << LED_G) | (1ULL << LED_B),
+    gpio_config_t pins_config = { .pin_bit_mask = (1ULL << LED_R) | (1ULL << LED_G) | (1ULL << LED_B),
                         .mode = GPIO_MODE_OUTPUT };
-    gpio_config(&g);
+    gpio_config(&pins_config);
 }
 
-static void rgb(uint8_t r, uint8_t g, uint8_t b) {
+static void rgb(uint8_t red, uint8_t green, uint8_t blue) {
 #if RGB_COMMON_ANODE
-    r = !r; g = !g; b = !b;                 /* common-anode: drive low to light */
+    red = !red; green = !green; blue = !blue;                 /* common-anode: drive low to light */
 #endif
-    gpio_set_level(LED_R, r);
-    gpio_set_level(LED_G, g);
-    gpio_set_level(LED_B, b);
+    gpio_set_level(LED_R, red);
+    gpio_set_level(LED_G, green);
+    gpio_set_level(LED_B, blue);
 }
 
 /* verdict (winning edge index) -> RGB + name */

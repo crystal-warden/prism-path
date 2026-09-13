@@ -84,8 +84,8 @@ static uint16_t normal_id = 0;
 /* The normal's id: FNV-1a over the background pixels, folded to 16 bits; every reading and keyframe names it. */
 static uint16_t normal_hash(void) {
     uint32_t fnv = FNV_OFFSET_BASIS;
-    for (uint32_t i = 0; i < FRAME_W * FRAME_H; i++) {
-        fnv ^= background[i];
+    for (uint32_t pixel_index = 0; pixel_index < FRAME_W * FRAME_H; pixel_index++) {
+        fnv ^= background[pixel_index];
         fnv *= FNV_PRIME;
     }
     return (uint16_t)(fnv ^ (fnv >> FNV_HASH_FOLD_SHIFT));
@@ -153,8 +153,8 @@ static void front_end(int32_t *motion_cells, int32_t *dark, int32_t *step, int32
             }
         }
     }
-    for (uint32_t i = 0; i < FRAME_W * FRAME_H; i++) {
-        sum += cur[i];
+    for (uint32_t pixel_index = 0; pixel_index < FRAME_W * FRAME_H; pixel_index++) {
+        sum += cur[pixel_index];
     }
     *motion_cells = motion_cell_count;
     *dark = (int32_t)(sum / (FRAME_W * FRAME_H));
@@ -203,27 +203,27 @@ static void front_end(int32_t *motion_cells, int32_t *dark, int32_t *step, int32
     memcpy(prev, cur, FRAME_W * FRAME_H);
 }
 
-static void usb_write_all(const uint8_t *p, size_t n) {
-    while (n) {
-        size_t piece = n < 2048 ? n : 2048;
-        int w = usb_serial_jtag_write_bytes(p, piece, pdMS_TO_TICKS(1000));
-        if (w <= 0) {
+static void usb_write_all(const uint8_t *bytes, size_t remaining) {
+    while (remaining) {
+        size_t piece = remaining < 2048 ? remaining : 2048;
+        int written = usb_serial_jtag_write_bytes(bytes, piece, pdMS_TO_TICKS(1000));
+        if (written <= 0) {
             vTaskDelay(1);
             continue;
         }
-        p += w;
-        n -= w;
+        bytes += written;
+        remaining -= written;
     }
 }
 
-static void usb_read_all(uint8_t *p, size_t n) {
-    while (n) {
-        int r = usb_serial_jtag_read_bytes(p, n, pdMS_TO_TICKS(1000));
-        if (r <= 0) {
+static void usb_read_all(uint8_t *bytes, size_t remaining) {
+    while (remaining) {
+        int read_count = usb_serial_jtag_read_bytes(bytes, remaining, pdMS_TO_TICKS(1000));
+        if (read_count <= 0) {
             continue;
         }
-        p += r;
-        n -= r;
+        bytes += read_count;
+        remaining -= read_count;
     }
 }
 
@@ -246,9 +246,9 @@ static void vision_core_init(void) {
 static void decide(int32_t motion_cells, int32_t dark, int32_t step, int32_t door_hit, int32_t scene,
                    uint16_t *out_node, uint16_t *out_steps) {
     memset(regs, 0, sizeof(regs));
-#define SETM(r, c)                           \
-    set_reg(REG_m_##r##c, motion_mad[r][c]); \
-    set_reg(REG_b_##r##c, background_mad[r][c]);
+#define SETM(row, col)                               \
+    set_reg(REG_m_##row##col, motion_mad[row][col]); \
+    set_reg(REG_b_##row##col, background_mad[row][col]);
     SETM(0, 0)
     SETM(0, 1) SETM(0, 2) SETM(0, 3) SETM(0, 4) SETM(0, 5) SETM(0, 6) SETM(0, 7) SETM(1, 0) SETM(1, 1) SETM(1, 2)
         SETM(1, 3) SETM(1, 4) SETM(1, 5) SETM(1, 6) SETM(1, 7) SETM(2, 0) SETM(2, 1) SETM(2, 2) SETM(2, 3) SETM(2, 4)
