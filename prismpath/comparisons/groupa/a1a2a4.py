@@ -89,14 +89,14 @@ def conformance_rows(system: str) -> List[Dict[str, Any]]:
 
 
 def row_for(rows, policy: str, scenario: str) -> Dict[str, Any]:
-    return next(r for r in rows if r["policy"] == policy and r["scenario"] == scenario)
+    return next(row for row in rows if row["policy"] == policy and row["scenario"] == scenario)
 
 
 def outcome_grade(system: str) -> str:
-    m = MECHANISM[system]
-    if m["carrier"] == "boolean_only":
+    mechanism = MECHANISM[system]
+    if mechanism["carrier"] == "boolean_only":
         return "NOT"
-    if m["carrier"] == "first_class" and m["absence"] == "unsatisfied":
+    if mechanism["carrier"] == "first_class" and mechanism["absence"] == "unsatisfied":
         return "NATIVE"
     return "WITH-WORK"
 
@@ -116,20 +116,20 @@ def run_a1() -> None:
             "sensor_interlock": ["undeclared_missing_1", "undeclared_missing_2"]}
     for system in SYSTEMS:
         rows = conformance_rows(system)
-        m = MECHANISM[system]
+        mechanism = MECHANISM[system]
         ev = evidence_dir(system, "A1")
-        (ev / "mechanism.json").write_text(json.dumps(m, indent=2) + "\n")
+        (ev / "mechanism.json").write_text(json.dumps(mechanism, indent=2) + "\n")
         for pol, scs in dims.items():
             for sc in scs:
-                r = row_for(rows, pol, sc)
-                obs = r["observed"]["observed"]
-                exp = r["expected"]["outcome"]
+                row = row_for(rows, pol, sc)
+                obs = row["observed"]["observed"]
+                exp = row["expected"]["outcome"]
                 grade = outcome_grade(system)
                 notes = (f"Observed by the real system in the Phase 2 conformance run: {obs} (expected {exp}"
-                         f"{'; a probe scenario: the observed value is the measurement' if r['kind'] == 'undeclared_missing' else ''}). "
-                         f"Carrier: {m['carrier']} ({m['carrier_note']}). Absence: {m['absence']} ({m['absence_note']}).")
+                         f"{'; a probe scenario: the observed value is the measurement' if row['kind'] == 'undeclared_missing' else ''}). "
+                         f"Carrier: {mechanism['carrier']} ({mechanism['carrier_note']}). Absence: {mechanism['absence']} ({mechanism['absence_note']}).")
                 if system == "prismpath" and obs == "no_match":
-                    notes += f" Cause on the receipt: {r['observed']['cause']} (refused, nothing routed)."
+                    notes += f" Cause on the receipt: {row['observed']['cause']} (refused, nothing routed)."
                 write_result(system=system, dimension="A1", policy=pol, scenario=sc, expected=exp, observed=obs,
                              grade=grade, idiomatic=True, evidence_path=SYSTEMS_DIR / system / "generated",
                              glue=WRAPPER_GLUE if grade == "WITH-WORK" else None, notes=notes)
@@ -140,20 +140,20 @@ def run_a2() -> None:
             "ai_action_gate": ["escalate_execute_confidential_1", "escalate_org_write_1", "escalate_human_requested_1"]}
     for system in SYSTEMS:
         rows = conformance_rows(system)
-        m = MECHANISM[system]
+        mechanism = MECHANISM[system]
         ev = evidence_dir(system, "A2")
-        (ev / "mechanism.json").write_text(json.dumps(m, indent=2) + "\n")
+        (ev / "mechanism.json").write_text(json.dumps(mechanism, indent=2) + "\n")
         for pol, scs in dims.items():
             for sc in scs:
-                r = row_for(rows, pol, sc)
-                obs = r["observed"]["observed"]
-                exp = r["expected"]["outcome"]
+                row = row_for(rows, pol, sc)
+                obs = row["observed"]["observed"]
+                exp = row["expected"]["outcome"]
                 grade = outcome_grade(system)
                 notes = (f"Observed by the real system in the Phase 2 conformance run: {obs} (expected {exp}). "
-                         f"Carrier: {m['carrier']} ({m['carrier_note']}). Worker requested vs policy selected "
-                         f"escalation: {m['human_distinct']}.")
+                         f"Carrier: {mechanism['carrier']} ({mechanism['carrier_note']}). Worker requested vs policy selected "
+                         f"escalation: {mechanism['human_distinct']}.")
                 if sc == "escalate_human_requested_1":
-                    notes += f" This is the worker requested case; cause observed: {r['observed']['cause']}."
+                    notes += f" This is the worker requested case; cause observed: {row['observed']['cause']}."
                 write_result(system=system, dimension="A2", policy=pol, scenario=sc, expected=exp, observed=obs,
                              grade=grade, idiomatic=True, evidence_path=SYSTEMS_DIR / system / "generated",
                              glue=WRAPPER_GLUE if grade == "WITH-WORK" else None, notes=notes)

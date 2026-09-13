@@ -57,9 +57,9 @@ def _subject_types(model: Dict[str, Any], obj_type: str, relation: str) -> List[
             if key not in seen:
                 seen.add(key)
                 out.append({"type": rule["subject_type"], "relation": rule["subject_relation"]})
-    for s, r, o in model["tuples"]:
-        if r == relation and o.split(":", 1)[0] == obj_type and "#" not in s:
-            key = (s.split(":", 1)[0], "")
+    for subject, tuple_relation, object_ref in model["tuples"]:
+        if tuple_relation == relation and object_ref.split(":", 1)[0] == obj_type and "#" not in subject:
+            key = (subject.split(":", 1)[0], "")
             if key not in seen:
                 seen.add(key)
                 out.append({"type": key[0]})
@@ -68,20 +68,20 @@ def _subject_types(model: Dict[str, Any], obj_type: str, relation: str) -> List[
 
 def _model_json(model: Dict[str, Any]) -> Dict[str, Any]:
     type_defs = []
-    for t in model["types"]:
-        rels = model["relations"].get(t, {})
+    for obj_type in model["types"]:
+        rels = model["relations"].get(obj_type, {})
         relations, meta = {}, {}
         for rel, rules in rels.items():
             parts = []
-            if any(r["kind"] in ("direct", "userset") for r in rules):
+            if any(rule["kind"] in ("direct", "userset") for rule in rules):
                 parts.append({"this": {}})
-            for r in rules:
-                if r["kind"] == "parent":
-                    parts.append({"tupleToUserset": {"tupleset": {"relation": r["via"]},
-                                                     "computedUserset": {"relation": r["parent_relation"]}}})
+            for rule in rules:
+                if rule["kind"] == "parent":
+                    parts.append({"tupleToUserset": {"tupleset": {"relation": rule["via"]},
+                                                     "computedUserset": {"relation": rule["parent_relation"]}}})
             relations[rel] = parts[0] if len(parts) == 1 else {"union": {"child": parts}}
-            meta[rel] = {"directly_related_user_types": _subject_types(model, t, rel)}
-        td: Dict[str, Any] = {"type": t}
+            meta[rel] = {"directly_related_user_types": _subject_types(model, obj_type, rel)}
+        td: Dict[str, Any] = {"type": obj_type}
         if relations:
             td["relations"] = relations
             td["metadata"] = {"relations": meta}
@@ -91,23 +91,23 @@ def _model_json(model: Dict[str, Any]) -> Dict[str, Any]:
 
 def _model_dsl(model: Dict[str, Any]) -> str:
     lines = ["model", "  schema 1.1"]
-    for t in model["types"]:
-        lines.append(f"type {t}")
-        rels = model["relations"].get(t, {})
+    for obj_type in model["types"]:
+        lines.append(f"type {obj_type}")
+        rels = model["relations"].get(obj_type, {})
         if rels:
             lines.append("  relations")
         for rel, rules in rels.items():
-            direct = ", ".join(d["type"] + (f"#{d['relation']}" if d.get("relation") else "")
-                               for d in _subject_types(model, t, rel))
+            direct = ", ".join(subject_type["type"] + (f"#{subject_type['relation']}" if subject_type.get("relation") else "")
+                               for subject_type in _subject_types(model, obj_type, rel))
             expr = [f"[{direct}]"] if direct else []
-            expr += [f"{r['parent_relation']} from {r['via']}" for r in rules if r["kind"] == "parent"]
+            expr += [f"{rule['parent_relation']} from {rule['via']}" for rule in rules if rule["kind"] == "parent"]
             lines.append(f"    define {rel}: " + " or ".join(expr))
     return "\n".join(lines) + "\n"
 
 
 def translate(policy: Dict[str, Any]) -> Translation:
     tr = Translation(citations=list(CITATIONS))
-    related = [r for r in policy["rules"] if r["if"] is not True and "related" in r["if"]]
+    related = [rule for rule in policy["rules"] if rule["if"] is not True and "related" in rule["if"]]
     if not related:
         tr.expressible = False
         tr.notes.append("not expressible: a Check returns one boolean for one relation; the policy needs "
@@ -119,7 +119,7 @@ def translate(policy: Dict[str, Any]) -> Translation:
     tr.files["model.json"] = json.dumps(_model_json(model), indent=2) + "\n"
     tr.files["model.fga"] = _model_dsl(model)
     tr.files["tuples.json"] = json.dumps(
-        [{"user": s, "relation": r, "object": o} for s, r, o in model["tuples"]], indent=2) + "\n"
+        [{"user": subject, "relation": tuple_relation, "object": object_ref} for subject, tuple_relation, object_ref in model["tuples"]], indent=2) + "\n"
     tr.notes.append("the corpus relation model maps one to one: direct -> assignable, userset -> group#member "
                     "subject, parent -> 'viewer from parent'; model.json is generated directly in the schema 1.1 "
                     "JSON the API takes and model.fga is the same model in the DSL for review")
@@ -129,8 +129,8 @@ def translate(policy: Dict[str, Any]) -> Translation:
 class Runner:
     def __init__(self, policy: Dict[str, Any], gen_dir: Path):
         self.policy = policy
-        self.related_rule = next(r for r in policy["rules"] if r["if"] is not True and "related" in r["if"])
-        self.default_rule = next((r for r in policy["rules"] if r["if"] is True), None)
+        self.related_rule = next(rule for rule in policy["rules"] if rule["if"] is not True and "related" in rule["if"])
+        self.default_rule = next((rule for rule in policy["rules"] if rule["if"] is True), None)
         self.base = f"http://127.0.0.1:{HTTP_PORT}"
         self.log = tempfile.NamedTemporaryFile("w", prefix="openfga_", suffix=".log", delete=False)
         self.proc = subprocess.Popen(
@@ -148,8 +148,8 @@ class Runner:
     def _wait_healthy(self) -> None:
         for _ in range(80):
             try:
-                with urllib.request.urlopen(f"{self.base}/healthz", timeout=1) as r:
-                    if r.status == 200:
+                with urllib.request.urlopen(f"{self.base}/healthz", timeout=1) as response:
+                    if response.status == 200:
                         return
             except (urllib.error.URLError, ConnectionError, OSError):
                 time.sleep(0.25)
@@ -158,8 +158,8 @@ class Runner:
     def _post(self, path: str, body: Dict[str, Any]) -> Dict[str, Any]:
         req = urllib.request.Request(self.base + path, data=json.dumps(body).encode(),
                                      headers={"content-type": "application/json"}, method="POST")
-        with urllib.request.urlopen(req, timeout=10) as r:
-            return json.loads(r.read().decode())
+        with urllib.request.urlopen(req, timeout=10) as response:
+            return json.loads(response.read().decode())
 
     def decide(self, inp: Dict[str, Any]) -> Decision:
         uf, rf, of = self.related_rule["if"]["related"]
@@ -167,8 +167,8 @@ class Runner:
                 "tuple_key": {"user": inp.get(uf), "relation": inp.get(rf), "object": inp.get(of)}}
         try:
             res = self._post(f"/stores/{self.store}/check", body)
-        except urllib.error.HTTPError as e:
-            return Decision("error", None, None, e.read().decode(errors="replace"))
+        except urllib.error.HTTPError as error:
+            return Decision("error", None, None, error.read().decode(errors="replace"))
         raw = json.dumps(res, sort_keys=True)
         if res.get("allowed") is True:
             return Decision(self.related_rule["then"], self.related_rule["id"], None, raw)

@@ -30,23 +30,23 @@ OUT = os.path.join(OUT_DIR, "blind_cases.jsonl")
 
 def main() -> None:
     os.makedirs(OUT_DIR, exist_ok=True)
-    n = 0
-    with open(OUT, "w", encoding="utf-8") as f:
-        for i, case in enumerate(blind_cases(BENCH)):
+    case_count = 0
+    with open(OUT, "w", encoding="utf-8") as handle:
+        for case_index, case in enumerate(blind_cases(BENCH)):
             # exactly the human's information: flow/node context, instruction, outcome, numbered edges.
             # NO label, NO stratum hint about the answer.
             rec = {
-                "i": i,
+                "i": case_index,
                 "flow": case["flow"],
                 "node": case["node"],
                 "instruction": case["instruction"],
                 "outcome": case["outcome"],
-                "choices": [{"n": j + 1, "target": t, "condition": c}
-                            for j, (t, c) in enumerate(case["edges"])],
+                "choices": [{"n": edge_index + 1, "target": target, "condition": condition}
+                            for edge_index, (target, condition) in enumerate(case["edges"])],
             }
-            f.write(json.dumps(rec, ensure_ascii=False) + "\n")
-            n += 1
-    print(f"wrote {OUT}  ({n} blind cases)")
+            handle.write(json.dumps(rec, ensure_ascii=False) + "\n")
+            case_count += 1
+    print(f"wrote {OUT}  ({case_count} blind cases)")
 
 
 if __name__ == "__main__":

@@ -17,23 +17,23 @@ use std::io::{self, BufRead, BufReader};
 use std::net::TcpListener;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-fn json_to_v(j: &serde_json::Value) -> Option<V> {
-    match j {
-        serde_json::Value::Bool(b) => Some(V::Bool(*b)),
-        serde_json::Value::Number(n) => n.as_f64().map(V::Num),
-        serde_json::Value::String(s) => Some(V::Str(s.clone())),
+fn json_to_v(json_value: &serde_json::Value) -> Option<V> {
+    match json_value {
+        serde_json::Value::Bool(flag) => Some(V::Bool(*flag)),
+        serde_json::Value::Number(number) => number.as_f64().map(V::Num),
+        serde_json::Value::String(text) => Some(V::Str(text.clone())),
         _ => None,
     }
 }
 
 /// Deterministic xorshift64 -> f64 in [0,1); seeded from the clock so injection is random per run.
 fn next_f64(state: &mut u64) -> f64 {
-    let mut x = *state;
-    x ^= x << 13;
-    x ^= x >> 7;
-    x ^= x << 17;
-    *state = x;
-    (x >> 11) as f64 / ((1u64 << 53) as f64)
+    let mut scrambled = *state;
+    scrambled ^= scrambled << 13;
+    scrambled ^= scrambled >> 7;
+    scrambled ^= scrambled << 17;
+    *state = scrambled;
+    (scrambled >> 11) as f64 / ((1u64 << 53) as f64)
 }
 
 #[derive(Default)]
@@ -45,92 +45,92 @@ struct Report {
 }
 
 fn process<R: BufRead>(reader: R, parts: &HashMap<String, FieldPartition>, fields: &[String]) -> Report {
-    let mut r = Report::default();
+    let mut report = Report::default();
     for line in reader.lines() {
         let line = match line {
-            Ok(l) => l,
+            Ok(text) => text,
             Err(_) => break,
         };
         if line.trim().is_empty() {
             continue;
         }
-        r.json_bytes += line.len();
+        report.json_bytes += line.len();
         let ev: serde_json::Value = match serde_json::from_str(&line) {
-            Ok(v) => v,
+            Ok(parsed) => parsed,
             Err(_) => {
-                r.skipped += 1;
+                report.skipped += 1;
                 continue;
             }
         };
         let mut reading: HashMap<String, V> = HashMap::new();
-        for f in fields {
-            if let Some(val) = ev.get(f).and_then(json_to_v) {
-                reading.insert(f.clone(), val);
+        for field in fields {
+            if let Some(val) = ev.get(field).and_then(json_to_v) {
+                reading.insert(field.clone(), val);
             }
         }
         match wire::encode_reading(parts, &reading) {
             Ok(bits) => {
-                r.all_bits.push_str(&bits);
-                r.decisions += 1;
+                report.all_bits.push_str(&bits);
+                report.decisions += 1;
             }
-            Err(_) => r.skipped += 1,
+            Err(_) => report.skipped += 1,
         }
     }
-    r
+    report
 }
 
-fn print_baseline(r: &Report) {
-    let facet_bytes = (r.all_bits.len() + 7) / 8;
-    let per = |n: usize| if r.decisions > 0 { n as f64 / r.decisions as f64 } else { 0.0 };
-    let ratio = if facet_bytes > 0 { r.json_bytes as f64 / facet_bytes as f64 } else { 0.0 };
-    let report = serde_json::json!({
-        "decisions": r.decisions,
-        "skipped": r.skipped,
-        "raw_vector_json_bytes": r.json_bytes,
-        "raw_vector_json_bytes_per_decision": (per(r.json_bytes) * 1000.0).round() / 1000.0,
+fn print_baseline(report: &Report) {
+    let facet_bytes = (report.all_bits.len() + 7) / 8;
+    let per = |bytes: usize| if report.decisions > 0 { bytes as f64 / report.decisions as f64 } else { 0.0 };
+    let ratio = if facet_bytes > 0 { report.json_bytes as f64 / facet_bytes as f64 } else { 0.0 };
+    let baseline = serde_json::json!({
+        "decisions": report.decisions,
+        "skipped": report.skipped,
+        "raw_vector_json_bytes": report.json_bytes,
+        "raw_vector_json_bytes_per_decision": (per(report.json_bytes) * 1000.0).round() / 1000.0,
         "facet_bytes": facet_bytes,
         "facet_bytes_per_decision": (per(facet_bytes) * 1000.0).round() / 1000.0,
         "reduction_vs_raw_vector_json": (ratio * 10.0).round() / 10.0,
     });
-    println!("{}", serde_json::to_string_pretty(&report).unwrap());
+    println!("{}", serde_json::to_string_pretty(&baseline).unwrap());
 }
 
 /// Stream the Facet wire over a lossy link: each block transmission is dropped or corrupted
 /// with probability p (50/50). Corrupt blocks are rejected by their Merkle proof; missing
 /// blocks are retransmitted (also over the lossy link) until the receiver is whole.
-fn run_interference(all_bits: &str, n_fields: usize, p: f64) {
+fn run_interference(all_bits: &str, n_fields: usize, interference_rate: f64) {
     let block_bits = 128usize;
     let sender = Sender::new(all_bits, block_bits).expect("sender");
-    let n = sender.n_blocks();
-    let mut rx = Receiver::new(sender.root.clone(), n);
-    let mut st = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64 | 1;
+    let block_count = sender.n_blocks();
+    let mut receiver = Receiver::new(sender.root.clone(), block_count);
+    let mut rng_state = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64 | 1;
 
     let (mut lost, mut corrupted, mut silent, mut attempts, mut rounds) = (0usize, 0usize, 0usize, 0usize, 0usize);
     loop {
-        let targets: Vec<usize> = if rounds == 0 { (0..n).collect() } else { rx.missing() };
+        let targets: Vec<usize> = if rounds == 0 { (0..block_count).collect() } else { receiver.missing() };
         if targets.is_empty() {
             break;
         }
         for idx in targets {
             attempts += 1;
             let (block, proof) = sender.serve(idx);
-            if next_f64(&mut st) < p {
-                if next_f64(&mut st) < 0.5 {
+            if next_f64(&mut rng_state) < interference_rate {
+                if next_f64(&mut rng_state) < 0.5 {
                     lost += 1; // connectivity dropout: nothing arrives
                 } else {
-                    let mut b = block.into_bytes(); // interference: flip one bit
-                    if !b.is_empty() {
-                        let j = (next_f64(&mut st) * b.len() as f64) as usize % b.len();
-                        b[j] = if b[j] == b'0' { b'1' } else { b'0' };
+                    let mut block_bytes = block.into_bytes(); // interference: flip one bit
+                    if !block_bytes.is_empty() {
+                        let bit_index = (next_f64(&mut rng_state) * block_bytes.len() as f64) as usize % block_bytes.len();
+                        block_bytes[bit_index] = if block_bytes[bit_index] == b'0' { b'1' } else { b'0' };
                     }
-                    let cb = String::from_utf8(b).unwrap();
-                    if rx.accept(idx, &cb, &proof) {
+                    let corrupted_block = String::from_utf8(block_bytes).unwrap();
+                    if receiver.accept(idx, &corrupted_block, &proof) {
                         silent += 1; // a corrupted block accepted -> a silent error (must stay 0)
                     }
                     corrupted += 1;
                 }
             } else {
-                rx.accept(idx, &block, &proof); // clean delivery, Merkle-verified
+                receiver.accept(idx, &block, &proof); // clean delivery, Merkle-verified
             }
         }
         rounds += 1;
@@ -139,17 +139,17 @@ fn run_interference(all_bits: &str, n_fields: usize, p: f64) {
         }
     }
 
-    let complete = rx.complete();
-    let assembled = if complete { rx.assemble().ok() } else { None };
+    let complete = receiver.complete();
+    let assembled = if complete { receiver.assemble().ok() } else { None };
     let identical = assembled.as_deref() == Some(all_bits);
     let decisions_recovered = match &assembled {
         Some(bits) if n_fields > 0 => zeckendorf::decode_stream(bits).len() / n_fields,
         _ => 0,
     };
     let report = serde_json::json!({
-        "link_interference_rate": p,
+        "link_interference_rate": interference_rate,
         "merkle_root_prefix": &sender.root[..16],
-        "blocks": n,
+        "blocks": block_count,
         "block_bits": block_bits,
         "transmission_attempts_incl_retransmit": attempts,
         "blocks_lost_to_dropout": lost,
@@ -160,29 +160,29 @@ fn run_interference(all_bits: &str, n_fields: usize, p: f64) {
         "reassembled_bit_identical_to_source": identical,
         "decisions_recovered": decisions_recovered,
     });
-    eprintln!("[facet-sink] DIL self-heal over a lossy link (interference p={})", p);
+    eprintln!("[facet-sink] DIL self-heal over a lossy link (interference p={})", interference_rate);
     println!("{}", serde_json::to_string_pretty(&report).unwrap());
 }
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let (mut flow, mut listen, mut interference): (Option<String>, Option<String>, Option<f64>) = (None, None, None);
-    let mut i = 1;
-    while i < args.len() {
-        match args[i].as_str() {
+    let mut arg_index = 1;
+    while arg_index < args.len() {
+        match args[arg_index].as_str() {
             "--listen" => {
-                listen = args.get(i + 1).cloned();
-                i += 2;
+                listen = args.get(arg_index + 1).cloned();
+                arg_index += 2;
             }
             "--interference" => {
-                interference = args.get(i + 1).and_then(|s| s.parse().ok());
-                i += 2;
+                interference = args.get(arg_index + 1).and_then(|text| text.parse().ok());
+                arg_index += 2;
             }
-            s => {
+            arg => {
                 if flow.is_none() {
-                    flow = Some(s.to_string());
+                    flow = Some(arg.to_string());
                 }
-                i += 1;
+                arg_index += 1;
             }
         }
     }
@@ -206,7 +206,7 @@ fn main() {
     };
 
     print_baseline(&report);
-    if let Some(p) = interference {
-        run_interference(&report.all_bits, fields.len(), p);
+    if let Some(interference_rate) = interference {
+        run_interference(&report.all_bits, fields.len(), interference_rate);
     }
 }

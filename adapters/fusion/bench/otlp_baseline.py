@@ -41,7 +41,7 @@ from opentelemetry.proto.resource.v1.resource_pb2 import Resource
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parent.parent.parent
 
-N = 64484                 # match the #84 population exactly
+DECISION_COUNT = 64484                 # match the #84 population exactly
 EPOCH = 4096              # the decision codec's Merkle-committed epoch (#84)  -  amortization unit
 BASE_TS = 1_700_000_000_000_000_000
 
@@ -49,7 +49,7 @@ BASE_TS = 1_700_000_000_000_000_000
 _SEVERITY = {"contain": 17, "watch": 13, "ignore": 9}
 
 
-def _representative_population(n: int):
+def _representative_population(decision_count: int):
     """A realistic decision population spanning the routing space (levels 7-15, all postures,
     the deadband/move/shake dev_mg bands). Deterministic; value variety exercises the varint sizes
     honestly without needing the live indexer."""
@@ -57,22 +57,22 @@ def _representative_population(n: int):
     stabs = ["still", "moving", "shaken"]
     devs = [0, 149, 300, 600, 2600]
     out = []
-    for i in range(n):
-        level = levels[i % len(levels)]
-        stab = stabs[(i // 7) % len(stabs)]
-        dev = devs[(i // 3) % len(devs)]
+    for index in range(decision_count):
+        level = levels[index % len(levels)]
+        stab = stabs[(index // 7) % len(stabs)]
+        dev = devs[(index // 3) % len(devs)]
         imu = {"stability": stab, "dev_mg": dev, "derived": False}
         out.append(projection.fused_reading(level, projection.soc_action_from_level(level), imu))
     return out
 
 
-def _set_val(kv: KeyValue, v):
-    if isinstance(v, bool):
-        kv.value.bool_value = v
-    elif isinstance(v, int):
-        kv.value.int_value = v
+def _set_val(kv: KeyValue, value):
+    if isinstance(value, bool):
+        kv.value.bool_value = value
+    elif isinstance(value, int):
+        kv.value.int_value = value
     else:
-        kv.value.string_value = str(v)
+        kv.value.string_value = str(value)
 
 
 def _log_record(reading: dict, ts: int, faithful: bool) -> LogRecord:
@@ -81,10 +81,10 @@ def _log_record(reading: dict, ts: int, faithful: bool) -> LogRecord:
     lr.observed_time_unix_nano = ts
     lr.severity_number = _SEVERITY.get(reading["soc_action"], 9)
     if faithful:
-        for k in ("stability", "dev_mg", "rule_level", "soc_action"):
+        for field_name in ("stability", "dev_mg", "rule_level", "soc_action"):
             kv = lr.attributes.add()
-            kv.key = k
-            _set_val(kv, reading[k])
+            kv.key = field_name
+            _set_val(kv, reading[field_name])
     else:
         # MINIMAL: one attribute  -  the band verdict the O2 stream carries (soc_action as the class)
         kv = lr.attributes.add()
@@ -97,21 +97,21 @@ def _logs_data(readings, faithful: bool) -> bytes:
     """One OTLP LogsData batch (one Resource, one Scope, all records)  -  how a batch ships."""
     ld = LogsData()
     rl = ld.resource_logs.add()
-    r = Resource()
-    kv = r.attributes.add(); kv.key = "service.name"; kv.value.string_value = "prismpath-fusion"
-    rl.resource.CopyFrom(r)
+    resource = Resource()
+    kv = resource.attributes.add(); kv.key = "service.name"; kv.value.string_value = "prismpath-fusion"
+    rl.resource.CopyFrom(resource)
     sl = rl.scope_logs.add()
     sl.scope.CopyFrom(InstrumentationScope(name="fusion_triage", version="1"))
-    for i, reading in enumerate(readings):
-        sl.log_records.append(_log_record(reading, BASE_TS + i * 1_000_000, faithful))
+    for record_index, reading in enumerate(readings):
+        sl.log_records.append(_log_record(reading, BASE_TS + record_index * 1_000_000, faithful))
     return ld.SerializeToString()
 
 
 def _epoched_bytes(readings, faithful: bool, epoch: int) -> int:
     """Total wire bytes if shipped in `epoch`-sized OTLP batches (Resource+Scope paid per batch)."""
     total = 0
-    for i in range(0, len(readings), epoch):
-        total += len(_logs_data(readings[i:i + epoch], faithful))
+    for batch_start in range(0, len(readings), epoch):
+        total += len(_logs_data(readings[batch_start:batch_start + epoch], faithful))
     return total
 
 
@@ -126,13 +126,13 @@ def _compress(blob: bytes) -> dict:
 
 
 def main() -> int:
-    readings = _representative_population(N)
+    readings = _representative_population(DECISION_COUNT)
     # sanity: every faithful record is a VALID OTLP LogRecord (round-trips)
     probe = _log_record(readings[0], BASE_TS, True)
     rt = LogRecord(); rt.ParseFromString(probe.SerializeToString())
     assert rt.attributes[0].key == "stability", "OTLP record must round-trip"
 
-    result = {"n": N, "epoch": EPOCH, "note": "OTLP LogRecord (opentelemetry.proto), real "
+    result = {"n": DECISION_COUNT, "epoch": EPOCH, "note": "OTLP LogRecord (opentelemetry.proto), real "
               "round-tripping records; representative decision population (wire cost is "
               "field-shape-invariant, #84)."}
 
@@ -144,14 +144,14 @@ def main() -> int:
         result[name] = {
             "marginal_bytes_per_record": marginal,
             "one_batch_total": len(one_batch),
-            "one_batch_per_decision": round(len(one_batch) / N, 3),
+            "one_batch_per_decision": round(len(one_batch) / DECISION_COUNT, 3),
             "epoched_total": epoched,
-            "epoched_per_decision": round(epoched / N, 3),
+            "epoched_per_decision": round(epoched / DECISION_COUNT, 3),
             "compressed_one_batch": comp,
-            "gzip_per_decision": round(comp["gzip"] / N, 3),
+            "gzip_per_decision": round(comp["gzip"] / DECISION_COUNT, 3),
         }
         if "zstd19" in comp:
-            result[name]["zstd19_per_decision"] = round(comp["zstd19"] / N, 3)
+            result[name]["zstd19_per_decision"] = round(comp["zstd19"] / DECISION_COUNT, 3)
 
     # pull the decision-codec + JSON numbers to state the ratios in one place
     try:
@@ -174,37 +174,37 @@ def main() -> int:
         if o2:
             result["ratios"]["otlp_minimal_over_o2"] = round(
                 result["otlp_minimal"]["epoched_per_decision"] / o2, 1)
-    except Exception as e:  # noqa: BLE001
-        result["ratios_error"] = str(e)
+    except Exception as error:  # noqa: BLE001
+        result["ratios_error"] = str(error)
 
     (HERE / "otlp_results.json").write_text(json.dumps(result, indent=1) + "\n")
     _write_md(result)
-    r = result["otlp_faithful"]
-    print(f"OTLP faithful: {r['marginal_bytes_per_record']} B/record marginal, "
-          f"{r['epoched_per_decision']} B/decision epoched, "
-          f"{r.get('zstd19_per_decision', '?')} B/decision zstd")
+    faithful_result = result["otlp_faithful"]
+    print(f"OTLP faithful: {faithful_result['marginal_bytes_per_record']} B/record marginal, "
+          f"{faithful_result['epoched_per_decision']} B/decision epoched, "
+          f"{faithful_result.get('zstd19_per_decision', '?')} B/decision zstd")
     print(f"ratios: {result.get('ratios')}")
     return 0
 
 
-def _write_md(r: dict) -> None:
-    f = r["otlp_faithful"]
-    ra = r.get("ratios", {})
+def _write_md(result: dict) -> None:
+    faithful = result["otlp_faithful"]
+    ra = result.get("ratios", {})
     md = f"""# OTLP baseline · the industry standard telemetry wire vs the decision codec
 
 The bandwidth story, measured against **OpenTelemetry (OTLP)**, the wire real observability
 pipelines speak, not just JSON. Records are genuine `opentelemetry.proto` `LogRecord`s (they
-round trip). n = {r['n']:,} representative fused decisions; batched the way OTLP ships
-(ResourceLogs/ScopeLogs amortized over {r['epoch']} record epochs).
+round trip). n = {result['n']:,} representative fused decisions; batched the way OTLP ships
+(ResourceLogs/ScopeLogs amortized over {result['epoch']} record epochs).
 
 | encoding | B / decision | note |
 |---|---:|---|
-| **OTLP faithful** (4 decision fields as attributes) | **{f['epoched_per_decision']}** | industry standard telemetry envelope |
-| OTLP faithful + zstd-19 (batched) | {f.get('zstd19_per_decision', 'n/a')} | |
-| OTLP faithful + gzip-9 (batched) | {f['gzip_per_decision']} | |
+| **OTLP faithful** (4 decision fields as attributes) | **{faithful['epoched_per_decision']}** | industry standard telemetry envelope |
+| OTLP faithful + zstd-19 (batched) | {faithful.get('zstd19_per_decision', 'n/a')} | |
+| OTLP faithful + gzip-9 (batched) | {faithful['gzip_per_decision']} | |
 | B2: minimal 4 field JSON | 68 | (from results.json) |
 | **O1: the decision wire (per field)** | **{ra.get('o1_B_per_decision', 'n/a')}** | frames itself, tamper evident |
-| OTLP minimal (band only) | {r['otlp_minimal']['epoched_per_decision']} | vs O2 band stream |
+| OTLP minimal (band only) | {result['otlp_minimal']['epoched_per_decision']} | vs O2 band stream |
 
 **Headline:** the decision wire is **{ra.get('otlp_over_o1', 'n/a')}× smaller than OTLP protobuf** per
 decision, and **{ra.get('otlp_zstd_over_o1', 'n/a')}× smaller than zstd compressed batched OTLP**.
@@ -213,7 +213,7 @@ convention as the #84 headline; every ratio divides by the exact measured cost, 
 
 **Why OTLP is this size (honest):** OTLP is a general telemetry *envelope*, not a decision codec.
 Every record carries two per record wall clock timestamps (fixed64), typed attribute values, and
-repeated string keys; so it is ~{f['marginal_bytes_per_record']} B/record and actually **larger
+repeated string keys; so it is ~{faithful['marginal_bytes_per_record']} B/record and actually **larger
 than minimal JSON** ({ra.get('otlp_over_b2_json', 'n/a')}× B2) for this payload. Compression
 recovers the repeated keys but not the per record timestamps. The decision codec's advantage over
 OTLP is therefore structural (it ships the decision, not a timestamped attribute bag), the same

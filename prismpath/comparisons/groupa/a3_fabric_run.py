@@ -17,8 +17,8 @@ out = open(sys.argv[2], "a", buffering=1)
 sweep_s = float(sys.argv[3]) if len(sys.argv) > 3 else 90.0
 R_CAUSE = 0x34
 
-def log(s):
-    out.write(s + "\n"); out.flush()
+def log(message):
+    out.write(message + "\n"); out.flush()
 
 log("BOOT " + time.strftime("%Y-%m-%dT%H:%M:%S"))
 ol = PptOverlay("/home/xilinx/ppt_datapath.bit")           # the one configuration
@@ -34,32 +34,32 @@ for pid, spec in bundle["images"].items():
 rows = []
 for pid, img in imgs.items():
     ol.load_image(img)
-    for v in bundle["vectors"]:
-        if v["cid"] != pid:
+    for vector in bundle["vectors"]:
+        if vector["cid"] != pid:
             continue
-        ol.write_fields(img, v["ctx"])
+        ol.write_fields(img, vector["ctx"])
         t0 = time.perf_counter_ns()
         res = ol.evaluate(img.start)
         dt = (time.perf_counter_ns() - t0) / 1000
         cause = ol.io.read(R_CAUSE) & 0xFF
         target = res[1] if res is not None else -1
-        rows.append({"policy": pid, "scenario": v["scenario"], "fabric_target": target, "fabric_edge": res[0] if res else None,
-                     "cause": cause, "python_target": v["python_target"], "agree": target == v["python_target"], "round_trip_us": round(dt, 1)})
+        rows.append({"policy": pid, "scenario": vector["scenario"], "fabric_target": target, "fabric_edge": res[0] if res else None,
+                     "cause": cause, "python_target": vector["python_target"], "agree": target == vector["python_target"], "round_trip_us": round(dt, 1)})
         log("A3ROW " + json.dumps(rows[-1]))
-agree = sum(1 for r in rows if r["agree"])
+agree = sum(1 for row in rows if row["agree"])
 log(f"A3DONE {agree}/{len(rows)} fabric targets equal the host Python targets")
 
 # (2) sweeps for the pins witness
 for pid, img in imgs.items():
     ol.load_image(img)
-    vecs = [v for v in bundle["vectors"] if v["cid"] == pid]
+    vecs = [vector for vector in bundle["vectors"] if vector["cid"] == pid]
     log(f"SWEEP START {pid} wcet_cycles={bundle['images'][pid]['wcet_cycles']}")
     t_end = time.time() + sweep_s
-    n = 0
+    evaluation_count = 0
     while time.time() < t_end:
-        for v in vecs:
-            ol.write_fields(img, v["ctx"])
+        for vector in vecs:
+            ol.write_fields(img, vector["ctx"])
             ol.evaluate(img.start)
-            n += 1
-    log(f"SWEEP END {pid} evaluations={n}")
+            evaluation_count += 1
+    log(f"SWEEP END {pid} evaluations={evaluation_count}")
 log("ALLDONE")

@@ -43,105 +43,105 @@ DELTAS = [0.0, 0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.08, 0.10, 0.12, 0.15, 0.20,
 
 
 def llm_choice(prompt: str, n_edges: int) -> int:
-    r = requests.post(ENDPOINT, json={
+    response = requests.post(ENDPOINT, json={
         "model": MODEL, "temperature": 0.0, "max_tokens": 8,
         "messages": [{"role": "user", "content": prompt}]}, timeout=120)
-    r.raise_for_status()
-    return _parse_choice(r.json()["choices"][0]["message"]["content"], n_edges)
+    response.raise_for_status()
+    return _parse_choice(response.json()["choices"][0]["message"]["content"], n_edges)
 
 
 def main() -> None:
     import numpy as np
-    records = [json.loads(l) for l in open(BENCH, encoding="utf-8") if l.strip()]
+    records = [json.loads(line) for line in open(BENCH, encoding="utf-8") if line.strip()]
     graphs = load_graphs(records)
     items = _decision_items(records, graphs)
-    n = len(items)
-    print(f"decisions: {n}")
+    decision_count = len(items)
+    print(f"decisions: {decision_count}")
 
     outs = [it[0]["outcome"] for it in items]
     oq = embedder.embed(outs, is_query=True)
     op = embedder.embed(outs, is_query=False)
-    conds = sorted({c for _, sem, _ in items for _, c in sem})
-    cvec = {c: np.asarray(v, dtype="float32")
-            for c, v in zip(conds, embedder.embed(conds, is_query=False))}
+    conds = sorted({condition for _, sem, _ in items for _, condition in sem})
+    cvec = {condition: np.asarray(vector, dtype="float32")
+            for condition, vector in zip(conds, embedder.embed(conds, is_query=False))}
 
     # ---- the one LLM pass (cached; keyed by item index — the bench file is frozen) ----
     cache = json.load(open(LLM_CACHE)) if os.path.exists(LLM_CACHE) else {}
     t0 = time.time()
-    for i, (rec, sem, ci) in enumerate(items):
-        k = str(i)
-        if k in cache:
+    for item_index, (rec, sem, ci) in enumerate(items):
+        cache_key = str(item_index)
+        if cache_key in cache:
             continue
         instr = graphs[rec["flow"]].nodes[rec["node"]].instruction
-        cache[k] = llm_choice(routing_prompt(instr, rec["outcome"], sem), len(sem))
-        if i % 25 == 0:
+        cache[cache_key] = llm_choice(routing_prompt(instr, rec["outcome"], sem), len(sem))
+        if item_index % 25 == 0:
             json.dump(cache, open(LLM_CACHE, "w"))
-            print(f"  llm {i}/{n}  ({time.time()-t0:.0f}s)")
+            print(f"  llm {item_index}/{decision_count}  ({time.time()-t0:.0f}s)")
     json.dump(cache, open(LLM_CACHE, "w"))
-    llm_pick = [cache[str(i)] for i in range(n)]
+    llm_pick = [cache[str(item_index)] for item_index in range(decision_count)]
     print(f"llm pass done ({time.time()-t0:.0f}s)")
 
     # ---- per-item picks + margins for both embed tiers ----
     strata = [it[0].get("stratum", "?") for it in items]
     correct = [ci for _, _, ci in items]
     zs_pick, zs_margin = [], []
-    cen_pick, cen_margin = [None] * n, [0.0] * n
-    for i, (rec, sem, ci) in enumerate(items):
-        ec = [c for _, c in sem]
-        s = embedder.cosine(oq[i], np.asarray([cvec[c] for c in ec]))[0]
-        top = np.argsort(s)[::-1]
+    cen_pick, cen_margin = [None] * decision_count, [0.0] * decision_count
+    for item_index, (rec, sem, ci) in enumerate(items):
+        ec = [condition for _, condition in sem]
+        scores = embedder.cosine(oq[item_index], np.asarray([cvec[condition] for condition in ec]))[0]
+        top = np.argsort(scores)[::-1]
         zs_pick.append(int(top[0]))
-        zs_margin.append(float(s[top[0]] - s[top[1]]) if len(s) > 1 else 1.0)
+        zs_margin.append(float(scores[top[0]] - scores[top[1]]) if len(scores) > 1 else 1.0)
 
-    for f in range(FOLDS):                                # identical split to centroid.cross_validate
-        train = [i for i in range(n) if i % FOLDS != f]
-        test = [i for i in range(n) if i % FOLDS == f]
+    for fold in range(FOLDS):                                # identical split to centroid.cross_validate
+        train = [item_index for item_index in range(decision_count) if item_index % FOLDS != fold]
+        test = [item_index for item_index in range(decision_count) if item_index % FOLDS == fold]
         by_cond: dict = {}
-        for i in train:
-            _r, sem, ci = items[i]
-            by_cond.setdefault(sem[ci][1], []).append(op[i])
-        cen = {c: _unit(np.mean(vs, axis=0)) for c, vs in by_cond.items()}
-        cnt = {c: len(vs) for c, vs in by_cond.items()}
-        for i in test:
-            _r, sem, _ci = items[i]
-            ec = [c for _, c in sem]
-            eff = [(_unit(cvec[c]) if cnt.get(c, 0) == 0
-                    else _unit((PRIOR * cvec[c] + cnt[c] * cen[c]) / (PRIOR + cnt[c])))
-                   for c in ec]
-            s = embedder.cosine(op[i], np.asarray(eff))[0]
-            top = np.argsort(s)[::-1]
-            cen_pick[i] = int(top[0])
-            cen_margin[i] = float(s[top[0]] - s[top[1]]) if len(s) > 1 else 1.0
+        for item_index in train:
+            _r, sem, ci = items[item_index]
+            by_cond.setdefault(sem[ci][1], []).append(op[item_index])
+        cen = {condition: _unit(np.mean(vs, axis=0)) for condition, vs in by_cond.items()}
+        cnt = {condition: len(vs) for condition, vs in by_cond.items()}
+        for item_index in test:
+            _r, sem, _ci = items[item_index]
+            ec = [condition for _, condition in sem]
+            eff = [(_unit(cvec[condition]) if cnt.get(condition, 0) == 0
+                    else _unit((PRIOR * cvec[condition] + cnt[condition] * cen[condition]) / (PRIOR + cnt[condition])))
+                   for condition in ec]
+            scores = embedder.cosine(op[item_index], np.asarray(eff))[0]
+            top = np.argsort(scores)[::-1]
+            cen_pick[item_index] = int(top[0])
+            cen_margin[item_index] = float(scores[top[0]] - scores[top[1]]) if len(scores) > 1 else 1.0
 
     # ---- the sweeps (pure post-processing) ----
     def sweep(pick, margin):
         rows = []
-        for d in DELTAS:
-            esc = [m < d for m in margin]
-            final = [llm_pick[i] if esc[i] else pick[i] for i in range(n)]
+        for delta in DELTAS:
+            esc = [margin_value < delta for margin_value in margin]
+            final = [llm_pick[item_index] if esc[item_index] else pick[item_index] for item_index in range(decision_count)]
             acc = {}
             for key in sorted(set(strata)) + ["ALL"]:
-                idx = [i for i in range(n) if key == "ALL" or strata[i] == key]
-                acc[key] = round(sum(final[i] == correct[i] for i in idx) / len(idx), 4)
-            rows.append({"delta": d, "escalation": round(sum(esc) / n, 4), **acc})
+                idx = [item_index for item_index in range(decision_count) if key == "ALL" or strata[item_index] == key]
+                acc[key] = round(sum(final[item_index] == correct[item_index] for item_index in idx) / len(idx), 4)
+            rows.append({"delta": delta, "escalation": round(sum(esc) / decision_count, 4), **acc})
         return rows
 
     result = {
-        "config": {"n": n, "folds": FOLDS, "prior_weight": PRIOR, "model": MODEL,
+        "config": {"n": decision_count, "folds": FOLDS, "prior_weight": PRIOR, "model": MODEL,
                    "embedder": embedder.MODEL_NAME, "deltas": DELTAS},
-        "llm_only": round(sum(llm_pick[i] == correct[i] for i in range(n)) / n, 4),
-        "zero_shot_only": round(sum(zs_pick[i] == correct[i] for i in range(n)) / n, 4),
-        "centroid_only_cv": round(sum(cen_pick[i] == correct[i] for i in range(n)) / n, 4),
+        "llm_only": round(sum(llm_pick[item_index] == correct[item_index] for item_index in range(decision_count)) / decision_count, 4),
+        "zero_shot_only": round(sum(zs_pick[item_index] == correct[item_index] for item_index in range(decision_count)) / decision_count, 4),
+        "centroid_only_cv": round(sum(cen_pick[item_index] == correct[item_index] for item_index in range(decision_count)) / decision_count, 4),
         "hybrid_over_zero_shot": sweep(zs_pick, zs_margin),
         "hybrid_over_centroids": sweep(cen_pick, cen_margin),
     }
     json.dump(result, open(OUT, "w"), indent=1)
-    print(json.dumps({k: v for k, v in result.items() if not k.startswith("hybrid")}, indent=1))
+    print(json.dumps({key: value for key, value in result.items() if not key.startswith("hybrid")}, indent=1))
     print(f"\nwrote {OUT}")
     print("\nδ      | zs-acc  esc%   | cen-acc  esc%")
-    for a, b in zip(result["hybrid_over_zero_shot"], result["hybrid_over_centroids"]):
-        print(f"{a['delta']:<6} | {a['ALL']:.3f}  {a['escalation']*100:5.1f}%  | "
-              f"{b['ALL']:.3f}  {b['escalation']*100:5.1f}%")
+    for zero_shot_row, centroid_row in zip(result["hybrid_over_zero_shot"], result["hybrid_over_centroids"]):
+        print(f"{zero_shot_row['delta']:<6} | {zero_shot_row['ALL']:.3f}  {zero_shot_row['escalation']*100:5.1f}%  | "
+              f"{centroid_row['ALL']:.3f}  {centroid_row['escalation']*100:5.1f}%")
 
 
 if __name__ == "__main__":

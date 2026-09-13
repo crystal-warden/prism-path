@@ -47,18 +47,18 @@ class Inexpressible(Exception):
     pass
 
 
-def _lit(v: Any) -> str:
-    if isinstance(v, bool):
-        return "True" if v else "False"
-    if isinstance(v, int):
-        return str(v)
-    if isinstance(v, str):
-        return json.dumps(v)
-    raise Inexpressible(f"constant {v!r} has no predicate literal")
+def _lit(value: Any) -> str:
+    if isinstance(value, bool):
+        return "True" if value else "False"
+    if isinstance(value, int):
+        return str(value)
+    if isinstance(value, str):
+        return json.dumps(value)
+    raise Inexpressible(f"constant {value!r} has no predicate literal")
 
 
 def _tuple(vals: List[Any]) -> str:
-    inner = ", ".join(_lit(v) for v in vals)
+    inner = ", ".join(_lit(value) for value in vals)
     return f"({inner},)" if len(vals) == 1 else f"({inner})"
 
 
@@ -67,10 +67,10 @@ def render(cond: Any, policy: Dict[str, Any]) -> str:
         return "else"
     (form, arg), = cond.items()
     if form == "cmp":
-        f, op, c = arg
-        if isinstance(c, bool) and op == "==":
-            return f if c else f"{f} == False"
-        return f"{f} {op} {_lit(c)}"
+        field, op, constant = arg
+        if isinstance(constant, bool) and op == "==":
+            return field if constant else f"{field} == False"
+        return f"{field} {op} {_lit(constant)}"
     if form == "in":
         return f"{arg[0]} in {_tuple(arg[1])}"
     if form == "not_in":
@@ -81,9 +81,9 @@ def render(cond: Any, policy: Dict[str, Any]) -> str:
                 and arg[1] == {"cmp": [arg[0]["missing"], "==", False]}
                 and policy["fields"].get(arg[0]["missing"], {}).get("type") == "bool"):
             return f"not {arg[0]['missing']}"
-        return " or ".join(f"({render(c, policy)})" for c in arg)
+        return " or ".join(f"({render(condition, policy)})" for condition in arg)
     if form == "all":
-        return " and ".join(f"({render(c, policy)})" for c in arg)
+        return " and ".join(f"({render(condition, policy)})" for condition in arg)
     if form == "not":
         return f"not ({render(arg, policy)})"
     if form in ("missing", "present"):
@@ -91,33 +91,33 @@ def render(cond: Any, policy: Dict[str, Any]) -> str:
             raise Inexpressible(f"{form} on a non bool field {arg!r}: null is only exactly spelled through truthiness for bools")
         return f"not {arg}" if form == "missing" else arg
     if form == "role_at_least":
-        f, floor = arg
+        field, floor = arg
         order = policy["hierarchy"]["order"]
-        return f"{f} in {_tuple(order[order.index(floor):])}"
+        return f"{field} in {_tuple(order[order.index(floor):])}"
     raise Inexpressible(f"{form}: outside the predicate language (SPEC section 4)")
 
 
 def translate(policy: Dict[str, Any]) -> Translation:
     tr = Translation(citations=list(CITATIONS))
-    if any(r["if"] is not True and "related" in r["if"] for r in policy["rules"]):
+    if any(rule["if"] is not True and "related" in rule["if"] for rule in policy["rules"]):
         tr.expressible = False
         tr.notes.append("relationship graphs are outside PrismPath: no data plane, no relation model; "
                         "every derived tuple would have to be precomputed by the caller into a boolean field")
         return tr
     edges, terminals = [], []
-    for r in policy["rules"]:
-        node = f"{r['id']}_{r['then']}"
+    for rule in policy["rules"]:
+        node = f"{rule['id']}_{rule['then']}"
         try:
-            cond = render(r["if"], policy)
-        except Inexpressible as e:
-            tr.dropped_rules.append(r["id"])
-            tr.notes.append(f"{r['id']} dropped: {e}")
+            cond = render(rule["if"], policy)
+        except Inexpressible as error:
+            tr.dropped_rules.append(rule["id"])
+            tr.notes.append(f"{rule['id']} dropped: {error}")
             continue
-        if r["if"] is not True and "role_at_least" in json.dumps(r["if"]):
-            tr.notes.append(f"{r['id']}: role hierarchy flattened at authoring into an explicit in list (WITH-WORK); the policy states the consequence, not the hierarchy")
+        if rule["if"] is not True and "role_at_least" in json.dumps(rule["if"]):
+            tr.notes.append(f"{rule['id']}: role hierarchy flattened at authoring into an explicit in list (WITH-WORK); the policy states the consequence, not the hierarchy")
         edges.append(f"-> {node}: {cond}" if cond == "else" else f"-> {node}: when {cond}")
-        terminals.append(f"## {node}\n{r['why']}\n")
-    if any(r["if"] is True for r in policy["rules"]) is False:
+        terminals.append(f"## {node}\n{rule['why']}\n")
+    if any(rule["if"] is True for rule in policy["rules"]) is False:
         tr.notes.append("no catch all by design: an input no rule covers stops the walk as stuck (cause 36)")
     fields = ", ".join(policy["fields"])
     text = (f"---\nname: {policy['id']}\nstart: decide\n---\n\n## decide\n{policy['title']}\n"
@@ -136,11 +136,11 @@ class Runner:
     def __init__(self, policy: Dict[str, Any], gen_dir: Path):
         self.policy = policy
         self.graph = parse((gen_dir / f"{policy['id']}.md").read_text(encoding="utf-8"))
-        self.human_rule = next((r["id"] for r in policy["rules"]
-                                if r["if"] == {"cmp": [HUMAN_REQUEST_FIELD, "==", True]}), None)
+        self.human_rule = next((rule["id"] for rule in policy["rules"]
+                                if rule["if"] == {"cmp": [HUMAN_REQUEST_FIELD, "==", True]}), None)
 
     def decide(self, inp: Dict[str, Any]) -> Decision:
-        fields = {k: v for k, v in inp.items() if v is not None}
+        fields = {field: value for field, value in inp.items() if value is not None}
 
         def worker(node: str, instruction: str, ctx: dict):
             out = dict(fields)
@@ -166,5 +166,5 @@ class Runner:
 
 class _NoRouter:
     """The corpus policies are fully deterministic; a semantic route would be a translator bug."""
-    def route(self, *a, **k):
+    def route(self, *args, **kwargs):
         raise AssertionError("semantic routing reached in a deterministic corpus policy")

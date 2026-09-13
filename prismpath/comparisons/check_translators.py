@@ -47,17 +47,17 @@ def check_system(system: str, policies: List[Dict[str, Any]], write: bool = True
         runner = mod.Runner(pol, gen)
         try:
             for sid, kind, inp, exp in scenario_steps(pol):
-                d = runner.decide(inp)
+                decision = runner.decide(inp)
                 if exp.get("rule") in tr.dropped_rules:
                     cls = "DROPPED"
                 elif kind == "undeclared_missing":
                     cls = "PROBE"
-                elif d.observed == exp["outcome"] and d.rule == exp["rule"]:
+                elif decision.observed == exp["outcome"] and decision.rule == exp["rule"]:
                     cls = "MATCH"
                 else:
                     cls = "MISMATCH"
                 rows.append({"policy": pol["id"], "scenario": sid, "kind": kind, "class": cls,
-                             "expected": exp, "observed": asdict(d)})
+                             "expected": exp, "observed": asdict(decision)})
                 summary[cls] += 1
         finally:
             runner.close()
@@ -72,22 +72,22 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--system", action="append", choices=KNOWN)
     ap.add_argument("--policy", action="append")
-    a = ap.parse_args(argv)
-    systems = a.system or [s for s in KNOWN if (SYSTEMS_DIR / s / "__init__.py").exists()]
+    args = ap.parse_args(argv)
+    systems = args.system or [system for system in KNOWN if (SYSTEMS_DIR / system / "__init__.py").exists()]
     policies = load_policies()
-    if a.policy:
-        policies = [p for p in policies if p["id"] in a.policy]
+    if args.policy:
+        policies = [policy for policy in policies if policy["id"] in args.policy]
     failed = False
-    for s in systems:
-        rep = check_system(s, policies)
+    for system in systems:
+        rep = check_system(system, policies)
         sm = rep["summary"]
-        print(f"{s:10} MATCH {sm['MATCH']:3}  MISMATCH {sm['MISMATCH']:3}  PROBE {sm['PROBE']:2}  "
+        print(f"{system:10} MATCH {sm['MATCH']:3}  MISMATCH {sm['MISMATCH']:3}  PROBE {sm['PROBE']:2}  "
               f"DROPPED {sm['DROPPED']:2}  UNEXPRESSIBLE {sm['UNEXPRESSIBLE']:2}")
-        for r in rep["rows"]:
-            if r["class"] in ("MISMATCH", "PROBE", "DROPPED"):
-                o = r["observed"]
-                print(f"    {r['class']:9} {r['policy']}/{r['scenario']}: expected {r['expected']['outcome']}/{r['expected']['rule']}"
-                      f" observed {o['observed']}/{o['rule']} cause={o['cause']}")
+        for row in rep["rows"]:
+            if row["class"] in ("MISMATCH", "PROBE", "DROPPED"):
+                observed = row["observed"]
+                print(f"    {row['class']:9} {row['policy']}/{row['scenario']}: expected {row['expected']['outcome']}/{row['expected']['rule']}"
+                      f" observed {observed['observed']}/{observed['rule']} cause={observed['cause']}")
         failed |= sm["MISMATCH"] > 0
     return 1 if failed else 0
 

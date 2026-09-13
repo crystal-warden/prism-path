@@ -11,7 +11,7 @@ ADAPTER = Path(__file__).resolve().parent.parent
 
 
 def _sim(mode, *, enc=False, **kw):
-    events = bench_wire.events_from_fixture(n=1500, hz=6.0)
+    events = bench_wire.events_from_fixture(event_count=1500, hz=6.0)
     graph = bench_wire.parse(bench_wire.FLOW.read_text())
     parts = bench_wire.quantizer.build_partitions(graph)
     ours, _ = bench_wire.make_encoders(parts)
@@ -30,10 +30,10 @@ ENC_FILL = _sim("mtu", enc=True)
 
 
 def test_schema():
-    for m in (STREAM, MTU_FILL, MTU_CAP):
-        for k in ("packets", "total_wire_bytes", "bytes_per_event", "bytes_per_day",
+    for metrics in (STREAM, MTU_FILL, MTU_CAP):
+        for field in ("packets", "total_wire_bytes", "bytes_per_event", "bytes_per_day",
                   "packets_per_day", "mean_latency_ms", "p95_latency_ms"):
-            assert k in m
+            assert field in metrics
 
 
 def test_batching_amortizes_the_header_tax():
@@ -44,7 +44,7 @@ def test_batching_amortizes_the_header_tax():
 
 def test_self_framing_advantage_persists_in_a_batch():
     # Batched JSON still pays its per-record keys; the self-framing codec pays none.
-    events = bench_wire.events_from_fixture(n=1500, hz=6.0)
+    events = bench_wire.events_from_fixture(event_count=1500, hz=6.0)
     graph = bench_wire.parse(bench_wire.FLOW.read_text())
     _, jsonb = bench_wire.make_encoders(bench_wire.quantizer.build_partitions(graph))
     json_fill = bench_wire.simulate(events, jsonb, False, mode="mtu", overhead=bench_wire.OVERHEAD["tcp_tls"])
@@ -94,8 +94,8 @@ def test_measured_crypto_cost_runs_on_this_host():
 
 def test_committed_wire_results_are_aggregate_only():
     import json
-    for f in (ADAPTER / "bench").glob("wire_*.json"):
-        blob = json.loads(f.read_text())
+    for results_file in (ADAPTER / "bench").glob("wire_*.json"):
+        blob = json.loads(results_file.read_text())
         # only counts/sizes/latencies/crypto-timings  -  no alert content ever enters this artifact
         assert set(blob) <= {"corpus", "n", "span_s", "overhead", "crypto_cost", "rows"}
         for row in blob["rows"]:

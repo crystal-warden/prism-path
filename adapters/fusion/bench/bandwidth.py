@@ -68,25 +68,25 @@ LOSS_REGIMES = (("light burst", 0.02, 0.5), ("heavy burst", 0.08, 0.3))
 def hits_from_ndjson(path: Path, max_docs: Optional[int] = None) -> Iterator[dict]:
     """Fixture replay: each flat row acts as its own _source (mechanics only  -  fixture byte
     numbers are never published)."""
-    n = 0
+    row_count = 0
     for line in path.read_text().splitlines():
         line = line.strip()
         if not line:
             continue
         row = json.loads(line)
-        yield {"_id": row.get("id", str(n)), "_source": row}
-        n += 1
-        if max_docs is not None and n >= max_docs:
+        yield {"_id": row.get("id", str(row_count)), "_source": row}
+        row_count += 1
+        if max_docs is not None and row_count >= max_docs:
             return
 
 
 # ------------------------------------------------------------------ helpers
 
 def _stats(sizes: List[int]) -> Dict[str, float]:
-    s = sorted(sizes)
-    n = len(s)
-    return {"n": n, "total_bytes": sum(s), "avg": round(sum(s) / n, 1),
-            "median": s[n // 2], "p90": s[int(n * 0.9)], "min": s[0], "max": s[-1]}
+    sorted_sizes = sorted(sizes)
+    count = len(sorted_sizes)
+    return {"n": count, "total_bytes": sum(sorted_sizes), "avg": round(sum(sorted_sizes) / count, 1),
+            "median": sorted_sizes[count // 2], "p90": sorted_sizes[int(count * 0.9)], "min": sorted_sizes[0], "max": sorted_sizes[-1]}
 
 
 def _compact(obj) -> bytes:
@@ -99,12 +99,12 @@ def collect(hits: Iterator[dict], normalize_hit) -> dict:
     b0, b1, b2 = [], [], []
     readings = []
     b0_batch, b2_batch = [], []
-    for h in hits:
-        src_doc = h.get("_source", {})
+    for hit in hits:
+        src_doc = hit.get("_source", {})
         raw = _compact(src_doc)
         b0.append(len(raw))
         b0_batch.append(raw)
-        norm = normalize_hit(h)
+        norm = normalize_hit(hit)
         b1.append(len(_compact(norm)))
         level = int(norm.get("level", src_doc.get("level", 0)))
         reading = projection.fused_reading(level, projection.soc_action_from_level(level), projection.ASSUME_STILL)
@@ -126,13 +126,13 @@ def batch_compressed(ndjson: bytes) -> Dict[str, int]:
     return out
 
 
-def _stream_stats(all_bits: List[str], n: int) -> dict:
+def _stream_stats(all_bits: List[str], reading_count: int) -> dict:
     """Pack per-epoch windows; count every byte the transport actually costs."""
-    n_epochs = math.ceil(n / EPOCH_READINGS) or 1
+    n_epochs = math.ceil(reading_count / EPOCH_READINGS) or 1
     payload_bits = wire_bytes = pad_bits = 0
     roots = 0
-    for e in range(n_epochs):
-        window = "".join(all_bits[e * EPOCH_READINGS:(e + 1) * EPOCH_READINGS])
+    for epoch_index in range(n_epochs):
+        window = "".join(all_bits[epoch_index * EPOCH_READINGS:(epoch_index + 1) * EPOCH_READINGS])
         if not window:
             continue
         data = packed.pack(window)
@@ -146,19 +146,19 @@ def _stream_stats(all_bits: List[str], n: int) -> dict:
     merkle_epoch_bytes = roots * 64          # 32 B Merkle root + 32 B chained root
     ack_bytes = roots * 32                   # authenticated ACK, return channel, itemized
     total = wire_bytes + merkle_epoch_bytes
-    return {"n": n, "epochs": roots, "payload_bits": payload_bits, "pad_bits": pad_bits,
+    return {"n": reading_count, "epochs": roots, "payload_bits": payload_bits, "pad_bits": pad_bits,
             "wire_bytes": wire_bytes, "merkle_epoch_bytes": merkle_epoch_bytes,
             "ack_bytes": ack_bytes, "wire_bytes_total": total,
-            "bytes_per_alert": round(total / n, 3)}
+            "bytes_per_alert": round(total / reading_count, 3)}
 
 
 def decision_stream_stats(parts, readings: List[dict]) -> dict:
-    bits = [decode.encode_readings(parts, [r]) for r in readings]
+    bits = [decode.encode_readings(parts, [reading]) for reading in readings]
     return _stream_stats(bits, len(readings))
 
 
 def band_stream_stats(layout, readings: List[dict]) -> dict:
-    bits = [layout.encode_decision(r) for r in readings]
+    bits = [layout.encode_decision(reading) for reading in readings]
     return _stream_stats(bits, len(readings))
 
 
@@ -200,9 +200,9 @@ def write_results(outdir: Path, data: dict) -> None:
     row("B1", "normalized alert JSON", b1["total_bytes"], b1["avg"])
     row("B2", "4-field minimal JSON", b2["total_bytes"], b2["avg"])
     for name, comp in (("B0", data["b3_full"]), ("B2", data["b3_minimal"])):
-        for k, v in comp.items():
-            if k != "raw_bytes":
-                row("B3", f"{k} over {name} NDJSON batch", v, round(v / data["n"], 2))
+        for compressor, compressed_bytes in comp.items():
+            if compressor != "raw_bytes":
+                row("B3", f"{compressor} over {name} NDJSON batch", compressed_bytes, round(compressed_bytes / data["n"], 2))
     o1, o2 = data["o1"], data["o2"]
     row("O1", "per-field decision stream + epoch apparatus", o1["wire_bytes_total"],
         o1["bytes_per_alert"])
@@ -222,7 +222,7 @@ def write_results(outdir: Path, data: dict) -> None:
     r_b2 = b2["total_bytes"] / o1["wire_bytes_total"]
     r_b0 = b0["total_bytes"] / o1["wire_bytes_total"]
     gate = (r_b2 >= 10) and (r_b0 >= 500) and (o2["wire_bytes_total"] <= o1["wire_bytes_total"])
-    best_batch = min(v for k, v in data["b3_minimal"].items() if k != "raw_bytes")
+    best_batch = min(compressed_bytes for compressor, compressed_bytes in data["b3_minimal"].items() if compressor != "raw_bytes")
     md += ["", "## Reading (go/no-go)", "",
            f"- O1 vs B2 (apples-to-apples): **{r_b2:,.0f}x** smaller (gate: >= 10x).",
            f"- O1 vs B0 (fidelity-class): **{r_b0:,.0f}x** smaller (gate: >= 500x).",
@@ -239,7 +239,7 @@ def write_results(outdir: Path, data: dict) -> None:
            f"_generated in {data['elapsed']:.1f}s_", ""]
     (outdir / "results.md").write_text("\n".join(md))
     (outdir / "results.json").write_text(json.dumps(
-        {k: v for k, v in data.items() if k not in ()}, indent=1) + "\n")
+        {key: value for key, value in data.items() if key not in ()}, indent=1) + "\n")
 
 
 def main(argv=None) -> int:
@@ -257,20 +257,20 @@ def main(argv=None) -> int:
     layout = spiral.SpiralLayout(graph, NODE)
 
     path = Path(args.from_ndjson)
-    hits = (h for h in hits_from_ndjson(path, args.max_docs)
-            if int(h["_source"].get("level", 0)) >= args.min_level)
-    col = collect(hits, lambda h: h["_source"])
+    hits = (hit for hit in hits_from_ndjson(path, args.max_docs)
+            if int(hit["_source"].get("level", 0)) >= args.min_level)
+    col = collect(hits, lambda hit: hit["_source"])
     source, synthetic = f"fixture:{path.name}", True
 
-    n = len(col["readings"])
-    if n == 0:
+    reading_count = len(col["readings"])
+    if reading_count == 0:
         print("no documents matched", file=sys.stderr)
         return 1
 
     o1 = decision_stream_stats(parts, col["readings"])
     o2 = band_stream_stats(layout, col["readings"])
     data = {
-        "source": source, "synthetic": synthetic, "min_level": args.min_level, "n": n,
+        "source": source, "synthetic": synthetic, "min_level": args.min_level, "n": reading_count,
         "block_bits": BLOCK_BITS, "epoch_readings": EPOCH_READINGS,
         "b0": _stats(col["b0"]), "b1": _stats(col["b1"]), "b2": _stats(col["b2"]),
         "b3_full": batch_compressed(col["b0_ndjson"]),
@@ -281,7 +281,7 @@ def main(argv=None) -> int:
     }
     outdir = Path(args.out) if args.out else HERE
     write_results(outdir, data)
-    print(f"wrote {outdir/'results.md'}  n={n:,}  "
+    print(f"wrote {outdir/'results.md'}  n={reading_count:,}  "
           f"O1={o1['bytes_per_alert']} B/alert vs B0={data['b0']['avg']} B/alert")
     return 0
 

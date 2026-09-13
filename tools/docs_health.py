@@ -25,32 +25,32 @@ assert os.path.exists(EV), f"evidence ledger missing at {EV} — fix this path, 
 CLAIMS = os.path.join(BASE, "docs/research/CLAIMS_detection_metrics.md")  # optional; lives in the private lab repo, absent here
 
 mds = []
-for r in CANON:
-    for dp, _, fn in os.walk(os.path.join(BASE, r)):
+for canon_root in CANON:
+    for dp, _, fn in os.walk(os.path.join(BASE, canon_root)):
         if EXC.search(dp + "/"):
             continue
-        for f in fn:
-            if f.endswith(".md") and not EXC.search(os.path.join(dp, f)):
-                mds.append(os.path.join(dp, f))
+        for filename in fn:
+            if filename.endswith(".md") and not EXC.search(os.path.join(dp, filename)):
+                mds.append(os.path.join(dp, filename))
 
 
-def read(p):
-    return open(p, encoding="utf-8", errors="ignore").read()
+def read(path):
+    return open(path, encoding="utf-8", errors="ignore").read()
 
 
 # 1. dead doc-links (targets ending .md)
 dead = []
 linkrx = re.compile(r"\[[^\]]+\]\(([^)]+\.md)(?:#[^)]*)?\)")
-for p in mds:
-    d = os.path.dirname(p)
-    for m in linkrx.finditer(read(p)):
-        tgt = m.group(1)
+for md_path in mds:
+    doc_dir = os.path.dirname(md_path)
+    for matched in linkrx.finditer(read(md_path)):
+        tgt = matched.group(1)
         if tgt.startswith("http"):
             continue
-        cands = [os.path.join(d, tgt), os.path.join(BASE, tgt),
-                 os.path.join(os.path.dirname(d), tgt)]
-        if not any(os.path.exists(c) for c in cands):
-            dead.append((os.path.relpath(p, BASE), tgt))
+        cands = [os.path.join(doc_dir, tgt), os.path.join(BASE, tgt),
+                 os.path.join(os.path.dirname(doc_dir), tgt)]
+        if not any(os.path.exists(candidate) for candidate in cands):
+            dead.append((os.path.relpath(md_path, BASE), tgt))
 
 # 2. brand residue — pre-rename self-references leaking into the docs.
 # `mdflow` is BOTH the name this project carried before it was renamed to PrismPath AND a real
@@ -61,25 +61,25 @@ brx = re.compile(r"\bmdflow\b", re.I)
 MDFLOW_OK = ("examples/mdflow_interop/", "examples/code_nodes/README.md", "docs/guides/code-nodes.md",
              "docs/guides/tour.md",   # the interop-example citation moved here from the root README
              "docs/research/paper-routing-spectrum.md", "CHANGELOG.md", "ROADMAP.md")
-for p in mds:
-    rel = os.path.relpath(p, BASE)
+for md_path in mds:
+    rel = os.path.relpath(md_path, BASE)
     if rel == "README.md" or any(ok in rel for ok in MDFLOW_OK):   # root README cites the mdflow interop example
         continue
-    for i, line in enumerate(read(p).split("\n"), 1):
+    for line_number, line in enumerate(read(md_path).split("\n"), 1):
         if brx.search(line):
-            residue.append((os.path.relpath(p, BASE), i, line.strip()[:80]))
+            residue.append((os.path.relpath(md_path, BASE), line_number, line.strip()[:80]))
 
 # 3. lingering dupes across canonical repos
-def nh(t):
-    return hashlib.sha256(re.sub(r"\s+", "", t.lower().replace("prismpath", "\x00").replace("mdflow", "\x00")).encode()).hexdigest()
+def nh(text):
+    return hashlib.sha256(re.sub(r"\s+", "", text.lower().replace("prismpath", "\x00").replace("mdflow", "\x00")).encode()).hexdigest()
 DUP_OK = ("/gallery/", "/adapters/")   # gallery showcases the core flows; adapters ship self-contained copies
 byh = defaultdict(list)
-for p in mds:
-    rel = os.path.relpath(p, BASE)
+for md_path in mds:
+    rel = os.path.relpath(md_path, BASE)
     if any(ok in "/" + rel for ok in DUP_OK):
         continue
-    byh[nh(read(p))].append(rel)
-dupes = [v for v in byh.values() if len(v) > 1]
+    byh[nh(read(md_path))].append(rel)
+dupes = [paths for paths in byh.values() if len(paths) > 1]
 
 # 6. backticked repo-relative paths (ADVISORY, non-failing). A `path/like/this.py` in prose is not a
 #    markdown link, so check 1 never sees it; that is exactly how rows #65-71 kept citing an
@@ -98,12 +98,12 @@ ARCHIVED_EXTERNAL = ("etbert-lab/", "triage-corpus/", "triage-7b-lab/",
                      "adapters/fusion/live_capture.py")
 btickrx = re.compile(r"`([A-Za-z0-9_][A-Za-z0-9_./\-]*)`")
 missing_paths = []
-for p in mds:
-    rel = os.path.relpath(p, BASE)
+for md_path in mds:
+    rel = os.path.relpath(md_path, BASE)
     if rel == "CHANGELOG.md":                                 # append-only history legitimately names removed paths
         continue
-    for m in btickrx.finditer(read(p)):
-        tok = m.group(1)
+    for matched in btickrx.finditer(read(md_path)):
+        tok = matched.group(1)
         if "*" in tok or "/" not in tok:                      # need a real path; no globs, no bare names
             continue
         if ".venv" in tok or "__pycache__" in tok:            # env/cache dirs are not claims
@@ -124,8 +124,8 @@ ARTIFACTS = ["validation_v0.json", "lm_deepdive.json", "enrich_lift_v0.json", "s
              "decomposed_v0.json", "embed_routed_v0.json", "agentic_pull_demo.json", "rag_nodes_v1.json",
              "step4_recert_livepool.json", "step6_perfamily_recall.json",
              "ledger_airgap.py", "validate_triage_decomposed.py", "build_knowledge_index.py"]
-task_gaps = [t for t in TASKS if t not in evtext]
-artifact_gaps = [a for a in ARTIFACTS if a not in evtext]
+task_gaps = [task for task in TASKS if task not in evtext]
+artifact_gaps = [artifact for artifact in ARTIFACTS if artifact not in evtext]
 
 report = {"canonical_md_files": len(mds), "dead_doc_links": dead,
           "brand_residue_in_prismpath": residue[:40], "brand_residue_count": len(residue),
@@ -138,17 +138,17 @@ md = ["# Docs Health Report", "",
       f"- lingering content dupes: **{len(dupes)}**",
       f"- task-coverage gaps: **{task_gaps or 'none'}**", f"- artifact-coverage gaps: **{artifact_gaps or 'none'}**", ""]
 if dead:
-    md += ["## Dead doc-links", *[f"- `{p}` → `{t}`" for p, t in dead], ""]
+    md += ["## Dead doc-links", *[f"- `{md_path}` → `{target}`" for md_path, target in dead], ""]
 if residue:
-    md += ["## Brand residue (prismpath docs mentioning mdflow)", *[f"- `{p}`:{i} — {tx}" for p, i, tx in residue[:40]], ""]
+    md += ["## Brand residue (prismpath docs mentioning mdflow)", *[f"- `{md_path}`:{line_number} — {tx}" for md_path, line_number, tx in residue[:40]], ""]
 if dupes:
-    md += ["## Lingering dupes", *[f"- {' == '.join(g)}" for g in dupes], ""]
+    md += ["## Lingering dupes", *[f"- {' == '.join(group)}" for group in dupes], ""]
 md += [f"- backticked repo-local paths that don't resolve (advisory): **{len(missing_paths)}**", ""]
 if missing_paths:
     md += ["## Backticked missing paths (ADVISORY — not gated)",
            "Paths in prose that look repo-local, don't exist on disk, and aren't a declared "
            "archived/separate-lab location. Either fix the reference or mark it archived.",
-           *[f"- `{p}` → `{t}`" for p, t in missing_paths], ""]
+           *[f"- `{md_path}` → `{target}`" for md_path, target in missing_paths], ""]
 open(os.path.join(BASE, "docs_health_report.md"), "w").write("\n".join(md) + "\n")
 print(json.dumps(report, indent=2))
 raise SystemExit(1 if (dead or residue) else 0)   # honor the docstring: fail on real defects

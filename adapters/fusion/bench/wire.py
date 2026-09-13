@@ -62,12 +62,12 @@ ECDHE_HANDSHAKE = 64
 REKEY_READINGS = 4096   # matches the telemetry codec's epoch length
 
 
-def _compress(b: bytes) -> bytes:
+def _compress(payload: bytes) -> bytes:
     try:
         import zstandard
-        return zstandard.ZstdCompressor(level=19).compress(b)
+        return zstandard.ZstdCompressor(level=19).compress(payload)
     except Exception:
-        return zlib.compress(b, 9)
+        return zlib.compress(payload, 9)
 
 
 # ---------------------------------------------------------------- corpora
@@ -83,21 +83,21 @@ def events_from_imu() -> List[Tuple[float, dict]]:
             line = line.strip()
             if not line:
                 continue
-            n = projection.normalize_imu(json.loads(line))
-            if n and n.get("ts") is not None and n.get("dev_mg") is not None and not n["derived"]:
-                out.append((float(n["ts"]), projection.fused_reading(3, "ignore", n)))
-    out.sort(key=lambda e: e[0])
+            reading = projection.normalize_imu(json.loads(line))
+            if reading and reading.get("ts") is not None and reading.get("dev_mg") is not None and not reading["derived"]:
+                out.append((float(reading["ts"]), projection.fused_reading(3, "ignore", reading)))
+    out.sort(key=lambda event: event[0])
     return out
 
 
-def events_from_fixture(n=2000, hz=6.0) -> List[Tuple[float, dict]]:
+def events_from_fixture(event_count=2000, hz=6.0) -> List[Tuple[float, dict]]:
     import random
     rng = random.Random(7)
-    out, t = [], 1_000_000.0
-    for _ in range(n):
-        t += 1.0 / hz
+    out, timestamp = [], 1_000_000.0
+    for _ in range(event_count):
+        timestamp += 1.0 / hz
         lvl = rng.choice([3, 3, 3, 7, 8])
-        out.append((t, projection.fused_reading(lvl, projection.soc_action_from_level(lvl), projection.ASSUME_STILL)))
+        out.append((timestamp, projection.fused_reading(lvl, projection.soc_action_from_level(lvl), projection.ASSUME_STILL)))
     return out
 
 
@@ -117,23 +117,23 @@ def make_encoders(parts):
 def simulate(events, encode: Callable, is_bits: bool, mode: str, *, overhead: int,
              batch_n=None, batch_ms=None, max_latency_ms=None, attest=0, compress=False,
              enc_tag=0, rekey_readings=None) -> dict:
-    contribs = [encode(r) for _, r in events]
-    times = [t for t, _ in events]
-    n = len(events)
+    contribs = [encode(reading) for _, reading in events]
+    times = [timestamp for timestamp, _ in events]
+    event_count = len(events)
 
     def payload_bytes(idxs) -> int:
         if is_bits:
-            raw = packed.pack("".join(contribs[i] for i in idxs))
+            raw = packed.pack("".join(contribs[event_index] for event_index in idxs))
         else:
-            raw = b"".join(contribs[i] for i in idxs)
+            raw = b"".join(contribs[event_index] for event_index in idxs)
         if compress:
             raw = _compress(raw)
         return len(raw)
 
     def est_running_bytes(idxs) -> int:
         if is_bits:
-            return math.ceil(sum(len(contribs[i]) for i in idxs) / 8)
-        return sum(len(contribs[i]) for i in idxs)
+            return math.ceil(sum(len(contribs[event_index]) for event_index in idxs) / 8)
+        return sum(len(contribs[event_index]) for event_index in idxs)
 
     packets, latencies = [], []
     buf: List[int] = []
@@ -143,12 +143,12 @@ def simulate(events, encode: Callable, is_bits: bool, mode: str, *, overhead: in
             return
         wire = overhead + payload_bytes(buf) + attest + enc_tag   # enc_tag=AEAD tag when encrypted
         packets.append(wire)
-        for i in buf:
-            latencies.append(flush_ts - times[i])
+        for event_index in buf:
+            latencies.append(flush_ts - times[event_index])
         buf.clear()
 
-    for i in range(n):
-        ts = times[i]
+    for event_index in range(event_count):
+        ts = times[event_index]
         if buf:
             deadline = None
             if mode == "batch_ms":
@@ -159,13 +159,13 @@ def simulate(events, encode: Callable, is_bits: bool, mode: str, *, overhead: in
                 flush(deadline)
         if mode == "mtu" and buf:
             budget = MTU_PAYLOAD - overhead - attest
-            if est_running_bytes(buf + [i]) > budget:
+            if est_running_bytes(buf + [event_index]) > budget:
                 flush(ts)                          # packet full -> send now
         if mode == "stream":
-            buf.append(i)
+            buf.append(event_index)
             flush(ts)
             continue
-        buf.append(i)
+        buf.append(event_index)
         if mode == "batch_n" and len(buf) >= batch_n:
             flush(ts)
     flush(times[-1])
@@ -173,14 +173,14 @@ def simulate(events, encode: Callable, is_bits: bool, mode: str, *, overhead: in
     # ECDHE handshake: one 64 B exchange per rekey epoch, amortized across the whole run
     session_bytes = 0
     if rekey_readings:
-        session_bytes = math.ceil(n / rekey_readings) * ECDHE_HANDSHAKE
+        session_bytes = math.ceil(event_count / rekey_readings) * ECDHE_HANDSHAKE
     total = sum(packets) + session_bytes
     span = max(times[-1] - times[0], 1e-9)
-    lat_ms = sorted(l * 1000 for l in latencies)
+    lat_ms = sorted(latency * 1000 for latency in latencies)
     return {
         "packets": len(packets),
         "total_wire_bytes": total,
-        "bytes_per_event": round(total / n, 3),
+        "bytes_per_event": round(total / event_count, 3),
         "bytes_per_day": round(total / span * 86400),
         "packets_per_day": round(len(packets) / span * 86400),
         "mean_latency_ms": round(sum(lat_ms) / len(lat_ms), 1) if lat_ms else 0,
@@ -203,9 +203,9 @@ def measure_crypto_cost(payload_len: int, iters: int = 4000) -> dict:
     hs_iters = max(50, iters // 20)
     t0 = time.perf_counter()
     for _ in range(hs_iters):                       # full ECDHE: both endpoints keygen + exchange
-        a, b = X25519PrivateKey.generate(), X25519PrivateKey.generate()
-        ap, bp = a.public_key(), b.public_key()
-        a.exchange(bp); b.exchange(ap)
+        initiator_key, responder_key = X25519PrivateKey.generate(), X25519PrivateKey.generate()
+        initiator_public, responder_public = initiator_key.public_key(), responder_key.public_key()
+        initiator_key.exchange(responder_public); responder_key.exchange(initiator_public)
     handshake_us = (time.perf_counter() - t0) / hs_iters * 1e6
 
     key = ChaCha20Poly1305.generate_key()
@@ -226,7 +226,7 @@ def run(events, corpus: str, overhead_name: str, outdir: Path):
     parts = quantizer.build_partitions(graph)
     ours, jsonb = make_encoders(parts)
     ov = OVERHEAD[overhead_name]
-    n = len(events)
+    decision_count = len(events)
     span = events[-1][0] - events[0][0]
 
     # Three transmission strategies the product supports interchangeably, plus the latency-cap knob.
@@ -247,29 +247,29 @@ def run(events, corpus: str, overhead_name: str, outdir: Path):
     rows = []
     for fname, enc, is_bits, attest, comp, etag, rekey in formats:
         for cname, cfg in configs:
-            m = simulate(events, enc, is_bits, overhead=ov, attest=attest, compress=comp,
+            metrics = simulate(events, enc, is_bits, overhead=ov, attest=attest, compress=comp,
                          enc_tag=etag, rekey_readings=rekey, **cfg)
-            rows.append((fname, cname, m))
+            rows.append((fname, cname, metrics))
 
-    by = {(f, c): m for f, c, m in rows}                       # (format, strategy) -> metrics
-    o1 = {c: by[("ours O1 (decision)", c)] for c, _ in configs}
-    enc = {c: by[("ours O1 +AEAD+ECDHE", c)] for c, _ in configs}
+    by = {(format_name, strategy_name): metrics for format_name, strategy_name, metrics in rows}                       # (format, strategy) -> metrics
+    o1 = {strategy_name: by[("ours O1 (decision)", strategy_name)] for strategy_name, _ in configs}
+    enc = {strategy_name: by[("ours O1 +AEAD+ECDHE", strategy_name)] for strategy_name, _ in configs}
     json_fill = by[("JSON B2 (4-field)", "mtu-fill")]
     jz_fill = by[("JSON B2 + zstd", "mtu-fill")]
 
-    def mb_day(m):
-        return m["bytes_per_day"] / 1e6
+    def mb_day(metrics):
+        return metrics["bytes_per_day"] / 1e6
 
     md = [f"# Wire-bytes benchmark  -  {corpus} corpus", "",
-          f"n = {n:,} decisions over {span:.0f}s (~{n/span:.1f}/s). Transport overhead: "
+          f"n = {decision_count:,} decisions over {span:.0f}s (~{decision_count/span:.1f}/s). Transport overhead: "
           f"{overhead_name} ({ov} B/packet). MTU payload budget {MTU_PAYLOAD} B. Ours carries a "
           f"{ATTEST_BYTES} B Merkle root/packet (tamper-evident); JSON carries none.", "",
           "## Full matrix  -  4 formats x 4 strategies", "",
           "| format | strategy | wire B/decision | packets/day | MB/day | p95 latency |",
           "|---|---|---|---|---|---|"]
-    for fname, cname, m in rows:
-        md.append(f"| {fname} | {cname} | {m['bytes_per_event']} | {m['packets_per_day']:,} | "
-                  f"{mb_day(m):.3f} | {m['p95_latency_ms']} ms |")
+    for fname, cname, metrics in rows:
+        md.append(f"| {fname} | {cname} | {metrics['bytes_per_event']} | {metrics['packets_per_day']:,} | "
+                  f"{mb_day(metrics):.3f} | {metrics['p95_latency_ms']} ms |")
 
     # ---- the three strategies over a 24-hour period (the product, ours O1) ----
     md += ["", "## The three strategies over 24 hours (ours O1  -  the product)", "",
@@ -347,13 +347,13 @@ def run(events, corpus: str, overhead_name: str, outdir: Path):
 
     (outdir / f"wire_{corpus}.md").write_text("\n".join(md))
     (outdir / f"wire_{corpus}.json").write_text(json.dumps(
-        {"corpus": corpus, "n": n, "span_s": span, "overhead": overhead_name,
+        {"corpus": corpus, "n": decision_count, "span_s": span, "overhead": overhead_name,
          "crypto_cost": cc,
-         "rows": [{"format": f, "strategy": c, **m} for f, c, m in rows]}, indent=1) + "\n")
-    print(f"wrote wire_{corpus}.md ({n:,} decisions)")
-    for fname, cname, m in rows:
-        print(f"  {fname:22s} {cname:12s} {m['bytes_per_event']:8.3f} B/dec  "
-              f"p95 {m['p95_latency_ms']:.0f}ms  {mb_day(m):.2f} MB/day")
+         "rows": [{"format": format_name, "strategy": strategy_name, **metrics} for format_name, strategy_name, metrics in rows]}, indent=1) + "\n")
+    print(f"wrote wire_{corpus}.md ({decision_count:,} decisions)")
+    for fname, cname, metrics in rows:
+        print(f"  {fname:22s} {cname:12s} {metrics['bytes_per_event']:8.3f} B/dec  "
+              f"p95 {metrics['p95_latency_ms']:.0f}ms  {mb_day(metrics):.2f} MB/day")
 
 
 def main(argv=None) -> int:

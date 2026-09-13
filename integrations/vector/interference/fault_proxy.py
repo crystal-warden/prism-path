@@ -13,16 +13,16 @@ LOG = open("faults.ndjson", "a", buffering=1)
 
 
 def phase():
-    m = (time.time() - START) / 60
-    if m < 45:
+    elapsed_minutes = (time.time() - START) / 60
+    if elapsed_minutes < 45:
         return "P0-clean"
-    if m < 135:
+    if elapsed_minutes < 135:
         return "P1-intermittent"
-    if m < 225:
+    if elapsed_minutes < 225:
         return "P2-severe"
-    if m < 270:
+    if elapsed_minutes < 270:
         return "P3-blackout"
-    if m < 315:
+    if elapsed_minutes < 315:
         return "P4-recovery"
     return "DONE"
 
@@ -40,47 +40,47 @@ blackout_until = 0.0
 def maybe_fault(data):
     """Return (data, close_now). Mutates per phase."""
     global blackout_until
-    p = phase()
-    if p in ("P0-clean", "P4-recovery", "DONE"):
+    current_phase = phase()
+    if current_phase in ("P0-clean", "P4-recovery", "DONE"):
         return data, False
-    r = random.random()
-    if p == "P1-intermittent":
-        if r < 0.002:
-            d = random.uniform(2, 10)
-            log("stall", secs=round(d, 1))
-            time.sleep(d)
-        elif r < 0.003:
+    draw = random.random()
+    if current_phase == "P1-intermittent":
+        if draw < 0.002:
+            stall_seconds = random.uniform(2, 10)
+            log("stall", secs=round(stall_seconds, 1))
+            time.sleep(stall_seconds)
+        elif draw < 0.003:
             log("reset")
             return data, True
-        elif r < 0.006 and len(data) > 4:
-            i = random.randrange(len(data))
-            b = bytearray(data)
-            b[i] ^= 0xFF
-            log("corrupt", bytes=1, at=i)
-            return bytes(b), False
-    elif p == "P2-severe":
-        if r < 0.01:
-            d = random.uniform(5, 20)
-            log("stall", secs=round(d, 1))
-            time.sleep(d)
-        elif r < 0.02:
+        elif draw < 0.006 and len(data) > 4:
+            byte_index = random.randrange(len(data))
+            corrupted = bytearray(data)
+            corrupted[byte_index] ^= 0xFF
+            log("corrupt", bytes=1, at=byte_index)
+            return bytes(corrupted), False
+    elif current_phase == "P2-severe":
+        if draw < 0.01:
+            stall_seconds = random.uniform(5, 20)
+            log("stall", secs=round(stall_seconds, 1))
+            time.sleep(stall_seconds)
+        elif draw < 0.02:
             log("reset")
             return data, True
-        elif r < 0.05 and len(data) > 8:
-            b = bytearray(data)
+        elif draw < 0.05 and len(data) > 8:
+            corrupted = bytearray(data)
             nf = random.randint(1, 8)
             for _ in range(nf):
-                b[random.randrange(len(b))] ^= random.randrange(1, 256)
+                corrupted[random.randrange(len(corrupted))] ^= random.randrange(1, 256)
             log("corrupt", bytes=nf)
-            return bytes(b), False
-        elif r < 0.06:
+            return bytes(corrupted), False
+        elif draw < 0.06:
             time.sleep(random.uniform(0.2, 1.5))
-    elif p == "P3-blackout":
+    elif current_phase == "P3-blackout":
         now = time.time()
         if now < blackout_until:
             log("drop-during-blackout")
             return None, True
-        if r < 0.01:
+        if draw < 0.01:
             dur = random.uniform(30, 60)
             blackout_until = now + dur
             log("blackout", secs=round(dur))
@@ -118,14 +118,14 @@ def handle(client):
         except OSError:
             pass
         finally:
-            for s in (src, dst):
+            for endpoint in (src, dst):
                 try:
-                    s.close()
+                    endpoint.close()
                 except OSError:
                     pass
 
-    t = threading.Thread(target=pump, args=(up, client, False), daemon=True)
-    t.start()
+    upstream_thread = threading.Thread(target=pump, args=(up, client, False), daemon=True)
+    upstream_thread.start()
     pump(client, up, True)
 
 
@@ -137,8 +137,8 @@ log("proxy-start")
 while phase() != "DONE":
     srv.settimeout(5)
     try:
-        c, _ = srv.accept()
-        threading.Thread(target=handle, args=(c,), daemon=True).start()
+        client, _ = srv.accept()
+        threading.Thread(target=handle, args=(client,), daemon=True).start()
     except socket.timeout:
         continue
 log("proxy-done")

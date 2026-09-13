@@ -50,7 +50,7 @@ def main() -> int:
         split_nodes[(flow, node)] = int(pos) if pos else None
 
     cases = list(blind_cases(BENCH))                       # authoritative order + valid targets
-    gold = [json.loads(l) for l in open(BENCH, encoding="utf-8") if l.strip()]
+    gold = [json.loads(line) for line in open(BENCH, encoding="utf-8") if line.strip()]
 
     answers = {}
     for ln, line in enumerate(open(args.answers, encoding="utf-8"), 1):
@@ -58,12 +58,12 @@ def main() -> int:
         if not line:
             continue
         try:
-            r = json.loads(line)
-        except ValueError as e:
-            print(f"  ✗ line {ln}: not JSON ({e})"); return 1
-        if "i" not in r or "choice" not in r:
-            print(f"  ✗ line {ln}: needs both 'i' and 'choice' — got {sorted(r)}"); return 1
-        answers[int(r["i"])] = int(r["choice"])
+            answer = json.loads(line)
+        except ValueError as error:
+            print(f"  ✗ line {ln}: not JSON ({error})"); return 1
+        if "i" not in answer or "choice" not in answer:
+            print(f"  ✗ line {ln}: needs both 'i' and 'choice' — got {sorted(answer)}"); return 1
+        answers[int(answer["i"])] = int(answer["choice"])
 
     def split_pos(case):
         """The 1-indexed compound-edge position to expand for this node, or None if the node isn't
@@ -73,50 +73,50 @@ def main() -> int:
             return None
         if declared is not None:
             return declared
-        for j, (_t, c) in enumerate(case["edges"], 1):
-            if " or " in c.lower():
-                return j
+        for edge_position, (_t, condition) in enumerate(case["edges"], 1):
+            if " or " in condition.lower():
+                return edge_position
         return None
 
-    def resolve_pick(i):
+    def resolve_pick(case_index):
         """Map answers[i] -> a target. On a --split-compound node the compound edge occupies TWO adjacent
         slots (its two disjuncts) so every pick past it shifts up by one; valid range is 1..N+1.
         Returns (target, note) or (None, reason)."""
-        case = cases[i]
-        n = len(case["edges"])
-        v = answers.get(i)
-        if v is None:
+        case = cases[case_index]
+        edge_count = len(case["edges"])
+        choice = answers.get(case_index)
+        if choice is None:
             return None, "unanswered"
-        p = split_pos(case)
-        if p is None:
-            if 1 <= v <= n:
-                return case["targets"][v - 1], None
-            return None, f"case {i}: choice {v} out of range 1..{n}"
+        split_position = split_pos(case)
+        if split_position is None:
+            if 1 <= choice <= edge_count:
+                return case["targets"][choice - 1], None
+            return None, f"case {case_index}: choice {choice} out of range 1..{edge_count}"
         # compound edge at position p spans slots p and p+1; later edges shift back one:
         #   v <= p    -> targets[v-1]   (before, or the compound edge's 1st disjunct)
         #   v == p+1  -> targets[p-1]   (the compound edge's 2nd disjunct)
         #   v  > p+1  -> targets[v-2]   (a later edge)
-        if not (1 <= v <= n + 1):
-            return None, f"case {i}: choice {v} out of range 1..{n+1} (split node)"
-        idx = v - 1 if v <= p else (p - 1 if v == p + 1 else v - 2)
+        if not (1 <= choice <= edge_count + 1):
+            return None, f"case {case_index}: choice {choice} out of range 1..{edge_count+1} (split node)"
+        idx = choice - 1 if choice <= split_position else (split_position - 1 if choice == split_position + 1 else choice - 2)
         tgt = case["targets"][idx]
         note = None
-        if v >= p + 1:  # only the shifted picks are a genuine reinterpretation worth reporting
-            cond = case["edges"][p - 1][1]
-            note = (f"case {i} [{case['flow']}/{case['node']}]: pick {v} under compound-split of edge "
-                    f"{p} (\"{cond[:44]}\") -> {tgt}")
+        if choice >= split_position + 1:  # only the shifted picks are a genuine reinterpretation worth reporting
+            cond = case["edges"][split_position - 1][1]
+            note = (f"case {case_index} [{case['flow']}/{case['node']}]: pick {choice} under compound-split of edge "
+                    f"{split_position} (\"{cond[:44]}\") -> {tgt}")
         return tgt, note
 
     remaps, problems, labels = [], [], {}
-    for i in range(len(cases)):
-        tgt, note = resolve_pick(i)
+    for case_index in range(len(cases)):
+        tgt, note = resolve_pick(case_index)
         if tgt is None:
             problems.append(note)
         else:
-            labels[i] = tgt
+            labels[case_index] = tgt
             if note:
                 remaps.append(note)
-    extra = [i for i in answers if i >= len(cases)]
+    extra = [case_index for case_index in answers if case_index >= len(cases)]
     if extra:
         problems.append(f"answers for nonexistent cases: {extra[:10]}")
 
@@ -127,19 +127,19 @@ def main() -> int:
     if problems and not args.drop_invalid:
         print(f"VERIFICATION FAILED — {len(problems)} problem(s) "
               f"(use --split-compound for disjunctive-edge picks, or --drop-invalid to exclude + proceed):")
-        for p in problems[:25]:
-            print(f"  ✗ {p}")
+        for problem in problems[:25]:
+            print(f"  ✗ {problem}")
         return 1
 
-    with open(args.out, "w", encoding="utf-8") as f:
-        for i in sorted(labels):
-            f.write(json.dumps({"flow": cases[i]["flow"], "node": cases[i]["node"],
-                                "outcome": cases[i]["outcome"], "label": labels[i],
-                                "stratum": gold[i].get("stratum")}, ensure_ascii=False) + "\n")
+    with open(args.out, "w", encoding="utf-8") as handle:
+        for case_index in sorted(labels):
+            handle.write(json.dumps({"flow": cases[case_index]["flow"], "node": cases[case_index]["node"],
+                                "outcome": cases[case_index]["outcome"], "label": labels[case_index],
+                                "stratum": gold[case_index].get("stratum")}, ensure_ascii=False) + "\n")
     dropped = len(cases) - len(labels)
     if dropped:
         print(f"⚠ excluded {dropped} out-of-range/unanswered case(s): "
-              f"{[i for i in range(len(cases)) if i not in labels][:20]}")
+              f"{[case_index for case_index in range(len(cases)) if case_index not in labels][:20]}")
     print(f"✓ wrote {len(labels)} labeled cases -> {args.out}"
           f"{' (κ over this subset)' if dropped else ''}")
     return 0

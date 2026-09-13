@@ -56,7 +56,7 @@ def _probes(graph) -> list:
     seen, probes = set(), []
 
     def add(reading):
-        key = tuple(sorted((k, str(v)) for k, v in reading.items()))
+        key = tuple(sorted((field, str(value)) for field, value in reading.items()))
         if key in seen:
             return
         seen.add(key)
@@ -64,8 +64,8 @@ def _probes(graph) -> list:
 
     for field, values in (("dev_mg", _DEV_VALUES), ("rule_level", _LEVEL_VALUES),
                           ("soc_action", _SOC_VALUES), ("stability", _STAB_VALUES)):
-        for v in values:
-            add({**_BASE, field: v})
+        for value in values:
+            add({**_BASE, field: value})
     for corner in _CORNERS:
         add(dict(corner))
     return probes
@@ -74,7 +74,7 @@ def _probes(graph) -> list:
 def main() -> int:
     flow_text = FLOW_PATH.read_text()
     graph = parse(flow_text)
-    L = spiral.SpiralLayout(graph, NODE)
+    layout = spiral.SpiralLayout(graph, NODE)
     corpus = {
         "version": 1,
         "note": "Frozen integer tessellation of fusion_triage@correlate. xy floats deliberately "
@@ -83,19 +83,19 @@ def main() -> int:
         "flow": flow_text,
         "flow_sha256": hashlib.sha256(flow_text.encode()).hexdigest(),
         "node": NODE,
-        "fields": L.fields,
-        "radices": L.radices,
-        "size": L.size,
-        "bands": [{"route": r, "base": L.band_base[i], "width": L.band_width[i]}
-                  for i, r in enumerate(L.routes)],
-        "cells": [{"cell": list(L.cell_of[n]), "n": n,
-                   "band": L.band_index[L.route_of(n)], "route": L.route_of(n)}
-                  for n in range(L.size)],
+        "fields": layout.fields,
+        "radices": layout.radices,
+        "size": layout.size,
+        "bands": [{"route": target, "base": layout.band_base[band_index], "width": layout.band_width[band_index]}
+                  for band_index, target in enumerate(layout.routes)],
+        "cells": [{"cell": list(layout.cell_of[cell_index]), "n": cell_index,
+                   "band": layout.band_index[layout.route_of(cell_index)], "route": layout.route_of(cell_index)}
+                  for cell_index in range(layout.size)],
         "probes": _probes(graph),
     }
     out = HERE / "conformance" / "spiral_fusion.json"
     out.write_text(json.dumps(corpus, indent=1) + "\n")
-    print(f"wrote {out}  ({L.size} cells, {len(L.routes)} bands, {len(corpus['probes'])} probes)")
+    print(f"wrote {out}  ({layout.size} cells, {len(layout.routes)} bands, {len(corpus['probes'])} probes)")
     return 0
 
 

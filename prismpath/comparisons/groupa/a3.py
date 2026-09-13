@@ -83,14 +83,14 @@ def write_prismpath() -> None:
     and at least one MCU class leg is present."""
     ev = RESULTS / "prismpath" / "evidence" / "A3"
     vectors = json.loads((ev / "a3_vectors.json").read_text())["vectors"]
-    mcus = {f.stem[4:]: json.loads(f.read_text()) for f in sorted(ev.glob("mcu_*.json"))}
+    mcus = {mcu_file.stem[4:]: json.loads(mcu_file.read_text()) for mcu_file in sorted(ev.glob("mcu_*.json"))}
     fabric = {}
     fab_log = ev / "fabric_finale_attach.log"
     if fab_log.exists():
         for line in fab_log.read_text().splitlines():
             if line.startswith("A3ROW "):
-                r = json.loads(line[6:])
-                fabric[(r["policy"], r["scenario"])] = r
+                fabric_row = json.loads(line[6:])
+                fabric[(fabric_row["policy"], fabric_row["scenario"])] = fabric_row
     kernels = {}
     for arch in ("aarch64_gx10", "x86_64_protectli"):
         text = (ev / f"kernel_{arch}.log").read_text()
@@ -98,12 +98,12 @@ def write_prismpath() -> None:
     if not mcus:
         print("no MCU leg yet; prismpath A3 rows not written")
         return
-    for v in vectors:
-        pid, sid = v["policy"], v["scenario"]
-        legs = {"python": v["python_target"], "c_target": v["c_target"]}
-        agree = v["python_target"] == v["c_target"]
-        for ident, m in mcus.items():
-            row = next(r for r in m["rows"] if r["policy"] == pid and r["scenario"] == sid)
+    for vector in vectors:
+        pid, sid = vector["policy"], vector["scenario"]
+        legs = {"python": vector["python_target"], "c_target": vector["c_target"]}
+        agree = vector["python_target"] == vector["c_target"]
+        for ident, mcu_record in mcus.items():
+            row = next(row for row in mcu_record["rows"] if row["policy"] == pid and row["scenario"] == sid)
             legs[ident] = row["board_target"]
             agree = agree and row["agree"]
         if (pid, sid) in fabric:
@@ -112,16 +112,16 @@ def write_prismpath() -> None:
             agree = agree and fr["agree"]
         agree = agree and all(kernels.values())
         grade = "NATIVE" if agree else "NOT"
-        observed = v["expected_outcome"] if agree else "divergent"
-        write_result(system="prismpath", dimension="A3", policy=pid, scenario=sid, expected=v["expected_outcome"], observed=observed,
+        observed = vector["expected_outcome"] if agree else "divergent"
+        write_result(system="prismpath", dimension="A3", policy=pid, scenario=sid, expected=vector["expected_outcome"], observed=observed,
                      grade=grade, idiomatic=True, evidence_path=ev,
                      measurements={"targets_by_substrate": legs, "kernel_certify_all_pass": kernels,
-                                   "image_sha256_16": v["image_sha256_16"], "image_bytes": v["image_bytes"]},
-                     notes=(f"One compiled image ({v['image_bytes']} B, sha256 {v['image_sha256_16']}...) decided the same scenario reading on: host "
-                            f"Python (target {v['python_target']}), the C reference (target {v['c_target']}), in kernel eBPF via "
+                                   "image_sha256_16": vector["image_sha256_16"], "image_bytes": vector["image_bytes"]},
+                     notes=(f"One compiled image ({vector['image_bytes']} B, sha256 {vector['image_sha256_16']}...) decided the same scenario reading on: host "
+                            f"Python (target {vector['python_target']}), the C reference (target {vector['c_target']}), in kernel eBPF via "
                             f"BPF_PROG_TEST_RUN on aarch64 (this host) and x86_64 (the Protectli, object rebuilt there), both 23/23 ALL PASS "
                             f"over the corpus (kernel_*.log), and on the RP2350's Cortex-M33 and Hazard3 RISC-V cores from one firmware source "
-                            f"(mcu_*.json; board targets {[legs[k] for k in mcus]})"
+                            f"(mcu_*.json; board targets {[legs[ident] for ident in mcus]})"
                             + (f", and on the Zynq-7020 fabric through the certified PS evaluate path of the resident finale overlay "
                                f"(target {legs['zynq7020_fabric_finale_ps_path']}, cause {fabric[(pid, sid)]['cause']}, attach without "
                                "reconfiguration, fabric_finale_attach.log)" if (pid, sid) in fabric else "")

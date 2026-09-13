@@ -19,8 +19,8 @@ ROOT = os.path.dirname(HERE)  # repo root (tools/ lives under it)
 
 def loc(path):
     try:
-        with open(path, encoding="utf-8", errors="ignore") as f:
-            return sum(1 for _ in f)
+        with open(path, encoding="utf-8", errors="ignore") as handle:
+            return sum(1 for _ in handle)
     except OSError:
         return 0
 
@@ -34,29 +34,29 @@ def scan_domain_nouns(path, noun_map):
         return hits
     compiled = []
     for domain, nouns in noun_map.items():
-        for n in nouns:
-            pat = n if n.startswith("\\b") or "\\b" in n else r"\b" + re.escape(n) + r"\b"
-            compiled.append((domain, n, re.compile(pat, re.I)))
-    for i, line in enumerate(lines, 1):
+        for noun in nouns:
+            pat = noun if noun.startswith("\\b") or "\\b" in noun else r"\b" + re.escape(noun) + r"\b"
+            compiled.append((domain, noun, re.compile(pat, re.I)))
+    for line_number, line in enumerate(lines, 1):
         low = line
-        for domain, n, rx in compiled:
+        for domain, noun, rx in compiled:
             if rx.search(low):
-                hits.append((i, domain, n, line.strip()[:80]))
+                hits.append((line_number, domain, noun, line.strip()[:80]))
     return hits
 
 
 def scan_adapter_imports(path, adapter_code_modules):
     """Return [(lineno, module)] where CORE imports an adapter code module."""
     hits = []
-    stems = [os.path.splitext(os.path.basename(m))[0] for m in adapter_code_modules]
+    stems = [os.path.splitext(os.path.basename(module_path))[0] for module_path in adapter_code_modules]
     if not stems:
         return hits
     rx = re.compile(r"^\s*(?:from\s+[\w.]*?\b(" + "|".join(map(re.escape, stems)) +
                     r")\b|import\s+[\w.]*?\b(" + "|".join(map(re.escape, stems)) + r")\b)")
     try:
-        for i, line in enumerate(open(path, encoding="utf-8", errors="ignore"), 1):
+        for line_number, line in enumerate(open(path, encoding="utf-8", errors="ignore"), 1):
             if rx.search(line):
-                hits.append((i, next(s for s in stems if s in line)))
+                hits.append((line_number, next(stem for stem in stems if stem in line)))
     except OSError:
         pass
     return hits
@@ -65,7 +65,7 @@ def scan_adapter_imports(path, adapter_code_modules):
 def git_core_churn(pkg_dir, core_modules, baseline):
     if not baseline:
         return None
-    paths = [os.path.join(pkg_dir, m) for m in core_modules]
+    paths = [os.path.join(pkg_dir, module) for module in core_modules]
     try:
         out = subprocess.run(["git", "-C", ROOT, "diff", "--numstat", baseline, "--", *paths],
                              capture_output=True, text=True, timeout=30)
@@ -73,12 +73,12 @@ def git_core_churn(pkg_dir, core_modules, baseline):
             return {"error": out.stderr.strip()[:120]}
         added = removed = files = 0
         for ln in out.stdout.splitlines():
-            p = ln.split("\t")
-            if len(p) >= 3 and p[0].isdigit():
-                added += int(p[0]); removed += int(p[1]) if p[1].isdigit() else 0; files += 1
+            columns = ln.split("\t")
+            if len(columns) >= 3 and columns[0].isdigit():
+                added += int(columns[0]); removed += int(columns[1]) if columns[1].isdigit() else 0; files += 1
         return {"baseline": baseline, "core_files_changed": files, "lines_added": added, "lines_removed": removed}
-    except Exception as e:
-        return {"error": str(e)[:120]}
+    except Exception as error:
+        return {"error": str(error)[:120]}
 
 
 def main():
@@ -90,28 +90,28 @@ def main():
     pkg = os.path.join(ROOT, cfg["package_dir"])
     core = cfg["core_modules"]
     adapters = cfg["adapters"]
-    all_adapter_code = [m for a in adapters.values() for m in a.get("code", [])]
+    all_adapter_code = [module for adapter in adapters.values() for module in adapter.get("code", [])]
 
     # ---- Signal 1: core purity (HARD) ----
     violations = []
-    for m in core:
-        p = os.path.join(pkg, m)
-        if not os.path.exists(p):
+    for module in core:
+        module_path = os.path.join(pkg, module)
+        if not os.path.exists(module_path):
             continue
-        for (ln, dom, noun, text) in scan_domain_nouns(p, cfg["domain_nouns"]):
-            violations.append({"file": m, "line": ln, "kind": "domain-noun", "domain": dom, "noun": noun, "text": text})
-        for (ln, mod) in scan_adapter_imports(p, all_adapter_code):
-            violations.append({"file": m, "line": ln, "kind": "adapter-import", "module": mod})
+        for (ln, dom, noun, text) in scan_domain_nouns(module_path, cfg["domain_nouns"]):
+            violations.append({"file": module, "line": ln, "kind": "domain-noun", "domain": dom, "noun": noun, "text": text})
+        for (ln, mod) in scan_adapter_imports(module_path, all_adapter_code):
+            violations.append({"file": module, "line": ln, "kind": "adapter-import", "module": mod})
 
     # ---- Signal 3: core churn (TREND) ----
-    core_loc = sum(loc(os.path.join(pkg, m)) for m in core if os.path.exists(os.path.join(pkg, m)))
+    core_loc = sum(loc(os.path.join(pkg, module)) for module in core if os.path.exists(os.path.join(pkg, module)))
     churn = git_core_churn(pkg, core, args.baseline)
 
     # ---- Signal 7: marginal cost + %-logic-in-md (TREND) ----
     scores = []
-    for name, a in adapters.items():
-        code_loc = sum(loc(os.path.join(pkg, m)) for m in a.get("code", []))
-        md_loc = sum(loc(os.path.join(pkg, m)) for m in a.get("flows", []))
+    for name, adapter in adapters.items():
+        code_loc = sum(loc(os.path.join(pkg, module)) for module in adapter.get("code", []))
+        md_loc = sum(loc(os.path.join(pkg, module)) for module in adapter.get("flows", []))
         total = code_loc + md_loc
         scores.append({"adapter": name, "code_loc": code_loc, "flow_md_loc": md_loc,
                        "pct_logic_in_md": round(md_loc / total, 3) if total else None})
@@ -132,17 +132,17 @@ def main():
     if violations:
         md.append("| file | line | kind | detail |")
         md.append("|---|---|---|---|")
-        for v in violations[:60]:
-            detail = f"{v.get('domain','')}:{v.get('noun','')}" if v["kind"] == "domain-noun" else f"imports {v.get('module','')}"
-            md.append(f"| `{v['file']}` | {v['line']} | {v['kind']} | {detail} |")
+        for violation in violations[:60]:
+            detail = f"{violation.get('domain','')}:{violation.get('noun','')}" if violation["kind"] == "domain-noun" else f"imports {violation.get('module','')}"
+            md.append(f"| `{violation['file']}` | {violation['line']} | {violation['kind']} | {detail} |")
     md += ["", f"## Signal 3 — Core churn (trend)", f"- core total LOC: **{core_loc}** across {len(core)} declared-core modules",
            f"- churn since baseline: `{json.dumps(churn)}`", "- watch: core LOC changed per adapter milestone must DECAY.",
            "", "## Signal 7 — Marginal adapter cost + %-logic-in-md (trend)",
            "| adapter | code LOC | flow .md LOC | % logic in .md |", "|---|---|---|---|"]
-    for s in scores:
-        md.append(f"| {s['adapter']} | {s['code_loc']} | {s['flow_md_loc']} | {s['pct_logic_in_md']} |")
+    for score in scores:
+        md.append(f"| {score['adapter']} | {score['code_loc']} | {score['flow_md_loc']} | {score['pct_logic_in_md']} |")
     md += ["", "## Unclassified modules (triage core vs adapter during refactor)",
-           ", ".join(f"`{m}`" for m in cfg.get("unclassified_needs_triage", []))]
+           ", ".join(f"`{module}`" for module in cfg.get("unclassified_needs_triage", []))]
     scorecard_dir = os.path.join(ROOT, "docs", "design")
     os.makedirs(scorecard_dir, exist_ok=True)
     md.insert(1, "\n*Generated by `tools/arch_guard.py` — do not hand-edit.*")

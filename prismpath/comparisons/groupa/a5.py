@@ -63,7 +63,7 @@ def run_prismpath() -> None:
         for seq, (sid, kind, inp, exp) in enumerate(scenario_steps(policy)):
             if kind == "undeclared_missing":
                 continue
-            reading = {k: v for k, v in inp.items() if v is not None}
+            reading = {field: value for field, value in inp.items() if value is not None}
             bits = wire.encode_reading(parts, reading)
             req = packed.pack(bits, 8)
             target = wire.route_node(graph, "decide", reading)   # the node name is r<n>_<outcome>; observed is the outcome the flow actually reached
@@ -75,9 +75,9 @@ def run_prismpath() -> None:
             conc = {}
             symbols = quantizer.quantize(parts, reading)
             order = sorted(parts)
-            reading_ints = [symbols[f] + 1 for f in order]           # symbol plus one, the wire mapping
+            reading_ints = [symbols[field] + 1 for field in order]           # symbol plus one, the wire mapping
             for fleet in (1, 10, 50):
-                frame = concentrator.concentrate([(i + 1, reading_ints) for i in range(fleet)])
+                frame = concentrator.concentrate([(node_index + 1, reading_ints) for node_index in range(fleet)])
                 conc[str(fleet)] = round((len(frame) + ENVELOPE) / fleet, 2)
             table.append({"policy": pid, "scenario": sid, "request_bytes": len(req), "result_bytes": len(res),
                           "total": total, "total_plus_envelope": total + ENVELOPE,
@@ -110,11 +110,11 @@ def run_opa() -> None:
             for sid, kind, inp, exp in scenario_steps(policy):
                 if kind == "undeclared_missing":
                     continue
-                body = compact({"input": {k: v for k, v in inp.items() if v is not None}})
+                body = compact({"input": {field: value for field, value in inp.items() if value is not None}})
                 req = urllib.request.Request(f"http://127.0.0.1:{port}/v1/data/comparison/{pid}/decision", data=body,
                                              headers={"content-type": "application/json"}, method="POST")
-                with urllib.request.urlopen(req, timeout=10) as r:
-                    resp = r.read()
+                with urllib.request.urlopen(req, timeout=10) as response:
+                    resp = response.read()
                 res = json.loads(resp).get("result")
                 observed = res["outcome"] if isinstance(res, dict) else "undefined"
                 total = len(body) + len(resp)
@@ -143,17 +143,17 @@ def run_cedar() -> None:
         for sid, kind, inp, exp in scenario_steps(policy):
             if kind == "undeclared_missing":
                 continue
-            ctx = {k: v for k, v in inp.items() if v is not None}
+            ctx = {field: value for field, value in inp.items() if value is not None}
             request = compact({"principal": 'User::"requester"', "action": 'Action::"decide"', "resource": 'Request::"r"', "context": ctx})
-            d = runner.decide(inp)
-            total = len(request) + len(d.raw.encode())
-            table.append({"policy": pid, "scenario": sid, "request_bytes": len(request), "response_bytes": len(d.raw.encode()), "total": total})
-            write_result(system="cedar", dimension="A5", policy=pid, scenario=sid, expected=exp["outcome"], observed=d.observed,
+            decision = runner.decide(inp)
+            total = len(request) + len(decision.raw.encode())
+            table.append({"policy": pid, "scenario": sid, "request_bytes": len(request), "response_bytes": len(decision.raw.encode()), "total": total})
+            write_result(system="cedar", dimension="A5", policy=pid, scenario=sid, expected=exp["outcome"], observed=decision.observed,
                          grade="NOT", idiomatic=True, evidence_path=ev,
-                         measurements={"bytes_on_wire": total, "request_bytes": len(request), "result_bytes": len(d.raw.encode()),
+                         measurements={"bytes_on_wire": total, "request_bytes": len(request), "result_bytes": len(decision.raw.encode()),
                                        "total_plus_envelope_28B": total + ENVELOPE},
                          notes=(f"Request JSON in the --request-json shape {len(request)} B (every context field), result = the "
-                                f"verbose authorize output {len(d.raw.encode())} B (the outcome annotation lives in the diagnostics, "
+                                f"verbose authorize output {len(decision.raw.encode())} B (the outcome annotation lives in the diagnostics, "
                                 "so the verbose form is what carries the decision). Cedar is a library; JSON is its documented "
                                 "interchange, no compact encoding."))
     (ev / "bytes.json").write_text(json.dumps(table, indent=1) + "\n")
@@ -168,8 +168,8 @@ def run_cerbos() -> None:
         policy = policy_by_id(pid)
         gen = gen_dir_for("cerbos", pid)
         tmp = Path(tempfile.mkdtemp(prefix="cerbos_a5_")); store = tmp / "p"; store.mkdir()
-        for f in gen.glob("*.yaml"):
-            (store / f.name).write_text(f.read_text())
+        for policy_file in gen.glob("*.yaml"):
+            (store / policy_file.name).write_text(policy_file.read_text())
         (tmp / "c.yaml").write_text(f"server:\n  httpListenAddr: \"127.0.0.1:{http}\"\n  grpcListenAddr: \"127.0.0.1:{grpc}\"\nstorage:\n  driver: disk\n  disk:\n    directory: {store}\n")
         proc = subprocess.Popen([str(TOOLCHAIN_BIN / "cerbos"), "server", f"--config={tmp / 'c.yaml'}"],
                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
@@ -183,15 +183,15 @@ def run_cerbos() -> None:
             for sid, kind, inp, exp in scenario_steps(policy):
                 if kind == "undeclared_missing":
                     continue
-                attr = {k: v for k, v in inp.items() if v is not None}
+                attr = {field: value for field, value in inp.items() if value is not None}
                 body = compact({"requestId": "a5", "principal": {"id": "requester", "roles": ["user"]},
                                 "resources": [{"actions": ["decide"], "resource": {"kind": pid, "id": "r1", "attr": attr}}]})
                 req = urllib.request.Request(f"http://127.0.0.1:{http}/api/check/resources", data=body,
                                              headers={"content-type": "application/json"}, method="POST")
-                with urllib.request.urlopen(req, timeout=10) as r:
-                    resp = r.read()
+                with urllib.request.urlopen(req, timeout=10) as response:
+                    resp = response.read()
                 res = json.loads(resp)
-                outs = [o.get("val") for o in res["results"][0].get("outputs", []) if isinstance(o.get("val"), dict)]
+                outs = [output.get("val") for output in res["results"][0].get("outputs", []) if isinstance(output.get("val"), dict)]
                 observed = outs[0]["outcome"] if len(outs) == 1 else ("no_match" if not outs else "error")
                 total = len(body) + len(resp)
                 table.append({"policy": pid, "scenario": sid, "request_bytes": len(body), "response_bytes": len(resp), "total": total})

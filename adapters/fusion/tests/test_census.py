@@ -33,26 +33,26 @@ def test_fixture_marginal_reproduces_distribution():
 
 
 def test_assume_still_arithmetic(artifact):
-    a = artifact["pairings"]["assume_still"]
-    assert a["n"] == 50  # levels >= 7 in the fixture
+    assume_still = artifact["pairings"]["assume_still"]
+    assert assume_still["n"] == 50  # levels >= 7 in the fixture
     # Under assume-still, watch-grade levels land in cyber_watch, containment-grade in
     # cyber_containment, and every fusion band stays empty. That emptiness is the finding.
-    assert a["bands"]["cyber_watch"] == 47
-    assert a["bands"]["cyber_containment"] == 3
+    assert assume_still["bands"]["cyber_watch"] == 47
+    assert assume_still["bands"]["cyber_containment"] == 3
     for band in ("coincident_critical", "physical_escalation", "tandem_watch",
                  "physical_watch", "all_quiet"):
-        assert a["bands"][band] == 0
-    assert sum(a["bands"].values()) == a["n"]
-    assert a["rounding_residual"] == 0
-    assert sum(a["cells"]) == a["n"] and len(a["cells"]) == 108
+        assert assume_still["bands"][band] == 0
+    assert sum(assume_still["bands"].values()) == assume_still["n"]
+    assert assume_still["rounding_residual"] == 0
+    assert sum(assume_still["cells"]) == assume_still["n"] and len(assume_still["cells"]) == 108
 
 
 def test_independence_expected_sums_to_cyber_n(artifact):
-    e = artifact["pairings"]["independence_expected"]
-    assert e["n"] == 50
-    assert abs(sum(e["bands"].values()) - e["n"]) <= len(e["bands"])  # rounding only
-    assert abs(e["rounding_residual"]) <= len(e["bands"])
-    assert "NOT time-coincident" in e["label"]
+    independence = artifact["pairings"]["independence_expected"]
+    assert independence["n"] == 50
+    assert abs(sum(independence["bands"].values()) - independence["n"]) <= len(independence["bands"])  # rounding only
+    assert abs(independence["rounding_residual"]) <= len(independence["bands"])
+    assert "NOT time-coincident" in independence["label"]
 
 
 def test_artifact_carries_the_honesty_apparatus(artifact):
@@ -89,16 +89,16 @@ IP_RE = re.compile(r"\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b")
 
 def _walk(obj, path="$"):
     if isinstance(obj, dict):
-        for k, v in obj.items():
-            assert k.lower() not in FORBIDDEN_KEYS, f"forbidden key {k!r} at {path}"
-            _walk(v, f"{path}.{k}")
+        for key, value in obj.items():
+            assert key.lower() not in FORBIDDEN_KEYS, f"forbidden key {key!r} at {path}"
+            _walk(value, f"{path}.{key}")
     elif isinstance(obj, list):
-        for i, v in enumerate(obj):
-            _walk(v, f"{path}[{i}]")
+        for index, value in enumerate(obj):
+            _walk(value, f"{path}[{index}]")
     elif isinstance(obj, str):
         low = obj.lower()
-        for s in FORBIDDEN_SUBSTRINGS:
-            assert s not in low, f"forbidden substring {s!r} at {path}"
+        for forbidden in FORBIDDEN_SUBSTRINGS:
+            assert forbidden not in low, f"forbidden substring {forbidden!r} at {path}"
         assert not IP_RE.search(obj), f"IP-like value at {path}"
 
 

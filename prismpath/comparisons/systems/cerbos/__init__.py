@@ -52,12 +52,12 @@ PRINCIPAL_FIELDS = {"user_id", "user_groups", "user_role"}   # B1: attributes of
 ROLE_FIELD = "user_role"
 
 
-def _lit(v: Any) -> str:
-    if isinstance(v, bool):
-        return "true" if v else "false"
-    if isinstance(v, int):
-        return str(v)
-    return json.dumps(v)
+def _lit(value: Any) -> str:
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, int):
+        return str(value)
+    return json.dumps(value)
 
 
 def _ref(field: str, policy: Dict[str, Any]) -> str:
@@ -75,44 +75,44 @@ def cel(cond: Any, policy: Dict[str, Any]) -> str:
         return "true"
     (form, arg), = cond.items()
     if form == "cmp":
-        f, op, c = arg
-        r = _ref(f, policy)
-        return f"(has({r}) && {r} {op} {_lit(c)})"
+        field, op, constant = arg
+        reference = _ref(field, policy)
+        return f"(has({reference}) && {reference} {op} {_lit(constant)})"
     if form == "in":
-        r = _ref(arg[0], policy)
-        return f"(has({r}) && {r} in [{', '.join(_lit(v) for v in arg[1])}])"
+        reference = _ref(arg[0], policy)
+        return f"(has({reference}) && {reference} in [{', '.join(_lit(value) for value in arg[1])}])"
     if form == "not_in":
-        r = _ref(arg[0], policy)
-        return f"(has({r}) && !({r} in [{', '.join(_lit(v) for v in arg[1])}]))"
+        reference = _ref(arg[0], policy)
+        return f"(has({reference}) && !({reference} in [{', '.join(_lit(value) for value in arg[1])}]))"
     if form == "missing":
         return f"!has({_ref(arg, policy)})"
     if form == "present":
         return f"has({_ref(arg, policy)})"
     if form == "all":
-        return "(" + " && ".join(cel(c, policy) for c in arg) + ")"
+        return "(" + " && ".join(cel(condition, policy) for condition in arg) + ")"
     if form == "any":
-        return "(" + " || ".join(cel(c, policy) for c in arg) + ")"
+        return "(" + " || ".join(cel(condition, policy) for condition in arg) + ")"
     if form == "not":
         return f"!{cel(arg, policy)}"
     if form == "eq_fields":
-        a, b = _ref(arg[0], policy), _ref(arg[1], policy)
-        return f"(has({a}) && has({b}) && {a} == {b})"
+        left_reference, right_reference = _ref(arg[0], policy), _ref(arg[1], policy)
+        return f"(has({left_reference}) && has({right_reference}) && {left_reference} == {right_reference})"
     if form == "intersects":
-        a, b = _ref(arg[0], policy), _ref(arg[1], policy)
-        return f"(has({a}) && has({b}) && {a}.exists(g, g in {b}))"
+        left_reference, right_reference = _ref(arg[0], policy), _ref(arg[1], policy)
+        return f"(has({left_reference}) && has({right_reference}) && {left_reference}.exists(g, g in {right_reference}))"
     if form == "role_at_least":
         # flattened in CEL over the principal's static roles: derived roles (the Cerbos idiom for a
         # hierarchy) gate a rule but cannot be referenced inside the condition, so they cannot join the
         # negation chain the first match emulation needs; the derived roles file is still emitted
         order = policy["hierarchy"]["order"]
-        roles = ", ".join(json.dumps(r) for r in order[order.index(arg[1]):])
+        roles = ", ".join(json.dumps(role) for role in order[order.index(arg[1]):])
         return f"request.principal.roles.exists(r, r in [{roles}])"
     raise Inexpressible(form)
 
 
 def translate(policy: Dict[str, Any]) -> Translation:
     tr = Translation(citations=list(CITATIONS))
-    if any(r["if"] is not True and "related" in r["if"] for r in policy["rules"]):
+    if any(rule["if"] is not True and "related" in rule["if"] for rule in policy["rules"]):
         tr.expressible = False
         tr.notes.append("not expressible: Cerbos has no relationship store; conditions see only the attributes "
                         "the caller sends, so the caller would have to flatten group membership and folder "
@@ -122,8 +122,8 @@ def translate(policy: Dict[str, Any]) -> Translation:
     derived: List[str] = []
     if hierarchy:
         order = hierarchy["order"]
-        for i, role in enumerate(order):
-            parents = ", ".join(json.dumps(r) for r in order[i:])
+        for role_index, role in enumerate(order):
+            parents = ", ".join(json.dumps(role) for role in order[role_index:])
             derived.append(f"    - name: at_least_{role}\n      parentRoles: [{parents}]")
         tr.idiomatic = False
         tr.notes.append("role hierarchy: derived roles with parentRoles are the documented Cerbos idiom and are emitted, "
@@ -133,16 +133,16 @@ def translate(policy: Dict[str, Any]) -> Translation:
                         "The user's role travels as the principal's role and also as a principal attribute so equality "
                         "rules read it; user_id and user_groups are principal attributes")
     rules_yaml, prior = [], []
-    for r in policy["rules"]:
-        own = cel(r["if"], policy)
-        parts = [own] + [f"!{p}" for p in prior]
+    for rule in policy["rules"]:
+        own = cel(rule["if"], policy)
+        parts = [own] + [f"!{prior_condition}" for prior_condition in prior]
         expr = " && ".join(parts) if len(parts) > 1 else own
-        if r["if"] is not True:
+        if rule["if"] is not True:
             prior.append(own)
-        effect = "EFFECT_ALLOW" if r["then"] in ("allow", "observe") else "EFFECT_DENY"
-        out = json.dumps({"outcome": r["then"], "rule": r["id"]})
+        effect = "EFFECT_ALLOW" if rule["then"] in ("allow", "observe") else "EFFECT_DENY"
+        out = json.dumps({"outcome": rule["then"], "rule": rule["id"]})
         rules_yaml.append(
-            f"    - name: {r['id']}\n      actions: [\"decide\"]\n      effect: {effect}\n      roles: [\"*\"]\n"
+            f"    - name: {rule['id']}\n      actions: [\"decide\"]\n      effect: {effect}\n      roles: [\"*\"]\n"
             + (f"      derivedRoles: []\n" if False else "")
             + f"      condition:\n        match:\n          expr: {json.dumps(expr)}\n"
             + f"      output:\n        when:\n          ruleActivated: {json.dumps(out)}\n")
@@ -151,7 +151,7 @@ def translate(policy: Dict[str, Any]) -> Translation:
                     "has() guarded so absence is unsatisfied, not a logged CEL evaluation error")
     tr.notes.append("outcomes beyond allow/deny ride the rule's output block as {outcome, rule}; the effect is "
                     "EFFECT_ALLOW for allow and observe, EFFECT_DENY otherwise")
-    if not any(r["if"] is True for r in policy["rules"]):
+    if not any(rule["if"] is True for rule in policy["rules"]):
         tr.notes.append("no catch all by design: no rule activates, the effect is the default EFFECT_DENY with no output")
     head = (f"apiVersion: api.cerbos.dev/v1\nresourcePolicy:\n  version: default\n  resource: {policy['id']}\n"
             + (f"  importDerivedRoles: [{policy['id']}_roles]\n" if hierarchy else "") + "  rules:\n")
@@ -169,8 +169,8 @@ class Runner:
         self.tmp = tempfile.mkdtemp(prefix="cerbos_")
         store = Path(self.tmp) / "policies"
         store.mkdir()
-        for f in gen_dir.glob("*.yaml"):
-            (store / f.name).write_text(f.read_text(encoding="utf-8"), encoding="utf-8")
+        for policy_file in gen_dir.glob("*.yaml"):
+            (store / policy_file.name).write_text(policy_file.read_text(encoding="utf-8"), encoding="utf-8")
         conf = Path(self.tmp) / "conf.yaml"
         conf.write_text(f"server:\n  httpListenAddr: \"127.0.0.1:{HTTP_PORT}\"\n  grpcListenAddr: \"127.0.0.1:{GRPC_PORT}\"\n"
                         f"storage:\n  driver: disk\n  disk:\n    directory: {store}\n", encoding="utf-8")
@@ -179,8 +179,8 @@ class Runner:
                                      stdout=self.log, stderr=subprocess.STDOUT, start_new_session=True)
         for _ in range(80):
             try:
-                with urllib.request.urlopen(f"{self.base}/_cerbos/health", timeout=1) as r:
-                    if r.status == 200:
+                with urllib.request.urlopen(f"{self.base}/_cerbos/health", timeout=1) as response:
+                    if response.status == 200:
                         break
             except (urllib.error.URLError, ConnectionError, OSError):
                 time.sleep(0.25)
@@ -188,28 +188,28 @@ class Runner:
             raise RuntimeError("cerbos did not become healthy")
 
     def decide(self, inp: Dict[str, Any]) -> Decision:
-        inp = {k: v for k, v in inp.items() if v is not None}
+        inp = {field: value for field, value in inp.items() if value is not None}
         hierarchy = self.policy.get("hierarchy")
         principal: Dict[str, Any] = {"id": "requester", "roles": ["user"], "attr": {}}
         attr = dict(inp)
         if hierarchy:
             role = attr.get(ROLE_FIELD)
             principal["roles"] = [role] if role else ["user"]
-            for f in list(attr):
-                if f in PRINCIPAL_FIELDS:
-                    principal["attr"][f] = attr.pop(f)
+            for field in list(attr):
+                if field in PRINCIPAL_FIELDS:
+                    principal["attr"][field] = attr.pop(field)
         body = {"requestId": "cmp", "includeMeta": True, "principal": principal,
                 "resources": [{"actions": ["decide"], "resource": {"kind": self.policy["id"], "id": "r1", "attr": attr}}]}
         req = urllib.request.Request(self.base + "/api/check/resources", data=json.dumps(body).encode(),
                                      headers={"content-type": "application/json"}, method="POST")
         try:
-            with urllib.request.urlopen(req, timeout=10) as r:
-                res = json.loads(r.read().decode())
-        except urllib.error.HTTPError as e:
-            return Decision("error", None, None, e.read().decode(errors="replace"))
+            with urllib.request.urlopen(req, timeout=10) as response:
+                res = json.loads(response.read().decode())
+        except urllib.error.HTTPError as error:
+            return Decision("error", None, None, error.read().decode(errors="replace"))
         raw = json.dumps(res, sort_keys=True)
         result = res["results"][0]
-        outputs = [o.get("val") for o in result.get("outputs", []) if isinstance(o.get("val"), dict)]
+        outputs = [output.get("val") for output in result.get("outputs", []) if isinstance(output.get("val"), dict)]
         if len(outputs) == 1:
             return Decision(outputs[0].get("outcome", "error"), outputs[0].get("rule"), None, raw)
         if not outputs:

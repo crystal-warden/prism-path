@@ -45,7 +45,7 @@ SCENARIO = "ai_worker_loop_1"
 
 
 def loop_steps(policy: Dict[str, Any]) -> List[Dict[str, Any]]:
-    sc = next(s for s in policy["scenarios"] if s["id"] == SCENARIO)
+    sc = next(scenario for scenario in policy["scenarios"] if scenario["id"] == SCENARIO)
     return sc["steps"]
 
 
@@ -70,12 +70,12 @@ def run_prismpath(policy, steps) -> None:
     observed: List[str] = []
     causes: List[int] = []
     phash = policy_hash(flow_text)
-    for i, st in enumerate(steps):
-        d = runner.decide(st["input"])
-        observed.append(d.observed)
-        causes.append(d.cause if d.cause is not None else -1)
-        log.append("gate", "decision", {"seq": i, "outcome": d.observed, "rule": d.rule, "cause": d.cause,
-                                        "policy_hash": phash, "raw": d.raw})
+    for step_index, st in enumerate(steps):
+        decision = runner.decide(st["input"])
+        observed.append(decision.observed)
+        causes.append(decision.cause if decision.cause is not None else -1)
+        log.append("gate", "decision", {"seq": step_index, "outcome": decision.observed, "rule": decision.rule, "cause": decision.cause,
+                                        "policy_hash": phash, "raw": decision.raw})
     root = log.current_root()
     ok_log = log.verify_log()
     proof = log.prove(3)
@@ -128,12 +128,12 @@ def run_opa(policy, steps) -> None:
     rules: List[str] = []
     try:
         for st in steps:
-            inp = {k: v for k, v in st["input"].items() if v is not None}
+            inp = {field: value for field, value in st["input"].items() if value is not None}
             req = urllib.request.Request(f"http://127.0.0.1:{port}/v1/data/comparison/{POLICY}/decision",
                                          data=json.dumps({"input": inp}).encode(),
                                          headers={"content-type": "application/json"}, method="POST")
-            with urllib.request.urlopen(req, timeout=10) as r:
-                res = json.loads(r.read())
+            with urllib.request.urlopen(req, timeout=10) as response:
+                res = json.loads(response.read())
             val = res.get("result")
             observed.append(val["outcome"] if isinstance(val, dict) else "undefined")
             rules.append(val.get("rule") if isinstance(val, dict) else None)
@@ -173,9 +173,9 @@ def run_cedar(policy, steps) -> None:
     runner = sys_cedar.Runner(policy, gen_dir_for("cedar", POLICY))
     observed, raws = [], []
     for st in steps:
-        d = runner.decide(st["input"])
-        observed.append(d.observed)
-        raws.append(d.raw)
+        decision = runner.decide(st["input"])
+        observed.append(decision.observed)
+        raws.append(decision.raw)
     (ev / "authorize_outputs.txt").write_text("\n=====\n".join(raws))
     write_result(system="cedar", dimension="A8", policy=POLICY, scenario=SCENARIO,
                  expected=expected_string(steps), observed=",".join(observed), grade="NOT", idiomatic=True,
@@ -195,8 +195,8 @@ def run_cerbos(policy, steps) -> None:
     gen = gen_dir_for("cerbos", POLICY)
     tmp = Path(tempfile.mkdtemp(prefix="cerbos_a8_"))
     store = tmp / "policies"; store.mkdir()
-    for f in gen.glob("*.yaml"):
-        (store / f.name).write_text(f.read_text())
+    for policy_file in gen.glob("*.yaml"):
+        (store / policy_file.name).write_text(policy_file.read_text())
     audit_path = ev / "decision_audit.jsonl"
     if audit_path.exists():
         audit_path.unlink()
@@ -217,15 +217,15 @@ def run_cerbos(policy, steps) -> None:
             time.sleep(0.25)
     observed, rules = [], []
     try:
-        for i, st in enumerate(steps):
-            inp = {k: v for k, v in st["input"].items() if v is not None}
-            body = {"requestId": f"a8-{i}", "includeMeta": True, "principal": {"id": "requester", "roles": ["user"]},
+        for step_index, st in enumerate(steps):
+            inp = {field: value for field, value in st["input"].items() if value is not None}
+            body = {"requestId": f"a8-{step_index}", "includeMeta": True, "principal": {"id": "requester", "roles": ["user"]},
                     "resources": [{"actions": ["decide"], "resource": {"kind": POLICY, "id": "r1", "attr": inp}}]}
             req = urllib.request.Request(f"http://127.0.0.1:{http}/api/check/resources", data=json.dumps(body).encode(),
                                          headers={"content-type": "application/json"}, method="POST")
-            with urllib.request.urlopen(req, timeout=10) as r:
-                res = json.loads(r.read())
-            outs = [o.get("val") for o in res["results"][0].get("outputs", []) if isinstance(o.get("val"), dict)]
+            with urllib.request.urlopen(req, timeout=10) as response:
+                res = json.loads(response.read())
+            outs = [output.get("val") for output in res["results"][0].get("outputs", []) if isinstance(output.get("val"), dict)]
             observed.append(outs[0]["outcome"] if len(outs) == 1 else "error")
             rules.append(outs[0].get("rule") if len(outs) == 1 else None)
         time.sleep(1.5)                       # let the audit writer flush
@@ -268,12 +268,12 @@ RUNNERS = {"prismpath": run_prismpath, "opa": run_opa, "cedar": run_cedar, "cerb
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--system", action="append", choices=sorted(RUNNERS))
-    a = ap.parse_args(argv)
+    args = ap.parse_args(argv)
     policy = policy_by_id(POLICY)
     steps = loop_steps(policy)
-    for s in (a.system or list(RUNNERS)):
-        RUNNERS[s](policy, steps)
-        print(f"A8 {s}: written")
+    for system in (args.system or list(RUNNERS)):
+        RUNNERS[system](policy, steps)
+        print(f"A8 {system}: written")
     return 0
 
 

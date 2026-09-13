@@ -41,35 +41,35 @@ def load_cases():
     for line in open(DATA, encoding="utf-8"):
         if not line.strip():
             continue
-        c = json.loads(line)
-        g = graphs.setdefault(c["flow"], parse_file(os.path.join(FLOWS, f"{c['flow']}.md")))
-        node = g.nodes[c["node"]]
+        case = json.loads(line)
+        graph = graphs.setdefault(case["flow"], parse_file(os.path.join(FLOWS, f"{case['flow']}.md")))
+        node = graph.nodes[case["node"]]
         edges = list(node.edges)
-        out.append((c, node.instruction, c["outcome"], edges))
+        out.append((case, node.instruction, case["outcome"], edges))
     return out
 
 
-def _pct(x):
-    return f"{100 * x:5.1f}%"
+def _pct(fraction):
+    return f"{100 * fraction:5.1f}%"
 
 
 def run_baseline(bl, cases, repeats):
     """Return metrics dict for one baseline over `repeats` passes of the suite."""
     per_case_decisions = [[] for _ in cases]
     latencies, total_calls, correct_last = [], 0, 0
-    for r in range(repeats):
-        for i, (c, instr, outcome, edges) in enumerate(cases):
+    for repeat_index in range(repeats):
+        for case_index, (case, instr, outcome, edges) in enumerate(cases):
             target, calls, dt = bl.decide(instr, outcome, edges)
-            per_case_decisions[i].append(target)
+            per_case_decisions[case_index].append(target)
             total_calls += calls
             if len(edges) > 1:                 # only real decisions carry latency/accuracy weight
                 latencies.append(dt)
     # accuracy: score the final repeat's decision against the label
-    decisions_last = [d[-1] for d in per_case_decisions]
-    correct = sum(int(dec == c[0]["label"]) for dec, c in zip(decisions_last, cases))
+    decisions_last = [decisions[-1] for decisions in per_case_decisions]
+    correct = sum(int(dec == case[0]["label"]) for dec, case in zip(decisions_last, cases))
     # determinism: identical decision across every repeat
-    stable = sum(int(len(set(d)) == 1) for d in per_case_decisions)
-    n_decisions = sum(1 for _, _, _, e in cases if len(e) > 1)
+    stable = sum(int(len(set(decisions)) == 1) for decisions in per_case_decisions)
+    n_decisions = sum(1 for _, _, _, edges in cases if len(edges) > 1)
     transitions = n_decisions * repeats
     return {
         "name": bl.name,
@@ -87,20 +87,20 @@ def run_baseline(bl, cases, repeats):
 
 def markdown_table(rows):
     order = ["prismpath", "langgraph", "llm_router", "crewai"]
-    rows = sorted(rows, key=lambda r: order.index(r["name"]) if r["name"] in order else 99)
-    head = "| metric | " + " | ".join(r["name"] for r in rows) + " |"
+    rows = sorted(rows, key=lambda row: order.index(row["name"]) if row["name"] in order else 99)
+    head = "| metric | " + " | ".join(row["name"] for row in rows) + " |"
     sep = "|" + "---|" * (len(rows) + 1)
 
     def line(label, fn):
-        return "| " + label + " | " + " | ".join(fn(r) for r in rows) + " |"
+        return "| " + label + " | " + " | ".join(fn(row) for row in rows) + " |"
 
     return "\n".join([
         head, sep,
-        line("routing accuracy (hard suite)", lambda r: _pct(r["accuracy"])),
-        line("LLM calls / 1k transitions", lambda r: f"{r['llm_calls_per_1k']:.0f}"),
-        line("median latency / transition", lambda r: f"{r['latency_median_s'] * 1000:.0f} ms"),
-        line("p95 latency / transition", lambda r: f"{r['latency_p95_s'] * 1000:.0f} ms"),
-        line("determinism (identical across repeats)", lambda r: _pct(r["determinism"])),
+        line("routing accuracy (hard suite)", lambda row: _pct(row["accuracy"])),
+        line("LLM calls / 1k transitions", lambda row: f"{row['llm_calls_per_1k']:.0f}"),
+        line("median latency / transition", lambda row: f"{row['latency_median_s'] * 1000:.0f} ms"),
+        line("p95 latency / transition", lambda row: f"{row['latency_p95_s'] * 1000:.0f} ms"),
+        line("determinism (identical across repeats)", lambda row: _pct(row["determinism"])),
     ])
 
 
@@ -115,10 +115,10 @@ def main(argv=None):
     from prismpath.comparisons.baselines import all_baselines
     cases = load_cases()
     print(f"loaded {len(cases)} labeled transitions "
-          f"({sum(1 for _,_,_,e in cases if len(e) > 1)} are real >1-edge decisions), "
+          f"({sum(1 for _,_,_,edges in cases if len(edges) > 1)} are real >1-edge decisions), "
           f"repeats={args.repeats}\n")
 
-    only = {s for s in args.only.split(",") if s}
+    only = {name for name in args.only.split(",") if name}
     rows, skipped = [], []
     for bl in all_baselines(margin=args.margin, temperature=args.temperature):
         if only and bl.name not in only:
@@ -136,10 +136,10 @@ def main(argv=None):
     table = markdown_table(rows)
     print("\n" + table + "\n")
     out = {"config": vars(args), "rows": rows}
-    with open(os.path.join(HERE, "results.json"), "w") as f:
-        json.dump(out, f, indent=2)
-    with open(os.path.join(HERE, "results_table.md"), "w") as f:
-        f.write(table + "\n")
+    with open(os.path.join(HERE, "results.json"), "w") as handle:
+        json.dump(out, handle, indent=2)
+    with open(os.path.join(HERE, "results_table.md"), "w") as handle:
+        handle.write(table + "\n")
     print(f"wrote {os.path.join('comparisons', 'results.json')} and results_table.md")
     return out
 

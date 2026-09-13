@@ -40,7 +40,7 @@ SCENARIOS = {"stale_policy_1": "stale", "tampered_policy_1": "tampered", "unsign
 
 
 def lifecycle_entries(policy: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
-    return {e["id"]: e for e in policy.get("lifecycle", [])}
+    return {entry["id"]: entry for entry in policy.get("lifecycle", [])}
 
 
 # ----------------------------------------------------------------------------- PrismPath
@@ -59,15 +59,15 @@ def run_prismpath(policy) -> None:
         host = policy_host.PolicyHost(str(tmp / "state"), [keys["public"]], env, audit_path=str(ev / "swaps.log"))
 
     def pack(version: int, name: str, image: bytes) -> str:
-        p = tmp / f"{name}.ppt"
-        p.write_bytes(image)
-        policy_pack.build_pack(str(p), fields, version, "comparison-a6", keys["private"], keys["public"])
-        return str(p)
+        pack_path = tmp / f"{name}.ppt"
+        pack_path.write_bytes(image)
+        policy_pack.build_pack(str(pack_path), fields, version, "comparison-a6", keys["private"], keys["public"])
+        return str(pack_path)
 
     log: Dict[str, Any] = {}
     v2 = pack(2, "v2", blob)
-    r = host.swap(v2)
-    log["baseline_v2"] = r
+    swap_result = host.swap(v2)
+    log["baseline_v2"] = swap_result
     # stale: an older signed version presented after the floor is 2
     v1 = pack(1, "v1", blob)
     r1 = host.swap(v1)
@@ -125,13 +125,13 @@ def run_opa(policy) -> None:
     build("4", "unsigned.tar.gz", False)
     # tamper v3: rewrite policy.rego inside the tarball, keep the original signatures file
     with tarfile.open(tmp / "v3.tar.gz", "r:gz") as tf:
-        members = [(m, tf.extractfile(m).read() if m.isfile() else None) for m in tf.getmembers()]
+        members = [(member, tf.extractfile(member).read() if member.isfile() else None) for member in tf.getmembers()]
     with tarfile.open(tmp / "v3_tampered.tar.gz", "w:gz") as tf:
-        for m, data in members:
-            if m.isfile() and m.name.endswith("policy.rego"):
+        for member, data in members:
+            if member.isfile() and member.name.endswith("policy.rego"):
                 data = data.replace(b'"deny"', b'"allow"', 1)
-                m.size = len(data)
-            tf.addfile(m, io.BytesIO(data) if data is not None else None)
+                member.size = len(data)
+            tf.addfile(member, io.BytesIO(data) if data is not None else None)
 
     def try_load(bundle: str, port: int) -> Dict[str, Any]:
         logf = tmp / f"{Path(bundle).stem}.log"
@@ -146,8 +146,8 @@ def run_opa(policy) -> None:
                     req = urllib.request.Request(f"http://127.0.0.1:{port}/v1/data/comparison/{POLICY}/decision",
                                                  data=json.dumps({"input": {"protocol": 6, "dst_port": 443, "pkt_len": 800, "src_internal": False}}).encode(),
                                                  headers={"content-type": "application/json"}, method="POST")
-                    with urllib.request.urlopen(req, timeout=5) as r:
-                        loaded = "result" in json.loads(r.read())
+                    with urllib.request.urlopen(req, timeout=5) as response:
+                        loaded = "result" in json.loads(response.read())
                 except Exception:
                     loaded = False
                 os.killpg(proc.pid, signal.SIGTERM); proc.wait(timeout=10)

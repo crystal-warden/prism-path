@@ -30,10 +30,10 @@ import time
 from prismpath.comparisons.gemma import BASE, KEY, MODEL, Gemma, routing_prompt
 
 
-def _parse_choice(raw: str, n: int) -> int:
-    m = re.search(r"\d+", raw or "")
-    idx = (int(m.group()) - 1) if m else 0
-    return max(0, min(idx, n - 1))
+def _parse_choice(raw: str, choice_count: int) -> int:
+    digits_match = re.search(r"\d+", raw or "")
+    idx = (int(digits_match.group()) - 1) if digits_match else 0
+    return max(0, min(idx, choice_count - 1))
 
 
 # --------------------------------------------------------------------------- prismpath
@@ -48,16 +48,16 @@ class PrismPathBaseline:
         self.router = HybridRouter(LLMRouter(self.gemma.generate), margin=margin, embed=self._embed)
 
     def warm(self, cases):
-        for c in cases:
-            edges = c[-1]
+        for case in cases:
+            edges = case[-1]
             if len(edges) > 1:
                 self._embed._cond_embs(edges)   # populate the condition-embedding cache
 
     def decide(self, instruction, outcome, edges):
         self.gemma.calls = 0
-        t = time.perf_counter()
-        d = self.router.route(outcome, edges, instruction)
-        return d.target, self.gemma.calls, time.perf_counter() - t
+        started = time.perf_counter()
+        decision = self.router.route(outcome, edges, instruction)
+        return decision.target, self.gemma.calls, time.perf_counter() - started
 
 
 # --------------------------------------------------------------------------- LLM-router
@@ -77,9 +77,9 @@ class LLMRouterBaseline:
         if len(edges) == 1:
             return edges[0][0], 0, 0.0
         self.gemma.calls = 0
-        t = time.perf_counter()
-        d = self.router.route(outcome, edges, instruction)
-        return d.target, self.gemma.calls, time.perf_counter() - t
+        started = time.perf_counter()
+        decision = self.router.route(outcome, edges, instruction)
+        return decision.target, self.gemma.calls, time.perf_counter() - started
 
 
 # --------------------------------------------------------------------------- LangGraph
@@ -110,7 +110,7 @@ class LangGraphBaseline:
 
     def _build(self, instruction, outcome, edges):
         StateGraph, END = self._StateGraph, self._END
-        targets = [t for t, _ in edges]
+        targets = [target for target, _ in edges]
         uniq = list(dict.fromkeys(targets))          # dedupe, keep order
         prompt = routing_prompt(instruction, outcome, edges)
 
@@ -120,23 +120,23 @@ class LangGraphBaseline:
             self._last_target = targets[_parse_choice(raw, len(targets))]
             return self._last_target
 
-        g = StateGraph(dict)
-        g.add_node("entry", lambda s: s)
-        for t in uniq:
-            g.add_node(t, lambda s: s)
-            g.add_edge(t, END)
-        g.set_entry_point("entry")
-        g.add_conditional_edges("entry", route_fn, {t: t for t in uniq})
-        return g.compile()
+        graph = StateGraph(dict)
+        graph.add_node("entry", lambda state: state)
+        for target in uniq:
+            graph.add_node(target, lambda state: state)
+            graph.add_edge(target, END)
+        graph.set_entry_point("entry")
+        graph.add_conditional_edges("entry", route_fn, {target: target for target in uniq})
+        return graph.compile()
 
     def decide(self, instruction, outcome, edges):
         if len(edges) == 1:
             return edges[0][0], 0, 0.0
         app = self._build(instruction, outcome, edges)
         self._calls = 0
-        t = time.perf_counter()
+        started = time.perf_counter()
         app.invoke({"outcome": outcome}, {"recursion_limit": 5})
-        dt = time.perf_counter() - t
+        dt = time.perf_counter() - started
         return self._last_target, self._calls, dt
 
 
@@ -167,7 +167,7 @@ def _make_crew_flow():
             prompt = routing_prompt(ctx["instruction"], ctx["outcome"], ctx["edges"])
             raw = ctx["llm"].call(prompt)                 # the LLM call inside the @router method
             ctx["calls"] += 1
-            targets = [t for t, _ in ctx["edges"]]
+            targets = [target for target, _ in ctx["edges"]]
             ctx["target"] = targets[_parse_choice(raw, len(targets))]
             return ctx["target"]
 
@@ -201,9 +201,9 @@ class CrewAIBaseline:
         _CREW_CTX.update(instruction=instruction, outcome=outcome, edges=edges,
                          llm=self._llm, calls=0, target=None)
         flow = self._flow_cls()
-        t = time.perf_counter()
+        started = time.perf_counter()
         flow.kickoff()
-        dt = time.perf_counter() - t
+        dt = time.perf_counter() - started
         return _CREW_CTX["target"], _CREW_CTX["calls"], dt
 
 

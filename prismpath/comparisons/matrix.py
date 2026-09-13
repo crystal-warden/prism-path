@@ -75,15 +75,15 @@ def validate_and_load_results(
                 raw_bytes = file_path.read_bytes()
                 sha256 = hashlib.sha256(raw_bytes).hexdigest()
                 data = json.loads(raw_bytes.decode("utf-8"))
-            except Exception as e:
-                errors.append(f"File '{rel_path}' is invalid JSON: {e}")
+            except Exception as error:
+                errors.append(f"File '{rel_path}' is invalid JSON: {error}")
                 continue
 
             if not isinstance(data, dict):
                 errors.append(f"File '{rel_path}' top-level JSON must be an object.")
                 continue
 
-            missing = [f for f in REQUIRED_FIELDS if f not in data]
+            missing = [field for field in REQUIRED_FIELDS if field not in data]
             if missing:
                 errors.append(f"File '{rel_path}' missing required fields: {', '.join(missing)}")
                 continue
@@ -163,7 +163,7 @@ def validate_and_load_results(
                     )
                 else:
                     glue_req = ["description", "components", "loc", "hours"]
-                    missing_glue = [g for g in glue_req if g not in glue]
+                    missing_glue = [glue_field for glue_field in glue_req if glue_field not in glue]
                     if missing_glue:
                         errors.append(
                             f"File '{rel_path}' glue object missing fields: {', '.join(missing_glue)}."
@@ -171,7 +171,7 @@ def validate_and_load_results(
                     else:
                         if not isinstance(glue["description"], str):
                             errors.append(f"File '{rel_path}' glue.description must be a string.")
-                        if not isinstance(glue["components"], list) or not all(isinstance(c, str) for c in glue["components"]):
+                        if not isinstance(glue["components"], list) or not all(isinstance(component, str) for component in glue["components"]):
                             errors.append(f"File '{rel_path}' glue.components must be a list of strings.")
                         if type(glue["loc"]) is not int:
                             errors.append(f"File '{rel_path}' glue.loc must be an int.")
@@ -204,7 +204,7 @@ def validate_and_load_results(
                 consumed_files.append((rel_path, file_path, data, sha256))
 
     if errors:
-        msg = "Validation errors found in results:\n" + "\n".join(f"  - {e}" for e in errors)
+        msg = "Validation errors found in results:\n" + "\n".join(f"  - {error}" for error in errors)
         raise ValueError(msg)
 
     all_systems = list(SYSTEMS) + sorted(extra_systems)
@@ -214,7 +214,7 @@ def validate_and_load_results(
 def compute_verdict(dim: str, dim_row: Dict[str, Dict[str, Any]], systems: List[str]) -> str:
     """Compute the distinct-layer verdict for a dimension."""
     prism_grade = dim_row["prismpath"]["grade"]
-    comparators = [s for s in systems if s != "prismpath"]
+    comparators = [system for system in systems if system != "prismpath"]
 
     if dim.startswith("A"):
         if prism_grade != "NATIVE":
@@ -226,11 +226,11 @@ def compute_verdict(dim: str, dim_row: Dict[str, Dict[str, Any]], systems: List[
         return "DISTINCT"
     else:
         comparator_grades = [dim_row[comp]["grade"] for comp in comparators]
-        if prism_grade in ("WITH-WORK", "NOT") and any(g == "NATIVE" for g in comparator_grades):
+        if prism_grade in ("WITH-WORK", "NOT") and any(grade == "NATIVE" for grade in comparator_grades):
             return "LOSES"
-        if prism_grade == "NOT" and any(g in ("NATIVE", "WITH-WORK") for g in comparator_grades):
+        if prism_grade == "NOT" and any(grade in ("NATIVE", "WITH-WORK") for grade in comparator_grades):
             return "LOSES"
-        if prism_grade == "UNTESTED" or any(g == "UNTESTED" for g in comparator_grades):
+        if prism_grade == "UNTESTED" or any(grade == "UNTESTED" for grade in comparator_grades):
             return "OPEN"
         return "HOLDS"
 
@@ -269,16 +269,16 @@ def build_matrix(results_dir: str | Path) -> Dict[str, Any]:
                     "files": []
                 }
             else:
-                grades = [d["grade"] for _, d, _ in cell_data]
-                min_rank = min(GRADE_ORDER[g] for g in grades)
-                cell_grade = [g for g, r in GRADE_ORDER.items() if r == min_rank][0]
+                grades = [result["grade"] for _, result, _ in cell_data]
+                min_rank = min(GRADE_ORDER[grade] for grade in grades)
+                cell_grade = [grade for grade, rank in GRADE_ORDER.items() if rank == min_rank][0]
 
                 counts = {
                     "NATIVE": grades.count("NATIVE"),
                     "WITH-WORK": grades.count("WITH-WORK"),
                     "NOT": grades.count("NOT")
                 }
-                mismatches = sum(1 for _, d, _ in cell_data if d.get("match") is False)
+                mismatches = sum(1 for _, result, _ in cell_data if result.get("match") is False)
                 file_paths = sorted(rel_path for rel_path, _, _ in cell_data)
 
                 matrix[dim][sys_id] = {

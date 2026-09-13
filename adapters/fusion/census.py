@@ -109,21 +109,21 @@ def imu_marginal(parts, paths: Iterable[Path], include_derived: bool = False) ->
         "derived_excluded": derived_excluded,
         "include_derived": include_derived,
         # JSON-friendly: "stability|dev_symbol" -> count
-        "counts": {f"{s}|{d}": c for (s, d), c in sorted(counts.items())},
+        "counts": {f"{stability}|{dev_symbol}": count for (stability, dev_symbol), count in sorted(counts.items())},
     }
 
 
 # -------------------------------------------------------------------- pairings
 
 def _band_add(layout, reading: dict, weight: float, bands: Counter, cells: list) -> None:
-    n = layout.index(reading)
-    cells[n] += weight
+    cell_index = layout.index(reading)
+    cells[cell_index] += weight
     bands[layout.routes[layout.band_id(reading)]] += weight
 
 
 def band_census(layout, parts, pairing: str, cyber_hist: Dict[int, int], imu: dict) -> dict:
-    dev_rep = {int(k.split("|")[1]): parts["dev_mg"].cells[int(k.split("|")[1])]["rep"]
-               for k in imu["counts"]}
+    dev_rep = {int(marginal_key.split("|")[1]): parts["dev_mg"].cells[int(marginal_key.split("|")[1])]["rep"]
+               for marginal_key in imu["counts"]}
     bands: Counter = Counter()
     cells = [0.0] * layout.size
     n_cyber = sum(cyber_hist.values())
@@ -148,14 +148,14 @@ def band_census(layout, parts, pairing: str, cyber_hist: Dict[int, int], imu: di
     else:
         raise ValueError(f"unknown pairing {pairing!r}")
 
-    rounded = {r: int(round(v)) for r, v in bands.items()}
+    rounded = {target: int(round(weight)) for target, weight in bands.items()}
     residual = n_cyber - sum(rounded.values())
     return {
         "pairing": pairing,
         "label": label,
         "n": n_cyber,
-        "bands": {r: rounded.get(r, 0) for r in layout.routes},
-        "cells": [int(round(v)) for v in cells],
+        "bands": {target: rounded.get(target, 0) for target in layout.routes},
+        "cells": [int(round(weight)) for weight in cells],
         "rounding_residual": residual,
     }
 
@@ -169,13 +169,13 @@ def build_artifact(cyber_hist: Dict[int, int], query_meta: dict, min_level: int,
     layout = spiral.SpiralLayout(graph, NODE)
     parts = quantizer.build_partitions(graph)
 
-    filtered = {lvl: c for lvl, c in cyber_hist.items() if lvl >= min_level}
-    imu = imu_marginal(parts, [HW_EVIDENCE / s for s in POSTURE_SESSIONS],
+    filtered = {lvl: count for lvl, count in cyber_hist.items() if lvl >= min_level}
+    imu = imu_marginal(parts, [HW_EVIDENCE / session_name for session_name in POSTURE_SESSIONS],
                        include_derived=include_derived)
 
     totals = {"all_levels": sum(cyber_hist.values()),
               "at_or_above_min_level": sum(filtered.values()),
-              "at_or_above_12": sum(c for lvl, c in cyber_hist.items() if lvl >= 12)}
+              "at_or_above_12": sum(count for lvl, count in cyber_hist.items() if lvl >= 12)}
 
     return {
         "generated": _dt.date.today().isoformat(),
@@ -184,12 +184,12 @@ def build_artifact(cyber_hist: Dict[int, int], query_meta: dict, min_level: int,
         "node": NODE,
         "query": {**query_meta, "min_level": min_level, "totals": totals},
         "projection_rule": PROJECTION_RULE,
-        "cyber_marginal": {str(k): v for k, v in sorted(filtered.items())},
-        "cyber_marginal_all_levels": {str(k): v for k, v in sorted(cyber_hist.items())},
+        "cyber_marginal": {str(level): count for level, count in sorted(filtered.items())},
+        "cyber_marginal_all_levels": {str(level): count for level, count in sorted(cyber_hist.items())},
         "imu_marginal": imu,
         "pairings": {
-            p: band_census(layout, parts, p, filtered, imu)
-            for p in ("assume_still", "independence_expected")
+            pairing: band_census(layout, parts, pairing, filtered, imu)
+            for pairing in ("assume_still", "independence_expected")
         },
         "caveats": CAVEATS,
     }
@@ -214,11 +214,11 @@ def main(argv=None) -> int:
         HERE / "evidence" / f"census_{_dt.date.today():%Y-%m}.json"
     out.write_text(json.dumps(artifact, indent=1) + "\n")
 
-    a = artifact["pairings"]["assume_still"]["bands"]
+    assume_still_bands = artifact["pairings"]["assume_still"]["bands"]
     print(f"wrote {out}")
     print(f"  cyber N={artifact['pairings']['assume_still']['n']:,}  "
           f"imu rows used={artifact['imu_marginal']['rows_used']:,}")
-    print(f"  assume_still bands: {json.dumps(a)}")
+    print(f"  assume_still bands: {json.dumps(assume_still_bands)}")
     return 0
 
 

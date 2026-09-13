@@ -77,8 +77,8 @@ def main() -> int:
 
     field_paths: Dict[str, str] = {}
     for m in args.map:
-        f, _, p = m.partition("=")
-        field_paths[f] = p
+        field, _, raw_path = m.partition("=")
+        field_paths[field] = raw_path
 
     graph = parse_file(args.flow)
     parts = quantizer.build_partitions(graph)
@@ -106,13 +106,13 @@ def main() -> int:
             continue
         expected.append(wire.route_node(graph, args.route_node, seen) or "(no match)")
 
-    exp_routes = [r for r in expected if r is not None]
+    exp_routes = [route for route in expected if route is not None]
     got_routes = [str(ev.get(args.route_field, "(absent)")) for ev in decoded]
 
     mismatches: List[dict] = []
-    for i, (e, g) in enumerate(zip(exp_routes, got_routes)):
-        if e != g and len(mismatches) < 10:
-            mismatches.append({"position": i, "expected": e, "decoded": g})
+    for position, (expected_route, decoded_route) in enumerate(zip(exp_routes, got_routes)):
+        if expected_route != decoded_route and len(mismatches) < 10:
+            mismatches.append({"position": position, "expected": expected_route, "decoded": decoded_route})
     count_drift = len(exp_routes) - len(got_routes)
     exp_dist, got_dist = Counter(exp_routes), Counter(got_routes)
     ok = not mismatches and count_drift == 0 and exp_dist == got_dist \
@@ -137,9 +137,9 @@ def main() -> int:
                   f"MISMATCHES** (first shown; usual causes: flow version skew between the legs, "
                   f"an unpinned policy edited on one side, or field_paths that differ from the "
                   f"encoder's):")
-        for m in mismatches:
-            md.append(f"- event {m['position']}: raw leg routes `{m['expected']}`, "
-                      f"decoded leg carried `{m['decoded']}`")
+        for mismatch in mismatches:
+            md.append(f"- event {mismatch['position']}: raw leg routes `{mismatch['expected']}`, "
+                      f"decoded leg carried `{mismatch['decoded']}`")
         md.append("")
     md.append("**PARITY.** Every decoded route matches the raw leg; the Facet wire is carrying "
               "your decisions faithfully." if ok else

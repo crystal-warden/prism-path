@@ -42,30 +42,30 @@ def test_layout_matches_frozen_corpus_exactly():
     assert LAYOUT.fields == CORPUS["fields"]
     assert LAYOUT.radices == CORPUS["radices"]
     assert LAYOUT.size == CORPUS["size"] == 108
-    frozen_bands = [(b["route"], b["base"], b["width"]) for b in CORPUS["bands"]]
-    live_bands = [(r, LAYOUT.band_base[i], LAYOUT.band_width[i])
-                  for i, r in enumerate(LAYOUT.routes)]
+    frozen_bands = [(frozen_band["route"], frozen_band["base"], frozen_band["width"]) for frozen_band in CORPUS["bands"]]
+    live_bands = [(target, LAYOUT.band_base[band_index], LAYOUT.band_width[band_index])
+                  for band_index, target in enumerate(LAYOUT.routes)]
     assert live_bands == frozen_bands
     for entry in CORPUS["cells"]:
-        n = entry["n"]
-        assert list(LAYOUT.cell_of[n]) == entry["cell"]
-        assert LAYOUT.route_of(n) == entry["route"]
-        assert LAYOUT.band_index[LAYOUT.route_of(n)] == entry["band"]
+        cell_index = entry["n"]
+        assert list(LAYOUT.cell_of[cell_index]) == entry["cell"]
+        assert LAYOUT.route_of(cell_index) == entry["route"]
+        assert LAYOUT.band_index[LAYOUT.route_of(cell_index)] == entry["band"]
 
 
 def test_band_order_is_severity_center_outward():
-    assert [b["route"] for b in CORPUS["bands"]] == SEVERITY_ORDER
+    assert [frozen_band["route"] for frozen_band in CORPUS["bands"]] == SEVERITY_ORDER
 
 
 def test_every_cell_routes():
-    assert all(e["route"] is not None for e in CORPUS["cells"]), \
+    assert all(cell["route"] is not None for cell in CORPUS["cells"]), \
         "the correlate node has an else edge; no cell may be unrouted"
 
 
 # --------------------------------------------------- decisions preserved, three ways
 
 @pytest.mark.parametrize("probe", CORPUS["probes"],
-                         ids=lambda p: "/".join(str(p["reading"][f]) for f in
+                         ids=lambda probe: "/".join(str(probe["reading"][field]) for field in
                                                 ("stability", "dev_mg", "rule_level", "soc_action")))
 def test_probe_decisions_preserved(probe):
     reading, frozen_route = probe["reading"], probe["route"]
@@ -90,8 +90,8 @@ def test_missing_field_raises():
 def test_other_collapse_is_decision_preserving():
     # "still" and the drifted "On Table" are not flow constants; both land in the OTHER cell
     # and must quantize identically  -  the minimum-sufficient-statistic property, visible.
-    s = PARTS["stability"]
-    assert s.symbol("still") == s.symbol("On Table") == s.symbol("anything_else")
-    a = PARTS["soc_action"]
-    assert a.symbol("ignore") == a.symbol("none")
-    assert a.symbol("contain") != a.symbol("ignore")
+    stability_part = PARTS["stability"]
+    assert stability_part.symbol("still") == stability_part.symbol("On Table") == stability_part.symbol("anything_else")
+    action_part = PARTS["soc_action"]
+    assert action_part.symbol("ignore") == action_part.symbol("none")
+    assert action_part.symbol("contain") != action_part.symbol("ignore")

@@ -36,14 +36,14 @@ CITATIONS = [
 ]
 
 
-def _lit(v: Any) -> str:
-    if isinstance(v, bool):
-        return "true" if v else "false"
-    if isinstance(v, (int, float)):
-        return str(v)
-    if isinstance(v, str):
-        return json.dumps(v)
-    raise ValueError(f"Unsupported literal: {v!r}")
+def _lit(value: Any) -> str:
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (int, float)):
+        return str(value)
+    if isinstance(value, str):
+        return json.dumps(value)
+    raise ValueError(f"Unsupported literal: {value!r}")
 
 
 def translate(policy: Dict[str, Any]) -> Translation:
@@ -61,7 +61,7 @@ def translate(policy: Dict[str, Any]) -> Translation:
     # Group B: role_at_least hierarchy mapping
     if "hierarchy" in policy:
         order = policy["hierarchy"]["order"]
-        data_content["hierarchy"] = {role: i for i, role in enumerate(order)}
+        data_content["hierarchy"] = {role: rank for rank, role in enumerate(order)}
         notes.append("Role hierarchy is encoded natively via a rank map in data.json (`data.hierarchy`) compared with the `>=` operator.")
 
     # Group B: ReBAC graph compiling
@@ -70,23 +70,23 @@ def translate(policy: Dict[str, Any]) -> Translation:
         tuples = model.get("tuples", [])
         adj: Dict[str, set] = {}
 
-        def add_edge(u: str, v: str):
-            if u not in adj:
-                adj[u] = set()
-            if v not in adj:
-                adj[v] = set()
-            adj[u].add(v)
+        def add_edge(source: str, destination: str):
+            if source not in adj:
+                adj[source] = set()
+            if destination not in adj:
+                adj[destination] = set()
+            adj[source].add(destination)
 
-        for s, r, o in tuples:
-            if r == "parent":
+        for subject, relation, object_ref in tuples:
+            if relation == "parent":
                 # Parent tuple (s, parent, o) e.g. ["folder:f1", "parent", "doc:d1"]:
                 # Viewers of parent folder can view child doc: folder:f1#viewer -> doc:d1#viewer
-                add_edge(f"{s}#viewer", f"{o}#viewer")
+                add_edge(f"{subject}#viewer", f"{object_ref}#viewer")
             else:
                 # Direct or userset tuple (s, r, o): e.g. ["user:alice", "member", "group:eng"] -> user:alice -> group:eng#member
-                add_edge(s, f"{o}#{r}")
+                add_edge(subject, f"{object_ref}#{relation}")
 
-        data_content["graph"] = {k: sorted(list(v)) for k, v in sorted(adj.items())}
+        data_content["graph"] = {node: sorted(list(neighbors)) for node, neighbors in sorted(adj.items())}
         notes.append(
             "Relationship reachability is computed natively using the `graph.reachable` built-in over `data.graph` compiled from model.tuples in data.json."
         )
@@ -97,26 +97,26 @@ def translate(policy: Dict[str, Any]) -> Translation:
             "Compilation of the relation model into a reachability graph is handwritten for this model shape."
         )
 
-    def compile_cond(c: Any, rule_id: str, depth: int = 0) -> List[str]:
-        if c is True:
+    def compile_cond(cond: Any, rule_id: str, depth: int = 0) -> List[str]:
+        if cond is True:
             return []
-        (op, arg), = c.items()
+        (op, arg), = cond.items()
 
         if op == "cmp":
-            f, rel_op, const = arg
-            return [f"input.{f} {rel_op} {_lit(const)}"]
+            field, rel_op, const = arg
+            return [f"input.{field} {rel_op} {_lit(const)}"]
 
         if op == "in":
-            f, consts = arg
-            lits = ", ".join(_lit(v) for v in consts)
-            return [f"input.{f} in {{{lits}}}"]
+            field, consts = arg
+            lits = ", ".join(_lit(value) for value in consts)
+            return [f"input.{field} in {{{lits}}}"]
 
         if op == "not_in":
-            f, consts = arg
-            lits = ", ".join(_lit(v) for v in consts)
+            field, consts = arg
+            lits = ", ".join(_lit(value) for value in consts)
             if "Guarded not_in with input.field != null so missing fields yield unsatisfied rather than true." not in notes:
                 notes.append("Guarded not_in with input.field != null so missing fields yield unsatisfied rather than true.")
-            return [f"input.{f} != null", f"not input.{f} in {{{lits}}}"]
+            return [f"input.{field} != null", f"not input.{field} in {{{lits}}}"]
 
         if op == "missing":
             return [f'object.get(input, "{arg}", null) == null']
@@ -149,8 +149,8 @@ def translate(policy: Dict[str, Any]) -> Translation:
                 return [f"not {hname}"]
 
         if op == "role_at_least":
-            f, floor = arg
-            return [f"data.hierarchy[input.{f}] >= data.hierarchy[{_lit(floor)}]"]
+            field, floor = arg
+            return [f"data.hierarchy[input.{field}] >= data.hierarchy[{_lit(floor)}]"]
 
         if op == "eq_fields":
             f1, f2 = arg
@@ -168,7 +168,7 @@ def translate(policy: Dict[str, Any]) -> Translation:
                 f"target in graph.reachable(graph_set, {{input.{subj_var}}})",
             ]
 
-        raise ValueError(f"Unknown condition: {c}")
+        raise ValueError(f"Unknown condition: {cond}")
 
     else_branches: List[str] = []
     for idx, r in enumerate(policy["rules"]):
@@ -210,7 +210,7 @@ class Runner:
         self.gen_dir = gen_dir
 
     def decide(self, inp: Dict[str, Any]) -> Decision:
-        clean_inp = {k: v for k, v in inp.items() if v is not None}
+        clean_inp = {field: value for field, value in inp.items() if value is not None}
 
         with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f_inp:
             json.dump(clean_inp, f_inp)
@@ -243,7 +243,7 @@ class Runner:
             val = results[0]["expressions"][0]["value"]
             return Decision(val["outcome"], val.get("rule"), None, raw)
         except Exception as e:
-            return Decision("error", raw=str(e))
+            return Decision("error", raw=str(error))
         finally:
             if tmp_path.exists():
                 tmp_path.unlink()

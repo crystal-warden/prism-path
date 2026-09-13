@@ -31,44 +31,44 @@ STRICT = {
 }
 
 
-def sha256(p: Path) -> str:
-    h = hashlib.sha256()
-    with p.open("rb") as f:
-        for chunk in iter(lambda: f.read(1 << 20), b""):
-            h.update(chunk)
-    return h.hexdigest()
+def sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1 << 20), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def resolve(manifest: Path, name: str) -> Path | None:
     for base in (manifest.parent, manifest.parent.parent, ROOT):
-        p = base / name
-        if p.is_file():
-            return p
+        candidate = base / name
+        if candidate.is_file():
+            return candidate
     return None
 
 
 def main() -> int:
-    manifests = sorted(p for p in ROOT.rglob("*SHA256SUMS") if ".venv" not in p.parts and "build" not in p.parts)
+    manifests = sorted(path for path in ROOT.rglob("*SHA256SUMS") if ".venv" not in path.parts and "build" not in path.parts)
     failed = 0
     print(f"{'manifest':60s} {'ok':>4s} {'bad':>4s} {'absent':>6s}  ots  kind")
-    for m in manifests:
-        rel = m.relative_to(ROOT).as_posix()
+    for manifest in manifests:
+        rel = manifest.relative_to(ROOT).as_posix()
         ok = bad = absent = 0
-        for line in m.read_text().splitlines():
+        for line in manifest.read_text().splitlines():
             line = line.strip()
             if not line or line.startswith("#"):
                 continue
             digest, _, name = line.partition("  ")
             name = name.strip().lstrip("*")
-            p = resolve(m, name)
-            if p is None:
+            path = resolve(manifest, name)
+            if path is None:
                 absent += 1
-            elif sha256(p) == digest.strip():
+            elif sha256(path) == digest.strip():
                 ok += 1
             else:
                 bad += 1
         strict = rel in STRICT
-        ots = "yes" if m.with_name(m.name + ".ots").exists() else "no"
+        ots = "yes" if manifest.with_name(manifest.name + ".ots").exists() else "no"
         kind = "artifact" if strict else "snapshot"
         flag = "  MISMATCH" if (bad and strict) else ""
         print(f"{rel:60s} {ok:4d} {bad:4d} {absent:6d}  {ots:3s}  {kind}{flag}")

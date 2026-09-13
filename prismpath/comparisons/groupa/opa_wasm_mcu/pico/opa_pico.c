@@ -23,7 +23,7 @@
 
 static const struct { const char *name; const uint8_t *bytes; uint32_t len; } MODULES[] = {
     {"network_admission", wasm_network_admission, 0}, {"sensor_interlock", wasm_sensor_interlock, 0}};
-static uint32_t module_len(int i) { return i == 0 ? wasm_network_admission_len : wasm_sensor_interlock_len; }
+static uint32_t module_len(int index) { return index == 0 ? wasm_network_admission_len : wasm_sensor_interlock_len; }
 
 #ifndef ISA_NAME
 #define ISA_NAME "rp2350-arm"
@@ -34,13 +34,13 @@ static uint8_t inbuf[2048];
 static char outbuf[2048];
 static size_t heap_high = 0;
 
-static void put_frame(char tag, const char *data, size_t n) {
-    putchar_raw(tag); putchar_raw(n & 0xff); putchar_raw((n >> 8) & 0xff);
-    for (size_t i = 0; i < n; i++) putchar_raw(data[i]);
+static void put_frame(char tag, const char *data, size_t length) {
+    putchar_raw(tag); putchar_raw(length & 0xff); putchar_raw((length >> 8) & 0xff);
+    for (size_t i = 0; i < length; i++) putchar_raw(data[i]);
     stdio_flush();
 }
-static int read_exact(uint8_t *dst, size_t n) {
-    for (size_t i = 0; i < n; i++) { int c = getchar_timeout_us(2000000); if (c < 0) return -1; dst[i] = (uint8_t)c; }
+static int read_exact(uint8_t *dst, size_t length) {
+    for (size_t i = 0; i < length; i++) { int byte = getchar_timeout_us(2000000); if (byte < 0) return -1; dst[i] = (uint8_t)byte; }
     return 0;
 }
 static void track_heap(void) { struct mallinfo mi = mallinfo(); if ((size_t)mi.uordblks > heap_high) heap_high = mi.uordblks; }
@@ -49,33 +49,33 @@ int main(void) {
     stdio_usb_init();
     while (!stdio_usb_connected()) sleep_ms(50);
     int cur = 0;
-    opa_wasm_t *w = opa_wasm_open(MODULES[cur].bytes, module_len(cur), STACK_BYTES);
+    opa_wasm_t *runtime = opa_wasm_open(MODULES[cur].bytes, module_len(cur), STACK_BYTES);
     track_heap();
     for (;;) {
-        int c = getchar_timeout_us(100000);
-        if (c < 0) continue;
-        if (c == 'I') {
-            int n = snprintf(outbuf, sizeof outbuf, "opa-wasm3-rp2350/1 %s opa-abi-%s wasm3 module=%s/%u", ISA_NAME, w ? opa_wasm_abi(w) : "?", MODULES[cur].name, (unsigned)module_len(cur));
-            putchar_raw('i'); putchar_raw(n); for (int i = 0; i < n; i++) putchar_raw(outbuf[i]); stdio_flush();
-        } else if (c == 'S') {
+        int command = getchar_timeout_us(100000);
+        if (command < 0) continue;
+        if (command == 'I') {
+            int length = snprintf(outbuf, sizeof outbuf, "opa-wasm3-rp2350/1 %s opa-abi-%s wasm3 module=%s/%u", ISA_NAME, runtime ? opa_wasm_abi(runtime) : "?", MODULES[cur].name, (unsigned)module_len(cur));
+            putchar_raw('i'); putchar_raw(length); for (int i = 0; i < length; i++) putchar_raw(outbuf[i]); stdio_flush();
+        } else if (command == 'S') {
             struct mallinfo mi = mallinfo();
-            int n = snprintf(outbuf, sizeof outbuf, "{\"linear_memory_bytes\":%u,\"heap_in_use\":%u,\"heap_high_water\":%u,\"stack_bytes\":%u,\"open_ok\":%s}",
-                             w ? opa_wasm_memory_bytes(w) : 0, (unsigned)mi.uordblks, (unsigned)heap_high, (unsigned)STACK_BYTES, w ? "true" : "false");
-            put_frame('s', outbuf, n);
-        } else if (c == 'L') {
+            int length = snprintf(outbuf, sizeof outbuf, "{\"linear_memory_bytes\":%u,\"heap_in_use\":%u,\"heap_high_water\":%u,\"stack_bytes\":%u,\"open_ok\":%s}",
+                             runtime ? opa_wasm_memory_bytes(runtime) : 0, (unsigned)mi.uordblks, (unsigned)heap_high, (unsigned)STACK_BYTES, runtime ? "true" : "false");
+            put_frame('s', outbuf, length);
+        } else if (command == 'L') {
             int idx = getchar_timeout_us(2000000);
             if (idx < 0 || idx > 1) { put_frame('E', "bad module", 10); continue; }
-            if (idx != cur || !w) { opa_wasm_close(w); cur = idx; w = opa_wasm_open(MODULES[cur].bytes, module_len(cur), STACK_BYTES); track_heap(); }
-            if (!w) { const char *e = opa_wasm_error(); put_frame('E', e, strlen(e)); continue; }
+            if (idx != cur || !runtime) { opa_wasm_close(runtime); cur = idx; runtime = opa_wasm_open(MODULES[cur].bytes, module_len(cur), STACK_BYTES); track_heap(); }
+            if (!runtime) { const char *error = opa_wasm_error(); put_frame('E', error, strlen(error)); continue; }
             put_frame('l', MODULES[cur].name, strlen(MODULES[cur].name));
-        } else if (c == 'V') {
+        } else if (command == 'V') {
             uint8_t lb[2]; if (read_exact(lb, 2)) continue;
-            size_t n = lb[0] | (lb[1] << 8);
-            if (n >= sizeof inbuf || read_exact(inbuf, n)) { put_frame('E', "frame", 5); continue; }
-            if (!w) { const char *e = opa_wasm_error(); put_frame('E', e, strlen(e)); continue; }
-            const char *res = opa_wasm_eval(w, (const char *)inbuf, n);
+            size_t length = lb[0] | (lb[1] << 8);
+            if (length >= sizeof inbuf || read_exact(inbuf, length)) { put_frame('E', "frame", 5); continue; }
+            if (!runtime) { const char *error = opa_wasm_error(); put_frame('E', error, strlen(error)); continue; }
+            const char *res = opa_wasm_eval(runtime, (const char *)inbuf, length);
             track_heap();
-            if (!res) { const char *e = opa_wasm_error(); put_frame('E', e, strlen(e)); continue; }
+            if (!res) { const char *error = opa_wasm_error(); put_frame('E', error, strlen(error)); continue; }
             put_frame('M', res, strlen(res));
         }
     }

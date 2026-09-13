@@ -32,22 +32,22 @@ GRAPH = bench_wire.parse(bench_wire.FLOW.read_text())
 PARTS = bench_wire.quantizer.build_partitions(GRAPH)
 ORDER = sorted(PARTS.keys())
 NODE = bench_wire.wire.decision_nodes(GRAPH)[0]
-READINGS = [r for _t, r in bench_wire.events_from_fixture(n=300)]
+READINGS = [reading for _t, reading in bench_wire.events_from_fixture(event_count=300)]
 
 
 def _symbols(reading):
-    s = bench_wire.quantizer.quantize(PARTS, reading)
-    return [s[f] + 1 for f in ORDER]
+    symbols = bench_wire.quantizer.quantize(PARTS, reading)
+    return [symbols[field] + 1 for field in ORDER]
 
 
-def _flip_bit(bits, i):
-    return bits[:i] + ("0" if bits[i] == "1" else "1") + bits[i + 1:]
+def _flip_bit(bits, bit_index):
+    return bits[:bit_index] + ("0" if bits[bit_index] == "1" else "1") + bits[bit_index + 1:]
 
 
 def _decision_stat(reading):
     """The quantized symbol tuple  -  by I1 this IS the decision-sufficient statistic the wire carries."""
-    s = bench_wire.quantizer.quantize(PARTS, reading)
-    return tuple(s[f] for f in ORDER)
+    symbols = bench_wire.quantizer.quantize(PARTS, reading)
+    return tuple(symbols[field] for field in ORDER)
 
 
 def test_bare_codec_self_frames_but_is_not_integrity():
@@ -64,9 +64,9 @@ def test_bare_codec_self_frames_but_is_not_integrity():
     for reading in READINGS[:80]:
         orig = _decision_stat(reading)
         bits = bench_wire.wire.encode_reading(PARTS, reading)
-        for i in range(len(bits)):
+        for bit_index in range(len(bits)):
             try:
-                got = _decision_stat(bench_wire.wire.decode_reading(PARTS, _flip_bit(bits, i)))
+                got = _decision_stat(bench_wire.wire.decode_reading(PARTS, _flip_bit(bits, bit_index)))
             except Exception:
                 rejected += 1
                 continue
@@ -82,7 +82,7 @@ def test_bare_codec_self_frames_but_is_not_integrity():
 
     # (b) the integrity gap, by construction: a VALID stream for a different reading is accepted verbatim.
     t1 = _decision_stat(READINGS[0])
-    r2 = next((r for r in READINGS if _decision_stat(r) != t1), None)
+    r2 = next((reading for reading in READINGS if _decision_stat(reading) != t1), None)
     assert r2 is not None, "corpus lacks two distinct decision statistics"
     forged = bench_wire.wire.encode_reading(PARTS, r2)          # a perfectly well-formed Facet stream
     dec = bench_wire.wire.decode_reading(PARTS, forged)         # decodes with no error...
@@ -97,8 +97,8 @@ def test_aead_layer_rejects_every_single_byte_tamper():
     ChaCha20Poly1305 = aead_mod.ChaCha20Poly1305
 
     syms = []
-    for r in READINGS[:120]:
-        syms += _symbols(r)
+    for reading in READINGS[:120]:
+        syms += _symbols(reading)
     wire_bytes = packed.pack(zeck.encode_stream(syms))
     assert len(wire_bytes) > 0
 
@@ -109,10 +109,10 @@ def test_aead_layer_rejects_every_single_byte_tamper():
     assert aead.decrypt(nonce, ct, None) == wire_bytes      # untampered round-trips
 
     caught = trials = 0
-    for i in range(len(ct)):
+    for byte_index in range(len(ct)):
         for mask in (0x01, 0x40, 0x80):    # a few bit positions per byte
             bad = bytearray(ct)
-            bad[i] ^= mask
+            bad[byte_index] ^= mask
             trials += 1
             try:
                 aead.decrypt(nonce, bytes(bad), None)
@@ -125,7 +125,7 @@ def test_aead_layer_rejects_every_single_byte_tamper():
 
 def test_merkle_root_makes_a_tampered_reading_evident():
     """§2.4/I4: a tampered reading's leaf no longer verifies against the committed root."""
-    leaves = [hashlib.sha256(packed.encode(_symbols(r))).hexdigest() for r in READINGS[:16]]
+    leaves = [hashlib.sha256(packed.encode(_symbols(reading))).hexdigest() for reading in READINGS[:16]]
     root, paths = merkle_root_and_paths(leaves)
     assert verify_leaf(leaves[5], paths[5], root)          # an untampered leaf verifies
 
@@ -133,5 +133,5 @@ def test_merkle_root_makes_a_tampered_reading_evident():
     assert tampered_leaf != leaves[5]
     assert not verify_leaf(tampered_leaf, paths[5], root)  # the tampered reading fails against the committed root
 
-    bad_root, _ = merkle_root_and_paths([tampered_leaf if i == 5 else h for i, h in enumerate(leaves)])
+    bad_root, _ = merkle_root_and_paths([tampered_leaf if leaf_index == 5 else leaf for leaf_index, leaf in enumerate(leaves)])
     assert bad_root != root                                # and the recomputed root diverges from the committed one
