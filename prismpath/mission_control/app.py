@@ -54,7 +54,9 @@ async def _validation_error(request: Request, exc: RequestValidationError):
 
 @app.exception_handler(Exception)
 async def _unhandled(request: Request, exc: Exception):
-    return _envelope(500, str(exc))
+    # The exception text carries internal paths and library detail; the operator reads it in the
+    # server log (the traceback is already there), the HTTP body says only that it failed.
+    return _envelope(500, "internal error")
 
 
 @app.middleware("http")

@@ -48,7 +48,8 @@ def list_standards():
     out = {}
     for standard, catalog_path in STANDARDS.items():
         try:
-            meta = json.load(open(catalog_path)).get("_meta", {})
+            with open(catalog_path, encoding="utf-8") as catalog_file:
+                meta = json.load(catalog_file).get("_meta", {})
             out[standard] = {"revision": meta.get("revision"), "controls": meta.get("controls"), "families": meta.get("families")}
         except FileNotFoundError:
             out[standard] = {"error": "catalog file missing"}
@@ -56,7 +57,8 @@ def list_standards():
 
 def _catalog():
     if _ACTIVE not in _CAT_CACHE:
-        _CAT_CACHE[_ACTIVE] = json.load(open(STANDARDS[_ACTIVE]))
+        with open(STANDARDS[_ACTIVE], encoding="utf-8") as catalog_file:
+            _CAT_CACHE[_ACTIVE] = json.load(catalog_file)
     return _CAT_CACHE[_ACTIVE]
 
 def get_control(control_id):
@@ -135,7 +137,8 @@ def applicability_determination(actor):
 
 # ---------- Ingestion port: control-assessment request (control id + evidence bundle) ----------
 def load_request(path):
-    return json.load(open(path))
+    with open(path, encoding="utf-8") as request_file:
+        return json.load(request_file)
 
 def iter_requests(dir_):
     for filename in sorted(os.listdir(dir_)):
@@ -233,7 +236,10 @@ def write_result(control, req, determination, out_dir):
         rec["weaknesses"] = rec["unmet_objectives"]
         rec["remediation"] = "TBD — address the listed weaknesses"; rec["milestone"] = "TBD"; rec["poam_status"] = "open"
         path = os.path.join(out_dir, f"poam_{cid}.json")
-    json.dump(rec, open(path, "w"), indent=1)
+    # the record is evidence: it is written through a handle that is closed here rather than
+    # whenever the collector happens to run
+    with open(path, "w", encoding="utf-8") as record_file:
+        json.dump(rec, record_file, indent=1)
     return path, rec["record_type"]
 
 # ---------- Attestation port: REUSE the core Flow-Ledger provenance (#53) ----------
@@ -241,7 +247,8 @@ GENERIC_FLOW = os.path.join(HERE, "flows", "nist_800171_generic.md")
 
 def active_flow_hash(path=GENERIC_FLOW):
     """Hash the actual decision-flow content, so the attestation binds the exact policy graph used."""
-    return "sha256:" + hashlib.sha256(open(path, "rb").read()).hexdigest()[:16]
+    with open(path, "rb") as flow_file:
+        return "sha256:" + hashlib.sha256(flow_file.read()).hexdigest()[:16]
 
 def attest(control, req, determination, flow_hash=None):
     """Attestation port — through the SDK's ledger_airgap binding (`attest_decision` computes the
@@ -384,7 +391,8 @@ def resolve_review(unit_id, new_status, unmet_objective_ids, actor, rationale, o
     os.makedirs(out_dir, exist_ok=True)
     kind = "finding" if new_status == "met" else "poam"
     path = os.path.join(out_dir, f"{kind}_{control['id']}_overridden.json")
-    json.dump(out, open(path, "w"), indent=1)
+    with open(path, "w", encoding="utf-8") as record_file:
+        json.dump(out, record_file, indent=1)
     return {"unit_id": unit_id, "ai_status": ai_det["status"], "final_status": new_status, "overrider": actor,
             "ai_manifest": ai_prov["manifest_hash"][:16], "override_manifest": ov["manifest_hash"][:16],
             "supersedes_ai": ov["supersedes"] == ai_prov["manifest_hash"], "record": os.path.relpath(path, HERE)}

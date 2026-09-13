@@ -22,7 +22,9 @@ from pathlib import Path
 
 from prismpath.comparisons.groupa.common import evidence_dir
 
-BENCH = Path("/home/cwadmin/cwprojects/prismpath-hw/wcet-pins")
+# CONFIGURE: the wcet-pins workspace on the host the LA2016 is plugged into (the default is the
+# bench box this witness was recorded on; PRISMPATH_WCET_PINS moves it without editing the driver).
+BENCH = Path(os.environ.get("PRISMPATH_WCET_PINS", "/home/cwadmin/cwprojects/prismpath-hw/wcet-pins"))
 sys.path.insert(0, str(BENCH))
 from la_wcet_check import CHMAP, DEV, SIGROK, _env, load_srzip, measure  # noqa: E402
 

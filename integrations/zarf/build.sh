@@ -13,6 +13,9 @@ mkdir -p keys
 cp keys/authority.pub authority.pub
 
 # The negative-control image: a byte-flipped copy of the same policy (authentic sig stays put).
+# The manifest signs the sha256 of the WHOLE image, so any offset inside the file breaks the
+# verification; 64 is past the 28 byte header, so the flip lands in the policy tables themselves
+# rather than in a header field a reader might dismiss as cosmetic.
 cp policy.ppt policy.tampered.ppt
 printf '\xff' | dd of=policy.tampered.ppt bs=1 seek=64 count=1 conv=notrunc 2>/dev/null
 

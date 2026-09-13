@@ -12,6 +12,8 @@ so the predictions table cannot drift from the corpus.
 import re
 from pathlib import Path
 
+import pytest
+
 from prismpath.comparisons import corpus_check as cc
 from prismpath.tests._repo import repo_file
 
@@ -21,6 +23,13 @@ COMP = repo_file("prismpath", "comparisons", "PREREGISTRATION.lock").parent
 def test_corpus_is_self_consistent():
     errors = cc.check_corpus()
     assert errors == [], "\n".join(errors)
+
+
+def test_malformed_cmp_is_a_corpus_error():
+    # a short cmp used to unpack into a bare ValueError, which reads as a harness crash rather than
+    # as the corpus defect it is
+    with pytest.raises(cc.CorpusError):
+        cc.evaluate({"cmp": ["amount", ">"]}, {"amount": 5}, {})
 
 
 def test_corpus_shape_matches_the_protocol_summary():

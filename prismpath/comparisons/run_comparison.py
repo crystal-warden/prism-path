@@ -38,14 +38,15 @@ def load_cases():
     """Return [(case_dict, instruction, outcome, edges)] for every labeled transition."""
     from prismpath.kernel.parser import parse_file
     graphs, out = {}, []
-    for line in open(DATA, encoding="utf-8"):
-        if not line.strip():
-            continue
-        case = json.loads(line)
-        graph = graphs.setdefault(case["flow"], parse_file(os.path.join(FLOWS, f"{case['flow']}.md")))
-        node = graph.nodes[case["node"]]
-        edges = list(node.edges)
-        out.append((case, node.instruction, case["outcome"], edges))
+    with open(DATA, encoding="utf-8") as case_file:
+        for line in case_file:
+            if not line.strip():
+                continue
+            case = json.loads(line)
+            graph = graphs.setdefault(case["flow"], parse_file(os.path.join(FLOWS, f"{case['flow']}.md")))
+            node = graph.nodes[case["node"]]
+            edges = list(node.edges)
+            out.append((case, node.instruction, case["outcome"], edges))
     return out
 
 

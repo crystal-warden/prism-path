@@ -111,6 +111,30 @@ def test_write_rejects_traversal(client, proj):
     assert ok.status_code == 200 and (proj / "flows" / "note.txt").read_text() == "hi"
 
 
+def test_write_is_atomic_and_keeps_the_file_mode(client, proj):
+    target = proj / "flows" / "triage.md"
+    target.chmod(0o640)
+    assert client.post(API_V1 + "/file", json={"path": "flows/triage.md", "content": "edited"}).status_code == 200
+    assert target.read_text() == "edited"
+    assert target.stat().st_mode & 0o777 == 0o640                     # the rename kept the mode
+    leftovers = [entry.name for entry in (proj / "flows").iterdir() if entry.name.startswith(".mc-write-")]
+    assert leftovers == []                                            # no temp file survives the write
+
+
+def test_unhandled_error_body_carries_no_exception_text(proj, monkeypatch):
+    def explode(*_args, **_kwargs):
+        raise RuntimeError("secret path /home/someone/private")
+
+    monkeypatch.setattr(core, "file_tree", explode)
+    # the handler under test is the one that turns an unexpected exception into an HTTP body, so the
+    # client must let the app answer instead of re-raising the exception into the test
+    with TestClient(app, raise_server_exceptions=False) as raw_client:
+        response = raw_client.get(API_V1 + "/files")
+    assert response.status_code == 500
+    assert "secret path" not in response.text
+    assert response.json()["error"]["message"] == "internal error"
+
+
 def test_read_rejects_traversal(client):
     assert client.get(API_V1 + "/file", params={"path": "../../etc/passwd"}).status_code == 400
 

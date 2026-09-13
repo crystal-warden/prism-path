@@ -56,6 +56,13 @@ def test_baseline_route_sits_at_the_center():
     assert layout.band_id(baseline_reading) == 0
 
 
+def test_route_of_refuses_an_index_below_the_spiral():
+    _, layout = _layout()
+    # a negative index used to fall into the first band's compare and answer with its route
+    with pytest.raises(ValueError):
+        layout.route_of(-1)
+
+
 def test_route_of_is_an_integer_band_compare():
     _, layout = _layout()
     for spiral_index in range(layout.size):

@@ -242,7 +242,7 @@ class Runner:
 
             val = results[0]["expressions"][0]["value"]
             return Decision(val["outcome"], val.get("rule"), None, raw)
-        except Exception as e:
+        except Exception as error:
             return Decision("error", raw=str(error))
         finally:
             if tmp_path.exists():

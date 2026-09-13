@@ -179,6 +179,8 @@ def run_cerbos() -> None:
                     break
             except Exception:
                 time.sleep(0.25)
+        else:
+            raise RuntimeError("cerbos did not become healthy")   # the server never answered, so every scenario below would fail with a raw URLError
         try:
             for sid, kind, inp, exp in scenario_steps(policy):
                 if kind == "undeclared_missing":

@@ -189,6 +189,9 @@ class Runner:
             except (urllib.error.URLError, ConnectionError, OSError):
                 time.sleep(0.25)
         else:
+            # close() is never reached on this path, so the server and its log are released here
+            self.proc.kill()
+            self.log.close()
             raise RuntimeError("cerbos did not become healthy")
 
     def decide(self, inp: Dict[str, Any]) -> Decision:

@@ -6,7 +6,9 @@ import os
 
 
 def balance_state(state):
-    """The category-balance ledger + current weights - visualizes EVEN expansion across directions."""
+    """The category-balance ledger - visualizes EVEN expansion across directions.
+
+    Every row carries weight 1.0: the console counts categories, it does not weight them."""
     led = {}
     try:
         with open(os.path.join(state["proj"], "category_balance.json"), encoding="utf-8") as balance_file:

@@ -67,7 +67,7 @@ def demux(frame: bytes, registry: Dict[int, int]) -> Tuple[List[Tuple[int, List[
 
     pos = 0
     while pos < bit_count:
-        if "1" not in bits[pos:]:
+        if bits.find("1", pos) < 0:                 # find, not a slice: demux stays linear in the datagram
             break                                   # trailing zero pad: the only legal tail
         sid, nxt = take_one(pos)
         if sid < 0:

@@ -84,8 +84,8 @@ def run_b1() -> None:
             rule = r["expected"].get("rule")
             if system == "prismpath":
                 if r["class"] == "DROPPED":
+                    # the engine decided deny because the rule that should have fired was never written
                     grade, glue = "NOT", None
-                    obs = obs  # the engine decided deny because the rule that should have fired was never written
                     note = (f"Rule {rule} is outside the predicate language (corpus prismpath_expressibility): "
                             + ("field against field comparison (eq_fields)" if rule == "r3" else "set intersection over runtime collections (intersects)")
                             + ". The translator dropped it (dropped_rules) rather than force it, so the flow falls through to the "

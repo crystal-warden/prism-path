@@ -64,8 +64,10 @@ def start_sprint(cfg, state):
                 os.remove(os.path.join(proj, marker_name))
             except OSError:
                 pass
-        log = open(os.path.join(proj, "mc_sprint.log"), "a")
-        proc = subprocess.Popen(argv, cwd=SETTINGS.repo_root, env=env, stdout=log, stderr=subprocess.STDOUT)
+        # the child gets its own descriptor at spawn, so the parent closes its copy here rather
+        # than leaking one handle per start_sprint
+        with open(os.path.join(proj, "mc_sprint.log"), "a") as log:
+            proc = subprocess.Popen(argv, cwd=SETTINGS.repo_root, env=env, stdout=log, stderr=subprocess.STDOUT)
         cfg = dict(cfg, unbuffered=unbuffered)
         state.update({"proc": proc, "proj": proj, "cfg": cfg, "pinned": True})   # follow the one we started
     audit.record("sprint.start", {"proj": proj, "cfg": cfg, "pid": proc.pid, "unbuffered": unbuffered})

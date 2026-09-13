@@ -49,6 +49,10 @@ def decode(code: str) -> int:
     if len(code) < 2 or code[-2:] != "11":
         raise ValueError(f"not a Fibonacci code (must end in '11'): {code!r}")
     zeck = code[:-1]                          # strip the terminator '1'; the rest is d2 d3 ... d_max
+    if "11" in zeck:
+        # Zeckendorf digits are never consecutive, so an internal "11" is a bit string `encode` can
+        # never emit: a corrupted frame is refused here rather than decoded into a plausible symbol.
+        raise ValueError(f"not a Fibonacci code (consecutive 1s before the terminator): {code!r}")
     fibs = [1, 2]
     while len(fibs) < len(zeck):
         fibs.append(fibs[-1] + fibs[-2])

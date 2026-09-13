@@ -39,6 +39,24 @@ def sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def parse_line(line: str) -> tuple[str, str] | None:
+    """One sha256sum line -> (digest, name), or None for a blank or comment line.
+
+    The separator is two spaces in GNU output and one space or a tab in manifests written by other
+    tools; splitting on the first run of whitespace reads all of them, and a name with spaces of its
+    own survives because only the first split is taken."""
+    line = line.strip()
+    if not line or line.startswith("#"):
+        return None
+    fields = line.split(None, 1)                 # the first run of whitespace, whatever it is
+    if len(fields) != 2:
+        return None
+    name = fields[1].strip().lstrip("*")
+    if not name:
+        return None
+    return fields[0], name
+
+
 def resolve(manifest: Path, name: str) -> Path | None:
     for base in (manifest.parent, manifest.parent.parent, ROOT):
         candidate = base / name
@@ -55,15 +73,14 @@ def main() -> int:
         rel = manifest.relative_to(ROOT).as_posix()
         ok = bad = absent = 0
         for line in manifest.read_text().splitlines():
-            line = line.strip()
-            if not line or line.startswith("#"):
+            parsed = parse_line(line)
+            if parsed is None:
                 continue
-            digest, _, name = line.partition("  ")
-            name = name.strip().lstrip("*")
+            digest, name = parsed
             path = resolve(manifest, name)
             if path is None:
                 absent += 1
-            elif sha256(path) == digest.strip():
+            elif sha256(path) == digest:
                 ok += 1
             else:
                 bad += 1

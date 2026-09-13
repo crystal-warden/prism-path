@@ -97,4 +97,9 @@ class SandboxRunner:
                                f"(rc={child.returncode}): {(child.stderr or child.stdout or '')[:200]}")
         if not res.get("ok"):
             raise SandboxError(f"code node {node!r}: {res.get('error', 'sandbox error')}")
-        return res["outcome"]
+        outcome = res["outcome"]
+        if not res.get("mem_enforced", True) and isinstance(outcome, dict):
+            # same contract as the "_sandbox": "off" marker above: an envelope the platform refused
+            # to apply is recorded on the outcome, never assumed to have held
+            return {**outcome, "_sandbox_mem": "unenforced"}
+        return outcome

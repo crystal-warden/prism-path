@@ -215,6 +215,8 @@ def run_cerbos(policy, steps) -> None:
                 break
         except Exception:
             time.sleep(0.25)
+    else:
+        raise RuntimeError("cerbos did not become healthy")   # the server never answered, so every scenario below would fail with a raw URLError
     observed, rules = [], []
     try:
         for step_index, st in enumerate(steps):

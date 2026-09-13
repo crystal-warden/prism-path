@@ -205,6 +205,8 @@ def run_cerbos(repeats: int) -> None:
                     break
             except Exception:
                 time.sleep(0.25)
+        else:
+            raise RuntimeError("cerbos did not become healthy")   # the server never answered, so every scenario below would fail with a raw URLError
         try:
             for sid, inp, exp in complete_steps(policy):
                 attr = {field: value for field, value in inp.items() if value is not None}

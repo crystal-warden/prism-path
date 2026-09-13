@@ -147,7 +147,8 @@ def check_docs():
         rel = os.path.relpath(md_path, BASE)
         if any(rel.endswith(skipped) for skipped in DOC_SKIP):
             continue
-        txt = open(md_path, encoding="utf-8", errors="ignore").read()
+        with open(md_path, encoding="utf-8", errors="ignore") as md_file:
+            txt = md_file.read()
         for rx, canon in SUPERSEDED:
             for superseded_match in rx.finditer(txt):
                 sec = _section(txt, superseded_match.start())

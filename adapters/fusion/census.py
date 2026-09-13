@@ -79,6 +79,15 @@ def cyber_marginal_ndjson(path: Path) -> Tuple[Dict[int, int], dict]:
 
 # ---------------------------------------------------------------- IMU marginal
 
+MARGINAL_KEY = "{stability}|{dev_symbol}"
+
+
+def marginal_key_parts(marginal_key: str):
+    """One `counts` key -> (stability, dev symbol); the only place the key format is read."""
+    stability, _, dev_symbol = marginal_key.partition("|")
+    return stability, int(dev_symbol)
+
+
 def imu_marginal(parts, paths: Iterable[Path], include_derived: bool = False) -> dict:
     """Counter over (stability, dev_mg symbol) from the real recorded sessions."""
     dev_part = parts["dev_mg"]
@@ -108,8 +117,9 @@ def imu_marginal(parts, paths: Iterable[Path], include_derived: bool = False) ->
         "rows_used": used,
         "derived_excluded": derived_excluded,
         "include_derived": include_derived,
-        # JSON-friendly: "stability|dev_symbol" -> count
-        "counts": {f"{stability}|{dev_symbol}": count for (stability, dev_symbol), count in sorted(counts.items())},
+        # JSON-friendly: "stability|dev_symbol" -> count (read back with marginal_key_parts)
+        "counts": {MARGINAL_KEY.format(stability=stability, dev_symbol=dev_symbol): count
+                   for (stability, dev_symbol), count in sorted(counts.items())},
     }
 
 
@@ -122,8 +132,8 @@ def _band_add(layout, reading: dict, weight: float, bands: Counter, cells: list)
 
 
 def band_census(layout, parts, pairing: str, cyber_hist: Dict[int, int], imu: dict) -> dict:
-    dev_rep = {int(marginal_key.split("|")[1]): parts["dev_mg"].cells[int(marginal_key.split("|")[1])]["rep"]
-               for marginal_key in imu["counts"]}
+    dev_symbols = [marginal_key_parts(marginal_key)[1] for marginal_key in imu["counts"]]
+    dev_rep = {dev_symbol: parts["dev_mg"].cells[dev_symbol]["rep"] for dev_symbol in dev_symbols}
     bands: Counter = Counter()
     cells = [0.0] * layout.size
     n_cyber = sum(cyber_hist.values())
@@ -141,9 +151,9 @@ def band_census(layout, parts, pairing: str, cyber_hist: Dict[int, int], imu: di
         for level, c_count in cyber_hist.items():
             action = projection.soc_action_from_level(level)
             for key, i_count in imu["counts"].items():
-                stability, dsym = key.split("|")
+                stability, dev_symbol = marginal_key_parts(key)
                 reading = projection.fused_reading(level, action,
-                                           {"stability": stability, "dev_mg": dev_rep[int(dsym)]})
+                                           {"stability": stability, "dev_mg": dev_rep[dev_symbol]})
                 _band_add(layout, reading, c_count * i_count / n_imu, bands, cells)
     else:
         raise ValueError(f"unknown pairing {pairing!r}")

@@ -74,3 +74,7 @@ def test_rejects_non_code():
         zeck.decode("10")        # does not end in '11'
     with pytest.raises(ValueError):
         zeck.decode("1")         # too short
+    with pytest.raises(ValueError):
+        zeck.decode("1111")      # an internal '11': a corrupted frame, not a code encode can emit
+    with pytest.raises(ValueError):
+        zeck.decode("01111")     # the same corruption with a leading zero digit

@@ -176,7 +176,8 @@ class SprintConfig:
 
         nudge_file = os.environ.get("SPRINT_NUDGE_FILE")
         if nudge_file and os.path.isfile(nudge_file):
-            nudge = open(nudge_file, encoding="utf-8").read()
+            with open(nudge_file, encoding="utf-8") as nudge_handle:
+                nudge = nudge_handle.read()
         else:
             nudge = os.environ.get("SPRINT_NUDGE", "")
 
@@ -190,7 +191,8 @@ class SprintConfig:
         )
         arch = ""
         if arch_file and os.path.isfile(arch_file):
-            arch = open(arch_file, encoding="utf-8").read()
+            with open(arch_file, encoding="utf-8") as arch_handle:
+                arch = arch_handle.read()
 
         sprint_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         cecli_bin = os.environ.get("SPRINT_CECLI_BIN", os.path.expanduser("~/.cecli-venv/bin/cecli"))

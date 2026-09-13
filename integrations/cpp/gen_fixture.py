@@ -14,6 +14,10 @@ verdicts. Output bytes are deterministic (no timestamps, fixed layout).
 Fixture format (little endian):
   magic 'PPTF' | u16 version=1 | u16 n_fields | u32 n_events | 32-byte image sha256
   per event: u16 node_in | n_fields x (i32 ty, i32 val) | i16 expected_edge | u16 node_out
+
+Slow on purpose: one `interp eval` process per event, 4568 of them, because the point is to use the
+certified binary exactly as a caller would rather than a faster path that is not the certified one.
+Expect minutes, not seconds.
 """
 from __future__ import annotations
 

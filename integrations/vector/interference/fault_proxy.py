@@ -4,12 +4,15 @@
 """Fault injection proxy: edge sink connects to :19401, we forward to agg :19402, mangling per
 phase. Every injected fault is logged to faults.ndjson so the harvest can attribute damage."""
 
-import json, random, socket, threading, time
+import json, os, random, socket, threading, time
 from datetime import datetime, timezone
 
 START = time.time()
 random.seed(1337)
-LOG = open("faults.ndjson", "a", buffering=1)
+# CONFIGURE: the fault log. The default is relative to the working directory, so the harvest reads
+# the faults of whichever run was started from that directory; FAULT_LOG pins it to one file.
+LOG_PATH = os.environ.get("FAULT_LOG", "faults.ndjson")
+LOG = open(LOG_PATH, "a", buffering=1)
 
 
 def phase():
@@ -116,7 +119,11 @@ def handle(client):
                 else:
                     dst.sendall(data)
         except OSError:
-            pass
+            pass                     # the peer hung up; the leg is finished either way
+        except Exception as error:
+            # anything else would kill this daemon thread in silence and stall the leg with nothing
+            # in the fault log to attribute the damage to
+            log("pump-error", error=f"{type(error).__name__}: {error}")
         finally:
             for endpoint in (src, dst):
                 try:

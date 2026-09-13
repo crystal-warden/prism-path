@@ -184,6 +184,10 @@ class SpiralLayout:
 
     def route_of(self, spiral_index: int) -> Optional[str]:
         """``n`` -> route, by integer band-boundary compares (``base <= n < base+width``: the Level M atom)."""
+        if spiral_index < 0:
+            # the bands are contiguous and ascending from 0, so the scan below would hand a negative
+            # index the first band's route instead of refusing it
+            raise ValueError(f"index {spiral_index} outside the spiral ({self.size} cells)")
         for band in range(len(self.routes)):
             if spiral_index < self.band_base[band] + self.band_width[band]:   # contiguous & ascending
                 return self.routes[band]
