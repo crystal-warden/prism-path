@@ -61,7 +61,7 @@ function showTab(v) {
   else if (v === "audit") loadAudit();
   else if (v === "queue") loadQueue();
   else if (v === "flows") loadFlows();
-  else if (["inspect", "quality", "proof", "policy"].includes(v)) prefillFlowInputs();
+  else if (["inspect", "quality", "proof", "policy"].includes(v)) { prefillFlowInputs(); populatePickers(); }
 }
 
 /* ---------------- graph (the command center) ---------------- */
@@ -266,6 +266,19 @@ function prefillFlowInputs() {   // seed the flow-path fields with the followed 
   ["#ins-flow", "#q-flow", "#pf-flow", "#pol-flow"].forEach(id => {
     const el = $(id); if (el && !el.value) el.value = f;
   });
+}
+let FILELIST = null;
+async function populatePickers() {   // fill the datalists so a person picks a file instead of typing a path
+  try { FILELIST = (await jget("/pick")).files || []; } catch { FILELIST = []; }
+  const paths = FILELIST;
+  const fill = (id, keep) => {
+    const dl = $("#" + id); if (!dl) return;
+    dl.innerHTML = paths.filter(keep).map(pth => `<option value="${esc(pth)}">`).join("");
+  };
+  fill("dl-flows", p => p.endsWith(".md"));
+  fill("dl-jsonl", p => p.endsWith(".jsonl"));
+  fill("dl-ppt", p => p.endsWith(".ppt"));
+  fill("dl-files", () => true);
 }
 
 /* ---------------- wire up ---------------- */
