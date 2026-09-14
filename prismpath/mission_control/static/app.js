@@ -61,6 +61,7 @@ function showTab(v) {
   else if (v === "audit") loadAudit();
   else if (v === "queue") loadQueue();
   else if (v === "flows") loadFlows();
+  else if (["inspect", "quality", "proof", "policy"].includes(v)) prefillFlowInputs();
 }
 
 /* ---------------- graph (the command center) ---------------- */
@@ -249,6 +250,24 @@ async function startSprint(ev) {
   toast(r.error ? (r.error.message || "error") : (r.ok ? `launched (${r.unbuffered ? "unbuffered" : "buffered"}) pid ${r.pid}` : r.error));
 }
 
+/* ---------------- CLI tool panels (inspect / quality / proof / policy) ---------------- */
+const activeFlow = () => (GRAPH && GRAPH.flow_path) || "";
+async function runTool(endpoint, body, outId) {
+  const out = $(outId); out.textContent = "running…";
+  try {
+    const r = await jpost(endpoint, body);
+    out.textContent = (r && r.error)
+      ? "error: " + (r.error.message || JSON.stringify(r.error))
+      : JSON.stringify(r, null, 2);
+  } catch (e) { out.textContent = "error: " + e; }
+}
+function prefillFlowInputs() {   // seed the flow-path fields with the followed flow, do not run
+  const f = activeFlow();
+  ["#ins-flow", "#q-flow", "#pf-flow", "#pol-flow"].forEach(id => {
+    const el = $(id); if (el && !el.value) el.value = f;
+  });
+}
+
 /* ---------------- wire up ---------------- */
 $("#tabs").onclick = e => { if (e.target.dataset.v) showTab(e.target.dataset.v); };
 $("#g-refresh").onclick = () => loadGraph(true);
@@ -259,6 +278,37 @@ $("#c-start-toggle").onclick = () => { $("#startform").classList.toggle("hidden"
 $("#startform").onsubmit = startSprint;
 $$("[data-act]").forEach(b => b.onclick = async () => {
   const r = await jpost("/sprint/" + b.dataset.act, {}); toast(r.error ? r.error.message : (b.dataset.act + " ok"));
+});
+
+$$("[data-inspect]").forEach(b => b.onclick = () => {
+  const act = b.dataset.inspect, body = { flow_md: $("#ins-flow").value.trim() };
+  if (act === "graph") body.direction = "TD";
+  runTool("/inspect/" + act, body, "#ins-out");
+});
+$$("[data-quality]").forEach(b => b.onclick = () => {
+  const act = b.dataset.quality;
+  if (act === "lock") runTool("/quality/lock", { flow_md: $("#q-flow").value.trim() }, "#q-out");
+  else if (act === "lock-check") runTool("/quality/lock", { flow_md: $("#q-flow").value.trim(), check: true }, "#q-out");
+  else if (act === "calibrate") runTool("/quality/calibrate", { labels_path: $("#q-labels").value.trim() }, "#q-out");
+  else if (act === "centroids") runTool("/quality/centroids", { benchmark_path: $("#q-bench").value.trim() }, "#q-out");
+  else if (act === "kappa") runTool("/quality/kappa", { a_path: $("#q-a").value.trim(), b_path: $("#q-b").value.trim() }, "#q-out");
+});
+$$("[data-proof]").forEach(b => b.onclick = () => {
+  const act = b.dataset.proof;
+  if (act === "model-check") runTool("/attest/model-check", { flow_md: $("#pf-flow").value.trim() }, "#pf-out");
+  else if (act === "trail") runTool("/attest/trail", { source: $("#pf-trail").value.trim() || undefined }, "#pf-out");
+  else if (act === "ledger-verify") runTool("/attest/ledger-verify",
+    { leaf: $("#pf-leaf").value.trim() || undefined, root: $("#pf-root").value.trim() || undefined }, "#pf-out");
+});
+$$("[data-policy]").forEach(b => b.onclick = () => {
+  const act = b.dataset.policy;
+  if (act === "pack-verify") runTool("/policy/pack-verify",
+    { ppt_path: $("#pol-ppt").value.trim(), pub: $("#pol-pub").value.trim().split(/\s+/).filter(Boolean) }, "#pol-out");
+  else if (act === "pack-attest") runTool("/policy/pack-attest", { state_dir: $("#pol-state").value.trim() }, "#pol-out");
+  else if (act === "facet-decode") runTool("/policy/facet-decode",
+    { flow_md: $("#pol-flow").value.trim(), payload_hex: $("#pol-hex").value.trim() }, "#pol-out");
+  else if (act === "facet-encode") runTool("/policy/facet-encode",
+    { flow_md: $("#pol-flow").value.trim(), reading_json: $("#pol-json").value.trim() }, "#pol-out");
 });
 
 loadRetrievals();

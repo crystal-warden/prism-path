@@ -13,7 +13,8 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from . import control, core, edit, events, observe, prove
+from . import (attest, control, core, edit, events, inspect, observe,
+               policy, prove, quality)
 
 API_PREFIX = "/api/v1"
 STATIC_DIR = os.path.join(core.PKG_DIR, "static")
@@ -30,6 +31,10 @@ app.include_router(observe.router, prefix=API_PREFIX)
 app.include_router(control.router, prefix=API_PREFIX)
 app.include_router(edit.router, prefix=API_PREFIX)
 app.include_router(events.router, prefix=API_PREFIX)
+app.include_router(inspect.router, prefix=API_PREFIX)
+app.include_router(quality.router, prefix=API_PREFIX)
+app.include_router(attest.router, prefix=API_PREFIX)
+app.include_router(policy.router, prefix=API_PREFIX)
 
 
 def _envelope(status_code: int, message: str) -> JSONResponse:
