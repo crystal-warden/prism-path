@@ -51,9 +51,17 @@
     <span class="tab" data-v="audit">Audit</span>
     <span class="tab" data-v="queue">Queue</span>
     <span class="tab" data-v="flows">Flows</span>
+    <span class="tab" data-v="inspect">Inspect</span>
+    <span class="tab" data-v="quality">Quality</span>
+    <span class="tab" data-v="proof">Proof</span>
+    <span class="tab" data-v="policy">Policy</span>
   </nav>
 
   <main>
+  <datalist id="dl-flows"></datalist>
+  <datalist id="dl-jsonl"></datalist>
+  <datalist id="dl-ppt"></datalist>
+  <datalist id="dl-files"></datalist>
     <!-- GRAPH: the command center -->
     <section class="view active" id="v-graph">
       <div class="graph-wrap">
@@ -118,6 +126,82 @@
     <section class="view" id="v-flows">
       <div class="card"><h3>Fan-out composition</h3>
         <div id="f-tree"></div></div>
+    </section>
+
+    <!-- INSPECT: author-time analyses on a flow -->
+    <section class="view" id="v-inspect">
+      <div class="card">
+        <h3>Inspect a flow</h3>
+        <div class="muted">Run the author-time checks on a flow file, read the result here.</div>
+        <label>flow path</label>
+        <input id="ins-flow" list="dl-flows" placeholder="path to the flow .md (blank = the followed flow)">
+        <div class="toolrow">
+          <button class="btn" data-inspect="validate">Validate</button>
+          <button class="btn" data-inspect="lint">Lint</button>
+          <button class="btn" data-inspect="contract">Contract</button>
+          <button class="btn" data-inspect="portable">Portable</button>
+          <button class="btn" data-inspect="test">Test</button>
+          <button class="btn" data-inspect="graph">Mermaid</button>
+        </div>
+        <pre class="tool-out" id="ins-out">pick a check.</pre>
+      </div>
+    </section>
+
+    <!-- QUALITY: routing calibration + agreement -->
+    <section class="view" id="v-quality">
+      <div class="card">
+        <h3>Routing quality</h3>
+        <div class="muted">Lock the routing, calibrate the escalation threshold, and measure agreement.</div>
+        <label>flow path (lock)</label><input id="q-flow" list="dl-flows" placeholder="flow .md">
+        <label>labeled routing decisions (calibrate)</label><input id="q-labels" list="dl-jsonl" placeholder="labels .jsonl">
+        <label>benchmark (centroids)</label><input id="q-bench" list="dl-jsonl" placeholder="benchmark .jsonl">
+        <label>two annotation files (kappa)</label>
+        <input id="q-a" list="dl-jsonl" placeholder="annotator A .jsonl"><input id="q-b" list="dl-jsonl" placeholder="annotator B .jsonl">
+        <div class="toolrow">
+          <button class="btn" data-quality="lock">Lock</button>
+          <button class="btn" data-quality="lock-check">Lock check</button>
+          <button class="btn" data-quality="calibrate">Calibrate</button>
+          <button class="btn" data-quality="centroids">Centroids</button>
+          <button class="btn" data-quality="kappa">Kappa</button>
+        </div>
+        <pre class="tool-out" id="q-out">pick a task.</pre>
+      </div>
+    </section>
+
+    <!-- PROOF: model check, trail, ledger verify (alongside prove on the Graph tab) -->
+    <section class="view" id="v-proof">
+      <div class="card">
+        <h3>Proof and attestation</h3>
+        <div class="muted">Model check a flow, walk the sealed receipt trail, verify an anchored record. Level M and reachability live on the Graph tab.</div>
+        <label>flow path (model check)</label><input id="pf-flow" list="dl-flows" placeholder="flow .md">
+        <label>trail source (optional)</label><input id="pf-trail" list="dl-files" placeholder="run dir or ledger (blank = followed)">
+        <label>ledger verify</label><input id="pf-leaf" placeholder="leaf hash hex"><input id="pf-root" list="dl-files" placeholder="root file (optional)">
+        <div class="toolrow">
+          <button class="btn" data-proof="model-check">Model check</button>
+          <button class="btn" data-proof="trail">Trail</button>
+          <button class="btn" data-proof="ledger-verify">Ledger verify</button>
+        </div>
+        <pre class="tool-out" id="pf-out">pick a task.</pre>
+      </div>
+    </section>
+
+    <!-- POLICY: signed pack verify + attest + facet inspector (no signing) -->
+    <section class="view" id="v-policy">
+      <div class="card">
+        <h3>Policy and telemetry</h3>
+        <div class="muted">Verify a signed pack and read the active policy's attestation. Signing and key generation stay on the CLI by design.</div>
+        <label>pack verify</label><input id="pol-ppt" list="dl-ppt" placeholder="the .ppt image"><input id="pol-pub" list="dl-files" placeholder="public key path(s), space separated">
+        <label>attest state dir</label><input id="pol-state" placeholder="swap state dir">
+        <label>facet decode / encode</label><input id="pol-flow" list="dl-flows" placeholder="flow .md">
+        <input id="pol-hex" placeholder="wire hex (decode)"><input id="pol-json" placeholder='reading JSON (encode), e.g. {"amount":500}'>
+        <div class="toolrow">
+          <button class="btn" data-policy="pack-verify">Pack verify</button>
+          <button class="btn" data-policy="pack-attest">Pack attest</button>
+          <button class="btn" data-policy="facet-decode">Facet decode</button>
+          <button class="btn" data-policy="facet-encode">Facet encode</button>
+        </div>
+        <pre class="tool-out" id="pol-out">pick a task.</pre>
+      </div>
     </section>
   </main>
 

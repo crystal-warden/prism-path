@@ -135,3 +135,20 @@ pre.tree { white-space: pre-wrap; font-size: 12px; color: var(--muted); }
 .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
   background: var(--panel2); border: 1px solid var(--accent); color: var(--ink);
   padding: 10px 18px; z-index: 50; clip-path: var(--facet); box-shadow: var(--glow); }
+
+/* CLI tool panels (inspect / quality / proof / policy) */
+.toolrow { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0; }
+#v-inspect input, #v-quality input, #v-proof input, #v-policy input {
+  display: block; width: 100%; max-width: 520px; margin: 4px 0 8px;
+}
+#v-inspect label, #v-quality label, #v-proof label, #v-policy label {
+  display: block; font-size: 11px; color: #8ea3ad; margin-top: 6px;
+}
+.tool-out {
+  margin-top: 10px; padding: 10px; background: #0c121e; border: 1px solid #1e3345;
+  border-radius: 6px; color: #cfe3e8; font-family: monospace; font-size: 12px;
+  white-space: pre-wrap; word-break: break-word; max-height: 460px; overflow: auto;
+}
+
+/* keep the tool buttons in a tidy row, not full-width stacked */
+.toolrow .btn { width: auto; flex: 0 0 auto; }

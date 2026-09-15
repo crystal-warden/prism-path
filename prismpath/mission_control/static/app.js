@@ -147,7 +147,65 @@ function followEventStream() {
     if (event.type === "status") {
       paintStatusPills(event.status);
     } else if (event.type === "interactions") {
-      loadRetrievals();
+      /* ---------------- CLI tool panels (inspect / quality / proof / policy) ---------------- */
+const activeFlow = () => (state.graph && state.graph.flow_path) || "";
+async function runTool(endpoint, body, outSelector) {
+  const out = select(outSelector); out.textContent = "running";
+  try {
+    const result = await postJson(endpoint, body);
+    out.textContent = (result && result.error)
+      ? "error: " + (result.error.message || JSON.stringify(result.error))
+      : JSON.stringify(result, null, 2);
+  } catch (e) { out.textContent = "error: " + e; }
+}
+function prefillFlowInputs() {
+  const flow = activeFlow();
+  ["#ins-flow", "#q-flow", "#pf-flow", "#pol-flow"].forEach(id => {
+    const el = select(id); if (el && !el.value) el.value = flow;
+  });
+}
+let FILE_PICKS = null;
+async function populatePickers() {
+  try { FILE_PICKS = (await getJson("/pick")).files || []; } catch { FILE_PICKS = []; }
+  const fill = (id, keep) => {
+    const dl = select("#" + id); if (!dl) return;
+    dl.innerHTML = FILE_PICKS.filter(keep).map(pth => `<option value="${pth}">`).join("");
+  };
+  fill("dl-flows", p => p.endsWith(".md"));
+  fill("dl-jsonl", p => p.endsWith(".jsonl"));
+  fill("dl-ppt", p => p.endsWith(".ppt"));
+  fill("dl-files", () => true);
+}
+function wireCliPanels() {
+  selectAll("[data-inspect]").forEach(b => b.onclick = () => {
+    const act = b.dataset.inspect, body = { flow_md: select("#ins-flow").value.trim() };
+    if (act === "graph") body.direction = "TD";
+    runTool("/inspect/" + act, body, "#ins-out");
+  });
+  selectAll("[data-quality]").forEach(b => b.onclick = () => {
+    const act = b.dataset.quality;
+    if (act === "lock") runTool("/quality/lock", { flow_md: select("#q-flow").value.trim() }, "#q-out");
+    else if (act === "lock-check") runTool("/quality/lock", { flow_md: select("#q-flow").value.trim(), check: true }, "#q-out");
+    else if (act === "calibrate") runTool("/quality/calibrate", { labels_path: select("#q-labels").value.trim() }, "#q-out");
+    else if (act === "centroids") runTool("/quality/centroids", { benchmark_path: select("#q-bench").value.trim() }, "#q-out");
+    else if (act === "kappa") runTool("/quality/kappa", { a_path: select("#q-a").value.trim(), b_path: select("#q-b").value.trim() }, "#q-out");
+  });
+  selectAll("[data-proof]").forEach(b => b.onclick = () => {
+    const act = b.dataset.proof;
+    if (act === "model-check") runTool("/attest/model-check", { flow_md: select("#pf-flow").value.trim() }, "#pf-out");
+    else if (act === "trail") runTool("/attest/trail", { source: select("#pf-trail").value.trim() || undefined }, "#pf-out");
+    else if (act === "ledger-verify") runTool("/attest/ledger-verify", { leaf: select("#pf-leaf").value.trim() || undefined, root: select("#pf-root").value.trim() || undefined }, "#pf-out");
+  });
+  selectAll("[data-policy]").forEach(b => b.onclick = () => {
+    const act = b.dataset.policy;
+    if (act === "pack-verify") runTool("/policy/pack-verify", { ppt_path: select("#pol-ppt").value.trim(), pub: select("#pol-pub").value.trim().split(/\s+/).filter(Boolean) }, "#pol-out");
+    else if (act === "pack-attest") runTool("/policy/pack-attest", { state_dir: select("#pol-state").value.trim() }, "#pol-out");
+    else if (act === "facet-decode") runTool("/policy/facet-decode", { flow_md: select("#pol-flow").value.trim(), payload_hex: select("#pol-hex").value.trim() }, "#pol-out");
+    else if (act === "facet-encode") runTool("/policy/facet-encode", { flow_md: select("#pol-flow").value.trim(), reading_json: select("#pol-json").value.trim() }, "#pol-out");
+  });
+}
+wireCliPanels();
+loadRetrievals();
       if (state.screen === "audit") {
         loadAuditScreen();
       }
@@ -166,6 +224,10 @@ const SCREEN_LOADERS = {
   audit: () => loadAuditScreen(),
   queue: () => loadQueueScreen(),
   flows: () => loadFlowsScreen(),
+  inspect: () => { prefillFlowInputs(); populatePickers(); },
+  quality: () => { prefillFlowInputs(); populatePickers(); },
+  proof: () => { prefillFlowInputs(); populatePickers(); },
+  policy: () => { prefillFlowInputs(); populatePickers(); },
 };
 
 function showScreen(name) {
@@ -510,6 +572,37 @@ async function startSprint(submitEvent) {
 async function sendSprintAction(action) {
   const result = await postJson("/sprint/" + action, {});
   showToast(result.error ? result.error.message : (action + " ok"));
+}
+
+/* ---------------- CLI tool panels (inspect / quality / proof / policy) ---------------- */
+const activeFlow = () => (GRAPH && GRAPH.flow_path) || "";
+async function runTool(endpoint, body, outId) {
+  const out = $(outId); out.textContent = "running…";
+  try {
+    const r = await jpost(endpoint, body);
+    out.textContent = (r && r.error)
+      ? "error: " + (r.error.message || JSON.stringify(r.error))
+      : JSON.stringify(r, null, 2);
+  } catch (e) { out.textContent = "error: " + e; }
+}
+function prefillFlowInputs() {   // seed the flow-path fields with the followed flow, do not run
+  const f = activeFlow();
+  ["#ins-flow", "#q-flow", "#pf-flow", "#pol-flow"].forEach(id => {
+    const el = $(id); if (el && !el.value) el.value = f;
+  });
+}
+let FILELIST = null;
+async function populatePickers() {   // fill the datalists so a person picks a file instead of typing a path
+  try { FILELIST = (await jget("/pick")).files || []; } catch { FILELIST = []; }
+  const paths = FILELIST;
+  const fill = (id, keep) => {
+    const dl = $("#" + id); if (!dl) return;
+    dl.innerHTML = paths.filter(keep).map(pth => `<option value="${esc(pth)}">`).join("");
+  };
+  fill("dl-flows", p => p.endsWith(".md"));
+  fill("dl-jsonl", p => p.endsWith(".jsonl"));
+  fill("dl-ppt", p => p.endsWith(".ppt"));
+  fill("dl-files", () => true);
 }
 
 /* ---------------- wire up ---------------- */
