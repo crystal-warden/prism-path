@@ -1,12 +1,12 @@
 # Supporting Evidence · Validated Results Ledger
 
-**Ledger v2 · rows #1 to #157 · September 2026**
+**Ledger v2 · rows #1 to #161 · September 2026**
 
 *Every claim in the PrismPath papers, backed by a measured result, its provenance, and an honest
 verdict; negative results included. Written to survive a hostile read and to be merge-ready into the
 research paper (`docs/research/paper-routing-spectrum.md`) and engineering white paper
 (`docs/research/whitepaper-engineering.md`). All numbers first party on the GB10 (Grace-Blackwell, unified
-memory). Consolidated July 2026; maintained through row #157 (September 2026).*
+memory). Consolidated July 2026; maintained through row #161 (September 2026).*
 
 > **Rule of use.** No claim ships without its row here (result + provenance + gap).
 >
@@ -1372,24 +1372,24 @@ aarch64 and x86_64, on both ISAs of an RP2350, and on the Zynq-7020 fabric; and 
 worst case bound that travels signed with each image, recomputed at verify, was honored by every
 evaluation the logic analyzer saw on the fabric pins.
 
-**Method:** groupa/a3_corpus.py compiles network_admission (224 B) and sensor_interlock (160 B) once
+**Method:** groupa/cross_substrate_corpus.py compiles network_admission (224 B) and sensor_interlock (160 B) once
 through the untouched table compiler and frames the 23 complete scenario readings as table per vector
 records with the host Python route as the expected target, cross checked against the C reference.
 Kernel legs: loader certify via BPF_PROG_TEST_RUN on the GX10 (Linux 6.17.0, clang 18) and on the
 Protectli (Linux 6.17.2, program object rebuilt there with clang 19 from the identical source). MCU
-legs: groupa/a3_mcu.py replays the records over the unchanged RP2350 certification firmware's
+legs: groupa/mcu_leg.py replays the records over the unchanged RP2350 certification firmware's
 USB-CDC contract, one Pico 2 W flashed with the Cortex-M33 build and then, after a 1200 baud reset
 into the bootloader, with the Hazard3 RISC-V build, both rebuilt this session (Pico SDK 2.1.1,
-gcc-arm-none-eabi 13.2, riscv32-unknown-elf gcc). Fabric legs: groupa/a3_fabric_attach.py attached to
+gcc-arm-none-eabi 13.2, riscv32-unknown-elf gcc). Fabric legs: groupa/fabric_leg_attach.py attached to
 the finale overlay the board's boot demo service had already loaded (pynq Overlay without download,
 address from the running design's own hwh, auto mode off to the certified PS evaluate path of #117
 and #123), loaded both images through the AXI load port, and evaluated the 23 readings; then, after
-quiescing, groupa/a3_fabric_run.py loaded the tapped ppt_datapath.bit once from a single process and
-repeated the 23. Pins witness: groupa/a7_sweep_only.py swept each policy's readings continuously
-through the PS path for 400 s while groupa/a7_pins.py on the GX10 took 30 free run LA2016 captures per
+quiescing, groupa/fabric_leg_run.py loaded the tapped ppt_datapath.bit once from a single process and
+repeated the 23. Pins witness: groupa/wcet_sweep_only.py swept each policy's readings continuously
+through the PS path for 400 s while groupa/wcet_pins_witness.py on the GX10 took 30 free run LA2016 captures per
 policy on Pmod JB at 200 MSa/s (threshold 1.4 V, passed to sigrok as the range literal 1.4-1.4) and
 measured every busy window with the #122 bench code (la_wcet_check.measure, edge count and width
-methods). groupa/a3.py and groupa/a7.py write PrismPath's result files from the leg records; a7.py
+methods). groupa/cross_substrate_decisions.py and groupa/bounded_decision_time.py write PrismPath's result files from the leg records; bounded_decision_time.py
 grades from the witness record (native on PASS, with work when absent, not on FAIL).
 
 **Result:** 23 of 23 on every leg: python, C, kernel aarch64 (ALL PASS), kernel x86_64 (ALL PASS),
@@ -1413,8 +1413,8 @@ rule; one process drives the fabric at a time, and a 37 s overlap caused by a pr
 ended by killing by PID with the board intact. The Pico was returned to nothing in particular.
 
 **Provenance:** Branch comparisons/phase0-prereg, commits 54cd707 (MCU legs), a568419 (fabric attach),
-da41b7c (pins witness): groupa/{a3_corpus,a3,a3_mcu,a3_fabric_attach,a3_fabric_run,a7_sweep_only,
-a7_pins,a7}.py, groupa/HARDWARE_LEGS.md, results/prismpath/evidence/A3/ (a3.packets.bin,
+da41b7c (pins witness): groupa/{cross_substrate_corpus,cross_substrate_decisions,mcu_leg,fabric_leg_attach,
+fabric_leg_run,wcet_sweep_only,wcet_pins_witness,bounded_decision_time}.py, groupa/HARDWARE_LEGS.md, results/prismpath/evidence/A3/ (a3.packets.bin,
 a3_vectors.json, the two .ppt images, kernel_aarch64_gx10.log, kernel_x86_64_protectli.log,
 mcu_ppt-rp2350_*.json, fabric_finale_attach.log, fabric_datapath_run.log, a3_fabric_bundle.json),
 results/prismpath/evidence/A7/ (pins_network_admission.json, pins_sensor_interlock.json,
@@ -1773,6 +1773,54 @@ decision-sufficient-vision/: T6_scaling.md, evidence/t3/20_t6_qvga_2026-09-11.mp
 
 **Honest scope:** The actuator trusts the authority's key and the receiver's admission; its own refusals are signature, addressee, admission and counter. The LED state reported in three negative answers reflects a preceding authorized action still lit. Provenance: prismpath 6900c00 (the camera as actuator), ACTUATOR.md, evidence/t3/37_*; hashes anchored in `prismpath-hw/evidence/vision_2026-09-11.SHA256SUMS`. The published flows are in prismpath-hw/esp-vision-node/flows/ and prismpath-hw/esp-vision-c6/flows/.
 
+### #158 — Heterogeneous quorum over non bit identical semantic evaluators (September 2026)
+
+**Claim:** a non deterministic proposer sits behind a deterministic distributed authorization boundary, and heterogeneous nodes agree on the authorization edge without agreeing on the floating point representation. Three grounding nodes on three sentence-transformers versions, three torch versions, three operating systems, and CUDA, MPS and CPU backends agreed on the edge for every item.
+
+**Method:** one worker proposal per item, pinned and sent to every node; each node grounds the proposal against the same anchored capability corpus and votes; the aggregator folds the edges by quorum. The D0 to D4 orchestration patterns, parallel agreement, serial cooperation, shared goal and best admissible candidate, sit under this row.
+
+**Result:** all four nodes participated (GB10 aarch64 Linux, Mac arm64 macOS, Windows x86 native, Protectli x86 Linux as the floor node); the three embedder capable nodes agreed on the decision edge on every item despite different library versions and backends, and the run sealed a receipt per item.
+
+**Honest scope:** a bench demonstrator, one bench, a bounded test set on the tested configurations; live keyless feeds (USAspending, Grants.gov) plus a curated bucket spanning set.
+
+**Provenance:** the governed fleet demonstrator held in the private strategy folder, cw-strategy/governed-fleet/ (fleet/ code, capability/ corpus, runs/ receipts); the worker is a served Gemma; not pushed to a public remote.
+
+### #159 — Tamper resistant denial semantics and dissenter detection (September 2026)
+
+**Claim:** not all denials carry the same trust. Deterministic hard denials, the safety floor and a record contradiction, may veto unilaterally because a tampered embedder cannot forge them; grounding derived denials go through quorum. A node running a tampered corpus is flagged, and its differing corpus digest exposes it in the receipt, while the honest majority still decides correctly.
+
+**Method:** one node was given a tampered corpus; the quorum unions only hard denials and sends grounding edges to a vote; the corpus sha256 is bound into each node record. A first union deny design let the tampered node veto the honest majority, which was found and corrected.
+
+**Result:** the tampered node was flagged as the sole dissenter, its corpus digest differing from the honest three, and the fleet still decided correctly through the honest majority.
+
+**Honest scope:** tamper simulated by a corpus swap; one bench.
+
+**Provenance:** cw-strategy/governed-fleet/ (the calibration passes, the corrected quorum in fleet/aggregator.py, the pass receipts in runs/).
+
+### #160 — LLM tool call decision gated execution (September 2026)
+
+**Claim:** a worker's proposed tool call executes only when the policy approves; unsafe and destructive calls are denied and mutating calls are held for a human, each with a cause. An LLM proposal is not execution authority.
+
+**Method:** Gemma proposes one tool call as JSON; the gate classifies it by tool class and validates its arguments against an allowlist; the tool runs only on approve.
+
+**Result:** a safe file read and an allowlisted API fetch were approved and executed; a directory delete and an out of allowlist key read were denied; a dictionary overwrite was held for review; the tool ran only on approve.
+
+**Honest scope:** a small tool registry, one bench.
+
+**Provenance:** cw-strategy/governed-fleet/fleet/tool_gate.py and runs/tool_gate_results.json.
+
+### #161 — A signed fleet verdict drives in kernel network admission (September 2026)
+
+**Claim:** the same signed authorization edge that gates a tool call can gate traffic at the network boundary, admitting only what the decision approved and dropping the rest, deciding in the kernel with no userspace in the packet path.
+
+**Method:** a minimal XDP gate on the Protectli reads a decision map the control plane writes from the fleet edge; tested in an isolated veth and network namespace, never on a production bridge.
+
+**Result:** approve admitted the traffic and deny dropped it, the in kernel counters confirming 28 packets passed and 9 dropped; driving the gate from the real fleet verdicts admitted every approved item and refused every denied or abstained one; the node was left clean afterward.
+
+**Honest scope:** an isolated namespace, generic XDP, the admit traffic action only; a live bridge deployment is an open item.
+
+**Provenance:** cw-strategy/governed-fleet/fleet/xdp/ (xdp_gate.bpf.c, run_xdp_from_fleet.sh); the Protectli, warden-node-01.
+
 ## Revision history
 
 - **v1** (July 2026 consolidation, maintained through row #96, August 2026): the original ledger.
@@ -1883,3 +1931,16 @@ decision-sufficient-vision/: T6_scaling.md, evidence/t3/20_t6_qvga_2026-09-11.mp
   git tree, which is what the vendored copies carry, rather than the release number 4.0.2 the tree
   does not substantiate. Anchored in `prismpath/evidence/ledger_v2.12_2026-09-11.SHA256SUMS` (`.ots`
   alongside); the anchor, not this prose, is the authoritative timestamp.
+
+- **v2.13** (September 2026): rows #158 to #161 folded in, the governed fleet demonstrator, a non
+  deterministic proposer behind a deterministic distributed authorization boundary: heterogeneous nodes
+  agree on the edge not the floating point (#158), denial semantics are tamper resistant with dissenter
+  detection (#159), an LLM tool call is decision gated execution (#160), and a signed fleet verdict drives
+  in kernel network admission (#161). The readability refactor and the mission control CLI exposure merged
+  to main this revision; the comparison harness source files were renamed in that refactor (a3 to
+  cross_substrate, a7 to wcet and bounded_decision_time) and the references in the comparison method and
+  provenance were brought to the current names. The RTL hardening of the nine review findings is merged
+  with its on-silicon recertification, including the WCET re-witness, pending a working board. The
+  OpenTimestamps anchors were upgraded to their Bitcoin attestations. Anchored in
+  `prismpath/evidence/ledger_v2.13_2026-09-15.SHA256SUMS` (`.ots` alongside); the anchor, not this prose,
+  is the authoritative timestamp.
