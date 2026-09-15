@@ -1,5 +1,5 @@
 # cocotb tb: the in-fabric Facet frame decoder (walker's zeck [class,tick,band] wire -> band).
-#   make -f Makefile.frame
+#   make -f Makefile.frame       the gate: runs the sim, then fails on any cocotb failure
 SIM ?= verilator
 TOPLEVEL_LANG ?= verilog
 VERILOG_SOURCES = $(PWD)/../../rtl/zeck_dec.sv $(PWD)/../../rtl/zeck_frame_rx.sv
@@ -8,4 +8,7 @@ COCOTB_TOPLEVEL = zeck_frame_rx
 COCOTB_TEST_MODULES = test_zeck_frame_rx
 TOPLEVEL = $(COCOTB_TOPLEVEL)
 MODULE = $(COCOTB_TEST_MODULES)
+GATE_NAME = zeck_frame_rx
+GATE_EXPECTED = frames
+include ../../rtl-tb/gate.mk
 include $(shell cocotb-config --makefiles)/Makefile.sim

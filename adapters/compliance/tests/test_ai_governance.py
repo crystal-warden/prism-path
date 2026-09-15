@@ -4,9 +4,9 @@
 the NIST AI RMF functions) assessed through the same unified determination. Inventory objectives decide
 deterministically from the AI-use register; policy/operating objectives fail closed to insufficient
 without adopted SOPs and records. A missing inventory reads as not-met, never assumed met."""
-import compliance_adapter as ca
-import ai_register as reg
-import ai_governance as aig
+from adapters.compliance import compliance_adapter as ca
+from adapters.compliance import ai_register as reg
+from adapters.compliance import ai_governance as aig
 
 
 def test_ai_governance_is_registered_and_covers_the_questions():
@@ -23,7 +23,7 @@ def test_ai_governance_is_registered_and_covers_the_questions():
 def test_register_is_fail_closed():
     empty = reg.facts_from_register({})
     assert set(empty) == set(reg.FACT_KEYS)
-    assert all(v is False for v in empty.values())          # nothing shown -> nothing credited
+    assert all(fact_value is False for fact_value in empty.values())          # nothing shown -> nothing credited
     sample = reg.facts_from_register(reg._SAMPLE)
     assert sample["ai_user_inventory_exists"] is True
     assert sample["ai_prohibited_data_controls_enforced"] is False   # the modeled gap
@@ -31,11 +31,11 @@ def test_register_is_fail_closed():
 
 
 def test_assessment_decides_inventory_from_the_register_fail_closed():
-    r = aig.demo()
-    assert r["standard"] == "ai_governance" and r["n_controls"] == 11
+    assessment = aig.demo()
+    assert assessment["standard"] == "ai_governance" and assessment["n_controls"] == 11
     # the register actually decided objectives deterministically (no model)
-    assert r["by_mechanism"]["config"] >= 8
-    by = {c["control_id"]: c["verdict"] for c in r["controls"]}
+    assert assessment["by_mechanism"]["config"] >= 8
+    by = {control["control_id"]: control["verdict"] for control in assessment["controls"]}
     # approved-tools: both objectives are register facts and both true -> met with no model
     assert by["MP-2"] == "met"
     # decision-impact recorded but tiering incomplete -> one objective met, one refuted -> partially-met

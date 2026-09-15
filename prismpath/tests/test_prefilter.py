@@ -26,7 +26,7 @@ _VECS = {
 
 
 def stub_embed(texts):
-    return np.vstack([_VECS[t] for t in texts])
+    return np.vstack([_VECS[text] for text in texts])
 
 
 def make_cache(tmp_path, **kw):
@@ -36,19 +36,19 @@ def make_cache(tmp_path, **kw):
 
 
 def test_empty_corpus_misses_and_returns_reusable_vector(tmp_path):
-    c = make_cache(tmp_path)
-    r = c.lookup("doc a")
-    assert isinstance(r, CacheResult)
-    assert r.hit is False and r.record is None and r.similarity == 0.0
-    assert r.vector.shape == (2,)          # reusable by learn() — no re-embed
-    assert len(c) == 0
+    cache = make_cache(tmp_path)
+    lookup_result = cache.lookup("doc a")
+    assert isinstance(lookup_result, CacheResult)
+    assert lookup_result.hit is False and lookup_result.record is None and lookup_result.similarity == 0.0
+    assert lookup_result.vector.shape == (2,)          # reusable by learn() — no re-embed
+    assert len(cache) == 0
 
 
 def test_learn_then_identical_lookup_hits_with_record_fields(tmp_path):
-    c = make_cache(tmp_path)
-    r = c.lookup("doc a")
-    c.learn(r.vector, "contain", 0.95, key="k1", description="desc one")
-    r2 = c.lookup("doc a again")           # identical direction -> cosine 1.0
+    cache = make_cache(tmp_path)
+    lookup_result = cache.lookup("doc a")
+    cache.learn(lookup_result.vector, "contain", 0.95, key="k1", description="desc one")
+    r2 = cache.lookup("doc a again")           # identical direction -> cosine 1.0
     assert r2.hit is True
     assert r2.record["action"] == "contain"
     assert r2.record["confidence"] == 0.95
@@ -59,25 +59,25 @@ def test_learn_then_identical_lookup_hits_with_record_fields(tmp_path):
 
 def test_similar_but_below_threshold_misses(tmp_path):
     # cos(doc near a, doc a) ~ 0.95 < threshold 0.97 -> miss, but similarity is reported.
-    c = make_cache(tmp_path)
-    c.learn("doc a", "watch", 0.9)
-    r = c.lookup("doc near a")
-    assert r.hit is False
-    assert 0.90 < r.similarity < 0.97
+    cache = make_cache(tmp_path)
+    cache.learn("doc a", "watch", 0.9)
+    lookup_result = cache.lookup("doc near a")
+    assert lookup_result.hit is False
+    assert 0.90 < lookup_result.similarity < 0.97
 
 
 def test_confidence_floor_blocks_hit_even_at_perfect_similarity(tmp_path):
-    c = make_cache(tmp_path)
-    c.learn("doc a", "watch", 0.5)          # stored confidence < min_conf 0.8
-    r = c.lookup("doc a again")
-    assert r.similarity > 0.999             # same situation...
-    assert r.hit is False                   # ...but the prior verdict wasn't trustworthy
+    cache = make_cache(tmp_path)
+    cache.learn("doc a", "watch", 0.5)          # stored confidence < min_conf 0.8
+    lookup_result = cache.lookup("doc a again")
+    assert lookup_result.similarity > 0.999             # same situation...
+    assert lookup_result.hit is False                   # ...but the prior verdict wasn't trustworthy
 
 
 def test_persistence_across_instances(tmp_path):
-    c = make_cache(tmp_path)
-    c.learn("doc a", "contain", 0.9, key="k")
-    c.learn("doc far", "ignore", 0.9)
+    cache = make_cache(tmp_path)
+    cache.learn("doc a", "contain", 0.9, key="k")
+    cache.learn("doc far", "ignore", 0.9)
     c2 = make_cache(tmp_path)               # fresh instance, same dir
     assert len(c2) == 2
     assert c2.stats()["by_action"] == {"contain": 1, "ignore": 1}
@@ -86,45 +86,45 @@ def test_persistence_across_instances(tmp_path):
 
 def test_legacy_field_names_migrate_on_load(tmp_path):
     # corpora written before the generic API used recommended_action / alert_key
-    d = tmp_path / "corpus"
-    d.mkdir(parents=True)
-    np.save(d / "embeddings.npy", stub_embed(["doc a"]))
-    (d / "meta.json").write_text(json.dumps([{
+    corpus_dir = tmp_path / "corpus"
+    corpus_dir.mkdir(parents=True)
+    np.save(corpus_dir / "embeddings.npy", stub_embed(["doc a"]))
+    (corpus_dir / "meta.json").write_text(json.dumps([{
         "recommended_action": "ignore", "confidence": 0.9,
         "alert_key": "1002|host|none", "description": "old entry"}]))
-    c = make_cache(tmp_path)
-    r = c.lookup("doc a")
-    assert r.hit is True
-    assert r.record["action"] == "ignore"
-    assert r.record["key"] == "1002|host|none"
+    cache = make_cache(tmp_path)
+    lookup_result = cache.lookup("doc a")
+    assert lookup_result.hit is True
+    assert lookup_result.record["action"] == "ignore"
+    assert lookup_result.record["key"] == "1002|host|none"
 
 
 def test_learn_accepts_raw_document_string(tmp_path):
-    c = make_cache(tmp_path)
-    c.learn("doc a", "contain", 0.9)         # str -> embedded internally
-    assert len(c) == 1
-    assert c.lookup("doc a again").hit is True
+    cache = make_cache(tmp_path)
+    cache.learn("doc a", "contain", 0.9)         # str -> embedded internally
+    assert len(cache) == 1
+    assert cache.lookup("doc a again").hit is True
 
 
 def test_match_arrays_pure_function_threshold_and_conf_sweeps(tmp_path):
     emb = stub_embed(["doc a"])
     recs = [{"action": "watch", "confidence": 0.85}]
-    v = stub_embed(["doc near a"])[0]        # cosine ~0.95 to the corpus entry
-    hit_lo, rec, sim = match_arrays(v, emb, recs, threshold=0.90, min_conf=0.8)
+    vector = stub_embed(["doc near a"])[0]        # cosine ~0.95 to the corpus entry
+    hit_lo, rec, sim = match_arrays(vector, emb, recs, threshold=0.90, min_conf=0.8)
     assert hit_lo is True and rec["action"] == "watch" and 0.90 < sim < 0.97
-    hit_hi, _, _ = match_arrays(v, emb, recs, threshold=0.97, min_conf=0.8)
+    hit_hi, _, _ = match_arrays(vector, emb, recs, threshold=0.97, min_conf=0.8)
     assert hit_hi is False                   # same vector, tighter threshold
-    hit_conf, _, _ = match_arrays(v, emb, recs, threshold=0.90, min_conf=0.9)
+    hit_conf, _, _ = match_arrays(vector, emb, recs, threshold=0.90, min_conf=0.9)
     assert hit_conf is False                 # same vector, tighter confidence floor
-    hit_empty, rec_e, sim_e = match_arrays(v, np.zeros((0, 0), dtype="float32"), [],
+    hit_empty, rec_e, sim_e = match_arrays(vector, np.zeros((0, 0), dtype="float32"), [],
                                            threshold=0.5, min_conf=0.0)
     assert (hit_empty, rec_e, sim_e) == (False, None, 0.0)
 
 
 def test_clear_empties_the_corpus(tmp_path):
-    c = make_cache(tmp_path)
-    c.learn("doc a", "contain", 0.9)
-    assert len(c) == 1
-    c.clear()
-    assert len(c) == 0
-    assert c.lookup("doc a").hit is False
+    cache = make_cache(tmp_path)
+    cache.learn("doc a", "contain", 0.9)
+    assert len(cache) == 1
+    cache.clear()
+    assert len(cache) == 0
+    assert cache.lookup("doc a").hit is False

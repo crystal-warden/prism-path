@@ -3,22 +3,22 @@
 """Band-population census for the fusion_triage tessellation.
 
 Weights every ring of the spiral with REAL data: the cyber axis from an alert-level backlog
-(a level histogram — under the decidable projection the cyber marginal IS the level histogram,
+(a level histogram  -  under the decidable projection the cyber marginal IS the level histogram,
 so one aggregation replaces a 64k document pull), the physical axis from the recorded sensor
 sessions in prismpath-hw/evidence/.
 
 Two pairings, both labeled, neither time-coincident:
 
-- assume_still  — every alert fused with the baseline posture {still, 0}. The cyber axis is
+- assume_still   -  every alert fused with the baseline posture {still, 0}. The cyber axis is
   fully observed; the physical axis is a stated baseline. The fusion bands stay empty and that
   emptiness is the finding: without coincident capture there is no honest joint.
-- independence_expected — cyber marginal x IMU marginal, normalized to the cyber N. Marginals
+- independence_expected  -  cyber marginal x IMU marginal, normalized to the cyber N. Marginals
   measured, joint modeled. Expected counts under independence, explicitly not observations.
 
 Committed artifacts are aggregates only: no alert content, agent names, hostnames, or IPs
 (tests/test_census.py enforces this against the committed file).
 
-    python adapters/fusion/census.py --from-fixture [path]
+    python -m adapters.fusion.census --from-fixture [path]
 
 The cyber axis is fed here from an NDJSON level backlog. Any decision source that yields a
 `rule.level` histogram is a valid connector; the archived SIEM connector was the v1 example.
@@ -29,22 +29,17 @@ import argparse
 import datetime as _dt
 import hashlib
 import json
-import sys
 from collections import Counter
 from pathlib import Path
 from typing import Dict, Iterable, Optional, Tuple
 
+from adapters.fusion import projection
+from prismpath.kernel.parser import parse
+from prismpath.telemetry import quantizer
+from prismpath.telemetry import spiral
+
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parent.parent
-for p in (str(REPO / "prismpath" / "telemetry"), str(REPO), str(HERE)):
-    if p not in sys.path:
-        sys.path.insert(0, p)
-
-from prismpath.telemetry import quantizer as q  # noqa: E402
-from prismpath.telemetry import spiral as sp    # noqa: E402
-from prismpath.kernel.parser import parse  # noqa: E402
-
-import projection as pj  # noqa: E402
 
 FLOW_PATH = HERE / "flows" / "fusion_triage.md"
 NODE = "correlate"
@@ -84,6 +79,15 @@ def cyber_marginal_ndjson(path: Path) -> Tuple[Dict[int, int], dict]:
 
 # ---------------------------------------------------------------- IMU marginal
 
+MARGINAL_KEY = "{stability}|{dev_symbol}"
+
+
+def marginal_key_parts(marginal_key: str):
+    """One `counts` key -> (stability, dev symbol); the only place the key format is read."""
+    stability, _, dev_symbol = marginal_key.partition("|")
+    return stability, int(dev_symbol)
+
+
 def imu_marginal(parts, paths: Iterable[Path], include_derived: bool = False) -> dict:
     """Counter over (stability, dev_mg symbol) from the real recorded sessions."""
     dev_part = parts["dev_mg"]
@@ -99,7 +103,7 @@ def imu_marginal(parts, paths: Iterable[Path], include_derived: bool = False) ->
             if not line:
                 continue
             rows += 1
-            out = pj.normalize_imu(json.loads(line))
+            out = projection.normalize_imu(json.loads(line))
             if out is None:
                 continue
             if out["derived"] and not include_derived:
@@ -113,22 +117,23 @@ def imu_marginal(parts, paths: Iterable[Path], include_derived: bool = False) ->
         "rows_used": used,
         "derived_excluded": derived_excluded,
         "include_derived": include_derived,
-        # JSON-friendly: "stability|dev_symbol" -> count
-        "counts": {f"{s}|{d}": c for (s, d), c in sorted(counts.items())},
+        # JSON-friendly: "stability|dev_symbol" -> count (read back with marginal_key_parts)
+        "counts": {MARGINAL_KEY.format(stability=stability, dev_symbol=dev_symbol): count
+                   for (stability, dev_symbol), count in sorted(counts.items())},
     }
 
 
 # -------------------------------------------------------------------- pairings
 
 def _band_add(layout, reading: dict, weight: float, bands: Counter, cells: list) -> None:
-    n = layout.index(reading)
-    cells[n] += weight
+    cell_index = layout.index(reading)
+    cells[cell_index] += weight
     bands[layout.routes[layout.band_id(reading)]] += weight
 
 
 def band_census(layout, parts, pairing: str, cyber_hist: Dict[int, int], imu: dict) -> dict:
-    dev_rep = {int(k.split("|")[1]): parts["dev_mg"].cells[int(k.split("|")[1])]["rep"]
-               for k in imu["counts"]}
+    dev_symbols = [marginal_key_parts(marginal_key)[1] for marginal_key in imu["counts"]]
+    dev_rep = {dev_symbol: parts["dev_mg"].cells[dev_symbol]["rep"] for dev_symbol in dev_symbols}
     bands: Counter = Counter()
     cells = [0.0] * layout.size
     n_cyber = sum(cyber_hist.values())
@@ -137,30 +142,30 @@ def band_census(layout, parts, pairing: str, cyber_hist: Dict[int, int], imu: di
         label = ("every alert fused with the baseline posture {still, dev_mg=0}; cyber axis "
                  "fully observed, physical axis a stated baseline")
         for level, count in cyber_hist.items():
-            reading = pj.fused_reading(level, pj.soc_action_from_level(level), pj.ASSUME_STILL)
+            reading = projection.fused_reading(level, projection.soc_action_from_level(level), projection.ASSUME_STILL)
             _band_add(layout, reading, count, bands, cells)
     elif pairing == "independence_expected":
         label = ("cyber marginal x IMU marginal normalized to cyber N; marginals measured, "
                  "joint modeled under an explicit independence assumption; NOT time-coincident")
         n_imu = sum(imu["counts"].values()) or 1
         for level, c_count in cyber_hist.items():
-            action = pj.soc_action_from_level(level)
+            action = projection.soc_action_from_level(level)
             for key, i_count in imu["counts"].items():
-                stability, dsym = key.split("|")
-                reading = pj.fused_reading(level, action,
-                                           {"stability": stability, "dev_mg": dev_rep[int(dsym)]})
+                stability, dev_symbol = marginal_key_parts(key)
+                reading = projection.fused_reading(level, action,
+                                           {"stability": stability, "dev_mg": dev_rep[dev_symbol]})
                 _band_add(layout, reading, c_count * i_count / n_imu, bands, cells)
     else:
         raise ValueError(f"unknown pairing {pairing!r}")
 
-    rounded = {r: int(round(v)) for r, v in bands.items()}
+    rounded = {target: int(round(weight)) for target, weight in bands.items()}
     residual = n_cyber - sum(rounded.values())
     return {
         "pairing": pairing,
         "label": label,
         "n": n_cyber,
-        "bands": {r: rounded.get(r, 0) for r in layout.routes},
-        "cells": [int(round(v)) for v in cells],
+        "bands": {target: rounded.get(target, 0) for target in layout.routes},
+        "cells": [int(round(weight)) for weight in cells],
         "rounding_residual": residual,
     }
 
@@ -171,16 +176,16 @@ def build_artifact(cyber_hist: Dict[int, int], query_meta: dict, min_level: int,
                    include_derived: bool = False) -> dict:
     flow_text = FLOW_PATH.read_text()
     graph = parse(flow_text)
-    layout = sp.SpiralLayout(graph, NODE)
-    parts = q.build_partitions(graph)
+    layout = spiral.SpiralLayout(graph, NODE)
+    parts = quantizer.build_partitions(graph)
 
-    filtered = {lvl: c for lvl, c in cyber_hist.items() if lvl >= min_level}
-    imu = imu_marginal(parts, [HW_EVIDENCE / s for s in POSTURE_SESSIONS],
+    filtered = {lvl: count for lvl, count in cyber_hist.items() if lvl >= min_level}
+    imu = imu_marginal(parts, [HW_EVIDENCE / session_name for session_name in POSTURE_SESSIONS],
                        include_derived=include_derived)
 
     totals = {"all_levels": sum(cyber_hist.values()),
               "at_or_above_min_level": sum(filtered.values()),
-              "at_or_above_12": sum(c for lvl, c in cyber_hist.items() if lvl >= 12)}
+              "at_or_above_12": sum(count for lvl, count in cyber_hist.items() if lvl >= 12)}
 
     return {
         "generated": _dt.date.today().isoformat(),
@@ -189,12 +194,12 @@ def build_artifact(cyber_hist: Dict[int, int], query_meta: dict, min_level: int,
         "node": NODE,
         "query": {**query_meta, "min_level": min_level, "totals": totals},
         "projection_rule": PROJECTION_RULE,
-        "cyber_marginal": {str(k): v for k, v in sorted(filtered.items())},
-        "cyber_marginal_all_levels": {str(k): v for k, v in sorted(cyber_hist.items())},
+        "cyber_marginal": {str(level): count for level, count in sorted(filtered.items())},
+        "cyber_marginal_all_levels": {str(level): count for level, count in sorted(cyber_hist.items())},
         "imu_marginal": imu,
         "pairings": {
-            p: band_census(layout, parts, p, filtered, imu)
-            for p in ("assume_still", "independence_expected")
+            pairing: band_census(layout, parts, pairing, filtered, imu)
+            for pairing in ("assume_still", "independence_expected")
         },
         "caveats": CAVEATS,
     }
@@ -219,11 +224,11 @@ def main(argv=None) -> int:
         HERE / "evidence" / f"census_{_dt.date.today():%Y-%m}.json"
     out.write_text(json.dumps(artifact, indent=1) + "\n")
 
-    a = artifact["pairings"]["assume_still"]["bands"]
+    assume_still_bands = artifact["pairings"]["assume_still"]["bands"]
     print(f"wrote {out}")
     print(f"  cyber N={artifact['pairings']['assume_still']['n']:,}  "
           f"imu rows used={artifact['imu_marginal']['rows_used']:,}")
-    print(f"  assume_still bands: {json.dumps(a)}")
+    print(f"  assume_still bands: {json.dumps(assume_still_bands)}")
     return 0
 
 

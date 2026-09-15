@@ -2,10 +2,10 @@
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Lynis scanner adapter: it maps only what Lynis genuinely reports, so it grades a handful of host
 controls and honestly DEFERS the ones it cannot establish (MFA, screen lock, password complexity)."""
-import compliance_adapter as ca
-import scanner as sc
-import scan_lynis
-import posture_connector as pc
+from adapters.compliance import compliance_adapter as ca
+from adapters.compliance import scanner as sc
+from adapters.compliance import scan_lynis
+from adapters.compliance import posture_connector as pc
 
 FULLY_GRADED = {"3.1.8", "3.5.8", "3.13.11", "3.13.16", "3.1.9", "3.14.4", "3.13.6"}
 
@@ -24,9 +24,9 @@ def test_lynis_maps_only_what_it_reports():
     assert facts["antivirus_auto_update_enabled"] is True
     assert facts["default_deny_firewall_policy_enforced"] is True
     # honest boundaries: no fanned-out MFA, no screen-lock from an SSH timeout, no length-as-complexity
-    for k in ("mfa_local_privileged", "mfa_network_privileged", "privileged_accounts_identified",
-              "session_lock_pattern_hiding", "session_lock_enforced", "password_complexity_enforced"):
-        assert k not in facts
+    for fact_key in ("mfa_local_privileged", "mfa_network_privileged", "privileged_accounts_identified",
+                     "session_lock_pattern_hiding", "session_lock_enforced", "password_complexity_enforced"):
+        assert fact_key not in facts
 
 
 def test_lynis_maps_auditd_and_removable_media():
@@ -54,7 +54,7 @@ def test_lynis_to_posture_carries_provenance():
 def test_lynis_end_to_end_grades_reported_controls_and_defers_the_rest():
     ca.use_standard("nist_800171_r2")
     res = pc.assess(sc.to_posture("lynis", sc.load_sample("lynis_linux"), "the Linux enclave"))
-    graded = {r["control_id"]: r["status"] for r in res["results"]}
+    graded = {result["control_id"]: result["status"] for result in res["results"]}
     for cid in FULLY_GRADED:
         assert graded.get(cid) == "met", (cid, graded)
     # MFA and screen lock are NOT gradable from a Lynis scan, so they defer rather than pass on a proxy

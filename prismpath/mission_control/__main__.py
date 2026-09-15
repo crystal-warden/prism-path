@@ -7,6 +7,7 @@ from . import core
 from .app import app
 
 if __name__ == "__main__":
-    print(f"mission control on {core.HOST}:{core.PORT}  proj={core.PROJ}  "
-          f"audit_root={core.AUDIT.current_root()[:16]}", flush=True)
-    uvicorn.run(app, host=core.HOST, port=core.PORT, log_level="warning")
+    settings = core.SETTINGS
+    print(f"mission control on {settings.host}:{settings.port}  proj={settings.proj}  "
+          f"audit_root={core.audit.LOG.current_root()[:16]}", flush=True)
+    uvicorn.run(app, host=settings.host, port=settings.port, log_level="warning")

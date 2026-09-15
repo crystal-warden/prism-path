@@ -13,14 +13,14 @@ CORPUS = os.path.join(os.path.dirname(__file__), "..", "portable", "conformance"
 
 
 def _norm(bad):
-    return [{"node": r["node"], "target": r["target"], "condition": r["condition"], "reason": r["reason"]}
-            for r in bad]
+    return [{"node": row["node"], "target": row["target"], "condition": row["condition"], "reason": row["reason"]}
+            for row in bad]
 
 
 def test_python_level_m_matches_frozen_vectors():
     data = json.load(open(CORPUS, encoding="utf-8"))
     assert len(data["cases"]) >= 15
-    for c in data["cases"]:
-        all_in, bad = model_check.flow_level_m(parse(c["flow"]))
+    for case in data["cases"]:
+        all_in, bad = model_check.flow_level_m(parse(case["flow"]))
         got = {"level_m": all_in, "non_member_edges": _norm(bad)}
-        assert got == c["expected"], f"{c['key']}: {got} != {c['expected']}"
+        assert got == case["expected"], f"{case['key']}: {got} != {case['expected']}"

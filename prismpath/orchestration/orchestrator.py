@@ -78,82 +78,83 @@ class MsgReq(BaseModel):
 
 
 def _get(sid: str) -> dict:
-    s = SESS.get(sid)
-    if not s:
+    session = SESS.get(sid)
+    if not session:
         raise HTTPException(404, "no such session")
-    return s
+    return session
 
 
 def _llm(messages, max_new=2048, temp=0.5) -> str:
     sys = PLANNER_SYS + PLANNER_NOTE
-    r = requests.post(BASE.rstrip("/") + "/chat/completions", json={
+    response = requests.post(BASE.rstrip("/") + "/chat/completions", json={
         "model": MODEL, "messages": [{"role": "system", "content": sys}] + messages,
         "max_tokens": max_new, "temperature": temp, "stream": False,
         "chat_template_kwargs": {"enable_thinking": False}}, timeout=600)
-    r.raise_for_status()
-    return (r.json()["choices"][0].get("message") or {}).get("content", "") or ""
+    response.raise_for_status()
+    return (response.json()["choices"][0].get("message") or {}).get("content", "") or ""
 
 
-def _planner_turn(s: dict) -> str:
-    reply = _llm(s["messages"])
-    s["messages"].append({"role": "assistant", "content": reply})
+def _planner_turn(session: dict) -> str:
+    reply = _llm(session["messages"])
+    session["messages"].append({"role": "assistant", "content": reply})
     if PLAN_SENTINEL in reply.lower():
-        s["phase"] = "awaiting_approval"
-        s["plan"] = reply
-    elif s["phase"] != "executing":
-        s["phase"] = "planning"
+        session["phase"] = "awaiting_approval"
+        session["plan"] = reply
+    elif session["phase"] != "executing":
+        session["phase"] = "planning"
     return reply
 
 
 @app.post("/api/session")
 async def start(req: StartReq):
     sid = uuid.uuid4().hex[:8]
-    s = {"id": sid, "phase": "planning", "messages": [{"role": "user", "content": req.prompt}],
+    session = {"id": sid, "phase": "planning", "messages": [{"role": "user", "content": req.prompt}],
          "plan": None, "proj": os.path.join(WORK, sid), "created": time.time(), "proc": None}
-    SESS[sid] = s
-    reply = await run_in_threadpool(_planner_turn, s)
-    return {"session_id": sid, "phase": s["phase"], "reply": reply}
+    SESS[sid] = session
+    reply = await run_in_threadpool(_planner_turn, session)
+    return {"session_id": sid, "phase": session["phase"], "reply": reply}
 
 
 @app.post("/api/session/{sid}/message")
 async def message(sid: str, req: MsgReq):
-    s = _get(sid)
-    s["messages"].append({"role": "user", "content": req.text})
-    reply = await run_in_threadpool(_planner_turn, s)
-    return {"phase": s["phase"], "reply": reply}
+    session = _get(sid)
+    session["messages"].append({"role": "user", "content": req.text})
+    reply = await run_in_threadpool(_planner_turn, session)
+    return {"phase": session["phase"], "reply": reply}
 
 
 @app.post("/api/session/{sid}/approve")
 def approve(sid: str):
-    s = _get(sid)
-    if s.get("proc") is not None:
-        return {"phase": s["phase"]}
-    os.makedirs(s["proj"], exist_ok=True)
-    plan = s.get("plan") or s["messages"][-1]["content"]
+    session = _get(sid)
+    if session.get("proc") is not None:
+        return {"phase": session["phase"]}
+    os.makedirs(session["proj"], exist_ok=True)
+    plan = session.get("plan") or session["messages"][-1]["content"]
     nudge = ("Build EXACTLY this approved plan — nothing more, nothing less (lazy-dev: least code that "
              "delivers it):\n\n" + plan)
-    nf = os.path.join(s["proj"], "NUDGE.md")
+    nf = os.path.join(session["proj"], "NUDGE.md")
     open(nf, "w", encoding="utf-8").write(nudge)
-    env = dict(os.environ, SPRINT_PROJ=s["proj"], SPRINT_GATE=TARGET, SPRINT_ARCH=ARCH_FILE,
+    env = dict(os.environ, SPRINT_PROJ=session["proj"], SPRINT_GATE=TARGET, SPRINT_ARCH=ARCH_FILE,
                SPRINT_NUDGE_FILE=nf, SPRINT_FRESH="0", LLM_BASE=BASE, LLM_MODEL=MODEL)
-    out = open(os.path.join(s["proj"], "orch_run.out"), "w")
-    s["proc"] = subprocess.Popen(["python", "-u", "prismpath/run_sprint.py"], cwd=REPO, env=env,
+    out = open(os.path.join(session["proj"], "orch_run.out"), "w")
+    session["proc"] = subprocess.Popen(["python", "-u", "prismpath/run_sprint.py"], cwd=REPO, env=env,
                                  stdout=out, stderr=subprocess.STDOUT)
-    s["phase"] = "executing"
+    session["phase"] = "executing"
     return {"phase": "executing"}
 
 
 @app.get("/api/session/{sid}")
 def snapshot(sid: str):
-    s = _get(sid)
+    session = _get(sid)
     st = None
-    stf = os.path.join(s["proj"], "status.json")
+    stf = os.path.join(session["proj"], "status.json")
     if os.path.isfile(stf):
         try:
             st = json.load(open(stf))
         except Exception:
             st = None
-    return {"id": sid, "phase": s["phase"], "messages": s["messages"], "plan": s.get("plan"),
+    return {"id": sid, "phase": session["phase"], "messages": session["messages"],
+            "plan": session.get("plan"),
             "build_status": st}
 
 
@@ -163,24 +164,25 @@ def _sse(obj) -> str:
 
 @app.get("/api/session/{sid}/events")
 async def events(sid: str):
-    s = _get(sid)
+    session = _get(sid)
 
     async def gen():
         sent, last_status, last_phase, help_seen = 0, None, None, 0
         while True:
-            while sent < len(s["messages"]):
-                m = s["messages"][sent]; sent += 1
-                yield _sse({"type": "message", "role": m["role"], "content": m["content"]})
-            if s["phase"] != last_phase:
-                last_phase = s["phase"]
-                yield _sse({"type": "phase", "phase": s["phase"]})
-            helpf = os.path.join(s["proj"], "HELP.md")
+            while sent < len(session["messages"]):
+                chat_message = session["messages"][sent]; sent += 1
+                yield _sse({"type": "message", "role": chat_message["role"],
+                            "content": chat_message["content"]})
+            if session["phase"] != last_phase:
+                last_phase = session["phase"]
+                yield _sse({"type": "phase", "phase": session["phase"]})
+            helpf = os.path.join(session["proj"], "HELP.md")
             if os.path.isfile(helpf):
                 opens = open(helpf, encoding="utf-8").read().count("- [ ]")   # unticked = awaiting supervisor
                 if opens != help_seen:
                     help_seen = opens
                     yield _sse({"type": "help", "open": opens})
-            stf = os.path.join(s["proj"], "status.json")
+            stf = os.path.join(session["proj"], "status.json")
             if os.path.isfile(stf):
                 try:
                     st = json.load(open(stf))
@@ -200,12 +202,12 @@ async def events(sid: str):
 
 @app.get("/api/session/{sid}/artifact")
 def artifact(sid: str):
-    s = _get(sid)
+    session = _get(sid)
     buf = io.BytesIO()
-    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
-        for f in glob.glob(os.path.join(s["proj"], "**", "*"), recursive=True):
-            if os.path.isfile(f) and "/node_modules/" not in f:
-                z.write(f, os.path.relpath(f, s["proj"]))
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as archive:
+        for file_path in glob.glob(os.path.join(session["proj"], "**", "*"), recursive=True):
+            if os.path.isfile(file_path) and "/node_modules/" not in file_path:
+                archive.write(file_path, os.path.relpath(file_path, session["proj"]))
     return Response(buf.getvalue(), media_type="application/zip",
                     headers={"Content-Disposition": f'attachment; filename="{sid}.zip"'})
 

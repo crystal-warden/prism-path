@@ -9,8 +9,7 @@ Built on the **Connector SDK** (`prismpath.connector.BaseConnector` — the six 
 the SOC adapter's migration. The Attestation port REUSES the core `ledger_airgap` (#53) through
 the SDK — proving it is shared core, not re-implemented.
 """
-import os, sys, json, hashlib, requests
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+import os, json, hashlib, requests
 from prismpath.ledgers import ledger_airgap
 from prismpath.workers import deferral# CORE attestation + deferral ports (adapter→core OK; core→adapter is the leak)
 from prismpath.workers.connector import BaseConnector  # the Connector SDK — six-port base
@@ -47,24 +46,26 @@ def active_standard():
 
 def list_standards():
     out = {}
-    for s, p in STANDARDS.items():
+    for standard, catalog_path in STANDARDS.items():
         try:
-            m = json.load(open(p)).get("_meta", {})
-            out[s] = {"revision": m.get("revision"), "controls": m.get("controls"), "families": m.get("families")}
+            with open(catalog_path, encoding="utf-8") as catalog_file:
+                meta = json.load(catalog_file).get("_meta", {})
+            out[standard] = {"revision": meta.get("revision"), "controls": meta.get("controls"), "families": meta.get("families")}
         except FileNotFoundError:
-            out[s] = {"error": "catalog file missing"}
+            out[standard] = {"error": "catalog file missing"}
     return out
 
 def _catalog():
     if _ACTIVE not in _CAT_CACHE:
-        _CAT_CACHE[_ACTIVE] = json.load(open(STANDARDS[_ACTIVE]))
+        with open(STANDARDS[_ACTIVE], encoding="utf-8") as catalog_file:
+            _CAT_CACHE[_ACTIVE] = json.load(catalog_file)
     return _CAT_CACHE[_ACTIVE]
 
 def get_control(control_id):
-    c = _catalog()["controls"].get(control_id)
-    if not c:
+    control = _catalog()["controls"].get(control_id)
+    if not control:
         raise KeyError(f"control {control_id} not in catalog {_ACTIVE}")
-    return {"id": control_id, **c}
+    return {"id": control_id, **control}
 
 def catalog_hash():
     body = {"standard": _ACTIVE, "controls": _catalog()["controls"]}
@@ -72,7 +73,7 @@ def catalog_hash():
 
 def catalog_weights():
     """DoD SPRS point values from the active catalog (Rev 2 only; empty for standards without weights)."""
-    return {cid: c["dod_am_weight"] for cid, c in _catalog()["controls"].items() if "dod_am_weight" in c}
+    return {cid: control["dod_am_weight"] for cid, control in _catalog()["controls"].items() if "dod_am_weight" in control}
 
 def actor_types():
     """The actor types this catalog's controls are scoped to (from _meta.actor_types), or {} if the
@@ -110,8 +111,8 @@ def applicable_controls(actor=None):
     known = actor_types()
     if known and actor not in known:
         raise KeyError(f"unknown actor '{actor}' for {_ACTIVE}; choose from {sorted(known)}")
-    return sorted(cid for cid, c in controls.items()
-                  if c.get("applies_to") is None or actor in c["applies_to"])
+    return sorted(cid for cid, control in controls.items()
+                  if control.get("applies_to") is None or actor in control["applies_to"])
 
 def applicability_determination(actor):
     """Split the active catalog into applicable vs not-applicable for `actor`, with a written
@@ -122,8 +123,8 @@ def applicability_determination(actor):
     if known and actor not in known:
         raise KeyError(f"unknown actor '{actor}' for {_ACTIVE}; choose from {sorted(known)}")
     applicable, na = [], []
-    for cid, c in sorted(controls.items()):
-        tags = c.get("applies_to")
+    for cid, control in sorted(controls.items()):
+        tags = control.get("applies_to")
         if tags is None or actor in tags:
             applicable.append(cid)
         else:
@@ -136,12 +137,13 @@ def applicability_determination(actor):
 
 # ---------- Ingestion port: control-assessment request (control id + evidence bundle) ----------
 def load_request(path):
-    return json.load(open(path))
+    with open(path, encoding="utf-8") as request_file:
+        return json.load(request_file)
 
 def iter_requests(dir_):
-    for f in sorted(os.listdir(dir_)):
-        if f.endswith(".json"):
-            yield load_request(os.path.join(dir_, f))
+    for filename in sorted(os.listdir(dir_)):
+        if filename.endswith(".json"):
+            yield load_request(os.path.join(dir_, filename))
 
 def bundle_hash(req):
     body = json.dumps({"control_id": req.get("control_id"), "boundary": req.get("boundary"),
@@ -156,12 +158,12 @@ DETERMINATION_SCHEMA = {"type": "object", "properties": {
     "required": ["status", "unmet_objective_ids", "gap_summary"]}
 
 def _gemma(prompt, schema, name, concise=False):
-    p = prompt + ("\nReturn ONE compact JSON object; gap_summary under 25 words." if concise else "")
-    body = {"model": MODEL, "temperature": 0, "max_tokens": 640, "messages": [{"role": "user", "content": p}],
+    full_prompt = prompt + ("\nReturn ONE compact JSON object; gap_summary under 25 words." if concise else "")
+    body = {"model": MODEL, "temperature": 0, "max_tokens": 640, "messages": [{"role": "user", "content": full_prompt}],
             "response_format": {"type": "json_schema", "json_schema": {"name": name, "schema": schema}}}
-    r = requests.post(GEMMA, json=body, timeout=180); r.raise_for_status()
+    response = requests.post(GEMMA, json=body, timeout=180); response.raise_for_status()
     try:
-        return json.loads(r.json()["choices"][0]["message"]["content"])
+        return json.loads(response.json()["choices"][0]["message"]["content"])
     except Exception:
         return _gemma(prompt, schema, name, True) if not concise else None
 
@@ -170,7 +172,7 @@ def _gemma(prompt, schema, name, concise=False):
 def _method_profile(control):
     fam = (control.get("family_name") or "").lower()
     def has(*ks):
-        return any(k in fam for k in ks)
+        return any(keyword in fam for keyword in ks)
     if has("risk assessment"):                                          # policy/process, not the CA family
         return "procedural"
     if has("security assessment", "assessment and authorization"):
@@ -224,8 +226,8 @@ def write_result(control, req, determination, out_dir):
     unmet = set(determination.get("unmet_objective_ids", []))
     rec = {"control_id": cid, "title": control["title"], "boundary": req.get("boundary"),
            "status": determination["status"], "gap_summary": determination["gap_summary"],
-           "objectives_assessed": [o["id"] for o in control["objectives"]],
-           "unmet_objectives": [o for o in control["objectives"] if o["id"] in unmet]}
+           "objectives_assessed": [objective["id"] for objective in control["objectives"]],
+           "unmet_objectives": [objective for objective in control["objectives"] if objective["id"] in unmet]}
     if determination["status"] == "met":
         rec["record_type"] = "finding_met"
         path = os.path.join(out_dir, f"finding_{cid}.json")
@@ -234,7 +236,10 @@ def write_result(control, req, determination, out_dir):
         rec["weaknesses"] = rec["unmet_objectives"]
         rec["remediation"] = "TBD — address the listed weaknesses"; rec["milestone"] = "TBD"; rec["poam_status"] = "open"
         path = os.path.join(out_dir, f"poam_{cid}.json")
-    json.dump(rec, open(path, "w"), indent=1)
+    # the record is evidence: it is written through a handle that is closed here rather than
+    # whenever the collector happens to run
+    with open(path, "w", encoding="utf-8") as record_file:
+        json.dump(rec, record_file, indent=1)
     return path, rec["record_type"]
 
 # ---------- Attestation port: REUSE the core Flow-Ledger provenance (#53) ----------
@@ -242,7 +247,8 @@ GENERIC_FLOW = os.path.join(HERE, "flows", "nist_800171_generic.md")
 
 def active_flow_hash(path=GENERIC_FLOW):
     """Hash the actual decision-flow content, so the attestation binds the exact policy graph used."""
-    return "sha256:" + hashlib.sha256(open(path, "rb").read()).hexdigest()[:16]
+    with open(path, "rb") as flow_file:
+        return "sha256:" + hashlib.sha256(flow_file.read()).hexdigest()[:16]
 
 def attest(control, req, determination, flow_hash=None):
     """Attestation port — through the SDK's ledger_airgap binding (`attest_decision` computes the
@@ -290,8 +296,9 @@ class ComplianceConnector(BaseConnector):
     # -- Adjudicator port: the domain prompt (payload = the assessment request, criteria = control)
     def adjudication_prompt(self, payload, criteria=None, schema=None):
         control, req = criteria, payload
-        objs = "\n".join(f"  - {o['id']}: {o['text']}" for o in control["objectives"])
-        ev = "\n".join(f"  - [{e.get('type', 'evidence')}] {e.get('text', '')}" for e in req.get("evidence", [])) or "  (no evidence submitted)"
+        objs = "\n".join(f"  - {objective['id']}: {objective['text']}" for objective in control["objectives"])
+        ev = "\n".join(f"  - [{evidence_item.get('type', 'evidence')}] {evidence_item.get('text', '')}"
+                       for evidence_item in req.get("evidence", [])) or "  (no evidence submitted)"
         profile = _method_profile(control)
         methods = ", ".join(control.get("methods", [])) or "Examine"
         return (f"You are a NIST SP 800-171 assessor evaluating control {control['id']} — {control['title']} "
@@ -311,10 +318,9 @@ class ComplianceConnector(BaseConnector):
 CONNECTOR = ComplianceConnector()
 
 # ---------- Sink port (report emitter): standards-native OSCAL + CycloneDX (#65) ----------
-sys.path.insert(0, HERE)
-import emit as _emit      # pure serialization, adapter-local; carries the Flow-Ledger provenance into each report
-import rollup as _rollup  # system-level aggregation: partial SPRS + scope + rollup attestation
-import deterministic_checks as _det  # comparator Adjudicator for machine-checkable objectives (honest hybrid)
+from adapters.compliance import emit as _emit      # pure serialization, adapter-local; carries the Flow-Ledger provenance into each report
+from adapters.compliance import rollup as _rollup  # system-level aggregation: partial SPRS + scope + rollup attestation
+from adapters.compliance import deterministic_checks as _det  # comparator Adjudicator for machine-checkable objectives (honest hybrid)
 
 def result_record(control, req, determination, manifest):
     """Normalize an adjudicated determination + its attestation manifest into an emit() record."""
@@ -344,8 +350,8 @@ def rollup_report(records, scope_meta, out_dir=None, fmt="both"):
     summary_path = _rollup.write_summary(sprs, scope, manifest, summary, out_dir) if out_dir else None
     return {"sprs": sprs, "scope": scope, "rollup_manifest": manifest["manifest_hash"],
             "bound_control_manifests": manifest["ingestion_hashes"], "summary_path": summary_path,
-            "emitted": {k: {"valid": v["valid"], "n_errors": len(v["errors"]), "path": v["path"]}
-                        for k, v in emitted.items()}}
+            "emitted": {format_name: {"valid": emission["valid"], "n_errors": len(emission["errors"]), "path": emission["path"]}
+                        for format_name, emission in emitted.items()}}
 
 # ---------- Deferral port wiring: HITL review + missing-evidence discovery ----------
 # The module global is the swap seam (tests replace it); it is initialized to the CONNECTOR's own
@@ -378,14 +384,15 @@ def resolve_review(unit_id, new_status, unmet_objective_ids, actor, rationale, o
     unmet = set(unmet_objective_ids)
     out = {"control_id": control["id"], "title": control["title"], "final_status": new_status,
            "gap_summary": final_det["gap_summary"],
-           "unmet_objectives": [o for o in control["objectives"] if o["id"] in unmet],
+           "unmet_objectives": [objective for objective in control["objectives"] if objective["id"] in unmet],
            "override": {"actor": actor, "rationale": rationale, "ai_original_status": ai_det["status"],
                         "ai_manifest": ai_prov["manifest_hash"], "override_manifest": ov["manifest_hash"],
                         "supersedes": ov["supersedes"]}}
     os.makedirs(out_dir, exist_ok=True)
     kind = "finding" if new_status == "met" else "poam"
     path = os.path.join(out_dir, f"{kind}_{control['id']}_overridden.json")
-    json.dump(out, open(path, "w"), indent=1)
+    with open(path, "w", encoding="utf-8") as record_file:
+        json.dump(out, record_file, indent=1)
     return {"unit_id": unit_id, "ai_status": ai_det["status"], "final_status": new_status, "overrider": actor,
             "ai_manifest": ai_prov["manifest_hash"][:16], "override_manifest": ov["manifest_hash"][:16],
             "supersedes_ai": ov["supersedes"] == ai_prov["manifest_hash"], "record": os.path.relpath(path, HERE)}
@@ -393,10 +400,10 @@ def resolve_review(unit_id, new_status, unmet_objective_ids, actor, rationale, o
 def translate_missing(control, unmet_ids=None):
     """Translation layer (Gap 1): turn a control + its unmet objectives into a catalog-driven,
     objective-specific evidence request. unmet_ids=None means the whole control (e.g. an empty bundle)."""
-    targets = set(unmet_ids) if unmet_ids else {o["id"] for o in control["objectives"]}
-    requests = [{"objective_id": o["id"], "objective": o["text"],
-                 "ask": o.get("discovery_query", "Provide evidence that %s." % o["text"])}
-                for o in control["objectives"] if o["id"] in targets]
+    targets = set(unmet_ids) if unmet_ids else {objective["id"] for objective in control["objectives"]}
+    requests = [{"objective_id": objective["id"], "objective": objective["text"],
+                 "ask": objective.get("discovery_query", "Provide evidence that %s." % objective["text"])}
+                for objective in control["objectives"] if objective["id"] in targets]
     return {"control_id": control["id"], "evidence_types": control.get("evidence_types", []),
             "requests": requests}
 
@@ -410,7 +417,7 @@ def defer_for_evidence(control, req, missing=None, unmet_ids=None):
     unit = f"assess:{control['id']}:{bundle_hash(req)}"
     _DEFER.defer(unit, reason=("request_evidence: %s" % reason)[:200],
                  state={"flow": "nist_800171_access_control", "control_id": control["id"], "boundary": req.get("boundary")},
-                 prior_output={"request": missing, "objective_ids": [o["id"] for o in control["objectives"]]})
+                 prior_output={"request": missing, "objective_ids": [objective["id"] for objective in control["objectives"]]})
     return {"unit_id": unit, "status": "pending_evidence", "request": missing}
 
 def resolve_evidence(unit_id, new_evidence, out_dir):

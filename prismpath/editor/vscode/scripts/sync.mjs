@@ -11,7 +11,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const portable = join(here, "..", "..", "..", "portable");
 const media = join(here, "..", "media");
 mkdirSync(media, { recursive: true });
-for (const f of ["playground.html", "prismpath.mjs"]) {
-  copyFileSync(join(portable, f), join(media, f));
-  console.log(`synced ${f} -> media/`);
+for (const fileName of ["playground.html", "prismpath.mjs"]) {
+  copyFileSync(join(portable, fileName), join(media, fileName));
+  console.log(`synced ${fileName} -> media/`);
 }

@@ -23,7 +23,7 @@ impl AtomConst {
     pub fn is_str(&self) -> bool {
         match self {
             AtomConst::Str(_) => true,
-            AtomConst::List(l) => l.iter().any(|x| x.is_str()),
+            AtomConst::List(members) => members.iter().any(|member| member.is_str()),
             _ => false,
         }
     }
@@ -31,7 +31,7 @@ impl AtomConst {
     pub fn is_bool(&self) -> bool {
         match self {
             AtomConst::Bool(_) => true,
-            AtomConst::List(l) => l.iter().any(|x| x.is_bool()),
+            AtomConst::List(members) => members.iter().any(|member| member.is_bool()),
             _ => false,
         }
     }
@@ -39,15 +39,15 @@ impl AtomConst {
     pub fn is_num(&self) -> bool {
         match self {
             AtomConst::Num(_) => true,
-            AtomConst::List(l) => l.iter().any(|x| x.is_num()),
+            AtomConst::List(members) => members.iter().any(|member| member.is_num()),
             _ => false,
         }
     }
 
     pub fn flat_consts(&self) -> Vec<AtomConst> {
         match self {
-            AtomConst::List(l) => l.clone(),
-            c => vec![c.clone()],
+            AtomConst::List(members) => members.clone(),
+            single => vec![single.clone()],
         }
     }
 }
@@ -95,12 +95,12 @@ impl FieldPartition {
     pub fn symbol(&self, value: &V) -> Result<usize, String> {
         match self.kind {
             FieldKind::Numeric => {
-                let v = v_to_i64(value);
-                for (i, c) in self.cells.iter().enumerate() {
-                    let lo_ok = c.lo.is_none_or(|l| v >= l);
-                    let hi_ok = c.hi.is_none_or(|h| v <= h);
+                let number = v_to_i64(value);
+                for (index, cell) in self.cells.iter().enumerate() {
+                    let lo_ok = cell.lo.is_none_or(|low| number >= low);
+                    let hi_ok = cell.hi.is_none_or(|high| number <= high);
                     if lo_ok && hi_ok {
-                        return Ok(i);
+                        return Ok(index);
                     }
                 }
                 Err(format!("{}={:?} fell outside its numeric partition", self.field, value))
@@ -109,11 +109,11 @@ impl FieldPartition {
                 Ok(if prismpath_rs::py_truthy(value) { 1 } else { 0 })
             }
             FieldKind::Categorical => {
-                let s = v_to_str(value);
-                for (i, c) in self.cells.iter().enumerate() {
-                    if let Some(ref cv) = c.const_val {
-                        if cv == &s {
-                            return Ok(i);
+                let text = v_to_str(value);
+                for (index, cell) in self.cells.iter().enumerate() {
+                    if let Some(ref constant) = cell.const_val {
+                        if constant == &text {
+                            return Ok(index);
                         }
                     }
                 }
@@ -129,45 +129,45 @@ impl FieldPartition {
 
 fn v_to_i64(value: &V) -> i64 {
     match value {
-        V::Num(n) => *n as i64,
-        V::Bool(b) => if *b { 1 } else { 0 },
-        V::Str(s) => s.parse::<i64>().unwrap_or(0),
+        V::Num(number) => *number as i64,
+        V::Bool(flag) => if *flag { 1 } else { 0 },
+        V::Str(text) => text.parse::<i64>().unwrap_or(0),
         _ => 0,
     }
 }
 
 fn v_to_str(value: &V) -> String {
     match value {
-        V::Str(s) => s.clone(),
-        V::Num(n) => n.to_string(),
-        V::Bool(b) => if *b { "True".to_string() } else { "False".to_string() },
+        V::Str(text) => text.clone(),
+        V::Num(number) => number.to_string(),
+        V::Bool(flag) => if *flag { "True".to_string() } else { "False".to_string() },
         _ => String::new(),
     }
 }
 
-fn atom_true(op: &str, const_val: &AtomConst, v: i64) -> bool {
-    let c = match const_val {
-        AtomConst::Num(n) => *n,
+fn atom_true(op: &str, const_val: &AtomConst, reading_value: i64) -> bool {
+    let constant = match const_val {
+        AtomConst::Num(number) => *number,
         _ => 0,
     };
     // `in` / `not in` over a numeric list: membership of the value in the list's integers. The
     // first version returned false for both, so list atoms never influenced the merge (September
     // 2026, found by the Lean formalization of I1 alongside the missing cut points below).
     let in_list = || match const_val {
-        AtomConst::List(l) => l.iter().any(|x| matches!(x, AtomConst::Num(n) if *n == v)),
-        AtomConst::Num(n) => *n == v,
+        AtomConst::List(members) => members.iter().any(|member| matches!(member, AtomConst::Num(number) if *number == reading_value)),
+        AtomConst::Num(number) => *number == reading_value,
         _ => false,
     };
     match op {
-        "<" => v < c,
-        "<=" => v <= c,
-        ">" => v > c,
-        ">=" => v >= c,
-        "==" => v == c,
-        "!=" => v != c,
+        "<" => reading_value < constant,
+        "<=" => reading_value <= constant,
+        ">" => reading_value > constant,
+        ">=" => reading_value >= constant,
+        "==" => reading_value == constant,
+        "!=" => reading_value != constant,
         "in" => in_list(),
         "not in" => !in_list(),
-        "truthy" => v != 0,
+        "truthy" => reading_value != 0,
         _ => false,
     }
 }
@@ -177,20 +177,20 @@ fn numeric_partition(field: &str, atoms: &[Atom]) -> FieldPartition {
     // constants, every integer in an `in` / `not in` list, and 0 for a bare truthiness atom.
     // Mirrors quantizer.py `_numeric_partition` after the September 2026 correction.
     let mut const_set: Vec<i64> = Vec::new();
-    for a in atoms {
-        match a.op.as_str() {
+    for atom in atoms {
+        match atom.op.as_str() {
             "<" | "<=" | ">" | ">=" | "==" | "!=" => {
-                if let AtomConst::Num(n) = a.const_val {
-                    if !const_set.contains(&n) {
-                        const_set.push(n);
+                if let AtomConst::Num(number) = atom.const_val {
+                    if !const_set.contains(&number) {
+                        const_set.push(number);
                     }
                 }
             }
             "in" | "not in" => {
-                for x in a.const_val.flat_consts() {
-                    if let AtomConst::Num(n) = x {
-                        if !const_set.contains(&n) {
-                            const_set.push(n);
+                for member in atom.const_val.flat_consts() {
+                    if let AtomConst::Num(number) = member {
+                        if !const_set.contains(&number) {
+                            const_set.push(number);
                         }
                     }
                 }
@@ -206,12 +206,12 @@ fn numeric_partition(field: &str, atoms: &[Atom]) -> FieldPartition {
 
     let mut fine: Vec<(Option<i64>, Option<i64>)> = Vec::new();
     fine.push((None, Some(const_set[0] - 1)));
-    for (i, &c) in const_set.iter().enumerate() {
-        fine.push((Some(c), Some(c)));
-        let nxt = const_set.get(i + 1).copied();
-        let lo = c + 1;
-        let hi = nxt.map(|n| n - 1);
-        if hi.is_none_or(|h| lo <= h) {
+    for (index, &cut_point) in const_set.iter().enumerate() {
+        fine.push((Some(cut_point), Some(cut_point)));
+        let nxt = const_set.get(index + 1).copied();
+        let lo = cut_point + 1;
+        let hi = nxt.map(|next_cut_point| next_cut_point - 1);
+        if hi.is_none_or(|bound| lo <= bound) {
             fine.push((Some(lo), hi));
         }
     }
@@ -220,8 +220,8 @@ fn numeric_partition(field: &str, atoms: &[Atom]) -> FieldPartition {
         lo.or(hi).unwrap_or_default()
     }
 
-    let truth = |v: i64| -> Vec<bool> {
-        atoms.iter().map(|a| atom_true(&a.op, &a.const_val, v)).collect()
+    let truth = |reading_value: i64| -> Vec<bool> {
+        atoms.iter().map(|atom| atom_true(&atom.op, &atom.const_val, reading_value)).collect()
     };
 
     let mut cells: Vec<Cell> = Vec::new();
@@ -257,32 +257,32 @@ fn boolean_partition(field: &str) -> FieldPartition {
 
 fn categorical_partition(field: &str, atoms: &[Atom]) -> FieldPartition {
     let mut consts: Vec<String> = Vec::new();
-    for a in atoms {
+    for atom in atoms {
         // str truthiness is `s != ""`: the empty string is a named constant (September 2026).
-        let vals: Vec<String> = if a.op == "truthy" {
+        let vals: Vec<String> = if atom.op == "truthy" {
             vec![String::new()]
         } else {
-            match &a.const_val {
-                AtomConst::List(l) => l.iter().filter_map(|x| match x {
-                    AtomConst::Str(s) => Some(s.clone()),
+            match &atom.const_val {
+                AtomConst::List(members) => members.iter().filter_map(|member| match member {
+                    AtomConst::Str(text) => Some(text.clone()),
                     _ => None,
                 }).collect(),
-                AtomConst::Str(s) => vec![s.clone()],
+                AtomConst::Str(text) => vec![text.clone()],
                 _ => vec![],
             }
         };
-        for v in vals {
-            if !consts.contains(&v) {
-                consts.push(v);
+        for value in vals {
+            if !consts.contains(&value) {
+                consts.push(value);
             }
         }
     }
 
-    let mut cells: Vec<Cell> = consts.iter().map(|c| Cell {
+    let mut cells: Vec<Cell> = consts.iter().map(|constant| Cell {
         lo: None,
         hi: None,
-        const_val: Some(c.clone()),
-        rep: V::Str(c.clone()),
+        const_val: Some(constant.clone()),
+        rep: V::Str(constant.clone()),
     }).collect();
 
     cells.push(Cell {
@@ -297,13 +297,13 @@ fn categorical_partition(field: &str, atoms: &[Atom]) -> FieldPartition {
 
 fn classify_kind(atoms: &[Atom]) -> Result<FieldKind, String> {
     let mut flat = Vec::new();
-    for a in atoms {
-        if a.op != "truthy" {
-            flat.extend(a.const_val.flat_consts());
+    for atom in atoms {
+        if atom.op != "truthy" {
+            flat.extend(atom.const_val.flat_consts());
         }
     }
-    let has_str = flat.iter().any(|x| x.is_str());
-    let has_num = flat.iter().any(|x| x.is_num());
+    let has_str = flat.iter().any(|member| member.is_str());
+    let has_num = flat.iter().any(|member| member.is_num());
 
     if has_str && has_num {
         return Err("field mixes string and numeric constants — not a Level M field".to_string());
@@ -330,77 +330,77 @@ enum Tok {
 fn tokenize_cond(src: &str) -> Vec<Tok> {
     let mut toks = Vec::new();
     let chars: Vec<char> = src.chars().collect();
-    let mut i = 0;
-    while i < chars.len() {
-        let c = chars[i];
-        if c.is_whitespace() {
-            i += 1;
+    let mut cursor = 0;
+    while cursor < chars.len() {
+        let character = chars[cursor];
+        if character.is_whitespace() {
+            cursor += 1;
             continue;
         }
-        if c == '\'' || c == '"' {
-            let quote = c;
-            i += 1;
-            let mut s = String::new();
-            while i < chars.len() && chars[i] != quote {
-                s.push(chars[i]);
-                i += 1;
+        if character == '\'' || character == '"' {
+            let quote = character;
+            cursor += 1;
+            let mut text = String::new();
+            while cursor < chars.len() && chars[cursor] != quote {
+                text.push(chars[cursor]);
+                cursor += 1;
             }
-            if i < chars.len() {
-                i += 1;
+            if cursor < chars.len() {
+                cursor += 1;
             }
-            toks.push(Tok::Str(s));
+            toks.push(Tok::Str(text));
             continue;
         }
-        if c == '-' || c.is_ascii_digit() {
-            let start = i;
-            if c == '-' {
-                i += 1;
+        if character == '-' || character.is_ascii_digit() {
+            let start = cursor;
+            if character == '-' {
+                cursor += 1;
             }
-            while i < chars.len() && chars[i].is_ascii_digit() {
-                i += 1;
+            while cursor < chars.len() && chars[cursor].is_ascii_digit() {
+                cursor += 1;
             }
-            if i > start && (start != i - 1 || chars[start] != '-') {
-                let s: String = chars[start..i].iter().collect();
-                if let Ok(n) = s.parse::<i64>() {
-                    toks.push(Tok::Num(n));
+            if cursor > start && (start != cursor - 1 || chars[start] != '-') {
+                let text: String = chars[start..cursor].iter().collect();
+                if let Ok(number) = text.parse::<i64>() {
+                    toks.push(Tok::Num(number));
                     continue;
                 }
             }
-            i = start;
+            cursor = start;
         }
-        if c.is_alphabetic() || c == '_' {
-            let start = i;
-            while i < chars.len() && (chars[i].is_alphanumeric() || chars[i] == '_') {
-                i += 1;
+        if character.is_alphabetic() || character == '_' {
+            let start = cursor;
+            while cursor < chars.len() && (chars[cursor].is_alphanumeric() || chars[cursor] == '_') {
+                cursor += 1;
             }
-            let s: String = chars[start..i].iter().collect();
-            match s.as_str() {
+            let text: String = chars[start..cursor].iter().collect();
+            match text.as_str() {
                 "True" => toks.push(Tok::Bool(true)),
                 "False" => toks.push(Tok::Bool(false)),
-                "and" | "or" | "not" | "in" => toks.push(Tok::Op(s)),
-                _ => toks.push(Tok::Ident(s)),
+                "and" | "or" | "not" | "in" => toks.push(Tok::Op(text)),
+                _ => toks.push(Tok::Ident(text)),
             }
             continue;
         }
-        if i + 1 < chars.len() {
-            let two: String = chars[i..i + 2].iter().collect();
+        if cursor + 1 < chars.len() {
+            let two: String = chars[cursor..cursor + 2].iter().collect();
             if matches!(two.as_str(), "==" | "!=" | "<=" | ">=") {
                 toks.push(Tok::Op(two));
-                i += 2;
+                cursor += 2;
                 continue;
             }
         }
-        if matches!(c, '<' | '>') {
-            toks.push(Tok::Op(c.to_string()));
-            i += 1;
+        if matches!(character, '<' | '>') {
+            toks.push(Tok::Op(character.to_string()));
+            cursor += 1;
             continue;
         }
-        if matches!(c, '(' | ')' | '[' | ']' | ',') {
-            toks.push(Tok::Op(c.to_string()));
-            i += 1;
+        if matches!(character, '(' | ')' | '[' | ']' | ',') {
+            toks.push(Tok::Op(character.to_string()));
+            cursor += 1;
             continue;
         }
-        i += 1;
+        cursor += 1;
     }
 
     // Coalesce "not" + "in" -> "not in"
@@ -437,39 +437,39 @@ fn flip_op(op: &str) -> String {
 pub fn parse_atoms(expr_str: &str) -> Vec<Atom> {
     let toks = tokenize_cond(expr_str);
     let mut atoms = Vec::new();
-    let mut i = 0;
+    let mut cursor = 0;
 
-    while i < toks.len() {
-        match &toks[i] {
+    while cursor < toks.len() {
+        match &toks[cursor] {
             Tok::Op(op) if op == "and" || op == "or" || op == "not" => {
-                i += 1;
+                cursor += 1;
             }
             Tok::Op(op) if op == "(" || op == ")" || op == "[" || op == "]" || op == "," => {
-                i += 1;
+                cursor += 1;
             }
             Tok::Ident(field) => {
                 let f_name = field.clone();
-                if i + 1 < toks.len() {
-                    if let Tok::Op(cmp_op) = &toks[i + 1] {
+                if cursor + 1 < toks.len() {
+                    if let Tok::Op(cmp_op) = &toks[cursor + 1] {
                         if cmp_op == "in" || cmp_op == "not in" {
                             // field in (c1, c2, ...)
                             let op_str = cmp_op.clone();
-                            i += 2;
+                            cursor += 2;
                             let mut consts = Vec::new();
-                            if i < toks.len() && matches!(&toks[i], Tok::Op(o) if o == "(" || o == "[") {
-                                i += 1;
-                                while i < toks.len() {
-                                    match &toks[i] {
-                                        Tok::Str(s) => consts.push(AtomConst::Str(s.clone())),
-                                        Tok::Num(n) => consts.push(AtomConst::Num(*n)),
-                                        Tok::Bool(b) => consts.push(AtomConst::Bool(*b)),
-                                        Tok::Op(o) if o == ")" || o == "]" => {
-                                            i += 1;
+                            if cursor < toks.len() && matches!(&toks[cursor], Tok::Op(bracket) if bracket == "(" || bracket == "[") {
+                                cursor += 1;
+                                while cursor < toks.len() {
+                                    match &toks[cursor] {
+                                        Tok::Str(text) => consts.push(AtomConst::Str(text.clone())),
+                                        Tok::Num(number) => consts.push(AtomConst::Num(*number)),
+                                        Tok::Bool(flag) => consts.push(AtomConst::Bool(*flag)),
+                                        Tok::Op(bracket) if bracket == ")" || bracket == "]" => {
+                                            cursor += 1;
                                             break;
                                         }
                                         _ => {}
                                     }
-                                    i += 1;
+                                    cursor += 1;
                                 }
                             }
                             atoms.push(Atom {
@@ -480,33 +480,33 @@ pub fn parse_atoms(expr_str: &str) -> Vec<Atom> {
                             continue;
                         } else if matches!(cmp_op.as_str(), "<" | "<=" | ">" | ">=" | "==" | "!=") {
                             let op_str = cmp_op.clone();
-                            if i + 2 < toks.len() {
-                                match &toks[i + 2] {
-                                    Tok::Num(n) => {
+                            if cursor + 2 < toks.len() {
+                                match &toks[cursor + 2] {
+                                    Tok::Num(number) => {
                                         atoms.push(Atom {
                                             field: f_name,
                                             op: op_str,
-                                            const_val: AtomConst::Num(*n),
+                                            const_val: AtomConst::Num(*number),
                                         });
-                                        i += 3;
+                                        cursor += 3;
                                         continue;
                                     }
-                                    Tok::Str(s) => {
+                                    Tok::Str(text) => {
                                         atoms.push(Atom {
                                             field: f_name,
                                             op: op_str,
-                                            const_val: AtomConst::Str(s.clone()),
+                                            const_val: AtomConst::Str(text.clone()),
                                         });
-                                        i += 3;
+                                        cursor += 3;
                                         continue;
                                     }
-                                    Tok::Bool(b) => {
+                                    Tok::Bool(flag) => {
                                         atoms.push(Atom {
                                             field: f_name,
                                             op: op_str,
-                                            const_val: AtomConst::Bool(*b),
+                                            const_val: AtomConst::Bool(*flag),
                                         });
-                                        i += 3;
+                                        cursor += 3;
                                         continue;
                                     }
                                     _ => {}
@@ -521,44 +521,44 @@ pub fn parse_atoms(expr_str: &str) -> Vec<Atom> {
                     op: "truthy".to_string(),
                     const_val: AtomConst::None,
                 });
-                i += 1;
+                cursor += 1;
             }
-            Tok::Num(n) => {
-                let val = *n;
-                if i + 2 < toks.len() {
-                    if let (Tok::Op(cmp_op), Tok::Ident(field)) = (&toks[i + 1], &toks[i + 2]) {
+            Tok::Num(number) => {
+                let val = *number;
+                if cursor + 2 < toks.len() {
+                    if let (Tok::Op(cmp_op), Tok::Ident(field)) = (&toks[cursor + 1], &toks[cursor + 2]) {
                         if matches!(cmp_op.as_str(), "<" | "<=" | ">" | ">=" | "==" | "!=") {
                             atoms.push(Atom {
                                 field: field.clone(),
                                 op: flip_op(cmp_op),
                                 const_val: AtomConst::Num(val),
                             });
-                            i += 3;
+                            cursor += 3;
                             continue;
                         }
                     }
                 }
-                i += 1;
+                cursor += 1;
             }
-            Tok::Str(s) => {
-                let val = s.clone();
-                if i + 2 < toks.len() {
-                    if let (Tok::Op(cmp_op), Tok::Ident(field)) = (&toks[i + 1], &toks[i + 2]) {
+            Tok::Str(text) => {
+                let val = text.clone();
+                if cursor + 2 < toks.len() {
+                    if let (Tok::Op(cmp_op), Tok::Ident(field)) = (&toks[cursor + 1], &toks[cursor + 2]) {
                         if matches!(cmp_op.as_str(), "<" | "<=" | ">" | ">=" | "==" | "!=") {
                             atoms.push(Atom {
                                 field: field.clone(),
                                 op: flip_op(cmp_op),
                                 const_val: AtomConst::Str(val),
                             });
-                            i += 3;
+                            cursor += 3;
                             continue;
                         }
                     }
                 }
-                i += 1;
+                cursor += 1;
             }
             _ => {
-                i += 1;
+                cursor += 1;
             }
         }
     }
@@ -567,11 +567,11 @@ pub fn parse_atoms(expr_str: &str) -> Vec<Atom> {
 }
 
 fn expr_of(cond: &str) -> String {
-    let c = cond.trim();
-    if c.to_lowercase().starts_with("when ") {
-        c[5..].trim().to_string()
+    let text = cond.trim();
+    if text.to_lowercase().starts_with("when ") {
+        text[5..].trim().to_string()
     } else {
-        c.to_string()
+        text.to_string()
     }
 }
 
@@ -617,9 +617,9 @@ pub fn quantize(
     reading: &HashMap<String, V>,
 ) -> Result<HashMap<String, usize>, String> {
     let mut out = HashMap::new();
-    for (f, p) in parts {
-        if let Some(v) = reading.get(f) {
-            out.insert(f.clone(), p.symbol(v)?);
+    for (field, partition) in parts {
+        if let Some(value) = reading.get(field) {
+            out.insert(field.clone(), partition.symbol(value)?);
         }
     }
     Ok(out)
@@ -630,9 +630,9 @@ pub fn reconstruct(
     symbols: &HashMap<String, usize>,
 ) -> HashMap<String, V> {
     let mut out = HashMap::new();
-    for (f, &s) in symbols {
-        if let Some(p) = parts.get(f) {
-            out.insert(f.clone(), p.representative(s));
+    for (field, &symbol) in symbols {
+        if let Some(partition) = parts.get(field) {
+            out.insert(field.clone(), partition.representative(symbol));
         }
     }
     out

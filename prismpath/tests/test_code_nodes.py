@@ -16,17 +16,17 @@ BAD_ENV = ("---\nname: e\nstart: a\n---\n"
 UNDECLARED = "---\nname: u\nstart: a\n---\n## a\nx\n-> b: else\n## b\ndone\n"
 
 
-def _handler_v(v):
-    return lambda node, instruction, state: {"v": v, "text": f"v={v}"}
+def _handler_v(value):
+    return lambda node, instruction, state: {"v": value, "text": f"v={value}"}
 
 
 # ── routing on a code node's outcome ──────────────────────────────────────────
 def test_routes_on_code_outcome():
-    g = parse(DECLARED)
-    agent = cn.code_agent(g, {"a": _handler_v(2)}, runner=cn.in_process_runner)
-    assert run(g, agent).path == ["a", "b"]          # v=2 > 1 -> b
-    agent0 = cn.code_agent(g, {"a": _handler_v(0)}, runner=cn.in_process_runner)
-    assert run(g, agent0).path == ["a", "c"]          # else -> c
+    graph = parse(DECLARED)
+    agent = cn.code_agent(graph, {"a": _handler_v(2)}, runner=cn.in_process_runner)
+    assert run(graph, agent).path == ["a", "b"]          # v=2 > 1 -> b
+    agent0 = cn.code_agent(graph, {"a": _handler_v(0)}, runner=cn.in_process_runner)
+    assert run(graph, agent0).path == ["a", "c"]          # else -> c
 
 
 # ── the static gate (portable, verifiable) ────────────────────────────────────
@@ -42,27 +42,27 @@ def test_static_gate_flags_invalid_envelope():
 
 
 def test_parse_envelope_defaults_and_values():
-    g = parse(DECLARED)
-    env, probs = cn.parse_envelope(g.nodes["a"].annotations["code"])
+    graph = parse(DECLARED)
+    env, probs = cn.parse_envelope(graph.nodes["a"].annotations["code"])
     assert probs == [] and env.net is False and env.fs == "none" and env.timeout_s == 5 and env.mem_mb == 128
 
 
 # ── fail-closed contract (call the agent directly; the engine's error tier would swallow it) ──
 def test_refuses_handler_on_undeclared_node():
-    g = parse(UNDECLARED)
-    agent = cn.code_agent(g, {"a": _handler_v(2)}, runner=cn.in_process_runner)
+    graph = parse(UNDECLARED)
+    agent = cn.code_agent(graph, {"a": _handler_v(2)}, runner=cn.in_process_runner)
     with pytest.raises(cn.CodeNodeError):
         agent("a", "x", {})
 
 
 def test_refuses_without_a_runner():
-    g = parse(DECLARED)
-    agent = cn.code_agent(g, {"a": _handler_v(2)})   # no runner supplied
+    graph = parse(DECLARED)
+    agent = cn.code_agent(graph, {"a": _handler_v(2)})   # no runner supplied
     with pytest.raises(cn.CodeNodeError):
         agent("a", "x", {})
 
 
 def test_non_handler_node_passes_through():
-    g = parse(DECLARED)
-    agent = cn.code_agent(g, {"a": _handler_v(2)}, runner=cn.in_process_runner)
+    graph = parse(DECLARED)
+    agent = cn.code_agent(graph, {"a": _handler_v(2)}, runner=cn.in_process_runner)
     assert agent("b", "done", {}) == {"text": "b"}   # 'b' has no handler -> text passthrough

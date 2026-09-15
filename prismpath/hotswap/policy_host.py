@@ -54,8 +54,8 @@ class PolicyHost:
     # -- persisted monotonic version (anti-rollback floor) --
     def _stored_version(self) -> int:
         try:
-            with open(self._version_path) as f:
-                return int(f.read().strip() or "0")
+            with open(self._version_path) as version_file:
+                return int(version_file.read().strip() or "0")
         except (FileNotFoundError, ValueError):
             return 0
 
@@ -77,10 +77,10 @@ class PolicyHost:
         with self._lock:
             image = None
             try:
-                with open(ppt_path, "rb") as f:
-                    image = f.read()
-            except OSError as e:
-                return self._reject(None, None, [f"image:unreadable:{e.errno}"], strict)
+                with open(ppt_path, "rb") as image_file:
+                    image = image_file.read()
+            except OSError as error:
+                return self._reject(None, None, [f"image:unreadable:{error.errno}"], strict)
 
             to_hash = pp.sha256_hex(image)
 
@@ -106,8 +106,8 @@ class PolicyHost:
             # stage a shadow: fully parse the image into the register-machine views before any flip
             try:
                 staged = pp.read_ppt_header(image)
-            except ValueError as e:
-                return self._reject(to_hash, manifest.get("version"), [str(e)], strict)
+            except ValueError as error:
+                return self._reject(to_hash, manifest.get("version"), [str(error)], strict)
 
             # atomic flip
             new_active = {"sha256": to_hash, "version": manifest.get("version"),
@@ -132,10 +132,10 @@ class PolicyHost:
     def active(self) -> dict:
         if self._active is None:
             return {"active": None}
-        a = self._active
-        return {"active": a["sha256"], "version": a["version"], "since": a["since"],
-                "unsigned": a["unsigned"], "envelope_id": a["envelope_id"],
-                "overlay_of": a.get("overlay_of")}
+        active_policy = self._active
+        return {"active": active_policy["sha256"], "version": active_policy["version"], "since": active_policy["since"],
+                "unsigned": active_policy["unsigned"], "envelope_id": active_policy["envelope_id"],
+                "overlay_of": active_policy.get("overlay_of")}
 
     def rollback(self) -> dict:
         """Restore the last-known-good policy (one deep). Audited; does NOT lower the version
@@ -151,11 +151,11 @@ class PolicyHost:
 
     def attest(self) -> dict:
         """Append a point-in-time attestation of the active policy to the ledger."""
-        a = self.active()
+        active_policy = self.active()
         self.audit.append("policy_host", "attestation",
-                          {"active": a.get("active"), "version": a.get("version"),
-                           "overlay_of": a.get("overlay_of"), "ts": _now()})
-        return a
+                          {"active": active_policy.get("active"), "version": active_policy.get("version"),
+                           "overlay_of": active_policy.get("overlay_of"), "ts": _now()})
+        return active_policy
 
     def anchor_attestations(self, out_dir: str, label: str) -> dict:
         """Anchor the audit trail's leaves to Bitcoin via OTS (delegates to ledger_ots)."""

@@ -2,7 +2,7 @@
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Breadth2 tests for newly added SOP specification documents."""
 import pytest
-import sop_generator as sg
+from adapters.compliance import sop_generator as sg
 
 NEW_BREADTH2_SOP_SPECS = [
     "identification_and_authentication_policy",

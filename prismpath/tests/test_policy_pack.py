@@ -54,8 +54,8 @@ def pack(tmp_path):
     return {"ppt": str(ppt), "keys": keys, "manifest": manifest, "tmp": tmp_path}
 
 
-def _verify(p, **kw):
-    return pp.verify_pack(p["ppt"], [p["keys"]["public"]], **kw)
+def _verify(pack, **kw):
+    return pp.verify_pack(pack["ppt"], [pack["keys"]["public"]], **kw)
 
 
 # ------------------------------------------------------------- authorized
@@ -108,10 +108,10 @@ def test_refusal_is_loud_without_cryptography(pack, monkeypatch):
     import builtins
     real_import = builtins.__import__
 
-    def block(name, *a, **kw):
+    def block(name, *args, **kw):
         if name.startswith("cryptography"):
             raise ImportError("blocked for test")
-        return real_import(name, *a, **kw)
+        return real_import(name, *args, **kw)
 
     monkeypatch.setattr(builtins, "__import__", block)
     with pytest.raises(RuntimeError, match="pip install cryptography"):
@@ -142,9 +142,9 @@ def test_length_mismatch(pack):
 def test_unknown_opcode_injected(pack):
     """Flip a program word to an out-of-fragment opcode -> the load-time walk catches it."""
     raw = bytearray(Path(pack["ppt"]).read_bytes())
-    h = pp.read_ppt_header(bytes(raw))
-    prog_off = (pp.HEADER.size + pp.ATOM.size * h["atoms"]
-                + pp.NODE.size * h["nodes"] + pp.EDGE.size * h["edges"])
+    header = pp.read_ppt_header(bytes(raw))
+    prog_off = (pp.HEADER.size + pp.ATOM.size * header["atoms"]
+                + pp.NODE.size * header["nodes"] + pp.EDGE.size * header["edges"])
     pp.WORD.pack_into(raw, prog_off, 0x9999)
     ok, reasons = pp.validate_image(bytes(raw))
     assert not ok and "image:unknown-opcode:word0" in reasons
@@ -193,7 +193,7 @@ def test_envelope_rejects_id_mismatch(pack, envelope):
 def test_envelope_rejects_each_cap_exceeded(pack, envelope, cap):
     tight = dict(envelope, caps={**envelope["caps"], cap: 0})
     ok, reasons = pp.check_envelope(pack["manifest"], Path(pack["ppt"]).read_bytes(), tight)
-    assert not ok and f"envelope:cap-exceeded:{cap}" in reasons
+    assert not ok and f"image:caps-exceeded:{cap}" in reasons
 
 
 # ---------------------------------------------------------------- packing profile (spiral sidecar)
@@ -222,8 +222,8 @@ def test_packing_declared_and_verified(tmp_path):
 
 def test_packing_tampered_sidecar_fails(tmp_path):
     ppt, keys, _ = _spiral_pack(tmp_path, b"sidecar-bytes-v1")
-    with open(ppt + ".spiral", "wb") as f:
-        f.write(b"sidecar-bytes-v2")
+    with open(ppt + ".spiral", "wb") as sidecar:
+        sidecar.write(b"sidecar-bytes-v2")
     ok, reasons, _ = pp.verify_pack(ppt, [keys["public"]])
     assert not ok and "spiral:sidecar-hash-mismatch" in reasons
 

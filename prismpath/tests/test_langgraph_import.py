@@ -27,20 +27,20 @@ g.add_edge("review", END)
 
 def test_import_produces_valid_flow():
     md = langgraph_import.import_langgraph(SOURCE, name="bugfix")
-    g = parse(md)                                          # the skeleton must at least parse
-    assert g.start == "triage"
-    assert set(g.nodes) >= {"triage", "implement", "review", "done"}
+    graph = parse(md)                                          # the skeleton must at least parse
+    assert graph.start == "triage"
+    assert set(graph.nodes) >= {"triage", "implement", "review", "done"}
     # deterministic edges from add_edge
-    assert ("review", "done", "when always") in _edges(g)
-    assert ("implement", "review", "when always") in _edges(g)
+    assert ("review", "done", "when always") in _edges(graph)
+    assert ("implement", "review", "when always") in _edges(graph)
     # conditional edge -> a TODO condition the human fills in
-    todo = [(t, c) for t, c in g.nodes["triage"].edges if "TODO" in c]
-    assert any(t == "implement" for t, _ in todo)
-    assert g.nodes["done"].terminal
+    todo = [(target, condition) for target, condition in graph.nodes["triage"].edges if "TODO" in condition]
+    assert any(target == "implement" for target, _ in todo)
+    assert graph.nodes["done"].terminal
 
 
-def _edges(g):
-    return [(name, t, c) for name, n in g.nodes.items() for t, c in n.edges]
+def _edges(graph):
+    return [(name, target, condition) for name, node in graph.nodes.items() for target, condition in node.edges]
 
 
 def test_set_entry_point_form():
@@ -48,5 +48,5 @@ def test_set_entry_point_form():
            'g.add_node("a", a)\n'
            'g.set_entry_point("a")\n'
            'g.add_edge("a", END)\n')
-    g = parse(langgraph_import.import_langgraph(src))
-    assert g.start == "a" and ("a", "done", "when always") in _edges(g)
+    graph = parse(langgraph_import.import_langgraph(src))
+    assert graph.start == "a" and ("a", "done", "when always") in _edges(graph)

@@ -44,26 +44,26 @@ class Envelope:
     mem_mb: int = 256
 
 
-def _as_bool(v, key: str, problems: List[str]) -> Optional[bool]:
-    s = str(v).strip().lower()
-    if s in _TRUE:
+def _as_bool(value, key: str, problems: List[str]) -> Optional[bool]:
+    normalized = str(value).strip().lower()
+    if normalized in _TRUE:
         return True
-    if s in _FALSE:
+    if normalized in _FALSE:
         return False
-    problems.append(f"{key}={v!r} is not a boolean")
+    problems.append(f"{key}={value!r} is not a boolean")
     return None
 
 
-def _as_pos_int(v, key: str, problems: List[str]) -> Optional[int]:
+def _as_pos_int(value, key: str, problems: List[str]) -> Optional[int]:
     try:
-        n = int(str(v).strip())
+        parsed_int = int(str(value).strip())
     except (TypeError, ValueError):
-        problems.append(f"{key}={v!r} is not an integer")
+        problems.append(f"{key}={value!r} is not an integer")
         return None
-    if n <= 0:
-        problems.append(f"{key}={v!r} must be positive")
+    if parsed_int <= 0:
+        problems.append(f"{key}={value!r} must be positive")
         return None
-    return n
+    return parsed_int
 
 
 def parse_envelope(anno: Optional[dict]) -> Tuple[Optional[Envelope], List[str]]:
@@ -78,23 +78,23 @@ def parse_envelope(anno: Optional[dict]) -> Tuple[Optional[Envelope], List[str]]
         problems.append(f"unknown @code key(s): {', '.join(sorted(unknown))}")
     kw: dict = {}
     if "net" in anno:
-        b = _as_bool(anno["net"], "net", problems)
-        if b is not None:
-            kw["net"] = b
+        net_allowed = _as_bool(anno["net"], "net", problems)
+        if net_allowed is not None:
+            kw["net"] = net_allowed
     if "fs" in anno:
-        m = str(anno["fs"]).strip().lower()
-        if m in _FS_MODES:
-            kw["fs"] = _FS_MODES[m]
+        fs_mode = str(anno["fs"]).strip().lower()
+        if fs_mode in _FS_MODES:
+            kw["fs"] = _FS_MODES[fs_mode]
         else:
             problems.append(f"fs={anno['fs']!r} must be one of none|ro|rw")
     if "timeout_s" in anno:
-        n = _as_pos_int(anno["timeout_s"], "timeout_s", problems)
-        if n is not None:
-            kw["timeout_s"] = n
+        limit = _as_pos_int(anno["timeout_s"], "timeout_s", problems)
+        if limit is not None:
+            kw["timeout_s"] = limit
     if "mem_mb" in anno:
-        n = _as_pos_int(anno["mem_mb"], "mem_mb", problems)
-        if n is not None:
-            kw["mem_mb"] = n
+        limit = _as_pos_int(anno["mem_mb"], "mem_mb", problems)
+        if limit is not None:
+            kw["mem_mb"] = limit
     if problems:
         return None, problems
     return Envelope(**kw), []
@@ -116,7 +116,7 @@ def check_code_nodes(graph) -> List[str]:
         if anno is None:
             continue
         _env, probs = parse_envelope(anno)
-        problems.extend(f"code node {name!r}: {p}" for p in probs)
+        problems.extend(f"code node {name!r}: {problem}" for problem in probs)
     return problems
 
 
@@ -143,8 +143,8 @@ def code_agent(graph, handlers: Dict[str, Callable], runner: Optional[Runner] = 
         handler = handlers.get(node)
         if handler is None:
             return base(node, instruction, state) if base else {"text": node}
-        n = graph.nodes.get(node)
-        anno = n.annotations.get("code") if n else None
+        flow_node = graph.nodes.get(node)
+        anno = flow_node.annotations.get("code") if flow_node else None
         env, problems = parse_envelope(anno)
         if env is None:
             raise CodeNodeError(f"code node {node!r}: {'; '.join(problems)}")

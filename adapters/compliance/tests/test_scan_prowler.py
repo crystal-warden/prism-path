@@ -2,10 +2,10 @@
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Prowler scanner adapter tests — verify exact, honest mapping of AWS findings to posture facts.
 Asserts that only mapped facts are produced, MFA/lockout facts remain absent, and posture_connector processes the posture."""
-import compliance_adapter as ca
-import scanner as sc
-import scan_prowler
-import posture_connector as pc
+from adapters.compliance import compliance_adapter as ca
+from adapters.compliance import scanner as sc
+from adapters.compliance import scan_prowler
+from adapters.compliance import posture_connector as pc
 
 FULLY_MAPPED_FACTS = {
     "encryption_at_rest_enforced",
@@ -28,7 +28,7 @@ def test_prowler_maps_only_exact_honest_facts():
 
     assert set(facts.keys()) == FULLY_MAPPED_FACTS
 
-    for k in (
+    for fact_key in (
         "mfa_local_privileged",
         "mfa_network_privileged",
         "mfa_network_nonprivileged",
@@ -37,7 +37,7 @@ def test_prowler_maps_only_exact_honest_facts():
         "session_lock_enforced",
         "fips_validated_cryptography",
     ):
-        assert k not in facts
+        assert fact_key not in facts
 
 
 def test_prowler_fail_status_sets_fact_false():
@@ -84,7 +84,7 @@ def test_prowler_end_to_end_posture_connector():
     assert res["boundary"] == "AWS cloud enclave"
     assert res["provenance"]["source"] == "prowler"
 
-    graded = {r["control_id"]: r["status"] for r in res["results"]}
+    graded = {result["control_id"]: result["status"] for result in res["results"]}
     assert graded.get("3.13.16") == "met"
 
     assert "3.5.3" in res["deferred"]

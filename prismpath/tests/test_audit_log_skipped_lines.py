@@ -17,20 +17,20 @@ def _write_two_events(path):
 
 
 def test_clean_log_has_no_skipped_lines(tmp_path):
-    p = tmp_path / "audit.jsonl"
-    _write_two_events(p)
-    reopened = AuditLog(str(p))
+    path = tmp_path / "audit.jsonl"
+    _write_two_events(path)
+    reopened = AuditLog(str(path))
     assert reopened.skipped == []
     assert len(reopened.events) == 2
     assert reopened.verify_log() is True
 
 
 def test_corrupt_line_is_recorded_and_fails_verify(tmp_path):
-    p = tmp_path / "audit.jsonl"
-    _write_two_events(p)
-    with open(p, "a") as f:
-        f.write('{"actor": "tester", "action": "third", "data": {"n": 3}\n')   # truncated: no closing brace
-    reopened = AuditLog(str(p))
+    path = tmp_path / "audit.jsonl"
+    _write_two_events(path)
+    with open(path, "a") as log_file:
+        log_file.write('{"actor": "tester", "action": "third", "data": {"n": 3}\n')   # truncated: no closing brace
+    reopened = AuditLog(str(path))
     assert len(reopened.events) == 2
     assert reopened.skipped == [3]                # one based line numbers of the lines that did not parse
     assert reopened.verify_log() is False

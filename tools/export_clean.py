@@ -88,19 +88,19 @@ ROOT = Path(__file__).resolve().parent.parent    # the source repo, wherever thi
 
 def tracked_files():
     out = subprocess.check_output(["git", "ls-files"], text=True, cwd=ROOT)
-    return [l for l in out.splitlines() if l]
+    return [path for path in out.splitlines() if path]
 
 
 def is_included(path):
     if path in EXCLUDE_EXACT:
         return False
-    if any(path.startswith(p) for p in EXCLUDE_PREFIXES):
+    if any(path.startswith(prefix) for prefix in EXCLUDE_PREFIXES):
         return False
-    if any(path.endswith(s) for s in EXCLUDE_SUFFIXES):
+    if any(path.endswith(suffix) for suffix in EXCLUDE_SUFFIXES):
         return False
     if path in INCLUDE_FILES:
         return True
-    return any(path.startswith(p) for p in INCLUDE_PREFIXES)
+    return any(path.startswith(prefix) for prefix in INCLUDE_PREFIXES)
 
 
 # ------------------------------------------------------------ link rewriting
@@ -109,11 +109,11 @@ LINK = re.compile(r"(\]\()([^)]+)(\))")
 
 def classify_target(raw, md_path, included, tracked):
     """keep | rewrite | leave for a markdown link target relative to md_path."""
-    t = raw.strip()
-    if t.startswith(("http://", "https://", "mailto:", "#", "//", "www.")):
+    target = raw.strip()
+    if target.startswith(("http://", "https://", "mailto:", "#", "//", "www.")):
         return "leave", None
-    core = t.split("#", 1)[0].split("?", 1)[0]
-    anchor = t[len(core):]
+    core = target.split("#", 1)[0].split("?", 1)[0]
+    anchor = target[len(core):]
     if not core:
         return "leave", None
     base = posixpath.dirname(md_path)
@@ -125,8 +125,8 @@ def classify_target(raw, md_path, included, tracked):
     if rp in tracked:                                   # excluded-but-real -> research repo
         return "rewrite", RESEARCH_REPO + rp + anchor
     # directory link: does it name a real subtree?
-    inc_dir = any(f == rp or f.startswith(rp + "/") for f in included)
-    trk_dir = any(f == rp or f.startswith(rp + "/") for f in tracked)
+    inc_dir = any(repo_path == rp or repo_path.startswith(rp + "/") for repo_path in included)
+    trk_dir = any(repo_path == rp or repo_path.startswith(rp + "/") for repo_path in tracked)
     if inc_dir:
         return "keep", None
     if trk_dir:
@@ -135,12 +135,12 @@ def classify_target(raw, md_path, included, tracked):
 
 
 def rewrite_markdown(text, md_path, included, tracked, stats):
-    def repl(m):
-        kind, new = classify_target(m.group(2), md_path, included, tracked)
+    def repl(link_match):
+        kind, new = classify_target(link_match.group(2), md_path, included, tracked)
         if kind == "rewrite":
-            stats.append((md_path, m.group(2), new))
-            return m.group(1) + new + m.group(3)
-        return m.group(0)
+            stats.append((md_path, link_match.group(2), new))
+            return link_match.group(1) + new + link_match.group(3)
+        return link_match.group(0)
     return LINK.sub(repl, text)
 
 
@@ -221,8 +221,8 @@ jobs:
 
 def strip_research_datafiles(text):
     """Drop the pyproject data-files line that ships docs/research (absent in the mirror)."""
-    return "\n".join(l for l in text.splitlines()
-                     if "docs/research" not in l) + ("\n" if text.endswith("\n") else "")
+    return "\n".join(line for line in text.splitlines()
+                     if "docs/research" not in line) + ("\n" if text.endswith("\n") else "")
 
 
 def main():
@@ -239,7 +239,7 @@ def main():
         sys.exit("refusing to export onto the source repo")
 
     tracked = set(tracked_files())
-    included = sorted(f for f in tracked if is_included(f))
+    included = sorted(repo_path for repo_path in tracked if is_included(repo_path))
     # README.md is generated (not copied from INCLUDE_FILES) but DOES exist in the
     # mirror, so links to it must classify as "keep", not redirect to the research repo.
     included_set = set(included) | {"README.md"}
@@ -272,15 +272,15 @@ def main():
     base_readme = (mirror_src if mirror_src.exists() else (root / "README.md")).read_text()
     readme = rewrite_markdown(base_readme, "README.md", included_set, tracked, rewrites)
     lines = readme.split("\n")
-    i = 1 if lines and lines[0].startswith("# ") else 0            # banner after the H1
-    (out / "README.md").write_text("\n".join(lines[:i] + ["", MIRROR_BANNER.rstrip()] + lines[i:]))
+    banner_index = 1 if lines and lines[0].startswith("# ") else 0            # banner after the H1
+    (out / "README.md").write_text("\n".join(lines[:banner_index] + ["", MIRROR_BANNER.rstrip()] + lines[banner_index:]))
 
     # generated clean CI
     (out / ".github" / "workflows").mkdir(parents=True, exist_ok=True)
     (out / ".github" / "workflows" / "ci.yml").write_text(CLEAN_CI)
 
     n_files = len(included) + 2   # + README + ci.yml
-    total_kb = sum((out / f).stat().st_size for f in included) // 1024
+    total_kb = sum((out / repo_path).stat().st_size for repo_path in included) // 1024
     print(f"mirror written to {out}")
     print(f"  files:        {n_files}  (~{total_kb} KB of tracked content)")
     print(f"  excluded:     {len(tracked) - len(included)} tracked files held back")

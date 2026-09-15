@@ -13,22 +13,22 @@ posture_connector defers those controls.
 """
 
 
-def _as_bool(v):
-    if isinstance(v, bool):
-        return v
-    if v is None:
+def _as_bool(raw_value):
+    if isinstance(raw_value, bool):
+        return raw_value
+    if raw_value is None:
         return None
-    s = str(v).strip().lower()
-    if s in ("1", "true", "yes", "on", "enabled"):
+    text = str(raw_value).strip().lower()
+    if text in ("1", "true", "yes", "on", "enabled"):
         return True
-    if s in ("0", "false", "no", "off", "disabled", ""):
+    if text in ("0", "false", "no", "off", "disabled", ""):
         return False
     return None
 
 
 def _matches_encryption(cid_str):
     prefixes = ("ebs_", "s3_bucket_", "rds_", "efs_")
-    return any(p in cid_str for p in prefixes) and ("encryption" in cid_str)
+    return any(prefix in cid_str for prefix in prefixes) and ("encryption" in cid_str)
 
 
 def _matches_firewall(cid_str):
@@ -53,15 +53,15 @@ def parse(raw):
 
     for fact_key, match_fn in mappings:
         matching_statuses = []
-        for f in raw:
-            if not isinstance(f, dict):
+        for finding in raw:
+            if not isinstance(finding, dict):
                 continue
-            cid = f.get("check_id") or f.get("CheckID")
+            cid = finding.get("check_id") or finding.get("CheckID")
             if not cid:
                 continue
             cid_str = str(cid).lower()
             if match_fn(cid_str):
-                st = f.get("status") or f.get("StatusCode")
+                st = finding.get("status") or finding.get("StatusCode")
                 st_str = str(st).strip().upper() if st is not None else ""
                 matching_statuses.append(st_str)
 

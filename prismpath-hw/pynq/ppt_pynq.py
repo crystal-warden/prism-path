@@ -43,53 +43,53 @@ class PptImage:
     intern table) — no prismpath dependency on the board."""
 
     def __init__(self, ppt_path: str, json_path: str):
-        b = open(ppt_path, "rb").read()
+        image_bytes = open(ppt_path, "rb").read()
         (magic, version, self.n_fields, self.n_interns, self.n_atoms, self.n_nodes,
          self.n_edges, self.prog_len, self.start, self.visits_idx, self.max_steps,
-         self.max_stack, _pad) = struct.unpack_from("<IHHHHHHHHHHHH", b, 0)
+         self.max_stack, _pad) = struct.unpack_from("<IHHHHHHHHHHHH", image_bytes, 0)
         assert magic == 0x4D545050 and version == 1, "not a PPT v1 image"
         off = 28
         self.atoms = []
         for _ in range(self.n_atoms):
-            f, op, ty, val = struct.unpack_from("<HBBi", b, off)
-            self.atoms.append((f, op, ty, val))
+            field_index, op, ty, val = struct.unpack_from("<HBBi", image_bytes, off)
+            self.atoms.append((field_index, op, ty, val))
             off += 8
         self.node_recs = []
         for _ in range(self.n_nodes):
-            self.node_recs.append(struct.unpack_from("<HH", b, off))
+            self.node_recs.append(struct.unpack_from("<HH", image_bytes, off))
             off += 4
         self.edges = []
         for _ in range(self.n_edges):
-            self.edges.append(struct.unpack_from("<HHH", b, off))
+            self.edges.append(struct.unpack_from("<HHH", image_bytes, off))
             off += 6
-        self.prog = list(struct.unpack_from(f"<{self.prog_len}H", b, off))
+        self.prog = list(struct.unpack_from(f"<{self.prog_len}H", image_bytes, off))
         dbg = json.load(open(json_path))
         self.fields = dbg["fields"]                       # name -> idx
         self.intern = dict(dbg["intern"])                 # str -> id
-        self.node_names = [n["name"] for n in dbg["nodes"]]
+        self.node_names = [node["name"] for node in dbg["nodes"]]
 
-    def encode(self, v):
-        if v is None:
+    def encode(self, value):
+        if value is None:
             return TY_NONE, 0
-        if isinstance(v, bool):
-            return TY_BOOL, int(v)
-        if isinstance(v, int) and -2**31 <= v < 2**31:
-            return TY_INT, v
-        if isinstance(v, str):
-            if v not in self.intern:
-                self.intern[v] = len(self.intern)
-            return TY_STR, self.intern[v]
+        if isinstance(value, bool):
+            return TY_BOOL, int(value)
+        if isinstance(value, int) and -2**31 <= value < 2**31:
+            return TY_INT, value
+        if isinstance(value, str):
+            if value not in self.intern:
+                self.intern[value] = len(self.intern)
+            return TY_STR, self.intern[value]
         return TY_NONE, 0                                 # out-of-domain -> missing
 
 
 class PptOverlay:
     def __init__(self, bit_path: str):
         from pynq import Overlay
-        self.ol = Overlay(bit_path)
-        ip = next(k for k in self.ol.ip_dict if "ppt" in k.lower())
-        self.mmio = self.ol.ip_dict[ip]  # noqa: F841 — keep dict entry for debugging
-        self.io = getattr(self.ol, ip).mmio if hasattr(getattr(self.ol, ip), "mmio") \
-            else __import__("pynq").MMIO(self.ol.ip_dict[ip]["phys_addr"], 0x100)
+        self.overlay = Overlay(bit_path)
+        ip = next(name for name in self.overlay.ip_dict if "ppt" in name.lower())
+        self.mmio = self.overlay.ip_dict[ip]  # noqa: F841 — keep dict entry for debugging
+        self.io = getattr(self.overlay, ip).mmio if hasattr(getattr(self.overlay, ip), "mmio") \
+            else __import__("pynq").MMIO(self.overlay.ip_dict[ip]["phys_addr"], 0x100)
         got = self.io.read(R_MAGIC)
         assert got == MAGIC, f"overlay magic mismatch: {got:#x}"
 
@@ -100,16 +100,16 @@ class PptOverlay:
     def load_image(self, img: PptImage):
         self.io.write(R_SOFT_RST, 1)
         self._load(0, 0, img.visits_idx)
-        for i, (f, op, ty, val) in enumerate(img.atoms):
-            self._load(1, i, (ty << 24) | (op << 16) | f)
-            self._load(2, i, val & 0xFFFFFFFF)
-        for ni, (eoff, ecnt) in enumerate(img.node_recs):
-            self._load(3, ni, (ecnt << 16) | eoff)
-        for ei, (tgt, poff, pcnt) in enumerate(img.edges):
-            self._load(4, ei, (poff << 16) | tgt)
-            self._load(5, ei, pcnt)
-        for pi, w in enumerate(img.prog):
-            self._load(6, pi, w)
+        for atom_index, (field_index, op, ty, val) in enumerate(img.atoms):
+            self._load(1, atom_index, (ty << 24) | (op << 16) | field_index)
+            self._load(2, atom_index, val & 0xFFFFFFFF)
+        for node_index, (eoff, ecnt) in enumerate(img.node_recs):
+            self._load(3, node_index, (ecnt << 16) | eoff)
+        for edge_index, (target, poff, pcnt) in enumerate(img.edges):
+            self._load(4, edge_index, (poff << 16) | target)
+            self._load(5, edge_index, pcnt)
+        for prog_index, word in enumerate(img.prog):
+            self._load(6, prog_index, word)
 
     def write_fields(self, img: PptImage, ctx: dict):
         for name, idx in img.fields.items():
@@ -120,18 +120,18 @@ class PptOverlay:
     def evaluate(self, node: int, use_visits: bool = False):
         self.io.write(R_CTRL, (int(use_visits) << 16) | node)
         for _ in range(1000):
-            s = self.io.read(R_STATUS)
-            if s & 0b010:
+            status = self.io.read(R_STATUS)
+            if status & 0b010:
                 break
         else:
             raise TimeoutError("fabric evaluate never done")
         result = self.io.read(R_RESULT)                   # clears the done latch
-        if not (s & 0b100):
+        if not (status & 0b100):
             return None
         return (result >> 16) & 0xFFFF, result & 0xFFFF   # (edge, target)
 
 
-def watch_and_reload(ol: PptOverlay, holder: dict, lock, ppt_path: str, json_path: str):
+def watch_and_reload(overlay: PptOverlay, holder: dict, lock, ppt_path: str, json_path: str):
     """Hot reload — the demo's spine: a new .ppt landing on disk becomes new BRAM contents
     in milliseconds, mid-stream, bitstream untouched. `make deploy` scps the files; this
     thread notices."""
@@ -141,21 +141,21 @@ def watch_and_reload(ol: PptOverlay, holder: dict, lock, ppt_path: str, json_pat
     while True:
         time.sleep(0.5)
         try:
-            m = os.path.getmtime(ppt_path)
+            mtime = os.path.getmtime(ppt_path)
         except OSError:
             continue
-        if m != last_mtime:
-            last_mtime = m
-            t0 = time.perf_counter_ns()
+        if mtime != last_mtime:
+            last_mtime = mtime
+            start_ns = time.perf_counter_ns()
             new_img = PptImage(ppt_path, json_path)
             with lock:
-                ol.load_image(new_img)
+                overlay.load_image(new_img)
                 holder["img"] = new_img
-            dt_ms = (time.perf_counter_ns() - t0) / 1e6
+            dt_ms = (time.perf_counter_ns() - start_ns) / 1e6
             print(f"*** TABLE RELOADED in {dt_ms:.1f}ms — same circuit, new policy ***")
 
 
-def serve(ol: PptOverlay, holder: dict, lock, port: int, respond: bool = False):
+def serve(overlay: PptOverlay, holder: dict, lock, port: int, respond: bool = False):
     srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     srv.bind(("0.0.0.0", port))
@@ -166,7 +166,7 @@ def serve(ol: PptOverlay, holder: dict, lock, port: int, respond: bool = False):
         conn, addr = srv.accept()
         print(f"bridge connected from {addr[0]}")
         last = None
-        n = 0
+        sample_count = 0
         for line in conn.makefile("r"):
             line = line.strip()
             if not line:
@@ -174,12 +174,12 @@ def serve(ol: PptOverlay, holder: dict, lock, port: int, respond: bool = False):
             sample = json.loads(line)
             with lock:
                 img = holder["img"]
-                ol.write_fields(img, sample)
-                t0 = time.perf_counter_ns()
-                res = ol.evaluate(img.start)
-                dt_us = (time.perf_counter_ns() - t0) / 1000
+                overlay.write_fields(img, sample)
+                start_ns = time.perf_counter_ns()
+                res = overlay.evaluate(img.start)
+                dt_us = (time.perf_counter_ns() - start_ns) / 1000
             decision = img.node_names[res[1]] if res else "<stuck>"
-            n += 1
+            sample_count += 1
             log.write(json.dumps({"decision": decision, "us": round(dt_us, 1),
                                   **sample}) + "\n")
             log.flush()
@@ -191,35 +191,35 @@ def serve(ol: PptOverlay, holder: dict, lock, port: int, respond: bool = False):
                 conn.sendall((json.dumps({"decision": decision, "us": round(dt_us, 1)})
                               + "\n").encode())
             if decision != last:
-                print(f"#{n:6d} -> {decision:12s} ({dt_us:.0f}us round-trip) "
+                print(f"#{sample_count:6d} -> {decision:12s} ({dt_us:.0f}us round-trip) "
                       f"rate={sample.get('error_rate')} risk={sample.get('data_at_risk')}")
                 last = decision
-        print(f"bridge disconnected after {n} samples")
+        print(f"bridge disconnected after {sample_count} samples")
 
 
 def main() -> int:
     import argparse
-    ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("bitfile")
-    ap.add_argument("ppt")
-    ap.add_argument("json")
-    ap.add_argument("--port", type=int, default=9317)
-    ap.add_argument("--respond", action="store_true",
+    arg_parser = argparse.ArgumentParser(description=__doc__)
+    arg_parser.add_argument("bitfile")
+    arg_parser.add_argument("ppt")
+    arg_parser.add_argument("json")
+    arg_parser.add_argument("--port", type=int, default=9317)
+    arg_parser.add_argument("--respond", action="store_true",
                     help="write each verdict back to the caller (request/response; "
                          "the in-silicon governor needs this). Default off = the "
                          "certified streaming behavior, unchanged.")
-    args = ap.parse_args()
+    args = arg_parser.parse_args()
     import threading
     img = PptImage(args.ppt, args.json)
-    ol = PptOverlay(args.bitfile)
-    ol.load_image(img)
+    overlay = PptOverlay(args.bitfile)
+    overlay.load_image(img)
     print(f"image loaded: {img.n_atoms} atoms, {img.n_nodes} nodes, "
           f"{img.n_edges} edges, {img.prog_len} prog words")
     holder = {"img": img}
     lock = threading.Lock()
-    threading.Thread(target=watch_and_reload, args=(ol, holder, lock, args.ppt, args.json),
+    threading.Thread(target=watch_and_reload, args=(overlay, holder, lock, args.ppt, args.json),
                      daemon=True).start()
-    serve(ol, holder, lock, args.port, respond=args.respond)
+    serve(overlay, holder, lock, args.port, respond=args.respond)
     return 0
 
 

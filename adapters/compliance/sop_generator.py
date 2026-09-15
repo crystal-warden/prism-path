@@ -46,8 +46,8 @@ GENERATED_NOTICE = (
 
 
 def list_documents():
-    return sorted(os.path.splitext(os.path.basename(p))[0]
-                  for p in glob.glob(os.path.join(SPEC_DIR, "*.json")))
+    return sorted(os.path.splitext(os.path.basename(path))[0]
+                  for path in glob.glob(os.path.join(SPEC_DIR, "*.json")))
 
 
 def load_spec(doc_id):
@@ -60,7 +60,7 @@ def load_spec(doc_id):
 def _resolve_get_control(get_control):
     if get_control is not None:
         return get_control
-    import compliance_adapter
+    from adapters.compliance import compliance_adapter
     return compliance_adapter.get_control
 
 
@@ -70,16 +70,16 @@ def _get_control_for(spec, get_control):
     active. Falls back to the active-standard get_control."""
     if get_control is not None:
         return get_control
-    import compliance_adapter as _ca
+    from adapters.compliance import compliance_adapter as _ca
     std = spec.get("standard")
     if std and std != _ca.active_standard() and std in _ca.STANDARDS:
         cat = json.load(open(_ca.STANDARDS[std]))["controls"]
 
         def gc(cid):
-            c = cat.get(cid)
-            if not c:
+            control = cat.get(cid)
+            if not control:
                 raise KeyError("control %s not in catalog %s" % (cid, std))
-            return {"id": cid, **c}
+            return {"id": cid, **control}
         return gc
     return _ca.get_control
 
@@ -95,8 +95,8 @@ def verify_coverage(spec, get_control=None):
     gc = _get_control_for(spec, get_control)
     catalog_set = set()
     for cid in spec["controls"]:
-        catalog_set.update(o["id"] for o in gc(cid)["objectives"])
-    mapped = [oid for s in spec["sections"] for oid in s.get("objectives", [])]
+        catalog_set.update(objective["id"] for objective in gc(cid)["objectives"])
+    mapped = [oid for section in spec["sections"] for oid in section.get("objectives", [])]
     mapped_set = set(mapped)
     dupes = sorted({oid for oid in mapped_set if mapped.count(oid) > 1})
     missing = sorted(catalog_set - mapped_set)    # objectives no section addresses
@@ -110,21 +110,21 @@ def verify_coverage(spec, get_control=None):
 
 def _prompt_map(spec):
     prompts = dict(PROFILE_QUESTIONS)
-    for s in spec["sections"]:
-        for q in s.get("questions", []):
-            prompts[q["key"]] = q["prompt"]
+    for section in spec["sections"]:
+        for question in section.get("questions", []):
+            prompts[question["key"]] = question["prompt"]
     return prompts
 
 
 def intake(spec):
     """The full structured question set: the shared profile questions plus each section's questions,
     each tagged with where its answer belongs. Answer these to fill the template."""
-    items = [{"key": k, "prompt": PROFILE_QUESTIONS[k], "scope": "profile"}
-             for k in spec.get("org_profile_keys", [])]
-    for s in spec["sections"]:
-        for q in s.get("questions", []):
-            items.append({"key": q["key"], "prompt": q["prompt"],
-                          "scope": "document", "section": s["id"]})
+    items = [{"key": profile_key, "prompt": PROFILE_QUESTIONS[profile_key], "scope": "profile"}
+             for profile_key in spec.get("org_profile_keys", [])]
+    for section in spec["sections"]:
+        for question in section.get("questions", []):
+            items.append({"key": question["key"], "prompt": question["prompt"],
+                          "scope": "document", "section": section["id"]})
     return items
 
 
@@ -149,9 +149,9 @@ def generate(spec, answers, get_control=None):
     prompts = _prompt_map(spec)
     missing = set()
     out = ["# %s" % spec["title"], "", GENERATED_NOTICE, ""]
-    for s in spec["sections"]:
-        out.append("## %s" % s["heading"])
-        out.append(s["body"].format_map(_Fill(answers, missing, prompts)))
+    for section in spec["sections"]:
+        out.append("## %s" % section["heading"])
+        out.append(section["body"].format_map(_Fill(answers, missing, prompts)))
         out.append("")
 
     cov = verify_coverage(spec, get_control)
@@ -167,9 +167,9 @@ def generate(spec, answers, get_control=None):
     out.append("")
     out.append("| Section | Objectives addressed |")
     out.append("|---|---|")
-    for s in spec["sections"]:
-        objs = ", ".join(s.get("objectives", [])) or "(context; no objective)"
-        out.append("| %s | %s |" % (s["heading"], objs))
+    for section in spec["sections"]:
+        objs = ", ".join(section.get("objectives", [])) or "(context; no objective)"
+        out.append("| %s | %s |" % (section["heading"], objs))
     out.append("")
     if not cov["complete"]:
         out.append("> COVERAGE WARNING: this template does not currently map every objective "

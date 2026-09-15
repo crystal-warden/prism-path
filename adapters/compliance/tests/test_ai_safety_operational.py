@@ -3,10 +3,10 @@
 """The AST catalog's three-mechanism treatment: a documented AI Safety Testing Plan (SOP), a recurring
 retest task whose completion evidences continuous evaluation (operational), alongside the config
 comparator and measured receipts."""
-import compliance_adapter as ca
-import control_tasks as ct
-import sop_generator as sg
-import ai_safety as ais
+from adapters.compliance import compliance_adapter as ca
+from adapters.compliance import control_tasks as ct
+from adapters.compliance import sop_generator as sg
+from adapters.compliance import ai_safety as ais
 
 _CAPS_NO_CONTINUOUS = {
     "test_suite_defined": True, "model_versions_hashed": True,
@@ -52,12 +52,12 @@ def test_continuous_evaluation_measured_from_task_record():
     # a current retest completion + as_of -> continuous_evaluation is measured -> AST-3 decides met
     done = [ct.record_completion("safety-suite-run", "AST-3", "2026-09-01", "ci", "run.json")]
     r1 = ais.assess(_state(dict(_CAPS_NO_CONTINUOUS), done), as_of="2026-09-03")
-    by = {x["control_id"]: x for x in r1["results"]}
+    by = {result["control_id"]: result for result in r1["results"]}
     assert by["AST-3"]["status"] == "met"
     assert "continuous_evaluation" in r1["measured"]
     # an overdue retest -> continuous_evaluation measured False -> AST-3 not met
     r2 = ais.assess(_state(dict(_CAPS_NO_CONTINUOUS), done), as_of="2026-10-01")
-    by2 = {x["control_id"]: x for x in r2["results"]}
+    by2 = {result["control_id"]: result for result in r2["results"]}
     assert by2["AST-3"]["status"] in ("partially-met", "not-met")
     assert "AST-3[d]" in by2["AST-3"]["unmet_objective_ids"]
     assert ca.active_standard() == "nist_800171_r2"

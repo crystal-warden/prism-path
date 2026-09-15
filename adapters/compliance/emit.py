@@ -44,51 +44,51 @@ def _is_met(status):
 
 # ---------- provenance -> OSCAL props / CycloneDX properties ----------
 def _prov_fields(manifest):
-    m = manifest or {}
+    manifest_fields = manifest or {}
     return [
-        ("prismpath-flow-ledger-manifest", m.get("manifest_hash", "")),
-        ("prismpath-determination-root", m.get("root", "")),
-        ("prismpath-policy-hash", m.get("policy_hash", "")),
-        ("prismpath-gate-id", m.get("gate_id", "")),
-        ("prismpath-knowledge-base-hash", m.get("knowledge_base_hash", "")),
-        ("prismpath-ingestion-hashes", ",".join(m.get("ingestion_hashes", []) or [])),
-        ("prismpath-attested-at", m.get("created", "")),
+        ("prismpath-flow-ledger-manifest", manifest_fields.get("manifest_hash", "")),
+        ("prismpath-determination-root", manifest_fields.get("root", "")),
+        ("prismpath-policy-hash", manifest_fields.get("policy_hash", "")),
+        ("prismpath-gate-id", manifest_fields.get("gate_id", "")),
+        ("prismpath-knowledge-base-hash", manifest_fields.get("knowledge_base_hash", "")),
+        ("prismpath-ingestion-hashes", ",".join(manifest_fields.get("ingestion_hashes", []) or [])),
+        ("prismpath-attested-at", manifest_fields.get("created", "")),
     ]
 
 def _oscal_props(manifest):
-    return [{"name": n, "ns": PP_NS, "value": v} for n, v in _prov_fields(manifest) if v]
+    return [{"name": field_name, "ns": PP_NS, "value": field_value} for field_name, field_value in _prov_fields(manifest) if field_value]
 
 def _cdx_props(manifest):
-    return [{"name": "prismpath:" + n.replace("prismpath-", ""), "value": v}
-            for n, v in _prov_fields(manifest) if v]
+    return [{"name": "prismpath:" + field_name.replace("prismpath-", ""), "value": field_value}
+            for field_name, field_value in _prov_fields(manifest) if field_value]
 
 # ============================ OSCAL POA&M ============================
 def emit_oscal_poam(results, now=None, title="NIST SP 800-171 Rev 2 Plan of Action & Milestones"):
     now = _now(now)
-    bundle_seed = "poam:" + ":".join(sorted(r["control_id"] for r in results))
+    bundle_seed = "poam:" + ":".join(sorted(record["control_id"] for record in results))
     observations, poam_items = [], []
-    for r in results:
-        if _is_met(r["status"]):
+    for record in results:
+        if _is_met(record["status"]):
             continue                                            # POA&M tracks only open weaknesses
-        cid = r["control_id"]
-        obs_uuid = _uuid("obs:" + cid + ":" + r.get("manifest", {}).get("manifest_hash", ""))
-        unmet = r.get("unmet_objective_ids", [])
+        cid = record["control_id"]
+        obs_uuid = _uuid("obs:" + cid + ":" + record.get("manifest", {}).get("manifest_hash", ""))
+        unmet = record.get("unmet_objective_ids", [])
         observations.append({
             "uuid": obs_uuid,
             "description": "Assessment of %s (%s) on boundary '%s': %s. %s" % (
-                cid, r["title"], r.get("boundary", "n/a"), r["status"], r.get("gap_summary", "")),
+                cid, record["title"], record.get("boundary", "n/a"), record["status"], record.get("gap_summary", "")),
             "methods": ["EXAMINE"],
-            "props": _oscal_props(r.get("manifest")),
+            "props": _oscal_props(record.get("manifest")),
             "collected": now,
         })
         poam_items.append({
-            "uuid": _uuid("poam-item:" + cid + ":" + r.get("manifest", {}).get("manifest_hash", "")),
-            "title": "%s %s" % (cid, r["title"]),
+            "uuid": _uuid("poam-item:" + cid + ":" + record.get("manifest", {}).get("manifest_hash", "")),
+            "title": "%s %s" % (cid, record["title"]),
             "description": "%s — unmet objectives: %s" % (
-                r.get("gap_summary", "control not met"),
+                record.get("gap_summary", "control not met"),
                 ", ".join(unmet) if unmet else "(control-level)"),
-            "props": _oscal_props(r.get("manifest")) + [
-                {"name": "status", "ns": PP_NS, "value": r["status"]},
+            "props": _oscal_props(record.get("manifest")) + [
+                {"name": "status", "ns": PP_NS, "value": record["status"]},
                 {"name": "unmet-objective-ids", "ns": PP_NS, "value": ", ".join(unmet)}],
             "related-observations": [{"observation-uuid": obs_uuid}],
         })
@@ -113,28 +113,28 @@ def emit_oscal_poam(results, now=None, title="NIST SP 800-171 Rev 2 Plan of Acti
 def emit_oscal_ar(results, now=None, title="NIST SP 800-171 Rev 2 Assessment Results",
                   ap_href="prismpath://assessment-plan/nist-800171-access-control", rollup=None):
     now = _now(now)
-    bundle_seed = "ar:" + ":".join(sorted(r["control_id"] for r in results))
+    bundle_seed = "ar:" + ":".join(sorted(record["control_id"] for record in results))
     observations, findings = [], []
-    for r in results:
-        cid = r["control_id"]
-        mh = r.get("manifest", {}).get("manifest_hash", "")
+    for record in results:
+        cid = record["control_id"]
+        mh = record.get("manifest", {}).get("manifest_hash", "")
         obs_uuid = _uuid("ar-obs:" + cid + ":" + mh)
         observations.append({
             "uuid": obs_uuid,
-            "description": "Examined evidence for %s (%s) on boundary '%s'." % (cid, r["title"], r.get("boundary", "n/a")),
+            "description": "Examined evidence for %s (%s) on boundary '%s'." % (cid, record["title"], record.get("boundary", "n/a")),
             "methods": ["EXAMINE"],
-            "props": _oscal_props(r.get("manifest")),
+            "props": _oscal_props(record.get("manifest")),
             "collected": now,
         })
         findings.append({
             "uuid": _uuid("finding:" + cid + ":" + mh),
-            "title": "%s %s" % (cid, r["title"]),
-            "description": r.get("gap_summary", "") or ("Control %s assessed %s." % (cid, r["status"])),
-            "props": _oscal_props(r.get("manifest")) + [
-                {"name": "status", "ns": PP_NS, "value": r["status"]}],
+            "title": "%s %s" % (cid, record["title"]),
+            "description": record.get("gap_summary", "") or ("Control %s assessed %s." % (cid, record["status"])),
+            "props": _oscal_props(record.get("manifest")) + [
+                {"name": "status", "ns": PP_NS, "value": record["status"]}],
             "target": {"type": "objective-id", "target-id": _tok(cid),
-                       "title": r["title"],
-                       "status": {"state": "satisfied" if _is_met(r["status"]) else "not-satisfied"}},
+                       "title": record["title"],
+                       "status": {"state": "satisfied" if _is_met(record["status"]) else "not-satisfied"}},
             "related-observations": [{"observation-uuid": obs_uuid}],
         })
     result = {
@@ -188,23 +188,23 @@ def emit_oscal_ar(results, now=None, title="NIST SP 800-171 Rev 2 Assessment Res
 # ==================== CycloneDX 1.6 Attestations ====================
 def emit_cyclonedx(results, now=None):
     now = _now(now)
-    bundle_seed = "cdx:" + ":".join(sorted(r["control_id"] for r in results))
+    bundle_seed = "cdx:" + ":".join(sorted(record["control_id"] for record in results))
     requirements, amap = [], []
-    for r in results:
-        cid = r["control_id"]
+    for record in results:
+        cid = record["control_id"]
         rref = "req-" + cid
         # provenance rides on the requirement (the attestation map item has no `properties` slot in 1.6)
-        requirements.append({"bom-ref": rref, "identifier": cid, "title": r["title"],
-                             "text": r.get("gap_summary", ""),
-                             "properties": _cdx_props(r.get("manifest"))})
-        met = _is_met(r["status"])
+        requirements.append({"bom-ref": rref, "identifier": cid, "title": record["title"],
+                             "text": record.get("gap_summary", ""),
+                             "properties": _cdx_props(record.get("manifest"))})
+        met = _is_met(record["status"])
         amap.append({
             "requirement": rref,
             "conformance": {"score": 1.0 if met else 0.0,
-                            "rationale": (r.get("gap_summary") or ("Assessed %s." % r["status"]))[:1000]},
+                            "rationale": (record.get("gap_summary") or ("Assessed %s." % record["status"]))[:1000]},
             "confidence": {"score": 1.0 if met else 0.5,
                            "rationale": "Escalation-default adjudication; unmet objectives: %s" %
-                                        (", ".join(r.get("unmet_objective_ids", [])) or "none")},
+                                        (", ".join(record.get("unmet_objective_ids", [])) or "none")},
         })
     doc = {
         "bomFormat": "CycloneDX", "specVersion": "1.6",
@@ -230,23 +230,23 @@ def emit_cyclonedx(results, now=None):
 
 # ============================ validation ============================
 import re as _re
-def _py_pattern(p):
+def _py_pattern(pattern):
     """OSCAL/CycloneDX patterns use \\p{...} Unicode property escapes that Python `re` rejects.
     Translate the common ones; fall back to a permissive `.` for any exotic remainder (we keep the
     structural/required/enum checks — only the string char-class check is approximated)."""
-    p = p.replace("\\p{L}", "[^\\W\\d_]").replace("\\p{Nd}", "\\d").replace("\\p{N}", "\\d")
-    return _re.sub(r"\\p\{[^}]+\}", ".", p)
+    pattern = pattern.replace("\\p{L}", "[^\\W\\d_]").replace("\\p{Nd}", "\\d").replace("\\p{N}", "\\d")
+    return _re.sub(r"\\p\{[^}]+\}", ".", pattern)
 
 def _sanitize(node):
     if isinstance(node, dict):
-        for k, v in node.items():
-            if k == "pattern" and isinstance(v, str) and "\\p{" in v:
-                node[k] = _py_pattern(v)
+        for key, value in node.items():
+            if key == "pattern" and isinstance(value, str) and "\\p{" in value:
+                node[key] = _py_pattern(value)
             else:
-                _sanitize(v)
+                _sanitize(value)
     elif isinstance(node, list):
-        for x in node:
-            _sanitize(x)
+        for item in node:
+            _sanitize(item)
     return node
 
 def _load_schema(name):
@@ -268,17 +268,17 @@ def validate(doc, kind):
         base = "file://" + SCHEMA_DIR + "/"
         store = {}
         for fn in ("bom-1.6.schema.json", "jsf-0.82.schema.json", "spdx.schema.json"):
-            s = _load_schema(fn); store[base + fn] = s
-            if "$id" in s:
-                store[s["$id"]] = s
+            sibling_schema = _load_schema(fn); store[base + fn] = sibling_schema
+            if "$id" in sibling_schema:
+                store[sibling_schema["$id"]] = sibling_schema
         resolver = jsonschema.RefResolver(base_uri=base + "bom-1.6.schema.json", referrer=schema, store=store)
         validator = jsonschema.Draft7Validator(schema, resolver=resolver)
     else:
         validator = jsonschema.Draft202012Validator(schema) \
             if str(schema.get("$schema", "")).find("2020-12") >= 0 else jsonschema.Draft7Validator(schema)
     errs = []
-    for e in sorted(validator.iter_errors(doc), key=lambda x: list(x.path)):
-        errs.append("/".join(str(p) for p in e.path) + ": " + e.message)
+    for error in sorted(validator.iter_errors(doc), key=lambda error: list(error.path)):
+        errs.append("/".join(str(path_part) for path_part in error.path) + ": " + error.message)
     return (len(errs) == 0, errs)
 
 # ============================ dispatcher ============================
@@ -313,7 +313,7 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--selftest", action="store_true")
     ap.add_argument("--out", default=None)
-    a = ap.parse_args()
+    args = ap.parse_args()
     results = [
         {"control_id": "3.1.1", "title": "Access Control Policy", "boundary": "CUI enclave",
          "status": "met", "gap_summary": "All objectives demonstrated.", "unmet_objective_ids": [],
@@ -325,9 +325,9 @@ if __name__ == "__main__":
          "status": "partially-met", "gap_summary": "Remote sessions logged but not monitored in real time.",
          "unmet_objective_ids": ["3.1.12[b]"], "manifest": _sample_manifest("3.1.12")},
     ]
-    res = emit(results, fmt="both", out_dir=a.out, now="2026-07-22T12:00:00+00:00")
+    res = emit(results, fmt="both", out_dir=args.out, now="2026-07-22T12:00:00+00:00")
     summary = {}
-    for k, v in res.items():
-        summary[k] = {"valid": v["valid"], "n_errors": len(v["errors"]),
-                      "errors": v["errors"][:6], "path": v["path"]}
+    for format_name, emission in res.items():
+        summary[format_name] = {"valid": emission["valid"], "n_errors": len(emission["errors"]),
+                                "errors": emission["errors"][:6], "path": emission["path"]}
     print(json.dumps(summary, indent=1))

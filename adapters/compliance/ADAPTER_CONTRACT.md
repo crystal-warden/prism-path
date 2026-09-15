@@ -10,7 +10,7 @@ It knows only: **route → adjudicate a node → emit a structured result → at
 
 ## The rule (enforced by `arch_guard.py` Signal 1 — HARD)
 **No domain vocabulary in core.** A `control_id`, `NIST`, `CMMC`, `POA&M`, `threat_class`, or
-`learner_state` appearing in an engine module is a leak. Domain vocab, verdict/determination schemas,
+`learner_state` appearing in an engine module is a leak. Domain vocab, determination schemas,
 and catalogs live in the **adapter only**. Adding an adapter must touch **zero** core files.
 
 ## The six ports (core-owned interfaces) and what each adapter supplies
@@ -20,7 +20,7 @@ six ports; the module functions remain the stable API (see adapters/ADAPTER_GUID
 | Port | Core interface | SOC adapter (#1) | **Compliance adapter (#2)** |
 |---|---|---|---|
 | **Ingestion** | yields a unit-of-work | Wazuh alert | control-assessment request (control id + evidence bundle) |
-| **Adjudicator** | node → structured result | threat verdict (contain/watch/ignore) | control determination (met / partially-met / not-met) |
+| **Adjudicator** | node → structured result | threat decision (contain/watch/ignore) | control determination (met / partially-met / not-met) |
 | **Embedder** *(auxiliary — shared infrastructure, not one of the six ports)* | text → vector | bge / EmbeddingGemma | *same (shared)* |
 | **Retrieval** | query → few relevant snippets | LOLBAS cards | control objectives + assessment procedures (800-171A) |
 | **Action/Sink** | consume a determination | OPNsense containment staging | finding + POA&M entry |

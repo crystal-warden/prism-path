@@ -3,8 +3,8 @@
 """Dual-catalog coverage: the engine is catalog-agnostic and the assessor selects the standard.
 Rev 2 (CMMC's current basis, SPRS-scored) and Rev 3 (NIST's current official, not SPRS-scored)."""
 import pytest
-import compliance_adapter as ca
-from sample import record
+from adapters.compliance import compliance_adapter as ca
+from adapters.compliance.tests.sample import record
 
 
 def test_list_standards_shows_both_revisions():
@@ -22,9 +22,9 @@ def test_r2_full_breadth_and_weights():
     ca.use_standard("nist_800171_r2")
     cat = ca._catalog()["controls"]
     assert len(cat) == 110
-    assert all("dod_am_weight" in c for c in cat.values())      # every control DoD-weighted
+    assert all("dod_am_weight" in control for control in cat.values())      # every control DoD-weighted
     assert len(ca.catalog_weights()) == 110
-    fams = {c["family"] for c in cat.values()}
+    fams = {control["family"] for control in cat.values()}
     assert len(fams) == 14
 
 
@@ -33,8 +33,8 @@ def test_r3_full_breadth_no_sprs_has_odps():
     cat = ca._catalog()["controls"]
     assert len(cat) == 130
     assert ca.catalog_weights() == {}                           # Rev 3 is not SPRS-scored
-    assert any(c.get("odps") for c in cat.values())             # Rev 3 carries ODPs
-    fams = {c["family"] for c in cat.values()}
+    assert any(control.get("odps") for control in cat.values())             # Rev 3 carries ODPs
+    fams = {control["family"] for control in cat.values()}
     assert len(fams) == 17
 
 
@@ -58,8 +58,8 @@ def test_r3_rollup_marks_sprs_not_applicable(tmp_path):
     out = ca.rollup_report(recs, {"boundary": "enclave"}, out_dir=str(tmp_path), fmt="oscal")
     assert out["sprs"].get("applicable") is False
     assert "Rev 2" in out["sprs"]["reason"]
-    for name, r in out["emitted"].items():
-        assert r["valid"], (name, r)
+    for name, emission in out["emitted"].items():
+        assert emission["valid"], (name, emission)
 
 
 def test_r2_rollup_scores_sprs(tmp_path):

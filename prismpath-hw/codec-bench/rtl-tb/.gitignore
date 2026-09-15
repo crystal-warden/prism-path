@@ -1,0 +1,4 @@
+# gate.mk gives each testbench its own results file so that four suites sharing this directory
+# stop overwriting one another's verdict. prismpath-hw/.gitignore already covers the plain
+# results.xml and sim_build/.
+results.*.xml

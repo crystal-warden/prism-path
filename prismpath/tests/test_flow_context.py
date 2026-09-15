@@ -47,8 +47,8 @@ def test_context_keys_and_counts():
 
 def test_edge_tiers_classified():
     facts = flow_context(parse(_CLEAN))
-    a = next(n for n in facts["nodes"] if n["name"] == "a")
-    vias = {e["target"]: e["via"] for e in a["edges"]}
+    node_a = next(node for node in facts["nodes"] if node["name"] == "a")
+    vias = {edge["target"]: edge["via"] for edge in node_a["edges"]}
     assert vias == {"b": "deterministic", "c": "semantic", "d": "deterministic"}  # 'else' is deterministic
 
 
@@ -57,7 +57,7 @@ def test_unreachable_node_is_proven():
     assert "orphan" in facts["unreachable_nodes"]
     assert facts["reachability"]["orphan"]["reachable"] == "no"
     assert facts["reachability"]["orphan"]["proven"] is True
-    assert any(f["code"] == "unreachable-node" for f in facts["findings"])
+    assert any(finding["code"] == "unreachable-node" for finding in facts["findings"])
 
 
 def test_render_is_grounding_prose():

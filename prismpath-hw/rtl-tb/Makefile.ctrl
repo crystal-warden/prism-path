@@ -1,10 +1,18 @@
 # cocotb tb: ctrl_in (switch/button conditioning: sync + debounce + one-shot press).
+#   make -f Makefile.ctrl        the gate: runs the sim, then fails on any cocotb failure
 SIM ?= verilator
 TOPLEVEL_LANG ?= verilog
 VERILOG_SOURCES = $(PWD)/../rtl/ctrl_in.sv
+# The silicon THRESH is 250,000 clocks (5 ms at 50 MHz) and simulating one press at that depth would
+# cost a million cycles per hold, so the gate runs the module at 8 and test_ctrl_in.py's hold counts
+# are written against 8. What this gate proves is the debounce LOGIC, parameterized; the 5 ms number
+# itself is only ever exercised on the board.
 EXTRA_ARGS += -GTHRESH=8
 COCOTB_TOPLEVEL = ctrl_in
 COCOTB_TEST_MODULES = test_ctrl_in
 TOPLEVEL = $(COCOTB_TOPLEVEL)
 MODULE = $(COCOTB_TEST_MODULES)
+GATE_NAME = ctrl
+GATE_EXPECTED = debounce
+include gate.mk
 include $(shell cocotb-config --makefiles)/Makefile.sim

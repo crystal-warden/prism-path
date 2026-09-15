@@ -59,17 +59,17 @@ def _host(env):
 
 def test_accepted_swap_becomes_active(env):
     host = _host(env)
-    r = host.swap(_pack(env, "v1", 1))
-    assert r["ok"] and r["version"] == 1
-    assert host.active()["active"] == r["active"]
+    swap_result = host.swap(_pack(env, "v1", 1))
+    assert swap_result["ok"] and swap_result["version"] == 1
+    assert host.active()["active"] == swap_result["active"]
 
 
 def test_swap_chain_reconstructs_from_ledger(env):
     host = _host(env)
     h1 = host.swap(_pack(env, "v1", 1))["active"]
     h2 = host.swap(_pack(env, "v2", 2, hot=80))["active"]
-    swaps = [e for e in host.history() if e["action"] == "swap"]
-    assert [s["data"]["to_hash"] for s in swaps] == [h1, h2]
+    swaps = [event for event in host.history() if event["action"] == "swap"]
+    assert [swap["data"]["to_hash"] for swap in swaps] == [h1, h2]
     assert swaps[1]["data"]["from_hash"] == h1          # chain is linked
     assert host.audit.verify_log()                       # Merkle-intact
 
@@ -77,9 +77,9 @@ def test_swap_chain_reconstructs_from_ledger(env):
 def test_rollback_replay_is_rejected_and_logged(env):
     host = _host(env)
     host.swap(_pack(env, "v2", 2))
-    r = host.swap(_pack(env, "v1", 1))                    # older version -> replay
-    assert not r["ok"] and any("version:not-monotonic" in x for x in r["reasons"])
-    rej = [e for e in host.history() if e["action"] == "swap_rejected"]
+    swap_result = host.swap(_pack(env, "v1", 1))                    # older version -> replay
+    assert not swap_result["ok"] and any("version:not-monotonic" in reason for reason in swap_result["reasons"])
+    rej = [event for event in host.history() if event["action"] == "swap_rejected"]
     assert len(rej) == 1 and host.active()["version"] == 2
 
 
@@ -96,17 +96,17 @@ def test_out_of_envelope_swap_rejected_active_unchanged(env):
     )).serialize())
     pp.build_pack(str(ppt), {"humidity": "int"}, version=2, envelope_id="env1",
                   priv_path=env["keys"]["private"], pub_path=env["keys"]["public"])
-    r = host.swap(str(ppt))
-    assert not r["ok"] and any("unknown-field" in x for x in r["reasons"])
+    swap_result = host.swap(str(ppt))
+    assert not swap_result["ok"] and any("unknown-field" in reason for reason in swap_result["reasons"])
     assert host.active() == before                        # untouched
 
 
 def test_tampered_image_rejected(env):
     host = _host(env)
-    p = _pack(env, "v1", 1)
-    raw = bytearray(Path(p).read_bytes()); raw[-1] ^= 1; Path(p).write_bytes(bytes(raw))
-    r = host.swap(p)
-    assert not r["ok"] and r["reasons"] == ["image:sha256-mismatch"]
+    pack_path = _pack(env, "v1", 1)
+    raw = bytearray(Path(pack_path).read_bytes()); raw[-1] ^= 1; Path(pack_path).write_bytes(bytes(raw))
+    swap_result = host.swap(pack_path)
+    assert not swap_result["ok"] and swap_result["reasons"] == ["image:sha256-mismatch"]
     assert host.active()["active"] is None
 
 
@@ -114,9 +114,9 @@ def test_rollback_restores_previous(env):
     host = _host(env)
     h1 = host.swap(_pack(env, "v1", 1))["active"]
     host.swap(_pack(env, "v2", 2, hot=80))
-    r = host.rollback()
-    assert r["ok"] and r["active"] == h1
-    assert [e["action"] for e in host.history()][-1] == "rollback"
+    rollback_result = host.rollback()
+    assert rollback_result["ok"] and rollback_result["active"] == h1
+    assert [event["action"] for event in host.history()][-1] == "rollback"
 
 
 def test_strict_raises(env):
@@ -130,9 +130,9 @@ def test_allow_unsigned_stamps_the_event(env):
     host = _host(env)
     ppt = env["tmp"] / "raw.ppt"
     ppt.write_bytes(pc.compile_flow(parse(_flow(100))).serialize())
-    r = host.swap(str(ppt), allow_unsigned=True)
-    assert r["ok"] and r["unsigned"] is True
-    ev = [e for e in host.history() if e["action"] == "swap"][-1]
+    swap_result = host.swap(str(ppt), allow_unsigned=True)
+    assert swap_result["ok"] and swap_result["unsigned"] is True
+    ev = [event for event in host.history() if event["action"] == "swap"][-1]
     assert ev["data"]["unsigned"] is True
 
 
@@ -140,7 +140,7 @@ def test_attest_writes_a_ledger_row(env):
     host = _host(env)
     host.swap(_pack(env, "v1", 1))
     host.attest()
-    att = [e for e in host.history() if e["action"] == "attestation"]
+    att = [event for event in host.history() if event["action"] == "attestation"]
     assert len(att) == 1 and att[0]["data"]["version"] == 1
 
 
@@ -151,7 +151,7 @@ def test_unexpected_exception_is_atomic(env, monkeypatch):
     host.swap(_pack(env, "v1", 1))
     before = host.active()
     monkeypatch.setattr(pp, "check_envelope",
-                        lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom")))
+                        lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("boom")))
     with pytest.raises(RuntimeError, match="boom"):
         host.swap(_pack(env, "v2", 2))
     assert host.active() == before                        # nothing flipped
@@ -161,5 +161,5 @@ def test_version_floor_persists_across_restart(env):
     host = _host(env)
     host.swap(_pack(env, "v3", 3))
     host2 = _host(env)                                    # fresh host, same state_dir
-    r = host2.swap(_pack(env, "v2", 2))                  # below the persisted floor
-    assert not r["ok"] and any("version:not-monotonic" in x for x in r["reasons"])
+    swap_result = host2.swap(_pack(env, "v2", 2))                  # below the persisted floor
+    assert not swap_result["ok"] and any("version:not-monotonic" in reason for reason in swap_result["reasons"])

@@ -3,7 +3,7 @@
 // Copyright 2026 Crystal Warden Supply Chain Labs LLC
 // Log-alert worker (JavaScript). Read one log line from the [context] block on stdin, extract its level
 // and latency, print ONE JSON object, exit 0. A nonzero exit routes to the flow's error tier.
-// Wire it in with:  cli_agent(["node", "log_alert.js"], pass_state=["line"])
+// Wire it in with:  cli_worker(["node", "log_alert.js"], pass_state=["line"])
 let buf = "";
 process.stdin.on("data", (c) => (buf += c));
 process.stdin.on("end", () => {

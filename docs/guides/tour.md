@@ -10,7 +10,7 @@ Routing is a **spectrum chosen by the engine, not the author**:
 
 | edge kind | syntax | how it routes | cost |
 |---|---|---|---|
-| **deterministic** | `-> t: when <expr>` (also `always`/`else`/`false`) | a safe predicate over the agent's structured outcome (+ a `visits` counter) | free, exact |
+| **deterministic** | `-> t: when <expr>` (also `always`/`else`/`false`) | a safe predicate over the worker's structured outcome (+ a `visits` counter) | free, exact |
 | **semantic** | `-> t: <natural language>` | embed the outcome vs the condition; escalate to a 1 shot LLM only on low confidence | ~free + rare LLM |
 
 > *Logic where logic exists, intent where it doesn't.* Negation, counts, and thresholds are written
@@ -48,12 +48,12 @@ All tests pass.
 Too many attempts.
 ```
 
-### The agent contract
+### The worker contract
 
-The engine is agent agnostic. You pass `run(graph, agent, router=...)` where:
+The engine is worker agnostic. You pass `run(graph, worker, router=...)` where:
 
 ```python
-agent(node_name: str, instruction: str, state: dict) -> str | dict
+worker(node_name: str, instruction: str, state: dict) -> str | dict
 ```
 
 - Return a **string** → it becomes the text used for semantic routing.
@@ -73,7 +73,7 @@ from prismpath.router import HybridRouter, LLMRouter
 from prismpath import llm_local
 
 router = HybridRouter(LLMRouter(llm_local.generate), margin=0.05)  # recommended
-run(graph, agent, router=router)
+run(graph, worker, router=router)
 ```
 
 - `EmbeddingRouter()`: cosine only (cheap, ~0.82 on the routing bench).
@@ -296,7 +296,7 @@ reference adapters ride the ports:
   ([evidence #82 to #86](../research/supporting-evidence.md)).
 - **The GRC adjudication adapter** (`adapters/compliance/`): the class whose Adjudicator may be a model,
   machine checkable controls deciding deterministically and prose objectives resolving fail closed, with
-  evidence typed verdicts ([evidence #137 to #139](../research/supporting-evidence.md)).
+  evidence typed determinations ([evidence #137 to #139](../research/supporting-evidence.md)).
 
 ## From a decision to a receipt
 
@@ -315,7 +315,7 @@ graph = parse_file("prismpath/examples/pr_demo/triage.md")
 log = AuditLog("triage.audit.jsonl")
 
 for amount in (700, 200):                                  # the same ticket, above and below the line
-    def worker(node, instruction, state, amount=amount):   # stands in for your agent
+    def worker(node, instruction, state, amount=amount):   # stands in for your worker
         return {"category": "billing_dispute", "amount": amount, "sentiment": "neutral"}
     result = run(graph, worker)
     cause = causes.code("route:stuck") if result.stopped == "stuck" else 0
@@ -350,5 +350,6 @@ python -m prismpath.cli lint     prismpath/flows/triage_support.md   # validate 
 python -m prismpath.cli test     prismpath/flows/coding.md   # assert routing from coding.tests.md (a Markdown table, no LLM)
 python -m prismpath.cli lock     prismpath/flows/coding.md   # commit condition embeddings -> reproducible routing
 python -m prismpath.cli graph    prismpath/flows/coding.md --fenced   # -> a Mermaid diagram for your README
-python -m prismpath.cli run      prismpath/flows/coding.md   # run with a built-in mock agent; print path + stop reason
+python -m prismpath.cli run      prismpath/flows/coding.md   # run with a built-in mock worker; print path + stop reason
+python -m prismpath.cli run      prismpath/flows/coding.md --worker ollama:llama3.2   # a real local model instead of the mock (`--agent` is the old spelling, still accepted)
 ```

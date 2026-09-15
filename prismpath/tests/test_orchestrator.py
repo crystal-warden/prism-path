@@ -58,7 +58,7 @@ def test_session_lifecycle(tmp_path, monkeypatch):
         def __init__(self):
             self.pid = 1234
 
-    monkeypatch.setattr(orchestrator.subprocess, "Popen", lambda *a, **k: FakeProc())
+    monkeypatch.setattr(orchestrator.subprocess, "Popen", lambda *args, **kwargs: FakeProc())
     r4 = client.post(f"/api/session/{sid}/approve")
     assert r4.status_code == 200
     assert r4.json()["phase"] == "executing"
@@ -71,16 +71,16 @@ def test_session_lifecycle(tmp_path, monkeypatch):
     # 5. Download artifact zip
     proj_dir = orchestrator.SESS[sid]["proj"]
     os.makedirs(proj_dir, exist_ok=True)
-    with open(os.path.join(proj_dir, "app.js"), "w") as f:
-        f.write("console.log('hello');")
+    with open(os.path.join(proj_dir, "app.js"), "w") as source_file:
+        source_file.write("console.log('hello');")
 
     r5 = client.get(f"/api/session/{sid}/artifact")
     assert r5.status_code == 200
     assert r5.headers["content-type"] == "application/zip"
 
-    z = zipfile.ZipFile(io.BytesIO(r5.content))
-    assert "app.js" in z.namelist()
-    assert z.read("app.js").decode("utf-8") == "console.log('hello');"
+    archive = zipfile.ZipFile(io.BytesIO(r5.content))
+    assert "app.js" in archive.namelist()
+    assert archive.read("app.js").decode("utf-8") == "console.log('hello');"
 
 
 def test_session_404():

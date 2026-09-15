@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
-"""FAIR risk pillar — the R in GRC, driven by the deterministic compliance verdicts.
+"""FAIR risk pillar — the R in GRC, driven by the deterministic compliance determinations.
 
 Risk is estimative, not deterministic, and this module does not pretend otherwise: the threat event
 frequency and the loss magnitude are calibrated estimates (ranges). What PrismPath makes provable is
 the PROCESS. Each scenario's mitigating controls are explicit, the vulnerability factor is COMPUTED
-from the deterministic compliance verdicts (the more mitigating controls are unmet, the more exposed
+from the deterministic compliance determinations (the more mitigating controls are unmet, the more exposed
 the scenario), the risk is a reproducible function of those inputs, and a risk-acceptance decision
 carries a signed receipt with an owner, a rationale, and a date.
 
@@ -16,7 +16,7 @@ so improving compliance measurably reduces risk, and a control gap shows up as e
 """
 import os
 import json
-import ai_safety_receipts as _sig   # reuse the engine's Ed25519 receipt signing (generic over any record)
+from adapters.compliance import ai_safety_receipts as _sig   # reuse the engine's Ed25519 receipt signing (generic over any record)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SCEN_PATH = os.path.join(HERE, "risk_scenarios.json")
@@ -27,43 +27,44 @@ def load_scenarios():
     return json.load(open(SCEN_PATH))["scenarios"]
 
 
-def verdicts_from_results(results):
-    """Convenience: build {control_id: status} from a posture_connector / assessment result list."""
-    return {r["control_id"]: r["status"] for r in results}
+def determinations_from_results(results):
+    """Convenience: build {control_id: determination} from a posture_connector / assessment result list."""
+    return {result["control_id"]: result["status"] for result in results}
 
 
-def vulnerability(scenario, verdicts):
+def vulnerability(scenario, determinations):
     """Vulnerability (0..1) driven by the compliance posture of the scenario's mitigating controls. A
-    control mitigates only when its verdict is exactly 'met'; anything else (not-met, partially-met,
+    control mitigates only when its determination is exactly 'met'; anything else (not-met, partially-met,
     insufficient, or absent) leaves the scenario exposed. A residual floor applies even at full
     compliance."""
     controls = scenario.get("controls", [])
     if not controls:
         return 1.0
-    unmet = sum(1 for c in controls if verdicts.get(c) != "met")
+    unmet = sum(1 for control_id in controls if determinations.get(control_id) != "met")
     return max(RESIDUAL_VULN, round(unmet / len(controls), 4))
 
 
-def ale(scenario, verdicts):
+def ale(scenario, determinations):
     """Annualized Loss Expectancy range (min/likely/max) = TEF x Vulnerability x Loss Magnitude."""
-    v = vulnerability(scenario, verdicts)
+    vulnerability_factor = vulnerability(scenario, determinations)
     tef, loss = scenario["tef"], scenario["loss"]
-    return {k: round(tef[k] * v * loss[k]) for k in ("min", "likely", "max")}
+    return {bound: round(tef[bound] * vulnerability_factor * loss[bound]) for bound in ("min", "likely", "max")}
 
 
-def risk_register(verdicts, scenarios=None):
+def risk_register(determinations, scenarios=None):
     """Per-scenario ALE plus the aggregate, and the mitigating controls that are unmet (the drivers).
-    verdicts: {control_id: status}. Reproducible given the same verdicts."""
+    determinations: {control_id: determination}. Reproducible given the same determinations."""
     scenarios = scenarios if scenarios is not None else load_scenarios()
     rows = []
-    for s in scenarios:
-        rows.append({"id": s["id"], "name": s["name"],
-                     "vulnerability": vulnerability(s, verdicts), "ale": ale(s, verdicts),
-                     "unmet_controls": sorted(c for c in s.get("controls", []) if verdicts.get(c) != "met")})
-    agg = {k: sum(r["ale"][k] for r in rows) for k in ("min", "likely", "max")}
+    for scenario in scenarios:
+        rows.append({"id": scenario["id"], "name": scenario["name"],
+                     "vulnerability": vulnerability(scenario, determinations), "ale": ale(scenario, determinations),
+                     "unmet_controls": sorted(control_id for control_id in scenario.get("controls", [])
+                                              if determinations.get(control_id) != "met")})
+    agg = {bound: sum(row["ale"][bound] for row in rows) for bound in ("min", "likely", "max")}
     return {"scenarios": rows, "aggregate_ale": agg,
             "note": "ALE is an estimate; TEF and loss magnitude require calibration. Vulnerability is "
-                    "computed from the deterministic compliance verdicts, so the ranking is defensible "
+                    "computed from the deterministic compliance determinations, so the ranking is defensible "
                     "even though the dollar figures are estimates."}
 
 

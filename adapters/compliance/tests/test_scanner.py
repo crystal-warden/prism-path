@@ -4,10 +4,10 @@
 The osquery adapter maps only what osquery reports, so the posture_connector grades what it covers and
 defers the rest."""
 import pytest
-import compliance_adapter as ca
-import scanner as sc
-import scan_osquery
-import posture_connector as pc
+from adapters.compliance import compliance_adapter as ca
+from adapters.compliance import scanner as sc
+from adapters.compliance import scan_osquery
+from adapters.compliance import posture_connector as pc
 
 
 def test_osquery_registered():
@@ -56,7 +56,7 @@ def test_end_to_end_osquery_posture_grades_session_lock():
     posture = sc.to_posture("osquery", sc.load_sample("osquery_macos"), "the Mac dev host")
     res = pc.assess(posture)
     # osquery only supplies the session-lock facts, so 3.1.10 is decided and the rest are deferred
-    assert [r["control_id"] for r in res["results"]] == ["3.1.10"]
+    assert [result["control_id"] for result in res["results"]] == ["3.1.10"]
     assert res["results"][0]["status"] == "met"
     assert "3.13.11" in res["deferred"] and "3.5.3" in res["deferred"]
 

@@ -5,9 +5,9 @@
    Ingestion → Retrieval → Adjudicator → Action/Sink → Attestation.
 Analogous to wazuh_triage_agent.py for the SOC adapter; the interesting logic is in the flow + this
 thin port-wiring, not re-implemented engine machinery."""
-import os, sys, json
-HERE = os.path.dirname(os.path.abspath(__file__)); sys.path.insert(0, HERE)
-import compliance_adapter as ca
+import os, json
+HERE = os.path.dirname(os.path.abspath(__file__))
+from adapters.compliance import compliance_adapter as ca
 
 
 def assess_one(req, out_dir):
@@ -28,6 +28,6 @@ def assess_one(req, out_dir):
 
 if __name__ == "__main__":
     req_dir = os.path.join(HERE, "requests"); out_dir = os.path.join(HERE, "out")
-    results = [assess_one(r, out_dir) for r in ca.iter_requests(req_dir)]
+    results = [assess_one(request, out_dir) for request in ca.iter_requests(req_dir)]
     print(json.dumps(results, indent=1))
     print("\ncatalog fingerprint:", ca.catalog_hash())

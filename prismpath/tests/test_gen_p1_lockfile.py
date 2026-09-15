@@ -9,11 +9,11 @@ from prismpath.safety import gen_p1_lockfile
 
 
 def test_cos_helper():
-    a = [1.0, 0.0, 0.0]
-    b = [1.0, 0.0, 0.0]
-    c = [0.0, 1.0, 0.0]
-    assert abs(gen_p1_lockfile._cos(a, b) - 1.0) < 1e-6
-    assert abs(gen_p1_lockfile._cos(a, c) - 0.0) < 1e-6
+    vector = [1.0, 0.0, 0.0]
+    same_direction = [1.0, 0.0, 0.0]
+    orthogonal_vector = [0.0, 1.0, 0.0]
+    assert abs(gen_p1_lockfile._cos(vector, same_direction) - 1.0) < 1e-6
+    assert abs(gen_p1_lockfile._cos(vector, orthogonal_vector) - 0.0) < 1e-6
 
 
 def _fake_embedder(texts):

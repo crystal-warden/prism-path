@@ -327,8 +327,10 @@ kernel claiming compatibility must pass all of them.
 **Content addressed**: named by the hash of its contents. See idea 11.
 
 **Control plane / data plane**: borrowed from networking. The data plane does the work (running a
-flow); the control plane decides what work happens and whether it's done (gates, sprints, ledger).
-[architecture](design/architecture.md)
+flow); the control plane decides what the autonomous system is permitted to do. PrismPath is one
+control plane among many, never "the" control plane. The sprint and swarm loop that builds software
+on top of it is **the orchestration layer**, which is a different thing.
+[architecture](design/architecture.md) [the orchestration layer](design/orchestration.md)
 
 **Cosine similarity**: how aligned two vectors are, 0.0 to 1.0. See idea 1.
 
@@ -601,7 +603,7 @@ observe, control, events, prove; [API guide](guides/mission-control-api.md)) ·
 | [`prismpath/policies/`](../prismpath/policies/) | the statutory floor + the P1 lockfile |
 | [`prismpath/telemetry/`](../prismpath/telemetry/) | decision-preserving telemetry codec |
 | [`adapters/fusion/`](../adapters/fusion/) | the decision fusion plane |
-| [`adapters/compliance/`](../adapters/compliance/README.md) | the GRC adjudication adapter: machine checkable controls, evidence typed verdicts, OSCAL |
+| [`adapters/compliance/`](../adapters/compliance/README.md) | the GRC adjudication adapter: machine checkable controls, evidence typed determinations, OSCAL |
 | [`prismpath-hw/`](../prismpath-hw/README.md) | the C target, the `.ppt` compiler and format, the fabric RTL, four MCU ISAs, the mesh demos |
 | [`prismpath-ebpf/`](../prismpath-ebpf/README.md) | the interpreter in the Linux kernel (XDP and TC), the loader, receipt sealing |
 | [`prismpath-rs/`](../prismpath-rs/README.md), [`prismpath-telemetry-rs/`](../prismpath-telemetry-rs/README.md), [`prismpath-hotswap-rs/`](../prismpath-hotswap-rs/README.md), [`prismpath-preflight/`](../prismpath-preflight/README.md), [`prismpath-reflect-bindings/`](../prismpath-reflect-bindings/README.md) | the Rust crates: kernel, Facet wire, signed packs, the adoption gate, type bindings |

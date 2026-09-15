@@ -18,6 +18,11 @@
  * The register file is `regs`: a 4 byte prefix (the node id in the regs.bin file format) then
  * 8 bytes per field, i32 type and i32 value, the layout the table image indexes directly.
  *
+ * Include this file in exactly ONE translation unit per firmware. `tbl`, `regs` and the ten header
+ * fields are file scope statics, so a second translation unit that includes it gets a second, empty
+ * table and register file, and the compiler says nothing: the firmware would decide on whichever
+ * copy the calling file happens to see. Every firmware here is a single .c file for that reason.
+ *
  * parse_table returns a ppt_parse_rc and eval_prog writes a ppt_eval_rc into *err. Both are this
  * header's own namespace, kept small and stable since the first firmware: they are NOT registry cause
  * codes (prismpath/kernel/causes.py) and a caller that puts a refusal on the wire maps them to one. */
@@ -50,9 +55,9 @@ static uint8_t tbl[TBL_MAX]; static uint8_t regs[REGS_MAX];
 static uint16_t n_fields, n_interns, n_atoms, n_nodes, n_edges, prog_len, start_node, visits_idx, max_steps, max_stack, tbl_flags;
 static uint16_t atoms_off, nodes_off, edges_off, prog_off_base;
 
-static inline uint16_t rd16b(const uint8_t *p) { return (uint16_t)(p[0] | ((uint16_t)p[1] << 8)); }
-static inline int32_t rd32(const uint8_t *p) { int32_t v; memcpy(&v, p, 4); return v; }
-static inline void wr32(uint8_t *p, int32_t v) { memcpy(p, &v, 4); }
+static inline uint16_t rd16b(const uint8_t *bytes) { return (uint16_t)(bytes[0] | ((uint16_t)bytes[1] << 8)); }
+static inline int32_t rd32(const uint8_t *bytes) { int32_t value; memcpy(&value, bytes, 4); return value; }
+static inline void wr32(uint8_t *bytes, int32_t value) { memcpy(bytes, &value, 4); }
 
 /* parse the image already copied into tbl; len is the number of bytes the caller placed there */
 static inline uint8_t parse_table(uint16_t len) {
@@ -73,9 +78,9 @@ static inline uint8_t parse_table(uint16_t len) {
 
 /* atoms are the parallel comparators over the register file; interp.c eval_atom, line for line */
 static inline uint8_t eval_atom(uint16_t atom_idx) {
-    const uint8_t *a = tbl + atoms_off + 8 * (uint32_t)atom_idx;
-    uint16_t field = rd16b(a); uint8_t op = a[2], aty = a[3]; int32_t aval = rd32(a + 4);
-    const uint8_t *r = regs + 4 + 8 * (uint32_t)field; int32_t rty = rd32(r), rval = rd32(r + 4);
+    const uint8_t *atom = tbl + atoms_off + 8 * (uint32_t)atom_idx;
+    uint16_t field = rd16b(atom); uint8_t op = atom[2], aty = atom[3]; int32_t aval = rd32(atom + 4);
+    const uint8_t *reg = regs + 4 + 8 * (uint32_t)field; int32_t rty = rd32(reg), rval = rd32(reg + 4);
     uint8_t lnum = (rty == TY_BOOL || rty == TY_INT), rnum = (aty == TY_BOOL || aty == TY_INT);
     switch (op) {
     case OP_EQ: case OP_NE: { uint8_t eq;
@@ -93,10 +98,10 @@ static inline uint8_t eval_atom(uint16_t atom_idx) {
 /* one edge's program folds atom results on a small stack; the result is the top of stack */
 static inline int8_t eval_prog(uint16_t e_prog_off, uint16_t e_prog_cnt, uint8_t *err) {
     uint8_t stack[STACK_MAX]; int16_t sp = 0;
-    for (uint16_t i = 0; i < e_prog_cnt; i++) {
-        uint16_t w = rd16b(tbl + prog_off_base + 2 * (uint32_t)(e_prog_off + i));
-        if (w < 0x8000) { if (sp >= STACK_MAX) { *err = PPT_EVAL_STACK_OVERFLOW; return 0; } stack[sp++] = eval_atom(w); }
-        else switch (w) {
+    for (uint16_t word_index = 0; word_index < e_prog_cnt; word_index++) {
+        uint16_t word = rd16b(tbl + prog_off_base + 2 * (uint32_t)(e_prog_off + word_index));
+        if (word < 0x8000) { if (sp >= STACK_MAX) { *err = PPT_EVAL_STACK_OVERFLOW; return 0; } stack[sp++] = eval_atom(word); }
+        else switch (word) {
         case OPC_NOT:   stack[sp - 1] = (uint8_t)!stack[sp - 1]; break;
         case OPC_AND:   sp--; stack[sp - 1] = (uint8_t)(stack[sp - 1] && stack[sp]); break;
         case OPC_OR:    sp--; stack[sp - 1] = (uint8_t)(stack[sp - 1] || stack[sp]); break;
@@ -105,21 +110,22 @@ static inline int8_t eval_prog(uint16_t e_prog_off, uint16_t e_prog_cnt, uint8_t
         default: *err = PPT_EVAL_BAD_OPCODE; return 0;
         }
     }
-    return (int8_t)stack[0];
+    return sp > 0 ? (int8_t)stack[0] : 0;   /* an empty program leaves nothing to read; the compiler never emits one */
 }
 
 /* the priority encoder: the first edge whose program is true wins; -1 when none (or on error) */
 static inline int8_t evaluate(uint16_t node, uint16_t *out_target, uint8_t *err) {
-    const uint8_t *n = tbl + nodes_off + 4 * (uint32_t)node; uint16_t edge_off = rd16b(n), edge_cnt = rd16b(n + 2);
-    for (uint16_t i = 0; i < edge_cnt; i++) {
-        const uint8_t *e = tbl + edges_off + 6 * (uint32_t)(edge_off + i);
-        if (eval_prog(rd16b(e + 2), rd16b(e + 4), err)) { *out_target = rd16b(e); return (int8_t)i; }
-        if (*err) return -1;
+    const uint8_t *node_entry = tbl + nodes_off + 4 * (uint32_t)node; uint16_t edge_off = rd16b(node_entry), edge_cnt = rd16b(node_entry + 2);
+    for (uint16_t edge_index = 0; edge_index < edge_cnt; edge_index++) {
+        const uint8_t *edge_entry = tbl + edges_off + 6 * (uint32_t)(edge_off + edge_index);
+        int8_t matched = eval_prog(rd16b(edge_entry + 2), rd16b(edge_entry + 4), err);
+        if (*err) return -1;                                   /* the error is decided before the result is used, not after */
+        if (matched) { *out_target = rd16b(edge_entry); return (int8_t)edge_index; }
     }
     return -1;
 }
 
 static inline uint16_t node_edge_count(uint16_t node) { return rd16b(tbl + nodes_off + 4 * (uint32_t)node + 2); }
-static inline void set_reg(uint16_t reg, int32_t v) { wr32(regs + 4 + 8 * (uint32_t)reg, TY_INT); wr32(regs + 8 + 8 * (uint32_t)reg, v); }
-static inline void set_reg_typed(uint16_t reg, int32_t ty, int32_t v) { wr32(regs + 4 + 8 * (uint32_t)reg, ty); wr32(regs + 8 + 8 * (uint32_t)reg, v); }
+static inline void set_reg(uint16_t reg, int32_t value) { wr32(regs + 4 + 8 * (uint32_t)reg, TY_INT); wr32(regs + 8 + 8 * (uint32_t)reg, value); }
+static inline void set_reg_typed(uint16_t reg, int32_t ty, int32_t value) { wr32(regs + 4 + 8 * (uint32_t)reg, ty); wr32(regs + 8 + 8 * (uint32_t)reg, value); }
 static inline int32_t get_reg(uint16_t reg) { return rd32(regs + 8 + 8 * (uint32_t)reg); }

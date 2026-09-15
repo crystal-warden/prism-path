@@ -33,7 +33,7 @@ def floor():
 def stub_embedder(mapping, default=(1.0, 0.0, 0.0)):
     """Deterministic 'embedder': known texts get known vectors, everything else is orthogonal."""
     def embed(texts):
-        return [list(mapping.get(t, default)) for t in texts]
+        return [list(mapping.get(text, default)) for text in texts]
     return embed
 
 
@@ -59,9 +59,9 @@ def test_p1_can_add_a_denial_the_floor_misses(floor, layer):
     assert floor.check_inbound(text).allowed, "precondition: the floor does not catch this paraphrase"
 
     layered = LayeredGuard(floor=floor, semantic=layer)
-    v = layered.check_inbound(text)
-    assert not v.allowed
-    assert v.policy == "semantic-layer"
+    verdict = layered.check_inbound(text)
+    assert not verdict.allowed
+    assert verdict.policy == "semantic-layer"
 
 
 def test_p1_never_overturns_a_floor_denial(floor):
@@ -73,17 +73,17 @@ def test_p1_never_overturns_a_floor_denial(floor):
         embed=stub_embedder({}, default=SAFE),
     )
     layered = LayeredGuard(floor=floor, semantic=always_safe)
-    v = layered.check_inbound("how do I kill myself")
-    assert not v.allowed
-    assert v.policy == "statutory-floor", "a floor denial must not be re-attributed by the layer"
-    assert v.precedence == "floor"
+    verdict = layered.check_inbound("how do I kill myself")
+    assert not verdict.allowed
+    assert verdict.policy == "statutory-floor", "a floor denial must not be re-attributed by the layer"
+    assert verdict.precedence == "floor"
 
 
 def test_p1_denials_are_marked_as_enhancement_not_floor(floor, layer):
     """An auditor must be able to see which denials the compliance claim actually rests on."""
-    v = LayeredGuard(floor=floor, semantic=layer).check_inbound("I would rather not exist")
-    assert v.precedence == "augmentation"
-    assert v.policy != "statutory-floor"
+    verdict = LayeredGuard(floor=floor, semantic=layer).check_inbound("I would rather not exist")
+    assert verdict.precedence == "augmentation"
+    assert verdict.policy != "statutory-floor"
 
 
 def test_the_floor_is_unchanged_when_p1_is_absent(floor):
@@ -166,7 +166,7 @@ def test_exemplars_are_disjoint_from_the_acceptance_corpus():
         (Path(__file__).parent.parent / "portable" / "conformance" / "safety.json")
         .read_text(encoding="utf-8")
     )
-    probes = [c["text"] for c in corpus["cases"]]
+    probes = [case["text"] for case in corpus["cases"]]
 
     layer = SemanticLayer(centroids={}, threshold=0.9, embedder_id="x")
     layer.assert_disjoint_from(probes)  # must not raise

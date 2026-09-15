@@ -9,12 +9,7 @@ instant a declared consumer acts on the sender's current state, a state the send
 the last stale_ms, or the signed fail-safe (I6) — under single loss, burst loss, and total
 blackout. Loss masks are deterministic; no randomness, no wall clock.
 """
-import sys
-from pathlib import Path
-
-ADAPTER = Path(__file__).resolve().parent.parent
-REPO = ADAPTER.parent.parent
-from prismpath.telemetry.refresh import KeyframeScheduler, StalenessTracker  # noqa: E402
+from prismpath.telemetry.refresh import KeyframeScheduler, StalenessTracker
 
 TICK_MS = 100
 KEYFRAME_MS = 500
@@ -33,30 +28,30 @@ def simulate(loss, keyframe_ms=KEYFRAME_MS, stale_ms=STALE_MS):
     tracker = StalenessTracker(stale_ms, SAFE)
     rows = []
     prev = None
-    for i, state in enumerate(TRUTH):
-        t = i * TICK_MS
+    for tick_index, state in enumerate(TRUTH):
+        time_ms = tick_index * TICK_MS
         changed = state != prev
         prev = state
-        if sched.should_emit(t, changed):
-            sched.note_emit(t)
-            if not loss(i, t):
-                tracker.on_frame(t, state)
-        acting, fresh = tracker.acting_state(t)
-        rows.append((t, state, acting, fresh))
+        if sched.should_emit(time_ms, changed):
+            sched.note_emit(time_ms)
+            if not loss(tick_index, time_ms):
+                tracker.on_frame(time_ms, state)
+        acting, fresh = tracker.acting_state(time_ms)
+        rows.append((time_ms, state, acting, fresh))
     return rows, tracker
 
 
-def held_within(t, acting, stale_ms):
+def held_within(time_ms, acting, stale_ms):
     """True iff the sender held `acting` at some instant in [t - stale_ms, t]."""
-    lo = max(0, (t - stale_ms) // TICK_MS)
-    hi = t // TICK_MS
+    lo = max(0, (time_ms - stale_ms) // TICK_MS)
+    hi = time_ms // TICK_MS
     return acting in TRUTH[lo:hi + 1]
 
 
 def assert_i6(rows, stale_ms=STALE_MS):
-    for t, truth, acting, fresh in rows:
-        ok = (acting == truth) or (acting == SAFE) or held_within(t, acting, stale_ms)
-        assert ok, f"I6 violated at t={t}: acting={acting!r}, truth={truth!r}"
+    for time_ms, truth, acting, fresh in rows:
+        ok = (acting == truth) or (acting == SAFE) or held_within(time_ms, acting, stale_ms)
+        assert ok, f"I6 violated at t={time_ms}: acting={acting!r}, truth={truth!r}"
         if not fresh:
             assert acting == SAFE, f"stale consumer acted on {acting!r}, not the fail-safe"
 
@@ -69,45 +64,45 @@ def test_delta_only_wrong_state_is_unbounded():
     last_received = None
     wrong_ticks = 0
     prev = None
-    for i, state in enumerate(TRUTH):
+    for tick_index, state in enumerate(TRUTH):
         changed = state != prev
         prev = state
-        if sched.should_emit(i * TICK_MS, changed):
-            sched.note_emit(i * TICK_MS)
-            if i != 30:                                # lose exactly the HIGH->MID change frame
+        if sched.should_emit(tick_index * TICK_MS, changed):
+            sched.note_emit(tick_index * TICK_MS)
+            if tick_index != 30:                                # lose exactly the HIGH->MID change frame
                 last_received = state
-        if i >= 30 and last_received != state:
+        if tick_index >= 30 and last_received != state:
             wrong_ticks += 1
     assert wrong_ticks == len(TRUTH) - 30              # wrong every tick to the end, unbounded
 
 
 # ---------------------------------------------------------------------- I6 under loss shapes
 def test_i6_lossless():
-    rows, tracker = simulate(lambda i, t: False)
+    rows, tracker = simulate(lambda tick_index, time_ms: False)
     assert_i6(rows)
     assert all(fresh for _t, _s, _a, fresh in rows)    # a healthy link never goes stale
     assert tracker.transitions == [(0, "recovered")]
 
 
 def test_i6_single_lost_change_frame():
-    rows, _ = simulate(lambda i, t: i == 30)           # the HIGH->MID change frame again
+    rows, _ = simulate(lambda tick_index, time_ms: tick_index == 30)           # the HIGH->MID change frame again
     assert_i6(rows)
     # wrong-state exposure is bounded by the next delivered keyframe, well inside stale_ms
-    wrong = [t for t, truth, acting, _f in rows if acting not in (truth, SAFE)]
+    wrong = [time_ms for time_ms, truth, acting, _f in rows if acting not in (truth, SAFE)]
     assert wrong and max(wrong) - min(wrong) < KEYFRAME_MS
     assert not any(acting == SAFE for _t, _s, acting, _f in rows)   # never had to park
 
 
 def test_i6_burst_loss():
-    rows, _ = simulate(lambda i, t: 28 <= i <= 37)     # 1s burst swallowing the change + keyframes
+    rows, _ = simulate(lambda tick_index, time_ms: 28 <= tick_index <= 37)     # 1s burst swallowing the change + keyframes
     assert_i6(rows)
 
 
 def test_i6_blackout_parks_safe_within_bound():
     blackout_start = 20                                 # t=2000, mid-HIGH dwell, link dies for good
-    rows, tracker = simulate(lambda i, t: i >= blackout_start)
+    rows, tracker = simulate(lambda tick_index, time_ms: tick_index >= blackout_start)
     assert_i6(rows)
-    stale_rows = [(t, acting) for t, _s, acting, fresh in rows if not fresh]
+    stale_rows = [(time_ms, acting) for time_ms, _s, acting, fresh in rows if not fresh]
     assert stale_rows, "blackout must eventually trip stale"
     first_stale_t = stale_rows[0][0]
     last_delivery_t = (blackout_start - 1) * TICK_MS
@@ -118,12 +113,12 @@ def test_i6_blackout_parks_safe_within_bound():
 
 
 def test_recovery_after_blackout():
-    rows, tracker = simulate(lambda i, t: 20 <= i <= 44)   # blackout, then the link returns
+    rows, tracker = simulate(lambda tick_index, time_ms: 20 <= tick_index <= 44)   # blackout, then the link returns
     assert_i6(rows)
     # after the link returns, the next delivered emission restores fresh, correct state
-    post = [r for r in rows if r[0] >= 45 * TICK_MS + KEYFRAME_MS]
+    post = [row for row in rows if row[0] >= 45 * TICK_MS + KEYFRAME_MS]
     assert post and all(fresh and acting == truth for _t, truth, acting, fresh in post)
-    kinds = [k for _t, k in tracker.transitions]
+    kinds = [kind for _t, kind in tracker.transitions]
     assert kinds == ["recovered", "stale", "recovered"]    # one clean stale episode, receipted
 
 
@@ -132,13 +127,13 @@ def test_keyframe_cadence_bounds_emission_gap():
     sched = KeyframeScheduler(KEYFRAME_MS)
     emits = []
     prev = None
-    for i, state in enumerate(TRUTH):
-        t = i * TICK_MS
+    for tick_index, state in enumerate(TRUTH):
+        time_ms = tick_index * TICK_MS
         changed = state != prev
         prev = state
-        if sched.should_emit(t, changed):
-            sched.note_emit(t)
-            emits.append(t)
-    gaps = [b - a for a, b in zip(emits, emits[1:])]
+        if sched.should_emit(time_ms, changed):
+            sched.note_emit(time_ms)
+            emits.append(time_ms)
+    gaps = [later - earlier for earlier, later in zip(emits, emits[1:])]
     assert max(gaps) <= KEYFRAME_MS                    # the conforming-sender contract
     assert 1000 in emits and 3000 in emits             # both changes still emit immediately

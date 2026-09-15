@@ -20,9 +20,9 @@ def _norm_id(oscal_id):
     """Normalize control ID (e.g., SP_800_171_03.01.01 or 03.01.01 -> 3.1.1)."""
     if not oscal_id:
         return ""
-    m = re.search(r"(\d+(?:\.\d+)+)$", oscal_id)
-    if m:
-        return ".".join(str(int(x)) for x in m.group(1).split("."))
+    match = re.search(r"(\d+(?:\.\d+)+)$", oscal_id)
+    if match:
+        return ".".join(str(int(part)) for part in match.group(1).split("."))
     return oscal_id
 
 
@@ -31,9 +31,9 @@ def _obj_id(part_id, cid):
     if not part_id:
         return ""
     # Match NIST OSCAL Rev 3 pattern: assessment-objective_DS-A.03.01.01.b.01 -> 3.1.1[b.01]
-    m = re.search(r"\d{2}(?:\.\d{2})+\.([a-z0-9.]+)$", part_id)
-    if m:
-        return f"{cid}[{m.group(1)}]"
+    match = re.search(r"\d{2}(?:\.\d{2})+\.([a-z0-9.]+)$", part_id)
+    if match:
+        return f"{cid}[{match.group(1)}]"
     if part_id.startswith("assessment-objective_"):
         return part_id[len("assessment-objective_"):]
     return part_id
@@ -57,23 +57,23 @@ def import_oscal(oscal):
     """Import an OSCAL catalog dict into the adapter catalog schema."""
     cat = oscal.get("catalog", oscal) if isinstance(oscal, dict) else {}
 
-    def walk(g):
-        for c in g.get("controls", []):
-            yield g, c
-        for sg in g.get("groups", []):
+    def walk(group):
+        for control in group.get("controls", []):
+            yield group, control
+        for sg in group.get("groups", []):
             yield from walk(sg)
 
     families = {}
     controls = {}
 
     for grp in cat.get("groups", []):
-        for g, ctl in walk(grp):
+        for group, ctl in walk(grp):
             cid = _norm_id(ctl.get("id", ""))
             if not cid:
                 continue
 
-            gid = g.get("id", "")
-            gtitle = g.get("title", "")
+            gid = group.get("id", "")
+            gtitle = group.get("title", "")
 
             # Determine family digraph and family name
             if gid in FAM_DIGRAPH_R3:
@@ -88,15 +88,15 @@ def import_oscal(oscal):
             families[dg] = fam_name
 
             parts = ctl.get("parts", [])
-            statement = " ".join(_prose(p) for p in parts if p.get("name") == "statement").strip()
+            statement = " ".join(_prose(part) for part in parts if part.get("name") == "statement").strip()
 
             objectives = []
             obj_idx = 1
-            for p in parts:
-                if p.get("name") == "assessment-objective":
-                    prose_text = _prose(p)
+            for part in parts:
+                if part.get("name") == "assessment-objective":
+                    prose_text = _prose(part)
                     if prose_text:
-                        pid = p.get("id", "")
+                        pid = part.get("id", "")
                         oid = _obj_id(pid, cid) if pid else f"{cid}_obj_{obj_idx}"
                         obj_dict = {
                             "id": oid,
@@ -131,9 +131,9 @@ def export_oscal(catalog):
     controls = catalog.get("controls", {})
 
     family_map = dict(families)
-    for c in controls.values():
-        fam = c.get("family")
-        fam_name = c.get("family_name")
+    for control in controls.values():
+        fam = control.get("family")
+        fam_name = control.get("family_name")
         if fam and fam not in family_map:
             family_map[fam] = fam_name or fam
 

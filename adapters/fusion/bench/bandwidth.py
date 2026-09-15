@@ -1,12 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
-"""Bandwidth: raw alert JSON vs the fused decision-code wire — measured, overhead counted.
+"""Bandwidth: raw alert JSON vs the fused decision-code wire  -  measured, overhead counted.
 
 The task frame (stated so the comparison stays honest): *the aggregator needs the fused verdict,
 auditably.* Baselines ship the reading and decide centrally; ours decides at the edge and ships
 the decision code plus the integrity apparatus. B2 is the apples-to-apples comparator (the same
 four decision fields as JSON); B0 is the fidelity-class comparison against what the wire carries
-today. The decision streams carry the four fields at partition resolution only — decision-
+today. The decision streams carry the four fields at partition resolution only  -  decision-
 sufficient telemetry, not a lossless alert record.
 
 Baselines (per alert):
@@ -24,10 +24,10 @@ Ours (per alert, overhead itemized, never hidden):
       + a loss row: Gilbert-Elliott (the two regimes telemetry already benches),
         retransmitted block + 32*ceil(log2 n_blocks) B inclusion proof per served block
 
-Shared-config assumption (stated): the receiver holds the flow — the policy hash is the
-binding — so graph/partitions are not per-stream bytes.
+Shared-config assumption (stated): the receiver holds the flow  -  the policy hash is the
+binding  -  so graph/partitions are not per-stream bytes.
 
-    python adapters/fusion/bench/bandwidth.py --from-ndjson fixtures/alerts_synth.ndjson
+    python -m adapters.fusion.bench.bandwidth --from-ndjson adapters/fusion/fixtures/alerts_synth.ndjson
 
 The alert stream is fed here from NDJSON. Any decision source that yields {level: int} records
 is a valid connector; the archived SIEM connector was the v1 example.
@@ -43,23 +43,18 @@ import zlib
 from pathlib import Path
 from typing import Dict, Iterator, List, Optional
 
+from adapters.fusion import projection
+from prismpath.kernel.parser import parse
+from prismpath.telemetry import decode
+from prismpath.telemetry import packed
+from prismpath.telemetry import quantizer
+from prismpath.telemetry import selfheal
+from prismpath.telemetry import spiral
+from prismpath.telemetry.bench import channel        # telemetry's Gilbert-Elliott loss model
+
 HERE = Path(__file__).resolve().parent
 ADAPTER = HERE.parent
 REPO = ADAPTER.parent.parent
-for p in (str(REPO / "prismpath" / "telemetry"), str(REPO / "prismpath" / "telemetry" / "bench"),
-          str(REPO), str(ADAPTER)):
-    if p not in sys.path:
-        sys.path.insert(0, p)
-
-from prismpath.telemetry.bench import channel as CH        # noqa: E402  (telemetry's Gilbert-Elliott model)
-from prismpath.telemetry import decode as D          # noqa: E402
-from prismpath.telemetry import packed as P          # noqa: E402
-from prismpath.telemetry import quantizer as q       # noqa: E402
-from prismpath.telemetry import selfheal as sh       # noqa: E402
-from prismpath.telemetry import spiral as sp         # noqa: E402
-from prismpath.kernel.parser import parse  # noqa: E402
-
-import projection as pj     # noqa: E402
 
 FLOW_PATH = ADAPTER / "flows" / "fusion_triage.md"
 NODE = "correlate"
@@ -71,27 +66,27 @@ LOSS_REGIMES = (("light burst", 0.02, 0.5), ("heavy burst", 0.08, 0.3))
 # ---------------------------------------------------------------- ingestion
 
 def hits_from_ndjson(path: Path, max_docs: Optional[int] = None) -> Iterator[dict]:
-    """Fixture replay: each flat row acts as its own _source (mechanics only — fixture byte
+    """Fixture replay: each flat row acts as its own _source (mechanics only  -  fixture byte
     numbers are never published)."""
-    n = 0
+    row_count = 0
     for line in path.read_text().splitlines():
         line = line.strip()
         if not line:
             continue
         row = json.loads(line)
-        yield {"_id": row.get("id", str(n)), "_source": row}
-        n += 1
-        if max_docs is not None and n >= max_docs:
+        yield {"_id": row.get("id", str(row_count)), "_source": row}
+        row_count += 1
+        if max_docs is not None and row_count >= max_docs:
             return
 
 
 # ------------------------------------------------------------------ helpers
 
 def _stats(sizes: List[int]) -> Dict[str, float]:
-    s = sorted(sizes)
-    n = len(s)
-    return {"n": n, "total_bytes": sum(s), "avg": round(sum(s) / n, 1),
-            "median": s[n // 2], "p90": s[int(n * 0.9)], "min": s[0], "max": s[-1]}
+    sorted_sizes = sorted(sizes)
+    count = len(sorted_sizes)
+    return {"n": count, "total_bytes": sum(sorted_sizes), "avg": round(sum(sorted_sizes) / count, 1),
+            "median": sorted_sizes[count // 2], "p90": sorted_sizes[int(count * 0.9)], "min": sorted_sizes[0], "max": sorted_sizes[-1]}
 
 
 def _compact(obj) -> bytes:
@@ -100,19 +95,19 @@ def _compact(obj) -> bytes:
 
 def collect(hits: Iterator[dict], normalize_hit) -> dict:
     """One pass: baseline sizes + the fused readings (assume-still posture; the physical
-    fields' wire cost is identical whichever pairing fills them — the wire is fixed-field)."""
+    fields' wire cost is identical whichever pairing fills them  -  the wire is fixed-field)."""
     b0, b1, b2 = [], [], []
     readings = []
     b0_batch, b2_batch = [], []
-    for h in hits:
-        src_doc = h.get("_source", {})
+    for hit in hits:
+        src_doc = hit.get("_source", {})
         raw = _compact(src_doc)
         b0.append(len(raw))
         b0_batch.append(raw)
-        norm = normalize_hit(h)
+        norm = normalize_hit(hit)
         b1.append(len(_compact(norm)))
         level = int(norm.get("level", src_doc.get("level", 0)))
-        reading = pj.fused_reading(level, pj.soc_action_from_level(level), pj.ASSUME_STILL)
+        reading = projection.fused_reading(level, projection.soc_action_from_level(level), projection.ASSUME_STILL)
         minimal = _compact(reading)
         b2.append(len(minimal))
         b2_batch.append(minimal)
@@ -131,39 +126,39 @@ def batch_compressed(ndjson: bytes) -> Dict[str, int]:
     return out
 
 
-def _stream_stats(all_bits: List[str], n: int) -> dict:
+def _stream_stats(all_bits: List[str], reading_count: int) -> dict:
     """Pack per-epoch windows; count every byte the transport actually costs."""
-    n_epochs = math.ceil(n / EPOCH_READINGS) or 1
+    n_epochs = math.ceil(reading_count / EPOCH_READINGS) or 1
     payload_bits = wire_bytes = pad_bits = 0
     roots = 0
-    for e in range(n_epochs):
-        window = "".join(all_bits[e * EPOCH_READINGS:(e + 1) * EPOCH_READINGS])
+    for epoch_index in range(n_epochs):
+        window = "".join(all_bits[epoch_index * EPOCH_READINGS:(epoch_index + 1) * EPOCH_READINGS])
         if not window:
             continue
-        data = P.pack(window)
+        data = packed.pack(window)
         payload_bits += len(window)
         wire_bytes += len(data)
         pad_bits += len(data) * 8 - len(window)
         # the epoch apparatus: Merkle root + chained root (selfheal/epochs semantics)
-        blocks = sh.chunk(window, BLOCK_BITS)
-        sh.commit(blocks)   # exercised for real; the wire cost is the 32 B root
+        blocks = selfheal.chunk(window, BLOCK_BITS)
+        selfheal.commit(blocks)   # exercised for real; the wire cost is the 32 B root
         roots += 1
     merkle_epoch_bytes = roots * 64          # 32 B Merkle root + 32 B chained root
     ack_bytes = roots * 32                   # authenticated ACK, return channel, itemized
     total = wire_bytes + merkle_epoch_bytes
-    return {"n": n, "epochs": roots, "payload_bits": payload_bits, "pad_bits": pad_bits,
+    return {"n": reading_count, "epochs": roots, "payload_bits": payload_bits, "pad_bits": pad_bits,
             "wire_bytes": wire_bytes, "merkle_epoch_bytes": merkle_epoch_bytes,
             "ack_bytes": ack_bytes, "wire_bytes_total": total,
-            "bytes_per_alert": round(total / n, 3)}
+            "bytes_per_alert": round(total / reading_count, 3)}
 
 
 def decision_stream_stats(parts, readings: List[dict]) -> dict:
-    bits = [D.encode_readings(parts, [r]) for r in readings]
+    bits = [decode.encode_readings(parts, [reading]) for reading in readings]
     return _stream_stats(bits, len(readings))
 
 
 def band_stream_stats(layout, readings: List[dict]) -> dict:
-    bits = [layout.encode_decision(r) for r in readings]
+    bits = [layout.encode_decision(reading) for reading in readings]
     return _stream_stats(bits, len(readings))
 
 
@@ -174,7 +169,7 @@ def loss_scenario(stream: dict) -> List[dict]:
     proof_bytes = 32 * math.ceil(math.log2(n_blocks)) if n_blocks > 1 else 0
     rows = []
     for label, p_, r_ in LOSS_REGIMES:
-        mask = CH.lost_mask(n_blocks, p_, r_, seed=0)
+        mask = channel.lost_mask(n_blocks, p_, r_, seed=0)
         lost = int(mask.sum())
         rows.append({"regime": label, "p": p_, "r": r_, "n_blocks": n_blocks,
                      "lost_blocks": lost,
@@ -186,11 +181,11 @@ def loss_scenario(stream: dict) -> List[dict]:
 # -------------------------------------------------------------------- report
 
 def write_results(outdir: Path, data: dict) -> None:
-    md = ["# Bandwidth — raw alert JSON vs the fused decision wire", "",
+    md = ["# Bandwidth  -  raw alert JSON vs the fused decision wire", "",
           f"Source: {data['source']}  ·  population: rule.level >= {data['min_level']}, "
           f"n = {data['n']:,}", ""]
     if data.get("synthetic"):
-        md += ["**SYNTHETIC FIXTURE RUN — mechanics only; these numbers are never published.**", ""]
+        md += ["**SYNTHETIC FIXTURE RUN  -  mechanics only; these numbers are never published.**", ""]
     md += ["Task frame: the aggregator needs the fused verdict, auditably. Baselines ship the",
            "reading and decide centrally; ours decides at the edge and ships the decision code.",
            "The decision streams are decision-sufficient, not a lossless alert record: B2 is the",
@@ -205,9 +200,9 @@ def write_results(outdir: Path, data: dict) -> None:
     row("B1", "normalized alert JSON", b1["total_bytes"], b1["avg"])
     row("B2", "4-field minimal JSON", b2["total_bytes"], b2["avg"])
     for name, comp in (("B0", data["b3_full"]), ("B2", data["b3_minimal"])):
-        for k, v in comp.items():
-            if k != "raw_bytes":
-                row("B3", f"{k} over {name} NDJSON batch", v, round(v / data["n"], 2))
+        for compressor, compressed_bytes in comp.items():
+            if compressor != "raw_bytes":
+                row("B3", f"{compressor} over {name} NDJSON batch", compressed_bytes, round(compressed_bytes / data["n"], 2))
     o1, o2 = data["o1"], data["o2"]
     row("O1", "per-field decision stream + epoch apparatus", o1["wire_bytes_total"],
         o1["bytes_per_alert"])
@@ -227,7 +222,7 @@ def write_results(outdir: Path, data: dict) -> None:
     r_b2 = b2["total_bytes"] / o1["wire_bytes_total"]
     r_b0 = b0["total_bytes"] / o1["wire_bytes_total"]
     gate = (r_b2 >= 10) and (r_b0 >= 500) and (o2["wire_bytes_total"] <= o1["wire_bytes_total"])
-    best_batch = min(v for k, v in data["b3_minimal"].items() if k != "raw_bytes")
+    best_batch = min(compressed_bytes for compressor, compressed_bytes in data["b3_minimal"].items() if compressor != "raw_bytes")
     md += ["", "## Reading (go/no-go)", "",
            f"- O1 vs B2 (apples-to-apples): **{r_b2:,.0f}x** smaller (gate: >= 10x).",
            f"- O1 vs B0 (fidelity-class): **{r_b0:,.0f}x** smaller (gate: >= 500x).",
@@ -235,7 +230,7 @@ def write_results(outdir: Path, data: dict) -> None:
            f"- B3 note, stated before anyone else states it: the best batch compressor over the",
            f"  minimal JSON ({best_batch / data['n']:.2f} B/alert) undercuts the streams on pure",
            "  size. It requires buffering the whole batch before a byte ships, is not",
-           "  self-framing or per-reading streamable, and carries no tamper-evidence — the",
+           "  self-framing or per-reading streamable, and carries no tamper-evidence  -  the",
            "  buffered-batch bound, not a transport. The streams pay their integrity apparatus",
            "  and still land within striking distance of it.",
            "- Overheads are itemized above and included in every ratio; the ACK line is the",
@@ -244,7 +239,7 @@ def write_results(outdir: Path, data: dict) -> None:
            f"_generated in {data['elapsed']:.1f}s_", ""]
     (outdir / "results.md").write_text("\n".join(md))
     (outdir / "results.json").write_text(json.dumps(
-        {k: v for k, v in data.items() if k not in ()}, indent=1) + "\n")
+        {key: value for key, value in data.items() if key not in ()}, indent=1) + "\n")
 
 
 def main(argv=None) -> int:
@@ -258,24 +253,24 @@ def main(argv=None) -> int:
 
     t0 = time.time()
     graph = parse(FLOW_PATH.read_text())
-    parts = q.build_partitions(graph)
-    layout = sp.SpiralLayout(graph, NODE)
+    parts = quantizer.build_partitions(graph)
+    layout = spiral.SpiralLayout(graph, NODE)
 
     path = Path(args.from_ndjson)
-    hits = (h for h in hits_from_ndjson(path, args.max_docs)
-            if int(h["_source"].get("level", 0)) >= args.min_level)
-    col = collect(hits, lambda h: h["_source"])
+    hits = (hit for hit in hits_from_ndjson(path, args.max_docs)
+            if int(hit["_source"].get("level", 0)) >= args.min_level)
+    col = collect(hits, lambda hit: hit["_source"])
     source, synthetic = f"fixture:{path.name}", True
 
-    n = len(col["readings"])
-    if n == 0:
+    reading_count = len(col["readings"])
+    if reading_count == 0:
         print("no documents matched", file=sys.stderr)
         return 1
 
     o1 = decision_stream_stats(parts, col["readings"])
     o2 = band_stream_stats(layout, col["readings"])
     data = {
-        "source": source, "synthetic": synthetic, "min_level": args.min_level, "n": n,
+        "source": source, "synthetic": synthetic, "min_level": args.min_level, "n": reading_count,
         "block_bits": BLOCK_BITS, "epoch_readings": EPOCH_READINGS,
         "b0": _stats(col["b0"]), "b1": _stats(col["b1"]), "b2": _stats(col["b2"]),
         "b3_full": batch_compressed(col["b0_ndjson"]),
@@ -286,7 +281,7 @@ def main(argv=None) -> int:
     }
     outdir = Path(args.out) if args.out else HERE
     write_results(outdir, data)
-    print(f"wrote {outdir/'results.md'}  n={n:,}  "
+    print(f"wrote {outdir/'results.md'}  n={reading_count:,}  "
           f"O1={o1['bytes_per_alert']} B/alert vs B0={data['b0']['avg']} B/alert")
     return 0
 

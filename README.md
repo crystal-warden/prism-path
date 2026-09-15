@@ -139,7 +139,7 @@ with its integrity apparatus counted, 66.9 times under an OpenTelemetry record o
 | distributed policy update behind a quorum on real radios | demonstrated in the field |
 | Figueroa quantization | proven within the declared domain |
 | Facet wire, Vector codec, Wireshark dissector | implemented and measured |
-| GRC adjudication adapter: machine checkable controls, evidence typed verdicts, OSCAL | implemented, dogfooded on a real enclave |
+| GRC adjudication adapter: machine checkable controls, evidence typed determinations, OSCAL | implemented, dogfooded on a real enclave |
 | drift detection beyond the lockfile and staleness bound, authorized recovery, homeostatic control | research direction |
 | multimodal sensing, quantum assisted computation | research direction |
 
@@ -180,7 +180,7 @@ Four people touch a deployment, and the commands, the docs and the package layou
 **process owner** who authors and tests the policy of record; the **engineer** who establishes the
 interface once, calibrates for deployment and delivers; the **operator** who runs the system day to day,
 swaps and attests policy, authors short lived changes that expire by construction, and reads the trail;
-and the **evaluator** who anchors, verifies and reads the evidence. **[docs/SYSTEM_MAP.md](docs/SYSTEM_MAP.md)**
+and the **assessor** who anchors, verifies and reads the evidence. **[docs/SYSTEM_MAP.md](docs/SYSTEM_MAP.md)**
 maps every directory to them and holds the conformance topology that keeps the many implementations of
 one idea in agreement. The **[operator's guide](docs/guides/operator.md)** is the day to day view.
 

@@ -17,12 +17,12 @@ determination, so one assessment answers "what is my CMMC status" per level with
 
 Every mapping here is authoritative data (control membership, the scoring threshold), flagged for
 verification against the current CMMC scoping guidance and 32 CFR Part 170. Nothing is model-adjudicated:
-a level status is a deterministic function of the per-control verdicts, and insufficient is scored as
+a level status is a deterministic function of the per-control determinations, and insufficient is scored as
 not-met (fail closed), never assumed met.
 """
-import compliance_adapter as _ca
-import unified as _un
-import rollup as _rollup
+from adapters.compliance import compliance_adapter as _ca
+from adapters.compliance import unified as _un
+from adapters.compliance import rollup as _rollup
 
 # CMMC 2.0 Level 1 = FAR 52.204-21(b)(1) basic safeguarding, expressed as NIST SP 800-171 Rev 2 control
 # ids. 17 practices. Verify against the current CMMC Level 1 scoping guidance.
@@ -42,7 +42,7 @@ L3_ENHANCED_STANDARD = "nist_800172"
 
 
 def _numkey(cid):
-    return [int(p) for p in cid.split(".")]
+    return [int(part) for part in cid.split(".")]
 
 
 def level_controls(level):
@@ -50,7 +50,7 @@ def level_controls(level):
     because it needs the 800-172 catalog, which assess_level handles."""
     allc = _ca._catalog()["controls"]
     if level == 1:
-        missing = [c for c in L1_CONTROLS if c not in allc]
+        missing = [control_id for control_id in L1_CONTROLS if control_id not in allc]
         if missing:
             raise KeyError("CMMC L1 controls absent from the active catalog: %s" % missing)
         return list(L1_CONTROLS)
@@ -61,7 +61,7 @@ def level_controls(level):
     raise ValueError("CMMC has levels 1, 2, 3; got %r" % (level,))
 
 
-def _verdicts(cids, req_base, completions, as_of, use_llm):
+def _determinations(cids, req_base, completions, as_of, use_llm):
     out = {}
     for cid in cids:
         control = _ca.get_control(cid)
@@ -71,19 +71,19 @@ def _verdicts(cids, req_base, completions, as_of, use_llm):
     return out
 
 
-def _tally(verdicts):
-    t = {"met": 0, "partially-met": 0, "not-met": 0, "insufficient": 0}
-    for v in verdicts.values():
-        t[v] = t.get(v, 0) + 1
-    return t
+def _tally(determinations):
+    tally = {"met": 0, "partially-met": 0, "not-met": 0, "insufficient": 0}
+    for determination in determinations.values():
+        tally[determination] = tally.get(determination, 0) + 1
+    return tally
 
 
 def _poam(records, weights, score):
     """POA&M eligibility for a conditional CMMC L2 status: score at or above the floor, and no open
     requirement worth more than one point. 'open' is any status other than met (insufficient counts as
     not-met). The exact POA&M-ineligible set and the closeout window are verified externally."""
-    open_high = sorted((r["control_id"] for r in records
-                        if r["status"] != "met" and (weights.get(r["control_id"]) or 0) > 1), key=_numkey)
+    open_high = sorted((record["control_id"] for record in records
+                        if record["status"] != "met" and (weights.get(record["control_id"]) or 0) > 1), key=_numkey)
     eligible = score is not None and score >= POAM_MIN_SCORE and not open_high
     return {"threshold": POAM_MIN_SCORE, "score": score, "eligible": eligible,
             "blocking_high_value_controls": open_high,
@@ -94,7 +94,7 @@ def _poam(records, weights, score):
 
 def assess_level(level, posture, completions=None, as_of=None, use_llm=False):
     """Assess one CMMC level over a scanned posture. Returns the level status, tally, and per-control
-    verdicts, scored by that level's own rule. Deterministic given the verdicts."""
+    determinations, scored by that level's own rule. Deterministic given the determinations."""
     if level == 3:
         if "nist_800172" not in _ca.list_standards():
             return {"level": 3, "name": LEVEL_NAME[3], "assessable": False, "status": "unavailable",
@@ -107,7 +107,7 @@ def assess_level(level, posture, completions=None, as_of=None, use_llm=False):
         boundary = (posture or {}).get("boundary", "(unspecified)")
         req_base = {"facts": (posture or {}).get("facts") or {}, "boundary": boundary}
         _ca.use_standard(L3_ENHANCED_STANDARD)
-        enh = _verdicts(L3_800172_SUBSET, req_base, completions, as_of, use_llm)  # the 24 enhanced
+        enh = _determinations(L3_800172_SUBSET, req_base, completions, as_of, use_llm)  # the 24 enhanced
         _ca.use_standard(prev)
         enh_tally = _tally(enh)
         status = "met" if (base["status"] == "met" and enh_tally["met"] == len(L3_800172_SUBSET)) else "not-met"
@@ -117,7 +117,7 @@ def assess_level(level, posture, completions=None, as_of=None, use_llm=False):
                             "requirements_met": base.get("requirements_met")},
                 "enhanced": {"standard": L3_ENHANCED_STANDARD, "in_scope": len(L3_800172_SUBSET),
                              "tally": enh_tally,
-                             "controls": [{"control_id": c, "verdict": enh[c]} for c in L3_800172_SUBSET]},
+                             "controls": [{"control_id": control_id, "verdict": enh[control_id]} for control_id in L3_800172_SUBSET]},
                 "scoring": "Level 3 is met only when Level 2 is met and every one of the 24 selected NIST "
                            "800-172 enhanced requirements is met. Insufficient is scored as not-met. The "
                            "enhanced requirements are prose and resolve via SOPs, records, or the LLM."}
@@ -125,21 +125,21 @@ def assess_level(level, posture, completions=None, as_of=None, use_llm=False):
     boundary = (posture or {}).get("boundary", "(unspecified)")
     req_base = {"facts": facts, "boundary": boundary}
     cids = level_controls(level)
-    verdicts = _verdicts(cids, req_base, completions, as_of, use_llm)
-    tally = _tally(verdicts)
+    determinations = _determinations(cids, req_base, completions, as_of, use_llm)
+    tally = _tally(determinations)
     report = {"level": level, "name": LEVEL_NAME[level], "assessable": True,
               "standard": _ca.active_standard(), "boundary": boundary,
               "in_scope": len(cids), "tally": tally,
-              "controls": [{"control_id": c, "verdict": verdicts[c]} for c in cids]}
+              "controls": [{"control_id": control_id, "verdict": determinations[control_id]} for control_id in cids]}
     if level == 1:
-        failing = sorted((c for c, v in verdicts.items() if v != "met"), key=_numkey)
+        failing = sorted((control_id for control_id, determination in determinations.items() if determination != "met"), key=_numkey)
         report.update({
             "status": "met" if not failing else "not-met",
             "practices_total": len(cids), "practices_met": tally["met"], "failing_practices": failing,
             "scoring": "Annual self-assessment: every practice must be met; POA&Ms are not permitted. "
                        "Insufficient is treated as not-met."})
     else:  # level 2 = all 110
-        records = [{"control_id": c, "status": v} for c, v in verdicts.items()]
+        records = [{"control_id": control_id, "status": determination} for control_id, determination in determinations.items()]
         weights = _ca.catalog_weights()
         sprs = _rollup.sprs_partial(records, weights) if weights else {}
         score = sprs.get("ceiling_if_unassessed_all_met")     # all 110 assessed -> this is the exact score
@@ -167,8 +167,8 @@ def assess(posture, completions=None, as_of=None, use_llm=False, levels=(1, 2, 3
 
 def demo(use_llm=False):
     """Assess CMMC L1/L2/L3 over the sample host posture plus a few task completions."""
-    import posture_connector as _pc
-    import control_tasks as _ct
+    from adapters.compliance import posture_connector as _pc
+    from adapters.compliance import control_tasks as _ct
     _ca.use_standard("nist_800171_r2")
     posture = _pc.load_sample("example_host")
     completions = [
@@ -180,24 +180,24 @@ def demo(use_llm=False):
 
 
 def render_text(report):
-    L = ["CMMC 2.0 assessment  |  standard: %s  |  boundary: %s" % (report["standard"], report["boundary"])]
+    lines = ["CMMC 2.0 assessment  |  standard: %s  |  boundary: %s" % (report["standard"], report["boundary"])]
     for lv in report["levels"]:
         if not lv.get("assessable", True):
-            L.append("  L%d %-12s %-11s  requires %s" % (lv["level"], lv["name"], lv["status"], lv["depends_on"]))
+            lines.append("  L%d %-12s %-11s  requires %s" % (lv["level"], lv["name"], lv["status"], lv["depends_on"]))
         elif lv["level"] == 1:
             extra = "" if lv["status"] == "met" else "  failing: " + ", ".join(lv["failing_practices"][:6])
-            L.append("  L1 %-12s %-11s  %d/%d practices met%s"
-                     % (lv["name"], lv["status"].upper(), lv["practices_met"], lv["practices_total"], extra))
+            lines.append("  L1 %-12s %-11s  %d/%d practices met%s"
+                         % (lv["name"], lv["status"].upper(), lv["practices_met"], lv["practices_total"], extra))
         elif lv["level"] == 2:
-            L.append("  L2 %-12s %-11s  SPRS %s/%s  %d/%d met  POA&M-eligible: %s"
-                     % (lv["name"], lv["status"].upper(), lv["sprs_score"], lv["sprs_max"],
-                        lv["requirements_met"], lv["in_scope"], lv["poam"]["eligible"]))
+            lines.append("  L2 %-12s %-11s  SPRS %s/%s  %d/%d met  POA&M-eligible: %s"
+                         % (lv["name"], lv["status"].upper(), lv["sprs_score"], lv["sprs_max"],
+                            lv["requirements_met"], lv["in_scope"], lv["poam"]["eligible"]))
         else:
             enh = lv["enhanced"]
-            L.append("  L3 %-12s %-11s  L2 base %s, enhanced %d/%d met (800-172)"
-                     % (lv["name"], lv["status"].upper(), lv["base_l2"]["status"],
-                        enh["tally"].get("met", 0), enh["in_scope"]))
-    return "\n".join(L)
+            lines.append("  L3 %-12s %-11s  L2 base %s, enhanced %d/%d met (800-172)"
+                         % (lv["name"], lv["status"].upper(), lv["base_l2"]["status"],
+                            enh["tally"].get("met", 0), enh["in_scope"]))
+    return "\n".join(lines)
 
 
 if __name__ == "__main__":

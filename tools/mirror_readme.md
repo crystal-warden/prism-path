@@ -124,7 +124,7 @@ at a worker:
 
 ```bash
 pip install 'prismpath[embeddings]'   # about 90 MB, on your machine, no cloud, no API key
-prismpath run flow.md                 # mock worker by default; --agent ollama:llama3.2 for a real LLM
+prismpath run flow.md                 # mock worker by default; --worker ollama:llama3.2 for a real LLM
 ```
 
 ## Going deeper

@@ -2,34 +2,34 @@
 // Copyright 2026 Crystal Warden Supply Chain Labs LLC
 //! Zeckendorf / Fibonacci codec — the self-framing wire for the decision-preserving telemetry stream.
 
-fn fibs_upto(n: usize) -> Vec<usize> {
+fn fibs_upto(upper_bound: usize) -> Vec<usize> {
     // `fibs` is seeded with [1, 2] and only ever grows, so `.last()` is always Some.
     let mut fibs = vec![1, 2];
-    while *fibs.last().expect("fibs seeded non-empty") <= n {
+    while *fibs.last().expect("fibs seeded non-empty") <= upper_bound {
         let next = fibs[fibs.len() - 1] + fibs[fibs.len() - 2];
         fibs.push(next);
     }
-    if *fibs.last().expect("fibs seeded non-empty") > n {
+    if *fibs.last().expect("fibs seeded non-empty") > upper_bound {
         fibs.pop();
     }
     fibs
 }
 
 /// Fibonacci code of a positive integer `n` (>= 1) as a bit-string ending in `"11"`.
-pub fn encode(n: usize) -> Result<String, String> {
-    if n < 1 {
-        return Err(format!("Fibonacci coding is for positive integers; got {n}"));
+pub fn encode(value: usize) -> Result<String, String> {
+    if value < 1 {
+        return Err(format!("Fibonacci coding is for positive integers; got {value}"));
     }
-    let fibs = fibs_upto(n);
+    let fibs = fibs_upto(value);
     let mut bits = vec!['0'; fibs.len()];
-    let mut rem = n;
-    for i in (0..fibs.len()).rev() {
-        if fibs[i] <= rem {
-            bits[i] = '1';
-            rem -= fibs[i];
+    let mut rem = value;
+    for index in (0..fibs.len()).rev() {
+        if fibs[index] <= rem {
+            bits[index] = '1';
+            rem -= fibs[index];
         }
     }
-    assert_eq!(rem, 0, "Zeckendorf decomposition failed for {n}");
+    assert_eq!(rem, 0, "Zeckendorf decomposition failed for {value}");
     let mut out: String = bits.into_iter().collect();
     out.push('1'); // append terminator -> unique trailing '11'
     Ok(out)
@@ -47,9 +47,9 @@ pub fn decode(code: &str) -> Result<usize, String> {
         fibs.push(next);
     }
     let mut sum = 0;
-    for (i, ch) in zeck.chars().enumerate() {
+    for (index, ch) in zeck.chars().enumerate() {
         if ch == '1' {
-            sum += fibs[i];
+            sum += fibs[index];
         }
     }
     Ok(sum)
@@ -59,8 +59,8 @@ pub fn decode(code: &str) -> Result<usize, String> {
 /// `Err` if any value is `< 1` (Fibonacci coding is for positive integers; the wire sends symbol+1).
 pub fn encode_stream(values: &[usize]) -> Result<String, String> {
     let mut out = String::new();
-    for &v in values {
-        out.push_str(&encode(v)?);
+    for &value in values {
+        out.push_str(&encode(value)?);
     }
     Ok(out)
 }
@@ -70,19 +70,19 @@ pub fn encode_stream(values: &[usize]) -> Result<String, String> {
 pub fn decode_stream(bits: &str) -> Vec<usize> {
     let mut out = Vec::new();
     let chars: Vec<char> = bits.chars().collect();
-    let n = chars.len();
+    let bit_count = chars.len();
     let mut start = 0;
-    let mut i = 0;
-    while i < n {
-        if chars[i] == '1' && i + 1 < n && chars[i + 1] == '1' {
-            let slice: String = chars[start..=i + 1].iter().collect();
+    let mut cursor = 0;
+    while cursor < bit_count {
+        if chars[cursor] == '1' && cursor + 1 < bit_count && chars[cursor + 1] == '1' {
+            let slice: String = chars[start..=cursor + 1].iter().collect();
             if let Ok(val) = decode(&slice) {
                 out.push(val);
             }
-            i += 2;
-            start = i;
+            cursor += 2;
+            start = cursor;
         } else {
-            i += 1;
+            cursor += 1;
         }
     }
     out
@@ -96,23 +96,23 @@ pub fn decode_stream(bits: &str) -> Vec<usize> {
 pub fn decode_stream_strict(bits: &str) -> Result<Vec<usize>, String> {
     let mut out = Vec::new();
     let chars: Vec<char> = bits.chars().collect();
-    let n = chars.len();
+    let bit_count = chars.len();
     let mut start = 0;
-    let mut i = 0;
-    while i < n {
-        if chars[i] == '1' && i + 1 < n && chars[i + 1] == '1' {
-            let slice: String = chars[start..=i + 1].iter().collect();
+    let mut cursor = 0;
+    while cursor < bit_count {
+        if chars[cursor] == '1' && cursor + 1 < bit_count && chars[cursor + 1] == '1' {
+            let slice: String = chars[start..=cursor + 1].iter().collect();
             out.push(decode(&slice)?);
-            i += 2;
-            start = i;
+            cursor += 2;
+            start = cursor;
         } else {
-            i += 1;
+            cursor += 1;
         }
     }
     if chars[start..].contains(&'1') {
         return Err(format!(
             "truncated Fibonacci stream: {} trailing bits contain a '1' with no terminator",
-            n - start
+            bit_count - start
         ));
     }
     Ok(out)

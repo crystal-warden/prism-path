@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
-"""audit_log.py — an append-only action log for Mission Control, with a real (tamper-evident) Merkle root.
+"""audit_log.py  -  an append-only action log for Mission Control, with a real (tamper-evident) Merkle root.
 
 Every control action (start/stop a sprint, edit a file, run an ad-hoc query, …) is appended as a line to
-a JSONL file, so the console has a chronological record of what happened and who did it — the
+a JSONL file, so the console has a chronological record of what happened and who did it  -  the
 *observability* layer.
 
 Each event is committed as a Merkle leaf (sha256 of its canonical form) using the repo's own Merkle
@@ -20,11 +20,11 @@ import os
 import threading
 import time
 
-from prismpath.ledgers import ledger_ots as _mk
+from prismpath.ledgers import ledger_ots as merkle
 from prismpath import canon as _canon
 
 def _leaf_hex(ev: dict) -> str:
-    """A stable content hash of an event — its Merkle leaf. Commits to every field, so editing any past
+    """A stable content hash of an event  -  its Merkle leaf. Commits to every field, so editing any past
     event changes its leaf and therefore the root."""
     return _canon.sha256_hex(_canon.canonical_compact(ev))
 
@@ -37,8 +37,8 @@ class AuditLog:
         self.leaves: list = []
         self.skipped: list = []
         if path and os.path.exists(path):
-            with open(path) as f:
-                for line_num, line in enumerate(f, 1):
+            with open(path) as log_file:
+                for line_num, line in enumerate(log_file, 1):
                     line = line.strip()
                     if not line:
                         continue
@@ -59,14 +59,14 @@ class AuditLog:
             self.leaves.append(_leaf_hex(ev))
             if self.path:
                 os.makedirs(os.path.dirname(os.path.abspath(self.path)), exist_ok=True)
-                with open(self.path, "a") as f:
-                    f.write(json.dumps(ev) + "\n")
+                with open(self.path, "a") as log_file:
+                    log_file.write(json.dumps(ev) + "\n")
             return ev
 
     def current_root(self) -> str:
         """The Merkle root over all event leaves (hex); empty string for an empty log. Anchor it via
         `ledger_ots` (OTS) to make the trail externally tamper-evident."""
-        root, _paths = _mk.merkle_root_and_paths(self.leaves)
+        root, _paths = merkle.merkle_root_and_paths(self.leaves)
         return root or ""
 
     def verify_log(self) -> bool:
@@ -77,15 +77,15 @@ class AuditLog:
             return False
         if not self.leaves:
             return True
-        root, paths = _mk.merkle_root_and_paths(self.leaves)
-        return all(_mk.verify_leaf(self.leaves[i], paths[i], root) for i in range(len(self.leaves)))
+        root, paths = merkle.merkle_root_and_paths(self.leaves)
+        return all(merkle.verify_leaf(self.leaves[i], paths[i], root) for i in range(len(self.leaves)))
 
-    def prove(self, i: int) -> dict:
-        """Inclusion proof for event `i`: {'path': [...], 'peaks': [root]}. `path` feeds `verify()`."""
-        root, paths = _mk.merkle_root_and_paths(self.leaves)
-        if not (0 <= i < len(paths)):
-            raise IndexError(f"leaf index out of range: {i}")
-        return {"path": paths[i], "peaks": [root] if root else []}
+    def prove(self, leaf_index: int) -> dict:
+        """Inclusion proof for event `leaf_index`: {'path': [...], 'peaks': [root]}. `path` feeds `verify()`."""
+        root, paths = merkle.merkle_root_and_paths(self.leaves)
+        if not (0 <= leaf_index < len(paths)):
+            raise IndexError(f"leaf index out of range: {leaf_index}")
+        return {"path": paths[leaf_index], "peaks": [root] if root else []}
 
 
 def verify(leaf, proof, root) -> bool:
@@ -93,4 +93,4 @@ def verify(leaf, proof, root) -> bool:
     path = proof.get("path", []) if isinstance(proof, dict) else proof
     if not root:
         return False
-    return _mk.verify_leaf(leaf, path, root)
+    return merkle.verify_leaf(leaf, path, root)

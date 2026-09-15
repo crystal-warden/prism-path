@@ -35,7 +35,8 @@ _CMP = {
     ast.Eq: operator.eq, ast.NotEq: operator.ne,
     ast.Lt: operator.lt, ast.LtE: operator.le,
     ast.Gt: operator.gt, ast.GtE: operator.ge,
-    ast.In: lambda a, b: a in b, ast.NotIn: lambda a, b: a not in b,
+    ast.In: lambda field_value, constant_list: field_value in constant_list,
+    ast.NotIn: lambda field_value, constant_list: field_value not in constant_list,
 }
 
 # The complete set of AST node types the predicate grammar is allowed to contain. Anything else
@@ -68,9 +69,9 @@ class _SignFolder(ast.NodeTransformer):
                 and isinstance(node.operand, ast.Constant)
                 and isinstance(node.operand.value, int)
                 and not isinstance(node.operand.value, bool)):
-            v = node.operand.value
+            constant = node.operand.value
             return ast.copy_location(
-                ast.Constant(value=(-v if isinstance(node.op, ast.USub) else v)), node)
+                ast.Constant(value=(-constant if isinstance(node.op, ast.USub) else constant)), node)
         return node
 
 
@@ -88,8 +89,8 @@ class PredicateError(ValueError):
 
 
 def is_deterministic(condition: str) -> bool:
-    c = condition.strip().lower()
-    return c.startswith("when ") or c in ALWAYS or c in NEVER
+    normalized = condition.strip().lower()
+    return normalized.startswith("when ") or normalized in ALWAYS or normalized in NEVER
 
 
 def is_error(condition: str) -> bool:
@@ -101,16 +102,16 @@ def is_error(condition: str) -> bool:
 def is_event(condition: str) -> bool:
     """A wait-for-event edge: `on event <name>` (an external signal/webhook) or `on timeout`. Only
     fires when the run is resumed with that event after the worker returned `{"wait": …}`."""
-    c = condition.strip().lower()
-    return c.startswith("on event") or c.startswith("on timeout")
+    normalized = condition.strip().lower()
+    return normalized.startswith("on event") or normalized.startswith("on timeout")
 
 
 def event_name(condition: str) -> str:
     """The event a `on event <name>` edge awaits; '__timeout__' for an `on timeout` edge."""
-    c = condition.strip()
-    if c.lower().startswith("on timeout"):
+    trimmed = condition.strip()
+    if trimmed.lower().startswith("on timeout"):
         return "__timeout__"
-    return c[len("on event"):].strip()
+    return trimmed[len("on event"):].strip()
 
 
 def is_semantic(condition: str) -> bool:
@@ -122,10 +123,10 @@ def spawn_join_event(join: str) -> str:
     """The event NAME a fan-out `@spawn(join=…)` policy resolves to — the single source of truth so the
     composer (which DELIVERS the event) and the static analyzer (which REQUIRES the matching
     `on event <name>` edge) can never drift: `all_done` | `any` | `quorum`."""
-    j = (join or "all_done").strip().lower()
-    if j.startswith("quorum"):
+    join_policy = (join or "all_done").strip().lower()
+    if join_policy.startswith("quorum"):
         return "quorum"
-    if j == "any":
+    if join_policy == "any":
         return "any"
     return "all_done"
 
@@ -136,8 +137,8 @@ def error_expr(condition: str) -> str:
 
 
 def _expr_of(condition: str) -> str:
-    c = condition.strip()
-    return c[5:].strip() if c.lower().startswith("when ") else c
+    trimmed = condition.strip()
+    return trimmed[5:].strip() if trimmed.lower().startswith("when ") else trimmed
 
 
 def check_predicate(condition: str) -> List[str]:
@@ -155,8 +156,8 @@ def check_predicate(condition: str) -> List[str]:
         return [f"empty `when` predicate in {condition!r}"]
     try:
         tree = ast.parse(expr, mode="eval")
-    except (SyntaxError, ValueError) as e:  # ValueError: e.g. null bytes
-        return [f"unparseable predicate {condition!r}: {e}"]
+    except (SyntaxError, ValueError) as error:  # ValueError: e.g. null bytes
+        return [f"unparseable predicate {condition!r}: {error}"]
     fold_unary_signs(tree)                   # `-5` is a constant; the bare USub node never reaches the walk
     problems: List[str] = []
     for node in ast.walk(tree):
@@ -169,15 +170,16 @@ def check_predicate(condition: str) -> List[str]:
         problems.append(f"predicate {condition!r} is nested too deeply (> {_MAX_DEPTH})")
     # de-dup while preserving order (walk can flag the same disallowed kind repeatedly)
     seen, out = set(), []
-    for p in problems:
-        if p not in seen:
-            seen.add(p); out.append(p)
+    for problem in problems:
+        if problem not in seen:
+            seen.add(problem); out.append(problem)
     return out
 
 
-def _depth(node, d: int = 0) -> int:
+def _depth(node, depth_so_far: int = 0) -> int:
     children = list(ast.iter_child_nodes(node))
-    return d if not children else max(_depth(c, d + 1) for c in children)
+    return depth_so_far if not children else max(_depth(child, depth_so_far + 1)
+                                                 for child in children)
 
 
 def eval_condition(condition: str, ctx: Dict[str, Any]) -> bool:
@@ -189,8 +191,8 @@ def eval_condition(condition: str, ctx: Dict[str, Any]) -> bool:
         return False
     try:
         tree = ast.parse(expr, mode="eval")
-    except (SyntaxError, ValueError) as e:
-        raise PredicateError(f"unparseable predicate {condition!r}: {e}") from e
+    except (SyntaxError, ValueError) as error:
+        raise PredicateError(f"unparseable predicate {condition!r}: {error}") from error
     fold_unary_signs(tree)                   # same normalization the static check applies, so both agree
     # Enforce the sandbox STATICALLY before evaluating, exactly like check_predicate: without this,
     # a lazily-short-circuited chain (`2 < 1 < f(x)`) never visits the disallowed Call and quietly
@@ -227,7 +229,7 @@ def _ev(node, ctx, depth: int):
     if isinstance(node, ast.Name):
         return ctx.get(node.id)            # unknown name -> None (falsy)
     if isinstance(node, ast.BoolOp):
-        vals = [_ev(v, ctx, depth + 1) for v in node.values]
+        vals = [_ev(operand, ctx, depth + 1) for operand in node.values]
         return all(vals) if isinstance(node.op, ast.And) else any(vals)
     if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.Not):
         return not _ev(node.operand, ctx, depth + 1)
@@ -240,7 +242,7 @@ def _ev(node, ctx, depth: int):
             left = right
         return True
     if isinstance(node, (ast.List, ast.Tuple)):   # literal collection, e.g. `x in [1,2,3]`
-        return [_ev(e, ctx, depth + 1) for e in node.elts]
+        return [_ev(element, ctx, depth + 1) for element in node.elts]
     raise PredicateError(f"unsupported predicate syntax near: {type(node).__name__}")
 
 

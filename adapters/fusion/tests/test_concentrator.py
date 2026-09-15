@@ -10,14 +10,9 @@ deliberately excluded (stated in the spec). The win is header amortization on IP
 single-stream concentrated frame costs one extra byte over the bare frame (the stream id) and
 the bench asserts that too, because the profile should never be sold for N=1.
 """
-import sys
-from pathlib import Path
-
-ADAPTER = Path(__file__).resolve().parent.parent
-REPO = ADAPTER.parent.parent
-from prismpath.telemetry import packed                                          # noqa: E402
-from prismpath.telemetry import zeckendorf as z                                 # noqa: E402
-from prismpath.telemetry.concentrator import (CONCENTRATOR_TRUNCATED,      # noqa: E402
+from prismpath.telemetry import packed
+from prismpath.telemetry import zeckendorf as zeck
+from prismpath.telemetry.concentrator import (CONCENTRATOR_TRUNCATED,
                           CONCENTRATOR_UNKNOWN_STREAM, OK, concentrate, demux)
 
 IP_UDP = 28                                            # IPv4 (20) + UDP (8), per datagram
@@ -55,7 +50,7 @@ def test_unknown_stream_rejects_whole_datagram():
 
 
 def test_truncated_record_rejects_whole_datagram():
-    bits = z.encode(1) + z.encode_stream([2, 1])       # stream 1 declares 3 fields, sends 2
+    bits = zeck.encode(1) + zeck.encode_stream([2, 1])       # stream 1 declares 3 fields, sends 2
     out, cause = demux(packed.pack(bits, 8), REGISTRY)
     assert (out, cause) == ([], CONCENTRATOR_TRUNCATED)
 
@@ -82,7 +77,7 @@ def test_bad_inputs_raise():
 # ------------------------------------------------------------- the honest measurement, frozen
 def fleet_costs(n_nodes):
     """Per-reading uplink bytes at fleet size n: (per_node_datagrams, concentrated)."""
-    per_reading_payload = len(packed.pack(z.encode_stream([2, 1, 5]), 8))
+    per_reading_payload = len(packed.pack(zeck.encode_stream([2, 1, 5]), 8))
     per_node = per_reading_payload + IP_UDP
     recs = [(1, [2, 1, 5])] * n_nodes
     conc = (len(concentrate(recs)) + IP_UDP) / n_nodes

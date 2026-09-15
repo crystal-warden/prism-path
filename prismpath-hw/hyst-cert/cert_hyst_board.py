@@ -50,24 +50,24 @@ def load_policy(io, ppt_path, dbg):
 
     load(0, 0, visits_idx)
     off = 28
-    for i in range(n_atoms):
-        f, op, ty, val = struct.unpack_from("<HBBi", data, off); off += 8
-        load(1, i, ((ty & 0xFF) << 24) | ((op & 0xFF) << 16) | (f & 0xFFFF))
-        load(2, i, val & 0xFFFFFFFF)
+    for slot_index in range(n_atoms):
+        field_index, op, ty, val = struct.unpack_from("<HBBi", data, off); off += 8
+        load(1, slot_index, ((ty & 0xFF) << 24) | ((op & 0xFF) << 16) | (field_index & 0xFFFF))
+        load(2, slot_index, val & 0xFFFFFFFF)
     node_recs = []
-    for i in range(n_nodes):
-        eo, ec = struct.unpack_from("<HH", data, off); off += 4
-        node_recs.append((eo, ec))
-        load(3, i, ((ec & 0xFFFF) << 16) | (eo & 0xFFFF))
-    for i in range(n_edges):
-        t, po, pc = struct.unpack_from("<HHH", data, off); off += 6
-        load(4, i, ((po & 0xFFFF) << 16) | (t & 0xFFFF))
-        load(5, i, pc)
-    for i in range(prog_len):
-        (w,) = struct.unpack_from("<H", data, off); off += 2
-        load(6, i, w)
-    for n in sorted(dbg["nodes"], key=lambda x: x["i"]):
-        load(7, n["i"], int(n.get("color", 0)) & 0x3F)
+    for slot_index in range(n_nodes):
+        edge_offset, edge_count = struct.unpack_from("<HH", data, off); off += 4
+        node_recs.append((edge_offset, edge_count))
+        load(3, slot_index, ((edge_count & 0xFFFF) << 16) | (edge_offset & 0xFFFF))
+    for slot_index in range(n_edges):
+        target, prog_offset, prog_count = struct.unpack_from("<HHH", data, off); off += 6
+        load(4, slot_index, ((prog_offset & 0xFFFF) << 16) | (target & 0xFFFF))
+        load(5, slot_index, prog_count)
+    for slot_index in range(prog_len):
+        (word,) = struct.unpack_from("<H", data, off); off += 2
+        load(6, slot_index, word)
+    for node in sorted(dbg["nodes"], key=lambda node_entry: node_entry["i"]):
+        load(7, node["i"], int(node.get("color", 0)) & 0x3F)
     return {"start": start, "flags": flags, "safe": (flags >> 8) & 0xFF,
             "stateful": bool(flags & 0x08), "pot_fidx": dbg["fields"]["pot"]}
 
@@ -76,12 +76,12 @@ def eval_step(io, cur, pot, pot_fidx, timeout=0.02):
     io.write(R_FLD_IDX, (TY_INT << 16) | pot_fidx)
     io.write(R_FLD_VAL, pot & 0xFFFFFFFF)
     io.write(R_CTRL, cur & 0xFFFF)                     # pulses start (PS mode)
-    t0 = time.time()
-    while time.time() - t0 < timeout:
-        st = io.read(R_STATUS)
-        if st & 0x2:                                   # done latch
+    start_time = time.time()
+    while time.time() - start_time < timeout:
+        status = io.read(R_STATUS)
+        if status & 0x2:                                   # done latch
             res = io.read(R_RESULT)                    # read clears the latch
-            assert st & 0x4, f"no matching edge: node={cur} pot={pot}"
+            assert status & 0x4, f"no matching edge: node={cur} pot={pot}"
             return res & 0xFFFF
     raise TimeoutError(f"evaluate stuck: node={cur} pot={pot}")
 
@@ -100,17 +100,17 @@ def main():
     names = corpus["node_names"]
 
     total = bad = 0
-    for st in corpus["streams"]:
-        cur = st["start"]
-        for pot, want in zip(st["pots"], st["trail"]):
+    for stream in corpus["streams"]:
+        cur = stream["start"]
+        for pot, want in zip(stream["pots"], stream["trail"]):
             got = eval_step(io, cur, pot, hdr["pot_fidx"])
             if got != want:
                 bad += 1
-                print(f"MISMATCH {st['name']}: pot={pot} cur={names[cur]} "
+                print(f"MISMATCH {stream['name']}: pot={pot} cur={names[cur]} "
                       f"silicon={names[got]} frozen={names[want]}")
             cur = got
             total += 1
-        print(f"  {st['name']:24s} {len(st['pots']):4d} events  end={names[cur]}")
+        print(f"  {stream['name']:24s} {len(stream['pots']):4d} events  end={names[cur]}")
     print(f"\nLEG 1 (PS-mode sequence replay): {total - bad}/{total} events match the frozen trail"
           f" -> {'PASS' if bad == 0 else 'FAIL'}")
     if bad:
@@ -122,18 +122,18 @@ def main():
                | ((hdr["start"] & 0xFF) << 8) | 0x2 | 0x1
         io.write(R_AUTO_CTRL, word)
         time.sleep(0.05)
-        cn = io.read(R_CUR_NODE)
-        assert (cn >> 16) & 1, "CUR_NODE must read stateful=1 after the stateful arm"
-        print(f"LEG 2 armed: resident={names[cn & 0xFFFF]} (word=0x{word:08X})")
+        current_node = io.read(R_CUR_NODE)
+        assert (current_node >> 16) & 1, "CUR_NODE must read stateful=1 after the stateful arm"
+        print(f"LEG 2 armed: resident={names[current_node & 0xFFFF]} (word=0x{word:08X})")
         print("sweep the pot through both boundaries; resident band + pot follow for 30s:")
         last = None
-        t0 = time.time()
-        while time.time() - t0 < 30:
-            cn = io.read(R_CUR_NODE) & 0xFFFF
+        start_time = time.time()
+        while time.time() - start_time < 30:
+            current_node = io.read(R_CUR_NODE) & 0xFFFF
             pot = io.read(R_POT_NOW) & 0xFFF
-            if cn != last:
-                print(f"  t={time.time()-t0:5.1f}s pot={pot:4d} resident -> {names[cn]}")
-                last = cn
+            if current_node != last:
+                print(f"  t={time.time()-start_time:5.1f}s pot={pot:4d} resident -> {names[current_node]}")
+                last = current_node
             time.sleep(0.05)
         print("LEG 2 done (operator-verified: enter at +H, leave at -H, hold on the line)")
 

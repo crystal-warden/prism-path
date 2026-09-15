@@ -61,6 +61,8 @@ class SandboxRunner:
             cmd += ["--unshare-net"]                       # network namespace with no interfaces
         if env.fs == "rw" and self.scratch_dir:
             cmd += ["--bind", self.scratch_dir, self.scratch_dir]
+        if sys.prefix.startswith("/tmp"):
+            cmd += ["--ro-bind", sys.prefix, sys.prefix]
         # fs == none|ro: the root is bound read-only above; only /tmp (tmpfs) is writable.
         cmd += ["--", sys.executable, "-m", "prismpath.workers._sandbox_child"]
         return cmd
@@ -84,15 +86,20 @@ class SandboxRunner:
         child_env = dict(os.environ)
         child_env["PYTHONPATH"] = _REPO_ROOT + os.pathsep + child_env.get("PYTHONPATH", "")
         try:
-            p = subprocess.run(self._profile(env), input=job, capture_output=True, text=True,
+            child = subprocess.run(self._profile(env), input=job, capture_output=True, text=True,
                                timeout=env.timeout_s + 2, env=child_env)
         except subprocess.TimeoutExpired:
             raise SandboxError(f"code node {node!r}: exceeded timeout_s={env.timeout_s}")
         try:
-            res = json.loads(p.stdout or "{}")
+            res = json.loads(child.stdout or "{}")
         except json.JSONDecodeError:
             raise SandboxError(f"code node {node!r}: sandbox produced no result "
-                               f"(rc={p.returncode}): {(p.stderr or p.stdout or '')[:200]}")
+                               f"(rc={child.returncode}): {(child.stderr or child.stdout or '')[:200]}")
         if not res.get("ok"):
             raise SandboxError(f"code node {node!r}: {res.get('error', 'sandbox error')}")
-        return res["outcome"]
+        outcome = res["outcome"]
+        if not res.get("mem_enforced", True) and isinstance(outcome, dict):
+            # same contract as the "_sandbox": "off" marker above: an envelope the platform refused
+            # to apply is recorded on the outcome, never assumed to have held
+            return {**outcome, "_sandbox_mem": "unenforced"}
+        return outcome

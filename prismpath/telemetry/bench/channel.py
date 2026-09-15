@@ -15,27 +15,28 @@ from typing import Dict
 import numpy as np
 
 
-def lost_mask(n: int, p: float, r: float, p_b: float = 1.0, p_g: float = 0.0, seed: int = 0):
+def lost_mask(sample_count: int, loss_probability: float, recovery_probability: float,
+              p_b: float = 1.0, p_g: float = 0.0, seed: int = 0):
     """Per-sample loss mask under Gilbert-Elliott(p=g->b, r=b->g)."""
     rng = np.random.default_rng(seed)
-    mask = np.zeros(n, dtype=bool)
+    mask = np.zeros(sample_count, dtype=bool)
     bad = False
-    for i in range(n):
-        mask[i] = rng.random() < (p_b if bad else p_g)
+    for sample_index in range(sample_count):
+        mask[sample_index] = rng.random() < (p_b if bad else p_g)
         if bad:
-            if rng.random() < r:      # b -> g (mean burst length ~ 1/r)
+            if rng.random() < recovery_probability:   # b -> g (mean burst length ~ 1/r)
                 bad = False
-        elif rng.random() < p:        # g -> b
+        elif rng.random() < loss_probability:         # g -> b
             bad = True
     return mask
 
 
-def retransmit_bytes(n: int, block_size: int, mask, bytes_per_sample: float) -> Dict[str, float]:
+def retransmit_bytes(sample_count: int, block_size: int, mask, bytes_per_sample: float) -> Dict[str, float]:
     """Bytes needed to repair the losses: selective (only blocks touching a loss) vs full retransmit."""
-    n_blocks = (n + block_size - 1) // block_size
+    n_blocks = (sample_count + block_size - 1) // block_size
     lost_blocks = 0
-    for b in range(n_blocks):
-        seg = mask[b * block_size:(b + 1) * block_size]
+    for block_index in range(n_blocks):
+        seg = mask[block_index * block_size:(block_index + 1) * block_size]
         if seg.any():
             lost_blocks += 1
     block_bytes = block_size * bytes_per_sample

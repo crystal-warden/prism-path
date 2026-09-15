@@ -4,11 +4,11 @@
 """Runnable demonstration of the SOP generator: fill the Incident Response Plan template from a
 structured intake and print the objective-complete draft. Deterministic, no model in the loop.
 
-    PYTHONSAFEPATH=1 PYTHONPATH=<core>:<adapter> python -m sop_demo
+    python -m adapters.compliance.sop_demo        # from the repository root
 """
 import json
-import compliance_adapter as ca
-import sop_generator as sg
+from adapters.compliance import compliance_adapter as ca
+from adapters.compliance import sop_generator as sg
 
 # ============================================================================
 # CONFIGURE -- point ANSWERS_PATH at your organization's intake JSON (same shape

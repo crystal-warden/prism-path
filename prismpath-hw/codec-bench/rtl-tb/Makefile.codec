@@ -1,5 +1,5 @@
 # cocotb tb: the wired zeck_enc -> zeck_dec codec core (peek + self-test sweep).
-#   make -f Makefile.codec
+#   make -f Makefile.codec       the gate: runs the sim, then fails on any cocotb failure
 SIM ?= verilator
 TOPLEVEL_LANG ?= verilog
 VERILOG_SOURCES = $(PWD)/../../rtl/zeck_enc.sv $(PWD)/../../rtl/zeck_dec.sv $(PWD)/../../rtl/zeck_codec_core.sv
@@ -7,4 +7,7 @@ COCOTB_TOPLEVEL = zeck_codec_core
 COCOTB_TEST_MODULES = test_zeck_codec
 TOPLEVEL = $(COCOTB_TOPLEVEL)
 MODULE = $(COCOTB_TEST_MODULES)
+GATE_NAME = zeck_codec
+GATE_EXPECTED = codec
+include ../../rtl-tb/gate.mk
 include $(shell cocotb-config --makefiles)/Makefile.sim

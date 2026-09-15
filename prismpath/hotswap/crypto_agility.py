@@ -38,7 +38,8 @@ def suite_node(suite_id: str) -> str:
 
 def suite_nodes(graph) -> Dict[str, str]:
     """{node_name: suite_id} for every suite terminal in the flow."""
-    return {n: n[len(SUITE_NODE_PREFIX):] for n in graph.nodes if n.startswith(SUITE_NODE_PREFIX)}
+    return {node_name: node_name[len(SUITE_NODE_PREFIX):]
+            for node_name in graph.nodes if node_name.startswith(SUITE_NODE_PREFIX)}
 
 
 def reachable_suites(graph, assume: Optional[str] = None) -> Dict[str, dict]:
@@ -54,12 +55,12 @@ def _forbidden_reachable(reach: Dict[str, dict], forbidden: set) -> List[dict]:
     not be *proven* (search cut by the bound) — an inconclusive result is not a pass."""
     bad = []
     for sid in sorted(forbidden):
-        r = reach.get(sid)
-        if r is None:
+        reach_entry = reach.get(sid)
+        if reach_entry is None:
             continue                                    # not a terminal in this flow -> not selectable
-        if r["reachable"] != "no":
-            bad.append({"suite": sid, "reachable": r["reachable"], "reason": "reachable"})
-        elif not r["proven"]:
+        if reach_entry["reachable"] != "no":
+            bad.append({"suite": sid, "reachable": reach_entry["reachable"], "reason": "reachable"})
+        elif not reach_entry["proven"]:
             bad.append({"suite": sid, "reachable": "no", "reason": "unproven (bound hit)"})
     return bad
 
@@ -69,12 +70,13 @@ def _forbidden_reachable(reach: Dict[str, dict], forbidden: set) -> List[dict]:
 def prove_envelope_closure(graph, envelope: dict) -> dict:
     approved = set(envelope.get("approved_suites", []))
     reach = reachable_suites(graph)
-    offenders = [{"suite": sid, "reachable": r["reachable"]}
-                 for sid, r in sorted(reach.items())
-                 if r["reachable"] != "no" and sid not in approved]
+    offenders = [{"suite": sid, "reachable": reach_entry["reachable"]}
+                 for sid, reach_entry in sorted(reach.items())
+                 if reach_entry["reachable"] != "no" and sid not in approved]
     return {"ok": not offenders, "offenders": offenders,
-            "reachable_suites": {s: r["reachable"] for s, r in sorted(reach.items())
-                                 if r["reachable"] != "no"}}
+            "reachable_suites": {reachable_id: reach_entry["reachable"]
+                                 for reachable_id, reach_entry in sorted(reach.items())
+                                 if reach_entry["reachable"] != "no"}}
 
 
 # ------------------------------------------------------------------ P2: totality (structural)
@@ -93,7 +95,7 @@ def prove_totality(graph) -> dict:
         node = graph.nodes.get(name)
         if node is None or not node.edges or name in suites:
             continue                                    # terminal / suite node
-        if not any(_is_catchall(c) for _t, c in node.edges):
+        if not any(_is_catchall(condition) for _t, condition in node.edges):
             gaps.append(name)
     return {"ok": not gaps, "nodes_without_catchall": gaps}
 
@@ -143,4 +145,4 @@ def prove_all(graph, envelope: dict, registry: dict) -> dict:
         "P4_monotone_migration": prove_monotone_migration(graph, envelope, registry),
         "P5_decidable": prove_decidable(graph),
     }
-    return {"ok": all(p["ok"] for p in proofs.values()), "proofs": proofs}
+    return {"ok": all(proof["ok"] for proof in proofs.values()), "proofs": proofs}

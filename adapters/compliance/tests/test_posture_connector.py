@@ -3,15 +3,15 @@
 """Layer 3: a scanned machine posture grades every control it can fully decide, deterministically,
 and defers (never assumes) the rest."""
 import json
-import compliance_adapter as ca
-import deterministic_checks as dc
-import posture_connector as pc
+from adapters.compliance import compliance_adapter as ca
+from adapters.compliance import deterministic_checks as dc
+from adapters.compliance import posture_connector as pc
 
 # The reviewed machine-checkable set. Grew from 26 to 50 as the deterministic check registry was
 # extended (access control, audit, config mgmt, identification, least functionality, boundary
-# monitoring, device access, media, personnel, flaw remediation). Each control's verdict is decidable
-# from posture facts alone; deterministic_checks.evidence_class() discloses whether each fact is
-# tool-scanned or documentation-attested.
+# monitoring, device access, media, personnel, flaw remediation). Each control's determination is
+# decidable from posture facts alone; deterministic_checks.evidence_class() discloses whether each
+# fact is tool-scanned or documentation-attested.
 CHECKABLE = {
     "3.1.1", "3.1.2", "3.1.8", "3.1.9", "3.1.10", "3.1.11", "3.1.14", "3.1.19",
     "3.3.2", "3.3.6", "3.3.7", "3.3.8",
@@ -43,8 +43,8 @@ def test_required_facts_match_the_check_registry():
                                    "mfa_network_privileged", "mfa_network_nonprivileged"])
     # every listed fact key is a real check key
     for keys in req.values():
-        for k in keys:
-            assert k in dc.FACT_KEYS.values()
+        for fact_key in keys:
+            assert fact_key in dc.FACT_KEYS.values()
 
 
 def test_full_posture_assesses_all_checkable_none_deferred():
@@ -55,10 +55,10 @@ def test_full_posture_assesses_all_checkable_none_deferred():
     assert res["deferred"] == []
     # the one intentional gap: MFA for network access to non-privileged accounts is off
     assert res["tally"] == {"met": len(CHECKABLE) - 1, "partially-met": 1, "not-met": 0}
-    by_id = {r["control_id"]: r for r in res["results"]}
+    by_id = {result["control_id"]: result for result in res["results"]}
     assert by_id["3.5.3"]["status"] == "partially-met"
     assert by_id["3.5.3"]["unmet_objective_ids"] == ["3.5.3[d]"]
-    assert all(r["method"] == "deterministic" for r in res["results"])
+    assert all(result["method"] == "deterministic" for result in res["results"])
     assert res["boundary"] == "example-host CUI enclave host"
     assert res["provenance"]["source"] == "example-scan"
 
@@ -70,7 +70,7 @@ def test_partial_posture_defers_what_it_cannot_decide():
         "fips_validated_cryptography": True,
         "account_lockout_threshold": 5, "account_lockout_enforced": True}}
     res = pc.assess(posture)
-    assert {r["control_id"] for r in res["results"]} == {"3.13.11", "3.1.8"}
+    assert {result["control_id"] for result in res["results"]} == {"3.13.11", "3.1.8"}
     assert set(res["deferred"]) == CHECKABLE - {"3.13.11", "3.1.8"}
     assert res["tally"]["met"] == 2
 

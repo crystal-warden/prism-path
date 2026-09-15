@@ -1,21 +1,21 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
-"""centroid.py — prototype routing: the escalation tier as a teacher (roadmap item 2).
+"""centroid.py - prototype routing: the escalation tier as a teacher (roadmap item 2).
 
 A zero-shot embedding router scores an outcome against the AUTHOR'S condition phrase and hopes real
-outcomes land near it. But every labeled decision — from `prismpath test` fixtures, `prismpath label`, and
-especially the LLM escalations the hybrid router already logs — is an (outcome, correct-edge) example.
+outcomes land near it. But every labeled decision - from `prismpath test` fixtures, `prismpath label`, and
+especially the LLM escalations the hybrid router already logs - is an (outcome, correct-edge) example.
 So route against the **centroid of historical correct outcomes per edge**, shrinking toward the
 condition-string prior when history is thin. With zero history a `CentroidRouter` IS the EmbeddingRouter
-(pure prior); as the corpus grows it gets more accurate AND escalates less — the router teaches itself
-to not need the LLM. It attacks the confident-error class directly: "correct per spec → close" fails
+(pure prior); as the corpus grows it gets more accurate AND escalates less - the router teaches itself
+to not need the LLM. It attacks the confident-error class directly: "correct per spec -> close" fails
 zero-shot on the word "correct", but a centroid built from real closures captures it.
 
 This is pure data machinery: centroids are unit vectors, serializable/lockable exactly like the routing
 lockfile's condition vectors, and rebuilt OFFLINE from the corpus (the engine stays pure).
 
 Everything is in PASSAGE space (`is_query=False`) so it is a symmetric outcome-vs-{centroid,condition}
-comparison — the natural "does this new outcome look like the outcomes that took this edge?" test.
+comparison - the natural "does this new outcome look like the outcomes that took this edge?" test.
 """
 from __future__ import annotations
 
@@ -27,10 +27,10 @@ from prismpath.kernel import predicates
 from prismpath.routing.router import EmbeddingRouter
 
 
-def _unit(v):
+def _unit(vec):
     import numpy as np
-    n = float(np.linalg.norm(v))
-    return v / n if n else v
+    norm = float(np.linalg.norm(vec))
+    return vec / norm if norm else vec
 
 
 class CentroidRouter(EmbeddingRouter):
@@ -51,15 +51,15 @@ class CentroidRouter(EmbeddingRouter):
 
     def _cond_embs(self, edges):
         import numpy as np
-        conds = [c for _, c in edges]
+        conds = [condition for _, condition in edges]
         priors = embedder.embed(conds, is_query=False)        # condition prior per edge (passage space)
         out = []
-        for prior, cond in zip(priors, conds):
-            n = self._counts.get(cond, 0)
-            if n == 0:
+        for prior, condition in zip(priors, conds):
+            count_val = self._counts.get(condition, 0)
+            if count_val == 0:
                 out.append(_unit(np.asarray(prior, dtype="float32")))
-            else:                                             # James–Stein-style shrink toward the prior
-                blended = (self._prior * prior + n * self._centroids[cond]) / (self._prior + n)
+            else:                                             # James-Stein-style shrink toward the prior
+                blended = (self._prior * prior + count_val * self._centroids[condition]) / (self._prior + count_val)
                 out.append(_unit(blended))
         return np.asarray(out, dtype="float32")
 
@@ -78,10 +78,10 @@ def load_graphs(records: List[dict], flows_dir: Optional[str] = None) -> dict:
     from prismpath.kernel.parser import parse_file
     flows_dir = flows_dir or _FLOWS
     graphs = {}
-    for r in records:
-        f = r.get("flow")
-        if f and f not in graphs:
-            graphs[f] = parse_file(os.path.join(flows_dir, f"{f}.md"))
+    for record in records:
+        flow_name = record.get("flow")
+        if flow_name and flow_name not in graphs:
+            graphs[flow_name] = parse_file(os.path.join(flows_dir, f"{flow_name}.md"))
     return graphs
 
 
@@ -94,12 +94,12 @@ def record_condition(rec: dict, graphs: dict) -> Optional[str]:
     for cand in rec.get("candidates", []):
         if cand.get("target") == label:
             return cand.get("condition")
-    g = graphs.get(rec.get("flow"))
-    node = g.nodes.get(rec.get("node")) if g else None
+    graph = graphs.get(rec.get("flow"))
+    node = graph.nodes.get(rec.get("node")) if graph else None
     if node is not None:
-        for t, c in node.edges:
-            if t == label:
-                return c
+        for target, condition in node.edges:
+            if target == label:
+                return condition
     return None
 
 
@@ -107,15 +107,15 @@ def _decision_items(records: List[dict], graphs: dict):
     """Keep records that are real semantic decisions (node has >=2 semantic edges, label is one of
     them). Returns [(record, sem_edges, correct_index)]."""
     items = []
-    for rec in records:
-        g = graphs.get(rec.get("flow"))
-        node = g.nodes.get(rec.get("node")) if g else None
+    for record in records:
+        graph = graphs.get(record.get("flow"))
+        node = graph.nodes.get(record.get("node")) if graph else None
         if node is None:
             continue
-        sem = [(t, c) for t, c in node.edges if predicates.is_semantic(c)]
-        targets = [t for t, _ in sem]
-        if len(sem) >= 2 and rec.get("label") in targets:
-            items.append((rec, sem, targets.index(rec["label"])))
+        sem = [(target, condition) for target, condition in node.edges if predicates.is_semantic(condition)]
+        targets = [target for target, _ in sem]
+        if len(sem) >= 2 and record.get("label") in targets:
+            items.append((record, sem, targets.index(record["label"])))
     return items
 
 
@@ -130,39 +130,39 @@ def cross_validate(records: List[dict], graphs: Optional[dict] = None, flows_dir
     items = _decision_items(records, graphs)
     if not items:
         return {}
-    outs = [it[0]["outcome"] for it in items]
-    oq = embedder.embed(outs, is_query=True)              # baseline outcome space (query)
-    op = embedder.embed(outs, is_query=False)             # centroid outcome space (passage)
-    conds = sorted({c for _, sem, _ in items for _, c in sem})
-    cvec = {c: np.asarray(v, dtype="float32") for c, v in zip(conds, embedder.embed(conds, is_query=False))}
+    outs = [item[0]["outcome"] for item in items]
+    outcome_query_vecs = embedder.embed(outs, is_query=True)              # baseline outcome space (query)
+    outcome_passage_vecs = embedder.embed(outs, is_query=False)             # centroid outcome space (passage)
+    conds = sorted({condition for _, sem, _ in items for _, condition in sem})
+    condition_vecs = {condition: np.asarray(vec, dtype="float32") for condition, vec in zip(conds, embedder.embed(conds, is_query=False))}
 
     tally = defaultdict(lambda: {"n": 0, "baseline": 0, "centroid": 0})
-    for f in range(folds):
-        train = [i for i in range(len(items)) if i % folds != f]
-        test = [i for i in range(len(items)) if i % folds == f]
+    for fold in range(folds):
+        train = [index for index in range(len(items)) if index % folds != fold]
+        test = [index for index in range(len(items)) if index % folds == fold]
         by_cond = defaultdict(list)
-        for i in train:                                   # centroid = mean train outcome for the correct edge
-            _rec, sem, ci = items[i]
-            by_cond[sem[ci][1]].append(op[i])
-        cen = {c: _unit(np.mean(vs, axis=0)) for c, vs in by_cond.items()}
-        cnt = {c: len(vs) for c, vs in by_cond.items()}
-        for i in test:
-            rec, sem, ci = items[i]
-            ec = [c for _, c in sem]
-            b_pick = int(np.argmax(embedder.cosine(oq[i], np.asarray([cvec[c] for c in ec]))[0]))
-            eff = [(_unit(cvec[c]) if cnt.get(c, 0) == 0
-                    else _unit((prior_weight * cvec[c] + cnt[c] * cen[c]) / (prior_weight + cnt[c])))
-                   for c in ec]
-            c_pick = int(np.argmax(embedder.cosine(op[i], np.asarray(eff))[0]))
-            for key in (rec.get("stratum", "?"), "ALL"):
+        for index in train:                                   # centroid = mean train outcome for the correct edge
+            _rec, sem, correct_index = items[index]
+            by_cond[sem[correct_index][1]].append(outcome_passage_vecs[index])
+        train_centroids = {condition: _unit(np.mean(vecs, axis=0)) for condition, vecs in by_cond.items()}
+        train_counts = {condition: len(vecs) for condition, vecs in by_cond.items()}
+        for index in test:
+            record, sem, correct_index = items[index]
+            edge_conditions = [condition for _, condition in sem]
+            baseline_choice = int(np.argmax(embedder.cosine(outcome_query_vecs[index], np.asarray([condition_vecs[condition] for condition in edge_conditions]))[0]))
+            shrunk_vecs = [(_unit(condition_vecs[condition]) if train_counts.get(condition, 0) == 0
+                            else _unit((prior_weight * condition_vecs[condition] + train_counts[condition] * train_centroids[condition]) / (prior_weight + train_counts[condition])))
+                           for condition in edge_conditions]
+            centroid_choice = int(np.argmax(embedder.cosine(outcome_passage_vecs[index], np.asarray(shrunk_vecs))[0]))
+            for key in (record.get("stratum", "?"), "ALL"):
                 tally[key]["n"] += 1
-                tally[key]["baseline"] += int(b_pick == ci)
-                tally[key]["centroid"] += int(c_pick == ci)
+                tally[key]["baseline"] += int(baseline_choice == correct_index)
+                tally[key]["centroid"] += int(centroid_choice == correct_index)
 
-    out = {k: {"n": v["n"], "baseline": round(v["baseline"] / v["n"], 4),
-               "centroid": round(v["centroid"] / v["n"], 4),
-               "delta": round((v["centroid"] - v["baseline"]) / v["n"], 4)}
-           for k, v in tally.items()}
+    out = {key: {"n": val["n"], "baseline": round(val["baseline"] / val["n"], 4),
+                 "centroid": round(val["centroid"] / val["n"], 4),
+                 "delta": round((val["centroid"] - val["baseline"]) / val["n"], 4)}
+           for key, val in tally.items()}
     out["config"] = {"folds": folds, "prior_weight": prior_weight, "n_decisions": len(items)}
     return out
 
@@ -172,14 +172,14 @@ def build_centroids(records: List[dict], graphs: dict) -> Tuple[Dict[str, Any], 
     conditions get centroids (deterministic/error/event edges don't route by embedding)."""
     import numpy as np
     by_cond: Dict[str, List[str]] = {}
-    for rec in records:
-        cond = record_condition(rec, graphs)
-        outcome = rec.get("outcome") or rec.get("outcome_text")
-        if cond and outcome and predicates.is_semantic(cond):
-            by_cond.setdefault(cond, []).append(outcome)
+    for record in records:
+        condition = record_condition(record, graphs)
+        outcome = record.get("outcome") or record.get("outcome_text")
+        if condition and outcome and predicates.is_semantic(condition):
+            by_cond.setdefault(condition, []).append(outcome)
     centroids, counts = {}, {}
-    for cond, outs in by_cond.items():
+    for condition, outs in by_cond.items():
         vecs = embedder.embed(outs, is_query=False)
-        centroids[cond] = _unit(np.mean(vecs, axis=0).astype("float32"))
-        counts[cond] = len(outs)
+        centroids[condition] = _unit(np.mean(vecs, axis=0).astype("float32"))
+        counts[condition] = len(outs)
     return centroids, counts

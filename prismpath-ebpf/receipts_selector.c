@@ -11,15 +11,16 @@
  * restores the statefulness a current-state-only map would flatten, and makes it tamper-evident.
  *
  *   clang -O2 -target bpf -I. -c ppt_select.bpf.c -o ppt_select.bpf.o
- *   gcc -O2 -Wno-unused-function -I. receipts_selector.c -o receipts_selector -lcrypto $(pkg-config --libs libbpf)
+ *   gcc -O2 -I. receipts_selector.c ppt_image.c ppt_maps.c -o receipts_selector -lcrypto $(pkg-config --libs libbpf)
  *   sudo ./receipts_selector selector_corpus.bin ppt_select.bpf.o
  */
-#define main loader_orig_main
-#include "loader.c"
-#undef main
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include <openssl/sha.h>
 
-/* struct sel_state is defined in loader.c (included above) */
+#include "ppt_image.h"   /* Image, parse_image_buf, build_frame, the host reference evaluator */
+#include "ppt_maps.h"    /* populate_maps, struct sel_state, selector_hotswap */
 
 #define MAX_EV 4096
 static struct ppt_receipt g_rcpts[MAX_EV];

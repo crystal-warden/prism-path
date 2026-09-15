@@ -1,27 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 Crystal Warden Supply Chain Labs LLC
 //! Certify `prismpath-rs` against the frozen kernel spec.
-//!
-//! The conformance corpus is the specification expressed as data:
-//!   * `predicates.json` — 1,079 `(condition, context) -> true | false | "ERROR"` cases
-//!   * `flows.json`      — 27 engine fixtures -> `{path, stopped, pending_node, spawn}`
-//!
-//! Its README states the intent plainly: "A future Go / Rust / WASM kernel implements the frozen
-//! subset, reads these two files, and is provably interchangeable — or measurably not." This binary
-//! answers that question for the Rust crate, replaying exactly what `run_vectors.mjs` replays. On
-//! failure every divergence is reported, grouped by cause — itemized drift documentation rather
-//! than a verdict.
-//!
-//! Usage: cargo run --bin conformance -- [path/to/conformance/dir]
 
-use prismpath_rs::{eval_condition, parse, run, run_locked, Lock, RunOpts, RunState, V};
+use prismpath_rs::{eval_condition, parse, run, run_locked, Lock, RunOpts, RunState, Value};
 use std::collections::HashMap;
 
 #[derive(serde::Deserialize)]
 struct PredicateCase {
     cond: String,
     ctx: HashMap<String, serde_json::Value>,
-    expect: serde_json::Value, // true | false | "ERROR"
+    expect: serde_json::Value,
 }
 
 #[derive(serde::Deserialize)]
@@ -74,17 +62,16 @@ struct P1FlowFile {
     cases: Vec<P1FlowCase>,
 }
 
-/// Classify a divergence so the report groups causes instead of listing hundreds of lines.
 fn classify(cond: &str) -> &'static str {
-    let c = cond.trim_start_matches("when ").trim();
-    let tokens: Vec<&str> = c.split_whitespace().collect();
-    if c.contains(" not in ") {
+    let cond_str = cond.trim_start_matches("when ").trim();
+    let tokens: Vec<&str> = cond_str.split_whitespace().collect();
+    if cond_str.contains(" not in ") {
         "`not in` semantics"
-    } else if tokens.len() > 3 && (c.contains('<') || c.contains('>') || c.contains("==")) {
+    } else if tokens.len() > 3 && (cond_str.contains('<') || cond_str.contains('>') || cond_str.contains("==")) {
         "chained / multi-term comparison"
-    } else if c.contains(" and ") || c.contains(" or ") || c.starts_with("not ") {
+    } else if cond_str.contains(" and ") || cond_str.contains(" or ") || cond_str.starts_with("not ") {
         "boolean connective (and/or/not)"
-    } else if c.contains('[') || c.contains('(') {
+    } else if cond_str.contains('[') || cond_str.contains('(') {
         "collection literal / grouping"
     } else if tokens.len() == 3 {
         "binary comparison semantics"
@@ -95,28 +82,26 @@ fn classify(cond: &str) -> &'static str {
     }
 }
 
-/// The scripted agent from `run_vectors.mjs`: outcomes are consumed in visit order, the last one
-/// repeats, an unscripted node answers `{text: node}`, and `{"__raise__": msg}` throws.
-fn scripted_agent(
-    script: &HashMap<String, Vec<serde_json::Value>>,
-) -> impl FnMut(&str, &str, &RunState) -> Result<V, String> + '_ {
+fn scripted_agent<'a>(
+    script: &'a HashMap<String, Vec<serde_json::Value>>,
+) -> impl FnMut(&str, &str, &RunState) -> Result<Value, String> + 'a {
     let mut used: HashMap<String, usize> = HashMap::new();
     move |node: &str, _instruction: &str, _state: &RunState| {
         let Some(seq) = script.get(node) else {
-            return Ok(V::Obj(vec![("text".to_string(), V::Str(node.to_string()))]));
+            return Ok(Value::Obj(vec![("text".to_string(), Value::Str(node.to_string()))]));
         };
-        let i = *used.get(node).unwrap_or(&0);
-        used.insert(node.to_string(), i + 1);
-        let outcome = &seq[i.min(seq.len().saturating_sub(1))];
-        if let serde_json::Value::Object(o) = outcome {
-            if let Some(msg) = o.get("__raise__") {
+        let idx = *used.get(node).unwrap_or(&0);
+        used.insert(node.to_string(), idx + 1);
+        let outcome = &seq[idx.min(seq.len().saturating_sub(1))];
+        if let serde_json::Value::Object(obj_val) = outcome {
+            if let Some(msg) = obj_val.get("__raise__") {
                 return Err(match msg {
-                    serde_json::Value::String(s) => s.clone(),
+                    serde_json::Value::String(str_val) => str_val.clone(),
                     other => other.to_string(),
                 });
             }
         }
-        Ok(V::from_json(outcome))
+        Ok(Value::from_json(outcome))
     }
 }
 
@@ -130,9 +115,9 @@ fn main() {
 
     let mut failures = 0usize;
 
-    // ---------------------------------------------------------------- predicates
-    let raw = std::fs::read_to_string(format!("{dir}/predicates.json")).unwrap_or_else(|e| {
-        eprintln!("cannot read predicates.json: {e}");
+    // predicates
+    let raw = std::fs::read_to_string(format!("{dir}/predicates.json")).unwrap_or_else(|err| {
+        eprintln!("cannot read predicates.json: {err}");
         std::process::exit(2);
     });
     let pf: PredicateFile = serde_json::from_str(&raw).expect("predicates.json parse");
@@ -142,16 +127,16 @@ fn main() {
     let mut samples: HashMap<&'static str, Vec<String>> = HashMap::new();
 
     for case in &pf.cases {
-        let ctx: HashMap<String, V> =
-            case.ctx.iter().map(|(k, v)| (k.clone(), V::from_json(v))).collect();
+        let ctx: HashMap<String, Value> =
+            case.ctx.iter().map(|(key, val)| (key.clone(), Value::from_json(val))).collect();
 
         let got = match eval_condition(&case.cond, &ctx) {
-            Ok(b) => b.to_string(),
+            Ok(bool_val) => bool_val.to_string(),
             Err(_) => "ERROR".to_string(),
         };
         let want = match &case.expect {
-            serde_json::Value::Bool(b) => b.to_string(),
-            serde_json::Value::String(s) => s.clone(),
+            serde_json::Value::Bool(bool_val) => bool_val.to_string(),
+            serde_json::Value::String(str_val) => str_val.clone(),
             other => other.to_string(),
         };
 
@@ -175,16 +160,16 @@ fn main() {
     if pred_pass < pf.cases.len() {
         println!("\n  divergences grouped by cause:");
         let mut rows: Vec<_> = buckets.iter().collect();
-        rows.sort_by(|a, b| b.1.cmp(a.1));
+        rows.sort_by(|left, right| right.1.cmp(left.1));
         for (bucket, count) in rows {
             println!("    {count:>5}  {bucket}");
-            for s in &samples[*bucket] {
-                println!("           {s}");
+            for sample_item in &samples[*bucket] {
+                println!("           {sample_item}");
             }
         }
     }
 
-    // ---------------------------------------------------------------- flows
+    // flows
     let fraw = std::fs::read_to_string(format!("{dir}/flows.json")).expect("read flows.json");
     let ff: FlowFile = serde_json::from_str(&fraw).expect("flows.json parse");
 
@@ -194,17 +179,17 @@ fn main() {
         let opts = RunOpts {
             max_steps: fx.max_steps.unwrap_or(25),
             start: fx.start.clone(),
-            state: fx.state.as_ref().map(V::from_json),
+            state: fx.state.as_ref().map(Value::from_json),
             ..Default::default()
         };
         let got = match run(&graph, scripted_agent(&fx.script), opts) {
             Ok(res) => serde_json::json!({
                 "path": res.path,
                 "stopped": res.stopped,
-                "pending_node": res.pending.as_ref().map(|p| p.node.clone()),
-                "spawn": res.pending.as_ref().and_then(|p| p.spawn.as_ref().map(v_to_json)),
+                "pending_node": res.pending.as_ref().map(|pending_val| pending_val.node.clone()),
+                "spawn": res.pending.as_ref().and_then(|pending_val| pending_val.spawn.as_ref().map(val_to_json)),
             }),
-            Err(e) => serde_json::json!({ "error": e.to_string() }),
+            Err(err) => serde_json::json!({ "error": err.to_string() }),
         };
         let want = serde_json::json!({
             "path": fx.expect.get("path").cloned().unwrap_or(serde_json::Value::Null),
@@ -223,23 +208,23 @@ fn main() {
     }
     println!("\nFLOWS: {flow_pass}/{} match the frozen spec", ff.cases.len());
 
-    // ---------------------------------------------------------------- P1 locked flows
+    // P1 locked flows
     let p1_path = format!("{dir}/locked_flows.json");
     if let Ok(p1_raw) = std::fs::read_to_string(&p1_path) {
         let p1f: P1FlowFile = serde_json::from_str(&p1_raw).expect("locked_flows.json parse");
         let mut p1_pass = 0usize;
         for fx in &p1f.cases {
             let graph = parse(&fx.flow);
-            let lock = Lock::from_json(&fx.lock).unwrap_or_else(|e| {
-                panic!("P1 fixture {:?}: lock parse error: {e}", fx.name);
+            let lock = Lock::from_json(&fx.lock).unwrap_or_else(|err| {
+                panic!("P1 fixture {:?}: lock parse error: {err}", fx.name);
             });
 
             let embed_map: HashMap<String, Vec<f32>> = fx
                 .embed_map
                 .iter()
-                .map(|(k, v)| {
-                    let b64 = v.as_str().expect("embedMap values must be base64 strings");
-                    (k.clone(), prismpath_rs::decode_b64_f32(b64).expect("embedMap base64 decode"))
+                .map(|(key, val)| {
+                    let b64 = val.as_str().expect("embedMap values must be base64 strings");
+                    (key.clone(), prismpath_rs::decode_b64_f32(b64).expect("embedMap base64 decode"))
                 })
                 .collect();
             let dim = lock.dim;
@@ -247,7 +232,7 @@ fn main() {
             let opts = RunOpts {
                 max_steps: fx.max_steps.unwrap_or(25),
                 start: fx.start.clone(),
-                state: fx.state.as_ref().map(V::from_json),
+                state: fx.state.as_ref().map(Value::from_json),
                 human_floor: fx.human_floor,
                 ..Default::default()
             };
@@ -267,10 +252,10 @@ fn main() {
                 Ok(res) => serde_json::json!({
                     "path": res.path,
                     "stopped": res.stopped,
-                    "pending_node": res.pending.as_ref().map(|p| p.node.clone()),
-                    "would_pick": res.pending.as_ref().and_then(|p| p.would_pick.clone()),
+                    "pending_node": res.pending.as_ref().map(|pending_val| pending_val.node.clone()),
+                    "would_pick": res.pending.as_ref().and_then(|pending_val| pending_val.would_pick.clone()),
                 }),
-                Err(e) => serde_json::json!({ "error": e.to_string() }),
+                Err(err) => serde_json::json!({ "error": err.to_string() }),
             };
             let want = serde_json::json!({
                 "path": fx.expect.get("path").cloned().unwrap_or(serde_json::Value::Null),
@@ -289,36 +274,34 @@ fn main() {
         }
         println!("\nP1 LOCKED FLOWS: {p1_pass}/{} match the frozen spec", p1f.cases.len());
     } else {
-        println!("\n(no locked_flows.json found — P1 conformance skipped)");
+        println!("\n(no locked_flows.json found - P1 conformance skipped)");
     }
 
-    // ---------------------------------------------------------------- verdict
+    // verdict
     println!("\n---------------------------------------------------");
     if failures == 0 {
-        println!("CONFORMANT — prismpath-rs matches the frozen kernel spec.");
+        println!("CONFORMANT - prismpath-rs matches the frozen kernel spec.");
         std::process::exit(0);
     }
-    println!("NOT CONFORMANT — {failures} divergence(s) from the frozen kernel spec.");
+    println!("NOT CONFORMANT - {failures} divergence(s) from the frozen kernel spec.");
     std::process::exit(1);
 }
 
-fn v_to_json(v: &V) -> serde_json::Value {
-    match v {
-        V::Null => serde_json::Value::Null,
-        V::Bool(b) => serde_json::Value::Bool(*b),
-        // JSON.stringify(1.0) is "1": the contract's numbers are f64 rendered the JS way, so an
-        // integral float must serialize as an integer or the comparison fails on notation alone.
-        V::Num(n) if n.fract() == 0.0 && n.abs() < 9.2e18 => {
-            serde_json::Value::Number(serde_json::Number::from(*n as i64))
+fn val_to_json(val: &Value) -> serde_json::Value {
+    match val {
+        Value::Null => serde_json::Value::Null,
+        Value::Bool(bool_val) => serde_json::Value::Bool(*bool_val),
+        Value::Num(num_val) if num_val.fract() == 0.0 && num_val.abs() < 9.2e18 => {
+            serde_json::Value::Number(serde_json::Number::from(*num_val as i64))
         }
-        V::Num(n) => serde_json::Number::from_f64(*n)
+        Value::Num(num_val) => serde_json::Number::from_f64(*num_val)
             .map(serde_json::Value::Number)
             .unwrap_or(serde_json::Value::Null),
-        V::Str(s) => serde_json::Value::String(s.clone()),
-        V::List(a) => serde_json::Value::Array(a.iter().map(v_to_json).collect()),
-        V::Obj(o) => serde_json::Value::Object(
-            o.iter().map(|(k, x)| (k.clone(), v_to_json(x))).collect(),
+        Value::Str(str_val) => serde_json::Value::String(str_val.clone()),
+        Value::List(arr_val) => serde_json::Value::Array(arr_val.iter().map(val_to_json).collect()),
+        Value::Obj(obj_val) => serde_json::Value::Object(
+            obj_val.iter().map(|(key, item)| (key.clone(), val_to_json(item))).collect(),
         ),
-        V::Ellipsis => serde_json::Value::Null,
+        Value::Ellipsis => serde_json::Value::Null,
     }
 }

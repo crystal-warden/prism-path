@@ -1,3 +1,5 @@
+# cocotb tb: ppt_ctrl_plane (the control interpreter wired to the pack loader it drives).
+#   make -f Makefile.ctrlplane   the gate: runs the sim, then fails on any cocotb failure
 SIM ?= verilator
 TOPLEVEL_LANG ?= verilog
 VERILOG_SOURCES = $(PWD)/../rtl/ppt_ctrl_plane.sv $(PWD)/../rtl/ppt_ctrl_interp.sv $(PWD)/../rtl/ppt_pack_loader.sv
@@ -6,4 +8,7 @@ COCOTB_TEST_MODULES = test_ppt_ctrl_plane
 TOPLEVEL = $(COCOTB_TOPLEVEL)
 MODULE = $(COCOTB_TEST_MODULES)
 EXTRA_ARGS += -I$(PWD)/../rtl
+GATE_NAME = ctrlplane
+GATE_EXPECTED = ctrl_plane
+include gate.mk
 include $(shell cocotb-config --makefiles)/Makefile.sim

@@ -2,7 +2,7 @@
 // change to the flow. Read the build report from stdin, decide pass/coverage, print ONE JSON object,
 // exit 0. A nonzero exit routes to the flow's error tier. This scans stdin for the report's fields; a
 // worker needing structured input would parse the [context] JSON block (see ci_gate.py).
-// Build once (rustc -O ci_gate.rs), then wire it in with:  cli_agent(["./ci_gate"], pass_state=["report"])
+// Build once (rustc -O ci_gate.rs), then wire it in with:  cli_worker(["./ci_gate"], pass_state=["report"])
 use std::io::{self, Read};
 
 fn field(text: &str, key: &str) -> Option<i64> {

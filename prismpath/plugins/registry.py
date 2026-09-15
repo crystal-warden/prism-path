@@ -31,6 +31,7 @@ from __future__ import annotations
 import importlib
 import json
 import pkgutil
+import warnings
 from dataclasses import dataclass, field
 from typing import Callable, Dict, List, Optional
 
@@ -79,10 +80,10 @@ def discover() -> Dict[str, PluginInfo]:
     the audit listing makes that visible rather than silent)."""
     found: Dict[str, PluginInfo] = {}
     import prismpath.plugins as _pkg
-    for m in pkgutil.iter_modules(_pkg.__path__):
-        if not m.ispkg and m.name in ("registry",):
+    for module_info in pkgutil.iter_modules(_pkg.__path__):
+        if not module_info.ispkg and module_info.name in ("registry",):
             continue
-        info = _inspect(m.name, f"prismpath.plugins.{m.name}", "bundled")
+        info = _inspect(module_info.name, f"prismpath.plugins.{module_info.name}", "bundled")
         if info:
             found[info.name] = info
     try:
@@ -120,22 +121,22 @@ def _bound_ref(node) -> Optional[str]:
         return None
     if args.get("name"):
         return args["name"]
-    return next((k for k, v in args.items() if v is None), None)
+    return next((arg_name for arg_name, arg_value in args.items() if arg_value is None), None)
 
 
-def worker_agent(graph, default: Optional[Callable] = None) -> Callable:
-    """A harness agent for `graph` that dispatches `@worker`-annotated nodes to registry workers and
+def worker_for(graph, default: Optional[Callable] = None) -> Callable:
+    """A harness worker for `graph` that dispatches `@worker`-annotated nodes to registry workers and
     everything else to `default`. Bindings resolve at CONSTRUCTION (one registry pass, fail-fast —
     a missing tool is discovered before the run starts, not at hop 40). The dispatched outcome (when
     a dict) gains a `_worker` provenance field, so the transcript and `_outcomes` record which
     installed tool produced each hop — the audit trail the binding annotation promises."""
     bound: Dict[str, tuple] = {}
-    for name, n in graph.nodes.items():
-        ref = _bound_ref(n)
+    for name, node_obj in graph.nodes.items():
+        ref = _bound_ref(node_obj)
         if ref is not None:
             bound[name] = (ref, resolve_worker(ref))       # raises KeyError up front if unresolvable
 
-    def agent(node, instruction, state):
+    def worker(node, instruction, state):
         hit = bound.get(node)
         if hit is None:
             if default is None:
@@ -146,7 +147,15 @@ def worker_agent(graph, default: Optional[Callable] = None) -> Callable:
         if isinstance(out, dict):
             out.setdefault("_worker", ref)
         return out
-    return agent
+    return worker
+
+
+def worker_agent(graph, default: Optional[Callable] = None) -> Callable:
+    """What `worker_for` was called before the rename, kept importable so code written against the
+    old name keeps running."""
+    warnings.warn("worker_agent is now worker_for; the old name goes away in a later release",
+                  DeprecationWarning, stacklevel=2)
+    return worker_for(graph, default=default)
 
 
 def check_flow(graph) -> List[str]:
@@ -154,18 +163,18 @@ def check_flow(graph) -> List[str]:
     registry. Returns problems (empty = clean). This is the ecosystem's `validate` counterpart —
     run it in CI so a flow never reaches a host missing the tools it names."""
     problems = []
-    for name, n in graph.nodes.items():
-        args = n.annotations.get("worker")
+    for name, flow_node in graph.nodes.items():
+        args = flow_node.annotations.get("worker")
         if args is None:
             continue
-        ref = _bound_ref(n)
+        ref = _bound_ref(flow_node)
         if not ref:
             problems.append(f"node {name!r}: @worker has no name")
             continue
         try:
             resolve_worker(ref)
-        except KeyError as e:
-            problems.append(f"node {name!r}: {e.args[0]}")
+        except KeyError as exc:
+            problems.append(f"node {name!r}: {exc.args[0]}")
     return problems
 
 
@@ -173,13 +182,13 @@ def audit(as_json: bool = False) -> str:
     """The human/CI-readable listing of everything installed and what each thing provides."""
     infos = discover()
     if as_json:
-        return json.dumps({k: v.summary() for k, v in sorted(infos.items())}, indent=2)
+        return json.dumps({plugin_name: plugin_info.summary() for plugin_name, plugin_info in sorted(infos.items())}, indent=2)
     if not infos:
         return "no plugins installed"
     lines = []
-    for name, i in sorted(infos.items()):
-        provides = ([f"workers: {', '.join(i.workers)}"] if i.workers else []) \
-                 + (["gate"] if i.is_gate else []) + (["cli"] if i.has_cli else [])
-        lines.append(f"{name} {i.version} [{i.source}] — {i.description or i.module}")
+    for name, plugin_info in sorted(infos.items()):
+        provides = ([f"workers: {', '.join(plugin_info.workers)}"] if plugin_info.workers else []) \
+                 + (["gate"] if plugin_info.is_gate else []) + (["cli"] if plugin_info.has_cli else [])
+        lines.append(f"{name} {plugin_info.version} [{plugin_info.source}] — {plugin_info.description or plugin_info.module}")
         lines.append(f"    provides: {'; '.join(provides) or '(nothing declared)'}")
     return "\n".join(lines)

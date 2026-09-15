@@ -12,12 +12,12 @@ from prismpath.kernel.parser import parse, parse_file
 from prismpath.kernel import analysis
 
 def _codes(findings):
-    return {f.code for f in findings}
+    return {finding.code for finding in findings}
 
 
 # --- in-graph: the deadlock check ----------------------------------------------------
 def test_spawn_without_join_edge_is_a_deadlock_error():
-    g = parse("""---
+    graph = parse("""---
 name: p
 start: dispatch
 ---
@@ -30,13 +30,13 @@ Fan out but forget the join edge.
 ## escalate
 Human.
 """)
-    f = analysis.analyze(g)
-    assert "spawn-no-join-edge" in _codes(f)
-    assert any(x.severity == "error" for x in f if x.code == "spawn-no-join-edge")
+    findings = analysis.analyze(graph)
+    assert "spawn-no-join-edge" in _codes(findings)
+    assert any(finding.severity == "error" for finding in findings if finding.code == "spawn-no-join-edge")
 
 
 def test_spawn_join_edge_present_no_error():
-    g = parse("""---
+    graph = parse("""---
 name: p
 start: dispatch
 ---
@@ -48,11 +48,11 @@ start: dispatch
 ## aggregate
 Combine.
 """)
-    assert "spawn-no-join-edge" not in _codes(analysis.analyze(g))
+    assert "spawn-no-join-edge" not in _codes(analysis.analyze(graph))
 
 
 def test_quorum_join_requires_on_event_quorum_edge():
-    g = parse("""---
+    graph = parse("""---
 name: p
 start: dispatch
 ---
@@ -65,11 +65,11 @@ start: dispatch
 Combine.
 """)
     # declared quorum but only an all_done edge -> the quorum event has nowhere to land
-    assert "spawn-no-join-edge" in _codes(analysis.analyze(g))
+    assert "spawn-no-join-edge" in _codes(analysis.analyze(graph))
 
 
 def test_spawn_without_child_arg_errors():
-    g = parse("""---
+    graph = parse("""---
 name: p
 start: dispatch
 ---
@@ -81,7 +81,7 @@ start: dispatch
 ## aggregate
 Combine.
 """)
-    assert "spawn-no-child" in _codes(analysis.analyze(g))
+    assert "spawn-no-child" in _codes(analysis.analyze(graph))
 
 
 # --- cross-file: child existence / terminal / contract -------------------------------
@@ -115,15 +115,15 @@ Fan out.
 ## aggregate
 Combine.
 """
-    p = tmp_path / "parent.md"
-    p.write_text(body)
-    return p
+    path = tmp_path / "parent.md"
+    path.write_text(body)
+    return path
 
 
 def test_missing_child_file_is_an_error(tmp_path):
-    p = _parent(tmp_path, "@spawn(child=nope.md, join=all_done)")
-    g = parse_file(str(p))
-    assert "spawn-missing-child" in _codes(analysis.analyze_composition(g, str(p)))
+    parent_path = _parent(tmp_path, "@spawn(child=nope.md, join=all_done)")
+    graph = parse_file(str(parent_path))
+    assert "spawn-missing-child" in _codes(analysis.analyze_composition(graph, str(parent_path)))
 
 
 def test_child_without_terminal_is_an_error(tmp_path):
@@ -136,25 +136,25 @@ start: a
 Never terminates.
 -> a: always
 """)
-    p = _parent(tmp_path, "@spawn(child=loop.md, join=all_done)")
-    g = parse_file(str(p))
-    assert "spawn-child-no-terminal" in _codes(analysis.analyze_composition(g, str(p)))
+    parent_path = _parent(tmp_path, "@spawn(child=loop.md, join=all_done)")
+    graph = parse_file(str(parent_path))
+    assert "spawn-child-no-terminal" in _codes(analysis.analyze_composition(graph, str(parent_path)))
 
 
 def test_valid_composition_has_no_spawn_findings(tmp_path):
     (tmp_path / "child.md").write_text(VALID_CHILD)
-    p = _parent(tmp_path, "@spawn(child=child.md, join=all_done)", "@expect(verdict)")
-    g = parse_file(str(p))
-    comp = analysis.analyze_composition(g, str(p))
-    assert not [f for f in comp if f.code.startswith("spawn-")]      # child exists, terminal, @expect met
+    parent_path = _parent(tmp_path, "@spawn(child=child.md, join=all_done)", "@expect(verdict)")
+    graph = parse_file(str(parent_path))
+    comp = analysis.analyze_composition(graph, str(parent_path))
+    assert not [finding for finding in comp if finding.code.startswith("spawn-")]      # child exists, terminal, @expect met
 
 
 def test_expect_not_emitted_by_child_warns(tmp_path):
     (tmp_path / "child.md").write_text(VALID_CHILD)                  # child @emits(verdict), not `score`
-    p = _parent(tmp_path, "@spawn(child=child.md, join=all_done)", "@expect(verdict, score)")
-    g = parse_file(str(p))
-    comp = analysis.analyze_composition(g, str(p))
-    unmet = [f for f in comp if f.code == "spawn-expect-unmet"]
+    parent_path = _parent(tmp_path, "@spawn(child=child.md, join=all_done)", "@expect(verdict, score)")
+    graph = parse_file(str(parent_path))
+    comp = analysis.analyze_composition(graph, str(parent_path))
+    unmet = [finding for finding in comp if finding.code == "spawn-expect-unmet"]
     assert unmet and unmet[0].severity == "warning" and "score" in unmet[0].message
 
 
@@ -172,18 +172,18 @@ Review.
 ## done
 Done.
 """)
-    p = _parent(tmp_path, "@spawn(child=bare.md, join=all_done)", "@expect(verdict)")
-    g = parse_file(str(p))
-    assert "spawn-expect-unmet" not in _codes(analysis.analyze_composition(g, str(p)))
+    parent_path = _parent(tmp_path, "@spawn(child=bare.md, join=all_done)", "@expect(verdict)")
+    graph = parse_file(str(parent_path))
+    assert "spawn-expect-unmet" not in _codes(analysis.analyze_composition(graph, str(parent_path)))
 
 
 def test_composition_check_is_separate_from_pure_analyze(tmp_path):
     # analyze() must stay pure/in-graph: it does NOT read the child file, so a missing child is not
     # reported by analyze() alone — only analyze_composition() (which does I/O) surfaces it.
-    p = _parent(tmp_path, "@spawn(child=ghost.md, join=all_done)")
-    g = parse_file(str(p))
-    assert "spawn-missing-child" not in _codes(analysis.analyze(g))
-    assert "spawn-missing-child" in _codes(analysis.analyze_composition(g, str(p)))
+    parent_path = _parent(tmp_path, "@spawn(child=ghost.md, join=all_done)")
+    graph = parse_file(str(parent_path))
+    assert "spawn-missing-child" not in _codes(analysis.analyze(graph))
+    assert "spawn-missing-child" in _codes(analysis.analyze_composition(graph, str(parent_path)))
 
 
 def test_spawn_expect_type_mismatch(tmp_path):
@@ -200,10 +200,10 @@ start: review
 Done.
 """)
     # Parent expects score to be a number, but child emits it as a bool
-    p = _parent(tmp_path, "@spawn(child=child.md, join=all_done)", "@expect(score=number)")
-    g = parse_file(str(p))
-    comp = analysis.analyze_composition(g, str(p))
-    mismatches = [f for f in comp if f.code == "spawn-expect-type-mismatch"]
+    parent_path = _parent(tmp_path, "@spawn(child=child.md, join=all_done)", "@expect(score=number)")
+    graph = parse_file(str(parent_path))
+    comp = analysis.analyze_composition(graph, str(parent_path))
+    mismatches = [finding for finding in comp if finding.code == "spawn-expect-type-mismatch"]
     assert len(mismatches) == 1
     assert mismatches[0].node == "dispatch"
     assert "expects number" in mismatches[0].message

@@ -76,7 +76,7 @@
     "orchestration/orchestrator.py",
     "orchestration/sprint_flow.py"
   ],
-  "_orchestration_note": "The sprint and swarm machinery: the fallback orchestration layer for an organisation without one of its own (docs/design/control-plane.md). Kept in the package deliberately; not core, not an adapter, not gated by Signal-1.",
+  "_orchestration_note": "The sprint and swarm machinery: the fallback orchestration layer for an organisation without one of its own (docs/design/orchestration.md). Kept in the package deliberately; not core, not an adapter, not gated by Signal-1.",
   "_layout_note": "Package layout (September 2026): kernel/, routing/, safety/, hotswap/, ledgers/, workers/, orchestration/, evals/, telemetry/; the old flat module names remain as shims that alias the same module objects.",
   "console": [
     "mission_control/"

@@ -60,10 +60,10 @@ def _parse_anno_args(argstr: str) -> dict:
         if not part:
             continue
         if "=" in part:
-            k, v = part.split("=", 1)
-            k = k.strip()
-            if k:                       # ignore a malformed `=value` with no key
-                args[k] = v.strip()
+            key, val = part.split("=", 1)
+            key = key.strip()
+            if key:                       # ignore a malformed `=value` with no key
+                args[key] = val.strip()
         else:
             args[part] = None
     return args
@@ -97,13 +97,13 @@ def parse(text: str) -> Graph:
         raise ParseError(f"flow document exceeds PRISMPATH_MAX_FLOW_BYTES ({MAX_FLOW_BYTES} bytes)")
     meta = {}
     body = text
-    m = re.match(r"^---\s*\n(.*?)\n---\s*\n(.*)$", text, re.DOTALL)
-    if m:
-        for line in m.group(1).splitlines():
+    match = re.match(r"^---\s*\n(.*?)\n---\s*\n(.*)$", text, re.DOTALL)
+    if match:
+        for line in match.group(1).splitlines():
             if ":" in line:
-                k, v = line.split(":", 1)
-                meta[k.strip()] = v.strip()
-        body = m.group(2)
+                key, val = line.split(":", 1)
+                meta[key.strip()] = val.strip()
+        body = match.group(2)
 
     nodes: Dict[str, Node] = {}
     cur: Node | None = None
@@ -115,10 +115,10 @@ def parse(text: str) -> Graph:
             cur.instruction = "\n".join(instr_lines).strip()
 
     for line in body.splitlines():
-        h = HEAD_RE.match(line)
-        if h:
+        head_match = HEAD_RE.match(line)
+        if head_match:
             flush()
-            name = h.group(1).strip().lower().replace(" ", "_")
+            name = head_match.group(1).strip().lower().replace(" ", "_")
             # Count distinct node names — a new heading that reuses a name isn't a new node.
             if name not in nodes and len(nodes) >= MAX_NODES:
                 raise ParseError(f"flow document exceeds PRISMPATH_MAX_NODES ({MAX_NODES} nodes)")
@@ -128,24 +128,24 @@ def parse(text: str) -> Graph:
             continue
         if cur is None:
             continue
-        e = EDGE_RE.match(line)
-        a = ANNO_RE.match(line)
-        if e:
+        edge_match = EDGE_RE.match(line)
+        anno_match = ANNO_RE.match(line)
+        if edge_match:
             edge_count += 1
             if edge_count > MAX_EDGES:
                 raise ParseError(f"flow document exceeds PRISMPATH_MAX_EDGES ({MAX_EDGES} edges)")
-            cur.edges.append((e.group(1).strip(), e.group(2).strip()))
-        elif a:
+            cur.edges.append((edge_match.group(1).strip(), edge_match.group(2).strip()))
+        elif anno_match:
             # merge repeated annotations of the same name (e.g. @emits split across two lines) rather
             # than overwriting, so a later declaration doesn't silently drop the earlier fields.
-            cur.annotations.setdefault(a.group(1).strip(), {}).update(_parse_anno_args(a.group(2)))
+            cur.annotations.setdefault(anno_match.group(1).strip(), {}).update(_parse_anno_args(anno_match.group(2)))
         else:
             instr_lines.append(line)
     flush()
 
     start = meta.get("start") or (next(iter(nodes)) if nodes else "")
-    g = Graph(name=meta.get("name", "flow"), start=start, nodes=nodes, meta=meta)
-    return g
+    parsed_graph = Graph(name=meta.get("name", "flow"), start=start, nodes=nodes, meta=meta)
+    return parsed_graph
 
 
 def parse_file(path: str) -> Graph:
@@ -155,8 +155,8 @@ def parse_file(path: str) -> Graph:
         raise ParseError(
             f"flow file {os.path.basename(path)!r} is {sz} bytes, exceeds "
             f"PRISMPATH_MAX_FLOW_BYTES ({MAX_FLOW_BYTES})")
-    with open(path, encoding="utf-8") as f:
-        return parse(f.read())
+    with open(path, encoding="utf-8") as file_handle:
+        return parse(file_handle.read())
 
 
 def reachable(graph) -> set:

@@ -11,18 +11,18 @@ const here = dirname(fileURLToPath(import.meta.url));
 const data = JSON.parse(readFileSync(join(here, "conformance", "level_m.json"), "utf8"));
 
 let pass = 0, fail = 0;
-for (const c of data.cases) {
-  const got = flowLevelM(parse(c.flow));
+for (const testCase of data.cases) {
+  const got = flowLevelM(parse(testCase.flow));
   const norm = {
     level_m: got.level_m,
-    non_member_edges: got.non_member_edges.map((e) => ({
-      node: e.node, target: e.target, condition: e.condition, reason: e.reason,
+    non_member_edges: got.non_member_edges.map((edge) => ({
+      node: edge.node, target: edge.target, condition: edge.condition, reason: edge.reason,
     })),
   };
-  if (JSON.stringify(norm) === JSON.stringify(c.expected)) pass++;
+  if (JSON.stringify(norm) === JSON.stringify(testCase.expected)) pass++;
   else {
     fail++;
-    console.error(`FAIL ${c.key}\n  expected ${JSON.stringify(c.expected)}\n  got      ${JSON.stringify(norm)}`);
+    console.error(`FAIL ${testCase.key}\n  expected ${JSON.stringify(testCase.expected)}\n  got      ${JSON.stringify(norm)}`);
   }
 }
 console.log(`Level M: ${pass}/${pass + fail} match the frozen vectors`);

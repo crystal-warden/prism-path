@@ -32,10 +32,10 @@ def test_generate_shape_and_fields():
     required_keys = {"text", "rule", "policy", "direction", "stratum", "klass", "variant"}
     valid_klasses = {bypass_corpus.CONTROL, bypass_corpus.MECHANICAL, bypass_corpus.SEMANTIC}
 
-    for v in variants:
-        assert required_keys.issubset(set(v.keys()))
-        assert v["klass"] in valid_klasses
-        assert isinstance(v["variant"], str) and len(v["variant"]) > 0
+    for variant in variants:
+        assert required_keys.issubset(set(variant.keys()))
+        assert variant["klass"] in valid_klasses
+        assert isinstance(variant["variant"], str) and len(variant["variant"]) > 0
 
 
 def test_generate_determinism():

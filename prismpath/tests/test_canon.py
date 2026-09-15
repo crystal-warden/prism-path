@@ -17,8 +17,8 @@ def test_compact_matches_the_signature_recipe():
 
 def test_spaced_matches_the_manifest_recipe():
     assert canon.canonical_spaced(OBJ) == json.dumps(OBJ, sort_keys=True).encode()
-    o = {"t": (1, 2)}
-    assert canon.canonical_spaced(o, default=str) == json.dumps(o, sort_keys=True, default=str).encode()
+    document = {"t": (1, 2)}
+    assert canon.canonical_spaced(document, default=str) == json.dumps(document, sort_keys=True, default=str).encode()
 
 
 def test_digests():
@@ -28,18 +28,18 @@ def test_digests():
 
 
 def test_file_digest_and_manifest_hash(tmp_path):
-    p = tmp_path / "f.md"; p.write_bytes(b"## a\n")
-    assert canon.file_sha256_prefixed(p) == "sha256:" + hashlib.sha256(b"## a\n").hexdigest()
-    m = {"manifest_hash": "stale", "policy_hash": "sha256:1", "gate_id": "g", "ingestion_hashes": ["sha256:aa"]}
-    body = json.dumps({k: m[k] for k in m if k != "manifest_hash"}, sort_keys=True).encode()
-    assert canon.manifest_hash(m) == hashlib.sha256(body).hexdigest()
+    path = tmp_path / "f.md"; path.write_bytes(b"## a\n")
+    assert canon.file_sha256_prefixed(path) == "sha256:" + hashlib.sha256(b"## a\n").hexdigest()
+    manifest = {"manifest_hash": "stale", "policy_hash": "sha256:1", "gate_id": "g", "ingestion_hashes": ["sha256:aa"]}
+    body = json.dumps({key: manifest[key] for key in manifest if key != "manifest_hash"}, sort_keys=True).encode()
+    assert canon.manifest_hash(manifest) == hashlib.sha256(body).hexdigest()
 
 
 def test_atomic_write_creates_parent_and_replaces(tmp_path):
-    p = tmp_path / "deep" / "dir" / "x.json"
-    canon.atomic_write(p, "one")
-    canon.atomic_write(p, "two")
-    assert p.read_text() == "two" and not os.path.exists(str(p) + ".tmp")
+    path = tmp_path / "deep" / "dir" / "x.json"
+    canon.atomic_write(path, "one")
+    canon.atomic_write(path, "two")
+    assert path.read_text() == "two" and not os.path.exists(str(path) + ".tmp")
 
 
 def test_safe_name():

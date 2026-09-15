@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
-"""Human-readable inspect path — the answer to "opaque wire, no tcpdump".
+"""Human-readable inspect path  -  the answer to "opaque wire, no tcpdump".
 
 Point it at a captured telemetry bitstream + the flow `.md` and it decodes each reading back to its
-symbols, the reconstructed representative values, and — the useful part — the **routing decision** the
+symbols, the reconstructed representative values, and  -  the useful part  -  the **routing decision** the
 policy makes on it. The `.md` IS the decoder: it defines both the field partition (how bits become
 symbols) and the routing (how symbols become a decision), so no bespoke, drifting tooling is needed.
 
@@ -26,42 +26,44 @@ try:
 except ImportError:  # run as a loose script from a clone: make the repo root importable
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
-from prismpath.telemetry import quantizer as q   # noqa: E402
-from prismpath.telemetry import wire as w        # noqa: E402
-from prismpath.telemetry import zeckendorf as z  # noqa: E402
+from prismpath.telemetry import quantizer   # noqa: E402
+from prismpath.telemetry import wire        # noqa: E402
+from prismpath.telemetry import zeckendorf as zeck  # noqa: E402
 from prismpath.kernel.parser import parse  # noqa: E402
 
 
-def _show(v):
-    return "<other>" if v == q._OTHER else v
+def _show(value):
+    return "<other>" if value == quantizer.OTHER_CELL else value
 
 
 def encode_readings(parts, readings: List[dict]) -> str:
     """The multi-reading wire: each reading's fields in canonical order, concatenated (zero header)."""
-    return "".join(w.encode_reading(parts, r) for r in readings)
+    return "".join(wire.encode_reading(parts, reading) for reading in readings)
 
 
 def inspect(graph, bits: str) -> Dict:
     """Decode a bitstream against a flow -> per-reading symbols, reconstructed values, and routes."""
-    parts = q.build_partitions(graph)
+    parts = quantizer.build_partitions(graph)
     fields = sorted(parts.keys())
-    nodes = w.decision_nodes(graph)
+    nodes = wire.decision_nodes(graph)
     nf = len(fields)
-    wire_ints = z.decode_stream(bits)
+    wire_ints = zeck.decode_stream(bits)
     n_complete = len(wire_ints) // nf if nf else 0
     rows = []
-    for i in range(n_complete):
-        syms = {fields[j]: wire_ints[i * nf + j] - 1 for j in range(nf)}
-        reading = q.reconstruct(parts, syms)
-        routes = {n: w.route_node(graph, n, reading) for n in nodes}
+    for reading_index in range(n_complete):
+        syms = {fields[field_index]: wire_ints[reading_index * nf + field_index] - 1
+                for field_index in range(nf)}
+        reading = quantizer.reconstruct(parts, syms)
+        routes = {node: wire.route_node(graph, node, reading) for node in nodes}
         rows.append({"symbols": syms,
-                     "reading": {f: _show(v) for f, v in reading.items()},
+                     "reading": {field: _show(value) for field, value in reading.items()},
                      "routes": routes})
     trailing = len(wire_ints) - n_complete * nf          # leftover ints = a partial final frame
-    dist = Counter(tuple(sorted(r["routes"].items())) for r in rows)
+    dist = Counter(tuple(sorted(row["routes"].items())) for row in rows)
     return {"fields": fields, "decision_nodes": nodes, "n_readings": len(rows),
             "trailing_ints": trailing, "readings": rows,
-            "route_distribution": {" ".join(f"{n}={t}" for n, t in k): c for k, c in dist.items()}}
+            "route_distribution": {" ".join(f"{node}={target}" for node, target in route_pairs): count
+                                   for route_pairs, count in dist.items()}}
 
 
 def _render(rep: Dict) -> str:
@@ -69,12 +71,12 @@ def _render(rep: Dict) -> str:
            f"decoded {rep['n_readings']} reading(s)"
            + (f"  (+{rep['trailing_ints']} trailing int(s) = partial final frame)"
               if rep["trailing_ints"] else ""), ""]
-    for i, r in enumerate(rep["readings"]):
-        route = ", ".join(f"{n}->{t}" for n, t in r["routes"].items())
-        out.append(f"#{i:4d}  {r['reading']}   =>  {route}")
+    for reading_index, reading in enumerate(rep["readings"]):
+        route = ", ".join(f"{node}->{target}" for node, target in reading["routes"].items())
+        out.append(f"#{reading_index:4d}  {reading['reading']}   =>  {route}")
     out += ["", "route distribution:"]
-    for k, c in sorted(rep["route_distribution"].items(), key=lambda kv: -kv[1]):
-        out.append(f"  {c:6d}  {k}")
+    for route_label, count in sorted(rep["route_distribution"].items(), key=lambda kv: -kv[1]):
+        out.append(f"  {count:6d}  {route_label}")
     return "\n".join(out)
 
 
@@ -83,12 +85,12 @@ def main(argv=None) -> int:
     ap.add_argument("--flow", required=True, help="the flow .md (the decoder)")
     ap.add_argument("--bits", required=True, help="file of 0/1 chars, or - for stdin")
     ap.add_argument("--json", action="store_true")
-    a = ap.parse_args(argv)
-    bits = sys.stdin.read() if a.bits == "-" else Path(a.bits).read_text()
+    args = ap.parse_args(argv)
+    bits = sys.stdin.read() if args.bits == "-" else Path(args.bits).read_text()
     bits = "".join(ch for ch in bits if ch in "01")
-    graph = parse(Path(a.flow).read_text())
+    graph = parse(Path(args.flow).read_text())
     rep = inspect(graph, bits)
-    print(json.dumps(rep, indent=1) if a.json else _render(rep))
+    print(json.dumps(rep, indent=1) if args.json else _render(rep))
     return 0
 
 

@@ -9,11 +9,11 @@
   documented     -> the pack's policy templates, generated for your org
 
 Every objective is scored by its declared mechanism, and its evidence provenance is reported. Output
-is a per-actor verdict tally plus the review-assistance notice. Nothing here is a legal determination.
+is a per-actor determination tally plus the review-assistance notice. Nothing here is a legal opinion.
 
-Run:  python adapters/compliance/assess_texas.py
+Run:  python -m adapters.compliance.assess_texas
 """
-import os, sys, json, glob
+import os, json, glob
 
 # ============================================================================
 # CONFIGURE — set these to your organization, then run. To point the config plane
@@ -37,11 +37,10 @@ SAMPLE_OPERATIONAL_PERFORMED = [
 ]
 # ============================================================================
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import compliance_adapter as ca
-import deterministic_checks as dc
-import sop_generator as sg
-import texas_ai_connector as tx
+from adapters.compliance import compliance_adapter as ca
+from adapters.compliance import deterministic_checks as dc
+from adapters.compliance import sop_generator as sg
+from adapters.compliance import texas_ai_connector as tx
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 
@@ -55,29 +54,30 @@ def operational_performed():
 def documented_coverage():
     """Controls covered by a generated policy template (the documented plane)."""
     covered = set()
-    for f in glob.glob(os.path.join(_HERE, "sop_specs", "texas_*.json")):
-        covered |= set(json.load(open(f))["controls"])
+    for spec_path in glob.glob(os.path.join(_HERE, "sop_specs", "texas_*.json")):
+        covered |= set(json.load(open(spec_path))["controls"])
     return covered
 
 
 def assess_control(cid, config_facts, documented, operational):
-    c = ca.get_control(cid)
+    control = ca.get_control(cid)
     objs = {}
-    for o in c["objectives"]:
-        oid, mech = o["id"], o["mechanism"]
+    for objective in control["objectives"]:
+        oid, mech = objective["id"], objective["mechanism"]
         if mech == "config":
-            m = dc.check_objectives(c, config_facts).get(oid)
-            ev = "engine-proven" if m is True else ("engine-refuted" if m is False else "not-derived(attested)")
+            met = dc.check_objectives(control, config_facts).get(oid)
+            ev = "engine-proven" if met is True else ("engine-refuted" if met is False else "not-derived(attested)")
         elif mech == "operational":
-            m = oid in operational
-            ev = "operational-record" if m else "no-record"
+            met = oid in operational
+            ev = "operational-record" if met else "no-record"
         else:
-            m = cid in documented
-            ev = "policy-provided" if m else "policy-needed"
-        objs[oid] = (m, ev)
-    vals = [m for m, _ in objs.values()]
-    status = "met" if all(v is True for v in vals) else ("partially-met" if any(v is True for v in vals) else "not-met")
-    return status, objs
+            met = cid in documented
+            ev = "policy-provided" if met else "policy-needed"
+        objs[oid] = (met, ev)
+    vals = [met for met, _ in objs.values()]
+    determination = ("met" if all(met is True for met in vals)
+                     else ("partially-met" if any(met is True for met in vals) else "not-met"))
+    return determination, objs
 
 
 def assess_actor(actor, config_facts, documented, operational):
@@ -86,9 +86,9 @@ def assess_actor(actor, config_facts, documented, operational):
     tally = {"met": 0, "partially-met": 0, "not-met": 0, "not-applicable": appl["counts"]["not_applicable"]}
     rows = []
     for cid in appl["applicable"]:
-        status, objs = assess_control(cid, config_facts, documented, operational)
-        tally[status] += 1
-        rows.append((cid, status, objs))
+        determination, objs = assess_control(cid, config_facts, documented, operational)
+        tally[determination] += 1
+        rows.append((cid, determination, objs))
     return appl, tally, rows
 
 
@@ -104,15 +104,15 @@ def main():
           f"({'your file' if OPERATIONAL_COMPLETIONS_PATH else 'built-in sample'})")
 
     config_facts, receipts = tx.derive_facts()
-    print(f"Config plane (engine-derived): {sum(1 for v in config_facts.values() if v)} facts proven "
+    print(f"Config plane (engine-derived): {sum(1 for fact_value in config_facts.values() if fact_value)} facts proven "
           f"from {len(receipts)} receipt(s)")
 
     for actor in ACTORS:
         appl, tally, rows = assess_actor(actor, config_facts, documented, operational)
         print(f"\n{'='*78}\nACTOR: {actor}   {tally}")
-        for cid, status, objs in rows:
+        for cid, determination, objs in rows:
             prov = ",".join(sorted({ev for _, ev in objs.values()}))
-            print(f"    {cid:14} {status:14} [{prov}]")
+            print(f"    {cid:14} {determination:14} [{prov}]")
     print(f"\n{'='*78}\nReview assistance only. Documented objectives shown as policy-provided still "
           "require\nadjudication of the policy content in production; counsel review is the gate.")
 

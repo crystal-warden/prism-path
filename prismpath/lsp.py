@@ -66,35 +66,35 @@ def _scan(text: str) -> dict:
     node_lines: Dict[str, int] = {}
     edges: List[dict] = []
     current = None
-    for i, line in enumerate(text.splitlines()):
-        h = HEAD_RE.match(line)
-        if h:
-            current = h.group(1).strip().lower().replace(" ", "_")
-            node_lines.setdefault(current, i)
+    for index, line in enumerate(text.splitlines()):
+        heading = HEAD_RE.match(line)
+        if heading:
+            current = heading.group(1).strip().lower().replace(" ", "_")
+            node_lines.setdefault(current, index)
             continue
-        e = EDGE_RE.match(line)
-        if e and current is not None:
-            edges.append({"node": current, "target": e.group(1), "condition": e.group(2),
-                          "line": i, "text": line})
+        edge_match = EDGE_RE.match(line)
+        if edge_match and current is not None:
+            edges.append({"node": current, "target": edge_match.group(1), "condition": edge_match.group(2),
+                          "line": index, "text": line})
     return {"nodes": node_lines, "edges": edges}
 
 
-def _line_range(i: int, text_line: str = "") -> dict:
-    return {"start": {"line": i, "character": 0},
-            "end": {"line": i, "character": max(len(text_line), 1)}}
+def _line_range(index: int, text_line: str = "") -> dict:
+    return {"start": {"line": index, "character": 0},
+            "end": {"line": index, "character": max(len(text_line), 1)}}
 
 
-def _finding_range(f, scan: dict, lines: List[str]) -> dict:
+def _finding_range(finding, scan: dict, lines: List[str]) -> dict:
     """Best anchor for a finding: the edge line its message names, else the node heading."""
-    if f.node and f.node in scan["nodes"]:
-        for e in scan["edges"]:
-            if e["node"] != f.node:
+    if finding.node and finding.node in scan["nodes"]:
+        for edge in scan["edges"]:
+            if edge["node"] != finding.node:
                 continue
-            if (f"-> {e['target']!r}" in f.message or f"'{e['target']}'" in f.message
-                    or repr(e["condition"]) in f.message):
-                return _line_range(e["line"], e["text"])
-        i = scan["nodes"][f.node]
-        return _line_range(i, lines[i] if i < len(lines) else "")
+            if (f"-> {edge['target']!r}" in finding.message or f"'{edge['target']}'" in finding.message
+                    or repr(edge["condition"]) in finding.message):
+                return _line_range(edge["line"], edge["text"])
+        index = scan["nodes"][finding.node]
+        return _line_range(index, lines[index] if index < len(lines) else "")
     return _line_range(0, lines[0] if lines else "")
 
 
@@ -161,8 +161,8 @@ class Server:
         try:
             handler = {
                 "initialize": self._initialize,
-                "initialized": lambda p: None,
-                "shutdown": lambda p: None,
+                "initialized": lambda params: None,
+                "shutdown": lambda params: None,
                 "exit": self._exit,
                 "textDocument/didOpen": self._did_open,
                 "textDocument/didChange": self._did_change,
@@ -180,9 +180,9 @@ class Server:
             result = handler(params)
             if msg_id is not None and method != "exit":
                 self._reply(msg_id, result=result)
-        except Exception as e:                          # noqa: BLE001 - a server must not die mid-edit
+        except Exception as error:                          # noqa: BLE001 - a server must not die mid-edit
             if msg_id is not None:
-                self._reply(msg_id, error={"code": -32603, "message": str(e)})
+                self._reply(msg_id, error={"code": -32603, "message": str(error)})
 
     # -- lifecycle -----------------------------------------------------------
     def _initialize(self, params: dict) -> dict:
@@ -247,18 +247,18 @@ class Server:
                     findings += lint.polarity_mirror(graph)
                 except Exception:                       # noqa: BLE001 - embedder extra absent
                     pass
-            for f in findings:
+            for finding in findings:
                 diags.append({
-                    "range": _finding_range(f, scan, lines),
-                    "severity": 1 if f.severity == "error" else 2,
-                    "code": f.code,
+                    "range": _finding_range(finding, scan, lines),
+                    "severity": 1 if finding.severity == "error" else 2,
+                    "code": finding.code,
                     "source": "prismpath",
-                    "message": f.message,
+                    "message": finding.message,
                 })
-        except Exception as e:                          # noqa: BLE001 - unparseable mid-edit
+        except Exception as error:                          # noqa: BLE001 - unparseable mid-edit
             diags.append({"range": _line_range(0, lines[0] if lines else ""),
                           "severity": 1, "code": "parse-error", "source": "prismpath",
-                          "message": str(e)})
+                          "message": str(error)})
         self._notify("textDocument/publishDiagnostics", {"uri": uri, "diagnostics": diags})
 
     # -- language features ---------------------------------------------------
@@ -278,23 +278,25 @@ class Server:
 
         stripped = prefix.lstrip()
         if stripped.startswith("@"):
-            items = [{"label": a, "kind": 14, "insertText": f"{a}()"} for a in _ANNOTATIONS]
+            items = [{"label": annotation, "kind": 14, "insertText": f"{annotation}()"}
+                     for annotation in _ANNOTATIONS]
         elif "->" in prefix and ":" in prefix.split("->", 1)[1]:
             # condition position: tier keywords + the fields this flow's predicates read
-            items = [{"label": k, "kind": 14} for k in _KEYWORDS]
+            items = [{"label": keyword, "kind": 14} for keyword in _KEYWORDS]
             fields = {"visits", "error_count"}
             if graph is not None:
                 from prismpath.kernel.contract import derive_contract
                 for spec in derive_contract(graph).values():
                     fields |= set(spec)
-            items += [{"label": f, "kind": 5} for f in sorted(fields)]
+            items += [{"label": finding, "kind": 5} for finding in sorted(fields)]
         elif "->" in prefix:
             # target position: every node in the document
             if graph is not None:
-                items = [{"label": n, "kind": 6} for n in graph.nodes]
+                items = [{"label": node_name, "kind": 6} for node_name in graph.nodes]
         else:
             items = [{"label": "-> ", "kind": 15, "detail": "edge"}] + \
-                    [{"label": a, "kind": 14, "insertText": f"@{a}()"} for a in _ANNOTATIONS]
+                    [{"label": annotation, "kind": 14, "insertText": f"@{annotation}()"}
+                     for annotation in _ANNOTATIONS]
         return {"isIncomplete": False, "items": items}
 
     def _hover(self, params: dict) -> Optional[dict]:
@@ -307,10 +309,10 @@ class Server:
         line = lines[pos["line"]]
         scan = _scan(text)
 
-        e = EDGE_RE.match(line)
-        if e:
-            tier = _tier(e.group(2))
-            md = (f"**edge** `-> {e.group(1)}`  \n"
+        edge_match = EDGE_RE.match(line)
+        if edge_match:
+            tier = _tier(edge_match.group(2))
+            md = (f"**edge** `-> {edge_match.group(1)}`  \n"
                   f"tier: **{tier}** — {_TIER_BLURB[tier]}")
             return {"contents": {"kind": "markdown", "value": md},
                     "range": _line_range(pos["line"], line)}
@@ -329,8 +331,9 @@ class Server:
             node = None
         if node is None:
             return None
-        rows = [f"- `-> {t}` — *{_tier(c)}* `{c}`" for t, c in node.edges] or ["- *(terminal)*"]
-        annos = ", ".join(f"@{a}" for a in node.annotations) if node.annotations else ""
+        rows = [f"- `-> {edge_target}` — *{_tier(condition)}* `{condition}`"
+                for edge_target, condition in node.edges] or ["- *(terminal)*"]
+        annos = ", ".join(f"@{annotation}" for annotation in node.annotations) if node.annotations else ""
         anno_part = "  \n" + annos if annos else ""
         md = f"**## {current}**{anno_part}\n" + "\n".join(rows)
         return {"contents": {"kind": "markdown", "value": md}}
@@ -342,8 +345,8 @@ class Server:
         scan = _scan(text)
         ordered = sorted(scan["nodes"].items(), key=lambda kv: kv[1])
         out = []
-        for i, (name, nline) in enumerate(ordered):
-            end = ordered[i + 1][1] - 1 if i + 1 < len(ordered) else max(len(lines) - 1, nline)
+        for index, (name, nline) in enumerate(ordered):
+            end = ordered[index + 1][1] - 1 if index + 1 < len(ordered) else max(len(lines) - 1, nline)
             out.append({
                 "name": name, "kind": 6,                # Method — reads well in outlines
                 "location": {"uri": uri, "range": {
@@ -369,11 +372,11 @@ def _uri_to_path(uri: str) -> Optional[str]:
 # ------------------------------------------------------------------ CLI (`prismpath lsp`)
 
 def add_parser(subparsers) -> None:
-    p = subparsers.add_parser(
+    parser = subparsers.add_parser(
         'lsp', help='Language Server over stdio: live diagnostics, completion, hover, and graph '
                     'preview in any LSP editor (Neovim, JetBrains via LSP4IJ, VS Code, …). '
                     'Stdlib only — see prismpath/editor/README.md for client setup.')
-    p.set_defaults(func=lsp_cmd)
+    parser.set_defaults(func=lsp_cmd)
 
 
 def lsp_cmd(args) -> int:

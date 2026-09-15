@@ -7,6 +7,7 @@ from __future__ import annotations
 import datetime as _dt
 import json
 import subprocess
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -19,6 +20,7 @@ SYSTEM_VERSION = {"prismpath": "repo@harness_commit", "opa": "1.20.2", "cedar": 
 GRADES = ("NATIVE", "WITH-WORK", "NOT")
 
 
+@lru_cache(maxsize=1)
 def harness_commit() -> str:
     try:
         return subprocess.run(["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True,

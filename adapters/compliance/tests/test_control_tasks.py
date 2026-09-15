@@ -3,8 +3,8 @@
 """Operational / evidence layer: recurring tasks, due/overdue status from cadence, and completion
 records that evidence the 'performed' objectives. Fail-closed and clock-free (dates passed in)."""
 import pytest
-import compliance_adapter as ca
-import control_tasks as ct
+from adapters.compliance import compliance_adapter as ca
+from adapters.compliance import control_tasks as ct
 
 
 def _control(cid):
@@ -18,10 +18,10 @@ def _ir_task():
 
 def test_specs_load_and_map_to_operational_objectives():
     assert "3.6.3" in ct.list_operational_controls()
-    t = _ir_task()
-    assert t["id"] == "ir-capability-test"
-    assert t["objectives"] == ["3.6.3[a]"]
-    assert t["cadence_days"] == 365
+    task = _ir_task()
+    assert task["id"] == "ir-capability-test"
+    assert task["objectives"] == ["3.6.3[a]"]
+    assert task["cadence_days"] == 365
 
 
 def test_all_task_spec_controls_exist_in_catalog():
@@ -89,6 +89,6 @@ def test_multi_objective_task_covers_both():
 
 def test_due_tasks_lists_everything_when_nothing_done():
     due = ct.due_tasks([], "2026-06-01")
-    controls_with_due = {d["control_id"] for d in due}
+    controls_with_due = {due_task["control_id"] for due_task in due}
     assert controls_with_due == set(ct.list_operational_controls())
-    assert all(d["overdue"] for d in due)
+    assert all(due_task["overdue"] for due_task in due)

@@ -47,7 +47,7 @@ def test_the_guard_satisfies_every_committed_vector():
 
     failures = []
     for case in data["cases"]:
-        policies = [guards[n] for n in case["policies"]]
+        policies = [guards[policy_name] for policy_name in case["policies"]]
         verdict = compose(policies).check(case["text"], case["direction"])
         expect = case["expect"]
 
@@ -72,7 +72,7 @@ def test_the_corpus_embeds_its_policy_sources():
 def test_the_corpus_keeps_meaningful_negatives():
     """Denials alone would let an over-blocking port pass. The allowed cases are normative too."""
     data = _load()
-    allowed = [c for c in data["cases"] if c["expect"]["allowed"]]
-    denied = [c for c in data["cases"] if not c["expect"]["allowed"]]
+    allowed = [case for case in data["cases"] if case["expect"]["allowed"]]
+    denied = [case for case in data["cases"] if not case["expect"]["allowed"]]
     assert len(allowed) >= 20, "too few negative cases to catch over-blocking"
     assert len(denied) >= 20, "too few positive cases to catch under-blocking"

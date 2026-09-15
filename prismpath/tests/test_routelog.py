@@ -26,38 +26,38 @@ Decide the kind of request.
 """
 
 
-def _unit(v):
-    v = np.asarray(v, "float32")
-    return v / (np.linalg.norm(v) or 1)
+def _unit(vector):
+    vector = np.asarray(vector, "float32")
+    return vector / (np.linalg.norm(vector) or 1)
 
 
 def _stub(monkeypatch):
     vecs = {"something is broken": _unit([1, 0]), "about a payment": _unit([0, 1]),
             "the app crashes": _unit([0.95, 0.05])}
     monkeypatch.setattr(embedder, "embed",
-                        lambda texts, is_query=False: np.asarray([vecs[t] for t in texts], "float32"))
+                        lambda texts, is_query=False: np.asarray([vecs[text] for text in texts], "float32"))
 
 
 def test_run_logged_emits_a_record_per_semantic_decision(tmp_path, monkeypatch):
     _stub(monkeypatch)
-    g = parse(FLOW)
+    graph = parse(FLOW)
     log = str(tmp_path / "routes.jsonl")
-    agent = lambda n, i, s: {"text": "the app crashes" if n == "classify" else n, "always": True}
-    routelog.run_logged(g, agent, log, router=EmbeddingRouter(), run_id="R1")
+    agent = lambda node, instruction, state: {"text": "the app crashes" if node == "classify" else node, "always": True}
+    routelog.run_logged(graph, agent, log, router=EmbeddingRouter(), run_id="R1")
     recs = routelog.load_records(log)
     assert len(recs) == 1                                   # one semantic node (classify); the rest deterministic
-    r = recs[0]
-    assert r["node"] == "classify" and r["flow"] == "triage" and r["run_id"] == "R1"
-    assert r["chosen"] == "bug" and r["mechanism"] == "embed" and r["escalated"] is False
-    assert {c["target"] for c in r["candidates"]} == {"bug", "billing"}
-    assert r["top1"] >= r["top2"] and r["label"] is None
+    record = recs[0]
+    assert record["node"] == "classify" and record["flow"] == "triage" and record["run_id"] == "R1"
+    assert record["chosen"] == "bug" and record["mechanism"] == "embed" and record["escalated"] is False
+    assert {candidate["target"] for candidate in record["candidates"]} == {"bug", "billing"}
+    assert record["top1"] >= record["top2"] and record["label"] is None
 
 
 def test_load_save_roundtrip(tmp_path):
     recs = [{"node": "a", "label": None}, {"node": "b", "label": "x"}]
-    p = str(tmp_path / "r.jsonl")
-    routelog.save_records(p, recs)
-    assert routelog.load_records(p) == recs
+    path = str(tmp_path / "r.jsonl")
+    routelog.save_records(path, recs)
+    assert routelog.load_records(path) == recs
 
 
 def test_label_records_fills_unlabeled(tmp_path):
@@ -68,8 +68,8 @@ def test_label_records_fills_unlabeled(tmp_path):
     ]
     # scripted ask: label n1 -> b, skip n3
     answers = {"n1": "b", "n3": None}
-    n = routelog.label_records(recs, lambda r, targets: answers[r["node"]])
-    assert n == 1                                           # only n1 newly labeled (n2 already, n3 skipped)
+    labeled_count = routelog.label_records(recs, lambda record, targets: answers[record["node"]])
+    assert labeled_count == 1                                           # only n1 newly labeled (n2 already, n3 skipped)
     assert recs[0]["label"] == "b" and recs[0]["label_source"] == "human"
     assert recs[2]["label"] is None
     stats = routelog.label_stats(recs)
@@ -77,8 +77,8 @@ def test_label_records_fills_unlabeled(tmp_path):
 
 
 def test_jsonl_sink_appends(tmp_path):
-    p = str(tmp_path / "s.jsonl")
-    sink = routelog.jsonl_sink(p)
+    path = str(tmp_path / "s.jsonl")
+    sink = routelog.jsonl_sink(path)
     sink({"a": 1})
     sink({"a": 2})
-    assert [json.loads(l) for l in open(p)] == [{"a": 1}, {"a": 2}]
+    assert [json.loads(line) for line in open(path)] == [{"a": 1}, {"a": 2}]

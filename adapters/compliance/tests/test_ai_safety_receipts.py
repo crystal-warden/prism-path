@@ -3,9 +3,9 @@
 """Real signed, anchored receipts for AI-safety determinations, and the payoff: with a key, the AST-2
 and AST-3 facts are MEASURED from actual crypto rather than taken from a declaration."""
 import pytest
-import compliance_adapter as ca
-import ai_safety_receipts as r
-import ai_safety as ais
+from adapters.compliance import compliance_adapter as ca
+from adapters.compliance import ai_safety_receipts as receipts
+from adapters.compliance import ai_safety as ais
 from prismpath.hotswap import policy_pack as pp
 @pytest.fixture
 def key(tmp_path):
@@ -17,32 +17,32 @@ def _det(vh="v3"):
 
 
 def test_receipt_sign_verify_roundtrip(key):
-    d = _det()
-    rec = r.sign_receipt(d, key, "2026-09-03T00:00:00Z")
+    determination = _det()
+    rec = receipts.sign_receipt(determination, key, "2026-09-03T00:00:00Z")
     assert len(bytes.fromhex(rec["signature"])) == 64        # a real Ed25519 signature
-    assert r.verify_receipt(rec, d, key["public"]) is True
+    assert receipts.verify_receipt(rec, determination, key["public"]) is True
 
 
 def test_receipt_detects_tampered_determination(key):
-    d = _det()
-    rec = r.sign_receipt(d, key, "2026-09-03T00:00:00Z")
-    tampered = dict(d, status="not-met")
-    assert r.verify_receipt(rec, tampered, key["public"]) is False
+    determination = _det()
+    rec = receipts.sign_receipt(determination, key, "2026-09-03T00:00:00Z")
+    tampered = dict(determination, status="not-met")
+    assert receipts.verify_receipt(rec, tampered, key["public"]) is False
 
 
 def test_receipt_detects_tampered_signature(key):
-    d = _det()
-    rec = r.sign_receipt(d, key, "2026-09-03T00:00:00Z")
+    determination = _det()
+    rec = receipts.sign_receipt(determination, key, "2026-09-03T00:00:00Z")
     rec["signature"] = "00" * 64
-    assert r.verify_receipt(rec, d, key["public"]) is False
+    assert receipts.verify_receipt(rec, determination, key["public"]) is False
 
 
 def test_anchor_verifies_and_detects_edit(key):
-    rec = r.sign_receipt(_det(), key, "2026-09-03T00:00:00Z")
-    m = r.anchor_receipt(rec)
-    assert r.verify_anchor(m) is True
-    m["root"] = "deadbeef"
-    assert r.verify_anchor(m) is False
+    rec = receipts.sign_receipt(_det(), key, "2026-09-03T00:00:00Z")
+    anchor = receipts.anchor_receipt(rec)
+    assert receipts.verify_anchor(anchor) is True
+    anchor["root"] = "deadbeef"
+    assert receipts.verify_anchor(anchor) is False
 
 
 def _state(dets, caps=None):
@@ -53,13 +53,13 @@ def _state(dets, caps=None):
 
 def test_measure_all_facts_true_when_signed_and_fingerprinted(key):
     mf = ais.measure(_state([_det("v3")]), key, "2026-09-03T00:00:00Z")["measured_facts"]
-    assert all(mf[k] for k in ("determinations_signed", "receipts_anchored",
-                               "point_in_time_replayable", "tests_fingerprinted", "stale_tests_refused"))
+    assert all(mf[fact_name] for fact_name in ("determinations_signed", "receipts_anchored",
+                                               "point_in_time_replayable", "tests_fingerprinted", "stale_tests_refused"))
 
 
 def test_measure_fingerprint_false_without_version_hash(key):
-    d = {"control_id": "AST-1", "status": "met", "tested_at": "x"}   # no version_hash
-    mf = ais.measure(_state([d]), key, "2026-09-03T00:00:00Z")["measured_facts"]
+    determination = {"control_id": "AST-1", "status": "met", "tested_at": "x"}   # no version_hash
+    mf = ais.measure(_state([determination]), key, "2026-09-03T00:00:00Z")["measured_facts"]
     assert mf["tests_fingerprinted"] is False
     assert mf["stale_tests_refused"] is False
     assert mf["determinations_signed"] is True                       # still signable
@@ -79,7 +79,7 @@ def test_measured_assessment_beats_a_declaration(key):
 
     # with a key: those facts are MEASURED from real signed, anchored receipts, so both controls decide met
     measured = ais.assess(_state([_det("v3")], dict(caps)), key=key, signed_at="2026-09-03T00:00:00Z")
-    by = {x["control_id"]: x for x in measured["results"]}
+    by = {result["control_id"]: result for result in measured["results"]}
     assert by["AST-2"]["status"] == "met"
     assert by["AST-3"]["status"] == "met"
     assert set(measured["measured"]) == {"determinations_signed", "receipts_anchored",

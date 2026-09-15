@@ -37,9 +37,9 @@ def _run(tmp_path, raw, decoded, *extra):
     flow = tmp_path / "flow.md"
     flow.write_text(_FLOW)
     rawf = tmp_path / "raw.ndjson"
-    rawf.write_text("".join(json.dumps(e) + "\n" for e in raw))
+    rawf.write_text("".join(json.dumps(event) + "\n" for event in raw))
     decf = tmp_path / "decoded.ndjson"
-    decf.write_text("".join(json.dumps(e) + "\n" for e in decoded))
+    decf.write_text("".join(json.dumps(event) + "\n" for event in decoded))
     return subprocess.run(
         [sys.executable, str(_VERIFY), str(flow), "--raw", str(rawf), "--decoded", str(decf),
          "--route-node", "classify", *extra],
@@ -47,35 +47,35 @@ def _run(tmp_path, raw, decoded, *extra):
 
 
 def test_parity_exits_zero(tmp_path):
-    decoded = [{"facet_route": r} for r in _ROUTES]
-    r = _run(tmp_path, _RAW, decoded)
-    assert r.returncode == 0, r.stdout + r.stderr
-    assert "**PARITY.**" in r.stdout
+    decoded = [{"facet_route": route} for route in _ROUTES]
+    result = _run(tmp_path, _RAW, decoded)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "**PARITY.**" in result.stdout
 
 
 def test_route_mismatch_named_by_position(tmp_path):
-    decoded = [{"facet_route": r} for r in ["critical", "ok", "ok"]]   # position 1 skewed
-    r = _run(tmp_path, _RAW, decoded)
-    assert r.returncode == 1
-    assert "event 1" in r.stdout and "`warn`" in r.stdout and "NO PARITY" in r.stdout
+    decoded = [{"facet_route": route} for route in ["critical", "ok", "ok"]]   # position 1 skewed
+    result = _run(tmp_path, _RAW, decoded)
+    assert result.returncode == 1
+    assert "event 1" in result.stdout and "`warn`" in result.stdout and "NO PARITY" in result.stdout
 
 
 def test_count_drift_flagged(tmp_path):
-    decoded = [{"facet_route": r} for r in _ROUTES[:2]]                # one decoded event lost
-    r = _run(tmp_path, _RAW, decoded)
-    assert r.returncode == 1 and "COUNT DRIFT" in r.stdout
+    decoded = [{"facet_route": route} for route in _ROUTES[:2]]                # one decoded event lost
+    result = _run(tmp_path, _RAW, decoded)
+    assert result.returncode == 1 and "COUNT DRIFT" in result.stdout
 
 
 def test_encoder_dropped_events_keep_positions_synced(tmp_path):
     raw = [_RAW[0], {"temp": 60}, _RAW[2]]            # middle event lacks `armed`: encoder dropped it
     decoded = [{"facet_route": "critical"}, {"facet_route": "ok"}]
-    r = _run(tmp_path, raw, decoded)
-    assert r.returncode == 0, r.stdout + r.stderr
-    assert "1 not encodable" in r.stdout and "**PARITY.**" in r.stdout
+    result = _run(tmp_path, raw, decoded)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "1 not encodable" in result.stdout and "**PARITY.**" in result.stdout
 
 
 def test_map_applies_to_raw_leg(tmp_path):
     raw = [{"sensor": {"temp": 95}, "armed": True}, {"sensor": {"temp": 10}, "armed": False}]
     decoded = [{"facet_route": "critical"}, {"facet_route": "ok"}]
-    r = _run(tmp_path, raw, decoded, "--map", "temp=sensor.temp")
-    assert r.returncode == 0, r.stdout + r.stderr
+    result = _run(tmp_path, raw, decoded, "--map", "temp=sensor.temp")
+    assert result.returncode == 0, result.stdout + result.stderr

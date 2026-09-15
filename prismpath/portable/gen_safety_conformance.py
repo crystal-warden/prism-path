@@ -133,16 +133,16 @@ def _probes() -> list[tuple[str, str]]:
 
 
 def _expect(guard, text: str, direction: str) -> dict:
-    v = guard.check(text, direction)
-    if v.allowed:
+    verdict = guard.check(text, direction)
+    if verdict.allowed:
         return {"allowed": True}
     # Name the rule and policy too: a port that denies for the WRONG reason is also a divergence,
     # and the citation is what a user-facing refusal is built from.
     return {
         "allowed": False,
-        "policy": v.policy,
-        "rule": v.rule,
-        "citation": v.citation,
+        "policy": verdict.policy,
+        "rule": verdict.rule,
+        "citation": verdict.citation,
     }
 
 
@@ -206,7 +206,7 @@ def main() -> int:
         return 0
 
     OUT_PATH.write_text(text, encoding="utf-8")
-    denied = sum(1 for c in data["cases"] if not c["expect"]["allowed"])
+    denied = sum(1 for case in data["cases"] if not case["expect"]["allowed"])
     print(f"Wrote {OUT_PATH}: {len(data['cases'])} cases ({denied} denied, {len(data['cases']) - denied} allowed)")
     return 0
 

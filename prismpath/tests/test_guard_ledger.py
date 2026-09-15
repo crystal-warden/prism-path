@@ -30,7 +30,7 @@ def log(tmp_path):
 
 
 def entries(log):
-    return [e for e in log.events if e["action"] == VERDICT_ACTION]
+    return [event for event in log.events if event["action"] == VERDICT_ACTION]
 
 
 def test_an_allowed_exchange_is_recorded_not_just_denials(guard, log):
@@ -42,8 +42,8 @@ def test_an_allowed_exchange_is_recorded_not_just_denials(guard, log):
         on_verdict=verdict_recorder(log, guard),
     )
     recorded = entries(log)
-    assert [e["data"]["direction"] for e in recorded] == ["inbound", "outbound"]
-    assert all(e["data"]["allowed"] for e in recorded)
+    assert [event["data"]["direction"] for event in recorded] == ["inbound", "outbound"]
+    assert all(event["data"]["allowed"] for event in recorded)
 
 
 def test_a_denial_records_the_rule_policy_and_citation(guard, log):
@@ -67,8 +67,8 @@ def test_every_entry_binds_the_policy_hash(guard, log):
     """Bind the logic, not just the output — which rules AND which normalization decided this."""
     guarded_exchange(guard, "explain lifetimes", lambda _t: "a lifetime is...",
                      on_verdict=verdict_recorder(log, guard))
-    for e in entries(log):
-        assert e["data"]["policy_hash"] == guard.policy_hash
+    for event in entries(log):
+        assert event["data"]["policy_hash"] == guard.policy_hash
 
 
 def test_changing_the_normalization_changes_what_entries_attest_to(guard, log, monkeypatch):

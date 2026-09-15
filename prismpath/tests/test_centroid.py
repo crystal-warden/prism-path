@@ -15,14 +15,14 @@ _VEC = {"cond_a": [1, 0, 0], "cond_b": [0, 1, 0], "tricky": [0.7, 0.5, 0]}
 
 def _stub(texts, is_query=False):
     out = []
-    for t in texts:
-        v = _VEC.get(t)
-        if v is None:                       # deterministic hash for unknown text
-            h = abs(hash(t))
-            v = [(h >> 0) & 7, (h >> 3) & 7, (h >> 6) & 7]
-        v = np.asarray(v, dtype="float32")
-        n = np.linalg.norm(v)
-        out.append(v / n if n else v)
+    for text in texts:
+        vector = _VEC.get(text)
+        if vector is None:                       # deterministic hash for unknown text
+            digest = abs(hash(text))
+            vector = [(digest >> 0) & 7, (digest >> 3) & 7, (digest >> 6) & 7]
+        vector = np.asarray(vector, dtype="float32")
+        norm = np.linalg.norm(vector)
+        out.append(vector / norm if norm else vector)
     return np.asarray(out, dtype="float32")
 
 
@@ -41,8 +41,8 @@ def test_centroid_overrides_a_confident_zeroshot_error(stub):
     # history: 3 real "tricky"-shaped outcomes actually took edge b -> the centroid captures it
     recs = [{"flow": "t", "node": "n", "outcome": "tricky", "label": "b"}] * 3
     cr = centroid.CentroidRouter.from_labeled(recs, {"t": GRAPH}, prior_weight=1.0)
-    d = cr.route("tricky", EDGES)
-    assert d.target == "b"                              # the confident error is fixed by history
+    decision = cr.route("tricky", EDGES)
+    assert decision.target == "b"                              # the confident error is fixed by history
 
 
 def test_zero_history_falls_back_to_the_condition_prior(stub):
@@ -59,10 +59,10 @@ def test_shrinkage_needs_enough_history_to_flip(stub):
 
 
 def test_build_centroids_only_semantic_and_counts(stub):
-    g = parse("---\nname:t\nstart:n\n---\n## n\nGo.\n-> a: cond_a\n-> keep: when x\n## a\n## keep\n")
+    graph = parse("---\nname:t\nstart:n\n---\n## n\nGo.\n-> a: cond_a\n-> keep: when x\n## a\n## keep\n")
     recs = [{"flow": "t", "node": "n", "outcome": "tricky", "label": "a"},
             {"flow": "t", "node": "n", "outcome": "tricky", "label": "keep"}]   # deterministic edge -> ignored
-    cen, cnt = centroid.build_centroids(recs, {"t": g})
+    cen, cnt = centroid.build_centroids(recs, {"t": graph})
     assert cnt == {"cond_a": 1}                        # only the semantic edge's condition gets a centroid
 
 
@@ -82,9 +82,9 @@ def test_drops_into_hybrid_as_the_embed_tier(stub):
     cr = centroid.CentroidRouter.from_labeled(recs, {"t": GRAPH}, prior_weight=1.0)
     # a HybridRouter with a confident centroid decision does NOT escalate (margin above default δ)
     called = {"llm": False}
-    h = HybridRouter(LLMRouter(lambda p: called.__setitem__("llm", True) or "1"), embed=cr)
-    d = h.route("tricky", EDGES)
-    assert d.target == "b" and called["llm"] is False
+    router = HybridRouter(LLMRouter(lambda prompt: called.__setitem__("llm", True) or "1"), embed=cr)
+    decision = router.route("tricky", EDGES)
+    assert decision.target == "b" and called["llm"] is False
 
 
 def test_cross_validate_returns_per_stratum(stub):

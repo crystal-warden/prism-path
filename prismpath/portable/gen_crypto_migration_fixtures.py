@@ -37,14 +37,14 @@ GATES = [1, 2, 3]
 FLOORS = [0, 1, 2, 3]
 
 
-def phase_policy(k: int) -> str:
+def phase_policy(policy_gate: int) -> str:
     return f"""---
-name: ca_phase_{k}
+name: ca_phase_{policy_gate}
 start: classify
 ---
 ## classify
 -> cui-path: when data_class == "cui"
--> legacy-path: when migration_phase < {k}
+-> legacy-path: when migration_phase < {policy_gate}
 -> hybrid-path: else
 ## cui-path
 -> suite-cnsa2-hybrid-1: when always
@@ -73,12 +73,12 @@ def build() -> dict:
     registry = cr.build_registry(SUITES, key_id=KEY_ID)
     rh = cr.registry_hash(registry)
     cells = []
-    for k in GATES:
-        graph = parse(phase_policy(k))
-        for f in FLOORS:
-            p4 = ca.prove_monotone_migration(graph, _envelope(rh, f), registry)
-            cells.append({"policy_gate": k, "envelope_floor": f, "p4": p4,
-                          "invariant_holds": (p4["ok"] == (f >= k))})
+    for policy_gate in GATES:
+        graph = parse(phase_policy(policy_gate))
+        for envelope_floor in FLOORS:
+            p4 = ca.prove_monotone_migration(graph, _envelope(rh, envelope_floor), registry)
+            cells.append({"policy_gate": policy_gate, "envelope_floor": envelope_floor, "p4": p4,
+                          "invariant_holds": (p4["ok"] == (envelope_floor >= policy_gate))})
     return {"format": "crypto-migration-conformance/1", "registry_hash": rh,
             "gates": GATES, "floors": FLOORS, "cells": cells}
 
@@ -86,8 +86,8 @@ def build() -> dict:
 def main() -> int:
     data = build()
     OUT.write_text(json.dumps(data, indent=1, sort_keys=True) + "\n")
-    passes = sum(1 for c in data["cells"] if c["p4"]["ok"])
-    inv = all(c["invariant_holds"] for c in data["cells"])
+    passes = sum(1 for cell in data["cells"] if cell["p4"]["ok"])
+    inv = all(cell["invariant_holds"] for cell in data["cells"])
     print(f"wrote {OUT.relative_to(HERE.parent.parent)}: {len(data['cells'])} cells "
           f"({passes} P4-pass), f>=k invariant holds in every cell: {inv}")
     return 0

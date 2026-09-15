@@ -80,8 +80,8 @@ _LED_RE = re.compile(r"RGB\s+LEDs?\s+(\w+)", re.IGNORECASE)
 def parse_led_color(instruction: str) -> int:
     """A node's LED color from its prose: the word after 'RGB LED(s)'. 0 (off) when absent —
     non-outcome nodes never light. Unknown color words -> 0."""
-    m = _LED_RE.search(instruction or "")
-    return _LED_COLORS.get(m.group(1).lower(), 0) if m else 0
+    led_match = _LED_RE.search(instruction or "")
+    return _LED_COLORS.get(led_match.group(1).lower(), 0) if led_match else 0
 
 
 class SubsetError(ValueError):
@@ -93,23 +93,23 @@ class SubsetError(ValueError):
         super().__init__(f"{reason}{': ' + detail if detail else ''}")
 
 
-def encode_scalar(v, intern: dict) -> tuple:
+def encode_scalar(value, intern: dict) -> tuple:
     """A Python scalar -> (type, i32). Mutates `intern` (str -> id; '' is id 0)."""
-    if v is None:
+    if value is None:
         return TY_NONE, 0
-    if isinstance(v, bool):
-        return TY_BOOL, int(v)
-    if isinstance(v, int):
-        if not I32_MIN <= v <= I32_MAX:
-            raise SubsetError("int-out-of-i32", repr(v))
-        return TY_INT, v
-    if isinstance(v, float):
-        raise SubsetError("float-value", repr(v))
-    if isinstance(v, str):
-        if v not in intern:
-            intern[v] = len(intern)
-        return TY_STR, intern[v]
-    raise SubsetError("non-scalar-value", type(v).__name__)
+    if isinstance(value, bool):
+        return TY_BOOL, int(value)
+    if isinstance(value, int):
+        if not I32_MIN <= value <= I32_MAX:
+            raise SubsetError("int-out-of-i32", repr(value))
+        return TY_INT, value
+    if isinstance(value, float):
+        raise SubsetError("float-value", repr(value))
+    if isinstance(value, str):
+        if value not in intern:
+            intern[value] = len(intern)
+        return TY_STR, intern[value]
+    raise SubsetError("non-scalar-value", type(value).__name__)
 
 
 # _desugar_chains lives in prismpath.model_check (imported above) — the ONE normalization the
@@ -151,9 +151,9 @@ class TableImage:
         if isinstance(node, ast.BoolOp):
             opc = OPC_AND if isinstance(node.op, ast.And) else OPC_OR
             prog: list = []
-            for i, v in enumerate(node.values):
-                prog += self._prog_expr(v)
-                if i:
+            for index, operand in enumerate(node.values):
+                prog += self._prog_expr(operand)
+                if index:
                     prog.append(opc)
             return prog
         if isinstance(node, ast.Compare):
@@ -164,10 +164,10 @@ class TableImage:
                     prog = [OPC_FALSE]
                 else:
                     prog = []
-                    for i, e in enumerate(right.elts):
-                        ty, val = encode_scalar(e.value, self.intern)
+                    for index, element in enumerate(right.elts):
+                        ty, val = encode_scalar(element.value, self.intern)
                         prog.append(self.atom(fidx, OP_EQ, ty, val))
-                        if i:
+                        if index:
                             prog.append(OPC_OR)
                 if isinstance(op, ast.NotIn):
                     prog.append(OPC_NOT)
@@ -211,13 +211,17 @@ class TableImage:
     @staticmethod
     def _stack_depth(prog: list) -> int:
         depth = peak = 0
-        for w in prog:
-            if w < 0x8000 or w in (OPC_TRUE, OPC_FALSE):
+        for word in prog:
+            if word < 0x8000 or word in (OPC_TRUE, OPC_FALSE):
                 depth += 1
-            elif w in (OPC_AND, OPC_OR):
+            elif word in (OPC_AND, OPC_OR):
                 depth -= 1
             peak = max(peak, depth)
-        assert depth == 1, f"malformed program (final depth {depth})"
+        # a raise, not an assert: this is the only check that a compiled program is well formed, and
+        # python -O drops asserts, which would let a malformed image reach every substrate unexamined.
+        # Depth 0 is the empty program the evaluators have nothing to return; depth above 1 is a leftover.
+        if depth != 1:
+            raise ValueError(f"malformed program (final depth {depth})")
         return peak
 
     def serialize(self) -> bytes:
@@ -246,45 +250,45 @@ class TableImage:
                           self.start, visits_idx, self.max_steps, max_stack, flags)
         for fidx, op, ty, val in self.atoms:
             out += struct.pack("<HBBi", fidx, op, ty, val)
-        for eo, ec in node_recs:
-            out += struct.pack("<HH", eo, ec)
-        for t, po, pc in edges:
-            out += struct.pack("<HHH", t, po, pc)
-        for w in prog_blob:
-            out += struct.pack("<H", w)
+        for edge_offset, edge_count in node_recs:
+            out += struct.pack("<HH", edge_offset, edge_count)
+        for edge_target, prog_offset, prog_count in edges:
+            out += struct.pack("<HHH", edge_target, prog_offset, prog_count)
+        for word in prog_blob:
+            out += struct.pack("<H", word)
         if flags & FLAG_COLORS:                              # appended last: one uint16 color / node
-            for c in colors:
-                out += struct.pack("<H", c & 0xFFFF)
+            for color in colors:
+                out += struct.pack("<H", color & 0xFFFF)
         return out
 
     def debug(self) -> dict:
         def dis(prog):
             names = {OPC_NOT: "NOT", OPC_AND: "AND", OPC_OR: "OR",
                      OPC_TRUE: "TRUE", OPC_FALSE: "FALSE"}
-            return [f"ATOM {w}" if w < 0x8000 else names[w] for w in prog]
-        inv_f = {v: k for k, v in self.fields.items()}
+            return [f"ATOM {word}" if word < 0x8000 else names[word] for word in prog]
+        inv_f = {index: name for name, index in self.fields.items()}
         colors = (list(self.node_colors) + [0] * len(self.nodes))[:len(self.nodes)]
         return {
             "format": "PPT", "version": 1, "max_steps": self.max_steps,
             "fields": self.fields,
             "intern": self.intern,
-            "atoms": [{"i": i, "field": inv_f[f], "op": _OP_NAME[op],
+            "atoms": [{"i": atom_index, "field": inv_f[field_index], "op": _OP_NAME[op],
                        "type": _TY_NAME[ty], "val": val}
-                      for i, (f, op, ty, val) in enumerate(self.atoms)],
+                      for atom_index, (field_index, op, ty, val) in enumerate(self.atoms)],
             "start": self.start,
             "colors_present": bool(any(colors)),
             "stateful": self.stateful,
             "migration": ("by-name" if self.migrate_by_name else
                           ("reset-to" if self.stateful else None)),
             "safe_node": self.safe_node,
-            "wcet_cycles": (max(sum(2 + max(len(p), 1) for _, _, p in ne) + 2
-                                for _, ne in self.nodes) if self.nodes else 2),
-            "nodes": [{"i": i, "name": name, "color": colors[i],
-                       "edges": [{"target": t, "condition": c, "program": dis(p)}
-                                 for t, c, p in nedges]}
-                      for i, (name, nedges) in enumerate(self.nodes)],
-            "host_side_edges": [{"node": n, "target": t, "condition": c}
-                                for n, t, c in self.skipped_tiers],
+            "wcet_cycles": (max(sum(2 + max(len(program), 1) for _, _, program in node_edges) + 2
+                                for _, node_edges in self.nodes) if self.nodes else 2),
+            "nodes": [{"i": node_index, "name": name, "color": colors[node_index],
+                       "edges": [{"target": target, "condition": condition, "program": dis(program)}
+                                 for target, condition, program in nedges]}
+                      for node_index, (name, nedges) in enumerate(self.nodes)],
+            "host_side_edges": [{"node": name, "target": target, "condition": condition}
+                                for name, target, condition in self.skipped_tiers],
         }
 
 
@@ -299,8 +303,8 @@ def compile_flow(graph, max_steps: int = 25) -> TableImage:
     says stuck)."""
     img = TableImage(max_steps)
     reach = _reachable(graph)
-    names = [n for n in graph.nodes if n in reach]      # document order, reachable only
-    idx = {n: i for i, n in enumerate(names)}
+    names = [name for name in graph.nodes if name in reach]      # document order, reachable only
+    idx = {name: index for index, name in enumerate(names)}
     if graph.start not in idx:
         raise SubsetError("bad-start", graph.start)
     skipped = []
@@ -353,9 +357,9 @@ def encode_regs(img: TableImage, ctx: dict, node_idx: int = 0) -> bytes:
     authored constant, truthy iff non-empty — exactly the runtime contract)."""
     intern = dict(img.intern)
     out = struct.pack("<I", node_idx)
-    by_idx = sorted(img.fields.items(), key=lambda kv: kv[1])
-    for _name, _i in by_idx:
-        ty, val = encode_scalar(ctx.get(_name), intern)
+    by_idx = sorted(img.fields.items(), key=lambda field_entry: field_entry[1])
+    for field_name, _register_index in by_idx:
+        ty, val = encode_scalar(ctx.get(field_name), intern)
         out += struct.pack("<ii", ty, val)
     return out
 
@@ -366,7 +370,7 @@ def encode_script(img: TableImage, script: dict) -> bytes:
     str(); only fields the image reads are encoded; suspending/raising outcomes are outside
     the subset."""
     intern = dict(img.intern)
-    by_idx = sorted(img.fields.items(), key=lambda kv: kv[1])
+    by_idx = sorted(img.fields.items(), key=lambda field_entry: field_entry[1])
     out = struct.pack("<I", len(img.nodes))
     for name, _edges in img.nodes:
         seq = script.get(name)
@@ -383,27 +387,27 @@ def encode_script(img: TableImage, script: dict) -> bytes:
             if fields.get("needs_human") or fields.get("wait") or \
                     fields.get("spawn") is not None:
                 raise SubsetError("script-suspends")
-            for _name, _i in by_idx:
-                ty, val = encode_scalar(fields.get(_name), intern)
+            for field_name, _register_index in by_idx:
+                ty, val = encode_scalar(fields.get(field_name), intern)
                 out += struct.pack("<ii", ty, val)
     return out
 
 
 def main() -> int:
     import argparse
-    ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("flow_md")
-    ap.add_argument("-o", "--out", default=None)
-    ap.add_argument("--json", dest="json_out", default=None)
-    ap.add_argument("--max-steps", type=int, default=25)
-    args = ap.parse_args()
+    arg_parser = argparse.ArgumentParser(description=__doc__)
+    arg_parser.add_argument("flow_md")
+    arg_parser.add_argument("-o", "--out", default=None)
+    arg_parser.add_argument("--json", dest="json_out", default=None)
+    arg_parser.add_argument("--max-steps", type=int, default=25)
+    args = arg_parser.parse_args()
 
     from prismpath.kernel.parser import parse_file
     graph = parse_file(args.flow_md)
     try:
         img = compile_flow(graph, args.max_steps)
-    except SubsetError as e:
-        print(f"NOT TABLE-COMPILABLE: {e}")
+    except SubsetError as error:
+        print(f"NOT TABLE-COMPILABLE: {error}")
         return 1
     blob = img.serialize()
     out = args.out or (Path(args.flow_md).stem + ".ppt")
@@ -413,7 +417,7 @@ def main() -> int:
         Path(args.json_out).write_text(json.dumps(dbg, indent=1) + "\n")
     print(f"{out}: {len(blob)}B  fields={len(img.fields)} interns={len(img.intern)} "
           f"atoms={len(img.atoms)} nodes={len(img.nodes)} "
-          f"edges={sum(len(e) for _, e in img.nodes)}  wcet={dbg['wcet_cycles']}cyc")
+          f"edges={sum(len(node_edges) for _, node_edges in img.nodes)}  wcet={dbg['wcet_cycles']}cyc")
     return 0
 
 

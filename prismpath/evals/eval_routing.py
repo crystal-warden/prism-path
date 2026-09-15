@@ -46,11 +46,11 @@ CASES = [
 def lexical_route(outcome, edges):
     ow = set(re.findall(r"[a-z]+", outcome.lower()))
     best, bi = -1, 0
-    for i, (_, cond) in enumerate(edges):
+    for edge_index, (_, cond) in enumerate(edges):
         cw = set(re.findall(r"[a-z]+", cond.lower()))
         score = len(ow & cw)
         if score > best:
-            best, bi = score, i
+            best, bi = score, edge_index
     return edges[bi][0]
 
 
@@ -62,19 +62,19 @@ def embed_route(outcome, edges, cond_embs):
 
 
 def main():
-    g = parse_file("prismpath/flows/bugfix.md")
-    print("flow:", g.name, "| nodes:", list(g.nodes), "| start:", g.start)
-    print("validate:", analysis.errors(g) or "ok")
+    graph = parse_file("prismpath/flows/bugfix.md")
+    print("flow:", graph.name, "| nodes:", list(graph.nodes), "| start:", graph.start)
+    print("validate:", analysis.errors(graph) or "ok")
 
     # precompute edge-condition embeddings per node
-    cond_embs = {name: embedder.embed([c for _, c in n.edges], is_query=False)
-                 for name, n in g.nodes.items() if n.edges}
+    cond_embs = {name: embedder.embed([condition for _, condition in flow_node.edges], is_query=False)
+                 for name, flow_node in graph.nodes.items() if flow_node.edges}
 
     n_ok_e = n_ok_l = 0
     per_node = defaultdict(lambda: [0, 0])  # node -> [embed_ok, total]
     fails = []
     for node, outcome, expected in CASES:
-        edges = g.nodes[node].edges
+        edges = graph.nodes[node].edges
         pe, sims = embed_route(outcome, edges, cond_embs[node])
         pl = lexical_route(outcome, edges)
         n_ok_e += pe == expected
@@ -82,15 +82,18 @@ def main():
         per_node[node][0] += pe == expected
         per_node[node][1] += 1
         if pe != expected:
-            ranked = sorted(zip([t for t, _ in edges], sims), key=lambda x: -x[1])
+            ranked = sorted(zip([edge_target for edge_target, _ in edges], sims),
+                            key=lambda pair: -pair[1])
             fails.append((node, outcome, expected, pe,
-                          ", ".join(f"{t}={s:.2f}" for t, s in ranked)))
+                          ", ".join(f"{edge_target}={similarity:.2f}"
+                                    for edge_target, similarity in ranked)))
 
-    N = len(CASES)
-    print(f"\n=== routing accuracy on {N} labeled cases ===")
-    print(f"  EMBED  (cosine):       {n_ok_e}/{N} = {n_ok_e/N:.2f}")
-    print(f"  LEXICAL (token-overlap): {n_ok_l}/{N} = {n_ok_l/N:.2f}")
-    print("  per-node (embed):", {k: f"{v[0]}/{v[1]}" for k, v in per_node.items()})
+    total_cases = len(CASES)
+    print(f"\n=== routing accuracy on {total_cases} labeled cases ===")
+    print(f"  EMBED  (cosine):       {n_ok_e}/{total_cases} = {n_ok_e/total_cases:.2f}")
+    print(f"  LEXICAL (token-overlap): {n_ok_l}/{total_cases} = {n_ok_l/total_cases:.2f}")
+    print("  per-node (embed):", {node_name: f"{hit_total[0]}/{hit_total[1]}"
+                                  for node_name, hit_total in per_node.items()})
     print(f"\n=== embed failures ({len(fails)}) ===")
     for node, outcome, exp, got, ranked in fails:
         print(f"  [{node}] {outcome!r}\n     expected={exp} got={got} | sims: {ranked}")

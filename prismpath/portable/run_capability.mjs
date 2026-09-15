@@ -11,12 +11,12 @@ const here = dirname(fileURLToPath(import.meta.url));
 const data = JSON.parse(readFileSync(join(here, "conformance", "capability.json"), "utf-8"));
 
 let pass = 0, fail = 0;
-for (const c of data.cases) {
-  const got = capabilityReport(parse(c.flow));
-  if (JSON.stringify(got) === JSON.stringify(c.expected)) pass++;
+for (const testCase of data.cases) {
+  const got = capabilityReport(parse(testCase.flow));
+  if (JSON.stringify(got) === JSON.stringify(testCase.expected)) pass++;
   else {
     fail++;
-    console.error(`FAIL ${c.key}\n  expected ${JSON.stringify(c.expected)}\n  got      ${JSON.stringify(got)}`);
+    console.error(`FAIL ${testCase.key}\n  expected ${JSON.stringify(testCase.expected)}\n  got      ${JSON.stringify(got)}`);
   }
 }
 console.log(`capability: ${pass}/${pass + fail} match the frozen matrix`);

@@ -9,12 +9,12 @@ and the control-implementation section is generated from the live assessment —
 implementation status, the responsible role, and the policy that governs it — so the SSP stays
 consistent with the actual posture and regenerates whenever the assessment or the policies change.
 
-Same template/instance model as the policy generator: with no profile and no verdicts it renders a
+Same template/instance model as the policy generator: with no profile and no determinations it renders a
 reusable blank (every field a TODO); with a filled profile and a real assessment it renders the
 organization's SSP. A generated SSP is a living document to maintain, not evidence by itself.
 """
-import compliance_adapter as _ca
-import sop_generator as _sg
+from adapters.compliance import compliance_adapter as _ca
+from adapters.compliance import sop_generator as _sg
 
 _OWNER = {"technical": "System / Security Administrator", "procedural": "ISSM / Policy Owner",
           "operational": "Operations / Process Owner", "general": "ISSM"}
@@ -37,7 +37,7 @@ NOTICE = ("This System Security Plan was generated from the live assessment and 
 
 
 def _numkey(cid):
-    return [int(p) for p in cid.split(".")]
+    return [int(part) for part in cid.split(".")]
 
 
 def _owner(control):
@@ -59,73 +59,77 @@ def _sop_index():
     return idx
 
 
-def _impl_note(verdict, sop_title):
-    if verdict == "met":
+def _impl_note(determination, sop_title):
+    if determination == "met":
         return "Implemented; determination met."
-    if verdict == "partially-met":
+    if determination == "partially-met":
         return "Partially implemented; remaining objectives tracked on the POA&M."
     if sop_title:
         return "Planned. Adopt and operate the %s, then retain records; tracked on the POA&M." % sop_title
     return "Planned; tracked on the POA&M."
 
 
-def generate_ssp(profile=None, verdicts=None):
-    """Render the SSP. profile fills the system sections (blank fields become TODO); verdicts drive the
+def generate_ssp(profile=None, determinations=None):
+    """Render the SSP. profile fills the system sections (blank fields become TODO); determinations drive the
     control-implementation section (absent -> a blank TODO structure, the reusable template)."""
     profile = profile or {}
     _ca.use_standard("nist_800171_r2")
     catalog = _ca._catalog()["controls"]
     sop_idx = _sop_index()
 
-    def f(k):
-        return profile.get(k) or "[TODO: %s]" % SSP_PROFILE_QUESTIONS.get(k, k)
+    def profile_value(question_key):
+        return profile.get(question_key) or "[TODO: %s]" % SSP_PROFILE_QUESTIONS.get(question_key, question_key)
 
-    L = ["# System Security Plan", "", "> " + NOTICE, "",
-         "Standard: NIST SP 800-171 Rev 2 (CMMC Level 2).", ""]
-    L += ["## 1. System Identification", "",
-          "| Field | Value |", "|---|---|",
-          "| Organization | %s |" % f("org_name"),
-          "| System name | %s |" % f("system_name"),
-          "| System owner | %s |" % f("system_owner"),
-          "| Security lead (ISSM/ISSO) | %s |" % f("security_lead"),
-          "| Assessment date | %s |" % f("assessment_date"),
-          "| Current SPRS score | %s |" % f("sprs_score"), ""]
-    L += ["## 2. System Environment and Boundary", "",
-          "The assessment boundary (the CUI environment) is described as: %s." % f("boundary"),
-          "", "Confirm the component inventory (hardware, software, and services that store, process, or "
-          "transmit CUI), the network boundary, and the data flows in or attached to this section.", ""]
-    L += ["## 3. Controlled Unclassified Information", "",
-          "CUI handled by the system: %s." % f("cui_description"), ""]
-    L += ["## 4. Roles and Responsibilities", "",
-          "The system owner (%s) is accountable for the system; the security lead (%s) owns the security "
-          "posture; control-level responsibility is assigned per requirement in Section 5." % (
-              f("system_owner"), f("security_lead")), ""]
-    L += ["## 5. Control Implementation", "",
-          "One row per NIST 800-171 Rev 2 requirement: implementation status, the responsible role, the "
-          "policy that governs it, and the implementation summary.", "",
-          "| Control | Title | Status | Responsible role | Governing policy | Implementation |",
-          "|---|---|---|---|---|---|"]
+    lines = ["# System Security Plan", "", "> " + NOTICE, "",
+             "Standard: NIST SP 800-171 Rev 2 (CMMC Level 2).", ""]
+    lines += ["## 1. System Identification", "",
+              "| Field | Value |", "|---|---|",
+              "| Organization | %s |" % profile_value("org_name"),
+              "| System name | %s |" % profile_value("system_name"),
+              "| System owner | %s |" % profile_value("system_owner"),
+              "| Security lead (ISSM/ISSO) | %s |" % profile_value("security_lead"),
+              "| Assessment date | %s |" % profile_value("assessment_date"),
+              "| Current SPRS score | %s |" % profile_value("sprs_score"), ""]
+    lines += ["## 2. System Environment and Boundary", "",
+              "The assessment boundary (the CUI environment) is described as: %s." % profile_value("boundary"),
+              "", "Confirm the component inventory (hardware, software, and services that store, process, or "
+              "transmit CUI), the network boundary, and the data flows in or attached to this section.", ""]
+    lines += ["## 3. Controlled Unclassified Information", "",
+              "CUI handled by the system: %s." % profile_value("cui_description"), ""]
+    lines += ["## 4. Roles and Responsibilities", "",
+              "The system owner (%s) is accountable for the system; the security lead (%s) owns the security "
+              "posture; control-level responsibility is assigned per requirement in Section 5." % (
+                  profile_value("system_owner"), profile_value("security_lead")), ""]
+    lines += ["## 5. Control Implementation", "",
+              "One row per NIST 800-171 Rev 2 requirement: implementation status, the responsible role, the "
+              "policy that governs it, and the implementation summary.", "",
+              "| Control | Title | Status | Responsible role | Governing policy | Implementation |",
+              "|---|---|---|---|---|---|"]
     tally = {}
     for cid in sorted(catalog, key=_numkey):
-        c = _ca.get_control(cid)
-        v = (verdicts or {}).get(cid)
-        tally[v] = tally.get(v, 0) + 1
-        status = _STATUS.get(v, "[TODO: status]") if verdicts else "[TODO: status]"
+        control = _ca.get_control(cid)
+        determination = (determinations or {}).get(cid)
+        tally[determination] = tally.get(determination, 0) + 1
+        status = _STATUS.get(determination, "[TODO: status]") if determinations else "[TODO: status]"
         sop_title = sop_idx.get(cid, "")
-        impl = _impl_note(v, sop_title) if verdicts else "[TODO: describe how this requirement is implemented]"
-        L.append("| %s | %s | %s | %s | %s | %s |" % (
-            cid, c["title"], status, _owner(c), sop_title or "(no policy mapped)", impl))
-    L += ["", "## 6. Assessment Status", ""]
-    if verdicts:
-        L.append("Current posture: " + ", ".join("%s %d" % (k, n) for k, n in sorted(tally.items()) if k) + ".")
-        L.append("SPRS score: %s. See the POA&M for the prioritized remediation path." % f("sprs_score"))
+        impl = (_impl_note(determination, sop_title) if determinations
+                else "[TODO: describe how this requirement is implemented]")
+        lines.append("| %s | %s | %s | %s | %s | %s |" % (
+            cid, control["title"], status, _owner(control), sop_title or "(no policy mapped)", impl))
+    lines += ["", "## 6. Assessment Status", ""]
+    if determinations:
+        lines.append("Current posture: "
+                     + ", ".join("%s %d" % (determination_name, count)
+                                 for determination_name, count in sorted(tally.items()) if determination_name)
+                     + ".")
+        lines.append("SPRS score: %s. See the POA&M for the prioritized remediation path." % profile_value("sprs_score"))
     else:
-        L.append("[TODO: summarize the assessment result and SPRS score once the system is assessed.]")
-    L += ["", "## 7. Related Documents", "",
-          "- Policy and procedure set (one per 800-171 family): the policy document package.",
-          "- Plan of Action and Milestones (POA&M): the prioritized remediation for every open requirement.",
-          "- Assessment Scope: the CUI, asset categories, and boundary.", ""]
-    return {"markdown": "\n".join(L), "controls": len(catalog), "status_tally": tally}
+        lines.append("[TODO: summarize the assessment result and SPRS score once the system is assessed.]")
+    lines += ["", "## 7. Related Documents", "",
+              "- Policy and procedure set (one per 800-171 family): the policy document package.",
+              "- Plan of Action and Milestones (POA&M): the prioritized remediation for every open requirement.",
+              "- Assessment Scope: the CUI, asset categories, and boundary.", ""]
+    return {"markdown": "\n".join(lines), "controls": len(catalog), "status_tally": tally}
 
 
 if __name__ == "__main__":

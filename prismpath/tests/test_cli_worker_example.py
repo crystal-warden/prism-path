@@ -20,7 +20,7 @@ import pytest
 
 from prismpath.kernel.parser import parse_file
 from prismpath.kernel.engine import run
-from prismpath.workers.cli_worker import cli_agent
+from prismpath.workers.cli_worker import cli_worker
 
 from prismpath.tests._repo import repo_file
 
@@ -29,46 +29,46 @@ EX = str(repo_file("prismpath", "examples", "cli_worker", "ci_gate.rs").parent)
 
 
 def _route(flow, cmd, pass_state, seed):
-    agent = cli_agent(cmd, pass_state=pass_state)
-    return run(parse_file(os.path.join(EX, flow)), agent, state=seed, max_steps=5).path[-1]
+    worker = cli_worker(cmd, pass_state=pass_state)
+    return run(parse_file(os.path.join(EX, flow)), worker, state=seed, max_steps=5).path[-1]
 
 
 def test_python_ci_gate():
     cmd = [sys.executable, os.path.join(EX, "ci_gate.py")]
-    r = lambda report: _route("ci_gate.md", cmd, ["report"], {"report": report})   # noqa: E731
-    assert r("tests=48 failed=0 coverage=91") == "ship"
-    assert r("tests=48 failed=0 coverage=71") == "low_coverage"
-    assert r("tests=48 failed=3 coverage=91") == "triage"
-    assert r("build broke, no numbers") == "error_hold"       # unparseable -> nonzero exit -> error tier
+    route = lambda report: _route("ci_gate.md", cmd, ["report"], {"report": report})   # noqa: E731
+    assert route("tests=48 failed=0 coverage=91") == "ship"
+    assert route("tests=48 failed=0 coverage=71") == "low_coverage"
+    assert route("tests=48 failed=3 coverage=91") == "triage"
+    assert route("build broke, no numbers") == "error_hold"       # unparseable -> nonzero exit -> error tier
 
 
 @pytest.mark.skipif(shutil.which("rustc") is None, reason="rust toolchain not installed")
 def test_rust_ci_gate(tmp_path):
     binary = str(tmp_path / "ci_gate")
     subprocess.run(["rustc", "-O", os.path.join(EX, "ci_gate.rs"), "-o", binary], check=True)
-    r = lambda report: _route("ci_gate.md", [binary], ["report"], {"report": report})  # noqa: E731
-    assert r("tests=48 failed=0 coverage=91") == "ship"       # same flow as ci_gate.py, second language
-    assert r("tests=48 failed=0 coverage=71") == "low_coverage"
-    assert r("tests=48 failed=3 coverage=91") == "triage"
-    assert r("build broke, no numbers") == "error_hold"
+    route = lambda report: _route("ci_gate.md", [binary], ["report"], {"report": report})  # noqa: E731
+    assert route("tests=48 failed=0 coverage=91") == "ship"       # same flow as ci_gate.py, second language
+    assert route("tests=48 failed=0 coverage=71") == "low_coverage"
+    assert route("tests=48 failed=3 coverage=91") == "triage"
+    assert route("build broke, no numbers") == "error_hold"
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="node not installed")
 def test_js_log_alert():
     cmd = ["node", os.path.join(EX, "log_alert.js")]
-    r = lambda line: _route("log_alert.md", cmd, ["line"], {"line": line})         # noqa: E731
-    assert r("ERROR api latency=1900ms db timeout") == "page_oncall"
-    assert r("WARN api latency=1500ms") == "slow_warn"
-    assert r("INFO request latency=120ms") == "archive"
-    assert r("garbage with no level") == "error_hold"
+    route = lambda line: _route("log_alert.md", cmd, ["line"], {"line": line})         # noqa: E731
+    assert route("ERROR api latency=1900ms db timeout") == "page_oncall"
+    assert route("WARN api latency=1500ms") == "slow_warn"
+    assert route("INFO request latency=120ms") == "archive"
+    assert route("garbage with no level") == "error_hold"
 
 
 @pytest.mark.skipif(shutil.which("go") is None, reason="go toolchain not installed")
 def test_go_release_gate(tmp_path):
     binary = str(tmp_path / "release_gate")
     subprocess.run(["go", "build", "-o", binary, os.path.join(EX, "release_gate.go")], check=True)
-    r = lambda frm, to: _route("release_gate.md", [binary], ["from", "to"], {"from": frm, "to": to})  # noqa: E731
-    assert r("1.4.2", "2.0.0") == "block"
-    assert r("1.4.2", "1.4.3") == "auto_publish"
-    assert r("1.4.2", "1.5.0") == "needs_review"
-    assert r("1.4.2", "x.y.z") == "error_hold"                # unparseable -> nonzero exit -> error tier
+    route = lambda frm, to: _route("release_gate.md", [binary], ["from", "to"], {"from": frm, "to": to})  # noqa: E731
+    assert route("1.4.2", "2.0.0") == "block"
+    assert route("1.4.2", "1.4.3") == "auto_publish"
+    assert route("1.4.2", "1.5.0") == "needs_review"
+    assert route("1.4.2", "x.y.z") == "error_hold"                # unparseable -> nonzero exit -> error tier

@@ -58,9 +58,9 @@ async def master_write(dut, pre, addr, data):
 async def wmux(dut):
     cocotb.start_soon(Clock(dut.clk, 10, "ns").start())
     dut.rst.value = 1
-    for s in ("s_awaddr", "s_awvalid", "s_wdata", "s_wstrb", "s_wvalid", "s_bready",
+    for signal_name in ("s_awaddr", "s_awvalid", "s_wdata", "s_wstrb", "s_wvalid", "s_bready",
               "m_awaddr", "m_awvalid", "m_wdata", "m_wstrb", "m_wvalid", "m_bready"):
-        getattr(dut, s).value = 0
+        getattr(dut, signal_name).value = 0
     dut.o_awready.value = 0
     dut.o_wready.value = 0
     dut.o_bvalid.value = 0
@@ -76,24 +76,24 @@ async def wmux(dut):
     await master_write(dut, "s", 0x04, 0xAA)
     for _ in range(4):
         await RisingEdge(dut.clk)
-    assert cap == [(0x04, 0xAA)], f"PS-only -> {[(hex(a),d) for a,d in cap]}"
+    assert cap == [(0x04, 0xAA)], f"PS-only -> {[(hex(addr), data) for addr, data in cap]}"
 
     # loader-only write reaches the slave
     cap.clear()
     await master_write(dut, "m", 0x00, 0xBB)
     for _ in range(4):
         await RisingEdge(dut.clk)
-    assert cap == [(0x00, 0xBB)], f"loader-only -> {[(hex(a),d) for a,d in cap]}"
+    assert cap == [(0x00, 0xBB)], f"loader-only -> {[(hex(addr), data) for addr, data in cap]}"
 
     # concurrent: loader wins first, PS completes after - both land, in that order, uncorrupted
     cap.clear()
-    ps = cocotb.start_soon(master_write(dut, "s", 0x08, 0xCC))
-    ld = cocotb.start_soon(master_write(dut, "m", 0x20, 0xDD))
-    await ld
-    await ps
+    ps_task = cocotb.start_soon(master_write(dut, "s", 0x08, 0xCC))
+    loader_task = cocotb.start_soon(master_write(dut, "m", 0x20, 0xDD))
+    await loader_task
+    await ps_task
     for _ in range(4):
         await RisingEdge(dut.clk)
-    assert cap == [(0x20, 0xDD), (0x08, 0xCC)], f"concurrent order -> {[(hex(a),d) for a,d in cap]}"
+    assert cap == [(0x20, 0xDD), (0x08, 0xCC)], f"concurrent order -> {[(hex(addr), data) for addr, data in cap]}"
 
     dut._log.info("AXI WMUX: PS and loader each reach ppt_axi; on collision the loader wins and the PS "
                   "completes after, selection held for the whole transaction - no interleave, no drop")

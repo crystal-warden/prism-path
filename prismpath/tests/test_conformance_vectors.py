@@ -46,7 +46,7 @@ def test_no_silent_python_drift():
 
 @pytest.mark.skipif(NODE is None, reason="node not installed — port conformance untested here")
 def test_the_port_passes_the_frozen_vectors():
-    p = subprocess.run([NODE, str(REPO / "portable" / "run_vectors.mjs"), str(CONF)],
+    process = subprocess.run([NODE, str(REPO / "portable" / "run_vectors.mjs"), str(CONF)],
                        capture_output=True, text=True, timeout=120)
-    assert p.returncode == 0, f"port is NON-CONFORMANT:\n{p.stdout[-2000:]}\n{p.stderr[-1000:]}"
-    assert "CONFORMANT" in p.stdout
+    assert process.returncode == 0, f"port is NON-CONFORMANT:\n{process.stdout[-2000:]}\n{process.stderr[-1000:]}"
+    assert "CONFORMANT" in process.stdout

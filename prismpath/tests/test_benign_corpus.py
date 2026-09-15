@@ -39,8 +39,8 @@ def test_generate_filtered():
     holdout_cases = benign_corpus.generate(split=benign_corpus.HOLDOUT)
     all_cases = benign_corpus.generate()
 
-    assert all(c["split"] == benign_corpus.DEV for c in dev_cases)
-    assert all(c["split"] == benign_corpus.HOLDOUT for c in holdout_cases)
+    assert all(case["split"] == benign_corpus.DEV for case in dev_cases)
+    assert all(case["split"] == benign_corpus.HOLDOUT for case in holdout_cases)
     assert len(dev_cases) + len(holdout_cases) == len(all_cases)
 
 

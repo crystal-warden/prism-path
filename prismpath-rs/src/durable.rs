@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 Crystal Warden Supply Chain Labs LLC
-//! durable.rs — durable execution + attestation manifests, feature `durable`.
+//! durable.rs: durable execution + attestation manifests, feature `durable`.
 //!
 //! Faithful port of the runtime-relevant parts of `prismpath/checkpoint.py` and
 //! `prismpath/ledger_airgap.py`:
 //!
-//!   * the JSON checkpoint — `run_durable` persists a sidecar at every step (atomic
+//!   * the JSON checkpoint: `run_durable` persists a sidecar at every step (atomic
 //!     write-then-rename), `resume` re-parses the READ-ONLY `.md` and re-enters the engine at the
 //!     pending node (crash), the human's chosen edge (`choose`), or the delivered event (`event`).
 //!     The flow file is NEVER written; a resume against an edited flow is refused by content hash
 //!     (`PRISMPATH_RESUME_ON_FLOW_CHANGE` = refuse | warn | allow, same contract as Python).
-//!   * the content-addressed provenance/override manifests + `verify_manifest` + `salt_leaf` —
+//!   * the content-addressed provenance/override manifests + `verify_manifest` + `salt_leaf`:
 //!     the tamper-evidence primitives. `manifest_hash` is sha256 over Python's exact
 //!     `json.dumps(..., sort_keys=True)` byte layout, reproduced here by `py_canonical_string`
 //!     (also used compact for the policy-pack signatures), so a manifest built on either runtime
@@ -21,12 +21,12 @@
 //! human-queue helpers of `checkpoint.py`; and the git Flow-Ledger (`ledger.py`).
 //!
 //! One honest divergence: Python's `type_gate` (worker-contract enforcement) has no Rust engine
-//! counterpart yet — the flag is PERSISTED faithfully (so a Python resume of a Rust checkpoint
+//! counterpart yet: the flag is PERSISTED faithfully (so a Python resume of a Rust checkpoint
 //! keeps the gate) but this kernel does not enforce it.
 
 use crate::{
     event_name, is_event, parse, run_observed, EngineError, Pending, RunOpts, RunResult, RunState,
-    Step, V,
+    Step, Value as EngineValue,
 };
 use serde_json::Value;
 use sha2::{Digest, Sha256};
@@ -38,62 +38,62 @@ pub const CHECKPOINT_VERSION: i64 = 1;
 #[derive(Debug)]
 pub struct CheckpointError(pub String);
 impl std::fmt::Display for CheckpointError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(formatter, "{}", self.0)
     }
 }
 impl std::error::Error for CheckpointError {}
-fn cerr<T>(msg: impl Into<String>) -> Result<T, CheckpointError> {
+fn cerr<RetType>(msg: impl Into<String>) -> Result<RetType, CheckpointError> {
     Err(CheckpointError(msg.into()))
 }
 
-// ------------------------------------------------------------- Python-parity canonical JSON
+// Python-parity canonical JSON
 
 /// Python `json.dumps(obj, sort_keys=True)` byte-for-byte: sorted keys, `ensure_ascii` escaping,
 /// ints as ints, floats with a `.0` when integral. `spaced=false` gives the
 /// `separators=(",", ":")` compact form the policy-pack signatures use; `spaced=true` the default
 /// `(", ", ": ")` form the manifests hash over.
-pub fn py_canonical_string(v: &Value, spaced: bool) -> String {
-    let (isep, ksep) = if spaced { (", ", ": ") } else { (",", ":") };
-    match v {
+pub fn py_canonical_string(val: &Value, spaced: bool) -> String {
+    let (item_sep, key_sep) = if spaced { (", ", ": ") } else { (",", ":") };
+    match val {
         Value::Null => "null".to_string(),
-        Value::Bool(b) => b.to_string(),
-        Value::Number(n) => {
-            if let Some(i) = n.as_i64() {
-                i.to_string()
-            } else if let Some(u) = n.as_u64() {
-                u.to_string()
+        Value::Bool(bool_val) => bool_val.to_string(),
+        Value::Number(num_val) => {
+            if let Some(i_val) = num_val.as_i64() {
+                i_val.to_string()
+            } else if let Some(u_val) = num_val.as_u64() {
+                u_val.to_string()
             } else {
-                let f = n.as_f64().unwrap_or(f64::NAN);
-                if f.fract() == 0.0 && f.is_finite() && f.abs() < 1e16 {
-                    format!("{f:.1}") // Python repr: 2.0 -> "2.0"
+                let f_val = num_val.as_f64().unwrap_or(f64::NAN);
+                if f_val.fract() == 0.0 && f_val.is_finite() && f_val.abs() < 1e16 {
+                    format!("{f_val:.1}")
                 } else {
-                    format!("{f}") // shortest round-trip, same contract as Python repr
+                    format!("{f_val}")
                 }
             }
         }
-        Value::String(s) => py_json_quote(s),
-        Value::Array(a) => {
-            let items: Vec<String> = a.iter().map(|x| py_canonical_string(x, spaced)).collect();
-            format!("[{}]", items.join(isep))
+        Value::String(raw) => py_json_quote(raw),
+        Value::Array(arr_val) => {
+            let items: Vec<String> = arr_val.iter().map(|item| py_canonical_string(item, spaced)).collect();
+            format!("[{}]", items.join(item_sep))
         }
-        Value::Object(o) => {
-            let sorted: BTreeMap<&String, &Value> = o.iter().collect();
+        Value::Object(obj_map) => {
+            let sorted: BTreeMap<&String, &Value> = obj_map.iter().collect();
             let items: Vec<String> = sorted
                 .iter()
-                .map(|(k, x)| format!("{}{}{}", py_json_quote(k), ksep, py_canonical_string(x, spaced)))
+                .map(|(key, item)| format!("{}{}{}", py_json_quote(key), key_sep, py_canonical_string(item, spaced)))
                 .collect();
-            format!("{{{}}}", items.join(isep))
+            format!("{{{}}}", items.join(item_sep))
         }
     }
 }
 
 /// Python json's default string escaping (`ensure_ascii=True`): `"` `\` and control chars use the
 /// short escapes, everything non-ASCII becomes `\uXXXX` (surrogate pairs above the BMP).
-fn py_json_quote(s: &str) -> String {
-    let mut out = String::with_capacity(s.len() + 2);
+fn py_json_quote(raw: &str) -> String {
+    let mut out = String::with_capacity(raw.len() + 2);
     out.push('"');
-    for ch in s.chars() {
+    for ch in raw.chars() {
         match ch {
             '"' => out.push_str("\\\""),
             '\\' => out.push_str("\\\\"),
@@ -102,15 +102,15 @@ fn py_json_quote(s: &str) -> String {
             '\t' => out.push_str("\\t"),
             '\u{8}' => out.push_str("\\b"),
             '\u{c}' => out.push_str("\\f"),
-            c if (c as u32) < 0x20 => out.push_str(&format!("\\u{:04x}", c as u32)),
-            c if (c as u32) < 0x7f => out.push(c),
-            c => {
-                let cp = c as u32;
-                if cp <= 0xffff {
-                    out.push_str(&format!("\\u{cp:04x}"));
+            char_val if (char_val as u32) < 0x20 => out.push_str(&format!("\\u{:04x}", char_val as u32)),
+            char_val if (char_val as u32) < 0x7f => out.push(char_val),
+            char_val => {
+                let code_point = char_val as u32;
+                if code_point <= 0xffff {
+                    out.push_str(&format!("\\u{code_point:04x}"));
                 } else {
-                    let v = cp - 0x10000;
-                    out.push_str(&format!("\\u{:04x}\\u{:04x}", 0xd800 + (v >> 10), 0xdc00 + (v & 0x3ff)));
+                    let val_offset = code_point - 0x10000;
+                    out.push_str(&format!("\\u{:04x}\\u{:04x}", 0xd800 + (val_offset >> 10), 0xdc00 + (val_offset & 0x3ff)));
                 }
             }
         }
@@ -119,116 +119,112 @@ fn py_json_quote(s: &str) -> String {
     out
 }
 
-// --------------------------------------------------------------------------------- hashes
+// hashes
 
-/// Content hash of a flow file — the run's POLICY HASH ("sha256:<hex>"; "" if unreadable).
+/// Content hash of a flow file: the run's POLICY HASH ("sha256:<hex>"; "" if unreadable).
 pub fn flow_hash(path: &str) -> String {
     match std::fs::read(path) {
-        Ok(b) => format!("sha256:{}", hex::encode(Sha256::digest(&b))),
+        Ok(bytes) => format!("sha256:{}", hex::encode(Sha256::digest(&bytes))),
         Err(_) => String::new(),
     }
 }
 
-// ------------------------------------------------------- state / pending <-> checkpoint JSON
+// state / pending <-> checkpoint JSON
 
 /// RunState -> the reference's state dict: engine fields under their Python names (`visits`,
 /// `transcript`, `_errors`, `_outcomes`), host fields alongside.
 pub fn state_to_json(st: &RunState) -> Value {
-    let mut m = serde_json::Map::new();
-    for (k, v) in &st.extra {
-        m.insert(k.clone(), v.to_json());
+    let mut map_obj = serde_json::Map::new();
+    for (key, val) in &st.extra {
+        map_obj.insert(key.clone(), val.to_json());
     }
     let mut visits = serde_json::Map::new();
-    for (k, n) in &st.visits {
-        visits.insert(k.clone(), Value::Number((*n).into()));
+    for (key, count) in &st.visits {
+        visits.insert(key.clone(), Value::Number((*count).into()));
     }
-    m.insert("visits".to_string(), Value::Object(visits));
-    m.insert(
+    map_obj.insert("visits".to_string(), Value::Object(visits));
+    map_obj.insert(
         "transcript".to_string(),
-        Value::Array(st.transcript.iter().map(V::to_json).collect()),
+        Value::Array(st.transcript.iter().map(EngineValue::to_json).collect()),
     );
     if !st.errors.is_empty() {
         let mut errs = serde_json::Map::new();
-        for (k, n) in &st.errors {
-            errs.insert(k.clone(), Value::Number((*n).into()));
+        for (key, count) in &st.errors {
+            errs.insert(key.clone(), Value::Number((*count).into()));
         }
-        m.insert("_errors".to_string(), Value::Object(errs));
+        map_obj.insert("_errors".to_string(), Value::Object(errs));
     }
     if !st.outcomes.is_empty() {
-        // `outcomes` holds each node's LAST outcome as its object entries — the reference's
-        // `_outcomes: {node: outcome_dict}`.
         let mut outs = serde_json::Map::new();
-        for (k, entries) in &st.outcomes {
-            outs.insert(k.clone(), V::Obj(entries.clone()).to_json());
+        for (key, entries) in &st.outcomes {
+            outs.insert(key.clone(), EngineValue::Obj(entries.clone()).to_json());
         }
-        m.insert("_outcomes".to_string(), Value::Object(outs));
+        map_obj.insert("_outcomes".to_string(), Value::Object(outs));
     }
-    Value::Object(m)
+    Value::Object(map_obj)
 }
 
-/// Pending -> the evidence-packet dict the reference engine builds (shape depends on why the run
-/// suspended; keys the reference omits are omitted here too).
-pub fn pending_to_json(p: &Pending) -> Value {
-    let mut m = serde_json::Map::new();
-    m.insert("node".to_string(), Value::String(p.node.clone()));
-    if p.wait {
-        m.insert("wait".to_string(), Value::Bool(true));
-        m.insert(
+/// Pending -> the evidence-packet dict the reference engine builds.
+pub fn pending_to_json(pending: &Pending) -> Value {
+    let mut map_obj = serde_json::Map::new();
+    map_obj.insert("node".to_string(), Value::String(pending.node.clone()));
+    if pending.wait {
+        map_obj.insert("wait".to_string(), Value::Bool(true));
+        map_obj.insert(
             "awaiting".to_string(),
-            Value::Array(p.awaiting.iter().map(|a| Value::String(a.clone())).collect()),
+            Value::Array(pending.awaiting.iter().map(|item| Value::String(item.clone())).collect()),
         );
-        m.insert(
+        map_obj.insert(
             "timeout_s".to_string(),
-            p.timeout_s.as_ref().map(V::to_json).unwrap_or(Value::Null),
+            pending.timeout_s.as_ref().map(EngineValue::to_json).unwrap_or(Value::Null),
         );
-    } else if let Some(r) = &p.reason {
-        m.insert("reason".to_string(), Value::String(r.clone()));
+    } else if let Some(reason) = &pending.reason {
+        map_obj.insert("reason".to_string(), Value::String(reason.clone()));
     }
-    if let Some(wp) = &p.would_pick {
-        m.insert("would_pick".to_string(), Value::String(wp.clone()));
+    if let Some(would_pick) = &pending.would_pick {
+        map_obj.insert("would_pick".to_string(), Value::String(would_pick.clone()));
     }
-    let cands: Vec<Value> = match &p.scored_candidates {
+    let cands: Vec<Value> = match &pending.scored_candidates {
         Some(scored) => scored
             .iter()
-            .map(|(t, c, s)| {
-                serde_json::json!({"target": t, "condition": c, "score": s})
+            .map(|(target, cond, score)| {
+                serde_json::json!({"target": target, "condition": cond, "score": score})
             })
             .collect(),
-        None => p
+        None => pending
             .candidates
             .iter()
-            .map(|(t, c)| serde_json::json!({"target": t, "condition": c}))
+            .map(|(target, cond)| serde_json::json!({"target": target, "condition": cond}))
             .collect(),
     };
-    m.insert("candidates".to_string(), Value::Array(cands));
-    if let Some(sp) = &p.spawn {
-        m.insert("spawn".to_string(), sp.to_json());
+    map_obj.insert("candidates".to_string(), Value::Array(cands));
+    if let Some(spawn_val) = &pending.spawn {
+        map_obj.insert("spawn".to_string(), spawn_val.to_json());
     }
-    Value::Object(m)
+    Value::Object(map_obj)
 }
 
-// ------------------------------------------------------------------------------ checkpoint
+// checkpoint
 
 fn atomic_write(path: &str, data: &str) -> Result<(), CheckpointError> {
-    if let Some(dir) = std::path::Path::new(path).parent() {
-        if !dir.as_os_str().is_empty() {
-            std::fs::create_dir_all(dir).map_err(|e| CheckpointError(e.to_string()))?;
+    if let Some(dir_path) = std::path::Path::new(path).parent() {
+        if !dir_path.as_os_str().is_empty() {
+            std::fs::create_dir_all(dir_path).map_err(|err| CheckpointError(err.to_string()))?;
         }
     }
-    let tmp = format!("{path}.tmp");
+    let tmp_path = format!("{path}.tmp");
     {
-        let mut f = std::fs::File::create(&tmp).map_err(|e| CheckpointError(e.to_string()))?;
-        f.write_all(data.as_bytes()).map_err(|e| CheckpointError(e.to_string()))?;
-        f.sync_all().map_err(|e| CheckpointError(e.to_string()))?;
+        let mut file_handle = std::fs::File::create(&tmp_path).map_err(|err| CheckpointError(err.to_string()))?;
+        file_handle.write_all(data.as_bytes()).map_err(|err| CheckpointError(err.to_string()))?;
+        file_handle.sync_all().map_err(|err| CheckpointError(err.to_string()))?;
     }
-    // atomic on POSIX: a reader sees the old or new file, never a torn one
-    std::fs::rename(&tmp, path).map_err(|e| CheckpointError(e.to_string()))
+    std::fs::rename(&tmp_path, path).map_err(|err| CheckpointError(err.to_string()))
 }
 
 fn now_epoch() -> f64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs_f64())
+        .map(|dur| dur.as_secs_f64())
         .unwrap_or(0.0)
 }
 
@@ -241,12 +237,12 @@ pub fn save_checkpoint(
     pending_node: Option<&str>,
     type_gate: bool,
 ) -> Result<(), CheckpointError> {
-    let abs = std::fs::canonicalize(flow_path)
-        .map(|p| p.to_string_lossy().into_owned())
+    let abs_path = std::fs::canonicalize(flow_path)
+        .map(|path_buf| path_buf.to_string_lossy().into_owned())
         .unwrap_or_else(|_| flow_path.to_string());
     let doc = serde_json::json!({
         "version": CHECKPOINT_VERSION,
-        "flow_path": abs,
+        "flow_path": abs_path,
         "flow_hash": flow_hash(flow_path),
         "pending_node": pending_node,
         "stopped": result.stopped,
@@ -255,21 +251,18 @@ pub fn save_checkpoint(
         "path": result.path,
         "state": state_to_json(state),
         "pending_decision": result.pending.as_ref().map(pending_to_json).unwrap_or(Value::Null),
-        // The reference's `used` vocabulary is the bare tier name ("deterministic", "error",
-        // "human", …); this kernel's in-memory Step embeds the condition after a colon — strip it
-        // at the serialization boundary so the checkpoint format stays Python's.
-        "steps": result.steps.iter().map(|s| serde_json::json!({
-            "node": s.node, "target": s.target,
-            "used": s.used.split(':').next().unwrap_or(&s.used),
+        "steps": result.steps.iter().map(|step| serde_json::json!({
+            "node": step.node, "target": step.target,
+            "used": step.used.split(':').next().unwrap_or(&step.used),
         })).collect::<Vec<_>>(),
     });
-    atomic_write(path, &serde_json::to_string_pretty(&doc).map_err(|e| CheckpointError(e.to_string()))?)
+    atomic_write(path, &serde_json::to_string_pretty(&doc).map_err(|err| CheckpointError(err.to_string()))?)
 }
 
 pub fn load_checkpoint(path: &str) -> Result<Value, CheckpointError> {
-    let text = std::fs::read_to_string(path).map_err(|e| CheckpointError(e.to_string()))?;
-    let cp: Value = serde_json::from_str(&text).map_err(|e| CheckpointError(e.to_string()))?;
-    if cp.get("version").and_then(|v| v.as_i64()) != Some(CHECKPOINT_VERSION) {
+    let text = std::fs::read_to_string(path).map_err(|err| CheckpointError(err.to_string()))?;
+    let cp: Value = serde_json::from_str(&text).map_err(|err| CheckpointError(err.to_string()))?;
+    if cp.get("version").and_then(|ver| ver.as_i64()) != Some(CHECKPOINT_VERSION) {
         return cerr(format!(
             "unsupported checkpoint version {:?} (this build expects {CHECKPOINT_VERSION})",
             cp.get("version")
@@ -278,64 +271,60 @@ pub fn load_checkpoint(path: &str) -> Result<Value, CheckpointError> {
     Ok(cp)
 }
 
-/// Guard resume against a flow edited while the run was suspended. Same env contract as Python:
-/// PRISMPATH_RESUME_ON_FLOW_CHANGE = refuse (default) | warn | allow.
 fn check_flow_unchanged(cp: &Value) -> Result<(), CheckpointError> {
-    let old = cp.get("flow_hash").and_then(|h| h.as_str()).unwrap_or("");
-    if old.is_empty() {
+    let old_hash = cp.get("flow_hash").and_then(|hash_val| hash_val.as_str()).unwrap_or("");
+    if old_hash.is_empty() {
         return Ok(());
     }
-    let flow_path = cp.get("flow_path").and_then(|p| p.as_str()).unwrap_or("");
-    let now = flow_hash(flow_path);
-    if !now.is_empty() && now == old {
+    let flow_path = cp.get("flow_path").and_then(|path_val| path_val.as_str()).unwrap_or("");
+    let now_hash = flow_hash(flow_path);
+    if !now_hash.is_empty() && now_hash == old_hash {
         return Ok(());
     }
     let policy = std::env::var("PRISMPATH_RESUME_ON_FLOW_CHANGE")
         .unwrap_or_default()
         .to_lowercase();
     let msg = format!(
-        "flow {flow_path:?} changed since this run was checkpointed (was {}…, now {}…)",
-        &old[..old.len().min(23)],
-        if now.is_empty() { "missing" } else { &now[..now.len().min(23)] },
+        "flow {flow_path:?} changed since this run was checkpointed (was {}..., now {}...)",
+        &old_hash[..old_hash.len().min(23)],
+        if now_hash.is_empty() { "missing" } else { &now_hash[..now_hash.len().min(23)] },
     );
     match policy.as_str() {
         "allow" => Ok(()),
         "warn" => {
-            eprintln!("  [checkpoint] WARNING: {msg} — resuming anyway");
+            eprintln!("  [checkpoint] WARNING: {msg} - resuming anyway");
             Ok(())
         }
         _ => cerr(format!(
-            "{msg}. Refusing to resume against a changed flow — set \
+            "{msg}. Refusing to resume against a changed flow - set \
              PRISMPATH_RESUME_ON_FLOW_CHANGE=warn (proceed) or =allow (silent) to override."
         )),
     }
 }
 
-// ------------------------------------------------------------------- run_durable / resume
+// run_durable / resume
 
-/// Run a flow while persisting a checkpoint at every step (best-effort: a failing save disables
-/// itself with a warning rather than break the run).
-pub fn run_durable<F>(
+pub fn run_durable<AgentFn>(
     flow_path: &str,
-    agent: F,
+    agent: AgentFn,
     checkpoint_path: &str,
     type_gate: bool,
     opts: RunOpts,
 ) -> Result<RunResult, EngineError>
 where
-    F: FnMut(&str, &str, &RunState) -> Result<V, String>,
+    AgentFn: FnMut(&str, &str, &RunState) -> Result<EngineValue, String>,
 {
     let text = std::fs::read_to_string(flow_path)
-        .map_err(|e| EngineError::Unhandled(format!("cannot read flow {flow_path:?}: {e}")))?;
+        .map_err(|err| EngineError::Unhandled(format!("cannot read flow {flow_path:?}: {err}")))?;
     let graph = parse(&text);
     let mut disabled = false;
     run_observed(&graph, agent, opts, |res, state, pending_node| {
         if disabled {
             return;
         }
-        if let Err(e) = save_checkpoint(checkpoint_path, flow_path, res, state, pending_node, type_gate)
+        if let Err(err) = save_checkpoint(checkpoint_path, flow_path, res, state, pending_node, type_gate)
         {
-            eprintln!("  [checkpoint] disabled for this run — {e}");
+            eprintln!("  [checkpoint] disabled for this run - {err}");
             disabled = true;
         }
     })
@@ -343,14 +332,14 @@ where
 
 fn prior_steps(cp: &Value) -> Vec<Step> {
     cp.get("steps")
-        .and_then(|s| s.as_array())
+        .and_then(|steps_val| steps_val.as_array())
         .map(|arr| {
             arr.iter()
-                .map(|s| Step {
-                    node: s.get("node").and_then(|x| x.as_str()).unwrap_or("").to_string(),
+                .map(|step_item| Step {
+                    node: step_item.get("node").and_then(|str_val| str_val.as_str()).unwrap_or("").to_string(),
                     outcome: String::new(),
-                    target: s.get("target").and_then(|x| x.as_str()).unwrap_or("").to_string(),
-                    used: s.get("used").and_then(|x| x.as_str()).unwrap_or("").to_string(),
+                    target: step_item.get("target").and_then(|str_val| str_val.as_str()).unwrap_or("").to_string(),
+                    used: step_item.get("used").and_then(|str_val| str_val.as_str()).unwrap_or("").to_string(),
                     cond: None,
                     score: None,
                     margin: None,
@@ -362,66 +351,62 @@ fn prior_steps(cp: &Value) -> Vec<Step> {
         .unwrap_or_default()
 }
 
-fn push_transcript(state_v: &mut V, entry: V) {
-    if let V::Obj(entries) = state_v {
-        if let Some((_, V::List(items))) = entries.iter_mut().find(|(k, _)| k == "transcript") {
+fn push_transcript(state_v: &mut EngineValue, entry: EngineValue) {
+    if let EngineValue::Obj(entries) = state_v {
+        if let Some((_, EngineValue::List(items))) = entries.iter_mut().find(|(key, _)| key == "transcript") {
             items.push(entry);
             return;
         }
-        entries.push(("transcript".to_string(), V::List(vec![entry])));
+        entries.push(("transcript".to_string(), EngineValue::List(vec![entry])));
     }
 }
 
-/// Resume a run from its checkpoint. Mirrors the reference exactly:
-/// * `choose` -> apply the human's edge after a `needs_human` suspension;
-/// * `event`  -> deliver the named event after a `waiting` suspension;
-/// * neither  -> re-enter at the pending node after a crash.
-pub fn resume<F>(
+pub fn resume<AgentFn>(
     checkpoint_path: &str,
-    agent: F,
+    agent: AgentFn,
     choose: Option<&str>,
     event: Option<&str>,
     max_steps: usize,
     write_back: bool,
 ) -> Result<RunResult, CheckpointError>
 where
-    F: FnMut(&str, &str, &RunState) -> Result<V, String>,
+    AgentFn: FnMut(&str, &str, &RunState) -> Result<EngineValue, String>,
 {
     let cp = load_checkpoint(checkpoint_path)?;
     check_flow_unchanged(&cp)?;
     let flow_path =
-        cp.get("flow_path").and_then(|p| p.as_str()).ok_or(CheckpointError("no flow_path".into()))?;
+        cp.get("flow_path").and_then(|path_val| path_val.as_str()).ok_or(CheckpointError("no flow_path".into()))?;
     let text = std::fs::read_to_string(flow_path)
-        .map_err(|e| CheckpointError(format!("cannot read flow {flow_path:?}: {e}")))?;
-    let graph = parse(&text); // never written
-    let mut state_v = V::from_json(cp.get("state").unwrap_or(&Value::Null));
-    if !matches!(state_v, V::Obj(_)) {
-        state_v = V::Obj(vec![]);
+        .map_err(|err| CheckpointError(format!("cannot read flow {flow_path:?}: {err}")))?;
+    let graph = parse(&text);
+    let mut state_v = EngineValue::from_json(cp.get("state").unwrap_or(&Value::Null));
+    if !matches!(state_v, EngineValue::Obj(_)) {
+        state_v = EngineValue::Obj(vec![]);
     }
-    let stopped = cp.get("stopped").and_then(|s| s.as_str()).unwrap_or("");
-    let type_gate = cp.get("type_gate").and_then(|t| t.as_bool()).unwrap_or(false);
+    let stopped = cp.get("stopped").and_then(|str_val| str_val.as_str()).unwrap_or("");
+    let type_gate = cp.get("type_gate").and_then(|bool_val| bool_val.as_bool()).unwrap_or(false);
     let choose: Option<String> = match choose {
-        Some(c) => Some(c.to_string()),
+        Some(choose_str) => Some(choose_str.to_string()),
         None => cp
             .get("decision")
-            .and_then(|d| d.get("choose"))
-            .and_then(|c| c.as_str())
-            .map(|s| s.to_string()),
+            .and_then(|decision_obj| decision_obj.get("choose"))
+            .and_then(|str_val| str_val.as_str())
+            .map(|str_val| str_val.to_string()),
     };
     let seed_path: Vec<String> = cp
         .get("path")
-        .and_then(|p| p.as_array())
-        .map(|a| a.iter().filter_map(|x| x.as_str().map(|s| s.to_string())).collect())
+        .and_then(|arr_val| arr_val.as_array())
+        .map(|arr| arr.iter().filter_map(|item| item.as_str().map(|str_val| str_val.to_string())).collect())
         .unwrap_or_default();
     let pend = cp.get("pending_decision").cloned().unwrap_or(Value::Null);
-    let pending_node = cp.get("pending_node").and_then(|p| p.as_str()).map(|s| s.to_string());
+    let pending_node = cp.get("pending_node").and_then(|path_val| path_val.as_str()).map(|str_val| str_val.to_string());
 
     let run_seeded = |start: String,
-                      state_v: V,
+                      state_v: EngineValue,
                       seed_path: Vec<String>,
                       seed_steps: Vec<Step>,
-                      mut agent: F|
-     -> Result<RunResult, CheckpointError> {
+                      mut agent_fn: AgentFn|
+      -> Result<RunResult, CheckpointError> {
         let opts = RunOpts {
             max_steps,
             start: Some(start),
@@ -431,37 +416,37 @@ where
             ..Default::default()
         };
         let fp = flow_path.to_string();
-        let res = run_observed(&graph, &mut agent, opts, |res, state, pending_node| {
+        let res = run_observed(&graph, &mut agent_fn, opts, |res, state, pending_node| {
             if write_back {
                 let _ = save_checkpoint(checkpoint_path, &fp, res, state, pending_node, type_gate);
             }
         });
-        res.map_err(|e| CheckpointError(e.to_string()))
+        res.map_err(|err| CheckpointError(err.to_string()))
     };
 
     if let Some(choose) = choose {
         let dnode = pend
             .get("node")
-            .and_then(|n| n.as_str())
-            .map(|s| s.to_string())
+            .and_then(|node_val| node_val.as_str())
+            .map(|str_val| str_val.to_string())
             .or(pending_node.clone())
             .ok_or(CheckpointError("checkpoint has no pending node".into()))?;
         let node = graph
             .nodes
             .get(&dnode)
             .ok_or(CheckpointError(format!("pending node {dnode:?} is not in the flow")))?;
-        let valid: Vec<&String> = node.edges.iter().map(|(t, _)| t).collect();
-        if !valid.iter().any(|t| **t == choose) {
+        let valid: Vec<&String> = node.edges.iter().map(|(target, _)| target).collect();
+        if !valid.iter().any(|target| **target == choose) {
             return cerr(format!(
                 "choose {choose:?} is not an edge target of node {dnode:?}; valid: {valid:?}"
             ));
         }
         push_transcript(
             &mut state_v,
-            V::Obj(vec![
-                ("node".into(), V::Str(dnode.clone())),
-                ("outcome".into(), V::Str(format!("[human chose -> {choose}]"))),
-                ("decided_by".into(), V::Str("human".into())),
+            EngineValue::Obj(vec![
+                ("node".into(), EngineValue::Str(dnode.clone())),
+                ("outcome".into(), EngineValue::Str(format!("[human chose -> {choose}]"))),
+                ("decided_by".into(), EngineValue::Str("human".into())),
             ]),
         );
         let mut steps = prior_steps(&cp);
@@ -482,8 +467,8 @@ where
     if let Some(event) = event {
         let wnode = pend
             .get("node")
-            .and_then(|n| n.as_str())
-            .map(|s| s.to_string())
+            .and_then(|node_val| node_val.as_str())
+            .map(|str_val| str_val.to_string())
             .or(pending_node.clone())
             .ok_or(CheckpointError("checkpoint has no pending node".into()))?;
         let node = graph
@@ -493,23 +478,23 @@ where
         let target = node
             .edges
             .iter()
-            .find(|(_, c)| is_event(c) && event_name(c) == event)
-            .map(|(t, _)| t.clone());
+            .find(|(_, cond)| is_event(cond) && event_name(cond) == event)
+            .map(|(target, _)| target.clone());
         let Some(target) = target else {
             let avail: Vec<String> = node
                 .edges
                 .iter()
-                .filter(|(_, c)| is_event(c))
-                .map(|(_, c)| event_name(c))
+                .filter(|(_, cond)| is_event(cond))
+                .map(|(_, cond)| event_name(cond))
                 .collect();
             return cerr(format!("no edge for event {event:?} on {wnode:?}; awaiting: {avail:?}"));
         };
         push_transcript(
             &mut state_v,
-            V::Obj(vec![
-                ("node".into(), V::Str(wnode.clone())),
-                ("outcome".into(), V::Str(format!("[event: {event}]"))),
-                ("event".into(), V::Str(event.to_string())),
+            EngineValue::Obj(vec![
+                ("node".into(), EngineValue::Str(wnode.clone())),
+                ("outcome".into(), EngineValue::Str(format!("[event: {event}]"))),
+                ("event".into(), EngineValue::Str(event.to_string())),
             ]),
         );
         let mut steps = prior_steps(&cp);
@@ -531,23 +516,23 @@ where
         "needs_human" => {
             let cands: Vec<String> = pend
                 .get("candidates")
-                .and_then(|c| c.as_array())
-                .map(|a| {
-                    a.iter()
-                        .filter_map(|c| c.get("target").and_then(|t| t.as_str()))
-                        .map(|s| s.to_string())
+                .and_then(|c_val| c_val.as_array())
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|c_item| c_item.get("target").and_then(|t_val| t_val.as_str()))
+                        .map(|str_val| str_val.to_string())
                         .collect()
                 })
                 .unwrap_or_default();
             cerr(format!(
-                "this run is suspended for a human decision — resume with choose=<edge> \
+                "this run is suspended for a human decision - resume with choose=<edge> \
                  (candidates: {cands:?})"
             ))
         }
         "waiting" => {
             let awaiting = pend.get("awaiting").cloned().unwrap_or(Value::Null);
             cerr(format!(
-                "this run is waiting for an event — resume with event=<name> (awaiting: {awaiting})"
+                "this run is waiting for an event - resume with event=<name> (awaiting: {awaiting})"
             ))
         }
         "terminal" | "stuck" | "max_steps" => {
@@ -555,12 +540,12 @@ where
         }
         _ => {
             let pending = pending_node
-                .filter(|p| graph.nodes.contains_key(p))
+                .filter(|p_node| graph.nodes.contains_key(p_node))
                 .ok_or(CheckpointError("checkpoint has no resumable pending node".into()))?;
             let prior = if seed_path.is_empty() {
                 seed_path
             } else {
-                seed_path[..seed_path.len() - 1].to_vec() // prior ends at pending (re-run)
+                seed_path[..seed_path.len() - 1].to_vec()
             };
             let steps = prior_steps(&cp);
             run_seeded(pending, state_v, prior, steps, agent)
@@ -568,13 +553,11 @@ where
     }
 }
 
-// ------------------------------------------------------------ context ledger (frozen models)
+// context ledger
 
-/// The genesis chain value — 64 zero hex chars.
 pub const CONTEXT_GENESIS: &str =
     "0000000000000000000000000000000000000000000000000000000000000000";
 
-/// One committed context segment (hashes only — content is NEVER stored).
 #[derive(Debug, Clone, PartialEq)]
 pub struct ContextSegment {
     pub idx: usize,
@@ -584,37 +567,30 @@ pub struct ContextSegment {
     pub chain: String,
 }
 
-/// Append-only, hash-chained commitments to the context a frozen model is conditioned on —
-/// mirror of `prismpath.context_ledger.ContextLedger`, gated by `conformance/context.json`.
-/// For a hardwired model the weights are fixed: the context is the governance surface, and this
-/// makes it attestable ("this answer was produced by policy P over EXACTLY this context").
 #[derive(Debug, Default)]
 pub struct ContextLedger {
     pub segments: Vec<ContextSegment>,
 }
 
-/// Bitcoin-style Merkle root over hex leaves (duplicate last if odd); None when empty.
-/// (Same algorithm as ledger_ots.merkle_root_and_paths / the hotswap audit root.)
 pub fn merkle_root_hex(leaves_hex: &[String]) -> Option<String> {
     if leaves_hex.is_empty() {
         return None;
     }
     let mut layer: Vec<Vec<u8>> =
-        leaves_hex.iter().map(|s| hex::decode(s).unwrap_or_default()).collect();
+        leaves_hex.iter().map(|str_val| hex::decode(str_val).unwrap_or_default()).collect();
     while layer.len() > 1 {
         if layer.len() % 2 == 1 {
             layer.push(layer.last().expect("non-empty").clone());
         }
         layer = layer
             .chunks(2)
-            .map(|p| Sha256::digest([p[0].as_slice(), p[1].as_slice()].concat()).to_vec())
+            .map(|pair| Sha256::digest([pair[0].as_slice(), pair[1].as_slice()].concat()).to_vec())
             .collect();
     }
     Some(hex::encode(&layer[0]))
 }
 
 impl ContextLedger {
-    /// Commit one segment by content hash (utf-8), optionally salted (HMAC) for low-entropy text.
     pub fn commit(
         &mut self,
         role: &str,
@@ -626,11 +602,11 @@ impl ContextLedger {
         if let Some(secret) = salt_secret {
             leaf = salt_leaf(&leaf, secret)?;
         }
-        let prev = self.segments.last().map(|s| s.chain.clone()).unwrap_or_else(|| {
+        let prev = self.segments.last().map(|seg| seg.chain.clone()).unwrap_or_else(|| {
             CONTEXT_GENESIS.to_string()
         });
-        let mut bytes = hex::decode(&prev).map_err(|e| CheckpointError(e.to_string()))?;
-        bytes.extend(hex::decode(&leaf).map_err(|e| CheckpointError(e.to_string()))?);
+        let mut bytes = hex::decode(&prev).map_err(|err| CheckpointError(err.to_string()))?;
+        bytes.extend(hex::decode(&leaf).map_err(|err| CheckpointError(err.to_string()))?);
         let chain = hex::encode(Sha256::digest(&bytes));
         self.segments.push(ContextSegment {
             idx: self.segments.len(),
@@ -643,22 +619,17 @@ impl ContextLedger {
     }
 
     pub fn leaves(&self) -> Vec<String> {
-        self.segments.iter().map(|s| s.leaf.clone()).collect()
+        self.segments.iter().map(|seg| seg.leaf.clone()).collect()
     }
 
-    /// The chain head — commits to every leaf AND their order.
     pub fn head(&self) -> String {
-        self.segments.last().map(|s| s.chain.clone()).unwrap_or_else(|| CONTEXT_GENESIS.to_string())
+        self.segments.last().map(|seg| seg.chain.clone()).unwrap_or_else(|| CONTEXT_GENESIS.to_string())
     }
 
-    /// Merkle root over the segment leaves; "" when empty (matches the reference).
     pub fn root(&self) -> String {
         merkle_root_hex(&self.leaves()).unwrap_or_default()
     }
 
-    /// Bind the context to the run: a standard provenance manifest — the context root as the
-    /// manifest root, segment leaves as ingestion hashes, order in the label, the MODEL identity
-    /// as the knowledge hash (for a frozen model, the model IS the knowledge snapshot).
     pub fn attest(
         &self,
         policy_hash: Option<&str>,
@@ -668,7 +639,7 @@ impl ContextLedger {
     ) -> Value {
         let model_hash = format!("sha256:{}", hex::encode(Sha256::digest(model_id.as_bytes())));
         let leaves = self.leaves();
-        let leaf_refs: Vec<&str> = leaves.iter().map(|s| s.as_str()).collect();
+        let leaf_refs: Vec<&str> = leaves.iter().map(|str_val| str_val.as_str()).collect();
         provenance_manifest(
             &self.root(),
             &format!("context:chain:{}", self.head()),
@@ -681,11 +652,10 @@ impl ContextLedger {
     }
 }
 
-/// Recompute the chain — any edit, reorder, insertion, or deletion of a past segment fails this.
 pub fn verify_context_chain(segments: &[ContextSegment]) -> bool {
     let mut prev = CONTEXT_GENESIS.to_string();
-    for (i, seg) in segments.iter().enumerate() {
-        if seg.idx != i {
+    for (idx, seg) in segments.iter().enumerate() {
+        if seg.idx != idx {
             return false;
         }
         let (Ok(mut bytes), Ok(leaf)) = (hex::decode(&prev), hex::decode(&seg.leaf)) else {
@@ -701,18 +671,16 @@ pub fn verify_context_chain(segments: &[ContextSegment]) -> bool {
     true
 }
 
-// -------------------------------------------------------- attestation manifests (C1/C4)
+// attestation manifests (C1/C4)
 
-fn manifest_hash_of(m: &Value) -> String {
-    let mut body = m.clone();
-    if let Value::Object(o) = &mut body {
-        o.remove("manifest_hash");
+fn manifest_hash_of(manifest_val: &Value) -> String {
+    let mut body = manifest_val.clone();
+    if let Value::Object(obj_map) = &mut body {
+        obj_map.remove("manifest_hash");
     }
     hex::encode(Sha256::digest(py_canonical_string(&body, true).as_bytes()))
 }
 
-/// C1: the provable chain of custody that travels with a Merkle root. `created` is injected
-/// (Python defaults to now; explicit here for determinism) — pass an ISO-8601 UTC string.
 #[allow(clippy::too_many_arguments)]
 pub fn provenance_manifest(
     root_hex: &str,
@@ -723,7 +691,7 @@ pub fn provenance_manifest(
     ingestion_hashes: &[&str],
     knowledge_base_hash: Option<&str>,
 ) -> Value {
-    let mut m = serde_json::json!({
+    let mut manifest_val = serde_json::json!({
         "root": root_hex,
         "label": label,
         "created": created,
@@ -732,13 +700,11 @@ pub fn provenance_manifest(
         "knowledge_base_hash": knowledge_base_hash,
         "ingestion_hashes": ingestion_hashes,
     });
-    let h = manifest_hash_of(&m);
-    m["manifest_hash"] = Value::String(h);
-    m
+    let manifest_sha = manifest_hash_of(&manifest_val);
+    manifest_val["manifest_hash"] = Value::String(manifest_sha);
+    manifest_val
 }
 
-/// Attest a HUMAN OVERRIDE of a prior decision as a SUPERSEDING commit (the prior manifest stays
-/// immutable; provenance bindings carry forward).
 pub fn override_manifest(
     prior: &Value,
     overrider_id: &str,
@@ -747,10 +713,10 @@ pub fn override_manifest(
     new_label: Option<&str>,
     created: &str,
 ) -> Value {
-    let label = new_label.map(|l| l.to_string()).unwrap_or_else(|| {
-        format!("override:{}", prior.get("label").and_then(|l| l.as_str()).unwrap_or(""))
+    let label = new_label.map(|lbl| lbl.to_string()).unwrap_or_else(|| {
+        format!("override:{}", prior.get("label").and_then(|lbl| lbl.as_str()).unwrap_or(""))
     });
-    let mut m = serde_json::json!({
+    let mut manifest_val = serde_json::json!({
         "kind": "override",
         "supersedes": prior.get("manifest_hash"),
         "prior_root": prior.get("root"),
@@ -765,23 +731,20 @@ pub fn override_manifest(
         "knowledge_base_hash": prior.get("knowledge_base_hash"),
         "ingestion_hashes": prior.get("ingestion_hashes").cloned().unwrap_or(serde_json::json!([])),
     });
-    let h = manifest_hash_of(&m);
-    m["manifest_hash"] = Value::String(h);
-    m
+    let manifest_sha = manifest_hash_of(&manifest_val);
+    manifest_val["manifest_hash"] = Value::String(manifest_sha);
+    manifest_val
 }
 
-/// Recompute the content-address over every bound field; any tampering flips this to false.
-pub fn verify_manifest(m: &Value) -> bool {
-    m.get("manifest_hash").and_then(|h| h.as_str()) == Some(manifest_hash_of(m).as_str())
+pub fn verify_manifest(manifest_val: &Value) -> bool {
+    manifest_val.get("manifest_hash").and_then(|hash_val| hash_val.as_str()) == Some(manifest_hash_of(manifest_val).as_str())
 }
 
-/// C4: HMAC a (possibly low-entropy) unit hash with an in-enclave secret so a leaked hash can't
-/// be confirmed by guessing the content.
 pub fn salt_leaf(leaf_hex: &str, secret: &str) -> Result<String, CheckpointError> {
     use hmac::{Hmac, Mac};
-    let leaf = hex::decode(leaf_hex).map_err(|e| CheckpointError(format!("bad leaf hex: {e}")))?;
+    let leaf = hex::decode(leaf_hex).map_err(|err| CheckpointError(format!("bad leaf hex: {err}")))?;
     let mut mac = Hmac::<Sha256>::new_from_slice(secret.as_bytes())
-        .map_err(|e| CheckpointError(e.to_string()))?;
+        .map_err(|err| CheckpointError(err.to_string()))?;
     mac.update(&leaf);
     Ok(hex::encode(mac.finalize().into_bytes()))
 }

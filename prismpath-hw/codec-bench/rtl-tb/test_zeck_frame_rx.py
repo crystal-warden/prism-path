@@ -13,12 +13,12 @@ from cocotb.clock import Clock
 from cocotb.triggers import RisingEdge
 
 HERE = Path(__file__).resolve().parent
-from prismpath.telemetry import zeckendorf as z  # noqa: E402
+from prismpath.telemetry import zeckendorf as zeck  # noqa: E402
 from prismpath.telemetry import packed  # noqa: E402
 
 
 def frame_bytes(tick, band):
-    return packed.pack(z.encode_stream([2, tick + 1, band + 1]), 8)   # class+1=2, tick+1, band+1
+    return packed.pack(zeck.encode_stream([2, tick + 1, band + 1]), 8)   # class+1=2, tick+1, band+1
 
 
 async def feed_byte(dut, b, inter):

@@ -34,7 +34,7 @@ def build_registry(suites: Dict[str, dict], key_id: str) -> dict:
     """Canonical registry dict. Each suite spec must carry kem/sig/aead/provider/strength_rank."""
     norm: Dict[str, dict] = {}
     for sid, spec in suites.items():
-        missing = [k for k in _REQUIRED_SUITE_KEYS if k not in spec]
+        missing = [required_key for required_key in _REQUIRED_SUITE_KEYS if required_key not in spec]
         if missing:
             raise ValueError(f"suite {sid!r} missing keys: {','.join(missing)}")
         norm[sid] = {
@@ -58,11 +58,11 @@ def sign_registry(registry: dict, priv_path: str, out_path: str) -> str:
     """Write the canonical registry JSON + a detached Ed25519 signature (`<out>.sig`). Returns hash."""
     priv = pp._load_private(priv_path)
     payload = pp.canonical_bytes(registry)
-    with open(out_path, "wb") as f:
-        f.write(payload)
+    with open(out_path, "wb") as handle:
+        handle.write(payload)
     sig = priv.sign(payload)
-    with open(out_path + ".sig", "wb") as f:
-        f.write(sig)
+    with open(out_path + ".sig", "wb") as handle:
+        handle.write(sig)
     return registry_hash(registry)
 
 
@@ -75,10 +75,10 @@ def verify_registry(path: str, pubkey_paths: List[str],
     sig_path = path + ".sig"
     if not os.path.exists(path) or not os.path.exists(sig_path):
         return False, ["registry:missing"], None
-    with open(path, "rb") as f:
-        raw = f.read()
-    with open(sig_path, "rb") as f:
-        sig = f.read()
+    with open(path, "rb") as handle:
+        raw = handle.read()
+    with open(sig_path, "rb") as handle:
+        sig = handle.read()
     try:
         registry = json.loads(raw)
     except Exception:
@@ -113,8 +113,8 @@ def suite_ids(registry: dict) -> set:
 
 
 def strength_rank(registry: dict, suite_id: str) -> Optional[int]:
-    s = registry.get("suites", {}).get(suite_id)
-    return None if s is None else int(s["strength_rank"])
+    suite_spec = registry.get("suites", {}).get(suite_id)
+    return None if suite_spec is None else int(suite_spec["strength_rank"])
 
 
 def suites_below(registry: dict, floor_id: str) -> set:
@@ -126,10 +126,10 @@ def suites_below(registry: dict, floor_id: str) -> set:
 
 
 def is_quantum_resistant(registry: dict, suite_id: str) -> bool:
-    s = registry.get("suites", {}).get(suite_id)
-    if s is None:
+    suite_spec = registry.get("suites", {}).get(suite_id)
+    if suite_spec is None:
         return False
-    kem = s["kem"].lower()
+    kem = suite_spec["kem"].lower()
     return any(tok in kem for tok in _PQ_KEM_TOKENS)
 
 

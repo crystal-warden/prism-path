@@ -6,14 +6,15 @@
  * build + map fill. Corpus: <u32 tbl_len><tbl><u32 n_streams>{<u32 n_ev>{<s32 ev><s32 posture>}}.
  *
  *   clang -O2 -target bpf -I. -c ppt_select.bpf.c -o ppt_select.bpf.o
- *   gcc  -O2 -Wno-unused-function -I. cert_selector.c -o cert_selector $(pkg-config --libs libbpf)
+ *   gcc  -O2 -I. cert_selector.c ppt_image.c ppt_maps.c -o cert_selector $(pkg-config --libs libbpf)
  *   sudo ./cert_selector selector_corpus.bin ppt_select.bpf.o
  */
-#define main loader_orig_main
-#include "loader.c"
-#undef main
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
-/* struct sel_state is defined in loader.c (included above) */
+#include "ppt_image.h"   /* Image, parse_image_buf, build_frame, the host reference evaluator */
+#include "ppt_maps.h"    /* populate_maps, struct sel_state, selector_hotswap */
 
 int main(int argc, char **argv) {
     const char *corpus = argc > 1 ? argv[1] : "selector_corpus.bin";

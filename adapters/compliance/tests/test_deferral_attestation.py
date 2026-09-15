@@ -9,10 +9,10 @@ from prismpath.ledgers import ledger_airgap
 from prismpath.workers import deferral
 
 def mk(root="a" * 64, **kw):
-    d = dict(root_hex=root, label="assess:x", policy_hash="sha256:pol", gate_id="gate@v0",
-             ingestion_hashes=["sha256:in"], knowledge_base_hash="sha256:kb")
-    d.update(kw)
-    return ledger_airgap.provenance_manifest(**d)
+    fields = dict(root_hex=root, label="assess:x", policy_hash="sha256:pol", gate_id="gate@v0",
+                  ingestion_hashes=["sha256:in"], knowledge_base_hash="sha256:kb")
+    fields.update(kw)
+    return ledger_airgap.provenance_manifest(**fields)
 
 
 # ================= provenance manifest =================
@@ -29,15 +29,15 @@ def test_manifest_verifies():
     ("knowledge_base_hash", "sha256:swapped"), ("label", "assess:tampered"),
 ])
 def test_tamper_any_bound_field_detected(field, newval):
-    m = mk()
-    m[field] = newval
-    assert not ledger_airgap.verify_manifest(m)
+    manifest = mk()
+    manifest[field] = newval
+    assert not ledger_airgap.verify_manifest(manifest)
 
 
 def test_tamper_ingestion_hash_detected():
-    m = mk()
-    m["ingestion_hashes"] = ["sha256:different"]
-    assert not ledger_airgap.verify_manifest(m)
+    manifest = mk()
+    manifest["ingestion_hashes"] = ["sha256:different"]
+    assert not ledger_airgap.verify_manifest(manifest)
 
 
 def test_distinct_inputs_distinct_hash():
@@ -98,9 +98,9 @@ def store(tmp_path):
 
 
 def test_defer_then_in_pending(tmp_path):
-    s = store(tmp_path)
-    s.defer("u1", reason="r", state={"k": "v"})
-    assert "u1" in [p["unit_id"] for p in s.pending()]
+    deferral_store = store(tmp_path)
+    deferral_store.defer("u1", reason="r", state={"k": "v"})
+    assert "u1" in [pending["unit_id"] for pending in deferral_store.pending()]
 
 
 def test_get_unknown_returns_none(tmp_path):
@@ -108,9 +108,9 @@ def test_get_unknown_returns_none(tmp_path):
 
 
 def test_resume_records_actor_and_resolution(tmp_path):
-    s = store(tmp_path)
-    s.defer("u1", reason="r", state={})
-    rec = s.resume("u1", resolution={"status": "met"}, actor="auditor:jsmith")
+    deferral_store = store(tmp_path)
+    deferral_store.defer("u1", reason="r", state={})
+    rec = deferral_store.resume("u1", resolution={"status": "met"}, actor="auditor:jsmith")
     assert rec["actor"] == "auditor:jsmith" and rec["resolution"]["status"] == "met"
 
 
@@ -120,25 +120,25 @@ def test_resume_unknown_raises(tmp_path):
 
 
 def test_double_resume_raises(tmp_path):
-    s = store(tmp_path)
-    s.defer("u1", reason="r", state={})
-    s.resume("u1", resolution={}, actor="a")
+    deferral_store = store(tmp_path)
+    deferral_store.defer("u1", reason="r", state={})
+    deferral_store.resume("u1", resolution={}, actor="a")
     with pytest.raises(ValueError):
-        s.resume("u1", resolution={}, actor="b")
+        deferral_store.resume("u1", resolution={}, actor="b")
 
 
 def test_prior_output_preserved(tmp_path):
-    s = store(tmp_path)
-    s.defer("u1", reason="r", state={}, prior_output={"determination": {"status": "not-met"}})
-    s.resume("u1", resolution={}, actor="a")
-    assert s.get("u1")["prior_output"]["determination"]["status"] == "not-met"
+    deferral_store = store(tmp_path)
+    deferral_store.defer("u1", reason="r", state={}, prior_output={"determination": {"status": "not-met"}})
+    deferral_store.resume("u1", resolution={}, actor="a")
+    assert deferral_store.get("u1")["prior_output"]["determination"]["status"] == "not-met"
 
 
 def test_resume_removes_from_pending(tmp_path):
-    s = store(tmp_path)
-    s.defer("u1", reason="r", state={})
-    s.resume("u1", resolution={}, actor="a")
-    assert "u1" not in [p["unit_id"] for p in s.pending()]
+    deferral_store = store(tmp_path)
+    deferral_store.defer("u1", reason="r", state={})
+    deferral_store.resume("u1", resolution={}, actor="a")
+    assert "u1" not in [pending["unit_id"] for pending in deferral_store.pending()]
 
 
 def test_persistence_across_store_instances(tmp_path):

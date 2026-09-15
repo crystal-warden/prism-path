@@ -36,6 +36,11 @@ function previewHtml(webview, dir) {
   let html = fs.readFileSync(path.join(dir, "playground.html"), "utf8");
   const kernel = webview.asWebviewUri(vscode.Uri.file(path.join(dir, "prismpath.mjs")));
   html = html.replace(/from\s+["']\.\/prismpath\.mjs["']/, `from "${kernel}"`);
+  // What each relaxation buys, since the header above calls the KERNEL dependency free and this
+  // looks like a contradiction: the kernel is, the page around it is not. playground.html carries
+  // its styles and its module script inline, hence 'unsafe-inline' on both; the Mermaid graph the
+  // header advertises is imported from jsdelivr at render time, hence script-src and connect-src.
+  // Nothing else is reachable, and the kernel itself is served from the extension's own origin.
   const csp = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; ` +
     `img-src ${webview.cspSource} https: data:; style-src ${webview.cspSource} 'unsafe-inline'; ` +
     `script-src ${webview.cspSource} 'unsafe-inline' https://cdn.jsdelivr.net; ` +
@@ -92,22 +97,38 @@ function activate(context) {
       { timeout: 15000 }, (err, stdout) => {
         // The CLI exits nonzero on findings — that's data, not failure. Absent CLI: stay silent.
         if (!stdout) { diagnostics.delete(doc.uri); return; }
-        let report;
-        try { report = JSON.parse(stdout); } catch { diagnostics.delete(doc.uri); return; }
         const lines = doc.getText().split("\n");
+        let report;
+        try {
+          report = JSON.parse(stdout);
+        } catch (parseError) {
+          // Clearing was indistinguishable from a clean file: a validate command that crashed part
+          // way through its JSON left the buffer looking validated and green. Say so instead.
+          const firstLine = new vscode.Diagnostic(
+            new vscode.Range(0, 0, 0, (lines[0] || "").length),
+            `prismpath validate did not return JSON (${parseError.message}); findings are not being shown`,
+            vscode.DiagnosticSeverity.Warning);
+          firstLine.source = "prismpath validate";
+          diagnostics.set(doc.uri, [firstLine]);
+          return;
+        }
+        // The node name is data from the CLI, not a pattern: a name carrying a regex metacharacter
+        // (a `.` matching any character, an unbalanced bracket throwing) has to be matched
+        // literally. Built once per finding rather than once per line of the document.
         const nodeLine = (node) => {
-          const i = lines.findIndex((l) => l.match(new RegExp(`^##\\s+${node}\\s*$`)));
-          return i >= 0 ? i : 0;
+          const heading = new RegExp(`^##\\s+${String(node).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*$`);
+          const lineIndex = lines.findIndex((textLine) => heading.test(textLine));
+          return lineIndex >= 0 ? lineIndex : 0;
         };
-        diagnostics.set(doc.uri, (report.findings || []).map((f) => {
-          const line = nodeLine(f.node);
-          const d = new vscode.Diagnostic(
+        diagnostics.set(doc.uri, (report.findings || []).map((finding) => {
+          const line = nodeLine(finding.node);
+          const diagnostic = new vscode.Diagnostic(
             new vscode.Range(line, 0, line, lines[line].length),
-            `${f.message}`,
-            f.severity === "error" ? vscode.DiagnosticSeverity.Error : vscode.DiagnosticSeverity.Warning);
-          d.source = "prismpath validate";
-          d.code = f.code;
-          return d;
+            `${finding.message}`,
+            finding.severity === "error" ? vscode.DiagnosticSeverity.Error : vscode.DiagnosticSeverity.Warning);
+          diagnostic.source = "prismpath validate";
+          diagnostic.code = finding.code;
+          return diagnostic;
         }));
       });
   }));

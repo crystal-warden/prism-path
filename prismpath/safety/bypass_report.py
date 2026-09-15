@@ -42,19 +42,20 @@ def measure() -> dict:
     strata_class: dict[str, str] = {}
     examples: dict[tuple[str, str], str] = {}
 
-    for v in variants:
-        key = (v["rule"], v["stratum"])
-        strata_class[v["stratum"]] = v["klass"]
-        verdict = guard.check(v["variant"], v["direction"])
+    for variant_case in variants:
+        key = (variant_case["rule"], variant_case["stratum"])
+        strata_class[variant_case["stratum"]] = variant_case["klass"]
+        verdict = guard.check(variant_case["variant"], variant_case["direction"])
         cells[key][1] += 1
         if verdict.allowed:
             cells[key][0] += 1
-            examples.setdefault(key, v["variant"])
+            examples.setdefault(key, variant_case["variant"])
 
-    rules = sorted({r for r, _ in cells})
-    strata = sorted(strata_class, key=lambda s: (
-        {bypass_corpus.CONTROL: 0, bypass_corpus.MECHANICAL: 1, bypass_corpus.SEMANTIC: 2}[strata_class[s]],
-        s,
+    rules = sorted({rule_name for rule_name, _ in cells})
+    strata = sorted(strata_class, key=lambda stratum_name: (
+        {bypass_corpus.CONTROL: 0, bypass_corpus.MECHANICAL: 1,
+         bypass_corpus.SEMANTIC: 2}[strata_class[stratum_name]],
+        stratum_name,
     ))
 
     rollup: dict[str, list[int]] = defaultdict(lambda: [0, 0])
@@ -73,10 +74,11 @@ def measure() -> dict:
         "rules": rules,
         "strata": strata,
         "strata_class": strata_class,
-        "cells": {f"{r}|{s}": cells[(r, s)] for (r, s) in cells},
-        "per_stratum": {s: per_stratum[s] for s in strata},
+        "cells": {f"{rule_name}|{stratum_name}": cells[(rule_name, stratum_name)] for (rule_name, stratum_name) in cells},
+        "per_stratum": {stratum_name: per_stratum[stratum_name] for stratum_name in strata},
         "rollup": dict(rollup),
-        "examples": {f"{r}|{s}": t for (r, s), t in examples.items()},
+        "examples": {f"{rule_name}|{stratum_name}": example_text
+                     for (rule_name, stratum_name), example_text in examples.items()},
     }
 
 
@@ -111,8 +113,8 @@ def measure_collisions() -> dict:
                 })
                 break
 
-    total = sum(v[1] for v in per_stratum.values())
-    hits = sum(v[0] for v in per_stratum.values())
+    total = sum(stratum_counts[1] for stratum_counts in per_stratum.values())
+    hits = sum(stratum_counts[0] for stratum_counts in per_stratum.values())
     return {
         "cases": total,
         "false_matches": hits,
@@ -133,15 +135,15 @@ def render(report: dict) -> str:
     lines.append(f"variants: {report['variants']}\n")
     lines.append("bypass rate = variants ALLOWED / variants generated. higher is worse.\n")
 
-    width = max(len(s) for s in report["strata"]) + 2
+    width = max(len(stratum_name) for stratum_name in report["strata"]) + 2
     header = "stratum".ljust(width) + "class".ljust(12) + "rate".ljust(8) + "counts"
     lines.append(header)
     lines.append("-" * len(header))
-    for s in report["strata"]:
-        cell = report["per_stratum"][s]
+    for stratum_name in report["strata"]:
+        cell = report["per_stratum"][stratum_name]
         lines.append(
-            s.ljust(width)
-            + report["strata_class"][s].ljust(12)
+            stratum_name.ljust(width)
+            + report["strata_class"][stratum_name].ljust(12)
             + f"{_rate(cell):.2f}".ljust(8)
             + f"{cell[0]}/{cell[1]}"
         )
@@ -149,13 +151,13 @@ def render(report: dict) -> str:
     lines.append("\n--- per rule x stratum ---")
     for rule in report["rules"]:
         lines.append(f"\n  {rule}")
-        for s in report["strata"]:
-            key = f"{rule}|{s}"
+        for stratum_name in report["strata"]:
+            key = f"{rule}|{stratum_name}"
             if key not in report["cells"]:
                 continue
             cell = report["cells"][key]
             mark = "" if cell[0] == 0 else "  <-- bypassed"
-            lines.append(f"    {s.ljust(width)}{_rate(cell):.2f}  ({cell[0]}/{cell[1]}){mark}")
+            lines.append(f"    {stratum_name.ljust(width)}{_rate(cell):.2f}  ({cell[0]}/{cell[1]}){mark}")
 
     lines.append("\n--- rollup ---")
     for klass in ("control", "mechanical", "semantic"):
@@ -220,8 +222,8 @@ def main() -> int:
             print(f"\n  !! {collisions['false_matches']} FALSE MATCHES over "
                   f"{collisions['cases']} benign cases — the bound is ZERO. Normalization is "
                   "blocked regardless of bypass rates.")
-            for d in collisions["detail"][:10]:
-                print(f"     [{d['rule']}] {d['text'][:70]!r}")
+            for detail_row in collisions["detail"][:10]:
+                print(f"     [{detail_row['rule']}] {detail_row['text'][:70]!r}")
 
     # Hard failures: the control stratum must reproduce the corpus, AND benign text must not be
     # denied. Bypass rates themselves never fail the build — a known-defeatable control is being

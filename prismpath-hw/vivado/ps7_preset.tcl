@@ -2,6 +2,12 @@
 # (warden_design.bd, Crystal_Warden_Core): Arty Z7-20 DDR/MIO/clock truth.
 # Filtered: computed params (PCW_ACT_*, MIO_TREE summaries, derived clocks,
 # addr map) and any value with Tcl-hostile characters.
+#
+# These values are DDR timing and MIO pinout for ONE board. Applied under a different part they
+# configure memory that board does not have, and nothing in the CONFIG.* dict records which board
+# they came from, so the part is declared here and every script that sources this file checks it
+# against the part it is building for rather than producing a bitstream that boots into garbage.
+set ps7_part xc7z020clg400-1
 set ps7_cfg [list \
   CONFIG.PCW_APU_CLK_RATIO_ENABLE {6:2:1} \
   CONFIG.PCW_APU_PERIPHERAL_FREQMHZ {650} \

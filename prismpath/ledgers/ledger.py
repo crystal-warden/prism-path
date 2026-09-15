@@ -67,13 +67,13 @@ def default_state_dir() -> Path:
 
 def sha256_files(mapping: Dict[str, object]) -> str:
     """Content hash of a {path: content} mapping — order-independent, the per-unit output proof."""
-    h = hashlib.sha256()
+    hasher = hashlib.sha256()
     for path in sorted(mapping):
-        c = mapping[path]
-        c = c if isinstance(c, (bytes, bytearray)) else str(c).encode()
-        h.update(path.encode() + b"\0")
-        h.update(c + b"\0")
-    return "sha256:" + h.hexdigest()
+        file_bytes = mapping[path]
+        file_bytes = file_bytes if isinstance(file_bytes, (bytes, bytearray)) else str(file_bytes).encode()
+        hasher.update(path.encode() + b"\0")
+        hasher.update(file_bytes + b"\0")
+    return "sha256:" + hasher.hexdigest()
 
 
 def new_run_id() -> str:
@@ -104,18 +104,18 @@ class Ledger:
 
     def _git(self, args: List[str], *, env: dict, input: Optional[bytes] = None,
              check: bool = True) -> str:
-        p = subprocess.run(["git", *args], env=env, input=input, capture_output=True)
-        if check and p.returncode != 0:
-            raise LedgerError(f"git {' '.join(args[:2])} failed: {p.stderr.decode()[:200]}")
-        return p.stdout.decode()
+        git_run = subprocess.run(["git", *args], env=env, input=input, capture_output=True)
+        if check and git_run.returncode != 0:
+            raise LedgerError(f"git {' '.join(args[:2])} failed: {git_run.stderr.decode()[:200]}")
+        return git_run.stdout.decode()
 
     def init(self) -> None:
         if not (self.repo / "HEAD").exists():
             self.repo.parent.mkdir(parents=True, exist_ok=True)
-            r = subprocess.run(["git", "init", "--bare", "-q", str(self.repo)],
+            init_run = subprocess.run(["git", "init", "--bare", "-q", str(self.repo)],
                                capture_output=True)
-            if r.returncode != 0:
-                raise LedgerError(f"git init --bare failed: {r.stderr.decode()[:200]}")
+            if init_run.returncode != 0:
+                raise LedgerError(f"git init --bare failed: {init_run.stderr.decode()[:200]}")
 
     def tip(self) -> Optional[str]:
         env = self._env()
@@ -146,9 +146,9 @@ class Ledger:
     def _cas_update(self, new: str, old: Optional[str]) -> bool:
         # compare-and-swap: fails (returns False) if another writer moved the ref since we read the
         # tip. The caller re-reads and rebuilds on the new tip rather than dropping the proof.
-        p = subprocess.run(["git", "update-ref", self.ref, new, old or _ZERO],
+        update_run = subprocess.run(["git", "update-ref", self.ref, new, old or _ZERO],
                            env=self._env(), capture_output=True)
-        return p.returncode == 0
+        return update_run.returncode == 0
 
     # --- the API ----------------------------------------------------------------------
     def commit_unit(self, unit: str, *, node: Optional[str] = None, gate: str = "green",
@@ -167,8 +167,8 @@ class Ledger:
         proof."""
         self.init()
         fb: Dict[str, bytes] = {
-            p: (c if isinstance(c, (bytes, bytearray)) else str(c).encode())
-            for p, c in (files or {}).items()}
+            file_path: (file_bytes if isinstance(file_bytes, (bytes, bytearray)) else str(file_bytes).encode())
+            for file_path, file_bytes in (files or {}).items()}
         if output_hash is None:
             output_hash = sha256_files(fb)
         if wallclock is None:                       # real UTC green-time; the pinned git dates don't carry it
@@ -199,7 +199,8 @@ class Ledger:
             body = subject + "\n\n"
             if summary:
                 body += summary.strip() + "\n\n"
-            body += "\n".join(f"{k}: {v}" for k, v in trailers) + "\n"
+            body += "\n".join(f"{trailer_key}: {trailer_value}"
+                              for trailer_key, trailer_value in trailers) + "\n"
 
             args = ["commit-tree", tree]
             if parent:
@@ -214,7 +215,7 @@ class Ledger:
         return self._write_tree({}, None)
 
     def _next_seq(self) -> int:
-        seqs = [r["seq"] for r in self.log() if isinstance(r.get("seq"), int)]
+        seqs = [record["seq"] for record in self.log() if isinstance(record.get("seq"), int)]
         return (max(seqs) + 1) if seqs else 1
 
     def log(self) -> List[dict]:
@@ -230,16 +231,16 @@ class Ledger:
             sha, _, bodytext = chunk.partition("\n")
             rec: dict = {"commit": sha.strip()}
             for line in bodytext.splitlines():
-                m = re.match(r"^PrismPath-([A-Za-z-]+):\s*(.*)$", line)
-                if m:
-                    rec[m.group(1).lower().replace("-", "_")] = m.group(2).strip()
+                trailer_match = re.match(r"^PrismPath-([A-Za-z-]+):\s*(.*)$", line)
+                if trailer_match:
+                    rec[trailer_match.group(1).lower().replace("-", "_")] = trailer_match.group(2).strip()
             if "seq" in rec:
                 try:
                     rec["seq"] = int(rec["seq"])
                 except ValueError:
                     pass
             if "depends" in rec:
-                rec["depends"] = [d for d in rec["depends"].split(",") if d]
+                rec["depends"] = [dependency for dependency in rec["depends"].split(",") if dependency]
             records.append(rec)
         return records
 
@@ -248,7 +249,7 @@ class Ledger:
         re-run of a unit supersedes the old proof. This is the ledger's replacement for the mutable
         `.kg.json` status field — progress derived from the log, never a separate pointer."""
         done: Dict[str, dict] = {}
-        for r in self.log():                    # oldest -> newest; later overwrites
-            if r.get("gate") == "green" and r.get("unit"):
-                done[r["unit"]] = r
+        for record in self.log():                    # oldest -> newest; later overwrites
+            if record.get("gate") == "green" and record.get("unit"):
+                done[record["unit"]] = record
         return done

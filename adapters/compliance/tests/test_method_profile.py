@@ -3,7 +3,7 @@
 """Adjudicator method-depth: each control is classified to an assessment-method profile (matching the
 generic flow's routing), and the profile's evidence guidance is injected into the adjudication prompt."""
 import pytest
-import compliance_adapter as ca
+from adapters.compliance import compliance_adapter as ca
 
 
 @pytest.mark.parametrize("family_name,expected", [
@@ -41,8 +41,8 @@ def test_risk_vs_security_assessment_not_confused():
 @pytest.mark.parametrize("std", ["nist_800171_r2", "nist_800171_r3"])
 def test_full_catalog_has_no_general_leak(std):
     ca.use_standard(std)
-    generals = [cid for cid, c in ca._catalog()["controls"].items()
-                if ca._method_profile({"id": cid, **c}) == "general"]
+    generals = [cid for cid, control in ca._catalog()["controls"].items()
+                if ca._method_profile({"id": cid, **control}) == "general"]
     assert generals == [], generals                            # every real family maps to a real profile
 
 
@@ -70,7 +70,7 @@ def test_prompt_injects_profile_guidance_and_methods(monkeypatch):
 
 def test_prompt_profile_differs_by_family(monkeypatch):
     captured = {}
-    monkeypatch.setattr(ca, "_gemma", lambda p, s, n, concise=False: captured.__setitem__("p", p) or
+    monkeypatch.setattr(ca, "_gemma", lambda prompt, schema, name, concise=False: captured.__setitem__("p", prompt) or
                         {"status": "met", "unmet_objective_ids": [], "gap_summary": "x"})
     ca.use_standard("nist_800171_r2")
     ca.adjudicate(ca.get_control("3.9.1"), {"control_id": "3.9.1", "boundary": "b", "evidence": []})  # PS procedural

@@ -52,8 +52,8 @@ def parse_ppt(data: bytes) -> dict:
     off = 28
     atoms = []
     for _ in range(n_atoms):
-        f, op, ty, val = struct.unpack_from("<HBBi", data, off)
-        atoms.append((f, op, ty, val))
+        field_index, op, ty, val = struct.unpack_from("<HBBi", data, off)
+        atoms.append((field_index, op, ty, val))
         off += 8
     node_recs = []
     for _ in range(n_nodes):
@@ -69,11 +69,11 @@ def parse_ppt(data: bytes) -> dict:
 
 
 def image_colors(data: bytes) -> list[int] | None:
-    h = policy_pack.read_ppt_header(data)
-    if not (h["flags"] & policy_pack.FLAG_COLORS):
+    header = policy_pack.read_ppt_header(data)
+    if not (header["flags"] & policy_pack.FLAG_COLORS):
         return None
-    n = h["nodes"]
-    return list(struct.unpack_from(f"<{n}H", data, len(data) - 2 * n))
+    node_count = header["nodes"]
+    return list(struct.unpack_from(f"<{node_count}H", data, len(data) - 2 * node_count))
 
 
 def load_writes(sel: int, addr: int, data: int) -> list[tuple[int, int]]:
@@ -84,70 +84,70 @@ def policy_writes(img: dict, colors: list[int] | None,
                   arm: tuple[int, int, bool, int] | None,
                   disarm: bool = False) -> list[tuple[int, int]]:
     """The full PS-identical load sequence for one policy."""
-    w: list[tuple[int, int]] = [(R_SOFT_RST, 1)]
-    w += load_writes(0, 0, img["visits_idx"])
-    for i, (f, op, ty, val) in enumerate(img["atoms"]):
-        w += load_writes(1, i, ((ty & 0xFF) << 24) | ((op & 0xFF) << 16) | (f & 0xFFFF))
-        w += load_writes(2, i, val)
-    for ni, (eoff, ecnt) in enumerate(img["node_recs"]):
-        w += load_writes(3, ni, ((ecnt & 0xFFFF) << 16) | (eoff & 0xFFFF))
-    for ei, (tgt, poff, pcnt) in enumerate(img["edges"]):
-        w += load_writes(4, ei, ((poff & 0xFFFF) << 16) | (tgt & 0xFFFF))
-        w += load_writes(5, ei, pcnt)
-    for pi, word in enumerate(img["prog"]):
-        w += load_writes(6, pi, word)
+    writes: list[tuple[int, int]] = [(R_SOFT_RST, 1)]
+    writes += load_writes(0, 0, img["visits_idx"])
+    for atom_index, (field_index, op, ty, val) in enumerate(img["atoms"]):
+        writes += load_writes(1, atom_index, ((ty & 0xFF) << 24) | ((op & 0xFF) << 16) | (field_index & 0xFFFF))
+        writes += load_writes(2, atom_index, val)
+    for node_index, (eoff, ecnt) in enumerate(img["node_recs"]):
+        writes += load_writes(3, node_index, ((ecnt & 0xFFFF) << 16) | (eoff & 0xFFFF))
+    for edge_index, (target, poff, pcnt) in enumerate(img["edges"]):
+        writes += load_writes(4, edge_index, ((poff & 0xFFFF) << 16) | (target & 0xFFFF))
+        writes += load_writes(5, edge_index, pcnt)
+    for prog_index, word in enumerate(img["prog"]):
+        writes += load_writes(6, prog_index, word)
     if colors is not None:
-        for ni, c in enumerate(colors):
-            w += load_writes(7, ni, c)
+        for node_index, color in enumerate(colors):
+            writes += load_writes(7, node_index, color)
     if arm is not None:
         fidx, start, stateful, safe = arm
         # [31:24] safe_node, [23:16] pot_fidx, [15:8] start, [1] stateful, [0] enable — the
         # stateful/safe bits come from the SIGNED image header (FLAG_STATEFUL + safe byte), so the
         # resident-FSM mode rides the signed replay and a manifest cannot contradict the pack.
-        w.append((R_AUTO_CTRL, ((safe & 0xFF) << 24) | ((fidx & 0xFF) << 16)
+        writes.append((R_AUTO_CTRL, ((safe & 0xFF) << 24) | ((fidx & 0xFF) << 16)
                   | ((start & 0xFF) << 8) | ((2 if stateful else 0)) | 1))
     elif disarm:
         # a pack that is not auto-armed DECLARES that too: swap-in drops to PS mode instead of
         # inheriting the previous policy's arm word (mode inherited = mode negotiated — the hole
         # the stateful bit must never fall into)
-        w.append((R_AUTO_CTRL, 0))
-    return w
+        writes.append((R_AUTO_CTRL, 0))
+    return writes
 
 
 _MANIFEST_DIR = Path('.')     # set by main() to the manifest file's parent
 
 
-def _rel(p: str) -> str:
+def _rel(path_text: str) -> str:
     """A manifest path, resolved relative to the manifest file (absolute passes through)."""
-    q = Path(p)
-    return str(q if q.is_absolute() else (_MANIFEST_DIR / q))
+    path = Path(path_text)
+    return str(path if path.is_absolute() else (_MANIFEST_DIR / path))
 
 
 def emit_pack_svh(policies: list[dict], out: Path) -> None:
     all_writes: list[tuple[int, int]] = []
     starts, lens, notes = [], [], []
-    for p in policies:
-        data = Path(_rel(p["ppt"])).read_bytes()
+    for policy in policies:
+        data = Path(_rel(policy["ppt"])).read_bytes()
         img = parse_ppt(data)
-        colors = image_colors(data) if p.get("colors", True) else None
+        colors = image_colors(data) if policy.get("colors", True) else None
         arm = None
-        if p.get("arm_field"):
-            dbg = json.load(open(_rel(p["json"])))
-            h = policy_pack.read_ppt_header(data)
-            arm = (dbg["fields"][p["arm_field"]], img["start"], h["stateful"], h["safe_node"])
-        disarm = bool(p.get("disarm"))
+        if policy.get("arm_field"):
+            dbg = json.load(open(_rel(policy["json"])))
+            header = policy_pack.read_ppt_header(data)
+            arm = (dbg["fields"][policy["arm_field"]], img["start"], header["stateful"], header["safe_node"])
+        disarm = bool(policy.get("disarm"))
         verified = "UNSIGNED"
-        if p.get("pubkeys"):
-            ok, reasons, man = policy_pack.verify_pack(_rel(p["ppt"]), [_rel(k) for k in p["pubkeys"]])
+        if policy.get("pubkeys"):
+            ok, reasons, man = policy_pack.verify_pack(_rel(policy["ppt"]), [_rel(key_path) for key_path in policy["pubkeys"]])
             if not ok:
-                raise SystemExit(f"REFUSED: {p['ppt']} failed verification: {reasons}")
+                raise SystemExit(f"REFUSED: {policy['ppt']} failed verification: {reasons}")
             verified = f"verified envelope={man['envelope_id']} v{man['version']} key={man['key_id'][:8]}"
-        w = policy_writes(img, colors, arm, disarm)
+        writes = policy_writes(img, colors, arm, disarm)
         starts.append(len(all_writes))
-        lens.append(len(w))
-        all_writes += w
-        notes.append(f"//   [{len(starts)-1}] {Path(_rel(p['ppt'])).name}  sha256={hashlib.sha256(data).hexdigest()[:16]}"
-                     f"  writes={len(w)}  colors={'y' if colors else 'n'}  arm={'y' if arm else 'n'}  {verified}")
+        lens.append(len(writes))
+        all_writes += writes
+        notes.append(f"//   [{len(starts)-1}] {Path(_rel(policy['ppt'])).name}  sha256={hashlib.sha256(data).hexdigest()[:16]}"
+                     f"  writes={len(writes)}  colors={'y' if colors else 'n'}  arm={'y' if arm else 'n'}  {verified}")
     npol, nw = len(policies), len(all_writes)
     lines = [
         "// ppt_pack.svh - GENERATED by tools/gen_pack_svh.py; do not hand-edit.",
@@ -157,7 +157,7 @@ def emit_pack_svh(policies: list[dict], out: Path) -> None:
         f"localparam int NW   = {nw};",
         f"localparam logic [39:0] WRITES [0:NW-1] = '{{",
     ]
-    body = [f"    {{8'h{r:02X}, 32'h{v:08X}}}" for r, v in all_writes]
+    body = [f"    {{8'h{register:02X}, 32'h{value:08X}}}" for register, value in all_writes]
     lines.append(",\n".join(body))
     lines.append("};")
     lines.append("localparam int POL_START [0:NPOL-1] = '{" + ", ".join(map(str, starts)) + "};")
@@ -173,7 +173,7 @@ def emit_ctrl_svh(spec_path: str, out: Path) -> None:
     spec = json.load(open(spec_path))
     nbtn = spec["nbtn"]
     entries = spec["entries"]                       # [{profile, btn, act, arg}]
-    tbl = {(e["profile"], e["btn"]): (ACT[e["act"]], e.get("arg", 0)) for e in entries}
+    tbl = {(entry["profile"], entry["btn"]): (ACT[entry["act"]], entry.get("arg", 0)) for entry in entries}
     lines = [
         "// ppt_ctrl_pack.svh - GENERATED by tools/gen_pack_svh.py from " + Path(spec_path).name + "; do not hand-edit.",
         f"localparam int NENT = {2 * nbtn};",
@@ -181,10 +181,10 @@ def emit_ctrl_svh(spec_path: str, out: Path) -> None:
     ]
     rows = []
     for prof in (0, 1):
-        for b in range(nbtn):
-            code, arg = tbl.get((prof, b), (0, 0))
-            last = (prof == 1 and b == nbtn - 1)
-            rows.append(f"    {{3'd{code}, 8'h{arg & 0xFF:02X}}}{' ' if last else ','}  // P{prof} BTN{b}")
+        for button_index in range(nbtn):
+            code, arg = tbl.get((prof, button_index), (0, 0))
+            last = (prof == 1 and button_index == nbtn - 1)
+            rows.append(f"    {{3'd{code}, 8'h{arg & 0xFF:02X}}}{' ' if last else ','}  // P{prof} BTN{button_index}")
     lines.extend(rows)
     lines.append("};")
     out.write_text("\n".join(lines) + "\n")
@@ -192,14 +192,14 @@ def emit_ctrl_svh(spec_path: str, out: Path) -> None:
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser()
-    ap.add_argument("manifest")
-    ap.add_argument("-o", "--outdir", default=str(Path(__file__).resolve().parents[1] / "rtl"))
-    a = ap.parse_args()
+    arg_parser = argparse.ArgumentParser()
+    arg_parser.add_argument("manifest")
+    arg_parser.add_argument("-o", "--outdir", default=str(Path(__file__).resolve().parents[1] / "rtl"))
+    args = arg_parser.parse_args()
     global _MANIFEST_DIR
-    _MANIFEST_DIR = Path(a.manifest).resolve().parent
-    man = json.load(open(a.manifest))
-    outdir = Path(a.outdir)
+    _MANIFEST_DIR = Path(args.manifest).resolve().parent
+    man = json.load(open(args.manifest))
+    outdir = Path(args.outdir)
     emit_pack_svh(man["policies"], outdir / "ppt_pack.svh")
     if man.get("ctrl_table"):
         emit_ctrl_svh(_rel(man["ctrl_table"]), outdir / "ppt_ctrl_pack.svh")

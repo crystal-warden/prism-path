@@ -26,7 +26,7 @@ REPO = HERE.parents[1]
 sys.path.insert(0, str(REPO))
 from prismpath.telemetry import packed  # noqa: E402
 from prismpath.telemetry import receipts  # noqa: E402
-from prismpath.telemetry import zeckendorf as z  # noqa: E402
+from prismpath.telemetry import zeckendorf as zeck  # noqa: E402
 
 FACET_PORT = 4711
 TS_BASE = 1_787_200_000  # fixed epoch seconds; deterministic output is the point
@@ -48,7 +48,7 @@ def strict_decode(payload: bytes) -> dict:
         if bits[i] == "1" and bits[i + 1] == "1":
             if (i - start + 1) > 70:
                 return {"form": "raw", "malformed": 1, "reason": "overflow"}
-            ints.append(z.decode(bits[start:i + 2]))
+            ints.append(zeck.decode(bits[start:i + 2]))
             spans.append((start, i + 1))
             last_end = i + 1
             i += 2
@@ -101,7 +101,7 @@ def frame(payload: bytes) -> bytes:
 
 
 def raw_payload(wire_ints: list) -> bytes:
-    return packed.pack(z.encode_stream(wire_ints), 8)
+    return packed.pack(zeck.encode_stream(wire_ints), 8)
 
 
 def decoded_payload(cells: list) -> bytes:
@@ -128,8 +128,8 @@ def build_corpus() -> list:
     # deliberate heuristic collision: raw parseable AND satisfies the decoded length check
     out.append(("ambiguous_specimen", bytes([0x46, 0x01, 0x03, 0x00])))
     # receipt stream specimens
-    out.append(("rcpt_clean", receipts.encode_receipt(seq=1, prev_node=10, event=5, next_node=11, cause_val=0)))
-    out.append(("rcpt_stuck", receipts.encode_receipt(seq=2, prev_node=10, event=5, next_node=11, cause_val=36)))
+    out.append(("rcpt_clean", receipts.encode_receipt(seq=1, prev_node=10, event=5, next_node=11, cause_code=0)))
+    out.append(("rcpt_stuck", receipts.encode_receipt(seq=2, prev_node=10, event=5, next_node=11, cause_code=36)))
     return out
 
 

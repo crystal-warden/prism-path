@@ -28,10 +28,10 @@ FLOWS = os.path.join(os.path.dirname(HERE), "flows")
 def _lexical(outcome, edges):
     ow = set(re.findall(r"[a-z]+", outcome.lower()))
     best, pick = -1, edges[0][0]
-    for t, cond in edges:
-        s = len(ow & set(re.findall(r"[a-z]+", cond.lower())))
-        if s > best:
-            best, pick = s, t
+    for target, cond in edges:
+        overlap = len(ow & set(re.findall(r"[a-z]+", cond.lower())))
+        if overlap > best:
+            best, pick = overlap, target
     return pick
 
 
@@ -42,30 +42,30 @@ def main(dataset=None) -> dict:
     from prismpath.kernel.parser import parse_file
 
     dataset = dataset or os.path.join(HERE, "routing_bench.jsonl")
-    cases = [json.loads(l) for l in open(dataset, encoding="utf-8") if l.strip()]
+    cases = [json.loads(line) for line in open(dataset, encoding="utf-8") if line.strip()]
     graphs = {}
 
     per = defaultdict(lambda: {"n": 0, "embed": 0, "lexical": 0})
-    for c in cases:
-        flow = c["flow"]
+    for case in cases:
+        flow = case["flow"]
         if flow not in graphs:
             graphs[flow] = parse_file(os.path.join(FLOWS, f"{flow}.md"))
-        node = graphs[flow].nodes[c["node"]]
-        sem = [(t, cond) for t, cond in node.edges if predicates.is_semantic(cond)]
+        node = graphs[flow].nodes[case["node"]]
+        sem = [(target, cond) for target, cond in node.edges if predicates.is_semantic(cond)]
         cond_embs = embedder.embed([cond for _, cond in sem], is_query=False)
-        qe = embedder.embed([c["outcome"]], is_query=True)
+        qe = embedder.embed([case["outcome"]], is_query=True)
         embed_pick = sem[int(np.argmax(embedder.cosine(qe, cond_embs)[0]))][0]
-        lex_pick = _lexical(c["outcome"], sem)
-        for key in (c["stratum"], "ALL"):
+        lex_pick = _lexical(case["outcome"], sem)
+        for key in (case["stratum"], "ALL"):
             per[key]["n"] += 1
-            per[key]["embed"] += int(embed_pick == c["label"])
-            per[key]["lexical"] += int(lex_pick == c["label"])
+            per[key]["embed"] += int(embed_pick == case["label"])
+            per[key]["lexical"] += int(lex_pick == case["label"])
 
     print(f"routing benchmark — {len(cases)} labeled cases\n")
     print(f"  {'stratum':<12} {'n':>3}  {'embed':>7}  {'lexical':>7}")
-    for key in sorted(per, key=lambda k: (k != "ALL", k)):
-        s = per[key]
-        print(f"  {key:<12} {s['n']:>3}  {s['embed']/s['n']:>6.2f}  {s['lexical']/s['n']:>6.2f}")
+    for key in sorted(per, key=lambda stratum: (stratum != "ALL", stratum)):
+        counts = per[key]
+        print(f"  {key:<12} {counts['n']:>3}  {counts['embed']/counts['n']:>6.2f}  {counts['lexical']/counts['n']:>6.2f}")
     return dict(per)
 
 

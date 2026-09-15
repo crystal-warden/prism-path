@@ -7,7 +7,7 @@ import ast
 
 import pytest
 
-from prismpath.kernel import predicates as P
+from prismpath.kernel import predicates as predicates
 from prismpath.kernel import model_check as mc
 @pytest.mark.parametrize("cond, ctx, expect", [
     ("when x >= -1282", {"x": -5}, True),
@@ -20,8 +20,8 @@ from prismpath.kernel import model_check as mc
     ("when x in [-3, -1, 2]", {"x": 0}, False),
 ])
 def test_negative_ints_evaluate(cond, ctx, expect):
-    assert P.check_predicate(cond) == []        # accepted by the static sandbox
-    assert P.eval_condition(cond, ctx) is expect
+    assert predicates.check_predicate(cond) == []        # accepted by the static sandbox
+    assert predicates.eval_condition(cond, ctx) is expect
     assert mc.is_level_m(cond)[0] is True        # and it is in the Level M fragment
 
 
@@ -32,15 +32,15 @@ def test_negative_ints_evaluate(cond, ctx, expect):
     "when x >= -foo",
 ])
 def test_signs_on_non_ints_stay_rejected(cond):
-    assert P.check_predicate(cond) != []         # sandbox still rejects
-    with pytest.raises(P.PredicateError):
-        P.eval_condition(cond, {"x": 1, "y": 2, "foo": 3})
+    assert predicates.check_predicate(cond) != []         # sandbox still rejects
+    with pytest.raises(predicates.PredicateError):
+        predicates.eval_condition(cond, {"x": 1, "y": 2, "foo": 3})
     assert mc.is_level_m(cond) == (False, "disallowed-or-unparseable")
 
 
 def test_fold_only_touches_signed_int_constants():
     def folded(src):
-        return ast.dump(P.fold_unary_signs(ast.parse(src, mode="eval")).body)
+        return ast.dump(predicates.fold_unary_signs(ast.parse(src, mode="eval")).body)
     assert "Constant(value=-5)" in folded("x >= -5")
     assert "Constant(value=5)" in folded("x >= +5")
     assert "Constant(value=5)" in folded("x >= -(-5)")   # bottom-up
@@ -60,4 +60,4 @@ def test_compiles_to_a_table():
     img = pc.compile_predicate("when x >= -1282")        # no SubsetError
     assert img.serialize()[:4] == b"PPTM"
     # the negative constant is stored as a signed i32 in the atom
-    assert any(a[3] == -1282 for a in img.atoms)
+    assert any(atom[3] == -1282 for atom in img.atoms)

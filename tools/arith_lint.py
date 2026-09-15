@@ -40,19 +40,19 @@ def _ledger_numeric_mentions():
     and `#NN` row ids are excluded; everything else (including counts) is kept, so this over-counts the
     true 'numeric claim' surface, which is the safe direction for an honesty statement."""
     txt = ""
-    for f in (LEDGER, PENDING):
-        if f.exists():
-            txt += f.read_text()
+    for ledger_path in (LEDGER, PENDING):
+        if ledger_path.exists():
+            txt += ledger_path.read_text()
     toks = re.findall(r"(?<![#\w.])\d[\d,]*(?:\.\d+)?", txt)
-    return sum(1 for t in toks if not re.fullmatch(r"(19|20)\d\d", t.replace(",", "")))
+    return sum(1 for token in toks if not re.fullmatch(r"(19|20)\d\d", token.replace(",", "")))
 
 
 def _load(name):
     return json.loads((BENCH / name).read_text())
 
 
-def _close(a, b, tol):
-    return abs(float(a) - float(b)) <= tol
+def _close(stored, recomputed, tol):
+    return abs(float(stored) - float(recomputed)) <= tol
 
 
 # --- checks 1 + 2: recompute the source of truth ---------------------------------------------------
@@ -63,10 +63,10 @@ def check_sources():
     hard = []
     otlp = _load("otlp_results.json")
     res = _load("results.json")
-    n = res["n"]
+    decision_count = res["n"]
 
-    o1 = res["o1"]["wire_bytes_total"] / n                     # 1.516
-    o2 = res["o2"]["wire_bytes_total"] / n                     # 0.516
+    o1 = res["o1"]["wire_bytes_total"] / decision_count                     # 1.516
+    o2 = res["o2"]["wire_bytes_total"] / decision_count                     # 0.516
     otlp_b = otlp["otlp_faithful"]["epoched_per_decision"]     # 101.372
     zstd_b = otlp["otlp_faithful"]["zstd19_per_decision"]      # 7.162
     min_b = otlp["otlp_minimal"]["epoched_per_decision"]       # 39.905
@@ -82,12 +82,12 @@ def check_sources():
         "otlp_over_b2_json": round(otlp_b / b2, 2),
     }
     have = otlp.get("ratios", {})
-    for k, v in want.items():
-        if k in have:
-            tol = 0.05 if v > 5 else 0.01     # ratios quoted to 1 dp; B/dec quoted to 3 dp
-            if not _close(have[k], v, tol):
+    for ratio_name, recomputed_value in want.items():
+        if ratio_name in have:
+            tol = 0.05 if recomputed_value > 5 else 0.01     # ratios quoted to 1 dp; B/dec quoted to 3 dp
+            if not _close(have[ratio_name], recomputed_value, tol):
                 hard.append({"check": "SOURCE", "detail":
-                             f"otlp_results.json ratios.{k} = {have[k]} but recompute = {v}"})
+                             f"otlp_results.json ratios.{ratio_name} = {have[ratio_name]} but recompute = {recomputed_value}"})
     return hard, want, round(o1, 3)
 
 
@@ -119,11 +119,11 @@ def _md_files():
     for dp, _, fn in os.walk(BASE):
         if EXC.search(dp + "/"):
             continue
-        for f in fn:
-            if f.endswith(".md"):
-                p = os.path.join(dp, f)
-                if not EXC.search(p):
-                    out.append(p)
+        for filename in fn:
+            if filename.endswith(".md"):
+                path = os.path.join(dp, filename)
+                if not EXC.search(path):
+                    out.append(path)
     return out
 
 
@@ -135,28 +135,29 @@ DOC_SKIP = ("CHANGELOG.md",)
 
 def _section(txt, pos):
     """The heading-delimited section enclosing `pos` (covers a whole ledger row: Claim .. Result)."""
-    starts = [m.start() for m in HEADING.finditer(txt)]
-    lo = max([s for s in starts if s <= pos], default=0)
-    hi = min([s for s in starts if s > pos], default=len(txt))
+    starts = [heading.start() for heading in HEADING.finditer(txt)]
+    lo = max([start for start in starts if start <= pos], default=0)
+    hi = min([start for start in starts if start > pos], default=len(txt))
     return txt[lo:hi]
 
 
 def check_docs():
     hard = []
-    for p in _md_files():
-        rel = os.path.relpath(p, BASE)
-        if any(rel.endswith(s) for s in DOC_SKIP):
+    for md_path in _md_files():
+        rel = os.path.relpath(md_path, BASE)
+        if any(rel.endswith(skipped) for skipped in DOC_SKIP):
             continue
-        txt = open(p, encoding="utf-8", errors="ignore").read()
+        with open(md_path, encoding="utf-8", errors="ignore") as md_file:
+            txt = md_file.read()
         for rx, canon in SUPERSEDED:
-            for m in rx.finditer(txt):
-                sec = _section(txt, m.start())
+            for superseded_match in rx.finditer(txt):
+                sec = _section(txt, superseded_match.start())
                 if ANN.search(sec):          # append-only annotation somewhere in this row/section
                     continue
                 if ANCHOR.search(sec):
-                    line = txt.count("\n", 0, m.start()) + 1
+                    line = txt.count("\n", 0, superseded_match.start()) + 1
                     hard.append({"check": "DOC", "detail":
-                                 f"{rel}:{line} quotes superseded ratio {m.group(0).strip()} in an "
+                                 f"{rel}:{line} quotes superseded ratio {superseded_match.group(0).strip()} in an "
                                  f"OTLP/zstd section without an append-only annotation "
                                  f"(canonical {canon}x)"})
     return hard
@@ -176,8 +177,8 @@ def main(argv):
         n_rc = len(rep["recomputed"])
         total = _ledger_numeric_mentions()
         print(f"arith_lint: recomputed {n_rc} canonical numbers; {len(rep['hard'])} hard")
-        for f in rep["hard"]:
-            print(f"  HARD  {f['check']:<6} {f['detail']}")
+        for finding in rep["hard"]:
+            print(f"  HARD  {finding['check']:<6} {finding['detail']}")
         if not rep["hard"]:
             print("  clean — every source ratio recomputes and no superseded value is unannotated.")
         print()

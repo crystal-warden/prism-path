@@ -14,15 +14,15 @@ FLOWS = os.path.join(HERE, "flows")
 
 
 def test_dataset_wellformed_and_labels_are_real_edges():
-    cases = [json.loads(l) for l in open(DATA, encoding="utf-8") if l.strip()]
+    cases = [json.loads(line) for line in open(DATA, encoding="utf-8") if line.strip()]
     assert len(cases) >= 17
     graphs = {}
-    for c in cases:
-        assert set(c) >= {"flow", "node", "outcome", "label", "stratum"}
-        g = graphs.setdefault(c["flow"], parse_file(os.path.join(FLOWS, f"{c['flow']}.md")))
-        assert c["node"] in g.nodes
-        targets = [t for t, _ in g.nodes[c["node"]].edges]
-        assert c["label"] in targets, f"label {c['label']!r} is not an edge of {c['node']!r}"
+    for case in cases:
+        assert set(case) >= {"flow", "node", "outcome", "label", "stratum"}
+        graph = graphs.setdefault(case["flow"], parse_file(os.path.join(FLOWS, f"{case['flow']}.md")))
+        assert case["node"] in graph.nodes
+        targets = [target for target, _ in graph.nodes[case["node"]].edges]
+        assert case["label"] in targets, f"label {case['label']!r} is not an edge of {case['node']!r}"
 
 
 def test_reproduce_aggregates_with_stub_embedder(monkeypatch):

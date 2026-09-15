@@ -26,14 +26,17 @@ from collections import Counter
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-_TELEMETRY = Path(__file__).resolve().parent.parent.parent / "prismpath" / "telemetry"
-sys.path.insert(0, str(_TELEMETRY))
-sys.path.insert(0, str(_TELEMETRY.parent.parent))
+# Imported as a module (python -m integrations.vector.canary_verify) the repository root is already
+# on sys.path. Run as a plain script against an uninstalled checkout it is not, and that is how the
+# verifier is invoked in the field, so the root goes on the path for that case.
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
 
-from prismpath.telemetry import preflight  # noqa: E402  (extract_reading + _codec_view: the codec's exact view of an event)
-from prismpath.telemetry import quantizer as q  # noqa: E402
-from prismpath.telemetry import wire as w  # noqa: E402
 from prismpath.kernel.parser import parse_file  # noqa: E402
+from prismpath.telemetry import preflight  # noqa: E402  (extract_reading + the codec's exact view of an event)
+from prismpath.telemetry import quantizer  # noqa: E402
+from prismpath.telemetry import wire  # noqa: E402
 
 
 def _read_ndjson(path: str) -> Tuple[List[dict], int]:
@@ -74,12 +77,12 @@ def main() -> int:
 
     field_paths: Dict[str, str] = {}
     for m in args.map:
-        f, _, p = m.partition("=")
-        field_paths[f] = p
+        field, _, raw_path = m.partition("=")
+        field_paths[field] = raw_path
 
     graph = parse_file(args.flow)
-    parts = q.build_partitions(graph)
-    if args.route_node not in w.decision_nodes(graph):
+    parts = quantizer.build_partitions(graph)
+    if args.route_node not in wire.decision_nodes(graph):
         ap.error(f"--route-node {args.route_node!r} is not a decision node of the flow")
     order = sorted(parts.keys())
 
@@ -96,20 +99,20 @@ def main() -> int:
             continue
         try:
             seen, _trunc = preflight._codec_view(parts, reading)
-            w.encode_reading(parts, seen)
+            wire.encode_reading(parts, seen)
         except (TypeError, ValueError, KeyError):
             unencodable += 1
             expected.append(None)
             continue
-        expected.append(w.route_node(graph, args.route_node, seen) or "(no match)")
+        expected.append(wire.route_node(graph, args.route_node, seen) or "(no match)")
 
-    exp_routes = [r for r in expected if r is not None]
+    exp_routes = [route for route in expected if route is not None]
     got_routes = [str(ev.get(args.route_field, "(absent)")) for ev in decoded]
 
     mismatches: List[dict] = []
-    for i, (e, g) in enumerate(zip(exp_routes, got_routes)):
-        if e != g and len(mismatches) < 10:
-            mismatches.append({"position": i, "expected": e, "decoded": g})
+    for position, (expected_route, decoded_route) in enumerate(zip(exp_routes, got_routes)):
+        if expected_route != decoded_route and len(mismatches) < 10:
+            mismatches.append({"position": position, "expected": expected_route, "decoded": decoded_route})
     count_drift = len(exp_routes) - len(got_routes)
     exp_dist, got_dist = Counter(exp_routes), Counter(got_routes)
     ok = not mismatches and count_drift == 0 and exp_dist == got_dist \
@@ -134,9 +137,9 @@ def main() -> int:
                   f"MISMATCHES** (first shown; usual causes: flow version skew between the legs, "
                   f"an unpinned policy edited on one side, or field_paths that differ from the "
                   f"encoder's):")
-        for m in mismatches:
-            md.append(f"- event {m['position']}: raw leg routes `{m['expected']}`, "
-                      f"decoded leg carried `{m['decoded']}`")
+        for mismatch in mismatches:
+            md.append(f"- event {mismatch['position']}: raw leg routes `{mismatch['expected']}`, "
+                      f"decoded leg carried `{mismatch['decoded']}`")
         md.append("")
     md.append("**PARITY.** Every decoded route matches the raw leg; the Facet wire is carrying "
               "your decisions faithfully." if ok else

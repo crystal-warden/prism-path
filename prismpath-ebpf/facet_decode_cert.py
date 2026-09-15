@@ -13,7 +13,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 from prismpath.telemetry import packed  # noqa: E402
-from prismpath.telemetry import zeckendorf as z  # noqa: E402
+from prismpath.telemetry import zeckendorf as zeck  # noqa: E402
 
 FACET_PORT = 4711
 
@@ -26,7 +26,7 @@ def frame(payload):
     return eth + ip + udp
 
 def facet_payload(wire_ints):
-    return packed.pack(z.encode_stream(wire_ints), 8)
+    return packed.pack(zeck.encode_stream(wire_ints), 8)
 
 # --- minimal libbpf ctypes binding ---
 lib = C.CDLL("libbpf.so.1", use_errno=True)

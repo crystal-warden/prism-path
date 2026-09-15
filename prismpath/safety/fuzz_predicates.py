@@ -82,29 +82,29 @@ _CMP = ["==", "!=", "<", "<=", ">", ">=", "in", "not in"]
 _BOOL = ["and", "or"]
 
 
-def _atom(r):
-    return r.choice(_NAMES + _LITS)
+def _atom(rng):
+    return rng.choice(_NAMES + _LITS)
 
 
-def _expr(r, depth=0):
-    if depth > 4 or r.random() < 0.4:
-        a, b = _atom(r), _atom(r)
-        return f"{a} {r.choice(_CMP)} {b}"
-    kind = r.random()
+def _expr(rng, depth=0):
+    if depth > 4 or rng.random() < 0.4:
+        left_atom, right_atom = _atom(rng), _atom(rng)
+        return f"{left_atom} {rng.choice(_CMP)} {right_atom}"
+    kind = rng.random()
     if kind < 0.4:
-        return f"({_expr(r, depth+1)}) {r.choice(_BOOL)} ({_expr(r, depth+1)})"
+        return f"({_expr(rng, depth+1)}) {rng.choice(_BOOL)} ({_expr(rng, depth+1)})"
     if kind < 0.7:
-        return f"not ({_expr(r, depth+1)})"
-    return f"{_atom(r)} {r.choice(_CMP)} {_atom(r)}"
+        return f"not ({_expr(rng, depth+1)})"
+    return f"{_atom(rng)} {rng.choice(_CMP)} {_atom(rng)}"
 
 
-def _random_ctx(r):
+def _random_ctx(rng):
     # Deliberately partial + type-mixed: missing fields, strings where numbers may be compared, etc.
     ctx = {}
     for name in _NAMES:
-        if r.random() < 0.5:
+        if rng.random() < 0.5:
             continue  # leave it missing -> exercises the None path
-        ctx[name] = r.choice([0, 1, 3, 42, 0.9, True, False, "done", "contain", [1, 2, 3], None])
+        ctx[name] = rng.choice([0, 1, 3, 42, 0.9, True, False, "done", "contain", [1, 2, 3], None])
     return ctx
 
 
@@ -119,8 +119,8 @@ def classify(cond, ctx):
         return "REJECTED", None
     except RecursionError:
         return "CRASH", "RecursionError"
-    except Exception as e:  # noqa: BLE001 - the whole point is to catch the unexpected
-        return "CRASH", f"{type(e).__name__}: {e}"
+    except Exception as exc:  # noqa: BLE001 - the whole point is to catch the unexpected
+        return "CRASH", f"{type(exc).__name__}: {exc}"
 
 
 def main(argv=None):
@@ -128,7 +128,7 @@ def main(argv=None):
     ap.add_argument("-n", type=int, default=8000, help="random cases")
     ap.add_argument("--seed", type=int, default=1234)
     args = ap.parse_args(argv)
-    r = random.Random(args.seed)
+    rng = random.Random(args.seed)
 
     counts = {"OK": 0, "REJECTED": 0, "CRASH": 0}
     crash_examples = {}   # detail-signature -> example condition
@@ -162,8 +162,8 @@ def main(argv=None):
 
     # 3) random valid-grammar expressions with hostile operands/contexts
     for _ in range(args.n):
-        cond = "when " + _expr(r)
-        ctx = _random_ctx(r)
+        cond = "when " + _expr(rng)
+        ctx = _random_ctx(rng)
         klass, detail = classify(cond, ctx)
         counts[klass] += 1
         if klass == "CRASH":
@@ -172,12 +172,12 @@ def main(argv=None):
     total = sum(counts.values())
     print(f"=== predicate fuzz: {total} inputs "
           f"(seed={args.seed}, n={args.n}, +{len(ATTACKS)} attacks + nesting) ===")
-    for k in ("OK", "REJECTED", "CRASH"):
-        print(f"  {k:9s} {counts[k]:6d}  ({100*counts[k]/total:.1f}%)")
+    for outcome in ("OK", "REJECTED", "CRASH"):
+        print(f"  {outcome:9s} {counts[outcome]:6d}  ({100*counts[outcome]/total:.1f}%)")
 
     print(f"\n--- security: canary tripped? {'YES — FAIL' if exec_failures else 'no (good)'}")
-    for c in exec_failures:
-        print(f"    EXECUTED: {c}")
+    for executed_case in exec_failures:
+        print(f"    EXECUTED: {executed_case}")
     if attack_bad:
         print(f"\n--- {len(attack_bad)} adversarial payload(s) NOT cleanly rejected:")
         for cond, klass, detail in attack_bad:

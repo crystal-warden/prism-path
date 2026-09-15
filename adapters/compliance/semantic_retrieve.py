@@ -17,57 +17,57 @@ TOPK = 3
 
 def breadth_controls():
     by_fam = {}
-    for cid, c in CAT.items():
-        by_fam.setdefault(c["family"], []).append(cid)
-    key = lambda cid: [int(x) for x in cid.split(".")]
-    return [sorted(v, key=key)[0] for _, v in sorted(by_fam.items())]
+    for cid, control in CAT.items():
+        by_fam.setdefault(control["family"], []).append(cid)
+    key = lambda cid: [int(part) for part in cid.split(".")]
+    return [sorted(family_controls, key=key)[0] for _, family_controls in sorted(by_fam.items())]
 
 
 def load_docs():
     out = []
-    for f in sorted(os.listdir(COMPANY)):
-        p = os.path.join(COMPANY, f)
-        if os.path.isfile(p) and not f.startswith("_"):
-            t = open(p, errors="ignore").read()
-            if t.strip():
-                out.append((f, t[:6000]))
+    for filename in sorted(os.listdir(COMPANY)):
+        path = os.path.join(COMPANY, filename)
+        if os.path.isfile(path) and not filename.startswith("_"):
+            text = open(path, errors="ignore").read()
+            if text.strip():
+                out.append((filename, text[:6000]))
     return out
 
 
-def emb(m, texts, kind):
-    fn = getattr(m, "encode_query" if kind == "query" else "encode_document", None)
+def emb(model, texts, kind):
+    fn = getattr(model, "encode_query" if kind == "query" else "encode_document", None)
     try:
         return np.asarray(fn(texts, normalize_embeddings=True)) if fn else \
-               np.asarray(m.encode(texts, normalize_embeddings=True))
+               np.asarray(model.encode(texts, normalize_embeddings=True))
     except Exception:
-        return np.asarray(m.encode(texts, normalize_embeddings=True))
+        return np.asarray(model.encode(texts, normalize_embeddings=True))
 
 
 def main():
-    m = SentenceTransformer("google/embeddinggemma-300m", device="cpu")
+    model = SentenceTransformer("google/embeddinggemma-300m", device="cpu")
     docs = load_docs()
-    dnames = [n for n, _ in docs]
-    dvec = emb(m, [t for _, t in docs], "document")
+    dnames = [doc_name for doc_name, _ in docs]
+    dvec = emb(model, [text for _, text in docs], "document")
     controls = breadth_controls()
     queries = []
     for cid in controls:
-        c = CAT[cid]
-        q = "%s. %s. Objectives: %s. Evidence: %s." % (
-            c["title"], c.get("family_name", ""),
-            " ".join(o["text"] for o in c["objectives"]),
-            " ".join(c.get("evidence_types", [])))
-        queries.append(q)
-    qvec = emb(m, queries, "query")
+        control = CAT[cid]
+        query = "%s. %s. Objectives: %s. Evidence: %s." % (
+            control["title"], control.get("family_name", ""),
+            " ".join(objective["text"] for objective in control["objectives"]),
+            " ".join(control.get("evidence_types", [])))
+        queries.append(query)
+    qvec = emb(model, queries, "query")
     sims = qvec @ dvec.T                                        # cosine (both normalized)
     smap, detail = {}, {}
-    for i, cid in enumerate(controls):
-        order = np.argsort(-sims[i])[:TOPK]
-        smap[cid] = [dnames[j] for j in order]
-        detail[cid] = [{"doc": dnames[j], "sim": round(float(sims[i][j]), 3)} for j in order]
+    for control_index, cid in enumerate(controls):
+        order = np.argsort(-sims[control_index])[:TOPK]
+        smap[cid] = [dnames[doc_index] for doc_index in order]
+        detail[cid] = [{"doc": dnames[doc_index], "sim": round(float(sims[control_index][doc_index]), 3)} for doc_index in order]
     json.dump(smap, open(os.path.join(HERE, "efficacy", "semantic_map.json"), "w"), indent=1)
     json.dump(detail, open(os.path.join(HERE, "efficacy", "semantic_map_detail.json"), "w"), indent=1)
     for cid in controls:
-        print(cid.ljust(7), CAT[cid]["family"].ljust(3), "<-", ", ".join("%s(%.2f)" % (d["doc"], d["sim"]) for d in detail[cid]))
+        print(cid.ljust(7), CAT[cid]["family"].ljust(3), "<-", ", ".join("%s(%.2f)" % (hit["doc"], hit["sim"]) for hit in detail[cid]))
 
 
 if __name__ == "__main__":

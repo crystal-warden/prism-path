@@ -4,14 +4,14 @@
 import json
 import os
 import pytest
-from oscal_catalog import export_oscal, import_oscal
+from adapters.compliance.oscal_catalog import export_oscal, import_oscal
 
 
 def test_oscal_roundtrip_nist_800171_r2():
     cat_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "catalog")
     r2_path = os.path.join(cat_dir, "nist_800171_r2.json")
-    with open(r2_path, "r", encoding="utf-8") as f:
-        r2 = json.load(f)
+    with open(r2_path, "r", encoding="utf-8") as catalog_file:
+        r2 = json.load(catalog_file)
 
     oscal_dict = export_oscal(r2)
     imported = import_oscal(oscal_dict)
@@ -27,8 +27,8 @@ def test_oscal_roundtrip_nist_800171_r2():
     # Assert complete set of objective ids and texts are preserved
     for cid, original_ctl in r2["controls"].items():
         imported_ctl = imported["controls"][cid]
-        original_objs = [(o["id"], o["text"]) for o in original_ctl["objectives"]]
-        imported_objs = [(o["id"], o["text"]) for o in imported_ctl["objectives"]]
+        original_objs = [(objective["id"], objective["text"]) for objective in original_ctl["objectives"]]
+        imported_objs = [(objective["id"], objective["text"]) for objective in imported_ctl["objectives"]]
         assert original_objs == imported_objs, f"Objectives mismatch for control {cid}"
 
 

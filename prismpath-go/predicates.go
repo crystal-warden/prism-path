@@ -30,105 +30,108 @@ type token struct {
 	str  string
 }
 
-// AST Node interface
-type node interface {
+const maxPredicateDepth = 50 // the same bound the Python kernel enforces
+
+// exprNode is one node of a predicate expression tree. It is deliberately spelled
+// apart from Node, which in this package is a node of the flow graph.
+type exprNode interface {
 	eval(ctx map[string]interface{}, depth int) (interface{}, error)
 }
 
 type constNode struct{ val interface{} }
 
-func (n *constNode) eval(ctx map[string]interface{}, depth int) (interface{}, error) {
-	if depth > 50 {
+func (expr *constNode) eval(ctx map[string]interface{}, depth int) (interface{}, error) {
+	if depth > maxPredicateDepth {
 		return nil, newPredErr("expression nested too deeply (depth > 50)")
 	}
-	return n.val, nil
+	return expr.val, nil
 }
 
 type varNode struct{ name string }
 
-func (n *varNode) eval(ctx map[string]interface{}, depth int) (interface{}, error) {
-	if depth > 50 {
+func (expr *varNode) eval(ctx map[string]interface{}, depth int) (interface{}, error) {
+	if depth > maxPredicateDepth {
 		return nil, newPredErr("expression nested too deeply (depth > 50)")
 	}
-	if v, ok := ctx[n.name]; ok {
-		return v, nil
+	if value, ok := ctx[expr.name]; ok {
+		return value, nil
 	}
 	return nil, nil
 }
 
-type notNode struct{ child node }
+type notNode struct{ child exprNode }
 
-func (n *notNode) eval(ctx map[string]interface{}, depth int) (interface{}, error) {
-	if depth > 50 {
+func (expr *notNode) eval(ctx map[string]interface{}, depth int) (interface{}, error) {
+	if depth > maxPredicateDepth {
 		return nil, newPredErr("expression nested too deeply (depth > 50)")
 	}
-	v, err := n.child.eval(ctx, depth+1)
+	value, err := expr.child.eval(ctx, depth+1)
 	if err != nil {
 		return nil, err
 	}
-	return !pyTruthy(v), nil
+	return !pyTruthy(value), nil
 }
 
 type binOpNode struct {
 	op    string
-	left  node
-	right node
+	left  exprNode
+	right exprNode
 }
 
-func (n *binOpNode) eval(ctx map[string]interface{}, depth int) (interface{}, error) {
-	if depth > 50 {
+func (expr *binOpNode) eval(ctx map[string]interface{}, depth int) (interface{}, error) {
+	if depth > maxPredicateDepth {
 		return nil, newPredErr("expression nested too deeply (depth > 50)")
 	}
-	switch n.op {
+	switch expr.op {
 	case "and":
-		lVal, err := n.left.eval(ctx, depth+1)
+		lVal, err := expr.left.eval(ctx, depth+1)
 		if err != nil {
 			return nil, err
 		}
 		if !pyTruthy(lVal) {
-			rVal, err := n.right.eval(ctx, depth+1)
+			rVal, err := expr.right.eval(ctx, depth+1)
 			if err != nil {
 				return nil, err
 			}
 			_ = rVal
 			return false, nil
 		}
-		rVal, err := n.right.eval(ctx, depth+1)
+		rVal, err := expr.right.eval(ctx, depth+1)
 		if err != nil {
 			return nil, err
 		}
 		return pyTruthy(rVal), nil
 
 	case "or":
-		lVal, err := n.left.eval(ctx, depth+1)
+		lVal, err := expr.left.eval(ctx, depth+1)
 		if err != nil {
 			return nil, err
 		}
 		if pyTruthy(lVal) {
-			rVal, err := n.right.eval(ctx, depth+1)
+			rVal, err := expr.right.eval(ctx, depth+1)
 			if err != nil {
 				return nil, err
 			}
 			_ = rVal
 			return true, nil
 		}
-		rVal, err := n.right.eval(ctx, depth+1)
+		rVal, err := expr.right.eval(ctx, depth+1)
 		if err != nil {
 			return nil, err
 		}
 		return pyTruthy(rVal), nil
 	}
 
-	lVal, err := n.left.eval(ctx, depth+1)
+	lVal, err := expr.left.eval(ctx, depth+1)
 	if err != nil {
 		return nil, err
 	}
-	rVal, err := n.right.eval(ctx, depth+1)
+	rVal, err := expr.right.eval(ctx, depth+1)
 	if err != nil {
 		return nil, err
 	}
 
-	switch n.op {
+	switch expr.op {
 	case "==":
 		return pyEq(lVal, rVal), nil
 	case "!=":
@@ -152,29 +155,29 @@ func (n *binOpNode) eval(ctx map[string]interface{}, depth int) (interface{}, er
 		res, _ := pyIn(lVal, rVal)
 		return !res, nil
 	default:
-		return nil, newPredErr("unknown operator %s", n.op)
+		return nil, newPredErr("unknown operator %s", expr.op)
 	}
 }
 
 type chainedCmpNode struct {
 	ops   []string
-	exprs []node
+	exprs []exprNode
 }
 
-func (n *chainedCmpNode) eval(ctx map[string]interface{}, depth int) (interface{}, error) {
-	if depth > 50 {
+func (expr *chainedCmpNode) eval(ctx map[string]interface{}, depth int) (interface{}, error) {
+	if depth > maxPredicateDepth {
 		return nil, newPredErr("expression nested too deeply (depth > 50)")
 	}
-	if len(n.exprs) == 0 {
+	if len(expr.exprs) == 0 {
 		return true, nil
 	}
-	left, err := n.exprs[0].eval(ctx, depth+1)
+	left, err := expr.exprs[0].eval(ctx, depth+1)
 	if err != nil {
 		return nil, err
 	}
-	for i := 0; i < len(n.ops); i++ {
-		op := n.ops[i]
-		right, err := n.exprs[i+1].eval(ctx, depth+1)
+	for index := 0; index < len(expr.ops); index++ {
+		op := expr.ops[index]
+		right, err := expr.exprs[index+1].eval(ctx, depth+1)
 		if err != nil {
 			return nil, err
 		}
@@ -210,47 +213,47 @@ func (n *chainedCmpNode) eval(ctx map[string]interface{}, depth int) (interface{
 	return true, nil
 }
 
-type listNode struct{ elems []node }
+type listNode struct{ elems []exprNode }
 
-func (n *listNode) eval(ctx map[string]interface{}, depth int) (interface{}, error) {
-	if depth > 50 {
+func (expr *listNode) eval(ctx map[string]interface{}, depth int) (interface{}, error) {
+	if depth > maxPredicateDepth {
 		return nil, newPredErr("expression nested too deeply (depth > 50)")
 	}
-	res := make([]interface{}, len(n.elems))
-	for i, e := range n.elems {
-		v, err := e.eval(ctx, depth+1)
+	res := make([]interface{}, len(expr.elems))
+	for index, element := range expr.elems {
+		value, err := element.eval(ctx, depth+1)
 		if err != nil {
 			return nil, err
 		}
-		res[i] = v
+		res[index] = value
 	}
 	return res, nil
 }
 
-type tupleNode struct{ elems []node }
+type tupleNode struct{ elems []exprNode }
 
-func (n *tupleNode) eval(ctx map[string]interface{}, depth int) (interface{}, error) {
-	if depth > 50 {
+func (expr *tupleNode) eval(ctx map[string]interface{}, depth int) (interface{}, error) {
+	if depth > maxPredicateDepth {
 		return nil, newPredErr("expression nested too deeply (depth > 50)")
 	}
-	res := make([]interface{}, len(n.elems))
-	for i, e := range n.elems {
-		v, err := e.eval(ctx, depth+1)
+	res := make([]interface{}, len(expr.elems))
+	for index, element := range expr.elems {
+		value, err := element.eval(ctx, depth+1)
 		if err != nil {
 			return nil, err
 		}
-		res[i] = v
+		res[index] = value
 	}
 	return res, nil
 }
 
 // Python Semantics Implementations
 
-func pyTruthy(v interface{}) bool {
-	if v == nil {
+func pyTruthy(value interface{}) bool {
+	if value == nil {
 		return false
 	}
-	switch val := v.(type) {
+	switch val := value.(type) {
 	case bool:
 		return val
 	case int:
@@ -268,7 +271,7 @@ func pyTruthy(v interface{}) bool {
 	case EllipsisType:
 		return true
 	}
-	rv := reflect.ValueOf(v)
+	rv := reflect.ValueOf(value)
 	switch rv.Kind() {
 	case reflect.Array, reflect.Slice, reflect.Map:
 		return rv.Len() > 0
@@ -276,8 +279,8 @@ func pyTruthy(v interface{}) bool {
 	return true
 }
 
-func toFloat(v interface{}) (float64, bool) {
-	switch val := v.(type) {
+func toFloat(value interface{}) (float64, bool) {
+	switch val := value.(type) {
 	case bool:
 		if val {
 			return 1.0, true
@@ -293,48 +296,48 @@ func toFloat(v interface{}) (float64, bool) {
 	return 0, false
 }
 
-func pyEq(a, b interface{}) bool {
-	if a == Ellipsis || b == Ellipsis {
+func pyEq(left, right interface{}) bool {
+	if left == Ellipsis || right == Ellipsis {
 		return false
 	}
-	if a == nil && b == nil {
+	if left == nil && right == nil {
 		return true
 	}
-	if a == nil || b == nil {
+	if left == nil || right == nil {
 		return false
 	}
-	af, aOk := toFloat(a)
-	bf, bOk := toFloat(b)
-	if aOk && bOk {
-		return af == bf
+	leftFloat, leftOk := toFloat(left)
+	rightFloat, rightOk := toFloat(right)
+	if leftOk && rightOk {
+		return leftFloat == rightFloat
 	}
-	as, aIsStr := a.(string)
-	bs, bIsStr := b.(string)
-	if aIsStr && bIsStr {
-		return as == bs
+	leftStr, leftIsStr := left.(string)
+	rightStr, rightIsStr := right.(string)
+	if leftIsStr && rightIsStr {
+		return leftStr == rightStr
 	}
-	aSlice, aIsSlice := toSlice(a)
-	bSlice, bIsSlice := toSlice(b)
-	if aIsSlice && bIsSlice {
-		if len(aSlice) != len(bSlice) {
+	leftSlice, leftIsSlice := toSlice(left)
+	rightSlice, rightIsSlice := toSlice(right)
+	if leftIsSlice && rightIsSlice {
+		if len(leftSlice) != len(rightSlice) {
 			return false
 		}
-		for i := range aSlice {
-			if !pyEq(aSlice[i], bSlice[i]) {
+		for index := range leftSlice {
+			if !pyEq(leftSlice[index], rightSlice[index]) {
 				return false
 			}
 		}
 		return true
 	}
-	aMap, aIsMap := toMap(a)
-	bMap, bIsMap := toMap(b)
-	if aIsMap && bIsMap {
-		if len(aMap) != len(bMap) {
+	leftMap, leftIsMap := toMap(left)
+	rightMap, rightIsMap := toMap(right)
+	if leftIsMap && rightIsMap {
+		if len(leftMap) != len(rightMap) {
 			return false
 		}
-		for k, v := range aMap {
-			bv, ok := bMap[k]
-			if !ok || !pyEq(v, bv) {
+		for key, value := range leftMap {
+			rightValue, ok := rightMap[key]
+			if !ok || !pyEq(value, rightValue) {
 				return false
 			}
 		}
@@ -343,83 +346,83 @@ func pyEq(a, b interface{}) bool {
 	return false
 }
 
-func toSlice(v interface{}) ([]interface{}, bool) {
-	if s, ok := v.([]interface{}); ok {
-		return s, true
+func toSlice(value interface{}) ([]interface{}, bool) {
+	if slice, ok := value.([]interface{}); ok {
+		return slice, true
 	}
-	rv := reflect.ValueOf(v)
+	rv := reflect.ValueOf(value)
 	if rv.Kind() == reflect.Slice || rv.Kind() == reflect.Array {
 		res := make([]interface{}, rv.Len())
-		for i := 0; i < rv.Len(); i++ {
-			res[i] = rv.Index(i).Interface()
+		for index := 0; index < rv.Len(); index++ {
+			res[index] = rv.Index(index).Interface()
 		}
 		return res, true
 	}
 	return nil, false
 }
 
-func toMap(v interface{}) (map[string]interface{}, bool) {
-	if m, ok := v.(map[string]interface{}); ok {
-		return m, true
+func toMap(value interface{}) (map[string]interface{}, bool) {
+	if mapping, ok := value.(map[string]interface{}); ok {
+		return mapping, true
 	}
-	rv := reflect.ValueOf(v)
+	rv := reflect.ValueOf(value)
 	if rv.Kind() == reflect.Map {
 		res := make(map[string]interface{})
-		for _, k := range rv.MapKeys() {
-			res[fmt.Sprint(k.Interface())] = rv.MapIndex(k).Interface()
+		for _, key := range rv.MapKeys() {
+			res[fmt.Sprint(key.Interface())] = rv.MapIndex(key).Interface()
 		}
 		return res, true
 	}
 	return nil, false
 }
 
-func pyOrder(a, b interface{}) (int, bool) {
-	af, aOk := toFloat(a)
-	bf, bOk := toFloat(b)
-	if aOk && bOk {
-		if math.IsNaN(af) || math.IsNaN(bf) {
+func pyOrder(left, right interface{}) (int, bool) {
+	leftFloat, leftOk := toFloat(left)
+	rightFloat, rightOk := toFloat(right)
+	if leftOk && rightOk {
+		if math.IsNaN(leftFloat) || math.IsNaN(rightFloat) {
 			return 0, false
 		}
-		if af < bf {
+		if leftFloat < rightFloat {
 			return -1, true
 		}
-		if af > bf {
+		if leftFloat > rightFloat {
 			return 1, true
 		}
 		return 0, true
 	}
-	as, aIsStr := a.(string)
-	bs, bIsStr := b.(string)
-	if aIsStr && bIsStr {
-		if as < bs {
+	leftStr, leftIsStr := left.(string)
+	rightStr, rightIsStr := right.(string)
+	if leftIsStr && rightIsStr {
+		if leftStr < rightStr {
 			return -1, true
 		}
-		if as > bs {
+		if leftStr > rightStr {
 			return 1, true
 		}
 		return 0, true
 	}
-	aSlice, aIsSlice := toSlice(a)
-	bSlice, bIsSlice := toSlice(b)
-	if aIsSlice && bIsSlice {
-		minLen := len(aSlice)
-		if len(bSlice) < minLen {
-			minLen = len(bSlice)
+	leftSlice, leftIsSlice := toSlice(left)
+	rightSlice, rightIsSlice := toSlice(right)
+	if leftIsSlice && rightIsSlice {
+		minLen := len(leftSlice)
+		if len(rightSlice) < minLen {
+			minLen = len(rightSlice)
 		}
-		for i := 0; i < minLen; i++ {
-			if pyEq(aSlice[i], bSlice[i]) {
+		for index := 0; index < minLen; index++ {
+			if pyEq(leftSlice[index], rightSlice[index]) {
 				continue
 			}
-			cmp, ok := pyOrder(aSlice[i], bSlice[i])
+			cmp, ok := pyOrder(leftSlice[index], rightSlice[index])
 			if !ok {
 				return 0, false
 			}
 			return cmp, true
 		}
-		if len(aSlice) < len(bSlice) {
+		if len(leftSlice) < len(rightSlice) {
 			return -1, true
 		}
-		if len(aSlice) > len(bSlice) {
+		if len(leftSlice) > len(rightSlice) {
 			return 1, true
 		}
 		return 0, true
@@ -427,27 +430,27 @@ func pyOrder(a, b interface{}) (int, bool) {
 	return 0, false
 }
 
-func pyIn(a, b interface{}) (bool, bool) {
-	if b == nil {
+func pyIn(left, right interface{}) (bool, bool) {
+	if right == nil {
 		return false, false
 	}
-	if bStr, ok := b.(string); ok {
-		if aStr, ok := a.(string); ok {
-			return strings.Contains(bStr, aStr), true
+	if rightStr, ok := right.(string); ok {
+		if leftStr, ok := left.(string); ok {
+			return strings.Contains(rightStr, leftStr), true
 		}
 		return false, false
 	}
-	if bSlice, ok := toSlice(b); ok {
-		for _, item := range bSlice {
-			if pyEq(a, item) {
+	if rightSlice, ok := toSlice(right); ok {
+		for _, item := range rightSlice {
+			if pyEq(left, item) {
 				return true, true
 			}
 		}
 		return false, true
 	}
-	if bMap, ok := toMap(b); ok {
-		if aStr, ok := a.(string); ok {
-			_, exists := bMap[aStr]
+	if rightMap, ok := toMap(right); ok {
+		if leftStr, ok := left.(string); ok {
+			_, exists := rightMap[leftStr]
 			return exists, true
 		}
 		return false, false
@@ -459,50 +462,50 @@ func pyIn(a, b interface{}) (bool, bool) {
 
 func tokenize(src string) ([]token, error) {
 	var toks []token
-	i := 0
-	n := len(src)
-	for i < n {
-		ch := rune(src[i])
+	pos := 0
+	srcLen := len(src)
+	for pos < srcLen {
+		ch := rune(src[pos])
 		if ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r' {
-			i++
+			pos++
 			continue
 		}
 		if unicode.IsLetter(ch) || ch == '_' {
-			if (ch == 'r' || ch == 'R') && i+1 < n && (src[i+1] == '\'' || src[i+1] == '"') {
-				q := src[i+1]
-				j := i + 2
+			if (ch == 'r' || ch == 'R') && pos+1 < srcLen && (src[pos+1] == '\'' || src[pos+1] == '"') {
+				quoteByte := src[pos+1]
+				scan := pos + 2
 				var sb strings.Builder
-				for j < n && src[j] != q {
-					sb.WriteByte(src[j])
-					j++
+				for scan < srcLen && src[scan] != quoteByte {
+					sb.WriteByte(src[scan])
+					scan++
 				}
-				if j >= n {
+				if scan >= srcLen {
 					return nil, newPredErr("unterminated string in predicate")
 				}
 				toks = append(toks, token{kind: tokStr, val: sb.String(), str: sb.String()})
-				i = j + 1
+				pos = scan + 1
 				continue
 			}
-			if (ch == 'b' || ch == 'B') && i+1 < n && (src[i+1] == '\'' || src[i+1] == '"') {
+			if (ch == 'b' || ch == 'B') && pos+1 < srcLen && (src[pos+1] == '\'' || src[pos+1] == '"') {
 				return nil, newPredErr("bytes literals are not supported in predicates")
 			}
-			j := i + 1
-			for j < n && (unicode.IsLetter(rune(src[j])) || unicode.IsDigit(rune(src[j])) || src[j] == '_') {
-				j++
+			scan := pos + 1
+			for scan < srcLen && (unicode.IsLetter(rune(src[scan])) || unicode.IsDigit(rune(src[scan])) || src[scan] == '_') {
+				scan++
 			}
-			name := src[i:j]
+			name := src[pos:scan]
 			if pyKeywords[name] {
 				return nil, newPredErr("keyword %s is not permitted in predicates", name)
 			}
 			toks = append(toks, token{kind: tokName, val: name, str: name})
-			i = j
+			pos = scan
 			continue
 		}
-		if unicode.IsDigit(ch) || (ch == '.' && i+1 < n && unicode.IsDigit(rune(src[i+1]))) {
-			j := i
+		if unicode.IsDigit(ch) || (ch == '.' && pos+1 < srcLen && unicode.IsDigit(rune(src[pos+1]))) {
+			scan := pos
 			radix := 10
-			if ch == '0' && i+1 < n && (src[i+1] == 'x' || src[i+1] == 'X' || src[i+1] == 'o' || src[i+1] == 'O' || src[i+1] == 'b' || src[i+1] == 'B') {
-				rChar := strings.ToLower(string(src[i+1]))
+			if ch == '0' && pos+1 < srcLen && (src[pos+1] == 'x' || src[pos+1] == 'X' || src[pos+1] == 'o' || src[pos+1] == 'O' || src[pos+1] == 'b' || src[pos+1] == 'B') {
+				rChar := strings.ToLower(string(src[pos+1]))
 				if rChar == "x" {
 					radix = 16
 				} else if rChar == "o" {
@@ -510,12 +513,12 @@ func tokenize(src string) ([]token, error) {
 				} else {
 					radix = 2
 				}
-				j = i + 2
-				bodyStart := j
-				for j < n && (unicode.IsDigit(rune(src[j])) || src[j] == '_' || (radix == 16 && strings.ContainsRune("abcdefABCDEF", rune(src[j])))) {
-					j++
+				scan = pos + 2
+				bodyStart := scan
+				for scan < srcLen && (unicode.IsDigit(rune(src[scan])) || src[scan] == '_' || (radix == 16 && strings.ContainsRune("abcdefABCDEF", rune(src[scan])))) {
+					scan++
 				}
-				body := strings.ReplaceAll(src[bodyStart:j], "_", "")
+				body := strings.ReplaceAll(src[bodyStart:scan], "_", "")
 				if body == "" {
 					return nil, newPredErr("malformed numeric literal in predicate")
 				}
@@ -523,39 +526,39 @@ func tokenize(src string) ([]token, error) {
 				if err != nil {
 					return nil, newPredErr("malformed numeric literal in predicate")
 				}
-				toks = append(toks, token{kind: tokNum, val: val, str: src[i:j]})
-				i = j
+				toks = append(toks, token{kind: tokNum, val: val, str: src[pos:scan]})
+				pos = scan
 				continue
 			}
 			hasDot := false
-			for j < n && (unicode.IsDigit(rune(src[j])) || src[j] == '_') {
-				j++
+			for scan < srcLen && (unicode.IsDigit(rune(src[scan])) || src[scan] == '_') {
+				scan++
 			}
-			if j < n && src[j] == '.' {
+			if scan < srcLen && src[scan] == '.' {
 				hasDot = true
-				j++
-				for j < n && (unicode.IsDigit(rune(src[j])) || src[j] == '_') {
-					j++
+				scan++
+				for scan < srcLen && (unicode.IsDigit(rune(src[scan])) || src[scan] == '_') {
+					scan++
 				}
 			}
-			if j < n && (src[j] == 'e' || src[j] == 'E') {
+			if scan < srcLen && (src[scan] == 'e' || src[scan] == 'E') {
 				hasDot = true
-				k := j + 1
-				if k < n && (src[k] == '+' || src[k] == '-') {
-					k++
+				expScan := scan + 1
+				if expScan < srcLen && (src[expScan] == '+' || src[expScan] == '-') {
+					expScan++
 				}
-				if k < n && unicode.IsDigit(rune(src[k])) {
-					k++
-					for k < n && (unicode.IsDigit(rune(src[k])) || src[k] == '_') {
-						k++
+				if expScan < srcLen && unicode.IsDigit(rune(src[expScan])) {
+					expScan++
+					for expScan < srcLen && (unicode.IsDigit(rune(src[expScan])) || src[expScan] == '_') {
+						expScan++
 					}
-					j = k
+					scan = expScan
 				}
 			}
-			if j < n && (src[j] == 'j' || src[j] == 'J') {
+			if scan < srcLen && (src[scan] == 'j' || src[scan] == 'J') {
 				return nil, newPredErr("complex literals are not supported in predicates")
 			}
-			numStr := strings.ReplaceAll(src[i:j], "_", "")
+			numStr := strings.ReplaceAll(src[pos:scan], "_", "")
 			if hasDot {
 				val, err := strconv.ParseFloat(numStr, 64)
 				if err != nil {
@@ -569,17 +572,17 @@ func tokenize(src string) ([]token, error) {
 				}
 				toks = append(toks, token{kind: tokNum, val: val, str: numStr})
 			}
-			i = j
+			pos = scan
 			continue
 		}
 		if ch == '\'' || ch == '"' {
 			quote := ch
-			j := i + 1
+			scan := pos + 1
 			var sb strings.Builder
-			for j < n && rune(src[j]) != quote {
-				if src[j] == '\\' && j+1 < n {
-					j++
-					esc := src[j]
+			for scan < srcLen && rune(src[scan]) != quote {
+				if src[scan] == '\\' && scan+1 < srcLen {
+					scan++
+					esc := src[scan]
 					switch esc {
 					case 'n':
 						sb.WriteByte('\n')
@@ -604,11 +607,11 @@ func tokenize(src string) ([]token, error) {
 					case '"':
 						sb.WriteByte('"')
 					case 'x':
-						if j+2 < n {
-							hexVal, err := strconv.ParseInt(src[j+1:j+3], 16, 32)
+						if scan+2 < srcLen {
+							hexVal, err := strconv.ParseInt(src[scan+1:scan+3], 16, 32)
 							if err == nil {
 								sb.WriteByte(byte(hexVal))
-								j += 2
+								scan += 2
 							} else {
 								sb.WriteString("\\x")
 							}
@@ -616,11 +619,11 @@ func tokenize(src string) ([]token, error) {
 							sb.WriteString("\\x")
 						}
 					case 'u':
-						if j+4 < n {
-							hexVal, err := strconv.ParseInt(src[j+1:j+5], 16, 32)
+						if scan+4 < srcLen {
+							hexVal, err := strconv.ParseInt(src[scan+1:scan+5], 16, 32)
 							if err == nil {
 								sb.WriteRune(rune(hexVal))
-								j += 4
+								scan += 4
 							} else {
 								sb.WriteString("\\u")
 							}
@@ -632,51 +635,51 @@ func tokenize(src string) ([]token, error) {
 						sb.WriteByte(esc)
 					}
 				} else {
-					sb.WriteByte(src[j])
+					sb.WriteByte(src[scan])
 				}
-				j++
+				scan++
 			}
-			if j >= n {
+			if scan >= srcLen {
 				return nil, newPredErr("unterminated string in predicate")
 			}
 			toks = append(toks, token{kind: tokStr, val: sb.String(), str: sb.String()})
-			i = j + 1
+			pos = scan + 1
 			continue
 		}
 
-		if strings.HasPrefix(src[i:], "==") || strings.HasPrefix(src[i:], "!=") || strings.HasPrefix(src[i:], "<=") || strings.HasPrefix(src[i:], ">=") {
-			toks = append(toks, token{kind: tokOp, val: src[i : i+2], str: src[i : i+2]})
-			i += 2
+		if strings.HasPrefix(src[pos:], "==") || strings.HasPrefix(src[pos:], "!=") || strings.HasPrefix(src[pos:], "<=") || strings.HasPrefix(src[pos:], ">=") {
+			toks = append(toks, token{kind: tokOp, val: src[pos : pos+2], str: src[pos : pos+2]})
+			pos += 2
 			continue
 		}
 		if ch == '<' || ch == '>' {
 			toks = append(toks, token{kind: tokOp, val: string(ch), str: string(ch)})
-			i++
+			pos++
 			continue
 		}
 		if ch == '(' {
 			toks = append(toks, token{kind: tokLParen, str: "("})
-			i++
+			pos++
 			continue
 		}
 		if ch == ')' {
 			toks = append(toks, token{kind: tokRParen, str: ")"})
-			i++
+			pos++
 			continue
 		}
 		if ch == '[' {
 			toks = append(toks, token{kind: tokLBracket, str: "["})
-			i++
+			pos++
 			continue
 		}
 		if ch == ']' {
 			toks = append(toks, token{kind: tokRBracket, str: "]"})
-			i++
+			pos++
 			continue
 		}
 		if ch == ',' {
 			toks = append(toks, token{kind: tokComma, str: ","})
-			i++
+			pos++
 			continue
 		}
 		if ch == '-' || ch == '+' {
@@ -699,37 +702,37 @@ func tokenize(src string) ([]token, error) {
 					}
 				}
 			}
-			if unary && i+1 < n && unicode.IsDigit(rune(src[i+1])) {
-				j := i + 1
-				for j < n && (unicode.IsDigit(rune(src[j])) || src[j] == '_') {
-					j++
+			if unary && pos+1 < srcLen && unicode.IsDigit(rune(src[pos+1])) {
+				scan := pos + 1
+				for scan < srcLen && (unicode.IsDigit(rune(src[scan])) || src[scan] == '_') {
+					scan++
 				}
 				// A trailing '.', exponent, complex suffix, or identifier char means it is not
 				// a plain base-10 integer (float / 0x.. / 1j) — leave the sign to be rejected.
 				foldable := true
-				if j < n {
-					c := rune(src[j])
-					if c == '.' || c == 'e' || c == 'E' || c == 'j' || c == 'J' || unicode.IsLetter(c) || c == '_' {
+				if scan < srcLen {
+					nextChar := rune(src[scan])
+					if nextChar == '.' || nextChar == 'e' || nextChar == 'E' || nextChar == 'j' || nextChar == 'J' || unicode.IsLetter(nextChar) || nextChar == '_' {
 						foldable = false
 					}
 				}
 				if foldable {
-					body := strings.ReplaceAll(src[i+1:j], "_", "")
+					body := strings.ReplaceAll(src[pos+1:scan], "_", "")
 					if val, err := strconv.ParseInt(body, 10, 64); err == nil {
 						if ch == '-' {
 							val = -val
 						}
-						toks = append(toks, token{kind: tokNum, val: val, str: src[i:j]})
-						i = j
+						toks = append(toks, token{kind: tokNum, val: val, str: src[pos:scan]})
+						pos = scan
 						continue
 					}
 				}
 			}
 			return nil, newPredErr("unrecognized syntax in predicate: %s", string(ch))
 		}
-		if strings.HasPrefix(src[i:], "...") {
+		if strings.HasPrefix(src[pos:], "...") {
 			toks = append(toks, token{kind: tokName, val: "...", str: "..."})
-			i += 3
+			pos += 3
 			continue
 		}
 		return nil, newPredErr("unrecognized syntax in predicate: %s", string(ch))
@@ -744,59 +747,59 @@ type parser struct {
 	pos  int
 }
 
-func (p *parser) peek() *token {
-	if p.pos < len(p.toks) {
-		return &p.toks[p.pos]
+func (parseState *parser) peek() *token {
+	if parseState.pos < len(parseState.toks) {
+		return &parseState.toks[parseState.pos]
 	}
 	return nil
 }
 
-func (p *parser) next() *token {
-	t := p.peek()
-	if t != nil {
-		p.pos++
+func (parseState *parser) next() *token {
+	tok := parseState.peek()
+	if tok != nil {
+		parseState.pos++
 	}
-	return t
+	return tok
 }
 
-func (p *parser) parseExpr() (node, error) {
-	n, err := p.parseOr()
+func (parseState *parser) parseExpr() (exprNode, error) {
+	expr, err := parseState.parseOr()
 	if err != nil {
 		return nil, err
 	}
 	// Top-level comma is a Python tuple: `when done, verified` is (done, verified),
 	// non-empty and therefore ALWAYS truthy (a real trap, but parity first).
-	if t := p.peek(); t != nil && t.kind == tokComma {
-		elems := []node{n}
-		for p.peek() != nil && p.peek().kind == tokComma {
-			p.next() // consume comma
-			if p.peek() == nil {
+	if tok := parseState.peek(); tok != nil && tok.kind == tokComma {
+		elems := []exprNode{expr}
+		for parseState.peek() != nil && parseState.peek().kind == tokComma {
+			parseState.next() // consume comma
+			if parseState.peek() == nil {
 				break // trailing comma, e.g. `x,`
 			}
-			e, err := p.parseOr()
+			element, err := parseState.parseOr()
 			if err != nil {
 				return nil, err
 			}
-			elems = append(elems, e)
+			elems = append(elems, element)
 		}
-		n = &tupleNode{elems: elems}
+		expr = &tupleNode{elems: elems}
 	}
-	if p.pos < len(p.toks) {
+	if parseState.pos < len(parseState.toks) {
 		return nil, newPredErr("unexpected token in predicate")
 	}
-	return n, nil
+	return expr, nil
 }
 
-func (p *parser) parseOr() (node, error) {
-	left, err := p.parseAnd()
+func (parseState *parser) parseOr() (exprNode, error) {
+	left, err := parseState.parseAnd()
 	if err != nil {
 		return nil, err
 	}
 	for {
-		t := p.peek()
-		if t != nil && t.kind == tokName && t.val == "or" {
-			p.next()
-			right, err := p.parseAnd()
+		tok := parseState.peek()
+		if tok != nil && tok.kind == tokName && tok.val == "or" {
+			parseState.next()
+			right, err := parseState.parseAnd()
 			if err != nil {
 				return nil, err
 			}
@@ -808,16 +811,16 @@ func (p *parser) parseOr() (node, error) {
 	return left, nil
 }
 
-func (p *parser) parseAnd() (node, error) {
-	left, err := p.parseNot()
+func (parseState *parser) parseAnd() (exprNode, error) {
+	left, err := parseState.parseNot()
 	if err != nil {
 		return nil, err
 	}
 	for {
-		t := p.peek()
-		if t != nil && t.kind == tokName && t.val == "and" {
-			p.next()
-			right, err := p.parseNot()
+		tok := parseState.peek()
+		if tok != nil && tok.kind == tokName && tok.val == "and" {
+			parseState.next()
+			right, err := parseState.parseNot()
 			if err != nil {
 				return nil, err
 			}
@@ -829,45 +832,45 @@ func (p *parser) parseAnd() (node, error) {
 	return left, nil
 }
 
-func (p *parser) parseNot() (node, error) {
-	t := p.peek()
-	if t != nil && t.kind == tokName && t.val == "not" {
-		p.next()
-		child, err := p.parseNot()
+func (parseState *parser) parseNot() (exprNode, error) {
+	tok := parseState.peek()
+	if tok != nil && tok.kind == tokName && tok.val == "not" {
+		parseState.next()
+		child, err := parseState.parseNot()
 		if err != nil {
 			return nil, err
 		}
 		return &notNode{child: child}, nil
 	}
-	return p.parseCmp()
+	return parseState.parseCmp()
 }
 
-func (p *parser) parseCmp() (node, error) {
-	left, err := p.parsePrimary()
+func (parseState *parser) parseCmp() (exprNode, error) {
+	left, err := parseState.parsePrimary()
 	if err != nil {
 		return nil, err
 	}
 
 	var ops []string
-	exprs := []node{left}
+	exprs := []exprNode{left}
 
 	for {
-		t := p.peek()
-		if t == nil {
+		tok := parseState.peek()
+		if tok == nil {
 			break
 		}
 		opStr := ""
-		if t.kind == tokOp {
-			opStr = fmt.Sprint(t.val)
-			p.next()
-		} else if t.kind == tokName && t.val == "in" {
+		if tok.kind == tokOp {
+			opStr = fmt.Sprint(tok.val)
+			parseState.next()
+		} else if tok.kind == tokName && tok.val == "in" {
 			opStr = "in"
-			p.next()
-		} else if t.kind == tokName && t.val == "not" {
-			p.next()
-			t2 := p.peek()
-			if t2 != nil && t2.kind == tokName && t2.val == "in" {
-				p.next()
+			parseState.next()
+		} else if tok.kind == tokName && tok.val == "not" {
+			parseState.next()
+			nextTok := parseState.peek()
+			if nextTok != nil && nextTok.kind == tokName && nextTok.val == "in" {
+				parseState.next()
 				opStr = "not in"
 			} else {
 				return nil, newPredErr("expected 'in' after 'not'")
@@ -876,7 +879,7 @@ func (p *parser) parseCmp() (node, error) {
 			break
 		}
 
-		right, err := p.parsePrimary()
+		right, err := parseState.parsePrimary()
 		if err != nil {
 			return nil, err
 		}
@@ -893,17 +896,17 @@ func (p *parser) parseCmp() (node, error) {
 	return &chainedCmpNode{ops: ops, exprs: exprs}, nil
 }
 
-func (p *parser) parsePrimary() (node, error) {
-	t := p.next()
-	if t == nil {
+func (parseState *parser) parsePrimary() (exprNode, error) {
+	tok := parseState.next()
+	if tok == nil {
 		return nil, newPredErr("unexpected end of predicate")
 	}
 
-	switch t.kind {
+	switch tok.kind {
 	case tokNum, tokStr:
-		return &constNode{val: t.val}, nil
+		return &constNode{val: tok.val}, nil
 	case tokName:
-		name := fmt.Sprint(t.val)
+		name := fmt.Sprint(tok.val)
 		if name == "True" {
 			return &constNode{val: true}, nil
 		}
@@ -918,17 +921,17 @@ func (p *parser) parsePrimary() (node, error) {
 		}
 		return &varNode{name: name}, nil
 	case tokLBracket:
-		var elems []node
-		if p.peek() != nil && p.peek().kind != tokRBracket {
+		var elems []exprNode
+		if parseState.peek() != nil && parseState.peek().kind != tokRBracket {
 			for {
-				e, err := p.parseOr()
+				element, err := parseState.parseOr()
 				if err != nil {
 					return nil, err
 				}
-				elems = append(elems, e)
-				if p.peek() != nil && p.peek().kind == tokComma {
-					p.next()
-					if p.peek() != nil && p.peek().kind == tokRBracket {
+				elems = append(elems, element)
+				if parseState.peek() != nil && parseState.peek().kind == tokComma {
+					parseState.next()
+					if parseState.peek() != nil && parseState.peek().kind == tokRBracket {
 						break
 					}
 				} else {
@@ -936,46 +939,46 @@ func (p *parser) parsePrimary() (node, error) {
 				}
 			}
 		}
-		if p.next() == nil || p.peek() == nil && p.toks[p.pos-1].kind != tokRBracket {
+		if parseState.next() == nil || parseState.peek() == nil && parseState.toks[parseState.pos-1].kind != tokRBracket {
 			// consume RBracket
 		}
 		return &listNode{elems: elems}, nil
 	case tokLParen:
-		if p.peek() != nil && p.peek().kind == tokRParen {
-			p.next()
+		if parseState.peek() != nil && parseState.peek().kind == tokRParen {
+			parseState.next()
 			return &tupleNode{elems: nil}, nil
 		}
-		e, err := p.parseOr()
+		element, err := parseState.parseOr()
 		if err != nil {
 			return nil, err
 		}
-		if p.peek() != nil && p.peek().kind == tokComma {
-			p.next()
-			elems := []node{e}
-			for p.peek() != nil && p.peek().kind != tokRParen {
-				elem, err := p.parseOr()
+		if parseState.peek() != nil && parseState.peek().kind == tokComma {
+			parseState.next()
+			elems := []exprNode{element}
+			for parseState.peek() != nil && parseState.peek().kind != tokRParen {
+				nextElement, err := parseState.parseOr()
 				if err != nil {
 					return nil, err
 				}
-				elems = append(elems, elem)
-				if p.peek() != nil && p.peek().kind == tokComma {
-					p.next()
+				elems = append(elems, nextElement)
+				if parseState.peek() != nil && parseState.peek().kind == tokComma {
+					parseState.next()
 				} else {
 					break
 				}
 			}
-			if p.peek() != nil && p.peek().kind == tokRParen {
-				p.next()
+			if parseState.peek() != nil && parseState.peek().kind == tokRParen {
+				parseState.next()
 			}
 			return &tupleNode{elems: elems}, nil
 		}
-		if p.peek() != nil && p.peek().kind == tokRParen {
-			p.next()
+		if parseState.peek() != nil && parseState.peek().kind == tokRParen {
+			parseState.next()
 		}
-		return e, nil
+		return element, nil
 	}
 
-	return nil, newPredErr("unexpected syntax at token %s", t.str)
+	return nil, newPredErr("unexpected syntax at token %s", tok.str)
 }
 
 // EvalCondition evaluates condition string against context map.
@@ -992,8 +995,8 @@ func EvalCondition(condition string, ctx map[string]interface{}) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	p := &parser{toks: toks}
-	ast, err := p.parseExpr()
+	parseState := &parser{toks: toks}
+	ast, err := parseState.parseExpr()
 	if err != nil {
 		return false, err
 	}

@@ -37,22 +37,22 @@ class LockError(Exception):
 
 
 # --- vector + flow encoding -------------------------------------------------------------
-def _encode_vec(v) -> str:
+def _encode_vec(vector) -> str:
     try:
         import numpy as np
-        b = np.asarray(v, dtype="<f4").tobytes()
+        raw_bytes = np.asarray(vector, dtype="<f4").tobytes()
     except ImportError:
         import struct
-        if isinstance(v, (list, tuple)):
-            b = struct.pack(f"<{len(v)}f", *v)
+        if isinstance(vector, (list, tuple)):
+            raw_bytes = struct.pack(f"<{len(vector)}f", *vector)
         else:
             raise
-    return base64.b64encode(b).decode("ascii")
+    return base64.b64encode(raw_bytes).decode("ascii")
 
 
-def _decode_vec(s: str):
+def _decode_vec(encoded: str):
     import numpy as np
-    return np.frombuffer(base64.b64decode(s), dtype="<f4").astype("float32")
+    return np.frombuffer(base64.b64decode(encoded), dtype="<f4").astype("float32")
 
 
 def _flow_hash(flow_path) -> str:
@@ -68,10 +68,10 @@ def lock_path(flow_path) -> str:
 def _semantic_conditions(graph) -> list:
     from prismpath.kernel import predicates
     conds = set()
-    for n in graph.nodes.values():
-        for _, c in n.edges:
-            if predicates.is_semantic(c):
-                conds.add(c)
+    for flow_node in graph.nodes.values():
+        for _, condition in flow_node.edges:
+            if predicates.is_semantic(condition):
+                conds.add(condition)
     return sorted(conds)
 
 
@@ -141,20 +141,20 @@ def build_lock(flow_path, delta: Optional[float] = None, centroids: Optional[dic
             "probe_vec": _encode_vec(probe_vec),
         },
         "delta": DEFAULT_DELTA if delta is None else float(delta),
-        "conditions": {c: _encode_vec(vecs[i]) for i, c in enumerate(conds)},
+        "conditions": {condition: _encode_vec(vecs[index]) for index, condition in enumerate(conds)},
     }
     if centroids:
         import numpy as np
         pinned = {}
         counts = centroid_counts or {}
-        for i, c in enumerate(conds):
-            cen = centroids.get(c)
+        for index, condition in enumerate(conds):
+            cen = centroids.get(condition)
             if cen is None:
                 continue
-            n = int(counts.get(c, 1))
-            blend = float(prior_weight) * vecs[i] + n * np.asarray(cen, dtype="float32")
+            centroid_count = int(counts.get(condition, 1))
+            blend = float(prior_weight) * vecs[index] + centroid_count * np.asarray(cen, dtype="float32")
             norm = np.linalg.norm(blend) or 1.0
-            pinned[c] = {"vec": _encode_vec(blend / norm), "n": n}
+            pinned[condition] = {"vec": _encode_vec(blend / norm), "n": centroid_count}
         if pinned:
             lock["centroids"] = pinned
             lock["centroid_prior_weight"] = float(prior_weight)
@@ -168,8 +168,8 @@ def save_lock(flow_path, lock: dict) -> str:
 
 
 def load_lock(path) -> dict:
-    with open(path, encoding="utf-8") as f:
-        lock = json.load(f)
+    with open(path, encoding="utf-8") as handle:
+        lock = json.load(handle)
     if lock.get("version") != LOCK_VERSION:
         raise LockError(f"unsupported lock version {lock.get('version')!r} (expected {LOCK_VERSION})")
     return lock

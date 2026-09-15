@@ -31,16 +31,16 @@ type EllipsisType struct{}
 var Ellipsis = EllipsisType{}
 
 // pyTrim strips Python whitespace (including U+0085 NEL, U+001C-U+001F)
-func pyTrim(s string) string {
-	return strings.TrimFunc(s, func(r rune) bool {
-		return unicode.IsSpace(r) || r == 0x85 || (r >= 0x1c && r <= 0x1f)
+func pyTrim(text string) string {
+	return strings.TrimFunc(text, func(char rune) bool {
+		return unicode.IsSpace(char) || char == 0x85 || (char >= 0x1c && char <= 0x1f)
 	})
 }
 
 // IsDeterministic reports whether condition is a deterministic tier edge.
 func IsDeterministic(condition string) bool {
-	c := strings.ToLower(pyTrim(condition))
-	return strings.HasPrefix(c, "when ") || alwaysSet[c] || neverSet[c]
+	text := strings.ToLower(pyTrim(condition))
+	return strings.HasPrefix(text, "when ") || alwaysSet[text] || neverSet[text]
 }
 
 // IsError reports whether condition is an error tier edge.
@@ -50,17 +50,17 @@ func IsError(condition string) bool {
 
 // IsEvent reports whether condition is an event tier edge.
 func IsEvent(condition string) bool {
-	c := strings.ToLower(pyTrim(condition))
-	return strings.HasPrefix(c, "on event") || strings.HasPrefix(c, "on timeout")
+	text := strings.ToLower(pyTrim(condition))
+	return strings.HasPrefix(text, "on event") || strings.HasPrefix(text, "on timeout")
 }
 
 // EventName returns the event name for event tier edges.
 func EventName(condition string) string {
-	c := pyTrim(condition)
-	if strings.HasPrefix(strings.ToLower(c), "on timeout") {
+	text := pyTrim(condition)
+	if strings.HasPrefix(strings.ToLower(text), "on timeout") {
 		return "__timeout__"
 	}
-	return pyTrim(c[len("on event"):])
+	return pyTrim(text[len("on event"):])
 }
 
 // IsSemantic reports whether condition is a semantic tier edge.
@@ -70,16 +70,16 @@ func IsSemantic(condition string) bool {
 
 // ErrorExpr extracts the expression from an 'on error' condition.
 func ErrorExpr(condition string) string {
-	c := pyTrim(condition)
-	return pyTrim(c[len("on error"):])
+	text := pyTrim(condition)
+	return pyTrim(text[len("on error"):])
 }
 
 func exprOf(condition string) string {
-	c := pyTrim(condition)
-	if strings.HasPrefix(strings.ToLower(c), "when ") {
-		return pyTrim(c[5:])
+	text := pyTrim(condition)
+	if strings.HasPrefix(strings.ToLower(text), "when ") {
+		return pyTrim(text[5:])
 	}
-	return c
+	return text
 }
 
 // PredicateError represents an error during predicate evaluation or parsing.
@@ -87,10 +87,10 @@ type PredicateError struct {
 	Message string
 }
 
-func (e *PredicateError) Error() string {
-	return fmt.Sprintf("PredicateError: %s", e.Message)
+func (predErr *PredicateError) Error() string {
+	return fmt.Sprintf("PredicateError: %s", predErr.Message)
 }
 
-func newPredErr(format string, a ...interface{}) error {
-	return &PredicateError{Message: fmt.Sprintf(format, a...)}
+func newPredErr(format string, args ...interface{}) error {
+	return &PredicateError{Message: fmt.Sprintf(format, args...)}
 }

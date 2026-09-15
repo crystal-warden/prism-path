@@ -33,13 +33,13 @@ from prismpath.kernel.parser import parse                         # noqa: E402
 CONF = Path(pc._REPO) / "portable" / "conformance"    # pc._REPO is the package dir (matches tb/)
 
 
-def _subset_scalar_ok(v) -> str | None:
+def _subset_scalar_ok(value) -> str | None:
     """None if a ctx/script value is in the v0 domain, else the exclusion reason."""
-    if v is None or isinstance(v, (bool, str)):
+    if value is None or isinstance(value, (bool, str)):
         return None
-    if isinstance(v, int):
-        return None if pc.I32_MIN <= v <= pc.I32_MAX else "int-out-of-i32"
-    if isinstance(v, float):
+    if isinstance(value, int):
+        return None if pc.I32_MIN <= value <= pc.I32_MAX else "int-out-of-i32"
+    if isinstance(value, float):
         return "float-value"
     return "non-scalar-value"
 
@@ -62,7 +62,7 @@ def cert_predicates() -> tuple:
     failures = []
     img_cache: dict = {}
 
-    for i, case in enumerate(cases):
+    for case_index, case in enumerate(cases):
         cond, ctx, expect = case["cond"], case["ctx"], case["expect"]
         try:
             if cond not in img_cache:
@@ -77,19 +77,20 @@ def cert_predicates() -> tuple:
             (BUILD / "pred.ppt").write_bytes(blob)
             # only fields the condition reads are subset-relevant
             regs = pc.encode_regs(img, ctx, node_idx=0)
-        except pc.SubsetError as e:
-            excluded[e.reason] += 1
+        except pc.SubsetError as error:
+            excluded[error.reason] += 1
             continue
+        if expect == "ERROR":       # unreachable: ERROR conds never classify as Level M. Checked BEFORE
+            # the run, because the run itself is the thing that should never have happened
+            raise RuntimeError(f"ERROR case survived the subset filter: {cond!r}")
         (BUILD / "pred_regs.bin").write_bytes(regs)
         out = run_interp("eval", BUILD / "pred.ppt", BUILD / "pred_regs.bin")
         got = out.startswith("match")
-        if expect == "ERROR":       # unreachable: ERROR conds never classify as Level M
-            raise RuntimeError(f"ERROR case survived the subset filter: {cond!r}")
         if got == expect:
             passed += 1
         else:
             failed += 1
-            failures.append((i, cond, ctx, expect, got))
+            failures.append((case_index, cond, ctx, expect, got))
     return passed, failed, excluded, failures
 
 
@@ -125,8 +126,8 @@ def cert_flows() -> tuple:
             if blob != pc.compile_flow(graph, case.get("maxSteps", 25)).serialize():
                 raise RuntimeError(f"non-deterministic compile: {case['name']}")
             script = pc.encode_script(img, case["script"])
-        except pc.SubsetError as e:
-            excluded[e.reason] += 1
+        except pc.SubsetError as error:
+            excluded[error.reason] += 1
             continue
         (BUILD / "flow.ppt").write_bytes(blob)
         (BUILD / "flow_script.bin").write_bytes(script)
@@ -154,27 +155,27 @@ def main() -> int:
         print(f"{INTERP} missing — run `make` first", file=sys.stderr)
         return 2
 
-    pp, pf, pex, pfail = cert_predicates()
-    fp, ff, fex, ffail = cert_flows()
+    pred_passed, pred_failed, pred_excluded, pred_failures = cert_predicates()
+    flow_passed, flow_failed, flow_excluded, flow_failures = cert_flows()
 
     print("── predicate vectors ─────────────────────────────")
-    print(f"  total {pp + pf + sum(pex.values())}   in-subset {pp + pf}   "
-          f"pass {pp}   FAIL {pf}   excluded {sum(pex.values())}")
-    for r, n in sorted(pex.items(), key=lambda kv: -kv[1]):
-        print(f"    excluded {n:4d}  {r}")
-    for i, cond, ctx, want, got in pfail[:20]:
-        print(f"    ✗ case {i}: {cond!r}  ctx={ctx}  want={want} got={got}")
+    print(f"  total {pred_passed + pred_failed + sum(pred_excluded.values())}   in-subset {pred_passed + pred_failed}   "
+          f"pass {pred_passed}   FAIL {pred_failed}   excluded {sum(pred_excluded.values())}")
+    for reason, count in sorted(pred_excluded.items(), key=lambda entry: -entry[1]):
+        print(f"    excluded {count:4d}  {reason}")
+    for case_index, cond, ctx, want, got in pred_failures[:20]:
+        print(f"    ✗ case {case_index}: {cond!r}  ctx={ctx}  want={want} got={got}")
 
     print("── engine vectors ────────────────────────────────")
-    print(f"  total {fp + ff + sum(fex.values())}   in-subset {fp + ff}   "
-          f"pass {fp}   FAIL {ff}   excluded {sum(fex.values())}")
-    for r, n in sorted(fex.items(), key=lambda kv: -kv[1]):
-        print(f"    excluded {n:4d}  {r}")
-    for name, wp, ws, gp, gs in ffail:
-        print(f"    ✗ {name}: want path={wp} stopped={ws}\n"
-              f"               got path={gp} stopped={gs}")
+    print(f"  total {flow_passed + flow_failed + sum(flow_excluded.values())}   in-subset {flow_passed + flow_failed}   "
+          f"pass {flow_passed}   FAIL {flow_failed}   excluded {sum(flow_excluded.values())}")
+    for reason, count in sorted(flow_excluded.items(), key=lambda entry: -entry[1]):
+        print(f"    excluded {count:4d}  {reason}")
+    for name, want_path, want_stopped, got_path, got_stopped in flow_failures:
+        print(f"    ✗ {name}: want path={want_path} stopped={want_stopped}\n"
+              f"               got path={got_path} stopped={got_stopped}")
 
-    ok = (pf == 0 and ff == 0)
+    ok = (pred_failed == 0 and flow_failed == 0)
     print(f"\n{'✅ ' + INTERP.name + ' CONFORMANT on the declared subset' if ok else '✗ ' + INTERP.name + ' NOT CONFORMANT'}")
     return 0 if ok else 1
 

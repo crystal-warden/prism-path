@@ -10,7 +10,7 @@ from pathlib import Path
 _ADAPTER = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_ADAPTER))
 sys.path.insert(0, str(_ADAPTER.parent.parent))
-from prismpath.telemetry import quantizer as q  # noqa: E402
+from prismpath.telemetry import quantizer  # noqa: E402
 from prismpath.kernel.parser import parse  # noqa: E402
 
 _CORPUS = _ADAPTER / "conformance" / "boundary.json"
@@ -18,19 +18,19 @@ _CORPUS = _ADAPTER / "conformance" / "boundary.json"
 
 def test_boundary_symbols_match_frozen_corpus():
     corpus = json.loads(_CORPUS.read_text())
-    parts = q.build_partitions(parse(corpus["flow"]))
-    p = parts[corpus["field"]]
-    assert p.n == corpus["cells"]
+    parts = quantizer.build_partitions(parse(corpus["flow"]))
+    partition = parts[corpus["field"]]
+    assert partition.n == corpus["cells"]
     for probe in corpus["probes"]:
-        assert p.symbol(probe["value"]) == probe["symbol"], probe
+        assert partition.symbol(probe["value"]) == probe["symbol"], probe
 
 
 def test_strict_inequality_normalizes_to_closed_integer_intervals():
     corpus = json.loads(_CORPUS.read_text())
-    parts = q.build_partitions(parse(corpus["flow"]))
-    p = parts[corpus["field"]]
+    parts = quantizer.build_partitions(parse(corpus["flow"]))
+    partition = parts[corpus["field"]]
     # every cut `mag < t` becomes the closed bound hi = t - 1: t-1 and t always land in
     # different cells, and no cell has an open interior edge
-    for c in p.cells:
-        if c["hi"] is not None:
-            assert p.symbol(c["hi"]) != p.symbol(c["hi"] + 1)
+    for cell in partition.cells:
+        if cell["hi"] is not None:
+            assert partition.symbol(cell["hi"]) != partition.symbol(cell["hi"] + 1)

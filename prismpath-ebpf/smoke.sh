@@ -83,8 +83,10 @@ echo "Loading PPT table into BPF maps and attaching XDP to $IF_A..."
 ./loader "$PPT" "$IF_A"
 
 echo "Injecting crafted PPT packet payload into $IF_B..."
+# The interface name goes in as an argument, not interpolated into the Python source: a name with a
+# quote in it would otherwise be Python the shell wrote for us.
 python3 -c "
-import socket, struct
+import socket, struct, sys
 
 # ETH (14B) + IP (20B) + UDP (8B) + PPT_HDR (12B) + REGS (24B)
 eth_hdr = struct.pack('!6s6sH', b'\xff'*6, b'\x02'*6, 0x0800)
@@ -98,11 +100,11 @@ regs = struct.pack('<ii', 2, 1) + struct.pack('<ii', 2, 1) + struct.pack('<ii', 
 pkt = eth_hdr + ip_hdr + udp_hdr + ppt_hdr + regs
 
 s = socket.socket(socket.AF_PACKET, socket.SOCK_RAW)
-s.bind(('$IF_B', 0))
+s.bind((sys.argv[1], 0))
 s.send(pkt)
 s.close()
-print('Injected 1 PPT test packet into $IF_B successfully.')
-"
+print('Injected 1 PPT test packet into ' + sys.argv[1] + ' successfully.')
+" "$IF_B"
 sleep 0.5   # let the RX softirq run the XDP program on the injected packet
 
 echo ""

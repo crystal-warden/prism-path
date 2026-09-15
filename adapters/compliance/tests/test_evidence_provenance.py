@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
-"""Evidence provenance: every deterministic verdict discloses HOW its facts were evidenced
+"""Evidence provenance: every deterministic determination discloses HOW its facts were evidenced
 (tool-scanned vs documentation-attested) - the cause-code layer ported from the fabric receipt
 (supporting-evidence #129/#130)."""
-import compliance_adapter as ca
-import deterministic_checks as dc
+from adapters.compliance import compliance_adapter as ca
+from adapters.compliance import deterministic_checks as dc
 
 
 def _control(cid):

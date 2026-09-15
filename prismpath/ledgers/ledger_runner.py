@@ -31,9 +31,9 @@ from prismpath.kernel.parser import parse_file
 
 def find_checkpoint(graph):
     """Return (node_name, annotation_args) for the flow's single @checkpoint node, or (None, None)."""
-    for name, n in graph.nodes.items():
-        if "checkpoint" in n.annotations:
-            return name, n.annotations["checkpoint"]
+    for name, flow_node in graph.nodes.items():
+        if "checkpoint" in flow_node.annotations:
+            return name, flow_node.annotations["checkpoint"]
     return None, None
 
 
@@ -54,12 +54,12 @@ def _outcome_field(state: dict, node: str, field: str):
     return (state.get("_outcomes", {}).get(node) or {}).get(field)
 
 
-def _to_bytes(v) -> bytes:
-    if isinstance(v, (bytes, bytearray)):
-        return bytes(v)
-    if isinstance(v, str):
-        return v.encode()
-    return json.dumps(v, sort_keys=True, default=str).encode()
+def _to_bytes(value) -> bytes:
+    if isinstance(value, (bytes, bytearray)):
+        return bytes(value)
+    if isinstance(value, str):
+        return value.encode()
+    return json.dumps(value, sort_keys=True, default=str).encode()
 
 
 def run_ledgered_loop(flow_path, agent, ledger, *, router=None, max_items: int = 1000,
@@ -99,7 +99,7 @@ def run_ledgered_loop(flow_path, agent, ledger, *, router=None, max_items: int =
 
         proof_val = _resolve(proof_key, res.state) if proof_key else _outcome_field(res.state, cp_node, "text")
         # the checkpoint node's chosen out-edge (not the run's last step, which may be downstream)
-        cp_step = next((s for s in reversed(res.steps) if s.node == cp_node), None)
+        cp_step = next((step for step in reversed(res.steps) if step.node == cp_node), None)
         files = {f"{unit}.proof": _to_bytes(proof_val)} if proof_val is not None else {}
         ledger.commit_unit(unit, node=cp_node, gate="green", gate_name=(gate_field or cp_node),
                            files=files, edge=(cp_step.target if cp_step else None))
@@ -111,19 +111,19 @@ def upsert_jsonl(path, record: dict, key) -> bool:
     """Append `record` to a JSONL file only if no existing record matches on the `key` field(s).
     Makes an append-based side effect idempotent under replay. Returns True if it wrote a new line."""
     keys = [key] if isinstance(key, str) else list(key)
-    kv = tuple(record.get(k) for k in keys)
-    p = Path(path)
-    if p.exists():
-        for line in p.read_text().splitlines():
+    kv = tuple(record.get(key_field) for key_field in keys)
+    jsonl_path = Path(path)
+    if jsonl_path.exists():
+        for line in jsonl_path.read_text().splitlines():
             line = line.strip()
             if not line:
                 continue
             try:
-                r = json.loads(line)
+                existing = json.loads(line)
             except ValueError:
                 continue
-            if tuple(r.get(k) for k in keys) == kv:
+            if tuple(existing.get(key_field) for key_field in keys) == kv:
                 return False
-    with open(p, "a") as f:
-        f.write(json.dumps(record) + "\n")
+    with open(jsonl_path, "a") as handle:
+        handle.write(json.dumps(record) + "\n")
     return True

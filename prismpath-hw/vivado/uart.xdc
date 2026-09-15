@@ -1,7 +1,10 @@
-# datapath.xdc — Stage-2 decision-datapath overlay pins, Digilent Arty Z7-20.
-# Identical to pathb.xdc except the RGB LEDs are driven by the datapath's led_o (plain 6b output
-# port `led`), not the gpio_out interface (rgb_tri_o). SW/BTN/I2C/analog are unchanged.
-# Port names come from the external interfaces in build_overlay_datapath.tcl.
+# uart.xdc - decision-datapath overlay pins with the PL-native UART, Digilent Arty Z7-20.
+# The RGB LEDs are driven by the datapath's led_o (a plain 6-bit output port `led`) rather than a
+# gpio_out interface (rgb_tri_o); switches, buttons, I2C and the analog pot are PS-side as before,
+# and the last entry adds the fabric's own UART RX on Pmod JA1.
+# Port names come from the external ports and interfaces created in build_overlay_uart.tcl, which
+# adds this file; build_overlay_zeck_demo.tcl reuses the same pinout and adds it too.
+# See finale.xdc for the variant where the switches and all four buttons are direct PL ports.
 
 # switches: SW0/SW1 -> gpio_in ch1 (sw)
 set_property -dict { PACKAGE_PIN M20 IOSTANDARD LVCMOS33 } [get_ports { sw_tri_i[0] }]

@@ -91,13 +91,13 @@ class SemanticStatus:
     UNAVAILABLE_FINGERPRINT = "unavailable: embedder fingerprint mismatch"
 
 
-def _cosine(a, b) -> float:
+def _cosine(left_vector, right_vector) -> float:
     import numpy as np
 
-    a = np.asarray(a, dtype="float32")
-    b = np.asarray(b, dtype="float32")
-    denom = float((a @ a) ** 0.5 * (b @ b) ** 0.5)
-    return float(a @ b) / denom if denom else 0.0
+    left_vector = np.asarray(left_vector, dtype="float32")
+    right_vector = np.asarray(right_vector, dtype="float32")
+    denom = float((left_vector @ left_vector) ** 0.5 * (right_vector @ right_vector) ** 0.5)
+    return float(left_vector @ right_vector) / denom if denom else 0.0
 
 
 @dataclass
@@ -141,17 +141,17 @@ class SemanticLayer:
         rule name can never absorb the bytes that follow it):
         domain tag · embedder_id · threshold · rule count · (rule name · dim · values)*, rules sorted.
         """
-        h = hashlib.sha256()
-        h.update(b"p1-layer-hash-v2\x00")
-        h.update(self.embedder_id.encode("utf-8") + b"\x00")
-        h.update(struct.pack(">d", float(self.threshold)))
-        h.update(struct.pack(">I", len(self.centroids)))
+        hasher = hashlib.sha256()
+        hasher.update(b"p1-layer-hash-v2\x00")
+        hasher.update(self.embedder_id.encode("utf-8") + b"\x00")
+        hasher.update(struct.pack(">d", float(self.threshold)))
+        hasher.update(struct.pack(">I", len(self.centroids)))
         for rule in sorted(self.centroids):
             vec = self.centroids[rule]
-            h.update(rule.encode("utf-8") + b"\x00")
-            h.update(struct.pack(">I", len(vec)))
-            h.update(struct.pack(f">{len(vec)}d", *(float(x) for x in vec)))
-        return h.hexdigest()
+            hasher.update(rule.encode("utf-8") + b"\x00")
+            hasher.update(struct.pack(">I", len(vec)))
+            hasher.update(struct.pack(f">{len(vec)}d", *(float(component) for component in vec)))
+        return hasher.hexdigest()
 
     def verify(self, probe: str = "the quick brown fox jumps over the lazy dog") -> str:
         """Check the local embedder reproduces the pinned fingerprint; disable P1 if not.
@@ -190,8 +190,9 @@ class SemanticLayer:
         Training on the test set would make every number this layer produces meaningless, so the
         constraint is checked rather than remembered.
         """
-        overlap = {p.strip().lower() for p in probes} & {
-            e.strip().lower() for exemplars in PROHIBITED_INTENT_EXEMPLARS.values() for e in exemplars
+        overlap = {probe_text.strip().lower() for probe_text in probes} & {
+            exemplar.strip().lower() for exemplars in PROHIBITED_INTENT_EXEMPLARS.values()
+            for exemplar in exemplars
         }
         if overlap:
             raise AssertionError(

@@ -16,8 +16,8 @@ sys.path.insert(0, str(HERE))
 REPO = HERE.parent.parent
 sys.path.insert(0, str(REPO))
 
-from prismpath.telemetry import quantizer as q          # noqa: E402
-from prismpath.telemetry import wire as w              # noqa: E402
+from prismpath.telemetry import quantizer          # noqa: E402
+from prismpath.telemetry import wire              # noqa: E402
 from prismpath.kernel.parser import parse  # noqa: E402
 
 
@@ -25,11 +25,11 @@ def main():
     corpus = json.loads((HERE / "conformance" / "decisions.json").read_text())
     out = {}
     for case in corpus["cases"]:
-        parts = q.build_partitions(parse(case["flow"]))
-        out[case["name"]] = [w.encode_reading(parts, e["reading"]) for e in case["readings"]]
+        parts = quantizer.build_partitions(parse(case["flow"]))
+        out[case["name"]] = [wire.encode_reading(parts, entry["reading"]) for entry in case["readings"]]
     dest = REPO / "prismpath-telemetry-rs" / "tests" / "fixtures" / "wire_parity.json"
     dest.write_text(json.dumps(out, indent=1) + "\n")
-    print(f"wrote {dest}  ({len(out)} flows, {sum(len(v) for v in out.values())} readings)")
+    print(f"wrote {dest}  ({len(out)} flows, {sum(len(bitstreams) for bitstreams in out.values())} readings)")
     return 0
 
 

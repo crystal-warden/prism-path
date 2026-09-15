@@ -110,10 +110,10 @@ def test_checkpoint_payload_stays_flat_across_resumes(tmp_path):
         sizes.append((len(doc["path"]), len(doc["steps"]), len(doc["state"]["transcript"])))
 
     # bounded: the persisted payload is FLAT, not linear in resume count
-    path_lens = {p for p, _, _ in sizes[4:]}
+    path_lens = {path_length for path_length, _, _ in sizes[4:]}
     assert len(path_lens) == 1, f"path kept growing: {sizes}"
-    assert all(t <= 4 for _, _, t in sizes)              # transcript window honored in the payload
-    assert all(s <= 4 + 2 for _, s, _ in sizes)          # seed windowed + this segment's steps
+    assert all(transcript_length <= 4 for _, _, transcript_length in sizes)              # transcript window honored in the payload
+    assert all(step_count <= 4 + 2 for _, step_count, _ in sizes)          # seed windowed + this segment's steps
     dropped = load_checkpoint(cp)["state"]["_state_dropped"]
     assert dropped["transcript"] > 0 and dropped["path"] > 0 and dropped["steps"] > 0
 

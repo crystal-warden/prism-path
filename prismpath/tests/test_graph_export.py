@@ -20,13 +20,13 @@ Terminal.
 
 
 def test_mermaid_edges_by_tier():
-    m = graph_export.to_mermaid(parse(FLOW))
-    assert m.startswith("flowchart TD")
-    assert "_start(( )) --> triage" in m
-    assert 'triage -->|"when tests_pass"| review' in m          # deterministic -> solid
-    assert 'triage -.->|"the bug is reproduced' in m            # semantic -> dashed
-    assert 'review(["review"])' in m                            # terminal -> pill
-    assert "class" in m and "terminal" in m
+    mermaid = graph_export.to_mermaid(parse(FLOW))
+    assert mermaid.startswith("flowchart TD")
+    assert "_start(( )) --> triage" in mermaid
+    assert 'triage -->|"when tests_pass"| review' in mermaid          # deterministic -> solid
+    assert 'triage -.->|"the bug is reproduced' in mermaid            # semantic -> dashed
+    assert 'review(["review"])' in mermaid                            # terminal -> pill
+    assert "class" in mermaid and "terminal" in mermaid
 
 
 def test_direction_and_fence():
@@ -37,6 +37,6 @@ def test_direction_and_fence():
 
 def test_long_labels_truncated():
     long = "x " * 60
-    g = parse(f"---\nstart: a\n---\n## a\n-> b: {long}\n## b\n")
-    line = [l for l in graph_export.to_mermaid(g).splitlines() if "-.->|" in l][0]
+    graph = parse(f"---\nstart: a\n---\n## a\n-> b: {long}\n## b\n")
+    line = [line for line in graph_export.to_mermaid(graph).splitlines() if "-.->|" in line][0]
     assert "…" in line

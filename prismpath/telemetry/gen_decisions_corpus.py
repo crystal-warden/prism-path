@@ -3,7 +3,7 @@
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Generate the frozen decisions-preserved corpus: a set of flows + boundary-probing reading grids, each
 reading tagged with the full-precision route at every decision node. `test_decisions_preserved.py` replays
-it two ways — the engine must still produce the frozen routes (drift guard), and the wire round-trip
+it two ways  -  the engine must still produce the frozen routes (drift guard), and the wire round-trip
 (quantize -> Fibonacci -> decode -> reconstruct) must reproduce them exactly (the differentiated proof).
 
 Usage: gen_decisions_corpus.py   # writes conformance/decisions.json
@@ -18,8 +18,8 @@ sys.path.insert(0, str(HERE))
 REPO = HERE.parent.parent
 sys.path.insert(0, str(REPO))
 
-from prismpath.telemetry import quantizer as q          # noqa: E402
-from prismpath.telemetry import wire as w              # noqa: E402
+from prismpath.telemetry import quantizer          # noqa: E402
+from prismpath.telemetry import wire              # noqa: E402
 from prismpath.kernel.parser import parse, parse_file  # noqa: E402
 
 _INCIDENT = REPO / "prismpath" / "gallery" / "incident_severity" / "incident_severity.md"
@@ -113,38 +113,39 @@ start: classify
 MAX_READINGS = 250            # per-flow cap; strided deterministically if the grid is larger
 
 
-def _field_values(p):
-    if p.kind == "numeric":
+def _field_values(partition):
+    if partition.kind == "numeric":
         vals = set()
-        for c in p.cells:
-            vals.add(c["rep"])
-            if c["lo"] is not None:
-                vals.add(c["lo"]); vals.add(c["lo"] - 1)
-            if c["hi"] is not None:
-                vals.add(c["hi"]); vals.add(c["hi"] + 1)
+        for cell in partition.cells:
+            vals.add(cell["rep"])
+            if cell["lo"] is not None:
+                vals.add(cell["lo"]); vals.add(cell["lo"] - 1)
+            if cell["hi"] is not None:
+                vals.add(cell["hi"]); vals.add(cell["hi"] + 1)
         return sorted(vals)[:12]
-    if p.kind == "boolean":
+    if partition.kind == "boolean":
         return [False, True]
     # categorical
-    return [c["const"] for c in p.cells if c["const"] != q._OTHER] + ["__unlisted__"]
+    return [cell["const"] for cell in partition.cells
+            if cell["const"] != quantizer.OTHER_CELL] + ["__unlisted__"]
 
 
 def _grid(parts):
     order = sorted(parts.keys())
-    axes = [_field_values(parts[f]) for f in order]
+    axes = [_field_values(parts[field]) for field in order]
     combos = list(itertools.product(*axes))
     if len(combos) > MAX_READINGS:
         stride = len(combos) // MAX_READINGS + 1
         combos = combos[::stride]
-    return [dict(zip(order, c)) for c in combos]
+    return [dict(zip(order, combo)) for combo in combos]
 
 
 def _case(name, graph):
-    parts = q.build_partitions(graph)
-    nodes = w.decision_nodes(graph)
+    parts = quantizer.build_partitions(graph)
+    nodes = wire.decision_nodes(graph)
     entries = []
     for reading in _grid(parts):
-        routes = {n: w.route_node(graph, n, reading) for n in nodes}
+        routes = {node: wire.route_node(graph, node, reading) for node in nodes}
         entries.append({"reading": reading, "routes": routes})
     return {"name": name, "flow": None, "decision_nodes": nodes, "readings": entries}
 
@@ -161,9 +162,9 @@ def main():
     }
     cases = []
     for name, (graph, text) in flows.items():
-        c = _case(name, graph)
-        c["flow"] = text
-        cases.append(c)
+        case = _case(name, graph)
+        case["flow"] = text
+        cases.append(case)
     doc = {
         "version": 2,
         "note": "Decisions-preserved corpus (v2 adds numin, truthynum, strtruthy: the cut point regression flows). Each reading is tagged with the full-precision route at every "
@@ -174,10 +175,10 @@ def main():
     out = HERE / "conformance" / "decisions.json"
     out.parent.mkdir(exist_ok=True)
     out.write_text(json.dumps(doc, indent=1) + "\n")
-    total = sum(len(c["readings"]) for c in cases)
+    total = sum(len(case["readings"]) for case in cases)
     print(f"wrote {out}  ({len(cases)} flows, {total} readings)")
-    for c in cases:
-        print(f"  {c['name']:20} nodes={c['decision_nodes']}  readings={len(c['readings'])}")
+    for case in cases:
+        print(f"  {case['name']:20} nodes={case['decision_nodes']}  readings={len(case['readings'])}")
     return 0
 
 

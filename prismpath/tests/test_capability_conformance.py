@@ -15,6 +15,6 @@ CORPUS = os.path.join(os.path.dirname(__file__), "..", "portable", "conformance"
 def test_python_capability_matches_frozen_vectors():
     data = json.load(open(CORPUS, encoding="utf-8"))
     assert len(data["cases"]) >= 6
-    for c in data["cases"]:
-        got = mc.capability_report(parse(c["flow"]))
-        assert got == c["expected"], f"{c['key']}: {got} != {c['expected']}"
+    for case in data["cases"]:
+        got = mc.capability_report(parse(case["flow"]))
+        assert got == case["expected"], f"{case['key']}: {got} != {case['expected']}"

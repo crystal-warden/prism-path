@@ -21,24 +21,24 @@ def _no_embed(texts):
     raise AssertionError("the tuner must not embed when vectors are supplied")
 
 
-def _unit(v):
-    v = np.asarray(v, dtype=np.float32)
-    return v / np.linalg.norm(v)
+def _unit(vector):
+    vector = np.asarray(vector, dtype=np.float32)
+    return vector / np.linalg.norm(vector)
 
 
 def build_corpus(dir_path, n_per=60, n_poison=6, dim=8, seed=7):
     rng = np.random.default_rng(seed)
     cache = PrefilterCache(dir_path, embed_fn=_no_embed)
-    a = np.zeros(dim); a[0] = 1.0                        # benign centre
-    b = np.zeros(dim); b[1] = 1.0                        # malicious centre
-    for i in range(n_per):
-        cache.learn(_unit(a + rng.normal(0, 0.01, dim)), "benign", 0.9, key=f"b{i}")
-        cache.learn(_unit(b + rng.normal(0, 0.01, dim)), "malicious", 0.9, key=f"m{i}")
+    benign_centre = np.zeros(dim); benign_centre[0] = 1.0                        # benign centre
+    malicious_centre = np.zeros(dim); malicious_centre[1] = 1.0                        # malicious centre
+    for index in range(n_per):
+        cache.learn(_unit(benign_centre + rng.normal(0, 0.01, dim)), "benign", 0.9, key=f"b{index}")
+        cache.learn(_unit(malicious_centre + rng.normal(0, 0.01, dim)), "malicious", 0.9, key=f"m{index}")
     # poison: near the benign cluster (~0.94) but labeled malicious; mutually spread so each
     # poison's best match is a BENIGN neighbour, not another poison
-    for i in range(n_poison):
-        off = np.zeros(dim); off[2 + i % (dim - 2)] = 0.36
-        cache.learn(_unit(a + off), "malicious", 0.9, key=f"p{i}")
+    for index in range(n_poison):
+        off = np.zeros(dim); off[2 + index % (dim - 2)] = 0.36
+        cache.learn(_unit(benign_centre + off), "malicious", 0.9, key=f"p{index}")
     return cache
 
 
@@ -53,9 +53,9 @@ def test_tuner_certifies_the_safe_point(tmp_path):
     # the clusters are tight (cos > 0.999), so 0.95/0.97/0.99 share the same auto-resolve —
     # equal points tie-break to the SAFEST (highest) threshold
     assert ch["threshold"] == pytest.approx(0.99)
-    low = [r for r in out["grid"] if r["threshold"] == 0.90]
-    assert any(r["errors"] > 0 for r in low), "the low threshold must actually reuse across the gap"
-    assert all(not r["certified"] for r in low)
+    low = [row for row in out["grid"] if row["threshold"] == 0.90]
+    assert any(row["errors"] > 0 for row in low), "the low threshold must actually reuse across the gap"
+    assert all(not row["certified"] for row in low)
 
 
 def test_tuner_refuses_when_evidence_cannot_clear_risk(tmp_path):
@@ -96,11 +96,11 @@ def test_labeled_replay_stream(tmp_path):
     cache = build_corpus(corpus, n_poison=0)
     emb, meta = cache.load()
     # replay half the corpus as external labels, one with a deliberately WRONG oracle
-    labels = [{"vec": emb[i].tolist(), "action": meta[i]["action"]} for i in range(0, 40)]
+    labels = [{"vec": emb[index].tolist(), "action": meta[index]["action"]} for index in range(0, 40)]
     labels.append({"vec": emb[0].tolist(), "action": "malicious"})     # oracle disagrees
     out = tune(corpus, labels=labels, risk=0.5, embed_fn=_no_embed)
     assert out["labels"] == "labels" and out["n_eval"] == 41
-    top = [r for r in out["grid"] if r["threshold"] == 0.99 and r["min_conf"] == 0.5][0]
+    top = [row for row in out["grid"] if row["threshold"] == 0.99 and row["min_conf"] == 0.5][0]
     assert top["errors"] == 1, "exactly the mislabeled replay row disagrees"
 
 

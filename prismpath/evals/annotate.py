@@ -21,8 +21,8 @@ from prismpath.kernel.parser import parse_file
 _FLOWS = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "flows")
 
 
-def _key(c: dict):
-    return (c.get("flow", ""), c.get("node", ""), (c.get("outcome") or "").strip())
+def _key(case: dict):
+    return (case.get("flow", ""), case.get("node", ""), (case.get("outcome") or "").strip())
 
 
 def blind_cases(benchmark_path: str, flows_dir: Optional[str] = None) -> Iterator[dict]:
@@ -33,20 +33,21 @@ def blind_cases(benchmark_path: str, flows_dir: Optional[str] = None) -> Iterato
     for line in open(benchmark_path, encoding="utf-8"):
         if not line.strip():
             continue
-        c = json.loads(line)
-        flow = c["flow"]
+        case = json.loads(line)
+        flow = case["flow"]
         if flow not in graphs:
             graphs[flow] = parse_file(os.path.join(flows_dir, f"{flow}.md"))
-        node = graphs[flow].nodes[c["node"]]
-        yield {"flow": flow, "node": c["node"], "outcome": c["outcome"], "stratum": c.get("stratum"),
+        node = graphs[flow].nodes[case["node"]]
+        yield {"flow": flow, "node": case["node"], "outcome": case["outcome"], "stratum": case.get("stratum"),
                "instruction": node.instruction, "edges": list(node.edges),
-               "targets": [t for t, _ in node.edges]}
+               "targets": [edge_target for edge_target, _ in node.edges]}
 
 
 def _done_keys(out_path: str) -> set:
     if not os.path.exists(out_path):
         return set()
-    return {_key(json.loads(l)) for l in open(out_path, encoding="utf-8") if l.strip()}
+    return {_key(json.loads(raw_line)) for raw_line in open(out_path, encoding="utf-8")
+            if raw_line.strip()}
 
 
 def _resolve(raw: str, targets: List[str]) -> Optional[str]:
@@ -63,8 +64,8 @@ def present(case: dict) -> str:
              f"  instruction: {case['instruction'][:200]}",
              f"  OUTCOME: {case['outcome']}",
              "  which edge should this route to?"]
-    for i, (t, c) in enumerate(case["edges"], 1):
-        lines.append(f"    {i}. -> {t}: {c}")
+    for edge_index, (edge_target, condition) in enumerate(case["edges"], 1):
+        lines.append(f"    {edge_index}. -> {edge_target}: {condition}")
     return "\n".join(lines)
 
 
@@ -75,13 +76,13 @@ def annotate_loop(benchmark_path: str, out_path: str, flows_dir: Optional[str] =
     skips a case, 'q' saves and quits. Returns the number of cases labeled this session."""
     cases = list(blind_cases(benchmark_path, flows_dir))
     done = _done_keys(out_path)
-    todo = [c for c in cases if _key(c) not in done]
+    todo = [case for case in cases if _key(case) not in done]
     if limit is not None:
         todo = todo[:limit]
     print_fn(f"{len(done)} already labeled, {len(todo)} to go ({len(cases)} total). "
              f"Enter the edge number (or name); blank = skip, q = save & quit.")
-    n = 0
-    with open(out_path, "a", encoding="utf-8") as f:
+    labeled_count = 0
+    with open(out_path, "a", encoding="utf-8") as handle:
         for case in todo:
             print_fn("\n" + present(case))
             raw = input_fn("pick> ")
@@ -91,9 +92,10 @@ def annotate_loop(benchmark_path: str, out_path: str, flows_dir: Optional[str] =
             if pick is None:
                 print_fn("  (skipped)")
                 continue
-            f.write(json.dumps({"flow": case["flow"], "node": case["node"], "outcome": case["outcome"],
+            handle.write(json.dumps({"flow": case["flow"], "node": case["node"],
+                                     "outcome": case["outcome"],
                                 "label": pick, "stratum": case.get("stratum")}) + "\n")
-            f.flush()
-            n += 1
-    print_fn(f"\nlabeled {n} case(s) this session -> {out_path}")
-    return n
+            handle.flush()
+            labeled_count += 1
+    print_fn(f"\nlabeled {labeled_count} case(s) this session -> {out_path}")
+    return labeled_count

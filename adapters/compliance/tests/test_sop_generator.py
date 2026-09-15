@@ -3,8 +3,8 @@
 """The SOP generator: objective-grounded templates, coverage machine-checked against the catalog,
 honest TODO markers, no fabrication."""
 import copy
-import compliance_adapter as ca
-import sop_generator as sg
+from adapters.compliance import compliance_adapter as ca
+from adapters.compliance import sop_generator as sg
 
 
 def _ir():
@@ -51,11 +51,11 @@ def test_coverage_complete_against_catalog():
 
 def test_intake_covers_profile_and_document_questions():
     items = sg.intake(_ir())
-    keys = {i["key"] for i in items}
+    keys = {item["key"] for item in items}
     assert {"org_name", "system_name", "boundary", "cui_description"} <= keys
     assert {"ir_lead_role", "preparation", "tracking_system", "test_method"} <= keys
-    assert any(i["scope"] == "profile" for i in items)
-    assert any(i["scope"] == "document" for i in items)
+    assert any(item["scope"] == "profile" for item in items)
+    assert any(item["scope"] == "document" for item in items)
 
 
 def test_generate_full_has_no_todo():
@@ -71,7 +71,7 @@ def test_generate_full_has_no_todo():
 
 
 def test_generate_partial_marks_todo_and_does_not_fabricate():
-    partial = {k: v for k, v in FULL_ANSWERS.items() if k not in ("containment", "test_method")}
+    partial = {question_key: answer for question_key, answer in FULL_ANSWERS.items() if question_key not in ("containment", "test_method")}
     res = sg.generate(_ir(), partial)
     assert set(res["unanswered"]) == {"containment", "test_method"}
     assert "[TODO: " in res["markdown"]
@@ -81,7 +81,7 @@ def test_generate_partial_marks_todo_and_does_not_fabricate():
 
 def test_generate_empty_marks_everything_todo():
     res = sg.generate(_ir(), {})
-    every_key = {i["key"] for i in sg.intake(_ir())}
+    every_key = {item["key"] for item in sg.intake(_ir())}
     assert set(res["unanswered"]) == every_key
 
 

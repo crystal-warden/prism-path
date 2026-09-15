@@ -62,7 +62,7 @@ class ContextLedger:
 
     @property
     def leaves(self) -> List[str]:
-        return [s["leaf"] for s in self.segments]
+        return [segment["leaf"] for segment in self.segments]
 
     def head(self) -> str:
         """The chain head — commits to every leaf AND their order."""
@@ -73,12 +73,12 @@ class ContextLedger:
         root, _paths = ledger_ots.merkle_root_and_paths(self.leaves)
         return root or ""
 
-    def prove(self, i: int) -> dict:
-        """Inclusion proof for segment `i` against `root()`."""
+    def prove(self, segment_index: int) -> dict:
+        """Inclusion proof for segment `segment_index` against `root()`."""
         root, paths = ledger_ots.merkle_root_and_paths(self.leaves)
-        if not (0 <= i < len(paths)):
-            raise IndexError(f"segment index out of range: {i}")
-        return {"leaf": self.leaves[i], "path": paths[i], "root": root}
+        if not (0 <= segment_index < len(paths)):
+            raise IndexError(f"segment index out of range: {segment_index}")
+        return {"leaf": self.leaves[segment_index], "path": paths[segment_index], "root": root}
 
     def attest(self, policy_hash: Optional[str], gate_id: Optional[str],
                model_id: str, label: str = "context") -> dict:
@@ -101,8 +101,8 @@ def verify_chain(segments: List[Dict]) -> bool:
     """Recompute the chain over a ledger's segments — any edit, reorder, insertion, or deletion
     of a past segment flips this to False."""
     prev = GENESIS
-    for i, seg in enumerate(segments):
-        if seg.get("idx") != i:
+    for index, seg in enumerate(segments):
+        if seg.get("idx") != index:
             return False
         expect = _sha256_hex(bytes.fromhex(prev) + bytes.fromhex(seg["leaf"]))
         if seg.get("chain") != expect:

@@ -35,9 +35,9 @@ def scripted_agent(script: dict):
         seq = script.get(node)
         if seq is None:
             return {"text": node}
-        i = used.get(node, 0)
-        used[node] = i + 1
-        outcome = seq[min(i, len(seq) - 1)]
+        index = used.get(node, 0)
+        used[node] = index + 1
+        outcome = seq[min(index, len(seq) - 1)]
         if isinstance(outcome, dict) and "__raise__" in outcome:
             raise RuntimeError(outcome["__raise__"])
         return outcome
@@ -275,15 +275,15 @@ def _python_results():
 def _js_results(tmp_path):
     fixtures_file = tmp_path / "fixtures.json"
     fixtures_file.write_text(json.dumps(FIXTURES))
-    p = subprocess.run([NODE, str(REPO / "portable" / "run_conformance.mjs"), str(fixtures_file)],
+    process = subprocess.run([NODE, str(REPO / "portable" / "run_conformance.mjs"), str(fixtures_file)],
                        capture_output=True, text=True, timeout=60)
-    assert p.returncode == 0, f"node runner failed: {p.stderr[:500]}"
+    assert process.returncode == 0, f"node runner failed: {process.stderr[:500]}"
     out = []
-    for r in json.loads(p.stdout):
-        assert "error" not in r, f"port errored on {r['name']}: {r.get('error')}"
-        out.append({"name": r["name"], "path": r["path"], "stopped": r["stopped"],
-                    "pending_node": (r.get("pending") or {}).get("node"),
-                    "spawn": (r.get("pending") or {}).get("spawn")})
+    for result in json.loads(process.stdout):
+        assert "error" not in result, f"port errored on {result['name']}: {result.get('error')}"
+        out.append({"name": result["name"], "path": result["path"], "stopped": result["stopped"],
+                    "pending_node": (result.get("pending") or {}).get("node"),
+                    "spawn": (result.get("pending") or {}).get("spawn")})
     return out
 
 
@@ -291,14 +291,14 @@ def test_python_and_port_route_identically(tmp_path):
     py = _python_results()
     js = _js_results(tmp_path)
     assert len(py) == len(js) == len(FIXTURES)
-    for a, b in zip(py, js):
-        assert a == b, (f"CONFORMANCE DIVERGENCE on {a['name']!r}:\n  python: {a}\n  port:   {b}")
+    for python_result, port_result in zip(py, js):
+        assert python_result == port_result, (f"CONFORMANCE DIVERGENCE on {python_result['name']!r}:\n  python: {python_result}\n  port:   {port_result}")
 
 
 def test_fixture_branches_actually_diverge():
     # meta-check: the predicate fixtures genuinely exercise DIFFERENT branches (a fixture set that
     # all routed to `done` would vacuously pass conformance).
     py = _python_results()
-    branches = {r["path"][1] for r in py if r["name"].count("-") and len(r["path"]) > 1
-                and r["path"][0] == "route"}
+    branches = {result["path"][1] for result in py if result["name"].count("-") and len(result["path"]) > 1
+                and result["path"][0] == "route"}
     assert len(branches) >= 7, f"fixtures collapsed to too few branches: {branches}"

@@ -11,6 +11,7 @@ software references agreed on. A stateless demo_input pass on the same image the
 certified path is untouched (regression: AUTO_CTRL[1]=0 must behave exactly as today).
 """
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -19,7 +20,10 @@ from cocotb.clock import Clock
 from cocotb.triggers import ClockCycles, RisingEdge
 
 HERE = Path(__file__).resolve().parent
-BENCH = Path("/home/cwadmin/cwprojects/prismpath-hw")          # demo bench: flows + corpus live here
+# The flows and the frozen corpus this gate certifies against are committed here, so the gate runs
+# from a clean checkout on any machine. An external demo bench can still be pointed at through the
+# environment, but it has to be asked for; it is no longer what the certification silently reads.
+BENCH = Path(os.environ.get("PRISMPATH_HW_BENCH") or HERE.parent)
 sys.path.insert(0, str(HERE.parent / "tools"))
 import gen_pack_svh as gp                                       # noqa: E402
 
@@ -27,15 +31,22 @@ FLOWS = BENCH / "demo" / "flows"
 R_STATUS, R_RESULT, R_AUTO_CTRL, R_POT_NOW, R_CUR_NODE = 0x18, 0x1C, 0x28, 0x2C, 0x30
 
 CUR_POT = {"v": 300}          # the DRP mock serves this (12-bit), updated by the test body
+DEN_SEEN = {"n": 0}           # drp_den pulses the DUT issued, so the handshake is observed not assumed
 
 
 async def drp_mock(dut):
     """XADC over DRP, always ready: drdy held high with the current pot on drp_do. The DUT's DRP
     FSM issues its FIRST den the cycle after reset — an edge-triggered mock started later misses
     it and the FSM wedges in its wait state, so serve unconditionally (st=0 ignores drdy; st=1
-    completes in one cycle; the pot refreshes every 2 cycles)."""
+    completes in one cycle; the pot refreshes every 2 cycles).
+
+    Serving unconditionally is what makes the mock work, and it is also what stops it from checking
+    the request side: a DUT that never asserted den would still read a plausible pot from it. So the
+    mock counts den instead of gating on it, and the test asserts the count moved."""
     while True:
         await RisingEdge(dut.clk)
+        if int(dut.drp_den.value) == 1:
+            DEN_SEEN["n"] += 1
         dut.drp_do.value = (CUR_POT["v"] & 0xFFF) << 4
         dut.drp_drdy.value = 1
 
@@ -83,9 +94,9 @@ def policy_write_list(stem: str):
     dbg = json.load(open(FLOWS / f"{stem}.json"))
     img = gp.parse_ppt(data)
     colors = gp.image_colors(data)
-    h = gp.policy_pack.read_ppt_header(data)
-    arm = (dbg["fields"]["pot"], img["start"], h["stateful"], h["safe_node"])
-    return gp.policy_writes(img, colors, arm), h
+    header = gp.policy_pack.read_ppt_header(data)
+    arm = (dbg["fields"]["pot"], img["start"], header["stateful"], header["safe_node"])
+    return gp.policy_writes(img, colors, arm), header
 
 
 async def load_and_arm(dut, stem: str):
@@ -145,7 +156,9 @@ async def finale_hysteresis_corpus(dut):
         tgt = (await axi_read(dut, R_RESULT)) & 0xFFFF
         assert tgt == st["trail_settled"][-1], \
             f"{st['name']}: RESULT target {tgt} != settled band {st['trail_settled'][-1]}"
-    dut._log.info(f"HYST CORPUS PASS: {events} events across {len(corpus['streams'])} streams")
+    assert DEN_SEEN["n"] > 0, "the DUT never asserted drp_den: the pot readings came from the mock alone"
+    dut._log.info(f"HYST CORPUS PASS: {events} events across {len(corpus['streams'])} streams, "
+                  f"{DEN_SEEN['n']} DRP requests observed")
 
     # ---- stateless regression: demo_input on the same image, AUTO_CTRL[1]=0, certified path ----
     hdr = await load_and_arm(dut, "demo_input")

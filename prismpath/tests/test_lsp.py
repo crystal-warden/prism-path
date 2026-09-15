@@ -47,8 +47,8 @@ Queue it.
 def run_server(*messages):
     """Feed framed messages to a Server over BytesIO pipes; return the decoded replies."""
     buf = io.BytesIO()
-    for m in messages:
-        buf.write(lsp._frame(m))
+    for message in messages:
+        buf.write(lsp._frame(message))
     buf.write(lsp._frame({"jsonrpc": "2.0", "method": "exit"}))
     buf.seek(0)
     out = io.BytesIO()
@@ -74,11 +74,11 @@ def _open(uri, text):
 
 
 def by_id(replies, msg_id):
-    return next(r for r in replies if r.get("id") == msg_id)
+    return next(reply for reply in replies if reply.get("id") == msg_id)
 
 
 def notifications(replies, method):
-    return [r for r in replies if r.get("method") == method]
+    return [reply for reply in replies if reply.get("method") == method]
 
 
 # ------------------------------------------------------------------ tests
@@ -104,14 +104,14 @@ def test_diagnostics_on_open_anchor_to_the_offending_line():
     pubs = notifications(replies, "textDocument/publishDiagnostics")
     assert pubs and pubs[-1]["params"]["uri"] == uri
     diags = pubs[-1]["params"]["diagnostics"]
-    codes = {d["code"] for d in diags}
+    codes = {diagnostic["code"] for diagnostic in diags}
     assert "undefined-target" in codes and "unreachable-node" in codes
-    tgt = next(d for d in diags if d["code"] == "undefined-target")
+    tgt = next(diagnostic for diagnostic in diags if diagnostic["code"] == "undefined-target")
     # the undefined-target finding anchors to the edge line, not line 0
     assert tgt["range"]["start"]["line"] == BROKEN_FLOW.splitlines().index(
         "-> missing_node: always")
     assert tgt["severity"] == 1
-    unreach = next(d for d in diags if d["code"] == "unreachable-node")
+    unreach = next(diagnostic for diagnostic in diags if diagnostic["code"] == "unreachable-node")
     assert unreach["range"]["start"]["line"] == BROKEN_FLOW.splitlines().index("## b")
 
 
@@ -135,7 +135,7 @@ def test_completion_targets_after_arrow():
             "params": {"textDocument": {"uri": uri},
                        "position": {"line": line, "character": 3}}}
     replies = run_server(_init(), _open(uri, text), comp)
-    labels = {i["label"] for i in by_id(replies, 2)["result"]["items"]}
+    labels = {item["label"] for item in by_id(replies, 2)["result"]["items"]}
     assert {"classify", "urgent_desk", "routine_desk"} <= labels
 
 
@@ -147,7 +147,7 @@ def test_completion_condition_offers_keywords_and_derived_fields():
             "params": {"textDocument": {"uri": uri},
                        "position": {"line": line, "character": len("-> urgent_desk: ")}}}
     replies = run_server(_init(), _open(uri, text), comp)
-    labels = {i["label"] for i in by_id(replies, 2)["result"]["items"]}
+    labels = {item["label"] for item in by_id(replies, 2)["result"]["items"]}
     assert "when " in labels and "on error" in labels
     assert "kind" in labels, "fields derived from the flow's own predicates"
     assert "visits" in labels
@@ -161,7 +161,7 @@ def test_completion_annotations_after_at():
             "params": {"textDocument": {"uri": uri},
                        "position": {"line": line, "character": 1}}}
     replies = run_server(_init(), _open(uri, text), comp)
-    labels = {i["label"] for i in by_id(replies, 2)["result"]["items"]}
+    labels = {item["label"] for item in by_id(replies, 2)["result"]["items"]}
     assert {"emits", "spawn", "state_bound", "field_only"} <= labels
 
 
@@ -188,7 +188,7 @@ def test_document_symbols_are_the_nodes():
     sym = {"jsonrpc": "2.0", "id": 2, "method": "textDocument/documentSymbol",
            "params": {"textDocument": {"uri": uri}}}
     replies = run_server(_init(), _open(uri, GOOD_FLOW), sym)
-    names = [s["name"] for s in by_id(replies, 2)["result"]]
+    names = [symbol["name"] for symbol in by_id(replies, 2)["result"]]
     assert names == ["classify", "urgent_desk", "routine_desk"]
 
 

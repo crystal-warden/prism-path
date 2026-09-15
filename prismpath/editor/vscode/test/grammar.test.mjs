@@ -13,7 +13,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const grammar = JSON.parse(readFileSync(join(here, "..", "syntaxes", "prismpath.injection.json"), "utf8"));
 const rule = (name) => new RegExp(grammar.repository[name].match);
 const ORDER = ["edge-error", "edge-event", "edge-deterministic", "edge-always", "edge-semantic"];
-const firstMatch = (line) => ORDER.find((r) => rule(r).test(line));
+const firstMatch = (line) => ORDER.find((ruleName) => rule(ruleName).test(line));
 
 test("tier classification matches the format's tiers", () => {
   assert.equal(firstMatch("-> done: when tests_pass"), "edge-deterministic");
@@ -47,6 +47,6 @@ test("annotations match, prose with @ does not", () => {
 
 test("grammar wiring: injection + rule order includes semantic LAST", () => {
   assert.equal(grammar.injectionSelector, "L:text.html.markdown");
-  const listed = grammar.patterns.map((p) => p.include.slice(1));
+  const listed = grammar.patterns.map((pattern) => pattern.include.slice(1));
   assert.deepEqual(listed.slice(0, 5), ORDER);   // catch-all last, so tiers win
 });

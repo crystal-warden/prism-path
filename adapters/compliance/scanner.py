@@ -59,15 +59,15 @@ def merge_postures(postures, boundary=None):
     conflicts = []
     sources = []
     host = None
-    for p in postures:
-        host = host or p.get("host")
-        src = p.get("provenance", {}).get("source")
+    for posture in postures:
+        host = host or posture.get("host")
+        src = posture.get("provenance", {}).get("source")
         if src:
             sources.append(src)
-        for k, v in (p.get("facts") or {}).items():
-            if k in facts and facts[k] != v:
-                conflicts.append({"fact": k, "was": facts[k], "now": v, "source": src})
-            facts[k] = v
+        for fact_name, fact_value in (posture.get("facts") or {}).items():
+            if fact_name in facts and facts[fact_name] != fact_value:
+                conflicts.append({"fact": fact_name, "was": facts[fact_name], "now": fact_value, "source": src})
+            facts[fact_name] = fact_value
     prov = {"source": "+".join(sources) if sources else "merged", "merged_from": sources}
     if conflicts:
         prov["conflicts"] = conflicts
@@ -83,13 +83,13 @@ def load_sample(name):
 
 
 # Register the bundled adapters. Each concrete adapter is a standalone module exposing parse(raw).
-from scan_osquery import parse as _osquery_parse  # noqa: E402
+from adapters.compliance.scan_osquery import parse as _osquery_parse  # noqa: E402
 register("osquery", _osquery_parse)
 
-from scan_lynis import parse as _lynis_parse  # noqa: E402
+from adapters.compliance.scan_lynis import parse as _lynis_parse  # noqa: E402
 register("lynis", _lynis_parse)
 
-from scan_prowler import parse as _prowler_parse  # noqa: E402
+from adapters.compliance.scan_prowler import parse as _prowler_parse  # noqa: E402
 register("prowler", _prowler_parse)
 
 

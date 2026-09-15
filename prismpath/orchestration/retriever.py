@@ -25,9 +25,9 @@ _MODEL_NAME = os.environ.get("EMBED_MODEL", "BAAI/bge-base-en-v1.5")
 def _resolve_device():
     # 128GB unified memory: embed on GPU by default; CPU only if CUDA is genuinely unavailable.
     # (The old "keep on CPU" default was a 12GB-VRAM-era artifact.)
-    d = os.environ.get("EMBED_DEVICE")
-    if d:
-        return d
+    embed_device = os.environ.get("EMBED_DEVICE")
+    if embed_device:
+        return embed_device
     try:
         import torch
         return "cuda" if torch.cuda.is_available() else "cpu"
@@ -51,12 +51,13 @@ def _load(index_path):
     if index_path not in _cache:
         import turbovec
         idx = turbovec.IdMapIndex.load(index_path)
-        meta = {int(k): v for k, v in json.load(open(index_path + ".meta.json")).items()}
+        meta = {int(chunk_id): meta_value
+                for chunk_id, meta_value in json.load(open(index_path + ".meta.json")).items()}
         _cache[index_path] = (idx, meta)
     return _cache[index_path]
 
 
-def retrieve(query, k=4, index_path=None):
+def retrieve(query, top_k=4, index_path=None):
     """Top-k doc chunks for `query` -> [{score, source, path, text}]. Never raises."""
     global _warned
     index_path = index_path or os.environ.get("SPRINT_RAG_INDEX") or _DEFAULT_INDEX
@@ -70,37 +71,37 @@ def retrieve(query, k=4, index_path=None):
         vec = _embedder().encode([_QUERY_INSTRUCTION + query], normalize_embeddings=True)
         # Over-fetch, then diversify: cap chunks per (source,path) so one doc can't monopolize top-k
         # (a lightweight MMR-style spread — keeps the canonical class AND its neighbours in view).
-        scores, ids = idx.search(np.asarray(vec, dtype="float32"), k=max(k * 8, 32))
+        scores, ids = idx.search(np.asarray(vec, dtype="float32"), k=max(top_k * 8, 32))
         out, seen = [], {}
-        for s, i in zip(np.asarray(scores)[0], np.asarray(ids)[0]):
-            m = meta.get(int(i))
-            if not m:
+        for score, chunk_id in zip(np.asarray(scores)[0], np.asarray(ids)[0]):
+            meta_record = meta.get(int(chunk_id))
+            if not meta_record:
                 continue
-            text = m.get("text", "")
+            text = meta_record.get("text", "")
             if drop_marked and ("[deprecated]" in text.lower() or "[internal]" in text.lower()):
                 continue
-            mm = m.get("meta", {}) or {}
+            mm = meta_record.get("meta", {}) or {}
             key = (mm.get("source", ""), mm.get("path", ""))
             if seen.get(key, 0) >= per_doc:
                 continue
             seen[key] = seen.get(key, 0) + 1
-            out.append({"score": float(s), "source": mm.get("source", ""),
+            out.append({"score": float(score), "source": mm.get("source", ""),
                         "path": mm.get("path", ""), "text": text})
-            if len(out) >= k:
+            if len(out) >= top_k:
                 break
         return out
-    except Exception as e:
+    except Exception as exc:
         if not _warned:
-            print(f"[retriever] RAG disabled ({type(e).__name__}: {str(e)[:140]})", flush=True)
+            print(f"[retriever] RAG disabled ({type(exc).__name__}: {str(exc)[:140]})", flush=True)
             _warned = True
         return []
 
 
 if __name__ == "__main__":
     import sys
-    q = sys.argv[1] if len(sys.argv) > 1 else "export a typed port"
-    hits = retrieve(q, int(os.environ.get("K", "4")))
-    print(f"query: {q}\n{len(hits)} hits:")
-    for h in hits:
-        print(f"  [{h['score']:.3f}] {h['source']}/{h['path']}")
-        print("     " + h["text"][:160].replace("\n", " ") + "…")
+    query_text = sys.argv[1] if len(sys.argv) > 1 else "export a typed port"
+    hits = retrieve(query_text, int(os.environ.get("K", "4")))
+    print(f"query: {query_text}\n{len(hits)} hits:")
+    for hit in hits:
+        print(f"  [{hit['score']:.3f}] {hit['source']}/{hit['path']}")
+        print("     " + hit["text"][:160].replace("\n", " ") + "…")

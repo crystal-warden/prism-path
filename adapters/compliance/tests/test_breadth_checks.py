@@ -2,8 +2,8 @@
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Breadth tests for expanded machine-checkable technical configuration controls."""
 import pytest
-import deterministic_checks as dc
-import compliance_adapter as ca
+from adapters.compliance import deterministic_checks as dc
+from adapters.compliance import compliance_adapter as ca
 
 NEWLY_COVERED_CONTROLS = [
     "3.5.4",
@@ -45,7 +45,7 @@ def test_newly_covered_controls_are_machine_checkable(cid):
 def test_total_machine_checkable_control_count():
     ca.use_standard("nist_800171_r2")
     cat = ca._catalog()
-    checkable = [cid for cid, c in cat["controls"].items() if dc.machine_checkable({"id": cid, **c})]
+    checkable = [cid for cid, control in cat["controls"].items() if dc.machine_checkable({"id": cid, **control})]
     assert len(checkable) >= 17
     for cid in NEWLY_COVERED_CONTROLS + PREVIOUSLY_COVERED_CONTROLS:
         assert cid in checkable

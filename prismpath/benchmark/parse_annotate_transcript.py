@@ -36,22 +36,22 @@ def main() -> int:
     args = ap.parse_args()
 
     cases = list(blind_cases(BENCH))
-    gold = [json.loads(l) for l in open(BENCH, encoding="utf-8") if l.strip()]
+    gold = [json.loads(line) for line in open(BENCH, encoding="utf-8") if line.strip()]
 
     # Walk the transcript; pair each block header with the pick that closes it, in order.
     pairs = []            # (flow, node, raw_pick)
     cur = None
     for line in open(args.transcript, encoding="utf-8"):
-        h = HEAD.match(line.rstrip("\n"))
-        if h:
-            cur = (h.group(1), h.group(2))
+        header = HEAD.match(line.rstrip("\n"))
+        if header:
+            cur = (header.group(1), header.group(2))
             continue
-        p = PICK.match(line.rstrip("\n"))
-        if p:
+        pick = PICK.match(line.rstrip("\n"))
+        if pick:
             if cur is None:
                 print(f"  ✗ a `pick>` with no preceding [flow/node] header near: {line.strip()!r}")
                 return 1
-            pairs.append((cur[0], cur[1], p.group(1)))
+            pairs.append((cur[0], cur[1], pick.group(1)))
             cur = None
 
     if len(pairs) != len(cases):
@@ -60,27 +60,27 @@ def main() -> int:
         return 1
 
     out_recs, mism = [], []
-    for i, ((flow, node, raw), case) in enumerate(zip(pairs, cases)):
+    for case_index, ((flow, node, raw), case) in enumerate(zip(pairs, cases)):
         if (flow, node) != (case["flow"], case["node"]):
-            mism.append(f"case {i}: transcript [{flow}/{node}] vs benchmark [{case['flow']}/{case['node']}]")
+            mism.append(f"case {case_index}: transcript [{flow}/{node}] vs benchmark [{case['flow']}/{case['node']}]")
             continue
         target = _resolve(raw, case["targets"])
         if target is None:
-            mism.append(f"case {i} [{flow}/{node}]: pick {raw!r} is not a valid edge "
+            mism.append(f"case {case_index} [{flow}/{node}]: pick {raw!r} is not a valid edge "
                         f"(targets: {case['targets']})")
             continue
         out_recs.append({"flow": case["flow"], "node": case["node"], "outcome": case["outcome"],
-                         "label": target, "stratum": gold[i].get("stratum")})
+                         "label": target, "stratum": gold[case_index].get("stratum")})
 
     if mism:
         print(f"VERIFICATION FAILED — {len(mism)} misalignment(s):")
-        for m in mism[:25]:
-            print(f"  ✗ {m}")
+        for message in mism[:25]:
+            print(f"  ✗ {message}")
         return 1
 
-    with open(args.out, "w", encoding="utf-8") as f:
-        for r in out_recs:
-            f.write(json.dumps(r, ensure_ascii=False) + "\n")
+    with open(args.out, "w", encoding="utf-8") as handle:
+        for record in out_recs:
+            handle.write(json.dumps(record, ensure_ascii=False) + "\n")
     print(f"✓ verified {len(out_recs)} cases (headers aligned, picks in-range); wrote {args.out}")
     return 0
 

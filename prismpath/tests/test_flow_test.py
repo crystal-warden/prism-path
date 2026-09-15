@@ -51,9 +51,9 @@ Decide the kind of request.
 """
 
 
-def _unit(v):
-    v = np.asarray(v, "float32")
-    return v / (np.linalg.norm(v) or 1)
+def _unit(vector):
+    vector = np.asarray(vector, "float32")
+    return vector / (np.linalg.norm(vector) or 1)
 
 
 def _write(tmp_path, flow, tests, stem="f"):
@@ -83,11 +83,11 @@ def test_parse_tests_ignores_non_table_and_bad_headers():
 
 def test_deterministic_cases_pass_without_a_model(tmp_path, monkeypatch):
     # make any embedder use explode, to prove the deterministic path never calls it
-    monkeypatch.setattr(embedder, "embed", lambda *a, **k: (_ for _ in ()).throw(AssertionError("embedded!")))
+    monkeypatch.setattr(embedder, "embed", lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("embedded!")))
     fp, tp = _write(tmp_path, DET_FLOW, DET_TESTS)
     report = flow_test.run_tests(fp, tp)
     assert report.ok and report.passed == 2
-    assert all(r.how == "deterministic" for r in report.results)
+    assert all(result.how == "deterministic" for result in report.results)
 
 
 # --- embed tier: stub embedder ----------------------------------------------------------
@@ -97,7 +97,7 @@ def stub_embed(monkeypatch):
     vecs = {"something is broken": _unit([1, 0]), "about a payment or refund": _unit([0, 1]),
             "the app crashes on save": _unit([0.95, 0.05]), "i want my money back": _unit([0.05, 0.95])}
     monkeypatch.setattr(embedder, "embed",
-                        lambda texts, is_query=False: np.asarray([vecs[t] for t in texts], "float32"))
+                        lambda texts, is_query=False: np.asarray([vecs[text] for text in texts], "float32"))
 
 
 def test_embed_cases_route_and_report(tmp_path, stub_embed):
@@ -107,7 +107,7 @@ def test_embed_cases_route_and_report(tmp_path, stub_embed):
     fp, tp = _write(tmp_path, SEM_FLOW, tests)
     report = flow_test.run_tests(fp, tp, router=EmbeddingRouter())
     assert report.ok and report.passed == 2
-    assert all(r.how == "embed" for r in report.results)
+    assert all(result.how == "embed" for result in report.results)
 
 
 def test_failing_case_is_reported(tmp_path, stub_embed):
@@ -120,7 +120,7 @@ def test_failing_case_is_reported(tmp_path, stub_embed):
 
 
 def test_unknown_node_is_an_error(tmp_path, monkeypatch):
-    monkeypatch.setattr(embedder, "embed", lambda *a, **k: np.zeros((1, 2), "float32"))
+    monkeypatch.setattr(embedder, "embed", lambda *args, **kwargs: np.zeros((1, 2), "float32"))
     tests = "| node | outcome | expect |\n|---|---|---|\n| nope | x | y |\n"
     fp, tp = _write(tmp_path, DET_FLOW, tests)
     report = flow_test.run_tests(fp, tp)
@@ -130,13 +130,13 @@ def test_unknown_node_is_an_error(tmp_path, monkeypatch):
 # --- labeled-data side output -----------------------------------------------------------
 
 def test_emit_labels_writes_jsonl(tmp_path, monkeypatch):
-    monkeypatch.setattr(embedder, "embed", lambda *a, **k: (_ for _ in ()).throw(AssertionError))
+    monkeypatch.setattr(embedder, "embed", lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError))
     fp, tp = _write(tmp_path, DET_FLOW, DET_TESTS)
     report = flow_test.run_tests(fp, tp)
     out = tmp_path / "labels.jsonl"
-    n = flow_test.emit_labels(report, "gate", str(out))
-    assert n == 2
-    recs = [json.loads(l) for l in out.read_text().splitlines()]
+    label_count = flow_test.emit_labels(report, "gate", str(out))
+    assert label_count == 2
+    recs = [json.loads(line) for line in out.read_text().splitlines()]
     assert recs[0]["label"] == "pass" and recs[0]["label_source"] == "flow_test"
     assert recs[0]["chosen"] == "pass" and recs[0]["correct"] is True
 

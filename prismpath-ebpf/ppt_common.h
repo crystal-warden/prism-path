@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 Crystal Warden Supply Chain Labs LLC
-/* ppt_common.h — PrismPath PPT v1 shared definitions for eBPF XDP & Loader */
+/* ppt_common.h: PrismPath PPT v1 shared definitions for eBPF XDP & Loader */
 #ifndef PPT_COMMON_H
 #define PPT_COMMON_H
 
@@ -8,6 +8,8 @@
 
 #define PPT_MAGIC 0x4D545050u
 #define PPT_VISITS_NONE 0xFFFFu
+#define PPT_A6_REFUSED_SHORT 0xFFFFFFFEu
+#define PPT_A6_NO_MATCH      0xFFFFFFFFu
 
 /* Value domain type tags */
 #define TY_NONE 0
@@ -39,7 +41,7 @@
 
 /* Per-iteration loop bounds. The edge loop runs via bpf_loop() (callback verified ONCE), so
  * MAX_EDGES_PER_NODE is effectively free to the verifier. eval_prog keeps EXACT RPN semantics but its
- * operand stack is a FIXED depth accessed only through constant indices (st_get/st_put's switch) — never
+ * operand stack is a FIXED depth accessed only through constant indices (st_get/st_put's switch), never
  * st[runtime_sp], which is what made the verifier explore every sp value and overrun the 1M-insn limit.
  * STACK_MAX is the declared max operand-stack depth of a supported predicate. Level M expressions fold
  * left-associatively, so a flat AND/OR chain (including `in`-lists) stays at depth 2; 4 covers real
@@ -47,7 +49,7 @@
 /* BIG-TEST bounds: the original large numbers that overran the verifier BEFORE the bpf_loop rewrite
  * (64x64 hit the 8192-jump limit; 16x16 processed 1,000,001 insns). With edge + prog loops now run via
  * bpf_loop (each callback verified once), MAX_EDGES_PER_NODE and MAX_PROG_PER_EDGE are O(1) to the
- * verifier, and MAX_FIELDS_PER_PKT is a once-verified field-load loop — so these should now load. */
+ * verifier, and MAX_FIELDS_PER_PKT is a once-verified field-load loop, so these should now load. */
 #define MAX_FIELDS_PER_PKT 32
 #define MAX_EDGES_PER_NODE 64
 #define MAX_PROG_PER_EDGE  64
@@ -99,7 +101,7 @@ struct ppt_config {
     __u16 safe_node;   /* selector fail-safe: most-restrictive node index; 0 = undeclared (ppt_select) */
     /* inline enforcement (ppt_net only): bit i set => decision node i returns XDP_DROP instead of
      * XDP_PASS. 0 = observe-only (default). Covers node indices 0-63; the net program bounds the shift.
-     * ppt_xdp (the conformance program) ignores this field — the 114/114 cert is unaffected. */
+     * ppt_xdp (the conformance program) ignores this field; the 114/114 cert is unaffected. */
     __u64 drop_mask;
     __u64 policy_hash;   /* low 64 bits of sha256(image): binds a selector receipt to the loaded policy */
 };
@@ -113,9 +115,9 @@ struct ppt_receipt {
     __u64 seq;          /* commit sequence = the new generation counter (monotonic per policy load) */
     __u64 t_ns;         /* bpf_ktime_get_ns() at commit: the TIME axis, signed into the tamper-evident record */
     __u64 policy_hash;  /* low 64 bits of the loaded image's sha256 (loader-attested) */
-    __s32 prev_node;    /* the resident posture BEFORE this event */
+    __s32 prev_node;    /* the resident node BEFORE this event */
     __s32 event;        /* the driving event value (field 0) */
-    __s32 next_node;    /* the resident posture AFTER this event */
+    __s32 next_node;    /* the resident node AFTER this event */
     __s32 cause;        /* WHY, from the cause code registry (docs/design/spec-cause-codes.md):
                          * 0 = PPT_CAUSE_NONE, an ordinary committed transition. Occupies the former
                          * _pad slot (explicitly written 0 since introduction), so size, layout, and
@@ -125,7 +127,7 @@ struct ppt_receipt {
 #define PPT_CAUSE_NONE 0   /* clean decision; nonzero values come from the registry (append-only) */
 #define PPT_CAUSE_MIGRATION_RESET 66   /* state:migration-reset (docs/design/spec-cause-codes.md): a
                                         * hot-swap reset-to strategy (or a vanished name under by-name)
-                                        * parked the resident posture on the new fail-safe rather than
+                                        * parked the resident node on the new fail-safe rather than
                                         * preserving it. Attested by the loader on the swap, not the kernel. */
 
 /* A migration receipt reuses the ppt_receipt struct (the anchored format is NEVER changed) and marks

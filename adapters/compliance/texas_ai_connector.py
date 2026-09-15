@@ -19,7 +19,7 @@ checks consume:
 Facts PrismPath does not natively enforce (generative guardrails, disclosure delivery) are deliberately
 NOT emitted here; they remain the org's attestation via other tooling. Honest by omission.
 """
-import os, sys, json
+import os, json
 
 # ============================================================================
 # CONFIGURE — set these to your own environment, then run. Nothing below this
@@ -38,9 +38,6 @@ FLOW_VERSION = "tx-governance-flow@1"
 VERSION_AUTHORIZED = True
 # ============================================================================
 
-_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-if _ROOT not in sys.path:
-    sys.path.insert(0, _ROOT)
 from prismpath.kernel.parser import parse
 from prismpath.kernel.engine import run
 from prismpath.kernel import causes
@@ -72,13 +69,13 @@ def _agent_for(request):
 
 
 def _receipts_from_demo(flow, version):
-    g = parse(flow)
+    graph = parse(flow)
     receipts = []
     for req in DEMO_REQUESTS:
-        r = run(g, _agent_for(req))
-        receipts.append({"label": req["label"], "stopped": r.stopped, "cause": r.cause,
-                         "cause_class": causes.cause_class(r.cause), "version": version,
-                         "path": r.path})
+        run_result = run(graph, _agent_for(req))
+        receipts.append({"label": req["label"], "stopped": run_result.stopped, "cause": run_result.cause,
+                         "cause_class": causes.cause_class(run_result.cause), "version": version,
+                         "path": run_result.path})
     return receipts
 
 
@@ -99,12 +96,12 @@ def collect_receipts():
 def derive_facts():
     """Derive the Texas config facts from the configured receipt source. Returns (facts, receipts)."""
     receipts = collect_receipts()
-    escalated = any(r.get("stopped") == "needs_human" for r in receipts)
-    refused = any(r.get("stopped") == "stuck" for r in receipts)
+    escalated = any(receipt.get("stopped") == "needs_human" for receipt in receipts)
+    refused = any(receipt.get("stopped") == "stuck" for receipt in receipts)
     facts = {
         "human_oversight_escalation_enforced": escalated,
         "prohibited_use_refusal_enforced": refused,
-        "decision_version_attribution": bool(receipts) and all(r.get("version") for r in receipts),
+        "decision_version_attribution": bool(receipts) and all(receipt.get("version") for receipt in receipts),
         "governing_version_authorized": bool(FLOW_VERSION) and bool(VERSION_AUTHORIZED),
     }
     return facts, receipts
@@ -114,8 +111,8 @@ if __name__ == "__main__":
     facts, receipts = derive_facts()
     src = RECEIPTS_PATH or GOVERNANCE_FLOW_PATH or "built-in demo flow"
     print(f"=== receipts (source: {src}) ===")
-    for r in receipts:
-        print(f"  {r.get('label',''):26} stopped={r.get('stopped'):11} cause={r.get('cause')} "
-              f"({r.get('cause_class')}) version={r.get('version')}")
+    for receipt in receipts:
+        print(f"  {receipt.get('label',''):26} stopped={receipt.get('stopped'):11} cause={receipt.get('cause')} "
+              f"({receipt.get('cause_class')}) version={receipt.get('version')}")
     print("\n=== derived Texas config facts ===")
     print(json.dumps(facts, indent=2))

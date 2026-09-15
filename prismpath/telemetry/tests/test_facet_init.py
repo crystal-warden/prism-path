@@ -61,7 +61,7 @@ def _setup(tmp_path, toml_text, events):
     toml = tmp_path / "vector.toml"
     toml.write_text(toml_text)
     sample = tmp_path / "sample.ndjson"
-    sample.write_text("".join(json.dumps(e) + "\n" for e in events))
+    sample.write_text("".join(json.dumps(event) + "\n" for event in events))
     return toml, sample
 
 
@@ -82,27 +82,27 @@ route.low = '.level < 7'
 
 @_needs_toml
 def test_end_to_end_draft_parses_and_preflight_is_ready(tmp_path):
-    toml, sample = _setup(tmp_path, _TOML, [{"level": v, "msg": "m"} for v in (1, 5, 9)])
+    toml, sample = _setup(tmp_path, _TOML, [{"level": level, "msg": "m"} for level in (1, 5, 9)])
     out = tmp_path / "draft.flow.md"
-    r = subprocess.run(
+    result = subprocess.run(
         [sys.executable, str(_ADAPTER / "facet_init.py"), str(sample),
          "--vector-toml", str(toml), "--out", str(out)],
         capture_output=True, text=True)
-    assert r.returncode == 0, r.stdout + r.stderr
-    g = parse_file(str(out))                          # the draft is a valid flow
-    assert [t for t, _c in g.nodes["gate"].edges] == ["sev", "gate_dropped"]
-    assert [t for t, _c in g.nodes["sev"].edges] == ["sev_high", "sev_low", "sev_unmatched"]
-    assert "sev.noise" in r.stdout and "match(" in r.stdout   # refused verbatim, with the culprit
-    assert "**READY.**" in r.stdout                   # preflight ran on the draft and passed
+    assert result.returncode == 0, result.stdout + result.stderr
+    graph = parse_file(str(out))                          # the draft is a valid flow
+    assert [target for target, _c in graph.nodes["gate"].edges] == ["sev", "gate_dropped"]
+    assert [target for target, _c in graph.nodes["sev"].edges] == ["sev_high", "sev_low", "sev_unmatched"]
+    assert "sev.noise" in result.stdout and "match(" in result.stdout   # refused verbatim, with the culprit
+    assert "**READY.**" in result.stdout                   # preflight ran on the draft and passed
 
 
 def test_skeleton_mode_never_invents_conditions(tmp_path):
     _toml, sample = _setup(tmp_path, "", [{"level": 5, "tag": "a"}])
     out = tmp_path / "skel.flow.md"
-    r = subprocess.run(
+    result = subprocess.run(
         [sys.executable, str(_ADAPTER / "facet_init.py"), str(sample), "--out", str(out)],
         capture_output=True, text=True)
-    assert r.returncode == 0, r.stdout + r.stderr
+    assert result.returncode == 0, result.stdout + result.stderr
     text = out.read_text()
     assert "when" not in text                         # annotations only, zero learned conditions
     assert "level (int, 1/1 events" in text
@@ -112,7 +112,7 @@ def test_skeleton_mode_never_invents_conditions(tmp_path):
 def test_empty_sample_fails_loud(tmp_path):
     sample = tmp_path / "empty.ndjson"
     sample.write_text("")
-    r = subprocess.run(
+    result = subprocess.run(
         [sys.executable, str(_ADAPTER / "facet_init.py"), str(sample)],
         capture_output=True, text=True)
-    assert r.returncode == 1 and "no events" in r.stdout
+    assert result.returncode == 1 and "no events" in result.stdout

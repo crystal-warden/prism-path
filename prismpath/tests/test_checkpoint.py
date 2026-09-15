@@ -69,9 +69,9 @@ Done.
 
 
 def _write(tmp_path, name, text):
-    p = tmp_path / name
-    p.write_text(text)
-    return str(p)
+    path = tmp_path / name
+    path.write_text(text)
+    return str(path)
 
 
 class CrashAt:
@@ -105,16 +105,16 @@ def _crash_at_b(tmp_path):
 
 def test_resume_refuses_when_flow_edited(tmp_path):
     flow, ckpt = _crash_at_b(tmp_path)
-    with open(flow, "a") as f:
-        f.write("\n## extra\nan added node\n")            # the flow changed while suspended
+    with open(flow, "a") as flow_file:
+        flow_file.write("\n## extra\nan added node\n")            # the flow changed while suspended
     with pytest.raises(checkpoint.CheckpointError):
         checkpoint.resume(ckpt, CrashAt(None))            # default policy: refuse (audit-safe)
 
 
 def test_resume_warn_policy_proceeds_on_edit(tmp_path, monkeypatch, capsys):
     flow, ckpt = _crash_at_b(tmp_path)
-    with open(flow, "a") as f:
-        f.write("\n## extra\nx\n")
+    with open(flow, "a") as flow_file:
+        flow_file.write("\n## extra\nx\n")
     monkeypatch.setenv("PRISMPATH_RESUME_ON_FLOW_CHANGE", "warn")
     res = checkpoint.resume(ckpt, CrashAt(None))
     assert res.stopped == "terminal"
@@ -132,8 +132,8 @@ def test_legacy_checkpoint_without_flow_hash_resumes(tmp_path):
     cp = json.load(open(ckpt))
     cp.pop("flow_hash", None)                             # a pre-flow-hash checkpoint
     json.dump(cp, open(ckpt, "w"))
-    with open(flow, "a") as f:
-        f.write("\n## extra\nx\n")
+    with open(flow, "a") as flow_file:
+        flow_file.write("\n## extra\nx\n")
     res = checkpoint.resume(ckpt, CrashAt(None))          # no stored hash -> not blocked
     assert res.stopped == "terminal"
 
@@ -174,7 +174,7 @@ def test_needs_human_suspends_with_evidence(tmp_path):
     res = checkpoint.run_durable(flow, agent, ckpt)
     assert res.stopped == "needs_human"
     assert res.pending["node"] == "gate"
-    assert {c["target"] for c in res.pending["candidates"]} == {"approve", "deny"}
+    assert {candidate["target"] for candidate in res.pending["candidates"]} == {"approve", "deny"}
     cp = checkpoint.load_checkpoint(ckpt)
     assert cp["stopped"] == "needs_human" and cp["pending_decision"]["reason"] == "policy requires sign-off"
 
@@ -189,28 +189,28 @@ def test_resume_with_choose_applies_human_edge(tmp_path):
         return {"text": node, "always": True}
 
     checkpoint.run_durable(flow, suspend, ckpt)
-    res = checkpoint.resume(ckpt, lambda n, i, s: {"text": n, "always": True}, choose="approve")
+    res = checkpoint.resume(ckpt, lambda node, instruction, state: {"text": node, "always": True}, choose="approve")
     assert res.path == ["gate", "approve", "done"]
     assert res.stopped == "terminal"
     # the human decision is recorded in the transcript with attribution
-    human = [t for t in res.state["transcript"] if t.get("decided_by") == "human"]
+    human = [entry for entry in res.state["transcript"] if entry.get("decided_by") == "human"]
     assert human and human[0]["node"] == "gate"
 
 
 def test_resume_choose_rejects_invalid_edge(tmp_path):
     flow = _write(tmp_path, "gate.md", GATE)
     ckpt = str(tmp_path / "ck.json")
-    checkpoint.run_durable(flow, lambda n, i, s: {"text": n, "needs_human": n == "gate", "always": True}, ckpt)
+    checkpoint.run_durable(flow, lambda node, instruction, state: {"text": node, "needs_human": node == "gate", "always": True}, ckpt)
     with pytest.raises(checkpoint.CheckpointError):
-        checkpoint.resume(ckpt, lambda n, i, s: {"text": n, "always": True}, choose="nonexistent")
+        checkpoint.resume(ckpt, lambda node, instruction, state: {"text": node, "always": True}, choose="nonexistent")
 
 
 def test_needs_human_resume_requires_choose(tmp_path):
     flow = _write(tmp_path, "gate.md", GATE)
     ckpt = str(tmp_path / "ck.json")
-    checkpoint.run_durable(flow, lambda n, i, s: {"text": n, "needs_human": n == "gate", "always": True}, ckpt)
+    checkpoint.run_durable(flow, lambda node, instruction, state: {"text": node, "needs_human": node == "gate", "always": True}, ckpt)
     with pytest.raises(checkpoint.CheckpointError):
-        checkpoint.resume(ckpt, lambda n, i, s: {"text": n, "always": True})   # no choose
+        checkpoint.resume(ckpt, lambda node, instruction, state: {"text": node, "always": True})   # no choose
 
 
 class StubRouter:
@@ -225,21 +225,21 @@ def test_router_floor_suspends_instead_of_guessing(tmp_path):
     flow = _write(tmp_path, "semantic.md", SEMANTIC)
     graph = parse_file(flow)
     router = StubRouter("stage", score=0.30, sims={"stage": 0.30, "ignore": 0.28})
-    res = run(graph, lambda n, i, s: {"text": "ambiguous alert"}, router=router, human_floor=0.5)
+    res = run(graph, lambda node, instruction, state: {"text": "ambiguous alert"}, router=router, human_floor=0.5)
     assert res.stopped == "needs_human"
     assert res.pending["node"] == "triage" and res.pending["would_pick"] == "stage"
-    scores = {c["target"]: c["score"] for c in res.pending["candidates"]}
+    scores = {candidate["target"]: candidate["score"] for candidate in res.pending["candidates"]}
     assert scores == {"stage": 0.30, "ignore": 0.28}       # candidate edges + scores captured
     # above the floor, it routes normally (no suspension)
     router2 = StubRouter("stage", score=0.80, sims={"stage": 0.80, "ignore": 0.20})
-    res2 = run(graph, lambda n, i, s: {"text": "clearly malicious"}, router=router2, human_floor=0.5)
+    res2 = run(graph, lambda node, instruction, state: {"text": "clearly malicious"}, router=router2, human_floor=0.5)
     assert res2.stopped == "terminal" and res2.path == ["triage", "stage", "done"]
 
 
 def test_checkpoint_is_valid_json_each_step(tmp_path):
     flow = _write(tmp_path, "linear.md", LINEAR)
     ckpt = str(tmp_path / "ck.json")
-    checkpoint.run_durable(flow, lambda n, i, s: {"text": n, "always": True}, ckpt)
+    checkpoint.run_durable(flow, lambda node, instruction, state: {"text": node, "always": True}, ckpt)
     doc = json.load(open(ckpt))
     assert doc["version"] == checkpoint.CHECKPOINT_VERSION
     assert doc["stopped"] == "terminal"
@@ -262,6 +262,6 @@ def test_non_serializable_state_disables_checkpoint_but_run_completes(tmp_path, 
 def test_resume_finished_run_errors(tmp_path):
     flow = _write(tmp_path, "linear.md", LINEAR)
     ckpt = str(tmp_path / "ck.json")
-    checkpoint.run_durable(flow, lambda n, i, s: {"text": n, "always": True}, ckpt)
+    checkpoint.run_durable(flow, lambda node, instruction, state: {"text": node, "always": True}, ckpt)
     with pytest.raises(checkpoint.CheckpointError):
-        checkpoint.resume(ckpt, lambda n, i, s: {"text": n, "always": True})   # already terminal
+        checkpoint.resume(ckpt, lambda node, instruction, state: {"text": node, "always": True})   # already terminal

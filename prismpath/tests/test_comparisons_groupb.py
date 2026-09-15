@@ -21,8 +21,8 @@ def test_every_system_has_the_row(dim):
     for system in SYSTEMS:
         files = list((RESULTS / system).glob(f"{dim}__*.json"))
         assert files, (system, dim)
-        for f in files:
-            doc = json.loads(f.read_text())
+        for path in files:
+            doc = json.loads(path.read_text())
             assert doc["grade"] in ("NATIVE", "WITH-WORK", "NOT")
             if doc["grade"] == "WITH-WORK":
                 assert doc["glue"] and doc["glue"]["loc"] <= 300 and doc["glue"]["hours"] <= 8
@@ -30,14 +30,14 @@ def test_every_system_has_the_row(dim):
 
 def test_group_b_rows_are_losses():
     from prismpath.comparisons.matrix import build_matrix
-    m = build_matrix(RESULTS)
+    matrix = build_matrix(RESULTS)
     for dim in ("B1", "B2", "B3", "B4", "B5"):
-        assert m["verdicts"][dim] == "LOSES", (dim, m["verdicts"][dim])
+        assert matrix["verdicts"][dim] == "LOSES", (dim, matrix["verdicts"][dim])
 
 
 def test_prismpath_b1_is_not_and_names_the_constructs():
-    docs = [json.loads(f.read_text()) for f in (RESULTS / "prismpath").glob("B1__*.json")]
-    grades = {d["scenario"]: d["grade"] for d in docs}
+    docs = [json.loads(path.read_text()) for path in (RESULTS / "prismpath").glob("B1__*.json")]
+    grades = {doc["scenario"]: doc["grade"] for doc in docs}
     assert grades["owner_write_1"] == "NOT" and grades["group_read_1"] == "NOT"
     assert grades["manager_hours_write_1"] == "WITH-WORK"
     assert min(grades.values(), key=("NOT", "WITH-WORK", "NATIVE").index) == "NOT"

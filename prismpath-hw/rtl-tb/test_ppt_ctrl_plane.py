@@ -39,17 +39,30 @@ async def axi_write_slave(dut):
             dut.m_bvalid.value = 0
 
 
-async def press(dut, i, settle=80):
+async def press(dut, button_index, settle=80, expect_writes=True):
+    """Press one button and return the AXI writes it produced.
+
+    `expect_writes` is what separates a load that never finished from a load that correctly issued
+    nothing. Without it an expired settle loop returned a HALF captured load, which the caller then
+    compared against the full expected list and reported as a content mismatch - a timeout wearing a
+    wrong-writes message. The finale's local actions pass expect_writes=False, because an empty
+    capture after the full settle is their correct answer rather than a timeout."""
     cap.clear()
-    dut.btn_press.value = (1 << i)
+    dut.btn_press.value = (1 << button_index)
     await RisingEdge(dut.clk)
     dut.btn_press.value = 0
+    settled = False
     for _ in range(settle):
         await RisingEdge(dut.clk)
         if int(dut.loading.value) == 0 and len(cap) > 0:
             for _ in range(6):
                 await RisingEdge(dut.clk)
+            settled = True
             break
+    if expect_writes and not settled:
+        raise AssertionError(
+            f"button {button_index}: no completed load within {settle} cycles "
+            f"(loading={int(dut.loading.value)}, {len(cap)} write(s) captured so far)")
     return list(cap)
 
 
@@ -71,30 +84,30 @@ async def ctrl_plane(dut):
 
     # Act 1: BTN0 hot-swaps to decision policy 0 -> those exact writes reach ppt_axi
     got = await press(dut, 0)
-    assert got == POL0, f"BTN0 -> {[(hex(a),d) for a,d in got]} != policy 0"
+    assert got == POL0, f"BTN0 -> {[(hex(addr), data) for addr, data in got]} != policy 0"
 
     # Act 1: BTN1 hot-swaps to decision policy 1
     got = await press(dut, 1)
-    assert got == POL1, f"BTN1 -> {[(hex(a),d) for a,d in got]} != policy 1"
+    assert got == POL1, f"BTN1 -> {[(hex(addr), data) for addr, data in got]} != policy 1"
 
     # BTN3 meta-swap into the finale: profile -> 1, and it installs the finale's decision policy (pack 1)
     got = await press(dut, 3)
     assert int(dut.profile.value) == 1, "meta-swap should enter the finale"
-    assert got == POL1, f"meta-swap load -> {[(hex(a),d) for a,d in got]} != policy 1"
+    assert got == POL1, f"meta-swap load -> {[(hex(addr), data) for addr, data in got]} != policy 1"
 
     # Finale BTN0 (cycle colors) must touch the AXI bus NOT AT ALL - it is pure fabric LED state
-    got = await press(dut, 0, settle=40)
-    assert got == [], f"finale color-cycle leaked AXI writes: {[(hex(a),d) for a,d in got]}"
+    got = await press(dut, 0, settle=40, expect_writes=False)
+    assert got == [], f"finale color-cycle leaked AXI writes: {[(hex(addr), data) for addr, data in got]}"
     assert int(dut.color_idx.value) == 1, "finale BTN0 should have cycled the color"
 
     # Finale BTN1 mute: also no bus traffic
-    got = await press(dut, 1, settle=40)
+    got = await press(dut, 1, settle=40, expect_writes=False)
     assert got == [] and int(dut.mute.value) == 1, "finale mute should be local, no AXI writes"
 
     # BTN3 meta-swap exit: profile -> 0, reinstall Act 1's decision policy (pack 0)
     got = await press(dut, 3)
     assert int(dut.profile.value) == 0, "meta-swap exit should return to Act 1"
-    assert got == POL0, f"meta-swap exit load -> {[(hex(a),d) for a,d in got]} != policy 0"
+    assert got == POL0, f"meta-swap exit load -> {[(hex(addr), data) for addr, data in got]} != policy 0"
 
     dut._log.info("CTRL PLANE: button -> signed control table -> fabric loader -> exact ppt_axi writes, "
                   "no processor; finale color/mute stayed off the bus; meta-swap re-installed policies")

@@ -116,6 +116,8 @@ def evaluate(cond: Any, inp: Dict[str, Any], policy: Dict[str, Any]) -> bool:
         raise CorpusError(f"malformed condition {cond!r}")
     (form, arg), = cond.items()
     if form == "cmp":
+        if not isinstance(arg, (list, tuple)) or len(arg) != 3:
+            raise CorpusError(f"malformed cmp {arg!r} (expected [field, op, const])")
         field, op, const = arg
         if op not in CMP_OPS:
             raise CorpusError(f"bad op {op!r}")

@@ -118,7 +118,7 @@ documented interfaces (row #142). The wire is PrismPath's own and composes with 
 | distributed policy update behind a quorum, real radios | demonstrated in the field | row #136 |
 | Figueroa quantization | implemented, proven within the declared domain | rows #140, #141 |
 | Facet wire, Vector codec, Wireshark dissector | implemented and measured | rows #84, #86, #124 to #127 |
-| GRC adjudication adapter (machine checkable controls, evidence typed verdicts, OSCAL) | implemented, dogfooded on a real enclave | rows #137 to #139 |
+| GRC adjudication adapter (machine checkable controls, evidence typed determinations, OSCAL) | implemented, dogfooded on a real enclave | rows #137 to #139 |
 | operator overlays that expire by construction, the trail read side | implemented | `docs/guides/operator.md` |
 | drift detection beyond the lockfile and staleness bound, authorized recovery, homeostatic control | research direction | not claimed |
 | multimodal sensing, quantum assisted computation, quantum sensing | research direction | not claimed |
@@ -187,7 +187,7 @@ Use these words this way, everywhere.
 | process owner | the policy of record | the flow, `validate`, `test`, `graph` |
 | engineer | the interface once, calibration, delivery | `contract`, `capability`, `compile`, `lock`, the kernels, CI |
 | operator | day to day, short lived changes, the feedback wheel | Mission Control, `swap`, `attest`, `trail`, overlays |
-| evaluator | after the fact | receipts, `ledger`, the evidence ledger, the comparison |
+| assessor | after the fact | receipts, `ledger`, the evidence ledger, the comparison |
 
 `docs/SYSTEM_MAP.md` maps every directory to these people and holds the conformance topology.
 

@@ -2,7 +2,7 @@
 // semver bump and whether it is breaking, print ONE JSON object, exit 0. A nonzero exit routes to the
 // flow's error tier.
 // Build once (go build -o release_gate release_gate.go), then wire it in with:
-//   cli_agent(["./release_gate"], pass_state=["from", "to"])
+//   cli_worker(["./release_gate"], pass_state=["from", "to"])
 package main
 
 import (

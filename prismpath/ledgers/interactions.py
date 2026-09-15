@@ -22,17 +22,17 @@ _LOCK = threading.Lock()
 _PHASE = "init"
 
 
-def set_phase(p: str):
+def set_phase(phase: str):
     """Coarse pipeline phase (architect/ideate/build/fix/review/...) stamped onto events."""
     global _PHASE
-    if p:
-        _PHASE = str(p)
+    if phase:
+        _PHASE = str(phase)
 
 
 def _path() -> str:
-    p = os.environ.get("SWARM_INTERACTIONS")
-    if p:
-        return p
+    configured_path = os.environ.get("SWARM_INTERACTIONS")
+    if configured_path:
+        return configured_path
     proj = os.environ.get("SPRINT_PROJ") or os.environ.get("SWARM_PROJ")
     return os.path.join(proj, "interactions.jsonl") if proj else "interactions.jsonl"
 

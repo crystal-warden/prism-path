@@ -79,8 +79,8 @@ Delete it.
 **6.** `prismpath validate my_first_flow.md`; catch the typo *now*, not at 3 a.m.
 
 **7.** Wire a worker; or skip the driver file entirely if you run local models:
-`prismpath run my_first_flow.md --agent ollama:llama3.2` (any Ollama model; or
-`--agent openai:MODEL@http://host:port/v1` for vLLM / LM Studio / llama.cpp). JSON replies
+`prismpath run my_first_flow.md --worker ollama:llama3.2` (any Ollama model; or
+`--worker openai:MODEL@http://host:port/v1` for vLLM / LM Studio / llama.cpp). JSON replies
 feed the `when` predicates; failures ride the `on error` edges. For full control, wire it
 yourself; any CLI that reads stdin and prints to stdout is an agent (Claude Code, a
 Gemini CLI, aider, or a shell script):
@@ -89,9 +89,9 @@ Gemini CLI, aider, or a shell script):
 # drive.py
 from prismpath.parser import parse_file
 from prismpath.engine import run
-from prismpath.cli_worker import cli_agent
+from prismpath.cli_worker import cli_worker
 
-agent = cli_agent(["claude", "-p"])          # or ["gemini"], or any command you trust
+agent = cli_worker(["claude", "-p"])          # or ["gemini"], or any command you trust
 res = run(parse_file("my_first_flow.md"), agent)
 print("path:", " -> ".join(res.path), "| stopped:", res.stopped)
 ```
@@ -109,7 +109,7 @@ path: classify -> page_me | stopped: terminal
 
 Eight steps, and the part you'll maintain forever (the control flow) is a document your whole
 team can read. A different engine per node is one dict away
-(`cli_agent({"classify": [...], "page_me": [...]})`): route between *engines* by outcome, not
+(`cli_worker({"classify": [...], "page_me": [...]})`): route between *engines* by outcome, not
 by hardcoding.
 
 ## Path 4 · make it a team process (steps 9 · 10)

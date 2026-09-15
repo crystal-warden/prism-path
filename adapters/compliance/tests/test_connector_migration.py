@@ -7,7 +7,7 @@ seam, and the shared deferral backend."""
 import hashlib
 import json
 
-import compliance_adapter as ca
+from adapters.compliance import compliance_adapter as ca
 from prismpath.ledgers import ledger_airgap
 from prismpath.workers.connector import BaseConnector
 
@@ -34,15 +34,15 @@ def test_attest_routes_through_the_sdk_with_manifest_parity():
     cid = next(iter(ca._catalog()["controls"]))
     control = ca.get_control(cid)
     det = {"status": "met", "unmet_objective_ids": [], "gap_summary": "all objectives evidenced"}
-    m = ca.attest(control, REQ, det)
+    manifest = ca.attest(control, REQ, det)
     # the SDK binding computes the same root the pre-migration code did
-    assert m["root"] == hashlib.sha256(json.dumps(det, sort_keys=True).encode()).hexdigest()
-    assert m["label"] == f"assess:{cid}"
-    assert m["gate_id"] == "nist_800171_generic@v1"
-    assert m["ingestion_hashes"] == [ca.bundle_hash(REQ)]
-    assert m["knowledge_base_hash"] == ca.catalog_hash()
-    assert m["policy_hash"] == ca.active_flow_hash()
-    assert ledger_airgap.verify_manifest(m), "the SDK-produced manifest must verify"
+    assert manifest["root"] == hashlib.sha256(json.dumps(det, sort_keys=True).encode()).hexdigest()
+    assert manifest["label"] == f"assess:{cid}"
+    assert manifest["gate_id"] == "nist_800171_generic@v1"
+    assert manifest["ingestion_hashes"] == [ca.bundle_hash(REQ)]
+    assert manifest["knowledge_base_hash"] == ca.catalog_hash()
+    assert manifest["policy_hash"] == ca.active_flow_hash()
+    assert ledger_airgap.verify_manifest(manifest), "the SDK-produced manifest must verify"
 
 
 def test_adjudication_prompt_lives_on_the_connector(monkeypatch):
@@ -53,7 +53,7 @@ def test_adjudication_prompt_lives_on_the_connector(monkeypatch):
     assert "NOT MET unless the evidence POSITIVELY DEMONSTRATES" in prompt
     # and adjudicate() feeds exactly that prompt into the _gemma seam
     seen = {}
-    monkeypatch.setattr(ca, "_gemma", lambda p, s, n, concise=False: seen.update(p=p) or
+    monkeypatch.setattr(ca, "_gemma", lambda prompt, schema, name, concise=False: seen.update(p=prompt) or
                         {"status": "met", "unmet_objective_ids": [], "gap_summary": "x"})
     ca.adjudicate(control, REQ)
     assert seen["p"] == prompt
@@ -64,7 +64,7 @@ def test_deferral_backend_is_shared_by_default(tmp_path):
         deferral_store=__import__("prismpath.workers.deferral", fromlist=["FileDeferralStore"])
         .FileDeferralStore(str(tmp_path / "d")))
     conn.defer_decision("assess:3.1.1:test", "human_review: parity", {"control_id": "3.1.1"})
-    assert [p["unit_id"] for p in conn.pending_deferrals()] == ["assess:3.1.1:test"]
+    assert [pending["unit_id"] for pending in conn.pending_deferrals()] == ["assess:3.1.1:test"]
     conn.resume_decision("assess:3.1.1:test", {"status": "met"}, actor="auditor")
     assert conn.pending_deferrals() == []
     # the module seam is initialized to the CONNECTOR's own store

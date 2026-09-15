@@ -39,16 +39,16 @@ def test_facet_encode_decode_roundtrip_route_parity(capsys):
     assert "Next node:" in decode_out
     assert "Cause:" in decode_out
 
-    decoded_next_node = None
+    decoded_route = None
     for line in decode_out.splitlines():
         if line.startswith("Next node:"):
-            decoded_next_node = line.split(":", 1)[1].strip()
+            decoded_route = line.split(":", 1)[1].strip()
 
     graph = parse_file(flow_path)
     direct_route = _route_node(graph, graph.start, reading)
 
-    assert decoded_next_node == direct_route, (
-        f"decoded route {decoded_next_node!r} != direct evaluation {direct_route!r}"
+    assert decoded_route == direct_route, (
+        f"decoded route {decoded_route!r} != direct evaluation {direct_route!r}"
     )
 
 

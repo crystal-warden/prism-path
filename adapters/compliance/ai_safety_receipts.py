@@ -43,7 +43,7 @@ def verify_receipt(receipt, determination, pub_path):
         return False
     if _pp.sha256_hex(_pp.canonical_bytes(determination)) != receipt.get("determination_root"):
         return False
-    payload = {k: receipt.get(k) for k in _SIGNED_KEYS}
+    payload = {field: receipt.get(field) for field in _SIGNED_KEYS}
     try:
         pub.verify(bytes.fromhex(receipt.get("signature", "")), _pp.canonical_bytes(payload))
         return True

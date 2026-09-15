@@ -57,7 +57,7 @@ class EpochStore:
 
     def ack(self, chained_root: str) -> int:
         """Ground verified up to `chained_root`: drop those epochs' bytes (keep roots). Returns #dropped."""
-        idx = next((i for i, ep in enumerate(self.epochs) if ep.chained_root == chained_root), None)
+        idx = next((index for index, ep in enumerate(self.epochs) if ep.chained_root == chained_root), None)
         if idx is None:
             return 0
         dropped = 0

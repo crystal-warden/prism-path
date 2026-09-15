@@ -63,7 +63,12 @@ The spec itself now ships as **data**: [`conformance/`](conformance/README.md) h
 predicate vectors + 27 engine fixtures, generated deterministically from the Python reference
 (`gen_conformance.py`) and enforced in both directions on every test run; the committed files
 must match a fresh regeneration (no silent reference drift), and this port must pass them
-(`node prismpath/portable/run_vectors.mjs` → CONFORMANT). And no longer only this port: **Rust
+(`node prismpath/portable/run_vectors.mjs` → CONFORMANT). All seven JavaScript runners
+(`run_vectors.mjs`, `run_p1_conformance.mjs`, `run_capability.mjs`, `run_reach.mjs`, `run_level_m.mjs`,
+`run_conformance.mjs`, `run_crypto_agility.mjs`) are executed and verified in pytest via
+`test_conformance_vectors.py` and `test_portable_runners.py`, with Python generators
+(`gen_conformance.py`, `gen_p1_conformance.py`, `gen_capability.py`, `gen_reach.py`, `gen_level_m.py`)
+reproducing each committed corpus byte for byte. And no longer only this port: **Rust
 (`prismpath-rs/`) and Go (`prismpath-go/`) kernels implement the frozen subset and pass every
 vector**: three independent implementations, provably interchangeable. (The Level M fragment
 additionally has a hardware target certified on a *declared subset* of these vectors;

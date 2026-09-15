@@ -65,8 +65,8 @@ def test_fires_timeout_after_elapsed_and_takes_the_edge(tmp_path):
 
 def test_ignores_non_checkpoint_files(tmp_path):
     qdir, ckpt = _suspend(tmp_path)
-    with open(os.path.join(qdir, "note.txt"), "w") as f:
-        f.write("not a checkpoint")
+    with open(os.path.join(qdir, "note.txt"), "w") as note_file:
+        note_file.write("not a checkpoint")
     # far-future now so the real run is due; the junk file is skipped, not raised on
     cp = checkpoint.load_checkpoint(ckpt)
     fired = scheduler.fire_due_timeouts(_agent, qdir=qdir, now=cp["saved_at"] + 10_000)

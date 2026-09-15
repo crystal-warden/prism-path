@@ -14,10 +14,10 @@ from prismpath.routing import lockfile
 def make_stub(tag=""):
     def stub(texts, is_query=False):
         out = []
-        for t in texts:
-            h = abs(hash(tag + t)) % (2 ** 31)
-            v = np.random.RandomState(h).randn(8).astype("float32")
-            out.append(v / np.linalg.norm(v))
+        for text in texts:
+            seed = abs(hash(tag + text)) % (2 ** 31)
+            vector = np.random.RandomState(seed).randn(8).astype("float32")
+            out.append(vector / np.linalg.norm(vector))
         return np.asarray(out, dtype="float32")
     return stub
 
@@ -216,8 +216,8 @@ def test_pinned_centroids_round_trip_and_route(tmp_path, stub_embedder):
     # with n=50 the pinned vector is dominated by the centroid (~e0); an outcome embedding IS the
     # centroid direction under the stub? No — the stub hashes text; instead just assert routing runs
     # against the pinned vectors without needing the corpus or recomputation.
-    d = router.route("some outcome text", [("good", cond), ("bad", "the change is broken or incomplete")])
-    assert d.target in ("good", "bad") and "score" in d.info
+    decision = router.route("some outcome text", [("good", cond), ("bad", "the change is broken or incomplete")])
+    assert decision.target in ("good", "bad") and "score" in decision.info
 
 
 def test_lock_records_provider_identity_and_verify_checks_it(tmp_path, stub_embedder, monkeypatch):
@@ -231,7 +231,7 @@ def test_lock_records_provider_identity_and_verify_checks_it(tmp_path, stub_embe
     monkeypatch.setattr(embedder, "PRECISION", "int8", raising=False)
     assert lockfile.verify_lock(lock, policy="allow") is False
     # a legacy lock without the fields is not blocked (back-compat)
-    legacy = {k: (dict(v) if isinstance(v, dict) else v) for k, v in lock.items()}
-    legacy["embedder"] = {k: v for k, v in lock["embedder"].items()
-                          if k not in ("provider", "precision")}
+    legacy = {key: (dict(value) if isinstance(value, dict) else value) for key, value in lock.items()}
+    legacy["embedder"] = {field: value for field, value in lock["embedder"].items()
+                          if field not in ("provider", "precision")}
     assert lockfile.verify_lock(legacy, policy="allow") is True

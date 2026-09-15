@@ -20,8 +20,8 @@ from prismpath.comparisons.glue import opa_revision_floor
 
 def count_non_blank_non_comment(filepath: Path) -> int:
     count = 0
-    with open(filepath, "r", encoding="utf-8") as f:
-        for line in f:
+    with open(filepath, "r", encoding="utf-8") as source_file:
+        for line in source_file:
             stripped = line.strip()
             if stripped and not stripped.startswith("#"):
                 count += 1
@@ -29,9 +29,9 @@ def count_non_blank_non_comment(filepath: Path) -> int:
 
 
 def find_free_port() -> int:
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.bind(("127.0.0.1", 0))
-        return s.getsockname()[1]
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe_socket:
+        probe_socket.bind(("127.0.0.1", 0))
+        return probe_socket.getsockname()[1]
 
 
 from prismpath.tests._repo import repo_file, REPO_ROOT
@@ -108,9 +108,9 @@ def test_glue_opa_revision_floor(tmp_path: Path) -> None:
                     headers={"content-type": "application/json"},
                     method="POST",
                 )
-                with opener.open(req, timeout=2) as r:
-                    if r.status == 200:
-                        res_data = json.loads(r.read().decode("utf-8"))
+                with opener.open(req, timeout=2) as response:
+                    if response.status == 200:
+                        res_data = json.loads(response.read().decode("utf-8"))
                         if "result" in res_data:
                             ready = True
                             break

@@ -15,7 +15,8 @@ set here [file dirname [file normalize [info script]]]
 set out $here/build_overlay_finale
 file mkdir $out
 
-create_project -force ppt_finale $out/proj -part xc7z020clg400-1
+set part xc7z020clg400-1
+create_project -force ppt_finale $out/proj -part $part
 add_files [list $here/../rtl/ppt_interp.sv $here/../rtl/ppt_axi.sv $here/../rtl/uart_rx.sv \
                 $here/../rtl/zeck_dec.sv $here/../rtl/zeck_frame_rx.sv \
                 $here/../rtl/ctrl_in.sv $here/../rtl/ppt_ctrl_interp.sv \
@@ -35,11 +36,20 @@ create_bd_design "ppt_bd"
 
 # --- Zynq PS (Feb-design preset) ---
 set ps7 [create_bd_cell -type ip -vlnv xilinx.com:ip:processing_system7:5.5 ps7]
+# The preset carries one board's DDR timing and MIO pinout, so applying it under another part
+# would build a bitstream that boots into garbage; ps7_preset.tcl declares the part it came from
+# and the mismatch stops the build here. Which source was used is carried to the DONE line below,
+# because after the fact a default-automation bitstream looks exactly like a preset one.
 if {[file exists $here/ps7_preset.tcl]} {
   source $here/ps7_preset.tcl
+  if {![info exists ps7_part] || $ps7_part ne $part} {
+    error "PS7 preset is for part [expr {[info exists ps7_part] ? $ps7_part : {unknown}}], this build is $part"
+  }
   set_property -dict $ps7_cfg $ps7
+  set ps7_source "Feb-design preset"
   puts "PS7: applied Feb-design preset"
 } else {
+  set ps7_source "default automation (no ps7_preset.tcl)"
   puts "PS7: WARNING — no ps7_preset.tcl; using default automation (PYNQ FSBL owns init)"
 }
 apply_bd_automation -rule xilinx.com:bd_rule:processing_system7 \
@@ -126,5 +136,10 @@ report_timing_summary -file $out/timing.rpt
 
 file copy -force [get_property DIRECTORY [get_runs impl_1]]/ppt_bd_wrapper.bit $out/ppt_finale.bit
 set hwh [glob -nocomplain $out/proj/*.gen/sources_1/bd/ppt_bd/hw_handoff/ppt_bd.hwh]
-if {[llength $hwh] > 0} { file copy -force [lindex $hwh 0] $out/ppt_finale.hwh }
-puts "FINALE OVERLAY BUILD DONE: $out/ppt_finale.bit (+ .hwh)"
+# PYNQ's Overlay() loads the pair, so a bitstream without its .hwh fails on the board
+# rather than here; skipping the copy quietly moved that failure a day downstream.
+if {[llength $hwh] == 0} {
+  error "no ppt_bd.hwh under $out/proj: the block design handoff was not written"
+}
+file copy -force [lindex $hwh 0] $out/ppt_finale.hwh
+puts "FINALE OVERLAY BUILD DONE: $out/ppt_finale.bit (+ .hwh) | PS7: $ps7_source"

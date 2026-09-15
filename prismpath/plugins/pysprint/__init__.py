@@ -59,9 +59,9 @@ _FROZEN = os.environ.get("PYSPRINT_FROZEN_TESTS", "")
 
 
 def _test_files(proj: str) -> list:
-    d = _FROZEN or proj
-    return sorted(os.path.join(d, f) for f in os.listdir(d)
-                  if f.startswith("test_") and f.endswith(".py"))
+    test_dir = _FROZEN or proj
+    return sorted(os.path.join(test_dir, file_name) for file_name in os.listdir(test_dir)
+                  if file_name.startswith("test_") and file_name.endswith(".py"))
 
 
 def validate(proj: str) -> dict:
@@ -79,32 +79,32 @@ def validate(proj: str) -> dict:
     env = dict(os.environ)
     env["PYTHONPATH"] = proj + os.pathsep + env.get("PYTHONPATH", "")
     try:
-        r = subprocess.run(
+        proc = subprocess.run(
             [sys.executable, "-m", "pytest", "-q", "--no-header", "-p", "no:cacheprovider", *tests],
             cwd=proj, env=env, capture_output=True, text=True, timeout=_PYTEST_TIMEOUT)
     except subprocess.TimeoutExpired:
         return {"valid": False, "errs": [f"pytest exceeded {_PYTEST_TIMEOUT}s (a hang or a "
                                          f"blocking call in the module under test)"],
                 "oversized": False, "oversized_file": "", "biggest": 0, "biggest_file": ""}
-    out = (r.stdout or "") + (r.stderr or "")
+    out = (proc.stdout or "") + (proc.stderr or "")
 
     biggest_file, biggest = "", 0
-    for f in os.listdir(proj):
-        p = os.path.join(proj, f)
-        if os.path.isfile(p) and f.endswith(FILE_EXTS):
-            n = os.path.getsize(p) // 4          # rough token estimate, gates.py convention
-            if n > biggest:
-                biggest, biggest_file = n, f
+    for file_name in os.listdir(proj):
+        file_path = os.path.join(proj, file_name)
+        if os.path.isfile(file_path) and file_name.endswith(FILE_EXTS):
+            token_estimate = os.path.getsize(file_path) // 4   # rough estimate, gates.py convention
+            if token_estimate > biggest:
+                biggest, biggest_file = token_estimate, file_name
 
-    if r.returncode == 0:
+    if proc.returncode == 0:
         return {"valid": True, "errs": [], "oversized": False, "oversized_file": "",
                 "biggest": biggest, "biggest_file": biggest_file}
 
     errs = []
-    for m in _FAIL_RE.finditer(out):
-        errs.append(f"{m.group(1)} {m.group(2)}")
+    for failure_match in _FAIL_RE.finditer(out):
+        errs.append(f"{failure_match.group(1)} {failure_match.group(2)}")
     if not errs:                                 # pytest died before reporting (import/syntax)
         tail = [ln for ln in out.splitlines() if ln.strip()][-6:]
-        errs = tail or [f"pytest exited {r.returncode} with no parseable failures"]
+        errs = tail or [f"pytest exited {proc.returncode} with no parseable failures"]
     return {"valid": False, "errs": errs, "oversized": False, "oversized_file": "",
             "biggest": biggest, "biggest_file": biggest_file}

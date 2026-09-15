@@ -26,7 +26,7 @@ def test_calibrate_picks_smallest_tau_meeting_bound():
     cal = calibrate.calibrate(recs, alpha=0.1, confidence=0.95)
     assert cal["tau"] is not None and cal["tau"] >= 0.10     # excludes the wrong low-margin cluster
     # at the chosen τ, the lower bound clears the target
-    at = next(p for p in cal["curve"] if p["tau"] == cal["tau"])
+    at = next(point for point in cal["curve"] if point["tau"] == cal["tau"])
     assert at["acc_lower"] >= 1 - cal["alpha"]
     # the guarantee's width is surfaced at the top level (point vs certified lower bound + effective N)
     assert cal["tau_acc_lower"] == at["acc_lower"] and cal["tau_n_kept"] == at["n_kept"]
@@ -43,13 +43,13 @@ def test_risk_controlled_router_uses_calibrated_tau(tmp_path):
     recs = [_rec(0.02, False)] * 20 + [_rec(0.30, True)] * 200
     cal = calibrate.calibrate(recs, alpha=0.05)
     assert cal["tau"] == 0.30
-    r = calibrate.RiskControlledHybridRouter(LLMRouter(lambda p: "1"), calibration=cal)
-    assert r.margin == cal["tau"] and r.alpha == 0.05 and r.escalate_all is False
+    router = calibrate.RiskControlledHybridRouter(LLMRouter(lambda prompt: "1"), calibration=cal)
+    assert router.margin == cal["tau"] and router.alpha == 0.05 and router.escalate_all is False
 
     # round-trips through a file too
-    p = str(tmp_path / "cal.json")
-    calibrate.save_calibration(p, cal)
-    r2 = calibrate.RiskControlledHybridRouter(LLMRouter(lambda p: "1"), calibration=p)
+    calibration_path = str(tmp_path / "cal.json")
+    calibrate.save_calibration(calibration_path, cal)
+    r2 = calibrate.RiskControlledHybridRouter(LLMRouter(lambda prompt: "1"), calibration=calibration_path)
     assert r2.margin == cal["tau"]
 
 
@@ -61,8 +61,8 @@ def test_conformal_alias_still_resolves():
 def test_router_escalates_all_and_warns_loudly_when_no_tau():
     cal = {"tau": None, "alpha": 0.05, "n": 5, "curve": [{"tau": 0.0}, {"tau": 0.4}]}
     with pytest.warns(RuntimeWarning, match="escalate EVERY decision"):
-        r = calibrate.RiskControlledHybridRouter(LLMRouter(lambda p: "1"), calibration=cal)
-    assert r.margin > 0.4 and r.escalate_all is True         # threshold above any real margin -> escalate all
+        router = calibrate.RiskControlledHybridRouter(LLMRouter(lambda prompt: "1"), calibration=cal)
+    assert router.margin > 0.4 and router.escalate_all is True         # threshold above any real margin -> escalate all
 
 
 def test_calibrate_surfaces_no_tau_and_low_n_warnings():

@@ -18,30 +18,30 @@ defers the rest (MFA, screen lock, password complexity, and others).
 """
 
 
-def _as_bool(v):
-    if isinstance(v, bool):
-        return v
-    if v is None:
+def _as_bool(raw_value):
+    if isinstance(raw_value, bool):
+        return raw_value
+    if raw_value is None:
         return None
-    s = str(v).strip().lower()
-    if s in ("1", "true", "yes", "on", "enabled"):
+    text = str(raw_value).strip().lower()
+    if text in ("1", "true", "yes", "on", "enabled"):
         return True
-    if s in ("0", "false", "no", "off", "disabled", ""):
+    if text in ("0", "false", "no", "off", "disabled", ""):
         return False
     return None
 
 
-def _as_int(v):
+def _as_int(raw_value):
     try:
-        return int(str(v).strip())
+        return int(str(raw_value).strip())
     except (TypeError, ValueError):
         return None
 
 
 def _first(raw, *keys):
-    for k in keys:
-        if raw.get(k) is not None:
-            return raw[k]
+    for key in keys:
+        if raw.get(key) is not None:
+            return raw[key]
     return None
 
 

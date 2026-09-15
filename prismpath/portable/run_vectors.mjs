@@ -11,44 +11,41 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { parse, run, evalCondition, PredicateError } from "./prismpath.mjs";
+import { parse, run, evalCondition, PredicateError, scriptedAgent } from "./prismpath.mjs";
 
 const dir = process.argv[2] || join(dirname(fileURLToPath(import.meta.url)), "conformance");
 let failures = 0;
 
 // ---- predicates -----------------------------------------------------------------------
+// The corpus README draws a line the report has to keep: a PredicateError is the sandbox REFUSING a
+// predicate, which is a legitimate frozen expectation ("ERROR"), while any other exception is the
+// evaluator itself crashing, which no expectation can ever equal. Folding the second into the first
+// as a mismatch hid the distinction, so a crash is now counted and printed as a crash.
 const preds = JSON.parse(readFileSync(join(dir, "predicates.json"), "utf-8"));
 let predPass = 0;
-for (const c of preds.cases) {
+let predCrash = 0;
+for (const predCase of preds.cases) {
   let got;
   try {
-    got = evalCondition(c.cond, c.ctx);
-  } catch (e) {
-    got = e instanceof PredicateError ? "ERROR" : `CRASH: ${e.message}`;
+    got = evalCondition(predCase.cond, predCase.ctx);
+  } catch (err) {
+    if (!(err instanceof PredicateError)) {
+      predCrash++;
+      failures++;
+      console.error(`PRED CRASH  cond=${JSON.stringify(predCase.cond)} ctx=${JSON.stringify(predCase.ctx)}`
+        + `\n  the evaluator threw ${err.name}: ${err.message}`);
+      continue;
+    }
+    got = "ERROR";
   }
-  if (got === c.expect) { predPass++; continue; }
+  if (got === predCase.expect) { predPass++; continue; }
   failures++;
-  console.error(`PRED MISMATCH  cond=${JSON.stringify(c.cond)} ctx=${JSON.stringify(c.ctx)}`
-    + `\n  expect=${JSON.stringify(c.expect)} got=${JSON.stringify(got)}`);
+  console.error(`PRED MISMATCH  cond=${JSON.stringify(predCase.cond)} ctx=${JSON.stringify(predCase.ctx)}`
+    + `\n  expect=${JSON.stringify(predCase.expect)} got=${JSON.stringify(got)}`);
 }
-console.log(`predicates: ${predPass}/${preds.cases.length}`);
+console.log(`predicates: ${predPass}/${preds.cases.length}${predCrash ? ` (${predCrash} evaluator crash(es))` : ""}`);
 
 // ---- flows ------------------------------------------------------------------------------
-function scriptedAgent(script) {
-  const used = {};
-  return (node) => {
-    const seq = script[node];
-    if (seq === undefined) return { text: node };
-    const i = used[node] || 0;
-    used[node] = i + 1;
-    const outcome = seq[Math.min(i, seq.length - 1)];
-    if (outcome !== null && typeof outcome === "object" && "__raise__" in outcome) {
-      throw new Error(outcome.__raise__);
-    }
-    return outcome;
-  };
-}
-
 const flows = JSON.parse(readFileSync(join(dir, "flows.json"), "utf-8"));
 let flowPass = 0;
 for (const fx of flows.cases) {
@@ -61,8 +58,8 @@ for (const fx of flows.cases) {
     got = { path: res.path, stopped: res.stopped,
             pending_node: res.pending ? (res.pending.node ?? null) : null,
             spawn: res.pending ? (res.pending.spawn ?? null) : null };
-  } catch (e) {
-    got = { error: String(e.message ?? e) };
+  } catch (err) {
+    got = { error: String(err.message ?? err) };
   }
   const want = fx.expect;
   const same = JSON.stringify(got) === JSON.stringify(

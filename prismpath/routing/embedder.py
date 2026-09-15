@@ -27,12 +27,12 @@ def _embedder():
     if _model is None:
         try:
             from sentence_transformers import SentenceTransformer
-        except ImportError as e:
+        except ImportError as error:
             raise ImportError(
                 "the embedder needs sentence-transformers, an optional extra. Install it with "
                 "`pip install 'prismpath[embeddings]'` (or `pipx inject prismpath sentence-transformers`). "
                 "The non-embedding commands (annotate, kappa, validate, contract, graph, import, test) "
-                "work without it.") from e
+                "work without it.") from error
         _model = SentenceTransformer(MODEL_NAME, device=EMBED_DEVICE)
     return _model
 
@@ -40,13 +40,14 @@ def _embedder():
 def embed(texts, is_query=False):
     import numpy as np
     if is_query:
-        texts = [QUERY_INSTRUCTION + t for t in texts]
-    v = _embedder().encode(texts, normalize_embeddings=True, show_progress_bar=False)
-    return np.asarray(v, dtype="float32")
+        texts = [QUERY_INSTRUCTION + text for text in texts]
+    vectors = _embedder().encode(texts, normalize_embeddings=True, show_progress_bar=False)
+    return np.asarray(vectors, dtype="float32")
 
 
-def cosine(a, b):
-    """a: [d] or [n,d], b: [m,d] (all unit-normalized) -> similarity matrix/vector."""
+def cosine(query_vectors, reference_vectors):
+    """query_vectors: [d] or [n,d], reference_vectors: [m,d] (all unit-normalized)
+    -> similarity matrix/vector."""
     import numpy as np
-    a = np.atleast_2d(a)
-    return (a @ b.T)
+    query_vectors = np.atleast_2d(query_vectors)
+    return (query_vectors @ reference_vectors.T)

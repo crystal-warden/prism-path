@@ -13,10 +13,10 @@ version_binding answers that provably: given the model versions and the safety-t
 bound to a version hash, it reports which deployed versions have no determination (the gap). Nothing is
 assumed. A deployed version with no bound determination is a gap, full stop.
 """
-import compliance_adapter as _ca
-import posture_connector as _pc
-import ai_safety_receipts as _r
-import control_tasks as _ct
+from adapters.compliance import compliance_adapter as _ca
+from adapters.compliance import posture_connector as _pc
+from adapters.compliance import ai_safety_receipts as _r
+from adapters.compliance import control_tasks as _ct
 
 STANDARD = "ai_safety_testing"
 
@@ -24,10 +24,10 @@ STANDARD = "ai_safety_testing"
 def version_binding(versions, determinations):
     """versions: [{version_hash, deployed?, current?}]. determinations: [{version_hash, ...}] (safety
     results bound to a model version). Returns the retest-coverage picture."""
-    bound = {d.get("version_hash") for d in determinations}
-    deployed = [v for v in versions if v.get("deployed")]
-    unretested = [v["version_hash"] for v in deployed if v.get("version_hash") not in bound]
-    current = next((v for v in versions if v.get("current")), None)
+    bound = {determination.get("version_hash") for determination in determinations}
+    deployed = [version for version in versions if version.get("deployed")]
+    unretested = [version["version_hash"] for version in deployed if version.get("version_hash") not in bound]
+    current = next((version for version in versions if version.get("current")), None)
     current_hash = current.get("version_hash") if current else None
     return {"deployed": len(deployed), "unretested_deployed": unretested,
             "all_deployed_retested": not unretested,
@@ -43,12 +43,12 @@ def measure(state, key, signed_at):
     dets = state.get("determinations", [])
     receipts = []
     signed_ok = anchored_ok = fingerprinted = bool(dets)
-    for d in dets:
-        if "version_hash" not in d:
+    for determination in dets:
+        if "version_hash" not in determination:
             fingerprinted = False
-        rec = _r.sign_receipt(d, key, signed_at)
+        rec = _r.sign_receipt(determination, key, signed_at)
         receipts.append(rec)
-        if not _r.verify_receipt(rec, d, key["public"]):
+        if not _r.verify_receipt(rec, determination, key["public"]):
             signed_ok = False
         if not _r.verify_anchor(_r.anchor_receipt(rec)):
             anchored_ok = False
@@ -88,9 +88,9 @@ def safety_posture(state, measured=None):
     facts["no_unretested_deployed_versions"] = vb["all_deployed_retested"]
     measured_keys = []
     if measured:
-        for k, v in measured["measured_facts"].items():
-            facts[k] = v
-            measured_keys.append(k)
+        for fact_name, fact_value in measured["measured_facts"].items():
+            facts[fact_name] = fact_value
+            measured_keys.append(fact_name)
     prov = {"source": "ai-safety-pipeline", "measured_facts": sorted(measured_keys)}
     prov.update(state.get("provenance", {}))
     return {"boundary": state.get("boundary", "the AI system"), "facts": facts,
@@ -108,9 +108,9 @@ def assess(state, out_dir=None, key=None, signed_at=None, as_of=None):
     try:
         measured_facts, receipts = {}, []
         if key is not None and signed_at is not None:
-            m = measure(state, key, signed_at)
-            measured_facts.update(m["measured_facts"])
-            receipts = m["receipts"]
+            measurement = measure(state, key, signed_at)
+            measured_facts.update(measurement["measured_facts"])
+            receipts = measurement["receipts"]
         if as_of is not None:
             measured_facts.update(operational_facts(state, as_of))
         measured = {"measured_facts": measured_facts} if measured_facts else None

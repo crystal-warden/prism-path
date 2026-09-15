@@ -13,7 +13,7 @@ independence preserved precisely because the evidence is cryptographically signe
 verifiable — the third line verifies the receipt rather than re-running the test. This module makes that
 concrete: it assigns each control's assurance across the four lines and quantifies the de-duplication.
 """
-import compliance_adapter as _ca
+from adapters.compliance import compliance_adapter as _ca
 
 _OWNER = {"technical": "System / Security Administrator", "procedural": "ISSM / Policy Owner",
           "operational": "Operations / Process Owner", "general": "ISSM"}
@@ -23,7 +23,7 @@ def _first_line_owner(control):
     return _OWNER.get(_ca._method_profile(control), "ISSM")
 
 
-def assurance_for_control(control_id, verdict, signed=False, standard=None):
+def assurance_for_control(control_id, determination, signed=False, standard=None):
     """How one control's single determination is assured across all four lines from the same evidence."""
     if standard:
         _ca.use_standard(standard)
@@ -31,7 +31,7 @@ def assurance_for_control(control_id, verdict, signed=False, standard=None):
     third = ("independently verifies the signed, replayable receipt (no re-test needed)" if signed
              else "must re-test, because there is no signed receipt to verify")
     return {
-        "control_id": control_id, "title": control["title"], "verdict": verdict, "signed": signed,
+        "control_id": control_id, "title": control["title"], "verdict": determination, "signed": signed,
         "shared_evidence": ("one signed determination" if signed else "one determination"),
         "lines": [
             {"line": "first_line", "name": "First Line (Management / Control Owner)",
@@ -67,31 +67,33 @@ def assurance_summary(n_controls, n_signed):
 
 
 def demo(use_llm=False):
-    import unified as _un
-    import posture_connector as _pc
+    from adapters.compliance import unified as _un
+    from adapters.compliance import posture_connector as _pc
     _ca.use_standard("nist_800171_r2")
     posture = _pc.load_sample("example_host")
     req_base = {"facts": posture.get("facts", {}), "boundary": posture.get("boundary")}
     controls = _ca._catalog()["controls"]
-    verdict_311 = _un.full_determination(_ca.get_control("3.1.1"), dict(req_base, control_id="3.1.1"))["status"]
-    n = len(controls)
-    return {"summary": assurance_summary(n, n),                       # every determination signed
-            "example_control": assurance_for_control("3.1.1", verdict_311, signed=True)}
+    determination_311 = _un.full_determination(_ca.get_control("3.1.1"), dict(req_base, control_id="3.1.1"))["status"]
+    control_count = len(controls)
+    return {"summary": assurance_summary(control_count, control_count),                       # every determination signed
+            "example_control": assurance_for_control("3.1.1", determination_311, signed=True)}
 
 
-def render_text(d):
-    s, c = d["summary"], d["example_control"]
-    L = ["Three-lines-of-defense assurance:"]
-    L.append("  %d controls -> %d signed determinations serve all 3 lines + the board"
-             % (s["controls"], s["signed_determinations"]))
-    L.append("  traditional (each line tests each control): %d assessments;  integrated: %d;  %s fewer"
-             % (s["traditional_line_assessments"], s["integrated_assessments"], s["reduction"]))
-    L.append("")
-    L.append("  %s (%s) — verdict %s, %s:" % (c["control_id"], c["title"][:44], c["verdict"], c["shared_evidence"]))
-    for ln in c["lines"]:
+def render_text(assurance):
+    summary, control = assurance["summary"], assurance["example_control"]
+    lines = ["Three-lines-of-defense assurance:"]
+    lines.append("  %d controls -> %d signed determinations serve all 3 lines + the board"
+                 % (summary["controls"], summary["signed_determinations"]))
+    lines.append("  traditional (each line tests each control): %d assessments;  integrated: %d;  %s fewer"
+                 % (summary["traditional_line_assessments"], summary["integrated_assessments"], summary["reduction"]))
+    lines.append("")
+    lines.append("  %s (%s) — determination %s, %s:"
+                 % (control["control_id"], control["title"][:44], control["verdict"],
+                    control["shared_evidence"]))
+    for ln in control["lines"]:
         who = ("  [%s]" % ln["owner"]) if ln.get("owner") else ""
-        L.append("    %-42s %s%s" % (ln["name"], ln["responsibility"], who))
-    return "\n".join(L)
+        lines.append("    %-42s %s%s" % (ln["name"], ln["responsibility"], who))
+    return "\n".join(lines)
 
 
 if __name__ == "__main__":

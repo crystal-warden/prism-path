@@ -29,14 +29,29 @@ hashed, Bitcoin anchored manifest you can verify in six commands:
 | [ppt_eval.h](ppt_eval.h) | the embedded evaluator every firmware includes: no allocation, static buffers sized by three macros, return codes instead of exits |
 | [interp_hdr.c](interp_hdr.c) | ppt_eval.h driven on the host with interp.c's command line, so `make cert` certifies the header against the same corpus |
 | [eval_copies_check.py](eval_copies_check.py) | which firmwares include ppt_eval.h and which still carry a local copy pending a hardware recertification |
+| [EVALUATOR_WALKTHROUGH.md](EVALUATOR_WALKTHROUGH.md) | interp.c and ppt_eval.h read in plain language: one paragraph per function, pseudocode, the three substrates side by side, and the deliberate differences |
+| [PPT_FORMAT_WALKTHROUGH.md](PPT_FORMAT_WALKTHROUGH.md) | one signed policy followed from the compiler through `validate_image` to the interpreter on the fabric, with every hand kept mirror of the layout named |
 | [esp-vision-node/WIRE.md](esp-vision-node/WIRE.md) | every record on the vision bench's links, camera, relays, sniffer and bench apps, in one contract |
+| [esp-vision-node/FRONT_END.md](esp-vision-node/FRONT_END.md) | the camera front end: what a cell value is in gray levels, what the thresholds mean, the anchored normal's state machine, and one paragraph per function |
+| [esp-vision-c6/RELAY_WALKTHROUGH.md](esp-vision-c6/RELAY_WALKTHROUGH.md) | the two relays as one story: the queues and the priority rule, the downlink window, the power policy and its signed decision record, reassembly and the room verdict |
+| [rtl-tb/README.md](rtl-tb/README.md) | the testbench index: one row per testbench, what it certifies, against which corpus, and the command that gates it |
 | [compile_flows.py](compile_flows.py) | sweep every repo flow; images land in `build/flows/` |
 
 ```sh
 make            # build the C interpreter
 make cert       # certify interp.c and ppt_eval.h against the conformance vectors, then check the firmware copies  (THE day-1 gate)
+make -C tb gate # certify rtl/ppt_interp.sv against the same corpus under Verilator and cocotb  (THE RTL gate)
 python3 -W ignore compile_flows.py
 ```
+
+The fabric is no longer one interpreter with one testbench. `rtl/` now holds the policy interpreter
+`ppt_interp.sv`, the control interpreter `ppt_ctrl_interp.sv` that drives it from buttons and a
+signed control table, and the loader, mux, field control and receipt modules around them; the eight
+cocotb testbenches in `rtl-tb/` cover them one module or composition at a time. Every Makefile there
+includes [rtl-tb/gate.mk](rtl-tb/gate.mk), so `make -f Makefile.<name>` runs the simulation **and**
+judges it, and [rtl-tb/README.md](rtl-tb/README.md) has the row and the command for each one. A bare
+`make sim` anywhere in this repository exits 0 even when a cocotb test fails, so it is a rendering
+step and never a pass or fail check.
 
 ## Day log
 
@@ -77,7 +92,7 @@ python3 -W ignore compile_flows.py
   load port, field register file, comparator atoms, per-edge stack machine, priority
   encoder, saturating visits bank) is **RTL CONFORMANT under Verilator + cocotb: 114
   predicate + 6 engine vectors, zero divergence**: the same counts as the C target, one
-  DUT build, every image loaded as data. `make -C tb` reproduces it.
+  DUT build, every image loaded as data. `make -C tb gate` reproduces it.
 - **Sensor-log replay**: all **7,436 live samples** from the banked Day-2 session routed
   through the simulated fabric reproduce the C target's decisions exactly; spec (Python)
   → C → RTL, three implementations, one behavior, physical data.

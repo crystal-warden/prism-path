@@ -138,7 +138,7 @@ def build() -> dict:
 def main() -> int:
     data = build()
     OUT.write_text(json.dumps(data, indent=1, sort_keys=True) + "\n")
-    n_ok = sum(1 for c in data["cases"] if c["expected"]["ok"])
+    n_ok = sum(1 for case in data["cases"] if case["expected"]["ok"])
     print(f"wrote {OUT.relative_to(HERE.parent.parent)}: {len(data['cases'])} cases "
           f"({n_ok} all-pass, {len(data['cases']) - n_ok} deliberate-fail), registry_hash={data['registry_hash'][:12]}…")
     return 0

@@ -34,25 +34,26 @@ from prismpath.routing.router import HybridRouter
 _Z = {0.90: 1.6448536269514722, 0.95: 1.959963984540054, 0.99: 2.5758293035489004}
 
 
-def _wilson_lower(k: int, n: int, confidence: float = 0.95) -> float:
+def _wilson_lower(successes: int, sample_count: int, confidence: float = 0.95) -> float:
     """High-probability lower bound on a binomial success rate (Wilson score interval). No scipy."""
-    if n == 0:
+    if sample_count == 0:
         return 1.0
-    z = _Z.get(confidence, 1.959963984540054)
-    phat = k / n
-    denom = 1 + z * z / n
-    center = phat + z * z / (2 * n)
-    half = z * math.sqrt(phat * (1 - phat) / n + z * z / (4 * n * n))
+    z_score = _Z.get(confidence, 1.959963984540054)
+    phat = successes / sample_count
+    denom = 1 + z_score * z_score / sample_count
+    center = phat + z_score * z_score / (2 * sample_count)
+    half = z_score * math.sqrt(phat * (1 - phat) / sample_count
+                               + z_score * z_score / (4 * sample_count * sample_count))
     return max(0.0, (center - half) / denom)
 
 
 def _labeled(records: List[dict]):
     out = []
-    for r in records:
-        m, lab = r.get("margin"), r.get("label")
-        if m is None or lab is None:
+    for record in records:
+        margin_value, lab = record.get("margin"), record.get("label")
+        if margin_value is None or lab is None:
             continue
-        out.append((float(m), r.get("chosen") == lab))
+        out.append((float(margin_value), record.get("chosen") == lab))
     return out
 
 
@@ -67,20 +68,21 @@ def calibrate(records: List[dict], alpha: float = 0.05, confidence: float = 0.95
     the *width* of the guarantee (point accuracy vs lower bound) is inspectable, not just the point."""
     labeled = _labeled(records)
     total = len(labeled)
-    thresholds = [0.0] + sorted({m for m, _ in labeled})
+    thresholds = [0.0] + sorted({margin_value for margin_value, _ in labeled})
     curve, tau, tau_row = [], None, None
-    for t in thresholds:
-        kept = [(m, c) for m, c in labeled if m >= t]
-        n = len(kept)
-        k = sum(1 for _, c in kept if c)
-        acc = (k / n) if n else 1.0
-        low = _wilson_lower(k, n, confidence)
-        row = {"tau": round(t, 4), "n_kept": n,
+    for threshold in thresholds:
+        kept = [(margin_value, correct) for margin_value, correct in labeled
+                if margin_value >= threshold]
+        sample_count = len(kept)
+        successes = sum(1 for _, correct in kept if correct)
+        acc = (successes / sample_count) if sample_count else 1.0
+        low = _wilson_lower(successes, sample_count, confidence)
+        row = {"tau": round(threshold, 4), "n_kept": sample_count,
                "accuracy": round(acc, 4), "acc_lower": round(low, 4),
-               "escalation_rate": round(1 - n / total, 4) if total else 0.0}
+               "escalation_rate": round(1 - sample_count / total, 4) if total else 0.0}
         curve.append(row)
         if tau is None and low >= 1 - alpha:
-            tau, tau_row = t, row
+            tau, tau_row = threshold, row
     warning = None
     if tau is None:
         warning = (f"no margin threshold reaches the ≥{1 - alpha:.0%} lower bound on n={total} "
@@ -97,13 +99,13 @@ def calibrate(records: List[dict], alpha: float = 0.05, confidence: float = 0.95
 
 
 def save_calibration(path, cal: dict) -> None:
-    with open(path, "w") as f:
-        json.dump(cal, f, indent=2)
+    with open(path, "w") as handle:
+        json.dump(cal, handle, indent=2)
 
 
 def load_calibration(path) -> dict:
-    with open(path, encoding="utf-8") as f:
-        return json.load(f)
+    with open(path, encoding="utf-8") as handle:
+        return json.load(handle)
 
 
 class RiskControlledHybridRouter(HybridRouter):
@@ -123,7 +125,7 @@ class RiskControlledHybridRouter(HybridRouter):
                 f"risk bound (n={cal.get('n')}); routing will escalate EVERY decision to the LLM "
                 "(LLM-router cost/latency). Collect more labels or relax alpha.",
                 RuntimeWarning, stacklevel=2)
-            tau = max((p["tau"] for p in cal.get("curve", [])), default=1.0) + 1.0
+            tau = max((curve_row["tau"] for curve_row in cal.get("curve", [])), default=1.0) + 1.0
         super().__init__(llm_router, margin=tau, min_score=min_score, embed=embed)
         self.alpha = alpha if alpha is not None else cal.get("alpha")
         self.calibration = cal

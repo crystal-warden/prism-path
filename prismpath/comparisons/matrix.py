@@ -22,6 +22,242 @@ REQUIRED_FIELDS = [
     "expected", "observed", "match", "grade", "idiomatic", "glue",
     "evidence_path", "harness_commit", "run_at", "notes"
 ]
+# the required fields whose whole contract is their type, kept beside the list they are drawn from
+STRING_FIELDS = ["system_version", "evidence_path", "harness_commit", "run_at", "notes"]
+BOOLEAN_FIELDS = ["match", "idiomatic"]
+
+
+def _check_system_directory(sys_entry: str, extra_systems: List[str]) -> Optional[str]:
+    """Classify one directory under results, recording a combination system so it reaches the columns."""
+    if sys_entry in SYSTEMS:
+        return None
+    if sys_entry.endswith("+glue"):
+        if sys_entry not in extra_systems:
+            extra_systems.append(sys_entry)
+        return None
+    return (
+        f"Directory '{sys_entry}' under results is not a registered system "
+        f"or '<system>+glue' combination system."
+    )
+
+
+def _split_result_filename(filename: str) -> Optional[Tuple[str, str, str]]:
+    """Split '<dimension>__<policy>__<scenario>.json' into its three parts, or None if it is not one."""
+    name_part = filename[:-5]
+    parts = name_part.split("__")
+    if len(parts) != 3:
+        return None
+    return parts[0], parts[1], parts[2]
+
+
+def _read_result_json(rel_path: str, file_path: Path) -> Tuple[Optional[str], Any, str]:
+    """Read one result file, returning (error, parsed JSON, digest of the bytes as they were read)."""
+    try:
+        raw_bytes = file_path.read_bytes()
+        sha256 = hashlib.sha256(raw_bytes).hexdigest()
+        data = json.loads(raw_bytes.decode("utf-8"))
+    except Exception as error:
+        return f"File '{rel_path}' is invalid JSON: {error}", None, ""
+    return None, data, sha256
+
+
+def _check_shape(rel_path: str, data: Any) -> Optional[str]:
+    """Return the error that makes every later check meaningless, since those index the fields directly."""
+    if not isinstance(data, dict):
+        return f"File '{rel_path}' top-level JSON must be an object."
+    missing = [field for field in REQUIRED_FIELDS if field not in data]
+    if missing:
+        return f"File '{rel_path}' missing required fields: {', '.join(missing)}"
+    return None
+
+
+def _check_filename_agreement(
+    rel_path: str,
+    sys_entry: str,
+    name_parts: Tuple[Optional[str], Optional[str], Optional[str]],
+    data: Dict[str, Any]
+) -> List[str]:
+    """Check the four fields the result's own path spells out against that path.
+
+    The type of each of the four is checked here rather than in _check_types because the agreement
+    check under it cannot run until the type holds.
+    """
+    fn_dim, fn_pol, fn_scen = name_parts
+    errors: List[str] = []
+
+    if not isinstance(data["system"], str):
+        errors.append(f"File '{rel_path}' field 'system' must be a string.")
+    elif data["system"] != sys_entry:
+        errors.append(
+            f"File '{rel_path}' field 'system' ('{data['system']}') disagrees with directory name ('{sys_entry}')."
+        )
+
+    if not isinstance(data["dimension"], str):
+        errors.append(f"File '{rel_path}' field 'dimension' must be a string.")
+    else:
+        if fn_dim is not None and data["dimension"] != fn_dim:
+            errors.append(
+                f"File '{rel_path}' field 'dimension' ('{data['dimension']}') disagrees with filename dimension ('{fn_dim}')."
+            )
+        if data["dimension"] not in DIMENSIONS:
+            errors.append(
+                f"File '{rel_path}' field 'dimension' ('{data['dimension']}') is not a registered dimension."
+            )
+
+    if not isinstance(data["policy"], str):
+        errors.append(f"File '{rel_path}' field 'policy' must be a string.")
+    elif fn_pol is not None and data["policy"] != fn_pol:
+        errors.append(
+            f"File '{rel_path}' field 'policy' ('{data['policy']}') disagrees with filename policy ('{fn_pol}')."
+        )
+
+    if not isinstance(data["scenario"], str):
+        errors.append(f"File '{rel_path}' field 'scenario' must be a string.")
+    elif fn_scen is not None and data["scenario"] != fn_scen:
+        errors.append(
+            f"File '{rel_path}' field 'scenario' ('{data['scenario']}') disagrees with filename scenario ('{fn_scen}')."
+        )
+
+    return errors
+
+
+def _check_types(rel_path: str, data: Dict[str, Any]) -> List[str]:
+    """Check the fields whose whole contract is their type, plus the closed grade vocabulary."""
+    errors: List[str] = []
+
+    for field in STRING_FIELDS:
+        if not isinstance(data[field], str):
+            errors.append(f"File '{rel_path}' field '{field}' must be a string.")
+
+    if data["expected"] is not None and not isinstance(data["expected"], str):
+        errors.append(f"File '{rel_path}' field 'expected' must be string or null.")
+
+    if not isinstance(data["observed"], str):
+        errors.append(f"File '{rel_path}' field 'observed' must be a string.")
+
+    for field in BOOLEAN_FIELDS:
+        if type(data[field]) is not bool:
+            errors.append(f"File '{rel_path}' field '{field}' must be boolean.")
+
+    if data["grade"] not in ("NATIVE", "WITH-WORK", "NOT"):
+        errors.append(
+            f"File '{rel_path}' field 'grade' ('{data['grade']}') must be NATIVE, WITH-WORK, or NOT."
+        )
+
+    return errors
+
+
+def _check_glue(rel_path: str, data: Dict[str, Any]) -> List[str]:
+    """Check that the cost of the workaround is stated when, and only when, the grade is WITH-WORK."""
+    errors: List[str] = []
+
+    if data["grade"] == "WITH-WORK":
+        glue = data.get("glue")
+        if glue is None or not isinstance(glue, dict):
+            errors.append(
+                f"File '{rel_path}' has grade 'WITH-WORK' but missing or non-object 'glue'."
+            )
+        else:
+            glue_req = ["description", "components", "loc", "hours"]
+            missing_glue = [glue_field for glue_field in glue_req if glue_field not in glue]
+            if missing_glue:
+                errors.append(
+                    f"File '{rel_path}' glue object missing fields: {', '.join(missing_glue)}."
+                )
+            else:
+                if not isinstance(glue["description"], str):
+                    errors.append(f"File '{rel_path}' glue.description must be a string.")
+                if not isinstance(glue["components"], list) or not all(isinstance(component, str) for component in glue["components"]):
+                    errors.append(f"File '{rel_path}' glue.components must be a list of strings.")
+                if type(glue["loc"]) is not int:
+                    errors.append(f"File '{rel_path}' glue.loc must be an int.")
+                if type(glue["hours"]) not in (int, float) or type(glue["hours"]) is bool:
+                    errors.append(f"File '{rel_path}' glue.hours must be a number.")
+    elif data["grade"] in ("NATIVE", "NOT"):
+        if data.get("glue") is not None:
+            errors.append(f"File '{rel_path}' has grade '{data['grade']}' but 'glue' is not null.")
+
+    return errors
+
+
+def _check_measurements(rel_path: str, data: Dict[str, Any]) -> List[str]:
+    """Check the optional measurements block, which a result may omit or leave null."""
+    if "measurements" not in data:
+        return []
+    if data["measurements"] is None:
+        return []
+    if isinstance(data["measurements"], dict):
+        return []
+    return [f"File '{rel_path}' field 'measurements' must be an object."]
+
+
+def _check_cross_file(
+    rel_path: str,
+    data: Dict[str, Any],
+    scenario_expected_map: Dict[Tuple[str, str], Tuple[Optional[str], str]]
+) -> List[str]:
+    """Hold one 'expected' value per scenario across systems, so no system is scored against its own answer.
+
+    The first file to name a scenario records the value the rest are held to, and is named in the error.
+    """
+    scenario = data.get("scenario")
+    policy = data.get("policy")
+    expected = data.get("expected")
+
+    if not scenario or not isinstance(scenario, str) or not isinstance(policy, str):
+        return []
+
+    key = (policy, scenario)
+    if key not in scenario_expected_map:
+        scenario_expected_map[key] = (expected, rel_path)
+        return []
+
+    prev_exp, prev_file = scenario_expected_map[key]
+    if expected == prev_exp:
+        return []
+    return [
+        f"Scenario '{policy}/{scenario}' has conflicting 'expected' values: '{prev_exp}' ({prev_file}) vs '{expected}' ({rel_path})."
+    ]
+
+
+def _validate_result_file(
+    rel_path: str,
+    file_path: Path,
+    sys_entry: str,
+    filename: str,
+    scenario_expected_map: Dict[Tuple[str, str], Tuple[Optional[str], str]]
+) -> Tuple[List[str], Any, str]:
+    """Run every check on one result file.
+
+    Returns the file's errors and, when the file was readable and complete enough for the field
+    checks to mean anything, its parsed body and digest; the caller decides whether to consume it.
+    """
+    errors: List[str] = []
+
+    name_parts = _split_result_filename(filename)
+    if name_parts is None:
+        errors.append(
+            f"File '{rel_path}' filename does not match structure '<dimension>__<policy>__<scenario>.json'"
+        )
+        name_parts = (None, None, None)
+
+    read_error, data, sha256 = _read_result_json(rel_path, file_path)
+    if read_error is not None:
+        errors.append(read_error)
+        return errors, None, ""
+
+    shape_error = _check_shape(rel_path, data)
+    if shape_error is not None:
+        errors.append(shape_error)
+        return errors, None, ""
+
+    errors.extend(_check_filename_agreement(rel_path, sys_entry, name_parts, data))
+    errors.extend(_check_types(rel_path, data))
+    errors.extend(_check_glue(rel_path, data))
+    errors.extend(_check_measurements(rel_path, data))
+    errors.extend(_check_cross_file(rel_path, data, scenario_expected_map))
+
+    return errors, data, sha256
 
 
 def validate_and_load_results(
@@ -42,16 +278,9 @@ def validate_and_load_results(
         if not sys_path.is_dir():
             continue
 
-        if sys_entry in SYSTEMS:
-            pass
-        elif sys_entry.endswith("+glue"):
-            if sys_entry not in extra_systems:
-                extra_systems.append(sys_entry)
-        else:
-            errors.append(
-                f"Directory '{sys_entry}' under results is not a registered system "
-                f"or '<system>+glue' combination system."
-            )
+        directory_error = _check_system_directory(sys_entry, extra_systems)
+        if directory_error is not None:
+            errors.append(directory_error)
             continue
 
         for filename in sorted(os.listdir(sys_path)):
@@ -61,150 +290,17 @@ def validate_and_load_results(
             file_path = sys_path / filename
             rel_path = f"{sys_entry}/{filename}"
 
-            name_part = filename[:-5]
-            parts = name_part.split("__")
-            if len(parts) != 3:
-                errors.append(
-                    f"File '{rel_path}' filename does not match structure '<dimension>__<policy>__<scenario>.json'"
-                )
-                fn_dim, fn_pol, fn_scen = None, None, None
-            else:
-                fn_dim, fn_pol, fn_scen = parts[0], parts[1], parts[2]
+            file_errors, data, sha256 = _validate_result_file(
+                rel_path, file_path, sys_entry, filename, scenario_expected_map
+            )
+            errors.extend(file_errors)
 
-            try:
-                raw_bytes = file_path.read_bytes()
-                sha256 = hashlib.sha256(raw_bytes).hexdigest()
-                data = json.loads(raw_bytes.decode("utf-8"))
-            except Exception as e:
-                errors.append(f"File '{rel_path}' is invalid JSON: {e}")
-                continue
-
-            if not isinstance(data, dict):
-                errors.append(f"File '{rel_path}' top-level JSON must be an object.")
-                continue
-
-            missing = [f for f in REQUIRED_FIELDS if f not in data]
-            if missing:
-                errors.append(f"File '{rel_path}' missing required fields: {', '.join(missing)}")
-                continue
-
-            # Field agreement and type validations
-            if not isinstance(data["system"], str):
-                errors.append(f"File '{rel_path}' field 'system' must be a string.")
-            elif data["system"] != sys_entry:
-                errors.append(
-                    f"File '{rel_path}' field 'system' ('{data['system']}') disagrees with directory name ('{sys_entry}')."
-                )
-
-            if not isinstance(data["dimension"], str):
-                errors.append(f"File '{rel_path}' field 'dimension' must be a string.")
-            else:
-                if fn_dim is not None and data["dimension"] != fn_dim:
-                    errors.append(
-                        f"File '{rel_path}' field 'dimension' ('{data['dimension']}') disagrees with filename dimension ('{fn_dim}')."
-                    )
-                if data["dimension"] not in DIMENSIONS:
-                    errors.append(
-                        f"File '{rel_path}' field 'dimension' ('{data['dimension']}') is not a registered dimension."
-                    )
-
-            if not isinstance(data["policy"], str):
-                errors.append(f"File '{rel_path}' field 'policy' must be a string.")
-            elif fn_pol is not None and data["policy"] != fn_pol:
-                errors.append(
-                    f"File '{rel_path}' field 'policy' ('{data['policy']}') disagrees with filename policy ('{fn_pol}')."
-                )
-
-            if not isinstance(data["scenario"], str):
-                errors.append(f"File '{rel_path}' field 'scenario' must be a string.")
-            elif fn_scen is not None and data["scenario"] != fn_scen:
-                errors.append(
-                    f"File '{rel_path}' field 'scenario' ('{data['scenario']}') disagrees with filename scenario ('{fn_scen}')."
-                )
-
-            if not isinstance(data["system_version"], str):
-                errors.append(f"File '{rel_path}' field 'system_version' must be a string.")
-
-            if not isinstance(data["evidence_path"], str):
-                errors.append(f"File '{rel_path}' field 'evidence_path' must be a string.")
-
-            if not isinstance(data["harness_commit"], str):
-                errors.append(f"File '{rel_path}' field 'harness_commit' must be a string.")
-
-            if not isinstance(data["run_at"], str):
-                errors.append(f"File '{rel_path}' field 'run_at' must be a string.")
-
-            if not isinstance(data["notes"], str):
-                errors.append(f"File '{rel_path}' field 'notes' must be a string.")
-
-            if data["expected"] is not None and not isinstance(data["expected"], str):
-                errors.append(f"File '{rel_path}' field 'expected' must be string or null.")
-
-            if not isinstance(data["observed"], str):
-                errors.append(f"File '{rel_path}' field 'observed' must be a string.")
-
-            if type(data["match"]) is not bool:
-                errors.append(f"File '{rel_path}' field 'match' must be boolean.")
-
-            if type(data["idiomatic"]) is not bool:
-                errors.append(f"File '{rel_path}' field 'idiomatic' must be boolean.")
-
-            if data["grade"] not in ("NATIVE", "WITH-WORK", "NOT"):
-                errors.append(
-                    f"File '{rel_path}' field 'grade' ('{data['grade']}') must be NATIVE, WITH-WORK, or NOT."
-                )
-
-            # Glue validation
-            if data["grade"] == "WITH-WORK":
-                glue = data.get("glue")
-                if glue is None or not isinstance(glue, dict):
-                    errors.append(
-                        f"File '{rel_path}' has grade 'WITH-WORK' but missing or non-object 'glue'."
-                    )
-                else:
-                    glue_req = ["description", "components", "loc", "hours"]
-                    missing_glue = [g for g in glue_req if g not in glue]
-                    if missing_glue:
-                        errors.append(
-                            f"File '{rel_path}' glue object missing fields: {', '.join(missing_glue)}."
-                        )
-                    else:
-                        if not isinstance(glue["description"], str):
-                            errors.append(f"File '{rel_path}' glue.description must be a string.")
-                        if not isinstance(glue["components"], list) or not all(isinstance(c, str) for c in glue["components"]):
-                            errors.append(f"File '{rel_path}' glue.components must be a list of strings.")
-                        if type(glue["loc"]) is not int:
-                            errors.append(f"File '{rel_path}' glue.loc must be an int.")
-                        if type(glue["hours"]) not in (int, float) or type(glue["hours"]) is bool:
-                            errors.append(f"File '{rel_path}' glue.hours must be a number.")
-            elif data["grade"] in ("NATIVE", "NOT"):
-                if data.get("glue") is not None:
-                    errors.append(f"File '{rel_path}' has grade '{data['grade']}' but 'glue' is not null.")
-
-            if "measurements" in data and data["measurements"] is not None:
-                if not isinstance(data["measurements"], dict):
-                    errors.append(f"File '{rel_path}' field 'measurements' must be an object.")
-
-            # Same-scenario expected consistency
-            scen = data.get("scenario")
-            pol = data.get("policy")
-            exp = data.get("expected")
-            if scen and isinstance(scen, str) and isinstance(pol, str):
-                key = (pol, scen)
-                if key in scenario_expected_map:
-                    prev_exp, prev_file = scenario_expected_map[key]
-                    if exp != prev_exp:
-                        errors.append(
-                            f"Scenario '{pol}/{scen}' has conflicting 'expected' values: '{prev_exp}' ({prev_file}) vs '{exp}' ({rel_path})."
-                        )
-                else:
-                    scenario_expected_map[key] = (exp, rel_path)
-
-            if not errors:
+            # one bad file anywhere stops the run, so nothing after it is consumed either
+            if data is not None and not errors:
                 consumed_files.append((rel_path, file_path, data, sha256))
 
     if errors:
-        msg = "Validation errors found in results:\n" + "\n".join(f"  - {e}" for e in errors)
+        msg = "Validation errors found in results:\n" + "\n".join(f"  - {error}" for error in errors)
         raise ValueError(msg)
 
     all_systems = list(SYSTEMS) + sorted(extra_systems)
@@ -214,7 +310,7 @@ def validate_and_load_results(
 def compute_verdict(dim: str, dim_row: Dict[str, Dict[str, Any]], systems: List[str]) -> str:
     """Compute the distinct-layer verdict for a dimension."""
     prism_grade = dim_row["prismpath"]["grade"]
-    comparators = [s for s in systems if s != "prismpath"]
+    comparators = [system for system in systems if system != "prismpath"]
 
     if dim.startswith("A"):
         if prism_grade != "NATIVE":
@@ -226,11 +322,11 @@ def compute_verdict(dim: str, dim_row: Dict[str, Dict[str, Any]], systems: List[
         return "DISTINCT"
     else:
         comparator_grades = [dim_row[comp]["grade"] for comp in comparators]
-        if prism_grade in ("WITH-WORK", "NOT") and any(g == "NATIVE" for g in comparator_grades):
+        if prism_grade in ("WITH-WORK", "NOT") and any(grade == "NATIVE" for grade in comparator_grades):
             return "LOSES"
-        if prism_grade == "NOT" and any(g in ("NATIVE", "WITH-WORK") for g in comparator_grades):
+        if prism_grade == "NOT" and any(grade in ("NATIVE", "WITH-WORK") for grade in comparator_grades):
             return "LOSES"
-        if prism_grade == "UNTESTED" or any(g == "UNTESTED" for g in comparator_grades):
+        if prism_grade == "UNTESTED" or any(grade == "UNTESTED" for grade in comparator_grades):
             return "OPEN"
         return "HOLDS"
 
@@ -269,16 +365,16 @@ def build_matrix(results_dir: str | Path) -> Dict[str, Any]:
                     "files": []
                 }
             else:
-                grades = [d["grade"] for _, d, _ in cell_data]
-                min_rank = min(GRADE_ORDER[g] for g in grades)
-                cell_grade = [g for g, r in GRADE_ORDER.items() if r == min_rank][0]
+                grades = [result["grade"] for _, result, _ in cell_data]
+                min_rank = min(GRADE_ORDER[grade] for grade in grades)
+                cell_grade = [grade for grade, rank in GRADE_ORDER.items() if rank == min_rank][0]
 
                 counts = {
                     "NATIVE": grades.count("NATIVE"),
                     "WITH-WORK": grades.count("WITH-WORK"),
                     "NOT": grades.count("NOT")
                 }
-                mismatches = sum(1 for _, d, _ in cell_data if d.get("match") is False)
+                mismatches = sum(1 for _, result, _ in cell_data if result.get("match") is False)
                 file_paths = sorted(rel_path for rel_path, _, _ in cell_data)
 
                 matrix[dim][sys_id] = {

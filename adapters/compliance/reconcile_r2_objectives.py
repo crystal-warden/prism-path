@@ -27,14 +27,14 @@ def _discovery(text):
     return "Provide evidence that %s" % text.rstrip(".") + "."
 
 
-def load_corpus(d):
+def load_corpus(corpus_dir):
     controls = {}
-    for f in sorted(glob.glob(os.path.join(d, "*.yaml"))):
-        if os.path.basename(f) == "index.yaml":
+    for path in sorted(glob.glob(os.path.join(corpus_dir, "*.yaml"))):
+        if os.path.basename(path) == "index.yaml":
             continue
-        doc = yaml.safe_load(open(f)) or {}
-        for c in doc.get("controls", []):
-            controls[c["id"]] = c
+        doc = yaml.safe_load(open(path)) or {}
+        for control in doc.get("controls", []):
+            controls[control["id"]] = control
     return controls
 
 
@@ -47,9 +47,9 @@ def main():
     # preserve any curated discovery_query, keyed by objective id
     old_dq = {}
     for ctl in cat["controls"].values():
-        for o in ctl.get("objectives", []):
-            if o.get("discovery_query"):
-                old_dq[o["id"]] = o["discovery_query"]
+        for objective in ctl.get("objectives", []):
+            if objective.get("discovery_query"):
+                old_dq[objective["id"]] = objective["discovery_query"]
 
     total_obj = 0
     stmt_changes = []
@@ -61,9 +61,9 @@ def main():
             total_obj += len(ctl.get("objectives", []))
             continue
         new_objs = []
-        for o in cc.get("objectives", []):
-            oid = o["ref"]
-            txt = (o.get("text") or "").rstrip(".") + "."
+        for objective in cc.get("objectives", []):
+            oid = objective["ref"]
+            txt = (objective.get("text") or "").rstrip(".") + "."
             new_objs.append({"id": oid, "text": txt,
                              "discovery_query": old_dq.get(oid) or _discovery(txt)})
         ctl["objectives"] = new_objs

@@ -16,12 +16,12 @@ CORPUS = os.path.join(os.path.dirname(__file__), "..", "portable", "conformance"
 def test_python_reach_matches_frozen_vectors():
     data = json.load(open(CORPUS, encoding="utf-8"))
     assert len(data["cases"]) >= 11
-    for c in data["cases"]:
+    for case in data["cases"]:
         res = mc.check_reach(
-            parse(c["flow"]), c["targets"],
-            assume=c.get("assume"), bound=c.get("bound", 25),
-            include_errors=c.get("include_errors", True),
-            include_events=c.get("include_events", True),
+            parse(case["flow"]), case["targets"],
+            assume=case.get("assume"), bound=case.get("bound", 25),
+            include_errors=case.get("include_errors", True),
+            include_events=case.get("include_events", True),
         )
-        got = {t: {"reachable": res[t].reachable, "proven": res[t].proven} for t in c["targets"]}
-        assert got == c["expected"], f"{c['key']}: {got} != {c['expected']}"
+        got = {target: {"reachable": res[target].reachable, "proven": res[target].proven} for target in case["targets"]}
+        assert got == case["expected"], f"{case['key']}: {got} != {case['expected']}"

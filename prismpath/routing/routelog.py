@@ -29,11 +29,11 @@ def jsonl_sink(path) -> Callable[[dict], None]:
     path = os.fspath(path)
 
     def sink(record: dict) -> None:
-        d = os.path.dirname(os.path.abspath(path))
-        if d:
-            os.makedirs(d, exist_ok=True)
-        with open(path, "a") as f:
-            f.write(json.dumps(record) + "\n")
+        directory = os.path.dirname(os.path.abspath(path))
+        if directory:
+            os.makedirs(directory, exist_ok=True)
+        with open(path, "a") as handle:
+            handle.write(json.dumps(record) + "\n")
     return sink
 
 
@@ -59,7 +59,7 @@ def load_records(path) -> List[dict]:
 
 
 def save_records(path, records: List[dict]) -> None:
-    canon.atomic_write(path, "".join(json.dumps(r) + "\n" for r in records))
+    canon.atomic_write(path, "".join(json.dumps(routing_record) + "\n" for routing_record in records))
 
 
 def label_records(records: List[dict], ask: Callable[[dict, List[str]], Optional[str]],
@@ -67,21 +67,23 @@ def label_records(records: List[dict], ask: Callable[[dict, List[str]], Optional
     """Fill in `label` for every unlabeled record by calling `ask(record, candidate_targets)` — which
     returns the chosen edge target, or None to skip. Returns the count newly labeled. Pure and
     testable; the CLI supplies an interactive `ask`."""
-    n = 0
-    for r in records:
-        if r.get("label"):
+    labeled_count = 0
+    for routing_record in records:
+        if routing_record.get("label"):
             continue
-        targets = [c.get("target") for c in r.get("candidates", [])]
-        choice = ask(r, targets)
+        targets = [candidate.get("target") for candidate in routing_record.get("candidates", [])]
+        choice = ask(routing_record, targets)
         if choice in targets:
-            r["label"] = choice
-            r["label_source"] = source
-            n += 1
-    return n
+            routing_record["label"] = choice
+            routing_record["label_source"] = source
+            labeled_count += 1
+    return labeled_count
 
 
 def label_stats(records: List[dict]) -> dict:
-    labeled = sum(1 for r in records if r.get("label"))
-    correct = sum(1 for r in records if r.get("label") and r.get("label") == r.get("chosen"))
+    labeled = sum(1 for routing_record in records if routing_record.get("label"))
+    correct = sum(1 for routing_record in records
+                  if routing_record.get("label")
+                  and routing_record.get("label") == routing_record.get("chosen"))
     return {"total": len(records), "labeled": labeled, "unlabeled": len(records) - labeled,
             "router_correct_on_labeled": correct}

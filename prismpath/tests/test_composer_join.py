@@ -60,16 +60,16 @@ def _agent(spec, child_behaviour=None):
         if node == "review":
             item = state.get("_item", {})
             if child_behaviour:
-                b = child_behaviour(item)
-                if b is not None:
-                    return b
+                behaviour = child_behaviour(item)
+                if behaviour is not None:
+                    return behaviour
             return {"text": f"reviewed {item.get('path')}", "verdict": "ok"}
         return {"text": node}
     return agent
 
 
-def _items(n):
-    return [{"path": f"f{i}.py"} for i in range(n)]
+def _items(count):
+    return [{"path": f"f{index}.py"} for index in range(count)]
 
 
 # --- quorum ---------------------------------------------------------------------------

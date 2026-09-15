@@ -11,16 +11,17 @@
  * misapplied from a stale snapshot.
  *
  *   clang -O2 -target bpf -I. -c ppt_select.bpf.c -o ppt_select.bpf.o
- *   gcc  -O2 -Wno-unused-function -I. smoke_selector.c -o smoke_selector -lpthread $(pkg-config --libs libbpf)
+ *   gcc  -O2 -I. smoke_selector.c ppt_image.c ppt_maps.c -o smoke_selector -lpthread $(pkg-config --libs libbpf)
  *   sudo ./smoke_selector selector_corpus.bin ppt_select.bpf.o
  */
-#define main loader_orig_main
-#include "loader.c"
-#undef main
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include <pthread.h>
 #include <stdatomic.h>
 
-/* struct sel_state is defined in loader.c (included above) */
+#include "ppt_image.h"   /* Image, parse_image_buf, build_frame, the host reference evaluator */
+#include "ppt_maps.h"    /* populate_maps, struct sel_state, selector_hotswap */
 
 #define NTHREADS 8
 #define NITERS   20000

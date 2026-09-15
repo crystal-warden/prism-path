@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """The LLM path in the unified adjudicator: prose objectives no other mechanism covers are resolved by
-the escalation-default LLM adjudicator, config and operational verdicts still win, and an unreachable
+the escalation-default LLM adjudicator, config and operational determinations still win, and an unreachable
 model fails closed rather than crashing or being assumed."""
 import pytest
-import compliance_adapter as ca
-import unified as un
+from adapters.compliance import compliance_adapter as ca
+from adapters.compliance import unified as un
 
 
 def _c(cid):
@@ -20,12 +20,12 @@ def test_llm_resolves_undetermined_prose_objectives(monkeypatch):
     det = un.full_determination(control, {"evidence": []}, use_llm=True)
     assert det["status"] == "met"
     assert det["undetermined_objective_ids"] == []
-    assert det["coverage"]["llm"] == [o["id"] for o in control["objectives"]]
-    assert all(v["by"] == "llm" for v in det["by_objective"].values())
+    assert det["coverage"]["llm"] == [objective["id"] for objective in control["objectives"]]
+    assert all(resolution["by"] == "llm" for resolution in det["by_objective"].values())
 
 
-def test_llm_partial_verdict(monkeypatch):
-    objs = [o["id"] for o in _c("3.1.3")["objectives"]]
+def test_llm_partial_determination(monkeypatch):
+    objs = [objective["id"] for objective in _c("3.1.3")["objectives"]]
     monkeypatch.setattr(ca, "adjudicate",
                         lambda control, req: {"status": "partially-met", "unmet_objective_ids": [objs[0]], "gap_summary": "x"})
     det = un.full_determination(_c("3.1.3"), {"evidence": []}, use_llm=True)
@@ -34,7 +34,7 @@ def test_llm_partial_verdict(monkeypatch):
 
 
 def test_llm_unreachable_fails_closed(monkeypatch):
-    def boom(*a, **k):
+    def boom(*args, **kwargs):
         raise RuntimeError("model endpoint down")
     monkeypatch.setattr(ca, "adjudicate", boom)
     det = un.full_determination(_c("3.1.3"), {"evidence": []}, use_llm=True)
@@ -44,7 +44,7 @@ def test_llm_unreachable_fails_closed(monkeypatch):
 
 def test_config_wins_llm_not_consulted(monkeypatch):
     calls = {"n": 0}
-    def spy(*a, **k):
+    def spy(*args, **kwargs):
         calls["n"] += 1
         return {"status": "not-met", "unmet_objective_ids": ["3.1.8[a]", "3.1.8[b]"], "gap_summary": "x"}
     monkeypatch.setattr(ca, "adjudicate", spy)

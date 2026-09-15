@@ -5,17 +5,17 @@
 
 The model's top layer links organizational objectives, risk appetite, and oversight to the controls
 below, so the assurance chain runs strategy-down: an objective -> the risk scenarios that threaten it ->
-the controls that mitigate them -> the live verdicts -> the resulting dollar exposure -> whether that
+the controls that mitigate them -> the live determinations -> the resulting dollar exposure -> whether that
 exposure sits inside the risk appetite the organization set. This closes the loop the rest of the
-platform leaves open: control verdicts stop being a compliance score and become "is this business
+platform leaves open: control determinations stop being a compliance score and become "is this business
 objective within the risk we agreed to accept, and what is driving it if not."
 
 Objectives and appetite are organization-specific (the tenant supplies them, and the board owns the
 appetite); a realistic sample drives the demo and tests. Exposure is computed from the FAIR scenarios
-and the live control verdicts, so improving the controls measurably moves an objective back inside
+and the live control determinations, so improving the controls measurably moves an objective back inside
 appetite.
 """
-import fair_risk as _fr
+from adapters.compliance import fair_risk as _fr
 
 # Each objective: what the organization is trying to achieve, who owns it, the risk scenarios that
 # threaten it, and the risk appetite = the maximum annual loss expectancy (likely) the board will accept.
@@ -38,70 +38,71 @@ ORG_OBJECTIVES = [
 
 
 def _scenarios_by_id():
-    return {s["id"]: s for s in _fr.load_scenarios()}
+    return {scenario["id"]: scenario for scenario in _fr.load_scenarios()}
 
 
-def objective_posture(objective, verdicts, scen_index=None):
+def objective_posture(objective, determinations, scen_index=None):
     """One objective's risk posture: the threatening scenarios and their current ALE (driven by the live
-    verdicts), the total exposure, whether it is within the appetite the organization set, and the unmet
-    controls driving it. Strategy-down: objective -> risk -> control."""
+    determinations), the total exposure, whether it is inside the appetite the organization set, and the
+    unmet controls driving it. Strategy-down: objective -> risk -> control."""
     scen_index = scen_index if scen_index is not None else _scenarios_by_id()
     rows = []
     for sid in objective["threatened_by"]:
-        s = scen_index.get(sid)
-        if not s:
+        scenario = scen_index.get(sid)
+        if not scenario:
             continue
-        rows.append({"scenario": sid, "name": s["name"], "ale_likely": _fr.ale(s, verdicts)["likely"],
-                     "unmet_controls": sorted(c for c in s.get("controls", []) if verdicts.get(c) != "met")})
-    exposure = sum(r["ale_likely"] for r in rows)
+        rows.append({"scenario": sid, "name": scenario["name"], "ale_likely": _fr.ale(scenario, determinations)["likely"],
+                     "unmet_controls": sorted(control_id for control_id in scenario.get("controls", [])
+                                              if determinations.get(control_id) != "met")})
+    exposure = sum(row["ale_likely"] for row in rows)
     appetite = objective["appetite_ale"]
     return {"objective": objective["id"], "statement": objective["statement"],
             "category": objective["category"], "owner": objective["owner"],
             "appetite_ale": appetite, "current_exposure": exposure,
             "within_appetite": exposure <= appetite, "over_by": max(0, exposure - appetite),
-            "scenarios": sorted(rows, key=lambda r: -r["ale_likely"]),
-            "driving_controls": sorted({c for r in rows for c in r["unmet_controls"]})}
+            "scenarios": sorted(rows, key=lambda row: -row["ale_likely"]),
+            "driving_controls": sorted({control_id for row in rows for control_id in row["unmet_controls"]})}
 
 
-def assess_governance(verdicts, objectives=None):
-    """Every objective's posture plus a portfolio rollup, grounded in the live control verdicts."""
+def assess_governance(determinations, objectives=None):
+    """Every objective's posture plus a portfolio rollup, grounded in the live control determinations."""
     objectives = objectives if objectives is not None else ORG_OBJECTIVES
     idx = _scenarios_by_id()
-    postures = [objective_posture(o, verdicts, idx) for o in objectives]
-    within = sum(1 for p in postures if p["within_appetite"])
+    postures = [objective_posture(objective, determinations, idx) for objective in objectives]
+    within = sum(1 for posture in postures if posture["within_appetite"])
     return {"n_objectives": len(postures), "within_appetite": within,
             "over_appetite": len(postures) - within, "objectives": postures,
             "note": "Exposure is the summed likely ALE of the scenarios threatening each objective, driven "
-                    "by the live control verdicts; an objective is over appetite when its exposure exceeds "
+                    "by the live control determinations; an objective is over appetite when its exposure exceeds "
                     "the tolerance the organization set. Scenarios can threaten more than one objective, so "
                     "per-objective exposures are not additive across the portfolio."}
 
 
 def demo(use_llm=False):
-    import compliance_adapter as _ca
-    import unified as _un
-    import posture_connector as _pc
+    from adapters.compliance import compliance_adapter as _ca
+    from adapters.compliance import unified as _un
+    from adapters.compliance import posture_connector as _pc
     _ca.use_standard("nist_800171_r2")
     posture = _pc.load_sample("example_host")
     req_base = {"facts": posture.get("facts", {}), "boundary": posture.get("boundary")}
-    verdicts = {cid: _un.full_determination(_ca.get_control(cid), dict(req_base, control_id=cid))["status"]
-                for cid in _ca._catalog()["controls"]}
-    return assess_governance(verdicts)
+    determinations = {cid: _un.full_determination(_ca.get_control(cid), dict(req_base, control_id=cid))["status"]
+                      for cid in _ca._catalog()["controls"]}
+    return assess_governance(determinations)
 
 
-def render_text(r):
-    L = ["Governance & Direction  |  objectives within appetite: %d/%d"
-         % (r["within_appetite"], r["n_objectives"])]
-    for p in r["objectives"]:
-        flag = "WITHIN" if p["within_appetite"] else "OVER by $%s" % format(p["over_by"], ",")
-        L.append("  %s %-52s %s" % (p["objective"], p["statement"][:52], p["category"]))
-        L.append("      owner: %-26s exposure $%-10s appetite $%-9s  -> %s"
-                 % (p["owner"], format(p["current_exposure"], ","), format(p["appetite_ale"], ","), flag))
-        if not p["within_appetite"]:
-            top = p["scenarios"][0]
-            L.append("      top driver: %s ($%s)  unmet controls: %s"
-                     % (top["name"], format(top["ale_likely"], ","), ", ".join(p["driving_controls"][:8])))
-    return "\n".join(L)
+def render_text(assessment):
+    lines = ["Governance & Direction  |  objectives within appetite: %d/%d"
+             % (assessment["within_appetite"], assessment["n_objectives"])]
+    for posture in assessment["objectives"]:
+        flag = "WITHIN" if posture["within_appetite"] else "OVER by $%s" % format(posture["over_by"], ",")
+        lines.append("  %s %-52s %s" % (posture["objective"], posture["statement"][:52], posture["category"]))
+        lines.append("      owner: %-26s exposure $%-10s appetite $%-9s  -> %s"
+                     % (posture["owner"], format(posture["current_exposure"], ","), format(posture["appetite_ale"], ","), flag))
+        if not posture["within_appetite"]:
+            top = posture["scenarios"][0]
+            lines.append("      top driver: %s ($%s)  unmet controls: %s"
+                         % (top["name"], format(top["ale_likely"], ","), ", ".join(posture["driving_controls"][:8])))
+    return "\n".join(lines)
 
 
 if __name__ == "__main__":

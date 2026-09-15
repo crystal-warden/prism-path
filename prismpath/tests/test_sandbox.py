@@ -75,8 +75,8 @@ def test_scratch_persists_only_when_rw(tmp_path):
     scratch = tmp_path / "scratch"
     scratch.mkdir()
     target = str(scratch / "out.txt")
-    r = sb.SandboxRunner(scratch_dir=str(scratch))
-    out = r(probes.write_file, Envelope(fs="rw", timeout_s=10, mem_mb=256), "n", "", {"target": target})
+    runner = sb.SandboxRunner(scratch_dir=str(scratch))
+    out = runner(probes.write_file, Envelope(fs="rw", timeout_s=10, mem_mb=256), "n", "", {"target": target})
     assert out["text"] == "wrote"
     assert (scratch / "out.txt").read_text() == "sandbox-was-here"
 
@@ -84,18 +84,18 @@ def test_scratch_persists_only_when_rw(tmp_path):
 @requires_bwrap
 def test_lambda_rejected():
     with pytest.raises(sb.SandboxError):
-        sb.SandboxRunner()(lambda n, i, s: {"v": 1}, Envelope(), "n", "", {})
+        sb.SandboxRunner()(lambda node, instruction, state: {"v": 1}, Envelope(), "n", "", {})
 
 
 def test_loud_absence_refuses():
-    r = sb.SandboxRunner(allow_unsandboxed=False)
-    r.bwrap = None                                   # simulate bwrap-absent
+    runner = sb.SandboxRunner(allow_unsandboxed=False)
+    runner.bwrap = None                                   # simulate bwrap-absent
     with pytest.raises(sb.SandboxUnavailable):
-        r(probes.ok, Envelope(), "n", "", {})
+        runner(probes.ok, Envelope(), "n", "", {})
 
 
 def test_override_runs_unsandboxed_with_marker():
-    r = sb.SandboxRunner(allow_unsandboxed=True)
-    r.bwrap = None
-    out = r(probes.ok, Envelope(), "n", "", {})
+    runner = sb.SandboxRunner(allow_unsandboxed=True)
+    runner.bwrap = None
+    out = runner(probes.ok, Envelope(), "n", "", {})
     assert out["v"] == 1 and out.get("_sandbox") == "off"

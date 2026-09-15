@@ -47,20 +47,20 @@ REQUIRED_SECTIONS = ("Claim", "Method", "Result", "Provenance")
 def parse_rows(text: str):
     """Yield {n, title, date, body} for each `### #N —` prose row."""
     lines = text.splitlines()
-    heads = [(i, m) for i, l in enumerate(lines) if (m := ROW_HEAD_RE.match(l))]
-    for idx, (line_no, m) in enumerate(heads):
-        n = int(m.group(1))
-        title = m.group(2).strip()
+    heads = [(line_number, head_match) for line_number, line in enumerate(lines) if (head_match := ROW_HEAD_RE.match(line))]
+    for idx, (line_no, head_match) in enumerate(heads):
+        row_number = int(head_match.group(1))
+        title = head_match.group(2).strip()
         dm = TRAILING_PAREN_RE.search(title)
         date = dm.group(1).strip() if dm else None
         end = heads[idx + 1][0] if idx + 1 < len(heads) else len(lines)
         # stop the body at the next top-level `## ` section too
-        for j in range(line_no + 1, end):
-            if lines[j].startswith("## ") and not lines[j].startswith("### "):
-                end = j
+        for body_line_index in range(line_no + 1, end):
+            if lines[body_line_index].startswith("## ") and not lines[body_line_index].startswith("### "):
+                end = body_line_index
                 break
         body = "\n".join(lines[line_no:end])
-        yield {"n": n, "title": title, "date": date, "body": body, "line": line_no + 1}
+        yield {"n": row_number, "title": title, "date": date, "body": body, "line": line_no + 1}
 
 
 def lint(text: str) -> dict:
@@ -68,43 +68,43 @@ def lint(text: str) -> dict:
     hard, review = [], []
 
     # 1. dates
-    for r in rows:
-        if r["date"] is None:
-            hard.append({"check": "DATE", "row": r["n"], "line": r["line"],
+    for row in rows:
+        if row["date"] is None:
+            hard.append({"check": "DATE", "row": row["n"], "line": row["line"],
                          "detail": "row header has no trailing (date)"})
-        elif ISO_DATE_RE.search(r["date"]) or not MONTH_DATE_RE.match(r["date"]):
-            hard.append({"check": "DATE", "row": r["n"], "line": r["line"],
-                         "detail": f"date {r['date']!r} is not month-granularity 'Month YYYY'"})
+        elif ISO_DATE_RE.search(row["date"]) or not MONTH_DATE_RE.match(row["date"]):
+            hard.append({"check": "DATE", "row": row["n"], "line": row["line"],
+                         "detail": f"date {row['date']!r} is not month-granularity 'Month YYYY'"})
 
     # 2. numbering
-    nums = [r["n"] for r in rows]
+    nums = [row["n"] for row in rows]
     seen = set()
-    for n in nums:
-        if n in seen:
-            hard.append({"check": "NUMBER", "row": n, "detail": f"duplicate row #{n}"})
-        seen.add(n)
+    for row_number in nums:
+        if row_number in seen:
+            hard.append({"check": "NUMBER", "row": row_number, "detail": f"duplicate row #{row_number}"})
+        seen.add(row_number)
     if nums:
         lo, hi = min(nums), max(nums)
         missing = sorted(set(range(lo, hi + 1)) - set(nums))
         if missing:
             hard.append({"check": "NUMBER", "detail": f"gaps in #{lo}–#{hi}: "
-                         + ", ".join(f"#{x}" for x in missing)})
+                         + ", ".join(f"#{missing_number}" for missing_number in missing)})
 
     # 3. schema
-    for r in rows:
-        missing = [s for s in REQUIRED_SECTIONS if f"{s}:" not in r["body"]]
+    for row in rows:
+        missing = [section for section in REQUIRED_SECTIONS if f"{section}:" not in row["body"]]
         if missing:
-            hard.append({"check": "SCHEMA", "row": r["n"], "line": r["line"],
+            hard.append({"check": "SCHEMA", "row": row["n"], "line": row["line"],
                          "detail": "missing section(s): " + ", ".join(missing)})
 
     # 4. caveats (review only)
-    for r in rows:
-        low = r["body"].lower()
-        if CLOSED_RE.search(r["body"]):
+    for row in rows:
+        low = row["body"].lower()
+        if CLOSED_RE.search(row["body"]):
             continue
-        hits = sorted({p for p in CAVEAT_PHRASES if p in low})
+        hits = sorted({phrase for phrase in CAVEAT_PHRASES if phrase in low})
         if hits:
-            review.append({"check": "CAVEAT", "row": r["n"], "line": r["line"],
+            review.append({"check": "CAVEAT", "row": row["n"], "line": row["line"],
                            "detail": "unreconciled caveat phrase(s): " + ", ".join(hits)
                            + " — classify per LEDGER_STANDARDS §3 (Closed by #N / rephrase / confirm open)"})
 
@@ -112,7 +112,7 @@ def lint(text: str) -> dict:
 
 
 def main(argv) -> int:
-    args = [a for a in argv if not a.startswith("--")]
+    args = [argument for argument in argv if not argument.startswith("--")]
     strict = "--strict" in argv
     as_json = "--json" in argv
     path = Path(args[0]) if args else Path(DEFAULT_LEDGER)
@@ -123,11 +123,11 @@ def main(argv) -> int:
     else:
         print(f"ledger_lint: {path} — {report['rows']} prose rows; "
               f"{len(report['hard'])} hard, {len(report['review'])} review")
-        for f in report["hard"]:
-            r = f.get("row")
-            print(f"  HARD  {f['check']:<6} {('#'+str(r)) if r else '':<5} {f['detail']}")
-        for f in report["review"]:
-            print(f"  REVIEW {f['check']:<5} #{f['row']:<4} {f['detail']}")
+        for finding in report["hard"]:
+            row_number = finding.get("row")
+            print(f"  HARD  {finding['check']:<6} {('#'+str(row_number)) if row_number else '':<5} {finding['detail']}")
+        for finding in report["review"]:
+            print(f"  REVIEW {finding['check']:<5} #{finding['row']:<4} {finding['detail']}")
         if not report["hard"] and not report["review"]:
             print("  clean.")
 

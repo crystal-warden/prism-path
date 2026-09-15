@@ -3,15 +3,13 @@
 """bench/bandwidth.py — fixture-mode mechanics (the bench itself stays out of pytest;
 this drives main() on the synthetic fixture and checks the accounting identities)."""
 import json
-import sys
 from pathlib import Path
 
 import pytest
 
-ADAPTER = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(ADAPTER / "bench"))
+from adapters.fusion.bench import bandwidth as bw
 
-import bandwidth as bw  # noqa: E402
+ADAPTER = Path(__file__).resolve().parent.parent
 
 FIXTURE = ADAPTER / "fixtures" / "alerts_synth.ndjson"
 

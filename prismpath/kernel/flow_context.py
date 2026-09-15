@@ -47,7 +47,7 @@ def _fields_in(cond: str) -> set:
     tree = _parse(cond)
     if tree is None:
         return set()
-    return {n.id for n in ast.walk(tree) if isinstance(n, ast.Name)}
+    return {node.id for node in ast.walk(tree) if isinstance(node, ast.Name)}
 
 
 def flow_context(graph) -> dict:
@@ -66,83 +66,84 @@ def flow_context(graph) -> dict:
     """
     nodes = []
     fields: set = set()
-    for name, node in graph.nodes.items():          # authored order (dict preserves insertion)
+    for name, flow_node in graph.nodes.items():     # authored order (dict preserves insertion)
         edges = []
-        for t, c in node.edges:
-            edges.append({"target": t, "condition": c, "via": _via(c)})
-            fields |= _fields_in(c)
+        for edge_target, edge_condition in flow_node.edges:
+            edges.append({"target": edge_target, "condition": edge_condition, "via": _via(edge_condition)})
+            fields |= _fields_in(edge_condition)
         nodes.append({
             "name": name,
-            "terminal": node.terminal,
-            "annotations": sorted(node.annotations.keys()),
+            "terminal": flow_node.terminal,
+            "annotations": sorted(flow_node.annotations.keys()),
             "edges": edges,
         })
 
     reach = check_reach(graph, sorted(graph.nodes))
-    reachability = {n: {"reachable": r.reachable, "proven": r.proven, "depth": r.depth}
-                    for n, r in reach.items()}
+    reachability = {node: {"reachable": reach_result.reachable, "proven": reach_result.proven, "depth": reach_result.depth}
+                    for node, reach_result in reach.items()}
     lm_ok, lm_bad = flow_level_m(graph)
 
     return {
         "name": graph.name,
         "start": graph.start,
         "n_nodes": len(graph.nodes),
-        "n_edges": sum(len(n.edges) for n in graph.nodes.values()),
+        "n_edges": sum(len(node.edges) for node in graph.nodes.values()),
         "nodes": nodes,
         "fields": sorted(fields),
-        "terminal_nodes": sorted(n for n, nd in graph.nodes.items() if nd.terminal),
+        "terminal_nodes": sorted(node for node, nd in graph.nodes.items() if nd.terminal),
         "reachability": reachability,
-        "unreachable_nodes": sorted(n for n, r in reachability.items()
-                                    if r["reachable"] == "no"),
+        "unreachable_nodes": sorted(node for node, reach_result in reachability.items()
+                                    if reach_result["reachable"] == "no"),
         "level_m": {"flow": lm_ok, "non_member_edges": lm_bad},
         "capability": capability_report(graph),
-        "findings": [f.as_dict() for f in analyze(graph)],
+        "findings": [finding.as_dict() for finding in analyze(graph)],
     }
 
 
 def render_context(facts: dict) -> str:
     """LLM-facing rendering of `flow_context`: a compact, prose block of PROVEN facts an agent must
     not contradict. Every line here is machine-checked, not asserted by the model."""
-    L: List[str] = []
-    L.append(f"# Verified facts about flow '{facts['name']}' "
+    lines: List[str] = []
+    lines.append(f"# Verified facts about flow '{facts['name']}' "
              f"(proven by PrismPath — ground truth, do not contradict)")
-    L.append(f"Start node: {facts['start']}")
-    L.append(f"Nodes ({facts['n_nodes']}): " + ", ".join(n["name"] for n in facts["nodes"]))
+    lines.append(f"Start node: {facts['start']}")
+    lines.append(f"Nodes ({facts['n_nodes']}): " + ", ".join(node["name"] for node in facts["nodes"]))
     if facts["terminal_nodes"]:
-        L.append("Terminal nodes (no outgoing edges): " + ", ".join(facts["terminal_nodes"]))
-    L.append(f"Declared fields (read by deterministic edges): "
+        lines.append("Terminal nodes (no outgoing edges): " + ", ".join(facts["terminal_nodes"]))
+    lines.append(f"Declared fields (read by deterministic edges): "
              + (", ".join(facts["fields"]) if facts["fields"] else "(none)"))
-    L.append("")
-    L.append("Edges (source -> target [tier]  condition):")
-    for n in facts["nodes"]:
-        for e in n["edges"]:
-            L.append(f"  {n['name']} -> {e['target']}  [{e['via']}]  {e['condition']!r}")
-    L.append("")
-    L.append("Reachability (adversarial-worker analysis, proven):")
+    lines.append("")
+    lines.append("Edges (source -> target [tier]  condition):")
+    for node in facts["nodes"]:
+        for edge in node["edges"]:
+            lines.append(f"  {node['name']} -> {edge['target']}  [{edge['via']}]  {edge['condition']!r}")
+    lines.append("")
+    lines.append("Reachability (adversarial-worker analysis, proven):")
     mark = {"yes": "reachable", "may": "may be reachable", "no": "UNREACHABLE"}
-    for node, r in facts["reachability"].items():
-        proof = " (proven for all bounds)" if r["reachable"] == "no" and r["proven"] else ""
-        L.append(f"  {node}: {mark[r['reachable']]}{proof}")
+    for flow_node, record in facts["reachability"].items():
+        proof = " (proven for all bounds)" if record["reachable"] == "no" and record["proven"] else ""
+        lines.append(f"  {flow_node}: {mark[record['reachable']]}{proof}")
     if facts["unreachable_nodes"]:
-        L.append("  -> unreachable nodes: " + ", ".join(facts["unreachable_nodes"]))
-    L.append("")
+        lines.append("  -> unreachable nodes: " + ", ".join(facts["unreachable_nodes"]))
+    lines.append("")
     lm = facts["level_m"]
     if lm["flow"]:
-        L.append("Level M: YES — every deterministic edge is in the hardware match-action fragment.")
+        lines.append("Level M: YES — every deterministic edge is in the hardware match-action fragment.")
     else:
-        L.append(f"Level M: NO — {len(lm['non_member_edges'])} deterministic edge(s) outside the fragment:")
-        for r in lm["non_member_edges"]:
-            L.append(f"  [{r['node']}] -> {r['target']}  {r['condition']!r}  ({r['reason']})")
+        lines.append(f"Level M: NO — {len(lm['non_member_edges'])} deterministic edge(s) outside the fragment:")
+        for record in lm["non_member_edges"]:
+            lines.append(f"  [{record['node']}] -> {record['target']}  {record['condition']!r}  ({record['reason']})")
     cap = facts["capability"]
-    L.append(f"Compiles to: tier {cap['tier']} — "
-             + ", ".join(f"{k}={v['status']}" for k, v in cap["targets"].items()))
+    lines.append(f"Compiles to: tier {cap['tier']} — "
+                 + ", ".join(f"{target_name}={target_status['status']}"
+                             for target_name, target_status in cap["targets"].items()))
     if facts["findings"]:
-        L.append("")
-        L.append("Static findings:")
-        for f in facts["findings"]:
-            where = f"[{f['node']}] " if f["node"] else ""
-            L.append(f"  {f['severity']}: {where}{f['message']} ({f['code']})")
-    return "\n".join(L)
+        lines.append("")
+        lines.append("Static findings:")
+        for finding in facts["findings"]:
+            where = f"[{finding['node']}] " if finding["node"] else ""
+            lines.append(f"  {finding['severity']}: {where}{finding['message']} ({finding['code']})")
+    return "\n".join(lines)
 
 
 def context_cmd(args) -> int:

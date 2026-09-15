@@ -15,18 +15,18 @@ pub const GOLDEN_ANGLE_DEG: f64 = 180.0 * (3.0 - 2.23606797749979);
 const ALWAYS: &[&str] = &["always", "true", "else", "otherwise", "default", "_"];
 const NEVER: &[&str] = &["false", "never"];
 
-pub fn theta_u32(n: u32) -> u32 {
-    n.wrapping_mul(GOLDEN_ANGLE_U32)
+pub fn theta_u32(spiral_index: u32) -> u32 {
+    spiral_index.wrapping_mul(GOLDEN_ANGLE_U32)
 }
 
-pub fn radius2(n: u32) -> u32 {
-    n
+pub fn radius2(spiral_index: u32) -> u32 {
+    spiral_index
 }
 
-pub fn spiral_xy(n: usize, c: f64) -> (f64, f64) {
-    let r = c * (n as f64).sqrt();
-    let theta = (n as f64 * GOLDEN_ANGLE_DEG).to_radians();
-    (r * theta.cos(), r * theta.sin())
+pub fn spiral_xy(spiral_index: usize, scale: f64) -> (f64, f64) {
+    let radius = scale * (spiral_index as f64).sqrt();
+    let theta = (spiral_index as f64 * GOLDEN_ANGLE_DEG).to_radians();
+    (radius * theta.cos(), radius * theta.sin())
 }
 
 pub fn mixed_radix_gray(radices: &[usize]) -> Vec<Vec<usize>> {
@@ -37,42 +37,48 @@ pub fn mixed_radix_gray(radices: &[usize]) -> Vec<Vec<usize>> {
     let mut digits = vec![0isize; n_fields];
     let mut directions = vec![1isize; n_fields];
     let mut total = 1;
-    for &r in radices {
-        total *= r;
+    for &radix in radices {
+        total *= radix;
     }
     let mut out = Vec::with_capacity(total);
-    out.push(digits.iter().map(|&d| d as usize).collect());
+    out.push(digits.iter().map(|&digit| digit as usize).collect());
 
     for _ in 1..total {
-        let mut i = (n_fields - 1) as isize;
-        while i >= 0 {
-            let idx = i as usize;
-            let nd = digits[idx] + directions[idx];
-            if nd >= 0 && (nd as usize) < radices[idx] {
-                digits[idx] = nd;
+        let mut position = (n_fields - 1) as isize;
+        while position >= 0 {
+            let idx = position as usize;
+            let next_digit = digits[idx] + directions[idx];
+            if next_digit >= 0 && (next_digit as usize) < radices[idx] {
+                digits[idx] = next_digit;
                 break;
             }
             directions[idx] = -directions[idx];
-            i -= 1;
+            position -= 1;
         }
-        out.push(digits.iter().map(|&d| d as usize).collect());
+        out.push(digits.iter().map(|&digit| digit as usize).collect());
     }
     out
 }
 
+/// The expression under a condition, trimmed the way the kernel trims.
+///
+/// Rust's `str::trim` strips Unicode White_Space, which is neither the kernel's set nor Python's:
+/// it keeps U+001C to U+001F and strips U+FEFF. A condition padded with one of those classifies as
+/// a `when` predicate in `is_deterministic` (which trims with py_trim) and would fall through to
+/// the raw-expression branch here, so the spiral layout would drop fields the kernel routes on.
 fn expr_of(cond: &str) -> String {
-    let c = cond.trim();
-    if c.to_lowercase().starts_with("when ") {
-        c[5..].trim().to_string()
+    let text = prismpath_rs::py_trim(cond);
+    if text.to_lowercase().starts_with("when ") {
+        prismpath_rs::py_trim(&text[5..]).to_string()
     } else {
-        c.to_string()
+        text.to_string()
     }
 }
 
 fn node_fields(graph: &Graph, node: &str, parts: &HashMap<String, FieldPartition>) -> Vec<String> {
     let mut seen = Vec::new();
-    if let Some(n) = graph.nodes.get(node) {
-        for (_target, cond) in &n.edges {
+    if let Some(flow_node) = graph.nodes.get(node) {
+        for (_target, cond) in &flow_node.edges {
             if !prismpath_rs::is_deterministic(cond) || prismpath_rs::is_semantic(cond) {
                 continue;
             }
@@ -118,7 +124,7 @@ impl SpiralLayout {
                 node
             ));
         }
-        let radices: Vec<usize> = fields.iter().map(|f| parts[f].n).collect();
+        let radices: Vec<usize> = fields.iter().map(|field| parts[field].n).collect();
 
         let route_order = route_order_map(graph, node);
 
@@ -126,19 +132,19 @@ impl SpiralLayout {
         let mut bucket_order: Vec<Option<String>> = Vec::new();
 
         for cell in mixed_radix_gray(&radices) {
-            let r = route_of_cell(graph, node, &parts, &fields, &cell);
-            if !bucket_order.contains(&r) {
-                bucket_order.push(r.clone());
+            let route = route_of_cell(graph, node, &parts, &fields, &cell);
+            if !bucket_order.contains(&route) {
+                bucket_order.push(route.clone());
             }
-            buckets.entry(r).or_default().push(cell);
+            buckets.entry(route).or_default().push(cell);
         }
 
         let mut routes = bucket_order;
-        routes.sort_by_key(|r| route_order.get(r).copied().unwrap_or(route_order.len()));
+        routes.sort_by_key(|route| route_order.get(route).copied().unwrap_or(route_order.len()));
 
         let mut band_index = HashMap::new();
-        for (i, r) in routes.iter().enumerate() {
-            band_index.insert(r.clone(), i);
+        for (band, route) in routes.iter().enumerate() {
+            band_index.insert(route.clone(), band);
         }
 
         let mut band_base = Vec::new();
@@ -147,8 +153,8 @@ impl SpiralLayout {
         let mut n_of = HashMap::new();
         let mut base = 0;
 
-        for r in &routes {
-            let cells = &buckets[r];
+        for route in &routes {
+            let cells = &buckets[route];
             band_base.push(base);
             band_width.push(cells.len());
             for cell in cells {
@@ -187,11 +193,11 @@ impl SpiralLayout {
     pub fn try_cell(&self, reading: &HashMap<String, V>) -> Result<Vec<usize>, String> {
         self.fields
             .iter()
-            .map(|f| {
-                let v = reading
-                    .get(f)
-                    .ok_or_else(|| format!("reading missing spiral field {f:?}"))?;
-                self.parts[f].symbol(v)
+            .map(|field| {
+                let value = reading
+                    .get(field)
+                    .ok_or_else(|| format!("reading missing spiral field {field:?}"))?;
+                self.parts[field].symbol(value)
             })
             .collect()
     }
@@ -224,27 +230,27 @@ impl SpiralLayout {
     }
 
     /// Panicking variant; see [`Self::try_route_of`].
-    pub fn route_of(&self, n: usize) -> Option<String> {
-        self.try_route_of(n).unwrap_or_else(|e| panic!("{}", e))
+    pub fn route_of(&self, spiral_index: usize) -> Option<String> {
+        self.try_route_of(spiral_index).unwrap_or_else(|error| panic!("{}", error))
     }
 
     /// Fallible twin of [`Self::route_of`]: an index outside the spiral is an `Err`.
-    pub fn try_route_of(&self, n: usize) -> Result<Option<String>, String> {
-        for b in 0..self.routes.len() {
-            if n < self.band_base[b] + self.band_width[b] {
-                return Ok(self.routes[b].clone());
+    pub fn try_route_of(&self, spiral_index: usize) -> Result<Option<String>, String> {
+        for band in 0..self.routes.len() {
+            if spiral_index < self.band_base[band] + self.band_width[band] {
+                return Ok(self.routes[band].clone());
             }
         }
-        Err(format!("index {} outside the spiral ({} cells)", n, self.size))
+        Err(format!("index {} outside the spiral ({} cells)", spiral_index, self.size))
     }
 
     pub fn band_bounds(&self) -> Vec<(usize, usize, Option<String>)> {
         (0..self.routes.len())
-            .map(|b| {
+            .map(|band| {
                 (
-                    self.band_base[b],
-                    self.band_base[b] + self.band_width[b],
-                    self.routes[b].clone(),
+                    self.band_base[band],
+                    self.band_base[band] + self.band_width[band],
+                    self.routes[band].clone(),
                 )
             })
             .collect()
@@ -253,7 +259,7 @@ impl SpiralLayout {
     /// Panicking variant; see [`Self::try_reconstruct_band`].
     pub fn reconstruct_band(&self, band_id: usize) -> HashMap<String, V> {
         self.try_reconstruct_band(band_id)
-            .unwrap_or_else(|e| panic!("{}", e))
+            .unwrap_or_else(|error| panic!("{}", error))
     }
 
     pub fn try_reconstruct_band(&self, band_id: usize) -> Result<HashMap<String, V>, String> {
@@ -265,15 +271,15 @@ impl SpiralLayout {
     }
 
     /// Panicking variant; see [`Self::try_reconstruct`].
-    pub fn reconstruct(&self, n: usize) -> HashMap<String, V> {
-        self.try_reconstruct(n).unwrap_or_else(|e| panic!("{}", e))
+    pub fn reconstruct(&self, spiral_index: usize) -> HashMap<String, V> {
+        self.try_reconstruct(spiral_index).unwrap_or_else(|error| panic!("{}", error))
     }
 
-    pub fn try_reconstruct(&self, n: usize) -> Result<HashMap<String, V>, String> {
+    pub fn try_reconstruct(&self, spiral_index: usize) -> Result<HashMap<String, V>, String> {
         let cell = self
             .cell_of
-            .get(n)
-            .ok_or_else(|| format!("index {} outside the spiral ({} cells)", n, self.size))?;
+            .get(spiral_index)
+            .ok_or_else(|| format!("index {} outside the spiral ({} cells)", spiral_index, self.size))?;
         Ok(cell_reading(&self.parts, &self.fields, cell))
     }
 
@@ -291,13 +297,13 @@ impl SpiralLayout {
     pub fn decode_decision(&self, bits: &str) -> Result<Option<String>, String> {
         // `bits` is untrusted wire data: a crafted code can decode to any index. checked_sub guards
         // the 1-based underflow and `.get` guards the out-of-range read — neither may panic here.
-        let b = zeckendorf::decode(bits)?
+        let band = zeckendorf::decode(bits)?
             .checked_sub(1)
             .ok_or_else(|| "decoded band index 0 is invalid (codes are 1-based)".to_string())?;
         self.routes
-            .get(b)
+            .get(band)
             .cloned()
-            .ok_or_else(|| format!("decoded band index {b} is outside the layout ({} bands)", self.routes.len()))
+            .ok_or_else(|| format!("decoded band index {band} is outside the layout ({} bands)", self.routes.len()))
     }
 
     /// Panicking variant; see [`Self::try_encode_progressive`].
@@ -307,15 +313,15 @@ impl SpiralLayout {
     }
 
     pub fn try_encode_progressive(&self, reading: &HashMap<String, V>) -> Result<(String, String), String> {
-        let n = self.try_index(reading)?;
-        let route = self.try_route_of(n)?;
-        let b = *self
+        let spiral_index = self.try_index(reading)?;
+        let route = self.try_route_of(spiral_index)?;
+        let band = *self
             .band_index
             .get(&route)
             .ok_or_else(|| format!("route {route:?} is not in the band layout"))?;
-        let local = n - self.band_base[b];
-        // b + 1 and local + 1 are both >= 1; encode only errs for inputs < 1.
-        Ok((zeckendorf::encode(b + 1)?, zeckendorf::encode(local + 1)?))
+        let local = spiral_index - self.band_base[band];
+        // band + 1 and local + 1 are both >= 1; encode only errs for inputs < 1.
+        Ok((zeckendorf::encode(band + 1)?, zeckendorf::encode(local + 1)?))
     }
 
     pub fn decode_progressive(
@@ -323,9 +329,9 @@ impl SpiralLayout {
         decision_bits: &str,
         refine_bits: &str,
     ) -> Result<HashMap<String, V>, String> {
-        let b = zeckendorf::decode(decision_bits)? - 1;
+        let band = zeckendorf::decode(decision_bits)? - 1;
         let local = zeckendorf::decode(refine_bits)? - 1;
-        Ok(self.reconstruct(self.band_base[b] + local))
+        Ok(self.reconstruct(self.band_base[band] + local))
     }
 
     pub fn tessellation(&self) -> serde_json::Value {
@@ -333,14 +339,14 @@ impl SpiralLayout {
             .cell_of
             .iter()
             .enumerate()
-            .map(|(n, cell)| {
-                let (x, y) = spiral_xy(n, 1.0);
+            .map(|(spiral_index, cell)| {
+                let (x_coordinate, y_coordinate) = spiral_xy(spiral_index, 1.0);
                 json!({
                     "cell": cell,
-                    "n": n,
-                    "band": self.band_index[&self.route_of(n)],
-                    "route": self.route_of(n),
-                    "xy": [(x * 1e6).round() / 1e6, (y * 1e6).round() / 1e6]
+                    "n": spiral_index,
+                    "band": self.band_index[&self.route_of(spiral_index)],
+                    "route": self.route_of(spiral_index),
+                    "xy": [(x_coordinate * 1e6).round() / 1e6, (y_coordinate * 1e6).round() / 1e6]
                 })
             })
             .collect();
@@ -349,11 +355,11 @@ impl SpiralLayout {
             .routes
             .iter()
             .enumerate()
-            .map(|(i, r)| {
+            .map(|(band, route)| {
                 json!({
-                    "route": r,
-                    "base": self.band_base[i],
-                    "width": self.band_width[i]
+                    "route": route,
+                    "base": self.band_base[band],
+                    "width": self.band_width[band]
                 })
             })
             .collect();
@@ -371,8 +377,8 @@ impl SpiralLayout {
 
 fn route_order_map(graph: &Graph, node: &str) -> HashMap<Option<String>, usize> {
     let mut appear: Vec<Option<String>> = Vec::new();
-    if let Some(n) = graph.nodes.get(node) {
-        for (target, cond) in &n.edges {
+    if let Some(flow_node) = graph.nodes.get(node) {
+        for (target, cond) in &flow_node.edges {
             if prismpath_rs::is_deterministic(cond) {
                 let t_opt = Some(target.clone());
                 if !appear.contains(&t_opt) {
@@ -383,8 +389,8 @@ fn route_order_map(graph: &Graph, node: &str) -> HashMap<Option<String>, usize> 
     }
     appear.reverse();
     let mut map = HashMap::new();
-    for (i, t) in appear.into_iter().enumerate() {
-        map.insert(t, i);
+    for (order, target) in appear.into_iter().enumerate() {
+        map.insert(target, order);
     }
     map
 }
@@ -397,7 +403,7 @@ fn cell_reading(
     fields
         .iter()
         .zip(cell.iter())
-        .map(|(f, &s)| (f.clone(), parts[f].representative(s)))
+        .map(|(field, &symbol)| (field.clone(), parts[field].representative(symbol)))
         .collect()
 }
 
@@ -410,4 +416,20 @@ fn route_of_cell(
 ) -> Option<String> {
     let reading = cell_reading(parts, fields, cell);
     wire::route_node(graph, node, &reading)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::expr_of;
+
+    #[test]
+    fn expr_of_trims_the_whitespace_the_kernel_trims() {
+        // U+001C is Python whitespace and so is stripped by is_deterministic's py_trim, but it is
+        // not Unicode White_Space, so str::trim used to leave it and hide the predicate.
+        let cond = "\u{1c}when temp > 50";
+        assert!(prismpath_rs::is_deterministic(cond));
+        assert_eq!(expr_of(cond), "temp > 50");
+        assert_eq!(expr_of("  when temp > 50  "), "temp > 50");
+        assert_eq!(expr_of("looks like a refund"), "looks like a refund");
+    }
 }

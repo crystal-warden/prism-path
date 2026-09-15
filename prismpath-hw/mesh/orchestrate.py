@@ -12,60 +12,60 @@ import sys, time, select, re
 import serial
 
 PORTS = sys.argv[1:] or ["/dev/ttyUSB0", "/dev/ttyUSB2", "/dev/ttyUSB3"]
-LABELS = {p: chr(ord('A') + i) for i, p in enumerate(PORTS)}
+LABELS = {port: chr(ord('A') + index) for index, port in enumerate(PORTS)}
 
 
-def reset_into_app(s):
-    s.dtr = False; s.rts = True; time.sleep(0.1); s.rts = False
+def reset_into_app(serial_port):
+    serial_port.dtr = False; serial_port.rts = True; time.sleep(0.1); serial_port.rts = False
 
 
 def main():
     sers = {}
-    for p in PORTS:
-        s = serial.Serial(p, 115200, timeout=0)
-        reset_into_app(s)
-        sers[p] = s
-    print(f"opened {', '.join(f'{LABELS[p]}={p}' for p in PORTS)} — booting ESP-NOW...")
+    for port in PORTS:
+        serial_port = serial.Serial(port, 115200, timeout=0)
+        reset_into_app(serial_port)
+        sers[port] = serial_port
+    print(f"opened {', '.join(f'{LABELS[port]}={port}' for port in PORTS)} — booting ESP-NOW...")
     time.sleep(2.0)                                # let all 3 reboot, bring up Wi-Fi + ESP-NOW
-    for s in sers.values():                        # drop ROM boot log + any pre-run backlog
-        s.reset_input_buffer()
-    t0 = time.time()
-    bufs = {p: b"" for p in PORTS}
+    for serial_port in sers.values():              # drop ROM boot log + any pre-run backlog
+        serial_port.reset_input_buffer()
+    start_time = time.time()
+    bufs = {port: b"" for port in PORTS}
     flips = {}          # label -> (host_t, epoch)
 
     def pump(deadline):
         while time.time() < deadline:
-            r, _, _ = select.select([sers[p] for p in PORTS], [], [], 0.1)
-            for s in r:
-                p = next(pp for pp in PORTS if sers[pp] is s)
-                bufs[p] += s.read(4096)
-                while b"\n" in bufs[p]:
-                    line, bufs[p] = bufs[p].split(b"\n", 1)
+            readable, _, _ = select.select([sers[port] for port in PORTS], [], [], 0.1)
+            for serial_port in readable:
+                port = next(candidate for candidate in PORTS if sers[candidate] is serial_port)
+                bufs[port] += serial_port.read(4096)
+                while b"\n" in bufs[port]:
+                    line, bufs[port] = bufs[port].split(b"\n", 1)
                     txt = line.decode(errors="replace").strip()
                     if not txt:
                         continue
-                    ht = time.time() - t0
-                    print(f"  [{ht:6.2f}s] {LABELS[p]}| {txt}")
-                    m = re.search(r'FLIP node=\w+ -> policy (\w+) verdict=(\w+) epoch=(\d+)', txt)
-                    if m:
-                        flips[LABELS[p]] = (ht, m.group(1), m.group(2), int(m.group(3)))
+                    elapsed = time.time() - start_time
+                    print(f"  [{elapsed:6.2f}s] {LABELS[port]}| {txt}")
+                    match = re.search(r'FLIP node=\w+ -> policy (\w+) verdict=(\w+) epoch=(\d+)', txt)
+                    if match:
+                        flips[LABELS[port]] = (elapsed, match.group(1), match.group(2), int(match.group(3)))
 
-    pump(t0 + 2.5)                                 # clean baseline: all on policy A / ALLOW
+    pump(start_time + 2.5)                                 # clean baseline: all on policy A / ALLOW
     print(f"\n>>> poking node {LABELS[PORTS[0]]} with 'R' (become coordinator, roll the fleet) <<<\n")
     sers[PORTS[0]].write(b"R")
-    pump(t0 + 8)                                    # capture PREPARE/ACK/COMMIT, the flip, settled DENY
+    pump(start_time + 8)                                    # capture PREPARE/ACK/COMMIT, the flip, settled DENY
 
     print("\n=== coordinated flip summary ===")
     if flips:
-        t_min = min(v[0] for v in flips.values()); t_max = max(v[0] for v in flips.values())
+        t_min = min(flip[0] for flip in flips.values()); t_max = max(flip[0] for flip in flips.values())
         for lbl in sorted(flips):
-            ht, pol, verd, ep = flips[lbl]
-            print(f"  node {lbl}: -> policy {pol} verdict {verd} epoch {ep}  @ {ht:.3f}s")
+            elapsed, pol, verd, ep = flips[lbl]
+            print(f"  node {lbl}: -> policy {pol} verdict {verd} epoch {ep}  @ {elapsed:.3f}s")
         print(f"  spread across nodes: {(t_max - t_min) * 1000:.1f} ms  ({len(flips)}/{len(PORTS)} flipped)")
     else:
         print("  no FLIP observed — check that all 3 nodes are up and on the same channel")
-    for s in sers.values():
-        s.close()
+    for serial_port in sers.values():
+        serial_port.close()
 
 
 if __name__ == "__main__":

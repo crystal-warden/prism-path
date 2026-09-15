@@ -1,22 +1,32 @@
-# build_overlay_datapath.tcl — Stage-2 "decision datapath" overlay for the live fabric demo.
-# Board: Digilent Arty Z7-20 (xc7z020clg400-1) running the PYNQ image.
-#   vivado -mode batch -source build_overlay_datapath.tcl
-# Produces build_overlay_datapath/ppt_datapath.bit + .hwh — the pair PYNQ's Overlay() loads.
+# build_overlay_zeck_demo.tcl: the Stage 2 "decision datapath" overlay whose field arrives as a
+# Facet frame the fabric decodes itself. Board: Digilent Arty Z7-20 (xc7z020clg400-1) running the
+# PYNQ image.
+#   vivado -mode batch -source build_overlay_zeck_demo.tcl
+# Produces build_overlay_zeck_demo/ppt_datapath_zeck.bit + .hwh, the pair PYNQ's Overlay() loads.
 #
-# Difference from build_overlay_pathb.tcl: the interpreter cell is ppt_datapath_top (ppt_axi + the
-# untouched ppt_interp + the fabric FSM). In auto_mode the PL closes the whole loop with the PS out
-# of the hot path:
-#   - XADC reads Vaux1 (pot) over its DRP port -> the datapath FSM (NOT AXI anymore; PS reads POT_NOW)
-#   - the FSM writes the pot field, pulses evaluate, drives the RGB LEDs from the SIGNED per-node color
-#   - auto_mode=0 (reset default) is byte-identical to the pathb (PS-driven) overlay
-# gpio_out still exists (PS-mode LED source -> ps_led); the datapath's led_o drives the RGB pins.
-# Pins: datapath.xdc (= pathb.xdc with the RGB port renamed rgb_tri_o -> led).
+# The interpreter cell is ppt_datapath_zeck_top, the plain Verilog shim over ppt_datapath_zeck
+# (ppt_axi + the untouched ppt_interp + the fabric FSM + uart_rx + zeck_dec + zeck_frame_rx); a
+# block design module reference refuses a SystemVerilog top, which is why the shim exists. In
+# auto_mode the PL closes the whole loop with the PS out of the hot path:
+#   - uart_rx recovers the ESP-NOW bridge's bytes on a Pmod pin and zeck_frame_rx decodes the
+#     walker's [class, tick, band] frame; a small LUT maps band to the checkpoint's field value.
+#     Until a frame lands the FSM falls back to XADC Vaux1 (the pot) read over DRP, so the knob
+#     alone still drives the demo
+#   - the FSM writes the field, pulses evaluate, drives the RGB LEDs from the SIGNED per-node color
+#   - auto_mode=0 (the reset default) leaves the PS driven path in charge, as on the plain overlay
+# gpio_out still exists (PS mode LED source into ps_led); the datapath's led_o drives the RGB pins.
+# Pins: uart.xdc, the same pin file build_overlay_uart.tcl adds.
+#
+# This script and build_overlay_uart.tcl differ only in the output stem, the project and cell names,
+# and the two extra sources above; build_overlay_finale.tcl is this design plus the fabric control
+# plane.
 
 set here [file dirname [file normalize [info script]]]
 set out $here/build_overlay_zeck_demo
 file mkdir $out
 
-create_project -force ppt_datapath_zeck $out/proj -part xc7z020clg400-1
+set part xc7z020clg400-1
+create_project -force ppt_datapath_zeck $out/proj -part $part
 add_files [list $here/../rtl/ppt_interp.sv $here/../rtl/ppt_axi.sv $here/../rtl/uart_rx.sv \
                 $here/../rtl/zeck_dec.sv $here/../rtl/zeck_frame_rx.sv \
                 $here/../rtl/ppt_datapath_zeck.sv $here/../rtl/ppt_datapath_zeck_top.v]
@@ -26,11 +36,20 @@ create_bd_design "ppt_bd"
 
 # --- Zynq PS (Feb-design preset) ---
 set ps7 [create_bd_cell -type ip -vlnv xilinx.com:ip:processing_system7:5.5 ps7]
+# The preset carries one board's DDR timing and MIO pinout, so applying it under another part
+# would build a bitstream that boots into garbage; ps7_preset.tcl declares the part it came from
+# and the mismatch stops the build here. Which source was used is carried to the DONE line below,
+# because after the fact a default-automation bitstream looks exactly like a preset one.
 if {[file exists $here/ps7_preset.tcl]} {
   source $here/ps7_preset.tcl
+  if {![info exists ps7_part] || $ps7_part ne $part} {
+    error "PS7 preset is for part [expr {[info exists ps7_part] ? $ps7_part : {unknown}}], this build is $part"
+  }
   set_property -dict $ps7_cfg $ps7
+  set ps7_source "Feb-design preset"
   puts "PS7: applied Feb-design preset"
 } else {
+  set ps7_source "default automation (no ps7_preset.tcl)"
   puts "PS7: WARNING — no ps7_preset.tcl; using default automation (PYNQ FSBL owns init)"
 }
 apply_bd_automation -rule xilinx.com:bd_rule:processing_system7 \
@@ -120,5 +139,10 @@ report_timing_summary -file $out/timing.rpt
 
 file copy -force [get_property DIRECTORY [get_runs impl_1]]/ppt_bd_wrapper.bit $out/ppt_datapath_zeck.bit
 set hwh [glob -nocomplain $out/proj/*.gen/sources_1/bd/ppt_bd/hw_handoff/ppt_bd.hwh]
-if {[llength $hwh] > 0} { file copy -force [lindex $hwh 0] $out/ppt_datapath_zeck.hwh }
-puts "ZECK DEMO OVERLAY BUILD DONE: $out/ppt_datapath_zeck.bit (+ .hwh)"
+# PYNQ's Overlay() loads the pair, so a bitstream without its .hwh fails on the board
+# rather than here; skipping the copy quietly moved that failure a day downstream.
+if {[llength $hwh] == 0} {
+  error "no ppt_bd.hwh under $out/proj: the block design handoff was not written"
+}
+file copy -force [lindex $hwh 0] $out/ppt_datapath_zeck.hwh
+puts "ZECK DEMO OVERLAY BUILD DONE: $out/ppt_datapath_zeck.bit (+ .hwh) | PS7: $ps7_source"

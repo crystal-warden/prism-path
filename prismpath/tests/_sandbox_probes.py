@@ -9,8 +9,8 @@ def ok(node, instruction, state):
 
 
 def hog_memory(node, instruction, state):
-    x = bytearray(900 * 1024 * 1024)   # 900 MB — exceeds a modest mem_mb envelope
-    return {"len": len(x)}
+    block = bytearray(900 * 1024 * 1024)   # 900 MB — exceeds a modest mem_mb envelope
+    return {"len": len(block)}
 
 
 def sleep_long(node, instruction, state):
@@ -21,16 +21,16 @@ def sleep_long(node, instruction, state):
 
 def open_socket(node, instruction, state):
     import socket
-    s = socket.socket()
-    s.settimeout(3)
-    s.connect(("1.1.1.1", 80))         # unreachable inside an unshared net namespace
-    s.close()
+    probe_socket = socket.socket()
+    probe_socket.settimeout(3)
+    probe_socket.connect(("1.1.1.1", 80))         # unreachable inside an unshared net namespace
+    probe_socket.close()
     return {"text": "connected"}
 
 
 def write_file(node, instruction, state):
     """Write `state['target']` — used to prove filesystem containment: blocked on the read-only root,
     ephemeral under /tmp's tmpfs, persistent only inside an explicit rw scratch bind."""
-    with open(state["target"], "w") as f:
-        f.write("sandbox-was-here")
+    with open(state["target"], "w") as target_file:
+        target_file.write("sandbox-was-here")
     return {"text": "wrote", "path": state["target"]}

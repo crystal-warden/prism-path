@@ -43,9 +43,9 @@ def test_corpus_size_pinned():
 def test_level_m_fragment_count_pinned():
     """If this changes, a corpus or classifier edit shifted the Level M fragment — deliberate or not.
     Update the pin AND reconcile the FPGA/eBPF declared-subset numbers (README, evidence #72/#77)."""
-    lm = [c for c in _cases() if mc.is_level_m(c["cond"])[0]]
+    lm = [case for case in _cases() if mc.is_level_m(case["cond"])[0]]
     assert len(lm) == 136, f"Level M case count drifted to {len(lm)} (was 136)"
-    assert len({c["cond"] for c in lm}) == 126
+    assert len({case["cond"] for case in lm}) == 126
 
 
 def test_classifier_compiler_gap_pinned():
@@ -61,11 +61,11 @@ def test_classifier_compiler_gap_pinned():
     _sys.path.insert(0, str(_hw))
     import ppt_compile as pc
 
-    classifier = {c["cond"] for c in _cases() if mc.is_level_m(c["cond"])[0]}
+    classifier = {case["cond"] for case in _cases() if mc.is_level_m(case["cond"])[0]}
     compiler = set()
-    for c in _cases():
+    for case in _cases():
         try:
-            pc.compile_predicate(c["cond"]); compiler.add(c["cond"])
+            pc.compile_predicate(case["cond"]); compiler.add(case["cond"])
         except Exception:
             pass
     assert compiler - classifier == set(), \

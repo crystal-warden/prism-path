@@ -78,10 +78,10 @@ def _punctuate(text: str) -> str:
 
 MECHANICAL_STRATA = {
     "case": _alternate_case,
-    "leetspeak": lambda t: t.translate(_LEET),
-    "homoglyph": lambda t: t.translate(_HOMOGLYPH),
-    "zero_width": lambda t: _interleave(t, _ZWSP),
-    "spacing": lambda t: _interleave(t, " "),
+    "leetspeak": lambda text: text.translate(_LEET),
+    "homoglyph": lambda text: text.translate(_HOMOGLYPH),
+    "zero_width": lambda text: _interleave(text, _ZWSP),
+    "spacing": lambda text: _interleave(text, " "),
     "diacritics": _add_diacritics,
     "punctuation": _punctuate,
 }

@@ -3,7 +3,7 @@
 """trail: the operator's read side of the receipts. Summarise an append only audit log (the JSONL
 `prismpath.audit_log` writes: decisions, swaps, attestations) over a window, in cause code terms, and
 say whether the log's Merkle root still verifies. What decisions have been shifting, and why, is the
-input to "should the policy change today"; the evaluator uses the same verb after the fact.
+input to "should the policy change today"; the assessor uses the same verb after the fact.
 
     prismpath trail run.audit.jsonl                 # everything, by action, outcome, and cause
     prismpath trail run.audit.jsonl --last 200      # the most recent 200 events
@@ -23,11 +23,11 @@ from prismpath.kernel import causes
 def _parse_since(text: Optional[str]) -> Optional[float]:
     if not text:
         return None
-    t = text.replace("Z", "+00:00")
-    d = _dt.datetime.fromisoformat(t)
-    if d.tzinfo is None:
-        d = d.replace(tzinfo=_dt.timezone.utc)
-    return d.timestamp()
+    normalized = text.replace("Z", "+00:00")
+    parsed_time = _dt.datetime.fromisoformat(normalized)
+    if parsed_time.tzinfo is None:
+        parsed_time = parsed_time.replace(tzinfo=_dt.timezone.utc)
+    return parsed_time.timestamp()
 
 
 def summarise(events: List[dict]) -> Dict[str, Any]:
@@ -48,18 +48,18 @@ def summarise(events: List[dict]) -> Dict[str, Any]:
     swaps = [ev for ev in events if ev.get("action") in ("swap", "swap_rejected", "rollback", "attestation")]
     swap_lines = []
     for ev in swaps:
-        d = ev.get("data") or {}
+        data = ev.get("data") or {}
         when = _dt.datetime.fromtimestamp(float(ev.get("ts", 0)), _dt.timezone.utc).isoformat(timespec="seconds")
         if ev["action"] == "swap":
-            swap_lines.append(f"{when} swap accepted -> version {d.get('version')} {str(d.get('to_hash'))[:12]}"
-                              + (f" overlay of {d['overlay_of']}" if d.get("overlay_of") else ""))
+            swap_lines.append(f"{when} swap accepted -> version {data.get('version')} {str(data.get('to_hash'))[:12]}"
+                              + (f" overlay of {data['overlay_of']}" if data.get("overlay_of") else ""))
         elif ev["action"] == "swap_rejected":
-            swap_lines.append(f"{when} swap refused: {','.join(d.get('reasons', []))}")
+            swap_lines.append(f"{when} swap refused: {','.join(data.get('reasons', []))}")
         elif ev["action"] == "rollback":
-            swap_lines.append(f"{when} rollback -> {str(d.get('to_hash'))[:12]}")
+            swap_lines.append(f"{when} rollback -> {str(data.get('to_hash'))[:12]}")
         else:
-            swap_lines.append(f"{when} attestation: version {d.get('version')}"
-                              + (f" overlay of {d['overlay_of']}" if d.get("overlay_of") else ""))
+            swap_lines.append(f"{when} attestation: version {data.get('version')}"
+                              + (f" overlay of {data['overlay_of']}" if data.get("overlay_of") else ""))
     first = min((float(ev.get("ts", 0)) for ev in events), default=None)
     last = max((float(ev.get("ts", 0)) for ev in events), default=None)
     return {"events": len(events), "decisions": len(decisions),
@@ -86,15 +86,24 @@ def render(rep: Dict[str, Any]) -> str:
     lines = [f"trail: {rep['log']['path']}  events {rep['events']} of {rep['log']['total_events']}  "
              f"root {rep['log']['merkle_root'][:16] or '(empty)'}  verifies {rep['log']['verifies']}"]
     if rep["window"]["first"] is not None:
-        f = _dt.datetime.fromtimestamp(rep["window"]["first"], _dt.timezone.utc).isoformat(timespec="seconds")
-        l = _dt.datetime.fromtimestamp(rep["window"]["last"], _dt.timezone.utc).isoformat(timespec="seconds")
-        lines.append(f"window: {f} to {l}")
-    lines.append("by action: " + ", ".join(f"{k} {v}" for k, v in sorted(rep["by_action"].items())))
+        first_iso = _dt.datetime.fromtimestamp(rep["window"]["first"],
+                                               _dt.timezone.utc).isoformat(timespec="seconds")
+        last_iso = _dt.datetime.fromtimestamp(rep["window"]["last"],
+                                              _dt.timezone.utc).isoformat(timespec="seconds")
+        lines.append(f"window: {first_iso} to {last_iso}")
+    lines.append("by action: " + ", ".join(f"{tally_name} {tally_count}"
+                                           for tally_name, tally_count in sorted(rep["by_action"].items())))
     if rep["decisions"]:
         lines.append(f"decisions {rep['decisions']}:")
-        lines.append("  outcomes: " + ", ".join(f"{k} {v}" for k, v in sorted(rep["outcomes"].items(), key=lambda kv: -kv[1])))
-        lines.append("  causes:   " + ", ".join(f"{k} x{v}" for k, v in sorted(rep["causes"].items(), key=lambda kv: -kv[1])))
-        lines.append("  rules:    " + ", ".join(f"{k} {v}" for k, v in sorted(rep["rules"].items(), key=lambda kv: -kv[1])))
+        lines.append("  outcomes: " + ", ".join(
+            f"{tally_name} {tally_count}"
+            for tally_name, tally_count in sorted(rep["outcomes"].items(), key=lambda kv: -kv[1])))
+        lines.append("  causes:   " + ", ".join(
+            f"{tally_name} x{tally_count}"
+            for tally_name, tally_count in sorted(rep["causes"].items(), key=lambda kv: -kv[1])))
+        lines.append("  rules:    " + ", ".join(
+            f"{tally_name} {tally_count}"
+            for tally_name, tally_count in sorted(rep["rules"].items(), key=lambda kv: -kv[1])))
     for sl in rep["swaps"]:
         lines.append("  " + sl)
     return "\n".join(lines)
@@ -107,10 +116,10 @@ def trail_cmd(args) -> int:
 
 
 def add_parser(subparsers) -> None:
-    p = subparsers.add_parser("trail", help="Summarise an audit log over a window: decisions by outcome, rule, and cause code, "
+    parser = subparsers.add_parser("trail", help="Summarise an audit log over a window: decisions by outcome, rule, and cause code, "
                                             "swaps and attestations, and whether the Merkle root verifies")
-    p.add_argument("audit_log", help="an append only JSONL written by prismpath.audit_log (decisions, swaps, attestations)")
-    p.add_argument("--since", default=None, help="ISO 8601 lower bound on event time (UTC if no zone)")
-    p.add_argument("--last", type=int, default=None, help="only the most recent N events")
-    p.add_argument("--json", action="store_true", help="machine readable output")
-    p.set_defaults(func=trail_cmd)
+    parser.add_argument("audit_log", help="an append only JSONL written by prismpath.audit_log (decisions, swaps, attestations)")
+    parser.add_argument("--since", default=None, help="ISO 8601 lower bound on event time (UTC if no zone)")
+    parser.add_argument("--last", type=int, default=None, help="only the most recent N events")
+    parser.add_argument("--json", action="store_true", help="machine readable output")
+    parser.set_defaults(func=trail_cmd)

@@ -116,7 +116,7 @@ def attest_verdicts(log: AuditLog, guard: Guard, label: str, *, gate_id: Optiona
     artifact in the system.
     """
     ingestion = [
-        e["id"] for e in log.events if e.get("action") == VERDICT_ACTION
+        event["id"] for event in log.events if event.get("action") == VERDICT_ACTION
     ]
     return provenance_manifest(
         root_hex=log.current_root(),

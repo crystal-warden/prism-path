@@ -11,6 +11,7 @@ import {
   proveAll,
   proveMonotoneMigration,
 } from "./prismpath.mjs";
+import { phasePolicy, migrationEnvelope } from "./crypto_migration_policy.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -33,61 +34,23 @@ if (rh === agilityFx.registry_hash && rh === migrationFx.registry_hash) {
 }
 
 // 2. Crypto agility cases
-for (const c of agilityFx.cases) {
-  const g = parse(c.flow_text);
-  const got = proveAll(g, agilityFx.envelope, agilityFx.registry);
-  if (JSON.stringify(got) === JSON.stringify(c.expected)) {
+for (const testCase of agilityFx.cases) {
+  const graph = parse(testCase.flow_text);
+  const got = proveAll(graph, agilityFx.envelope, agilityFx.registry);
+  if (JSON.stringify(got) === JSON.stringify(testCase.expected)) {
     pass++;
   } else {
     fail++;
-    console.error(`FAIL crypto_agility case ${c.name}\n  expected ${JSON.stringify(c.expected)}\n  got      ${JSON.stringify(got)}`);
+    console.error(`FAIL crypto_agility case ${testCase.name}\n  expected ${JSON.stringify(testCase.expected)}\n  got      ${JSON.stringify(got)}`);
   }
 }
 
-// 3. Crypto migration matrix
-const SUITES = ["cnsa2-hybrid-1", "tls13-aesgcm", "tls13-hybrid-x25519mlkem"];
-function phasePolicy(k) {
-  return `---
-name: ca_phase_${k}
-start: classify
----
-## classify
--> cui-path: when data_class == "cui"
--> legacy-path: when migration_phase < ${k}
--> hybrid-path: else
-## cui-path
--> suite-cnsa2-hybrid-1: when always
-## legacy-path
--> suite-tls13-aesgcm: when always
-## hybrid-path
--> suite-tls13-hybrid-x25519mlkem: when always
-## suite-cnsa2-hybrid-1
--> end: when always
-## suite-tls13-aesgcm
--> end: when always
-## suite-tls13-hybrid-x25519mlkem
--> end: when always
-## end
-done
-`;
-}
-
-function migrationEnvelope(hash, floor) {
-  return {
-    envelope_id: `floor-${floor}`,
-    approved_suites: SUITES,
-    class_field: "data_class",
-    migration_phase_field: "migration_phase",
-    migration_phase_floor: floor,
-    registry_hash: hash,
-    key_id: "0".repeat(64),
-  };
-}
-
+// 3. Crypto migration matrix. The policy text and the envelope come from
+// crypto_migration_policy.mjs, which explains how each is held to the generator's.
 for (const cell of migrationFx.cells) {
-  const g = parse(phasePolicy(cell.policy_gate));
-  const env = migrationEnvelope(rh, cell.envelope_floor);
-  const p4 = proveMonotoneMigration(g, env, agilityFx.registry);
+  const graph = parse(phasePolicy(cell.policy_gate));
+  const env = migrationEnvelope(agilityFx.registry, rh, cell.envelope_floor);
+  const p4 = proveMonotoneMigration(graph, env, agilityFx.registry);
   const matchP4 = JSON.stringify(p4) === JSON.stringify(cell.p4);
   const matchInv = (p4.ok === (cell.envelope_floor >= cell.policy_gate)) === cell.invariant_holds;
 
@@ -99,7 +62,11 @@ for (const cell of migrationFx.cells) {
   }
 }
 
+// One check here really is over bytes: the registry hash above is SHA-256 over the canonical
+// serialization, so the registry is compared byte for byte. The proof cases are not: each compares
+// the JS verdict object against the frozen one as canonically ordered JSON, which is the parity
+// claim the corpus actually makes. Saying "byte-for-byte" of the whole run overstated it.
 const total = 1 + agilityFx.cases.length + migrationFx.cells.length;
 console.log(`crypto-agility: ${pass}/${total} checks passed`);
-console.log(fail ? "NOT CONFORMANT" : "CONFORMANT — JS crypto-agility proofs match reference byte-for-byte");
+console.log(fail ? "NOT CONFORMANT" : "CONFORMANT — registry hash exact, every JS proof verdict equal to the frozen reference");
 process.exit(fail ? 1 : 0);

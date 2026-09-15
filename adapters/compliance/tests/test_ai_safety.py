@@ -2,9 +2,9 @@
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """The AI-safety-testing catalog assessed by the same engine, and the model-version binding that makes
 'retested after every change' provable."""
-import compliance_adapter as ca
-import deterministic_checks as dc
-import ai_safety as ais
+from adapters.compliance import compliance_adapter as ca
+from adapters.compliance import deterministic_checks as dc
+from adapters.compliance import ai_safety as ais
 
 CAPS = {
     "test_suite_defined": True, "model_versions_hashed": True,
@@ -69,7 +69,7 @@ def test_assess_unretested_version_fails_retest_control():
     state = _good_state()
     state["versions"].append({"version_hash": "v2.5", "deployed": True})   # no determination for it
     res = ais.assess(state)
-    by_id = {r["control_id"]: r for r in res["results"]}
+    by_id = {result["control_id"]: result for result in res["results"]}
     assert by_id["AST-1"]["status"] == "partially-met"
     assert by_id["AST-1"]["unmet_objective_ids"] == ["AST-1[d]"]
     assert res["version_binding"]["unretested_deployed"] == ["v2.5"]
@@ -80,7 +80,7 @@ def test_assess_missing_capability_defers_not_assumes():
     del state["capabilities"]["tests_fingerprinted"]   # AST-2[a] fact absent
     res = ais.assess(state)
     assert "AST-2" in res["deferred"]                   # fail-closed, not assumed met
-    assert "AST-1" in {r["control_id"] for r in res["results"]}
+    assert "AST-1" in {result["control_id"] for result in res["results"]}
 
 
 def test_assess_restores_previous_standard():

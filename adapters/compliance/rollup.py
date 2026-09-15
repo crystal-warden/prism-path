@@ -13,8 +13,7 @@ Three outputs, all bound to the per-control attestations that fed them:
 
 Pure aggregation + attestation reuse. No LLM, no domain adjudication.
 """
-import os, sys, json, hashlib
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+import os, json, hashlib
 from prismpath.ledgers import ledger_airgap# CORE attestation (adapter -> core is allowed)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -24,47 +23,47 @@ def _weights():
     return json.load(open(WEIGHTS_PATH))
 
 def weights_hash():
-    w = _weights()
-    return "sha256:" + hashlib.sha256(json.dumps(w["weights"], sort_keys=True).encode()).hexdigest()[:16]
+    weights_table = _weights()
+    return "sha256:" + hashlib.sha256(json.dumps(weights_table["weights"], sort_keys=True).encode()).hexdigest()[:16]
 
 def _canon(obj):
     return json.dumps(obj, sort_keys=True).encode()
 
 # ---------- partial SPRS score ----------
 def sprs_partial(records, weights=None):
-    w = _weights()
-    base = w["base"]
-    wt = weights if weights is not None else w["weights"]       # weights from the active catalog (Rev 2)
-    assessed = sorted({r["control_id"] for r in records})
+    weights_table = _weights()
+    base = weights_table["base"]
+    wt = weights if weights is not None else weights_table["weights"]       # weights from the active catalog (Rev 2)
+    assessed = sorted({record["control_id"] for record in records})
     deductions = []
-    for r in records:
-        if r["status"] == "met":
+    for record in records:
+        if record["status"] == "met":
             continue
-        cid = r["control_id"]; weight = wt.get(cid)
-        deductions.append({"control": cid, "status": r["status"], "weight": weight,
+        cid = record["control_id"]; weight = wt.get(cid)
+        deductions.append({"control": cid, "status": record["status"], "weight": weight,
                            "counted": weight if weight is not None else 0,
                            "note": None if weight is not None else "no weight in table — counted 0, VERIFY"})
-    deducted = sum(d["counted"] for d in deductions)
-    assessed_max = sum(wt.get(c, 0) for c in assessed)
+    deducted = sum(deduction["counted"] for deduction in deductions)
+    assessed_max = sum(wt.get(control_id, 0) for control_id in assessed)
     return {
-        "base": base, "n_total_controls": w.get("n_total_controls", 110),
+        "base": base, "n_total_controls": weights_table.get("n_total_controls", 110),
         "assessed_controls": assessed, "n_assessed": len(assessed),
         "deductions": deductions, "deducted_points": deducted,
         "ceiling_if_unassessed_all_met": base - deducted,
         "assessed_subset_max_points": assessed_max,
         "assessed_subset_earned_points": assessed_max - deducted,
-        "scoring_note": w["_scoring_note"], "weights_source": w["_source"],
-        "weights_verification": w["_verification"],
+        "scoring_note": weights_table["_scoring_note"], "weights_source": weights_table["_source"],
+        "weights_verification": weights_table["_verification"],
         "caveat": ("PARTIAL SCORE — only %d of %d controls assessed. 'ceiling_if_unassessed_all_met' assumes "
                    "every unassessed control is MET and is an OPTIMISTIC UPPER BOUND, not a submittable SPRS "
                    "score (which requires assessing all 110). Weights are provisional; verify against the "
-                   "official DoD Assessment Methodology." % (len(assessed), w.get("n_total_controls", 110))),
+                   "official DoD Assessment Methodology." % (len(assessed), weights_table.get("n_total_controls", 110))),
     }
 
 # ---------- assessment scope / sampling ----------
 _SCOPE_FIELDS = ("system_name", "boundary", "assets_sampled", "sampling_method", "assessor", "assessment_date")
 def build_scope(meta):
-    return {k: meta.get(k) for k in _SCOPE_FIELDS}
+    return {field: meta.get(field) for field in _SCOPE_FIELDS}
 
 def scope_hash(scope):
     return "sha256:" + hashlib.sha256(_canon(scope)).hexdigest()[:16]
@@ -75,15 +74,15 @@ def system_attestation(records, sprs, scope, catalog_hash, flow_hash="sha256:nis
     summary = {
         "kind": "system-rollup", "gate": "nist_800171_access_control",
         "sprs": sprs, "scope": scope,
-        "controls": [{"id": r["control_id"], "status": r["status"],
-                      "manifest": r["manifest"]["manifest_hash"]} for r in records],
+        "controls": [{"id": record["control_id"], "status": record["status"],
+                      "manifest": record["manifest"]["manifest_hash"]} for record in records],
     }
     root = hashlib.sha256(_canon(summary)).hexdigest()
     kb = "sha256:" + hashlib.sha256((catalog_hash + weights_hash() + scope_hash(scope)).encode()).hexdigest()[:16]
     manifest = ledger_airgap.provenance_manifest(
         root_hex=root, label="system-rollup:nist-800171-ac",
         policy_hash=flow_hash, gate_id="nist_800171_system_rollup@v0",
-        ingestion_hashes=[r["manifest"]["manifest_hash"] for r in records],
+        ingestion_hashes=[record["manifest"]["manifest_hash"] for record in records],
         knowledge_base_hash=kb)
     return manifest, summary
 

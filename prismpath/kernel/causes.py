@@ -62,10 +62,33 @@ _REGISTRY: Tuple[Tuple[int, str, str, str], ...] = (
     (66, "state:migration-reset",        "state",     "reset-to migration parked the resident state"),
     (67, "state:swap-in-flight-park",    "state",     "evaluate during swap parked on the fail-safe"),
     (68, "state:normal-unheld",          "state",     "the reading names a shared normal this side does not hold: abstain, the state the policy needs is absent"),
+    # -- envelope, continued: the pack verifier's structural refusals (policy_pack's
+    # read_ppt_header, validate_image, load_envelope, check_envelope). These sit past the state
+    # band because the registry is append only and the class, not the band arithmetic, is the
+    # semantic axis. Parameterized emitters append a ":<detail>" suffix to the name below.
+    (69, "image:truncated-header",       "envelope",  "image shorter than the fixed header"),
+    (70, "image:bad-magic",              "envelope",  "image does not open with the .ppt magic word"),
+    (71, "image:bad-version",            "envelope",  "image declares an unsupported format version"),
+    (72, "image:safe-node-oob",          "envelope",  "signed fail-safe names a node index the image does not have"),
+    (73, "image:length-mismatch",        "envelope",  "image length differs from the sum of its declared sections"),
+    (74, "image:unknown-op",             "envelope",  "atom carries an operator outside the Level M fragment"),
+    (75, "image:unknown-type",           "envelope",  "atom carries a value type outside the Level M fragment"),
+    (76, "image:field-index-oob",        "envelope",  "atom names a field index beyond the declared field count"),
+    (77, "image:edge-target-oob",        "envelope",  "edge targets a node index beyond the declared node count"),
+    (78, "image:edge-prog-oob",          "envelope",  "edge program range runs past the declared program words"),
+    (79, "image:unknown-opcode",         "envelope",  "program word is an opcode outside the boolean set"),
+    (80, "image:atom-index-oob",         "envelope",  "program word names an atom index beyond the declared atom count"),
+    (81, "image:node-attr-oob",          "envelope",  "per node attribute exceeds the materialization envelope"),
+    (82, "envelope:missing",             "envelope",  "the declared envelope artifact is absent"),
+    (83, "envelope:sig-invalid",         "envelope",  "envelope signature verifies under none of the offered keys"),
+    (84, "envelope:id-mismatch",         "envelope",  "manifest targets a different envelope"),
+    (85, "envelope:unknown-field",       "envelope",  "manifest declares a field the envelope does not admit"),
+    (86, "envelope:field-kind-mismatch", "envelope",  "manifest field kind differs from the envelope's"),
 )
 
-CODES: Dict[int, Tuple[str, str, str]] = {c: (n, k, d) for c, n, k, d in _REGISTRY}
-NAMES: Dict[str, int] = {n: c for c, n, _k, _d in _REGISTRY}
+CODES: Dict[int, Tuple[str, str, str]] = {cause_code: (canonical_name, class_name, description)
+                                          for cause_code, canonical_name, class_name, description in _REGISTRY}
+NAMES: Dict[str, int] = {canonical_name: cause_code for cause_code, canonical_name, _k, _d in _REGISTRY}
 
 # The engine's stop vocabulary (engine.py `stopped`), mapped onto the registry. 'terminal'
 # and 'waiting' are clean outcomes and deliberately have no cause code.
@@ -87,13 +110,14 @@ def code(cause_name: str) -> Optional[int]:
 
 
 def cause_class(code_or_name) -> Optional[str]:
-    c = NAMES.get(code_or_name) if isinstance(code_or_name, str) else code_or_name
-    entry = CODES.get(c) if c is not None else None
+    cause_code = NAMES.get(code_or_name) if isinstance(code_or_name, str) else code_or_name
+    entry = CODES.get(cause_code) if cause_code is not None else None
     return entry[1] if entry else None
 
 
 def registry_sha256() -> str:
     """A stable hash over (code, name, class) triples — the frozen-value anchor the tests pin.
     Descriptions may be edited for clarity; codes, names, and classes may not."""
-    blob = "\n".join(f"{c}|{n}|{k}" for c, n, k, _d in _REGISTRY).encode()
+    blob = "\n".join(f"{cause_code}|{canonical_name}|{class_name}"
+                     for cause_code, canonical_name, class_name, _d in _REGISTRY).encode()
     return hashlib.sha256(blob).hexdigest()

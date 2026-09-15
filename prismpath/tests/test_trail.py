@@ -9,9 +9,9 @@ from prismpath.ledgers import audit_log
 
 def _log(tmp_path):
     log = audit_log.AuditLog(str(tmp_path / "audit.jsonl"))
-    for i, (outcome, rule, cause) in enumerate([("allow", "r6", 0), ("deny", "r1", 0), ("abstain", "r3", 0),
+    for index, (outcome, rule, cause) in enumerate([("allow", "r6", 0), ("deny", "r1", 0), ("abstain", "r3", 0),
                                                  ("escalate_human", "r5", 0), ("escalate_human", "r4", 34)]):
-        log.append("gate", "decision", {"seq": i, "outcome": outcome, "rule": rule, "cause": cause})
+        log.append("gate", "decision", {"seq": index, "outcome": outcome, "rule": rule, "cause": cause})
     log.append("policy_host", "swap", {"from_hash": None, "to_hash": "ab" * 32, "version": 2, "overlay_of": "network_admission", "result": "accepted"})
     log.append("policy_host", "swap_rejected", {"reasons": ["version:not-monotonic:1<=2"]})
     log.append("policy_host", "attestation", {"active": "ab" * 32, "version": 2, "overlay_of": "network_admission", "ts": 0})
@@ -37,11 +37,11 @@ def test_trail_window_last(tmp_path):
 
 def test_trail_root_moves_when_a_record_is_altered(tmp_path):
     before = _log(tmp_path).current_root()
-    p = tmp_path / "audit.jsonl"
-    lines = p.read_text().splitlines()
+    path = tmp_path / "audit.jsonl"
+    lines = path.read_text().splitlines()
     ev = json.loads(lines[1]); ev["data"]["outcome"] = "allow"; lines[1] = json.dumps(ev)
-    p.write_text("\n".join(lines) + "\n")
-    rep = trail.run(str(p))
+    path.write_text("\n".join(lines) + "\n")
+    rep = trail.run(str(path))
     assert rep["log"]["merkle_root"] != before   # an anchored root from before the edit no longer matches
 
 

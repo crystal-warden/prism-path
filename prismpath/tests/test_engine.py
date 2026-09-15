@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
-"""Engine tests — end-to-end run() with MOCK agents and a stub router (no real model).
+"""Engine tests — end-to-end run() with MOCK workers and a stub router (no real model).
 
 ORIGIN: the swarm (Qwen2.5-Coder-7B, driven by flows/build_prismpath.md) authored the first
 version of this module; it covered the right cases but mis-modeled the real API in a few
@@ -8,6 +8,8 @@ systematic ways (treated `result.steps` as an int instead of a list; used capita
 names that the parser lowercases; asserted on visits keys for never-entered nodes). This file
 is the post-loop CORRECTION: same intent and case coverage, fixed to the real engine contract.
 """
+import pytest
+
 from prismpath.kernel.engine import run, RunResult
 from prismpath.kernel.parser import parse
 from prismpath.routing.router import RouteDecision
@@ -31,9 +33,9 @@ done
 ## b
 done
 """
-    g = parse(text)
-    agent = lambda n, i, s: {"text": "anything", "go": True}
-    res = run(g, agent, router=FirstEdgeRouter())
+    graph = parse(text)
+    worker = lambda node, instruction, state: {"text": "anything", "go": True}
+    res = run(graph, worker, router=FirstEdgeRouter())
     assert res.path == ["start", "a"]            # took the deterministic edge, not 'b'
     assert res.steps[0].info["used"] == "deterministic"
     assert res.stopped == "terminal"
@@ -50,9 +52,9 @@ end
 ## b
 end
 """
-    g = parse(text)
-    agent = lambda n, i, s: {"text": "x", "go": False}   # deterministic edge is False
-    res = run(g, agent, router=FirstEdgeRouter())
+    graph = parse(text)
+    worker = lambda node, instruction, state: {"text": "x", "go": False}   # deterministic edge is False
+    res = run(graph, worker, router=FirstEdgeRouter())
     assert res.path == ["start", "b"]
     assert res.steps[0].info["used"] == "semantic"
 
@@ -64,9 +66,9 @@ def test_terminal_node():
 ## end
 finish
 """
-    g = parse(text)
-    agent = lambda n, i, s: {"text": "ok"}
-    res = run(g, agent, router=FirstEdgeRouter())
+    graph = parse(text)
+    worker = lambda node, instruction, state: {"text": "ok"}
+    res = run(graph, worker, router=FirstEdgeRouter())
     assert res.stopped == "terminal"
     assert res.path == ["start", "end"]
     assert isinstance(res.steps, list) and len(res.steps) == 1
@@ -82,9 +84,9 @@ def test_cycle_bounded_by_visits():
 ## done
 finished
 """
-    g = parse(text)
-    agent = lambda n, i, s: {"text": "spin"}
-    res = run(g, agent, router=FirstEdgeRouter(), max_steps=50)
+    graph = parse(text)
+    worker = lambda node, instruction, state: {"text": "spin"}
+    res = run(graph, worker, router=FirstEdgeRouter(), max_steps=50)
     assert res.stopped == "terminal"
     assert res.path[-1] == "done"
     assert res.state["visits"]["loop"] == 3       # entered until visits>2 fired
@@ -96,9 +98,9 @@ def test_max_steps_enforced():
 ## loop
 -> loop: always
 """
-    g = parse(text)
-    agent = lambda n, i, s: {"text": "spin"}
-    res = run(g, agent, router=FirstEdgeRouter(), max_steps=3)
+    graph = parse(text)
+    worker = lambda node, instruction, state: {"text": "spin"}
+    res = run(graph, worker, router=FirstEdgeRouter(), max_steps=3)
     assert res.stopped == "max_steps"
     assert res.state["visits"]["loop"] == 3
 
@@ -111,9 +113,9 @@ def test_stuck_on_deterministic_only_no_match():
 ## end
 finish
 """
-    g = parse(text)
-    agent = lambda n, i, s: {"text": "x"}          # 'never_true' is unknown -> None -> falsy
-    res = run(g, agent, router=FirstEdgeRouter())
+    graph = parse(text)
+    worker = lambda node, instruction, state: {"text": "x"}          # 'never_true' is unknown -> None -> falsy
+    res = run(graph, worker, router=FirstEdgeRouter())
     assert res.stopped == "stuck"
     assert res.path == ["start"]
 
@@ -129,9 +131,9 @@ r
 ## done
 d
 """
-    g = parse(text)
-    agent = lambda n, i, s: {"text": "all good", "ok": True}
-    res = run(g, agent, router=FirstEdgeRouter())
+    graph = parse(text)
+    worker = lambda node, instruction, state: {"text": "all good", "ok": True}
+    res = run(graph, worker, router=FirstEdgeRouter())
     assert res.path == ["start", "done"]
     assert res.steps[0].info["used"] == "deterministic"
 
@@ -148,9 +150,9 @@ o
 ## done
 d
 """
-    g = parse(text)
-    agent = lambda n, i, s: "just a string outcome"
-    res = run(g, agent, router=FirstEdgeRouter())
+    graph = parse(text)
+    worker = lambda node, instruction, state: "just a string outcome"
+    res = run(graph, worker, router=FirstEdgeRouter())
     assert res.path == ["start", "other"]
     assert res.steps[0].info["used"] == "semantic"
 
@@ -162,9 +164,31 @@ def test_run_result_shape():
 ## end
 e
 """
-    g = parse(text)
-    res = run(g, lambda n, i, s: {"text": "x"}, router=FirstEdgeRouter())
+    graph = parse(text)
+    res = run(graph, lambda node, instruction, state: {"text": "x"}, router=FirstEdgeRouter())
     assert isinstance(res, RunResult)
     assert isinstance(res.path, list)
     assert isinstance(res.steps, list)
     assert isinstance(res.state, dict)
+
+
+def test_agent_keyword_still_works_and_warns():
+    """What the second parameter was called before the rename. No first party caller passes it,
+    so this test is the only place the alias runs and the only place the warning is expected."""
+    text = """
+## start
+-> end: always
+## end
+e
+"""
+    graph = parse(text)
+    with pytest.warns(DeprecationWarning, match="run.agent"):
+        res = run(graph, agent=lambda node, instruction, state: {"text": "x"},
+                  router=FirstEdgeRouter())
+    assert res.path == ["start", "end"]
+
+
+def test_run_without_a_worker_is_a_type_error():
+    graph = parse("## start\n-> end: always\n## end\ne\n")
+    with pytest.raises(TypeError):
+        run(graph)

@@ -12,6 +12,8 @@ so the predictions table cannot drift from the corpus.
 import re
 from pathlib import Path
 
+import pytest
+
 from prismpath.comparisons import corpus_check as cc
 from prismpath.tests._repo import repo_file
 
@@ -23,14 +25,21 @@ def test_corpus_is_self_consistent():
     assert errors == [], "\n".join(errors)
 
 
+def test_malformed_cmp_is_a_corpus_error():
+    # a short cmp used to unpack into a bare ValueError, which reads as a harness crash rather than
+    # as the corpus defect it is
+    with pytest.raises(cc.CorpusError):
+        cc.evaluate({"cmp": ["amount", ">"]}, {"amount": 5}, {})
+
+
 def test_corpus_shape_matches_the_protocol_summary():
     policies = cc.load_corpus()
     assert len(policies) == 6
-    n_sc = sum(len(p["scenarios"]) for _, p in policies)
-    n_lc = sum(len(p.get("lifecycle", [])) for _, p in policies)
+    n_sc = sum(len(policy["scenarios"]) for _, policy in policies)
+    n_lc = sum(len(policy.get("lifecycle", [])) for _, policy in policies)
     assert n_sc == 61
     assert n_lc == 5
-    level_m = [p["id"] for _, p in policies if p["level_m_claim"]]
+    level_m = [policy["id"] for _, policy in policies if policy["level_m_claim"]]
     assert sorted(level_m) == ["ai_action_gate", "expense_approval", "network_admission", "sensor_interlock"]
 
 
@@ -46,8 +55,8 @@ def test_freeze_hash_matches_the_lock():
 
 def test_lock_lists_every_frozen_file():
     lock = (COMP / "PREREGISTRATION.lock").read_text(encoding="utf-8")
-    for p in cc.frozen_paths():
-        assert p.relative_to(COMP).as_posix() in lock
+    for path in cc.frozen_paths():
+        assert path.relative_to(COMP).as_posix() in lock
 
 
 def test_protocol_names_every_policy_and_dimension():
@@ -71,13 +80,13 @@ def test_neutral_evaluator_semantics():
 
 
 def test_rebac_reference_derivation():
-    pol = next(p for _, p in cc.load_corpus() if p["id"] == "document_sharing_rebac")
-    m = pol["model"]
-    assert cc._related(m, "user:alice", "viewer", "doc:d1")      # group -> folder -> doc
-    assert cc._related(m, "user:dana", "viewer", "doc:d2")       # folder -> doc
-    assert cc._related(m, "user:bob", "viewer", "doc:d2")        # direct
-    assert not cc._related(m, "user:bob", "viewer", "doc:d1")
-    assert not cc._related(m, "user:carol", "viewer", "doc:d1")
+    pol = next(policy for _, policy in cc.load_corpus() if policy["id"] == "document_sharing_rebac")
+    model = pol["model"]
+    assert cc._related(model, "user:alice", "viewer", "doc:d1")      # group -> folder -> doc
+    assert cc._related(model, "user:dana", "viewer", "doc:d2")       # folder -> doc
+    assert cc._related(model, "user:bob", "viewer", "doc:d2")        # direct
+    assert not cc._related(model, "user:bob", "viewer", "doc:d1")
+    assert not cc._related(model, "user:carol", "viewer", "doc:d1")
 
 
 def test_matrix_on_the_committed_results_dir_is_all_untested_or_valid(tmp_path):

@@ -8,6 +8,7 @@
 #define PPT_MERKLE_H
 
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <openssl/sha.h>
@@ -16,11 +17,15 @@
 static inline void merkle_root(const struct ppt_receipt *r, int n, uint8_t root[32]) {
     if (n <= 0) { memset(root, 0, 32); return; }
     uint8_t (*cur)[32] = malloc((size_t)n * 32);
+    /* Every caller anchors this root in a receipt trail, so a null here must not be written
+     * through and must never become a plausible-looking root over nothing. */
+    if (!cur) { fprintf(stderr, "merkle_root: out of memory for %d leaves\n", n); exit(1); }
     for (int i = 0; i < n; i++) SHA256((const unsigned char *)&r[i], sizeof(r[i]), cur[i]);
     int cnt = n;
     while (cnt > 1) {
         int half = (cnt + 1) / 2;
         uint8_t (*nx)[32] = malloc((size_t)half * 32);
+        if (!nx) { fprintf(stderr, "merkle_root: out of memory for layer of %d\n", half); exit(1); }
         for (int i = 0; i < half; i++) {
             uint8_t buf[64];
             memcpy(buf, cur[2 * i], 32);

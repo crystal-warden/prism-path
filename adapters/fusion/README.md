@@ -32,18 +32,18 @@ so no external source is needed.
 
 ```sh
 python -m pytest adapters/fusion -q                           # the suite
-python adapters/fusion/gen_fusion_spiral.py                   # regenerate the frozen tessellation (must be byte-identical)
-python adapters/fusion/census.py                              # band census over the fixture backlog
-python adapters/fusion/bench/otlp_baseline.py                 # the Facet baseline (OTLP vs the decision codec)
-python adapters/fusion/bench/bandwidth.py --from-ndjson adapters/fusion/fixtures/alerts_synth.ndjson
-python adapters/fusion/bench/wire.py --imu                    # steady sensor corpus, on disk
-python adapters/fusion/bench/wire.py --from-fixture           # synthetic bursty stream
+python -m adapters.fusion.gen_fusion_spiral                   # regenerate the frozen tessellation (must be byte-identical)
+python -m adapters.fusion.census                              # band census over the fixture backlog
+python -m adapters.fusion.bench.otlp_baseline                 # the Facet baseline (OTLP vs the decision codec)
+python -m adapters.fusion.bench.bandwidth --from-ndjson adapters/fusion/fixtures/alerts_synth.ndjson
+python -m adapters.fusion.bench.wire --imu                    # steady sensor corpus, on disk
+python -m adapters.fusion.bench.wire --from-fixture           # synthetic bursty stream
 ```
 
 ## Dependencies (read only, unmodified)
 
 - `prismpath/telemetry/` modules: quantizer / wire / packed / selfheal / epochs / decode / spiral
-  (the codec and the Tier 6 packing; imported via the repo's self-rooted `sys.path` idiom).
+  (the codec and the Tier 6 packing; imported by package path from the repository root).
 - `prismpath-hw/bridge/field_bridge.py`: schema + threshold provenance for the physical fields;
   `prismpath-hw/evidence/mac_bridge_*.ndjson`: real recorded IMU sessions (the physical marginal).
 

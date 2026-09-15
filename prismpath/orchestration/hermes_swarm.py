@@ -119,8 +119,8 @@ MEMORY_CAP = int(os.environ.get("HERMES_MEMORY_CAP", "6000"))   # max chars of l
 
 # Roles that run on the qwen25 coder server (:8889) instead of gemma4 (:8888): the product-steering voices
 # and the consistency auditor. setup_roles() patches their config.yaml to the qwen endpoint (idempotent).
-QWEN_ROLES = {r.strip() for r in os.environ.get(
-    "HERMES_QWEN_ROLES", "product-manager,engagement-manager,auditor").split(",") if r.strip()}
+QWEN_ROLES = {role_name.strip() for role_name in os.environ.get(
+    "HERMES_QWEN_ROLES", "product-manager,engagement-manager,auditor").split(",") if role_name.strip()}
 
 _sem = threading.Semaphore(MAX_CONCURRENCY)
 
@@ -136,9 +136,9 @@ def _memory_file(role: str) -> Path:
 
 
 def recall(role: str) -> str:
-    f = _memory_file(role)
+    file_path = _memory_file(role)
     try:
-        return f.read_text(encoding="utf-8").strip() if f.exists() else ""
+        return file_path.read_text(encoding="utf-8").strip() if file_path.exists() else ""
     except OSError:
         return ""
 
@@ -148,12 +148,12 @@ def remember(role: str, lesson: str):
     lesson = " ".join((lesson or "").split()).strip(" -*•").strip()
     if len(lesson) < 8:
         return
-    f = _memory_file(role)
-    f.parent.mkdir(parents=True, exist_ok=True)
-    cur = f.read_text(encoding="utf-8") if f.exists() else "# Lessons — apply these every task\n"
+    file_path = _memory_file(role)
+    file_path.parent.mkdir(parents=True, exist_ok=True)
+    cur = file_path.read_text(encoding="utf-8") if file_path.exists() else "# Lessons — apply these every task\n"
     if lesson[:90].lower() in cur.lower():
         return                                            # dedupe
-    f.write_text((cur.rstrip() + f"\n- {lesson[:300]}\n")[-MEMORY_CAP:], encoding="utf-8")
+    file_path.write_text((cur.rstrip() + f"\n- {lesson[:300]}\n")[-MEMORY_CAP:], encoding="utf-8")
 
 
 def reflect(role: str, situation: str, timeout: int = 150) -> str:
@@ -173,8 +173,8 @@ def setup_roles(roles=None, force_soul=True) -> list:
     for role in roles:
         home = role_home(role)
         home.mkdir(parents=True, exist_ok=True)
-        for f in ("config.yaml", ".env"):
-            src, dst = HERMES_HOME_BASE / f, home / f
+        for file_path in ("config.yaml", ".env"):
+            src, dst = HERMES_HOME_BASE / file_path, home / file_path
             if src.exists() and not dst.exists():
                 shutil.copy(src, dst)
         soul = home / "SOUL.md"
@@ -183,12 +183,12 @@ def setup_roles(roles=None, force_soul=True) -> list:
         if role in QWEN_ROLES:                       # repoint the copied gemma4 config at the qwen25 server
             cfg = home / "config.yaml"
             if cfg.exists():
-                t = cfg.read_text(encoding="utf-8")
-                t2 = (t.replace("gemma4", "qwen25")
+                config_text = cfg.read_text(encoding="utf-8")
+                rewritten_text = (config_text.replace("gemma4", "qwen25")
                        .replace("127.0.0.1:8888", "127.0.0.1:8889")
                        .replace("131072", "65536"))   # qwen25 is served at 64k (YaRN), gemma4 at 128k
-                if t2 != t:
-                    cfg.write_text(t2, encoding="utf-8")
+                if rewritten_text != config_text:
+                    cfg.write_text(rewritten_text, encoding="utf-8")
     return roles
 
 
@@ -210,16 +210,16 @@ def dispatch(role: str, prompt: str, timeout: int = DISPATCH_TIMEOUT, _reflectin
     print(f"[hermes.dispatch>] role={role} promptlen={len(prompt)} reflecting={_reflecting} "
           f"{time.strftime('%H:%M:%S')}", flush=True)
     with _sem:
-        p = subprocess.run([str(HERMES_BIN), "-z", prompt], env=env,
+        proc = subprocess.run([str(HERMES_BIN), "-z", prompt], env=env,
                            capture_output=True, text=True, timeout=timeout)
-    print(f"[hermes.dispatch<] role={role} rc={p.returncode} dur={int(time.time()-_t0)}s "
+    print(f"[hermes.dispatch<] role={role} rc={proc.returncode} dur={int(time.time()-_t0)}s "
           f"{time.strftime('%H:%M:%S')}", flush=True)
-    out = (p.stdout or "").strip()
+    out = (proc.stdout or "").strip()
     if not _reflecting and _ix is not None:
         _ix.record("swarm", role, prompt, out, dur_ms=int((time.time() - _t0) * 1000),
-                   rc=p.returncode)
-    if p.returncode != 0 and not out:
-        raise RuntimeError(f"hermes[{role}] failed rc={p.returncode}: {(p.stderr or '')[:300]}")
+                   rc=proc.returncode)
+    if proc.returncode != 0 and not out:
+        raise RuntimeError(f"hermes[{role}] failed rc={proc.returncode}: {(proc.stderr or '')[:300]}")
     return out
 
 

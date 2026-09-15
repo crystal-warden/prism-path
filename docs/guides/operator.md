@@ -102,7 +102,7 @@ reset the resident state, and the rest of the registry), and every swap, refusal
 attestation with its overlay line. A cause that starts climbing is the signal to look at the policy;
 a root that no longer matches an anchored one is the signal that the log was edited. The console's
 `/interactions` and `/prove/audit`, the kernel and fabric receipt journals sealed by
-`prismpath-ebpf/seal_receipts.c`, and the evaluator's `ledger verify` sit beside it.
+`prismpath-ebpf/seal_receipts.c`, and the assessor's `ledger verify` sit beside it.
 
 ## 5. Feeding back to the owner
 

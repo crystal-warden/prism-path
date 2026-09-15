@@ -13,7 +13,7 @@ from cocotb.triggers import RisingEdge
 
 HERE = Path(__file__).resolve().parent
 from prismpath.telemetry import packed  # noqa: E402
-from prismpath.telemetry import zeckendorf as z  # noqa: E402
+from prismpath.telemetry import zeckendorf as zeck  # noqa: E402
 
 
 def corpus():
@@ -22,7 +22,7 @@ def corpus():
     for lo, hi in ((1, 6), (1, 1001)):
         for _ in range(64):
             ints = [random.randint(lo, hi) for _ in range(4)]
-            out.append((ints, packed.pack(z.encode_stream(ints), 8)))
+            out.append((ints, packed.pack(zeck.encode_stream(ints), 8)))
     return out
 
 

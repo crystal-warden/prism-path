@@ -28,22 +28,22 @@ from adafruit_bno08x.i2c import BNO08X_I2C
 REPORT_US = 50_000
 
 
-def quat_to_euler_deg(x, y, z, w):
+def quat_to_euler_deg(quat_i, quat_j, quat_k, quat_real):
     """(i,j,k,real) -> (roll, pitch, yaw) degrees, plus tilt-from-level."""
-    roll = math.atan2(2 * (w * x + y * z), 1 - 2 * (x * x + y * y))
-    sp = max(-1.0, min(1.0, 2 * (w * y - z * x)))
-    pitch = math.asin(sp)
-    yaw = math.atan2(2 * (w * z + x * y), 1 - 2 * (y * y + z * z))
+    roll = math.atan2(2 * (quat_real * quat_i + quat_j * quat_k), 1 - 2 * (quat_i * quat_i + quat_j * quat_j))
+    sin_pitch = max(-1.0, min(1.0, 2 * (quat_real * quat_j - quat_k * quat_i)))
+    pitch = math.asin(sin_pitch)
+    yaw = math.atan2(2 * (quat_real * quat_k + quat_i * quat_j), 1 - 2 * (quat_j * quat_j + quat_k * quat_k))
     # tilt = angle between the device's up axis and world up (0 = perfectly level)
-    up_z = 1 - 2 * (x * x + y * y)
+    up_z = 1 - 2 * (quat_i * quat_i + quat_j * quat_j)
     tilt = math.acos(max(-1.0, min(1.0, up_z)))
-    return tuple(round(math.degrees(a), 1) for a in (roll, pitch, yaw, tilt))
+    return tuple(round(math.degrees(angle), 1) for angle in (roll, pitch, yaw, tilt))
 
 
 def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--seconds", type=float, default=8.0)
-    args = ap.parse_args()
+    arg_parser = argparse.ArgumentParser()
+    arg_parser.add_argument("--seconds", type=float, default=8.0)
+    args = arg_parser.parse_args()
 
     rst = digitalio.DigitalInOut(board.G0)
     rst.direction = digitalio.Direction.OUTPUT
@@ -62,11 +62,11 @@ def main():
 
     counts = Counter()
     stab = Counter()
-    n = 0
+    cycle_count = 0
     printed = 0
     deadline = time.time() + args.seconds
     while time.time() < deadline:
-        n += 1
+        cycle_count += 1
         try:
             ax, ay, az = bno.acceleration
             counts["accel"] += 1
@@ -88,11 +88,11 @@ def main():
         except Exception:
             qi = None
         try:
-            s = bno.stability_classification
+            stability = bno.stability_classification
             counts["stability"] += 1
-            stab[s] += 1
+            stab[stability] += 1
         except Exception:
-            s = None
+            stability = None
         try:
             bno.magnetic
             counts["mag"] += 1
@@ -103,13 +103,13 @@ def main():
             gmag = round(math.sqrt(gx * gx + gy * gy + gz * gz), 3) if gx is not None else None
             lmag = round(math.sqrt(lx * lx + ly * ly + lz * lz), 3) if lx is not None else None
             print(f"  sample: roll/pitch/yaw/tilt={eul}  gyro|w|={gmag} rad/s  "
-                  f"lin|a|={lmag} m/s2  stability={s}")
+                  f"lin|a|={lmag} m/s2  stability={stability}")
             printed += 1
         time.sleep(0.05)
 
-    print(f"\n{n} read cycles in {args.seconds}s, all-features-simultaneous:")
-    for k in ("accel", "lin_accel", "gyro", "quat", "stability", "mag"):
-        print(f"  {k:12s} {counts[k]:4d}/{n}  ({100*counts[k]//max(n,1)}%)")
+    print(f"\n{cycle_count} read cycles in {args.seconds}s, all-features-simultaneous:")
+    for channel in ("accel", "lin_accel", "gyro", "quat", "stability", "mag"):
+        print(f"  {channel:12s} {counts[channel]:4d}/{cycle_count}  ({100*counts[channel]//max(cycle_count,1)}%)")
     print(f"  chip stability verdicts: {dict(stab)}")
     rst.value = False
 

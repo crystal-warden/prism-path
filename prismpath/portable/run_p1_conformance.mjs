@@ -10,28 +10,13 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { parse, run, decodeVec } from "./prismpath.mjs";
+import { parse, run, decodeVec, scriptedAgent } from "./prismpath.mjs";
 
 const dir = process.argv[2] || join(dirname(fileURLToPath(import.meta.url)), "conformance");
 let failures = 0;
 
 const doc = JSON.parse(readFileSync(join(dir, "locked_flows.json"), "utf-8"));
 let pass = 0;
-
-function scriptedAgent(script) {
-  const used = {};
-  return (node, _instruction, _state) => {
-    const seq = script[node];
-    if (seq === undefined) return { text: node };
-    const i = used[node] || 0;
-    used[node] = i + 1;
-    const outcome = seq[Math.min(i, seq.length - 1)];
-    if (outcome !== null && typeof outcome === "object" && "__raise__" in outcome) {
-      throw new Error(outcome.__raise__);
-    }
-    return outcome;
-  };
-}
 
 for (const fx of doc.cases) {
   let got;
@@ -43,8 +28,8 @@ for (const fx of doc.cases) {
       return new Float32Array(fx.lock.embedder.dim);
     };
 
-    const g = parse(fx.flow);
-    const res = run(g, scriptedAgent(fx.script || {}), {
+    const graph = parse(fx.flow);
+    const res = run(graph, scriptedAgent(fx.script || {}), {
       maxSteps: fx.maxSteps ?? 25,
       start: fx.start ?? null,
       state: fx.state ? JSON.parse(JSON.stringify(fx.state)) : null,
@@ -58,8 +43,8 @@ for (const fx of doc.cases) {
       pending_node: res.pending ? (res.pending.node ?? null) : null,
       would_pick: res.pending ? (res.pending.would_pick ?? null) : null,
     };
-  } catch (e) {
-    got = { error: String(e.message ?? e) };
+  } catch (err) {
+    got = { error: String(err.message ?? err) };
   }
 
   const want = fx.expect;

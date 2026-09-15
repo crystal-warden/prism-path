@@ -52,7 +52,7 @@ CASES = {
 
 
 def _semantic_edges(node):
-    return [(t, c) for t, c in node.edges if not is_deterministic(c)]
+    return [(edge_target, condition) for edge_target, condition in node.edges if not is_deterministic(condition)]
 
 
 def main():
@@ -66,26 +66,26 @@ def main():
 
     grand = [0, 0]
     for flow_path, cases in CASES.items():
-        g = parse_file(flow_path)
-        probs = analysis.errors(g)
-        print(f"\n=== {g.name} ({flow_path}) ===")
+        graph = parse_file(flow_path)
+        probs = analysis.errors(graph)
+        print(f"\n=== {graph.name} ({flow_path}) ===")
         if probs:
             print("  structural problems:", probs)
         ok_e = ok_h = total = 0
         esc = 0
         fails = []
         for node, outcome, expected in cases:
-            sem = _semantic_edges(g.nodes[node])
+            sem = _semantic_edges(graph.nodes[node])
             if len(sem) < 2:
                 # not a genuinely-semantic decision (1 or 0 semantic edges) -> skip scoring
                 continue
             total += 1
-            de = embed.route(outcome, sem, g.nodes[node].instruction)
+            de = embed.route(outcome, sem, graph.nodes[node].instruction)
             ok_e += de.target == expected
             if de.target != expected:
                 fails.append((node, outcome, expected, de.target, "embed"))
             if hybrid is not None:
-                dh = hybrid.route(outcome, sem, g.nodes[node].instruction)
+                dh = hybrid.route(outcome, sem, graph.nodes[node].instruction)
                 ok_h += dh.target == expected
                 esc += int(dh.info.get("escalated", False))
         grand[0] += ok_e

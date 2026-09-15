@@ -22,21 +22,21 @@ Python and Node need no build step:
 ```python
 from prismpath.parser import parse_file
 from prismpath.engine import run
-from prismpath.cli_worker import cli_agent
+from prismpath.cli_worker import cli_worker
 
-agent = cli_agent(["python", "ci_gate.py"], pass_state=["report"])
-res = run(parse_file("ci_gate.md"), agent, state={"report": "tests=48 failed=0 coverage=91"})
+worker = cli_worker(["python", "ci_gate.py"], pass_state=["report"])
+res = run(parse_file("ci_gate.md"), worker, state={"report": "tests=48 failed=0 coverage=91"})
 print(res.path)          # ['gate', 'ship']
 ```
 
-Go and Rust build first, then point `cli_agent` at the binary:
+Go and Rust build first, then point `cli_worker` at the binary:
 
 ```bash
 go build -o release_gate release_gate.go     # Go
 rustc -O ci_gate.rs                          # Rust
 ```
 ```python
-agent = cli_agent(["./release_gate"], pass_state=["from", "to"])
+worker = cli_worker(["./release_gate"], pass_state=["from", "to"])
 ```
 
 The contract is proven in

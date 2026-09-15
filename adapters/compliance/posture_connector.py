@@ -29,8 +29,8 @@ reported as `deferred` (they need the LLM adjudicator or more facts), never assu
 import os
 import json
 
-import compliance_adapter as _ca
-import deterministic_checks as _dc
+from adapters.compliance import compliance_adapter as _ca
+from adapters.compliance import deterministic_checks as _dc
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SAMPLE_DIR = os.path.join(HERE, "posture_samples")
@@ -76,14 +76,14 @@ def required_facts(get_control=None):
     gc = _resolve_get_control(get_control)
     out = {}
     for cid in machine_checkable_controls(get_control):
-        out[cid] = sorted({_dc.FACT_KEYS[o["id"]] for o in gc(cid)["objectives"]
-                           if o["id"] in _dc.FACT_KEYS})
+        out[cid] = sorted({_dc.FACT_KEYS[objective["id"]] for objective in gc(cid)["objectives"]
+                           if objective["id"] in _dc.FACT_KEYS})
     return out
 
 
 def assess(posture, out_dir=None, get_control=None):
     """Grade every control this posture can fully decide, deterministically. Returns per-control
-    determinations, the controls deferred for want of facts, and a status tally. Writes finding/POA&M
+    determinations, the controls deferred for want of facts, and a determination tally. Writes finding/POA&M
     records to out_dir when given."""
     gc = _resolve_get_control(get_control)
     facts = posture.get("facts", {}) or {}
@@ -91,7 +91,7 @@ def assess(posture, out_dir=None, get_control=None):
     provenance = posture.get("provenance", {})
 
     assessable = assessable_controls(facts, get_control)
-    deferred = [c for c in machine_checkable_controls(get_control) if c not in assessable]
+    deferred = [control_id for control_id in machine_checkable_controls(get_control) if control_id not in assessable]
 
     results = []
     tally = {"met": 0, "partially-met": 0, "not-met": 0}

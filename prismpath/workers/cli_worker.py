@@ -2,7 +2,7 @@
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """cli_worker.py — ANY command-line program as a flow worker (the generic subprocess contract).
 
-The engine's worker interface is `agent(node, instruction, state) -> str | dict`. This module
+The engine's worker interface is `worker(node, instruction, state) -> str | dict`. This module
 adapts the most stable interface in software — a process with stdin/stdout/exit-code — onto it,
 so a Claude/Gemini/aider CLI, a task-file runner, or a shell script can be a node's worker with
 no Python written by the flow author. The contract:
@@ -23,13 +23,13 @@ the ROUTING layer (the `when` predicate evaluator executes no worker-influenced 
 is not, and cannot be, a claim that your workers are safe. Choose your commands like you choose
 your dependencies.
 
-    from prismpath.workers.cli_worker import CliWorker, cli_agent
+    from prismpath.workers.cli_worker import CliWorker, cli_worker
 
     # every node runs the same CLI, prompt on stdin:
-    agent = cli_agent(["claude", "-p"])
+    worker = cli_worker(["claude", "-p"])
 
     # or per-node commands, with templating ({node}/{instruction} in args; state via stdin JSON):
-    agent = cli_agent({
+    worker = cli_worker({
         "implement": ["md", "tasks/implement.claude.md"],
         "review":    ["md", "tasks/review.gemini.md"],
     }, default=["claude", "-p"])
@@ -43,6 +43,7 @@ from __future__ import annotations
 import json
 import subprocess
 import threading
+import warnings
 from typing import Dict, List, Optional, Sequence, Union
 
 DEFAULT_TIMEOUT = 600.0
@@ -72,16 +73,16 @@ def _outcome_from_stdout(stdout: str):
     """JSON object on stdout -> dict outcome (fields feed predicates); anything else -> text.
     Only a top-level JSON OBJECT is treated as structured — a bare number/string/array on stdout
     is far more likely to be plain program output than an outcome contract."""
-    s = stdout.strip()
-    if s.startswith("{") and s.endswith("}"):
+    trimmed = stdout.strip()
+    if trimmed.startswith("{") and trimmed.endswith("}"):
         try:
-            obj = json.loads(s)
+            obj = json.loads(trimmed)
             if isinstance(obj, dict):
-                obj.setdefault("text", s)
+                obj.setdefault("text", trimmed)
                 return obj
         except ValueError:
             pass
-    return s
+    return trimmed
 
 
 class _CappedResult:
@@ -119,7 +120,7 @@ def _run_capped(argv, payload, timeout, max_output, cwd, env) -> _CappedResult:
     """Like `subprocess.run(input=payload, capture_output=True, text=True, timeout=…)` but with a
     hard cap on buffered stdout. stdout/stderr are drained by threads so neither pipe filling can
     stall the other; on timeout the child is killed and TimeoutExpired is re-raised."""
-    p = subprocess.Popen(
+    child = subprocess.Popen(
         argv,
         stdin=subprocess.PIPE if payload is not None else None,
         stdout=subprocess.PIPE, stderr=subprocess.PIPE,
@@ -127,8 +128,8 @@ def _run_capped(argv, payload, timeout, max_output, cwd, env) -> _CappedResult:
     )
     out_h: dict = {}
     err_h: dict = {}
-    t_out = threading.Thread(target=_drain, args=(p.stdout, max_output, out_h), daemon=True)
-    t_err = threading.Thread(target=_drain, args=(p.stderr, _STDERR_CAP, err_h), daemon=True)
+    t_out = threading.Thread(target=_drain, args=(child.stdout, max_output, out_h), daemon=True)
+    t_err = threading.Thread(target=_drain, args=(child.stderr, _STDERR_CAP, err_h), daemon=True)
     t_out.start()
     t_err.start()
     if payload is not None:
@@ -137,27 +138,27 @@ def _run_capped(argv, payload, timeout, max_output, cwd, env) -> _CappedResult:
         # this pipe and the daemon thread unwinds.
         def _feed():
             try:
-                p.stdin.write(payload)
+                child.stdin.write(payload)
             except (BrokenPipeError, OSError):
                 pass                                  # child closed stdin early — its right to
             finally:
                 try:
-                    p.stdin.close()
+                    child.stdin.close()
                 except OSError:
                     pass
         threading.Thread(target=_feed, daemon=True).start()
     try:
-        p.wait(timeout=timeout)
+        child.wait(timeout=timeout)
     except subprocess.TimeoutExpired:
-        p.kill()
-        p.wait()
+        child.kill()
+        child.wait()
         t_out.join(2)
         t_err.join(2)
         raise
     t_out.join(5)
     t_err.join(5)
     return _CappedResult(
-        p.returncode, out_h.get("text", ""), err_h.get("text", ""),
+        child.returncode, out_h.get("text", ""), err_h.get("text", ""),
         out_h.get("total", 0) > max_output,
     )
 
@@ -180,7 +181,7 @@ class CliWorker:
         self.max_output = int(max_output)
 
     def _stdin_payload(self, node: str, instruction: str, state: dict) -> str:
-        ctx = {k: state.get(k) for k in self.pass_state if k in state}
+        ctx = {field_name: state.get(field_name) for field_name in self.pass_state if field_name in state}
         block = ""
         if ctx:
             try:
@@ -190,42 +191,51 @@ class CliWorker:
         return instruction + block
 
     def __call__(self, node: str, instruction: str, state: dict):
-        argv = [_render(a, node, instruction) for a in self.command]
+        argv = [_render(argument, node, instruction) for argument in self.command]
         payload = self._stdin_payload(node, instruction, state) if self.stdin else None
         try:
-            p = _run_capped(argv, payload, self.timeout, self.max_output, self.cwd, self.env)
-        except subprocess.TimeoutExpired as e:
+            result = _run_capped(argv, payload, self.timeout, self.max_output, self.cwd, self.env)
+        except subprocess.TimeoutExpired as error:
             raise CliWorkerError(
-                f"cli worker timeout after {self.timeout:.0f}s: {' '.join(argv[:3])}…") from e
-        except OSError as e:                              # command not found / not executable
-            raise CliWorkerError(f"cli worker could not start ({argv[0]!r}): {e}") from e
-        if p.stdout_overflow:                             # a runaway worker — do not parse a truncated result
+                f"cli worker timeout after {self.timeout:.0f}s: {' '.join(argv[:3])}…") from error
+        except OSError as error:                              # command not found / not executable
+            raise CliWorkerError(f"cli worker could not start ({argv[0]!r}): {error}") from error
+        if result.stdout_overflow:                             # a runaway worker — do not parse a truncated result
             raise CliWorkerError(
                 f"cli worker stdout exceeded {self.max_output} bytes ({argv[0]}): refusing to "
                 f"buffer a runaway worker")
-        if p.returncode != 0:
-            tail = (p.stderr or p.stdout or "").strip()[-_STDERR_TAIL:]
+        if result.returncode != 0:
+            tail = (result.stderr or result.stdout or "").strip()[-_STDERR_TAIL:]
             raise CliWorkerError(
-                f"cli worker exit {p.returncode} ({argv[0]}): {tail or '(no stderr)'}")
-        return _outcome_from_stdout(p.stdout)
+                f"cli worker exit {result.returncode} ({argv[0]}): {tail or '(no stderr)'}")
+        return _outcome_from_stdout(result.stdout)
 
 
-def cli_agent(commands: Union[Sequence[str], Dict[str, Sequence[str]]],
-              default: Optional[Sequence[str]] = None, **kw):
-    """Build an engine-ready agent from CLI command(s).
+def cli_worker(commands: Union[Sequence[str], Dict[str, Sequence[str]]],
+               default: Optional[Sequence[str]] = None, **kw):
+    """Build an engine-ready worker from CLI command(s).
 
     * a single argv list -> every node runs that command;
     * a {node_name: argv} dict -> per-node commands (engine-heterogeneous routing), with
       `default` for unmapped nodes (no default -> unmapped nodes raise, landing on error edges).
     Extra kwargs (timeout, stdin, pass_state, cwd, env) apply to every constructed worker."""
     if isinstance(commands, dict):
-        workers = {n: CliWorker(cmd, **kw) for n, cmd in commands.items()}
+        workers = {name: CliWorker(cmd, **kw) for name, cmd in commands.items()}
         fallback = CliWorker(default, **kw) if default else None
 
-        def agent(node: str, instruction: str, state: dict):
-            w = workers.get(node) or fallback
-            if w is None:
+        def worker(node: str, instruction: str, state: dict):
+            chosen = workers.get(node) or fallback
+            if chosen is None:
                 raise CliWorkerError(f"no CLI command mapped for node {node!r} and no default")
-            return w(node, instruction, state)
-        return agent
+            return chosen(node, instruction, state)
+        return worker
     return CliWorker(commands, **kw)
+
+
+def cli_agent(commands: Union[Sequence[str], Dict[str, Sequence[str]]],
+              default: Optional[Sequence[str]] = None, **kw):
+    """What `cli_worker` was called before the rename, kept importable so code written against
+    the old name keeps running."""
+    warnings.warn("cli_agent is now cli_worker; the old name goes away in a later release",
+                  DeprecationWarning, stacklevel=2)
+    return cli_worker(commands, default=default, **kw)

@@ -38,7 +38,7 @@ cases + 27 engine fixtures, bit for bit). The Python kernel stays the reference 
 generated from it); the ports are runtime surfaces, and the tooling (validate/verify/test/lock/
 ci-report/lsp) deliberately lives only on the reference side: an asymmetry, not a gap.
 
-## 2. The control plane
+## 2. The orchestration layer
 
 `run_sprint.py` is the loop that drives a real agent swarm to build a real tree against a gate.
 
