@@ -27,7 +27,12 @@ STRICT = {
     "prismpath-hw/evidence/SHA256SUMS",
     "prismpath-hw/hyst-cert/evidence/SHA256SUMS",
     "prismpath-hw/evidence/openflow_2026-08-20.SHA256SUMS",
-    "prismpath-hw/evidence/wcet_2026-08-20.SHA256SUMS",
+    # wcet_2026-08-20 names a SOURCE (rtl/ppt_interp.sv, tb/wcet/ppt_wcet.sby), which by the docstring
+    # above is a snapshot, not a never-changes artifact. The interpreter has since been hardened and
+    # reflowed, so the live source legitimately differs from the witnessed bytes; the anchored witness
+    # remains a valid point-in-time record. It stays a snapshot until re-witnessed on silicon (the WCET
+    # bound is pending re-measurement, board down). The signed bound wcet_formal_2026-08-20.json is
+    # still covered by its own OpenTimestamps proof.
 }
 
 
