@@ -76,6 +76,10 @@ control plane, GRC. A term with no `Also called (deprecated)` line has no losing
 
 **abstain**: the decision to make no decision because the information required is absent. Distinct from a denial, which is a decision. Layer: kernel evaluation. Not to be confused with: deny, refusal with cause, escalate. Also called (deprecated): defer (in the kernel sense only; `defer` keeps its GRC and port meaning).
 
+**action**: a concrete operation proposed or authorized for execution against a consequence producing boundary. An action is not a decision; a decision may authorize, deny, abstain from, or refuse an action. Layer: control plane. Not to be confused with: decision (the act that rules on an action), match action fragment (the kernel fragment that selects an edge, unrelated to this sense), outcome (the worker's return that a decision reads).
+
+**actuator**: the component that causes a physical or external effect once a decision has authorized an action against its execution boundary. Layer: substrate execution. Not to be confused with: the execution boundary (the general locus of effect, of which an actuator is the physical subtype), worker (which proposes an outcome and does not itself effect anything).
+
 **adapter**: an implementation of one or more ports that carries all of one domain's knowledge, so the core carries none. Layer: control plane. Not to be confused with: connector (the SDK base class an adapter subclasses), port (the interface the adapter implements).
 
 **adjudicate**: to turn one unit of work into one structured result through the Adjudicator port, by a model, a comparator, or a circuit. Layer: control plane. Not to be confused with: route (choosing an edge), decide (the whole act). Also called (deprecated): `adjudicate` in `prismpath/evals/kappa.py:100`, which reconciles two human label sets and should be `reconcile`.
@@ -134,7 +138,7 @@ control plane, GRC. A term with no `Also called (deprecated)` line has no losing
 
 **datagram**: the delivery unit of the transport a Facet stream is bound to, and the boundary at which a concentrated stream fails closed. Layer: wire and transport. Not to be confused with: codeword, record, reading. Also called (deprecated): packet, when the Facet sense is meant.
 
-**decision**: the act of determining where a run goes next and whether an action is permitted, and the record of that act. The centre of this dictionary: every other term is defined by its position relative to one of these. Layer: all. Not to be confused with: outcome (the worker's return, which is an *input* to a decision). Also called (deprecated): verdict, in all its senses.
+**decision**: the act of determining where a run goes next and whether an action is permitted. The centre of this dictionary: every other term is defined by its position relative to one of these. The durable record of a decision is the receipt, not the decision itself, so the act and its record are two terms, never one. Layer: all. Not to be confused with: outcome (the worker's return, which is an *input* to a decision), receipt (the record of the decision, not the act itself), action (what a decision rules on). Also called (deprecated): verdict, in all its senses.
 
 **deny**: the decision that an action is not authorized. A decision, not an absence of one. Layer: kernel evaluation. Not to be confused with: abstain (information absent), refusal with cause (nothing matched), park (holding on the fail safe).
 
@@ -159,6 +163,8 @@ control plane, GRC. A term with no `Also called (deprecated)` line has no losing
 **evidence**: in this project's own operations, the committed artifact that backs a claim (hashes, stamps, reproduction scripts). In GRC, the material that supports a determination about a control. Always qualified. Layer: evidence and receipts, and GRC. Not to be confused with: the evidence ledger (a document), an `EVD1` record (a picture behind an escalating decision, which should be named `capture`), the payload in `pending` on a suspended run (which should be named `handoff`).
 
 **evidence ledger**: the Markdown document in which every public claim is a numbered row with its method, result, honest scope and provenance, linted by `tools/ledger_lint.py` and anchored. Layer: evidence and receipts. Not to be confused with: the Flow Ledger, the context ledger, the guard ledger, which are cryptographic structures and not documents. Never called just "the ledger".
+
+**execution boundary** (effect boundary): where a permitted decision becomes consequential effect. Governance is consequence agnostic, meaning one authorized decision can terminate at different execution boundaries, a tool call, an in kernel XDP gate, a physical actuator, without the authority relation changing. Layer: substrate execution. Not to be confused with: actuator (the physical subtype of an execution boundary), port (the interface a component implements, not the point of effect), action (the operation that crosses the boundary).
 
 **Facet**: the decision sufficient telemetry wire: self framing Fibonacci codes carrying quantized symbols, with per packet Merkle roots, a staleness bound, replay refusal with a named cause, and a concentrator for fleets. Layer: wire and transport. Not to be confused with: the unrelated Rust `facet` reflection crate, which is why the crates are named `prismpath-*`.
 
