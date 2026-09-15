@@ -91,7 +91,7 @@ async def bad_band_dropped(dut):
     INTER_FRAME = 200
 
     def raw_frame(codes):
-        return packed.pack(z.encode_stream(codes), 8)
+        return packed.pack(zeck.encode_stream(codes), 8)
 
     # good band 2, then a frame whose third code is 7 (band+1=7 -> would alias to band 6), then good band 3
     frames = [raw_frame([2, 6, 3]),        # class+1=2, tick+1=6, band+1=3 -> band 2

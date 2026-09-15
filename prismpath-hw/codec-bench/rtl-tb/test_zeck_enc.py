@@ -97,7 +97,7 @@ async def zero_input_refused(dut):
     assert not saw_done, "encoder claimed a completed code for a zero input"
 
     # recovery: a real value after the refusal still encodes to the reference wire
-    expected = packed.pack(z.encode_stream([7]), 8)
+    expected = packed.pack(zeck.encode_stream([7]), 8)
     dut.in_val.value = 7
     dut.in_valid.value = 1
     while True:
