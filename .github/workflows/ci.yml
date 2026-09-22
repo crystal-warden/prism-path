@@ -80,6 +80,8 @@ jobs:
         run: python tools/docs_health.py
       - name: Arithmetic lint (recompute cross-artifact ratios)
         run: python tools/arith_lint.py --strict
+      - name: Architecture guard (core purity, declared paths, deprecated identifiers, vocabulary drift)
+        run: python tools/arch_guard.py
 
   # The package as a user receives it: the wheel and the sdist are built, each installed into a clean
   # environment away from the checkout, and the supported workflows run from there. A repository test

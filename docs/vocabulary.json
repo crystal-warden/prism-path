@@ -1,0 +1,80 @@
+{
+ "_doc": "The enforceable part of the Decision Dictionary (docs/DICTIONARY.md explains each term; this file is what tools/arch_guard.py reads). Three things are enforced: domain nouns that must not appear in core modules, deprecated identifiers that must not be used outside the paths that keep them alive on purpose, and the frozen identifiers that certified artifacts carry and that no rename may touch. A term named here must have a dictionary entry, which the guard checks, so the two files cannot drift apart silently.",
+ "domains": {
+  "tutor": {
+   "nouns": [
+    "learner",
+    "pedagog",
+    "curriculum"
+   ],
+   "reason": "the learning environment is an adapter, never the kernel's vocabulary"
+  },
+  "sensor": {
+   "nouns": [
+    "bno086",
+    "quaternion",
+    "mcp2221",
+    "\\bfpga\\b",
+    "\\bimu\\b"
+   ],
+   "reason": "a physical transducer and a substrate are adapters and targets, never the kernel's vocabulary"
+  },
+  "fusion": {
+   "nouns": [
+    "dev_mg",
+    "soc_action",
+    "fusion_triage",
+    "coincident_critical"
+   ],
+   "reason": "the decision fusion adapter's field names stay in the adapter"
+  }
+ },
+ "deprecated": [
+  {
+   "identifier": "cli_agent",
+   "canonical": "cli_worker",
+   "term": "worker",
+   "allowed_paths": [
+    "prismpath/workers/cli_worker.py",
+    "prismpath/tests/"
+   ],
+   "note": "the shim that keeps the old name importable with a DeprecationWarning, and the tests that pin the warning"
+  },
+  {
+   "identifier": "worker_agent",
+   "canonical": "worker_for",
+   "term": "worker",
+   "allowed_paths": [
+    "prismpath/plugins/registry.py",
+    "prismpath/tests/"
+   ],
+   "note": "the shim that keeps the old name importable with a DeprecationWarning, and the tests that pin the warning"
+  },
+  {
+   "identifier": "\\bnid\\b",
+   "canonical": "device_id",
+   "term": "edge",
+   "allowed_paths": [],
+   "note": "rule 14: nid was legal only where node meant a device, which it no longer does"
+  }
+ ],
+ "certified": {
+  "paths": [
+   "prismpath-hw/",
+   "prismpath-ebpf/",
+   "prismpath/portable/conformance/",
+   "prismpath/telemetry/conformance/",
+   "prismpath/evidence/",
+   "docs/research/",
+   "prismpath/comparisons/"
+  ],
+  "identifiers": [
+   {
+    "identifier": "next_node",
+    "term": "route",
+    "note": "the receipt record key, frozen by conformance/receipts.json and the Wireshark dissector; the dictionary deprecates the word for prose, the wire keeps it"
+   }
+  ],
+  "reason": "certified bytes do not move (rule 12): the C target, the RTL, the kernel programs, the frozen corpora, the anchored evidence and the comparison corpus keep every identifier they carry"
+ }
+}

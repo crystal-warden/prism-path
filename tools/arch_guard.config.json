@@ -1,5 +1,5 @@
 {
-  "_doc": "Architecture guard config = the hexagonal contract. Signal 1 (domain noun / adapter-import in CORE) is a HARD FAIL. Signals 3 (core churn) and 7 (marginal cost + %-logic-in-md) are TREND metrics, reported not gated (co-evolution edits the core early; the alarm is a PLATEAU, not any single edit). Refining core-vs-adapter membership is itself part of the refactor.",
+  "_doc": "Architecture guard config = the hexagonal contract. Signal 1 (domain noun / adapter-import in CORE) is a HARD FAIL, and so are a declared path that is missing, a deprecated identifier outside its allowed paths, and vocabulary drift between docs/vocabulary.json and docs/DICTIONARY.md. The domain nouns live in docs/vocabulary.json, not here. Signals 3 (core churn) and 7 (marginal cost + %-logic-in-md) are TREND metrics, reported not gated (co-evolution edits the core early; the alarm is a PLATEAU, not any single edit). Refining core-vs-adapter membership is itself part of the refactor.",
   "package_dir": "prismpath",
   "core_modules": [
     "kernel/engine.py",
@@ -47,26 +47,6 @@
     }
   },
   "unclassified_needs_triage": [],
-  "domain_nouns": {
-    "tutor": [
-      "learner",
-      "pedagog",
-      "curriculum"
-    ],
-    "sensor": [
-      "bno086",
-      "quaternion",
-      "mcp2221",
-      "\\bfpga\\b",
-      "\\bimu\\b"
-    ],
-    "fusion": [
-      "dev_mg",
-      "soc_action",
-      "fusion_triage",
-      "coincident_critical"
-    ]
-  },
   "_adapters_note": "Domain adapters live in ../adapters/<domain>/ (migrated 2026-07-23). The published prismpath/ package is core-only; Signal-1 scans core_modules for domain_nouns. Each adapter conforms to adapters/ADAPTER_GUIDE.md.",
   "orchestration_fallback": [
     "orchestration/run_sprint.py",
@@ -82,5 +62,14 @@
     "mission_control/"
   ],
   "_console_note": "Mission Control is the operator's console (observe, control, events, prove); it consumes the ledgers and the kernel and is not core.",
-  "_triage_resolved_note": "September 2026: analysis.py is kernel/ (static analysis), chat_agent.py is workers/ (a worker backend), ledger_runner.py is ledgers/ (a flow driven per item with a git proof), mission_control/ is the console."
+  "_triage_resolved_note": "September 2026: analysis.py is kernel/ (static analysis), chat_agent.py is workers/ (a worker backend), ledger_runner.py is ledgers/ (a flow driven per item with a git proof), mission_control/ is the console.",
+  "vocabulary": "docs/vocabulary.json",
+  "dictionary": "docs/DICTIONARY.md",
+  "scan_roots": [
+    "prismpath",
+    "adapters",
+    "tools",
+    "integrations"
+  ],
+  "_scan_note": "scan_roots are the Python trees the deprecated identifier check walks; certified paths in the vocabulary and each entry's allowed_paths are skipped."
 }

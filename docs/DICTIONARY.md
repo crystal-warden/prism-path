@@ -45,10 +45,12 @@ of the two is renamed.** Context resolution works for the author and fails for e
 worst in exactly the situation the system is built for, which is a person reading an unfamiliar layer under
 time pressure. The corollary is that the dictionary must say what happens to the loser: deprecated outright,
 kept as a layer specific alias with a stated layer, or kept as the domain's own word inside that domain only
-and banned in core. That third disposition already has enforcement machinery, `tools/arch_guard.py` Signal 1,
-which fails the build when a domain noun appears in core (`docs/decoder-ring.md:254`,
-`adapters/compliance/ADAPTER_CONTRACT.md:11`). The dictionary should feed that guard its word list rather
-than the guard keeping a private one.
+and banned in core. That third disposition has enforcement machinery, `tools/arch_guard.py`, which fails
+the build when a domain noun appears in core (`docs/decoder-ring.md:254`,
+`adapters/compliance/ADAPTER_CONTRACT.md:11`). The guard reads its word list from this dictionary's
+enforceable half, `docs/vocabulary.json`: the domain nouns per domain, the deprecated identifiers with the
+paths allowed to keep them alive, and the certified paths and identifiers that never move. The guard also
+checks that every term named there has an entry here, so the two files cannot drift apart silently.
 
 One more thing the purpose statement should say out loud, because the repository's own history shows it is
 needed. **This dictionary governs the company as well as the codebase, and it governs documents before it
@@ -58,6 +60,14 @@ the RTL and the eBPF programs are certified byte for byte, and renaming a field 
 means a silicon re-certification (`prismpath-hw/README.md:33`, `make cert`). For those, the dictionary entry
 records the frozen name as a deprecated alias and points at the walkthrough document, instead of pretending
 the rename happened.
+
+## The domains the guard keeps out of core
+
+Three domains own vocabulary that must never appear in a core module: **tutor** (the learning
+environment: learner, pedagogy, curriculum), **sensor** (physical transducers and substrates: the BNO086,
+a quaternion, the MCP2221 bridge, the FPGA, the IMU) and **fusion** (the decision fusion adapter's field
+names). The word lists are in `docs/vocabulary.json`; a new domain noun is added there in the same
+commit that introduces it (rule 13).
 
 ## The layers
 
@@ -350,7 +360,7 @@ Fourteen rules a contributor can apply without consulting anyone.
 
 12. **Documents change first, identifiers follow, certified bytes do not move.** Fix the term in `docs/POSITION.md` and the dictionary, then in prose, then in code. Where a rename would touch bytes that are certified (`prismpath-hw/interp.c`, the RTL, the eBPF programs, the frozen corpora, the append only cause registry), do not rename: record the frozen name in the dictionary as a deprecated alias and write the companion walkthrough instead.
 
-13. **A new domain word enters the dictionary in the same commit that introduces it**, and is added to `tools/arch_guard.py`'s word list if it is a domain noun, so the hexagonal boundary is enforced rather than intended. A pull request that introduces a domain noun with no dictionary entry is incomplete.
+13. **A new domain word enters the dictionary in the same commit that introduces it**, and is added to `docs/vocabulary.json`'s word list if it is a domain noun, so the hexagonal boundary is enforced rather than intended. A pull request that introduces a domain noun with no dictionary entry is incomplete.
 
 14. **Abbreviations inherit their term's rules.** `nid` is legal only where `node` means a device, which it no longer does; a device identifier is `device_id`. Abbreviate only terms whose full form is in the dictionary, and abbreviate the same way everywhere (`pver` for policy version, `ctx` for the evaluation environment, `seq` for the sequence counter).
 
