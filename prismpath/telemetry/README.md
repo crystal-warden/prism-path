@@ -44,8 +44,8 @@ runs lands here.
 
 ### Phase B ✅
 - ✅ **Self-heal core** (`selfheal.py`); the Fibonacci stream is chunked into Merkle committed blocks,
-  reusing the repo's **real** Merkle primitive (`prismpath.ledger_ots`; `audit_log`'s open-release MMR is
-  a stub, so this is the genuine one; batch-per-epoch, OTS-anchorable). A lost block is a detected gap; a
+  reusing the repo's **real** Merkle primitive (`prismpath.ledger_ots`, the same one `audit_log` commits
+  its events with; this one seals batch per epoch and is OTS anchorable). A lost block is a detected gap; a
   **forged or corrupted block is rejected** (its inclusion proof fails against the trusted root), never
   silently accepted; selective retransmission fills exactly the gaps and reassembles the stream
   bit-for-bit; an unrecoverable block stays a **provable** gap (`assemble()` refuses a silent hole).

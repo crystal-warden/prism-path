@@ -3,7 +3,8 @@
 """Self-healing transport  -  Merkle-committed blocks + selective retransmission, reusing the repo's real
 Merkle primitive (`prismpath.ledger_ots`, which is also OTS/Bitcoin-anchorable). NOT a new subsystem.
 
-(The doc named `audit_log`'s MMR, but that is a stub in the open release  -  no roots/proofs. `ledger_ots`
+(`audit_log` commits every event as a leaf of the same Merkle primitive and gives real roots and
+inclusion proofs; the epoch chain here is the stream's own sealing, per epoch and OTS anchorable. `ledger_ots`
 is the genuine one. A batch Merkle tree recomputed per window/epoch fits the daily-chained-epoch design;
 an append-only MMR with O(log n) peaks is a later streaming optimization.)
 

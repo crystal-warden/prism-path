@@ -6,6 +6,8 @@ failure at any stage leaves the previous policy active. Uses the real compiler +
 import sys
 from pathlib import Path
 
+import os
+
 import pytest
 
 pytest.importorskip("cryptography")
@@ -163,3 +165,67 @@ def test_version_floor_persists_across_restart(env):
     host2 = _host(env)                                    # fresh host, same state_dir
     swap_result = host2.swap(_pack(env, "v2", 2))                  # below the persisted floor
     assert not swap_result["ok"] and any("version:not-monotonic" in reason for reason in swap_result["reasons"])
+
+def _events(host, action):
+    return [event for event in host.audit.events if event["action"] == action]
+
+
+def test_floor_write_failure_leaves_previous_policy_active(env, monkeypatch):
+    """A failure after validation, at the version floor write, must not activate the new policy, must
+    not record an accepted swap, and must let the same swap complete on retry."""
+    host = _host(env)
+    host.swap(_pack(env, "v1", 1))
+    before = host.active()
+    v2 = _pack(env, "v2", 2)
+    real_persist = host._persist_version
+
+    def failing_persist(version):
+        raise OSError(28, "No space left on device")
+    monkeypatch.setattr(host, "_persist_version", failing_persist)
+    with pytest.raises(OSError):
+        host.swap(v2)
+    assert host.active() == before, "the previous policy stays active"
+    assert host._stored_version() == 1, "the floor did not move"
+    assert [event["data"]["version"] for event in _events(host, "swap")] == [1], "no accepted swap for version 2 was recorded"
+    monkeypatch.setattr(host, "_persist_version", real_persist)
+    result = host.swap(v2)
+    assert result["ok"] and result["version"] == 2
+    assert [event["data"]["version"] for event in _events(host, "swap")] == [1, 2]
+    assert not os.path.exists(host._pending_path())
+
+
+def test_evidence_write_failure_after_the_floor_is_recoverable(env, monkeypatch):
+    """The floor advanced, the evidence did not: the previous policy stays active, a restart records the
+    interruption, and the same image at the same version is admitted although the floor equals it."""
+    from prismpath.ledgers import audit_log as audit_module
+    host = _host(env)
+    host.swap(_pack(env, "v1", 1))
+    before = host.active()
+    v2 = _pack(env, "v2", 2)
+
+    def failing_append(*args, **kwargs):
+        raise audit_module.AuditWriteError("disk gone")
+    monkeypatch.setattr(host.audit, "append", failing_append)
+    with pytest.raises(audit_module.AuditWriteError):
+        host.swap(v2)
+    assert host.active() == before
+    assert host._stored_version() == 2, "the floor had already advanced when the evidence write failed"
+    assert os.path.exists(host._pending_path()), "the intent record marks the interrupted commit"
+    restarted = _host(env)
+    assert [event["data"]["version"] for event in _events(restarted, "swap_incomplete")] == [2]
+    other_image_same_version = restarted.swap(_pack(env, "v2b", 2, hot=50))
+    assert not other_image_same_version["ok"], "a different image at the floor version is still rejected"
+    result = restarted.swap(v2)
+    assert result["ok"] and result["version"] == 2, "the interrupted swap completes on retry"
+    assert not os.path.exists(restarted._pending_path())
+    assert [event["data"]["version"] for event in _events(restarted, "swap")] == [1, 2]
+    assert restarted.audit.verify_persisted()
+
+
+def test_a_floor_below_the_intent_is_not_admitted_twice(env):
+    """After a completed swap the intent record is gone, so the floor is strict again."""
+    host = _host(env)
+    host.swap(_pack(env, "v1", 1))
+    host.swap(_pack(env, "v2", 2))
+    again = host.swap(_pack(env, "v2c", 2, hot=60))
+    assert not again["ok"] and any("version:not-monotonic" in reason for reason in again["reasons"])

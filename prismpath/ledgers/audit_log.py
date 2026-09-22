@@ -11,6 +11,14 @@ primitive (`prismpath.ledger_ots`), so `current_root()` is a real root that chan
 altered, `prove(i)` yields a real inclusion proof, and `verify()` checks it. Anchor `current_root()` with
 `ledger_ots` (OTS / Bitcoin) to make the trail externally tamper-evident over time. The interface is
 unchanged from the earlier stub, so Mission Control and the guard ledger consume it as-is.
+
+Persistence is part of the promise. `append` writes the event to the file, flushes and fsyncs it, and
+only then commits the event to the in memory tree, so an event the file does not hold never has a leaf.
+A write that fails raises `AuditWriteError` and leaves the log exactly as it was. `verify_log` checks
+the structure of what is in memory; `verify_persisted` checks that the file holds the same events, the
+question the structural check cannot answer. A caller that must not act without evidence appends
+first and acts only when append returned, which is how the policy host commits a swap; a caller that
+records after acting must surface the error rather than continue as if the record existed.
 """
 from __future__ import annotations
 
@@ -22,6 +30,10 @@ import time
 
 from prismpath.ledgers import ledger_ots as merkle
 from prismpath import canon as _canon
+
+class AuditWriteError(RuntimeError):
+    """The event could not be persisted. The in memory log was not changed; nothing was committed."""
+
 
 def _leaf_hex(ev: dict) -> str:
     """A stable content hash of an event  -  its Merkle leaf. Commits to every field, so editing any past
@@ -51,17 +63,43 @@ class AuditLog:
                     self.leaves.append(_leaf_hex(ev))
 
     def append(self, actor: str, action: str, data: dict) -> dict:
+        """Persist the event, then commit it to the tree. Raises AuditWriteError, with the log
+        unchanged, when the file cannot take it."""
         with self._lock:
             idx = len(self.events)
             ev = {"idx": idx, "id": f"{idx}", "ts": time.time(),
                   "actor": actor, "action": action, "data": data}
+            line = json.dumps(ev) + "\n"
+            if self.path:
+                try:
+                    os.makedirs(os.path.dirname(os.path.abspath(self.path)), exist_ok=True)
+                    with open(self.path, "a") as log_file:
+                        log_file.write(line)
+                        log_file.flush()
+                        os.fsync(log_file.fileno())
+                except OSError as error:
+                    raise AuditWriteError(f"audit event not persisted to {self.path}: {error}") from error
             self.events.append(ev)
             self.leaves.append(_leaf_hex(ev))
-            if self.path:
-                os.makedirs(os.path.dirname(os.path.abspath(self.path)), exist_ok=True)
-                with open(self.path, "a") as log_file:
-                    log_file.write(json.dumps(ev) + "\n")
             return ev
+
+    def verify_persisted(self) -> bool:
+        """True when the file holds exactly the events in memory, line for line. A log with no path is
+        never persisted and answers False, so a caller cannot mistake an in memory log for evidence."""
+        if not self.path or not os.path.exists(self.path):
+            return False
+        with self._lock:
+            on_disk = []
+            with open(self.path) as log_file:
+                for line in log_file:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        on_disk.append(_leaf_hex(json.loads(line)))
+                    except Exception:
+                        return False
+            return on_disk == self.leaves
 
     def current_root(self) -> str:
         """The Merkle root over all event leaves (hex); empty string for an empty log. Anchor it via
@@ -70,8 +108,9 @@ class AuditLog:
         return root or ""
 
     def verify_log(self) -> bool:
-        """Every leaf's inclusion proof verifies against the current root (structural integrity). Detecting
-        tampering *over time* comes from anchoring `current_root()` and re-deriving it later."""
+        """Every leaf's inclusion proof verifies against the current root: structural integrity of what
+        is in memory, and nothing about the file. `verify_persisted` answers the persistence question.
+        Detecting tampering *over time* comes from anchoring `current_root()` and re-deriving it later."""
         # A log with a line that cannot be read is not a log that verifies
         if self.skipped:
             return False
