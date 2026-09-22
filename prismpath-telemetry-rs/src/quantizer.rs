@@ -95,7 +95,7 @@ impl FieldPartition {
     pub fn symbol(&self, value: &V) -> Result<usize, String> {
         match self.kind {
             FieldKind::Numeric => {
-                let number = v_to_i64(value);
+                let number = v_to_i64(value)?;
                 for (index, cell) in self.cells.iter().enumerate() {
                     let lo_ok = cell.lo.is_none_or(|low| number >= low);
                     let hi_ok = cell.hi.is_none_or(|high| number <= high);
@@ -125,15 +125,146 @@ impl FieldPartition {
     pub fn representative(&self, symbol: usize) -> V {
         self.cells[symbol].rep.clone()
     }
+
+    /// `symbol` behind the input contract: the value is accepted and converted by `accept_value`
+    /// or the error names the field and the reason. Encode through this at a runtime boundary;
+    /// `symbol` keeps its permissive numeric view for compatibility.
+    pub fn checked_symbol(&self, value: &V) -> Result<usize, InputContractError> {
+        let converted = accept_value(&self.kind, value)
+            .map_err(|rejection| InputContractError { field: self.field.clone(), rejection })?;
+        self.symbol(&converted)
+            .map_err(|_| InputContractError { field: self.field.clone(), rejection: InputRejection::OutOfRange })
+    }
 }
 
-fn v_to_i64(value: &V) -> i64 {
+/// The permissive numeric view `symbol` keeps for compatibility: a fraction truncates, a bool is
+/// 0 or 1. A string that is not an integer literal and a null are errors, never zero; reading them
+/// as zero was a silent coercion the reference never had, and a preflight that passed could not
+/// predict it.
+fn v_to_i64(value: &V) -> Result<i64, String> {
     match value {
-        V::Num(number) => *number as i64,
-        V::Bool(flag) => if *flag { 1 } else { 0 },
-        V::Str(text) => text.parse::<i64>().unwrap_or(0),
-        _ => 0,
+        V::Num(number) => Ok(*number as i64),
+        V::Bool(flag) => Ok(if *flag { 1 } else { 0 }),
+        V::Str(text) => text.parse::<i64>().map_err(|_| format!("{text:?} is not an integer literal")),
+        other => Err(format!("{other:?} is not a number")),
     }
+}
+
+// ------------------------------------------------------------------ the input contract
+// One rule set for the Rust and Python encoders and for both preflight tools, frozen as the
+// inputs corpus. Integers are accepted within the range every JSON reader represents exactly.
+pub const SAFE_INTEGER_LIMIT: f64 = 9007199254740992.0;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum InputRejection {
+    Missing,
+    WrongType,
+    UnparseableString,
+    Fractional,
+    OutOfRange,
+}
+
+impl InputRejection {
+    /// The reason string shared with the Python side and the preflight reports.
+    pub fn reason(&self) -> &'static str {
+        match self {
+            InputRejection::Missing => "missing",
+            InputRejection::WrongType => "wrong_type",
+            InputRejection::UnparseableString => "unparseable_string",
+            InputRejection::Fractional => "fractional",
+            InputRejection::OutOfRange => "out_of_range",
+        }
+    }
+}
+
+impl std::fmt::Display for InputRejection {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(self.reason())
+    }
+}
+
+/// A value the input contract refuses, with the field it was offered for.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InputContractError {
+    pub field: String,
+    pub rejection: InputRejection,
+}
+
+impl std::fmt::Display for InputContractError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(formatter, "{}: {}", self.field, self.rejection)
+    }
+}
+
+fn integer_literal(text: &str) -> bool {
+    let digits = text.strip_prefix('+').or_else(|| text.strip_prefix('-')).unwrap_or(text);
+    !digits.is_empty() && digits.bytes().all(|byte| byte.is_ascii_digit())
+}
+
+/// The input contract for one field kind: the converted value, or the rejection.
+///
+/// numeric accepts an integer within the safe range, an integral float, a bool as 0 or 1, and a
+/// string that is an integer literal with an optional sign; a fraction is refused rather than
+/// truncated, another string is refused rather than read as zero, null is missing. boolean accepts
+/// a bool and a number exactly 0 or 1. categorical accepts a string only. Anything else is the
+/// wrong type. Python's `accept_value` is the same function; the inputs corpus pins both.
+pub fn accept_value(kind: &FieldKind, value: &V) -> Result<V, InputRejection> {
+    if matches!(value, V::Null) {
+        return Err(InputRejection::Missing);
+    }
+    match kind {
+        FieldKind::Numeric => {
+            let number = match value {
+                V::Bool(flag) => if *flag { 1.0 } else { 0.0 },
+                V::Num(number) => {
+                    if !number.is_finite() {
+                        return Err(InputRejection::OutOfRange);
+                    }
+                    if number.fract() != 0.0 {
+                        return Err(InputRejection::Fractional);
+                    }
+                    *number
+                }
+                V::Str(text) => {
+                    if !integer_literal(text) {
+                        return Err(InputRejection::UnparseableString);
+                    }
+                    // A literal that overflows f64 parsing is out of range, not unparseable.
+                    text.parse::<f64>().map_err(|_| InputRejection::OutOfRange)?
+                }
+                _ => return Err(InputRejection::WrongType),
+            };
+            if number.abs() >= SAFE_INTEGER_LIMIT {
+                return Err(InputRejection::OutOfRange);
+            }
+            Ok(V::Num(number))
+        }
+        FieldKind::Boolean => match value {
+            V::Bool(flag) => Ok(V::Bool(*flag)),
+            V::Num(number) if *number == 0.0 || *number == 1.0 => Ok(V::Bool(*number == 1.0)),
+            _ => Err(InputRejection::WrongType),
+        },
+        FieldKind::Categorical => match value {
+            V::Str(text) => Ok(V::Str(text.clone())),
+            _ => Err(InputRejection::WrongType),
+        },
+    }
+}
+
+/// `quantize` behind the input contract: every decision field present and accepted, or the error
+/// names the first field that is not.
+pub fn checked_quantize(
+    parts: &HashMap<String, FieldPartition>,
+    reading: &HashMap<String, V>,
+) -> Result<HashMap<String, usize>, InputContractError> {
+    let mut fields: Vec<&String> = parts.keys().collect();
+    fields.sort();
+    let mut out = HashMap::new();
+    for field in fields {
+        let value = reading.get(field).ok_or_else(|| InputContractError { field: field.clone(), rejection: InputRejection::Missing })?;
+        out.insert(field.clone(), parts[field].checked_symbol(value)?);
+    }
+    Ok(out)
 }
 
 fn v_to_str(value: &V) -> String {

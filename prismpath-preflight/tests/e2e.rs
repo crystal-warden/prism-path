@@ -1,5 +1,5 @@
 //! The same contract the Python reference tool's tests pin, exercised against the compiled
-//! binary — plus the one place the Rust value model differs (string-to-0 coercion), which this
+//! binary, plus the input contract finding a string on a numeric field raises, which this
 //! tool must surface precisely BECAUSE the reference errors there instead.
 
 use std::path::PathBuf;
@@ -85,19 +85,22 @@ fn map_reaches_nested_fields() {
 }
 
 #[test]
-fn string_coercion_to_zero_is_surfaced_and_blocks_ready() {
-    // The Rust crates coerce an unparseable string on a numeric field to 0 (the Python
-    // reference errors instead). The Rust preflight must therefore encode the event AND flag it.
-    let (flow, sample, out) = setup("coerce", &[
-        r#"{"temp": "not-a-number", "armed": true}"#, r#"{"temp": 50, "armed": false}"#]);
-    let result = run(&[flow.to_str().unwrap(), sample.to_str().unwrap(),
-                  "--json", out.to_str().unwrap()]);
-    assert_eq!(result.status.code(), Some(1));
-    assert!(String::from_utf8_lossy(&result.stdout).contains("COERCED TO 0"));
+fn contract_rejection_is_surfaced_and_blocks_ready() {
+    // A string that is not an integer literal on a numeric field is refused by the input contract
+    // and by the encoder alike, on both sides of the stack: the event is out of partition for the
+    // permissive encoder and rejected by the contract, and neither lets it become a zero reading.
+    let (flow, sample, out) = setup("contract", &[
+        r#"{"temp": 95, "armed": true}"#,
+        r#"{"temp": "hot", "armed": true}"#,
+    ]);
+    let output = run(&[flow.to_str().unwrap(), sample.to_str().unwrap(), "--json", out.to_str().unwrap()]);
+    assert_eq!(output.status.code(), Some(1));
     let rep = report(&out);
-    assert_eq!(rep["encoded"], 2);                  // both encode: coercion is not an error here
-    assert_eq!(rep["coerced_to_zero_by_field"]["temp"], 1);
-    assert_eq!(rep["out_of_partition"].as_object().unwrap().len(), 0);
+    assert_eq!(rep["encoded"], 1);
+    assert_eq!(rep["out_of_partition"]["temp"], 1);
+    assert_eq!(rep["rejected_by_contract"]["temp"]["unparseable_string"], 1);
+    assert!(rep.get("coerced_to_zero_by_field").is_none());
+    assert_eq!(rep["ready"], false);
 }
 
 #[test]
@@ -107,11 +110,13 @@ fn float_truncation_counted_and_null_is_missing() {
         r#"{"temp": null, "armed": true}"#]);        // JSON null = missing, as in the codec
     let result = run(&[flow.to_str().unwrap(), sample.to_str().unwrap(),
                   "--on-missing", "skip", "--json", out.to_str().unwrap()]);
-    assert_eq!(result.status.code(), Some(0));
+    assert_eq!(result.status.code(), Some(1), "a fraction is rejected by the input contract");
     let rep = report(&out);
     assert_eq!(rep["float_truncated_by_field"]["temp"], 1);
+    assert_eq!(rep["rejected_by_contract"]["temp"]["fractional"], 1);
     assert_eq!(rep["missing_by_field"]["temp"], 1);
     assert_eq!(rep["route_distribution"]["classify"]["ok"], 1);
+    assert_eq!(rep["ready"], false);
 }
 
 #[test]

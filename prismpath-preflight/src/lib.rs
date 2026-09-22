@@ -9,7 +9,7 @@
 //! Same contract as the Python reference tool (`prismpath/telemetry/preflight.py`), but running on
 //! the exact crates the Vector codec is built from — so what this reports IS what the codec will
 //! do, by construction, including the places the Rust value model differs from the reference
-//! (a non-numeric string on a numeric field is coerced to 0 here, where the reference errors;
+//! (both apply the one input contract, `quantizer::accept_value`, and report its rejections;
 //! this tool surfaces that as its own finding). Running both tools on one sample is a free
 //! differential test of the whole stack.
 //!
@@ -64,7 +64,7 @@ pub struct Scan {
     pub out_of_partition: HashMap<String, usize>,
     pub oop_examples: HashMap<String, String>,
     pub truncated_counts: HashMap<String, usize>,
-    pub coerced_counts: HashMap<String, usize>,
+    pub contract_rejections: HashMap<String, HashMap<String, usize>>,
     pub field_seen: HashMap<String, usize>,
     pub raw_bytes: usize,
     pub wire_bits: usize,
@@ -80,12 +80,15 @@ pub struct Scan {
 // Mirrors of the quantizer's private coercions (quantizer.rs `v_to_i64` / `v_to_str`): the
 // preflight must route the SAME view of a value that `symbol()` quantizes, or float truncation
 // and string coercion would show up as false round-trip mismatches.
-fn v_to_i64(value: &V) -> i64 {
+/// The permissive numeric view the crate's `symbol` uses, mirrored here so the report shows the
+/// reading as the encoder will see it: a fraction truncates, a bool is 0 or 1, and a string that
+/// is not an integer literal is an error, never zero.
+fn v_to_i64(value: &V) -> Result<i64, String> {
     match value {
-        V::Num(number) => *number as i64,
-        V::Bool(flag) => i64::from(*flag),
-        V::Str(text) => text.parse::<i64>().unwrap_or(0),
-        _ => 0,
+        V::Num(number) => Ok(*number as i64),
+        V::Bool(flag) => Ok(i64::from(*flag)),
+        V::Str(text) => text.parse::<i64>().map_err(|_| format!("{text:?} is not an integer literal")),
+        other => Err(format!("{other:?} is not a number")),
     }
 }
 
@@ -155,15 +158,22 @@ fn count_detail(counts: &HashMap<String, usize>) -> String {
     detail.join(", ")
 }
 
-/// The reading exactly as `symbol()` will see it, plus which fields lost a fraction to
-/// truncation and which strings the codec coerces to 0 (the Rust-specific hazard).
-fn codec_view(parts: &HashMap<String, FieldPartition>, reading: &HashMap<String, V>)
-              -> (HashMap<String, V>, Vec<String>, Vec<String>) {
+/// The reading exactly as the permissive `symbol()` will see it, plus which fields lost a fraction
+/// to truncation, and the fields the input contract rejects with the reason each. The contract is
+/// what the checked encoder refuses at runtime, so the report predicts it exactly.
+/// The reading as the encoder sees it, the fields that lost a fraction, and the fields the input
+/// contract rejects with the reason each.
+type CodecView = (HashMap<String, V>, Vec<String>, Vec<(String, String)>);
+
+fn codec_view(parts: &HashMap<String, FieldPartition>, reading: &HashMap<String, V>) -> CodecView {
     let mut seen = HashMap::new();
     let mut truncated = Vec::new();
-    let mut coerced = Vec::new();
+    let mut rejected = Vec::new();
     for (field, value) in reading {
         let partition = &parts[field];
+        if let Err(rejection) = quantizer::accept_value(&partition.kind, value) {
+            rejected.push((field.clone(), rejection.reason().to_string()));
+        }
         let out = match partition.kind {
             FieldKind::Numeric => {
                 if let V::Num(number) = value {
@@ -171,19 +181,17 @@ fn codec_view(parts: &HashMap<String, FieldPartition>, reading: &HashMap<String,
                         truncated.push(field.clone());
                     }
                 }
-                if let V::Str(text) = value {
-                    if text.parse::<i64>().is_err() {
-                        coerced.push(field.clone());
-                    }
+                match v_to_i64(value) {
+                    Ok(number) => V::Num(number as f64),
+                    Err(_) => value.clone(),   // the permissive encoder will refuse it; keep it visible
                 }
-                V::Num(v_to_i64(value) as f64)
             }
             FieldKind::Boolean => V::Bool(py_truthy(value)),
             FieldKind::Categorical => V::Str(v_to_str(value)),
         };
         seen.insert(field.clone(), out);
     }
-    (seen, truncated, coerced)
+    (seen, truncated, rejected)
 }
 
 fn branch_nodes(graph: &Graph, nodes: &[String]) -> Vec<String> {
@@ -293,7 +301,7 @@ pub fn scan_sample(codebook: Codebook, reader: &mut dyn BufRead, cfg: &Config)
     let mut out_of_partition: HashMap<String, usize> = HashMap::new();
     let mut oop_examples: HashMap<String, String> = HashMap::new();
     let mut truncated_counts: HashMap<String, usize> = HashMap::new();
-    let mut coerced_counts: HashMap<String, usize> = HashMap::new();
+    let mut contract_rejections: HashMap<String, HashMap<String, usize>> = HashMap::new();
     let mut field_seen: HashMap<String, usize> = HashMap::new();
     let (mut raw_bytes, mut wire_bits, mut framed_bytes) = (0usize, 0usize, 0usize);
     let mut route_dist: HashMap<String, HashMap<String, usize>> =
@@ -342,12 +350,12 @@ pub fn scan_sample(codebook: Codebook, reader: &mut dyn BufRead, cfg: &Config)
             continue;
         }
 
-        let (seen, truncated, coerced) = codec_view(&codebook.parts, &reading);
+        let (seen, truncated, rejected) = codec_view(&codebook.parts, &reading);
         for field in truncated {
             *truncated_counts.entry(field).or_default() += 1;
         }
-        for field in coerced {
-            *coerced_counts.entry(field).or_default() += 1;
+        for (field, reason) in rejected {
+            *contract_rejections.entry(field).or_default().entry(reason).or_default() += 1;
         }
 
         let bits = match wire::encode_reading(&codebook.parts, &seen) {
@@ -382,7 +390,7 @@ pub fn scan_sample(codebook: Codebook, reader: &mut dyn BufRead, cfg: &Config)
         .cloned().collect();
     let codec_errors = if cfg.on_missing_skip { 0 } else { missing_events };
     let ready = n_encoded > 0 && mismatches.is_empty() && unseen.is_empty()
-        && codec_errors == 0 && out_of_partition.is_empty() && coerced_counts.is_empty();
+        && codec_errors == 0 && out_of_partition.is_empty() && contract_rejections.is_empty();
 
     Ok(Scan {
         codebook,
@@ -395,7 +403,7 @@ pub fn scan_sample(codebook: Codebook, reader: &mut dyn BufRead, cfg: &Config)
         out_of_partition,
         oop_examples,
         truncated_counts,
-        coerced_counts,
+        contract_rejections,
         field_seen,
         raw_bytes,
         wire_bits,
@@ -455,10 +463,15 @@ fn section_sample_scan(cfg: &Config, scan: &Scan) -> Vec<String> {
                          (a 21.7 routes as 21; make thresholds integer-aware or scale the field)",
                         count_detail(&scan.truncated_counts)));
     }
-    if !scan.coerced_counts.is_empty() {
-        md.push(format!("- COERCED TO 0: non-numeric strings on numeric fields: {} (the codec \
-                         quantizes them as 0, which is almost never what you meant; fix the \
-                         field or map a different path)", count_detail(&scan.coerced_counts)));
+    let mut rejected_fields: Vec<&String> = scan.contract_rejections.keys().collect();
+    rejected_fields.sort();
+    for field in rejected_fields {
+        let reasons = &scan.contract_rejections[field];
+        let mut detail: Vec<(&String, &usize)> = reasons.iter().collect();
+        detail.sort_by(|left, right| right.1.cmp(left.1).then(left.0.cmp(right.0)));
+        let text: Vec<String> = detail.iter().map(|(reason, count)| format!("{reason} x{count}")).collect();
+        md.push(format!("- REJECTED BY THE INPUT CONTRACT on `{field}`: {} (the checked encoder \
+                         refuses these at runtime; fix the field or map a different path)", text.join(", ")));
     }
     if !scan.unseen.is_empty() {
         let names: Vec<String> = scan.unseen.iter().map(|field| format!("`{field}`")).collect();
@@ -616,7 +629,7 @@ pub fn render_json(cfg: &Config, scan: &Scan) -> Value {
         "missing_events": scan.missing_events, "missing_by_field": scan.missing_counts,
         "out_of_partition": scan.out_of_partition,
         "float_truncated_by_field": scan.truncated_counts,
-        "coerced_to_zero_by_field": scan.coerced_counts,
+        "rejected_by_contract": scan.contract_rejections,
         "fields_never_seen": scan.unseen,
         "raw_bytes_per_event": if scan.n_events > 0 {
             json!(scan.raw_bytes as f64 / scan.n_events as f64) } else { Value::Null },

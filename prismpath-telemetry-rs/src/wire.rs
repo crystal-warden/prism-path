@@ -57,6 +57,21 @@ pub fn encode_reading_with_codec<C: WireCodec>(
     codec.encode_symbols(&wire_vals)
 }
 
+/// `encode_reading` behind the input contract: a value the contract refuses is an
+/// `InputContractError` naming the field and the reason, never a truncated, coerced or zero
+/// reading. Encode through this at a runtime boundary; a preflight run over the same sample reports
+/// exactly the rejections this returns.
+pub fn encode_reading_checked(
+    parts: &HashMap<String, FieldPartition>,
+    reading: &HashMap<String, V>,
+) -> Result<String, quantizer::InputContractError> {
+    let ord = order(parts);
+    let syms = quantizer::checked_quantize(parts, reading)?;
+    let wire_vals: Vec<usize> = ord.iter().map(|f| syms[f] + 1).collect();
+    FibonacciWireCodec.encode_symbols(&wire_vals).map_err(|_| quantizer::InputContractError {
+        field: String::new(), rejection: quantizer::InputRejection::OutOfRange })
+}
+
 pub fn decode_reading(
     parts: &HashMap<String, FieldPartition>,
     bits: &str,

@@ -31,6 +31,16 @@ def encode_reading(parts: Dict[str, "q.FieldPartition"], reading: Dict[str, Any]
     return zeck.encode_stream([syms[field] + 1 for field in order])
 
 
+def encode_reading_checked(parts: Dict[str, "q.FieldPartition"], reading: Dict[str, Any]) -> str:
+    """`encode_reading` behind the input contract (`quantizer.accept_value`): a value the contract
+    refuses raises `quantizer.InputRejected` with the field and the reason instead of being
+    truncated, coerced or read as zero. Encode through this at a runtime boundary; a preflight
+    run over the same sample reports exactly the rejections this will raise."""
+    order = _order(parts)
+    syms = quantizer.checked_quantize(parts, reading)
+    return zeck.encode_stream([syms[field] + 1 for field in order])
+
+
 def decode_reading(parts: Dict[str, "q.FieldPartition"], bits: str) -> Dict[str, Any]:
     """Bitstream -> a representative reading that routes identically to the original."""
     order = _order(parts)

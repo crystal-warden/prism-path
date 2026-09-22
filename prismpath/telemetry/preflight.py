@@ -191,6 +191,7 @@ class ScanResult:
     out_of_partition: Counter
     oop_examples: Dict[str, Any]
     truncated_counts: Counter
+    contract_rejections: Dict[str, Counter]
     field_seen: Counter
     raw_bytes: int
     wire_bits: int
@@ -227,6 +228,7 @@ def scan_sample(
     out_of_partition: Counter = Counter()
     oop_examples: Dict[str, Any] = {}
     truncated_counts: Counter = Counter()
+    contract_rejections: Dict[str, Counter] = {}
     field_seen: Counter = Counter()
     raw_bytes = 0
     wire_bits = 0
@@ -261,6 +263,12 @@ def scan_sample(
 
         reading, missing = extract_reading(event, order, field_paths)
         field_seen.update(reading.keys())
+        # The input contract, field by field, before the permissive codec view: this is what the
+        # checked encoder will refuse at runtime, so the report predicts it exactly.
+        for field, value in reading.items():
+            reason, _converted = quantizer.accept_value(parts[field].kind, value)
+            if reason is not None:
+                contract_rejections.setdefault(field, Counter())[reason] += 1
         if missing:
             missing_events += 1
             missing_counts.update(missing)
@@ -305,7 +313,8 @@ def scan_sample(
     unseen = [field for field in order if field_seen[field] == 0]
     codec_errors = missing_events if on_missing == "error" else 0
     ready = (n_encoded > 0 and not mismatches and not unseen
-             and codec_errors == 0 and sum(out_of_partition.values()) == 0)
+             and codec_errors == 0 and sum(out_of_partition.values()) == 0
+             and not contract_rejections)
 
     recon = None
     agg = None
@@ -334,6 +343,7 @@ def scan_sample(
         out_of_partition=out_of_partition,
         oop_examples=oop_examples,
         truncated_counts=truncated_counts,
+        contract_rejections=contract_rejections,
         field_seen=field_seen,
         raw_bytes=raw_bytes,
         wire_bits=wire_bits,
@@ -379,6 +389,11 @@ def render_markdown(result: ScanResult) -> str:
         for field, count in result.out_of_partition.most_common():
             md.append(f"- out of partition on `{field}`: {count} events "
                       f"(example value: {result.oop_examples[field]!r}) -> encoding error")
+    if result.contract_rejections:
+        for field, reasons in sorted(result.contract_rejections.items()):
+            detail = ", ".join(f"{reason} x{count}" for reason, count in reasons.most_common())
+            md.append(f"- REJECTED BY THE INPUT CONTRACT on `{field}`: {detail} (the checked encoder "
+                      f"refuses these at runtime; fix the field or map a different path)")
     if result.truncated_counts:
         detail = ", ".join(f"`{field}` x{count}" for field, count in result.truncated_counts.most_common())
         md.append(f"- float truncation: numeric fields compare on int(value); affected: {detail} "
@@ -512,6 +527,7 @@ def render_json(result: ScanResult) -> Dict[str, Any]:
         "missing_by_field": dict(result.missing_counts),
         "out_of_partition": dict(result.out_of_partition),
         "float_truncated_by_field": dict(result.truncated_counts),
+        "rejected_by_contract": {field: dict(reasons) for field, reasons in sorted(result.contract_rejections.items())},
         "fields_never_seen": result.unseen,
         "raw_bytes_per_event": result.raw_bytes / result.n_events if result.n_events else None,
         "framed_bytes_per_event": result.framed_bytes / result.n_encoded if result.n_encoded else None,

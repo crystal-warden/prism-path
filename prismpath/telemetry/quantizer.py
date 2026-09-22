@@ -23,7 +23,8 @@ A field mixing kinds (e.g. int and str constants) raises — well-formed Level M
 from __future__ import annotations
 
 import ast
-from typing import Any, Dict, List, Optional, Tuple
+import re
+from typing import Optional, Any, Dict, List, Optional, Tuple
 
 from prismpath.kernel import predicates
 from prismpath.kernel.parser import parse_file  # noqa: F401  (re-exported for callers)
@@ -120,6 +121,91 @@ class FieldPartition:
 
     def representative(self, symbol: int) -> Any:
         return self.cells[symbol]["rep"]
+
+    def checked_symbol(self, value: Any) -> int:
+        """`symbol` behind the input contract: the value is accepted and converted by `accept_value`
+        or the call raises InputRejected naming the field and the reason. This is the runtime
+        boundary a library consumer should encode through; `symbol` keeps its permissive behavior
+        for compatibility (truncated fractions, truthiness on boolean fields)."""
+        reason, converted = accept_value(self.kind, value)
+        if reason is not None:
+            raise InputRejected(self.field, reason, value)
+        return self.symbol(converted)
+
+
+# ------------------------------------------------------------------ the input contract
+# One rule set for the Python and Rust encoders and for both preflight tools, frozen as
+# conformance/inputs.json. Integers are accepted within the range every JSON reader represents
+# exactly, so a value that is in range here is the same value on the other side of any wire.
+SAFE_INTEGER_LIMIT = 2 ** 53
+REJECTION_MISSING = "missing"
+REJECTION_WRONG_TYPE = "wrong_type"
+REJECTION_UNPARSEABLE_STRING = "unparseable_string"
+REJECTION_FRACTIONAL = "fractional"
+REJECTION_OUT_OF_RANGE = "out_of_range"
+_INTEGER_LITERAL = re.compile(r"^[+-]?[0-9]+$")
+
+
+class InputRejected(ValueError):
+    """A reading value the input contract refuses, with the field and the reason."""
+
+    def __init__(self, field: str, reason: str, value: Any):
+        super().__init__(f"{field}: {reason} ({value!r})")
+        self.field = field
+        self.reason = reason
+        self.value = value
+
+
+def accept_value(kind: str, value: Any) -> Tuple[Optional[str], Any]:
+    """(rejection reason, converted value) for one field kind. None as the reason means accepted.
+
+    numeric accepts an int within the safe range, an integral float, a bool as 0 or 1, and a
+    string that is an integer literal with an optional sign. A fractional number is refused rather
+    than truncated, a string that is not an integer literal is refused rather than read as zero,
+    and null is missing. boolean accepts a bool and a number exactly 0 or 1. categorical accepts a
+    string only. Anything else is the wrong type."""
+    if value is None:
+        return REJECTION_MISSING, None
+    if kind == "numeric":
+        if isinstance(value, bool):
+            return None, int(value)
+        if isinstance(value, int):
+            integer_value = value
+        elif isinstance(value, float):
+            if value != value or value in (float("inf"), float("-inf")):
+                return REJECTION_OUT_OF_RANGE, None
+            if value != int(value):
+                return REJECTION_FRACTIONAL, None
+            integer_value = int(value)
+        elif isinstance(value, str):
+            if not _INTEGER_LITERAL.match(value):
+                return REJECTION_UNPARSEABLE_STRING, None
+            integer_value = int(value)
+        else:
+            return REJECTION_WRONG_TYPE, None
+        if not -SAFE_INTEGER_LIMIT < integer_value < SAFE_INTEGER_LIMIT:
+            return REJECTION_OUT_OF_RANGE, None
+        return None, integer_value
+    if kind == "boolean":
+        if isinstance(value, bool):
+            return None, value
+        if isinstance(value, (int, float)) and value in (0, 1):
+            return None, bool(value)
+        return REJECTION_WRONG_TYPE, None
+    if isinstance(value, str):
+        return None, value
+    return REJECTION_WRONG_TYPE, None
+
+
+def checked_quantize(parts: Dict[str, "FieldPartition"], reading: Dict[str, Any]) -> Dict[str, int]:
+    """`quantize` behind the input contract: every decision field present and accepted, or
+    InputRejected names the first field that is not."""
+    symbols = {}
+    for field in sorted(parts):
+        if field not in reading:
+            raise InputRejected(field, REJECTION_MISSING, None)
+        symbols[field] = parts[field].checked_symbol(reading[field])
+    return symbols
 
 
 def atom_true(op: str, const: Any, value: Any) -> bool:
