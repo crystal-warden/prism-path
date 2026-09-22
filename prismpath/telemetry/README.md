@@ -177,3 +177,17 @@ integer literal as zero on either side; that was a coercion the reference never 
 reports `rejected_by_contract` per field and withholds READY on any rejection, so a sample that
 passes preflight encodes through the checked boundary without a surprise.
 
+## Durable epochs across a restart
+
+`epoch_journal.EpochJournal` keeps the epoch store's retention and acknowledgment state on disk so a
+power loss during an unreliable connection loses nothing silently. Each state change is written in a
+fixed order (the data file before its chain line, the acknowledgment state before any deletion, the
+gap record before the bytes go), recovery replays the journal in a fixed order at every start, and
+`recovery_report()` names every interruption it found: an orphaned seal, a torn chain line, an
+acknowledgment finished on recovery, a corrupt data file treated as a named gap. `max_data_epochs`
+and `max_bytes` bound what the edge stores; an unacknowledged epoch forced out is a provable gap,
+recorded before deletion. `DurableAckReceiver` verifies the tag and the sequence against the
+persisted one, persists the new state, and only then deletes, so a replayed acknowledgment before
+or after a restart deletes nothing. `tests/test_epoch_journal.py` interrupts sealing,
+acknowledgment and deletion and restarts through each. The memory store stays as it was for
+callers that do not need durability.
