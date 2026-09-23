@@ -4,7 +4,7 @@
 (spec-secure-hotswap §3.3-§3.4).
 
 Holds the single active policy. `swap(pack)` runs the full pipeline — signature -> envelope ->
-monotonic-version -> stage-and-parse a shadow -> commit -> single atomic reference flip — and writes
+monotonic-version -> stage-and-parse a shadow -> commit -> single atomic reference flip, and writes
 every attempt, accepted or rejected, to the Merkle-rooted audit log (`audit_log.py`, OTS-anchorable via
 `ledger_ots`). Any failure at any stage leaves the previous policy active with no partial state,
 and the last-known-good pack is retained for `rollback()`.

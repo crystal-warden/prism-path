@@ -1,4 +1,5 @@
 {
+ "acceptance": "Facet acceptance rules, one rule set for the Python and Rust encoders and for both preflight tools. numeric: integers within (-2^53, 2^53), integral floats, booleans as 0 and 1 (compatibility), strings that are an integer literal with an optional sign; fractional numbers, other strings, and non scalar values are refused; null is missing. boolean: booleans, and numbers exactly 0 or 1 (compatibility); anything else is refused; null is missing. categorical: strings only; null is missing. Legacy symbol() keeps truncation of fractional numbers and truthiness on boolean fields for compatibility; the checked encoders and preflight apply these rules.",
  "cases": [
   {
    "expect": {
@@ -107,77 +108,77 @@
   },
   {
    "expect": {
-    "reject": "fractional"
+    "refuse": "fractional"
    },
    "field": "error_rate",
    "input": 2.5
   },
   {
    "expect": {
-    "reject": "fractional"
+    "refuse": "fractional"
    },
    "field": "error_rate",
    "input": 24.9
   },
   {
    "expect": {
-    "reject": "fractional"
+    "refuse": "fractional"
    },
    "field": "error_rate",
    "input": -0.5
   },
   {
    "expect": {
-    "reject": "unparseable_string"
+    "refuse": "unparseable_string"
    },
    "field": "error_rate",
    "input": "5.0"
   },
   {
    "expect": {
-    "reject": "unparseable_string"
+    "refuse": "unparseable_string"
    },
    "field": "error_rate",
    "input": " 5"
   },
   {
    "expect": {
-    "reject": "unparseable_string"
+    "refuse": "unparseable_string"
    },
    "field": "error_rate",
    "input": ""
   },
   {
    "expect": {
-    "reject": "unparseable_string"
+    "refuse": "unparseable_string"
    },
    "field": "error_rate",
    "input": "abc"
   },
   {
    "expect": {
-    "reject": "unparseable_string"
+    "refuse": "unparseable_string"
    },
    "field": "error_rate",
    "input": "0x10"
   },
   {
    "expect": {
-    "reject": "unparseable_string"
+    "refuse": "unparseable_string"
    },
    "field": "error_rate",
    "input": "1e3"
   },
   {
    "expect": {
-    "reject": "missing"
+    "refuse": "missing"
    },
    "field": "error_rate",
    "input": null
   },
   {
    "expect": {
-    "reject": "wrong_type"
+    "refuse": "wrong_type"
    },
    "field": "error_rate",
    "input": [
@@ -186,7 +187,7 @@
   },
   {
    "expect": {
-    "reject": "wrong_type"
+    "refuse": "wrong_type"
    },
    "field": "error_rate",
    "input": {
@@ -195,21 +196,21 @@
   },
   {
    "expect": {
-    "reject": "out_of_range"
+    "refuse": "out_of_range"
    },
    "field": "error_rate",
    "input": 9007199254740992
   },
   {
    "expect": {
-    "reject": "out_of_range"
+    "refuse": "out_of_range"
    },
    "field": "error_rate",
    "input": -9007199254740992
   },
   {
    "expect": {
-    "reject": "out_of_range"
+    "refuse": "out_of_range"
    },
    "field": "error_rate",
    "input": 1e+300
@@ -258,49 +259,49 @@
   },
   {
    "expect": {
-    "reject": "wrong_type"
+    "refuse": "wrong_type"
    },
    "field": "user_facing",
    "input": 2
   },
   {
    "expect": {
-    "reject": "wrong_type"
+    "refuse": "wrong_type"
    },
    "field": "user_facing",
    "input": -1
   },
   {
    "expect": {
-    "reject": "wrong_type"
+    "refuse": "wrong_type"
    },
    "field": "user_facing",
    "input": 0.5
   },
   {
    "expect": {
-    "reject": "wrong_type"
+    "refuse": "wrong_type"
    },
    "field": "user_facing",
    "input": "true"
   },
   {
    "expect": {
-    "reject": "wrong_type"
+    "refuse": "wrong_type"
    },
    "field": "user_facing",
    "input": ""
   },
   {
    "expect": {
-    "reject": "missing"
+    "refuse": "missing"
    },
    "field": "user_facing",
    "input": null
   },
   {
    "expect": {
-    "reject": "wrong_type"
+    "refuse": "wrong_type"
    },
    "field": "user_facing",
    "input": [
@@ -337,28 +338,28 @@
   },
   {
    "expect": {
-    "reject": "wrong_type"
+    "refuse": "wrong_type"
    },
    "field": "region",
    "input": 5
   },
   {
    "expect": {
-    "reject": "wrong_type"
+    "refuse": "wrong_type"
    },
    "field": "region",
    "input": true
   },
   {
    "expect": {
-    "reject": "missing"
+    "refuse": "missing"
    },
    "field": "region",
    "input": null
   },
   {
    "expect": {
-    "reject": "wrong_type"
+    "refuse": "wrong_type"
    },
    "field": "region",
    "input": [
@@ -367,7 +368,7 @@
   },
   {
    "expect": {
-    "reject": "wrong_type"
+    "refuse": "wrong_type"
    },
    "field": "region",
    "input": {
@@ -375,7 +376,6 @@
    }
   }
  ],
- "contract": "Facet input contract, one rule set for the Python and Rust encoders and for both preflight tools. numeric: integers within (-2^53, 2^53), integral floats, booleans as 0 and 1 (compatibility), strings that are an integer literal with an optional sign; fractional numbers, other strings, and non scalar values are rejected; null is missing. boolean: booleans, and numbers exactly 0 or 1 (compatibility); anything else is rejected; null is missing. categorical: strings only; null is missing. Legacy symbol() keeps truncation of fractional numbers and truthiness on boolean fields for compatibility; the checked encoders and preflight apply this contract.",
  "flow": "---\nname: input_contract\nstart: assess\n---\n\n## assess\n-> page: when error_rate >= 25\n-> ticket: when error_rate >= 5\n-> watch: when user_facing\n-> hold: when region == \"eu\"\n-> done: else\n\n## page\n\n## ticket\n\n## watch\n\n## hold\n\n## done\n",
  "readings": [
   {
@@ -408,7 +408,7 @@
   },
   {
    "expect": {
-    "reject": {
+    "refuse": {
      "field": "error_rate",
      "reason": "fractional"
     }
@@ -421,7 +421,7 @@
   },
   {
    "expect": {
-    "reject": {
+    "refuse": {
      "field": "error_rate",
      "reason": "unparseable_string"
     }
@@ -434,7 +434,7 @@
   },
   {
    "expect": {
-    "reject": {
+    "refuse": {
      "field": "error_rate",
      "reason": "missing"
     }
@@ -446,7 +446,7 @@
   },
   {
    "expect": {
-    "reject": {
+    "refuse": {
      "field": "user_facing",
      "reason": "wrong_type"
     }
@@ -459,7 +459,7 @@
   },
   {
    "expect": {
-    "reject": {
+    "refuse": {
      "field": "region",
      "reason": "wrong_type"
     }

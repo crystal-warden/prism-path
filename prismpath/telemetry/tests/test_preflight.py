@@ -95,10 +95,10 @@ def test_float_truncation_counted_and_null_is_missing(tmp_path):
         {"temp": None, "armed": True}])               # JSON null = missing, as in the codec
     out = tmp_path / "report.json"
     result = _run(flow, sample, "--on-missing", "skip", "--json", str(out))
-    assert result.returncode == 1, "a fraction is rejected by the input contract"
+    assert result.returncode == 1, "a fraction is refused by acceptance"
     report = json.loads(out.read_text())
     assert report["float_truncated_by_field"] == {"temp": 1}
-    assert report["rejected_by_contract"] == {"temp": {"fractional": 1}}
+    assert report["refused_by_field"] == {"temp": {"fractional": 1}}
     assert report["missing_by_field"] == {"temp": 1}
     assert report["route_distribution"]["classify"] == {"ok": 1}
     assert report["ready"] is False

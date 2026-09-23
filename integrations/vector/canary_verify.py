@@ -151,8 +151,8 @@ def main() -> int:
     identity = None
     if args.id_field:
         decoded_id_field = args.decoded_id_field or args.id_field.split(".")[-1]
-        raw_ids = [_lookup(ev, args.id_field) for ev, route in zip(raw, expected) if route is not None]
-        decoded_ids = [ev.get(decoded_id_field) for ev in decoded]
+        raw_ids = [_lookup(event, args.id_field) for event, route in zip(raw, expected) if route is not None]
+        decoded_ids = [event.get(decoded_id_field) for event in decoded]
         identity = _compare_identities(raw_ids, decoded_ids)
 
     mismatches: List[dict] = []

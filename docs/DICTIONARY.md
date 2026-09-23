@@ -80,11 +80,13 @@ assessment).
 
 ## Entries
 
-One hundred and twenty entries, alphabetical. Each is written from the decision's point of view. `Layer` is one of
+130 entries, alphabetical. Each is written from the decision's point of view. `Layer` is one of
 flow authoring, kernel evaluation, wire and transport, substrate execution, evidence and receipts,
 control plane, GRC. A term with no `Also called (deprecated)` line has no losing synonym today.
 
 **abstain**: the decision to make no decision because the information required is absent. Distinct from a denial, which is a decision. Layer: kernel evaluation. Not to be confused with: deny, refusal with cause, escalate. Also called (deprecated): defer (in the kernel sense only; `defer` keeps its GRC and port meaning).
+
+**acceptance**: the rules deciding which values a field kind accepts at the codec boundary and how each converts, frozen as a corpus that both implementations read. A value acceptance refuses never reaches the codec; it is reported with the field and the reason, and preflight reports the same refusals, so a preflight that passes predicts the boundary. Layer: wire and transport. Not to be confused with: contract (the worker interface a flow derives), the permissive symbol path kept for compatibility.
 
 **action**: a concrete operation proposed or authorized for execution against a consequence producing boundary. An action is not a decision; a decision may authorize, deny, abstain from, or refuse an action. Layer: control plane. Not to be confused with: decision (the act that rules on an action), match action fragment (the kernel fragment that selects an edge, unrelated to this sense), outcome (the worker's return that a decision reads).
 
@@ -93,6 +95,8 @@ control plane, GRC. A term with no `Also called (deprecated)` line has no losing
 **adapter**: an implementation of one or more ports that carries all of one domain's knowledge, so the core carries none. Layer: control plane. Not to be confused with: connector (the SDK base class an adapter subclasses), port (the interface the adapter implements).
 
 **adjudicate**: to turn one unit of work into one structured result through the Adjudicator port, by a model, a comparator, or a circuit. Layer: control plane. Not to be confused with: route (choosing an edge), decide (the whole act). Also called (deprecated): `adjudicate` in `prismpath/evals/kappa.py:100`, which reconciles two human label sets and should be `reconcile`.
+
+**adopted revision**: the research commit a product path was last taken from, recorded per path in the product inventory's lock. A promotion advances it for the paths it promotes and no others, so no single revision describes a product tree. Layer: control plane. Not to be confused with: the seed revision (the first adoption of the whole tree), a product's own commits.
 
 **air gap**: a deliberate absence of network connectivity, and the ledger tier built for it. Layer: evidence and receipts. Not to be confused with: over the air, which means the opposite and is spelled out in full, never abbreviated to `air`.
 
@@ -113,6 +117,8 @@ control plane, GRC. A term with no `Also called (deprecated)` line has no losing
 **band**: a contiguous range of the joint spiral index whose members all route the same way, so one band identifier is a decision sufficient wire symbol. Layer: wire and transport. Not to be confused with: a cause code numeric range (`prismpath/kernel/causes.py:12`), a gray level in the vision encoder, a cell (one field's bucket rather than a joint range). Also called (deprecated): level, quartile, `q0` to `q3`.
 
 **bound**: see WCET bound. Used bare, `bound` in this project means a worst case execution bound unless qualified; every other kind of bound is named (version floor, replay window, staleness bound, step bound).
+
+**candidate**: a built artifact under acceptance and before any publication decision: a wheel, a source distribution, a packaged crate. Candidates that depend on one another are tested together, patched to one another, never one alone against a registry whose published version may lag. Layer: control plane. Not to be confused with: a release, which is the owner's decision after acceptance.
 
 **catalog**: an ordered set of controls with their assessment objectives, content addressed and bound into every attestation made against it. Layer: GRC. Not to be confused with: an OSCAL catalog (an external document format this repository imports and exports), the SDK's generic "catalog criteria" (any retrievable knowledge base).
 
@@ -157,6 +163,8 @@ control plane, GRC. A term with no `Also called (deprecated)` line has no losing
 **deterministic edge**: an edge whose condition begins with `when` or is one of the keyword catch alls, resolved by evaluating a predicate against the outcome fields, free and exact. Layer: flow authoring. Not to be confused with: semantic, error and event edges, which are the other three tiers.
 
 **device_id**: the identifier of one physical board or host on a link, carried in a record so a receiver can say which device a reading came from. Layer: wire and transport. Not to be confused with: node (a step of a flow, never a device), a node index inside an image, a MAC address (which is one way to derive a `device_id`, not the term for it). Also called (deprecated): `nid`, and `node_id` where a device rather than a flow node was meant; rule 14 allows an abbreviation only for a term whose full form is in this dictionary, and `node` is not that term.
+
+**divergence**: an intentional difference between a product file and the research file it was adopted from, recorded with its reason. A promotion must preserve every recorded divergence. Layer: control plane. Not to be confused with: drift, a difference nobody intended, which is a defect.
 
 **edge**: a line of the form `-> target: condition` inside a node, the authored transition. Document order is significant: the first true deterministic edge wins. Layer: flow authoring. Not to be confused with: a clock edge in RTL (`posedge`, `negedge`), an edge device, a graph edge in a rendering library.
 
@@ -209,6 +217,10 @@ control plane, GRC. A term with no `Also called (deprecated)` line has no losing
 **instruction**: the prose inside a node, handed to the worker verbatim. The engine never interprets it. Layer: flow authoring.
 
 **interpreter**: a table image executor: given a node and a register file, walk the edges and return the target. Layer: substrate execution. Not to be confused with: engine, evaluator, kernel, a third party WebAssembly interpreter used as a comparator.
+
+**inventory**: the product inventory: the rules that say what may be in the product and what never enters, and the lock that enumerates every classified path with its research source and adopted revision. A path the rules match but the lock lacks is unclassified until a reviewed lock update names it. Layer: control plane. Not to be confused with: manifest, which is the signed pack's manifest and nothing else.
+
+**journal**: the durable form of the epoch store: every state change written to disk in a fixed order, replayed in a fixed order at every start, and every interruption reported by name rather than repaired silently. Layer: wire and transport. Not to be confused with: the evidence ledger, the audit log, the chain of roots the journal persists.
 
 **kernel**: a conformant implementation of the flow language, judged by the frozen corpus. Four exist: Python, JavaScript, Rust, Go. Layer: kernel evaluation. Not to be confused with: the Linux kernel (always spelled in full), the Lean proof kernel, the decision kernel's C interpreter.
 
@@ -264,6 +276,8 @@ control plane, GRC. A term with no `Also called (deprecated)` line has no losing
 
 **program**: the per edge sequence of stack machine words that folds atom results into a boolean. A part of an image, never the whole. Layer: substrate execution. Not to be confused with: the flow, the image, a running process.
 
+**promotion**: the reviewed integration of one research revision into the product, decided path by path against the adopted version, the proposed version and the current product version. It happens only on request or within an approved product release, stages a branch for review, and stops with nothing written when any path conflicts. Layer: control plane. Not to be confused with: synchronization, which the product never does automatically in either direction.
+
 **provenance**: the cryptographic binding of an artifact to what produced it. Layer: evidence and receipts. Not to be confused with: the static dataflow check that a `when` edge reads a field some node declares emitting, which is a lint and should be named `field_declaration`.
 
 **quantizer**: the component that derives each field's cells from the policy text and maps a reading to its symbols. Layer: wire and transport. Not to be confused with: the codec, which turns symbols into codewords.
@@ -315,6 +329,8 @@ control plane, GRC. A term with no `Also called (deprecated)` line has no losing
 **tier**: which mechanism resolves an edge: deterministic, semantic, error, or event. Selected by the syntactic shape of the condition, never chosen by the author. Layer: flow authoring. Not to be confused with: ledger anchoring tiers, portability levels.
 
 **trail**: the Merkle rooted sequence of receipts over a window, and the operator's read side of it. Layer: evidence and receipts. Not to be confused with: a git commit trailer, the audit log.
+
+**tree digest**: a sha256 over one line per tracked file, the git mode, the sha256 of the bytes and the path, sorted by path, with the provenance and checksum files excluded so it never refers to itself. A way to tell two trees apart and to notice a hand edit; not a signature, and no proof of who produced the tree. Layer: evidence and receipts. Not to be confused with: a Merkle root, an anchor.
 
 **vector**: one case in a frozen corpus: a condition and a ctx with a recorded result, or a scripted run with a recorded path. Layer: kernel evaluation. Not to be confused with: an embedding vector, which is always "embedding".
 

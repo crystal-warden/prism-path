@@ -126,14 +126,14 @@ impl FieldPartition {
         self.cells[symbol].rep.clone()
     }
 
-    /// `symbol` behind the input contract: the value is accepted and converted by `accept_value`
+    /// `symbol` behind acceptance: the value is accepted and converted by `accept_value`
     /// or the error names the field and the reason. Encode through this at a runtime boundary;
     /// `symbol` keeps its permissive numeric view for compatibility.
-    pub fn checked_symbol(&self, value: &V) -> Result<usize, InputContractError> {
+    pub fn checked_symbol(&self, value: &V) -> Result<usize, AcceptanceError> {
         let converted = accept_value(&self.kind, value)
-            .map_err(|rejection| InputContractError { field: self.field.clone(), rejection })?;
+            .map_err(|refusal| AcceptanceError { field: self.field.clone(), refusal })?;
         self.symbol(&converted)
-            .map_err(|_| InputContractError { field: self.field.clone(), rejection: InputRejection::OutOfRange })
+            .map_err(|_| AcceptanceError { field: self.field.clone(), refusal: InputRefusal::OutOfRange })
     }
 }
 
@@ -150,13 +150,13 @@ fn v_to_i64(value: &V) -> Result<i64, String> {
     }
 }
 
-// ------------------------------------------------------------------ the input contract
+// ------------------------------------------------------------------ acceptance
 // One rule set for the Rust and Python encoders and for both preflight tools, frozen as the
 // inputs corpus. Integers are accepted within the range every JSON reader represents exactly.
 pub const SAFE_INTEGER_LIMIT: f64 = 9007199254740992.0;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum InputRejection {
+pub enum InputRefusal {
     Missing,
     WrongType,
     UnparseableString,
@@ -164,35 +164,35 @@ pub enum InputRejection {
     OutOfRange,
 }
 
-impl InputRejection {
+impl InputRefusal {
     /// The reason string shared with the Python side and the preflight reports.
     pub fn reason(&self) -> &'static str {
         match self {
-            InputRejection::Missing => "missing",
-            InputRejection::WrongType => "wrong_type",
-            InputRejection::UnparseableString => "unparseable_string",
-            InputRejection::Fractional => "fractional",
-            InputRejection::OutOfRange => "out_of_range",
+            InputRefusal::Missing => "missing",
+            InputRefusal::WrongType => "wrong_type",
+            InputRefusal::UnparseableString => "unparseable_string",
+            InputRefusal::Fractional => "fractional",
+            InputRefusal::OutOfRange => "out_of_range",
         }
     }
 }
 
-impl std::fmt::Display for InputRejection {
+impl std::fmt::Display for InputRefusal {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         formatter.write_str(self.reason())
     }
 }
 
-/// A value the input contract refuses, with the field it was offered for.
+/// A value acceptance refuses, with the field it was offered for.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct InputContractError {
+pub struct AcceptanceError {
     pub field: String,
-    pub rejection: InputRejection,
+    pub refusal: InputRefusal,
 }
 
-impl std::fmt::Display for InputContractError {
+impl std::fmt::Display for AcceptanceError {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(formatter, "{}: {}", self.field, self.rejection)
+        write!(formatter, "{}: {}", self.field, self.refusal)
     }
 }
 
@@ -201,16 +201,16 @@ fn integer_literal(text: &str) -> bool {
     !digits.is_empty() && digits.bytes().all(|byte| byte.is_ascii_digit())
 }
 
-/// The input contract for one field kind: the converted value, or the rejection.
+/// Acceptance for one field kind: the converted value, or the refusal.
 ///
 /// numeric accepts an integer within the safe range, an integral float, a bool as 0 or 1, and a
 /// string that is an integer literal with an optional sign; a fraction is refused rather than
 /// truncated, another string is refused rather than read as zero, null is missing. boolean accepts
 /// a bool and a number exactly 0 or 1. categorical accepts a string only. Anything else is the
 /// wrong type. Python's `accept_value` is the same function; the inputs corpus pins both.
-pub fn accept_value(kind: &FieldKind, value: &V) -> Result<V, InputRejection> {
+pub fn accept_value(kind: &FieldKind, value: &V) -> Result<V, InputRefusal> {
     if matches!(value, V::Null) {
-        return Err(InputRejection::Missing);
+        return Err(InputRefusal::Missing);
     }
     match kind {
         FieldKind::Numeric => {
@@ -218,50 +218,50 @@ pub fn accept_value(kind: &FieldKind, value: &V) -> Result<V, InputRejection> {
                 V::Bool(flag) => if *flag { 1.0 } else { 0.0 },
                 V::Num(number) => {
                     if !number.is_finite() {
-                        return Err(InputRejection::OutOfRange);
+                        return Err(InputRefusal::OutOfRange);
                     }
                     if number.fract() != 0.0 {
-                        return Err(InputRejection::Fractional);
+                        return Err(InputRefusal::Fractional);
                     }
                     *number
                 }
                 V::Str(text) => {
                     if !integer_literal(text) {
-                        return Err(InputRejection::UnparseableString);
+                        return Err(InputRefusal::UnparseableString);
                     }
                     // A literal that overflows f64 parsing is out of range, not unparseable.
-                    text.parse::<f64>().map_err(|_| InputRejection::OutOfRange)?
+                    text.parse::<f64>().map_err(|_| InputRefusal::OutOfRange)?
                 }
-                _ => return Err(InputRejection::WrongType),
+                _ => return Err(InputRefusal::WrongType),
             };
             if number.abs() >= SAFE_INTEGER_LIMIT {
-                return Err(InputRejection::OutOfRange);
+                return Err(InputRefusal::OutOfRange);
             }
             Ok(V::Num(number))
         }
         FieldKind::Boolean => match value {
             V::Bool(flag) => Ok(V::Bool(*flag)),
             V::Num(number) if *number == 0.0 || *number == 1.0 => Ok(V::Bool(*number == 1.0)),
-            _ => Err(InputRejection::WrongType),
+            _ => Err(InputRefusal::WrongType),
         },
         FieldKind::Categorical => match value {
             V::Str(text) => Ok(V::Str(text.clone())),
-            _ => Err(InputRejection::WrongType),
+            _ => Err(InputRefusal::WrongType),
         },
     }
 }
 
-/// `quantize` behind the input contract: every decision field present and accepted, or the error
+/// `quantize` behind acceptance: every decision field present and accepted, or the error
 /// names the first field that is not.
 pub fn checked_quantize(
     parts: &HashMap<String, FieldPartition>,
     reading: &HashMap<String, V>,
-) -> Result<HashMap<String, usize>, InputContractError> {
+) -> Result<HashMap<String, usize>, AcceptanceError> {
     let mut fields: Vec<&String> = parts.keys().collect();
     fields.sort();
     let mut out = HashMap::new();
     for field in fields {
-        let value = reading.get(field).ok_or_else(|| InputContractError { field: field.clone(), rejection: InputRejection::Missing })?;
+        let value = reading.get(field).ok_or_else(|| AcceptanceError { field: field.clone(), refusal: InputRefusal::Missing })?;
         out.insert(field.clone(), parts[field].checked_symbol(value)?);
     }
     Ok(out)

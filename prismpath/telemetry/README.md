@@ -108,8 +108,8 @@ schema, same exit codes). The Python one above runs on the **reference implement
 Python, no build. The Rust one (`prismpath-preflight/`, in the workspace) runs on the **same crates
 the Vector codec is built from**, so its report is what the codec will do by construction; it is
 also where the Rust value model's own behavior would surface if the two sides disagreed; they do
-not, because both encoders and both tools apply one input contract (below) and report its
-rejections field by field. Running both on one sample is a free differential test of the whole
+not, because both encoders and both tools apply one acceptance (below) and report its
+refusals field by field. Running both on one sample is a free differential test of the whole
 stack; on the clean corpus their JSON reports are identical.
 ```
 cargo install prismpath-preflight        # published on crates.io
@@ -156,25 +156,25 @@ python prismpath/telemetry/bench/run.py            # Phase A go/no-go -> bench/r
 python prismpath/telemetry/bench/spiral_bench.py   # Tier-6 routing-accuracy gate -> bench/spiral_results.md
 ```
 
-## The input contract
+## Acceptance: what a reading value may be
 
 One rule set decides what a reading value is, on both sides of the stack, frozen as
-`conformance/inputs.json` and pinned by `tests/test_input_contract.py` here and
-`tests/test_input_contract.rs` in the Rust crate. `quantizer.accept_value` (Python) and
+`conformance/inputs.json` and pinned by `tests/test_acceptance.py` here and
+`tests/test_acceptance.rs` in the Rust crate. `quantizer.accept_value` (Python) and
 `quantizer::accept_value` (Rust) are the same function.
 
-| kind | accepted | converted to | rejected, with the reason |
+| kind | accepted | converted to | refused, with the reason |
 |---|---|---|---|
 | numeric | an integer within the safe range, an integral float, a bool, a string that is an integer literal with an optional sign | the integer; a bool as 0 or 1 | a fraction (`fractional`), any other string (`unparseable_string`), a value at or beyond 2^53 in magnitude, an infinity or NaN (`out_of_range`), a list or object (`wrong_type`), null (`missing`) |
 | boolean | a bool, a number exactly 0 or 1 | the bool | any other number, any string, list or object (`wrong_type`), null (`missing`) |
 | categorical | a string | the string | anything else (`wrong_type`), null (`missing`) |
 
 The checked encoders, `wire.encode_reading_checked` and `wire::encode_reading_checked`, refuse a
-rejected value with the field and the reason and never truncate, coerce or read it as zero. The
+refused value with the field and the reason and never truncate, coerce or read it as zero. The
 permissive `symbol` keeps two compatibility behaviors that the corpus pins as well: a fraction
 truncates and a boolean field applies truthiness. It no longer reads a string that is not an
 integer literal as zero on either side; that was a coercion the reference never had. Preflight
-reports `rejected_by_contract` per field and withholds READY on any rejection, so a sample that
+reports `refused_by_field` per field and withholds READY on any refusal, so a sample that
 passes preflight encodes through the checked boundary without a surprise.
 
 ## Durable epochs across a restart

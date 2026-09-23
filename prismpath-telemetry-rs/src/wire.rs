@@ -57,19 +57,19 @@ pub fn encode_reading_with_codec<C: WireCodec>(
     codec.encode_symbols(&wire_vals)
 }
 
-/// `encode_reading` behind the input contract: a value the contract refuses is an
-/// `InputContractError` naming the field and the reason, never a truncated, coerced or zero
+/// `encode_reading` behind acceptance: a value the contract refuses is an
+/// `AcceptanceError` naming the field and the reason, never a truncated, coerced or zero
 /// reading. Encode through this at a runtime boundary; a preflight run over the same sample reports
-/// exactly the rejections this returns.
+/// exactly the refusals this returns.
 pub fn encode_reading_checked(
     parts: &HashMap<String, FieldPartition>,
     reading: &HashMap<String, V>,
-) -> Result<String, quantizer::InputContractError> {
-    let ord = order(parts);
-    let syms = quantizer::checked_quantize(parts, reading)?;
-    let wire_vals: Vec<usize> = ord.iter().map(|f| syms[f] + 1).collect();
-    FibonacciWireCodec.encode_symbols(&wire_vals).map_err(|_| quantizer::InputContractError {
-        field: String::new(), rejection: quantizer::InputRejection::OutOfRange })
+) -> Result<String, quantizer::AcceptanceError> {
+    let field_order = order(parts);
+    let symbols = quantizer::checked_quantize(parts, reading)?;
+    let wire_values: Vec<usize> = field_order.iter().map(|field| symbols[field] + 1).collect();
+    FibonacciWireCodec.encode_symbols(&wire_values).map_err(|_| quantizer::AcceptanceError {
+        field: String::new(), refusal: quantizer::InputRefusal::OutOfRange })
 }
 
 pub fn decode_reading(

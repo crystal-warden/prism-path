@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
-"""The Facet input contract, pinned by the frozen corpus conformance/inputs.json that the Rust crate
-reads too: every case's value is accepted to the recorded symbol or rejected for the recorded
+"""The Facet acceptance, pinned by the frozen corpus conformance/inputs.json that the Rust crate
+reads too: every case's value is accepted to the recorded symbol or refused for the recorded
 reason, by checked_symbol and by the checked encoder; the permissive symbol() agrees on every
 accepted value; and the one thing the contract exists to prevent, an unsupported input becoming a
 valid zero reading, cannot happen through either path."""
@@ -27,9 +27,9 @@ def test_checked_symbol_follows_the_corpus(case):
     if "symbol" in case["expect"]:
         assert partition.checked_symbol(case["input"]) == case["expect"]["symbol"]
     else:
-        with pytest.raises(quantizer.InputRejected) as caught:
+        with pytest.raises(quantizer.InputRefused) as caught:
             partition.checked_symbol(case["input"])
-        assert caught.value.reason == case["expect"]["reject"]
+        assert caught.value.reason == case["expect"]["refuse"]
         assert caught.value.field == case["field"]
 
 
@@ -47,15 +47,15 @@ def test_checked_encoding_follows_the_corpus(entry):
         assert wire.decode_reading(PARTS, bits) == quantizer.reconstruct(PARTS, entry["expect"]["symbols"])
         assert quantizer.checked_quantize(PARTS, entry["reading"]) == entry["expect"]["symbols"]
     else:
-        with pytest.raises(quantizer.InputRejected) as caught:
+        with pytest.raises(quantizer.InputRefused) as caught:
             wire.encode_reading_checked(PARTS, entry["reading"])
-        assert caught.value.field == entry["expect"]["reject"]["field"]
-        assert caught.value.reason == entry["expect"]["reject"]["reason"]
+        assert caught.value.field == entry["expect"]["refuse"]["field"]
+        assert caught.value.reason == entry["expect"]["refuse"]["reason"]
 
 
 def test_an_unparseable_string_is_never_a_zero_reading():
     zero_symbol = PARTS["error_rate"].symbol(0)
-    with pytest.raises(quantizer.InputRejected):
+    with pytest.raises(quantizer.InputRefused):
         PARTS["error_rate"].checked_symbol("abc")
     with pytest.raises(ValueError):
         PARTS["error_rate"].symbol("abc")
@@ -63,6 +63,6 @@ def test_an_unparseable_string_is_never_a_zero_reading():
 
 
 def test_corpus_covers_every_reason_and_kind():
-    reasons = {case["expect"].get("reject") for case in CORPUS["cases"] if "reject" in case["expect"]}
+    reasons = {case["expect"].get("refuse") for case in CORPUS["cases"] if "refuse" in case["expect"]}
     assert reasons == {"missing", "wrong_type", "unparseable_string", "fractional", "out_of_range"}
     assert {PARTS[case["field"]].kind for case in CORPUS["cases"]} == {"numeric", "boolean", "categorical"}

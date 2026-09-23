@@ -105,17 +105,17 @@ jobs:
       - name: Installed workflows, run from outside the checkout
         run: |
           cd /tmp && rm -rf smoke && mkdir smoke && cd smoke
-          V=/tmp/wheel-venv/bin
-          $V/python -c 'import prismpath; assert "site-packages" in prismpath.__file__, prismpath.__file__'
-          $V/prismpath --help > /dev/null
-          $V/prismpath init --template incident_severity > /dev/null
-          $V/prismpath validate incident_severity.md
-          $V/prismpath test incident_severity.md
-          $V/prismpath verify incident_severity.md > /dev/null
+          VENV_BIN=/tmp/wheel-venv/bin
+          $VENV_BIN/python -c 'import prismpath; assert "site-packages" in prismpath.__file__, prismpath.__file__'
+          $VENV_BIN/prismpath --help > /dev/null
+          $VENV_BIN/prismpath init --template incident_severity > /dev/null
+          $VENV_BIN/prismpath validate incident_severity.md
+          $VENV_BIN/prismpath test incident_severity.md
+          $VENV_BIN/prismpath verify incident_severity.md > /dev/null
           printf '{"data_at_risk": false, "user_facing": true, "error_rate": 7}\n{"data_at_risk": true, "user_facing": false, "error_rate": 0}\n' > sample.ndjson
-          $V/python -m prismpath.telemetry.preflight incident_severity.md sample.ndjson --json preflight.json > /dev/null
-          $V/python -c 'import json; assert json.load(open("preflight.json"))["events"] == 2'
-          $V/python -c 'from prismpath.mission_control import app; import importlib.resources as r; assert (r.files("prismpath.mission_control") / "static" / "index.html").is_file(); assert (r.files("prismpath.mission_control") / "static" / "vendor" / "cytoscape.min.js").is_file()'
+          $VENV_BIN/python -m prismpath.telemetry.preflight incident_severity.md sample.ndjson --json preflight.json > /dev/null
+          $VENV_BIN/python -c 'import json; assert json.load(open("preflight.json"))["events"] == 2'
+          $VENV_BIN/python -c 'from prismpath.mission_control import app; import importlib.resources as resources; assert (resources.files("prismpath.mission_control") / "static" / "index.html").is_file(); assert (resources.files("prismpath.mission_control") / "static" / "vendor" / "cytoscape.min.js").is_file()'
       - name: Shipped test suite against the installed package
         run: cd /tmp && /tmp/wheel-venv/bin/python -m pytest --pyargs prismpath.tests prismpath.telemetry.tests -q -rs -p no:cacheprovider
       - name: The sdist rebuilds and installs

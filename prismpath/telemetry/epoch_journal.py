@@ -218,7 +218,7 @@ class EpochJournal:
         return total
 
     def _drop_under_pressure(self, epoch: epoch_module.Epoch) -> None:
-        """Record the loss, then delete. An acknowledged epoch's bytes are simply gone; an
+        """Record the loss, then delete. An acknowledged epoch's bytes are gone; an
         unacknowledged one is a provable gap."""
         if not epoch.acked:
             _append_line(self._gaps_path(), {"epoch_id": epoch.id, "reason": "pressure"})

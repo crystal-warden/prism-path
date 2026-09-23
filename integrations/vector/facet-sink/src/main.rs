@@ -19,7 +19,7 @@ use std::sync::mpsc::{sync_channel, Receiver as MpscReceiver, SyncSender, TrySen
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-/// Command line runtime options configured for a sink execution run.
+/// The options one run is given on the command line.
 #[derive(Clone, Debug)]
 struct RunOptions {
     batch_size: usize,
@@ -29,7 +29,7 @@ struct RunOptions {
     used_seed: u64,
 }
 
-/// Converts a JSON value into a PrismPath value representation.
+/// A JSON scalar as the kernel's value type; a null, list or object is not a reading value and yields None.
 fn json_to_v(json_value: &serde_json::Value) -> Option<V> {
     match json_value {
         serde_json::Value::Bool(flag) => Some(V::Bool(*flag)),
@@ -39,7 +39,8 @@ fn json_to_v(json_value: &serde_json::Value) -> Option<V> {
     }
 }
 
-/// Advances the xorshift64 random generator and returns a float in the half open interval zero to one.
+/// One step of the xorshift64 generator as a float in [0, 1). A tiny generator with an explicit
+/// state is what makes a run reproducible from --seed; a library generator seeded from the clock is not.
 fn next_f64(state: &mut u64) -> f64 {
     let mut scrambled = *state;
     scrambled ^= scrambled << 13;
@@ -49,7 +50,8 @@ fn next_f64(state: &mut u64) -> f64 {
     (scrambled >> 11) as f64 / ((1u64 << 53) as f64)
 }
 
-/// Calculates the compression ratio as accepted input bytes divided by encoded payload bytes.
+/// The ratio a reader can trust: accepted input bytes over encoded payload bytes. Refused lines
+/// stay out of the numerator, so they cannot inflate it; no payload means no ratio, never a division by zero.
 fn calculate_ratio(accepted_bytes: usize, payload_bytes: usize) -> Option<f64> {
     if payload_bytes == 0 {
         None
@@ -58,59 +60,62 @@ fn calculate_ratio(accepted_bytes: usize, payload_bytes: usize) -> Option<f64> {
     }
 }
 
-/// Message sent through the bounded channel to the simulated downstream consumer.
+/// What waits in the bounded queue for the simulated consumer: the epoch a batch was sealed into.
 struct QueuedBatch {
     epoch_id: usize,
 }
 
-/// Accumulated statistics for a single batch of readings.
+/// One batch's accounting, kept separate per counter so a report can show what was accepted, what
+/// was refused and what went on the wire without mixing them.
 #[derive(Default)]
 struct BatchAccumulator {
     batch_index: usize,
     readings_encoded: usize,
-    lines_rejected_unparseable: usize,
-    lines_rejected_unencodable: usize,
+    lines_refused_unparseable: usize,
+    lines_refused_unencodable: usize,
     accepted_input_bytes: usize,
-    rejected_input_bytes: usize,
+    refused_input_bytes: usize,
     wire_bits: String,
 }
 
-/// Cumulative accounting totals across all batches.
+/// The same counters summed over the run, for the summary.
 #[derive(Default)]
 struct SummaryTotals {
     readings_encoded: usize,
-    lines_rejected_unparseable: usize,
-    lines_rejected_unencodable: usize,
+    lines_refused_unparseable: usize,
+    lines_refused_unencodable: usize,
     accepted_input_bytes: usize,
-    rejected_input_bytes: usize,
+    refused_input_bytes: usize,
     encoded_payload_bytes: usize,
     transport_overhead_bytes: usize,
 }
 
-/// Mutable context state passed into batch processing and flush routines.
+/// Everything a batch flush needs, gathered so the flush and the input loop share one state.
 struct BatchContext<'a> {
     epoch_store: &'a mut EpochStore,
     block_bits: usize,
     interference_rate: Option<f64>,
-    rng_state: &'a mut u64,
+    random_state: &'a mut u64,
     sender_channel: &'a SyncSender<QueuedBatch>,
     receiver_arc: &'a Arc<Mutex<MpscReceiver<QueuedBatch>>>,
     batches_dropped_backpressure: &'a mut usize,
     summary_totals: &'a mut SummaryTotals,
 }
 
-/// Prints usage message to standard error and exits with code 2.
+/// Usage on stderr and exit 2, so stdout stays JSON lines only.
 fn print_usage_and_exit() -> ! {
     eprintln!("usage: facet-vector-sink <flow.md> [--listen ADDR] [--interference P] [--batch N] [--max-queued Q] [--consumer-delay-ms D] [--seed S]");
     std::process::exit(2);
 }
 
-/// Simulates block transmission over a lossy channel and returns transport overhead in bytes.
+/// The batch over a lossy link: blocks dropped or corrupted at the interference rate, repaired by
+/// the self heal proofs. Returns the transport overhead those proofs cost in bytes, which is the
+/// price of recovery and is reported apart from the payload.
 fn simulate_interference(
     batch_bits: &str,
     block_bits: usize,
     interference_rate: f64,
-    rng_state: &mut u64,
+    random_state: &mut u64,
 ) -> usize {
     let sender = match Sender::new(batch_bits, block_bits) {
         Ok(s) => s,
@@ -133,13 +138,13 @@ fn simulate_interference(
         for index in targets {
             let (block, proof) = sender.serve(index);
             transport_overhead_bytes += proof.len() * 64;
-            if next_f64(rng_state) < interference_rate {
-                if next_f64(rng_state) < 0.5 {
+            if next_f64(random_state) < interference_rate {
+                if next_f64(random_state) < 0.5 {
                     // Dropout: lost block.
                 } else {
                     let mut block_bytes = block.into_bytes();
                     if !block_bytes.is_empty() {
-                        let bit_index = (next_f64(rng_state) * block_bytes.len() as f64) as usize % block_bytes.len();
+                        let bit_index = (next_f64(random_state) * block_bytes.len() as f64) as usize % block_bytes.len();
                         block_bytes[bit_index] = if block_bytes[bit_index] == b'0' { b'1' } else { b'0' };
                     }
                     if let Ok(corrupted_block) = String::from_utf8(block_bytes) {
@@ -158,7 +163,9 @@ fn simulate_interference(
     transport_overhead_bytes
 }
 
-/// Enqueues a batch for the consumer, dropping the oldest batch if queue capacity is exceeded.
+/// Hand a batch to the consumer without ever blocking input. When the queue is full the oldest
+/// batch is dropped and its epoch marked as a gap: on a live feed the newest decision matters more
+/// than the oldest, and a recorded gap is honest where a stalled feed would be silent.
 fn enqueue_batch(
     sender_channel: &SyncSender<QueuedBatch>,
     receiver_arc: &Arc<Mutex<MpscReceiver<QueuedBatch>>>,
@@ -184,13 +191,14 @@ fn enqueue_batch(
     }
 }
 
-/// Flushes a batch of readings, sealing into EpochStore, printing report, and queueing for consumer.
+/// Seal the batch as an epoch, report it at once so a long lived connection shows results before
+/// it closes, then queue it for the consumer.
 fn flush_batch(batch: &mut BatchAccumulator, context: &mut BatchContext<'_>) {
     let epoch = context.epoch_store.seal(&batch.wire_bits);
     let encoded_payload_bytes = batch.wire_bits.len().div_ceil(8);
 
     let transport_overhead_bytes = if let Some(rate) = context.interference_rate {
-        simulate_interference(&batch.wire_bits, context.block_bits, rate, context.rng_state)
+        simulate_interference(&batch.wire_bits, context.block_bits, rate, context.random_state)
     } else {
         0
     };
@@ -203,10 +211,10 @@ fn flush_batch(batch: &mut BatchAccumulator, context: &mut BatchContext<'_>) {
         "chained_root": epoch.chained_root,
         "merkle_root": epoch.merkle_root,
         "readings_encoded": batch.readings_encoded,
-        "lines_rejected_unparseable": batch.lines_rejected_unparseable,
-        "lines_rejected_unencodable": batch.lines_rejected_unencodable,
+        "lines_refused_unparseable": batch.lines_refused_unparseable,
+        "lines_refused_unencodable": batch.lines_refused_unencodable,
         "accepted_input_bytes": batch.accepted_input_bytes,
-        "rejected_input_bytes": batch.rejected_input_bytes,
+        "refused_input_bytes": batch.refused_input_bytes,
         "encoded_payload_bytes": encoded_payload_bytes,
         "transport_overhead_bytes": transport_overhead_bytes,
         "compression_ratio": compression_ratio,
@@ -223,15 +231,16 @@ fn flush_batch(batch: &mut BatchAccumulator, context: &mut BatchContext<'_>) {
     );
 
     context.summary_totals.readings_encoded += batch.readings_encoded;
-    context.summary_totals.lines_rejected_unparseable += batch.lines_rejected_unparseable;
-    context.summary_totals.lines_rejected_unencodable += batch.lines_rejected_unencodable;
+    context.summary_totals.lines_refused_unparseable += batch.lines_refused_unparseable;
+    context.summary_totals.lines_refused_unencodable += batch.lines_refused_unencodable;
     context.summary_totals.accepted_input_bytes += batch.accepted_input_bytes;
-    context.summary_totals.rejected_input_bytes += batch.rejected_input_bytes;
+    context.summary_totals.refused_input_bytes += batch.refused_input_bytes;
     context.summary_totals.encoded_payload_bytes += encoded_payload_bytes;
     context.summary_totals.transport_overhead_bytes += transport_overhead_bytes;
 }
 
-/// Spawns the simulated downstream consumer thread.
+/// The simulated consumer: a thread that takes --consumer-delay-ms per batch, the slow reader the
+/// backpressure policy exists for.
 fn spawn_consumer_thread(
     max_queued_batches: usize,
     consumer_delay_milliseconds: u64,
@@ -262,7 +271,8 @@ fn spawn_consumer_thread(
     (sender, receiver_arc, handle)
 }
 
-/// Processes NDJSON input records from a buffered reader.
+/// The input loop: one line is one event; a line that does not parse or does not encode is refused
+/// and its bytes counted as refused, never as accepted.
 fn process_input<R: BufRead>(
     reader: R,
     partitions: &HashMap<String, FieldPartition>,
@@ -271,7 +281,7 @@ fn process_input<R: BufRead>(
 ) {
     let block_bits = (64 * field_names.len()).max(64);
     let mut epoch_store = EpochStore::new(block_bits, 10000);
-    let mut rng_state = if options.used_seed == 0 { 1 } else { options.used_seed };
+    let mut random_state = if options.used_seed == 0 { 1 } else { options.used_seed };
 
     let (sender_channel, receiver_arc, consumer_handle) =
         spawn_consumer_thread(options.max_queued_batches, options.consumer_delay_milliseconds);
@@ -298,8 +308,8 @@ fn process_input<R: BufRead>(
         let event_value: serde_json::Value = match serde_json::from_str(&line) {
             Ok(parsed) => parsed,
             Err(_) => {
-                current_batch.lines_rejected_unparseable += 1;
-                current_batch.rejected_input_bytes += line_byte_count;
+                current_batch.lines_refused_unparseable += 1;
+                current_batch.refused_input_bytes += line_byte_count;
                 continue;
             }
         };
@@ -318,8 +328,8 @@ fn process_input<R: BufRead>(
                 current_batch.accepted_input_bytes += line_byte_count;
             }
             Err(_) => {
-                current_batch.lines_rejected_unencodable += 1;
-                current_batch.rejected_input_bytes += line_byte_count;
+                current_batch.lines_refused_unencodable += 1;
+                current_batch.refused_input_bytes += line_byte_count;
             }
         }
 
@@ -328,7 +338,7 @@ fn process_input<R: BufRead>(
                 epoch_store: &mut epoch_store,
                 block_bits,
                 interference_rate: options.interference_rate,
-                rng_state: &mut rng_state,
+                random_state: &mut random_state,
                 sender_channel: &sender_channel,
                 receiver_arc: &receiver_arc,
                 batches_dropped_backpressure: &mut batches_dropped_backpressure,
@@ -344,14 +354,14 @@ fn process_input<R: BufRead>(
     }
 
     if current_batch.readings_encoded > 0
-        || current_batch.lines_rejected_unparseable > 0
-        || current_batch.lines_rejected_unencodable > 0
+        || current_batch.lines_refused_unparseable > 0
+        || current_batch.lines_refused_unencodable > 0
     {
         let mut context = BatchContext {
             epoch_store: &mut epoch_store,
             block_bits,
             interference_rate: options.interference_rate,
-            rng_state: &mut rng_state,
+            random_state: &mut random_state,
             sender_channel: &sender_channel,
             receiver_arc: &receiver_arc,
             batches_dropped_backpressure: &mut batches_dropped_backpressure,
@@ -377,10 +387,10 @@ fn process_input<R: BufRead>(
 
     let summary_report = serde_json::json!({
         "readings_encoded": summary_totals.readings_encoded,
-        "lines_rejected_unparseable": summary_totals.lines_rejected_unparseable,
-        "lines_rejected_unencodable": summary_totals.lines_rejected_unencodable,
+        "lines_refused_unparseable": summary_totals.lines_refused_unparseable,
+        "lines_refused_unencodable": summary_totals.lines_refused_unencodable,
         "accepted_input_bytes": summary_totals.accepted_input_bytes,
-        "rejected_input_bytes": summary_totals.rejected_input_bytes,
+        "refused_input_bytes": summary_totals.refused_input_bytes,
         "encoded_payload_bytes": summary_totals.encoded_payload_bytes,
         "transport_overhead_bytes": summary_totals.transport_overhead_bytes,
         "compression_ratio": summary_ratio,

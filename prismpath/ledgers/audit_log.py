@@ -66,10 +66,10 @@ class AuditLog:
         """Persist the event, then commit it to the tree. Raises AuditWriteError, with the log
         unchanged, when the file cannot take it."""
         with self._lock:
-            idx = len(self.events)
-            ev = {"idx": idx, "id": f"{idx}", "ts": time.time(),
-                  "actor": actor, "action": action, "data": data}
-            line = json.dumps(ev) + "\n"
+            index = len(self.events)
+            event = {"idx": index, "id": f"{index}", "ts": time.time(),
+                     "actor": actor, "action": action, "data": data}
+            line = json.dumps(event) + "\n"
             if self.path:
                 try:
                     os.makedirs(os.path.dirname(os.path.abspath(self.path)), exist_ok=True)
@@ -79,9 +79,9 @@ class AuditLog:
                         os.fsync(log_file.fileno())
                 except OSError as error:
                     raise AuditWriteError(f"audit event not persisted to {self.path}: {error}") from error
-            self.events.append(ev)
-            self.leaves.append(_leaf_hex(ev))
-            return ev
+            self.events.append(event)
+            self.leaves.append(_leaf_hex(event))
+            return event
 
     def verify_persisted(self) -> bool:
         """True when the file holds exactly the events in memory, line for line. A log with no path is

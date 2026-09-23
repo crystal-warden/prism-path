@@ -143,25 +143,25 @@ fn test_rejected_input_accounting() {
         serde_json::from_str(summary_line).expect("valid summary json");
 
     let readings_encoded = parsed_summary_report["readings_encoded"].as_u64().expect("readings encoded") as usize;
-    let lines_rejected_unparseable =
-        parsed_summary_report["lines_rejected_unparseable"].as_u64().expect("unparseable count") as usize;
-    let lines_rejected_unencodable =
-        parsed_summary_report["lines_rejected_unencodable"].as_u64().expect("unencodable count") as usize;
+    let lines_refused_unparseable =
+        parsed_summary_report["lines_refused_unparseable"].as_u64().expect("unparseable count") as usize;
+    let lines_refused_unencodable =
+        parsed_summary_report["lines_refused_unencodable"].as_u64().expect("unencodable count") as usize;
     let accepted_input_bytes =
         parsed_summary_report["accepted_input_bytes"].as_u64().expect("accepted bytes") as usize;
-    let rejected_input_bytes =
-        parsed_summary_report["rejected_input_bytes"].as_u64().expect("rejected bytes") as usize;
+    let refused_input_bytes =
+        parsed_summary_report["refused_input_bytes"].as_u64().expect("refused bytes") as usize;
     let compression_ratio = parsed_summary_report["compression_ratio"].as_f64().expect("ratio value");
 
     assert_eq!(readings_encoded, 2);
-    assert_eq!(lines_rejected_unparseable, 1);
-    assert_eq!(lines_rejected_unencodable, 1);
+    assert_eq!(lines_refused_unparseable, 1);
+    assert_eq!(lines_refused_unencodable, 1);
 
     let expected_accepted_bytes = valid_reading_first.len() + valid_reading_second.len();
     let expected_rejected_bytes = unparseable_line.len() + unencodable_line.len();
 
     assert_eq!(accepted_input_bytes, expected_accepted_bytes);
-    assert_eq!(rejected_input_bytes, expected_rejected_bytes);
+    assert_eq!(refused_input_bytes, expected_rejected_bytes);
 
     let encoded_payload_bytes =
         parsed_summary_report["encoded_payload_bytes"].as_u64().expect("payload bytes") as usize;

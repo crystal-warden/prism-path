@@ -1,9 +1,9 @@
-//! The Facet input contract, pinned by the frozen inputs corpus the Python side reads too: every
-//! case's value is accepted to the recorded symbol or rejected for the recorded reason, by
+//! The Facet acceptance, pinned by the frozen inputs corpus the Python side reads too: every
+//! case's value is accepted to the recorded symbol or refused for the recorded reason, by
 //! `checked_symbol` and by `encode_reading_checked`; the permissive `symbol` agrees on every
 //! accepted value; and an unsupported input can never become a valid zero reading.
 use prismpath_rs::{parse, V};
-use prismpath_telemetry_rs::quantizer::{self, InputRejection};
+use prismpath_telemetry_rs::quantizer::{self, InputRefusal};
 use prismpath_telemetry_rs::wire;
 use serde_json::Value;
 use std::collections::HashMap;
@@ -19,13 +19,13 @@ fn partitions(corpus: &Value) -> HashMap<String, quantizer::FieldPartition> {
     quantizer::build_partitions(&parse(corpus["flow"].as_str().unwrap()))
 }
 
-fn expected_rejection(reason: &str) -> InputRejection {
+fn expected_refusal(reason: &str) -> InputRefusal {
     match reason {
-        "missing" => InputRejection::Missing,
-        "wrong_type" => InputRejection::WrongType,
-        "unparseable_string" => InputRejection::UnparseableString,
-        "fractional" => InputRejection::Fractional,
-        "out_of_range" => InputRejection::OutOfRange,
+        "missing" => InputRefusal::Missing,
+        "wrong_type" => InputRefusal::WrongType,
+        "unparseable_string" => InputRefusal::UnparseableString,
+        "fractional" => InputRefusal::Fractional,
+        "out_of_range" => InputRefusal::OutOfRange,
         other => panic!("unknown reason {other}"),
     }
 }
@@ -44,9 +44,9 @@ fn checked_symbol_follows_the_corpus() {
             let converted = quantizer::accept_value(&parts[field].kind, &value).unwrap();
             assert_eq!(parts[field].symbol(&converted), Ok(symbol as usize), "permissive symbol agrees on {field} {}", case["input"]);
         } else {
-            let error = outcome.expect_err(&format!("{field} {} must be rejected", case["input"]));
+            let error = outcome.expect_err(&format!("{field} {} must be refused", case["input"]));
             assert_eq!(error.field, field);
-            assert_eq!(error.rejection, expected_rejection(case["expect"]["reject"].as_str().unwrap()), "{field} {}", case["input"]);
+            assert_eq!(error.refusal, expected_refusal(case["expect"]["refuse"].as_str().unwrap()), "{field} {}", case["input"]);
         }
         checked += 1;
     }
@@ -67,9 +67,9 @@ fn checked_encoding_follows_the_corpus() {
             assert_eq!(quantizer::checked_quantize(&parts, &reading).unwrap(), expected);
             assert_eq!(wire::decode_reading(&parts, &bits).unwrap(), quantizer::reconstruct(&parts, &expected));
         } else {
-            let error = outcome.expect_err("rejected reading does not encode");
-            assert_eq!(error.field, entry["expect"]["reject"]["field"].as_str().unwrap());
-            assert_eq!(error.rejection.reason(), entry["expect"]["reject"]["reason"].as_str().unwrap());
+            let error = outcome.expect_err("refused reading does not encode");
+            assert_eq!(error.field, entry["expect"]["refuse"]["field"].as_str().unwrap());
+            assert_eq!(error.refusal.reason(), entry["expect"]["refuse"]["reason"].as_str().unwrap());
         }
     }
 }
