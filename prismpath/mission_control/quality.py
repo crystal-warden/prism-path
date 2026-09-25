@@ -9,7 +9,7 @@ prismpath.cli), so a verdict shown in the console is the verdict the operator wo
 terminal. Where the CLI prints human text, we return the structured result objects instead so the
 front end can render them.
 
-Every filesystem path a caller supplies is confined under the active project with core._safe the same
+Every filesystem path a caller supplies is confined under the active project with core.safe_path the same
 way the edit router confines its writes. A path that tries to escape the project raises ValueError,
 which the application maps to a 400 response, so the router fails closed against traversal.
 """
@@ -58,7 +58,7 @@ def lock(req: LockReq):
     lock_flow in prismpath.cli.
     """
     from prismpath.routing import lockfile
-    flow_path = core._safe(core.STATE["proj"], req.flow_md)
+    flow_path = core.safe_path(core.STATE["proj"], req.flow_md)
 
     if req.check:
         # verify_tree degrades to the single-flow fingerprint check when the flow has no children,
@@ -85,7 +85,7 @@ def lock(req: LockReq):
         import json
         from prismpath.routing import centroid
         from prismpath.kernel.parser import parse_file
-        centroids_path = core._safe(core.STATE["proj"], req.centroids)
+        centroids_path = core.safe_path(core.STATE["proj"], req.centroids)
         records = [json.loads(line) for line in open(centroids_path, encoding="utf-8") if line.strip()]
         graph = parse_file(flow_path)
         centroids, counts = centroid.build_centroids(records, {graph.name: graph})
@@ -115,7 +115,7 @@ def calibrate(req: CalibrateReq):
     """
     from prismpath.routing import calibrate as calibrate_lib
     from prismpath.routing import routelog
-    labels_path = core._safe(core.STATE["proj"], req.labels_path)
+    labels_path = core.safe_path(core.STATE["proj"], req.labels_path)
     records = routelog.load_records(labels_path)
     return calibrate_lib.calibrate(records, alpha=req.alpha)
 
@@ -129,7 +129,7 @@ def centroids(req: CentroidsReq):
     """
     import json
     from prismpath.routing import centroid
-    benchmark_path = core._safe(core.STATE["proj"], req.benchmark_path)
+    benchmark_path = core.safe_path(core.STATE["proj"], req.benchmark_path)
     records = [json.loads(line) for line in open(benchmark_path, encoding="utf-8") if line.strip()]
     return centroid.cross_validate(records, flows_dir=None, folds=req.folds, prior_weight=req.prior)
 
@@ -143,8 +143,8 @@ def kappa(req: KappaReq):
     disagreement side outputs are omitted because this endpoint reports rather than writes datasets.
     """
     from prismpath.evals import kappa as kappa_lib
-    a_path = core._safe(core.STATE["proj"], req.a_path)
-    b_path = core._safe(core.STATE["proj"], req.b_path)
+    a_path = core.safe_path(core.STATE["proj"], req.a_path)
+    b_path = core.safe_path(core.STATE["proj"], req.b_path)
     a = kappa_lib.load(a_path)
     b = kappa_lib.load(b_path)
     return kappa_lib.report(a, b, by_stratum=req.by_stratum)

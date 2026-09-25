@@ -43,8 +43,8 @@ class FacetEncodeRequest(BaseModel):
 def verify_pack_endpoint(request: PackVerifyRequest):
     """Verify a signed policy pack against public keys without applying hot-swap changes."""
     project_dir = core.STATE["proj"]
-    safe_ppt_path = core._safe(project_dir, request.ppt_path)
-    safe_pubkey_paths = [core._safe(project_dir, key_path) for key_path in request.pub]
+    safe_ppt_path = core.safe_path(project_dir, request.ppt_path)
+    safe_pubkey_paths = [core.safe_path(project_dir, key_path) for key_path in request.pub]
 
     if not os.path.exists(safe_ppt_path):
         raise HTTPException(status_code=400, detail="policy pack image file does not exist")
@@ -65,8 +65,8 @@ def verify_pack_endpoint(request: PackVerifyRequest):
 def pack_attest_endpoint(request: PackAttestRequest):
     """Return the active policy attestation and status for Mission Control in read-only mode."""
     project_dir = core.STATE["proj"]
-    safe_state_dir = core._safe(project_dir, request.state_dir)
-    safe_pubkey_paths = [core._safe(project_dir, key_path) for key_path in (request.pub or [])]
+    safe_state_dir = core.safe_path(project_dir, request.state_dir)
+    safe_pubkey_paths = [core.safe_path(project_dir, key_path) for key_path in (request.pub or [])]
 
     try:
         from prismpath.hotswap import policy_host, policy_pack
@@ -75,7 +75,7 @@ def pack_attest_endpoint(request: PackAttestRequest):
 
     envelope_data = {}
     if request.envelope:
-        safe_envelope_path = core._safe(project_dir, request.envelope)
+        safe_envelope_path = core.safe_path(project_dir, request.envelope)
         if safe_pubkey_paths:
             envelope_dict, reasons = policy_pack.load_envelope(safe_envelope_path, safe_pubkey_paths)
             if envelope_dict is None:
@@ -104,7 +104,7 @@ def pack_attest_endpoint(request: PackAttestRequest):
 def facet_decode_endpoint(request: FacetDecodeRequest):
     """Decode a wire telemetry hex string into a structured reading and resolve the start node edge transition."""
     project_dir = core.STATE["proj"]
-    safe_flow_path = core._safe(project_dir, request.flow_md)
+    safe_flow_path = core.safe_path(project_dir, request.flow_md)
 
     if not os.path.exists(safe_flow_path):
         raise HTTPException(status_code=400, detail="flow markdown file does not exist")
@@ -151,7 +151,7 @@ def facet_decode_endpoint(request: FacetDecodeRequest):
 def facet_encode_endpoint(request: FacetEncodeRequest):
     """Quantize and wire-encode a JSON telemetry reading against flow decision partitions."""
     project_dir = core.STATE["proj"]
-    safe_flow_path = core._safe(project_dir, request.flow_md)
+    safe_flow_path = core.safe_path(project_dir, request.flow_md)
 
     if not os.path.exists(safe_flow_path):
         raise HTTPException(status_code=400, detail="flow markdown file does not exist")

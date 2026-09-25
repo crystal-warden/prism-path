@@ -12,6 +12,13 @@ and the last-known-good pack is retained for `rollback()`.
 Anti-rollback is a file-backed monotonic counter (`<state_dir>/active_version`, fsync'd) — the
 software tier: tamper-evident through the ledger, not tamper-proof. The eFUSE/secure-element
 counter is the hardware follow-on (spec §7).
+
+The active policy is also on disk, `<state_dir>/active.ppt` beside `<state_dir>/active_policy.json`
+naming its digest, so the process that swapped is not the only one that knows what is active: the
+`swap attest` command and the console's attestation panel each build a fresh host over the same
+state directory and report the policy the last accepted swap committed. A record whose image is
+missing or whose digest disagrees is not restored; the host then starts with no active policy and
+writes `active_unreadable` to the ledger.
 """
 from __future__ import annotations
 
@@ -52,6 +59,7 @@ class PolicyHost:
         self._version_path = os.path.join(state_dir, "active_version")
         self._recovery_recorded = False
         self._recover()
+        self._load_active()
 
     # -- persisted monotonic version (anti-rollback floor) --
     def _stored_version(self) -> int:
@@ -69,9 +77,11 @@ class PolicyHost:
     #   1. the intent record, <state_dir>/pending_swap, naming the image hash and version;
     #   2. the version floor;
     #   3. the audit event, the evidence that the swap was accepted;
-    #   4. the reference flip, an assignment that cannot fail;
+    #   4. the active policy record on disk, the image then the record naming its digest, and the
+    #      reference flip in memory, an assignment that cannot fail;
     #   5. the intent record removed.
-    # A failure at 1, 2 or 3 raises and leaves the previous policy active, because nothing has flipped.
+    # A failure at 1, 2, 3 or the record write in 4 raises and leaves the previous policy active,
+    # because nothing has flipped.
     # What it leaves behind is an intent record, and possibly a floor one step ahead of the last
     # accepted swap. Recovery reads that record at the next start and at the next swap: it is written
     # to the audit log as `swap_incomplete`, and the same image at the same version is allowed to
@@ -110,6 +120,42 @@ class PolicyHost:
                 "stored_version": self._stored_version(), "result": "incomplete"})
             self._recovery_recorded = True
         return pending
+
+    # -- the active policy record: what a fresh host over this state directory restores --
+    def _active_record_path(self) -> str:
+        return os.path.join(self.state_dir, "active_policy.json")
+
+    def _active_image_path(self) -> str:
+        return os.path.join(self.state_dir, "active.ppt")
+
+    def _persist_active(self, policy: dict) -> None:
+        """The image first, then the record naming its digest, each durable before the next."""
+        canon.atomic_write_bytes(self._active_image_path(), policy["image"])
+        record = {key: value for key, value in policy.items() if key != "image"}
+        canon.atomic_write(self._active_record_path(), json.dumps(record, sort_keys=True))
+
+    def _load_active(self) -> None:
+        """Restore the policy a previous process committed. Nothing on disk means nothing active. A
+        record whose image is missing, unreadable or of another digest is not restored, and the
+        ledger says so; the host then holds no active policy, the fail closed answer."""
+        try:
+            with open(self._active_record_path()) as record_file:
+                record = json.loads(record_file.read())
+        except FileNotFoundError:
+            return
+        except (OSError, ValueError) as error:
+            self.audit.append("policy_host", "active_unreadable", {"reason": f"record:unreadable:{error}", "result": "not_restored"})
+            return
+        try:
+            with open(self._active_image_path(), "rb") as image_file:
+                image = image_file.read()
+        except OSError as error:
+            self.audit.append("policy_host", "active_unreadable", {"to_hash": record.get("sha256"), "reason": f"image:unreadable:{error.errno}", "result": "not_restored"})
+            return
+        if not isinstance(record, dict) or pp.sha256_hex(image) != record.get("sha256"):
+            self.audit.append("policy_host", "active_unreadable", {"to_hash": record.get("sha256") if isinstance(record, dict) else None, "reason": "image:digest-mismatch", "result": "not_restored"})
+            return
+        self._active = {**record, "image": image}
 
     def _reject(self, to_hash: Optional[str], version, reasons: List[str], strict: bool) -> dict:
         self.audit.append("policy_host", "swap_rejected", {
@@ -180,6 +226,7 @@ class PolicyHost:
                 "key_id": manifest.get("key_id"), "envelope_id": manifest.get("envelope_id"),
                 "unsigned": bool(manifest.get("unsigned")), "overlay_of": manifest.get("overlay_of"),
                 "result": "accepted"})
+            self._persist_active(new_active)
             self._prev, self._active = self._active, new_active
             self._clear_pending()
             return {"ok": True, **self.active()}
@@ -198,6 +245,7 @@ class PolicyHost:
         with self._lock:
             if self._prev is None:
                 return {"ok": False, "reasons": ["rollback:no-previous"]}
+            self._persist_active(self._prev)
             self._active, self._prev = self._prev, None
             self.audit.append("policy_host", "rollback", {
                 "to_hash": self._active["sha256"], "version": self._active["version"],

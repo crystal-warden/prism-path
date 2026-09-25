@@ -44,7 +44,7 @@ def _envelope(status_code: int, message: str) -> JSONResponse:
 
 @app.exception_handler(ValueError)
 async def _value_error(request: Request, exc: ValueError):
-    # containment guards (_safe) raise ValueError — a client error, not a 500
+    # containment guards (safe_path) raise ValueError, a client error, not a 500
     return _envelope(400, str(exc))
 
 

@@ -229,3 +229,37 @@ def test_a_floor_below_the_intent_is_not_admitted_twice(env):
     host.swap(_pack(env, "v2", 2))
     again = host.swap(_pack(env, "v2c", 2, hot=60))
     assert not again["ok"] and any("version:not-monotonic" in reason for reason in again["reasons"])
+
+
+def test_active_policy_survives_a_new_host(env):
+    """The process that swapped is not the only one that knows what is active: `swap attest` and the
+    console each build a fresh host over the state directory and must report the committed policy."""
+    first = _host(env)
+    accepted = first.swap(_pack(env, "v1", 1))
+    second = _host(env)
+    assert second.active()["active"] == accepted["active"]
+    assert second.attest()["version"] == 1
+    third_swap = second.swap(_pack(env, "v2", 2, hot=50))
+    assert third_swap["ok"]
+    assert _host(env).active()["active"] == third_swap["active"] != accepted["active"]
+    rows = [ev for ev in AuditLog(str(env["tmp"] / "state" / "swaps.log")).events if ev["action"] == "attestation"]
+    assert rows and rows[-1]["data"]["active"] == accepted["active"]
+
+
+def test_a_tampered_active_image_is_not_restored(env):
+    first = _host(env)
+    accepted = first.swap(_pack(env, "v1", 1))
+    (env["tmp"] / "state" / "active.ppt").write_bytes(b"not the image")
+    second = _host(env)
+    assert second.active() == {"active": None}
+    last = AuditLog(str(env["tmp"] / "state" / "swaps.log")).events[-1]
+    assert last["action"] == "active_unreadable"
+    assert last["data"] == {"to_hash": accepted["active"], "reason": "image:digest-mismatch", "result": "not_restored"}
+
+
+def test_rollback_is_what_a_new_host_restores(env):
+    host = _host(env)
+    first = host.swap(_pack(env, "v1", 1))
+    host.swap(_pack(env, "v2", 2, hot=50))
+    assert host.rollback()["active"] == first["active"]
+    assert _host(env).active()["active"] == first["active"]

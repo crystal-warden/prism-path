@@ -11,7 +11,7 @@ Unlike the proving router, which takes flow *text* over the wire, these commands
 flow *path*, because contract, portability, composition, and fixture resolution all read sibling
 files (spawned children, the `.tests.md` fixture) relative to that path. To keep that from
 becoming a filesystem traversal surface, every path is confined under the active project with
-`core._safe`, exactly the way the edit router does it. A path that escapes the project raises
+`core.safe_path`, exactly the way the edit router does it. A path that escapes the project raises
 ValueError, which the app's error handler turns into a clean client error rather than a leak.
 """
 from fastapi import APIRouter, HTTPException
@@ -48,13 +48,13 @@ def _resolve(flow_md: str) -> str:
     """Confine a client-supplied flow path under the active project, failing closed.
 
     An empty path is a client error, not a stat of the project root, so we reject it up front.
-    `core._safe` raises ValueError on any path that would escape the project tree; we translate
+    `core.safe_path` raises ValueError on any path that would escape the project tree; we translate
     that into a 400 here so the caller sees a contained refusal instead of a traceback.
     """
     if not (flow_md or "").strip():
         raise HTTPException(status_code=400, detail="flow_md is empty")
     try:
-        return core._safe(core.STATE["proj"], flow_md)
+        return core.safe_path(core.STATE["proj"], flow_md)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 

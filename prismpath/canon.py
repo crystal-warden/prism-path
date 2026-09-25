@@ -70,6 +70,18 @@ def atomic_write(path, data: str, encoding: str = "utf-8") -> None:
     os.replace(tmp, path)
 
 
+def atomic_write_bytes(path, data: bytes) -> None:
+    """`atomic_write` for bytes: the old file or the new one, never a torn one."""
+    path = os.fspath(path)
+    os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
+    tmp = f"{path}.tmp"
+    with open(tmp, "wb") as f:
+        f.write(data)
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp, path)
+
+
 def safe_name(name: str) -> str:
     """Filesystem safe and deliberately NOT injective (composer disambiguates with a hash when it
     matters): every character outside [A-Za-z0-9_.-] becomes `_`; empty becomes `flow`."""
