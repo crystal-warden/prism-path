@@ -1,6 +1,6 @@
 # Supporting Evidence · Validated Results Ledger
 
-**Ledger v2 · rows #1 to #161 · September 2026**
+**Ledger v2 · rows #1 to #162 · September 2026**
 
 *Every claim in the PrismPath papers, backed by a measured result, its provenance, and an honest
 verdict; negative results included. Written to survive a hostile read and to be merge-ready into the
@@ -1821,6 +1821,18 @@ decision-sufficient-vision/: T6_scaling.md, evidence/t3/20_t6_qvga_2026-09-11.mp
 
 **Provenance:** cw-strategy/governed-fleet/fleet/xdp/ (xdp_gate.bpf.c, run_xdp_from_fleet.sh); the Protectli, warden-node-01.
 
+### #162 — A theory of governed autonomous execution composed from this ledger, with a machine checked core and a machine checked bridge to Figueroa quantization (September 2026)
+
+**Claim:** the general core of a theory of governed autonomous execution checks in Lean 4 while importing nothing, and a bridge proves that Figueroa quantization is a sound relevance criterion for deterministic Level M routing, preserving the full routing result over a policy's authored action domain, discharged from the decision preservation theorem of #140.
+
+**Method:** `supplementary/lean-governance/check.sh` in `docs/research/governed-autonomous-execution/`, run against the repository's own `formal/` project under the pinned toolchain, and the bridge was also reproduced against the FQ project built from scratch in a fresh public clone, as an outside reader would build it.
+
+**Result:** 29 theorems in the core and 5 in the bridge check with no `sorry` and no axiom declarations under leanprover/lean4:v4.33.1. The paper composes the work recorded in #100 to #102, #125, #126, #136, #140, #149 to #151, #153, and #157 into a proposed theory, and cites those rows for its implemented and tested claims.
+
+**Honest scope:** the theory is proposed, not validated, and this row claims only the machine checked results and the release. The core covers semantic invariance and the relevance seam, not authority separation, evidence, or the execution boundary, and it abstracts the proposal from the consequential action at the authorization step. There is no composition theorem, and the reuse across node and collective levels is implemented and tested, not proved. The paper grades its external evidence, and its account of one derivation preceding the external search is a first party report without an independent timestamp.
+
+**Provenance:** `docs/research/governed-autonomous-execution/` (paper source, build, supplementary artifacts, Lean package); the Zenodo record doi:DOI_PENDING; anchored in `prismpath/evidence/ledger_v2.14_2026-09-30.SHA256SUMS`.
+
 ## Revision history
 
 - **v1** (July 2026 consolidation, maintained through row #96, August 2026): the original ledger.
@@ -1944,3 +1956,7 @@ decision-sufficient-vision/: T6_scaling.md, evidence/t3/20_t6_qvga_2026-09-11.mp
   OpenTimestamps anchors were upgraded to their Bitcoin attestations. Anchored in
   `prismpath/evidence/ledger_v2.13_2026-09-15.SHA256SUMS` (`.ots` alongside); the anchor, not this prose,
   is the authoritative timestamp.
+- **v2.14** (September 2026): row #162 folded in, the theory of governed autonomous execution composed from
+  this ledger, published as a preprint in `docs/research/governed-autonomous-execution/` with its machine checked
+  core and its Figueroa quantization bridge. Anchored in `prismpath/evidence/ledger_v2.14_2026-09-30.SHA256SUMS`
+  (`.ots` alongside), and the anchor, not this prose, is the authoritative timestamp.
