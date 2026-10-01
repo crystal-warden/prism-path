@@ -146,14 +146,18 @@ class PolicyHost:
         except (OSError, ValueError) as error:
             self.audit.append("policy_host", "active_unreadable", {"reason": f"record:unreadable:{error}", "result": "not_restored"})
             return
+        # The shape check comes before anything reads a field, so every branch below can rely on a dict.
+        if not isinstance(record, dict):
+            self.audit.append("policy_host", "active_unreadable", {"reason": "record:not-an-object", "result": "not_restored"})
+            return
         try:
             with open(self._active_image_path(), "rb") as image_file:
                 image = image_file.read()
         except OSError as error:
             self.audit.append("policy_host", "active_unreadable", {"to_hash": record.get("sha256"), "reason": f"image:unreadable:{error.errno}", "result": "not_restored"})
             return
-        if not isinstance(record, dict) or pp.sha256_hex(image) != record.get("sha256"):
-            self.audit.append("policy_host", "active_unreadable", {"to_hash": record.get("sha256") if isinstance(record, dict) else None, "reason": "image:digest-mismatch", "result": "not_restored"})
+        if pp.sha256_hex(image) != record.get("sha256"):
+            self.audit.append("policy_host", "active_unreadable", {"to_hash": record.get("sha256"), "reason": "image:digest-mismatch", "result": "not_restored"})
             return
         self._active = {**record, "image": image}
 
