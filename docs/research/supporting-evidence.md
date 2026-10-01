@@ -1831,7 +1831,7 @@ decision-sufficient-vision/: T6_scaling.md, evidence/t3/20_t6_qvga_2026-09-11.mp
 
 **Honest scope:** the theory is proposed, not validated, and this row claims only the machine checked results and the release. The core covers semantic invariance and the relevance seam, not authority separation, evidence, or the execution boundary, and it abstracts the proposal from the consequential action at the authorization step. There is no composition theorem, and the reuse across node and collective levels is implemented and tested, not proved. The paper grades its external evidence, and its account of one derivation preceding the external search is a first party report without an independent timestamp.
 
-**Provenance:** `docs/research/governed-autonomous-execution/` (paper source, build, supplementary artifacts, Lean package); the Zenodo record doi:DOI_PENDING; anchored in `prismpath/evidence/ledger_v2.14_2026-09-30.SHA256SUMS`.
+**Provenance:** `docs/research/governed-autonomous-execution/` (paper source, build, supplementary artifacts, Lean package); the Zenodo record doi:10.5281/zenodo.23073693; anchored in `prismpath/evidence/ledger_v2.14_2026-09-30.SHA256SUMS`.
 
 ## Revision history
 
