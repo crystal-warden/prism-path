@@ -23,6 +23,7 @@ A field mixing kinds (e.g. int and str constants) raises — well-formed Level M
 from __future__ import annotations
 
 import ast
+import math
 import re
 from typing import Optional, Any, Dict, List, Optional, Tuple
 
@@ -93,6 +94,17 @@ def flow_atoms(graph) -> Dict[str, List[Tuple[str, Any]]]:
 
 
 # ----------------------------------------------------------------- per-field partitions
+def numeric_view(value: Any) -> int:
+    """The integer a numeric field compares on: an int, a bool as 0 or 1, an integral float, or a
+    string that is an integer literal. A fraction is refused rather than truncated, because
+    truncation moves a reading across a cut and changes the decision the engine makes on the reading
+    itself: a reading of -0.5 truncates to 0, so `x < 0` routes differently, and 3.5 truncates to 3,
+    so `x == 3` and `x <= 3` do. Found by the Lean formalization's float check, October 2026."""
+    if isinstance(value, float) and (not math.isfinite(value) or not value.is_integer()):
+        raise ValueError(f"{value!r} is fractional or not finite: refused rather than truncated")
+    return int(value)
+
+
 class FieldPartition:
     """An ordered list of decision-cells for one field. `symbol(value)` -> cell index;
     `representative(symbol)` -> a value in that cell that routes identically."""
@@ -105,7 +117,10 @@ class FieldPartition:
 
     def symbol(self, value: Any) -> int:
         if self.kind == "numeric":
-            integer_value = int(value)
+            try:
+                integer_value = numeric_view(value)
+            except ValueError as error:
+                raise ValueError(f"{self.field}: {error}") from None
             for cell_index, cell in enumerate(self.cells):
                 if ((cell["lo"] is None or integer_value >= cell["lo"])
                         and (cell["hi"] is None or integer_value <= cell["hi"])):
@@ -126,7 +141,8 @@ class FieldPartition:
         """`symbol` behind acceptance: the value is accepted and converted by `accept_value`
         or the call raises InputRefused naming the field and the reason. This is the runtime
         boundary a library consumer should encode through; `symbol` keeps its permissive behavior
-        for compatibility (truncated fractions, truthiness on boolean fields)."""
+        for compatibility (numeric strings and bools as integers, truthiness on boolean fields). A
+        fraction is refused on both paths, never truncated."""
         reason, converted = accept_value(self.kind, value)
         if reason is not None:
             raise InputRefused(self.field, reason, value)

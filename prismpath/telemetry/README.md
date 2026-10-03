@@ -92,7 +92,7 @@ runs lands here.
 One command answers the adoption question before you touch a Vector config: point it at a policy flow
 and a sample of your real events (NDJSON), and it reports the derived codebook, how many events encode
 cleanly and exactly why the rest do not (missing fields, unmapped nested paths, values a partition
-cannot place, float truncation), the projected bytes per event next to your raw JSON, and how your
+cannot place, fractional readings), the projected bytes per event next to your raw JSON, and how your
 traffic distributes over the flow's routes. Every encodable event is replayed through the full round
 trip (quantize, Fibonacci-code, decode, reconstruct) and checked to route **identically** to the
 original at every decision node, so decision preservation is verified on *your* data. Semantics match
@@ -171,8 +171,9 @@ One rule set decides what a reading value is, on both sides of the stack, frozen
 
 The checked encoders, `wire.encode_reading_checked` and `wire::encode_reading_checked`, refuse a
 refused value with the field and the reason and never truncate, coerce or read it as zero. The
-permissive `symbol` keeps two compatibility behaviors that the corpus pins as well: a fraction
-truncates and a boolean field applies truthiness. It no longer reads a string that is not an
+permissive `symbol` keeps one compatibility behavior, truthiness on a boolean field. A fraction is
+refused on both paths, never truncated, because truncation moves a reading across a cut and changes
+the decision (found by the Lean formalization's float check, October 2026). It no longer reads a string that is not an
 integer literal as zero on either side; that was a coercion the reference never had. Preflight
 reports `refused_by_field` per field and withholds READY on any refusal, so a sample that
 passes preflight encodes through the checked boundary without a surprise.

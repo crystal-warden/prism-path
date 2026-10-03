@@ -137,12 +137,17 @@ impl FieldPartition {
     }
 }
 
-/// The permissive numeric view `symbol` keeps for compatibility: a fraction truncates, a bool is
-/// 0 or 1. A string that is not an integer literal and a null are errors, never zero; reading them
-/// as zero was a silent coercion the reference never had, and a preflight that passed could not
-/// predict it.
+/// The permissive numeric view `symbol` keeps for compatibility: a bool is 0 or 1 and an integer
+/// literal string is its integer. A string that is not an integer literal and a null are errors,
+/// never zero; reading them as zero was a silent coercion the reference never had, and a preflight
+/// that passed could not predict it. A fraction or a non finite number is an error too, never
+/// truncated: `as i64` truncates toward zero, which moves a reading across a cut (-0.5 against
+/// `x < 0`, 3.5 against `x == 3`) and changes the decision. Found by the Lean formalization's float
+/// check, October 2026.
 fn v_to_i64(value: &V) -> Result<i64, String> {
     match value {
+        V::Num(number) if !number.is_finite() || number.fract() != 0.0 =>
+            Err(format!("{number} is fractional or not finite: refused rather than truncated")),
         V::Num(number) => Ok(*number as i64),
         V::Bool(flag) => Ok(if *flag { 1 } else { 0 }),
         V::Str(text) => text.parse::<i64>().map_err(|_| format!("{text:?} is not an integer literal")),

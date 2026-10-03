@@ -145,7 +145,7 @@ def _level_m_reason(node: ast.AST, tokens: set) -> Optional[str]:
         if const.value is None:
             return "null comparison is not Level M"
         if isinstance(const.value, float):
-            return "float threshold (the codec compares truncated integers; round it and review)"
+            return "float threshold (the codec compares integers; round it and review)"
         return None
     return f"{type(node).__name__} is not Level M (only field OP const under and/or/not)"
 

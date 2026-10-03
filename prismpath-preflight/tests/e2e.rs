@@ -104,18 +104,19 @@ fn acceptance_refusal_is_surfaced_and_blocks_ready() {
 }
 
 #[test]
-fn float_truncation_counted_and_null_is_missing() {
+fn a_fraction_is_refused_not_truncated_and_null_is_missing() {
     let (flow, sample, out) = setup("trunc", &[
-        r#"{"temp": 49.9, "armed": true}"#,          // truncates to 49 -> ok, counted
+        r#"{"temp": 49.9, "armed": true}"#,          // refused as fractional, never truncated to 49
         r#"{"temp": null, "armed": true}"#]);        // JSON null = missing, as in the codec
     let result = run(&[flow.to_str().unwrap(), sample.to_str().unwrap(),
                   "--on-missing", "skip", "--json", out.to_str().unwrap()]);
     assert_eq!(result.status.code(), Some(1), "a fraction is refused by acceptance");
     let rep = report(&out);
-    assert_eq!(rep["float_truncated_by_field"]["temp"], 1);
+    assert!(rep.get("float_truncated_by_field").is_none());
     assert_eq!(rep["refused_by_field"]["temp"]["fractional"], 1);
     assert_eq!(rep["missing_by_field"]["temp"], 1);
-    assert_eq!(rep["route_distribution"]["classify"]["ok"], 1);
+    assert_eq!(rep["out_of_partition"]["temp"], 1, "the encoder cannot place it, as for any refused value");
+    assert_eq!(rep["encoded"], 0, "the fractional reading is not encoded under a truncated value");
     assert_eq!(rep["ready"], false);
 }
 

@@ -179,3 +179,33 @@ fn test_out_of_partition_numeric_is_err_not_panic() {
     reading.insert("x".to_string(), V::Num(99.0));
     assert!(quantizer::quantize(&parts, &reading).is_err());
 }
+
+
+/// Found in October 2026 by the Lean formalization's float check: the permissive `symbol` truncated a
+/// fraction with `as i64`, toward zero, which moved the reading across a cut and changed the decision.
+/// A fraction and a non finite number are refused on the permissive path now, as on the checked one.
+#[test]
+fn a_fraction_is_refused_on_the_permissive_path_never_truncated() {
+    const CUTS: &str = r#"---
+name: cuts
+start: s
+---
+## s
+@emits(x)
+-> hit: when x < 0
+-> hit: when x == 3
+-> hit: when x in [7]
+-> miss: else
+## hit
+## miss
+"#;
+    let parts = quantizer::build_partitions(&parse(CUTS));
+    let x = &parts["x"];
+    for value in [-0.5, -0.9, 3.5, 7.5, 0.25, f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+        let error = x.symbol(&V::Num(value)).expect_err("a fraction or non finite number must be refused");
+        assert!(error.contains("refused rather than truncated"), "{value}: {error}");
+    }
+    for value in [-1.0, 0.0, 3.0, 7.0] {
+        assert!(x.symbol(&V::Num(value)).is_ok(), "an integral float is still its integer: {value}");
+    }
+}

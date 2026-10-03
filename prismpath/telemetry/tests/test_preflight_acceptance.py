@@ -22,7 +22,8 @@ def _scan(lines):
 def test_refusals_are_reported_and_block_ready():
     report = _scan(['{"temp": 95, "armed": true}', '{"temp": "hot", "armed": true}', '{"temp": 2.5, "armed": "yes"}'])
     assert report["refused_by_field"] == {"armed": {"wrong_type": 1}, "temp": {"unparseable_string": 1, "fractional": 1}}
-    assert report["out_of_partition"] == {"temp": 1}
+    # "hot" and 2.5 both: the encoder places neither, since a fraction is refused, never truncated to 2
+    assert report["out_of_partition"] == {"temp": 2}
     assert report["ready"] is False
 
 

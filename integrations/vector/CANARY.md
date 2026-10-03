@@ -128,5 +128,6 @@ dropped (`on_missing`) desynchronizing positions, which shows up as count drift.
   reading the raw leg; that is the design, not a limitation of the canary.
 - Positional comparison assumes each leg preserves stream order (true for one source feeding one
   sink over one connection). Across reconnects, trust the count and distribution checks and rerun.
-- Numeric fields compare on truncated integers, and integer exactness holds through 2^53
-  (IEEE 754 double). Preflight counts how often truncation touches your sample.
+- Numeric fields compare on integers, a fractional value is refused rather than truncated, and
+  integer exactness holds through 2^53 (IEEE 754 double). Preflight counts fractional readings under
+  its refusals.

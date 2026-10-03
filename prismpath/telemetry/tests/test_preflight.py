@@ -89,18 +89,19 @@ def test_unconvertible_numeric_is_reported_not_crashed(tmp_path):
     assert report["out_of_partition"] == {"temp": 1} and report["encoded"] == 1
 
 
-def test_float_truncation_counted_and_null_is_missing(tmp_path):
+def test_a_fraction_is_refused_not_truncated_and_null_is_missing(tmp_path):
     flow, sample = _setup(tmp_path, [
-        {"temp": 49.9, "armed": True},                # truncates to 49 -> ok, counted
+        {"temp": 49.9, "armed": True},                # refused as fractional, never truncated to 49
         {"temp": None, "armed": True}])               # JSON null = missing, as in the codec
     out = tmp_path / "report.json"
     result = _run(flow, sample, "--on-missing", "skip", "--json", str(out))
     assert result.returncode == 1, "a fraction is refused by acceptance"
     report = json.loads(out.read_text())
-    assert report["float_truncated_by_field"] == {"temp": 1}
+    assert "float_truncated_by_field" not in report
     assert report["refused_by_field"] == {"temp": {"fractional": 1}}
     assert report["missing_by_field"] == {"temp": 1}
-    assert report["route_distribution"]["classify"] == {"ok": 1}
+    assert report["out_of_partition"] == {"temp": 1}, "the encoder cannot place it, as for any refused value"
+    assert report["encoded"] == 0, "the fractional reading is not encoded under a truncated value"
     assert report["ready"] is False
 
 

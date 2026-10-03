@@ -13,8 +13,8 @@ to the original at every decision node, so "decision preserving" is checked on y
 
 This is the same reference implementation the Vector codec is parity-tested against, with the same
 semantics: `field_paths` mapping (--map), `on_missing` error|skip, one byte-aligned reading per
-frame, and integer truncation on numeric fields (a value 21.7 compares as 21; the report counts how
-often that bites your sample).
+frame, and integer numeric fields (a fractional value such as 21.7 is refused, never truncated, and
+the report counts it under the refusals).
 
 Usage:
   preflight.py FLOW.md SAMPLE.ndjson [--map FIELD=PATH ...] [--on-missing error|skip]
@@ -74,22 +74,12 @@ def extract_reading(event: dict, fields: List[str], field_paths: Dict[str, str]
     return reading, missing
 
 
-def _codec_view(parts: Dict[str, quantizer.FieldPartition], reading: Dict[str, Any]
-                ) -> Tuple[Dict[str, Any], List[str]]:
-    """The reading as the codec compares it (numeric fields truncate to int); also returns which
-    fields lost a fractional part, since that truncation can flip a threshold."""
-    seen: Dict[str, Any] = {}
-    truncated: List[str] = []
-    for field, value in reading.items():
-        partition = parts[field]
-        if partition.kind == "numeric":
-            int_val = int(value)
-            if isinstance(value, float) and int_val != value:
-                truncated.append(field)
-            seen[field] = int_val
-        else:
-            seen[field] = value
-    return seen, truncated
+def _codec_view(parts: Dict[str, quantizer.FieldPartition], reading: Dict[str, Any]) -> Dict[str, Any]:
+    """The reading as the codec compares it, numeric fields through `quantizer.numeric_view`, the
+    same view the encoder uses. A fraction raises ValueError here as it does in the encoder, and
+    acceptance has already counted it as a refusal."""
+    return {field: quantizer.numeric_view(value) if parts[field].kind == "numeric" else value
+            for field, value in reading.items()}
 
 
 # ----------------------------------------------------------------- report pieces
@@ -190,7 +180,6 @@ class ScanResult:
     missing_counts: Counter
     out_of_partition: Counter
     oop_examples: Dict[str, Any]
-    truncated_counts: Counter
     refusals: Dict[str, Counter]
     field_seen: Counter
     raw_bytes: int
@@ -227,7 +216,6 @@ def scan_sample(
     missing_events = 0
     out_of_partition: Counter = Counter()
     oop_examples: Dict[str, Any] = {}
-    truncated_counts: Counter = Counter()
     refusals: Dict[str, Counter] = {}
     field_seen: Counter = Counter()
     raw_bytes = 0
@@ -275,17 +263,16 @@ def scan_sample(
             continue
 
         try:
-            seen, truncated = _codec_view(parts, reading)
+            seen = _codec_view(parts, reading)
         except (TypeError, ValueError):
             for field in order:
                 if parts[field].kind == "numeric":
                     try:
-                        int(reading[field])
+                        quantizer.numeric_view(reading[field])   # the encoder's own view, as in Rust
                     except (TypeError, ValueError):
                         out_of_partition[field] += 1
                         oop_examples.setdefault(field, reading[field])
             continue
-        truncated_counts.update(truncated)
 
         try:
             bits = wire.encode_reading(parts, seen)
@@ -342,7 +329,6 @@ def scan_sample(
         missing_counts=missing_counts,
         out_of_partition=out_of_partition,
         oop_examples=oop_examples,
-        truncated_counts=truncated_counts,
         refusals=refusals,
         field_seen=field_seen,
         raw_bytes=raw_bytes,
@@ -394,10 +380,6 @@ def render_markdown(result: ScanResult) -> str:
             detail = ", ".join(f"{reason} x{count}" for reason, count in reasons.most_common())
             md.append(f"- REFUSED BY ACCEPTANCE on `{field}`: {detail} (the checked encoder "
                       f"refuses these at runtime; fix the field or map a different path)")
-    if result.truncated_counts:
-        detail = ", ".join(f"`{field}` x{count}" for field, count in result.truncated_counts.most_common())
-        md.append(f"- float truncation: numeric fields compare on int(value); affected: {detail} "
-                  f"(a 21.7 routes as 21; make thresholds integer-aware or scale the field)")
     if result.unseen:
         md.append(f"- NEVER SEEN in the sample: {', '.join(f'`{field}`' for field in result.unseen)} "
                   f"(is the field name right? try --map FIELD=your.json.path)")
@@ -526,7 +508,6 @@ def render_json(result: ScanResult) -> Dict[str, Any]:
         "missing_events": result.missing_events,
         "missing_by_field": dict(result.missing_counts),
         "out_of_partition": dict(result.out_of_partition),
-        "float_truncated_by_field": dict(result.truncated_counts),
         "refused_by_field": {field: dict(reasons) for field, reasons in sorted(result.refusals.items())},
         "fields_never_seen": result.unseen,
         "raw_bytes_per_event": result.raw_bytes / result.n_events if result.n_events else None,
