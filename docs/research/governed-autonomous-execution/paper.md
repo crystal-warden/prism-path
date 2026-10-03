@@ -3,7 +3,7 @@
 
 A. Figueroa. Crystal Warden Labs.
 
-Preprint, September 2026. {{DOI_LINE}} The formal development is machine-checked in Lean 4
+Preprint, version 1.1, October 2026. {{DOI_LINE}} The formal development is machine-checked in Lean 4
 (leanprover/lean4 v4.33.1) and is provided, with the dictionary classification and the citation audit, as
 supplementary material (see Supplementary artifacts). The formal names in section 4 and
 after refer to the accompanying Lean development.
@@ -46,16 +46,14 @@ rather than the worker or the substrate.
 
 We propose governing the act rather than requiring the theory to model the actor. That is an abstraction
 choice, and it is the source of whatever generality the theory has, because a worker may be a language model,
-a human, a controller, a program, or an organization the theory never describes. The contribution is four
-things. First, a proposed conceptual model reduced from an existing implementation vocabulary, through counterexample
+a human, a controller, a program, or an organization the theory never describes. The paper makes four contributions. First, a proposed conceptual model reduced from an existing implementation vocabulary, through counterexample
 and explicit definitional choice, with
 five primitives, two pillars, and a family of distinctions. Second, machine-checked formal consequences of the
 model, including one design condition the definitions alone did not reveal. Third, an external countermodel
 search with graded mappings, testing whether those distinctions recur outside the system they came from. Fourth,
 a first-party implementation corpus with a formally checked bridge from the model to one built transformation.
 
-One deliberately mundane example runs through the paper, so the ideas attach to something concrete before
-they are generalized. A controller governs a valve. A pressure sensor reports 40, the controller proposes
+One deliberately mundane example runs through the paper, so the ideas attach to a concrete case before they are generalized. A controller governs a valve. A pressure sensor reports 40, the controller proposes
 OPEN, the policy permits OPEN while pressure is below 50, the authority relation returns yes, the valve opens,
 and a signed record keeps enough to reconstruct why. Nothing here is about AI, and the same structure appears whether the worker is a controller, a language
 model, or a person. We return to the valve as each idea is introduced.
@@ -65,7 +63,7 @@ model, or a person. We return to the valve as each idea is introduced.
 Return to the valve. The controller proposes OPEN, the policy permits OPEN while the pressure stays below 50,
 the authority relation returns yes for the reading of 40, the valve opens, and a signed record keeps enough
 that the decision can be reconstructed afterward. Governed autonomous execution, as we use the term, is what
-that scene has in common with any other governed action, and it comes to three things, a consequential action
+that scene has in common with any other governed action, and it has three parts, a consequential action
 that will have an effect once it happens, a bounded permission that independently determines whether the proposed action may happen
 now rather than treating proposal itself as authorization, and a verifiable governing under which the claim that the
 system governed the action can be checked afterward from a record rather than taken on trust.
@@ -114,7 +112,7 @@ but none of them determines whether the action was permitted. That relation is w
 does not derive from the other four, since they together do not yield permission. Permission is the added relation, and this reduction could not eliminate it without reintroducing permission somewhere else.
 
 **ACTION** is the consequential transition whose execution is at stake. Without it, a model can represent
-state, candidate proposals, permission, and evidence, and still not name the thing permission ranges over, the
+state, candidate proposals, permission, and evidence, and still not name what permission ranges over, the
 consequential transition that authorization is authorization of. Action is that transition. It is distinct
 from proposal, which is only a candidate, and from decision, which is only the ruling on a candidate.
 
@@ -347,8 +345,7 @@ because safety would then be its own definition. We state the criterion independ
 criterion R is a relation on states, and it is sound when every pair it declares interchangeable is
 authority-equal, so that $R(\sigma_1, \sigma_2)$ implies $A(\sigma_1, a) = A(\sigma_2, a)$ for every $a$ (in Lean,
 `Sound`). Soundness mentions neither admissibility nor non-expansion. A sound criterion
-whose induced transformation only ever maps a state to something the criterion already declares
-interchangeable is admissible, and therefore safe (in Lean, `sound_induces_admissible`). Safety now follows
+whose induced transformation only ever maps a state to one the criterion already declares interchangeable with it is admissible, and therefore safe (in Lean, `sound_induces_admissible`). Safety now follows
 from a property of the criterion rather than being assumed of the transformation.
 
 Completeness is the converse. A criterion is complete when it declares interchangeable every pair that
@@ -390,8 +387,7 @@ whether soundness survives. For an exact criterion it does: if every declared pa
 closure relates only authority-equal states, because authority-equality is transitive (in Lean, `sound_tc`),
 so bucketing under an exact criterion is safe. For a criterion that is merely similar enough it does not. If
 the local test is that two states agree on some action, a plausible and too-weak heuristic, then states one
-and two may be declared interchangeable on one action, two and three on another, while one and three agree on
-nothing, and the closure merges one and three and collapses a distinction that changes authorization (in Lean,
+and two may be declared interchangeable on one action, two and three on another, while one and three agree on no action, and the closure merges one and three and collapses a distinction that changes authorization (in Lean,
 `weak_criterion_not_closed`, a concrete three-state, two-action witness). The design condition this produces was not visible from the definitions. Pairwise
 overlap is insufficient for safe bucketing. A bucketing criterion must be strong enough that its transitive
 closure remains within authority-equivalence, and full authority-equality is one criterion that satisfies that
@@ -424,8 +420,7 @@ artifacts, the kind of evidence each supplies, and its limit.
 | Reuse of the governing shape one level up | `mesh-fusion/`, `room_fusion.md` (ledger #101, #136, #151) | implemented, tested | no composition theorem |
 | Conservative fallback | `route:stuck` at a node, a STALE input the signed table decides on in a collective (ledger #101, #151) | implemented, tested | on the inputs exercised |
 
-We treat the three kinds as three levels and give the machine-checked one the fullest account, since it is the
-only one that is proved.
+
 
 ### 7.1 The machine-checked bridge
 
@@ -503,8 +498,7 @@ The distinctions of section 5 were extracted from one implementation, and that i
 tested elsewhere. If they are artifacts of that implementation, systems built independently should not
 systematically preserve them. So we searched for countermodels. For each distinction we asked whether an unrelated, mature system keeps it, and
 whether collapsing it there is a recognized failure. We report what we found, and we grade the evidence,
-because the grades are not interchangeable. A direct instantiation is a system that keeps the two things
-apart as a stated architectural boundary. A structural analogue exhibits the same shape but
+because the grades are not interchangeable. A direct instantiation is a system that keeps both sides of the distinction apart as a stated architectural boundary. A structural analogue exhibits the same shape but
 does not instantiate the theory exactly, or rests partly on our reading. A theory interpretation is a known
 failure that the theory explains as a collapse, where the external literature does not itself use our terms.
 

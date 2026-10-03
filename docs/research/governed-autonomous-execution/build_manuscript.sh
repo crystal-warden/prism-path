@@ -13,10 +13,10 @@ AUTHOR="A. Figueroa, Crystal Warden Labs"
 FMT="gfm+tex_math_dollars"
 if [ -n "${DOI:-}" ]; then
   DOI_LINE="doi:${DOI}."
-  DATE="Preprint, September 2026. doi:${DOI}"
+  DATE="Preprint, version 1.1, October 2026. doi:${DOI}"
 else
   DOI_LINE="The DOI is assigned on publication."
-  DATE="Preprint, September 2026"
+  DATE="Preprint, version 1.1, October 2026"
 fi
 
 command -v pandoc >/dev/null || { echo "pandoc is required" >&2; exit 1; }
