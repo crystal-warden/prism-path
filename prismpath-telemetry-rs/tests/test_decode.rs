@@ -20,7 +20,7 @@ start: classify
 #[test]
 fn test_decode_reproduces_routes() {
     let graph = parse(CAT);
-    let parts = quantizer::build_partitions(&graph);
+    let parts = quantizer::build_partitions(&graph).expect("the flow partitions");
     let readings = vec![
         {
             let mut reading = HashMap::new();
@@ -48,7 +48,7 @@ fn test_decode_reproduces_routes() {
         },
     ];
     let bits = decode::encode_readings(&parts, &readings).unwrap();
-    let rep = decode::inspect(&graph, &bits);
+    let rep = decode::inspect(&graph, &bits).expect("the flow partitions");
     assert_eq!(rep.n_readings, 4);
     assert_eq!(rep.trailing_ints, 0);
 
@@ -63,12 +63,12 @@ fn test_decode_reproduces_routes() {
 #[test]
 fn test_other_renders_readably() {
     let graph = parse(CAT);
-    let parts = quantizer::build_partitions(&graph);
+    let parts = quantizer::build_partitions(&graph).expect("the flow partitions");
     let mut reading = HashMap::new();
     reading.insert("kind".to_string(), V::Str("adhoc".to_string()));
     reading.insert("status".to_string(), V::Str("bad".to_string()));
     let bits = decode::encode_readings(&parts, &[reading]).unwrap();
-    let rep = decode::inspect(&graph, &bits);
+    let rep = decode::inspect(&graph, &bits).expect("the flow partitions");
     assert_eq!(
         rep.readings[0].reading.get("kind").unwrap(),
         &V::Str("<other>".to_string())
@@ -78,11 +78,11 @@ fn test_other_renders_readably() {
 #[test]
 fn test_partial_final_frame_is_reported_not_crashed() {
     let graph = parse(CAT);
-    let parts = quantizer::build_partitions(&graph);
+    let parts = quantizer::build_partitions(&graph).expect("the flow partitions");
     let mut reading = HashMap::new();
     reading.insert("kind".to_string(), V::Str("urgent".to_string()));
     reading.insert("status".to_string(), V::Str("ok".to_string()));
     let bits = decode::encode_readings(&parts, &[reading]).unwrap();
-    let rep = decode::inspect(&graph, &format!("{}0", bits));
+    let rep = decode::inspect(&graph, &format!("{}0", bits)).expect("the flow partitions");
     assert_eq!(rep.n_readings, 1);
 }

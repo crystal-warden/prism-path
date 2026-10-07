@@ -203,7 +203,9 @@ impl Codebook {
         let flow_text = std::fs::read_to_string(&cfg.flow)
             .map_err(|error| format!("cannot read flow {:?}: {error}", cfg.flow))?;
         let graph = parse(&flow_text);
-        let parts = quantizer::build_partitions(&graph);
+        let parts = quantizer::build_partitions(&graph).map_err(|reason| {
+            format!("NOT READY: policy {:?} cannot be carried by the codec: {reason}", cfg.flow)
+        })?;
         if parts.is_empty() {
             return Err(format!(
                 "NOT READY: policy {:?} yields no decision-relevant fields (no `field OP const` \

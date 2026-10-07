@@ -156,6 +156,21 @@ python prismpath/telemetry/bench/run.py            # Phase A go/no-go -> bench/r
 python prismpath/telemetry/bench/spiral_bench.py   # Tier-6 routing-accuracy gate -> bench/spiral_results.md
 ```
 
+## What a policy may route on
+
+The codec carries a decision only when every deterministic condition in the flow is Level M, because
+only those reduce to cut points on one field at a time. `quantizer.build_partitions` and
+`quantizer::build_partitions` read each condition through the engine's own parse, so a negative
+threshold, a chained range such as `0 < x < 5`, and a constant on the left all contribute their cuts,
+and a boolean constant on a numeric field cuts at 0 or 1 as the engine compares it. Both refuse the
+whole flow, naming every offending condition and its reason, when a condition compares a field with
+another field, orders a string, tests a substring or a runtime collection, uses a float constant, mixes
+strings with numbers on one field, or compares with None. The last is refused because None is how the
+engine reads an absent field, and the codec has no cell for absence yet. Before October 2026 both
+implementations skipped such conditions or dropped such fields, so a decoded reading could take a
+different route from the raw one. The forms are frozen as `conformance/policy_forms.json`, with the
+engine's route for every carried probe, and both test suites replay it.
+
 ## Acceptance: what a reading value may be
 
 One rule set decides what a reading value is, on both sides of the stack, frozen as

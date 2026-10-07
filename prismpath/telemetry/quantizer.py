@@ -27,7 +27,7 @@ import math
 import re
 from typing import Optional, Any, Dict, List, Optional, Tuple
 
-from prismpath.kernel import predicates
+from prismpath.kernel import level_m, predicates
 from prismpath.kernel.parser import parse_file  # noqa: F401  (re-exported for callers)
 
 _ORDER = {"Lt": "<", "LtE": "<=", "Gt": ">", "GtE": ">="}
@@ -42,8 +42,10 @@ OTHER_CELL = "\x00__other__"
 # ----------------------------------------------------------------- atom extraction
 def atoms_of(expr_node) -> List[Tuple[str, str, Any]]:
     """Collect (field, op, const) atoms from a predicate AST. `op` in {<,<=,>,>=,==,!=,in,not in,truthy}.
-    `not`/`and`/`or` add no cuts, only recursion. Field-vs-field / non-literal atoms are ignored (they
-    are not Level M and carry no transmittable cut)."""
+    `not`/`and`/`or` add no cuts, only recursion. The AST must already be folded and desugared, as
+    `flow_atoms` does, because a raw `-3` is a unary minus and a raw `0 < x < 5` is one compare with
+    two operators, and this walk reads neither. Any other form yields no atom, which is why
+    `build_partitions` refuses a flow outside Level M before it reads atoms at all."""
     out: List[Tuple[str, str, Any]] = []
     node = expr_node
     if isinstance(node, ast.BoolOp):
@@ -81,16 +83,24 @@ def flow_atoms(graph) -> Dict[str, List[Tuple[str, Any]]]:
         for _target, cond in node.edges:
             if not predicates.is_deterministic(cond) or predicates.is_semantic(cond):
                 continue
-            expr = predicates._expr_of(cond)
-            if expr.lower() in predicates.ALWAYS or expr.lower() in predicates.NEVER:
-                continue
-            try:
-                body = ast.parse(expr, mode="eval").body
-            except SyntaxError:
-                continue
-            for field, op, const in atoms_of(body):
+            for field, op, const in condition_atoms(cond):
                 fields.setdefault(field, []).append((op, const))
     return fields
+
+
+def condition_atoms(cond: str) -> List[Tuple[str, str, Any]]:
+    """The (field, op, const) atoms of one deterministic condition, read from the same parse the engine
+    and the Level M classifier use.
+
+    The engine's parse folds `-3` into a constant, and the classifier's desugar turns a chained
+    comparison into its pairwise conjunction. A plain `ast.parse` did neither, so until October 2026 a
+    negative threshold or a chained range contributed no cut point, every reading on that field decoded
+    to the same cell, and the spiral packer did not see the field at all. A keyword catch all, a non
+    deterministic condition, or one that does not parse has no atoms."""
+    body = predicates.expr_ast(cond)
+    if body is None:
+        return []
+    return atoms_of(level_m._desugar_chains(body))
 
 
 # ----------------------------------------------------------------- per-field partitions
@@ -267,7 +277,9 @@ def _numeric_partition(field: str, atoms: List[Tuple[str, Any]]) -> FieldPartiti
             for member in const:
                 if isinstance(member, float):
                     _refuse_float(member)
-                if isinstance(member, int) and not isinstance(member, bool):
+                # A boolean member is a cut at 0 or 1, because the engine compares `1 in [True]` as
+                # true. Skipping it, as the first version did, merged 1 with its neighbors.
+                if isinstance(member, int):
                     consts_set.add(int(member))
         elif op == "truthy":
             consts_set.add(0)
@@ -329,11 +341,19 @@ def _classify_kind(atoms: List[Tuple[str, Any]]) -> str:
     for value in flat:
         if isinstance(value, float):
             _refuse_float(value)
+        if value is None:
+            # The engine reads a missing field as None, so `x == None` is a test for absence. The codec
+            # has no cell for absence yet: the permissive path put None in the false cell of a boolean
+            # field, where it decoded to False and missed the edge the raw reading took. Refused until
+            # the canonical reading gives absence an explicit cell.
+            raise ValueError("a comparison with None tests for an absent field, and the codec does not "
+                             "carry absence yet")
     has_str = any(isinstance(value, str) for value in flat)
     has_bool = any(isinstance(value, bool) for value in flat)
     has_int = any(isinstance(value, int) and not isinstance(value, bool) for value in flat)
-    if has_str and (has_int):
-        raise ValueError("field mixes string and numeric constants — not a Level M field")
+    if has_str and (has_int or has_bool):
+        # A boolean counts as a number here because the engine compares it as 0 or 1.
+        raise ValueError("field mixes string and numeric constants, which is not a Level M field")
     if has_str:
         return "categorical"
     if has_int:
@@ -343,11 +363,41 @@ def _classify_kind(atoms: List[Tuple[str, Any]]) -> str:
     return "boolean"                          # only "truthy" seen
 
 
+def conditions_outside_level_m(graph) -> List[Tuple[str, str, str]]:
+    """Every deterministic, non semantic condition in the flow that is not Level M, as (node, condition,
+    reason code). The codec carries a decision only for Level M conditions, because only those reduce
+    to per field cut points. A field compared to another field, or a string ordered against a
+    constant, depends on values the partition does not keep, so a decoded reading can route where the
+    raw reading would not."""
+    outside: List[Tuple[str, str, str]] = []
+    for name, node in graph.nodes.items():
+        for _target, cond in node.edges:
+            if not predicates.is_deterministic(cond) or predicates.is_semantic(cond):
+                continue
+            member, reason = level_m.is_level_m(cond)
+            if not member:
+                outside.append((name, cond, reason or "not-level-m"))
+    return outside
+
+
 def build_partitions(graph) -> Dict[str, FieldPartition]:
-    """Per decision-relevant field, the coarsest partition that preserves every routing decision."""
+    """Per decision-relevant field, the coarsest partition that preserves every routing decision.
+
+    A flow with a deterministic condition outside Level M is refused rather than partitioned. Before
+    October 2026 such a condition was skipped, which left its fields out of the partition or kept only
+    some of their cuts, and the decoded reading took a different route from the raw one."""
+    atoms_by_field = flow_atoms(graph)
+    # Classify first so a float threshold or a field mixing strings and numbers is refused with the
+    # message that names it, rather than the generic reason code the Level M check gives the same edge.
+    kinds = {field: _classify_kind(atoms) for field, atoms in atoms_by_field.items()}
+    outside = conditions_outside_level_m(graph)
+    if outside:
+        listed = "; ".join(f"{name}: {cond!r} ({reason})" for name, cond, reason in outside)
+        raise ValueError(f"the flow routes on conditions outside Level M, which the codec cannot "
+                         f"carry: {listed}")
     parts: Dict[str, FieldPartition] = {}
-    for field, atoms in flow_atoms(graph).items():
-        kind = _classify_kind(atoms)
+    for field, atoms in atoms_by_field.items():
+        kind = kinds[field]
         if kind == "numeric":
             parts[field] = _numeric_partition(field, atoms)
         elif kind == "categorical":

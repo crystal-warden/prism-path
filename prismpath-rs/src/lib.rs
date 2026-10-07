@@ -39,7 +39,7 @@ pub use engine::{
     CentroidPin, EngineError, Lock, Pending, RouteDecision, RunOpts, RunResult, RunState, Step,
     Violation,
 };
-pub use level_m::{capability_report, flow_level_m, is_level_m, NonMemberEdge};
+pub use level_m::{capability_report, flow_level_m, is_level_m, level_m_atoms, LevelMAtom, NonMemberEdge};
 pub use parser::{parse, Graph, Node};
 pub use reach::check_reach;
 pub use value::{PredicateError, Value, V, CMP_DEPTH, MAX_DEPTH};

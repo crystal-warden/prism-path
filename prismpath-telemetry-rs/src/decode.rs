@@ -91,8 +91,8 @@ pub struct InspectReport {
     pub route_distribution: HashMap<String, usize>,
 }
 
-pub fn inspect(graph: &Graph, bits: &str) -> InspectReport {
-    let parts = quantizer::build_partitions(graph);
+pub fn inspect(graph: &Graph, bits: &str) -> Result<InspectReport, String> {
+    let parts = quantizer::build_partitions(graph)?;
     let fields = wire::order(&parts);
     let nodes = wire::decision_nodes(graph);
     let nf = fields.len();
@@ -145,14 +145,14 @@ pub fn inspect(graph: &Graph, bits: &str) -> InspectReport {
 
     let trailing_ints = wire_ints.len() - n_complete * nf;
 
-    InspectReport {
+    Ok(InspectReport {
         fields,
         decision_nodes: nodes,
         n_readings: rows.len(),
         trailing_ints,
         readings: rows,
         route_distribution: route_dist,
-    }
+    })
 }
 
 pub fn render(rep: &InspectReport) -> String {

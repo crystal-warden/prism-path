@@ -16,7 +16,7 @@ start: start
 #[test]
 fn test_encode_decode_round_trip() {
     let g = parse(FLOW);
-    let parts = q::build_partitions(&g);
+    let parts = q::build_partitions(&g).expect("the flow partitions");
     let mut reading = HashMap::new();
     reading.insert("x".to_string(), V::Num(15.0));
 
@@ -32,7 +32,7 @@ fn test_encode_decode_round_trip() {
 #[test]
 fn test_missing_field_error() {
     let g = parse(FLOW);
-    let parts = q::build_partitions(&g);
+    let parts = q::build_partitions(&g).expect("the flow partitions");
     let reading = HashMap::new();
 
     let err = w::encode_reading(&parts, &reading).unwrap_err();
@@ -42,7 +42,7 @@ fn test_missing_field_error() {
 #[test]
 fn test_symbol_count_mismatch_error() {
     let g = parse(FLOW);
-    let parts = q::build_partitions(&g);
+    let parts = q::build_partitions(&g).expect("the flow partitions");
     let err = w::decode_reading(&parts, "1111").unwrap_err();
     assert!(err.contains("symbol count"));
 }

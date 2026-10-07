@@ -219,7 +219,7 @@ fn test_frozen_tessellation_matches() {
 fn test_decision_stream_cheaper_than_linear_for_multidim() {
     let corpus = load_corpus();
     let (graph, layout) = layout_from_corpus(&corpus);
-    let parts = quantizer::build_partitions(&graph);
+    let parts = quantizer::build_partitions(&graph).expect("the flow partitions");
 
     let mut readings = Vec::new();
     for pitch in [0.0, 25.0, 50.0] {

@@ -33,7 +33,6 @@ only after quantization to a bounded key space.
 """
 from __future__ import annotations
 
-import ast
 import math
 from typing import Any, Dict, Iterator, List, Optional, Tuple
 
@@ -94,14 +93,7 @@ def _node_fields(graph, node: str, parts: Dict[str, "q.FieldPartition"]) -> List
     for _target, cond in graph.nodes[node].edges:
         if not predicates.is_deterministic(cond) or predicates.is_semantic(cond):
             continue
-        expr = predicates._expr_of(cond)
-        if expr.lower() in predicates.ALWAYS or expr.lower() in predicates.NEVER:
-            continue
-        try:
-            body = ast.parse(expr, mode="eval").body
-        except SyntaxError:
-            continue
-        for field, _op, _const in quantizer.atoms_of(body):
+        for field, _op, _const in quantizer.condition_atoms(cond):
             if field in parts and field not in seen:
                 seen.append(field)
     return sorted(seen)

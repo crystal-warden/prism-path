@@ -16,7 +16,7 @@ fn corpus() -> Value {
 const FIXTURE: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../prismpath/telemetry/conformance/inputs.json");
 
 fn partitions(corpus: &Value) -> HashMap<String, quantizer::FieldPartition> {
-    quantizer::build_partitions(&parse(corpus["flow"].as_str().unwrap()))
+    quantizer::build_partitions(&parse(corpus["flow"].as_str().unwrap())).expect("the flow partitions")
 }
 
 fn expected_refusal(reason: &str) -> InputRefusal {

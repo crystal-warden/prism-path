@@ -12,9 +12,6 @@ use std::collections::HashMap;
 pub const GOLDEN_ANGLE_U32: u32 = 0x9E3779B9;
 pub const GOLDEN_ANGLE_DEG: f64 = 180.0 * (3.0 - 2.23606797749979);
 
-const ALWAYS: &[&str] = &["always", "true", "else", "otherwise", "default", "_"];
-const NEVER: &[&str] = &["false", "never"];
-
 pub fn theta_u32(spiral_index: u32) -> u32 {
     spiral_index.wrapping_mul(GOLDEN_ANGLE_U32)
 }
@@ -66,15 +63,6 @@ pub fn mixed_radix_gray(radices: &[usize]) -> Vec<Vec<usize>> {
 /// it keeps U+001C to U+001F and strips U+FEFF. A condition padded with one of those classifies as
 /// a `when` predicate in `is_deterministic` (which trims with py_trim) and would fall through to
 /// the raw-expression branch here, so the spiral layout would drop fields the kernel routes on.
-fn expr_of(cond: &str) -> String {
-    let text = prismpath_rs::py_trim(cond);
-    if text.to_lowercase().starts_with("when ") {
-        prismpath_rs::py_trim(&text[5..]).to_string()
-    } else {
-        text.to_string()
-    }
-}
-
 fn node_fields(graph: &Graph, node: &str, parts: &HashMap<String, FieldPartition>) -> Vec<String> {
     let mut seen = Vec::new();
     if let Some(flow_node) = graph.nodes.get(node) {
@@ -82,12 +70,9 @@ fn node_fields(graph: &Graph, node: &str, parts: &HashMap<String, FieldPartition
             if !prismpath_rs::is_deterministic(cond) || prismpath_rs::is_semantic(cond) {
                 continue;
             }
-            let expr = expr_of(cond);
-            let lower = expr.to_lowercase();
-            if ALWAYS.contains(&lower.as_str()) || NEVER.contains(&lower.as_str()) {
-                continue;
-            }
-            for atom in quantizer::parse_atoms(&expr) {
+            // build_partitions has already refused any condition outside Level M, so every condition
+            // reaching this point has atoms.
+            for atom in quantizer::condition_atoms(cond).unwrap_or_default() {
                 if parts.contains_key(&atom.field) && !seen.contains(&atom.field) {
                     seen.push(atom.field);
                 }
@@ -116,7 +101,7 @@ pub struct SpiralLayout {
 
 impl SpiralLayout {
     pub fn new(graph: &Graph, node: &str) -> Result<Self, String> {
-        let parts = quantizer::build_partitions(graph);
+        let parts = quantizer::build_partitions(graph)?;
         let fields = node_fields(graph, node, &parts);
         if fields.is_empty() {
             return Err(format!(
@@ -420,16 +405,16 @@ fn route_of_cell(
 
 #[cfg(test)]
 mod tests {
-    use super::expr_of;
+    use crate::quantizer::condition_atoms;
 
     #[test]
-    fn expr_of_trims_the_whitespace_the_kernel_trims() {
+    fn a_condition_led_by_python_whitespace_still_yields_its_field() {
         // U+001C is Python whitespace and so is stripped by is_deterministic's py_trim, but it is
-        // not Unicode White_Space, so str::trim used to leave it and hide the predicate.
-        let cond = "\u{1c}when temp > 50";
-        assert!(prismpath_rs::is_deterministic(cond));
-        assert_eq!(expr_of(cond), "temp > 50");
-        assert_eq!(expr_of("  when temp > 50  "), "temp > 50");
-        assert_eq!(expr_of("looks like a refund"), "looks like a refund");
+        // not Unicode White_Space, so str::trim used to leave it and hide the predicate. The atoms
+        // now come from the core crate's own parse, which trims as the kernel does.
+        let atoms = condition_atoms("\u{1c}when temp > 50").unwrap();
+        assert_eq!(atoms.len(), 1);
+        assert_eq!(atoms[0].field, "temp");
+        assert!(condition_atoms("looks like a refund").is_err());
     }
 }

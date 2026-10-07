@@ -1185,7 +1185,11 @@ def _load_telemetry():
 def facet_cmd(args) -> int:
     quantizer, zeckendorf, wire, packed = _load_telemetry()
     graph = parse_file(args.flow_md)
-    parts = quantizer.build_partitions(graph)
+    try:
+        parts = quantizer.build_partitions(graph)
+    except ValueError as refusal:
+        print(f"facet: the codec cannot carry this flow: {refusal}", file=sys.stderr)
+        return 2
     action = args.action
 
     if action in ('quantize', 'encode'):

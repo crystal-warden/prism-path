@@ -22,7 +22,7 @@ fn test_wire_bytes_match_python_and_decode_cross_impl() {
     for case in corpus["cases"].as_array().unwrap() {
         let name = case["name"].as_str().unwrap();
         let g = parse(case["flow"].as_str().unwrap());
-        let parts = q::build_partitions(&g);
+        let parts = q::build_partitions(&g).expect("the flow partitions");
         let py_bits = fixture[name].as_array().unwrap();
         for (i, entry) in case["readings"].as_array().unwrap().iter().enumerate() {
             let reading = reading_of(entry["reading"].as_object().unwrap());

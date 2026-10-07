@@ -158,6 +158,106 @@ pub fn is_level_m(cond: &str) -> (bool, Option<String>) {
     }
 }
 
+/// One atom of a Level M condition: a field compared with a constant, a field's membership in a
+/// literal list, or a bare field read for its truthiness.
+#[derive(Debug, Clone, PartialEq)]
+pub struct LevelMAtom {
+    pub field: String,
+    /// One of `<`, `<=`, `>`, `>=`, `==`, `!=`, `in`, `not in`, or `truthy` for a bare field.
+    pub op: String,
+    /// The constant, oriented so the field reads on the left. A `Value::List` for membership and
+    /// `Value::Null` for a bare field.
+    pub constant: Value,
+}
+
+/// The atoms of a Level M condition, or the reason code it is not Level M. They are read from the
+/// same parse and chain desugar `is_level_m` classifies, so a consumer that partitions on them sees
+/// exactly the fragment the classifier admits. The telemetry quantizer used to scan the condition's
+/// tokens instead, and it read `0 < x < 5` as `x > 0` alone and `True == x` as a bare `x` (October
+/// 2026 reading boundary audit). A keyword catch all and a bare `on error` have no atoms.
+pub fn level_m_atoms(cond: &str) -> Result<Vec<LevelMAtom>, String> {
+    let (member, reason) = is_level_m(cond);
+    if !member {
+        return Err(reason.unwrap_or_else(|| lm_reason::SYNTAX.to_string()));
+    }
+    let mut atoms = Vec::new();
+    if let Some(node) = lm_member_tree(cond) {
+        lm_collect_atoms(&node, &mut atoms);
+    }
+    Ok(atoms)
+}
+
+/// The desugared tree of a condition `is_level_m` admits, following its branches exactly; None for
+/// the catch alls and a bare `on error`, which are table default rows with no field to read.
+fn lm_member_tree(cond: &str) -> Option<Ast> {
+    if !is_deterministic(cond) {
+        if !is_error(cond) {
+            return None;
+        }
+        let mut expr = error_expr(cond);
+        if expr.is_empty() {
+            return None;
+        }
+        if !expr.to_lowercase().starts_with("when ") {
+            expr = format!("when {expr}");
+        }
+        return lm_member_tree(&expr);
+    }
+    let expr = expr_of(cond);
+    let low = expr.to_lowercase();
+    if ["always", "true", "else", "otherwise", "default", "_"].contains(&low.as_str())
+        || ["false", "never"].contains(&low.as_str())
+    {
+        return None;
+    }
+    parse_expr(&expr).ok().map(lm_desugar_chains)
+}
+
+fn lm_collect_atoms(node: &Ast, atoms: &mut Vec<LevelMAtom>) {
+    let mut push = |field: &str, op: &str, constant: Value| {
+        atoms.push(LevelMAtom { field: field.to_string(), op: op.to_string(), constant });
+    };
+    match node {
+        Ast::And(items) | Ast::Or(items) => {
+            for item in items {
+                lm_collect_atoms(item, atoms);
+            }
+        }
+        Ast::Not(inner) => lm_collect_atoms(inner, atoms),
+        Ast::Name(field) => push(field, "truthy", Value::Null),
+        Ast::Cmp { left, ops, rights } => {
+            // The classifier admitted this tree, so every compare has one operator, a field on one
+            // side, and a scalar constant or a list of scalar constants on the other.
+            let op = ops[0].as_str();
+            match (left.as_ref(), &rights[0]) {
+                (Ast::Name(field), Ast::List(members)) => {
+                    let constants = members
+                        .iter()
+                        .filter_map(|member| match member {
+                            Ast::Const(value, _) => Some(value.clone()),
+                            _ => None,
+                        })
+                        .collect();
+                    push(field, op, Value::List(constants));
+                }
+                (Ast::Name(field), Ast::Const(value, _)) => push(field, op, value.clone()),
+                (Ast::Const(value, _), Ast::Name(field)) => {
+                    let flipped = match op {
+                        "<" => ">",
+                        "<=" => ">=",
+                        ">" => "<",
+                        ">=" => "<=",
+                        other => other,
+                    };
+                    push(field, flipped, value.clone());
+                }
+                _ => {}
+            }
+        }
+        _ => {}
+    }
+}
+
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct NonMemberEdge {
     pub node: String,

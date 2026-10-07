@@ -80,7 +80,7 @@ start: start
 ## n2
 "#;
     let graph = parse(flow);
-    let parts = quantizer::build_partitions(&graph);
+    let parts = quantizer::build_partitions(&graph).expect("the flow partitions");
 
     let bits_extracted = wire::encode_reading(&parts, &reading).expect("encode reading from extracted");
     let bits_hand_built = wire::encode_reading(&parts, &hand_built).expect("encode reading from hand-built");

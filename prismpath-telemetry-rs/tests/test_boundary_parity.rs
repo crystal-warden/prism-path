@@ -11,7 +11,7 @@ fn boundary_symbols_match_frozen_corpus() {
         serde_json::from_str(&std::fs::read_to_string(path).expect("read boundary.json"))
             .expect("parse boundary.json");
     let graph = parse(corpus["flow"].as_str().unwrap());
-    let parts = quantizer::build_partitions(&graph);
+    let parts = quantizer::build_partitions(&graph).expect("the flow partitions");
     let p = &parts[corpus["field"].as_str().unwrap()];
     assert_eq!(p.n as u64, corpus["cells"].as_u64().unwrap());
     for probe in corpus["probes"].as_array().unwrap() {

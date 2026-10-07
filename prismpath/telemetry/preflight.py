@@ -558,7 +558,11 @@ def main() -> int:
         field_paths[field] = path
 
     graph = parse_file(args.flow)
-    parts = quantizer.build_partitions(graph)
+    try:
+        parts = quantizer.build_partitions(graph)
+    except ValueError as refusal:
+        print(f"NOT READY: policy {args.flow!r} cannot be carried by the codec: {refusal}")
+        return 1
     if not parts:
         print(f"NOT READY: policy {args.flow!r} yields no decision-relevant fields "
               f"(no `field OP const` conditions on deterministic edges).")

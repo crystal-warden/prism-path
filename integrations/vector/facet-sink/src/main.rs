@@ -517,7 +517,10 @@ fn main() {
 
     let flow_text = std::fs::read_to_string(&flow_file_path).expect("read flow file");
     let graph = parse(&flow_text);
-    let partitions = quantizer::build_partitions(&graph);
+    let partitions = quantizer::build_partitions(&graph).unwrap_or_else(|reason| {
+        eprintln!("[facet-sink] refused policy {flow_file_path:?}: {reason}");
+        std::process::exit(2);
+    });
     let field_names = wire::order(&partitions);
     eprintln!(
         "[facet-sink] codebook from policy: {} field(s): {:?}",

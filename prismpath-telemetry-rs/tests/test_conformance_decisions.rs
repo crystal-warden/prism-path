@@ -64,7 +64,7 @@ fn test_wire_round_trip_preserves_decisions() {
         let name = case["name"].as_str().unwrap();
         let flow = case["flow"].as_str().unwrap();
         let g = parse(flow);
-        let parts = q::build_partitions(&g);
+        let parts = q::build_partitions(&g).expect("the flow partitions");
 
         for entry in case["readings"].as_array().unwrap() {
             let reading = json_obj_to_reading(entry["reading"].as_object().unwrap());
@@ -91,7 +91,7 @@ fn test_wire_round_trip_is_stable() {
     let case = &corpus["cases"].as_array().unwrap()[0];
     let flow = case["flow"].as_str().unwrap();
     let g = parse(flow);
-    let parts = q::build_partitions(&g);
+    let parts = q::build_partitions(&g).expect("the flow partitions");
 
     let reading = json_obj_to_reading(case["readings"][0]["reading"].as_object().unwrap());
     let bits = w::encode_reading(&parts, &reading).unwrap();
