@@ -212,6 +212,25 @@ def test_type_gate_survives_resume(tmp_path):
     assert r2.stopped == "contract_violation"
 
 
+def test_type_gate_survives_a_crash_resume(tmp_path):
+    # The crash branch of resume, which also resumes a contract_violation stop, re-runs the pending node.
+    # Found by the October 2026 reading boundary audit: that branch called run without type_gate, so a
+    # run stopped BECAUSE a field had the wrong type re-ran that node ungated and routed on the bad value.
+    from prismpath.ledgers import checkpoint
+    flow = tmp_path / "f.md"
+    flow.write_text("---\nname:t\nstart:m\n---\n## m\nDo it.\n"
+                    "-> a: when tests_pass\n-> b: when not tests_pass\n## a\n## b\n")
+    ckpt = str(tmp_path / "c.json")
+
+    def agent(node, instr, state):
+        return {"text": node, "tests_pass": "yes"} if node == "m" else {"text": node}   # still mistyped
+
+    r1 = checkpoint.run_durable(str(flow), agent, ckpt, type_gate=True)
+    assert r1.stopped == "contract_violation"
+    r2 = checkpoint.resume(ckpt, agent)                 # no choose, no event: the crash branch
+    assert r2.stopped == "contract_violation", "the gate must persist across the crash resume"
+
+
 def test_none_value_is_not_a_type_violation():
     node = _c(TYPES_FLOW)
     assert [problem for problem in contract.validate_output(node, {"tests_pass": None}) if problem.startswith("type:")] == []

@@ -225,7 +225,7 @@ def resume(checkpoint_path, agent, router=None, choose: Optional[str] = None,
         raise CheckpointError(f"checkpoint has no resumable pending node ({pending!r})")
     prior = cp.get("path", [])
     return run(graph, agent, router=router, start=pending, state=state,
-               human_floor=human_floor, max_steps=max_steps, on_step=on_step,
+               human_floor=human_floor, type_gate=tg, max_steps=max_steps, on_step=on_step,
                _seed_path=prior[:-1], _seed_steps=_prior_steps(cp))   # prior ends at pending (re-run)
 
 
