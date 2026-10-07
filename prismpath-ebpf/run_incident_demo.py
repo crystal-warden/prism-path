@@ -15,6 +15,7 @@ REPO = HERE.parent
 sys.path.insert(0, str(REPO / "prismpath-hw"))
 sys.path.insert(0, str(REPO))
 import ppt_compile as pc                                  # noqa: E402
+from ebpf_table_limits import require_within_limits       # noqa: E402
 from prismpath.kernel.parser import parse_file                  # noqa: E402
 
 FLOW = REPO / "prismpath" / "flows" / "wazuh_triage.md"
@@ -50,7 +51,7 @@ def main():
     img = pc.compile_flow(g, 25)
     names = [n for n, _ in img.nodes]
     start = names.index(g.start)
-    (HERE / "scratch" / "wazuh.ppt").write_bytes(img.serialize())
+    (HERE / "scratch" / "wazuh.ppt").write_bytes(require_within_limits(img.serialize()))
     (HERE / "scratch" / "wazuh.names").write_text("\n".join(names) + "\n")
 
     rec = action_from_level(a["level"])

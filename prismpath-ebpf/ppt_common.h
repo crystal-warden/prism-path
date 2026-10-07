@@ -45,7 +45,8 @@
  * st[runtime_sp], which is what made the verifier explore every sp value and overrun the 1M-insn limit.
  * STACK_MAX is the declared max operand-stack depth of a supported predicate. Level M expressions fold
  * left-associatively, so a flat AND/OR chain (including `in`-lists) stays at depth 2; 4 covers real
- * nesting. A predicate deeper than this is outside the eBPF-target's declared subset. */
+ * nesting. A predicate deeper than this is outside the eBPF-target's declared subset, and the loader
+ * (ppt_image.c, check_evaluator_limits) refuses its table rather than letting this evaluator clamp it. */
 /* BIG-TEST bounds: the original large numbers that overran the verifier BEFORE the bpf_loop rewrite
  * (64x64 hit the 8192-jump limit; 16x16 processed 1,000,001 insns). With edge + prog loops now run via
  * bpf_loop (each callback verified once), MAX_EDGES_PER_NODE and MAX_PROG_PER_EDGE are O(1) to the

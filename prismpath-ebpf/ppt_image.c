@@ -64,6 +64,68 @@ int build_frame(uint8_t *out, uint16_t node_idx, uint16_t n_fields, const struct
     return (int)(cursor - out);
 }
 
+/* The in kernel evaluator runs each loop under a fixed bound and clamps past it instead of failing: it
+ * reads at most MAX_EDGES_PER_NODE edges of a node and MAX_PROG_PER_EDGE words of a program, drops a push
+ * past STACK_MAX, and treats an operator without its operands as a no op. A table past any bound was
+ * populated and evaluated as if it were the authored policy: `when x not in [0..32]` compiles to 66
+ * words, and the kernel cut it before the final OR and NOT and decided the inverse (October 2026
+ * reading boundary audit). The host reference below clamps the same way, so certification compared
+ * like with like and never saw it. Refuse such a table here, before it reaches any map. The header's
+ * max_stack is the compiler's claim, so every program's stack effect is run instead of trusting it.
+ * ebpf_table_limits.py applies the same checks where the tooling builds a table. */
+static int check_evaluator_limits(const Image *im) {
+    for (uint32_t node_index = 0; node_index < im->n_nodes; node_index++) {
+        const struct ppt_node *node = &im->nodes[node_index];
+        if (node->edge_cnt > MAX_EDGES_PER_NODE || (uint32_t)node->edge_off + node->edge_cnt > im->n_edges) {
+            fprintf(stderr, "parse_image: node %u has edges %u+%u, past MAX_EDGES_PER_NODE %d or the %u edges\n",
+                    node_index, node->edge_off, node->edge_cnt, MAX_EDGES_PER_NODE, im->n_edges);
+            return -1;
+        }
+    }
+    for (uint32_t edge_index = 0; edge_index < im->n_edges; edge_index++) {
+        const struct ppt_edge *edge = &im->edges[edge_index];
+        if (edge->prog_cnt > MAX_PROG_PER_EDGE || (uint32_t)edge->prog_off + edge->prog_cnt > im->prog_len) {
+            fprintf(stderr, "parse_image: edge %u program %u+%u, past MAX_PROG_PER_EDGE %d or the %u words\n",
+                    edge_index, edge->prog_off, edge->prog_cnt, MAX_PROG_PER_EDGE, im->prog_len);
+            return -1;
+        }
+        int depth = 0, peak = 0;
+        for (uint32_t word_index = 0; word_index < edge->prog_cnt; word_index++) {
+            uint16_t word = im->prog[edge->prog_off + word_index];
+            if (word < 0x8000) {
+                if (word >= im->n_atoms) {
+                    fprintf(stderr, "parse_image: edge %u reads atom %u of %u\n", edge_index, word, im->n_atoms);
+                    return -1;
+                }
+                depth++;
+            } else if (word == OPC_TRUE || word == OPC_FALSE) {
+                depth++;
+            } else if (word == OPC_NOT) {
+                if (depth < 1) {
+                    fprintf(stderr, "parse_image: edge %u negates an empty stack\n", edge_index);
+                    return -1;
+                }
+            } else if (word == OPC_AND || word == OPC_OR) {
+                if (depth < 2) {
+                    fprintf(stderr, "parse_image: edge %u combines fewer than two operands\n", edge_index);
+                    return -1;
+                }
+                depth--;
+            } else {
+                fprintf(stderr, "parse_image: edge %u holds unknown opcode 0x%04x\n", edge_index, word);
+                return -1;
+            }
+            if (depth > peak) peak = depth;
+        }
+        if (peak > STACK_MAX || depth != 1) {
+            fprintf(stderr, "parse_image: edge %u needs stack depth %d (STACK_MAX %d) and leaves %d results\n",
+                    edge_index, peak, STACK_MAX, depth);
+            return -1;
+        }
+    }
+    return 0;
+}
+
 /* Parse a PPT image already resident in memory. Mallocs im->atoms/nodes/edges/prog (free_image frees
  * them). Returns 0 on success, -1 on a malformed image (used by the certify loop, which must not exit). */
 int parse_image_buf(const uint8_t *table_bytes, long len, Image *im) {
@@ -108,6 +170,10 @@ int parse_image_buf(const uint8_t *table_bytes, long len, Image *im) {
     }
     im->prog = malloc(sizeof(uint16_t) * (im->prog_len ? im->prog_len : 1));
     for (int slot = 0; slot < im->prog_len; slot++, cursor += 2) im->prog[slot] = rd16(cursor);
+    if (check_evaluator_limits(im) != 0) {
+        free_image(im);
+        return -1;
+    }
     /* Signed per-node name-hash section (for by-name hot-swap migration), appended after the optional
      * node-attribute section. Skip node-attr first so the offset is right regardless of that flag. */
     if (im->flags & PPT_FLAG_NODE_NAMES) {

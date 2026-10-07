@@ -26,6 +26,7 @@ REPO = HERE.parent
 sys.path.insert(0, str(REPO / "prismpath-hw"))
 sys.path.insert(0, str(REPO))
 import ppt_compile as pc                                  # noqa: E402
+from ebpf_table_limits import table_refusals             # noqa: E402
 
 PPT_MAGIC = 0x4D545050
 INTERP = HERE / "interp"
@@ -81,6 +82,11 @@ def main():
             continue
 
         tbl = img.serialize()
+        # A table the kernel would clamp is outside the eBPF target's subset, so it is excluded and
+        # counted here, never certified against a reference that clamps the same way.
+        if table_refusals(tbl):
+            excl["ebpf-limits"] += 1
+            continue
         regs_bytes = regs_payload[4:]
         n_fields = len(img.fields)
         pkt = frame_packet(0, n_fields, regs_bytes)

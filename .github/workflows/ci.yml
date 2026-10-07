@@ -225,7 +225,7 @@ jobs:
           python-version: "3.12"
       - name: Install (editable kernel pkg + sim/build toolchain)
         run: |
-          pip install -e . cocotb==1.9.2
+          pip install -e . cocotb==1.9.2 pytest
           sudo apt-get update
           sudo apt-get install -y verilator clang libbpf-dev
       - name: C target — certify against the frozen corpus (declared subset)
@@ -258,6 +258,8 @@ jobs:
         run: |
           make -C prismpath-ebpf
           python3 prismpath-ebpf/cert_corpus.py /tmp/cert_corpus.bin
+      - name: eBPF tables past the evaluator's bounds are refused where they are built and by the loader just built
+        run: python -m pytest prismpath/tests/test_ebpf_table_limits.py -q -rs
 
   # In-kernel eBPF conformance via BPF_PROG_TEST_RUN (needs root + a BPF-capable kernel). Confirmed
   # green on GitHub-hosted ubuntu-24.04 runners (they provide sudo + /sys/kernel/btf + a recent kernel),

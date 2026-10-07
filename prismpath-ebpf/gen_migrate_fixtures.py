@@ -21,6 +21,7 @@ sys.path.insert(0, str(HERE.parent / "prismpath-hw"))
 sys.path.insert(0, str(HERE.parent))
 os.environ.setdefault("PRISMPATH_REPO", str(HERE.parent))
 import ppt_compile as pc                              # noqa: E402
+from ebpf_table_limits import require_within_limits   # noqa: E402
 from prismpath.kernel.parser import parse_file               # noqa: E402
 
 FLAG_MIGRATE_BY_NAME = 0x02
@@ -39,7 +40,7 @@ def build(md: str, migration: str, out: str):
     graph = parse_file(str(HERE / md))
     img = pc.compile_flow(graph)
     names = [node_name for node_name, _ in img.nodes]
-    tbl = bytearray(img.serialize())
+    tbl = bytearray(require_within_limits(img.serialize()))
     safe = graph.meta.get("safe")
     if safe is not None:
         tbl[27] = names.index(safe) & 0xFF                 # signed fail-safe node (flags-word high byte)

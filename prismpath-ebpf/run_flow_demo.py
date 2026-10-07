@@ -20,6 +20,7 @@ REPO = HERE.parent
 sys.path.insert(0, str(REPO / "prismpath-hw"))
 sys.path.insert(0, str(REPO))
 import ppt_compile as pc                                  # noqa: E402
+from ebpf_table_limits import require_within_limits       # noqa: E402
 from prismpath.kernel.parser import parse_file                  # noqa: E402
 
 INTERP = HERE / "interp"
@@ -42,7 +43,7 @@ def main():
     start = names.index(g.start)
 
     (HERE / "scratch").mkdir(exist_ok=True)
-    (HERE / "scratch" / "wazuh.ppt").write_bytes(img.serialize())
+    (HERE / "scratch" / "wazuh.ppt").write_bytes(require_within_limits(img.serialize()))
     (HERE / "scratch" / "wazuh.names").write_text("\n".join(names) + "\n")
     (HERE / "scratch" / "wazuh.regs.bin").write_bytes(pc.encode_regs(img, SCENARIO, node_idx=start))
 

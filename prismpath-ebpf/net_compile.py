@@ -16,6 +16,7 @@ REPO = HERE.parent
 sys.path.insert(0, str(REPO / "prismpath-hw"))
 sys.path.insert(0, str(REPO))
 import ppt_compile as pc                                  # noqa: E402
+from ebpf_table_limits import require_within_limits       # noqa: E402
 from prismpath.kernel.parser import parse_file                  # noqa: E402
 from prismpath.kernel.analysis import _reachable                # noqa: E402
 from prismpath.kernel import predicates                         # noqa: E402
@@ -65,7 +66,7 @@ def main():
         print(f"  WARNING: fields not in the packet schema (will read NONE in-kernel): {off_schema}")
         print(f"  refusing to write {out_ppt}: compile the flow against the canonical schema")
         return 2
-    out_ppt.write_bytes(img.serialize())
+    out_ppt.write_bytes(require_within_limits(img.serialize()))
     out_names.write_text("\n".join(names) + "\n")
     print(f"start slot: {img.start} ({names[img.start]})")
     print(f"wrote {out_ppt} + {out_names}")

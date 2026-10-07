@@ -61,10 +61,15 @@ that, such as the 128 field vision class table, does not belong on this substrat
 array size that could simply be raised. It is the number of cases in the `st_get` and `st_put` switches,
 so every stack slot is a compile time constant to the verifier. Level M expressions fold left
 associatively, so a flat `and` or `or` chain, membership in a literal list included, stays at depth 2, and
-4 covers real nesting. A predicate deeper than 4 is outside this target's declared subset. Be honest about
-what enforces that: the image's `max_stack` rides in the header and the loader copies it into
-`config_map`, but no program compares it against `STACK_MAX`, so the guard today is the compiler and the
-corpus, not a refusal at load. A deeper program would silently drop its pushes rather than refuse.
+4 covers real nesting. A predicate deeper than 4 is outside this target's declared subset, and since
+October 2026 that is enforced rather than stated. The loader's `parse_image_buf` runs every edge program's
+stack effect and refuses the image when any program passes `STACK_MAX`, passes `MAX_PROG_PER_EDGE` words,
+lacks an operand, or leaves other than one result, and it refuses a node with more than
+`MAX_EDGES_PER_NODE` edges. It does not trust the header's `max_stack`, which is the compiler's claim. The
+eBPF build scripts apply the same checks through `ebpf_table_limits.py` before they write a table. Before
+then nothing refused such a table, and the shared compiler emits them because the C and FPGA targets allow
+more: `when x not in [0..32]` is 66 words, so the kernel cut it before its final OR and NOT and decided
+the inverse of the policy.
 
 **The 512 byte stack budget** is not a constant anywhere; it is the kernel's limit on a BPF program's
 frame, and two decisions exist only to stay under it: the register file lives in a map rather than in
@@ -292,9 +297,8 @@ One packet, one node with three edges, and one edge whose program is `[atom3, at
 Peak stack depth was 2, which is what a flat `and` reaches. Depth grows only with right nested
 parentheses: a program shaped `a b AND c d AND e f AND OR OR` peaks at 4, which is exactly `STACK_MAX`,
 and one more level of nesting would peak at 5. At depth 5 the guard `sp < STACK_MAX` makes the fifth push
-a no operation and `st_get` returns 0 for the slot, so the predicate quietly decides wrongly rather than
-refusing. That is what "outside the declared subset" means here, and it is why the subset is stated rather
-than discovered.
+a no operation and `st_get` returns 0 for the slot, so the predicate would quietly decide wrongly. That is
+why the loader refuses such a table before it reaches a map, as described under the subset limit above.
 
 ## The bank arithmetic, in `ppt_net`
 

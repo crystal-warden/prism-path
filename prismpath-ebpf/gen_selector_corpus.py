@@ -26,6 +26,7 @@ sys.path.insert(0, str(HERE.parent / "prismpath-hw"))
 sys.path.insert(0, str(HERE.parent))
 os.environ.setdefault("PRISMPATH_REPO", str(HERE.parent))
 import ppt_compile as pc                              # noqa: E402
+from ebpf_table_limits import require_within_limits   # noqa: E402
 from prismpath.kernel.parser import parse_file               # noqa: E402
 from prismpath.kernel.engine import first_deterministic       # noqa: E402
 
@@ -59,7 +60,7 @@ def main():
     g = parse_file(str(HERE / "posture_selector.md"))
     img = pc.compile_flow(g)
     names = [n for n, _ in img.nodes]
-    tbl = bytearray(img.serialize())
+    tbl = bytearray(require_within_limits(img.serialize()))
     # Signed fail-safe: the policy declares `safe: <node>` in its frontmatter; stamp that node index
     # into the HIGH byte of the flags word (offset 26, so byte 27 in LE) so the fail-safe posture rides
     # inside the image — and thus the manifest signature — instead of an unsigned convention. Left 0
