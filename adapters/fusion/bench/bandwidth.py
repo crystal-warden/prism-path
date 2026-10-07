@@ -106,7 +106,7 @@ def collect(hits: Iterator[dict], normalize_hit) -> dict:
         b0_batch.append(raw)
         norm = normalize_hit(hit)
         b1.append(len(_compact(norm)))
-        level = int(norm.get("level", src_doc.get("level", 0)))
+        level = projection.whole_number(norm.get("level", src_doc.get("level", 0)), "level")
         reading = projection.fused_reading(level, projection.soc_action_from_level(level), projection.ASSUME_STILL)
         minimal = _compact(reading)
         b2.append(len(minimal))
@@ -258,7 +258,7 @@ def main(argv=None) -> int:
 
     path = Path(args.from_ndjson)
     hits = (hit for hit in hits_from_ndjson(path, args.max_docs)
-            if int(hit["_source"].get("level", 0)) >= args.min_level)
+            if projection.whole_number(hit["_source"].get("level", 0), "level") >= args.min_level)
     col = collect(hits, lambda hit: hit["_source"])
     source, synthetic = f"fixture:{path.name}", True
 

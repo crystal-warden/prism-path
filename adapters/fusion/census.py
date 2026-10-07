@@ -73,7 +73,7 @@ def cyber_marginal_ndjson(path: Path) -> Tuple[Dict[int, int], dict]:
     for line in path.read_text().splitlines():
         line = line.strip()
         if line:
-            hist[int(json.loads(line)["level"])] += 1
+            hist[projection.whole_number(json.loads(line)["level"], "level")] += 1
     return dict(hist), {"index_pattern": f"fixture:{path.name}", "span": None}
 
 

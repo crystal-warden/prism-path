@@ -39,6 +39,22 @@ CANONICAL_STABILITY = ("still", "moving", "shaken")
 ASSUME_STILL = {"stability": "still", "dev_mg": 0}
 
 
+def whole_number(value: Any, field: str) -> int:
+    """The integer a fusion field carries, or a ValueError naming the field.
+
+    An int passes, and an integral float passes as its integer because it is the same number. A
+    fraction, an infinity or NaN, a bool, a string and anything else are refused. This replaces the
+    `int()` the projection used before October 2026, which truncated toward zero, so a dev_mg of 149.9
+    became 149 and a rule level of 11.5 became 11, each on the other side of a cut the flow routes on,
+    and which also read True as 1 and "12" as 12 without saying so. Every recorded session and the
+    alert fixture carry plain integers, so nothing real is refused."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError(f"{field} {value!r} is not a number")
+    if isinstance(value, float) and (not math.isfinite(value) or not value.is_integer()):
+        raise ValueError(f"{field} {value!r} is fractional or not finite: refused rather than truncated")
+    return int(value)
+
+
 def soc_action_from_level(level: int) -> str:
     """Decidable projection of a SIEM rule level onto the flow's soc_action vocabulary."""
     if level >= 12:
@@ -76,7 +92,7 @@ def normalize_imu(row: Dict[str, Any]) -> Optional[Dict[str, Any]]:
 
     return {
         "stability": label,
-        "dev_mg": int(dev) if dev is not None else None,
+        "dev_mg": whole_number(dev, "dev_mg") if dev is not None else None,
         "ts": row.get("ts"),
         "derived": derived,
     }
@@ -88,7 +104,7 @@ def fused_reading(alert_level: int, soc_action: str, imu: Dict[str, Any]) -> Dic
         raise ValueError("imu posture has no dev_mg (derived excluded or missing) — cannot fuse")
     return {
         "stability": imu["stability"],
-        "dev_mg": int(imu["dev_mg"]),
-        "rule_level": int(alert_level),
+        "dev_mg": whole_number(imu["dev_mg"], "dev_mg"),
+        "rule_level": whole_number(alert_level, "rule_level"),
         "soc_action": soc_action,
     }

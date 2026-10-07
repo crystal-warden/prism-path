@@ -32,6 +32,14 @@ def test_fixture_marginal_reproduces_distribution():
     assert meta["index_pattern"].startswith("fixture:")
 
 
+def test_a_fractional_alert_level_is_refused_not_truncated(tmp_path):
+    # October 2026 regression: the marginal read each level with int(), so 11.5 counted as 11.
+    fixture = tmp_path / "alerts.ndjson"
+    fixture.write_text('{"level": 12}\n{"level": 11.5}\n')
+    with pytest.raises(ValueError, match="fractional"):
+        cs.cyber_marginal_ndjson(fixture)
+
+
 def test_assume_still_arithmetic(artifact):
     assume_still = artifact["pairings"]["assume_still"]
     assert assume_still["n"] == 50  # levels >= 7 in the fixture

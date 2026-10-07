@@ -94,6 +94,30 @@ def test_fused_reading_refuses_missing_dev_mg():
         projection.fused_reading(8, "watch", {"stability": "still", "dev_mg": None})
 
 
+# Regression, October 2026 reading boundary audit: the projection used `int()`, which truncated toward
+# zero, so a fractional value landed on the other side of a cut the flow routes on (dev_mg 149.9 became
+# 149, under the flow's 150 threshold; rule level 11.5 became 11, under containment at 12). Each case
+# below was accepted and truncated before the fix.
+@pytest.mark.parametrize("value", [149.9, 11.5, -0.5, float("nan"), float("inf"), True, "12", None, [3]])
+def test_whole_number_refuses_what_it_would_have_truncated_or_coerced(value):
+    with pytest.raises(ValueError, match="rule_level"):
+        projection.whole_number(value, "rule_level")
+
+
+def test_whole_number_keeps_an_integer_and_an_integral_float():
+    assert projection.whole_number(12, "rule_level") == 12
+    assert projection.whole_number(150.0, "dev_mg") == 150
+
+
+def test_a_fractional_reading_is_refused_on_every_projection_path():
+    with pytest.raises(ValueError, match="fractional"):
+        projection.normalize_imu({"stability": "still", "dev_mg": 149.9})
+    with pytest.raises(ValueError, match="fractional"):
+        projection.fused_reading(8, "watch", {"stability": "still", "dev_mg": 149.9})
+    with pytest.raises(ValueError, match="fractional"):
+        projection.fused_reading(11.5, "watch", {"stability": "still", "dev_mg": 0})
+
+
 # ----------------------------------------- the real sessions, end to end (read-only)
 
 @pytest.mark.parametrize("fname", POSTURE_SESSIONS)
