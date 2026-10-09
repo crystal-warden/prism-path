@@ -87,6 +87,9 @@ class Graph:
     start: str
     nodes: Dict[str, Node]
     meta: Dict[str, str] = field(default_factory=dict)  # frontmatter beyond name/start (e.g. packing)
+    # the field definitions from `field.<name>` front matter lines (SPEC section 4.5), keyed by name;
+    # empty for a flow that defines none
+    fields: Dict[str, object] = field(default_factory=dict)
 
 
 
@@ -145,6 +148,12 @@ def parse(text: str) -> Graph:
 
     start = meta.get("start") or (next(iter(nodes)) if nodes else "")
     parsed_graph = Graph(name=meta.get("name", "flow"), start=start, nodes=nodes, meta=meta)
+    # Field definitions are applied here, at parse, so every consumer of a graph sees decimal thresholds
+    # on fixed fields already lowered to canonical integers, and a flow that breaks its definitions is
+    # refused before anything can run, compile or encode it. Imported here because the module reads
+    # the predicate layer, which itself imports this parser.
+    from prismpath.kernel import field_definitions
+    field_definitions.apply_definitions(parsed_graph)
     return parsed_graph
 
 

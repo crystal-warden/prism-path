@@ -69,6 +69,16 @@ automatically from the constants:
 A field mixing string and numeric constants is rejected; well formed Level M policies do not produce
 one.
 
+**Defined fields (normative when the policy defines its fields).** A policy that defines its fields
+(`SPEC.md` §4.5) is not inferred from. Each field's kind is its definition's: `int` and `fixed` fields
+are numeric, `bool` fields boolean, `category` fields categorical. Thresholds on `fixed` fields arrive
+already lowered to canonical integers by the parser, so the cut points above are canonical integers. A
+field whose definition allows absence has one more cell, always last, whose representative is the
+absent value itself; no present value falls in it, so absence is never confused with zero, false or a
+string. Every encoder takes only canonical values for such a policy, on the permissive path as well as
+the checked one, and refuses anything else with the field and the reason; a missing field is the
+absent cell or a refusal, by its definition.
+
 **Guarantee (I1, decision preservation).** Reconstructing *any* representative of each cell and routing
 it through the policy reproduces every decision the original reading produced. This is proven three
 ways in `test_fusion_spiral.py`; it is the property the whole protocol rests on.
@@ -281,8 +291,21 @@ Reference implementation `prismpath/telemetry/receipts.py`; referees
 
 ## 3. Normative invariants
 
-- **I1 (decision preservation).** `reconstruct(quantize(reading))` routes identically to `reading`
-  through the policy. (Proven: `test_fusion_spiral.py`.)
+- **I1 (decision preservation).** For a policy that defines its fields and a canonical reading of it,
+  `reconstruct(quantize(reading))` routes identically to `reading` through the policy, and every
+  reading that is not canonical is refused. For a policy that infers its fields, the same holds for
+  every reading whose values the acceptance rules pass through unchanged. (Pinned by
+  `test_fusion_spiral.py`, `test_policy_forms.py` and `test_defined_fields.py`; proven in Lean for the
+  modeled domain.)
+
+  **Status, October 2026.** The defined path is the one the guarantee is built on. The inferred path
+  still accepts three coercions that can change a decision, and they are known violations being
+  removed, not part of the contract: a string that spells an integer on a numeric field is read as the
+  integer, so `"5"` decodes to 5 where the engine compares the string and routes otherwise (the frozen
+  acceptance corpus pins this today as reading 0); the permissive encoder reads a boolean field by
+  truthiness, so `"false"` decodes to true; and it reads a number on a categorical field as its string,
+  so 3 decodes to `"3"`. Each becomes a refusal in a coming release, with the acceptance corpus updated
+  in the same change and the Python and Rust implementations moving together.
 - **I2 (frames itself).** A reading carries no length header and no field tags; decode recovers the
   symbol count from the stream and the field identities from canonical order.
 - **I3 (codebook binding).** A stream is decodable only under the exact signed policy that produced

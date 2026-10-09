@@ -21,10 +21,11 @@ def _order(parts: Dict[str, "q.FieldPartition"]) -> List[str]:
 
 
 def encode_reading(parts: Dict[str, "q.FieldPartition"], reading: Dict[str, Any]) -> str:
-    """Reading -> bitstream. Requires every decision-relevant field present (missing-field handling is a
-    later refinement)."""
+    """Reading -> bitstream. A flow that infers its fields needs every decision relevant field present.
+    A flow that defines its fields encodes a missing field as its absent cell when the definition allows
+    absence and refuses it otherwise, through the partition's own acceptance."""
     order = _order(parts)
-    missing = [field for field in order if field not in reading]
+    missing = [field for field in order if field not in reading and parts[field].definition is None]
     if missing:
         raise KeyError(f"reading missing decision fields: {missing}")
     syms = quantizer.quantize(parts, reading)

@@ -27,7 +27,7 @@ import math
 import re
 from typing import Optional, Any, Dict, List, Optional, Tuple
 
-from prismpath.kernel import level_m, predicates
+from prismpath.kernel import field_definitions, level_m, predicates
 from prismpath.kernel.parser import parse_file  # noqa: F401  (re-exported for callers)
 
 _ORDER = {"Lt": "<", "LtE": "<=", "Gt": ">", "GtE": ">="}
@@ -119,13 +119,42 @@ class FieldPartition:
     """An ordered list of decision-cells for one field. `symbol(value)` -> cell index;
     `representative(symbol)` -> a value in that cell that routes identically."""
 
-    def __init__(self, field: str, kind: str, cells: List[dict]):
+    def __init__(self, field: str, kind: str, cells: List[dict], definition=None):
         self.field = field
         self.kind = kind          # "numeric" | "boolean" | "categorical"
         self.cells = cells        # each: {"rep": value, plus kind-specific membership fields}
         self.n = len(cells)
+        # The field's signed definition when the flow defines its fields (SPEC section 4.5), else None.
+        # A defined field takes only canonical values on every path, and one that allows absence has a
+        # last cell of its own for the absent value, distinct from zero, false and every string.
+        self.definition = definition
+        self.absent_symbol = (self.n - 1) if cells and cells[-1].get("absent") else None
 
     def symbol(self, value: Any) -> int:
+        if self.definition is not None:
+            return self._defined_symbol(value)
+        return self._inferred_symbol(value)
+
+    def _defined_symbol(self, value: Any) -> int:
+        """The symbol of a value on a defined field. Nothing is converted: a value that is not canonical
+        for the field's definition is refused, and the absent value has its own cell."""
+        reason, canonical = field_definitions.accept_canonical(self.definition, value)
+        if reason is not None:
+            raise InputRefused(self.field, reason, value)
+        if canonical is None:
+            return self.absent_symbol
+        if self.kind == "categorical":
+            for cell_index, cell in enumerate(self.cells):
+                if cell.get("const") == canonical:
+                    return cell_index
+            return self._other_symbol()
+        return self._inferred_symbol(canonical)
+
+    def _other_symbol(self) -> int:
+        """The categorical cell for every string the flow does not name."""
+        return next(index for index, cell in enumerate(self.cells) if cell.get("const") == OTHER_CELL)
+
+    def _inferred_symbol(self, value: Any) -> int:
         if self.kind == "numeric":
             try:
                 integer_value = numeric_view(value)
@@ -142,7 +171,7 @@ class FieldPartition:
         for cell_index, cell in enumerate(self.cells):
             if cell.get("const", OTHER_CELL) == value:
                 return cell_index
-        return self.n - 1                     # the trailing "other" cell
+        return self._other_symbol()
 
     def representative(self, symbol: int) -> Any:
         return self.cells[symbol]["rep"]
@@ -153,6 +182,8 @@ class FieldPartition:
         boundary a library consumer should encode through; `symbol` keeps its permissive behavior
         for compatibility (numeric strings and bools as integers, truthiness on boolean fields). A
         fraction is refused on both paths, never truncated."""
+        if self.definition is not None:
+            return self._defined_symbol(value)
         reason, converted = accept_value(self.kind, value)
         if reason is not None:
             raise InputRefused(self.field, reason, value)
@@ -228,9 +259,9 @@ def checked_quantize(parts: Dict[str, "FieldPartition"], reading: Dict[str, Any]
     InputRefused names the first field that is not."""
     symbols = {}
     for field in sorted(parts):
-        if field not in reading:
+        if field not in reading and parts[field].definition is None:
             raise InputRefused(field, REFUSAL_MISSING, None)
-        symbols[field] = parts[field].checked_symbol(reading[field])
+        symbols[field] = parts[field].checked_symbol(reading.get(field))
     return symbols
 
 
@@ -387,6 +418,8 @@ def build_partitions(graph) -> Dict[str, FieldPartition]:
     October 2026 such a condition was skipped, which left its fields out of the partition or kept only
     some of their cuts, and the decoded reading took a different route from the raw one."""
     atoms_by_field = flow_atoms(graph)
+    if getattr(graph, "fields", None):
+        return _defined_partitions(graph, atoms_by_field)
     # Classify first so a float threshold or a field mixing strings and numbers is refused with the
     # message that names it, rather than the generic reason code the Level M check gives the same edge.
     kinds = {field: _classify_kind(atoms) for field, atoms in atoms_by_field.items()}
@@ -407,11 +440,50 @@ def build_partitions(graph) -> Dict[str, FieldPartition]:
     return parts
 
 
+_KIND_OF_DEFINITION = {
+    field_definitions.KIND_INT: "numeric",
+    field_definitions.KIND_FIXED: "numeric",
+    field_definitions.KIND_BOOL: "boolean",
+    field_definitions.KIND_CATEGORY: "categorical",
+}
+
+
+def _defined_partitions(graph, atoms_by_field) -> Dict[str, FieldPartition]:
+    """The partitions of a flow that defines its fields. The parser has already lowered every decimal
+    threshold and refused any rule the definitions forbid, so each field's kind is its definition's,
+    never an inference from its constants. A comparison with None is the test for absence: it is constant
+    across every present value, so it adds no cut, and a field that allows absence gets one more cell
+    whose representative is the absent value itself. The engine counters keep the inferred partition."""
+    parts: Dict[str, FieldPartition] = {}
+    for field, atoms in atoms_by_field.items():
+        definition = graph.fields.get(field)
+        if definition is None:
+            kind = _classify_kind(atoms)
+            builder = {"numeric": _numeric_partition, "categorical": _categorical_partition}.get(kind)
+            parts[field] = builder(field, atoms) if builder else _boolean_partition(field)
+            continue
+        present_atoms = [(op, const) for op, const in atoms if const is not None or op == "truthy"]
+        kind = _KIND_OF_DEFINITION[definition.kind]
+        if kind == "numeric":
+            built = _numeric_partition(field, present_atoms)
+        elif kind == "categorical":
+            built = _categorical_partition(field, present_atoms)
+        else:
+            built = _boolean_partition(field)
+        cells = list(built.cells)
+        if definition.absent_allowed:
+            cells.append({"rep": None, "absent": True})
+        parts[field] = FieldPartition(field, kind, cells, definition)
+    return parts
+
+
 # ----------------------------------------------------------------- quantize / reconstruct
 def quantize(parts: Dict[str, FieldPartition], reading: Dict[str, Any]) -> Dict[str, int]:
     """A reading -> one small symbol per decision-relevant field (fields the flow never routes on are
-    dropped: they cannot change any decision)."""
-    return {field: partition.symbol(reading[field]) for field, partition in parts.items() if field in reading}
+    dropped: they cannot change any decision). A defined field missing from the reading is the absent
+    value, encoded as its own cell or refused by its definition; an inferred field missing is skipped."""
+    return {field: partition.symbol(reading.get(field)) for field, partition in parts.items()
+            if field in reading or partition.definition is not None}
 
 
 def reconstruct(parts: Dict[str, FieldPartition], symbols: Dict[str, int]) -> Dict[str, Any]:

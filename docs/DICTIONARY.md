@@ -84,6 +84,8 @@ assessment).
 flow authoring, kernel evaluation, wire and transport, substrate execution, evidence and receipts,
 control plane, GRC. A term with no `Also called (deprecated)` line has no losing synonym today.
 
+**absent**: the value of a field that is missing from a reading or null in it, which the engine reads as one value. In a flow that defines its fields it is a value of its own, never zero, false or the empty string, allowed only where the field's definition allows it, tested only by `== None` or `!= None`, and carried by the codec in a cell of its own. Layer: kernel evaluation. Not to be confused with: abstain (a decision not to decide), park, a refused value.
+
 **abstain**: the decision to make no decision because the information required is absent. Distinct from a denial, which is a decision. Layer: kernel evaluation. Not to be confused with: deny, refusal with cause, escalate. Also called (deprecated): defer (in the kernel sense only; `defer` keeps its GRC and port meaning).
 
 **acceptance**: the rules deciding which values a field kind accepts at the codec boundary and how each converts, frozen as a corpus that both implementations read. A value acceptance refuses never reaches the codec; it is reported with the field and the reason, and preflight reports the same refusals, so a preflight that passes predicts the boundary. Layer: wire and transport. Not to be confused with: contract (the worker interface a flow derives), the permissive symbol path kept for compatibility.
@@ -119,6 +121,10 @@ control plane, GRC. A term with no `Also called (deprecated)` line has no losing
 **bound**: see WCET bound. Used bare, `bound` in this project means a worst case execution bound unless qualified; every other kind of bound is named (version floor, replay window, staleness bound, step bound).
 
 **candidate**: a built artifact under acceptance and before any publication decision: a wheel, a source distribution, a packaged crate. Candidates that depend on one another are tested together, patched to one another, never one alone against a registry whose published version may lag. Layer: control plane. Not to be confused with: a release, which is the owner's decision after acceptance.
+
+**canonical conversion**: the one function that turns a source value into a canonical value under its field's signed definition, in exact arithmetic, `field_definitions.canonical_value`. Adapters call it instead of carrying numeric semantics of their own, and frozen vectors hold every implementation to it. Layer: wire and transport. Not to be confused with: acceptance, which checks that a value is already canonical and converts nothing; the permissive symbol path.
+
+**canonical reading**: a reading in which every defined field the flow routes on holds a canonical value of its kind within its range, or is absent where its definition allows absence. The only reading the decision boundary accepts for a flow that defines its fields. Layer: wire and transport. Not to be confused with: the representative reading a decode produces, a raw source value before canonical conversion.
 
 **catalog**: an ordered set of controls with their assessment objectives, content addressed and bound into every attestation made against it. Layer: GRC. Not to be confused with: an OSCAL catalog (an external document format this repository imports and exports), the SDK's generic "catalog criteria" (any retrievable knowledge base).
 
@@ -190,9 +196,13 @@ control plane, GRC. A term with no `Also called (deprecated)` line has no losing
 
 **field**: a named value a predicate can test. The one term that survives every layer unchanged: authored, evaluated, partitioned, compiled to a register, ordered on the wire. Layer: all. Not to be confused with: a C struct field, "in the field" meaning a deployment.
 
+**field definition**: a `field.<name>` front matter line giving a field's kind (`int`, `fixed`, `bool`, `category`) and, as the kind takes them, its range, scale, unit, rounding and whether it may be absent. Part of the policy text, so it is bound by whatever hash or signature covers the policy. Layer: flow authoring. Not to be confused with: an `@emits` type token, which the analyzer cross checks and which binds nothing; the field dictionary of a pack manifest; the `field_declaration` lint.
+
 **Figueroa quantization**: the map from a policy's text to the cells of each field that can change a decision, so a reading can be sent as one symbol per cell and still route identically. Proven decision preserving in Lean 4 within a declared domain. Layer: wire and transport. Not to be confused with: Facet, which is the wire that carries the result.
 
 **finding**: a diagnostic PrismPath emits about an authored flow, with a stable code and a severity. Layer: flow authoring. Not to be confused with: a scanner finding, which is an *input fact* PrismPath ingests in the GRC layer and must be called a scan result.
+
+**fixed field**: a field defined with kind `fixed`, whose canonical value is an integer counting units of one over its scale, and whose rounding mode decides which comparisons a policy may make on it. Layer: flow authoring. Not to be confused with: a float, which Level M does not have; fixed point arithmetic inside firmware.
 
 **floor**: a bound below which a decision is refused rather than degraded. Always qualified: version floor, confidence floor, suite class floor, statutory floor, power floor. Layer: varies with the qualifier. Not to be confused with: any use of bare "floor", which is banned.
 
@@ -229,6 +239,8 @@ control plane, GRC. A term with no `Also called (deprecated)` line has no losing
 **Level M**: the match action fragment, the decidable subset of the predicate language that every substrate can execute. Layer: kernel evaluation. Not to be confused with: P0, P1 and P2, which describe how much of a flow runs without a model. The two are different axes and POSITION section 6 insists on keeping them apart.
 
 **lockfile**: the committed embeddings and embedder identity for every semantic condition of a flow, making semantic routing reproducible bit for bit and promoting P2 to P1. Layer: flow authoring. Not to be confused with: a dependency lockfile, a mutex, a corpus freeze hash. Never called just "the lock".
+
+**lowering**: the parse time rewrite of every decimal literal compared with a fixed field into its canonical integer, exact, and refused when the literal is off the field's grid or outside its range. Every kernel lowers, or refuses a flow with a fixed field. Layer: flow authoring. Not to be confused with: compiling a flow to an image; desugaring a chained comparison.
 
 **manifest**: the signed metadata of a pack: image hash, field dictionary, version, envelope identity, WCET bound, key identity. Layer: control plane. Not to be confused with: a provenance manifest (evidence and receipts), a packaging manifest. Both of those are always qualified.
 
