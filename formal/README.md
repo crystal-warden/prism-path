@@ -55,8 +55,14 @@ Plainly:
   read against `prismpath/telemetry/quantizer.py`; its agreement with the code rests on the generated
   checks above and on review, not on a proof about the source text.
 - Readings with missing fields (the engine's null semantics, 72 of the 136 Level M corpus vectors),
-  cross kind comparisons (13 vectors), and readings with floats (the reference casts with `int()`)
-  are outside the model by declared decision.
+  cross kind comparisons (13 vectors), and readings with floats are outside the model by declared
+  decision. Since October 2026 the codec refuses a fractional reading on every path rather than
+  truncating it, and a flow that defines its fields (SPEC section 4.5) gives absence an explicit cell
+  of its own; modeling that cell is the next target below.
+- Two targets are stated and not yet proven. The conversion lemma of SPEC section 4.5: floor
+  preserves `>=` and `<` against a threshold on the grid, ceiling preserves `>` and `<=`, and an exact
+  conversion preserves every comparison. And decision preservation over canonical readings of a
+  defined flow, absent cell included, with every reading that is not canonical refused.
 - The Gray adjacency property (consecutive cells differ in one digit) is a locality optimization and
   is not proven; the bijection does not need it.
 - The categorical `other` sentinel is assumed not to be a named constant (`NoSentinel`) for the

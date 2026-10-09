@@ -46,7 +46,7 @@ pub fn encode_reading_with_codec<C: WireCodec>(
     let ord = order(parts);
     let missing: Vec<&str> = ord
         .iter()
-        .filter(|f| !reading.contains_key(*f))
+        .filter(|f| !reading.contains_key(*f) && parts[*f].definition.is_none())
         .map(|s| s.as_str())
         .collect();
     if !missing.is_empty() {

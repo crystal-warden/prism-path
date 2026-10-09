@@ -203,6 +203,12 @@ field.label: category absent=allowed
 -> watch: else
 ```
 
+**Binding.** A signed pack built from a defined flow carries the definitions, in one canonical
+spelling, as its manifest's field dictionary, together with the hash of the authored flow text, so the
+signature covers both the interpretation and the image's canonical integers. An envelope compares the
+dictionary entry for entry, so a receiver that declares another scale, unit, rounding, range or absence
+rule refuses the pack.
+
 **Grammar.** A definition is a kind word followed by `option=value` pairs separated by spaces, in any
 order. Each option may appear once. An unknown kind, an unknown option, an option the kind does not
 take, a repeated option, or a value that does not parse makes the whole flow invalid.
@@ -231,8 +237,10 @@ replacing each with its canonical integer (`error_rate >= 8500`), so evaluation 
 integers. A literal that is not a whole number of units of `1/scale`, or that lowers outside
 `[min, max]`, makes the flow invalid. The literal is read from its source text as an exact decimal,
 never through a binary double. Float literals stay outside Level M on every other field, so this adds
-no floating point semantics to the fragment. A kernel that does not implement lowering MUST refuse a
-flow that defines a `fixed` field, since running it unlowered would compare 8500 with 0.85.
+no floating point semantics to the fragment. A kernel that does not implement this section MUST refuse
+any flow that defines its fields, since running one unlowered could compare 8500 with 0.85 and would
+skip the rules below. The JavaScript and Go kernels refuse; the Python reference and the Rust kernel
+implement it, and table targets receive only lowered integers from the compiler.
 
 **Policy rules.** A flow that defines any field is invalid, and no run, codebook, table or pack is
 built from it, unless all of the following hold after lowering.

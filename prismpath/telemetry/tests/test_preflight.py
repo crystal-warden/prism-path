@@ -193,3 +193,40 @@ def test_scan_render_byte_identity(tmp_path):
 
     assert cli_stdout == expected_full_stdout
     assert cli_json_text == expected_json_text
+
+
+_DEFINED_FLOW = """---
+name: defined_guard
+start: classify
+field.load: fixed scale=100 unit=ratio rounding=floor min=0 max=100
+field.zone: category absent=allowed
+---
+## classify
+-> critical: when load >= 0.9
+-> unzoned: when zone == None
+-> warn: when load >= 0.5 and zone == "a"
+-> ok: else
+## critical
+## unzoned
+## warn
+## ok
+"""
+
+
+def test_a_defined_flow_is_judged_by_its_definitions(tmp_path):
+    # A string spelling a number is refused, not parsed, a fraction is refused, and an absent zone is
+    # a value the flow routes on rather than a missing field. The Rust preflight pins the same report.
+    flow = tmp_path / "flow.md"
+    flow.write_text(_DEFINED_FLOW)
+    sample = tmp_path / "sample.ndjson"
+    events = [{"load": 95, "zone": "a"}, {"load": 60}, {"load": 60, "zone": None}, {"load": 60, "zone": "a"},
+              {"load": "60", "zone": "a"}, {"load": 60.5, "zone": "a"}]
+    sample.write_text("".join(json.dumps(event) + "\n" for event in events))
+    out = tmp_path / "report.json"
+    result = _run(flow, sample, "--json", str(out))
+    assert result.returncode == 1, result.stdout + result.stderr
+    report = json.loads(out.read_text())
+    assert report["refused_by_field"] == {"load": {"wrong_type": 1, "fractional": 1}}
+    assert not report.get("missing_by_field")
+    assert report["encoded"] == 4 and report["route_mismatches"] == []
+    assert report["ready"] is False

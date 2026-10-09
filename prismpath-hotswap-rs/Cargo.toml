@@ -7,7 +7,7 @@ description = "Native port of the PrismPath secure policy hot-swap: Ed25519-sign
 license = "Apache-2.0"
 
 [dependencies]
-prismpath-rs = { path = "../prismpath-rs", version = "0.1.0", features = ["durable"] }
+prismpath-rs = { path = "../prismpath-rs", version = "0.2.0", features = ["durable"] }
 ed25519-dalek = { version = "2", features = ["rand_core"] }
 rand = "0.8"
 sha2 = "0.10"

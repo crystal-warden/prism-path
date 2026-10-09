@@ -236,6 +236,8 @@ def _add_operator_commands(subparsers) -> None:
     swap_parser.add_argument('--out', help='output dir (keygen/envelope) or state dir (swap/attest)')
     swap_parser.add_argument('--name', default='authority', help='keygen key name (default authority)')
     swap_parser.add_argument('--fields', help='comma list name:kind (pack/envelope), e.g. temp:int,rule:str')
+    swap_parser.add_argument('--flow', help='the flow the image was compiled from (pack/envelope): a flow that '
+                             'defines its fields supplies the signed field dictionary, and pack records its hash')
     swap_parser.add_argument('--version', type=int, default=1, help='monotonic pack version (pack)')
     swap_parser.add_argument('--envelope-id', dest='envelope_id', default='env1',
                              help='envelope id the pack targets / the envelope defines')
@@ -1049,6 +1051,11 @@ def lint_flow(args) -> int:
     return _report(findings, args.json)
 
 
+def _read_text(path):
+    with open(path, encoding="utf-8") as handle:
+        return handle.read()
+
+
 def _parse_fields(spec):
     return dict(part.split(":", 1) for part in spec.split(",")) if spec else {}
 
@@ -1072,8 +1079,10 @@ def swap_cmd(args):
             if not (args.ppt and args.priv and args.pub):
                 print('pack needs --ppt --priv --pub', file=sys.stderr)
                 return 2
+            flow_text = _read_text(args.flow) if args.flow else None
             manifest = policy_pack.build_pack(args.ppt, _parse_fields(args.fields), args.version,
-                                              args.envelope_id, args.priv, args.pub[0], overlay_of=args.overlay_of)
+                                              args.envelope_id, args.priv, args.pub[0], overlay_of=args.overlay_of,
+                                              flow_text=flow_text)
             print(_json.dumps(manifest, indent=1))
             return 0
         if action == 'verify':
@@ -1089,7 +1098,9 @@ def swap_cmd(args):
                 return 2
             caps = ({key: int(val) for key, val in (kv.split("=", 1) for kv in args.caps.split(","))}
                     if args.caps else None)
-            env = policy_pack.build_envelope(args.envelope_id, _parse_fields(args.fields), caps,
+            fields = (policy_pack.field_dictionary_of(_read_text(args.flow)) if args.flow
+                      else _parse_fields(args.fields))
+            env = policy_pack.build_envelope(args.envelope_id, fields, caps,
                                              args.priv, args.pub[0], args.out)
             print(_json.dumps(env, indent=1))
             return 0
@@ -1114,6 +1125,9 @@ def swap_cmd(args):
     except RuntimeError as exc:                               # loud absence (no cryptography)
         print(str(exc), file=sys.stderr)
         return 2
+    except ValueError as refusal:                             # a flow, image or dictionary refused
+        print(f"swap {action}: refused: {refusal}", file=sys.stderr)
+        return 1
     return 2
 
 

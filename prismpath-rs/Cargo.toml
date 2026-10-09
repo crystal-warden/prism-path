@@ -1,6 +1,6 @@
 [package]
 name = "prismpath-rs"
-version = "0.1.1"
+version = "0.2.0"
 edition = "2021"
 rust-version = "1.82"
 description = "PrismPath P0 engine in native Rust: a decidable Markdown policy runtime (Level M match-action)."

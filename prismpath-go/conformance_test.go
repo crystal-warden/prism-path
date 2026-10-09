@@ -186,3 +186,36 @@ func TestPredicateSemanticsFixes(test *testing.T) {
 		})
 	}
 }
+
+// A flow that defines its fields (SPEC section 4.5) is refused: this kernel does not lower decimal
+// thresholds, so it must not run such a flow. Every policy of the shared field definition vectors is
+// one, accepted by the reference or not.
+func TestFieldDefinitionsAreRefused(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("..", "prismpath", "portable", "conformance", "field_definitions.json"))
+	if err != nil {
+		t.Fatalf("read field_definitions.json: %v", err)
+	}
+	var corpus struct {
+		Policies []struct {
+			Name string `json:"name"`
+			Flow string `json:"flow"`
+		} `json:"policies"`
+	}
+	if err := json.Unmarshal(raw, &corpus); err != nil {
+		t.Fatalf("parse field_definitions.json: %v", err)
+	}
+	for _, policy := range corpus.Policies {
+		graph := Parse(policy.Flow)
+		if graph.Refused == "" {
+			t.Errorf("[%s] parsed without a refusal", policy.Name)
+		}
+		if _, err := Run(graph, func(node string, instruction string, state map[string]interface{}) (interface{}, error) {
+			return nil, nil
+		}, RunOptions{}); err == nil {
+			t.Errorf("[%s] ran", policy.Name)
+		}
+	}
+	if Parse("---\nname: t\n---\n## s\n-> e: when x >= 1\n## e\n").Refused != "" {
+		t.Errorf("a flow without definitions was refused")
+	}
+}

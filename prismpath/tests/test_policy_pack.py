@@ -250,3 +250,56 @@ def test_packing_unknown_profile_refused_at_build(tmp_path):
 def test_pack_without_packing_is_unaffected(pack):
     ok, reasons, manifest = pp.verify_pack(pack["ppt"], [pack["keys"]["public"]])
     assert ok and "packing" not in manifest
+
+
+# ------------------------------------------------------------ field definitions bound into the pack
+DEFINED_FLOW = """---
+name: defined_fixture
+start: start
+field.load: fixed scale=100 unit=ratio rounding=floor min=0 max=100
+---
+## start
+-> hot: when load >= 0.9
+-> cold: else
+## hot
+## cold
+"""
+
+
+def _defined_pack(tmp_path, fields=None):
+    keys = pp.keygen(str(tmp_path / "keys"))
+    ppt = tmp_path / "defined.ppt"
+    ppt.write_bytes(pc.compile_flow(parse(DEFINED_FLOW)).serialize())
+    manifest = pp.build_pack(str(ppt), fields or {}, version=1, envelope_id="env1", priv_path=keys["private"],
+                             pub_path=keys["public"], flow_text=DEFINED_FLOW)
+    return keys, ppt, manifest
+
+
+def test_a_defined_flow_signs_its_definitions_and_its_text(tmp_path):
+    import hashlib
+    keys, ppt, manifest = _defined_pack(tmp_path)
+    assert manifest["fields"] == {"load": "fixed scale=100 rounding=floor unit=ratio min=0 max=100 absent=refused"}
+    assert manifest["flow_sha256"] == hashlib.sha256(DEFINED_FLOW.encode()).hexdigest()
+    ok, reasons, _manifest = pp.verify_pack(str(ppt), [keys["public"]])
+    assert ok, reasons
+
+
+def test_an_envelope_with_another_scale_refuses_the_pack(tmp_path):
+    keys, ppt, manifest = _defined_pack(tmp_path)
+    image = ppt.read_bytes()
+    same = {"envelope_id": "env1", "fields": pp.field_dictionary_of(DEFINED_FLOW)}
+    assert pp.check_envelope(manifest, image, same)[0]
+    other_scale = {"envelope_id": "env1",
+                   "fields": {"load": "fixed scale=1000 rounding=floor unit=ratio min=0 max=1000 absent=refused"}}
+    ok, reasons = pp.check_envelope(manifest, image, other_scale)
+    assert not ok and "envelope:field-kind-mismatch:load" in reasons
+
+
+def test_a_dictionary_that_contradicts_the_flow_is_refused(tmp_path):
+    with pytest.raises(ValueError, match="differs from the flow's own definitions"):
+        _defined_pack(tmp_path, fields={"load": "int"})
+
+
+def test_a_flow_breaking_its_definitions_cannot_be_signed(tmp_path):
+    with pytest.raises(ValueError):
+        pp.field_dictionary_of(DEFINED_FLOW.replace("load >= 0.9", "load > 0.9"))

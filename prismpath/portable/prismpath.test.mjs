@@ -406,3 +406,12 @@ test("compiled bundle: a semantic flow refuses to run without an embedder", asyn
   const bundle = await importBundle(graph, { delta: 0.05, conditions: { "it worked": halfVectorBase64([1, 0, 0, 0]) } });
   await assert.rejects(() => bundle.runFlow(async () => "green"), /needs an embedder/);
 });
+
+// ------------------------------------------------------------------ field definitions
+test("a flow that defines its fields is refused, since this kernel does not lower them", () => {
+  const corpus = JSON.parse(readFileSync(new URL("./conformance/field_definitions.json", import.meta.url)));
+  for (const policy of corpus.policies) {
+    assert.throws(() => parse(policy.flow), /does not implement field definitions/, policy.name);
+  }
+  assert.doesNotThrow(() => parse("---\nname: t\n---\n## s\n-> e: when x >= 1\n## e\n"));
+});

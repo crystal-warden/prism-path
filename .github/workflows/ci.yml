@@ -230,6 +230,8 @@ jobs:
           sudo apt-get install -y verilator clang libbpf-dev
       - name: C target — certify against the frozen corpus (declared subset)
         run: make -C prismpath-hw cert
+      - name: C target, defined flows route as the engine does on lowered thresholds and absence
+        run: python -m pytest prismpath/tests/test_field_definitions_tables.py -q -rs
       - name: RTL sim — conformance + live-sensor replay (REAL gate; fails on any cocotb failure)
         run: make -C prismpath-hw/tb gate
       # The step above used to be the only simulation CI ran, so the control plane, the pack loader,

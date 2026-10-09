@@ -169,6 +169,15 @@ fn codec_view(parts: &HashMap<String, FieldPartition>, reading: &HashMap<String,
     let mut refused = Vec::new();
     for (field, value) in reading {
         let partition = &parts[field];
+        if partition.definition.is_some() {
+            // A defined field is judged by its definition and compared as it arrives: its value is
+            // canonical or refused, never converted.
+            if let Err(error) = partition.checked_symbol(value) {
+                refused.push((field.clone(), error.refusal.reason().to_string()));
+            }
+            seen.insert(field.clone(), value.clone());
+            continue;
+        }
         if let Err(refusal) = quantizer::accept_value(&partition.kind, value) {
             refused.push((field.clone(), refusal.reason().to_string()));
         }
@@ -334,6 +343,10 @@ pub fn scan_sample(codebook: Codebook, reader: &mut dyn BufRead, cfg: &Config)
         for field in reading.keys() {
             *field_seen.entry(field.clone()).or_default() += 1;
         }
+        // A defined field whose definition allows absence is not missing when it is absent.
+        let missing: Vec<String> = missing.into_iter()
+            .filter(|field| !codebook.parts[field].definition.as_ref().is_some_and(|definition| definition.absent_allowed))
+            .collect();
         if !missing.is_empty() {
             missing_events += 1;
             for field in missing {

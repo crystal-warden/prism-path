@@ -2,7 +2,7 @@
 // Copyright 2026 Crystal Warden Supply Chain Labs LLC
 //! Decision-preserving quantizer — the differentiator.
 
-use prismpath_rs::{Graph, Value, V};
+use prismpath_rs::{accept_canonical, DefinedKind, FieldDefinition, Graph, Value, V};
 use std::collections::HashMap;
 
 pub const OTHER: &str = "\x00__other__";
@@ -77,12 +77,46 @@ pub struct FieldPartition {
     pub kind: FieldKind,
     pub cells: Vec<Cell>,
     pub n: usize,
+    /// The field's signed definition when the flow defines its fields (SPEC section 4.5). A defined
+    /// field takes only canonical values on every path, permissive included.
+    pub definition: Option<FieldDefinition>,
+    /// The index of the absent cell, always the last, when the definition allows absence. No present
+    /// value falls in it, so absence is never zero, false or a string.
+    pub absent_symbol: Option<usize>,
 }
 
 impl FieldPartition {
     pub fn new(field: String, kind: FieldKind, cells: Vec<Cell>) -> Self {
         let n = cells.len();
-        FieldPartition { field, kind, cells, n }
+        FieldPartition { field, kind, cells, n, definition: None, absent_symbol: None }
+    }
+
+    /// A partition for a defined field: the inferred cells of its kind, plus the absent cell when the
+    /// definition allows absence.
+    fn defined(built: FieldPartition, definition: FieldDefinition) -> Self {
+        let mut cells = built.cells;
+        let absent_symbol = if definition.absent_allowed {
+            cells.push(Cell { lo: None, hi: None, const_val: None, rep: V::Null });
+            Some(cells.len() - 1)
+        } else {
+            None
+        };
+        let n = cells.len();
+        FieldPartition { field: built.field, kind: built.kind, cells, n, definition: Some(definition), absent_symbol }
+    }
+
+    /// The cells a present value can fall in: every cell but the absent one.
+    fn present_cells(&self) -> usize {
+        self.n - usize::from(self.absent_symbol.is_some())
+    }
+
+    /// The symbol of a value on a defined field, or the refusal reason. Nothing is converted.
+    fn defined_symbol(&self, definition: &FieldDefinition, value: &V) -> Result<usize, &'static str> {
+        let canonical = accept_canonical(definition, value)?;
+        if matches!(canonical, V::Null) {
+            return self.absent_symbol.ok_or(prismpath_rs::field_definitions::REFUSAL_MISSING);
+        }
+        self.present_symbol(&canonical).map_err(|_| prismpath_rs::field_definitions::REFUSAL_OUT_OF_RANGE)
     }
 
     /// The cell index a value falls in. `Err` only for a value outside every cell of a numeric
@@ -90,10 +124,17 @@ impl FieldPartition {
     /// hand-constructed partition can bound both ends, and a library consumer (e.g. a Vector
     /// codec) must never be able to panic the encoder.
     pub fn symbol(&self, value: &V) -> Result<usize, String> {
+        if let Some(definition) = &self.definition {
+            return self.defined_symbol(definition, value).map_err(|reason| format!("{}: {reason} ({value:?})", self.field));
+        }
+        self.present_symbol(value)
+    }
+
+    fn present_symbol(&self, value: &V) -> Result<usize, String> {
         match self.kind {
             FieldKind::Numeric => {
                 let number = v_to_i64(value)?;
-                for (index, cell) in self.cells.iter().enumerate() {
+                for (index, cell) in self.cells.iter().enumerate().take(self.present_cells()) {
                     let lo_ok = cell.lo.is_none_or(|low| number >= low);
                     let hi_ok = cell.hi.is_none_or(|high| number <= high);
                     if lo_ok && hi_ok {
@@ -107,14 +148,14 @@ impl FieldPartition {
             }
             FieldKind::Categorical => {
                 let text = v_to_str(value);
-                for (index, cell) in self.cells.iter().enumerate() {
+                for (index, cell) in self.cells.iter().enumerate().take(self.present_cells()) {
                     if let Some(ref constant) = cell.const_val {
                         if constant == &text {
                             return Ok(index);
                         }
                     }
                 }
-                Ok(self.n - 1) // trailing "other" cell
+                Ok(self.present_cells() - 1) // the "other" cell, last of the present cells
             }
         }
     }
@@ -127,6 +168,10 @@ impl FieldPartition {
     /// or the error names the field and the reason. Encode through this at a runtime boundary;
     /// `symbol` keeps its permissive numeric view for compatibility.
     pub fn checked_symbol(&self, value: &V) -> Result<usize, AcceptanceError> {
+        if let Some(definition) = &self.definition {
+            return self.defined_symbol(definition, value)
+                .map_err(|reason| AcceptanceError { field: self.field.clone(), refusal: InputRefusal::from_reason(reason) });
+        }
         let converted = accept_value(&self.kind, value)
             .map_err(|refusal| AcceptanceError { field: self.field.clone(), refusal })?;
         self.symbol(&converted)
@@ -167,6 +212,18 @@ pub enum InputRefusal {
 }
 
 impl InputRefusal {
+    /// The refusal a canonical boundary reason names. The boundary only ever gives the four reasons
+    /// below; any other would be a bug, and it reads as wrong_type rather than as an acceptance.
+    pub fn from_reason(reason: &str) -> InputRefusal {
+        match reason {
+            "missing" => InputRefusal::Missing,
+            "fractional" => InputRefusal::Fractional,
+            "out_of_range" => InputRefusal::OutOfRange,
+            "unparseable_string" => InputRefusal::UnparseableString,
+            _ => InputRefusal::WrongType,
+        }
+    }
+
     /// The reason string shared with the Python side and the preflight reports.
     pub fn reason(&self) -> &'static str {
         match self {
@@ -263,7 +320,13 @@ pub fn checked_quantize(
     fields.sort();
     let mut out = HashMap::new();
     for field in fields {
-        let value = reading.get(field).ok_or_else(|| AcceptanceError { field: field.clone(), refusal: InputRefusal::Missing })?;
+        // A defined field missing from the reading is the absent value, which its definition carries
+        // or refuses; an inferred field missing is refused here.
+        let value = match reading.get(field) {
+            Some(value) => value,
+            None if parts[field].definition.is_some() => &V::Null,
+            None => return Err(AcceptanceError { field: field.clone(), refusal: InputRefusal::Missing }),
+        };
         out.insert(field.clone(), parts[field].checked_symbol(value)?);
     }
     Ok(out)
@@ -543,6 +606,12 @@ pub fn extract_flow_atoms(graph: &Graph) -> Result<HashMap<String, Vec<Atom>>, S
 /// strings with numbers or comparing with None, used to be dropped from the partition silently, so
 /// readings on it decoded without it.
 pub fn build_partitions(graph: &Graph) -> Result<HashMap<String, FieldPartition>, String> {
+    if let Some(reason) = &graph.field_error {
+        return Err(reason.clone());
+    }
+    if !graph.fields.is_empty() {
+        return defined_partitions(graph);
+    }
     let mut parts = HashMap::new();
     for (field, atoms) in extract_flow_atoms(graph)? {
         let kind = classify_kind(&atoms).map_err(|reason| format!("{field}: {reason}"))?;
@@ -556,14 +625,50 @@ pub fn build_partitions(graph: &Graph) -> Result<HashMap<String, FieldPartition>
     Ok(parts)
 }
 
+/// The partitions of a flow that defines its fields, the twin of quantizer.py `_defined_partitions`.
+/// The parser has lowered every decimal threshold and checked every rule, so each field's kind is its
+/// definition's. A comparison with None adds no cut, since it is constant across present values, and a
+/// field that allows absence gets the absent cell. The engine counters keep the inferred partition.
+fn defined_partitions(graph: &Graph) -> Result<HashMap<String, FieldPartition>, String> {
+    let mut parts = HashMap::new();
+    for (field, atoms) in extract_flow_atoms(graph)? {
+        let Some(definition) = graph.fields.get(&field) else {
+            let kind = classify_kind(&atoms).map_err(|reason| format!("{field}: {reason}"))?;
+            let part = match kind {
+                FieldKind::Numeric => numeric_partition(&field, &atoms),
+                FieldKind::Categorical => categorical_partition(&field, &atoms),
+                FieldKind::Boolean => boolean_partition(&field),
+            };
+            parts.insert(field, part);
+            continue;
+        };
+        let present: Vec<Atom> = atoms.into_iter()
+            .filter(|atom| atom.op == "truthy" || !matches!(atom.const_val, AtomConst::None))
+            .collect();
+        let built = match definition.kind {
+            DefinedKind::Int | DefinedKind::Fixed => numeric_partition(&field, &present),
+            DefinedKind::Category => categorical_partition(&field, &present),
+            DefinedKind::Bool => boolean_partition(&field),
+        };
+        parts.insert(field, FieldPartition::defined(built, definition.clone()));
+    }
+    Ok(parts)
+}
+
 pub fn quantize(
     parts: &HashMap<String, FieldPartition>,
     reading: &HashMap<String, V>,
 ) -> Result<HashMap<String, usize>, String> {
     let mut out = HashMap::new();
     for (field, partition) in parts {
-        if let Some(value) = reading.get(field) {
-            out.insert(field.clone(), partition.symbol(value)?);
+        match reading.get(field) {
+            Some(value) => {
+                out.insert(field.clone(), partition.symbol(value)?);
+            }
+            None if partition.definition.is_some() => {
+                out.insert(field.clone(), partition.symbol(&V::Null)?);
+            }
+            None => {}
         }
     }
     Ok(out)

@@ -69,3 +69,9 @@ def test_a_field_refusing_absence_has_no_absent_cell():
     assert latency.absent_symbol is None
     with pytest.raises(quantizer.InputRefused, match="missing"):
         latency.symbol(None)
+
+
+def test_the_frozen_streams_are_what_the_reference_produces():
+    from prismpath.telemetry import gen_defined_wire_corpus
+    committed = json.loads(gen_defined_wire_corpus.OUT.read_text())
+    assert gen_defined_wire_corpus.build() == committed

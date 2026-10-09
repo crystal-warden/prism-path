@@ -78,7 +78,9 @@ def _codec_view(parts: Dict[str, quantizer.FieldPartition], reading: Dict[str, A
     """The reading as the codec compares it, numeric fields through `quantizer.numeric_view`, the
     same view the encoder uses. A fraction raises ValueError here as it does in the encoder, and
     acceptance has already counted it as a refusal."""
-    return {field: quantizer.numeric_view(value) if parts[field].kind == "numeric" else value
+    # A defined field is compared as it arrives: its value is canonical or refused, never converted.
+    return {field: quantizer.numeric_view(value)
+            if parts[field].kind == "numeric" and parts[field].definition is None else value
             for field, value in reading.items()}
 
 
@@ -251,10 +253,14 @@ def scan_sample(
 
         reading, missing = extract_reading(event, order, field_paths)
         field_seen.update(reading.keys())
+        # A defined field whose definition allows absence is not missing when it is absent: absence
+        # is a value it carries in a cell of its own.
+        missing = [field for field in missing
+                   if not (parts[field].definition is not None and parts[field].definition.absent_allowed)]
         # Acceptance, field by field, before the permissive codec view: this is what the
         # checked encoder will refuse at runtime, so the report predicts it exactly.
         for field, value in reading.items():
-            reason, _converted = quantizer.accept_value(parts[field].kind, value)
+            reason = quantizer.boundary_refusal(parts[field], value)
             if reason is not None:
                 refusals.setdefault(field, Counter())[reason] += 1
         if missing:

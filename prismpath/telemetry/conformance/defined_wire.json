@@ -1,0 +1,503 @@
+{
+ "comment": "FROZEN. The Facet stream of every canonical probe of the field definition vectors, from the Python reference. Both implementation twins replay this file.",
+ "policies": [
+  {
+   "name": "floor_ratio_with_absent_label",
+   "fields": {
+    "error_rate": {
+     "cells": 3,
+     "absent_symbol": null
+    },
+    "label": {
+     "cells": 3,
+     "absent_symbol": 2
+    }
+   },
+   "probes": [
+    {
+     "reading": {
+      "error_rate": 8500,
+      "label": "b"
+     },
+     "symbols": {
+      "error_rate": 2,
+      "label": 1
+     },
+     "bits": "0011011"
+    },
+    {
+     "reading": {
+      "error_rate": 8499,
+      "label": "a"
+     },
+     "symbols": {
+      "error_rate": 1,
+      "label": 0
+     },
+     "bits": "01111"
+    },
+    {
+     "reading": {
+      "error_rate": 2499,
+      "label": "a"
+     },
+     "symbols": {
+      "error_rate": 0,
+      "label": 0
+     },
+     "bits": "1111"
+    },
+    {
+     "reading": {
+      "error_rate": 2500,
+      "label": "a"
+     },
+     "symbols": {
+      "error_rate": 1,
+      "label": 0
+     },
+     "bits": "01111"
+    },
+    {
+     "reading": {
+      "error_rate": 100
+     },
+     "symbols": {
+      "error_rate": 0,
+      "label": 2
+     },
+     "bits": "110011"
+    },
+    {
+     "reading": {
+      "error_rate": 100,
+      "label": null
+     },
+     "symbols": {
+      "error_rate": 0,
+      "label": 2
+     },
+     "bits": "110011"
+    },
+    {
+     "reading": {
+      "error_rate": 0,
+      "label": ""
+     },
+     "symbols": {
+      "error_rate": 0,
+      "label": 1
+     },
+     "bits": "11011"
+    },
+    {
+     "reading": {
+      "error_rate": 10000,
+      "label": "z"
+     },
+     "symbols": {
+      "error_rate": 2,
+      "label": 1
+     },
+     "bits": "0011011"
+    }
+   ]
+  },
+  {
+   "name": "floor_orientation_and_negation",
+   "fields": {
+    "drift": {
+     "cells": 3,
+     "absent_symbol": null
+    }
+   },
+   "probes": [
+    {
+     "reading": {
+      "drift": 50
+     },
+     "symbols": {
+      "drift": 2
+     },
+     "bits": "0011"
+    },
+    {
+     "reading": {
+      "drift": 49
+     },
+     "symbols": {
+      "drift": 1
+     },
+     "bits": "011"
+    },
+    {
+     "reading": {
+      "drift": -125
+     },
+     "symbols": {
+      "drift": 1
+     },
+     "bits": "011"
+    },
+    {
+     "reading": {
+      "drift": -126
+     },
+     "symbols": {
+      "drift": 0
+     },
+     "bits": "11"
+    },
+    {
+     "reading": {
+      "drift": 5000
+     },
+     "symbols": {
+      "drift": 2
+     },
+     "bits": "0011"
+    },
+    {
+     "reading": {
+      "drift": -5000
+     },
+     "symbols": {
+      "drift": 0
+     },
+     "bits": "11"
+    }
+   ]
+  },
+  {
+   "name": "ceiling_seconds",
+   "fields": {
+    "latency": {
+     "cells": 3,
+     "absent_symbol": null
+    }
+   },
+   "probes": [
+    {
+     "reading": {
+      "latency": 1501
+     },
+     "symbols": {
+      "latency": 2
+     },
+     "bits": "0011"
+    },
+    {
+     "reading": {
+      "latency": 1500
+     },
+     "symbols": {
+      "latency": 1
+     },
+     "bits": "011"
+    },
+    {
+     "reading": {
+      "latency": 250
+     },
+     "symbols": {
+      "latency": 0
+     },
+     "bits": "11"
+    },
+    {
+     "reading": {
+      "latency": 251
+     },
+     "symbols": {
+      "latency": 1
+     },
+     "bits": "011"
+    },
+    {
+     "reading": {
+      "latency": 0
+     },
+     "symbols": {
+      "latency": 0
+     },
+     "bits": "11"
+    }
+   ]
+  },
+  {
+   "name": "exact_price_every_operator",
+   "fields": {
+    "price": {
+     "cells": 12,
+     "absent_symbol": null
+    }
+   },
+   "probes": [
+    {
+     "reading": {
+      "price": 1999
+     },
+     "symbols": {
+      "price": 10
+     },
+     "bits": "001011"
+    },
+    {
+     "reading": {
+      "price": 0
+     },
+     "symbols": {
+      "price": 3
+     },
+     "bits": "1011"
+    },
+    {
+     "reading": {
+      "price": 550
+     },
+     "symbols": {
+      "price": 8
+     },
+     "bits": "100011"
+    },
+    {
+     "reading": {
+      "price": -1
+     },
+     "symbols": {
+      "price": 2
+     },
+     "bits": "0011"
+    },
+    {
+     "reading": {
+      "price": 50
+     },
+     "symbols": {
+      "price": 5
+     },
+     "bits": "10011"
+    },
+    {
+     "reading": {
+      "price": 99
+     },
+     "symbols": {
+      "price": 6
+     },
+     "bits": "01011"
+    },
+    {
+     "reading": {
+      "price": -99
+     },
+     "symbols": {
+      "price": 1
+     },
+     "bits": "011"
+    },
+    {
+     "reading": {
+      "price": 100
+     },
+     "symbols": {
+      "price": 7
+     },
+     "bits": "000011"
+    },
+    {
+     "reading": {
+      "price": 1998
+     },
+     "symbols": {
+      "price": 9
+     },
+     "bits": "010011"
+    }
+   ]
+  },
+  {
+   "name": "lowering_shapes",
+   "fields": {
+    "d": {
+     "cells": 5,
+     "absent_symbol": null
+    },
+    "p": {
+     "cells": 10,
+     "absent_symbol": null
+    }
+   },
+   "probes": [
+    {
+     "reading": {
+      "d": 50,
+      "p": 0
+     },
+     "symbols": {
+      "d": 4,
+      "p": 2
+     },
+     "bits": "000110011"
+    },
+    {
+     "reading": {
+      "d": -1250,
+      "p": 0
+     },
+     "symbols": {
+      "d": 1,
+      "p": 2
+     },
+     "bits": "0110011"
+    },
+    {
+     "reading": {
+      "d": -1251,
+      "p": 1600
+     },
+     "symbols": {
+      "d": 0,
+      "p": 8
+     },
+     "bits": "11100011"
+    },
+    {
+     "reading": {
+      "d": 0,
+      "p": 100
+     },
+     "symbols": {
+      "d": 1,
+      "p": 3
+     },
+     "bits": "0111011"
+    },
+    {
+     "reading": {
+      "d": 0,
+      "p": 1049
+     },
+     "symbols": {
+      "d": 1,
+      "p": 6
+     },
+     "bits": "01101011"
+    },
+    {
+     "reading": {
+      "d": 0,
+      "p": 1050
+     },
+     "symbols": {
+      "d": 1,
+      "p": 7
+     },
+     "bits": "011000011"
+    },
+    {
+     "reading": {
+      "d": 10,
+      "p": 1600
+     },
+     "symbols": {
+      "d": 2,
+      "p": 8
+     },
+     "bits": "0011100011"
+    },
+    {
+     "reading": {
+      "d": 20,
+      "p": 1600
+     },
+     "symbols": {
+      "d": 3,
+      "p": 8
+     },
+     "bits": "1011100011"
+    }
+   ]
+  },
+  {
+   "name": "int_and_bool_with_absent_count",
+   "fields": {
+    "armed": {
+     "cells": 2,
+     "absent_symbol": null
+    },
+    "count": {
+     "cells": 3,
+     "absent_symbol": 2
+    }
+   },
+   "probes": [
+    {
+     "reading": {
+      "armed": true
+     },
+     "symbols": {
+      "armed": 1,
+      "count": 2
+     },
+     "bits": "0110011"
+    },
+    {
+     "reading": {
+      "count": null,
+      "armed": false
+     },
+     "symbols": {
+      "armed": 0,
+      "count": 2
+     },
+     "bits": "110011"
+    },
+    {
+     "reading": {
+      "count": 3,
+      "armed": true
+     },
+     "symbols": {
+      "armed": 1,
+      "count": 1
+     },
+     "bits": "011011"
+    },
+    {
+     "reading": {
+      "count": 2,
+      "armed": true
+     },
+     "symbols": {
+      "armed": 1,
+      "count": 0
+     },
+     "bits": "01111"
+    },
+    {
+     "reading": {
+      "count": 5,
+      "armed": false
+     },
+     "symbols": {
+      "armed": 0,
+      "count": 1
+     },
+     "bits": "11011"
+    },
+    {
+     "reading": {
+      "count": -5,
+      "armed": true
+     },
+     "symbols": {
+      "armed": 1,
+      "count": 0
+     },
+     "bits": "01111"
+    }
+   ]
+  }
+ ]
+}

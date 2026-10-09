@@ -244,6 +244,8 @@ pub enum EngineError {
     MissingNode(String),
     /// A semantic condition is not covered by the lockfile.
     LockMissing(String),
+    /// The flow breaks its own field definitions (SPEC section 4.5), so there is no policy to run.
+    InvalidFlow(String),
 }
 
 impl std::fmt::Display for EngineError {
@@ -261,6 +263,7 @@ impl std::fmt::Display for EngineError {
                 formatter,
                 "condition not in lock: {cond:?} - the flow changed; re-run `prismpath lock`"
             ),
+            EngineError::InvalidFlow(reason) => write!(formatter, "{reason}"),
         }
     }
 }
@@ -726,6 +729,9 @@ where
     AgentFn: FnMut(&str, &str, &RunState) -> Result<Value, String>,
     ObserverFn: FnMut(&RunResult, &RunState, Option<&str>),
 {
+    if let Some(reason) = &graph.field_error {
+        return Err(EngineError::InvalidFlow(reason.clone()));
+    }
     let violations = portability_violations(graph);
     if !violations.is_empty() {
         if let Some((lock, _)) = semantic_ctx {

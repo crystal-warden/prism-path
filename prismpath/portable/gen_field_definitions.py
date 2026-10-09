@@ -43,7 +43,9 @@ DEFINITIONS = {
 CONVERSION = [
     ("ratio_floor", ["0.892", "0.85", "0.8499", "0.84999", "1", "1.0", "0", "+0.5", ".5", "5.", "8.5e-1",
                      "1e-4", "0.00001", "-0.00001", "1.00001", "0.85000000000000000000000000",
-                     "1_000", "0x10", " 0.5", "0.5 ", "NaN", "inf", "", "1e31", "1e-31",
+                     "1_000", "0x10", " 0.5", "0.5 ", "0.5\n", "NaN", "inf", "", "1e31", "1e-31",
+                     "+.5", "-.5", "00000.5000", "1.5E-1", "0e30", "0e31", "1e+0", "e5", "1e", ".", "+",
+                     "0.000000000000000000000000001", "0.0000000000000000000000000001",
                      "1234567890123456789012345678", "12345678901234567890123456789",
                      0.5, 1, 1.0, 0, True, None, [1], {"value": 1}]),
     ("drift_floor", ["0.29", "-0.291", "-0.29", "-50", "-50.001", "50", "50.01", 0.29, -3, -3.0]),
@@ -91,6 +93,13 @@ ACCEPTED = [
      [{"price": 1999}, {"price": 0}, {"price": 550}, {"price": -1}, {"price": 50}, {"price": 99},
       {"price": -99}, {"price": 100}, {"price": 1998}],
      [{"price": 19.99}]),
+    ("lowering_shapes",
+     {"d": DEFINITIONS["drift_floor"], "p": DEFINITIONS["price_exact"]},
+     [("hit", "when (d) >= (0.5) and d < - 1.25e1"), ("low", "when p in (1, -0.01, +2.5) or 1_0.5 > p"),
+      ("gone", "when not (0.1 <= d < 0.2) and p == 0x10"), ("miss", "else")],
+     [{"d": 50, "p": 0}, {"d": -1250, "p": 0}, {"d": -1251, "p": 1600}, {"d": 0, "p": 100}, {"d": 0, "p": 1049},
+      {"d": 0, "p": 1050}, {"d": 10, "p": 1600}, {"d": 20, "p": 1600}],
+     [{"d": 1, "p": 1.5}]),
     ("int_and_bool_with_absent_count",
      {"count": DEFINITIONS["count_int"], "armed": DEFINITIONS["flag_bool"]},
      [("gone", "when count == None"), ("hit", "when count >= 3 and armed"), ("low", "when not armed"),
@@ -131,6 +140,8 @@ REFUSED = [
     ("range_wider_than_exact", {"x": "int max=9007199254740992"}, ["when x > 1"]),
     ("absent_neither_word", {"x": "int absent=maybe"}, ["when x > 1"]),
     ("engine_counter_defined", {"visits": "int"}, ["when visits > 1"]),
+    ("sign_outside_parentheses_on_a_decimal", {"d": DEFINITIONS["drift_floor"]}, ["when d >= -(0.5)"]),
+    ("sign_outside_parentheses_on_an_integer", {"d": DEFINITIONS["drift_floor"]}, ["when d >= -(5)"]),
 ]
 
 

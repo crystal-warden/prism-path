@@ -104,6 +104,11 @@
   },
   {
    "definition": "fixed scale=10000 unit=ratio rounding=floor min=0 max=10000",
+   "raw": "0.5\n",
+   "refused": "unparseable_string"
+  },
+  {
+   "definition": "fixed scale=10000 unit=ratio rounding=floor min=0 max=10000",
    "raw": "NaN",
    "refused": "unparseable_string"
   },
@@ -126,6 +131,71 @@
    "definition": "fixed scale=10000 unit=ratio rounding=floor min=0 max=10000",
    "raw": "1e-31",
    "refused": "unparseable_string"
+  },
+  {
+   "definition": "fixed scale=10000 unit=ratio rounding=floor min=0 max=10000",
+   "raw": "+.5",
+   "canonical": 5000
+  },
+  {
+   "definition": "fixed scale=10000 unit=ratio rounding=floor min=0 max=10000",
+   "raw": "-.5",
+   "refused": "out_of_range"
+  },
+  {
+   "definition": "fixed scale=10000 unit=ratio rounding=floor min=0 max=10000",
+   "raw": "00000.5000",
+   "canonical": 5000
+  },
+  {
+   "definition": "fixed scale=10000 unit=ratio rounding=floor min=0 max=10000",
+   "raw": "1.5E-1",
+   "canonical": 1500
+  },
+  {
+   "definition": "fixed scale=10000 unit=ratio rounding=floor min=0 max=10000",
+   "raw": "0e30",
+   "canonical": 0
+  },
+  {
+   "definition": "fixed scale=10000 unit=ratio rounding=floor min=0 max=10000",
+   "raw": "0e31",
+   "refused": "unparseable_string"
+  },
+  {
+   "definition": "fixed scale=10000 unit=ratio rounding=floor min=0 max=10000",
+   "raw": "1e+0",
+   "canonical": 10000
+  },
+  {
+   "definition": "fixed scale=10000 unit=ratio rounding=floor min=0 max=10000",
+   "raw": "e5",
+   "refused": "unparseable_string"
+  },
+  {
+   "definition": "fixed scale=10000 unit=ratio rounding=floor min=0 max=10000",
+   "raw": "1e",
+   "refused": "unparseable_string"
+  },
+  {
+   "definition": "fixed scale=10000 unit=ratio rounding=floor min=0 max=10000",
+   "raw": ".",
+   "refused": "unparseable_string"
+  },
+  {
+   "definition": "fixed scale=10000 unit=ratio rounding=floor min=0 max=10000",
+   "raw": "+",
+   "refused": "unparseable_string"
+  },
+  {
+   "definition": "fixed scale=10000 unit=ratio rounding=floor min=0 max=10000",
+   "raw": "0.000000000000000000000000001",
+   "canonical": 0
+  },
+  {
+   "definition": "fixed scale=10000 unit=ratio rounding=floor min=0 max=10000",
+   "raw": "0.0000000000000000000000000001",
+   "canonical": 0
   },
   {
    "definition": "fixed scale=10000 unit=ratio rounding=floor min=0 max=10000",
@@ -765,6 +835,85 @@
    ]
   },
   {
+   "name": "lowering_shapes",
+   "flow": "---\nname: lowering_shapes\nstart: s\nfield.d: fixed scale=100 unit=celsius rounding=floor min=-5000 max=5000\nfield.p: fixed scale=100 unit=usd rounding=exact min=-100000 max=100000\n---\n## s\n-> hit: when (d) >= (0.5) and d < - 1.25e1\n-> low: when p in (1, -0.01, +2.5) or 1_0.5 > p\n-> gone: when not (0.1 <= d < 0.2) and p == 0x10\n-> miss: else\n## hit\n## low\n## gone\n## miss\n",
+   "accepted": true,
+   "lowered": [
+    "when (d) >= (50) and d < -1250",
+    "when p in (100, -1, 250) or 1050 > p",
+    "when not (10 <= d < 20) and p == 1600",
+    "else"
+   ],
+   "probes": [
+    {
+     "reading": {
+      "d": 50,
+      "p": 0
+     },
+     "route": "low"
+    },
+    {
+     "reading": {
+      "d": -1250,
+      "p": 0
+     },
+     "route": "low"
+    },
+    {
+     "reading": {
+      "d": -1251,
+      "p": 1600
+     },
+     "route": "gone"
+    },
+    {
+     "reading": {
+      "d": 0,
+      "p": 100
+     },
+     "route": "low"
+    },
+    {
+     "reading": {
+      "d": 0,
+      "p": 1049
+     },
+     "route": "low"
+    },
+    {
+     "reading": {
+      "d": 0,
+      "p": 1050
+     },
+     "route": "miss"
+    },
+    {
+     "reading": {
+      "d": 10,
+      "p": 1600
+     },
+     "route": "miss"
+    },
+    {
+     "reading": {
+      "d": 20,
+      "p": 1600
+     },
+     "route": "gone"
+    }
+   ],
+   "refused_readings": [
+    {
+     "reading": {
+      "d": 1,
+      "p": 1.5
+     },
+     "field": "p",
+     "reason": "fractional"
+    }
+   ]
+  },
+  {
    "name": "int_and_bool_with_absent_count",
    "flow": "---\nname: int_and_bool_with_absent_count\nstart: s\nfield.count: int min=-5 max=5 absent=allowed\nfield.armed: bool\n---\n## s\n-> gone: when count == None\n-> hit: when count >= 3 and armed\n-> low: when not armed\n-> miss: else\n## hit\n## low\n## gone\n## miss\n",
    "accepted": true,
@@ -999,6 +1148,16 @@
   {
    "name": "engine_counter_defined",
    "flow": "---\nname: engine_counter_defined\nstart: s\nfield.visits: int\n---\n## s\n-> hit: when visits > 1\n-> miss: else\n## hit\n## low\n## gone\n## miss\n",
+   "accepted": false
+  },
+  {
+   "name": "sign_outside_parentheses_on_a_decimal",
+   "flow": "---\nname: sign_outside_parentheses_on_a_decimal\nstart: s\nfield.d: fixed scale=100 unit=celsius rounding=floor min=-5000 max=5000\n---\n## s\n-> hit: when d >= -(0.5)\n-> miss: else\n## hit\n## low\n## gone\n## miss\n",
+   "accepted": false
+  },
+  {
+   "name": "sign_outside_parentheses_on_an_integer",
+   "flow": "---\nname: sign_outside_parentheses_on_an_integer\nstart: s\nfield.d: fixed scale=100 unit=celsius rounding=floor min=-5000 max=5000\n---\n## s\n-> hit: when d >= -(5)\n-> miss: else\n## hit\n## low\n## gone\n## miss\n",
    "accepted": false
   }
  ]

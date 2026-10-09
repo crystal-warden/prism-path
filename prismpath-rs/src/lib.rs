@@ -12,6 +12,7 @@
 
 pub mod condition;
 pub mod engine;
+pub mod field_definitions;
 pub mod level_m;
 pub mod parser;
 pub mod reach;
@@ -40,7 +41,8 @@ pub use engine::{
     Violation,
 };
 pub use level_m::{capability_report, flow_level_m, is_level_m, level_m_atoms, LevelMAtom, NonMemberEdge};
-pub use parser::{parse, Graph, Node};
+pub use parser::{parse, parse_checked, Graph, Node};
+pub use field_definitions::{accept_canonical, canonical_value, CanonicalRefusal, DefinedKind, FieldDefinition, Rounding};
 pub use reach::check_reach;
 pub use value::{PredicateError, Value, V, CMP_DEPTH, MAX_DEPTH};
 

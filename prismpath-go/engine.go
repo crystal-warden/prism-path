@@ -1,6 +1,7 @@
 package prismpath
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 )
@@ -86,6 +87,9 @@ func pyRepr(value interface{}) string {
 
 // Run executes a P0 portable flow graph against a worker function.
 func Run(graph Graph, worker WorkerFn, opts RunOptions) (RunResult, error) {
+	if graph.Refused != "" {
+		return RunResult{}, errors.New(graph.Refused)
+	}
 	if violations := PortabilityViolations(graph); len(violations) > 0 {
 		return RunResult{}, fmt.Errorf("non-portable flow: contains semantic edges: %s", strings.Join(violations, "; "))
 	}

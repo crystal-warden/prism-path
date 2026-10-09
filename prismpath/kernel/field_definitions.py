@@ -51,7 +51,7 @@ MAX_SCALE = 10 ** 9
 
 # Decimal text the conversion accepts, and the bounds on it. The bounds keep the exact arithmetic
 # inside 128 bit integers in the Rust twin, and the two must refuse the same texts.
-DECIMAL_TEXT = re.compile(r"^[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?$")
+DECIMAL_TEXT = re.compile(r"[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?")
 MAX_DECIMAL_DIGITS = 28
 MAX_DECIMAL_EXPONENT = 30
 
@@ -187,7 +187,8 @@ def definitions_of(meta: Dict[str, str]) -> Dict[str, FieldDefinition]:
 # ----------------------------------------------------------------- exact decimals
 def decimal_fraction(text: str) -> Optional[Fraction]:
     """The exact value of decimal text within the shared bounds, or None when it is not such text."""
-    if not DECIMAL_TEXT.match(text):
+    # fullmatch, not match with a trailing $, which would let a final newline through
+    if not DECIMAL_TEXT.fullmatch(text):
         return None
     mantissa, _, exponent = text.lower().partition("e")
     digits = re.sub(r"[^0-9]", "", mantissa).lstrip("0")
@@ -309,7 +310,16 @@ def _literal_value(expr: str, node) -> Optional[Fraction]:
     sign = 1
     if isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.USub, ast.UAdd)):
         sign = -1 if isinstance(node.op, ast.USub) else 1
-        node = node.operand
+        inner = node.operand
+        # The sign must sit directly on the literal. `-(0.5)` is a signed literal to Python's syntax tree
+        # but not to the predicate tokenizer the other kernels share, and leaving `-(5)` unlowered would
+        # compare -5 canonical units instead of -5.0, so a separated sign is refused outright.
+        if isinstance(inner, ast.Constant) and not isinstance(inner.value, bool) \
+                and isinstance(inner.value, (int, float)) \
+                and ast.get_source_segment(expr, node)[1:].strip() != ast.get_source_segment(expr, inner):
+            raise FieldDefinitionError(f"the threshold {ast.get_source_segment(expr, node)} puts its sign outside "
+                                       f"parentheses; write the sign on the number")
+        node = inner
     if not isinstance(node, ast.Constant) or isinstance(node.value, bool) \
             or not isinstance(node.value, (int, float)):
         return None

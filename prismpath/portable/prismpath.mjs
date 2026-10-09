@@ -1066,6 +1066,14 @@ export function parse(sourceText) {
     }
     flowBody = frontmatterMatch[2];
   }
+  // Field definitions (SPEC section 4.5) are not implemented in this kernel. A flow that defines its
+  // fields may compare decimal thresholds the reference lowers to canonical integers at parse, so
+  // running it here unlowered would compare 8500 with 0.85. The spec requires such a kernel to refuse.
+  const definedFields = Object.keys(frontmatterMeta).filter((key) => key.startsWith("field."));
+  if (definedFields.length > 0) {
+    throw new Error(`flow defines its fields (${definedFields.join(", ")}), and this kernel does not ` +
+      "implement field definitions (SPEC section 4.5); run it on the Python or Rust kernel");
+  }
   const nodesMap = {};
   let currentNodeRec = null;
   let instructionLines = [];

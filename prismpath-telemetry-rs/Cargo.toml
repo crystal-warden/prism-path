@@ -10,7 +10,7 @@ keywords = ["telemetry", "quantization", "policy", "merkle", "embedded"]
 categories = ["encoding", "embedded"]
 
 [dependencies]
-prismpath-rs = { path = "../prismpath-rs", version = "0.1.1" }
+prismpath-rs = { path = "../prismpath-rs", version = "0.2.0" }
 sha2 = "0.10"
 hmac = "0.12"
 hex = "0.4"

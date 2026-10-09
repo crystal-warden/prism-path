@@ -19,6 +19,13 @@ pub struct Graph {
     pub name: String,
     pub start: String,
     pub nodes: HashMap<String, Node>,
+    /// Every front matter `key: value` line, as the reference keeps it.
+    pub meta: HashMap<String, String>,
+    /// The field definitions (SPEC section 4.5), keyed by field name; empty when the flow defines none.
+    pub fields: std::collections::BTreeMap<String, crate::field_definitions::FieldDefinition>,
+    /// Why the flow breaks its field definitions, when it does. Such a graph has every edge disabled,
+    /// the engine refuses to run it, and the codec refuses to partition it.
+    pub field_error: Option<String>,
 }
 
 /// -> target: condition (optionally as a - bullet): EDGE_RE.
@@ -240,5 +247,16 @@ pub fn parse(text: &str) -> Graph {
         _ => order.first().cloned().unwrap_or_default(),
     };
     let name = meta.get("name").cloned().unwrap_or_else(|| "flow".to_string());
-    Graph { name, start, nodes }
+    let mut graph = Graph { name, start, nodes, meta, ..Default::default() };
+    crate::field_definitions::apply_definitions(&mut graph);
+    graph
+}
+
+/// `parse`, returning the reason instead of a disabled graph when the flow breaks its field definitions.
+pub fn parse_checked(text: &str) -> Result<Graph, String> {
+    let graph = parse(text);
+    match &graph.field_error {
+        Some(reason) => Err(reason.clone()),
+        None => Ok(graph),
+    }
 }

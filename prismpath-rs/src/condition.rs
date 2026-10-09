@@ -59,8 +59,8 @@ pub(crate) fn split_lines_py(text: &str) -> Vec<&str> {
     out
 }
 
-const ALWAYS: [&str; 6] = ["always", "true", "else", "otherwise", "default", "_"];
-const NEVER: [&str; 2] = ["false", "never"];
+pub(crate) const ALWAYS: [&str; 6] = ["always", "true", "else", "otherwise", "default", "_"];
+pub(crate) const NEVER: [&str; 2] = ["false", "never"];
 
 // Python HARD keywords (minus True/False/None, which are constants, and and/or/not/in, which are
 // operators here). Python's ast.parse REJECTS these as names: when class == "phish" is a
@@ -136,7 +136,7 @@ pub(crate) fn expr_of(condition: &str) -> String {
 // No calls, attributes, subscripts, arithmetic, or unary minus: anything else throws.
 
 #[derive(Debug, Clone, PartialEq)]
-enum Tok {
+pub(crate) enum Tok {
     Name(String),
     Num(f64, bool), // value, is_float: the flag lets -<int> fold while -<float> stays rejected
     Str(String),
@@ -145,18 +145,35 @@ enum Tok {
 }
 
 fn tokenize(src: &str) -> Result<Vec<Tok>, PredicateError> {
+    tokenize_spanned(src).map(|(toks, _spans)| toks)
+}
+
+/// Tokens with their spans, each span (first char index, one past the last).
+pub(crate) type SpannedTokens = (Vec<Tok>, Vec<(usize, usize)>);
+
+/// The tokens and, for each, its span as (first char index, one past the last). Lowering decimal
+/// thresholds on fixed fields (field_definitions.rs) rewrites literals in place by these spans, so it
+/// reads the very token boundaries evaluation reads. A span is closed at the top of the pass after its
+/// token was pushed, which is where every branch below lands with `pos` one past the token.
+pub(crate) fn tokenize_spanned(src: &str) -> Result<SpannedTokens, PredicateError> {
     let chars: Vec<char> = src.chars().collect();
     let len = chars.len();
     let mut toks = Vec::new();
+    let mut spans: Vec<(usize, usize)> = Vec::new();
+    let mut token_start = 0usize;
     let mut pos = 0usize;
 
     while pos < len {
+        if spans.len() < toks.len() {
+            spans.push((token_start, pos));
+        }
         let ch = chars[pos];
         // the tokenizer's own whitespace is EXACTLY " \t\n\r": narrower than either trim set
         if ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r' {
             pos += 1;
             continue;
         }
+        token_start = pos;
         if ch.is_ascii_alphabetic() || ch == '_' {
             // raw-string prefix: r'...' / R"..." is a plain Constant in Python (no escape processing)
             if (ch == 'r' || ch == 'R') && pos + 1 < len && (chars[pos + 1] == '\'' || chars[pos + 1] == '"') {
@@ -324,7 +341,10 @@ fn tokenize(src: &str) -> Result<Vec<Tok>, PredicateError> {
         let near: String = chars[pos..(pos + 8).min(len)].iter().collect();
         return perr(format!("predicate uses disallowed syntax near {near:?}"));
     }
-    Ok(toks)
+    if spans.len() < toks.len() {
+        spans.push((token_start, pos));
+    }
+    Ok((toks, spans))
 }
 
 #[derive(Debug, Clone, PartialEq)]

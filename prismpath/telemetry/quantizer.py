@@ -254,6 +254,17 @@ def accept_value(kind: str, value: Any) -> Tuple[Optional[str], Any]:
     return REFUSAL_WRONG_TYPE, None
 
 
+def boundary_refusal(partition: "FieldPartition", value: Any) -> Optional[str]:
+    """The reason the runtime boundary refuses this value for this field, or None when it accepts it.
+    A defined field is judged by its definition, an inferred field by its kind's acceptance rules, so
+    a preflight that asks this predicts the checked encoder exactly."""
+    if partition.definition is not None:
+        reason, _value = field_definitions.accept_canonical(partition.definition, value)
+        return reason
+    reason, _converted = accept_value(partition.kind, value)
+    return reason
+
+
 def checked_quantize(parts: Dict[str, "FieldPartition"], reading: Dict[str, Any]) -> Dict[str, int]:
     """`quantize` behind acceptance: every decision field present and accepted, or
     InputRefused names the first field that is not."""

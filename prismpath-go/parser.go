@@ -33,6 +33,10 @@ type Graph struct {
 	Nodes     map[string]Node `json:"nodes"`
 	NodeOrder []string        `json:"node_order"`
 	Terminals []string        `json:"terminals"`
+	// Refused says why this kernel will not run the flow. Field definitions (SPEC section 4.5) are not
+	// implemented here, and a flow that defines its fields may hold decimal thresholds the reference
+	// lowers at parse, so such a flow has every edge disabled and Run refuses it.
+	Refused string `json:"refused,omitempty"`
 }
 
 var (
@@ -84,6 +88,7 @@ func Parse(markdown string) Graph {
 
 	inFrontmatter := false
 	fmDone := false
+	definedFields := []string{}
 	bodyLines := []string{}
 
 	if len(lines) > 0 && strings.TrimSpace(lines[0]) == "---" {
@@ -99,6 +104,9 @@ func Parse(markdown string) Graph {
 			if len(parts) == 2 {
 				key := strings.TrimSpace(parts[0])
 				value := strings.TrimSpace(parts[1])
+				if strings.HasPrefix(key, "field.") {
+					definedFields = append(definedFields, key)
+				}
 				if key == "name" {
 					name = value
 				} else if key == "start" {
@@ -164,6 +172,18 @@ func Parse(markdown string) Graph {
 	}
 	flushNode()
 
+	refused := ""
+	if fmDone && len(definedFields) > 0 {
+		refused = "flow defines its fields (" + strings.Join(definedFields, ", ") + "), and this kernel does not " +
+			"implement field definitions (SPEC section 4.5); run it on the Python or Rust kernel"
+		for nodeName, node := range nodes {
+			for edgeIndex := range node.Edges {
+				node.Edges[edgeIndex].Condition = "never"
+			}
+			nodes[nodeName] = node
+		}
+	}
+
 	if start == "" && len(nodeOrder) > 0 {
 		start = nodeOrder[0]
 	}
@@ -181,5 +201,6 @@ func Parse(markdown string) Graph {
 		Nodes:     nodes,
 		NodeOrder: nodeOrder,
 		Terminals: terminals,
+		Refused:   refused,
 	}
 }

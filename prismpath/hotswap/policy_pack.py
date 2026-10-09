@@ -252,9 +252,23 @@ def build_manifest(image: bytes, fields: Dict[str, str], version: int,
     }
 
 
+def field_dictionary_of(flow_text: str) -> Dict[str, str]:
+    """The manifest field dictionary of a flow that defines its fields (SPEC section 4.5): each field
+    name with its definition in canonical spelling. Signed into a pack, it binds the interpretation
+    of every value the image compares, the scale, unit, rounding, range and absence, and the
+    envelope gate compares it entry for entry, so a receiver declaring a different scale refuses the
+    pack. A flow that breaks its definitions raises here, as it does at parse."""
+    from prismpath.kernel.parser import parse
+    graph = parse(flow_text)
+    if not graph.fields:
+        raise ValueError("the flow defines no fields, so there is no definition to bind; pass the field "
+                         "dictionary explicitly")
+    return {name: definition.canonical_text() for name, definition in sorted(graph.fields.items())}
+
+
 def build_pack(ppt_path: str, fields: Dict[str, str], version: int, envelope_id: str,
                priv_path: str, pub_path: str, packing: Optional[dict] = None,
-               overlay_of: Optional[str] = None) -> dict:
+               overlay_of: Optional[str] = None, flow_text: Optional[str] = None) -> dict:
     """Sign a `.ppt` into a pack: writes `<ppt>.manifest.json` + `<ppt>.manifest.sig`
     beside the (untouched) image. Returns the manifest.
 
@@ -266,7 +280,20 @@ def build_pack(ppt_path: str, fields: Dict[str, str], version: int, envelope_id:
     `packing` (optional) declares a wire-packing profile whose baked artifact rides the pack,
     e.g. {"profile": "spiral", "sidecar_sha256": <hex of `<ppt>.spiral`>} — built by the
     telemetry adapter's `spiral_pack.write_sidecar`, which lint-gates the flow. The manifest
-    signature then covers the declaration, and `verify_pack` re-hashes the sidecar at load."""
+    signature then covers the declaration, and `verify_pack` re-hashes the sidecar at load.
+
+    `flow_text` (optional) is the authored flow the image was compiled from. When the flow defines its
+    fields, the field dictionary is derived from those definitions and an explicit `fields` must
+    match it. The manifest also records `flow_sha256`, so the signature covers the authored text,
+    decimal thresholds included, beside the image's canonical integers. The image is not recompiled
+    here to check that it came from this flow; that correspondence is the signer's to assert."""
+    flow_sha256 = None
+    if flow_text is not None:
+        derived = field_dictionary_of(flow_text)
+        if fields and dict(fields) != derived:
+            raise ValueError(f"the field dictionary {dict(fields)} differs from the flow's own definitions {derived}")
+        fields = derived
+        flow_sha256 = sha256_hex(flow_text.encode("utf-8"))
     with open(ppt_path, "rb") as handle:
         image = handle.read()
     ok, reasons = validate_image(image)
@@ -281,6 +308,8 @@ def build_pack(ppt_path: str, fields: Dict[str, str], version: int, envelope_id:
                                "sidecar_sha256": packing["sidecar_sha256"]}
     if overlay_of:
         manifest["overlay_of"] = str(overlay_of)
+    if flow_sha256 is not None:
+        manifest["flow_sha256"] = flow_sha256
     priv = _load_private(priv_path)
     sig = priv.sign(canonical_bytes(manifest))
     with open(ppt_path + ".manifest.json", "w") as handle:

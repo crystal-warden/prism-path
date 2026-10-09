@@ -10,6 +10,6 @@ keywords = ["telemetry", "quantization", "policy", "vector", "cli"]
 categories = ["command-line-utilities", "encoding"]
 
 [dependencies]
-prismpath-rs = { path = "../prismpath-rs", version = "0.1.0" }
+prismpath-rs = { path = "../prismpath-rs", version = "0.2.0" }
 prismpath-telemetry-rs = { path = "../prismpath-telemetry-rs", version = "0.2.0" }
 serde_json = "1.0"

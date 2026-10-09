@@ -138,3 +138,38 @@ fn bad_usage_exits_two() {
     let result = run(&["only-one-arg"]);
     assert_eq!(result.status.code(), Some(2));
 }
+
+const DEFINED_FLOW: &str = "---
+name: defined_guard
+start: classify
+field.load: fixed scale=100 unit=ratio rounding=floor min=0 max=100
+field.zone: category absent=allowed
+---
+## classify
+-> critical: when load >= 0.9
+-> unzoned: when zone == None
+-> warn: when load >= 0.5 and zone == \"a\"
+-> ok: else
+## critical
+## unzoned
+## warn
+## ok
+";
+
+#[test]
+fn a_defined_flow_is_judged_by_its_definitions() {
+    // The twin of the Python test of the same name: a numeric string is refused rather than parsed,
+    // a fraction is refused, and an absent zone is a routed value, not a missing field.
+    let (flow, sample, out) = setup("defined", &[
+        r#"{"load": 95, "zone": "a"}"#, r#"{"load": 60}"#, r#"{"load": 60, "zone": null}"#,
+        r#"{"load": 60, "zone": "a"}"#, r#"{"load": "60", "zone": "a"}"#, r#"{"load": 60.5, "zone": "a"}"#]);
+    std::fs::write(&flow, DEFINED_FLOW).unwrap();
+    let result = run(&[flow.to_str().unwrap(), sample.to_str().unwrap(), "--json", out.to_str().unwrap()]);
+    assert_eq!(result.status.code(), Some(1), "{}", String::from_utf8_lossy(&result.stdout));
+    let rep = report(&out);
+    assert_eq!(rep["refused_by_field"], serde_json::json!({"load": {"wrong_type": 1, "fractional": 1}}));
+    assert!(rep.get("missing_by_field").is_none_or(|missing| missing.as_object().is_none_or(|map| map.is_empty())));
+    assert_eq!(rep["encoded"], 4);
+    assert_eq!(rep["route_mismatches"], serde_json::json!([]));
+    assert_eq!(rep["ready"], false);
+}
