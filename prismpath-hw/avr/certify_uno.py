@@ -32,6 +32,7 @@ sys.path.insert(0, str(REPO))
 
 import serial  # noqa: E402
 import ppt_compile as pc  # noqa: E402
+import declared_subset  # noqa: E402
 
 CONF = REPO / "prismpath" / "portable" / "conformance"
 
@@ -87,6 +88,7 @@ def cert_predicates(uno: Uno):
     img_cache: dict = {}
     lat_us = []
     loaded_cond = None
+    kept_ids = []
 
     for i, case in enumerate(cases):
         cond, ctx, expect = case["cond"], case["ctx"], case["expect"]
@@ -99,6 +101,7 @@ def cert_predicates(uno: Uno):
         except pc.SubsetError as e:
             excluded[e.reason] += 1
             continue
+        kept_ids.append(declared_subset.case_id(case))
         if loaded_cond != cond:                 # table-per-condition, like the C cert
             uno.load(blob)
             loaded_cond = cond
@@ -112,6 +115,8 @@ def cert_predicates(uno: Uno):
         else:
             failed += 1
             failures.append((i, cond, ctx, expect, got))
+    # the board certified exactly the frozen declared subset, or the run reports nothing
+    declared_subset.require_frozen(kept_ids, "certify_uno")
     return passed, failed, excluded, failures, lat_us
 
 
