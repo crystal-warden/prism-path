@@ -180,18 +180,22 @@ One rule set decides what a reading value is, on both sides of the stack, frozen
 
 | kind | accepted | converted to | refused, with the reason |
 |---|---|---|---|
-| numeric | an integer within the safe range, an integral float, a bool, a string that is an integer literal with an optional sign | the integer; a bool as 0 or 1 | a fraction (`fractional`), any other string (`unparseable_string`), a value at or beyond 2^53 in magnitude, an infinity or NaN (`out_of_range`), a list or object (`wrong_type`), null (`missing`) |
+| numeric | an integer within the safe range, an integral float, a bool | the integer; a bool as 0 or 1 | a fraction (`fractional`), a value at or beyond 2^53 in magnitude, an infinity or NaN (`out_of_range`), any string, list or object (`wrong_type`), null (`missing`) |
 | boolean | a bool, a number exactly 0 or 1 | the bool | any other number, any string, list or object (`wrong_type`), null (`missing`) |
 | categorical | a string | the string | anything else (`wrong_type`), null (`missing`) |
 
-The checked encoders, `wire.encode_reading_checked` and `wire::encode_reading_checked`, refuse a
-refused value with the field and the reason and never truncate, coerce or read it as zero. The
-permissive `symbol` keeps one compatibility behavior, truthiness on a boolean field. A fraction is
-refused on both paths, never truncated, because truncation moves a reading across a cut and changes
-the decision (found by the Lean formalization's float check, October 2026). It no longer reads a string that is not an
-integer literal as zero on either side; that was a coercion the reference never had. Preflight
-reports `refused_by_field` per field and withholds READY on any refusal, so a sample that
-passes preflight encodes through the checked boundary without a surprise.
+Every encoder, Python and Rust, permissive and checked, applies this one rule, so the encoders
+cannot be told apart: a refused value raises or returns the refusal with the field and the reason,
+and nothing is truncated, parsed, coerced or read as zero. Every conversion in the table is one the
+engine cannot tell apart, so an accepted value takes the route the raw value takes. A fraction is
+refused because truncation moves a reading across a cut (found by the Lean formalization's float
+check, October 2026). A string on a numeric field is refused rather than parsed because the engine
+never orders a string against a number, so `"5"` decoded as 5 routed where the engine would not
+(acceptance corpus version 2, which marks every expectation it changed). Parsing a source's values is
+the adapter's job: Vector's `to_int` in a remap, `int()` in a Python feeder, or, for a flow that
+defines its fields, the canonical conversion of `SPEC.md` §4.5. Preflight reports `refused_by_field`
+per field and withholds READY on any refusal, so a sample that passes preflight encodes without a
+surprise.
 
 ## Durable epochs across a restart
 

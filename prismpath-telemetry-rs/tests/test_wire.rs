@@ -36,7 +36,7 @@ fn test_missing_field_error() {
     let reading = HashMap::new();
 
     let err = w::encode_reading(&parts, &reading).unwrap_err();
-    assert!(err.contains("missing decision fields"));
+    assert!(err.contains("missing"), "{err}");   // a refusal naming the field, as on the checked path
 }
 
 #[test]

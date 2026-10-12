@@ -1,5 +1,6 @@
 {
- "comment": "FROZEN. Boundary parity: expected quantizer symbol at every threshold edge and the 2^53 f64 exactness edge. Both implementation twins replay this file.",
+ "comment": "FROZEN. Boundary parity: expected quantizer symbol at every threshold edge and the 2^53 f64 exactness edge, where every path refuses an integer past the exactly representable range. Both implementation twins replay this file.",
+ "version": 2,
  "flow": "---\nname: boundary_guard\nstart: classify\n---\n## classify\n-> tiny: when mag < 100\n-> small: when mag < 5000\n-> mid: when mag < 1000000\n-> large: when mag < 1000000000\n-> huge: when mag < 1000000000000\n-> extreme: else\n## tiny\n## small\n## mid\n## large\n## huge\n## extreme\n",
  "field": "mag",
  "cells": 6,
@@ -70,11 +71,23 @@
   },
   {
    "value": 9007199254740992,
-   "symbol": 5
+   "refuse": "out_of_range",
+   "changed": {
+    "version": 2,
+    "was": {
+     "symbol": 5
+    }
+   }
   },
   {
    "value": 9007199254740994,
-   "symbol": 5
+   "refuse": "out_of_range",
+   "changed": {
+    "version": 2,
+    "was": {
+     "symbol": 5
+    }
+   }
   },
   {
    "value": 1000000000000000,

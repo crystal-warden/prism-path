@@ -128,6 +128,9 @@ dropped (`on_missing`) desynchronizing positions, which shows up as count drift.
   reading the raw leg; that is the design, not a limitation of the canary.
 - Positional comparison assumes each leg preserves stream order (true for one source feeding one
   sink over one connection). Across reconnects, trust the count and distribution checks and rerun.
-- Numeric fields compare on integers, a fractional value is refused rather than truncated, and
-  integer exactness holds through 2^53 (IEEE 754 double). Preflight counts fractional readings under
-  its refusals.
+- Numeric fields compare on integers, a fractional value is refused rather than truncated, a string
+  is refused rather than parsed, and integer exactness holds through 2^53 (IEEE 754 double). Preflight
+  counts both under its refusals. A source that sends numbers as strings needs a remap that parses
+  them (`to_int`) before the Facet sink. Until the fork is rebuilt on the crates that carry this rule,
+  its encoder still parses integer strings, and the canary reports those events as encoded on the
+  decoded leg while it expects no twin for them, as count drift.

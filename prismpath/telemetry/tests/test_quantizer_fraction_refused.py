@@ -38,10 +38,12 @@ def test_a_fraction_is_refused_on_both_paths(condition, value):
 def test_every_value_the_permissive_path_accepts_routes_as_the_engine_does(condition):
     graph = parse(FLOW.format(condition=condition))
     parts = quantizer.build_partitions(graph)
-    for value in (-2, -1, 0, 1, 2, 3, 4, 7, 8, -1.0, 0.0, 3.0, 7.0, True, False, "3", "-1"):
-        converted = {"x": quantizer.numeric_view(value)}
+    for value in (-2, -1, 0, 1, 2, 3, 4, 7, 8, -1.0, 0.0, 3.0, 7.0, True, False):
         representative = quantizer.reconstruct(parts, quantizer.quantize(parts, {"x": value}))
-        assert _route(graph, converted) == _route(graph, representative), (condition, value)
+        assert _route(graph, {"x": value}) == _route(graph, representative), (condition, value)
+    for text in ("3", "-1"):            # parsed until October 2026; the adapter parses now
+        with pytest.raises(quantizer.InputRefused, match="wrong_type"):
+            quantizer.quantize(parts, {"x": text})
 
 
 def test_non_finite_floats_are_refused():

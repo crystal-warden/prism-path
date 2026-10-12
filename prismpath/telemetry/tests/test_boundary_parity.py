@@ -7,6 +7,8 @@ import json
 import sys
 from pathlib import Path
 
+import pytest
+
 _ADAPTER = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_ADAPTER))
 sys.path.insert(0, str(_ADAPTER.parent.parent))
@@ -22,7 +24,12 @@ def test_boundary_symbols_match_frozen_corpus():
     partition = parts[corpus["field"]]
     assert partition.n == corpus["cells"]
     for probe in corpus["probes"]:
-        assert partition.symbol(probe["value"]) == probe["symbol"], probe
+        if "refuse" in probe:
+            with pytest.raises(quantizer.InputRefused) as refusal:
+                partition.symbol(probe["value"])
+            assert refusal.value.reason == probe["refuse"], probe
+        else:
+            assert partition.symbol(probe["value"]) == probe["symbol"], probe
 
 
 def test_strict_inequality_normalizes_to_closed_integer_intervals():

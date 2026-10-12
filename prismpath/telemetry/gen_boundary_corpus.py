@@ -53,10 +53,18 @@ def main() -> int:
         values += [threshold - 1, threshold, threshold + 1]
     values += [EDGE - 1, EDGE, EDGE + 2, 10**15]
     for value in values:
-        probes.append({"value": value, "symbol": partition.symbol(value)})
+        try:
+            probes.append({"value": value, "symbol": partition.symbol(value)})
+        except quantizer.InputRefused as refusal:
+            # Version 1 gave these the last cell through the permissive path, which accepted integers
+            # past the range every reader represents exactly; since version 2 every path refuses them.
+            probes.append({"value": value, "refuse": refusal.reason,
+                           "changed": {"version": 2, "was": {"symbol": partition.n - 1}}})
     out = {
         "comment": "FROZEN. Boundary parity: expected quantizer symbol at every threshold edge "
-                   "and the 2^53 f64 exactness edge. Both implementation twins replay this file.",
+                   "and the 2^53 f64 exactness edge, where every path refuses an integer past the "
+                   "exactly representable range. Both implementation twins replay this file.",
+        "version": 2,
         "flow": FLOW,
         "field": "mag",
         "cells": partition.n,

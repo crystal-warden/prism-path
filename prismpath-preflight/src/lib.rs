@@ -22,7 +22,7 @@
 use std::collections::HashMap;
 use std::io::BufRead;
 
-use prismpath_rs::{parse, py_truthy, Graph, V};
+use prismpath_rs::{parse, Graph, V};
 use prismpath_telemetry_rs::quantizer::{self, FieldKind, FieldPartition};
 use prismpath_telemetry_rs::{packed, wire, zeckendorf};
 use serde_json::{json, Value};
@@ -74,32 +74,6 @@ pub struct Scan {
     pub unseen: Vec<String>,
     pub codec_errors: usize,
     pub ready: bool,
-}
-
-// Mirrors of the quantizer's private coercions (quantizer.rs `v_to_i64` / `v_to_str`): the
-// preflight must route the SAME view of a value that `symbol()` quantizes, or string coercion
-// would show up as false round-trip mismatches.
-/// The permissive numeric view the crate's `symbol` uses, mirrored here so the report shows the
-/// reading as the encoder will see it: a bool is 0 or 1, a string that is not an integer literal
-/// is an error, never zero, and a fraction is an error, never truncated, as in the crate.
-fn v_to_i64(value: &V) -> Result<i64, String> {
-    match value {
-        V::Num(number) if !number.is_finite() || number.fract() != 0.0 =>
-            Err(format!("{number} is fractional or not finite: refused rather than truncated")),
-        V::Num(number) => Ok(*number as i64),
-        V::Bool(flag) => Ok(i64::from(*flag)),
-        V::Str(text) => text.parse::<i64>().map_err(|_| format!("{text:?} is not an integer literal")),
-        other => Err(format!("{other:?} is not a number")),
-    }
-}
-
-fn v_to_str(value: &V) -> String {
-    match value {
-        V::Str(text) => text.clone(),
-        V::Num(number) => number.to_string(),
-        V::Bool(flag) => if *flag { "True".into() } else { "False".into() },
-        _ => String::new(),
-    }
 }
 
 /// Dot-path lookup, mirroring the codec's `parse_path_and_get_value`: absent and JSON null are
@@ -159,39 +133,20 @@ fn count_detail(counts: &HashMap<String, usize>) -> String {
     detail.join(", ")
 }
 
-/// The reading exactly as the permissive `symbol()` will see it, and the fields acceptance refuses
-/// with the reason each. The contract is what the checked encoder refuses at runtime, so the report
-/// predicts it exactly.
+/// The reading as the codec compares it, which is the reading itself, and the fields acceptance
+/// refuses with the reason each. Since October 2026 the encoder converts nothing a policy could tell
+/// apart, so the route of the reading as it arrives is the route the codec must preserve, and a
+/// refused value is reported, never reshaped. The twin of preflight.py `_codec_view`.
 type CodecView = (HashMap<String, V>, Vec<(String, String)>);
 
 fn codec_view(parts: &HashMap<String, FieldPartition>, reading: &HashMap<String, V>) -> CodecView {
-    let mut seen = HashMap::new();
     let mut refused = Vec::new();
     for (field, value) in reading {
-        let partition = &parts[field];
-        if partition.definition.is_some() {
-            // A defined field is judged by its definition and compared as it arrives: its value is
-            // canonical or refused, never converted.
-            if let Err(error) = partition.checked_symbol(value) {
-                refused.push((field.clone(), error.refusal.reason().to_string()));
-            }
-            seen.insert(field.clone(), value.clone());
-            continue;
+        if let Err(error) = parts[field].checked_symbol(value) {
+            refused.push((field.clone(), error.refusal.reason().to_string()));
         }
-        if let Err(refusal) = quantizer::accept_value(&partition.kind, value) {
-            refused.push((field.clone(), refusal.reason().to_string()));
-        }
-        let out = match partition.kind {
-            FieldKind::Numeric => match v_to_i64(value) {
-                Ok(number) => V::Num(number as f64),
-                Err(_) => value.clone(),   // the permissive encoder will refuse it; keep it visible
-            },
-            FieldKind::Boolean => V::Bool(py_truthy(value)),
-            FieldKind::Categorical => V::Str(v_to_str(value)),
-        };
-        seen.insert(field.clone(), out);
     }
-    (seen, refused)
+    (reading.clone(), refused)
 }
 
 fn branch_nodes(graph: &Graph, nodes: &[String]) -> Vec<String> {

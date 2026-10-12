@@ -47,6 +47,8 @@ fn checked_symbol_follows_the_corpus() {
             let error = outcome.expect_err(&format!("{field} {} must be refused", case["input"]));
             assert_eq!(error.field, field);
             assert_eq!(error.refusal, expected_refusal(case["expect"]["refuse"].as_str().unwrap()), "{field} {}", case["input"]);
+            // one rule since corpus version 2: the permissive path refuses what the checked path refuses
+            assert!(parts[field].symbol(&value).is_err(), "permissive symbol accepted {field} {}", case["input"]);
         }
         checked += 1;
     }
@@ -83,4 +85,28 @@ fn an_unparseable_string_is_never_a_zero_reading() {
     assert!(parts["error_rate"].symbol(&text).is_err(), "the permissive path errors too; it no longer reads the string as zero");
     assert!(parts["error_rate"].symbol(&V::Null).is_err());
     assert_eq!(parts["error_rate"].symbol(&V::Num(0.0)), Ok(0), "the zero cell exists and is reached only by a number");
+}
+
+#[test]
+fn every_change_from_version_1_is_marked() {
+    let corpus = corpus();
+    assert_eq!(corpus["version"], 2);
+    let entries: Vec<&Value> = corpus["cases"].as_array().unwrap().iter().chain(corpus["readings"].as_array().unwrap()).collect();
+    let changed: Vec<&&Value> = entries.iter().filter(|entry| entry.get("changed").is_some()).collect();
+    assert_eq!(changed.len(), 12);
+    for entry in changed {
+        assert_eq!(entry["changed"]["version"], 2);
+        assert_ne!(entry["changed"]["was"], entry["expect"]);
+    }
+}
+
+#[test]
+fn a_numeric_string_is_refused_on_both_paths() {
+    let corpus = corpus();
+    let parts = partitions(&corpus);
+    for text in ["5", "+5", "abc", ""] {
+        let value = V::Str(text.to_string());
+        assert_eq!(parts["error_rate"].checked_symbol(&value).map_err(|error| error.refusal), Err(InputRefusal::WrongType), "{text:?}");
+        assert!(parts["error_rate"].symbol(&value).is_err(), "{text:?}");
+    }
 }

@@ -123,11 +123,14 @@ impl FieldPartition {
     /// partition — unreachable for partitions built by `build_partitions` (open ends), but a
     /// hand-constructed partition can bound both ends, and a library consumer (e.g. a Vector
     /// codec) must never be able to panic the encoder.
+    /// The cell index of a value, or the refusal naming the field and the reason. One rule for every
+    /// encoder, the twin of quantizer.py `symbol`: a defined field takes only canonical values, and an
+    /// inferred field takes what `accept_value` accepts, converted only in ways the engine cannot tell
+    /// apart. Until October 2026 this permissive path also parsed integer strings, read a boolean field
+    /// by truthiness, and turned a number on a categorical field into its string, and each of those
+    /// could change a decision.
     pub fn symbol(&self, value: &V) -> Result<usize, String> {
-        if let Some(definition) = &self.definition {
-            return self.defined_symbol(definition, value).map_err(|reason| format!("{}: {reason} ({value:?})", self.field));
-        }
-        self.present_symbol(value)
+        self.checked_symbol(value).map_err(|error| format!("{error} ({value:?})"))
     }
 
     fn present_symbol(&self, value: &V) -> Result<usize, String> {
@@ -147,10 +150,12 @@ impl FieldPartition {
                 Ok(if prismpath_rs::py_truthy(value) { 1 } else { 0 })
             }
             FieldKind::Categorical => {
-                let text = v_to_str(value);
+                let V::Str(text) = value else {
+                    return Err(format!("{}={:?} is not a string", self.field, value));
+                };
                 for (index, cell) in self.cells.iter().enumerate().take(self.present_cells()) {
                     if let Some(ref constant) = cell.const_val {
-                        if constant == &text {
+                        if constant == text {
                             return Ok(index);
                         }
                     }
@@ -174,25 +179,22 @@ impl FieldPartition {
         }
         let converted = accept_value(&self.kind, value)
             .map_err(|refusal| AcceptanceError { field: self.field.clone(), refusal })?;
-        self.symbol(&converted)
+        self.present_symbol(&converted)
             .map_err(|_| AcceptanceError { field: self.field.clone(), refusal: InputRefusal::OutOfRange })
     }
 }
 
-/// The permissive numeric view `symbol` keeps for compatibility: a bool is 0 or 1 and an integer
-/// literal string is its integer. A string that is not an integer literal and a null are errors,
-/// never zero; reading them as zero was a silent coercion the reference never had, and a preflight
-/// that passed could not predict it. A fraction or a non finite number is an error too, never
-/// truncated: `as i64` truncates toward zero, which moves a reading across a cut (-0.5 against
-/// `x < 0`, 3.5 against `x == 3`) and changes the decision. Found by the Lean formalization's float
-/// check, October 2026.
+/// The integer an accepted numeric value compares as: an integral number, or a bool as 0 or 1. A
+/// fraction or a non finite number is an error, never truncated: `as i64` truncates toward zero,
+/// which moves a reading across a cut (-0.5 against `x < 0`, 3.5 against `x == 3`) and changes the
+/// decision (the Lean formalization's float check, October 2026). A string is an error rather than
+/// parsed, since the engine never orders a string against a number; parsing belongs to the adapter.
 fn v_to_i64(value: &V) -> Result<i64, String> {
     match value {
         V::Num(number) if !number.is_finite() || number.fract() != 0.0 =>
             Err(format!("{number} is fractional or not finite: refused rather than truncated")),
         V::Num(number) => Ok(*number as i64),
         V::Bool(flag) => Ok(if *flag { 1 } else { 0 }),
-        V::Str(text) => text.parse::<i64>().map_err(|_| format!("{text:?} is not an integer literal")),
         other => Err(format!("{other:?} is not a number")),
     }
 }
@@ -255,18 +257,14 @@ impl std::fmt::Display for AcceptanceError {
     }
 }
 
-fn integer_literal(text: &str) -> bool {
-    let digits = text.strip_prefix('+').or_else(|| text.strip_prefix('-')).unwrap_or(text);
-    !digits.is_empty() && digits.bytes().all(|byte| byte.is_ascii_digit())
-}
-
 /// Acceptance for one field kind: the converted value, or the refusal.
 ///
-/// numeric accepts an integer within the safe range, an integral float, a bool as 0 or 1, and a
-/// string that is an integer literal with an optional sign; a fraction is refused rather than
-/// truncated, another string is refused rather than read as zero, null is missing. boolean accepts
-/// a bool and a number exactly 0 or 1. categorical accepts a string only. Anything else is the
-/// wrong type. Python's `accept_value` is the same function; the inputs corpus pins both.
+/// numeric accepts an integer within the safe range, an integral float, and a bool as 0 or 1; a
+/// fraction is refused rather than truncated, a string is the wrong type rather than parsed (since
+/// October 2026; accepting `"5"` as 5 routed it where the engine would not), and null is missing.
+/// boolean accepts a bool and a number exactly 0 or 1. categorical accepts a string only. Anything
+/// else is the wrong type. Every remaining conversion is one the engine cannot tell apart. Python's
+/// `accept_value` is the same function; the inputs corpus pins both.
 pub fn accept_value(kind: &FieldKind, value: &V) -> Result<V, InputRefusal> {
     if matches!(value, V::Null) {
         return Err(InputRefusal::Missing);
@@ -283,13 +281,6 @@ pub fn accept_value(kind: &FieldKind, value: &V) -> Result<V, InputRefusal> {
                         return Err(InputRefusal::Fractional);
                     }
                     *number
-                }
-                V::Str(text) => {
-                    if !integer_literal(text) {
-                        return Err(InputRefusal::UnparseableString);
-                    }
-                    // A literal that overflows f64 parsing is out of range, not unparseable.
-                    text.parse::<f64>().map_err(|_| InputRefusal::OutOfRange)?
                 }
                 _ => return Err(InputRefusal::WrongType),
             };
@@ -330,15 +321,6 @@ pub fn checked_quantize(
         out.insert(field.clone(), parts[field].checked_symbol(value)?);
     }
     Ok(out)
-}
-
-fn v_to_str(value: &V) -> String {
-    match value {
-        V::Str(text) => text.clone(),
-        V::Num(number) => number.to_string(),
-        V::Bool(flag) => if *flag { "True".to_string() } else { "False".to_string() },
-        _ => String::new(),
-    }
 }
 
 /// The integer a constant compares as on a numeric field. A boolean is 0 or 1, because the engine

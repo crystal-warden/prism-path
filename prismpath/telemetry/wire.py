@@ -21,25 +21,20 @@ def _order(parts: Dict[str, "q.FieldPartition"]) -> List[str]:
 
 
 def encode_reading(parts: Dict[str, "q.FieldPartition"], reading: Dict[str, Any]) -> str:
-    """Reading -> bitstream. A flow that infers its fields needs every decision relevant field present.
-    A flow that defines its fields encodes a missing field as its absent cell when the definition allows
-    absence and refuses it otherwise, through the partition's own acceptance."""
+    """Reading -> bitstream, or `quantizer.InputRefused` naming the first field, in canonical order,
+    that is missing or whose value acceptance refuses. Since October 2026 this and
+    `encode_reading_checked` are one encoder: the permissive path no longer parsed, truncated or
+    coerced anything, so the two could not be told apart, and a missing field is a refusal with the
+    reason `missing` rather than a KeyError. A flow that defines its fields encodes a missing field as
+    its absent cell when the definition allows absence."""
     order = _order(parts)
-    missing = [field for field in order if field not in reading and parts[field].definition is None]
-    if missing:
-        raise KeyError(f"reading missing decision fields: {missing}")
-    syms = quantizer.quantize(parts, reading)
+    syms = quantizer.checked_quantize(parts, reading)
     return zeck.encode_stream([syms[field] + 1 for field in order])
 
 
 def encode_reading_checked(parts: Dict[str, "q.FieldPartition"], reading: Dict[str, Any]) -> str:
-    """`encode_reading` behind acceptance (`quantizer.accept_value`): a value the contract
-    refuses raises `quantizer.InputRefused` with the field and the reason instead of being
-    truncated, coerced or read as zero. Encode through this at a runtime boundary; a preflight
-    run over the same sample reports exactly the refusals this will raise."""
-    order = _order(parts)
-    syms = quantizer.checked_quantize(parts, reading)
-    return zeck.encode_stream([syms[field] + 1 for field in order])
+    """`encode_reading`, kept under its earlier name for callers that chose the checked boundary."""
+    return encode_reading(parts, reading)
 
 
 def decode_reading(parts: Dict[str, "q.FieldPartition"], bits: str) -> Dict[str, Any]:

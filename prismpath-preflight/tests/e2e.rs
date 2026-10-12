@@ -98,7 +98,7 @@ fn acceptance_refusal_is_surfaced_and_blocks_ready() {
     let rep = report(&out);
     assert_eq!(rep["encoded"], 1);
     assert_eq!(rep["out_of_partition"]["temp"], 1);
-    assert_eq!(rep["refused_by_field"]["temp"]["unparseable_string"], 1);
+    assert_eq!(rep["refused_by_field"]["temp"]["wrong_type"], 1);   // unparseable_string until corpus v2
     assert!(rep.get("coerced_to_zero_by_field").is_none());
     assert_eq!(rep["ready"], false);
 }

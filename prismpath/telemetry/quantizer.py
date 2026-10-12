@@ -24,7 +24,6 @@ from __future__ import annotations
 
 import ast
 import math
-import re
 from typing import Optional, Any, Dict, List, Optional, Tuple
 
 from prismpath.kernel import field_definitions, level_m, predicates
@@ -105,14 +104,17 @@ def condition_atoms(cond: str) -> List[Tuple[str, str, Any]]:
 
 # ----------------------------------------------------------------- per-field partitions
 def numeric_view(value: Any) -> int:
-    """The integer a numeric field compares on: an int, a bool as 0 or 1, an integral float, or a
-    string that is an integer literal. A fraction is refused rather than truncated, because
-    truncation moves a reading across a cut and changes the decision the engine makes on the reading
-    itself: a reading of -0.5 truncates to 0, so `x < 0` routes differently, and 3.5 truncates to 3,
-    so `x == 3` and `x <= 3` do. Found by the Lean formalization's float check, October 2026."""
+    """The integer a numeric field compares on: an int, a bool as 0 or 1, or an integral float, each
+    of which the engine compares exactly as that integer. A fraction is refused rather than truncated,
+    because truncation moves a reading across a cut and changes the decision the engine makes on the
+    reading itself (found by the Lean formalization's float check, October 2026). A string is refused
+    rather than parsed, because the engine never orders a string against a number, so `"5"` is not 5
+    to the policy (October 2026, step 3 of the reading boundary plan); parsing belongs to the adapter."""
     if isinstance(value, float) and (not math.isfinite(value) or not value.is_integer()):
         raise ValueError(f"{value!r} is fractional or not finite: refused rather than truncated")
-    return int(value)
+    if isinstance(value, bool) or isinstance(value, (int, float)):
+        return int(value)
+    raise ValueError(f"{value!r} is not a number: refused rather than parsed, the adapter parses")
 
 
 class FieldPartition:
@@ -131,9 +133,19 @@ class FieldPartition:
         self.absent_symbol = (self.n - 1) if cells and cells[-1].get("absent") else None
 
     def symbol(self, value: Any) -> int:
+        """The cell index of a value, or InputRefused naming the field and the reason. One rule for
+        every encoder: a defined field takes only canonical values, and an inferred field takes what
+        `accept_value` accepts, converted only in ways the engine cannot tell apart (5.0 as 5, a bool
+        on a numeric field as 0 or 1, 0 or 1 on a boolean field as False or True). Until October 2026
+        this permissive path also parsed integer strings, read a boolean field by truthiness, and sent
+        any non string on a categorical field to the other cell, and each of those could change a
+        decision."""
         if self.definition is not None:
             return self._defined_symbol(value)
-        return self._inferred_symbol(value)
+        reason, converted = accept_value(self.kind, value)
+        if reason is not None:
+            raise InputRefused(self.field, reason, value)
+        return self._inferred_symbol(converted)
 
     def _defined_symbol(self, value: Any) -> int:
         """The symbol of a value on a defined field. Nothing is converted: a value that is not canonical
@@ -177,17 +189,9 @@ class FieldPartition:
         return self.cells[symbol]["rep"]
 
     def checked_symbol(self, value: Any) -> int:
-        """`symbol` behind acceptance: the value is accepted and converted by `accept_value`
-        or the call raises InputRefused naming the field and the reason. This is the runtime
-        boundary a library consumer should encode through; `symbol` keeps its permissive behavior
-        for compatibility (numeric strings and bools as integers, truthiness on boolean fields). A
-        fraction is refused on both paths, never truncated."""
-        if self.definition is not None:
-            return self._defined_symbol(value)
-        reason, converted = accept_value(self.kind, value)
-        if reason is not None:
-            raise InputRefused(self.field, reason, value)
-        return self.symbol(converted)
+        """`symbol`, kept under its earlier name: since October 2026 the two paths share one
+        acceptance rule, so there is no permissive behavior left to opt out of."""
+        return self.symbol(value)
 
 
 # ------------------------------------------------------------------ acceptance
@@ -200,7 +204,6 @@ REFUSAL_WRONG_TYPE = "wrong_type"
 REFUSAL_UNPARSEABLE_STRING = "unparseable_string"
 REFUSAL_FRACTIONAL = "fractional"
 REFUSAL_OUT_OF_RANGE = "out_of_range"
-_INTEGER_LITERAL = re.compile(r"^[+-]?[0-9]+$")
 
 
 class InputRefused(ValueError):
@@ -216,11 +219,12 @@ class InputRefused(ValueError):
 def accept_value(kind: str, value: Any) -> Tuple[Optional[str], Any]:
     """(refusal reason, converted value) for one field kind. None as the reason means accepted.
 
-    numeric accepts an int within the safe range, an integral float, a bool as 0 or 1, and a
-    string that is an integer literal with an optional sign. A fractional number is refused rather
-    than truncated, a string that is not an integer literal is refused rather than read as zero,
-    and null is missing. boolean accepts a bool and a number exactly 0 or 1. categorical accepts a
-    string only. Anything else is the wrong type."""
+    numeric accepts an int within the safe range, an integral float, and a bool as 0 or 1. A
+    fractional number is refused rather than truncated, a string is the wrong type rather than parsed
+    (the engine never orders a string against a number, so accepting `"5"` as 5 changed decisions;
+    the adapter parses), and null is missing. boolean accepts a bool and a number exactly 0 or 1.
+    categorical accepts a string only. Anything else is the wrong type. Every conversion that remains
+    is one the engine cannot tell apart, so an accepted value decides as the raw value would."""
     if value is None:
         return REFUSAL_MISSING, None
     if kind == "numeric":
@@ -233,10 +237,6 @@ def accept_value(kind: str, value: Any) -> Tuple[Optional[str], Any]:
                 return REFUSAL_OUT_OF_RANGE, None
             if value != int(value):
                 return REFUSAL_FRACTIONAL, None
-            integer_value = int(value)
-        elif isinstance(value, str):
-            if not _INTEGER_LITERAL.match(value):
-                return REFUSAL_UNPARSEABLE_STRING, None
             integer_value = int(value)
         else:
             return REFUSAL_WRONG_TYPE, None

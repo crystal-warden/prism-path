@@ -75,13 +75,10 @@ def extract_reading(event: dict, fields: List[str], field_paths: Dict[str, str]
 
 
 def _codec_view(parts: Dict[str, quantizer.FieldPartition], reading: Dict[str, Any]) -> Dict[str, Any]:
-    """The reading as the codec compares it, numeric fields through `quantizer.numeric_view`, the
-    same view the encoder uses. A fraction raises ValueError here as it does in the encoder, and
-    acceptance has already counted it as a refusal."""
-    # A defined field is compared as it arrives: its value is canonical or refused, never converted.
-    return {field: quantizer.numeric_view(value)
-            if parts[field].kind == "numeric" and parts[field].definition is None else value
-            for field, value in reading.items()}
+    """The reading as the codec compares it, which is the reading itself. Since October 2026 the
+    encoder converts nothing a policy could tell apart, so the route of the reading as it arrives is
+    the route the codec must preserve, and a value acceptance refuses is reported, never reshaped."""
+    return dict(reading)
 
 
 # ----------------------------------------------------------------- report pieces
@@ -268,18 +265,7 @@ def scan_sample(
             missing_counts.update(missing)
             continue
 
-        try:
-            seen = _codec_view(parts, reading)
-        except (TypeError, ValueError):
-            for field in order:
-                if parts[field].kind == "numeric":
-                    try:
-                        quantizer.numeric_view(reading[field])   # the encoder's own view, as in Rust
-                    except (TypeError, ValueError):
-                        out_of_partition[field] += 1
-                        oop_examples.setdefault(field, reading[field])
-            continue
-
+        seen = _codec_view(parts, reading)
         try:
             bits = wire.encode_reading(parts, seen)
         except ValueError:

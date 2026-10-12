@@ -16,8 +16,15 @@ fn boundary_symbols_match_frozen_corpus() {
     assert_eq!(p.n as u64, corpus["cells"].as_u64().unwrap());
     for probe in corpus["probes"].as_array().unwrap() {
         let v = probe["value"].as_i64().unwrap();
+        let outcome = p.checked_symbol(&V::Num(v as f64));
+        if let Some(reason) = probe["refuse"].as_str() {
+            // past the exactly representable range every path refuses, since corpus version 2
+            assert_eq!(outcome.map_err(|error| error.refusal.reason()), Err(reason), "value {v}");
+            assert!(p.symbol(&V::Num(v as f64)).is_err(), "the permissive path refuses {v} too");
+            continue;
+        }
         let expected = probe["symbol"].as_u64().unwrap() as usize;
-        let got = p.symbol(&V::Num(v as f64)).unwrap();
+        let got = outcome.unwrap();
         assert_eq!(got, expected, "value {v} quantized to {got}, frozen corpus says {expected}");
     }
 }

@@ -38,21 +38,18 @@ pub fn encode_reading(
     encode_reading_with_codec(&FibonacciWireCodec, parts, reading)
 }
 
+/// A reading through any symbol codec, or the reason it is refused. Since October 2026 this is the
+/// checked path: a missing field or a value acceptance refuses is a refusal naming the field, the
+/// same as `encode_reading_checked`, because the permissive path no longer parsed, truncated or
+/// coerced anything that could tell the two apart. A flow that defines its fields encodes a missing
+/// field as its absent cell when the definition allows absence.
 pub fn encode_reading_with_codec<C: WireCodec>(
     codec: &C,
     parts: &HashMap<String, FieldPartition>,
     reading: &HashMap<String, V>,
 ) -> Result<String, String> {
     let ord = order(parts);
-    let missing: Vec<&str> = ord
-        .iter()
-        .filter(|f| !reading.contains_key(*f) && parts[*f].definition.is_none())
-        .map(|s| s.as_str())
-        .collect();
-    if !missing.is_empty() {
-        return Err(format!("reading missing decision fields: {:?}", missing));
-    }
-    let syms = quantizer::quantize(parts, reading)?;
+    let syms = quantizer::checked_quantize(parts, reading).map_err(|error| error.to_string())?;
     let wire_vals: Vec<usize> = ord.iter().map(|f| syms[f] + 1).collect();
     codec.encode_symbols(&wire_vals)
 }

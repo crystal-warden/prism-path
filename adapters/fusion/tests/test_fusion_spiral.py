@@ -83,7 +83,8 @@ def test_probe_decisions_preserved(probe):
 # ------------------------------------------------------------------ guard rails
 
 def test_missing_field_raises():
-    with pytest.raises(KeyError):
+    # a refusal naming the field and the reason, the same on every encoder since October 2026
+    with pytest.raises(quantizer.InputRefused, match="soc_action: missing"):
         wire.encode_reading(PARTS, {"stability": "still", "dev_mg": 0, "rule_level": 3})
 
 

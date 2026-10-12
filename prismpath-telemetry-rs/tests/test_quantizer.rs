@@ -203,7 +203,8 @@ start: s
     let x = &parts["x"];
     for value in [-0.5, -0.9, 3.5, 7.5, 0.25, f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
         let error = x.symbol(&V::Num(value)).expect_err("a fraction or non finite number must be refused");
-        assert!(error.contains("refused rather than truncated"), "{value}: {error}");
+        // a refusal by reason, the same names Python reports: never a truncated cell
+        assert!(error.contains("fractional") || error.contains("out_of_range"), "{value}: {error}");
     }
     for value in [-1.0, 0.0, 3.0, 7.0] {
         assert!(x.symbol(&V::Num(value)).is_ok(), "an integral float is still its integer: {value}");

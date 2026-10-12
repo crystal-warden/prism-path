@@ -21,13 +21,23 @@ def _scan(lines):
 
 def test_refusals_are_reported_and_block_ready():
     report = _scan(['{"temp": 95, "armed": true}', '{"temp": "hot", "armed": true}', '{"temp": 2.5, "armed": "yes"}'])
-    assert report["refused_by_field"] == {"armed": {"wrong_type": 1}, "temp": {"unparseable_string": 1, "fractional": 1}}
-    # "hot" and 2.5 both: the encoder places neither, since a fraction is refused, never truncated to 2
-    assert report["out_of_partition"] == {"temp": 2}
+    assert report["refused_by_field"] == {"armed": {"wrong_type": 1}, "temp": {"wrong_type": 1, "fractional": 1}}
+    # "hot" and 2.5 both: the encoder places neither, since a fraction is refused, never truncated to 2.
+    # "yes" on the boolean field is placed by neither encoder either: since October 2026 there is no
+    # truthiness path left that read it as true.
+    assert report["out_of_partition"] == {"temp": 2, "armed": 1}
     assert report["ready"] is False
 
 
 def test_clean_sample_has_no_refusals_and_is_ready():
-    report = _scan(['{"temp": 95, "armed": true}', '{"temp": 10, "armed": false}', '{"temp": "60", "armed": 1}'])
+    report = _scan(['{"temp": 95, "armed": true}', '{"temp": 10, "armed": false}', '{"temp": 60, "armed": 1}'])
     assert report["refused_by_field"] == {}
     assert report["ready"] is True
+
+
+def test_a_numeric_string_is_refused_not_parsed():
+    # Accepted as 60 until October 2026, which routed it where the engine, comparing a string with a
+    # number, would not. The adapter parses; the boundary only refuses.
+    report = _scan(['{"temp": "60", "armed": 1}'])
+    assert report["refused_by_field"] == {"temp": {"wrong_type": 1}}
+    assert report["ready"] is False
