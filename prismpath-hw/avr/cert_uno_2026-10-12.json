@@ -1,0 +1,26 @@
+{
+ "board": "ppt-uno/1 atmega328p PPTM-v1",
+ "port": "/dev/ttyACM1",
+ "total": 1112,
+ "in_subset": 147,
+ "pass": 147,
+ "fail": 0,
+ "excluded": {
+  "not-level-m:field-vs-field": 281,
+  "not-level-m:disallowed-or-unparseable": 251,
+  "not-level-m:non-literal-collection": 114,
+  "not-level-m:constant-only": 141,
+  "non-scalar-value": 11,
+  "float-value": 8,
+  "int-out-of-i32": 3,
+  "not-level-m:string-ordering": 119,
+  "not-level-m:substring-in": 36,
+  "not-level-m:nested-container": 1
+ },
+ "latency_us": {
+  "min": 3974,
+  "median": 8264,
+  "max": 11983
+ },
+ "failures": []
+}
