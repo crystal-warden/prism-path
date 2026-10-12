@@ -164,9 +164,9 @@ the C reference on a real packet, at full table bounds.
 
 ### What stands today
 
-The chain in section 5 was the first proof. Since then the target has been certified 124 of 124 against
-the frozen corpus in kernel on aarch64 and x86_64 on every push (`ebpf_kernel` job), the loader attests
-hot swap migrations with a cause code (ledger rows #131 to #135), migration and decision receipts join
+The chain in section 5 was the first proof. Since then the target has been certified against the
+frozen corpus in kernel on every push (`ebpf_kernel` job), 124 of 124 and, since October 2026, the
+enlarged declared subset at 147 of 147; the loader attests hot swap migrations with a cause code (ledger rows #131 to #135), migration and decision receipts join
 one Merkle rooted journal sealed by `seal_receipts.c`, the Facet decode plane certifies 250 of 250 byte
 identical, and the decision delta demo (`decision-delta-demo/`) runs a signed value, state, and time
 trail across three machines. The comparison corpus decided identically here and on six other substrates

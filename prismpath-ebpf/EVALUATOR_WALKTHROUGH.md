@@ -416,7 +416,7 @@ harness that matches what you changed:
 
 | harness | the property it proves |
 |---|---|
-| `loader <ppt> certify <packets.bin>`, built by [cert_corpus.py](cert_corpus.py) | the predicate corpus decides identically in kernel and in the reference; 124 of 124 of the in fragment subset, on aarch64 and x86_64 |
+| `loader <ppt> certify <packets.bin>`, built by [cert_corpus.py](cert_corpus.py) | the predicate corpus decides identically in kernel and in the reference; 147 of 147 of the declared subset (124 of 124 before October 2026), against the frozen expectations |
 | `loader <ppt> run` and `runbatch` | whole flows walk to the same terminal in kernel as on the host |
 | `loader netstorm <a> <b>` | the bank flip is atomic: no torn read under concurrent swaps |
 | [cert_selector.c](cert_selector.c) | the selector's posture trail matches the reference, and the fail safe holds |

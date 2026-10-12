@@ -138,6 +138,13 @@ Over JSON-representable values (null, bool, number, string, array, object):
   is **satisfied** ("unknown → falsy", consistently).
 - `and`/`or` evaluate **all** operands (no observable short-circuit; evaluation is pure) and
   return a boolean.
+- **The portable numeric domain.** The reference compares integers exactly at any size; kernels that
+  hold numbers as IEEE doubles (the JavaScript, Rust and Go kernels) compare them exactly only within
+  plus or minus 2^53 minus 1, and a JSON reader may round a larger integer before any comparison
+  happens. The conformance vectors therefore stop at that edge, and the decision boundary refuses an
+  integer beyond it (the Facet acceptance rules, §4.5). NaN and the infinities have no JSON spelling,
+  so their semantics above are pinned by each implementation's own tests rather than by the
+  language neutral vectors.
 
 ### 4.3 The match-action fragment (Level M) · the synthesizable core
 
@@ -146,13 +153,20 @@ A predicate is in the **match action fragment** iff it is a boolean combination 
 
 - `field OP constant` with `OP ∈ {==, !=, <, <=, >, >=}`, `field` a name, and `constant` an
   **integer** (positive or negative; a leading `-`/`+` on an integer literal folds to a signed
-  `i32` constant; the table stores `val` as signed `i32`), boolean, or string literal (string
-  constants with `==`/`!=` only). The value domain of the fragment is `i32`; **float literals are
-  excluded**: a `field OP <float>` condition is outside the fragment (it has no representation on
-  the i32 match action table), and a sign on anything other than an integer literal (a float, or a
-  field name as in `-x`) does **not** fold and stays outside the language;
+  constant), boolean, or string literal (string constants with `==`/`!=` only). **Float literals are
+  excluded**: a `field OP <float>` condition is outside the fragment, and a sign on anything other
+  than an integer literal (a float, or a field name as in `-x`) does **not** fold and stays outside
+  the language. A decimal literal compared with a `fixed` field is not a float; the parser lowers it
+  to an integer before classification (§4.5);
 - `field in <list of scalar literals>` or its `not in` form;
 - a bare `field` (truthiness of a scalar).
+
+**Integer range.** The fragment's integers are those every kernel compares exactly, plus or minus
+2^53 minus 1, the range field definitions default to (§4.5). A table target stores each constant
+and register as a signed 32 bit integer, so its compiler refuses a constant outside that range
+(`int-out-of-i32`) as a target limit, as the eBPF evaluator refuses a program deeper than its stack.
+That is the one place the classifier and a table compiler may disagree, and the conformance drift
+guard pins that it is the only one.
 
 Fields are worker-emitted scalars plus the engine counters `visits` and `error_count`.
 **Excluded** from the fragment: substring `in`, string *ordering*, field-vs-field comparisons,

@@ -14,7 +14,7 @@ the specification. The crate's only claim to correctness is passing it bit for b
 cargo run --bin conformance -- ../prismpath/portable/conformance
 ```
 
-`CONFORMANCE.md` records the certified result (1079/1079 predicates, 27/27 flows) and the exact
+`CONFORMANCE.md` records the certified result (1112/1112 predicates, 27/27 flows) and the exact
 command. CI runs `cargo test` for this crate on every push.
 
 **What is here.** `src/lib.rs` (the kernel), `src/durable.rs` (checkpoints, Python canonical JSON),

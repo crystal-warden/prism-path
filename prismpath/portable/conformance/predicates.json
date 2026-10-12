@@ -545,6 +545,219 @@
    "expect": true
   },
   {
+   "cond": "when x >= 5",
+   "ctx": {
+    "x": "5"
+   },
+   "expect": false
+  },
+  {
+   "cond": "when x < 5",
+   "ctx": {
+    "x": "5"
+   },
+   "expect": false
+  },
+  {
+   "cond": "when x == 5",
+   "ctx": {
+    "x": "5"
+   },
+   "expect": false
+  },
+  {
+   "cond": "when x != 5",
+   "ctx": {
+    "x": "5"
+   },
+   "expect": true
+  },
+  {
+   "cond": "when x in [5, 6]",
+   "ctx": {
+    "x": "5"
+   },
+   "expect": false
+  },
+  {
+   "cond": "when x not in [5, 6]",
+   "ctx": {
+    "x": "5"
+   },
+   "expect": true
+  },
+  {
+   "cond": "when x",
+   "ctx": {
+    "x": "0"
+   },
+   "expect": true
+  },
+  {
+   "cond": "when x < 3",
+   "ctx": {
+    "x": 2.999999
+   },
+   "expect": true
+  },
+  {
+   "cond": "when x >= 3",
+   "ctx": {
+    "x": 2.999999
+   },
+   "expect": false
+  },
+  {
+   "cond": "when x <= 3",
+   "ctx": {
+    "x": 3.000001
+   },
+   "expect": false
+  },
+  {
+   "cond": "when x == 3",
+   "ctx": {
+    "x": 3.0
+   },
+   "expect": true
+  },
+  {
+   "cond": "when x in [3, 7]",
+   "ctx": {
+    "x": 3.5
+   },
+   "expect": false
+  },
+  {
+   "cond": "when x < 0",
+   "ctx": {
+    "x": -0.5
+   },
+   "expect": true
+  },
+  {
+   "cond": "when x >= 0",
+   "ctx": {
+    "x": -0.0
+   },
+   "expect": true
+  },
+  {
+   "cond": "when x > 9007199254740990",
+   "ctx": {
+    "x": 9007199254740991
+   },
+   "expect": true
+  },
+  {
+   "cond": "when x == 9007199254740991",
+   "ctx": {
+    "x": 9007199254740991
+   },
+   "expect": true
+  },
+  {
+   "cond": "when x < -9007199254740990",
+   "ctx": {
+    "x": -9007199254740991
+   },
+   "expect": true
+  },
+  {
+   "cond": "when x in [1, 2]",
+   "ctx": {},
+   "expect": false
+  },
+  {
+   "cond": "when x not in [1, 2]",
+   "ctx": {},
+   "expect": true
+  },
+  {
+   "cond": "when x not in []",
+   "ctx": {},
+   "expect": true
+  },
+  {
+   "cond": "when x in [None]",
+   "ctx": {},
+   "expect": true
+  },
+  {
+   "cond": "when x in [None]",
+   "ctx": {
+    "x": null
+   },
+   "expect": true
+  },
+  {
+   "cond": "when x not in [None, 1]",
+   "ctx": {},
+   "expect": false
+  },
+  {
+   "cond": "when x != None",
+   "ctx": {},
+   "expect": false
+  },
+  {
+   "cond": "when x != None",
+   "ctx": {
+    "x": 0
+   },
+   "expect": true
+  },
+  {
+   "cond": "when x == None",
+   "ctx": {
+    "x": 0
+   },
+   "expect": false
+  },
+  {
+   "cond": "when x == None",
+   "ctx": {
+    "x": false
+   },
+   "expect": false
+  },
+  {
+   "cond": "when x == None",
+   "ctx": {
+    "x": ""
+   },
+   "expect": false
+  },
+  {
+   "cond": "when not (x < 5)",
+   "ctx": {},
+   "expect": true
+  },
+  {
+   "cond": "when not (x >= 5)",
+   "ctx": {
+    "x": null
+   },
+   "expect": true
+  },
+  {
+   "cond": "when x",
+   "ctx": {
+    "x": null
+   },
+   "expect": false
+  },
+  {
+   "cond": "when x < 5 or x >= 5",
+   "ctx": {},
+   "expect": false
+  },
+  {
+   "cond": "when x != 5",
+   "ctx": {},
+   "expect": true
+  },
+  {
    "cond": "when items < []",
    "ctx": {
     "action": 1000,

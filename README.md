@@ -102,8 +102,8 @@ the pull request. The ten minute tour walks a real flow end to end: **[docs/guid
 
 The same image decided the same 23 corpus readings identically on host Python, the C reference, in
 kernel on aarch64 and x86_64, on both ISAs of an RP2350 and on a Zynq-7020 fabric. Four language kernels
-pass the same 1,079 predicate and 27 flow vectors; the kernel target certifies 124 of 124 in kernel on
-every push; the fabric's signed bound was witnessed on the pins at 34 of 35 and 23 of 24 cycles for the
+pass the same 1,112 predicate and 27 flow vectors; the kernel target certifies its declared subset, 147
+of 147, in kernel on every push; the fabric's signed bound was witnessed on the pins at 34 of 35 and 23 of 24 cycles for the
 comparison images and at most 9 cycles inside a signed 11 across 16,009 evaluations for the resident
 policy. Two tiers are kept distinct so nobody infers that a model backed route compiles to a chip: P0, P1
 and P2 describe how much of a flow runs without a model; Level M is the fragment every hardware target

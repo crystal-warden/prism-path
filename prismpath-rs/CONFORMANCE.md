@@ -1,6 +1,6 @@
 # prismpath-rs · conformance certification against the frozen kernel spec
 
-**Date:** 2026-07-29 · re verified 2026-08-12 on corpus v2 · **Verdict: CONFORMANT**: 1079/1079 predicates, 27/27 flows · Reproduce with:
+**Date:** 2026-07-29 · re verified 2026-08-12 on corpus v2 and 2026-10-12 with the reading boundary cases · **Verdict: CONFORMANT**: 1112/1112 predicates, 27/27 flows · Reproduce with:
 
 ```
 cargo run --bin conformance -- ../prismpath/portable/conformance

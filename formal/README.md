@@ -42,7 +42,7 @@ Plainly:
 - Fibonacci coding round trips and a stream of codes frames itself (I2).
 - The development contains no `sorry`; the dependency audit shows only the standard axioms.
 - The formal construction is bridged to the Python and Rust implementations through generated
-  conformance checks (`FQ/Vectors.lean`, `#guard`, evaluated at every build): 35 Level M predicate
+  conformance checks (`FQ/Vectors.lean`, `#guard`, evaluated at every build): 39 Level M predicate
   cases against the frozen corpus, 90 frozen routes and 164 canonical symbols equal to the corrected
   reference quantizer on every decisions corpus reading, 34 spiral probes, all 108 frozen spiral cells
   at the frozen index, band, and route with the layout derived inside Lean from the policy, the Lean

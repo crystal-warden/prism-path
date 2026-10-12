@@ -221,6 +221,13 @@ def gen_decisions(lines: list, counts: dict) -> None:
         fields = sorted(parts)
         for reading_index, entry in enumerate(case["readings"]):
             reading = entry["reading"]
+            # The model's readings are total, and readingOf fills a gap with 0. A reading missing a
+            # decision field is a different reading to the reference, which reads it as null, so it
+            # is never bridged: a guard that happened to agree would tie Lean to a reading the
+            # reference never saw. Absence enters the model in the formalization's next step.
+            if any(field not in reading or reading[field] is None for field in fields):
+                counts["readings skipped: a decision field missing or null"] += 1
+                continue
             reading_lean = reading_term(reading, fields)
             for node, target in entry["routes"].items():
                 exp = f"some {lean_str(target)}" if target is not None else "none"
@@ -315,12 +322,10 @@ def main() -> int:
         "namespace FQ.Vectors",
         "open FQ",
         "",
-        "/-- A total reading from an association list; absent fields read as 0. The predicate guards",
-        "never see one: check_typed skips a case whose condition references a missing or null field.",
-        "The route and symbol guards can, because they are emitted for every field of the partition;",
-        "there the 0 is not assumed harmless, it is pinned - each guard compares the Lean answer on",
-        "this reading against the reference implementation's answer on the same reading, so a field",
-        "the two treat differently fails `lake build` rather than passing quietly. -/",
+        "/-- A total reading from an association list; a field not listed reads as 0. No guard relies on",
+        "that default: the generator skips, with a counted reason, every predicate case whose condition",
+        "references a missing or null field and every corpus reading missing a decision field, because",
+        "the reference reads absence as null and the model has no null yet. -/",
         "def readingOf (l : List (String × Value)) : Reading := fun f => (l.lookup f).getD (.int 0)",
         "",
     ]

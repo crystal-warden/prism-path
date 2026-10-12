@@ -28,6 +28,7 @@ if "--interp" in sys.argv:
     INTERP = Path(sys.argv[sys.argv.index("--interp") + 1]).resolve()
 
 import ppt_compile as pc                                   # noqa: E402
+import declared_subset                                      # noqa: E402
 from prismpath.kernel.parser import parse                         # noqa: E402
 
 CONF = Path(pc._REPO) / "portable" / "conformance"    # pc._REPO is the package dir (matches tb/)
@@ -61,6 +62,7 @@ def cert_predicates() -> tuple:
     passed = failed = 0
     failures = []
     img_cache: dict = {}
+    kept_ids = []
 
     for case_index, case in enumerate(cases):
         cond, ctx, expect = case["cond"], case["ctx"], case["expect"]
@@ -84,6 +86,7 @@ def cert_predicates() -> tuple:
             # the run, because the run itself is the thing that should never have happened
             raise RuntimeError(f"ERROR case survived the subset filter: {cond!r}")
         (BUILD / "pred_regs.bin").write_bytes(regs)
+        kept_ids.append(declared_subset.case_id(case))
         out = run_interp("eval", BUILD / "pred.ppt", BUILD / "pred_regs.bin")
         got = out.startswith("match")
         if got == expect:
@@ -91,6 +94,8 @@ def cert_predicates() -> tuple:
         else:
             failed += 1
             failures.append((case_index, cond, ctx, expect, got))
+    # the run certified exactly the frozen subset, or it reports nothing
+    declared_subset.require_frozen(kept_ids, "run_vectors")
     return passed, failed, excluded, failures
 
 

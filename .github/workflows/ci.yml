@@ -256,7 +256,7 @@ jobs:
           cd integrations/cpp && python gen_fixture.py && ./build/ppt_replay ../../prismpath-hw/demo/flows/hyst_band.ppt hyst_fixture.bin
       - name: Evidence integrity — every artifact manifest in the tree still matches (snapshot manifests reported)
         run: python tools/evidence_check.py
-      - name: eBPF — build every program and tool (xdp, net, decode plane, selector, a6 rewrite, host tools) + host-side interp cross-check (124/124 vs the reference, no kernel needed)
+      - name: eBPF — build every program and tool (xdp, net, decode plane, selector, a6 rewrite, host tools) + host-side interp cross-check (the frozen declared subset, 147/147 vs the reference, no kernel needed)
         run: |
           make -C prismpath-ebpf
           python3 prismpath-ebpf/cert_corpus.py /tmp/cert_corpus.bin
@@ -285,7 +285,7 @@ jobs:
           python3 prismpath-ebpf/cert_corpus.py /tmp/cert_corpus.bin
           python3 prismpath-ebpf/net_compile.py prismpath-ebpf/net_triage.md \
             prismpath-ebpf/build/seed.ppt prismpath-ebpf/build/seed.names
-      - name: In-kernel corpus conformance (124/124, BPF_PROG_TEST_RUN)
+      - name: In-kernel corpus conformance (147/147, BPF_PROG_TEST_RUN)
         run: cd prismpath-ebpf && sudo ./loader build/seed.ppt certify /tmp/cert_corpus.bin
       - name: In-kernel Facet decode-plane cert (250/250 byte-identical + negative matrix)
         run: cd prismpath-ebpf && sudo -E env "PATH=$PATH" python3 facet_decode_cert.py

@@ -27,6 +27,7 @@ sys.path.insert(0, str(REPO / "prismpath-hw"))
 sys.path.insert(0, str(REPO))
 import ppt_compile as pc                                  # noqa: E402
 from ebpf_table_limits import table_refusals             # noqa: E402
+import declared_subset                                    # noqa: E402
 
 PPT_MAGIC = 0x4D545050
 INTERP = HERE / "interp"
@@ -59,6 +60,7 @@ def main():
 
     records = bytearray()
     kept = 0
+    kept_ids = []
     excl = collections.Counter()
     ref_disagree = 0
     for c in cases:
@@ -91,20 +93,22 @@ def main():
         n_fields = len(img.fields)
         pkt = frame_packet(0, n_fields, regs_bytes)
 
-        exp_target, matched = interp_target(tbl, regs_payload, tmp)
-        if isinstance(expect, bool) and matched != expect:
+        # The kernel is held to the frozen expectation itself: a match is edge 0's target and no match
+        # is -1. The C reference interpreter is a second referee that must agree with the same record.
+        frozen_target = img.nodes[0][1][0][0] if expect is True else -1
+        interp_target_index, matched = interp_target(tbl, regs_payload, tmp)
+        if not isinstance(expect, bool) or matched != expect or interp_target_index != frozen_target:
             ref_disagree += 1                                    # C reference vs recorded expect
-        records += struct.pack("<iI", exp_target, len(tbl)) + tbl + struct.pack("<I", len(pkt)) + pkt
+        records += struct.pack("<iI", frozen_target, len(tbl)) + tbl + struct.pack("<I", len(pkt)) + pkt
         kept += 1
+        kept_ids.append(declared_subset.case_id(c))
 
     out_path.write_bytes(records)
     total = len(cases)
-    EXPECTED_SUBSET = 124   # the declared subset shared with the FPGA C-target (corpus v2, 2026-08-12); see test_conformance_drift
     print(f"PREDICATE CORPUS: {total} frozen vectors")
     print(f"  in declared subset (in-fragment condition + read fields i32-representable): {kept}")
-    if kept != EXPECTED_SUBSET:
-        print(f"  *** WARNING: subset drifted from {EXPECTED_SUBSET} — reconcile FPGA/eBPF evidence "
-              f"(#72/#77) + the drift guard before trusting this run")
+    # refuse, not warn: a smaller subset would certify less and still report every record passing
+    declared_subset.require_frozen(kept_ids, "cert_corpus")
     print(f"  excluded: {sum(excl.values())}")
     for r, n in excl.most_common():
         print(f"     {n:4}  {r}")
