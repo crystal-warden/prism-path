@@ -112,7 +112,8 @@ static int8_t evaluate(uint16_t node, uint16_t *out_target, uint8_t *err) {
 }
 
 /* ---- the demo ---- */
-static const char *BANDS[] = {"contact", "near", "mid", "far"};
+static const char *BANDS[] = {"dark", "contact", "near", "mid", "far"};
+#define N_BANDS 5
 
 /* Connectivity check: print every device that ACKs on the bus. VL53L0X should appear at 0x29. */
 static void scan_i2c(void) {
@@ -146,29 +147,43 @@ int main(void) {
     memcpy(tbl, PROX_TABLE, PROX_TABLE_LEN);            /* bake the signed policy into RAM */
     uint8_t rc = parse_table(PROX_TABLE_LEN);
     memset(regs, 0, sizeof(regs));
-    regs[4] = TY_INT;                                   /* field 0 (dist_mm) is an int */
 
+    /* Every cycle decides. When the sensor cannot be read (not answering, a ranging timeout, an I2C
+       error) the distance register is absent, type none, and the signed table routes it to "dark".
+       Until October 2026 a timeout went in as 65535 mm, "far", a bus error as 0 mm, "contact", and a
+       missing sensor stopped the decisions altogether while the loop scanned the bus. */
+    unsigned cycle = 0;
     for (;;) {
         if (rc != 0) { printf("table parse rc=%d (firmware issue)\r\n", rc); sleep_ms(1000); continue; }
-        if (!sensor_ok) {
-            scan_i2c();                                          /* live bus scan — fiddle wires */
+        if (!sensor_ok && cycle % 8 == 0) {
+            scan_i2c();                                          /* live bus scan, fiddle wires */
             sensor_ok = vl53l0x_init(&tof, I2C_PORT, VL53L0X_ADDR);   /* retry without reflashing */
-            printf(sensor_ok ? "  VL53L0X up at 0x29 -> starting demo\r\n"
-                             : "  VL53L0X (0x29) not answering yet...\r\n");
-            sleep_ms(800);
-            continue;
+            printf(sensor_ok ? "  VL53L0X up at 0x29\r\n" : "  VL53L0X (0x29) not answering\r\n");
         }
-        uint16_t distance_mm = vl53l0x_read_range_single(&tof);
-        int32_t reading = (int32_t)distance_mm;
-        memcpy(regs + 8, &reading, 4);                        /* field 0 value = distance */
+        cycle++;
+        bool present = false;
+        uint16_t distance_mm = 0;
+        if (sensor_ok) {
+            distance_mm = vl53l0x_read_range_single(&tof);
+            present = !(tof.did_timeout || tof.bus_error);
+            if (!present)
+                sensor_ok = false;                               /* re-initialise on the next scan */
+        }
+        int32_t reg_type = present ? TY_INT : TY_NONE;
+        int32_t reading = present ? (int32_t)distance_mm : 0;
+        memcpy(regs + 4, &reg_type, 4);                       /* field 0 type: int, or none when absent */
+        memcpy(regs + 8, &reading, 4);                        /* field 0 value */
         uint8_t err = 0;
         uint16_t target = 0;
         int8_t matched_edge = evaluate(0, &target, &err);
-        int band = (matched_edge >= 0 && matched_edge < 4) ? matched_edge : -1;
+        int band = (matched_edge >= 0 && matched_edge < N_BANDS) ? matched_edge : -1;
 #ifdef PICO_DEFAULT_LED_PIN
-        gpio_put(PICO_DEFAULT_LED_PIN, band == 0 || band == 1);   /* lit when something is near */
+        gpio_put(PICO_DEFAULT_LED_PIN, band == 1 || band == 2);   /* lit when something is near */
 #endif
-        printf("dist=%5u mm  ->  band %d (%s)\r\n", distance_mm, band, band >= 0 ? BANDS[band] : "err");
+        if (present)
+            printf("dist=%5u mm  ->  band %d (%s)\r\n", distance_mm, band, band >= 0 ? BANDS[band] : "err");
+        else
+            printf("dist= absent  ->  band %d (%s)\r\n", band, band >= 0 ? BANDS[band] : "err");
         sleep_ms(120);
     }
 }

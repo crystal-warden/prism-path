@@ -3,8 +3,8 @@
 """Compile the proximity policy to a .ppt and emit it as a C header for the ToF demo firmware.
 
 The MCU decides on-device from the SAME compiler and format every other substrate uses — the table is
-just baked into flash instead of streamed over serial. classify's edges, in order: 0=contact 1=near
-2=mid 3=far, so the returned edge index IS the proximity band.
+just baked into flash instead of streamed over serial. classify's edges, in order: 0=dark 1=contact
+2=near 3=mid 4=far, so the returned edge index IS the proximity band.
 
     python gen_proximity_table.py     # -> table_proximity.h
 """
@@ -22,13 +22,18 @@ from prismpath.kernel.parser import parse
 FLOW = """---
 name: proximity
 start: classify
+field.dist_mm: int min=0 max=65535 absent=allowed
 ---
 ## classify
-Distance in millimetres from the VL53L0X drives a proximity band. Real thresholds, one field.
+Distance in millimetres from the VL53L0X drives a proximity band. Real thresholds, one field. A read
+that failed is absent, never a distance, and the policy routes it to its own band.
+-> dark: when dist_mm == None
 -> contact: when dist_mm < 100
 -> near: when dist_mm < 300
 -> mid: when dist_mm < 800
 -> far: else
+## dark
+-> end: when always
 ## contact
 -> end: when always
 ## near
@@ -41,7 +46,10 @@ Distance in millimetres from the VL53L0X drives a proximity band. Real threshold
 done
 """
 
-BANDS = ["contact", "near", "mid", "far"]
+# Edge order is band order. "dark" is a sensor that could not be read (a timeout, a bus error, no
+# sensor answering): until October 2026 the firmware reported a timeout as 65535 mm, "far", and a bus
+# error as 0 mm, "contact", and the policy had no way to tell either from a real reading.
+BANDS = ["dark", "contact", "near", "mid", "far"]
 
 
 def main() -> int:

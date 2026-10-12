@@ -24,33 +24,33 @@
 /* ---------------------------------------------------------------- I2C helpers */
 static void wr8(vl53l0x_t *s, uint8_t reg, uint8_t val) {
     uint8_t b[2] = {reg, val};
-    i2c_write_blocking(s->i2c, s->addr, b, 2, false);
+    if (i2c_write_blocking(s->i2c, s->addr, b, 2, false) < 0) s->bus_error = true;
 }
 static uint8_t rd8(vl53l0x_t *s, uint8_t reg) {
     uint8_t v = 0;
-    i2c_write_blocking(s->i2c, s->addr, &reg, 1, true);
-    i2c_read_blocking(s->i2c, s->addr, &v, 1, false);
+    if (i2c_write_blocking(s->i2c, s->addr, &reg, 1, true) < 0 || i2c_read_blocking(s->i2c, s->addr, &v, 1, false) < 0)
+        s->bus_error = true;
     return v;
 }
 static void wr16(vl53l0x_t *s, uint8_t reg, uint16_t val) {
     uint8_t b[3] = {reg, (uint8_t)(val >> 8), (uint8_t)(val & 0xFF)};
-    i2c_write_blocking(s->i2c, s->addr, b, 3, false);
+    if (i2c_write_blocking(s->i2c, s->addr, b, 3, false) < 0) s->bus_error = true;
 }
 static uint16_t rd16(vl53l0x_t *s, uint8_t reg) {
     uint8_t v[2] = {0, 0};
-    i2c_write_blocking(s->i2c, s->addr, &reg, 1, true);
-    i2c_read_blocking(s->i2c, s->addr, v, 2, false);
+    if (i2c_write_blocking(s->i2c, s->addr, &reg, 1, true) < 0 || i2c_read_blocking(s->i2c, s->addr, v, 2, false) < 0)
+        s->bus_error = true;
     return ((uint16_t)v[0] << 8) | v[1];
 }
 static void wr_multi(vl53l0x_t *s, uint8_t reg, const uint8_t *src, uint8_t n) {
     uint8_t b[16];
     b[0] = reg;
     memcpy(b + 1, src, n);
-    i2c_write_blocking(s->i2c, s->addr, b, n + 1, false);
+    if (i2c_write_blocking(s->i2c, s->addr, b, n + 1, false) < 0) s->bus_error = true;
 }
 static void rd_multi(vl53l0x_t *s, uint8_t reg, uint8_t *dst, uint8_t n) {
-    i2c_write_blocking(s->i2c, s->addr, &reg, 1, true);
-    i2c_read_blocking(s->i2c, s->addr, dst, n, false);
+    if (i2c_write_blocking(s->i2c, s->addr, &reg, 1, true) < 0 || i2c_read_blocking(s->i2c, s->addr, dst, n, false) < 0)
+        s->bus_error = true;
 }
 
 /* ---------------------------------------------------------------- timeout */
@@ -172,6 +172,8 @@ bool vl53l0x_init(vl53l0x_t *s, i2c_inst_t *i2c, uint8_t addr) {
 
 /* ---------------------------------------------------------------- single-shot range (mm) */
 uint16_t vl53l0x_read_range_single(vl53l0x_t *s) {
+    s->did_timeout = false;
+    s->bus_error = false;
     wr8(s, 0x80, 0x01);
     wr8(s, 0xFF, 0x01);
     wr8(s, 0x00, 0x00);

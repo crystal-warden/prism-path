@@ -17,6 +17,7 @@ typedef struct {
     uint8_t stop_variable;
     uint16_t io_timeout_ms;
     bool did_timeout;
+    bool bus_error;   /* an I2C transfer failed during the last read: its value is not a range */
 } vl53l0x_t;
 
 /* Initialise the sensor on the given I2C bus. Returns true on success. */
