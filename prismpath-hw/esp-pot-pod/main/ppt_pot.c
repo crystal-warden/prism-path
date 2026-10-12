@@ -10,6 +10,7 @@
  * (1024/2048/3072) — a decided band, not a smooth fade. Console left on UART0 for a readable status.
  */
 #include <stdint.h>
+#include <stdbool.h>
 #include <string.h>
 #include <stdio.h>
 #include "freertos/FreeRTOS.h"
@@ -143,9 +144,11 @@ static void led_set(uint8_t duty) {
     ledc_update_duty(LEDC_LOW_SPEED_MODE, LEDC_CHANNEL_0);
 }
 
-/* band (winning edge index) -> LED brightness: four discrete levels */
-static const uint8_t BAND_DUTY[4] = { 0, 24, 96, 255 };
-static const char *BAND_NAME[4] = { "q0", "q1", "q2", "q3" };
+/* band (winning edge index) -> LED brightness: four discrete levels, and dark (band 0, the knob absent)
+ * blinks so a failed read never looks like a position */
+#define N_BANDS 5
+static const uint8_t BAND_DUTY[N_BANDS] = { 0, 0, 24, 96, 255 };
+static const char *BAND_NAME[N_BANDS] = { "dark", "q0", "q1", "q2", "q3" };
 
 void app_main(void) {
     adc_setup();
@@ -157,15 +160,20 @@ void app_main(void) {
 
     while (1) {
         int raw = 0;
-        adc_oneshot_read(adc, POT_ADC_CHAN, &raw);
+        bool read_ok = adc_oneshot_read(adc, POT_ADC_CHAN, &raw) == ESP_OK;
         wr32(regs, 0);                                   /* node 0 = classify (start) */
-        wr32(regs + 4, TY_INT);                          /* field 0 (knob) type */
-        wr32(regs + 8, raw);                             /* field 0 value */
+        wr32(regs + 4, read_ok ? TY_INT : TY_NONE);      /* field 0 (knob) type: absent when the read failed */
+        wr32(regs + 8, read_ok ? raw : 0);               /* field 0 value */
         uint8_t err = 0; uint16_t target = 0;
         int8_t band = evaluate(0, &target, &err);
+        static bool blink = false;
         if (err) { printf("[pot] eval error %u\n", err); led_set(0); }
-        else if (band < 0 || band > 3) { printf("[pot] knob=%4d no band\n", raw); led_set(0); }
-        else {
+        else if (band < 0 || band >= N_BANDS) { printf("[pot] knob=%4d no band\n", raw); led_set(0); }
+        else if (band == 0) {
+            blink = !blink;
+            led_set(blink ? 255 : 0);
+            printf("[pot] knob= absent -> band 0 (dark)\n");
+        } else {
             led_set(BAND_DUTY[band]);
             printf("[pot] knob=%4d -> band %d (%s)\n", raw, band, BAND_NAME[band]);
         }

@@ -6,7 +6,7 @@ Two independent analog fields fused into one decision: `level` (the potentiomete
 (the photoresistor, 0-4095). The interesting property is that the ALERT verdict depends on BOTH fields
 together — knob set high AND the room dark — a fused region neither field reaches alone. Decided
 on-device by the same byte-exact evaluator every substrate certifies; the winning edge index is the
-verdict: 0=alert 1,2=warn 3=ok.
+verdict: 0=blind (a field is absent) 1=alert 2,3=warn 4=ok.
 
     python gen_fusion_table.py     # -> main/fusion_table.h
 """
@@ -25,13 +25,20 @@ FLOW = """---
 name: fusion
 start: classify
 ---
+field.level: int min=0 max=4095 absent=allowed
+field.light: int min=0 max=4095 absent=allowed
+
 ## classify
 Two fields fused: knob position (level) and ambient light. Alert only when set high AND in the dark —
-a region neither field reaches alone.
+a region neither field reaches alone. A field whose ADC read failed is absent, and a verdict that needs
+both fields is not made on one: the pod says it is blind instead.
+-> blind: when level == None or light == None
 -> alert: when level >= 3000 and light < 1000
 -> warn: when level >= 2048
 -> warn: when light < 1000
 -> ok: else
+## blind
+-> end: when always
 ## alert
 -> end: when always
 ## warn
@@ -42,7 +49,7 @@ a region neither field reaches alone.
 done
 """
 
-VERDICTS = ["alert", "warn", "warn", "ok"]     # by classify edge index
+VERDICTS = ["blind", "alert", "warn", "warn", "ok"]     # by classify edge index
 
 
 def main() -> int:

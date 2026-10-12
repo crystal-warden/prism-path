@@ -5,7 +5,7 @@
 One analog field (`knob`, the potentiometer's 0-4095 ADC reading) routed into four decision bands at
 authored thresholds. The ESP32 decides on-device from the SAME compiler and byte-exact format every
 other substrate certifies — the table is baked into flash. classify's edges, in order, ARE the band:
-0=q0 1=q1 2=q2 3=q3. The onboard LED's brightness is driven by the band, so turning the knob steps the
+0=dark (the ADC read failed, the knob is absent) 1=q0 2=q1 3=q2 4=q3. The onboard LED's brightness is driven by the band, so turning the knob steps the
 LED through four discrete levels at exactly these constants (a decided band, not a smooth fade).
 
     python gen_pot_table.py     # -> main/pot_table.h
@@ -25,12 +25,18 @@ FLOW = """---
 name: knob
 start: classify
 ---
+field.knob: int min=0 max=4095 absent=allowed
+
 ## classify
 Potentiometer position (0-4095 from the ADC) drives a decision band. Discrete verdicts, exact thresholds.
+A read the ADC failed is absent, never a position, and is decided first.
+-> dark: when knob == None
 -> q0: when knob < 1024
 -> q1: when knob < 2048
 -> q2: when knob < 3072
 -> q3: else
+## dark
+-> end: when always
 ## q0
 -> end: when always
 ## q1
@@ -43,7 +49,7 @@ Potentiometer position (0-4095 from the ADC) drives a decision band. Discrete ve
 done
 """
 
-BANDS = ["q0", "q1", "q2", "q3"]
+BANDS = ["dark", "q0", "q1", "q2", "q3"]
 
 
 def main() -> int:

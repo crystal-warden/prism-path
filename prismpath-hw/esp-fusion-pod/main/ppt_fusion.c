@@ -6,9 +6,11 @@
  * Field 0 `level` = potentiometer on GPIO15 (ADC2_CH3). Field 1 `light` = photoresistor on GPIO34
  * (ADC1_CH6). The evaluator core is a local copy of interp.c's core, pending conversion to ../ppt_eval.h (eval_copies_check.py). The winning edge is the
  * verdict: alert (red) fires only when BOTH fields say so (knob high AND dark) — a fused region neither
- * field reaches alone; warn (amber) when either alone; ok (green) otherwise. Console left on for status.
+ * field reaches alone; warn (amber) when either alone; ok (green) otherwise; blind (blue) when either
+ * field's ADC read failed, decided before any of them. Console left on for status.
  */
 #include <stdint.h>
+#include <stdbool.h>
 #include <string.h>
 #include <stdio.h>
 #include "freertos/FreeRTOS.h"
@@ -149,9 +151,10 @@ static void rgb(uint8_t red, uint8_t green, uint8_t blue) {
 /* verdict (winning edge index) -> RGB + name */
 static void show(int8_t edge, const char **name) {
     switch (edge) {
-    case 0: rgb(1, 0, 0); *name = "ALERT (red)";  break;   /* high AND dark */
-    case 1: case 2: rgb(1, 1, 0); *name = "warn (amber)"; break;
-    case 3: rgb(0, 1, 0); *name = "ok (green)";   break;
+    case 0: rgb(0, 0, 1); *name = "blind (blue)"; break;   /* a field's read failed: no verdict */
+    case 1: rgb(1, 0, 0); *name = "ALERT (red)";  break;   /* high AND dark */
+    case 2: case 3: rgb(1, 1, 0); *name = "warn (amber)"; break;
+    case 4: rgb(0, 1, 0); *name = "ok (green)";   break;
     default: rgb(0, 0, 0); *name = "none";        break;
     }
 }
@@ -168,11 +171,13 @@ void app_main(void) {
 
     while (1) {
         int level = 0, light = 0;
-        adc_oneshot_read(adc2, LEVEL_ADC_CHAN, &level);
-        adc_oneshot_read(adc1, LIGHT_ADC_CHAN, &light);
+        /* a failed read is written absent (TY_NONE), never as the 0 the variable was initialized to: 0 on
+           light would read as a dark room, 0 on level as a knob turned all the way down */
+        bool level_ok = adc_oneshot_read(adc2, LEVEL_ADC_CHAN, &level) == ESP_OK;
+        bool light_ok = adc_oneshot_read(adc1, LIGHT_ADC_CHAN, &light) == ESP_OK;
         wr32(regs, 0);                                   /* node 0 = classify */
-        wr32(regs + 4, TY_INT); wr32(regs + 8, level);   /* field 0 = level */
-        wr32(regs + 12, TY_INT); wr32(regs + 16, light); /* field 1 = light */
+        wr32(regs + 4, level_ok ? TY_INT : TY_NONE); wr32(regs + 8, level_ok ? level : 0);    /* field 0 = level */
+        wr32(regs + 12, light_ok ? TY_INT : TY_NONE); wr32(regs + 16, light_ok ? light : 0);  /* field 1 = light */
         uint8_t err = 0; uint16_t target = 0;
         int8_t edge = evaluate(0, &target, &err);
         const char *name = "?";
