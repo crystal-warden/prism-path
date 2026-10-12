@@ -295,7 +295,9 @@ Reference implementation `prismpath/telemetry/receipts.py`; referees
   reading that is not canonical is refused. For a policy that infers its fields, the same holds for
   every reading the acceptance rules accept, and every other reading is refused. (Pinned by
   `test_fusion_spiral.py`, `test_policy_forms.py`, `test_acceptance.py` and `test_defined_fields.py`;
-  proven in Lean for the modeled domain.)
+  proven in Lean for the modeled domain: `decision_preservation` for well typed readings,
+  `contract_a` from raw JSON values through acceptance for well kinded policies, and
+  `reconstructX_route` with absence for defined flows, in `formal/FQ/`.)
 
   **Status, October 2026.** Every encoder now applies one acceptance rule, and the only conversions
   left are ones the engine cannot tell apart: an integral number written `5.0` is 5, a boolean on a

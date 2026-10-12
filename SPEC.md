@@ -314,7 +314,9 @@ rational `x`:
 
 So a policy that obeys rule 4 decides on the canonical value exactly as it would decide on the source
 value against its authored thresholds, and a boolean combination of such atoms does too. The lemma is
-stated here as the target of the formalization's next step, where it is to be machine checked.
+proven in Lean (`formal/FQ/Conversion.lean`, `convert_preserves` and `fixed_policy_preserved`), and
+the decoded reading of a canonical reading, absence included, routing as the original is proven there
+too (`formal/FQ/Absence.lean`).
 
 ## 5. The engine contract
 

@@ -5,6 +5,9 @@ import FQ.Reconstruct
 import FQ.Zeckendorf
 import FQ.AlgEq
 import FQ.Spiral
+import FQ.Conversion
+import FQ.Contract
+import FQ.Absence
 /-! The axiom audit: the theorem must depend on nothing beyond Lean's three standard axioms. -/
 #print axioms FQ.decision_preservation
 #print axioms FQ.symbolCount_eq_truthVec
@@ -19,3 +22,10 @@ import FQ.Spiral
 #print axioms FQ.Spiral.spiral_bijection
 #print axioms FQ.Spiral.band_route
 #print axioms FQ.Spiral.band_eq_route_eq
+#print axioms FQ.Conversion.convert_preserves
+#print axioms FQ.Conversion.fixed_policy_preserved
+#print axioms FQ.accept_faithful
+#print axioms FQ.contract_a
+#print axioms FQ.atomAbsent_is_engine_null
+#print axioms FQ.absence_preservation
+#print axioms FQ.reconstructX_route

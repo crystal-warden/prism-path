@@ -34,6 +34,8 @@ from prismpath.telemetry import quantizer as quantizer  # noqa: E402
 PRED = REPO / "prismpath" / "portable" / "conformance" / "predicates.json"
 DEC = REPO / "prismpath" / "telemetry" / "conformance" / "decisions.json"
 SPI = REPO / "adapters" / "fusion" / "conformance" / "spiral_fusion.json"
+INP = REPO / "prismpath" / "telemetry" / "conformance" / "inputs.json"
+FDEF = REPO / "prismpath" / "portable" / "conformance" / "field_definitions.json"
 OUT = REPO / "formal" / "FQ" / "Vectors.lean"
 
 CATCH_ALL = {"else", "otherwise", "always", "default", "_", "true"}
@@ -298,6 +300,99 @@ def gen_zeckendorf(lines: list, counts: dict, upto: int = 300) -> None:
         counts["zeckendorf codes checked against the reference"] += 1
 
 
+def lean_rat(value) -> str:
+    """The exact rational of an int, a float (a binary double is a dyadic rational) or a Fraction."""
+    from fractions import Fraction
+    frac = Fraction(value)
+    if frac.denominator == 1:
+        return f"({frac.numerator} : ℚ)"
+    return f"(({frac.numerator} : ℚ) / {frac.denominator})"
+
+
+def lean_raw(value) -> str:
+    """A JSON value as the model's raw value (FQ.Contract)."""
+    if value is None:
+        return ".null"
+    if isinstance(value, bool):
+        return ".bool true" if value else ".bool false"
+    if isinstance(value, (int, float)):
+        return f".num {lean_rat(value)}"
+    if isinstance(value, str):
+        return f".str {lean_str(value)}"
+    return f".other {'true' if value else 'false'}"
+
+
+LEAN_KIND = {"numeric": ".numeric", "boolean": ".boolean", "categorical": ".categorical"}
+
+
+def gen_acceptance(lines: list, counts: dict) -> None:
+    """Every case of the frozen acceptance corpus: the model's `accept` (FQ.Contract, the function the
+    strict contract is proven over) refuses what the corpus refuses, accepts what it accepts to the same
+    value, and the accepted value lands in the frozen cell."""
+    doc = json.loads(INP.read_text())
+    parts = quantizer.build_partitions(parse(doc["flow"]))
+    all_term, _node_terms = flow_policies(doc["flow"])
+    lines.append(f"\n/-! ## inputs.json (version {doc['version']}, {len(doc['cases'])} cases): the acceptance function -/")
+    lines.append(f"def inputs_all : Policy String := {all_term}")
+    for case_index, case in enumerate(doc["cases"]):
+        field = case["field"]
+        kind = parts[field].kind
+        raw = lean_raw(case["input"])
+        label = f"inputs case {case_index}: {field}={json.dumps(case['input'])}"
+        if "refuse" in case["expect"]:
+            lines.append(f"#guard accept {LEAN_KIND[kind]} ({raw}) == none  -- {label} refused {case['expect']['refuse']}")
+            counts["acceptance refusals checked"] += 1
+            continue
+        _reason, converted = quantizer.accept_value(kind, case["input"])
+        value = lean_value(converted)
+        lines.append(f"#guard accept {LEAN_KIND[kind]} ({raw}) == some ({value})  -- {label}")
+        lines.append(f"#guard ((buildPartitions inputs_all).find? (·.field == {lean_str(field)})).map "
+                     f"(fun q => symbolOf q ({value})) == some {case['expect']['symbol']}  -- {label}")
+        counts["acceptances checked, value and cell"] += 1
+
+
+def gen_conversion(lines: list, counts: dict) -> None:
+    """Every fixed field case of the frozen conversion vectors the model covers: the model's `convert`
+    (FQ.Conversion, the function the conversion lemma is proven over) gives the canonical integer the
+    reference gives, puts an out of range value outside the range, and refuses an off grid value under
+    exact rounding. Cases the model leaves to the implementation (text that does not parse, a binary
+    double with a fraction, a wrong type, absence) are counted, not bridged."""
+    from fractions import Fraction
+    from prismpath.kernel import field_definitions
+    doc = json.loads(FDEF.read_text())
+    lines.append(f"\n/-! ## field_definitions.json (version {doc['version']}): the shared conversion on fixed fields -/")
+    rounding_term = {"floor": ".floor", "ceiling": ".ceiling", "exact": ".exact"}
+    for case_index, case in enumerate(doc["conversion"]):
+        definition = field_definitions.parse_definition("value", case["definition"])
+        raw = case["raw"]
+        if definition.kind != field_definitions.KIND_FIXED:
+            counts["conversion cases skipped: not a fixed field"] += 1
+            continue
+        if isinstance(raw, str):
+            exact = field_definitions.decimal_fraction(raw)
+        elif isinstance(raw, int) and not isinstance(raw, bool):
+            exact = Fraction(raw)
+        elif isinstance(raw, float) and raw.is_integer():
+            exact = Fraction(raw)
+        else:
+            exact = None
+        if exact is None or case.get("refused") in ("unparseable_string", "binary_float", "wrong_type", "missing"):
+            counts["conversion cases skipped: outside the model (parse, type, absence)"] += 1
+            continue
+        call = f"FQ.Conversion.convert {rounding_term[definition.rounding]} {definition.scale} {lean_rat(exact)}"
+        label = f"conversion case {case_index}: {case['definition']} {json.dumps(raw)}"
+        if "canonical" in case:
+            lines.append(f"#guard {call} == some {lean_int(case['canonical'])}  -- {label}")
+        elif case["refused"] == "off_grid":
+            lines.append(f"#guard {call} == none  -- {label} off grid")
+        elif case["refused"] == "out_of_range":
+            lines.append(f"#guard ({call}).map (fun n => decide ({lean_int(definition.minimum)} ≤ n ∧ n ≤ "
+                         f"{lean_int(definition.maximum)})) != some true  -- {label} out of range")
+        else:
+            raise AssertionError(f"unhandled conversion refusal {case['refused']!r}")
+        counts["conversions checked"] += 1
+
+
 def main() -> int:
     from collections import Counter
     counts: Counter = Counter()
@@ -307,6 +402,8 @@ def main() -> int:
     gen_spiral(body, counts)
     gen_spiral_layout(body, counts)
     gen_zeckendorf(body, counts)
+    gen_acceptance(body, counts)
+    gen_conversion(body, counts)
     header = [
         "-- SPDX-License-Identifier: Apache-2.0",
         "-- Copyright 2026 Crystal Warden Supply Chain Labs LLC",
@@ -314,10 +411,14 @@ def main() -> int:
         f"-- predicates.json sha256 {sha(PRED)}",
         f"-- decisions.json   sha256 {sha(DEC)}",
         f"-- spiral_fusion.json sha256 {sha(SPI)}",
+        f"-- inputs.json sha256 {sha(INP)}",
+        f"-- field_definitions.json sha256 {sha(FDEF)}",
         "-- counts: " + ", ".join(f"{name} {count}" for name, count in sorted(counts.items())),
         "import FQ.Partition",
         "import FQ.Zeckendorf",
         "import FQ.Spiral",
+        "import FQ.Contract",
+        "import FQ.Conversion",
         "",
         "namespace FQ.Vectors",
         "open FQ",

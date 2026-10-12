@@ -1,14 +1,17 @@
 name: formal
 
 # The Lean 4 development proving Figueroa quantization (formal/). Mathlib's cache is large, so this
-# runs only when formal/ or the corpora it bridges to change, and on demand. Gate: every module builds,
+# runs only when formal/, the corpora it bridges to, or the reference code it compares against change,
+# and on demand. Gate: every module builds,
 # every #guard bridge check evaluates, the axiom audit prints, and no sorry exists in the sources.
 on:
   push:
     branches: [main]
-    paths: ["formal/**", "prismpath/telemetry/conformance/**", ".github/workflows/formal.yml"]
+    paths: ["formal/**", "prismpath/telemetry/conformance/**", "prismpath/portable/conformance/**",
+            "prismpath/telemetry/quantizer.py", "prismpath/kernel/**", ".github/workflows/formal.yml"]
   pull_request:
-    paths: ["formal/**", "prismpath/telemetry/conformance/**", ".github/workflows/formal.yml"]
+    paths: ["formal/**", "prismpath/telemetry/conformance/**", "prismpath/portable/conformance/**",
+            "prismpath/telemetry/quantizer.py", "prismpath/kernel/**", ".github/workflows/formal.yml"]
   workflow_dispatch:
 
 jobs:

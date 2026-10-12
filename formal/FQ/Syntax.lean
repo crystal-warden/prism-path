@@ -12,11 +12,12 @@ substring `in`, string ordering, runtime collections, and nested containers are 
 and outside this model.
 
 Specification decisions (recorded here; formal/README.md states the boundary they draw):
-1. Readings are integer valued on numeric fields. `Value.int` is `Int`; there is no float. The
-   reference quantizer casts with `int()`; that projection is outside the theorem.
+1. Readings are integer valued on numeric fields. `Value.int` is `Int`; there is no float. Since
+   October 2026 the reference refuses a fractional reading rather than truncating it, and the
+   acceptance boundary from raw JSON values to these readings is modeled in `FQ.Contract`.
 2. Readings are total (`Reading := String → Value`) and, for the theorem, well typed: every field a
    partition covers carries a value of the field's kind (`WellTyped`). Cross kind comparisons and
-   missing fields are outside the theorem, stated so.
+   missing fields are outside I1, stated so; absence as an explicit cell is `FQ.Absence`.
 -/
 
 namespace FQ

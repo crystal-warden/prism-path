@@ -8,5 +8,8 @@ import FQ.Reconstruct
 import FQ.Zeckendorf
 import FQ.AlgEq
 import FQ.Spiral
+import FQ.Conversion
+import FQ.Contract
+import FQ.Absence
 import FQ.Axioms
 import FQ.Vectors

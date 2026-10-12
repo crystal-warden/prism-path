@@ -4,10 +4,14 @@
 -- predicates.json sha256 7ac112866e36147202866f7615ea6592ba828578d04368bebb2d90405e7bb711
 -- decisions.json   sha256 6b68a08de7f57cdd11bee07bd256587094dc353b959d1195473c6880472479c8
 -- spiral_fusion.json sha256 1d9dec55645adfe3a63ba7ee555fc45f2aae69d68c53542574876a96d844eaa4
--- counts: checked 39, cross kind comparison 19, non scalar or float constant 30, not Level M 943, referenced field missing or null 80, routes checked 90, shape not carried (non literal operand) 1, spiral cells checked (index, route, band) 108, spiral gray order equals the reference 1, spiral probes checked 34, symbols checked against the reference 164, zeckendorf codes checked against the reference 300
+-- inputs.json sha256 3af3541d5107695114acbb7d19e0083e3e1e5ff53623cb8427bffbe443a4f7dc
+-- field_definitions.json sha256 50c777852951a0d03d17fcbf9db01c70322af3fb1432d40a76bc47c7df67df18
+-- counts: acceptance refusals checked 31, acceptances checked, value and cell 21, checked 39, conversion cases skipped: not a fixed field 25, conversion cases skipped: outside the model (parse, type, absence) 23, conversions checked 54, cross kind comparison 19, non scalar or float constant 30, not Level M 943, referenced field missing or null 80, routes checked 90, shape not carried (non literal operand) 1, spiral cells checked (index, route, band) 108, spiral gray order equals the reference 1, spiral probes checked 34, symbols checked against the reference 164, zeckendorf codes checked against the reference 300
 import FQ.Partition
 import FQ.Zeckendorf
 import FQ.Spiral
+import FQ.Contract
+import FQ.Conversion
 
 namespace FQ.Vectors
 open FQ
@@ -1007,5 +1011,137 @@ def fusion_layout : List FQ.Spiral.Cell := FQ.Spiral.layout (FQ.Spiral.gray fusi
 #guard FQ.Zeck.encode 298 == [false, true, false, false, true, false, false, false, true, false, false, true, true]
 #guard FQ.Zeck.encode 299 == [false, false, true, false, true, false, false, false, true, false, false, true, true]
 #guard FQ.Zeck.encode 300 == [true, false, true, false, true, false, false, false, true, false, false, true, true]
+
+/-! ## inputs.json (version 2, 52 cases): the acceptance function -/
+def inputs_all : Policy String := [⟨(Cond.cmp "error_rate" .ge (.int 25)), "page"⟩, ⟨(Cond.cmp "error_rate" .ge (.int 5)), "ticket"⟩, ⟨(Cond.truthy "user_facing"), "watch"⟩, ⟨(Cond.cmp "region" .eq (.str "eu")), "hold"⟩, ⟨Cond.tt, "done"⟩]
+#guard accept .numeric (.num (0 : ℚ)) == some (.int 0)  -- inputs case 0: error_rate=0
+#guard ((buildPartitions inputs_all).find? (·.field == "error_rate")).map (fun q => symbolOf q (.int 0)) == some 0  -- inputs case 0: error_rate=0
+#guard accept .numeric (.num (4 : ℚ)) == some (.int 4)  -- inputs case 1: error_rate=4
+#guard ((buildPartitions inputs_all).find? (·.field == "error_rate")).map (fun q => symbolOf q (.int 4)) == some 0  -- inputs case 1: error_rate=4
+#guard accept .numeric (.num (5 : ℚ)) == some (.int 5)  -- inputs case 2: error_rate=5
+#guard ((buildPartitions inputs_all).find? (·.field == "error_rate")).map (fun q => symbolOf q (.int 5)) == some 1  -- inputs case 2: error_rate=5
+#guard accept .numeric (.num (24 : ℚ)) == some (.int 24)  -- inputs case 3: error_rate=24
+#guard ((buildPartitions inputs_all).find? (·.field == "error_rate")).map (fun q => symbolOf q (.int 24)) == some 1  -- inputs case 3: error_rate=24
+#guard accept .numeric (.num (25 : ℚ)) == some (.int 25)  -- inputs case 4: error_rate=25
+#guard ((buildPartitions inputs_all).find? (·.field == "error_rate")).map (fun q => symbolOf q (.int 25)) == some 2  -- inputs case 4: error_rate=25
+#guard accept .numeric (.num (-7 : ℚ)) == some (.int (-7))  -- inputs case 5: error_rate=-7
+#guard ((buildPartitions inputs_all).find? (·.field == "error_rate")).map (fun q => symbolOf q (.int (-7))) == some 0  -- inputs case 5: error_rate=-7
+#guard accept .numeric (.str "5") == none  -- inputs case 6: error_rate="5" refused wrong_type
+#guard accept .numeric (.str "+5") == none  -- inputs case 7: error_rate="+5" refused wrong_type
+#guard accept .numeric (.str "-3") == none  -- inputs case 8: error_rate="-3" refused wrong_type
+#guard accept .numeric (.str "25") == none  -- inputs case 9: error_rate="25" refused wrong_type
+#guard accept .numeric (.num (5 : ℚ)) == some (.int 5)  -- inputs case 10: error_rate=5.0
+#guard ((buildPartitions inputs_all).find? (·.field == "error_rate")).map (fun q => symbolOf q (.int 5)) == some 1  -- inputs case 10: error_rate=5.0
+#guard accept .numeric (.num (25 : ℚ)) == some (.int 25)  -- inputs case 11: error_rate=25.0
+#guard ((buildPartitions inputs_all).find? (·.field == "error_rate")).map (fun q => symbolOf q (.int 25)) == some 2  -- inputs case 11: error_rate=25.0
+#guard accept .numeric (.bool true) == some (.int 1)  -- inputs case 12: error_rate=true
+#guard ((buildPartitions inputs_all).find? (·.field == "error_rate")).map (fun q => symbolOf q (.int 1)) == some 0  -- inputs case 12: error_rate=true
+#guard accept .numeric (.bool false) == some (.int 0)  -- inputs case 13: error_rate=false
+#guard ((buildPartitions inputs_all).find? (·.field == "error_rate")).map (fun q => symbolOf q (.int 0)) == some 0  -- inputs case 13: error_rate=false
+#guard accept .numeric (.num (9007199254740991 : ℚ)) == some (.int 9007199254740991)  -- inputs case 14: error_rate=9007199254740991
+#guard ((buildPartitions inputs_all).find? (·.field == "error_rate")).map (fun q => symbolOf q (.int 9007199254740991)) == some 2  -- inputs case 14: error_rate=9007199254740991
+#guard accept .numeric (.num ((5 : ℚ) / 2)) == none  -- inputs case 15: error_rate=2.5 refused fractional
+#guard accept .numeric (.num ((3504363460047667 : ℚ) / 140737488355328)) == none  -- inputs case 16: error_rate=24.9 refused fractional
+#guard accept .numeric (.num ((-1 : ℚ) / 2)) == none  -- inputs case 17: error_rate=-0.5 refused fractional
+#guard accept .numeric (.str "5.0") == none  -- inputs case 18: error_rate="5.0" refused wrong_type
+#guard accept .numeric (.str " 5") == none  -- inputs case 19: error_rate=" 5" refused wrong_type
+#guard accept .numeric (.str "") == none  -- inputs case 20: error_rate="" refused wrong_type
+#guard accept .numeric (.str "abc") == none  -- inputs case 21: error_rate="abc" refused wrong_type
+#guard accept .numeric (.str "0x10") == none  -- inputs case 22: error_rate="0x10" refused wrong_type
+#guard accept .numeric (.str "1e3") == none  -- inputs case 23: error_rate="1e3" refused wrong_type
+#guard accept .numeric (.null) == none  -- inputs case 24: error_rate=null refused missing
+#guard accept .numeric (.other true) == none  -- inputs case 25: error_rate=[5] refused wrong_type
+#guard accept .numeric (.other true) == none  -- inputs case 26: error_rate={"value": 5} refused wrong_type
+#guard accept .numeric (.num (9007199254740992 : ℚ)) == none  -- inputs case 27: error_rate=9007199254740992 refused out_of_range
+#guard accept .numeric (.num (-9007199254740992 : ℚ)) == none  -- inputs case 28: error_rate=-9007199254740992 refused out_of_range
+#guard accept .numeric (.num (1000000000000000052504760255204420248704468581108159154915854115511802457988908195786371375080447864043704443832883878176942523235360430575644792184786706982848387200926575803737830233794788090059368953234970799945081119038967640880074652742780142494579258788820056842838115669472196386865459400540160 : ℚ)) == none  -- inputs case 29: error_rate=1e+300 refused out_of_range
+#guard accept .boolean (.bool true) == some (.bool true)  -- inputs case 30: user_facing=true
+#guard ((buildPartitions inputs_all).find? (·.field == "user_facing")).map (fun q => symbolOf q (.bool true)) == some 1  -- inputs case 30: user_facing=true
+#guard accept .boolean (.bool false) == some (.bool false)  -- inputs case 31: user_facing=false
+#guard ((buildPartitions inputs_all).find? (·.field == "user_facing")).map (fun q => symbolOf q (.bool false)) == some 0  -- inputs case 31: user_facing=false
+#guard accept .boolean (.num (1 : ℚ)) == some (.bool true)  -- inputs case 32: user_facing=1
+#guard ((buildPartitions inputs_all).find? (·.field == "user_facing")).map (fun q => symbolOf q (.bool true)) == some 1  -- inputs case 32: user_facing=1
+#guard accept .boolean (.num (0 : ℚ)) == some (.bool false)  -- inputs case 33: user_facing=0
+#guard ((buildPartitions inputs_all).find? (·.field == "user_facing")).map (fun q => symbolOf q (.bool false)) == some 0  -- inputs case 33: user_facing=0
+#guard accept .boolean (.num (1 : ℚ)) == some (.bool true)  -- inputs case 34: user_facing=1.0
+#guard ((buildPartitions inputs_all).find? (·.field == "user_facing")).map (fun q => symbolOf q (.bool true)) == some 1  -- inputs case 34: user_facing=1.0
+#guard accept .boolean (.num (0 : ℚ)) == some (.bool false)  -- inputs case 35: user_facing=0.0
+#guard ((buildPartitions inputs_all).find? (·.field == "user_facing")).map (fun q => symbolOf q (.bool false)) == some 0  -- inputs case 35: user_facing=0.0
+#guard accept .boolean (.num (2 : ℚ)) == none  -- inputs case 36: user_facing=2 refused wrong_type
+#guard accept .boolean (.num (-1 : ℚ)) == none  -- inputs case 37: user_facing=-1 refused wrong_type
+#guard accept .boolean (.num ((1 : ℚ) / 2)) == none  -- inputs case 38: user_facing=0.5 refused wrong_type
+#guard accept .boolean (.str "true") == none  -- inputs case 39: user_facing="true" refused wrong_type
+#guard accept .boolean (.str "") == none  -- inputs case 40: user_facing="" refused wrong_type
+#guard accept .boolean (.null) == none  -- inputs case 41: user_facing=null refused missing
+#guard accept .boolean (.other true) == none  -- inputs case 42: user_facing=[true] refused wrong_type
+#guard accept .categorical (.str "eu") == some (.str "eu")  -- inputs case 43: region="eu"
+#guard ((buildPartitions inputs_all).find? (·.field == "region")).map (fun q => symbolOf q (.str "eu")) == some 0  -- inputs case 43: region="eu"
+#guard accept .categorical (.str "us") == some (.str "us")  -- inputs case 44: region="us"
+#guard ((buildPartitions inputs_all).find? (·.field == "region")).map (fun q => symbolOf q (.str "us")) == some 1  -- inputs case 44: region="us"
+#guard accept .categorical (.str "") == some (.str "")  -- inputs case 45: region=""
+#guard ((buildPartitions inputs_all).find? (·.field == "region")).map (fun q => symbolOf q (.str "")) == some 1  -- inputs case 45: region=""
+#guard accept .categorical (.str "EU") == some (.str "EU")  -- inputs case 46: region="EU"
+#guard ((buildPartitions inputs_all).find? (·.field == "region")).map (fun q => symbolOf q (.str "EU")) == some 1  -- inputs case 46: region="EU"
+#guard accept .categorical (.num (5 : ℚ)) == none  -- inputs case 47: region=5 refused wrong_type
+#guard accept .categorical (.bool true) == none  -- inputs case 48: region=true refused wrong_type
+#guard accept .categorical (.null) == none  -- inputs case 49: region=null refused missing
+#guard accept .categorical (.other true) == none  -- inputs case 50: region=["eu"] refused wrong_type
+#guard accept .categorical (.other true) == none  -- inputs case 51: region={"region": "eu"} refused wrong_type
+
+/-! ## field_definitions.json (version 1): the shared conversion on fixed fields -/
+#guard FQ.Conversion.convert .floor 10000 ((223 : ℚ) / 250) == some 8920  -- conversion case 0: fixed scale=10000 unit=ratio rounding=floor min=0 max=10000 "0.892"
+#guard FQ.Conversion.convert .floor 10000 ((17 : ℚ) / 20) == some 8500  -- conversion case 1: fixed scale=10000 unit=ratio rounding=floor min=0 max=10000 "0.85"
+#guard FQ.Conversion.convert .floor 10000 ((8499 : ℚ) / 10000) == some 8499  -- conversion case 2: fixed scale=10000 unit=ratio rounding=floor min=0 max=10000 "0.8499"
+#guard FQ.Conversion.convert .floor 10000 ((84999 : ℚ) / 100000) == some 8499  -- conversion case 3: fixed scale=10000 unit=ratio rounding=floor min=0 max=10000 "0.84999"
+#guard FQ.Conversion.convert .floor 10000 (1 : ℚ) == some 10000  -- conversion case 4: fixed scale=10000 unit=ratio rounding=floor min=0 max=10000 "1"
+#guard FQ.Conversion.convert .floor 10000 (1 : ℚ) == some 10000  -- conversion case 5: fixed scale=10000 unit=ratio rounding=floor min=0 max=10000 "1.0"
+#guard FQ.Conversion.convert .floor 10000 (0 : ℚ) == some 0  -- conversion case 6: fixed scale=10000 unit=ratio rounding=floor min=0 max=10000 "0"
+#guard FQ.Conversion.convert .floor 10000 ((1 : ℚ) / 2) == some 5000  -- conversion case 7: fixed scale=10000 unit=ratio rounding=floor min=0 max=10000 "+0.5"
+#guard FQ.Conversion.convert .floor 10000 ((1 : ℚ) / 2) == some 5000  -- conversion case 8: fixed scale=10000 unit=ratio rounding=floor min=0 max=10000 ".5"
+#guard (FQ.Conversion.convert .floor 10000 (5 : ℚ)).map (fun n => decide (0 ≤ n ∧ n ≤ 10000)) != some true  -- conversion case 9: fixed scale=10000 unit=ratio rounding=floor min=0 max=10000 "5." out of range
+#guard FQ.Conversion.convert .floor 10000 ((17 : ℚ) / 20) == some 8500  -- conversion case 10: fixed scale=10000 unit=ratio rounding=floor min=0 max=10000 "8.5e-1"
+#guard FQ.Conversion.convert .floor 10000 ((1 : ℚ) / 10000) == some 1  -- conversion case 11: fixed scale=10000 unit=ratio rounding=floor min=0 max=10000 "1e-4"
+#guard FQ.Conversion.convert .floor 10000 ((1 : ℚ) / 100000) == some 0  -- conversion case 12: fixed scale=10000 unit=ratio rounding=floor min=0 max=10000 "0.00001"
+#guard (FQ.Conversion.convert .floor 10000 ((-1 : ℚ) / 100000)).map (fun n => decide (0 ≤ n ∧ n ≤ 10000)) != some true  -- conversion case 13: fixed scale=10000 unit=ratio rounding=floor min=0 max=10000 "-0.00001" out of range
+#guard FQ.Conversion.convert .floor 10000 ((100001 : ℚ) / 100000) == some 10000  -- conversion case 14: fixed scale=10000 unit=ratio rounding=floor min=0 max=10000 "1.00001"
+#guard FQ.Conversion.convert .floor 10000 ((17 : ℚ) / 20) == some 8500  -- conversion case 15: fixed scale=10000 unit=ratio rounding=floor min=0 max=10000 "0.85000000000000000000000000"
+#guard FQ.Conversion.convert .floor 10000 ((1 : ℚ) / 2) == some 5000  -- conversion case 26: fixed scale=10000 unit=ratio rounding=floor min=0 max=10000 "+.5"
+#guard (FQ.Conversion.convert .floor 10000 ((-1 : ℚ) / 2)).map (fun n => decide (0 ≤ n ∧ n ≤ 10000)) != some true  -- conversion case 27: fixed scale=10000 unit=ratio rounding=floor min=0 max=10000 "-.5" out of range
+#guard FQ.Conversion.convert .floor 10000 ((1 : ℚ) / 2) == some 5000  -- conversion case 28: fixed scale=10000 unit=ratio rounding=floor min=0 max=10000 "00000.5000"
+#guard FQ.Conversion.convert .floor 10000 ((3 : ℚ) / 20) == some 1500  -- conversion case 29: fixed scale=10000 unit=ratio rounding=floor min=0 max=10000 "1.5E-1"
+#guard FQ.Conversion.convert .floor 10000 (0 : ℚ) == some 0  -- conversion case 30: fixed scale=10000 unit=ratio rounding=floor min=0 max=10000 "0e30"
+#guard FQ.Conversion.convert .floor 10000 (1 : ℚ) == some 10000  -- conversion case 32: fixed scale=10000 unit=ratio rounding=floor min=0 max=10000 "1e+0"
+#guard FQ.Conversion.convert .floor 10000 ((1 : ℚ) / 1000000000000000000000000000) == some 0  -- conversion case 37: fixed scale=10000 unit=ratio rounding=floor min=0 max=10000 "0.000000000000000000000000001"
+#guard FQ.Conversion.convert .floor 10000 ((1 : ℚ) / 10000000000000000000000000000) == some 0  -- conversion case 38: fixed scale=10000 unit=ratio rounding=floor min=0 max=10000 "0.0000000000000000000000000001"
+#guard (FQ.Conversion.convert .floor 10000 (1234567890123456789012345678 : ℚ)).map (fun n => decide (0 ≤ n ∧ n ≤ 10000)) != some true  -- conversion case 39: fixed scale=10000 unit=ratio rounding=floor min=0 max=10000 "1234567890123456789012345678" out of range
+#guard FQ.Conversion.convert .floor 10000 (1 : ℚ) == some 10000  -- conversion case 42: fixed scale=10000 unit=ratio rounding=floor min=0 max=10000 1
+#guard FQ.Conversion.convert .floor 10000 (1 : ℚ) == some 10000  -- conversion case 43: fixed scale=10000 unit=ratio rounding=floor min=0 max=10000 1.0
+#guard FQ.Conversion.convert .floor 10000 (0 : ℚ) == some 0  -- conversion case 44: fixed scale=10000 unit=ratio rounding=floor min=0 max=10000 0
+#guard FQ.Conversion.convert .floor 100 ((29 : ℚ) / 100) == some 29  -- conversion case 49: fixed scale=100 unit=celsius rounding=floor min=-5000 max=5000 "0.29"
+#guard FQ.Conversion.convert .floor 100 ((-291 : ℚ) / 1000) == some (-30)  -- conversion case 50: fixed scale=100 unit=celsius rounding=floor min=-5000 max=5000 "-0.291"
+#guard FQ.Conversion.convert .floor 100 ((-29 : ℚ) / 100) == some (-29)  -- conversion case 51: fixed scale=100 unit=celsius rounding=floor min=-5000 max=5000 "-0.29"
+#guard FQ.Conversion.convert .floor 100 (-50 : ℚ) == some (-5000)  -- conversion case 52: fixed scale=100 unit=celsius rounding=floor min=-5000 max=5000 "-50"
+#guard (FQ.Conversion.convert .floor 100 ((-50001 : ℚ) / 1000)).map (fun n => decide ((-5000) ≤ n ∧ n ≤ 5000)) != some true  -- conversion case 53: fixed scale=100 unit=celsius rounding=floor min=-5000 max=5000 "-50.001" out of range
+#guard FQ.Conversion.convert .floor 100 (50 : ℚ) == some 5000  -- conversion case 54: fixed scale=100 unit=celsius rounding=floor min=-5000 max=5000 "50"
+#guard (FQ.Conversion.convert .floor 100 ((5001 : ℚ) / 100)).map (fun n => decide ((-5000) ≤ n ∧ n ≤ 5000)) != some true  -- conversion case 55: fixed scale=100 unit=celsius rounding=floor min=-5000 max=5000 "50.01" out of range
+#guard FQ.Conversion.convert .floor 100 (-3 : ℚ) == some (-300)  -- conversion case 57: fixed scale=100 unit=celsius rounding=floor min=-5000 max=5000 -3
+#guard FQ.Conversion.convert .floor 100 (-3 : ℚ) == some (-300)  -- conversion case 58: fixed scale=100 unit=celsius rounding=floor min=-5000 max=5000 -3.0
+#guard FQ.Conversion.convert .ceiling 1000 ((1 : ℚ) / 10000) == some 1  -- conversion case 59: fixed scale=1000 unit=seconds rounding=ceiling min=0 max=600000 "0.0001"
+#guard FQ.Conversion.convert .ceiling 1000 ((3 : ℚ) / 2) == some 1500  -- conversion case 60: fixed scale=1000 unit=seconds rounding=ceiling min=0 max=600000 "1.5"
+#guard FQ.Conversion.convert .ceiling 1000 ((15001 : ℚ) / 10000) == some 1501  -- conversion case 61: fixed scale=1000 unit=seconds rounding=ceiling min=0 max=600000 "1.5001"
+#guard FQ.Conversion.convert .ceiling 1000 (0 : ℚ) == some 0  -- conversion case 62: fixed scale=1000 unit=seconds rounding=ceiling min=0 max=600000 "0"
+#guard FQ.Conversion.convert .ceiling 1000 (600 : ℚ) == some 600000  -- conversion case 63: fixed scale=1000 unit=seconds rounding=ceiling min=0 max=600000 "600"
+#guard (FQ.Conversion.convert .ceiling 1000 ((6000001 : ℚ) / 10000)).map (fun n => decide (0 ≤ n ∧ n ≤ 600000)) != some true  -- conversion case 64: fixed scale=1000 unit=seconds rounding=ceiling min=0 max=600000 "600.0001" out of range
+#guard FQ.Conversion.convert .ceiling 1000 ((-1 : ℚ) / 10000) == some 0  -- conversion case 65: fixed scale=1000 unit=seconds rounding=ceiling min=0 max=600000 "-0.0001"
+#guard FQ.Conversion.convert .ceiling 1000 (2 : ℚ) == some 2000  -- conversion case 66: fixed scale=1000 unit=seconds rounding=ceiling min=0 max=600000 2
+#guard FQ.Conversion.convert .exact 100 ((1999 : ℚ) / 100) == some 1999  -- conversion case 67: fixed scale=100 unit=usd rounding=exact min=-100000 max=100000 "19.99"
+#guard FQ.Conversion.convert .exact 100 ((19999 : ℚ) / 1000) == none  -- conversion case 68: fixed scale=100 unit=usd rounding=exact min=-100000 max=100000 "19.999" off grid
+#guard FQ.Conversion.convert .exact 100 ((-1 : ℚ) / 100) == some (-1)  -- conversion case 69: fixed scale=100 unit=usd rounding=exact min=-100000 max=100000 "-0.01"
+#guard FQ.Conversion.convert .exact 100 ((1 : ℚ) / 200) == none  -- conversion case 70: fixed scale=100 unit=usd rounding=exact min=-100000 max=100000 "0.005" off grid
+#guard FQ.Conversion.convert .exact 100 (1000 : ℚ) == some 100000  -- conversion case 71: fixed scale=100 unit=usd rounding=exact min=-100000 max=100000 "1000"
+#guard (FQ.Conversion.convert .exact 100 ((100001 : ℚ) / 100)).map (fun n => decide ((-100000) ≤ n ∧ n ≤ 100000)) != some true  -- conversion case 72: fixed scale=100 unit=usd rounding=exact min=-100000 max=100000 "1000.01" out of range
+#guard FQ.Conversion.convert .exact 100 (100 : ℚ) == some 10000  -- conversion case 73: fixed scale=100 unit=usd rounding=exact min=-100000 max=100000 "1e2"
+#guard FQ.Conversion.convert .exact 100 (15 : ℚ) == some 1500  -- conversion case 74: fixed scale=100 unit=usd rounding=exact min=-100000 max=100000 "1.5e1"
+#guard FQ.Conversion.convert .exact 100 (20 : ℚ) == some 2000  -- conversion case 76: fixed scale=100 unit=usd rounding=exact min=-100000 max=100000 20
 
 end FQ.Vectors
