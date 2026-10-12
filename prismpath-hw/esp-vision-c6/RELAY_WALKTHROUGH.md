@@ -112,7 +112,10 @@ Once a second the relay turns its own counters into three fields and walks
 [flows/hop_power.md](flows/hop_power.md):
 
 - `give_up_run`, sub frames given up in a row;
-- `retry_pct`, retries per hundred sub frames over the last ten one second buckets;
+- `retry_pct`, retries per hundred sub frames over the last ten one second buckets, written absent when
+  those buckets carried no sub frames at all, so that no comparison on it holds and the flow falls to its
+  `else` route, full power (until October 2026 an empty window read as 0 percent, a perfect link, and
+  allowed `step_down` with nothing measured);
 - `backoff`, how far the transmitter sits below full power in dB, zero at `LEVEL_FULL` (20 dBm) and
   forty four at `LEVEL_FLOOR` (minus 24 dBm).
 
@@ -126,7 +129,7 @@ stays at full power for good; the start up log says which of the two happened.
 
 Whenever the route changes, or the level changes, or ten seconds pass, the relay emits a `PWR2` record:
 the timestamp, the route, the step count, the resulting level, and the two inputs `give_up_run` and
-`retry_pct`, followed by an Ed25519 signature over all of that. The key is the relay's own, generated
+`retry_pct` (0xFFFF when the rate was absent), followed by an Ed25519 signature over all of that. The key is the relay's own, generated
 once and kept in non volatile storage by `relay_key_init`, and published as `PUB1` at boot, on the `'K'`
 command, and once a minute alongside the counters.
 
@@ -332,5 +335,6 @@ radio queue holds. There is no second task; the ordering in that loop is the who
 The air relay's evaluator has its own replay app, [main/relay_replay.c](main/relay_replay.c). The host
 sends field triples as an `RPL2` record; the relay walks the same table image the air relay carries with
 the same shared evaluator and returns a route and a step count for each as `RES2`, to be compared
-against the host engine. That is what makes the relay's power decisions a conformant PrismPath
+against the host engine. A `retry_pct` below zero is loaded absent, the way the air relay loads an empty
+window, so the grid certifies the absent decision too. That is what makes the relay's power decisions a conformant PrismPath
 evaluation on RISC-V rather than firmware that resembles one.

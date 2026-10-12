@@ -1,0 +1,17 @@
+{
+ "board": "XIAO ESP32-C6 air relay C6-B (10:bd:a3:9f:a4:f8), relay_replay.c, RISC-V",
+ "date": "2026-10-12",
+ "flow": "prismpath-hw/esp-vision-c6/flows/hop_power.md (table 144 B, unchanged)",
+ "grid": "give_up_run 0..16 x retry_pct {absent, 0..160} x backoff 0..44",
+ "absent_convention": "retry_pct below 0 is loaded TY_NONE on the relay and read as None by the host engine",
+ "cases": 123930,
+ "agree": 123930,
+ "mismatches": 0,
+ "runner": "cw-strategy decision-sufficient-vision/tools/c6_replay.py",
+ "transcript": [
+  "123930 cases: give_up_run 0..16, retry_pct absent and 0..160, backoff 0..44; nodes ['window', 'full_power', 'step_up', 'step_down', 'hold']",
+  "relay decided 123930 cases in 490.4 s",
+  "host engine decided 123930 cases in 2.8 s; routes {'full_power': 67018, 'step_down': 2112, 'hold': 8688, 'step_up': 46112}",
+  "agreement: 123930/123930 routes and step counts identical; mismatches 0"
+ ]
+}

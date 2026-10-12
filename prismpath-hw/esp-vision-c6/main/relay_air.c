@@ -45,9 +45,10 @@ typedef struct __attribute__((packed)) {
     uint64_t t_us;
     uint16_t target, steps;
     int8_t level;
-    uint16_t give_up_run, retry_pct;
+    uint16_t give_up_run, retry_pct;   // retry_pct is RETRY_PCT_ABSENT when the window carried no sub frames
     uint8_t sig[64];
 } pwr_t;
+#define RETRY_PCT_ABSENT 0xFFFFu
 static uint8_t relay_sk[64], relay_pk[32];
 static bool relay_key = false;
 static void relay_key_init(void) {
@@ -80,10 +81,16 @@ static void set_level(int8_t wanted_level) {
         esp_ieee802154_set_txpower(level);
     }
 }
+// retry_pct below 0 means the window carried no sub frames, so there is no rate to read: the register is written
+// absent, every comparison on it is unsatisfied, and the signed table falls to its else route (full power). Writing
+// 0 instead read an idle link as a perfect one and let the relay step its power down with nothing measured.
 static uint16_t policy_decide(int32_t gur, int32_t retry_pct, int32_t backoff, uint16_t *steps_out) {
     memset(regs, 0, sizeof regs);
     set_reg(REG_give_up_run, gur);
-    set_reg(REG_retry_pct, retry_pct);
+    if (retry_pct < 0)
+        set_reg_typed(REG_retry_pct, TY_NONE, 0);
+    else
+        set_reg(REG_retry_pct, retry_pct);
     set_reg(REG_backoff, backoff);
     uint16_t node = start_node, target = 0, steps = 0;
     uint8_t err = 0;
@@ -404,7 +411,7 @@ void app_main(void) {
                 retries += win_retry[entry_index];
                 sf += win_sub[entry_index];
             }
-            int32_t retry_pct = (int32_t)(sf ? (100u * retries) / sf : 0);
+            int32_t retry_pct = sf ? (int32_t)((100u * retries) / sf) : -1;   // -1: no sub frames, no rate
             if (policy_ok) {
                 uint16_t steps;
                 uint16_t target = policy_decide(give_up_run, retry_pct, LEVEL_FULL - level, &steps);
@@ -425,7 +432,7 @@ void app_main(void) {
                                 steps,
                                 level,
                                 give_up_run,
-                                (uint16_t)retry_pct,
+                                retry_pct < 0 ? RETRY_PCT_ABSENT : (uint16_t)retry_pct,
                                 {0}};
                     if (relay_key)
                         crypto_ed25519_sign(pw.sig, relay_sk, (const uint8_t *)&pw, sizeof pw - 64);
@@ -433,9 +440,14 @@ void app_main(void) {
                     pm.len = sizeof pw;
                     xQueueSend(qpwr, &pm, 0);
                     t_pwr = esp_timer_get_time();
-                    if (target != last_target || level != before)
-                        ESP_LOGI(TAG, "power policy: %s (give ups in a row %u, retries %ld%%, backoff %d dB) -> %d dBm",
-                                 name, give_up_run, (long)retry_pct, LEVEL_FULL - before, level);
+                    if (target != last_target || level != before) {
+                        if (retry_pct < 0)
+                            ESP_LOGI(TAG, "power policy: %s (give ups in a row %u, retries absent, backoff %d dB) -> %d dBm",
+                                     name, give_up_run, LEVEL_FULL - before, level);
+                        else
+                            ESP_LOGI(TAG, "power policy: %s (give ups in a row %u, retries %ld%%, backoff %d dB) -> %d dBm",
+                                     name, give_up_run, (long)retry_pct, LEVEL_FULL - before, level);
+                    }
                 }
                 last_target = target;
             }

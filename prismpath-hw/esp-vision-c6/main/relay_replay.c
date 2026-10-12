@@ -5,6 +5,7 @@
 // (ppt_eval.h) and returns the route and step count for each, to be compared with the host engine.
 //   in:  "RPL2" | n u32 | (give_up_run i32, retry_pct i32, backoff i32) x n
 //   out: "RES2" | n u32 | (target u16, steps u16) x n
+// A retry_pct below 0 is loaded absent, as relay_air.c loads a window that carried no sub frames.
 #include <stdio.h>
 #include <string.h>
 #include "freertos/FreeRTOS.h"
@@ -30,7 +31,7 @@ void app_main(void)
             int32_t fields[3]; usb_read_all((uint8_t *)fields, 12);
             uint16_t node = 0xffff, steps = 0;
             if (rc == 0) {
-                memset(regs, 0, sizeof regs); set_reg(REG_give_up_run, fields[0]); set_reg(REG_retry_pct, fields[1]); set_reg(REG_backoff, fields[2]);
+                memset(regs, 0, sizeof regs); set_reg(REG_give_up_run, fields[0]); if (fields[1] < 0) set_reg_typed(REG_retry_pct, TY_NONE, 0); else set_reg(REG_retry_pct, fields[1]); set_reg(REG_backoff, fields[2]);
                 uint16_t target = 0; uint8_t err = 0; node = start_node;
                 while (steps < max_steps && node_edge_count(node) > 0) { int8_t matched_edge = evaluate(node, &target, &err); if (matched_edge < 0 || err) break; node = target; steps++; }
             }
