@@ -62,3 +62,16 @@ def test_facet_cli_with_reading_file(tmp_path, capsys):
     assert rc == 0
     quant_out = capsys.readouterr().out.strip()
     assert quant_out == "(1, 0, 0)"
+
+
+def test_a_refused_payload_is_reported_not_raised(tmp_path, capsys):
+    # One acceptance rule since October 2026: a number sent as a string and a missing field are
+    # refusals with the field and the reason, exit 2, never a traceback or a parsed value.
+    from prismpath.cli import main
+    flow = tmp_path / "flow.md"
+    flow.write_text("---\nname: t\nstart: s\n---\n## s\n-> hot: when temp >= 50\n-> cold: else\n## hot\n## cold\n")
+    assert main(["facet", "encode", str(flow), '{"temp": "60"}']) == 2
+    assert "refused temp: wrong_type" in capsys.readouterr().err
+    assert main(["facet", "quantize", str(flow), "{}"]) == 2
+    assert "refused temp: missing" in capsys.readouterr().err
+    assert main(["facet", "encode", str(flow), '{"temp": 60}']) == 0

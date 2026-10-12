@@ -1214,11 +1214,13 @@ def facet_cmd(args) -> int:
             reading = json.loads(args.payload)
 
         order = sorted(parts.keys())
-        missing = [field_name for field_name in order if field_name not in reading]
-        if missing:
-            raise KeyError(f"reading missing decision fields: {missing}")
-
-        syms = quantizer.quantize(parts, reading)
+        # The one acceptance rule: a missing field or a refused value is reported with the field and
+        # the reason, and a defined field that allows absence encodes its absent cell.
+        try:
+            syms = quantizer.checked_quantize(parts, reading)
+        except quantizer.InputRefused as refusal:
+            print(f"facet: refused {refusal.field}: {refusal.reason} ({refusal.value!r})", file=sys.stderr)
+            return 2
 
         if action == 'quantize':
             symbol_tuple = tuple(syms[field_name] for field_name in order)
