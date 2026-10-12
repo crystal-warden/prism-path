@@ -253,9 +253,21 @@ Ethernet/IPv4/TCP-UDP into a fixed canonical register file; `0 src_ip · 1 dst_i
 `net_compile.py` compiles a triage flow (`net_triage.md`) with that schema pre-seeded so field indices
 line up with the parser's slots.
 
+A field the packet does not carry is absent, never 0: ports only on the first fragment of a TCP or UDP
+packet with its whole header in the frame, `tcp_flags` only on such a TCP packet. Until October 2026 each
+read 0, so `dst_port < 1024` held for every ICMP packet and a later UDP fragment whose payload began with
+two bytes of 22 classified as ssh. An address is carried as its u32 bit pattern in the s32 register,
+which decides `==`, `!=`, `in`, `not in` and truthiness exactly and an ordering wrongly from 128.0.0.0 up,
+so `net_compile.py` refuses an ordering on `src_ip` or `dst_ip` and any negative constant on one.
+`net_cert.py` builds 30 crafted frames over three flows, each frame's expected route decided by the host
+engine on a reading parsed independently from the header layouts, and `loader x netcert` replays the
+90 records through `ppt_net_prog` (CI runs it in the `ebpf_kernel` job). The previous front end fails 12
+of them; this one passes all 90, with no latency change measurable above run to run noise.
+
 Loader modes: `netattach <ppt> <iface>` (populate table + attach XDP in SKB mode + pin the histogram),
 `netstats [names]` (read the per-target histogram), `netdetach <iface>`, `netbench <ppt>` (per packet
-latency via `BPF_PROG_TEST_RUN`), `netupdate <new.ppt> <iface>` (live policy hot swap; below).
+latency via `BPF_PROG_TEST_RUN`), `netupdate <new.ppt> <iface>` (live policy hot swap; below),
+`netcert <frames.bin>` (front end conformance, above).
 
 - **Live traffic:** attached observe only on `span0` (the gretap mirroring all home traffic), the
   `net_triage` table (ssh/dns/http/https/icmp/jumbo/other) classified **7,491 real packets in kernel**

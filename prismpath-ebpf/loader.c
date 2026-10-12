@@ -422,17 +422,20 @@ static int runbatch_flow(const char *ppt_path, const char *records_path, char **
     return (total > 0 && passed == total) ? 0 : 1;
 }
 
-static int certify_bpf(const char *packets_path) {
-    struct bpf_object *obj = bpf_object__open_file("ppt_xdp.bpf.o", NULL);
-    if (!obj) { fprintf(stderr, "error: failed to open ppt_xdp.bpf.o (run 'make').\n"); return -1; }
+/* The same records certify two programs: ppt_xdp, whose packets carry a PPT register file, and ppt_net,
+ * whose packets are real Ethernet/IPv4 frames its front end parses (netcert, built by net_cert.py). */
+static int certify_program(const char *object_path, const char *program_name, const char *title,
+                           const char *packets_path) {
+    struct bpf_object *obj = bpf_object__open_file(object_path, NULL);
+    if (!obj) { fprintf(stderr, "error: failed to open %s (run 'make').\n", object_path); return -1; }
     if (bpf_object__load(obj)) {
         fprintf(stderr, "error: bpf load failed (verifier / CAP_BPF).\n");
         bpf_object__close(obj); return -1;
     }
-    struct bpf_program *prog = bpf_object__find_program_by_name(obj, "ppt_xdp_prog");
+    struct bpf_program *prog = bpf_object__find_program_by_name(obj, program_name);
     struct bpf_map *result_map = bpf_object__find_map_by_name(obj, "result_map");
     if (!prog || !result_map) {
-        fprintf(stderr, "error: ppt_xdp_prog / result_map not found in object.\n");
+        fprintf(stderr, "error: %s / result_map not found in %s.\n", program_name, object_path);
         bpf_object__close(obj); return -1;
     }
     int prog_fd = bpf_program__fd(prog);
@@ -444,7 +447,7 @@ static int certify_bpf(const char *packets_path) {
      * maps are repopulated per vector before the in-kernel run. The BPF program bounds every access by
      * config_map's counts, so stale higher-index map entries from a larger prior table are never read.
      * Record format (LE): <s32 expected_target><u32 tbl_len><tbl><u32 pkt_len><pkt>. */
-    printf("\n[eBPF in-kernel conformance — BPF_PROG_TEST_RUN, table-per-vector]\n");
+    printf("\n[%s, BPF_PROG_TEST_RUN, table per vector]\n", title);
     long off = 0; int total = 0, passed = 0, first_fail = -1;
     uint8_t out_buf[2048];
     while (off + 4 <= flen) {
@@ -489,7 +492,7 @@ static int certify_bpf(const char *packets_path) {
     free(buf);
     bpf_object__close(obj);
     if (total == 0) { fprintf(stderr, "error: no vectors read from %s\n", packets_path); return 2; }
-    printf("\neBPF in-kernel conformance: %d/%d vectors match the reference.\n", passed, total);
+    printf("\n%s: %d/%d vectors match the reference.\n", title, passed, total);
     if (first_fail >= 0) printf("  (first mismatch at vector %d)\n", first_fail);
     else printf("  ALL PASS — every in-fragment vector routed identically in-kernel and by the reference.\n");
     return (passed == total) ? 0 : 1;
@@ -941,7 +944,12 @@ static int cmd_readresult(int argc, char **argv) {
 static int cmd_certify(int argc, char **argv) {
     (void)argc;
     /* Each vector in the corpus file carries its own compiled table; argv[1] (ppt) is unused here. */
-    return certify_bpf(argv[3]);
+    return certify_program("ppt_xdp.bpf.o", "ppt_xdp_prog", "eBPF in-kernel conformance", argv[3]);
+}
+
+static int cmd_netcert(int argc, char **argv) {
+    (void)argc;
+    return certify_program("ppt_net.bpf.o", "ppt_net_prog", "ppt_net real packet front end conformance", argv[3]);
 }
 
 static int cmd_selattach(int argc, char **argv) {
@@ -1028,6 +1036,8 @@ static const struct loader_command LOADER_COMMANDS[] = {
       cmd_readresult, "<image.ppt> readresult" },
     { "certify", 4, "error: 'certify' loads the program into the kernel — run as root / CAP_BPF.\n",
       cmd_certify, "<image.ppt> certify <packets.bin>   (in-kernel conformance; root)" },
+    { "netcert", 4, "error: 'netcert' loads the program into the kernel, run as root / CAP_BPF.\n",
+      cmd_netcert, "x netcert <frames.bin>               (real packet front end vs the host engine; root)" },
     { "selattach", 4, "error: 'selattach' needs root.\n",
       cmd_selattach, "<policy.ppt> selattach <iface> [native]  (deploy resident selector, pin state; root)" },
     { "selstate", 3, NULL,

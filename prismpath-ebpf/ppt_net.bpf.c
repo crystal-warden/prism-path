@@ -14,7 +14,14 @@
  *
  * Canonical field ABI (must match the pre-seeded schema the flow is compiled with):
  *   0 src_ip   1 dst_ip   2 src_port   3 dst_port   4 protocol   5 pkt_len   6 tcp_flags   7 ttl
- * All are TY_INT. IPs are host-order u32 stored in the s32 val (bit-equality holds for ==/!=).
+ * A field the packet carries is TY_INT; a field it does not carry is absent (TY_NONE), never 0.
+ * Ports are absent unless the packet is TCP or UDP with its whole header in the frame and is the
+ * first fragment (a later fragment's L4 bytes are payload, not a header); tcp_flags likewise for TCP.
+ * Until October 2026 each of these read 0, so `dst_port < 1024` held for every ICMP packet.
+ * IPs are the host-order u32 address carried as its bit pattern in the s32 value. That decides `==`,
+ * `!=`, `in`, `not in` and truthiness exactly as the address would, and nothing else: an address at or
+ * above 128.0.0.0 reads negative, so an ordering on it would be wrong. net_compile.py refuses ordering
+ * on an address field and any negative constant on one, so no table reaches this program asking.
  */
 #include <linux/bpf.h>
 #include <linux/if_ether.h>
@@ -101,26 +108,31 @@ int ppt_net_prog(struct xdp_md *ctx)
     __s32 pkt_len = bpf_ntohs(iph->tot_len);
     __s32 ttl = iph->ttl;
     __s32 sport = 0, dport = 0, tcp_flags = 0;
+    int have_ports = 0, have_flags = 0;
 
+    /* only the first fragment carries the L4 header; a later one starts mid payload */
+    int first_fragment = (bpf_ntohs(iph->frag_off) & 0x1FFF) == 0;
     void *l4 = (void *)iph + ihl;
-    if (proto == IPPROTO_TCP) {
+    if (first_fragment && proto == IPPROTO_TCP) {
         struct tcphdr *th = l4;
         if ((void *)(th + 1) <= data_end) {
             sport = bpf_ntohs(th->source);
             dport = bpf_ntohs(th->dest);
             tcp_flags = ((__u8 *)th)[13];              /* flags byte (FIN=0x01 SYN=0x02 ... ACK=0x10) */
+            have_ports = have_flags = 1;
         }
-    } else if (proto == IPPROTO_UDP) {
+    } else if (first_fragment && proto == IPPROTO_UDP) {
         struct udphdr *uh = l4;
         if ((void *)(uh + 1) <= data_end) {
             sport = bpf_ntohs(uh->source);
             dport = bpf_ntohs(uh->dest);
+            have_ports = 1;
         }
     }
 
     struct ppt_regfile *regfile = ppt_regs();
     if (!regfile) return XDP_PASS;
-    /* fill the fixed canonical schema; slots >= NET_FIELDS default to NONE */
+    /* every slot starts absent; a field the packet carries is then written present */
     #pragma unroll
     for (__u32 field_index = 0; field_index < MAX_FIELDS_PER_PKT; field_index++) {
         regfile->reg[field_index & (MAX_FIELDS_PER_PKT - 1)].ty = TY_NONE;
@@ -128,11 +140,14 @@ int ppt_net_prog(struct xdp_md *ctx)
     }
     set_reg(regfile, 0, src_ip);
     set_reg(regfile, 1, dst_ip);
-    set_reg(regfile, 2, sport);
-    set_reg(regfile, 3, dport);
+    if (have_ports) {
+        set_reg(regfile, 2, sport);
+        set_reg(regfile, 3, dport);
+    }
     set_reg(regfile, 4, proto);
     set_reg(regfile, 5, pkt_len);
-    set_reg(regfile, 6, tcp_flags);
+    if (have_flags)
+        set_reg(regfile, 6, tcp_flags);
     set_reg(regfile, 7, ttl);
 
     /* Read the active bank ONCE — a single aligned load, atomic against the loader's flip. Every

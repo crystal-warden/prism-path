@@ -22,6 +22,28 @@ from prismpath.kernel.analysis import _reachable                # noqa: E402
 from prismpath.kernel import predicates                         # noqa: E402
 
 SCHEMA = ["src_ip", "dst_ip", "src_port", "dst_port", "protocol", "pkt_len", "tcp_flags", "ttl"]
+# ppt_net.bpf.c carries an address as its u32 bit pattern in an s32 register, which decides equality,
+# membership and truthiness exactly and ordering wrongly from 128.0.0.0 up, where the register reads
+# negative. A negative constant would equal the bit pattern of such an address. Both are refused.
+ADDRESS_FIELDS = ("src_ip", "dst_ip")
+ORDERING_OPS = (pc.OP_LT, pc.OP_LE, pc.OP_GT, pc.OP_GE)
+
+
+def address_refusals(img):
+    """Every atom the kernel front end cannot decide faithfully, as (field, reason)."""
+    slot_name = {slot: name for name, slot in img.fields.items()}
+    refusals = []
+    for field_index, op, ty, val in img.atoms:
+        name = slot_name.get(field_index)
+        if name not in ADDRESS_FIELDS:
+            continue
+        if op in ORDERING_OPS:
+            refusals.append((name, "an ordering on an address: the register holds the bit pattern, which "
+                                   "reads negative from 128.0.0.0 up"))
+        elif ty == pc.TY_INT and val < 0:
+            refusals.append((name, f"the negative constant {val}: no address is negative, and it would equal "
+                                   f"the bit pattern of one"))
+    return refusals
 
 
 def compile_with_schema(graph, schema, max_steps=25):
@@ -65,6 +87,12 @@ def main():
         # in kernel for every packet. A warning with a zero exit let such a table be deployed.
         print(f"  WARNING: fields not in the packet schema (will read NONE in-kernel): {off_schema}")
         print(f"  refusing to write {out_ppt}: compile the flow against the canonical schema")
+        return 2
+    refused = address_refusals(img)
+    if refused:
+        for field_name, reason in refused:
+            print(f"  REFUSED on {field_name}: {reason}")
+        print(f"  refusing to write {out_ppt}: the kernel front end cannot decide these atoms faithfully")
         return 2
     out_ppt.write_bytes(require_within_limits(img.serialize()))
     out_names.write_text("\n".join(names) + "\n")
