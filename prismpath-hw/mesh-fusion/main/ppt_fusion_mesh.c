@@ -285,34 +285,43 @@ typedef struct {
     int io_timeout_ms;
     uint8_t stop_variable;
     bool did_timeout;
+    bool bus_error; /* any I2C transfer failed since the read began; the value is then not a range */
 } vl53l0x_t;
 
+/* Every transfer records a failure in bus_error. Before October 2026 a failed read returned the
+   zeroed buffer, so a bus fault read as 0 mm, "contact", a believable value in place of a missing one. */
 static void v_wr8(vl53l0x_t *sensor, uint8_t reg, uint8_t val) {
     uint8_t payload[2] = {reg, val};
-    i2c_master_write_to_device(I2C_PORT, sensor->addr, payload, 2, TO_TICKS);
+    if (i2c_master_write_to_device(I2C_PORT, sensor->addr, payload, 2, TO_TICKS) != ESP_OK)
+        sensor->bus_error = true;
 }
 static uint8_t v_rd8(vl53l0x_t *sensor, uint8_t reg) {
     uint8_t value = 0;
-    i2c_master_write_read_device(I2C_PORT, sensor->addr, &reg, 1, &value, 1, TO_TICKS);
+    if (i2c_master_write_read_device(I2C_PORT, sensor->addr, &reg, 1, &value, 1, TO_TICKS) != ESP_OK)
+        sensor->bus_error = true;
     return value;
 }
 static void v_wr16(vl53l0x_t *sensor, uint8_t reg, uint16_t val) {
     uint8_t payload[3] = {reg, (uint8_t)(val >> 8), (uint8_t)(val & 0xFF)};
-    i2c_master_write_to_device(I2C_PORT, sensor->addr, payload, 3, TO_TICKS);
+    if (i2c_master_write_to_device(I2C_PORT, sensor->addr, payload, 3, TO_TICKS) != ESP_OK)
+        sensor->bus_error = true;
 }
 static uint16_t v_rd16(vl53l0x_t *sensor, uint8_t reg) {
     uint8_t value_bytes[2] = {0, 0};
-    i2c_master_write_read_device(I2C_PORT, sensor->addr, &reg, 1, value_bytes, 2, TO_TICKS);
+    if (i2c_master_write_read_device(I2C_PORT, sensor->addr, &reg, 1, value_bytes, 2, TO_TICKS) != ESP_OK)
+        sensor->bus_error = true;
     return ((uint16_t)value_bytes[0] << 8) | value_bytes[1];
 }
 static void v_wr_multi(vl53l0x_t *sensor, uint8_t reg, const uint8_t *src, uint8_t count) {
     uint8_t payload[16];
     payload[0] = reg;
     memcpy(payload + 1, src, count);
-    i2c_master_write_to_device(I2C_PORT, sensor->addr, payload, count + 1, TO_TICKS);
+    if (i2c_master_write_to_device(I2C_PORT, sensor->addr, payload, count + 1, TO_TICKS) != ESP_OK)
+        sensor->bus_error = true;
 }
 static void v_rd_multi(vl53l0x_t *sensor, uint8_t reg, uint8_t *dst, uint8_t count) {
-    i2c_master_write_read_device(I2C_PORT, sensor->addr, &reg, 1, dst, count, TO_TICKS);
+    if (i2c_master_write_read_device(I2C_PORT, sensor->addr, &reg, 1, dst, count, TO_TICKS) != ESP_OK)
+        sensor->bus_error = true;
 }
 
 static int64_t s_deadline_us;
@@ -367,6 +376,7 @@ static bool vl53l0x_init(vl53l0x_t *sensor, uint8_t addr) {
     sensor->addr = addr;
     sensor->io_timeout_ms = 500;
     sensor->did_timeout = false;
+    sensor->bus_error = false;
     if (v_rd8(sensor, 0xC0) != 0xEE)
         return false;
     v_wr8(sensor, VHV_CONFIG_PAD_SCL_SDA__EXTSUP_HV, v_rd8(sensor, VHV_CONFIG_PAD_SCL_SDA__EXTSUP_HV) | 0x01);
@@ -426,6 +436,8 @@ static bool vl53l0x_init(vl53l0x_t *sensor, uint8_t addr) {
     return true;
 }
 static uint16_t read_range_single(vl53l0x_t *sensor) {
+    sensor->did_timeout = false;
+    sensor->bus_error = false;
     v_wr8(sensor, 0x80, 0x01);
     v_wr8(sensor, 0xFF, 0x01);
     v_wr8(sensor, 0x00, 0x00);
@@ -546,18 +558,26 @@ static void start_rollout(void) {
     emit("[%s] coord PREPARE seq=%u target=fusion-%s, collecting ACKs\r\n", my_label, rollout_seq, pname(target_id));
 }
 
+/* This node's own band, or STALE_BAND when the sensor could not be read. A failed read is absence,
+   and the signed fusion table already decides absence (tamper while armed, degraded otherwise). Before
+   October 2026 a dead rangefinder reported band 3, "far", a failed ADC read reported whatever the
+   zeroed buffer held, and a bus fault read as 0 mm, so a broken sensor looked like an all clear. */
 static int8_t read_own_band(void) {
     if (my_kind == KIND_POT) {
         int raw = 0;
-        adc_oneshot_read(adc1, POT_ADC_CHAN, &raw);
+        if (adc_oneshot_read(adc1, POT_ADC_CHAN, &raw) != ESP_OK)
+            return STALE_BAND;
         return project_pot(raw);
     }
     if (my_kind == KIND_TOF) {
         if (!tof_ok)
-            return 3;
-        return project_tof(read_range_single(&tof));
+            return STALE_BAND;
+        uint16_t mm = read_range_single(&tof);
+        if (tof.did_timeout || tof.bus_error)
+            return STALE_BAND;
+        return project_tof(mm);
     }
-    return 3;
+    return STALE_BAND;
 }
 
 static void led_setup(void) {
@@ -652,7 +672,7 @@ void app_main(void) {
                 vTaskDelay(pdMS_TO_TICKS(50));
         }
         if (!tof_ok)
-            emit("[%s] VL53L0X init FAILED — this node will report band 3 (far)\r\n", my_label);
+            emit("[%s] VL53L0X init FAILED, this node reports band 8 (sensor dark)\r\n", my_label);
     }
 
     for (int entry_index = 0; entry_index < N_SLOTS; entry_index++) {

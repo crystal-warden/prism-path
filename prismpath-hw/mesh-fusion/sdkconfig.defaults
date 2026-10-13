@@ -3,3 +3,7 @@
 CONFIG_ESP_CONSOLE_UART_NONE=y
 CONFIG_BOOTLOADER_LOG_LEVEL_NONE=y
 CONFIG_LOG_DEFAULT_LEVEL_NONE=y
+# The three nodes are not one board: tof-B (58:2a:bd:76:6a:bc) carries a 26 MHz crystal where the others
+# carry 40 MHz. A fixed 40 MHz build runs every clock on tof-B about 35 percent off, the radio included,
+# so the crystal is detected at boot (October 2026, found recertifying tof-B).
+CONFIG_XTAL_FREQ_AUTO=y
