@@ -19,6 +19,7 @@ import pytest
 from prismpath.tests._repo import repo_file
 
 _ebpf = repo_file("prismpath-ebpf")
+repo_file("prismpath-ebpf", "ppt_common.h")      # the bounds are read from it; a wheel ships the directory without it
 sys.path.insert(0, str(repo_file("prismpath-hw")))
 import ppt_compile as pc  # noqa: E402
 

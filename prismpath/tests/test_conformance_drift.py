@@ -107,6 +107,7 @@ def test_the_declared_hardware_subset_neither_shrinks_nor_grows_unreviewed():
     import sys as _sys
     from prismpath.tests._repo import repo_file
     _sys.path.insert(0, str(repo_file("prismpath-hw")))
+    repo_file("prismpath-hw", "declared_subset.json")   # a wheel ships the directory without the manifest
     import declared_subset
     shrank, grew = declared_subset.drift(declared_subset.selected_ids(_cases()))
     assert shrank == [], f"the declared subset shrank: {shrank}"
