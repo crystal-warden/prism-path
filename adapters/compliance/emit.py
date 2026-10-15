@@ -42,6 +42,48 @@ def _now(now=None):
 def _is_met(status):
     return status == "met"
 
+# ---------- the standard a report names ----------
+# Each report names the standard its records were assessed against. The default is NIST SP 800-171
+# Rev 2, the access control assessment these emitters were written for, so a caller that names no
+# standard gets the same documents as before.
+DEFAULT_STANDARD = "nist_800171_r2"
+STANDARD_LABELS = {
+    "nist_800171_r2": {
+        "bom_ref": "std-nist-800-171-r2", "name": "NIST SP 800-171 Rev 2", "owner": "NIST",
+        "description": "Protecting Controlled Unclassified Information in Nonfederal Systems and Organizations",
+        "summary": "NIST SP 800-171 access-control assessment, each determination bound to a Flow-Ledger attestation.",
+        "ar_title": "NIST SP 800-171 Rev 2 Assessment Results",
+        "ar_description": "PrismPath decomposed, escalation-default assessment of NIST 800-171 access-control objectives.",
+        "poam_title": "NIST SP 800-171 Rev 2 Plan of Action & Milestones",
+        "ap_href": "prismpath://assessment-plan/nist-800171-access-control"},
+    "nist_ssdf": {
+        "bom_ref": "std-nist-sp-800-218-v1.1", "name": "NIST SP 800-218 SSDF Version 1.1", "owner": "NIST",
+        "description": "Secure Software Development Framework (SSDF) Version 1.1: Recommendations for Mitigating the Risk of Software Vulnerabilities",
+        "summary": "SSDF assessment of the evidence a signed policy delivery produces, each determination bound to a Flow-Ledger attestation.",
+        "ar_title": "NIST SP 800-218 SSDF Assessment Results",
+        "ar_description": "PrismPath assessment of SSDF practices against delivery evidence it checks itself; practices the evidence does not reach are listed as not assessed.",
+        "poam_title": "NIST SP 800-218 SSDF Plan of Action & Milestones",
+        "ap_href": "prismpath://assessment-plan/nist-ssdf-policy-delivery"},
+    "eu_cra_annex_i": {
+        "bom_ref": "std-eu-2024-2847-annex-i", "name": "Regulation (EU) 2024/2847 (Cyber Resilience Act) Annex I",
+        "owner": "European Union",
+        "description": "Essential cybersecurity requirements for products with digital elements",
+        "summary": "Cyber Resilience Act Annex I assessment of the evidence a signed policy delivery produces, each determination bound to a Flow-Ledger attestation.",
+        "ar_title": "Cyber Resilience Act Annex I Assessment Results",
+        "ar_description": "PrismPath assessment of Annex I requirements against delivery evidence it checks itself; requirements the evidence does not reach are listed as not assessed.",
+        "poam_title": "Cyber Resilience Act Annex I Plan of Action & Milestones",
+        "ap_href": "prismpath://assessment-plan/eu-cra-annex-i-policy-delivery"},
+}
+
+def _label(standard):
+    if standard not in STANDARD_LABELS:
+        raise KeyError("no report labels for standard %s; choose from %s" % (standard, sorted(STANDARD_LABELS)))
+    return STANDARD_LABELS[standard]
+
+def _not_assessed_remarks(not_assessed):
+    return "Not assessed, because the evidence read does not reach them:\n" + "\n".join(
+        "- %s %s: %s" % (item["control_id"], item["title"], item["reason"]) for item in not_assessed)
+
 # ---------- provenance -> OSCAL props / CycloneDX properties ----------
 def _prov_fields(manifest):
     manifest_fields = manifest or {}
@@ -63,8 +105,9 @@ def _cdx_props(manifest):
             for field_name, field_value in _prov_fields(manifest) if field_value]
 
 # ============================ OSCAL POA&M ============================
-def emit_oscal_poam(results, now=None, title="NIST SP 800-171 Rev 2 Plan of Action & Milestones"):
+def emit_oscal_poam(results, now=None, title=None, standard=DEFAULT_STANDARD):
     now = _now(now)
+    title = title or _label(standard)["poam_title"]
     bundle_seed = "poam:" + ":".join(sorted(record["control_id"] for record in results))
     observations, poam_items = [], []
     for record in results:
@@ -110,9 +153,14 @@ def emit_oscal_poam(results, now=None, title="NIST SP 800-171 Rev 2 Plan of Acti
     return {"plan-of-action-and-milestones": poam}
 
 # ==================== OSCAL Assessment Results (AR) ====================
-def emit_oscal_ar(results, now=None, title="NIST SP 800-171 Rev 2 Assessment Results",
-                  ap_href="prismpath://assessment-plan/nist-800171-access-control", rollup=None):
+def emit_oscal_ar(results, now=None, title=None, ap_href=None, rollup=None, standard=DEFAULT_STANDARD,
+                  not_assessed=None):
+    """not_assessed (optional) = [{control_id, title, reason}] for a scoped assessment: the result then
+    names only the assessed controls as reviewed, and lists the others in its remarks with the reason."""
     now = _now(now)
+    labels = _label(standard)
+    title = title or labels["ar_title"]
+    ap_href = ap_href or labels["ap_href"]
     bundle_seed = "ar:" + ":".join(sorted(record["control_id"] for record in results))
     observations, findings = [], []
     for record in results:
@@ -140,10 +188,15 @@ def emit_oscal_ar(results, now=None, title="NIST SP 800-171 Rev 2 Assessment Res
     result = {
         "uuid": _uuid("result:" + bundle_seed),
         "title": title,
-        "description": "PrismPath decomposed, escalation-default assessment of NIST 800-171 access-control objectives.",
+        "description": labels["ar_description"],
         "start": now,
         "reviewed-controls": {"control-selections": [{"include-all": {}}]},
     }
+    if not_assessed is not None and results:                    # scoped: name what was reviewed, list the rest
+        result["reviewed-controls"] = {"control-selections": [{"include-controls": [
+            {"control-id": _tok(record["control_id"])} for record in results]}]}
+    if not_assessed:
+        result["remarks"] = _not_assessed_remarks(not_assessed)
     if observations:                                            # optional arrays; OSCAL rejects them empty
         result["observations"] = observations
     if findings:
@@ -186,8 +239,12 @@ def emit_oscal_ar(results, now=None, title="NIST SP 800-171 Rev 2 Assessment Res
     return ar
 
 # ==================== CycloneDX 1.6 Attestations ====================
-def emit_cyclonedx(results, now=None):
+def emit_cyclonedx(results, now=None, standard=DEFAULT_STANDARD, not_assessed=None):
+    """not_assessed (optional) = [{control_id, title, reason}]: those requirements are defined in the
+    standard with the reason as their text and are left out of the attestation map, so nothing claims
+    a conformance score for them."""
     now = _now(now)
+    labels = _label(standard)
     bundle_seed = "cdx:" + ":".join(sorted(record["control_id"] for record in results))
     requirements, amap = [], []
     for record in results:
@@ -206,6 +263,9 @@ def emit_cyclonedx(results, now=None):
                            "rationale": "Escalation-default adjudication; unmet objectives: %s" %
                                         (", ".join(record.get("unmet_objective_ids", [])) or "none")},
         })
+    for item in not_assessed or []:
+        requirements.append({"bom-ref": "req-" + item["control_id"], "identifier": item["control_id"],
+                             "title": item["title"], "text": "Not assessed: " + item["reason"]})
     doc = {
         "bomFormat": "CycloneDX", "specVersion": "1.6",
         "serialNumber": "urn:uuid:" + _uuid(bundle_seed), "version": 1,
@@ -214,14 +274,13 @@ def emit_cyclonedx(results, now=None):
                                                "version": "0.1.0"}]},
                      "properties": _cdx_props(results[0].get("manifest")) if results else []},
         "definitions": {"standards": [{
-            "bom-ref": "std-nist-800-171-r2", "name": "NIST SP 800-171 Rev 2",
-            "description": "Protecting Controlled Unclassified Information in Nonfederal Systems and Organizations",
-            "owner": "NIST", "requirements": requirements}]},
+            "bom-ref": labels["bom_ref"], "name": labels["name"], "description": labels["description"],
+            "owner": labels["owner"], "requirements": requirements}]},
         "declarations": {
             "assessors": [{"bom-ref": "assessor-prismpath", "thirdParty": False,
                            "organization": {"name": "PrismPath attestable decision-automation engine"}}],
             "attestations": [{
-                "summary": "NIST SP 800-171 access-control assessment, each determination bound to a Flow-Ledger attestation.",
+                "summary": labels["summary"],
                 "assessor": "assessor-prismpath",
                 "map": amap}],
         },
@@ -341,9 +400,12 @@ def validate(doc, kind):
     return (len(errs) == 0, errs)
 
 # ============================ dispatcher ============================
-def emit(results, fmt="both", out_dir=None, now=None, do_validate=True, rollup=None):
+def emit(results, fmt="both", out_dir=None, now=None, do_validate=True, rollup=None, standard=DEFAULT_STANDARD,
+         not_assessed=None):
     """fmt in {oscal, cyclonedx, both}. Writes files to out_dir if given. Returns {name:{doc,path,valid,errors}}.
-    rollup (optional) = {"sprs":..., "scope":..., "attestation":manifest} to embed a system-level rollup in the AR."""
+    rollup (optional) = {"sprs":..., "scope":..., "attestation":manifest} to embed a system-level rollup in the AR.
+    standard names the catalog the records were assessed against (a key of STANDARD_LABELS); not_assessed
+    lists the requirements a scoped assessment did not reach, as emit_oscal_ar and emit_cyclonedx take it."""
     out = {}
     def _make(kind, doc, fname):
         rec = {"doc": doc, "path": None, "valid": None, "errors": []}
@@ -355,10 +417,12 @@ def emit(results, fmt="both", out_dir=None, now=None, do_validate=True, rollup=N
             json.dump(doc, open(rec["path"], "w"), indent=1)
         return rec
     if fmt in ("oscal", "both"):
-        out["oscal_poam"] = _make("poam", emit_oscal_poam(results, now), "poam.oscal.json")
-        out["oscal_ar"] = _make("ar", emit_oscal_ar(results, now, rollup=rollup), "assessment-results.oscal.json")
+        out["oscal_poam"] = _make("poam", emit_oscal_poam(results, now, standard=standard), "poam.oscal.json")
+        out["oscal_ar"] = _make("ar", emit_oscal_ar(results, now, rollup=rollup, standard=standard,
+                                                    not_assessed=not_assessed), "assessment-results.oscal.json")
     if fmt in ("cyclonedx", "both"):
-        out["cyclonedx"] = _make("cyclonedx", emit_cyclonedx(results, now), "bom.cdx.json")
+        out["cyclonedx"] = _make("cyclonedx", emit_cyclonedx(results, now, standard=standard,
+                                                             not_assessed=not_assessed), "bom.cdx.json")
     return out
 
 # ============================ self-test ============================

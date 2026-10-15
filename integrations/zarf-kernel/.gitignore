@@ -16,3 +16,4 @@ deployed/
 deployed-tampered/
 tampered/*.tar.zst
 tampered/deployed-tampered/
+reports/

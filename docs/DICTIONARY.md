@@ -276,6 +276,8 @@ control plane, GRC. A term with no `Also called (deprecated)` line has no losing
 
 **persona**: one of the four people a deployment is organised around: process owner, engineer, operator, assessor. The CLI groups its commands by them and the docs are indexed by them. Layer: control plane.
 
+**policy delivery assessment**: the compliance adapter's assessment of a signed pack as a host received it (`python -m adapters.compliance.assess_policy_delivery`), against NIST SSDF and the Cyber Resilience Act's Annex I. It runs every check itself on the deployed directory, never writes to it, and maps the checks to a short curated list of requirements with the boundary set to the policy artifact. A requirement the checks reach in part is partially met with the unreached part written out, one they do not reach is not assessed, and a failed check makes every requirement resting on it not met. Layer: GRC. Not to be confused with: a conformity assessment under the Regulation, or an attestation of the organization's SSDF conformance, neither of which it is.
+
 **policy of record**: the authored decision structure a deployment is actually governed by, as against an overlay or a test pack. Layer: flow authoring. Not to be confused with: "policy" used loosely for the compiled image, for a competitor's rule file, or for a severity setting.
 
 **port**: an interface the core owns and the outside world implements, written in the core's own vocabulary. Six exist: Ingestion, Retrieval, Adjudicator, Action/Sink, Attestation, Deferral. Layer: control plane. Not to be confused with: a network or serial port, an RTL port, or "port" as a verb meaning reimplement. The verb is fine; the noun is reserved.

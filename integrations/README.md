@@ -21,6 +21,8 @@ cd ../zarf-tampered && zarf package create . --confirm && zarf package deploy za
 cd ../zarf-kernel && PRISMPATH_EBPF=$PWD/../../prismpath-ebpf ./build.sh
 PRISMPATH_EBPF=$PWD/../../prismpath-ebpf zarf package create . --confirm && PRISMPATH_EBPF=$PWD/../../prismpath-ebpf zarf package deploy zarf-package-*.tar.zst --confirm
 cat deployed/activation.json
+# Assess what was delivered against NIST SSDF and the Cyber Resilience Act's Annex I (OSCAL + CycloneDX)
+(cd ../.. && python -m adapters.compliance.assess_policy_delivery integrations/zarf-kernel/deployed --out integrations/zarf-kernel/reports)
 cd tampered && zarf package create . --confirm && zarf package deploy zarf-package-*.tar.zst --confirm   # aborts at verify; activation never runs
 cd ..
 

@@ -29,6 +29,8 @@ STANDARDS = {
     "ai_governance": os.path.join(HERE, "catalog", "ai_governance.json"),      # AI governance (NIST AI RMF-structured)
     "nist_800172": os.path.join(HERE, "catalog", "nist_800172.json"),          # NIST SP 800-172 enhanced reqs (CMMC L3 basis)
     "texas_ai": os.path.join(HERE, "catalog", "texas_ai.json"),                # Texas AI governance (TRAIGA HB 149 + SB 1964), applicability-tagged
+    "nist_ssdf": os.path.join(HERE, "catalog", "nist_ssdf.json"),              # NIST SP 800-218 SSDF v1.1 (practices as controls, tasks as objectives)
+    "eu_cra_annex_i": os.path.join(HERE, "catalog", "eu_cra_annex_i.json"),    # Cyber Resilience Act (EU) 2024/2847 Annex I, verbatim
 }
 _ACTIVE = os.environ.get("PRISMPATH_STANDARD", "nist_800171_r2")
 _CAT_CACHE = {}

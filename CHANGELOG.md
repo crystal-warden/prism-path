@@ -24,6 +24,17 @@ spec stable.
   stops at verification; a copy replaced on disk after acceptance is refused before the kernel is
   touched. The probe reading is encoded with the compiler's binding of the same flow, which the pack
   does not yet sign; `make_probe.py` refuses unless the flow recompiles to the delivered image.
+- **Supply chain catalogs and a policy delivery assessment in the compliance adapter.** Two new
+  selectable standards: `nist_ssdf` (NIST SP 800-218 v1.1, 19 practices and 42 tasks) and
+  `eu_cra_annex_i` (the Cyber Resilience Act's Annex I, Parts I and II, 22 requirements), with text
+  verbatim from the publication and the Official Journal. `assess_policy_delivery.py` runs its own
+  checks on a deployed pack and emits OSCAL Assessment Results, POA&M and CycloneDX attestations for
+  each. On the Zarf kernel deployment it finds SSDF PS.2 met, PS.3 and PW.4 partially met, and Annex I
+  (2)(f), (2)(l), Part II (1) and (7) partially met, with everything else reported not assessed.
+- **The emitter names the standard its records were assessed against** (`standard=`, default NIST SP
+  800-171 Rev 2 with unchanged output), and takes `not_assessed=` for a scoped assessment: the OSCAL
+  result then reviews only the assessed controls and lists the rest in its remarks, and the CycloneDX
+  attestation map leaves them out.
 
 ### Deprecated
 - **`agent` as the name for whatever does a node's work; the word is `worker`.** `run(agent=...)`

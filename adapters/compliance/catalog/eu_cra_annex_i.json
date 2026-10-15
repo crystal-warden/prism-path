@@ -1,0 +1,304 @@
+{
+ "_meta": {
+  "standard": "eu_cra_annex_i",
+  "revision": "Regulation (EU) 2024/2847, OJ L 20.11.2024",
+  "title": "EU Cyber Resilience Act, Annex I: Essential cybersecurity requirements",
+  "controls": 22,
+  "families": 2,
+  "authority": "Regulation (EU) 2024/2847 of the European Parliament and of the Council (Cyber Resilience Act), Annex I, ELI http://data.europa.eu/eli/reg/2024/2847/oj. Requirement text is verbatim from the Official Journal HTML on EUR-Lex, retrieved 2026-10-15; each control's text joins the Part's lead-in to its point. Control titles are ours, for display; the Regulation gives the points no titles.",
+  "applicability": "Article 71(2): the Regulation applies from 11 December 2027; Article 14 (reporting obligations) applies from 11 September 2026 and Chapter IV (notification of conformity assessment bodies) from 11 June 2026. Part I binds products with digital elements, on the basis of the manufacturer's cybersecurity risk assessment and where applicable; Part II binds manufacturers.",
+  "disclaimer": "Not legal advice and not a conformity assessment. A determination produced against this catalog states what the supplied evidence shows for the assessed scope; conformity under the Regulation is declared by the manufacturer or assessed by a notified body under Annex VIII."
+ },
+ "families": {
+  "PART-I": "Cybersecurity requirements relating to the properties of products with digital elements",
+  "PART-II": "Vulnerability handling requirements"
+ },
+ "controls": {
+  "I.1": {
+   "family": "PART-I",
+   "family_name": "Cybersecurity requirements relating to the properties of products with digital elements",
+   "title": "Appropriate level of cybersecurity based on the risks",
+   "control": "Products with digital elements shall be designed, developed and produced in such a way that they ensure an appropriate level of cybersecurity based on the risks.",
+   "objectives": [
+    {
+     "id": "I.1[a]",
+     "text": "Products with digital elements shall be designed, developed and produced in such a way that they ensure an appropriate level of cybersecurity based on the risks.",
+     "discovery_query": "Provide evidence that Annex I, I.1 is met."
+    }
+   ]
+  },
+  "I.2.a": {
+   "family": "PART-I",
+   "family_name": "Cybersecurity requirements relating to the properties of products with digital elements",
+   "title": "No known exploitable vulnerabilities",
+   "control": "On the basis of the cybersecurity risk assessment referred to in Article 13(2) and where applicable, products with digital elements shall: be made available on the market without known exploitable vulnerabilities;",
+   "objectives": [
+    {
+     "id": "I.2.a[a]",
+     "text": "be made available on the market without known exploitable vulnerabilities;",
+     "discovery_query": "Provide evidence that Annex I, I.2.a is met."
+    }
+   ]
+  },
+  "I.2.b": {
+   "family": "PART-I",
+   "family_name": "Cybersecurity requirements relating to the properties of products with digital elements",
+   "title": "Secure by default configuration",
+   "control": "On the basis of the cybersecurity risk assessment referred to in Article 13(2) and where applicable, products with digital elements shall: be made available on the market with a secure by default configuration, unless otherwise agreed between manufacturer and business user in relation to a tailor-made product with digital elements, including the possibility to reset the product to its original state;",
+   "objectives": [
+    {
+     "id": "I.2.b[a]",
+     "text": "be made available on the market with a secure by default configuration, unless otherwise agreed between manufacturer and business user in relation to a tailor-made product with digital elements, including the possibility to reset the product to its original state;",
+     "discovery_query": "Provide evidence that Annex I, I.2.b is met."
+    }
+   ]
+  },
+  "I.2.c": {
+   "family": "PART-I",
+   "family_name": "Cybersecurity requirements relating to the properties of products with digital elements",
+   "title": "Vulnerabilities addressed through security updates",
+   "control": "On the basis of the cybersecurity risk assessment referred to in Article 13(2) and where applicable, products with digital elements shall: ensure that vulnerabilities can be addressed through security updates, including, where applicable, through automatic security updates that are installed within an appropriate timeframe enabled as a default setting, with a clear and easy-to-use opt-out mechanism, through the notification of available updates to users, and the option to temporarily postpone them;",
+   "objectives": [
+    {
+     "id": "I.2.c[a]",
+     "text": "ensure that vulnerabilities can be addressed through security updates, including, where applicable, through automatic security updates that are installed within an appropriate timeframe enabled as a default setting, with a clear and easy-to-use opt-out mechanism, through the notification of available updates to users, and the option to temporarily postpone them;",
+     "discovery_query": "Provide evidence that Annex I, I.2.c is met."
+    }
+   ]
+  },
+  "I.2.d": {
+   "family": "PART-I",
+   "family_name": "Cybersecurity requirements relating to the properties of products with digital elements",
+   "title": "Protection from unauthorised access",
+   "control": "On the basis of the cybersecurity risk assessment referred to in Article 13(2) and where applicable, products with digital elements shall: ensure protection from unauthorised access by appropriate control mechanisms, including but not limited to authentication, identity or access management systems, and report on possible unauthorised access;",
+   "objectives": [
+    {
+     "id": "I.2.d[a]",
+     "text": "ensure protection from unauthorised access by appropriate control mechanisms, including but not limited to authentication, identity or access management systems, and report on possible unauthorised access;",
+     "discovery_query": "Provide evidence that Annex I, I.2.d is met."
+    }
+   ]
+  },
+  "I.2.e": {
+   "family": "PART-I",
+   "family_name": "Cybersecurity requirements relating to the properties of products with digital elements",
+   "title": "Confidentiality of data",
+   "control": "On the basis of the cybersecurity risk assessment referred to in Article 13(2) and where applicable, products with digital elements shall: protect the confidentiality of stored, transmitted or otherwise processed data, personal or other, such as by encrypting relevant data at rest or in transit by state of the art mechanisms, and by using other technical means;",
+   "objectives": [
+    {
+     "id": "I.2.e[a]",
+     "text": "protect the confidentiality of stored, transmitted or otherwise processed data, personal or other, such as by encrypting relevant data at rest or in transit by state of the art mechanisms, and by using other technical means;",
+     "discovery_query": "Provide evidence that Annex I, I.2.e is met."
+    }
+   ]
+  },
+  "I.2.f": {
+   "family": "PART-I",
+   "family_name": "Cybersecurity requirements relating to the properties of products with digital elements",
+   "title": "Integrity of data, commands, programs and configuration",
+   "control": "On the basis of the cybersecurity risk assessment referred to in Article 13(2) and where applicable, products with digital elements shall: protect the integrity of stored, transmitted or otherwise processed data, personal or other, commands, programs and configuration against any manipulation or modification not authorised by the user, and report on corruptions;",
+   "objectives": [
+    {
+     "id": "I.2.f[a]",
+     "text": "protect the integrity of stored, transmitted or otherwise processed data, personal or other, commands, programs and configuration against any manipulation or modification not authorised by the user, and report on corruptions;",
+     "discovery_query": "Provide evidence that Annex I, I.2.f is met."
+    }
+   ]
+  },
+  "I.2.g": {
+   "family": "PART-I",
+   "family_name": "Cybersecurity requirements relating to the properties of products with digital elements",
+   "title": "Data minimisation",
+   "control": "On the basis of the cybersecurity risk assessment referred to in Article 13(2) and where applicable, products with digital elements shall: process only data, personal or other, that are adequate, relevant and limited to what is necessary in relation to the intended purpose of the product with digital elements (data minimisation);",
+   "objectives": [
+    {
+     "id": "I.2.g[a]",
+     "text": "process only data, personal or other, that are adequate, relevant and limited to what is necessary in relation to the intended purpose of the product with digital elements (data minimisation);",
+     "discovery_query": "Provide evidence that Annex I, I.2.g is met."
+    }
+   ]
+  },
+  "I.2.h": {
+   "family": "PART-I",
+   "family_name": "Cybersecurity requirements relating to the properties of products with digital elements",
+   "title": "Availability of essential and basic functions",
+   "control": "On the basis of the cybersecurity risk assessment referred to in Article 13(2) and where applicable, products with digital elements shall: protect the availability of essential and basic functions, also after an incident, including through resilience and mitigation measures against denial-of-service attacks;",
+   "objectives": [
+    {
+     "id": "I.2.h[a]",
+     "text": "protect the availability of essential and basic functions, also after an incident, including through resilience and mitigation measures against denial-of-service attacks;",
+     "discovery_query": "Provide evidence that Annex I, I.2.h is met."
+    }
+   ]
+  },
+  "I.2.i": {
+   "family": "PART-I",
+   "family_name": "Cybersecurity requirements relating to the properties of products with digital elements",
+   "title": "Minimised impact on other devices and networks",
+   "control": "On the basis of the cybersecurity risk assessment referred to in Article 13(2) and where applicable, products with digital elements shall: minimise the negative impact by the products themselves or connected devices on the availability of services provided by other devices or networks;",
+   "objectives": [
+    {
+     "id": "I.2.i[a]",
+     "text": "minimise the negative impact by the products themselves or connected devices on the availability of services provided by other devices or networks;",
+     "discovery_query": "Provide evidence that Annex I, I.2.i is met."
+    }
+   ]
+  },
+  "I.2.j": {
+   "family": "PART-I",
+   "family_name": "Cybersecurity requirements relating to the properties of products with digital elements",
+   "title": "Limited attack surfaces",
+   "control": "On the basis of the cybersecurity risk assessment referred to in Article 13(2) and where applicable, products with digital elements shall: be designed, developed and produced to limit attack surfaces, including external interfaces;",
+   "objectives": [
+    {
+     "id": "I.2.j[a]",
+     "text": "be designed, developed and produced to limit attack surfaces, including external interfaces;",
+     "discovery_query": "Provide evidence that Annex I, I.2.j is met."
+    }
+   ]
+  },
+  "I.2.k": {
+   "family": "PART-I",
+   "family_name": "Cybersecurity requirements relating to the properties of products with digital elements",
+   "title": "Exploitation mitigation",
+   "control": "On the basis of the cybersecurity risk assessment referred to in Article 13(2) and where applicable, products with digital elements shall: be designed, developed and produced to reduce the impact of an incident using appropriate exploitation mitigation mechanisms and techniques;",
+   "objectives": [
+    {
+     "id": "I.2.k[a]",
+     "text": "be designed, developed and produced to reduce the impact of an incident using appropriate exploitation mitigation mechanisms and techniques;",
+     "discovery_query": "Provide evidence that Annex I, I.2.k is met."
+    }
+   ]
+  },
+  "I.2.l": {
+   "family": "PART-I",
+   "family_name": "Cybersecurity requirements relating to the properties of products with digital elements",
+   "title": "Recording and monitoring of internal activity",
+   "control": "On the basis of the cybersecurity risk assessment referred to in Article 13(2) and where applicable, products with digital elements shall: provide security related information by recording and monitoring relevant internal activity, including the access to or modification of data, services or functions, with an opt-out mechanism for the user;",
+   "objectives": [
+    {
+     "id": "I.2.l[a]",
+     "text": "provide security related information by recording and monitoring relevant internal activity, including the access to or modification of data, services or functions, with an opt-out mechanism for the user;",
+     "discovery_query": "Provide evidence that Annex I, I.2.l is met."
+    }
+   ]
+  },
+  "I.2.m": {
+   "family": "PART-I",
+   "family_name": "Cybersecurity requirements relating to the properties of products with digital elements",
+   "title": "Secure removal and transfer of data and settings",
+   "control": "On the basis of the cybersecurity risk assessment referred to in Article 13(2) and where applicable, products with digital elements shall: provide the possibility for users to securely and easily remove on a permanent basis all data and settings and, where such data can be transferred to other products or systems, ensure that this is done in a secure manner.",
+   "objectives": [
+    {
+     "id": "I.2.m[a]",
+     "text": "provide the possibility for users to securely and easily remove on a permanent basis all data and settings and, where such data can be transferred to other products or systems, ensure that this is done in a secure manner.",
+     "discovery_query": "Provide evidence that Annex I, I.2.m is met."
+    }
+   ]
+  },
+  "II.1": {
+   "family": "PART-II",
+   "family_name": "Vulnerability handling requirements",
+   "title": "Identify and document vulnerabilities and components, including an SBOM",
+   "control": "Manufacturers of products with digital elements shall: identify and document vulnerabilities and components contained in products with digital elements, including by drawing up a software bill of materials in a commonly used and machine-readable format covering at the very least the top-level dependencies of the products;",
+   "objectives": [
+    {
+     "id": "II.1[a]",
+     "text": "identify and document vulnerabilities and components contained in products with digital elements, including by drawing up a software bill of materials in a commonly used and machine-readable format covering at the very least the top-level dependencies of the products;",
+     "discovery_query": "Provide evidence that Annex I, II.1 is met."
+    }
+   ]
+  },
+  "II.2": {
+   "family": "PART-II",
+   "family_name": "Vulnerability handling requirements",
+   "title": "Address and remediate vulnerabilities without delay",
+   "control": "Manufacturers of products with digital elements shall: in relation to the risks posed to products with digital elements, address and remediate vulnerabilities without delay, including by providing security updates; where technically feasible, new security updates shall be provided separately from functionality updates;",
+   "objectives": [
+    {
+     "id": "II.2[a]",
+     "text": "in relation to the risks posed to products with digital elements, address and remediate vulnerabilities without delay, including by providing security updates; where technically feasible, new security updates shall be provided separately from functionality updates;",
+     "discovery_query": "Provide evidence that Annex I, II.2 is met."
+    }
+   ]
+  },
+  "II.3": {
+   "family": "PART-II",
+   "family_name": "Vulnerability handling requirements",
+   "title": "Effective and regular security tests and reviews",
+   "control": "Manufacturers of products with digital elements shall: apply effective and regular tests and reviews of the security of the product with digital elements;",
+   "objectives": [
+    {
+     "id": "II.3[a]",
+     "text": "apply effective and regular tests and reviews of the security of the product with digital elements;",
+     "discovery_query": "Provide evidence that Annex I, II.3 is met."
+    }
+   ]
+  },
+  "II.4": {
+   "family": "PART-II",
+   "family_name": "Vulnerability handling requirements",
+   "title": "Disclose fixed vulnerabilities",
+   "control": "Manufacturers of products with digital elements shall: once a security update has been made available, share and publicly disclose information about fixed vulnerabilities, including a description of the vulnerabilities, information allowing users to identify the product with digital elements affected, the impacts of the vulnerabilities, their severity and clear and accessible information helping users to remediate the vulnerabilities; in duly justified cases, where manufacturers consider the security risks of publication to outweigh the security benefits, they may delay making public information regarding a fixed vulnerability until after users have been given the possibility to apply the relevant patch;",
+   "objectives": [
+    {
+     "id": "II.4[a]",
+     "text": "once a security update has been made available, share and publicly disclose information about fixed vulnerabilities, including a description of the vulnerabilities, information allowing users to identify the product with digital elements affected, the impacts of the vulnerabilities, their severity and clear and accessible information helping users to remediate the vulnerabilities; in duly justified cases, where manufacturers consider the security risks of publication to outweigh the security benefits, they may delay making public information regarding a fixed vulnerability until after users have been given the possibility to apply the relevant patch;",
+     "discovery_query": "Provide evidence that Annex I, II.4 is met."
+    }
+   ]
+  },
+  "II.5": {
+   "family": "PART-II",
+   "family_name": "Vulnerability handling requirements",
+   "title": "Coordinated vulnerability disclosure policy",
+   "control": "Manufacturers of products with digital elements shall: put in place and enforce a policy on coordinated vulnerability disclosure;",
+   "objectives": [
+    {
+     "id": "II.5[a]",
+     "text": "put in place and enforce a policy on coordinated vulnerability disclosure;",
+     "discovery_query": "Provide evidence that Annex I, II.5 is met."
+    }
+   ]
+  },
+  "II.6": {
+   "family": "PART-II",
+   "family_name": "Vulnerability handling requirements",
+   "title": "Facilitate sharing of vulnerability information",
+   "control": "Manufacturers of products with digital elements shall: take measures to facilitate the sharing of information about potential vulnerabilities in their product with digital elements as well as in third-party components contained in that product, including by providing a contact address for the reporting of the vulnerabilities discovered in the product with digital elements;",
+   "objectives": [
+    {
+     "id": "II.6[a]",
+     "text": "take measures to facilitate the sharing of information about potential vulnerabilities in their product with digital elements as well as in third-party components contained in that product, including by providing a contact address for the reporting of the vulnerabilities discovered in the product with digital elements;",
+     "discovery_query": "Provide evidence that Annex I, II.6 is met."
+    }
+   ]
+  },
+  "II.7": {
+   "family": "PART-II",
+   "family_name": "Vulnerability handling requirements",
+   "title": "Secure distribution of updates",
+   "control": "Manufacturers of products with digital elements shall: provide for mechanisms to securely distribute updates for products with digital elements to ensure that vulnerabilities are fixed or mitigated in a timely manner and, where applicable for security updates, in an automatic manner;",
+   "objectives": [
+    {
+     "id": "II.7[a]",
+     "text": "provide for mechanisms to securely distribute updates for products with digital elements to ensure that vulnerabilities are fixed or mitigated in a timely manner and, where applicable for security updates, in an automatic manner;",
+     "discovery_query": "Provide evidence that Annex I, II.7 is met."
+    }
+   ]
+  },
+  "II.8": {
+   "family": "PART-II",
+   "family_name": "Vulnerability handling requirements",
+   "title": "Security updates disseminated without delay",
+   "control": "Manufacturers of products with digital elements shall: ensure that, where security updates are available to address identified security issues, they are disseminated without delay and, unless otherwise agreed between a manufacturer and a business user in relation to a tailor-made product with digital elements, free of charge, accompanied by advisory messages providing users with the relevant information, including on potential action to be taken.",
+   "objectives": [
+    {
+     "id": "II.8[a]",
+     "text": "ensure that, where security updates are available to address identified security issues, they are disseminated without delay and, unless otherwise agreed between a manufacturer and a business user in relation to a tailor-made product with digital elements, free of charge, accompanied by advisory messages providing users with the relevant information, including on potential action to be taken.",
+     "discovery_query": "Provide evidence that Annex I, II.8 is met."
+    }
+   ]
+  }
+ }
+}

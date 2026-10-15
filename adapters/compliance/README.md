@@ -17,6 +17,7 @@ adjudication calls the served model at `PRISMPATH_LLM_ENDPOINT` (default `http:/
 | `compliance_adapter.py` | the adapter — a **Connector SDK** consumer (`ComplianceConnector`): Retrieval (selectable catalog), Ingestion, Adjudicator (escalation-default, method-profile-aware), Sink, Attestation (reuses core `ledger_airgap` through the SDK), Deferral (HITL + discovery) |
 | `emit.py` | Sink — dual OSCAL (AR + POA&M) + CycloneDX 1.6 emitter, schema-validated against `schemas/` |
 | `rollup.py` | Sink — system rollup: partial SPRS score + scope + rollup attestation |
+| `assess_policy_delivery.py` | policy delivery assessment: runs its own checks on a deployed signed pack (verify, a one byte tamper refused, host state attests the image, replay refused, audit log, SBOM bound, kernel activation receipt when present) and emits OSCAL and CycloneDX for NIST SSDF and the Cyber Resilience Act's Annex I; what the checks do not reach is reported not assessed |
 
 **Catalog pipeline**
 | file | role |
@@ -25,7 +26,9 @@ adjudication calls the served model at `PRISMPATH_LLM_ENDPOINT` (default `http:/
 | `enrich_catalog.py` | legacy: add evidence_types + discovery_query to the AC-only catalog (superseded by build_catalogs) |
 
 **Assessment content**
-- `catalog/` — the dual catalogs + `sprs_weights.json`. `flows/` — the maps (`nist_800171_generic.md`
+- `catalog/` — the dual catalogs + `sprs_weights.json`, and the supply chain catalogs
+  `nist_ssdf.json` (SP 800-218 v1.1, practices as controls and tasks as objectives) and
+  `eu_cra_annex_i.json` (Regulation (EU) 2024/2847 Annex I), both verbatim with their sources in `_meta`. `flows/` — the maps (`nist_800171_generic.md`
   is canonical; `nist_800171_access_control.md` legacy AC; `agy_800171_assessment.md` is an
   independently agy-authored map kept as a generalization artifact). `schemas/` — cached OSCAL +
   CycloneDX JSON schemas (the hermetic validation gate). `requests/` — sample evidence bundles.
