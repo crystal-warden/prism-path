@@ -346,6 +346,54 @@ def pack_sbom(ppt_path, pubkey_paths, revoked=frozenset(), name=None, supplier=N
         return {"ok": False, "reasons": ["sbom:schema:" + error for error in errors]}
     return {"ok": True, "sbom": doc}
 
+# ==================== CycloneDX 1.6 VEX for reachability verdicts ====================
+# A reachability analysis states, per advisory, whether the product runs the vulnerable code. The
+# verdicts arrive in the OpenVEX vocabulary the analysis is written in and leave in CycloneDX's:
+# affected is `exploitable`, under investigation is `in_triage`, and the two not affected
+# justifications become `code_not_reachable` and `code_not_present`. A not affected verdict without
+# a justification is refused, because a bare "not affected" is the claim VEX exists to qualify.
+VEX_STATES = {"affected": "exploitable", "not_affected": "not_affected", "under_investigation": "in_triage",
+              "fixed": "resolved"}
+VEX_JUSTIFICATIONS = {"vulnerable_code_not_in_execute_path": "code_not_reachable",
+                      "component_not_present": "code_not_present"}
+
+def emit_vex(verdicts, component, now=None):
+    """verdicts = [{id, state, justification?, detail, source_name?, source_url?, properties?: {name: value}}],
+    component = {name, version, purl?}: the product the verdicts are about."""
+    now = _now(now)
+    product_ref = "product:" + component["name"]
+    product = {"type": "application", "bom-ref": product_ref, "name": component["name"],
+               "version": str(component.get("version", "unversioned"))}
+    if component.get("purl"):
+        product["purl"] = component["purl"]
+    vulnerabilities = []
+    for verdict in verdicts:
+        if verdict["state"] not in VEX_STATES:
+            raise ValueError("unknown VEX state %s" % verdict["state"])
+        analysis = {"state": VEX_STATES[verdict["state"]], "detail": verdict.get("detail", "")[:10000]}
+        if verdict["state"] == "not_affected":
+            if verdict.get("justification") not in VEX_JUSTIFICATIONS:
+                raise ValueError("not_affected for %s needs a justification from %s" % (verdict["id"], sorted(VEX_JUSTIFICATIONS)))
+            analysis["justification"] = VEX_JUSTIFICATIONS[verdict["justification"]]
+        entry = {"bom-ref": "vex:" + verdict["id"], "id": verdict["id"], "analysis": analysis,
+                 "affects": [{"ref": product_ref}]}
+        if verdict.get("source_name"):
+            entry["source"] = {"name": verdict["source_name"]}
+            if verdict.get("source_url"):
+                entry["source"]["url"] = verdict["source_url"]
+        if verdict.get("properties"):
+            entry["properties"] = [{"name": "prismpath:" + name, "value": str(value)}
+                                   for name, value in sorted(verdict["properties"].items())]
+        vulnerabilities.append(entry)
+    seed = "vex:%s:%s:" % (component["name"], component.get("version", "")) + ":".join(
+        sorted("%s=%s" % (verdict["id"], verdict["state"]) for verdict in verdicts))
+    return {"bomFormat": "CycloneDX", "specVersion": "1.6", "serialNumber": "urn:uuid:" + _uuid(seed), "version": 1,
+            "metadata": {"timestamp": now,
+                         "tools": {"components": [{"type": "application", "name": "PrismPath compliance adapter",
+                                                   "version": "0.1.0"}]},
+                         "component": product},
+            "vulnerabilities": vulnerabilities}
+
 # ============================ validation ============================
 import re as _re
 def _py_pattern(pattern):
