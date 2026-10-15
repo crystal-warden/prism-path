@@ -350,6 +350,8 @@ control plane, GRC. A term with no `Also called (deprecated)` line has no losing
 
 **vector**: one case in a frozen corpus: a condition and a ctx with a recorded result, or a scripted run with a recorded path. Layer: kernel evaluation. Not to be confused with: an embedding vector, which is always "embedding".
 
+**VEX**: a vulnerability exploitability statement about one product and one advisory: affected, not affected with a justification, under investigation, or fixed (`adapters.compliance.emit.emit_vex`, written as CycloneDX 1.6). A not affected statement always carries its justification, and the emitter refuses one without. Layer: evidence and receipts. Not to be confused with: a vulnerability scan result, which says a component version is listed in an advisory and nothing about whether the product runs the vulnerable code.
+
 **visits**: the per node counter the engine increments before a worker runs and exposes to that node's predicates. An engine owned register, not a worker emitted field. Layer: kernel evaluation.
 
 **WCET bound**: the signed worst case execution bound that travels with an image, derived from the table counts alone and recomputed at verify. Layer: substrate execution. Not to be confused with: a timeout, a step bound, a staleness bound.
