@@ -8,7 +8,7 @@ The compiled image carries register indices and string ids, not field names or t
 so a reading can only be encoded with the compiler's binding of the same flow. This script recompiles
 the flow, refuses unless the result is byte identical to the committed policy image, and only then
 encodes the probe against it. The binding itself is not covered by the pack's signature today; the
-demo's README says so, and the pack format change that would carry it is a separate decision.
+integrations README says so, and the pack format change that would carry it is a separate decision.
 
     python make_probe.py [flow.md] [policy.ppt]
 """
