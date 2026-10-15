@@ -8,6 +8,23 @@ spec stable.
 
 ## [Unreleased]
 
+### Added
+- **A CycloneDX 1.6 SBOM for a signed policy pack, from the compliance emitter**
+  (`adapters.compliance.emit.pack_sbom`, `python -m adapters.compliance.emit --pack-sbom`), beside its
+  OSCAL and CycloneDX attestation output and validated with the same cached schemas. It restates the
+  verified manifest (image SHA-256, version, signing key, envelope, WCET bound, field dictionary, and
+  the authored flow's hash when the pack recorded one), is written only for a pack that verifies and a
+  document the schema accepts, and is the same document for the same pack. Zarf's own SBOM of a policy
+  package lists no artifacts and no files (Zarf 0.87.0), so the Zarf demos now ship this one beside the
+  policy.
+- **`integrations/zarf-kernel/`: delivery through activation.** Zarf delivers the signed pack, the
+  host verifies and swaps it, and `activate.sh` loads the host's accepted copy into the in-kernel
+  evaluator only after its hash matches the attestation, then checks the kernel's path for a probe
+  reading against the host reference and writes `deployed/activation.json`. A tampered package
+  stops at verification; a copy replaced on disk after acceptance is refused before the kernel is
+  touched. The probe reading is encoded with the compiler's binding of the same flow, which the pack
+  does not yet sign; `make_probe.py` refuses unless the flow recompiles to the delivered image.
+
 ### Deprecated
 - **`agent` as the name for whatever does a node's work; the word is `worker`.** `run(agent=...)`
   is `run(worker=...)`, `prismpath.workers.cli_worker.cli_agent` is `cli_worker`,

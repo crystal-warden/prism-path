@@ -21,6 +21,8 @@ components:
         target: deployed/env1.envelope.json
       - source: env1.envelope.sig
         target: deployed/env1.envelope.sig
+      - source: policy.ppt.cdx.json
+        target: deployed/policy.ppt.cdx.json
     actions:
       onDeploy:
         before:

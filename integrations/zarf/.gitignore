@@ -8,3 +8,4 @@ policy.tampered.ppt
 *.envelope.sig
 *.tar.zst
 deployed/
+policy.ppt.cdx.json

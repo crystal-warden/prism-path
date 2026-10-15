@@ -1,0 +1,41 @@
+kind: ZarfPackageConfig
+metadata:
+  name: prismpath-policy-kernel-tampered
+  version: 0.1.0
+  description: "Negative control: a byte-flipped policy carrying an AUTHENTIC signature, with the same verify, swap and activate actions. Verification must refuse it, so activation never runs. Run ../build.sh first."
+
+components:
+  - name: deliver-tampered
+    required: true
+    description: "Delivers the tampered image with the original manifest and signature."
+    files:
+      - source: ../policy.tampered.ppt
+        target: deployed-tampered/policy.ppt
+      - source: ../policy.ppt.manifest.json
+        target: deployed-tampered/policy.ppt.manifest.json
+      - source: ../policy.ppt.manifest.sig
+        target: deployed-tampered/policy.ppt.manifest.sig
+      - source: ../authority.pub
+        target: deployed-tampered/authority.pub
+      - source: ../env1.envelope.json
+        target: deployed-tampered/env1.envelope.json
+      - source: ../env1.envelope.sig
+        target: deployed-tampered/env1.envelope.sig
+      - source: ../probe.regs.bin
+        target: deployed-tampered/probe.regs.bin
+      - source: ../policy.names
+        target: deployed-tampered/policy.names
+      - source: ../activate.sh
+        target: deployed-tampered/activate.sh
+        executable: true
+    actions:
+      onDeploy:
+        before:
+          - cmd: mkdir -p deployed-tampered/state
+        after:
+          - description: "verify (EXPECTED TO FAIL: image tampered), so nothing below runs"
+            cmd: prismpath swap verify --ppt deployed-tampered/policy.ppt --pub deployed-tampered/authority.pub
+          - description: "atomic swap"
+            cmd: prismpath swap swap --ppt deployed-tampered/policy.ppt --pub deployed-tampered/authority.pub --envelope deployed-tampered/env1.envelope --out deployed-tampered/state
+          - description: "activate"
+            cmd: ./deployed-tampered/activate.sh deployed-tampered

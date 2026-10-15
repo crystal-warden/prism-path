@@ -268,6 +268,8 @@ control plane, GRC. A term with no `Also called (deprecated)` line has no losing
 
 **pack**: the signed distribution unit: the byte identical image, a detached signed manifest, and the signature. Layer: control plane. Not to be confused with: bit packing into words, the `packing` profile, a C struct packing attribute, a content pack. The bit packing verb must be renamed; see section 6.
 
+**pack SBOM**: a CycloneDX software bill of materials for a signed pack, stated from its verified manifest: the image as a data component with its SHA-256, the version, the signing key, the envelope, the WCET bound and the field dictionary, and the authored flow's hash when the pack recorded one. Written only for a pack that verifies and only when the CycloneDX schema accepts it, and the same document for the same pack (`python -m adapters.compliance.emit --pack-sbom`, beside the compliance adapter's OSCAL and CycloneDX attestation output). Layer: evidence and receipts. Not to be confused with: the SBOM a delivery tool generates for the software it packages, which does not describe a policy, or the manifest itself, which is the signed source of truth the SBOM restates.
+
 **packet**: the transport unit a Facet stream is carried in, over which a Merkle root commits. Layer: wire and transport. Not to be confused with: a network packet that is itself the subject of a decision, as in the eBPF classifier. That one is "the classified packet", spelled in full.
 
 **park**: to hold on the signed fail safe rather than decide, because the state the policy needs is stale, absent or in flight. Always leaves a cause in the `state` class. Layer: substrate execution. Not to be confused with: abstain, refuse, deny. Also called (deprecated): hold.

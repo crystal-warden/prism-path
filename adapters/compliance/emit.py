@@ -228,6 +228,65 @@ def emit_cyclonedx(results, now=None):
     }
     return doc
 
+# ============== CycloneDX 1.6 SBOM for a signed policy pack ==============
+# A delivery tool's SBOM does not describe a policy: Zarf catalogs software packages with Syft, and a
+# package carrying a signed .ppt gets an SBOM with no artifacts and no files (Zarf 0.87.0, October 2026).
+# The policy's provenance is the pack's signed manifest, so this states that manifest as a bill of
+# materials: the image as a `data` component with its SHA-256, the pack version, the signing key, the
+# envelope, the WCET bound, the table counts and field dictionary, and the authored flow's hash as a part
+# when the pack recorded one. It is written only for a pack that verifies, and it is deterministic: the
+# serial comes from the image hash and version, the timestamp is the manifest's `created`.
+
+def _pack_properties(manifest):
+    entries = [("prismpath:pack_format", manifest["format"]), ("prismpath:key_id", manifest["key_id"]),
+               ("prismpath:envelope_id", manifest["envelope_id"]), ("prismpath:wcet_cycles", manifest["wcet_cycles"]),
+               ("prismpath:signature", "Ed25519 over the canonical manifest, detached in <image>.manifest.sig")]
+    entries += [("prismpath:count:" + name, manifest["counts"][name]) for name in sorted(manifest.get("counts", {}))]
+    entries += [("prismpath:field:" + name, manifest["fields"][name]) for name in sorted(manifest.get("fields", {}))]
+    for key in ("flow_sha256", "overlay_of"):
+        if manifest.get(key):
+            entries.append(("prismpath:" + key, manifest[key]))
+    if manifest.get("packing"):
+        entries += [("prismpath:packing_profile", manifest["packing"]["profile"]),
+                    ("prismpath:packing_sidecar_sha256", manifest["packing"]["sidecar_sha256"])]
+    return [{"name": name, "value": str(value)} for name, value in entries]
+
+def emit_pack_sbom(manifest, name, supplier=None):
+    """The CycloneDX SBOM for a pack whose manifest has already verified; use pack_sbom, which verifies."""
+    component = {"type": "data", "bom-ref": "prismpath-policy:" + manifest["image_sha256"], "name": name,
+                 "version": str(manifest["version"]),
+                 "description": "A compiled PrismPath policy table (PPT image), signed in a pack.",
+                 "hashes": [{"alg": "SHA-256", "content": manifest["image_sha256"]}],
+                 "properties": _pack_properties(manifest)}
+    if supplier:
+        component["supplier"] = {"name": supplier}
+    if manifest.get("flow_sha256"):
+        component["components"] = [{
+            "type": "file", "bom-ref": "prismpath-flow:" + manifest["flow_sha256"], "name": name + " authored flow",
+            "description": "The flow source the image was compiled from, bound by hash in the signed manifest.",
+            "hashes": [{"alg": "SHA-256", "content": manifest["flow_sha256"]}]}]
+    return {"bomFormat": "CycloneDX", "specVersion": "1.6",
+            "serialNumber": "urn:uuid:" + _uuid("pack-sbom:%s:%s" % (manifest["image_sha256"], manifest["version"])),
+            "version": 1,
+            "metadata": {"timestamp": manifest["created"],
+                         "tools": {"components": [{"type": "application", "name": "PrismPath compliance adapter",
+                                                   "version": "0.1.0"}]},
+                         "component": component}}
+
+def pack_sbom(ppt_path, pubkey_paths, revoked=frozenset(), name=None, supplier=None):
+    """Verify the pack, then describe it, then validate the description. Returns {"ok": True, "sbom": doc}
+    or {"ok": False, "reasons": [...]}: the verification's refusal, or the schema's. A refused pack
+    never gets a bill of materials that would describe bytes nobody signed."""
+    from prismpath.hotswap import policy_pack
+    ok, reasons, manifest = policy_pack.verify_pack(ppt_path, pubkey_paths, revoked)
+    if not ok or manifest is None:
+        return {"ok": False, "reasons": reasons}
+    doc = emit_pack_sbom(manifest, name or os.path.splitext(os.path.basename(ppt_path))[0], supplier)
+    valid, errors = validate(doc, "cyclonedx")
+    if not valid:
+        return {"ok": False, "reasons": ["sbom:schema:" + error for error in errors]}
+    return {"ok": True, "sbom": doc}
+
 # ============================ validation ============================
 import re as _re
 def _py_pattern(pattern):
@@ -309,11 +368,36 @@ def _sample_manifest(cid, root="deadbeef"):
             "gate_id": "nist_800171_access_control@v0", "knowledge_base_hash": "sha256:cat0011223344",
             "ingestion_hashes": ["sha256:bundle" + cid.replace(".", "")], "created": "2026-07-22T00:00:00+00:00"}
 
+def _pack_sbom_main(args):
+    from prismpath.hotswap import policy_pack
+    result = pack_sbom(args.pack_sbom, args.pub, policy_pack.load_revoked(args.revoked),
+                       name=args.name, supplier=args.supplier)
+    if not result["ok"]:
+        print(json.dumps(result, indent=1))
+        return 1
+    out_path = args.sbom_out or (args.pack_sbom + ".cdx.json")
+    with open(out_path, "w") as handle:
+        json.dump(result["sbom"], handle, indent=1, sort_keys=True)
+        handle.write("\n")
+    print(json.dumps({"ok": True, "sbom": out_path, "serialNumber": result["sbom"]["serialNumber"]}, indent=1))
+    return 0
+
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--selftest", action="store_true")
     ap.add_argument("--out", default=None)
+    ap.add_argument("--pack-sbom", dest="pack_sbom", metavar="PPT",
+                    help="write the CycloneDX SBOM of this signed pack (verified first); needs --pub")
+    ap.add_argument("--pub", nargs="+", help="authority public key(s) the pack must verify against")
+    ap.add_argument("--revoked", default=None, help="revocation list JSON of key ids")
+    ap.add_argument("--name", default=None, help="the component name (default the image file name)")
+    ap.add_argument("--supplier", default=None, help="the supplier recorded on the component")
+    ap.add_argument("--sbom-out", dest="sbom_out", default=None, help="where to write it (default <ppt>.cdx.json)")
     args = ap.parse_args()
+    if args.pack_sbom:
+        if not args.pub:
+            ap.error("--pack-sbom needs --pub")
+        raise SystemExit(_pack_sbom_main(args))
     results = [
         {"control_id": "3.1.1", "title": "Access Control Policy", "boundary": "CUI enclave",
          "status": "met", "gap_summary": "All objectives demonstrated.", "unmet_objective_ids": [],

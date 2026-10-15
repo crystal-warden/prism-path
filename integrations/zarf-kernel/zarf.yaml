@@ -1,0 +1,43 @@
+kind: ZarfPackageConfig
+metadata:
+  name: prismpath-policy-kernel
+  version: 0.1.0
+  description: "A signed PrismPath policy delivered through to activation: verified, swapped, then loaded into the in-kernel evaluator and checked against the host reference."
+
+components:
+  - name: deliver-and-activate
+    required: true
+    description: "Delivers the signed pack, its CycloneDX SBOM and a probe reading; verifies, swaps, then activates in the kernel. Needs PRISMPATH_EBPF (the built prismpath-ebpf directory) and CAP_BPF, here through sudo."
+    files:
+      - source: policy.ppt
+        target: deployed/policy.ppt
+      - source: policy.ppt.manifest.json
+        target: deployed/policy.ppt.manifest.json
+      - source: policy.ppt.manifest.sig
+        target: deployed/policy.ppt.manifest.sig
+      - source: policy.ppt.cdx.json
+        target: deployed/policy.ppt.cdx.json
+      - source: authority.pub
+        target: deployed/authority.pub
+      - source: env1.envelope.json
+        target: deployed/env1.envelope.json
+      - source: env1.envelope.sig
+        target: deployed/env1.envelope.sig
+      - source: probe.regs.bin
+        target: deployed/probe.regs.bin
+      - source: policy.names
+        target: deployed/policy.names
+      - source: activate.sh
+        target: deployed/activate.sh
+        executable: true
+    actions:
+      onDeploy:
+        before:
+          - cmd: mkdir -p deployed/state
+        after:
+          - description: "verify the pack signature (authority key)"
+            cmd: prismpath swap verify --ppt deployed/policy.ppt --pub deployed/authority.pub
+          - description: "atomic swap: enforce envelope caps and anti-rollback, emit the receipt"
+            cmd: prismpath swap swap --ppt deployed/policy.ppt --pub deployed/authority.pub --envelope deployed/env1.envelope --out deployed/state
+          - description: "activate: load the attested policy into the kernel evaluator and check its path"
+            cmd: ./deployed/activate.sh deployed
