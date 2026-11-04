@@ -82,7 +82,7 @@ force and which baseline it overrides. It changes nothing about verification or 
 the owner's next version still wins when it lands.
 
 ```bash
-prismpath swap pack --ppt overlay.ppt --fields ... --version 2 --overlay-of network_admission --priv authority.priv --pub authority.pub
+prismpath swap pack --ppt overlay.ppt --fields ... --version 2 --overlay-of network_admission --priv authority.key --pub authority.pub
 ```
 
 ## 4. Reading the trail

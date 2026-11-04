@@ -34,8 +34,8 @@ fabric all execute that image. The signed pack around it is your setup, and ever
 
 ```bash
 prismpath swap keygen   --out keys --name authority
-prismpath swap envelope --envelope-id env1 --fields temp:int,armed:bool --caps atoms=1024,nodes=256 --priv keys/authority.priv --pub keys/authority.pub --out env
-prismpath swap pack     --ppt flow.ppt --fields temp:int,armed:bool --version 3 --envelope-id env1 --priv keys/authority.priv --pub keys/authority.pub
+prismpath swap envelope --envelope-id env1 --fields temp:int,armed:bool --caps atoms=1024,nodes=256 --priv keys/authority.key --pub keys/authority.pub --out env
+prismpath swap pack     --ppt flow.ppt --fields temp:int,armed:bool --version 3 --envelope-id env1 --priv keys/authority.key --pub keys/authority.pub
 ```
 
 The envelope declares what a host will accept (fields, capabilities, size caps); the pack binds the
