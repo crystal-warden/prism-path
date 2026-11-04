@@ -5,7 +5,7 @@ start: admit_check
 
 ## admit_check
 Link 6 of the provenance chain: the artifact-delivery admission policy, enforced inline on the
-Protectli in XDP. One packet, classified on its 5-tuple against the canonical network schema
+an x86 firewall host in XDP. One packet, classified on its 5-tuple against the canonical network schema
 (0 src_ip, 1 dst_ip, 2 src_port, 3 dst_port, 4 protocol, 5 pkt_len, 6 tcp_flags, 7 ttl). The
 signed pack travels from the dev station to the target over the delivery port; this policy admits
 that flow and drops an unauthorized attempt to reach the same port from anywhere else. First edge

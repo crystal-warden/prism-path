@@ -208,7 +208,7 @@ verdicts are tested against it.
 - B4 and B5 are documentation rows with published bars, not measurements.
 - The corpus is small and neutral by design; it exercises the pre registered properties, not the full
   range of any engine.
-- Everything ran on one bench (the GX10 dev station, a Protectli, a Pico 2 W, an Arty Z7-20).
+- Everything ran on one bench (an aarch64 dev station, an x86_64 firewall box, a Pico 2 W, an Arty Z7-20).
 
 ## 9. Publication and what remains
 

@@ -105,7 +105,7 @@ branch `fix/quantizer-cut-points` (merged here) with the decisions corpus at ver
 ## Validation, and how to reproduce it
 
 ```bash
-# toolchain (user local), pinned in lean-toolchain and lake-manifest.json; see TOOLCHAIN.md
+# toolchain (user local), pinned in lean-toolchain and lake-manifest.json (Lean 4.33.1, Mathlib v4.33.1)
 curl -sSf https://elan.lean-lang.org/elan-init.sh | sh -s -- -y --default-toolchain leanprover/lean4:v4.33.1
 cd formal && lake exe cache get
 lake build                         # compiles every module, evaluates every #guard, prints the axiom audit
@@ -137,4 +137,3 @@ The reference suites the bridge depends on: `pytest prismpath/tests`, `pytest pr
 | `FQ/Vectors.lean` | generated evaluated checks against the frozen corpora and the reference |
 | `FQ/Axioms.lean` | the axiom audit |
 | `gen_vectors.py` | generator for `FQ/Vectors.lean` |
-| `TOOLCHAIN.md` | exact Lean, Lake, Mathlib pins and host |

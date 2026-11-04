@@ -22,7 +22,7 @@ inputs that v1 handed to the model are now handed to a person, because the rule 
 
 ## warn
 Two of three elevated. Hand the event to the investigator model: the PS sends the field context
-to the LLM on the bench inference node (the GX10) and renders its triage note on the dashboard.
+to the LLM on the bench inference node and renders its triage note on the dashboard.
 RGB LEDs amber, OLED and dashboard read WARN.
 
 ## ok

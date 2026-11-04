@@ -22,7 +22,7 @@ RGB LEDs red, OLED and dashboard read CRITICAL.
 
 ## warn
 Two of three elevated. Hand the event to the investigator model: the PS sends the field context
-to the LLM on the bench inference node (the GX10) and renders its triage note on the dashboard.
+to the LLM on the bench inference node and renders its triage note on the dashboard.
 The fabric decided, provably and in nanoseconds, that this event deserves a model's attention;
 the model never sees the events that do not. RGB LEDs amber, OLED and dashboard read WARN.
 

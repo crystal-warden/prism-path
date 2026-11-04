@@ -267,7 +267,7 @@ flowchart TD
 Because the flow is data, **a pull request is a process change**: the `human_review` rule lands as a
 three-line prose diff, a fixture row asserts it in CI (milliseconds, no model), and merging changes
 production routing with no deploy and no engineer in the loop. **See it run:**
-[`examples/pr_demo/`](../../prismpath/examples/pr_demo/README.md).
+[`examples/pr_demo/`](../../prismpath/examples/pr_demo/).
 
 ## The worker is yours; the control plane is PrismPath's
 

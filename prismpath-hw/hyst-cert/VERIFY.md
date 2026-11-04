@@ -129,7 +129,7 @@ the demo rows #121 to #123) upgrades to its block attestation as the calendar co
 
 ## The one step that is yours
 
-Watch the take against `evidence/take_receipt_session2.log` with `evidence/TAKE_NOTES.md` open.
+Watch the take against `evidence/take_receipt_session2.log`.
 The button presses in the video line up with the stateful flag flips in the receipt; the walker
 shake lines up with the quantized field values; the parked knife edge holds one band while the
 field jitters. The receipt was written by the fabric while the camera rolled. If the video and the

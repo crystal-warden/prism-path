@@ -132,7 +132,7 @@ routing. The bundled GitHub Action takes it further: on every PR it posts a stic
 with the flow's topology **before → after** (live Mermaid) plus the fixture verdicts; the
 process change reviewable in the conversation. That loop (the point of the whole system)
 is demonstrated end to end in
-[`examples/pr_demo/`](prismpath/examples/pr_demo/README.md).
+[`examples/pr_demo/`](prismpath/examples/pr_demo/).
 
 ---
 

@@ -319,5 +319,5 @@ latency via `BPF_PROG_TEST_RUN`), `netupdate <new.ppt> <iface>` (live policy hot
   end to end wire latency, on **generic/SKB** XDP (native-driver XDP would likely be faster);
   enforcement is **observe only** (no inline `DROP`/`REDIRECT` yet); a first class
   `prismpath compile --target ebpf` flag is still a packaging nicety (the `.ppt` comes from
-  `../prismpath-hw/ppt_compile.py`). The inline deployment on the Protectli/Proxmox firewall (its Linux
+  `../prismpath-hw/ppt_compile.py`). The inline deployment on an x86 Proxmox firewall (its Linux
   side; never OPNsense/FreeBSD) is the follow-on.

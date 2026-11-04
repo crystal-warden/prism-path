@@ -10,7 +10,7 @@ exact `system_version` strings result files must carry.*
 
 | item | value |
 |---|---|
-| machine | gx10-f60f (the GX10 dev station) |
+| machine | an aarch64 Linux dev station |
 | arch | aarch64 |
 | kernel | 6.17.0-1032-nvidia |
 | cargo | cargo 1.97.1 (c980f4866 2026-06-30) |
