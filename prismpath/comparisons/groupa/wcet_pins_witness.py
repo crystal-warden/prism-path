@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
-"""A7 pins witness driver, run on the host the LA2016 is plugged into (gx10). While the board's single
+"""A7 pins witness driver, run on the host the LA2016 is plugged into. While the board's single
 process sweeps a policy image's vectors on the tapped datapath overlay, take repeated free run
 captures on Pmod JB (CH0 clk, CH1 busy, CH2 done, CH3 start; 200 MSa/s, 1.4 V threshold, passed to sigrok as the range literal 1.4-1.4) and measure
 every evaluation's busy window against the image's signed wcet_cycles, exactly as ledger #122/#123
@@ -22,9 +22,10 @@ from pathlib import Path
 
 from prismpath.comparisons.groupa.common import evidence_dir
 
-# CONFIGURE: the wcet-pins workspace on the host the LA2016 is plugged into (the default is the
-# bench box this witness was recorded on; PRISMPATH_WCET_PINS moves it without editing the driver).
-BENCH = Path(os.environ.get("PRISMPATH_WCET_PINS", "/home/cwadmin/cwprojects/prismpath-hw/wcet-pins"))
+# CONFIGURE: PRISMPATH_WCET_PINS names the wcet-pins workspace on the host the LA2016 is plugged into.
+if "PRISMPATH_WCET_PINS" not in os.environ:
+    sys.exit("set PRISMPATH_WCET_PINS to the wcet-pins workspace (the folder holding la_wcet_check.py)")
+BENCH = Path(os.environ["PRISMPATH_WCET_PINS"])
 sys.path.insert(0, str(BENCH))
 from la_wcet_check import CHMAP, DEV, SIGROK, _env, load_srzip, measure  # noqa: E402
 
@@ -65,7 +66,7 @@ def main(argv=None) -> int:
     rec = {"policy": args.policy, "signed_wcet_cycles": args.bound, "evaluations_measured": total, "global_max_edge_cycles": gmax,
            "global_max_width_cycles": width_max, "method_disagreements": disagree, "cycle_histogram": {str(cycles): count for cycles, count in sorted(hist.items())},
            "samplerate": args.rate, "threshold_v": args.threshold, "samples_per_capture": args.samples, "captures": args.iters,
-           "verdict": "PASS" if ok else "FAIL", "instrument": "Kingst LA2016 on gx10 USB, sigrok-cli /usr/local/bin with kingst-la2016 driver"}
+           "verdict": "PASS" if ok else "FAIL", "instrument": "Kingst LA2016 on the bench host USB, sigrok-cli /usr/local/bin with kingst-la2016 driver"}
     (ev / f"pins_{args.policy}.json").write_text(json.dumps(rec, indent=2) + "\n")
     print(f"WCET-ON-PINS {args.policy}: max {gmax} cycles vs signed {args.bound}: {'PASS' if ok else 'FAIL'} ({total} evaluations)")
     return 0 if ok else 1

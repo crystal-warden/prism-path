@@ -55,6 +55,7 @@ INCLUDE_FILES = [
     "SPEC.md", "PROTOCOL.md", "action.yml", "MANIFEST.in", "pyproject.toml",
     "Cargo.toml", "Cargo.lock", ".gitignore", ".pre-commit-hooks.yaml",
     "docs/README.md", "docs/decoder-ring.md", "docs/objections.md",
+    "docs/DICTIONARY.md", "docs/vocabulary.json", "docs/POSITION.md",   # arch_guard reads the first two
     ".github/PULL_REQUEST_TEMPLATE.md", ".github/ISSUE_TEMPLATE/config.yml",
     # README.md is generated below (banner + link rewrite), not copied verbatim.
 ]
