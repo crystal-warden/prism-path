@@ -180,6 +180,17 @@ def test_a_runnable_flow_still_runs(tmp_path, capsys):
     assert code == 0 and "Path: ['a', 'b']" in out
 
 
+def test_a_worker_that_does_not_answer_is_one_line(tmp_path, monkeypatch, capsys):
+    from prismpath.workers.chat_agent import ChatAgentError
+    def down(_path):
+        raise ChatAgentError("[a] llama3.2 at http://localhost:11434/v1: [Errno 111] Connection refused")
+    monkeypatch.setattr(cli, "parse_file", down)
+    code, _out, err = _main(capsys, "validate", str(tmp_path / "flow.md"))
+    assert code == 2
+    assert err.strip() == ("prismpath validate: the worker did not answer: "
+                           "[a] llama3.2 at http://localhost:11434/v1: [Errno 111] Connection refused")
+
+
 # ------------------------------------------------------------------ real bugs stay visible
 
 def test_an_unexpected_exception_keeps_its_traceback(tmp_path, monkeypatch):

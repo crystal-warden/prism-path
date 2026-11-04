@@ -338,6 +338,9 @@ def _user_error(exc: BaseException):
         return f"an input file is not UTF-8 text ({exc.reason} at byte {exc.start})"
     if isinstance(exc, json.JSONDecodeError):
         return f"an input file is not valid JSON: {exc}"
+    from prismpath.workers.chat_agent import ChatAgentError
+    if isinstance(exc, ChatAgentError):
+        return f"the worker did not answer: {exc}"
     return None
 
 
