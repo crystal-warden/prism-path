@@ -61,7 +61,7 @@ images and are judged against the same frozen conformance corpus.
 | directory | what it holds |
 |---|---|
 | `rtl/`, `rtl-tb/`, `tb/` | the fixed interpreter circuit (`ppt_interp.sv`: runtime load port, field register file, comparator atoms, per-edge stack machine, priority encoder, saturating visits bank), its AXI-Lite wrapper `ppt_axi.sv`, the control interpreter and the modules around them, with the Verilator and cocotb benches that certify them |
-| `vivado/`, `pynq/`, `deploy.sh` | the Vivado batch scripts that build the overlay (`ppt_overlay.bit` and `.hwh`), the PYNQ runtime that hot-reloads a table over MMIO, and the board bring-up checklist in [`pynq/BOARD_BRINGUP.md`](pynq/BOARD_BRINGUP.md) |
+| `vivado/`, `pynq/`, `deploy.sh` | the Vivado batch scripts that build the overlay (`ppt_overlay.bit` and `.hwh`), and the PYNQ runtime that hot-reloads a table over MMIO |
 | `bridge/` | the host side of the live sensor demo: field bridges from a BNO086 sensor to the interpreter, with a read watchdog and a staleness detector |
 | `avr/` | the same evaluator on an ATmega328P (a stock Arduino Uno R3), tables streamed over serial |
 | `rp2350/` | the evaluator on the Pico 2, built for both the ARM Cortex-M33 and the Hazard3 RISC-V core from one source, plus `ppt_tof.c`, a VL53L0X time-of-flight proximity policy that decides on device |
