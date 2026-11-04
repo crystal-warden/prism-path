@@ -46,9 +46,13 @@ record, and some of them predate the upload.
   Act catalogs, VEX, the pack SBOM), the Vector integration and Wireshark dissector, the hardware, eBPF,
   FPGA and firmware work, the Lean proof of Figueroa quantization, the pre registered comparison and the
   evidence ledger live in the repository.
-- **Fixed in the command line (placeholder).** CLI error handling: missing files, malformed flows and
-  absent optional extras end with a one line message and a nonzero exit instead of a traceback. To be
-  filled in from the `cli-clean-errors` change when it merges.
+- **Command line errors.** A missing or unreadable file, a flow that does not parse, malformed JSON, a
+  worker that does not answer and a missing optional extra now end in one line on stderr naming the
+  command, with exit code 2, instead of a traceback; `PRISMPATH_DEBUG=1` shows the traceback. A missing
+  extra names the install line (`pip install 'prismpath[embeddings]'` and so on). The ledger, `ci-report`
+  and RFC 3161 commands check for `ots`, `git` and `openssl` before they start. `calibrate`, `label` and
+  `trail` refuse a missing log rather than reading it as empty. `init NAME` writes `NAME.md` and
+  `NAME.tests.md`.
 
 ### Added
 - **A CycloneDX 1.6 SBOM for a signed policy pack, from the compliance emitter**

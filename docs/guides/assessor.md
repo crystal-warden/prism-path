@@ -22,6 +22,9 @@ prismpath swap verify --ppt flow.ppt --pub authority.pub --revoked revoked.json
 prismpath facet decode flow.md <hex>            # what a wire frame decided
 ```
 
+The `ledger` commands call the OpenTimestamps client, `ots`, which is installed separately
+(`pip install opentimestamps-client`) and must be on your PATH.
+
 Two things are not in the base install. `ledger anchor`, `upgrade` and `verify` call the external
 OpenTimestamps client, `ots`, so install it separately (`pip install opentimestamps-client`) and keep it
 on your PATH. Every `swap` action needs the `signing` extra (`pip install 'prismpath[signing]'`).
