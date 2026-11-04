@@ -10,8 +10,8 @@ You declare the node `@code` (see below), write a handler `(node, instruction, s
 register it:
 
 ```python
-from prismpath.code_nodes import code_agent, in_process_runner
-from prismpath.engine import run
+from prismpath.workers.code_nodes import code_agent, in_process_runner
+from prismpath.kernel.engine import run
 
 def extract(node, instruction, state):
     return {"amount": parse_amount(state["request"])}      # emit the fields the edges route on

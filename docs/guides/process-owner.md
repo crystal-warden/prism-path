@@ -31,6 +31,9 @@ prismpath context flow.md       # the proven facts about the flow, as grounding 
 prismpath lint flow.md          # ambiguous semantic conditions (needs the embedder)
 ```
 
+The embedder is the `embeddings` extra (`pip install 'prismpath[embeddings]'`). Everything above it in this
+list runs on the base install, and so does `test` on any row that routes deterministically.
+
 The fixture table is a Markdown table of `node`, `outcome`, `fields`, `expect` rows. It is the process
 change stated as a test: when you change a rule, you add the row that proves it. `prismpath test` runs
 in milliseconds and CI runs it on every pull request, rendering the before and after graph in the review.

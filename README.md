@@ -170,6 +170,21 @@ prismpath test prismpath/examples/pr_demo/triage.md       # fixture asserted rou
 prismpath --help                                          # commands grouped by who runs them
 ```
 
+The base install is numpy only, and a feature that needs more says which extra it needs. Add one with
+`pip install -e ".[embeddings]"` from the clone, or `pip install 'prismpath[embeddings]'` from PyPI:
+
+| Extra | What needs it |
+|---|---|
+| none (numpy only) | `init`, `validate`, `test` on deterministic rows, `graph`, `context`, `capability`, `contract`, `verify`, `portable`, `compile`, `calibrate`, `trail`, `facet`, and `run` on a flow whose edges are all deterministic |
+| `embeddings` | the embedder, so semantic edges can route: `run` on a flow that has one, `lock`, `test` rows that exercise one, `lint`'s semantic checks, `centroids` |
+| `signing` | Ed25519 and the confidentiality layer: every `swap` action (`keygen`, `envelope`, `pack`, `verify`, `swap`, `attest`) |
+| `control-plane` | Mission Control (`python -m prismpath.mission_control`), the orchestrator and the sprint runner: FastAPI, uvicorn, pydantic and requests |
+| `llm-local` | transformers, for the local model that serves as the LLM fallback in the router and the swarm runner |
+
+Extras combine (`pip install -e ".[embeddings,signing]"`). `prismpath ledger anchor`, `upgrade` and `verify` also call the
+external OpenTimestamps client, `ots`, which is not a Python extra: install it separately
+(`pip install opentimestamps-client`) and keep it on your PATH.
+
 Or skip the terminal: the **[live playground](https://www.crystalwardenlabs.com/playground)** runs the
 portable kernel in your browser; nothing you type leaves the page. **[GETTING_STARTED.md](GETTING_STARTED.md)**
 goes from clone to a real agent driving your own flow in eight steps.

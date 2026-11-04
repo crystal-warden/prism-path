@@ -24,9 +24,9 @@ stdin and print stdout is a worker.
 ## Wire it in
 
 ```python
-from prismpath.parser import parse_file
-from prismpath.engine import run
-from prismpath.cli_worker import cli_worker
+from prismpath.kernel.parser import parse_file
+from prismpath.kernel.engine import run
+from prismpath.workers.cli_worker import cli_worker
 
 worker = cli_worker(["python", "ci_gate.py"], pass_state=["report"])
 # worker = cli_worker(["node", "log_alert.js"], pass_state=["line"])   # a JS worker

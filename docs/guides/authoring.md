@@ -2,7 +2,7 @@
 
 A workflow is **one markdown file**. The kernel (~700 LOC across parser/predicates/router/
 engine; hard dep: numpy; the embedder is the optional `[embeddings]` extra, transformers only
-for the LLM-fallback router) reads it and drives any worker through it. No code defines the
+for the LLM-fallback router, which is the `[llm-local]` extra; the README lists every extra and the commands that need it) reads it and drives any worker through it. No code defines the
 graph; no framework state objects. This doc is the authoring contract: the normative format
 definition lives in [SPEC.md](../../SPEC.md); read both before extending.
 

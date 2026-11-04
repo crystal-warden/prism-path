@@ -68,8 +68,8 @@ worker(node_name: str, instruction: str, state: dict) -> str | dict
 ### Routers
 
 ```python
-from prismpath.engine import run
-from prismpath.router import HybridRouter, LLMRouter
+from prismpath.kernel.engine import run
+from prismpath.routing.router import HybridRouter, LLMRouter
 from prismpath import llm_local
 
 router = HybridRouter(LLMRouter(llm_local.generate), margin=0.05)  # recommended
@@ -92,7 +92,7 @@ whose verdict carried confidence ≥ 0.8 is reused and the call is **skipped**; 
 adjudicates, then `learn()`s the fresh verdict so the cache compounds.
 
 ```python
-from prismpath.prefilter import PrefilterCache
+from prismpath.routing.prefilter import PrefilterCache
 
 cache = PrefilterCache("corpus/")            # lazy; pluggable embed_fn
 res = cache.lookup(document)

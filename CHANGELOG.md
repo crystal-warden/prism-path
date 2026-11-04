@@ -8,6 +8,48 @@ spec stable.
 
 ## [Unreleased]
 
+### Summary since the 0.1.0 upload to PyPI
+
+The 0.1.0 files on PyPI were built on 2026-08-17 from commit `6cafd86`, which is 179 commits after the
+`v0.1.0` tag (`990f493`, 2026-08-05); RELEASING.md has the evidence. This summary covers the 368 commits
+after `6cafd86`, grouped by what a user of the package meets. The detailed entries below it are the
+record, and some of them predate the upload.
+
+- **Installing and extras.** The README, the getting started guide, the PyPI page and the guides now say
+  which extra each feature needs (`embeddings`, `signing`, `control-plane`, `llm-local`) and that the
+  ledger commands call the external `ots` client. The wheel ships every package under `prismpath` by
+  discovery, so `prismpath.comparisons` and `prismpath.portable` are no longer missing from it, and the
+  package metadata carries an SPDX license expression and the documentation and issue links.
+- **Command line.** `--help` groups the commands by the four people who run them (process owner,
+  engineer, operator, assessor). New: `prismpath trail` reads an audit log, `swap attest` shows an
+  overlay, `facet quantize` and `encode` refuse a bad payload with the field and the reason and exit 2,
+  and the ledger commands return the OpenTimestamps client's exit code. `run --worker` replaces
+  `--agent` (the old flag still works, hidden).
+- **Package layout.** The flat layout became eight subpackages (`kernel`, `routing`, `safety`, `hotswap`,
+  `ledgers`, `workers`, `orchestration`, `evals`); the 67 old module names still import and now warn.
+  The Facet wire ships in the package as `prismpath.telemetry`.
+- **Flow format and engine.** Field definitions (SPEC section 4.5) let a flow sign the meaning of every
+  value it routes on, with one acceptance rule on every encoder that refuses a value rather than
+  truncating it. Receipts carry a cause from the refusal and deviation registry. An error edge guard that
+  cannot be evaluated is recorded, the embedding router's cache is bounded, the type gate survives a
+  crash resume, and an unparseable audit log line fails `verify_log` rather than vanishing.
+- **Signed packs and hot swap.** A durable commit protocol, an explicit audit persistence step, and an
+  active policy that survives a new process, so `swap attest` reports what a real swap left running.
+- **Facet wire.** The refresh, tick replay, concentrator, receipt stream and spiral packing profiles
+  (PROTOCOL.md sections 2.7 to 2.10) and a durable epoch journal.
+- **Mission Control.** Panels for inspect, quality, proof and policy, and a file picker instead of a
+  typed path.
+- **Documentation.** The public position (docs/POSITION.md), the Decision Dictionary, the operator's
+  guide and system map, METHODOLOGY.md, and README front doors for the crates. Install snippets in the
+  guides now import from the grouped module paths.
+- **Not in the wheel.** The compliance adapter (OSCAL and CycloneDX output, the SSDF and Cyber Resilience
+  Act catalogs, VEX, the pack SBOM), the Vector integration and Wireshark dissector, the hardware, eBPF,
+  FPGA and firmware work, the Lean proof of Figueroa quantization, the pre registered comparison and the
+  evidence ledger live in the repository.
+- **Fixed in the command line (placeholder).** CLI error handling: missing files, malformed flows and
+  absent optional extras end with a one line message and a nonzero exit instead of a traceback. To be
+  filled in from the `cli-clean-errors` change when it merges.
+
 ### Added
 - **A CycloneDX 1.6 SBOM for a signed policy pack, from the compliance emitter**
   (`adapters.compliance.emit.pack_sbom`, `python -m adapters.compliance.emit --pack-sbom`), beside its

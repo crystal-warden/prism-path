@@ -16,7 +16,8 @@ path to the same operations; `prismpath --help` lists your commands under "Opera
 
 ## 2. Swap and attest
 
-A policy reaches an enforcement point as a signed pack. Two of the `swap` actions are yours:
+A policy reaches an enforcement point as a signed pack. Two of the `swap` actions are yours, and like the rest
+of `swap` they need the `signing` extra (`pip install 'prismpath[signing]'`):
 
 ```bash
 prismpath swap swap   --out <state dir> --pub <authority.pub> --envelope <envelope.json> --ppt <new.ppt>

@@ -20,7 +20,7 @@ target executes. A flow that must reach a device stays in Level M by constructio
 ## 2. Delivery
 
 ```bash
-prismpath lock flow.md          # pin semantic routing into a lockfile for reproducible routing
+prismpath lock flow.md          # pin semantic routing into a lockfile for reproducible routing (needs the embeddings extra)
 prismpath compile flow.md       # the flow and its lock as a single file portable JS bundle
 prismpath portable flow.md      # is this flow in the model free portable subset
 prismpath plugins --check flow.md
@@ -29,7 +29,8 @@ prismpath ci-report             # the pull request report: validate, fixtures, b
 
 For the compiled image, `.ppt`, the compiler is `prismpath-hw/ppt_compile.py` and the format is
 `prismpath-hw/TABLE_FORMAT.md`; the C target, the kernel programs, the microcontroller firmware, and the
-fabric all execute that image. The signed pack around it is your setup:
+fabric all execute that image. The signed pack around it is your setup, and every `swap` action needs the `signing` extra
+(`pip install 'prismpath[signing]'`):
 
 ```bash
 prismpath swap keygen   --out keys --name authority
@@ -50,7 +51,7 @@ prismpath label       log.jsonl            # hand label routing decisions
 prismpath annotate    bench.jsonl          # blind relabel for agreement measurement
 prismpath kappa       a.jsonl b.jsonl      # Cohen's kappa between two label sets
 prismpath calibrate   labels.jsonl         # the risk controlled escalation threshold
-prismpath centroids   bench.jsonl          # prototype routing against zero shot embedding
+prismpath centroids   bench.jsonl          # prototype routing against zero shot embedding (needs the embeddings extra)
 ```
 
 `docs/decoder-ring.md` explains the statistics behind each of these in plain language.

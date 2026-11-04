@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=77"]      # 77 reads the SPDX license expression and license-files below
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -8,7 +8,8 @@ version = "0.1.0"
 description = "One Markdown file is the workflow: a routing spectrum (deterministic predicates -> embeddings -> LLM-on-doubt) for LLM-agent workflows, plus a gated sprint control plane."
 readme = "tools/mirror_readme.md"    # the lean product page renders on PyPI (absolute links); the
                                      # dense research README stays the repo landing
-license = { text = "Apache-2.0" }
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
 authors = [{ name = "Crystal Warden Labs" }]
 requires-python = ">=3.10"
 keywords = ["llm", "agents", "workflow", "orchestration", "markdown", "routing", "declarative"]
@@ -16,8 +17,9 @@ classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "Intended Audience :: Information Technology",
-    "License :: OSI Approved :: Apache Software License",
     "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
@@ -94,7 +96,9 @@ prismpath = ["flows/*.md",                    # example + reference flows
 [project.urls]
 Homepage = "https://github.com/crystal-warden/prismpath"     # the clean product mirror (browse + quickstart)
 Repository = "https://github.com/crystal-warden/prism-path"  # source, issues, PRs (the mirror is generated)
+Documentation = "https://github.com/crystal-warden/prism-path/blob/main/docs/README.md"
 "Getting Started" = "https://github.com/crystal-warden/prism-path/blob/main/GETTING_STARTED.md"
 Specification = "https://github.com/crystal-warden/prism-path/blob/main/SPEC.md"
+Issues = "https://github.com/crystal-warden/prism-path/issues"
 Changelog = "https://github.com/crystal-warden/prism-path/blob/main/CHANGELOG.md"
 Security = "https://github.com/crystal-warden/prism-path/blob/main/SECURITY.md"

@@ -16,11 +16,15 @@ RFC 3161 authority, including from an air gapped site.
 
 ```bash
 prismpath trail run.audit.jsonl                 # decisions by outcome, rule, and cause; swaps; attestations; root check
-prismpath ledger verify --dir proofs            # verify anchored roots
-prismpath ledger upgrade ...                    # upgrade a pending anchor to a Bitcoin attestation
+prismpath ledger verify --out proofs --leaf <hash>   # one leaf: its Merkle path to the anchored root, then the OTS proof
+prismpath ledger upgrade --out proofs --label v1     # upgrade a pending anchor to a Bitcoin attestation
 prismpath swap verify --ppt flow.ppt --pub authority.pub --revoked revoked.json
 prismpath facet decode flow.md <hex>            # what a wire frame decided
 ```
+
+Two things are not in the base install. `ledger anchor`, `upgrade` and `verify` call the external
+OpenTimestamps client, `ots`, so install it separately (`pip install opentimestamps-client`) and keep it
+on your PATH. Every `swap` action needs the `signing` extra (`pip install 'prismpath[signing]'`).
 
 `trail` reads the append only log, checks that the Merkle root still verifies, and summarises the window
 in cause code terms; a root that no longer matches an anchored one is the signal that the log was

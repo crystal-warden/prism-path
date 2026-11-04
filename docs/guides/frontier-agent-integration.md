@@ -44,9 +44,9 @@ This architecture pairs the **determinism, auditability, and safety of PrismPath
 The most decoupled worker pattern uses processes. PrismPath’s [`cli_worker.py`](../../prismpath/workers/cli_worker.py) can invoke **any command line program** as a worker: an AI agent CLI or your own Go/Rust/JS/Python project, passing node instructions on `stdin` and parsing JSON/stdout. For a runnable, four language walkthrough of wiring in your own program, see [Run any program as a worker](workers.md).
 
 ```python
-from prismpath.parser import parse_file
-from prismpath.engine import run
-from prismpath.cli_worker import cli_worker
+from prismpath.kernel.parser import parse_file
+from prismpath.kernel.engine import run
+from prismpath.workers.cli_worker import cli_worker
 
 # Use any CLI agent backend (Claude Code, Gemini CLI, Aider, custom scripts)
 worker = cli_worker(["claude", "-p"])
@@ -65,8 +65,8 @@ res = run(parse_file("workflow.md"), worker)
 For REST APIs or local inference servers (vLLM, LM Studio, Ollama, OpenAI compatible endpoints):
 
 ```python
-from prismpath.parser import parse_file
-from prismpath.engine import run
+from prismpath.kernel.parser import parse_file
+from prismpath.kernel.engine import run
 
 def api_agent(node_name: str, instruction: str, state: dict) -> dict:
     # Query any HTTP endpoint or local LLM server

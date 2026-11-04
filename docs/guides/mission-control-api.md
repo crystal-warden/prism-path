@@ -11,7 +11,7 @@ the same API: other services connect the same way.
 ## Run it
 
 ```bash
-pip install -e ".[control-plane]"        # FastAPI/uvicorn/pydantic (the control-plane extra)
+pip install -e ".[control-plane]"        # FastAPI/uvicorn/pydantic (the control-plane extra; from PyPI: pip install 'prismpath[control-plane]')
 MC_PROJ=/tmp/demo python -m prismpath.mission_control
 # command center + API at http://127.0.0.1:9109  (loopback only; OpenAPI at /docs)
 ```
