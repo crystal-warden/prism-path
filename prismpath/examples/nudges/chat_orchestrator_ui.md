@@ -1,4 +1,4 @@
-# Build: a "plan → approve → execute" chat interface (browser app)
+# Example nudge: build a "plan → approve → execute" chat interface (browser app)
 
 GOAL: a single-page browser chat UI for a **non-technical person**. They type a rough idea in plain
 language; an AI agent replies conversationally; asking a clarifying question or two and proposing a

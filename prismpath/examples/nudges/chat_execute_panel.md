@@ -1,7 +1,7 @@
-# Narrow task: add the EXECUTE / build-progress panel to the existing working chat UI
+# Example nudge: add a build-progress panel to an existing working chat UI
 
-You are given a chat UI that ALREADY WORKS for plan→approve: the user types an idea, the agent
-plans (POST /api/session, then /message), and an "Approve & Build" button appears. **Do not break or
+A narrow nudge: one small change to a project that already works. The chat UI in this example ALREADY WORKS
+for plan→approve: the user types an idea, the agent plans (POST /api/session, then /message), and an "Approve & Build" button appears. **Do not break or
 refactor that working flow.** Make the SMALLEST change that adds the remaining piece below.
 
 ## The ONE thing to add: render the EXECUTE phase from the SSE stream
