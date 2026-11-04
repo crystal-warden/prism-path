@@ -83,8 +83,8 @@ images and are judged against the same frozen conformance corpus.
   as an AXI-Lite module reference through the plain-Verilog shim `ppt_axi_top.v`, because block
   design module references refuse a SystemVerilog top. The certified pair is committed under
   `evidence/`.
-- **The board** is a PYNQ-Z1 image v3.1.1 on an Arty Z7-20. Follow
-  [`pynq/BOARD_BRINGUP.md`](pynq/BOARD_BRINGUP.md); `pynq/ppt_pynq.py` is the hot-reload fabric
+- **The board** is a PYNQ-Z1 image v3.1.1 on an Arty Z7-20. Set the board up
+  with the PYNQ image's own instructions; `pynq/ppt_pynq.py` is the hot-reload fabric
   router and `deploy.sh` compiles a flow and sends it to the board. PYNQ v3 needs `sudo` with the
   pynq virtual environment sourced, and the server should run from a directory that does not hold a
   folder named `pynq`, which would shadow the package. Reprogramming the PL under an active auto
