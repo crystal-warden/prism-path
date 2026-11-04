@@ -51,7 +51,8 @@ def _add_owner_commands(subparsers) -> None:
     init_parser = subparsers.add_parser(
         'init', help='Scaffold a starter flow - zero to a running, validated flow in two commands')
     init_parser.add_argument('path', nargs='?', default=None,
-                             help='where to write the flow (default: ./flow.md, or ./<template>.md)')
+                             help='where to write the flow; .md is added when missing, and the tests go '
+                                  'beside it as <name>.tests.md (default: ./flow.md, or ./<template>.md)')
     init_parser.add_argument('--template', default=None, metavar='NAME',
                              help="start from a gallery flow instead of the generic starter "
                                   "(`--template list` shows what's available); copies the flow AND "
@@ -303,13 +304,91 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+class CliError(Exception):
+    """A failure the person at the terminal can fix (a missing program, a flow that cannot run, a
+    directory that is not a git repository). `main` prints the message as one line on stderr and
+    exits with `code`, which is 2 like every other input or environment refusal here."""
+
+    def __init__(self, message: str, code: int = 2):
+        super().__init__(message)
+        self.code = code
+
+
+# The ordinary mistakes `main` reports in one line. Anything else is a bug and keeps its traceback;
+# PRISMPATH_DEBUG=1 shows the traceback for these too.
+_FILE_ERRORS = (FileNotFoundError, NotADirectoryError, IsADirectoryError, PermissionError)
+
+
+def _user_error(exc: BaseException):
+    """The one line `main` prints for `exc`, or None when `exc` is not an ordinary user mistake."""
+    from prismpath import extras
+    from prismpath.kernel.parser import ParseError
+    if isinstance(exc, CliError):
+        return str(exc)
+    missing = extras.from_exception(exc)
+    if missing is not None:
+        return missing.install
+    if isinstance(exc, _FILE_ERRORS):
+        if exc.filename is not None:
+            return f"{exc.filename}: {exc.strerror}"
+        return str(exc)
+    if isinstance(exc, ParseError):
+        return f"the flow document cannot be parsed: {exc}"
+    if isinstance(exc, UnicodeDecodeError):
+        return f"an input file is not UTF-8 text ({exc.reason} at byte {exc.start})"
+    if isinstance(exc, json.JSONDecodeError):
+        return f"an input file is not valid JSON: {exc}"
+    return None
+
+
 def main(argv=None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
     if not args.command:
         parser.print_help()
         return 2
-    return args.func(args)
+    try:
+        return args.func(args)
+    except Exception as exc:
+        message = None if os.environ.get("PRISMPATH_DEBUG") else _user_error(exc)
+        if message is None:
+            raise
+        print(f"prismpath {args.command}: {message}", file=sys.stderr)
+        return exc.code if isinstance(exc, CliError) else 2
+
+
+def _require_file(path: str) -> None:
+    """Refuse a missing input file that the command would otherwise read as empty."""
+    if not os.path.exists(path):
+        import errno
+        raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), path)
+
+
+def require_program(program: str, how: str, action: str = "") -> None:
+    """Refuse before shelling out to an external program that is not on PATH, naming it and how to
+    get it, instead of letting the subprocess fail as a missing file. `action` names the subcommand
+    action that needs it, after the `prismpath <command>:` prefix `main` prints."""
+    import shutil
+    if shutil.which(program) is None:
+        raise CliError(f"{action + ' ' if action else ''}needs the `{program}` program on PATH ({how})")
+
+
+def _require_runnable(graph, path: str) -> None:
+    """Refuse to run a flow whose start or edge targets name nodes it does not define; the engine
+    would otherwise stop on a bare KeyError. `prismpath validate` reports the same findings."""
+    if not graph.nodes:
+        raise CliError(f"{path} defines no nodes (a node is a `## name` heading); "
+                       f"see `prismpath validate {path}`")
+    problems = []
+    if graph.start not in graph.nodes:
+        problems.append(f"start node {graph.start!r} is not defined")
+    for name, node_obj in graph.nodes.items():
+        for target, _condition in node_obj.edges:
+            if target not in graph.nodes:
+                problems.append(f"[{name}] edge -> {target!r} points at an undefined node")
+    if problems:
+        more = f" (and {len(problems) - 1} more)" if len(problems) > 1 else ""
+        raise CliError(f"{path} cannot run: {problems[0]}{more}; see `prismpath validate {path}`")
 
 
 def _mock_agent(node, instruction, state):
@@ -318,6 +397,7 @@ def _mock_agent(node, instruction, state):
 
 def run_flow(args) -> int:
     graph = parse_file(args.flow_md)
+    _require_runnable(graph, args.flow_md)
     agent = _mock_agent
     if getattr(args, "agent", None):
         from prismpath.workers.chat_agent import chat_agent
@@ -367,6 +447,7 @@ def import_cmd(args) -> int:
 def calibrate_cmd(args) -> int:
     from prismpath.routing import calibrate
     from prismpath.routing import routelog
+    _require_file(args.labels)
     recs = routelog.load_records(args.labels)
     cal = calibrate.calibrate(recs, alpha=args.alpha)
     print(f"n={cal['n']} labeled decisions; target risk alpha={cal['alpha']}")
@@ -392,6 +473,7 @@ def graph_flow(args) -> int:
 
 def label_cmd(args) -> int:
     from prismpath.routing import routelog
+    _require_file(args.log)
     records = routelog.load_records(args.log)
     if not records:
         print(f"no records in {args.log}")
@@ -775,6 +857,8 @@ def init_cmd(args) -> int:
         print(f"✓ wrote {', '.join(others)}\n")
     else:
         flow_path = args.path or "flow.md"
+        if not flow_path.endswith(".md"):
+            flow_path += ".md"           # `init demo` writes demo.md, like every other flow
         tests_path = os.path.splitext(flow_path)[0] + ".tests.md"
         for path_item in (flow_path, tests_path):
             if os.path.exists(path_item):
@@ -1137,6 +1221,13 @@ def ledger_cmd(args):
     from prismpath.ledgers import ledger_ots as ots
     from prismpath.ledgers import ledger_airgap as airgap
     action = args.action
+    # The OpenTimestamps client and OpenSSL are external programs, checked before shelling out.
+    if action in ('anchor', 'upgrade', 'verify', 'relay-stamp'):
+        require_program('ots', 'the OpenTimestamps client: pip install opentimestamps-client', action)
+    if action == 'anchor' and args.repo:
+        require_program('git', 'install git from https://git-scm.com', 'anchor --repo')
+    if action == 'rfc3161':
+        require_program('openssl', "install OpenSSL with your system's package manager", action)
     if action == 'anchor':
         hashes = ots.from_ledger(args.repo) if args.repo else []
         if not hashes:
@@ -1257,4 +1348,7 @@ def facet_cmd(args) -> int:
 
 
 if __name__ == '__main__':
-    raise SystemExit(main())
+    # Run the importable module's main, not this __main__ copy, so the CliError that other modules
+    # raise (ci_report imports it from prismpath.cli) is the class main catches.
+    from prismpath.cli import main as _main
+    raise SystemExit(_main())

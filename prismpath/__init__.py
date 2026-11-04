@@ -27,6 +27,7 @@ The package is grouped by concern:
     prismpath.telemetry      Facet: quantizer, zeckendorf, wire, packed, receipts, epochs, ackchannel,
                              selfheal, concentrator, spiral (PROTOCOL.md)
     prismpath.canon          the byte level helpers every persisted or signed artifact is built from
+    prismpath.extras         the optional extras, and the MissingExtra a module raises without one
     prismpath.cli            the command line, grouped by who runs it; prismpath.trail, lsp, ci_report
     prismpath.mission_control  the operator's console
     prismpath.portable       the JavaScript kernel and the frozen conformance corpora every kernel is judged by

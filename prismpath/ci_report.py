@@ -176,7 +176,20 @@ def render(reports: List[FlowReport]) -> str:
 
 
 def ci_report_cmd(args) -> int:
-    reports = [report_flow(rel, args.base) for rel in changed_flows(args.base)]
+    from prismpath.cli import CliError, require_program
+    require_program("git", "install git from https://git-scm.com")
+    inside = subprocess.run(["git", "rev-parse", "--is-inside-work-tree"],
+                            capture_output=True, text=True)
+    if inside.returncode != 0 or inside.stdout.strip() != "true":
+        raise CliError("must run inside a git working tree "
+                       "(it reports the flows changed since --base)")
+    try:
+        flows = changed_flows(args.base)
+    except subprocess.CalledProcessError as exc:
+        detail = (exc.stderr or "").strip().splitlines()
+        raise CliError(f"git could not diff against {args.base!r}"
+                       + (f": {detail[-1]}" if detail else "")) from exc
+    reports = [report_flow(rel, args.base) for rel in flows]
     text = render(reports)
     if args.out:
         with open(args.out, "w", encoding="utf-8") as out_file:

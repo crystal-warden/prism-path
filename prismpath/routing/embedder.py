@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import os
 
+from prismpath.extras import MissingExtra
+
 MODEL_NAME = os.environ.get("EMBED_MODEL", "BAAI/bge-base-en-v1.5")
 EMBED_DEVICE = os.environ.get("EMBED_DEVICE", "cpu")
 # The lock identity is per-(model, provider, precision): the same weights under a different
@@ -28,7 +30,8 @@ def _embedder():
         try:
             from sentence_transformers import SentenceTransformer
         except ImportError as error:
-            raise ImportError(
+            raise MissingExtra(
+                "embeddings", "sentence-transformers",
                 "the embedder needs sentence-transformers, an optional extra. Install it with "
                 "`pip install 'prismpath[embeddings]'` (or `pipx inject prismpath sentence-transformers`). "
                 "The non-embedding commands (annotate, kappa, validate, contract, graph, import, test) "

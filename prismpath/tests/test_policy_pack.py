@@ -104,7 +104,8 @@ def test_revoked_key(pack):
 
 
 def test_refusal_is_loud_without_cryptography(pack, monkeypatch):
-    """Loud absence: no cryptography -> RuntimeError naming the install, never silent."""
+    """Loud absence: no cryptography -> RuntimeError naming the install, never silent; it is also the
+    MissingExtra the command line prints as one install line."""
     import builtins
     real_import = builtins.__import__
 
@@ -114,8 +115,10 @@ def test_refusal_is_loud_without_cryptography(pack, monkeypatch):
         return real_import(name, *args, **kw)
 
     monkeypatch.setattr(builtins, "__import__", block)
-    with pytest.raises(RuntimeError, match="pip install cryptography"):
+    with pytest.raises(RuntimeError, match=r"pip install 'prismpath\[signing\]'") as raised:
         pp.verify_pack(pack["ppt"], [pack["keys"]["public"]])
+    from prismpath.extras import MissingExtra
+    assert isinstance(raised.value, MissingExtra) and raised.value.extra == "signing"
 
 
 # ------------------------------------------------------------- image validation

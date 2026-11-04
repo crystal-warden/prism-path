@@ -14,6 +14,7 @@ from __future__ import annotations
 import collections
 import datetime as _dt
 import json
+import os
 import sys
 from typing import Any, Dict, List, Optional
 
@@ -110,6 +111,9 @@ def render(rep: Dict[str, Any]) -> str:
 
 
 def trail_cmd(args) -> int:
+    if not os.path.exists(args.audit_log):        # a mistyped path must not read as an empty, verified log
+        import errno
+        raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), args.audit_log)
     rep = run(args.audit_log, since=args.since, last=args.last)
     print(json.dumps(rep, indent=1) if args.json else render(rep))
     return 0 if rep["log"]["verifies"] else 1
