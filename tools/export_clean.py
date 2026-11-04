@@ -71,7 +71,7 @@ EXCLUDE_PREFIXES = [
 ]
 EXCLUDE_SUFFIXES = [".deferrals"]           # empty top-level scratch files
 EXCLUDE_EXACT = {"docs_health_report.md", "tools/arch_scorecard.json",  # generated reports
-                 "tools/mirror_readme.md"}  # the mirror's README SOURCE (used below, not shipped as a file)
+                 "tools/mirror_readme.md"}  # the mirror's README SOURCE (used below, then copied verbatim)
 
 RESEARCH_REPO = "https://github.com/crystal-warden/prism-path/blob/main/"
 MIRROR_BANNER = (
@@ -274,12 +274,16 @@ def main():
     lines = readme.split("\n")
     banner_index = 1 if lines and lines[0].startswith("# ") else 0            # banner after the H1
     (out / "README.md").write_text("\n".join(lines[:banner_index] + ["", MIRROR_BANNER.rstrip()] + lines[banner_index:]))
+    # pyproject's `readme` names the template, so the mirror ships it unchanged and builds the same PyPI page
+    if mirror_src.exists():
+        (out / "tools").mkdir(exist_ok=True)
+        shutil.copy2(mirror_src, out / "tools" / "mirror_readme.md")
 
     # generated clean CI
     (out / ".github" / "workflows").mkdir(parents=True, exist_ok=True)
     (out / ".github" / "workflows" / "ci.yml").write_text(CLEAN_CI)
 
-    n_files = len(included) + 2   # + README + ci.yml
+    n_files = len(included) + 2 + mirror_src.exists()   # + README + ci.yml (+ the PyPI page template)
     total_kb = sum((out / repo_path).stat().st_size for repo_path in included) // 1024
     print(f"mirror written to {out}")
     print(f"  files:        {n_files}  (~{total_kb} KB of tracked content)")

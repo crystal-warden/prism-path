@@ -6,7 +6,7 @@ frozen conformance vectors that changes an existing case bumps the spec version,
 is the spec-change review. Pre-1.0, minor versions may break APIs; the flow *format* is already
 spec stable.
 
-## [Unreleased]
+## [0.1.1] (not yet uploaded)
 
 ### Summary since the 0.1.0 upload to PyPI
 

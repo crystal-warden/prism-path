@@ -112,14 +112,14 @@ of the repository, the repository name, the workflow file name and an optional e
 existing trusted publisher, add the new repository's entry and remove the old one. None of that exists yet,
 and no workflow in this change creates it.
 
-## Owner decisions
+## Decided (2026-11-04)
 
-1. **Which line is the release source** (this repository, the mirror's `main` after a fresh export, or the
-   product branch). This repository is the only one that matches what is on PyPI and the only one the
-   current `pyproject.toml` and documentation fit.
-2. **The version number** (see the changelog; 0.2.0 is proposed, because the package layout, extras
-   documentation and many commands changed after 0.1.0).
-3. **The tag.** `v0.1.0` and its OpenTimestamps proof are the 2026-08-05 tree, not the PyPI files. A new tag
-   on the released commit, and whether to anchor it, is the owner's call.
-4. **Whether to upload by hand again or add Trusted Publishing,** and to which repository.
-5. **Whether the mirror should be regenerated** or retired as a release input.
+1. **Release source: the mirror's `main`, freshly exported.** Run `python tools/export_clean.py --out
+   ../prismpath-clean` from this repository at the commit being released, review and commit the result in the
+   mirror, then build and upload from the mirror checkout as above. The export copies `tools/mirror_readme.md`
+   into the mirror unchanged, because `pyproject.toml` names it as the PyPI page.
+2. **Version: 0.1.1.**
+3. **Uploads stay manual,** with `twine` and the owner's API token. No publishing workflow is added.
+
+Still open: a tag on the released commit and whether to anchor it with OpenTimestamps (`v0.1.0` and its proof
+are the 2026-08-05 tree, not the PyPI files).
