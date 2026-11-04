@@ -1,0 +1,9 @@
+# PrismPath evidence content anchor, renewed 2026-11-04: the files of SHA256SUMS that still exist, at their current revisions.
+# SHA256SUMS and SHA256SUMS.ots stay as the priority-date record of the earlier revisions.
+# Verify from repo root:  sha256sum -c docs/research/evidence/SHA256SUMS-2026-11-04
+397f53101a2b7070ccf2fbef2978123b7501ab7baf509592d624f56c2bb2dfd4  docs/research/supporting-evidence.md
+04e00bf007a3bac843bd61447e4054317a324458ffdfec643e89dec977c197b4  docs/research/paper-facet-figueroa-quantization.md
+860dfef91c67f47b99f1c3b9a8a1c399a0c7a80f67c45fc4beea90af13a19084  prismpath-hw/mesh-fusion/main/ppt_fusion_mesh.c
+cb40e257581b77a92348f6f7de6500b686074c0a5aca7508c39c45fa6c77eea9  prismpath-hw/mesh-fusion/field_walk.py
+e8f3d205f6467042fac4a46abe15415fcc0f38e49173a4498891871ef7ae02e8  prismpath-hw/mesh-fusion/RESULTS-field-walk-2026-08-30.md
+da72fb8293ce084a66053697c7c43c8fcb3fed839ac3fd02c630426d9f260cac  prismpath-hw/mesh-fusion/trail-2026-08-30-field-walk.jsonl
