@@ -57,7 +57,7 @@ needed. **This dictionary governs the company as well as the codebase, and it go
 governs identifiers.** Terms are fixed in prose first, in `docs/POSITION.md` and here; identifiers are then
 brought into line at a pace the certification gates allow. Some identifiers cannot move: the C evaluator core,
 the RTL and the eBPF programs are certified byte for byte, and renaming a field in `prismpath-hw/interp.c`
-means a silicon re-certification (`prismpath-hw/README.md:33`, `make cert`). For those, the dictionary entry
+means a silicon re-certification (`make cert` in `prismpath-hw/README.md`). For those, the dictionary entry
 records the frozen name as a deprecated alias and points at the walkthrough document, instead of pretending
 the rename happened.
 
