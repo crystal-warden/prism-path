@@ -23,6 +23,7 @@ import struct
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Tuple
 from prismpath import canon
+from prismpath.extras import MissingExtra
 # --- .ppt format facts (read-only mirror of ppt_compile.py / TABLE_FORMAT.md) ---
 MAGIC = 0x4D545050          # "PPTM"
 FORMAT_VERSION = 1
@@ -60,7 +61,12 @@ PACK_FORMAT = "ppt-pack/1"
 DEFAULT_CAPS = {"atoms": 1024, "nodes": 256, "edges": 1024, "prog_words": 4096,
                 "max_steps": 25, "max_stack": 16}
 
-_INSTALL_MSG = "policy signing needs `pip install cryptography` (the `signing` extra)"
+_INSTALL_MSG = "policy signing needs cryptography (the signing extra): pip install 'prismpath[signing]'"
+
+
+class MissingSigningExtra(MissingExtra, RuntimeError):
+    """The signing extra is not installed. Also a RuntimeError, because callers have long caught the
+    loud absence as one; the command line prints its install line alone."""
 
 
 def _ed25519():
@@ -71,7 +77,7 @@ def _ed25519():
         from cryptography.hazmat.primitives import serialization
         from cryptography.exceptions import InvalidSignature
     except ImportError as exc:                                   # pragma: no cover
-        raise RuntimeError(_INSTALL_MSG) from exc
+        raise MissingSigningExtra("signing", "cryptography", _INSTALL_MSG) from exc
     return Ed25519PrivateKey, Ed25519PublicKey, serialization, InvalidSignature
 
 
