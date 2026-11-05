@@ -170,6 +170,17 @@ def test_calibrate_prints_the_warning_it_computes(tmp_path, capsys):
     assert code == 0 and "warning:" in err and "n=1" in err
 
 
+# ------------------------------------------------------------------ centroids
+
+def test_centroids_says_when_no_row_is_a_semantic_decision(tmp_path, capsys):
+    # a benchmark over a flow with no semantic edge used to print `{}` and exit 0
+    _flow(tmp_path)
+    code, out, err = _main(capsys, "centroids", "--flows-dir", str(tmp_path),
+                           _bench(tmp_path, {"flow": "flow", "node": "a", "outcome": "x", "label": "b"}))
+    assert code == 2 and out == ""
+    assert err.startswith("prismpath centroids: no row of ") and "semantic routing decision" in err
+
+
 # ------------------------------------------------------------------ facet decode
 
 @pytest.mark.parametrize("payload", ["zz", "7", "", "ff", "00"])

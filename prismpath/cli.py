@@ -669,6 +669,11 @@ def centroids_cmd(args) -> int:
     with open(args.benchmark, encoding="utf-8") as fh:
         recs = [json.loads(line) for line in fh if line.strip()]
     res = centroid.cross_validate(recs, flows_dir=args.flows_dir, folds=args.folds, prior_weight=args.prior)
+    if not res:
+        # an empty report used to print as `{}` and exit 0
+        raise CliError(f"no row of {args.benchmark} is a semantic routing decision in the flows it names "
+                       "(a row needs a flow with semantic edges at that node, and a label that is one of its targets); "
+                       "--flows-dir says where the flows are")
     print(json.dumps(res, indent=2))
     return 0
 
