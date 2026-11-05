@@ -57,6 +57,13 @@ def verify_leaf(leaf_hex, path, root_hex):
     return cur.hex() == root_hex
 
 
+def _leaf_hex(value):
+    """The bare hex of a hash written as `sha256:<hex>`, which is how the Flow-Ledger records an output
+    hash; a bare hex string passes through. The Merkle tree is built over the bytes, so the prefix goes."""
+    value = value.strip()
+    return value[len("sha256:"):] if value.startswith("sha256:") else value
+
+
 def from_ledger(ledger_repo, ref="refs/prismpath/runs"):
     """Enumerate PrismPath-Output-Hash values from a Flow-Ledger bare repo (git log trailers)."""
     env = {**os.environ, "GIT_DIR": ledger_repo}
@@ -71,7 +78,7 @@ def from_ledger(ledger_repo, ref="refs/prismpath/runs"):
             text=True,
             env=env,
         ).stdout
-        out += [trailer_line.strip() for trailer_line in log.splitlines() if trailer_line.strip()]
+        out += [_leaf_hex(trailer_line) for trailer_line in log.splitlines() if trailer_line.strip()]
     return out
 
 
@@ -111,6 +118,7 @@ def upgrade(out_dir, label):
 def verify_unit(leaf_hex, out_dir, label):
     """Full chain: Merkle path to the anchored root, then OTS-verify the root against Bitcoin."""
     manifest = json.load(open(os.path.join(out_dir, f"manifest_{label}.json")))
+    leaf_hex = _leaf_hex(leaf_hex)
     path = manifest["leaves"].get(leaf_hex)
     if path is None:
         return dict(merkle_ok=False, reason="output-hash not in this anchor batch")

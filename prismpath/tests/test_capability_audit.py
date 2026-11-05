@@ -49,6 +49,34 @@ def _flow(tmp_path, text=FLOW):
     return str(path)
 
 
+# ------------------------------------------------------------------ the ledger anchor
+
+def test_the_ledger_hashes_anchor_as_bare_hex(tmp_path):
+    # the Flow-Ledger writes `sha256:<hex>`; the Merkle tree is over the bytes, and `ledger anchor`
+    # used to die with "non-hexadecimal number found in fromhex()"
+    if shutil.which("git") is None:
+        pytest.skip("git is not installed")
+    from prismpath.ledgers import ledger_ots
+    from prismpath.ledgers.ledger import Ledger
+    ledger = Ledger("demo", "run1", state_dir=str(tmp_path))
+    for unit in ("a", "b", "c"):
+        ledger.commit_unit(unit, files={unit + ".txt": unit})
+    hashes = ledger_ots.from_ledger(str(tmp_path / "demo.git"))
+    assert len(hashes) == 3 and all(len(h) == 64 and not h.startswith("sha256:") for h in hashes)
+    root, paths = ledger_ots.merkle_root_and_paths(hashes)
+    assert all(ledger_ots.verify_leaf(h, paths[i], root) for i, h in enumerate(hashes))
+
+
+def test_verify_unit_accepts_a_prefixed_leaf(tmp_path, monkeypatch):
+    from prismpath.ledgers import ledger_ots
+    leaves = ["aa" * 32, "bb" * 32]
+    root, paths = ledger_ots.merkle_root_and_paths(leaves)
+    (tmp_path / "manifest_v1.json").write_text(json.dumps(
+        {"label": "v1", "root": root, "leaf_count": 2, "leaves": {leaves[0]: paths[0], leaves[1]: paths[1]}}))
+    monkeypatch.setattr(ledger_ots.subprocess, "run", lambda *a, **k: subprocess.CompletedProcess(a, 0, "", ""))
+    assert ledger_ots.verify_unit("sha256:" + leaves[0], str(tmp_path), "v1")["merkle_ok"] is True
+
+
 # ------------------------------------------------------------------ the browser kernel
 
 def test_the_portable_kernel_imports_nothing():
