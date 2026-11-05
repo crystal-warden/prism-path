@@ -21,6 +21,10 @@ from prismpath.kernel.parser import parse_file
 _FLOWS = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "flows")
 
 
+class AnnotateError(ValueError):
+    """A benchmark row the annotator cannot present; `main` prints it as one line."""
+
+
 def _key(case: dict):
     return (case.get("flow", ""), case.get("node", ""), (case.get("outcome") or "").strip())
 
@@ -34,9 +38,16 @@ def blind_cases(benchmark_path: str, flows_dir: Optional[str] = None) -> Iterato
         if not line.strip():
             continue
         case = json.loads(line)
+        missing = [key for key in ("flow", "node", "outcome") if key not in case]
+        if missing:
+            raise AnnotateError(f"{benchmark_path}: a benchmark row has no {', '.join(repr(k) for k in missing)} "
+                                f"(each row is {{flow, node, outcome, label, stratum}}): {line.strip()[:100]}")
         flow = case["flow"]
         if flow not in graphs:
             graphs[flow] = parse_file(os.path.join(flows_dir, f"{flow}.md"))
+        if case["node"] not in graphs[flow].nodes:
+            raise AnnotateError(f"{benchmark_path}: flow {flow!r} has no node {case['node']!r} "
+                                f"(its nodes: {', '.join(graphs[flow].nodes)})")
         node = graphs[flow].nodes[case["node"]]
         yield {"flow": flow, "node": case["node"], "outcome": case["outcome"], "stratum": case.get("stratum"),
                "instruction": node.instruction, "edges": list(node.edges),
@@ -85,7 +96,10 @@ def annotate_loop(benchmark_path: str, out_path: str, flows_dir: Optional[str] =
     with open(out_path, "a", encoding="utf-8") as handle:
         for case in todo:
             print_fn("\n" + present(case))
-            raw = input_fn("pick> ")
+            try:
+                raw = input_fn("pick> ")
+            except EOFError:                      # input ended (a closed pipe): save what is labeled and stop
+                break
             if raw.strip().lower() in ("q", "quit"):
                 break
             pick = _resolve(raw, case["targets"])

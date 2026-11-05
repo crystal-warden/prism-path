@@ -65,6 +65,84 @@ def test_verify_still_proves_a_real_node(tmp_path, capsys):
     assert code == 1 and "b: REACHABLE" in out
 
 
+# ------------------------------------------------------------------ annotate
+
+def _bench(tmp_path, *rows):
+    path = tmp_path / "bench.jsonl"
+    path.write_text("".join(json.dumps(row) + "\n" for row in rows))
+    return str(path)
+
+
+def test_annotate_names_the_missing_key(tmp_path, capsys):
+    # before: `KeyError: 'flow'`
+    code, _out, err = _main(capsys, "annotate", "--out", str(tmp_path / "a.jsonl"),
+                            _bench(tmp_path, {"node": "a", "outcome": "x", "label": "b"}))
+    assert code == 2
+    assert err.startswith("prismpath annotate: ") and "no 'flow'" in err
+    assert len(err.strip().splitlines()) == 1
+
+
+def test_annotate_names_a_node_the_flow_does_not_have(tmp_path, capsys):
+    _flow(tmp_path)
+    code, _out, err = _main(capsys, "annotate", "--out", str(tmp_path / "a.jsonl"), "--flows-dir", str(tmp_path),
+                            _bench(tmp_path, {"flow": "flow", "node": "zzz", "outcome": "x", "label": "b"}))
+    assert code == 2 and "has no node 'zzz'" in err and "a, b, c" in err
+
+
+def test_annotate_saves_and_stops_when_input_ends(tmp_path):
+    # a closed pipe used to end in an EOFError traceback
+    _flow(tmp_path)
+    bench = _bench(tmp_path, {"flow": "flow", "node": "a", "outcome": "x", "label": "b"})
+    env = {**os.environ, "PYTHONPATH": REPO_ROOT + os.pathsep + os.environ.get("PYTHONPATH", "")}
+    result = subprocess.run([sys.executable, "-m", "prismpath.cli", "annotate", "--out", str(tmp_path / "a.jsonl"),
+                             "--flows-dir", str(tmp_path), bench],
+                            input="", capture_output=True, text=True, env=env)
+    assert result.returncode == 0 and "Traceback" not in result.stderr
+    assert "labeled 0 case(s)" in result.stdout
+
+
+# ------------------------------------------------------------------ calibrate
+
+def test_calibrate_refuses_a_log_with_no_margins(tmp_path, capsys):
+    # before: "n=0 ... calibrated tau = 0.0 (escalation threshold with a >=95% correctness guarantee)"
+    log = tmp_path / "labels.jsonl"
+    log.write_text(json.dumps({"flow": "t", "node": "a", "chosen": "b", "label": "b", "mechanism": "deterministic"}) + "\n")
+    code, out, err = _main(capsys, "calibrate", str(log))
+    assert code == 2 and out == ""
+    assert err.startswith("prismpath calibrate: ") and "no labeled routing decisions with a margin" in err
+
+
+def test_calibrate_prints_the_warning_it_computes(tmp_path, capsys):
+    log = tmp_path / "labels.jsonl"
+    log.write_text(json.dumps({"flow": "t", "node": "a", "chosen": "b", "label": "b", "margin": 0.1}) + "\n")
+    code, _out, err = _main(capsys, "calibrate", str(log))
+    assert code == 0 and "warning:" in err and "n=1" in err
+
+
+# ------------------------------------------------------------------ facet decode
+
+@pytest.mark.parametrize("payload", ["zz", "7", "", "ff", "00"])
+def test_facet_decode_of_a_bad_frame_is_one_line(payload, tmp_path, capsys):
+    flow = _flow(tmp_path, "---\nname: t\nstart: a\n---\n\n## a\nX.\n@emits(n=int)\n-> b: when n > 5\n-> c: else\n\n## b\nB.\n\n## c\nC.\n")
+    code, _out, err = _main(capsys, "facet", "decode", flow, payload)
+    assert code == 2 and err.startswith("facet: not a frame")
+    assert len(err.strip().splitlines()) == 1
+
+
+# ------------------------------------------------------------------ the command line itself
+
+def test_version(capsys):
+    with pytest.raises(SystemExit) as stop:
+        cli.main(["--version"])
+    assert stop.value.code == 0
+    assert capsys.readouterr().out.startswith("prismpath ")
+
+
+def test_the_program_name_in_usage_is_prismpath(capsys):
+    cli.main([])
+    assert capsys.readouterr().out.startswith("usage: prismpath ")
+
+
 # ------------------------------------------------------------------ the ledger anchor
 
 def test_the_ledger_hashes_anchor_as_bare_hex(tmp_path):

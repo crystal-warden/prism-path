@@ -402,8 +402,7 @@ def main() -> int:
             report.append(f'- `encoding.field_paths.{token} = "{path}"` (preflight: `--map {token}={path}`)')
 
     check_cmd = [sys.executable, str(HERE / "preflight.py"), str(out_path), args.sample, *map_args]
-    report.append(f"\nFull report: `"
-                  f"{' '.join(Path(part).name if position < 2 else part for position, part in enumerate(check_cmd))}`")
+    report.append("\nFull report: `python -m prismpath.telemetry.preflight " + " ".join(check_cmd[2:]) + "`")
     print("\n".join(report))
 
     if args.no_check or args.sample == "-" or not args.vector_toml:

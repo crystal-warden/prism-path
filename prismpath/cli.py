@@ -277,7 +277,7 @@ def _add_assessor_commands(subparsers) -> None:
     ledger_parser.add_argument('--gate-id', dest='gate_id', default=None,
                                help='C1: bind the gate identity that produced the record')
     ledger_parser.add_argument('--ots', action='store_true',
-                               help='verify: include the full OTS/Bitcoin proof chain')
+                               help='accepted and ignored: verify always walks the Merkle path and then the OTS proof')
     ledger_parser.set_defaults(func=ledger_cmd)
 
     facet_parser = subparsers.add_parser(
@@ -289,9 +289,18 @@ def _add_assessor_commands(subparsers) -> None:
     facet_parser.set_defaults(func=facet_cmd)
 
 
+def _package_version() -> str:
+    from importlib import metadata
+    try:
+        return metadata.version('prismpath')
+    except metadata.PackageNotFoundError:        # running from a source tree that was never installed
+        return 'unknown (not installed)'
+
+
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description='Command-line interface for prismpath',
+    parser = argparse.ArgumentParser(prog='prismpath', description='Command-line interface for prismpath',
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument('--version', action='version', version='prismpath ' + _package_version())
     subparsers = parser.add_subparsers(dest='command', metavar='<command>')
 
     _add_owner_commands(subparsers)
@@ -341,6 +350,9 @@ def _user_error(exc: BaseException):
     from prismpath.workers.chat_agent import ChatAgentError
     if isinstance(exc, ChatAgentError):
         return f"the worker did not answer: {exc}"
+    from prismpath.evals.annotate import AnnotateError
+    if isinstance(exc, AnnotateError):
+        return str(exc)
     return None
 
 
@@ -453,6 +465,11 @@ def calibrate_cmd(args) -> int:
     _require_file(args.labels)
     recs = routelog.load_records(args.labels)
     cal = calibrate.calibrate(recs, alpha=args.alpha)
+    if cal["n"] == 0:
+        raise CliError(f"{args.labels} has no labeled routing decisions with a margin, so there is nothing to "
+                       "calibrate from. Semantic decisions are logged with their margin by run_logged "
+                       "(then `prismpath label`), and `prismpath test --emit-labels` records the margin of "
+                       "every row that routed through the embedder.")
     print(f"n={cal['n']} labeled decisions; target risk alpha={cal['alpha']}")
     print(f"calibrated tau = {cal['tau']}  (escalation threshold with a >={1-cal['alpha']:.0%} "
           f"correctness guarantee on non-escalated decisions)")
@@ -460,6 +477,8 @@ def calibrate_cmd(args) -> int:
         mark = "  <- tau" if point["tau"] == cal["tau"] else ""
         print(f"  tau={point['tau']:.3f}  acc={point['accuracy']:.3f} (lower {point['acc_lower']:.3f})  "
               f"escalate={point['escalation_rate']:.0%}{mark}")
+    if cal.get("warning"):
+        print(f"warning: {cal['warning']}", file=sys.stderr)
     if args.out:
         calibrate.save_calibration(args.out, cal)
         print(f"wrote {args.out}")
@@ -1327,9 +1346,12 @@ def facet_cmd(args) -> int:
             return 0
 
     elif action == 'decode':
-        raw_bytes = bytes.fromhex(args.payload)
-        bits = packed.unpack(raw_bytes)
-        recon_reading = wire.decode_reading(parts, bits)
+        try:
+            raw_bytes = bytes.fromhex(args.payload)
+            recon_reading = wire.decode_reading(parts, packed.unpack(raw_bytes))
+        except ValueError as refusal:
+            print(f"facet: not a frame this flow's codebook decodes: {refusal}", file=sys.stderr)
+            return 2
 
         start_node = graph.start
         route = None
