@@ -39,6 +39,7 @@ class CaseResult:
     ok: bool
     how: str            # "deterministic" | "embed" | "stuck" | "error"
     detail: str = ""
+    margin: Optional[float] = None   # top-1 minus top-2 similarity, for a row the embedder routed
 
 
 @dataclass
@@ -157,7 +158,12 @@ def run_tests(flow_path, tests_path=None, router=None) -> TestReport:
                 continue
             if lazy_router is None:
                 lazy_router = _make_router(flow_path)     # only load a model if an embed case needs it
-            got, how = lazy_router.route(case["outcome"], sem, node.instruction).target, "embed"
+            decision = lazy_router.route(case["outcome"], sem, node.instruction)
+            got, how = decision.target, "embed"
+            margin = (getattr(decision, "info", None) or {}).get("margin")
+            report.results.append(CaseResult(case["node"], case["outcome"], case["expect"],
+                                             got, got == case["expect"], how, margin=margin))
+            continue
         report.results.append(CaseResult(case["node"], case["outcome"], case["expect"],
                                          got, got == case["expect"], how))
     return report
@@ -168,9 +174,12 @@ def emit_labels(report: TestReport, flow_name: str, path) -> int:
     count = 0
     with open(path, "a", encoding="utf-8") as file_handle:
         for result_item in report.results:
-            file_handle.write(json.dumps({
+            record = {
                 "flow": flow_name, "node": result_item.node, "outcome_text": result_item.outcome,
                 "chosen": result_item.got, "label": result_item.expect, "label_source": "flow_test",
-                "mechanism": result_item.how, "correct": result_item.ok}) + "\n")
+                "mechanism": result_item.how, "correct": result_item.ok}
+            if result_item.margin is not None:      # what `prismpath calibrate` reads: only embedder rows have one
+                record["margin"] = result_item.margin
+            file_handle.write(json.dumps(record) + "\n")
             count += 1
     return count

@@ -101,6 +101,57 @@ def test_annotate_saves_and_stops_when_input_ends(tmp_path):
     assert "labeled 0 case(s)" in result.stdout
 
 
+# ------------------------------------------------------------------ test --emit-labels and calibrate
+
+class _StubRouter:
+    class _Decision:
+        def __init__(self, target, margin):
+            self.target, self.info = target, {"used": "embed", "margin": margin}
+
+    def route(self, outcome, sem, instruction=""):
+        return self._Decision(sem[0][0], 0.12)
+
+
+SEMANTIC = """---
+name: s
+start: a
+---
+
+## a
+Read the report.
+-> b: the report describes an outage
+-> c: the report is a routine request
+
+## b
+Page someone.
+
+## c
+Answer it.
+"""
+
+
+def test_emit_labels_records_the_margin_of_an_embedder_row(tmp_path):
+    from prismpath.kernel import flow_test
+    flow = _flow(tmp_path, SEMANTIC)
+    (tmp_path / "flow.tests.md").write_text(
+        "| node | outcome | fields | expect |\n|---|---|---|---|\n| a | the site is down | | b |\n")
+    report = flow_test.run_tests(flow, router=_StubRouter())
+    labels = tmp_path / "labels.jsonl"
+    flow_test.emit_labels(report, "s", labels)
+    record = json.loads(labels.read_text())
+    assert record["mechanism"] == "embed" and record["margin"] == pytest.approx(0.12)
+
+
+def test_emit_labels_omits_a_margin_for_a_deterministic_row(tmp_path):
+    from prismpath.kernel import flow_test
+    flow = _flow(tmp_path)
+    (tmp_path / "flow.tests.md").write_text(
+        "| node | outcome | fields | expect |\n|---|---|---|---|\n| a | fine | ok=true | b |\n")
+    labels = tmp_path / "labels.jsonl"
+    flow_test.emit_labels(flow_test.run_tests(flow), "t", labels)
+    assert "margin" not in json.loads(labels.read_text())
+
+
 # ------------------------------------------------------------------ calibrate
 
 def test_calibrate_refuses_a_log_with_no_margins(tmp_path, capsys):
