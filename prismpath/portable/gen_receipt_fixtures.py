@@ -19,8 +19,9 @@ Case kinds (each carries its `name` and its `expect`):
     merkle       leaves -> root, and the inclusion path of every leaf
     trail        an audit log's text + its statements file's text + pinned keys -> the full report
                  `AuditLog.verify_statements` returns (status, counts, keys, findings)
-    bundle       a receipt bundle + pinned keys -> `verify_receipt_bundle`'s result, or {"error": true}
-                 where the reference raises
+    bundle       a receipt bundle + pinned keys -> `verify_receipt_bundle`'s result: `status`, every check
+                 (`index` and `covered` included) and, for a bundle that is not shaped like one, the
+                 `problem`; or {"error": true} where the reference still raises
     flow         a flow's bytes, manifest text, signature, trusted keys, revoked key ids and the version
                  floor -> `verify_flow`'s (ok, causes) plus the manifest hash and recorded authorization
     floor        manifests accepted in order -> `admits` before each and the floor file afterwards
@@ -406,7 +407,7 @@ def bundle_cases() -> list:
     cases.append(bundle_case("leaf_replaced_but_receipt_unchanged", edit(lambda b: b.update(leaf="ab" * 32)), pin))
     cases.append(bundle_case("path_sibling_flipped", edit(lambda b: b["path"][0].__setitem__(1, "ab" * 32)), pin))
     cases.append(bundle_case("path_side_swapped", edit_of(bundle_for(run, 1), lambda b: b["path"][0].__setitem__(0, "L" if b["path"][0][0] == "R" else "R")), pin))
-    cases.append(bundle_case("path_side_unknown_counts_as_left", edit_of(bundle_for(run, 1), lambda b: b["path"][0].__setitem__(0, "X")), pin))
+    cases.append(bundle_case("path_side_unknown_is_a_malformed_path", edit_of(bundle_for(run, 1), lambda b: b["path"][0].__setitem__(0, "X")), pin))
     cases.append(bundle_case("path_side_swapped_on_the_unpaired_leaf_changes_nothing", edit(lambda b: b["path"][0].__setitem__(0, "L")), pin,
                              note="receipt 4 is the odd leaf of its tree, so its first sibling is itself and the side does not matter"))
     cases.append(bundle_case("path_truncated", edit(lambda b: b.update(path=b["path"][:-1])), pin))
@@ -423,13 +424,49 @@ def bundle_cases() -> list:
     forged = Run(key=INTRUDER)
     cases.append(bundle_case("bundle_from_an_intruders_log_unpinned", bundle_for(forged, 4)))
     cases.append(bundle_case("bundle_from_an_intruders_log_pinned", bundle_for(forged, 4), pin))
-    # Where the reference raises, the verifier reports an error and not a verdict.
-    cases.append(bundle_case("leaf_not_hex_is_an_error", edit(lambda b: b.update(leaf="zz")), pin))
-    cases.append(bundle_case("path_sibling_not_hex_is_an_error", edit(lambda b: b["path"][0].__setitem__(1, "zz")), pin))
-    cases.append(bundle_case("no_statement_is_an_error", edit(lambda b: b.pop("statement")), pin))
-    cases.append(bundle_case("no_receipt_is_an_error", edit(lambda b: b.pop("receipt")), pin))
-    cases.append(bundle_case("path_entry_not_a_pair_is_an_error", edit(lambda b: b.update(path=[["R"]])), pin))
-    cases.append(bundle_case("statement_not_an_object_is_an_error", edit(lambda b: b.update(statement=[1])), pin))
+    # The index the receipt claims and the index the bundle names, and whether the statement covers it.
+    cases.append(bundle_case("receipt_idx_is_not_the_bundle_index", edit(lambda b: b.update(index=3)), pin))
+    cases.append(bundle_case("receipt_idx_edited_to_match_a_neighbour", edit(lambda b: b["receipt"].update(idx=3)), pin))
+    cases.append(bundle_case("receipt_idx_missing", edit(lambda b: b["receipt"].pop("idx")), pin))
+    cases.append(bundle_case("receipt_idx_is_a_float_equal_to_the_index", edit(lambda b: b["receipt"].update(idx=4.0)), pin,
+                             note="4.0 == 4 in Python, so the index check passes; the receipt's own bytes changed, so the leaf check does not"))
+    cases.append(bundle_case("index_past_the_covered_leaves", edit(lambda b: b.update(index=b["statement"]["leaves"])), pin))
+    cases.append(bundle_case("index_negative", edit(lambda b: b.update(index=-1)), pin))
+    last = Run(runs=((4, "run-end"),))
+    last_bundle = bundle_for(last, 3)
+    cases.append(bundle_case("last_covered_leaf", last_bundle, pin))
+    cases.append(bundle_case("index_one_past_the_last_leaf", edit_of(last_bundle, lambda b: (b["receipt"].update(idx=4), b.update(index=4))), pin,
+                             note="index and idx agree here, so only `covered` fails (and the leaf, inclusion and signature checks the edit also breaks)"))
+    # A bundle that is not shaped like one is invalid with the reason, and raises nothing.
+    cases.append(bundle_case("leaf_not_hex_is_malformed", edit(lambda b: b.update(leaf="zz")), pin))
+    cases.append(bundle_case("path_sibling_not_hex_is_malformed", edit(lambda b: b["path"][0].__setitem__(1, "zz")), pin))
+    cases.append(bundle_case("path_sibling_not_text_is_malformed", edit(lambda b: b["path"][0].__setitem__(1, 7)), pin))
+    cases.append(bundle_case("no_statement_is_malformed", edit(lambda b: b.pop("statement")), pin))
+    cases.append(bundle_case("no_receipt_is_malformed", edit(lambda b: b.pop("receipt")), pin))
+    cases.append(bundle_case("no_leaf_is_malformed", edit(lambda b: b.pop("leaf")), pin))
+    cases.append(bundle_case("no_path_is_malformed", edit(lambda b: b.pop("path")), pin))
+    cases.append(bundle_case("no_index_is_malformed", edit(lambda b: b.pop("index")), pin))
+    cases.append(bundle_case("index_is_a_boolean_is_malformed", edit(lambda b: b.update(index=True)), pin))
+    cases.append(bundle_case("index_is_a_float_is_malformed", edit(lambda b: b.update(index=4.0)), pin))
+    cases.append(bundle_case("index_is_text_is_malformed", edit(lambda b: b.update(index="4")), pin))
+    cases.append(bundle_case("receipt_is_a_list_is_malformed", edit(lambda b: b.update(receipt=[1])), pin))
+    cases.append(bundle_case("path_is_text_is_malformed", edit(lambda b: b.update(path="R")), pin))
+    cases.append(bundle_case("path_entry_not_a_pair_is_malformed", edit(lambda b: b.update(path=[["R"]])), pin))
+    cases.append(bundle_case("path_entry_too_long_is_malformed", edit(lambda b: b.update(path=[["R", "ab" * 32, 1]])), pin))
+    cases.append(bundle_case("path_entry_is_text_is_malformed", edit(lambda b: b.update(path=["RR"])), pin))
+    cases.append(bundle_case("path_side_not_text_is_malformed", edit(lambda b: b["path"][0].__setitem__(0, 1)), pin))
+    cases.append(bundle_case("leaf_checked_before_path_shape", edit(lambda b: b.update(leaf="zz", path=[["R"]])), pin))
+    cases.append(bundle_case("path_hex_checked_in_order", edit(lambda b: b.update(path=[["R", "zz"], ["R"]])), pin))
+    cases.append(bundle_case("statement_not_an_object_is_malformed", edit(lambda b: b.update(statement=[1])), pin))
+    cases.append(bundle_case("malformed_and_unpinned", edit(lambda b: b.pop("statement"))))
+    cases.append(bundle_case("bundle_is_a_list", [good], pin))
+    cases.append(bundle_case("bundle_is_null", None, pin))
+    # Where the reference still raises, the verifier reports an error and not a verdict.
+    cases.append(bundle_case("statement_key_id_is_a_number_is_an_error", edit(lambda b: b["statement"].update(key_id=5)), pin))
+    cases.append(bundle_case("statement_key_id_is_a_number_unpinned_is_an_error", edit(lambda b: b["statement"].update(key_id=5))))
+    cases.append(bundle_case("statement_key_id_is_null_is_an_error", edit(lambda b: b["statement"].update(key_id=None))))
+    cases.append(bundle_case("statement_key_id_is_a_list_pinned_is_an_error", edit(lambda b: b["statement"].update(key_id=["a", "b"])), pin))
+    cases.append(bundle_case("statement_key_id_is_a_list_unpinned_is_sliced", edit(lambda b: b["statement"].update(key_id=list("abcdefghijklmnopqrstuvwxyz")))))
     return cases
 
 

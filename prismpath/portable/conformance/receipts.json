@@ -5534,7 +5534,9 @@
    },
    "expect": {
     "checks": {
+     "covered": true,
      "inclusion": true,
+     "index": true,
      "key_id": true,
      "leaf": true,
      "pinned": true,
@@ -5546,7 +5548,8 @@
     "ok": true,
     "pinned": true,
     "statement": 1,
-    "statement_sha256": "41ba0b029b81199119c55e2da3fda55a0b5f639d5d2e84362275e7cb5138cfca"
+    "statement_sha256": "41ba0b029b81199119c55e2da3fda55a0b5f639d5d2e84362275e7cb5138cfca",
+    "status": "signed"
    },
    "kind": "bundle",
    "name": "valid_pinned",
@@ -5604,7 +5607,9 @@
    },
    "expect": {
     "checks": {
+     "covered": true,
      "inclusion": true,
+     "index": true,
      "key_id": true,
      "leaf": true,
      "pinned": null,
@@ -5616,7 +5621,8 @@
     "ok": true,
     "pinned": false,
     "statement": 1,
-    "statement_sha256": "41ba0b029b81199119c55e2da3fda55a0b5f639d5d2e84362275e7cb5138cfca"
+    "statement_sha256": "41ba0b029b81199119c55e2da3fda55a0b5f639d5d2e84362275e7cb5138cfca",
+    "status": "signed-unpinned"
    },
    "kind": "bundle",
    "name": "valid_unpinned",
@@ -5669,7 +5675,9 @@
    },
    "expect": {
     "checks": {
+     "covered": true,
      "inclusion": true,
+     "index": true,
      "key_id": true,
      "leaf": true,
      "pinned": true,
@@ -5681,7 +5689,8 @@
     "ok": true,
     "pinned": true,
     "statement": 0,
-    "statement_sha256": "d08a319a0df3455c997d305aa7c9284942e12d1dd797ab1c1eb42c1ac2fdd995"
+    "statement_sha256": "d08a319a0df3455c997d305aa7c9284942e12d1dd797ab1c1eb42c1ac2fdd995",
+    "status": "signed"
    },
    "kind": "bundle",
    "name": "valid_receipt_0",
@@ -5740,7 +5749,9 @@
    },
    "expect": {
     "checks": {
+     "covered": true,
      "inclusion": true,
+     "index": true,
      "key_id": true,
      "leaf": true,
      "pinned": true,
@@ -5752,7 +5763,8 @@
     "ok": true,
     "pinned": true,
     "statement": 1,
-    "statement_sha256": "41ba0b029b81199119c55e2da3fda55a0b5f639d5d2e84362275e7cb5138cfca"
+    "statement_sha256": "41ba0b029b81199119c55e2da3fda55a0b5f639d5d2e84362275e7cb5138cfca",
+    "status": "signed"
    },
    "kind": "bundle",
    "name": "valid_receipt_3",
@@ -5814,7 +5826,9 @@
    },
    "expect": {
     "checks": {
+     "covered": true,
      "inclusion": true,
+     "index": true,
      "key_id": true,
      "leaf": true,
      "pinned": true,
@@ -5826,7 +5840,8 @@
     "ok": true,
     "pinned": true,
     "statement": 2,
-    "statement_sha256": "9b35dbc8b743bedc3e28403472597e963293d3efab83fa7f10822822485f7723"
+    "statement_sha256": "9b35dbc8b743bedc3e28403472597e963293d3efab83fa7f10822822485f7723",
+    "status": "signed"
    },
    "kind": "bundle",
    "name": "valid_receipt_8",
@@ -5872,7 +5887,9 @@
    },
    "expect": {
     "checks": {
+     "covered": true,
      "inclusion": true,
+     "index": true,
      "key_id": true,
      "leaf": true,
      "pinned": true,
@@ -5884,7 +5901,8 @@
     "ok": true,
     "pinned": true,
     "statement": 0,
-    "statement_sha256": "cbb0e114bb62db285d957a821ac85e036d855546f6ae6d0fdba5c95e998efc56"
+    "statement_sha256": "cbb0e114bb62db285d957a821ac85e036d855546f6ae6d0fdba5c95e998efc56",
+    "status": "signed"
    },
    "kind": "bundle",
    "name": "single_leaf_has_an_empty_path",
@@ -5943,7 +5961,9 @@
    },
    "expect": {
     "checks": {
+     "covered": true,
      "inclusion": true,
+     "index": true,
      "key_id": true,
      "leaf": true,
      "pinned": true,
@@ -5955,7 +5975,8 @@
     "ok": true,
     "pinned": true,
     "statement": 0,
-    "statement_sha256": "9f83d49fe10064c97fdc84ab3b2aaf859b98e9bf21626c37717915f4fd1d802a"
+    "statement_sha256": "9f83d49fe10064c97fdc84ab3b2aaf859b98e9bf21626c37717915f4fd1d802a",
+    "status": "signed"
    },
    "kind": "bundle",
    "name": "odd_tree_duplicates_the_last_leaf",
@@ -6030,7 +6051,9 @@
    },
    "expect": {
     "checks": {
+     "covered": true,
      "inclusion": true,
+     "index": true,
      "key_id": true,
      "leaf": true,
      "pinned": true,
@@ -6042,7 +6065,8 @@
     "ok": true,
     "pinned": true,
     "statement": 2,
-    "statement_sha256": "9b35dbc8b743bedc3e28403472597e963293d3efab83fa7f10822822485f7723"
+    "statement_sha256": "9b35dbc8b743bedc3e28403472597e963293d3efab83fa7f10822822485f7723",
+    "status": "signed"
    },
    "kind": "bundle",
    "name": "receipt_with_float_and_unicode_values",
@@ -6100,7 +6124,9 @@
    },
    "expect": {
     "checks": {
+     "covered": true,
      "inclusion": true,
+     "index": true,
      "key_id": true,
      "leaf": false,
      "pinned": true,
@@ -6112,7 +6138,8 @@
     "ok": false,
     "pinned": true,
     "statement": 1,
-    "statement_sha256": "41ba0b029b81199119c55e2da3fda55a0b5f639d5d2e84362275e7cb5138cfca"
+    "statement_sha256": "41ba0b029b81199119c55e2da3fda55a0b5f639d5d2e84362275e7cb5138cfca",
+    "status": "invalid"
    },
    "kind": "bundle",
    "name": "receipt_edited",
@@ -6170,7 +6197,9 @@
    },
    "expect": {
     "checks": {
+     "covered": true,
      "inclusion": true,
+     "index": true,
      "key_id": true,
      "leaf": false,
      "pinned": true,
@@ -6182,7 +6211,8 @@
     "ok": false,
     "pinned": true,
     "statement": 1,
-    "statement_sha256": "41ba0b029b81199119c55e2da3fda55a0b5f639d5d2e84362275e7cb5138cfca"
+    "statement_sha256": "41ba0b029b81199119c55e2da3fda55a0b5f639d5d2e84362275e7cb5138cfca",
+    "status": "invalid"
    },
    "kind": "bundle",
    "name": "receipt_float_edited_in_the_last_digit",
@@ -6240,7 +6270,9 @@
    },
    "expect": {
     "checks": {
+     "covered": true,
      "inclusion": false,
+     "index": true,
      "key_id": true,
      "leaf": false,
      "pinned": true,
@@ -6252,7 +6284,8 @@
     "ok": false,
     "pinned": true,
     "statement": 1,
-    "statement_sha256": "41ba0b029b81199119c55e2da3fda55a0b5f639d5d2e84362275e7cb5138cfca"
+    "statement_sha256": "41ba0b029b81199119c55e2da3fda55a0b5f639d5d2e84362275e7cb5138cfca",
+    "status": "invalid"
    },
    "kind": "bundle",
    "name": "leaf_replaced_but_receipt_unchanged",
@@ -6310,7 +6343,9 @@
    },
    "expect": {
     "checks": {
+     "covered": true,
      "inclusion": false,
+     "index": true,
      "key_id": true,
      "leaf": true,
      "pinned": true,
@@ -6322,7 +6357,8 @@
     "ok": false,
     "pinned": true,
     "statement": 1,
-    "statement_sha256": "41ba0b029b81199119c55e2da3fda55a0b5f639d5d2e84362275e7cb5138cfca"
+    "statement_sha256": "41ba0b029b81199119c55e2da3fda55a0b5f639d5d2e84362275e7cb5138cfca",
+    "status": "invalid"
    },
    "kind": "bundle",
    "name": "path_sibling_flipped",
@@ -6389,7 +6425,9 @@
    },
    "expect": {
     "checks": {
+     "covered": true,
      "inclusion": false,
+     "index": true,
      "key_id": true,
      "leaf": true,
      "pinned": true,
@@ -6401,7 +6439,8 @@
     "ok": false,
     "pinned": true,
     "statement": 0,
-    "statement_sha256": "d08a319a0df3455c997d305aa7c9284942e12d1dd797ab1c1eb42c1ac2fdd995"
+    "statement_sha256": "d08a319a0df3455c997d305aa7c9284942e12d1dd797ab1c1eb42c1ac2fdd995",
+    "status": "invalid"
    },
    "kind": "bundle",
    "name": "path_side_swapped",
@@ -6468,22 +6507,19 @@
    },
    "expect": {
     "checks": {
-     "inclusion": true,
-     "key_id": true,
-     "leaf": true,
-     "pinned": true,
-     "signature": true,
-     "well_formed": true
+     "well_formed": false
     },
-    "index": 1,
-    "key": "d080af74adc57958",
-    "ok": true,
+    "index": null,
+    "key": "",
+    "ok": false,
     "pinned": true,
-    "statement": 0,
-    "statement_sha256": "d08a319a0df3455c997d305aa7c9284942e12d1dd797ab1c1eb42c1ac2fdd995"
+    "problem": "malformed inclusion path",
+    "statement": null,
+    "statement_sha256": null,
+    "status": "invalid"
    },
    "kind": "bundle",
-   "name": "path_side_unknown_counts_as_left",
+   "name": "path_side_unknown_is_a_malformed_path",
    "pinned": [
     "51d07513ea144ffbd4017541bf33b184f6383f27b133d096759d9f1a64f48009"
    ]
@@ -6538,7 +6574,9 @@
    },
    "expect": {
     "checks": {
+     "covered": true,
      "inclusion": true,
+     "index": true,
      "key_id": true,
      "leaf": true,
      "pinned": true,
@@ -6550,7 +6588,8 @@
     "ok": true,
     "pinned": true,
     "statement": 1,
-    "statement_sha256": "41ba0b029b81199119c55e2da3fda55a0b5f639d5d2e84362275e7cb5138cfca"
+    "statement_sha256": "41ba0b029b81199119c55e2da3fda55a0b5f639d5d2e84362275e7cb5138cfca",
+    "status": "signed"
    },
    "kind": "bundle",
    "name": "path_side_swapped_on_the_unpaired_leaf_changes_nothing",
@@ -6605,7 +6644,9 @@
    },
    "expect": {
     "checks": {
+     "covered": true,
      "inclusion": false,
+     "index": true,
      "key_id": true,
      "leaf": true,
      "pinned": true,
@@ -6617,7 +6658,8 @@
     "ok": false,
     "pinned": true,
     "statement": 1,
-    "statement_sha256": "41ba0b029b81199119c55e2da3fda55a0b5f639d5d2e84362275e7cb5138cfca"
+    "statement_sha256": "41ba0b029b81199119c55e2da3fda55a0b5f639d5d2e84362275e7cb5138cfca",
+    "status": "invalid"
    },
    "kind": "bundle",
    "name": "path_truncated",
@@ -6679,7 +6721,9 @@
    },
    "expect": {
     "checks": {
+     "covered": true,
      "inclusion": false,
+     "index": true,
      "key_id": true,
      "leaf": true,
      "pinned": true,
@@ -6691,7 +6735,8 @@
     "ok": false,
     "pinned": true,
     "statement": 1,
-    "statement_sha256": "41ba0b029b81199119c55e2da3fda55a0b5f639d5d2e84362275e7cb5138cfca"
+    "statement_sha256": "41ba0b029b81199119c55e2da3fda55a0b5f639d5d2e84362275e7cb5138cfca",
+    "status": "invalid"
    },
    "kind": "bundle",
    "name": "path_extended",
@@ -6749,7 +6794,9 @@
    },
    "expect": {
     "checks": {
+     "covered": true,
      "inclusion": false,
+     "index": true,
      "key_id": true,
      "leaf": true,
      "pinned": true,
@@ -6761,7 +6808,8 @@
     "ok": false,
     "pinned": true,
     "statement": 1,
-    "statement_sha256": "823d639ed994985a43cf7c0f793c3c146769f4efe8082fd59f09fadc19efc1a3"
+    "statement_sha256": "823d639ed994985a43cf7c0f793c3c146769f4efe8082fd59f09fadc19efc1a3",
+    "status": "invalid"
    },
    "kind": "bundle",
    "name": "statement_root_replaced",
@@ -6819,7 +6867,9 @@
    },
    "expect": {
     "checks": {
+     "covered": true,
      "inclusion": true,
+     "index": true,
      "key_id": true,
      "leaf": true,
      "pinned": true,
@@ -6831,7 +6881,8 @@
     "ok": false,
     "pinned": true,
     "statement": 1,
-    "statement_sha256": "17d8fec842958889a4a345273a3c952c72962a2f2454f67184803ea63df53673"
+    "statement_sha256": "17d8fec842958889a4a345273a3c952c72962a2f2454f67184803ea63df53673",
+    "status": "invalid"
    },
    "kind": "bundle",
    "name": "statement_signature_zeroed",
@@ -6889,7 +6940,9 @@
    },
    "expect": {
     "checks": {
+     "covered": true,
      "inclusion": true,
+     "index": true,
      "key_id": true,
      "leaf": true,
      "pinned": true,
@@ -6901,7 +6954,8 @@
     "ok": false,
     "pinned": true,
     "statement": 1,
-    "statement_sha256": "925bde7430b91904ad195d1c849d7e1ad1f50923064b10cd09dd8088db1ac4dd"
+    "statement_sha256": "925bde7430b91904ad195d1c849d7e1ad1f50923064b10cd09dd8088db1ac4dd",
+    "status": "invalid"
    },
    "kind": "bundle",
    "name": "statement_edited_after_signing",
@@ -6959,7 +7013,9 @@
    },
    "expect": {
     "checks": {
+     "covered": true,
      "inclusion": true,
+     "index": true,
      "key_id": false,
      "leaf": true,
      "pinned": false,
@@ -6971,7 +7027,8 @@
     "ok": false,
     "pinned": true,
     "statement": 1,
-    "statement_sha256": "91bcedb8138f6c8c8ca01d3e2f2ad3a925785a3d7c409b05b4fab85deb4cf256"
+    "statement_sha256": "91bcedb8138f6c8c8ca01d3e2f2ad3a925785a3d7c409b05b4fab85deb4cf256",
+    "status": "invalid"
    },
    "kind": "bundle",
    "name": "statement_key_id_altered",
@@ -7028,7 +7085,9 @@
    },
    "expect": {
     "checks": {
+     "covered": false,
      "inclusion": true,
+     "index": true,
      "key_id": false,
      "leaf": true,
      "pinned": true,
@@ -7040,7 +7099,8 @@
     "ok": false,
     "pinned": true,
     "statement": 1,
-    "statement_sha256": "8ae88c55ac2bc3eca2872efbbb8c225a961ba2fc3f40b0e88ee674ee7589c97c"
+    "statement_sha256": "8ae88c55ac2bc3eca2872efbbb8c225a961ba2fc3f40b0e88ee674ee7589c97c",
+    "status": "invalid"
    },
    "kind": "bundle",
    "name": "statement_without_a_signature",
@@ -7097,7 +7157,9 @@
    },
    "expect": {
     "checks": {
+     "covered": false,
      "inclusion": false,
+     "index": true,
      "key_id": false,
      "leaf": true,
      "pinned": true,
@@ -7109,7 +7171,8 @@
     "ok": false,
     "pinned": true,
     "statement": 1,
-    "statement_sha256": "c234889cc2a92b008b19efabdb139df43c55598df84db308169b31957d83ea95"
+    "statement_sha256": "c234889cc2a92b008b19efabdb139df43c55598df84db308169b31957d83ea95",
+    "status": "invalid"
    },
    "kind": "bundle",
    "name": "statement_without_a_root",
@@ -7167,7 +7230,9 @@
    },
    "expect": {
     "checks": {
+     "covered": false,
      "inclusion": true,
+     "index": true,
      "key_id": false,
      "leaf": true,
      "pinned": true,
@@ -7179,7 +7244,8 @@
     "ok": false,
     "pinned": true,
     "statement": 1,
-    "statement_sha256": "19b509460a5d19233138252ba60ad559e2a3b5b43dadc4b232f923a30ff92365"
+    "statement_sha256": "19b509460a5d19233138252ba60ad559e2a3b5b43dadc4b232f923a30ff92365",
+    "status": "invalid"
    },
    "kind": "bundle",
    "name": "statement_for_another_log",
@@ -7237,7 +7303,9 @@
    },
    "expect": {
     "checks": {
+     "covered": true,
      "inclusion": true,
+     "index": true,
      "key_id": true,
      "leaf": true,
      "pinned": false,
@@ -7249,7 +7317,8 @@
     "ok": false,
     "pinned": true,
     "statement": 1,
-    "statement_sha256": "41ba0b029b81199119c55e2da3fda55a0b5f639d5d2e84362275e7cb5138cfca"
+    "statement_sha256": "41ba0b029b81199119c55e2da3fda55a0b5f639d5d2e84362275e7cb5138cfca",
+    "status": "invalid"
    },
    "kind": "bundle",
    "name": "wrong_pinned_key",
@@ -7307,7 +7376,9 @@
    },
    "expect": {
     "checks": {
+     "covered": true,
      "inclusion": true,
+     "index": true,
      "key_id": true,
      "leaf": true,
      "pinned": true,
@@ -7319,7 +7390,8 @@
     "ok": true,
     "pinned": true,
     "statement": 1,
-    "statement_sha256": "41ba0b029b81199119c55e2da3fda55a0b5f639d5d2e84362275e7cb5138cfca"
+    "statement_sha256": "41ba0b029b81199119c55e2da3fda55a0b5f639d5d2e84362275e7cb5138cfca",
+    "status": "signed"
    },
    "kind": "bundle",
    "name": "pinned_to_two_keys_one_right",
@@ -7378,7 +7450,9 @@
    },
    "expect": {
     "checks": {
+     "covered": true,
      "inclusion": true,
+     "index": true,
      "key_id": true,
      "leaf": true,
      "pinned": null,
@@ -7390,7 +7464,8 @@
     "ok": true,
     "pinned": false,
     "statement": 1,
-    "statement_sha256": "abdc4c41d3d31b0caba3444e25a9f5c63f10c6980d7d6aae3a99cfd16de66cff"
+    "statement_sha256": "abdc4c41d3d31b0caba3444e25a9f5c63f10c6980d7d6aae3a99cfd16de66cff",
+    "status": "signed-unpinned"
    },
    "kind": "bundle",
    "name": "bundle_from_an_intruders_log_unpinned",
@@ -7446,7 +7521,9 @@
    },
    "expect": {
     "checks": {
+     "covered": true,
      "inclusion": true,
+     "index": true,
      "key_id": true,
      "leaf": true,
      "pinned": false,
@@ -7458,10 +7535,590 @@
     "ok": false,
     "pinned": true,
     "statement": 1,
-    "statement_sha256": "abdc4c41d3d31b0caba3444e25a9f5c63f10c6980d7d6aae3a99cfd16de66cff"
+    "statement_sha256": "abdc4c41d3d31b0caba3444e25a9f5c63f10c6980d7d6aae3a99cfd16de66cff",
+    "status": "invalid"
    },
    "kind": "bundle",
    "name": "bundle_from_an_intruders_log_pinned",
+   "pinned": [
+    "51d07513ea144ffbd4017541bf33b184f6383f27b133d096759d9f1a64f48009"
+   ]
+  },
+  {
+   "bundle": {
+    "index": 3,
+    "leaf": "70a3b9fb21772441017f2ef65cfd6abc1ba7ef7d29a6105ad732216d84fde81c",
+    "path": [
+     [
+      "R",
+      "70a3b9fb21772441017f2ef65cfd6abc1ba7ef7d29a6105ad732216d84fde81c"
+     ],
+     [
+      "R",
+      "246c364074471f5fdd2779d6146a8fbc55678413dec8bc6c5cbc0c9990a9425c"
+     ],
+     [
+      "L",
+      "0a727be017a10a2f9b73f0af2adea7a99509292d31ee0bd535ba9e2bb43c8742"
+     ]
+    ],
+    "receipt": {
+     "action": "decision",
+     "actor": "engine",
+     "data": {
+      "cause": 0,
+      "node": "a",
+      "seq": 4,
+      "target": "b"
+     },
+     "id": "4",
+     "idx": 4,
+     "ts": 1730800004.9382713
+    },
+    "statement": {
+     "format": "prismpath-root-statement/1",
+     "key_id": "d080af74adc57958d8c77d2f2e27e3493fda17588e60024fd8f38c9b445672ac",
+     "leaves": 5,
+     "log": "audit-log",
+     "policy": {
+      "flow_sha256": "abababababababababababababababababababababababababababababababab"
+     },
+     "prev": "d08a319a0df3455c997d305aa7c9284942e12d1dd797ab1c1eb42c1ac2fdd995",
+     "public_key": "51d07513ea144ffbd4017541bf33b184f6383f27b133d096759d9f1a64f48009",
+     "root": "d12f37d212bb9b87b2f1885c96e40ee9a9618f35e69bbeba9dbab2d57a396f5b",
+     "seq": 1,
+     "sig": "74276502074e58afa68913c65c1fa97d51eadae397219af9623c976a1532cbe55dc78cbc93c53c9022af6236661e5bb6ea269b13750c0d0f7acde2e01ee27a0e",
+     "time": "2026-11-04T12:00:01.250Z",
+     "trigger": "run-end"
+    }
+   },
+   "expect": {
+    "checks": {
+     "covered": true,
+     "inclusion": true,
+     "index": false,
+     "key_id": true,
+     "leaf": true,
+     "pinned": true,
+     "signature": true,
+     "well_formed": true
+    },
+    "index": 3,
+    "key": "d080af74adc57958",
+    "ok": false,
+    "pinned": true,
+    "statement": 1,
+    "statement_sha256": "41ba0b029b81199119c55e2da3fda55a0b5f639d5d2e84362275e7cb5138cfca",
+    "status": "invalid"
+   },
+   "kind": "bundle",
+   "name": "receipt_idx_is_not_the_bundle_index",
+   "pinned": [
+    "51d07513ea144ffbd4017541bf33b184f6383f27b133d096759d9f1a64f48009"
+   ]
+  },
+  {
+   "bundle": {
+    "index": 4,
+    "leaf": "70a3b9fb21772441017f2ef65cfd6abc1ba7ef7d29a6105ad732216d84fde81c",
+    "path": [
+     [
+      "R",
+      "70a3b9fb21772441017f2ef65cfd6abc1ba7ef7d29a6105ad732216d84fde81c"
+     ],
+     [
+      "R",
+      "246c364074471f5fdd2779d6146a8fbc55678413dec8bc6c5cbc0c9990a9425c"
+     ],
+     [
+      "L",
+      "0a727be017a10a2f9b73f0af2adea7a99509292d31ee0bd535ba9e2bb43c8742"
+     ]
+    ],
+    "receipt": {
+     "action": "decision",
+     "actor": "engine",
+     "data": {
+      "cause": 0,
+      "node": "a",
+      "seq": 4,
+      "target": "b"
+     },
+     "id": "4",
+     "idx": 3,
+     "ts": 1730800004.9382713
+    },
+    "statement": {
+     "format": "prismpath-root-statement/1",
+     "key_id": "d080af74adc57958d8c77d2f2e27e3493fda17588e60024fd8f38c9b445672ac",
+     "leaves": 5,
+     "log": "audit-log",
+     "policy": {
+      "flow_sha256": "abababababababababababababababababababababababababababababababab"
+     },
+     "prev": "d08a319a0df3455c997d305aa7c9284942e12d1dd797ab1c1eb42c1ac2fdd995",
+     "public_key": "51d07513ea144ffbd4017541bf33b184f6383f27b133d096759d9f1a64f48009",
+     "root": "d12f37d212bb9b87b2f1885c96e40ee9a9618f35e69bbeba9dbab2d57a396f5b",
+     "seq": 1,
+     "sig": "74276502074e58afa68913c65c1fa97d51eadae397219af9623c976a1532cbe55dc78cbc93c53c9022af6236661e5bb6ea269b13750c0d0f7acde2e01ee27a0e",
+     "time": "2026-11-04T12:00:01.250Z",
+     "trigger": "run-end"
+    }
+   },
+   "expect": {
+    "checks": {
+     "covered": true,
+     "inclusion": true,
+     "index": false,
+     "key_id": true,
+     "leaf": false,
+     "pinned": true,
+     "signature": true,
+     "well_formed": true
+    },
+    "index": 4,
+    "key": "d080af74adc57958",
+    "ok": false,
+    "pinned": true,
+    "statement": 1,
+    "statement_sha256": "41ba0b029b81199119c55e2da3fda55a0b5f639d5d2e84362275e7cb5138cfca",
+    "status": "invalid"
+   },
+   "kind": "bundle",
+   "name": "receipt_idx_edited_to_match_a_neighbour",
+   "pinned": [
+    "51d07513ea144ffbd4017541bf33b184f6383f27b133d096759d9f1a64f48009"
+   ]
+  },
+  {
+   "bundle": {
+    "index": 4,
+    "leaf": "70a3b9fb21772441017f2ef65cfd6abc1ba7ef7d29a6105ad732216d84fde81c",
+    "path": [
+     [
+      "R",
+      "70a3b9fb21772441017f2ef65cfd6abc1ba7ef7d29a6105ad732216d84fde81c"
+     ],
+     [
+      "R",
+      "246c364074471f5fdd2779d6146a8fbc55678413dec8bc6c5cbc0c9990a9425c"
+     ],
+     [
+      "L",
+      "0a727be017a10a2f9b73f0af2adea7a99509292d31ee0bd535ba9e2bb43c8742"
+     ]
+    ],
+    "receipt": {
+     "action": "decision",
+     "actor": "engine",
+     "data": {
+      "cause": 0,
+      "node": "a",
+      "seq": 4,
+      "target": "b"
+     },
+     "id": "4",
+     "ts": 1730800004.9382713
+    },
+    "statement": {
+     "format": "prismpath-root-statement/1",
+     "key_id": "d080af74adc57958d8c77d2f2e27e3493fda17588e60024fd8f38c9b445672ac",
+     "leaves": 5,
+     "log": "audit-log",
+     "policy": {
+      "flow_sha256": "abababababababababababababababababababababababababababababababab"
+     },
+     "prev": "d08a319a0df3455c997d305aa7c9284942e12d1dd797ab1c1eb42c1ac2fdd995",
+     "public_key": "51d07513ea144ffbd4017541bf33b184f6383f27b133d096759d9f1a64f48009",
+     "root": "d12f37d212bb9b87b2f1885c96e40ee9a9618f35e69bbeba9dbab2d57a396f5b",
+     "seq": 1,
+     "sig": "74276502074e58afa68913c65c1fa97d51eadae397219af9623c976a1532cbe55dc78cbc93c53c9022af6236661e5bb6ea269b13750c0d0f7acde2e01ee27a0e",
+     "time": "2026-11-04T12:00:01.250Z",
+     "trigger": "run-end"
+    }
+   },
+   "expect": {
+    "checks": {
+     "covered": true,
+     "inclusion": true,
+     "index": false,
+     "key_id": true,
+     "leaf": false,
+     "pinned": true,
+     "signature": true,
+     "well_formed": true
+    },
+    "index": 4,
+    "key": "d080af74adc57958",
+    "ok": false,
+    "pinned": true,
+    "statement": 1,
+    "statement_sha256": "41ba0b029b81199119c55e2da3fda55a0b5f639d5d2e84362275e7cb5138cfca",
+    "status": "invalid"
+   },
+   "kind": "bundle",
+   "name": "receipt_idx_missing",
+   "pinned": [
+    "51d07513ea144ffbd4017541bf33b184f6383f27b133d096759d9f1a64f48009"
+   ]
+  },
+  {
+   "bundle": {
+    "index": 4,
+    "leaf": "70a3b9fb21772441017f2ef65cfd6abc1ba7ef7d29a6105ad732216d84fde81c",
+    "path": [
+     [
+      "R",
+      "70a3b9fb21772441017f2ef65cfd6abc1ba7ef7d29a6105ad732216d84fde81c"
+     ],
+     [
+      "R",
+      "246c364074471f5fdd2779d6146a8fbc55678413dec8bc6c5cbc0c9990a9425c"
+     ],
+     [
+      "L",
+      "0a727be017a10a2f9b73f0af2adea7a99509292d31ee0bd535ba9e2bb43c8742"
+     ]
+    ],
+    "receipt": {
+     "action": "decision",
+     "actor": "engine",
+     "data": {
+      "cause": 0,
+      "node": "a",
+      "seq": 4,
+      "target": "b"
+     },
+     "id": "4",
+     "idx": 4.0,
+     "ts": 1730800004.9382713
+    },
+    "statement": {
+     "format": "prismpath-root-statement/1",
+     "key_id": "d080af74adc57958d8c77d2f2e27e3493fda17588e60024fd8f38c9b445672ac",
+     "leaves": 5,
+     "log": "audit-log",
+     "policy": {
+      "flow_sha256": "abababababababababababababababababababababababababababababababab"
+     },
+     "prev": "d08a319a0df3455c997d305aa7c9284942e12d1dd797ab1c1eb42c1ac2fdd995",
+     "public_key": "51d07513ea144ffbd4017541bf33b184f6383f27b133d096759d9f1a64f48009",
+     "root": "d12f37d212bb9b87b2f1885c96e40ee9a9618f35e69bbeba9dbab2d57a396f5b",
+     "seq": 1,
+     "sig": "74276502074e58afa68913c65c1fa97d51eadae397219af9623c976a1532cbe55dc78cbc93c53c9022af6236661e5bb6ea269b13750c0d0f7acde2e01ee27a0e",
+     "time": "2026-11-04T12:00:01.250Z",
+     "trigger": "run-end"
+    }
+   },
+   "expect": {
+    "checks": {
+     "covered": true,
+     "inclusion": true,
+     "index": true,
+     "key_id": true,
+     "leaf": false,
+     "pinned": true,
+     "signature": true,
+     "well_formed": true
+    },
+    "index": 4,
+    "key": "d080af74adc57958",
+    "ok": false,
+    "pinned": true,
+    "statement": 1,
+    "statement_sha256": "41ba0b029b81199119c55e2da3fda55a0b5f639d5d2e84362275e7cb5138cfca",
+    "status": "invalid"
+   },
+   "kind": "bundle",
+   "name": "receipt_idx_is_a_float_equal_to_the_index",
+   "note": "4.0 == 4 in Python, so the index check passes; the receipt's own bytes changed, so the leaf check does not",
+   "pinned": [
+    "51d07513ea144ffbd4017541bf33b184f6383f27b133d096759d9f1a64f48009"
+   ]
+  },
+  {
+   "bundle": {
+    "index": 5,
+    "leaf": "70a3b9fb21772441017f2ef65cfd6abc1ba7ef7d29a6105ad732216d84fde81c",
+    "path": [
+     [
+      "R",
+      "70a3b9fb21772441017f2ef65cfd6abc1ba7ef7d29a6105ad732216d84fde81c"
+     ],
+     [
+      "R",
+      "246c364074471f5fdd2779d6146a8fbc55678413dec8bc6c5cbc0c9990a9425c"
+     ],
+     [
+      "L",
+      "0a727be017a10a2f9b73f0af2adea7a99509292d31ee0bd535ba9e2bb43c8742"
+     ]
+    ],
+    "receipt": {
+     "action": "decision",
+     "actor": "engine",
+     "data": {
+      "cause": 0,
+      "node": "a",
+      "seq": 4,
+      "target": "b"
+     },
+     "id": "4",
+     "idx": 4,
+     "ts": 1730800004.9382713
+    },
+    "statement": {
+     "format": "prismpath-root-statement/1",
+     "key_id": "d080af74adc57958d8c77d2f2e27e3493fda17588e60024fd8f38c9b445672ac",
+     "leaves": 5,
+     "log": "audit-log",
+     "policy": {
+      "flow_sha256": "abababababababababababababababababababababababababababababababab"
+     },
+     "prev": "d08a319a0df3455c997d305aa7c9284942e12d1dd797ab1c1eb42c1ac2fdd995",
+     "public_key": "51d07513ea144ffbd4017541bf33b184f6383f27b133d096759d9f1a64f48009",
+     "root": "d12f37d212bb9b87b2f1885c96e40ee9a9618f35e69bbeba9dbab2d57a396f5b",
+     "seq": 1,
+     "sig": "74276502074e58afa68913c65c1fa97d51eadae397219af9623c976a1532cbe55dc78cbc93c53c9022af6236661e5bb6ea269b13750c0d0f7acde2e01ee27a0e",
+     "time": "2026-11-04T12:00:01.250Z",
+     "trigger": "run-end"
+    }
+   },
+   "expect": {
+    "checks": {
+     "covered": false,
+     "inclusion": true,
+     "index": false,
+     "key_id": true,
+     "leaf": true,
+     "pinned": true,
+     "signature": true,
+     "well_formed": true
+    },
+    "index": 5,
+    "key": "d080af74adc57958",
+    "ok": false,
+    "pinned": true,
+    "statement": 1,
+    "statement_sha256": "41ba0b029b81199119c55e2da3fda55a0b5f639d5d2e84362275e7cb5138cfca",
+    "status": "invalid"
+   },
+   "kind": "bundle",
+   "name": "index_past_the_covered_leaves",
+   "pinned": [
+    "51d07513ea144ffbd4017541bf33b184f6383f27b133d096759d9f1a64f48009"
+   ]
+  },
+  {
+   "bundle": {
+    "index": -1,
+    "leaf": "70a3b9fb21772441017f2ef65cfd6abc1ba7ef7d29a6105ad732216d84fde81c",
+    "path": [
+     [
+      "R",
+      "70a3b9fb21772441017f2ef65cfd6abc1ba7ef7d29a6105ad732216d84fde81c"
+     ],
+     [
+      "R",
+      "246c364074471f5fdd2779d6146a8fbc55678413dec8bc6c5cbc0c9990a9425c"
+     ],
+     [
+      "L",
+      "0a727be017a10a2f9b73f0af2adea7a99509292d31ee0bd535ba9e2bb43c8742"
+     ]
+    ],
+    "receipt": {
+     "action": "decision",
+     "actor": "engine",
+     "data": {
+      "cause": 0,
+      "node": "a",
+      "seq": 4,
+      "target": "b"
+     },
+     "id": "4",
+     "idx": 4,
+     "ts": 1730800004.9382713
+    },
+    "statement": {
+     "format": "prismpath-root-statement/1",
+     "key_id": "d080af74adc57958d8c77d2f2e27e3493fda17588e60024fd8f38c9b445672ac",
+     "leaves": 5,
+     "log": "audit-log",
+     "policy": {
+      "flow_sha256": "abababababababababababababababababababababababababababababababab"
+     },
+     "prev": "d08a319a0df3455c997d305aa7c9284942e12d1dd797ab1c1eb42c1ac2fdd995",
+     "public_key": "51d07513ea144ffbd4017541bf33b184f6383f27b133d096759d9f1a64f48009",
+     "root": "d12f37d212bb9b87b2f1885c96e40ee9a9618f35e69bbeba9dbab2d57a396f5b",
+     "seq": 1,
+     "sig": "74276502074e58afa68913c65c1fa97d51eadae397219af9623c976a1532cbe55dc78cbc93c53c9022af6236661e5bb6ea269b13750c0d0f7acde2e01ee27a0e",
+     "time": "2026-11-04T12:00:01.250Z",
+     "trigger": "run-end"
+    }
+   },
+   "expect": {
+    "checks": {
+     "covered": false,
+     "inclusion": true,
+     "index": false,
+     "key_id": true,
+     "leaf": true,
+     "pinned": true,
+     "signature": true,
+     "well_formed": true
+    },
+    "index": -1,
+    "key": "d080af74adc57958",
+    "ok": false,
+    "pinned": true,
+    "statement": 1,
+    "statement_sha256": "41ba0b029b81199119c55e2da3fda55a0b5f639d5d2e84362275e7cb5138cfca",
+    "status": "invalid"
+   },
+   "kind": "bundle",
+   "name": "index_negative",
+   "pinned": [
+    "51d07513ea144ffbd4017541bf33b184f6383f27b133d096759d9f1a64f48009"
+   ]
+  },
+  {
+   "bundle": {
+    "index": 3,
+    "leaf": "1f1e1106bd6baeee50c334a1c383dd829f74a9b5407582e786cbfa307239b76e",
+    "path": [
+     [
+      "L",
+      "c62d28247cf06947e7d8de468079a9a951bf1d413c7a6ce0ffbeaef2989a8cd3"
+     ],
+     [
+      "L",
+      "ce8cb4ed929dfacc47c7b3ca4a227e6d23e328290aac0f197c695caedfdc516e"
+     ]
+    ],
+    "receipt": {
+     "action": "decision",
+     "actor": "engine",
+     "data": {
+      "cause": 0,
+      "node": "a",
+      "note": "caf\u00e9 \u2603 \ud834\udd1e \"quoted\" \\ \t",
+      "seq": 3,
+      "target": "b"
+     },
+     "id": "3",
+     "idx": 3,
+     "ts": 1730800003.7037034
+    },
+    "statement": {
+     "format": "prismpath-root-statement/1",
+     "key_id": "d080af74adc57958d8c77d2f2e27e3493fda17588e60024fd8f38c9b445672ac",
+     "leaves": 4,
+     "log": "audit-log",
+     "policy": {
+      "flow_sha256": "abababababababababababababababababababababababababababababababab"
+     },
+     "prev": "",
+     "public_key": "51d07513ea144ffbd4017541bf33b184f6383f27b133d096759d9f1a64f48009",
+     "root": "0a727be017a10a2f9b73f0af2adea7a99509292d31ee0bd535ba9e2bb43c8742",
+     "seq": 0,
+     "sig": "be56c41cf39ac9c723870d2c48b8c0368efd91a0c58f8fdd9a156263ea070a4170593d56a35ab00ac3c76d98ad28cc0c4f20089f0f79f5cc1cf51c560e660b0a",
+     "time": "2026-11-04T12:00:00.250Z",
+     "trigger": "run-end"
+    }
+   },
+   "expect": {
+    "checks": {
+     "covered": true,
+     "inclusion": true,
+     "index": true,
+     "key_id": true,
+     "leaf": true,
+     "pinned": true,
+     "signature": true,
+     "well_formed": true
+    },
+    "index": 3,
+    "key": "d080af74adc57958",
+    "ok": true,
+    "pinned": true,
+    "statement": 0,
+    "statement_sha256": "c9261a917c78e5ed921c3a2ce6bd24c8a4f587be2e2bbc104e3826789f20b840",
+    "status": "signed"
+   },
+   "kind": "bundle",
+   "name": "last_covered_leaf",
+   "pinned": [
+    "51d07513ea144ffbd4017541bf33b184f6383f27b133d096759d9f1a64f48009"
+   ]
+  },
+  {
+   "bundle": {
+    "index": 4,
+    "leaf": "1f1e1106bd6baeee50c334a1c383dd829f74a9b5407582e786cbfa307239b76e",
+    "path": [
+     [
+      "L",
+      "c62d28247cf06947e7d8de468079a9a951bf1d413c7a6ce0ffbeaef2989a8cd3"
+     ],
+     [
+      "L",
+      "ce8cb4ed929dfacc47c7b3ca4a227e6d23e328290aac0f197c695caedfdc516e"
+     ]
+    ],
+    "receipt": {
+     "action": "decision",
+     "actor": "engine",
+     "data": {
+      "cause": 0,
+      "node": "a",
+      "note": "caf\u00e9 \u2603 \ud834\udd1e \"quoted\" \\ \t",
+      "seq": 3,
+      "target": "b"
+     },
+     "id": "3",
+     "idx": 4,
+     "ts": 1730800003.7037034
+    },
+    "statement": {
+     "format": "prismpath-root-statement/1",
+     "key_id": "d080af74adc57958d8c77d2f2e27e3493fda17588e60024fd8f38c9b445672ac",
+     "leaves": 4,
+     "log": "audit-log",
+     "policy": {
+      "flow_sha256": "abababababababababababababababababababababababababababababababab"
+     },
+     "prev": "",
+     "public_key": "51d07513ea144ffbd4017541bf33b184f6383f27b133d096759d9f1a64f48009",
+     "root": "0a727be017a10a2f9b73f0af2adea7a99509292d31ee0bd535ba9e2bb43c8742",
+     "seq": 0,
+     "sig": "be56c41cf39ac9c723870d2c48b8c0368efd91a0c58f8fdd9a156263ea070a4170593d56a35ab00ac3c76d98ad28cc0c4f20089f0f79f5cc1cf51c560e660b0a",
+     "time": "2026-11-04T12:00:00.250Z",
+     "trigger": "run-end"
+    }
+   },
+   "expect": {
+    "checks": {
+     "covered": false,
+     "inclusion": true,
+     "index": true,
+     "key_id": true,
+     "leaf": false,
+     "pinned": true,
+     "signature": true,
+     "well_formed": true
+    },
+    "index": 4,
+    "key": "d080af74adc57958",
+    "ok": false,
+    "pinned": true,
+    "statement": 0,
+    "statement_sha256": "c9261a917c78e5ed921c3a2ce6bd24c8a4f587be2e2bbc104e3826789f20b840",
+    "status": "invalid"
+   },
+   "kind": "bundle",
+   "name": "index_one_past_the_last_leaf",
+   "note": "index and idx agree here, so only `covered` fails (and the leaf, inclusion and signature checks the edit also breaks)",
    "pinned": [
     "51d07513ea144ffbd4017541bf33b184f6383f27b133d096759d9f1a64f48009"
    ]
@@ -7515,10 +8172,20 @@
     }
    },
    "expect": {
-    "error": true
+    "checks": {
+     "well_formed": false
+    },
+    "index": null,
+    "key": "",
+    "ok": false,
+    "pinned": true,
+    "problem": "the leaf and the inclusion path are hex hashes",
+    "statement": null,
+    "statement_sha256": null,
+    "status": "invalid"
    },
    "kind": "bundle",
-   "name": "leaf_not_hex_is_an_error",
+   "name": "leaf_not_hex_is_malformed",
    "pinned": [
     "51d07513ea144ffbd4017541bf33b184f6383f27b133d096759d9f1a64f48009"
    ]
@@ -7572,10 +8239,87 @@
     }
    },
    "expect": {
-    "error": true
+    "checks": {
+     "well_formed": false
+    },
+    "index": null,
+    "key": "",
+    "ok": false,
+    "pinned": true,
+    "problem": "the leaf and the inclusion path are hex hashes",
+    "statement": null,
+    "statement_sha256": null,
+    "status": "invalid"
    },
    "kind": "bundle",
-   "name": "path_sibling_not_hex_is_an_error",
+   "name": "path_sibling_not_hex_is_malformed",
+   "pinned": [
+    "51d07513ea144ffbd4017541bf33b184f6383f27b133d096759d9f1a64f48009"
+   ]
+  },
+  {
+   "bundle": {
+    "index": 4,
+    "leaf": "70a3b9fb21772441017f2ef65cfd6abc1ba7ef7d29a6105ad732216d84fde81c",
+    "path": [
+     [
+      "R",
+      7
+     ],
+     [
+      "R",
+      "246c364074471f5fdd2779d6146a8fbc55678413dec8bc6c5cbc0c9990a9425c"
+     ],
+     [
+      "L",
+      "0a727be017a10a2f9b73f0af2adea7a99509292d31ee0bd535ba9e2bb43c8742"
+     ]
+    ],
+    "receipt": {
+     "action": "decision",
+     "actor": "engine",
+     "data": {
+      "cause": 0,
+      "node": "a",
+      "seq": 4,
+      "target": "b"
+     },
+     "id": "4",
+     "idx": 4,
+     "ts": 1730800004.9382713
+    },
+    "statement": {
+     "format": "prismpath-root-statement/1",
+     "key_id": "d080af74adc57958d8c77d2f2e27e3493fda17588e60024fd8f38c9b445672ac",
+     "leaves": 5,
+     "log": "audit-log",
+     "policy": {
+      "flow_sha256": "abababababababababababababababababababababababababababababababab"
+     },
+     "prev": "d08a319a0df3455c997d305aa7c9284942e12d1dd797ab1c1eb42c1ac2fdd995",
+     "public_key": "51d07513ea144ffbd4017541bf33b184f6383f27b133d096759d9f1a64f48009",
+     "root": "d12f37d212bb9b87b2f1885c96e40ee9a9618f35e69bbeba9dbab2d57a396f5b",
+     "seq": 1,
+     "sig": "74276502074e58afa68913c65c1fa97d51eadae397219af9623c976a1532cbe55dc78cbc93c53c9022af6236661e5bb6ea269b13750c0d0f7acde2e01ee27a0e",
+     "time": "2026-11-04T12:00:01.250Z",
+     "trigger": "run-end"
+    }
+   },
+   "expect": {
+    "checks": {
+     "well_formed": false
+    },
+    "index": null,
+    "key": "",
+    "ok": false,
+    "pinned": true,
+    "problem": "the leaf and the inclusion path are hex hashes",
+    "statement": null,
+    "statement_sha256": null,
+    "status": "invalid"
+   },
+   "kind": "bundle",
+   "name": "path_sibling_not_text_is_malformed",
    "pinned": [
     "51d07513ea144ffbd4017541bf33b184f6383f27b133d096759d9f1a64f48009"
    ]
@@ -7613,10 +8357,20 @@
     }
    },
    "expect": {
-    "error": true
+    "checks": {
+     "well_formed": false
+    },
+    "index": null,
+    "key": "",
+    "ok": false,
+    "pinned": true,
+    "problem": "missing or malformed field 'statement'",
+    "statement": null,
+    "statement_sha256": null,
+    "status": "invalid"
    },
    "kind": "bundle",
-   "name": "no_statement_is_an_error",
+   "name": "no_statement_is_malformed",
    "pinned": [
     "51d07513ea144ffbd4017541bf33b184f6383f27b133d096759d9f1a64f48009"
    ]
@@ -7657,10 +8411,517 @@
     }
    },
    "expect": {
-    "error": true
+    "checks": {
+     "well_formed": false
+    },
+    "index": null,
+    "key": "",
+    "ok": false,
+    "pinned": true,
+    "problem": "missing or malformed field 'receipt'",
+    "statement": null,
+    "statement_sha256": null,
+    "status": "invalid"
    },
    "kind": "bundle",
-   "name": "no_receipt_is_an_error",
+   "name": "no_receipt_is_malformed",
+   "pinned": [
+    "51d07513ea144ffbd4017541bf33b184f6383f27b133d096759d9f1a64f48009"
+   ]
+  },
+  {
+   "bundle": {
+    "index": 4,
+    "path": [
+     [
+      "R",
+      "70a3b9fb21772441017f2ef65cfd6abc1ba7ef7d29a6105ad732216d84fde81c"
+     ],
+     [
+      "R",
+      "246c364074471f5fdd2779d6146a8fbc55678413dec8bc6c5cbc0c9990a9425c"
+     ],
+     [
+      "L",
+      "0a727be017a10a2f9b73f0af2adea7a99509292d31ee0bd535ba9e2bb43c8742"
+     ]
+    ],
+    "receipt": {
+     "action": "decision",
+     "actor": "engine",
+     "data": {
+      "cause": 0,
+      "node": "a",
+      "seq": 4,
+      "target": "b"
+     },
+     "id": "4",
+     "idx": 4,
+     "ts": 1730800004.9382713
+    },
+    "statement": {
+     "format": "prismpath-root-statement/1",
+     "key_id": "d080af74adc57958d8c77d2f2e27e3493fda17588e60024fd8f38c9b445672ac",
+     "leaves": 5,
+     "log": "audit-log",
+     "policy": {
+      "flow_sha256": "abababababababababababababababababababababababababababababababab"
+     },
+     "prev": "d08a319a0df3455c997d305aa7c9284942e12d1dd797ab1c1eb42c1ac2fdd995",
+     "public_key": "51d07513ea144ffbd4017541bf33b184f6383f27b133d096759d9f1a64f48009",
+     "root": "d12f37d212bb9b87b2f1885c96e40ee9a9618f35e69bbeba9dbab2d57a396f5b",
+     "seq": 1,
+     "sig": "74276502074e58afa68913c65c1fa97d51eadae397219af9623c976a1532cbe55dc78cbc93c53c9022af6236661e5bb6ea269b13750c0d0f7acde2e01ee27a0e",
+     "time": "2026-11-04T12:00:01.250Z",
+     "trigger": "run-end"
+    }
+   },
+   "expect": {
+    "checks": {
+     "well_formed": false
+    },
+    "index": null,
+    "key": "",
+    "ok": false,
+    "pinned": true,
+    "problem": "missing or malformed field 'leaf'",
+    "statement": null,
+    "statement_sha256": null,
+    "status": "invalid"
+   },
+   "kind": "bundle",
+   "name": "no_leaf_is_malformed",
+   "pinned": [
+    "51d07513ea144ffbd4017541bf33b184f6383f27b133d096759d9f1a64f48009"
+   ]
+  },
+  {
+   "bundle": {
+    "index": 4,
+    "leaf": "70a3b9fb21772441017f2ef65cfd6abc1ba7ef7d29a6105ad732216d84fde81c",
+    "receipt": {
+     "action": "decision",
+     "actor": "engine",
+     "data": {
+      "cause": 0,
+      "node": "a",
+      "seq": 4,
+      "target": "b"
+     },
+     "id": "4",
+     "idx": 4,
+     "ts": 1730800004.9382713
+    },
+    "statement": {
+     "format": "prismpath-root-statement/1",
+     "key_id": "d080af74adc57958d8c77d2f2e27e3493fda17588e60024fd8f38c9b445672ac",
+     "leaves": 5,
+     "log": "audit-log",
+     "policy": {
+      "flow_sha256": "abababababababababababababababababababababababababababababababab"
+     },
+     "prev": "d08a319a0df3455c997d305aa7c9284942e12d1dd797ab1c1eb42c1ac2fdd995",
+     "public_key": "51d07513ea144ffbd4017541bf33b184f6383f27b133d096759d9f1a64f48009",
+     "root": "d12f37d212bb9b87b2f1885c96e40ee9a9618f35e69bbeba9dbab2d57a396f5b",
+     "seq": 1,
+     "sig": "74276502074e58afa68913c65c1fa97d51eadae397219af9623c976a1532cbe55dc78cbc93c53c9022af6236661e5bb6ea269b13750c0d0f7acde2e01ee27a0e",
+     "time": "2026-11-04T12:00:01.250Z",
+     "trigger": "run-end"
+    }
+   },
+   "expect": {
+    "checks": {
+     "well_formed": false
+    },
+    "index": null,
+    "key": "",
+    "ok": false,
+    "pinned": true,
+    "problem": "missing or malformed field 'path'",
+    "statement": null,
+    "statement_sha256": null,
+    "status": "invalid"
+   },
+   "kind": "bundle",
+   "name": "no_path_is_malformed",
+   "pinned": [
+    "51d07513ea144ffbd4017541bf33b184f6383f27b133d096759d9f1a64f48009"
+   ]
+  },
+  {
+   "bundle": {
+    "leaf": "70a3b9fb21772441017f2ef65cfd6abc1ba7ef7d29a6105ad732216d84fde81c",
+    "path": [
+     [
+      "R",
+      "70a3b9fb21772441017f2ef65cfd6abc1ba7ef7d29a6105ad732216d84fde81c"
+     ],
+     [
+      "R",
+      "246c364074471f5fdd2779d6146a8fbc55678413dec8bc6c5cbc0c9990a9425c"
+     ],
+     [
+      "L",
+      "0a727be017a10a2f9b73f0af2adea7a99509292d31ee0bd535ba9e2bb43c8742"
+     ]
+    ],
+    "receipt": {
+     "action": "decision",
+     "actor": "engine",
+     "data": {
+      "cause": 0,
+      "node": "a",
+      "seq": 4,
+      "target": "b"
+     },
+     "id": "4",
+     "idx": 4,
+     "ts": 1730800004.9382713
+    },
+    "statement": {
+     "format": "prismpath-root-statement/1",
+     "key_id": "d080af74adc57958d8c77d2f2e27e3493fda17588e60024fd8f38c9b445672ac",
+     "leaves": 5,
+     "log": "audit-log",
+     "policy": {
+      "flow_sha256": "abababababababababababababababababababababababababababababababab"
+     },
+     "prev": "d08a319a0df3455c997d305aa7c9284942e12d1dd797ab1c1eb42c1ac2fdd995",
+     "public_key": "51d07513ea144ffbd4017541bf33b184f6383f27b133d096759d9f1a64f48009",
+     "root": "d12f37d212bb9b87b2f1885c96e40ee9a9618f35e69bbeba9dbab2d57a396f5b",
+     "seq": 1,
+     "sig": "74276502074e58afa68913c65c1fa97d51eadae397219af9623c976a1532cbe55dc78cbc93c53c9022af6236661e5bb6ea269b13750c0d0f7acde2e01ee27a0e",
+     "time": "2026-11-04T12:00:01.250Z",
+     "trigger": "run-end"
+    }
+   },
+   "expect": {
+    "checks": {
+     "well_formed": false
+    },
+    "index": null,
+    "key": "",
+    "ok": false,
+    "pinned": true,
+    "problem": "missing or malformed field 'index'",
+    "statement": null,
+    "statement_sha256": null,
+    "status": "invalid"
+   },
+   "kind": "bundle",
+   "name": "no_index_is_malformed",
+   "pinned": [
+    "51d07513ea144ffbd4017541bf33b184f6383f27b133d096759d9f1a64f48009"
+   ]
+  },
+  {
+   "bundle": {
+    "index": true,
+    "leaf": "70a3b9fb21772441017f2ef65cfd6abc1ba7ef7d29a6105ad732216d84fde81c",
+    "path": [
+     [
+      "R",
+      "70a3b9fb21772441017f2ef65cfd6abc1ba7ef7d29a6105ad732216d84fde81c"
+     ],
+     [
+      "R",
+      "246c364074471f5fdd2779d6146a8fbc55678413dec8bc6c5cbc0c9990a9425c"
+     ],
+     [
+      "L",
+      "0a727be017a10a2f9b73f0af2adea7a99509292d31ee0bd535ba9e2bb43c8742"
+     ]
+    ],
+    "receipt": {
+     "action": "decision",
+     "actor": "engine",
+     "data": {
+      "cause": 0,
+      "node": "a",
+      "seq": 4,
+      "target": "b"
+     },
+     "id": "4",
+     "idx": 4,
+     "ts": 1730800004.9382713
+    },
+    "statement": {
+     "format": "prismpath-root-statement/1",
+     "key_id": "d080af74adc57958d8c77d2f2e27e3493fda17588e60024fd8f38c9b445672ac",
+     "leaves": 5,
+     "log": "audit-log",
+     "policy": {
+      "flow_sha256": "abababababababababababababababababababababababababababababababab"
+     },
+     "prev": "d08a319a0df3455c997d305aa7c9284942e12d1dd797ab1c1eb42c1ac2fdd995",
+     "public_key": "51d07513ea144ffbd4017541bf33b184f6383f27b133d096759d9f1a64f48009",
+     "root": "d12f37d212bb9b87b2f1885c96e40ee9a9618f35e69bbeba9dbab2d57a396f5b",
+     "seq": 1,
+     "sig": "74276502074e58afa68913c65c1fa97d51eadae397219af9623c976a1532cbe55dc78cbc93c53c9022af6236661e5bb6ea269b13750c0d0f7acde2e01ee27a0e",
+     "time": "2026-11-04T12:00:01.250Z",
+     "trigger": "run-end"
+    }
+   },
+   "expect": {
+    "checks": {
+     "well_formed": false
+    },
+    "index": null,
+    "key": "",
+    "ok": false,
+    "pinned": true,
+    "problem": "missing or malformed field 'index'",
+    "statement": null,
+    "statement_sha256": null,
+    "status": "invalid"
+   },
+   "kind": "bundle",
+   "name": "index_is_a_boolean_is_malformed",
+   "pinned": [
+    "51d07513ea144ffbd4017541bf33b184f6383f27b133d096759d9f1a64f48009"
+   ]
+  },
+  {
+   "bundle": {
+    "index": 4.0,
+    "leaf": "70a3b9fb21772441017f2ef65cfd6abc1ba7ef7d29a6105ad732216d84fde81c",
+    "path": [
+     [
+      "R",
+      "70a3b9fb21772441017f2ef65cfd6abc1ba7ef7d29a6105ad732216d84fde81c"
+     ],
+     [
+      "R",
+      "246c364074471f5fdd2779d6146a8fbc55678413dec8bc6c5cbc0c9990a9425c"
+     ],
+     [
+      "L",
+      "0a727be017a10a2f9b73f0af2adea7a99509292d31ee0bd535ba9e2bb43c8742"
+     ]
+    ],
+    "receipt": {
+     "action": "decision",
+     "actor": "engine",
+     "data": {
+      "cause": 0,
+      "node": "a",
+      "seq": 4,
+      "target": "b"
+     },
+     "id": "4",
+     "idx": 4,
+     "ts": 1730800004.9382713
+    },
+    "statement": {
+     "format": "prismpath-root-statement/1",
+     "key_id": "d080af74adc57958d8c77d2f2e27e3493fda17588e60024fd8f38c9b445672ac",
+     "leaves": 5,
+     "log": "audit-log",
+     "policy": {
+      "flow_sha256": "abababababababababababababababababababababababababababababababab"
+     },
+     "prev": "d08a319a0df3455c997d305aa7c9284942e12d1dd797ab1c1eb42c1ac2fdd995",
+     "public_key": "51d07513ea144ffbd4017541bf33b184f6383f27b133d096759d9f1a64f48009",
+     "root": "d12f37d212bb9b87b2f1885c96e40ee9a9618f35e69bbeba9dbab2d57a396f5b",
+     "seq": 1,
+     "sig": "74276502074e58afa68913c65c1fa97d51eadae397219af9623c976a1532cbe55dc78cbc93c53c9022af6236661e5bb6ea269b13750c0d0f7acde2e01ee27a0e",
+     "time": "2026-11-04T12:00:01.250Z",
+     "trigger": "run-end"
+    }
+   },
+   "expect": {
+    "checks": {
+     "well_formed": false
+    },
+    "index": null,
+    "key": "",
+    "ok": false,
+    "pinned": true,
+    "problem": "missing or malformed field 'index'",
+    "statement": null,
+    "statement_sha256": null,
+    "status": "invalid"
+   },
+   "kind": "bundle",
+   "name": "index_is_a_float_is_malformed",
+   "pinned": [
+    "51d07513ea144ffbd4017541bf33b184f6383f27b133d096759d9f1a64f48009"
+   ]
+  },
+  {
+   "bundle": {
+    "index": "4",
+    "leaf": "70a3b9fb21772441017f2ef65cfd6abc1ba7ef7d29a6105ad732216d84fde81c",
+    "path": [
+     [
+      "R",
+      "70a3b9fb21772441017f2ef65cfd6abc1ba7ef7d29a6105ad732216d84fde81c"
+     ],
+     [
+      "R",
+      "246c364074471f5fdd2779d6146a8fbc55678413dec8bc6c5cbc0c9990a9425c"
+     ],
+     [
+      "L",
+      "0a727be017a10a2f9b73f0af2adea7a99509292d31ee0bd535ba9e2bb43c8742"
+     ]
+    ],
+    "receipt": {
+     "action": "decision",
+     "actor": "engine",
+     "data": {
+      "cause": 0,
+      "node": "a",
+      "seq": 4,
+      "target": "b"
+     },
+     "id": "4",
+     "idx": 4,
+     "ts": 1730800004.9382713
+    },
+    "statement": {
+     "format": "prismpath-root-statement/1",
+     "key_id": "d080af74adc57958d8c77d2f2e27e3493fda17588e60024fd8f38c9b445672ac",
+     "leaves": 5,
+     "log": "audit-log",
+     "policy": {
+      "flow_sha256": "abababababababababababababababababababababababababababababababab"
+     },
+     "prev": "d08a319a0df3455c997d305aa7c9284942e12d1dd797ab1c1eb42c1ac2fdd995",
+     "public_key": "51d07513ea144ffbd4017541bf33b184f6383f27b133d096759d9f1a64f48009",
+     "root": "d12f37d212bb9b87b2f1885c96e40ee9a9618f35e69bbeba9dbab2d57a396f5b",
+     "seq": 1,
+     "sig": "74276502074e58afa68913c65c1fa97d51eadae397219af9623c976a1532cbe55dc78cbc93c53c9022af6236661e5bb6ea269b13750c0d0f7acde2e01ee27a0e",
+     "time": "2026-11-04T12:00:01.250Z",
+     "trigger": "run-end"
+    }
+   },
+   "expect": {
+    "checks": {
+     "well_formed": false
+    },
+    "index": null,
+    "key": "",
+    "ok": false,
+    "pinned": true,
+    "problem": "missing or malformed field 'index'",
+    "statement": null,
+    "statement_sha256": null,
+    "status": "invalid"
+   },
+   "kind": "bundle",
+   "name": "index_is_text_is_malformed",
+   "pinned": [
+    "51d07513ea144ffbd4017541bf33b184f6383f27b133d096759d9f1a64f48009"
+   ]
+  },
+  {
+   "bundle": {
+    "index": 4,
+    "leaf": "70a3b9fb21772441017f2ef65cfd6abc1ba7ef7d29a6105ad732216d84fde81c",
+    "path": [
+     [
+      "R",
+      "70a3b9fb21772441017f2ef65cfd6abc1ba7ef7d29a6105ad732216d84fde81c"
+     ],
+     [
+      "R",
+      "246c364074471f5fdd2779d6146a8fbc55678413dec8bc6c5cbc0c9990a9425c"
+     ],
+     [
+      "L",
+      "0a727be017a10a2f9b73f0af2adea7a99509292d31ee0bd535ba9e2bb43c8742"
+     ]
+    ],
+    "receipt": [
+     1
+    ],
+    "statement": {
+     "format": "prismpath-root-statement/1",
+     "key_id": "d080af74adc57958d8c77d2f2e27e3493fda17588e60024fd8f38c9b445672ac",
+     "leaves": 5,
+     "log": "audit-log",
+     "policy": {
+      "flow_sha256": "abababababababababababababababababababababababababababababababab"
+     },
+     "prev": "d08a319a0df3455c997d305aa7c9284942e12d1dd797ab1c1eb42c1ac2fdd995",
+     "public_key": "51d07513ea144ffbd4017541bf33b184f6383f27b133d096759d9f1a64f48009",
+     "root": "d12f37d212bb9b87b2f1885c96e40ee9a9618f35e69bbeba9dbab2d57a396f5b",
+     "seq": 1,
+     "sig": "74276502074e58afa68913c65c1fa97d51eadae397219af9623c976a1532cbe55dc78cbc93c53c9022af6236661e5bb6ea269b13750c0d0f7acde2e01ee27a0e",
+     "time": "2026-11-04T12:00:01.250Z",
+     "trigger": "run-end"
+    }
+   },
+   "expect": {
+    "checks": {
+     "well_formed": false
+    },
+    "index": null,
+    "key": "",
+    "ok": false,
+    "pinned": true,
+    "problem": "missing or malformed field 'receipt'",
+    "statement": null,
+    "statement_sha256": null,
+    "status": "invalid"
+   },
+   "kind": "bundle",
+   "name": "receipt_is_a_list_is_malformed",
+   "pinned": [
+    "51d07513ea144ffbd4017541bf33b184f6383f27b133d096759d9f1a64f48009"
+   ]
+  },
+  {
+   "bundle": {
+    "index": 4,
+    "leaf": "70a3b9fb21772441017f2ef65cfd6abc1ba7ef7d29a6105ad732216d84fde81c",
+    "path": "R",
+    "receipt": {
+     "action": "decision",
+     "actor": "engine",
+     "data": {
+      "cause": 0,
+      "node": "a",
+      "seq": 4,
+      "target": "b"
+     },
+     "id": "4",
+     "idx": 4,
+     "ts": 1730800004.9382713
+    },
+    "statement": {
+     "format": "prismpath-root-statement/1",
+     "key_id": "d080af74adc57958d8c77d2f2e27e3493fda17588e60024fd8f38c9b445672ac",
+     "leaves": 5,
+     "log": "audit-log",
+     "policy": {
+      "flow_sha256": "abababababababababababababababababababababababababababababababab"
+     },
+     "prev": "d08a319a0df3455c997d305aa7c9284942e12d1dd797ab1c1eb42c1ac2fdd995",
+     "public_key": "51d07513ea144ffbd4017541bf33b184f6383f27b133d096759d9f1a64f48009",
+     "root": "d12f37d212bb9b87b2f1885c96e40ee9a9618f35e69bbeba9dbab2d57a396f5b",
+     "seq": 1,
+     "sig": "74276502074e58afa68913c65c1fa97d51eadae397219af9623c976a1532cbe55dc78cbc93c53c9022af6236661e5bb6ea269b13750c0d0f7acde2e01ee27a0e",
+     "time": "2026-11-04T12:00:01.250Z",
+     "trigger": "run-end"
+    }
+   },
+   "expect": {
+    "checks": {
+     "well_formed": false
+    },
+    "index": null,
+    "key": "",
+    "ok": false,
+    "pinned": true,
+    "problem": "missing or malformed field 'path'",
+    "statement": null,
+    "statement_sha256": null,
+    "status": "invalid"
+   },
+   "kind": "bundle",
+   "name": "path_is_text_is_malformed",
    "pinned": [
     "51d07513ea144ffbd4017541bf33b184f6383f27b133d096759d9f1a64f48009"
    ]
@@ -7705,10 +8966,323 @@
     }
    },
    "expect": {
-    "error": true
+    "checks": {
+     "well_formed": false
+    },
+    "index": null,
+    "key": "",
+    "ok": false,
+    "pinned": true,
+    "problem": "malformed inclusion path",
+    "statement": null,
+    "statement_sha256": null,
+    "status": "invalid"
    },
    "kind": "bundle",
-   "name": "path_entry_not_a_pair_is_an_error",
+   "name": "path_entry_not_a_pair_is_malformed",
+   "pinned": [
+    "51d07513ea144ffbd4017541bf33b184f6383f27b133d096759d9f1a64f48009"
+   ]
+  },
+  {
+   "bundle": {
+    "index": 4,
+    "leaf": "70a3b9fb21772441017f2ef65cfd6abc1ba7ef7d29a6105ad732216d84fde81c",
+    "path": [
+     [
+      "R",
+      "abababababababababababababababababababababababababababababababab",
+      1
+     ]
+    ],
+    "receipt": {
+     "action": "decision",
+     "actor": "engine",
+     "data": {
+      "cause": 0,
+      "node": "a",
+      "seq": 4,
+      "target": "b"
+     },
+     "id": "4",
+     "idx": 4,
+     "ts": 1730800004.9382713
+    },
+    "statement": {
+     "format": "prismpath-root-statement/1",
+     "key_id": "d080af74adc57958d8c77d2f2e27e3493fda17588e60024fd8f38c9b445672ac",
+     "leaves": 5,
+     "log": "audit-log",
+     "policy": {
+      "flow_sha256": "abababababababababababababababababababababababababababababababab"
+     },
+     "prev": "d08a319a0df3455c997d305aa7c9284942e12d1dd797ab1c1eb42c1ac2fdd995",
+     "public_key": "51d07513ea144ffbd4017541bf33b184f6383f27b133d096759d9f1a64f48009",
+     "root": "d12f37d212bb9b87b2f1885c96e40ee9a9618f35e69bbeba9dbab2d57a396f5b",
+     "seq": 1,
+     "sig": "74276502074e58afa68913c65c1fa97d51eadae397219af9623c976a1532cbe55dc78cbc93c53c9022af6236661e5bb6ea269b13750c0d0f7acde2e01ee27a0e",
+     "time": "2026-11-04T12:00:01.250Z",
+     "trigger": "run-end"
+    }
+   },
+   "expect": {
+    "checks": {
+     "well_formed": false
+    },
+    "index": null,
+    "key": "",
+    "ok": false,
+    "pinned": true,
+    "problem": "malformed inclusion path",
+    "statement": null,
+    "statement_sha256": null,
+    "status": "invalid"
+   },
+   "kind": "bundle",
+   "name": "path_entry_too_long_is_malformed",
+   "pinned": [
+    "51d07513ea144ffbd4017541bf33b184f6383f27b133d096759d9f1a64f48009"
+   ]
+  },
+  {
+   "bundle": {
+    "index": 4,
+    "leaf": "70a3b9fb21772441017f2ef65cfd6abc1ba7ef7d29a6105ad732216d84fde81c",
+    "path": [
+     "RR"
+    ],
+    "receipt": {
+     "action": "decision",
+     "actor": "engine",
+     "data": {
+      "cause": 0,
+      "node": "a",
+      "seq": 4,
+      "target": "b"
+     },
+     "id": "4",
+     "idx": 4,
+     "ts": 1730800004.9382713
+    },
+    "statement": {
+     "format": "prismpath-root-statement/1",
+     "key_id": "d080af74adc57958d8c77d2f2e27e3493fda17588e60024fd8f38c9b445672ac",
+     "leaves": 5,
+     "log": "audit-log",
+     "policy": {
+      "flow_sha256": "abababababababababababababababababababababababababababababababab"
+     },
+     "prev": "d08a319a0df3455c997d305aa7c9284942e12d1dd797ab1c1eb42c1ac2fdd995",
+     "public_key": "51d07513ea144ffbd4017541bf33b184f6383f27b133d096759d9f1a64f48009",
+     "root": "d12f37d212bb9b87b2f1885c96e40ee9a9618f35e69bbeba9dbab2d57a396f5b",
+     "seq": 1,
+     "sig": "74276502074e58afa68913c65c1fa97d51eadae397219af9623c976a1532cbe55dc78cbc93c53c9022af6236661e5bb6ea269b13750c0d0f7acde2e01ee27a0e",
+     "time": "2026-11-04T12:00:01.250Z",
+     "trigger": "run-end"
+    }
+   },
+   "expect": {
+    "checks": {
+     "well_formed": false
+    },
+    "index": null,
+    "key": "",
+    "ok": false,
+    "pinned": true,
+    "problem": "malformed inclusion path",
+    "statement": null,
+    "statement_sha256": null,
+    "status": "invalid"
+   },
+   "kind": "bundle",
+   "name": "path_entry_is_text_is_malformed",
+   "pinned": [
+    "51d07513ea144ffbd4017541bf33b184f6383f27b133d096759d9f1a64f48009"
+   ]
+  },
+  {
+   "bundle": {
+    "index": 4,
+    "leaf": "70a3b9fb21772441017f2ef65cfd6abc1ba7ef7d29a6105ad732216d84fde81c",
+    "path": [
+     [
+      1,
+      "70a3b9fb21772441017f2ef65cfd6abc1ba7ef7d29a6105ad732216d84fde81c"
+     ],
+     [
+      "R",
+      "246c364074471f5fdd2779d6146a8fbc55678413dec8bc6c5cbc0c9990a9425c"
+     ],
+     [
+      "L",
+      "0a727be017a10a2f9b73f0af2adea7a99509292d31ee0bd535ba9e2bb43c8742"
+     ]
+    ],
+    "receipt": {
+     "action": "decision",
+     "actor": "engine",
+     "data": {
+      "cause": 0,
+      "node": "a",
+      "seq": 4,
+      "target": "b"
+     },
+     "id": "4",
+     "idx": 4,
+     "ts": 1730800004.9382713
+    },
+    "statement": {
+     "format": "prismpath-root-statement/1",
+     "key_id": "d080af74adc57958d8c77d2f2e27e3493fda17588e60024fd8f38c9b445672ac",
+     "leaves": 5,
+     "log": "audit-log",
+     "policy": {
+      "flow_sha256": "abababababababababababababababababababababababababababababababab"
+     },
+     "prev": "d08a319a0df3455c997d305aa7c9284942e12d1dd797ab1c1eb42c1ac2fdd995",
+     "public_key": "51d07513ea144ffbd4017541bf33b184f6383f27b133d096759d9f1a64f48009",
+     "root": "d12f37d212bb9b87b2f1885c96e40ee9a9618f35e69bbeba9dbab2d57a396f5b",
+     "seq": 1,
+     "sig": "74276502074e58afa68913c65c1fa97d51eadae397219af9623c976a1532cbe55dc78cbc93c53c9022af6236661e5bb6ea269b13750c0d0f7acde2e01ee27a0e",
+     "time": "2026-11-04T12:00:01.250Z",
+     "trigger": "run-end"
+    }
+   },
+   "expect": {
+    "checks": {
+     "well_formed": false
+    },
+    "index": null,
+    "key": "",
+    "ok": false,
+    "pinned": true,
+    "problem": "malformed inclusion path",
+    "statement": null,
+    "statement_sha256": null,
+    "status": "invalid"
+   },
+   "kind": "bundle",
+   "name": "path_side_not_text_is_malformed",
+   "pinned": [
+    "51d07513ea144ffbd4017541bf33b184f6383f27b133d096759d9f1a64f48009"
+   ]
+  },
+  {
+   "bundle": {
+    "index": 4,
+    "leaf": "zz",
+    "path": [
+     [
+      "R"
+     ]
+    ],
+    "receipt": {
+     "action": "decision",
+     "actor": "engine",
+     "data": {
+      "cause": 0,
+      "node": "a",
+      "seq": 4,
+      "target": "b"
+     },
+     "id": "4",
+     "idx": 4,
+     "ts": 1730800004.9382713
+    },
+    "statement": {
+     "format": "prismpath-root-statement/1",
+     "key_id": "d080af74adc57958d8c77d2f2e27e3493fda17588e60024fd8f38c9b445672ac",
+     "leaves": 5,
+     "log": "audit-log",
+     "policy": {
+      "flow_sha256": "abababababababababababababababababababababababababababababababab"
+     },
+     "prev": "d08a319a0df3455c997d305aa7c9284942e12d1dd797ab1c1eb42c1ac2fdd995",
+     "public_key": "51d07513ea144ffbd4017541bf33b184f6383f27b133d096759d9f1a64f48009",
+     "root": "d12f37d212bb9b87b2f1885c96e40ee9a9618f35e69bbeba9dbab2d57a396f5b",
+     "seq": 1,
+     "sig": "74276502074e58afa68913c65c1fa97d51eadae397219af9623c976a1532cbe55dc78cbc93c53c9022af6236661e5bb6ea269b13750c0d0f7acde2e01ee27a0e",
+     "time": "2026-11-04T12:00:01.250Z",
+     "trigger": "run-end"
+    }
+   },
+   "expect": {
+    "checks": {
+     "well_formed": false
+    },
+    "index": null,
+    "key": "",
+    "ok": false,
+    "pinned": true,
+    "problem": "the leaf and the inclusion path are hex hashes",
+    "statement": null,
+    "statement_sha256": null,
+    "status": "invalid"
+   },
+   "kind": "bundle",
+   "name": "leaf_checked_before_path_shape",
+   "pinned": [
+    "51d07513ea144ffbd4017541bf33b184f6383f27b133d096759d9f1a64f48009"
+   ]
+  },
+  {
+   "bundle": {
+    "index": 4,
+    "leaf": "70a3b9fb21772441017f2ef65cfd6abc1ba7ef7d29a6105ad732216d84fde81c",
+    "path": [
+     [
+      "R",
+      "zz"
+     ],
+     [
+      "R"
+     ]
+    ],
+    "receipt": {
+     "action": "decision",
+     "actor": "engine",
+     "data": {
+      "cause": 0,
+      "node": "a",
+      "seq": 4,
+      "target": "b"
+     },
+     "id": "4",
+     "idx": 4,
+     "ts": 1730800004.9382713
+    },
+    "statement": {
+     "format": "prismpath-root-statement/1",
+     "key_id": "d080af74adc57958d8c77d2f2e27e3493fda17588e60024fd8f38c9b445672ac",
+     "leaves": 5,
+     "log": "audit-log",
+     "policy": {
+      "flow_sha256": "abababababababababababababababababababababababababababababababab"
+     },
+     "prev": "d08a319a0df3455c997d305aa7c9284942e12d1dd797ab1c1eb42c1ac2fdd995",
+     "public_key": "51d07513ea144ffbd4017541bf33b184f6383f27b133d096759d9f1a64f48009",
+     "root": "d12f37d212bb9b87b2f1885c96e40ee9a9618f35e69bbeba9dbab2d57a396f5b",
+     "seq": 1,
+     "sig": "74276502074e58afa68913c65c1fa97d51eadae397219af9623c976a1532cbe55dc78cbc93c53c9022af6236661e5bb6ea269b13750c0d0f7acde2e01ee27a0e",
+     "time": "2026-11-04T12:00:01.250Z",
+     "trigger": "run-end"
+    }
+   },
+   "expect": {
+    "checks": {
+     "well_formed": false
+    },
+    "index": null,
+    "key": "",
+    "ok": false,
+    "pinned": true,
+    "problem": "the leaf and the inclusion path are hex hashes",
+    "statement": null,
+    "statement_sha256": null,
+    "status": "invalid"
+   },
+   "kind": "bundle",
+   "name": "path_hex_checked_in_order",
    "pinned": [
     "51d07513ea144ffbd4017541bf33b184f6383f27b133d096759d9f1a64f48009"
    ]
@@ -7749,13 +9323,504 @@
     ]
    },
    "expect": {
-    "error": true
+    "checks": {
+     "well_formed": false
+    },
+    "index": null,
+    "key": "",
+    "ok": false,
+    "pinned": true,
+    "problem": "missing or malformed field 'statement'",
+    "statement": null,
+    "statement_sha256": null,
+    "status": "invalid"
    },
    "kind": "bundle",
-   "name": "statement_not_an_object_is_an_error",
+   "name": "statement_not_an_object_is_malformed",
    "pinned": [
     "51d07513ea144ffbd4017541bf33b184f6383f27b133d096759d9f1a64f48009"
    ]
+  },
+  {
+   "bundle": {
+    "index": 4,
+    "leaf": "70a3b9fb21772441017f2ef65cfd6abc1ba7ef7d29a6105ad732216d84fde81c",
+    "path": [
+     [
+      "R",
+      "70a3b9fb21772441017f2ef65cfd6abc1ba7ef7d29a6105ad732216d84fde81c"
+     ],
+     [
+      "R",
+      "246c364074471f5fdd2779d6146a8fbc55678413dec8bc6c5cbc0c9990a9425c"
+     ],
+     [
+      "L",
+      "0a727be017a10a2f9b73f0af2adea7a99509292d31ee0bd535ba9e2bb43c8742"
+     ]
+    ],
+    "receipt": {
+     "action": "decision",
+     "actor": "engine",
+     "data": {
+      "cause": 0,
+      "node": "a",
+      "seq": 4,
+      "target": "b"
+     },
+     "id": "4",
+     "idx": 4,
+     "ts": 1730800004.9382713
+    }
+   },
+   "expect": {
+    "checks": {
+     "well_formed": false
+    },
+    "index": null,
+    "key": "",
+    "ok": false,
+    "pinned": false,
+    "problem": "missing or malformed field 'statement'",
+    "statement": null,
+    "statement_sha256": null,
+    "status": "invalid"
+   },
+   "kind": "bundle",
+   "name": "malformed_and_unpinned",
+   "pinned": []
+  },
+  {
+   "bundle": [
+    {
+     "index": 4,
+     "leaf": "70a3b9fb21772441017f2ef65cfd6abc1ba7ef7d29a6105ad732216d84fde81c",
+     "path": [
+      [
+       "R",
+       "70a3b9fb21772441017f2ef65cfd6abc1ba7ef7d29a6105ad732216d84fde81c"
+      ],
+      [
+       "R",
+       "246c364074471f5fdd2779d6146a8fbc55678413dec8bc6c5cbc0c9990a9425c"
+      ],
+      [
+       "L",
+       "0a727be017a10a2f9b73f0af2adea7a99509292d31ee0bd535ba9e2bb43c8742"
+      ]
+     ],
+     "receipt": {
+      "action": "decision",
+      "actor": "engine",
+      "data": {
+       "cause": 0,
+       "node": "a",
+       "seq": 4,
+       "target": "b"
+      },
+      "id": "4",
+      "idx": 4,
+      "ts": 1730800004.9382713
+     },
+     "statement": {
+      "format": "prismpath-root-statement/1",
+      "key_id": "d080af74adc57958d8c77d2f2e27e3493fda17588e60024fd8f38c9b445672ac",
+      "leaves": 5,
+      "log": "audit-log",
+      "policy": {
+       "flow_sha256": "abababababababababababababababababababababababababababababababab"
+      },
+      "prev": "d08a319a0df3455c997d305aa7c9284942e12d1dd797ab1c1eb42c1ac2fdd995",
+      "public_key": "51d07513ea144ffbd4017541bf33b184f6383f27b133d096759d9f1a64f48009",
+      "root": "d12f37d212bb9b87b2f1885c96e40ee9a9618f35e69bbeba9dbab2d57a396f5b",
+      "seq": 1,
+      "sig": "74276502074e58afa68913c65c1fa97d51eadae397219af9623c976a1532cbe55dc78cbc93c53c9022af6236661e5bb6ea269b13750c0d0f7acde2e01ee27a0e",
+      "time": "2026-11-04T12:00:01.250Z",
+      "trigger": "run-end"
+     }
+    }
+   ],
+   "expect": {
+    "checks": {
+     "well_formed": false
+    },
+    "index": null,
+    "key": "",
+    "ok": false,
+    "pinned": true,
+    "problem": "a bundle is a JSON object",
+    "statement": null,
+    "statement_sha256": null,
+    "status": "invalid"
+   },
+   "kind": "bundle",
+   "name": "bundle_is_a_list",
+   "pinned": [
+    "51d07513ea144ffbd4017541bf33b184f6383f27b133d096759d9f1a64f48009"
+   ]
+  },
+  {
+   "bundle": null,
+   "expect": {
+    "checks": {
+     "well_formed": false
+    },
+    "index": null,
+    "key": "",
+    "ok": false,
+    "pinned": true,
+    "problem": "a bundle is a JSON object",
+    "statement": null,
+    "statement_sha256": null,
+    "status": "invalid"
+   },
+   "kind": "bundle",
+   "name": "bundle_is_null",
+   "pinned": [
+    "51d07513ea144ffbd4017541bf33b184f6383f27b133d096759d9f1a64f48009"
+   ]
+  },
+  {
+   "bundle": {
+    "index": 4,
+    "leaf": "70a3b9fb21772441017f2ef65cfd6abc1ba7ef7d29a6105ad732216d84fde81c",
+    "path": [
+     [
+      "R",
+      "70a3b9fb21772441017f2ef65cfd6abc1ba7ef7d29a6105ad732216d84fde81c"
+     ],
+     [
+      "R",
+      "246c364074471f5fdd2779d6146a8fbc55678413dec8bc6c5cbc0c9990a9425c"
+     ],
+     [
+      "L",
+      "0a727be017a10a2f9b73f0af2adea7a99509292d31ee0bd535ba9e2bb43c8742"
+     ]
+    ],
+    "receipt": {
+     "action": "decision",
+     "actor": "engine",
+     "data": {
+      "cause": 0,
+      "node": "a",
+      "seq": 4,
+      "target": "b"
+     },
+     "id": "4",
+     "idx": 4,
+     "ts": 1730800004.9382713
+    },
+    "statement": {
+     "format": "prismpath-root-statement/1",
+     "key_id": 5,
+     "leaves": 5,
+     "log": "audit-log",
+     "policy": {
+      "flow_sha256": "abababababababababababababababababababababababababababababababab"
+     },
+     "prev": "d08a319a0df3455c997d305aa7c9284942e12d1dd797ab1c1eb42c1ac2fdd995",
+     "public_key": "51d07513ea144ffbd4017541bf33b184f6383f27b133d096759d9f1a64f48009",
+     "root": "d12f37d212bb9b87b2f1885c96e40ee9a9618f35e69bbeba9dbab2d57a396f5b",
+     "seq": 1,
+     "sig": "74276502074e58afa68913c65c1fa97d51eadae397219af9623c976a1532cbe55dc78cbc93c53c9022af6236661e5bb6ea269b13750c0d0f7acde2e01ee27a0e",
+     "time": "2026-11-04T12:00:01.250Z",
+     "trigger": "run-end"
+    }
+   },
+   "expect": {
+    "error": true
+   },
+   "kind": "bundle",
+   "name": "statement_key_id_is_a_number_is_an_error",
+   "pinned": [
+    "51d07513ea144ffbd4017541bf33b184f6383f27b133d096759d9f1a64f48009"
+   ]
+  },
+  {
+   "bundle": {
+    "index": 4,
+    "leaf": "70a3b9fb21772441017f2ef65cfd6abc1ba7ef7d29a6105ad732216d84fde81c",
+    "path": [
+     [
+      "R",
+      "70a3b9fb21772441017f2ef65cfd6abc1ba7ef7d29a6105ad732216d84fde81c"
+     ],
+     [
+      "R",
+      "246c364074471f5fdd2779d6146a8fbc55678413dec8bc6c5cbc0c9990a9425c"
+     ],
+     [
+      "L",
+      "0a727be017a10a2f9b73f0af2adea7a99509292d31ee0bd535ba9e2bb43c8742"
+     ]
+    ],
+    "receipt": {
+     "action": "decision",
+     "actor": "engine",
+     "data": {
+      "cause": 0,
+      "node": "a",
+      "seq": 4,
+      "target": "b"
+     },
+     "id": "4",
+     "idx": 4,
+     "ts": 1730800004.9382713
+    },
+    "statement": {
+     "format": "prismpath-root-statement/1",
+     "key_id": 5,
+     "leaves": 5,
+     "log": "audit-log",
+     "policy": {
+      "flow_sha256": "abababababababababababababababababababababababababababababababab"
+     },
+     "prev": "d08a319a0df3455c997d305aa7c9284942e12d1dd797ab1c1eb42c1ac2fdd995",
+     "public_key": "51d07513ea144ffbd4017541bf33b184f6383f27b133d096759d9f1a64f48009",
+     "root": "d12f37d212bb9b87b2f1885c96e40ee9a9618f35e69bbeba9dbab2d57a396f5b",
+     "seq": 1,
+     "sig": "74276502074e58afa68913c65c1fa97d51eadae397219af9623c976a1532cbe55dc78cbc93c53c9022af6236661e5bb6ea269b13750c0d0f7acde2e01ee27a0e",
+     "time": "2026-11-04T12:00:01.250Z",
+     "trigger": "run-end"
+    }
+   },
+   "expect": {
+    "error": true
+   },
+   "kind": "bundle",
+   "name": "statement_key_id_is_a_number_unpinned_is_an_error",
+   "pinned": []
+  },
+  {
+   "bundle": {
+    "index": 4,
+    "leaf": "70a3b9fb21772441017f2ef65cfd6abc1ba7ef7d29a6105ad732216d84fde81c",
+    "path": [
+     [
+      "R",
+      "70a3b9fb21772441017f2ef65cfd6abc1ba7ef7d29a6105ad732216d84fde81c"
+     ],
+     [
+      "R",
+      "246c364074471f5fdd2779d6146a8fbc55678413dec8bc6c5cbc0c9990a9425c"
+     ],
+     [
+      "L",
+      "0a727be017a10a2f9b73f0af2adea7a99509292d31ee0bd535ba9e2bb43c8742"
+     ]
+    ],
+    "receipt": {
+     "action": "decision",
+     "actor": "engine",
+     "data": {
+      "cause": 0,
+      "node": "a",
+      "seq": 4,
+      "target": "b"
+     },
+     "id": "4",
+     "idx": 4,
+     "ts": 1730800004.9382713
+    },
+    "statement": {
+     "format": "prismpath-root-statement/1",
+     "key_id": null,
+     "leaves": 5,
+     "log": "audit-log",
+     "policy": {
+      "flow_sha256": "abababababababababababababababababababababababababababababababab"
+     },
+     "prev": "d08a319a0df3455c997d305aa7c9284942e12d1dd797ab1c1eb42c1ac2fdd995",
+     "public_key": "51d07513ea144ffbd4017541bf33b184f6383f27b133d096759d9f1a64f48009",
+     "root": "d12f37d212bb9b87b2f1885c96e40ee9a9618f35e69bbeba9dbab2d57a396f5b",
+     "seq": 1,
+     "sig": "74276502074e58afa68913c65c1fa97d51eadae397219af9623c976a1532cbe55dc78cbc93c53c9022af6236661e5bb6ea269b13750c0d0f7acde2e01ee27a0e",
+     "time": "2026-11-04T12:00:01.250Z",
+     "trigger": "run-end"
+    }
+   },
+   "expect": {
+    "error": true
+   },
+   "kind": "bundle",
+   "name": "statement_key_id_is_null_is_an_error",
+   "pinned": []
+  },
+  {
+   "bundle": {
+    "index": 4,
+    "leaf": "70a3b9fb21772441017f2ef65cfd6abc1ba7ef7d29a6105ad732216d84fde81c",
+    "path": [
+     [
+      "R",
+      "70a3b9fb21772441017f2ef65cfd6abc1ba7ef7d29a6105ad732216d84fde81c"
+     ],
+     [
+      "R",
+      "246c364074471f5fdd2779d6146a8fbc55678413dec8bc6c5cbc0c9990a9425c"
+     ],
+     [
+      "L",
+      "0a727be017a10a2f9b73f0af2adea7a99509292d31ee0bd535ba9e2bb43c8742"
+     ]
+    ],
+    "receipt": {
+     "action": "decision",
+     "actor": "engine",
+     "data": {
+      "cause": 0,
+      "node": "a",
+      "seq": 4,
+      "target": "b"
+     },
+     "id": "4",
+     "idx": 4,
+     "ts": 1730800004.9382713
+    },
+    "statement": {
+     "format": "prismpath-root-statement/1",
+     "key_id": [
+      "a",
+      "b"
+     ],
+     "leaves": 5,
+     "log": "audit-log",
+     "policy": {
+      "flow_sha256": "abababababababababababababababababababababababababababababababab"
+     },
+     "prev": "d08a319a0df3455c997d305aa7c9284942e12d1dd797ab1c1eb42c1ac2fdd995",
+     "public_key": "51d07513ea144ffbd4017541bf33b184f6383f27b133d096759d9f1a64f48009",
+     "root": "d12f37d212bb9b87b2f1885c96e40ee9a9618f35e69bbeba9dbab2d57a396f5b",
+     "seq": 1,
+     "sig": "74276502074e58afa68913c65c1fa97d51eadae397219af9623c976a1532cbe55dc78cbc93c53c9022af6236661e5bb6ea269b13750c0d0f7acde2e01ee27a0e",
+     "time": "2026-11-04T12:00:01.250Z",
+     "trigger": "run-end"
+    }
+   },
+   "expect": {
+    "error": true
+   },
+   "kind": "bundle",
+   "name": "statement_key_id_is_a_list_pinned_is_an_error",
+   "pinned": [
+    "51d07513ea144ffbd4017541bf33b184f6383f27b133d096759d9f1a64f48009"
+   ]
+  },
+  {
+   "bundle": {
+    "index": 4,
+    "leaf": "70a3b9fb21772441017f2ef65cfd6abc1ba7ef7d29a6105ad732216d84fde81c",
+    "path": [
+     [
+      "R",
+      "70a3b9fb21772441017f2ef65cfd6abc1ba7ef7d29a6105ad732216d84fde81c"
+     ],
+     [
+      "R",
+      "246c364074471f5fdd2779d6146a8fbc55678413dec8bc6c5cbc0c9990a9425c"
+     ],
+     [
+      "L",
+      "0a727be017a10a2f9b73f0af2adea7a99509292d31ee0bd535ba9e2bb43c8742"
+     ]
+    ],
+    "receipt": {
+     "action": "decision",
+     "actor": "engine",
+     "data": {
+      "cause": 0,
+      "node": "a",
+      "seq": 4,
+      "target": "b"
+     },
+     "id": "4",
+     "idx": 4,
+     "ts": 1730800004.9382713
+    },
+    "statement": {
+     "format": "prismpath-root-statement/1",
+     "key_id": [
+      "a",
+      "b",
+      "c",
+      "d",
+      "e",
+      "f",
+      "g",
+      "h",
+      "i",
+      "j",
+      "k",
+      "l",
+      "m",
+      "n",
+      "o",
+      "p",
+      "q",
+      "r",
+      "s",
+      "t",
+      "u",
+      "v",
+      "w",
+      "x",
+      "y",
+      "z"
+     ],
+     "leaves": 5,
+     "log": "audit-log",
+     "policy": {
+      "flow_sha256": "abababababababababababababababababababababababababababababababab"
+     },
+     "prev": "d08a319a0df3455c997d305aa7c9284942e12d1dd797ab1c1eb42c1ac2fdd995",
+     "public_key": "51d07513ea144ffbd4017541bf33b184f6383f27b133d096759d9f1a64f48009",
+     "root": "d12f37d212bb9b87b2f1885c96e40ee9a9618f35e69bbeba9dbab2d57a396f5b",
+     "seq": 1,
+     "sig": "74276502074e58afa68913c65c1fa97d51eadae397219af9623c976a1532cbe55dc78cbc93c53c9022af6236661e5bb6ea269b13750c0d0f7acde2e01ee27a0e",
+     "time": "2026-11-04T12:00:01.250Z",
+     "trigger": "run-end"
+    }
+   },
+   "expect": {
+    "checks": {
+     "covered": false,
+     "inclusion": true,
+     "index": true,
+     "key_id": false,
+     "leaf": true,
+     "pinned": null,
+     "signature": false,
+     "well_formed": false
+    },
+    "index": 4,
+    "key": [
+     "a",
+     "b",
+     "c",
+     "d",
+     "e",
+     "f",
+     "g",
+     "h",
+     "i",
+     "j",
+     "k",
+     "l",
+     "m",
+     "n",
+     "o",
+     "p"
+    ],
+    "ok": false,
+    "pinned": false,
+    "statement": 1,
+    "statement_sha256": "068b1ba1d40fff551ab9528781e53830a9c387db756e0f8525eb83f868d4b0cc",
+    "status": "invalid"
+   },
+   "kind": "bundle",
+   "name": "statement_key_id_is_a_list_unpinned_is_sliced",
+   "pinned": []
   },
   {
    "expect": {
