@@ -275,7 +275,9 @@ def test_the_kernel_sha256_agrees_with_hashlib(tmp_path):
 def test_every_example_flow_is_package_data():
     # the wheel shipped examples/*/run_demo.py without the .md flow each one parses
     import fnmatch
-    import tomllib
+    tomllib = pytest.importorskip("tomllib")          # Python 3.11+
+    if not os.path.exists(os.path.join(REPO_ROOT, "pyproject.toml")):
+        pytest.skip("run from an installed package: there is no pyproject.toml beside it")
     with open(os.path.join(REPO_ROOT, "pyproject.toml"), "rb") as handle:
         patterns = tomllib.load(handle)["tool"]["setuptools"]["package-data"]["prismpath"]
     examples = os.path.join(REPO_ROOT, "prismpath", "examples")
