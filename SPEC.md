@@ -221,7 +221,10 @@ field.label: category absent=allowed
 spelling, as its manifest's field dictionary, together with the hash of the authored flow text, so the
 signature covers both the interpretation and the image's canonical integers. An envelope compares the
 dictionary entry for entry, so a receiver that declares another scale, unit, rounding, range or absence
-rule refuses the pack.
+rule refuses the pack. A flow that is not compiled to an image is authorized by a flow manifest instead
+(`prismpath authorize sign`, `prismpath/hotswap/flow_authority.py`), which carries the same dictionary in
+the same spelling beside the sha256 of the flow text, a monotonic version and the authority key's
+identity, under the same Ed25519 key a pack is signed with.
 
 **Grammar.** A definition is a kind word followed by `option=value` pairs separated by spaces, in any
 order. Each option may appear once. An unknown kind, an unknown option, an option the kind does not

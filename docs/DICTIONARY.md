@@ -80,7 +80,7 @@ assessment).
 
 ## Entries
 
-130 entries, alphabetical. Each is written from the decision's point of view. `Layer` is one of
+144 entries, alphabetical. Each is written from the decision's point of view. `Layer` is one of
 flow authoring, kernel evaluation, wire and transport, substrate execution, evidence and receipts,
 control plane, GRC. A term with no `Also called (deprecated)` line has no losing synonym today.
 
@@ -102,7 +102,7 @@ control plane, GRC. A term with no `Also called (deprecated)` line has no losing
 
 **air gap**: a deliberate absence of network connectivity, and the ledger tier built for it. Layer: evidence and receipts. Not to be confused with: over the air, which means the opposite and is spelled out in full, never abbreviated to `air`.
 
-**anchor**: to bind a Merkle root to a timestamp a third party can verify without trusting the emitter, by OpenTimestamps into Bitcoin or by an RFC 3161 authority. Layer: evidence and receipts. Not to be confused with: seal (closing an epoch, which happens first), attest (binding a claim to a key), the LSP sense of attaching a diagnostic to a line (`prismpath/tests/test_lsp.py:101`), and the identity sense at `prismpath/ledgers/ledger.py:21`.
+**anchor**: to bind a Merkle root to a timestamp a third party can verify without trusting the emitter, by OpenTimestamps into Bitcoin or by an RFC 3161 authority. Anchoring a root statement's hash, which covers its signature, timestamps the signed root rather than the bare one. Layer: evidence and receipts. Not to be confused with: seal (closing an epoch, which happens first), attest (binding a claim to a key), the LSP sense of attaching a diagnostic to a line (`prismpath/tests/test_lsp.py:101`), and the identity sense at `prismpath/ledgers/ledger.py:21`.
 
 **annotation**: a line inside a node of the form `@name(args)` that declares something the toolchain acts on, such as `@emits`, `@field_only`, `@spawn`, `@state_bound`, `@checkpoint`, `@worker`. The engine parses annotations and never interprets the instruction prose. Layer: flow authoring. Not to be confused with: `prismpath annotate`, the blind relabelling command for agreement measurement.
 
@@ -115,6 +115,8 @@ control plane, GRC. A term with no `Also called (deprecated)` line has no losing
 **audit event**: a durable record of an administrative action, principally a policy swap, written whether the action succeeded or was refused. Layer: control plane. Not to be confused with: receipt, which records a *decision* rather than an administrative action.
 
 **authority**: what a system is permitted to do, as authored by a person and held in the flow document. One of the three concerns POSITION keeps separate, the other two being computation and evidence. Layer: flow authoring.
+
+**authority key**: the Ed25519 key that says which policy may run. It signs packs, envelopes and flow manifests, `swap keygen` writes it, and its key id is the sha256 of its raw public key. Layer: control plane. Not to be confused with: the instance key, which attests what a deployment recorded and is never the same key, because whoever held one key for both could write the policy and the evidence that it held; authority, what a system is permitted to do.
 
 **band**: a contiguous range of the joint spiral index whose members all route the same way, so one band identifier is a decision sufficient wire symbol. Layer: wire and transport. Not to be confused with: a cause code numeric range (`prismpath/kernel/causes.py:12`), a gray level in the vision encoder, a cell (one field's bucket rather than a joint range). Also called (deprecated): level, quartile, `q0` to `q3`.
 
@@ -208,6 +210,8 @@ control plane, GRC. A term with no `Also called (deprecated)` line has no losing
 
 **flow**: the authored Markdown document that holds a decision structure. The source artifact of everything else. Layer: flow authoring. Not to be confused with: graph, image, pack, policy, which are the same artifact at later stages; control flow.
 
+**flow manifest**: the signed metadata of an authored flow document, the sha256 of its text with line endings read as LF, its name, a monotonic version, its field dictionary when it defines one, the authority key's identity and the time, kept as `<flow>.manifest.json` with its signature in `<flow>.manifest.sig`. It is how the authority authorizes a flow that has no table image, and `run --require-authorization` refuses a flow without a valid one, with a registered cause. Layer: control plane. Not to be confused with: manifest, which is a pack's and covers a compiled image; a provenance manifest.
+
 **fragment**: see match action fragment for the language sense. As a wire term, a fragment is a piece of an oversized payload on the first hop, reassembled by the receiver. Layer: wire and transport. Not to be confused with: the match action fragment, sub frame (the same operation on the second hop). One of these two senses must go; see section 6.
 
 **gate**: a machine check that decides whether work may proceed, in CI or at admission. Layer: control plane. Not to be confused with: `gate_id`, which names a *governed decision point* in an attestation and should be renamed; the type gate; a logic gate; the `gate=` annotation argument.
@@ -223,6 +227,8 @@ control plane, GRC. A term with no `Also called (deprecated)` line has no losing
 **hot swap**: replacing the live policy without rebuilding the system, after its signature, envelope and version floor are checked, flipping atomically and writing one audit event either way. Layer: control plane. Not to be confused with: compare and swap, a pointer swap (the mechanism), a button driven table selection in a demo.
 
 **image**: the compiled Level M table: header, atoms, nodes, edges, programs, optional colors. A few hundred bytes, identical on every substrate. Layer: substrate execution. Not to be confused with: a camera image, a register file, an FPGA bitstream, a container image. Also called (deprecated): table, used alone.
+
+**instance key**: the Ed25519 key a deployment signs its root statements with, generated by `prismpath ledger keygen` and kept on the deployment, private half mode 0600. It attests what the deployment recorded and never authorizes policy. Its key id is the sha256 of its raw public key and the first 16 hex characters of that id are its fingerprint. Layer: evidence and receipts. Not to be confused with: the authority key, which a host and `run` refuse to accept as an instance key.
 
 **instruction**: the prose inside a node, handed to the worker verbatim. The engine never interprets it. Layer: flow authoring.
 
@@ -242,7 +248,7 @@ control plane, GRC. A term with no `Also called (deprecated)` line has no losing
 
 **lowering**: the parse time rewrite of every decimal literal compared with a fixed field into its canonical integer, exact, and refused when the literal is off the field's grid or outside its range. Every kernel lowers, or refuses a flow with a fixed field. Layer: flow authoring. Not to be confused with: compiling a flow to an image; desugaring a chained comparison.
 
-**manifest**: the signed metadata of a pack: image hash, field dictionary, version, envelope identity, WCET bound, key identity. Layer: control plane. Not to be confused with: a provenance manifest (evidence and receipts), a packaging manifest. Both of those are always qualified.
+**manifest**: the signed metadata of a pack: image hash, field dictionary, version, envelope identity, WCET bound, key identity. Layer: control plane. Not to be confused with: a flow manifest, which authorizes a flow document that has no image; a provenance manifest (evidence and receipts), a packaging manifest. All three are always qualified.
 
 **margin**: the gap between the best and second best similarity score from the embedding router. The confidence signal escalation is keyed to, not the raw score. Layer: kernel evaluation.
 
@@ -300,7 +306,7 @@ control plane, GRC. A term with no `Also called (deprecated)` line has no losing
 
 **reading**: one measurement of the world as a map of field names to values; the unit Figueroa quantization consumes. Layer: wire and transport. Not to be confused with: record (the framed bytes that carry a reading), event, sample, frame.
 
-**receipt**: the durable per decision record: what decided, what it decided, under which policy version, at what time, with the cause byte if it refused, parked or escalated. The artifact the whole dictionary is written to serve. Layer: evidence and receipts. Not to be confused with: audit event (an administrative action), row (an evidence ledger entry), record.
+**receipt**: the durable per decision record: what decided, what it decided, under which policy version, at what time, with the cause byte if it refused, parked or escalated. The artifact the whole dictionary is written to serve. Each receipt is a leaf of its audit log's Merkle tree, and a root statement signed with the deployment's instance key binds it to the deployment that wrote it; a receipt `run` writes names the flow's hash and the flow manifest in force, or says the flow ran unauthorized. Layer: evidence and receipts. Not to be confused with: audit event (an administrative action), row (an evidence ledger entry), record.
 
 **record**: a magic tagged, fixed layout struct on a link. Layer: wire and transport. Not to be confused with: reading (its payload), receipt, a compliance record, a route log entry.
 
@@ -313,6 +319,8 @@ control plane, GRC. A term with no `Also called (deprecated)` line has no losing
 **relay**: a device that forwards records between links without aggregating them. Always qualified when more than one exists: the air relay, the host relay. Layer: wire and transport. Not to be confused with: the concentrator (which aggregates), the air gap courier (which should be named courier).
 
 **resident node**: the node a selector is currently sitting on, persisted across evaluations so the next decision starts from where the system already is. The identifier is `resident_node`, and the state that holds it is the resident state. Layer: substrate execution. Not to be confused with: posture (the GRC term, which is an assessed state of a boundary and never this), a start node (what an image declares), the fail safe (where a selector parks when it cannot decide). Also called (deprecated): posture, which the eBPF selector no longer says; the RTL and the certified corpora still carry it and do not move for a rename.
+
+**root statement**: a deployment's signed statement of a log's Merkle root, giving the root, how many leaves it covers, the hash of the statement before it, the time, the instance key's identity and the policy in force, signed with the instance key and kept one per line beside the log (`run.audit.jsonl` beside `run.audit.roots.jsonl`). A receipt verifies offline through its inclusion path to the root a statement signed, and a chain of statements shows a shortened log, a rewritten receipt, a removed statement or a foreign key. It attests and does not timestamp; anchoring the statement's hash adds the time a third party saw it. Layer: evidence and receipts. Not to be confused with: seal, closing an epoch, which a journal with an instance key follows with a root statement; anchor; a checkpoint, the saved state of a resumable run; the bare Merkle root, which says nothing about who computed it.
 
 **route**: the outcome of routing, the one target node a decision picked for one reading. Layer: kernel evaluation. Not to be confused with: target (the destination an edge declares, which is the same node named as a part of the flow rather than as the result of deciding), band (the spiral range whose members all take one route), path (the sequence of routes a run walks). A struct field that stores an edge's declared destination is `target`; a value that holds what routing produced is `route`. Also called (deprecated): band verdict, next_node, verdict, chosen.
 
