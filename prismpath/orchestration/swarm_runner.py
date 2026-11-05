@@ -2,7 +2,7 @@
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Wire prismpath -> the local agent swarm.
 
-`make_swarm_agent(...)` returns an prismpath-compatible agent callable
+`make_swarm_agent(...)` returns a prismpath-compatible agent callable
 `(node, instruction, state) -> str | {"text":..., ...fields}` whose work is performed by
 the swarm. It dispatches each node's instruction (plus the relevant `state` — prior files,
 last error) through the EXISTING swarm interface and does NOT rewrite the swarm core:

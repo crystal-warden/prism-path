@@ -46,7 +46,7 @@ _END = {"END", "__end__"}
 
 
 def import_langgraph(source: str, name: str = "imported") -> str:
-    """Parse LangGraph Python `source` and return an prismpath flow (Markdown) skeleton."""
+    """Parse LangGraph Python `source` and return a prismpath flow (Markdown) skeleton."""
     tree = ast.parse(source)
     nodes: dict = {}                         # name -> function name (for the TODO)
     edges: List[Tuple[str, str, str]] = []   # (src, dst, condition)

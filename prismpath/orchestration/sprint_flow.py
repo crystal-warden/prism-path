@@ -7,7 +7,7 @@ Python loop orchestrating prismpath. This module runs the SAME loop as `flows/sp
 gates route on deterministic fields, the 3×-same-error rule is an `on error when
 error_count >= …` edge, escalation is an ordinary `needs_human` suspension, and every
 gate-green unit is a `@checkpoint` proof-commit in the git Flow-Ledger. The control plane
-that builds prismpath is itself an prismpath flow — the credibility argument, self-demonstrating.
+that builds prismpath is itself a prismpath flow — the credibility argument, self-demonstrating.
 
 The concrete work (what "pick"/"build"/"gate"/"fix"/"escalate" DO) stays out of the flow, in
 a `SprintSeams` bundle of callables over the run state:

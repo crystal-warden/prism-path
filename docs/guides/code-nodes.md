@@ -73,6 +73,8 @@ Runners:
   whose profile is *derived from the envelope* (network off, fs scope, memory + time limits) via `bwrap`.
   Same agent; the envelope is enforced at runtime, and an unavailable sandbox **refuses** rather than
   running unsandboxed.
+  The handler's module must be importable inside the sandbox, which mounts `/tmp` as an empty tmpfs, so
+  keep handlers in the project or an installed package rather than under `/tmp`.
 
 ## Where safety lives (and doesn't)
 

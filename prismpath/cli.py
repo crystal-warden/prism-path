@@ -939,7 +939,7 @@ requires-python = ">=3.10"
 [tool.setuptools]
 packages = ["{mod}"]
 ''')
-    write_file(os.path.join(mod, "__init__.py"), f'''"""{name} - an prismpath worker pack.
+    write_file(os.path.join(mod, "__init__.py"), f'''"""{name} - a prismpath worker pack.
 
 Workers are plain callables `(node, instruction, state) -> outcome` (a dict outcome routes on its
 fields; a string routes semantically). Flows bind them by name in the document:

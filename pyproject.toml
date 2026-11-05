@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "prismpath"
-version = "0.1.1"
+version = "0.1.2"
 description = "One Markdown file is the workflow: a routing spectrum (deterministic predicates -> embeddings -> LLM-on-doubt) for LLM-agent workflows, plus a gated sprint control plane."
 readme = "tools/mirror_readme.md"    # the lean product page renders on PyPI (absolute links); the
                                      # dense research README stays the repo landing
