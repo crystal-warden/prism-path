@@ -488,6 +488,139 @@ def test_run_refuses_an_instance_key_with_nothing_to_sign(keys, tmp_path, capsys
     assert code == 2 and err.strip() == "prismpath run: --instance-key signs the run's receipts; pass --audit-log PATH as well"
 
 
+ASKING = """---
+name: asking
+start: a
+---
+
+## a
+Go.
+-> b: when always
+
+## b
+Ask.
+-> c: when tests_pass
+-> d: else
+
+## c
+Done.
+
+## d
+Other.
+"""
+
+
+def _suspended(tmp_path, name="s.json", crash=False):
+    """A checkpoint for ASKING: parked for a human at b (or, with crash, cut off at b), one step taken."""
+    from prismpath.ledgers import checkpoint
+    flow = tmp_path / "asking.md"
+    flow.write_text(ASKING)
+
+    def agent(node, instruction, state):
+        if node == "b":
+            if crash:
+                raise RuntimeError("worker died")
+            return {"needs_human": True}
+        return {"always": True}
+
+    path = str(tmp_path / name)
+    if crash:
+        with pytest.raises(RuntimeError):
+            checkpoint.run_durable(str(flow), agent, path)
+    else:
+        assert checkpoint.run_durable(str(flow), agent, path).stopped == "needs_human"
+    return str(flow), path
+
+
+def test_resume_writes_receipts_for_the_steps_it_took_and_signs_them(keys, tmp_path, capsys, monkeypatch):
+    monkeypatch.delenv(rs.INSTANCE_KEY_ENV, raising=False)
+    flow, checkpoint_path = _suspended(tmp_path)
+    audit = str(tmp_path / "resumed.audit.jsonl")
+    code, out, _err = _run(capsys, "resume", checkpoint_path, "--choose", "c", "--audit-log", audit,
+                           "--instance-key", keys["private"])
+    assert code == 0 and "Path: ['a', 'b', 'c']" in out
+    assert "Receipts: 1 appended" in out and f"by instance key {keys['fingerprint']}" in out
+    receipts = [json.loads(line)["data"] for line in open(audit)]
+    assert len(receipts) == 1                                   # the human's choice; a -> b was run's, before the suspension
+    assert receipts[0]["node"] == "b" and receipts[0]["target"] == "c" and receipts[0]["how"] == "human"
+    assert receipts[0]["seq"] == 1 and receipts[0]["resumed"] is True and receipts[0]["prior_steps"] == 1
+    assert receipts[0]["policy"]["flow_sha256"] == rs.canon.sha256_hex(open(flow, "rb").read())
+    statement = rs.read_statements(rs.statements_path_for(audit))[0][0]
+    assert statement["trigger"] == "resume-end" and statement["policy"] == receipts[0]["policy"]
+    code, out, _err = _run(capsys, "trail", audit, "--pub", keys["public"], "--receipt", "0")
+    assert code == 0 and "(pinned)" in out and "receipt 0: verifies" in out
+
+
+def test_resume_after_a_crash_records_the_steps_taken_since(keys, tmp_path, capsys, monkeypatch):
+    monkeypatch.delenv(rs.INSTANCE_KEY_ENV, raising=False)
+    _flow, checkpoint_path = _suspended(tmp_path, crash=True)
+    audit = str(tmp_path / "crash.audit.jsonl")
+    code, out, _err = _run(capsys, "resume", checkpoint_path, "--audit-log", audit, "--instance-key", keys["private"])
+    receipt = json.loads(open(audit).readline())["data"]
+    assert code == 0 and receipt["node"] == "b" and receipt["target"] == "c" and receipt["how"] == "deterministic"
+    assert receipt["seq"] == 1 and receipt["prior_steps"] == 1
+
+
+def test_resume_signs_by_default_with_the_key_in_the_state_directory(tmp_path, capsys, monkeypatch):
+    monkeypatch.delenv(rs.INSTANCE_KEY_ENV, raising=False)
+    monkeypatch.delenv("PRISMPATH_STATE_DIR", raising=False)
+    monkeypatch.chdir(tmp_path)
+    made = rs.keygen(str(tmp_path / ".prismpath"))
+    _flow, checkpoint_path = _suspended(tmp_path)
+    code, out, _err = _run(capsys, "resume", checkpoint_path, "--choose", "d", "--audit-log", "d.audit.jsonl")
+    assert code == 0 and "Signed: root statement 0" in out
+    assert f"Signing with the deployment's instance key {made['fingerprint']}, found at " in out
+    assert _run(capsys, "trail", "d.audit.jsonl", "--pub", made["public"])[0] == 0
+
+
+def test_resume_says_plainly_when_it_is_not_signing(tmp_path, capsys, monkeypatch):
+    monkeypatch.delenv(rs.INSTANCE_KEY_ENV, raising=False)
+    monkeypatch.delenv("PRISMPATH_STATE_DIR", raising=False)
+    monkeypatch.chdir(tmp_path)
+    _flow, checkpoint_path = _suspended(tmp_path)
+    code, out, _err = _run(capsys, "resume", checkpoint_path, "--choose", "c", "--audit-log", "u.audit.jsonl")
+    assert code == 0 and "Not signed: no instance key" in out
+    assert not os.path.exists(tmp_path / "u.audit.roots.jsonl")
+
+
+def test_resume_with_a_key_and_no_audit_log_says_so(keys, tmp_path, capsys, monkeypatch):
+    monkeypatch.delenv(rs.INSTANCE_KEY_ENV, raising=False)
+    _flow, checkpoint_path = _suspended(tmp_path)
+    code, _out, err = _run(capsys, "resume", checkpoint_path, "--choose", "c", "--instance-key", keys["private"])
+    assert code == 2 and err.strip() == "prismpath resume: --instance-key signs the run's receipts; pass --audit-log PATH as well"
+    monkeypatch.setenv(rs.INSTANCE_KEY_ENV, keys["private"])
+    code, out, _err = _run(capsys, "resume", checkpoint_path, "--choose", "c")
+    assert code == 0 and "Not signed: no receipts were written" in out
+
+
+def test_resume_that_cannot_resume_writes_no_receipt(keys, tmp_path, capsys, monkeypatch):
+    monkeypatch.delenv(rs.INSTANCE_KEY_ENV, raising=False)
+    _flow, checkpoint_path = _suspended(tmp_path)
+    audit = str(tmp_path / "none.audit.jsonl")
+    code, out, _err = _run(capsys, "resume", checkpoint_path, "--choose", "zzz", "--audit-log", audit,
+                           "--instance-key", keys["private"])
+    assert code == 1 and "cannot resume" in out and not os.path.exists(audit)
+
+
+def test_resume_that_refuses_leaves_a_signed_refusal_receipt(keys, tmp_path, capsys, monkeypatch):
+    from prismpath.hotswap import policy_pack
+    monkeypatch.delenv(rs.INSTANCE_KEY_ENV, raising=False)
+    authority = policy_pack.keygen(str(tmp_path / "authority"))
+    _flow, checkpoint_path = _suspended(tmp_path)
+    audit = str(tmp_path / "refused.audit.jsonl")
+    code, out, err = _run(capsys, "resume", checkpoint_path, "--choose", "c", "--audit-log", audit,
+                          "--instance-key", keys["private"], "--require-authorization", "--authority-pub",
+                          authority["public"], "--state-dir", str(tmp_path / "state"))
+    assert code == 2 and "Path:" not in out
+    assert err.strip() == "prismpath resume: refused: the flow is not authorized: sig:missing (cause 1)"
+    receipt = json.loads(open(audit).readline())["data"]
+    assert receipt["outcome"] == "refused" and receipt["cause"] == 1 and receipt["node"] == "b"
+    assert receipt["resumed"] is True and receipt["policy"]["authorization"] == "unauthorized"
+    assert audit_log.AuditLog(audit).verify_statements([rs.load_public(keys["public"])])["status"] == rs.SIGNED
+    from prismpath.ledgers import checkpoint
+    assert checkpoint.load_checkpoint(checkpoint_path)["stopped"] == "needs_human"      # nothing ran
+
+
 def test_ledger_keygen_and_its_refusal(tmp_path, capsys):
     code, out, _err = _run(capsys, "ledger", "keygen", "--out", str(tmp_path / "k"))
     made = json.loads(out)
@@ -507,10 +640,13 @@ def test_ledger_anchor_stamps_the_statement_hashes(key, tmp_path, capsys, monkey
 
 
 @pytest.mark.parametrize("argv", [["ledger", "keygen", "--out", "k"], ["trail", "run.audit.jsonl"],
-                                  ["run", "flow.md", "--audit-log", "x.audit.jsonl", "--instance-key", "keys/instance.key"]])
+                                  ["run", "flow.md", "--audit-log", "x.audit.jsonl", "--instance-key", "keys/instance.key"],
+                                  ["resume", "s.json", "--choose", "c", "--audit-log", "x.audit.jsonl",
+                                   "--instance-key", "keys/instance.key"]])
 def test_no_cryptography_is_one_install_line(argv, key, keys, tmp_path):
     _signed_log(tmp_path, key)
     (tmp_path / "flow.md").write_text(FLOW)
+    _suspended(tmp_path)
     res = _cli(*argv, block=["cryptography"], cwd=tmp_path)
     assert res.returncode == 2
     assert res.stderr.strip() == f"prismpath {argv[0]}: {INSTALL_LINE}"
