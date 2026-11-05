@@ -259,3 +259,22 @@ def test_the_kernel_sha256_agrees_with_hashlib(tmp_path):
     assert json.loads(result.stdout) == [hashlib.sha256(text.encode("utf-8")).hexdigest() for text in samples]
 
 
+# ------------------------------------------------------------------ what the wheel carries
+
+def test_every_example_flow_is_package_data():
+    # the wheel shipped examples/*/run_demo.py without the .md flow each one parses
+    import fnmatch
+    import tomllib
+    with open(os.path.join(REPO_ROOT, "pyproject.toml"), "rb") as handle:
+        patterns = tomllib.load(handle)["tool"]["setuptools"]["package-data"]["prismpath"]
+    examples = os.path.join(REPO_ROOT, "prismpath", "examples")
+    missing = []
+    for folder, _dirs, files in os.walk(examples):
+        for name in files:
+            if name.endswith((".md", ".sh", ".js", ".rs", ".go")):
+                rel = os.path.relpath(os.path.join(folder, name), os.path.join(REPO_ROOT, "prismpath"))
+                if not any(fnmatch.fnmatch(rel, pattern) for pattern in patterns):
+                    missing.append(rel)
+    assert missing == []
+
+

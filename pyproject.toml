@@ -72,6 +72,8 @@ prismpath = ["flows/*.md",                    # example + reference flows
           "tests/fixtures/broken/*.md",       # the analyzer's broken-flow corpus (test_analysis)
           "telemetry/conformance/*.json",     # the frozen Facet corpora every other implementation is judged by
           "*.html",
+          "examples/*.md", "examples/*/*.md", "examples/*/*/*.md",   # the flows the shipped demos run
+          "examples/*/*.sh", "examples/*/*.js", "examples/*/*.rs", "examples/*/*.go",
           "portable/*.mjs", "portable/*.html",
           "portable/conformance/*.json"]      # the frozen kernel spec
 "prismpath.plugins.pysprint" = ["*.md"]   # ARCH.md / LESSONS.md read at runtime by the sprint plugin
