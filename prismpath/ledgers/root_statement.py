@@ -194,7 +194,7 @@ def merkle_root(leaves: List[str]) -> str:
     while len(layer) > 1:
         if len(layer) % 2:
             layer = layer + [layer[-1]]
-        layer = [merkle._h(layer[index] + layer[index + 1]) for index in range(0, len(layer), 2)]
+        layer = [merkle.node_hash(layer[index] + layer[index + 1]) for index in range(0, len(layer), 2)]
     return layer[0].hex()
 
 
@@ -217,8 +217,13 @@ class MerkleAccumulator:
 
     def add(self, leaf_hex: str) -> None:
         height, node = 0, bytes.fromhex(leaf_hex)
+        # The peaks are a stack of perfect subtrees with strictly falling heights, like the set bits of the
+        # leaf count written in binary. A new leaf is a subtree of height 0; while the top of the stack has
+        # the same height the two are siblings, so they merge into one subtree a level higher (the old peak
+        # on the left, because it holds the earlier leaves). This is binary counter carry, which is why a
+        # leaf costs O(1) amortized.
         while self._peaks and self._peaks[-1][0] == height:
-            node = merkle._h(self._peaks.pop()[1] + node)
+            node = merkle.node_hash(self._peaks.pop()[1] + node)
             height += 1
         self._peaks.append((height, node))
         self.count += 1
@@ -226,12 +231,17 @@ class MerkleAccumulator:
     def root(self) -> str:
         if not self._peaks:
             return ""
+        # Fold the peaks from the shortest, which holds the latest leaves, up to the tallest. The tree the
+        # reference builds pads every odd layer by repeating its last node, so a short peak sitting beside
+        # a taller one is hashed with itself, once per level it is missing, until it is as tall as the peak
+        # to its left, and only then paired with it. That rule is `ledger_ots.merkle_root_and_paths`'s
+        # "duplicate the last node if odd", and it has to match it exactly or the roots would differ.
         height, node = self._peaks[-1]
         for taller, peak in reversed(self._peaks[:-1]):
             while height < taller:
-                node = merkle._h(node + node)
+                node = merkle.node_hash(node + node)
                 height += 1
-            node = merkle._h(peak + node)
+            node = merkle.node_hash(peak + node)
             height += 1
         return node.hex()
 
@@ -239,9 +249,13 @@ class MerkleAccumulator:
 def prefix_roots(leaves: List[str], counts: Iterable[int]) -> Dict[int, str]:
     """The root over the first n leaves for each n in `counts`, in one pass over the leaves. A count
     past the end of `leaves` is left out."""
+    # A count that is not an int, or is outside the log, is left out and not an error: `verify_chain` asks
+    # `roots.get(count, "")` and reports a statement that claims more leaves than the log holds as
+    # `log_truncated` before it ever compares roots.
     wanted = sorted({count for count in counts if isinstance(count, int) and 0 <= count <= len(leaves)})
     roots: Dict[int, str] = {}
     accumulator = MerkleAccumulator()
+    # Ascending order lets one accumulator serve every count: it only ever has to take more leaves.
     for count in wanted:
         while accumulator.count < count:
             accumulator.add(leaves[accumulator.count])
@@ -374,12 +388,18 @@ def verify_chain(statements: List[dict], read_findings: List[dict], root_at: Cal
     mismatch_from: Optional[int] = None
     key_ids: List[str] = []
     for index, statement in enumerate(statements):
+        # An empty statement is a line that could not be read (already a finding from the reader); a
+        # statement of the wrong shape is reported here. Either way it stays in the chain as a link, with
+        # the hash of what is there (nothing, for a line that could not be read), so the next statement's
+        # `prev` is compared with the truth and a chain cannot be mended by deleting the damaged link.
         if not statement or not _well_formed(statement, log):
             if statement:
                 findings.append({"finding": "bad_format", "statement": index})
             prev_hash = statement_hash(statement) if statement else ""
             continue
         seq = statement["seq"]
+        # The key id must be the hash of the key the statement carries; only then is the signature checked
+        # (under that key), so a statement that names one key and was signed by another is one finding, not two.
         if key_id_of(bytes.fromhex(statement["public_key"])) != statement["key_id"]:
             findings.append({"finding": "key_id_mismatch", "statement": seq})
         elif not _verify_signature(statement):
@@ -387,15 +407,22 @@ def verify_chain(statements: List[dict], read_findings: List[dict], root_at: Cal
         if pinned_ids and statement["key_id"] not in pinned_ids:
             findings.append({"finding": "unpinned_key", "statement": seq,
                              "key": fingerprint(statement["key_id"])})
+        # A policy authority key authorizes flows and packs; it must never also attest what a deployment
+        # recorded, or whoever can replace the policy could also vouch for the record of running it.
         if statement["key_id"] in authority:
             findings.append({"finding": "authority_key", "statement": seq, "key": fingerprint(statement["key_id"])})
         if statement["key_id"] not in key_ids:
             key_ids.append(statement["key_id"])
+        # Each statement names the hash of the one before it, and carries its position, so a statement
+        # dropped, reordered, duplicated or replaced shows as a break at the first place it matters.
         if seq != index or statement["prev"] != prev_hash:
             findings.append({"finding": "chain_broken", "statement": seq, "position": index})
+        # A log only grows, so a later statement covering fewer leaves means events were dropped between them.
         if statement["leaves"] < prev_leaves:
             findings.append({"finding": "leaf_count_regressed", "statement": seq,
                              "leaves": statement["leaves"], "before": prev_leaves})
+        # A statement that covers more leaves than the log holds proves the log was cut after it was signed;
+        # there is no root to compare, because the leaves it signed are gone.
         if statement["leaves"] > total_leaves:
             findings.append({"finding": "log_truncated", "statement": seq,
                              "signed_leaves": statement["leaves"], "log_leaves": total_leaves})

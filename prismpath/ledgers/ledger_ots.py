@@ -19,7 +19,10 @@ import subprocess
 _OTSENV = {**os.environ, "PATH": os.path.expanduser("~/.local/bin") + ":" + os.environ.get("PATH", "")}
 
 
-def _h(payload):
+def node_hash(payload):
+    """The hash of a Merkle node: SHA-256 of the two child hashes concatenated, left first. Public because
+    `root_statement` builds the same tree (and keeps its root as leaves arrive), and the two must hash a
+    node the same way or a root signed from one would not verify against the other."""
     return hashlib.sha256(payload).digest()
 
 
@@ -32,7 +35,7 @@ def merkle_root_and_paths(leaves_hex):
         cur = layers[-1][:]
         if len(cur) % 2:
             cur = cur + [cur[-1]]
-        layers.append([_h(cur[index] + cur[index + 1]) for index in range(0, len(cur), 2)])
+        layers.append([node_hash(cur[index] + cur[index + 1]) for index in range(0, len(cur), 2)])
     root = layers[-1][0]
 
     def path(idx):
@@ -53,7 +56,7 @@ def verify_leaf(leaf_hex, path, root_hex):
     cur = bytes.fromhex(leaf_hex)
     for side, sib in path:
         sibling = bytes.fromhex(sib)
-        cur = _h(cur + sibling) if side == "R" else _h(sibling + cur)
+        cur = node_hash(cur + sibling) if side == "R" else node_hash(sibling + cur)
     return cur.hex() == root_hex
 
 

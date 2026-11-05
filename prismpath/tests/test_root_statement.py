@@ -331,13 +331,13 @@ def test_a_log_signed_after_every_event_verifies_in_linear_time(key, tmp_path, m
     cost about n squared over two (more than three million here), against under fifty thousand."""
     count = 2500
     hashes = {"calls": 0}
-    original = ledger_ots._h
+    original = ledger_ots.node_hash
 
     def counting(payload):
         hashes["calls"] += 1
         return original(payload)
 
-    monkeypatch.setattr(ledger_ots, "_h", counting)
+    monkeypatch.setattr(ledger_ots, "node_hash", counting)
     log = audit_log.AuditLog(str(tmp_path / "long.audit.jsonl"), instance_key=key, sign_appends=True)
     for index in range(count):
         log.append("engine", "decision", {"seq": index, "cause": 0})
