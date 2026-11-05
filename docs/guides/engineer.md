@@ -21,7 +21,7 @@ target executes. A flow that must reach a device stays in Level M by constructio
 
 ```bash
 prismpath lock flow.md          # pin semantic routing into a lockfile for reproducible routing (needs the embeddings extra)
-prismpath compile flow.md       # the flow and its lock as a single file portable JS bundle
+prismpath compile --tier p0 flow.md   # a single file portable JS bundle (--tier p1 embeds the lock's vectors)
 prismpath portable flow.md      # is this flow in the model free portable subset
 prismpath plugins --check flow.md
 prismpath ci-report             # the pull request report: validate, fixtures, before and after graph
@@ -48,7 +48,7 @@ Thresholds are a deployment setting, so they are yours:
 
 ```bash
 prismpath label       log.jsonl            # hand label routing decisions
-prismpath annotate    bench.jsonl          # blind relabel for agreement measurement
+prismpath annotate    bench.jsonl --out a.jsonl   # blind relabel for agreement measurement (each row names its flow, node and outcome; --flows-dir says where the flows are)
 prismpath kappa       a.jsonl b.jsonl      # Cohen's kappa between two label sets
 prismpath calibrate   labels.jsonl         # the risk controlled escalation threshold
 prismpath centroids   bench.jsonl          # prototype routing against zero shot embedding (needs the embeddings extra)

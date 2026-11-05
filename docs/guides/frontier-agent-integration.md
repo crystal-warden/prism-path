@@ -39,7 +39,7 @@ This architecture pairs the **determinism, auditability, and safety of PrismPath
 
 ## 2. Five Core Integration Patterns
 
-### Pattern A: Any CLI as a Worker (`prismpath.cli_worker`)
+### Pattern A: Any CLI as a Worker (`prismpath.workers.cli_worker`)
 
 The most decoupled worker pattern uses processes. PrismPath’s [`cli_worker.py`](../../prismpath/workers/cli_worker.py) can invoke **any command line program** as a worker: an AI agent CLI or your own Go/Rust/JS/Python project, passing node instructions on `stdin` and parsing JSON/stdout. For a runnable, four language walkthrough of wiring in your own program, see [Run any program as a worker](workers.md).
 
@@ -95,7 +95,7 @@ For large scale tasks (e.g., auditing 100 compliance controls or reviewing 50 pu
 ```markdown
 ## fanout_review
 Process each changed file in parallel.
-@spawn(child="review_one.md", over="pr_files", join="all_done")
+@spawn(child=review_one.md, over=pr_files, join=all_done)
 -> summarize: on event all_done
 ```
 

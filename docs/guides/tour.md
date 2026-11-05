@@ -70,7 +70,7 @@ worker(node_name: str, instruction: str, state: dict) -> str | dict
 ```python
 from prismpath.kernel.engine import run
 from prismpath.routing.router import HybridRouter, LLMRouter
-from prismpath import llm_local
+from prismpath.routing import llm_local
 
 router = HybridRouter(LLMRouter(llm_local.generate), margin=0.05)  # recommended
 run(graph, worker, router=router)
@@ -196,18 +196,18 @@ flow is P0: its routing is fully decidable; the LLM lives in the workers. See
 The git Flow Ledger (`ledger.py`, gate green proof commits) is the base tier. On top of it PrismPath
 ships an **attestation tier** that makes a decision *provable and tamper evident*, air gap friendly:
 
-- **`ledger_airgap.provenance_manifest(...)`** binds a decision to its inputs: the policy (flow) hash,
+- **`prismpath.ledgers.ledger_airgap.provenance_manifest(...)`** binds a decision to its inputs: the policy (flow) hash,
   the gate id, the knowledge base hash, and the per input ingestion hashes, content addressed into a
   `manifest_hash`.
-- **`ledger_airgap.verify_manifest(m)`** recomputes that content address; tampering with *any* bound
+- **`prismpath.ledgers.ledger_airgap.verify_manifest(m)`** recomputes that content address; tampering with *any* bound
   field flips it false. That is what makes a manifest a tamper evidence anchor rather than a label.
-- **`ledger_airgap.override_manifest(prior, overrider, rationale, new_root)`** records a **human
+- **`prismpath.ledgers.ledger_airgap.override_manifest(prior, overrider, rationale, new_root)`** records a **human
   override as a superseding commit**: the AI determination is attested first and stays immutable, and
   the override binds who/why/when and supersedes it, a provable *"the AI said X, auditor Y overrode to
   Z because …"* trail.
-- **OpenTimestamps + RFC-3161** anchoring (`ledger_ots.py`, `ledger_airgap.py`) for an air gapped,
+- **OpenTimestamps + RFC-3161** anchoring (`prismpath/ledgers/ledger_ots.py`, `ledger_airgap.py`) for an air gapped,
   third party verifiable timestamp tier.
-- **`deferral.py`**: the Deferral/Resumption port: suspend a unit for human review or missing evidence
+- **`prismpath.workers.deferral`**: the Deferral/Resumption port: suspend a unit for human review or missing evidence
   discovery and resume it later, recording the actor. One primitive serves both HITL override and
   evidence request loops.
 
@@ -335,8 +335,10 @@ prismpath trail triage.audit.jsonl
 
 Your root will differ, because the receipts carry their own timestamps; the shape will not.
 
-Two decisions, two receipts, one Merkle root. Anchor the root with `prismpath ledger anchor` and a third
-party can later show the log was not edited. The same shape holds when the decision was made by a kernel
+Two decisions, two receipts, one Merkle root. Anchor the root and a third
+party can later show the log was not edited: `prismpath.ledgers.ledger_ots.anchor(list(log.leaves), "proofs", "v1")` stamps
+the log's leaves with OpenTimestamps (it needs the `ots` client), and `prismpath ledger verify --out proofs --leaf <hash>`
+checks one receipt against that root. (`prismpath ledger anchor --repo` is the same step for the git Flow Ledger.) The same shape holds when the decision was made by a kernel
 program or a fabric: the receipt struct is the same, the cause byte is the same, and the
 [operator's guide](operator.md) covers reading the trail day to day.
 

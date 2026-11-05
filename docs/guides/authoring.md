@@ -77,7 +77,7 @@ stashes `state["code"]`, `state["last_error"]`. The engine never inspects those;
 fields you *return* are exposed to predicates.
 
 
-### Any CLI as a worker (`prismpath.cli_worker`)
+### Any CLI as a worker (`prismpath.workers.cli_worker`)
 
 The most stable worker interface is a process: `cli_worker(["claude", "-p"])` runs a CLI per node
 (prompt on stdin), a `{node: argv}` map runs a **different engine per node**, and the contract is
@@ -140,14 +140,14 @@ always   |   else   |   false      # bare catch-alls
 
 ---
 
-## 6b. Durable execution: suspend, checkpoint, resume (`prismpath.checkpoint`)
+## 6b. Durable execution: suspend, checkpoint, resume (`prismpath.ledgers.checkpoint`)
 
 The engine is pure and its `state` is ephemeral. To make a run **durable and resumable** without
 ever writing the read-only `.md`, the checkpoint layer serializes the run to a JSON sidecar
 (atomic `os.replace`) and resumes by re-parsing the `.md` and re-entering the engine:
 
 ```python
-from prismpath import checkpoint
+from prismpath.ledgers import checkpoint
 # run, persisting a checkpoint at every step:
 res = checkpoint.run_durable("flows/soc.md", worker, "run.ckpt.json")
 # after a crash, continue from the pending node (deterministic, re-runs only the unfinished node):
@@ -504,7 +504,7 @@ than a liability. Commit the `.lock` next to the flow.
 
 Routing is cheap; the expensive step in a real flow is usually one adjudication node. If that
 node's inputs recur near-identically, put a **prefilter node** in front of it backed by
-`prismpath.prefilter.PrefilterCache`:
+`prismpath.routing.prefilter.PrefilterCache`:
 
 1. The prefilter node's handler calls `cache.lookup(document)` and returns
    `{"cached_action": <action>|None, "prefilter_hit": bool, ...}`.

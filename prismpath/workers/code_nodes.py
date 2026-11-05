@@ -14,7 +14,7 @@ Two properties make a code node governed rather than a hole in the model:
    kernel (`check_code_nodes`), exactly like Level M membership.
 2. **Fail-closed execution.** `code_agent` refuses to run a handler on a node that is *not* declared
    `@code` (no undeclared code sneaks in), refuses an invalid envelope, and refuses when no runner is
-   supplied. The sandboxed runner (`prismpath.sandbox`) enforces the envelope at runtime; an in-process
+   supplied. The sandboxed runner (`prismpath.workers.sandbox`) enforces the envelope at runtime; an in-process
    runner is available for trusted/pure code (tests, deterministic transforms).
 
 Code nodes are **software-tier (P2)**: substrate-specific, never portable to another kernel or to the
@@ -126,7 +126,7 @@ Runner = Callable[[Callable, Envelope, str, str, dict], object]
 
 def in_process_runner(handler: Callable, env: Envelope, node: str, instruction: str, state: dict):
     """Trusted, in-process execution — for pure/deterministic code (tests, transforms). Does NOT
-    enforce the envelope. Use `prismpath.sandbox.SandboxRunner` for untrusted or effectful code."""
+    enforce the envelope. Use `prismpath.workers.sandbox.SandboxRunner` for untrusted or effectful code."""
     return handler(node, instruction, state)
 
 
@@ -151,7 +151,7 @@ def code_agent(graph, handlers: Dict[str, Callable], runner: Optional[Runner] = 
         if runner is None:
             raise CodeNodeError(
                 f"code node {node!r}: no runner supplied — refusing to execute code un-governed "
-                f"(pass prismpath.sandbox.SandboxRunner, or in_process_runner for trusted code)")
+                f"(pass prismpath.workers.sandbox.SandboxRunner, or in_process_runner for trusted code)")
         return runner(handler, env, node, instruction, state)
 
     return agent

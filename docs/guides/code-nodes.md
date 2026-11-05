@@ -56,20 +56,20 @@ Every code node declares what it may touch:
 | `timeout_s` | wall clock budget | `10` |
 | `mem_mb` | memory ceiling | `256` |
 
-The envelope is **flow data**: portable and inspectable. `prismpath.code_nodes.check_code_nodes(graph)`
+The envelope is **flow data**: portable and inspectable. `prismpath.workers.code_nodes.check_code_nodes(graph)`
 is a **static gate**: it flags any `@code` node with a missing or invalid envelope. That's a verifiable
 property, the same shape as Level M membership: any kernel can check it from the flow alone.
 
 ## Governed execution (fail closed)
 
-`prismpath.code_nodes.code_agent(graph, handlers, runner=…)` builds the flow agent and refuses to:
+`prismpath.workers.code_nodes.code_agent(graph, handlers, runner=…)` builds the flow agent and refuses to:
 - run a handler on a node that is **not** declared `@code` (no undeclared code sneaks in),
 - run an **invalid** envelope,
 - run a code node with **no runner** (never execute code ungoverned).
 
 Runners:
 - **`in_process_runner`**: trusted, pure code (deterministic transforms, tests). No enforcement.
-- **`prismpath.sandbox.SandboxRunner`**: untrusted or effectful code. Runs the function in a sandbox
+- **`prismpath.workers.sandbox.SandboxRunner`**: untrusted or effectful code. Runs the function in a sandbox
   whose profile is *derived from the envelope* (network off, fs scope, memory + time limits) via `bwrap`.
   Same agent; the envelope is enforced at runtime, and an unavailable sandbox **refuses** rather than
   running unsandboxed.

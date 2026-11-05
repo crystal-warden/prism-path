@@ -52,6 +52,21 @@ record, and some of them predate the upload.
   extra names the install line (`pip install 'prismpath[embeddings]'` and so on). The ledger, `ci-report`
   and RFC 3161 commands check for `ots`, `git` and `openssl` before they start. `calibrate`, `label` and
   `trail` refuse a missing log rather than reading it as empty. `init NAME` writes `NAME.md` and
+- **Found by running every documented capability.** The browser playground, the first path in the
+  getting started guide, showed empty panels because the portable kernel imported `node:crypto`, which no
+  browser resolves; the kernel now carries its own SHA-256 and imports nothing, so the playground and the
+  bundles from `prismpath compile` load in a browser. `prismpath ledger anchor --repo` died on the
+  Flow-Ledger's `sha256:` output hashes; `verify --forbid` or `--reach` with a node name the flow does not
+  have said "proven unreachable" and passed, and now refuses; `test --emit-labels` records the embedder's
+  margin so `calibrate` has something to read, and `calibrate` refuses a log with no margins instead of
+  printing a threshold with a guarantee over nothing; `annotate` names a benchmark row that lacks `flow`
+  or names a node the flow does not have, and stops cleanly when its input ends; `facet decode` ends a
+  bad frame in one line; `prismpath --version` exists. `swap` takes the envelope by its `.json` file name
+  as well as its base path. Mission Control starts a sprint by module (the path it ran was an alias that
+  never started anything), answers a bad `queue/decide` with a 400, follows the flow and not its
+  `.tests.md` fixtures, and says which extra a missing `uvicorn` belongs to. The wheel carries the `.md`
+  flows its shipped examples run. Guides that named old module paths or an unquoted `@spawn` now match
+  the code.
   `NAME.tests.md`.
 
 ### Added
@@ -186,7 +201,7 @@ record, and some of them predate the upload.
   and Err instead of panic on missing fields and out of range indices). One internal cleanup:
   the quantizer's remaining guarded `unwrap` became `is_none_or`. The codec path was already
   panic free; this closes the gap on the optional tier.
-- **prismpath-preflight, the adoption gate for the Facet codec** (`adapters/telemetry/preflight.py`).
+- **prismpath-preflight, the adoption gate for the Facet codec** (now `prismpath/telemetry/preflight.py`; in the package it runs as `python -m prismpath.telemetry.preflight`).
   One command takes a policy flow plus a sample of real events (NDJSON) and reports the derived
   codebook, exactly which events encode and why the rest do not (missing fields, unmapped nested
   paths via `--map`, out of partition values, float truncation), projected bytes per event next to
@@ -211,7 +226,7 @@ record, and some of them predate the upload.
   `facet-preflight 0.1.0` on the owner's go; the registry-installed binary verified end to end
   (`cargo install facet-preflight`, the name at publish time; since renamed, and the old crate
   deleted, see Changed above).
-- **facet-init, the migration drafter** (`adapters/telemetry/facet_init.py`). Reads the
+- **facet-init, the migration drafter** (now `prismpath/telemetry/facet_init.py`; in the package it runs as `python -m prismpath.telemetry.facet_init`). Reads the
   `vector.toml` an integrator already runs, transcribes every route and filter condition that is
   Level M expressible (`field OP const` under and/or/not, `includes([..], .field)` as `in`) into a
   DRAFT flow with the transforms chained as nodes, maps nested event paths to codec `field_paths`
