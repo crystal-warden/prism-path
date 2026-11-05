@@ -19,6 +19,12 @@ the structure of what is in memory; `verify_persisted` checks that the file hold
 question the structural check cannot answer. A caller that must not act without evidence appends
 first and acts only when append returned, which is how the policy host commits a swap; a caller that
 records after acting must surface the error rather than continue as if the record existed.
+
+Signing is optional and lives beside the log, never in it. Given an instance key, `checkpoint()` writes
+a root statement (`prismpath.ledgers.root_statement`) to `<log>.roots.jsonl`: the root and leaf count
+now, chained to the statement before and signed. With `sign_appends`, every append is followed by one,
+which is what the hosts use. A log written before signing existed has no statements file, still reads
+and still verifies, and `verify_statements` reports it as unsigned rather than failed.
 """
 from __future__ import annotations
 
@@ -28,11 +34,19 @@ import os
 import threading
 import time
 
+from typing import Callable, Iterable, Optional
+
 from prismpath.ledgers import ledger_ots as merkle
+from prismpath.ledgers import root_statement as _statements
 from prismpath import canon as _canon
 
 class AuditWriteError(RuntimeError):
     """The event could not be persisted. The in memory log was not changed; nothing was committed."""
+
+
+class StatementWriteError(AuditWriteError):
+    """The event was persisted, and the root statement that should cover it was not. A caller that
+    fails closed on AuditWriteError still does; the next statement that is written covers the event."""
 
 
 def _leaf_hex(ev: dict) -> str:
@@ -42,8 +56,15 @@ def _leaf_hex(ev: dict) -> str:
 
 
 class AuditLog:
-    def __init__(self, path: str):
+    def __init__(self, path: str, instance_key: Optional["_statements.InstanceKey"] = None,
+                 sign_appends: bool = False, policy_of: Optional[Callable[[], Optional[dict]]] = None,
+                 statements_path: Optional[str] = None):
         self.path = path
+        self.instance_key = instance_key
+        self.sign_appends = sign_appends
+        self.policy_of = policy_of            # the policy identity in force, when the owner knows it
+        self.statements_path = statements_path or (_statements.statements_path_for(path) if path else None)
+        self._signer: Optional[_statements.RootSigner] = None
         self._lock = threading.Lock()
         self.events: list = []
         self.leaves: list = []
@@ -81,7 +102,56 @@ class AuditLog:
                     raise AuditWriteError(f"audit event not persisted to {self.path}: {error}") from error
             self.events.append(event)
             self.leaves.append(_leaf_hex(event))
+            if self.sign_appends and self.instance_key is not None:
+                self._sign_locked("append", None)
             return event
+
+    @property
+    def signing(self) -> bool:
+        """True when this log writes root statements: it has an instance key and a file to sit beside."""
+        return self.instance_key is not None and bool(self.statements_path)
+
+    def _sign_locked(self, trigger: str, policy: Optional[dict]) -> Optional[dict]:
+        if not self.signing or not self.leaves:
+            return None
+        if policy is None and self.policy_of is not None:
+            policy = self.policy_of()
+        if self._signer is None:
+            self._signer = _statements.RootSigner(self.instance_key, self.statements_path, _statements.LOG_AUDIT)
+        try:
+            return self._signer.sign(_statements.merkle_root(self.leaves), len(self.leaves), trigger, policy)
+        except OSError as error:
+            raise StatementWriteError(f"root statement not persisted to {self.statements_path}: {error}") from error
+
+    def checkpoint(self, trigger: str = "checkpoint", policy: Optional[dict] = None) -> Optional[dict]:
+        """Sign the root as it stands: one root statement covering every leaf so far. Returns it, or
+        None when there is no instance key or nothing to cover. Raises StatementWriteError when the
+        statement cannot be persisted."""
+        with self._lock:
+            return self._sign_locked(trigger, policy)
+
+    def root_at(self, leaf_count: int) -> str:
+        """The Merkle root over the first `leaf_count` leaves: what a statement of that count signed."""
+        return _statements.merkle_root(self.leaves[:leaf_count])
+
+    def verify_statements(self, pinned: Optional[Iterable[bytes]] = None) -> dict:
+        """Check the root statements beside the log against the log: status signed, signed-unpinned,
+        unsigned or invalid, with every finding (truncation, a rewritten leaf, a wrong key, a broken
+        chain, a statement whose root does not match). Checking a signature needs the signing extra."""
+        statements, read_findings = _statements.read_statements(self.statements_path)
+        if self.skipped:
+            read_findings = read_findings + [{"finding": "bad_format", "log_lines": list(self.skipped)}]
+        return _statements.verify_chain(
+            statements, read_findings, self.root_at, len(self.leaves), log=_statements.LOG_AUDIT,
+            pinned=pinned, authority_key_ids=_statements.authority_key_ids_in(self.events))
+
+    def receipt_bundle(self, index: int) -> dict:
+        """One receipt with its inclusion path and the signed statement that covers it, checkable
+        offline by `root_statement.verify_receipt_bundle`."""
+        if not (0 <= index < len(self.events)):
+            raise IndexError(f"receipt index out of range: {index} (the log holds {len(self.events)})")
+        statements, _findings = _statements.read_statements(self.statements_path)
+        return _statements.receipt_bundle(self.events[index], self.leaves, index, statements)
 
     def verify_persisted(self) -> bool:
         """True when the file holds exactly the events in memory, line for line. A log with no path is

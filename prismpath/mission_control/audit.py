@@ -4,14 +4,16 @@
 
 One log object for the process, opened from `SETTINGS.audit_path`. Reach it as `audit.LOG` rather
 than binding the object into another module, so a test that swaps the log (or an embedder that points
-it elsewhere) is seen by every caller.
+it elsewhere) is seen by every caller. When PRISMPATH_INSTANCE_KEY names an instance key, every control
+action is followed by a signed root statement beside the log, as the policy host does.
 """
 from prismpath.ledgers import audit_log
+from prismpath.ledgers import root_statement
 
 from .config import SETTINGS
 
 ACTOR = "operator"                                            # single local operator; audit actor
-LOG = audit_log.AuditLog(SETTINGS.audit_path)
+LOG = audit_log.AuditLog(SETTINGS.audit_path, instance_key=root_statement.key_from_env(), sign_appends=True)
 
 
 def record(action, data):

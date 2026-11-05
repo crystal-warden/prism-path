@@ -15,6 +15,7 @@
     "ledgers/ledger.py",
     "ledgers/ledger_ots.py",
     "ledgers/ledger_airgap.py",
+    "ledgers/root_statement.py",
     "workers/composer.py",
     "kernel/lint.py",
     "evals/kappa.py",

@@ -30,7 +30,21 @@ from typing import List, Optional
 
 from prismpath.hotswap import policy_pack as pp
 from prismpath.ledgers.audit_log import AuditLog
+from prismpath.ledgers import root_statement
 from prismpath import canon
+
+
+def _authority_key_ids(pubkey_paths: List[str]) -> List[str]:
+    """The key id of each authority public key file (sha256 of its raw bytes), unreadable ones skipped:
+    the host itself reports those when it verifies."""
+    ids = []
+    for path in pubkey_paths:
+        try:
+            with open(path, "rb") as handle:
+                ids.append(canon.sha256_hex(handle.read()))
+        except OSError:
+            continue
+    return ids
 
 class SwapRejected(Exception):
     """Raised by swap(..., strict=True) when a swap is refused; reasons on `.reasons`."""
@@ -46,13 +60,21 @@ def _now() -> str:
 
 class PolicyHost:
     def __init__(self, state_dir: str, pubkey_paths: List[str], envelope: dict,
-                 audit_path: Optional[str] = None, revoked: frozenset = frozenset()):
+                 audit_path: Optional[str] = None, revoked: frozenset = frozenset(),
+                 instance_key: Optional[root_statement.InstanceKey] = None):
         self.state_dir = state_dir
         self.pubkey_paths = list(pubkey_paths)
         self.envelope = envelope
         self.revoked = revoked
         os.makedirs(state_dir, exist_ok=True)
-        self.audit = AuditLog(audit_path or os.path.join(state_dir, "swaps.log"))
+        # The instance key signs a root statement after every audit event, so each swap, refusal and
+        # attestation is covered by a signed root as soon as it is written. It defaults to
+        # $PRISMPATH_INSTANCE_KEY and must not be one of the authority keys this host trusts.
+        if instance_key is None:
+            instance_key = root_statement.key_from_env()
+        root_statement.check_separation(instance_key, _authority_key_ids(self.pubkey_paths))
+        self.audit = AuditLog(audit_path or os.path.join(state_dir, "swaps.log"), instance_key=instance_key,
+                              sign_appends=True, policy_of=self._policy_identity)
         self._lock = threading.Lock()
         self._active: Optional[dict] = None    # {sha256, version, key_id, envelope_id, image, since}
         self._prev: Optional[dict] = None      # last-known-good, for rollback
@@ -234,6 +256,14 @@ class PolicyHost:
             self._prev, self._active = self._active, new_active
             self._clear_pending()
             return {"ok": True, **self.active()}
+
+    def _policy_identity(self) -> Optional[dict]:
+        """The pack in force when a root statement is signed, as the statement records it."""
+        active_policy = getattr(self, "_active", None)
+        if active_policy is None:
+            return None
+        return {"image_sha256": active_policy["sha256"], "version": active_policy["version"],
+                "key_id": active_policy.get("key_id"), "unsigned": active_policy.get("unsigned")}
 
     def active(self) -> dict:
         if self._active is None:

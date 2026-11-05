@@ -19,6 +19,10 @@ Files under the journal directory:
   gaps.jsonl         one line per epoch whose unacknowledged data was dropped under pressure,
                      appended and fsynced BEFORE the data file is deleted, so a loss is recorded
                      before it happens and never after the fact.
+  roots.jsonl        with an instance key only: one signed root statement per seal, over the chained
+                     root and the epoch count (prismpath.ledgers.root_statement), appended AFTER the
+                     chain line. A crash between the two leaves the newest epoch unsigned, which
+                     `verify_statements` reports as an unsigned tail, not as a failure.
 
 Recovery order, at every start:
   1. chain.jsonl is read. A torn final line is discarded and reported as `interrupted_seal`; a torn
@@ -52,11 +56,13 @@ import os
 from typing import Dict, List, Optional
 
 from prismpath import canon
+from prismpath.ledgers import root_statement
 from prismpath.telemetry import ackchannel
 from prismpath.telemetry import epochs as epoch_module
 from prismpath.telemetry import selfheal as sh
 
 CHAIN_FILE = "chain.jsonl"
+ROOTS_FILE = "roots.jsonl"
 ACKS_FILE = "acks.json"
 GAPS_FILE = "gaps.jsonl"
 EPOCH_DIRECTORY = "epochs"
@@ -81,8 +87,11 @@ class JournalCorrupt(RuntimeError):
 
 
 class EpochJournal:
-    def __init__(self, directory: str, block_bits: int, max_data_epochs: int = 3, max_bytes: Optional[int] = None):
+    def __init__(self, directory: str, block_bits: int, max_data_epochs: int = 3, max_bytes: Optional[int] = None,
+                 instance_key: Optional[root_statement.InstanceKey] = None):
         self.directory = directory
+        self.instance_key = instance_key
+        self._signer: Optional[root_statement.RootSigner] = None
         self.block_bits = block_bits
         self.max_data_epochs = max_data_epochs
         self.max_bytes = max_bytes
@@ -200,8 +209,28 @@ class EpochJournal:
                                           "data_sha256": _sha256(data), "data_length": len(data)})
         epoch = epoch_module.Epoch(epoch_id, blocks, merkle_root, chained)
         self.store.epochs.append(epoch)
+        if self.instance_key is not None:
+            if self._signer is None:
+                self._signer = root_statement.RootSigner(self.instance_key, self._roots_path(),
+                                                         root_statement.LOG_EPOCH_CHAIN)
+            self._signer.sign(chained, len(self.store.epochs), "seal")
         self._enforce_caps()
         return epoch
+
+    def _roots_path(self) -> str:
+        return os.path.join(self.directory, ROOTS_FILE)
+
+    def verify_statements(self, pinned=None) -> dict:
+        """The signed root statements against the chain: signed, signed-unpinned, unsigned or invalid,
+        with every finding (a chain shorter than a signed count, a rewritten epoch, a wrong key)."""
+        chain = self.store.chain()
+
+        def root_at(count: int) -> str:
+            return chain[count - 1] if 1 <= count <= len(chain) else ""
+
+        statements, findings = root_statement.read_statements(self._roots_path())
+        return root_statement.verify_chain(statements, findings, root_at, len(chain),
+                                           log=root_statement.LOG_EPOCH_CHAIN, pinned=pinned)
 
     def _remove_data(self, epoch_id: int) -> None:
         try:

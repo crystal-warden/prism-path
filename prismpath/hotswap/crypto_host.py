@@ -26,6 +26,8 @@ from typing import List, Optional, Tuple
 from prismpath.hotswap import crypto_registry as cr
 from prismpath.hotswap import policy_pack as pp
 from prismpath.ledgers.audit_log import AuditLog
+from prismpath.ledgers import root_statement
+from prismpath.hotswap.policy_host import _authority_key_ids
 from prismpath import canon
 
 _PQ_KEM_TOKENS = ("ml-kem", "kyber")
@@ -136,7 +138,8 @@ def measure_suite_cost(suite_spec: dict, payload_len: int = 1024, iters: int = 5
 
 class CryptoHost:
     def __init__(self, state_dir: str, pubkey_paths: List[str], envelope: dict, registry: dict,
-                 audit_path: Optional[str] = None, revoked: frozenset = frozenset()):
+                 audit_path: Optional[str] = None, revoked: frozenset = frozenset(),
+                 instance_key: Optional[root_statement.InstanceKey] = None):
         self.state_dir = state_dir
         self.pubkey_paths = list(pubkey_paths)
         self.envelope = envelope
@@ -144,7 +147,11 @@ class CryptoHost:
         self.registry_hash = cr.registry_hash(registry)
         self.revoked = revoked
         os.makedirs(state_dir, exist_ok=True)
-        self.audit = AuditLog(audit_path or os.path.join(state_dir, "crypto_swaps.log"))
+        if instance_key is None:                 # as PolicyHost: signed roots after every audit event
+            instance_key = root_statement.key_from_env()
+        root_statement.check_separation(instance_key, _authority_key_ids(self.pubkey_paths))
+        self.audit = AuditLog(audit_path or os.path.join(state_dir, "crypto_swaps.log"),
+                              instance_key=instance_key, sign_appends=True)
         self._lock = threading.Lock()
         self._active: Optional[dict] = None
         self._prev: Optional[dict] = None

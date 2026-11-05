@@ -19,4 +19,8 @@ if __name__ == "__main__":
     settings = core.SETTINGS
     print(f"mission control on {settings.host}:{settings.port}  proj={settings.proj}  "
           f"audit_root={core.audit.LOG.current_root()[:16]}", flush=True)
+    log = core.audit.LOG
+    print(f"audit log signed by instance key {log.instance_key.fingerprint}, statements in {log.statements_path}"
+          if log.signing else
+          "audit log not signed: no instance key (set PRISMPATH_INSTANCE_KEY to sign root statements)", flush=True)
     uvicorn.run(app, host=settings.host, port=settings.port, log_level="warning")
