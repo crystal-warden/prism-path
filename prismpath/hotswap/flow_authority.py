@@ -141,6 +141,8 @@ def verify_flow(flow_path: str, pubkey_paths: List[str], revoked: frozenset = fr
         return False, ["manifest:bad-format"], manifest if isinstance(manifest, dict) else None
     payload = pp.canonical_bytes(manifest)
     signer_id = None
+    # Any one trusted key may have signed, so a rotation can trust the old and the new key together; the
+    # key that verified, not the one the manifest names, decides what is checked next.
     for path in pubkey_paths:
         public_key, key_id = pp.load_public(path)
         try:
@@ -149,14 +151,23 @@ def verify_flow(flow_path: str, pubkey_paths: List[str], revoked: frozenset = fr
             break
         except InvalidSignature:
             continue
+    # The order of the refusals is the order of the questions, cheapest and most fundamental first, and the
+    # first one that fails is the only cause reported: a forged signature is not also called a stale version.
+    # Revocation comes right after the signature because a revoked key's signatures must stop counting even
+    # when everything else about the manifest is right.
     if signer_id is None:
         return False, ["sig:invalid"], manifest
     if signer_id in revoked:
         return False, ["sig:revoked-key"], manifest
+    # The manifest's own `key_id` is a claim; it has to agree with the key that actually verified.
     if manifest.get("key_id") != signer_id:
         return False, ["manifest:key-id-mismatch"], manifest
+    # The signature covers the hash, not the flow, so the flow on disk is compared with it last of the
+    # content checks: this is the one that catches a flow edited after it was authorized.
     if flow_sha256(flow_path) != manifest.get("flow_sha256"):
         return False, ["flow:sha256-mismatch"], manifest
+    # The version floor is consulted only for a manifest that is otherwise good, so a replay of an old but
+    # validly signed manifest (the one attack a signature alone cannot see) is named as itself.
     if floor is not None and not floor.admits(manifest):
         return False, ["flow:version-replay"], manifest
     return True, [], manifest
@@ -194,18 +205,24 @@ class VersionFloor:
     def admits(self, manifest: dict) -> bool:
         entry = self.entries.get(str(manifest.get("flow")))
         if entry is None:
-            return True
+            return True                          # a flow never accepted before has no floor
         version = manifest["version"]
         if version > entry["version"]:
             return True
+        # The same version is the same authorization being used again, so it passes only for the same flow
+        # bytes; a different flow signed at that version is not a repeat, it is a substitute.
         return version == entry["version"] and manifest.get("flow_sha256") == entry["flow_sha256"]
 
     def accept(self, manifest: dict) -> None:
         """Raise the floor to this manifest's version, durably, before the flow runs."""
         name = str(manifest.get("flow"))
         entry = self.entries.get(name)
+        # The floor only rises; accepting the same or an older version again leaves the file as it is, so
+        # a repeat run does not rewrite it.
         if entry is not None and entry["version"] >= manifest["version"]:
             return
+        # Written with an atomic replace before the flow runs, so a crash cannot leave the floor behind a
+        # flow that already made decisions.
         self.entries[name] = {"version": manifest["version"], "flow_sha256": manifest["flow_sha256"],
                               "manifest_sha256": manifest_sha256(manifest)}
         canon.atomic_write(self.path, json.dumps(self.entries, indent=1, sort_keys=True) + "\n")
@@ -290,6 +307,8 @@ def authorize_flow(flow_path: str, policy: Optional[AuthorizationPolicy] = None,
     authorizes a flow, so it is refused as an authority key and as the signer of a manifest."""
     policy = policy or AuthorizationPolicy()
     required = policy.is_required()
+    # A manifest beside the flow is checked even when authorization is not required: ignoring it would let a
+    # flow that claims an authorization be run as though it had none.
     manifest_present = any(os.path.exists(path) for path in manifest_paths(flow_path))
     if not required and not manifest_present:
         return Authorization(flow_path, NONE)
@@ -310,6 +329,8 @@ def authorize_flow(flow_path: str, policy: Optional[AuthorizationPolicy] = None,
             root_statement.check_separation(instance_key, authority_ids)
         except ValueError as same_key:
             raise AuthorizationConfigError(str(same_key)) from same_key
+    # The floor is read in every check but only raised when the check was required and passed, so looking
+    # at a flow (a dry run, an unrequired check) never changes what the next real run is held to.
     floor = VersionFloor.in_state_dir(policy.state())
     ok, reasons, manifest = verify_flow(flow_path, pubs, policy.revoked_ids(), floor=floor)
     if ok and instance_key is not None and manifest.get("key_id") == instance_key.key_id:
