@@ -24,6 +24,7 @@ import json
 from pathlib import Path
 from typing import List, Optional
 
+from prismpath.hotswap import flow_authority
 from prismpath.kernel.engine import run
 from prismpath.ledgers.ledger import LedgerError, sha256_files
 from prismpath.kernel.parser import parse_file
@@ -63,9 +64,13 @@ def _to_bytes(value) -> bytes:
 
 
 def run_ledgered_loop(flow_path, agent, ledger, *, router=None, max_items: int = 1000,
-                      max_steps: int = 25) -> List[str]:
+                      max_steps: int = 25, policy=None) -> List[str]:
     """Run `flow_path` once per item, committing a proof at its @checkpoint node. Returns the list
-    of item ids committed this call. Resumes from the ledger: already-proven items are skipped."""
+    of item ids committed this call. Resumes from the ledger: already-proven items are skipped.
+
+    The flow's authorization is checked first (`flow_authority.authorize_flow`; `policy` says how, the
+    default is the environment) and `FlowNotAuthorized` is raised before any item runs."""
+    flow_authority.authorize_flow(str(flow_path), policy)
     graph = parse_file(flow_path)
     cp_node, ann = find_checkpoint(graph)
     if cp_node is None:

@@ -35,6 +35,7 @@ import json
 import os
 from typing import List, Optional
 
+from prismpath.hotswap import flow_authority
 from prismpath.ledgers import checkpoint
 from prismpath.kernel import predicates
 from prismpath.canon import atomic_write as _atomic_write, safe_name as _safe
@@ -129,7 +130,7 @@ def _mark_child_error(child_ckpt_path: str, base: dict, reason: str) -> dict:
 
 
 def _advance_child(child_ckpt_path: str, child_flow: str, agent, item, iid: str,
-                   router=None) -> dict:
+                   router=None, policy=None) -> dict:
     """Idempotently bring one child forward by one attempt and return its checkpoint dict.
 
     - no checkpoint yet   -> run_durable from a fresh state seeded with `_item` (its payload)
@@ -143,13 +144,13 @@ def _advance_child(child_ckpt_path: str, child_flow: str, agent, item, iid: str,
         cp = load_checkpoint(child_ckpt_path)
         if cp.get("stopped") in _STABLE:
             return cp
-        resume(child_ckpt_path, agent, router=router)      # crashed/mid-run -> re-enter
+        resume(child_ckpt_path, agent, router=router, policy=policy)      # crashed/mid-run -> re-enter
         cp = load_checkpoint(child_ckpt_path)
         return cp if cp.get("stopped") in _STABLE else _mark_child_error(
             child_ckpt_path, cp, "child did not reach a stable state on resume")
     os.makedirs(os.path.dirname(child_ckpt_path), exist_ok=True)
     seed = {"transcript": [], "visits": {}, "_item": item, "_item_id": iid}
-    res = run_durable(child_flow, agent, child_ckpt_path, router=router, state=seed)
+    res = run_durable(child_flow, agent, child_ckpt_path, router=router, state=seed, policy=policy)
     cp = load_checkpoint(child_ckpt_path) if os.path.exists(child_ckpt_path) else {}
     if cp.get("stopped") in _STABLE:
         return cp
@@ -228,14 +229,14 @@ def _aggregate(children: List[dict], gate: Optional[str] = None) -> dict:
 
 
 def _inject_and_resume(parent_ckpt_path: str, node: str, agg: dict, event: str, agent,
-                       router=None, human_floor: Optional[float] = None):
+                       router=None, human_floor: Optional[float] = None, policy=None):
     """Write the aggregation into the parent checkpoint's state (so the resumed post-join node can read
     it) and deliver the join event — atomically ordered: state first, then resume."""
     cp = load_checkpoint(parent_ckpt_path)
     state = cp.setdefault("state", {})
     state.setdefault("_spawned", {})[node] = agg
     _atomic_write(parent_ckpt_path, json.dumps(cp, indent=2))
-    return resume(parent_ckpt_path, agent, router=router, event=event, human_floor=human_floor)
+    return resume(parent_ckpt_path, agent, router=router, event=event, human_floor=human_floor, policy=policy)
 
 
 def _effective_spec(cp: dict, node: str, spec: dict):
@@ -268,10 +269,15 @@ def _effective_spec(cp: dict, node: str, spec: dict):
 
 # --- the scan (mirrors scheduler.fire_due_timeouts) -----------------------------------
 def advance_fanout(parent_ckpt_path: str, agent, router=None,
-                   human_floor: Optional[float] = None) -> dict:
+                   human_floor: Optional[float] = None, policy=None) -> dict:
     """Advance ONE fan-out parent: spawn/poll its children (driving any nested sub-fan-outs), and if the
     join is ready, aggregate + resume the parent. Returns a record: {path, node, spawned, done,
-    joined(bool), event, result?}."""
+    joined(bool), event, result?}.
+
+    Both flows are checked for authorization first (`flow_authority.authorize_flow`; `policy` says how, the
+    default is the environment): the parent that will be resumed and the child that will be spawned. A
+    flow that is refused leaves the record `refused` (the registry causes) and `error`, and nothing is
+    spawned or resumed."""
     cp = load_checkpoint(parent_ckpt_path)
     pend = cp.get("pending_decision") or {}
     spec = pend.get("spawn")
@@ -285,16 +291,23 @@ def advance_fanout(parent_ckpt_path: str, agent, router=None,
     child_flow = _resolve_child_flow(cp.get("flow_path", ""), spec.get("child", ""))
     gate = spec.get("gate")
     idfield = spec.get("item_id")
+    for flow_path in (cp.get("flow_path", ""), child_flow):
+        try:
+            flow_authority.authorize_flow(flow_path, policy)
+        except flow_authority.FlowNotAuthorized as refused:
+            return {"path": parent_ckpt_path, "node": node, "spawned": 0, "done": 0, "joined": False, "event": None,
+                    "refused": refused.causes, "flow": flow_path,
+                    "error": f"refused: {flow_path} is not authorized: {', '.join(refused.causes)}"}
 
     children, done_flags = [], []
     for item in _items(spec):
         iid = item_id(item, idfield)
         cpath = _child_ckpt_path(parent_ckpt_path, iid)
-        ccp = _advance_child(cpath, child_flow, agent, item, iid, router=router)
+        ccp = _advance_child(cpath, child_flow, agent, item, iid, router=router, policy=policy)
         # NESTED composition: a child that is itself a waiting fan-out — drive its whole subtree now
         # (depth-first), so composition works to any depth, not just one level.
         if ccp.get("stopped") == "waiting" and (ccp.get("pending_decision") or {}).get("spawn") is not None:
-            advance_fanout(cpath, agent, router=router, human_floor=human_floor)
+            advance_fanout(cpath, agent, router=router, human_floor=human_floor, policy=policy)
             ccp = load_checkpoint(cpath)
         children.append((iid, ccp))
         done_flags.append(_child_done(ccp, gate))
@@ -312,7 +325,7 @@ def advance_fanout(parent_ckpt_path: str, agent, router=None,
             rec["error"] = f"join fired {event!r} but node {node!r} has no `on event {event}` edge"
             return rec
         res = _inject_and_resume(parent_ckpt_path, node, _aggregate(children, gate), event, agent,
-                                 router=router, human_floor=human_floor)
+                                 router=router, human_floor=human_floor, policy=policy)
         rec.update(joined=True, event=event, result=res)
     return rec
 
@@ -407,7 +420,7 @@ def fanout_tree(qdir: Optional[str] = None) -> List[dict]:
 
 
 def advance_fanouts(agent, qdir: Optional[str] = None, router=None,
-                    human_floor: Optional[float] = None) -> List[dict]:
+                    human_floor: Optional[float] = None, policy=None) -> List[dict]:
     """Scan a queue dir once and advance every `waiting` parent that carries a `spawn` spec. Returns
     one record per fan-out touched. Restartable and idempotent: re-scanning re-attaches to existing
     children (deterministic ids) rather than re-spawning, and only resumes a parent whose join is
@@ -424,7 +437,7 @@ def advance_fanouts(agent, qdir: Optional[str] = None, router=None,
         if cp.get("stopped") != "waiting" or (cp.get("pending_decision") or {}).get("spawn") is None:
             continue
         try:
-            out.append(advance_fanout(path, agent, router=router, human_floor=human_floor))
+            out.append(advance_fanout(path, agent, router=router, human_floor=human_floor, policy=policy))
         except Exception as exc:                        # noqa: BLE001 - one malformed fan-out (e.g. a
             # missing `on event` join edge — caught statically by analysis.py) must not abort the whole
             # scan; record it and move on, like scheduler.fire_due_timeouts skips bad checkpoints.

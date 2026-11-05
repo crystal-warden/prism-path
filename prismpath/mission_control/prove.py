@@ -47,7 +47,32 @@ def prove_reach(req: ProveReachReq):
             "results": {node_name: reach_result.as_dict() for node_name, reach_result in results.items()}}
 
 
+def signing_status(log) -> dict:
+    """Whether the log's root statements verify, in the terms `prismpath trail` reports: status (signed,
+    signed-unpinned, unsigned, invalid), how many statements cover how many events, the keys that signed,
+    and the findings. `console_key` is the instance key this console signs with now (None when it has
+    none), and `console_key_signed` whether every statement was made by it; the check pins no key itself,
+    so a reader who needs the deployment's key pinned runs `prismpath trail --pub`."""
+    from prismpath.extras import MissingExtra
+    key = log.instance_key
+    console_key = key.fingerprint if key is not None else None
+    try:
+        report = log.verify_statements()
+    except MissingExtra as missing:                 # statements exist and this install cannot check signatures
+        return {"status": "unchecked", "reason": missing.install, "console_key": console_key}
+    return {"status": report["status"], "statements": report["statements"], "signed_leaves": report["signed_leaves"],
+            "log_leaves": report["log_leaves"], "unsigned_tail": report["unsigned_tail"], "keys": report["keys"],
+            "pinned": report["pinned"], "findings": report["findings"], "console_key": console_key,
+            "console_key_signed": bool(console_key and report["keys"] == [console_key]),
+            "last_statement_sha256": report["last_statement_sha256"]}
+
+
 @router.get("/audit")
 def prove_audit():
-    """The console verifies its own append-only audit log (tamper-evidence, self-checked)."""
-    return {"valid": core.audit.LOG.verify_log(), "n": len(core.audit.LOG.events)}
+    """The console verifies its own append-only audit log (tamper-evidence, self-checked), and says
+    whether the log is signed: `valid` is the Merkle check, `signing` the root statements beside it."""
+    log = core.audit.LOG
+    signing = signing_status(log)
+    valid = log.verify_log()
+    return {"valid": valid, "n": len(log.events), "signing": signing,
+            "ok": valid and signing["status"] != "invalid"}

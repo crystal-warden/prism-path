@@ -24,6 +24,7 @@ import os
 import time
 from typing import List, Optional
 
+from prismpath.hotswap import flow_authority
 from prismpath.ledgers import checkpoint
 
 def seconds_until_due(cp: dict, now: Optional[float] = None) -> Optional[float]:
@@ -45,7 +46,7 @@ def is_due(cp: dict, now: Optional[float] = None) -> bool:
 
 
 def fire_due_timeouts(agent, qdir: Optional[str] = None, now: Optional[float] = None,
-                      router=None, human_floor: Optional[float] = None) -> List[dict]:
+                      router=None, human_floor: Optional[float] = None, policy=None) -> List[dict]:
     """Scan a queue dir of checkpoints once and resume every `waiting` run whose timer has elapsed by
     delivering `__timeout__`. Returns one record per fired timeout: {path, result}. Runs that are not
     waiting, have no timer, or are not yet due are left untouched."""
@@ -60,7 +61,11 @@ def fire_due_timeouts(agent, qdir: Optional[str] = None, now: Optional[float] = 
             continue                                 # not a checkpoint / unreadable — skip
         if not is_due(cp, now):
             continue
-        res = checkpoint.resume(path, agent, router=router, event="__timeout__",
-                                human_floor=human_floor)
+        try:
+            res = checkpoint.resume(path, agent, router=router, event="__timeout__",
+                                    human_floor=human_floor, policy=policy)
+        except flow_authority.FlowNotAuthorized as refused:       # one unauthorized flow must not stop the scan
+            fired.append({"path": path, "refused": refused.causes, "error": str(refused)})
+            continue
         fired.append({"path": path, "result": res})
     return fired

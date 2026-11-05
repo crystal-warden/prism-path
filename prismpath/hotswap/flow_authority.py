@@ -29,13 +29,22 @@ the flow, because whoever can replace the flow can replace what sits next to it.
 The authority key is the key `swap keygen` writes. The instance key (`prismpath ledger keygen`) attests
 what a deployment recorded and must never authorize a flow; `run` refuses the pair when they are the
 same key.
+
+`authorize_flow` is the check as a library call, for every place that loads a flow to make decisions:
+`run` and `resume` on the command line, `compose`, the timeout scheduler, a Mission Control sprint that
+runs `flows/sprint_loop.md`, and a program that calls `checkpoint.run_durable`, `checkpoint.resume`,
+`ledger_runner.run_ledgered_loop` or `engine.run` itself. It reads the same three settings the command
+line does (`PRISMPATH_REQUIRE_AUTHORIZATION`, `PRISMPATH_AUTHORITY_PUB`, `PRISMPATH_STATE_DIR`), or an
+`AuthorizationPolicy` that names them. A program that builds a `Graph` and calls `engine.run` has no path
+to check, so it calls `authorize_flow(path)` before `parse_file(path)`; `load_authorized` does both.
 """
 from __future__ import annotations
 
 import json
 import os
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, Iterable, List, Optional, Sequence, Tuple, Union
 
 from prismpath import canon
 from prismpath.hotswap import policy_pack as pp
@@ -47,6 +56,11 @@ STATE_DIR_ENV = "PRISMPATH_STATE_DIR"
 DEFAULT_STATE_DIR = ".prismpath"
 FLOOR_FILE = "flow_versions.json"
 UNAUTHORIZED = "unauthorized"
+
+# What `authorize_flow` found. `none`: no manifest beside the flow and authorization not required, so
+# nothing was asked. `unchecked`: a manifest is present and no authority key was given, so it was not
+# verified. `verified` and `failed` are the two answers to a check that ran.
+NONE, UNCHECKED, VERIFIED, FAILED = "none", "unchecked", "verified", "failed"
 
 
 def manifest_paths(flow_path: str) -> Tuple[str, str]:
@@ -195,3 +209,123 @@ class VersionFloor:
         self.entries[name] = {"version": manifest["version"], "flow_sha256": manifest["flow_sha256"],
                               "manifest_sha256": manifest_sha256(manifest)}
         canon.atomic_write(self.path, json.dumps(self.entries, indent=1, sort_keys=True) + "\n")
+
+
+# ------------------------------------------------------------------ the check, for any caller
+
+class AuthorizationConfigError(ValueError):
+    """Authorization is required and cannot be checked: no authority public key was given, or the
+    instance key and an authority key are the same key. A configuration the operator fixes, not a flow
+    that was refused."""
+
+
+class FlowNotAuthorized(Exception):
+    """Authorization is required and the flow does not have it. `causes` are registry names
+    (`sig:missing`, `flow:sha256-mismatch`, ...); `manifest` is the manifest that was read, if any."""
+
+    def __init__(self, flow_path: str, causes: Sequence[str], manifest: Optional[dict] = None):
+        super().__init__(f"{flow_path}: the flow is not authorized: {', '.join(causes)}")
+        self.flow_path = flow_path
+        self.causes = list(causes)
+        self.manifest = manifest
+
+
+@dataclass
+class Authorization:
+    """What a check found: `status` (none, unchecked, verified or failed), the registry causes when it
+    failed, and the manifest read. `record` is what a receipt and a root statement carry as the
+    authorization in force."""
+    flow_path: str
+    status: str
+    required: bool = False
+    reasons: List[str] = field(default_factory=list)
+    manifest: Optional[dict] = None
+
+    @property
+    def ok(self) -> bool:
+        return self.status == VERIFIED
+
+    @property
+    def record(self):
+        return authorization_of(self.manifest, self.ok)
+
+
+@dataclass(frozen=True)
+class AuthorizationPolicy:
+    """Where a check gets its settings. Every field left as None is read from the environment when the
+    check runs: `required` from PRISMPATH_REQUIRE_AUTHORIZATION, `authority_pubs` from
+    PRISMPATH_AUTHORITY_PUB (paths separated by the platform path separator), `state_dir` from
+    PRISMPATH_STATE_DIR, else `.prismpath`. `revoked` is a revocation list path or a set of key ids."""
+    required: Optional[bool] = None
+    authority_pubs: Optional[Sequence[str]] = None
+    revoked: Union[None, str, Iterable[str]] = None
+    state_dir: Optional[str] = None
+
+    def is_required(self) -> bool:
+        if self.required is not None:
+            return bool(self.required)
+        return os.environ.get(REQUIRE_ENV, "").strip().lower() in ("1", "true", "yes")
+
+    def pubs(self) -> List[str]:
+        if self.authority_pubs:
+            return list(self.authority_pubs)
+        return [path for path in os.environ.get(AUTHORITY_PUB_ENV, "").split(os.pathsep) if path.strip()]
+
+    def state(self) -> str:
+        return self.state_dir or os.environ.get(STATE_DIR_ENV, "").strip() or DEFAULT_STATE_DIR
+
+    def revoked_ids(self) -> frozenset:
+        if self.revoked is None or isinstance(self.revoked, str):
+            return pp.load_revoked(self.revoked)
+        return frozenset(self.revoked)
+
+
+def authorize_flow(flow_path: str, policy: Optional[AuthorizationPolicy] = None, instance_key=None) -> Authorization:
+    """Decide whether this flow may make decisions. Returns an `Authorization`; raises `FlowNotAuthorized`
+    when authorization is required and the flow does not have it, and `AuthorizationConfigError` when it
+    is required and cannot be checked. When it is not required, a flow manifest that is present is still
+    verified (given authority keys) and the result returned, never ignored; nothing here prints.
+
+    `instance_key` is the key the caller signs its receipts with, if it signs: an instance key never
+    authorizes a flow, so it is refused as an authority key and as the signer of a manifest."""
+    policy = policy or AuthorizationPolicy()
+    required = policy.is_required()
+    manifest_present = any(os.path.exists(path) for path in manifest_paths(flow_path))
+    if not required and not manifest_present:
+        return Authorization(flow_path, NONE)
+    pubs = policy.pubs()
+    if required and not pubs:
+        raise AuthorizationConfigError(
+            "authorization is required and no trusted authority key was given: pass --authority-pub PUB or "
+            f"set {AUTHORITY_PUB_ENV}")
+    if not pubs:
+        return Authorization(flow_path, UNCHECKED, required, [], read_manifest(flow_path))
+    if instance_key is not None:
+        from prismpath.ledgers import root_statement
+        authority_ids = []
+        for path in pubs:
+            with open(path, "rb") as handle:
+                authority_ids.append(pp.sha256_hex(handle.read()))
+        try:
+            root_statement.check_separation(instance_key, authority_ids)
+        except ValueError as same_key:
+            raise AuthorizationConfigError(str(same_key)) from same_key
+    floor = VersionFloor.in_state_dir(policy.state())
+    ok, reasons, manifest = verify_flow(flow_path, pubs, policy.revoked_ids(), floor=floor)
+    if ok and instance_key is not None and manifest.get("key_id") == instance_key.key_id:
+        ok, reasons = False, ["sig:invalid"]            # an instance key never authorizes a flow
+    if not ok:
+        if required:
+            raise FlowNotAuthorized(flow_path, reasons, manifest)
+        return Authorization(flow_path, FAILED, required, reasons, manifest)
+    if required:
+        floor.accept(manifest)
+    return Authorization(flow_path, VERIFIED, required, [], manifest)
+
+
+def load_authorized(flow_path: str, policy: Optional[AuthorizationPolicy] = None, instance_key=None):
+    """`authorize_flow`, then `parse_file`: the flow's graph and the authorization it was loaded under.
+    For a program that runs `engine.run` itself and would otherwise load the flow unchecked."""
+    from prismpath.kernel.parser import parse_file
+    authorization = authorize_flow(flow_path, policy, instance_key)
+    return parse_file(flow_path), authorization

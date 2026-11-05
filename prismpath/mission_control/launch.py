@@ -32,12 +32,37 @@ def sprint_running(state):
         return False
 
 
+def flow_refusal():
+    """Why a sprint that runs `flows/sprint_loop.md` (SPRINT_FLOW=1) may not start, or None. The loop
+    checks the flow itself when it loads it (`ledger_runner.run_ledgered_loop`); asking here as well means
+    the console answers the request, and records the refusal, instead of leaving a traceback in the
+    sprint's log. Honours PRISMPATH_REQUIRE_AUTHORIZATION and PRISMPATH_AUTHORITY_PUB; a sprint that does
+    not run the flow, or authorization that is not required, is not refused."""
+    if os.environ.get("SPRINT_FLOW", "0") != "1":
+        return None
+    from prismpath.hotswap import flow_authority
+    from prismpath.orchestration.sprint_flow import DEFAULT_FLOW
+    try:
+        flow_authority.authorize_flow(DEFAULT_FLOW)
+    except flow_authority.FlowNotAuthorized as refused:
+        return {"ok": False, "error": f"refused: the sprint flow is not authorized: {', '.join(refused.causes)}",
+                "refused": refused.causes, "flow": DEFAULT_FLOW}
+    except flow_authority.AuthorizationConfigError as unconfigured:
+        return {"ok": False, "error": f"refused: {unconfigured}", "refused": [], "flow": DEFAULT_FLOW}
+    return None
+
+
 def start_sprint(cfg, state):
     """Launch a sprint. `cfg['unbuffered']` (default True) governs whether the child streams live
     (`python -u` / PYTHONUNBUFFERED) or batches: the buffered/unbuffered console toggle."""
     with LAUNCH_LOCK:
         if sprint_running(state):
             return {"ok": False, "error": "a sprint is already running"}
+        refusal = flow_refusal()
+        if refusal is not None:
+            audit.record("sprint.refused", {"proj": cfg.get("proj") or state["proj"], "reasons": refusal["refused"],
+                                            "flow": refusal["flow"]})
+            return refusal
         proj = os.path.abspath(cfg.get("proj") or state["proj"])
         env = dict(os.environ)
         env.update({

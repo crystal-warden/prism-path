@@ -20,6 +20,10 @@ Design guarantees:
     deterministic-first routing is a pure function of the restored state).
   * Off the critical path: if the state is not JSON-serializable, checkpointing disables itself
     with a warning rather than breaking the run.
+  * Authorization is checked where the flow is loaded (`prismpath.hotswap.flow_authority`): when
+    PRISMPATH_REQUIRE_AUTHORIZATION is set, or the caller passes a `policy` that requires it,
+    `run_durable` and `resume` raise `FlowNotAuthorized` for a flow without a valid flow manifest
+    before anything runs, so the scheduler, `compose` and Mission Control cannot step around it.
 """
 from __future__ import annotations
 
@@ -29,6 +33,7 @@ import os
 import time
 from typing import Optional
 
+from prismpath.hotswap import flow_authority
 from prismpath.kernel.engine import RunResult, StepLog, run
 from prismpath.kernel.parser import parse_file
 from prismpath import canon
@@ -118,13 +123,17 @@ def _check_flow_unchanged(cp: dict) -> None:
 
 
 def run_durable(flow_path, agent, checkpoint_path, router=None, human_floor: Optional[float] = None,
-                type_gate: bool = False, max_steps: int = 25, state: Optional[dict] = None) -> RunResult:
+                type_gate: bool = False, max_steps: int = 25, state: Optional[dict] = None,
+                policy: Optional["flow_authority.AuthorizationPolicy"] = None) -> RunResult:
     """Run a flow while persisting a checkpoint at every step. On a crash, `resume(checkpoint_path,
     agent)` continues from the pending node. Checkpointing is best-effort — it disables itself (with
     a warning) rather than break the run if the state can't be serialized.
 
     `state` seeds the run's initial state — the composition harness uses it to hand a spawned child its
-    per-item payload (e.g. state={'_item': {...}}) so a fan-out child knows which item it is processing."""
+    per-item payload (e.g. state={'_item': {...}}) so a fan-out child knows which item it is processing.
+
+    `policy` says how authorization is checked (default: the environment); raises `FlowNotAuthorized`."""
+    flow_authority.authorize_flow(os.fspath(flow_path), policy)
     graph = parse_file(flow_path)
     disabled = {"v": False}
 
@@ -143,7 +152,8 @@ def run_durable(flow_path, agent, checkpoint_path, router=None, human_floor: Opt
 
 def resume(checkpoint_path, agent, router=None, choose: Optional[str] = None,
            event: Optional[str] = None, human_floor: Optional[float] = None, max_steps: int = 25,
-           write_back: bool = True, type_gate: Optional[bool] = None) -> RunResult:
+           write_back: bool = True, type_gate: Optional[bool] = None,
+           policy: Optional["flow_authority.AuthorizationPolicy"] = None) -> RunResult:
     """Resume a run from its checkpoint. Re-parses the READ-ONLY .md and re-enters the engine.
 
     * `choose` given  -> resume a `needs_human` suspension: apply the human's edge and continue.
@@ -154,10 +164,13 @@ def resume(checkpoint_path, agent, router=None, choose: Optional[str] = None,
 
     `type_gate` defaults to the value the checkpoint was saved with, so the gate is never silently
     dropped on resume; pass True/False to override.
+
+    `policy` says how authorization is checked (default: the environment); raises `FlowNotAuthorized`.
     """
     from prismpath.kernel import predicates
     cp = load_checkpoint(checkpoint_path)
     _check_flow_unchanged(cp)                           # refuse to resume against a silently-edited flow
+    flow_authority.authorize_flow(cp.get("flow_path", ""), policy)
     graph = parse_file(cp["flow_path"])                 # never written
     state = cp.get("state") or {}
     stopped = cp.get("stopped", "")
