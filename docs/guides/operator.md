@@ -20,9 +20,14 @@ A policy reaches an enforcement point as a signed pack. Two of the `swap` action
 of `swap` they need the `signing` extra (`pip install 'prismpath[signing]'`):
 
 ```bash
-prismpath swap swap   --out <state dir> --pub <authority.pub> --envelope <envelope.json> --ppt <new.ppt>
-prismpath swap attest --out <state dir> --pub <authority.pub> --envelope <envelope.json>
+prismpath swap swap   --out <state dir> --pub <authority.pub> --envelope <env dir>/<envelope id>.envelope --ppt <new.ppt>
+prismpath swap attest --out <state dir> --pub <authority.pub> --envelope <env dir>/<envelope id>.envelope
 ```
+
+`--envelope` names the envelope by its base path, the one `swap envelope` wrote beside its signature
+(`env/env1.envelope.json` and `env/env1.envelope.sig` are given as `env/env1.envelope`; naming the `.json`
+file works too). Every swap, refusal and attestation is appended to `swaps.log` in the state directory, which
+is the file `prismpath trail` reads.
 
 `swap` verifies the signature against the authority keys and the revocation list, checks the image
 fits the envelope the engineer declared (fields, capabilities, size caps), refuses a version below the

@@ -406,6 +406,9 @@ def build_envelope(envelope_id: str, fields: Dict[str, str], caps: Optional[dict
 def load_envelope(base_path: str, pubkey_paths: List[str]) -> Tuple[Optional[dict], List[str]]:
     """Load + signature-verify an envelope (`base_path` without .json/.sig suffix)."""
     _Priv, _Pub, _ser, InvalidSignature = _ed25519()
+    for suffix in (".json", ".sig"):            # the files are <base>.json and <base>.sig; take either name
+        if base_path.endswith(suffix):
+            base_path = base_path[:-len(suffix)]
     try:
         with open(base_path + ".json") as handle:
             env = json.load(handle)

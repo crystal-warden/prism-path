@@ -194,6 +194,19 @@ def test_the_program_name_in_usage_is_prismpath(capsys):
     assert capsys.readouterr().out.startswith("usage: prismpath ")
 
 
+# ------------------------------------------------------------------ swap: the envelope path
+
+def test_swap_accepts_the_envelope_file_name_as_well_as_its_base(tmp_path):
+    pytest.importorskip("cryptography")
+    from prismpath.hotswap import policy_pack
+    keys = policy_pack.keygen(str(tmp_path / "keys"), "authority")
+    policy_pack.build_envelope("env1", {"x": "int"}, None, keys["private"], keys["public"], str(tmp_path / "env"))
+    base = str(tmp_path / "env" / "env1.envelope")
+    for given in (base, base + ".json", base + ".sig"):
+        env, reasons = policy_pack.load_envelope(given, [keys["public"]])
+        assert reasons == [] and env["envelope_id"] == "env1"
+
+
 # ------------------------------------------------------------------ the ledger anchor
 
 def test_the_ledger_hashes_anchor_as_bare_hex(tmp_path):
