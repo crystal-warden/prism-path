@@ -17,7 +17,7 @@
     "problems": []
   },
   "signal_3_core_churn": {
-    "core_total_loc": 7875,
+    "core_total_loc": 8787,
     "churn_since_baseline": null,
     "note": "track per adapter; must decay. flat or rising means rebuilding, not generalizing."
   },
@@ -25,9 +25,9 @@
     "adapters": [
       {
         "adapter": "fusion",
-        "code_loc": 620,
+        "code_loc": 636,
         "flow_md_loc": 93,
-        "pct_logic_in_md": 0.13
+        "pct_logic_in_md": 0.128
       }
     ],
     "note": "adapter N should cost less than adapter 1; a higher share of logic in Markdown is the point."

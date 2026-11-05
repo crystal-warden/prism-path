@@ -137,3 +137,22 @@ fn a_damaged_floor_entry_admits_nothing() {
     assert!(!floor.admits(&json!({"flow": "triage", "version": 4, "flow_sha256": "ab"})));
     assert!(floor.admits(&json!({"flow": "another", "version": 1, "flow_sha256": "ab"})));
 }
+
+#[test]
+fn the_rust_audit_log_writes_leaves_the_verifier_reads_the_same() {
+    use prismpath_hotswap_rs::host::AuditLog;
+    use prismpath_hotswap_rs::root_statement::{AuditLogView, UNSIGNED};
+    let dir = std::env::temp_dir().join(format!("pp_receipt_edges_{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let path = dir.join("swaps.log");
+    let mut log = AuditLog::open(path.to_str().unwrap());
+    log.append("policy_host", "swap", json!({"to_hash": "ab", "version": 1, "note": "caf\u{e9} \u{1d11e}", "ratio": 1e-7, "result": "accepted"}));
+    log.append("policy_host", "attest", json!({"ok": true}));
+    let text = std::fs::read_to_string(&path).unwrap();
+    let view = AuditLogView::from_text(&text);
+    assert_eq!(view.leaves, log.leaves);
+    assert_eq!(view.root_at(2), log.current_root());
+    let report = verify_trail(&text, None, &[]);
+    assert_eq!((report.status, report.log_leaves, report.unsigned_tail), (UNSIGNED, 2, 2));
+    let _ = std::fs::remove_dir_all(&dir);
+}
