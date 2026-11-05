@@ -192,3 +192,40 @@ def test_model_check_and_trail_panels_answer(client, proj):
     assert walked.status_code == 200, walked.text
     report = walked.json()
     assert report["log"]["verifies"] is True and report["by_action"] == {"attestation": 1}
+
+
+# ── 0.1.1 hand check ──────────────────────────────────────────────────────────
+
+
+def test_the_followed_flow_is_never_a_fixture_table(client, proj):
+    # a `<flow>.tests.md` beside the flow was picked at random by the glob and parsed as the flow
+    (proj / "flows" / "a_flow.tests.md").write_text("| node | outcome | fields | expect |\n|---|---|---|---|\n", encoding="utf-8")
+    (proj / "status.json").write_text(json.dumps({"iteration": 1}), encoding="utf-8")
+    (proj / "checkpoint.json").unlink()
+    graph = client.get(API_V1 + "/flow/graph").json()
+    assert graph["flow_path"].endswith("triage.md") and graph["nodes"]
+
+
+def test_a_decision_for_an_unknown_queue_item_is_a_client_error(client, tmp_path, monkeypatch):
+    monkeypatch.setenv("PRISMPATH_QUEUE_DIR", str(tmp_path / "queue"))
+    response = client.post(API_V1 + "/queue/decide", json={"id": "nope", "choose": "x"})
+    assert response.status_code == 400 and "not found" in response.json()["error"]["message"]
+
+
+def test_the_sprint_is_started_by_module_not_by_the_alias_script(tmp_path, monkeypatch):
+    import sys
+    proj = tmp_path / "sprintproj"
+    proj.mkdir()
+    from prismpath.mission_control import launch
+    seen = {}
+
+    class _Proc:
+        pid = 1
+
+    def fake_popen(argv, **kw):
+        seen["argv"] = argv
+        return _Proc()
+    monkeypatch.setattr(launch.subprocess, "Popen", fake_popen)
+    launch.start_sprint({"proj": str(proj)}, {"proc": None, "proj": str(proj)})
+    assert seen["argv"][0] == sys.executable
+    assert seen["argv"][-2:] == ["-m", "prismpath.orchestration.run_sprint"]

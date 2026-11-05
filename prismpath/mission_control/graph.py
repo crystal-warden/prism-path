@@ -22,7 +22,9 @@ def _live_flow_path(proj):
                 return named
         except Exception:
             pass
-    candidates = glob.glob(os.path.join(proj, "flows", "*.md")) + glob.glob(os.path.join(proj, "*.md"))
+    # a `<flow>.tests.md` fixture table is not a flow; sorted so the followed flow is the same every time
+    candidates = sorted(path for path in glob.glob(os.path.join(proj, "flows", "*.md")) + glob.glob(os.path.join(proj, "*.md"))
+                        if not path.endswith(".tests.md"))
     return candidates[0] if candidates else os.path.join(SETTINGS.prism_dir, "flows", "coding.md")
 
 

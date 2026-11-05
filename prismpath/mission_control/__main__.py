@@ -1,10 +1,19 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """`python -m prismpath.mission_control` — the loopback command center."""
-import uvicorn
+import sys
 
-from . import core
-from .app import app
+try:
+    import uvicorn
+
+    from . import core
+    from .app import app
+except ImportError as exc:
+    from prismpath import extras
+    missing = extras.from_exception(exc)
+    if missing is None:
+        raise
+    sys.exit(f"prismpath mission_control: {missing.install}")
 
 if __name__ == "__main__":
     settings = core.SETTINGS

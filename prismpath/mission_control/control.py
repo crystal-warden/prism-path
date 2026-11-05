@@ -3,7 +3,7 @@
 """Control router — start/stop the sprint and resolve human-in-the-loop decisions."""
 import os
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 
 from . import core
 from .models import QueueDecideReq, SprintSelectReq, SprintStartReq
@@ -57,7 +57,10 @@ def sprint_resume():
 def queue_decide(req: QueueDecideReq):
     """Human picks an edge for a suspended run. `resolve_queue_item` confines the id to the queue dir."""
     from prismpath.ledgers import checkpoint as _ckpt
-    cpath = _ckpt.resolve_queue_item(req.id)
-    _ckpt.record_decision(cpath, req.choose, decided_by=core.audit.ACTOR)
+    try:
+        cpath = _ckpt.resolve_queue_item(req.id)
+        _ckpt.record_decision(cpath, req.choose, decided_by=core.audit.ACTOR)
+    except _ckpt.CheckpointError as refusal:     # an unknown queue item or an edge it does not offer: the caller's mistake
+        raise HTTPException(status_code=400, detail=str(refusal))
     core.audit.record("queue.decide", {"id": req.id, "choose": req.choose})
     return {"ok": True}

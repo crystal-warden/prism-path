@@ -9,6 +9,7 @@ so they work for both kinds of run.
 import json
 import os
 import subprocess
+import sys
 import time
 
 from . import audit
@@ -58,7 +59,9 @@ def start_sprint(cfg, state):
             env["PYTHONUNBUFFERED"] = "1"
         else:
             env.pop("PYTHONUNBUFFERED", None)
-        argv = ["python"] + (["-u"] if unbuffered else []) + ["prismpath/run_sprint.py"]
+        # the module, run by the interpreter that is serving this console: a path to prismpath/run_sprint.py
+        # reaches only the alias that re-exports it, which defines the sprint and never starts it
+        argv = [sys.executable] + (["-u"] if unbuffered else []) + ["-m", "prismpath.orchestration.run_sprint"]
         for marker_name in ("STOP", "PAUSE"):
             try:
                 os.remove(os.path.join(proj, marker_name))
