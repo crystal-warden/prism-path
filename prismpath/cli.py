@@ -16,7 +16,7 @@ PERSONAS = (
      ("init", "validate", "test", "graph", "lint", "context")),
     ("Engineer: implement the interface once, calibrate for deployment, deliver",
      ("contract", "capability", "compile", "portable", "lock", "verify", "plugins", "ci-report", "lsp", "import",
-      "calibrate", "label", "annotate", "kappa", "centroids")),
+      "calibrate", "label", "annotate", "kappa", "centroids", "authorize")),
     ("Operator: run the system day to day, swap and attest policy (Mission Control is the console; this is the scripted path)",
      ("run", "resume", "compose", "swap", "trail")),
     ("Assessor: anchor, verify, and read the evidence",
@@ -43,7 +43,9 @@ def _grouped_help(subparsers) -> str:
         out.append("")
     out.append("`swap` splits by action: keygen, envelope, and pack are the engineer's setup; swap and attest are the "
                "operator's; verify is the assessor's. `ledger keygen` is the engineer's setup too: it makes the "
-               "deployment's instance key, which signs root statements and is never the policy authority key.")
+               "deployment's instance key, which signs root statements and is never the policy authority key. "
+               "`authorize` splits the same way as `swap`: sign is the engineer's (it holds the authority key), "
+               "verify is the assessor's.")
     return "\n".join(out)
 
 
@@ -90,8 +92,36 @@ def _add_owner_commands(subparsers) -> None:
     lint_parser.set_defaults(func=lint_flow)
 
 
+def _add_authorization_args(parser) -> None:
+    """The flags `run` and `resume` share for requiring an authorized flow."""
+    parser.add_argument('--require-authorization', dest='require_authorization', action='store_true',
+                        help='refuse a flow whose flow manifest is missing, edited after signing, signed by an unknown '
+                             'or revoked authority key, or older than a version already accepted (exit 2); also '
+                             'PRISMPATH_REQUIRE_AUTHORIZATION=1')
+    parser.add_argument('--authority-pub', dest='authority_pub', nargs='+', default=None, metavar='PUB',
+                        help='trusted authority public key(s) (`swap keygen`); default: PRISMPATH_AUTHORITY_PUB, '
+                             'paths separated by the platform path separator')
+    parser.add_argument('--revoked', default=None, help='revocation list JSON of authority key ids')
+    parser.add_argument('--state-dir', dest='state_dir', default=None, metavar='DIR',
+                        help='where the accepted flow versions are kept (default: PRISMPATH_STATE_DIR, else ./.prismpath)')
+
+
 def _add_engineer_commands(subparsers) -> None:
     # Adding engineer commands for compilation, calibration, verification, and tooling integration.
+    authorize_parser = subparsers.add_parser(
+        'authorize', help='Sign a Markdown flow with the policy authority key, or verify that signature: '
+                          'the authorization `run --require-authorization` checks')
+    authorize_parser.add_argument('action', choices=['sign', 'verify'], help='sign | verify')
+    authorize_parser.add_argument('flow_md', type=str, help='Path to the flow markdown file')
+    authorize_parser.add_argument('--priv', help='authority private key (sign)')
+    authorize_parser.add_argument('--pub', nargs='+', help='authority public key (sign: the signer\'s; verify: the trusted keys)')
+    authorize_parser.add_argument('--version', type=int, default=None,
+                                  help='sign: the monotonic version of this authorization (1, 2, ...)')
+    authorize_parser.add_argument('--revoked', default=None, help='verify: revocation list JSON of key ids')
+    authorize_parser.add_argument('--state-dir', dest='state_dir', default=None, metavar='DIR',
+                                  help='verify: also check the version against the floor accepted in DIR')
+    authorize_parser.set_defaults(func=authorize_cmd)
+
     contract_parser = subparsers.add_parser(
         'contract', help="Derive each node's worker output schema from its `when` edges")
     contract_parser.add_argument('flow_md', type=str, help='Path to the flow markdown file')
@@ -217,6 +247,7 @@ def _add_operator_commands(subparsers) -> None:
                             help='the deployment\'s instance private key (`prismpath ledger keygen`): sign a root '
                                  'statement over the audit log at the end of the run (default: '
                                  '$PRISMPATH_INSTANCE_KEY; without either the receipts are written unsigned)')
+    _add_authorization_args(run_parser)
     run_parser.set_defaults(func=run_flow)
 
     resume_parser = subparsers.add_parser(
@@ -224,6 +255,7 @@ def _add_operator_commands(subparsers) -> None:
     resume_parser.add_argument('checkpoint', type=str, help='Path to the checkpoint JSON')
     resume_parser.add_argument('--choose', default=None,
                                help='the edge target a human picks (for a needs_human suspension)')
+    _add_authorization_args(resume_parser)
     resume_parser.set_defaults(func=resume_flow)
 
     compose_parser = subparsers.add_parser(
@@ -449,10 +481,95 @@ def _receipts_of(result, graph, run_id: str, policy: dict) -> list:
     return receipts
 
 
-def _flow_policy_identity(path: str, graph) -> dict:
-    from prismpath import canon
-    with open(path, "rb") as handle:
-        return {"flow": graph.name, "flow_sha256": canon.sha256_hex(handle.read())}
+def _authority_pubs(args) -> list:
+    from prismpath.hotswap import flow_authority
+    pubs = list(getattr(args, "authority_pub", None) or [])
+    if not pubs:
+        pubs = [path for path in os.environ.get(flow_authority.AUTHORITY_PUB_ENV, "").split(os.pathsep) if path.strip()]
+    for path in pubs:
+        _require_file(path)
+    return pubs
+
+
+def _authorization_required(args) -> bool:
+    from prismpath.hotswap import flow_authority
+    return bool(getattr(args, "require_authorization", False)) or \
+        os.environ.get(flow_authority.REQUIRE_ENV, "").strip().lower() in ("1", "true", "yes")
+
+
+def _state_dir(args) -> str:
+    from prismpath.hotswap import flow_authority
+    return (getattr(args, "state_dir", None) or os.environ.get(flow_authority.STATE_DIR_ENV, "").strip()
+            or flow_authority.DEFAULT_STATE_DIR)
+
+
+class _Refused(Exception):
+    """The flow is not authorized and authorization is required; `causes` are registry names."""
+
+    def __init__(self, causes_named, manifest):
+        super().__init__(",".join(causes_named))
+        self.causes = list(causes_named)
+        self.manifest = manifest
+
+
+def _check_authorization(args, flow_path: str, instance_key=None):
+    """Decide whether this flow may run. Returns what the receipts and the root statement record as the
+    authorization in force, and prints one line saying what was checked. Raises _Refused when
+    authorization is required and the flow does not have it; when it is not required, a flow manifest
+    that is present is still verified (given authority keys) and the result reported, never ignored."""
+    from prismpath.hotswap import flow_authority, policy_pack
+    from prismpath.ledgers import root_statement
+    required = _authorization_required(args)
+    manifest_present = any(os.path.exists(path) for path in flow_authority.manifest_paths(flow_path))
+    if not required and not manifest_present:
+        return flow_authority.UNAUTHORIZED
+    pubs = _authority_pubs(args)
+    if required and not pubs:
+        raise CliError("--require-authorization needs the trusted authority key: pass --authority-pub PUB "
+                       "or set PRISMPATH_AUTHORITY_PUB")
+    if not pubs:
+        manifest = flow_authority.read_manifest(flow_path) or {}
+        print(f"Authorization: a flow manifest is present (version {manifest.get('version')}, authority key "
+              f"{str(manifest.get('key_id'))[:16]}), not checked: pass --authority-pub to verify it")
+        return flow_authority.UNAUTHORIZED
+    authority_ids = []
+    for path in pubs:
+        with open(path, "rb") as handle:
+            authority_ids.append(policy_pack.sha256_hex(handle.read()))
+    try:
+        root_statement.check_separation(instance_key, authority_ids)
+    except ValueError as same_key:
+        raise CliError(f"refused: {same_key}") from same_key
+    floor = flow_authority.VersionFloor.in_state_dir(_state_dir(args))
+    ok, reasons, manifest = flow_authority.verify_flow(flow_path, pubs, policy_pack.load_revoked(getattr(args, "revoked", None)),
+                                                       floor=floor)
+    if ok and instance_key is not None and manifest.get("key_id") == instance_key.key_id:
+        ok, reasons = False, ["sig:invalid"]            # an instance key never authorizes a flow
+    if not ok:
+        if required:
+            raise _Refused(reasons, manifest)
+        print(f"Authorization: NOT verified: {_named_causes(reasons)}; not required, so the run proceeds unauthorized")
+        return flow_authority.UNAUTHORIZED
+    if required:
+        floor.accept(manifest)
+    print(f"Authorization: verified, {manifest['flow']} version {manifest['version']} by authority key "
+          f"{manifest['key_id'][:16]} (flow manifest {flow_authority.manifest_sha256(manifest)[:16]})")
+    return flow_authority.authorization_of(manifest, True)
+
+
+def _cause_code(reason: str):
+    """The registry code of a refusal string; a parameterized one carries a `:<detail>` past the name."""
+    from prismpath.kernel import causes
+    return causes.code(":".join(reason.split(":")[:2]))
+
+
+def _named_causes(reasons) -> str:
+    return ", ".join(f"{reason} (cause {_cause_code(reason)})" for reason in reasons)
+
+
+def _flow_policy_identity(path: str, graph, authorization) -> dict:
+    from prismpath.hotswap import flow_authority
+    return {"flow": graph.name, "flow_sha256": flow_authority.flow_sha256(path), "authorization": authorization}
 
 
 def run_flow(args) -> int:
@@ -462,7 +579,14 @@ def run_flow(args) -> int:
     if not audit_path and getattr(args, "instance_key", None):
         raise CliError("--instance-key signs the run's receipts; pass --audit-log PATH as well")
     instance_key = _instance_key_for(args) if audit_path else None
-    policy = _flow_policy_identity(args.flow_md, graph)
+    try:
+        authorization = _check_authorization(args, args.flow_md, instance_key)
+    except _Refused as refused:
+        policy = _flow_policy_identity(args.flow_md, graph, "unauthorized")
+        if audit_path:
+            _write_refusal(audit_path, instance_key, graph, policy, refused.causes)
+        raise CliError(f"refused: the flow is not authorized: {_named_causes(refused.causes)}") from refused
+    policy = _flow_policy_identity(args.flow_md, graph, authorization)
     agent = _mock_agent
     if getattr(args, "agent", None):
         from prismpath.workers.chat_agent import chat_agent
@@ -482,6 +606,21 @@ def run_flow(args) -> int:
     elif os.environ.get("PRISMPATH_INSTANCE_KEY", "").strip():
         print("Not signed: no receipts were written (PRISMPATH_INSTANCE_KEY is set; pass --audit-log PATH)")
     return 1 if result.stopped == "contract_violation" else 0
+
+
+def _write_refusal(audit_path: str, instance_key, graph, policy: dict, refusal_causes) -> None:
+    """A refusal to run is a decision too: one receipt with the first registry cause, signed like any."""
+    import uuid
+    from prismpath.ledgers.audit_log import AuditLog
+    log = AuditLog(audit_path, instance_key=instance_key)
+    first = refusal_causes[0]
+    log.append("engine", "decision", {"run": uuid.uuid4().hex[:12], "seq": 0, "node": graph.start, "target": None,
+                                      "how": "authorization", "rule": None, "outcome": "refused",
+                                      "cause": _cause_code(first) or 0,
+                                      "refusal": list(refusal_causes), "policy": policy})
+    statement = log.checkpoint("run-refused", policy)
+    print(f"Receipts: the refusal appended to {audit_path}"
+          + (f", signed in root statement {statement['seq']}" if statement else ", not signed (no instance key)"))
 
 
 def _write_receipts(audit_path: str, instance_key, result, graph, policy: dict) -> None:
@@ -504,6 +643,16 @@ def _write_receipts(audit_path: str, instance_key, result, graph, policy: dict) 
 
 def resume_flow(args) -> int:
     from prismpath.ledgers import checkpoint
+    if _authorization_required(args) or getattr(args, "authority_pub", None):
+        try:
+            flow_path = checkpoint.load_checkpoint(args.checkpoint)["flow_path"]
+        except checkpoint.CheckpointError as exc:
+            print(f"cannot resume: {exc}")
+            return 1
+        try:
+            _check_authorization(args, flow_path)
+        except _Refused as refused:
+            raise CliError(f"refused: the flow is not authorized: {_named_causes(refused.causes)}") from refused
     try:
         result = checkpoint.resume(args.checkpoint, _mock_agent, choose=args.choose)
     except checkpoint.CheckpointError as exc:
@@ -1241,6 +1390,42 @@ def _read_text(path):
 
 def _parse_fields(spec):
     return dict(part.split(":", 1) for part in spec.split(",")) if spec else {}
+
+
+def authorize_cmd(args) -> int:
+    """Sign a flow with the authority key, or verify that signature (prismpath.hotswap.flow_authority)."""
+    from prismpath.hotswap import flow_authority, policy_pack
+    from prismpath.ledgers import root_statement
+    _require_file(args.flow_md)
+    if args.action == 'sign':
+        if not (args.priv and args.pub and args.version is not None):
+            raise CliError("sign needs --priv and --pub (the authority key) and --version N")
+        instance = root_statement.key_from_env()
+        if instance is not None:
+            with open(args.pub[0], "rb") as handle:
+                if policy_pack.sha256_hex(handle.read()) == instance.key_id:
+                    raise CliError("refused: that is the instance key (PRISMPATH_INSTANCE_KEY); a flow is authorized "
+                                   "by the policy authority key, `swap keygen`")
+        try:
+            manifest = flow_authority.sign_flow(args.flow_md, args.version, args.priv, args.pub[0])
+        except ValueError as refusal:
+            raise CliError(f"sign: refused: {refusal}") from refusal
+        print(json.dumps({**manifest, "manifest_sha256": flow_authority.manifest_sha256(manifest),
+                          "files": list(flow_authority.manifest_paths(args.flow_md))}, indent=1))
+        return 0
+    if not args.pub:
+        raise CliError("verify needs --pub (the trusted authority key or keys)")
+    for path in args.pub:
+        _require_file(path)
+    floor = flow_authority.VersionFloor.in_state_dir(args.state_dir) if args.state_dir else None
+    ok, reasons, manifest = flow_authority.verify_flow(args.flow_md, args.pub, policy_pack.load_revoked(args.revoked),
+                                                       floor=floor)
+    out = {"ok": ok, "reasons": reasons, "causes": [_cause_code(reason) for reason in reasons]}
+    if manifest:
+        out.update({"flow": manifest.get("flow"), "version": manifest.get("version"), "key_id": manifest.get("key_id"),
+                    "manifest_sha256": flow_authority.manifest_sha256(manifest)})
+    print(json.dumps(out, indent=1))
+    return 0 if ok else 1
 
 
 def swap_cmd(args):

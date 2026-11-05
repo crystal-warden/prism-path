@@ -139,7 +139,8 @@ def _signing_line(signing: Dict[str, Any]) -> str:
     keys = ", ".join(signing["keys"])
     pin = "pinned" if signing["pinned"] else "not pinned: pass --pub to check it is the deployment's key"
     tail = (f", {signing['unsigned_tail']} later receipts not yet covered" if signing["unsigned_tail"] else "")
-    return (f"signing: signed by instance key {keys} ({pin}); {signing['statements']} statements cover "
+    count = signing["statements"]
+    return (f"signing: signed by instance key {keys} ({pin}); {count} statement{'s cover' if count != 1 else ' covers'} "
             f"{signing['signed_leaves']} of {signing['log_leaves']} events{tail}")
 
 
@@ -185,7 +186,18 @@ def _receipt_line(check: Dict[str, Any]) -> str:
              f" -> statement {check['statement']} -> signature {'ok' if steps['signature'] else 'FAILS'}"
              f" -> key {check['key']} "
              + ("pinned" if steps["pinned"] else ("NOT the pinned key" if steps["pinned"] is False else "not pinned")))
-    return f"receipt {check['index']}: {'verifies' if check['ok'] else 'DOES NOT VERIFY'}: {chain}"
+    line = f"receipt {check['index']}: {'verifies' if check['ok'] else 'DOES NOT VERIFY'}: {chain}"
+    policy = (check.get("bundle", {}).get("statement") or {}).get("policy")
+    if isinstance(policy, dict) and "authorization" in policy:
+        authorization = policy["authorization"]
+        flow = f"flow {policy.get('flow')} {str(policy.get('flow_sha256'))[:16]}"
+        if isinstance(authorization, dict):
+            line += (f"\n  the signed root names {flow}, authorized by authority key {authorization['key_id'][:16]} "
+                     f"at version {authorization['version']} (flow manifest {authorization['manifest_sha256'][:16]}); "
+                     f"`prismpath authorize verify` checks that manifest against the authority key")
+        else:
+            line += f"\n  the signed root names {flow}, run {authorization} (no verified flow manifest)"
+    return line
 
 
 def trail_cmd(args) -> int:
