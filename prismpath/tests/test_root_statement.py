@@ -387,6 +387,150 @@ def test_a_receipt_no_statement_covers_says_so(key, tmp_path):
         _reopen(log).receipt_bundle(2)
 
 
+# ------------------------------------------------------------------ a bundle, checked by the person who was handed it
+
+def _bundle_file(tmp_path, key, index=4):
+    log = _signed_log(tmp_path, key)
+    path = str(tmp_path / "bundle.json")
+    json.dump(_reopen(log).receipt_bundle(index), open(path, "w"))
+    return log, path
+
+
+def test_trail_writes_a_bundle_and_verify_bundle_checks_it_without_the_log(key, keys, tmp_path, capsys):
+    log = _signed_log(tmp_path, key)
+    bundle_path = str(tmp_path / "bundle.json")
+    code, out, _err = _run(capsys, "trail", log.path, "--pub", keys["public"], "--receipt", "4", "--bundle-out", bundle_path)
+    assert code == 0 and f"bundle written to {bundle_path}" in out
+    os.remove(log.path)                                       # the reader has the bundle and the key, nothing else
+    os.remove(log.statements_path)
+    code, out, _err = _run(capsys, "trail", "--verify-bundle", bundle_path, "--pub", keys["public"])
+    assert code == 0 and "status signed" in out and "receipt 4: verifies" in out and f"key {keys['fingerprint']} pinned" in out
+    code, out, _err = _run(capsys, "trail", "--verify-bundle", bundle_path, "--pub", keys["public"], "--json")
+    result = json.loads(out)
+    assert code == 0 and result["status"] == "signed" and result["ok"] and result["checks"]["signature"] is True
+    assert result["index"] == 4 and result["statement"] == 1 and result["key"] == keys["fingerprint"]
+
+
+def test_a_bundle_with_no_pinned_key_is_signed_unpinned_and_says_so(key, keys, tmp_path, capsys):
+    _log, bundle_path = _bundle_file(tmp_path, key)
+    code, out, _err = _run(capsys, "trail", "--verify-bundle", bundle_path)
+    assert code == 0 and "status signed-unpinned" in out and "no key was pinned" in out and "not pinned" in out
+
+
+def test_a_bundle_checked_against_another_key_is_invalid(key, tmp_path, capsys):
+    _log, bundle_path = _bundle_file(tmp_path, key)
+    other = rs.keygen(str(tmp_path / "other"))
+    code, out, _err = _run(capsys, "trail", "--verify-bundle", bundle_path, "--pub", other["public"])
+    assert code == 1 and "status invalid" in out and "NOT the pinned key" in out
+
+
+def test_an_edited_bundle_is_invalid_at_the_step_that_changed(key, keys, tmp_path, capsys):
+    _log, bundle_path = _bundle_file(tmp_path, key)
+    bundle = json.load(open(bundle_path))
+    bundle["receipt"]["data"]["target"] = "z"
+    json.dump(bundle, open(bundle_path, "w"))
+    code, out, _err = _run(capsys, "trail", "--verify-bundle", bundle_path, "--pub", keys["public"])
+    assert code == 1 and "status invalid" in out and "leaf CHANGED" in out
+    bundle = json.load(open(_bundle_file(tmp_path, key)[1]))
+    bundle["statement"]["root"] = "00" * 32                    # a statement edited after signing
+    json.dump(bundle, open(bundle_path, "w"))
+    code, out, _err = _run(capsys, "trail", "--verify-bundle", bundle_path, "--pub", keys["public"])
+    assert code == 1 and "inclusion FAILS" in out and "signature FAILS" in out
+
+
+def test_a_bundle_from_the_json_report_is_accepted(key, keys, tmp_path, capsys):
+    log = _signed_log(tmp_path, key)
+    code, out, _err = _run(capsys, "trail", log.path, "--receipt", "1", "--json")
+    report = tmp_path / "report.json"
+    report.write_text(out)
+    code, out, _err = _run(capsys, "trail", "--verify-bundle", str(report), "--pub", keys["public"])
+    assert code == 0 and "status signed" in out
+
+
+@pytest.mark.parametrize("damage", ["no-statement", "bad-path", "bad-leaf", "not-an-object", "index-lies"])
+def test_a_malformed_bundle_is_invalid_not_a_traceback(key, keys, tmp_path, capsys, damage):
+    _log, bundle_path = _bundle_file(tmp_path, key)
+    bundle = json.load(open(bundle_path))
+    if damage == "no-statement":
+        del bundle["statement"]
+    elif damage == "bad-path":
+        bundle["path"] = [["X", "zz"]]
+    elif damage == "bad-leaf":
+        bundle["leaf"] = "not hex"
+    elif damage == "not-an-object":
+        bundle = ["receipt"]
+    elif damage == "index-lies":
+        bundle["index"] = 3
+    json.dump(bundle, open(bundle_path, "w"))
+    code, out, err = _run(capsys, "trail", "--verify-bundle", bundle_path, "--pub", keys["public"])
+    assert code == 1 and ("INVALID" in out or "status invalid" in out) and err == ""
+
+
+def test_verify_bundle_refuses_what_is_not_a_json_file_or_is_mixed_with_a_log(key, keys, tmp_path, capsys):
+    log, bundle_path = _bundle_file(tmp_path, key)
+    (tmp_path / "garbage.json").write_text("{nope")
+    code, _out, err = _run(capsys, "trail", "--verify-bundle", str(tmp_path / "garbage.json"))
+    assert code == 2 and err.startswith("prismpath trail: an input file is not valid JSON")
+    code, _out, err = _run(capsys, "trail", "--verify-bundle", str(tmp_path / "missing.json"))
+    assert code == 2 and "missing.json: No such file or directory" in err
+    code, _out, err = _run(capsys, "trail", log.path, "--verify-bundle", bundle_path)
+    assert code == 2 and "checks a bundle on its own" in err
+    code, _out, err = _run(capsys, "trail", "--verify-bundle", bundle_path, "--receipt", "1")
+    assert code == 2 and "--receipt reads a log" in err
+    code, _out, err = _run(capsys, "trail")
+    assert code == 2 and "name an audit log to read, or --verify-bundle FILE" in err
+    code, _out, err = _run(capsys, "trail", log.path, "--bundle-out", str(tmp_path / "b.json"))
+    assert code == 2 and "pass --receipt IDX" in err
+
+
+def test_a_bundle_no_statement_covers_cannot_be_written(key, tmp_path, capsys):
+    log = _signed_log(tmp_path, key, runs=((2, "run-end"),))
+    log.append("engine", "decision", {"seq": 2, "cause": 0})
+    code, _out, err = _run(capsys, "trail", log.path, "--receipt", "2", "--bundle-out", str(tmp_path / "b.json"))
+    assert code == 2 and "no bundle to write: no root statement covers receipt 2" in err
+    assert not os.path.exists(tmp_path / "b.json")
+
+
+def test_the_anchor_step_checks_the_statement_hash_and_needs_the_ots_program(key, keys, tmp_path, capsys, monkeypatch):
+    _log, bundle_path = _bundle_file(tmp_path, key)
+    seen = {}
+
+    def verify_unit(leaf, out_dir, label):
+        seen.update(leaf=leaf, out_dir=out_dir, label=label)
+        return seen.get("answer")
+
+    monkeypatch.setattr(ledger_ots, "verify_unit", verify_unit)
+    monkeypatch.setattr("shutil.which", lambda program: None)
+    code, _out, err = _run(capsys, "trail", "--verify-bundle", bundle_path, "--anchor-dir", str(tmp_path / "proofs"))
+    assert code == 2 and "needs the `ots` program on PATH" in err and not seen
+    monkeypatch.setattr("shutil.which", lambda program: f"/usr/bin/{program}")
+    statement_hash = rs.statement_hash(json.load(open(bundle_path))["statement"])
+
+    seen["answer"] = {"merkle_ok": True, "ots_ok": True, "root": statement_hash}
+    code, out, _err = _run(capsys, "trail", "--verify-bundle", bundle_path, "--pub", keys["public"],
+                           "--anchor-dir", str(tmp_path / "proofs"), "--label", "audit")
+    assert code == 0 and "its OpenTimestamps proof verifies" in out
+    assert seen["leaf"] == statement_hash and seen["label"] == "audit" and seen["out_dir"] == str(tmp_path / "proofs")
+
+    seen["answer"] = {"merkle_ok": False, "reason": "output-hash not in this anchor batch"}
+    code, out, _err = _run(capsys, "trail", "--verify-bundle", bundle_path, "--pub", keys["public"],
+                           "--anchor-dir", str(tmp_path / "proofs"))
+    assert code == 1 and "anchor: FAILS: output-hash not in this anchor batch" in out and "ledger anchor --statements" in out
+
+    seen["answer"] = {"merkle_ok": True, "ots_ok": False, "ots_verify": "Pending confirmation in Bitcoin blockchain"}
+    code, out, _err = _run(capsys, "trail", "--verify-bundle", bundle_path, "--pub", keys["public"],
+                           "--anchor-dir", str(tmp_path / "proofs"), "--json")
+    result = json.loads(out)
+    assert code == 1 and result["status"] == "invalid" and result["anchor"]["ok"] is False and result["checks"]["signature"] is True
+
+
+def test_the_help_says_the_anchor_step_needs_bitcoin_block_data(capsys):
+    with pytest.raises(SystemExit):
+        cli.main(["trail", "--help"])
+    help_text = " ".join(capsys.readouterr().out.split())
+    assert "--verify-bundle" in help_text and "needs Bitcoin block data" in help_text and "Offline" in help_text
+
+
 # ------------------------------------------------------------------ the epoch journal
 
 def test_an_epoch_journal_signs_each_seal(key, tmp_path):
@@ -641,12 +785,14 @@ def test_ledger_anchor_stamps_the_statement_hashes(key, tmp_path, capsys, monkey
 
 @pytest.mark.parametrize("argv", [["ledger", "keygen", "--out", "k"], ["trail", "run.audit.jsonl"],
                                   ["run", "flow.md", "--audit-log", "x.audit.jsonl", "--instance-key", "keys/instance.key"],
+                                  ["trail", "--verify-bundle", "bundle.json"],
                                   ["resume", "s.json", "--choose", "c", "--audit-log", "x.audit.jsonl",
                                    "--instance-key", "keys/instance.key"]])
 def test_no_cryptography_is_one_install_line(argv, key, keys, tmp_path):
     _signed_log(tmp_path, key)
     (tmp_path / "flow.md").write_text(FLOW)
     _suspended(tmp_path)
+    json.dump(_reopen(_signed_log(tmp_path, key)).receipt_bundle(1), open(tmp_path / "bundle.json", "w"))
     res = _cli(*argv, block=["cryptography"], cwd=tmp_path)
     assert res.returncode == 2
     assert res.stderr.strip() == f"prismpath {argv[0]}: {INSTALL_LINE}"

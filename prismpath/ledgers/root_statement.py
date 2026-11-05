@@ -442,21 +442,50 @@ def receipt_bundle(event: dict, leaves: List[str], index: int, statements: List[
     return {"receipt": event, "index": index, "leaf": leaves[index], "path": paths[index], "statement": covering}
 
 
+def bundle_problem(bundle) -> Optional[str]:
+    """Why `bundle` is not shaped like a receipt bundle, or None. A bundle read from a file is untrusted
+    input, so every field the check touches is looked at before it is used."""
+    if not isinstance(bundle, dict):
+        return "a bundle is a JSON object"
+    for name, kind in (("receipt", dict), ("index", int), ("leaf", str), ("path", list), ("statement", dict)):
+        if not isinstance(bundle.get(name), kind) or isinstance(bundle.get(name), bool):
+            return f"missing or malformed field {name!r}"
+    try:
+        bytes.fromhex(bundle["leaf"])
+        for step in bundle["path"]:
+            if not (isinstance(step, (list, tuple)) and len(step) == 2 and step[0] in ("L", "R")):
+                return "malformed inclusion path"
+            bytes.fromhex(step[1])
+    except (TypeError, ValueError):
+        return "the leaf and the inclusion path are hex hashes"
+    return None
+
+
 def verify_receipt_bundle(bundle: dict, pinned: Optional[Iterable[bytes]] = None) -> dict:
     """receipt -> leaf -> inclusion path -> signed root -> signature, and the key against `pinned`.
     Offline and self contained. It checks the one statement in the bundle, not the chain around it;
-    `trail` checks the chain."""
+    `trail` checks the chain. `status` is `signed` (a pinned key made the signature), `signed-unpinned`
+    (the key the statement carries made it; none was pinned) or `invalid`; a bundle that is not shaped
+    like one is invalid with `problem` saying how, never an exception."""
+    problem = bundle_problem(bundle)
+    if problem is not None:
+        return {"ok": False, "status": INVALID, "pinned": bool(pinned), "checks": {"well_formed": False},
+                "problem": problem, "index": None, "statement": None, "statement_sha256": None, "key": ""}
     statement = bundle["statement"]
     leaf = canon.sha256_hex(canon.canonical_compact(bundle["receipt"]))
     checks = {"leaf": leaf == bundle["leaf"],
-              "inclusion": merkle.verify_leaf(bundle["leaf"], bundle["path"], statement.get("root", "")),
+              "index": bundle["receipt"].get("idx") == bundle["index"],
+              "inclusion": merkle.verify_leaf(bundle["leaf"], [tuple(step) for step in bundle["path"]],
+                                              statement.get("root", "")),
               "well_formed": _well_formed(statement, LOG_AUDIT)}
+    checks["covered"] = checks["well_formed"] and 0 <= bundle["index"] < statement["leaves"]
     checks["key_id"] = checks["well_formed"] and key_id_of(bytes.fromhex(statement["public_key"])) == statement["key_id"]
     checks["signature"] = checks["key_id"] and _verify_signature(statement)
     pinned_ids = {key_id_of(raw) for raw in pinned} if pinned else set()
     checks["pinned"] = (statement.get("key_id") in pinned_ids) if pinned_ids else None
     ok = all(value for name, value in checks.items() if name != "pinned") and checks["pinned"] is not False
-    return {"ok": ok, "pinned": bool(pinned_ids), "checks": checks, "index": bundle.get("index"),
+    return {"ok": ok, "status": (SIGNED if pinned_ids else SIGNED_UNPINNED) if ok else INVALID,
+            "pinned": bool(pinned_ids), "checks": checks, "index": bundle.get("index"),
             "statement": statement.get("seq"), "statement_sha256": statement_hash(statement),
             "key": fingerprint(statement.get("key_id", ""))}
 

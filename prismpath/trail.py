@@ -10,6 +10,8 @@ input to "should the policy change today"; the assessor uses the same verb after
     prismpath trail run.audit.jsonl --since 2026-09-09T00:00:00Z --json
     prismpath trail run.audit.jsonl --pub instance.pub              # and the signed roots, under a pinned key
     prismpath trail run.audit.jsonl --pub instance.pub --receipt 3  # one receipt, checked on its own
+    prismpath trail run.audit.jsonl --receipt 3 --bundle-out bundle.json    # and handed on as a bundle
+    prismpath trail --verify-bundle bundle.json --pub instance.pub  # the reader's side: no log needed
 
 Beside the Merkle check, trail reads the root statements beside the log (`run.audit.roots.jsonl`) and
 says whether the log is signed, unsigned (written without an instance key, as every log before 0.1.2
@@ -17,6 +19,16 @@ was) or invalid, naming each finding: a log shorter than a signed leaf count, a 
 a signed root, a statement signed by a key that is not the pinned one, a broken statement chain. With
 `--pub` the reader pins the deployment's instance key, and a log with no statements is then invalid
 rather than unsigned. Checking a signature needs the signing extra; an unsigned log needs nothing.
+
+`--verify-bundle` is the check a reader runs on a receipt bundle they were handed (`--receipt IDX
+--bundle-out FILE`, or the `--json` report of one): receipt, leaf, inclusion path, signed root,
+signature and key, offline, from the bundle and the pinned public key alone. The result is `signed`
+(a pinned key made the signature), `signed-unpinned` (no key was pinned, so the statement's own key
+was trusted) or `invalid`, and the exit status follows `trail`: 0 for the first two, 1 for invalid.
+With `--anchor-dir` it also checks that the statement's hash was timestamped by `ledger anchor`; that
+step runs `ots verify`, which needs Bitcoin block data (a node or a block explorer), so it is the one
+step that is not offline. A bundle holds one statement, not the chain around it, and says nothing about
+the log's other receipts; `trail LOG --pub KEY` checks those.
 """
 from __future__ import annotations
 
@@ -102,6 +114,60 @@ def run(path: str, since: Optional[str] = None, last: Optional[int] = None,
         else:
             out["receipt"] = {**root_statement.verify_receipt_bundle(bundle, pinned), "bundle": bundle}
     return out
+
+
+def load_bundle(path: str) -> dict:
+    """A receipt bundle from a file: the bare bundle `--bundle-out` writes, or the `--json` report of
+    `trail --receipt` that carries one."""
+    with open(path, encoding="utf-8") as handle:
+        data = json.load(handle)
+    if isinstance(data, dict) and isinstance(data.get("receipt"), dict) and isinstance(data["receipt"].get("bundle"), dict):
+        return data["receipt"]["bundle"]
+    return data
+
+
+def check_bundle(bundle: dict, pinned: Optional[List[bytes]] = None, anchor_dir: Optional[str] = None,
+                 label: str = "v1") -> Dict[str, Any]:
+    """`verify_receipt_bundle`, plus the anchor when `anchor_dir` is given: the statement's hash must be
+    one of the hashes `ledger anchor` stamped there, and its OpenTimestamps proof must verify. The
+    anchor needs the `ots` program and Bitcoin block data; nothing else here touches the network."""
+    result = root_statement.verify_receipt_bundle(bundle, pinned)
+    result["bundle"] = bundle
+    if anchor_dir:
+        from prismpath.ledgers import ledger_ots
+        anchor = ledger_ots.verify_unit(result["statement_sha256"], anchor_dir, label) \
+            if result["statement_sha256"] else {"merkle_ok": False, "reason": "no statement to look up"}
+        anchor["ok"] = bool(anchor.get("merkle_ok") and anchor.get("ots_ok"))
+        result["anchor"] = anchor
+        if not anchor["ok"]:
+            result["ok"], result["status"] = False, root_statement.INVALID
+    return result
+
+
+def _bundle_text(result: Dict[str, Any]) -> str:
+    if "problem" in result:
+        return f"bundle: INVALID: not a receipt bundle: {result['problem']}"
+    lines = [f"bundle: receipt {result['index']} in statement {result['statement']} "
+             f"(statement sha256 {result['statement_sha256'][:16]}), status {result['status']}"]
+    check = {**result, "bundle": result["bundle"]}
+    lines.append(_receipt_line(check))
+    if result["status"] == root_statement.SIGNED_UNPINNED:
+        lines.append("  no key was pinned, so the key the statement carries was trusted: pass --pub with the "
+                     "deployment's instance public key to check it is theirs")
+    steps = result["checks"]
+    for name in ("index", "covered"):
+        if steps.get(name) is False:
+            lines.append(f"  check failed: {name}")
+    if "anchor" in result:
+        anchor = result["anchor"]
+        if anchor["ok"]:
+            lines.append("anchor: the statement hash is in the anchored batch and its OpenTimestamps proof verifies")
+        elif anchor.get("merkle_ok") is False:
+            lines.append(f"anchor: FAILS: {anchor.get('reason') or 'the statement hash is not in this anchor batch'} "
+                         f"(anchor the statements with `ledger anchor --statements`)")
+        else:
+            lines.append(f"anchor: FAILS: the OpenTimestamps proof does not verify: {anchor.get('ots_verify', '')}")
+    return "\n".join(lines)
 
 
 def _finding_text(finding: dict) -> str:
@@ -201,24 +267,65 @@ def _receipt_line(check: Dict[str, Any]) -> str:
 
 
 def trail_cmd(args) -> int:
+    pinned = [root_statement.load_public(path) for path in (args.pub or [])]
+    if args.verify_bundle:
+        return _verify_bundle_cmd(args, pinned)
+    if not args.audit_log:
+        from prismpath.cli import CliError
+        raise CliError("name an audit log to read, or --verify-bundle FILE to check a receipt bundle")
+    if args.anchor_dir:
+        from prismpath.cli import CliError
+        raise CliError("--anchor-dir checks a bundle's statement: use it with --verify-bundle")
     if not os.path.exists(args.audit_log):        # a mistyped path must not read as an empty, verified log
         import errno
         raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), args.audit_log)
-    pinned = [root_statement.load_public(path) for path in (args.pub or [])]
+    if args.bundle_out and args.receipt is None:
+        from prismpath.cli import CliError
+        raise CliError("--bundle-out writes the bundle of one receipt: pass --receipt IDX")
     rep = run(args.audit_log, since=args.since, last=args.last, pinned=pinned or None,
               statements_path=args.statements, receipt=args.receipt)
     print(json.dumps(rep, indent=1) if args.json else render(rep))
     ok = rep["log"]["verifies"] and rep["signing"]["status"] != root_statement.INVALID
     if "receipt" in rep:
         ok = ok and rep["receipt"]["ok"]
+    if args.bundle_out:
+        bundle = rep["receipt"].get("bundle")
+        if bundle is None:
+            from prismpath.cli import CliError
+            raise CliError(f"no bundle to write: {rep['receipt'].get('uncovered')}")
+        with open(args.bundle_out, "w", encoding="utf-8") as handle:
+            json.dump(bundle, handle, indent=1)
+            handle.write("\n")
+        if not args.json:
+            print(f"bundle written to {args.bundle_out}; check it with `prismpath trail --verify-bundle "
+                  f"{args.bundle_out} --pub INSTANCE_PUB`")
     return 0 if ok else 1
+
+
+def _verify_bundle_cmd(args, pinned: List[bytes]) -> int:
+    from prismpath.cli import CliError, require_program
+    if args.audit_log:
+        raise CliError("--verify-bundle checks a bundle on its own: drop the audit log (or drop --verify-bundle to read the log)")
+    for flag in ("since", "last", "statements", "receipt", "bundle_out"):
+        if getattr(args, flag) is not None:
+            raise CliError(f"--{flag.replace('_', '-')} reads a log, and --verify-bundle does not take one")
+    if args.anchor_dir:
+        require_program("ots", "the OpenTimestamps client: pip install opentimestamps-client", "--anchor-dir")
+    result = check_bundle(load_bundle(args.verify_bundle), pinned or None, args.anchor_dir, args.label)
+    if args.json:
+        print(json.dumps(result, indent=1))
+    else:
+        print(_bundle_text(result))
+    return 0 if result["ok"] else 1
 
 
 def add_parser(subparsers) -> None:
     parser = subparsers.add_parser("trail", help="Summarise an audit log over a window: decisions by outcome, rule, and cause code, "
                                             "swaps and attestations, whether the Merkle root verifies, and whether "
-                                            "its signed roots do")
-    parser.add_argument("audit_log", help="an append only JSONL written by prismpath.audit_log (decisions, swaps, attestations)")
+                                            "its signed roots do; or check a receipt bundle offline (--verify-bundle)")
+    parser.add_argument("audit_log", nargs="?", default=None,
+                        help="an append only JSONL written by prismpath.audit_log (decisions, swaps, attestations); "
+                             "not given with --verify-bundle")
     parser.add_argument("--since", default=None, help="ISO 8601 lower bound on event time (UTC if no zone)")
     parser.add_argument("--last", type=int, default=None, help="only the most recent N events")
     parser.add_argument("--json", action="store_true", help="machine readable output")
@@ -230,4 +337,17 @@ def add_parser(subparsers) -> None:
     parser.add_argument("--receipt", type=int, default=None, metavar="IDX",
                         help="check one receipt offline: leaf -> inclusion path -> signed root -> signature -> key; "
                              "--json prints the self contained bundle")
+    parser.add_argument("--bundle-out", dest="bundle_out", default=None, metavar="FILE",
+                        help="with --receipt: write that receipt's bundle to FILE, for a reader to check with "
+                             "--verify-bundle")
+    parser.add_argument("--verify-bundle", dest="verify_bundle", default=None, metavar="FILE",
+                        help="check a receipt bundle from FILE (a --bundle-out file, or the --json report of "
+                             "--receipt) without the log: receipt -> leaf -> inclusion path -> signed root -> signature "
+                             "-> key, result signed | signed-unpinned | invalid (exit 0, 0, 1). Offline, except the "
+                             "anchor step: --anchor-dir runs `ots verify`, which needs Bitcoin block data (a node or "
+                             "an explorer)")
+    parser.add_argument("--anchor-dir", dest="anchor_dir", default=None, metavar="DIR",
+                        help="with --verify-bundle: also check the statement's hash is in the batch `ledger anchor "
+                             "--statements --out DIR` stamped, and that its OpenTimestamps proof verifies")
+    parser.add_argument("--label", default="v1", help="the anchor label (default v1), with --anchor-dir")
     parser.set_defaults(func=trail_cmd)
