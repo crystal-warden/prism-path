@@ -418,6 +418,11 @@ def _run_context_cmd(command_args) -> int:
 def verify_cmd(args) -> int:
     from prismpath.kernel.parser import parse_file
     graph = parse_file(args.flow_md)
+    unknown = [name for name in dict.fromkeys(args.reach + args.forbid) if name not in graph.nodes]
+    if unknown:
+        # a typo in --forbid would otherwise pass as "proven unreachable"
+        from prismpath.cli import CliError
+        raise CliError(f"no such node in {args.flow_md}: {', '.join(unknown)} (nodes: {', '.join(sorted(graph.nodes))})")
     targets = list(dict.fromkeys(args.reach + args.forbid)) or sorted(graph.nodes)
     results = check_reach(graph, targets, assume=args.assume, bound=args.bound,
                           include_errors=not args.no_errors,

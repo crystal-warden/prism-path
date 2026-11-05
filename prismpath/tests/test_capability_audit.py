@@ -49,6 +49,22 @@ def _flow(tmp_path, text=FLOW):
     return str(path)
 
 
+# ------------------------------------------------------------------ verify
+
+@pytest.mark.parametrize("flag", ["--forbid", "--reach"])
+def test_verify_refuses_a_node_the_flow_does_not_have(flag, tmp_path, capsys):
+    # `--forbid typo` used to print "UNREACHABLE (proven for all bounds)" and exit 0
+    code, out, err = _main(capsys, "verify", _flow(tmp_path), flag, "nosuch")
+    assert code == 2 and out == ""
+    assert err.startswith("prismpath verify: no such node in ") and "nosuch" in err
+    assert len(err.strip().splitlines()) == 1
+
+
+def test_verify_still_proves_a_real_node(tmp_path, capsys):
+    code, out, _err = _main(capsys, "verify", _flow(tmp_path), "--reach", "b", "--forbid", "c")
+    assert code == 1 and "b: REACHABLE" in out
+
+
 # ------------------------------------------------------------------ the ledger anchor
 
 def test_the_ledger_hashes_anchor_as_bare_hex(tmp_path):
