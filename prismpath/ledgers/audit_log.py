@@ -69,6 +69,7 @@ class AuditLog:
         self.events: list = []
         self.leaves: list = []
         self.skipped: list = []
+        self._accumulator = _statements.MerkleAccumulator()      # the root as leaves arrive, for signing
         if path and os.path.exists(path):
             with open(path) as log_file:
                 for line_num, line in enumerate(log_file, 1):
@@ -82,6 +83,7 @@ class AuditLog:
                         continue
                     self.events.append(ev)
                     self.leaves.append(_leaf_hex(ev))
+                    self._accumulator.add(self.leaves[-1])
 
     def append(self, actor: str, action: str, data: dict) -> dict:
         """Persist the event, then commit it to the tree. Raises AuditWriteError, with the log
@@ -102,6 +104,7 @@ class AuditLog:
                     raise AuditWriteError(f"audit event not persisted to {self.path}: {error}") from error
             self.events.append(event)
             self.leaves.append(_leaf_hex(event))
+            self._accumulator.add(self.leaves[-1])
             if self.sign_appends and self.instance_key is not None:
                 self._sign_locked("append", None)
             return event
@@ -118,8 +121,10 @@ class AuditLog:
             policy = self.policy_of()
         if self._signer is None:
             self._signer = _statements.RootSigner(self.instance_key, self.statements_path, _statements.LOG_AUDIT)
+        if self._accumulator.count != len(self.leaves):        # the leaves were edited under us: rebuild
+            self._accumulator = _statements.MerkleAccumulator(self.leaves)
         try:
-            return self._signer.sign(_statements.merkle_root(self.leaves), len(self.leaves), trigger, policy)
+            return self._signer.sign(self._accumulator.root(), len(self.leaves), trigger, policy)
         except OSError as error:
             raise StatementWriteError(f"root statement not persisted to {self.statements_path}: {error}") from error
 
@@ -141,8 +146,11 @@ class AuditLog:
         statements, read_findings = _statements.read_statements(self.statements_path)
         if self.skipped:
             read_findings = read_findings + [{"finding": "bad_format", "log_lines": list(self.skipped)}]
+        # One pass over the leaves gives the root at every signed count, so a log signed after every event
+        # is checked in linear time, not by rebuilding the tree once per statement.
+        roots = _statements.prefix_roots(self.leaves, (statement.get("leaves") for statement in statements))
         return _statements.verify_chain(
-            statements, read_findings, self.root_at, len(self.leaves), log=_statements.LOG_AUDIT,
+            statements, read_findings, lambda count: roots.get(count, ""), len(self.leaves), log=_statements.LOG_AUDIT,
             pinned=pinned, authority_key_ids=_statements.authority_key_ids_in(self.events))
 
     def receipt_bundle(self, index: int) -> dict:

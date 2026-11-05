@@ -59,6 +59,23 @@ def test_merkle_root_is_the_ledger_root():
         assert rs.merkle_root(leaves[:count]) == expected
 
 
+def test_the_accumulator_is_the_same_root_for_every_count():
+    leaves = [rs.canon.sha256_hex(bytes([index % 256, index // 256])) for index in range(300)]
+    accumulator = rs.MerkleAccumulator()
+    assert accumulator.root() == ""
+    for count, leaf in enumerate(leaves, start=1):
+        accumulator.add(leaf)
+        assert accumulator.count == count
+        assert accumulator.root() == rs.merkle_root(leaves[:count]), count
+    assert rs.MerkleAccumulator(leaves).root() == rs.merkle_root(leaves)
+
+
+def test_prefix_roots_answer_every_count_in_one_pass():
+    leaves = [rs.canon.sha256_hex(bytes([index])) for index in range(40)]
+    roots = rs.prefix_roots(leaves, [40, 0, 7, 7, 33, 41, -1, "x"])
+    assert roots == {count: rs.merkle_root(leaves[:count]) for count in (0, 7, 33, 40)}
+
+
 def test_statements_sit_beside_the_log():
     assert rs.statements_path_for("run.audit.jsonl") == "run.audit.roots.jsonl"
     assert rs.statements_path_for("state/swaps.log") == "state/swaps.log.roots.jsonl"
@@ -306,6 +323,39 @@ def test_a_policy_host_signs_after_every_audit_event(key, tmp_path):
     host.attest()
     report = audit_log.AuditLog(host.audit.path).verify_statements([key.public_raw])
     assert report["status"] == rs.SIGNED and report["statements"] == len(host.audit.events) == 2
+
+
+def test_a_log_signed_after_every_event_verifies_in_linear_time(key, tmp_path, monkeypatch):
+    """A few thousand events with a statement after each: the work is counted in hash operations, not
+    seconds, so the test does not depend on the machine. Rebuilding the tree once per statement would
+    cost about n squared over two (more than three million here), against under fifty thousand."""
+    count = 2500
+    hashes = {"calls": 0}
+    original = ledger_ots._h
+
+    def counting(payload):
+        hashes["calls"] += 1
+        return original(payload)
+
+    monkeypatch.setattr(ledger_ots, "_h", counting)
+    log = audit_log.AuditLog(str(tmp_path / "long.audit.jsonl"), instance_key=key, sign_appends=True)
+    for index in range(count):
+        log.append("engine", "decision", {"seq": index, "cause": 0})
+    assert hashes["calls"] < 20 * count                      # signing is linear too
+    hashes["calls"] = 0
+    reopened = audit_log.AuditLog(log.path)
+    report = reopened.verify_statements([key.public_raw])
+    assert report["status"] == rs.SIGNED and report["statements"] == count and report["unsigned_tail"] == 0
+    assert hashes["calls"] < 20 * count, hashes["calls"]
+    # and a receipt rewritten early is still found, with the range it bounds
+    lines = open(log.path).read().splitlines()
+    event = json.loads(lines[10]); event["data"]["cause"] = 99; lines[10] = json.dumps(event)
+    open(log.path, "w").write("\n".join(lines) + "\n")
+    hashes["calls"] = 0
+    bad = audit_log.AuditLog(log.path).verify_statements([key.public_raw])
+    assert bad["status"] == rs.INVALID
+    assert next(f for f in bad["findings"] if f["finding"] == "root_mismatch")["leaf_range"] == [10, 10]
+    assert hashes["calls"] < 20 * count
 
 
 def test_a_statement_signed_by_a_key_that_signed_a_pack_is_flagged(key, tmp_path):

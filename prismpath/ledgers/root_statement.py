@@ -198,6 +198,57 @@ def merkle_root(leaves: List[str]) -> str:
     return layer[0].hex()
 
 
+class MerkleAccumulator:
+    """The same root, kept as leaves arrive: O(1) amortized to add a leaf and O(log n) to read the root.
+
+    It holds the roots of the complete subtrees (the "peaks", one per set bit of the leaf count) rather
+    than the leaves. The root of an odd-sized layer repeats its last node, so the root over n leaves is
+    the smallest peak raised to the height of the next one by hashing it with itself, then combined with
+    that peak on its left, and so on up. That is exactly what `merkle_root` computes, so a statement
+    signed from either verifies against the other; `test_root_statement` pins the two equal for every
+    count up to a few hundred. Writing a signed statement after every event, and checking a chain that
+    has one, then cost O(n) in all instead of O(n squared)."""
+
+    def __init__(self, leaves: Iterable[str] = ()):
+        self._peaks: List[Tuple[int, bytes]] = []        # (height, hash), tallest first
+        self.count = 0
+        for leaf in leaves:
+            self.add(leaf)
+
+    def add(self, leaf_hex: str) -> None:
+        height, node = 0, bytes.fromhex(leaf_hex)
+        while self._peaks and self._peaks[-1][0] == height:
+            node = merkle._h(self._peaks.pop()[1] + node)
+            height += 1
+        self._peaks.append((height, node))
+        self.count += 1
+
+    def root(self) -> str:
+        if not self._peaks:
+            return ""
+        height, node = self._peaks[-1]
+        for taller, peak in reversed(self._peaks[:-1]):
+            while height < taller:
+                node = merkle._h(node + node)
+                height += 1
+            node = merkle._h(peak + node)
+            height += 1
+        return node.hex()
+
+
+def prefix_roots(leaves: List[str], counts: Iterable[int]) -> Dict[int, str]:
+    """The root over the first n leaves for each n in `counts`, in one pass over the leaves. A count
+    past the end of `leaves` is left out."""
+    wanted = sorted({count for count in counts if isinstance(count, int) and 0 <= count <= len(leaves)})
+    roots: Dict[int, str] = {}
+    accumulator = MerkleAccumulator()
+    for count in wanted:
+        while accumulator.count < count:
+            accumulator.add(leaves[accumulator.count])
+        roots[count] = accumulator.root()
+    return roots
+
+
 def signed_bytes(statement: dict) -> bytes:
     """The bytes the signature covers: the domain prefix, then every field but `sig`, canonical."""
     return SIGNING_DOMAIN + canon.canonical_compact({key: statement[key] for key in _BODY_FIELDS})
