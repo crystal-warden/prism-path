@@ -24,7 +24,7 @@ CAUSE_NONE = 0
 # Classes: authority | envelope | routing | wire | state
 _REGISTRY: Tuple[Tuple[int, str, str, str], ...] = (
     # -- authority: the signature chain and the signed manifest (verify_pack, loader) --------
-    (1,  "sig:missing",                  "authority", "pack carries no signature"),
+    (1,  "sig:missing",                  "authority", "pack, or flow when authorization is required, carries no signature"),
     (2,  "sig:invalid",                  "authority", "signature fails verification"),
     (3,  "sig:revoked-key",              "authority", "signing key is revoked"),
     (4,  "manifest:key-id-mismatch",     "authority", "manifest names a different key"),
@@ -84,6 +84,12 @@ _REGISTRY: Tuple[Tuple[int, str, str, str], ...] = (
     (84, "envelope:id-mismatch",         "envelope",  "manifest targets a different envelope"),
     (85, "envelope:unknown-field",       "envelope",  "manifest declares a field the envelope does not admit"),
     (86, "envelope:field-kind-mismatch", "envelope",  "manifest field kind differs from the envelope's"),
+    # -- authority, continued: a signed flow manifest (prismpath.hotswap.flow_authority), the
+    # authorization of an ordinary Markdown flow. The signature refusals it shares with packs keep
+    # their rows (sig:missing, sig:invalid, sig:revoked-key, manifest:bad-format,
+    # manifest:key-id-mismatch); these two are the flow's own.
+    (87, "flow:sha256-mismatch",         "authority", "flow document differs from the one its signed flow manifest names"),
+    (88, "flow:version-replay",          "authority", "flow manifest version below the accepted floor, or equal to it with another flow"),
 )
 
 CODES: Dict[int, Tuple[str, str, str]] = {cause_code: (canonical_name, class_name, description)

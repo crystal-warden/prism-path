@@ -44,7 +44,7 @@ def test_registry_frozen():
     """Append-only means this hash changes ONLY when rows are appended. If this test fails
     without an append, a shipped (code, name, class) was altered — that is the defect."""
     assert causes.registry_sha256() == (
-        "74f1b33c52f426159612c9f16e32e5f798939715fe212001b726b89ef1125ffe")
+        "41c04927d934120fa8a75dc99d55f8597fb0be2647a1fb96d61a3192bddd23ae")
 
 
 # ------------------------------------------------------------------- binding to the codebase
@@ -67,6 +67,17 @@ def test_verify_pack_failure_strings_are_registered():
     assert emitted, "the verifier source parsed to no refusal strings at all"
     for emitted_name in emitted:
         assert causes.code(emitted_name) is not None, f"verifier emits {emitted_name!r} unregistered"
+
+
+def test_flow_authorization_refusal_strings_are_registered():
+    """The flow manifest verifier refuses with registry names only, its own two and the signature
+    refusals it shares with the pack verifier."""
+    from prismpath.hotswap import flow_authority
+    src = Path(flow_authority.__file__).read_text()
+    emitted = set(re.findall(r'return False, \[f?"' + _CAUSE_NAME, src))
+    assert {"sig:missing", "sig:invalid", "flow:sha256-mismatch", "flow:version-replay"} <= emitted
+    for emitted_name in emitted:
+        assert causes.code(emitted_name) is not None, f"flow verifier emits {emitted_name!r} unregistered"
 
 
 def test_image_and_envelope_refusal_strings_are_registered():

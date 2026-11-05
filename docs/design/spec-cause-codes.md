@@ -37,7 +37,7 @@ routing and state bands) use the colon style.
 
 Bands group codes by class for legibility; the **class** column is the semantic axis, the band
 arithmetic is not. See `prismpath/kernel/causes.py` for the full table: `authority` (the signature
-chain and signed manifest), `envelope` (admission caps, profile artifacts, and the pack verifier's
+chain and the signed manifest, of a pack or of a flow), `envelope` (admission caps, profile artifacts, and the pack verifier's
 structural refusals), `routing` (the decision itself: no matching edge, below the calibrated floor,
 needs-human, max steps, stuck, contract violation), `wire` (strict decode, codebook binding, replay,
 concentrator), and `state` (resident-state transitions that are not ordinary matches: stale park,
@@ -46,8 +46,10 @@ recovery, migration reset, swap-in-flight park).
 **A band is a starting point, not a capacity.** The bands were allocated sixteen codes apart, and
 `envelope` has since outgrown its first sixteen: the pack verifier's structural refusals were
 appended at 69 to 86, after the highest code then in use, because §4 forbids renumbering and reuse
-and an append must never displace a shipped code. So the occupied ranges today are `authority` 1 to
-10, `envelope` 16 to 19 and 69 to 86, `routing` 32 to 37, `wire` 48 to 56, and `state` 64 to 68.
+and an append must never displace a shipped code. The flow manifest's own two refusals,
+`flow:sha256-mismatch` and `flow:version-replay`, were appended at 87 and 88 in the `authority` class
+for the same reason. So the occupied ranges today are `authority` 1 to 10 and 87 to 88, `envelope` 16
+to 19 and 69 to 86, `routing` 32 to 37, `wire` 48 to 56, and `state` 64 to 68.
 `state` stops at 68; it never reached 79, and 69 upward is envelope, not state. Read a code's class
 off the `class` column in `prismpath/kernel/causes.py` and never infer it from the number: the next
 append lands after the highest code present, in whatever band that falls, and nothing already
