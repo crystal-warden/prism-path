@@ -17,13 +17,12 @@ guarantees, enforced on every run:
 import json
 import shutil
 import subprocess
-from pathlib import Path
 
 import pytest
 
 pytest.importorskip("cryptography")
 
-from prismpath.tests._repo import REPO_ROOT, repo_file  # noqa: E402
+from prismpath.tests._repo import repo_file  # noqa: E402
 
 VECTORS = repo_file("prismpath", "portable", "conformance", "receipts.json")
 CARGO = shutil.which("cargo")
@@ -78,7 +77,7 @@ def test_merkle(case):
     assert rs.merkle_root(case["leaves"]) == case["root"]
     root, paths = ledger_ots.merkle_root_and_paths(case["leaves"])
     assert [[list(step) for step in path] for path in paths] == case["paths"]
-    for leaf, path in zip(case["leaves"], case["paths"]):
+    for leaf, path in zip(case["leaves"], case["paths"], strict=True):
         assert ledger_ots.verify_leaf(leaf, path, root)
 
 

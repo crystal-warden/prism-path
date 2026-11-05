@@ -17,7 +17,6 @@ pytest.importorskip("cryptography")
 from prismpath import cli  # noqa: E402
 from prismpath.hotswap import flow_authority as fa, policy_pack  # noqa: E402
 from prismpath.kernel import causes  # noqa: E402
-from prismpath.kernel.parser import parse_file  # noqa: E402
 from prismpath.ledgers import checkpoint, root_statement as rs  # noqa: E402
 from prismpath.workers import composer, scheduler  # noqa: E402
 
