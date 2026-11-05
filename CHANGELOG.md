@@ -52,6 +52,7 @@ record, and some of them predate the upload.
   extra names the install line (`pip install 'prismpath[embeddings]'` and so on). The ledger, `ci-report`
   and RFC 3161 commands check for `ots`, `git` and `openssl` before they start. `calibrate`, `label` and
   `trail` refuse a missing log rather than reading it as empty. `init NAME` writes `NAME.md` and
+  `NAME.tests.md`.
 - **Found by running every documented capability.** The browser playground, the first path in the
   getting started guide, showed empty panels because the portable kernel imported `node:crypto`, which no
   browser resolves; the kernel now carries its own SHA-256 and imports nothing, so the playground and the
@@ -67,7 +68,6 @@ record, and some of them predate the upload.
   `.tests.md` fixtures, and says which extra a missing `uvicorn` belongs to. The wheel carries the `.md`
   flows its shipped examples run. Guides that named old module paths or an unquoted `@spawn` now match
   the code.
-  `NAME.tests.md`.
 
 ### Added
 - **A CycloneDX 1.6 SBOM for a signed policy pack, from the compliance emitter**
