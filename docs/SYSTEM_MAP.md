@@ -102,7 +102,7 @@ target is the reference for the compiled image's execution, because the substrat
 | implementation | where | judged by | in CI |
 |---|---|---|---|
 | Python (reference) | `prismpath/hotswap/policy_pack.py`, `policy_host.py` | `prismpath/portable/conformance/hotswap.json`, `crypto_agility.json`, `crypto_migration.json` | yes |
-| Rust | `prismpath-hotswap-rs/` | a pack signed on either runtime verifies on the other; and it verifies root statements, receipt bundles and flow manifests the Python engine writes (`prismpath/portable/conformance/receipts.json`, 257 cases) | yes |
+| Rust | `prismpath-hotswap-rs/` | a pack signed on either runtime verifies on the other; and it verifies root statements, receipt bundles and flow manifests the Python engine writes (`prismpath/portable/conformance/receipts.json`, 287 cases) | yes |
 | MCU | `prismpath-hw/mesh/` (monocypher) | the mesh recertification and the field walk, rows #136 | no (hardware) |
 | kernel receipt sealing | `prismpath-ebpf/seal_receipts.c` | the unified trail rows #132 to #135 | yes |
 

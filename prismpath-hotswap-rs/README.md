@@ -63,8 +63,8 @@ and your own `root_at`). The instance key and the authority key must stay apart:
 signs or runs anything, as Python's `run` does.
 
 **What enforces agreement.** `prismpath/portable/conformance/receipts.json` is a frozen vector set
-written by `prismpath/portable/gen_receipt_fixtures.py` from the Python reference (257 cases: the
-canonical JSON bytes, the tree, valid and tampered audit trails, receipt bundles, flow manifests, the
+written by `prismpath/portable/gen_receipt_fixtures.py` from the Python reference (287 cases: the
+canonical JSON bytes, the tree, valid and tampered audit trails, receipt bundles with 0.1.3's checks (`status`, `index`, `covered`, and the `problem` for a malformed bundle), flow manifests, the
 version floor, the key separation). It is reproducible byte for byte, `prismpath/tests/test_receipt_vectors.py`
 refuses drift and replays it through Python, and `tests/test_receipt_verify.rs` replays it through
 this crate and requires every verdict to match. `tests/test_receipt_edges.rs` pins the places this
@@ -80,9 +80,12 @@ refuses.
   int)` lets it through).
 - A public key file of the wrong length is skipped in `verify_flow` (Python raises); a signature of the
   wrong length is `sig:invalid` on both.
-- A flow that is not UTF-8 is `flow:sha256-mismatch` (Python raises when it reads it). Where Python
-  raises on a malformed receipt bundle (a missing field, hashes that are not hex) the Rust function
-  returns `Err`.
+- A flow that is not UTF-8 is `flow:sha256-mismatch` (Python raises when it reads it).
+
+A receipt bundle that is not shaped like one is no longer a difference: as 0.1.3's Python does, the
+Rust function returns an `invalid` result with the same `problem` text (`bundle_problem`) and no
+`Err`. `Err` is left for the cases where the reference still raises, a statement whose `key_id` is not
+text, or is a list or object while a key is pinned.
 
 **Limits of the number reading.** JSON integers beyond the 64 bit range and the literals `NaN` and
 `Infinity` are not read as Python reads them (an event holding one is a skipped log line, and a

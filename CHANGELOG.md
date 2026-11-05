@@ -68,15 +68,19 @@ flow manifests, receipts and bundles read exactly as 0.1.2 wrote them, and a 0.1
   generates a key or loads a private one for them. The crate's README lists where it is stricter than
   Python (small order keys, a boolean is not an integer, a flow that is not UTF-8) and what it does not
   read as Python does (integers past 64 bits, `NaN` and `Infinity`).
-- **Frozen cross-language vectors**, `prismpath/portable/conformance/receipts.json`: 257 cases (56
-  canonical JSON, 14 Merkle, 83 audit trails, 34 receipt bundles, 59 flow manifests, 6 version floor
+- **Frozen cross-language vectors**, `prismpath/portable/conformance/receipts.json`: 287 cases (56
+  canonical JSON, 14 Merkle, 83 audit trails, 64 receipt bundles, 59 flow manifests, 6 version floor
   sequences, 5 key separation), each verdict produced by running the Python reference, covering a
   rewritten leaf, a truncated log, a wrong key, a broken or reordered chain, a bad signature, a flow
   edited by one byte, a version replay, a revoked key and an instance key presented as an authority.
   `prismpath/portable/gen_receipt_fixtures.py` writes them from fixed keys and clocks, so regeneration
   is byte identical; `prismpath/tests/test_receipt_vectors.py` refuses drift and replays every case
   through Python, and `prismpath-hotswap-rs/tests/test_receipt_verify.rs` replays them through Rust,
-  which agrees on all 257.
+  which agrees on all 287. The bundle cases cover 0.1.3's bundle checks: the `status` (`signed`,
+  `signed-unpinned`, `invalid`), the `index` check (the receipt's `idx` is the bundle's `index`), the
+  `covered` check (`0 <= index < leaves`), and a bundle that is not shaped like one, which is `invalid`
+  with the `problem` Python gives and no longer an error in either language (only a statement whose
+  `key_id` is not text still raises, and Rust returns `Err` there).
 - `prismpath_rs::durable::py_canonical_string` writes floats as Python's `repr` does (`1e-05`,
   `1.5e+20`, `1e+16`); it had used Rust's own spelling outside the range `1e-4` to `1e16`, which
   would have changed a receipt's leaf. Existing frozen corpora are unchanged.

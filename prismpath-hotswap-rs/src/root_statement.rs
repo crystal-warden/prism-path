@@ -389,76 +389,175 @@ pub fn verify_trail(log_text: &str, statements_text: Option<&str>, pinned: &[Vec
 #[derive(Debug, Clone, PartialEq)]
 pub struct BundleVerdict {
     pub ok: bool,
+    /// `signed` (a pinned key made the signature), `signed-unpinned` (the key the statement carries
+    /// made it; none was pinned) or `invalid`.
+    pub status: &'static str,
     pub pinned: bool,
     pub leaf: bool,
+    /// The receipt's `idx` equals the bundle's `index`.
+    pub index_matches: bool,
     pub inclusion: bool,
     pub well_formed: bool,
+    /// The bundle's `index` is a leaf the statement covers: `0 <= index < leaves`.
+    pub covered: bool,
     pub key_id: bool,
     pub signature: bool,
     /// `None` when no key was pinned.
     pub pinned_check: Option<bool>,
     pub index: Value,
     pub statement: Value,
-    pub statement_sha256: String,
-    pub key: String,
+    /// `None` for a bundle that is not shaped like one.
+    pub statement_sha256: Option<String>,
+    pub key: Value,
+    /// Why the bundle is not shaped like a receipt bundle (`bundle_problem`). When set, the checks
+    /// were not run: the only one reported is `well_formed: false`.
+    pub problem: Option<String>,
 }
 
 impl BundleVerdict {
     pub fn to_json(&self) -> Value {
+        if let Some(problem) = &self.problem {
+            return json!({
+                "ok": false, "status": INVALID, "pinned": self.pinned, "checks": {"well_formed": false},
+                "problem": problem, "index": null, "statement": null, "statement_sha256": null, "key": "",
+            });
+        }
         json!({
-            "ok": self.ok, "pinned": self.pinned,
-            "checks": {"leaf": self.leaf, "inclusion": self.inclusion, "well_formed": self.well_formed,
-                       "key_id": self.key_id, "signature": self.signature, "pinned": self.pinned_check},
+            "ok": self.ok, "status": self.status, "pinned": self.pinned,
+            "checks": {"leaf": self.leaf, "index": self.index_matches, "inclusion": self.inclusion,
+                       "well_formed": self.well_formed, "covered": self.covered, "key_id": self.key_id,
+                       "signature": self.signature, "pinned": self.pinned_check},
             "index": self.index, "statement": self.statement, "statement_sha256": self.statement_sha256,
             "key": self.key,
         })
     }
 }
 
-/// receipt -> leaf -> inclusion path -> signed root -> signature, and the key against `pinned`.
-/// Offline and self contained. It checks the one statement in the bundle, not the chain around it.
-/// `Err` where the reference raises: a bundle without its receipt, leaf, path or statement, or one
-/// whose hashes are not hex.
-pub fn verify_receipt_bundle(bundle: &Value, pinned: &[Vec<u8>]) -> Result<BundleVerdict, String> {
-    let field = |name: &str| bundle.get(name).ok_or_else(|| format!("the bundle has no `{name}`"));
-    let statement = field("statement")?;
-    if !statement.is_object() {
-        return Err("the bundle's statement is not an object".to_string());
+/// A test of one bundle field's JSON type.
+type ShapeCheck = fn(&Value) -> bool;
+
+/// Why `bundle` is not shaped like a receipt bundle, or `None` (`root_statement.bundle_problem`). A
+/// bundle read from a file is untrusted input, so every field the check touches is looked at first, in
+/// the reference's order, and the reason is its text.
+pub fn bundle_problem(bundle: &Value) -> Option<String> {
+    let Some(object) = bundle.as_object() else { return Some("a bundle is a JSON object".to_string()) };
+    let shapes: [(&str, ShapeCheck); 5] = [
+        ("receipt", Value::is_object),
+        ("index", |value| value.is_i64() || value.is_u64()),
+        ("leaf", Value::is_string),
+        ("path", Value::is_array),
+        ("statement", Value::is_object),
+    ];
+    for (name, is_kind) in shapes {
+        if !object.get(name).is_some_and(is_kind) {
+            return Some(format!("missing or malformed field '{name}'"));
+        }
     }
-    let leaf = sha256_hex(&canonical_bytes(field("receipt")?));
-    let leaf_matches = field("leaf")?.as_str() == Some(leaf.as_str());
-    let leaf_hex = field("leaf")?.as_str().ok_or("the bundle's leaf is not a string")?;
-    let path = path_from_json(field("path")?)?;
+    const NOT_HEX: &str = "the leaf and the inclusion path are hex hashes";
+    if object["leaf"].as_str().and_then(from_hex).is_none() {
+        return Some(NOT_HEX.to_string());
+    }
+    for step in object["path"].as_array().expect("checked") {
+        let pair = step.as_array().filter(|pair| pair.len() == 2 && matches!(pair[0].as_str(), Some("L" | "R")));
+        let Some(pair) = pair else { return Some("malformed inclusion path".to_string()) };
+        if pair[1].as_str().and_then(from_hex).is_none() {
+            return Some(NOT_HEX.to_string());
+        }
+    }
+    None
+}
+
+/// Python's `receipt.get("idx") == bundle["index"]`, where `index` is an integer: a number equal to it
+/// (`4.0` is, as in Python) or a boolean equal to it (`True == 1`, as in Python).
+fn idx_equals(idx: Option<&Value>, index: i128) -> bool {
+    match idx {
+        Some(Value::Bool(flag)) => i128::from(*flag) == index,
+        Some(Value::Number(number)) => match (number.as_i64(), number.as_u64()) {
+            (Some(int), _) => i128::from(int) == index,
+            (None, Some(int)) => i128::from(int) == index,
+            // A float is equal to an integer exactly when it has no fraction and is that integer.
+            _ => number.as_f64().is_some_and(|float| float.fract() == 0.0 && float.abs() < 1.0e30 && float as i128 == index),
+        },
+        _ => false,
+    }
+}
+
+/// receipt -> leaf -> index -> inclusion path -> signed root -> signature, and the key against `pinned`.
+/// Offline and self contained. It checks the one statement in the bundle, not the chain around it.
+/// A bundle that is not shaped like one is `invalid` with a `problem`, never an `Err`. `Err` is left
+/// for what still raises in the reference: a statement whose `key_id` is not text (and, with a key
+/// pinned, one that is a list or object, which cannot be compared).
+pub fn verify_receipt_bundle(bundle: &Value, pinned: &[Vec<u8>]) -> Result<BundleVerdict, String> {
+    let pinned_ids: Vec<String> = pinned.iter().map(|raw| key_id_of(raw)).collect();
+    if let Some(problem) = bundle_problem(bundle) {
+        return Ok(BundleVerdict {
+            ok: false,
+            status: INVALID,
+            pinned: !pinned.is_empty(),
+            leaf: false,
+            index_matches: false,
+            inclusion: false,
+            well_formed: false,
+            covered: false,
+            key_id: false,
+            signature: false,
+            pinned_check: None,
+            index: Value::Null,
+            statement: Value::Null,
+            statement_sha256: None,
+            key: json!(""),
+            problem: Some(problem),
+        });
+    }
+    let statement = &bundle["statement"];
+    let index = &bundle["index"];
+    let index_int = index.as_i64().map(i128::from).or_else(|| index.as_u64().map(i128::from)).expect("checked");
+    let leaf = sha256_hex(&canonical_bytes(&bundle["receipt"]));
+    let leaf_hex = bundle["leaf"].as_str().expect("checked");
+    let leaf_matches = leaf_hex == leaf;
+    let index_matches = idx_equals(bundle["receipt"].get("idx"), index_int);
+    let path = path_from_json(&bundle["path"])?;
     // The root is only compared with the computed one, so a root that is missing or not text never matches.
     let root = statement.get("root").and_then(Value::as_str).unwrap_or("");
     let inclusion = verify_leaf(leaf_hex, &path, root)?;
     let well_formed = well_formed(statement, LOG_AUDIT);
+    let covered = well_formed && index_int >= 0 && index_int < i128::from(py_int(&statement["leaves"]).expect("well formed"));
     let key_id = well_formed && key_id_of(&public_raw(statement)) == statement["key_id"].as_str().unwrap_or_default();
     let signature = key_id && signature_verifies(statement);
-    let pinned_ids: Vec<String> = pinned.iter().map(|raw| key_id_of(raw)).collect();
     let pinned_check = if pinned_ids.is_empty() {
         None
     } else {
-        Some(statement.get("key_id").and_then(Value::as_str).is_some_and(|id| pinned_ids.iter().any(|pinned| pinned == id)))
+        match statement.get("key_id") {
+            Some(Value::Array(_) | Value::Object(_)) => {
+                return Err("the statement's key_id cannot be compared with a pinned key".to_string())
+            }
+            other => Some(other.and_then(Value::as_str).is_some_and(|id| pinned_ids.iter().any(|pinned| pinned == id))),
+        }
     };
-    let ok = leaf_matches && inclusion && well_formed && key_id && signature && pinned_check != Some(false);
+    let ok = leaf_matches && index_matches && inclusion && well_formed && covered && key_id && signature && pinned_check != Some(false);
     let key = match statement.get("key_id") {
-        None => String::new(),
-        Some(Value::String(id)) => fingerprint(id),
+        None => json!(""),
+        Some(Value::String(id)) => json!(fingerprint(id)),
+        // Python slices whatever is there: a list gives its first 16 items, anything else raises.
+        Some(Value::Array(items)) => Value::Array(items.iter().take(16).cloned().collect()),
         Some(_) => return Err("the statement's key_id is not a string".to_string()),
     };
     Ok(BundleVerdict {
         ok,
+        status: if !ok { INVALID } else if pinned_ids.is_empty() { SIGNED_UNPINNED } else { SIGNED },
         pinned: !pinned_ids.is_empty(),
         leaf: leaf_matches,
+        index_matches,
         inclusion,
         well_formed,
+        covered,
         key_id,
         signature,
         pinned_check,
-        index: bundle.get("index").cloned().unwrap_or(Value::Null),
+        index: index.clone(),
         statement: statement.get("seq").cloned().unwrap_or(Value::Null),
-        statement_sha256: statement_hash(statement),
+        statement_sha256: Some(statement_hash(statement)),
         key,
+        problem: None,
     })
 }
