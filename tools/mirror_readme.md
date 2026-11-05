@@ -19,7 +19,13 @@ Deterministic edges decide first and free, in document order; an embedding route
 are reached only where meaning genuinely requires one, and low confidence abstains or escalates to a
 person instead of guessing. `validate` and `test` check the deterministic paths with no model; `verify`
 model checks reachability; `capability` says which targets the flow compiles to; every decision can
-leave a receipt with a cause code, Merkle rooted per session.
+leave a receipt with a cause code, Merkle rooted per session, and with the deployment's instance key
+`run` signs a root statement over the receipts, chained to the one before, so one receipt verifies
+offline back to a root the deployment signed. `authorize sign` lets the policy authority sign a flow,
+and `run --require-authorization` refuses one that is unsigned, edited after signing, signed by an
+unknown or revoked key, or older than a version already accepted. Signed hot swap packs (`.ppt`) are
+for Level M flows compiled for table substrates; the compiler is in the repository's `prismpath-hw/`,
+not in this package.
 
 The predicates are authored by a person. PrismPath does not compile policy from prose; it compiles that
 authored structure, and the deterministic fragment (Level M) becomes a table image a few hundred bytes
@@ -135,7 +141,7 @@ numpy only, and a feature that needs more says which extra it needs:
 |---|---|
 | none (numpy only) | `init`, `validate`, `test` on deterministic rows, `graph`, `context`, `capability`, `contract`, `verify`, `portable`, `compile`, `calibrate`, `trail`, `facet`, and `run` on a flow whose edges are all deterministic |
 | `embeddings` | the embedder, so semantic edges can route: `run` on a flow that has one, `lock`, `test` rows that exercise one, `lint`'s semantic checks, `centroids` |
-| `signing` | Ed25519 and the confidentiality layer: every `swap` action (`keygen`, `envelope`, `pack`, `verify`, `swap`, `attest`) |
+| `signing` | Ed25519 and the confidentiality layer: every `swap` action (`keygen`, `envelope`, `pack`, `verify`, `swap`, `attest`), both `authorize` actions, `ledger keygen`, `run --instance-key` and `run --require-authorization`, and `trail` on a log that has root statements |
 | `control-plane` | Mission Control (`python -m prismpath.mission_control`), the orchestrator and the sprint runner: FastAPI, uvicorn, pydantic and requests |
 | `llm-local` | transformers, for the local model that serves as the LLM fallback in the router and the swarm runner |
 

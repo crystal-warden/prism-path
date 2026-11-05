@@ -12,10 +12,22 @@ no catch all, 64 state went stale, 66 a swap reset the resident state, and the r
 leaves of a Merkle tree per session; the root can be anchored to a timestamp with OpenTimestamps or an
 RFC 3161 authority, including from an air gapped site.
 
+A deployment that has an instance key also leaves root statements beside the log
+(`run.audit.jsonl` beside `run.audit.roots.jsonl`). Each one is the deployment's signature over the
+root and the number of receipts it covers, chained to the statement before it, with the policy in
+force: the flow's hash and, when the flow was authorized, the hash of its flow manifest, the
+authority key that signed it and its version. That gives one receipt a path back to two keys you can
+pin separately, receipt to inclusion path to signed root to the instance key, and signed root to flow
+manifest to the authority key. The instance key and the authority key are different keys by design.
+A log written before signing existed has no statements and reads as unsigned, not as failed.
+
 ## 2. What you run
 
 ```bash
 prismpath trail run.audit.jsonl                 # decisions by outcome, rule, and cause; swaps; attestations; root check
+prismpath trail run.audit.jsonl --pub instance.pub              # and every signed root, under the pinned instance key
+prismpath trail run.audit.jsonl --pub instance.pub --receipt 3  # one receipt: leaf, inclusion path, signed root, signature
+prismpath authorize verify flow.md --pub authority.pub          # the flow manifest a signed root names
 prismpath ledger verify --out proofs --leaf <hash>   # one leaf: its Merkle path to the anchored root, then the OTS proof
 prismpath ledger upgrade --out proofs --label v1     # upgrade a pending anchor to a Bitcoin attestation
 prismpath swap verify --ppt flow.ppt --pub authority.pub --revoked revoked.json
@@ -27,12 +39,40 @@ The `ledger` commands call the OpenTimestamps client, `ots`, which is installed 
 
 Two things are not in the base install. `ledger anchor`, `upgrade` and `verify` call the external
 OpenTimestamps client, `ots`, so install it separately (`pip install opentimestamps-client`) and keep it
-on your PATH. Every `swap` action needs the `signing` extra (`pip install 'prismpath[signing]'`).
+on your PATH. Every `swap` and `authorize` action, `ledger keygen`, and `trail` on a log that has root
+statements need the `signing` extra (`pip install 'prismpath[signing]'`); `trail` on an unsigned log
+does not.
 
 `trail` reads the append only log, checks that the Merkle root still verifies, and summarises the window
 in cause code terms; a root that no longer matches an anchored one is the signal that the log was
 edited. `swap verify` checks a pack against the authority keys and the revocation list and prints the
 reasons if it fails; the reason strings are a frozen vocabulary that maps onto the cause registry.
+
+With `--pub`, `trail` pins the deployment's instance public key and reports the log as signed or
+invalid, naming what it found: a log shorter than a signed count (`log_truncated`), a receipt changed
+under a signed root (`root_mismatch`, with the range of receipt indexes the change lies in), a
+statement signed by a key you did not pin (`unpinned_key`), a statement removed, reordered or edited
+(`chain_broken`, `bad_signature`), and a pinned key with no statements at all (`no_statements`), so
+deleting the statements file cannot pass a signed log off as an old unsigned one. Without `--pub` it
+checks each statement under the key the statement carries and says the key was not pinned, which
+shows the log is consistent but not whose it is. Get the instance public key from the deployment
+through a channel you trust, not from the log. `--receipt IDX --json` prints a self contained bundle
+(the receipt, its path, the covering statement) that `prismpath.ledgers.root_statement.verify_receipt_bundle`
+checks with nothing else.
+
+What signing does not prove. A statement's time is the signer's clock, and whoever holds the instance
+key can sign anything; a log and its statements cut back together leave a shorter chain that still
+verifies. Anchoring answers both: `prismpath ledger anchor --statements run.audit.jsonl --out proofs`
+stamps the hash of every statement, which covers its signature, and `ledger verify --leaf <statement
+hash>` checks one later. The signature, chain and inclusion checks run offline. An OpenTimestamps
+proof does not: `ots verify` needs Bitcoin block headers, from a node or a block explorer, to turn the
+proof into a time. An RFC 3161 token needs only the authority's certificate.
+
+`authorize verify` checks a flow manifest against the authority keys and the revocation list: the
+signature, the key it names, and that the flow document is byte for byte the one signed (line endings
+aside). Compare the `manifest_sha256` it prints with the one the signed root names. A run that was
+refused for want of authorization is itself a receipt, with the cause (`sig:missing`,
+`flow:sha256-mismatch` 87, `flow:version-replay` 88 and the rest).
 
 ## 3. What the evidence base is
 

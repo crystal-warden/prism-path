@@ -38,9 +38,9 @@ is the same struct on the wire, in the kernel, and on the fabric.
 | persona | horizon | primary surface | commands |
 |---|---|---|---|
 | process owner | the policy of record, long term change management | the flow document, `prismpath/examples/`, `docs/guides/process-owner.md` | `init`, `validate`, `test`, `graph`, `lint`, `context` |
-| engineer | establish the interface once, calibrate for deployment, deliver | `contract` output, the kernels, CI, the pack and envelope, `docs/guides/engineer.md` | `contract`, `capability`, `compile`, `portable`, `lock`, `verify`, `plugins`, `ci-report`, `lsp`, `import`, `calibrate`, `label`, `annotate`, `kappa`, `centroids`, `swap keygen`, `swap envelope`, `swap pack` |
+| engineer | establish the interface once, calibrate for deployment, deliver | `contract` output, the kernels, CI, the pack and envelope, `docs/guides/engineer.md` | `contract`, `capability`, `compile`, `portable`, `lock`, `verify`, `plugins`, `ci-report`, `lsp`, `import`, `calibrate`, `label`, `annotate`, `kappa`, `centroids`, `swap keygen`, `swap envelope`, `swap pack`, `authorize sign`, `ledger keygen` |
 | operator | day to day: monitor, assess for policy mutation, author short lived changes | Mission Control (`prismpath/mission_control/`, `docs/guides/mission-control-api.md`), the PolicyHost | `run`, `resume`, `compose`, `swap swap`, `swap attest`, `trail`; see `docs/guides/operator.md` |
-| assessor | after the fact: was the decision right, and can it be proven | receipts, the audit trail, ledger anchors, `docs/guides/assessor.md` | `ledger` (anchor, upgrade, verify, export-request, relay-stamp, import-proofs, rfc3161), `swap verify`, `facet decode` |
+| assessor | after the fact: was the decision right, and can it be proven | receipts, the audit trail, ledger anchors, `docs/guides/assessor.md` | `ledger` (anchor, upgrade, verify, export-request, relay-stamp, import-proofs, rfc3161), `trail --pub`, `authorize verify`, `swap verify`, `facet decode` |
 
 `prismpath --help` prints the commands in these groups.
 
@@ -124,8 +124,9 @@ swap migration (row #131). The registry is append only and its hash rides the re
    written as policy semantics with an `on timeout` edge back to the baseline rather than as pack
    expiry; the pack names the policy of record it overrides (`--overlay-of`) and `attest` shows it.
    `trail` is the operator's read side of the receipts. See `docs/guides/operator.md`.
-4. The assessor reads the receipts: every decision with its cause, Merkle rooted, anchored to a
-   timestamp a third party can verify without trusting the emitter.
+4. The assessor reads the receipts: every decision with its cause, Merkle rooted, under a root
+   statement the deployment signed with its instance key, naming the flow manifest the authority key
+   signed, and anchored to a timestamp a third party can verify without trusting the emitter.
 
 ## 6. Where to read next
 

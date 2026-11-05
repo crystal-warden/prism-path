@@ -29,6 +29,13 @@ prismpath swap attest --out <state dir> --pub <authority.pub> --envelope <env di
 file works too). Every swap, refusal and attestation is appended to `swaps.log` in the state directory, which
 is the file `prismpath trail` reads.
 
+When `PRISMPATH_INSTANCE_KEY` names the deployment's instance key, the host signs a root statement
+after every one of those events, in `swaps.log.roots.jsonl` beside the log, and `swap` says on stderr
+whether it is signing. The instance key is the deployment's own, made once with `prismpath ledger
+keygen --out <dir>`, and it is never one of the authority keys: a host handed an authority key as its
+instance key refuses to start. Mission Control signs its own audit log the same way when the variable is
+set, and says so when it starts.
+
 `swap` verifies the signature against the authority keys and the revocation list, checks the image
 fits the envelope the engineer declared (fields, capabilities, size caps), refuses a version below the
 persisted floor, stages the image, and flips atomically. Every attempt, accepted or refused, is one
@@ -90,7 +97,36 @@ the owner's next version still wins when it lands.
 prismpath swap pack --ppt overlay.ppt --fields ... --version 2 --overlay-of network_admission --priv authority.key --pub authority.pub
 ```
 
-## 4. Reading the trail
+## 4. Running a flow, and the receipts it leaves
+
+`prismpath run` writes receipts when you give it a log, one per decision and one more when the run
+refuses, parks or escalates, with its cause, and signs a root statement over the log at the end of the
+run when it has the instance key:
+
+```bash
+prismpath run flow.md --audit-log run.audit.jsonl --instance-key keys/instance.key
+prismpath run flow.md --audit-log run.audit.jsonl          # PRISMPATH_INSTANCE_KEY instead of the flag
+```
+
+Without a key it writes the receipts and says, in a line of its own, that they are not signed. A
+deployment that should run only flows the authority approved adds the requirement:
+
+```bash
+prismpath run flow.md --require-authorization --authority-pub keys/authority.pub \
+    --audit-log run.audit.jsonl --instance-key keys/instance.key
+```
+
+The flow then needs a valid flow manifest beside it (`flow.md.manifest.json` and `.sig`, which the
+engineer writes with `prismpath authorize sign`). A flow that has none, was edited after signing, was
+signed by a key you do not trust or one on the revocation list (`--revoked`), or carries a version below
+the one this deployment already accepted is refused before it runs, exit 2, with its registry cause, and
+the refusal is written to the log as a receipt. The accepted versions are kept in the state directory
+(`--state-dir`, `PRISMPATH_STATE_DIR`, or `./.prismpath`). `PRISMPATH_REQUIRE_AUTHORIZATION=1` and
+`PRISMPATH_AUTHORITY_PUB` set the same requirement for every run on the machine. Without the
+requirement a flow manifest that is present is still checked when you pass `--authority-pub`, and the
+result is printed, so a stale signature is never silently ignored. `resume` takes the same flags.
+
+## 5. Reading the trail
 
 Every decision leaves a receipt with its cause code, Merkle rooted per session and anchored. The
 operator's read side is `trail`:
@@ -106,11 +142,14 @@ and summarises the window in cause code terms: how many decisions, which outcome
 causes (0 clean, 34 the worker asked for a human, 36 nothing matched, 64 state went stale, 66 a swap
 reset the resident state, and the rest of the registry), and every swap, refusal, rollback, and
 attestation with its overlay line. A cause that starts climbing is the signal to look at the policy;
-a root that no longer matches an anchored one is the signal that the log was edited. The console's
+a root that no longer matches an anchored one is the signal that the log was edited. `trail` also
+reads the root statements beside the log and says whether it is signed, unsigned (written without an
+instance key) or invalid, and what it found; `--pub keys/instance.pub` pins the deployment's key and
+`--receipt IDX` checks one receipt from its leaf to the signature. The console's
 `/interactions` and `/prove/audit`, the kernel and fabric receipt journals sealed by
 `prismpath-ebpf/seal_receipts.c`, and the assessor's `ledger verify` sit beside it.
 
-## 5. Feeding back to the owner
+## 6. Feeding back to the owner
 
 An overlay that keeps coming back is a policy change waiting to be made. Hand the owner the fixture
 rows that would have caught it (`prismpath test` reads the same table you would write) and the

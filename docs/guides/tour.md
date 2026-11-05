@@ -335,7 +335,12 @@ prismpath trail triage.audit.jsonl
 
 Your root will differ, because the receipts carry their own timestamps; the shape will not.
 
-Two decisions, two receipts, one Merkle root. Anchor the root and a third
+Two decisions, two receipts, one Merkle root. `prismpath run flow.md --audit-log run.audit.jsonl`
+writes the same receipts from the command line, and with `--instance-key keys/instance.key` (made by
+`prismpath ledger keygen`) it also signs a root statement over the log, chained to the one before, so
+`prismpath trail run.audit.jsonl --pub keys/instance.pub` can say the log is signed by this deployment
+or name what changed; from Python, `AuditLog(path, instance_key=root_statement.InstanceKey.load(...))`
+and `log.checkpoint()` do the same. Anchor the root and a third
 party can later show the log was not edited: `prismpath.ledgers.ledger_ots.anchor(list(log.leaves), "proofs", "v1")` stamps
 the log's leaves with OpenTimestamps (it needs the `ots` client), and `prismpath ledger verify --out proofs --leaf <hash>`
 checks one receipt against that root. (`prismpath ledger anchor --repo` is the same step for the git Flow Ledger.) The same shape holds when the decision was made by a kernel

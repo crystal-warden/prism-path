@@ -48,8 +48,12 @@ model / agent / worker
   its declared envelope and a monotonic version floor are checked; an unsigned pack is refused unless an
   operator explicitly allows it for a test, and that is recorded.
 - **After execution.** Every decision leaves a receipt with a one byte cause code that says why it
-  routed, refused, parked or escalated; receipts Merkle root per session and anchor to a timestamp a third
-  party can verify without trusting the emitter.
+  routed, refused, parked or escalated; receipts Merkle root per session, and a deployment with an
+  instance key signs a root statement over them, chained to the one before, so a receipt verifies
+  offline through its inclusion path to a root the deployment signed, and a log cut short or rewritten
+  under a signed root says so. The statement names the flow that ran and the flow manifest that
+  authorized it, signed by a separate authority key. Anchoring the statement's hash adds a timestamp a
+  third party can verify without trusting the emitter.
 
 ## Works with the systems you already have
 
@@ -132,7 +136,8 @@ with its integrity apparatus counted, 66.9 times under an OpenTelemetry record o
 | declarative policy, deterministic and semantic routing, human escalation, durable execution | implemented |
 | static analysis, reachability, bounded model checking, portability report | implemented |
 | signed packs, envelope, version floor, atomic hot swap, attestation | implemented |
-| receipts with cause codes, Merkle trails, OpenTimestamps and RFC 3161 anchoring | implemented |
+| signed flow manifests for Markdown flows, refused when required and absent, stale or replayed | implemented |
+| receipts with cause codes, Merkle trails, signed and chained root statements, OpenTimestamps and RFC 3161 anchoring | implemented |
 | four language kernels on one frozen corpus | implemented |
 | in kernel execution (eBPF, XDP and TC) | demonstrated, CI gated |
 | microcontroller execution, four ISAs; FPGA fabric with a pin witnessed bound | demonstrated on hardware |
@@ -177,7 +182,7 @@ The base install is numpy only, and a feature that needs more says which extra i
 |---|---|
 | none (numpy only) | `init`, `validate`, `test` on deterministic rows, `graph`, `context`, `capability`, `contract`, `verify`, `portable`, `compile`, `calibrate`, `trail`, `facet`, and `run` on a flow whose edges are all deterministic |
 | `embeddings` | the embedder, so semantic edges can route: `run` on a flow that has one, `lock`, `test` rows that exercise one, `lint`'s semantic checks, `centroids` |
-| `signing` | Ed25519 and the confidentiality layer: every `swap` action (`keygen`, `envelope`, `pack`, `verify`, `swap`, `attest`) |
+| `signing` | Ed25519 and the confidentiality layer: every `swap` action (`keygen`, `envelope`, `pack`, `verify`, `swap`, `attest`), both `authorize` actions, `ledger keygen`, `run --instance-key` and `run --require-authorization`, and `trail` on a log that has root statements |
 | `control-plane` | Mission Control (`python -m prismpath.mission_control`), the orchestrator and the sprint runner: FastAPI, uvicorn, pydantic and requests |
 | `llm-local` | transformers, for the local model that serves as the LLM fallback in the router and the swarm runner |
 
