@@ -127,7 +127,27 @@ the refusal is written to the log as a receipt. The accepted versions are kept i
 (`--state-dir`, `PRISMPATH_STATE_DIR`, or `./.prismpath`). `PRISMPATH_REQUIRE_AUTHORIZATION=1` and
 `PRISMPATH_AUTHORITY_PUB` set the same requirement for every run on the machine. Without the
 requirement a flow manifest that is present is still checked when you pass `--authority-pub`, and the
-result is printed, so a stale signature is never silently ignored. `resume` takes the same flags.
+result is printed, so a stale signature is never silently ignored.
+
+`resume` takes the same flags and does the same things: it checks the flow's authorization, writes a
+receipt for each decision it takes after the suspension (the human's choice is one, with `how` set to
+`human`) and signs the root at the end, with the same default key lookup. Each receipt carries
+`resumed` and `prior_steps`, and `seq` continues from the steps taken before the suspension, so a
+reader can tell where the earlier run's receipts end; the root statement's trigger is `resume-end`.
+A resume that refuses leaves a refusal receipt, as `run` does, and one that cannot resume (a choice
+that is not an edge, a run that already finished) writes nothing, because nothing ran.
+
+Authorization is checked wherever a flow is loaded to make decisions, not only by `run` and `resume`.
+`compose` takes the same flags and checks the parent flow and the child flow of each fan-out before it
+spawns or resumes anything; a fan-out whose flow is refused is left as it was, named in the output, and
+the command exits 2. The timeout scheduler skips a refused flow and carries on with the rest. The
+library does the same: `checkpoint.run_durable`, `checkpoint.resume` and `ledger_runner.run_ledgered_loop`
+raise `FlowNotAuthorized` (with the registry causes) when `PRISMPATH_REQUIRE_AUTHORIZATION` is set and
+the flow is not authorized, and a program that calls `engine.run` itself asks first with
+`flow_authority.authorize_flow(path)` or loads the flow with `flow_authority.load_authorized(path)`.
+Mission Control refuses to start a sprint that runs the sprint flow (`SPRINT_FLOW=1`) when the flow is
+not authorized, and records the refusal; `flows/sprint_loop.md` ships in the package, so a deployment
+that requires authorization signs its copy with its own authority key first.
 
 ## 5. Reading the trail
 
@@ -148,8 +168,10 @@ attestation with its overlay line. A cause that starts climbing is the signal to
 a root that no longer matches an anchored one is the signal that the log was edited. `trail` also
 reads the root statements beside the log and says whether it is signed, unsigned (written without an
 instance key) or invalid, and what it found; `--pub keys/instance.pub` pins the deployment's key and
-`--receipt IDX` checks one receipt from its leaf to the signature. The console's
-`/interactions` and `/prove/audit`, the kernel and fabric receipt journals sealed by
+`--receipt IDX` checks one receipt from its leaf to the signature, and `--receipt IDX --bundle-out
+bundle.json` writes that receipt as a bundle you can hand to the assessor, who needs no log to check
+it (`prismpath trail --verify-bundle bundle.json --pub instance.pub`). The console's
+`/interactions` and `/prove/audit` (which now reports the log's signing status), the kernel and fabric receipt journals sealed by
 `prismpath-ebpf/seal_receipts.c`, and the assessor's `ledger verify` sit beside it.
 
 ## 6. Feeding back to the owner

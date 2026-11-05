@@ -69,7 +69,9 @@ from the authority key: the authority key says which policy may run and the inst
 ran, and one key doing both would let its holder write the policy and the evidence that it held. Hosts
 and `run` refuse an instance key that is also a trusted authority key, and `authorize sign` refuses the
 key `PRISMPATH_INSTANCE_KEY` names. `ledger keygen` never replaces a key that exists, because the
-statements an old key signed verify only against it. Give the operator the instance key's path
+statements an old key signed verify only against it. A deployment that requires authorization
+(`PRISMPATH_REQUIRE_AUTHORIZATION=1` with `PRISMPATH_AUTHORITY_PUB`) applies it to every program that
+loads a flow to decide, not only `run`: see the operator's guide, section 4. Give the operator the instance key's path
 (`--instance-key` or `PRISMPATH_INSTANCE_KEY`) and the assessor its public half.
 
 ## 3. Calibration

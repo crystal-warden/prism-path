@@ -27,6 +27,9 @@ A log written before signing existed has no statements and reads as unsigned, no
 prismpath trail run.audit.jsonl                 # decisions by outcome, rule, and cause; swaps; attestations; root check
 prismpath trail run.audit.jsonl --pub instance.pub              # and every signed root, under the pinned instance key
 prismpath trail run.audit.jsonl --pub instance.pub --receipt 3  # one receipt: leaf, inclusion path, signed root, signature
+prismpath trail --verify-bundle bundle.json --pub instance.pub  # a receipt you were handed as a file: no log needed
+prismpath ledger anchor --log run.audit.jsonl --out proofs      # timestamp the log (its latest signed statement)
+prismpath ledger verify --log run.audit.jsonl --out proofs --pub instance.pub   # the log still holds it, and the proof verifies
 prismpath authorize verify flow.md --pub authority.pub          # the flow manifest a signed root names
 prismpath ledger verify --out proofs --leaf <hash>   # one leaf: its Merkle path to the anchored root, then the OTS proof
 prismpath ledger upgrade --out proofs --label v1     # upgrade a pending anchor to a Bitcoin attestation
@@ -56,17 +59,33 @@ statement signed by a key you did not pin (`unpinned_key`), a statement removed,
 deleting the statements file cannot pass a signed log off as an old unsigned one. Without `--pub` it
 checks each statement under the key the statement carries and says the key was not pinned, which
 shows the log is consistent but not whose it is. Get the instance public key from the deployment
-through a channel you trust, not from the log. `--receipt IDX --json` prints a self contained bundle
-(the receipt, its path, the covering statement) that `prismpath.ledgers.root_statement.verify_receipt_bundle`
-checks with nothing else.
+through a channel you trust, not from the log. `--receipt IDX --bundle-out FILE` writes a self contained
+bundle (the receipt, its inclusion path, the covering statement; `--json` prints the same inside its
+report), and `prismpath trail --verify-bundle FILE --pub instance.pub` checks it with nothing else, no
+log and no network: receipt to leaf to inclusion path to signed root to signature to key. The answer is
+`signed` (the pinned key made it, exit 0), `signed-unpinned` (no key was pinned, so the statement's own
+key was trusted, exit 0, and it says so) or `invalid` (exit 1, with the step that failed); a file that is
+not a bundle, or has a damaged path or hash, is `invalid` too and never an error trace. A bundle holds one
+statement and not the chain around it, so it shows that the deployment's key signed a root that holds
+this receipt and says nothing about the log's other receipts; `trail LOG --pub KEY` checks those.
 
 What signing does not prove. A statement's time is the signer's clock, and whoever holds the instance
 key can sign anything; a log and its statements cut back together leave a shorter chain that still
-verifies. Anchoring answers both: `prismpath ledger anchor --statements run.audit.jsonl --out proofs`
-stamps the hash of every statement, which covers its signature, and `ledger verify --leaf <statement
-hash>` checks one later. The signature, chain and inclusion checks run offline. An OpenTimestamps
-proof does not: `ots verify` needs Bitcoin block headers, from a node or a block explorer, to turn the
-proof into a time. An RFC 3161 token needs only the authority's certificate.
+verifies. Anchoring answers both. `prismpath ledger anchor --log run.audit.jsonl --out proofs` stamps the
+hash of the log's latest root statement, which covers its signature and, through the chain, every
+statement before it; it says so, and says how many of the log's events that statement covers, because a
+timestamp on it says nothing about the events after it (checkpoint, then anchor again). A log with no
+statements is anchored by its Merkle root, and the output says that this timestamps the events and not
+who recorded them. A log that does not verify, or is empty, is not anchored. `ledger anchor --log`
+keeps a record beside the proof, and `prismpath ledger verify --log run.audit.jsonl --out proofs --pub
+instance.pub` reads it back: the log verifies, the anchored statement (or the root over the first N
+events) is still in it however much it has grown, and the proof verifies. `ledger anchor --statements
+run.audit.jsonl` stamps every statement instead, so that `trail --verify-bundle bundle.json --pub
+instance.pub --anchor-dir proofs` can check that the bundle's own statement was timestamped; with
+only the latest anchored it reports the statement is not in the batch. The signature, chain and
+inclusion checks run offline. An OpenTimestamps proof does not: `ots verify` needs Bitcoin block
+headers, from a node or a block explorer, to turn the proof into a time, and a proof the calendar has
+not yet had confirmed fails with that reason. An RFC 3161 token needs only the authority's certificate.
 
 `authorize verify` checks a flow manifest against the authority keys and the revocation list: the
 signature, the key it names, and that the flow document is byte for byte the one signed (line endings

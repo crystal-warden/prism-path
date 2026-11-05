@@ -141,11 +141,11 @@ numpy only, and a feature that needs more says which extra it needs:
 |---|---|
 | none (numpy only) | `init`, `validate`, `test` on deterministic rows, `graph`, `context`, `capability`, `contract`, `verify`, `portable`, `compile`, `calibrate`, `trail`, `facet`, and `run` on a flow whose edges are all deterministic |
 | `embeddings` | the embedder, so semantic edges can route: `run` on a flow that has one, `lock`, `test` rows that exercise one, `lint`'s semantic checks, `centroids` |
-| `signing` | Ed25519 and the confidentiality layer: every `swap` action (`keygen`, `envelope`, `pack`, `verify`, `swap`, `attest`), both `authorize` actions, `ledger keygen`, `run --instance-key` and `run --require-authorization`, and `trail` on a log that has root statements |
+| `signing` | Ed25519 and the confidentiality layer: every `swap` action (`keygen`, `envelope`, `pack`, `verify`, `swap`, `attest`), both `authorize` actions, `ledger keygen`, `run` and `resume` with `--instance-key` or `--require-authorization`, `compose --require-authorization`, and `trail` on a log that has root statements or a receipt bundle |
 | `control-plane` | Mission Control (`python -m prismpath.mission_control`), the orchestrator and the sprint runner: FastAPI, uvicorn, pydantic and requests |
 | `llm-local` | transformers, for the local model that serves as the LLM fallback in the router and the swarm runner |
 
-Extras combine (`pip install 'prismpath[embeddings,signing]'`). `prismpath ledger anchor`, `upgrade` and `verify` also call the
+Extras combine (`pip install 'prismpath[embeddings,signing]'`). `prismpath ledger anchor`, `upgrade` and `verify`, and `trail --verify-bundle --anchor-dir`, also call the
 external OpenTimestamps client, `ots`, which is not a Python extra: install it separately
 (`pip install opentimestamps-client`) and keep it on your PATH.
 

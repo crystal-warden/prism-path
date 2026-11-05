@@ -38,7 +38,7 @@ and CLI use.
 |---|---|---|
 | POST | `/api/v1/prove/level-m` | `{flow}` → `{level_m, non_member_edges}`: does the deterministic tier compile to a hardware match action table (SPEC §7)? |
 | POST | `/api/v1/prove/reach` | `{flow, reach?, forbid?, assume?}` → `{verdicts:{node:"yes\|may\|no"}, results}`: bounded reachability under an optional assumption |
-| GET | `/api/v1/prove/audit` | → `{valid, n}`: the console verifies its own append only audit log |
+| GET | `/api/v1/prove/audit` | → `{valid, n, signing, ok}`: the console verifies its own append only audit log, and `signing` is what `prismpath trail` reports for the root statements beside it (`status` signed-unpinned, unsigned, invalid or unchecked when the install lacks the signing extra; the keys that signed, how many events are covered, the findings, and whether this console's own key made them). It pins no key; `trail --pub` does |
 
 ```bash
 # Is this flow Level M?
@@ -63,7 +63,10 @@ live active node + `flow_text`) · `/retrievals` (which RAG chunks a run pulled:
 
 `POST /api/v1/sprint/start`: accepts `{unbuffered: bool = true}` (the `-u`/PYTHONUNBUFFERED launch
 toggle; `false` batches) plus the usual sprint config, and `/sprint/{select,auto,stop,pause,resume}`,
-`/queue/decide` (human picks an edge for a suspended run).
+`/queue/decide` (human picks an edge for a suspended run). A sprint that runs `flows/sprint_loop.md`
+(`SPRINT_FLOW=1`) is refused, with the registry causes and a `sprint.refused` audit event, when
+`PRISMPATH_REQUIRE_AUTHORIZATION` is set and the flow has no valid flow manifest under the
+`PRISMPATH_AUTHORITY_PUB` keys.
 
 ### Edit: the only write surface
 
