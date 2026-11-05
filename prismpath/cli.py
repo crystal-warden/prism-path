@@ -457,11 +457,18 @@ def _mock_agent(node, instruction, state):
 
 
 def _instance_key_for(args):
-    """The instance key `run` signs with: --instance-key, else $PRISMPATH_INSTANCE_KEY, else None."""
+    """The instance key `run` signs with: --instance-key, else $PRISMPATH_INSTANCE_KEY, else the deployment's
+    own key in the state directory (`<state dir>/instance.key`, ./.prismpath by default), else None. The key
+    found in the state directory is named on stdout, so signing by default is never silent."""
     from prismpath.ledgers import root_statement
     path = getattr(args, "instance_key", None) or os.environ.get(root_statement.INSTANCE_KEY_ENV, "").strip()
     if not path:
-        return None
+        default = os.path.join(_state_dir(args), root_statement.DEFAULT_KEY_NAME + ".key")
+        if not os.path.exists(default):
+            return None
+        key = root_statement.InstanceKey.load(default)
+        print(f"Signing with the deployment's instance key {key.fingerprint}, found at {default}")
+        return key
     _require_file(path)
     return root_statement.InstanceKey.load(path)
 
@@ -637,7 +644,8 @@ def _write_receipts(audit_path: str, instance_key, result, graph, policy: dict) 
         print(f"Signed: root statement {statement['seq']} over {statement['leaves']} events by instance key "
               f"{instance_key.fingerprint}, in {log.statements_path}")
     elif instance_key is None:
-        print("Not signed: no instance key (pass --instance-key KEY or set PRISMPATH_INSTANCE_KEY); "
+        print("Not signed: no instance key (pass --instance-key KEY, set PRISMPATH_INSTANCE_KEY, or create the "
+              "deployment's own with `prismpath ledger keygen --out .prismpath`); "
               "the receipts carry a Merkle root and no signature")
 
 

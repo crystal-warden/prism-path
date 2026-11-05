@@ -401,11 +401,26 @@ def test_a_run_that_refuses_leaves_a_receipt_with_its_cause(tmp_path, capsys, mo
 
 def test_run_says_plainly_when_it_is_not_signing(tmp_path, capsys, monkeypatch):
     monkeypatch.delenv(rs.INSTANCE_KEY_ENV, raising=False)
+    monkeypatch.delenv("PRISMPATH_STATE_DIR", raising=False)
+    monkeypatch.chdir(tmp_path)
     flow = tmp_path / "flow.md"
     flow.write_text(FLOW)
     code, out, _err = _run(capsys, "run", str(flow), "--audit-log", str(tmp_path / "a.audit.jsonl"))
     assert code == 0 and "Not signed: no instance key" in out
     assert not os.path.exists(tmp_path / "a.audit.roots.jsonl")
+
+
+def test_run_signs_by_default_with_the_key_in_the_state_directory(tmp_path, capsys, monkeypatch):
+    monkeypatch.delenv(rs.INSTANCE_KEY_ENV, raising=False)
+    monkeypatch.delenv("PRISMPATH_STATE_DIR", raising=False)
+    monkeypatch.chdir(tmp_path)
+    made = rs.keygen(str(tmp_path / ".prismpath"))
+    (tmp_path / "flow.md").write_text(FLOW)
+    code, out, _err = _run(capsys, "run", "flow.md", "--audit-log", "d.audit.jsonl")
+    assert code == 0 and "Signed: root statement 0" in out
+    assert f"Signing with the deployment's instance key {made['fingerprint']}, found at " in out
+    code, out, _err = _run(capsys, "trail", "d.audit.jsonl", "--pub", made["public"])
+    assert code == 0 and "(pinned)" in out
 
 
 def test_run_takes_the_instance_key_from_the_environment(keys, tmp_path, capsys, monkeypatch):

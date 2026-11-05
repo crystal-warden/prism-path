@@ -106,9 +106,12 @@ run when it has the instance key:
 ```bash
 prismpath run flow.md --audit-log run.audit.jsonl --instance-key keys/instance.key
 prismpath run flow.md --audit-log run.audit.jsonl          # PRISMPATH_INSTANCE_KEY instead of the flag
+prismpath ledger keygen --out .prismpath                   # once: then every run here signs by default
 ```
 
-Without a key it writes the receipts and says, in a line of its own, that they are not signed. A
+With neither the flag nor the variable, `run` signs with the deployment's own key in its state directory,
+`.prismpath/instance.key` (or `--state-dir` / `PRISMPATH_STATE_DIR`), and names that key when it does, so signing
+by default is never silent. It does not look anywhere else. Without a key it writes the receipts and says, in a line of its own, that they are not signed. A
 deployment that should run only flows the authority approved adds the requirement:
 
 ```bash

@@ -84,8 +84,9 @@ record, and some of them predate the upload.
   signature over a domain prefix and the canonical bytes. `prismpath ledger keygen` writes the instance
   key (private half 0600, never replaced once it exists). `run --audit-log PATH` writes one receipt per
   decision and one for a refusal or park with its cause, and with `--instance-key` or
-  `PRISMPATH_INSTANCE_KEY` signs a statement at the end of the run; without a key it says the receipts
-  are unsigned. The policy host, the crypto host and Mission Control sign after every audit event when
+  `PRISMPATH_INSTANCE_KEY`, or by default with the deployment's own key at `.prismpath/instance.key` (the state
+  directory), which it names when it uses it, signs a statement at the end of the run; without a key it says
+  the receipts are unsigned. The policy host, the crypto host and Mission Control sign after every audit event when
   the variable is set, and the durable epoch journal signs each seal when given the key. `trail` reports signed, unsigned
   or invalid; `--pub` pins the key, so a log with its statements deleted is invalid rather than
   unsigned, and `--receipt IDX` checks one receipt through its inclusion path to the signed root.
