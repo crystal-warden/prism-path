@@ -64,12 +64,7 @@ pub fn py_canonical_string(val: &Value, spaced: bool) -> String {
             } else if let Some(u_val) = num_val.as_u64() {
                 u_val.to_string()
             } else {
-                let f_val = num_val.as_f64().unwrap_or(f64::NAN);
-                if f_val.fract() == 0.0 && f_val.is_finite() && f_val.abs() < 1e16 {
-                    format!("{f_val:.1}")
-                } else {
-                    format!("{f_val}")
-                }
+                py_float_repr(num_val.as_f64().unwrap_or(f64::NAN))
             }
         }
         Value::String(raw) => py_json_quote(raw),
@@ -85,6 +80,44 @@ pub fn py_canonical_string(val: &Value, spaced: bool) -> String {
                 .collect();
             format!("{{{}}}", items.join(item_sep))
         }
+    }
+}
+
+/// Python `repr(float)`, which is what `json.dumps` writes for a float: the shortest digits that
+/// round trip, fixed notation from 1e-4 up to (not including) 1e16 with a `.0` when integral, and
+/// otherwise an exponent with an explicit sign and at least two digits (`1e-05`, `1.5e+20`).
+/// Rust's own `Display` differs from this outside that window (`0.00001`, `150000000000000000000`).
+/// Non finite values are written as `json.dumps` writes them (`NaN`, `Infinity`, `-Infinity`).
+pub fn py_float_repr(value: f64) -> String {
+    if value.is_nan() {
+        return "NaN".to_string();
+    }
+    if value.is_infinite() {
+        return if value < 0.0 { "-Infinity" } else { "Infinity" }.to_string();
+    }
+    let sign = if value.is_sign_negative() { "-" } else { "" };
+    if value == 0.0 {
+        return format!("{sign}0.0");
+    }
+    // `{:e}` writes the shortest round trip digits as `d.ddde<exp>`.
+    let scientific = format!("{:e}", value.abs());
+    let (mantissa, exponent) = scientific.split_once('e').expect("LowerExp always has an exponent");
+    let exponent: i32 = exponent.parse().expect("LowerExp exponent is an integer");
+    let digits: String = mantissa.chars().filter(|digit| *digit != '.').collect();
+    if !(-4..16).contains(&exponent) {
+        let (head, tail) = digits.split_at(1);
+        let fraction = if tail.is_empty() { String::new() } else { format!(".{tail}") };
+        let exponent_sign = if exponent < 0 { '-' } else { '+' };
+        return format!("{sign}{head}{fraction}e{exponent_sign}{:02}", exponent.abs());
+    }
+    if exponent < 0 {
+        return format!("{sign}0.{}{digits}", "0".repeat((-exponent - 1) as usize));
+    }
+    let integer_len = exponent as usize + 1;
+    if digits.len() <= integer_len {
+        format!("{sign}{digits}{}.0", "0".repeat(integer_len - digits.len()))
+    } else {
+        format!("{sign}{}.{}", &digits[..integer_len], &digits[integer_len..])
     }
 }
 

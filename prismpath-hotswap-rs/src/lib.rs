@@ -24,7 +24,11 @@ use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 
+pub mod flow_authority;
 pub mod host;
+pub mod merkle;
+mod pyval;
+pub mod root_statement;
 
 // --- .ppt format facts (read-only mirror of ppt_compile.py / TABLE_FORMAT.md) ---
 pub const MAGIC: u32 = 0x4D54_5050; // "PPTM"
@@ -53,6 +57,17 @@ pub fn canonical_bytes(obj: &Value) -> Vec<u8> {
 
 pub fn sha256_hex(data: &[u8]) -> String {
     hex::encode(Sha256::digest(data))
+}
+
+/// Check an Ed25519 signature given the raw 32 byte public key, the message and the raw 64 byte
+/// signature. A key or signature of any other length, a key that is not a curve point, and a
+/// signature that does not verify are all `false`. This is `verify_strict`, which also refuses
+/// small order keys; the receipt verifiers (`root_statement`, `flow_authority`) use it.
+pub fn verify_ed25519(public: &[u8], message: &[u8], signature: &[u8]) -> bool {
+    let (Ok(public), Ok(signature)) = (<[u8; 32]>::try_from(public), Signature::from_slice(signature)) else {
+        return false;
+    };
+    VerifyingKey::from_bytes(&public).is_ok_and(|key| key.verify_strict(message, &signature).is_ok())
 }
 
 // ------------------------------------------------------------------ image parsing

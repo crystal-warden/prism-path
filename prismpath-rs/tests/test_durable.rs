@@ -172,3 +172,19 @@ fn checkpoint_scenarios_match_the_python_reference() {
     eprintln!("checkpoints: {}/{} scenarios match", scenarios.len(), scenarios.len());
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn floats_are_spelled_as_python_repr_spells_them() {
+    // Each right hand side is `repr(float)` from CPython, which is what `json.dumps` writes.
+    for (value, python) in [
+        (0.0, "0.0"), (-0.0, "-0.0"), (1.0, "1.0"), (100.0, "100.0"), (2.5, "2.5"), (0.1, "0.1"),
+        (0.30000000000000004, "0.30000000000000004"), (0.0001, "0.0001"), (0.00001, "1e-05"),
+        (1.5e-7, "1.5e-07"), (5e-324, "5e-324"), (1e15, "1000000000000000.0"),
+        (1234567890123456.0, "1234567890123456.0"), (1e16, "1e+16"), (1.5e20, "1.5e+20"),
+        (123456789012345680000.0, "1.2345678901234568e+20"), (1730800001.2345679, "1730800001.2345679"),
+        (-2.675, "-2.675"), (1.7976931348623157e308, "1.7976931348623157e+308"),
+        (f64::INFINITY, "Infinity"), (f64::NEG_INFINITY, "-Infinity"), (f64::NAN, "NaN"),
+    ] {
+        assert_eq!(py_float_repr(value), python, "{value:e}");
+    }
+}

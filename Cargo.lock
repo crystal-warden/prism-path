@@ -215,6 +215,7 @@ dependencies = [
  "hex",
  "prismpath-rs",
  "rand",
+ "serde",
  "serde_json",
  "sha2",
 ]

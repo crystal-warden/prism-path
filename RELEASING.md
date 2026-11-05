@@ -118,8 +118,10 @@ and no workflow in this change creates it.
    ../prismpath-clean` from this repository at the commit being released, review and commit the result in the
    mirror, then build and upload from the mirror checkout as above. The export copies `tools/mirror_readme.md`
    into the mirror unchanged, because `pyproject.toml` names it as the PyPI page.
-2. **Version: 0.1.2.** The `v0.1.1` tag was pushed on 2026-11-04 and superseded before any upload, when a
-   hand check of every documented capability found 14 bugs and the receipt signing gap. PyPI never held 0.1.1.
+2. **Version: 0.1.3,** the first upload since 0.1.0. Two tags were pushed and superseded before any upload: `v0.1.1`
+   (2026-11-04), when a hand check of every documented capability found 14 bugs and the receipt signing gap, and
+   `v0.1.2` (2026-11-05), when the owner chose to ship its follow-ups and the Rust verifier in the same upload rather
+   than upload twice in a day. PyPI never held 0.1.1 or 0.1.2.
 3. **Uploads stay manual,** with `twine` and the owner's API token. No publishing workflow is added.
 
 4. **Tag and timestamp.** Tag the released research commit and the mirror commit `v0.1.2`, write the
