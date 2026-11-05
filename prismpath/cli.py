@@ -319,6 +319,12 @@ def _add_assessor_commands(subparsers) -> None:
     ledger_parser.add_argument('--statements', default=None, metavar='PATH',
                                help='anchor: the hashes of the signed root statements in this file (or the ones '
                                     'beside this audit log), so the timestamp covers the signatures')
+    ledger_parser.add_argument('--log', default=None, metavar='PATH',
+                               help='anchor: timestamp this audit log (the hash of its latest root statement when it '
+                                    'has any, else its Merkle root; the output says which). verify: check the log '
+                                    'still holds what was anchored under --out/--label, and the timestamp proof')
+    ledger_parser.add_argument('--pub', nargs='+', default=None, metavar='INSTANCE_PUB',
+                               help='verify --log: pin the deployment\'s instance public key(s), as `trail --pub`')
     ledger_parser.add_argument('--out', help='output dir (anchor/upgrade/verify) or bundle path (air-gap)')
     ledger_parser.add_argument('--label', default='v1', help='anchor label (default v1)')
     ledger_parser.add_argument('--leaf', help='leaf hash hex (verify)')
@@ -1559,6 +1565,73 @@ def _statement_hashes(path: str) -> list:
     return [root_statement.statement_hash(statement) for statement in statements if statement]
 
 
+LOG_ANCHOR_RECORD = "log_{label}.json"
+
+
+def _anchor_log(args) -> int:
+    """`ledger anchor --log`: stamp the latest signed root statement's hash (the Merkle root when the log
+    has no statements), say which, and keep a record beside the proof for `ledger verify --log`."""
+    import json as _json
+    from prismpath.ledgers import ledger_ots as ots
+    from prismpath.ledgers.audit_log import AnchorRefused, AuditLog
+    if args.repo or args.statements:
+        raise CliError("--log anchors an audit log by itself: drop --repo and --statements")
+    _require_file(args.log)
+    log = AuditLog(args.log)
+    try:
+        target = log.anchor_target()
+    except AnchorRefused as refused:
+        raise CliError(f"not anchoring {args.log}: {refused}", code=1) from refused
+    if target["kind"] == "root-statement":
+        said = (f"anchoring root statement {target['statement']} (sha256 {target['hash'][:16]}), signed by instance key "
+                f"{target['key']}, which covers {target['leaves']} of the log's {target['log_leaves']} events")
+        if target["unsigned_tail"]:
+            said += (f"; the {target['unsigned_tail']} later events are not covered by it, and a timestamp on it says "
+                     f"nothing about them until a later statement is anchored")
+    else:
+        said = (f"anchoring the Merkle root (sha256 {target['hash'][:16]}) over the log's {target['leaves']} events: the "
+                f"log has no root statements, so this timestamps the events and not who recorded them "
+                f"(`prismpath ledger keygen` makes the instance key that signs them)")
+    print(said, file=sys.stderr)
+    out_dir = args.out or '.'
+    res = ots.anchor([target["hash"]], out_dir, args.label)
+    res["anchored"] = {**target, "log": os.path.abspath(args.log), "label": args.label, "says": said}
+    if res.get('stamped'):
+        with open(os.path.join(out_dir, LOG_ANCHOR_RECORD.format(label=args.label)), "w", encoding="utf-8") as handle:
+            _json.dump(res["anchored"], handle, indent=1, sort_keys=True)
+            handle.write("\n")
+    print(_json.dumps(res, indent=1))
+    return 0 if res.get('stamped') else 1
+
+
+def _verify_log_anchor(args) -> int:
+    """`ledger verify --log`: does the log still hold what `ledger anchor --log` stamped, does it verify,
+    and does the timestamp proof verify. The last needs Bitcoin block data."""
+    import json as _json
+    from prismpath.ledgers import ledger_ots as ots, root_statement
+    from prismpath.ledgers.audit_log import AuditLog
+    _require_file(args.log)
+    out_dir = args.out or '.'
+    record_path = os.path.join(out_dir, LOG_ANCHOR_RECORD.format(label=args.label))
+    if not os.path.exists(record_path):
+        raise CliError(f"no log anchor record {record_path}: anchor the log with `ledger anchor --log` "
+                       f"(same --out and --label), or check a single hash with `ledger verify --leaf`")
+    with open(record_path, encoding="utf-8") as handle:
+        record = _json.load(handle)
+    pinned = [root_statement.load_public(path) for path in (args.pub or [])]
+    log = AuditLog(args.log)
+    signing = log.verify_statements(pinned or None)
+    in_log = log.holds_anchor(record)
+    proof = ots.verify_unit(record["hash"], out_dir, args.label)
+    ok = (log.verify_log() and signing["status"] != root_statement.INVALID and in_log
+          and bool(proof.get("merkle_ok")) and bool(proof.get("ots_ok")))
+    print(_json.dumps({"ok": ok, "log": args.log, "log_verifies": log.verify_log(), "signing": signing["status"],
+                       "findings": signing["findings"], "anchored": {key: record.get(key) for key in
+                       ("kind", "hash", "statement", "leaves", "says")},
+                       "log_holds_anchor": in_log, "proof": proof}, indent=1))
+    return 0 if ok else 1
+
+
 def ledger_cmd(args):
     """Flow-Ledger attestation CLI (#36 connected OTS + #53 air-gap tier)."""
     import json as _json
@@ -1579,6 +1652,10 @@ def ledger_cmd(args):
         require_program('git', 'install git from https://git-scm.com', 'anchor --repo')
     if action == 'rfc3161':
         require_program('openssl', "install OpenSSL with your system's package manager", action)
+    if action == 'anchor' and args.log:
+        return _anchor_log(args)
+    if action == 'verify' and args.log:
+        return _verify_log_anchor(args)
     if action == 'anchor':
         if args.statements:
             hashes = _statement_hashes(args.statements)

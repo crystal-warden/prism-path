@@ -44,6 +44,11 @@ class AuditWriteError(RuntimeError):
     """The event could not be persisted. The in memory log was not changed; nothing was committed."""
 
 
+class AnchorRefused(ValueError):
+    """The log is not in a state worth timestamping: it is empty, a line cannot be read, or its root
+    statements do not verify. Anchoring it would put a third party's time on a record that does not hold."""
+
+
 class StatementWriteError(AuditWriteError):
     """The event was persisted, and the root statement that should cover it was not. A caller that
     fails closed on AuditWriteError still does; the next statement that is written covers the event."""
@@ -152,6 +157,44 @@ class AuditLog:
         return _statements.verify_chain(
             statements, read_findings, lambda count: roots.get(count, ""), len(self.leaves), log=_statements.LOG_AUDIT,
             pinned=pinned, authority_key_ids=_statements.authority_key_ids_in(self.events))
+
+    def anchor_target(self) -> dict:
+        """What `ledger anchor --log` timestamps, and which kind it is. With root statements it is the hash
+        of the latest one, which covers its signature and, through the chain, every statement before it;
+        `kind` is `root-statement`, and `unsigned_tail` counts the events after the leaves it signed, which
+        a timestamp on that statement does not cover. Without any it is the Merkle root over every event,
+        `kind` `merkle-root`: the events are timestamped, who recorded them is not. Raises `AnchorRefused`
+        for an empty log, an unreadable line, or root statements that do not verify (checking them needs
+        the signing extra)."""
+        if not self.events:
+            raise AnchorRefused("the log holds no events: there is nothing to anchor")
+        if self.skipped:
+            raise AnchorRefused(f"the log has unreadable lines {self.skipped}: it does not verify")
+        statements, _findings = _statements.read_statements(self.statements_path)
+        if not statements:
+            root = self.current_root()
+            return {"kind": "merkle-root", "hash": root, "root": root, "leaves": len(self.leaves),
+                    "log_leaves": len(self.leaves), "unsigned_tail": 0, "statement": None, "key": None}
+        report = self.verify_statements()
+        if report["status"] == _statements.INVALID:
+            fatal = list(dict.fromkeys(finding["finding"] for finding in report["findings"]
+                                       if finding["finding"] in _statements.FATAL_FINDINGS))
+            raise AnchorRefused(f"the log's root statements do not verify ({', '.join(fatal)}); "
+                                f"`prismpath trail` names each finding")
+        last = next(statement for statement in reversed(statements) if statement)
+        return {"kind": "root-statement", "hash": _statements.statement_hash(last), "root": last["root"],
+                "leaves": last["leaves"], "log_leaves": len(self.leaves), "unsigned_tail": report["unsigned_tail"],
+                "statement": last["seq"], "key": report["keys"][-1] if report["keys"] else None}
+
+    def holds_anchor(self, record: dict) -> bool:
+        """True when the log still holds what an `anchor_target` record names: the root statement with
+        that hash in its chain, or the Merkle root over the first `leaves` events. Appending to the log
+        after the anchor does not change the answer; editing or dropping what was anchored does."""
+        if record.get("kind") == "root-statement":
+            statements, _findings = _statements.read_statements(self.statements_path)
+            return any(statement and _statements.statement_hash(statement) == record.get("hash") for statement in statements)
+        count = record.get("leaves")
+        return isinstance(count, int) and 0 < count <= len(self.leaves) and self.root_at(count) == record.get("hash")
 
     def receipt_bundle(self, index: int) -> dict:
         """One receipt with its inclusion path and the signed statement that covers it, checkable

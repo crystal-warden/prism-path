@@ -783,6 +783,151 @@ def test_ledger_anchor_stamps_the_statement_hashes(key, tmp_path, capsys, monkey
     assert code == 0 and seen["hashes"] == [rs.statement_hash(statement) for statement in statements]
 
 
+# ------------------------------------------------------------------ ledger anchor --log, and its verify
+
+@pytest.fixture()
+def fake_ots(tmp_path, monkeypatch):
+    """An `ots` program on PATH that stamps by writing the .ots file and verifies by exiting with the number
+    in `ots.rc` beside it (0 when there is none), so the real subprocess path runs without a calendar
+    server or Bitcoin block data."""
+    if os.name == "nt":
+        pytest.skip("a shell stub stands in for ots")
+    bindir = tmp_path / "fakebin"
+    bindir.mkdir()
+    program = bindir / "ots"
+    program.write_text('#!/bin/sh\ncase "$1" in\n  stamp) echo stamped > "$2.ots"; exit 0;;\n'
+                       '  verify) echo "Success! Bitcoin block 1 attests existence"; exit $(cat "$0.rc" 2>/dev/null || echo 0);;\n'
+                       '  *) exit 0;;\nesac\n')
+    program.chmod(0o755)
+    monkeypatch.setattr(ledger_ots, "_OTSENV", {**os.environ, "PATH": str(bindir) + os.pathsep + os.environ["PATH"]})
+    monkeypatch.setenv("PATH", str(bindir) + os.pathsep + os.environ["PATH"])
+    return bindir
+
+
+def test_anchor_log_stamps_the_latest_statement_and_says_which(key, tmp_path, capsys, fake_ots):
+    log = _signed_log(tmp_path, key)                                   # 3 statements over 9 events
+    for index in range(2):
+        log.append("engine", "decision", {"seq": 9 + index, "cause": 0})
+    statements = rs.read_statements(log.statements_path)[0]
+    code, out, err = _run(capsys, "ledger", "anchor", "--log", log.path, "--out", str(tmp_path / "proofs"))
+    result = json.loads(out)
+    anchored = result["anchored"]
+    assert code == 0 and result["stamped"] is True
+    assert anchored["kind"] == "root-statement" and anchored["hash"] == rs.statement_hash(statements[-1])
+    assert anchored["statement"] == 2 and anchored["leaves"] == 9 and anchored["log_leaves"] == 11 and anchored["unsigned_tail"] == 2
+    assert result["root"] == anchored["hash"]                          # the single hash is its own Merkle root
+    assert "anchoring root statement 2" in err and "covers 9 of the log's 11 events" in err
+    assert "the 2 later events are not covered" in err
+    assert os.path.exists(tmp_path / "proofs" / "root_v1.txt.ots") and os.path.exists(tmp_path / "proofs" / "log_v1.json")
+
+
+def test_anchor_log_without_statements_stamps_the_merkle_root_and_says_so(tmp_path, capsys, fake_ots):
+    log = audit_log.AuditLog(str(tmp_path / "old.audit.jsonl"))
+    for index in range(3):
+        log.append("gate", "decision", {"seq": index, "cause": 0})
+    code, out, err = _run(capsys, "ledger", "anchor", "--log", log.path, "--out", str(tmp_path / "proofs"), "--label", "m")
+    anchored = json.loads(out)["anchored"]
+    assert code == 0 and anchored["kind"] == "merkle-root" and anchored["hash"] == log.current_root() and anchored["leaves"] == 3
+    assert "anchoring the Merkle root" in err and "not who recorded them" in err
+
+
+@pytest.mark.parametrize("damage, message", [("edited", "root statements do not verify (root_mismatch)"),
+                                              ("truncated", "root statements do not verify (log_truncated)"),
+                                              ("unreadable", "unreadable lines")])
+def test_anchor_log_refuses_a_log_that_does_not_verify(key, tmp_path, capsys, fake_ots, damage, message):
+    log = _signed_log(tmp_path, key)
+    lines = open(log.path).read().splitlines()
+    if damage == "edited":
+        event = json.loads(lines[1]); event["data"]["cause"] = 5; lines[1] = json.dumps(event)
+    elif damage == "truncated":
+        lines = lines[:-3]
+    else:
+        lines[2] = "{not json"
+    open(log.path, "w").write("\n".join(lines) + "\n")
+    code, out, err = _run(capsys, "ledger", "anchor", "--log", log.path, "--out", str(tmp_path / "proofs"))
+    assert code == 1 and out == "" and message in err and "not anchoring" in err
+    assert not os.path.exists(tmp_path / "proofs")
+
+
+def test_anchor_log_refuses_an_empty_log_and_a_mixed_command(tmp_path, capsys, fake_ots):
+    empty = tmp_path / "empty.audit.jsonl"
+    empty.write_text("")
+    code, _out, err = _run(capsys, "ledger", "anchor", "--log", str(empty))
+    assert code == 1 and "nothing to anchor" in err
+    code, _out, err = _run(capsys, "ledger", "anchor", "--log", str(empty), "--statements", str(empty))
+    assert code == 2 and "drop --repo and --statements" in err
+    code, _out, err = _run(capsys, "ledger", "anchor", "--log", str(tmp_path / "nope.jsonl"))
+    assert code == 2 and "nope.jsonl: No such file or directory" in err
+
+
+def test_verify_log_checks_the_log_holds_the_anchor_and_the_proof(key, keys, tmp_path, capsys, fake_ots):
+    log = _signed_log(tmp_path, key)
+    proofs = str(tmp_path / "proofs")
+    assert _run(capsys, "ledger", "anchor", "--log", log.path, "--out", proofs)[0] == 0
+    log.append("engine", "decision", {"seq": 99, "cause": 0})            # the log moves on after the anchor
+    log.checkpoint("run-end")
+    code, out, _err = _run(capsys, "ledger", "verify", "--log", log.path, "--out", proofs, "--pub", keys["public"])
+    report = json.loads(out)
+    assert code == 0 and report["ok"] and report["log_holds_anchor"] and report["signing"] == "signed"
+    assert report["anchored"]["kind"] == "root-statement" and report["proof"]["merkle_ok"] and report["proof"]["ots_ok"]
+    (fake_ots / "ots.rc").write_text("1")                                 # Bitcoin has not confirmed it, or no block data
+    code, out, _err = _run(capsys, "ledger", "verify", "--log", log.path, "--out", proofs)
+    assert code == 1 and json.loads(out)["proof"]["ots_ok"] is False and json.loads(out)["log_holds_anchor"] is True
+
+
+def test_verify_log_notices_what_the_anchor_no_longer_covers(key, tmp_path, capsys, fake_ots):
+    log = _signed_log(tmp_path, key)
+    proofs = str(tmp_path / "proofs")
+    assert _run(capsys, "ledger", "anchor", "--log", log.path, "--out", proofs)[0] == 0
+    lines = open(log.statements_path).read().splitlines()
+    open(log.statements_path, "w").write("\n".join(lines[:-1]) + "\n")       # the anchored statement is dropped
+    code, out, _err = _run(capsys, "ledger", "verify", "--log", log.path, "--out", proofs)
+    report = json.loads(out)
+    assert code == 1 and report["log_holds_anchor"] is False
+    lines = open(log.path).read().splitlines()
+    event = json.loads(lines[0]); event["data"]["cause"] = 7; lines[0] = json.dumps(event)
+    open(log.path, "w").write("\n".join(lines) + "\n")
+    code, out, _err = _run(capsys, "ledger", "verify", "--log", log.path, "--out", proofs)
+    assert code == 1 and json.loads(out)["log_verifies"] is True and json.loads(out)["signing"] == "invalid"
+
+
+def test_verify_log_of_a_merkle_root_anchor_survives_appends_and_notices_edits(tmp_path, capsys, fake_ots):
+    log = audit_log.AuditLog(str(tmp_path / "old.audit.jsonl"))
+    for index in range(4):
+        log.append("gate", "decision", {"seq": index, "cause": 0})
+    proofs = str(tmp_path / "proofs")
+    assert _run(capsys, "ledger", "anchor", "--log", log.path, "--out", proofs)[0] == 0
+    log.append("gate", "decision", {"seq": 4, "cause": 0})
+    code, out, _err = _run(capsys, "ledger", "verify", "--log", log.path, "--out", proofs)
+    assert code == 0 and json.loads(out)["log_holds_anchor"] is True and json.loads(out)["signing"] == "unsigned"
+    lines = open(log.path).read().splitlines()
+    event = json.loads(lines[2]); event["data"]["cause"] = 9; lines[2] = json.dumps(event)
+    open(log.path, "w").write("\n".join(lines) + "\n")
+    code, out, _err = _run(capsys, "ledger", "verify", "--log", log.path, "--out", proofs)
+    assert code == 1 and json.loads(out)["log_holds_anchor"] is False
+
+
+def test_verify_log_without_an_anchor_record_says_what_to_run(key, tmp_path, capsys, fake_ots):
+    log = _signed_log(tmp_path, key)
+    code, _out, err = _run(capsys, "ledger", "verify", "--log", log.path, "--out", str(tmp_path / "proofs"))
+    assert code == 2 and "no log anchor record" in err and "ledger anchor --log" in err
+
+
+def test_a_bundle_checks_against_an_anchor_of_all_its_statements(key, keys, tmp_path, capsys, fake_ots):
+    log = _signed_log(tmp_path, key)
+    proofs = str(tmp_path / "proofs")
+    assert _run(capsys, "ledger", "anchor", "--statements", log.path, "--out", proofs)[0] == 0
+    bundle = str(tmp_path / "bundle.json")
+    assert _run(capsys, "trail", log.path, "--pub", keys["public"], "--receipt", "4", "--bundle-out", bundle)[0] == 0
+    code, out, _err = _run(capsys, "trail", "--verify-bundle", bundle, "--pub", keys["public"], "--anchor-dir", proofs)
+    assert code == 0 and "its OpenTimestamps proof verifies" in out
+    # anchoring only the latest statement timestamps the chain, but a bundle's own statement is not that leaf
+    other = str(tmp_path / "latest")
+    assert _run(capsys, "ledger", "anchor", "--log", log.path, "--out", other)[0] == 0
+    code, out, _err = _run(capsys, "trail", "--verify-bundle", bundle, "--pub", keys["public"], "--anchor-dir", other)
+    assert code == 1 and "not in this anchor batch" in out
+
+
 @pytest.mark.parametrize("argv", [["ledger", "keygen", "--out", "k"], ["trail", "run.audit.jsonl"],
                                   ["run", "flow.md", "--audit-log", "x.audit.jsonl", "--instance-key", "keys/instance.key"],
                                   ["trail", "--verify-bundle", "bundle.json"],
