@@ -278,3 +278,12 @@ def test_every_example_flow_is_package_data():
     assert missing == []
 
 
+# ------------------------------------------------------------------ the optional-extra message for Mission Control
+
+def test_mission_control_without_the_extra_names_the_install_line():
+    script = ("import sys\nsys.modules['uvicorn'] = None\nsys.modules['fastapi'] = None\n"
+              "import runpy\nrunpy.run_module('prismpath.mission_control', run_name='__main__')\n")
+    env = {**os.environ, "PYTHONPATH": REPO_ROOT + os.pathsep + os.environ.get("PYTHONPATH", "")}
+    result = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True, env=env)
+    assert result.returncode != 0 and "Traceback" not in result.stderr
+    assert result.stderr.strip() == "prismpath mission_control: needs uvicorn (the control-plane extra): pip install 'prismpath[control-plane]'"
