@@ -6,6 +6,36 @@ frozen conformance vectors that changes an existing case bumps the spec version,
 is the spec-change review. Pre-1.0, minor versions may break APIs; the flow *format* is already
 spec stable.
 
+## [Unreleased]
+
+### Rust verification of signed receipts
+
+- **`prismpath-hotswap-rs` verifies what 0.1.2 signs.** New modules `root_statement`, `merkle` and
+  `flow_authority` check root statements (form, key id, Ed25519 signature over the domain prefixed
+  canonical bytes, the `prev` chain, leaf counts, the root against a log's leaves, truncation, pinned
+  keys, policy authority keys), whole audit trails (`verify_trail`, the Rust `AuditLog.verify_statements`),
+  one receipt bundle offline (`verify_receipt_bundle`, with `pinned`), the instance and authority key
+  separation (`check_separation`), and flow manifests (`verify_flow`) with the same registry causes
+  (`sig:missing`, `sig:invalid`, `sig:revoked-key`, `manifest:key-id-mismatch`, `manifest:bad-format`,
+  `flow:sha256-mismatch`, `flow:version-replay`) and the same version floor. Findings, statuses and
+  checks carry the Python names. Verify only: nothing in the crate signs a statement or a manifest,
+  generates a key or loads a private one for them. The crate's README lists where it is stricter than
+  Python (small order keys, a boolean is not an integer, a flow that is not UTF-8) and what it does not
+  read as Python does (integers past 64 bits, `NaN` and `Infinity`).
+- **Frozen cross-language vectors**, `prismpath/portable/conformance/receipts.json`: 257 cases (56
+  canonical JSON, 14 Merkle, 83 audit trails, 34 receipt bundles, 59 flow manifests, 6 version floor
+  sequences, 5 key separation), each verdict produced by running the Python reference, covering a
+  rewritten leaf, a truncated log, a wrong key, a broken or reordered chain, a bad signature, a flow
+  edited by one byte, a version replay, a revoked key and an instance key presented as an authority.
+  `prismpath/portable/gen_receipt_fixtures.py` writes them from fixed keys and clocks, so regeneration
+  is byte identical; `prismpath/tests/test_receipt_vectors.py` refuses drift and replays every case
+  through Python, and `prismpath-hotswap-rs/tests/test_receipt_verify.rs` replays them through Rust,
+  which agrees on all 257.
+- `prismpath_rs::durable::py_canonical_string` writes floats as Python's `repr` does (`1e-05`,
+  `1.5e+20`, `1e+16`); it had used Rust's own spelling outside the range `1e-4` to `1e16`, which
+  would have changed a receipt's leaf. Existing frozen corpora are unchanged.
+- The hot swap crate is in CI (it already was, in `ci.yml`); its README and `docs/SYSTEM_MAP.md` said it was not.
+
 ## [0.1.2] (not yet uploaded)
 
 ### Summary since the 0.1.0 upload to PyPI
@@ -110,7 +140,10 @@ record, and some of them predate the upload.
   (`prismpath-telemetry-rs`), the eBPF receipt sealing (`prismpath-ebpf/seal_receipts.c`), the mesh
   firmware receipts (`prismpath-hw/mesh/`), and the Rust, Go and JavaScript kernels and compiled bundles
   write or carry receipts and roots without root statements, and none of them checks a flow manifest.
-  Their roots can still be anchored as before.
+  Their roots can still be anchored as before. *Since this note was written (Unreleased, above):*
+  `prismpath-hotswap-rs` now verifies root statements, audit trails, receipt bundles and flow manifests
+  the Python engine produces, against frozen vectors; none of the ports writes a root statement or
+  signs a flow manifest, and the other ports still neither verify nor check them.
 - **A CycloneDX 1.6 SBOM for a signed policy pack, from the compliance emitter**
   (`adapters.compliance.emit.pack_sbom`, `python -m adapters.compliance.emit --pack-sbom`), beside its
   OSCAL and CycloneDX attestation output and validated with the same cached schemas. It restates the
