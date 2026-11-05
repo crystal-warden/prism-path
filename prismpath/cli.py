@@ -42,7 +42,8 @@ def _grouped_help(subparsers) -> str:
             out.append(f"  {name:<12} {help_text}")
         out.append("")
     out.append("`swap` splits by action: keygen, envelope, and pack are the engineer's setup; swap and attest are the "
-               "operator's; verify is the assessor's.")
+               "operator's; verify is the assessor's. `ledger keygen` is the engineer's setup too: it makes the "
+               "deployment's instance key, which signs root statements and is never the policy authority key.")
     return "\n".join(out)
 
 
@@ -209,6 +210,13 @@ def _add_operator_commands(subparsers) -> None:
                                  'failures ride the flow\'s `on error` edges')
     run_parser.add_argument('--agent', dest='agent', default=None, metavar='SPEC',
                             help=argparse.SUPPRESS)
+    run_parser.add_argument('--audit-log', dest='audit_log', default=None, metavar='PATH',
+                            help='append one receipt per decision to this audit log (JSONL, Merkle rooted; '
+                                 '`prismpath trail` reads it)')
+    run_parser.add_argument('--instance-key', dest='instance_key', default=None, metavar='KEY',
+                            help='the deployment\'s instance private key (`prismpath ledger keygen`): sign a root '
+                                 'statement over the audit log at the end of the run (default: '
+                                 '$PRISMPATH_INSTANCE_KEY; without either the receipts are written unsigned)')
     run_parser.set_defaults(func=run_flow)
 
     resume_parser = subparsers.add_parser(
@@ -258,11 +266,17 @@ def _add_operator_commands(subparsers) -> None:
 def _add_assessor_commands(subparsers) -> None:
     # Adding assessor commands for ledger timestamp anchoring and telemetry processing.
     ledger_parser = subparsers.add_parser(
-        'ledger', help='Flow-Ledger attestation: OTS anchor/upgrade/verify + air-gap tier (#36/#53)')
+        'ledger', help='Evidence: the instance key, OTS anchor/upgrade/verify of roots and root statements, '
+                       'and the air-gap tier (#36/#53)')
     ledger_parser.add_argument('action', choices=[
-        'anchor', 'upgrade', 'verify', 'export-request', 'relay-stamp', 'import-proofs', 'rfc3161'],
-        help='ledger attestation action')
+        'keygen', 'anchor', 'upgrade', 'verify', 'export-request', 'relay-stamp', 'import-proofs', 'rfc3161'],
+        help='ledger action: keygen writes the instance key that signs root statements; the rest anchor and verify')
+    ledger_parser.add_argument('--name', default='instance',
+                               help='keygen key name (default instance; never the policy authority key)')
     ledger_parser.add_argument('--repo', help='ledger git repo (anchor: enumerate Output-Hash trailers)')
+    ledger_parser.add_argument('--statements', default=None, metavar='PATH',
+                               help='anchor: the hashes of the signed root statements in this file (or the ones '
+                                    'beside this audit log), so the timestamp covers the signatures')
     ledger_parser.add_argument('--out', help='output dir (anchor/upgrade/verify) or bundle path (air-gap)')
     ledger_parser.add_argument('--label', default='v1', help='anchor label (default v1)')
     ledger_parser.add_argument('--leaf', help='leaf hash hex (verify)')
@@ -410,9 +424,45 @@ def _mock_agent(node, instruction, state):
     return {'text': node, 'tests_pass': True, 'always': True}
 
 
+def _instance_key_for(args):
+    """The instance key `run` signs with: --instance-key, else $PRISMPATH_INSTANCE_KEY, else None."""
+    from prismpath.ledgers import root_statement
+    path = getattr(args, "instance_key", None) or os.environ.get(root_statement.INSTANCE_KEY_ENV, "").strip()
+    if not path:
+        return None
+    _require_file(path)
+    return root_statement.InstanceKey.load(path)
+
+
+def _receipts_of(result, graph, run_id: str, policy: dict) -> list:
+    """One receipt per decision the run made: each routed step with cause 0, and the stop itself when
+    the run refused, parked or escalated, with the registry cause the engine set."""
+    receipts = []
+    for seq, step in enumerate(result.steps):
+        receipts.append({"run": run_id, "seq": seq, "node": step.node, "target": step.target,
+                         "how": step.info.get("used"), "rule": step.info.get("cond"), "outcome": step.target,
+                         "cause": 0, "policy": policy})
+    if result.cause:
+        receipts.append({"run": run_id, "seq": len(result.steps), "node": result.path[-1], "target": None,
+                         "how": result.stopped, "rule": None, "outcome": result.stopped,
+                         "cause": int(result.cause), "policy": policy})
+    return receipts
+
+
+def _flow_policy_identity(path: str, graph) -> dict:
+    from prismpath import canon
+    with open(path, "rb") as handle:
+        return {"flow": graph.name, "flow_sha256": canon.sha256_hex(handle.read())}
+
+
 def run_flow(args) -> int:
     graph = parse_file(args.flow_md)
     _require_runnable(graph, args.flow_md)
+    audit_path = getattr(args, "audit_log", None)
+    if not audit_path and getattr(args, "instance_key", None):
+        raise CliError("--instance-key signs the run's receipts; pass --audit-log PATH as well")
+    instance_key = _instance_key_for(args) if audit_path else None
+    policy = _flow_policy_identity(args.flow_md, graph)
     agent = _mock_agent
     if getattr(args, "agent", None):
         from prismpath.workers.chat_agent import chat_agent
@@ -427,7 +477,29 @@ def run_flow(args) -> int:
     if result.stopped == "contract_violation" and result.pending:
         for violation in result.pending.get("violations", []):
             print(f"  ✗ [{result.pending['node']}] {violation}")
+    if audit_path:
+        _write_receipts(audit_path, instance_key, result, graph, policy)
+    elif os.environ.get("PRISMPATH_INSTANCE_KEY", "").strip():
+        print("Not signed: no receipts were written (PRISMPATH_INSTANCE_KEY is set; pass --audit-log PATH)")
     return 1 if result.stopped == "contract_violation" else 0
+
+
+def _write_receipts(audit_path: str, instance_key, result, graph, policy: dict) -> None:
+    import uuid
+    from prismpath.ledgers.audit_log import AuditLog
+    log = AuditLog(audit_path, instance_key=instance_key)
+    receipts = _receipts_of(result, graph, uuid.uuid4().hex[:12], policy)
+    for receipt in receipts:
+        log.append("engine", "decision", receipt)
+    print(f"Receipts: {len(receipts)} appended to {audit_path} ({len(log.events)} in the log), "
+          f"root {log.current_root()[:16] or '(empty)'}")
+    statement = log.checkpoint("run-end", policy)
+    if statement is not None:
+        print(f"Signed: root statement {statement['seq']} over {statement['leaves']} events by instance key "
+              f"{instance_key.fingerprint}, in {log.statements_path}")
+    elif instance_key is None:
+        print("Not signed: no instance key (pass --instance-key KEY or set PRISMPATH_INSTANCE_KEY); "
+              "the receipts carry a Merkle root and no signature")
 
 
 def resume_flow(args) -> int:
@@ -1224,6 +1296,10 @@ def swap_cmd(args):
                 print(_json.dumps({'ok': False, 'reasons': reasons}, indent=1))
                 return 1
             host = policy_host.PolicyHost(args.out, args.pub, env, revoked=policy_pack.load_revoked(args.revoked))
+            print(f"audit log {host.audit.path}: root statements signed by instance key "
+                  f"{host.audit.instance_key.fingerprint}" if host.audit.signing else
+                  f"audit log {host.audit.path}: not signed (no instance key; set PRISMPATH_INSTANCE_KEY)",
+                  file=sys.stderr)
             if action == 'attest':
                 print(_json.dumps(host.attest(), indent=1))
                 return 0
@@ -1242,12 +1318,31 @@ def swap_cmd(args):
     return 2
 
 
+def _statement_hashes(path: str) -> list:
+    """The content hash of every root statement in `path`, or in the statements file beside the audit
+    log `path` names. Each hash covers the statement's signature, so anchoring them timestamps the
+    signed roots and not only the roots."""
+    from prismpath.ledgers import root_statement
+    if not path.endswith(".roots.jsonl") and os.path.exists(root_statement.statements_path_for(path)):
+        path = root_statement.statements_path_for(path)
+    _require_file(path)
+    statements, _findings = root_statement.read_statements(path)
+    return [root_statement.statement_hash(statement) for statement in statements if statement]
+
+
 def ledger_cmd(args):
     """Flow-Ledger attestation CLI (#36 connected OTS + #53 air-gap tier)."""
     import json as _json
     from prismpath.ledgers import ledger_ots as ots
     from prismpath.ledgers import ledger_airgap as airgap
     action = args.action
+    if action == 'keygen':
+        from prismpath.ledgers import root_statement
+        try:
+            print(_json.dumps(root_statement.keygen(args.out or '.', args.name), indent=1))
+        except FileExistsError as exists:
+            raise CliError(f"keygen: {exists.filename} exists; {exists.strerror}") from exists
+        return 0
     # The OpenTimestamps client and OpenSSL are external programs, checked before shelling out.
     if action in ('anchor', 'upgrade', 'verify', 'relay-stamp'):
         require_program('ots', 'the OpenTimestamps client: pip install opentimestamps-client', action)
@@ -1256,9 +1351,16 @@ def ledger_cmd(args):
     if action == 'rfc3161':
         require_program('openssl', "install OpenSSL with your system's package manager", action)
     if action == 'anchor':
-        hashes = ots.from_ledger(args.repo) if args.repo else []
+        if args.statements:
+            hashes = _statement_hashes(args.statements)
+            if not hashes:
+                print(f'no root statements in {args.statements} (a run signs them with --instance-key)')
+                return 1
+        else:
+            hashes = ots.from_ledger(args.repo) if args.repo else []
         if not hashes:
-            print('no Output-Hash values found in ledger (need --repo with PrismPath-Output-Hash trailers)')
+            print('no Output-Hash values found in ledger (need --repo with PrismPath-Output-Hash trailers, '
+                  'or --statements with signed root statements)')
             return 1
         res = ots.anchor(hashes, args.out or '.', args.label)
         print(_json.dumps(res, indent=1))
