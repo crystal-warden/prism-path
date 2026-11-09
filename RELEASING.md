@@ -129,9 +129,13 @@ and no workflow in this change creates it.
    SHA-256 of the exact wheel and sdist that are uploaded to a `SHA256SUMS` file, and stamp it with `ots stamp`.
    Upload those same files, because a rebuild is not byte identical and the proof would not match it.
 
-## Trusted Publishing, from 0.1.4
+## Trusted Publishing, from the release after 0.1.3
 
-From 0.1.4 a GitHub Actions workflow uploads to PyPI with a short lived OIDC credential, so no API token exists
+**Tag only when you publish.** Versions 0.1.1 and 0.1.2 were tagged publicly and their files timestamped while they
+were only staged; both were then dropped before upload, so their numbers were spent although PyPI never saw them. From
+now on a version is tagged, built and published in one step, so a release dropped before that step keeps its number.
+
+From the first release after 0.1.3 (0.1.4 once 0.1.3 is uploaded), a GitHub Actions workflow uploads to PyPI with a short lived OIDC credential, so no API token exists
 to leak and every file carries a PEP 740 attestation tying it to the workflow run. The workflow is
 `publish.yml` in the mirror, `crystal-warden/prismpath`. The export deletes everything in the mirror but `.git`
 on each run, so the workflow cannot be kept there by hand. Its source is `tools/mirror_publish.yml` in this
