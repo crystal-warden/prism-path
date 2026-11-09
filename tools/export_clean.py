@@ -72,7 +72,8 @@ EXCLUDE_PREFIXES = [
 ]
 EXCLUDE_SUFFIXES = [".deferrals"]           # empty top-level scratch files
 EXCLUDE_EXACT = {"docs_health_report.md", "tools/arch_scorecard.json",  # generated reports
-                 "tools/mirror_readme.md"}  # the mirror's README SOURCE (used below, then copied verbatim)
+                 "tools/mirror_readme.md",  # the mirror's README SOURCE (used below, then copied verbatim)
+                 "tools/mirror_publish.yml"}  # the mirror's PyPI publish workflow SOURCE (written below)
 
 RESEARCH_REPO = "https://github.com/crystal-warden/prism-path/blob/main/"
 MIRROR_BANNER = (
@@ -284,7 +285,13 @@ def main():
     (out / ".github" / "workflows").mkdir(parents=True, exist_ok=True)
     (out / ".github" / "workflows" / "ci.yml").write_text(CLEAN_CI)
 
-    n_files = len(included) + 2 + mirror_src.exists()   # + README + ci.yml (+ the PyPI page template)
+    # the PyPI Trusted Publishing workflow lives in this repo as tools/mirror_publish.yml, because the
+    # wipe above removes everything in the mirror but .git, so a file added there by hand would not survive
+    publish_src = root / "tools" / "mirror_publish.yml"
+    if publish_src.exists():
+        (out / ".github" / "workflows" / "publish.yml").write_text(publish_src.read_text())
+
+    n_files = len(included) + 2 + mirror_src.exists() + publish_src.exists()   # + README + ci.yml (+ the PyPI page template, publish.yml)
     total_kb = sum((out / repo_path).stat().st_size for repo_path in included) // 1024
     print(f"mirror written to {out}")
     print(f"  files:        {n_files}  (~{total_kb} KB of tracked content)")

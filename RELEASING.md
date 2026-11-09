@@ -122,8 +122,53 @@ and no workflow in this change creates it.
    (2026-11-04), when a hand check of every documented capability found 14 bugs and the receipt signing gap, and
    `v0.1.2` (2026-11-05), when the owner chose to ship its follow-ups and the Rust verifier in the same upload rather
    than upload twice in a day. PyPI never held 0.1.1 or 0.1.2.
-3. **Uploads stay manual,** with `twine` and the owner's API token. No publishing workflow is added.
+3. **Uploads stay manual** with `twine` and the owner's API token, up to and including 0.1.3. From 0.1.4 on they
+   go through Trusted Publishing (see the next section), and this item is superseded.
 
 4. **Tag and timestamp.** Tag the released research commit and the mirror commit `v0.1.2`, write the
    SHA-256 of the exact wheel and sdist that are uploaded to a `SHA256SUMS` file, and stamp it with `ots stamp`.
    Upload those same files, because a rebuild is not byte identical and the proof would not match it.
+
+## Trusted Publishing, from 0.1.4
+
+From 0.1.4 a GitHub Actions workflow uploads to PyPI with a short lived OIDC credential, so no API token exists
+to leak and every file carries a PEP 740 attestation tying it to the workflow run. The workflow is
+`publish.yml` in the mirror, `crystal-warden/prismpath`. The export deletes everything in the mirror but `.git`
+on each run, so the workflow cannot be kept there by hand. Its source is `tools/mirror_publish.yml` in this
+repository, and `tools/export_clean.py` writes it to `.github/workflows/publish.yml` beside the generated
+`ci.yml`. Edit the source and re-export, never the mirror's copy.
+
+### One time setup (the owner, in a browser)
+
+1. On GitHub, in `crystal-warden/prismpath`: **Settings, Environments, New environment**, name it `pypi`, tick
+   **Required reviewers** and add yourself, and save. This is the gate: the publish job stops until you approve it.
+   Optionally restrict **Deployment branches and tags** to the tag pattern `v*`.
+2. On pypi.org, for the `prismpath` project: **Manage, Publishing, Add a new publisher, GitHub**, with owner
+   `crystal-warden`, repository `prismpath`, workflow name `publish.yml`, environment name `pypi`. Save.
+3. After the first successful Trusted Publishing upload, delete the old API token under **Account settings, API
+   tokens**.
+
+### How a release runs
+
+1. Bump `version` in `pyproject.toml`, move the changelog entry, commit, run the gates, and export into the mirror
+   as before (`python tools/export_clean.py --out ../prismpath-clean`, review, commit). Push the mirror `main`.
+2. Tag the mirror commit `v<version>` (annotated) and push the tag. The tag must equal `v` plus the version in
+   `pyproject.toml`, or the build job refuses to run.
+3. On GitHub, **Actions, publish, Run workflow**, choosing the tag `v<version>` as the ref. The `build` job builds the
+   sdist and the wheel (with `SOURCE_DATE_EPOCH` set from the tagged commit), runs `twine check --strict`, writes the
+   SHA-256 of each file to the job summary and uploads them as the `dist` artifact.
+4. The `publish` job then waits. Open the run, check the hashes in the summary, and click **Review deployments,
+   Approve**. Only then does `pypa/gh-action-pypi-publish` upload the exact files from the artifact.
+5. For the OpenTimestamps proof, download the `dist` artifact, write `SHA256SUMS-<version>` from those files, run
+   `ots stamp`, and keep both with the release record. The files on PyPI are the ones in the artifact, so the proof
+   matches them. A local rebuild is not byte identical and must not be used for the proof.
+
+The workflow has no tag push trigger on purpose. A tag push would build before the owner has looked at anything,
+and a manual run on the tag keeps one deliberate click in front of both the build and the upload.
+
+### What this replaces
+
+The hand upload (`twine upload` with a token from a laptop) ends with 0.1.3. The old rule that the proof must match
+the uploaded files still holds, and is now met by stamping the workflow's artifact instead of a local `dist/`.
+`twine` remains useful for the optional TestPyPI rehearsal and for `twine check`. PyPI settings, the GitHub
+environment and the tag stay with the owner, and no agent or workflow creates them.
