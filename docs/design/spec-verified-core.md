@@ -177,6 +177,8 @@ defines it; the Python reference `prismpath/kernel/canon2.py` (`loads`, `dumps`)
 73 byte strings, every rule above at least once and the first rule broken where several are) are
 replayed by `prismpath/tests/test_canon2.py`, which also runs every vector through the oracle, and by
 `prismpath-rs/tests/test_canon2.rs`, `prismpath/portable/run_vectors.mjs` and `prismpath-go/conformance_test.go`.
+The Lean writer `Core.writeBytes` and the strict reader `Core.readCanonical` (`formal/Core/Canon2.lean`) define the
+canonical spelling, and section 3.2 states what is proved about them.
 The writer emits RFC 8785 with no float: no whitespace, members in
 order of the UTF-16 code units of their keys, strings as raw UTF-8 with only `"`, `\` and the control
 characters escaped (`\b \t \n \f \r`, otherwise lowercase `\u00xx`), integers in decimal; it refuses
@@ -256,6 +258,60 @@ see unchanged; the flow hash inside it is the only hash), the flow authority's v
 sink's JSONL records, the receipt stream's binary wire frames, and the comparison harnesses that model
 other systems. Retiring the canon/1 reader (and with it canon/1 packs) is the owner's decision; until then
 the twins keep it honest.
+
+### 3.2 The encoding layer, proved (formal/Core/Canon2.lean, Canon2Proofs.lean, 2026-11-10)
+
+The Lean development has a canon/2 writer beside the reader, and the two are proved inverse. The writer,
+`Core.writeBytes`, spells a value with no whitespace, the members of every object in the order of the UTF-16
+code units of their keys, strings as raw UTF-8 with only `"`, `\` and the control characters escaped (`\b \t
+\n \f \r`, otherwise lowercase `\u00xx`), and integers in decimal with no leading zero and a minus sign only
+before a nonzero magnitude, as the writers of the other four implementations do. It is total; its domain,
+the canonical values, is decided by `Core.canon`: no object holds a key twice, every integer lies within plus
+or minus 2^53 minus 1, nesting is at most 128 deep, and in every object the keys strictly increase in UTF-16
+code unit order. A Lean string holds Unicode scalar values only, so no value holds a lone surrogate by its
+type. The strict reader, `Core.readCanonical`, reads a byte string with `Core.readBytes` and accepts it
+exactly when it is the writer's spelling of the value read, and otherwise refuses it with the reader's own
+cause or `not-canonical`. The theorems, in words:
+
+1. **What the reader returns** (`readChars_doc`, `readBytes_doc`). Every value the reader returns holds no
+   key twice in any object, only integers within the exact range, and nests at most 128 deep.
+2. **Round trip** (`read_write`, `readChars_wr`). For every canonical value, the reader reads the writer's
+   bytes back to that value. More generally, every value the reader could return, spelled with its members
+   in the order given, reads back to itself.
+3. **The canonical form of an accepted document** (`canonical_form`, `read_write_doc`,
+   `same_value_same_spelling`). For every byte string the reader accepts, the writer's bytes of its value are
+   a canonical document that reads back to the value's normal form (the same members, every object's in key
+   order), and writing that normal form gives the same bytes again; two accepted documents whose values have
+   the same members, in any order, have byte identical canonical spellings.
+4. **One spelling per value** (`write_injective`, `readCanonical_unique`). The writer is injective on
+   canonical values, and two byte strings the strict reader accepts with the same value are byte identical.
+5. **Canonicity** (`readCanonical_iff`, `write_readCanonical`, `readCanonical_write`). The strict reader
+   returns a value exactly when the value is canonical and the bytes are the writer's bytes of it: the
+   accepted documents are exactly the canonical spellings, and for every one of them writing what was read
+   gives back the input.
+6. **Refusal** (`readCanonical_refuses`, `readCanonical_cause`). Every byte string that is not the canonical
+   spelling of a canonical value is refused by the strict reader, with the reader's cause when it is not a
+   document and `not-canonical` when it is a document spelled otherwise.
+7. **The reader alone is not canonical** (`reader_not_canonical`). `Core.readBytes`, the reader this section
+   defines and every implementation shares, accepts `[ ]`, `{"b":null,"a":null}` and a string with a needless
+   `\u` escape, none of them a canonical spelling; the strict reader refuses all three.
+
+Item 7 is the one statement the request for these proofs had wrong: "the writer of what the reader reads is
+the input" holds of the strict reader and not of `readBytes`. That is the rules above, not a defect: the
+eight rules refuse what is not a canon/2 document, and none of them refuses whitespace, member order or an
+escape, exactly as RFC 8785 canonicalizes any JSON text rather than accepting only its output. The reader
+was not changed. The core's decision does not depend on the difference (`verdict_text_perm`: two readings
+whose members are a permutation of each other get the same verdict), and every hashed or signed document is
+compared or hashed by its canonical bytes, so a document whose bytes must be canonical is checked with the
+strict reader or by comparing the input with its canonical bytes, as `verify_root_statement` does (section
+11). Making canonical spelling a rule of the reader itself would be a change of this specification and of all
+five readers, and is left to the owner.
+
+The writer and the strict reader depend on `propext` and `Quot.sound` only (the decimal digits are well
+founded recursion), the theorems on the standard three; `Core.verdict` still depends on `propext` only.
+`lake exe canon2-oracle` is the compiled writer and readers (`formal/Core/Canon2Main.lean`), and
+`formal/diff/canon2_diff.py` holds the Python, Rust, JavaScript and Go readers and writers to it
+(`docs/research/verified-core-summary.md`, section 3).
 
 ## 4. The checks of a policy
 
