@@ -66,7 +66,7 @@ pub(crate) const NEVER: [&str; 2] = ["false", "never"];
 // operators here). Python's ast.parse REJECTS these as names: when class == "phish" is a
 // PredicateError there, so it must be one here too, or the edge routes differently across engines.
 // Soft keywords (match/case/type) are ordinary Names in both.
-const PY_KEYWORDS: [&str; 28] = [
+pub(crate) const PY_KEYWORDS: [&str; 28] = [
     "as", "assert", "async", "await", "break", "class", "continue", "def", "del", "elif", "else",
     "except", "finally", "for", "from", "global", "if", "import", "is", "lambda", "nonlocal",
     "pass", "raise", "return", "try", "while", "with", "yield",

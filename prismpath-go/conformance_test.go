@@ -28,6 +28,7 @@ type flowCase struct {
 	MaxSteps *int                     `json:"maxSteps"`
 	Start    *string                  `json:"start"`
 	State    map[string]interface{}   `json:"state"`
+	Opts     map[string]interface{}   `json:"opts"`
 	Expect   struct {
 		Path        []string    `json:"path"`
 		Stopped     string      `json:"stopped"`
@@ -85,7 +86,14 @@ func TestFlowsConformance(test *testing.T) {
 	}
 
 	passed := 0
+	skipped := 0
 	for _, fx := range corpus.Cases {
+		// A case that carries opts sets an engine option this kernel does not take (the type gate, the
+		// transcript bound, a run id); those cases are for the engines that implement the options.
+		if fx.Opts != nil {
+			skipped++
+			continue
+		}
 		graph := Parse(fx.Flow)
 		used := make(map[string]int)
 
@@ -146,7 +154,7 @@ func TestFlowsConformance(test *testing.T) {
 		}
 	}
 
-	test.Logf("flows: %d/%d passed", passed, len(corpus.Cases))
+	test.Logf("flows: %d/%d passed (%d with engine options skipped)", passed, len(corpus.Cases)-skipped, skipped)
 }
 
 func TestPredicateSemanticsFixes(test *testing.T) {

@@ -3,8 +3,72 @@
 //! Markdown flow parser.
 
 use std::collections::HashMap;
+use std::sync::OnceLock;
 
 use crate::condition::{is_js_ws, js_trim, split_lines_py};
+
+/// The input bounds of the reference parser (`kernel/parser.py`): a flow is human authored routing config, not
+/// a data payload, and these keep an untrusted or accidental oversized document from exhausting memory or
+/// driving the polynomial analyses off a cliff. Each is overridden by the environment variable of the same
+/// name as the reference's constant, `PRISMPATH_MAX_FLOW_BYTES`, `PRISMPATH_MAX_NODES` and `PRISMPATH_MAX_EDGES`.
+pub const DEFAULT_MAX_FLOW_BYTES: i64 = 2 * 1024 * 1024;
+pub const DEFAULT_MAX_NODES: i64 = 5000;
+pub const DEFAULT_MAX_EDGES: i64 = 20000;
+
+/// Bounds on a flow document. A cap below zero refuses every document, as the reference's does.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Limits {
+    /// The most characters a document may have (the reference counts `len(text)`, characters not bytes).
+    pub max_flow_bytes: i64,
+    /// The most distinct node names.
+    pub max_nodes: i64,
+    /// The most edge lines under a heading.
+    pub max_edges: i64,
+}
+
+impl Default for Limits {
+    fn default() -> Limits {
+        Limits { max_flow_bytes: DEFAULT_MAX_FLOW_BYTES, max_nodes: DEFAULT_MAX_NODES, max_edges: DEFAULT_MAX_EDGES }
+    }
+}
+
+impl Limits {
+    /// The limits the environment gives: each variable read as Python's `int()` reads it (a sign, digits with
+    /// single underscores between them, spaces around). The reference reads them once when it is imported, and
+    /// a value that is not an integer stops the import; here it refuses every document, naming the variable,
+    /// and so does a value beyond a 64 bit integer.
+    pub fn from_env() -> Result<Limits, String> {
+        fn read(name: &str, default: i64) -> Result<i64, String> {
+            match std::env::var(name) {
+                Ok(raw) => Limits::read_value(name, &raw),
+                Err(_) => Ok(default),
+            }
+        }
+        Ok(Limits {
+            max_flow_bytes: read("PRISMPATH_MAX_FLOW_BYTES", DEFAULT_MAX_FLOW_BYTES)?,
+            max_nodes: read("PRISMPATH_MAX_NODES", DEFAULT_MAX_NODES)?,
+            max_edges: read("PRISMPATH_MAX_EDGES", DEFAULT_MAX_EDGES)?,
+        })
+    }
+
+    /// What the variable `name` holding `raw` means: the integer Python's `int(raw)` makes of it, or the reason
+    /// it is refused. The digits of other scripts, which `int()` reads, are refused, and so is a value
+    /// beyond a 64 bit integer.
+    pub fn read_value(name: &str, raw: &str) -> Result<i64, String> {
+        let Some((negative, digits)) = crate::engine::py_int_text(raw) else {
+            return Err(format!("{name} is not an integer: {}", crate::contract::py_str_repr(raw)));
+        };
+        let magnitude: i64 = digits
+            .parse()
+            .map_err(|_| format!("{name} is beyond a 64 bit integer: {}", crate::contract::py_str_repr(raw)))?;
+        Ok(if negative { -magnitude } else { magnitude })
+    }
+}
+
+fn env_limits() -> &'static Result<Limits, String> {
+    static LIMITS: OnceLock<Result<Limits, String>> = OnceLock::new();
+    LIMITS.get_or_init(Limits::from_env)
+}
 
 #[derive(Debug, Clone, Default)]
 pub struct Node {
@@ -19,6 +83,9 @@ pub struct Graph {
     pub name: String,
     pub start: String,
     pub nodes: HashMap<String, Node>,
+    /// The node names in document order, each at its first heading (the order the reference's
+    /// dictionary iterates), which the type gate's contract and the flow's state bound read in.
+    pub order: Vec<String>,
     /// Every front matter `key: value` line, as the reference keeps it.
     pub meta: HashMap<String, String>,
     /// The field definitions (SPEC section 4.5), keyed by field name; empty when the flow defines none.
@@ -26,6 +93,17 @@ pub struct Graph {
     /// Why the flow breaks its field definitions, when it does. Such a graph has every edge disabled,
     /// the engine refuses to run it, and the codec refuses to partition it.
     pub field_error: Option<String>,
+    /// Why the document could not be parsed at all, when it could not: it is over one of the `Limits`. Such a
+    /// graph is empty, and the reference raises `ParseError` with this message instead of returning one.
+    pub parse_error: Option<String>,
+}
+
+impl Graph {
+    /// Why this graph must not be run, analysed or encoded: it was not parsed (`parse_error`) or it breaks its
+    /// field definitions (`field_error`).
+    pub fn refusal(&self) -> Option<&str> {
+        self.parse_error.as_deref().or(self.field_error.as_deref())
+    }
 }
 
 /// -> target: condition (optionally as a - bullet): EDGE_RE.
@@ -180,8 +258,30 @@ fn split_frontmatter(text: &str) -> Option<(String, String)> {
     None
 }
 
-/// Markdown -> Graph: a faithful port of the reference parse. A node with no edges is terminal.
+/// The graph of a document that is over a bound: empty, with the reason.
+fn refused(reason: String) -> Graph {
+    Graph { parse_error: Some(reason), ..Default::default() }
+}
+
+/// Markdown -> Graph: a faithful port of the reference parse, within the bounds of `Limits::from_env`. A node
+/// with no edges is terminal. A document over a bound has `parse_error` set and no nodes (see `parse_checked`).
 pub fn parse(text: &str) -> Graph {
+    match env_limits() {
+        Ok(limits) => parse_with_limits(text, limits),
+        Err(reason) => refused(reason.clone()),
+    }
+}
+
+/// `parse` with the bounds given. The messages are the reference's: `flow document exceeds
+/// PRISMPATH_MAX_FLOW_BYTES (N bytes)`, `... PRISMPATH_MAX_NODES (N nodes)` and `... PRISMPATH_MAX_EDGES (N
+/// edges)`, raised in the order the document reaches them (the size first, before any work).
+pub fn parse_with_limits(text: &str, limits: &Limits) -> Graph {
+    // the size is a character count, as the reference's `len(text)` is: the figure that governs the in memory
+    // string and the line scan
+    if text.chars().count() as i128 > limits.max_flow_bytes as i128 {
+        return refused(format!("flow document exceeds PRISMPATH_MAX_FLOW_BYTES ({} bytes)", limits.max_flow_bytes));
+    }
+    let mut edge_count: i64 = 0;
     let mut meta: HashMap<String, String> = HashMap::new();
     let body = match split_frontmatter(text) {
         Some((frontmatter, body_text)) => {
@@ -219,6 +319,10 @@ pub fn parse(text: &str) -> Graph {
         if let Some(heading_text) = match_head(line) {
             flush(&current_node, &instructions, &mut nodes);
             let name = heading_text.to_lowercase().replace(' ', "_");
+            // distinct node names are counted: a heading that reuses a name is not a new node
+            if !nodes.contains_key(&name) && nodes.len() as i64 >= limits.max_nodes {
+                return refused(format!("flow document exceeds PRISMPATH_MAX_NODES ({} nodes)", limits.max_nodes));
+            }
             nodes.insert(name.clone(), Node { name: name.clone(), ..Default::default() });
             if !order.contains(&name) {
                 order.push(name.clone());
@@ -229,6 +333,10 @@ pub fn parse(text: &str) -> Graph {
         }
         let Some(cur_name) = &current_node else { continue };
         if let Some((target, cond)) = match_edge(line) {
+            edge_count += 1;
+            if edge_count > limits.max_edges {
+                return refused(format!("flow document exceeds PRISMPATH_MAX_EDGES ({} edges)", limits.max_edges));
+            }
             nodes.get_mut(cur_name).expect("cur names an inserted node").edges.push((target, cond));
         } else if let Some((anno_name, argstr)) = match_anno(line) {
             let node = nodes.get_mut(cur_name).expect("cur names an inserted node");
@@ -247,7 +355,7 @@ pub fn parse(text: &str) -> Graph {
         _ => order.first().cloned().unwrap_or_default(),
     };
     let name = meta.get("name").cloned().unwrap_or_else(|| "flow".to_string());
-    let mut graph = Graph { name, start, nodes, meta, ..Default::default() };
+    let mut graph = Graph { name, start, nodes, order, meta, ..Default::default() };
     crate::field_definitions::apply_definitions(&mut graph);
     graph
 }
@@ -255,8 +363,8 @@ pub fn parse(text: &str) -> Graph {
 /// `parse`, returning the reason instead of a disabled graph when the flow breaks its field definitions.
 pub fn parse_checked(text: &str) -> Result<Graph, String> {
     let graph = parse(text);
-    match &graph.field_error {
-        Some(reason) => Err(reason.clone()),
+    match graph.refusal() {
+        Some(reason) => Err(reason.to_string()),
         None => Ok(graph),
     }
 }

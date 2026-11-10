@@ -187,7 +187,7 @@ async def conformance(dut):
     ffailures = []
     for case in doc["cases"]:
         exp = case["expect"]
-        if ("start" in case or "state" in case
+        if ("opts" in case or "start" in case or "state" in case
                 or exp["stopped"] not in ("terminal", "stuck", "max_steps")
                 or exp["pending_node"] is not None or exp["spawn"] is not None):
             fexcluded += 1

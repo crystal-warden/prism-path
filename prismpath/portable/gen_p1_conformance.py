@@ -16,7 +16,7 @@ Each fixture includes:
   * lock   — synthetic lockfile JSON (conditions as base64 float32, dim=4)
   * embedMap — {outcome_text: base64_vector} — the embed callback returns this vector
   * humanFloor — optional confidence floor
-  * expect — {path, stopped, pending_node, would_pick} from the Python reference
+  * expect — {path, stopped, pending_node, would_pick, cause} from the Python reference
 """
 from __future__ import annotations
 
@@ -246,6 +246,7 @@ FIXTURES.append({
 
 
 def _run_fixture(fx):
+    import numpy as np
     from prismpath.routing.lockfile import _decode_vec
 
     conds = {}
@@ -258,7 +259,7 @@ def _run_fixture(fx):
 
     embed_map = {text: _decode_vec(b64) for text, b64 in fx["embedMap"].items()}
 
-    import prismpath.routing as emb_mod
+    from prismpath.routing import embedder as emb_mod
     _orig_embed = emb_mod.embed
     def _stub_embed(texts, is_query=False):
         vecs = []
@@ -287,6 +288,7 @@ def _run_fixture(fx):
             "stopped": res.stopped,
             "pending_node": pending.get("node"),
             "would_pick": pending.get("would_pick"),
+            "cause": res.cause,
         }
         return expect
     finally:

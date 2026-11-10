@@ -106,7 +106,8 @@ where
 
     let mut children = Vec::new();
     for item in items {
-        let state = Value::Obj(vec![("_item".to_string(), Value::from_json(&item))]);
+        let item_value = Value::try_from_json(&item).map_err(CheckpointError)?;
+        let state = Value::Obj(vec![("_item".to_string(), item_value)]);
         let mut agent = child_agent_factory();
         match run(&child_graph, &mut *agent, RunOpts { state: Some(state), ..Default::default() }) {
             Ok(res) => children.push(ChildResult { item, path: res.path, stopped: res.stopped }),
@@ -145,7 +146,7 @@ fn inject_children(checkpoint_path: &str, summary: &JsonValue) -> Result<(), Che
     let text =
         std::fs::read_to_string(checkpoint_path).map_err(|err| CheckpointError(err.to_string()))?;
     let mut checkpoint_val: JsonValue =
-        serde_json::from_str(&text).map_err(|err| CheckpointError(err.to_string()))?;
+        crate::value::parse_strict(&text).map_err(|err| CheckpointError(err.to_string()))?;
     checkpoint_val["state"]["_children"] = summary.clone();
     std::fs::write(checkpoint_path, serde_json::to_string_pretty(&checkpoint_val).map_err(|err| CheckpointError(err.to_string()))?)
         .map_err(|err| CheckpointError(err.to_string()))

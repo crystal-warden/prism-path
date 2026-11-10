@@ -14,10 +14,10 @@ the specification. The crate's only claim to correctness is passing it bit for b
 cargo run --bin conformance -- ../prismpath/portable/conformance
 ```
 
-`CONFORMANCE.md` records the certified result (1112/1112 predicates, 27/27 flows) and the exact
+`CONFORMANCE.md` records the certified result (1112/1112 predicates, 105/105 flows, 8/8 locked flows) and the exact
 command. CI runs `cargo test` for this crate on every push.
 
-**What is here.** `src/lib.rs` (the kernel), `src/durable.rs` (checkpoints, Python canonical JSON),
+**What is here.** `src/lib.rs` (the kernel), `src/contract.rs` (the worker output contract the type gate holds a worker to), `src/durable.rs` (checkpoints, Python canonical JSON),
 `src/compose.rs` (fan out), `src/connector.rs` (the connector contract), `src/crypto_agility.rs`
 (suite registry proofs), `src/bin/conformance.rs` (the corpus runner). Tests under `tests/` replay the
 corpus files by name.

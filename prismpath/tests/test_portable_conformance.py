@@ -29,6 +29,16 @@ pytestmark = pytest.mark.skipif(NODE is None, reason="node not installed — por
 REPO = Path(__file__).resolve().parent.parent
 
 
+def raised(outcome: dict):
+    """The exception a `{"__raise__": msg}` outcome stands for. `__kind__` names its class, so the engine's
+    error context carries that name as `error_type`; without it the class is RuntimeError. A class made
+    here has no base but Exception, which is all `type(exc).__name__` and `str(exc)` read."""
+    kind = outcome.get("__kind__", "RuntimeError")
+    if kind == "RuntimeError":
+        return RuntimeError(outcome["__raise__"])
+    return type(kind, (Exception,), {})(outcome["__raise__"])
+
+
 def scripted_agent(script: dict):
     used: dict = {}
     def agent(node, instruction, state):
@@ -39,7 +49,7 @@ def scripted_agent(script: dict):
         used[node] = index + 1
         outcome = seq[min(index, len(seq) - 1)]
         if isinstance(outcome, dict) and "__raise__" in outcome:
-            raise RuntimeError(outcome["__raise__"])
+            raise raised(outcome)
         return outcome
     return agent
 

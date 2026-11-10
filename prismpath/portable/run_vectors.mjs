@@ -48,7 +48,11 @@ console.log(`predicates: ${predPass}/${preds.cases.length}${predCrash ? ` (${pre
 // ---- flows ------------------------------------------------------------------------------
 const flows = JSON.parse(readFileSync(join(dir, "flows.json"), "utf-8"));
 let flowPass = 0;
+let flowSkipped = 0;
 for (const fx of flows.cases) {
+  // A case that carries `opts` sets an engine option the P0 kernel does not take (the type gate, the
+  // transcript bound, a run id). Those cases are for the engines that implement the options.
+  if (fx.opts) { flowSkipped++; continue; }
   let got;
   try {
     const res = run(parse(fx.flow), scriptedAgent(fx.script || {}), {
@@ -69,7 +73,7 @@ for (const fx of flows.cases) {
   failures++;
   console.error(`FLOW MISMATCH  ${fx.name}\n  expect=${JSON.stringify(want)}\n  got=   ${JSON.stringify(got)}`);
 }
-console.log(`flows:      ${flowPass}/${flows.cases.length}`);
+console.log(`flows:      ${flowPass}/${flows.cases.length - flowSkipped}${flowSkipped ? ` (${flowSkipped} with engine options skipped)` : ""}`);
 
 if (failures) {
   console.error(`\nNON-CONFORMANT: ${failures} mismatch(es)`);

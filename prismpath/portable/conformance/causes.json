@@ -1,0 +1,440 @@
+{
+ "version": 1,
+ "comment": "FROZEN. The cause registry of prismpath.kernel.causes: every row, its hash, the engine stop mapping and the lookups a consumer must answer. prismpath-rs/src/causes.rs is generated from the same registry and prismpath-rs/tests/test_causes.rs replays this file. Appending a row regenerates it.",
+ "registry_sha256": "41c04927d934120fa8a75dc99d55f8597fb0be2647a1fb96d61a3192bddd23ae",
+ "registry": [
+  {
+   "code": 1,
+   "name": "sig:missing",
+   "class": "authority",
+   "description": "pack, or flow when authorization is required, carries no signature"
+  },
+  {
+   "code": 2,
+   "name": "sig:invalid",
+   "class": "authority",
+   "description": "signature fails verification"
+  },
+  {
+   "code": 3,
+   "name": "sig:revoked-key",
+   "class": "authority",
+   "description": "signing key is revoked"
+  },
+  {
+   "code": 4,
+   "name": "manifest:key-id-mismatch",
+   "class": "authority",
+   "description": "manifest names a different key"
+  },
+  {
+   "code": 5,
+   "name": "manifest:bad-format",
+   "class": "authority",
+   "description": "manifest unparseable"
+  },
+  {
+   "code": 6,
+   "name": "image:sha256-mismatch",
+   "class": "authority",
+   "description": "image hash differs from the signed manifest"
+  },
+  {
+   "code": 7,
+   "name": "manifest:count-mismatch",
+   "class": "authority",
+   "description": "table counts differ from the signed manifest"
+  },
+  {
+   "code": 8,
+   "name": "manifest:wcet-mismatch",
+   "class": "authority",
+   "description": "recomputed WCET differs from the signed bound"
+  },
+  {
+   "code": 9,
+   "name": "image:version-replay",
+   "class": "authority",
+   "description": "older signed version replayed at the loader"
+  },
+  {
+   "code": 10,
+   "name": "image:unsigned-refused",
+   "class": "authority",
+   "description": "unsigned image without the explicit override"
+  },
+  {
+   "code": 16,
+   "name": "image:caps-exceeded",
+   "class": "envelope",
+   "description": "image exceeds a MAX_* capacity bound"
+  },
+  {
+   "code": 17,
+   "name": "packing:unknown-profile",
+   "class": "envelope",
+   "description": "manifest declares an unknown packing profile"
+  },
+  {
+   "code": 18,
+   "name": "spiral:sidecar-missing",
+   "class": "envelope",
+   "description": "declared spiral sidecar absent from the pack"
+  },
+  {
+   "code": 19,
+   "name": "spiral:sidecar-hash-mismatch",
+   "class": "envelope",
+   "description": "spiral sidecar differs from the signed hash"
+  },
+  {
+   "code": 32,
+   "name": "route:no-matching-edge",
+   "class": "routing",
+   "description": "no deterministic edge matched (hold for stateful, refuse for admission)"
+  },
+  {
+   "code": 33,
+   "name": "route:below-human-floor",
+   "class": "routing",
+   "description": "semantic confidence below the calibrated floor"
+  },
+  {
+   "code": 34,
+   "name": "route:needs-human",
+   "class": "routing",
+   "description": "worker explicitly requested a human"
+  },
+  {
+   "code": 35,
+   "name": "route:max-steps",
+   "class": "routing",
+   "description": "walk exhausted the signed step bound"
+  },
+  {
+   "code": 36,
+   "name": "route:stuck",
+   "class": "routing",
+   "description": "non-terminal node with no viable edge"
+  },
+  {
+   "code": 37,
+   "name": "route:contract-violation",
+   "class": "routing",
+   "description": "worker output violated the declared contract"
+  },
+  {
+   "code": 48,
+   "name": "wire:no-terminator",
+   "class": "wire",
+   "description": "frame carries no complete codeword"
+  },
+  {
+   "code": 49,
+   "name": "wire:dangling-codeword",
+   "class": "wire",
+   "description": "trailing partial codeword with data bits"
+  },
+  {
+   "code": 50,
+   "name": "wire:symbol-overflow",
+   "class": "wire",
+   "description": "wire integer beyond the cell range"
+  },
+  {
+   "code": 51,
+   "name": "wire:codebook-mismatch",
+   "class": "wire",
+   "description": "stream not decodable under the bound policy (I3)"
+  },
+  {
+   "code": 52,
+   "name": "replay-duplicate",
+   "class": "wire",
+   "description": "tick already seen inside the window"
+  },
+  {
+   "code": 53,
+   "name": "replay-stale",
+   "class": "wire",
+   "description": "tick beyond the replay window"
+  },
+  {
+   "code": 54,
+   "name": "concentrator-unknown-stream",
+   "class": "wire",
+   "description": "concentrated record names an unregistered stream"
+  },
+  {
+   "code": 55,
+   "name": "concentrator-truncated",
+   "class": "wire",
+   "description": "concentrated record cut mid-reading"
+  },
+  {
+   "code": 56,
+   "name": "wire:chain-broken",
+   "class": "wire",
+   "description": "reading's previous hash does not match the record before it (splice, not loss)"
+  },
+  {
+   "code": 64,
+   "name": "state:stale",
+   "class": "state",
+   "description": "refresh bound exceeded; parked on the signed fail-safe"
+  },
+  {
+   "code": 65,
+   "name": "state:recovered",
+   "class": "state",
+   "description": "fresh state restored after a stale episode"
+  },
+  {
+   "code": 66,
+   "name": "state:migration-reset",
+   "class": "state",
+   "description": "reset-to migration parked the resident state"
+  },
+  {
+   "code": 67,
+   "name": "state:swap-in-flight-park",
+   "class": "state",
+   "description": "evaluate during swap parked on the fail-safe"
+  },
+  {
+   "code": 68,
+   "name": "state:normal-unheld",
+   "class": "state",
+   "description": "the reading names a shared normal this side does not hold: abstain, the state the policy needs is absent"
+  },
+  {
+   "code": 69,
+   "name": "image:truncated-header",
+   "class": "envelope",
+   "description": "image shorter than the fixed header"
+  },
+  {
+   "code": 70,
+   "name": "image:bad-magic",
+   "class": "envelope",
+   "description": "image does not open with the .ppt magic word"
+  },
+  {
+   "code": 71,
+   "name": "image:bad-version",
+   "class": "envelope",
+   "description": "image declares an unsupported format version"
+  },
+  {
+   "code": 72,
+   "name": "image:safe-node-oob",
+   "class": "envelope",
+   "description": "signed fail-safe names a node index the image does not have"
+  },
+  {
+   "code": 73,
+   "name": "image:length-mismatch",
+   "class": "envelope",
+   "description": "image length differs from the sum of its declared sections"
+  },
+  {
+   "code": 74,
+   "name": "image:unknown-op",
+   "class": "envelope",
+   "description": "atom carries an operator outside the Level M fragment"
+  },
+  {
+   "code": 75,
+   "name": "image:unknown-type",
+   "class": "envelope",
+   "description": "atom carries a value type outside the Level M fragment"
+  },
+  {
+   "code": 76,
+   "name": "image:field-index-oob",
+   "class": "envelope",
+   "description": "atom names a field index beyond the declared field count"
+  },
+  {
+   "code": 77,
+   "name": "image:edge-target-oob",
+   "class": "envelope",
+   "description": "edge targets a node index beyond the declared node count"
+  },
+  {
+   "code": 78,
+   "name": "image:edge-prog-oob",
+   "class": "envelope",
+   "description": "edge program range runs past the declared program words"
+  },
+  {
+   "code": 79,
+   "name": "image:unknown-opcode",
+   "class": "envelope",
+   "description": "program word is an opcode outside the boolean set"
+  },
+  {
+   "code": 80,
+   "name": "image:atom-index-oob",
+   "class": "envelope",
+   "description": "program word names an atom index beyond the declared atom count"
+  },
+  {
+   "code": 81,
+   "name": "image:node-attr-oob",
+   "class": "envelope",
+   "description": "per node attribute exceeds the materialization envelope"
+  },
+  {
+   "code": 82,
+   "name": "envelope:missing",
+   "class": "envelope",
+   "description": "the declared envelope artifact is absent"
+  },
+  {
+   "code": 83,
+   "name": "envelope:sig-invalid",
+   "class": "envelope",
+   "description": "envelope signature verifies under none of the offered keys"
+  },
+  {
+   "code": 84,
+   "name": "envelope:id-mismatch",
+   "class": "envelope",
+   "description": "manifest targets a different envelope"
+  },
+  {
+   "code": 85,
+   "name": "envelope:unknown-field",
+   "class": "envelope",
+   "description": "manifest declares a field the envelope does not admit"
+  },
+  {
+   "code": 86,
+   "name": "envelope:field-kind-mismatch",
+   "class": "envelope",
+   "description": "manifest field kind differs from the envelope's"
+  },
+  {
+   "code": 87,
+   "name": "flow:sha256-mismatch",
+   "class": "authority",
+   "description": "flow document differs from the one its signed flow manifest names"
+  },
+  {
+   "code": 88,
+   "name": "flow:version-replay",
+   "class": "authority",
+   "description": "flow manifest version below the accepted floor, or equal to it with another flow"
+  }
+ ],
+ "engine_stop_to_cause": {
+  "stuck": 36,
+  "needs_human": 34,
+  "max_steps": 35,
+  "contract_violation": 37
+ },
+ "clean_stops": [
+  "terminal",
+  "waiting"
+ ],
+ "by_code": [
+  {
+   "code": 0,
+   "name": null,
+   "class": null
+  },
+  {
+   "code": 1,
+   "name": "sig:missing",
+   "class": "authority"
+  },
+  {
+   "code": 36,
+   "name": "route:stuck",
+   "class": "routing"
+  },
+  {
+   "code": 48,
+   "name": "wire:no-terminator",
+   "class": "wire"
+  },
+  {
+   "code": 51,
+   "name": "wire:codebook-mismatch",
+   "class": "wire"
+  },
+  {
+   "code": 52,
+   "name": "replay-duplicate",
+   "class": "wire"
+  },
+  {
+   "code": 56,
+   "name": "wire:chain-broken",
+   "class": "wire"
+  },
+  {
+   "code": 68,
+   "name": "state:normal-unheld",
+   "class": "state"
+  },
+  {
+   "code": 69,
+   "name": "image:truncated-header",
+   "class": "envelope"
+  },
+  {
+   "code": 86,
+   "name": "envelope:field-kind-mismatch",
+   "class": "envelope"
+  },
+  {
+   "code": 87,
+   "name": "flow:sha256-mismatch",
+   "class": "authority"
+  },
+  {
+   "code": 200,
+   "name": null,
+   "class": null
+  },
+  {
+   "code": 255,
+   "name": null,
+   "class": null
+  }
+ ],
+ "by_name": [
+  {
+   "name": "route:stuck",
+   "code": 36,
+   "class": "routing"
+  },
+  {
+   "name": "replay-duplicate",
+   "code": 52,
+   "class": "wire"
+  },
+  {
+   "name": "no-such-cause",
+   "code": null,
+   "class": null
+  },
+  {
+   "name": "",
+   "code": null,
+   "class": null
+  },
+  {
+   "name": "ROUTE:STUCK",
+   "code": null,
+   "class": null
+  },
+  {
+   "name": "route:stuck ",
+   "code": null,
+   "class": null
+  }
+ ]
+}

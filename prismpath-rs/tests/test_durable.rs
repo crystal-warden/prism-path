@@ -6,6 +6,9 @@
 //! Python reference froze (flow_path/saved_at dropped; everything else must match).
 #![cfg(feature = "durable")]
 
+mod common;
+
+use common::Scratch;
 use prismpath_rs::durable::*;
 use prismpath_rs::{RunState, V};
 use serde_json::Value;
@@ -73,7 +76,8 @@ fn manifests_verify_and_tamper_fails() {
         over["root"].as_str().unwrap(),
         None,
         over["created"].as_str().unwrap(),
-    );
+    )
+    .unwrap();
     assert_eq!(rebuilt_over, *over, "Rust-built override manifest != Python's");
 }
 
@@ -114,10 +118,8 @@ fn normalize(mut cp: Value) -> Value {
     cp
 }
 
-fn tmpdir() -> std::path::PathBuf {
-    let dir = std::env::temp_dir().join(format!("pp_durable_{}", std::process::id()));
-    std::fs::create_dir_all(&dir).unwrap();
-    dir
+fn tmpdir() -> Scratch {
+    Scratch::new("durable")
 }
 
 #[test]
@@ -170,7 +172,6 @@ fn checkpoint_scenarios_match_the_python_reference() {
         }
     }
     eprintln!("checkpoints: {}/{} scenarios match", scenarios.len(), scenarios.len());
-    let _ = std::fs::remove_dir_all(&dir);
 }
 
 #[test]

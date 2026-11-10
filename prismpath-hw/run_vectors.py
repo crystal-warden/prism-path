@@ -102,6 +102,8 @@ def cert_predicates() -> tuple:
 # ---------------------------------------------------------------- engine vectors
 
 def flow_subset_reason(case: dict) -> str | None:
+    if "opts" in case:
+        return "engine-options"       # the type gate, the transcript bound, a run id: not in the compiled subset
     if "start" in case or "state" in case:
         return "resume-fixture"
     exp = case["expect"]

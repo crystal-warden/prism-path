@@ -59,17 +59,35 @@ impl Value {
         }
     }
 
+    /// A JSON value as an engine value. A number beyond the double range is refused (see
+    /// `try_from_json`); every input boundary reads with `parse_strict`, so none reaches here, and
+    /// one that did stops with a panic rather than become infinity or zero.
     pub fn from_json(json_val: &serde_json::Value) -> Value {
-        match json_val {
+        Self::try_from_json(json_val).unwrap_or_else(|error| panic!("{error}; read documents with value::parse_strict"))
+    }
+
+    /// `from_json`, refusing a number with no finite double (past 1.8e308, written as an integer or
+    /// not) instead of converting it to infinity, zero or NaN.
+    pub fn try_from_json(json_val: &serde_json::Value) -> Result<Value, String> {
+        Ok(match json_val {
             serde_json::Value::Null => Value::Null,
             serde_json::Value::Bool(bool_val) => Value::Bool(*bool_val),
-            serde_json::Value::Number(num_val) => Value::Num(num_val.as_f64().unwrap_or(0.0)),
+            serde_json::Value::Number(num_val) => Value::Num(number_to_f64(num_val).ok_or_else(|| {
+                let text = num_val.to_string();
+                let shown: String = text.chars().take(24).collect();
+                format!("number {shown} is beyond the double range and is refused, not read as infinity")
+            })?),
             serde_json::Value::String(str_val) => Value::Str(str_val.clone()),
-            serde_json::Value::Array(arr_val) => Value::List(arr_val.iter().map(Value::from_json).collect()),
-            serde_json::Value::Object(obj_val) => {
-                Value::Obj(obj_val.iter().map(|(key, item)| (key.clone(), Value::from_json(item))).collect())
+            serde_json::Value::Array(arr_val) => {
+                Value::List(arr_val.iter().map(Value::try_from_json).collect::<Result<Vec<_>, _>>()?)
             }
-        }
+            serde_json::Value::Object(obj_val) => Value::Obj(
+                obj_val
+                    .iter()
+                    .map(|(key, item)| Value::try_from_json(item).map(|value| (key.clone(), value)))
+                    .collect::<Result<Vec<_>, _>>()?,
+            ),
+        })
     }
 
     pub fn obj_get<'a>(entries: &'a [(String, Value)], key: &str) -> Option<&'a Value> {
@@ -89,4 +107,50 @@ impl std::error::Error for PredicateError {}
 
 pub fn perr<ValType>(msg: impl Into<String>) -> Result<ValType, PredicateError> {
     Err(PredicateError(msg.into()))
+}
+
+/// A JSON number as a finite double, or `None` when it has none. serde_json is built with
+/// `arbitrary_precision`, where a number beyond the double range (`1e400`) keeps its digits and has
+/// no `as_f64`. Such a number is REFUSED, never read as infinity and never as zero: canonical JSON
+/// has no non finite number, and `prismpath.canon` refuses the same text (`CanonicalReadError`).
+pub fn number_to_f64(number: &serde_json::Number) -> Option<f64> {
+    number.as_f64().or_else(|| number.to_string().parse::<f64>().ok()).filter(|double| double.is_finite())
+}
+
+/// A number written with digits only (and an optional sign) is an integer of any width, which both
+/// languages keep exactly, so it has no double and needs none.
+pub fn is_integer_text(number: &serde_json::Number) -> bool {
+    let text = number.to_string();
+    let digits = text.strip_prefix('-').unwrap_or(&text);
+    !digits.is_empty() && digits.bytes().all(|byte| byte.is_ascii_digit())
+}
+
+/// Refuse a document that holds a number canonical JSON cannot carry: one beyond the double range
+/// (`1e400`, `-1e400`). NaN, Infinity and lone surrogates never reach a `serde_json::Value`, which
+/// refuses them at parse; this is the refusal for the one case serde_json accepts.
+pub fn check_canonical(value: &serde_json::Value) -> Result<(), String> {
+    match value {
+        serde_json::Value::Number(number) => {
+            if is_integer_text(number) || number_to_f64(number).is_some() {
+                Ok(())
+            } else {
+                let text = number.to_string();
+                let shown: String = text.chars().take(24).collect();
+                Err(format!("number {shown} is beyond the double range and is refused, not read as infinity"))
+            }
+        }
+        serde_json::Value::Array(items) => items.iter().try_for_each(check_canonical),
+        serde_json::Value::Object(entries) => entries.values().try_for_each(check_canonical),
+        _ => Ok(()),
+    }
+}
+
+/// `serde_json::from_str::<Value>` for a document that is hashed, signed or verified: the same
+/// text prismpath.canon.loads accepts. NaN, Infinity, lone surrogates and any text serde_json
+/// refuses fail in the parse; a number beyond the double range fails here. The error type is
+/// serde_json's, so a caller swaps this in for `serde_json::from_str` unchanged.
+pub fn parse_strict(text: &str) -> Result<serde_json::Value, serde_json::Error> {
+    let value: serde_json::Value = serde_json::from_str(text)?;
+    check_canonical(&value).map_err(<serde_json::Error as serde::de::Error>::custom)?;
+    Ok(value)
 }

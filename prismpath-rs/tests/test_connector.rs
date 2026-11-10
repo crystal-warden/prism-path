@@ -5,6 +5,9 @@
 //! the same final path/stopped with `_children` aggregated — against the Python reference.
 #![cfg(feature = "durable")]
 
+mod common;
+
+use common::Scratch;
 use prismpath_rs::compose::run_fanout;
 use prismpath_rs::connector::{flatten, Connector, DeferralStore, EchoConnector, MemDeferralStore};
 use prismpath_rs::{RunState, V};
@@ -25,12 +28,12 @@ fn hashes_and_flatten_match_python() {
     let fx = fixtures();
     let conn = EchoConnector { name: "echo".to_string() };
     for case in fx["hashes"].as_array().unwrap() {
-        assert_eq!(conn.ingestion_hash(&case["data"]), case["ingestion"].as_str().unwrap());
-        assert_eq!(conn.knowledge_hash(&case["data"]), case["knowledge"].as_str().unwrap());
+        assert_eq!(conn.ingestion_hash(&case["data"]).unwrap(), case["ingestion"].as_str().unwrap());
+        assert_eq!(conn.knowledge_hash(&case["data"]).unwrap(), case["knowledge"].as_str().unwrap());
     }
     for case in fx["flatten"].as_array().unwrap() {
         let mut flat = BTreeMap::new();
-        flatten(&case["data"], "", ".", &mut flat);
+        flatten(&case["data"], "", ".", &mut flat).unwrap();
         let expected = case["flat"].as_object().unwrap();
         assert_eq!(flat.len(), expected.len(), "flatten arity for {}", case["data"]);
         for (key, value) in expected {
@@ -48,7 +51,7 @@ fn prompt_surface_matches_python_byte_for_byte() {
     for case in fx["prompts"].as_array().unwrap() {
         let criteria = case["criteria"].as_str();
         let schema = case.get("schema").filter(|value| !value.is_null());
-        let got = conn.adjudication_prompt(&case["payload"], criteria, schema);
+        let got = conn.adjudication_prompt(&case["payload"], criteria, schema).unwrap();
         assert_eq!(got, case["prompt"].as_str().unwrap(), "prompt for {}", case["payload"]);
     }
 }
@@ -68,7 +71,7 @@ fn attestation_manifest_matches_python() {
         attestation["kb_hash"].as_str().unwrap(),
         None,
         attestation["manifest"]["created"].as_str().unwrap(),
-    );
+    ).unwrap();
     assert_eq!(got, attestation["manifest"], "attestation manifest");
 }
 
@@ -76,10 +79,10 @@ fn attestation_manifest_matches_python() {
 fn adjudicate_extracts_json_and_degrades_gracefully() {
     let conn = EchoConnector { name: "echo".to_string() };
     let mut model = |_prompt: &str| r#"verdict follows {"verdict": "contain"} end"#.to_string();
-    let out = conn.adjudicate(&json!({"x": 1}), &mut model, None, None);
+    let out = conn.adjudicate(&json!({"x": 1}), &mut model, None, None).unwrap();
     assert_eq!(out["verdict"], "contain");
     let mut plain = |_prompt: &str| "no json here".to_string();
-    let out2 = conn.adjudicate(&json!({"x": 1}), &mut plain, None, None);
+    let out2 = conn.adjudicate(&json!({"x": 1}), &mut plain, None, None).unwrap();
     assert_eq!(out2, json!({"text": "no json here"}));
 }
 
@@ -100,20 +103,41 @@ fn join_policy_grid_matches_the_composer() {
     eprintln!("joins: {}/{} grid entries match composer", grid.len(), grid.len());
 }
 
+/// The interpreter for the cross language legs: `PRISMPATH_PYTHON` when set, else the repository's
+/// `.venv`. `PRISMPATH_REQUIRE_CROSS_LANGUAGE` (any non empty value) is what CI sets: with it, a
+/// missing interpreter fails the test, because a leg that cannot run proves nothing. Without it a
+/// developer machine with no Python skips with a message that says exactly what was skipped.
+fn python_for_cross_language(repo: &str, what: &str) -> Option<String> {
+    let required = std::env::var("PRISMPATH_REQUIRE_CROSS_LANGUAGE").is_ok_and(|value| !value.is_empty());
+    let configured = std::env::var("PRISMPATH_PYTHON").ok().filter(|value| !value.is_empty());
+    let python = configured.clone().unwrap_or_else(|| format!("{repo}/.venv/bin/python"));
+    let found = if configured.is_some() {
+        std::process::Command::new(&python).arg("--version").output().is_ok_and(|out| out.status.success())
+    } else {
+        std::path::Path::new(&python).exists()
+    };
+    if found {
+        return Some(python);
+    }
+    assert!(
+        !required,
+        "PRISMPATH_REQUIRE_CROSS_LANGUAGE is set but no Python was found ({python}); set PRISMPATH_PYTHON to an interpreter that can import prismpath"
+    );
+    eprintln!(
+        "SKIPPED (not run): {what} needs Python; set PRISMPATH_PYTHON (or make {repo}/.venv) to run it. CI sets PRISMPATH_REQUIRE_CROSS_LANGUAGE so it cannot skip there."
+    );
+    None
+}
+
 /// Bidirectional file-deferral parity: Python defers -> Rust lists + resumes -> Python reads the
-/// resolution (and the reverse). Skips cleanly without the venv.
+/// resolution (and the reverse). See `python_for_cross_language` for when this skips.
 #[test]
 fn file_deferral_store_is_cross_runtime() {
     use prismpath_rs::connector::FileDeferralStore;
     let repo = format!("{}/..", env!("CARGO_MANIFEST_DIR"));
-    let python = format!("{repo}/.venv/bin/python");
-    if !std::path::Path::new(&python).exists() {
-        eprintln!("SKIP: no .venv python for the bidirectional leg");
-        return;
-    }
-    let dir = std::env::temp_dir().join(format!("pp_defer_{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    let store = FileDeferralStore::new(&dir).unwrap();
+    let Some(python) = python_for_cross_language(&repo, "the bidirectional file deferral leg") else { return };
+    let dir = Scratch::new("defer");
+    let store = FileDeferralStore::new(dir.to_path_buf()).unwrap();
     let run_python = |code: &str| {
         let out = std::process::Command::new(&python).arg("-c").arg(code).output().unwrap();
         assert!(out.status.success(), "python failed: {}", String::from_utf8_lossy(&out.stderr));
@@ -153,7 +177,6 @@ fn file_deferral_store_is_cross_runtime() {
     assert_eq!(rec["actor"], "auditor:py");
     assert_eq!(store.pending().len(), 0);
     eprintln!("file deferral: cross-runtime round-trips both ways");
-    let _ = std::fs::remove_dir_all(&dir);
 }
 
 #[test]
@@ -169,8 +192,7 @@ fn deferral_port_round_trip() {
 #[test]
 fn emit_record_is_idempotent() {
     let conn = EchoConnector { name: "echo".to_string() };
-    let dir = std::env::temp_dir().join(format!("pp_conn_{}", std::process::id()));
-    let _ = std::fs::create_dir_all(&dir);
+    let dir = Scratch::new("conn");
     let dest = dir.join("out.jsonl");
     let dest_s = dest.to_str().unwrap();
     let _ = std::fs::remove_file(&dest);
@@ -184,7 +206,6 @@ fn emit_record_is_idempotent() {
         .collect();
     assert_eq!(lines.len(), 2, "replayed key must not double-write");
     assert_eq!(lines[0]["v"], 2);
-    let _ = std::fs::remove_dir_all(&dir);
 }
 
 // ------------------------------------------------------------------ spawn/join fan-out
@@ -209,9 +230,7 @@ fn scripted(script: Value) -> ScriptedAgent {
 fn fanout_matches_the_python_reference() {
     let fx = fixtures();
     let fanout = &fx["fanout"];
-    let dir = std::env::temp_dir().join(format!("pp_fanout_{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).unwrap();
+    let dir = Scratch::new("fanout");
     let parent = dir.join("fx_parent.md");
     std::fs::write(&parent, fanout["parent_flow"].as_str().unwrap()).unwrap();
     let ckpt = dir.join("fx_parent.ckpt.json");
@@ -250,5 +269,4 @@ fn fanout_matches_the_python_reference() {
     assert_eq!(children_in_state, fanout["final"]["children_in_state"], "_children in state");
 
     eprintln!("fanout: {} children, final path {:?} — matches Python", children.len(), final_res.path);
-    let _ = std::fs::remove_dir_all(&dir);
 }

@@ -17,8 +17,11 @@ Two files:
     found) + a seeded grammar-fuzz sample. "ERROR" means PredicateError — the edge is
     non-matching at run time, and check/eval agree it's outside the sandbox.
   * flows.json — full engine fixtures: a flow document + scripted worker outcomes ->
-    {path, stopped, pending_node, spawn}. Same script protocol as run_conformance.mjs
-    ({"__raise__": msg} throws, exercising the error tier).
+    {path, stopped, pending_node, spawn, cause}. Same script protocol as run_conformance.mjs
+    ({"__raise__": msg} throws, exercising the error tier). A case with `opts` runs the engine's
+    `type_gate` / `max_transcript` options and its expect also holds {reason, violations, transcript,
+    state_dropped, guard_errors, steps}; a flow with a malformed @state_bound expects {error: message} (see
+    engine_surface_fixtures.py).
 
 Determinism: fixed RNG seed, sorted iteration — regenerating on the same Python produces
 byte-identical files, so `git diff` over this directory IS the spec-change review. The pytest
@@ -251,24 +254,54 @@ def _expect(cond: str, ctx: dict):
 
 
 # ---------------------------------------------------------------------- engine fixtures
+# what a step's info holds that a corpus case expects (the routing scores of a semantic step are floats of an
+# embedding and are compared by the cross language engine test instead)
+STEP_INFO_KEYS = ("used", "cond", "error_type", "guard_errors")
+
+
 def _flow_fixtures():
-    """The engine-level fixtures — imported from the conformance test so there is ONE fixture
-    source; their expected results are computed here from the Python engine."""
+    """The engine-level fixtures, from the conformance test (the frozen ones, so there is ONE fixture
+    source) and portable/engine_surface_fixtures.py (the type gate and the transcript bound, which carry
+    `opts`); their expected results are computed here from the Python engine."""
+    from prismpath.portable.engine_surface_fixtures import FIXTURES as SURFACE
     from prismpath.tests.test_portable_conformance import FIXTURES, scripted_agent
     out = []
-    for fx in FIXTURES:
+    for fx in list(FIXTURES) + list(SURFACE):
         graph = parse(fx["flow"])
         state = json.loads(json.dumps(fx["state"])) if "state" in fx else None
-        res = run(graph, scripted_agent(fx["script"]), max_steps=fx.get("maxSteps", 25),
-                  start=fx.get("start"), state=state)
+        options = fx.get("opts")
+        try:
+            res = run(graph, scripted_agent(fx["script"]), max_steps=fx.get("maxSteps", 25),
+                      start=fx.get("start"), state=state, **(options or {}))
+        except Exception as error:       # the run does not start (a malformed @state_bound, a route into a
+            # node the flow does not define) or the worker's own error found no handler; the class is kept
+            # because a Rust engine reports the same refusal as a different type
+            expect = {"error": str(error), "error_class": type(error).__name__}
+        else:
+            expect = {"path": res.path, "stopped": res.stopped,
+                      "pending_node": (res.pending or {}).get("node"),
+                      "spawn": (res.pending or {}).get("spawn"),
+                      "cause": res.cause}
+            if options is not None:      # what the type gate and the bound change
+                expect.update({"reason": (res.pending or {}).get("reason"),
+                               "violations": (res.pending or {}).get("violations"),
+                               "transcript": res.state["transcript"],
+                               "state_dropped": res.state.get("_state_dropped", {}),
+                               # an error guard's message is the engine language's own words, so only which
+                               # guard of which node was recorded is expected; the step keeps what the error
+                               # tier added to its info
+                               "guard_errors": [{"node": item["node"], "guard": item["guard"]}
+                                                for item in res.state.get("_guard_errors", [])],
+                               "steps": [{"node": step.node, "target": step.target,
+                                          **{key: step.info[key] for key in STEP_INFO_KEYS if key in step.info}}
+                                         for step in res.steps]})
         out.append({
             "name": fx["name"], "flow": fx["flow"], "script": fx["script"],
             **({"maxSteps": fx["maxSteps"]} if "maxSteps" in fx else {}),
             **({"start": fx["start"]} if "start" in fx else {}),
             **({"state": fx["state"]} if "state" in fx else {}),
-            "expect": {"path": res.path, "stopped": res.stopped,
-                       "pending_node": (res.pending or {}).get("node"),
-                       "spawn": (res.pending or {}).get("spawn")},
+            **({"opts": options} if options is not None else {}),
+            "expect": expect,
         })
     return out
 
@@ -285,7 +318,7 @@ def generate() -> dict:
     flows_doc = {
         "version": VERSION,
         "note": "script maps node -> outcomes consumed in visit order (last repeats); "
-                "{'__raise__': msg} throws. expect is the Python reference engine's result.",
+                "{'__raise__': msg} throws (class named by '__kind__', RuntimeError by default). expect is the Python reference engine's result.",
         "cases": _flow_fixtures(),
     }
     return {"predicates.json": predicates_doc, "flows.json": flows_doc}

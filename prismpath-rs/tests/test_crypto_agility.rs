@@ -76,7 +76,7 @@ fn crypto_agility_conformance() {
     let agility_fx = load_fixture("crypto_agility.json");
     let registry = &agility_fx["registry"];
     let expected_hash = agility_fx["registry_hash"].as_str().expect("hash str");
-    let computed_hash = registry_hash(registry);
+    let computed_hash = registry_hash(registry).unwrap();
 
     assert_eq!(computed_hash, expected_hash, "registry_hash mismatch");
 
@@ -99,7 +99,7 @@ fn crypto_migration_conformance() {
     let migration_fx = load_fixture("crypto_migration.json");
 
     let expected_hash = migration_fx["registry_hash"].as_str().expect("hash str");
-    let computed_hash = registry_hash(registry);
+    let computed_hash = registry_hash(registry).unwrap();
     assert_eq!(computed_hash, expected_hash, "migration registry_hash mismatch");
 
     let cells = migration_fx["cells"].as_array().expect("cells array");

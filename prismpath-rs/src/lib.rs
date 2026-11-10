@@ -10,7 +10,9 @@
 //! cargo run --bin conformance -- ../prismpath/portable/conformance
 //! ```
 
+pub mod causes;
 pub mod condition;
+pub mod contract;
 pub mod engine;
 pub mod field_definitions;
 pub mod level_m;
@@ -37,11 +39,12 @@ pub use condition::{
 pub use engine::{
     decode_b64_f32, event_target, first_deterministic, locked_route,
     portability_violations, py_str, reachable, run, run_locked, run_locked_observed, run_observed,
-    CentroidPin, EngineError, Lock, Pending, RouteDecision, RunOpts, RunResult, RunState, Step,
-    Violation,
+    run_locked_decided, CentroidPin, Decision, EngineError, Lock, Pending, RouteDecision, RunOpts, RunResult, RunState,
+    Step, Violation, WorkerError,
 };
+pub use contract::{derive_contract, ContractError};
 pub use level_m::{capability_report, flow_level_m, is_level_m, level_m_atoms, LevelMAtom, NonMemberEdge};
-pub use parser::{parse, parse_checked, Graph, Node};
+pub use parser::{parse, parse_checked, parse_with_limits, Graph, Limits, Node};
 pub use field_definitions::{accept_canonical, canonical_value, CanonicalRefusal, DefinedKind, FieldDefinition, Rounding};
 pub use reach::check_reach;
 pub use value::{PredicateError, Value, V, CMP_DEPTH, MAX_DEPTH};
@@ -175,7 +178,7 @@ mod tests {
         let res = run(
             &graph,
             |_, _, _| {
-                Ok(Value::Obj(vec![
+                Ok::<_, String>(Value::Obj(vec![
                     ("ok".into(), Value::Bool(true)),
                     ("text".into(), Value::Str("x".into())),
                 ]))
@@ -190,7 +193,7 @@ mod tests {
     #[test]
     fn max_steps_protects_against_loops() {
         let graph = parse("## a\n-> a: always\n");
-        let res = run(&graph, |_, _, _| Ok(Value::Str("t".into())), RunOpts::default()).unwrap();
+        let res = run(&graph, |_, _, _| Ok::<_, String>(Value::Str("t".into())), RunOpts::default()).unwrap();
         assert_eq!(res.stopped, "max_steps");
         assert_eq!(res.path.len(), 26);
     }
@@ -199,7 +202,7 @@ mod tests {
     fn semantic_edge_is_refused_up_front() {
         let graph = parse("## a\n-> b: the answer looks correct\n\n## b\nDone.\n");
         assert!(matches!(
-            run(&graph, |_, _, _| Ok(Value::Null), RunOpts::default()),
+            run(&graph, |_, _, _| Ok::<_, String>(Value::Null), RunOpts::default()),
             Err(EngineError::NotPortable(_))
         ));
     }
@@ -213,14 +216,15 @@ mod tests {
         let lock = Lock { conditions: conds, centroids: None, dim: 4 };
         let res = run_locked(
             &graph,
-            |_, _, _| Ok(Value::Obj(vec![("text".to_string(), Value::Str("great".into()))])),
+            |_, _, _| Ok::<_, String>(Value::Obj(vec![("text".to_string(), Value::Str("great".into()))])),
             |_text| vec![0.99f32, 0.11, 0.0, 0.0],
             &lock,
             RunOpts::default(),
         ).unwrap();
         assert_eq!(res.path, vec!["a", "b"]);
         assert_eq!(res.stopped, "terminal");
-        assert_eq!(res.steps[0].used, "locked");
+        assert_eq!(res.steps[0].used, "embed");
+        assert_eq!(res.steps[0].locked, Some(true));
         assert!(res.steps[0].score.unwrap() > 0.9);
     }
 
@@ -233,7 +237,7 @@ mod tests {
         let lock = Lock { conditions: conds, centroids: None, dim: 4 };
         let res = run_locked(
             &graph,
-            |_, _, _| Ok(Value::Obj(vec![("text".to_string(), Value::Str("ambiguous".into()))])),
+            |_, _, _| Ok::<_, String>(Value::Obj(vec![("text".to_string(), Value::Str("ambiguous".into()))])),
             |_text| vec![0.72f32, 0.69, 0.0, 0.07],
             &lock,
             RunOpts { human_floor: Some(0.99), ..Default::default() },
@@ -250,7 +254,7 @@ mod tests {
         let lock = Lock { conditions: conds, centroids: None, dim: 4 };
         let res = run_locked(
             &graph,
-            |_, _, _| Ok(Value::Obj(vec![
+            |_, _, _| Ok::<_, String>(Value::Obj(vec![
                 ("text".to_string(), Value::Str("go".into())),
                 ("x".to_string(), Value::Num(1.0)),
             ])),
@@ -259,7 +263,9 @@ mod tests {
             RunOpts::default(),
         ).unwrap();
         assert_eq!(res.path, vec!["a", "b"]);
-        assert!(res.steps[0].used.starts_with("deterministic"));
+        assert_eq!(res.steps[0].used, "deterministic");
+        assert_eq!(res.steps[0].cond.as_deref(), Some("when x == 1"));
+        assert_eq!(res.steps[0].locked, None);
     }
 
     #[test]
@@ -270,7 +276,7 @@ mod tests {
         let lock = Lock { conditions: conds, centroids: None, dim: 4 };
         let res = run_locked(
             &graph,
-            |_, _, _| Ok(Value::Null),
+            |_, _, _| Ok::<_, String>(Value::Null),
             |_| vec![1.0, 0.0, 0.0, 0.0],
             &lock,
             RunOpts::default(),
@@ -291,7 +297,7 @@ mod tests {
         let lock = Lock { conditions: conds, centroids: Some(centroids), dim: 4 };
         let res = run_locked(
             &graph,
-            |_, _, _| Ok(Value::Obj(vec![("text".to_string(), Value::Str("test".into()))])),
+            |_, _, _| Ok::<_, String>(Value::Obj(vec![("text".to_string(), Value::Str("test".into()))])),
             |_| vec![0.0, 0.99, 0.0, 0.1],
             &lock,
             RunOpts::default(),

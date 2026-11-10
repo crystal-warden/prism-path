@@ -64,7 +64,7 @@ fn a_refused_policy_is_disabled_and_the_engine_will_not_run_it() {
         let graph = parse(policy["flow"].as_str().unwrap());
         assert!(graph.field_error.is_some(), "[{name}] parsed although the reference refuses it");
         assert!(graph.nodes.values().flat_map(|node| node.edges.iter()).all(|(_target, cond)| cond == "never"), "[{name}] an edge stayed live");
-        let outcome = run(&graph, |_node, _instruction, _state| Ok(Value::Null), RunOpts::default());
+        let outcome = run(&graph, |_node, _instruction, _state| Ok::<_, String>(Value::Null), RunOpts::default());
         assert!(matches!(outcome, Err(EngineError::InvalidFlow(_))), "[{name}] the engine ran a refused flow");
     }
 }
