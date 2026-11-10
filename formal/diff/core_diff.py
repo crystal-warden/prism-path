@@ -53,7 +53,8 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-ORACLE = ROOT / "formal" / ".lake" / "build" / "bin" / "core-oracle"
+# PRISMPATH_CORE_ORACLE names a built oracle elsewhere (another worktree's build) so no build or symlink is needed here
+ORACLE = Path(os.environ.get("PRISMPATH_CORE_ORACLE") or ROOT / "formal" / ".lake" / "build" / "bin" / "core-oracle")
 EXACT = 2 ** 53 - 1
 FORMAT = "prismpath.core/1"
 START = "core_decision"
