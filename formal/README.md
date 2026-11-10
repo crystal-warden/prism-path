@@ -102,6 +102,27 @@ line policy, in atom forms the frozen corpus never exercised. No shipped flow us
 branch `fix/quantizer-cut-points` (merged here) with the decisions corpus at version 2; ledger rows
 #140 to #143.
 
+## The verified policy core (formal/Core)
+
+Beside FQ, `formal/Core` is the executable semantics of the narrow core PrismPath proves once: one
+decision of a Level M policy with field definitions, read from canon/2 documents
+(docs/design/spec-verified-core.md). Unlike FQ, which proves properties of a model, these theorems are
+about the very function the oracle runs (`Core.verdict`), and the oracle is the reference the other
+implementations are differentially tested against. The evaluator depends only on `propext`; the
+theorems on the standard three.
+
+| theorem | file | statement in words |
+|---|---|---|
+| `verdict_total`, `matchSteps_le` | Theorems.lean | **Termination.** Every image and reading has a verdict (structural recursion only); routing evaluates at most the policy's atoms |
+| `policy_refusal_refuses_all`, `unreadable_image_refused` | Theorems.lean | **No fail open, policy.** An image that does not read, decode or check refuses every reading with its refusal |
+| `unreadable_reading_refused`, `boundary_refusal` | Theorems.lean | **No fail open, reading.** An unreadable reading, or one the boundary refuses, is refused |
+| `route_sound`, `route_is_a_target` | Theorems.lean | **No fail open, the allow.** A route exists only for a checked policy and a reading every definition accepts, and names the first rule whose condition holds |
+| `verdict_cases`, `policy_refusal_iff`, `verdict_route_or_refuse` | Theorems.lean | **Refusal completeness.** Every input lands in exactly one of six stages, each a route or one refusal of the closed `Refusal` type |
+| `verdict_perm`, `verdict_text_perm`, `readChars_wf`, `evalC_congr` | Theorems.lean | **Determinism.** The verdict depends on a reading's members, not their order or spelling |
+| `evalC_toX`, `firstMatch_eq_routeX` | Bridge.lean | the core evaluates and routes as FQ's `evalX` and `routeX` |
+| `boundary_canonical`, `accepted_quantization_preserves`, `core_reconstruct_route` | Bridge.lean | readings the core accepts are FQ canonical, so equal quantization gives equal verdicts and the decoded reading routes as the reading |
+| `scaled_correct`, `lowered_threshold_preserves` | Bridge.lean | a decimal threshold the core lowers decides on the canonical integer as the authored decimal on the source value |
+
 ## Validation, and how to reproduce it
 
 ```bash
@@ -109,7 +130,7 @@ branch `fix/quantizer-cut-points` (merged here) with the decisions corpus at ver
 curl -sSf https://elan.lean-lang.org/elan-init.sh | sh -s -- -y --default-toolchain leanprover/lean4:v4.33.1
 cd formal && lake exe cache get
 lake build                         # compiles every module, evaluates every #guard, prints the axiom audit
-grep -rn sorry FQ/ FQ.lean         # expect no output
+grep -rn sorry FQ/ FQ.lean Core/ Core.lean   # expect no output
 for m in FQ.Syntax FQ.Partition FQ.I1 FQ.Reconstruct FQ.AlgEq FQ.Zeckendorf FQ.Spiral FQ.Bridge FQ.Vectors; do
   lake env leanchecker $m          # independent kernel re-check of the stored proofs
 done

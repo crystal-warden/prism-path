@@ -8,6 +8,7 @@ import FQ.Spiral
 import FQ.Conversion
 import FQ.Contract
 import FQ.Absence
+import Core.Bridge
 /-! The axiom audit: the theorem must depend on nothing beyond Lean's three standard axioms. -/
 #print axioms FQ.decision_preservation
 #print axioms FQ.symbolCount_eq_truthVec
@@ -29,3 +30,32 @@ import FQ.Absence
 #print axioms FQ.atomAbsent_is_engine_null
 #print axioms FQ.absence_preservation
 #print axioms FQ.reconstructX_route
+/-! The verified core (formal/Core, docs/design/spec-verified-core.md): its theorems, and the
+evaluator the oracle runs, which must not use `Classical.choice` to compute. -/
+#print axioms Core.verdict
+#print axioms Core.verdictBytes
+#print axioms Core.verdict_total
+#print axioms Core.matchSteps_le
+#print axioms Core.firstMatch_spec
+#print axioms Core.firstRefused_spec
+#print axioms Core.policy_refusal_refuses_all
+#print axioms Core.unreadable_image_refused
+#print axioms Core.unreadable_reading_refused
+#print axioms Core.boundary_refusal
+#print axioms Core.route_sound
+#print axioms Core.route_is_a_target
+#print axioms Core.verdict_cases
+#print axioms Core.policy_refusal_iff
+#print axioms Core.decideReading_perm
+#print axioms Core.verdict_perm
+#print axioms Core.verdict_text_perm
+#print axioms Core.readChars_wf
+#print axioms Core.evalC_congr
+#print axioms Core.Bridge.evalC_toX
+#print axioms Core.Bridge.firstMatch_eq_routeX
+#print axioms Core.Bridge.core_quantization_preserves
+#print axioms Core.Bridge.core_reconstruct_route
+#print axioms Core.Bridge.scaled_correct
+#print axioms Core.Bridge.lowered_threshold_preserves
+#print axioms Core.Bridge.boundary_canonical
+#print axioms Core.Bridge.accepted_quantization_preserves

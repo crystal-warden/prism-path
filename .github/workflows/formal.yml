@@ -34,7 +34,7 @@ jobs:
       - name: Build (modules, #guard bridge checks, axiom audit)
         run: cd formal && lake build
       - name: No sorry in the sources
-        run: "! grep -rn --include=*.lean -w sorry formal/FQ formal/FQ.lean"
+        run: "! grep -rn --include=*.lean -w sorry formal/FQ formal/FQ.lean formal/Core formal/Core.lean"
       - name: Bridge vectors are byte identical to a fresh generation from the frozen corpora
         run: |
           pip install numpy

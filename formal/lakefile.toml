@@ -1,5 +1,5 @@
 name = "fq"
-defaultTargets = ["FQ"]
+defaultTargets = ["FQ", "Core"]
 
 [[require]]
 name = "mathlib"
@@ -8,3 +8,8 @@ rev = "v4.33.1"
 
 [[lean_lib]]
 name = "FQ"
+
+# The verified policy core (docs/design/spec-verified-core.md): the evaluator, its theorems and its
+# bridge to FQ.
+[[lean_lib]]
+name = "Core"
