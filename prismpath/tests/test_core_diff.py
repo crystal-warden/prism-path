@@ -44,11 +44,16 @@ def _legs():
         if os.environ.get("PRISMPATH_REQUIRE_CORE_ORACLE"):
             pytest.fail(f"PRISMPATH_REQUIRE_CORE_ORACLE is set and {core_diff.ORACLE} is not built")
         pytest.skip("the Lean oracle is not built (cd formal && lake build)")
+    legs = ["python"]
     if core_diff.rust_binary().exists() or shutil.which("cargo"):
-        return ("python", "rust")
-    if os.environ.get("PRISMPATH_REQUIRE_CORE_ORACLE"):
-        pytest.fail("PRISMPATH_REQUIRE_CORE_ORACLE is set and there is no cargo for the Rust leg")
-    return ("python",)
+        legs.append("rust")
+    for leg, tool in (("js", "node"), ("go", "go"), ("c-interp", "cc"), ("c-hdr", "cc")):
+        if shutil.which(tool):
+            legs.append(leg)
+    missing = set(core_diff.ALL_LEGS) - set(legs)
+    if missing and os.environ.get("PRISMPATH_REQUIRE_CORE_ORACLE"):
+        pytest.fail(f"PRISMPATH_REQUIRE_CORE_ORACLE is set and these legs have no toolchain: {sorted(missing)}")
+    return tuple(legs)
 
 
 @pytest.fixture(scope="module")
@@ -66,7 +71,8 @@ def test_every_difference_is_known(run):
                if kind not in KNOWN and not kind[1].startswith(KNOWN_PREFIXES)}
     assert not unknown, f"new kinds of disagreement with the oracle: {unknown}"
     for leg in legs:
-        assert counts[leg]["agree"] > CASES, counts[leg]
+        # the second tier kernels agree only where no field is defined (D5), so their bar is lower
+        assert counts[leg]["agree"] > (CASES if leg in core_diff.CODED else CASES // 2), counts[leg]
 
 
 def test_no_reading_disagrees_and_nothing_crashes(run):
@@ -88,6 +94,22 @@ def test_every_refusal_carries_a_registered_code(run):
         refusals += [verdict for verdict in row["readings"] if verdict["verdict"] == "refuse"]
         for refusal in refusals:
             assert refusal["code"] is not None and causes.name(refusal["code"]) == refusal["cause"], refusal
+
+
+def test_the_second_tier_and_table_legs(run):
+    """D5: the JavaScript and Go kernels refuse every flow that defines its fields and agree elsewhere,
+    differing only by reader gaps (they have no canon/2 reader). D6: the C table targets route every
+    compiled policy's readings as the oracle does, and the compiler's 32 bit limit shows only as a
+    refusal (target-limit), never as a different route."""
+    legs, _lean, counts, _findings = run
+    for leg in ("js", "go"):
+        if leg in legs:
+            assert counts[leg]["refusing-kernel"] > 0 and counts[leg]["agree"] > 0, counts[leg]
+            assert not [key for key in counts[leg] if key.startswith("finding")], counts[leg]
+    for leg in ("c-interp", "c-hdr"):
+        if leg in legs:
+            assert counts[leg]["target-limit:compile"] > 0 and counts[leg]["target-limit:reading"] > 0, counts[leg]
+            assert not [key for key in counts[leg] if key.startswith("finding") and key != "finding:cause"], counts[leg]
 
 
 def test_the_run_reaches_every_stage(run):

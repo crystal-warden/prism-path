@@ -2,7 +2,8 @@
 
 *Specification of the narrow core PrismPath proves once and every implementation is held to: one
 decision of a match action policy over integers, booleans and strings, with the signed field
-definitions that say what each integer means. November 2026, research line, branch `verified-core`.*
+definitions that say what each integer means. November 2026, research line, branch `verified-core`;
+step 2 on `verified-core-2`.*
 
 This document defines the core precisely enough that its Lean semantics (`formal/Core`), the oracle
 compiled from it, and the differential harness that holds the other implementations to it all refer
@@ -381,42 +382,76 @@ partitions as FQ defines them; the quantizer's code is held to those by FQ's own
 prints one JSON line for the policy, `{"policy":"accepted"}` or `{"policy":"refused","cause":...,
 "code":...}`, then one line per reading, `{"verdict":"route","target":...}` or
 `{"verdict":"refuse","cause":...,"code":...,"field":...,"reason":...}` with `field` and `reason` only
-where the refusal has them. `--batch` reads framed cases (`case <id> <n>` then `n + 1` documents, each
-as its byte length and its bytes) and prints one line per case. Every printed value is computed by
+where the refusal has them; every refusal carries its registered code (section 5). `--batch` reads
+framed cases (`case <id> <n>` then `n + 1` documents, each as its byte length and its bytes) and prints
+one line per case, each reading's verdict with its policy check beside it (`"policy_check"`, section
+6.1) when the policy is accepted and the reading is an object. Every printed value is computed by
 `Core.verdict`; `formal/Core/Main.lean` only frames and spells.
 
 **The harness.** `formal/diff/core_diff.py` generates random images and readings, well formed and
 malformed, biased toward boundaries (ranges at plus or minus 2^53 minus 1 and at 2^31, scales from 1
 to 10^9 and invalid ones, on and off grid decimals, decimals at the digit and exponent bounds, empty
-and duplicate lists, conditions at depth 49 to 52, absence, wrong types, odd whitespace in definitions,
-strings with escapes and astral characters, floats, `-0`, wide integers, duplicate keys, deep nesting,
-invalid UTF-8, malformed and truncated images). Each case runs through the oracle, the Python reference
-and the Rust port. The reference and the port read flows, so the harness renders each well formed
-image to the flow text it means, with semantics preserving surface variation (orientation, grouping,
-tuples, chains); an image without a faithful rendering is compared on the oracle alone. Each difference
-is classified as a scope difference (the inferred path, engine counters, section 1), a reader gap
-(only for a leg with no canon/2 reader, section 3), or a finding, which is minimised to a small
-reproducer. A leg is one function from cases
-to results, so the JavaScript and Go kernels and the C table interpreter are adapters of a few dozen
-lines (section 10).
+and duplicate lists, conditions at depth 25 and 49 to 53 as `not` chains and as `and` and `or` nested
+on the left, the right and alternately, absence, wrong types, Python's whitespace and U+FEFF in
+definitions, strings with escapes and astral characters, floats, `-0`, wide integers, duplicate keys,
+deep nesting, invalid UTF-8, malformed and truncated images). The reference and the ports read flows,
+so the harness renders each well formed image to the flow text it means, with semantics preserving
+surface variation (orientation, grouping, tuples, chains); an image without a faithful rendering is
+compared on the oracle alone. Each case runs through the oracle and six legs, each an adapter around
+the implementation's own functions:
+
+| leg | implementation | composition | documents |
+|---|---|---|---|
+| `python` | the reference | `parser.parse`, `field_definitions.system_boundary` and `policy_check`, `engine.first_deterministic` | canon/2 (`kernel/canon2.py`) |
+| `rust` | `prismpath-rs` | the same, `prismpath-rs/examples/core_diff.rs` | canon/2 (`canon2.rs`) |
+| `js` | `prismpath/portable/prismpath.mjs` | `parse`, `firstDeterministic`, `formal/diff/core_diff_js.mjs` | `JSON.parse` after strict UTF-8 |
+| `go` | `prismpath-go` | `Parse`, `IsDeterministic`, `EvalCondition`, `prismpath-go/cmd/core_diff` | `encoding/json` after a UTF-8 check |
+| `c-interp` | `prismpath-hw/interp.c` | host: the reference checks the policy, reads, applies the system boundary; `ppt_compile.py` compiles and encodes registers; the interpreter picks the edge (`formal/diff/ppt_batch.c`) | canon/2 on the host |
+| `c-hdr` | `prismpath-hw/ppt_eval.h`, the embedded evaluator the FPGA's C twin and the firmwares include | the same | canon/2 on the host |
+
+Each difference is classified: `agree`; a scope difference (the inferred path and engine counters,
+section 1); a reader gap, only for the two legs with no canon/2 reader (D5); `refusing-kernel` (D5);
+`target-limit` (D6: the compiler or the register encoder refuses a value outside 32 bits, or interp.c's
+64 deep stack would overflow); `cause-order` (D7, the oracle's cause is among the leg's problems); or a
+finding, which is minimised to a small reproducer of the same kind. Every refusal of the four legs that
+speak the registry must carry its registered code (`finding:uncoded` otherwise), and the first tier
+legs' policy checks must equal the oracle's (`finding:policy-check`).
 
 **Commands.** `python formal/diff/core_diff.py --cases 100000 --seed 1 --report out.json` is the large
-run; `prismpath/tests/test_core_diff.py` is the seeded CI sized run (5,000 cases, seed 7, a few
-seconds), which fails on any kind of finding not recorded in section 9, on any reading level
-disagreement and on any crash. The oracle comes from `lake build` in `formal/`; the Rust leg is the
-example `prismpath-rs/examples/core_diff.rs`, built on demand.
+run (all six legs by default; `--legs` picks some). `prismpath/tests/test_core_diff.py` is the seeded
+CI sized run (5,000 cases, seed 7, every leg whose toolchain is present, a few seconds): it fails on any
+kind of finding not recorded in section 9, on any reading level or policy check disagreement, on any
+uncoded refusal and on any crash. The oracle comes from `lake build` in `formal/`; the Rust leg is the
+example `prismpath-rs/examples/core_diff.rs`, built on demand; the Go and C adapters are compiled into a
+private temporary directory per run.
 
-**The large run** (100,000 cases, seed 1, 420,486 readings). The oracle accepted 25,348 policies and
-refused 74,652; it routed 31,857 readings and refused 13,923 with `route:no-matching-edge`, 43,588 with
-`route:contract-violation`, 17,049 as unreadable and 392 as not an object, the rest with their policy's
-refusal. Against the Python reference: 142,795 agreements; reader gaps 3,217 float, 3,561 duplicate
-key, 8,490 integer range, 2,624 negative zero, 156 depth; scope differences 10,129 inferred path and
-168 engine counter; 9,390 excluded (4,030 images `canon.loads` itself refuses, 5,360 with no flow
-rendering, all refused by the oracle too); 931 findings, every one D1. Against the Rust port: 139,412
-agreements; reader gaps 3,061 float, 3,434 duplicate key, 8,002 integer range, 2,551 negative zero;
-scope 10,129 and 165; the same 9,390 excluded; 1,569 findings, 1,182 of them D3 and 387 D1 and D2. No
-reading level disagreement and no crash in either leg: on every policy both sides accept, every
-reading's route or refusal, with its field and reason, is the oracle's.
+**The large run, step 2** (100,000 cases, seed 1, 419,651 readings). The oracle accepted 24,041 policies
+and refused 75,959; it routed 30,380 readings and refused 13,741 with `route:no-matching-edge`, 40,892
+with `route:contract-violation`, 15,846 as unreadable and 379 as not an object, the rest with their
+policy's refusal; on 18,568 readings the system boundary refused a defined field no rule reads, which
+the policy check passed (D4, section 6.1). Per leg (case level policy rows and reading rows together):
+
+| leg | agree | cause-order (D7) | policy-cause (D7) | scope | excluded | other |
+|---|---|---|---|---|---|---|
+| python | 153,822 | 6,843 | 2,915 | 10,265 inferred, 171 engine counter | 3,181 | none |
+| rust | 153,741 | 6,270 | 3,569 | 10,265, 171 | 3,181 | none |
+| js | 60,492 | | | 10,265 inferred | 12,902 | 22,035 refusing-kernel; reader gaps 276 float, 160 integer range, 154 negative zero, 33 depth, 26 duplicate key, 17 lone surrogate |
+| go | 60,511 | | | 10,265 inferred | 12,902 | 22,035 refusing-kernel; reader gaps 257 float, 160, 154, 33, 26, 17 |
+| c-interp | 137,116 | 6,843 | 2,915 (the host's) | 10,265, 171 | 3,181 | target-limit 3,527 at compile, 2,070 on a reading |
+| c-hdr | 137,116 | 6,843 | 2,915 (the host's) | 10,265, 171 | 3,181 | target-limit 3,527, 2,070 |
+
+Excluded are the 3,181 images with no flow rendering, all refused by the oracle (for the second tier
+legs also the images that do not read, which they have no reader for). No reading level disagreement,
+no policy check disagreement, no uncoded refusal and no crash on any leg: on every policy a leg accepts
+and the oracle accepts, every reading's route or refusal, with its field and reason, is the oracle's,
+and on every policy the table compiled, every register encodable reading routes on both C evaluators
+as the oracle routes it. The only findings are D7's, every one a policy both sides refuse.
+
+**The large run, step 1** (for comparison; 100,000 cases, seed 1, 420,486 readings, the step 1
+generator). Against the Python reference: 142,795 agreements; reader gaps 3,217 float, 3,561 duplicate
+key, 8,490 integer range, 2,624 negative zero, 156 depth; 931 findings, every one D1. Against the Rust
+port: 139,412 agreements; reader gaps 3,061 float, 3,434 duplicate key, 8,002 integer range, 2,551
+negative zero; 1,569 findings, 1,182 of them D3 and 387 D1 and D2.
 
 ## 9. Where the implementations disagree on the slice
 
@@ -489,16 +524,35 @@ and that only routed fields can change a route.
 (`prismpath/portable/prismpath.mjs:1113-1116`, `prismpath-go/parser.go:107-178`), as SPEC.md 4.5
 requires of a kernel that does not implement field definitions. So on the core they agree only on
 refusals. **Specification:** conformant by refusal for now; step 2 either implements section 4.5 in
-both or records them as refusing kernels in the conformance matrix.
+both or records them as refusing kernels in the conformance matrix. **Step 2: recorded as refusing
+kernels.** Implementing section 4.5 in them is not contained: each would need the definition grammar,
+exact decimal lowering on the source spans of the predicate text (the JavaScript kernel in BigInt), the
+six policy rules with their causes, the system boundary and the policy check, and a canon/2 reader, a
+port of about the size of `prismpath-rs/src/field_definitions.rs` and `canon2.rs` in each language, with
+its own conformance replay. Both are legs of the harness now (adapters `formal/diff/core_diff_js.mjs`,
+`prismpath-go/cmd/core_diff`): on the large run they refuse all 22,035 defined flows the oracle accepts,
+agree on every flow without definitions, and differ otherwise only by reader gaps, documents canon/2
+refuses and their runtime's JSON reads.
 
 **D6. The table targets (C, FPGA, eBPF).** Constants and registers are signed 32 bit
 (`int-out-of-i32`, SPEC.md 4.3), so a checked policy with a constant outside that range compiles to no
 table. This is a declared target limit, not a disagreement; the table adapter (step 2) must report it as
-a refusal of the compiler, never a different route.
+a refusal of the compiler, never a different route. **Step 2: confirmed.** The C legs compile every
+checked policy with `prismpath-hw/ppt_compile.py` and run its readings through `interp.c` and
+`ppt_eval.h`; 3,527 checked policies of the large run hold a constant outside 32 bits and are refused by
+the compiler (`int-out-of-i32`), and 2,070 readings of compiled policies hold a value the 32 bit
+registers cannot carry and are refused by the register encoder (`encode_scalar`, the same reason);
+neither is ever a route. Every other reading routes as the oracle routes it. The target limit is not a
+registered cause of the core: it is the compiler's refusal, and stays outside the core's closed set. The
+eBPF target shares the table image and is not run here.
 
 **D7. Which cause names a policy with several problems (Python, Rust).** Found when step 2 made every
-leg report its cause. Both sides refuse the same policies; every refusal carries a registered code; on
-a policy with exactly one problem the causes agree. On a policy with several, the specification names
+leg report its cause. Both sides refuse the same policies and every refusal carries a registered code;
+every minimised reproducer of a cause difference (31 kinds for Python, 37 for Rust in the large run of
+section 8) is a policy with at least two problems, sometimes in one atom (an undefined field compared
+with a decimal is both `image:field-index-oob` and a decimal on a field that is not fixed), and the
+kinds `policy:engine-counter vs ...` are the scope difference of section 1 meeting another problem
+(the reference does not refuse an engine counter, so it names the policy's other problem). On a policy with several, the specification names
 the first in its order (section 4: the whole image decoded, then the definitions in code point order,
 then rule by rule and atom by atom), while the reference and the port meet them in their own phases:
 the Level M classifier judges a whole condition before its atoms, the lowering of a condition's
@@ -522,11 +576,13 @@ difference on them is a finding; the step 2 runs show none.
 
 ## 10. Next
 
-Step 2 adds the JavaScript and Go kernels (an adapter each, reading the rendered flow; until they
-implement section 4.5 they are expected to refuse every defined flow), and the C table interpreter and
-the FPGA's C twin (`prismpath-hw/interp.c`, `ppt_eval.h`): compile a checked policy to a `.ppt` image
-with `prismpath-hw/ppt_compile.py`, run the readings through the interpreter, compare routes and the
-compiler's refusals with the oracle. Then signed images and receipts as the evidence form: the image's
-canonical bytes under an Ed25519 signature, and a receipt per verdict binding the image hash, the
-reading's canonical bytes and the verdict, so a differential run is itself evidence. Owner decisions
-this step leaves open: registering the proposed causes of section 5, D4, and canon/2 itself.
+Step 2 (this branch) adopted canon/2 for the core's documents (section 3) and wrote down the migration
+of the rest (section 3.1), registered every core refusal (section 5), resolved D4 into the system
+boundary and the policy check (section 6.1), fixed D1 to D3, ran the JavaScript, Go and C legs (D5,
+D6), and proved the new claims (section 7). Next: signed images and receipts as the evidence form (the
+image's canon/2 bytes under an Ed25519 signature, a receipt per verdict binding the image hash, the
+reading's canonical bytes, the verdict and its cause code, so a differential run is itself evidence);
+the eBPF table target as a leg. Owner decisions this step leaves open: D7 (the reference adopts the
+order of section 4, or a policy refusal's cause is specified as one of its problems); whether the
+JavaScript and Go kernels should implement section 4.5 or stay refusing kernels in the conformance
+matrix; and when the canon/2 migration of section 3.1 starts.

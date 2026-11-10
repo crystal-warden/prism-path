@@ -3,32 +3,35 @@
 """Differential harness for the verified policy core (docs/design/spec-verified-core.md, section 8).
 
 One generator writes random policy images and readings, well formed and malformed, biased toward
-boundaries. Each case runs through three legs:
+boundaries. Each case runs through the oracle and up to six legs (spec section 8 has the table):
 
-  * lean:   the oracle compiled from the Lean semantics (`formal/.lake/build/bin/core-oracle --batch`);
-  * python: the reference, composed exactly as the frozen field definition vectors compose it
-            (`prismpath/portable/gen_field_definitions.py`): `parser.parse` (which lowers and applies the
-            policy rules), `field_definitions.accept_canonical` over the defined fields in sorted order,
-            then `engine.first_deterministic`; documents are read with the canon/2 reader
-            `prismpath.kernel.canon2.loads`;
-  * rust:   the Rust port, composed the same way by `prismpath-rs/examples/core_diff.rs`; documents are
-            read with the canon/2 reader `prismpath_rs::canon2::read`.
+  * lean:     the oracle compiled from the Lean semantics (`formal/.lake/build/bin/core-oracle --batch`);
+  * python:   the reference, composed as the frozen field definition vectors compose it: `parser.parse`
+              (which lowers and applies the policy rules), `field_definitions.system_boundary`, then
+              `engine.first_deterministic`, with `field_definitions.policy_check` beside it; documents are
+              read with the canon/2 reader `prismpath.kernel.canon2.loads`;
+  * rust:     the Rust port, composed the same way by `prismpath-rs/examples/core_diff.rs`, reading with
+              `prismpath_rs::canon2::read`;
+  * js, go:   the second tier kernels (`formal/diff/core_diff_js.mjs`, `prismpath-go/cmd/core_diff`), which
+              refuse every flow that defines its fields (D5) and read readings with their runtime's JSON;
+  * c-interp, c-hdr: the table targets: the reference as host, `prismpath-hw/ppt_compile.py`, and the
+              certified C evaluators `interp.c` and `ppt_eval.h` through `formal/diff/ppt_batch.c` (D6).
 
-The image is a canon/2 document in the core's abstract syntax. The reference and the port read flows,
-not images, so this module renders a well formed image to the flow text it means (`render`); an image
-that has no faithful rendering is reported as unrenderable for those legs and compared on the Lean leg
-alone. Every leg is an adapter around the implementation's own functions; no leg reimplements a rule.
+The image is a canon/2 document in the core's abstract syntax. The kernels read flows, not images, so
+this module renders a well formed image to the flow text it means (`render`); an image that has no
+faithful rendering is reported as unrenderable for those legs and compared on the Lean leg alone. Every
+leg is an adapter around the implementation's own functions; no leg reimplements a rule.
 
-Each difference is classified. Both legs read canon/2 themselves, so an unreadable image or reading
-must be refused with the oracle's rule, and a difference there is a finding like any other.
-`reader-gap:<rule>` remains only for a leg whose kernel has no canon/2 reader (none of the legs here).
-Anything else is a finding, minimised to a small reproducer.
+Each difference is classified. The legs that read canon/2 must refuse an unreadable image or reading
+with the oracle's rule; `reader-gap:<rule>` remains only for the two legs with no canon/2 reader. Scope
+differences, refusing kernels, target limits and D7's cause order are counted as such; anything else is
+a finding, minimised to a small reproducer of the same kind.
 
-    python formal/diff/core_diff.py --cases 100000 --seed 1          # the large run
-    python formal/diff/core_diff.py --cases 2000 --seed 7 --quiet    # what the test runs
+    python formal/diff/core_diff.py --cases 100000 --seed 1          # the large run, every leg
+    python formal/diff/core_diff.py --cases 2000 --seed 7 --quiet    # a quick run
 
-Adding a leg (the JavaScript or Go kernel, the C table interpreter) is one entry in LEGS: a function
-from the list of cases to {id: result} in the normalized shape `normalize_*` documents.
+Adding a leg is one entry in LEGS: a function from the list of cases to {id: result} in the normalized
+shape `normalize_*` documents.
 """
 from __future__ import annotations
 
@@ -53,7 +56,12 @@ START = "core_decision"
 # canon/2 document rules a leg without a canon/2 reader does not apply: for such a leg (READS_CANON2
 # false) a difference that is only one of these is a reader gap, not a finding (spec section 3)
 READER_GAP = {"float", "integer-range", "negative-zero", "duplicate-key", "depth"}
-READS_CANON2 = {"python": True, "rust": True}
+READS_CANON2 = {"python": True, "rust": True, "c-interp": True, "c-hdr": True}
+# the second tier kernels read readings with their runtime's JSON (D5), which also accepts a lone
+# surrogate escape (replacing it, in Go)
+READER_GAP_SECOND_TIER = READER_GAP | {"lone-surrogate"}
+# the legs whose refusals speak the cause registry (the second tier kernels do not)
+CODED = {"python", "rust", "c-interp", "c-hdr"}
 
 ALWAYS = {"always", "true", "else", "otherwise", "default", "_"}
 NEVER = {"false", "never"}
@@ -716,7 +724,180 @@ def rust_leg(cases):
     return out
 
 
-LEGS = {"python": python_leg, "rust": rust_leg}
+# ----------------------------------------------------------------- the second tier and table legs
+_TOOLS = {}
+
+
+def _tool_dir() -> Path:
+    """A private build directory for the adapters this run compiles, removed when the process exits."""
+    if "dir" not in _TOOLS:
+        import atexit
+        import shutil
+        made = tempfile.mkdtemp(prefix="core_diff_tools_")
+        atexit.register(shutil.rmtree, made, True)
+        _TOOLS["dir"] = Path(made)
+    return _TOOLS["dir"]
+
+
+def _tool(name: str) -> Path:
+    """Build an adapter once per run: the Go leg and the two C table drivers."""
+    if name in _TOOLS:
+        return _TOOLS[name]
+    out = _tool_dir() / name
+    hw = ROOT / "prismpath-hw"
+    driver = ROOT / "formal" / "diff" / "ppt_batch.c"
+    if name == "go":
+        subprocess.run(["go", "build", "-o", str(out), "./cmd/core_diff"], cwd=ROOT / "prismpath-go", check=True)
+    elif name == "c-hdr":
+        subprocess.run(["cc", "-O2", "-std=c11", "-Wall", "-Wextra", "-Werror", "-I", str(hw), "-DPPT_BATCH_HDR",
+                        "-o", str(out), str(driver)], check=True)
+    elif name == "c-interp":
+        # interp.c's CLI modes are unused without its main, so its own warnings are not made errors here
+        subprocess.run(["cc", "-O2", "-std=c11", "-Wall", "-Wextra", "-Wno-unused-function", "-Werror", "-I", str(hw),
+                        "-DPPT_INTERP_NO_MAIN", "-o", str(out), str(driver), str(hw / "interp.c")], check=True)
+    else:
+        raise KeyError(name)
+    _TOOLS[name] = out
+    return out
+
+
+def _second_tier(cases, command):
+    data = frames(cases, lambda case: [case["image"], (case.get("flow") or "").encode("utf-8")] + case["readings"])
+    result = subprocess.run(command, input=data, capture_output=True)
+    if result.returncode != 0:
+        raise RuntimeError(f"{command[0]} leg failed: " + result.stderr.decode("utf-8", "replace")[-2000:])
+    out = {}
+    for line in result.stdout.decode("utf-8").splitlines():
+        row = json.loads(line)
+        out[row["id"]] = row
+    for case in cases:
+        if case.get("flow") is None and case["flow_why"].startswith("unreadable:"):
+            # these kernels read flows, not images; an image no flow is rendered from is not theirs to read
+            out[case["id"]] = {"policy": "unrenderable"}
+    return out
+
+
+def js_leg(cases):
+    """The JavaScript kernel (prismpath/portable/prismpath.mjs) through formal/diff/core_diff_js.mjs."""
+    return _second_tier(cases, ["node", str(ROOT / "formal" / "diff" / "core_diff_js.mjs")])
+
+
+def go_leg(cases):
+    """The Go kernel (prismpath-go) through prismpath-go/cmd/core_diff."""
+    return _second_tier(cases, [str(_tool("go"))])
+
+
+def _ppt_compile():
+    if "ppt" not in _TOOLS:
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("ppt_compile", ROOT / "prismpath-hw" / "ppt_compile.py")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        _TOOLS["ppt"] = module
+    return _TOOLS["ppt"]
+
+
+def table_leg(cases, variant):
+    """The C table targets: the host (the Python reference) checks the policy, reads each reading with
+    canon/2 and applies the system boundary, `prismpath-hw/ppt_compile.py` compiles the checked policy to a
+    .ppt image and encodes each accepted reading's registers, and the certified C evaluator (`interp.c` or
+    the embedded `ppt_eval.h`) picks the edge. The compiler's 32 bit limit (`int-out-of-i32`, SPEC.md 4.3)
+    is a refusal of the compiler or of the register encoder, reported as `target-limit`, never a route."""
+    from prismpath.kernel import canon2, causes, field_definitions
+    from prismpath.kernel.field_definitions import FieldDefinitionError
+    from prismpath.kernel.parser import Node, parse
+    ppt = _ppt_compile()
+    out, pending, data = {}, [], bytearray()
+
+    def refuse(cause, **detail):
+        return {"verdict": "refuse", "cause": cause, "code": causes.code(cause), **detail}
+
+    for case in cases:
+        flow, why = case["flow"], case["flow_why"]
+        if flow is None:
+            out[case["id"]] = ({"policy": "refused", "cause": "policy:unreadable", "reason": why.split(":", 1)[1],
+                                "code": causes.code("policy:unreadable"), "causes": ["policy:unreadable"]}
+                               if why.startswith("unreadable:") else {"policy": why})
+            continue
+        try:
+            graph = parse(flow)
+        except FieldDefinitionError as error:
+            out[case["id"]] = {"policy": "refused", "reason": str(error)[:300], "cause": error.cause, "code": error.code,
+                               "causes": [problem.cause for problem in error.problems]}
+            continue
+        except ValueError as error:
+            out[case["id"]] = {"policy": "refused", "reason": str(error)[:300], "cause": None, "code": None, "causes": []}
+            continue
+        # the core's targets are labels, the table's are nodes: each rule's edge gets a node of its own, and a
+        # matched edge index is read back as the rule's label, so a label that is no node name still routes
+        start = graph.nodes[graph.start]
+        labels = [target for target, _cond in start.edges]
+        start.edges = [(f"rule{index}", cond) for index, (_target, cond) in enumerate(start.edges)]
+        for index in range(len(labels)):
+            graph.nodes[f"rule{index}"] = Node(name=f"rule{index}")
+        row = {"policy": "accepted", "defines": bool(graph.fields)}
+        out[case["id"]] = row
+        try:
+            image = ppt.compile_flow(graph)
+        except ppt.SubsetError as error:
+            row["table"] = "target-limit" if error.reason == "int-out-of-i32" else "compile-refused"
+            row["reason"] = str(error)[:200]
+            continue
+        blob = image.serialize()
+        verdicts, registers = [], []
+        for raw in case["readings"]:
+            try:
+                doc = canon2.loads(raw)
+            except canon2.Canon2Error as error:
+                verdicts.append(refuse("reading:unreadable", reason=error.rule))
+                registers.append(b"")
+                continue
+            if not isinstance(doc, dict):
+                verdicts.append(refuse("reading:not-object"))
+                registers.append(b"")
+                continue
+            refused = field_definitions.system_boundary(graph, doc)
+            if refused is not None:
+                verdicts.append(refuse("route:contract-violation", field=refused[0], reason=refused[1]))
+                registers.append(b"")
+                continue
+            try:
+                registers.append(ppt.encode_regs(image, doc, node_idx=image.start))
+                verdicts.append(None)
+            except ppt.SubsetError as error:
+                verdicts.append({"verdict": "refuse", "cause": "target-limit", "reason": str(error)[:120]})
+                registers.append(b"")
+        row["readings"] = verdicts
+        pending.append((case["id"], labels, verdicts))
+        data += f"case {case['id']} {len(registers)}\n".encode() + f"{len(blob)}\n".encode() + blob + b"\n"
+        for regs in registers:
+            data += f"{len(regs)}\n".encode() + regs + b"\n"
+    if pending:
+        command = [str(_tool(variant))]
+        if variant == "c-interp":
+            command.append(str(_tool_dir() / "image.ppt"))
+        result = subprocess.run(command, input=bytes(data), capture_output=True)
+        if result.returncode != 0:
+            raise RuntimeError(f"{variant} leg failed: " + result.stderr.decode("utf-8", "replace")[-2000:])
+        lines = {line.split(" ", 1)[0]: line.split(" ", 1)[1] if " " in line else ""
+                 for line in result.stdout.decode().splitlines()}
+        for ident, labels, verdicts in pending:
+            answers = lines[ident].split(";") if verdicts else []
+            for index, answer in enumerate(answers):
+                if verdicts[index] is not None:
+                    continue
+                if answer.startswith("m "):
+                    verdicts[index] = {"verdict": "route", "target": labels[int(answer.split()[1])]}
+                elif answer == "n":
+                    verdicts[index] = refuse("route:no-matching-edge")
+                else:
+                    verdicts[index] = {"verdict": "refuse", "cause": "target-error", "reason": answer}
+    return out
+
+
+LEGS = {"python": python_leg, "rust": rust_leg, "js": js_leg, "go": go_leg,
+        "c-interp": lambda cases: table_leg(cases, "c-interp"), "c-hdr": lambda cases: table_leg(cases, "c-hdr")}
+ALL_LEGS = tuple(LEGS)
 
 
 # ----------------------------------------------------------------- comparison
@@ -733,10 +914,10 @@ def classify(lean_row, other, leg):
     for verdict in [lean_row["policy"]] * (lean_row["policy"]["policy"] != "accepted") + lean_row["readings"]:
         if verdict.get("verdict", "refuse") == "refuse" and _uncoded(verdict):
             rows.append(("finding:uncoded", f"lean {verdict}"))
-    if other.get("policy") == "refused" and _uncoded(other):
+    if leg in CODED and other.get("policy") == "refused" and _uncoded(other):
         rows.append(("finding:uncoded", f"leg policy {other.get('cause')} {other.get('code')} {other.get('reason', '')[:120]}"))
-    for verdict in other.get("readings", []):
-        if verdict["verdict"] == "refuse" and _uncoded(verdict):
+    for verdict in other.get("readings", []) if leg in CODED else []:
+        if verdict["verdict"] == "refuse" and verdict.get("cause") != "target-limit" and _uncoded(verdict):
             rows.append(("finding:uncoded", f"leg reading {verdict}"))
     return rows + _classify(lean_row, other, leg)
 
@@ -745,6 +926,15 @@ def _classify(lean_row, other, leg):
     lean_policy = lean_row["policy"]
     lean_ok = lean_policy["policy"] == "accepted"
     status = other["policy"]
+    if other.get("cause") == "refusing-kernel":
+        # D5: a kernel without field definitions refuses every flow that defines its fields, as SPEC.md 4.5
+        # requires; where the oracle refuses too, both refuse
+        return [("refusing-kernel", "accepted by the oracle")] if lean_ok else [("agree", "policy-refused")]
+    if lean_ok and status == "accepted" and other.get("table") == "target-limit":
+        # D6: the compiler refuses a checked policy with a constant outside 32 bits; a refusal, not a route
+        return [("target-limit:compile", other.get("reason", ""))]
+    if lean_ok and status == "accepted" and other.get("table") == "compile-refused":
+        return [("finding:compile", other.get("reason", ""))]
     if status not in ("accepted", "refused"):
         if status.startswith("crash"):
             return [("finding:crash", status)]
@@ -772,7 +962,7 @@ def _classify(lean_row, other, leg):
             if (lean_policy["cause"], lean_policy.get("reason")) != (other.get("cause"), other.get("reason")):
                 return [("finding:policy", f"unreadable image: lean {lean_policy['cause']} {lean_policy.get('reason')} "
                                            f"| leg {other.get('cause')} {other.get('reason')}")]
-        if "cause" not in other:
+        if "cause" not in other or (leg not in CODED and other.get("cause") is None):
             return [("agree", "policy-refused")]
         if other.get("cause") == lean_policy["cause"]:
             return [("agree", "policy-refused")]
@@ -796,9 +986,15 @@ def _classify(lean_row, other, leg):
             rows.append(("finding:policy-check", f"lean {lean_v['policy_check']} vs leg none"))
         if b[0] == "crash":
             rows.append(("finding:crash", b[1]))
+        elif b[0] == "policy" and b[1] == "target-limit":
+            # D6 on a reading: a value the 32 bit registers cannot hold is refused by the register encoder
+            rows.append(("target-limit:reading", f"lean {a}"))
+        elif b[0] == "policy" and b[1] == "target-error" and other_v.get("reason") == "e stack" and leg == "c-interp":
+            # interp.c's operand stack is 64 deep and it exits on overflow; the driver refuses such an image
+            rows.append(("target-limit:stack", f"lean {a}"))
         elif a == b or (a[0] == b[0] == "unreadable" and not READS_CANON2.get(leg, False)):
             rows.append(("agree", a[0]))
-        elif a[0] == "unreadable" and a[1] in READER_GAP and not READS_CANON2.get(leg, False):
+        elif a[0] == "unreadable" and a[1] in READER_GAP_SECOND_TIER and not READS_CANON2.get(leg, False):
             rows.append((f"reader-gap:{a[1]}", "reading"))
         else:
             rows.append(("finding:reading", f"lean {a} vs leg {b}"))
@@ -806,6 +1002,8 @@ def _classify(lean_row, other, leg):
 
 
 def run(cases, legs=("python", "rust"), quiet=False):
+    """Every case through the oracle and the named legs; the default is the two first tier legs, and
+    `ALL_LEGS` adds the second tier kernels and the C table targets."""
     prepare(cases)
     lean = lean_leg(cases)
     results = {name: LEGS[name](cases) for name in legs}
@@ -822,18 +1020,24 @@ def run(cases, legs=("python", "rust"), quiet=False):
 
 
 # ----------------------------------------------------------------- minimisation
-def _still_differs(case, leg, cls):
+def _still_differs(case, leg, cls, kind=None):
     try:
-        _lean, _results, counts, _f = run([case], legs=(leg,))
+        _lean, _results, counts, found = run([case], legs=(leg,))
     except Exception:   # noqa: BLE001 - a candidate that breaks a leg is not a reproducer of this finding
         return False
-    return counts[leg][cls] > 0
+    if kind is None:
+        return counts[leg][cls] > 0
+    return any(name == leg and found_cls == cls and finding_kind(detail) == kind for name, found_cls, detail, _c in found)
 
 
-def minimise(case, leg, cls):
+def minimise(case, leg, cls, kind=None):
     """Shrink a disagreeing case: fewer readings, rules, fields and smaller conditions, while it still
-    shows the same class of finding on the same leg."""
+    shows the same kind of finding (`finding_kind`) on the same leg."""
     case = dict(case)
+    _same = globals()["_still_differs"]
+
+    def _still_differs(candidate, leg, cls):   # noqa: F811 - the same check, held to the finding's kind
+        return _same(candidate, leg, cls, kind)
     # readings: keep one that shows it
     for raw in case["readings"]:
         candidate = dict(case, readings=[raw])
@@ -909,7 +1113,7 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--cases", type=int, default=2000)
     parser.add_argument("--seed", type=int, default=1)
-    parser.add_argument("--legs", default="python,rust")
+    parser.add_argument("--legs", default=",".join(ALL_LEGS))
     parser.add_argument("--chunk", type=int, default=5000)
     parser.add_argument("--report", help="write the findings and counts as JSON here")
     parser.add_argument("--quiet", action="store_true")
@@ -944,9 +1148,10 @@ def main(argv=None) -> int:
               "finding_kinds": {f"{leg} {kind}": count for (leg, kind), count in sorted(kinds.items())},
               "findings": []}
     for (leg, cls, _key), (_leg, _cls, detail, case) in sorted(first_findings.items(), key=lambda item: item[0]):
-        small = minimise(case, leg, cls)
-        prepare([small])
-        report["findings"].append({"leg": leg, "class": cls, "detail": detail,
+        small = minimise(case, leg, cls, finding_kind(detail))
+        _l, _r, _c, again = run([small], legs=(leg,))
+        report["findings"].append({"leg": leg, "class": cls, "kind": finding_kind(detail), "detail": detail,
+                                   "reproducer_detail": [found[2] for found in again if found[0] == leg],
                                    "image": small["image"].decode("utf-8", "replace"),
                                    "readings": [raw.decode("utf-8", "replace") for raw in small["readings"]],
                                    "flow": small.get("flow")})
