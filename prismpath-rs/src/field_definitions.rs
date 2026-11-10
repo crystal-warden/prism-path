@@ -16,7 +16,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use crate::condition::{error_expr, expr_of, is_deterministic, is_error, is_semantic, tokenize_spanned, Tok, ALWAYS, NEVER};
+use crate::condition::{error_expr, expr_of, is_deterministic, is_error, is_semantic, parse_expr, tokenize_spanned, Ast, Tok, ALWAYS, NEVER};
 use crate::level_m::{is_level_m, level_m_atoms};
 use crate::parser::Graph;
 use crate::value::Value;
@@ -357,6 +357,8 @@ pub fn accept_canonical(definition: &FieldDefinition, value: &Value) -> Result<V
 enum LoweringNode {
     Name(String),
     Literal { span: (usize, usize), number_token: usize, negative: bool },
+    /// A sign outside the parentheses of a number, `-(0.5)`, which the reference refuses on a fixed field.
+    SeparatedSign { span: (usize, usize) },
     List(Vec<LoweringNode>),
     Compare { operands: Vec<LoweringNode>, ops: Vec<String> },
     Other(Vec<LoweringNode>),
@@ -469,6 +471,13 @@ impl LoweringParser<'_> {
                     self.pos += 1;
                     return Some(LoweringNode::Literal { span: (self.spans[index].0, self.spans[index + 1].1), number_token: index + 1, negative: op == "-" });
                 }
+                if self.peek_op("(")
+                    && matches!(self.toks.get(self.pos + 1), Some(Tok::Num(..)))
+                    && matches!(self.toks.get(self.pos + 2), Some(Tok::Op(close)) if close == ")")
+                {
+                    self.pos += 3;
+                    return Some(LoweringNode::SeparatedSign { span: (self.spans[index].0, self.spans[index + 3].1) });
+                }
                 None
             }
             Tok::Num(..) => Some(LoweringNode::Literal { span: self.spans[index], number_token: index, negative: false }),
@@ -565,6 +574,10 @@ pub fn lower_expression(expr: &str, definitions: &BTreeMap<String, FieldDefiniti
 
 #[allow(clippy::too_many_arguments)]
 fn lower_one(field: &str, node: &LoweringNode, definitions: &BTreeMap<String, FieldDefinition>, chars: &[char], toks: &[Tok], spans: &[(usize, usize)], replacements: &mut BTreeMap<(usize, usize), (String, i64)>) -> Result<(), String> {
+    if let LoweringNode::SeparatedSign { span } = node {
+        let source: String = chars[span.0..span.1].iter().collect();
+        return Err(format!("the threshold {source} puts its sign outside parentheses; write the sign on the number"));
+    }
     let LoweringNode::Literal { span, number_token, negative } = node else { return Ok(()) };
     let definition = &definitions[field];
     let source: String = chars[span.0..span.1].iter().collect();
@@ -615,7 +628,7 @@ fn collect_lowering(node: &LoweringNode, fixed: &BTreeSet<&str>, definitions: &B
                 collect_lowering(child, fixed, definitions, chars, toks, spans, replacements)?;
             }
         }
-        LoweringNode::Name(_) | LoweringNode::Literal { .. } => {}
+        LoweringNode::Name(_) | LoweringNode::Literal { .. } | LoweringNode::SeparatedSign { .. } => {}
     }
     Ok(())
 }
@@ -642,21 +655,34 @@ pub fn lower_condition(cond: &str, definitions: &BTreeMap<String, FieldDefinitio
 }
 
 // ----------------------------------------------------------------- the policy rules
-fn atom_problem(definition: &FieldDefinition, op: &str, constant: &Value) -> Option<String> {
+/// One way a flow breaks its field definitions: the message, and the registered refusal it is
+/// (prismpath/kernel/causes.py; docs/design/spec-verified-core.md, section 5), as the reference's
+/// `field_definitions.Problem` carries it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Problem {
+    pub cause: &'static str,
+    pub text: String,
+}
+
+fn problem(cause: &'static str, text: String) -> Problem {
+    Problem { cause, text }
+}
+
+fn atom_problem(definition: &FieldDefinition, op: &str, constant: &Value) -> Option<Problem> {
     let name = &definition.name;
     let members: Vec<&Value> = match (op, constant) {
         ("in" | "not in", Value::List(elements)) => elements.iter().collect(),
         _ => vec![constant],
     };
     if (op == "in" || op == "not in") && members.iter().any(|member| matches!(member, Value::Null)) {
-        return Some(format!("field {name:?}: None may not appear in a list"));
+        return Some(problem("policy:none", format!("field {name:?}: None may not appear in a list")));
     }
     if op != "truthy" && matches!(constant, Value::Null) {
         if op != "==" && op != "!=" {
-            return Some(format!("field {name:?}: None is compared only by == or !="));
+            return Some(problem("policy:none", format!("field {name:?}: None is compared only by == or !=")));
         }
         if !definition.absent_allowed {
-            return Some(format!("field {name:?}: compared with None, but its definition refuses absence"));
+            return Some(problem("policy:none", format!("field {name:?}: compared with None, but its definition refuses absence")));
         }
         return None;
     }
@@ -665,29 +691,29 @@ fn atom_problem(definition: &FieldDefinition, op: &str, constant: &Value) -> Opt
             if op == "truthy" || ((op == "==" || op == "!=") && matches!(constant, Value::Bool(_))) {
                 return None;
             }
-            return Some(format!("field {name:?}: a bool field is tested by truthiness or == and != with True or False"));
+            return Some(problem("policy:kind-mismatch", format!("field {name:?}: a bool field is tested by truthiness or == and != with True or False")));
         }
         DefinedKind::Category => {
             if op == "truthy" || (matches!(op, "==" | "!=" | "in" | "not in") && members.iter().all(|member| matches!(member, Value::Str(_)))) {
                 return None;
             }
-            return Some(format!("field {name:?}: a category field is compared with strings by ==, !=, in and not in"));
+            return Some(problem("policy:kind-mismatch", format!("field {name:?}: a category field is compared with strings by ==, !=, in and not in")));
         }
         DefinedKind::Int | DefinedKind::Fixed => {}
     }
     if op != "truthy" && !members.iter().all(|member| matches!(member, Value::Num(_))) {
-        return Some(format!("field {name:?}: a field of this kind is compared only with numbers"));
+        return Some(problem("policy:kind-mismatch", format!("field {name:?}: a field of this kind is compared only with numbers")));
     }
     if let (DefinedKind::Fixed, Some(rounding)) = (definition.kind, definition.rounding) {
         if !rounding.carries(op) {
-            return Some(format!("field {name:?}: rounding={} does not carry {op:?}", rounding.word()));
+            return Some(problem("policy:rounding", format!("field {name:?}: rounding={} does not carry {op:?}", rounding.word())));
         }
     }
     if op != "truthy" {
         for member in members {
             if let Value::Num(number) = member {
                 if *number < definition.minimum as f64 || *number > definition.maximum as f64 {
-                    return Some(format!("field {name:?}: the constant {number} is outside its range {} to {}", definition.minimum, definition.maximum));
+                    return Some(problem("policy:threshold", format!("field {name:?}: the constant {number} is outside its range {} to {}", definition.minimum, definition.maximum)));
                 }
             }
         }
@@ -695,10 +721,63 @@ fn atom_problem(definition: &FieldDefinition, op: &str, constant: &Value) -> Opt
     None
 }
 
-/// Every way the flow breaks the rules of SPEC section 4.5; empty when it obeys them.
-pub fn policy_problems(graph: &Graph, definitions: &BTreeMap<String, FieldDefinition>) -> Vec<String> {
+fn has_float(node: &Ast) -> bool {
+    match node {
+        Ast::Const(_, is_float) => *is_float,
+        Ast::Name(_) => false,
+        Ast::And(items) | Ast::Or(items) | Ast::List(items) => items.iter().any(has_float),
+        Ast::Not(inner) => has_float(inner),
+        Ast::Cmp { left, rights, .. } => has_float(left) || rights.iter().any(has_float),
+    }
+}
+
+/// The source text of every float literal of a condition's expression.
+fn float_literal_texts(cond: &str) -> Vec<String> {
+    let expr = expr_of(cond);
+    let Ok((toks, spans)) = tokenize_spanned(&expr) else { return Vec::new() };
+    let chars: Vec<char> = expr.chars().collect();
+    toks.iter()
+        .zip(&spans)
+        .filter(|(tok, _)| matches!(tok, Tok::Num(_, true)))
+        .map(|(_, (start, end))| chars[*start..*end].iter().filter(|character| **character != '_').collect())
+        .collect()
+}
+
+/// The Level M classifier's reason as the core's registered refusal, as the reference maps it
+/// (`field_definitions._level_m_problem`): an operator outside the fragment is `image:unknown-op`, a
+/// value type outside it `image:unknown-type`, anything else is outside Level M by name.
+fn level_m_cause(cond: &str, reason: Option<&str>) -> &'static str {
+    match reason {
+        Some("string-ordering" | "substring-in") => "image:unknown-op",
+        Some("field-vs-field" | "nested-container" | "non-literal-collection") => "image:unknown-type",
+        Some("constant-only") => "policy:not-level-m",
+        Some("chained-comparison") => "policy:shape",
+        _ => {
+            // a decimal literal past the exact bounds is a threshold the core refuses whatever the field,
+            // any other float a value type outside the fragment, anything else outside it by name
+            if float_literal_texts(cond).iter().any(|text| decimal_value(text).is_none()) {
+                "policy:threshold"
+            } else if parse_expr(&expr_of(cond)).is_ok_and(|tree| has_float(&tree)) {
+                "image:unknown-type"
+            } else {
+                "policy:not-level-m"
+            }
+        }
+    }
+}
+
+/// Whether a Level M problem stands before the definitions are known (the reference's
+/// `_decided_without_definitions`): not when the classifier only objects to the syntax of a condition
+/// that holds decimal literals within the bounds, which on a fixed field are lowered to integers first.
+fn decided_without_definitions(cause: &str, cond: &str, reason: Option<&str>) -> bool {
+    reason != Some("disallowed-or-unparseable") || cause == "policy:threshold" || float_literal_texts(cond).is_empty()
+}
+
+/// The problems of the flow's conditions that no definition can change (spec section 4, step 1), the
+/// twin of the reference's `fragment_problems`: reported beside a malformed definition. A decimal literal
+/// within the bounds is left to the definitions, since on a fixed field it is lowered to an integer.
+fn fragment_problems(graph: &Graph) -> Vec<Problem> {
     let mut problems = Vec::new();
-    let mut tested_for_absence: BTreeSet<String> = BTreeSet::new();
     let mut names: Vec<&String> = graph.nodes.keys().collect();
     names.sort();
     for name in names {
@@ -707,8 +786,45 @@ pub fn policy_problems(graph: &Graph, definitions: &BTreeMap<String, FieldDefini
                 continue;
             }
             let (member, reason) = is_level_m(cond);
+            if member {
+                continue;
+            }
+            let cause = level_m_cause(cond, reason.as_deref());
+            if decided_without_definitions(cause, cond, reason.as_deref()) {
+                problems.push(problem(cause, format!("{name}: {cond:?} is outside Level M ({})", reason.unwrap_or_default())));
+            }
+        }
+    }
+    problems
+}
+
+/// Every way the flow breaks the rules of SPEC section 4.5; empty when it obeys them.
+pub fn policy_problems(graph: &Graph, definitions: &BTreeMap<String, FieldDefinition>) -> Vec<String> {
+    policy_problems_caused(graph, definitions, &BTreeSet::new()).into_iter().map(|found| found.text).collect()
+}
+
+/// `policy_problems` with the registered cause of each problem. `skip` names the (node, edge index)
+/// pairs whose lowering already failed, so their unlowered constants are not reported a second time.
+pub fn policy_problems_caused(graph: &Graph, definitions: &BTreeMap<String, FieldDefinition>, skip: &BTreeSet<(String, usize)>) -> Vec<Problem> {
+    let mut problems = Vec::new();
+    let mut tested_for_absence: BTreeSet<String> = BTreeSet::new();
+    let mut names: Vec<&String> = graph.nodes.keys().collect();
+    names.sort();
+    for name in names {
+        for (index, (_target, cond)) in graph.nodes[name].edges.iter().enumerate() {
+            if !is_deterministic(cond) || is_semantic(cond) {
+                continue;
+            }
+            // lowering failed on this edge, so its fixed fields still hold decimal literals: as the reference
+            // does, report the fragment problems no definition changes and the atoms on every field that is
+            // not fixed, and leave the fixed fields to the lowering's own problem
+            let unlowered = skip.contains(&(name.clone(), index));
+            let (member, reason) = is_level_m(cond);
             if !member {
-                problems.push(format!("{name}: {cond:?} is outside Level M ({})", reason.unwrap_or_default()));
+                let cause = level_m_cause(cond, reason.as_deref());
+                if !unlowered || decided_without_definitions(cause, cond, reason.as_deref()) {
+                    problems.push(problem(cause, format!("{name}: {cond:?} is outside Level M ({})", reason.unwrap_or_default())));
+                }
                 continue;
             }
             let Ok(atoms) = level_m_atoms(cond) else { continue };
@@ -716,12 +832,15 @@ pub fn policy_problems(graph: &Graph, definitions: &BTreeMap<String, FieldDefini
                 if ENGINE_COUNTERS.contains(&atom.field.as_str()) {
                     continue;
                 }
+                if unlowered && definitions.get(&atom.field).is_some_and(|definition| definition.kind == DefinedKind::Fixed) {
+                    continue;
+                }
                 let Some(definition) = definitions.get(&atom.field) else {
-                    problems.push(format!("{name}: {cond:?} reads {:?}, which the flow does not define", atom.field));
+                    problems.push(problem("image:field-index-oob", format!("{name}: {cond:?} reads {:?}, which the flow does not define", atom.field)));
                     continue;
                 };
-                if let Some(problem) = atom_problem(definition, &atom.op, &atom.constant) {
-                    problems.push(format!("{name}: {cond:?}: {problem}"));
+                if let Some(found) = atom_problem(definition, &atom.op, &atom.constant) {
+                    problems.push(problem(found.cause, format!("{name}: {cond:?}: {}", found.text)));
                 }
                 if matches!(atom.constant, Value::Null) && (atom.op == "==" || atom.op == "!=") {
                     tested_for_absence.insert(atom.field.clone());
@@ -731,35 +850,62 @@ pub fn policy_problems(graph: &Graph, definitions: &BTreeMap<String, FieldDefini
     }
     for (field, definition) in definitions {
         if definition.absent_allowed && !tested_for_absence.contains(field) {
-            problems.push(format!("field {field:?} allows absence but no edge tests it with == None or != None"));
+            problems.push(problem("policy:absence-untested", format!("field {field:?} allows absence but no edge tests it with == None or != None")));
         }
     }
     problems
 }
 
 /// Parse the flow's definitions, lower its conditions, and check the rules. A flow that breaks them
-/// keeps the reason in `field_error` and has every edge disabled.
+/// keeps the reason in `field_error`, the registered cause of each problem in `field_error_causes`
+/// (the first in `field_error_cause`), and has every edge disabled.
 pub fn apply_definitions(graph: &mut Graph) {
-    let outcome = definitions_of(&graph.meta).and_then(|definitions| {
-        graph.fields = definitions.clone();
-        if definitions.is_empty() {
-            return Ok(());
+    let outcome: Result<(), Vec<Problem>> = match definitions_of(&graph.meta) {
+        Err(reason) => {
+            let mut problems = vec![problem("policy:definition", reason)];
+            problems.extend(fragment_problems(graph));
+            Err(problems)
         }
-        let mut names: Vec<String> = graph.nodes.keys().cloned().collect();
-        names.sort();
-        for name in names {
-            let node = graph.nodes.get_mut(&name).expect("a listed node");
-            let mut lowered = Vec::with_capacity(node.edges.len());
-            for (target, cond) in &node.edges {
-                lowered.push((target.clone(), lower_condition(cond, &definitions)?));
+        Ok(definitions) => {
+            graph.fields = definitions.clone();
+            if definitions.is_empty() {
+                Ok(())
+            } else {
+                let mut problems = Vec::new();
+                let mut failed: BTreeSet<(String, usize)> = BTreeSet::new();
+                let mut names: Vec<String> = graph.nodes.keys().cloned().collect();
+                names.sort();
+                for name in names {
+                    let node = graph.nodes.get_mut(&name).expect("a listed node");
+                    let mut lowered = Vec::with_capacity(node.edges.len());
+                    for (index, (target, cond)) in node.edges.iter().enumerate() {
+                        match lower_condition(cond, &definitions) {
+                            Ok(text) => lowered.push((target.clone(), text)),
+                            Err(reason) => {
+                                // every lowering refusal is a threshold: off the grid, out of range, more
+                                // digits than an exact threshold carries, or between two scales
+                                problems.push(problem("policy:threshold", reason));
+                                failed.insert((name.clone(), index));
+                                lowered.push((target.clone(), cond.clone()));
+                            }
+                        }
+                    }
+                    node.edges = lowered;
+                }
+                problems.extend(policy_problems_caused(graph, &definitions, &failed));
+                if problems.is_empty() { Ok(()) } else { Err(problems) }
             }
-            node.edges = lowered;
         }
-        let problems = policy_problems(graph, &definitions);
-        if problems.is_empty() { Ok(()) } else { Err(format!("the flow breaks its field definitions: {}", problems.join("; "))) }
-    });
-    if let Err(reason) = outcome {
-        graph.field_error = Some(reason);
+    };
+    if let Err(problems) = outcome {
+        let texts: Vec<&str> = problems.iter().map(|found| found.text.as_str()).collect();
+        graph.field_error = Some(if problems[0].cause == "policy:definition" {
+            texts[0].to_string()
+        } else {
+            format!("the flow breaks its field definitions: {}", texts.join("; "))
+        });
+        graph.field_error_cause = problems.first().map(|found| found.cause);
+        graph.field_error_causes = problems.iter().map(|found| found.cause).collect();
         for node in graph.nodes.values_mut() {
             for edge in node.edges.iter_mut() {
                 edge.1 = "never".to_string();

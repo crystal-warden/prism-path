@@ -2,11 +2,15 @@
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """Generate the Rust cause registry from the Python one, so the two cannot drift.
 
-    python prismpath/portable/gen_causes_rs.py          writes prismpath-rs/src/causes.rs
-                                                        and conformance/causes.json
+    python prismpath/portable/gen_causes_rs.py          writes prismpath-rs/src/causes.rs,
+                                                        conformance/causes.json and
+                                                        formal/Core/Causes.lean
     python prismpath/portable/gen_causes_rs.py --check  exits 1 if either file is not what the
                                                         registry in prismpath/kernel/causes.py
                                                         produces now
+
+`formal/Core/Causes.lean` holds every (code, name) pair for the verified core's Lean semantics, whose
+theorem `Core.refusal_registered` proves that every refusal the core can produce carries one of them.
 
 `prismpath-rs/src/causes.rs` holds every (code, name, class, description) row of
 `prismpath.kernel.causes`, the stop to cause mapping, and the registry hash, all taken from the
@@ -29,6 +33,7 @@ sys.path.insert(0, str(REPO))
 from prismpath.kernel import causes  # noqa: E402
 
 RUST_OUT = REPO / "prismpath-rs" / "src" / "causes.rs"
+LEAN_OUT = REPO / "formal" / "Core" / "Causes.lean"
 CORPUS_OUT = HERE / "conformance" / "causes.json"
 CLASSES = ("authority", "envelope", "routing", "wire", "state")
 
@@ -150,6 +155,34 @@ def build_rust() -> str:
     return "\n".join(out)
 
 
+def build_lean() -> str:
+    rows = causes._REGISTRY
+    out = ["-- SPDX-License-Identifier: Apache-2.0",
+           "-- Copyright 2026 Crystal Warden Supply Chain Labs LLC",
+           "/-!",
+           "# The cause registry, for the verified core",
+           "",
+           "GENERATED from `prismpath/kernel/causes.py` by `prismpath/portable/gen_causes_rs.py`. Do not edit by",
+           "hand: `gen_causes_rs.py --check` and `prismpath/tests/test_causes_rs.py` fail when this file is not",
+           "what the generator writes now. Every (code, name) pair of the registry, in registry order; the core's",
+           "spelling of its refusals (`Core.Refusal.code`, `Core.Refusal.cause`) is proved to land in this list",
+           "(`Core.refusal_registered`), so a refusal with no registered code cannot be written.",
+           "-/",
+           "",
+           "namespace Core",
+           "",
+           f"/-- `registry_sha256()` of the Python registry when this file was generated. -/",
+           f"def causeRegistrySha256 : String := \"{causes.registry_sha256()}\"",
+           "",
+           "/-- Every registered (code, canonical name), in registry order. -/",
+           "def causeRegistry : List (Nat × String) := ["]
+    for index, (cause_code, cause_name, _class, _description) in enumerate(rows):
+        assert cause_name.isascii() and '"' not in cause_name and "\\" not in cause_name, cause_name
+        out.append(f"  ({cause_code}, \"{cause_name}\")" + ("," if index + 1 < len(rows) else ""))
+    out += ["]", "", "end Core", ""]
+    return "\n".join(out)
+
+
 def build_corpus() -> dict:
     return {
         "version": 1,
@@ -176,7 +209,7 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--check", action="store_true")
     args = parser.parse_args(argv)
-    outputs = [(RUST_OUT, build_rust()), (CORPUS_OUT, corpus_text())]
+    outputs = [(RUST_OUT, build_rust()), (CORPUS_OUT, corpus_text()), (LEAN_OUT, build_lean())]
     if args.check:
         stale = [str(path.relative_to(REPO)) for path, text in outputs if not path.exists() or path.read_text(encoding="utf-8") != text]
         for path in stale:

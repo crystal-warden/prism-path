@@ -11,7 +11,7 @@
 pub const CAUSE_NONE: u8 = 0;
 
 /// `registry_sha256()` of the Python registry when this file was generated.
-pub const REGISTRY_SHA256: &str = "41c04927d934120fa8a75dc99d55f8597fb0be2647a1fb96d61a3192bddd23ae";
+pub const REGISTRY_SHA256: &str = "4b50c76662b6e71206d699581ed090cd9968385dcbd539c2ce7a2fc6088e5443";
 
 /// The cause class, the semantic axis of the registry.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -153,6 +153,30 @@ pub const ENVELOPE_FIELD_KIND_MISMATCH: u8 = 86;
 pub const FLOW_SHA256_MISMATCH: u8 = 87;
 /// `flow:version-replay`
 pub const FLOW_VERSION_REPLAY: u8 = 88;
+/// `policy:unreadable`
+pub const POLICY_UNREADABLE: u8 = 89;
+/// `policy:shape`
+pub const POLICY_SHAPE: u8 = 90;
+/// `policy:not-level-m`
+pub const POLICY_NOT_LEVEL_M: u8 = 91;
+/// `policy:definition`
+pub const POLICY_DEFINITION: u8 = 92;
+/// `policy:engine-counter`
+pub const POLICY_ENGINE_COUNTER: u8 = 93;
+/// `policy:kind-mismatch`
+pub const POLICY_KIND_MISMATCH: u8 = 94;
+/// `policy:rounding`
+pub const POLICY_ROUNDING: u8 = 95;
+/// `policy:threshold`
+pub const POLICY_THRESHOLD: u8 = 96;
+/// `policy:none`
+pub const POLICY_NONE: u8 = 97;
+/// `policy:absence-untested`
+pub const POLICY_ABSENCE_UNTESTED: u8 = 98;
+/// `reading:unreadable`
+pub const READING_UNREADABLE: u8 = 99;
+/// `reading:not-object`
+pub const READING_NOT_OBJECT: u8 = 100;
 
 /// Every registered cause, in registry order.
 pub const REGISTRY: &[Cause] = &[
@@ -210,6 +234,18 @@ pub const REGISTRY: &[Cause] = &[
     Cause { code: 86, name: "envelope:field-kind-mismatch", class: CauseClass::Envelope, description: "manifest field kind differs from the envelope's" },
     Cause { code: 87, name: "flow:sha256-mismatch", class: CauseClass::Authority, description: "flow document differs from the one its signed flow manifest names" },
     Cause { code: 88, name: "flow:version-replay", class: CauseClass::Authority, description: "flow manifest version below the accepted floor, or equal to it with another flow" },
+    Cause { code: 89, name: "policy:unreadable", class: CauseClass::Envelope, description: "the core's policy image is not a canon/2 document" },
+    Cause { code: 90, name: "policy:shape", class: CauseClass::Envelope, description: "the policy image is not in the core's abstract syntax" },
+    Cause { code: 91, name: "policy:not-level-m", class: CauseClass::Envelope, description: "a condition names a field Level M does not allow, or nests deeper than the bound of 50" },
+    Cause { code: 92, name: "policy:definition", class: CauseClass::Envelope, description: "a field definition breaks the definition grammar" },
+    Cause { code: 93, name: "policy:engine-counter", class: CauseClass::Envelope, description: "a condition reads an engine counter, which the one decision core does not have" },
+    Cause { code: 94, name: "policy:kind-mismatch", class: CauseClass::Envelope, description: "an atom compares a field with an operator or constant its kind does not take" },
+    Cause { code: 95, name: "policy:rounding", class: CauseClass::Envelope, description: "an atom on a fixed field uses an operator its rounding mode does not carry" },
+    Cause { code: 96, name: "policy:threshold", class: CauseClass::Envelope, description: "a threshold is off its field's grid, outside its range, or past the exact decimal bounds" },
+    Cause { code: 97, name: "policy:none", class: CauseClass::Envelope, description: "None is ordered, compared on a field that refuses absence, or listed" },
+    Cause { code: 98, name: "policy:absence-untested", class: CauseClass::Envelope, description: "a field that allows absence is tested with == None or != None by no rule" },
+    Cause { code: 99, name: "reading:unreadable", class: CauseClass::Routing, description: "the reading is not a canon/2 document" },
+    Cause { code: 100, name: "reading:not-object", class: CauseClass::Routing, description: "the reading is a canon/2 document that is not an object" },
 ];
 
 /// The engine's stop vocabulary mapped onto the registry; `terminal` and `waiting` are clean and have no cause.

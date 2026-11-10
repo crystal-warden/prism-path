@@ -12,7 +12,8 @@ parts that every implementation replays:
     cases a binary double gets wrong.
   * `policies`: flows that define their fields. An accepted flow records the conditions after parse
     time lowering and, for a set of readings, the route the engine takes and the reason any reading
-    that is not canonical is refused at the boundary. A refused flow records only that it is refused.
+    that is not canonical is refused at the boundary. A refused flow records its registered refusal
+    cause, the first problem's, and the cause of every problem the reference finds.
   * `version`: bumped when an existing case changes meaning.
 
 Every expected value comes from the reference implementation, never from either twin, so the Rust
@@ -186,8 +187,10 @@ def build() -> dict:
         flow = _flow(name, definitions, [("hit", cond) for cond in conditions] + [("miss", "else")])
         try:
             parse(flow)
-        except ValueError:
-            policies.append({"name": name, "flow": flow, "accepted": False})
+        except field_definitions.FieldDefinitionError as error:
+            # the registered refusal (prismpath/kernel/causes.py) of every problem, the first one first
+            policies.append({"name": name, "flow": flow, "accepted": False, "cause": error.cause,
+                             "causes": [problem.cause for problem in error.problems]})
             continue
         raise AssertionError(f"{name} was meant to be refused and parsed")
     return {

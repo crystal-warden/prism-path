@@ -33,6 +33,8 @@ from dataclasses import dataclass
 from fractions import Fraction
 from typing import Any, Dict, List, Optional, Tuple
 
+from prismpath.kernel import causes
+
 FIELD_PREFIX = "field."
 
 KIND_INT = "int"
@@ -86,7 +88,42 @@ REFUSAL_BINARY_FLOAT = "binary_float"
 class FieldDefinitionError(ValueError):
     """A flow whose field definitions are malformed or whose predicates break a definition's rules.
     A ValueError, like the parser's own ParseError, so every caller that turns bad input into a client
-    error already handles it."""
+    error already handles it.
+
+    `cause` is the registered refusal (prismpath/kernel/causes.py) of the first problem, with `field` and
+    `reason` where the refusal has them, and `problems` every problem found, each a `Problem` carrying its
+    own cause. These are the refusals of the verified core (docs/design/spec-verified-core.md, section 5):
+    every one is a registered row, so `code` is never None."""
+
+    def __init__(self, message: str, cause: str = "policy:definition", field: Optional[str] = None,
+                 reason: Optional[str] = None, problems: Tuple["Problem", ...] = ()):
+        super().__init__(message)
+        self.cause = cause
+        self.field = field
+        self.reason = reason
+        self.problems = tuple(problems) or (Problem(message, cause, field, reason),)
+
+    @property
+    def code(self) -> Optional[int]:
+        return causes.code(self.cause)
+
+
+class Problem(str):
+    """One way a flow breaks its field definitions: the message, as policy_problems always returned it,
+    and the registered refusal it is (`cause`, with `field` and `reason` where the refusal has them)."""
+
+    cause: str
+    field: Optional[str]
+    reason: Optional[str]
+
+    def __new__(cls, text: str, cause: str, field: Optional[str] = None, reason: Optional[str] = None):
+        problem = super().__new__(cls, text)
+        problem.cause, problem.field, problem.reason = cause, field, reason
+        return problem
+
+    @property
+    def code(self) -> Optional[int]:
+        return causes.code(self.cause)
 
 
 class CanonicalRefusal(ValueError):
@@ -127,45 +164,45 @@ class FieldDefinition:
 # ----------------------------------------------------------------- definitions
 def _integer_option(name: str, option: str, text: str) -> int:
     if not re.fullmatch(r"[+-]?[0-9]+", text):
-        raise FieldDefinitionError(f"field {name!r}: {option}={text!r} is not an integer")
+        raise FieldDefinitionError(f"field {name!r}: {option}={text!r} is not an integer", field=name, reason="not-integer")
     return int(text)
 
 
 def parse_definition(name: str, text: str) -> FieldDefinition:
     """One `field.<name>` front matter value as a FieldDefinition, or FieldDefinitionError."""
     if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", name):
-        raise FieldDefinitionError(f"field {name!r}: not a field name")
+        raise FieldDefinitionError(f"field {name!r}: not a field name", field=name, reason="name")
     if name in ENGINE_COUNTERS:
-        raise FieldDefinitionError(f"field {name!r}: the engine supplies this counter, it is not defined")
+        raise FieldDefinitionError(f"field {name!r}: the engine supplies this counter, it is not defined", field=name, reason="engine-counter")
     words = text.split()
     if not words:
-        raise FieldDefinitionError(f"field {name!r}: the definition is empty")
+        raise FieldDefinitionError(f"field {name!r}: the definition is empty", field=name, reason="empty")
     kind, options = words[0], {}
     if kind not in _OPTIONS:
-        raise FieldDefinitionError(f"field {name!r}: unknown kind {kind!r} (int, fixed, bool, category)")
+        raise FieldDefinitionError(f"field {name!r}: unknown kind {kind!r} (int, fixed, bool, category)", field=name, reason="unknown-kind")
     for word in words[1:]:
         option, equals, value = word.partition("=")
         if not equals or not value:
-            raise FieldDefinitionError(f"field {name!r}: {word!r} is not option=value")
+            raise FieldDefinitionError(f"field {name!r}: {word!r} is not option=value", field=name, reason="not-option")
         if option not in _OPTIONS[kind]:
-            raise FieldDefinitionError(f"field {name!r}: a {kind} field takes no {option!r} option")
+            raise FieldDefinitionError(f"field {name!r}: a {kind} field takes no {option!r} option", field=name, reason="option-not-taken")
         if option in options:
-            raise FieldDefinitionError(f"field {name!r}: {option!r} is given twice")
+            raise FieldDefinitionError(f"field {name!r}: {option!r} is given twice", field=name, reason="option-repeated")
         options[option] = value
 
     absent = options.get("absent", "refused")
     if absent not in ("refused", "allowed"):
-        raise FieldDefinitionError(f"field {name!r}: absent={absent!r} is neither refused nor allowed")
+        raise FieldDefinitionError(f"field {name!r}: absent={absent!r} is neither refused nor allowed", field=name, reason="absent")
     scale = rounding = unit = None
     if kind == KIND_FIXED:
         if "scale" not in options or "rounding" not in options:
-            raise FieldDefinitionError(f"field {name!r}: a fixed field needs both scale and rounding")
+            raise FieldDefinitionError(f"field {name!r}: a fixed field needs both scale and rounding", field=name, reason="fixed-needs-scale-and-rounding")
         scale = _integer_option(name, "scale", options["scale"])
         if not 1 <= scale <= MAX_SCALE:
-            raise FieldDefinitionError(f"field {name!r}: scale={scale} is outside 1 to {MAX_SCALE}")
+            raise FieldDefinitionError(f"field {name!r}: scale={scale} is outside 1 to {MAX_SCALE}", field=name, reason="scale")
         rounding = options["rounding"]
         if rounding not in _ROUNDING_OPERATORS:
-            raise FieldDefinitionError(f"field {name!r}: rounding={rounding!r} is not floor, ceiling or exact")
+            raise FieldDefinitionError(f"field {name!r}: rounding={rounding!r} is not floor, ceiling or exact", field=name, reason="rounding")
         unit = options.get("unit")
     minimum, maximum = -EXACT_INTEGER_LIMIT, EXACT_INTEGER_LIMIT
     if "min" in options:
@@ -174,7 +211,7 @@ def parse_definition(name: str, text: str) -> FieldDefinition:
         maximum = _integer_option(name, "max", options["max"])
     if not -EXACT_INTEGER_LIMIT <= minimum <= maximum <= EXACT_INTEGER_LIMIT:
         raise FieldDefinitionError(f"field {name!r}: the range {minimum} to {maximum} is empty or wider "
-                                   f"than plus or minus 2^53 minus 1")
+                                   f"than plus or minus 2^53 minus 1", field=name, reason="range")
     return FieldDefinition(name, kind, scale, rounding, unit, minimum, maximum, absent == "allowed")
 
 
@@ -318,7 +355,8 @@ def _literal_value(expr: str, node) -> Optional[Fraction]:
                 and isinstance(inner.value, (int, float)) \
                 and ast.get_source_segment(expr, node)[1:].strip() != ast.get_source_segment(expr, inner):
             raise FieldDefinitionError(f"the threshold {ast.get_source_segment(expr, node)} puts its sign outside "
-                                       f"parentheses; write the sign on the number")
+                                       f"parentheses; write the sign on the number", cause="policy:threshold",
+                                       reason="sign")
         node = inner
     if not isinstance(node, ast.Constant) or isinstance(node.value, bool) \
             or not isinstance(node.value, (int, float)):
@@ -328,7 +366,7 @@ def _literal_value(expr: str, node) -> Optional[Fraction]:
     exact = decimal_fraction(ast.get_source_segment(expr, node).replace("_", ""))
     if exact is None:
         raise FieldDefinitionError(f"the literal {ast.get_source_segment(expr, node)!r} has more digits "
-                                   f"than an exact threshold carries")
+                                   f"than an exact threshold carries", cause="policy:threshold", reason="digits")
     return sign * exact
 
 
@@ -349,17 +387,20 @@ def lower_expression(expr: str, definitions: Dict[str, FieldDefinition]) -> str:
         scaled = exact * definition.scale
         if scaled.denominator != 1:
             raise FieldDefinitionError(f"field {field_name!r}: the threshold {ast.get_source_segment(expr, node)} "
-                                       f"is not a multiple of 1/{definition.scale}")
+                                       f"is not a multiple of 1/{definition.scale}", cause="policy:threshold",
+                                       field=field_name, reason="off-grid")
         canonical = scaled.numerator
         if not definition.minimum <= canonical <= definition.maximum:
             raise FieldDefinitionError(f"field {field_name!r}: the threshold {ast.get_source_segment(expr, node)} "
                                        f"is {canonical} canonically, outside {definition.minimum} to "
-                                       f"{definition.maximum}")
+                                       f"{definition.maximum}", cause="policy:threshold", field=field_name,
+                                       reason="out-of-range")
         span = (node.col_offset, node.end_col_offset)
         if span in spans and spans[span][0] != field_name \
                 and definitions[spans[span][0]].scale != definition.scale:
             raise FieldDefinitionError(f"the literal {ast.get_source_segment(expr, node)} sits between two "
-                                       f"fixed fields of different scales")
+                                       f"fixed fields of different scales", cause="policy:threshold",
+                                       reason="two-scales")
         spans[span] = (field_name, canonical)
 
     for node in ast.walk(tree):
@@ -429,89 +470,215 @@ def _atoms(node) -> List[Tuple[str, str, Any]]:
     return []
 
 
-def _atom_problem(definition: FieldDefinition, op: str, constant: Any) -> Optional[str]:
+def _atom_problem(definition: FieldDefinition, op: str, constant: Any) -> Optional[Problem]:
     """Why one atom breaks its field's definition, or None when it agrees."""
     kind, name = definition.kind, definition.name
     members = constant if op in ("in", "not in") else (constant,)
     if op in ("in", "not in") and any(member is None for member in members):
-        return f"field {name!r}: None may not appear in a list"
+        return Problem(f"field {name!r}: None may not appear in a list", "policy:none", name, "in-list")
     if constant is None and op != "truthy":
         if op not in ("==", "!="):
-            return f"field {name!r}: None is compared only by == or !="
+            return Problem(f"field {name!r}: None is compared only by == or !=", "policy:none", name, "ordered")
         if not definition.absent_allowed:
-            return f"field {name!r}: compared with None, but its definition refuses absence"
+            return Problem(f"field {name!r}: compared with None, but its definition refuses absence", "policy:none",
+                           name, "absence-refused")
         return None
     if kind == KIND_BOOL:
         if op == "truthy" or (op in ("==", "!=") and isinstance(constant, bool)):
             return None
-        return f"field {name!r}: a bool field is tested by truthiness or == and != with True or False"
+        return Problem(f"field {name!r}: a bool field is tested by truthiness or == and != with True or False",
+                       "policy:kind-mismatch", name)
     if kind == KIND_CATEGORY:
         if op == "truthy" or (op in ("==", "!=", "in", "not in")
                               and all(isinstance(member, str) for member in members)):
             return None
-        return f"field {name!r}: a category field is compared with strings by ==, !=, in and not in"
+        return Problem(f"field {name!r}: a category field is compared with strings by ==, !=, in and not in",
+                       "policy:kind-mismatch", name)
     # int and fixed
     if op != "truthy" and not all(isinstance(member, int) and not isinstance(member, bool)
                                   for member in members):
-        return f"field {name!r}: a {kind} field is compared only with numbers"
+        return Problem(f"field {name!r}: a {kind} field is compared only with numbers", "policy:kind-mismatch", name)
     if kind == KIND_FIXED and op not in _ROUNDING_OPERATORS[definition.rounding]:
         allowed = " and ".join(sorted(_ROUNDING_OPERATORS[definition.rounding]))
         written = "a bare truthiness test" if op == "truthy" else f"{op!r}"
-        return (f"field {name!r}: rounding={definition.rounding} carries only {allowed}, so {written} "
-                f"would not decide on the canonical value as it does on the source value")
+        return Problem(f"field {name!r}: rounding={definition.rounding} carries only {allowed}, so {written} "
+                       f"would not decide on the canonical value as it does on the source value", "policy:rounding", name)
     if op != "truthy":
         for member in members:
             if not definition.minimum <= member <= definition.maximum:
-                return (f"field {name!r}: the constant {member} is outside its range "
-                        f"{definition.minimum} to {definition.maximum}")
+                return Problem(f"field {name!r}: the constant {member} is outside its range "
+                               f"{definition.minimum} to {definition.maximum}", "policy:threshold", name,
+                               "constant-range" if kind == KIND_INT else "out-of-range")
     return None
 
 
-def policy_problems(graph, definitions: Dict[str, FieldDefinition]) -> List[str]:
-    """Every way the flow breaks the rules of SPEC section 4.5, in node order; empty when it obeys them."""
+# The Level M classifier's reasons (level_m.py) as the core's registered refusals (spec section 2.2):
+# an operator outside the fragment is image:unknown-op, a value type outside it image:unknown-type, and a
+# condition that is not an atom at all (a constant, a hard keyword) is outside Level M by name.
+_LEVEL_M_CAUSE = {
+    "string-ordering": "image:unknown-op",
+    "substring-in": "image:unknown-op",
+    "field-vs-field": "image:unknown-type",
+    "nested-container": "image:unknown-type",
+    "non-literal-collection": "image:unknown-type",
+    "constant-only": "policy:not-level-m",
+    "chained-comparison": "policy:shape",
+}
+
+
+def _float_literals(cond: str) -> Optional[List[str]]:
+    """The source text of every float literal of a deterministic condition, or None when it has no syntax
+    tree."""
+    from prismpath.kernel import predicates
+    if not predicates.is_deterministic(cond):
+        return None
+    expr = predicates._expr_of(cond)
+    tree = predicates.expr_ast(cond)
+    if tree is None:
+        return None
+    return [ast.get_source_segment(expr, node) or "" for node in ast.walk(tree)
+            if isinstance(node, ast.Constant) and isinstance(node.value, float)]
+
+
+def _level_m_problem(name: str, cond: str, reason: Optional[str]) -> Problem:
+    cause = _LEVEL_M_CAUSE.get(reason or "")
+    if cause is None:
+        # disallowed-or-unparseable: a float constant on a field that is not fixed is a value type outside the
+        # fragment, or a threshold past the exact decimal bounds, which the core refuses whatever the field;
+        # anything else (a hard keyword as a name, syntax outside the grammar) is outside it by name
+        floats = _float_literals(cond) or []
+        if any(decimal_fraction(text.replace("_", "")) is None for text in floats):
+            return Problem(f"{name}: {cond!r} holds a decimal literal past the exact bounds", "policy:threshold", None,
+                           "digits")
+        cause = "image:unknown-type" if floats else "policy:not-level-m"
+    return Problem(f"{name}: {cond!r} is outside Level M ({reason}), and a flow that defines its fields routes "
+                   f"only on Level M conditions", cause, None, reason)
+
+
+def fragment_problems(graph) -> List[Problem]:
+    """The problems of the flow's conditions that no definition can change (spec section 4, step 1): an
+    operator or value type outside the fragment, a name outside it, and a decimal literal past the exact
+    bounds. Reported beside a malformed definition, so a refusal names every cause the core could name
+    first. A decimal literal within the bounds is left to the definitions, since on a fixed field it is
+    lowered to an integer."""
     from prismpath.kernel import level_m, predicates
-    problems: List[str] = []
-    tested_for_absence = set()
+    problems: List[Problem] = []
     for name, node in graph.nodes.items():
         for _target, cond in node.edges:
             if not predicates.is_deterministic(cond) or predicates.is_semantic(cond):
                 continue
             member, reason = level_m.is_level_m(cond)
-            if not member:
-                problems.append(f"{name}: {cond!r} is outside Level M ({reason}), and a flow that defines "
-                                f"its fields routes only on Level M conditions")
+            if member:
+                continue
+            problem = _level_m_problem(name, cond, reason)
+            if _decided_without_definitions(problem, cond, reason):
+                problems.append(problem)
+    return problems
+
+
+def _decided_without_definitions(problem: Problem, cond: str, reason: Optional[str]) -> bool:
+    """Whether a Level M problem stands before the definitions are known: not when the classifier only
+    objects to the syntax of a condition that holds decimal literals within the bounds, which on a fixed
+    field are lowered to integers first."""
+    return reason != "disallowed-or-unparseable" or problem.cause == "policy:threshold" or not _float_literals(cond)
+
+
+def policy_problems(graph, definitions: Dict[str, FieldDefinition], skip=frozenset()) -> List[Problem]:
+    """Every way the flow breaks the rules of SPEC section 4.5, in node order; empty when it obeys them.
+    Each problem is a Problem, a str carrying its registered cause. `skip` names (node, edge index) pairs
+    whose lowering already failed, so their unlowered constants are not reported a second time."""
+    from prismpath.kernel import level_m, predicates
+    problems: List[Problem] = []
+    tested_for_absence = set()
+    for name, node in graph.nodes.items():
+        for index, (_target, cond) in enumerate(node.edges):
+            if not predicates.is_deterministic(cond) or predicates.is_semantic(cond):
+                continue
+            unlowered = (name, index) in skip
+            member, reason = level_m.is_level_m(cond)
+            if not member and not unlowered:
+                problems.append(_level_m_problem(name, cond, reason))
                 continue
             tree = predicates.expr_ast(cond)
             if tree is None:
+                continue
+            if unlowered:
+                # lowering failed on this edge, so its fixed fields still hold decimal literals: report what
+                # the failure does not decide, the fragment problems no definition changes and the atoms on
+                # every field that is not fixed, and leave the fixed fields to the lowering's own problem
+                if not member:
+                    problem = _level_m_problem(name, cond, reason)
+                    if _decided_without_definitions(problem, cond, reason):
+                        problems.append(problem)
+                    continue
+                try:
+                    atoms = _atoms(level_m._desugar_chains(tree))
+                except (AttributeError, KeyError, IndexError):
+                    continue
+                for field_name, op, constant in atoms:
+                    definition = definitions.get(field_name)
+                    if field_name in ENGINE_COUNTERS or (definition is not None and definition.kind == KIND_FIXED):
+                        continue
+                    if definition is None:
+                        problems.append(Problem(f"{name}: {cond!r} reads {field_name!r}, which the flow does not "
+                                                f"define", "image:field-index-oob", field_name))
+                        continue
+                    problem = _atom_problem(definition, op, constant)
+                    if problem is not None:
+                        problems.append(Problem(f"{name}: {cond!r}: {problem}", problem.cause, problem.field,
+                                                problem.reason))
+                    if constant is None and op in ("==", "!="):
+                        tested_for_absence.add(field_name)
                 continue
             for field_name, op, constant in _atoms(level_m._desugar_chains(tree)):
                 if field_name in ENGINE_COUNTERS:
                     continue
                 definition = definitions.get(field_name)
                 if definition is None:
-                    problems.append(f"{name}: {cond!r} reads {field_name!r}, which the flow does not define")
+                    problems.append(Problem(f"{name}: {cond!r} reads {field_name!r}, which the flow does not define",
+                                            "image:field-index-oob", field_name))
                     continue
                 problem = _atom_problem(definition, op, constant)
                 if problem is not None:
-                    problems.append(f"{name}: {cond!r}: {problem}")
+                    problems.append(Problem(f"{name}: {cond!r}: {problem}", problem.cause, problem.field,
+                                            problem.reason))
                 if constant is None and op in ("==", "!="):
                     tested_for_absence.add(field_name)
     for field_name, definition in sorted(definitions.items()):
         if definition.absent_allowed and field_name not in tested_for_absence:
-            problems.append(f"field {field_name!r} allows absence but no edge tests it with == None or "
-                            f"!= None, so absence would only ever be observed by accident")
+            problems.append(Problem(f"field {field_name!r} allows absence but no edge tests it with == None or "
+                                    f"!= None, so absence would only ever be observed by accident",
+                                    "policy:absence-untested", field_name))
     return problems
 
 
 def apply_definitions(graph) -> None:
     """Parse the flow's field definitions, lower its conditions in place, and refuse a flow that breaks
-    a rule. A flow with no definitions is left exactly as it was."""
-    definitions = definitions_of(graph.meta)
+    a rule. A flow with no definitions is left exactly as it was. The refusal names every problem, the
+    lowering's and the policy rules', each with its registered cause."""
+    try:
+        definitions = definitions_of(graph.meta)
+    except FieldDefinitionError as error:
+        problems = list(error.problems) + fragment_problems(graph)
+        raise FieldDefinitionError(str(error), cause=error.cause, field=error.field, reason=error.reason,
+                                   problems=problems) from None
     graph.fields = definitions
     if not definitions:
         return
-    for node in graph.nodes.values():
-        node.edges = [(target, lower_condition(cond, definitions)) for target, cond in node.edges]
-    problems = policy_problems(graph, definitions)
+    problems: List[Problem] = []
+    failed = set()
+    for name, node in graph.nodes.items():
+        lowered = []
+        for index, (target, cond) in enumerate(node.edges):
+            try:
+                lowered.append((target, lower_condition(cond, definitions)))
+            except FieldDefinitionError as error:
+                problems.extend(error.problems)
+                failed.add((name, index))
+                lowered.append((target, cond))
+        node.edges = lowered
+    problems += policy_problems(graph, definitions, failed)
     if problems:
-        raise FieldDefinitionError("the flow breaks its field definitions: " + "; ".join(problems))
+        first = problems[0]
+        raise FieldDefinitionError("the flow breaks its field definitions: " + "; ".join(problems),
+                                   cause=first.cause, field=first.field, reason=first.reason, problems=problems)

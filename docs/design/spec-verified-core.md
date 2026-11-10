@@ -243,33 +243,41 @@ literal (an integer, a boolean, a string, or `None`).
 
 ## 5. Refusals and their causes
 
-Every input that is not routed gets exactly one of these refusals. The registered codes are those of
-`prismpath/kernel/causes.py`; the rows marked *proposed* have no registered cause yet, and the oracle
-prints `"code": null` for them until the registry (which is append only) gains them.
+Every input that is not routed gets exactly one of these refusals, and every one is a registered row of
+`prismpath/kernel/causes.py` (append only; rows 89 to 100 were appended for the core in step 2, the
+policy refusals in the `envelope` class beside the pack verifier's structural refusals, the two reading
+refusals in the `routing` class). The Lean semantics spells each refusal with its code and name
+(`Refusal.code`, `Refusal.cause`, `formal/Core/Eval.lean`), and the theorem `refusal_registered` proves
+every pair is a row of the registry, which `gen_causes_rs.py` generates into `formal/Core/Causes.lean`
+beside the Rust table; so the oracle never prints a refusal without a code. The Python reference
+carries the cause on every refusal (`FieldDefinitionError.cause`, `.code`, and `.problems`, each a
+`Problem` with its own cause), the Rust port on the graph (`Graph.field_error_cause`,
+`field_error_causes`), and the frozen field definition vectors record the cause of every refused
+policy, which the Rust replay checks.
 
 | refusal | cause | code | when |
 |---|---|---|---|
-| image unreadable | `policy:unreadable` | proposed | section 3, on the image |
-| image shape | `policy:shape` | proposed | section 2, the image is not the core's syntax |
+| image unreadable | `policy:unreadable` | 89 | section 3, on the image |
+| image shape | `policy:shape` | 90 | section 2, the image is not the core's syntax |
 | operator outside Level M | `image:unknown-op` | 74 | `causes.py:74`, an atom's operator outside the fragment |
 | value type outside Level M | `image:unknown-type` | 75 | `causes.py:75` |
-| name or depth outside Level M | `policy:not-level-m` | proposed | section 2.2, 2.4 |
-| malformed definition | `policy:definition` | proposed | section 2.5 |
+| name or depth outside Level M | `policy:not-level-m` | 91 | section 2.2, 2.4 |
+| malformed definition | `policy:definition` | 92 | section 2.5 |
 | undefined field | `image:field-index-oob` | 76 | `causes.py:76`, an atom names a field the policy does not declare |
-| engine counter read | `policy:engine-counter` | proposed | section 1 |
-| kind mismatch | `policy:kind-mismatch` | proposed | rule 3 |
-| rounding mode | `policy:rounding` | proposed | rule 4 |
-| threshold | `policy:threshold` | proposed | lowering and ranges |
-| `None` misused | `policy:none` | proposed | rule 5 |
-| absence untested | `policy:absence-untested` | proposed | rule 6 |
-| reading unreadable | `reading:unreadable` | proposed | section 3, on the reading |
-| reading not an object | `reading:not-object` | proposed | section 6 |
+| engine counter read | `policy:engine-counter` | 93 | section 1 |
+| kind mismatch | `policy:kind-mismatch` | 94 | rule 3 |
+| rounding mode | `policy:rounding` | 95 | rule 4 |
+| threshold | `policy:threshold` | 96 | lowering and ranges |
+| `None` misused | `policy:none` | 97 | rule 5 |
+| absence untested | `policy:absence-untested` | 98 | rule 6 |
+| reading unreadable | `reading:unreadable` | 99 | section 3, on the reading |
+| reading not an object | `reading:not-object` | 100 | section 6 |
 | value refused at the boundary | `route:contract-violation` | 37 | `causes.py:48`, the reading violates the declared definitions; the field and `missing`, `wrong_type` or `out_of_range` |
 | no rule holds | `route:no-matching-edge` | 32 | `causes.py:43`, refused for admission |
 
-A policy refusal refuses every reading with the same refusal. The proposed rows would sit in the
-envelope class with the pack verifier's structural refusals (`causes.py:65-86`), and the two reading
-rows in the routing class; registering them is an owner decision, listed in section 10.
+A policy refusal refuses every reading with the same refusal. The image refusals 74 to 76 keep their
+pack verifier names: the operator, value type and field index of a table image are the same three
+facts about an atom.
 
 ## 6. Evaluation
 
@@ -433,6 +441,25 @@ both or records them as refusing kernels in the conformance matrix.
 (`int-out-of-i32`, SPEC.md 4.3), so a checked policy with a constant outside that range compiles to no
 table. This is a declared target limit, not a disagreement; the table adapter (step 2) must report it as
 a refusal of the compiler, never a different route.
+
+**D7. Which cause names a policy with several problems (Python, Rust).** Found when step 2 made every
+leg report its cause. Both sides refuse the same policies; every refusal carries a registered code; on
+a policy with exactly one problem the causes agree. On a policy with several, the specification names
+the first in its order (section 4: the whole image decoded, then the definitions in code point order,
+then rule by rule and atom by atom), while the reference and the port meet them in their own phases:
+the Level M classifier judges a whole condition before its atoms, the lowering of a condition's
+decimals runs before its atoms are checked, and a malformed definition stops the definitions before any
+atom is read. Both legs therefore report every problem they find (`FieldDefinitionError.problems`,
+`Graph.field_error_causes`), including the condition problems no definition changes, and the harness
+classifies a case as `cause-order` when the oracle's cause is among them and as the finding
+`policy-cause <oracle> vs <leg>` when it is not (the leg stopped before reaching it). Reproducer: `fields
+{"x": "int"}`, one rule `["and", ["cmp", "x", "==", ["num", "9007199254740992"]], ["cmp", "x", "==",
+["num", "2.5"]]]`: the oracle names `policy:threshold` (`constant-range`, the first atom), the reference
+`image:unknown-type` (the classifier sees the float in the second atom first). **Specification:** the
+order of section 4 is the one the oracle proves things about; making the reference report exactly that
+first cause means checking it atom by atom in the core's order, a restructuring of `apply_definitions`
+that this step does not do. Open: either the reference adopts the order, or the cause of a policy
+refusal is specified as any one of its problems, with the oracle's as the canonical one.
 
 **Reader gaps (closed).** Step 1 counted floats, `-0`, wide integers, duplicate keys and deep nesting
 as reader gaps: the implementations read documents with canon/1, which accepts them. canon/2 is now

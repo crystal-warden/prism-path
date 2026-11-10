@@ -11,7 +11,7 @@
 //! Output: one JSON line per case.
 
 use prismpath_rs::canon2::{self, Doc};
-use prismpath_rs::{accept_canonical, first_deterministic, parse_checked, Value};
+use prismpath_rs::{accept_canonical, causes, first_deterministic, parse, Value};
 use std::collections::HashMap;
 use std::io::{Read, Write};
 
@@ -29,23 +29,31 @@ fn read_frame<'a>(input: &'a [u8], pos: &mut usize) -> Option<&'a [u8]> {
     Some(frame)
 }
 
+/// A refusal with its registered code, as the oracle prints one.
+fn refuse(cause: &str, mut detail: serde_json::Value) -> serde_json::Value {
+    detail["verdict"] = "refuse".into();
+    detail["cause"] = cause.into();
+    detail["code"] = causes::code(cause).into();
+    detail
+}
+
 fn reading_verdict(graph: &prismpath_rs::Graph, bytes: &[u8]) -> serde_json::Value {
     let document = match canon2::read(bytes) {
         Ok(document) => document,
-        Err(error) => return serde_json::json!({"verdict": "refuse", "cause": "reading:unreadable", "reason": error.rule()}),
+        Err(error) => return refuse("reading:unreadable", serde_json::json!({"reason": error.rule()})),
     };
     let Doc::Obj(members) = document else {
-        return serde_json::json!({"verdict": "refuse", "cause": "reading:not-object"});
+        return refuse("reading:not-object", serde_json::json!({}));
     };
     let values: HashMap<String, Value> = members.iter().map(|(key, value)| (key.clone(), value.to_value())).collect();
     for (field, definition) in &graph.fields {
         if let Err(reason) = accept_canonical(definition, values.get(field).unwrap_or(&Value::Null)) {
-            return serde_json::json!({"verdict": "refuse", "cause": "route:contract-violation", "field": field, "reason": reason});
+            return refuse("route:contract-violation", serde_json::json!({"field": field, "reason": reason}));
         }
     }
     match first_deterministic(&graph.nodes[&graph.start].edges, &values) {
         Some((target, _)) => serde_json::json!({"verdict": "route", "target": target}),
-        None => serde_json::json!({"verdict": "refuse", "cause": "route:no-matching-edge"}),
+        None => refuse("route:no-matching-edge", serde_json::json!({})),
     }
 }
 
@@ -63,14 +71,21 @@ fn main() {
         let flow = read_frame(&input, &mut pos).expect("flow frame");
         let readings: Vec<&[u8]> = (0..count).map(|_| read_frame(&input, &mut pos).expect("reading frame")).collect();
         let line = if let Err(error) = canon2::read(image) {
-            serde_json::json!({"id": parts[1], "policy": "refused", "cause": "policy:unreadable", "reason": error.rule()})
+            serde_json::json!({"id": parts[1], "policy": "refused", "cause": "policy:unreadable", "reason": error.rule(),
+                               "code": causes::code("policy:unreadable"), "causes": ["policy:unreadable"]})
         } else if flow.is_empty() {
             serde_json::json!({"id": parts[1], "policy": "unrenderable"})
         } else {
             let flow_text = std::str::from_utf8(flow).expect("a rendered flow is UTF-8");
-            match parse_checked(flow_text) {
-                Err(reason) => serde_json::json!({"id": parts[1], "policy": "refused", "reason": reason}),
-                Ok(graph) => {
+            let graph = parse(flow_text);
+            match graph.refusal() {
+                Some(reason) => {
+                    // the registered cause of the first problem, and of every problem the port found
+                    let cause = graph.field_error_cause;
+                    serde_json::json!({"id": parts[1], "policy": "refused", "reason": reason, "cause": cause,
+                                       "code": cause.and_then(causes::code), "causes": graph.field_error_causes})
+                }
+                None => {
                     let verdicts: Vec<serde_json::Value> = readings.iter().map(|bytes| reading_verdict(&graph, bytes)).collect();
                     serde_json::json!({"id": parts[1], "policy": "accepted", "defines": !graph.fields.is_empty(), "readings": verdicts})
                 }

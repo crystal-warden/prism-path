@@ -1,0 +1,88 @@
+-- SPDX-License-Identifier: Apache-2.0
+-- Copyright 2026 Crystal Warden Supply Chain Labs LLC
+/-!
+# The cause registry, for the verified core
+
+GENERATED from `prismpath/kernel/causes.py` by `prismpath/portable/gen_causes_rs.py`. Do not edit by
+hand: `gen_causes_rs.py --check` and `prismpath/tests/test_causes_rs.py` fail when this file is not
+what the generator writes now. Every (code, name) pair of the registry, in registry order; the core's
+spelling of its refusals (`Core.Refusal.code`, `Core.Refusal.cause`) is proved to land in this list
+(`Core.refusal_registered`), so a refusal with no registered code cannot be written.
+-/
+
+namespace Core
+
+/-- `registry_sha256()` of the Python registry when this file was generated. -/
+def causeRegistrySha256 : String := "4b50c76662b6e71206d699581ed090cd9968385dcbd539c2ce7a2fc6088e5443"
+
+/-- Every registered (code, canonical name), in registry order. -/
+def causeRegistry : List (Nat × String) := [
+  (1, "sig:missing"),
+  (2, "sig:invalid"),
+  (3, "sig:revoked-key"),
+  (4, "manifest:key-id-mismatch"),
+  (5, "manifest:bad-format"),
+  (6, "image:sha256-mismatch"),
+  (7, "manifest:count-mismatch"),
+  (8, "manifest:wcet-mismatch"),
+  (9, "image:version-replay"),
+  (10, "image:unsigned-refused"),
+  (16, "image:caps-exceeded"),
+  (17, "packing:unknown-profile"),
+  (18, "spiral:sidecar-missing"),
+  (19, "spiral:sidecar-hash-mismatch"),
+  (32, "route:no-matching-edge"),
+  (33, "route:below-human-floor"),
+  (34, "route:needs-human"),
+  (35, "route:max-steps"),
+  (36, "route:stuck"),
+  (37, "route:contract-violation"),
+  (48, "wire:no-terminator"),
+  (49, "wire:dangling-codeword"),
+  (50, "wire:symbol-overflow"),
+  (51, "wire:codebook-mismatch"),
+  (52, "replay-duplicate"),
+  (53, "replay-stale"),
+  (54, "concentrator-unknown-stream"),
+  (55, "concentrator-truncated"),
+  (56, "wire:chain-broken"),
+  (64, "state:stale"),
+  (65, "state:recovered"),
+  (66, "state:migration-reset"),
+  (67, "state:swap-in-flight-park"),
+  (68, "state:normal-unheld"),
+  (69, "image:truncated-header"),
+  (70, "image:bad-magic"),
+  (71, "image:bad-version"),
+  (72, "image:safe-node-oob"),
+  (73, "image:length-mismatch"),
+  (74, "image:unknown-op"),
+  (75, "image:unknown-type"),
+  (76, "image:field-index-oob"),
+  (77, "image:edge-target-oob"),
+  (78, "image:edge-prog-oob"),
+  (79, "image:unknown-opcode"),
+  (80, "image:atom-index-oob"),
+  (81, "image:node-attr-oob"),
+  (82, "envelope:missing"),
+  (83, "envelope:sig-invalid"),
+  (84, "envelope:id-mismatch"),
+  (85, "envelope:unknown-field"),
+  (86, "envelope:field-kind-mismatch"),
+  (87, "flow:sha256-mismatch"),
+  (88, "flow:version-replay"),
+  (89, "policy:unreadable"),
+  (90, "policy:shape"),
+  (91, "policy:not-level-m"),
+  (92, "policy:definition"),
+  (93, "policy:engine-counter"),
+  (94, "policy:kind-mismatch"),
+  (95, "policy:rounding"),
+  (96, "policy:threshold"),
+  (97, "policy:none"),
+  (98, "policy:absence-untested"),
+  (99, "reading:unreadable"),
+  (100, "reading:not-object")
+]
+
+end Core

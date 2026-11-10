@@ -25,37 +25,33 @@ def jsonEscape (s : String) : String :=
     else acc.push c) ""
   "\"" ++ body ++ "\""
 
-/-- The registered cause code, or `none` for a row the spec proposes and the registry lacks. -/
+/-- A refusal as printed: its registered code and name (`Refusal.code`, `Refusal.cause`, proved to be a
+registry row by `refusal_registered`), and the field and reason where it has them. -/
 structure Spelled where
-  code : Option Nat
+  code : Nat
   cause : String
   field : Option String := none
   reason : Option String := none
 
-def spellPolicy : PolicyErr → Spelled
-  | .unreadable e => { code := none, cause := "policy:unreadable", reason := some e.name }
-  | .shape w => { code := none, cause := "policy:shape", reason := some w }
-  | .unknownOp w => { code := some 74, cause := "image:unknown-op", reason := some w }
-  | .unknownType w => { code := some 75, cause := "image:unknown-type", reason := some w }
-  | .notLevelM w => { code := none, cause := "policy:not-level-m", reason := some w }
-  | .definition f r => { code := none, cause := "policy:definition", field := some f, reason := some r }
-  | .undefinedField f => { code := some 76, cause := "image:field-index-oob", field := some f }
-  | .engineCounter f => { code := none, cause := "policy:engine-counter", field := some f }
-  | .kindMismatch f => { code := none, cause := "policy:kind-mismatch", field := some f }
-  | .rounding f => { code := none, cause := "policy:rounding", field := some f }
-  | .threshold f r => { code := none, cause := "policy:threshold", field := some f, reason := some r }
-  | .noneMisuse f r => { code := none, cause := "policy:none", field := some f, reason := some r }
-  | .absenceUntested f => { code := none, cause := "policy:absence-untested", field := some f }
+def spellPolicy (e : PolicyErr) : Spelled :=
+  let base : Spelled := { code := e.code, cause := e.cause }
+  match e with
+  | .unreadable d => { base with reason := some d.name }
+  | .shape w | .unknownOp w | .unknownType w | .notLevelM w => { base with reason := some w }
+  | .definition f r | .threshold f r | .noneMisuse f r => { base with field := some f, reason := some r }
+  | .undefinedField f | .engineCounter f | .kindMismatch f | .rounding f | .absenceUntested f =>
+    { base with field := some f }
 
-def spellRefusal : Refusal → Spelled
+def spellRefusal (r : Refusal) : Spelled :=
+  match r with
   | .policy e => spellPolicy e
-  | .readingUnreadable e => { code := none, cause := "reading:unreadable", reason := some e.name }
-  | .readingNotObject => { code := none, cause := "reading:not-object" }
-  | .contract f r => { code := some 37, cause := "route:contract-violation", field := some f, reason := some r.name }
-  | .noMatch => { code := some 32, cause := "route:no-matching-edge" }
+  | .readingUnreadable e => { code := r.code, cause := r.cause, reason := some e.name }
+  | .readingNotObject => { code := r.code, cause := r.cause }
+  | .contract f e => { code := r.code, cause := r.cause, field := some f, reason := some e.name }
+  | .noMatch => { code := r.code, cause := r.cause }
 
 def spelledJson (s : Spelled) : String :=
-  let code := match s.code with | some c => toString c | none => "null"
+  let code := toString s.code
   let fld := match s.field with | some f => ",\"field\":" ++ jsonEscape f | none => ""
   let rsn := match s.reason with | some r => ",\"reason\":" ++ jsonEscape r | none => ""
   "\"cause\":" ++ jsonEscape s.cause ++ ",\"code\":" ++ code ++ fld ++ rsn

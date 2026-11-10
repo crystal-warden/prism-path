@@ -1,6 +1,7 @@
 -- SPDX-License-Identifier: Apache-2.0
 -- Copyright 2026 Crystal Warden Supply Chain Labs LLC
 import Core.Policy
+import Core.Causes
 /-!
 # The verified core: the canonical boundary, evaluation, and the verdict
 
@@ -39,6 +40,57 @@ inductive Refusal where
   | contract (field : String) (reason : BoundaryErr)
   | noMatch
   deriving DecidableEq, Repr, Inhabited
+
+/-! ## Registered causes
+
+Every refusal is spelled as a row of the cause registry (`prismpath/kernel/causes.py`, generated into
+`Core/Causes.lean`): its canonical name and its code. The pairs are written here once; the theorem
+`refusal_registered` proves each is a registry row, so a refusal with no code, or with a code the
+registry gives another name, does not type check as a theorem. -/
+
+def PolicyErr.cause : PolicyErr → String
+  | .unreadable _ => "policy:unreadable"
+  | .shape _ => "policy:shape"
+  | .unknownOp _ => "image:unknown-op"
+  | .unknownType _ => "image:unknown-type"
+  | .notLevelM _ => "policy:not-level-m"
+  | .definition _ _ => "policy:definition"
+  | .undefinedField _ => "image:field-index-oob"
+  | .engineCounter _ => "policy:engine-counter"
+  | .kindMismatch _ => "policy:kind-mismatch"
+  | .rounding _ => "policy:rounding"
+  | .threshold _ _ => "policy:threshold"
+  | .noneMisuse _ _ => "policy:none"
+  | .absenceUntested _ => "policy:absence-untested"
+
+def PolicyErr.code : PolicyErr → Nat
+  | .unreadable _ => 89
+  | .shape _ => 90
+  | .unknownOp _ => 74
+  | .unknownType _ => 75
+  | .notLevelM _ => 91
+  | .definition _ _ => 92
+  | .undefinedField _ => 76
+  | .engineCounter _ => 93
+  | .kindMismatch _ => 94
+  | .rounding _ => 95
+  | .threshold _ _ => 96
+  | .noneMisuse _ _ => 97
+  | .absenceUntested _ => 98
+
+def Refusal.cause : Refusal → String
+  | .policy e => e.cause
+  | .readingUnreadable _ => "reading:unreadable"
+  | .readingNotObject => "reading:not-object"
+  | .contract _ _ => "route:contract-violation"
+  | .noMatch => "route:no-matching-edge"
+
+def Refusal.code : Refusal → Nat
+  | .policy e => e.code
+  | .readingUnreadable _ => 99
+  | .readingNotObject => 100
+  | .contract _ _ => 37
+  | .noMatch => 32
 
 inductive Verdict where
   | route (target : String)

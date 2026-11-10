@@ -48,8 +48,10 @@ recovery, migration reset, swap-in-flight park).
 appended at 69 to 86, after the highest code then in use, because §4 forbids renumbering and reuse
 and an append must never displace a shipped code. The flow manifest's own two refusals,
 `flow:sha256-mismatch` and `flow:version-replay`, were appended at 87 and 88 in the `authority` class
-for the same reason. So the occupied ranges today are `authority` 1 to 10 and 87 to 88, `envelope` 16
-to 19 and 69 to 86, `routing` 32 to 37, `wire` 48 to 56, and `state` 64 to 68.
+for the same reason, and the verified policy core's refusals (docs/design/spec-verified-core.md, section
+5) at 89 to 100: its ten policy refusals in `envelope`, its two reading refusals in `routing`. So the
+occupied ranges today are `authority` 1 to 10 and 87 to 88, `envelope` 16 to 19, 69 to 86 and 89 to 98,
+`routing` 32 to 37 and 99 to 100, `wire` 48 to 56, and `state` 64 to 68.
 `state` stops at 68; it never reached 79, and 69 upward is envelope, not state. Read a code's class
 off the `class` column in `prismpath/kernel/causes.py` and never infer it from the number: the next
 append lands after the highest code present, in whatever band that falls, and nothing already

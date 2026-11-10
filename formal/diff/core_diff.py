@@ -607,25 +607,29 @@ def _render_for(case):
 
 
 def python_reading(graph, raw):
-    from prismpath.kernel import canon2, engine, field_definitions
+    from prismpath.kernel import canon2, causes, engine, field_definitions
+
+    def refuse(cause, **detail):
+        return {"verdict": "refuse", "cause": cause, "code": causes.code(cause), **detail}
+
     try:
         doc = canon2.loads(raw)
     except canon2.Canon2Error as error:
-        return {"verdict": "refuse", "cause": "reading:unreadable", "reason": error.rule}
+        return refuse("reading:unreadable", reason=error.rule)
     except RecursionError:
         return {"verdict": "refuse", "cause": "crash", "reason": "RecursionError in canon2.loads"}
     if not isinstance(doc, dict):
-        return {"verdict": "refuse", "cause": "reading:not-object"}
+        return refuse("reading:not-object")
     try:
         for field in sorted(graph.fields):
             reason, _value = field_definitions.accept_canonical(graph.fields[field], doc.get(field))
             if reason is not None:
-                return {"verdict": "refuse", "cause": "route:contract-violation", "field": field, "reason": reason}
+                return refuse("route:contract-violation", field=field, reason=reason)
         target, _cond = engine.first_deterministic(graph.nodes[graph.start].edges, doc)
     except Exception as error:   # noqa: BLE001 - an exception is itself the finding
         return {"verdict": "refuse", "cause": "crash", "reason": f"{type(error).__name__}: {error}"[:200]}
     if target is None:
-        return {"verdict": "refuse", "cause": "route:no-matching-edge"}
+        return refuse("route:no-matching-edge")
     return {"verdict": "route", "target": target}
 
 
@@ -636,20 +640,28 @@ def prepare(cases):
 
 
 def python_leg(cases):
+    from prismpath.kernel import causes
+    from prismpath.kernel.field_definitions import FieldDefinitionError
     from prismpath.kernel.parser import parse
     out = {}
     for case in cases:
         flow, why = case["flow"], case["flow_why"]
         if flow is None and why.startswith("unreadable:"):
-            out[case["id"]] = {"policy": "refused", "cause": "policy:unreadable", "reason": why.split(":", 1)[1]}
+            out[case["id"]] = {"policy": "refused", "cause": "policy:unreadable", "reason": why.split(":", 1)[1],
+                               "code": causes.code("policy:unreadable"), "causes": ["policy:unreadable"]}
             continue
         if flow is None:
             out[case["id"]] = {"policy": why}
             continue
         try:
             graph = parse(flow)
+        except FieldDefinitionError as error:
+            out[case["id"]] = {"policy": "refused", "reason": str(error)[:300], "cause": error.cause,
+                               "code": error.code, "causes": [problem.cause for problem in error.problems]}
+            continue
         except ValueError as error:
-            out[case["id"]] = {"policy": "refused", "reason": str(error)[:300]}
+            out[case["id"]] = {"policy": "refused", "reason": str(error)[:300], "cause": None, "code": None,
+                               "causes": []}
             continue
         except Exception as error:   # noqa: BLE001
             out[case["id"]] = {"policy": "crash", "reason": f"{type(error).__name__}: {error}"[:300]}
@@ -686,8 +698,28 @@ LEGS = {"python": python_leg, "rust": rust_leg}
 
 
 # ----------------------------------------------------------------- comparison
+def _uncoded(row) -> bool:
+    """A refusal that carries no registered code, or a code the registry gives another name."""
+    from prismpath.kernel import causes
+    return row.get("cause") != "crash" and (row.get("code") is None or causes.code(row.get("cause")) != row.get("code"))
+
+
 def classify(lean_row, other, leg):
-    """[(class, detail)] for one case: 'agree', 'excluded:<why>', 'reader-gap:<rule>' or 'finding:<what>'."""
+    """[(class, detail)] for one case: 'agree', 'excluded:<why>', 'reader-gap:<rule>', 'cause-order' or
+    'finding:<what>'."""
+    rows = []
+    for verdict in [lean_row["policy"]] * (lean_row["policy"]["policy"] != "accepted") + lean_row["readings"]:
+        if verdict.get("verdict", "refuse") == "refuse" and _uncoded(verdict):
+            rows.append(("finding:uncoded", f"lean {verdict}"))
+    if other.get("policy") == "refused" and _uncoded(other):
+        rows.append(("finding:uncoded", f"leg policy {other.get('cause')} {other.get('code')} {other.get('reason', '')[:120]}"))
+    for verdict in other.get("readings", []):
+        if verdict["verdict"] == "refuse" and _uncoded(verdict):
+            rows.append(("finding:uncoded", f"leg reading {verdict}"))
+    return rows + _classify(lean_row, other, leg)
+
+
+def _classify(lean_row, other, leg):
     lean_policy = lean_row["policy"]
     lean_ok = lean_policy["policy"] == "accepted"
     status = other["policy"]
@@ -718,7 +750,21 @@ def classify(lean_row, other, leg):
             if (lean_policy["cause"], lean_policy.get("reason")) != (other.get("cause"), other.get("reason")):
                 return [("finding:policy", f"unreadable image: lean {lean_policy['cause']} {lean_policy.get('reason')} "
                                            f"| leg {other.get('cause')} {other.get('reason')}")]
-        return [("agree", "policy-refused")]
+        if "cause" not in other:
+            return [("agree", "policy-refused")]
+        if other.get("cause") == lean_policy["cause"]:
+            return [("agree", "policy-refused")]
+        if lean_policy["cause"] in other.get("causes", []):
+            # the leg finds the oracle's refusal too, but reports another of the policy's problems first: the
+            # reference checks definitions in front matter order and lowers before it classifies, where the
+            # specification fixes one order (section 4); the refusal is the same policy refused, for a cause
+            # the leg also names
+            return [("cause-order", f"{lean_policy['cause']} after {other.get('cause')}")]
+        # D7 (spec section 9): both refuse, each with a registered cause, but the leg's phases meet another of
+        # the policy's problems first and do not reach the one the specification's order names
+        return [("finding:cause", f"policy cause lean {lean_policy['cause']} {lean_policy.get('reason', '')} "
+                                  f"{lean_policy.get('field', '')} | leg {other.get('cause')} {other.get('causes')} "
+                                  f"{other.get('reason', '')[:160]}")]
     rows = []
     for lean_v, other_v in zip(lean_row["readings"], other["readings"]):
         a, b = normalize_reading(lean_v), normalize_reading(other_v)
@@ -814,6 +860,9 @@ def minimise(case, leg, cls):
 def finding_kind(detail: str) -> str:
     """A short stable name for a finding, so a large run reports how many of each it saw."""
     import re
+    if detail.startswith("policy cause lean "):
+        match = re.match(r"policy cause lean (\S+) .*\| leg (\S+) ", detail)
+        return f"policy-cause {match.group(1)} vs {match.group(2)}" if match else "policy-cause"
     if "policy:not-level-m depth" in detail:
         return "depth-bound-not-applied"
     match = re.search(r"\| field \"[^\"]*\": (.*)$", detail)

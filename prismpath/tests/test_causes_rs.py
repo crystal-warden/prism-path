@@ -27,6 +27,12 @@ def test_the_rust_registry_is_what_the_generator_writes_now():
         "prismpath-rs/src/causes.rs is stale; run prismpath/portable/gen_causes_rs.py and commit the result")
 
 
+def test_the_lean_registry_is_what_the_generator_writes_now():
+    generator = _generator()
+    assert (REPO / "formal" / "Core" / "Causes.lean").read_text(encoding="utf-8") == generator.build_lean(), (
+        "formal/Core/Causes.lean is stale; run prismpath/portable/gen_causes_rs.py and commit the result")
+
+
 def test_the_cause_corpus_is_what_the_generator_writes_now():
     generator = _generator()
     committed = (PORTABLE / "conformance" / "causes.json").read_text(encoding="utf-8")

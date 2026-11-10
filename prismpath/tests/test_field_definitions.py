@@ -72,3 +72,24 @@ def test_two_spellings_of_one_definition_bind_the_same_text():
     one = fd.parse_definition("r", "fixed rounding=floor scale=10000 unit=ratio max=10000 min=0")
     two = fd.parse_definition("r", "fixed scale=10000 unit=ratio rounding=floor min=0 max=10000 absent=refused")
     assert one.canonical_text() == two.canonical_text()
+
+
+def test_every_refusal_carries_a_registered_cause():
+    """A refused flow names a registered refusal (spec-verified-core.md section 5) for its first problem
+    and for every problem, as the frozen corpus records it; no refusal of the core is uncoded."""
+    from prismpath.kernel import causes
+    corpus = json.loads((Path(__file__).resolve().parents[1] / "portable" / "conformance" /
+                         "field_definitions.json").read_text())
+    refused = [policy for policy in corpus["policies"] if not policy["accepted"]]
+    assert refused
+    for policy in refused:
+        with pytest.raises(fd.FieldDefinitionError) as raised:
+            parse(policy["flow"])
+        error = raised.value
+        assert error.code is not None and causes.name(error.code) == error.cause == policy["cause"], policy["name"]
+        assert [problem.cause for problem in error.problems] == policy["causes"], policy["name"]
+        assert all(problem.code is not None for problem in error.problems), policy["name"]
+    for text in ("float", "", "int min=5 max=4", "fixed scale=100", "int min=x", "bool min=0"):
+        with pytest.raises(fd.FieldDefinitionError) as raised:
+            fd.parse_definition("x", text)
+        assert raised.value.cause == "policy:definition" and raised.value.code == causes.code("policy:definition")

@@ -1,7 +1,7 @@
 {
  "version": 1,
  "comment": "FROZEN. The cause registry of prismpath.kernel.causes: every row, its hash, the engine stop mapping and the lookups a consumer must answer. prismpath-rs/src/causes.rs is generated from the same registry and prismpath-rs/tests/test_causes.rs replays this file. Appending a row regenerates it.",
- "registry_sha256": "41c04927d934120fa8a75dc99d55f8597fb0be2647a1fb96d61a3192bddd23ae",
+ "registry_sha256": "4b50c76662b6e71206d699581ed090cd9968385dcbd539c2ce7a2fc6088e5443",
  "registry": [
   {
    "code": 1,
@@ -326,6 +326,78 @@
    "name": "flow:version-replay",
    "class": "authority",
    "description": "flow manifest version below the accepted floor, or equal to it with another flow"
+  },
+  {
+   "code": 89,
+   "name": "policy:unreadable",
+   "class": "envelope",
+   "description": "the core's policy image is not a canon/2 document"
+  },
+  {
+   "code": 90,
+   "name": "policy:shape",
+   "class": "envelope",
+   "description": "the policy image is not in the core's abstract syntax"
+  },
+  {
+   "code": 91,
+   "name": "policy:not-level-m",
+   "class": "envelope",
+   "description": "a condition names a field Level M does not allow, or nests deeper than the bound of 50"
+  },
+  {
+   "code": 92,
+   "name": "policy:definition",
+   "class": "envelope",
+   "description": "a field definition breaks the definition grammar"
+  },
+  {
+   "code": 93,
+   "name": "policy:engine-counter",
+   "class": "envelope",
+   "description": "a condition reads an engine counter, which the one decision core does not have"
+  },
+  {
+   "code": 94,
+   "name": "policy:kind-mismatch",
+   "class": "envelope",
+   "description": "an atom compares a field with an operator or constant its kind does not take"
+  },
+  {
+   "code": 95,
+   "name": "policy:rounding",
+   "class": "envelope",
+   "description": "an atom on a fixed field uses an operator its rounding mode does not carry"
+  },
+  {
+   "code": 96,
+   "name": "policy:threshold",
+   "class": "envelope",
+   "description": "a threshold is off its field's grid, outside its range, or past the exact decimal bounds"
+  },
+  {
+   "code": 97,
+   "name": "policy:none",
+   "class": "envelope",
+   "description": "None is ordered, compared on a field that refuses absence, or listed"
+  },
+  {
+   "code": 98,
+   "name": "policy:absence-untested",
+   "class": "envelope",
+   "description": "a field that allows absence is tested with == None or != None by no rule"
+  },
+  {
+   "code": 99,
+   "name": "reading:unreadable",
+   "class": "routing",
+   "description": "the reading is not a canon/2 document"
+  },
+  {
+   "code": 100,
+   "name": "reading:not-object",
+   "class": "routing",
+   "description": "the reading is a canon/2 document that is not an object"
   }
  ],
  "engine_stop_to_cause": {

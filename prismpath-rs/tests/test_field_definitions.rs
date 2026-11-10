@@ -63,6 +63,16 @@ fn a_refused_policy_is_disabled_and_the_engine_will_not_run_it() {
         let name = policy["name"].as_str().unwrap();
         let graph = parse(policy["flow"].as_str().unwrap());
         assert!(graph.field_error.is_some(), "[{name}] parsed although the reference refuses it");
+        // the refusal carries the reference's registered cause, and every problem's cause is registered
+        assert_eq!(graph.field_error_cause, policy["cause"].as_str(), "[{name}] the first problem's cause");
+        // every cause the reference names is one the port names too (the port may name one more: its
+        // predicate parser refuses a sign outside the parentheses of an integer, `-(5)`, which the
+        // reference folds, so such a condition is also outside Level M by name in the port)
+        let got: std::collections::BTreeSet<&str> = graph.field_error_causes.iter().copied().collect();
+        for cause in policy["causes"].as_array().unwrap() {
+            assert!(got.contains(cause.as_str().unwrap()), "[{name}] the port does not name {cause}: {got:?}");
+        }
+        assert!(graph.field_error_causes.iter().all(|cause| prismpath_rs::causes::code(cause).is_some()), "[{name}] an unregistered cause");
         assert!(graph.nodes.values().flat_map(|node| node.edges.iter()).all(|(_target, cond)| cond == "never"), "[{name}] an edge stayed live");
         let outcome = run(&graph, |_node, _instruction, _state| Ok::<_, String>(Value::Null), RunOpts::default());
         assert!(matches!(outcome, Err(EngineError::InvalidFlow(_))), "[{name}] the engine ran a refused flow");

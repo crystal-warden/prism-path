@@ -38,6 +38,9 @@ KNOWN = {
     ("rust", "depth-bound-not-applied"),
     ("rust", "definition-whitespace-u001f"),
 }
+# D7: on a policy with several problems both sides refuse, each with a registered cause, but the leg's
+# own phases name another problem first than the specification's order (section 4). Any pair of causes.
+KNOWN_PREFIXES = ("policy-cause ",)
 
 
 def _legs():
@@ -63,7 +66,8 @@ def run():
 def test_every_difference_is_known(run):
     legs, _lean, counts, findings = run
     kinds = Counter((leg, core_diff.finding_kind(detail)) for leg, _cls, detail, _case in findings)
-    unknown = {kind: count for kind, count in kinds.items() if kind not in KNOWN}
+    unknown = {kind: count for kind, count in kinds.items()
+               if kind not in KNOWN and not kind[1].startswith(KNOWN_PREFIXES)}
     assert not unknown, f"new kinds of disagreement with the oracle: {unknown}"
     for leg in legs:
         assert counts[leg]["agree"] > CASES, counts[leg]
@@ -75,6 +79,19 @@ def test_no_reading_disagrees_and_nothing_crashes(run):
         assert counts[leg]["finding:reading"] == 0, counts[leg]
         assert counts[leg]["finding:crash"] == 0, counts[leg]
         assert counts[leg]["finding:harness"] == 0, counts[leg]
+        assert counts[leg]["finding:uncoded"] == 0, counts[leg]
+
+
+def test_every_refusal_carries_a_registered_code(run):
+    """Every refusal the oracle prints carries the registry's code for its cause (spec section 5); the
+    legs' refusals are held to the same in the classification (finding:uncoded)."""
+    from prismpath.kernel import causes
+    _legs_, lean, _counts, _findings = run
+    for row in lean.values():
+        refusals = [row["policy"]] if row["policy"]["policy"] != "accepted" else []
+        refusals += [verdict for verdict in row["readings"] if verdict["verdict"] == "refuse"]
+        for refusal in refusals:
+            assert refusal["code"] is not None and causes.name(refusal["code"]) == refusal["cause"], refusal
 
 
 def test_the_run_reaches_every_stage(run):
@@ -118,7 +135,7 @@ def test_the_oracle_on_the_spec_example(tmp_path):
         {"verdict": "route", "target": "gone"},
         {"verdict": "route", "target": "low"},
         {"verdict": "refuse", "cause": "route:contract-violation", "code": 37, "field": "error_rate", "reason": "wrong_type"},
-        {"verdict": "refuse", "cause": "reading:unreadable", "code": None, "reason": "float"},
+        {"verdict": "refuse", "cause": "reading:unreadable", "code": 99, "reason": "float"},
         {"verdict": "refuse", "cause": "route:contract-violation", "code": 37, "field": "error_rate", "reason": "missing"},
-        {"verdict": "refuse", "cause": "reading:not-object", "code": None},
+        {"verdict": "refuse", "cause": "reading:not-object", "code": 100},
     ]

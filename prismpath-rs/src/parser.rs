@@ -93,6 +93,11 @@ pub struct Graph {
     /// Why the flow breaks its field definitions, when it does. Such a graph has every edge disabled,
     /// the engine refuses to run it, and the codec refuses to partition it.
     pub field_error: Option<String>,
+    /// The registered cause (prismpath/kernel/causes.py) of the first problem in `field_error`, as the
+    /// reference's `FieldDefinitionError.cause` names it; `None` exactly when `field_error` is.
+    pub field_error_cause: Option<&'static str>,
+    /// The registered cause of every problem in `field_error`, in the order they were found.
+    pub field_error_causes: Vec<&'static str>,
     /// Why the document could not be parsed at all, when it could not: it is over one of the `Limits`. Such a
     /// graph is empty, and the reference raises `ParseError` with this message instead of returning one.
     pub parse_error: Option<String>,
