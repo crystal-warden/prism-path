@@ -71,6 +71,12 @@ CONSUMERS: dict[str, dict[str, list[tuple]]] = {
         "py": [pytest("prismpath/tests/test_canon_nonfinite.py")],
         "rs": [cargo("prismpath-rs", "test_canonical", "prismpath-rs/tests/test_canonical.rs")],
         "js": [NONE_JS], "go": [NONE_GO], "hw": [NONE_HW]},
+    "portable/canon2": {
+        "py": [pytest("prismpath/tests/test_canon2.py")],
+        "rs": [cargo("prismpath-rs", "test_canon2", "prismpath-rs/tests/test_canon2.rs")],
+        "js": [("node", "run_vectors.mjs", "prismpath/portable/run_vectors.mjs")],
+        "go": [("go", "prismpath-go/conformance_test.go")],
+        "hw": [NONE_HW]},
     "portable/capability": {
         "py": [pytest("prismpath/tests/test_capability_conformance.py", PY_RUN)],
         "rs": [cargo("prismpath-rs", "test_proof", "prismpath-rs/tests/test_proof.rs")],
