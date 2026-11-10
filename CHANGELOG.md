@@ -212,6 +212,13 @@ receipts, their root statements, anchored roots and every frozen corpus read and
   an integer) in place of an ISO string; Python and Rust write it and verify each other's. Only the `core-run`
   log moved: `prismpath-root-statement/1` and its verifiers are unchanged, and a run's verifier refuses a
   statement in that format.
+- **A run excludes a case as `engine-counter` only when the oracle refuses its image for reading a counter.** The
+  oracle's own check of an image (Lean `loadPolicy`, named `counterRefusal` for this use in `formal/Core/Scope.lean`)
+  is ported to `formal/diff/core_policy.py` and to the Rust example, so producing a run needs no oracle; `core_evidence.py
+  scope-check` holds both ports to the oracle on every image (100,000 of 100,000 for each, cause, code, field and
+  reason). On the 100,000 case run the exclusion drops from 7,505 images that mention a counter to the 1,310 the oracle
+  refuses for one, and 361,984 receipts are written (352,564 before), every one replayed and agreeing. Lean proves an
+  excluded image refuses every reading with `policy:engine-counter` (`counter_excluded_refused`).
 
 ### The verified policy core: one cause per refused policy, runs as evidence, the eBPF leg (2026-11-10)
 Research line, `docs/design/spec-verified-core.md` sections 4, 7, 9 and 11. Nothing here changes a format

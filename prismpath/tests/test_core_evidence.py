@@ -214,3 +214,73 @@ def test_a_canon1_root_statement_is_refused(runs, tmp_path):
         core_evidence.verify(copy, sample=5)
     checked = _rust_verify(rust, copy)
     assert checked.returncode == 1 and "root statement" in checked.stdout, checked.stdout
+
+
+def _image(fields, *whens):
+    from prismpath.kernel import canon2
+    return canon2.dumps({"format": "prismpath.core/1", "fields": fields,
+                         "rules": [{"target": f"t{number}", "when": when} for number, when in enumerate(whens)]})
+
+
+# images at the edges of the ported check: a counter read first, a counter after an earlier problem, a counter
+# in a definition's name, a decimal past the digit bound (the threshold on no field), integers spelled wider
+# than Python converts by default, an exponent with leading zeros, and the order of definitions
+EDGE_IMAGES = [
+    _image({"x": "int"}, ["cmp", "visits", ">=", ["num", 1]], ["cmp", "x", ">", ["num", 2]]),
+    _image({"x": "int"}, ["cmp", "x", "==", ["num", "2.5"]], ["cmp", "visits", ">=", ["num", 1]]),
+    _image({"x": "int"}, ["and", ["cmp", "x", "==", ["num", "99999999999999999999"]], ["truthy", "error_count"]]),
+    _image({"x": "int"}, ["and", ["truthy", "error_count"], ["cmp", "x", "==", ["num", 2]]]),
+    _image({"x": "bogus"}, ["truthy", "visits"]),
+    _image({"visits": "int"}, ["truthy", "x"]),
+    _image({"r": "fixed scale=10 rounding=exact"}, ["cmp", "r", "==", ["num", "0." + "1" * 29]]),
+    _image({"r": "fixed scale=10 rounding=exact"}, ["cmp", "r", "==", ["num", "1" * 5000]]),
+    _image({"r": "fixed scale=10 rounding=exact"}, ["cmp", "r", "==", ["num", "-" + "9" * 5000]]),
+    _image({"r": "fixed scale=10 rounding=exact"}, ["cmp", "r", "==", ["num", "0." + "0" * 60 + "1"]]),
+    _image({"r": "fixed scale=10 rounding=exact"}, ["cmp", "r", "==", ["num", "0.0" + "0" * 60]]),
+    _image({"r": "fixed scale=10 rounding=exact"}, ["cmp", "r", "==", ["num", "1e000000000000000000000000001"]]),
+    _image({"r": "fixed scale=10 rounding=exact"}, ["cmp", "r", "==", ["num", "9" * 28 + "e30"]]),
+    _image({"x": "int min=" + "0" * 5000 + "1"}, ["cmp", "x", "==", ["num", 1]]),
+    _image({"x": "int max=" + "9" * 5000}, ["cmp", "x", "==", ["num", 1]]),
+    _image({"b": "int", "a": "int min=5 max=1"}, ["cmp", "b", "==", ["num", 1]]),
+    _image({"a": "category absent=allowed"}, ["cmp", "a", "==", ["str", "q"]], ["truthy", "visits"]),
+]
+
+
+def test_the_ported_policy_check_is_the_oracles(runs):
+    """The producers decide `engine-counter` exclusions with the oracle's own check of an image, ported from Lean
+    to Python (`core_policy`) and to Rust (`oracle_policy`); on every image of the run and on the edge images
+    above, both ports name what the oracle names: accepted, or the cause, code, field and reason."""
+    base, rust = runs
+    cases = core_evidence.read_cases(base / "cases.jsonl")
+    cases += [{"id": f"edge{number}", "image": image, "flow": None, "flow_why": None, "readings": []}
+              for number, image in enumerate(EDGE_IMAGES)]
+    source = base / "scope-cases.jsonl"
+    from prismpath.kernel import canon2
+    source.write_bytes(b"".join(canon2.dumps({"case": case["id"], "image": case["image"].hex(), "flow": case["flow"],
+                                              "readings": []}) + b"\n" for case in cases))
+    lines = subprocess.run([str(rust), "policy", "--from", str(source)], capture_output=True, check=True).stdout
+    counts = core_evidence.scope_check(core_evidence.read_cases(source), rust_lines=lines.split(b"\n")[:-1])
+    assert counts["first"] is None, counts
+    assert counts["python"]["agree"] == counts["rust"]["agree"] == len(cases), counts
+    assert counts["counter"] > 0 and counts["accepted"] > 0, counts
+    edge = core_evidence.oracle_policies(core_evidence.read_cases(source)[-len(EDGE_IMAGES):])
+    assert [item[0] if item else None for item in edge[:6]] == [
+        "policy:engine-counter", "image:unknown-type", "policy:threshold", "policy:engine-counter", "policy:definition",
+        "policy:definition"], edge
+
+
+def test_only_the_oracles_counter_refusals_are_excluded(runs):
+    """A case is excluded as `engine-counter` exactly when the oracle refuses its image for reading an engine
+    counter; an image that mentions a counter but is refused for an earlier problem is receipted, with the
+    oracle's refusal."""
+    from prismpath.kernel import canon2
+    base, _rust = runs
+    cases = core_evidence.read_cases(base / "cases.jsonl")
+    want = core_evidence.oracle_policies(cases)
+    excluded = {row["case"]: row["why"] for row in canon2.loads((base / "run-py" / "run.json").read_bytes().rstrip(b"\n"))["excluded"]}
+    for case, policy in zip(cases, want):
+        counter = policy is not None and policy[0] == "policy:engine-counter"
+        assert (excluded.get(case["id"]) == "engine-counter") == counter, (case["id"], policy, excluded.get(case["id"]))
+    mentions = [case for case in cases if b'"visits"' in case["image"] or b'"error_count"' in case["image"]]
+    receipted = [case for case in mentions if case["id"] not in excluded]
+    assert receipted, "the CI run holds images that mention a counter and are receipted"

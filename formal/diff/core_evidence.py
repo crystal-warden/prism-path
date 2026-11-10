@@ -48,6 +48,7 @@ if str(ROOT) not in sys.path:
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import core_diff  # noqa: E402
+import core_policy  # noqa: E402
 
 RUN_FORMAT = "prismpath.core-run/1"
 IMAGE_FORMAT = "prismpath.core-image/1"
@@ -111,39 +112,70 @@ def _why(image: bytes) -> str:
 
 
 # ----------------------------------------------------------------- the core's scope
-ENGINE_COUNTERS = ("visits", "error_count")
-
-
-def _reads_counter(cond) -> bool:
-    if not isinstance(cond, list) or not cond:
-        return False
-    if cond[0] in ("truthy", "cmp", "in", "not in") and len(cond) >= 2:
-        return cond[1] in ENGINE_COUNTERS
-    if cond[0] in ("not", "and", "or"):
-        return any(_reads_counter(operand) for operand in cond[1:])
-    return False
-
-
 def outside_core(image: bytes, flow):
-    """Why a case is not a decision of the core, or None (spec section 1): an image that reads but has no
-    flow rendering (`unrenderable`), one that defines no field yet routes on a condition, which the
-    reference takes by its inferred path (`inferred-path`), and one that reads an engine counter, which is
-    no reading field (`engine-counter`). Decided from the image alone, so the verifier recomputes it; every
-    other case is receipted, and every one of its decisions must be the oracle's."""
+    """Why a case is not a decision of the core, or None (spec section 1): an image the oracle refuses for
+    reading an engine counter, which is no reading field (`engine-counter`), decided by the oracle's own
+    check of the image ported from Lean (`core_policy.refuses_for_counter`, Lean `counterRefusal`); one that
+    reads but has no flow rendering (`unrenderable`); and one that defines no field yet routes on a
+    condition, which the reference takes by its inferred path (`inferred-path`). Decided from the image
+    alone, so the verifier recomputes it; every other case is receipted, and every one of its decisions must
+    be the oracle's. An image that mentions a counter but is refused for an earlier problem is receipted:
+    the oracle refuses it for that problem, and so must the implementation."""
     from prismpath.kernel import canon2
     try:
         doc = canon2.loads(image)
     except canon2.Canon2Error:
         return None
-    rules = doc.get("rules") if isinstance(doc, dict) else None
-    whens = [rule.get("when") for rule in rules if isinstance(rule, dict)] if isinstance(rules, list) else []
-    if any(_reads_counter(when) for when in whens):
+    if core_policy.refuses_for_counter(image):
         return "engine-counter"
     if flow is None:
         return "unrenderable"
+    rules = doc.get("rules") if isinstance(doc, dict) else None
+    whens = [rule.get("when") for rule in rules if isinstance(rule, dict)] if isinstance(rules, list) else []
     if doc.get("fields") == {} and any(when not in (["always"], ["never"]) for when in whens):
         return "inferred-path"
     return None
+
+
+def oracle_policies(cases, oracle=None) -> list:
+    """The oracle's check of every case's image, as (cause, code, field, reason) or None when accepted."""
+    binary = Path(oracle) if oracle else core_diff.ORACLE
+    data = bytearray()
+    for number, case in enumerate(cases):
+        data += f"case s{number} 0\n{len(case['image'])}\n".encode() + case["image"] + b"\n"
+    lines = subprocess.run([str(binary), "--batch"], input=bytes(data), capture_output=True, check=True).stdout
+    rows = {row["id"]: row["policy"] for row in map(json.loads, lines.decode().splitlines())}
+    out = []
+    for number in range(len(cases)):
+        row = rows[f"s{number}"]
+        out.append(None if row["policy"] == "accepted" else (row["cause"], row["code"], row.get("field"), row.get("reason")))
+    return out
+
+
+def scope_check(cases, oracle=None, rust_lines=None) -> dict:
+    """The ported checks of a policy image against the oracle's on every image: the Python port
+    (`core_policy.load_policy`) and, given the Rust port's lines (`core_evidence policy`, one canon/2 line
+    per case), the Rust port; whether each image is accepted, and the cause, code, field and reason of every
+    refusal. The exclusion of `engine-counter` cases is sound only while they agree."""
+    from prismpath.kernel import canon2
+    want = oracle_policies(cases, oracle)
+    ports = {"python": [core_policy.load_policy(case["image"]) for case in cases]}
+    if rust_lines is not None:
+        rows = [canon2.loads(line) for line in rust_lines]
+        if len(rows) != len(cases) or any(row.get("case") != case["id"] for row, case in zip(rows, cases)):
+            raise Bad("the Rust port's lines are not one per case in order")
+        ports["rust"] = [None if row["policy"] == "accepted" else (row["cause"], row["code"], row.get("field"),
+                                                                    row.get("reason")) for row in rows]
+    counts = {"images": len(cases), "accepted": sum(item is None for item in want),
+              "counter": sum(item is not None and item[0] == "policy:engine-counter" for item in want),
+              "first": None}
+    for name, got in ports.items():
+        agree = [a == b for a, b in zip(got, want)]
+        counts[name] = {"agree": sum(agree), "disagree": len(agree) - sum(agree)}
+        if not all(agree):
+            at = agree.index(False)
+            counts["first"] = counts["first"] or {"port": name, "case": cases[at]["id"], "got": got[at], "oracle": want[at]}
+    return counts
 
 
 # ----------------------------------------------------------------- the decisions
@@ -468,6 +500,10 @@ def main(argv=None) -> int:
     make.add_argument("--from", dest="source", required=True)
     make.add_argument("--out", required=True)
     make.add_argument("--keys", required=True, help="the test keys' directory (generated when empty)")
+    scope = sub.add_parser("scope-check", help="hold the ported policy check to the oracle's on every image")
+    scope.add_argument("--from", dest="source", required=True)
+    scope.add_argument("--rust", help="the Rust port's lines (`core_evidence policy --from CASES`), held to the oracle too")
+    scope.add_argument("--oracle")
     check = sub.add_parser("verify", help="re-check a run and replay a sample through the oracle")
     check.add_argument("run")
     check.add_argument("--sample", default="200", help="how many decisions to replay, or 'all'")
@@ -480,6 +516,15 @@ def main(argv=None) -> int:
         write_cases(core_diff.generate(args.cases, args.seed), Path(args.out))
         print(f"core_evidence: wrote {args.cases} cases to {args.out}")
         return 0
+    if args.command == "scope-check":
+        cases = read_cases(Path(args.source))
+        counts = scope_check(cases, args.oracle, _lines(Path(args.rust)) if args.rust else None)
+        ports = ", ".join(f"{name} port {counts[name]['agree']} agree, {counts[name]['disagree']} disagree"
+                          for name in ("python", "rust") if name in counts)
+        failed = counts["first"] is not None
+        print(f"core_evidence: scope check {args.source}: {counts['images']} images ({counts['accepted']} accepted, "
+              f"{counts['counter']} refused for an engine counter): {ports}" + (f"; first {counts['first']}" if failed else ""))
+        return 1 if failed else 0
     if args.command == "produce":
         manifest = produce(Path(args.source), Path(args.out), Path(args.keys))
         print(f"core_evidence: produced {args.out}: decider {manifest['decider']}, {manifest['cases']} cases, "

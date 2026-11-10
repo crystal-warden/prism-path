@@ -430,6 +430,11 @@ field's definition refuses, depth first and left to right, and passes exactly wh
 So the cause of a refused policy is one function of the image, the oracle's, and an implementation that
 names the head of the same list names the same cause.
 
+**The engine counter exclusion** (`Core/Scope.lean`, step 4, section 11). `counterRefusal_iff`: the check
+a run uses to exclude a case, `counterRefusal`, holds exactly when `loadPolicy` refuses the image with
+`engineCounter`. `counter_excluded_refused`: then every reading's verdict is that refusal, so an excluded
+case hides no route and no other refusal.
+
 **Not proven, stated as plainly.** That any implementation computes `verdict`: Python, Rust and the
 other targets are *conformant* to the oracle by differential testing (section 8), not proven. The
 order of the image's `fields` members does not change a verdict, because definitions are read in
@@ -684,8 +689,8 @@ left open: whether the JavaScript and Go kernels should implement section 4.5 or
 in the conformance matrix; when the canon/2 migration of section 3.1 starts; the Rust predicate parser's
 reading of `-(5)` at evaluation (the core's decoder now reads it as Python's syntax tree does, and the
 lowering refuses it on a fixed field in both); whether the eBPF leg should also run in kernel where CI has
-the privileges, and whether a run's exclusion of every policy that reads an engine counter (section 11)
-should narrow to the policies the oracle refuses for it.
+the privileges. Step 4 narrowed a run's engine counter exclusion to the policies the oracle refuses for it
+(section 11).
 
 ## 11. A differential run as evidence
 
@@ -711,11 +716,25 @@ the instance key, which attests what was recorded, signs the root statement; the
 code (`swap keygen`'s `policy_pack.keygen` and `ledger keygen`'s `root_statement.keygen` in Python, the
 hot swap crate's `keygen` in Rust), the run holding only their public halves.
 
-A case outside the core (section 1) is excluded with its reason, decided from the image alone: an image
-that reads an engine counter (`engine-counter`), one that reads but has no flow rendering
-(`unrenderable`), and one that defines no field yet routes on a condition, which the reference takes by
-its inferred path (`inferred-path`). So every receipted decision is a decision of the core and must be the
-oracle's.
+A case outside the core (section 1) is excluded with its reason, decided from the image alone, in this
+order: an image the oracle refuses for reading an engine counter (`engine-counter`), one that reads but has
+no flow rendering (`unrenderable`), and one that defines no field yet routes on a condition, which the
+reference takes by its inferred path (`inferred-path`). So every receipted decision is a decision of the
+core and must be the oracle's.
+
+**The engine counter exclusion is the oracle's own (step 4).** Step 3 excluded every image whose conditions
+mention `visits` or `error_count`, which also excluded images the oracle refuses for an earlier problem
+(a malformed definition, an undefined field, a threshold before the counter): decisions of the core, left
+out. Step 4 excludes an image exactly when the oracle refuses it with `policy:engine-counter`, decided by
+the oracle's own check of the image, Lean's `counterRefusal` (`formal/Core/Scope.lean`: `loadPolicy` on the
+image's bytes fails with `engineCounter`), ported line for line to the producers so that producing a run
+needs no oracle: `formal/diff/core_policy.py` (`load_policy`, `refuses_for_counter`) and the Rust example's
+`oracle_policy` module. Each port computes the whole of `loadPolicy`, accepted or the refusal's cause,
+code, field and reason, in the order of section 4, and `core_evidence.py scope-check --from CASES --rust
+LINES` holds both to the oracle on every image (`core_evidence policy --from CASES` prints the Rust
+port's). Lean proves the exclusion hides nothing (`counter_excluded_refused`: such an image refuses every
+reading with `policy:engine-counter`), and an image that mentions a counter but is refused for an earlier
+problem is receipted with the oracle's refusal, which the replay checks.
 
 **The verifier** (`core_evidence.py verify RUN`, and `core_evidence verify RUN` in Rust; `--sample N` or
 `all`, `--pin-authority PUB --pin-instance PUB`) checks, and refuses the run at the first failure: the
@@ -735,10 +754,16 @@ false decision passes the signature checks and fails the replay, which is why th
 verifier and not an extra.
 
 **The round trip** (`prismpath/tests/test_core_evidence.py` at CI size, and the large run). On the 100,000
-cases of seed 1 each producer writes 352,564 receipts and excludes 16,081 cases (7,505 engine counter,
-5,674 inferred path, 2,902 unrenderable); the Python verifier checks the Rust run and the Rust verifier
-the Python run, each with every receipt replayed, and every one of the 352,564 replayed decisions agrees
-with the oracle on both; the two runs' receipts are the same bytes but for the decider. The test also
+cases of seed 1, step 4: both ported checks name the oracle's verdict on the policy of every one of the
+100,000 images (24,041 accepted, 1,310 refused for an engine counter, the rest refused with the oracle's
+cause, code, field and reason); each producer writes 361,984 receipts and excludes 13,818 cases (1,310
+engine counter, 9,327 inferred path, 3,181 unrenderable); the Python verifier checks the Rust run and the
+Rust verifier the Python run, each with every receipt replayed, and every one of the 361,984 replayed
+decisions agrees with the oracle on both; the two runs' receipts are the same bytes but for the decider.
+The 1,310 are the 372 policies the differential counts as the engine counter scope (section 8) and 938
+that define no field, which the differential counts as the inferred path. Step 3 wrote 352,564 receipts
+and excluded 16,081 cases (7,505 mentioning an engine counter, 5,674 inferred path, 2,902 unrenderable):
+step 4 receipts 9,420 more decisions, every one replayed and agreeing. The test also
 alters each part of a run (a decision, a dropped receipt, a reading, an image signature, the manifest, a
 key, the root statement's signature, its clock written as a float of seconds, a later clock, the
 statement respelled with whitespace, a second statement), resigns a false receipt, puts the audit log's

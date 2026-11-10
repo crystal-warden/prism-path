@@ -10,6 +10,7 @@
 //! an integer count of microseconds), with the two public keys beside them.
 //!
 //!     core_evidence produce --from CASES.jsonl --out RUN --keys KEYS   # the Rust port decides
+//!     core_evidence policy --from CASES.jsonl   # the ported oracle check of every image, one line each
 //!     core_evidence verify RUN [--sample N|all] [--seed S] [--pin-authority PUB --pin-instance PUB] [--oracle BIN]
 //!
 //! `produce` decides every case with the Rust port, composed as the differential harness's Rust leg
@@ -113,36 +114,664 @@ fn read_cases(bytes: &[u8]) -> Result<Vec<Case>, String> {
 }
 
 // ----------------------------------------------------------------- the core's scope
-fn reads_counter(cond: &Doc) -> bool {
-    let Doc::Arr(items) = cond else { return false };
-    match items.first() {
-        Some(Doc::Str(tag)) if ["truthy", "cmp", "in", "not in"].contains(&tag.as_str()) => {
-            matches!(items.get(1), Some(Doc::Str(field)) if field == "visits" || field == "error_count")
-        }
-        Some(Doc::Str(tag)) if ["not", "and", "or"].contains(&tag.as_str()) => items[1..].iter().any(reads_counter),
-        _ => false,
-    }
-}
-
 /// Why a case is not a decision of the core, or None, as `core_evidence.outside_core` decides it from the
-/// image alone: `engine-counter`, `unrenderable` or `inferred-path`.
+/// image alone: `engine-counter` when the oracle refuses the image for reading an engine counter (the
+/// oracle's own check, ported in `oracle_policy`), `unrenderable` or `inferred-path`.
 fn outside_core(image: &[u8], flow: Option<&str>) -> Option<&'static str> {
     let doc = canon2::read(image).ok()?;
-    let whens: Vec<&Doc> = match member(&doc, "rules") {
-        Some(Doc::Arr(rules)) => rules.iter().filter_map(|rule| if let Doc::Obj(_) = rule { member(rule, "when") } else { None }).collect(),
-        _ => Vec::new(),
-    };
-    if whens.iter().any(|when| reads_counter(when)) {
+    if oracle_policy::refuses_for_counter(image) {
         return Some("engine-counter");
     }
     if flow.is_none() {
         return Some("unrenderable");
     }
+    let whens: Vec<&Doc> = match member(&doc, "rules") {
+        Some(Doc::Arr(rules)) => rules.iter().filter_map(|rule| if let Doc::Obj(_) = rule { member(rule, "when") } else { None }).collect(),
+        _ => Vec::new(),
+    };
     let catch_all = |when: &Doc| matches!(when, Doc::Arr(items) if items.len() == 1 && (items[0] == text("always") || items[0] == text("never")));
     if matches!(member(&doc, "fields"), Some(Doc::Obj(fields)) if fields.is_empty()) && whens.iter().any(|when| !catch_all(when)) {
         return Some("inferred-path");
     }
     None
+}
+
+/// The ported check's result on every case, one canon/2 line each, for `core_evidence.py scope-check
+/// --rust`, which holds it to the Python port and so to the oracle.
+fn policy_lines(source: &Path) -> Result<String, String> {
+    let cases = read_cases(&std::fs::read(source).map_err(|error| error.to_string())?)?;
+    let mut out = Vec::new();
+    for case in &cases {
+        let mut members = vec![("case", text(&case.id))];
+        match oracle_policy::load_policy(&case.image) {
+            None => members.push(("policy", text("accepted"))),
+            Some(refused) => {
+                members.extend([("policy", text("refused")), ("cause", text(refused.cause)), ("code", Doc::Int(refused.code()))]);
+                if let Some(field) = &refused.field {
+                    members.push(("field", text(field)));
+                }
+                if let Some(reason) = &refused.reason {
+                    members.push(("reason", text(reason)));
+                }
+            }
+        }
+        out.extend(canon2::write(&obj(members)).map_err(|error| error.to_string())?);
+        out.push(b'\n');
+    }
+    String::from_utf8(out).map(|text| text.trim_end().to_string()).map_err(|error| error.to_string())
+}
+
+// ----------------------------------------------------------------- the oracle's check of an image
+/// The oracle's check of a policy image, ported from the Lean semantics (`loadPolicy`,
+/// formal/Core/Policy.lean) as `formal/diff/core_policy.py` ports it, so the producer decides what the
+/// oracle decides about an image without running the oracle. Each function names the Lean definition it
+/// ports and checks in Lean's order (spec section 4). Integers past the bounds the checks compare with
+/// (plus or minus 2^53 times a scale of at most 10^9, an exponent of at most 30) are held as values of the
+/// same sign past those bounds, which changes no comparison.
+mod oracle_policy {
+    use prismpath_rs::canon2::{self, Doc};
+
+    const EXACT_LIMIT: i128 = 9_007_199_254_740_991;
+    const FORMAT_TAG: &str = "prismpath.core/1";
+    const MAX_COND_DEPTH: usize = 50;
+    const MAX_SCALE: i128 = 1_000_000_000;
+    /// A value this wide is past every bound a check compares with, and times a scale still fits in i128.
+    const WIDE: i128 = 100_000_000_000_000_000_000;
+    const ENGINE_COUNTERS: [&str; 2] = ["visits", "error_count"];
+    const HARD_KEYWORDS: [&str; 35] = [
+        "False", "None", "True", "and", "as", "assert", "async", "await", "break", "class", "continue", "def", "del", "elif", "else", "except", "finally", "for", "from",
+        "global", "if", "import", "in", "is", "lambda", "nonlocal", "not", "or", "pass", "raise", "return", "try", "while", "with", "yield",
+    ];
+    const OPS: [&str; 6] = ["<", "<=", ">", ">=", "==", "!="];
+    const ORDER_OPS: [&str; 4] = ["<", "<=", ">", ">="];
+
+    /// One `PolicyErr`, as `spellPolicy` spells it: its registered cause, and the field and reason.
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    pub struct Refused {
+        pub cause: &'static str,
+        pub field: Option<String>,
+        pub reason: Option<String>,
+    }
+
+    impl Refused {
+        /// `PolicyErr.code`.
+        pub fn code(&self) -> i64 {
+            match self.cause {
+                "policy:unreadable" => 89,
+                "policy:shape" => 90,
+                "image:unknown-op" => 74,
+                "image:unknown-type" => 75,
+                "policy:not-level-m" => 91,
+                "policy:definition" => 92,
+                "image:field-index-oob" => 76,
+                "policy:engine-counter" => 93,
+                "policy:kind-mismatch" => 94,
+                "policy:rounding" => 95,
+                "policy:threshold" => 96,
+                "policy:none" => 97,
+                _ => 98,
+            }
+        }
+    }
+
+    type Pe<T> = Result<T, Refused>;
+
+    fn refuse<T>(cause: &'static str, field: Option<&str>, reason: Option<&str>) -> Pe<T> {
+        Err(Refused { cause, field: field.map(str::to_string), reason: reason.map(str::to_string) })
+    }
+
+    fn shape<T>(what: &str) -> Pe<T> {
+        refuse("policy:shape", None, Some(what))
+    }
+
+    #[derive(Clone)]
+    struct Dec {
+        neg: bool,
+        digits: i128,
+        frac_len: i64,
+        exp: i64,
+        sig: usize,
+    }
+
+    #[derive(Clone)]
+    enum Const {
+        Int(i128),
+        Dec(Dec),
+        Bool,
+        Str,
+        Null,
+    }
+
+    enum Cond {
+        Always,
+        Never,
+        Truthy(String),
+        Cmp(String, &'static str, Const),
+        Mem(String, Vec<Const>),
+        Not(Box<Cond>),
+        All(Vec<Cond>),
+    }
+
+    struct Def {
+        name: String,
+        kind: &'static str,
+        scale: i128,
+        rounding: &'static str,
+        lo: i128,
+        hi: i128,
+        absent_ok: bool,
+    }
+
+    fn is_alpha(c: char) -> bool {
+        c.is_ascii_alphabetic()
+    }
+
+    /// `isIdent`.
+    fn is_ident(text: &str) -> bool {
+        let mut chars = text.chars();
+        matches!(chars.next(), Some(c) if is_alpha(c) || c == '_') && chars.all(|c| is_alpha(c) || c.is_ascii_digit() || c == '_')
+    }
+
+    /// `isTarget`.
+    fn is_target(text: &str) -> bool {
+        !text.is_empty() && text.chars().all(|c| is_alpha(c) || c.is_ascii_digit() || c == '_' || c == '-')
+    }
+
+    /// `digitsValue`, exact below `WIDE`.
+    fn digits_value(digits: &str) -> i128 {
+        let body = digits.trim_start_matches('0');
+        if body.len() > 20 {
+            WIDE
+        } else {
+            body.bytes().fold(0i128, |acc, byte| acc * 10 + i128::from(byte - b'0')).min(WIDE)
+        }
+    }
+
+    fn span_digits(text: &str) -> (&str, &str) {
+        let at = text.find(|c: char| !c.is_ascii_digit()).unwrap_or(text.len());
+        text.split_at(at)
+    }
+
+    /// `parseDecimal`.
+    fn parse_decimal(text: &str) -> Option<Dec> {
+        let (neg, rest) = match text.as_bytes().first() {
+            Some(b'-') => (true, &text[1..]),
+            Some(b'+') => (false, &text[1..]),
+            _ => (false, text),
+        };
+        let (int_part, rest) = span_digits(rest);
+        let (frac_part, rest) = match rest.strip_prefix('.') {
+            Some(after) => span_digits(after),
+            None => ("", rest),
+        };
+        if int_part.is_empty() && frac_part.is_empty() {
+            return None;
+        }
+        let (exp, rest) = match rest.strip_prefix(['e', 'E']) {
+            Some(after) => {
+                let (eneg, after) = match after.as_bytes().first() {
+                    Some(b'-') => (true, &after[1..]),
+                    Some(b'+') => (false, &after[1..]),
+                    _ => (false, after),
+                };
+                let (exp_digits, after) = span_digits(after);
+                if exp_digits.is_empty() {
+                    return None;
+                }
+                let body = exp_digits.trim_start_matches('0');
+                let value = if body.len() > 6 { 1_000_000 } else { body.parse::<i64>().unwrap_or(0) };
+                (if eneg { -value } else { value }, after)
+            }
+            None => (0, rest),
+        };
+        if !rest.is_empty() {
+            return None;
+        }
+        let every = format!("{int_part}{frac_part}");
+        let sig = every.trim_start_matches('0').len();
+        // the digits' value is read only when the literal is in bounds, at most 28 significant digits
+        let digits = if sig <= 28 { digits_value(&every) } else { 0 };
+        Some(Dec { neg, digits, frac_len: frac_part.len() as i64, exp, sig })
+    }
+
+    /// `decInBounds`.
+    fn dec_in_bounds(dec: &Dec) -> bool {
+        dec.sig <= 28 && dec.exp.abs() <= 30
+    }
+
+    /// `Dec.scaled`.
+    fn dec_scaled(dec: &Dec, scale: i128) -> Option<i128> {
+        let m = dec.digits * scale;
+        let t = dec.exp - dec.frac_len;
+        let value = if t >= 0 {
+            // t is at most 30 in bounds; past i128 the value is past every range a field has
+            10i128.checked_pow(t as u32).and_then(|power| m.checked_mul(power)).unwrap_or(if m == 0 { 0 } else { i128::MAX })
+        } else if -t > 38 {
+            // m is below 10^37, so it is a multiple of 10^-t only when it is 0
+            if m == 0 {
+                0
+            } else {
+                return None;
+            }
+        } else {
+            let power = 10i128.pow((-t) as u32);
+            if m % power != 0 {
+                return None;
+            }
+            m / power
+        };
+        Some(if dec.neg { -value } else { value })
+    }
+
+    /// `isCanonicalIntText`.
+    fn is_canonical_int_text(text: &str) -> bool {
+        if text == "0" {
+            return true;
+        }
+        let body = text.strip_prefix('-').unwrap_or(text);
+        !body.is_empty() && !body.starts_with('0') && body.bytes().all(|byte| byte.is_ascii_digit())
+    }
+
+    fn member<'a>(members: &'a [(String, Doc)], key: &str) -> Option<&'a Doc> {
+        members.iter().find(|(name, _)| name == key).map(|(_, value)| value)
+    }
+
+    /// `decodeConst`.
+    fn decode_const(j: &Doc) -> Pe<Const> {
+        if let Doc::Arr(items) = j {
+            match items.as_slice() {
+                [Doc::Str(tag), Doc::Int(n)] if tag == "num" => return Ok(Const::Int(i128::from(*n))),
+                [Doc::Str(tag), Doc::Str(text)] if tag == "num" => {
+                    if is_canonical_int_text(text) {
+                        let n = match text.strip_prefix('-') {
+                            Some(body) => -digits_value(body),
+                            None => digits_value(text),
+                        };
+                        if !(-EXACT_LIMIT..=EXACT_LIMIT).contains(&n) {
+                            return Ok(Const::Int(n));
+                        }
+                        return shape("integer-as-string");
+                    }
+                    return match parse_decimal(text) {
+                        Some(dec) if text.contains(['.', 'e', 'E']) => {
+                            if dec_in_bounds(&dec) {
+                                Ok(Const::Dec(dec))
+                            } else {
+                                refuse("policy:threshold", Some(""), Some("digits"))
+                            }
+                        }
+                        Some(_) => shape("number-spelling"),
+                        None => shape("number-text"),
+                    };
+                }
+                [Doc::Str(tag), Doc::Bool(_)] if tag == "bool" => return Ok(Const::Bool),
+                [Doc::Str(tag), Doc::Str(_)] if tag == "str" => return Ok(Const::Str),
+                [Doc::Str(tag)] if tag == "none" => return Ok(Const::Null),
+                [Doc::Str(tag), Doc::Str(_)] if tag == "field" => return refuse("image:unknown-type", None, Some("field-vs-field")),
+                [Doc::Str(tag), ..] if tag == "list" => return refuse("image:unknown-type", None, Some("nested-container")),
+                _ => {}
+            }
+        }
+        refuse("image:unknown-type", None, Some("constant"))
+    }
+
+    /// `checkName`.
+    fn check_name(name: &str) -> Pe<()> {
+        if !is_ident(name) || HARD_KEYWORDS.contains(&name) {
+            return refuse("policy:not-level-m", None, Some("name"));
+        }
+        Ok(())
+    }
+
+    /// `decodeCond`, arm by arm in Lean's order.
+    fn decode_cond(j: &Doc) -> Pe<Cond> {
+        if let Doc::Arr(items) = j {
+            match items.as_slice() {
+                [Doc::Str(tag)] if tag == "always" => return Ok(Cond::Always),
+                [Doc::Str(tag)] if tag == "never" => return Ok(Cond::Never),
+                [Doc::Str(tag), Doc::Str(f)] if tag == "truthy" => {
+                    check_name(f)?;
+                    return Ok(Cond::Truthy(f.clone()));
+                }
+                [Doc::Str(tag), Doc::Str(f), Doc::Str(op), k] if tag == "cmp" => {
+                    check_name(f)?;
+                    let Some(op) = OPS.iter().copied().find(|known| known == op) else {
+                        return refuse("image:unknown-op", None, Some("operator"));
+                    };
+                    let constant = decode_const(k)?;
+                    if ORDER_OPS.contains(&op) && matches!(constant, Const::Str) {
+                        return refuse("image:unknown-op", None, Some("string-ordering"));
+                    }
+                    return Ok(Cond::Cmp(f.clone(), op, constant));
+                }
+                [Doc::Str(tag), Doc::Str(f), list] if tag == "in" || tag == "not in" => {
+                    let Doc::Arr(ks) = list else {
+                        return refuse("image:unknown-op", None, Some("membership-not-in-a-list"));
+                    };
+                    check_name(f)?;
+                    let consts = ks.iter().map(decode_const).collect::<Pe<Vec<_>>>()?;
+                    return Ok(Cond::Mem(f.clone(), consts));
+                }
+                [Doc::Str(tag), c] if tag == "not" => return Ok(Cond::Not(Box::new(decode_cond(c)?))),
+                [Doc::Str(tag), _, _, ..] if tag == "and" || tag == "or" => {
+                    return Ok(Cond::All(items[1..].iter().map(decode_cond).collect::<Pe<Vec<_>>>()?));
+                }
+                _ => {}
+            }
+        }
+        shape("condition")
+    }
+
+    /// `Cond.depth`.
+    fn depth(cond: &Cond) -> usize {
+        match cond {
+            Cond::Always | Cond::Never => 0,
+            Cond::Truthy(_) => 1,
+            Cond::Cmp(..) | Cond::Mem(..) => 2,
+            Cond::Not(inner) => depth(inner) + 1,
+            Cond::All(operands) => operands.iter().map(depth).max().unwrap_or(0) + 1,
+        }
+    }
+
+    /// `decodeRule`.
+    fn decode_rule(j: &Doc) -> Pe<Cond> {
+        let Doc::Obj(members) = j else { return shape("rule") };
+        if !members.iter().all(|(key, _)| key == "target" || key == "when") {
+            return shape("rule-key");
+        }
+        let (Some(Doc::Str(target)), Some(when)) = (member(members, "target"), member(members, "when")) else {
+            return shape("rule");
+        };
+        if !is_target(target) {
+            return shape("target");
+        }
+        let cond = decode_cond(when)?;
+        if depth(&cond) > MAX_COND_DEPTH {
+            return refuse("policy:not-level-m", None, Some("depth"));
+        }
+        Ok(cond)
+    }
+
+    /// `decodeImage`: the definitions as text, in document order, and the rules' conditions.
+    /// A decoded image: its definitions as (name, text) in document order, and its rules' conditions.
+    type Decoded = (Vec<(String, String)>, Vec<Cond>);
+
+    fn decode_image(j: &Doc) -> Pe<Decoded> {
+        let Doc::Obj(members) = j else { return shape("image") };
+        if !members.iter().all(|(key, _)| key == "format" || key == "fields" || key == "rules") {
+            return shape("image-key");
+        }
+        let (Some(Doc::Str(tag)), Some(Doc::Obj(fields)), Some(Doc::Arr(rules))) = (member(members, "format"), member(members, "fields"), member(members, "rules")) else {
+            return shape("image");
+        };
+        if tag != FORMAT_TAG {
+            return shape("format");
+        }
+        let mut texts = Vec::new();
+        for (name, text) in fields {
+            let Doc::Str(text) = text else { return shape("definition-not-text") };
+            texts.push((name.clone(), text.clone()));
+        }
+        Ok((texts, rules.iter().map(decode_rule).collect::<Pe<Vec<_>>>()?))
+    }
+
+    /// `isPyWs`: Python's `str.isspace`.
+    fn is_py_ws(c: char) -> bool {
+        let n = c as u32;
+        (0x09..=0x0D).contains(&n)
+            || (0x1C..=0x20).contains(&n)
+            || [0x85, 0xA0, 0x1680, 0x2028, 0x2029, 0x202F, 0x205F, 0x3000].contains(&n)
+            || (0x2000..=0x200A).contains(&n)
+    }
+
+    /// `intOption`: `[+-]?[0-9]+`.
+    fn int_option(text: &str) -> Option<i128> {
+        let (neg, body) = match text.as_bytes().first() {
+            Some(b'-') => (true, &text[1..]),
+            Some(b'+') => (false, &text[1..]),
+            _ => (false, text),
+        };
+        if body.is_empty() || !body.bytes().all(|byte| byte.is_ascii_digit()) {
+            return None;
+        }
+        Some(if neg { -digits_value(body) } else { digits_value(body) })
+    }
+
+    fn options_of(kind: &str) -> &'static [&'static str] {
+        match kind {
+            "int" => &["min", "max", "absent"],
+            "fixed" => &["scale", "rounding", "unit", "min", "max", "absent"],
+            _ => &["absent"],
+        }
+    }
+
+    /// `parseDef`.
+    fn parse_def(name: &str, text: &str) -> Pe<Def> {
+        let bad = |reason: &str| refuse("policy:definition", Some(name), Some(reason));
+        if !is_ident(name) {
+            return bad("name");
+        }
+        if ENGINE_COUNTERS.contains(&name) {
+            return bad("engine-counter");
+        }
+        let words: Vec<&str> = text.split(is_py_ws).filter(|word| !word.is_empty()).collect();
+        let Some((kind_word, rest)) = words.split_first() else { return bad("empty") };
+        let Some(kind) = ["int", "fixed", "bool", "category"].into_iter().find(|kind| kind == kind_word) else {
+            return bad("unknown-kind");
+        };
+        let mut options: Vec<(&str, &str)> = Vec::new();
+        for word in rest {
+            let Some((option, value)) = word.split_once('=') else { return bad("not-option") };
+            if value.is_empty() {
+                return bad("not-option");
+            }
+            if !options_of(kind).contains(&option) {
+                return bad("option-not-taken");
+            }
+            if options.iter().any(|(seen, _)| *seen == option) {
+                return bad("option-repeated");
+            }
+            options.push((option, value));
+        }
+        let lookup = |key: &str| options.iter().find(|(option, _)| *option == key).map(|(_, value)| *value);
+        let absent = lookup("absent").unwrap_or("refused");
+        if absent != "refused" && absent != "allowed" {
+            return bad("absent");
+        }
+        let (mut scale, mut rounding) = (1, "exact");
+        if kind == "fixed" {
+            let (Some(scale_text), Some(rounding_text)) = (lookup("scale"), lookup("rounding")) else {
+                return bad("fixed-needs-scale-and-rounding");
+            };
+            let Some(parsed) = int_option(scale_text) else { return bad("not-integer") };
+            if !(1..=MAX_SCALE).contains(&parsed) {
+                return bad("scale");
+            }
+            let Some(mode) = ["floor", "ceiling", "exact"].into_iter().find(|mode| *mode == rounding_text) else {
+                return bad("rounding");
+            };
+            (scale, rounding) = (parsed, mode);
+        }
+        let lo = match lookup("min") {
+            None => -EXACT_LIMIT,
+            Some(text) => match int_option(text) {
+                Some(value) => value,
+                None => return bad("not-integer"),
+            },
+        };
+        let hi = match lookup("max") {
+            None => EXACT_LIMIT,
+            Some(text) => match int_option(text) {
+                Some(value) => value,
+                None => return bad("not-integer"),
+            },
+        };
+        if !(-EXACT_LIMIT <= lo && lo <= hi && hi <= EXACT_LIMIT) {
+            return bad("range");
+        }
+        Ok(Def { name: name.to_string(), kind, scale, rounding, lo, hi, absent_ok: absent == "allowed" })
+    }
+
+    /// `carries`; None stands for truthiness and membership.
+    fn carries(rounding: &str, op: Option<&str>) -> bool {
+        match rounding {
+            "exact" => true,
+            "floor" => matches!(op, Some(">=") | Some("<")),
+            _ => matches!(op, Some(">") | Some("<=")),
+        }
+    }
+
+    /// `lowerNum`.
+    fn lower_num(d: &Def, constant: &Const) -> Pe<()> {
+        let fixed = d.kind == "fixed";
+        match constant {
+            Const::Int(n) => {
+                let value = if fixed { n * d.scale } else { *n };
+                if value < d.lo || value > d.hi {
+                    return refuse("policy:threshold", Some(&d.name), Some(if fixed { "out-of-range" } else { "constant-range" }));
+                }
+                Ok(())
+            }
+            Const::Dec(dec) => {
+                if !fixed {
+                    return refuse("image:unknown-type", None, Some("float"));
+                }
+                match dec_scaled(dec, d.scale) {
+                    None => refuse("policy:threshold", Some(&d.name), Some("off-grid")),
+                    Some(value) if value < d.lo || value > d.hi => refuse("policy:threshold", Some(&d.name), Some("out-of-range")),
+                    Some(_) => Ok(()),
+                }
+            }
+            _ => refuse("policy:kind-mismatch", Some(&d.name), None),
+        }
+    }
+
+    /// `checkCmp`.
+    fn check_cmp(d: &Def, op: &str, constant: &Const) -> Pe<()> {
+        if let Const::Null = constant {
+            if op != "==" && op != "!=" {
+                return refuse("policy:none", Some(&d.name), Some("ordered"));
+            }
+            if !d.absent_ok {
+                return refuse("policy:none", Some(&d.name), Some("absence-refused"));
+            }
+            return Ok(());
+        }
+        match d.kind {
+            "bool" | "category" => {
+                let own = matches!((d.kind, constant), ("bool", Const::Bool) | ("category", Const::Str));
+                if own {
+                    if op == "==" || op == "!=" {
+                        return Ok(());
+                    }
+                    return refuse("policy:kind-mismatch", Some(&d.name), None);
+                }
+                if let Const::Dec(_) = constant {
+                    return refuse("image:unknown-type", None, Some("float"));
+                }
+                refuse("policy:kind-mismatch", Some(&d.name), None)
+            }
+            _ => {
+                let fixed = d.kind == "fixed";
+                if fixed && !carries(d.rounding, Some(op)) && matches!(constant, Const::Int(_) | Const::Dec(_)) {
+                    return refuse("policy:rounding", Some(&d.name), None);
+                }
+                lower_num(d, constant)?;
+                if fixed && !carries(d.rounding, Some(op)) {
+                    return refuse("policy:rounding", Some(&d.name), None);
+                }
+                Ok(())
+            }
+        }
+    }
+
+    /// `checkMem` with `lowerMembers`.
+    fn check_mem(d: &Def, consts: &[Const]) -> Pe<()> {
+        if consts.iter().any(|constant| matches!(constant, Const::Null)) {
+            return refuse("policy:none", Some(&d.name), Some("in-list"));
+        }
+        for constant in consts {
+            match (d.kind, constant) {
+                (_, Const::Null) => return refuse("policy:none", Some(&d.name), Some("in-list")),
+                ("category", Const::Str) => {}
+                ("int", _) | ("fixed", _) => lower_num(d, constant)?,
+                (_, Const::Dec(_)) => return refuse("image:unknown-type", None, Some("float")),
+                _ => return refuse("policy:kind-mismatch", Some(&d.name), None),
+            }
+        }
+        if d.kind == "fixed" && !carries(d.rounding, None) {
+            return refuse("policy:rounding", Some(&d.name), None);
+        }
+        Ok(())
+    }
+
+    /// `defined`: an engine counter first, then the definition.
+    fn defined<'a>(defs: &'a [Def], name: &str) -> Pe<&'a Def> {
+        if ENGINE_COUNTERS.contains(&name) {
+            return refuse("policy:engine-counter", Some(name), None);
+        }
+        match defs.iter().find(|d| d.name == name) {
+            Some(d) => Ok(d),
+            None => refuse("image:field-index-oob", Some(name), None),
+        }
+    }
+
+    /// `lowerCond`, depth first and left to right, gathering `LCond.noneTested`.
+    fn lower_cond(defs: &[Def], cond: &Cond, tested: &mut Vec<String>) -> Pe<()> {
+        match cond {
+            Cond::Always | Cond::Never => Ok(()),
+            Cond::Truthy(f) => {
+                let d = defined(defs, f)?;
+                if d.kind == "fixed" && !carries(d.rounding, None) {
+                    return refuse("policy:rounding", Some(&d.name), None);
+                }
+                Ok(())
+            }
+            Cond::Cmp(f, op, constant) => {
+                check_cmp(defined(defs, f)?, op, constant)?;
+                if let Const::Null = constant {
+                    tested.push(f.clone());
+                }
+                Ok(())
+            }
+            Cond::Mem(f, consts) => check_mem(defined(defs, f)?, consts),
+            Cond::Not(inner) => lower_cond(defs, inner, tested),
+            Cond::All(operands) => operands.iter().try_for_each(|operand| lower_cond(defs, operand, tested)),
+        }
+    }
+
+    /// `loadPolicy` on the image's bytes: None when the oracle accepts it, else its refusal.
+    pub fn load_policy(image: &[u8]) -> Option<Refused> {
+        let doc = match canon2::read(image) {
+            Ok(doc) => doc,
+            Err(error) => return Some(Refused { cause: "policy:unreadable", field: None, reason: Some(error.rule().to_string()) }),
+        };
+        check_image(&doc).err()
+    }
+
+    /// `decodeImage` then `checkImage`: the definitions, every rule lowered in order, then rule 6.
+    fn check_image(doc: &Doc) -> Pe<()> {
+        {
+            let (mut texts, rules) = decode_image(doc)?;
+            // `parseDefs`: code point order of the names, which is the order of their UTF-8 bytes
+            texts.sort_by(|a, b| a.0.cmp(&b.0));
+            let defs = texts.iter().map(|(name, text)| parse_def(name, text)).collect::<Pe<Vec<_>>>()?;
+            let mut tested = Vec::new();
+            for cond in &rules {
+                lower_cond(&defs, cond, &mut tested)?;
+            }
+            // `checkAbsence`, rule 6, in code point order
+            match defs.iter().find(|d| d.absent_ok && !tested.contains(&d.name)) {
+                Some(d) => refuse("policy:absence-untested", Some(&d.name), None),
+                None => Ok(()),
+            }
+        }
+    }
+
+    /// Lean's `counterRefusal`: the oracle refuses the image for reading an engine counter.
+    pub fn refuses_for_counter(image: &[u8]) -> bool {
+        load_policy(image).is_some_and(|refused| refused.cause == "policy:engine-counter")
+    }
 }
 
 // ----------------------------------------------------------------- the decisions
@@ -602,6 +1231,10 @@ fn main() -> ExitCode {
             (Some(source), Some(out), Some(keys)) => produce(Path::new(&source), Path::new(&out), Path::new(&keys)),
             _ => Err("produce --from CASES --out RUN --keys KEYS".to_string()),
         },
+        Some("policy") => match flag("--from") {
+            Some(source) => policy_lines(Path::new(&source)),
+            None => Err("policy --from CASES".to_string()),
+        },
         Some("verify") if args.len() > 1 => {
             let sample = match flag("--sample").as_deref() {
                 Some("all") => None,
@@ -618,7 +1251,7 @@ fn main() -> ExitCode {
             };
             verify(Path::new(&args[1]), &options).map_err(|why| format!("core_evidence: REFUSED {}: {why}", args[1]))
         }
-        _ => Err("usage: core_evidence produce --from CASES --out RUN --keys KEYS | verify RUN [--sample N|all] [--seed S] [--pin-authority PUB --pin-instance PUB] [--oracle BIN]".to_string()),
+        _ => Err("usage: core_evidence produce --from CASES --out RUN --keys KEYS | policy --from CASES | verify RUN [--sample N|all] [--seed S] [--pin-authority PUB --pin-instance PUB] [--oracle BIN]".to_string()),
     };
     match outcome {
         Ok(line) => {
