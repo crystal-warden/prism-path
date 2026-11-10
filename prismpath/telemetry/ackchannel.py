@@ -17,7 +17,8 @@ from typing import Dict
 from prismpath import canon
 
 def _canon(root: str, seq: int) -> bytes:
-    return canon.canonical_compact({"root": root, "seq": seq})
+    """What an ACK's tag covers: the canon/2 domain and the canon/2 bytes of the tagged pair."""
+    return canon.CANON2_DOMAIN + canon.canon2_bytes({"encoding": canon.CANON2, "root": root, "seq": seq})
 
 
 def sign_ack(secret: bytes, root: str, seq: int) -> str:

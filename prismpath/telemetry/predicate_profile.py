@@ -45,4 +45,4 @@ def cell_profile(graph, parts: Dict[str, "q.FieldPartition"], field: str, symbol
 
 def profile_wire_bytes(profile: dict) -> int:
     """Canonical serialized size  -  the measured cost of promoting one symbol to its profile."""
-    return len(canon.canonical_compact(profile))
+    return len(canon.canon2_bytes(profile))

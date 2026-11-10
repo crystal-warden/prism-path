@@ -67,6 +67,7 @@ def provenance_manifest(
         "gate_id": gate_id,
         "knowledge_base_hash": knowledge_base_hash,
         "ingestion_hashes": list(ingestion_hashes or []),
+        canon.ENCODING_KEY: canon.CANON2,
     }
     # the manifest itself is content-addressed so it can't be silently edited post-anchor
     manifest["manifest_hash"] = canon.manifest_hash(manifest)
@@ -97,6 +98,7 @@ def override_manifest(prior, overrider_id, rationale, new_root_hex, new_label=No
         "gate_id": prior.get("gate_id"),
         "knowledge_base_hash": prior.get("knowledge_base_hash"),
         "ingestion_hashes": list(prior.get("ingestion_hashes", [])),
+        canon.ENCODING_KEY: canon.CANON2,
     }
     manifest["manifest_hash"] = canon.manifest_hash(manifest)
     return manifest
@@ -112,7 +114,10 @@ def verify_manifest(manifest):
     Any tampering with a bound field (root, policy_hash, gate_id, ingestion_hashes, knowledge_base_hash,
     supersedes, overrider_id, rationale, ...) flips this to False. This is what makes a manifest a
     tamper-evidence anchor rather than a mere label."""
-    return canon.manifest_hash(manifest) == manifest.get("manifest_hash")
+    try:
+        return canon.manifest_hash(manifest) == manifest.get("manifest_hash")
+    except canon.CanonicalError:
+        return False           # no form under the encoding it names, or an encoding nobody reads
 
 
 def export_stamp_request(roots, out_bundle, policy_hash=None, gate_id=None, ingestion_hashes=None):
@@ -129,9 +134,8 @@ def export_stamp_request(roots, out_bundle, policy_hash=None, gate_id=None, inge
         dst = os.path.join(staging, f"root_{label}.txt")
         shutil.copyfile(rootfile, dst)
         entries.append(provenance_manifest(root_hex, label, policy_hash, gate_id, ingestion_hashes))
-    req = {"kind": "cw-stamp-request", "created": _now_iso(), "n": len(entries), "entries": entries}
-    with open(os.path.join(staging, "request.json"), "w") as handle:
-        handle.write(canon.dumps_strict(req, indent=1))
+    req = canon.tagged({"kind": "cw-stamp-request", "created": _now_iso(), "n": len(entries), "entries": entries})
+    canon.atomic_write_bytes(os.path.join(staging, "request.json"), canon.canon2_bytes(req) + b"\n")
     with tarfile.open(out_bundle, "w:gz") as archive:
         archive.add(staging, arcname="cw-stamp-request")
     shutil.rmtree(staging)
@@ -155,7 +159,7 @@ def relay_stamp(request_bundle, out_bundle):
         archive.extractall(work)
     src = os.path.join(work, "cw-stamp-request")
     with open(os.path.join(src, "request.json")) as handle:
-        req = canon.load(handle)
+        req = canon.loads_document(handle.read())
     stamped = []
     for entry in req["entries"]:
         rootfile = os.path.join(src, f"root_{entry['label']}.txt")
@@ -179,16 +183,13 @@ def relay_stamp(request_bundle, out_bundle):
         ots_path = os.path.join(src, f"root_{entry['label']}.txt.ots")
         if os.path.exists(ots_path):
             shutil.copyfile(ots_path, os.path.join(pack, f"root_{entry['label']}.txt.ots"))
-    with open(os.path.join(pack, "receipt.json"), "w") as handle:
-        handle.write(canon.dumps_strict(
-            {
-                "kind": "cw-proof-bundle",
-                "created": _now_iso(),
-                "request_created": req["created"],
-                "stamped": stamped,
-            },
-            indent=1,
-        ))
+    canon.atomic_write_bytes(os.path.join(pack, "receipt.json"), canon.canon2_bytes(canon.tagged(
+        {
+            "kind": "cw-proof-bundle",
+            "created": _now_iso(),
+            "request_created": req["created"],
+            "stamped": stamped,
+        })) + b"\n")
     with tarfile.open(out_bundle, "w:gz") as archive:
         archive.add(pack, arcname="cw-proof-bundle")
     shutil.rmtree(pack)
@@ -207,7 +208,7 @@ def import_proofs(proof_bundle, roots_dir):
         archive.extractall(work)
     src = os.path.join(work, "cw-proof-bundle")
     with open(os.path.join(src, "receipt.json")) as handle:
-        receipt = canon.load(handle)
+        receipt = canon.loads_document(handle.read())
     placed = []
     for fn in os.listdir(src):
         if fn.endswith(".ots"):

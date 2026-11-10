@@ -7,15 +7,16 @@
   "kb_hash": "sha256:kb",
   "manifest": {
    "created": "2026-08-12T00:00:00Z",
+   "encoding": "canon/2",
    "gate_id": "wazuh_triage@v3",
    "ingestion_hashes": [
     "sha256:aa"
    ],
    "knowledge_base_hash": "sha256:kb",
    "label": "echo:decision",
-   "manifest_hash": "821b6ebc0e2b275718bae69be53ec65108c5f8b2e9754b904b2a79f97549240d",
+   "manifest_hash": "d7b0464c132de4a2d03c0bb1713d52ad590342a86c78e8759ad25bb44fc5b969",
    "policy_hash": "sha256:deadbeef",
-   "root": "5af55e1022be5bb92df3172524b8f843fd2056258bdf2577f0d3898579b181c0"
+   "root": "4f530742580f6b76193dbee70335b459bcaa7c7df5640e2627e3bf7e61091692"
   },
   "outcome": {
    "score": 0.93,
@@ -232,8 +233,8 @@
      "severity": "high"
     }
    },
-   "ingestion": "sha256:e2caadad00699795",
-   "knowledge": "sha256:e2caadad00699795"
+   "ingestion": "sha256:799c0880565d9829",
+   "knowledge": "sha256:799c0880565d9829"
   },
   {
    "data": {
@@ -244,8 +245,8 @@
     ],
     "score": 1.5
    },
-   "ingestion": "sha256:f818c81481a90d15",
-   "knowledge": "sha256:f818c81481a90d15"
+   "ingestion": "sha256:0fc3ed7ca804626c",
+   "knowledge": "sha256:0fc3ed7ca804626c"
   },
   {
    "data": {
@@ -256,8 +257,8 @@
     },
     "note": "caf\u00e9"
    },
-   "ingestion": "sha256:c63ccca1f1902394",
-   "knowledge": "sha256:c63ccca1f1902394"
+   "ingestion": "sha256:b313272c28f9890a",
+   "knowledge": "sha256:b313272c28f9890a"
   }
  ],
  "joins": [

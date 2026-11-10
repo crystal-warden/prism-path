@@ -166,6 +166,44 @@ def document_hash(doc: Any) -> str:
     return sha256_hex(document_bytes(doc))
 
 
+def _content_value(value: Any, default: Optional[Any], depth: int = 0) -> Any:
+    if depth > 128:
+        raise EncodingError("no canon/2 form: nesting deeper than 128")
+    if isinstance(value, bool) or value is None or isinstance(value, (int, str)):
+        return value
+    if isinstance(value, float):
+        if value != value or value in (float("inf"), float("-inf")):
+            raise CanonicalError("NaN, Infinity and -Infinity have no canonical JSON form")
+        return repr(value)
+    if isinstance(value, (list, tuple)):
+        return [_content_value(item, default, depth + 1) for item in value]
+    if isinstance(value, dict):
+        out = {}
+        for key, item in value.items():
+            if not isinstance(key, str):
+                # json.dumps's own spelling of the key types it accepts; any other key is a TypeError
+                if key is None or isinstance(key, bool):
+                    key = {None: "null", True: "true", False: "false"}[key]
+                elif isinstance(key, (int, float)):
+                    key = repr(key) if isinstance(key, float) else str(key)
+                else:
+                    raise TypeError(f"keys must be str, int, float, bool or None, not {type(key).__name__}")
+            out[key] = _content_value(item, default, depth + 1)
+        return out
+    if default is None:
+        raise TypeError(f"Object of type {type(value).__name__} is not JSON serializable")
+    return _content_value(default(value), default, depth + 1)
+
+
+def content_bytes(value: Any, default: Optional[Any] = None) -> bytes:
+    """The canon/2 bytes of content PrismPath hashes but did not write: an item a worker returned, a
+    proof value, a connector's data. Content may hold a float, which canon/2 has no form for, so a
+    float is written as its shortest round trip decimal string (`repr`), the rule section 3.1 of the
+    verified core spec gives for floats in hashed documents; NaN and the infinities are still refused.
+    `default` stringifies a value that is not JSON, as `canonical_spaced` did for the same callers."""
+    return canon2_bytes(_content_value(value, default))
+
+
 def loads_document(text: Any) -> Any:
     """Read a document whose tag decides its reader: an object that names canon/2 is read again by the
     strict canon/2 reader (a float, a duplicate key or an out of range integer is refused as a
@@ -245,9 +283,14 @@ def file_sha256_prefixed(path) -> str:
 
 
 def manifest_hash(m: dict) -> str:
-    """The content address of an attestation manifest: sha256 over the spaced canonical form of every
-    field except `manifest_hash` itself (ledger_airgap and the fixture generators share this)."""
-    return sha256_hex(canonical_spaced({k: m[k] for k in m if k != "manifest_hash"}))
+    """The content address of an attestation manifest: sha256 over every field except `manifest_hash`
+    itself, under the encoding the manifest names (ledger_airgap and the fixture generators share this):
+    the canon/2 bytes for a manifest that names canon/2, which is every manifest written now, and the
+    spaced canon/1 form for an untagged one, read only to verify a manifest written before the migration."""
+    body = {k: m[k] for k in m if k != "manifest_hash"}
+    if encoding_of(m) == CANON2:
+        return sha256_hex(canon2_bytes(body))
+    return sha256_hex(canonical_spaced(body))
 
 
 def atomic_write(path, data: str, encoding: str = "utf-8") -> None:

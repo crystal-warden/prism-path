@@ -93,12 +93,9 @@ def anchor(hashes, out_dir, label):
     root, paths = merkle_root_and_paths(hashes)
     rootfile = os.path.join(out_dir, f"root_{label}.txt")
     open(rootfile, "w").write(root + "\n")
-    with open(os.path.join(out_dir, f"manifest_{label}.json"), "w") as manifest_file:
-        manifest_file.write(canon.dumps_strict(
-            dict(label=label, root=root, leaf_count=len(hashes),
-                 leaves={hash_hex: paths[index] for index, hash_hex in enumerate(hashes)}),
-            indent=2,
-        ))
+    manifest = canon.tagged(dict(label=label, root=root, leaf_count=len(hashes),
+                                 leaves={hash_hex: paths[index] for index, hash_hex in enumerate(hashes)}))
+    canon.atomic_write_bytes(os.path.join(out_dir, f"manifest_{label}.json"), canon.canon2_bytes(manifest) + b"\n")
     ots_run = subprocess.run(["ots", "stamp", rootfile], capture_output=True, text=True, env=_OTSENV)
     return dict(
         root=root,
@@ -123,7 +120,7 @@ def upgrade(out_dir, label):
 def verify_unit(leaf_hex, out_dir, label):
     """Full chain: Merkle path to the anchored root, then OTS-verify the root against Bitcoin."""
     with open(os.path.join(out_dir, f"manifest_{label}.json")) as manifest_file:
-        manifest = canon.load(manifest_file)
+        manifest = canon.loads_document(manifest_file.read())
     leaf_hex = _leaf_hex(leaf_hex)
     path = manifest["leaves"].get(leaf_hex)
     if path is None:

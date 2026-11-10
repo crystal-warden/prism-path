@@ -134,6 +134,29 @@ pub fn canon2_bytes(val: &Value) -> Result<Vec<u8>, CanonicalError> {
     crate::canon2::write_json(val).map_err(|error| CanonicalError(format!("no canon/2 form: {error}")))
 }
 
+/// The canon/2 bytes of content PrismPath hashes but did not write (a worker's outcome, a connector's
+/// data): a number with a fraction or an exponent is written as Python's `repr` of the float it reads
+/// as, the shortest round trip decimal string, and a number with no finite double is refused.
+/// `prismpath.canon.content_bytes`.
+pub fn content_bytes(val: &Value) -> Result<Vec<u8>, CanonicalError> {
+    fn convert(val: &Value) -> Result<Value, CanonicalError> {
+        Ok(match val {
+            Value::Number(number) if number.as_i64().is_none() && number.as_u64().is_none() && beyond_64_bit_integer(number).is_none() => {
+                match crate::value::number_to_f64(number) {
+                    Some(float) => Value::String(py_float_repr(float)),
+                    None => return Err(CanonicalError("NaN, Infinity and -Infinity have no canonical JSON form".to_string())),
+                }
+            }
+            Value::Array(items) => Value::Array(items.iter().map(convert).collect::<Result<_, _>>()?),
+            Value::Object(members) => {
+                Value::Object(members.iter().map(|(key, item)| Ok((key.clone(), convert(item)?))).collect::<Result<_, CanonicalError>>()?)
+            }
+            other => other.clone(),
+        })
+    }
+    canon2_bytes(&convert(val)?)
+}
+
 /// `val` with `"encoding": "canon/2"`.
 pub fn tagged(mut val: Value) -> Value {
     if let Value::Object(obj) = &mut val {
@@ -852,10 +875,15 @@ pub fn verify_context_chain(segments: &[ContextSegment]) -> bool {
 
 // attestation manifests (C1/C4)
 
+/// sha256 over every field but `manifest_hash`, under the encoding the manifest names: canon/2 for a
+/// tagged manifest, the spaced canon/1 form for an untagged one (verify only). `canon.manifest_hash`.
 fn manifest_hash_of(manifest_val: &Value) -> Result<String, CanonicalError> {
     let mut body = manifest_val.clone();
     if let Value::Object(obj_map) = &mut body {
         obj_map.remove("manifest_hash");
+    }
+    if encoding_of(manifest_val)? == CANON2 {
+        return Ok(hex::encode(Sha256::digest(canon2_bytes(&body)?)));
     }
     Ok(hex::encode(Sha256::digest(try_py_canonical_string(&body, true)?.as_bytes())))
 }
@@ -878,6 +906,7 @@ pub fn provenance_manifest(
         "gate_id": gate_id,
         "knowledge_base_hash": knowledge_base_hash,
         "ingestion_hashes": ingestion_hashes,
+        "encoding": CANON2,
     });
     // the body holds only the strings and nulls passed in above, which always have a canonical form
     let manifest_sha = manifest_hash_of(&manifest_val).expect("a manifest of strings has a canonical form");
@@ -912,6 +941,7 @@ pub fn override_manifest(
         "gate_id": prior.get("gate_id"),
         "knowledge_base_hash": prior.get("knowledge_base_hash"),
         "ingestion_hashes": prior.get("ingestion_hashes").cloned().unwrap_or(serde_json::json!([])),
+        "encoding": CANON2,
     });
     let manifest_sha = manifest_hash_of(&manifest_val)?;
     manifest_val["manifest_hash"] = Value::String(manifest_sha);

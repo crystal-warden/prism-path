@@ -15,7 +15,7 @@
 //! and `FileDeferralStore`, byte-compatible with the reference's directory layout so either
 //! runtime can list and resume units the other deferred.
 
-use crate::durable::{flow_hash, provenance_manifest, try_py_canonical_string, CanonicalError};
+use crate::durable::{content_bytes, flow_hash, provenance_manifest, try_py_canonical_string, CanonicalError};
 use crate::{py_str, Value as EngineValue};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
@@ -63,11 +63,11 @@ pub fn flatten(data: &Value, prefix: &str, delimiter: &str, out: &mut BTreeMap<S
     Ok(())
 }
 
-/// The reference's short content hash: "sha256:" + first 16 hex chars over the spaced canonical
-/// JSON (`json.dumps(sort_keys=True)`).
+/// The reference's short content hash: "sha256:" + first 16 hex chars over the content's canon/2
+/// bytes (`durable::content_bytes`, a float as its decimal string).
 /// Data with no canonical form (a number beyond the double range) is refused with `CanonicalError`.
 pub fn short_hash(data: &Value) -> Result<String, CanonicalError> {
-    let digest = hex::encode(Sha256::digest(try_py_canonical_string(data, true)?.as_bytes()));
+    let digest = hex::encode(Sha256::digest(content_bytes(data)?));
     Ok(format!("sha256:{}", &digest[..16]))
 }
 
@@ -204,7 +204,7 @@ pub trait Connector {
         label: Option<&str>,
         created: &str,
     ) -> Result<Value, String> {
-        let root = hex::encode(Sha256::digest(try_py_canonical_string(outcome, true).map_err(|err| err.to_string())?.as_bytes()));
+        let root = hex::encode(Sha256::digest(content_bytes(outcome).map_err(|err| err.to_string())?));
         let default_label = format!("{}:decision", self.name());
         Ok(provenance_manifest(
             &root,

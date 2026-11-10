@@ -63,7 +63,7 @@ def item_id(item, field: Optional[str] = None) -> str:
         return str(item[field])
     if isinstance(item, (str, int, float, bool)):
         return str(item)
-    blob = canon.canonical_spaced(item, default=str)
+    blob = canon.content_bytes(item, default=str)     # canon/2; a float as its decimal string
     return "h" + hashlib.sha256(blob).hexdigest()[:16]
 
 

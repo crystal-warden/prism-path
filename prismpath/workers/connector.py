@@ -109,7 +109,7 @@ class IngestionPort:
 
     def compute_ingestion_hash(self, data: Dict[str, Any]) -> str:
         """Computes a content-addressable hash for ingestion payloads."""
-        return "sha256:" + canon.sha256_hex(canon.canonical_spaced(data))[:16]
+        return "sha256:" + canon.sha256_hex(canon.content_bytes(data))[:16]
 
 
 class RetrievalPort:
@@ -122,7 +122,7 @@ class RetrievalPort:
 
     def compute_knowledge_hash(self, kb_data: Any) -> str:
         """Computes a content-addressable hash for knowledge base / catalog data."""
-        return "sha256:" + canon.sha256_hex(canon.canonical_spaced(kb_data))[:16]
+        return "sha256:" + canon.sha256_hex(canon.content_bytes(kb_data))[:16]
 
 
 class AdjudicatorPort:
@@ -220,7 +220,7 @@ class AttestationPort:
         """Default core attestation binding using ledger_airgap. Pass
         `policy_hash_for(flow_path)` as `policy_hash` to bind the governing document."""
         from prismpath.ledgers import ledger_airgap
-        root_hex = canon.sha256_hex(canon.canonical_spaced(outcome))
+        root_hex = canon.sha256_hex(canon.content_bytes(outcome))
         return ledger_airgap.provenance_manifest(
             root_hex=root_hex,
             label=label or f"{self.name}:decision",
