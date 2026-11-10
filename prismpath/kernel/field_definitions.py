@@ -623,11 +623,27 @@ def fragment_problems(graph) -> List[Problem]:
                 continue
             member, reason = level_m.is_level_m(cond)
             if member:
+                tree = predicates.expr_ast(cond)
+                depth_problem = _depth_problem(name, cond, tree) if tree is not None else None
+                if depth_problem is not None:
+                    problems.append(depth_problem)
                 continue
             problem = _level_m_problem(name, cond, reason)
             if _decided_without_definitions(problem, cond, reason):
                 problems.append(problem)
     return problems
+
+
+def _depth_problem(name: str, cond: str, tree) -> Optional[Problem]:
+    """SPEC section 4.1: a predicate nested beyond the bound is invalid, by the reference's own static
+    measure (`predicates._depth`, spec section 2.4). The Level M classifier has no depth bound, so until
+    November 2026 a defined flow deeper than 50 loaded, and from depth 52 the evaluator's run time bound
+    raised on every reading and the edge silently never matched, a later rule routing instead (D1)."""
+    from prismpath.kernel import predicates
+    if predicates._depth(tree) > predicates._MAX_DEPTH:
+        return Problem(f"{name}: {cond!r} is nested too deeply (> {predicates._MAX_DEPTH})", "policy:not-level-m",
+                       None, "depth")
+    return None
 
 
 def _decided_without_definitions(problem: Problem, cond: str, reason: Optional[str]) -> bool:
@@ -655,6 +671,10 @@ def policy_problems(graph, definitions: Dict[str, FieldDefinition], skip=frozens
                 continue
             tree = predicates.expr_ast(cond)
             if tree is None:
+                continue
+            depth_problem = _depth_problem(name, cond, tree)
+            if depth_problem is not None:
+                problems.append(depth_problem)
                 continue
             if unlowered:
                 # lowering failed on this edge, so its fixed fields still hold decimal literals: report what

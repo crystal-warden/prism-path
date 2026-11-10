@@ -243,7 +243,10 @@ def render(doc, rng) -> str:
 BOUNDS = [-EXACT, -EXACT + 1, -2 ** 31 - 1, -2 ** 31, -100, -5, -1, 0, 1, 5, 99, 100, 2 ** 31 - 1, 2 ** 31,
           EXACT - 1, EXACT]
 SCALES = [1, 10, 100, 1000, 10000, 10 ** 9]
-WS = [" ", " ", " ", "  ", "\t", "\xa0", "　", "\x1f"]
+# Python's whitespace (str.isspace) that can reach a definition through the flow text, and U+FEFF, which is
+# not whitespace in Python although JavaScript's trim strips it (D3)
+WS = [" ", " ", " ", "  ", "\t", "\xa0", "　", "\x1f", "\u1680", "\u2000", "\u200a", "\u202f", "\u205f",
+      "\x1f\x1f", "\ufeff"]
 
 
 class Field:
@@ -400,12 +403,21 @@ def gen_cond(rng, fields, depth):
 
 
 def deep_cond(rng, fields, target_depth):
-    """A condition at a chosen depth near the bound of 50 (spec section 2.4)."""
+    """A condition at a chosen depth near the bound of 50 (spec section 2.4): a `not` chain, or `and` and
+    `or` nested on the left, on the right or alternately, which the flow text writes with parentheses
+    (D2: a parser that counts its own recursion, or brackets, measures these differently)."""
     atom = gen_atom(rng, fields)
     base = 1 if atom[0] == "truthy" else 2
     cond = atom
-    for _ in range(max(0, target_depth - base)):
-        cond = ["not", cond]
+    shape = rng.choice(["not", "not", "right", "left", "mixed"])
+    for level in range(max(0, target_depth - base)):
+        if shape == "not" or (shape == "mixed" and level % 3 == 0):
+            cond = ["not", cond]
+        else:
+            other = gen_atom(rng, fields)
+            tag = rng.choice(["and", "or"])
+            right = shape == "right" or (shape == "mixed" and level % 2)
+            cond = [tag, other, cond] if right else [tag, cond, other]
     return cond
 
 
@@ -423,7 +435,7 @@ def gen_policy(rng):
     rules = []
     for index in range(rng.choice([0, 1, 2, 3, 4, 5])):
         if rng.random() < 0.06:
-            cond = deep_cond(rng, fields, rng.choice([49, 50, 50, 51, 52]))
+            cond = deep_cond(rng, fields, rng.choice([25, 49, 50, 50, 51, 52, 53]))
         else:
             cond = gen_cond(rng, fields, rng.choice([0, 1, 2, 3]))
         rules.append({"target": rng.choice(["hit", "low", "gone", "miss", "Hit", "core_decision", "t-1"]), "when": cond})
@@ -919,7 +931,7 @@ def main(argv=None) -> int:
                 lean_counts["reading " + (verdict["verdict"] if verdict["verdict"] == "route" else verdict["cause"])] += 1
                 if verdict.get("policy_check") == "pass" and verdict.get("cause") == "route:contract-violation":
                     # D4: the system boundary refuses a field no rule reads, which the policy check passes
-                    lean_counts["reading policy check passes, system boundary refuses"] += 1
+                    lean_counts["d4: policy check passes, system boundary refuses"] += 1
         for name in legs:
             total[name].update(counts[name])
         for leg, cls, detail, case in findings:

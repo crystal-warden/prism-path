@@ -5,7 +5,7 @@
 use std::collections::HashMap;
 use std::sync::OnceLock;
 
-use crate::condition::{is_js_ws, js_trim, split_lines_py};
+use crate::condition::{is_js_ws, js_trim, py_trim, split_lines_py};
 
 /// The input bounds of the reference parser (`kernel/parser.py`): a flow is human authored routing config, not
 /// a data payload, and these keep an untrusted or accidental oversized document from exhausting memory or
@@ -292,9 +292,11 @@ pub fn parse_with_limits(text: &str, limits: &Limits) -> Graph {
         Some((frontmatter, body_text)) => {
             for line in split_lines_py(&frontmatter) {
                 if let Some(colon_pos) = line.find(':') {
+                    // the reference strips both with `str.strip()`: Python's whitespace, which a field
+                    // definition's words are also split on (D3), not JS trim's
                     meta.insert(
-                        js_trim(&line[..colon_pos]).to_string(),
-                        js_trim(&line[colon_pos + 1..]).to_string(),
+                        py_trim(&line[..colon_pos]).to_string(),
+                        py_trim(&line[colon_pos + 1..]).to_string(),
                     );
                 }
             }

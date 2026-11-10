@@ -421,7 +421,9 @@ reading's route or refusal, with its field and reason, is the oracle's.
 ## 9. Where the implementations disagree on the slice
 
 Each row is a disagreement the harness or a direct probe shows, with the side this specification
-takes. None is fixed on this branch: this step records them.
+takes. Step 1 recorded D1 to D6; step 2 fixes D1, D2 and D3 (each with regression cases in the frozen
+field definition vectors and in the harness's generator), resolves D4 (section 6.1), extends the
+harness to the D5 and D6 legs, and records D7.
 
 **D1. The depth bound is not applied to a defined flow (Python).** SPEC.md 4.1 makes a predicate
 nested beyond 50 invalid and `check_predicate` refuses it (`predicates.py:169`), but a defined flow
@@ -432,7 +434,11 @@ raises at run time, `first_deterministic` treats the edge as non matching (`engi
 later rule routes. Reproducer: `fields {"x": "int"}`, rule 1 `hit` when `not`×50 applied to
 `x >= 3` (depth 52), rule 2 `miss` always, reading `{"x": 5}`: the reference routes `miss`, where the
 author's first rule says `hit`. **Specification:** the policy is refused at load (`policy:not-level-m`,
-`depth`), at every depth above 50.
+`depth`), at every depth above 50. **Fixed in step 2:** `field_definitions.policy_problems` and
+`fragment_problems` apply the reference's own static measure (`predicates._depth`) to every
+deterministic condition of a defined flow (`_depth_problem`), so the policy is refused at load with
+`policy:not-level-m`. Regressions: the vectors `depth_fifty_one_not_chain`, `depth_fifty_two_not_chain`
+(refused) and `depth_fifty_not_chain` (accepted).
 
 **D2. Rust bounds depth by a different measure (Rust).** The Rust predicate parser counts recursion
 levels of its own grammar (`prismpath-rs/src/condition.rs:392-505`, `MAX_DEPTH` 50), not the
@@ -441,6 +447,17 @@ depth 51 Rust accepts and evaluates, and a nested `and` at depth 52 is accepted 
 matches, as in D1. Python and Rust therefore disagree with each other on conditions at depth 52.
 Reproducer: as D1 with `not`×50 (Rust refuses, Python routes `miss`), and with an `and` nested to depth
 52 (both accept and route `miss`). **Specification:** refuse above 50 by the measure of section 2.4.
+**Fixed in step 2.** The direct probe showed the measure differed the other way too: an `and` nested on
+the right inside parentheses cost the Rust parser two levels per level, so the port refused a right
+nested condition far below 50 that the reference accepts. Now the parser's `depth` counts only the
+nesting that is evaluation depth (a `not`, a later operand of `and` or `or`, a comparison's right side),
+never a bracket, so its guard fires only where the evaluator (`ev_node`, the reference's `_ev`) refuses
+anyway; brackets have their own bound of 200, Python's tokenizer's; and the static bound of SPEC.md 4.1
+is the reference's measure, `condition::static_depth`, applied by `check_predicate` and by the policy
+rules of a defined flow (`policy:not-level-m`). Regressions: the vectors `depth_fifty_nested_right` and
+`depth_fifty_nested_left` (accepted), `depth_fifty_one_nested_right` and `depth_fifty_two_nested_left`
+(refused); the harness's generator writes `and` and `or` nested on the left, the right and alternately
+from depth 25 to 53.
 
 **D3. Definition whitespace (Rust).** The reference splits a definition with `str.split()`
 (`field_definitions.py:140`) and the front matter value is stripped with `str.strip()`
@@ -449,7 +466,13 @@ Reproducer: as D1 with `not`×50 (Rust refuses, Python routes `miss`), and with 
 definition `int\u001fmin=0` (or `int\u001f`): the reference accepts an `int` field, Rust refuses
 `unknown kind "int\u{1f}min=0"`. **Specification:** the reference's whitespace (section 2.5); Rust is
 wrong. U+001C to U+001E also end a line in the reference's `splitlines`, so they cannot reach a
-definition through the flow text at all.
+definition through the flow text at all. **Fixed in step 2:** `condition::is_py_ws` is now exactly
+Python's `str.isspace` (it also wrongly counted U+FEFF, which JavaScript's trim strips and Python's
+does not), a definition is split with `condition::py_split`, and the front matter keys and values are
+stripped with `py_trim` as the reference strips them, not with JavaScript's trim. Regressions: the
+vectors `definition_split_on_python_whitespace` (U+001F, U+3000, U+2000, accepted) and
+`definition_with_a_byte_order_mark` (refused); the generator's separators include the rest of
+Python's whitespace set and U+FEFF.
 
 **D4. Which fields the boundary checks (reference, two paths). Resolved in step 2 (section 6.1).** SPEC.md 4.5 calls a reading canonical
 when every defined field *the flow routes on* is canonical, and the Facet quantizer checks only the

@@ -1001,6 +1001,195 @@
    ]
   },
   {
+   "name": "depth_fifty_nested_right",
+   "flow": "---\nname: depth_fifty_nested_right\nstart: s\nfield.x: int min=0 max=10\n---\n## s\n-> hit: when x != 7 and (x != 6 and (x != 5 and (x != 4 and (x != 3 and (x != 2 and (x != 1 and (x != 0 and (x != 9 and (x != 8 and (x != 7 and (x != 6 and (x != 5 and (x != 4 and (x != 3 and (x != 2 and (x != 1 and (x != 0 and (x != 9 and (x != 8 and (x != 7 and (x != 6 and (x != 5 and (x != 4 and (x != 3 and (x != 2 and (x != 1 and (x != 0 and (x != 9 and (x != 8 and (x != 7 and (x != 6 and (x != 5 and (x != 4 and (x != 3 and (x != 2 and (x != 1 and (x != 0 and (x != 9 and (x != 8 and (x != 7 and (x != 6 and (x != 5 and (x != 4 and (x != 3 and (x != 2 and (x != 1 and (x != 0 and (x >= 3))))))))))))))))))))))))))))))))))))))))))))))))\n-> miss: else\n## hit\n## low\n## gone\n## miss\n",
+   "accepted": true,
+   "lowered": [
+    "when x != 7 and (x != 6 and (x != 5 and (x != 4 and (x != 3 and (x != 2 and (x != 1 and (x != 0 and (x != 9 and (x != 8 and (x != 7 and (x != 6 and (x != 5 and (x != 4 and (x != 3 and (x != 2 and (x != 1 and (x != 0 and (x != 9 and (x != 8 and (x != 7 and (x != 6 and (x != 5 and (x != 4 and (x != 3 and (x != 2 and (x != 1 and (x != 0 and (x != 9 and (x != 8 and (x != 7 and (x != 6 and (x != 5 and (x != 4 and (x != 3 and (x != 2 and (x != 1 and (x != 0 and (x != 9 and (x != 8 and (x != 7 and (x != 6 and (x != 5 and (x != 4 and (x != 3 and (x != 2 and (x != 1 and (x != 0 and (x >= 3))))))))))))))))))))))))))))))))))))))))))))))))",
+    "else"
+   ],
+   "probes": [
+    {
+     "reading": {
+      "x": 3
+     },
+     "route": "miss"
+    },
+    {
+     "reading": {
+      "x": 2
+     },
+     "route": "miss"
+    },
+    {
+     "reading": {
+      "x": 10
+     },
+     "route": "hit"
+    }
+   ],
+   "refused_readings": [
+    {
+     "reading": {
+      "x": 11
+     },
+     "field": "x",
+     "reason": "out_of_range"
+    }
+   ]
+  },
+  {
+   "name": "depth_fifty_nested_left",
+   "flow": "---\nname: depth_fifty_nested_left\nstart: s\nfield.x: int min=0 max=10\n---\n## s\n-> hit: when ((((((((((((((((((((((((((((((((((((((((((((((((x >= 3) and x != 0) and x != 1) and x != 2) and x != 3) and x != 4) and x != 5) and x != 6) and x != 7) and x != 8) and x != 9) and x != 0) and x != 1) and x != 2) and x != 3) and x != 4) and x != 5) and x != 6) and x != 7) and x != 8) and x != 9) and x != 0) and x != 1) and x != 2) and x != 3) and x != 4) and x != 5) and x != 6) and x != 7) and x != 8) and x != 9) and x != 0) and x != 1) and x != 2) and x != 3) and x != 4) and x != 5) and x != 6) and x != 7) and x != 8) and x != 9) and x != 0) and x != 1) and x != 2) and x != 3) and x != 4) and x != 5) and x != 6) and x != 7\n-> miss: else\n## hit\n## low\n## gone\n## miss\n",
+   "accepted": true,
+   "lowered": [
+    "when ((((((((((((((((((((((((((((((((((((((((((((((((x >= 3) and x != 0) and x != 1) and x != 2) and x != 3) and x != 4) and x != 5) and x != 6) and x != 7) and x != 8) and x != 9) and x != 0) and x != 1) and x != 2) and x != 3) and x != 4) and x != 5) and x != 6) and x != 7) and x != 8) and x != 9) and x != 0) and x != 1) and x != 2) and x != 3) and x != 4) and x != 5) and x != 6) and x != 7) and x != 8) and x != 9) and x != 0) and x != 1) and x != 2) and x != 3) and x != 4) and x != 5) and x != 6) and x != 7) and x != 8) and x != 9) and x != 0) and x != 1) and x != 2) and x != 3) and x != 4) and x != 5) and x != 6) and x != 7",
+    "else"
+   ],
+   "probes": [
+    {
+     "reading": {
+      "x": 3
+     },
+     "route": "miss"
+    },
+    {
+     "reading": {
+      "x": 2
+     },
+     "route": "miss"
+    }
+   ],
+   "refused_readings": [
+    {
+     "reading": {
+      "x": null
+     },
+     "field": "x",
+     "reason": "missing"
+    }
+   ]
+  },
+  {
+   "name": "depth_fifty_not_chain",
+   "flow": "---\nname: depth_fifty_not_chain\nstart: s\nfield.x: int min=0 max=10\n---\n## s\n-> hit: when not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not x >= 3\n-> miss: else\n## hit\n## low\n## gone\n## miss\n",
+   "accepted": true,
+   "lowered": [
+    "when not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not x >= 3",
+    "else"
+   ],
+   "probes": [
+    {
+     "reading": {
+      "x": 3
+     },
+     "route": "hit"
+    },
+    {
+     "reading": {
+      "x": 2
+     },
+     "route": "miss"
+    }
+   ],
+   "refused_readings": []
+  },
+  {
+   "name": "definition_split_on_python_whitespace",
+   "flow": "---\nname: definition_split_on_python_whitespace\nstart: s\nfield.x: int\u001fmin=0\u3000max=10\u001f\nfield.k: category\u2000absent=allowed\n---\n## s\n-> gone: when k == None\n-> hit: when x >= 5\n-> miss: else\n## hit\n## low\n## gone\n## miss\n",
+   "accepted": true,
+   "lowered": [
+    "when k == None",
+    "when x >= 5",
+    "else"
+   ],
+   "probes": [
+    {
+     "reading": {
+      "x": 5,
+      "k": "a"
+     },
+     "route": "hit"
+    },
+    {
+     "reading": {
+      "x": 4,
+      "k": "a"
+     },
+     "route": "miss"
+    },
+    {
+     "reading": {
+      "x": 9
+     },
+     "route": "gone"
+    }
+   ],
+   "refused_readings": [
+    {
+     "reading": {
+      "x": 11,
+      "k": "a"
+     },
+     "field": "x",
+     "reason": "out_of_range"
+    },
+    {
+     "reading": {
+      "x": 1,
+      "k": 3
+     },
+     "field": "k",
+     "reason": "wrong_type"
+    }
+   ]
+  },
+  {
+   "name": "depth_fifty_one_not_chain",
+   "flow": "---\nname: depth_fifty_one_not_chain\nstart: s\nfield.x: int\n---\n## s\n-> hit: when not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not x >= 3\n-> miss: else\n## hit\n## low\n## gone\n## miss\n",
+   "accepted": false,
+   "cause": "policy:not-level-m",
+   "causes": [
+    "policy:not-level-m"
+   ]
+  },
+  {
+   "name": "depth_fifty_two_not_chain",
+   "flow": "---\nname: depth_fifty_two_not_chain\nstart: s\nfield.x: int\n---\n## s\n-> hit: when not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not x >= 3\n-> miss: else\n## hit\n## low\n## gone\n## miss\n",
+   "accepted": false,
+   "cause": "policy:not-level-m",
+   "causes": [
+    "policy:not-level-m"
+   ]
+  },
+  {
+   "name": "depth_fifty_one_nested_right",
+   "flow": "---\nname: depth_fifty_one_nested_right\nstart: s\nfield.x: int\n---\n## s\n-> hit: when x != 8 and (x != 7 and (x != 6 and (x != 5 and (x != 4 and (x != 3 and (x != 2 and (x != 1 and (x != 0 and (x != 9 and (x != 8 and (x != 7 and (x != 6 and (x != 5 and (x != 4 and (x != 3 and (x != 2 and (x != 1 and (x != 0 and (x != 9 and (x != 8 and (x != 7 and (x != 6 and (x != 5 and (x != 4 and (x != 3 and (x != 2 and (x != 1 and (x != 0 and (x != 9 and (x != 8 and (x != 7 and (x != 6 and (x != 5 and (x != 4 and (x != 3 and (x != 2 and (x != 1 and (x != 0 and (x != 9 and (x != 8 and (x != 7 and (x != 6 and (x != 5 and (x != 4 and (x != 3 and (x != 2 and (x != 1 and (x != 0 and (x >= 3)))))))))))))))))))))))))))))))))))))))))))))))))\n-> miss: else\n## hit\n## low\n## gone\n## miss\n",
+   "accepted": false,
+   "cause": "policy:not-level-m",
+   "causes": [
+    "policy:not-level-m"
+   ]
+  },
+  {
+   "name": "depth_fifty_two_nested_left",
+   "flow": "---\nname: depth_fifty_two_nested_left\nstart: s\nfield.x: int\n---\n## s\n-> hit: when ((((((((((((((((((((((((((((((((((((((((((((((((((x >= 3) and x != 0) and x != 1) and x != 2) and x != 3) and x != 4) and x != 5) and x != 6) and x != 7) and x != 8) and x != 9) and x != 0) and x != 1) and x != 2) and x != 3) and x != 4) and x != 5) and x != 6) and x != 7) and x != 8) and x != 9) and x != 0) and x != 1) and x != 2) and x != 3) and x != 4) and x != 5) and x != 6) and x != 7) and x != 8) and x != 9) and x != 0) and x != 1) and x != 2) and x != 3) and x != 4) and x != 5) and x != 6) and x != 7) and x != 8) and x != 9) and x != 0) and x != 1) and x != 2) and x != 3) and x != 4) and x != 5) and x != 6) and x != 7) and x != 8) and x != 9\n-> miss: else\n## hit\n## low\n## gone\n## miss\n",
+   "accepted": false,
+   "cause": "policy:not-level-m",
+   "causes": [
+    "policy:not-level-m"
+   ]
+  },
+  {
+   "name": "definition_with_a_byte_order_mark",
+   "flow": "---\nname: definition_with_a_byte_order_mark\nstart: s\nfield.x: int\ufeffmin=0\n---\n## s\n-> hit: when x > 1\n-> miss: else\n## hit\n## low\n## gone\n## miss\n",
+   "accepted": false,
+   "cause": "policy:definition",
+   "causes": [
+    "policy:definition"
+   ]
+  },
+  {
    "name": "floor_with_greater",
    "flow": "---\nname: floor_with_greater\nstart: s\nfield.r: fixed scale=10000 unit=ratio rounding=floor min=0 max=10000\n---\n## s\n-> hit: when r > 0.85\n-> miss: else\n## hit\n## low\n## gone\n## miss\n",
    "accepted": false,

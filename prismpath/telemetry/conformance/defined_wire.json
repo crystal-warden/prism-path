@@ -498,6 +498,149 @@
      "bits": "01111"
     }
    ]
+  },
+  {
+   "name": "depth_fifty_nested_right",
+   "fields": {
+    "x": {
+     "cells": 12,
+     "absent_symbol": null
+    }
+   },
+   "probes": [
+    {
+     "reading": {
+      "x": 3
+     },
+     "symbols": {
+      "x": 4
+     },
+     "bits": "00011"
+    },
+    {
+     "reading": {
+      "x": 2
+     },
+     "symbols": {
+      "x": 3
+     },
+     "bits": "1011"
+    },
+    {
+     "reading": {
+      "x": 10
+     },
+     "symbols": {
+      "x": 11
+     },
+     "bits": "101011"
+    }
+   ]
+  },
+  {
+   "name": "depth_fifty_nested_left",
+   "fields": {
+    "x": {
+     "cells": 12,
+     "absent_symbol": null
+    }
+   },
+   "probes": [
+    {
+     "reading": {
+      "x": 3
+     },
+     "symbols": {
+      "x": 4
+     },
+     "bits": "00011"
+    },
+    {
+     "reading": {
+      "x": 2
+     },
+     "symbols": {
+      "x": 3
+     },
+     "bits": "1011"
+    }
+   ]
+  },
+  {
+   "name": "depth_fifty_not_chain",
+   "fields": {
+    "x": {
+     "cells": 2,
+     "absent_symbol": null
+    }
+   },
+   "probes": [
+    {
+     "reading": {
+      "x": 3
+     },
+     "symbols": {
+      "x": 1
+     },
+     "bits": "011"
+    },
+    {
+     "reading": {
+      "x": 2
+     },
+     "symbols": {
+      "x": 0
+     },
+     "bits": "11"
+    }
+   ]
+  },
+  {
+   "name": "definition_split_on_python_whitespace",
+   "fields": {
+    "k": {
+     "cells": 2,
+     "absent_symbol": 1
+    },
+    "x": {
+     "cells": 2,
+     "absent_symbol": null
+    }
+   },
+   "probes": [
+    {
+     "reading": {
+      "x": 5,
+      "k": "a"
+     },
+     "symbols": {
+      "k": 0,
+      "x": 1
+     },
+     "bits": "11011"
+    },
+    {
+     "reading": {
+      "x": 4,
+      "k": "a"
+     },
+     "symbols": {
+      "k": 0,
+      "x": 0
+     },
+     "bits": "1111"
+    },
+    {
+     "reading": {
+      "x": 9
+     },
+     "symbols": {
+      "k": 1,
+      "x": 1
+     },
+     "bits": "011011"
+    }
+   ]
   }
  ]
 }

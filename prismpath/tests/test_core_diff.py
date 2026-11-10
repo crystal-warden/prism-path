@@ -30,14 +30,10 @@ import core_diff  # noqa: E402
 CASES = 5000
 SEED = 7
 
-# The disagreements of spec section 9 that this step records and does not fix: D1 (the reference does
-# not apply the depth bound to a defined flow), D2 (Rust bounds depth by its own measure), D3 (Rust does
-# not treat U+001F as whitespace in a definition).
-KNOWN = {
-    ("python", "depth-bound-not-applied"),
-    ("rust", "depth-bound-not-applied"),
-    ("rust", "definition-whitespace-u001f"),
-}
+# The disagreements of spec section 9 that step 1 recorded, D1 (the reference did not apply the depth
+# bound to a defined flow), D2 (Rust bounded depth by its own measure) and D3 (Rust did not split a
+# definition on U+001F), are fixed in step 2: none is known any more, so each would fail this test.
+KNOWN = set()
 # D7: on a policy with several problems both sides refuse, each with a registered cause, but the leg's
 # own phases name another problem first than the specification's order (section 4). Any pair of causes.
 KNOWN_PREFIXES = ("policy-cause ",)

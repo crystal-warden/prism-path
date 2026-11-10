@@ -16,7 +16,8 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use crate::condition::{error_expr, expr_of, is_deterministic, is_error, is_semantic, parse_expr, tokenize_spanned, Ast, Tok, ALWAYS, NEVER};
+use crate::condition::{error_expr, expr_of, is_deterministic, is_error, is_semantic, parse_expr, predicate_depth, py_split, tokenize_spanned, Ast, Tok, ALWAYS, NEVER};
+use crate::value::MAX_DEPTH;
 use crate::level_m::{is_level_m, level_m_atoms};
 use crate::parser::Graph;
 use crate::value::Value;
@@ -134,7 +135,9 @@ pub fn parse_definition(name: &str, text: &str) -> Result<FieldDefinition, Strin
     if ENGINE_COUNTERS.contains(&name) {
         return Err(format!("field {name:?}: the engine supplies this counter, it is not defined"));
     }
-    let mut words = text.split_whitespace();
+    // Python's `str.split()`: U+001C to U+001F and the rest of Python's whitespace separate words, where
+    // `split_whitespace` (Unicode White_Space) would leave them inside one (D3)
+    let mut words = py_split(text);
     let kind_word = words.next().ok_or_else(|| format!("field {name:?}: the definition is empty"))?;
     let (kind, allowed): (DefinedKind, &[&str]) = match kind_word {
         "int" => (DefinedKind::Int, &["min", "max", "absent"]),
@@ -832,6 +835,9 @@ fn fragment_problems(graph: &Graph) -> Vec<Problem> {
             }
             let (member, reason) = is_level_m(cond);
             if member {
+                if predicate_depth(cond).is_some_and(|depth| depth > MAX_DEPTH) {
+                    problems.push(problem("policy:not-level-m", format!("{name}: {cond:?} is nested too deeply (> {MAX_DEPTH})")));
+                }
                 continue;
             }
             let cause = level_m_cause(cond, reason.as_deref());
@@ -870,6 +876,13 @@ pub fn policy_problems_caused(graph: &Graph, definitions: &BTreeMap<String, Fiel
                 if !unlowered || decided_without_definitions(cause, cond, reason.as_deref()) {
                     problems.push(problem(cause, format!("{name}: {cond:?} is outside Level M ({})", reason.unwrap_or_default())));
                 }
+                continue;
+            }
+            // SPEC section 4.1, by the reference's static measure (spec section 2.4, D2): the parser's own
+            // recursion bound measures something else, so a nested condition past 50 could load and then
+            // never match
+            if predicate_depth(cond).is_some_and(|depth| depth > MAX_DEPTH) {
+                problems.push(problem("policy:not-level-m", format!("{name}: {cond:?} is nested too deeply (> {MAX_DEPTH})")));
                 continue;
             }
             let Ok(atoms) = level_m_atoms(cond) else { continue };
