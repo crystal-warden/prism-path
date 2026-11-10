@@ -64,14 +64,14 @@ fn a_chain_signed_in_rust_test_code_verifies_like_one_signed_by_python() {
     let signer = key(7);
     let pinned = vec![signer.verifying_key().to_bytes().to_vec()];
     let events = [json!({"idx": 0, "id": "0", "ts": 1730800000.5, "actor": "a", "action": "decision", "data": {}})];
-    let leaf = sha256_hex(&canonical_bytes(&events[0]));
+    let leaf = sha256_hex(&canonical_bytes(&events[0]).unwrap());
     let first = statement(&signer, 0, 1, &leaf, "");
     let log = format!("{}\n", serde_json::to_string(&events[0]).unwrap());
     let report = verify_trail(&log, Some(&format!("{first}\n")), &pinned);
     assert_eq!((report.status, report.findings.len()), (SIGNED, 0));
-    assert_eq!(report.last_statement_sha256.as_deref(), Some(statement_hash(&first).as_str()));
+    assert_eq!(report.last_statement_sha256.as_deref(), statement_hash(&first).as_deref());
     // A second statement that names the first.
-    let second = statement(&signer, 1, 1, &leaf, &statement_hash(&first));
+    let second = statement(&signer, 1, 1, &leaf, &statement_hash(&first).unwrap());
     assert_eq!(verify_trail(&log, Some(&format!("{first}\n{second}\n")), &pinned).status, SIGNED);
     // The same chain read without its newline at the end, and with Windows line endings.
     assert_eq!(verify_trail(&log, Some(&format!("{first}\r\n{second}")), &pinned).status, SIGNED);
@@ -106,7 +106,7 @@ fn a_flow_manifest_with_a_boolean_version_is_bad_format() {
     let flow = b"---\nname: t\n---\n";
     let manifest = json!({"format": FLOW_MANIFEST_FORMAT, "flow": "t", "flow_sha256": sha256_hex(flow), "version": true,
                           "key_id": key_id_of(&authority.verifying_key().to_bytes()), "created": "2026-11-04T12:00:00+00:00"});
-    let signature = authority.sign(&canonical_bytes(&manifest)).to_bytes();
+    let signature = authority.sign(&canonical_bytes(&manifest).unwrap()).to_bytes();
     let verdict = verify_flow(flow, Some(&manifest.to_string()), Some(&signature), &[authority.verifying_key().to_bytes().to_vec()], &[], None);
     assert_eq!(verdict.causes, ["manifest:bad-format"]);
 }
@@ -117,7 +117,7 @@ fn a_flow_that_is_not_utf8_does_not_match_its_hash() {
     let flow = [0xffu8, 0xfe, b'\n'];
     let manifest = json!({"format": FLOW_MANIFEST_FORMAT, "flow": "t", "flow_sha256": sha256_hex(&flow), "version": 1,
                           "key_id": key_id_of(&authority.verifying_key().to_bytes()), "created": "x"});
-    let signature = authority.sign(&canonical_bytes(&manifest)).to_bytes();
+    let signature = authority.sign(&canonical_bytes(&manifest).unwrap()).to_bytes();
     let verdict = verify_flow(&flow, Some(&manifest.to_string()), Some(&signature), &[authority.verifying_key().to_bytes().to_vec()], &[], None);
     assert_eq!(verdict.causes, ["flow:sha256-mismatch"]);
 }
@@ -145,12 +145,12 @@ fn the_rust_audit_log_writes_leaves_the_verifier_reads_the_same() {
     let dir = std::env::temp_dir().join(format!("pp_receipt_edges_{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     let path = dir.join("swaps.log");
-    let mut log = AuditLog::open(path.to_str().unwrap());
-    log.append("policy_host", "swap", json!({"to_hash": "ab", "version": 1, "note": "caf\u{e9} \u{1d11e}", "ratio": 1e-7, "result": "accepted"}));
-    log.append("policy_host", "attest", json!({"ok": true}));
+    let log = AuditLog::open(path.to_str().unwrap()).unwrap();
+    log.append("policy_host", "swap", vec![("to_hash", json!("ab")), ("version", json!(1)), ("note", json!("caf\u{e9} \u{1d11e}")), ("ratio", json!(1e-7)), ("result", json!("accepted"))]).unwrap();
+    log.append("policy_host", "attest", vec![("ok", json!(true))]).unwrap();
     let text = std::fs::read_to_string(&path).unwrap();
     let view = AuditLogView::from_text(&text);
-    assert_eq!(view.leaves, log.leaves);
+    assert_eq!(view.leaves, log.leaves());
     assert_eq!(view.root_at(2), log.current_root());
     let report = verify_trail(&text, None, &[]);
     assert_eq!((report.status, report.log_leaves, report.unsigned_tail), (UNSIGNED, 2, 2));

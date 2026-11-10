@@ -213,6 +213,7 @@ fn extract_reading(event: &Value, order: &[String], field_paths: &HashMap<String
         let path = field_paths.get(field).map(String::as_str).unwrap_or(field);
         match walk_path(event, path) {
             Some(value) => {
+                // `event` was read by `parse_strict` above, so no number in it is beyond the double range
                 reading.insert(field.clone(), V::from_json(value));
             }
             None => missing.push(field.clone()),
@@ -278,7 +279,7 @@ pub fn scan_sample(codebook: Codebook, reader: &mut dyn BufRead, cfg: &Config)
             }
         }
         n_lines += 1;
-        let event: Value = match serde_json::from_str(line) {
+        let event: Value = match prismpath_rs::value::parse_strict(line) {
             Ok(Value::Object(object)) => Value::Object(object),
             _ => {
                 bad_json += 1;
@@ -622,6 +623,31 @@ start: classify
 ## ok
 ";
 
+    /// A scratch directory removed when it goes out of scope, a failed assertion included.
+    struct Scratch(std::path::PathBuf);
+
+    impl Scratch {
+        fn new(name: &str) -> Scratch {
+            let dir = std::env::temp_dir().join(format!("pp_preflight_{name}_{}", std::process::id()));
+            let _ = std::fs::remove_dir_all(&dir);
+            std::fs::create_dir_all(&dir).unwrap();
+            Scratch(dir)
+        }
+    }
+
+    impl Drop for Scratch {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    impl std::ops::Deref for Scratch {
+        type Target = std::path::Path;
+        fn deref(&self) -> &std::path::Path {
+            &self.0
+        }
+    }
+
     fn config(dir: &std::path::Path) -> Config {
         std::fs::create_dir_all(dir).unwrap();
         let flow = dir.join("flow.md");
@@ -640,7 +666,7 @@ start: classify
     // alone: anything else and a caller counting once and rendering twice would get two answers.
     #[test]
     fn scan_then_render_matches_the_whole_run() {
-        let dir = std::env::temp_dir().join(format!("ppf_split_{}", std::process::id()));
+        let dir = Scratch::new("split");
         let cfg = config(&dir);
         let sample = "{\"temp\": 95, \"armed\": true}\n{\"temp\": 10, \"armed\": false}\n";
         let codebook = Codebook::from_flow(&cfg).unwrap();
@@ -660,6 +686,5 @@ start: classify
         let whole = run(&Config { sample: sample_file.to_str().unwrap().to_string(), ..config(&dir) })
             .unwrap();
         assert_eq!(whole.markdown, render_markdown(&cfg, &scan));
-        std::fs::remove_dir_all(&dir).ok();
     }
 }

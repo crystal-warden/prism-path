@@ -46,9 +46,10 @@ pub fn flow_sha256(flow: &[u8]) -> Option<String> {
     Some(sha256_hex(universal_newlines(text).as_bytes()))
 }
 
-/// The manifest's content address: SHA-256 of the canonical bytes its signature covers.
-pub fn manifest_sha256(manifest: &Value) -> String {
-    sha256_hex(&canonical_bytes(manifest))
+/// The manifest's content address: SHA-256 of the canonical bytes its signature covers. `None` for a
+/// manifest with no canonical form (a number beyond the double range), which no strict reader yields.
+pub fn manifest_sha256(manifest: &Value) -> Option<String> {
+    canonical_bytes(manifest).ok().map(|bytes| sha256_hex(&bytes))
 }
 
 /// What a root statement and a receipt record as the authorization in force: the manifest hash, the
@@ -86,7 +87,7 @@ impl FlowVerdict {
     pub fn to_json(&self) -> Value {
         json!({
             "ok": self.ok, "causes": self.causes,
-            "manifest_sha256": self.manifest.as_ref().map(manifest_sha256),
+            "manifest_sha256": self.manifest.as_ref().and_then(manifest_sha256),
             "authorization": self.authorization(),
         })
     }
@@ -107,7 +108,7 @@ pub fn verify_flow(
     let (Some(manifest_text), Some(signature)) = (manifest_text, signature) else {
         return FlowVerdict::refuse(SIG_MISSING, None);
     };
-    let Ok(manifest) = serde_json::from_str::<Value>(manifest_text) else {
+    let Ok(manifest) = prismpath_rs::value::parse_strict(manifest_text) else {
         return FlowVerdict::refuse(MANIFEST_BAD_FORMAT, None);
     };
     let as_object = manifest.is_object().then(|| manifest.clone());
@@ -117,7 +118,9 @@ pub fn verify_flow(
     {
         return FlowVerdict::refuse(MANIFEST_BAD_FORMAT, as_object);
     }
-    let payload = canonical_bytes(&manifest);
+    let Ok(payload) = canonical_bytes(&manifest) else {
+        return FlowVerdict::refuse(MANIFEST_BAD_FORMAT, as_object);
+    };
     let signer_id = trusted
         .iter()
         .find(|public| verify_ed25519(public, &payload, signature))
@@ -155,7 +158,7 @@ pub struct VersionFloor {
 impl VersionFloor {
     /// Read the floor file's text (a JSON object of flow name to entry).
     pub fn from_json_str(text: &str) -> Result<VersionFloor, String> {
-        match serde_json::from_str::<Value>(text).map_err(|error| error.to_string())? {
+        match prismpath_rs::value::parse_strict(text).map_err(|error| error.to_string())? {
             Value::Object(entries) => Ok(VersionFloor { entries }),
             _ => Err("the version floor is not a JSON object".to_string()),
         }
@@ -194,9 +197,10 @@ impl VersionFloor {
             }
         }
         let flow_hash = manifest.get("flow_sha256").ok_or("the manifest has no flow_sha256")?.clone();
+        let manifest_hash = manifest_sha256(manifest).ok_or("the manifest has no canonical form")?;
         self.entries.insert(
             name,
-            json!({"version": version, "flow_sha256": flow_hash, "manifest_sha256": manifest_sha256(manifest)}),
+            json!({"version": version, "flow_sha256": flow_hash, "manifest_sha256": manifest_hash}),
         );
         Ok(())
     }

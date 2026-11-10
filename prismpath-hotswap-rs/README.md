@@ -16,9 +16,15 @@ uses the same stable reason strings the Python tests pin (`sig:missing`, `image:
 `version:not-monotonic`, and the rest). Run `cargo test` in this directory; CI runs the tests and
 clippy for this crate.
 
-**What is here.** `src/lib.rs` (pack build and verify), `src/host.rs` (the PolicyHost: verify,
-envelope, version floor, stage, atomic flip, one audit event per attempt), and the receipt verifiers
-described next.
+**What is here.** `src/lib.rs` (pack build and verify), `src/host.rs` (the PolicyHost and the audit
+log: verify, envelope, version floor, stage, then the commit in the reference's order, intent record,
+floor, audit event, the new image `active-<sha256>.ppt`, the record naming it, clean up; a rollback commits the same way;
+a fresh host restores the active policy and records an interrupted commit; every audit event is fsynced before it has a leaf and a
+write that fails is an `AuditWriteError`). The host trace corpus `prismpath/portable/conformance/host_trace.json`
+is generated from the Python host, `tests/test_host_trace.rs` replays it byte for byte,
+`tests/test_host_crash.rs` stops a swap and a rollback before each step, and `tests/test_host_cross_language.rs`
+has each runtime open the other's state directory.
+The receipt verifiers described next sit beside the host.
 
 ## Verifying receipts the Python engine produced
 
@@ -87,9 +93,10 @@ Rust function returns an `invalid` result with the same `problem` text (`bundle_
 `Err`. `Err` is left for the cases where the reference still raises, a statement whose `key_id` is not
 text, or is a list or object while a key is pinned.
 
-**Limits of the number reading.** JSON integers beyond the 64 bit range and the literals `NaN` and
-`Infinity` are not read as Python reads them (an event holding one is a skipped log line, and a
-statement holding one is unreadable, both reported). Floats are written as Python's `repr` writes
+**The number reading.** Documents are read as `prismpath.canon.loads` reads them: the literals `NaN` and
+`Infinity` and a number beyond the double range are refused (an event holding one is a skipped log line, a
+statement holding one is unreadable, and a manifest holding one is `manifest:bad-format`, all reported),
+and an integer of any width is kept and written digit for digit. Floats are written as Python's `repr` writes
 them (`prismpath_rs::durable::py_float_repr`), and the crate reads them with serde_json's
 `float_roundtrip`, so a receipt's `ts` hashes to the same leaf on both sides.
 

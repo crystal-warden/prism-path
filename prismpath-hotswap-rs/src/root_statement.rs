@@ -58,20 +58,23 @@ pub fn fingerprint(key_id: &str) -> String {
 }
 
 /// The bytes the signature covers: the domain prefix, then every field but `sig`, canonical.
-/// `None` when a field is missing (a statement that is not well formed has no signed bytes).
+/// `None` when a field is missing, or a value has no canonical form (a statement that is not well formed has
+/// no signed bytes).
 pub fn signed_bytes(statement: &Value) -> Option<Vec<u8>> {
     let mut body = Map::new();
     for field in BODY_FIELDS {
         body.insert(field.to_string(), statement.get(field)?.clone());
     }
     let mut bytes = SIGNING_DOMAIN.to_vec();
-    bytes.extend(canonical_bytes(&Value::Object(body)));
+    bytes.extend(canonical_bytes(&Value::Object(body)).ok()?);
     Some(bytes)
 }
 
-/// The statement's content address, signature included: what the next statement names as `prev`.
-pub fn statement_hash(statement: &Value) -> String {
-    sha256_hex(&canonical_bytes(statement))
+/// The statement's content address, signature included: what the next statement names as `prev`. `None`
+/// for a statement with no canonical form (a number beyond the double range), which no strict reader
+/// yields; `prismpath.canon.CanonicalError` is the same refusal in Python.
+pub fn statement_hash(statement: &Value) -> Option<String> {
+    canonical_bytes(statement).ok().map(|bytes| sha256_hex(&bytes))
 }
 
 fn is_empty_object(value: &Value) -> bool {
@@ -103,7 +106,7 @@ pub fn read_statements_text(text: &str) -> (Vec<Value>, Vec<Value>) {
     }
     let (mut statements, mut findings) = (Vec::new(), Vec::new());
     for (index, line) in lines.iter().enumerate() {
-        match serde_json::from_str::<Value>(line) {
+        match prismpath_rs::value::parse_strict(line) {
             Ok(record @ Value::Object(_)) => statements.push(record),
             _ if index == lines.len() - 1 => findings.push(json!({"finding": "interrupted_statement", "line": index + 1})),
             _ => {
@@ -236,7 +239,7 @@ pub fn verify_chain(
             if !is_empty_object(statement) {
                 findings.push(json!({"finding": "bad_format", "statement": index}));
             }
-            prev_hash = if is_empty_object(statement) { String::new() } else { statement_hash(statement) };
+            prev_hash = if is_empty_object(statement) { String::new() } else { statement_hash(statement).unwrap_or_default() };
             continue;
         }
         let seq = py_int(&statement["seq"]).expect("well formed");
@@ -270,7 +273,7 @@ pub fn verify_chain(
             let from = *mismatch_from.get_or_insert(prev_leaves.min(leaves));
             findings.push(json!({"finding": "root_mismatch", "statement": seq, "leaf_range": [from, leaves - 1]}));
         }
-        prev_hash = statement_hash(statement);
+        prev_hash = statement_hash(statement).unwrap_or_default();
         prev_leaves = leaves;
     }
     if !pinned_ids.is_empty() && statements.is_empty() {
@@ -298,7 +301,7 @@ pub fn verify_chain(
         unsigned_tail: if statements.is_empty() { total_leaves } else { (total_leaves as i128 - i128::from(signed_leaves)).max(0) as usize },
         keys: key_ids.iter().map(|key_id| fingerprint(key_id)).collect(),
         pinned: !pinned_ids.is_empty(),
-        last_statement_sha256: last.map(statement_hash),
+        last_statement_sha256: last.and_then(statement_hash),
         findings,
     }
 }
@@ -324,12 +327,16 @@ impl AuditLogView {
             if line.is_empty() {
                 continue;
             }
-            match serde_json::from_str::<Value>(line) {
-                Ok(event) => {
-                    view.leaves.push(sha256_hex(&canonical_bytes(&event)));
+            // Read as `canon.loads` reads, so a line holding NaN or a number beyond the double range is a line
+            // that is not JSON, and every event read here has a canonical form.
+            match prismpath_rs::value::parse_strict(line).ok().and_then(|event| {
+                canonical_bytes(&event).ok().map(|bytes| (sha256_hex(&bytes), event))
+            }) {
+                Some((leaf, event)) => {
+                    view.leaves.push(leaf);
                     view.events.push(event);
                 }
-                Err(_) => view.skipped.push(index + 1),
+                None => view.skipped.push(index + 1),
             }
         }
         view
@@ -512,7 +519,7 @@ pub fn verify_receipt_bundle(bundle: &Value, pinned: &[Vec<u8>]) -> Result<Bundl
     let statement = &bundle["statement"];
     let index = &bundle["index"];
     let index_int = index.as_i64().map(i128::from).or_else(|| index.as_u64().map(i128::from)).expect("checked");
-    let leaf = sha256_hex(&canonical_bytes(&bundle["receipt"]));
+    let leaf = sha256_hex(&canonical_bytes(&bundle["receipt"]).map_err(|error| error.to_string())?);
     let leaf_hex = bundle["leaf"].as_str().expect("checked");
     let leaf_matches = leaf_hex == leaf;
     let index_matches = idx_equals(bundle["receipt"].get("idx"), index_int);
@@ -556,7 +563,7 @@ pub fn verify_receipt_bundle(bundle: &Value, pinned: &[Vec<u8>]) -> Result<Bundl
         pinned_check,
         index: index.clone(),
         statement: statement.get("seq").cloned().unwrap_or(Value::Null),
-        statement_sha256: Some(statement_hash(statement)),
+        statement_sha256: statement_hash(statement),
         key,
         problem: None,
     })

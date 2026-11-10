@@ -19,7 +19,7 @@
 //! across runtimes, only public keys and signatures are).
 
 use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
-use prismpath_rs::durable::py_canonical_string;
+use prismpath_rs::durable::{try_py_canonical_string, CanonicalError};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
@@ -38,6 +38,15 @@ pub const ATOM_SIZE: usize = 8; // <HBBi
 pub const NODE_SIZE: usize = 4; // <HH
 pub const EDGE_SIZE: usize = 6; // <HHH
 pub const WORD_SIZE: usize = 2; // <H
+/// The 12th header word (offset 26) is split: the low byte is flags, the high byte is `safe_node`
+/// (a fail-safe node index; 0 is undeclared). Bit 0 appends a per-node attribute section (one
+/// uint16 per node) after the program, bit 2 a per-node uint32 name hash after that.
+pub const FLAG_NODE_ATTR: u8 = 0x01;
+pub const FLAG_MIGRATE_BY_NAME: u8 = 0x02;
+pub const FLAG_NODE_NAMES: u8 = 0x04;
+pub const FLAG_STATEFUL: u8 = 0x08;
+/// The fabric materialization envelope of a node attribute: 6 bits.
+const NODE_ATTR_MAX: u16 = 0x3F;
 const PROG_OPCODES: [u16; 5] = [0x8000, 0x8001, 0x8002, 0x8003, 0x8004]; // NOT AND OR TRUE FALSE
 
 pub const PACK_FORMAT: &str = "ppt-pack/1";
@@ -51,8 +60,10 @@ pub fn default_caps() -> BTreeMap<String, u64> {
         .collect()
 }
 
-pub fn canonical_bytes(obj: &Value) -> Vec<u8> {
-    py_canonical_string(obj, false).into_bytes()
+/// The compact canonical bytes a signature is computed over. A value with no canonical form (a number
+/// beyond the double range) is refused with `CanonicalError`.
+pub fn canonical_bytes(obj: &Value) -> Result<Vec<u8>, CanonicalError> {
+    try_py_canonical_string(obj, false).map(String::into_bytes)
 }
 
 pub fn sha256_hex(data: &[u8]) -> String {
@@ -84,9 +95,26 @@ pub struct PptHeader {
     pub visits_idx: u16,
     pub max_steps: u16,
     pub max_stack: u16,
+    /// Low byte of the 12th word.
+    pub flags: u8,
+    /// High byte of the 12th word: the signed fail-safe node, 0 when undeclared.
+    pub safe_node: u8,
+    pub migrate_by_name: bool,
+    pub stateful: bool,
 }
 
 impl PptHeader {
+    /// The header as the dict `read_ppt_header` returns, the `counts` member of the active policy record.
+    pub fn to_value(&self) -> Value {
+        json!({
+            "fields": self.fields, "interns": self.interns, "atoms": self.atoms, "nodes": self.nodes,
+            "edges": self.edges, "prog_words": self.prog_words, "start": self.start,
+            "visits_idx": self.visits_idx, "max_steps": self.max_steps, "max_stack": self.max_stack,
+            "flags": self.flags, "safe_node": self.safe_node,
+            "migrate_by_name": self.migrate_by_name, "stateful": self.stateful,
+        })
+    }
+
     pub fn count(&self, key: &str) -> u64 {
         match key {
             "atoms" => self.atoms as u64,
@@ -107,7 +135,8 @@ fn u32le(bytes: &[u8], off: usize) -> u32 {
     u32::from_le_bytes([bytes[off], bytes[off + 1], bytes[off + 2], bytes[off + 3]])
 }
 
-/// Parse the 28-byte header; stable-reason error strings match the reference exactly.
+/// Parse the 28-byte header; stable-reason error strings match the reference exactly. The 12th word
+/// is split into flags (low byte) and `safe_node` (high byte).
 pub fn read_ppt_header(data: &[u8]) -> Result<PptHeader, String> {
     if data.len() < HEADER_SIZE {
         return Err("image:truncated-header".to_string());
@@ -118,6 +147,8 @@ pub fn read_ppt_header(data: &[u8]) -> Result<PptHeader, String> {
     if u16le(data, 4) != FORMAT_VERSION {
         return Err("image:bad-version".to_string());
     }
+    let flag_word = u16le(data, 26);
+    let flags = (flag_word & 0x00FF) as u8;
     Ok(PptHeader {
         fields: u16le(data, 6),
         interns: u16le(data, 8),
@@ -129,6 +160,10 @@ pub fn read_ppt_header(data: &[u8]) -> Result<PptHeader, String> {
         visits_idx: u16le(data, 20),
         max_steps: u16le(data, 22),
         max_stack: u16le(data, 24),
+        flags,
+        safe_node: (flag_word >> 8) as u8,
+        migrate_by_name: flags & FLAG_MIGRATE_BY_NAME != 0,
+        stateful: flags & FLAG_STATEFUL != 0,
     })
 }
 
@@ -142,16 +177,28 @@ pub fn validate_image(data: &[u8], caps: Option<&BTreeMap<String, u64>>) -> (boo
         Err(error) => return (false, vec![error]),
     };
 
-    let need = HEADER_SIZE
+    if header.safe_node != 0 && u16::from(header.safe_node) >= header.nodes {
+        reasons.push("image:safe-node-oob".to_string()); // a signed fail-safe must name a real node
+    }
+
+    let mut need = HEADER_SIZE
         + ATOM_SIZE * header.atoms as usize
         + NODE_SIZE * header.nodes as usize
         + EDGE_SIZE * header.edges as usize
         + WORD_SIZE * header.prog_words as usize;
+    if header.flags & FLAG_NODE_ATTR != 0 {
+        need += WORD_SIZE * header.nodes as usize; // one uint16 attribute per node
+    }
+    if header.flags & FLAG_NODE_NAMES != 0 {
+        need += 4 * header.nodes as usize; // one uint32 name hash per node, after the attributes
+    }
     if data.len() != need {
-        return (false, vec!["image:length-mismatch".to_string()]);
+        reasons.push("image:length-mismatch".to_string());
+        return (false, reasons);
     }
 
-    if let Some(caps) = caps {
+    // an empty caps object is falsy in the reference, so it checks nothing
+    if let Some(caps) = caps.filter(|caps| !caps.is_empty()) {
         let defaults = default_caps();
         for key in ["atoms", "nodes", "edges", "prog_words", "max_steps", "max_stack"] {
             let cap = caps.get(key).copied().unwrap_or_else(|| defaults[key]);
@@ -197,8 +244,41 @@ pub fn validate_image(data: &[u8], caps: Option<&BTreeMap<String, u64>>) -> (boo
             reasons.push(format!("image:atom-index-oob:word{word_index}"));
         }
     }
+    if header.flags & FLAG_NODE_ATTR != 0 {
+        for node_index in 0..header.nodes as usize {
+            if u16le(data, off) > NODE_ATTR_MAX {
+                reasons.push(format!("image:node-attr-oob:node{node_index}"));
+            }
+            off += WORD_SIZE;
+        }
+    }
 
     (reasons.is_empty(), reasons)
+}
+
+/// Per-evaluate worst-case cycle bound: the maximum over nodes of the sum over that node's edges of
+/// `2 + max(prog_words, 1)`, plus 2 (the reference's `wcet_cycles`). Reads only the node and edge
+/// tables, and refuses an image too short to hold them instead of reading past the end (the
+/// reference raises there).
+pub fn wcet_cycles(data: &[u8]) -> Result<u64, String> {
+    let header = read_ppt_header(data)?;
+    let nodes_off = HEADER_SIZE + ATOM_SIZE * header.atoms as usize;
+    let edges_off = nodes_off + NODE_SIZE * header.nodes as usize;
+    if data.len() < edges_off + EDGE_SIZE * header.edges as usize {
+        return Err("image:length-mismatch".to_string());
+    }
+    let edge_cnt: Vec<u64> =
+        (0..header.edges as usize).map(|index| u64::from(u16le(data, edges_off + index * EDGE_SIZE + 4))).collect();
+    let mut worst = 0u64;
+    for index in 0..header.nodes as usize {
+        let (edge_off, edge_count) = (u16le(data, nodes_off + index * NODE_SIZE) as usize, u16le(data, nodes_off + index * NODE_SIZE + 2) as usize);
+        // slice bounds clamp, as Python's edge_pcnt[eoff:eoff + ecnt] does
+        let start = edge_off.min(edge_cnt.len());
+        let end = (edge_off + edge_count).min(edge_cnt.len());
+        let sum: u64 = edge_cnt[start..end].iter().map(|words| 2 + (*words).max(1)).sum();
+        worst = worst.max(sum + 2);
+    }
+    Ok(worst)
 }
 
 // ------------------------------------------------------------------ keys
@@ -268,11 +348,35 @@ pub fn build_manifest(
         "counts": {"atoms": header.atoms, "nodes": header.nodes, "edges": header.edges,
                    "prog_words": header.prog_words, "max_steps": header.max_steps,
                    "max_stack": header.max_stack},
+        "wcet_cycles": wcet_cycles(image)?, // per-evaluate worst case, signed with the policy
         "version": version,
         "envelope_id": envelope_id,
         "key_id": key_id,
         "created": created,
     }))
+}
+
+/// What a pack can carry beyond the image, the field dictionary and the version, all of it covered
+/// by the manifest signature.
+#[derive(Debug, Clone, Default)]
+pub struct PackOptions {
+    /// sha256 (hex) of the baked `<ppt>.spiral` sidecar; declares the `spiral` packing profile.
+    pub spiral_sidecar_sha256: Option<String>,
+    /// The policy of record this pack temporarily overrides; changes nothing about verification.
+    pub overlay_of: Option<String>,
+    /// The authored flow the image was compiled from. When it defines fields they become the
+    /// manifest's field dictionary (an explicit one must match) and `flow_sha256` records the text.
+    pub flow_text: Option<String>,
+}
+
+/// The manifest field dictionary of a flow that defines its fields: each name with its definition in
+/// canonical spelling. Refuses a flow that breaks its definitions or defines none.
+pub fn field_dictionary_of(flow_text: &str) -> Result<BTreeMap<String, String>, String> {
+    let graph = prismpath_rs::parser::parse_checked(flow_text)?;
+    if graph.fields.is_empty() {
+        return Err("the flow defines no fields, so there is no definition to bind; pass the field dictionary explicitly".to_string());
+    }
+    Ok(graph.fields.iter().map(|(name, definition)| (name.clone(), definition.canonical_text())).collect())
 }
 
 /// Sign a `.ppt` into a pack: `<ppt>.manifest.json` + `<ppt>.manifest.sig` beside the untouched
@@ -286,14 +390,52 @@ pub fn build_pack(
     pub_path: &str,
     created: &str,
 ) -> Result<Value, String> {
+    build_pack_with(ppt_path, fields, version, envelope_id, priv_path, pub_path, created, &PackOptions::default())
+}
+
+/// `build_pack` with the optional manifest members of the reference: `packing`, `overlay_of`, and the
+/// flow-derived field dictionary with `flow_sha256`.
+#[allow(clippy::too_many_arguments)]
+pub fn build_pack_with(
+    ppt_path: &str,
+    fields: &BTreeMap<String, String>,
+    version: i64,
+    envelope_id: &str,
+    priv_path: &str,
+    pub_path: &str,
+    created: &str,
+    options: &PackOptions,
+) -> Result<Value, String> {
+    let mut fields = fields.clone();
+    let mut flow_sha256 = None;
+    if let Some(flow_text) = &options.flow_text {
+        let derived = field_dictionary_of(flow_text)?;
+        if !fields.is_empty() && fields != derived {
+            return Err(format!("the field dictionary {fields:?} differs from the flow's own definitions {derived:?}"));
+        }
+        fields = derived;
+        flow_sha256 = Some(sha256_hex(flow_text.as_bytes()));
+    }
     let image = std::fs::read(ppt_path).map_err(|error| error.to_string())?;
     let (ok, reasons) = validate_image(&image, None);
     if !ok {
         return Err(format!("refusing to sign an invalid image: {}", reasons.join(",")));
     }
     let (_pub, key_id) = load_public(pub_path)?;
-    let manifest = build_manifest(&image, fields, version, envelope_id, &key_id, created)?;
-    let sig = load_private(priv_path)?.sign(&canonical_bytes(&manifest));
+    let mut manifest = build_manifest(&image, &fields, version, envelope_id, &key_id, created)?;
+    let members = manifest.as_object_mut().expect("a manifest is an object");
+    if let Some(sidecar_sha256) = options.spiral_sidecar_sha256.as_ref().filter(|digest| !digest.is_empty()) {
+        members.insert("packing".to_string(), json!({"profile": "spiral", "sidecar_sha256": sidecar_sha256}));
+    } else if options.spiral_sidecar_sha256.is_some() {
+        return Err("packing: only {'profile': 'spiral', 'sidecar_sha256': ...} is defined".to_string());
+    }
+    if let Some(overlay_of) = options.overlay_of.as_ref().filter(|name| !name.is_empty()) {
+        members.insert("overlay_of".to_string(), json!(overlay_of));
+    }
+    if let Some(flow_sha256) = flow_sha256 {
+        members.insert("flow_sha256".to_string(), json!(flow_sha256));
+    }
+    let sig = load_private(priv_path)?.sign(&canonical_bytes(&manifest).map_err(|error| error.to_string())?);
     std::fs::write(
         format!("{ppt_path}.manifest.json"),
         serde_json::to_string_pretty(&manifest).map_err(|error| error.to_string())? + "\n",
@@ -301,6 +443,18 @@ pub fn build_pack(
     .map_err(|error| error.to_string())?;
     std::fs::write(format!("{ppt_path}.manifest.sig"), sig.to_bytes()).map_err(|error| error.to_string())?;
     Ok(manifest)
+}
+
+/// Python's `recorded == count` for a JSON value against a non-negative integer: `12`, `12.0` and
+/// `true` (for 1) are all equal in Python, a string or null never is.
+fn py_number_equals(recorded: &Value, count: u64) -> bool {
+    match recorded {
+        Value::Number(number) => {
+            number.as_u64().map_or_else(|| number.as_f64().is_some_and(|float| float == count as f64), |exact| exact == count)
+        }
+        Value::Bool(flag) => u64::from(*flag) == count,
+        _ => false,
+    }
 }
 
 /// The Authorized gate. Same pipeline + stable reason strings as the reference:
@@ -312,18 +466,28 @@ pub fn verify_pack(
 ) -> (bool, Vec<String>, Option<Value>) {
     let man_path = format!("{ppt_path}.manifest.json");
     let sig_path = format!("{ppt_path}.manifest.sig");
-    let (Ok(man_text), Ok(sig_bytes)) = (std::fs::read_to_string(&man_path), std::fs::read(&sig_path))
-    else {
+    if !std::path::Path::new(&man_path).exists() || !std::path::Path::new(&sig_path).exists() {
         return (false, vec!["sig:missing".to_string()], None);
+    }
+    let (Ok(man_bytes), Ok(sig_bytes)) = (std::fs::read(&man_path), std::fs::read(&sig_path)) else {
+        return (false, vec!["sig:missing".to_string()], None); // present but unreadable: no signature to use
     };
-    let Ok(manifest) = serde_json::from_str::<Value>(&man_text) else {
-        return (false, vec!["sig:missing".to_string()], None);
+    // The registry's `manifest:bad-format` is "manifest unparseable": text that is not UTF-8 or JSON, holds
+    // NaN, Infinity or a number beyond the double range, or is not an object, is that refusal with no manifest.
+    let Some(manifest) = String::from_utf8(man_bytes)
+        .ok()
+        .and_then(|man_text| prismpath_rs::value::parse_strict(&man_text).ok())
+        .filter(|parsed| parsed.is_object())
+    else {
+        return (false, vec!["manifest:bad-format".to_string()], None);
     };
     if manifest.get("format").and_then(|value| value.as_str()) != Some(PACK_FORMAT) {
         return (false, vec!["manifest:bad-format".to_string()], Some(manifest));
     }
 
-    let payload = canonical_bytes(&manifest);
+    let Ok(payload) = canonical_bytes(&manifest) else {
+        return (false, vec!["manifest:bad-format".to_string()], Some(manifest));
+    };
     let Ok(sig_arr): Result<[u8; 64], _> = sig_bytes.as_slice().try_into() else {
         return (false, vec!["sig:invalid".to_string()], Some(manifest));
     };
@@ -357,9 +521,30 @@ pub fn verify_pack(
         Err(error) => return (false, vec![error], Some(manifest)),
     };
     for count_name in ["atoms", "nodes", "edges", "prog_words", "max_steps", "max_stack"] {
-        if manifest.get("counts").and_then(|counts| counts.get(count_name)).and_then(|value| value.as_u64()) != Some(header.count(count_name))
-        {
+        let recorded = manifest.get("counts").and_then(|counts| counts.get(count_name));
+        if !recorded.is_some_and(|value| py_number_equals(value, header.count(count_name))) {
             return (false, vec![format!("manifest:count-mismatch:{count_name}")], Some(manifest));
+        }
+    }
+    if let Some(recorded) = manifest.get("wcet_cycles") {
+        // recomputed from the image, independently of the signer
+        let recomputed = match wcet_cycles(&image) {
+            Ok(cycles) => cycles,
+            Err(error) => return (false, vec![error], Some(manifest)),
+        };
+        if !py_number_equals(recorded, recomputed) {
+            return (false, vec!["manifest:wcet-mismatch".to_string()], Some(manifest));
+        }
+    }
+    if let Some(packing) = manifest.get("packing") {
+        if packing.get("profile").and_then(|value| value.as_str()) != Some("spiral") {
+            return (false, vec!["packing:unknown-profile".to_string()], Some(manifest));
+        }
+        let Ok(sidecar) = std::fs::read(format!("{ppt_path}.spiral")) else {
+            return (false, vec!["spiral:sidecar-missing".to_string()], Some(manifest));
+        };
+        if packing.get("sidecar_sha256").and_then(|value| value.as_str()) != Some(sha256_hex(&sidecar).as_str()) {
+            return (false, vec!["spiral:sidecar-hash-mismatch".to_string()], Some(manifest));
         }
     }
     (true, Vec::new(), Some(manifest))
@@ -390,7 +575,7 @@ pub fn build_envelope(
         "require_level_m": true,
         "key_id": key_id,
     });
-    let sig = load_private(priv_path)?.sign(&canonical_bytes(&env));
+    let sig = load_private(priv_path)?.sign(&canonical_bytes(&env).map_err(|error| error.to_string())?);
     std::fs::create_dir_all(out_dir).map_err(|error| error.to_string())?;
     let base = format!("{out_dir}/{envelope_id}.envelope");
     std::fs::write(
@@ -410,14 +595,16 @@ pub fn load_envelope(base_path: &str, pubkey_paths: &[String]) -> (Option<Value>
     ) else {
         return (None, vec!["envelope:missing".to_string()]);
     };
-    let Ok(env) = serde_json::from_str::<Value>(&text) else {
+    let Ok(env) = prismpath_rs::value::parse_strict(&text) else {
         return (None, vec!["envelope:missing".to_string()]);
     };
     let Ok(sig_arr): Result<[u8; 64], _> = sig_bytes.as_slice().try_into() else {
         return (None, vec!["envelope:sig-invalid".to_string()]);
     };
     let sig = Signature::from_bytes(&sig_arr);
-    let payload = canonical_bytes(&env);
+    let Ok(payload) = canonical_bytes(&env) else {
+        return (None, vec!["envelope:sig-invalid".to_string()]);
+    };
     for path in pubkey_paths {
         if let Ok((pubkey, _)) = load_public(path) {
             if pubkey.verify(&payload, &sig).is_ok() {
