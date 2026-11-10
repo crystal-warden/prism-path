@@ -39,6 +39,7 @@ BOUNDARY = "the signed policy pack delivered to this host"
 # ============================================================================
 
 from adapters.compliance import emit
+from prismpath import canon
 from prismpath.hotswap import policy_pack
 from prismpath.hotswap.policy_host import PolicyHost
 from prismpath.ledgers import ledger_airgap
@@ -111,12 +112,26 @@ def _open_host_copy(paths, workdir):
     return PolicyHost(state_copy, paths["pubkeys"], envelope), None
 
 
+def active_image_path(state_dir):
+    """The stored copy of the active image: the file the host's record names (`active-<sha256>.ppt`), or
+    `active.ppt` for a state directory in the old layout or with no readable record."""
+    name = "active.ppt"
+    try:
+        with open(os.path.join(state_dir, "active_policy.json"), encoding="utf-8") as handle:
+            recorded = canon.load(handle).get("image_file", name)
+        if isinstance(recorded, str) and os.path.basename(recorded) == recorded:
+            name = recorded
+    except (OSError, ValueError, AttributeError):
+        pass
+    return os.path.join(state_dir, name)
+
+
 def check_host_attests_pack(paths, manifest, workdir):
     host, problem = _open_host_copy(paths, os.path.join(workdir, "attest"))
     if host is None:
         return _fail(problem)
     active = host.active().get("active")
-    on_disk = os.path.join(paths["state"], "active.ppt")
+    on_disk = active_image_path(paths["state"])
     disk_hash = _sha256_file(on_disk) if os.path.exists(on_disk) else None
     if active != manifest["image_sha256"] or disk_hash != manifest["image_sha256"]:
         return _fail("the host attests %s and its stored image hashes to %s, but the verified pack is %s" % (

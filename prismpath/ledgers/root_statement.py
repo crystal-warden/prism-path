@@ -300,7 +300,7 @@ def read_statements(path: str) -> Tuple[List[dict], List[dict]]:
     statements, findings = [], []
     for index, line in enumerate(raw_lines):
         try:
-            record = json.loads(line)
+            record = canon.loads(line)
             if not isinstance(record, dict):
                 raise ValueError("not an object")
         except ValueError:

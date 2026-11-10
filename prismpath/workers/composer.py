@@ -38,6 +38,7 @@ from typing import List, Optional
 from prismpath.hotswap import flow_authority
 from prismpath.ledgers import checkpoint
 from prismpath.kernel import predicates
+from prismpath import canon
 from prismpath.canon import atomic_write as _atomic_write, safe_name as _safe
 from prismpath.ledgers.checkpoint import load_checkpoint, run_durable, resume
 
@@ -62,7 +63,7 @@ def item_id(item, field: Optional[str] = None) -> str:
         return str(item[field])
     if isinstance(item, (str, int, float, bool)):
         return str(item)
-    blob = json.dumps(item, sort_keys=True, default=str).encode()
+    blob = canon.canonical_spaced(item, default=str)
     return "h" + hashlib.sha256(blob).hexdigest()[:16]
 
 
@@ -125,7 +126,7 @@ def _mark_child_error(child_ckpt_path: str, base: dict, reason: str) -> dict:
                "flow_hash": cp.get("flow_hash", ""), "state": cp.get("state", {}),
                "path": cp.get("path", [])})
     os.makedirs(os.path.dirname(child_ckpt_path), exist_ok=True)
-    _atomic_write(child_ckpt_path, json.dumps(cp, indent=2))
+    _atomic_write(child_ckpt_path, canon.dumps_strict(cp, indent=2))
     return cp
 
 
@@ -235,7 +236,7 @@ def _inject_and_resume(parent_ckpt_path: str, node: str, agg: dict, event: str, 
     cp = load_checkpoint(parent_ckpt_path)
     state = cp.setdefault("state", {})
     state.setdefault("_spawned", {})[node] = agg
-    _atomic_write(parent_ckpt_path, json.dumps(cp, indent=2))
+    _atomic_write(parent_ckpt_path, canon.dumps_strict(cp, indent=2))
     return resume(parent_ckpt_path, agent, router=router, event=event, human_floor=human_floor, policy=policy)
 
 

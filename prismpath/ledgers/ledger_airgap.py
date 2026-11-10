@@ -131,7 +131,7 @@ def export_stamp_request(roots, out_bundle, policy_hash=None, gate_id=None, inge
         entries.append(provenance_manifest(root_hex, label, policy_hash, gate_id, ingestion_hashes))
     req = {"kind": "cw-stamp-request", "created": _now_iso(), "n": len(entries), "entries": entries}
     with open(os.path.join(staging, "request.json"), "w") as handle:
-        json.dump(req, handle, indent=1)
+        handle.write(canon.dumps_strict(req, indent=1))
     with tarfile.open(out_bundle, "w:gz") as archive:
         archive.add(staging, arcname="cw-stamp-request")
     shutil.rmtree(staging)
@@ -154,7 +154,8 @@ def relay_stamp(request_bundle, out_bundle):
     with tarfile.open(request_bundle, "r:gz") as archive:
         archive.extractall(work)
     src = os.path.join(work, "cw-stamp-request")
-    req = json.load(open(os.path.join(src, "request.json")))
+    with open(os.path.join(src, "request.json")) as handle:
+        req = canon.load(handle)
     stamped = []
     for entry in req["entries"]:
         rootfile = os.path.join(src, f"root_{entry['label']}.txt")
@@ -178,16 +179,16 @@ def relay_stamp(request_bundle, out_bundle):
         ots_path = os.path.join(src, f"root_{entry['label']}.txt.ots")
         if os.path.exists(ots_path):
             shutil.copyfile(ots_path, os.path.join(pack, f"root_{entry['label']}.txt.ots"))
-    json.dump(
-        {
-            "kind": "cw-proof-bundle",
-            "created": _now_iso(),
-            "request_created": req["created"],
-            "stamped": stamped,
-        },
-        open(os.path.join(pack, "receipt.json"), "w"),
-        indent=1,
-    )
+    with open(os.path.join(pack, "receipt.json"), "w") as handle:
+        handle.write(canon.dumps_strict(
+            {
+                "kind": "cw-proof-bundle",
+                "created": _now_iso(),
+                "request_created": req["created"],
+                "stamped": stamped,
+            },
+            indent=1,
+        ))
     with tarfile.open(out_bundle, "w:gz") as archive:
         archive.add(pack, arcname="cw-proof-bundle")
     shutil.rmtree(pack)
@@ -205,7 +206,8 @@ def import_proofs(proof_bundle, roots_dir):
     with tarfile.open(proof_bundle, "r:gz") as archive:
         archive.extractall(work)
     src = os.path.join(work, "cw-proof-bundle")
-    receipt = json.load(open(os.path.join(src, "receipt.json")))
+    with open(os.path.join(src, "receipt.json")) as handle:
+        receipt = canon.load(handle)
     placed = []
     for fn in os.listdir(src):
         if fn.endswith(".ots"):

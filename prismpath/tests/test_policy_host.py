@@ -6,6 +6,7 @@ failure at any stage leaves the previous policy active. Uses the real compiler +
 import sys
 from pathlib import Path
 
+import json
 import os
 
 import pytest
@@ -249,7 +250,7 @@ def test_active_policy_survives_a_new_host(env):
 def test_a_tampered_active_image_is_not_restored(env):
     first = _host(env)
     accepted = first.swap(_pack(env, "v1", 1))
-    (env["tmp"] / "state" / "active.ppt").write_bytes(b"not the image")
+    (env["tmp"] / "state" / ph.image_file_name(accepted["active"])).write_bytes(b"not the image")
     second = _host(env)
     assert second.active() == {"active": None}
     last = AuditLog(str(env["tmp"] / "state" / "swaps.log")).events[-1]
@@ -276,3 +277,224 @@ def test_rollback_is_what_a_new_host_restores(env):
     host.swap(_pack(env, "v2", 2, hot=50))
     assert host.rollback()["active"] == first["active"]
     assert _host(env).active()["active"] == first["active"]
+
+
+# -- a death at any step of a commit, and the order a rollback commits in --
+
+class _Died(Exception):
+    """Stands for a process that stopped here."""
+
+
+def _die_before(host, step, action):
+    """Make the commit raise `_Died` before `step`; returns the undo."""
+    from prismpath import canon
+    saved = []
+
+    def patch(target, name, replacement):
+        saved.append((target, name, getattr(target, name)))
+        setattr(target, name, replacement)
+
+    def boom(*args, **kwargs):
+        raise _Died(step)
+
+    if step == "intent":
+        patch(host, "_write_pending", boom)
+    elif step == "floor":
+        patch(host, "_persist_version", boom)
+    elif step == "evidence":
+        real = host.audit.append
+        patch(host.audit, "append", lambda actor, name, data: boom() if name == action else real(actor, name, data))
+    elif step == "active_image":
+        real_bytes = canon.atomic_write_bytes
+        patch(canon, "atomic_write_bytes",
+              lambda path, data: boom() if os.path.basename(str(path)).startswith("active-") else real_bytes(path, data))
+    elif step == "active_record":
+        real_text = canon.atomic_write
+        patch(canon, "atomic_write",
+              lambda path, data, *a, **k: boom() if str(path).endswith("active_policy.json") else real_text(path, data, *a, **k))
+    else:
+        patch(host, "_clear_pending", boom)
+
+    def undo():
+        for target, name, original in reversed(saved):
+            setattr(target, name, original)
+    return undo
+
+
+def _images(env):
+    return sorted(name for name in os.listdir(env["tmp"] / "state") if name.startswith("active") and name.endswith(".ppt"))
+
+
+SWAP_STEPS = ["intent", "floor", "evidence", "active_image", "active_record", "clear"]
+
+
+@pytest.mark.parametrize("step", SWAP_STEPS)
+def test_a_death_at_any_swap_step_leaves_one_policy_and_the_retry_completes(env, step):
+    host = _host(env)
+    h1 = host.swap(_pack(env, "v1", 1))["active"]
+    v2 = _pack(env, "v2", 2, hot=80)
+    undo = _die_before(host, step, "swap")
+    try:
+        with pytest.raises(_Died):
+            host.swap(v2)
+    finally:
+        undo()
+    restarted = _host(env)
+    h2 = pp.sha256_hex(Path(v2).read_bytes())
+    # the record flips at active_record's rename: before it the old policy, after it the new one
+    assert restarted.active()["active"] == (h2 if step == "clear" else h1)
+    assert not any(event["action"] == "active_unreadable" for event in restarted.audit.events)
+    assert restarted.audit.verify_log() and restarted.audit.verify_persisted()
+    done = restarted.swap(v2)
+    if step == "clear":
+        # the record had flipped and recovery finished the commit, so the swap is already done and the
+        # floor refuses it a second time
+        assert not done["ok"] and done["reasons"] == ["version:not-monotonic:2<=2"]
+    else:
+        assert done["ok"] and done["active"] == h2
+    assert _images(env) == [ph.image_file_name(h2)] and not os.path.exists(restarted._pending_path())
+    assert _host(env).active()["active"] == h2
+
+
+@pytest.mark.parametrize("step", ["intent", "evidence", "active_image", "active_record", "clear"])
+def test_a_death_at_any_rollback_step_leaves_one_policy(env, step):
+    host = _host(env)
+    h1 = host.swap(_pack(env, "v1", 1))["active"]
+    h2 = host.swap(_pack(env, "v2", 2, hot=80))["active"]
+    undo = _die_before(host, step, "rollback")
+    try:
+        with pytest.raises(_Died):
+            host.rollback()
+    finally:
+        undo()
+    restarted = _host(env)
+    assert restarted.active()["active"] == (h1 if step == "clear" else h2)
+    assert not any(event["action"] == "active_unreadable" for event in restarted.audit.events)
+    assert restarted.audit.verify_log() and restarted.audit.verify_persisted()
+    assert restarted._stored_version() == 2, "a rollback never moves the floor"
+    # the next commit finishes and leaves one image, whatever the dead rollback left behind
+    h3 = restarted.swap(_pack(env, "v3", 3, hot=60))["active"]
+    assert _images(env) == [ph.image_file_name(h3)] and not os.path.exists(restarted._pending_path())
+
+
+def test_the_old_image_is_readable_until_the_record_flips(env):
+    host = _host(env)
+    h1 = host.swap(_pack(env, "v1", 1))["active"]
+    undo = _die_before(host, "active_record", "swap")
+    try:
+        with pytest.raises(_Died):
+            host.swap(_pack(env, "v2", 2, hot=80))
+    finally:
+        undo()
+    assert len(_images(env)) == 2, "the new image sits beside the one the record names"
+    assert (env["tmp"] / "state" / ph.image_file_name(h1)).exists()
+    assert _host(env).active()["active"] == h1
+
+
+def test_a_stray_image_is_never_trusted(env):
+    """An image no record names is ignored by a restart, even one holding the right bytes, and the commit
+    that wants that name writes it again over whatever it holds."""
+    host = _host(env)
+    h1 = host.swap(_pack(env, "v1", 1))["active"]
+    v2 = _pack(env, "v2", 2, hot=80)
+    h2 = pp.sha256_hex(Path(v2).read_bytes())
+    stray = env["tmp"] / "state" / ph.image_file_name(h2)
+    stray.write_bytes(b"left by a process that died")
+    assert _host(env).active()["active"] == h1
+    assert host.swap(v2)["ok"]
+    assert pp.sha256_hex(stray.read_bytes()) == h2
+    assert _host(env).active()["active"] == h2 and _images(env) == [stray.name]
+
+
+def test_a_rollback_that_cannot_write_its_event_changes_nothing(env, monkeypatch):
+    from prismpath.ledgers import audit_log as audit_module
+    host = _host(env)
+    h1 = host.swap(_pack(env, "v1", 1))["active"]
+    h2 = host.swap(_pack(env, "v2", 2, hot=80))["active"]
+    record_before = (env["tmp"] / "state" / "active_policy.json").read_bytes()
+    real = host.audit.append
+
+    def failing(actor, action, data):
+        if action == "rollback":
+            raise audit_module.AuditWriteError("disk gone")
+        return real(actor, action, data)
+    monkeypatch.setattr(host.audit, "append", failing)
+    with pytest.raises(audit_module.AuditWriteError):
+        host.rollback()
+    assert host.active()["active"] == h2, "the previous policy stays active"
+    assert (env["tmp"] / "state" / "active_policy.json").read_bytes() == record_before
+    assert _images(env) == [ph.image_file_name(h2)]
+    assert not [event for event in host.history() if event["action"] == "rollback"]
+    monkeypatch.setattr(host.audit, "append", real)
+    assert host.rollback()["active"] == h1, "the rollback is still available and completes"
+    assert _host(env).active()["active"] == h1
+
+
+def test_an_old_layout_state_directory_is_read_and_migrated_by_the_next_swap(env):
+    host = _host(env)
+    h1 = host.swap(_pack(env, "v1", 1))["active"]
+    state = env["tmp"] / "state"
+    # rewrite what this host wrote into the layout before content addressed images
+    (state / ph.image_file_name(h1)).rename(state / "active.ppt")
+    record = json.loads((state / "active_policy.json").read_text())
+    del record["image_file"]
+    (state / "active_policy.json").write_text(json.dumps(record, sort_keys=True))
+    old = _host(env)
+    assert old.active()["active"] == h1, "the old layout is still restored"
+    h2 = old.swap(_pack(env, "v2", 2, hot=80))["active"]
+    assert _images(env) == [ph.image_file_name(h2)], "active.ppt is gone once the new layout's record is durable"
+    assert json.loads((state / "active_policy.json").read_text())["image_file"] == ph.image_file_name(h2)
+    assert _host(env).active()["active"] == h2
+
+
+def test_a_record_naming_an_image_outside_the_layout_is_not_restored(env):
+    host = _host(env)
+    h1 = host.swap(_pack(env, "v1", 1))["active"]
+    state = env["tmp"] / "state"
+    record = json.loads((state / "active_policy.json").read_text())
+    record["image_file"] = "../" + record["image_file"]
+    (state / "active_policy.json").write_text(json.dumps(record, sort_keys=True))
+    assert _host(env).active() == {"active": None}
+    assert AuditLog(str(state / "swaps.log")).events[-1]["data"]["reason"] == "record:image-file-invalid"
+
+
+@pytest.mark.parametrize("text", ["NaN", "1e400", "-Infinity"])
+def test_a_record_holding_a_non_finite_number_is_not_restored(env, text):
+    """Canonical JSON has no non finite number, so a record that holds one is damage: audited, not restored."""
+    first = _host(env)
+    first.swap(_pack(env, "v1", 1))
+    record = env["tmp"] / "state" / "active_policy.json"
+    record.write_text(record.read_text().replace('"version": 1', f'"version": {text}'))
+    assert _host(env).active() == {"active": None}
+    last = AuditLog(str(env["tmp"] / "state" / "swaps.log")).events[-1]
+    assert last["action"] == "active_unreadable"
+    assert last["data"]["reason"].startswith("record:unreadable:") and last["data"]["result"] == "not_restored"
+
+
+@pytest.mark.parametrize("record", ['{"to_hash": null, "version": NaN}', '{"to_hash": null, "version": 1e400}',
+                                    '{"to_hash": "x", "version": 2, "op": "rollback", "extra": Infinity}'])
+def test_an_intent_record_holding_a_non_finite_number_is_unreadable(env, record):
+    host = _host(env)
+    host.swap(_pack(env, "v1", 1))
+    (env["tmp"] / "state" / "pending_swap").write_text(record)
+    with pytest.raises(RuntimeError, match="unreadable intent record"):
+        _host(env)
+    with pytest.raises(RuntimeError, match="unreadable intent record"):
+        host.swap(_pack(env, "v2", 2))
+    assert host.active()["active"] is not None
+
+
+def test_a_pack_whose_manifest_holds_a_non_finite_number_is_an_audited_bad_format_rejection(env):
+    """`verify_pack` answers an unparseable manifest with `manifest:bad-format` instead of raising
+    `CanonicalReadError`, so the swap audits a rejection and the Rust host does the same."""
+    host = _host(env)
+    host.swap(_pack(env, "v1", 1))
+    path = _pack(env, "v2", 2)
+    manifest = Path(path + ".manifest.json")
+    original = manifest.read_text()
+    for number in ("NaN", "1e400", "-Infinity"):
+        manifest.write_text(original.replace('"version": 2', f'"version": {number}'))
+        events = len(host.audit.events)
+        assert host.swap(path) == {"ok": False, "reasons": ["manifest:bad-format"]}
+        assert len(host.audit.events) == events + 1 and host.audit.events[-1]["action"] == "swap_rejected"
+        assert host.active()["version"] == 1

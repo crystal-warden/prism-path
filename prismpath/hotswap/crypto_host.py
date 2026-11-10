@@ -60,7 +60,7 @@ def build_crypto_pack(ppt_path: str, fields: dict, version: int, envelope_id: st
     priv = pp._load_private(priv_path)
     sig = priv.sign(pp.canonical_bytes(manifest))
     with open(ppt_path + ".manifest.json", "w") as handle:
-        json.dump(manifest, handle, indent=1, sort_keys=True)
+        handle.write(canon.dumps_strict(manifest, indent=1, sort_keys=True))
         handle.write("\n")
     with open(ppt_path + ".manifest.sig", "wb") as handle:
         handle.write(sig)

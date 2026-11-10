@@ -38,6 +38,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
+from prismpath import canon  # noqa: E402
 from prismpath.kernel.parser import parse_file  # noqa: E402
 from prismpath.telemetry import preflight  # noqa: E402  (extract_reading + the codec's exact view of an event)
 from prismpath.telemetry import quantizer  # noqa: E402
@@ -52,7 +53,7 @@ def _read_ndjson(path: str) -> Tuple[List[dict], int]:
             if not line:
                 continue
             try:
-                ev = json.loads(line)
+                ev = canon.loads(line)
             except json.JSONDecodeError:
                 bad += 1
                 continue

@@ -153,6 +153,16 @@ into a shadow slot; the switch to active is a single reference flip under a lock
 any stage leaves the previous policy active with no partial state, and the last known good pack is
 retained for explicit rollback.
 
+On disk the commit runs in a fixed order, each step durable (file and directory entry fsynced) before the
+next: the intent record `pending_swap` (`{"to_hash", "version"}`, plus `"op": "rollback"` for a rollback),
+the version floor `active_version` (not for a rollback, which never lowers it), the audit event, the new
+image `active-<sha256>.ppt` written beside the one in use, the record `active_policy.json` naming it in
+`image_file` (the flip point), then every image the record does not name and the intent record removed. A
+death before the record rename leaves the previous policy to be restored, a death after it the new one;
+an image the record does not name is never read. Recovery logs `swap_incomplete` (`rollback_incomplete`)
+and finishes a commit whose record already flipped. A state directory whose record has no `image_file`
+(image `active.ppt`) is the earlier layout, read as it was and replaced by the next swap or rollback.
+
 ## 4. What this composes (nothing new is invented)
 
 | Property | Existing primitive |

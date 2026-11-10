@@ -60,7 +60,11 @@ class TickWindow:
             return ok, cause
         if tick > self._top:
             ahead = tick - self._top
-            self._mask = ((self._mask << ahead) | 1) & ((1 << max(self.reorder, 1)) - 1)
+            width = max(self.reorder, 1)
+            # A jump of the window's width or more leaves no earlier tick inside it. Shifting by `ahead`
+            # itself would allocate a mask as long as the jump, so a hostile tick of 2**40 would take the
+            # memory of the machine; the result of the shift and mask is the same without it.
+            self._mask = 1 if ahead >= width else ((self._mask << ahead) | 1) & ((1 << width) - 1)
             self._top = tick
         else:
             self._mask |= 1 << (self._top - tick)

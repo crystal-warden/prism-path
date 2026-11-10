@@ -169,7 +169,7 @@ class AdjudicatorPort:
         matched = re.search(r"\{.*\}", reply or "", re.S)
         if matched:
             try:
-                out = json.loads(matched.group(0))
+                out = canon.loads(matched.group(0))
                 if isinstance(out, dict):
                     out.setdefault("text", (reply or "").strip())
                     return out
@@ -191,7 +191,7 @@ class SinkPort:
         os.makedirs(os.path.dirname(destination) or ".", exist_ok=True)
         if result.get(key) is None:
             with open(destination, "a") as handle:
-                handle.write(json.dumps(result, sort_keys=True) + "\n")
+                handle.write(canon.dumps_strict(result, sort_keys=True) + "\n")
             return True
         return upsert_jsonl(destination, result, key=key)
 

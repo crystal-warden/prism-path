@@ -82,7 +82,7 @@ class AuditLog:
                     if not line:
                         continue
                     try:
-                        ev = json.loads(line)
+                        ev = _canon.loads(line)
                     except Exception:
                         self.skipped.append(line_num)
                         continue
@@ -97,7 +97,11 @@ class AuditLog:
             index = len(self.events)
             event = {"idx": index, "id": f"{index}", "ts": time.time(),
                      "actor": actor, "action": action, "data": data}
-            line = json.dumps(event) + "\n"
+            try:
+                leaf = _leaf_hex(event)   # refuses NaN, Infinity and lone surrogates before anything is written
+                line = _canon.dumps_strict(event) + "\n"
+            except _canon.CanonicalError as error:
+                raise AuditWriteError(f"audit event has no canonical JSON form: {error}") from error
             if self.path:
                 try:
                     os.makedirs(os.path.dirname(os.path.abspath(self.path)), exist_ok=True)
@@ -108,7 +112,7 @@ class AuditLog:
                 except OSError as error:
                     raise AuditWriteError(f"audit event not persisted to {self.path}: {error}") from error
             self.events.append(event)
-            self.leaves.append(_leaf_hex(event))
+            self.leaves.append(leaf)
             self._accumulator.add(self.leaves[-1])
             if self.sign_appends and self.instance_key is not None:
                 self._sign_locked("append", None)
@@ -217,7 +221,7 @@ class AuditLog:
                     if not line:
                         continue
                     try:
-                        on_disk.append(_leaf_hex(json.loads(line)))
+                        on_disk.append(_leaf_hex(_canon.loads(line)))
                     except Exception:
                         return False
             return on_disk == self.leaves

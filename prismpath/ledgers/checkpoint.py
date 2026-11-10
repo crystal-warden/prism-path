@@ -80,17 +80,19 @@ def save_checkpoint(path, flow_path, result: RunResult, pending_node: Optional[s
                   for step in result.steps],
     }
     try:
-        data = json.dumps(doc, indent=2)
+        data = canon.dumps_strict(doc, indent=2)
     except TypeError as exc:
         raise CheckpointError(
             f"run state is not JSON-serializable ({exc}); keep checkpointed state to JSON types "
             f"(str/int/float/bool/list/dict/None)") from exc
+    except canon.CanonicalError as exc:
+        raise CheckpointError(f"run state has no canonical JSON form ({exc})") from exc
     _atomic_write(path, data)
 
 
 def load_checkpoint(path) -> dict:
     with open(path) as handle:
-        cp = json.load(handle)
+        cp = canon.load(handle)
     if cp.get("version") != CHECKPOINT_VERSION:
         raise CheckpointError(f"unsupported checkpoint version {cp.get('version')!r} "
                               f"(this build expects {CHECKPOINT_VERSION})")
@@ -332,5 +334,5 @@ def record_decision(checkpoint_path, choose: str, decided_by: str = "human") -> 
     if choose not in cands:
         raise CheckpointError(f"choose {choose!r} is not a candidate edge; valid: {cands}")
     cp["decision"] = {"choose": choose, "decided_by": decided_by}
-    _atomic_write(checkpoint_path, json.dumps(cp, indent=2))
+    _atomic_write(checkpoint_path, canon.dumps_strict(cp, indent=2))
     return cp

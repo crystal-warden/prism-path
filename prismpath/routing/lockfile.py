@@ -163,13 +163,13 @@ def build_lock(flow_path, delta: Optional[float] = None, centroids: Optional[dic
 
 def save_lock(flow_path, lock: dict) -> str:
     path = lock_path(flow_path)
-    canon.atomic_write(path, json.dumps(lock, indent=2, sort_keys=True))
+    canon.atomic_write(path, canon.dumps_strict(lock, indent=2, sort_keys=True))
     return path
 
 
 def load_lock(path) -> dict:
     with open(path, encoding="utf-8") as handle:
-        lock = json.load(handle)
+        lock = canon.load(handle)
     if lock.get("version") != LOCK_VERSION:
         raise LockError(f"unsupported lock version {lock.get('version')!r} (expected {LOCK_VERSION})")
     return lock

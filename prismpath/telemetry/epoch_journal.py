@@ -75,7 +75,7 @@ def _sha256(data: bytes) -> str:
 def _append_line(path: str, record: dict) -> None:
     """Append one JSON line and fsync it, so the line is on disk before the caller moves on. A crash
     mid write leaves a torn final line, which recovery discards and reports."""
-    line = json.dumps(record, sort_keys=True) + "\n"
+    line = canon.dumps_strict(record, sort_keys=True) + "\n"
     with open(path, "a", encoding="utf-8") as handle:
         handle.write(line)
         handle.flush()
@@ -126,7 +126,7 @@ class EpochJournal:
         records = []
         for index, line in enumerate(raw_lines):
             try:
-                records.append(json.loads(line))
+                records.append(canon.loads(line))
             except ValueError:
                 if index == len(raw_lines) - 1:
                     self._recovery.append({"finding": torn_finding, "file": os.path.basename(path), "line": index + 1})
@@ -144,7 +144,7 @@ class EpochJournal:
         acks = {}
         if os.path.exists(self._acks_path()):
             try:
-                acks = json.loads(open(self._acks_path(), encoding="utf-8").read())
+                acks = canon.loads(open(self._acks_path(), encoding="utf-8").read())
             except ValueError:
                 # atomic_write means a torn acks.json cannot exist; a corrupt one is a real fault
                 raise JournalCorrupt(f"{self._acks_path()} is not JSON")
@@ -166,7 +166,7 @@ class EpochJournal:
                     gaps.add(epoch_id)
                     os.remove(data_path)
                 else:
-                    blocks = json.loads(data.decode("utf-8"))
+                    blocks = canon.loads(data.decode("utf-8"))
             epoch = epoch_module.Epoch(epoch_id, blocks, record["merkle_root"], record["chained_root"])
             self.store.epochs.append(epoch)
         named = {record["epoch_id"] for record in chain}
@@ -202,7 +202,7 @@ class EpochJournal:
         merkle_root, _proofs = sh.commit(blocks)
         prev = self.store.epochs[-1].chained_root if self.store.epochs else ""
         epoch_id = len(self.store.epochs)
-        data = json.dumps(blocks).encode("utf-8")
+        data = canon.dumps_strict(blocks).encode("utf-8")
         canon.atomic_write(self._data_path(epoch_id), data.decode("utf-8"))
         chained = epoch_module.chain_root(prev, merkle_root)
         _append_line(self._chain_path(), {"epoch_id": epoch_id, "merkle_root": merkle_root, "chained_root": chained,
@@ -285,7 +285,7 @@ class EpochJournal:
         restart. Returns the number of epochs whose data was dropped."""
         if not any(epoch.chained_root == chained_root for epoch in self.store.epochs):
             return 0
-        canon.atomic_write(self._acks_path(), json.dumps({"last_seq": seq, "acked_through": chained_root}, sort_keys=True))
+        canon.atomic_write(self._acks_path(), canon.dumps_strict({"last_seq": seq, "acked_through": chained_root}, sort_keys=True))
         self.last_seq = seq
         self.acked_through = chained_root
         return len(self._apply_ack_to_files(chained_root))

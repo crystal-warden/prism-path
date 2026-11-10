@@ -70,7 +70,7 @@ def verify_registry(path: str, pubkey_paths: List[str],
                     revoked: frozenset = frozenset()) -> Tuple[bool, List[str], Optional[dict]]:
     """Verify a registry file's detached signature by a known, non-revoked authority key.
     Returns (ok, stable-reasons, registry-or-None). Loud absence if signing lib is unavailable."""
-    import json
+    from prismpath.canon import loads as canon_loads
     _Priv, _Pub, _ser, InvalidSignature = pp._ed25519()
     sig_path = path + ".sig"
     if not os.path.exists(path) or not os.path.exists(sig_path):
@@ -80,7 +80,7 @@ def verify_registry(path: str, pubkey_paths: List[str],
     with open(sig_path, "rb") as handle:
         sig = handle.read()
     try:
-        registry = json.loads(raw)
+        registry = canon_loads(raw)
     except Exception:
         return False, ["registry:bad-json"], None
     if registry.get("format") != REGISTRY_FORMAT:

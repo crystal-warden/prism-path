@@ -175,14 +175,12 @@ def test_locked_router_builds_hybrid_at_locked_delta(tmp_path, stub_embedder):
 
 # --- the real thing: reproducible routing with the actual embedder ----------------------
 
-def test_committed_vectors_reproduce_live_routing():
+def test_committed_vectors_reproduce_live_routing(tmp_path):
     pytest.importorskip("sentence_transformers", reason="needs the real bge embedder")
     from prismpath.routing.router import EmbeddingRouter
     graph = parse(FLOW)
-    import tempfile, os
-    flow_dir = tempfile.mkdtemp()
-    fp = os.path.join(flow_dir, "triage.md")
-    open(fp, "w").write(FLOW)
+    fp = str(tmp_path / "triage.md")
+    (tmp_path / "triage.md").write_text(FLOW)
     lock = lockfile.build_lock(fp)
     assert lockfile.verify_lock(lock) is True                       # same machine reproduces
     edges = graph.nodes["classify"].edges

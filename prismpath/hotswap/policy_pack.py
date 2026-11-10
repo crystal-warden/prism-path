@@ -319,7 +319,7 @@ def build_pack(ppt_path: str, fields: Dict[str, str], version: int, envelope_id:
     priv = _load_private(priv_path)
     sig = priv.sign(canonical_bytes(manifest))
     with open(ppt_path + ".manifest.json", "w") as handle:
-        json.dump(manifest, handle, indent=1, sort_keys=True)
+        handle.write(canon.dumps_strict(manifest, indent=1, sort_keys=True))
         handle.write("\n")
     with open(ppt_path + ".manifest.sig", "wb") as handle:
         handle.write(sig)
@@ -330,15 +330,25 @@ def verify_pack(ppt_path: str, pubkey_paths: List[str],
                 revoked: frozenset = frozenset()) -> Tuple[bool, List[str], Optional[dict]]:
     """The Authorized gate. Verifies: signature over the canonical manifest by a known,
     non-revoked key; manifest key_id matches the verifying key; image hash and header counts
-    match the manifest. Returns (ok, stable-reasons, manifest-or-None)."""
+    match the manifest. Returns (ok, stable-reasons, manifest-or-None): a manifest that cannot be parsed
+    (not JSON, not UTF-8, NaN, Infinity or a number beyond the double range, or not an object) is
+    `manifest:bad-format` with no manifest."""
     _Priv, _Pub, _ser, InvalidSignature = _ed25519()
     man_path, sig_path = ppt_path + ".manifest.json", ppt_path + ".manifest.sig"
     if not os.path.exists(man_path) or not os.path.exists(sig_path):
         return False, ["sig:missing"], None
-    with open(man_path) as handle:
-        manifest = json.load(handle)
+    try:
+        with open(man_path) as handle:
+            manifest = canon.load(handle)
+    except ValueError:
+        # The registry's `manifest:bad-format` is "manifest unparseable": text that is not JSON, not UTF-8,
+        # or holds NaN, Infinity or a number beyond the double range (`CanonicalReadError`) is that refusal,
+        # a stable reason, and not an exception out of a gate that returns reasons.
+        return False, ["manifest:bad-format"], None
     with open(sig_path, "rb") as handle:
         sig = handle.read()
+    if not isinstance(manifest, dict):
+        return False, ["manifest:bad-format"], None
     if manifest.get("format") != PACK_FORMAT:
         return False, ["manifest:bad-format"], manifest
 
@@ -396,7 +406,7 @@ def build_envelope(envelope_id: str, fields: Dict[str, str], caps: Optional[dict
     os.makedirs(out_dir, exist_ok=True)
     base = os.path.join(out_dir, f"{envelope_id}.envelope")
     with open(base + ".json", "w") as handle:
-        json.dump(env, handle, indent=1, sort_keys=True)
+        handle.write(canon.dumps_strict(env, indent=1, sort_keys=True))
         handle.write("\n")
     with open(base + ".sig", "wb") as handle:
         handle.write(sig)
@@ -411,7 +421,7 @@ def load_envelope(base_path: str, pubkey_paths: List[str]) -> Tuple[Optional[dic
             base_path = base_path[:-len(suffix)]
     try:
         with open(base_path + ".json") as handle:
-            env = json.load(handle)
+            env = canon.load(handle)
         with open(base_path + ".sig", "rb") as handle:
             sig = handle.read()
     except FileNotFoundError:

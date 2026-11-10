@@ -114,7 +114,7 @@ def read_manifest(flow_path: str) -> Optional[dict]:
     json_path, _sig_path = manifest_paths(flow_path)
     try:
         with open(json_path, encoding="utf-8") as handle:
-            manifest = json.load(handle)
+            manifest = canon.load(handle)
     except (FileNotFoundError, ValueError):
         return None
     return manifest if isinstance(manifest, dict) else None
@@ -131,7 +131,7 @@ def verify_flow(flow_path: str, pubkey_paths: List[str], revoked: frozenset = fr
         return False, ["sig:missing"], None
     try:
         with open(json_path, encoding="utf-8") as handle:
-            manifest = json.load(handle)
+            manifest = canon.load(handle)
     except ValueError:
         return False, ["manifest:bad-format"], None
     with open(sig_path, "rb") as handle:
@@ -193,7 +193,7 @@ class VersionFloor:
         self.entries: Dict[str, dict] = {}
         if os.path.exists(path):
             with open(path, encoding="utf-8") as handle:
-                loaded = json.load(handle)
+                loaded = canon.load(handle)
             if not isinstance(loaded, dict):
                 raise ValueError(f"{path}: the version floor is not a JSON object")
             self.entries = loaded

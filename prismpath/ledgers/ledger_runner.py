@@ -25,6 +25,7 @@ from pathlib import Path
 from typing import List, Optional
 
 from prismpath.hotswap import flow_authority
+from prismpath import canon
 from prismpath.kernel.engine import run
 from prismpath.ledgers.ledger import LedgerError, sha256_files
 from prismpath.kernel.parser import parse_file
@@ -60,7 +61,7 @@ def _to_bytes(value) -> bytes:
         return bytes(value)
     if isinstance(value, str):
         return value.encode()
-    return json.dumps(value, sort_keys=True, default=str).encode()
+    return canon.canonical_spaced(value, default=str)
 
 
 def run_ledgered_loop(flow_path, agent, ledger, *, router=None, max_items: int = 1000,
@@ -124,11 +125,11 @@ def upsert_jsonl(path, record: dict, key) -> bool:
             if not line:
                 continue
             try:
-                existing = json.loads(line)
+                existing = canon.loads(line)
             except ValueError:
                 continue
             if tuple(existing.get(key_field) for key_field in keys) == kv:
                 return False
     with open(jsonl_path, "a") as handle:
-        handle.write(json.dumps(record) + "\n")
+        handle.write(canon.dumps_strict(record) + "\n")
     return True
