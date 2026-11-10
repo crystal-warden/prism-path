@@ -48,8 +48,10 @@ def escStr : List Char → List Char
   | [] => []
   | c :: cs => escChar c ++ escStr cs
 
-/-- A string with its quotes. -/
-def wStr (s : String) : List Char := '"' :: (escStr s.toList ++ ['"'])
+/-- A string with its quotes. Its characters are taken by `chars`, the core's own UTF-8 decoder, as
+the reader's are (`Core.chars_eq` proves it equal to `String.toList`, whose definition carries
+`Classical.choice`). -/
+def wStr (s : String) : List Char := '"' :: (escStr (chars s) ++ ['"'])
 
 /-! ## Integers -/
 
@@ -78,7 +80,7 @@ def lexLt : List Nat → List Nat → Bool
   | a :: as, b :: bs => a < b || (a == b && lexLt as bs)
 
 /-- `a` sorts before `b`: the UTF-16 code units of `a` are lexicographically smaller. -/
-def keyLt (a b : String) : Bool := lexLt (units a.toList) (units b.toList)
+def keyLt (a b : String) : Bool := lexLt (units (chars a)) (units (chars b))
 
 def insertM (m : String × J) : List (String × J) → List (String × J)
   | [] => [m]

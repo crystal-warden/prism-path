@@ -97,6 +97,29 @@ theorem utf8Decode_enc_nil (cs : List Char) : utf8Decode (utf8Enc cs) [] = some 
   rw [this]; unfold utf8Decode; simp
 
 
+theorem utf8Char_eq (c : Char) : utf8Char c = String.utf8EncodeChar c := by
+  have hv := char_valid c
+  unfold utf8Char String.utf8EncodeChar
+  simp only [Char.toNat] at *
+  split_ifs <;> first
+    | omega
+    | rfl
+    | (simp only [List.cons.injEq, and_true]
+       (repeat' apply And.intro) <;> (congr 1; omega))
+
+theorem utf8Enc_eq (cs : List Char) : utf8Enc cs = cs.flatMap String.utf8EncodeChar := by
+  induction cs with
+  | nil => rfl
+  | cons c cs ih => simp [utf8Enc, ih, utf8Char_eq]
+
+/-- The core's own decoding of a string's bytes is Lean's `String.toList`. -/
+theorem chars_eq (s : String) : chars s = s.toList := by
+  unfold chars
+  conv => lhs; rw [← String.ofList_toList (s := s)]
+  rw [String.toByteArray_ofList, List.utf8Encode, List.toList_data_toByteArray, ← utf8Enc_eq,
+    utf8Decode_enc_nil]
+  simp
+
 /-! ## Strings: the reader inverts the escaping -/
 
 
@@ -157,8 +180,8 @@ theorem parseStr_escStr (cs : List Char) (rest acc) :
   | nil => simp [escStr]
   | cons c cs ih => simp [escStr, List.append_assoc, parseStr_esc, ih]
 
-theorem parseStr_wStr (s : String) (rest) : parseStr (escStr s.toList ++ '"' :: rest) [] = .ok (s, rest) := by
-  rw [parseStr_escStr]; simp [parseStr]
+theorem parseStr_wStr (s : String) (rest) : parseStr (escStr (chars s) ++ '"' :: rest) [] = .ok (s, rest) := by
+  rw [parseStr_escStr, chars_eq]; simp [parseStr]
 
 
 /-! ## Integers -/
@@ -416,7 +439,7 @@ theorem fuel_succ {n fuel : Nat} (h : 1 ≤ n) (hf : n ≤ fuel) : ∃ f, fuel =
   ⟨fuel - 1, by omega, by omega⟩
 
 theorem pm_step (g d : Nat) (k : String) (r : List Char) (acc : List (String × J)) :
-    pMember (g + 1) d ('"' :: (escStr k.toList ++ '"' :: r)) acc =
+    pMember (g + 1) d ('"' :: (escStr (chars k) ++ '"' :: r)) acc =
       if hasKey k acc then .error .dupKey
       else match skipWs r with
         | ':' :: r'' =>
@@ -428,7 +451,7 @@ theorem pm_step (g d : Nat) (k : String) (r : List Char) (acc : List (String × 
             | ',' :: r4 => pMember g d r4 ((k, v) :: acc)
             | _ => .error .syntax
         | _ => .error .syntax := by
-  have h2 : skipWs ('"' :: (escStr k.toList ++ '"' :: r)) = '"' :: (escStr k.toList ++ '"' :: r) :=
+  have h2 : skipWs ('"' :: (escStr (chars k) ++ '"' :: r)) = '"' :: (escStr (chars k) ++ '"' :: r) :=
     skipWs_head (by unfold HeadOk; decide)
   rw [pMember.eq_2, h2]
   simp only [parseStr_wStr]
@@ -498,10 +521,10 @@ theorem rt_value : (v : J) → ∀ (fuel d : Nat) (rest : List Char), wfJ v = tr
     simp only [sz] at hf'
     have hm := rt_mem ((k, v) :: ms) f (d + 1) rest [] (by simp) hw.2 hr (by omega) (by omega) hd
       (by simpa using (keysDistinct_iff _).mp hw.1)
-    have e : wr (.obj ((k, v) :: ms)) ++ rest = '{' :: '"' :: (escStr k.toList ++ '"' :: ':' :: (wr v ++ wrObj ms ++ rest)) := by
+    have e : wr (.obj ((k, v) :: ms)) ++ rest = '{' :: '"' :: (escStr (chars k) ++ '"' :: ':' :: (wr v ++ wrObj ms ++ rest)) := by
       simp [wr, wStr]
     rw [e, pv_obj f d _ (by omega)]
-    have e2 : wrMem ((k, v) :: ms) ++ rest = '"' :: (escStr k.toList ++ '"' :: ':' :: (wr v ++ wrObj ms ++ rest)) := by
+    have e2 : wrMem ((k, v) :: ms) ++ rest = '"' :: (escStr (chars k) ++ '"' :: ':' :: (wr v ++ wrObj ms ++ rest)) := by
       simp [wrMem, wStr]
     rw [← e2, hm]
     simp
@@ -534,7 +557,7 @@ theorem rt_mem : (ms : List (String × J)) → ∀ (fuel d : Nat) (rest : List C
     simp only [depthM] at hdep
     simp only [szO] at hf'
     have hx := rt_value v g d (wrObj ms ++ rest) hw.1 hr.1 (by omega) (by omega) (delim_wrObj ms rest)
-    have e : wrMem ((k, v) :: ms) ++ rest = '"' :: (escStr k.toList ++ '"' :: (':' :: (wr v ++ (wrObj ms ++ rest)))) := by
+    have e : wrMem ((k, v) :: ms) ++ rest = '"' :: (escStr (chars k) ++ '"' :: (':' :: (wr v ++ (wrObj ms ++ rest)))) := by
       simp [wrMem, wStr]
     rw [e, pm_step, hasKey_false_of_nodup hnd]
     have hc : skipWs (':' :: (wr v ++ (wrObj ms ++ rest))) = ':' :: (wr v ++ (wrObj ms ++ rest)) :=
@@ -755,5 +778,447 @@ theorem readBytes_doc {b : ByteArray} {v : J} (h : readBytes b = .ok v) : doc v 
   split at h
   · simp at h
   · exact readChars_doc h
+
+
+
+/-! ## The key order -/
+
+theorem lexLt_irrefl : ∀ a : List Nat, lexLt a a = false
+  | [] => rfl
+  | a :: as => by simp [lexLt, lexLt_irrefl as]
+
+theorem lexLt_asymm : ∀ a b : List Nat, lexLt a b = true → lexLt b a = false
+  | [], [], h => by simp [lexLt] at h
+  | [], _ :: _, _ => rfl
+  | _ :: _, [], h => by simp [lexLt] at h
+  | a :: as, b :: bs, h => by
+    simp only [lexLt, Bool.or_eq_true, decide_eq_true_eq, Bool.and_eq_true, beq_iff_eq] at h ⊢
+    rcases h with h | ⟨rfl, h⟩
+    · simp; omega
+    · have := lexLt_asymm as bs h; simp [this]
+
+theorem lexLt_trans : ∀ a b c : List Nat, lexLt a b = true → lexLt b c = true → lexLt a c = true
+  | [], [], _, h, _ => by simp [lexLt] at h
+  | [], _ :: _, [], _, h => by simp [lexLt] at h
+  | [], _ :: _, _ :: _, _, _ => rfl
+  | _ :: _, [], _, h, _ => by simp [lexLt] at h
+  | _ :: _, _ :: _, [], _, h => by simp [lexLt] at h
+  | a :: as, b :: bs, c :: cs, h1, h2 => by
+    simp only [lexLt, Bool.or_eq_true, decide_eq_true_eq, Bool.and_eq_true, beq_iff_eq] at h1 h2 ⊢
+    rcases h1 with h1 | ⟨rfl, h1⟩ <;> rcases h2 with h2 | ⟨rfl, h2⟩
+    · left; omega
+    · left; omega
+    · left; omega
+    · right; exact ⟨rfl, lexLt_trans as bs cs h1 h2⟩
+
+theorem lexLt_total : ∀ a b : List Nat, a ≠ b → lexLt a b = true ∨ lexLt b a = true
+  | [], [], h => absurd rfl h
+  | [], _ :: _, _ => Or.inl rfl
+  | _ :: _, [], _ => Or.inr rfl
+  | a :: as, b :: bs, h => by
+    simp only [lexLt, Bool.or_eq_true, decide_eq_true_eq, Bool.and_eq_true, beq_iff_eq]
+    rcases Nat.lt_trichotomy a b with hab | rfl | hab
+    · left; left; exact hab
+    · have : as ≠ bs := fun e => h (by rw [e])
+      rcases lexLt_total as bs this with h' | h'
+      · left; right; exact ⟨rfl, h'⟩
+      · right; right; exact ⟨rfl, h'⟩
+    · right; left; exact hab
+
+theorem char_toNat_inj {c d : Char} (h : c.toNat = d.toNat) : c = d := by
+  rw [← Char.ofNat_toNat c, ← Char.ofNat_toNat d, h]
+
+theorem utf16_head (c : Char) : ∃ u us, utf16 c = u :: us ∧
+    ((c.toNat < 0x10000 ∧ us = [] ∧ u = c.toNat ∧ (u < 0xD800 ∨ 0xDFFF < u)) ∨
+     (0x10000 ≤ c.toNat ∧ 0xD800 ≤ u ∧ u ≤ 0xDBFF ∧ us = [0xDC00 + (c.toNat - 0x10000) % 0x400] ∧
+      u = 0xD800 + (c.toNat - 0x10000) / 0x400)) := by
+  have hv := char_valid c
+  unfold utf16
+  split
+  · exact ⟨_, _, rfl, Or.inl ⟨by omega, rfl, rfl, by omega⟩⟩
+  · exact ⟨_, _, rfl, Or.inr ⟨by omega, by omega, by omega, rfl, rfl⟩⟩
+
+theorem units_inj : ∀ s t : List Char, units s = units t → s = t
+  | [], [], _ => rfl
+  | [], d :: t, h => by
+    obtain ⟨u, us, e, -⟩ := utf16_head d; simp [units, e] at h
+  | c :: s, [], h => by
+    obtain ⟨u, us, e, -⟩ := utf16_head c; simp [units, e] at h
+  | c :: s, d :: t, h => by
+    obtain ⟨u, us, e, hc⟩ := utf16_head c
+    obtain ⟨w, ws, e', hd⟩ := utf16_head d
+    simp only [units, e, e', List.cons_append, List.cons.injEq] at h
+    obtain ⟨rfl, h⟩ := h
+    have hcd : c = d := by
+      apply char_toNat_inj
+      rcases hc with ⟨h1, rfl, rfl, h3⟩ | ⟨h1, h2, h3, rfl, h5⟩ <;>
+        rcases hd with ⟨g1, rfl, g2, g3⟩ | ⟨g1, g2, g3, rfl, g5⟩
+      · omega
+      · omega
+      · omega
+      · simp only [List.cons_append, List.nil_append, List.cons.injEq] at h
+        omega
+    subst hcd
+    rw [e'] at e; obtain ⟨-, rfl⟩ := List.cons.inj e
+    rw [units_inj s t (List.append_cancel_left h)]
+
+theorem keyLt_irrefl (a : String) : keyLt a a = false := lexLt_irrefl _
+theorem keyLt_asymm {a b : String} (h : keyLt a b = true) : keyLt b a = false := lexLt_asymm _ _ h
+theorem keyLt_trans {a b c : String} (h1 : keyLt a b = true) (h2 : keyLt b c = true) : keyLt a c = true :=
+  lexLt_trans _ _ _ h1 h2
+theorem keyLt_total {a b : String} (h : a ≠ b) : keyLt a b = true ∨ keyLt b a = true :=
+  lexLt_total _ _ (fun e => h (String.toList_inj.mp (by simpa [chars_eq] using units_inj _ _ e)))
+
+
+/-! ## Sorting the members -/
+
+abbrev KLt (a b : String × J) : Prop := keyLt a.1 b.1 = true
+
+theorem keysSorted_iff (ms : List (String × J)) : keysSorted ms = true ↔ ms.Pairwise KLt := by
+  induction ms with
+  | nil => simp [keysSorted]
+  | cons m ms ih =>
+    obtain ⟨k, v⟩ := m
+    simp only [keysSorted, Bool.and_eq_true, List.all_eq_true, ih, List.pairwise_cons]
+
+theorem insertM_perm (m : String × J) : ∀ ns, (insertM m ns).Perm (m :: ns)
+  | [] => List.Perm.refl _
+  | n :: ns => by
+    unfold insertM
+    split
+    · exact ((insertM_perm m ns).cons n).trans (List.Perm.swap m n ns)
+    · exact List.Perm.refl _
+
+theorem sortM_perm : ∀ ms : List (String × J), (sortM ms).Perm ms
+  | [] => List.Perm.refl _
+  | m :: ms => (insertM_perm m (sortM ms)).trans ((sortM_perm ms).cons m)
+
+theorem insertM_sorted (m : String × J) : ∀ ns, ns.Pairwise KLt → (∀ n ∈ ns, n.1 ≠ m.1) →
+    (insertM m ns).Pairwise KLt
+  | [], _, _ => List.pairwise_singleton _ _
+  | n :: ns, hs, hk => by
+    rw [List.pairwise_cons] at hs
+    unfold insertM
+    split
+    · rename_i hnm
+      rw [List.pairwise_cons]
+      refine ⟨fun x hx => ?_, insertM_sorted m ns hs.2 (fun y hy => hk y (by simp [hy]))⟩
+      rcases List.mem_cons.mp ((List.Perm.mem_iff (insertM_perm m ns)).mp hx) with h | hx
+      · subst h; exact hnm
+      · exact hs.1 x hx
+    · rename_i hnm
+      have hmn : keyLt m.1 n.1 = true := by
+        rcases keyLt_total (hk n (by simp)) with h | h
+        · exact absurd h hnm
+        · exact h
+      rw [List.pairwise_cons]
+      refine ⟨fun x hx => ?_, List.pairwise_cons.mpr hs⟩
+      rcases List.mem_cons.mp hx with rfl | hx
+      · exact hmn
+      · exact keyLt_trans hmn (hs.1 x hx)
+
+theorem sortM_sorted : ∀ ms : List (String × J), (ms.map (·.1)).Nodup → (sortM ms).Pairwise KLt
+  | [], _ => List.Pairwise.nil
+  | m :: ms, hnd => by
+    rw [List.map_cons, List.nodup_cons] at hnd
+    refine insertM_sorted m (sortM ms) (sortM_sorted ms hnd.2) (fun n hn e => hnd.1 ?_)
+    rw [← e]
+    exact List.mem_map_of_mem ((List.Perm.mem_iff (sortM_perm ms)).mp hn)
+
+theorem insertM_of_lt (m : String × J) : ∀ ns, (∀ n ∈ ns, keyLt m.1 n.1 = true) → insertM m ns = m :: ns
+  | [], _ => rfl
+  | n :: ns, h => by
+    unfold insertM
+    rw [if_neg (by rw [keyLt_asymm (h n (by simp))]; simp)]
+
+theorem sortM_of_sorted : ∀ ms : List (String × J), ms.Pairwise KLt → sortM ms = ms
+  | [], _ => rfl
+  | m :: ms, h => by
+    rw [List.pairwise_cons] at h
+    simp only [sortM, sortM_of_sorted ms h.2]
+    exact insertM_of_lt m ms h.1
+
+/-! ## The normal form -/
+
+theorem normL_eq : ∀ xs : List J, normL xs = xs.map norm
+  | [] => rfl
+  | x :: xs => by simp [normL, normL_eq xs]
+
+theorem normM_eq : ∀ ms : List (String × J), normM ms = ms.map (fun m => (m.1, norm m.2))
+  | [] => rfl
+  | (k, v) :: ms => by simp [normM, normM_eq ms]
+
+theorem normM_keys (ms : List (String × J)) : (normM ms).map (·.1) = ms.map (·.1) := by
+  rw [normM_eq]; simp
+
+theorem wfList_iff (xs : List J) : wfList xs = true ↔ ∀ x ∈ xs, wfJ x = true := by
+  induction xs with
+  | nil => simp [wfList]
+  | cons x xs ih => simp [wfList, ih]
+theorem wfMembers_iff (ms : List (String × J)) : wfMembers ms = true ↔ ∀ m ∈ ms, wfJ m.2 = true := by
+  induction ms with
+  | nil => simp [wfMembers]
+  | cons m ms ih => obtain ⟨k, v⟩ := m; simp [wfMembers, ih]
+theorem rangeL_iff (xs : List J) : rangeL xs = true ↔ ∀ x ∈ xs, rangeJ x = true := by
+  induction xs with
+  | nil => simp [rangeL]
+  | cons x xs ih => simp [rangeL, ih]
+theorem rangeM_iff (ms : List (String × J)) : rangeM ms = true ↔ ∀ m ∈ ms, rangeJ m.2 = true := by
+  induction ms with
+  | nil => simp [rangeM]
+  | cons m ms ih => obtain ⟨k, v⟩ := m; simp [rangeM, ih]
+theorem sortedL_iff (xs : List J) : sortedL xs = true ↔ ∀ x ∈ xs, sortedJ x = true := by
+  induction xs with
+  | nil => simp [sortedL]
+  | cons x xs ih => simp [sortedL, ih]
+theorem sortedM_iff (ms : List (String × J)) : sortedM ms = true ↔ ∀ m ∈ ms, sortedJ m.2 = true := by
+  induction ms with
+  | nil => simp [sortedM]
+  | cons m ms ih => obtain ⟨k, v⟩ := m; simp [sortedM, ih]
+theorem depthL_le (xs : List J) (k : Nat) : depthL xs ≤ k ↔ ∀ x ∈ xs, depth x ≤ k := by
+  induction xs with
+  | nil => simp [depthL]
+  | cons x xs ih => simp [depthL, ih]
+theorem depthM_le (ms : List (String × J)) (k : Nat) : depthM ms ≤ k ↔ ∀ m ∈ ms, depth m.2 ≤ k := by
+  induction ms with
+  | nil => simp [depthM]
+  | cons m ms ih => obtain ⟨k', v⟩ := m; simp [depthM, ih]
+
+theorem depthM_perm {ms ms' : List (String × J)} (h : ms.Perm ms') : depthM ms = depthM ms' := by
+  apply Nat.le_antisymm
+  · rw [depthM_le]; intro m hm; exact (depthM_le ms' _).mp le_rfl m (h.mem_iff.mp hm)
+  · rw [depthM_le]; intro m hm; exact (depthM_le ms _).mp le_rfl m (h.mem_iff.mpr hm)
+
+mutual
+theorem depth_norm : (v : J) → depth (norm v) = depth v
+  | .arr xs => by simp only [norm, depth, depthL_norm xs]
+  | .obj ms => by simp only [norm, depth, depthM_perm (sortM_perm _), depthM_norm ms]
+  | .null | .bool _ | .int _ | .str _ => rfl
+theorem depthL_norm : (xs : List J) → depthL (normL xs) = depthL xs
+  | [] => rfl
+  | x :: xs => by simp only [normL, depthL, depth_norm x, depthL_norm xs]
+theorem depthM_norm : (ms : List (String × J)) → depthM (normM ms) = depthM ms
+  | [] => rfl
+  | (k, v) :: ms => by simp only [normM, depthM, depth_norm v, depthM_norm ms]
+end
+
+mutual
+theorem range_norm : (v : J) → rangeJ (norm v) = rangeJ v
+  | .arr xs => by simp only [norm, rangeJ, rangeL_norm xs]
+  | .obj ms => by
+    simp only [norm, rangeJ]
+    rw [Bool.eq_iff_iff, rangeM_iff, ← rangeM_norm ms, rangeM_iff]
+    exact ⟨fun h m hm => h m ((sortM_perm _).mem_iff.mpr hm), fun h m hm => h m ((sortM_perm _).mem_iff.mp hm)⟩
+  | .null | .bool _ | .int _ | .str _ => rfl
+theorem rangeL_norm : (xs : List J) → rangeL (normL xs) = rangeL xs
+  | [] => rfl
+  | x :: xs => by simp only [normL, rangeL, range_norm x, rangeL_norm xs]
+theorem rangeM_norm : (ms : List (String × J)) → rangeM (normM ms) = rangeM ms
+  | [] => rfl
+  | (k, v) :: ms => by simp only [normM, rangeM, range_norm v, rangeM_norm ms]
+end
+
+mutual
+theorem wf_norm : (v : J) → wfJ v = true → wfJ (norm v) = true
+  | .arr xs, h => by simp only [norm, wfJ] at h ⊢; exact wfList_norm xs h
+  | .obj ms, h => by
+    simp only [norm, wfJ, Bool.and_eq_true] at h ⊢
+    refine ⟨?_, ?_⟩
+    · rw [keysDistinct_iff, ((sortM_perm _).map _).nodup_iff, normM_keys, ← keysDistinct_iff]; exact h.1
+    · have := wfMembers_norm ms h.2
+      rw [wfMembers_iff] at this ⊢
+      exact fun m hm => this m ((sortM_perm _).mem_iff.mp hm)
+  | .null, _ | .bool _, _ | .int _, _ | .str _, _ => rfl
+theorem wfList_norm : (xs : List J) → wfList xs = true → wfList (normL xs) = true
+  | [], _ => rfl
+  | x :: xs, h => by
+    simp only [wfList, normL, Bool.and_eq_true] at h ⊢; exact ⟨wf_norm x h.1, wfList_norm xs h.2⟩
+theorem wfMembers_norm : (ms : List (String × J)) → wfMembers ms = true → wfMembers (normM ms) = true
+  | [], _ => rfl
+  | (k, v) :: ms, h => by
+    simp only [wfMembers, normM, Bool.and_eq_true] at h ⊢; exact ⟨wf_norm v h.1, wfMembers_norm ms h.2⟩
+end
+
+mutual
+theorem sorted_norm : (v : J) → wfJ v = true → sortedJ (norm v) = true
+  | .arr xs, h => by simp only [norm, wfJ, sortedJ] at h ⊢; exact sortedL_norm xs h
+  | .obj ms, h => by
+    simp only [norm, wfJ, sortedJ, Bool.and_eq_true] at h ⊢
+    refine ⟨?_, ?_⟩
+    · rw [keysSorted_iff]
+      apply sortM_sorted
+      rw [normM_keys, ← keysDistinct_iff]; exact h.1
+    · have := sortedM_norm ms h.2
+      rw [sortedM_iff] at this ⊢
+      exact fun m hm => this m ((sortM_perm _).mem_iff.mp hm)
+  | .null, _ | .bool _, _ | .int _, _ | .str _, _ => rfl
+theorem sortedL_norm : (xs : List J) → wfList xs = true → sortedL (normL xs) = true
+  | [], _ => rfl
+  | x :: xs, h => by
+    simp only [wfList, normL, sortedL, Bool.and_eq_true] at h ⊢; exact ⟨sorted_norm x h.1, sortedL_norm xs h.2⟩
+theorem sortedM_norm : (ms : List (String × J)) → wfMembers ms = true → sortedM (normM ms) = true
+  | [], _ => rfl
+  | (k, v) :: ms, h => by
+    simp only [wfMembers, normM, sortedM, Bool.and_eq_true] at h ⊢; exact ⟨sorted_norm v h.1, sortedM_norm ms h.2⟩
+end
+
+mutual
+theorem norm_of_sorted : (v : J) → sortedJ v = true → norm v = v
+  | .arr xs, h => by simp only [norm, sortedJ] at h ⊢; rw [normL_of_sorted xs h]
+  | .obj ms, h => by
+    simp only [norm, sortedJ, Bool.and_eq_true] at h ⊢
+    rw [normM_of_sorted ms h.2, sortM_of_sorted ms ((keysSorted_iff ms).mp h.1)]
+  | .null, _ | .bool _, _ | .int _, _ | .str _, _ => rfl
+theorem normL_of_sorted : (xs : List J) → sortedL xs = true → normL xs = xs
+  | [], _ => rfl
+  | x :: xs, h => by
+    simp only [sortedL, normL, Bool.and_eq_true] at h ⊢; rw [norm_of_sorted x h.1, normL_of_sorted xs h.2]
+theorem normM_of_sorted : (ms : List (String × J)) → sortedM ms = true → normM ms = ms
+  | [], _ => rfl
+  | (k, v) :: ms, h => by
+    simp only [sortedM, normM, Bool.and_eq_true] at h ⊢; rw [norm_of_sorted v h.1, normM_of_sorted ms h.2]
+end
+
+/-- The normal form of a document is canonical. -/
+theorem canon_norm {v : J} (h : doc v = true) : canon (norm v) = true := by
+  simp only [doc, Bool.and_eq_true, decide_eq_true_eq] at h
+  simp only [canon, doc, Bool.and_eq_true, decide_eq_true_eq, wf_norm v h.1.1, range_norm, h.1.2,
+    depth_norm, h.2, sorted_norm v h.1.1, and_self]
+
+/-- A canonical value is its own normal form. -/
+theorem norm_canon {v : J} (h : canon v = true) : norm v = v := by
+  simp only [canon, Bool.and_eq_true] at h
+  exact norm_of_sorted v h.2
+
+theorem norm_norm {v : J} (h : wfJ v = true) : norm (norm v) = norm v := norm_of_sorted _ (sorted_norm v h)
+
+
+/-! ## The theorems: writer and reader -/
+
+theorem writeChars_canon {v : J} (h : canon v = true) : writeChars v = wr v := by
+  unfold writeChars; rw [norm_canon h]
+
+theorem writeBytes_data (v : J) : (writeBytes v).data.toList = utf8Enc (writeChars v) := by
+  simp [writeBytes]
+
+theorem bytes_eq_of_data {b : ByteArray} {l : List UInt8} (h : b.data.toList = l) : b = ⟨l.toArray⟩ := by
+  cases b with
+  | mk data => simp only at h; subst h; simp
+
+theorem doc_of_canon {v : J} (h : canon v = true) : doc v = true := by
+  simp only [canon, Bool.and_eq_true] at h; exact h.1
+
+/-- **Round trip.** The reader reads the writer's bytes of every canonical value back to the value. -/
+theorem read_write {v : J} (h : canon v = true) : readBytes (writeBytes v) = .ok v := by
+  unfold writeBytes
+  rw [readBytes_enc, writeChars_canon h]
+  exact readChars_wr (doc_of_canon h)
+
+/-- The writer's bytes of any document read back to its normal form: the same members, every object's
+in key order. -/
+theorem read_write_doc {v : J} (h : doc v = true) : readBytes (writeBytes v) = .ok (norm v) := by
+  unfold writeBytes writeChars
+  rw [readBytes_enc]
+  exact readChars_wr (doc_of_canon (canon_norm h))
+
+/-- **One spelling per value.** The writer is injective on canonical values. -/
+theorem write_injective {v w : J} (hv : canon v = true) (hw : canon w = true)
+    (h : writeBytes v = writeBytes w) : v = w := by
+  have := read_write hv
+  rw [h, read_write hw] at this
+  exact (Except.ok.inj this).symm
+
+/-- Writing a value and writing its normal form give the same bytes. -/
+theorem writeBytes_norm {v : J} (h : wfJ v = true) : writeBytes (norm v) = writeBytes v := by
+  unfold writeBytes writeChars; rw [norm_norm h]
+
+/-- **Canonical form of an accepted document.** For every byte string the reader accepts, the writer's
+bytes of its value are a canonical document that reads back to the value's normal form, and writing
+that again gives the same bytes: the canonical spelling is a fixed point. -/
+theorem canonical_form {b : ByteArray} {v : J} (h : readBytes b = .ok v) :
+    readBytes (writeBytes v) = .ok (norm v) ∧ canon (norm v) = true ∧
+    writeBytes (norm v) = writeBytes v := by
+  have hd := readBytes_doc h
+  refine ⟨read_write_doc hd, canon_norm hd, writeBytes_norm ?_⟩
+  simp only [doc, Bool.and_eq_true] at hd; exact hd.1.1
+
+/-- Two accepted documents whose values have the same normal form (the same members, in any order)
+have byte identical canonical spellings. -/
+theorem same_value_same_spelling {b₁ b₂ : ByteArray} {v₁ v₂ : J} (_h₁ : readBytes b₁ = .ok v₁)
+    (_h₂ : readBytes b₂ = .ok v₂) (h : norm v₁ = norm v₂) : writeBytes v₁ = writeBytes v₂ := by
+  unfold writeBytes writeChars; rw [h]
+
+/-! ## The theorems: the strict reader -/
+
+/-- **The strict reader accepts exactly the canonical spellings.** It returns `v` exactly when `v` is
+canonical and the bytes are the writer's bytes of `v`. -/
+theorem readCanonical_iff (b : ByteArray) (v : J) :
+    readCanonical b = .ok v ↔ canon v = true ∧ b = writeBytes v := by
+  constructor
+  · intro h
+    unfold readCanonical at h
+    split at h
+    · simp at h
+    · rename_i v' hr
+      split at h
+      · rename_i heq
+        simp only [Except.ok.injEq] at h; subst h
+        have hb : b = writeBytes v' := by
+          rw [bytes_eq_of_data heq.symm]; rfl
+        have hn := (canonical_form hr).1
+        rw [← hb, hr] at hn
+        have hn' : norm v' = v' := (Except.ok.inj hn).symm
+        have := (canonical_form hr).2.1
+        rw [hn'] at this
+        exact ⟨this, hb⟩
+      · simp at h
+  · rintro ⟨hc, rfl⟩
+    unfold readCanonical
+    rw [read_write hc]
+    simp only [writeBytes_data, if_true]
+
+/-- The writer's bytes of a canonical value are accepted by the strict reader, as that value. -/
+theorem readCanonical_write {v : J} (h : canon v = true) : readCanonical (writeBytes v) = .ok v :=
+  (readCanonical_iff _ _).mpr ⟨h, rfl⟩
+
+/-- **Canonicity.** A byte string the strict reader accepts is the writer's spelling of what it read. -/
+theorem write_readCanonical {b : ByteArray} {v : J} (h : readCanonical b = .ok v) : writeBytes v = b :=
+  ((readCanonical_iff b v).mp h).2.symm
+
+/-- **One document per value.** Two byte strings the strict reader accepts with the same value are
+byte identical. -/
+theorem readCanonical_unique {b₁ b₂ : ByteArray} {v : J} (h₁ : readCanonical b₁ = .ok v)
+    (h₂ : readCanonical b₂ = .ok v) : b₁ = b₂ := by
+  rw [← write_readCanonical h₁, ← write_readCanonical h₂]
+
+/-- **Refusal.** Every byte string that is not the canonical spelling of a canonical value is refused. -/
+theorem readCanonical_refuses {b : ByteArray} (h : ∀ v, canon v = true → b ≠ writeBytes v) :
+    ∃ e, readCanonical b = .error e := by
+  cases hr : readCanonical b with
+  | error e => exact ⟨e, rfl⟩
+  | ok v => exact absurd ((readCanonical_iff b v).mp hr).2 (h v ((readCanonical_iff b v).mp hr).1)
+
+/-- The refusal's cause: the reader's own cause for a text that is not a document, and `notCanonical`
+for a document that is not spelled canonically. -/
+theorem readCanonical_cause (b : ByteArray) :
+    (∀ e, readBytes b = .error e → readCanonical b = .error (.doc e)) ∧
+    (∀ v, readBytes b = .ok v → b ≠ writeBytes v → readCanonical b = .error .notCanonical) := by
+  refine ⟨fun e h => by unfold readCanonical; rw [h], fun v h hne => ?_⟩
+  unfold readCanonical; rw [h]
+  simp only
+  rw [if_neg]
+  intro heq
+  exact hne (by rw [bytes_eq_of_data heq.symm]; rfl)
+
+/-- The strict reader accepts a byte string exactly when the reader does and the writer's bytes of the
+value are that byte string. -/
+theorem readCanonical_ok_iff (b : ByteArray) (v : J) :
+    readCanonical b = .ok v ↔ readBytes b = .ok v ∧ writeBytes v = b := by
+  constructor
+  · intro h
+    obtain ⟨hc, rfl⟩ := (readCanonical_iff b v).mp h
+    exact ⟨read_write hc, rfl⟩
+  · rintro ⟨hr, rfl⟩
+    unfold readCanonical; rw [hr]; simp [writeBytes_data]
 
 end Core
