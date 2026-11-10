@@ -242,11 +242,12 @@
   "min_suite_by_class": {
    "cui": "cnsa2-hybrid-1"
   },
-  "registry_hash": "374e1c666612b3c71e100f64c884c94b55f6a37609a6b85e61055ce49f77d20b",
+  "registry_hash": "e28d7a6ee9a383c496e9ede612bbcee6e832ebe6bdef351635dc6a51242567e7",
   "require_level_m": true
  },
  "format": "crypto-agility-conformance/1",
  "registry": {
+  "encoding": "canon/2",
   "format": "ppt-suite-registry/1",
   "key_id": "0000000000000000000000000000000000000000000000000000000000000000",
   "suites": {
@@ -273,5 +274,5 @@
    }
   }
  },
- "registry_hash": "374e1c666612b3c71e100f64c884c94b55f6a37609a6b85e61055ce49f77d20b"
+ "registry_hash": "e28d7a6ee9a383c496e9ede612bbcee6e832ebe6bdef351635dc6a51242567e7"
 }

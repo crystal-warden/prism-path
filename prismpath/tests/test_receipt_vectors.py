@@ -13,6 +13,12 @@ guarantees, enforced on every run:
      Python verifiers, gives the committed verdict.
   3. THE RUST VERIFIER AGREES. `prismpath-hotswap-rs` replays the same file and must give every
      verdict (skipped where cargo is not installed; CI runs the crate's tests directly as well).
+
+`receipts.json` is canon/2: events with `ts_us` and the `encoding` tag, `prismpath-root-statement/2`
+statements, flow manifests signed over the canon/2 domain. `receipts_canon1.json` is its frozen canon/1
+twin, the set as it stood before the migration: it is never regenerated, and guarantees 2 and 3 hold for
+it too, so the verify only canon/1 reader keeps deciding every old log, chain, bundle and manifest the
+way it did.
 """
 import json
 import shutil
@@ -25,6 +31,7 @@ pytest.importorskip("cryptography")
 from prismpath.tests._repo import repo_file  # noqa: E402
 
 VECTORS = repo_file("prismpath", "portable", "conformance", "receipts.json")
+FROZEN_CANON1 = repo_file("prismpath", "portable", "conformance", "receipts_canon1.json")
 CARGO = shutil.which("cargo")
 
 
@@ -39,6 +46,7 @@ def _generator():
 GEN = _generator()
 DOC = json.loads(VECTORS.read_text(encoding="utf-8"))
 CASES = DOC["cases"]
+SETS = {"canon2": CASES, "canon1": json.loads(FROZEN_CANON1.read_text(encoding="utf-8"))["cases"]}
 
 
 def test_no_silent_drift():
@@ -47,7 +55,9 @@ def test_no_silent_drift():
         "run `python prismpath/portable/gen_receipt_fixtures.py` and review the diff.")
 
 
-def test_the_set_covers_every_kind_and_every_named_tamper():
+@pytest.mark.parametrize("encoding", sorted(SETS))
+def test_the_set_covers_every_kind_and_every_named_tamper(encoding):
+    CASES = SETS[encoding]
     kinds = {case["kind"] for case in CASES}
     assert kinds == {"canon", "merkle", "trail", "bundle", "flow", "floor", "separation"}
     findings = {finding["finding"] for case in CASES if case["kind"] == "trail" for finding in case["expect"]["findings"]}
@@ -62,7 +72,25 @@ def test_the_set_covers_every_kind_and_every_named_tamper():
 
 
 def _ids(kind):
-    return [pytest.param(case, id=case["name"]) for case in CASES if case["kind"] == kind]
+    return [pytest.param(case, id=f"{encoding}:{case['name']}")
+            for encoding, cases in sorted(SETS.items()) for case in cases if case["kind"] == kind]
+
+
+def test_the_canon2_set_is_canon2_and_the_frozen_set_is_canon1():
+    """Every log line and statement of `receipts.json` names canon/2, and none of the frozen twin's does."""
+    def tags(cases):
+        found = set()
+        for case in cases:
+            if case["kind"] != "trail":
+                continue
+            for text in (case["log_text"], case["statements_text"] or ""):
+                for line in text.splitlines():
+                    try:
+                        found.add(json.loads(line).get("encoding", "canon/1"))
+                    except (ValueError, AttributeError):
+                        pass
+        return found
+    assert "canon/2" in tags(SETS["canon2"]) and tags(SETS["canon1"]) == {"canon/1"}
 
 
 @pytest.mark.parametrize("case", _ids("canon"))

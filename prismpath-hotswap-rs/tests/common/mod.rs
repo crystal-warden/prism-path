@@ -60,16 +60,16 @@ pub fn fresh_dir(tag: &str) -> Scratch {
     Scratch::new(&format!("host_{tag}"))
 }
 
-/// The clock the corpus was generated under: the Nth epoch read is `base + step * N`, the Nth ISO read
+/// The clock the corpus was generated under: the Nth epoch read (microseconds) is `base + step * N`, the Nth ISO read
 /// is `base_iso + N` seconds.
 pub fn counter_clock(doc: &Value) -> Clock {
-    let base = doc["clock"]["base_epoch"].as_f64().unwrap();
-    let step = doc["clock"]["epoch_step"].as_f64().unwrap();
+    let base = doc["clock"]["base_epoch_us"].as_i64().unwrap();
+    let step = doc["clock"]["epoch_step_us"].as_i64().unwrap();
     let base_iso = doc["clock"]["base_iso"].as_u64().unwrap();
     let epoch_calls = Arc::new(AtomicU64::new(0));
     let iso_calls = Arc::new(AtomicU64::new(0));
     Clock::new(
-        move || base + step * epoch_calls.fetch_add(1, Ordering::SeqCst) as f64,
+        move || base + step * epoch_calls.fetch_add(1, Ordering::SeqCst) as i64,
         move || iso_from_epoch(base_iso + iso_calls.fetch_add(1, Ordering::SeqCst)),
     )
 }

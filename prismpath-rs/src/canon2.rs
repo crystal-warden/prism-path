@@ -418,3 +418,60 @@ impl Doc {
         }
     }
 }
+
+/// A serde_json value as a canon/2 document: an integer number within plus or minus 2^53 minus 1 is an
+/// `Int`, a number written with a fraction or an exponent is refused as `Float`, an integer beyond the
+/// range as `IntegerRange`, and nesting deeper than `MAX_DEPTH` as `Depth`. This is how a writer that
+/// builds its document in serde_json hands it to `write`.
+pub fn from_json(value: &serde_json::Value) -> Result<Doc, Canon2Error> {
+    from_json_at(value, 0)
+}
+
+fn from_json_at(value: &serde_json::Value, depth: usize) -> Result<Doc, Canon2Error> {
+    Ok(match value {
+        serde_json::Value::Null => Doc::Null,
+        serde_json::Value::Bool(flag) => Doc::Bool(*flag),
+        serde_json::Value::Number(number) => {
+            if let Some(integer) = number.as_i64() {
+                if !(-EXACT_LIMIT..=EXACT_LIMIT).contains(&integer) {
+                    return Err(Canon2Error::IntegerRange);
+                }
+                Doc::Int(integer)
+            } else if number.as_u64().is_some() {
+                return Err(Canon2Error::IntegerRange);
+            } else {
+                // serde_json keeps the digits it read (`arbitrary_precision`): an integer too wide for
+                // 64 bits has only digits and a sign, a float has a fraction or an exponent.
+                let text = number.to_string();
+                let digits = text.strip_prefix('-').unwrap_or(&text);
+                if !digits.is_empty() && digits.bytes().all(|byte| byte.is_ascii_digit()) {
+                    return Err(Canon2Error::IntegerRange);
+                }
+                return Err(Canon2Error::Float);
+            }
+        }
+        serde_json::Value::String(text) => Doc::Str(text.clone()),
+        serde_json::Value::Array(items) => {
+            if depth + 1 > MAX_DEPTH {
+                return Err(Canon2Error::Depth);
+            }
+            Doc::Arr(items.iter().map(|item| from_json_at(item, depth + 1)).collect::<Result<_, _>>()?)
+        }
+        serde_json::Value::Object(members) => {
+            if depth + 1 > MAX_DEPTH {
+                return Err(Canon2Error::Depth);
+            }
+            Doc::Obj(
+                members
+                    .iter()
+                    .map(|(key, item)| Ok((key.clone(), from_json_at(item, depth + 1)?)))
+                    .collect::<Result<_, Canon2Error>>()?,
+            )
+        }
+    })
+}
+
+/// The canon/2 bytes of a serde_json value: `write(&from_json(value)?)`.
+pub fn write_json(value: &serde_json::Value) -> Result<Vec<u8>, Canon2Error> {
+    write(&from_json(value)?)
+}

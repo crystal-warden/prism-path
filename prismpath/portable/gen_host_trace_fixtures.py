@@ -16,7 +16,8 @@ records is the result of every operation, and at the end the persisted log read 
 leaves, Merkle root, skipped line numbers, both verifications) and the state directory's files.
 
 Determinism. The authority key is derived from a fixed seed, so every signature is reproducible. The
-clock is a counter: the Nth `time.time()` the audit log reads is `BASE_EPOCH + 0.25 * N` and the Nth
+clock is a counter: the Nth `time.time_ns()` the audit log reads is `BASE_EPOCH_US + 250000 * N`
+microseconds (in nanoseconds) and the Nth
 `_now()` of the host is `BASE_ISO + N` seconds, so the timestamps in events, leaves and the
 `active_policy.json` record are part of the expected bytes. The one thing that cannot be frozen is the
 absolute path of the work directory: `ppt_path` in `active_policy.json` is `abspath` of the pack, so
@@ -55,8 +56,8 @@ from prismpath.kernel.parser import parse  # noqa: E402
 from prismpath.ledgers import audit_log as al  # noqa: E402
 
 OUT = HERE / "conformance" / "host_trace.json"
-BASE_EPOCH = 1760000000.0
-EPOCH_STEP = 0.25
+BASE_EPOCH_US = 1760000000_000000
+EPOCH_STEP_US = 250000
 BASE_ISO = 1767225600          # 2026-01-01T00:00:00Z
 FIELDS = {"temp": "int"}
 UNICODE_ENVELOPE = "env-é☃\U0001F600"
@@ -108,8 +109,8 @@ class Clock:
         self.epoch_calls = 0
         self.iso_calls = 0
 
-    def epoch(self):
-        value = BASE_EPOCH + EPOCH_STEP * self.epoch_calls
+    def epoch_ns(self):
+        value = (BASE_EPOCH_US + EPOCH_STEP_US * self.epoch_calls) * 1000
         self.epoch_calls += 1
         return value
 
@@ -322,10 +323,10 @@ def _cases(key_id):
     # images the record does not name, and a state directory written with the image called active.ppt
     legacy_v1 = [{"op": "fs", "do": "rename", "path": "active-{sha:v1}.ppt", "to": "active.ppt"},
                  {"op": "fs", "do": "replace", "path": "active_policy.json",
-                  "old": "\"image_file\": \"active-{sha:v1}.ppt\", ", "new": ""}]
+                  "old": "\"image_file\":\"active-{sha:v1}.ppt\",", "new": ""}]
     legacy_v2 = [{"op": "fs", "do": "rename", "path": "active-{sha:v2}.ppt", "to": "active.ppt"},
                  {"op": "fs", "do": "replace", "path": "active_policy.json",
-                  "old": "\"image_file\": \"active-{sha:v2}.ppt\", ", "new": ""}]
+                  "old": "\"image_file\":\"active-{sha:v2}.ppt\",", "new": ""}]
     case("stray_image_with_wrong_content_is_ignored_then_overwritten",
          [open_, _swap("v1"),
           {"op": "fs", "do": "write", "path": "active-{sha:v2}.ppt", "text": "not the image"},
@@ -446,8 +447,8 @@ def _install_fault(host, step, action="swap"):
         real = canon.atomic_write_bytes
         patch(canon, "atomic_write_bytes", lambda path, data: boom() if os.path.basename(str(path)).startswith("active-") else real(path, data))
     elif step == "active_record":
-        real = canon.atomic_write
-        patch(canon, "atomic_write", lambda path, data, *a, **k: boom() if str(path).endswith("active_policy.json") else real(path, data, *a, **k))
+        real = canon.atomic_write_bytes
+        patch(canon, "atomic_write_bytes", lambda path, data: boom() if str(path).endswith("active_policy.json") else real(path, data))
     elif step == "clear":
         patch(host, "_clear_pending", boom)
     else:
@@ -548,7 +549,7 @@ def run_case(case, doc, work):
     envelope = doc["envelopes"][case.get("envelope", "default")]
     clock = Clock()
     saved_time, saved_now = al.time, ph._now
-    al.time = types.SimpleNamespace(time=clock.epoch)
+    al.time = types.SimpleNamespace(time_ns=clock.epoch_ns)
     ph._now = clock.iso
     host = None
     results = []
@@ -616,7 +617,7 @@ def build():
                "note": "Policy host traces. Every result, event, leaf, root and file was produced by the Python "
                        "PolicyHost and AuditLog under a counter clock; the Rust host must reproduce each exactly. "
                        "The work directory is written as @ROOT@.",
-               "clock": {"base_epoch": BASE_EPOCH, "epoch_step": EPOCH_STEP, "base_iso": BASE_ISO},
+               "clock": {"base_epoch_us": BASE_EPOCH_US, "epoch_step_us": EPOCH_STEP_US, "base_iso": BASE_ISO},
                "steps": STEPS, "rollback_steps": ROLLBACK_STEPS,
                "authority_pub_hex": Path(pub_path).read_bytes().hex(), "authority_key_id": key_id,
                "envelopes": {"default": envelope, "unicode": unicode_envelope},

@@ -8,13 +8,15 @@ executes, has no image, so until now nothing let the authority say "this flow, a
 run". A **flow manifest** does. It is a detached JSON document beside the flow, `flow.md.manifest.json`
 with its Ed25519 signature in `flow.md.manifest.sig`, the same two file shape a pack manifest has:
 
-    {"format": "prismpath-flow-manifest/1", "flow": "<the flow's name>",
+    {"format": "prismpath-flow-manifest/1", "encoding": "canon/2", "flow": "<the flow's name>",
      "flow_sha256": "<sha256 of the flow document>", "version": 3,
      "fields": {"amount": "fixed scale 2 ..."},       # only when the flow defines its fields
      "key_id": "<sha256 of the authority public key>", "created": "2026-11-04T12:00:00+00:00"}
 
-The signature covers the canonical compact JSON of the manifest (`policy_pack.canonical_bytes`), as a
-pack manifest's does; the `format` field keeps the two from ever being the same bytes. The flow's hash
+The signature covers `canon.CANON2_DOMAIN` and the canon/2 bytes of the manifest
+(`policy_pack.signed_bytes`), as a pack manifest's does; the `format` field keeps the two from ever being
+the same bytes. A manifest without `encoding`, signed before the migration over canon/1 compact JSON with
+no domain, is verified that way and never written. The flow's hash
 is the sha256 of its UTF-8 text with line endings read as LF, the same hash `swap pack --flow` records
 in a pack manifest, so a checkout that turns LF into CRLF does not unauthorize a flow and a change to
 any character does.
@@ -94,16 +96,14 @@ def sign_flow(flow_path: str, version: int, priv_path: str, pub_path: str) -> di
     derived = private_key.public_key().public_bytes(ser.Encoding.Raw, ser.PublicFormat.Raw)
     if canon.sha256_hex(derived) != key_id:
         raise ValueError(f"{priv_path} is not the private half of {pub_path}")
-    manifest = {"format": FLOW_MANIFEST_FORMAT, "flow": graph.name, "flow_sha256": canon.sha256_hex(text.encode("utf-8")),
+    manifest = {"format": FLOW_MANIFEST_FORMAT, canon.ENCODING_KEY: canon.CANON2, "flow": graph.name, "flow_sha256": canon.sha256_hex(text.encode("utf-8")),
                 "version": int(version), "key_id": key_id,
                 "created": datetime.now(timezone.utc).isoformat(timespec="seconds")}
     if graph.fields:
         manifest["fields"] = {name: definition.canonical_text() for name, definition in sorted(graph.fields.items())}
-    signature = private_key.sign(pp.canonical_bytes(manifest))
+    signature = private_key.sign(pp.signed_bytes(manifest))
     json_path, sig_path = manifest_paths(flow_path)
-    with open(json_path, "w", encoding="utf-8") as handle:
-        json.dump(manifest, handle, indent=1, sort_keys=True)
-        handle.write("\n")
+    pp.write_signed_document(json_path, manifest)
     with open(sig_path, "wb") as handle:
         handle.write(signature)
     return manifest
@@ -114,7 +114,7 @@ def read_manifest(flow_path: str) -> Optional[dict]:
     json_path, _sig_path = manifest_paths(flow_path)
     try:
         with open(json_path, encoding="utf-8") as handle:
-            manifest = canon.load(handle)
+            manifest = canon.loads_document(handle.read())
     except (FileNotFoundError, ValueError):
         return None
     return manifest if isinstance(manifest, dict) else None
@@ -131,7 +131,7 @@ def verify_flow(flow_path: str, pubkey_paths: List[str], revoked: frozenset = fr
         return False, ["sig:missing"], None
     try:
         with open(json_path, encoding="utf-8") as handle:
-            manifest = canon.load(handle)
+            manifest = canon.loads_document(handle.read())
     except ValueError:
         return False, ["manifest:bad-format"], None
     with open(sig_path, "rb") as handle:
@@ -139,7 +139,7 @@ def verify_flow(flow_path: str, pubkey_paths: List[str], revoked: frozenset = fr
     if not isinstance(manifest, dict) or manifest.get("format") != FLOW_MANIFEST_FORMAT \
             or not isinstance(manifest.get("version"), int):
         return False, ["manifest:bad-format"], manifest if isinstance(manifest, dict) else None
-    payload = pp.canonical_bytes(manifest)
+    payload = pp.signed_bytes(manifest)
     signer_id = None
     # Any one trusted key may have signed, so a rotation can trust the old and the new key together; the
     # key that verified, not the one the manifest names, decides what is checked next.

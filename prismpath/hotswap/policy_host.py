@@ -153,7 +153,7 @@ class PolicyHost:
     def _read_pending(self) -> Optional[dict]:
         try:
             with open(self._pending_path()) as pending_file:
-                return canon.loads(pending_file.read())
+                return canon.loads_document(pending_file.read())
         except FileNotFoundError:
             return None
         except (OSError, ValueError) as error:
@@ -163,7 +163,7 @@ class PolicyHost:
         record = {"to_hash": to_hash, "version": version}
         if op is not None:
             record["op"] = op
-        canon.atomic_write(self._pending_path(), canon.dumps_strict(record, sort_keys=True))
+        canon.atomic_write_bytes(self._pending_path(), canon.canon2_bytes(canon.tagged(record)))
         _fsync_dir(self.state_dir)
 
     def _clear_pending(self) -> None:
@@ -213,7 +213,7 @@ class PolicyHost:
         _fsync_dir(self.state_dir)
         record = {key: value for key, value in policy.items() if key != "image"}
         record["image_file"] = name
-        canon.atomic_write(self._active_record_path(), canon.dumps_strict(record, sort_keys=True))
+        canon.atomic_write_bytes(self._active_record_path(), canon.canon2_bytes(canon.tagged(record)))
         _fsync_dir(self.state_dir)
         return name
 
@@ -245,7 +245,7 @@ class PolicyHost:
         ledger says so; the host then holds no active policy, the fail closed answer."""
         try:
             with open(self._active_record_path()) as record_file:
-                record = canon.loads(record_file.read())
+                record = canon.loads_document(record_file.read())
         except FileNotFoundError:
             return
         except (OSError, ValueError) as error:
@@ -255,6 +255,7 @@ class PolicyHost:
         if not isinstance(record, dict):
             self.audit.append("policy_host", "active_unreadable", {"reason": "record:not-an-object", "result": "not_restored"})
             return
+        record.pop(canon.ENCODING_KEY, None)     # the tag says how the record was read, not what is active
         # A record without `image_file` is the old layout, whose image is `active.ppt`.
         name = record.get("image_file", LEGACY_IMAGE)
         if name != LEGACY_IMAGE and not (isinstance(name, str) and _IMAGE_FILE.fullmatch(name)):

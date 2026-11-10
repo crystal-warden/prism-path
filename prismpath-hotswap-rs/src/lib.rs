@@ -19,7 +19,7 @@
 //! across runtimes, only public keys and signatures are).
 
 use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
-use prismpath_rs::durable::{try_py_canonical_string, CanonicalError};
+use prismpath_rs::durable::{self, CanonicalError};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
@@ -60,10 +60,25 @@ pub fn default_caps() -> BTreeMap<String, u64> {
         .collect()
 }
 
-/// The compact canonical bytes a signature is computed over. A value with no canonical form (a number
-/// beyond the double range) is refused with `CanonicalError`.
+/// The bytes a document is hashed over, decided by its own tag (`durable::document_bytes`): canon/2 for a
+/// document that names it, which is every document written now, canon/1 compact for an untagged one
+/// written before the migration (verify only). A value with no form under its encoding is refused.
 pub fn canonical_bytes(obj: &Value) -> Result<Vec<u8>, CanonicalError> {
-    try_py_canonical_string(obj, false).map(String::into_bytes)
+    durable::document_bytes(obj)
+}
+
+/// The bytes a signature over a manifest, an envelope or a flow manifest covers
+/// (`durable::signed_message`): the canon/2 domain and canon/2 bytes for a tagged document, the bare
+/// canon/1 compact bytes for a legacy one, which is verified and never signed.
+pub fn signed_bytes(obj: &Value) -> Result<Vec<u8>, CanonicalError> {
+    durable::signed_message(obj)
+}
+
+/// A signed document as it is written to disk: its canon/2 bytes and a newline.
+pub fn write_signed_document(path: &str, doc: &Value) -> Result<(), String> {
+    let mut bytes = durable::canon2_bytes(doc).map_err(|error| error.to_string())?;
+    bytes.push(b'\n');
+    std::fs::write(path, bytes).map_err(|error| error.to_string())
 }
 
 pub fn sha256_hex(data: &[u8]) -> String {
@@ -343,6 +358,7 @@ pub fn build_manifest(
     let header = read_ppt_header(image)?;
     Ok(json!({
         "format": PACK_FORMAT,
+        "encoding": durable::CANON2,
         "image_sha256": sha256_hex(image),
         "fields": fields,
         "counts": {"atoms": header.atoms, "nodes": header.nodes, "edges": header.edges,
@@ -435,12 +451,8 @@ pub fn build_pack_with(
     if let Some(flow_sha256) = flow_sha256 {
         members.insert("flow_sha256".to_string(), json!(flow_sha256));
     }
-    let sig = load_private(priv_path)?.sign(&canonical_bytes(&manifest).map_err(|error| error.to_string())?);
-    std::fs::write(
-        format!("{ppt_path}.manifest.json"),
-        serde_json::to_string_pretty(&manifest).map_err(|error| error.to_string())? + "\n",
-    )
-    .map_err(|error| error.to_string())?;
+    let sig = load_private(priv_path)?.sign(&signed_bytes(&manifest).map_err(|error| error.to_string())?);
+    write_signed_document(&format!("{ppt_path}.manifest.json"), &manifest)?;
     std::fs::write(format!("{ppt_path}.manifest.sig"), sig.to_bytes()).map_err(|error| error.to_string())?;
     Ok(manifest)
 }
@@ -476,7 +488,7 @@ pub fn verify_pack(
     // NaN, Infinity or a number beyond the double range, or is not an object, is that refusal with no manifest.
     let Some(manifest) = String::from_utf8(man_bytes)
         .ok()
-        .and_then(|man_text| prismpath_rs::value::parse_strict(&man_text).ok())
+        .and_then(|man_text| durable::read_document(&man_text).ok())
         .filter(|parsed| parsed.is_object())
     else {
         return (false, vec!["manifest:bad-format".to_string()], None);
@@ -485,7 +497,7 @@ pub fn verify_pack(
         return (false, vec!["manifest:bad-format".to_string()], Some(manifest));
     }
 
-    let Ok(payload) = canonical_bytes(&manifest) else {
+    let Ok(payload) = signed_bytes(&manifest) else {
         return (false, vec!["manifest:bad-format".to_string()], Some(manifest));
     };
     let Ok(sig_arr): Result<[u8; 64], _> = sig_bytes.as_slice().try_into() else {
@@ -574,15 +586,12 @@ pub fn build_envelope(
         "caps": merged,
         "require_level_m": true,
         "key_id": key_id,
+        "encoding": durable::CANON2,
     });
-    let sig = load_private(priv_path)?.sign(&canonical_bytes(&env).map_err(|error| error.to_string())?);
+    let sig = load_private(priv_path)?.sign(&signed_bytes(&env).map_err(|error| error.to_string())?);
     std::fs::create_dir_all(out_dir).map_err(|error| error.to_string())?;
     let base = format!("{out_dir}/{envelope_id}.envelope");
-    std::fs::write(
-        format!("{base}.json"),
-        serde_json::to_string_pretty(&env).map_err(|error| error.to_string())? + "\n",
-    )
-    .map_err(|error| error.to_string())?;
+    write_signed_document(&format!("{base}.json"), &env)?;
     std::fs::write(format!("{base}.sig"), sig.to_bytes()).map_err(|error| error.to_string())?;
     Ok(env)
 }
@@ -595,14 +604,14 @@ pub fn load_envelope(base_path: &str, pubkey_paths: &[String]) -> (Option<Value>
     ) else {
         return (None, vec!["envelope:missing".to_string()]);
     };
-    let Ok(env) = prismpath_rs::value::parse_strict(&text) else {
+    let Ok(env) = durable::read_document(&text) else {
         return (None, vec!["envelope:missing".to_string()]);
     };
     let Ok(sig_arr): Result<[u8; 64], _> = sig_bytes.as_slice().try_into() else {
         return (None, vec!["envelope:sig-invalid".to_string()]);
     };
     let sig = Signature::from_bytes(&sig_arr);
-    let Ok(payload) = canonical_bytes(&env) else {
+    let Ok(payload) = signed_bytes(&env) else {
         return (None, vec!["envelope:sig-invalid".to_string()]);
     };
     for path in pubkey_paths {

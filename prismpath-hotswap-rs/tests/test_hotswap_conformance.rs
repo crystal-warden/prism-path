@@ -58,9 +58,21 @@ fn stage_case(dir: &std::path::Path, case: &Value) -> (String, Vec<String>) {
     (ppt.to_str().unwrap().to_string(), pubs)
 }
 
+/// The frozen canon/1 twin (`hotswap_canon1.json`, never regenerated): packs signed before the migration,
+/// over canon/1 compact bytes with no domain, which the verify only canon/1 reader must still decide.
+fn frozen_canon1_fixtures() -> Value {
+    let path = format!("{}/../prismpath/portable/conformance/hotswap_canon1.json", env!("CARGO_MANIFEST_DIR"));
+    serde_json::from_str(&std::fs::read_to_string(path).expect("read hotswap_canon1.json")).expect("parse hotswap_canon1.json")
+}
+
 #[test]
 fn python_signed_packs_verify_with_identical_verdicts() {
-    let fx = fixtures();
+    for fx in [fixtures(), frozen_canon1_fixtures()] {
+        verdicts_match(&fx);
+    }
+}
+
+fn verdicts_match(fx: &Value) {
     let cases = fx["cases"].as_array().unwrap();
     for case in cases {
         let name = case["name"].as_str().unwrap();

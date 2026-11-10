@@ -58,10 +58,8 @@ def build_crypto_pack(ppt_path: str, fields: dict, version: int, envelope_id: st
     manifest["suites"] = sorted(suites)
     manifest["registry_hash"] = registry_hash
     priv = pp._load_private(priv_path)
-    sig = priv.sign(pp.canonical_bytes(manifest))
-    with open(ppt_path + ".manifest.json", "w") as handle:
-        handle.write(canon.dumps_strict(manifest, indent=1, sort_keys=True))
-        handle.write("\n")
+    sig = priv.sign(pp.signed_bytes(manifest))
+    pp.write_signed_document(ppt_path + ".manifest.json", manifest)
     with open(ppt_path + ".manifest.sig", "wb") as handle:
         handle.write(sig)
     return manifest

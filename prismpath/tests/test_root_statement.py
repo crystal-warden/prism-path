@@ -155,7 +155,8 @@ def test_statement_round_trip(key, tmp_path):
     assert first["format"] == rs.STATEMENT_FORMAT and first["seq"] == 0 and first["prev"] == ""
     assert second["prev"] == rs.statement_hash(first) and second["seq"] == 1
     assert first["key_id"] == key.key_id and first["public_key"] == key.public_raw.hex()
-    assert first["policy"] == {"flow_sha256": "cd" * 32} and first["time"].endswith("Z")
+    assert first["policy"] == {"flow_sha256": "cd" * 32} and isinstance(first["time_us"], int)
+    assert first["encoding"] == "canon/2"
     assert rs.signed_bytes(first).startswith(rs.SIGNING_DOMAIN)
     # The hash covers the signature: the same body with another signature is another statement.
     forged = dict(first, sig="00" * 64)

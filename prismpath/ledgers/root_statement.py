@@ -20,17 +20,19 @@ a host that is handed an authority key as its instance key refuses it (`check_se
 
 A statement, one JSON line in the statements file beside the log:
 
-    {"format": "prismpath-root-statement/1", "log": "audit-log", "seq": 3,
+    {"format": "prismpath-root-statement/2", "encoding": "canon/2", "log": "audit-log", "seq": 3,
      "root": "<hex>", "leaves": 42, "prev": "<sha256 of statement 2, or empty for the first>",
-     "time": "2026-11-04T12:00:00.123Z", "trigger": "run-end",
+     "time_us": 1762257600123000, "trigger": "run-end",
      "key_id": "<sha256 of the raw public key>", "public_key": "<raw public key, hex>",
      "policy": {"flow_sha256": "<hex>"} or null,
      "sig": "<Ed25519 signature, hex>"}
 
-The signature covers `SIGNING_DOMAIN` followed by the canonical compact JSON of every field except
-`sig`. A statement's own hash, which the next statement names as `prev` and which `ledger anchor`
-anchors, is the sha256 of the canonical compact JSON of the whole statement, signature included, so an
-anchored timestamp covers the signature as well as the root.
+The signature covers `SIGNING_DOMAIN` followed by the canon/2 bytes of every field except `sig`. A
+statement's own hash, which the next statement names as `prev` and which `ledger anchor` anchors, is the
+sha256 of the canon/2 bytes of the whole statement, signature included, so an anchored timestamp covers
+the signature as well as the root. A `prismpath-root-statement/1` statement, written before canon/2, has
+an ISO `time`, no `encoding`, and is signed and hashed over canon/1 compact JSON; it is read and verified
+that way and never written.
 
 What it proves and what it does not. A pinned public key and a chain that verifies show that the
 holder of the instance key stated these roots, in this order, and that the log still holds the leaves
@@ -47,7 +49,6 @@ needs nothing.
 from __future__ import annotations
 
 import datetime as _dt
-import json
 import os
 from typing import Callable, Dict, Iterable, List, Optional, Tuple
 
@@ -55,8 +56,14 @@ from prismpath import canon
 from prismpath.extras import MissingExtra
 from prismpath.ledgers import ledger_ots as merkle
 
-STATEMENT_FORMAT = "prismpath-root-statement/1"
-SIGNING_DOMAIN = b"prismpath-root-statement/1\x00"
+# A statement is written as `prismpath-root-statement/2`, a canon/2 document that names its encoding and
+# carries its time as an integer of microseconds; `/1`, canon/1 with an ISO time, is read and verified only,
+# so a chain signed before the migration, and an anchor over one of its hashes, still verify. A chain may
+# hold both: each statement is hashed and its signature checked under the encoding its own format names.
+STATEMENT_FORMAT = "prismpath-root-statement/2"
+SIGNING_DOMAIN = b"prismpath-root-statement/2\x00"
+LEGACY_FORMAT = "prismpath-root-statement/1"
+LEGACY_SIGNING_DOMAIN = b"prismpath-root-statement/1\x00"
 INSTANCE_KEY_ENV = "PRISMPATH_INSTANCE_KEY"
 DEFAULT_KEY_NAME = "instance"
 
@@ -65,8 +72,14 @@ DEFAULT_KEY_NAME = "instance"
 LOG_AUDIT = "audit-log"
 LOG_EPOCH_CHAIN = "epoch-chain"
 
-_BODY_FIELDS = ("format", "log", "seq", "root", "leaves", "prev", "time", "trigger",
+_BODY_FIELDS = ("format", "encoding", "log", "seq", "root", "leaves", "prev", "time_us", "trigger",
                 "key_id", "public_key", "policy")
+_LEGACY_BODY_FIELDS = ("format", "log", "seq", "root", "leaves", "prev", "time", "trigger",
+                       "key_id", "public_key", "policy")
+
+
+def _body_fields(statement: dict) -> tuple:
+    return _LEGACY_BODY_FIELDS if statement.get("format") == LEGACY_FORMAT else _BODY_FIELDS
 
 # Findings that make a chain invalid. `interrupted_statement` (a torn final line from a crash mid
 # write) is reported and is not one of them: the statement it would have been never existed.
@@ -264,25 +277,31 @@ def prefix_roots(leaves: List[str], counts: Iterable[int]) -> Dict[int, str]:
 
 
 def signed_bytes(statement: dict) -> bytes:
-    """The bytes the signature covers: the domain prefix, then every field but `sig`, canonical."""
-    return SIGNING_DOMAIN + canon.canonical_compact({key: statement[key] for key in _BODY_FIELDS})
+    """The bytes the signature covers: the domain prefix of the statement's format, then every field but
+    `sig` in that format's encoding (canon/2 for `/2`, canon/1 compact for a legacy `/1`, verify only)."""
+    if statement.get("format") == LEGACY_FORMAT:
+        return LEGACY_SIGNING_DOMAIN + canon.canonical_compact({key: statement[key] for key in _LEGACY_BODY_FIELDS})
+    return SIGNING_DOMAIN + canon.canon2_bytes({key: statement[key] for key in _BODY_FIELDS})
 
 
 def statement_hash(statement: dict) -> str:
     """The statement's content address, signature included: what the next statement chains to and what
-    `ledger anchor` stamps."""
-    return canon.sha256_hex(canon.canonical_compact(statement))
+    `ledger anchor` stamps. A `/2` statement names canon/2 and is hashed under it; a `/1` statement has
+    no tag and is hashed under canon/1, as it was when it was signed and anchored."""
+    return canon.document_hash(statement)
 
 
-def _now() -> str:
-    return _dt.datetime.now(_dt.timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+def _now_us() -> int:
+    import time as _time
+    return _time.time_ns() // 1000
 
 
 def make_statement(key: InstanceKey, *, log: str, seq: int, root: str, leaves: int, prev: str,
-                   trigger: str, policy: Optional[dict] = None, time: Optional[str] = None) -> dict:
-    body = {"format": STATEMENT_FORMAT, "log": log, "seq": int(seq), "root": root, "leaves": int(leaves),
-            "prev": prev, "time": time or _now(), "trigger": trigger, "key_id": key.key_id,
-            "public_key": key.public_raw.hex(), "policy": policy}
+                   trigger: str, policy: Optional[dict] = None, time_us: Optional[int] = None) -> dict:
+    body = {"format": STATEMENT_FORMAT, canon.ENCODING_KEY: canon.CANON2, "log": log, "seq": int(seq),
+            "root": root, "leaves": int(leaves), "prev": prev,
+            "time_us": int(time_us) if time_us is not None else _now_us(), "trigger": trigger,
+            "key_id": key.key_id, "public_key": key.public_raw.hex(), "policy": policy}
     body["sig"] = key.sign(signed_bytes(body)).hex()
     return body
 
@@ -300,7 +319,7 @@ def read_statements(path: str) -> Tuple[List[dict], List[dict]]:
     statements, findings = [], []
     for index, line in enumerate(raw_lines):
         try:
-            record = canon.loads(line)
+            record = canon.loads_document(line)
             if not isinstance(record, dict):
                 raise ValueError("not an object")
         except ValueError:
@@ -337,7 +356,7 @@ class RootSigner:
         directory = os.path.dirname(os.path.abspath(self.path))
         os.makedirs(directory, exist_ok=True)
         with open(self.path, "a", encoding="utf-8") as handle:
-            handle.write(json.dumps(statement, sort_keys=True) + "\n")
+            handle.write(canon.canon2_bytes(statement).decode("utf-8") + "\n")
             handle.flush()
             os.fsync(handle.fileno())
         self._seq += 1
@@ -356,9 +375,16 @@ def _verify_signature(statement: dict) -> bool:
 
 
 def _well_formed(statement: dict, log: str) -> bool:
-    if statement.get("format") != STATEMENT_FORMAT or statement.get("log") != log:
+    if statement.get("format") not in (STATEMENT_FORMAT, LEGACY_FORMAT) or statement.get("log") != log:
         return False
-    if any(key not in statement for key in _BODY_FIELDS + ("sig",)):
+    fields = _body_fields(statement)
+    if any(key not in statement for key in fields + ("sig",)):
+        return False
+    if statement["format"] == STATEMENT_FORMAT and len(statement) != len(fields) + 1:
+        return False
+    if statement["format"] == STATEMENT_FORMAT and (statement["encoding"] != canon.CANON2
+                                                    or not isinstance(statement["time_us"], int)
+                                                    or isinstance(statement["time_us"], bool)):
         return False
     if not (isinstance(statement["seq"], int) and isinstance(statement["leaves"], int)
             and isinstance(statement["root"], str) and isinstance(statement["prev"], str)
@@ -485,6 +511,11 @@ def bundle_problem(bundle) -> Optional[str]:
             bytes.fromhex(step[1])
     except (TypeError, ValueError):
         return "the leaf and the inclusion path are hex hashes"
+    for name in ("receipt", "statement"):
+        try:
+            canon.encoding_of(bundle[name])
+        except canon.CanonicalError:
+            return f"the {name} names an encoding other than canon/2"
     return None
 
 
@@ -499,7 +530,10 @@ def verify_receipt_bundle(bundle: dict, pinned: Optional[Iterable[bytes]] = None
         return {"ok": False, "status": INVALID, "pinned": bool(pinned), "checks": {"well_formed": False},
                 "problem": problem, "index": None, "statement": None, "statement_sha256": None, "key": ""}
     statement = bundle["statement"]
-    leaf = canon.sha256_hex(canon.canonical_compact(bundle["receipt"]))
+    try:
+        leaf = canon.document_hash(bundle["receipt"])
+    except canon.CanonicalError:
+        leaf = ""
     checks = {"leaf": leaf == bundle["leaf"],
               "index": bundle["receipt"].get("idx") == bundle["index"],
               "inclusion": merkle.verify_leaf(bundle["leaf"], [tuple(step) for step in bundle["path"]],

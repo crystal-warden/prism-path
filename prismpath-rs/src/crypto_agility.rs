@@ -5,7 +5,7 @@
 //! Replays the P1-P5 proofs over parsed flow graphs and signed registries, matching
 //! `prismpath/crypto_agility.py` byte-for-byte against frozen conformance fixtures.
 
-use crate::durable::{try_py_canonical_string, CanonicalError};
+use crate::durable::{document_bytes, CanonicalError};
 use crate::{check_reach, flow_level_m, is_catchall, reachable, Graph};
 use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
@@ -15,12 +15,13 @@ pub const SUITE_NODE_PREFIX: &str = "suite-";
 pub const REACH_BOUND: usize = 25;
 const PQ_KEM_TOKENS: [&str; 2] = ["ml-kem", "kyber"];
 
-/// Registry hash: sha256 hex digest of the canonical JSON representation of the registry dict.
-/// A registry with no canonical form (a number beyond the double range) is refused with `CanonicalError`.
+/// Registry hash: sha256 hex digest of the registry's canonical bytes under the encoding it names
+/// (`durable::document_bytes`: canon/2 for a registry tagged `"encoding": "canon/2"`, canon/1 compact for
+/// a legacy untagged one). A registry with no form under its encoding is refused with `CanonicalError`.
 pub fn registry_hash(registry: &Value) -> Result<String, CanonicalError> {
-    let canonical = try_py_canonical_string(registry, false)?;
+    let canonical = document_bytes(registry)?;
     let mut hasher = Sha256::new();
-    hasher.update(canonical.as_bytes());
+    hasher.update(&canonical);
     Ok(format!("{:x}", hasher.finalize()))
 }
 

@@ -114,10 +114,17 @@ fn a_verified_manifest_whose_version_is_not_an_integer_changes_nothing() {
     std::fs::write(&ppt, &image).unwrap();
     let fields = [("temp".to_string(), "int".to_string())].into_iter().collect();
     build_pack(ppt.to_str().unwrap(), &fields, 7, "env1", &private, &public, "2026-01-01T00:00:00+00:00").unwrap();
-    // the same manifest with a version of 7.5, signed again by the same key
+    // the same manifest with a version of 7.5, signed again by the same key: a canon/2 manifest cannot
+    // hold the float at all, so it is refused as unreadable before its signature is looked at
     let manifest_path = format!("{}.manifest.json", ppt.display());
     let mut manifest: Value = serde_json::from_str(&std::fs::read_to_string(&manifest_path).unwrap()).unwrap();
     manifest["version"] = json!(7.5);
+    std::fs::write(&manifest_path, serde_json::to_string(&manifest).unwrap()).unwrap();
+    let probe = PolicyHost::new(&setup.state(), vec![public.clone()], setup.doc["envelopes"]["default"].clone(), Vec::new()).unwrap();
+    assert_eq!(probe.swap(ppt.to_str().unwrap(), false).unwrap()["reasons"], json!(["manifest:bad-format"]));
+    drop(probe);
+    // a legacy (untagged, canon/1) manifest can, and its signature verifies, so the version check decides
+    manifest.as_object_mut().unwrap().remove("encoding");
     std::fs::write(&manifest_path, serde_json::to_string(&manifest).unwrap()).unwrap();
     use ed25519_dalek::Signer;
     let signature = load_private(&private).unwrap().sign(&canonical_bytes(&manifest).unwrap());
@@ -167,8 +174,8 @@ fn the_system_clock_stamps_events_and_policies() {
     let since = swapped["since"].as_str().unwrap();
     assert_eq!(since.len(), 25, "{since}");
     assert!(since.starts_with("20") && since.ends_with("+00:00") && since.as_bytes()[10] == b'T', "{since}");
-    let ts = host.history()[0]["ts"].as_f64().unwrap();
-    assert!(ts > 1.7e9 && ts < 4.0e9, "{ts}");
+    let ts_us = host.history()[0]["ts_us"].as_i64().unwrap();
+    assert!(ts_us > 1_700_000_000_000_000 && ts_us < 4_000_000_000_000_000, "{ts_us}");
     assert_eq!(iso_from_epoch_for_test(0), "1970-01-01T00:00:00+00:00");
     assert_eq!(iso_from_epoch_for_test(1_767_225_600), "2026-01-01T00:00:00+00:00");
     assert_eq!(iso_from_epoch_for_test(951_782_400), "2000-02-29T00:00:00+00:00", "a leap day");
@@ -233,8 +240,8 @@ fn an_active_record_holding_a_non_finite_number_is_not_restored() {
         drop(host);
         let path = format!("{}/active_policy.json", setup.state());
         let text = std::fs::read_to_string(&path).unwrap();
-        assert!(text.contains("\"version\": 1"));
-        std::fs::write(&path, text.replacen("\"version\": 1", &format!("\"version\": {number}"), 1)).unwrap();
+        assert!(text.contains("\"version\":1"));
+        std::fs::write(&path, text.replacen("\"version\":1", &format!("\"version\":{number}"), 1)).unwrap();
         let reopened = setup.host().unwrap();
         assert_eq!(reopened.active_info(), json!({"active": null}), "{number}");
         let event = reopened.history().pop().unwrap();

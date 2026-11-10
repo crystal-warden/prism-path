@@ -103,6 +103,79 @@ pub fn try_py_canonical_string(val: &Value, spaced: bool) -> Result<String, Cano
     })
 }
 
+// canon/2, and the tag that decides between it and canon/1
+
+/// The encoding every hashed or signed document is written in, named by the document's own
+/// `encoding` member (`prismpath.canon.CANON2` in Python).
+pub const CANON2: &str = "canon/2";
+/// An untagged document: written before the migration, read and hashed under canon/1 only to verify.
+pub const CANON1: &str = "canon/1";
+pub const ENCODING_KEY: &str = "encoding";
+/// The domain a signature over a canon/2 document is computed over, before the document's bytes, when
+/// its format has no domain of its own (`prismpath.canon.CANON2_DOMAIN`).
+pub const CANON2_DOMAIN: &[u8] = b"prismpath.canon/2\x00";
+
+/// `canon/2` for an object that names it, `canon/1` for one without the member (legacy, verify only).
+/// Any other tag is refused.
+pub fn encoding_of(val: &Value) -> Result<&'static str, CanonicalError> {
+    match val.as_object().and_then(|obj| obj.get(ENCODING_KEY)) {
+        None => Ok(CANON1),
+        Some(Value::String(tag)) if tag == CANON2 => Ok(CANON2),
+        Some(other) => Err(CanonicalError(format!(
+            "unknown encoding {}: only canon/2 is read, and a document without the member is canon/1",
+            other.to_string().chars().take(40).collect::<String>()
+        ))),
+    }
+}
+
+/// The canon/2 bytes of `val`, the bytes every writer hashes and signs. A float, an integer beyond plus
+/// or minus 2^53 minus 1 and nesting deeper than 128 are refused, never converted.
+pub fn canon2_bytes(val: &Value) -> Result<Vec<u8>, CanonicalError> {
+    crate::canon2::write_json(val).map_err(|error| CanonicalError(format!("no canon/2 form: {error}")))
+}
+
+/// `val` with `"encoding": "canon/2"`.
+pub fn tagged(mut val: Value) -> Value {
+    if let Value::Object(obj) = &mut val {
+        obj.insert(ENCODING_KEY.to_string(), Value::String(CANON2.to_string()));
+    }
+    val
+}
+
+/// The bytes a document is hashed over, decided by its own tag: canon/2 for a document that names it,
+/// canon/1 compact for an untagged one (verify only). `prismpath.canon.document_bytes`.
+pub fn document_bytes(val: &Value) -> Result<Vec<u8>, CanonicalError> {
+    if encoding_of(val)? == CANON2 {
+        canon2_bytes(val)
+    } else {
+        try_py_canonical_string(val, false).map(String::into_bytes)
+    }
+}
+
+/// What a signature over `val` covers when its format has no domain of its own: `CANON2_DOMAIN` and
+/// the canon/2 bytes for a tagged document, the bare canon/1 compact bytes for a legacy one.
+pub fn signed_message(val: &Value) -> Result<Vec<u8>, CanonicalError> {
+    if encoding_of(val)? == CANON2 {
+        let mut message = CANON2_DOMAIN.to_vec();
+        message.extend(canon2_bytes(val)?);
+        Ok(message)
+    } else {
+        try_py_canonical_string(val, false).map(String::into_bytes)
+    }
+}
+
+/// Read a document whose tag decides its reader: `value::parse_strict`, and for an object that names
+/// canon/2 the strict canon/2 reader as well (a float, a duplicate key or an out of range integer is
+/// refused). `prismpath.canon.loads_document`.
+pub fn read_document(text: &str) -> Result<Value, CanonicalError> {
+    let val = crate::value::parse_strict(text).map_err(|error| CanonicalError(error.to_string()))?;
+    if encoding_of(&val)? == CANON2 {
+        crate::canon2::read_str(text)
+            .map_err(|error| CanonicalError(format!("a document that names canon/2 does not read under it: {error}")))?;
+    }
+    Ok(val)
+}
+
 /// `try_py_canonical_string` for a caller with no way to report a refusal. Every input boundary
 /// reads with `value::parse_strict`, which refuses the one kind of number that has no canonical
 /// form, so a value read that way cannot fail here; a value that does fail stops with a panic naming

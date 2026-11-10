@@ -147,7 +147,9 @@ fn the_rust_audit_log_writes_leaves_the_verifier_reads_the_same() {
     let dir = common::Scratch::new("receipt_edges");
     let path = dir.join("swaps.log");
     let log = AuditLog::open(path.to_str().unwrap()).unwrap();
-    log.append("policy_host", "swap", vec![("to_hash", json!("ab")), ("version", json!(1)), ("note", json!("caf\u{e9} \u{1d11e}")), ("ratio", json!(1e-7)), ("result", json!("accepted"))]).unwrap();
+    log.append("policy_host", "swap", vec![("to_hash", json!("ab")), ("version", json!(1)), ("note", json!("caf\u{e9} \u{1d11e}")), ("ratio_ppm", json!(1)), ("result", json!("accepted"))]).unwrap();
+    // canon/2 has no float: an event that carries one is refused with nothing written
+    assert!(log.append("policy_host", "probe", vec![("ratio", json!(1e-7))]).is_err());
     log.append("policy_host", "attest", vec![("ok", json!(true))]).unwrap();
     let text = std::fs::read_to_string(&path).unwrap();
     let view = AuditLogView::from_text(&text);

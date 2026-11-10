@@ -1573,8 +1573,49 @@ export function pyCanonicalString(val) {
   return "{" + sortedKeys.map((key) => JSON.stringify(key) + ":" + pyCanonicalString(val[key])).join(",") + "}";
 }
 
+// canon/2, the integer only JCS profile every hashed or signed document is written in
+// (prismpath/kernel/canon2.py): no whitespace, keys in UTF-16 code unit order (what Array.prototype.sort
+// does by default), strings raw UTF-8 with JSON.stringify's escapes, integers within plus or minus
+// 2^53 minus 1 in decimal, and no float. A value with no canon/2 form throws.
+export const CANON2 = "canon/2";
+
+export function canon2String(val, depth = 0) {
+  if (depth > 128) throw new Error("canon/2 depth: nesting deeper than 128");
+  if (val === null || typeof val === "boolean") return JSON.stringify(val);
+  if (typeof val === "number") {
+    if (!Number.isSafeInteger(val)) throw new Error(`canon/2 has no float or out of range integer: ${val}`);
+    return Object.is(val, -0) ? "0" : String(val);
+  }
+  if (typeof val === "string") {
+    if (/[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/.test(val)) {
+      throw new Error("canon/2 lone-surrogate");
+    }
+    return JSON.stringify(val);
+  }
+  if (Array.isArray(val)) {
+    if (depth + 1 > 128) throw new Error("canon/2 depth: nesting deeper than 128");
+    return "[" + val.map((item) => canon2String(item, depth + 1)).join(",") + "]";
+  }
+  if (typeof val === "object") {
+    if (depth + 1 > 128) throw new Error("canon/2 depth: nesting deeper than 128");
+    const keys = Object.keys(val).sort();
+    return "{" + keys.map((key) => canon2String(key, depth + 1) + ":" + canon2String(val[key], depth + 1)).join(",") + "}";
+  }
+  throw new Error(`${typeof val} has no canon/2 form`);
+}
+
+// The bytes a document is hashed over, decided by its own tag: canon/2 for a document that names it, the
+// legacy canon/1 compact spelling for one without the member (verify only), and a throw for any other tag.
+export function documentString(doc) {
+  if (doc !== null && typeof doc === "object" && !Array.isArray(doc) && "encoding" in doc) {
+    if (doc.encoding !== CANON2) throw new Error(`unknown encoding ${String(doc.encoding).slice(0, 40)}`);
+    return canon2String(doc);
+  }
+  return pyCanonicalString(doc);
+}
+
 export function registryHash(registryData) {
-  return sha256Hex(pyCanonicalString(registryData));
+  return sha256Hex(documentString(registryData));
 }
 
 export function strengthRank(registryData, suiteId) {
