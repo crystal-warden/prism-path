@@ -324,6 +324,24 @@ section 1), or a finding, which is minimised to a small reproducer. A leg is one
 to results, so the JavaScript and Go kernels and the C table interpreter are adapters of a few dozen
 lines (section 10).
 
+**Commands.** `python formal/diff/core_diff.py --cases 100000 --seed 1 --report out.json` is the large
+run; `prismpath/tests/test_core_diff.py` is the seeded CI sized run (5,000 cases, seed 7, a few
+seconds), which fails on any kind of finding not recorded in section 9, on any reading level
+disagreement and on any crash. The oracle comes from `lake build` in `formal/`; the Rust leg is the
+example `prismpath-rs/examples/core_diff.rs`, built on demand.
+
+**The large run** (100,000 cases, seed 1, 420,486 readings). The oracle accepted 25,348 policies and
+refused 74,652; it routed 31,857 readings and refused 13,923 with `route:no-matching-edge`, 43,588 with
+`route:contract-violation`, 17,049 as unreadable and 392 as not an object, the rest with their policy's
+refusal. Against the Python reference: 142,795 agreements; reader gaps 3,217 float, 3,561 duplicate
+key, 8,490 integer range, 2,624 negative zero, 156 depth; scope differences 10,129 inferred path and
+168 engine counter; 9,390 excluded (4,030 images `canon.loads` itself refuses, 5,360 with no flow
+rendering, all refused by the oracle too); 931 findings, every one D1. Against the Rust port: 139,412
+agreements; reader gaps 3,061 float, 3,434 duplicate key, 8,002 integer range, 2,551 negative zero;
+scope 10,129 and 165; the same 9,390 excluded; 1,569 findings, 1,182 of them D3 and 387 D1 and D2. No
+reading level disagreement and no crash in either leg: on every policy both sides accept, every
+reading's route or refusal, with its field and reason, is the oracle's.
+
 ## 9. Where the implementations disagree on the slice
 
 Each row is a disagreement the harness or a direct probe shows, with the side this specification

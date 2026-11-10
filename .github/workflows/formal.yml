@@ -42,6 +42,10 @@ jobs:
           .lake/build/bin/core-oracle /tmp/core_policy.json /tmp/core_r1.json /tmp/core_r2.json | tee /tmp/core_out.txt
           grep -q '"target":"hit"' /tmp/core_out.txt
           grep -q '"reason":"out_of_range"' /tmp/core_out.txt
+      - name: The differential harness, CI size (oracle, Python reference, Rust port)
+        run: |
+          pip install pytest
+          PRISMPATH_REQUIRE_CORE_ORACLE=1 python -m pytest prismpath/tests/test_core_diff.py -q
       - name: No sorry in the sources
         run: "! grep -rn --include=*.lean -w sorry formal/FQ formal/FQ.lean formal/Core formal/Core.lean"
       - name: Bridge vectors are byte identical to a fresh generation from the frozen corpora
