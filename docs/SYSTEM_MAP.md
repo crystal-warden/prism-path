@@ -76,7 +76,7 @@ runs on every push.
 |---|---|---|---|
 | Python engine (reference of record, `SPEC.md`) | `prismpath/kernel/engine.py`, `predicates.py` | generates `prismpath/portable/conformance/` | yes |
 | JS kernel | `prismpath/portable/prismpath.mjs` | `run_vectors.mjs` | yes |
-| Rust kernel | `prismpath-rs/` | `src/bin/conformance.rs`, 1079/1079 predicates, 27/27 flows | yes |
+| Rust kernel | `prismpath-rs/` | `src/bin/conformance.rs`, 1112/1112 predicates, 105/105 flows | yes |
 | Go kernel | `prismpath-go/` | `conformance_test.go` | no |
 | C target (the reference for the `.ppt` execution semantics the substrates follow) | `prismpath-hw/interp.c` | `prismpath-hw/run_vectors.py`, `make cert` | yes |
 | fabric RTL | `prismpath-hw/rtl/ppt_interp.sv` | cocotb gate `prismpath-hw/tb/`, then silicon certification, ledger rows #73 onward | yes (simulation) |

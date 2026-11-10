@@ -53,6 +53,22 @@ flow manifests, receipts and bundles read exactly as 0.1.2 wrote them, and a 0.1
   verify before, and 4.77 s and 0.27 s now (8,000 events: 10.64 s and 0.52 s; what remains of the write is
   the signature and two `fsync` calls per event). The statement format is the same, and a test pins the new
   root equal to the old for every count to 300.
+- **The policy host's active image is content addressed and a rollback commits in the swap's order**, in
+  Python and Rust alike. The image is `active-<sha256>.ppt`, written beside the one in use, and the record
+  `active_policy.json` names it in `image_file`; the record rename is the flip point, and the superseded
+  images and the intent record are removed only after it is durable. A death at any step now leaves exactly
+  one policy a restarted host can restore (before: a death between the image and the record left a digest
+  mismatch and no active policy). `rollback` writes its intent record (`"op": "rollback"`), then the audit
+  event, then the image and the record, so a failing append raises `AuditWriteError` with the previous
+  policy still active (before: the rollback had already flipped); an interrupted one is recorded as
+  `rollback_incomplete`. A state directory in the old layout is read as before and moved to the new one by
+  the next swap or rollback. Renames and removals are made durable with a directory fsync.
+  Every file the host reads back (the record, the intent record, the audit log) is read through the strict
+  readers and every file it writes through the refusing writers, so a record, an intent record or an audit
+  line that holds NaN, Infinity or a number beyond the double range is damage that fails closed, and an
+  event that would carry one is refused with `AuditWriteError` and the log unchanged. The host trace
+  corpus holds 65 cases, among them those inputs; Rust returns `HostError::Canonical` instead of
+  panicking where a record to be written has no canonical form.
 
 ### Rust verification of signed receipts
 
@@ -85,6 +101,85 @@ flow manifests, receipts and bundles read exactly as 0.1.2 wrote them, and a 0.1
   `1.5e+20`, `1e+16`); it had used Rust's own spelling outside the range `1e-4` to `1e16`, which
   would have changed a receipt's leaf. Existing frozen corpora are unchanged.
 - The hot swap crate is in CI (it already was, in `ci.yml`); its README and `docs/SYSTEM_MAP.md` said it was not.
+
+### The engine follow-ups in Rust (2026-11-09)
+- A Rust worker can name the kind of its failure: it returns `Result<Value, E>` for any `E: Into<WorkerError>`, and a
+  `WorkerError { kind, message }` becomes the flow's `error_type` as Python's exception class name does (a plain
+  `String` is kind `Error`, as every failure was before). `Step.error_type` carries it, an error no edge handles is
+  `EngineError::Worker` with the kind and message kept, and `EngineError::reference_exception` gives the class and
+  `str()` Python raises for it. A closure that never fails needs a type for its error: `Ok::<_, String>(value)`.
+- An error guard that cannot be evaluated is recorded as SPEC section 5.3 says: `RunState::guard_errors` holds
+  `{node, guard, error}` (persisted as `_guard_errors`, and kept from a resumed state) and `Step.guard_errors` counts the
+  node's records; the `error` text is Rust's own words and is not compared.
+- `parse` takes the reference's input bounds (`PRISMPATH_MAX_FLOW_BYTES`, `PRISMPATH_MAX_NODES`,
+  `PRISMPATH_MAX_EDGES`, in characters, distinct node names and edge lines, with its messages and its order of
+  checks); a document over one is an empty `Graph` with `parse_error` set (`Graph::refusal`), which the engine,
+  `parse_checked` and the telemetry codec refuse, and `parse_with_limits` and `Limits` take the bounds as
+  values. `parse_limits.json` is a new corpus from Python (49 documents under small caps, 6 built to the
+  default caps, 21 environment strings) and a live Python parses 1500 random documents under random caps as the
+  crate does.
+- `Step.used` has Python's shape: `deterministic` with the edge in `cond`, and `embed` with `locked` true for a locked
+  route (it was `deterministic: <cond>` and `locked`), `flows.json`'s `steps` hold each step's `used` and `cond`, and
+  the cross language test compares each step's whole info, the scores to 1e-5, over the corpus and the sample.
+- A route into an undefined node, which Python leaves as an unhandled `KeyError` and no document promises (`validate`
+  reports the target as `undefined-target`), is pinned by seven `flows.json` cases (the target, the start, an empty
+  flow, a capitalised target, an error edge, the last step and a resume) and is `EngineError::MissingNode` here, which
+  `reference_exception` maps to the `KeyError`.
+- `flows.json` has 33 more cases from Python (11 for the guard records, with `guard_errors` and `steps` now in the
+  `expect` of every case that has `opts`), 15 for routing on `error_type` and for the unhandled worker error and 7
+  for the undefined node, and `__raise__` outcomes take a `__kind__`; an expectation that is a refusal now carries `error_class`.
+
+- Every test that makes a directory in the temporary directory now removes it when it ends, a failed assertion
+  included (a `Scratch` value with a `Drop`, in `prismpath-rs/tests/common`, `prismpath-hotswap-rs/tests/common`
+  and the preflight tests); the older hotswap host tests had left a `pp_host_*` directory for each case on every
+  run, and the preflight and overflow tests an `fpf_*` and an `overflow_*` one. `test_lockfile.py` uses `tmp_path`.
+  A full `cargo test --workspace` and `pytest` leave no new entry in `/tmp`.
+
+### The engine surface in Rust (2026-11-09)
+- `prismpath-rs/src/contract.rs` ports `kernel/contract.py` (derive, JSON Schema, `validate_output`, `declared_emits`,
+  `describe`) with a reader of Python's whole expression grammar, since Python derives the contract with
+  `ast.parse` and so reads what the sandbox refuses (`f(y)`, `x.y`, `-5` as a unary minus). `RunOpts` gains
+  `type_gate` (a wrong typed field stops the run as `contract_violation`, cause 37, with the `violations` in
+  `Pending`), `max_transcript` and the flow's `@state_bound(transcript=N)` (a sliding window with the dropped counts in
+  `RunState.dropped`, a malformed bound refused before the run starts, the re-seeded path and steps bounded too) and
+  `run_id`; `run_locked_decided` calls an observer with the routing decision record of each semantic route. A gated
+  run is checkpointed, resumed and enforced by `durable`, and a checkpoint holds `_state_dropped`.
+- `flows.json` has 45 cases after the 27 frozen ones for the type gate and the bound (a case with `opts`; a case per
+  new stop value, per bound and per malformed bound), generated from Python (`engine_surface_fixtures.py`), and
+  `contract.json` (56 flows, 21 outputs) is new. The conformance binary now reports 72/72 flows beside 1112/1112
+  predicates and 8/8 locked flows.
+- Both engines run 600 random flows and every corpus flow and agree on everything the surface holds, in order
+  (`test_engine_cross_language.rs`); the crate also stops a stuck run's `on_step` at its node, as Python does, where it
+  passed none, and a hostile `visits` or error count no longer overflows.
+
+### Causes, receipts and the wire profiles in Rust (2026-11-09)
+- `prismpath-rs/src/causes.rs` is generated from `prismpath.kernel.causes` by `prismpath/portable/gen_causes_rs.py`
+  with the registry hash and the stop mapping; `RunResult.cause` carries the same code the Python engine gives on
+  every flow of `flows.json` and `locked_flows.json` (their `expect` now holds `cause`); `registry_sha256` matches
+  in both languages and a Rust test checks it against the live Python registry.
+- `prismpath-telemetry-rs` has `receipts`, `replay`, `refresh` and `concentrator`, ported from the Python modules
+  and replayed against `receipts.json` and four corpora generated from Python (`receipt_stream`, `replay`,
+  `refresh`, `concentrator`); Python and Rust verify each other's receipts, datagrams and tick streams. The
+  Zeckendorf codec refuses a code beyond `usize` and the encoder no longer overflows near `usize::MAX`.
+- A manifest that cannot be parsed is `manifest:bad-format` with no manifest in both languages (Python raised, Rust
+  answered `sig:missing`). The Python replay window no longer allocates a mask as long as a hostile tick jump.
+- Open for the owner: causes 48 to 51 (`wire:no-terminator`, `wire:dangling-codeword`, `wire:symbol-overflow`,
+  `wire:codebook-mismatch`) are registered and no code in either language emits them; nothing in the reference or
+  its documents says where each fires, so none was invented.
+
+### Canonical JSON refuses what it has no form for (2026-11-09)
+- NaN, Infinity, -Infinity, a number beyond the double range (`1e400`) and a lone surrogate are refused
+  in both languages, where canonical bytes are written and where a document that is hashed, signed or
+  verified is read. Python raised nothing before and wrote `NaN` and `Infinity`; Rust refused them but
+  read `1e400` as infinity. Neither converts any of them now. `prismpath.canon` has `CanonicalError`
+  (write) and `CanonicalReadError` (read, a `json.JSONDecodeError`), `canon.loads`, `canon.load` and
+  `canon.dumps_strict`; `prismpath-rs` has `value::parse_strict` and `durable::try_py_canonical_string`.
+  An audit event that cannot be canonicalised raises `AuditWriteError` and leaves the log unchanged.
+  The receipt verifiers read through the same strict readers in both languages (`root_statement` and
+  `flow_authority` in Python, the `prismpath-hotswap-rs` receipt modules in Rust), so a statement, an audit
+  line or a manifest holding one of those numbers is unreadable, not hashed, and `statement_hash` and
+  `manifest_sha256` in Rust return `None` for a value with no canonical form. The README entry above
+  that lists integers past 64 bits and `NaN` among what Rust does not read as Python does is superseded.
 
 ## [0.1.2] (tagged, superseded before upload; never on PyPI)
 
