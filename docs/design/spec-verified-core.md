@@ -162,13 +162,52 @@ refuses, with the cause in parentheses:
 The first rule broken, reading left to right, names the refusal. A policy image that does not read
 is refused as `policy:unreadable`; a reading that does not read is refused as `reading:unreadable`.
 
-**What the implementations read today.** No implementation reads canon/2 yet. The Python reference
-reads signed documents with `prismpath.canon.loads` (`canon.py:122-133`), which refuses rules 2 and 7
-and numbers beyond the double range, and accepts floats, `-0`, wide integers, duplicate keys (the last
-wins) and nesting to the interpreter's recursion limit. The Rust port reads with `value::parse_strict`
-(`prismpath-rs/src/value.rs:152`), which refuses the same and nesting past 128. A difference that is
-only one of rules 3, 4, 5, 6 or 8 is therefore a *reader gap* in section 8: counted, expected until
-canon/2 is implemented, never a silent agreement.
+**The readers.** canon/2 is the one reader and writer of the core's documents, in three
+implementations held to one table: the Lean reader `Core.readBytes` (`formal/Core/Json.lean`), which
+defines it; the Python reference `prismpath/kernel/canon2.py` (`loads`, `dumps`); and its Rust twin
+`prismpath-rs/src/canon2.rs` (`read`, `write`). The frozen vectors
+`prismpath/portable/conformance/canon2.json` (written by `prismpath/portable/gen_canon2_fixtures.py`,
+73 byte strings, every rule above at least once and the first rule broken where several are) are
+replayed by `prismpath/tests/test_canon2.py`, which also runs every vector through the oracle, and by
+`prismpath-rs/tests/test_canon2.rs`. The writer emits RFC 8785 with no float: no whitespace, members in
+order of the UTF-16 code units of their keys, strings as raw UTF-8 with only `"`, `\` and the control
+characters escaped (`\b \t \n \f \r`, otherwise lowercase `\u00xx`), integers in decimal; it refuses
+every value the reader would refuse, so a written document reads back to the same value and its bytes
+are a fixed point. In the differential harness both legs read the image and every reading with their
+canon/2 reader, so a document level difference is a finding, not a reader gap (section 8).
+
+**canon/1 stays, verify only.** `prismpath.canon` (Python's `json` with the compact and spaced
+canonical forms, `canon.loads` refusing NaN, Infinity, lone surrogates and numbers past the double
+range) and its Rust twin `value::parse_strict` remain the readers of everything already signed, hashed
+or anchored under them: policy packs and envelopes, audit logs and their Merkle leaves, root
+statements, anchored roots, attestation manifests, lock hashes, checkpoints and every frozen corpus.
+They change in no byte. canon/2 is scoped, in this step, to the core's two documents.
+
+### 3.1 Migration plan for the rest (written down, not done)
+
+Signed bytes cannot be rewritten, so the rest moves by versioning, never by reinterpreting an old
+artifact:
+
+1. **A name and a domain tag.** A document that is written under canon/2 says so: the core's image
+   carries `prismpath.core/1` (whose definition includes canon/2), and every other artifact that moves
+   gains an `encoding: "canon/2"` member, and its signature a `canon/2` domain prefix (root statements
+   already carry one), so a verifier never guesses which reader to use.
+2. **canon/1 is verify only, forever.** New writers emit canon/2; a verifier keeps the canon/1 reader
+   for artifacts that do not name canon/2. Each frozen corpus gains a canon/2 twin beside it; the old
+   corpus is not regenerated.
+3. **Audit events.** `ts` changes from a float of seconds to an integer count of microseconds since the
+   epoch (`ts_us`), the one float that every audit event carries today; an event names its encoding, a
+   log may hold both, and an old log verifies under canon/1. Other floats in signed documents (the
+   calibrated floors and confidences of routing receipts, measured durations) become integers of a
+   stated unit or decimal strings, each in its own reviewed change.
+4. **Anchored roots stay valid.** An OpenTimestamps or RFC 3161 anchor covers a Merkle root over
+   leaves computed under canon/1; the root is unchanged and its leaves verify under canon/1. A log that
+   mixes leaf versions hashes each leaf under the encoding the leaf names.
+5. **Packs and envelopes** are re-signed under canon/2 only at their next version; the loader accepts a
+   canon/1 pack whose signature verifies, until the owner retires canon/1 signing.
+6. **Order.** Python first (one writer, one tag, the twins of the vectors), then Rust; the JavaScript
+   and Go kernels and the table targets sign and hash nothing and are not touched. Each step is a
+   separate reviewed change with its own corpus twin, and none of it is done on this branch.
 
 ## 4. The checks of a policy
 
@@ -319,8 +358,9 @@ invalid UTF-8, malformed and truncated images). Each case runs through the oracl
 and the Rust port. The reference and the port read flows, so the harness renders each well formed
 image to the flow text it means, with semantics preserving surface variation (orientation, grouping,
 tuples, chains); an image without a faithful rendering is compared on the oracle alone. Each difference
-is classified as a reader gap (section 3), a scope difference (the inferred path, engine counters,
-section 1), or a finding, which is minimised to a small reproducer. A leg is one function from cases
+is classified as a scope difference (the inferred path, engine counters, section 1), a reader gap
+(only for a leg with no canon/2 reader, section 3), or a finding, which is minimised to a small
+reproducer. A leg is one function from cases
 to results, so the JavaScript and Go kernels and the C table interpreter are adapters of a few dozen
 lines (section 10).
 
@@ -394,9 +434,10 @@ both or records them as refusing kernels in the conformance matrix.
 table. This is a declared target limit, not a disagreement; the table adapter (step 2) must report it as
 a refusal of the compiler, never a different route.
 
-**Reader gaps** (section 3) are the other systematic differences: floats, `-0`, wide integers,
-duplicate keys and deep nesting are accepted by the implementations' current readers and refused by
-canon/2. They close when canon/2 is implemented, which is the cheap step the research note recommends.
+**Reader gaps (closed).** Step 1 counted floats, `-0`, wide integers, duplicate keys and deep nesting
+as reader gaps: the implementations read documents with canon/1, which accepts them. canon/2 is now
+the reader of both legs (section 3), so these documents are refused with the oracle's rule and a
+difference on them is a finding; the step 2 runs show none.
 
 ## 10. Next
 

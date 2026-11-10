@@ -10,6 +10,7 @@
 //! cargo run --bin conformance -- ../prismpath/portable/conformance
 //! ```
 
+pub mod canon2;
 pub mod causes;
 pub mod condition;
 pub mod contract;

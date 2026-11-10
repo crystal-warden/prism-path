@@ -4,11 +4,13 @@
 //! adapter, not part of the kernel: it composes the kernel's own public functions exactly as the
 //! frozen field definition vectors do (`tests/test_field_definitions.rs`) and prints what they decide.
 //!
-//! Input on stdin, one case after another: `case <id> <n>\n`, then the flow text and `n` reading
-//! documents, each framed as `<byte length>\n<bytes>\n`. A flow of length 0 means the image has no
-//! flow rendering, and the case is reported as such. Output: one JSON line per case.
+//! Input on stdin, one case after another: `case <id> <n>\n`, then the policy image, the flow text
+//! and `n` reading documents, each framed as `<byte length>\n<bytes>\n`. The image and the readings are
+//! canon/2 documents, read here with `canon2::read`; the flow is the image's rendering, which the harness
+//! writes. A flow of length 0 means the image has no flow rendering, and the case is reported as such.
+//! Output: one JSON line per case.
 
-use prismpath_rs::value::parse_strict;
+use prismpath_rs::canon2::{self, Doc};
 use prismpath_rs::{accept_canonical, first_deterministic, parse_checked, Value};
 use std::collections::HashMap;
 use std::io::{Read, Write};
@@ -28,25 +30,14 @@ fn read_frame<'a>(input: &'a [u8], pos: &mut usize) -> Option<&'a [u8]> {
 }
 
 fn reading_verdict(graph: &prismpath_rs::Graph, bytes: &[u8]) -> serde_json::Value {
-    let Ok(text) = std::str::from_utf8(bytes) else {
-        return serde_json::json!({"verdict": "refuse", "cause": "reading:unreadable", "reason": "utf8"});
-    };
-    let document = match parse_strict(text) {
+    let document = match canon2::read(bytes) {
         Ok(document) => document,
-        Err(error) => return serde_json::json!({"verdict": "refuse", "cause": "reading:unreadable", "reason": error.to_string()}),
+        Err(error) => return serde_json::json!({"verdict": "refuse", "cause": "reading:unreadable", "reason": error.rule()}),
     };
-    let Some(object) = document.as_object() else {
+    let Doc::Obj(members) = document else {
         return serde_json::json!({"verdict": "refuse", "cause": "reading:not-object"});
     };
-    let mut values: HashMap<String, Value> = HashMap::new();
-    for (key, value) in object {
-        match Value::try_from_json(value) {
-            Ok(converted) => {
-                values.insert(key.clone(), converted);
-            }
-            Err(error) => return serde_json::json!({"verdict": "refuse", "cause": "reading:unreadable", "reason": error}),
-        }
-    }
+    let values: HashMap<String, Value> = members.iter().map(|(key, value)| (key.clone(), value.to_value())).collect();
     for (field, definition) in &graph.fields {
         if let Err(reason) = accept_canonical(definition, values.get(field).unwrap_or(&Value::Null)) {
             return serde_json::json!({"verdict": "refuse", "cause": "route:contract-violation", "field": field, "reason": reason});
@@ -68,9 +59,12 @@ fn main() {
         let parts: Vec<&str> = header.split(' ').collect();
         assert!(parts.len() == 3 && parts[0] == "case", "malformed case header {header:?}");
         let count: usize = parts[2].parse().expect("reading count");
+        let image = read_frame(&input, &mut pos).expect("image frame");
         let flow = read_frame(&input, &mut pos).expect("flow frame");
         let readings: Vec<&[u8]> = (0..count).map(|_| read_frame(&input, &mut pos).expect("reading frame")).collect();
-        let line = if flow.is_empty() {
+        let line = if let Err(error) = canon2::read(image) {
+            serde_json::json!({"id": parts[1], "policy": "refused", "cause": "policy:unreadable", "reason": error.rule()})
+        } else if flow.is_empty() {
             serde_json::json!({"id": parts[1], "policy": "unrenderable"})
         } else {
             let flow_text = std::str::from_utf8(flow).expect("a rendered flow is UTF-8");

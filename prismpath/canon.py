@@ -11,6 +11,10 @@ filename, or an anchored root, so each has its own name here and the frozen test
 Truncations, the `sha256:` prefix, and hex versus raw byte concatenation are likewise properties of
 specific artifacts and stay at the call sites that own them; this module only removes copies that
 were already byte identical.
+
+These are canon/1. The verified core's documents (a policy image and a reading) are canon/2, the integer
+only JCS profile of `prismpath.kernel.canon2`; canon/1 is kept as it is, and is the verify only reader of
+everything already signed, hashed or anchored under it (docs/design/spec-verified-core.md, section 3.1).
 """
 from __future__ import annotations
 

@@ -9,18 +9,20 @@ boundaries. Each case runs through three legs:
   * python: the reference, composed exactly as the frozen field definition vectors compose it
             (`prismpath/portable/gen_field_definitions.py`): `parser.parse` (which lowers and applies the
             policy rules), `field_definitions.accept_canonical` over the defined fields in sorted order,
-            then `engine.first_deterministic`; documents are read with `prismpath.canon.loads`;
+            then `engine.first_deterministic`; documents are read with the canon/2 reader
+            `prismpath.kernel.canon2.loads`;
   * rust:   the Rust port, composed the same way by `prismpath-rs/examples/core_diff.rs`; documents are
-            read with `prismpath_rs::value::parse_strict`.
+            read with the canon/2 reader `prismpath_rs::canon2::read`.
 
 The image is a canon/2 document in the core's abstract syntax. The reference and the port read flows,
 not images, so this module renders a well formed image to the flow text it means (`render`); an image
 that has no faithful rendering is reported as unrenderable for those legs and compared on the Lean leg
 alone. Every leg is an adapter around the implementation's own functions; no leg reimplements a rule.
 
-Each difference is classified. `reader-gap:<rule>` is a canon/2 document rule that no implementation
-applies yet (floats, -0, wide integers, duplicate keys, nesting): expected until canon/2 lands, counted,
-never silently dropped. Anything else is a finding, minimised to a small reproducer.
+Each difference is classified. Both legs read canon/2 themselves, so an unreadable image or reading
+must be refused with the oracle's rule, and a difference there is a finding like any other.
+`reader-gap:<rule>` remains only for a leg whose kernel has no canon/2 reader (none of the legs here).
+Anything else is a finding, minimised to a small reproducer.
 
     python formal/diff/core_diff.py --cases 100000 --seed 1          # the large run
     python formal/diff/core_diff.py --cases 2000 --seed 7 --quiet    # what the test runs
@@ -48,9 +50,10 @@ ORACLE = ROOT / "formal" / ".lake" / "build" / "bin" / "core-oracle"
 EXACT = 2 ** 53 - 1
 FORMAT = "prismpath.core/1"
 START = "core_decision"
-# canon/2 document rules no implementation applies yet: a difference that is only one of these is a
-# reader gap, not a finding (spec section 3.3)
+# canon/2 document rules a leg without a canon/2 reader does not apply: for such a leg (READS_CANON2
+# false) a difference that is only one of these is a reader gap, not a finding (spec section 3)
 READER_GAP = {"float", "integer-range", "negative-zero", "duplicate-key", "depth"}
+READS_CANON2 = {"python": True, "rust": True}
 
 ALWAYS = {"always", "true", "else", "otherwise", "default", "_"}
 NEVER = {"false", "never"}
@@ -546,10 +549,12 @@ def gen_case(rng, ident):
 
 # ----------------------------------------------------------------- the legs
 def frames(cases, docs_of):
+    """`case <id> <readings>` then the documents, each as its byte length and its bytes. The documents
+    are the leg's head documents (the image, and the flow for a leg that reads one) and the readings."""
     out = bytearray()
     for case in cases:
         docs = docs_of(case)
-        out += f"case {case['id']} {len(docs) - 1}\n".encode()
+        out += f"case {case['id']} {len(case['readings'])}\n".encode()
         for doc in docs:
             out += f"{len(doc)}\n".encode() + doc + b"\n"
     return bytes(out)
@@ -586,16 +591,13 @@ def lean_leg(cases):
 
 
 def _render_for(case):
-    from prismpath import canon
+    from prismpath.kernel import canon2
     try:
-        text = case["image"].decode("utf-8")
-        doc = canon.loads(text)
-    except UnicodeDecodeError:
-        return None, "unreadable:utf8"
+        doc = canon2.loads(case["image"])
+    except canon2.Canon2Error as error:
+        return None, f"unreadable:{error.rule}"
     except RecursionError:
         return None, "crash:RecursionError"
-    except ValueError as error:
-        return None, f"unreadable:{type(error).__name__}"
     try:
         return render(doc, random.Random(case["render_seed"])), None
     except Unrenderable as why:
@@ -605,16 +607,13 @@ def _render_for(case):
 
 
 def python_reading(graph, raw):
-    from prismpath import canon
-    from prismpath.kernel import engine, field_definitions
+    from prismpath.kernel import canon2, engine, field_definitions
     try:
-        doc = canon.loads(raw.decode("utf-8"))
-    except UnicodeDecodeError:
-        return {"verdict": "refuse", "cause": "reading:unreadable", "reason": "utf8"}
+        doc = canon2.loads(raw)
+    except canon2.Canon2Error as error:
+        return {"verdict": "refuse", "cause": "reading:unreadable", "reason": error.rule}
     except RecursionError:
-        return {"verdict": "refuse", "cause": "crash", "reason": "RecursionError in canon.loads"}
-    except ValueError as error:
-        return {"verdict": "refuse", "cause": "reading:unreadable", "reason": type(error).__name__}
+        return {"verdict": "refuse", "cause": "crash", "reason": "RecursionError in canon2.loads"}
     if not isinstance(doc, dict):
         return {"verdict": "refuse", "cause": "reading:not-object"}
     try:
@@ -641,6 +640,9 @@ def python_leg(cases):
     out = {}
     for case in cases:
         flow, why = case["flow"], case["flow_why"]
+        if flow is None and why.startswith("unreadable:"):
+            out[case["id"]] = {"policy": "refused", "cause": "policy:unreadable", "reason": why.split(":", 1)[1]}
+            continue
         if flow is None:
             out[case["id"]] = {"policy": why}
             continue
@@ -669,7 +671,7 @@ def rust_leg(cases):
     binary = rust_binary()
     if not binary.exists():
         subprocess.run(["cargo", "build", "-q", "-p", "prismpath-rs", "--example", "core_diff"], cwd=ROOT, check=True)
-    data = frames(cases, lambda case: [(case.get("flow") or "").encode("utf-8")] + case["readings"])
+    data = frames(cases, lambda case: [case["image"], (case.get("flow") or "").encode("utf-8")] + case["readings"])
     result = subprocess.run([str(binary)], input=data, capture_output=True)
     if result.returncode != 0:
         raise RuntimeError("rust leg failed: " + result.stderr.decode("utf-8", "replace")[-2000:])
@@ -684,7 +686,7 @@ LEGS = {"python": python_leg, "rust": rust_leg}
 
 
 # ----------------------------------------------------------------- comparison
-def classify(lean_row, other):
+def classify(lean_row, other, leg):
     """[(class, detail)] for one case: 'agree', 'excluded:<why>', 'reader-gap:<rule>' or 'finding:<what>'."""
     lean_policy = lean_row["policy"]
     lean_ok = lean_policy["policy"] == "accepted"
@@ -698,7 +700,8 @@ def classify(lean_row, other):
             return [(f"excluded:{status.split(':')[0]}", lean_policy.get("reason", ""))]
         return [(f"excluded:{status.split(':')[0]}", lean_policy["cause"])]
     if lean_ok != (status == "accepted"):
-        if not lean_ok and lean_policy["cause"] == "policy:unreadable" and lean_policy.get("reason") in READER_GAP:
+        if not lean_ok and lean_policy["cause"] == "policy:unreadable" and lean_policy.get("reason") in READER_GAP \
+                and not READS_CANON2.get(leg, False):
             return [(f"reader-gap:{lean_policy['reason']}", "policy")]
         if not lean_ok and other.get("defines") is False:
             # a flow that defines no field takes the reference's inferred path (SPEC.md section 4.5,
@@ -711,15 +714,19 @@ def classify(lean_row, other):
         return [(f"finding:policy", f"{what}: {lean_policy.get('cause', '')} {lean_policy.get('reason', '')} "
                                     f"{lean_policy.get('field', '')} | {other.get('reason', '')}")]
     if not lean_ok:
+        if lean_policy["cause"] == "policy:unreadable" or other.get("cause") == "policy:unreadable":
+            if (lean_policy["cause"], lean_policy.get("reason")) != (other.get("cause"), other.get("reason")):
+                return [("finding:policy", f"unreadable image: lean {lean_policy['cause']} {lean_policy.get('reason')} "
+                                           f"| leg {other.get('cause')} {other.get('reason')}")]
         return [("agree", "policy-refused")]
     rows = []
     for lean_v, other_v in zip(lean_row["readings"], other["readings"]):
         a, b = normalize_reading(lean_v), normalize_reading(other_v)
         if b[0] == "crash":
             rows.append(("finding:crash", b[1]))
-        elif a == b or (a[0] == b[0] == "unreadable"):
+        elif a == b or (a[0] == b[0] == "unreadable" and not READS_CANON2.get(leg, False)):
             rows.append(("agree", a[0]))
-        elif a[0] == "unreadable" and a[1] in READER_GAP:
+        elif a[0] == "unreadable" and a[1] in READER_GAP and not READS_CANON2.get(leg, False):
             rows.append((f"reader-gap:{a[1]}", "reading"))
         else:
             rows.append(("finding:reading", f"lean {a} vs leg {b}"))
@@ -735,7 +742,7 @@ def run(cases, legs=("python", "rust"), quiet=False):
     for case in cases:
         lean_row = lean[case["id"]]
         for name in legs:
-            for cls, detail in classify(lean_row, results[name][case["id"]]):
+            for cls, detail in classify(lean_row, results[name][case["id"]], name):
                 counts[name][cls] += 1
                 if cls.startswith("finding"):
                     findings.append((name, cls, detail, case))
