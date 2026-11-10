@@ -604,4 +604,156 @@ theorem readBytes_enc {cs : List Char} : readBytes ⟨(utf8Enc cs).toArray⟩ = 
   unfold readBytes
   rw [show (⟨(utf8Enc cs).toArray⟩ : ByteArray).data.toList = utf8Enc cs from List.toList_toArray .., utf8Decode_enc_nil]
 
+/-! ## What the reader returns -/
+
+
+theorem parseNum_ok {neg : Bool} {cs r : List Char} {v : J} (h : parseNum neg cs = .ok (v, r)) :
+    ∃ n, v = .int n ∧ inRange n = true := by
+  unfold parseNum at h
+  simp only at h
+  repeat' split at h
+  all_goals (first | (simp at h; done) | skip)
+  all_goals
+    rename_i hr
+    simp only [Except.ok.injEq, Prod.mk.injEq] at h
+    obtain ⟨rfl, -⟩ := h
+    refine ⟨_, rfl, ?_⟩
+    simp only [inRange, Bool.and_eq_true, decide_eq_true_eq]
+    simp only [Bool.or_eq_true, decide_eq_true_eq, not_or] at hr
+    omega
+
+def Good (d : Nat) (x : J) : Prop := rangeJ x = true ∧ d + depth x ≤ maxDepth
+
+theorem good_arr {d : Nat} {xs : List J} (hd : d + 1 ≤ maxDepth) (h : ∀ x ∈ xs, Good (d + 1) x) : Good d (.arr xs) := by
+  induction xs with
+  | nil => exact ⟨rfl, by simp [depth, depthL]; omega⟩
+  | cons x xs ih =>
+    have h1 := h x (by simp)
+    have h2 := ih (fun y hy => h y (by simp [hy]))
+    simp only [Good, rangeJ, depth] at h1 h2 ⊢
+    simp only [rangeL, h1.1, h2.1, Bool.and_self, depthL, true_and]
+    omega
+
+theorem good_obj {d : Nat} {ms : List (String × J)} (hd : d + 1 ≤ maxDepth) (h : ∀ m ∈ ms, Good (d + 1) m.2) : Good d (.obj ms) := by
+  induction ms with
+  | nil => exact ⟨rfl, by simp [depth, depthM]; omega⟩
+  | cons m ms ih =>
+    obtain ⟨k, v⟩ := m
+    have h1 := h (k, v) (by simp)
+    have h2 := ih (fun y hy => h y (by simp [hy]))
+    simp only [Good, rangeJ, depth] at h1 h2 ⊢
+    simp only [rangeM, h1.1, h2.1, Bool.and_self, depthM, true_and]
+    omega
+
+theorem reader_good : ∀ fuel,
+    (∀ d cs v r, d ≤ maxDepth → pValue fuel d cs = .ok (v, r) → Good d v) ∧
+    (∀ d cs acc v r, d ≤ maxDepth → (∀ x ∈ acc, Good d x) → pArr fuel d cs acc = .ok (v, r) → ∃ xs, v = .arr xs ∧ ∀ x ∈ xs, Good d x) ∧
+    (∀ d cs acc v r, d ≤ maxDepth → (∀ m ∈ acc, Good d m.2) → pMember fuel d cs acc = .ok (v, r) →
+      ∃ ms, v = .obj ms ∧ ∀ m ∈ ms, Good d m.2) := by
+  intro fuel
+  induction fuel with
+  | zero =>
+    refine ⟨?_, ?_, ?_⟩ <;> intros <;> simp_all [pValue, pArr, pMember]
+  | succ f ih =>
+    obtain ⟨ihV, ihA, ihM⟩ := ih
+    refine ⟨?_, ?_, ?_⟩
+    · intro d cs v r hd h
+      rw [pValue.eq_2] at h
+      have scalar : ∀ w, rangeJ w = true → depth w = 0 → Good d w := fun w h1 h2 => ⟨h1, by omega⟩
+      have num : ∀ {neg cs'}, parseNum neg cs' = .ok (v, r) → Good d v := fun h => by
+        obtain ⟨n, rfl, hn⟩ := parseNum_ok h
+        exact scalar _ (by simpa [rangeJ] using hn) (by simp [depth])
+      split at h
+      · simp only [Except.ok.injEq, Prod.mk.injEq] at h; obtain ⟨rfl, -⟩ := h; exact scalar _ rfl rfl
+      · simp only [Except.ok.injEq, Prod.mk.injEq] at h; obtain ⟨rfl, -⟩ := h; exact scalar _ rfl rfl
+      · simp only [Except.ok.injEq, Prod.mk.injEq] at h; obtain ⟨rfl, -⟩ := h; exact scalar _ rfl rfl
+      · split at h
+        · simp only [Except.ok.injEq, Prod.mk.injEq] at h; obtain ⟨rfl, -⟩ := h; exact scalar _ rfl rfl
+        · simp at h
+      · exact num h
+      · split at h
+        · simp at h
+        · rename_i hdd
+          split at h
+          · simp only [Except.ok.injEq, Prod.mk.injEq] at h; obtain ⟨rfl, -⟩ := h
+            exact good_arr (by omega) (by simp)
+          · split at h
+            · simp at h
+            · rename_i v1 r1 h1
+              have g1 := ihV (d + 1) _ v1 r1 (by omega) h1
+              obtain ⟨xs, rfl, hxs⟩ := ihA (d + 1) _ [v1] v r (by omega) (by simpa using g1) h
+              exact good_arr (by omega) hxs
+      · split at h
+        · simp at h
+        · rename_i hdd
+          split at h
+          · simp only [Except.ok.injEq, Prod.mk.injEq] at h; obtain ⟨rfl, -⟩ := h
+            exact good_obj (by omega) (by simp)
+          · obtain ⟨ms, rfl, hms⟩ := ihM (d + 1) _ [] v r (by omega) (by simp) h
+            exact good_obj (by omega) hms
+      · split at h
+        · exact num h
+        · simp at h
+      · simp at h
+    · intro d cs acc v r hd hacc h
+      rw [pArr.eq_2] at h
+      split at h
+      · simp only [Except.ok.injEq, Prod.mk.injEq] at h
+        obtain ⟨rfl, -⟩ := h
+        exact ⟨_, rfl, fun x hx => hacc x (by simpa using hx)⟩
+      · split at h
+        · simp at h
+        · rename_i v1 r1 h1
+          have g1 := ihV d _ v1 r1 hd h1
+          exact ihA d _ (v1 :: acc) v r hd (fun x hx => by
+            simp at hx; rcases hx with rfl | hx; exact g1; exact hacc x hx) h
+      · simp at h
+    · intro d cs acc v r hd hacc h
+      rw [pMember.eq_2] at h
+      split at h
+      · split at h
+        · simp at h
+        · rename_i k r' _
+          split at h
+          · simp at h
+          · split at h
+            · split at h
+              · simp at h
+              · rename_i v1 r3 h1
+                have g1 := ihV d _ v1 r3 hd h1
+                have hacc' : ∀ m ∈ (k, v1) :: acc, Good d m.2 := fun m hm => by
+                  simp at hm; rcases hm with rfl | hm; exact g1; exact hacc m hm
+                split at h
+                · simp only [Except.ok.injEq, Prod.mk.injEq] at h; obtain ⟨rfl, -⟩ := h
+                  exact ⟨_, rfl, fun m hm => hacc' m (by simp at hm ⊢; tauto)⟩
+                · exact ihM d _ _ v r hd hacc' h
+                · simp at h
+            · simp at h
+      · simp at h
+
+
+/-- **The reader's output is a document.** Every value the reader returns holds no key twice in any
+object, only integers within plus or minus 2^53 minus 1, and nests at most `maxDepth` deep; the
+value's strings are `String`s, which hold Unicode scalar values only, so no lone surrogate. -/
+theorem readChars_doc {cs : List Char} {v : J} (h : readChars cs = .ok v) : doc v = true := by
+  have hw := readChars_wf h
+  unfold readChars at h
+  split at h
+  · simp at h
+  · rename_i v1 r1 h1
+    have g := (reader_good _).1 0 cs v1 r1 (by decide) h1
+    split at h
+    · split at h
+      · simp only [Except.ok.injEq] at h; subst h
+        simp only [doc, hw, g.1, Bool.and_self, decide_eq_true_eq, Bool.true_and]
+        have := g.2; omega
+      · simp at h
+    · simp at h
+
+theorem readBytes_doc {b : ByteArray} {v : J} (h : readBytes b = .ok v) : doc v = true := by
+  unfold readBytes at h
+  split at h
+  · simp at h
+  · exact readChars_doc h
+
 end Core
