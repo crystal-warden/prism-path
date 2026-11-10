@@ -9,8 +9,8 @@
  * includes, compiled natively against a shim of the three BPF facilities it uses (array maps,
  * bpf_map_lookup_elem and bpf_loop, each with the kernel's semantics: a lookup past max_entries is NULL,
  * a loop stops when its callback returns 1). The table is admitted by the loader's own parser
- * (prismpath-ebpf/ppt_image.c, parse_image_buf with its capacity and check_evaluator_limits, the eBPF
- * target's declared subset: an operand stack of 4, 64 edges per node, 64 words per edge, 32 fields) and
+ * (prismpath-ebpf/ppt_image.c, parse_image_buf with its capacity and check_evaluator_limits: an operand
+ * stack of 64 as the C interpreter's, an edge program or a node as long as the maps hold, 32 fields and the map capacities) and
  * written into the maps as ppt_maps.c writes them. What this does not cover is the verifier and the JIT;
  * the kernel certification (`ebpf_kernel` in CI, facet_decode_cert.py, cert_selector) covers those.
  *

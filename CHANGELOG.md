@@ -257,6 +257,45 @@ already signed: packs, envelopes, receipts, root statements and every frozen cor
   loader's parser. Loading in kernel needs CAP_BPF; the kernel certification stays the CI job's. The 100,000 case
   run shows no finding on any of the seven legs.
 
+### The eBPF evaluator carries what the C interpreter carries (2026-11-10)
+Research line, `docs/design/spec-verified-core.md` section 9 (D6, step 4). Nothing here changes a table format, a
+signed image or a frozen corpus: the 147 of 147 in kernel are the same vectors.
+- **An operand stack of 64 and no per program or per node bound short of the maps.** The 86 readings the 100,000
+  case run counted as outside the eBPF subset were edge programs past 64 words and operand stacks past 4, both of
+  which `interp.c` runs. The stack is now one `__u64` (`st_get` and `st_put` are a shift by a masked amount, not a
+  `switch` an arm a slot), `STACK_MAX` is 64, and `MAX_PROG_PER_EDGE` and `MAX_EDGES_PER_NODE` are the map
+  capacities. `prog_word_cb` shrank from 423 to 332 instructions. The 32 bit limit is unchanged and stays a
+  compile time refusal on every table target (the spec says why). The 100,000 case run shows the eBPF leg agreeing on
+  146,673 readings as `c-interp` does, no subset refusal, no finding on any of the seven legs.
+- **The verifier's acceptance is checked in the kernel job and, as far as it can be, without one.**
+  `prismpath-ebpf/verifier_budget.py` holds each built object to the combined stack of 512 bytes, no cycle in the
+  evaluator outside `bpf_loop` and its shape; `cert_corpus.py --boundary` writes 35 records of the evaluator's bounds
+  that the `ebpf_kernel` job loads and replays in kernel; `prismpath/tests/test_ebpf_evaluator_bounds.py` runs the
+  same tables natively. `formal/diff/core_diff.py` takes the oracle's path from `PRISMPATH_CORE_ORACLE`.
+
+### The JavaScript and Go kernels decide the verified core (2026-11-10)
+Research line, `docs/design/spec-verified-core.md` D5. Nothing here changes a format already signed or a frozen
+corpus: a flow that defines no field parses and runs as before.
+- **Both kernels implement field definitions (SPEC section 4.5) and no longer refuse a flow that defines its
+  fields.** `parse` reads the `field.<name>` definitions with Python's whitespace, checks the policy in the
+  core's order (the problems of the spec's section 4, one cause for a refused policy), and lowers every decimal
+  threshold compared with a `fixed` field to its canonical integer from its source span, exactly (`BigInt` in
+  `prismpath/portable/prismpath.mjs`, `math/big` in `prismpath-go`). A refusal is a `FieldDefinitionError` (both)
+  with the registered cause 89 to 100 or 74 to 76, the field and the reason, and every problem in order; the
+  Go graph keeps every edge disabled and `Run` refuses it. New: `systemBoundary` and `policyCheck`
+  (`SystemBoundary`, `PolicyCheck`), `canonicalValue`, `acceptCanonical`, and a canon/2 reader and writer
+  (`canon2Read`, `canon2Write`; `Canon2Read`, `Canon2Write`) with the frozen vectors replayed in
+  `run_vectors.mjs` (`canon2.json` 73 of 73, `field_definitions.json` 156 of 156) and in
+  `prismpath-go/conformance_test.go`.
+- **Evaluator corrections the core needed.** JavaScript no longer counts a bracket as predicate depth and
+  refuses more than 200 open brackets, as the reference and the Rust port do; Go reads `and` and `or` as one
+  n-ary node (a flat chain of operands is one level, as Python's syntax tree holds it) and `\xNN` in a string as
+  the code point rather than the byte; both read front matter with Python's whitespace, so U+FEFF is not
+  stripped.
+- **The differential harness has no refusing kernel and no reader gap.** `core_diff_js.mjs` and
+  `prismpath-go/cmd/core_diff` compose the kernels' own functions as the Python and Rust legs do, read canon/2,
+  and speak the cause registry. The 100,000 case run shows no finding on any of the seven legs.
+
 ## [0.1.2] (tagged, superseded before upload; never on PyPI)
 
 ### Summary since the 0.1.0 upload to PyPI

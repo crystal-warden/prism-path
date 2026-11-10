@@ -39,22 +39,25 @@
 #define MAX_EDGES          1024
 #define MAX_PROG_WORDS     4096
 
-/* Per-iteration loop bounds. The edge loop runs via bpf_loop() (callback verified ONCE), so
- * MAX_EDGES_PER_NODE is effectively free to the verifier. eval_prog keeps EXACT RPN semantics but its
- * operand stack is a FIXED depth accessed only through constant indices (st_get/st_put's switch), never
- * st[runtime_sp], which is what made the verifier explore every sp value and overrun the 1M-insn limit.
- * STACK_MAX is the declared max operand-stack depth of a supported predicate. Level M expressions fold
- * left-associatively, so a flat AND/OR chain (including `in`-lists) stays at depth 2; 4 covers real
- * nesting. A predicate deeper than this is outside the eBPF-target's declared subset, and the loader
- * (ppt_image.c, check_evaluator_limits) refuses its table rather than letting this evaluator clamp it. */
-/* BIG-TEST bounds: the original large numbers that overran the verifier BEFORE the bpf_loop rewrite
- * (64x64 hit the 8192-jump limit; 16x16 processed 1,000,001 insns). With edge + prog loops now run via
- * bpf_loop (each callback verified once), MAX_EDGES_PER_NODE and MAX_PROG_PER_EDGE are O(1) to the
- * verifier, and MAX_FIELDS_PER_PKT is a once-verified field-load loop, so these should now load. */
+/* Per-iteration loop bounds. The edge loop and the program loop both run via bpf_loop() (each callback
+ * verified ONCE), so MAX_EDGES_PER_NODE and MAX_PROG_PER_EDGE are free to the verifier and sit at the
+ * table capacity: a node may hold every edge the maps hold and an edge program every word they hold, so
+ * no table the maps admit is cut short per node or per edge. The cost of a large bound is run time, and
+ * the run time is bounded by the table (a loop stops at the node's own edge count and the program's own
+ * word count), never by these numbers. The operand stack is one __u64 of truth values (ppt_eval_bpf.h,
+ * st_get and st_put), so STACK_MAX is 64, the depth the C interpreter (prismpath-hw/interp.c) carries,
+ * and a shift by a masked amount costs the verifier the same at any depth; it must stay a power of two
+ * no greater than 64. A predicate deeper than this is the one thing outside the declared subset: the
+ * loader (ppt_image.c, check_evaluator_limits) refuses its table rather than letting this evaluator
+ * clamp it, as the C interpreter exits on the same overflow. The caps that remain are the map capacities
+ * above and MAX_FIELDS_PER_PKT, the once-verified unrolled register fill. */
 #define MAX_FIELDS_PER_PKT 32
-#define MAX_EDGES_PER_NODE 64
-#define MAX_PROG_PER_EDGE  64
-#define STACK_MAX          4
+#define MAX_EDGES_PER_NODE 1024   /* = MAX_EDGES; a literal because ebpf_table_limits.py reads these lines */
+#define MAX_PROG_PER_EDGE  4096   /* = MAX_PROG_WORDS, likewise */
+_Static_assert(MAX_EDGES_PER_NODE == MAX_EDGES && MAX_PROG_PER_EDGE == MAX_PROG_WORDS, "per node and per edge bounds sit at the map capacities");
+#define STACK_MAX          64
+_Static_assert(STACK_MAX > 0 && STACK_MAX <= 64 && (STACK_MAX & (STACK_MAX - 1)) == 0,
+               "the operand stack is one __u64 indexed by a masked shift");
 
 /* Binary table structs matching TABLE_FORMAT.md layout (little-endian) */
 struct ppt_atom {

@@ -72,6 +72,36 @@ func (expr *notNode) eval(ctx map[string]interface{}, depth int) (interface{}, e
 	return !pyTruthy(value), nil
 }
 
+// boolNode is one n-ary `and` or `or`, as Python's BoolOp: its operands are siblings, one level below the
+// node, however many there are. Every operand is evaluated (an operand that raises raises for the whole), as
+// the other kernels do.
+type boolNode struct {
+	op       string
+	operands []exprNode
+}
+
+func (expr *boolNode) eval(ctx map[string]interface{}, depth int) (interface{}, error) {
+	if depth > maxPredicateDepth {
+		return nil, newPredErr("expression nested too deeply (depth > 50)")
+	}
+	all, any := true, false
+	for _, operand := range expr.operands {
+		value, err := operand.eval(ctx, depth+1)
+		if err != nil {
+			return nil, err
+		}
+		if pyTruthy(value) {
+			any = true
+		} else {
+			all = false
+		}
+	}
+	if expr.op == "and" {
+		return all, nil
+	}
+	return any, nil
+}
+
 type binOpNode struct {
 	op    string
 	left  exprNode
@@ -82,46 +112,6 @@ func (expr *binOpNode) eval(ctx map[string]interface{}, depth int) (interface{},
 	if depth > maxPredicateDepth {
 		return nil, newPredErr("expression nested too deeply (depth > 50)")
 	}
-	switch expr.op {
-	case "and":
-		lVal, err := expr.left.eval(ctx, depth+1)
-		if err != nil {
-			return nil, err
-		}
-		if !pyTruthy(lVal) {
-			rVal, err := expr.right.eval(ctx, depth+1)
-			if err != nil {
-				return nil, err
-			}
-			_ = rVal
-			return false, nil
-		}
-		rVal, err := expr.right.eval(ctx, depth+1)
-		if err != nil {
-			return nil, err
-		}
-		return pyTruthy(rVal), nil
-
-	case "or":
-		lVal, err := expr.left.eval(ctx, depth+1)
-		if err != nil {
-			return nil, err
-		}
-		if pyTruthy(lVal) {
-			rVal, err := expr.right.eval(ctx, depth+1)
-			if err != nil {
-				return nil, err
-			}
-			_ = rVal
-			return true, nil
-		}
-		rVal, err := expr.right.eval(ctx, depth+1)
-		if err != nil {
-			return nil, err
-		}
-		return pyTruthy(rVal), nil
-	}
-
 	lVal, err := expr.left.eval(ctx, depth+1)
 	if err != nil {
 		return nil, err
@@ -610,7 +600,8 @@ func tokenize(src string) ([]token, error) {
 						if scan+2 < srcLen {
 							hexVal, err := strconv.ParseInt(src[scan+1:scan+3], 16, 32)
 							if err == nil {
-								sb.WriteByte(byte(hexVal))
+								// \xNN is the code point U+00NN, not the byte
+								sb.WriteRune(rune(hexVal))
 								scan += 2
 							} else {
 								sb.WriteString("\\x")
@@ -791,45 +782,36 @@ func (parseState *parser) parseExpr() (exprNode, error) {
 }
 
 func (parseState *parser) parseOr() (exprNode, error) {
-	left, err := parseState.parseAnd()
-	if err != nil {
-		return nil, err
-	}
-	for {
-		tok := parseState.peek()
-		if tok != nil && tok.kind == tokName && tok.val == "or" {
-			parseState.next()
-			right, err := parseState.parseAnd()
-			if err != nil {
-				return nil, err
-			}
-			left = &binOpNode{op: "or", left: left, right: right}
-		} else {
-			break
-		}
-	}
-	return left, nil
+	return parseState.parseBool("or", parseState.parseAnd)
 }
 
 func (parseState *parser) parseAnd() (exprNode, error) {
-	left, err := parseState.parseNot()
+	return parseState.parseBool("and", parseState.parseNot)
+}
+
+// parseBool reads `operand (keyword operand)*` as one n-ary node, as Python's syntax tree holds it.
+func (parseState *parser) parseBool(keyword string, next func() (exprNode, error)) (exprNode, error) {
+	first, err := next()
 	if err != nil {
 		return nil, err
 	}
+	operands := []exprNode{first}
 	for {
 		tok := parseState.peek()
-		if tok != nil && tok.kind == tokName && tok.val == "and" {
-			parseState.next()
-			right, err := parseState.parseNot()
-			if err != nil {
-				return nil, err
-			}
-			left = &binOpNode{op: "and", left: left, right: right}
-		} else {
+		if tok == nil || tok.kind != tokName || tok.val != keyword {
 			break
 		}
+		parseState.next()
+		operand, err := next()
+		if err != nil {
+			return nil, err
+		}
+		operands = append(operands, operand)
 	}
-	return left, nil
+	if len(operands) == 1 {
+		return first, nil
+	}
+	return &boolNode{op: keyword, operands: operands}, nil
 }
 
 func (parseState *parser) parseNot() (exprNode, error) {

@@ -11,7 +11,10 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { parse, run, evalCondition, PredicateError, scriptedAgent } from "./prismpath.mjs";
+import {
+  parse, run, evalCondition, PredicateError, scriptedAgent, firstDeterministic, FieldDefinitionError,
+  canon2Read, canon2Write, Canon2Error, parseDefinition, canonicalValue, systemBoundary, coreCauseCode,
+} from "./prismpath.mjs";
 
 const dir = process.argv[2] || join(dirname(fileURLToPath(import.meta.url)), "conformance");
 let failures = 0;
@@ -73,7 +76,89 @@ for (const fx of flows.cases) {
   failures++;
   console.error(`FLOW MISMATCH  ${fx.name}\n  expect=${JSON.stringify(want)}\n  got=   ${JSON.stringify(got)}`);
 }
-console.log(`flows:      ${flowPass}/${flows.cases.length - flowSkipped}${flowSkipped ? ` (${flowSkipped} with engine options skipped)` : ""}`);
+// The cases that carry `opts` are not core flows: the engine's type gate, transcript bound and run id are
+// options of the flow engine (spec-verified-core.md section 1), outside the one decision the core is.
+console.log(`flows:      ${flowPass}/${flows.cases.length - flowSkipped}${flowSkipped ? ` (${flowSkipped} with engine options skipped: the options are outside the core)` : ""}`);
+
+// ---- canon/2 ------------------------------------------------------------------------------
+// The frozen canon/2 vectors (spec-verified-core.md section 3): every case is refused with the reference's
+// rule, or read and written back to the reference's canonical bytes, which are a fixed point.
+const unhex = (hex) => Uint8Array.from(hex.match(/../g) || [], (pair) => parseInt(pair, 16));
+const hexOf = (bytes) => Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+const canon2 = JSON.parse(readFileSync(join(dir, "canon2.json"), "utf-8"));
+let canon2Pass = 0;
+for (const vector of canon2.cases) {
+  let problem = null;
+  try {
+    const document = canon2Read(unhex(vector.hex));
+    if (vector.refuse !== undefined) problem = `read, the reference refuses it as ${vector.refuse}`;
+    else {
+      const written = canon2Write(document);
+      if (hexOf(written) !== vector.canonical_hex) problem = `wrote ${hexOf(written)}, want ${vector.canonical_hex}`;
+      else if (hexOf(canon2Write(canon2Read(written))) !== vector.canonical_hex) problem = "the canonical bytes are not a fixed point";
+    }
+  } catch (err) {
+    if (!(err instanceof Canon2Error)) problem = `crashed: ${err}`;
+    else if (vector.refuse === undefined) problem = `refused as ${err.rule}, the reference reads it`;
+    else if (err.rule !== vector.refuse) problem = `refused as ${err.rule}, want ${vector.refuse}`;
+  }
+  if (problem === null) { canon2Pass++; continue; }
+  failures++;
+  console.error(`CANON2 MISMATCH  ${vector.name}: ${problem}`);
+}
+console.log(`canon2:     ${canon2Pass}/${canon2.cases.length}`);
+
+// ---- field definitions ----------------------------------------------------------------------
+// SPEC section 4.5, the frozen vectors: the shared conversion, parse time lowering to the reference's
+// exact text, the policy rules in the core's order, the canonical boundary and the routes on canonical
+// readings.
+const fieldDefs = JSON.parse(readFileSync(join(dir, "field_definitions.json"), "utf-8"));
+let fieldPass = 0;
+let fieldTotal = 0;
+const fieldFail = (what, detail) => { failures++; console.error(`FIELD DEFINITIONS MISMATCH  ${what}\n  ${detail}`); };
+for (const conversion of fieldDefs.conversion) {
+  fieldTotal++;
+  const [reason, canonical] = canonicalValue(parseDefinition("value", conversion.definition), conversion.raw);
+  const want = conversion.refused !== undefined ? [conversion.refused, null] : [null, conversion.canonical];
+  if (reason === want[0] && canonical === want[1]) fieldPass++;
+  else fieldFail(`conversion ${JSON.stringify(conversion)}`, `got ${JSON.stringify([reason, canonical])}`);
+}
+for (const policy of fieldDefs.policies) {
+  fieldTotal++;
+  let graph = null;
+  let refusal = null;
+  try {
+    graph = parse(policy.flow);
+  } catch (err) {
+    if (!(err instanceof FieldDefinitionError)) { fieldFail(policy.name, `crashed: ${err}`); continue; }
+    refusal = err;
+  }
+  if (policy.accepted !== (refusal === null)) {
+    fieldFail(policy.name, refusal ? `refused ${refusal.cause}: ${refusal.message}` : "parsed although the reference refuses it");
+    continue;
+  }
+  if (refusal !== null) {
+    const causes = refusal.problems.map((found) => found.cause);
+    const registered = causes.every((cause) => coreCauseCode(cause) !== null);
+    if (refusal.cause === policy.cause && JSON.stringify(causes) === JSON.stringify(policy.causes) && registered) fieldPass++;
+    else fieldFail(policy.name, `cause ${refusal.cause} ${JSON.stringify(causes)}, want ${policy.cause} ${JSON.stringify(policy.causes)}`);
+    continue;
+  }
+  const edges = graph.nodes.s.edges;
+  let problem = null;
+  if (JSON.stringify(edges.map(([, cond]) => cond)) !== JSON.stringify(policy.lowered)) problem = `lowered ${JSON.stringify(edges.map(([, cond]) => cond))}`;
+  for (const probe of policy.probes) {
+    const [target] = firstDeterministic(edges, probe.reading);
+    if (problem === null && target !== probe.route) problem = `probe ${JSON.stringify(probe.reading)} routed to ${target}, want ${probe.route}`;
+  }
+  for (const refused of policy.refused_readings) {
+    const got = systemBoundary(graph, refused.reading);
+    if (problem === null && JSON.stringify(got) !== JSON.stringify([refused.field, refused.reason])) problem = `reading ${JSON.stringify(refused.reading)} refused as ${JSON.stringify(got)}`;
+  }
+  if (problem === null) fieldPass++;
+  else fieldFail(policy.name, problem);
+}
+console.log(`field defs: ${fieldPass}/${fieldTotal}`);
 
 if (failures) {
   console.error(`\nNON-CONFORMANT: ${failures} mismatch(es)`);

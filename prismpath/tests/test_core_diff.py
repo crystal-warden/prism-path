@@ -7,9 +7,10 @@ the Python reference and the Rust port. The large run is the documented command
 
     python formal/diff/core_diff.py --cases 100000 --seed 1
 
-Every difference must be a reader gap, a scope difference, a target limit, or one of the
-disagreements the specification records in section 9 (KNOWN below, empty since step 3). A new kind of finding fails, and so does a
-disagreement on any reading. The oracle is built by `lake build` in formal/; without it the test skips,
+Every difference must be a scope difference, a target limit, or one of the disagreements the
+specification records in section 9 (KNOWN below, empty since step 3). A new kind of finding fails, and so
+does a disagreement on any reading. Since the JavaScript and Go kernels took the core there are no reader
+gaps and no refusing kernels: every leg reads canon/2 and decides. The oracle is built by `lake build` in formal/; without it the test skips,
 unless PRISMPATH_REQUIRE_CORE_ORACLE is set, when a missing oracle is a failure.
 """
 import os
@@ -70,8 +71,7 @@ def test_every_difference_is_known(run):
                if kind not in KNOWN and not kind[1].startswith(KNOWN_PREFIXES)}
     assert not unknown, f"new kinds of disagreement with the oracle: {unknown}"
     for leg in legs:
-        # the second tier kernels agree only where no field is defined (D5), so their bar is lower
-        assert counts[leg]["agree"] > (CASES if leg in core_diff.CODED else CASES // 2), counts[leg]
+        assert counts[leg]["agree"] > CASES, counts[leg]
 
 
 def test_no_reading_disagrees_and_nothing_crashes(run):
@@ -97,16 +97,16 @@ def test_every_refusal_carries_a_registered_code(run):
 
 
 def test_the_second_tier_and_table_legs(run):
-    """D5: the JavaScript and Go kernels refuse every flow that defines its fields and agree elsewhere,
-    differing only by reader gaps (they have no canon/2 reader). D6: the C table targets and the eBPF
-    evaluator (on its userspace path) route every compiled policy's readings as the oracle does, and the
-    compiler's 32 bit limit and the eBPF loader's declared subset show only as refusals (target-limit),
-    never as a different route."""
+    """The JavaScript and Go kernels decide the core as the oracle does: they read canon/2, check the policy
+    in the core's order and route every reading (no refusing kernel and no reader gap is left). D6: the C
+    table targets and the eBPF evaluator (on its userspace path) route every compiled policy's readings as
+    the oracle does, and the compiler's 32 bit limit and the eBPF loader's declared subset show only as
+    refusals (target-limit), never as a different route."""
     legs, _lean, counts, _findings = run
     for leg in ("js", "go"):
         if leg in legs:
-            assert counts[leg]["refusing-kernel"] > 0 and counts[leg]["agree"] > 0, counts[leg]
-            assert not [key for key in counts[leg] if key.startswith("finding")], counts[leg]
+            assert counts[leg]["agree"] > CASES, counts[leg]
+            assert not [key for key in counts[leg] if key.startswith(("finding", "refusing-kernel", "reader-gap"))], counts[leg]
     for leg in ("c-interp", "c-hdr", "ebpf"):
         if leg in legs:
             assert counts[leg]["target-limit:compile"] > 0 and counts[leg]["target-limit:reading"] > 0, counts[leg]

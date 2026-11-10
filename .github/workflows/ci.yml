@@ -286,7 +286,7 @@ jobs:
         run: |
           pip install -e . cocotb==1.9.2 pytest
           sudo apt-get update
-          sudo apt-get install -y verilator clang libbpf-dev
+          sudo apt-get install -y verilator clang llvm libbpf-dev
       - name: C target — certify against the frozen corpus (declared subset)
         run: make -C prismpath-hw cert
       - name: C target, defined flows route as the engine does on lowered thresholds and absence
@@ -321,6 +321,10 @@ jobs:
           python3 prismpath-ebpf/cert_corpus.py /tmp/cert_corpus.bin
       - name: eBPF tables past the evaluator's bounds are refused where they are built and by the loader just built
         run: python -m pytest prismpath/tests/test_ebpf_table_limits.py -q -rs
+      - name: eBPF evaluator at its bounds (stack 64, 4,000 word programs, 200 edge nodes) and every object within the modelled verifier limits, no kernel needed
+        run: |
+          python -m pytest prismpath/tests/test_ebpf_evaluator_bounds.py -q -rs
+          python3 prismpath-ebpf/verifier_budget.py prismpath-ebpf/ppt_xdp.bpf.o prismpath-ebpf/ppt_net.bpf.o prismpath-ebpf/ppt_select.bpf.o prismpath-ebpf/a6/ppt_xdp.bpf.o prismpath-ebpf/facet_decode.bpf.o
 
   # In-kernel eBPF conformance via BPF_PROG_TEST_RUN (needs root + a BPF-capable kernel). Confirmed
   # green on GitHub-hosted ubuntu-24.04 runners (they provide sudo + /sys/kernel/btf + a recent kernel),
@@ -339,15 +343,20 @@ jobs:
       - name: Install
         run: |
           pip install -e .
-          sudo apt-get update && sudo apt-get install -y clang libbpf-dev
+          sudo apt-get update && sudo apt-get install -y clang llvm libbpf-dev
       - name: Build eBPF target + a seed image
         run: |
           make -C prismpath-ebpf
           python3 prismpath-ebpf/cert_corpus.py /tmp/cert_corpus.bin
+          python3 prismpath-ebpf/cert_corpus.py --boundary /tmp/cert_boundary.bin
           python3 prismpath-ebpf/net_compile.py prismpath-ebpf/net_triage.md \
             prismpath-ebpf/build/seed.ppt prismpath-ebpf/build/seed.names
+      - name: The verifier's limits as the repo models them, on the objects about to be loaded
+        run: python3 prismpath-ebpf/verifier_budget.py prismpath-ebpf/ppt_xdp.bpf.o prismpath-ebpf/ppt_net.bpf.o prismpath-ebpf/ppt_select.bpf.o prismpath-ebpf/a6/ppt_xdp.bpf.o prismpath-ebpf/facet_decode.bpf.o
       - name: In-kernel corpus conformance (147/147, BPF_PROG_TEST_RUN)
         run: cd prismpath-ebpf && sudo ./loader build/seed.ppt certify /tmp/cert_corpus.bin
+      - name: In-kernel boundary corpus (stack 64, programs to 4,000 words, 200 edge nodes; the verifier accepts the evaluator and it routes as the reference does)
+        run: cd prismpath-ebpf && sudo ./loader build/seed.ppt certify /tmp/cert_boundary.bin
       - name: In-kernel Facet decode-plane cert (250/250 byte-identical + negative matrix)
         run: cd prismpath-ebpf && sudo -E env "PATH=$PATH" python3 facet_decode_cert.py
       - name: Real packet front end conformance (ppt_net, 90/90 frames against the host engine)
