@@ -66,9 +66,11 @@ int build_frame(uint8_t *out, uint16_t node_idx, uint16_t n_fields, const struct
 
 /* The in kernel evaluator runs each loop under a fixed bound and clamps past it instead of failing: it
  * reads at most MAX_EDGES_PER_NODE edges of a node and MAX_PROG_PER_EDGE words of a program, drops a push
- * past STACK_MAX, and treats an operator without its operands as a no op. A table past any bound was
- * populated and evaluated as if it were the authored policy: `when x not in [0..32]` compiles to 66
- * words, and the kernel cut it before the final OR and NOT and decided the inverse (October 2026
+ * past STACK_MAX, and treats an operator without its operands as a no op. Those bounds are the maps'
+ * capacities and the C interpreter's own depth of 64 now, but a table past any of them would still be
+ * populated and evaluated as if it were the authored policy. When the bounds were 64 words and a stack of
+ * 4, `when x not in [0..32]` compiled to 66 words, and the kernel cut it before the final OR and NOT and
+ * decided the inverse (October 2026
  * reading boundary audit). The host reference below clamps the same way, so certification compared
  * like with like and never saw it. Refuse such a table here, before it reaches any map. The header's
  * max_stack is the compiler's claim, so every program's stack effect is run instead of trusting it.

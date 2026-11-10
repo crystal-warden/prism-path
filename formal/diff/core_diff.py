@@ -992,8 +992,10 @@ def _classify(lean_row, other, leg):
         if b[0] == "crash":
             rows.append(("finding:crash", b[1]))
         elif b[0] == "policy" and b[1] == "target-limit" and other_v.get("reason") == "subset":
-            # the eBPF loader admits only its declared subset (an operand stack of 4, 64 edges per node, 64
-            # words per edge, 32 fields: prismpath-ebpf/ppt_image.c, check_evaluator_limits) and refuses the rest
+            # the eBPF loader admits only what the evaluator carries (an operand stack of 64, the C interpreter's,
+            # programs and nodes as long as the maps hold, 32 fields: prismpath-ebpf/ppt_image.c,
+            # check_evaluator_limits) and refuses the rest; the generator's tables are all inside it, so a row
+            # here is a table past a capacity
             rows.append(("target-limit:subset", f"lean {a}"))
         elif b[0] == "policy" and b[1] == "target-limit":
             # D6 on a reading: a value the 32 bit registers cannot hold is refused by the register encoder
