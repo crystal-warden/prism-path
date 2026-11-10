@@ -116,6 +116,16 @@ class EncodingError(CanonicalError):
     beyond plus or minus 2^53 minus 1). It is refused, never read under another encoding."""
 
 
+class FloatRefused(EncodingError):
+    """A float in content that is hashed or signed. canon/2 has no float, and PrismPath never writes one
+    as a decimal string of its own making: the caller supplies an integer of a stated unit or a decimal
+    string it chose."""
+
+
+_FLOAT_MESSAGE = ("a float is refused in hashed content: supply an integer of a stated unit "
+                  "(microseconds, basis points, bytes) or a decimal string")
+
+
 def canon2_bytes(obj: Any) -> bytes:
     """The canon/2 bytes of `obj`: what every writer hashes and signs. A float, an integer beyond plus or
     minus 2^53 minus 1, a lone surrogate or nesting deeper than 128 raise EncodingError (a
@@ -124,6 +134,8 @@ def canon2_bytes(obj: Any) -> bytes:
     try:
         return canon2.dumps(obj)
     except canon2.Canon2Error as error:
+        if error.rule == "float":
+            raise FloatRefused(_FLOAT_MESSAGE) from error
         raise EncodingError(f"no canon/2 form: {error}") from error
 
 
@@ -172,9 +184,7 @@ def _content_value(value: Any, default: Optional[Any], depth: int = 0) -> Any:
     if isinstance(value, bool) or value is None or isinstance(value, (int, str)):
         return value
     if isinstance(value, float):
-        if value != value or value in (float("inf"), float("-inf")):
-            raise CanonicalError("NaN, Infinity and -Infinity have no canonical JSON form")
-        return repr(value)
+        raise FloatRefused(_FLOAT_MESSAGE)
     if isinstance(value, (list, tuple)):
         return [_content_value(item, default, depth + 1) for item in value]
     if isinstance(value, dict):
@@ -184,8 +194,10 @@ def _content_value(value: Any, default: Optional[Any], depth: int = 0) -> Any:
                 # json.dumps's own spelling of the key types it accepts; any other key is a TypeError
                 if key is None or isinstance(key, bool):
                     key = {None: "null", True: "true", False: "false"}[key]
-                elif isinstance(key, (int, float)):
-                    key = repr(key) if isinstance(key, float) else str(key)
+                elif isinstance(key, float):
+                    raise FloatRefused(_FLOAT_MESSAGE)
+                elif isinstance(key, int):
+                    key = str(key)
                 else:
                     raise TypeError(f"keys must be str, int, float, bool or None, not {type(key).__name__}")
             out[key] = _content_value(item, default, depth + 1)
@@ -197,10 +209,11 @@ def _content_value(value: Any, default: Optional[Any], depth: int = 0) -> Any:
 
 def content_bytes(value: Any, default: Optional[Any] = None) -> bytes:
     """The canon/2 bytes of content PrismPath hashes but did not write: an item a worker returned, a
-    proof value, a connector's data. Content may hold a float, which canon/2 has no form for, so a
-    float is written as its shortest round trip decimal string (`repr`), the rule section 3.1 of the
-    verified core spec gives for floats in hashed documents; NaN and the infinities are still refused.
-    `default` stringifies a value that is not JSON, as `canonical_spaced` did for the same callers."""
+    proof value, a connector's data. canon/2 has no float and PrismPath does not invent a spelling for
+    one, so a float anywhere in the content (a value or an object key, NaN and the infinities included)
+    raises `FloatRefused`, an `EncodingError`; the caller supplies an integer of a stated unit or a
+    decimal string. `default` stringifies a value that is not JSON, as `canonical_spaced` did for the
+    same callers, and its product is held to the same rule."""
     return canon2_bytes(_content_value(value, default))
 
 

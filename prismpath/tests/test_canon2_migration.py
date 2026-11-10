@@ -43,11 +43,18 @@ def test_a_document_that_names_canon2_is_read_by_the_strict_reader():
             canon.loads_document(text)
 
 
-def test_content_is_canon2_with_a_float_as_its_decimal_string():
-    assert canon.content_bytes({"r": 0.1, "n": [1, 2.0]}) == b'{"n":[1,"2.0"],"r":"0.1"}'
+def test_a_float_in_content_is_refused_not_converted():
+    assert canon.content_bytes({"r": "0.1", "n": [1, 2]}) == b'{"n":[1,2],"r":"0.1"}'
     assert canon2.loads(canon.content_bytes({"k": "v"})) == {"k": "v"}
-    with pytest.raises(canon.CanonicalError):
-        canon.content_bytes({"x": float("nan")})
+    for content in ({"r": 0.1}, {"n": [1, 2.0]}, {"x": float("nan")}, {"x": {"y": [float("inf")]}}, {1.5: "k"},
+                    0.5, {"x": {1, 2}}):
+        with pytest.raises((canon.FloatRefused, TypeError)):
+            canon.content_bytes(content)
+    with pytest.raises(canon.FloatRefused, match="integer of a stated unit .* or a decimal string"):
+        canon.content_bytes([0.5])
+    with pytest.raises(canon.FloatRefused):
+        canon.content_bytes({"d": object()}, default=lambda item: 0.5)       # a stringifier's float too
+    assert issubclass(canon.FloatRefused, canon.CanonicalError)
 
 
 # Every call of a canon/1 encoder outside prismpath/canon.py, with the reason it is not a writer.

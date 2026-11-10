@@ -21,8 +21,8 @@ _SIGNED_KEYS = ("kind", "determination_root", "signed_at", "key_id")
 
 
 def _determination_root(determination, encoding):
-    """sha256 of the determination: its canon/2 content bytes for a canon/2 receipt (a float as its
-    decimal string), its canon/1 compact bytes for a receipt signed before the migration."""
+    """sha256 of the determination: its canon/2 content bytes for a canon/2 receipt (a float in it is
+    refused), its canon/1 compact bytes for a receipt signed before the migration."""
     if encoding == _canon.CANON2:
         return _pp.sha256_hex(_canon.content_bytes(determination))
     return _pp.sha256_hex(_canon.canonical_compact(determination))

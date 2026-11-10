@@ -61,7 +61,7 @@ def _to_bytes(value) -> bytes:
         return bytes(value)
     if isinstance(value, str):
         return value.encode()
-    return canon.content_bytes(value, default=str)       # canon/2; a float as its decimal string
+    return canon.content_bytes(value, default=str)       # canon/2; a float is refused
 
 
 def run_ledgered_loop(flow_path, agent, ledger, *, router=None, max_items: int = 1000,

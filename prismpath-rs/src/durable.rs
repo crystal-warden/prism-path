@@ -134,27 +134,28 @@ pub fn canon2_bytes(val: &Value) -> Result<Vec<u8>, CanonicalError> {
     crate::canon2::write_json(val).map_err(|error| CanonicalError(format!("no canon/2 form: {error}")))
 }
 
+/// The message of the refusal of a float in hashed content, the same words as
+/// `prismpath.canon.FloatRefused`.
+pub const FLOAT_REFUSED: &str =
+    "a float is refused in hashed content: supply an integer of a stated unit (microseconds, basis points, bytes) or a decimal string";
+
 /// The canon/2 bytes of content PrismPath hashes but did not write (a worker's outcome, a connector's
-/// data): a number with a fraction or an exponent is written as Python's `repr` of the float it reads
-/// as, the shortest round trip decimal string, and a number with no finite double is refused.
-/// `prismpath.canon.content_bytes`.
+/// data). canon/2 has no float and PrismPath writes no spelling of one, so a number with a fraction or an
+/// exponent anywhere in the content is refused (`FLOAT_REFUSED`), never converted. The caller supplies an
+/// integer of a stated unit or a decimal string. `prismpath.canon.content_bytes`.
 pub fn content_bytes(val: &Value) -> Result<Vec<u8>, CanonicalError> {
-    fn convert(val: &Value) -> Result<Value, CanonicalError> {
-        Ok(match val {
-            Value::Number(number) if number.as_i64().is_none() && number.as_u64().is_none() && beyond_64_bit_integer(number).is_none() => {
-                match crate::value::number_to_f64(number) {
-                    Some(float) => Value::String(py_float_repr(float)),
-                    None => return Err(CanonicalError("NaN, Infinity and -Infinity have no canonical JSON form".to_string())),
-                }
-            }
-            Value::Array(items) => Value::Array(items.iter().map(convert).collect::<Result<_, _>>()?),
-            Value::Object(members) => {
-                Value::Object(members.iter().map(|(key, item)| Ok((key.clone(), convert(item)?))).collect::<Result<_, CanonicalError>>()?)
-            }
-            other => other.clone(),
-        })
+    fn is_float(val: &Value) -> bool {
+        match val {
+            Value::Number(number) => number.as_i64().is_none() && number.as_u64().is_none() && beyond_64_bit_integer(number).is_none(),
+            Value::Array(items) => items.iter().any(is_float),
+            Value::Object(members) => members.values().any(is_float),
+            _ => false,
+        }
     }
-    canon2_bytes(&convert(val)?)
+    if is_float(val) {
+        return Err(CanonicalError(FLOAT_REFUSED.to_string()));
+    }
+    canon2_bytes(val)
 }
 
 /// `val` with `"encoding": "canon/2"`.

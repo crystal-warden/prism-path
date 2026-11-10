@@ -14,12 +14,12 @@
    ],
    "knowledge_base_hash": "sha256:kb",
    "label": "echo:decision",
-   "manifest_hash": "d7b0464c132de4a2d03c0bb1713d52ad590342a86c78e8759ad25bb44fc5b969",
+   "manifest_hash": "ee11d1d0882cac1f6fa5998a7fc8b61e4f09608fb8f3b9e558a2b89323be5796",
    "policy_hash": "sha256:deadbeef",
-   "root": "4f530742580f6b76193dbee70335b459bcaa7c7df5640e2627e3bf7e61091692"
+   "root": "f88f331b5fa4310e16b4f12e8b6927c9850b5d18efddf0b043bcdbf256e3d815"
   },
   "outcome": {
-   "score": 0.93,
+   "score_bp": 9300,
    "verdict": "contain"
   },
   "policy_hash": "sha256:deadbeef"
@@ -195,18 +195,20 @@
   {
    "data": {
     "active": true,
+    "ratio": "0.25",
     "roles": [
      "admin",
      "dev"
     ],
-    "score": 1.5
+    "score_milli": 1500
    },
    "flat": {
     "active": true,
+    "ratio": "0.25",
     "roles": "admin, dev",
     "roles.0": "admin",
     "roles.1": "dev",
-    "score": 1.5
+    "score_milli": 1500
    }
   },
   {
@@ -222,6 +224,61 @@
     "nested.deep.leaf": null,
     "note": "caf\u00e9"
    }
+  },
+  {
+   "data": {
+    "roles": [
+     "admin"
+    ],
+    "score": 1.5
+   },
+   "flat": {
+    "roles": "admin",
+    "roles.0": "admin",
+    "score": 1.5
+   }
+  },
+  {
+   "data": {
+    "nested": {
+     "deep": [
+      1,
+      2.5
+     ]
+    }
+   },
+   "flat": {
+    "nested.deep": "1, 2.5",
+    "nested.deep.0": 1,
+    "nested.deep.1": 2.5
+   }
+  },
+  {
+   "data": {
+    "exp": 1e+30
+   },
+   "flat": {
+    "exp": 1e+30
+   }
+  }
+ ],
+ "float_refusals": [
+  {
+   "roles": [
+    "admin"
+   ],
+   "score": 1.5
+  },
+  {
+   "nested": {
+    "deep": [
+     1,
+     2.5
+    ]
+   }
+  },
+  {
+   "exp": 1e+30
   }
  ],
  "hashes": [
@@ -239,14 +296,15 @@
   {
    "data": {
     "active": true,
+    "ratio": "0.25",
     "roles": [
      "admin",
      "dev"
     ],
-    "score": 1.5
+    "score_milli": 1500
    },
-   "ingestion": "sha256:0fc3ed7ca804626c",
-   "knowledge": "sha256:0fc3ed7ca804626c"
+   "ingestion": "sha256:077be8e744ab4077",
+   "knowledge": "sha256:077be8e744ab4077"
   },
   {
    "data": {
@@ -599,7 +657,7 @@
    "threshold": 1
   }
  ],
- "note": "Connector-SDK + composition fixtures from the Python reference. Rust must reproduce hashes and prompt strings byte-for-byte, the attestation manifest exactly, the fan-out final path/stopped with _children aggregated, and the join-policy grid (composer._quorum_threshold/_join_event) value-for-value.",
+ "note": "Connector-SDK + composition fixtures from the Python reference. Rust must reproduce hashes and prompt strings byte-for-byte, the attestation manifest exactly, a refusal (never a hash) for content that holds a float, the fan-out final path/stopped with _children aggregated, and the join-policy grid (composer._quorum_threshold/_join_event) value-for-value.",
  "prompts": [
   {
    "criteria": null,
@@ -617,13 +675,14 @@
    "criteria": "rule 12 governs",
    "payload": {
     "active": true,
+    "ratio": "0.25",
     "roles": [
      "admin",
      "dev"
     ],
-    "score": 1.5
+    "score_milli": 1500
    },
-   "prompt": "active: True\nroles: admin, dev\nroles.0: admin\nroles.1: dev\nscore: 1.5\n\nCRITERIA:\nrule 12 governs",
+   "prompt": "active: True\nratio: 0.25\nroles: admin, dev\nroles.0: admin\nroles.1: dev\nscore_milli: 1500\n\nCRITERIA:\nrule 12 governs",
    "schema": null
   },
   {

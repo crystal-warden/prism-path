@@ -31,6 +31,18 @@ fn hashes_and_flatten_match_python() {
         assert_eq!(conn.ingestion_hash(&case["data"]).unwrap(), case["ingestion"].as_str().unwrap());
         assert_eq!(conn.knowledge_hash(&case["data"]).unwrap(), case["knowledge"].as_str().unwrap());
     }
+    // Content that holds a float is refused, never hashed: the same words as `canon.FloatRefused`.
+    let refusals = fx["float_refusals"].as_array().expect("regen connector.json for the float refusals");
+    assert!(!refusals.is_empty());
+    for data in refusals {
+        for refused in [conn.ingestion_hash(data), conn.knowledge_hash(data)] {
+            let error = refused.expect_err(&format!("a float was hashed: {data}"));
+            assert!(error.to_string().contains("integer of a stated unit"), "{error}");
+        }
+        let error = conn.attest_decision(data, "sha256:deadbeef", "g", &[], "sha256:kb", None, "2026-08-12T00:00:00Z")
+            .expect_err("a float was attested");
+        assert!(error.contains("a decimal string"), "{error}");
+    }
     for case in fx["flatten"].as_array().unwrap() {
         let mut flat = BTreeMap::new();
         flatten(&case["data"], "", ".", &mut flat).unwrap();

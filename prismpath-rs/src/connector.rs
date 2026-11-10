@@ -64,7 +64,7 @@ pub fn flatten(data: &Value, prefix: &str, delimiter: &str, out: &mut BTreeMap<S
 }
 
 /// The reference's short content hash: "sha256:" + first 16 hex chars over the content's canon/2
-/// bytes (`durable::content_bytes`, a float as its decimal string).
+/// bytes (`durable::content_bytes`; a float in the data is refused).
 /// Data with no canonical form (a number beyond the double range) is refused with `CanonicalError`.
 pub fn short_hash(data: &Value) -> Result<String, CanonicalError> {
     let digest = hex::encode(Sha256::digest(content_bytes(data)?));

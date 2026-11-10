@@ -23,7 +23,7 @@ test holds every call of a canon/1 encoder in Python and Rust to a named list of
   escaped. A data value with a float is refused (`AuditWriteError`), never converted. A log may hold old and
   new events; each leaf is hashed under the encoding its event names, so an anchored root over old leaves
   still verifies. `trail` reads either time. Mission Control records an operator's control data as content,
-  a float in it as its decimal string.
+  and a float in it is refused (`AuditWriteError`).
 - **Root statements** are `prismpath-root-statement/2`: canon/2, `encoding`, the integer `time_us` instead
   of the ISO `time`, the domain `prismpath-root-statement/2`. A `/1` statement still verifies, and a chain may
   move from `/1` to `/2`. A receipt bundle whose receipt or statement names another encoding is `invalid`
@@ -40,8 +40,11 @@ test holds every call of a canon/1 encoder in Python and Rust to a named list of
   station must both be on this version.
 - **Content hashes** of data PrismPath did not write (a connector's ingestion and knowledge hashes, a
   decision's outcome root, a composer item id, a ledger proof, the compliance adapter's catalog, weight and
-  determination hashes) are over `canon.content_bytes`: canon/2 with a float as its shortest decimal string.
-  Every such hash, and so every composer checkpoint name keyed by one, changed.
+  determination hashes) are over `canon.content_bytes`: canon/2, and a float anywhere in the content is refused with
+  `FloatRefused` (Python, an `EncodingError`) or the same words as a `CanonicalError` (Rust), which tell the
+  caller to supply an integer of a stated unit or a decimal string. PrismPath writes no spelling of a float of
+  its own, so the earlier rule (a float as its shortest decimal string) is gone, and content that held a
+  float now fails to hash. Every such hash, and so every composer checkpoint name keyed by one, changed.
 - **Corpora.** `host_trace.json`, `hotswap.json`, `receipts.json` (301 cases, with a log and a chain that cross
   the migration), `crypto_agility.json`, `crypto_migration.json`, `durable.json`, `connector.json` and
   `context.json` were regenerated through their generators. `receipts_canon1.json` (287 cases) and
