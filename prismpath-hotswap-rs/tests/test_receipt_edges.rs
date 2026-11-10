@@ -4,6 +4,8 @@
 //! frozen vectors cannot carry. Each is fail closed: Rust refuses what Python would let through, never
 //! the reverse. (The vectors in `test_receipt_verify.rs` hold every other verdict to Python's.)
 
+mod common;
+
 use ed25519_dalek::{Signer, SigningKey};
 use prismpath_hotswap_rs::flow_authority::{verify_flow, VersionFloor, FLOW_MANIFEST_FORMAT};
 use prismpath_hotswap_rs::root_statement::{
@@ -142,8 +144,7 @@ fn a_damaged_floor_entry_admits_nothing() {
 fn the_rust_audit_log_writes_leaves_the_verifier_reads_the_same() {
     use prismpath_hotswap_rs::host::AuditLog;
     use prismpath_hotswap_rs::root_statement::{AuditLogView, UNSIGNED};
-    let dir = std::env::temp_dir().join(format!("pp_receipt_edges_{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
+    let dir = common::Scratch::new("receipt_edges");
     let path = dir.join("swaps.log");
     let log = AuditLog::open(path.to_str().unwrap()).unwrap();
     log.append("policy_host", "swap", vec![("to_hash", json!("ab")), ("version", json!(1)), ("note", json!("caf\u{e9} \u{1d11e}")), ("ratio", json!(1e-7)), ("result", json!("accepted"))]).unwrap();
@@ -154,5 +155,4 @@ fn the_rust_audit_log_writes_leaves_the_verifier_reads_the_same() {
     assert_eq!(view.root_at(2), log.current_root());
     let report = verify_trail(&text, None, &[]);
     assert_eq!((report.status, report.log_leaves, report.unsigned_tail), (UNSIGNED, 2, 2));
-    let _ = std::fs::remove_dir_all(&dir);
 }
