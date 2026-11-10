@@ -1,0 +1,168 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Crystal Warden Supply Chain Labs LLC
+"""A differential run as evidence (docs/design/spec-verified-core.md, section 11), at CI size.
+
+The Python reference and the Rust port each produce a run of the same cases with test keys generated
+for the test: image attestations under the authority key, a canon/2 receipt per decision, and one root
+statement over the receipts under the instance key. Each verifier checks the other's run, every receipt
+is replayed through the oracle, and a run altered in any part is refused. The oracle is built by `lake
+build` in formal/; without it the test skips, unless PRISMPATH_REQUIRE_CORE_ORACLE is set.
+"""
+import os
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+import pytest
+
+ROOT = Path(__file__).resolve().parents[2]
+if not (ROOT / "formal" / "diff" / "core_evidence.py").exists():
+    pytest.skip("formal/diff is not beside this package (an installed wheel)", allow_module_level=True)
+pytest.importorskip("cryptography")
+sys.path.insert(0, str(ROOT / "formal" / "diff"))
+import core_diff  # noqa: E402
+import core_evidence  # noqa: E402
+
+CASES = 400
+SEED = 11
+
+
+def _oracle():
+    if not core_diff.ORACLE.exists():
+        if os.environ.get("PRISMPATH_REQUIRE_CORE_ORACLE"):
+            pytest.fail(f"PRISMPATH_REQUIRE_CORE_ORACLE is set and {core_diff.ORACLE} is not built")
+        pytest.skip("the Lean oracle is not built (cd formal && lake build)")
+
+
+def _rust_example():
+    target = Path(os.environ.get("CARGO_TARGET_DIR", ROOT / "target"))
+    binary = target / "debug" / "examples" / "core_evidence"
+    if not binary.exists():
+        if not shutil.which("cargo"):
+            if os.environ.get("PRISMPATH_REQUIRE_CORE_ORACLE"):
+                pytest.fail("PRISMPATH_REQUIRE_CORE_ORACLE is set and there is no cargo for the Rust verifier")
+            pytest.skip("no cargo for the Rust producer and verifier")
+        subprocess.run(["cargo", "build", "-q", "-p", "prismpath-hotswap-rs", "--example", "core_evidence"], cwd=ROOT,
+                       check=True)
+    return binary
+
+
+@pytest.fixture(scope="module")
+def runs(tmp_path_factory):
+    _oracle()
+    base = tmp_path_factory.mktemp("core_evidence")
+    cases = base / "cases.jsonl"
+    core_evidence.write_cases(core_diff.generate(CASES, SEED), cases)
+    core_evidence.produce(cases, base / "run-py", base / "keys-py")
+    rust = _rust_example()
+    produced = subprocess.run([str(rust), "produce", "--from", str(cases), "--out", str(base / "run-rs"),
+                               "--keys", str(base / "keys-rs")], capture_output=True, text=True)
+    assert produced.returncode == 0, produced.stdout + produced.stderr
+    return base, rust
+
+
+def _rust_verify(rust, run, *pins):
+    return subprocess.run([str(rust), "verify", str(run), "--sample", "all", *pins], capture_output=True, text=True)
+
+
+def test_each_verifies_its_own_and_the_others_run(runs):
+    base, rust = runs
+    for run, keys in (("run-py", "keys-py"), ("run-rs", "keys-rs")):
+        pins = ["--pin-authority", str(base / keys / "authority.pub"), "--pin-instance", str(base / keys / "instance.pub")]
+        summary = core_evidence.verify(base / run, sample=None, pin_authority=pins[1], pin_instance=pins[3])
+        assert summary["root_statement"] == "signed" and summary["disagree"] == 0 and summary["agree"] > 0, summary
+        assert summary["replayed"] == summary["receipts"] > CASES, summary
+        checked = _rust_verify(rust, base / run, *pins)
+        assert checked.returncode == 0 and "root statement signed" in checked.stdout and " 0 disagree" in checked.stdout, \
+            checked.stdout + checked.stderr
+
+
+def test_the_two_runs_receipt_the_same_decisions(runs):
+    """The reference and the port decide every case alike, so their receipts are the same bytes but for the
+    decider; their keys, signatures and root statements differ."""
+    base, _rust = runs
+    python = (base / "run-py" / "receipts.jsonl").read_bytes().replace(b'"decider":"python"', b'"decider":"X"')
+    rust = (base / "run-rs" / "receipts.jsonl").read_bytes().replace(b'"decider":"rust"', b'"decider":"X"')
+    assert python == rust
+    assert (base / "run-py" / "cases.jsonl").read_bytes() == (base / "run-rs" / "cases.jsonl").read_bytes()
+    assert (base / "run-py" / "authority.pub").read_bytes() != (base / "run-rs" / "authority.pub").read_bytes()
+
+
+def _altered(base, run, name, change, tmp_path):
+    copy = tmp_path / f"{run}-{name}"
+    shutil.copytree(base / run, copy)
+    path = copy / name
+    path.write_bytes(change(path.read_bytes()))
+    return copy
+
+
+def _flip_decision(data: bytes) -> bytes:
+    return data.replace(b'"decision":"route","format"', b'"decision":"refuse","format"', 1)
+
+
+def _flip_signature(data: bytes) -> bytes:
+    at = data.index(b'"sig":"') + len(b'"sig":"')
+    return data[:at] + (b"1" if data[at:at + 1] == b"0" else b"0") + data[at + 1:]
+
+
+ALTERATIONS = [
+    ("receipts.jsonl", _flip_decision, "root statement"),
+    ("receipts.jsonl", lambda data: data[: data.rindex(b"\n", 0, len(data) - 1) + 1], "root statement"),
+    ("cases.jsonl", lambda data: data.replace(b'"readings":["7b', b'"readings":["5b', 1), "cases.jsonl"),
+    ("images.jsonl", lambda data: _flip_signature(data), "images.jsonl"),
+    ("run.json", lambda data: data.replace(b'"excluded":[', b'"excluded":["none",', 1), "root statement"),
+    ("instance.pub", lambda data: bytes(32 - len(data)) + data[::-1], "keys"),
+]
+
+
+@pytest.mark.parametrize("name,change,why", ALTERATIONS, ids=[f"{item[0]}-{index}" for index, item in enumerate(ALTERATIONS)])
+def test_an_altered_run_is_refused_by_both(runs, tmp_path, name, change, why):
+    base, rust = runs
+    for run in ("run-py", "run-rs"):
+        copy = _altered(base, run, name, change, tmp_path)
+        assert (copy / name).read_bytes() != (base / run / name).read_bytes(), (name, run)
+        with pytest.raises(core_evidence.Bad):
+            core_evidence.verify(copy, sample=20)
+        checked = _rust_verify(rust, copy)
+        assert checked.returncode == 1 and "REFUSED" in checked.stdout, (name, run, checked.stdout)
+
+
+def test_a_receipt_resigned_with_a_wrong_decision_fails_the_replay(runs, tmp_path):
+    """Whoever holds the instance key can sign anything, so the root statement alone does not make a
+    decision true: the replay through the oracle is what refuses a signed false receipt."""
+    from prismpath.kernel import canon2
+    from prismpath.ledgers import root_statement
+    base, rust = runs
+    copy = tmp_path / "resigned"
+    shutil.copytree(base / "run-py", copy)
+    lines = (copy / "receipts.jsonl").read_bytes().split(b"\n")[:-1]
+    for number, line in enumerate(lines):
+        receipt = canon2.loads(line)
+        if receipt["decision"] == "route":
+            receipt["target"] = receipt["target"] + "x"
+            lines[number] = canon2.dumps(receipt)
+            break
+    (copy / "receipts.jsonl").write_bytes(b"".join(line + b"\n" for line in lines))
+    leaves = [core_evidence.sha256_hex(line) for line in lines]
+    instance = root_statement.InstanceKey.load(str(base / "keys-py" / "instance.key"))
+    statement = root_statement.make_statement(
+        instance, log=core_evidence.LOG_CORE_RUN, seq=0, root=root_statement.merkle_root(leaves), leaves=len(leaves),
+        prev="", trigger="core-run",
+        policy={"core_run_sha256": core_evidence.sha256_hex((copy / "run.json").read_bytes().rstrip(b"\n"))})
+    import json
+    (copy / "receipts.roots.jsonl").write_text(json.dumps(statement, sort_keys=True) + "\n")
+    with pytest.raises(core_evidence.Bad, match="differ from the oracle"):
+        core_evidence.verify(copy, sample=None)
+    checked = _rust_verify(rust, copy)
+    assert checked.returncode == 1 and "differs from the oracle" in checked.stdout, checked.stdout
+
+
+def test_a_foreign_pin_is_refused(runs):
+    base, rust = runs
+    with pytest.raises(core_evidence.Bad, match="pinned"):
+        core_evidence.verify(base / "run-py", sample=5, pin_authority=str(base / "keys-rs" / "authority.pub"),
+                             pin_instance=str(base / "keys-py" / "instance.pub"))
+    checked = _rust_verify(rust, base / "run-rs", "--pin-authority", str(base / "keys-rs" / "authority.pub"),
+                           "--pin-instance", str(base / "keys-py" / "instance.pub"))
+    assert checked.returncode == 1 and "pinned" in checked.stdout, checked.stdout
