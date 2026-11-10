@@ -183,13 +183,15 @@ def save_lock(flow_path, lock: dict) -> str:
 
 def load_lock(path) -> dict:
     with open(path, encoding="utf-8") as handle:
-        lock = canon.loads_document(handle.read())
-    if isinstance(lock, dict) and canon.encoding_of(lock) == canon.CANON2:
-        # a canon/2 lock carries its floats as decimal strings; the lock in memory is what it was built as
-        lock.pop(canon.ENCODING_KEY)
-        for field in _DECIMAL_FIELDS:
-            if isinstance(lock.get(field), str):
-                lock[field] = float(lock[field])
+        try:
+            lock = canon.loads_document(handle.read())
+        except ValueError as error:
+            raise LockError(f"{path} is not a canon/2 lock ({error}); run `prismpath lock` again") from error
+    # a lock carries its floats as decimal strings; the lock in memory is what it was built as
+    lock.pop(canon.ENCODING_KEY)
+    for field in _DECIMAL_FIELDS:
+        if isinstance(lock.get(field), str):
+            lock[field] = float(lock[field])
     if lock.get("version") != LOCK_VERSION:
         raise LockError(f"unsupported lock version {lock.get('version')!r} (expected {LOCK_VERSION})")
     return lock

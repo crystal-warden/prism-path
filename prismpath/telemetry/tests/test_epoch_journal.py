@@ -169,9 +169,10 @@ def test_chain_hole_refuses_to_open(tmp_path):
         _journal(tmp_path)
 
 
-def test_every_line_and_file_is_canon2_and_a_legacy_journal_still_opens(tmp_path):
+def test_every_line_and_file_is_canon2_and_a_legacy_journal_is_refused(tmp_path):
     """New lines, data files and the acknowledgment state are canon/2 and name it; a journal written
-    before the migration (untagged lines, data files in Python's spaced JSON) opens with its readings."""
+    before the migration (untagged lines, data files in Python's spaced JSON) does not open, and its
+    complete lines are never discarded as torn writes."""
     from prismpath import canon
     from prismpath.kernel import canon2
     journal = _journal(tmp_path)
@@ -198,7 +199,7 @@ def test_every_line_and_file_is_canon2_and_a_legacy_journal_still_opens(tmp_path
         lines.append(json.dumps({"epoch_id": epoch.id, "merkle_root": epoch.merkle_root, "chained_root": epoch.chained_root,
                                  "data_sha256": canon.sha256_hex(blob), "data_length": len(blob)}, sort_keys=True))
     (legacy / "chain.jsonl").write_text("".join(line + "\n" for line in lines))
-    reopened = journal_module.EpochJournal(str(legacy), block_bits=64, max_data_epochs=5)
-    assert reopened.recovery_report() == [] and reopened.verify_chain()
-    assert reopened.chain() == store.chain()
-    assert reopened.retained() == {epoch.id: epoch.blocks for epoch in store.epochs if epoch.has_data()}
+    before = (legacy / "chain.jsonl").read_bytes()
+    with pytest.raises(journal_module.JournalCorrupt, match="not a canon/2 document"):
+        journal_module.EpochJournal(str(legacy), block_bits=64, max_data_epochs=5)
+    assert (legacy / "chain.jsonl").read_bytes() == before          # refused, not truncated

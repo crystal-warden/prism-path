@@ -53,7 +53,7 @@ def _read_ndjson(path: str) -> Tuple[List[dict], int]:
             if not line:
                 continue
             try:
-                ev = canon.loads(line)
+                ev = canon.plain_loads(line)
             except json.JSONDecodeError:
                 bad += 1
                 continue

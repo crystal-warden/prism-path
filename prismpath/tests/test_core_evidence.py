@@ -194,9 +194,9 @@ def test_the_root_statement_is_canon2_with_an_integer_clock(runs):
                 assert canon2.dumps(canon2.loads(row)) == row, (run, name)
 
 
-def test_a_canon1_root_statement_is_refused(runs, tmp_path):
-    """The audit log's statement format (canon/1, an ISO time, its own domain) signed over the same root with
-    the run's instance key does not pass as the run's root statement."""
+def test_an_audit_log_root_statement_is_refused(runs, tmp_path):
+    """The audit log's statement format (`prismpath-root-statement/2`, its own domain) signed over the same root
+    with the run's instance key does not pass as the run's root statement."""
     import json
     from prismpath.ledgers import root_statement
     base, rust = runs

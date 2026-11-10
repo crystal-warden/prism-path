@@ -63,7 +63,7 @@ def item_id(item, field: Optional[str] = None) -> str:
         return str(item[field])
     if isinstance(item, (str, int, float, bool)):
         return str(item)
-    blob = canon.content_bytes(item, default=str)     # canon/2; a float as its decimal string
+    blob = canon.content_bytes(item, default=str)     # canon/2; a float is refused
     return "h" + hashlib.sha256(blob).hexdigest()[:16]
 
 
@@ -126,7 +126,7 @@ def _mark_child_error(child_ckpt_path: str, base: dict, reason: str) -> dict:
                "flow_hash": cp.get("flow_hash", ""), "state": cp.get("state", {}),
                "path": cp.get("path", [])})
     os.makedirs(os.path.dirname(child_ckpt_path), exist_ok=True)
-    _atomic_write(child_ckpt_path, canon.dumps_strict(cp, indent=2))
+    _atomic_write(child_ckpt_path, canon.plain_dumps(cp, indent=2))
     return cp
 
 
@@ -236,7 +236,7 @@ def _inject_and_resume(parent_ckpt_path: str, node: str, agg: dict, event: str, 
     cp = load_checkpoint(parent_ckpt_path)
     state = cp.setdefault("state", {})
     state.setdefault("_spawned", {})[node] = agg
-    _atomic_write(parent_ckpt_path, canon.dumps_strict(cp, indent=2))
+    _atomic_write(parent_ckpt_path, canon.plain_dumps(cp, indent=2))
     return resume(parent_ckpt_path, agent, router=router, event=event, human_floor=human_floor, policy=policy)
 
 

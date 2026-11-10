@@ -241,7 +241,8 @@ def test_verify_unit_accepts_a_prefixed_leaf(tmp_path, monkeypatch):
     leaves = ["aa" * 32, "bb" * 32]
     root, paths = ledger_ots.merkle_root_and_paths(leaves)
     (tmp_path / "manifest_v1.json").write_text(json.dumps(
-        {"label": "v1", "root": root, "leaf_count": 2, "leaves": {leaves[0]: paths[0], leaves[1]: paths[1]}}))
+        {"label": "v1", "root": root, "leaf_count": 2, "leaves": {leaves[0]: paths[0], leaves[1]: paths[1]},
+         "encoding": "canon/2"}))
     monkeypatch.setattr(ledger_ots.subprocess, "run", lambda *a, **k: subprocess.CompletedProcess(a, 0, "", ""))
     assert ledger_ots.verify_unit("sha256:" + leaves[0], str(tmp_path), "v1")["merkle_ok"] is True
 

@@ -37,9 +37,9 @@ fn test_delivery_layer_parity_merkle_and_hmac_match_python() {
 
     let secret = b"test-secret-key-123";
     let seq = 42;
-    let tag = ack::sign_ack(secret, &root, seq);
+    let tag = ack::sign_ack(secret, &root, seq).unwrap();
     let expected_tag = "5d36b90f92f21035fa4f89e80ce0e1bd4297566a0526dd0486f534a1f4d5fed4";
 
     assert_eq!(tag, expected_tag, "HMAC ACK tag does not match Python");
-    assert!(ack::verify_ack(secret, &root, seq, &tag));
+    assert!(ack::verify_ack(secret, &root, seq, &tag).unwrap());
 }

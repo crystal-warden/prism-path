@@ -10,9 +10,9 @@ produced by RUNNING the Python reference (`prismpath.ledgers.audit_log`, `root_s
 
 The set is canon/2: every event names `"encoding": "canon/2"` and carries its time as the integer
 `ts_us`, every value that was a float is an integer of a stated unit or a decimal string, every log line
-and statement line is its canon/2 bytes, and the statements are `prismpath-root-statement/2`. The set as
-it stood under canon/1 is frozen beside it as `conformance/receipts_canon1.json`, never regenerated, and
-replayed by the same tests so the verify only canon/1 reader keeps its verdicts.
+and statement line is its canon/2 bytes, and the statements are `prismpath-root-statement/2`. canon/1 is
+retired: the cases built from what it wrote (events with a float `ts` and no tag, `/1` statements, a log
+that crosses the migration) are kept as refusals, with the findings the reference gives for them.
 
 Unlike `gen_hotswap_fixtures.py` this is byte-for-byte reproducible: the keys are derived from fixed
 labels (Ed25519 signatures are deterministic), clocks are fixed, and no private key is written. A test
@@ -21,7 +21,6 @@ case through the live Python verifiers.
 
 Case kinds (each carries its `name` and its `expect`):
 
-    canon        raw JSON text -> the canonical compact bytes (as text)
     merkle       leaves -> root, and the inclusion path of every leaf
     trail        an audit log's text + its statements file's text + pinned keys -> the full report
                  `AuditLog.verify_statements` returns (status, counts, keys, findings)
@@ -94,7 +93,7 @@ STRANGER_PUB = raw_public(STRANGER_PRIV)
 def make_events(count: int, start: int = 0) -> list:
     """Receipts as `AuditLog.append` writes them, with fixed timestamps and the value shapes real
     receipts carry: an integer `ts_us`, a non-ASCII string (BMP and astral), booleans, null, a nested
-    list, integers at the edge of the exact range and decimal strings where canon/1 had floats."""
+    list, integers at the edge of the exact range and decimal strings where a float would be refused."""
     events = []
     for index in range(start, start + count):
         data = {"seq": index, "node": "a", "target": "b", "cause": 0}
@@ -130,7 +129,8 @@ def make_events(count: int, start: int = 0) -> list:
 
 def line_of(record) -> str:
     """A record as a log or statements line: its canon/2 bytes, or, for a record that has no canon/2 form
-    (a deliberately damaged one with a float), the JSON text a writer that ignored canon/2 would produce."""
+    (a canon/1 record or a deliberately damaged one with a float), the JSON text a writer that ignored
+    canon/2 would produce."""
     try:
         return canon.canon2_bytes(record).decode("utf-8")
     except canon.CanonicalError:
@@ -141,8 +141,20 @@ def log_text(events: list) -> str:
     return "".join(line_of(event) + "\n" for event in events)
 
 
+def _compact_hash(record) -> str:
+    """sha256 of Python's compact JSON of a canon/1 record, the address the old log used; the product
+    cannot compute it any more, and a verifier that is given one must refuse it."""
+    return canon.sha256_hex(json.dumps(record, sort_keys=True, separators=(",", ":")).encode("ascii"))
+
+
 def leaf_of(event) -> str:
-    return canon.document_hash(event)
+    return canon.document_hash(event) if "encoding" in event else _compact_hash(event)
+
+
+def link_of(statement) -> str:
+    """The hash the next statement names as `prev`: canon/2 for a statement that names it, the old
+    compact JSON hash for a `/1` statement."""
+    return canon.document_hash(statement) if "encoding" in statement else _compact_hash(statement)
 
 
 def statements_text(statements: list) -> str:
@@ -183,7 +195,7 @@ class Run:
             seq=len(self.statements),
             root=rs.merkle_root(leaves) if root is None else root,
             leaves=count,
-            prev=rs.statement_hash(self.statements[-1]) if self.statements else "",
+            prev=link_of(self.statements[-1]) if self.statements else "",
             trigger=trigger,
             policy=self.policy if policy == "default" else policy,
             time_us=stamp(len(self.statements)),
@@ -202,24 +214,31 @@ class Run:
         return statements_text(self.statements)
 
 
+# What canon/1 wrote, built here by hand (the product no longer has an encoder for it) so the cases can
+# show that it is refused.
+OLD_FORMAT = "prismpath-root-statement/1"
+OLD_SIGNING_DOMAIN = b"prismpath-root-statement/1\x00"
+
+
 def legacy_events(count: int) -> list:
-    """Receipts as `AuditLog.append` wrote them before canon/2: a float `ts`, no tag."""
+    """Receipts as `AuditLog.append` wrote them under canon/1: a float `ts`, no tag."""
     return [{"idx": index, "id": f"{index}", "ts": round(1730700000.0 + index * 1.2345678, 7), "actor": "engine",
              "action": "decision", "data": {"seq": index, "ratio": 1e-07, "whole": 100.0}} for index in range(count)]
 
 
 def legacy_statement(key, *, seq: int, root: str, leaves: int, prev: str, trigger: str, policy, time: str) -> dict:
-    """A `prismpath-root-statement/1` statement as the signer wrote it before canon/2: canon/1 compact
-    bytes under the `/1` domain, an ISO time, no tag."""
-    body = {"format": rs.LEGACY_FORMAT, "log": rs.LOG_AUDIT, "seq": seq, "root": root, "leaves": leaves,
+    """A `prismpath-root-statement/1` statement as the signer wrote it under canon/1: Python's compact
+    JSON under the `/1` domain, an ISO time, no tag."""
+    body = {"format": OLD_FORMAT, "log": rs.LOG_AUDIT, "seq": seq, "root": root, "leaves": leaves,
             "prev": prev, "time": time, "trigger": trigger, "key_id": key.key_id,
             "public_key": key.public_raw.hex(), "policy": policy}
-    body["sig"] = key.sign(rs.LEGACY_SIGNING_DOMAIN + canon.canonical_compact(body)).hex()
+    compact = json.dumps(body, sort_keys=True, separators=(",", ":")).encode("ascii")
+    body["sig"] = key.sign(OLD_SIGNING_DOMAIN + compact).hex()
     return body
 
 
 def mixed_run() -> "Run":
-    """Three legacy events under one `/1` statement, then three canon/2 events under a `/2` statement."""
+    """Three canon/1 events under one `/1` statement, then three canon/2 events under a `/2` statement."""
     run = Run(runs=())
     run.events = legacy_events(3)
     run.statements.append(legacy_statement(INSTANCE, seq=0, root=rs.merkle_root(run.leaves), leaves=3, prev="",
@@ -548,8 +567,8 @@ def trail_cases() -> list:
     # A log that crosses the migration: canon/1 events under `/1` statements, then canon/2 events under
     # `/2` statements chained to them. Each leaf and each statement is hashed under its own encoding.
     mixed = mixed_run()
-    cases.append(trail_case("a_log_and_chain_that_cross_the_migration", mixed.log, mixed.roots, pin))
-    cases.append(trail_case("a_log_and_chain_that_cross_the_migration_unpinned", mixed.log, mixed.roots))
+    cases.append(trail_case("a_canon1_log_and_chain_are_refused", mixed.log, mixed.roots, pin))
+    cases.append(trail_case("a_canon1_log_and_chain_are_refused_unpinned", mixed.log, mixed.roots))
     cases.append(
         trail_case(
             "a_legacy_event_given_a_canon2_tag_changes_its_leaf",
@@ -638,7 +657,7 @@ def bundle_cases() -> list:
         return edit_of(good, change)
 
     mixed = mixed_run()
-    cases.append(bundle_case("legacy_receipt_under_a_legacy_statement", bundle_for(mixed, 1), pin))
+    cases.append(bundle_case("canon1_receipt_under_a_canon1_statement_is_refused", bundle_for(mixed, 1), pin))
     cases.append(bundle_case("canon2_receipt_under_a_canon2_statement_after_the_migration", bundle_for(mixed, 4), pin))
     cases.append(bundle_case("receipt_names_an_unknown_encoding",
                              edit_of(bundle_for(run, 4), lambda b: b["receipt"].update(encoding="canon/3")), pin))
@@ -783,80 +802,7 @@ def bundle_cases() -> list:
     return cases
 
 
-# ------------------------------------------------------------------ canonical JSON and the Merkle tree
-
-CANON_TEXTS = [
-    "null",
-    "true",
-    "false",
-    "0",
-    "-1",
-    "42",
-    "9223372036854775807",
-    "18446744073709551615",
-    "-9223372036854775808",
-    "1.0",
-    "0.5",
-    "-0.25",
-    "100.0",
-    "1e2",
-    "1E2",
-    "1.5e3",
-    "0.1",
-    "0.30000000000000004",
-    "1e-05",
-    "0.0001",
-    "0.00001",
-    "1e-07",
-    "5e-324",
-    "2.2250738585072014e-308",
-    "1.7976931348623157e+308",
-    "1e15",
-    "1e16",
-    "1e17",
-    "1.5e+20",
-    "123456789012345680000.0",
-    "1234567890123456.0",
-    "12345678901234567.0",
-    "1730800001.2345679",
-    "1730800002.4691358",
-    "4.35",
-    "2.675",
-    '""',
-    '"plain"',
-    '"caf\\u00e9"',
-    '"café"',
-    '"\\u2603"',
-    '"\U0001d11e"',
-    '"\\ud834\\udd1e"',
-    '"\\"\\\\\\/"',
-    '"\\b\\f\\n\\r\\t"',
-    '"\\u0000\\u001f\\u007f\\u0080"',
-    '"tab\there"'.replace("\t", "\\t"),
-    "[]",
-    "{}",
-    '[1, 2.5, "x", null, true]',
-    '{"b": 1, "a": 2}',
-    '{"a": {"c": 1, "b": [1, {"z": 0, "y": 1}]}}',
-    '{"\\u00e9": 1, "e": 2, "z": 3, "\\ud834\\udd1e": 4, "\\uffff": 5}',
-    '{"b": 1, "b": 2}',
-    '{"": 0, " ": 1, "A": 2, "a": 3, "_": 4}',
-    '{"idx": 3, "id": "3", "ts": 1730800003.7037034, "actor": "engine", "action": "decision", '
-    '"data": {"seq": 3, "cause": 0, "ratio": 1e-07, "big": 1.5e+20, "whole": 100.0}}',
-]
-
-
-def canon_cases() -> list:
-    return [
-        {
-            "kind": "canon",
-            "name": f"canon_{index:02d}",
-            "json": text,
-            "expect": canon.canonical_compact(json.loads(text)).decode("ascii"),
-        }
-        for index, text in enumerate(CANON_TEXTS)
-    ]
-
+# ------------------------------------------------------------------ the Merkle tree
 
 def merkle_cases() -> list:
     cases = []
@@ -1249,8 +1195,7 @@ def separation_cases() -> list:
 
 def build() -> dict:
     cases = (
-        canon_cases()
-        + merkle_cases()
+        merkle_cases()
         + trail_cases()
         + bundle_cases()
         + flow_cases()

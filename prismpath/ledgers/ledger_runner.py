@@ -61,7 +61,7 @@ def _to_bytes(value) -> bytes:
         return bytes(value)
     if isinstance(value, str):
         return value.encode()
-    return canon.content_bytes(value, default=str)       # canon/2; a float as its decimal string
+    return canon.content_bytes(value, default=str)       # canon/2; a float is refused
 
 
 def run_ledgered_loop(flow_path, agent, ledger, *, router=None, max_items: int = 1000,
@@ -125,11 +125,11 @@ def upsert_jsonl(path, record: dict, key) -> bool:
             if not line:
                 continue
             try:
-                existing = canon.loads(line)
+                existing = canon.plain_loads(line)
             except ValueError:
                 continue
             if tuple(existing.get(key_field) for key_field in keys) == kv:
                 return False
     with open(jsonl_path, "a") as handle:
-        handle.write(canon.dumps_strict(record) + "\n")
+        handle.write(canon.plain_dumps(record) + "\n")
     return True

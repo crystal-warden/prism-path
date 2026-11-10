@@ -57,8 +57,8 @@ class StatementWriteError(AuditWriteError):
 def _leaf_hex(ev: dict) -> str:
     """A stable content hash of an event  -  its Merkle leaf. Commits to every field, so editing any past
     event changes its leaf and therefore the root. The event's own tag decides the bytes: an event that
-    names canon/2 is hashed over its canon/2 bytes, and an untagged event, written before the migration,
-    over its canon/1 compact bytes, so an old log, and a root anchored over it, still verify."""
+    names canon/2 is hashed over its canon/2 bytes. An event that does not name canon/2 (an untagged one,
+    written before canon/1 was retired) is refused with an EncodingError."""
     return _canon.document_hash(ev)
 
 
@@ -68,14 +68,11 @@ def _now_us() -> int:
 
 
 def event_seconds(ev: dict) -> float:
-    """When an event was recorded, in seconds since the epoch, for display and filtering only: `ts_us`
-    of a canon/2 event, or the float `ts` of an event written before the migration."""
+    """When an event was recorded, in seconds since the epoch, for display and filtering only: its `ts_us`
+    over a million, or 0.0 for an event that has none."""
     if isinstance(ev.get("ts_us"), int) and not isinstance(ev.get("ts_us"), bool):
         return ev["ts_us"] / 1_000_000
-    try:
-        return float(ev.get("ts", 0) or 0)
-    except (TypeError, ValueError):
-        return 0.0
+    return 0.0
 
 
 class AuditLog:
@@ -92,6 +89,7 @@ class AuditLog:
         self.events: list = []
         self.leaves: list = []
         self.skipped: list = []
+        self.skipped_causes: dict = {}         # line number -> why the line was refused (canon/1 lines, bad JSON)
         self._accumulator = _statements.MerkleAccumulator()      # the root as leaves arrive, for signing
         if path and os.path.exists(path):
             with open(path) as log_file:
@@ -101,8 +99,9 @@ class AuditLog:
                         continue
                     try:
                         ev = _canon.loads_document(line)
-                    except Exception:
+                    except Exception as error:
                         self.skipped.append(line_num)
+                        self.skipped_causes[line_num] = str(error)[:200]
                         continue
                     self.events.append(ev)
                     self.leaves.append(_leaf_hex(ev))
@@ -193,7 +192,8 @@ class AuditLog:
         if not self.events:
             raise AnchorRefused("the log holds no events: there is nothing to anchor")
         if self.skipped:
-            raise AnchorRefused(f"the log has unreadable lines {self.skipped}: it does not verify")
+            first = self.skipped_causes.get(self.skipped[0], "")
+            raise AnchorRefused(f"the log has unreadable lines {self.skipped}: it does not verify ({first})")
         statements, _findings = _statements.read_statements(self.statements_path)
         if not statements:
             root = self.current_root()

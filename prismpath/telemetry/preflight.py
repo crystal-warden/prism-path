@@ -236,7 +236,7 @@ def scan_sample(
             n_lines -= 1
             break
         try:
-            event = canon.loads(line_str)
+            event = canon.plain_loads(line_str)
         except json.JSONDecodeError:
             bad_json += 1
             continue

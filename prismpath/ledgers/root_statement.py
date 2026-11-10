@@ -30,9 +30,9 @@ A statement, one JSON line in the statements file beside the log:
 The signature covers `SIGNING_DOMAIN` followed by the canon/2 bytes of every field except `sig`. A
 statement's own hash, which the next statement names as `prev` and which `ledger anchor` anchors, is the
 sha256 of the canon/2 bytes of the whole statement, signature included, so an anchored timestamp covers
-the signature as well as the root. A `prismpath-root-statement/1` statement, written before canon/2, has
-an ISO `time`, no `encoding`, and is signed and hashed over canon/1 compact JSON; it is read and verified
-that way and never written.
+the signature as well as the root. A `prismpath-root-statement/1` statement, written before canon/2 (an
+ISO `time`, no `encoding`, canon/1 compact JSON), is no longer read: canon/1 is retired, and such a
+statement is a `bad_format` finding.
 
 What it proves and what it does not. A pinned public key and a chain that verifies show that the
 holder of the instance key stated these roots, in this order, and that the log still holds the leaves
@@ -57,13 +57,9 @@ from prismpath.extras import MissingExtra
 from prismpath.ledgers import ledger_ots as merkle
 
 # A statement is written as `prismpath-root-statement/2`, a canon/2 document that names its encoding and
-# carries its time as an integer of microseconds; `/1`, canon/1 with an ISO time, is read and verified only,
-# so a chain signed before the migration, and an anchor over one of its hashes, still verify. A chain may
-# hold both: each statement is hashed and its signature checked under the encoding its own format names.
+# carries its time as an integer of microseconds. `/1` (canon/1, an ISO time) is retired and not read.
 STATEMENT_FORMAT = "prismpath-root-statement/2"
 SIGNING_DOMAIN = b"prismpath-root-statement/2\x00"
-LEGACY_FORMAT = "prismpath-root-statement/1"
-LEGACY_SIGNING_DOMAIN = b"prismpath-root-statement/1\x00"
 INSTANCE_KEY_ENV = "PRISMPATH_INSTANCE_KEY"
 DEFAULT_KEY_NAME = "instance"
 
@@ -74,12 +70,6 @@ LOG_EPOCH_CHAIN = "epoch-chain"
 
 _BODY_FIELDS = ("format", "encoding", "log", "seq", "root", "leaves", "prev", "time_us", "trigger",
                 "key_id", "public_key", "policy")
-_LEGACY_BODY_FIELDS = ("format", "log", "seq", "root", "leaves", "prev", "time", "trigger",
-                       "key_id", "public_key", "policy")
-
-
-def _body_fields(statement: dict) -> tuple:
-    return _LEGACY_BODY_FIELDS if statement.get("format") == LEGACY_FORMAT else _BODY_FIELDS
 
 # Findings that make a chain invalid. `interrupted_statement` (a torn final line from a crash mid
 # write) is reported and is not one of them: the statement it would have been never existed.
@@ -277,18 +267,25 @@ def prefix_roots(leaves: List[str], counts: Iterable[int]) -> Dict[int, str]:
 
 
 def signed_bytes(statement: dict) -> bytes:
-    """The bytes the signature covers: the domain prefix of the statement's format, then every field but
-    `sig` in that format's encoding (canon/2 for `/2`, canon/1 compact for a legacy `/1`, verify only)."""
-    if statement.get("format") == LEGACY_FORMAT:
-        return LEGACY_SIGNING_DOMAIN + canon.canonical_compact({key: statement[key] for key in _LEGACY_BODY_FIELDS})
+    """The bytes the signature covers: the domain prefix, then every field but `sig` in canon/2."""
     return SIGNING_DOMAIN + canon.canon2_bytes({key: statement[key] for key in _BODY_FIELDS})
 
 
 def statement_hash(statement: dict) -> str:
     """The statement's content address, signature included: what the next statement chains to and what
-    `ledger anchor` stamps. A `/2` statement names canon/2 and is hashed under it; a `/1` statement has
-    no tag and is hashed under canon/1, as it was when it was signed and anchored."""
+    `ledger anchor` stamps: sha256 over its canon/2 bytes. A statement that does not name canon/2 is refused
+    with an EncodingError."""
     return canon.document_hash(statement)
+
+
+def _link_hash(statement: dict) -> str:
+    """`statement_hash` for a link that may be damaged: the hash of what is there, or `unreadable` when it
+    has no canon/2 form, so the next statement's `prev` is still compared with something that is not the
+    empty first link."""
+    try:
+        return statement_hash(statement)
+    except canon.CanonicalError:
+        return "unreadable"
 
 
 def _now_us() -> int:
@@ -348,7 +345,7 @@ class RootSigner:
             kept = [line for line in lines[:-1] if line] if lines[-1] == "" else lines[:-1]
             canon.atomic_write(path, "".join(line + "\n" for line in kept))
         self._seq = len(statements)
-        self._prev = statement_hash(statements[-1]) if statements else ""
+        self._prev = _link_hash(statements[-1]) if statements else ""
 
     def sign(self, root: str, leaves: int, trigger: str, policy: Optional[dict] = None) -> dict:
         statement = make_statement(self.key, log=self.log, seq=self._seq, root=root, leaves=leaves,
@@ -375,16 +372,12 @@ def _verify_signature(statement: dict) -> bool:
 
 
 def _well_formed(statement: dict, log: str) -> bool:
-    if statement.get("format") not in (STATEMENT_FORMAT, LEGACY_FORMAT) or statement.get("log") != log:
+    if statement.get("format") != STATEMENT_FORMAT or statement.get("log") != log:
         return False
-    fields = _body_fields(statement)
-    if any(key not in statement for key in fields + ("sig",)):
+    if any(key not in statement for key in _BODY_FIELDS + ("sig",)) or len(statement) != len(_BODY_FIELDS) + 1:
         return False
-    if statement["format"] == STATEMENT_FORMAT and len(statement) != len(fields) + 1:
-        return False
-    if statement["format"] == STATEMENT_FORMAT and (statement["encoding"] != canon.CANON2
-                                                    or not isinstance(statement["time_us"], int)
-                                                    or isinstance(statement["time_us"], bool)):
+    if (statement["encoding"] != canon.CANON2 or not isinstance(statement["time_us"], int)
+            or isinstance(statement["time_us"], bool)):
         return False
     if not (isinstance(statement["seq"], int) and isinstance(statement["leaves"], int)
             and isinstance(statement["root"], str) and isinstance(statement["prev"], str)
@@ -421,7 +414,7 @@ def verify_chain(statements: List[dict], read_findings: List[dict], root_at: Cal
         if not statement or not _well_formed(statement, log):
             if statement:
                 findings.append({"finding": "bad_format", "statement": index})
-            prev_hash = statement_hash(statement) if statement else ""
+            prev_hash = _link_hash(statement) if statement else ""
             continue
         seq = statement["seq"]
         # The key id must be the hash of the key the statement carries; only then is the signature checked
@@ -476,7 +469,7 @@ def verify_chain(statements: List[dict], read_findings: List[dict], root_at: Cal
             "log_leaves": total_leaves,
             "unsigned_tail": max(0, total_leaves - signed_leaves) if statements else total_leaves,
             "keys": [fingerprint(key_id) for key_id in key_ids], "pinned": bool(pinned_ids),
-            "last_statement_sha256": statement_hash(last) if last else None,
+            "last_statement_sha256": _link_hash(last) if last else None,
             "findings": findings}
 
 
@@ -515,7 +508,7 @@ def bundle_problem(bundle) -> Optional[str]:
         try:
             canon.encoding_of(bundle[name])
         except canon.CanonicalError:
-            return f"the {name} names an encoding other than canon/2"
+            return f"the {name} does not name canon/2 (canon/1 is retired)"
     return None
 
 
@@ -547,7 +540,7 @@ def verify_receipt_bundle(bundle: dict, pinned: Optional[Iterable[bytes]] = None
     ok = all(value for name, value in checks.items() if name != "pinned") and checks["pinned"] is not False
     return {"ok": ok, "status": (SIGNED if pinned_ids else SIGNED_UNPINNED) if ok else INVALID,
             "pinned": bool(pinned_ids), "checks": checks, "index": bundle.get("index"),
-            "statement": statement.get("seq"), "statement_sha256": statement_hash(statement),
+            "statement": statement.get("seq"), "statement_sha256": _link_hash(statement),
             "key": fingerprint(statement.get("key_id", ""))}
 
 

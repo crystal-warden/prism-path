@@ -118,7 +118,7 @@ def active_image_path(state_dir):
     name = "active.ppt"
     try:
         with open(os.path.join(state_dir, "active_policy.json"), encoding="utf-8") as handle:
-            recorded = canon.load(handle).get("image_file", name)
+            recorded = canon.plain_load(handle).get("image_file", name)
         if isinstance(recorded, str) and os.path.basename(recorded) == recorded:
             name = recorded
     except (OSError, ValueError, AttributeError):

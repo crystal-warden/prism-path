@@ -5,9 +5,8 @@
 //! The audit log is append-only JSONL whose leaves are sha256 over each event's canonical form, rolled
 //! into a Bitcoin-style Merkle root (duplicate-last-if-odd), so a log written by either runtime
 //! verifies on the other. An event is written as canon/2 (it names `"encoding": "canon/2"` and its time
-//! is the integer `ts_us`, microseconds since the epoch), and its line is its canon/2 bytes; an event
-//! without the tag, written before the migration, is hashed over its canon/1 compact bytes
-//! (`durable::document_bytes`), so an old log and a root anchored over it still verify.
+//! is the integer `ts_us`, microseconds since the epoch), and its line is its canon/2 bytes; a line
+//! without the tag (canon/1, retired) is not an event and is skipped, so the log no longer verifies.
 //! Anti-rollback is the same fsync'd `active_version` file floor (software tier: tamper-EVIDENT
 //! through the ledger, not tamper-proof — the eFUSE counter is the hardware follow-on).
 //!

@@ -5,7 +5,6 @@ Python is the reference. Each line is a place where a Rust crate answers differe
 | Place | Python | Rust | Why, and where it is held |
 |---|---|---|---|
 | The host's `active_unreadable` event for a record that cannot be read | the text is the JSON decoder's | the text is the Rust error's, and a number beyond the double range is worded `1e+400` | the wording is a library's, not the protocol's; `prismpath-hotswap-rs/tests/test_host_corners.rs` |
-| An intent record that is valid JSON but not an object | `AttributeError` | `HostError::IntentUnreadable`, the log and the active policy unchanged | a port fails closed where the reference crashes; `test_host_corners.rs` |
 | A verified manifest whose `version` is not an integer | raises, or compares by Python's rules | `HostError::BadManifest`, nothing changed | the same; `test_host_corners.rs` |
 | `PolicyHost.anchor_attestations` | stamps the leaves with the external `ots` program | absent | the crate drives no process; the Merkle root and every proof are there |
 | An error a worker returns as a plain message | the flow's `error_type` is the exception's class name | the kind `Error`; a `WorkerError` names its own kind | a Rust closure has no exception class; `prismpath-rs/tests/test_engine_cross_language.rs` |
@@ -17,4 +16,3 @@ Python is the reference. Each line is a place where a Rust crate answers differe
 | The Rust core run verifier | checks signatures with `cryptography` | `verify_strict` | it also refuses a small order key or signature, as the receipt verifiers do; no honest key is affected (`prismpath/tests/test_core_evidence.py`) |
 | `prismpath-preflight --privacy` | measures aggregation privacy, the decision-relevant field combinations a frame hides | the option is not accepted, the report has no privacy section | not yet ported; the JSON report is identical to Python's without it (`prismpath-preflight/tests/e2e.rs`) |
 | The preflight Markdown report | a mismatch line shows the reading with `json.dumps` spacing, and the reasons of one line in Python's order | the reading in compact JSON and the reasons in Rust's own order | cosmetic, the JSON report is identical |
-| An acknowledgment sequence beyond 2^53 minus 1 | `sign_ack` raises `EncodingError`: canon/2 has no such integer | `ackchannel::canon` panics with the same refusal | the sequence is an `i64` counter that never comes near the bound; canon/2 refuses the integer in both, neither writes it |

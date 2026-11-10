@@ -64,6 +64,13 @@ image_sha256 b9c740b9bc1ab3e586144562174fa08c4123eb1c761d9da9f9255587c2484260
 signed wcet_cycles 11
 ```
 
+These manifests were signed over canon/1 (Python's compact JSON, no domain), which PrismPath retired: current
+`verify_pack` refuses a manifest that does not name `"encoding": "canon/2"` and prints
+`verified: False ['manifest:bad-format']` for them, and the demo authority's private key is not kept, so they
+are not re-signed. They are historic evidence. The hashes of these files in `evidence/SHA256SUMS` (step 2),
+which an OpenTimestamps proof anchors, are what the cert rests on; to check the signature itself, use a
+checkout from before the change that retired canon/1 (the research line at `0c54433` has the reader).
+
 An Ed25519 signature over the manifest, which binds the exact compiled image and the timing bound
 the silicon was held to. Repeat with `demo_input.ppt` (the flickering exact policy from the video's
 first beat) and `switch_nav.ppt` if you want all three.

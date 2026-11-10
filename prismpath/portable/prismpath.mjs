@@ -1608,13 +1608,6 @@ const SUITE_NODE_PREFIX = "suite-";
 const REACH_BOUND = 25;
 const PQ_KEM_TOKENS = ["ml-kem", "kyber"];
 
-export function pyCanonicalString(val) {
-  if (val === null || typeof val !== "object") return JSON.stringify(val);
-  if (Array.isArray(val)) return "[" + val.map(pyCanonicalString).join(",") + "]";
-  const sortedKeys = Object.keys(val).sort();
-  return "{" + sortedKeys.map((key) => JSON.stringify(key) + ":" + pyCanonicalString(val[key])).join(",") + "}";
-}
-
 // canon/2, the integer only JCS profile every hashed or signed document is written in
 // (prismpath/kernel/canon2.py). A value with no canon/2 form throws.
 export const CANON2 = "canon/2";
@@ -1624,14 +1617,14 @@ export function canon2String(val) {
   return new TextDecoder().decode(canon2Write(val));
 }
 
-// The bytes a document is hashed over, decided by its own tag: canon/2 for a document that names it, the
-// legacy canon/1 compact spelling for one without the member (verify only), and a throw for any other tag.
+// The bytes a document is hashed over: its canon/2 bytes. A document that does not name canon/2 (an untagged
+// one is canon/1, which is retired), or names another encoding, throws.
 export function documentString(doc) {
-  if (doc !== null && typeof doc === "object" && !Array.isArray(doc) && "encoding" in doc) {
-    if (doc.encoding !== CANON2) throw new Error(`unknown encoding ${String(doc.encoding).slice(0, 40)}`);
-    return canon2String(doc);
+  if (doc === null || typeof doc !== "object" || Array.isArray(doc) || !("encoding" in doc)) {
+    throw new Error('a document without "encoding": "canon/2" is refused: canon/1 is retired and is not read, hashed or verified');
   }
-  return pyCanonicalString(doc);
+  if (doc.encoding !== CANON2) throw new Error(`unknown encoding ${String(doc.encoding).slice(0, 40)}: only canon/2 is read`);
+  return canon2String(doc);
 }
 
 export function registryHash(registryData) {

@@ -55,7 +55,8 @@ pub fn py_str(value: Option<&Value>) -> String {
                 None => prismpath_rs::durable::py_float_repr(number.as_f64().unwrap_or(f64::NAN)),
             },
         },
-        Some(other) => prismpath_rs::durable::py_canonical_string(other, true),
+        // a message spelling of a container; a value with no JSON form is named, never a panic
+        Some(other) => prismpath_rs::durable::plain_dumps(other).unwrap_or_else(|error| format!("<{error}>")),
     }
 }
 

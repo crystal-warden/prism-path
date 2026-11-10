@@ -2,9 +2,8 @@
 // Copyright 2026 Crystal Warden Supply Chain Labs LLC
 //! Root statements, verified: a deployment's own Ed25519 signature over the Merkle root of what it
 //! recorded, chained, as `prismpath/ledgers/root_statement.py` defines them (format
-//! `prismpath-root-statement/2`, canon/2 with an integer `time_us`, and the legacy
-//! `prismpath-root-statement/1`, canon/1, verify only; SPEC 4.5, PROTOCOL 2.10). Each statement of a
-//! chain is hashed and its signature checked under the encoding its own format names.
+//! `prismpath-root-statement/2`, canon/2 with an integer `time_us`; SPEC 4.5, PROTOCOL 2.10). The earlier
+//! `prismpath-root-statement/1` (canon/1) is retired and is a `bad_format` finding.
 //!
 //! This is the verify side only. Nothing here signs, generates or loads a private key: a Rust
 //! consumer can check a log, a chain of statements or one receipt that the Python engine produced,
@@ -29,9 +28,6 @@ pub const STATEMENT_FORMAT: &str = "prismpath-root-statement/2";
 /// Prefixed to the canonical bytes before signing, so a root statement signature can never be
 /// presented as a pack or flow manifest signature or the reverse.
 pub const SIGNING_DOMAIN: &[u8] = b"prismpath-root-statement/2\x00";
-/// The format written before canon/2: read and verified, never written.
-pub const LEGACY_FORMAT: &str = "prismpath-root-statement/1";
-pub const LEGACY_SIGNING_DOMAIN: &[u8] = b"prismpath-root-statement/1\x00";
 /// An audit log's root is the Merkle root of its first `leaves` events.
 pub const LOG_AUDIT: &str = "audit-log";
 /// An epoch chain's root is the chained root of its first `leaves` epochs.
@@ -40,21 +36,6 @@ pub const LOG_EPOCH_CHAIN: &str = "epoch-chain";
 const BODY_FIELDS: [&str; 12] = [
     "format", "encoding", "log", "seq", "root", "leaves", "prev", "time_us", "trigger", "key_id", "public_key", "policy",
 ];
-const LEGACY_BODY_FIELDS: [&str; 11] = [
-    "format", "log", "seq", "root", "leaves", "prev", "time", "trigger", "key_id", "public_key", "policy",
-];
-
-fn is_legacy(statement: &Value) -> bool {
-    statement.get("format").and_then(Value::as_str) == Some(LEGACY_FORMAT)
-}
-
-fn body_fields(statement: &Value) -> &'static [&'static str] {
-    if is_legacy(statement) {
-        &LEGACY_BODY_FIELDS
-    } else {
-        &BODY_FIELDS
-    }
-}
 
 /// Findings that make a chain invalid. `interrupted_statement` (a torn final line from a crash mid
 /// write) is reported and is not one of them.
@@ -83,13 +64,8 @@ pub fn fingerprint(key_id: &str) -> String {
 /// no signed bytes).
 pub fn signed_bytes(statement: &Value) -> Option<Vec<u8>> {
     let mut body = Map::new();
-    for field in body_fields(statement) {
-        body.insert(field.to_string(), statement.get(*field)?.clone());
-    }
-    if is_legacy(statement) {
-        let mut bytes = LEGACY_SIGNING_DOMAIN.to_vec();
-        bytes.extend(durable::try_py_canonical_string(&Value::Object(body), false).ok()?.into_bytes());
-        return Some(bytes);
+    for field in BODY_FIELDS {
+        body.insert(field.to_string(), statement.get(field)?.clone());
     }
     let mut bytes = SIGNING_DOMAIN.to_vec();
     bytes.extend(durable::canon2_bytes(&Value::Object(body)).ok()?);
@@ -97,10 +73,17 @@ pub fn signed_bytes(statement: &Value) -> Option<Vec<u8>> {
 }
 
 /// The statement's content address, signature included: what the next statement names as `prev`. `None`
-/// for a statement with no canonical form (a number beyond the double range), which no strict reader
-/// yields; `prismpath.canon.CanonicalError` is the same refusal in Python.
+/// for a statement that does not name canon/2 or has no canon/2 form; `prismpath.canon.CanonicalError` is
+/// the same refusal in Python.
 pub fn statement_hash(statement: &Value) -> Option<String> {
     canonical_bytes(statement).ok().map(|bytes| sha256_hex(&bytes))
+}
+
+/// `statement_hash` for a link that may be damaged: the hash of what is there, or `unreadable` when it has no
+/// canon/2 form, so the next statement's `prev` is compared with something that is not the empty first link.
+/// `prismpath.ledgers.root_statement._link_hash`.
+fn link_hash(statement: &Value) -> String {
+    statement_hash(statement).unwrap_or_else(|| "unreadable".to_string())
 }
 
 fn is_empty_object(value: &Value) -> bool {
@@ -134,7 +117,7 @@ pub fn read_statements_text(text: &str) -> (Vec<Value>, Vec<Value>) {
     for (index, line) in lines.iter().enumerate() {
         match durable::read_document(line) {
             Ok(record @ Value::Object(_)) => statements.push(record),
-            _ if index == lines.len() - 1 => findings.push(json!({"finding": "interrupted_statement", "line": index + 1})),
+            _ if index == lines.len() - 1 && serde_json::from_str::<Value>(line).is_err() => findings.push(json!({"finding": "interrupted_statement", "line": index + 1})),
             _ => {
                 findings.push(json!({"finding": "bad_format", "line": index + 1}));
                 statements.push(json!({}));
@@ -165,20 +148,17 @@ pub fn statements_path_for(log_path: &str) -> String {
 // ------------------------------------------------------------------ one statement
 
 fn well_formed(statement: &Value, log: &str) -> bool {
-    let format = statement.get("format").and_then(Value::as_str);
-    if !(format == Some(STATEMENT_FORMAT) || format == Some(LEGACY_FORMAT))
+    if statement.get("format").and_then(Value::as_str) != Some(STATEMENT_FORMAT)
         || statement.get("log").and_then(Value::as_str) != Some(log)
     {
         return false;
     }
-    let fields = body_fields(statement);
-    if fields.iter().chain(["sig"].iter()).any(|key| statement.get(*key).is_none()) {
+    if BODY_FIELDS.iter().chain(["sig"].iter()).any(|key| statement.get(*key).is_none()) {
         return false;
     }
-    if format == Some(STATEMENT_FORMAT)
-        && (statement.as_object().map_or(0, Map::len) != fields.len() + 1
-            || statement["encoding"].as_str() != Some(durable::CANON2)
-            || !(statement["time_us"].is_i64() || statement["time_us"].is_u64()))
+    if statement.as_object().map_or(0, Map::len) != BODY_FIELDS.len() + 1
+        || statement["encoding"].as_str() != Some(durable::CANON2)
+        || !(statement["time_us"].is_i64() || statement["time_us"].is_u64())
     {
         return false;
     }
@@ -274,7 +254,7 @@ pub fn verify_chain(
             if !is_empty_object(statement) {
                 findings.push(json!({"finding": "bad_format", "statement": index}));
             }
-            prev_hash = if is_empty_object(statement) { String::new() } else { statement_hash(statement).unwrap_or_default() };
+            prev_hash = if is_empty_object(statement) { String::new() } else { link_hash(statement) };
             continue;
         }
         let seq = py_int(&statement["seq"]).expect("well formed");
@@ -308,7 +288,7 @@ pub fn verify_chain(
             let from = *mismatch_from.get_or_insert(prev_leaves.min(leaves));
             findings.push(json!({"finding": "root_mismatch", "statement": seq, "leaf_range": [from, leaves - 1]}));
         }
-        prev_hash = statement_hash(statement).unwrap_or_default();
+        prev_hash = link_hash(statement);
         prev_leaves = leaves;
     }
     if !pinned_ids.is_empty() && statements.is_empty() {
@@ -336,7 +316,7 @@ pub fn verify_chain(
         unsigned_tail: if statements.is_empty() { total_leaves } else { (total_leaves as i128 - i128::from(signed_leaves)).max(0) as usize },
         keys: key_ids.iter().map(|key_id| fingerprint(key_id)).collect(),
         pinned: !pinned_ids.is_empty(),
-        last_statement_sha256: last.and_then(statement_hash),
+        last_statement_sha256: last.map(link_hash),
         findings,
     }
 }
@@ -362,7 +342,7 @@ impl AuditLogView {
             if line.is_empty() {
                 continue;
             }
-            // Read as `canon.loads` reads, so a line holding NaN or a number beyond the double range is a line
+            // Read as `canon.loads_document` reads, so a line holding NaN or a number beyond the double range is a line
             // that is not JSON, and every event read here has a canonical form.
             match durable::read_document(line).ok().and_then(|event| {
                 canonical_bytes(&event).ok().map(|bytes| (sha256_hex(&bytes), event))
@@ -508,7 +488,7 @@ pub fn bundle_problem(bundle: &Value) -> Option<String> {
     }
     for name in ["receipt", "statement"] {
         if durable::encoding_of(&object[name]).is_err() {
-            return Some(format!("the {name} names an encoding other than canon/2"));
+            return Some(format!("the {name} does not name canon/2 (canon/1 is retired)"));
         }
     }
     None
@@ -603,7 +583,7 @@ pub fn verify_receipt_bundle(bundle: &Value, pinned: &[Vec<u8>]) -> Result<Bundl
         pinned_check,
         index: index.clone(),
         statement: statement.get("seq").cloned().unwrap_or(Value::Null),
-        statement_sha256: statement_hash(statement),
+        statement_sha256: Some(link_hash(statement)),
         key,
         problem: None,
     })

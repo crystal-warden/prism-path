@@ -184,78 +184,80 @@ every value the reader would refuse, so a written document reads back to the sam
 are a fixed point. In the differential harness every leg reads the image and every reading with its
 canon/2 reader, so a document level difference is a finding; there is no reader gap (section 8).
 
-**canon/1 stays, verify only.** `prismpath.canon` (Python's `json` with the compact and spaced
-canonical forms, `canon.loads` refusing NaN, Infinity, lone surrogates and numbers past the double
-range) and its Rust twin `value::parse_strict` remain the readers of everything already signed, hashed
-or anchored under them: policy packs and envelopes, audit logs and their Merkle leaves, root
-statements, anchored roots, attestation manifests, lock hashes, checkpoints and every frozen corpus.
-They change in no byte. canon/2 is scoped, in this step, to the core's two documents.
+**canon/1 is retired.** `prismpath.canon`'s Python `json` encodings (compact and spaced) and their Rust twin
+`value::parse_strict` read and hashed everything signed before canon/2: policy packs and envelopes, audit logs
+and their Merkle leaves, root statements, attestation manifests, lock hashes, checkpoints and every frozen
+corpus. They are gone (section 3.1): canon/2 is the one encoding of everything hashed or signed, and a document
+that does not name it is refused.
 
-### 3.1 Migration of the rest (done on the canon2-migration branch, 2026-11-10)
+### 3.1 Migration of the rest (done on the canon2-migration and canon2-finish branches, 2026-11-10)
 
-Signed bytes cannot be rewritten, so the rest moves by versioning, never by reinterpreting an old
-artifact:
+Signed bytes cannot be rewritten, so the rest moved by versioning, and then the old reading was removed:
 
-1. **A name and a domain tag.** A document that is written under canon/2 says so: the core's image
-   carries `prismpath.core/1` (whose definition includes canon/2), and every other artifact that moves
-   gains an `encoding: "canon/2"` member, and its signature a `canon/2` domain prefix (root statements
-   already carry one), so a verifier never guesses which reader to use. The first artifact moved this
-   way is the root statement of a differential run (step 4, section 11): a new format and domain prefix,
-   `prismpath.core-run-root/1`, with its time an integer of microseconds, scoped to the `core-run` log,
-   while the audit log's and the epoch chain's statements stay `prismpath-root-statement/1` under canon/1.
-2. **canon/1 is verify only, forever.** New writers emit canon/2; a verifier keeps the canon/1 reader
-   for artifacts that do not name canon/2. Each frozen corpus gains a canon/2 twin beside it; the old
-   corpus is not regenerated.
-3. **Audit events.** `ts` changes from a float of seconds to an integer count of microseconds since the
-   epoch (`ts_us`), the one float that every audit event carries today; an event names its encoding, a
-   log may hold both, and an old log verifies under canon/1. Other floats in signed documents (the
-   calibrated floors and confidences of routing receipts, measured durations) become integers of a
-   stated unit or decimal strings, each in its own reviewed change.
-4. **Anchored roots stay valid.** An OpenTimestamps or RFC 3161 anchor covers a Merkle root over
-   leaves computed under canon/1; the root is unchanged and its leaves verify under canon/1. A log that
-   mixes leaf versions hashes each leaf under the encoding the leaf names.
-5. **Packs and envelopes** are re-signed under canon/2 only at their next version; the loader accepts a
-   canon/1 pack whose signature verifies, until the owner retires canon/1 signing.
-6. **Order.** Python first (one writer, one tag, the twins of the vectors), then Rust; the JavaScript
-   and Go kernels and the table targets sign and hash nothing and are not touched. Each step is a
-   separate reviewed change with its own corpus twin, and none of it is done on this branch beyond the
-   core run's own root statement (section 11).
+1. **A name and a domain tag.** A document written under canon/2 says so: the core's image carries
+   `prismpath.core/1` (whose definition includes canon/2), and every other artifact that moved gained an
+   `encoding: "canon/2"` member, and its signature a `canon/2` domain prefix (root statements carry one of their
+   own, `prismpath-root-statement/2`), so a verifier never guesses which reader to use. A differential run's
+   root statement is `prismpath.core-run-root/1` (section 11).
+2. **canon/1 is retired.** The first plan kept a verify only canon/1 reader and frozen canon/1 twins of the
+   corpora. The owner decided (2026-11-10, evening) to retire it at once, since no one has used the system yet:
+   no reader, no encoder and no corpus of canon/1 remains. A document with no tag, or any tag but canon/2, is
+   refused with a named cause and never read under another encoding: an untagged audit line is skipped and the
+   log does not verify (`bad_format`), an untagged root statement is `bad_format`, a `prismpath-root-statement/1`
+   likewise, an untagged pack, flow manifest or registry is `manifest:bad-format` or `registry:bad-json`, an
+   untagged envelope is `envelope:sig-invalid`, an untagged epoch journal line, lock or receipt is refused
+   (`JournalCorrupt`, `LockError`, a receipt that does not verify). A complete line that is not canon/2 is never
+   dropped as a torn write; only a line that is not JSON, at the end, is.
+3. **Audit events.** `ts` is an integer count of microseconds since the epoch (`ts_us`); an event names its
+   encoding. A float in an audit event's data is refused.
+4. **A float in hashed content is refused.** In content PrismPath hashes but did not write (a connector's data, a
+   decision outcome, a composer item, a ledger proof, the compliance adapter's receipts and catalogs, an
+   operator's control data in Mission Control) a float anywhere raises `FloatRefused` in Python (an
+   `EncodingError`) and the same words as a `CanonicalError` in Rust, which tell the caller to supply an integer
+   of a stated unit or a decimal string. The earlier rule, a float written as its shortest decimal string, made
+   PrismPath the author of a spelling and is gone. The one place a float is still carried is the lock file's two
+   hyper-parameters (`delta`, `centroid_prior_weight`), which the lock format defines as decimal strings.
+5. **Plain JSON stays plain, and is held out of every hash.** A durable run checkpoint, the connector's JSONL
+   sink lines and the flow authority's version floor file are not hashed or signed. They are read and written with
+   `canon.plain_load`, `plain_loads` and `plain_dumps` (Rust: `value::parse_plain`, `durable::plain_dumps`), the
+   document `plain_loads` reads is a `PlainDict`, and every hashing helper of `prismpath.canon` refuses one
+   (`PlainJSONRefused`). `prismpath/tests/test_plain_json_never_hashed.py` also holds, in the source of Python and
+   Rust, that no function that reads or writes plain JSON also hashes or signs.
+6. **Order.** Python first, then Rust, then JavaScript. The Go kernel and the table targets sign and hash nothing
+   and hold no canon/1 (`prismpath/tests/test_canon2_migration.py` sweeps every language for it).
 
-**What was done** (branch `canon2-migration`; the owner's decision of 2026-11-10 that breaking changes are
-acceptable, so the steps above were taken together rather than one reviewed change each). The rule is one
-pair of functions in each language: `prismpath.canon.document_bytes` and `signed_message`, and
-`prismpath_rs::durable::document_bytes` and `signed_message`, which read the document's own tag, and the
-writers' `canon2_bytes` and `tagged`. The signature domain of a document without one of its own is
-`prismpath.canon/2` and a zero byte (`CANON2_DOMAIN`).
+**What was done.** The rule is one pair of functions in each language: `prismpath.canon.document_bytes` and
+`signed_message`, and `prismpath_rs::durable::document_bytes` and `signed_message` (JavaScript:
+`documentString`), which require the document's own tag, and the writers' `canon2_bytes` and `tagged`. The
+signature domain of a document without one of its own is `prismpath.canon/2` and a zero byte (`CANON2_DOMAIN`).
 
-- Item 1: the audit log's and the epoch chain's statements moved too, as `prismpath-root-statement/2` (canon/2,
-  `encoding`, `time_us`, its own domain); `/1` statements verify, and a chain may move from `/1` to `/2`.
-  Pack and flow manifests, envelopes and the crypto registry carry `encoding` and are signed over the canon/2
-  domain; so are the compliance adapter's receipts.
-- Item 2: `canon.loads_document` and `durable::read_document` read a tagged document with the strict canon/2
-  reader and an untagged one as before; any other tag is refused. `prismpath/tests/test_canon2_migration.py`
-  holds every call of a canon/1 encoder to a named list of verify only readers and frozen twin generators.
-  Frozen twins: `receipts_canon1.json` and `hotswap_canon1.json`, replayed by the same tests in both
-  languages; `canonical.json` is the canon/1 reader's vectors.
-- Item 3: audit events carry `ts_us`; a data value with a float is refused, never converted. The other floats
-  in hashed documents became decimal strings: the lock file's `delta` and `centroid_prior_weight`, and every
-  float in content PrismPath hashes but did not write (`canon.content_bytes`: connector, composer, ledger
-  runner, the compliance adapter).
-- Item 4: an anchored root's leaves are hashed under the encoding each leaf names; the receipt corpus has a
-  log and a chain that cross the migration.
-- Item 5: a canon/1 pack, envelope, flow manifest or registry whose signature verifies still loads.
+- The audit log's and the epoch chain's statements are `prismpath-root-statement/2` (canon/2, `encoding`,
+  `time_us`, its own domain). Pack and flow manifests, envelopes and the crypto registry carry `encoding` and
+  are signed over the canon/2 domain; so are the compliance adapter's receipts.
+- `canon.loads_document` and `durable::read_document` read a document that names canon/2 with the strict
+  canon/2 reader and refuse anything else, an object with another tag or none and a value that is not an object.
 - Also moved: the policy host's intent and active records, the epoch journal's chain, gap and acknowledgment
-  records and data files, the acknowledgment tag's message, attestation and OpenTimestamps manifests, the
-  stamp request and proof bundle records.
+  records and data files, the acknowledgment tag's message, attestation and OpenTimestamps manifests, the stamp
+  request and proof bundle records, and the lock file.
+- Removed with canon/1: `canonical_compact`, `canonical_spaced`, `CANON1`, `canon.loads` and `dumps_strict` (now
+  `plain_loads` and `plain_dumps`), `try_py_canonical_string` (now `plain_dumps`, used only for the sink's
+  line and a message), `parse_strict` (now `parse_plain`), `pyCanonicalString`, the `prismpath-root-statement/1`
+  reader, the corpora `canonical.json`, `receipts_canon1.json` and `hotswap_canon1.json` and the generator of
+  the first. `receipts.json` and `hotswap.json` keep the cases built from what canon/1 wrote, as refusals.
+- A Rust acknowledgment sequence beyond plus or minus 2^53 minus 1 is refused with a `CanonicalError`, as
+  Python raises `EncodingError`, in `canon`, `sign_ack`, `verify_ack` and `AckReceiver::on_ack`; none panics.
 
-**What remains.** The routing receipts' calibrated floors and confidences are not in a hashed document
-on this line (a routing receipt is an audit event whose data carries no float), so nothing moved for them;
-a writer that starts hashing one must use an integer of a stated unit or `content_bytes`. Not moved, each
-because it is not hashed or signed: a durable run checkpoint (its state may hold floats that a resume must
-see unchanged; the flow hash inside it is the only hash), the flow authority's version floor file, the
-sink's JSONL records, the receipt stream's binary wire frames, and the comparison harnesses that model
-other systems. Retiring the canon/1 reader (and with it canon/1 packs) is the owner's decision; until then
-the twins keep it honest.
+**Artifacts that were canon/1 and were not re-signed.** `prismpath-hw/demo/flows/*.ppt.manifest.{json,sig}`,
+`prismpath-hw/demo-display/switch_nav.ppt.manifest.{json,sig}` and the three copies in
+`prismpath-hw/hyst-cert/evidence/` are pack manifests signed under canon/1 by a demo authority key whose
+private half is not kept, and the evidence copies are named by an anchored `SHA256SUMS`; they are historic
+records, no product code reads them, and `prismpath-hw/hyst-cert/VERIFY.md` says how to check them.
+`prismpath/comparisons/results/prismpath/evidence/A8/receipt_root.json` is a recorded result of a comparison
+harness run, signed the same way. `prismpath/flows/wazuh_triage_decomposed.lock` was re-written as a canon/2 lock.
+
+**What remains.** Not hashed or signed, so not moved: a durable run checkpoint (its state may hold floats that a
+resume must see unchanged), the flow authority's version floor file, the sink's JSONL records, the receipt
+stream's binary wire frames, and the comparison harnesses that model other systems.
 
 ## 4. The checks of a policy
 
@@ -917,8 +919,8 @@ and excluded 16,081 cases (7,505 mentioning an engine counter, 5,674 inferred pa
 step 4 receipts 9,420 more decisions, every one replayed and agreeing. The test also
 alters each part of a run (a decision, a dropped receipt, a reading, an image signature, the manifest, a
 key, the root statement's signature, its clock written as a float of seconds, a later clock, the
-statement respelled with whitespace, a second statement), resigns a false receipt, puts the audit log's
-canon/1 statement format in place of the run's, and pins a foreign key, and both verifiers refuse each.
+statement respelled with whitespace, a second statement), resigns a false receipt, puts an audit log's
+root statement format in place of the run's, and pins a foreign key, and both verifiers refuse each.
 
 Lean states what a verified run shows about `Core.verdict` (`Core/Evidence.lean`, section 7):
 `evidence_sound`, over a model of the run and of this verifier with every receipt replayed, the
@@ -931,11 +933,10 @@ outside the core.
 
 **canon/2 end to end (step 4).** Every document of a run is canon/2: the cases, the image attestations,
 the receipts, the manifest and, since step 4, the root statement. Step 3 signed the run's root with the
-existing statement format, `prismpath-root-statement/1`, whose bytes are canon/1 compact and whose time
-is an ISO 8601 string; step 4 gives the core run its own format, `prismpath.core-run-root/1`, with its own
+audit log's statement format, `prismpath-root-statement/1`, whose bytes were canon/1 compact and whose time
+was an ISO 8601 string; step 4 gave the core run its own format, `prismpath.core-run-root/1`, with its own
 domain prefix, integers and strings only and the time as `time_us`, an integer. It is written by
-`core_evidence.make_root_statement` in Python and by the Rust example, each verifying the other's. Only
-the `core-run` log moved: the root statements of audit logs and epoch chains, the anchored roots and their
-verifier (`prismpath.ledgers.root_statement`, `prismpath-hotswap-rs/src/root_statement.rs`) change in no
-byte, and the run's verifier refuses a statement in that older format. The hash of the statement, what an
+`core_evidence.make_root_statement` in Python and by the Rust example, each verifying the other's. The
+audit log's and epoch chain's statements have since become `prismpath-root-statement/2` (section 3.1),
+a format of its own with its own domain, and the run's verifier refuses a statement in either audit log format. The hash of the statement, what an
 anchor would stamp, is the SHA-256 of its canon/2 line; `ledger anchor` is not yet taught this format.

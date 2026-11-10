@@ -82,16 +82,15 @@ def _ed25519():
 
 
 def canonical_bytes(obj) -> bytes:
-    """The bytes a document is hashed over, decided by its own tag (`canon.document_bytes`): canon/2 for a
-    document that names it, which is every document written now, and canon/1 compact for an untagged one
-    written before the migration, read only to verify it."""
+    """The bytes a document is hashed over (`canon.document_bytes`): its canon/2 bytes. A document that does
+    not name canon/2 (canon/1 is retired) raises EncodingError."""
     return canon.document_bytes(obj)
 
 
 def signed_bytes(obj) -> bytes:
     """The bytes a signature over a manifest, an envelope, a flow authority manifest or a crypto registry
-    covers (`canon.signed_message`): `canon.CANON2_DOMAIN` and the canon/2 bytes for a document that names
-    canon/2, the bare canon/1 compact bytes for a legacy one, which is verified and never signed."""
+    covers (`canon.signed_message`): `canon.CANON2_DOMAIN` and the canon/2 bytes. A document that does not
+    name canon/2 raises EncodingError."""
     return canon.signed_message(obj)
 
 
@@ -441,6 +440,8 @@ def load_envelope(base_path: str, pubkey_paths: List[str]) -> Tuple[Optional[dic
             sig = handle.read()
     except FileNotFoundError:
         return None, ["envelope:missing"]
+    except ValueError:                           # not canon/2: untagged (canon/1 is retired), another tag, or unreadable
+        return None, ["envelope:sig-invalid"]
     try:
         payload = signed_bytes(env)
     except canon.CanonicalError:

@@ -294,7 +294,7 @@ def test_a_statement_signature_is_not_a_manifest_signature(key, tmp_path):
     body = {name: statement[name] for name in statement if name != "sig"}
     from cryptography.exceptions import InvalidSignature
     with pytest.raises(InvalidSignature):
-        key._private.public_key().verify(bytes.fromhex(statement["sig"]), rs.canon.canonical_compact(body))
+        key._private.public_key().verify(bytes.fromhex(statement["sig"]), rs.canon.canon2_bytes(body))
 
 
 def test_check_separation_refuses_an_authority_key(key):
