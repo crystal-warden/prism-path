@@ -286,6 +286,32 @@ jobs:
           grep -q "cross-language telemetry: Rust decoded, re-encoded, demultiplexed and replayed what Python wrote" cross_language.log
           if grep -q SKIP cross_language.log; then echo "a cross language leg was skipped"; exit 1; fi
 
+  # One summary of every frozen corpus against every implementation that consumes it. tools/run_corpora.py
+  # checks its consumer table against the tree (a corpus with no decision, a consumer that no longer
+  # names its corpus, an unreadable target) and then calls the same test targets the jobs above call,
+  # printing one line per corpus and implementation. A new corpus without a consumer decision fails here.
+  corpus_summary:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: "22"
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: "1.22"
+      - name: Install
+        run: pip install -e . numpy pytest cryptography
+      - name: Consumer table against the tree
+        run: python tools/run_corpora.py --check
+      - name: Every corpus against every implementation
+        run: python tools/run_corpora.py
+
   # The Go kernel: the fourth language kernel, judged by the same frozen vectors.
   go:
     runs-on: ubuntu-latest
