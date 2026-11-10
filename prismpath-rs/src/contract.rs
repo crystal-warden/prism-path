@@ -9,12 +9,13 @@
 //!
 //! Python reads the predicates with `ast.parse`, which accepts all of Python's expression syntax, so this
 //! module has its own reader of that syntax (`PNode`) rather than the sandbox grammar of `condition.rs`:
-//! the sandbox folds `-5` into a constant and refuses calls, attributes and arithmetic, and the contract
-//! must see `-5` as the unary minus Python's tree holds (so `x == -5` types nothing) and must still read
+//! the sandbox refuses calls, attributes and arithmetic, and the contract must still read
 //! the fields of `x > 3 and f(y)`. The reader covers Python's expression grammar except the `\N{name}`
 //! string escape, a lone surrogate escape, comprehension and lambda bodies (read as one opaque value),
 //! and NFKC normalisation of identifiers; a predicate it cannot read is skipped, as one Python cannot
-//! parse is. Nesting past `MAX_NEST` is skipped too, where Python's own parser stops at 200 brackets.
+//! parse is. A sign on an integer literal folds into the constant, as `fold_unary_signs` does in Python
+//! (`x == -5` types a number; a signed float or field does not fold). Nesting past `MAX_NEST` is skipped too,
+//! where Python's own parser stops at 200 brackets.
 //!
 //! One refusal where Python has none: a literal that becomes a routed value must be exactly representable,
 //! so an integer beyond plus or minus 2^53 minus 1 and a float with no finite double (`1e999`) make
@@ -296,7 +297,7 @@ enum PNode {
     Compare { left: Box<PNode>, ops: Vec<COp>, comps: Vec<PNode> },
     /// A list or tuple display.
     Seq(Vec<PNode>),
-    /// Any other expression: a call, an attribute, arithmetic, a unary minus, a conditional, a lambda.
+    /// Any other expression: a call, an attribute, arithmetic, a sign on anything but an integer literal, a conditional, a lambda.
     Other,
 }
 
@@ -825,8 +826,17 @@ impl Reader {
 
     fn factor(&mut self) -> Parsed {
         if matches!(self.peek(), Some(PTok::Op(op)) if matches!(op.as_str(), "+" | "-" | "~")) {
+            let sign = if let Some(PTok::Op(op)) = self.peek() { op.clone() } else { String::new() };
             self.pos += 1;
-            self.guard(Reader::factor)?;
+            let operand = self.guard(Reader::factor)?;
+            // A sign on an integer literal folds into the constant, as `fold_unary_signs` does in Python.
+            if let PNode::Const(PConst::Int(int_val)) = &operand {
+                match sign.as_str() {
+                    "+" => return Ok(operand),
+                    "-" => return Ok(PNode::Const(PConst::Int(int_val.map(|val| -val)))),
+                    _ => {}
+                }
+            }
             return Ok(PNode::Other);
         }
         let base = if self.eat_name("await") {

@@ -1184,17 +1184,215 @@
      [
       "x",
       {
-       "type": "unknown"
+       "type": "number",
+       "values": [
+        -3
+       ]
       }
      ],
      [
       "y",
       {
-       "type": "unknown"
+       "type": "number",
+       "values": [
+        -3,
+        -1,
+        2
+       ]
       }
      ],
      [
       "z",
+      {
+       "type": "number",
+       "values": [
+        7
+       ]
+      }
+     ]
+    ],
+    "t": []
+   },
+   "describe": "## n\n    x: number{-3}\n    y: number{-3, -1, 2}\n    z: number{7}",
+   "flow": "---\nname: c\nstart: n\n---\n## n\nDo the work.\n-> t: when x == -3\n-> t: when y in [-3, -1, 2]\n-> t: when z == +7\n\n## t\nDone.\n",
+   "name": "a-signed-integer-literal-is-a-number",
+   "schemas": {
+    "n": {
+     "properties": {
+      "x": {
+       "enum": [
+        -3
+       ],
+       "type": "number"
+      },
+      "y": {
+       "enum": [
+        -3,
+        -1,
+        2
+       ],
+       "type": "number"
+      },
+      "z": {
+       "enum": [
+        7
+       ],
+       "type": "number"
+      }
+     },
+     "required": [
+      "x",
+      "y",
+      "z"
+     ],
+     "type": "object"
+    },
+    "t": {
+     "properties": {},
+     "required": [],
+     "type": "object"
+    }
+   }
+  },
+  {
+   "contract": {
+    "n": [
+     [
+      "a",
+      {
+       "type": "number",
+       "values": [
+        3
+       ]
+      }
+     ],
+     [
+      "b",
+      {
+       "type": "number",
+       "values": [
+        -5
+       ]
+      }
+     ],
+     [
+      "c",
+      {
+       "type": "number",
+       "values": [
+        -4
+       ]
+      }
+     ],
+     [
+      "d",
+      {
+       "type": "number",
+       "values": [
+        -2
+       ]
+      }
+     ],
+     [
+      "e",
+      {
+       "type": "number",
+       "values": [
+        -3
+       ]
+      }
+     ]
+    ],
+    "t": []
+   },
+   "describe": "## n\n    a: number{3}\n    b: number{-5}\n    c: number{-4}\n    d: number{-2}\n    e: number{-3}",
+   "flow": "---\nname: c\nstart: n\n---\n## n\nDo the work.\n-> t: when a == -(-3)\n-> t: when b == -(5)\n-> t: when c == +-4\n-> t: when d != - 2\n-> t: when -3 == e\n\n## t\nDone.\n",
+   "name": "a-signed-integer-literal-folds-like-the-engine-does",
+   "schemas": {
+    "n": {
+     "properties": {
+      "a": {
+       "enum": [
+        3
+       ],
+       "type": "number"
+      },
+      "b": {
+       "enum": [
+        -5
+       ],
+       "type": "number"
+      },
+      "c": {
+       "enum": [
+        -4
+       ],
+       "type": "number"
+      },
+      "d": {
+       "enum": [
+        -2
+       ],
+       "type": "number"
+      },
+      "e": {
+       "enum": [
+        -3
+       ],
+       "type": "number"
+      }
+     },
+     "required": [
+      "a",
+      "b",
+      "c",
+      "d",
+      "e"
+     ],
+     "type": "object"
+    },
+    "t": {
+     "properties": {},
+     "required": [],
+     "type": "object"
+    }
+   }
+  },
+  {
+   "contract": {
+    "n": [
+     [
+      "a",
+      {
+       "type": "unknown"
+      }
+     ],
+     [
+      "b",
+      {
+       "type": "unknown"
+      }
+     ],
+     [
+      "d",
+      {
+       "type": "unknown"
+      }
+     ],
+     [
+      "e",
+      {
+       "type": "unknown"
+      }
+     ],
+     [
+      "f",
+      {
+       "type": "unknown"
+      }
+     ],
+     [
+      "g",
       {
        "type": "unknown"
       }
@@ -1202,26 +1400,38 @@
     ],
     "t": []
    },
-   "describe": "## n\n    x: unknown\n    y: unknown\n    z: unknown",
-   "flow": "---\nname: c\nstart: n\n---\n## n\nDo the work.\n-> t: when x == -3\n-> t: when y in [-3, -1, 2]\n-> t: when z == +7\n\n## t\nDone.\n",
-   "name": "a-signed-integer-literal-is-not-a-constant-here",
+   "describe": "## n\n    a: unknown\n    b: unknown\n    d: unknown\n    e: unknown\n    f: unknown\n    g: unknown",
+   "flow": "---\nname: c\nstart: n\n---\n## n\nDo the work.\n-> t: when a == -1.5\n-> t: when b == -c\n-> t: when d == -True\n-> t: when e in [-1, -2.5]\n-> t: when f == ~3\n-> t: when g == -3 ** 2\n\n## t\nDone.\n",
+   "name": "a-signed-float-or-field-or-bool-does-not-fold",
    "schemas": {
     "n": {
      "properties": {
-      "x": {
+      "a": {
        "type": "string"
       },
-      "y": {
+      "b": {
        "type": "string"
       },
-      "z": {
+      "d": {
+       "type": "string"
+      },
+      "e": {
+       "type": "string"
+      },
+      "f": {
+       "type": "string"
+      },
+      "g": {
        "type": "string"
       }
      },
      "required": [
-      "x",
-      "y",
-      "z"
+      "a",
+      "b",
+      "d",
+      "e",
+      "f",
+      "g"
      ],
      "type": "object"
     },
@@ -2546,6 +2756,32 @@
    "name": "unknown-type-is-not-constrained",
    "node": "n",
    "problems": []
+  },
+  {
+   "fields": {
+    "x": -3,
+    "y": -1,
+    "z": 7
+   },
+   "flow": "---\nname: c\nstart: n\n---\n## n\nDo the work.\n-> t: when x == -3\n-> t: when y in [-3, -1, 2]\n-> t: when z == +7\n\n## t\nDone.\n",
+   "name": "a-signed-routed-value-is-routed",
+   "node": "n",
+   "problems": []
+  },
+  {
+   "fields": {
+    "x": -2,
+    "y": 0,
+    "z": -7
+   },
+   "flow": "---\nname: c\nstart: n\n---\n## n\nDo the work.\n-> t: when x == -3\n-> t: when y in [-3, -1, 2]\n-> t: when z == +7\n\n## t\nDone.\n",
+   "name": "a-signed-unrouted-value-is-a-note",
+   "node": "n",
+   "problems": [
+    "note: 'x'=-2 is not one of the routed values [-3] (will fall through the deterministic tier)",
+    "note: 'y'=0 is not one of the routed values [-3, -1, 2] (will fall through the deterministic tier)",
+    "note: 'z'=-7 is not one of the routed values [7] (will fall through the deterministic tier)"
+   ]
   },
   {
    "fields": {

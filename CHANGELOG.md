@@ -181,6 +181,13 @@ flow manifests, receipts and bundles read exactly as 0.1.2 wrote them, and a 0.1
   `manifest_sha256` in Rust return `None` for a value with no canonical form. The README entry above
   that lists integers past 64 bits and `NaN` among what Rust does not read as Python does is superseded.
 
+### Oddities closed in both languages (2026-11-10)
+- A sign on an integer literal in a flow's predicate now types a number in the worker output contract: `derive_contract`
+  folds the sign with `predicates.fold_unary_signs`, as every other reader of a predicate does, so `x == -3` and
+  `x in [-3, -1]` give a number with the routed values -3 and -1 as `x >= -5` already gave a number. Before, they gave
+  `unknown` and no values. A signed float, a signed field and a signed boolean still do not fold. Rust reads the same
+  (`prismpath-rs/src/contract.rs`), and `contract.json` holds the corrected answer (58 flows, 23 outputs).
+
 ## [0.1.2] (tagged, superseded before upload; never on PyPI)
 
 ### Summary since the 0.1.0 upload to PyPI

@@ -21,6 +21,9 @@ Types are inferred from how each field is USED in the predicates:
   * `== / != / in` a string literal (or list)        -> enum   (values = the routed literals)
   * `== / !=` a bool literal, OR used bare (`when f`, `not f`, `f and g`) -> boolean
   * `== / !=` a numeric literal                       -> number
+A sign on an integer literal folds into the constant first (`predicates.fold_unary_signs`, the transform
+every other reader of a predicate applies), so `x == -3` and `x in [-3, -1]` type as numbers like `x >= -5`;
+a signed float or a signed field does not fold and types nothing.
 Engine-provided names (`visits`, `error_count`, `error`, `error_type`, `error_message`) are NOT part of
 the worker's contract and are excluded. A field used two incompatible ways is flagged as a conflict.
 
@@ -160,7 +163,7 @@ def derive_contract(graph) -> Dict[str, Dict[str, dict]]:
             if expr.lower() in predicates.ALWAYS or expr.lower() in predicates.NEVER:
                 continue
             try:
-                tree = ast.parse(expr, mode="eval")
+                tree = predicates.fold_unary_signs(ast.parse(expr, mode="eval"))   # `-3` is the constant every other reader sees
             except (SyntaxError, ValueError):
                 continue                                  # check_predicate already reports these
             _walk(tree.body, fields, True)

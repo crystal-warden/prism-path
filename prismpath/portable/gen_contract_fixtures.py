@@ -77,7 +77,9 @@ DERIVE = [
     ("a-bool-op-in-an-operand-is-not-walked", _flow(_node("n", "when (a and b) == c"), _node("t"))),
     ("a-list-element-is-not-walked", _flow(_node("n", "when x in [a, b]"), _node("t"))),
     ("a-bare-tuple-types-nothing", _flow(_node("n", "when x, y"), _node("t"))),
-    ("a-signed-integer-literal-is-not-a-constant-here", _flow(_node("n", "when x == -3", "when y in [-3, -1, 2]", "when z == +7"), _node("t"))),
+    ("a-signed-integer-literal-is-a-number", _flow(_node("n", "when x == -3", "when y in [-3, -1, 2]", "when z == +7"), _node("t"))),
+    ("a-signed-integer-literal-folds-like-the-engine-does", _flow(_node("n", "when a == -(-3)", "when b == -(5)", "when c == +-4", "when d != - 2", "when -3 == e"), _node("t"))),
+    ("a-signed-float-or-field-or-bool-does-not-fold", _flow(_node("n", "when a == -1.5", "when b == -c", "when d == -True", "when e in [-1, -2.5]", "when f == ~3", "when g == -3 ** 2"), _node("t"))),
     ("a-signed-literal-still-gives-an-ordering-type", _flow(_node("n", "when x >= -5", "when -1 < y", "when z >= -0.5"), _node("t"))),
     ("a-call-is-not-walked-but-its-sibling-is", _flow(_node("n", "when f(x) > 3 and y"), _node("t"))),
     ("an-attribute-or-arithmetic-operand", _flow(_node("n", "when x.y == 1 and z", "when w + 1 > 2 and v", "when u == x + 1"), _node("t"))),
@@ -128,6 +130,8 @@ VALIDATE = [
     ("a-mixed-set-note-lists-every-value", "a-mixed-set-sorts-floats-then-ints-then-strings", "n", {"x": "zzz"}),
     ("an-integer-is-routed-by-a-float-of-the-same-value", "an-integer-and-a-float-of-one-value-are-one-value", "n", {"x": 1}),
     ("unknown-type-is-not-constrained", "a-membership-in-a-name-types-nothing", "n", {"x": {"any": [1]}}),
+    ("a-signed-routed-value-is-routed", "a-signed-integer-literal-is-a-number", "n", {"x": -3, "y": -1, "z": 7}),
+    ("a-signed-unrouted-value-is-a-note", "a-signed-integer-literal-is-a-number", "n", {"x": -2, "y": 0, "z": -7}),
     ("a-node-with-no-contract", "a-node-with-no-edges", "n", {"anything": 1}),
 ]
 
