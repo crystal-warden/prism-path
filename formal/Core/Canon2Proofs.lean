@@ -258,8 +258,8 @@ theorem parseNum_digits (neg : Bool) (m : Nat) (rest : List Char) (hr : Delim re
       subst hn
       rw [natDigits_zero]
       rcases t with _ | ⟨c, r⟩
-      · simp [parseNum, digitsValue, spanDigits, hlim]
-      · rcases hr c r ht with rfl | rfl | rfl <;> simp [parseNum, digitsValue, spanDigits, hlim]
+      · simp [parseNum, digitsValue, hlim]
+      · rcases hr c r ht with rfl | rfl | rfl <;> simp [parseNum, digitsValue, hlim]
     · obtain ⟨c, r, e, hc⟩ := natDigits_head m hpos
       have hd := natDigits_digits m
       have hv := natDigits_value m
@@ -480,7 +480,7 @@ theorem rt_value : (v : J) → ∀ (fuel d : Nat) (rest : List Char), wfJ v = tr
     exact pv_false f d rest
   | .str s, fuel, d, rest, _, _, _, hf, _ => by
     obtain ⟨f, rfl, -⟩ := fuel_succ (by simp [sz]) hf
-    simp only [wr, wStr, List.cons_append, List.append_assoc, List.singleton_append]
+    simp only [wr, wStr, List.cons_append, List.append_assoc]
     rw [pv_str, parseStr_wStr]
     rfl
   | .int n, fuel, d, rest, _, hr, _, hf, hd => by
