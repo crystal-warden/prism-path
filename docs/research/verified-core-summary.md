@@ -28,7 +28,8 @@ development contains no `sorry`, and the axiom audit that runs at every build (`
 shows each theorem depends on at most Lean's three standard axioms (`propext`, `Classical.choice`,
 `Quot.sound`). The decision function itself, `Core.verdict`, depends only on `propext`, and so does the
 check that decides which cases a differential run excludes (`Core.counterRefusal`): nothing the oracle
-computes goes through `Classical.choice`. The theorems are about the function the oracle runs, not about a
+computes goes through `Classical.choice`. The canon/2 writer and strict reader (`Core.writeBytes`, `Core.readCanonical`)
+depend on `propext` and `Quot.sound` only. The theorems are about the function the oracle runs, not about a
 separate model of it.
 
 | group | theorems | statement in words |
@@ -45,6 +46,7 @@ separate model of it.
 | the bridge to Figueroa quantization | `evalC_toX`, `firstMatch_eq_routeX`, `boundary_canonical`, `accepted_quantization_preserves`, `core_reconstruct_route`, `scaled_correct`, `lowered_threshold_preserves` | the core's evaluation is the FQ development's on the translated policy, so two accepted readings with the same quantization get the same decision, and a decimal threshold lowered on a `fixed` field decides on the canonical integer as the authored decimal decides on the source value |
 | the engine counter exclusion | `counterRefusal_iff`, `counter_excluded_refused` | the check a differential run uses to exclude a case holds exactly when the oracle refuses the policy image for reading an engine counter, and then every reading is refused with `policy:engine-counter`, so the exclusion leaves out no route and no other refusal |
 | evidence and the semantics | `verified_receipt_is_verdict`, `receipt_is_verdict_of_hashes`, `verified_run_complete`, `verified_refusal_registered`, `verified_excluded_counter`, `evidence_sound` | over a model of a differential run and of its verifier with every receipt replayed (`verifyRun`), every receipt the verifier accepts records `Core.verdict` on the image and the reading whose hashes it carries; every reading of every case not excluded has a receipt; a recorded refusal is the decision's registered nonzero code; a case excluded as reading an engine counter refuses every reading for it; and, under the cryptographic hypotheses of section 4, the root statement binds exactly these receipts |
+| the canon/2 encoding layer | `readBytes_doc`, `read_write`, `readChars_wr`, `canonical_form`, `same_value_same_spelling`, `write_injective`, `readCanonical_iff`, `write_readCanonical`, `readCanonical_unique`, `readCanonical_refuses`, `readCanonical_cause`, `reader_not_canonical` | the reader returns only documents (no key twice, integers within plus or minus 2^53 minus 1, nesting at most 128); the writer's bytes of every canonical value read back to the value; every accepted document's canonical bytes read back to its value with every object in key order, and are a fixed point; the writer is injective on canonical values; the strict reader accepts exactly the canonical spellings, so writing what it read gives back the input, two documents it accepts with the same value are byte identical, and everything else is refused with the reader's cause or `not-canonical`; the reader alone accepts whitespace, member order and needless escapes (specification section 3.2) |
 
 The evidence theorems take the cryptography as parameters (a hash, the canonical bytes of a receipt, a
 Merkle root, signature verification) and its security as explicit hypotheses of the theorems that need
@@ -83,6 +85,24 @@ The counts are policy rows and reading rows together. "Agree" means the same rou
 with the same cause, code, field and reason. On every policy a leg accepts and the oracle accepts, every
 reading's decision is the oracle's, and the policy check of the Python and Rust legs equals the oracle's on
 every reading. The seeded CI run (`prismpath/tests/test_core_diff.py`, 5,000 cases) fails on any finding.
+
+**The canon/2 differential** (`formal/diff/canon2_diff.py`) holds the reader and the writer of Python,
+Rust, JavaScript and Go to `lake exe canon2-oracle`, the compiled Lean writer and readers the theorems of
+section 2 are about. Every leg prints, per document, its writer's bytes of what its reader read and whether
+the input already was them, or its reader's refusal and rule. The sets: the 73 frozen vectors, each against
+its expected bytes or rule; 43 hand written probes (prototype keys such as `__proto__`, numeric keys,
+whitespace JSON does not allow, the boundary of every rule); generated values in the writer's domain, each
+sent as its canonical bytes and as a random legal spelling (whitespace, member order, `\/` and `\u`
+escapes in either case, surrogate pair escapes); byte strings made from canonical spellings by key order
+swaps, escape variants, whitespace, exponents and fractions, `-0`, leading zeros, integers at and past the
+exact range, lone and paired surrogate escapes, duplicate keys, nesting from 126 to 200, invalid UTF-8, a
+byte order mark, truncation and random byte edits; and every canonical output sent again, which every leg
+must print back unchanged. Two runs, no disagreement and no failed expectation:
+
+| run | values (documents) | mutated byte strings | fixed point | documents | disagreements |
+|---|---|---|---|---|---|
+| default seed 20261110 | 100,000 (200,000) | 100,000 | 77,714 | 377,830 | 0 |
+| seed 7 | 250,000 (500,000) | 500,000 | 230,108 | 1,230,224 | 0 |
 
 **Frozen vectors.** canon/2: 73 byte strings covering every reader rule, replayed by Python, Rust and the
 oracle (`prismpath/portable/conformance/canon2.json`). Field definitions: the conformance vectors replayed by
@@ -132,8 +152,9 @@ exactly when the oracle refuses it for one.
 - **The implementations.** The Python reference implementation, the Rust port, the JavaScript and Go
   kernels and the three table targets are conformant to the oracle on the inputs generated, not proven:
   differential testing shows no disagreement on 100,000 cases and does not show that none exists. The
-  canon/2 readers of Python and Rust are held to the Lean reader by the frozen vectors and the
-  differential.
+  canon/2 readers and writers of Python, Rust, JavaScript and Go are held to the Lean ones by the frozen
+  vectors and the canon/2 differential, and `canon2-oracle` is trusted to compute `Core.writeBytes` and
+  `Core.readCanonical` as `core-oracle` is trusted to compute `Core.verdict`.
 - **Time.** A root statement's `time_us` is the signer's clock. Nothing here anchors it.
 
 ## 5. What is out of scope
@@ -166,6 +187,8 @@ exactly when the oracle refuses it for one.
 cd formal && lake build                       # the proofs, the axiom audit, and core-oracle
 grep -rn -w sorry FQ FQ.lean Core Core.lean   # expect no output
 cd .. && python formal/diff/core_diff.py --cases 100000 --seed 1 --report diff.json
+cargo build --release -p prismpath-rs --example canon2_diff && (cd prismpath-go && go build -o canon2_diff_go ./cmd/canon2_diff)
+python formal/diff/canon2_diff.py --rust target/release/examples/canon2_diff --go prismpath-go/canon2_diff_go
 python formal/diff/core_evidence.py cases --cases 100000 --seed 1 --out cases.jsonl
 python formal/diff/core_evidence.py scope-check --from cases.jsonl --rust <(core_evidence policy --from cases.jsonl)
 python formal/diff/core_evidence.py produce --from cases.jsonl --out run-py --keys keys-py
