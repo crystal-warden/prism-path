@@ -226,6 +226,10 @@ receipts, their root statements, anchored roots and every frozen corpus read and
   a recorded refusal is the verdict's registered nonzero code; and `evidence_sound` adds the root statement under
   unforgeable signatures and collision free hashing, each stated per object as an explicit hypothesis. No `sorry`; in
   the axiom audit.
+- **`docs/research/verified-core-summary.md`** states for a reviewer what of the verified policy core is proven (each
+  theorem in words), what is tested (the seven differential legs and their counts on the 100,000 case run, the
+  frozen vectors, the evidence round trip), what is assumed (Ed25519, SHA-256, the Lean kernel and compiler, the C
+  compiler, the hardware, the verifiers) and what is out of scope.
 
 ### The verified policy core: one cause per refused policy, runs as evidence, the eBPF leg (2026-11-10)
 Research line, `docs/design/spec-verified-core.md` sections 4, 7, 9 and 11. Nothing here changes a format

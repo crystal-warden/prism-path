@@ -3,7 +3,7 @@
 *Specification of the narrow core PrismPath proves once and every implementation is held to: one
 decision of a match action policy over integers, booleans and strings, with the signed field
 definitions that say what each integer means. November 2026, research line, branch `verified-core`;
-step 2 on `verified-core-2`, step 3 on `verified-core-3`.*
+step 2 on `verified-core-2`, step 3 on `verified-core-3`, step 4 on `verified-core-4`.*
 
 This document defines the core precisely enough that its Lean semantics (`formal/Core`), the oracle
 compiled from it, and the differential harness that holds the other implementations to it all refer
@@ -537,6 +537,7 @@ oracle's counts are step 2's below). Per leg, case level policy rows and reading
 | c-hdr | 146,673 | 10,265, 372 | 3,181 | target-limit 3,527, 2,070 | 0 |
 | ebpf | 146,587 | 10,265, 372 | 3,181 | target-limit 3,527, 2,070, and 86 readings of tables outside the eBPF subset | 0 |
 
+Step 4 reran it (same seed and generator): every count above is unchanged, with no finding on any leg.
 No finding of any kind on any leg: the policy rows step 2 counted as D7 (9,758 for Python, 9,839 for
 Rust) now agree, each with the
 oracle's cause, field and reason, and the engine counter scope grew from 171 to 372 by the policies
@@ -715,7 +716,9 @@ left open: whether the JavaScript and Go kernels should implement section 4.5 or
 in the conformance matrix; when the canon/2 migration of section 3.1 starts; the Rust predicate parser's
 reading of `-(5)` at evaluation (the core's decoder now reads it as Python's syntax tree does, and the
 lowering refuses it on a fixed field in both); whether the eBPF leg should also run in kernel where CI has
-the privileges. Step 4 narrowed a run's engine counter exclusion to the policies the oracle refuses for it
+the privileges. Step 4 made a run's root statement canon/2 (section 11), proved what a verified run says
+about `Core.verdict` (section 7), wrote the summary for a reviewer (`docs/research/verified-core-summary.md`),
+and narrowed a run's engine counter exclusion to the policies the oracle refuses for it
 (section 11).
 
 ## 11. A differential run as evidence
