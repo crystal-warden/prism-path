@@ -1,11 +1,11 @@
 # prismpath-telemetry-rs · porting spec (1-1 Rust port of `prismpath/telemetry/`)
 
-A faithful, decision preserving Rust reimplementation of the Python telemetry adapter, for environments
-where Python cannot run (edge / embedded / P2-restricted). **The Python at `prismpath/telemetry/` is the
+A faithful, decision preserving Rust reimplementation of the Python telemetry adapter, a second
+implementation that also runs where Python cannot (edge / embedded / P2-restricted). **The Python at `prismpath/telemetry/` is the
 reference of record; read it for exact semantics; when in doubt, match Python.**
 
 ## Crate setup
-- Standalone crate `prismpath-telemetry-rs/` (sibling of `prismpath-rs/`; no workspace).
+- Crate `prismpath-telemetry-rs/` (sibling of `prismpath-rs/`, a member of the root Cargo workspace).
 - Depend on the Rust kernel: `prismpath-rs = { path = "../prismpath-rs" }`. Use it for flow parsing
   (`prismpath_rs::parse(text) -> Graph`), routing (`eval_condition(cond, &ctx)`), and the edge surface
   (`Node.edges: Vec<(target, condition)>`, plus `is_deterministic`/`is_semantic`/etc.).

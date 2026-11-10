@@ -79,7 +79,7 @@ is a Markdown diff a non engineer can approve.
 ### One policy across your whole stack
 
 The same signed image decides byte for byte identically on Python, JavaScript, Rust, and Go, plus a C
-reference interpreter, judged by one frozen corpus of 1,079 predicate and 27 flow vectors. Author the
+reference interpreter, judged by one frozen corpus of 1,112 predicate and 107 flow vectors (the JavaScript and Go kernels take the 27 that need no engine options). Author the
 policy once; run it in whatever language each service already speaks, and know they agree.
 
 ### Enforcing decisions in the Linux kernel

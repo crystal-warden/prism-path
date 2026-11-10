@@ -5,7 +5,8 @@ healing Merkle transport, epochs, the ack channel, the spiral layout, receipt st
 window, the refresh profile and the concentrator.
 
 **What it mirrors.** A one to one port of `prismpath/telemetry/` in Python, which is the reference of
-record. `PORT_SPEC.md` is the porting contract; when in doubt, match Python.
+record. `PORT_SPEC.md` is the porting contract; when in doubt, match Python, and `DIVERGENCES.md` at the
+repository root lists the places where this crate answers differently on purpose.
 
 **What enforces agreement.** The frozen corpora under `prismpath/telemetry/conformance/`
 (`decisions.json` version 2, the boundary and spiral corpora) and the byte level parity fixtures

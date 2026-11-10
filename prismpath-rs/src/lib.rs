@@ -2,8 +2,8 @@
 // Copyright 2026 Crystal Warden Supply Chain Labs LLC
 //! prismpath-rs: the portable PrismPath kernel, in Rust.
 //!
-//! A faithful port of portable/prismpath.mjs (itself a certified port of the Python reference:
-//! 1079/1079 predicates, 27/27 flows). The conformance corpus in ../prismpath/portable/conformance
+//! A faithful port of the Python reference, by way of portable/prismpath.mjs (1112/1112 predicates,
+//! 107/107 flows). Where it differs from Python on purpose, DIVERGENCES.md at the repository root says where. The conformance corpus in ../prismpath/portable/conformance
 //! IS the specification, and this crate's only claim to correctness is passing it bit-for-bit:
 //!
 //! ```text

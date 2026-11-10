@@ -1,6 +1,7 @@
-# Native (Python-free) PrismPath crates — the deployment path for where Python cannot run.
-# See prismpath-rs/CONFORMANCE.md for the parity story. Satellite crates (hot-swap) are
-# added to `members` as they are scaffolded.
+# Native (Python-free) PrismPath crates: the kernel, the Facet telemetry wire, the policy hot swap and the
+# preflight tool, held to the Python reference by the frozen corpora and the cross language tests.
+# prismpath-rs/CONFORMANCE.md has the certified counts and DIVERGENCES.md lists where they answer
+# differently on purpose. Lockfile and minimum version policy: docs/design/rust-lockfiles.md.
 [workspace]
 resolver = "2"
 members = [

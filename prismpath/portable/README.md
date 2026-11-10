@@ -60,7 +60,7 @@ fixtures**, and Python's `eval_condition` now enforces the sandbox statically (a
 short-circuited chain can no longer smuggle a disallowed call past the runtime on either engine).
 
 The spec itself now ships as **data**: [`conformance/`](conformance/README.md) holds 1,112
-predicate vectors + 27 engine fixtures, generated deterministically from the Python reference
+predicate vectors + 107 engine fixtures, generated deterministically from the Python reference
 (`gen_conformance.py`) and enforced in both directions on every test run; the committed files
 must match a fresh regeneration (no silent reference drift), and this port must pass them
 (`node prismpath/portable/run_vectors.mjs` → CONFORMANT). All seven JavaScript runners

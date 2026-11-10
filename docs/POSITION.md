@@ -78,7 +78,7 @@ comparison showed its wire carrying OPA's input and its receipt machinery wrappi
 
 The same image decided the same 23 corpus readings identically on host Python, the C reference, in
 kernel on aarch64 and x86_64, on both ISAs of an RP2350, and on a Zynq-7020 fabric (row #143). Four
-language kernels (Python, JavaScript, Rust, Go) pass the same 1,079 predicate and 27 flow vectors; the
+language kernels (Python, JavaScript, Rust, Go) pass the same 1,112 predicate and 27 flow vectors, Rust and Python taking the 80 more that carry engine options; the
 kernel target certifies 124 of 124 in kernel on every push; the fabric's signed bound was witnessed on
 the pins at 34 of 35 and 23 of 24 cycles for the comparison images (row #143) and across 16,009
 evaluations at most 9 cycles inside a signed 11 for the resident policy (rows #122, #123).

@@ -13,11 +13,11 @@ changed), and any implementation claiming conformance must pass **every case bit
   numeric spellings, list ordering past equal-but-unorderable elements, depth accounting)
   plus a seeded grammar-fuzz sample. `"ERROR"` means the sandbox rejects the predicate
   (PredicateError); at run time such an edge is non-matching, never a crash.
-- **`flows.json`**: 105 full engine fixtures: a flow document plus scripted worker outcomes
+- **`flows.json`**: 107 full engine fixtures: a flow document plus scripted worker outcomes
   (`script` maps node → outcomes consumed in visit order, last repeats; `{"__raise__": msg}`
   throws, exercising the error tier, and `"__kind__"` names the exception class the engine hands the flow as
   `error_type`, RuntimeError when it is absent) → the reference engine's `{path, stopped, pending_node,
-  spawn, cause}`. The first 27 are the frozen fixtures. The other 78 (`engine_surface_fixtures.py`)
+  spawn, cause}`. The first 27 are the frozen fixtures. The other 80 (`engine_surface_fixtures.py`)
   carry `opts`, the engine's `type_gate` and `max_transcript` options, and expect what those change as
   well: `reason` and `violations` (the pending decision of a `contract_violation`, cause 37),
   `transcript` and `state_dropped` (the persisted history after the bound), `guard_errors` (which
@@ -58,12 +58,12 @@ changed), and any implementation claiming conformance must pass **every case bit
 Verify the kernels:
 
 ```
-node prismpath/portable/run_vectors.mjs          # JS, P0  -> CONFORMANT (27 flows, the 78 with engine options skipped)
+node prismpath/portable/run_vectors.mjs          # JS, P0  -> CONFORMANT (27 flows, the 80 with engine options skipped)
 node prismpath/portable/run_p1_conformance.mjs   # JS, P1  -> P1 CONFORMANT
 node prismpath/portable/run_capability.mjs        # JS, portability matrix -> CONFORMANT
 node prismpath/portable/run_reach.mjs             # JS, reachability       -> CONFORMANT
 cd prismpath-rs && cargo run --bin conformance -- ../prismpath/portable/conformance
-cd prismpath-go && go test ./...                 # 1112/1112 predicates, 27/27 flows (78 with engine options skipped)
+cd prismpath-go && go test ./...                 # 1112/1112 predicates, 27/27 flows (80 with engine options skipped)
 cd prismpath-hotswap-rs && cargo test --test test_receipt_verify   # receipts.json, 287/287
 ```
 
