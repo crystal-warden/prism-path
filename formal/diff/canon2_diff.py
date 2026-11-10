@@ -105,9 +105,19 @@ class Legs:
 
 
 # ----------------------------------------------------------------- generation
-KEY_POOL = ["", "a", "b", "A", "Z", "aa", "ab", "a\u0000", "\u007f", "\u0080", "é", "߿", "ࠀ",
-            " ", "퟿", "", "", "｡", "﻿", "￿", "\U00010000", "\U0001f600",
-            "\U0010ffff", "€", "\U0001d11e", "id", "\"", "\\", "/", "\t", "k\u0001"]
+KEY_POOL = (["", "a", "b", "A", "Z", "aa", "ab", "id", '"', "\\", "/", "\t", "__proto__", "constructor", "toString",
+             "hasOwnProperty", "0", "1", "10", "a" + chr(0), "k" + chr(1)]
+            + [chr(c) for c in (0x7f, 0x80, 0xe9, 0x7ff, 0x800, 0x2028, 0xd7ff, 0xe000, 0xefff, 0xff61, 0xfeff, 0xffff,
+                                0x10000, 0x1f600, 0x10ffff, 0x20ac, 0x1d11e)])
+
+# Hand written edges: prototype keys a JavaScript object would mishandle, numeric keys a JavaScript object
+# reorders, whitespace JSON does not allow, and the boundaries of each rule.
+PROBES = [b'{"__proto__":1}', b'{"__proto__":{"a":1}}', b'{"__proto__":1,"__proto__":2}', b'{"constructor":1}',
+          b'{"toString":1,"toString":2}', b'{"a":{"__proto__":[]}}', b'{"1":1,"0":0,"10":2}', b'{"\\u0000":1}',
+          b'"\\uFEFF"', b'\xef\xbb\xbf1', b'1 ', b' 1', b'-', b'[1,]', b'{"a":1,}', b'0x10', b'1_0', b'\x00', b'[\x0b]',
+          b'[\x0c]', b'[\xc2\xa0]', b'"\x7f"', b'"\\u00"', b'"\\ud800\\ud800"', b'"\\udbff\\udfff"', b'"\\uDBFF\\uDFFF"',
+          b'123456789012345678', b'9007199254740991', b'-9007199254740991', b'9007199254740992', b'-9007199254740992',
+          b'9007199254740991.0', b'-0', b'0', b'-1', b'00', b'[-]', b'1e0', b'true', b'nulll', b'[]]', b'', b' ']
 
 
 def rand_char(rng: random.Random) -> str:
@@ -126,7 +136,7 @@ def rand_char(rng: random.Random) -> str:
             if not 0xd800 <= c <= 0xdfff:
                 return chr(c)
     if pick < 0.88:
-        return rng.choice("  ﻿￿퟿")
+        return rng.choice("\u2028\u2029\ufeff\uffff\ue000\ud7ff")
     return chr(rng.randint(0x10000, 0x10ffff))
 
 
@@ -366,6 +376,9 @@ def main() -> int:
             canon = case["canonical_hex"]
             flag = "1" if canon == case["hex"] else "0"
             expect["vectors"].append(lambda line, want=f"ok {flag} {canon}": line == want)
+
+    sets["probes"] = list(PROBES)
+    expect["probes"] = [lambda line: True] * len(PROBES)
 
     sets["values"] = []
     for i in range(args.values):

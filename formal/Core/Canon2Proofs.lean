@@ -1223,7 +1223,8 @@ theorem readCanonical_ok_iff (b : ByteArray) (v : J) :
 
 /-- **The reader alone is not canonical.** `readBytes`, the canon/2 reader the spec defines and the five
 implementations share, accepts documents that are not the canonical spelling of their value:
-whitespace (`[ ]`), members out of key order (`{"b":null,"a":null}`) and a needless escape (`"A"`).
+whitespace (`[ ]`), members out of key order (`{"b":null,"a":null}`) and a needless escape (`A` written
+as the six characters backslash, `u`, `0`, `0`, `4`, `1`).
 So `writeBytes (readBytes b) = b` does not hold of the reader; it holds of `readCanonical`
 (`write_readCanonical`), which refuses these three as `notCanonical`. -/
 theorem reader_not_canonical :
