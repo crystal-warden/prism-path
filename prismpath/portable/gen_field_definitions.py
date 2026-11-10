@@ -183,6 +183,24 @@ REFUSED = [
     ("sign_outside_parentheses_on_an_integer", {"d": DEFINITIONS["drift_floor"]}, ["when d >= -(5)"]),
 ]
 
+# D7 (spec-verified-core.md sections 4 and 9, step 3): a policy with several problems is refused for the
+# first in the core's order, decoding rule by rule, then the definitions in code point order, then lowering
+# rule by rule and atom by atom, then rule 6. Each flow below has at least two problems, and the reference
+# once named another of them first.
+REFUSED += [
+    ("d7_atom_left_to_right_in_one_condition", {"x": "int"},
+     ["when x == 9007199254740992 and x == 2.5"]),
+    ("d7_decoding_before_a_definition", {"x": "int min=5 max=4", "y": "int"}, ["when x == y"]),
+    ("d7_decoding_of_a_later_rule_before_lowering", {"x": "int", "k": "category"},
+     ["when x == 2.5", "when k < \"a\""]),
+    ("d7_an_earlier_atom_before_a_later_threshold", {"x": "int", "d": DEFINITIONS["drift_floor"]},
+     ["when x == True and d >= 0.001"]),
+    ("d7_membership_range_before_rounding", {"d": "fixed scale=100 rounding=floor min=0 max=100"},
+     ["when d in [5]"]),
+    ("d7_definitions_in_code_point_order", {"b": "int min=5 max=4", "a": "float"}, ["when a > 1"]),
+    ("d7_lowering_before_rule_six", {"c": "category absent=allowed", "x": "int"}, ["when x == \"s\""]),
+]
+
 
 def _route(graph, reading):
     return engine.first_deterministic(graph.nodes["s"].edges, reading)[0]

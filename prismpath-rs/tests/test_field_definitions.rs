@@ -65,13 +65,10 @@ fn a_refused_policy_is_disabled_and_the_engine_will_not_run_it() {
         assert!(graph.field_error.is_some(), "[{name}] parsed although the reference refuses it");
         // the refusal carries the reference's registered cause, and every problem's cause is registered
         assert_eq!(graph.field_error_cause, policy["cause"].as_str(), "[{name}] the first problem's cause");
-        // every cause the reference names is one the port names too (the port may name one more: its
-        // predicate parser refuses a sign outside the parentheses of an integer, `-(5)`, which the
-        // reference folds, so such a condition is also outside Level M by name in the port)
-        let got: std::collections::BTreeSet<&str> = graph.field_error_causes.iter().copied().collect();
-        for cause in policy["causes"].as_array().unwrap() {
-            assert!(got.contains(cause.as_str().unwrap()), "[{name}] the port does not name {cause}: {got:?}");
-        }
+        // every problem, in the core's order (docs/design/spec-verified-core.md, section 4), is the
+        // reference's: the same causes in the same order, so the first is the same refusal (D7)
+        let expected: Vec<&str> = policy["causes"].as_array().unwrap().iter().map(|cause| cause.as_str().unwrap()).collect();
+        assert_eq!(graph.field_error_causes, expected, "[{name}] the problems in the core's order");
         assert!(graph.field_error_causes.iter().all(|cause| prismpath_rs::causes::code(cause).is_some()), "[{name}] an unregistered cause");
         assert!(graph.nodes.values().flat_map(|node| node.edges.iter()).all(|(_target, cond)| cond == "never"), "[{name}] an edge stayed live");
         let outcome = run(&graph, |_node, _instruction, _state| Ok::<_, String>(Value::Null), RunOpts::default());

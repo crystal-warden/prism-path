@@ -1476,6 +1476,75 @@
    "causes": [
     "policy:threshold"
    ]
+  },
+  {
+   "name": "d7_atom_left_to_right_in_one_condition",
+   "flow": "---\nname: d7_atom_left_to_right_in_one_condition\nstart: s\nfield.x: int\n---\n## s\n-> hit: when x == 9007199254740992 and x == 2.5\n-> miss: else\n## hit\n## low\n## gone\n## miss\n",
+   "accepted": false,
+   "cause": "policy:threshold",
+   "causes": [
+    "policy:threshold",
+    "image:unknown-type"
+   ]
+  },
+  {
+   "name": "d7_decoding_before_a_definition",
+   "flow": "---\nname: d7_decoding_before_a_definition\nstart: s\nfield.x: int min=5 max=4\nfield.y: int\n---\n## s\n-> hit: when x == y\n-> miss: else\n## hit\n## low\n## gone\n## miss\n",
+   "accepted": false,
+   "cause": "image:unknown-type",
+   "causes": [
+    "image:unknown-type",
+    "policy:definition"
+   ]
+  },
+  {
+   "name": "d7_decoding_of_a_later_rule_before_lowering",
+   "flow": "---\nname: d7_decoding_of_a_later_rule_before_lowering\nstart: s\nfield.x: int\nfield.k: category\n---\n## s\n-> hit: when x == 2.5\n-> hit: when k < \"a\"\n-> miss: else\n## hit\n## low\n## gone\n## miss\n",
+   "accepted": false,
+   "cause": "image:unknown-op",
+   "causes": [
+    "image:unknown-op",
+    "image:unknown-type"
+   ]
+  },
+  {
+   "name": "d7_an_earlier_atom_before_a_later_threshold",
+   "flow": "---\nname: d7_an_earlier_atom_before_a_later_threshold\nstart: s\nfield.x: int\nfield.d: fixed scale=100 unit=celsius rounding=floor min=-5000 max=5000\n---\n## s\n-> hit: when x == True and d >= 0.001\n-> miss: else\n## hit\n## low\n## gone\n## miss\n",
+   "accepted": false,
+   "cause": "policy:kind-mismatch",
+   "causes": [
+    "policy:kind-mismatch",
+    "policy:threshold"
+   ]
+  },
+  {
+   "name": "d7_membership_range_before_rounding",
+   "flow": "---\nname: d7_membership_range_before_rounding\nstart: s\nfield.d: fixed scale=100 rounding=floor min=0 max=100\n---\n## s\n-> hit: when d in [5]\n-> miss: else\n## hit\n## low\n## gone\n## miss\n",
+   "accepted": false,
+   "cause": "policy:threshold",
+   "causes": [
+    "policy:threshold"
+   ]
+  },
+  {
+   "name": "d7_definitions_in_code_point_order",
+   "flow": "---\nname: d7_definitions_in_code_point_order\nstart: s\nfield.b: int min=5 max=4\nfield.a: float\n---\n## s\n-> hit: when a > 1\n-> miss: else\n## hit\n## low\n## gone\n## miss\n",
+   "accepted": false,
+   "cause": "policy:definition",
+   "causes": [
+    "policy:definition",
+    "policy:definition"
+   ]
+  },
+  {
+   "name": "d7_lowering_before_rule_six",
+   "flow": "---\nname: d7_lowering_before_rule_six\nstart: s\nfield.c: category absent=allowed\nfield.x: int\n---\n## s\n-> hit: when x == \"s\"\n-> miss: else\n## hit\n## low\n## gone\n## miss\n",
+   "accepted": false,
+   "cause": "policy:kind-mismatch",
+   "causes": [
+    "policy:kind-mismatch",
+    "policy:absence-untested"
+   ]
   }
  ]
 }

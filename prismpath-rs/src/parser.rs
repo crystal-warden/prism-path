@@ -96,7 +96,12 @@ pub struct Graph {
     /// The registered cause (prismpath/kernel/causes.py) of the first problem in `field_error`, as the
     /// reference's `FieldDefinitionError.cause` names it; `None` exactly when `field_error` is.
     pub field_error_cause: Option<&'static str>,
-    /// The registered cause of every problem in `field_error`, in the order they were found.
+    /// The field the first problem names, where its refusal names one (the oracle's `field`).
+    pub field_error_field: Option<String>,
+    /// The reason the first problem names, where its refusal names one (the oracle's `reason`).
+    pub field_error_reason: Option<&'static str>,
+    /// The registered cause of every problem in `field_error`, in the order of the core's checks
+    /// (docs/design/spec-verified-core.md, section 4): the first is `field_error_cause`.
     pub field_error_causes: Vec<&'static str>,
     /// Why the document could not be parsed at all, when it could not: it is over one of the `Limits`. Such a
     /// graph is empty, and the reference raises `ParseError` with this message instead of returning one.

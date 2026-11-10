@@ -88,7 +88,9 @@ fn main() {
                     // the registered cause of the first problem, and of every problem the port found
                     let cause = graph.field_error_cause;
                     serde_json::json!({"id": parts[1], "policy": "refused", "reason": reason, "cause": cause,
-                                       "code": cause.and_then(causes::code), "causes": graph.field_error_causes})
+                                       "code": cause.and_then(causes::code), "field": graph.field_error_field,
+                                       "policy_reason": graph.field_error_reason,
+                                       "causes": graph.field_error_causes})
                 }
                 None => {
                     let verdicts: Vec<serde_json::Value> = readings.iter().map(|bytes| reading_verdict(&graph, bytes)).collect();

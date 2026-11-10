@@ -7,8 +7,8 @@ the Python reference and the Rust port. The large run is the documented command
 
     python formal/diff/core_diff.py --cases 100000 --seed 1
 
-Every difference must be a reader gap, a scope difference, or one of the disagreements the
-specification records in section 9 (KNOWN below). A new kind of finding fails, and so does a
+Every difference must be a reader gap, a scope difference, a target limit, or one of the
+disagreements the specification records in section 9 (KNOWN below, empty since step 3). A new kind of finding fails, and so does a
 disagreement on any reading. The oracle is built by `lake build` in formal/; without it the test skips,
 unless PRISMPATH_REQUIRE_CORE_ORACLE is set, when a missing oracle is a failure.
 """
@@ -34,10 +34,9 @@ SEED = 7
 # bound to a defined flow), D2 (Rust bounded depth by its own measure) and D3 (Rust did not split a
 # definition on U+001F), are fixed in step 2: none is known any more, so each would fail this test.
 KNOWN = set()
-# D7: on a policy with several problems both sides refuse, each with a registered cause, but the leg's
-# own phases name another problem first than the specification's order (section 4). Any pair of causes.
-KNOWN_PREFIXES = ("policy-cause ",)
-
+# D7 is resolved in step 3: the reference and the Rust port name the first problem in the order of spec
+# section 4, the oracle's, so a policy both refuse for different causes is a finding like any other.
+KNOWN_PREFIXES = ()
 
 def _legs():
     if not core_diff.ORACLE.exists():
@@ -78,6 +77,7 @@ def test_every_difference_is_known(run):
 def test_no_reading_disagrees_and_nothing_crashes(run):
     legs, _lean, counts, _findings = run
     for leg in legs:
+        assert counts[leg]["finding:cause"] == 0, counts[leg]     # D7: one cause per refused policy
         assert counts[leg]["finding:reading"] == 0, counts[leg]
         assert counts[leg]["finding:crash"] == 0, counts[leg]
         assert counts[leg]["finding:harness"] == 0, counts[leg]
@@ -109,7 +109,7 @@ def test_the_second_tier_and_table_legs(run):
     for leg in ("c-interp", "c-hdr"):
         if leg in legs:
             assert counts[leg]["target-limit:compile"] > 0 and counts[leg]["target-limit:reading"] > 0, counts[leg]
-            assert not [key for key in counts[leg] if key.startswith("finding") and key != "finding:cause"], counts[leg]
+            assert not [key for key in counts[leg] if key.startswith("finding")], counts[leg]
 
 
 def test_the_run_reaches_every_stage(run):
@@ -157,3 +157,41 @@ def test_the_oracle_on_the_spec_example(tmp_path):
         {"verdict": "refuse", "cause": "route:contract-violation", "code": 37, "field": "error_rate", "reason": "missing"},
         {"verdict": "refuse", "cause": "reading:not-object", "code": 100},
     ]
+
+
+# D7 (spec section 4 and 9): policies with several problems, each refused for the first in the order of
+# section 4, with the cause the oracle proves (`Core.loadPolicy_first_problem`) and every leg names.
+D7_IMAGES = [
+    ({"x": "int"}, [["and", ["cmp", "x", "==", ["num", "9007199254740992"]], ["cmp", "x", "==", ["num", "2.5"]]]],
+     "policy:threshold"),
+    ({"x": "int min=5 max=4", "y": "int"}, [["cmp", "x", "==", ["field", "y"]]], "image:unknown-type"),
+    ({"x": "int", "k": "category"}, [["cmp", "x", "==", ["num", "2.5"]], ["cmp", "k", "<", ["str", "a"]]],
+     "image:unknown-op"),
+    ({"x": "int", "d": "fixed scale=100 rounding=floor"},
+     [["and", ["cmp", "x", "==", ["bool", True]], ["cmp", "d", ">=", ["num", "0.001"]]]], "policy:kind-mismatch"),
+    ({"d": "fixed scale=100 rounding=floor min=0 max=100"}, [["in", "d", [["num", 5]]]], "policy:threshold"),
+    ({"b": "int min=5 max=4", "a": "float"}, [["cmp", "a", ">", ["num", 1]]], "policy:definition"),
+    ({"c": "category absent=allowed", "x": "int"}, [["cmp", "x", "==", ["str", "s"]]], "policy:kind-mismatch"),
+    ({"x": "int"}, [["or", ["cmp", "ghost", "==", ["num", 1]], ["cmp", "x", "<", ["str", "a"]]]], "image:unknown-op"),
+]
+
+
+def test_d7_one_cause_per_refused_policy():
+    legs = _legs()
+    import json
+    cases = []
+    for index, (fields, conds, _cause) in enumerate(D7_IMAGES):
+        image = {"format": "prismpath.core/1", "fields": fields,
+                 "rules": [{"target": "hit", "when": cond} for cond in conds] + [{"target": "miss", "when": ["always"]}]}
+        for seed in range(8):
+            cases.append({"id": f"d7-{index}-{seed}", "image": json.dumps(image).encode(), "readings": [b"{}"],
+                          "render_seed": seed})
+    lean, results, counts, findings = core_diff.run(cases, legs)
+    for case in cases:
+        expected = D7_IMAGES[int(case["id"].split("-")[1])][2]
+        assert lean[case["id"]]["policy"]["cause"] == expected, (case["id"], lean[case["id"]]["policy"])
+    assert not findings, findings[:3]
+    for leg in legs:
+        if leg in core_diff.CODED:
+            for case in cases:
+                assert results[leg][case["id"]]["cause"] == lean[case["id"]]["policy"]["cause"], (leg, case["id"])

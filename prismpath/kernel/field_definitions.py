@@ -7,10 +7,11 @@ is the reference for everything a definition decides, and every other part of th
 rather than reimplementing a rule.
 
   * `definitions_of(meta)` parses the definitions out of the front matter.
-  * `apply_definitions(graph)` runs at parse time. It lowers every decimal literal compared with a
-    `fixed` field to the canonical integer, exactly, and then checks the policy rules. A flow that
-    breaks a rule raises FieldDefinitionError, so no engine run, codebook, table or pack is ever built
-    from it.
+  * `apply_definitions(graph)` runs at parse time. It checks the policy in the verified core's order
+    (`core_problems`, docs/design/spec-verified-core.md section 4) and then lowers every decimal literal
+    compared with a `fixed` field to the canonical integer, exactly. A flow that breaks a rule raises
+    FieldDefinitionError for the first problem in that order, so no engine run, codebook, table or pack
+    is ever built from it, and every implementation names the same cause.
   * `canonical_value(definition, raw)` is the one conversion from a source value to a canonical value,
     the function adapters call instead of writing their own numeric semantics.
   * `accept_canonical(definition, value)` is the boundary check on a value that should already be
@@ -216,9 +217,10 @@ def parse_definition(name: str, text: str) -> FieldDefinition:
 
 
 def definitions_of(meta: Dict[str, str]) -> Dict[str, FieldDefinition]:
-    """Every field definition in a flow's front matter, keyed by field name."""
-    return {key[len(FIELD_PREFIX):]: parse_definition(key[len(FIELD_PREFIX):], value)
-            for key, value in meta.items() if key.startswith(FIELD_PREFIX)}
+    """Every field definition in a flow's front matter, keyed by field name, parsed in code point order of
+    the names (spec section 2.5), so the first malformed one is the one the core names."""
+    return {key[len(FIELD_PREFIX):]: parse_definition(key[len(FIELD_PREFIX):], meta[key])
+            for key in sorted(meta) if key.startswith(FIELD_PREFIX)}
 
 
 # ----------------------------------------------------------------- exact decimals
@@ -524,235 +526,361 @@ def _atoms(node) -> List[Tuple[str, str, Any]]:
     return []
 
 
-def _atom_problem(definition: FieldDefinition, op: str, constant: Any) -> Optional[Problem]:
-    """Why one atom breaks its field's definition, or None when it agrees."""
-    kind, name = definition.kind, definition.name
-    members = constant if op in ("in", "not in") else (constant,)
-    if op in ("in", "not in") and any(member is None for member in members):
-        return Problem(f"field {name!r}: None may not appear in a list", "policy:none", name, "in-list")
-    if constant is None and op != "truthy":
-        if op not in ("==", "!="):
-            return Problem(f"field {name!r}: None is compared only by == or !=", "policy:none", name, "ordered")
-        if not definition.absent_allowed:
-            return Problem(f"field {name!r}: compared with None, but its definition refuses absence", "policy:none",
-                           name, "absence-refused")
-        return None
-    if kind == KIND_BOOL:
-        if op == "truthy" or (op in ("==", "!=") and isinstance(constant, bool)):
-            return None
-        return Problem(f"field {name!r}: a bool field is tested by truthiness or == and != with True or False",
-                       "policy:kind-mismatch", name)
-    if kind == KIND_CATEGORY:
-        if op == "truthy" or (op in ("==", "!=", "in", "not in")
-                              and all(isinstance(member, str) for member in members)):
-            return None
-        return Problem(f"field {name!r}: a category field is compared with strings by ==, !=, in and not in",
-                       "policy:kind-mismatch", name)
-    # int and fixed
-    if op != "truthy" and not all(isinstance(member, int) and not isinstance(member, bool)
-                                  for member in members):
-        return Problem(f"field {name!r}: a {kind} field is compared only with numbers", "policy:kind-mismatch", name)
-    if kind == KIND_FIXED and op not in _ROUNDING_OPERATORS[definition.rounding]:
-        allowed = " and ".join(sorted(_ROUNDING_OPERATORS[definition.rounding]))
-        written = "a bare truthiness test" if op == "truthy" else f"{op!r}"
-        return Problem(f"field {name!r}: rounding={definition.rounding} carries only {allowed}, so {written} "
-                       f"would not decide on the canonical value as it does on the source value", "policy:rounding", name)
-    if op != "truthy":
-        for member in members:
-            if not definition.minimum <= member <= definition.maximum:
-                return Problem(f"field {name!r}: the constant {member} is outside its range "
-                               f"{definition.minimum} to {definition.maximum}", "policy:threshold", name,
-                               "constant-range" if kind == KIND_INT else "out-of-range")
+# ----------------------------------------------------------------- the checks of a policy, in the core's order
+# docs/design/spec-verified-core.md, section 4, and the Lean semantics it defines (formal/Core/Policy.lean,
+# `loadPolicy`): a policy with several problems is refused for the FIRST, in one order, so every
+# implementation names the same cause (D7). The order has four phases:
+#
+#   1. decoding: rule by rule, each condition depth first and left to right, each atom its field name, then
+#      its operator, then its constant; a rule's depth after its whole condition decoded;
+#   2. the definitions, in code point order of their names;
+#   3. lowering: rule by rule, atom by atom, each atom against its field's definition;
+#   4. rule 6, the fields that allow absence, in code point order.
+#
+# Every problem is collected, in that order, so a refusal still names all of them for diagnostics
+# (`FieldDefinitionError.problems`); the first is the cause.
+
+_CORE_CMP = {ast.Lt: "<", ast.LtE: "<=", ast.Gt: ">", ast.GtE: ">=", ast.Eq: "==", ast.NotEq: "!="}
+_FLIP = {"<": ">", "<=": ">=", ">": "<", ">=": "<=", "==": "==", "!=": "!="}
+_ORDERING = frozenset({"<", "<=", ">", ">="})
+# the syntax the predicate language has (predicates._ALLOWED_NODES) and the sign written on a number
+_CORE_SYNTAX = (ast.Expression, ast.Constant, ast.Name, ast.Load, ast.BoolOp, ast.And, ast.Or, ast.UnaryOp, ast.Not,
+                ast.USub, ast.UAdd, ast.Compare, ast.Eq, ast.NotEq, ast.Lt, ast.LtE, ast.Gt, ast.GtE, ast.In,
+                ast.NotIn, ast.List, ast.Tuple)
+
+
+class _Refused(Exception):
+    def __init__(self, problem: Problem):
+        super().__init__(str(problem))
+        self.problem = problem
+
+
+def _outside(where: str, cond: str, cause: str, reason: str) -> _Refused:
+    return _Refused(Problem(f"{where}: {cond!r} is outside Level M ({reason}), and a flow that defines its fields "
+                            f"routes only on Level M conditions", cause, None, reason))
+
+
+def _signed_number(node):
+    """(sign, Constant) for a numeric literal with at most one sign written on it, or None."""
+    sign = 1
+    if isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.USub, ast.UAdd)):
+        sign = -1 if isinstance(node.op, ast.USub) else 1
+        node = node.operand
+    if isinstance(node, ast.Constant) and not isinstance(node.value, bool) and isinstance(node.value, (int, float)):
+        return sign, node
     return None
 
 
-# The Level M classifier's reasons (level_m.py) as the core's registered refusals (spec section 2.2):
-# an operator outside the fragment is image:unknown-op, a value type outside it image:unknown-type, and a
-# condition that is not an atom at all (a constant, a hard keyword) is outside Level M by name.
-_LEVEL_M_CAUSE = {
-    "string-ordering": "image:unknown-op",
-    "substring-in": "image:unknown-op",
-    "field-vs-field": "image:unknown-type",
-    "nested-container": "image:unknown-type",
-    "non-literal-collection": "image:unknown-type",
-    "constant-only": "policy:not-level-m",
-    "chained-comparison": "policy:shape",
-}
+def _decode_const(expr: str, node, where: str, cond: str):
+    """One constant of the core (spec section 2.3): ('int', n), ('dec', text, exact), ('bool', b), ('str', s)
+    or ('none',), or the decoding refusal (Lean `decodeConst`)."""
+    number = _signed_number(node)
+    if number is not None:
+        sign, constant = number
+        if isinstance(constant.value, int):
+            return ("int", sign * constant.value)
+        text = (ast.get_source_segment(expr, constant) or "").replace("_", "")
+        exact = decimal_fraction(text)
+        if exact is None:
+            raise _Refused(Problem(f"{where}: {cond!r}: the literal {text!r} has more digits than an exact threshold "
+                                   f"carries", "policy:threshold", None, "digits"))
+        return ("dec", text, sign * exact)
+    if isinstance(node, ast.Constant):
+        if node.value is None:
+            return ("none",)
+        if isinstance(node.value, bool):
+            return ("bool", node.value)
+        if isinstance(node.value, str):
+            return ("str", node.value)
+        raise _outside(where, cond, "image:unknown-type", "constant")
+    if isinstance(node, ast.Name):
+        raise _outside(where, cond, "image:unknown-type", "field-vs-field")
+    if isinstance(node, (ast.List, ast.Tuple)):
+        raise _outside(where, cond, "image:unknown-type", "nested-container")
+    raise _outside(where, cond, "image:unknown-type", "constant")
 
 
-def _float_literals(cond: str) -> Optional[List[str]]:
-    """The source text of every float literal of a deterministic condition, or None when it has no syntax
-    tree."""
-    from prismpath.kernel import predicates
-    if not predicates.is_deterministic(cond):
-        return None
-    expr = predicates._expr_of(cond)
-    tree = predicates.expr_ast(cond)
-    if tree is None:
-        return None
-    return [ast.get_source_segment(expr, node) or "" for node in ast.walk(tree)
-            if isinstance(node, ast.Constant) and isinstance(node.value, float)]
+def _decode_cond(expr: str, node, where: str, cond: str):
+    """A desugared condition as the core's abstract syntax (spec section 2.2), or the first decoding refusal
+    met depth first and left to right (Lean `decodeCond`)."""
+    if isinstance(node, ast.BoolOp):
+        tag = "and" if isinstance(node.op, ast.And) else "or"
+        return (tag, [_decode_cond(expr, value, where, cond) for value in node.values])
+    if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.Not):
+        return ("not", _decode_cond(expr, node.operand, where, cond))
+    if isinstance(node, ast.Name):
+        return ("truthy", node.id)
+    if isinstance(node, ast.Compare) and len(node.ops) == 1:
+        left, op, right = node.left, node.ops[0], node.comparators[0]
+        if isinstance(op, (ast.In, ast.NotIn)):
+            if not isinstance(left, ast.Name):
+                raise _outside(where, cond, "policy:not-level-m", "name")
+            tag = "in" if isinstance(op, ast.In) else "not in"
+            if isinstance(right, (ast.List, ast.Tuple)):
+                return (tag, left.id, [_decode_const(expr, element, where, cond) for element in right.elts])
+            raise _outside(where, cond, "image:unknown-op", "membership-not-in-a-list")
+        name = _CORE_CMP.get(type(op))
+        if name is None:
+            raise _outside(where, cond, "policy:not-level-m", "disallowed-or-unparseable")
+        if isinstance(left, ast.Name):
+            field_name, constant_node = left.id, right
+        elif isinstance(right, ast.Name):
+            field_name, constant_node, name = right.id, left, _FLIP[name]
+        else:
+            raise _outside(where, cond, "policy:not-level-m", "name")
+        constant = _decode_const(expr, constant_node, where, cond)
+        if name in _ORDERING and constant[0] == "str":
+            raise _outside(where, cond, "image:unknown-op", "string-ordering")
+        return ("cmp", field_name, name, constant)
+    if isinstance(node, ast.Constant):
+        raise _outside(where, cond, "policy:not-level-m", "name")
+    raise _outside(where, cond, "policy:not-level-m", "disallowed-or-unparseable")
 
 
-def _level_m_problem(name: str, cond: str, reason: Optional[str]) -> Problem:
-    cause = _LEVEL_M_CAUSE.get(reason or "")
-    if cause is None:
-        # disallowed-or-unparseable: a float constant on a field that is not fixed is a value type outside the
-        # fragment, or a threshold past the exact decimal bounds, which the core refuses whatever the field;
-        # anything else (a hard keyword as a name, syntax outside the grammar) is outside it by name
-        floats = _float_literals(cond) or []
-        if any(decimal_fraction(text.replace("_", "")) is None for text in floats):
-            return Problem(f"{name}: {cond!r} holds a decimal literal past the exact bounds", "policy:threshold", None,
-                           "digits")
-        cause = "image:unknown-type" if floats else "policy:not-level-m"
-    return Problem(f"{name}: {cond!r} is outside Level M ({reason}), and a flow that defines its fields routes "
-                   f"only on Level M conditions", cause, None, reason)
+def _core_depth(tree) -> int:
+    """The core's depth of a decoded condition (spec section 2.4, Lean `Cond.depth`)."""
+    tag = tree[0]
+    if tag in ("always", "never"):
+        return 0
+    if tag == "truthy":
+        return 1
+    if tag in ("cmp", "in", "not in"):
+        return 2
+    if tag == "not":
+        return 1 + _core_depth(tree[1])
+    return 1 + max(_core_depth(operand) for operand in tree[1])
 
 
-def fragment_problems(graph) -> List[Problem]:
-    """The problems of the flow's conditions that no definition can change (spec section 4, step 1): an
-    operator or value type outside the fragment, a name outside it, and a decimal literal past the exact
-    bounds. Reported beside a malformed definition, so a refusal names every cause the core could name
-    first. A decimal literal within the bounds is left to the definitions, since on a fixed field it is
-    lowered to an integer."""
+def decode_condition(cond: str, where: str = "core"):
+    """The core's abstract syntax of one deterministic condition (spec section 2.2), after the one
+    desugaring of chains, or the Problem that refuses it at decoding: phase 1 of section 4."""
     from prismpath.kernel import level_m, predicates
-    problems: List[Problem] = []
+    expr = predicates._expr_of(cond)
+    if expr.lower() in predicates.ALWAYS:
+        return ("always",)
+    if expr.lower() in predicates.NEVER:
+        return ("never",)
+    try:
+        tree = ast.parse(expr, mode="eval")
+    except (SyntaxError, ValueError):
+        return Problem(f"{where}: {cond!r} does not parse, and a flow that defines its fields routes only on "
+                       f"Level M conditions", "policy:not-level-m", None, "disallowed-or-unparseable")
+    for node in ast.walk(tree):
+        bad_sign = isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.USub, ast.UAdd)) \
+            and _signed_number(node) is None
+        bad_constant = isinstance(node, ast.Constant) and isinstance(node.value, (bytes, complex))
+        if not isinstance(node, _CORE_SYNTAX) or bad_sign or bad_constant:
+            return Problem(f"{where}: {cond!r} uses syntax outside the predicate language ({type(node).__name__})",
+                           "policy:not-level-m", None, "disallowed-or-unparseable")
+    try:
+        decoded = _decode_cond(expr, level_m._desugar_chains(tree.body), where, cond)
+    except _Refused as refused:
+        return refused.problem
+    if _core_depth(decoded) > predicates._MAX_DEPTH:
+        # SPEC section 4.1: a predicate nested beyond the bound is invalid. The Level M classifier has no depth
+        # bound, so until November 2026 a defined flow deeper than 50 loaded, and from depth 52 the evaluator's
+        # run time bound raised on every reading and the edge silently never matched (D1)
+        return Problem(f"{where}: {cond!r} is nested too deeply (> {predicates._MAX_DEPTH})", "policy:not-level-m",
+                       None, "depth")
+    return decoded
+
+
+def _carries(rounding: str, op: Optional[str]) -> bool:
+    """Whether a rounding mode carries an operator (rule 4); None stands for truthiness and membership."""
+    return op in _ROUNDING_OPERATORS[rounding] if op is not None else rounding == ROUNDING_EXACT
+
+
+def _threshold(definition: FieldDefinition, text: str, reason: str) -> Problem:
+    return Problem(f"field {definition.name!r}: the threshold {text} is {reason.replace('-', ' ')} for "
+                   f"{definition.canonical_text()!r}", "policy:threshold", definition.name, reason)
+
+
+def _lower_number(definition: FieldDefinition, constant) -> Optional[Problem]:
+    """A numeric constant of an int or fixed field against the field (Lean `lowerNum`)."""
+    name, tag = definition.name, constant[0]
+    if tag == "int":
+        value = constant[1] * definition.scale if definition.kind == KIND_FIXED else constant[1]
+        if not definition.minimum <= value <= definition.maximum:
+            return _threshold(definition, str(constant[1]), "out-of-range" if definition.kind == KIND_FIXED
+                              else "constant-range")
+        return None
+    if tag == "dec":
+        if definition.kind != KIND_FIXED:
+            return Problem(f"field {name!r}: the decimal {constant[1]} is a float, and a {definition.kind} field "
+                           f"compares integers", "image:unknown-type", None, "float")
+        scaled = constant[2] * definition.scale
+        if scaled.denominator != 1:
+            return _threshold(definition, constant[1], "off-grid")
+        if not definition.minimum <= scaled.numerator <= definition.maximum:
+            return _threshold(definition, constant[1], "out-of-range")
+        return None
+    return Problem(f"field {name!r}: a {definition.kind} field is compared only with numbers", "policy:kind-mismatch",
+                   name)
+
+
+def _rounding(definition: FieldDefinition, op: Optional[str]) -> Problem:
+    allowed = " and ".join(sorted(_ROUNDING_OPERATORS[definition.rounding]))
+    written = "a bare truthiness test or a membership" if op is None else f"{op!r}"
+    return Problem(f"field {definition.name!r}: rounding={definition.rounding} carries only {allowed}, so {written} "
+                   f"would not decide on the canonical value as it does on the source value", "policy:rounding",
+                   definition.name)
+
+
+def _atom_problem(definition: FieldDefinition, atom) -> Optional[Problem]:
+    """Why one decoded atom breaks its field's definition, or None (Lean `checkTruthy`, `checkCmp`,
+    `checkMem`, in their order)."""
+    kind, name, fixed = definition.kind, definition.name, definition.kind == KIND_FIXED
+    tag = atom[0]
+    if tag == "truthy":
+        return _rounding(definition, None) if fixed and not _carries(definition.rounding, None) else None
+    if tag == "cmp":
+        op, constant = atom[2], atom[3]
+        if constant[0] == "none":
+            if op not in ("==", "!="):
+                return Problem(f"field {name!r}: None is compared only by == or !=", "policy:none", name, "ordered")
+            if not definition.absent_allowed:
+                return Problem(f"field {name!r}: compared with None, but its definition refuses absence", "policy:none",
+                               name, "absence-refused")
+            return None
+        if kind in (KIND_BOOL, KIND_CATEGORY):
+            own = "bool" if kind == KIND_BOOL else "str"
+            if constant[0] == own and op in ("==", "!="):
+                return None
+            if constant[0] == "dec":
+                return Problem(f"field {name!r}: the decimal {constant[1]} is a float, and a {kind} field takes none",
+                               "image:unknown-type", None, "float")
+            return Problem(f"field {name!r}: a bool field is tested by truthiness or == and != with True or False"
+                           if kind == KIND_BOOL else
+                           f"field {name!r}: a category field is compared with strings by ==, !=, in and not in",
+                           "policy:kind-mismatch", name)
+        is_number = constant[0] in ("int", "dec")
+        if fixed and not _carries(definition.rounding, op) and is_number:
+            return _rounding(definition, op)
+        problem = _lower_number(definition, constant)
+        if problem is not None:
+            return problem
+        return _rounding(definition, op) if fixed and not _carries(definition.rounding, op) else None
+    members = atom[2]
+    if any(member[0] == "none" for member in members):
+        return Problem(f"field {name!r}: None may not appear in a list", "policy:none", name, "in-list")
+    for member in members:
+        if kind == KIND_CATEGORY and member[0] == "str":
+            continue
+        if kind in (KIND_INT, KIND_FIXED):
+            problem = _lower_number(definition, member)
+            if problem is not None:
+                return problem
+            continue
+        if member[0] == "dec":
+            return Problem(f"field {name!r}: the decimal {member[1]} is a float, and a {kind} field takes none",
+                           "image:unknown-type", None, "float")
+        return Problem(f"field {name!r}: a {kind} field is compared with {'strings' if kind == KIND_CATEGORY else 'True or False'} only",
+                       "policy:kind-mismatch", name)
+    return _rounding(definition, None) if fixed and not _carries(definition.rounding, None) else None
+
+
+def _core_atoms(tree):
+    """The atoms of a decoded condition, depth first and left to right."""
+    tag = tree[0]
+    if tag in ("always", "never"):
+        return []
+    if tag == "not":
+        return _core_atoms(tree[1])
+    if tag in ("and", "or"):
+        return [atom for operand in tree[1] for atom in _core_atoms(operand)]
+    return [tree]
+
+
+def _rules(graph):
+    """(where, condition) of every deterministic condition of the flow, in node order and edge order: the
+    rules of the core."""
+    from prismpath.kernel import predicates
     for name, node in graph.nodes.items():
         for _target, cond in node.edges:
-            if not predicates.is_deterministic(cond) or predicates.is_semantic(cond):
-                continue
-            member, reason = level_m.is_level_m(cond)
-            if member:
-                tree = predicates.expr_ast(cond)
-                depth_problem = _depth_problem(name, cond, tree) if tree is not None else None
-                if depth_problem is not None:
-                    problems.append(depth_problem)
-                continue
-            problem = _level_m_problem(name, cond, reason)
-            if _decided_without_definitions(problem, cond, reason):
-                problems.append(problem)
-    return problems
+            if predicates.is_deterministic(cond) and not predicates.is_semantic(cond):
+                yield name, cond
 
 
-def _depth_problem(name: str, cond: str, tree) -> Optional[Problem]:
-    """SPEC section 4.1: a predicate nested beyond the bound is invalid, by the reference's own static
-    measure (`predicates._depth`, spec section 2.4). The Level M classifier has no depth bound, so until
-    November 2026 a defined flow deeper than 50 loaded, and from depth 52 the evaluator's run time bound
-    raised on every reading and the edge silently never matched, a later rule routing instead (D1)."""
-    from prismpath.kernel import predicates
-    if predicates._depth(tree) > predicates._MAX_DEPTH:
-        return Problem(f"{name}: {cond!r} is nested too deeply (> {predicates._MAX_DEPTH})", "policy:not-level-m",
-                       None, "depth")
-    return None
-
-
-def _decided_without_definitions(problem: Problem, cond: str, reason: Optional[str]) -> bool:
-    """Whether a Level M problem stands before the definitions are known: not when the classifier only
-    objects to the syntax of a condition that holds decimal literals within the bounds, which on a fixed
-    field are lowered to integers first."""
-    return reason != "disallowed-or-unparseable" or problem.cause == "policy:threshold" or not _float_literals(cond)
-
-
-def policy_problems(graph, definitions: Dict[str, FieldDefinition], skip=frozenset()) -> List[Problem]:
-    """Every way the flow breaks the rules of SPEC section 4.5, in node order; empty when it obeys them.
-    Each problem is a Problem, a str carrying its registered cause. `skip` names (node, edge index) pairs
-    whose lowering already failed, so their unlowered constants are not reported a second time."""
-    from prismpath.kernel import level_m, predicates
+def core_problems(graph) -> List[Problem]:
+    """Every problem of a flow that defines its fields, in the order of spec section 4: the first is the one
+    the core refuses the policy for, the rest are diagnostics. Empty when the policy is checked."""
+    texts = {key[len(FIELD_PREFIX):]: value for key, value in graph.meta.items() if key.startswith(FIELD_PREFIX)}
     problems: List[Problem] = []
+    # phase 1: decoding, rule by rule
+    decoded = []
+    for where, cond in _rules(graph):
+        tree = decode_condition(cond, where)
+        if isinstance(tree, Problem):
+            problems.append(tree)
+        else:
+            decoded.append((where, cond, tree))
+    # phase 2: the definitions, in code point order of the names
+    definitions: Dict[str, FieldDefinition] = {}
+    for name in sorted(texts):
+        try:
+            definitions[name] = parse_definition(name, texts[name])
+        except FieldDefinitionError as error:
+            problems.extend(error.problems)
+    # phase 3: lowering, rule by rule and atom by atom
     tested_for_absence = set()
-    for name, node in graph.nodes.items():
-        for index, (_target, cond) in enumerate(node.edges):
-            if not predicates.is_deterministic(cond) or predicates.is_semantic(cond):
+    for where, cond, tree in decoded:
+        for atom in _core_atoms(tree):
+            field_name = atom[1]
+            if field_name in ENGINE_COUNTERS:
+                # the engine's registers: outside the core (spec section 1), routed by the flow engine
                 continue
-            unlowered = (name, index) in skip
-            member, reason = level_m.is_level_m(cond)
-            if not member and not unlowered:
-                problems.append(_level_m_problem(name, cond, reason))
-                continue
-            tree = predicates.expr_ast(cond)
-            if tree is None:
-                continue
-            depth_problem = _depth_problem(name, cond, tree)
-            if depth_problem is not None:
-                problems.append(depth_problem)
-                continue
-            if unlowered:
-                # lowering failed on this edge, so its fixed fields still hold decimal literals: report what
-                # the failure does not decide, the fragment problems no definition changes and the atoms on
-                # every field that is not fixed, and leave the fixed fields to the lowering's own problem
-                if not member:
-                    problem = _level_m_problem(name, cond, reason)
-                    if _decided_without_definitions(problem, cond, reason):
-                        problems.append(problem)
-                    continue
-                try:
-                    atoms = _atoms(level_m._desugar_chains(tree))
-                except (AttributeError, KeyError, IndexError):
-                    continue
-                for field_name, op, constant in atoms:
-                    definition = definitions.get(field_name)
-                    if field_name in ENGINE_COUNTERS or (definition is not None and definition.kind == KIND_FIXED):
-                        continue
-                    if definition is None:
-                        problems.append(Problem(f"{name}: {cond!r} reads {field_name!r}, which the flow does not "
-                                                f"define", "image:field-index-oob", field_name))
-                        continue
-                    problem = _atom_problem(definition, op, constant)
-                    if problem is not None:
-                        problems.append(Problem(f"{name}: {cond!r}: {problem}", problem.cause, problem.field,
-                                                problem.reason))
-                    if constant is None and op in ("==", "!="):
-                        tested_for_absence.add(field_name)
-                continue
-            for field_name, op, constant in _atoms(level_m._desugar_chains(tree)):
-                if field_name in ENGINE_COUNTERS:
-                    continue
-                definition = definitions.get(field_name)
-                if definition is None:
-                    problems.append(Problem(f"{name}: {cond!r} reads {field_name!r}, which the flow does not define",
+            definition = definitions.get(field_name)
+            if definition is None:
+                if field_name not in texts:
+                    problems.append(Problem(f"{where}: {cond!r} reads {field_name!r}, which the flow does not define",
                                             "image:field-index-oob", field_name))
-                    continue
-                problem = _atom_problem(definition, op, constant)
-                if problem is not None:
-                    problems.append(Problem(f"{name}: {cond!r}: {problem}", problem.cause, problem.field,
-                                            problem.reason))
-                if constant is None and op in ("==", "!="):
-                    tested_for_absence.add(field_name)
-    for field_name, definition in sorted(definitions.items()):
-        if definition.absent_allowed and field_name not in tested_for_absence:
+                continue
+            problem = _atom_problem(definition, atom)
+            if problem is not None:
+                problems.append(Problem(f"{where}: {cond!r}: {problem}", problem.cause, problem.field, problem.reason))
+            elif atom[0] == "cmp" and atom[3][0] == "none":
+                tested_for_absence.add(field_name)
+    # phase 4: rule 6, in code point order
+    for field_name in sorted(definitions):
+        if definitions[field_name].absent_allowed and field_name not in tested_for_absence:
             problems.append(Problem(f"field {field_name!r} allows absence but no edge tests it with == None or "
                                     f"!= None, so absence would only ever be observed by accident",
                                     "policy:absence-untested", field_name))
     return problems
 
 
+def policy_problems(graph) -> List[Problem]:
+    """Every way the flow breaks the rules of SPEC section 4.5, in the core's order; empty when it obeys
+    them. Each problem is a Problem, a str carrying its registered cause."""
+    return core_problems(graph)
+
+
 def apply_definitions(graph) -> None:
-    """Parse the flow's field definitions, lower its conditions in place, and refuse a flow that breaks
-    a rule. A flow with no definitions is left exactly as it was. The refusal names every problem, the
-    lowering's and the policy rules', each with its registered cause."""
-    try:
-        definitions = definitions_of(graph.meta)
-    except FieldDefinitionError as error:
-        problems = list(error.problems) + fragment_problems(graph)
-        raise FieldDefinitionError(str(error), cause=error.cause, field=error.field, reason=error.reason,
-                                   problems=problems) from None
-    graph.fields = definitions
-    if not definitions:
+    """Parse the flow's field definitions, check the policy in the core's order (spec section 4), lower its
+    conditions in place, and refuse a flow that breaks a rule. A flow with no definitions is left exactly as
+    it was. The refusal's cause is the first problem in that order; `problems` names every one, each with
+    its registered cause."""
+    if not any(key.startswith(FIELD_PREFIX) for key in graph.meta):
+        graph.fields = {}
         return
-    problems: List[Problem] = []
-    failed = set()
-    for name, node in graph.nodes.items():
-        lowered = []
-        for index, (target, cond) in enumerate(node.edges):
-            try:
-                lowered.append((target, lower_condition(cond, definitions)))
-            except FieldDefinitionError as error:
-                problems.extend(error.problems)
-                failed.add((name, index))
-                lowered.append((target, cond))
-        node.edges = lowered
-    problems += policy_problems(graph, definitions, failed)
+    problems = core_problems(graph)
+    if not problems:
+        definitions = definitions_of(graph.meta)
+        graph.fields = definitions
+        for name, node in graph.nodes.items():
+            lowered = []
+            for target, cond in node.edges:
+                try:
+                    lowered.append((target, lower_condition(cond, definitions)))
+                except FieldDefinitionError as error:
+                    # outside the core's syntax: a sign written outside parentheses, a literal between two scales
+                    problems.extend(Problem(f"{name}: {cond!r}: {problem}", problem.cause, problem.field,
+                                            problem.reason) for problem in error.problems)
+                    lowered.append((target, cond))
+            node.edges = lowered
     if problems:
         first = problems[0]
-        raise FieldDefinitionError("the flow breaks its field definitions: " + "; ".join(problems),
-                                   cause=first.cause, field=first.field, reason=first.reason, problems=problems)
+        message = str(first) if first.cause == "policy:definition" else \
+            "the flow breaks its field definitions: " + "; ".join(problems)
+        raise FieldDefinitionError(message, cause=first.cause, field=first.field, reason=first.reason,
+                                   problems=problems)

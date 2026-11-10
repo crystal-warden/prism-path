@@ -24,7 +24,7 @@ leg is an adapter around the implementation's own functions; no leg reimplements
 
 Each difference is classified. The legs that read canon/2 must refuse an unreadable image or reading
 with the oracle's rule; `reader-gap:<rule>` remains only for the two legs with no canon/2 reader. Scope
-differences, refusing kernels, target limits and D7's cause order are counted as such; anything else is
+differences, refusing kernels and target limits are counted as such; anything else is
 a finding, minimised to a small reproducer of the same kind.
 
     python formal/diff/core_diff.py --cases 100000 --seed 1          # the large run, every leg
@@ -687,7 +687,8 @@ def python_leg(cases):
             graph = parse(flow)
         except FieldDefinitionError as error:
             out[case["id"]] = {"policy": "refused", "reason": str(error)[:300], "cause": error.cause,
-                               "code": error.code, "causes": [problem.cause for problem in error.problems]}
+                               "code": error.code, "field": error.field, "policy_reason": error.reason,
+                               "causes": [problem.cause for problem in error.problems]}
             continue
         except ValueError as error:
             out[case["id"]] = {"policy": "refused", "reason": str(error)[:300], "cause": None, "code": None,
@@ -823,7 +824,7 @@ def table_leg(cases, variant):
             graph = parse(flow)
         except FieldDefinitionError as error:
             out[case["id"]] = {"policy": "refused", "reason": str(error)[:300], "cause": error.cause, "code": error.code,
-                               "causes": [problem.cause for problem in error.problems]}
+                               "field": error.field, "policy_reason": error.reason, "causes": [problem.cause for problem in error.problems]}
             continue
         except ValueError as error:
             out[case["id"]] = {"policy": "refused", "reason": str(error)[:300], "cause": None, "code": None, "causes": []}
@@ -908,7 +909,7 @@ def _uncoded(row) -> bool:
 
 
 def classify(lean_row, other, leg):
-    """[(class, detail)] for one case: 'agree', 'excluded:<why>', 'reader-gap:<rule>', 'cause-order' or
+    """[(class, detail)] for one case: 'agree', 'excluded:<why>', 'reader-gap:<rule>', 'scope:<what>', 'target-limit:<what>' or
     'finding:<what>'."""
     rows = []
     for verdict in [lean_row["policy"]] * (lean_row["policy"]["policy"] != "accepted") + lean_row["readings"]:
@@ -965,15 +966,21 @@ def _classify(lean_row, other, leg):
         if "cause" not in other or (leg not in CODED and other.get("cause") is None):
             return [("agree", "policy-refused")]
         if other.get("cause") == lean_policy["cause"]:
+            named = [(key, other_key) for key, other_key in (("field", "field"), ("reason", "policy_reason"))
+                     if lean_policy.get(key) and lean_policy["cause"] != "policy:unreadable"]
+            if leg in CODED and any(other.get(other_key) != lean_policy[key] for key, other_key in named):
+                # one cause per refused policy, and the first problem is the same problem: where the oracle's
+                # refusal names a field or a reason, every leg that speaks the registry names the same
+                return [("finding:cause", f"policy cause lean {lean_policy['cause']} {lean_policy.get('reason', '')} "
+                                          f"{lean_policy.get('field', '')} | leg {other.get('cause')} field "
+                                          f"{other.get('field')} {other.get('policy_reason')} {other.get('reason', '')[:120]}")]
             return [("agree", "policy-refused")]
-        if lean_policy["cause"] in other.get("causes", []):
-            # the leg finds the oracle's refusal too, but reports another of the policy's problems first: the
-            # reference checks definitions in front matter order and lowers before it classifies, where the
-            # specification fixes one order (section 4); the refusal is the same policy refused, for a cause
-            # the leg also names
-            return [("cause-order", f"{lean_policy['cause']} after {other.get('cause')}")]
-        # D7 (spec section 9): both refuse, each with a registered cause, but the leg's phases meet another of
-        # the policy's problems first and do not reach the one the specification's order names
+        if lean_policy["cause"] == "policy:engine-counter":
+            # the engine's registers are outside the core (spec section 1): the oracle refuses the policy for
+            # reading one, the reference and its ports route on them and name the policy's next problem
+            return [("scope:engine-counter", "policy")]
+        # D7, resolved (spec section 4 and 9): every leg names the first problem in the order of section 4,
+        # so a policy both refuse for different causes is a finding
         return [("finding:cause", f"policy cause lean {lean_policy['cause']} {lean_policy.get('reason', '')} "
                                   f"{lean_policy.get('field', '')} | leg {other.get('cause')} {other.get('causes')} "
                                   f"{other.get('reason', '')[:160]}")]
@@ -1090,6 +1097,9 @@ def minimise(case, leg, cls, kind=None):
 def finding_kind(detail: str) -> str:
     """A short stable name for a finding, so a large run reports how many of each it saw."""
     import re
+    if detail.startswith("policy cause lean ") and " field " in detail.split("| leg ", 1)[-1][:80]:
+        match = re.match(r"policy cause lean (\S+) ", detail)
+        return f"policy-field {match.group(1)}" if match else "policy-field"
     if detail.startswith("policy cause lean "):
         match = re.match(r"policy cause lean (\S+) .*\| leg (\S+) ", detail)
         return f"policy-cause {match.group(1)} vs {match.group(2)}" if match else "policy-cause"
