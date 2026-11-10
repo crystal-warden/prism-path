@@ -1,5 +1,5 @@
 name = "fq"
-defaultTargets = ["FQ", "Core"]
+defaultTargets = ["FQ", "Core", "core-oracle"]
 
 [[require]]
 name = "mathlib"
@@ -13,3 +13,9 @@ name = "FQ"
 # bridge to FQ.
 [[lean_lib]]
 name = "Core"
+
+# The oracle: the core's evaluator compiled to a program that reads canon/2 documents. It imports the
+# evaluator only, not Mathlib, so it links small.
+[[lean_exe]]
+name = "core-oracle"
+root = "Core.Main"

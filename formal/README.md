@@ -123,6 +123,10 @@ theorems on the standard three.
 | `boundary_canonical`, `accepted_quantization_preserves`, `core_reconstruct_route` | Bridge.lean | readings the core accepts are FQ canonical, so equal quantization gives equal verdicts and the decoded reading routes as the reading |
 | `scaled_correct`, `lowered_threshold_preserves` | Bridge.lean | a decimal threshold the core lowers decides on the canonical integer as the authored decimal on the source value |
 
+The oracle is that evaluator compiled: `lake build` also builds `core-oracle`, and
+`.lake/build/bin/core-oracle POLICY.json READING.json ...` prints one JSON line for the policy and one
+per reading (spec section 8); `--batch` serves the differential harness.
+
 ## Validation, and how to reproduce it
 
 ```bash
