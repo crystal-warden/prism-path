@@ -48,6 +48,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "facet-vector-sink"
+version = "0.1.0"
+dependencies = [
+ "prismpath-rs",
+ "prismpath-telemetry-rs",
+ "serde_json",
+]
+
+[[package]]
 name = "generic-array"
 version = "0.14.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -92,15 +101,18 @@ checksum = "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98"
 
 [[package]]
 name = "prismpath-rs"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
+ "hex",
+ "hmac",
  "serde",
  "serde_json",
+ "sha2",
 ]
 
 [[package]]
 name = "prismpath-telemetry-rs"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "hex",
  "hmac",
