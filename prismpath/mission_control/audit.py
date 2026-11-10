@@ -17,5 +17,9 @@ LOG = audit_log.AuditLog(SETTINGS.audit_path, instance_key=root_statement.key_fr
 
 
 def record(action, data):
-    """Append one control action under the single local operator."""
-    return LOG.append(ACTOR, action, data)
+    """Append one control action under the single local operator. The action's data is what the operator
+    sent (a sprint's configuration, a path), so a float in it is recorded as its decimal string, as
+    `canon.content_bytes` writes content, rather than refused by the canon/2 audit event."""
+    from prismpath import canon
+    from prismpath.kernel import canon2
+    return LOG.append(ACTOR, action, canon2.loads(canon.content_bytes(data, default=str)))

@@ -6,6 +6,53 @@ frozen conformance vectors that changes an existing case bumps the spec version,
 is the spec-change review. Pre-1.0, minor versions may break APIs; the flow *format* is already
 spec stable.
 
+## [Unreleased]
+
+### Changed, breaking: every hashed or signed document is canon/2 (2026-11-10)
+
+The rest of the system follows the verified core onto canon/2, the integer only JCS profile
+(docs/design/spec-verified-core.md, section 3.1; SPEC.md §8; docs/DICTIONARY.md "canon/2"). A document a
+writer hashes or signs now names `"encoding": "canon/2"`, is hashed over its canon/2 bytes, and is signed
+over the domain `prismpath.canon/2` and a zero byte before those bytes unless its format has a domain of its
+own. canon/1 is verify only: a document without the member is read and verified as it was written, and a
+test holds every call of a canon/1 encoder in Python and Rust to a named list of verify only readers
+(`prismpath/tests/test_canon2_migration.py`).
+
+- **Audit events** carry `ts_us`, an integer of microseconds since the epoch, instead of the float `ts`, and
+  `encoding`; each line is the event's canon/2 bytes, so non ASCII text is raw UTF-8 and no longer `\u`
+  escaped. A data value with a float is refused (`AuditWriteError`), never converted. A log may hold old and
+  new events; each leaf is hashed under the encoding its event names, so an anchored root over old leaves
+  still verifies. `trail` reads either time. Mission Control records an operator's control data as content,
+  a float in it as its decimal string.
+- **Root statements** are `prismpath-root-statement/2`: canon/2, `encoding`, the integer `time_us` instead
+  of the ISO `time`, the domain `prismpath-root-statement/2`. A `/1` statement still verifies, and a chain may
+  move from `/1` to `/2`. A receipt bundle whose receipt or statement names another encoding is `invalid`
+  with a `problem`.
+- **Pack manifests, envelopes, flow manifests and the crypto registry** are tagged and signed over the canon/2
+  domain, and their files are their canon/2 bytes. A canon/1 pack, envelope, flow manifest or registry whose
+  signature verifies still loads, until canon/1 signing is retired; a canon/2 one holding a float is
+  `manifest:bad-format`. The registry hash, and so every frozen `registry_hash`, changed.
+- **The policy host's intent and active records**, the **epoch journal**'s chain, gap and acknowledgment
+  records and data files, **attestation and OpenTimestamps manifests**, the stamp request and proof bundle
+  records, and the **lock file** (its `delta` and `centroid_prior_weight` as decimal strings) are canon/2;
+  older untagged ones still read.
+- **The acknowledgment tag** is HMAC over the canon/2 domain and the tagged pair, so an edge and a ground
+  station must both be on this version.
+- **Content hashes** of data PrismPath did not write (a connector's ingestion and knowledge hashes, a
+  decision's outcome root, a composer item id, a ledger proof, the compliance adapter's catalog, weight and
+  determination hashes) are over `canon.content_bytes`: canon/2 with a float as its shortest decimal string.
+  Every such hash, and so every composer checkpoint name keyed by one, changed.
+- **Corpora.** `host_trace.json`, `hotswap.json`, `receipts.json` (301 cases, with a log and a chain that cross
+  the migration), `crypto_agility.json`, `crypto_migration.json`, `durable.json`, `connector.json` and
+  `context.json` were regenerated through their generators. `receipts_canon1.json` (287 cases) and
+  `hotswap_canon1.json` are the frozen canon/1 twins, never regenerated and replayed by the same Python and
+  Rust tests; `canonical.json` stays as the canon/1 reader's vectors beside `canon2.json`.
+- **Not moved**, each for a stated reason in the spec's section 3.1: the receipt stream's wire frames (binary
+  Zeckendorf, no JSON is hashed), a durable run checkpoint (state, not hashed or signed, whose values may be
+  floats a resume must see unchanged), the flow authority's version floor file and the sink's JSONL records
+  (state and output, not hashed), and the comparison harnesses under `prismpath/comparisons/` (models of
+  other systems).
+
 ## [0.1.3] (not yet uploaded)
 
 The first upload to PyPI since 0.1.0: it carries everything listed under 0.1.2 below, which was tagged but

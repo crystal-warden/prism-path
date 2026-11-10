@@ -69,7 +69,8 @@ and your own `root_at`). The instance key and the authority key must stay apart:
 signs or runs anything, as Python's `run` does.
 
 **What enforces agreement.** `prismpath/portable/conformance/receipts.json` is a frozen vector set
-written by `prismpath/portable/gen_receipt_fixtures.py` from the Python reference (287 cases: the
+written by `prismpath/portable/gen_receipt_fixtures.py` from the Python reference (301 canon/2 cases, beside the
+287 of its frozen canon/1 twin `receipts_canon1.json`, which is replayed the same way: the
 canonical JSON bytes, the tree, valid and tampered audit trails, receipt bundles with 0.1.3's checks (`status`, `index`, `covered`, and the `problem` for a malformed bundle), flow manifests, the
 version floor, the key separation). It is reproducible byte for byte, `prismpath/tests/test_receipt_vectors.py`
 refuses drift and replays it through Python, and `tests/test_receipt_verify.rs` replays it through
@@ -93,16 +94,19 @@ Rust function returns an `invalid` result with the same `problem` text (`bundle_
 `Err`. `Err` is left for the cases where the reference still raises, a statement whose `key_id` is not
 text, or is a list or object while a key is pinned.
 
-**The number reading.** Documents are read as `prismpath.canon.loads` reads them: the literals `NaN` and
-`Infinity` and a number beyond the double range are refused (an event holding one is a skipped log line, a
-statement holding one is unreadable, and a manifest holding one is `manifest:bad-format`, all reported),
-and an integer of any width is kept and written digit for digit. Floats are written as Python's `repr` writes
-them (`prismpath_rs::durable::py_float_repr`), and the crate reads them with serde_json's
-`float_roundtrip`, so a receipt's `ts` hashes to the same leaf on both sides.
+**The number reading.** Documents are read as `prismpath.canon.loads_document` reads them: the literals
+`NaN` and `Infinity` and a number beyond the double range are refused (an event holding one is a skipped log
+line, a statement holding one is unreadable, and a manifest holding one is `manifest:bad-format`, all
+reported), and a document that names canon/2 is read by the strict canon/2 reader as well, which refuses any
+float, a duplicate key and an integer beyond plus or minus 2^53 minus 1. A canon/2 document is hashed over
+its canon/2 bytes (`prismpath_rs::durable::document_bytes`); an untagged one, written before the migration,
+over its canon/1 compact bytes, with floats as Python's `repr` writes them
+(`prismpath_rs::durable::py_float_repr`) and read with serde_json's `float_roundtrip`, so an old receipt's
+float `ts` still hashes to the same leaf on both sides.
 
 **What it does not do.** It does not sign, create or load private keys for statements or manifests,
 write an audit log or a statements file, check an OpenTimestamps or RFC 3161 anchor, or decide when
-a root was signed (the statement's `time` is the signer's clock). The writers in other ports
+a root was signed (the statement's `time_us` is the signer's clock). The writers in other ports
 (telemetry epochs, eBPF receipt sealing, the mesh firmware, the Rust, Go and JavaScript kernels) do
 not yet produce root statements; see the changelog.
 

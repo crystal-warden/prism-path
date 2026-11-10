@@ -413,6 +413,17 @@ The vectors are regenerated only from the reference implementation, deterministi
 version bump accompanies any regeneration that changes an existing case. New cases may be added
 within a version.
 
+**Signed and hashed documents.** Every document an implementation writes that is hashed or signed (an
+audit event and its Merkle leaf, a root statement, a pack or flow manifest, an envelope, a crypto
+registry, an attestation or OpenTimestamps manifest, a lock, the policy host's intent and active records,
+the epoch journal's records) is canon/2 (docs/DICTIONARY.md "canon/2") and names it with
+`"encoding": "canon/2"`; its hash is sha256 over its canon/2 bytes and a signature over it covers the
+domain `prismpath.canon/2` followed by a zero byte and those bytes, unless its format names a domain of
+its own (`prismpath-root-statement/2`). A reader decides by the document's own tag: canon/2 is read by the
+strict canon/2 reader, a document without the member is canon/1 and is read only to verify what was
+signed, hashed or anchored before the migration, and any other tag is refused. An implementation MUST
+NOT write canon/1. A time in such a document is an integer count of microseconds since the Unix epoch.
+
 ---
 
 *This spec follows the reference implementation in this repository. Where prose and vectors

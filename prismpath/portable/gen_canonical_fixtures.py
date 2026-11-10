@@ -1,9 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
-"""Freeze cross-language CANONICAL JSON vectors: the exact bytes `prismpath.canon` writes, which
-every pack signature, envelope signature, audit leaf, attestation manifest and connector content hash
-is computed over. Every expected string is produced by RUNNING `canon.canonical_compact` and
-`canon.canonical_spaced`, so a port is measured against what Python actually writes.
+"""Freeze cross-language CANONICAL JSON vectors for canon/1: the exact bytes `prismpath.canon` wrote,
+before the canon/2 migration, for every pack signature, envelope signature, audit leaf, attestation
+manifest and connector content hash. canon/1 is now verify only: it is the reader of documents that do
+not name canon/2, and nothing writes it. What is written now is canon/2, whose vectors are
+`conformance/canon2.json` (`gen_canon2_fixtures.py`). Every expected string here is produced by RUNNING
+`canon.canonical_compact` and `canon.canonical_spaced`, so a port that verifies an old document is
+measured against what Python wrote.
 
     python prismpath/portable/gen_canonical_fixtures.py   ->  conformance/canonical.json
 
