@@ -46,7 +46,7 @@ def _legs():
     legs = ["python"]
     if core_diff.rust_binary().exists() or shutil.which("cargo"):
         legs.append("rust")
-    for leg, tool in (("js", "node"), ("go", "go"), ("c-interp", "cc"), ("c-hdr", "cc")):
+    for leg, tool in (("js", "node"), ("go", "go"), ("c-interp", "cc"), ("c-hdr", "cc"), ("ebpf", "cc")):
         if shutil.which(tool):
             legs.append(leg)
     missing = set(core_diff.ALL_LEGS) - set(legs)
@@ -98,18 +98,20 @@ def test_every_refusal_carries_a_registered_code(run):
 
 def test_the_second_tier_and_table_legs(run):
     """D5: the JavaScript and Go kernels refuse every flow that defines its fields and agree elsewhere,
-    differing only by reader gaps (they have no canon/2 reader). D6: the C table targets route every
-    compiled policy's readings as the oracle does, and the compiler's 32 bit limit shows only as a
-    refusal (target-limit), never as a different route."""
+    differing only by reader gaps (they have no canon/2 reader). D6: the C table targets and the eBPF
+    evaluator (on its userspace path) route every compiled policy's readings as the oracle does, and the
+    compiler's 32 bit limit and the eBPF loader's declared subset show only as refusals (target-limit),
+    never as a different route."""
     legs, _lean, counts, _findings = run
     for leg in ("js", "go"):
         if leg in legs:
             assert counts[leg]["refusing-kernel"] > 0 and counts[leg]["agree"] > 0, counts[leg]
             assert not [key for key in counts[leg] if key.startswith("finding")], counts[leg]
-    for leg in ("c-interp", "c-hdr"):
+    for leg in ("c-interp", "c-hdr", "ebpf"):
         if leg in legs:
             assert counts[leg]["target-limit:compile"] > 0 and counts[leg]["target-limit:reading"] > 0, counts[leg]
             assert not [key for key in counts[leg] if key.startswith("finding")], counts[leg]
+            assert counts[leg]["agree"] > CASES, counts[leg]
 
 
 def test_the_run_reaches_every_stage(run):

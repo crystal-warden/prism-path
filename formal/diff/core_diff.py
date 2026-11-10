@@ -3,7 +3,7 @@
 """Differential harness for the verified policy core (docs/design/spec-verified-core.md, section 8).
 
 One generator writes random policy images and readings, well formed and malformed, biased toward
-boundaries. Each case runs through the oracle and up to six legs (spec section 8 has the table):
+boundaries. Each case runs through the oracle and up to seven legs (spec section 8 has the table):
 
   * lean:     the oracle compiled from the Lean semantics (`formal/.lake/build/bin/core-oracle --batch`);
   * python:   the reference, composed as the frozen field definition vectors compose it: `parser.parse`
@@ -15,7 +15,11 @@ boundaries. Each case runs through the oracle and up to six legs (spec section 8
   * js, go:   the second tier kernels (`formal/diff/core_diff_js.mjs`, `prismpath-go/cmd/core_diff`), which
               refuse every flow that defines its fields (D5) and read readings with their runtime's JSON;
   * c-interp, c-hdr: the table targets: the reference as host, `prismpath-hw/ppt_compile.py`, and the
-              certified C evaluators `interp.c` and `ppt_eval.h` through `formal/diff/ppt_batch.c` (D6).
+              certified C evaluators `interp.c` and `ppt_eval.h` through `formal/diff/ppt_batch.c` (D6);
+  * ebpf:     the eBPF table target on its userspace path: the same host and compiler, the loader's parser
+              (`prismpath-ebpf/ppt_image.c`) and the in-kernel evaluator's own text
+              (`prismpath-ebpf/ppt_eval_bpf.h`) over a shim of its maps and `bpf_loop`
+              (`formal/diff/ebpf_batch.c`).
 
 The image is a canon/2 document in the core's abstract syntax. The kernels read flows, not images, so
 this module renders a well formed image to the flow text it means (`render`); an image that has no
@@ -56,12 +60,12 @@ START = "core_decision"
 # canon/2 document rules a leg without a canon/2 reader does not apply: for such a leg (READS_CANON2
 # false) a difference that is only one of these is a reader gap, not a finding (spec section 3)
 READER_GAP = {"float", "integer-range", "negative-zero", "duplicate-key", "depth"}
-READS_CANON2 = {"python": True, "rust": True, "c-interp": True, "c-hdr": True}
+READS_CANON2 = {"python": True, "rust": True, "c-interp": True, "c-hdr": True, "ebpf": True}
 # the second tier kernels read readings with their runtime's JSON (D5), which also accepts a lone
 # surrogate escape (replacing it, in Go)
 READER_GAP_SECOND_TIER = READER_GAP | {"lone-surrogate"}
 # the legs whose refusals speak the cause registry (the second tier kernels do not)
-CODED = {"python", "rust", "c-interp", "c-hdr"}
+CODED = {"python", "rust", "c-interp", "c-hdr", "ebpf"}
 
 ALWAYS = {"always", "true", "else", "otherwise", "default", "_"}
 NEVER = {"false", "never"}
@@ -756,6 +760,13 @@ def _tool(name: str) -> Path:
         # interp.c's CLI modes are unused without its main, so its own warnings are not made errors here
         subprocess.run(["cc", "-O2", "-std=c11", "-Wall", "-Wextra", "-Wno-unused-function", "-Werror", "-I", str(hw),
                         "-DPPT_INTERP_NO_MAIN", "-o", str(out), str(driver), str(hw / "interp.c")], check=True)
+    elif name == "ebpf":
+        # the in-kernel evaluator's text on its userspace path (formal/diff/ebpf_batch.c says why); its
+        # `#pragma unroll` is clang's, which gcc ignores
+        ebpf = ROOT / "prismpath-ebpf"
+        subprocess.run(["cc", "-O2", "-std=gnu11", "-Wall", "-Wextra", "-Wno-unknown-pragmas", "-Werror", "-I", str(ebpf),
+                        "-o", str(out), str(ROOT / "formal" / "diff" / "ebpf_batch.c"), str(ebpf / "ppt_image.c")],
+                       check=True)
     else:
         raise KeyError(name)
     _TOOLS[name] = out
@@ -891,13 +902,17 @@ def table_leg(cases, variant):
                     verdicts[index] = {"verdict": "route", "target": labels[int(answer.split()[1])]}
                 elif answer == "n":
                     verdicts[index] = refuse("route:no-matching-edge")
+                elif answer == "e limits":
+                    # a table outside the eBPF target's declared subset, refused by its loader: a target limit
+                    verdicts[index] = {"verdict": "refuse", "cause": "target-limit", "reason": "subset"}
                 else:
                     verdicts[index] = {"verdict": "refuse", "cause": "target-error", "reason": answer}
     return out
 
 
 LEGS = {"python": python_leg, "rust": rust_leg, "js": js_leg, "go": go_leg,
-        "c-interp": lambda cases: table_leg(cases, "c-interp"), "c-hdr": lambda cases: table_leg(cases, "c-hdr")}
+        "c-interp": lambda cases: table_leg(cases, "c-interp"), "c-hdr": lambda cases: table_leg(cases, "c-hdr"),
+        "ebpf": lambda cases: table_leg(cases, "ebpf")}
 ALL_LEGS = tuple(LEGS)
 
 
@@ -993,12 +1008,17 @@ def _classify(lean_row, other, leg):
             rows.append(("finding:policy-check", f"lean {lean_v['policy_check']} vs leg none"))
         if b[0] == "crash":
             rows.append(("finding:crash", b[1]))
+        elif b[0] == "policy" and b[1] == "target-limit" and other_v.get("reason") == "subset":
+            # the eBPF loader admits only its declared subset (an operand stack of 4, 64 edges per node, 64
+            # words per edge, 32 fields: prismpath-ebpf/ppt_image.c, check_evaluator_limits) and refuses the rest
+            rows.append(("target-limit:subset", f"lean {a}"))
         elif b[0] == "policy" and b[1] == "target-limit":
             # D6 on a reading: a value the 32 bit registers cannot hold is refused by the register encoder
             rows.append(("target-limit:reading", f"lean {a}"))
         elif b[0] == "policy" and b[1] == "target-error" and other_v.get("reason") == "e stack" and leg == "c-interp":
             # interp.c's operand stack is 64 deep and it exits on overflow; the driver refuses such an image
             rows.append(("target-limit:stack", f"lean {a}"))
+
         elif a == b or (a[0] == b[0] == "unreadable" and not READS_CANON2.get(leg, False)):
             rows.append(("agree", a[0]))
         elif a[0] == "unreadable" and a[1] in READER_GAP_SECOND_TIER and not READS_CANON2.get(leg, False):
