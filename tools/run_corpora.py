@@ -61,8 +61,8 @@ def cargo(package, test, evidence):
     return ("cargo", package, test, evidence)
 
 
-NONE_JS = ("none", "no JavaScript consumer: the port covers the kernel, Level M, reach, capability and crypto agility only")
-NONE_GO = ("none", "the Go kernel covers the predicate and flow corpora and the field definitions refusal only")
+NONE_JS = ("none", "no JavaScript consumer: the port covers the kernel, Level M, reach, capability, crypto agility and canon/2 only")
+NONE_GO = ("none", "the Go kernel covers the predicate and flow corpora, the field definitions refusal and canon/2 only")
 NONE_HW = ("none", "the C target certifies the declared subset of the predicate and flow corpora only")
 NONE_REPRO = ("none", "recorded Python bytes are the reference: the Rust test reads this corpus, Python writes it")
 
