@@ -370,11 +370,33 @@ accepts with the same Facet quantization get the same verdict (from `FQ.absence_
 field decides on the canonical integer of any rational source value as the authored decimal decides on
 the source value (from `FQ.Conversion.convert_preserves`).
 
+**The two checks of a reading** (`Core/Boundary.lean`, step 2, section 6.1).
+`policyCheck_of_systemBoundary`: a reading the system boundary accepts passes the policy check.
+`systemBoundary_of_policyCheck`: a reading the policy check refuses the system boundary refuses, so the
+system boundary is at least as strict on every reading. `policyCheck_refuses_routed`: a policy check
+refusal names a defined field some rule reads, with the definition's own reason.
+`policyCheck_eq_systemBoundary`: on a policy that routes on every field it defines, the two checks are
+the same function. `route_depends_on_routed`: two readings the system boundary accepts that hold the
+same values on the routed fields get the same verdict (from `evalC_congr_on` and
+`firstMatch_congr_on`, a condition's truth depends only on the fields it reads).
+
+**Every refusal carries a registered code** (`Core/Codes.lean`, step 2, section 5).
+`refusal_registered`: the (code, name) of every refusal, of every one of the thirteen policy refusals
+and the four reading refusals, is a row of the registry generated from `prismpath/kernel/causes.py`
+(`Core/Causes.lean`). `refusal_code_ne_zero`: no refusal carries 0, the code of a clean decision.
+`registry_codes_distinct` and `refusal_name_of_code`: the registry gives each code one name, so a code
+alone names the cause. `verdict_refusal_registered`: whatever the inputs, a refused verdict carries a
+registered nonzero code. The proofs are `decide` over the generated list, so a spelling that drifts from
+the registry, or a registry regenerated without a row the core uses, fails the build.
+
 **Not proven, stated as plainly.** That any implementation computes `verdict`: Python, Rust and the
 other targets are *conformant* to the oracle by differential testing (section 8), not proven. The
 order of the image's `fields` members does not change a verdict, because definitions are read in
 sorted order, but the uniqueness of that sort is not yet a theorem. The FQ bridge theorems take FQ's
-partitions as FQ defines them; the quantizer's code is held to those by FQ's own bridge vectors.
+partitions as FQ defines them; the quantizer's code is held to those by FQ's own bridge vectors. That
+the reference names the oracle's first cause on a policy with several problems (D7): it names one of
+them, which the harness checks, not the first in the order of section 4. The canon/2 readers of Python
+and Rust are held to the Lean reader by the frozen vectors and the differential, not by proof.
 
 ## 8. The oracle and the differential harness
 
