@@ -21,7 +21,7 @@ PrismPath is an open-source framework that treats **agent workflows as data**. O
 ### Phase 1: Core Specification & Multi-Language Kernels (Complete)
 
 - [x] **Spec Version 1 (Draft)**: Normative definition of grammar, edge tiers, sandbox predicates, engine contracts, and portability levels ([`SPEC.md`](SPEC.md)).
-- [x] **Frozen Conformance Vectors**: 1,079 predicate cases and 27 engine fixtures checked deterministically across implementations ([`portable/conformance/`](prismpath/portable/conformance/README.md)).
+- [x] **Frozen Conformance Vectors**: 1,112 predicate cases and 107 engine fixtures checked deterministically across implementations ([`portable/conformance/`](prismpath/portable/conformance/README.md)).
 - [x] **JavaScript Portable Kernel**: Dependency-free ES module (`prismpath/portable/prismpath.mjs`) and interactive browser playground ([`portable/playground.html`](prismpath/portable/playground.html)).
 - [x] **Reference Rust Kernel (`prismpath-rs`)**: Certified conformant core kernel running natively on ARM64 and x86_64.
 - [x] **Go Portable Kernel (`prismpath-go`)**: Lightweight dependency-free Go runtime passing 100% of conformance vectors.

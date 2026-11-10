@@ -1,4 +1,3 @@
 vector_out.ndjson
 vector-data/
 target/
-Cargo.lock

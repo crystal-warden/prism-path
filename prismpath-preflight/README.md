@@ -9,7 +9,7 @@ contract. This binary runs on the exact crates the Vector codec is built from
 (`prismpath-telemetry-rs`, `prismpath-rs`), so what it reports is what the codec will do, by
 construction.
 
-**One documented difference, on purpose.** The Rust value model coerces a non numeric string on a
+**One documented difference, on purpose** (the other Rust differences are in `DIVERGENCES.md` at the repository root). The Rust value model coerces a non numeric string on a
 numeric field to 0 where the Python reference errors; this tool surfaces that as its own finding.
 Running both tools on one sample is a free differential test of the whole stack.
 

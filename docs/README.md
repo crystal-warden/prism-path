@@ -39,6 +39,7 @@ solved routing", "logic as data is a rules engine"), answered with the concessio
 
 | doc | what it covers |
 |---|---|
+| [rust-lockfiles.md](design/rust-lockfiles.md) | where a Cargo lockfile is committed and where it is not, and how the minimum supported Rust version is declared and built |
 | [orchestration.md](design/orchestration.md) | the reference deployment: the sprint loop, gates as the definition of done, Mission Control, the worked example |
 | [architecture.md](design/architecture.md) | the flow kernel, the portable kernels, the orchestration layer, and the gate-plugin seam |
 | [framework.md](design/framework.md) | the operating methodology: spec per module, gates as the definition of done, the hard won lessons |

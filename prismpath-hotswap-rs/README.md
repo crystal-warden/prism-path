@@ -1,7 +1,8 @@
 # prismpath-hotswap-rs
 
 The secure policy hot swap, natively: Ed25519 signed policy packs, envelope bounded image
-validation, and the atomic, audited PolicyHost.
+validation, and the atomic, audited PolicyHost. `DIVERGENCES.md` at the repository root lists the places
+where it answers differently from the Python host on purpose.
 
 **What it mirrors.** `prismpath/hotswap/policy_pack.py` (the Authorized and Envelope bounded gates) and
 `prismpath/hotswap/policy_host.py` (the Attested and Audited and atomic host), per

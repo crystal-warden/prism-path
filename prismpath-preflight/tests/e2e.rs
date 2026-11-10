@@ -217,3 +217,16 @@ fn a_line_with_a_non_finite_or_overflowing_number_or_a_lone_surrogate_is_not_an_
     assert_eq!(rep["bad_json"], 6);
     assert_eq!(rep["encoded"], 2);
 }
+
+#[test]
+fn example_values_are_shown_as_python_writes_them() {
+    // The Python report prints an example value with `repr`: 'yes' with its quotes, not the value model's
+    // debug text (`Str("yes")`).
+    let (_dir, flow, sample, _out) = setup("repr", &[
+        r#"{"temp": 95, "armed": true}"#, r#"{"temp": "yes", "armed": true}"#, r#"{"temp": 60, "armed": "x"}"#]);
+    let result = run(&[flow.to_str().unwrap(), sample.to_str().unwrap()]);
+    let text = String::from_utf8_lossy(&result.stdout).to_string();
+    assert!(text.contains("(example value: 'yes')"), "{text}");
+    assert!(text.contains("(example value: 'x')"), "{text}");
+    assert!(!text.contains("Str("), "{text}");
+}
