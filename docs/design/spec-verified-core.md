@@ -3,7 +3,7 @@
 *Specification of the narrow core PrismPath proves once and every implementation is held to: one
 decision of a match action policy over integers, booleans and strings, with the signed field
 definitions that say what each integer means. November 2026, research line, branch `verified-core`;
-step 2 on `verified-core-2`.*
+step 2 on `verified-core-2`, step 3 on `verified-core-3`.*
 
 This document defines the core precisely enough that its Lean semantics (`formal/Core`), the oracle
 compiled from it, and the differential harness that holds the other implementations to it all refer
@@ -39,7 +39,8 @@ settle, not behaviours to prove around.
   (section 8) is one such front end.
 - Signatures, envelopes, receipts, the `.ppt` table image and the table targets. The table image is a
   compilation target of the core (step 2, section 10), and a table target's narrower integer range
-  (`int-out-of-i32`, SPEC.md section 4.3) is a target limit, not a rule of the core.
+  (`int-out-of-i32`, SPEC.md section 4.3) is a target limit, not a rule of the core. The evidence a
+  differential run writes (section 11) signs and receipts the core's decisions; it changes none of them.
 - Floats of any kind. The core has none, in the image, in readings, or in its arithmetic.
 
 ## 2. Abstract syntax
@@ -119,7 +120,9 @@ The depth of a condition is the depth the reference's static check measures on i
 (`predicates._depth`, `predicates.py:179-182`, applied at `predicates.py:169`): `truthy` 1, every
 comparison and membership 2, `not c` one more than `c`, `and`/`or` one more than its deepest operand,
 the keywords 0. A condition deeper than 50 (`predicates.py:32`) is refused (`policy:not-level-m`,
-`depth`). The harness confirms the measure: on 20,000 random conditions the core's depth exceeds 50
+`depth`). Since step 3 the reference and the port measure it on the condition as the core decodes it
+(`field_definitions.decode_condition`, Rust `decode_condition`), after the one desugaring of chains,
+which is Lean's `Cond.depth` term for term. The harness confirms the measure: on 20,000 random conditions the core's depth exceeds 50
 exactly when `check_predicate` reports the lowered condition nested too deeply.
 
 ### 2.5 Field definitions
@@ -242,6 +245,29 @@ After the image reads, the core decodes and checks it in this order; the first f
 A policy that passes is *checked*: its definitions, and its rules with every constant a canonical
 literal (an integer, a boolean, a string, or `None`).
 
+**One cause per refused policy (D7, resolved in step 3).** The order above is normative, not a property
+of the oracle: a policy with several problems is refused for the first, in every implementation, with
+the field and the reason the oracle names. Within one atom the order is the field name, then the
+operator, then the constant (`decodeCond`); a rule's depth is checked after its whole condition decodes;
+and an atom's check against its definition runs as `checkCmp`, `checkMem` and `checkTruthy` run: `None`
+first (an ordering, then a refused absence, then a `None` in a list), a decimal on a `bool` or `category`
+field before its kind, on a `fixed` field a numeric constant under an operator its rounding does not
+carry before its value, then each member's value in order (`int` range, a decimal on an `int` field,
+off grid, out of range) and only then the rounding of a membership or a truthiness test. The Lean
+semantics enumerates every problem in this order (`policyProblems`, `formal/Core/Order.lean`) and
+proves the refusal it computes is the head of that list (section 7). The Python reference
+(`field_definitions.core_problems`, called by `apply_definitions`) and the Rust port (`core_problems`,
+called by its `apply_definitions`) enumerate the same list phase by phase: they decode every rule first,
+then parse every definition in code point order, then check every decoded atom against its parsed
+definition, then rule 6, so the first problem is the refusal (`FieldDefinitionError.cause`, `.field` and
+`.reason`; Rust `Graph.field_error_cause`, `field_error_field`, `field_error_reason`), and the whole list,
+one problem per atom, stays for diagnostics (`FieldDefinitionError.problems`, `Graph.field_error_causes`).
+Only then do they lower the conditions' text. The engine's counters stay outside the core (section 1): the
+reference and the port route on them, so an atom that reads one is not checked, and a policy the oracle
+refuses for reading one is a scope difference. The frozen field definition vectors hold seven such
+policies (`d7_*` in `field_definitions.json`), and the Rust replay checks the port's whole list against
+the reference's.
+
 ## 5. Refusals and their causes
 
 Every input that is not routed gets exactly one of these refusals, and every one is a registered row of
@@ -251,10 +277,10 @@ refusals in the `routing` class). The Lean semantics spells each refusal with it
 (`Refusal.code`, `Refusal.cause`, `formal/Core/Eval.lean`), and the theorem `refusal_registered` proves
 every pair is a row of the registry, which `gen_causes_rs.py` generates into `formal/Core/Causes.lean`
 beside the Rust table; so the oracle never prints a refusal without a code. The Python reference
-carries the cause on every refusal (`FieldDefinitionError.cause`, `.code`, and `.problems`, each a
-`Problem` with its own cause), the Rust port on the graph (`Graph.field_error_cause`,
-`field_error_causes`), and the frozen field definition vectors record the cause of every refused
-policy, which the Rust replay checks.
+carries the cause on every refusal (`FieldDefinitionError.cause`, `.code`, `.field`, `.reason`, and
+`.problems`, each a `Problem` with its own cause), the Rust port on the graph (`Graph.field_error_cause`,
+`field_error_field`, `field_error_reason`, `field_error_causes`), and the frozen field definition vectors
+record the cause of every refused policy and of every problem in order, which the Rust replay checks.
 
 | refusal | cause | code | when |
 |---|---|---|---|
@@ -389,13 +415,24 @@ alone names the cause. `verdict_refusal_registered`: whatever the inputs, a refu
 registered nonzero code. The proofs are `decide` over the generated list, so a spelling that drifts from
 the registry, or a registry regenerated without a row the core uses, fails the build.
 
+**One cause per refused policy** (`Core/Order.lean`, step 3, section 4). `policyProblems` lists every
+problem of a policy image in the order of section 4: the document, the image's shape and its
+definitions as text, each rule's decoding refusal rule by rule, each definition's refusal in code point
+order, each atom's lowering refusal rule by rule and atom by atom, and rule 6. `loadPolicy_first_problem`:
+the refusal `loadPolicy` computes is the head of that list, and `policy_cause_is_first`,
+`policy_accepted_iff_no_problem` and `verdict_policy_cause` state it as an equivalence, for acceptance
+and in verdict terms. `lowerCond_first_atom`: lowering one condition refuses for its first atom the
+field's definition refuses, depth first and left to right, and passes exactly when every atom passes.
+So the cause of a refused policy is one function of the image, the oracle's, and an implementation that
+names the head of the same list names the same cause.
+
 **Not proven, stated as plainly.** That any implementation computes `verdict`: Python, Rust and the
 other targets are *conformant* to the oracle by differential testing (section 8), not proven. The
 order of the image's `fields` members does not change a verdict, because definitions are read in
 sorted order, but the uniqueness of that sort is not yet a theorem. The FQ bridge theorems take FQ's
 partitions as FQ defines them; the quantizer's code is held to those by FQ's own bridge vectors. That
-the reference names the oracle's first cause on a policy with several problems (D7): it names one of
-them, which the harness checks, not the first in the order of section 4. The canon/2 readers of Python
+the reference and the port compute the head of `policyProblems`: they are held to it by the
+differential and the frozen vectors (D7, section 9), not by proof. The canon/2 readers of Python
 and Rust are held to the Lean reader by the frozen vectors and the differential, not by proof.
 
 ## 8. The oracle and the differential harness
@@ -419,7 +456,7 @@ definitions, strings with escapes and astral characters, floats, `-0`, wide inte
 deep nesting, invalid UTF-8, malformed and truncated images). The reference and the ports read flows,
 so the harness renders each well formed image to the flow text it means, with semantics preserving
 surface variation (orientation, grouping, tuples, chains); an image without a faithful rendering is
-compared on the oracle alone. Each case runs through the oracle and six legs, each an adapter around
+compared on the oracle alone. Each case runs through the oracle and seven legs, each an adapter around
 the implementation's own functions:
 
 | leg | implementation | composition | documents |
@@ -430,22 +467,46 @@ the implementation's own functions:
 | `go` | `prismpath-go` | `Parse`, `IsDeterministic`, `EvalCondition`, `prismpath-go/cmd/core_diff` | `encoding/json` after a UTF-8 check |
 | `c-interp` | `prismpath-hw/interp.c` | host: the reference checks the policy, reads, applies the system boundary; `ppt_compile.py` compiles and encodes registers; the interpreter picks the edge (`formal/diff/ppt_batch.c`) | canon/2 on the host |
 | `c-hdr` | `prismpath-hw/ppt_eval.h`, the embedded evaluator the FPGA's C twin and the firmwares include | the same | canon/2 on the host |
+| `ebpf` | `prismpath-ebpf/ppt_eval_bpf.h`, the evaluator every XDP program there includes, on its userspace path | the same host and compiler; the loader's parser (`ppt_image.c`, `parse_image_buf`) admits the table, which is written into the maps as `ppt_maps.c` writes them, and the evaluator's own text runs over a shim of its array maps and `bpf_loop` (`formal/diff/ebpf_batch.c`) | canon/2 on the host |
 
 Each difference is classified: `agree`; a scope difference (the inferred path and engine counters,
 section 1); a reader gap, only for the two legs with no canon/2 reader (D5); `refusing-kernel` (D5);
-`target-limit` (D6: the compiler or the register encoder refuses a value outside 32 bits, or interp.c's
-64 deep stack would overflow); `cause-order` (D7, the oracle's cause is among the leg's problems); or a
-finding, which is minimised to a small reproducer of the same kind. Every refusal of the four legs that
-speak the registry must carry its registered code (`finding:uncoded` otherwise), and the first tier
-legs' policy checks must equal the oracle's (`finding:policy-check`).
+`target-limit` (D6: the compiler or the register encoder refuses a value outside 32 bits, interp.c's
+64 deep stack would overflow, or the eBPF loader refuses a table outside its declared subset); or a
+finding, which is minimised to a small reproducer of the same kind. A policy both sides refuse agrees
+only when the leg names the oracle's cause and, where the oracle's refusal names a field or a reason,
+the same field and reason (`finding:cause` otherwise, D7); a policy the oracle refuses for reading an
+engine counter is the scope difference of section 1. Every refusal of the five legs that speak the
+registry must carry its registered code (`finding:uncoded` otherwise), and the first tier legs' policy
+checks must equal the oracle's (`finding:policy-check`).
 
 **Commands.** `python formal/diff/core_diff.py --cases 100000 --seed 1 --report out.json` is the large
-run (all six legs by default; `--legs` picks some). `prismpath/tests/test_core_diff.py` is the seeded
+run (all seven legs by default; `--legs` picks some). `prismpath/tests/test_core_diff.py` is the seeded
 CI sized run (5,000 cases, seed 7, every leg whose toolchain is present, a few seconds): it fails on any
-kind of finding not recorded in section 9, on any reading level or policy check disagreement, on any
-uncoded refusal and on any crash. The oracle comes from `lake build` in `formal/`; the Rust leg is the
-example `prismpath-rs/examples/core_diff.rs`, built on demand; the Go and C adapters are compiled into a
-private temporary directory per run.
+finding (section 9 records none since step 3), on any reading level, policy check or policy cause
+disagreement, on any uncoded refusal and on any crash, and it replays the seven policies of D7's
+regression set through every leg. The oracle comes from `lake build` in `formal/`; the Rust leg is the
+example `prismpath-rs/examples/core_diff.rs`, built on demand; the Go, C and eBPF adapters are compiled
+into a private temporary directory per run.
+
+**The large run, step 3** (100,000 cases, seed 1, 419,651 readings, the step 2 generator, so the
+oracle's counts are step 2's below). Per leg, case level policy rows and reading rows together:
+
+| leg | agree | scope | excluded | other | findings |
+|---|---|---|---|---|---|
+| python | 163,379 | 10,265 inferred, 372 engine counter | 3,181 | | 0 |
+| rust | 163,379 | 10,265, 372 | 3,181 | | 0 |
+| js | 60,492 | 10,265 inferred | 12,902 | 22,035 refusing-kernel; reader gaps 276 float, 160 integer range, 154 negative zero, 33 depth, 26 duplicate key, 17 lone surrogate | 0 |
+| go | 60,511 | 10,265 inferred | 12,902 | 22,035 refusing-kernel; reader gaps 257 float, 160, 154, 33, 26, 17 | 0 |
+| c-interp | 146,673 | 10,265, 372 | 3,181 | target-limit 3,527 at compile, 2,070 on a reading | 0 |
+| c-hdr | 146,673 | 10,265, 372 | 3,181 | target-limit 3,527, 2,070 | 0 |
+| ebpf | 146,587 | 10,265, 372 | 3,181 | target-limit 3,527, 2,070, and 86 readings of tables outside the eBPF subset | 0 |
+
+No finding of any kind on any leg: the policy rows step 2 counted as D7 (9,758 for Python, 9,839 for
+Rust) now agree, each with the
+oracle's cause, field and reason, and the engine counter scope grew from 171 to 372 by the policies
+whose first problem is reading a counter, which step 2 counted as D7. On every table the eBPF loader
+admits, every register encodable reading routes on the in-kernel evaluator's text as the oracle routes it.
 
 **The large run, step 2** (100,000 cases, seed 1, 419,651 readings). The oracle accepted 24,041 policies
 and refused 75,959; it routed 30,380 readings and refused 13,741 with `route:no-matching-edge`, 40,892
@@ -480,7 +541,7 @@ negative zero; 1,569 findings, 1,182 of them D3 and 387 D1 and D2.
 Each row is a disagreement the harness or a direct probe shows, with the side this specification
 takes. Step 1 recorded D1 to D6; step 2 fixes D1, D2 and D3 (each with regression cases in the frozen
 field definition vectors and in the harness's generator), resolves D4 (section 6.1), extends the
-harness to the D5 and D6 legs, and records D7.
+harness to the D5 and D6 legs, and records D7; step 3 resolves D7 and runs the eBPF leg of D6.
 
 **D1. The depth bound is not applied to a defined flow (Python).** SPEC.md 4.1 makes a predicate
 nested beyond 50 invalid and `check_predicate` refuses it (`predicates.py:169`), but a defined flow
@@ -565,31 +626,42 @@ checked policy with `prismpath-hw/ppt_compile.py` and run its readings through `
 the compiler (`int-out-of-i32`), and 2,070 readings of compiled policies hold a value the 32 bit
 registers cannot carry and are refused by the register encoder (`encode_scalar`, the same reason);
 neither is ever a route. Every other reading routes as the oracle routes it. The target limit is not a
-registered cause of the core: it is the compiler's refusal, and stays outside the core's closed set. The
-eBPF target shares the table image and is not run here.
+registered cause of the core: it is the compiler's refusal, and stays outside the core's closed set.
+**Step 3: the eBPF target is a leg.** Loading an XDP program and running it with `BPF_PROG_TEST_RUN`
+needs CAP_BPF, and this host has unprivileged BPF disabled and the work runs without privileges, so the
+leg takes the eBPF target's userspace path: the in-kernel evaluator's own text
+(`prismpath-ebpf/ppt_eval_bpf.h`, the `eval_atom`, `eval_prog` and `evaluate` of every XDP program
+there) compiled natively against a shim of its array maps, `bpf_map_lookup_elem` and `bpf_loop` with the
+kernel's semantics, behind the loader's own parser. It routes every reading of every table the loader
+admits as the oracle does; the loader's declared subset (an operand stack of 4, 64 edges per node, 64
+words per edge, 32 fields, `check_evaluator_limits`) refuses 86 readings' tables of the large run, a
+refusal and never a route. What the leg does not exercise is the kernel's verifier and JIT, which the
+kernel certification in CI (`ebpf_kernel`) covers on the frozen corpus.
 
-**D7. Which cause names a policy with several problems (Python, Rust).** Found when step 2 made every
-leg report its cause. Both sides refuse the same policies and every refusal carries a registered code;
-every minimised reproducer of a cause difference (31 kinds for Python, 37 for Rust in the large run of
-section 8) is a policy with at least two problems, sometimes in one atom (an undefined field compared
-with a decimal is both `image:field-index-oob` and a decimal on a field that is not fixed), and the
-kinds `policy:engine-counter vs ...` are the scope difference of section 1 meeting another problem
-(the reference does not refuse an engine counter, so it names the policy's other problem). On a policy with several, the specification names
-the first in its order (section 4: the whole image decoded, then the definitions in code point order,
-then rule by rule and atom by atom), while the reference and the port meet them in their own phases:
-the Level M classifier judges a whole condition before its atoms, the lowering of a condition's
-decimals runs before its atoms are checked, and a malformed definition stops the definitions before any
-atom is read. Both legs therefore report every problem they find (`FieldDefinitionError.problems`,
-`Graph.field_error_causes`), including the condition problems no definition changes, and the harness
-classifies a case as `cause-order` when the oracle's cause is among them and as the finding
-`policy-cause <oracle> vs <leg>` when it is not (the leg stopped before reaching it). Reproducer: `fields
-{"x": "int"}`, one rule `["and", ["cmp", "x", "==", ["num", "9007199254740992"]], ["cmp", "x", "==",
-["num", "2.5"]]]`: the oracle names `policy:threshold` (`constant-range`, the first atom), the reference
-`image:unknown-type` (the classifier sees the float in the second atom first). **Specification:** the
-order of section 4 is the one the oracle proves things about; making the reference report exactly that
-first cause means checking it atom by atom in the core's order, a restructuring of `apply_definitions`
-that this step does not do. Open: either the reference adopts the order, or the cause of a policy
-refusal is specified as any one of its problems, with the oracle's as the canonical one.
+**D7. Which cause names a policy with several problems (Python, Rust). Resolved in step 3.** Found when
+step 2 made every leg report its cause. Both sides refused the same policies and every refusal carried a
+registered code, but on a policy with at least two problems the reference and the port met them in their
+own phases, the Level M classifier judging a whole condition before its atoms, the lowering of a
+condition's decimals running before its atoms were checked, and a malformed definition stopping the
+definitions before any atom was read, so they could name another problem than the oracle's first
+(31 kinds for Python, 37 for Rust in step 2's large run). Reproducer: `fields {"x": "int"}`, one rule
+`["and", ["cmp", "x", "==", ["num", "9007199254740992"]], ["cmp", "x", "==", ["num", "2.5"]]]`: the oracle
+names `policy:threshold` (`constant-range`, the first atom), the reference named `image:unknown-type` (the
+classifier saw the float in the second atom first). **Resolution (the bulletproof one):** the order of
+section 4 is normative and every implementation names its first problem. The reference's
+`apply_definitions` and the port's now run `core_problems`, which decodes every rule in the core's
+abstract syntax (`decode_condition`), parses the definitions in code point order, checks each decoded atom
+in Lean's order and then rule 6, and only then lowers the text; the refusal is the first problem, with
+the oracle's field and reason, and the whole list stays for diagnostics. Lean proves the core's refusal
+is the head of the same order (`loadPolicy_first_problem`, section 7). The harness compares cause, field
+and reason and counts any difference as a finding; on the large run of section 8 there is none on any
+leg, the Python and Rust problem lists are equal case for case, and seven `d7_*` vectors in
+`field_definitions.json` and the CI run's D7 set hold the cases above and the other phase crossings
+(decoding before a definition, a later rule's decoding before an earlier rule's lowering, an earlier atom
+before a later threshold, a membership's range before its rounding, definitions in code point order, a
+lowering problem before rule 6). Policies the oracle refuses for reading an engine counter are the scope
+difference of section 1, not D7: the reference does not refuse a counter, so it names the policy's next
+problem.
 
 **Reader gaps (closed).** Step 1 counted floats, `-0`, wide integers, duplicate keys and deep nesting
 as reader gaps: the implementations read documents with canon/1, which accepts them. canon/2 is now
@@ -598,13 +670,77 @@ difference on them is a finding; the step 2 runs show none.
 
 ## 10. Next
 
-Step 2 (this branch) adopted canon/2 for the core's documents (section 3) and wrote down the migration
-of the rest (section 3.1), registered every core refusal (section 5), resolved D4 into the system
-boundary and the policy check (section 6.1), fixed D1 to D3, ran the JavaScript, Go and C legs (D5,
-D6), and proved the new claims (section 7). Next: signed images and receipts as the evidence form (the
-image's canon/2 bytes under an Ed25519 signature, a receipt per verdict binding the image hash, the
-reading's canonical bytes, the verdict and its cause code, so a differential run is itself evidence);
-the eBPF table target as a leg. Owner decisions this step leaves open: D7 (the reference adopts the
-order of section 4, or a policy refusal's cause is specified as one of its problems); whether the
-JavaScript and Go kernels should implement section 4.5 or stay refusing kernels in the conformance
-matrix; and when the canon/2 migration of section 3.1 starts.
+Step 2 adopted canon/2 for the core's documents (section 3) and wrote down the migration of the rest
+(section 3.1), registered every core refusal (section 5), resolved D4 into the system boundary and the
+policy check (section 6.1), fixed D1 to D3, ran the JavaScript, Go and C legs (D5, D6), and proved the
+new claims (section 7). Step 3 (this branch) resolved D7 with a theorem and with the reference and the
+port checking in the core's order (sections 4, 7 and 9), made a differential run evidence in its own
+right (section 11), and ran the eBPF table target as a leg on its userspace path (D6). Owner decisions
+left open: whether the JavaScript and Go kernels should implement section 4.5 or stay refusing kernels
+in the conformance matrix; when the canon/2 migration of section 3.1 starts; the Rust predicate parser's
+reading of `-(5)` at evaluation (the core's decoder now reads it as Python's syntax tree does, and the
+lowering refuses it on a fixed field in both); whether the eBPF leg should also run in kernel where CI has
+the privileges, and whether a run's exclusion of every policy that reads an engine counter (section 11)
+should narrow to the policies the oracle refuses for it.
+
+## 11. A differential run as evidence
+
+A differential run says that on these inputs an implementation decided these things, and that the
+oracle decides them alike. Step 3 makes that a claim a reader can check without trusting the
+implementation, the harness or whoever ran it. A run is a directory, written by
+`formal/diff/core_evidence.py produce` (the Python reference decides) or by
+`prismpath-hotswap-rs/examples/core_evidence.rs produce` (the Rust port decides), from the same inputs:
+
+| file | what it holds |
+|---|---|
+| `cases.jsonl` | the inputs, one canon/2 line per case: the image's and every reading's bytes in hex, and the flow text the image renders to (what the reference and the port read), or null |
+| `images.jsonl` | one image attestation per case, `prismpath.core-image/1`: the case, the image's SHA-256, the authority key's id, and an Ed25519 signature over the domain prefix `prismpath.core-image/1\0` followed by the image's canon/2 bytes |
+| `receipts.jsonl` | one receipt per decision, `prismpath.core-receipt/1`, a canon/2 line: its position `idx`, the case and the reading's index, the image's SHA-256, the reading's SHA-256, the decider (`python` or `rust`), and the decision, `route` with its target or `refuse` with the registered cause, its nonzero `cause_code` and the field and reason where the refusal has them |
+| `receipts.roots.jsonl` | one root statement (`prismpath.ledgers.root_statement`, log `core-run`), signed with the instance key, over the Merkle root of the receipts' SHA-256 leaves (the tree of `ledger_ots`), whose `policy` member is the SHA-256 of `run.json` |
+| `run.json` | the manifest, `prismpath.core-run/1`: the decider, the counts, the excluded cases with their reasons, the SHA-256 of `cases.jsonl` and `images.jsonl`, and the two keys' ids |
+| `authority.pub`, `instance.pub` | the two public keys, raw 32 bytes |
+
+A receipt is not signed by itself: the root statement attests every receipt at once, and each receipt is a
+leaf under the root it signs. The authority key, which says which policy may run, signs the images, and
+the instance key, which attests what was recorded, signs the root statement; they are never the same key
+(`root_statement.check_separation`), and both are test keys, generated per run by the repository's own
+code (`swap keygen`'s `policy_pack.keygen` and `ledger keygen`'s `root_statement.keygen` in Python, the
+hot swap crate's `keygen` in Rust), the run holding only their public halves.
+
+A case outside the core (section 1) is excluded with its reason, decided from the image alone: an image
+that reads an engine counter (`engine-counter`), one that reads but has no flow rendering
+(`unrenderable`), and one that defines no field yet routes on a condition, which the reference takes by
+its inferred path (`inferred-path`). So every receipted decision is a decision of the core and must be the
+oracle's.
+
+**The verifier** (`core_evidence.py verify RUN`, and `core_evidence verify RUN` in Rust; `--sample N` or
+`all`, `--pin-authority PUB --pin-instance PUB`) checks, and refuses the run at the first failure: the
+two keys against the pins and against `run.json`, and that they differ; the root statement through
+`root_statement.verify_chain` (signature under the pinned instance key, the Merkle root of every receipt,
+the leaf count, no unsigned tail) and that its `policy` binds this `run.json`; that `cases.jsonl` and
+`images.jsonl` are the files `run.json` names; every image attestation's signature under the authority key
+over its image's bytes; that the excluded cases are exactly those the image says are outside the core;
+that the receipts are, in order, one per reading of every other case, each in its canonical canon/2
+spelling, binding that case's image and reading by hash, naming the run's decider, and a route with a
+target or a refusal with a registered nonzero code; and it replays the sampled receipts through the
+oracle (`core-oracle --batch`, the image and the reading of each), every decision required to be the
+oracle's with its cause, code, field and reason. A receipt resigned under the right instance key with a
+false decision passes the signature checks and fails the replay, which is why the replay is part of the
+verifier and not an extra.
+
+**The round trip** (`prismpath/tests/test_core_evidence.py` at CI size, and the large run). On the 100,000
+cases of seed 1 each producer writes 352,564 receipts and excludes 16,081 cases (7,505 engine counter,
+5,674 inferred path, 2,902 unrenderable); the Python verifier checks the Rust run and the Rust verifier
+the Python run, each with every receipt replayed, and every one of the 352,564 replayed decisions agrees
+with the oracle on both; the two runs' receipts are the same bytes but for the decider. The test also
+alters each part of a run (a decision, a dropped receipt, a reading, an image signature, the manifest, a
+key), resigns a false receipt, and pins a foreign key, and both verifiers refuse each.
+
+What a verified run shows: the holder of the authority key published these images, the holder of the
+instance key stated these receipts, the decisions are the oracle's on every replayed receipt, and the
+Python and Rust verifiers agree on all of it. What it does not: when (the statement's time is the
+signer's clock; anchoring its hash with `ledger anchor` adds a third party's time), that a sample stands
+for the receipts it did not replay (replay `all` for that), or anything about the cases excluded as
+outside the core. The run's documents are canon/2 (receipts, attestations and manifest); the root
+statement is the existing format, canon/1 compact under its own domain prefix, unchanged, as section 3.1
+keeps everything already signed.

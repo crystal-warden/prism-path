@@ -204,6 +204,32 @@ flow manifests, receipts and bundles read exactly as 0.1.2 wrote them, and a 0.1
   `concentrator.json` list `registry_cause` per decode and demux case. Cause 50 (`wire:symbol-overflow`) still has
   no emitter, since no decoder here is handed a cell range, and the pin test keeps that for it alone.
 
+### The verified policy core: one cause per refused policy, runs as evidence, the eBPF leg (2026-11-10)
+Research line, `docs/design/spec-verified-core.md` sections 4, 7, 9 and 11. Nothing here changes a format
+already signed: packs, envelopes, receipts, root statements and every frozen corpus read as before.
+- **A policy with several problems is refused for the first, in every implementation (D7).** The order of the
+  spec's section 4 is normative: every rule decoded (each atom its name, operator and constant, a rule's depth
+  after its condition), then the definitions in code point order, then every atom against its definition, then
+  rule 6. `field_definitions.apply_definitions` and the Rust `apply_definitions` run `core_problems`, which
+  enumerates the problems in that order before any text is lowered; the refusal is the first, with the field and
+  reason the oracle names (`FieldDefinitionError.field` and `.reason`, Rust `Graph.field_error_field` and
+  `field_error_reason`, new), and `problems` and `field_error_causes` keep the whole list, equal in the two
+  languages. `definitions_of` parses in code point order. Before, the reference and the port named whichever
+  problem their own phases met first. Lean proves the core's refusal is the head of the same order
+  (`formal/Core/Order.lean`, `loadPolicy_first_problem`, in the axiom audit). The frozen field definition vectors
+  gain seven `d7_*` policies (44 refused), and the Rust replay now checks the port's whole problem list.
+- **A differential run is evidence.** `formal/diff/core_evidence.py` and `prismpath-hotswap-rs/examples/core_evidence.rs`
+  produce a run: each image's canon/2 bytes signed with the authority key, a canon/2 receipt per decision binding
+  the image hash, the reading hash and the registered cause, and one root statement (log `core-run`) over the
+  receipts signed with the instance key and binding the run's manifest. Their `verify` re-checks the statement,
+  every receipt and attestation, and replays a sample (or all) through the oracle; each language verifies the
+  other's run (100,000 cases, 352,564 receipts, every one replayed, none differing). Keys are test keys generated
+  per run.
+- **The eBPF table target is a differential leg** on its userspace path (`formal/diff/ebpf_batch.c`): the in-kernel
+  evaluator's own text, `prismpath-ebpf/ppt_eval_bpf.h`, over a shim of its maps and `bpf_loop`, behind the
+  loader's parser. Loading in kernel needs CAP_BPF; the kernel certification stays the CI job's. The 100,000 case
+  run shows no finding on any of the seven legs.
+
 ## [0.1.2] (tagged, superseded before upload; never on PyPI)
 
 ### Summary since the 0.1.0 upload to PyPI
