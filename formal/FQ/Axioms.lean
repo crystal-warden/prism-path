@@ -13,6 +13,7 @@ import Core.Boundary
 import Core.Codes
 import Core.Order
 import Core.Scope
+import Core.Evidence
 /-! The axiom audit: the theorem must depend on nothing beyond Lean's three standard axioms. -/
 #print axioms FQ.decision_preservation
 #print axioms FQ.symbolCount_eq_truthVec
@@ -73,6 +74,14 @@ evaluator the oracle runs, which must not use `Classical.choice` to compute. -/
 #print axioms Core.counterRefusal
 #print axioms Core.counterRefusal_iff
 #print axioms Core.counter_excluded_refused
+#print axioms Core.Evidence.record
+#print axioms Core.Evidence.verifyRun
+#print axioms Core.Evidence.verified_receipt_is_verdict
+#print axioms Core.Evidence.receipt_is_verdict_of_hashes
+#print axioms Core.Evidence.verified_run_complete
+#print axioms Core.Evidence.verified_refusal_registered
+#print axioms Core.Evidence.verified_excluded_counter
+#print axioms Core.Evidence.evidence_sound
 #print axioms Core.Bridge.evalC_toX
 #print axioms Core.Bridge.firstMatch_eq_routeX
 #print axioms Core.Bridge.core_quantization_preserves

@@ -435,6 +435,27 @@ a run uses to exclude a case, `counterRefusal`, holds exactly when `loadPolicy` 
 `engineCounter`. `counter_excluded_refused`: then every reading's verdict is that refusal, so an excluded
 case hides no route and no other refusal.
 
+**Evidence and the semantics** (`Core/Evidence.lean`, step 4, section 11). The file models a run (its cases,
+image signatures, exclusions, receipts, manifest and root statement) and its verifier, `verifyRun`: the
+verifier of section 11 with `--sample all` and both keys pinned, its checks written as one boolean
+function, with the cryptography as parameters (`Crypto`: the hash, the canon/2 bytes of a receipt, the
+Merkle root, signature verification and the two signed messages) and the receipt's decision as
+`record`, the oracle's spelling (`spellRefusal`) with an empty field or reason left out, as the producers
+write it. `verified_receipt_is_verdict`: every receipt of a run `verifyRun` accepts carries the hashes of an
+image and a reading of a case of the run and records `Core.verdict` on them. `receipt_is_verdict_of_hashes`:
+it records `Core.verdict` on any image and reading bytes with those hashes that collide with no document
+of the run. `verified_run_complete`: every reading of every case the run does not exclude has its receipt.
+`verified_refusal_registered`: a recorded refusal carries the code and cause of the verdict's refusal, a
+nonzero registry row. `verified_excluded_counter`: a case excluded as `engine-counter` refuses every
+reading with it. `evidence_sound` gathers them: if the pinned instance key's signatures are unforgeable,
+its holder signed the root statement; a list of as many receipts under that Merkle root that exhibits no
+hash collision is exactly the run's receipts; and every receipt records `Core.verdict` on every image and
+reading with its hashes that exhibits no collision. The cryptographic assumptions are explicit hypotheses,
+each stated for the objects at hand and never for all inputs (no hash onto a finite set is injective):
+`Unforgeable` (Ed25519 under the pinned key), `NoTreeCollision` and `NoCollision` (SHA-256, in the Merkle
+tree, over the canon/2 writer and on the documents). No `sorry`: what is not proven is a hypothesis of the
+theorem that needs it.
+
 **Not proven, stated as plainly.** That any implementation computes `verdict`: Python, Rust and the
 other targets are *conformant* to the oracle by differential testing (section 8), not proven. The
 order of the image's `fields` members does not change a verdict, because definitions are read in
@@ -442,7 +463,12 @@ sorted order, but the uniqueness of that sort is not yet a theorem. The FQ bridg
 partitions as FQ defines them; the quantizer's code is held to those by FQ's own bridge vectors. That
 the reference and the port compute the head of `policyProblems`: they are held to it by the
 differential and the frozen vectors (D7, section 9), not by proof. The canon/2 readers of Python
-and Rust are held to the Lean reader by the frozen vectors and the differential, not by proof.
+and Rust are held to the Lean reader by the frozen vectors and the differential, not by proof. That
+`core_evidence.verify` and its Rust twin compute `verifyRun`, and that the ported checks of an image
+(`core_policy.load_policy`, Rust `oracle_policy`) compute `loadPolicy`, are held by the tamper tests and by
+the scope check against the oracle on every image of the large run, not by proof; and the replay trusts
+that the `core-oracle` binary computes `Core.verdict`, which rests on the Lean compiler, the C compiler
+and the hardware.
 
 ## 8. The oracle and the differential harness
 
@@ -769,7 +795,9 @@ key, the root statement's signature, its clock written as a float of seconds, a 
 statement respelled with whitespace, a second statement), resigns a false receipt, puts the audit log's
 canon/1 statement format in place of the run's, and pins a foreign key, and both verifiers refuse each.
 
-What a verified run shows: the holder of the authority key published these images, the holder of the
+Lean states what a verified run shows about `Core.verdict` (`Core/Evidence.lean`, section 7):
+`evidence_sound`, over a model of the run and of this verifier with every receipt replayed, the
+cryptography as explicit hypotheses. What a verified run shows: the holder of the authority key published these images, the holder of the
 instance key stated these receipts, the decisions are the oracle's on every replayed receipt, and the
 Python and Rust verifiers agree on all of it. What it does not: when (the statement's time is the
 signer's clock; anchoring its hash with `ledger anchor` adds a third party's time), that a sample stands

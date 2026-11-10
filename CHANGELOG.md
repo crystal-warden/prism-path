@@ -219,6 +219,13 @@ receipts, their root statements, anchored roots and every frozen corpus read and
   reason). On the 100,000 case run the exclusion drops from 7,505 images that mention a counter to the 1,310 the oracle
   refuses for one, and 361,984 receipts are written (352,564 before), every one replayed and agreeing. Lean proves an
   excluded image refuses every reading with `policy:engine-counter` (`counter_excluded_refused`).
+- **Lean ties a run's evidence to the semantics** (`formal/Core/Evidence.lean`). Over a model of a run and of its
+  verifier with every receipt replayed (`verifyRun`), every accepted receipt records `Core.verdict` on the image and
+  reading whose hashes it carries (`verified_receipt_is_verdict`), on any bytes with those hashes that collide with no
+  document of the run (`receipt_is_verdict_of_hashes`); every reading of every case not excluded has its receipt;
+  a recorded refusal is the verdict's registered nonzero code; and `evidence_sound` adds the root statement under
+  unforgeable signatures and collision free hashing, each stated per object as an explicit hypothesis. No `sorry`; in
+  the axiom audit.
 
 ### The verified policy core: one cause per refused policy, runs as evidence, the eBPF leg (2026-11-10)
 Research line, `docs/design/spec-verified-core.md` sections 4, 7, 9 and 11. Nothing here changes a format
