@@ -11,8 +11,8 @@
 //! Cross-language contract (gated in `tests/`): a manifest or envelope is a canon/2 document that
 //! names its encoding, and its signature is Ed25519 over the canon/2 domain and its canon/2 bytes
 //! (`durable::signed_message`, `policy_pack.signed_bytes` in Python), so a pack signed by either
-//! runtime verifies on the other; an untagged manifest signed before the migration is verified over
-//! its canon/1 compact bytes, and never written. Every refusal uses the same stable reason strings
+//! runtime verifies on the other; an untagged manifest (canon/1, retired) is refused as
+//! `manifest:bad-format`. Every refusal uses the same stable reason strings
 //! the Python tests and audit rows pin.
 //!
 //! Key files: public keys are raw 32-byte Ed25519 (both runtimes read them); private keys here
@@ -61,16 +61,15 @@ pub fn default_caps() -> BTreeMap<String, u64> {
         .collect()
 }
 
-/// The bytes a document is hashed over, decided by its own tag (`durable::document_bytes`): canon/2 for a
-/// document that names it, which is every document written now, canon/1 compact for an untagged one
-/// written before the migration (verify only). A value with no form under its encoding is refused.
+/// The bytes a document is hashed over (`durable::document_bytes`): its canon/2 bytes. A document that does
+/// not name canon/2, or has no canon/2 form, is refused.
 pub fn canonical_bytes(obj: &Value) -> Result<Vec<u8>, CanonicalError> {
     durable::document_bytes(obj)
 }
 
 /// The bytes a signature over a manifest, an envelope or a flow manifest covers
-/// (`durable::signed_message`): the canon/2 domain and canon/2 bytes for a tagged document, the bare
-/// canon/1 compact bytes for a legacy one, which is verified and never signed.
+/// (`durable::signed_message`): the canon/2 domain and the canon/2 bytes. A document that does not name
+/// canon/2 is refused.
 pub fn signed_bytes(obj: &Value) -> Result<Vec<u8>, CanonicalError> {
     durable::signed_message(obj)
 }
@@ -606,7 +605,8 @@ pub fn load_envelope(base_path: &str, pubkey_paths: &[String]) -> (Option<Value>
         return (None, vec!["envelope:missing".to_string()]);
     };
     let Ok(env) = durable::read_document(&text) else {
-        return (None, vec!["envelope:missing".to_string()]);
+        // not canon/2: untagged (canon/1 is retired), another tag, or unreadable
+        return (None, vec!["envelope:sig-invalid".to_string()]);
     };
     let Ok(sig_arr): Result<[u8; 64], _> = sig_bytes.as_slice().try_into() else {
         return (None, vec!["envelope:sig-invalid".to_string()]);

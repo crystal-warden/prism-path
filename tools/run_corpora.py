@@ -67,10 +67,6 @@ NONE_HW = ("none", "the C target certifies the declared subset of the predicate 
 NONE_REPRO = ("none", "recorded Python bytes are the reference: the Rust test reads this corpus, Python writes it")
 
 CONSUMERS: dict[str, dict[str, list[tuple]]] = {
-    "portable/canonical": {
-        "py": [pytest("prismpath/tests/test_canon_nonfinite.py")],
-        "rs": [cargo("prismpath-rs", "test_canonical", "prismpath-rs/tests/test_canonical.rs")],
-        "js": [NONE_JS], "go": [NONE_GO], "hw": [NONE_HW]},
     "portable/canon2": {
         "py": [pytest("prismpath/tests/test_canon2.py")],
         "rs": [cargo("prismpath-rs", "test_canon2", "prismpath-rs/tests/test_canon2.rs")],
@@ -133,10 +129,6 @@ CONSUMERS: dict[str, dict[str, list[tuple]]] = {
         "py": [("generator", "prismpath/portable/gen_hotswap_fixtures.py")],
         "rs": [cargo("prismpath-hotswap-rs", "test_hotswap_conformance", "prismpath-hotswap-rs/tests/test_hotswap_conformance.rs")],
         "js": [NONE_JS], "go": [NONE_GO], "hw": [NONE_HW]},
-    "portable/hotswap_canon1": {
-        "py": [("none", "the frozen canon/1 twin, written once before the migration and never regenerated; Python does not read it back")],
-        "rs": [cargo("prismpath-hotswap-rs", "test_hotswap_conformance", "prismpath-hotswap-rs/tests/test_hotswap_conformance.rs")],
-        "js": [NONE_JS], "go": [NONE_GO], "hw": [NONE_HW]},
     "portable/level_m": {
         "py": [pytest("prismpath/tests/test_level_m_conformance.py", PY_RUN)],
         "rs": [cargo("prismpath-rs", "test_proof", "prismpath-rs/tests/test_proof.rs")],
@@ -167,10 +159,6 @@ CONSUMERS: dict[str, dict[str, list[tuple]]] = {
         "py": [pytest("prismpath/tests/test_receipt_vectors.py")],
         "rs": [cargo("prismpath-hotswap-rs", "test_receipt_verify", "prismpath-hotswap-rs/tests/test_receipt_verify.rs"),
                cargo("prismpath-telemetry-rs", "test_receipts", "prismpath-telemetry-rs/tests/test_receipts.rs")],
-        "js": [NONE_JS], "go": [NONE_GO], "hw": [NONE_HW]},
-    "portable/receipts_canon1": {
-        "py": [pytest("prismpath/tests/test_receipt_vectors.py")],
-        "rs": [cargo("prismpath-hotswap-rs", "test_receipt_verify", "prismpath-hotswap-rs/tests/test_receipt_verify.rs")],
         "js": [NONE_JS], "go": [NONE_GO], "hw": [NONE_HW]},
     "portable/safety": {
         "py": [pytest("prismpath/tests/test_safety_vectors.py")],

@@ -146,7 +146,7 @@ fn inject_children(checkpoint_path: &str, summary: &JsonValue) -> Result<(), Che
     let text =
         std::fs::read_to_string(checkpoint_path).map_err(|err| CheckpointError(err.to_string()))?;
     let mut checkpoint_val: JsonValue =
-        crate::value::parse_strict(&text).map_err(|err| CheckpointError(err.to_string()))?;
+        crate::value::parse_plain(&text).map_err(|err| CheckpointError(err.to_string()))?;
     checkpoint_val["state"]["_children"] = summary.clone();
     std::fs::write(checkpoint_path, serde_json::to_string_pretty(&checkpoint_val).map_err(|err| CheckpointError(err.to_string()))?)
         .map_err(|err| CheckpointError(err.to_string()))

@@ -11,7 +11,7 @@ mod common;
 use common::{corpus, counter_clock, fresh_dir, pack_path, stage};
 use prismpath_hotswap_rs::host::{merkle_root_and_paths, verify, verify_leaf, AuditLog, CommitStep, HostError, PolicyHost};
 use prismpath_hotswap_rs::sha256_hex;
-use prismpath_rs::durable::py_canonical_string;
+use prismpath_rs::durable::plain_dumps;
 use serde_json::{json, Value};
 use std::path::Path;
 use std::sync::Arc;
@@ -19,7 +19,7 @@ use std::sync::Arc;
 const ROOT_MARK: &str = "@ROOT@";
 
 fn canon(value: &Value) -> String {
-    py_canonical_string(value, true)
+    plain_dumps(value).expect("a value read from the corpus has a JSON form")
 }
 
 fn error_value(error: &HostError) -> Value {
@@ -282,7 +282,7 @@ fn the_corpus_covers_the_protocol() {
     for kind in ["AuditWriteError", "SwapRejected", "Injected", "IntentUnreadable", "OSError", "IndexError"] {
         assert!(raised.contains(kind), "no operation raised {kind}");
     }
-    for reason in ["image:unreadable:2", "sig:invalid", "sig:revoked-key", "sig:missing", "envelope:unknown-field:z", "envelope:id-mismatch", "image:bad-magic", "image:digest-mismatch", "record:image-file-invalid", "record:not-an-object", "image:unreadable:21", "version:not-monotonic:1<=2", "version:not-monotonic:2<=2", "rollback:no-previous"] {
+    for reason in ["image:unreadable:2", "sig:invalid", "sig:revoked-key", "sig:missing", "envelope:unknown-field:z", "envelope:id-mismatch", "image:bad-magic", "image:digest-mismatch", "record:image-file-invalid", "image:unreadable:21", "version:not-monotonic:1<=2", "version:not-monotonic:2<=2", "rollback:no-previous"] {
         assert!(reasons.contains(reason), "no case reaches {reason}");
     }
 }

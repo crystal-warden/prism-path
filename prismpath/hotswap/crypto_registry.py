@@ -88,8 +88,8 @@ def verify_registry(path: str, pubkey_paths: List[str],
         return False, ["registry:bad-json"], None
     if not isinstance(registry, dict) or registry.get("format") != REGISTRY_FORMAT:
         return False, ["registry:bad-format"], registry
-    # A canon/2 registry is signed over the domain and its bytes; a legacy (untagged) one over its bytes.
-    message = canon.CANON2_DOMAIN + raw if canon.encoding_of(registry) == canon.CANON2 else raw
+    # A registry is canon/2 (an untagged one did not read above) and is signed over the domain and its bytes.
+    message = canon.CANON2_DOMAIN + raw
     signer_id = None
     for pk in pubkey_paths:
         pub, key_id = pp.load_public(pk)

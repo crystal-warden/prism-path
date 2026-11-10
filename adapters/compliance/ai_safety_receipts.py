@@ -20,17 +20,14 @@ from prismpath.ledgers import ledger_airgap as _lg
 _SIGNED_KEYS = ("kind", "determination_root", "signed_at", "key_id")
 
 
-def _determination_root(determination, encoding):
-    """sha256 of the determination: its canon/2 content bytes for a canon/2 receipt (a float in it is
-    refused), its canon/1 compact bytes for a receipt signed before the migration."""
-    if encoding == _canon.CANON2:
-        return _pp.sha256_hex(_canon.content_bytes(determination))
-    return _pp.sha256_hex(_canon.canonical_compact(determination))
+def _determination_root(determination):
+    """sha256 of the determination's canon/2 content bytes (a float in it is refused)."""
+    return _pp.sha256_hex(_canon.content_bytes(determination))
 
 
 def _payload(determination, signed_at, key_id):
     return {"kind": "ai-safety-receipt",
-            "determination_root": _determination_root(determination, _canon.CANON2),
+            "determination_root": _determination_root(determination),
             "signed_at": signed_at, "key_id": key_id, _canon.ENCODING_KEY: _canon.CANON2}
 
 
@@ -51,12 +48,11 @@ def verify_receipt(receipt, determination, pub_path):
     if receipt.get("key_id") != key_id:
         return False
     try:
-        encoding = _canon.encoding_of(receipt)
-        if _determination_root(determination, encoding) != receipt.get("determination_root"):
+        _canon.encoding_of(receipt)                   # a receipt that does not name canon/2 is refused
+        if _determination_root(determination) != receipt.get("determination_root"):
             return False
         payload = {field: receipt.get(field) for field in _SIGNED_KEYS}
-        if encoding == _canon.CANON2:
-            payload[_canon.ENCODING_KEY] = _canon.CANON2
+        payload[_canon.ENCODING_KEY] = _canon.CANON2
         pub.verify(bytes.fromhex(receipt.get("signature", "")), _pp.signed_bytes(payload))
         return True
     except (InvalidSignature, ValueError):

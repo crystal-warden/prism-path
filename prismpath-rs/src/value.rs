@@ -60,10 +60,10 @@ impl Value {
     }
 
     /// A JSON value as an engine value. A number beyond the double range is refused (see
-    /// `try_from_json`); every input boundary reads with `parse_strict`, so none reaches here, and
+    /// `try_from_json`); every input boundary reads with `parse_plain`, so none reaches here, and
     /// one that did stops with a panic rather than become infinity or zero.
     pub fn from_json(json_val: &serde_json::Value) -> Value {
-        Self::try_from_json(json_val).unwrap_or_else(|error| panic!("{error}; read documents with value::parse_strict"))
+        Self::try_from_json(json_val).unwrap_or_else(|error| panic!("{error}; read documents with value::parse_plain"))
     }
 
     /// `from_json`, refusing a number with no finite double (past 1.8e308, written as an integer or
@@ -125,7 +125,7 @@ pub fn is_integer_text(number: &serde_json::Number) -> bool {
     !digits.is_empty() && digits.bytes().all(|byte| byte.is_ascii_digit())
 }
 
-/// Refuse a document that holds a number canonical JSON cannot carry: one beyond the double range
+/// Refuse a document that holds a number JSON cannot carry: one beyond the double range
 /// (`1e400`, `-1e400`). NaN, Infinity and lone surrogates never reach a `serde_json::Value`, which
 /// refuses them at parse; this is the refusal for the one case serde_json accepts.
 pub fn check_canonical(value: &serde_json::Value) -> Result<(), String> {
@@ -145,12 +145,20 @@ pub fn check_canonical(value: &serde_json::Value) -> Result<(), String> {
     }
 }
 
-/// `serde_json::from_str::<Value>` for a document that is hashed, signed or verified: the same
-/// text prismpath.canon.loads accepts. NaN, Infinity, lone surrogates and any text serde_json
-/// refuses fail in the parse; a number beyond the double range fails here. The error type is
-/// serde_json's, so a caller swaps this in for `serde_json::from_str` unchanged.
-pub fn parse_strict(text: &str) -> Result<serde_json::Value, serde_json::Error> {
+/// `serde_json::from_str::<Value>` for JSON that is neither hashed nor signed (a durable run checkpoint, a
+/// sink line, the version floor file, a deferral record), the same text `prismpath.canon.plain_loads`
+/// accepts. NaN, Infinity, lone surrogates and any text serde_json refuses fail in the parse; a number beyond
+/// the double range fails here. The error type is serde_json's, so a caller swaps this in for
+/// `serde_json::from_str` unchanged. What it reads is never hashed or signed: a hashed document is read by
+/// `durable::read_document` and built by `durable::canon2_bytes`.
+pub fn parse_plain(text: &str) -> Result<serde_json::Value, serde_json::Error> {
     let value: serde_json::Value = serde_json::from_str(text)?;
     check_canonical(&value).map_err(<serde_json::Error as serde::de::Error>::custom)?;
     Ok(value)
+}
+
+/// `parse_plain` for JSON that PrismPath did not write and may hash afterwards as content
+/// (`durable::content_bytes`): a model's reply. `prismpath.canon.loads_content`.
+pub fn parse_content(text: &str) -> Result<serde_json::Value, serde_json::Error> {
+    parse_plain(text)
 }

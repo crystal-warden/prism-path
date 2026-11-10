@@ -10,7 +10,7 @@ mod common;
 use common::Scratch;
 use prismpath_rs::connector::{flatten, short_hash, Connector, EchoConnector};
 use prismpath_rs::crypto_agility::registry_hash;
-use prismpath_rs::durable::{override_manifest, resume, try_py_canonical_string, verify_manifest};
+use prismpath_rs::durable::{override_manifest, resume, plain_dumps, verify_manifest};
 use prismpath_rs::value::Value as V;
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
@@ -54,7 +54,7 @@ fn the_connector_ports_refuse_it() {
 #[test]
 fn canonical_bytes_hashes_and_manifests_refuse_it() {
     let bad = json!({"suites": {"x": overflow()}});
-    assert!(try_py_canonical_string(&bad, false).is_err());
+    assert!(plain_dumps(&bad).is_err());
     assert!(no_panic("registry_hash", || registry_hash(&bad)).is_err());
     let prior = json!({"label": "l", "root": "r", "created": "c", "ingestion_hashes": [overflow()], "manifest_hash": "h"});
     assert!(no_panic("override_manifest", || override_manifest(&prior, "id", "why", "root", None, "2026")).is_err());

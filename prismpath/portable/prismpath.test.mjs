@@ -11,7 +11,7 @@ import {
   parse, run, evalCondition, checkPredicate, portabilityViolations, eventTarget,
   isDeterministic, isError, isEvent, isSemantic, eventName, pyTruthy, PredicateError,
   lockedRoute, decodeVec, firstDeterministic, FieldDefinitionError, routedFields, systemBoundary, policyCheck,
-  canon2Read, canon2Write,
+  canon2Read, canon2Write, documentString, registryHash,
 } from "./prismpath.mjs";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -441,6 +441,15 @@ test("a decimal threshold is lowered exactly, past the precision of a double", (
   assert.equal(graph.nodes.s.edges[0][1], "when d >= 7199254");
   assert.throws(() => parse("---\nname: t\nstart: s\nfield.d: fixed scale=100 rounding=exact\n---\n## s\n-> hit: when d >= 0.001\n## hit\n"),
     (err) => err.cause === "policy:threshold" && err.reason === "off-grid" && err.field === "d" && err.code === 96);
+});
+
+test("a document is hashed over its canon/2 bytes and canon/1 is refused", () => {
+  assert.equal(documentString({ b: 2, a: "x", encoding: "canon/2" }), '{"a":"x","b":2,"encoding":"canon/2"}');
+  for (const doc of [{ a: 1 }, { encoding: "canon/1" }, { encoding: "canon/3" }, { encoding: null }, [1], "x", 7, null]) {
+    assert.throws(() => documentString(doc), /canon\/1 is retired|unknown encoding/, JSON.stringify(doc));
+    assert.throws(() => registryHash(doc));
+  }
+  assert.throws(() => documentString({ encoding: "canon/2", n: 1.5 }), (err) => err.rule === "float");
 });
 
 test("canon/2 reads and writes the core's documents and names the first rule broken", () => {

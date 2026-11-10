@@ -213,7 +213,7 @@ fn extract_reading(event: &Value, order: &[String], field_paths: &HashMap<String
         let path = field_paths.get(field).map(String::as_str).unwrap_or(field);
         match walk_path(event, path) {
             Some(value) => {
-                // `event` was read by `parse_strict` above, so no number in it is beyond the double range
+                // `event` was read by `parse_plain` above, so no number in it is beyond the double range
                 reading.insert(field.clone(), V::from_json(value));
             }
             None => missing.push(field.clone()),
@@ -302,7 +302,7 @@ pub fn scan_sample(codebook: Codebook, reader: &mut dyn BufRead, cfg: &Config)
             }
         }
         n_lines += 1;
-        let event: Value = match prismpath_rs::value::parse_strict(line) {
+        let event: Value = match prismpath_rs::value::parse_plain(line) {
             Ok(Value::Object(object)) => Value::Object(object),
             _ => {
                 bad_json += 1;

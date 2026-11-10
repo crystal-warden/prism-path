@@ -3,342 +3,6 @@
  "authority_pub_hex": "9d2fbc00381aa75186e236b7f2fc32f7fd02b750e768c42b52377a861f768971",
  "cases": [
   {
-   "expect": "null",
-   "json": "null",
-   "kind": "canon",
-   "name": "canon_00"
-  },
-  {
-   "expect": "true",
-   "json": "true",
-   "kind": "canon",
-   "name": "canon_01"
-  },
-  {
-   "expect": "false",
-   "json": "false",
-   "kind": "canon",
-   "name": "canon_02"
-  },
-  {
-   "expect": "0",
-   "json": "0",
-   "kind": "canon",
-   "name": "canon_03"
-  },
-  {
-   "expect": "-1",
-   "json": "-1",
-   "kind": "canon",
-   "name": "canon_04"
-  },
-  {
-   "expect": "42",
-   "json": "42",
-   "kind": "canon",
-   "name": "canon_05"
-  },
-  {
-   "expect": "9223372036854775807",
-   "json": "9223372036854775807",
-   "kind": "canon",
-   "name": "canon_06"
-  },
-  {
-   "expect": "18446744073709551615",
-   "json": "18446744073709551615",
-   "kind": "canon",
-   "name": "canon_07"
-  },
-  {
-   "expect": "-9223372036854775808",
-   "json": "-9223372036854775808",
-   "kind": "canon",
-   "name": "canon_08"
-  },
-  {
-   "expect": "1.0",
-   "json": "1.0",
-   "kind": "canon",
-   "name": "canon_09"
-  },
-  {
-   "expect": "0.5",
-   "json": "0.5",
-   "kind": "canon",
-   "name": "canon_10"
-  },
-  {
-   "expect": "-0.25",
-   "json": "-0.25",
-   "kind": "canon",
-   "name": "canon_11"
-  },
-  {
-   "expect": "100.0",
-   "json": "100.0",
-   "kind": "canon",
-   "name": "canon_12"
-  },
-  {
-   "expect": "100.0",
-   "json": "1e2",
-   "kind": "canon",
-   "name": "canon_13"
-  },
-  {
-   "expect": "100.0",
-   "json": "1E2",
-   "kind": "canon",
-   "name": "canon_14"
-  },
-  {
-   "expect": "1500.0",
-   "json": "1.5e3",
-   "kind": "canon",
-   "name": "canon_15"
-  },
-  {
-   "expect": "0.1",
-   "json": "0.1",
-   "kind": "canon",
-   "name": "canon_16"
-  },
-  {
-   "expect": "0.30000000000000004",
-   "json": "0.30000000000000004",
-   "kind": "canon",
-   "name": "canon_17"
-  },
-  {
-   "expect": "1e-05",
-   "json": "1e-05",
-   "kind": "canon",
-   "name": "canon_18"
-  },
-  {
-   "expect": "0.0001",
-   "json": "0.0001",
-   "kind": "canon",
-   "name": "canon_19"
-  },
-  {
-   "expect": "1e-05",
-   "json": "0.00001",
-   "kind": "canon",
-   "name": "canon_20"
-  },
-  {
-   "expect": "1e-07",
-   "json": "1e-07",
-   "kind": "canon",
-   "name": "canon_21"
-  },
-  {
-   "expect": "5e-324",
-   "json": "5e-324",
-   "kind": "canon",
-   "name": "canon_22"
-  },
-  {
-   "expect": "2.2250738585072014e-308",
-   "json": "2.2250738585072014e-308",
-   "kind": "canon",
-   "name": "canon_23"
-  },
-  {
-   "expect": "1.7976931348623157e+308",
-   "json": "1.7976931348623157e+308",
-   "kind": "canon",
-   "name": "canon_24"
-  },
-  {
-   "expect": "1000000000000000.0",
-   "json": "1e15",
-   "kind": "canon",
-   "name": "canon_25"
-  },
-  {
-   "expect": "1e+16",
-   "json": "1e16",
-   "kind": "canon",
-   "name": "canon_26"
-  },
-  {
-   "expect": "1e+17",
-   "json": "1e17",
-   "kind": "canon",
-   "name": "canon_27"
-  },
-  {
-   "expect": "1.5e+20",
-   "json": "1.5e+20",
-   "kind": "canon",
-   "name": "canon_28"
-  },
-  {
-   "expect": "1.2345678901234568e+20",
-   "json": "123456789012345680000.0",
-   "kind": "canon",
-   "name": "canon_29"
-  },
-  {
-   "expect": "1234567890123456.0",
-   "json": "1234567890123456.0",
-   "kind": "canon",
-   "name": "canon_30"
-  },
-  {
-   "expect": "1.2345678901234568e+16",
-   "json": "12345678901234567.0",
-   "kind": "canon",
-   "name": "canon_31"
-  },
-  {
-   "expect": "1730800001.2345679",
-   "json": "1730800001.2345679",
-   "kind": "canon",
-   "name": "canon_32"
-  },
-  {
-   "expect": "1730800002.4691358",
-   "json": "1730800002.4691358",
-   "kind": "canon",
-   "name": "canon_33"
-  },
-  {
-   "expect": "4.35",
-   "json": "4.35",
-   "kind": "canon",
-   "name": "canon_34"
-  },
-  {
-   "expect": "2.675",
-   "json": "2.675",
-   "kind": "canon",
-   "name": "canon_35"
-  },
-  {
-   "expect": "\"\"",
-   "json": "\"\"",
-   "kind": "canon",
-   "name": "canon_36"
-  },
-  {
-   "expect": "\"plain\"",
-   "json": "\"plain\"",
-   "kind": "canon",
-   "name": "canon_37"
-  },
-  {
-   "expect": "\"caf\\u00e9\"",
-   "json": "\"caf\\u00e9\"",
-   "kind": "canon",
-   "name": "canon_38"
-  },
-  {
-   "expect": "\"caf\\u00e9\"",
-   "json": "\"caf\u00e9\"",
-   "kind": "canon",
-   "name": "canon_39"
-  },
-  {
-   "expect": "\"\\u2603\"",
-   "json": "\"\\u2603\"",
-   "kind": "canon",
-   "name": "canon_40"
-  },
-  {
-   "expect": "\"\\ud834\\udd1e\"",
-   "json": "\"\ud834\udd1e\"",
-   "kind": "canon",
-   "name": "canon_41"
-  },
-  {
-   "expect": "\"\\ud834\\udd1e\"",
-   "json": "\"\\ud834\\udd1e\"",
-   "kind": "canon",
-   "name": "canon_42"
-  },
-  {
-   "expect": "\"\\\"\\\\/\"",
-   "json": "\"\\\"\\\\\\/\"",
-   "kind": "canon",
-   "name": "canon_43"
-  },
-  {
-   "expect": "\"\\b\\f\\n\\r\\t\"",
-   "json": "\"\\b\\f\\n\\r\\t\"",
-   "kind": "canon",
-   "name": "canon_44"
-  },
-  {
-   "expect": "\"\\u0000\\u001f\\u007f\\u0080\"",
-   "json": "\"\\u0000\\u001f\\u007f\\u0080\"",
-   "kind": "canon",
-   "name": "canon_45"
-  },
-  {
-   "expect": "\"tab\\there\"",
-   "json": "\"tab\\there\"",
-   "kind": "canon",
-   "name": "canon_46"
-  },
-  {
-   "expect": "[]",
-   "json": "[]",
-   "kind": "canon",
-   "name": "canon_47"
-  },
-  {
-   "expect": "{}",
-   "json": "{}",
-   "kind": "canon",
-   "name": "canon_48"
-  },
-  {
-   "expect": "[1,2.5,\"x\",null,true]",
-   "json": "[1, 2.5, \"x\", null, true]",
-   "kind": "canon",
-   "name": "canon_49"
-  },
-  {
-   "expect": "{\"a\":2,\"b\":1}",
-   "json": "{\"b\": 1, \"a\": 2}",
-   "kind": "canon",
-   "name": "canon_50"
-  },
-  {
-   "expect": "{\"a\":{\"b\":[1,{\"y\":1,\"z\":0}],\"c\":1}}",
-   "json": "{\"a\": {\"c\": 1, \"b\": [1, {\"z\": 0, \"y\": 1}]}}",
-   "kind": "canon",
-   "name": "canon_51"
-  },
-  {
-   "expect": "{\"e\":2,\"z\":3,\"\\u00e9\":1,\"\\uffff\":5,\"\\ud834\\udd1e\":4}",
-   "json": "{\"\\u00e9\": 1, \"e\": 2, \"z\": 3, \"\\ud834\\udd1e\": 4, \"\\uffff\": 5}",
-   "kind": "canon",
-   "name": "canon_52"
-  },
-  {
-   "expect": "{\"b\":2}",
-   "json": "{\"b\": 1, \"b\": 2}",
-   "kind": "canon",
-   "name": "canon_53"
-  },
-  {
-   "expect": "{\"\":0,\" \":1,\"A\":2,\"_\":4,\"a\":3}",
-   "json": "{\"\": 0, \" \": 1, \"A\": 2, \"a\": 3, \"_\": 4}",
-   "kind": "canon",
-   "name": "canon_54"
-  },
-  {
-   "expect": "{\"action\":\"decision\",\"actor\":\"engine\",\"data\":{\"big\":1.5e+20,\"cause\":0,\"ratio\":1e-07,\"seq\":3,\"whole\":100.0},\"id\":\"3\",\"idx\":3,\"ts\":1730800003.7037034}",
-   "json": "{\"idx\": 3, \"id\": \"3\", \"ts\": 1730800003.7037034, \"actor\": \"engine\", \"action\": \"decision\", \"data\": {\"seq\": 3, \"cause\": 0, \"ratio\": 1e-07, \"big\": 1.5e+20, \"whole\": 100.0}}",
-   "kind": "canon",
-   "name": "canon_55"
-  },
-  {
    "kind": "merkle",
    "leaves": [],
    "name": "merkle_0_leaves",
@@ -4511,7 +4175,7 @@
     "findings": [
      {
       "finding": "bad_format",
-      "statement": 0
+      "line": 1
      },
      {
       "finding": "chain_broken",
@@ -5574,66 +5238,27 @@
   },
   {
    "expect": {
-    "findings": [],
-    "keys": [
-     "d080af74adc57958"
-    ],
-    "last_statement_sha256": "3dcfdd7cba27cfac06722056dacd2d734ce33c0d8fa612eab72f5e8671427895",
-    "log_leaves": 6,
-    "pinned": true,
-    "signed_leaves": 6,
-    "statements": 2,
-    "status": "signed",
-    "unsigned_tail": 0
-   },
-   "kind": "trail",
-   "log_text": "{\"action\": \"decision\", \"actor\": \"engine\", \"data\": {\"ratio\": 1e-07, \"seq\": 0, \"whole\": 100.0}, \"id\": \"0\", \"idx\": 0, \"ts\": 1730700000.0}\n{\"action\": \"decision\", \"actor\": \"engine\", \"data\": {\"ratio\": 1e-07, \"seq\": 1, \"whole\": 100.0}, \"id\": \"1\", \"idx\": 1, \"ts\": 1730700001.2345679}\n{\"action\": \"decision\", \"actor\": \"engine\", \"data\": {\"ratio\": 1e-07, \"seq\": 2, \"whole\": 100.0}, \"id\": \"2\", \"idx\": 2, \"ts\": 1730700002.4691355}\n{\"action\":\"decision\",\"actor\":\"engine\",\"data\":{\"cause\":0,\"node\":\"a\",\"note\":\"caf\u00e9 \u2603 \ud834\udd1e \\\"quoted\\\" \\\\ \\t\",\"seq\":3,\"target\":\"b\"},\"encoding\":\"canon/2\",\"id\":\"3\",\"idx\":3,\"ts_us\":1730800003703704}\n{\"action\":\"decision\",\"actor\":\"engine\",\"data\":{\"cause\":0,\"node\":\"a\",\"seq\":4,\"target\":\"b\"},\"encoding\":\"canon/2\",\"id\":\"4\",\"idx\":4,\"ts_us\":1730800004938272}\n{\"action\":\"decision\",\"actor\":\"engine\",\"data\":{\"big\":\"1.5e20\",\"cause\":0,\"edge\":9007199254740991,\"fixed\":-9007199254740991,\"node\":\"a\",\"ok\":true,\"ratio\":\"1e-07\",\"scores\":[1,\"2.5\",\"x\"],\"seq\":5,\"skipped\":null,\"target\":\"b\",\"tiny\":\"5e-324\",\"whole\":100},\"encoding\":\"canon/2\",\"id\":\"5\",\"idx\":5,\"ts_us\":1730800006172840}\n",
-   "name": "a_log_and_chain_that_cross_the_migration",
-   "pinned": [
-    "51d07513ea144ffbd4017541bf33b184f6383f27b133d096759d9f1a64f48009"
-   ],
-   "statements_text": "{\"format\":\"prismpath-root-statement/1\",\"key_id\":\"d080af74adc57958d8c77d2f2e27e3493fda17588e60024fd8f38c9b445672ac\",\"leaves\":3,\"log\":\"audit-log\",\"policy\":{\"flow_sha256\":\"abababababababababababababababababababababababababababababababab\"},\"prev\":\"\",\"public_key\":\"51d07513ea144ffbd4017541bf33b184f6383f27b133d096759d9f1a64f48009\",\"root\":\"3ff311551fe4b83f01f4e519fb9cc039a2141e491801eb21c230ee3a9b127304\",\"seq\":0,\"sig\":\"8669609790d73e1c92c96e64983049c34fffe7b25c2e6ff85e9691aa9814dd85580fadf59256e0aa7eca1a5810e48596bc0b69d68ea5c2e70c1be46aca7ec201\",\"time\":\"2026-11-03T12:00:00.250Z\",\"trigger\":\"run-end\"}\n{\"encoding\":\"canon/2\",\"format\":\"prismpath-root-statement/2\",\"key_id\":\"d080af74adc57958d8c77d2f2e27e3493fda17588e60024fd8f38c9b445672ac\",\"leaves\":6,\"log\":\"audit-log\",\"policy\":{\"flow_sha256\":\"abababababababababababababababababababababababababababababababab\"},\"prev\":\"b39d5c52b2028a0d382b1f1f146a3c35a874aa5b3e9ba7005c9523587162ec5b\",\"public_key\":\"51d07513ea144ffbd4017541bf33b184f6383f27b133d096759d9f1a64f48009\",\"root\":\"f3bf7001e118e1898d2403ef8ea109620fdb478eff798dade952acc012fb3360\",\"seq\":1,\"sig\":\"a4250d79d6e77a3c9dc0c651ec50a1eb2dc6acfd681c28617906fcdf9d338836c5a1dfedf847b5c3352145075fedb88eba90e94dcacd2430b090eb3b08b38403\",\"time_us\":1762257601250000,\"trigger\":\"run-end\"}\n"
-  },
-  {
-   "expect": {
-    "findings": [],
-    "keys": [
-     "d080af74adc57958"
-    ],
-    "last_statement_sha256": "3dcfdd7cba27cfac06722056dacd2d734ce33c0d8fa612eab72f5e8671427895",
-    "log_leaves": 6,
-    "pinned": false,
-    "signed_leaves": 6,
-    "statements": 2,
-    "status": "signed-unpinned",
-    "unsigned_tail": 0
-   },
-   "kind": "trail",
-   "log_text": "{\"action\": \"decision\", \"actor\": \"engine\", \"data\": {\"ratio\": 1e-07, \"seq\": 0, \"whole\": 100.0}, \"id\": \"0\", \"idx\": 0, \"ts\": 1730700000.0}\n{\"action\": \"decision\", \"actor\": \"engine\", \"data\": {\"ratio\": 1e-07, \"seq\": 1, \"whole\": 100.0}, \"id\": \"1\", \"idx\": 1, \"ts\": 1730700001.2345679}\n{\"action\": \"decision\", \"actor\": \"engine\", \"data\": {\"ratio\": 1e-07, \"seq\": 2, \"whole\": 100.0}, \"id\": \"2\", \"idx\": 2, \"ts\": 1730700002.4691355}\n{\"action\":\"decision\",\"actor\":\"engine\",\"data\":{\"cause\":0,\"node\":\"a\",\"note\":\"caf\u00e9 \u2603 \ud834\udd1e \\\"quoted\\\" \\\\ \\t\",\"seq\":3,\"target\":\"b\"},\"encoding\":\"canon/2\",\"id\":\"3\",\"idx\":3,\"ts_us\":1730800003703704}\n{\"action\":\"decision\",\"actor\":\"engine\",\"data\":{\"cause\":0,\"node\":\"a\",\"seq\":4,\"target\":\"b\"},\"encoding\":\"canon/2\",\"id\":\"4\",\"idx\":4,\"ts_us\":1730800004938272}\n{\"action\":\"decision\",\"actor\":\"engine\",\"data\":{\"big\":\"1.5e20\",\"cause\":0,\"edge\":9007199254740991,\"fixed\":-9007199254740991,\"node\":\"a\",\"ok\":true,\"ratio\":\"1e-07\",\"scores\":[1,\"2.5\",\"x\"],\"seq\":5,\"skipped\":null,\"target\":\"b\",\"tiny\":\"5e-324\",\"whole\":100},\"encoding\":\"canon/2\",\"id\":\"5\",\"idx\":5,\"ts_us\":1730800006172840}\n",
-   "name": "a_log_and_chain_that_cross_the_migration_unpinned",
-   "pinned": [],
-   "statements_text": "{\"format\":\"prismpath-root-statement/1\",\"key_id\":\"d080af74adc57958d8c77d2f2e27e3493fda17588e60024fd8f38c9b445672ac\",\"leaves\":3,\"log\":\"audit-log\",\"policy\":{\"flow_sha256\":\"abababababababababababababababababababababababababababababababab\"},\"prev\":\"\",\"public_key\":\"51d07513ea144ffbd4017541bf33b184f6383f27b133d096759d9f1a64f48009\",\"root\":\"3ff311551fe4b83f01f4e519fb9cc039a2141e491801eb21c230ee3a9b127304\",\"seq\":0,\"sig\":\"8669609790d73e1c92c96e64983049c34fffe7b25c2e6ff85e9691aa9814dd85580fadf59256e0aa7eca1a5810e48596bc0b69d68ea5c2e70c1be46aca7ec201\",\"time\":\"2026-11-03T12:00:00.250Z\",\"trigger\":\"run-end\"}\n{\"encoding\":\"canon/2\",\"format\":\"prismpath-root-statement/2\",\"key_id\":\"d080af74adc57958d8c77d2f2e27e3493fda17588e60024fd8f38c9b445672ac\",\"leaves\":6,\"log\":\"audit-log\",\"policy\":{\"flow_sha256\":\"abababababababababababababababababababababababababababababababab\"},\"prev\":\"b39d5c52b2028a0d382b1f1f146a3c35a874aa5b3e9ba7005c9523587162ec5b\",\"public_key\":\"51d07513ea144ffbd4017541bf33b184f6383f27b133d096759d9f1a64f48009\",\"root\":\"f3bf7001e118e1898d2403ef8ea109620fdb478eff798dade952acc012fb3360\",\"seq\":1,\"sig\":\"a4250d79d6e77a3c9dc0c651ec50a1eb2dc6acfd681c28617906fcdf9d338836c5a1dfedf847b5c3352145075fedb88eba90e94dcacd2430b090eb3b08b38403\",\"time_us\":1762257601250000,\"trigger\":\"run-end\"}\n"
-  },
-  {
-   "expect": {
     "findings": [
      {
       "finding": "bad_format",
+      "line": 1
+     },
+     {
+      "finding": "bad_format",
       "log_lines": [
-       1
+       1,
+       2,
+       3
       ]
      },
      {
-      "finding": "root_mismatch",
-      "leaf_range": [
-       0,
-       2
-      ],
-      "statement": 0
+      "finding": "chain_broken",
+      "position": 1,
+      "statement": 1
      },
      {
       "finding": "log_truncated",
-      "log_leaves": 5,
+      "log_leaves": 3,
       "signed_leaves": 6,
       "statement": 1
      }
@@ -5642,7 +5267,97 @@
      "d080af74adc57958"
     ],
     "last_statement_sha256": "3dcfdd7cba27cfac06722056dacd2d734ce33c0d8fa612eab72f5e8671427895",
-    "log_leaves": 5,
+    "log_leaves": 3,
+    "pinned": true,
+    "signed_leaves": 6,
+    "statements": 2,
+    "status": "invalid",
+    "unsigned_tail": 0
+   },
+   "kind": "trail",
+   "log_text": "{\"action\": \"decision\", \"actor\": \"engine\", \"data\": {\"ratio\": 1e-07, \"seq\": 0, \"whole\": 100.0}, \"id\": \"0\", \"idx\": 0, \"ts\": 1730700000.0}\n{\"action\": \"decision\", \"actor\": \"engine\", \"data\": {\"ratio\": 1e-07, \"seq\": 1, \"whole\": 100.0}, \"id\": \"1\", \"idx\": 1, \"ts\": 1730700001.2345679}\n{\"action\": \"decision\", \"actor\": \"engine\", \"data\": {\"ratio\": 1e-07, \"seq\": 2, \"whole\": 100.0}, \"id\": \"2\", \"idx\": 2, \"ts\": 1730700002.4691355}\n{\"action\":\"decision\",\"actor\":\"engine\",\"data\":{\"cause\":0,\"node\":\"a\",\"note\":\"caf\u00e9 \u2603 \ud834\udd1e \\\"quoted\\\" \\\\ \\t\",\"seq\":3,\"target\":\"b\"},\"encoding\":\"canon/2\",\"id\":\"3\",\"idx\":3,\"ts_us\":1730800003703704}\n{\"action\":\"decision\",\"actor\":\"engine\",\"data\":{\"cause\":0,\"node\":\"a\",\"seq\":4,\"target\":\"b\"},\"encoding\":\"canon/2\",\"id\":\"4\",\"idx\":4,\"ts_us\":1730800004938272}\n{\"action\":\"decision\",\"actor\":\"engine\",\"data\":{\"big\":\"1.5e20\",\"cause\":0,\"edge\":9007199254740991,\"fixed\":-9007199254740991,\"node\":\"a\",\"ok\":true,\"ratio\":\"1e-07\",\"scores\":[1,\"2.5\",\"x\"],\"seq\":5,\"skipped\":null,\"target\":\"b\",\"tiny\":\"5e-324\",\"whole\":100},\"encoding\":\"canon/2\",\"id\":\"5\",\"idx\":5,\"ts_us\":1730800006172840}\n",
+   "name": "a_canon1_log_and_chain_are_refused",
+   "pinned": [
+    "51d07513ea144ffbd4017541bf33b184f6383f27b133d096759d9f1a64f48009"
+   ],
+   "statements_text": "{\"format\":\"prismpath-root-statement/1\",\"key_id\":\"d080af74adc57958d8c77d2f2e27e3493fda17588e60024fd8f38c9b445672ac\",\"leaves\":3,\"log\":\"audit-log\",\"policy\":{\"flow_sha256\":\"abababababababababababababababababababababababababababababababab\"},\"prev\":\"\",\"public_key\":\"51d07513ea144ffbd4017541bf33b184f6383f27b133d096759d9f1a64f48009\",\"root\":\"3ff311551fe4b83f01f4e519fb9cc039a2141e491801eb21c230ee3a9b127304\",\"seq\":0,\"sig\":\"8669609790d73e1c92c96e64983049c34fffe7b25c2e6ff85e9691aa9814dd85580fadf59256e0aa7eca1a5810e48596bc0b69d68ea5c2e70c1be46aca7ec201\",\"time\":\"2026-11-03T12:00:00.250Z\",\"trigger\":\"run-end\"}\n{\"encoding\":\"canon/2\",\"format\":\"prismpath-root-statement/2\",\"key_id\":\"d080af74adc57958d8c77d2f2e27e3493fda17588e60024fd8f38c9b445672ac\",\"leaves\":6,\"log\":\"audit-log\",\"policy\":{\"flow_sha256\":\"abababababababababababababababababababababababababababababababab\"},\"prev\":\"b39d5c52b2028a0d382b1f1f146a3c35a874aa5b3e9ba7005c9523587162ec5b\",\"public_key\":\"51d07513ea144ffbd4017541bf33b184f6383f27b133d096759d9f1a64f48009\",\"root\":\"f3bf7001e118e1898d2403ef8ea109620fdb478eff798dade952acc012fb3360\",\"seq\":1,\"sig\":\"a4250d79d6e77a3c9dc0c651ec50a1eb2dc6acfd681c28617906fcdf9d338836c5a1dfedf847b5c3352145075fedb88eba90e94dcacd2430b090eb3b08b38403\",\"time_us\":1762257601250000,\"trigger\":\"run-end\"}\n"
+  },
+  {
+   "expect": {
+    "findings": [
+     {
+      "finding": "bad_format",
+      "line": 1
+     },
+     {
+      "finding": "bad_format",
+      "log_lines": [
+       1,
+       2,
+       3
+      ]
+     },
+     {
+      "finding": "chain_broken",
+      "position": 1,
+      "statement": 1
+     },
+     {
+      "finding": "log_truncated",
+      "log_leaves": 3,
+      "signed_leaves": 6,
+      "statement": 1
+     }
+    ],
+    "keys": [
+     "d080af74adc57958"
+    ],
+    "last_statement_sha256": "3dcfdd7cba27cfac06722056dacd2d734ce33c0d8fa612eab72f5e8671427895",
+    "log_leaves": 3,
+    "pinned": false,
+    "signed_leaves": 6,
+    "statements": 2,
+    "status": "invalid",
+    "unsigned_tail": 0
+   },
+   "kind": "trail",
+   "log_text": "{\"action\": \"decision\", \"actor\": \"engine\", \"data\": {\"ratio\": 1e-07, \"seq\": 0, \"whole\": 100.0}, \"id\": \"0\", \"idx\": 0, \"ts\": 1730700000.0}\n{\"action\": \"decision\", \"actor\": \"engine\", \"data\": {\"ratio\": 1e-07, \"seq\": 1, \"whole\": 100.0}, \"id\": \"1\", \"idx\": 1, \"ts\": 1730700001.2345679}\n{\"action\": \"decision\", \"actor\": \"engine\", \"data\": {\"ratio\": 1e-07, \"seq\": 2, \"whole\": 100.0}, \"id\": \"2\", \"idx\": 2, \"ts\": 1730700002.4691355}\n{\"action\":\"decision\",\"actor\":\"engine\",\"data\":{\"cause\":0,\"node\":\"a\",\"note\":\"caf\u00e9 \u2603 \ud834\udd1e \\\"quoted\\\" \\\\ \\t\",\"seq\":3,\"target\":\"b\"},\"encoding\":\"canon/2\",\"id\":\"3\",\"idx\":3,\"ts_us\":1730800003703704}\n{\"action\":\"decision\",\"actor\":\"engine\",\"data\":{\"cause\":0,\"node\":\"a\",\"seq\":4,\"target\":\"b\"},\"encoding\":\"canon/2\",\"id\":\"4\",\"idx\":4,\"ts_us\":1730800004938272}\n{\"action\":\"decision\",\"actor\":\"engine\",\"data\":{\"big\":\"1.5e20\",\"cause\":0,\"edge\":9007199254740991,\"fixed\":-9007199254740991,\"node\":\"a\",\"ok\":true,\"ratio\":\"1e-07\",\"scores\":[1,\"2.5\",\"x\"],\"seq\":5,\"skipped\":null,\"target\":\"b\",\"tiny\":\"5e-324\",\"whole\":100},\"encoding\":\"canon/2\",\"id\":\"5\",\"idx\":5,\"ts_us\":1730800006172840}\n",
+   "name": "a_canon1_log_and_chain_are_refused_unpinned",
+   "pinned": [],
+   "statements_text": "{\"format\":\"prismpath-root-statement/1\",\"key_id\":\"d080af74adc57958d8c77d2f2e27e3493fda17588e60024fd8f38c9b445672ac\",\"leaves\":3,\"log\":\"audit-log\",\"policy\":{\"flow_sha256\":\"abababababababababababababababababababababababababababababababab\"},\"prev\":\"\",\"public_key\":\"51d07513ea144ffbd4017541bf33b184f6383f27b133d096759d9f1a64f48009\",\"root\":\"3ff311551fe4b83f01f4e519fb9cc039a2141e491801eb21c230ee3a9b127304\",\"seq\":0,\"sig\":\"8669609790d73e1c92c96e64983049c34fffe7b25c2e6ff85e9691aa9814dd85580fadf59256e0aa7eca1a5810e48596bc0b69d68ea5c2e70c1be46aca7ec201\",\"time\":\"2026-11-03T12:00:00.250Z\",\"trigger\":\"run-end\"}\n{\"encoding\":\"canon/2\",\"format\":\"prismpath-root-statement/2\",\"key_id\":\"d080af74adc57958d8c77d2f2e27e3493fda17588e60024fd8f38c9b445672ac\",\"leaves\":6,\"log\":\"audit-log\",\"policy\":{\"flow_sha256\":\"abababababababababababababababababababababababababababababababab\"},\"prev\":\"b39d5c52b2028a0d382b1f1f146a3c35a874aa5b3e9ba7005c9523587162ec5b\",\"public_key\":\"51d07513ea144ffbd4017541bf33b184f6383f27b133d096759d9f1a64f48009\",\"root\":\"f3bf7001e118e1898d2403ef8ea109620fdb478eff798dade952acc012fb3360\",\"seq\":1,\"sig\":\"a4250d79d6e77a3c9dc0c651ec50a1eb2dc6acfd681c28617906fcdf9d338836c5a1dfedf847b5c3352145075fedb88eba90e94dcacd2430b090eb3b08b38403\",\"time_us\":1762257601250000,\"trigger\":\"run-end\"}\n"
+  },
+  {
+   "expect": {
+    "findings": [
+     {
+      "finding": "bad_format",
+      "line": 1
+     },
+     {
+      "finding": "bad_format",
+      "log_lines": [
+       1,
+       2,
+       3
+      ]
+     },
+     {
+      "finding": "chain_broken",
+      "position": 1,
+      "statement": 1
+     },
+     {
+      "finding": "log_truncated",
+      "log_leaves": 3,
+      "signed_leaves": 6,
+      "statement": 1
+     }
+    ],
+    "keys": [
+     "d080af74adc57958"
+    ],
+    "last_statement_sha256": "3dcfdd7cba27cfac06722056dacd2d734ce33c0d8fa612eab72f5e8671427895",
+    "log_leaves": 3,
     "pinned": true,
     "signed_leaves": 6,
     "statements": 2,
@@ -5661,11 +5376,27 @@
    "expect": {
     "findings": [
      {
-      "finding": "root_mismatch",
-      "leaf_range": [
+      "finding": "bad_format",
+      "line": 1
+     },
+     {
+      "finding": "bad_format",
+      "log_lines": [
+       1,
+       2,
        3,
-       5
-      ],
+       4
+      ]
+     },
+     {
+      "finding": "chain_broken",
+      "position": 1,
+      "statement": 1
+     },
+     {
+      "finding": "log_truncated",
+      "log_leaves": 2,
+      "signed_leaves": 6,
       "statement": 1
      }
     ],
@@ -5673,7 +5404,7 @@
      "d080af74adc57958"
     ],
     "last_statement_sha256": "3dcfdd7cba27cfac06722056dacd2d734ce33c0d8fa612eab72f5e8671427895",
-    "log_leaves": 6,
+    "log_leaves": 2,
     "pinned": true,
     "signed_leaves": 6,
     "statements": 2,
@@ -5692,8 +5423,26 @@
    "expect": {
     "findings": [
      {
+      "finding": "bad_format",
+      "log_lines": [
+       1,
+       2,
+       3
+      ]
+     },
+     {
+      "finding": "bad_format",
+      "statement": 0
+     },
+     {
       "finding": "chain_broken",
       "position": 1,
+      "statement": 1
+     },
+     {
+      "finding": "log_truncated",
+      "log_leaves": 3,
+      "signed_leaves": 6,
       "statement": 1
      }
     ],
@@ -5701,7 +5450,7 @@
      "d080af74adc57958"
     ],
     "last_statement_sha256": "3dcfdd7cba27cfac06722056dacd2d734ce33c0d8fa612eab72f5e8671427895",
-    "log_leaves": 6,
+    "log_leaves": 3,
     "pinned": true,
     "signed_leaves": 6,
     "statements": 2,
@@ -6411,25 +6160,19 @@
    },
    "expect": {
     "checks": {
-     "covered": true,
-     "inclusion": true,
-     "index": true,
-     "key_id": true,
-     "leaf": true,
-     "pinned": true,
-     "signature": true,
-     "well_formed": true
+     "well_formed": false
     },
-    "index": 1,
-    "key": "d080af74adc57958",
-    "ok": true,
+    "index": null,
+    "key": "",
+    "ok": false,
     "pinned": true,
-    "statement": 0,
-    "statement_sha256": "b39d5c52b2028a0d382b1f1f146a3c35a874aa5b3e9ba7005c9523587162ec5b",
-    "status": "signed"
+    "problem": "the receipt does not name canon/2 (canon/1 is retired)",
+    "statement": null,
+    "statement_sha256": null,
+    "status": "invalid"
    },
    "kind": "bundle",
-   "name": "legacy_receipt_under_a_legacy_statement",
+   "name": "canon1_receipt_under_a_canon1_statement_is_refused",
    "pinned": [
     "51d07513ea144ffbd4017541bf33b184f6383f27b133d096759d9f1a64f48009"
    ]
@@ -6567,7 +6310,7 @@
     "key": "",
     "ok": false,
     "pinned": true,
-    "problem": "the receipt names an encoding other than canon/2",
+    "problem": "the receipt does not name canon/2 (canon/1 is retired)",
     "statement": null,
     "statement_sha256": null,
     "status": "invalid"
@@ -6636,7 +6379,7 @@
     "key": "",
     "ok": false,
     "pinned": true,
-    "problem": "the statement names an encoding other than canon/2",
+    "problem": "the statement does not name canon/2 (canon/1 is retired)",
     "statement": null,
     "statement_sha256": null,
     "status": "invalid"

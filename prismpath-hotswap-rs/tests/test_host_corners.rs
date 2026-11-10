@@ -123,11 +123,11 @@ fn a_verified_manifest_whose_version_is_not_an_integer_changes_nothing() {
     let probe = PolicyHost::new(&setup.state(), vec![public.clone()], setup.doc["envelopes"]["default"].clone(), Vec::new()).unwrap();
     assert_eq!(probe.swap(ppt.to_str().unwrap(), false).unwrap()["reasons"], json!(["manifest:bad-format"]));
     drop(probe);
-    // a legacy (untagged, canon/1) manifest can, and its signature verifies, so the version check decides
-    manifest.as_object_mut().unwrap().remove("encoding");
+    // a canon/2 manifest with a version that is a string reads, and its signature verifies, so the version check decides
+    manifest["version"] = json!("7");
     std::fs::write(&manifest_path, serde_json::to_string(&manifest).unwrap()).unwrap();
     use ed25519_dalek::Signer;
-    let signature = load_private(&private).unwrap().sign(&canonical_bytes(&manifest).unwrap());
+    let signature = load_private(&private).unwrap().sign(&signed_bytes(&manifest).unwrap());
     std::fs::write(format!("{}.manifest.sig", ppt.display()), signature.to_bytes()).unwrap();
 
     let host = PolicyHost::new(&setup.state(), vec![public], setup.doc["envelopes"]["default"].clone(), Vec::new()).unwrap();
@@ -221,12 +221,20 @@ fn a_host_shared_between_threads_commits_one_swap_at_a_time() {
     assert_eq!(fresh.active_info()["active"], host.active_info()["active"]);
 }
 
-/// The compact bytes a signature covers are refused, not panicked on, for a number beyond the double range.
+/// The bytes a signature covers are refused, not panicked on, for a number beyond the double range, a float
+/// and a document that does not name canon/2.
 #[test]
 fn canonical_bytes_refuse_a_number_beyond_the_double_range() {
     let overflow: Value = serde_json::from_str("1e400").unwrap();
-    assert!(canonical_bytes(&json!({"wcet_cycles": overflow})).is_err());
-    assert_eq!(canonical_bytes(&json!({"b": 1, "a": 2})).unwrap(), br#"{"a":2,"b":1}"#.to_vec());
+    assert!(canonical_bytes(&tagged_doc(json!({"wcet_cycles": overflow}))).is_err());
+    assert!(canonical_bytes(&tagged_doc(json!({"wcet_cycles": 1.5}))).is_err());
+    assert!(canonical_bytes(&json!({"b": 1, "a": 2})).is_err(), "canon/1 is retired: an untagged document has no bytes");
+    assert_eq!(canonical_bytes(&tagged_doc(json!({"b": 1, "a": 2}))).unwrap(), br#"{"a":2,"b":1,"encoding":"canon/2"}"#.to_vec());
+}
+
+fn tagged_doc(mut doc: Value) -> Value {
+    doc["encoding"] = json!("canon/2");
+    doc
 }
 
 /// Python's `PolicyHost` answers these the same way (`prismpath/tests/test_policy_host.py`); the reason text

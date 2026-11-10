@@ -47,8 +47,8 @@ def test_tampered_leaf_fails_verify(tmp_path):
 
 
 def test_leaf_commits_to_content(tmp_path):
-    e1 = {"idx": 0, "id": "0", "ts": 1.0, "actor": "x", "action": "a", "data": {"n": 1}}
-    e2 = {"idx": 0, "id": "0", "ts": 1.0, "actor": "x", "action": "a", "data": {"n": 2}}
+    e1 = {"idx": 0, "id": "0", "ts_us": 1, "actor": "x", "action": "a", "data": {"n": 1}, "encoding": "canon/2"}
+    e2 = {"idx": 0, "id": "0", "ts_us": 1, "actor": "x", "action": "a", "data": {"n": 2}, "encoding": "canon/2"}
     assert _leaf_hex(e1) != _leaf_hex(e2)                       # content change -> different leaf
     assert _leaf_hex(e1) == _leaf_hex(dict(e1))                 # same content -> stable leaf
 

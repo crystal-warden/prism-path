@@ -125,11 +125,11 @@ def upsert_jsonl(path, record: dict, key) -> bool:
             if not line:
                 continue
             try:
-                existing = canon.loads(line)
+                existing = canon.plain_loads(line)
             except ValueError:
                 continue
             if tuple(existing.get(key_field) for key_field in keys) == kv:
                 return False
     with open(jsonl_path, "a") as handle:
-        handle.write(canon.dumps_strict(record) + "\n")
+        handle.write(canon.plain_dumps(record) + "\n")
     return True

@@ -70,9 +70,9 @@ and your own `root_at`). The instance key and the authority key must stay apart:
 signs or runs anything, as Python's `run` does.
 
 **What enforces agreement.** `prismpath/portable/conformance/receipts.json` is a frozen vector set
-written by `prismpath/portable/gen_receipt_fixtures.py` from the Python reference (301 canon/2 cases, beside the
-287 of its frozen canon/1 twin `receipts_canon1.json`, which is replayed the same way: the
-canonical JSON bytes, the tree, valid and tampered audit trails, receipt bundles with 0.1.3's checks (`status`, `index`, `covered`, and the `problem` for a malformed bundle), flow manifests, the
+written by `prismpath/portable/gen_receipt_fixtures.py` from the Python reference (245 canon/2 cases, among them
+the refusals of what canon/1 wrote, which is retired and has no twin: the
+tree, valid and tampered audit trails, receipt bundles with 0.1.3's checks (`status`, `index`, `covered`, and the `problem` for a malformed bundle), flow manifests, the
 version floor, the key separation). It is reproducible byte for byte, `prismpath/tests/test_receipt_vectors.py`
 refuses drift and replays it through Python, and `tests/test_receipt_verify.rs` replays it through
 this crate and requires every verdict to match. `tests/test_receipt_edges.rs` pins the places this
@@ -100,10 +100,9 @@ text, or is a list or object while a key is pinned.
 line, a statement holding one is unreadable, and a manifest holding one is `manifest:bad-format`, all
 reported), and a document that names canon/2 is read by the strict canon/2 reader as well, which refuses any
 float, a duplicate key and an integer beyond plus or minus 2^53 minus 1. A canon/2 document is hashed over
-its canon/2 bytes (`prismpath_rs::durable::document_bytes`); an untagged one, written before the migration,
-over its canon/1 compact bytes, with floats as Python's `repr` writes them
-(`prismpath_rs::durable::py_float_repr`) and read with serde_json's `float_roundtrip`, so an old receipt's
-float `ts` still hashes to the same leaf on both sides.
+its canon/2 bytes (`prismpath_rs::durable::document_bytes`). A document without the tag is canon/1, which is
+retired: it is not read, hashed or verified (an untagged log line is skipped and the log no longer verifies,
+an untagged statement is `bad_format`, an untagged manifest is `manifest:bad-format`).
 
 **What it does not do.** It does not sign, create or load private keys for statements or manifests,
 write an audit log or a statements file, check an OpenTimestamps or RFC 3161 anchor, or decide when

@@ -15,9 +15,8 @@ pub const SUITE_NODE_PREFIX: &str = "suite-";
 pub const REACH_BOUND: usize = 25;
 const PQ_KEM_TOKENS: [&str; 2] = ["ml-kem", "kyber"];
 
-/// Registry hash: sha256 hex digest of the registry's canonical bytes under the encoding it names
-/// (`durable::document_bytes`: canon/2 for a registry tagged `"encoding": "canon/2"`, canon/1 compact for
-/// a legacy untagged one). A registry with no form under its encoding is refused with `CanonicalError`.
+/// Registry hash: sha256 hex digest of the registry's canon/2 bytes (`durable::document_bytes`). A registry
+/// that does not name canon/2, or has no canon/2 form, is refused with `CanonicalError`.
 pub fn registry_hash(registry: &Value) -> Result<String, CanonicalError> {
     let canonical = document_bytes(registry)?;
     let mut hasher = Sha256::new();

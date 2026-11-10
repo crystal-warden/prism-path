@@ -1,85 +1,102 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 Crystal Warden Supply Chain Labs LLC
-//! Canonical JSON gate: replay `conformance/canonical.json`, generated from `prismpath.canon`, so the
-//! bytes every signature and Merkle leaf is hashed over are pinned for floats (exponents, tiny and
-//! huge values, integral values, negative zero), integers beyond 64 bits, unicode escapes, key
-//! ordering and nesting, and the inputs canonical JSON refuses (NaN, Infinity, a number beyond the double
-//! range, a lone surrogate). Each input is JSON text, parsed here and written back in both encodings.
+//! The byte rules under everything hashed or signed: canon/2 is the one encoding, a document without its tag
+//! is refused (canon/1 is retired), a float in hashed content is refused, and what has no JSON form at all (a
+//! number beyond the double range) is refused on read and on write. The canon/2 bytes themselves are pinned by
+//! `conformance/canon2.json` (`test_canon2.rs`).
 #![cfg(feature = "durable")]
 
-use prismpath_rs::durable::{py_canonical_string, py_float_repr, try_py_canonical_string};
-use serde_json::Value;
+use prismpath_rs::durable::{
+    canon2_bytes, content_bytes, document_bytes, encoding_of, plain_dumps, py_float_repr, read_document, signed_message, tagged,
+    CANON2_DOMAIN,
+};
+use serde_json::{json, Value};
 
-fn corpus() -> Value {
-    let path = format!("{}/../prismpath/portable/conformance/canonical.json", env!("CARGO_MANIFEST_DIR"));
-    serde_json::from_str(&std::fs::read_to_string(path).expect("read canonical.json")).expect("parse canonical.json")
-}
-
-#[test]
-fn canonical_bytes_match_python_for_every_case() {
-    let corpus = corpus();
-    let cases = corpus["cases"].as_array().unwrap();
-    let mut failures = Vec::new();
-    for case in cases {
-        let name = case["name"].as_str().unwrap();
-        let value: Value = prismpath_rs::value::parse_strict(case["json"].as_str().unwrap())
-            .unwrap_or_else(|error| panic!("{name}: Rust cannot parse {}: {error}", case["json"]));
-        for (spaced, key) in [(false, "compact"), (true, "spaced")] {
-            let got = py_canonical_string(&value, spaced);
-            if got != case[key].as_str().unwrap() {
-                failures.push(format!("{name} {key}: rust {got} python {}", case[key].as_str().unwrap()));
-            }
-        }
-    }
-    assert!(failures.is_empty(), "{} of {} outputs differ from Python:\n{}", failures.len(), cases.len() * 2, failures.join("\n"));
-    eprintln!("canonical: {}/{} cases identical to Python in both encodings", cases.len(), cases.len());
-}
-
-/// Canonical JSON has no form for these inputs, and neither language converts them: both refuse the
-/// document when they read it (`canon.loads`, `parse_strict`). The list of inputs Python writes
-/// bytes for and Rust refuses is empty, so the corpus has no divergence to record.
+/// JSON has no form for these inputs, and neither language converts them: both refuse the document when
+/// they read it (`canon.plain_loads`, `value::parse_plain`).
 #[test]
 fn every_refused_input_is_refused_on_read() {
-    let corpus = corpus();
-    let refused = corpus["refused"].as_array().unwrap();
-    assert!(refused.len() >= 14, "the refused list shrank");
-    for case in refused {
-        let (name, text) = (case["name"].as_str().unwrap(), case["json"].as_str().unwrap());
-        assert!(case.get("compact").is_none(), "{name}: a refused input carries no bytes");
-        let error = prismpath_rs::value::parse_strict(text).expect_err(&format!("{name}: parse_strict accepted {text}"));
-        eprintln!("canonical: refused {name}: {error}");
+    let refused = [
+        "NaN", "[Infinity]", "-Infinity", r#"{"x": NaN}"#, "1e400", "-1e400", "[1, 1e999]", r#"{"x": 1E+999}"#,
+        r#"{"x": -1e400}"#, "1.7976931348623159e308",
+    ];
+    for text in refused {
+        assert!(prismpath_rs::value::parse_plain(text).is_err(), "{text}: parse_plain accepted it");
+        assert!(read_document(text).is_err(), "{text}: read_document accepted it");
     }
-    eprintln!("canonical: {}/{} refused inputs refused on read", refused.len(), refused.len());
 }
 
 /// A number beyond the double range is the one input serde_json holds; plain parsing keeps its digits,
-/// and every use of it refuses: no canonical bytes, no engine value, no double. It is never infinity
-/// and never zero.
+/// and every use of it refuses: no bytes, no engine value, no double. It is never infinity and never zero.
 #[test]
 fn a_number_beyond_the_double_range_is_refused_never_converted() {
     for text in ["1e400", "-1e400", "1.7976931348623159e308", "[1, 1e999]", r#"{"a": 1E+999}"#] {
         let json: Value = serde_json::from_str(text).unwrap();
-        assert!(py_canonical_string_refused(&json), "{text}: canonical bytes were written");
+        assert!(plain_dumps(&json).is_err(), "{text}: bytes were written");
+        assert!(canon2_bytes(&json).is_err(), "{text}: canon/2 bytes were written");
+        assert!(content_bytes(&json).is_err(), "{text}: content bytes were written");
         assert!(prismpath_rs::value::Value::try_from_json(&json).is_err(), "{text}: became an engine value");
-        assert!(prismpath_rs::value::parse_strict(text).is_err(), "{text}: parse_strict accepted it");
+        assert!(prismpath_rs::value::parse_plain(text).is_err(), "{text}: parse_plain accepted it");
     }
     let huge: Value = serde_json::from_str("1e400").unwrap();
     assert_eq!(prismpath_rs::value::number_to_f64(huge.as_number().unwrap()), None);
     for (text, expect) in [("1e30", 1e30), ("1.7976931348623157e308", f64::MAX), ("1e-400", 0.0)] {
-        let json = prismpath_rs::value::parse_strict(text).unwrap();
+        let json = prismpath_rs::value::parse_plain(text).unwrap();
         assert!(matches!(prismpath_rs::value::Value::from_json(&json), prismpath_rs::value::Value::Num(number) if number == expect), "{text}");
     }
 }
 
-fn py_canonical_string_refused(value: &Value) -> bool {
-    [false, true].iter().all(|spaced| try_py_canonical_string(value, *spaced).is_err())
+/// canon/1 is retired: a document with no tag, another tag or no object at all has no bytes, no signed message
+/// and no reading, and is never read under another encoding.
+#[test]
+fn a_document_that_does_not_name_canon2_is_refused_everywhere() {
+    for doc in [json!({"a": 1}), json!({"encoding": "canon/1"}), json!({"encoding": "canon/3"}), json!({"encoding": null}), json!([1]), json!("x"), json!(7)] {
+        assert!(encoding_of(&doc).is_err(), "{doc}");
+        assert!(document_bytes(&doc).is_err(), "{doc}");
+        assert!(signed_message(&doc).is_err(), "{doc}");
+    }
+    for text in [r#"{"a":1}"#, r#"{"a":1.5}"#, r#"{"encoding":"canon/1"}"#, "[1]", "7"] {
+        let error = read_document(text).expect_err(text);
+        assert!(error.to_string().contains("canon/2") || error.to_string().contains("JSON object"), "{text}: {error}");
+    }
+    let doc = tagged(json!({"b": 2, "a": "é"}));
+    assert_eq!(document_bytes(&doc).unwrap(), r#"{"a":"é","b":2,"encoding":"canon/2"}"#.as_bytes().to_vec());
+    let mut message = CANON2_DOMAIN.to_vec();
+    message.extend(document_bytes(&doc).unwrap());
+    assert_eq!(signed_message(&doc).unwrap(), message);
+    assert_eq!(read_document(r#"{"encoding":"canon/2","n":1}"#).unwrap(), json!({"encoding": "canon/2", "n": 1}));
+    assert!(read_document(r#"{"encoding":"canon/2","n":1.5}"#).is_err());
+}
+
+/// A float anywhere in hashed content is refused with the words Python's `FloatRefused` uses.
+#[test]
+fn a_float_in_hashed_content_is_refused_not_converted() {
+    for text in ["0.5", r#"{"r": 0.1}"#, r#"{"n": [1, 2.0]}"#, r#"{"x": {"y": [1e30]}}"#, "-0.0", "1E2"] {
+        let value = prismpath_rs::value::parse_plain(text).unwrap();
+        let error = content_bytes(&value).expect_err(text);
+        assert!(error.to_string().contains("integer of a stated unit"), "{text}: {error}");
+        assert!(error.to_string().contains("a decimal string"), "{text}: {error}");
+    }
+    assert_eq!(content_bytes(&json!({"r": "0.1", "n": [1, 2]})).unwrap(), br#"{"n":[1,2],"r":"0.1"}"#.to_vec());
+    assert_eq!(content_bytes(&json!({"big": 9007199254740991i64, "neg": -9007199254740991i64})).unwrap().len(), 48);
+    assert!(content_bytes(&json!({"big": 9007199254740992i64})).is_err(), "an integer past 2^53 minus 1 is refused");
+}
+
+/// The sink's line is Python's `json.dumps(sort_keys=True)`: it is not canon/2 and nothing hashed is written with it.
+#[test]
+fn plain_dumps_is_pythons_json_dumps() {
+    assert_eq!(plain_dumps(&json!({"b": 1, "a": [1, 2.5, "é", null, true]})).unwrap(), r#"{"a": [1, 2.5, "\u00e9", null, true], "b": 1}"#);
 }
 
 #[test]
-fn float_spellings_match_python_repr_for_bit_patterns() {
-    let corpus = corpus();
-    for item in corpus["floats"].as_array().unwrap() {
-        let bits = u64::from_str_radix(item["bits"].as_str().unwrap(), 16).unwrap();
-        assert_eq!(py_float_repr(f64::from_bits(bits)), item["repr"].as_str().unwrap(), "bits {:016x}", bits);
+fn float_spellings_match_python_repr() {
+    // Each right hand side is `repr(float)` from CPython, which is what `json.dumps` writes.
+    for (value, python) in [
+        (0.0, "0.0"), (-0.0, "-0.0"), (1.0, "1.0"), (100.0, "100.0"), (2.5, "2.5"), (0.1, "0.1"),
+        (0.30000000000000004, "0.30000000000000004"), (0.0001, "0.0001"), (0.00001, "1e-05"),
+        (1.5e-7, "1.5e-07"), (5e-324, "5e-324"), (1e15, "1000000000000000.0"), (1e16, "1e+16"), (1.5e20, "1.5e+20"),
+        (1.7976931348623157e308, "1.7976931348623157e+308"),
+    ] {
+        assert_eq!(py_float_repr(value), python, "{value:e}");
     }
 }

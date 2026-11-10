@@ -24,27 +24,6 @@ fn fixtures() -> Value {
 }
 
 #[test]
-fn canonical_json_is_byte_identical_to_python() {
-    let fx = fixtures();
-    let cases = fx["canonical"].as_array().unwrap();
-    for case in cases {
-        assert_eq!(
-            py_canonical_string(&case["obj"], false),
-            case["compact"].as_str().unwrap(),
-            "compact bytes for {}",
-            case["obj"]
-        );
-        assert_eq!(
-            py_canonical_string(&case["obj"], true),
-            case["spaced"].as_str().unwrap(),
-            "spaced bytes for {}",
-            case["obj"]
-        );
-    }
-    eprintln!("canonical: {}/{} byte-identical", cases.len(), cases.len());
-}
-
-#[test]
 fn manifests_verify_and_tamper_fails() {
     let fx = fixtures();
     let prov = &fx["manifests"]["provenance"];

@@ -268,7 +268,7 @@ def test_a_record_that_is_not_an_object_is_not_restored(env):
     assert host.active() == {"active": None}
     last = AuditLog(str(state / "swaps.log")).events[-1]
     assert last["action"] == "active_unreadable"
-    assert last["data"] == {"reason": "record:not-an-object", "result": "not_restored"}
+    assert last["data"]["result"] == "not_restored" and last["data"]["reason"].startswith("record:unreadable:")
 
 
 def test_rollback_is_what_a_new_host_restores(env):

@@ -15,7 +15,7 @@
 //! and `FileDeferralStore`, byte-compatible with the reference's directory layout so either
 //! runtime can list and resume units the other deferred.
 
-use crate::durable::{content_bytes, flow_hash, provenance_manifest, try_py_canonical_string, CanonicalError};
+use crate::durable::{content_bytes, flow_hash, provenance_manifest, plain_dumps, CanonicalError};
 use crate::{py_str, Value as EngineValue};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
@@ -134,7 +134,7 @@ pub trait Connector {
         if let (Some(start_idx), Some(end_idx)) = (reply.find('{'), reply.rfind('}')) {
             if start_idx < end_idx {
                 if let Ok(Value::Object(mut out_map)) =
-                    crate::value::parse_strict(&reply[start_idx..=end_idx])
+                    crate::value::parse_content(&reply[start_idx..=end_idx])
                 {
                     out_map.entry("text".to_string())
                         .or_insert_with(|| Value::String(reply.trim().to_string()));
@@ -154,7 +154,7 @@ pub trait Connector {
             }
         }
         // a record with no canonical JSON form (a number beyond the double range) is refused before the file is touched
-        let canonical_line = try_py_canonical_string(result, true).map_err(|err| err.to_string())?;
+        let canonical_line = plain_dumps(result).map_err(|err| err.to_string())?;
         let key_val = result.get(key);
         if key_val.is_none() || key_val == Some(&Value::Null) {
             let mut file_handle = std::fs::OpenOptions::new()
@@ -170,7 +170,7 @@ pub trait Connector {
         let mut lines: Vec<String> = Vec::new();
         let mut replaced = false;
         for line_str in existing.lines().filter(|line_item| !line_item.trim().is_empty()) {
-            match crate::value::parse_strict(line_str) {
+            match crate::value::parse_plain(line_str) {
                 Ok(row) if row.get(key) == key_val => {
                     lines.push(canonical_line.clone());
                     replaced = true;
@@ -310,7 +310,7 @@ impl FileDeferralStore {
     pub fn get(&self, unit_id: &str) -> Option<Value> {
         std::fs::read_to_string(self.path(unit_id))
             .ok()
-            .and_then(|text| crate::value::parse_strict(&text).ok())
+            .and_then(|text| crate::value::parse_plain(&text).ok())
     }
 
     pub fn pending(&self) -> Vec<Value> {
@@ -327,7 +327,7 @@ impl FileDeferralStore {
             .into_iter()
             .filter_map(|name_str| {
                 let text = std::fs::read_to_string(self.dir.join(name_str)).ok()?;
-                let rec: Value = crate::value::parse_strict(&text).ok()?;
+                let rec: Value = crate::value::parse_plain(&text).ok()?;
                 (rec.get("status").and_then(|status_val| status_val.as_str()) == Some("pending")).then_some(rec)
             })
             .collect()

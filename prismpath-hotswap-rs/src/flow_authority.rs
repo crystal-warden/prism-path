@@ -11,8 +11,8 @@
 //! ```
 //!
 //! The signature covers the canon/2 domain and the canon/2 bytes of the manifest (the bytes a pack
-//! manifest's covers; the `format` field keeps the two apart); a manifest without `encoding`, signed
-//! before the migration, is checked over its canon/1 compact bytes. The flow's hash is the SHA-256 of its UTF-8 text
+//! manifest's covers; the `format` field keeps the two apart); a manifest without `encoding` (canon/1,
+//! retired) is refused as `manifest:bad-format`. The flow's hash is the SHA-256 of its UTF-8 text
 //! with line endings read as LF, so a checkout that turns LF into CRLF does not unauthorize a flow
 //! and a change to any character does.
 //!
@@ -159,7 +159,7 @@ pub struct VersionFloor {
 impl VersionFloor {
     /// Read the floor file's text (a JSON object of flow name to entry).
     pub fn from_json_str(text: &str) -> Result<VersionFloor, String> {
-        match prismpath_rs::value::parse_strict(text).map_err(|error| error.to_string())? {
+        match prismpath_rs::value::parse_plain(text).map_err(|error| error.to_string())? {
             Value::Object(entries) => Ok(VersionFloor { entries }),
             _ => Err("the version floor is not a JSON object".to_string()),
         }

@@ -11,10 +11,9 @@
 //!     The flow file is NEVER written; a resume against an edited flow is refused by content hash
 //!     (`PRISMPATH_RESUME_ON_FLOW_CHANGE` = refuse | warn | allow, same contract as Python).
 //!   * the content-addressed provenance/override manifests + `verify_manifest` + `salt_leaf`:
-//!     the tamper-evidence primitives. `manifest_hash` is sha256 over Python's exact
-//!     `json.dumps(..., sort_keys=True)` byte layout, reproduced here by `py_canonical_string`
-//!     (also used compact for the policy-pack signatures), so a manifest built on either runtime
-//!     verifies on the other.
+//!     the tamper-evidence primitives. `manifest_hash` is sha256 over the manifest's canon/2 bytes
+//!     (`canon2_bytes`), so a manifest built on either runtime verifies on the other. canon/1, the
+//!     earlier Python `json.dumps` layout, is retired: an untagged manifest is refused.
 //!
 //! Deliberately NOT ported (ops tooling, not edge runtime): the OTS batch-forward relay, tar
 //! bundling, and the RFC-3161/openssl subprocess tiers of `ledger_airgap.py`; the Mission Control
@@ -49,9 +48,9 @@ fn cerr<RetType>(msg: impl Into<String>) -> Result<RetType, CheckpointError> {
 
 // Python-parity canonical JSON
 
-/// A value with no canonical JSON form: a number beyond the double range (`1e400`) or a non finite
-/// double. `prismpath.canon.CanonicalError` is the same refusal in Python. A string with a lone
-/// surrogate never reaches here, because a Rust `String` cannot hold one.
+/// A value that has no canonical form: a number beyond the double range (`1e400`), a float in hashed
+/// content, a document that does not name canon/2. `prismpath.canon.CanonicalError` is the same refusal in
+/// Python. A string with a lone surrogate never reaches here, because a Rust `String` cannot hold one.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CanonicalError(pub String);
 
@@ -62,14 +61,13 @@ impl std::fmt::Display for CanonicalError {
 }
 impl std::error::Error for CanonicalError {}
 
-/// Python `json.dumps(obj, sort_keys=True)` byte-for-byte: sorted keys, `ensure_ascii` escaping,
-/// ints as ints of any width, floats as `repr(float)`. `spaced=false` gives the
-/// `separators=(",", ":")` compact form the policy-pack signatures use; `spaced=true` the default
-/// `(", ", ": ")` form the manifests hash over. A number beyond the double range is refused with
-/// `CanonicalError`, as `canon.canonical_compact` refuses a non finite float; it is never written
-/// as `Infinity`.
-pub fn try_py_canonical_string(val: &Value, spaced: bool) -> Result<String, CanonicalError> {
-    let (item_sep, key_sep) = if spaced { (", ", ": ") } else { (",", ":") };
+/// Python `json.dumps(obj, sort_keys=True)` for a value that is never hashed or signed: a line of the
+/// connector's JSONL sink. Sorted keys, the default `(", ", ": ")` separators, `ensure_ascii` escaping, ints
+/// of any width, floats as `repr(float)`. It is `prismpath.canon.plain_dumps(..., sort_keys=True)`. Nothing
+/// that is hashed or signed is written with it (canon/2 is: `canon2_bytes`), and a test holds every call of
+/// it to a list of sink and message writers. A number beyond the double range is refused with
+/// `CanonicalError`; it is never written as `Infinity`.
+pub fn plain_dumps(val: &Value) -> Result<String, CanonicalError> {
     Ok(match val {
         Value::Null => "null".to_string(),
         Value::Bool(bool_val) => bool_val.to_string(),
@@ -83,46 +81,46 @@ pub fn try_py_canonical_string(val: &Value, spaced: bool) -> Result<String, Cano
             } else {
                 match crate::value::number_to_f64(num_val) {
                     Some(float) => py_float_repr(float),
-                    None => return Err(CanonicalError("NaN, Infinity and -Infinity have no canonical JSON form".to_string())),
+                    None => return Err(CanonicalError("NaN, Infinity and -Infinity have no JSON form".to_string())),
                 }
             }
         }
         Value::String(raw) => py_json_quote(raw),
         Value::Array(arr_val) => {
-            let items = arr_val.iter().map(|item| try_py_canonical_string(item, spaced)).collect::<Result<Vec<String>, _>>()?;
-            format!("[{}]", items.join(item_sep))
+            let items = arr_val.iter().map(plain_dumps).collect::<Result<Vec<String>, _>>()?;
+            format!("[{}]", items.join(", "))
         }
         Value::Object(obj_map) => {
             let sorted: BTreeMap<&String, &Value> = obj_map.iter().collect();
             let items = sorted
                 .iter()
-                .map(|(key, item)| Ok(format!("{}{}{}", py_json_quote(key), key_sep, try_py_canonical_string(item, spaced)?)))
+                .map(|(key, item)| Ok(format!("{}: {}", py_json_quote(key), plain_dumps(item)?)))
                 .collect::<Result<Vec<String>, CanonicalError>>()?;
-            format!("{{{}}}", items.join(item_sep))
+            format!("{{{}}}", items.join(", "))
         }
     })
 }
 
-// canon/2, and the tag that decides between it and canon/1
+// canon/2, the one encoding of everything hashed or signed
 
 /// The encoding every hashed or signed document is written in, named by the document's own
 /// `encoding` member (`prismpath.canon.CANON2` in Python).
 pub const CANON2: &str = "canon/2";
-/// An untagged document: written before the migration, read and hashed under canon/1 only to verify.
-pub const CANON1: &str = "canon/1";
 pub const ENCODING_KEY: &str = "encoding";
 /// The domain a signature over a canon/2 document is computed over, before the document's bytes, when
 /// its format has no domain of its own (`prismpath.canon.CANON2_DOMAIN`).
 pub const CANON2_DOMAIN: &[u8] = b"prismpath.canon/2\x00";
 
-/// `canon/2` for an object that names it, `canon/1` for one without the member (legacy, verify only).
-/// Any other tag is refused.
+/// `canon/2` for an object that names it. Any other tag, an object with no tag (canon/1, retired) and a
+/// value that is not an object are refused. `prismpath.canon.encoding_of`.
 pub fn encoding_of(val: &Value) -> Result<&'static str, CanonicalError> {
     match val.as_object().and_then(|obj| obj.get(ENCODING_KEY)) {
-        None => Ok(CANON1),
+        None => Err(CanonicalError(
+            "a document without \"encoding\": \"canon/2\" is refused: canon/1 is retired and is not read, hashed or verified".to_string(),
+        )),
         Some(Value::String(tag)) if tag == CANON2 => Ok(CANON2),
         Some(other) => Err(CanonicalError(format!(
-            "unknown encoding {}: only canon/2 is read, and a document without the member is canon/1",
+            "unknown encoding {}: only canon/2 is read",
             other.to_string().chars().take(40).collect::<String>()
         ))),
     }
@@ -166,46 +164,34 @@ pub fn tagged(mut val: Value) -> Value {
     val
 }
 
-/// The bytes a document is hashed over, decided by its own tag: canon/2 for a document that names it,
-/// canon/1 compact for an untagged one (verify only). `prismpath.canon.document_bytes`.
+/// The bytes a document is hashed over: its canon/2 bytes. A document that does not name canon/2 is
+/// refused. `prismpath.canon.document_bytes`.
 pub fn document_bytes(val: &Value) -> Result<Vec<u8>, CanonicalError> {
-    if encoding_of(val)? == CANON2 {
-        canon2_bytes(val)
-    } else {
-        try_py_canonical_string(val, false).map(String::into_bytes)
-    }
+    encoding_of(val)?;
+    canon2_bytes(val)
 }
 
-/// What a signature over `val` covers when its format has no domain of its own: `CANON2_DOMAIN` and
-/// the canon/2 bytes for a tagged document, the bare canon/1 compact bytes for a legacy one.
+/// What a signature over `val` covers when its format has no domain of its own: `CANON2_DOMAIN` and the
+/// canon/2 bytes. A document that does not name canon/2 is refused. `prismpath.canon.signed_message`.
 pub fn signed_message(val: &Value) -> Result<Vec<u8>, CanonicalError> {
-    if encoding_of(val)? == CANON2 {
-        let mut message = CANON2_DOMAIN.to_vec();
-        message.extend(canon2_bytes(val)?);
-        Ok(message)
-    } else {
-        try_py_canonical_string(val, false).map(String::into_bytes)
-    }
+    encoding_of(val)?;
+    let mut message = CANON2_DOMAIN.to_vec();
+    message.extend(canon2_bytes(val)?);
+    Ok(message)
 }
 
-/// Read a document whose tag decides its reader: `value::parse_strict`, and for an object that names
-/// canon/2 the strict canon/2 reader as well (a float, a duplicate key or an out of range integer is
-/// refused). `prismpath.canon.loads_document`.
+/// Read a document that is hashed or signed: an object that names canon/2, read by the strict canon/2
+/// reader (a float, a duplicate key or an out of range integer is refused). An untagged object, another
+/// tag and a value that is not an object are refused. `prismpath.canon.loads_document`.
 pub fn read_document(text: &str) -> Result<Value, CanonicalError> {
-    let val = crate::value::parse_strict(text).map_err(|error| CanonicalError(error.to_string()))?;
-    if encoding_of(&val)? == CANON2 {
-        crate::canon2::read_str(text)
-            .map_err(|error| CanonicalError(format!("a document that names canon/2 does not read under it: {error}")))?;
+    let val = crate::value::parse_plain(text).map_err(|error| CanonicalError(error.to_string()))?;
+    if !val.is_object() {
+        return Err(CanonicalError("a document that is hashed or signed is a JSON object".to_string()));
     }
+    encoding_of(&val)?;
+    crate::canon2::read_str(text)
+        .map_err(|error| CanonicalError(format!("a document that is read as canon/2 does not read under it: {error}")))?;
     Ok(val)
-}
-
-/// `try_py_canonical_string` for a caller with no way to report a refusal. Every input boundary
-/// reads with `value::parse_strict`, which refuses the one kind of number that has no canonical
-/// form, so a value read that way cannot fail here; a value that does fail stops with a panic naming
-/// the refusal rather than being written as `Infinity` or zero.
-pub fn py_canonical_string(val: &Value, spaced: bool) -> String {
-    try_py_canonical_string(val, spaced).unwrap_or_else(|error| panic!("{error}; read documents with value::parse_strict"))
 }
 
 /// An integer too wide for i64 and u64, written the way Python writes it: every digit, no
@@ -454,7 +440,7 @@ pub fn save_checkpoint(
 
 pub fn load_checkpoint(path: &str) -> Result<Value, CheckpointError> {
     let text = std::fs::read_to_string(path).map_err(|err| CheckpointError(err.to_string()))?;
-    let cp: Value = crate::value::parse_strict(&text).map_err(|err| CheckpointError(err.to_string()))?;
+    let cp: Value = crate::value::parse_plain(&text).map_err(|err| CheckpointError(err.to_string()))?;
     if cp.get("version").and_then(|ver| ver.as_i64()) != Some(CHECKPOINT_VERSION) {
         return cerr(format!(
             "unsupported checkpoint version {:?} (this build expects {CHECKPOINT_VERSION})",
@@ -876,17 +862,15 @@ pub fn verify_context_chain(segments: &[ContextSegment]) -> bool {
 
 // attestation manifests (C1/C4)
 
-/// sha256 over every field but `manifest_hash`, under the encoding the manifest names: canon/2 for a
-/// tagged manifest, the spaced canon/1 form for an untagged one (verify only). `canon.manifest_hash`.
+/// sha256 over the canon/2 bytes of every field but `manifest_hash`. A manifest that does not name canon/2
+/// is refused. `canon.manifest_hash`.
 fn manifest_hash_of(manifest_val: &Value) -> Result<String, CanonicalError> {
     let mut body = manifest_val.clone();
     if let Value::Object(obj_map) = &mut body {
         obj_map.remove("manifest_hash");
     }
-    if encoding_of(manifest_val)? == CANON2 {
-        return Ok(hex::encode(Sha256::digest(canon2_bytes(&body)?)));
-    }
-    Ok(hex::encode(Sha256::digest(try_py_canonical_string(&body, true)?.as_bytes())))
+    encoding_of(manifest_val)?;
+    Ok(hex::encode(Sha256::digest(canon2_bytes(&body)?)))
 }
 
 #[allow(clippy::too_many_arguments)]

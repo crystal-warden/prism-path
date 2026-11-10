@@ -16,7 +16,7 @@ with its Ed25519 signature in `flow.md.manifest.sig`, the same two file shape a 
 The signature covers `canon.CANON2_DOMAIN` and the canon/2 bytes of the manifest
 (`policy_pack.signed_bytes`), as a pack manifest's does; the `format` field keeps the two from ever being
 the same bytes. A manifest without `encoding`, signed before the migration over canon/1 compact JSON with
-no domain, is verified that way and never written. The flow's hash
+no domain, is refused as `manifest:bad-format`: canon/1 is retired. The flow's hash
 is the sha256 of its UTF-8 text with line endings read as LF, the same hash `swap pack --flow` records
 in a pack manifest, so a checkout that turns LF into CRLF does not unauthorize a flow and a change to
 any character does.
@@ -193,7 +193,7 @@ class VersionFloor:
         self.entries: Dict[str, dict] = {}
         if os.path.exists(path):
             with open(path, encoding="utf-8") as handle:
-                loaded = canon.load(handle)
+                loaded = canon.plain_load(handle)
             if not isinstance(loaded, dict):
                 raise ValueError(f"{path}: the version floor is not a JSON object")
             self.entries = loaded

@@ -131,13 +131,14 @@ def main() -> int:
             record(variant, image, None, sig, [pub], [], manifest_raw=raw)
 
         # a legacy (canon/1, untagged) manifest signed over its canon/1 compact bytes, as packs were signed
-        # before the migration: it still verifies, until the owner retires canon/1 signing
+        # before the migration: canon/1 is retired, so it is `manifest:bad-format` and never verifies
         legacy = {key: value for key, value in manifest.items() if key != "encoding"}
-        record("legacy_canon1_manifest_still_verifies", image, legacy,
-               pp._load_private(keys["private"]).sign(pp.canonical_bytes(legacy)), [pub], [])
-        # the same legacy manifest given the canon/2 tag after signing: the signature no longer covers it
+        legacy_bytes = json.dumps(legacy, sort_keys=True, separators=(",", ":")).encode("ascii")
+        record("a_canon1_manifest_is_refused", image, legacy,
+               pp._load_private(keys["private"]).sign(legacy_bytes), [pub], [])
+        # the same legacy manifest given the canon/2 tag after signing: the signature does not cover it
         record("legacy_signature_over_a_retagged_manifest", image, manifest,
-               pp._load_private(keys["private"]).sign(pp.canonical_bytes(legacy)), [pub], [])
+               pp._load_private(keys["private"]).sign(legacy_bytes), [pub], [])
 
         # out-of-envelope field: manifest fields {"z": int}, properly re-signed -> verify ok,
         # envelope check fails with envelope:unknown-field:z
@@ -171,10 +172,11 @@ def main() -> int:
             try:
                 return man, priv.sign(pp.signed_bytes(man))
             except pp.canon.CanonicalError:
-                # a float has no canon/2 form: the case is a legacy (canon/1, untagged) manifest, the only
-                # kind that can carry one, so what it checks is the verify only canon/1 path
-                man.pop("encoding")
-                return man, priv.sign(pp.signed_bytes(man))
+                # a float has no canon/2 form, so no signature can cover this manifest as canon/2: the case
+                # keeps its tag, is signed over the spelling a writer that ignored canon/2 would produce,
+                # and is refused as `manifest:bad-format` when it is read
+                return man, priv.sign(pp.canon.CANON2_DOMAIN + json.dumps(man, sort_keys=True,
+                                                                         separators=(",", ":")).encode("ascii"))
 
         def with_flagword(image_b, flagword):
             raw = bytearray(image_b)
