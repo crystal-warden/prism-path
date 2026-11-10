@@ -7,6 +7,7 @@
 - **Zero Dependencies**: Standard library Go only (`go 1.21+`).
 - **Data-Not-Code Workflows**: Parse Markdown workflows directly into executable graph data.
 - **Safe Predicate Sandbox**: Evaluates `when` AST expressions without `eval` or arbitrary code execution.
+- **The verified policy core**: field definitions (SPEC §4.5) with exact decimal lowering in `math/big`, the policy checks in the core's order with registered causes, the system boundary and policy check, and a canon/2 reader and writer, held to the frozen vectors and to the Lean oracle by the differential harness (`docs/design/spec-verified-core.md`).
 - **Durable Suspension**: Supports `needs_human` and `wait`/`spawn` event-driven suspensions.
 - **Spec-Conformant**: Built and verified against the frozen PrismPath conformance test vectors (`1112/1112` predicates, `27/27` flows).
 

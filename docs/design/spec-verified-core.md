@@ -3,7 +3,7 @@
 *Specification of the narrow core PrismPath proves once and every implementation is held to: one
 decision of a match action policy over integers, booleans and strings, with the signed field
 definitions that say what each integer means. November 2026, research line, branch `verified-core`;
-step 2 on `verified-core-2`, step 3 on `verified-core-3`.*
+step 2 on `verified-core-2`, step 3 on `verified-core-3`, the JavaScript and Go kernels on `core-js-go`.*
 
 This document defines the core precisely enough that its Lean semantics (`formal/Core`), the oracle
 compiled from it, and the differential harness that holds the other implementations to it all refer
@@ -166,19 +166,22 @@ refuses, with the cause in parentheses:
 The first rule broken, reading left to right, names the refusal. A policy image that does not read
 is refused as `policy:unreadable`; a reading that does not read is refused as `reading:unreadable`.
 
-**The readers.** canon/2 is the one reader and writer of the core's documents, in three
+**The readers.** canon/2 is the one reader and writer of the core's documents, in five
 implementations held to one table: the Lean reader `Core.readBytes` (`formal/Core/Json.lean`), which
-defines it; the Python reference `prismpath/kernel/canon2.py` (`loads`, `dumps`); and its Rust twin
-`prismpath-rs/src/canon2.rs` (`read`, `write`). The frozen vectors
+defines it; the Python reference `prismpath/kernel/canon2.py` (`loads`, `dumps`); its Rust twin
+`prismpath-rs/src/canon2.rs` (`read`, `write`); and the two second tier kernels, JavaScript
+(`canon2Read`, `canon2Write` in `prismpath/portable/prismpath.mjs`) and Go (`Canon2Read`, `Canon2Write` in
+`prismpath-go/canon2.go`). The frozen vectors
 `prismpath/portable/conformance/canon2.json` (written by `prismpath/portable/gen_canon2_fixtures.py`,
 73 byte strings, every rule above at least once and the first rule broken where several are) are
 replayed by `prismpath/tests/test_canon2.py`, which also runs every vector through the oracle, and by
-`prismpath-rs/tests/test_canon2.rs`. The writer emits RFC 8785 with no float: no whitespace, members in
+`prismpath-rs/tests/test_canon2.rs`, `prismpath/portable/run_vectors.mjs` and `prismpath-go/conformance_test.go`.
+The writer emits RFC 8785 with no float: no whitespace, members in
 order of the UTF-16 code units of their keys, strings as raw UTF-8 with only `"`, `\` and the control
 characters escaped (`\b \t \n \f \r`, otherwise lowercase `\u00xx`), integers in decimal; it refuses
 every value the reader would refuse, so a written document reads back to the same value and its bytes
-are a fixed point. In the differential harness both legs read the image and every reading with their
-canon/2 reader, so a document level difference is a finding, not a reader gap (section 8).
+are a fixed point. In the differential harness every leg reads the image and every reading with its
+canon/2 reader, so a document level difference is a finding; there is no reader gap (section 8).
 
 **canon/1 stays, verify only.** `prismpath.canon` (Python's `json` with the compact and spaced
 canonical forms, `canon.loads` refusing NaN, Infinity, lone surrogates and numbers past the double
@@ -463,15 +466,14 @@ the implementation's own functions:
 |---|---|---|---|
 | `python` | the reference | `parser.parse`, `field_definitions.system_boundary` and `policy_check`, `engine.first_deterministic` | canon/2 (`kernel/canon2.py`) |
 | `rust` | `prismpath-rs` | the same, `prismpath-rs/examples/core_diff.rs` | canon/2 (`canon2.rs`) |
-| `js` | `prismpath/portable/prismpath.mjs` | `parse`, `firstDeterministic`, `formal/diff/core_diff_js.mjs` | `JSON.parse` after strict UTF-8 |
-| `go` | `prismpath-go` | `Parse`, `IsDeterministic`, `EvalCondition`, `prismpath-go/cmd/core_diff` | `encoding/json` after a UTF-8 check |
+| `js` | `prismpath/portable/prismpath.mjs` | `parse` (which checks the policy in the core's order and lowers exactly, in BigInt), `systemBoundary`, `firstDeterministic`, `policyCheck`, `formal/diff/core_diff_js.mjs` | canon/2 (`canon2Read`) |
+| `go` | `prismpath-go` | `Parse` (the same, in `math/big`), `SystemBoundary`, `IsDeterministic` and `EvalCondition`, `PolicyCheck`, `prismpath-go/cmd/core_diff` | canon/2 (`Canon2Read`) |
 | `c-interp` | `prismpath-hw/interp.c` | host: the reference checks the policy, reads, applies the system boundary; `ppt_compile.py` compiles and encodes registers; the interpreter picks the edge (`formal/diff/ppt_batch.c`) | canon/2 on the host |
 | `c-hdr` | `prismpath-hw/ppt_eval.h`, the embedded evaluator the FPGA's C twin and the firmwares include | the same | canon/2 on the host |
 | `ebpf` | `prismpath-ebpf/ppt_eval_bpf.h`, the evaluator every XDP program there includes, on its userspace path | the same host and compiler; the loader's parser (`ppt_image.c`, `parse_image_buf`) admits the table, which is written into the maps as `ppt_maps.c` writes them, and the evaluator's own text runs over a shim of its array maps and `bpf_loop` (`formal/diff/ebpf_batch.c`) | canon/2 on the host |
 
 Each difference is classified: `agree`; a scope difference (the inferred path and engine counters,
-section 1); a reader gap, only for the two legs with no canon/2 reader (D5); `refusing-kernel` (D5);
-`target-limit` (D6: the compiler or the register encoder refuses a value outside 32 bits, interp.c's
+section 1); `target-limit` (D6: the compiler or the register encoder refuses a value outside 32 bits, interp.c's
 64 deep stack would overflow, or the eBPF loader refuses a table outside its declared subset); or a
 finding, which is minimised to a small reproducer of the same kind. A policy both sides refuse agrees
 only when the leg names the oracle's cause and, where the oracle's refusal names a field or a reason,
@@ -488,6 +490,24 @@ disagreement, on any uncoded refusal and on any crash, and it replays the seven 
 regression set through every leg. The oracle comes from `lake build` in `formal/`; the Rust leg is the
 example `prismpath-rs/examples/core_diff.rs`, built on demand; the Go, C and eBPF adapters are compiled
 into a private temporary directory per run.
+
+**The large run, `core-js-go`** (100,000 cases, seed 1, 419,651 readings, the same generator as step 3, so the
+oracle's counts are the same). The JavaScript and Go kernels decide the core (D5), so their rows have the
+shape of the reference's and the port's, and the refusing kernel and reader gap classes no longer exist:
+
+| leg | agree | scope | excluded | other | findings |
+|---|---|---|---|---|---|
+| python | 163,379 | 10,265 inferred, 372 engine counter | 3,181 | | 0 |
+| rust | 163,379 | 10,265, 372 | 3,181 | | 0 |
+| js | 163,379 | 10,265, 372 | 3,181 | | 0 |
+| go | 163,379 | 10,265, 372 | 3,181 | | 0 |
+| c-interp | 146,673 | 10,265, 372 | 3,181 | target-limit 3,527 at compile, 2,070 on a reading | 0 |
+| c-hdr | 146,673 | 10,265, 372 | 3,181 | target-limit 3,527, 2,070 | 0 |
+| ebpf | 146,587 | 10,265, 372 | 3,181 | target-limit 3,527, 2,070, and 86 readings of tables outside the eBPF subset | 0 |
+
+Every refusal of the JavaScript and Go legs carries its registered code and the oracle's cause, field and
+reason, their policy checks equal the oracle's on every reading, and the 22,035 policies they refused as a
+refusing kernel in step 3 now route every reading as the oracle does.
 
 **The large run, step 3** (100,000 cases, seed 1, 419,651 readings, the step 2 generator, so the
 oracle's counts are step 2's below). Per leg, case level policy rows and reading rows together:
@@ -603,19 +623,35 @@ quantizer describe the *policy check* (the routed fields). Section 6.1 defines b
 implementations carry both, and the Lean theorems state that the system boundary is at least as strict
 and that only routed fields can change a route.
 
-**D5. The second tier kernels (JavaScript, Go).** Both refuse every flow that defines its fields
-(`prismpath/portable/prismpath.mjs:1113-1116`, `prismpath-go/parser.go:107-178`), as SPEC.md 4.5
-requires of a kernel that does not implement field definitions. So on the core they agree only on
-refusals. **Specification:** conformant by refusal for now; step 2 either implements section 4.5 in
-both or records them as refusing kernels in the conformance matrix. **Step 2: recorded as refusing
-kernels.** Implementing section 4.5 in them is not contained: each would need the definition grammar,
+**D5. The second tier kernels (JavaScript, Go). Resolved on `core-js-go`.** Both refused every flow that
+defined its fields (`prismpath/portable/prismpath.mjs`, `prismpath-go/parser.go`), as SPEC.md 4.5 requires of
+a kernel that does not implement field definitions, so on the core they agreed only on refusals.
+**Specification:** conformant by refusal until the owner chose otherwise; step 2 recorded them as refusing
+kernels. **Owner decision (2026-11-10): both take the same treatment as the Python reference and the Rust
+port and decide the core.** They now implement section 4.5 and the core's checks, each in its own kernel
+and with its own conformance replay: a canon/2 reader and writer (`canon2Read`, `canon2Write`; `Canon2Read`,
+`Canon2Write`), the definition grammar with Python's whitespace, exact decimal lowering on the source spans
+of the predicate text (BigInt in JavaScript, `math/big` in Go, 28 digits and an exponent of 30 as in
+the reference), the policy problems in the order of section 4 with the registered causes 89 to 100 and the
+field and reason the oracle names (`FieldDefinitionError` in both), the system boundary and the policy check
+(section 6.1) and first match routing. A refused flow has every edge disabled and the engine refuses it.
+Two evaluator corrections came with it, both matching the reference and the Rust port (D2): a bracket does not
+count as predicate depth and more than 200 open brackets refuse (JavaScript), and `and` and `or` are n-ary
+nodes whose operands are siblings, so a long `a and b and c ...` is one level and not as many as it has
+operands (Go); Go also reads `\xNN` in a string as the code point and not the byte, and both read the front
+matter with Python's whitespace (JavaScript's trim strips U+FEFF, which Python does not). The frozen vectors
+replay in both (`canon2.json` 73 of 73, `field_definitions.json` 156 of 156), and the 80 flows of
+`flows.json` that carry engine options stay skipped, since the type gate, the transcript bound and the run
+id are options of the flow engine and outside the core; none of them defines a field. The step 2 text below records why
+it was not done then.
+**Step 2: recorded as refusing kernels.** Implementing section 4.5 in them is not contained: each would need the definition grammar,
 exact decimal lowering on the source spans of the predicate text (the JavaScript kernel in BigInt), the
 six policy rules with their causes, the system boundary and the policy check, and a canon/2 reader, a
 port of about the size of `prismpath-rs/src/field_definitions.rs` and `canon2.rs` in each language, with
 its own conformance replay. Both are legs of the harness now (adapters `formal/diff/core_diff_js.mjs`,
-`prismpath-go/cmd/core_diff`): on the large run they refuse all 22,035 defined flows the oracle accepts,
-agree on every flow without definitions, and differ otherwise only by reader gaps, documents canon/2
-refuses and their runtime's JSON reads.
+`prismpath-go/cmd/core_diff`): on the large run of step 3 they refused all 22,035 defined flows the oracle accepts,
+agreed on every flow without definitions, and differed otherwise only by reader gaps, documents canon/2
+refuses and their runtime's JSON reads; the run of `core-js-go` in section 8 shows neither.
 
 **D6. The table targets (C, FPGA, eBPF).** Constants and registers are signed 32 bit
 (`int-out-of-i32`, SPEC.md 4.3), so a checked policy with a constant outside that range compiles to no
@@ -665,8 +701,10 @@ problem.
 
 **Reader gaps (closed).** Step 1 counted floats, `-0`, wide integers, duplicate keys and deep nesting
 as reader gaps: the implementations read documents with canon/1, which accepts them. canon/2 is now
-the reader of both legs (section 3), so these documents are refused with the oracle's rule and a
-difference on them is a finding; the step 2 runs show none.
+the reader of both first tier legs (section 3), so these documents are refused with the oracle's rule and a
+difference on them is a finding; the step 2 runs show none. The two second tier legs kept theirs (their
+runtimes' JSON, which also accepts a lone surrogate escape) until `core-js-go`, which gave them canon/2
+readers: every leg now reads canon/2 and the harness no longer has the class.
 
 ## 10. Next
 
@@ -676,8 +714,8 @@ policy check (section 6.1), fixed D1 to D3, ran the JavaScript, Go and C legs (D
 new claims (section 7). Step 3 (this branch) resolved D7 with a theorem and with the reference and the
 port checking in the core's order (sections 4, 7 and 9), made a differential run evidence in its own
 right (section 11), and ran the eBPF table target as a leg on its userspace path (D6). Owner decisions
-left open: whether the JavaScript and Go kernels should implement section 4.5 or stay refusing kernels
-in the conformance matrix; when the canon/2 migration of section 3.1 starts; the Rust predicate parser's
+settled since: the JavaScript and Go kernels implement section 4.5 and decide the core (D5,
+`core-js-go`). Left open: when the canon/2 migration of section 3.1 starts; the Rust predicate parser's
 reading of `-(5)` at evaluation (the core's decoder now reads it as Python's syntax tree does, and the
 lowering refuses it on a fixed field in both); whether the eBPF leg should also run in kernel where CI has
 the privileges, and whether a run's exclusion of every policy that reads an engine counter (section 11)

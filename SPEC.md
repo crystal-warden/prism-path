@@ -256,8 +256,8 @@ integers. A literal that is not a whole number of units of `1/scale`, or that lo
 never through a binary double. Float literals stay outside Level M on every other field, so this adds
 no floating point semantics to the fragment. A kernel that does not implement this section MUST refuse
 any flow that defines its fields, since running one unlowered could compare 8500 with 0.85 and would
-skip the rules below. The JavaScript and Go kernels refuse; the Python reference and the Rust kernel
-implement it, and table targets receive only lowered integers from the compiler.
+skip the rules below. The Python reference and the Rust, JavaScript and Go kernels implement it, and
+table targets receive only lowered integers from the compiler.
 
 **Policy rules.** A flow that defines any field is invalid, and no run, codebook, table or pack is
 built from it, unless all of the following hold after lowering.

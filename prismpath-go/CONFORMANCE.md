@@ -11,6 +11,7 @@
 * **`predicates.go`**: Safe AST parser and recursive descent evaluator for `when` conditions. Implements Python AST truthiness rules, numeric boolean comparisons, keyword rejection, and depth-limited AST execution (max depth 50).
 * **`parser.go`**: Markdown flow parser matching Python `splitlines()` boundaries (`\r\n`, `\r`, `\n`, `\v`, `\f`, U+0085, U+001C..U+001E, U+2028, U+2029) and parsing frontmatter, headings (`##`), edges (`->`), and annotations (`@`).
 * **`engine.go`**: Engine execution loop tracking `visits`, `max_steps`, `needs_human`, `waiting`/`spawn`, and error tiers (`on error`). Refuses non-portable flows up front via `PortabilityViolations`.
+* **`canon2.go`** and **`field_definitions.go`**: the verified policy core (`docs/design/spec-verified-core.md`): the canon/2 reader and writer, the field definition grammar, exact decimal lowering on the source spans of the predicate text, the policy problems in the core's order with their registered causes, the system boundary and the policy check.
 * **`conformance_test.go`**: Go test runner asserting 100% bit-for-bit conformance against `portable/conformance/predicates.json` and `flows.json`.
 
 ## Replaying Conformance Tests

@@ -12,8 +12,9 @@ boundaries. Each case runs through the oracle and up to seven legs (spec section
               read with the canon/2 reader `prismpath.kernel.canon2.loads`;
   * rust:     the Rust port, composed the same way by `prismpath-rs/examples/core_diff.rs`, reading with
               `prismpath_rs::canon2::read`;
-  * js, go:   the second tier kernels (`formal/diff/core_diff_js.mjs`, `prismpath-go/cmd/core_diff`), which
-              refuse every flow that defines its fields (D5) and read readings with their runtime's JSON;
+  * js, go:   the second tier kernels (`formal/diff/core_diff_js.mjs`, `prismpath-go/cmd/core_diff`), composed
+              the same way: their own canon/2 readers, `parse` (which checks the policy in the core's order and
+              lowers decimal thresholds exactly), the system boundary, first match and the policy check;
   * c-interp, c-hdr: the table targets: the reference as host, `prismpath-hw/ppt_compile.py`, and the
               certified C evaluators `interp.c` and `ppt_eval.h` through `formal/diff/ppt_batch.c` (D6);
   * ebpf:     the eBPF table target on its userspace path: the same host and compiler, the loader's parser
@@ -27,8 +28,7 @@ faithful rendering is reported as unrenderable for those legs and compared on th
 leg is an adapter around the implementation's own functions; no leg reimplements a rule.
 
 Each difference is classified. The legs that read canon/2 must refuse an unreadable image or reading
-with the oracle's rule; `reader-gap:<rule>` remains only for the two legs with no canon/2 reader. Scope
-differences, refusing kernels and target limits are counted as such; anything else is
+with the oracle's rule. Scope differences and target limits are counted as such; anything else is
 a finding, minimised to a small reproducer of the same kind.
 
     python formal/diff/core_diff.py --cases 100000 --seed 1          # the large run, every leg
@@ -57,15 +57,8 @@ ORACLE = ROOT / "formal" / ".lake" / "build" / "bin" / "core-oracle"
 EXACT = 2 ** 53 - 1
 FORMAT = "prismpath.core/1"
 START = "core_decision"
-# canon/2 document rules a leg without a canon/2 reader does not apply: for such a leg (READS_CANON2
-# false) a difference that is only one of these is a reader gap, not a finding (spec section 3)
-READER_GAP = {"float", "integer-range", "negative-zero", "duplicate-key", "depth"}
-READS_CANON2 = {"python": True, "rust": True, "c-interp": True, "c-hdr": True, "ebpf": True}
-# the second tier kernels read readings with their runtime's JSON (D5), which also accepts a lone
-# surrogate escape (replacing it, in Go)
-READER_GAP_SECOND_TIER = READER_GAP | {"lone-surrogate"}
-# the legs whose refusals speak the cause registry (the second tier kernels do not)
-CODED = {"python", "rust", "c-interp", "c-hdr", "ebpf"}
+# the legs whose refusals speak the cause registry: every one, since the second tier kernels took the core
+CODED = {"python", "rust", "js", "go", "c-interp", "c-hdr", "ebpf"}
 
 ALWAYS = {"always", "true", "else", "otherwise", "default", "_"}
 NEVER = {"false", "never"}
@@ -782,10 +775,6 @@ def _second_tier(cases, command):
     for line in result.stdout.decode("utf-8").splitlines():
         row = json.loads(line)
         out[row["id"]] = row
-    for case in cases:
-        if case.get("flow") is None and case["flow_why"].startswith("unreadable:"):
-            # these kernels read flows, not images; an image no flow is rendered from is not theirs to read
-            out[case["id"]] = {"policy": "unrenderable"}
     return out
 
 
@@ -924,15 +913,15 @@ def _uncoded(row) -> bool:
 
 
 def classify(lean_row, other, leg):
-    """[(class, detail)] for one case: 'agree', 'excluded:<why>', 'reader-gap:<rule>', 'scope:<what>', 'target-limit:<what>' or
+    """[(class, detail)] for one case: 'agree', 'excluded:<why>', 'scope:<what>', 'target-limit:<what>' or
     'finding:<what>'."""
     rows = []
     for verdict in [lean_row["policy"]] * (lean_row["policy"]["policy"] != "accepted") + lean_row["readings"]:
         if verdict.get("verdict", "refuse") == "refuse" and _uncoded(verdict):
             rows.append(("finding:uncoded", f"lean {verdict}"))
-    if leg in CODED and other.get("policy") == "refused" and _uncoded(other):
+    if other.get("policy") == "refused" and _uncoded(other):
         rows.append(("finding:uncoded", f"leg policy {other.get('cause')} {other.get('code')} {other.get('reason', '')[:120]}"))
-    for verdict in other.get("readings", []) if leg in CODED else []:
+    for verdict in other.get("readings", []):
         if verdict["verdict"] == "refuse" and verdict.get("cause") != "target-limit" and _uncoded(verdict):
             rows.append(("finding:uncoded", f"leg reading {verdict}"))
     return rows + _classify(lean_row, other, leg)
@@ -942,10 +931,6 @@ def _classify(lean_row, other, leg):
     lean_policy = lean_row["policy"]
     lean_ok = lean_policy["policy"] == "accepted"
     status = other["policy"]
-    if other.get("cause") == "refusing-kernel":
-        # D5: a kernel without field definitions refuses every flow that defines its fields, as SPEC.md 4.5
-        # requires; where the oracle refuses too, both refuse
-        return [("refusing-kernel", "accepted by the oracle")] if lean_ok else [("agree", "policy-refused")]
     if lean_ok and status == "accepted" and other.get("table") == "target-limit":
         # D6: the compiler refuses a checked policy with a constant outside 32 bits; a refusal, not a route
         return [("target-limit:compile", other.get("reason", ""))]
@@ -960,9 +945,6 @@ def _classify(lean_row, other, leg):
             return [(f"excluded:{status.split(':')[0]}", lean_policy.get("reason", ""))]
         return [(f"excluded:{status.split(':')[0]}", lean_policy["cause"])]
     if lean_ok != (status == "accepted"):
-        if not lean_ok and lean_policy["cause"] == "policy:unreadable" and lean_policy.get("reason") in READER_GAP \
-                and not READS_CANON2.get(leg, False):
-            return [(f"reader-gap:{lean_policy['reason']}", "policy")]
         if not lean_ok and other.get("defines") is False:
             # a flow that defines no field takes the reference's inferred path (SPEC.md section 4.5,
             # last paragraph), where no rule of section 4.5 applies; it is outside the core
@@ -978,12 +960,12 @@ def _classify(lean_row, other, leg):
             if (lean_policy["cause"], lean_policy.get("reason")) != (other.get("cause"), other.get("reason")):
                 return [("finding:policy", f"unreadable image: lean {lean_policy['cause']} {lean_policy.get('reason')} "
                                            f"| leg {other.get('cause')} {other.get('reason')}")]
-        if "cause" not in other or (leg not in CODED and other.get("cause") is None):
+        if "cause" not in other:
             return [("agree", "policy-refused")]
         if other.get("cause") == lean_policy["cause"]:
             named = [(key, other_key) for key, other_key in (("field", "field"), ("reason", "policy_reason"))
                      if lean_policy.get(key) and lean_policy["cause"] != "policy:unreadable"]
-            if leg in CODED and any(other.get(other_key) != lean_policy[key] for key, other_key in named):
+            if any(other.get(other_key) != lean_policy[key] for key, other_key in named):
                 # one cause per refused policy, and the first problem is the same problem: where the oracle's
                 # refusal names a field or a reason, every leg that speaks the registry names the same
                 return [("finding:cause", f"policy cause lean {lean_policy['cause']} {lean_policy.get('reason', '')} "
@@ -1004,7 +986,7 @@ def _classify(lean_row, other, leg):
         a, b = normalize_reading(lean_v), normalize_reading(other_v)
         if "policy_check" in lean_v and "policy_check" in other_v and lean_v["policy_check"] != other_v["policy_check"]:
             rows.append(("finding:policy-check", f"lean {lean_v['policy_check']} vs leg {other_v['policy_check']}"))
-        elif "policy_check" in lean_v and b[0] != "crash" and "policy_check" not in other_v and leg in ("python", "rust"):
+        elif "policy_check" in lean_v and b[0] != "crash" and "policy_check" not in other_v and leg in ("python", "rust", "js", "go"):
             rows.append(("finding:policy-check", f"lean {lean_v['policy_check']} vs leg none"))
         if b[0] == "crash":
             rows.append(("finding:crash", b[1]))
@@ -1019,10 +1001,8 @@ def _classify(lean_row, other, leg):
             # interp.c's operand stack is 64 deep and it exits on overflow; the driver refuses such an image
             rows.append(("target-limit:stack", f"lean {a}"))
 
-        elif a == b or (a[0] == b[0] == "unreadable" and not READS_CANON2.get(leg, False)):
+        elif a == b:
             rows.append(("agree", a[0]))
-        elif a[0] == "unreadable" and a[1] in READER_GAP_SECOND_TIER and not READS_CANON2.get(leg, False):
-            rows.append((f"reader-gap:{a[1]}", "reading"))
         else:
             rows.append(("finding:reading", f"lean {a} vs leg {b}"))
     return rows
@@ -1194,10 +1174,10 @@ def main(argv=None) -> int:
     for name in legs:
         counter = total[name]
         agree = counter["agree"]
-        gaps = sum(v for k, v in counter.items() if k.startswith("reader-gap") or k.startswith("scope"))
+        gaps = sum(v for k, v in counter.items() if k.startswith("scope"))
         excluded = sum(v for k, v in counter.items() if k.startswith("excluded"))
         found = sum(v for k, v in counter.items() if k.startswith("finding"))
-        print(f"core_diff: lean vs {name}: {agree} agree, {gaps} reader gaps or scope, {excluded} excluded, {found} findings")
+        print(f"core_diff: lean vs {name}: {agree} agree, {gaps} scope, {excluded} excluded, {found} findings")
     for (leg, kind), count in sorted(kinds.items()):
         print(f"core_diff: finding {leg} {kind}: {count}")
     return 0

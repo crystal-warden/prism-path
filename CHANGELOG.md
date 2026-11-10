@@ -230,6 +230,29 @@ already signed: packs, envelopes, receipts, root statements and every frozen cor
   loader's parser. Loading in kernel needs CAP_BPF; the kernel certification stays the CI job's. The 100,000 case
   run shows no finding on any of the seven legs.
 
+### The JavaScript and Go kernels decide the verified core (2026-11-10)
+Research line, `docs/design/spec-verified-core.md` D5. Nothing here changes a format already signed or a frozen
+corpus: a flow that defines no field parses and runs as before.
+- **Both kernels implement field definitions (SPEC section 4.5) and no longer refuse a flow that defines its
+  fields.** `parse` reads the `field.<name>` definitions with Python's whitespace, checks the policy in the
+  core's order (the problems of the spec's section 4, one cause for a refused policy), and lowers every decimal
+  threshold compared with a `fixed` field to its canonical integer from its source span, exactly (`BigInt` in
+  `prismpath/portable/prismpath.mjs`, `math/big` in `prismpath-go`). A refusal is a `FieldDefinitionError` (both)
+  with the registered cause 89 to 100 or 74 to 76, the field and the reason, and every problem in order; the
+  Go graph keeps every edge disabled and `Run` refuses it. New: `systemBoundary` and `policyCheck`
+  (`SystemBoundary`, `PolicyCheck`), `canonicalValue`, `acceptCanonical`, and a canon/2 reader and writer
+  (`canon2Read`, `canon2Write`; `Canon2Read`, `Canon2Write`) with the frozen vectors replayed in
+  `run_vectors.mjs` (`canon2.json` 73 of 73, `field_definitions.json` 156 of 156) and in
+  `prismpath-go/conformance_test.go`.
+- **Evaluator corrections the core needed.** JavaScript no longer counts a bracket as predicate depth and
+  refuses more than 200 open brackets, as the reference and the Rust port do; Go reads `and` and `or` as one
+  n-ary node (a flat chain of operands is one level, as Python's syntax tree holds it) and `\xNN` in a string as
+  the code point rather than the byte; both read front matter with Python's whitespace, so U+FEFF is not
+  stripped.
+- **The differential harness has no refusing kernel and no reader gap.** `core_diff_js.mjs` and
+  `prismpath-go/cmd/core_diff` compose the kernels' own functions as the Python and Rust legs do, read canon/2,
+  and speak the cause registry. The 100,000 case run shows no finding on any of the seven legs.
+
 ## [0.1.2] (tagged, superseded before upload; never on PyPI)
 
 ### Summary since the 0.1.0 upload to PyPI
