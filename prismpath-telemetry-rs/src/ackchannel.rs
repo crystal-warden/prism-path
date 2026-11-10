@@ -8,8 +8,13 @@ use sha2::Sha256;
 
 type HmacSha256 = Hmac<Sha256>;
 
+/// What an ACK's tag covers: the canon/2 domain and the canon/2 bytes of
+/// `{"encoding": "canon/2", "root": root, "seq": seq}` (`ackchannel._canon` in Python).
 pub fn canon(root: &str, seq: i64) -> Vec<u8> {
-    format!(r#"{{"root":"{}","seq":{}}}"#, root, seq).into_bytes()
+    let doc = serde_json::json!({"encoding": prismpath_rs::durable::CANON2, "root": root, "seq": seq});
+    let mut message = prismpath_rs::durable::CANON2_DOMAIN.to_vec();
+    message.extend(prismpath_rs::durable::canon2_bytes(&doc).expect("a string and an integer have a canon/2 form"));
+    message
 }
 
 pub fn sign_ack(secret: &[u8], root: &str, seq: i64) -> String {

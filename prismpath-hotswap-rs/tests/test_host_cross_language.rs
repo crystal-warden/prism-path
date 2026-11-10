@@ -43,12 +43,12 @@ for op in json.loads(os.environ["PP_OPS"]):
             host.audit.append = real
     elif kind in ("rollback_dies_before_record", "rollback_dies_before_clear"):
         # a process that died inside a rollback: before the record is written, or after it is
-        saved = canon.atomic_write, host._clear_pending
+        saved = canon.atomic_write_bytes, host._clear_pending
         def dying(*args, **kwargs):
             raise RuntimeError("the process died here")
         if kind.endswith("record"):
-            real_write = canon.atomic_write
-            canon.atomic_write = lambda path, data, *a, **k: dying() if str(path).endswith("active_policy.json") else real_write(path, data, *a, **k)
+            real_write = canon.atomic_write_bytes
+            canon.atomic_write_bytes = lambda path, data, *a, **k: dying() if str(path).endswith("active_policy.json") else real_write(path, data, *a, **k)
         else:
             host._clear_pending = dying
         try:
@@ -57,7 +57,7 @@ for op in json.loads(os.environ["PP_OPS"]):
         except RuntimeError:
             results.append({"died": True})
         finally:
-            canon.atomic_write, host._clear_pending = saved
+            canon.atomic_write_bytes, host._clear_pending = saved
     elif kind == "rollback":
         results.append(host.rollback())
     elif kind == "attest":
@@ -305,7 +305,7 @@ fn a_log_with_non_ascii_text_has_the_same_bytes_and_root_in_both_runtimes() {
     let python = pair.python_host("unicode", &["attest"]);
     assert_same_log(&python, &rust_report(&pair.rust_host("unicode")), "a non ASCII envelope id");
     let log = std::fs::read_to_string(format!("{}/swaps.log", pair.state())).unwrap();
-    assert!(log.is_ascii(), "the log is written ASCII only, as json.dumps writes it");
-    assert!(log.contains("env-\\u00e9\\u2603\\ud83d\\ude00"));
+    assert!(!log.is_ascii(), "the log is canon/2, which writes text as raw UTF-8");
+    assert!(log.contains("env-\u{e9}\u{2603}\u{1f600}"));
     eprintln!("cross-language host: non ASCII log identical in both runtimes");
 }

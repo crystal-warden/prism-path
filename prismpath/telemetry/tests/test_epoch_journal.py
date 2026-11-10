@@ -167,3 +167,38 @@ def test_chain_hole_refuses_to_open(tmp_path):
     Path(journal._chain_path()).write_text("\n".join(lines) + "\n", encoding="utf-8")
     with pytest.raises(journal_module.JournalCorrupt):
         _journal(tmp_path)
+
+
+def test_every_line_and_file_is_canon2_and_a_legacy_journal_still_opens(tmp_path):
+    """New lines, data files and the acknowledgment state are canon/2 and name it; a journal written
+    before the migration (untagged lines, data files in Python's spaced JSON) opens with its readings."""
+    from prismpath import canon
+    from prismpath.kernel import canon2
+    journal = _journal(tmp_path)
+    for seed in range(3):
+        journal.seal(_bits(seed))
+    root = journal.chain()[0]
+    assert journal_module.DurableAckReceiver(journal, SECRET).on_ack(root, 1, _signed(root, 1))["accepted"]
+    directory = tmp_path / "journal"
+    for line in (directory / "chain.jsonl").read_text().splitlines():
+        assert canon2.dumps(canon2.loads(line)).decode() == line and json.loads(line)["encoding"] == "canon/2"
+    acks = (directory / "acks.json").read_bytes()
+    assert canon2.dumps(canon2.loads(acks)) == acks and json.loads(acks)["encoding"] == "canon/2"
+    data = (directory / "epochs" / "2.json").read_bytes()
+    assert canon2.dumps(canon2.loads(data)) == data
+
+    legacy = tmp_path / "legacy" / "journal"
+    (legacy / "epochs").mkdir(parents=True)
+    store = journal_module.epoch_module.EpochStore(64, 5)
+    lines = []
+    for seed in range(2):
+        epoch = store.seal(_bits(seed))
+        blob = json.dumps(epoch.blocks).encode()
+        (legacy / "epochs" / f"{epoch.id}.json").write_bytes(blob)
+        lines.append(json.dumps({"epoch_id": epoch.id, "merkle_root": epoch.merkle_root, "chained_root": epoch.chained_root,
+                                 "data_sha256": canon.sha256_hex(blob), "data_length": len(blob)}, sort_keys=True))
+    (legacy / "chain.jsonl").write_text("".join(line + "\n" for line in lines))
+    reopened = journal_module.EpochJournal(str(legacy), block_bits=64, max_data_epochs=5)
+    assert reopened.recovery_report() == [] and reopened.verify_chain()
+    assert reopened.chain() == store.chain()
+    assert reopened.retained() == {epoch.id: epoch.blocks for epoch in store.epochs if epoch.has_data()}

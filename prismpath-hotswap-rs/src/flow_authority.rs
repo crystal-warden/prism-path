@@ -6,12 +6,13 @@
 //! two file shape a pack manifest has:
 //!
 //! ```text
-//! {"format": "prismpath-flow-manifest/1", "flow": "<name>", "flow_sha256": "<sha256 of the flow>",
+//! {"format": "prismpath-flow-manifest/1", "encoding": "canon/2", "flow": "<name>", "flow_sha256": "<sha256 of the flow>",
 //!  "version": 3, "fields": {...}, "key_id": "<sha256 of the authority public key>", "created": "..."}
 //! ```
 //!
-//! The signature covers the canonical compact JSON of the manifest (the bytes a pack manifest's
-//! covers; the `format` field keeps the two apart). The flow's hash is the SHA-256 of its UTF-8 text
+//! The signature covers the canon/2 domain and the canon/2 bytes of the manifest (the bytes a pack
+//! manifest's covers; the `format` field keeps the two apart); a manifest without `encoding`, signed
+//! before the migration, is checked over its canon/1 compact bytes. The flow's hash is the SHA-256 of its UTF-8 text
 //! with line endings read as LF, so a checkout that turns LF into CRLF does not unauthorize a flow
 //! and a change to any character does.
 //!
@@ -25,7 +26,7 @@
 //! `root_statement::check_separation` first, as the Python `run` does.
 
 use crate::pyval::{py_int, py_str, universal_newlines};
-use crate::{canonical_bytes, sha256_hex, verify_ed25519};
+use crate::{canonical_bytes, sha256_hex, signed_bytes, verify_ed25519};
 use serde_json::{json, Map, Value};
 
 pub const FLOW_MANIFEST_FORMAT: &str = "prismpath-flow-manifest/1";
@@ -108,7 +109,7 @@ pub fn verify_flow(
     let (Some(manifest_text), Some(signature)) = (manifest_text, signature) else {
         return FlowVerdict::refuse(SIG_MISSING, None);
     };
-    let Ok(manifest) = prismpath_rs::value::parse_strict(manifest_text) else {
+    let Ok(manifest) = prismpath_rs::durable::read_document(manifest_text) else {
         return FlowVerdict::refuse(MANIFEST_BAD_FORMAT, None);
     };
     let as_object = manifest.is_object().then(|| manifest.clone());
@@ -118,7 +119,7 @@ pub fn verify_flow(
     {
         return FlowVerdict::refuse(MANIFEST_BAD_FORMAT, as_object);
     }
-    let Ok(payload) = canonical_bytes(&manifest) else {
+    let Ok(payload) = signed_bytes(&manifest) else {
         return FlowVerdict::refuse(MANIFEST_BAD_FORMAT, as_object);
     };
     let signer_id = trusted

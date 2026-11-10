@@ -72,7 +72,7 @@ def summarise(events: List[dict]) -> Dict[str, Any]:
     swap_lines = []
     for ev in swaps:
         data = ev.get("data") or {}
-        when = _dt.datetime.fromtimestamp(float(ev.get("ts", 0)), _dt.timezone.utc).isoformat(timespec="seconds")
+        when = _dt.datetime.fromtimestamp(audit_log.event_seconds(ev), _dt.timezone.utc).isoformat(timespec="seconds")
         if ev["action"] == "swap":
             swap_lines.append(f"{when} swap accepted -> version {data.get('version')} {str(data.get('to_hash'))[:12]}"
                               + (f" overlay of {data['overlay_of']}" if data.get("overlay_of") else ""))
@@ -83,8 +83,8 @@ def summarise(events: List[dict]) -> Dict[str, Any]:
         else:
             swap_lines.append(f"{when} attestation: version {data.get('version')}"
                               + (f" overlay of {data['overlay_of']}" if data.get("overlay_of") else ""))
-    first = min((float(ev.get("ts", 0)) for ev in events), default=None)
-    last = max((float(ev.get("ts", 0)) for ev in events), default=None)
+    first = min((audit_log.event_seconds(ev) for ev in events), default=None)
+    last = max((audit_log.event_seconds(ev) for ev in events), default=None)
     return {"events": len(events), "decisions": len(decisions),
             "window": {"first": first, "last": last},
             "by_action": dict(by_action), "outcomes": dict(outcomes), "causes": dict(by_cause),
@@ -98,7 +98,7 @@ def run(path: str, since: Optional[str] = None, last: Optional[int] = None,
     events = list(log.events)
     t0 = _parse_since(since)
     if t0 is not None:
-        events = [ev for ev in events if float(ev.get("ts", 0)) >= t0]
+        events = [ev for ev in events if audit_log.event_seconds(ev) >= t0]
     if last:
         events = events[-last:]
     out = summarise(events)

@@ -161,15 +161,35 @@ def build_lock(flow_path, delta: Optional[float] = None, centroids: Optional[dic
     return lock
 
 
+# The two floats a lock carries, written on disk as decimal strings because canon/2 has no float.
+_DECIMAL_FIELDS = ("delta", "centroid_prior_weight")
+
+
+def lock_document(lock: dict) -> dict:
+    """The lock as it is written and hashed: canon/2, tagged, with `delta` and `centroid_prior_weight`
+    as their shortest round trip decimal strings."""
+    doc = {key: value for key, value in lock.items() if key != canon.ENCODING_KEY}
+    for field in _DECIMAL_FIELDS:
+        if isinstance(doc.get(field), float):
+            doc[field] = repr(doc[field])
+    return canon.tagged(doc)
+
+
 def save_lock(flow_path, lock: dict) -> str:
     path = lock_path(flow_path)
-    canon.atomic_write(path, canon.dumps_strict(lock, indent=2, sort_keys=True))
+    canon.atomic_write_bytes(path, canon.canon2_bytes(lock_document(lock)) + b"\n")
     return path
 
 
 def load_lock(path) -> dict:
     with open(path, encoding="utf-8") as handle:
-        lock = canon.load(handle)
+        lock = canon.loads_document(handle.read())
+    if isinstance(lock, dict) and canon.encoding_of(lock) == canon.CANON2:
+        # a canon/2 lock carries its floats as decimal strings; the lock in memory is what it was built as
+        lock.pop(canon.ENCODING_KEY)
+        for field in _DECIMAL_FIELDS:
+            if isinstance(lock.get(field), str):
+                lock[field] = float(lock[field])
     if lock.get("version") != LOCK_VERSION:
         raise LockError(f"unsupported lock version {lock.get('version')!r} (expected {LOCK_VERSION})")
     return lock
@@ -249,7 +269,7 @@ def _lock_hash(lock: dict) -> str:
     """Content hash of a lock (canonical JSON) — the pin a parent records for each child, so a child
     relocked or edited after the parent was pinned is detectable. The child's own `children` map is
     included, so the hash captures the whole subtree recursively."""
-    return canon.sha256_prefixed(canon.canonical_spaced(lock))
+    return canon.sha256_prefixed(canon.canon2_bytes(lock_document(lock)))
 
 
 def lock_tree(flow_path, delta: Optional[float] = None, centroids: Optional[dict] = None,

@@ -110,7 +110,7 @@ fn assert_swap_left_behind(setup: &Setup, step: CommitStep) {
     assert_eq!(read(&state, "active_version").unwrap(), if floor_advanced { "2" } else { "1" }, "{step:?}: floor");
     let evidence_written = !matches!(step, CommitStep::Intent | CommitStep::Floor | CommitStep::Evidence);
     let log = read(&state, "swaps.log").unwrap();
-    assert_eq!(log.contains(&format!("\"to_hash\": \"{v2}\"")), evidence_written, "{step:?}: audit event for the new policy");
+    assert_eq!(log.contains(&format!("\"to_hash\":\"{v2}\"")), evidence_written, "{step:?}: audit event for the new policy");
     // the record is the flip point; the old image is never written over and only removed after it
     let (record_digest, image_digest) = record_and_image(&state);
     assert_eq!(record_digest, if step == CommitStep::Clear { v2.as_str() } else { v1.as_str() }, "{step:?}: the record");
@@ -179,11 +179,11 @@ fn assert_rollback_left_behind(setup: &Setup, step: CommitStep) {
     let (v1, v2) = (setup.hash("v1"), setup.hash("v2"));
     assert_eq!(read(&state, "pending_swap").is_some(), step != CommitStep::Intent, "{step:?}: intent record");
     if let Some(pending) = read(&state, "pending_swap") {
-        assert!(pending.contains(&v1) && pending.contains("\"op\": \"rollback\""), "{step:?}: the intent names the rollback and its target: {pending}");
+        assert!(pending.contains(&v1) && pending.contains("\"op\":\"rollback\""), "{step:?}: the intent names the rollback and its target: {pending}");
     }
     assert_eq!(read(&state, "active_version").unwrap(), "2", "{step:?}: a rollback never moves the floor");
     let evidence_written = matches!(step, CommitStep::ActiveImage | CommitStep::ActiveRecord | CommitStep::Clear);
-    assert_eq!(count_in_file(&state, "\"action\": \"rollback\""), usize::from(evidence_written), "{step:?}: the rollback event");
+    assert_eq!(count_in_file(&state, "\"action\":\"rollback\""), usize::from(evidence_written), "{step:?}: the rollback event");
     let (record_digest, image_digest) = record_and_image(&state);
     assert_eq!(record_digest, if step == CommitStep::Clear { v1.as_str() } else { v2.as_str() }, "{step:?}: the record");
     assert_eq!(image_digest, record_digest, "{step:?}: the record's image is there");
@@ -331,7 +331,7 @@ fn an_old_layout_state_directory_is_read_and_migrated() {
         drop(host);
         let state = setup.state();
         std::fs::rename(Path::new(&state).join(format!("active-{v2}.ppt")), Path::new(&state).join("active.ppt")).unwrap();
-        let record = read(&state, "active_policy.json").unwrap().replace(&format!("\"image_file\": \"active-{v2}.ppt\", "), "");
+        let record = read(&state, "active_policy.json").unwrap().replace(&format!("\"image_file\":\"active-{v2}.ppt\","), "");
         assert!(!record.contains("image_file"));
         std::fs::write(Path::new(&state).join("active_policy.json"), record).unwrap();
 

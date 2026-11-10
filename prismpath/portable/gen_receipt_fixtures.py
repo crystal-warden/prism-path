@@ -8,6 +8,12 @@ produced by RUNNING the Python reference (`prismpath.ledgers.audit_log`, `root_s
 
     python prismpath/portable/gen_receipt_fixtures.py   ->  conformance/receipts.json
 
+The set is canon/2: every event names `"encoding": "canon/2"` and carries its time as the integer
+`ts_us`, every value that was a float is an integer of a stated unit or a decimal string, every log line
+and statement line is its canon/2 bytes, and the statements are `prismpath-root-statement/2`. The set as
+it stood under canon/1 is frozen beside it as `conformance/receipts_canon1.json`, never regenerated, and
+replayed by the same tests so the verify only canon/1 reader keeps its verdicts.
+
 Unlike `gen_hotswap_fixtures.py` this is byte-for-byte reproducible: the keys are derived from fixed
 labels (Ed25519 signatures are deterministic), clocks are fixed, and no private key is written. A test
 (`prismpath/tests/test_receipt_vectors.py`) regenerates the set and refuses drift, then replays every
@@ -52,7 +58,7 @@ from prismpath.ledgers import audit_log, ledger_ots as merkle, root_statement as
 OUT = HERE / "conformance" / "receipts.json"
 FORMAT_VERSION = 1
 
-T0 = "2026-11-04T12:00:{sec:02d}.250Z"
+T0_US = 1762257600_250000      # 2026-11-04T12:00:00.250Z in microseconds
 
 
 # ------------------------------------------------------------------ keys, deterministic
@@ -87,8 +93,8 @@ STRANGER_PUB = raw_public(STRANGER_PRIV)
 
 def make_events(count: int, start: int = 0) -> list:
     """Receipts as `AuditLog.append` writes them, with fixed timestamps and the value shapes real
-    receipts carry: float timestamps, a non-ASCII string (BMP and astral), booleans, null, a nested list
-    and the floats whose Python spelling is not Rust's default (exponents, integral values)."""
+    receipts carry: an integer `ts_us`, a non-ASCII string (BMP and astral), booleans, null, a nested
+    list, integers at the edge of the exact range and decimal strings where canon/1 had floats."""
     events = []
     for index in range(start, start + count):
         data = {"seq": index, "node": "a", "target": "b", "cause": 0}
@@ -99,42 +105,52 @@ def make_events(count: int, start: int = 0) -> list:
                 {
                     "ok": True,
                     "skipped": None,
-                    "scores": [1, 2.5, "x"],
-                    "ratio": 1e-07,
-                    "big": 1.5e20,
-                    "whole": 100.0,
-                    "tiny": 5e-324,
-                    "edge": 1e16,
-                    "fixed": 1e15,
+                    "scores": [1, "2.5", "x"],
+                    "ratio": "1e-07",
+                    "big": "1.5e20",
+                    "whole": 100,
+                    "tiny": "5e-324",
+                    "edge": 2 ** 53 - 1,
+                    "fixed": -(2 ** 53 - 1),
                 }
             )
         events.append(
             {
                 "idx": index,
                 "id": f"{index}",
-                "ts": round(1730800000.0 + index * 1.2345678, 7),
+                "ts_us": 1730800000_000000 + index * 1234568,
                 "actor": "engine",
                 "action": "decision",
                 "data": data,
+                "encoding": "canon/2",
             }
         )
     return events
 
 
+def line_of(record) -> str:
+    """A record as a log or statements line: its canon/2 bytes, or, for a record that has no canon/2 form
+    (a deliberately damaged one with a float), the JSON text a writer that ignored canon/2 would produce."""
+    try:
+        return canon.canon2_bytes(record).decode("utf-8")
+    except canon.CanonicalError:
+        return json.dumps(record, sort_keys=True)
+
+
 def log_text(events: list) -> str:
-    return "".join(json.dumps(event) + "\n" for event in events)
+    return "".join(line_of(event) + "\n" for event in events)
 
 
 def leaf_of(event) -> str:
-    return canon.sha256_hex(canon.canonical_compact(event))
+    return canon.document_hash(event)
 
 
 def statements_text(statements: list) -> str:
-    return "".join(json.dumps(statement, sort_keys=True) + "\n" for statement in statements)
+    return "".join(line_of(statement) + "\n" for statement in statements)
 
 
-def stamp(seq: int) -> str:
-    return T0.format(sec=seq)
+def stamp(seq: int) -> int:
+    return T0_US + seq * 1_000_000
 
 
 class Run:
@@ -170,7 +186,7 @@ class Run:
             prev=rs.statement_hash(self.statements[-1]) if self.statements else "",
             trigger=trigger,
             policy=self.policy if policy == "default" else policy,
-            time=stamp(len(self.statements)),
+            time_us=stamp(len(self.statements)),
         )
         if override:
             statement = {**statement, **override}
@@ -184,6 +200,33 @@ class Run:
     @property
     def roots(self) -> str:
         return statements_text(self.statements)
+
+
+def legacy_events(count: int) -> list:
+    """Receipts as `AuditLog.append` wrote them before canon/2: a float `ts`, no tag."""
+    return [{"idx": index, "id": f"{index}", "ts": round(1730700000.0 + index * 1.2345678, 7), "actor": "engine",
+             "action": "decision", "data": {"seq": index, "ratio": 1e-07, "whole": 100.0}} for index in range(count)]
+
+
+def legacy_statement(key, *, seq: int, root: str, leaves: int, prev: str, trigger: str, policy, time: str) -> dict:
+    """A `prismpath-root-statement/1` statement as the signer wrote it before canon/2: canon/1 compact
+    bytes under the `/1` domain, an ISO time, no tag."""
+    body = {"format": rs.LEGACY_FORMAT, "log": rs.LOG_AUDIT, "seq": seq, "root": root, "leaves": leaves,
+            "prev": prev, "time": time, "trigger": trigger, "key_id": key.key_id,
+            "public_key": key.public_raw.hex(), "policy": policy}
+    body["sig"] = key.sign(rs.LEGACY_SIGNING_DOMAIN + canon.canonical_compact(body)).hex()
+    return body
+
+
+def mixed_run() -> "Run":
+    """Three legacy events under one `/1` statement, then three canon/2 events under a `/2` statement."""
+    run = Run(runs=())
+    run.events = legacy_events(3)
+    run.statements.append(legacy_statement(INSTANCE, seq=0, root=rs.merkle_root(run.leaves), leaves=3, prev="",
+                                           trigger="run-end", policy=run.policy, time="2026-11-03T12:00:00.250Z"))
+    run.events += make_events(3, start=3)
+    run.sign("run-end")
+    return run
 
 
 def reference_trail(log: str, roots, pinned_raw) -> dict:
@@ -223,7 +266,7 @@ def edit_line(text: str, index: int, change) -> str:
     lines = lines_of(text)
     record = json.loads(lines[index])
     change(record)
-    lines[index] = json.dumps(record)
+    lines[index] = line_of(record)
     return join(lines)
 
 
@@ -277,7 +320,7 @@ def trail_cases() -> list:
     cases.append(trail_case("reordered_leaves", join(swapped), run.roots, pin))
     cases.append(
         trail_case(
-            "rewritten_float_timestamp", edit_line(run.log, 5, lambda e: e.update(ts=e["ts"] + 1e-06)), run.roots, pin
+            "rewritten_timestamp", edit_line(run.log, 5, lambda e: e.update(ts_us=e["ts_us"] + 1)), run.roots, pin
         )
     )
     with_junk = lines_of(run.log)
@@ -303,7 +346,7 @@ def trail_cases() -> list:
         trail_case(
             "edited_statement_fails_its_signature",
             run.log,
-            join(status[:2] + [json.dumps({**json.loads(status[2]), "leaves": 5})]),
+            join(status[:2] + [line_of({**json.loads(status[2]), "leaves": 5})]),
             pin,
         )
     )
@@ -311,7 +354,7 @@ def trail_cases() -> list:
         trail_case(
             "edited_trigger_fails_its_signature",
             run.log,
-            join([json.dumps({**json.loads(status[0]), "trigger": "other"})] + status[1:]),
+            join([line_of({**json.loads(status[0]), "trigger": "other"})] + status[1:]),
             pin,
         )
     )
@@ -319,7 +362,7 @@ def trail_cases() -> list:
         trail_case(
             "edited_policy_fails_its_signature",
             run.log,
-            join([json.dumps({**json.loads(status[0]), "policy": None})] + status[1:]),
+            join([line_of({**json.loads(status[0]), "policy": None})] + status[1:]),
             pin,
         )
     )
@@ -327,7 +370,7 @@ def trail_cases() -> list:
         trail_case(
             "signature_zeroed",
             run.log,
-            join([json.dumps({**json.loads(status[0]), "sig": "00" * 64})] + status[1:]),
+            join([line_of({**json.loads(status[0]), "sig": "00" * 64})] + status[1:]),
             pin,
         )
     )
@@ -335,7 +378,7 @@ def trail_cases() -> list:
         trail_case(
             "key_id_altered_is_a_key_id_mismatch",
             run.log,
-            join([json.dumps({**json.loads(status[0]), "key_id": "ee" * 32})] + status[1:]),
+            join([line_of({**json.loads(status[0]), "key_id": "ee" * 32})] + status[1:]),
             pin,
         )
     )
@@ -343,7 +386,7 @@ def trail_cases() -> list:
         trail_case(
             "key_id_altered_unpinned",
             run.log,
-            join([json.dumps({**json.loads(status[0]), "key_id": "ee" * 32})] + status[1:]),
+            join([line_of({**json.loads(status[0]), "key_id": "ee" * 32})] + status[1:]),
         )
     )
     swap_key = json.loads(status[1])
@@ -352,7 +395,7 @@ def trail_cases() -> list:
         trail_case(
             "public_key_swapped_for_another_consistent_one",
             run.log,
-            join([status[0], json.dumps(swap_key), status[2]]),
+            join([status[0], line_of(swap_key), status[2]]),
             pin,
         )
     )
@@ -377,7 +420,7 @@ def trail_cases() -> list:
         prev=rs.statement_hash(negative.statements[0]),
         trigger="checkpoint",
         policy=None,
-        time=stamp(1),
+        time_us=stamp(1),
     )
     negative.statements.append(neg)
     cases.append(trail_case("negative_leaf_count", negative.log, negative.roots, pin))
@@ -420,7 +463,8 @@ def trail_cases() -> list:
         "root",
         "leaves",
         "prev",
-        "time",
+        "time_us",
+        "encoding",
         "trigger",
         "key_id",
         "public_key",
@@ -428,9 +472,12 @@ def trail_cases() -> list:
         "sig",
     ):
         broken = {key: value for key, value in base.items() if key != field}
-        cases.append(trail_case(f"statement_without_{field}", run.log, join([json.dumps(broken)] + status[1:]), pin))
+        cases.append(trail_case(f"statement_without_{field}", run.log, join([line_of(broken)] + status[1:]), pin))
     variants = {
-        "wrong_format_string": {"format": "prismpath-root-statement/2"},
+        "wrong_format_string": {"format": "prismpath-root-statement/3"},
+        "legacy_format_with_a_canon2_body": {"format": "prismpath-root-statement/1"},
+        "unknown_encoding": {"encoding": "canon/3"},
+        "time_us_is_a_string": {"time_us": "1762257600250000"},
         "wrong_log_field": {"log": "epoch-chain"},
         "seq_is_a_string": {"seq": "0"},
         "seq_is_a_float": {"seq": 0.0},
@@ -447,13 +494,13 @@ def trail_cases() -> list:
     }
     for label, change in variants.items():
         cases.append(
-            trail_case(f"statement_with_{label}", run.log, join([json.dumps({**base, **change})] + status[1:]), pin)
+            trail_case(f"statement_with_{label}", run.log, join([line_of({**base, **change})] + status[1:]), pin)
         )
     cases.append(
         trail_case(
             "statement_with_an_extra_field_fails_the_hash_chain",
             run.log,
-            join([json.dumps({**base, "extra": 1})] + status[1:]),
+            join([line_of({**base, "extra": 1})] + status[1:]),
             pin,
         )
     )
@@ -477,10 +524,11 @@ def trail_cases() -> list:
         {
             "idx": 0,
             "id": "0",
-            "ts": 1730800000.5,
+            "ts_us": 1730800000_500000,
             "actor": "policy_host",
             "action": "swap",
             "data": {"to_hash": "ab" * 32, "version": 1, "key_id": INSTANCE.key_id, "result": "accepted"},
+            "encoding": "canon/2",
         }
     )
     swaps.sign("append")
@@ -496,6 +544,37 @@ def trail_cases() -> list:
     notswap.sign("append")
     cases.append(trail_case("only_swap_events_name_authority_keys", notswap.log, notswap.roots, pin))
     cases.append(trail_case("authority_key_flagged_without_a_pin", swaps.log, swaps.roots))
+
+    # A log that crosses the migration: canon/1 events under `/1` statements, then canon/2 events under
+    # `/2` statements chained to them. Each leaf and each statement is hashed under its own encoding.
+    mixed = mixed_run()
+    cases.append(trail_case("a_log_and_chain_that_cross_the_migration", mixed.log, mixed.roots, pin))
+    cases.append(trail_case("a_log_and_chain_that_cross_the_migration_unpinned", mixed.log, mixed.roots))
+    cases.append(
+        trail_case(
+            "a_legacy_event_given_a_canon2_tag_changes_its_leaf",
+            edit_line(mixed.log, 0, lambda e: e.update(encoding="canon/2")),
+            mixed.roots,
+            pin,
+        )
+    )
+    cases.append(
+        trail_case(
+            "a_canon2_event_stripped_of_its_tag_changes_its_leaf",
+            edit_line(mixed.log, 3, lambda e: e.pop("encoding")),
+            mixed.roots,
+            pin,
+        )
+    )
+    legacy_lines = lines_of(mixed.roots)
+    cases.append(
+        trail_case(
+            "a_legacy_statement_given_a_canon2_tag_does_not_read_as_either",
+            mixed.log,
+            join([line_of({**json.loads(legacy_lines[0]), "encoding": "canon/2"})] + legacy_lines[1:]),
+            pin,
+        )
+    )
 
     # Policy field shapes.
     authz = Run(runs=((2, "run-end"),), policy={"manifest_sha256": "cd" * 32, "key_id": AUTHORITY_ID, "version": 3})
@@ -548,7 +627,7 @@ def bundle_cases() -> list:
     cases.append(bundle_case("single_leaf_has_an_empty_path", bundle_for(single, 0), pin))
     seven = Run(runs=((7, "run-end"),))
     cases.append(bundle_case("odd_tree_duplicates_the_last_leaf", bundle_for(seven, 6), pin))
-    cases.append(bundle_case("receipt_with_float_and_unicode_values", bundle_for(run, 5), pin))
+    cases.append(bundle_case("receipt_with_decimal_strings_and_unicode_values", bundle_for(run, 5), pin))
 
     def edit_of(source, change):
         copy_ = copy.deepcopy(source)
@@ -558,11 +637,20 @@ def bundle_cases() -> list:
     def edit(change):
         return edit_of(good, change)
 
+    mixed = mixed_run()
+    cases.append(bundle_case("legacy_receipt_under_a_legacy_statement", bundle_for(mixed, 1), pin))
+    cases.append(bundle_case("canon2_receipt_under_a_canon2_statement_after_the_migration", bundle_for(mixed, 4), pin))
+    cases.append(bundle_case("receipt_names_an_unknown_encoding",
+                             edit_of(bundle_for(run, 4), lambda b: b["receipt"].update(encoding="canon/3")), pin))
+    cases.append(bundle_case("statement_names_an_unknown_encoding",
+                             edit_of(bundle_for(run, 4), lambda b: b["statement"].update(encoding="canon/3")), pin))
+    cases.append(bundle_case("receipt_holding_a_float_has_no_canon2_leaf",
+                             edit_of(bundle_for(run, 4), lambda b: b["receipt"]["data"].update(ratio=1e-07)), pin))
     cases.append(bundle_case("receipt_edited", edit(lambda b: b["receipt"]["data"].update(target="z")), pin))
     cases.append(
         bundle_case(
-            "receipt_float_edited_in_the_last_digit",
-            edit(lambda b: b["receipt"].update(ts=b["receipt"]["ts"] + 1e-06)),
+            "receipt_timestamp_edited_by_one_microsecond",
+            edit(lambda b: b["receipt"].update(ts_us=b["receipt"]["ts_us"] + 1)),
             pin,
         )
     )
@@ -857,7 +945,12 @@ def sign_with_the_reference(flow_bytes: bytes, version: int, private=AUTHORITY_P
 
 def resign(manifest: dict, private=AUTHORITY_PRIV) -> tuple:
     """A manifest edited and then properly signed, as an authority (or someone holding its key) would."""
-    return json.dumps(manifest, indent=1, sort_keys=True) + "\n", private.sign(pp.canonical_bytes(manifest))
+    text = json.dumps(manifest, indent=1, sort_keys=True) + "\n"
+    try:
+        return text, private.sign(pp.signed_bytes(manifest))
+    except canon.CanonicalError:
+        # no canon/2 form (a float in a tagged manifest): the reader refuses it before any signature is used
+        return text, private.sign(text.encode("utf-8"))
 
 
 def reference_flow(flow_bytes, manifest_text, sig, pubs, revoked, floor) -> dict:

@@ -1615,8 +1615,27 @@ export function pyCanonicalString(val) {
   return "{" + sortedKeys.map((key) => JSON.stringify(key) + ":" + pyCanonicalString(val[key])).join(",") + "}";
 }
 
+// canon/2, the integer only JCS profile every hashed or signed document is written in
+// (prismpath/kernel/canon2.py). A value with no canon/2 form throws.
+export const CANON2 = "canon/2";
+
+// One canon/2 implementation: the writer below (canon2Write), which refuses what canon2Read refuses.
+export function canon2String(val) {
+  return new TextDecoder().decode(canon2Write(val));
+}
+
+// The bytes a document is hashed over, decided by its own tag: canon/2 for a document that names it, the
+// legacy canon/1 compact spelling for one without the member (verify only), and a throw for any other tag.
+export function documentString(doc) {
+  if (doc !== null && typeof doc === "object" && !Array.isArray(doc) && "encoding" in doc) {
+    if (doc.encoding !== CANON2) throw new Error(`unknown encoding ${String(doc.encoding).slice(0, 40)}`);
+    return canon2String(doc);
+  }
+  return pyCanonicalString(doc);
+}
+
 export function registryHash(registryData) {
-  return sha256Hex(pyCanonicalString(registryData));
+  return sha256Hex(documentString(registryData));
 }
 
 export function strengthRank(registryData, suiteId) {

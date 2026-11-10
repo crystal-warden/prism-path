@@ -2,7 +2,9 @@
 // Copyright 2026 Crystal Warden Supply Chain Labs LLC
 //! Root statements, verified: a deployment's own Ed25519 signature over the Merkle root of what it
 //! recorded, chained, as `prismpath/ledgers/root_statement.py` defines them (format
-//! `prismpath-root-statement/1`, SPEC 4.5, PROTOCOL 2.10).
+//! `prismpath-root-statement/2`, canon/2 with an integer `time_us`, and the legacy
+//! `prismpath-root-statement/1`, canon/1, verify only; SPEC 4.5, PROTOCOL 2.10). Each statement of a
+//! chain is hashed and its signature checked under the encoding its own format names.
 //!
 //! This is the verify side only. Nothing here signs, generates or loads a private key: a Rust
 //! consumer can check a log, a chain of statements or one receipt that the Python engine produced,
@@ -19,21 +21,40 @@
 
 use crate::merkle::{merkle_root, path_from_json, verify_leaf};
 use crate::pyval::{from_hex, head, py_int, universal_newlines};
+use prismpath_rs::durable;
 use crate::{canonical_bytes, sha256_hex, verify_ed25519};
 use serde_json::{json, Map, Value};
 
-pub const STATEMENT_FORMAT: &str = "prismpath-root-statement/1";
+pub const STATEMENT_FORMAT: &str = "prismpath-root-statement/2";
 /// Prefixed to the canonical bytes before signing, so a root statement signature can never be
 /// presented as a pack or flow manifest signature or the reverse.
-pub const SIGNING_DOMAIN: &[u8] = b"prismpath-root-statement/1\x00";
+pub const SIGNING_DOMAIN: &[u8] = b"prismpath-root-statement/2\x00";
+/// The format written before canon/2: read and verified, never written.
+pub const LEGACY_FORMAT: &str = "prismpath-root-statement/1";
+pub const LEGACY_SIGNING_DOMAIN: &[u8] = b"prismpath-root-statement/1\x00";
 /// An audit log's root is the Merkle root of its first `leaves` events.
 pub const LOG_AUDIT: &str = "audit-log";
 /// An epoch chain's root is the chained root of its first `leaves` epochs.
 pub const LOG_EPOCH_CHAIN: &str = "epoch-chain";
 
-const BODY_FIELDS: [&str; 11] = [
+const BODY_FIELDS: [&str; 12] = [
+    "format", "encoding", "log", "seq", "root", "leaves", "prev", "time_us", "trigger", "key_id", "public_key", "policy",
+];
+const LEGACY_BODY_FIELDS: [&str; 11] = [
     "format", "log", "seq", "root", "leaves", "prev", "time", "trigger", "key_id", "public_key", "policy",
 ];
+
+fn is_legacy(statement: &Value) -> bool {
+    statement.get("format").and_then(Value::as_str) == Some(LEGACY_FORMAT)
+}
+
+fn body_fields(statement: &Value) -> &'static [&'static str] {
+    if is_legacy(statement) {
+        &LEGACY_BODY_FIELDS
+    } else {
+        &BODY_FIELDS
+    }
+}
 
 /// Findings that make a chain invalid. `interrupted_statement` (a torn final line from a crash mid
 /// write) is reported and is not one of them.
@@ -62,11 +83,16 @@ pub fn fingerprint(key_id: &str) -> String {
 /// no signed bytes).
 pub fn signed_bytes(statement: &Value) -> Option<Vec<u8>> {
     let mut body = Map::new();
-    for field in BODY_FIELDS {
-        body.insert(field.to_string(), statement.get(field)?.clone());
+    for field in body_fields(statement) {
+        body.insert(field.to_string(), statement.get(*field)?.clone());
+    }
+    if is_legacy(statement) {
+        let mut bytes = LEGACY_SIGNING_DOMAIN.to_vec();
+        bytes.extend(durable::try_py_canonical_string(&Value::Object(body), false).ok()?.into_bytes());
+        return Some(bytes);
     }
     let mut bytes = SIGNING_DOMAIN.to_vec();
-    bytes.extend(canonical_bytes(&Value::Object(body)).ok()?);
+    bytes.extend(durable::canon2_bytes(&Value::Object(body)).ok()?);
     Some(bytes)
 }
 
@@ -106,7 +132,7 @@ pub fn read_statements_text(text: &str) -> (Vec<Value>, Vec<Value>) {
     }
     let (mut statements, mut findings) = (Vec::new(), Vec::new());
     for (index, line) in lines.iter().enumerate() {
-        match prismpath_rs::value::parse_strict(line) {
+        match durable::read_document(line) {
             Ok(record @ Value::Object(_)) => statements.push(record),
             _ if index == lines.len() - 1 => findings.push(json!({"finding": "interrupted_statement", "line": index + 1})),
             _ => {
@@ -139,12 +165,21 @@ pub fn statements_path_for(log_path: &str) -> String {
 // ------------------------------------------------------------------ one statement
 
 fn well_formed(statement: &Value, log: &str) -> bool {
-    if statement.get("format").and_then(Value::as_str) != Some(STATEMENT_FORMAT)
+    let format = statement.get("format").and_then(Value::as_str);
+    if !(format == Some(STATEMENT_FORMAT) || format == Some(LEGACY_FORMAT))
         || statement.get("log").and_then(Value::as_str) != Some(log)
     {
         return false;
     }
-    if BODY_FIELDS.iter().chain(["sig"].iter()).any(|key| statement.get(*key).is_none()) {
+    let fields = body_fields(statement);
+    if fields.iter().chain(["sig"].iter()).any(|key| statement.get(*key).is_none()) {
+        return false;
+    }
+    if format == Some(STATEMENT_FORMAT)
+        && (statement.as_object().map_or(0, Map::len) != fields.len() + 1
+            || statement["encoding"].as_str() != Some(durable::CANON2)
+            || !(statement["time_us"].is_i64() || statement["time_us"].is_u64()))
+    {
         return false;
     }
     let is_int = |key: &str| py_int(&statement[key]).is_some();
@@ -329,7 +364,7 @@ impl AuditLogView {
             }
             // Read as `canon.loads` reads, so a line holding NaN or a number beyond the double range is a line
             // that is not JSON, and every event read here has a canonical form.
-            match prismpath_rs::value::parse_strict(line).ok().and_then(|event| {
+            match durable::read_document(line).ok().and_then(|event| {
                 canonical_bytes(&event).ok().map(|bytes| (sha256_hex(&bytes), event))
             }) {
                 Some((leaf, event)) => {
@@ -471,6 +506,11 @@ pub fn bundle_problem(bundle: &Value) -> Option<String> {
             return Some(NOT_HEX.to_string());
         }
     }
+    for name in ["receipt", "statement"] {
+        if durable::encoding_of(&object[name]).is_err() {
+            return Some(format!("the {name} names an encoding other than canon/2"));
+        }
+    }
     None
 }
 
@@ -519,7 +559,7 @@ pub fn verify_receipt_bundle(bundle: &Value, pinned: &[Vec<u8>]) -> Result<Bundl
     let statement = &bundle["statement"];
     let index = &bundle["index"];
     let index_int = index.as_i64().map(i128::from).or_else(|| index.as_u64().map(i128::from)).expect("checked");
-    let leaf = sha256_hex(&canonical_bytes(&bundle["receipt"]).map_err(|error| error.to_string())?);
+    let leaf = canonical_bytes(&bundle["receipt"]).map(|bytes| sha256_hex(&bytes)).unwrap_or_default();
     let leaf_hex = bundle["leaf"].as_str().expect("checked");
     let leaf_matches = leaf_hex == leaf;
     let index_matches = idx_equals(bundle["receipt"].get("idx"), index_int);

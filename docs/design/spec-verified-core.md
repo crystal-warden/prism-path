@@ -191,7 +191,7 @@ or anchored under them: policy packs and envelopes, audit logs and their Merkle 
 statements, anchored roots, attestation manifests, lock hashes, checkpoints and every frozen corpus.
 They change in no byte. canon/2 is scoped, in this step, to the core's two documents.
 
-### 3.1 Migration plan for the rest (written down, not done)
+### 3.1 Migration of the rest (done on the canon2-migration branch, 2026-11-10)
 
 Signed bytes cannot be rewritten, so the rest moves by versioning, never by reinterpreting an old
 artifact:
@@ -220,6 +220,42 @@ artifact:
    and Go kernels and the table targets sign and hash nothing and are not touched. Each step is a
    separate reviewed change with its own corpus twin, and none of it is done on this branch beyond the
    core run's own root statement (section 11).
+
+**What was done** (branch `canon2-migration`; the owner's decision of 2026-11-10 that breaking changes are
+acceptable, so the steps above were taken together rather than one reviewed change each). The rule is one
+pair of functions in each language: `prismpath.canon.document_bytes` and `signed_message`, and
+`prismpath_rs::durable::document_bytes` and `signed_message`, which read the document's own tag, and the
+writers' `canon2_bytes` and `tagged`. The signature domain of a document without one of its own is
+`prismpath.canon/2` and a zero byte (`CANON2_DOMAIN`).
+
+- Item 1: the audit log's and the epoch chain's statements moved too, as `prismpath-root-statement/2` (canon/2,
+  `encoding`, `time_us`, its own domain); `/1` statements verify, and a chain may move from `/1` to `/2`.
+  Pack and flow manifests, envelopes and the crypto registry carry `encoding` and are signed over the canon/2
+  domain; so are the compliance adapter's receipts.
+- Item 2: `canon.loads_document` and `durable::read_document` read a tagged document with the strict canon/2
+  reader and an untagged one as before; any other tag is refused. `prismpath/tests/test_canon2_migration.py`
+  holds every call of a canon/1 encoder to a named list of verify only readers and frozen twin generators.
+  Frozen twins: `receipts_canon1.json` and `hotswap_canon1.json`, replayed by the same tests in both
+  languages; `canonical.json` is the canon/1 reader's vectors.
+- Item 3: audit events carry `ts_us`; a data value with a float is refused, never converted. The other floats
+  in hashed documents became decimal strings: the lock file's `delta` and `centroid_prior_weight`, and every
+  float in content PrismPath hashes but did not write (`canon.content_bytes`: connector, composer, ledger
+  runner, the compliance adapter).
+- Item 4: an anchored root's leaves are hashed under the encoding each leaf names; the receipt corpus has a
+  log and a chain that cross the migration.
+- Item 5: a canon/1 pack, envelope, flow manifest or registry whose signature verifies still loads.
+- Also moved: the policy host's intent and active records, the epoch journal's chain, gap and acknowledgment
+  records and data files, the acknowledgment tag's message, attestation and OpenTimestamps manifests, the
+  stamp request and proof bundle records.
+
+**What remains.** The routing receipts' calibrated floors and confidences are not in a hashed document
+on this line (a routing receipt is an audit event whose data carries no float), so nothing moved for them;
+a writer that starts hashing one must use an integer of a stated unit or `content_bytes`. Not moved, each
+because it is not hashed or signed: a durable run checkpoint (its state may hold floats that a resume must
+see unchanged; the flow hash inside it is the only hash), the flow authority's version floor file, the
+sink's JSONL records, the receipt stream's binary wire frames, and the comparison harnesses that model
+other systems. Retiring the canon/1 reader (and with it canon/1 packs) is the owner's decision; until then
+the twins keep it honest.
 
 ## 4. The checks of a policy
 

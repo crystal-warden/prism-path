@@ -309,9 +309,9 @@ def _die_before(host, step, action):
         patch(canon, "atomic_write_bytes",
               lambda path, data: boom() if os.path.basename(str(path)).startswith("active-") else real_bytes(path, data))
     elif step == "active_record":
-        real_text = canon.atomic_write
-        patch(canon, "atomic_write",
-              lambda path, data, *a, **k: boom() if str(path).endswith("active_policy.json") else real_text(path, data, *a, **k))
+        real_record = canon.atomic_write_bytes
+        patch(canon, "atomic_write_bytes",
+              lambda path, data: boom() if str(path).endswith("active_policy.json") else real_record(path, data))
     else:
         patch(host, "_clear_pending", boom)
 
@@ -464,7 +464,7 @@ def test_a_record_holding_a_non_finite_number_is_not_restored(env, text):
     first = _host(env)
     first.swap(_pack(env, "v1", 1))
     record = env["tmp"] / "state" / "active_policy.json"
-    record.write_text(record.read_text().replace('"version": 1', f'"version": {text}'))
+    record.write_text(record.read_text().replace('"version":1', f'"version":{text}'))
     assert _host(env).active() == {"active": None}
     last = AuditLog(str(env["tmp"] / "state" / "swaps.log")).events[-1]
     assert last["action"] == "active_unreadable"
@@ -493,7 +493,7 @@ def test_a_pack_whose_manifest_holds_a_non_finite_number_is_an_audited_bad_forma
     manifest = Path(path + ".manifest.json")
     original = manifest.read_text()
     for number in ("NaN", "1e400", "-Infinity"):
-        manifest.write_text(original.replace('"version": 2', f'"version": {number}'))
+        manifest.write_text(original.replace('"version":2', f'"version":{number}'))
         events = len(host.audit.events)
         assert host.swap(path) == {"ok": False, "reasons": ["manifest:bad-format"]}
         assert len(host.audit.events) == events + 1 and host.audit.events[-1]["action"] == "swap_rejected"

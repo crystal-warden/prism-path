@@ -12,9 +12,23 @@ use prismpath_hotswap_rs::root_statement::{check_separation, verify_receipt_bund
 use prismpath_rs::durable::py_canonical_string;
 use serde_json::{json, Value};
 
+fn vectors_named(name: &str) -> Value {
+    let path = format!("{}/../prismpath/portable/conformance/{name}", env!("CARGO_MANIFEST_DIR"));
+    serde_json::from_str(&std::fs::read_to_string(path).expect("read the vectors")).expect("parse the vectors")
+}
+
+/// The canon/2 set, and its frozen canon/1 twin (`receipts_canon1.json`, never regenerated), whose
+/// cases the verify only canon/1 reader must keep deciding as it did.
 fn vectors() -> Value {
-    let path = format!("{}/../prismpath/portable/conformance/receipts.json", env!("CARGO_MANIFEST_DIR"));
-    serde_json::from_str(&std::fs::read_to_string(path).expect("read receipts.json")).expect("parse receipts.json")
+    let mut doc = vectors_named("receipts.json");
+    let frozen = vectors_named("receipts_canon1.json");
+    let cases = doc["cases"].as_array_mut().unwrap();
+    for case in frozen["cases"].as_array().unwrap() {
+        let mut case = case.clone();
+        case["name"] = json!(format!("canon1:{}", case["name"].as_str().unwrap()));
+        cases.push(case);
+    }
+    doc
 }
 
 fn keys(case: &Value, field: &str) -> Vec<Vec<u8>> {

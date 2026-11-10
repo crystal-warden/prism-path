@@ -13,6 +13,7 @@ import os, json, hashlib, requests
 from prismpath.ledgers import ledger_airgap
 from prismpath.workers import deferral# CORE attestation + deferral ports (adapter→core OK; core→adapter is the leak)
 from prismpath.workers.connector import BaseConnector  # the Connector SDK — six-port base
+from prismpath import canon as _canon_mod   # canon/2 content hashes
 
 # Adjudicator LLM endpoint (OpenAI-compatible /v1/chat/completions). Env-overridable so the same
 # adapter runs against the GPU vLLM factory (default) OR an air-gapped CPU llama.cpp llama-server.
@@ -71,7 +72,7 @@ def get_control(control_id):
 
 def catalog_hash():
     body = {"standard": _ACTIVE, "controls": _catalog()["controls"]}
-    return "sha256:" + hashlib.sha256(json.dumps(body, sort_keys=True).encode()).hexdigest()[:16]
+    return "sha256:" + hashlib.sha256(_canon_mod.content_bytes(body)).hexdigest()[:16]
 
 def catalog_weights():
     """DoD SPRS point values from the active catalog (Rev 2 only; empty for standards without weights)."""
@@ -382,7 +383,7 @@ def resolve_review(unit_id, new_status, unmet_objective_ids, actor, rationale, o
     final_det = {"status": new_status, "unmet_objective_ids": unmet_objective_ids,
                  "gap_summary": f"HUMAN OVERRIDE ({actor}): {rationale}. AI concluded '{ai_det['status']}'."}
     ov = ledger_airgap.override_manifest(ai_prov, overrider_id=actor, rationale=rationale,
-                                         new_root_hex=hashlib.sha256(json.dumps(final_det, sort_keys=True).encode()).hexdigest())
+                                         new_root_hex=hashlib.sha256(_canon_mod.content_bytes(final_det)).hexdigest())
     unmet = set(unmet_objective_ids)
     out = {"control_id": control["id"], "title": control["title"], "final_status": new_status,
            "gap_summary": final_det["gap_summary"],

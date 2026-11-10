@@ -56,8 +56,26 @@ class StatementWriteError(AuditWriteError):
 
 def _leaf_hex(ev: dict) -> str:
     """A stable content hash of an event  -  its Merkle leaf. Commits to every field, so editing any past
-    event changes its leaf and therefore the root."""
-    return _canon.sha256_hex(_canon.canonical_compact(ev))
+    event changes its leaf and therefore the root. The event's own tag decides the bytes: an event that
+    names canon/2 is hashed over its canon/2 bytes, and an untagged event, written before the migration,
+    over its canon/1 compact bytes, so an old log, and a root anchored over it, still verify."""
+    return _canon.document_hash(ev)
+
+
+def _now_us() -> int:
+    """The wall clock as an integer count of microseconds since the Unix epoch: an event's `ts_us`."""
+    return time.time_ns() // 1000
+
+
+def event_seconds(ev: dict) -> float:
+    """When an event was recorded, in seconds since the epoch, for display and filtering only: `ts_us`
+    of a canon/2 event, or the float `ts` of an event written before the migration."""
+    if isinstance(ev.get("ts_us"), int) and not isinstance(ev.get("ts_us"), bool):
+        return ev["ts_us"] / 1_000_000
+    try:
+        return float(ev.get("ts", 0) or 0)
+    except (TypeError, ValueError):
+        return 0.0
 
 
 class AuditLog:
@@ -82,7 +100,7 @@ class AuditLog:
                     if not line:
                         continue
                     try:
-                        ev = _canon.loads(line)
+                        ev = _canon.loads_document(line)
                     except Exception:
                         self.skipped.append(line_num)
                         continue
@@ -95,11 +113,13 @@ class AuditLog:
         unchanged, when the file cannot take it."""
         with self._lock:
             index = len(self.events)
-            event = {"idx": index, "id": f"{index}", "ts": time.time(),
-                     "actor": actor, "action": action, "data": data}
+            event = {"idx": index, "id": f"{index}", "ts_us": _now_us(),
+                     "actor": actor, "action": action, "data": data, _canon.ENCODING_KEY: _canon.CANON2}
             try:
-                leaf = _leaf_hex(event)   # refuses NaN, Infinity and lone surrogates before anything is written
-                line = _canon.dumps_strict(event) + "\n"
+                # canon/2: refuses a float, an out of range integer and a lone surrogate before anything is written
+                line_bytes = _canon.canon2_bytes(event)
+                leaf = _canon.sha256_hex(line_bytes)
+                line = line_bytes.decode("utf-8") + "\n"
             except _canon.CanonicalError as error:
                 raise AuditWriteError(f"audit event has no canonical JSON form: {error}") from error
             if self.path:
@@ -221,7 +241,7 @@ class AuditLog:
                     if not line:
                         continue
                     try:
-                        on_disk.append(_leaf_hex(_canon.loads(line)))
+                        on_disk.append(_leaf_hex(_canon.loads_document(line)))
                     except Exception:
                         return False
             return on_disk == self.leaves

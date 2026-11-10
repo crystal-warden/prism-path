@@ -560,6 +560,7 @@
  "manifests": {
   "override": {
    "created": "2026-08-12T00:00:01Z",
+   "encoding": "canon/2",
    "gate_id": "wazuh_triage@v3",
    "ingestion_hashes": [
     "sha256:aa",
@@ -568,17 +569,18 @@
    "kind": "override",
    "knowledge_base_hash": "sha256:kb26e3",
    "label": "override:demo",
-   "manifest_hash": "8a98ac5e8d4ef1e5bc8589cc10f4f8fcf29e82fe5bed79157d655ceaba7bc792",
+   "manifest_hash": "09f5de9686732646879901ff959e36ab737a39c2e714cce90e0bf7bb5afc7f3a",
    "overrider_id": "auditor:jsmith",
    "policy_hash": "sha256:deadbeef",
    "prior_created": "2026-08-12T00:00:00Z",
    "prior_root": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
    "rationale": "compensating control accepted",
    "root": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-   "supersedes": "503255abd81e0fcd327ad1f8a7e7cb4b289a6e24f8e8a2cdd6d155e8ca38e632"
+   "supersedes": "bf453095b3f0c986f1642e953ae21d936c55c26d7a41bb109ad3e4feccd86c39"
   },
   "provenance": {
    "created": "2026-08-12T00:00:00Z",
+   "encoding": "canon/2",
    "gate_id": "wazuh_triage@v3",
    "ingestion_hashes": [
     "sha256:aa",
@@ -586,12 +588,13 @@
    ],
    "knowledge_base_hash": "sha256:kb26e3",
    "label": "demo",
-   "manifest_hash": "503255abd81e0fcd327ad1f8a7e7cb4b289a6e24f8e8a2cdd6d155e8ca38e632",
+   "manifest_hash": "bf453095b3f0c986f1642e953ae21d936c55c26d7a41bb109ad3e4feccd86c39",
    "policy_hash": "sha256:deadbeef",
    "root": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
   },
   "tampered": {
    "created": "2026-08-12T00:00:00Z",
+   "encoding": "canon/2",
    "gate_id": "wazuh_triage@v3",
    "ingestion_hashes": [
     "sha256:aa",
@@ -599,7 +602,7 @@
    ],
    "knowledge_base_hash": "sha256:kb26e3",
    "label": "demo",
-   "manifest_hash": "503255abd81e0fcd327ad1f8a7e7cb4b289a6e24f8e8a2cdd6d155e8ca38e632",
+   "manifest_hash": "bf453095b3f0c986f1642e953ae21d936c55c26d7a41bb109ad3e4feccd86c39",
    "policy_hash": "sha256:deadbeef",
    "root": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
   }

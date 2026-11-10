@@ -123,14 +123,26 @@ def main() -> int:
             ("manifest_number_beyond_the_double_range", good_text.replace('"version": 3', '"version": 1e400').encode()),
             ("manifest_array", b"[1, 2, 3]"), ("manifest_scalar", b"7"), ("manifest_null", b"null"),
             ("manifest_wrong_format_is_still_bad_format", good_text.replace("ppt-pack/1", "ppt-pack/9").encode()),
+            # canon/2 has no float: a manifest that names canon/2 and holds one does not read
+            ("manifest_canon2_with_a_float", good_text.replace('"version": 3', '"version": 3.5').encode()),
+            ("manifest_unknown_encoding", good_text.replace('"canon/2"', '"canon/3"').encode()),
         ]:
             assert variant != "manifest_nan" or b"NaN" in raw
             record(variant, image, None, sig, [pub], [], manifest_raw=raw)
 
+        # a legacy (canon/1, untagged) manifest signed over its canon/1 compact bytes, as packs were signed
+        # before the migration: it still verifies, until the owner retires canon/1 signing
+        legacy = {key: value for key, value in manifest.items() if key != "encoding"}
+        record("legacy_canon1_manifest_still_verifies", image, legacy,
+               pp._load_private(keys["private"]).sign(pp.canonical_bytes(legacy)), [pub], [])
+        # the same legacy manifest given the canon/2 tag after signing: the signature no longer covers it
+        record("legacy_signature_over_a_retagged_manifest", image, manifest,
+               pp._load_private(keys["private"]).sign(pp.canonical_bytes(legacy)), [pub], [])
+
         # out-of-envelope field: manifest fields {"z": int}, properly re-signed -> verify ok,
         # envelope check fails with envelope:unknown-field:z
         m_z = pp.build_manifest(image, {"z": "int"}, 4, "test-env", keys["key_id"])
-        sig_z = pp._load_private(keys["private"]).sign(pp.canonical_bytes(m_z))
+        sig_z = pp._load_private(keys["private"]).sign(pp.signed_bytes(m_z))
         record("bad_envelope_field", image, m_z, sig_z, [pub], [])
 
         # injected out-of-fragment opcode: patch a prog word to 0x9999, re-sign over the
@@ -143,7 +155,7 @@ def main() -> int:
         struct.pack_into("<H", bad_img, prog_off, 0x9999)
         bad_img = bytes(bad_img)
         m_op = pp.build_manifest(bad_img, fields, 5, "test-env", keys["key_id"])
-        sig_op = pp._load_private(keys["private"]).sign(pp.canonical_bytes(m_op))
+        sig_op = pp._load_private(keys["private"]).sign(pp.signed_bytes(m_op))
         record("injected_opcode", bad_img, m_op, sig_op, [pub], [])
 
 
@@ -156,7 +168,13 @@ def main() -> int:
             man = pp.build_manifest(image_b, fields_ or fields, version, "test-env", keys["key_id"])
             if mutate:
                 mutate(man)
-            return man, priv.sign(pp.canonical_bytes(man))
+            try:
+                return man, priv.sign(pp.signed_bytes(man))
+            except pp.canon.CanonicalError:
+                # a float has no canon/2 form: the case is a legacy (canon/1, untagged) manifest, the only
+                # kind that can carry one, so what it checks is the verify only canon/1 path
+                man.pop("encoding")
+                return man, priv.sign(pp.signed_bytes(man))
 
         def with_flagword(image_b, flagword):
             raw = bytearray(image_b)

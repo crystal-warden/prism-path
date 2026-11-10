@@ -2,9 +2,12 @@
 // Copyright 2026 Crystal Warden Supply Chain Labs LLC
 //! PolicyHost + AuditLog — the Attested + Audited-and-atomic half (policy_host.py / audit_log.py).
 //!
-//! The audit log is append-only JSONL whose leaves are sha256 over each event's canonical form
-//! (Python's compact `sort_keys` bytes — same `py_canonical_string`), rolled into a Bitcoin-style
-//! Merkle root (duplicate-last-if-odd), so a log written by either runtime verifies on the other.
+//! The audit log is append-only JSONL whose leaves are sha256 over each event's canonical form, rolled
+//! into a Bitcoin-style Merkle root (duplicate-last-if-odd), so a log written by either runtime
+//! verifies on the other. An event is written as canon/2 (it names `"encoding": "canon/2"` and its time
+//! is the integer `ts_us`, microseconds since the epoch), and its line is its canon/2 bytes; an event
+//! without the tag, written before the migration, is hashed over its canon/1 compact bytes
+//! (`durable::document_bytes`), so an old log and a root anchored over it still verify.
 //! Anti-rollback is the same fsync'd `active_version` file floor (software tier: tamper-EVIDENT
 //! through the ledger, not tamper-proof — the eFUSE counter is the hardware follow-on).
 //!
@@ -40,11 +43,11 @@
 //! next swap or rollback. [`PolicyHost::set_commit_hook`] is the fault injection point the crash tests
 //! use: it runs before each step and an error stands for a process that died there.
 //!
-//! The event line is written the way `json.dumps(event)` writes it (insertion order, `", "` and `": "`
-//! separators, ASCII only), so the file is byte for byte what Python writes for the same event.
+//! The event line is the event's canon/2 bytes, so the file is byte for byte what Python writes for the
+//! same event. The intent record and the active policy record are canon/2 documents too.
 
 use crate::{check_envelope, read_ppt_header, sha256_hex, validate_image, verify_pack};
-use prismpath_rs::durable::{py_canonical_string, try_py_canonical_string};
+use prismpath_rs::durable;
 use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
@@ -128,12 +131,12 @@ impl From<AuditWriteError> for HostError {
 
 // ----------------------------------------------------------------------------------- clock
 
-/// The two clocks the protocol reads: epoch seconds for an event's `ts`, and the ISO-8601 second a
+/// The two clocks the protocol reads: epoch microseconds for an event's `ts_us`, and the ISO-8601 second a
 /// policy has been active `since`. Tests replace them with counters so timestamps are part of the
 /// expected bytes.
 #[derive(Clone)]
 pub struct Clock {
-    epoch: Arc<dyn Fn() -> f64 + Send + Sync>,
+    epoch: Arc<dyn Fn() -> i64 + Send + Sync>,
     iso: Arc<dyn Fn() -> String + Send + Sync>,
 }
 
@@ -143,18 +146,18 @@ impl Clock {
     }
 
     pub fn new(
-        epoch: impl Fn() -> f64 + Send + Sync + 'static,
+        epoch: impl Fn() -> i64 + Send + Sync + 'static,
         iso: impl Fn() -> String + Send + Sync + 'static,
     ) -> Clock {
         Clock { epoch: Arc::new(epoch), iso: Arc::new(iso) }
     }
 }
 
-fn now_epoch() -> f64 {
+fn now_epoch() -> i64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .map(|duration| duration.as_secs_f64())
-        .unwrap_or(0.0)
+        .map(|duration| i64::try_from(duration.as_micros()).unwrap_or(i64::MAX))
+        .unwrap_or(0)
 }
 
 fn now_iso() -> String {
@@ -407,16 +410,17 @@ pub struct AuditLog {
     clock: Clock,
 }
 
-/// A record the host writes and later reads back as a hashed document: refused, with nothing written, when it
-/// has no canonical form (a number beyond the double range), as `canon.dumps_strict` refuses it in Python.
-fn canonical_record(record: &Value) -> Result<String, HostError> {
-    try_py_canonical_string(record, true).map_err(|error| HostError::Canonical(error.to_string()))
+/// A record the host writes and later reads back: tagged canon/2 and written as its canon/2 bytes, refused
+/// with nothing written when it has no canon/2 form (a float, an integer beyond plus or minus 2^53 minus
+/// 1), as `canon.canon2_bytes` refuses it in Python.
+fn canonical_record(record: &Value) -> Result<Vec<u8>, HostError> {
+    durable::canon2_bytes(&durable::tagged(record.clone())).map_err(|error| HostError::Canonical(error.to_string()))
 }
 
-/// Every event reaching here was read by `parse_strict` or was checked by `append` before it was built, so
-/// it has a canonical form and the panicking spelling cannot fire.
+/// Every event reaching here was read by `durable::read_document` or was built by `append` from canon/2
+/// checked parts, so it has a form under the encoding it names.
 fn leaf_hex(ev: &Value) -> String {
-    hex::encode(Sha256::digest(py_canonical_string(ev, false).as_bytes()))
+    hex::encode(Sha256::digest(durable::document_bytes(ev).expect("an event read or built under its encoding")))
 }
 
 /// The lines of a text file the way Python's universal newline iteration yields them.
@@ -443,7 +447,7 @@ impl AuditLog {
                 if line.is_empty() {
                     continue;
                 }
-                match prismpath_rs::value::parse_strict(line) {
+                match durable::read_document(line) {
                     Ok(event) => {
                         state.leaves.push(leaf_hex(&event));
                         state.events.push(event);
@@ -473,31 +477,20 @@ impl AuditLog {
     pub fn append(&self, actor: &str, action: &str, data: Fields) -> Result<Value, AuditWriteError> {
         let mut state = locked(&self.state);
         let index = state.events.len();
-        let ts = (self.clock.epoch)();
-        let ts_value = serde_json::Number::from_f64(ts).map_or(Value::Null, Value::Number);
+        let ts_us = (self.clock.epoch)();
         let mut data_map = Map::new();
-        let mut data_text = Vec::new();
         for (key, value) in &data {
-            // a value with no canonical JSON form is refused before anything is written, as the reference does
-            let canonical = try_py_canonical_string(value, true)
-                .map_err(|error| AuditWriteError(format!("audit event has no canonical JSON form: {error}")))?;
-            // a key is a string, which always has a canonical form
-            data_text.push(format!("{}: {}", py_canonical_string(&Value::String((*key).to_string()), true), canonical));
             data_map.insert((*key).to_string(), value.clone());
         }
         let event = json!({
-            "idx": index, "id": index.to_string(), "ts": ts_value,
-            "actor": actor, "action": action, "data": Value::Object(data_map),
+            "idx": index, "id": index.to_string(), "ts_us": ts_us,
+            "actor": actor, "action": action, "data": Value::Object(data_map), "encoding": durable::CANON2,
         });
-        // index, ts (from_f64 or null), actor and action are an integer, a finite number and strings
-        let line = format!(
-            "{{\"idx\": {index}, \"id\": {}, \"ts\": {}, \"actor\": {}, \"action\": {}, \"data\": {{{}}}}}\n",
-            py_canonical_string(&Value::String(index.to_string()), true),
-            py_canonical_string(&ts_value, true),
-            py_canonical_string(&Value::String(actor.to_string()), true),
-            py_canonical_string(&Value::String(action.to_string()), true),
-            data_text.join(", "),
-        );
+        // canon/2: a float, an out of range integer or nesting too deep is refused before anything is written
+        let mut line = durable::canon2_bytes(&event)
+            .map_err(|error| AuditWriteError(format!("audit event has no canonical JSON form: {error}")))?;
+        let leaf = hex::encode(Sha256::digest(&line));
+        line.push(b'\n');
         if !self.path.is_empty() {
             let failed = |error: std::io::Error| {
                 AuditWriteError(format!("audit event not persisted to {}: {error}", self.path))
@@ -507,11 +500,11 @@ impl AuditLog {
                 std::fs::create_dir_all(dir).map_err(failed)?;
             }
             let mut file = std::fs::OpenOptions::new().create(true).append(true).open(&self.path).map_err(failed)?;
-            file.write_all(line.as_bytes()).map_err(failed)?;
+            file.write_all(&line).map_err(failed)?;
             file.flush().map_err(failed)?;
             file.sync_all().map_err(failed)?;
         }
-        state.leaves.push(leaf_hex(&event));
+        state.leaves.push(leaf);
         state.events.push(event.clone());
         Ok(event)
     }
@@ -533,7 +526,7 @@ impl AuditLog {
             if line.is_empty() {
                 continue;
             }
-            match prismpath_rs::value::parse_strict(line) {
+            match durable::read_document(line) {
                 Ok(event) => on_disk.push(leaf_hex(&event)),
                 Err(_) => return Ok(false),
             }
@@ -734,7 +727,7 @@ impl PolicyHost {
         };
         let text = String::from_utf8(bytes).map_err(|error| HostError::IntentUnreadable(format!("{path}: {error}")))?;
         let pending: Value =
-            prismpath_rs::value::parse_strict(&text).map_err(|error| HostError::IntentUnreadable(format!("{path}: {error}")))?;
+            durable::read_document(&text).map_err(|error| HostError::IntentUnreadable(format!("{path}: {error}")))?;
         if !pending.is_object() {
             return Err(HostError::IntentUnreadable(format!("{path}: not an object")));
         }
@@ -746,8 +739,8 @@ impl PolicyHost {
         if let Some(op) = op {
             record["op"] = json!(op);
         }
-        let text = canonical_record(&record)?;
-        atomic_write_bytes(&self.pending_path(), text.as_bytes())
+        let bytes = canonical_record(&record)?;
+        atomic_write_bytes(&self.pending_path(), &bytes)
     }
 
     fn clear_pending(&self) -> Result<(), HostError> {
@@ -799,8 +792,8 @@ impl PolicyHost {
         self.fault(CommitStep::ActiveRecord)?;
         let mut record = policy.record.clone();
         record.insert("image_file".into(), json!(name));
-        let text = canonical_record(&Value::Object(record))?;
-        atomic_write_bytes(&self.active_record_path(), text.as_bytes())?;
+        let bytes = canonical_record(&Value::Object(record))?;
+        atomic_write_bytes(&self.active_record_path(), &bytes)?;
         Ok(name)
     }
 
@@ -853,9 +846,13 @@ impl PolicyHost {
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
             Err(error) => Err(error.to_string()),
         };
-        let parsed = text.and_then(|text| prismpath_rs::value::parse_strict(&text).map_err(|error| error.to_string()));
+        let parsed = text.and_then(|text| durable::read_document(&text).map_err(|error| error.to_string()));
         let record = match parsed {
-            Ok(Value::Object(record)) => record,
+            Ok(Value::Object(mut record)) => {
+                // the tag says how the record was read, not what is active
+                record.remove(durable::ENCODING_KEY);
+                record
+            }
             Ok(_) => {
                 return self.unreadable(vec![("reason", json!("record:not-an-object")), ("result", json!("not_restored"))]);
             }
