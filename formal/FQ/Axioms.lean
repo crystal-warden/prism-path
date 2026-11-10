@@ -115,3 +115,4 @@ reader, and the theorems that the writer and the reader are inverse on the canon
 #print axioms Core.readCanonical_ok_iff
 #print axioms Core.writeBytes
 #print axioms Core.readCanonical
+#print axioms Core.reader_not_canonical

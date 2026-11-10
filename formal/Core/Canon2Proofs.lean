@@ -1221,4 +1221,19 @@ theorem readCanonical_ok_iff (b : ByteArray) (v : J) :
   · rintro ⟨hr, rfl⟩
     unfold readCanonical; rw [hr]; simp [writeBytes_data]
 
+/-- **The reader alone is not canonical.** `readBytes`, the canon/2 reader the spec defines and the five
+implementations share, accepts documents that are not the canonical spelling of their value:
+whitespace (`[ ]`), members out of key order (`{"b":null,"a":null}`) and a needless escape (`"A"`).
+So `writeBytes (readBytes b) = b` does not hold of the reader; it holds of `readCanonical`
+(`write_readCanonical`), which refuses these three as `notCanonical`. -/
+theorem reader_not_canonical :
+    readBytes ⟨#[91, 32, 93]⟩ = .ok (.arr []) ∧ readCanonical ⟨#[91, 32, 93]⟩ = .error .notCanonical ∧
+    readBytes ⟨#[123, 34, 98, 34, 58, 110, 117, 108, 108, 44, 34, 97, 34, 58, 110, 117, 108, 108, 125]⟩ =
+      .ok (.obj [("b", .null), ("a", .null)]) ∧
+    readCanonical ⟨#[123, 34, 98, 34, 58, 110, 117, 108, 108, 44, 34, 97, 34, 58, 110, 117, 108, 108, 125]⟩ =
+      .error .notCanonical ∧
+    readBytes ⟨#[34, 92, 117, 48, 48, 52, 49, 34]⟩ = .ok (.str "A") ∧
+    readCanonical ⟨#[34, 92, 117, 48, 48, 52, 49, 34]⟩ = .error .notCanonical := by
+  refine ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩
+
 end Core
