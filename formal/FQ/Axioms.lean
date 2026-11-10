@@ -14,6 +14,7 @@ import Core.Codes
 import Core.Order
 import Core.Scope
 import Core.Evidence
+import Core.Canon2Proofs
 /-! The axiom audit: the theorem must depend on nothing beyond Lean's three standard axioms. -/
 #print axioms FQ.decision_preservation
 #print axioms FQ.symbolCount_eq_truthVec
@@ -90,3 +91,28 @@ evaluator the oracle runs, which must not use `Classical.choice` to compute. -/
 #print axioms Core.Bridge.lowered_threshold_preserves
 #print axioms Core.Bridge.boundary_canonical
 #print axioms Core.Bridge.accepted_quantization_preserves
+/-! The canon/2 encoding layer (formal/Core/Canon2.lean, Canon2Proofs.lean): the writer, the strict
+reader, and the theorems that the writer and the reader are inverse on the canonical values. -/
+#print axioms Core.readChars_wr
+#print axioms Core.readChars_doc
+#print axioms Core.readBytes_doc
+#print axioms Core.keyLt_total
+#print axioms Core.units_inj
+#print axioms Core.sortM_sorted
+#print axioms Core.canon_norm
+#print axioms Core.norm_canon
+#print axioms Core.read_write
+#print axioms Core.read_write_doc
+#print axioms Core.write_injective
+#print axioms Core.canonical_form
+#print axioms Core.same_value_same_spelling
+#print axioms Core.readCanonical_iff
+#print axioms Core.readCanonical_write
+#print axioms Core.write_readCanonical
+#print axioms Core.readCanonical_unique
+#print axioms Core.readCanonical_refuses
+#print axioms Core.readCanonical_cause
+#print axioms Core.readCanonical_ok_iff
+#print axioms Core.writeBytes
+#print axioms Core.readCanonical
+#print axioms Core.reader_not_canonical

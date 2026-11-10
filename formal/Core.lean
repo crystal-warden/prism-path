@@ -2,6 +2,8 @@
 -- Copyright 2026 Crystal Warden Supply Chain Labs LLC
 import Core.Causes
 import Core.Json
+import Core.Canon2
+import Core.Canon2Proofs
 import Core.Policy
 import Core.Eval
 import Core.Theorems

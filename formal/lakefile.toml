@@ -1,5 +1,5 @@
 name = "fq"
-defaultTargets = ["FQ", "Core", "core-oracle"]
+defaultTargets = ["FQ", "Core", "core-oracle", "canon2-oracle"]
 
 [[require]]
 name = "mathlib"
@@ -19,3 +19,9 @@ name = "Core"
 [[lean_exe]]
 name = "core-oracle"
 root = "Core.Main"
+
+# The canon/2 oracle: the reader, the writer and the strict reader of Core.Canon2 compiled to a program
+# that prints a document's canonical bytes or the reader's refusal (formal/diff/canon2_diff.py).
+[[lean_exe]]
+name = "canon2-oracle"
+root = "Core.Canon2Main"

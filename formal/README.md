@@ -127,10 +127,14 @@ theorems on the standard three.
 | `counterRefusal_iff`, `counter_excluded_refused` | Scope.lean | **The engine counter exclusion hides nothing.** `counterRefusal`, the check a differential run uses to exclude a case as reading an engine counter, holds exactly when the oracle refuses the image with `policy:engine-counter`, and then every reading is refused with it |
 | `verified_receipt_is_verdict`, `receipt_is_verdict_of_hashes`, `verified_run_complete`, `verified_refusal_registered`, `verified_excluded_counter`, `evidence_sound` | Evidence.lean | **Evidence and the semantics.** Over a model of a differential run and its verifier (`verifyRun`, every receipt replayed, both keys pinned), every receipt the verifier accepts records `Core.verdict` on the image and reading whose hashes it carries, every reading of every case not excluded has one, and a recorded refusal is the verdict's registered code; the cryptography is a parameter and its security is stated per object as explicit hypotheses (`Unforgeable`, `NoTreeCollision`, `NoCollision`), never as `sorry` |
 | `policyCheck_of_systemBoundary`, `systemBoundary_of_policyCheck`, `policyCheck_refuses_routed`, `policyCheck_eq_systemBoundary`, `route_depends_on_routed` | Boundary.lean | **The two checks of a reading.** The system boundary (every defined field) is at least as strict as the policy check (the routed fields), the two agree when every defined field is routed, and only routed fields can change a route |
+| `readBytes_doc`, `read_write`, `readChars_wr`, `canonical_form`, `same_value_same_spelling`, `write_injective`, `readCanonical_iff`, `write_readCanonical`, `readCanonical_unique`, `readCanonical_refuses`, `readCanonical_cause`, `reader_not_canonical` | Canon2Proofs.lean | **The canon/2 encoding layer.** The reader returns only documents; the writer (`writeBytes`, Canon2.lean) and the reader are inverse on canonical values; every accepted document's canonical bytes are a fixed point; the strict reader (`readCanonical`) accepts exactly the canonical spellings, one per value, and refuses everything else with the reader's cause or `notCanonical`; the reader alone accepts non canonical spellings (spec section 3.2) |
 
 The oracle is that evaluator compiled: `lake build` also builds `core-oracle`, and
 `.lake/build/bin/core-oracle POLICY.json READING.json ...` prints one JSON line for the policy and one
 per reading (spec section 8); `--batch` serves the differential harness.
+`canon2-oracle` is the canon/2 writer and readers compiled: `.lake/build/bin/canon2-oracle DOC ...` prints
+`ok <c> <hex>` (the canonical bytes, and 1 when the input already is them) or `refuse <rule>` per document;
+`--batch` serves `diff/canon2_diff.py`.
 
 ## Validation, and how to reproduce it
 
