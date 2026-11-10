@@ -10,8 +10,11 @@ the implementation nor the person who ran it can check what was decided:
   * every decision has a receipt (`receipts.jsonl`, one canon/2 line each) binding the image's hash, the
     reading's hash and the decision with its registered cause; a receipt is not signed by itself;
   * the receipts are the leaves of a Merkle tree, and one root statement signed with the instance key
-    (`receipts.roots.jsonl`, `prismpath.ledgers.root_statement`, log `core-run`) states their root and
-    count, and binds the run's manifest (`run.json`) through its `policy` member.
+    (`receipts.roots.jsonl`, `prismpath.core-run-root/1`, log `core-run`) states their root and count,
+    and binds the run's manifest (`run.json`) through its `policy` member. It is a canon/2 document with
+    its time an integer count of microseconds (`time_us`), signed over its own domain prefix, so the
+    run's evidence is canon/2 end to end; the canon/1 root statements of audit logs and epoch chains
+    (`prismpath.ledgers.root_statement`) are untouched.
 
 The verifier re-checks the root statement, every receipt and every image attestation, and replays a
 sample of the decisions through the Lean oracle; a case outside the core (section 1) is excluded with
@@ -49,6 +52,12 @@ import core_diff  # noqa: E402
 RUN_FORMAT = "prismpath.core-run/1"
 IMAGE_FORMAT = "prismpath.core-image/1"
 RECEIPT_FORMAT = "prismpath.core-receipt/1"
+# The run's root statement: a canon/2 document of its own format, signed over its own domain prefix, so
+# it can never be presented as an audit log's canon/1 root statement (`prismpath-root-statement/1`), an
+# image attestation or a pack signature, or the reverse.
+ROOT_FORMAT = "prismpath.core-run-root/1"
+ROOT_DOMAIN = b"prismpath.core-run-root/1\x00"
+ROOT_MEMBERS = ("format", "log", "root", "leaves", "time_us", "trigger", "key_id", "public_key", "policy", "sig")
 # Prefixed to the image bytes before signing, so an image attestation can never be presented as a pack
 # manifest or root statement signature, or the reverse.
 IMAGE_DOMAIN = b"prismpath.core-image/1\x00"
@@ -187,7 +196,7 @@ def ensure_keys(keys: Path):
     return keys / "authority.key", keys / "authority.pub", keys / "instance.key", keys / "instance.pub"
 
 
-def produce(cases_path: Path, out: Path, keys: Path, decider: str = "python", time: str = None) -> dict:
+def produce(cases_path: Path, out: Path, keys: Path, decider: str = "python", time_us: int = None) -> dict:
     """Decide every case with the Python reference and write the run to `out`."""
     from prismpath.hotswap import policy_pack
     from prismpath.kernel import canon2
@@ -235,12 +244,77 @@ def produce(cases_path: Path, out: Path, keys: Path, decider: str = "python", ti
     (out / "run.json").write_bytes(manifest_bytes + b"\n")
     (out / "authority.pub").write_bytes(authority_pub.read_bytes())
     (out / "instance.pub").write_bytes(instance_pub.read_bytes())
-    # one root statement over every receipt (the existing root statement code), binding the manifest
-    statement = root_statement.make_statement(instance, log=LOG_CORE_RUN, seq=0, root=root_statement.merkle_root(leaves),
-                                              leaves=len(leaves), prev="", trigger="core-run",
-                                              policy={"core_run_sha256": sha256_hex(manifest_bytes)}, time=time)
-    (out / "receipts.roots.jsonl").write_text(json.dumps(statement, sort_keys=True) + "\n")
+    # one canon/2 root statement over every receipt, binding the manifest
+    statement = make_root_statement(instance, root_statement.merkle_root(leaves), len(leaves), manifest_bytes,
+                                    time_us=time_us)
+    (out / "receipts.roots.jsonl").write_bytes(canon2.dumps(statement) + b"\n")
     return manifest
+
+
+# ----------------------------------------------------------------- the run's root statement
+def root_signed_bytes(statement: dict) -> bytes:
+    """What the root statement's signature covers: its domain prefix, then the canon/2 bytes of every
+    member but `sig`."""
+    from prismpath.kernel import canon2
+    return ROOT_DOMAIN + canon2.dumps({key: value for key, value in statement.items() if key != "sig"})
+
+
+def make_root_statement(instance, root: str, leaves: int, manifest_bytes: bytes, time_us: int = None) -> dict:
+    """The run's root statement, `prismpath.core-run-root/1`, signed with the instance key: the Merkle root
+    of the receipts' leaves and their count, the signer's clock as an integer count of microseconds since
+    the epoch, and the SHA-256 of the manifest. Integers and strings only, so it is a canon/2 document."""
+    import time as _time
+    statement = {"format": ROOT_FORMAT, "log": LOG_CORE_RUN, "root": root, "leaves": int(leaves),
+                 "time_us": int(time_us if time_us is not None else _time.time_ns() // 1000), "trigger": LOG_CORE_RUN,
+                 "key_id": instance.key_id, "public_key": instance.public_raw.hex(),
+                 "policy": {"core_run_sha256": sha256_hex(manifest_bytes)}}
+    statement["sig"] = instance.sign(root_signed_bytes(statement)).hex()
+    return statement
+
+
+def _hex_of(value, size: int) -> bool:
+    return isinstance(value, str) and len(value) == 2 * size and all(char in "0123456789abcdef" for char in value)
+
+
+def verify_root_statement(data: bytes, leaves, manifest_bytes: bytes, instance_raw: bytes) -> dict:
+    """The run's root statement, checked in full, or Bad: one canon/2 line in its canonical spelling, exactly
+    the members of `prismpath.core-run-root/1` with their types, the run's instance key, a signature under
+    that key over the domain prefix and the body, the Merkle root of every receipt and their count, and the
+    manifest's hash."""
+    from prismpath.kernel import canon2
+    from prismpath.ledgers import root_statement
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+    from cryptography.exceptions import InvalidSignature
+    lines = data.split(b"\n")
+    if len(lines) != 2 or lines[1] != b"":
+        raise Bad("the root statement is not one line")
+    try:
+        statement = canon2.loads(lines[0])
+    except canon2.Canon2Error as error:
+        raise Bad(f"the root statement is not a canon/2 document ({error.rule})") from None
+    if not isinstance(statement, dict) or canon2.dumps(statement) != lines[0]:
+        raise Bad("the root statement is not in its canonical canon/2 spelling")
+    if set(statement) != set(ROOT_MEMBERS) or statement["format"] != ROOT_FORMAT or statement["log"] != LOG_CORE_RUN \
+            or statement["trigger"] != LOG_CORE_RUN:
+        raise Bad("the root statement is not a prismpath.core-run-root/1 statement")
+    for key in ("leaves", "time_us"):
+        if type(statement[key]) is not int or statement[key] < 0:
+            raise Bad(f"the root statement's {key} is not a nonnegative integer")
+    if not isinstance(statement["root"], str) or not _hex_of(statement["key_id"], 32) \
+            or not _hex_of(statement["public_key"], 32) or not _hex_of(statement["sig"], 64):
+        raise Bad("the root statement's root, key or signature is malformed")
+    if statement["public_key"] != instance_raw.hex() or statement["key_id"] != sha256_hex(instance_raw):
+        raise Bad("the root statement is not signed with the run's instance key")
+    try:
+        Ed25519PublicKey.from_public_bytes(instance_raw).verify(bytes.fromhex(statement["sig"]),
+                                                                root_signed_bytes(statement))
+    except (InvalidSignature, ValueError):
+        raise Bad("the root statement's signature does not verify") from None
+    if statement["leaves"] != len(leaves) or statement["root"] != root_statement.merkle_root(leaves):
+        raise Bad("the root statement does not verify: its root is not the receipts' Merkle root")
+    if statement["policy"] != {"core_run_sha256": sha256_hex(manifest_bytes)}:
+        raise Bad("the root statement does not bind this run.json")
+    return statement
 
 
 # ----------------------------------------------------------------- verifying a run
@@ -260,7 +334,6 @@ def _norm(verdict) -> tuple:
 def verify(run: Path, *, sample=200, seed=0, pin_authority=None, pin_instance=None, oracle=None) -> dict:
     """Every check of a run, or Bad naming the first that fails. Returns a summary."""
     from prismpath.kernel import canon2, causes
-    from prismpath.ledgers import root_statement
     for name in FILES:
         if not (run / name).exists():
             raise Bad(f"the run has no {name}")
@@ -288,13 +361,7 @@ def verify(run: Path, *, sample=200, seed=0, pin_authority=None, pin_instance=No
     # the root statement over the receipts, and the manifest it binds
     receipt_lines = _lines(run / "receipts.jsonl")
     leaves = [sha256_hex(line) for line in receipt_lines]
-    statements, findings = root_statement.read_statements(str(run / "receipts.roots.jsonl"))
-    report = root_statement.verify_chain(statements, findings, lambda count: root_statement.merkle_root(leaves[:count]),
-                                         len(leaves), log=LOG_CORE_RUN, pinned=[instance_raw])
-    if report["status"] != root_statement.SIGNED or report["unsigned_tail"] != 0 or len(statements) != 1:
-        raise Bad(f"the root statement does not verify: {report}")
-    if statements[0].get("policy") != {"core_run_sha256": sha256_hex(manifest_bytes)}:
-        raise Bad("the root statement does not bind this run.json")
+    statement = verify_root_statement((run / "receipts.roots.jsonl").read_bytes(), leaves, manifest_bytes, instance_raw)
     if manifest["receipts"] != len(leaves):
         raise Bad("run.json counts other receipts than the run holds")
 
@@ -364,7 +431,7 @@ def verify(run: Path, *, sample=200, seed=0, pin_authority=None, pin_instance=No
     if replay["disagree"]:
         raise Bad(f"{replay['disagree']} replayed decisions differ from the oracle: {replay['first']}")
     return {"run": str(run), "decider": manifest["decider"], "cases": len(cases), "excluded": len(excluded),
-            "receipts": len(receipts), "root": statements[0]["root"],
+            "receipts": len(receipts), "root": statement["root"],
             "root_statement": "signed" if pinned else "signed-unpinned", "images": len(cases), **replay}
 
 

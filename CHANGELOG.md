@@ -204,6 +204,15 @@ flow manifests, receipts and bundles read exactly as 0.1.2 wrote them, and a 0.1
   `concentrator.json` list `registry_cause` per decode and demux case. Cause 50 (`wire:symbol-overflow`) still has
   no emitter, since no decoder here is handed a cell range, and the pin test keeps that for it alone.
 
+### The verified policy core: evidence gaps closed (step 4, 2026-11-10)
+Research line, `docs/design/spec-verified-core.md` sections 3.1, 7 and 11. Packs, envelopes, audit log
+receipts, their root statements, anchored roots and every frozen corpus read and verify as before.
+- **A differential run is canon/2 end to end.** Its root statement is a new format, `prismpath.core-run-root/1`,
+  signed over its own domain prefix, integers and strings only, the signer's clock as `time_us` (microseconds,
+  an integer) in place of an ISO string; Python and Rust write it and verify each other's. Only the `core-run`
+  log moved: `prismpath-root-statement/1` and its verifiers are unchanged, and a run's verifier refuses a
+  statement in that format.
+
 ### The verified policy core: one cause per refused policy, runs as evidence, the eBPF leg (2026-11-10)
 Research line, `docs/design/spec-verified-core.md` sections 4, 7, 9 and 11. Nothing here changes a format
 already signed: packs, envelopes, receipts, root statements and every frozen corpus read as before.

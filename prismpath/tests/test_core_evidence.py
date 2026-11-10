@@ -4,11 +4,12 @@
 
 The Python reference and the Rust port each produce a run of the same cases with test keys generated
 for the test: image attestations under the authority key, a canon/2 receipt per decision, and one root
-statement over the receipts under the instance key. Each verifier checks the other's run, every receipt
+statement over the receipts under the instance key, all canon/2. Each verifier checks the other's run, every receipt
 is replayed through the oracle, and a run altered in any part is refused. The oracle is built by `lake
 build` in formal/; without it the test skips, unless PRISMPATH_REQUIRE_CORE_ORACLE is set.
 """
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -113,6 +114,17 @@ ALTERATIONS = [
     ("images.jsonl", lambda data: _flip_signature(data), "images.jsonl"),
     ("run.json", lambda data: data.replace(b'"excluded":[', b'"excluded":["none",', 1), "root statement"),
     ("instance.pub", lambda data: bytes(32 - len(data)) + data[::-1], "keys"),
+    ("receipts.roots.jsonl", _flip_signature, "root statement"),
+    # the clock as a float of seconds: canon/2 refuses a float, so the statement does not read
+    ("receipts.roots.jsonl", lambda data: re.sub(rb'"time_us":(\d+)', lambda m: b'"time_us":' + m.group(1)[:-6] + b"." +
+                                                m.group(1)[-6:], data), "root statement"),
+    # a later clock: the signature no longer covers the body
+    ("receipts.roots.jsonl", lambda data: re.sub(rb'"time_us":(\d+)', lambda m: b'"time_us":' + str(int(m.group(1)) + 1)
+                                                .encode(), data), "root statement"),
+    # the same members spelled with whitespace: not the canonical canon/2 bytes
+    ("receipts.roots.jsonl", lambda data: data.replace(b'","', b'", "', 1), "root statement"),
+    # a second statement appended
+    ("receipts.roots.jsonl", lambda data: data + data, "root statement"),
 ]
 
 
@@ -146,12 +158,9 @@ def test_a_receipt_resigned_with_a_wrong_decision_fails_the_replay(runs, tmp_pat
     (copy / "receipts.jsonl").write_bytes(b"".join(line + b"\n" for line in lines))
     leaves = [core_evidence.sha256_hex(line) for line in lines]
     instance = root_statement.InstanceKey.load(str(base / "keys-py" / "instance.key"))
-    statement = root_statement.make_statement(
-        instance, log=core_evidence.LOG_CORE_RUN, seq=0, root=root_statement.merkle_root(leaves), leaves=len(leaves),
-        prev="", trigger="core-run",
-        policy={"core_run_sha256": core_evidence.sha256_hex((copy / "run.json").read_bytes().rstrip(b"\n"))})
-    import json
-    (copy / "receipts.roots.jsonl").write_text(json.dumps(statement, sort_keys=True) + "\n")
+    statement = core_evidence.make_root_statement(instance, root_statement.merkle_root(leaves), len(leaves),
+                                                  (copy / "run.json").read_bytes().rstrip(b"\n"))
+    (copy / "receipts.roots.jsonl").write_bytes(canon2.dumps(statement) + b"\n")
     with pytest.raises(core_evidence.Bad, match="differ from the oracle"):
         core_evidence.verify(copy, sample=None)
     checked = _rust_verify(rust, copy)
@@ -166,3 +175,42 @@ def test_a_foreign_pin_is_refused(runs):
     checked = _rust_verify(rust, base / "run-rs", "--pin-authority", str(base / "keys-rs" / "authority.pub"),
                            "--pin-instance", str(base / "keys-py" / "instance.pub"))
     assert checked.returncode == 1 and "pinned" in checked.stdout, checked.stdout
+
+
+def test_the_root_statement_is_canon2_with_an_integer_clock(runs):
+    """The whole run is canon/2: the root statement reads under canon/2, is its own canonical spelling, holds
+    integers and strings only, its time an integer count of microseconds, and is signed over its own domain
+    prefix, so the canon/1 statement format of audit logs is not accepted in its place."""
+    from prismpath.kernel import canon2
+    base, _rust = runs
+    for run in ("run-py", "run-rs"):
+        line = (base / run / "receipts.roots.jsonl").read_bytes().rstrip(b"\n")
+        statement = canon2.loads(line)
+        assert canon2.dumps(statement) == line
+        assert statement["format"] == core_evidence.ROOT_FORMAT and set(statement) == set(core_evidence.ROOT_MEMBERS)
+        assert type(statement["time_us"]) is int and statement["time_us"] > 1_700_000_000 * 10 ** 6
+        for name in ("run.json", "images.jsonl", "receipts.jsonl", "cases.jsonl"):
+            for row in (base / run / name).read_bytes().split(b"\n")[:-1]:
+                assert canon2.dumps(canon2.loads(row)) == row, (run, name)
+
+
+def test_a_canon1_root_statement_is_refused(runs, tmp_path):
+    """The audit log's statement format (canon/1, an ISO time, its own domain) signed over the same root with
+    the run's instance key does not pass as the run's root statement."""
+    import json
+    from prismpath.ledgers import root_statement
+    base, rust = runs
+    copy = tmp_path / "canon1"
+    shutil.copytree(base / "run-py", copy)
+    lines = (copy / "receipts.jsonl").read_bytes().split(b"\n")[:-1]
+    leaves = [core_evidence.sha256_hex(line) for line in lines]
+    instance = root_statement.InstanceKey.load(str(base / "keys-py" / "instance.key"))
+    statement = root_statement.make_statement(
+        instance, log=core_evidence.LOG_CORE_RUN, seq=0, root=root_statement.merkle_root(leaves), leaves=len(leaves),
+        prev="", trigger="core-run",
+        policy={"core_run_sha256": core_evidence.sha256_hex((copy / "run.json").read_bytes().rstrip(b"\n"))})
+    (copy / "receipts.roots.jsonl").write_text(json.dumps(statement, sort_keys=True) + "\n")
+    with pytest.raises(core_evidence.Bad, match="root statement"):
+        core_evidence.verify(copy, sample=5)
+    checked = _rust_verify(rust, copy)
+    assert checked.returncode == 1 and "root statement" in checked.stdout, checked.stdout

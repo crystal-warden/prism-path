@@ -5,8 +5,9 @@
 //! `run.json` (the manifest), `cases.jsonl` (the inputs), `images.jsonl` (an image attestation per case,
 //! Ed25519 with the authority key over `prismpath.core-image/1\0` and the image's canon/2 bytes),
 //! `receipts.jsonl` (a canon/2 receipt per decision; a receipt is not signed by itself) and
-//! `receipts.roots.jsonl` (one root statement, signed with the instance key, over the receipts' Merkle
-//! root, binding the manifest), with the two public keys beside them.
+//! `receipts.roots.jsonl` (one canon/2 root statement, `prismpath.core-run-root/1`, signed with the
+//! instance key over its own domain prefix, over the receipts' Merkle root, binding the manifest, its time
+//! an integer count of microseconds), with the two public keys beside them.
 //!
 //!     core_evidence produce --from CASES.jsonl --out RUN --keys KEYS   # the Rust port decides
 //!     core_evidence verify RUN [--sample N|all] [--seed S] [--pin-authority PUB --pin-instance PUB] [--oracle BIN]
@@ -20,12 +21,10 @@
 
 use ed25519_dalek::Signer;
 use prismpath_hotswap_rs::merkle::merkle_root;
-use prismpath_hotswap_rs::root_statement::{read_statements_text, signed_bytes, verify_chain, ChainOptions, SIGNED};
 use prismpath_hotswap_rs::{keygen, load_private, sha256_hex, verify_ed25519};
 use prismpath_rs::canon2::{self, Doc};
 use prismpath_rs::field_definitions::system_boundary;
 use prismpath_rs::{causes, first_deterministic, parse, Value};
-use serde_json::json;
 use std::collections::{BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode, Stdio};
@@ -35,6 +34,10 @@ const IMAGE_FORMAT: &str = "prismpath.core-image/1";
 const RECEIPT_FORMAT: &str = "prismpath.core-receipt/1";
 const IMAGE_DOMAIN: &[u8] = b"prismpath.core-image/1\x00";
 const LOG_CORE_RUN: &str = "core-run";
+/// The run's root statement: canon/2, its own format and domain prefix (`core_evidence.ROOT_FORMAT`).
+const ROOT_FORMAT: &str = "prismpath.core-run-root/1";
+const ROOT_DOMAIN: &[u8] = b"prismpath.core-run-root/1\x00";
+const ROOT_MEMBERS: [&str; 10] = ["format", "log", "root", "leaves", "time_us", "trigger", "key_id", "public_key", "policy", "sig"];
 const FILES: [&str; 7] = ["run.json", "cases.jsonl", "images.jsonl", "receipts.jsonl", "receipts.roots.jsonl", "authority.pub", "instance.pub"];
 
 struct Case {
@@ -195,22 +198,66 @@ fn case_decisions(case: &Case) -> Result<Option<Vec<Decision>>, String> {
 }
 
 // ----------------------------------------------------------------- producing a run
-/// The signer's clock as the root statement spells it, `2026-11-10T12:00:00.123Z`.
-fn now() -> String {
+/// The signer's clock as the run's root statement holds it: microseconds since the epoch, an integer.
+fn now_us() -> i64 {
     let since = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).expect("a clock after 1970");
-    let (seconds, millis) = (since.as_secs() as i64, since.subsec_millis());
-    let (days, rest) = (seconds.div_euclid(86_400), seconds.rem_euclid(86_400));
-    // days since 1970-01-01 to the civil date (Howard Hinnant's algorithm)
-    let z = days + 719_468;
-    let era = z.div_euclid(146_097);
-    let doe = z - era * 146_097;
-    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let mp = (5 * doy + 2) / 153;
-    let day = doy - (153 * mp + 2) / 5 + 1;
-    let month = if mp < 10 { mp + 3 } else { mp - 9 };
-    let year = yoe + era * 400 + i64::from(month <= 2);
-    format!("{year:04}-{month:02}-{day:02}T{:02}:{:02}:{:02}.{millis:03}Z", rest / 3600, rest % 3600 / 60, rest % 60)
+    i64::try_from(since.as_micros()).expect("a clock before the year 294,000")
+}
+
+/// What the root statement's signature covers: its domain prefix, then the canon/2 bytes of every member
+/// but `sig`.
+fn root_signed_bytes(statement: &Doc) -> Result<Vec<u8>, String> {
+    let Doc::Obj(members) = statement else { return Err("the root statement is an object".to_string()) };
+    let body = Doc::Obj(members.iter().filter(|(key, _)| key != "sig").cloned().collect());
+    let mut out = ROOT_DOMAIN.to_vec();
+    out.extend(canon2::write(&body).map_err(|error| error.to_string())?);
+    Ok(out)
+}
+
+fn is_hex_of(value: &str, size: usize) -> bool {
+    value.len() == 2 * size && value.bytes().all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+}
+
+/// The run's root statement checked in full, as `core_evidence.verify_root_statement` checks it.
+fn verify_root_statement(data: &[u8], leaves: &[String], manifest_bytes: &[u8], instance_raw: &[u8]) -> Result<Doc, String> {
+    let Some(line) = data.strip_suffix(b"\n").filter(|line| !line.contains(&b'\n')) else {
+        return Err("the root statement is not one line".to_string());
+    };
+    let statement = canon2::read(line).map_err(|error| format!("the root statement is not a canon/2 document ({})", error.rule()))?;
+    if canon2::write(&statement).ok().as_deref() != Some(line) {
+        return Err("the root statement is not in its canonical canon/2 spelling".to_string());
+    }
+    let Doc::Obj(members) = &statement else { return Err("the root statement is not in its canonical canon/2 spelling".to_string()) };
+    let keys: BTreeSet<&str> = members.iter().map(|(key, _)| key.as_str()).collect();
+    let shaped = keys == ROOT_MEMBERS.iter().copied().collect()
+        && member(&statement, "format") == Some(&text(ROOT_FORMAT))
+        && member(&statement, "log") == Some(&text(LOG_CORE_RUN))
+        && member(&statement, "trigger") == Some(&text(LOG_CORE_RUN));
+    if !shaped {
+        return Err("the root statement is not a prismpath.core-run-root/1 statement".to_string());
+    }
+    for key in ["leaves", "time_us"] {
+        if !matches!(member(&statement, key), Some(Doc::Int(value)) if *value >= 0) {
+            return Err(format!("the root statement's {key} is not a nonnegative integer"));
+        }
+    }
+    let (root, key_id, public_key, sig) = match (member(&statement, "root"), member(&statement, "key_id"), member(&statement, "public_key"), member(&statement, "sig")) {
+        (Some(Doc::Str(root)), Some(Doc::Str(key_id)), Some(Doc::Str(public_key)), Some(Doc::Str(sig))) if is_hex_of(key_id, 32) && is_hex_of(public_key, 32) && is_hex_of(sig, 64) => (root, key_id, public_key, sig),
+        _ => return Err("the root statement's root, key or signature is malformed".to_string()),
+    };
+    if *public_key != hex::encode(instance_raw) || *key_id != sha256_hex(instance_raw) {
+        return Err("the root statement is not signed with the run's instance key".to_string());
+    }
+    if !verify_ed25519(instance_raw, &root_signed_bytes(&statement)?, &unhex(sig)?) {
+        return Err("the root statement's signature does not verify".to_string());
+    }
+    if int_of(&statement, "leaves")? != leaves.len() as i64 || *root != merkle_root(leaves)? {
+        return Err("the root statement does not verify: its root is not the receipts' Merkle root".to_string());
+    }
+    if member(&statement, "policy") != Some(&obj(vec![("core_run_sha256", text(&sha256_hex(manifest_bytes)))])) {
+        return Err("the root statement does not bind this run.json".to_string());
+    }
+    Ok(statement)
 }
 
 fn produce(source: &Path, out: &Path, keys: &Path) -> Result<String, String> {
@@ -297,16 +344,23 @@ fn produce(source: &Path, out: &Path, keys: &Path) -> Result<String, String> {
     std::fs::write(out.join("authority.pub"), authority_raw).map_err(|error| error.to_string())?;
     std::fs::write(out.join("instance.pub"), instance_raw).map_err(|error| error.to_string())?;
 
-    // one root statement over every receipt, as `root_statement.make_statement` writes one
-    let mut statement = json!({
-        "format": "prismpath-root-statement/1", "log": LOG_CORE_RUN, "seq": 0, "root": merkle_root(&leaves)?,
-        "leaves": leaves.len(), "prev": "", "time": now(), "trigger": "core-run", "key_id": instance_id,
-        "public_key": hex::encode(instance_raw), "policy": {"core_run_sha256": sha256_hex(&manifest_bytes)},
-    });
-    let body = signed_bytes(&statement).ok_or("the statement has no canonical form")?;
-    statement["sig"] = hex::encode(instance.sign(&body).to_bytes()).into();
-    let line = prismpath_hotswap_rs::canonical_bytes(&statement).map_err(|error| format!("{error:?}"))?;
-    let mut line = line;
+    // one canon/2 root statement over every receipt, as `core_evidence.make_root_statement` writes one
+    let mut statement = obj(vec![
+        ("format", text(ROOT_FORMAT)),
+        ("log", text(LOG_CORE_RUN)),
+        ("root", text(&merkle_root(&leaves)?)),
+        ("leaves", Doc::Int(leaves.len() as i64)),
+        ("time_us", Doc::Int(now_us())),
+        ("trigger", text(LOG_CORE_RUN)),
+        ("key_id", text(&instance_id)),
+        ("public_key", text(&hex::encode(instance_raw))),
+        ("policy", obj(vec![("core_run_sha256", text(&sha256_hex(&manifest_bytes)))])),
+    ]);
+    let sig = hex::encode(instance.sign(&root_signed_bytes(&statement)?).to_bytes());
+    if let Doc::Obj(members) = &mut statement {
+        members.push(("sig".to_string(), text(&sig)));
+    }
+    let mut line = canon2::write(&statement).map_err(|error| error.to_string())?;
     line.push(b'\n');
     std::fs::write(out.join("receipts.roots.jsonl"), line).map_err(|error| error.to_string())?;
     Ok(format!(
@@ -379,17 +433,7 @@ fn verify(run: &Path, options: &Options) -> Result<String, String> {
     let receipts_bytes = read("receipts.jsonl")?;
     let receipt_lines = lines(&receipts_bytes);
     let leaves: Vec<String> = receipt_lines.iter().map(|line| sha256_hex(line)).collect();
-    let statements_text = String::from_utf8(read("receipts.roots.jsonl")?).map_err(|error| error.to_string())?;
-    let (statements, findings) = read_statements_text(&statements_text);
-    let pins = [instance_raw.clone()];
-    let root_at = |count: i64| merkle_root(&leaves[..(count.max(0) as usize).min(leaves.len())]).unwrap_or_default();
-    let report = verify_chain(&statements, findings, &root_at, leaves.len(), ChainOptions { log: LOG_CORE_RUN, pinned: &pins, authority_key_ids: &[] });
-    if report.status != SIGNED || report.unsigned_tail != 0 || statements.len() != 1 {
-        return Err(format!("the root statement does not verify: {}", report.to_json()));
-    }
-    if statements[0]["policy"] != json!({"core_run_sha256": sha256_hex(&manifest_bytes)}) {
-        return Err("the root statement does not bind this run.json".to_string());
-    }
+    verify_root_statement(&read("receipts.roots.jsonl")?, &leaves, &manifest_bytes, &instance_raw)?;
     if int_of(&manifest, "receipts")? != leaves.len() as i64 {
         return Err("run.json counts other receipts than the run holds".to_string());
     }
