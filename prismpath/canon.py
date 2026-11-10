@@ -14,8 +14,9 @@ writes it and nothing reads it, so a document with no tag, or any tag but canon/
 
 JSON that is not hashed and not signed (a durable run checkpoint, the connector's JSONL sink lines, the
 flow authority's version floor file) is read and written with `plain_loads`, `plain_load` and
-`plain_dumps`. What they read is marked (`PlainDict`), and every hashing helper in this module refuses a
-value that holds the mark (`PlainJSONRefused`), so plain JSON never reaches a hash or a signature.
+`plain_dumps`. The document `plain_loads` reads is marked (`PlainDict`), and every hashing helper in this
+module refuses a value that holds the mark (`PlainJSONRefused`), so such a document never reaches a hash or
+a signature; what is taken out of it is content, and is hashed as content (`content_bytes`).
 
 Truncations, the `sha256:` prefix, and hex versus raw byte concatenation are properties of specific
 artifacts and stay at the call sites that own them.
@@ -86,8 +87,9 @@ class PlainJSONRefused(CanonicalError):
 
 
 class PlainDict(dict):
-    """A JSON object read by `plain_loads`. Every hashing helper in this module refuses a value that holds
-    one, so a checkpoint, a sink line or a version floor file can never be hashed or signed by mistake."""
+    """The JSON object `plain_loads` reads (the document itself, not the values inside it). Every hashing
+    helper in this module refuses a value that holds one, so a checkpoint, a sink line or a version floor
+    file can never be hashed or signed by mistake."""
 
 
 def _refuse_plain(obj: Any) -> None:
@@ -128,7 +130,9 @@ def canon2_bytes(obj: Any) -> bytes:
 
 
 def tagged(doc: dict) -> dict:
-    """`doc` with `"encoding": "canon/2"`, the member that tells every reader which encoding hashes it."""
+    """`doc` with `"encoding": "canon/2"`, the member that tells every reader which encoding hashes it. A
+    document read as plain JSON is refused (`PlainJSONRefused`): it is built again from its fields."""
+    _refuse_plain(doc)
     return {**doc, ENCODING_KEY: CANON2}
 
 
@@ -145,14 +149,17 @@ def encoding_of(doc: Any) -> str:
 
 def document_bytes(doc: Any) -> bytes:
     """The bytes a document is hashed over: its canon/2 bytes. Raises EncodingError for a document that
-    does not name canon/2."""
+    does not name canon/2 and PlainJSONRefused for one read as plain JSON."""
+    _refuse_plain(doc)
     encoding_of(doc)
     return canon2_bytes(doc)
 
 
 def signed_message(doc: Any) -> bytes:
     """What a signature over `doc` covers when its format has no domain of its own: `CANON2_DOMAIN` and
-    the canon/2 bytes. Raises EncodingError for a document that does not name canon/2."""
+    the canon/2 bytes. Raises EncodingError for a document that does not name canon/2 and PlainJSONRefused for
+    one read as plain JSON."""
+    _refuse_plain(doc)
     encoding_of(doc)
     return CANON2_DOMAIN + canon2_bytes(doc)
 
@@ -251,26 +258,26 @@ def _finite_float(text: str) -> float:
     return number
 
 
-def plain_loads(text: Any, **kwargs: Any) -> Any:
+def plain_loads(text: Any, *, mark: bool = True, **kwargs: Any) -> Any:
     """`json.loads` for JSON that is neither hashed nor signed: a NaN, Infinity or -Infinity token, a number
-    beyond the double range and a lone surrogate raise CanonicalReadError (a json.JSONDecodeError). Every
-    object read is a `PlainDict`, which no hashing helper accepts."""
+    beyond the double range and a lone surrogate raise CanonicalReadError (a json.JSONDecodeError). A document
+    that is an object is returned as a `PlainDict`, which no hashing helper accepts (`mark=False` returns an
+    ordinary dict, for content: `loads_content`)."""
     kwargs.setdefault("parse_constant", _refuse_constant)
     kwargs.setdefault("parse_float", _finite_float)
-    kwargs.setdefault("object_hook", PlainDict)
     value = json.loads(text, **kwargs)
     try:
         _surrogate_free(value)
     except CanonicalError as error:
         raise CanonicalReadError(str(error)) from error
-    return value
+    return PlainDict(value) if mark and type(value) is dict else value
 
 
 def loads_content(text: Any, **kwargs: Any) -> Any:
     """Read JSON that PrismPath did not write and may hash afterwards as content (`content_bytes`): a model's
     reply, data a connector fetched. The same refusals as `plain_loads`, and no `PlainDict` mark, because
     this is content, not a checkpoint or a sink line."""
-    return plain_loads(text, object_hook=None, **kwargs)
+    return plain_loads(text, mark=False, **kwargs)
 
 
 def plain_load(handle: Any, **kwargs: Any) -> Any:
@@ -297,6 +304,7 @@ def manifest_hash(m: dict) -> str:
     """The content address of an attestation manifest: sha256 over the canon/2 bytes of every field except
     `manifest_hash` itself (ledger_airgap and the fixture generators share this). A manifest that does not
     name canon/2 is refused."""
+    _refuse_plain(m)
     encoding_of(m)
     return sha256_hex(canon2_bytes({k: m[k] for k in m if k != "manifest_hash"}))
 
