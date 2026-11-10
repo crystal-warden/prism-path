@@ -59,21 +59,46 @@ def test_the_conformance_flows_carry_the_run_cause():
 
 
 STRICT_DECODE_CAUSES = ("wire:no-terminator", "wire:dangling-codeword", "wire:symbol-overflow", "wire:codebook-mismatch")
+# the strict decode causes a decoder emits beside its own refusal string, and the one still without an emitter
+EMITTED = {"wire:no-terminator": 48, "wire:dangling-codeword": 49, "wire:codebook-mismatch": 51}
+NO_EMITTER = {"wire:symbol-overflow": 50}
 
 
-def test_the_strict_decode_causes_are_registered_and_have_no_emitter():
-    """Causes 48 to 51 are registered, and no decoder in either language names them: the reference and its
-    documents say what they mean (docs/design/spec-cause-codes.md) but not where a decoder raises each one,
-    so emitting them would be a behavior invented here. Whoever decides where they fire adds the emitter, the
-    corpus cases and a change to this test in the same commit (the owner's decision is recorded in
-    CHANGELOG.md)."""
-    assert [causes.code(name) for name in STRICT_DECODE_CAUSES] == [48, 49, 50, 51]
+def _sources():
     sources = [path for path in (REPO / "prismpath").rglob("*.py")
                if "tests" not in path.parts and path.name not in ("causes.py", "gen_causes_rs.py")]
     sources += [path for crate in ("prismpath-rs", "prismpath-telemetry-rs", "prismpath-hotswap-rs", "prismpath-preflight")
                 for path in (REPO / crate / "src").rglob("*.rs") if path.name != "causes.rs"]
     assert len(sources) > 100
-    for path in sources:
+    return sources
+
+
+def test_the_strict_decode_causes_are_registered():
+    assert [causes.code(name) for name in STRICT_DECODE_CAUSES] == [48, 49, 50, 51]
+    assert set(EMITTED) | set(NO_EMITTER) == set(STRICT_DECODE_CAUSES)
+
+
+def test_three_strict_decode_causes_have_an_emitter_in_each_language():
+    """48, 49 and 51 ride beside a decoder's own refusal string (receipts, the concentrator, the reading
+    decoder). Python names them from the registry, Rust by the generated constant."""
+    python = "\n".join(path.read_text(encoding="utf-8") for path in _sources() if path.suffix == ".py")
+    rust = "\n".join(path.read_text(encoding="utf-8") for path in _sources() if path.suffix == ".rs")
+    constants = {"wire:no-terminator": "WIRE_NO_TERMINATOR", "wire:dangling-codeword": "WIRE_DANGLING_CODEWORD",
+                 "wire:codebook-mismatch": "WIRE_CODEBOOK_MISMATCH"}
+    for name in EMITTED:
+        assert f'causes.NAMES["{name}"]' in python, f"no Python decoder emits {name}"
+        assert f"causes::{constants[name]}" in rust, f"no Rust decoder emits {name}"
+
+
+def test_symbol_overflow_still_has_no_emitter():
+    """Cause 50 is a wire integer beyond the CELL range, which the kernel decode plane and the dissector
+    check at u16 against a frame's own cells. No Python or Rust decoder here is handed a cell range: the
+    receipt cause is a byte of the receipt, the concentrator's registry is a field count, and a reading
+    integer beyond 64 bits is a width the Rust crate refuses and Python carries (DIVERGENCES.md), none of which
+    is the cell range. Whoever gives a decoder a cell range adds the emitter, the corpus cases and a change to
+    this test in the same commit."""
+    for path in _sources():
         text = path.read_text(encoding="utf-8")
-        for name in STRICT_DECODE_CAUSES:
+        for name in NO_EMITTER:
             assert name not in text, f"{path.relative_to(REPO)} names {name}, which has no emitter by decision"
+        assert "WIRE_SYMBOL_OVERFLOW" not in text, f"{path.relative_to(REPO)} emits cause 50, which has no emitter by decision"

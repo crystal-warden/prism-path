@@ -16,6 +16,7 @@
 //! unknown stream, as it is in Python for any registry that does not list it (DIVERGENCES.md).
 
 use crate::{packed, zeckendorf};
+use prismpath_rs::causes;
 use std::collections::HashMap;
 
 pub const CONCENTRATOR_UNKNOWN_STREAM: &str = "concentrator-unknown-stream";
@@ -87,10 +88,19 @@ fn take_one(bits: &str, pos: usize) -> Option<(Option<usize>, usize)> {
     None
 }
 
-/// One concentrated frame -> `(records, cause)`. `registry` maps stream id to field count (from the
-/// stream's signed policy). On any structural failure the WHOLE datagram is rejected: `([], cause)`.
+/// One concentrated frame -> `(records, status)`. `registry` maps stream id to field count (from the
+/// stream's signed policy). On any structural failure the WHOLE datagram is rejected: `([], status)`.
 /// `Err` only for a reading integer beyond 64 bits.
 pub fn demux(frame: &[u8], registry: &HashMap<u64, usize>) -> Result<(Vec<Record>, &'static str), ConcentratorError> {
+    demux_cause(frame, registry).map(|(records, status, _cause)| (records, status))
+}
+
+/// `demux` and the registry cause of a refusal the strict decode causes name exactly, beside the status
+/// string, which stays the decoder's own. `wire:no-terminator` (48) is a datagram with no complete codeword
+/// in it at all; `wire:dangling-codeword` (49) is a trailing partial codeword with data bits after at least
+/// one complete codeword. A record cut where only zero bits remain is padding, not a dangling codeword, and an
+/// unknown stream id has its own registered cause, so neither carries one here.
+pub fn demux_cause(frame: &[u8], registry: &HashMap<u64, usize>) -> Result<(Vec<Record>, &'static str, Option<u8>), ConcentratorError> {
     let bits = packed::unpack(frame);
     let mut out: Vec<Record> = Vec::new();
     let mut pos = 0;
@@ -100,17 +110,25 @@ pub fn demux(frame: &[u8], registry: &HashMap<u64, usize>) -> Result<(Vec<Record
         }
         let (stream_value, next) = match take_one(&bits, pos) {
             Some(found) => found,
-            None => return Ok((Vec::new(), CONCENTRATOR_TRUNCATED)), // a 1 bit tail with no terminator
+            None => {
+                // a 1 bit tail with no terminator: no codeword at all in the datagram, or one left dangling
+                let cause = if pos == 0 { causes::WIRE_NO_TERMINATOR } else { causes::WIRE_DANGLING_CODEWORD };
+                return Ok((Vec::new(), CONCENTRATOR_TRUNCATED, Some(cause)));
+            }
         };
         let stream_id = match stream_value.and_then(|value| u64::try_from(value).ok()).filter(|id| registry.contains_key(id)) {
             Some(id) => id,
-            None => return Ok((Vec::new(), CONCENTRATOR_UNKNOWN_STREAM)),
+            None => return Ok((Vec::new(), CONCENTRATOR_UNKNOWN_STREAM, None)),
         };
         let mut wire_ints = Vec::new();
         pos = next;
         for _ in 0..registry[&stream_id] {
             match take_one(&bits, pos) {
-                None => return Ok((Vec::new(), CONCENTRATOR_TRUNCATED)), // record cut mid reading
+                None => {
+                    // record cut mid reading: dangling when data bits remain, padding (no cause) when only zeros do
+                    let cause = if bits[pos..].contains('1') { Some(causes::WIRE_DANGLING_CODEWORD) } else { None };
+                    return Ok((Vec::new(), CONCENTRATOR_TRUNCATED, cause));
+                }
                 Some((value, after)) => {
                     wire_ints.push(value.and_then(|number| u64::try_from(number).ok()).ok_or(ConcentratorError::Overflow)?);
                     pos = after;
@@ -119,5 +137,5 @@ pub fn demux(frame: &[u8], registry: &HashMap<u64, usize>) -> Result<(Vec<Record
         }
         out.push((stream_id, wire_ints));
     }
-    Ok((out, OK))
+    Ok((out, OK, None))
 }

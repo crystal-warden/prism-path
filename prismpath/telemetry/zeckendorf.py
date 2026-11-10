@@ -16,7 +16,7 @@ CPU path and the FPGA shift-register codec are Phase C.
 """
 from __future__ import annotations
 
-from typing import Iterable, List
+from typing import Iterable, List, Tuple
 
 
 def _fibs_upto(limit: int) -> List[int]:
@@ -64,14 +64,10 @@ def encode_stream(values: Iterable[int]) -> str:
     return "".join(encode(value) for value in values)
 
 
-def decode_stream(bits: str) -> List[int]:
-    """Split a concatenated stream at each self-framing ``11`` and decode each code.
-
-    Within a single code the only ``11`` is its terminator (Zeckendorf forbids consecutive 1s), so the
-    first ``11`` at/after a code's start is its boundary. A trailing run of bits with no terminator is an
-    incomplete final codeword and is dropped (the receiver requests it via the MMR self-heal, out of scope
-    here).
-    """
+def decode_stream_tail(bits: str) -> Tuple[List[int], str]:
+    """`decode_stream` and the bits it left over: the run after the last complete code, which a lenient
+    reader drops and a strict one inspects (a tail with a ``1`` in it is a partial codeword with data bits,
+    an all zero tail is byte alignment padding)."""
     out: List[int] = []
     start = 0
     bit_index = 0
@@ -83,4 +79,15 @@ def decode_stream(bits: str) -> List[int]:
             start = bit_index
         else:
             bit_index += 1
-    return out
+    return out, bits[start:]
+
+
+def decode_stream(bits: str) -> List[int]:
+    """Split a concatenated stream at each self-framing ``11`` and decode each code.
+
+    Within a single code the only ``11`` is its terminator (Zeckendorf forbids consecutive 1s), so the
+    first ``11`` at/after a code's start is its boundary. A trailing run of bits with no terminator is an
+    incomplete final codeword and is dropped (the receiver requests it via the MMR self-heal, out of scope
+    here).
+    """
+    return decode_stream_tail(bits)[0]

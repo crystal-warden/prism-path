@@ -35,16 +35,34 @@ RECEIPT_INVALID_CAUSE = "receipt-invalid-cause"
 RECEIPT_FIELD_MISMATCH = "receipt-field-mismatch"
 
 
-class DecodedReceipt(NamedTuple):
+_NO_TERMINATOR = causes.NAMES["wire:no-terminator"]
+_DANGLING_CODEWORD = causes.NAMES["wire:dangling-codeword"]
+
+
+class _DecodedPair(NamedTuple):
+    receipt: Optional[Dict[str, Any]]
+    refusal_cause: str
+
+
+class DecodedReceipt(_DecodedPair):
     """The result of a decode, with its two halves named apart.
 
     `refusal_cause` is why the decode was refused (OK when it was not); it is a decoder status
     string and never a registry cause name. The registry code the frame carried is
     `receipt["cause"]`, with its registry name under `receipt["cause_name"]`.
+
+    `cause` is the registry code of a strict decode cause when the refusal is exactly one of them, else
+    None, and it sits beside the status string, which stays as it was (the result is still the plain pair
+    when unpacked): `wire:no-terminator` (48) for a frame with bits in it and no complete codeword, and
+    `wire:dangling-codeword` (49) for a frame cut short (fewer than five codewords) that ends in a partial
+    codeword with data bits. An empty frame is its own refusal in the strict decode contract, an extra
+    codeword or a wide cause is a refusal about the receipt and not the framing, and none carries one.
     """
 
-    receipt: Optional[Dict[str, Any]]
-    refusal_cause: str
+    def __new__(cls, receipt, refusal_cause, cause=None):
+        self = super().__new__(cls, receipt, refusal_cause)
+        self.cause = cause
+        return self
 
 
 def encode_receipt_symbols(
@@ -122,12 +140,12 @@ def decode_receipt_bits(bits: str) -> DecodedReceipt:
     if not bits:
         return DecodedReceipt(None, RECEIPT_TRUNCATED)
 
-    wire_ints = zeck.decode_stream(bits)
+    wire_ints, tail = zeck.decode_stream_tail(bits)
     if len(wire_ints) == 0:
-        return DecodedReceipt(None, RECEIPT_TRUNCATED)
+        return DecodedReceipt(None, RECEIPT_TRUNCATED, _NO_TERMINATOR)
     if len(wire_ints) != len(RECEIPT_FIELDS):
         if len(wire_ints) < len(RECEIPT_FIELDS):
-            return DecodedReceipt(None, RECEIPT_TRUNCATED)
+            return DecodedReceipt(None, RECEIPT_TRUNCATED, _DANGLING_CODEWORD if "1" in tail else None)
         return DecodedReceipt(None, RECEIPT_FIELD_MISMATCH)
 
     syms = [wire_int - 1 for wire_int in wire_ints]

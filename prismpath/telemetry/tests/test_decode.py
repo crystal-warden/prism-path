@@ -59,3 +59,13 @@ def test_partial_final_frame_is_reported_not_crashed():
     bits = dec.encode_readings(parts, [{"kind": "urgent", "status": "ok"}])
     rep = dec.inspect(graph, bits + "0")           # a dangling bit = incomplete final frame
     assert rep["n_readings"] == 1              # the complete reading still decodes
+
+
+def test_a_stream_that_does_not_decode_under_its_policy_is_a_codebook_mismatch():
+    import pytest
+    from prismpath.kernel import causes
+    parts = quantizer.build_partitions(parse(CAT))
+    with pytest.raises(ValueError, match="symbol count 1 != decision fields") as refused:
+        wire.decode_reading(parts, "11")
+    assert isinstance(refused.value, wire.CodebookMismatch)
+    assert refused.value.cause == causes.NAMES["wire:codebook-mismatch"] == 51

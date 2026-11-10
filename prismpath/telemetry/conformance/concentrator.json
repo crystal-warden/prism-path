@@ -1,6 +1,6 @@
 {
  "version": 1,
- "comment": "FROZEN. Concentrator profile (PROTOCOL.md section 2.9): datagrams built by prismpath.telemetry.concentrator.concentrate, every cut of a multi record datagram, seeded noise and bit flips, each with the records and cause demux returns. `wide` datagrams carry an integer beyond 64 bits, which Python returns and the Rust crate refuses.",
+ "comment": "FROZEN. Concentrator profile (PROTOCOL.md section 2.9): datagrams built by prismpath.telemetry.concentrator.concentrate, every cut of a multi record datagram, seeded noise and bit flips, each with the records and status demux returns, and `registry_cause`, the strict decode cause code (48, 49) or null. `wide` datagrams carry an integer beyond 64 bits, which Python returns and the Rust crate refuses.",
  "causes": {
   "ok": "ok",
   "unknown": "concentrator-unknown-stream",
@@ -2609,7 +2609,8 @@
      ]
     ]
    ],
-   "cause": "ok"
+   "cause": "ok",
+   "registry_cause": null
   },
   {
    "name": "datagram_three_streams",
@@ -2640,7 +2641,8 @@
      ]
     ]
    ],
-   "cause": "ok"
+   "cause": "ok",
+   "registry_cause": null
   },
   {
    "name": "datagram_same_stream_twice",
@@ -2662,7 +2664,8 @@
      ]
     ]
    ],
-   "cause": "ok"
+   "cause": "ok",
+   "registry_cause": null
   },
   {
    "name": "datagram_seeded_0",
@@ -2705,7 +2708,8 @@
      ]
     ]
    ],
-   "cause": "ok"
+   "cause": "ok",
+   "registry_cause": null
   },
   {
    "name": "datagram_seeded_1",
@@ -2765,7 +2769,8 @@
      ]
     ]
    ],
-   "cause": "ok"
+   "cause": "ok",
+   "registry_cause": null
   },
   {
    "name": "datagram_seeded_2",
@@ -2810,7 +2815,8 @@
      ]
     ]
    ],
-   "cause": "ok"
+   "cause": "ok",
+   "registry_cause": null
   },
   {
    "name": "datagram_seeded_3",
@@ -2865,7 +2871,8 @@
      ]
     ]
    ],
-   "cause": "ok"
+   "cause": "ok",
+   "registry_cause": null
   },
   {
    "name": "datagram_seeded_4",
@@ -2941,7 +2948,8 @@
      ]
     ]
    ],
-   "cause": "ok"
+   "cause": "ok",
+   "registry_cause": null
   },
   {
    "name": "datagram_seeded_5",
@@ -2986,7 +2994,8 @@
      ]
     ]
    ],
-   "cause": "ok"
+   "cause": "ok",
+   "registry_cause": null
   },
   {
    "name": "datagram_seeded_6",
@@ -3031,7 +3040,8 @@
      ]
     ]
    ],
-   "cause": "ok"
+   "cause": "ok",
+   "registry_cause": null
   },
   {
    "name": "datagram_seeded_7",
@@ -3047,7 +3057,8 @@
      ]
     ]
    ],
-   "cause": "ok"
+   "cause": "ok",
+   "registry_cause": null
   },
   {
    "name": "datagram_seeded_8",
@@ -3075,7 +3086,8 @@
      ]
     ]
    ],
-   "cause": "ok"
+   "cause": "ok",
+   "registry_cause": null
   },
   {
    "name": "datagram_seeded_9",
@@ -3089,7 +3101,8 @@
      ]
     ]
    ],
-   "cause": "ok"
+   "cause": "ok",
+   "registry_cause": null
   },
   {
    "name": "datagram_seeded_10",
@@ -3142,7 +3155,8 @@
      ]
     ]
    ],
-   "cause": "ok"
+   "cause": "ok",
+   "registry_cause": null
   },
   {
    "name": "datagram_seeded_11",
@@ -3206,7 +3220,8 @@
      ]
     ]
    ],
-   "cause": "ok"
+   "cause": "ok",
+   "registry_cause": null
   },
   {
    "name": "datagram_seeded_12",
@@ -3231,7 +3246,8 @@
      ]
     ]
    ],
-   "cause": "ok"
+   "cause": "ok",
+   "registry_cause": null
   },
   {
    "name": "datagram_seeded_13",
@@ -3273,7 +3289,8 @@
      ]
     ]
    ],
-   "cause": "ok"
+   "cause": "ok",
+   "registry_cause": null
   },
   {
    "name": "datagram_seeded_14",
@@ -3323,7 +3340,8 @@
      ]
     ]
    ],
-   "cause": "ok"
+   "cause": "ok",
+   "registry_cause": null
   },
   {
    "name": "datagram_seeded_15",
@@ -3357,7 +3375,8 @@
      ]
     ]
    ],
-   "cause": "ok"
+   "cause": "ok",
+   "registry_cause": null
   },
   {
    "name": "datagram_seeded_16",
@@ -3373,7 +3392,8 @@
      ]
     ]
    ],
-   "cause": "ok"
+   "cause": "ok",
+   "registry_cause": null
   },
   {
    "name": "datagram_seeded_17",
@@ -3404,7 +3424,8 @@
      ]
     ]
    ],
-   "cause": "ok"
+   "cause": "ok",
+   "registry_cause": null
   },
   {
    "name": "datagram_seeded_18",
@@ -3467,7 +3488,8 @@
      ]
     ]
    ],
-   "cause": "ok"
+   "cause": "ok",
+   "registry_cause": null
   },
   {
    "name": "datagram_seeded_19",
@@ -3481,7 +3503,8 @@
      ]
     ]
    ],
-   "cause": "ok"
+   "cause": "ok",
+   "registry_cause": null
   },
   {
    "name": "datagram_seeded_20",
@@ -3513,7 +3536,8 @@
      ]
     ]
    ],
-   "cause": "ok"
+   "cause": "ok",
+   "registry_cause": null
   },
   {
    "name": "datagram_seeded_21",
@@ -3591,7 +3615,8 @@
      ]
     ]
    ],
-   "cause": "ok"
+   "cause": "ok",
+   "registry_cause": null
   },
   {
    "name": "datagram_seeded_22",
@@ -3609,7 +3634,8 @@
      ]
     ]
    ],
-   "cause": "ok"
+   "cause": "ok",
+   "registry_cause": null
   },
   {
    "name": "datagram_seeded_23",
@@ -3638,7 +3664,8 @@
      ]
     ]
    ],
-   "cause": "ok"
+   "cause": "ok",
+   "registry_cause": null
   },
   {
    "name": "datagram_seeded_24",
@@ -3705,7 +3732,8 @@
      ]
     ]
    ],
-   "cause": "ok"
+   "cause": "ok",
+   "registry_cause": null
   },
   {
    "name": "datagram_seeded_25",
@@ -3754,7 +3782,8 @@
      ]
     ]
    ],
-   "cause": "ok"
+   "cause": "ok",
+   "registry_cause": null
   },
   {
    "name": "datagram_seeded_26",
@@ -3816,7 +3845,8 @@
      ]
     ]
    ],
-   "cause": "ok"
+   "cause": "ok",
+   "registry_cause": null
   },
   {
    "name": "datagram_seeded_27",
@@ -3864,7 +3894,8 @@
      ]
     ]
    ],
-   "cause": "ok"
+   "cause": "ok",
+   "registry_cause": null
   },
   {
    "name": "datagram_seeded_28",
@@ -3928,7 +3959,8 @@
      ]
     ]
    ],
-   "cause": "ok"
+   "cause": "ok",
+   "registry_cause": null
   },
   {
    "name": "datagram_seeded_29",
@@ -3958,7 +3990,8 @@
      ]
     ]
    ],
-   "cause": "ok"
+   "cause": "ok",
+   "registry_cause": null
   },
   {
    "name": "datagram_seeded_30",
@@ -3992,7 +4025,8 @@
      ]
     ]
    ],
-   "cause": "ok"
+   "cause": "ok",
+   "registry_cause": null
   },
   {
    "name": "datagram_seeded_31",
@@ -4009,7 +4043,8 @@
      ]
     ]
    ],
-   "cause": "ok"
+   "cause": "ok",
+   "registry_cause": null
   },
   {
    "name": "datagram_seeded_32",
@@ -4059,7 +4094,8 @@
      ]
     ]
    ],
-   "cause": "ok"
+   "cause": "ok",
+   "registry_cause": null
   },
   {
    "name": "datagram_seeded_33",
@@ -4086,7 +4122,8 @@
      ]
     ]
    ],
-   "cause": "ok"
+   "cause": "ok",
+   "registry_cause": null
   },
   {
    "name": "datagram_seeded_34",
@@ -4112,7 +4149,8 @@
      ]
     ]
    ],
-   "cause": "ok"
+   "cause": "ok",
+   "registry_cause": null
   },
   {
    "name": "datagram_seeded_35",
@@ -4155,7 +4193,8 @@
      ]
     ]
    ],
-   "cause": "ok"
+   "cause": "ok",
+   "registry_cause": null
   },
   {
    "name": "datagram_seeded_36",
@@ -4173,7 +4212,8 @@
      ]
     ]
    ],
-   "cause": "ok"
+   "cause": "ok",
+   "registry_cause": null
   },
   {
    "name": "datagram_seeded_37",
@@ -4241,7 +4281,8 @@
      ]
     ]
    ],
-   "cause": "ok"
+   "cause": "ok",
+   "registry_cause": null
   },
   {
    "name": "datagram_seeded_38",
@@ -4317,7 +4358,8 @@
      ]
     ]
    ],
-   "cause": "ok"
+   "cause": "ok",
+   "registry_cause": null
   },
   {
    "name": "datagram_seeded_39",
@@ -4353,7 +4395,8 @@
      ]
     ]
    ],
-   "cause": "ok"
+   "cause": "ok",
+   "registry_cause": null
   },
   {
    "name": "datagram_seeded_40",
@@ -4406,7 +4449,8 @@
      ]
     ]
    ],
-   "cause": "ok"
+   "cause": "ok",
+   "registry_cause": null
   },
   {
    "name": "datagram_seeded_41",
@@ -4423,7 +4467,8 @@
      ]
     ]
    ],
-   "cause": "ok"
+   "cause": "ok",
+   "registry_cause": null
   },
   {
    "name": "datagram_seeded_42",
@@ -4481,7 +4526,8 @@
      ]
     ]
    ],
-   "cause": "ok"
+   "cause": "ok",
+   "registry_cause": null
   },
   {
    "name": "datagram_seeded_43",
@@ -4549,7 +4595,8 @@
      ]
     ]
    ],
-   "cause": "ok"
+   "cause": "ok",
+   "registry_cause": null
   },
   {
    "name": "datagram_seeded_44",
@@ -4587,7 +4634,8 @@
      ]
     ]
    ],
-   "cause": "ok"
+   "cause": "ok",
+   "registry_cause": null
   },
   {
    "name": "datagram_seeded_45",
@@ -4647,7 +4695,8 @@
      ]
     ]
    ],
-   "cause": "ok"
+   "cause": "ok",
+   "registry_cause": null
   },
   {
    "name": "datagram_seeded_46",
@@ -4684,7 +4733,8 @@
      ]
     ]
    ],
-   "cause": "ok"
+   "cause": "ok",
+   "registry_cause": null
   },
   {
    "name": "datagram_seeded_47",
@@ -4719,7 +4769,8 @@
      ]
     ]
    ],
-   "cause": "ok"
+   "cause": "ok",
+   "registry_cause": null
   },
   {
    "name": "datagram_seeded_48",
@@ -4737,7 +4788,8 @@
      ]
     ]
    ],
-   "cause": "ok"
+   "cause": "ok",
+   "registry_cause": null
   },
   {
    "name": "datagram_seeded_49",
@@ -4784,7 +4836,8 @@
      ]
     ]
    ],
-   "cause": "ok"
+   "cause": "ok",
+   "registry_cause": null
   },
   {
    "name": "datagram_seeded_50",
@@ -4802,7 +4855,8 @@
      ]
     ]
    ],
-   "cause": "ok"
+   "cause": "ok",
+   "registry_cause": null
   },
   {
    "name": "datagram_seeded_51",
@@ -4876,7 +4930,8 @@
      ]
     ]
    ],
-   "cause": "ok"
+   "cause": "ok",
+   "registry_cause": null
   },
   {
    "name": "datagram_seeded_52",
@@ -4920,7 +4975,8 @@
      ]
     ]
    ],
-   "cause": "ok"
+   "cause": "ok",
+   "registry_cause": null
   },
   {
    "name": "datagram_seeded_53",
@@ -4937,7 +4993,8 @@
      ]
     ]
    ],
-   "cause": "ok"
+   "cause": "ok",
+   "registry_cause": null
   },
   {
    "name": "datagram_seeded_54",
@@ -5006,7 +5063,8 @@
      ]
     ]
    ],
-   "cause": "ok"
+   "cause": "ok",
+   "registry_cause": null
   },
   {
    "name": "datagram_seeded_55",
@@ -5066,7 +5124,8 @@
      ]
     ]
    ],
-   "cause": "ok"
+   "cause": "ok",
+   "registry_cause": null
   },
   {
    "name": "datagram_seeded_56",
@@ -5084,7 +5143,8 @@
      ]
     ]
    ],
-   "cause": "ok"
+   "cause": "ok",
+   "registry_cause": null
   },
   {
    "name": "datagram_seeded_57",
@@ -5114,7 +5174,8 @@
      ]
     ]
    ],
-   "cause": "ok"
+   "cause": "ok",
+   "registry_cause": null
   },
   {
    "name": "datagram_seeded_58",
@@ -5156,7 +5217,8 @@
      ]
     ]
    ],
-   "cause": "ok"
+   "cause": "ok",
+   "registry_cause": null
   },
   {
    "name": "datagram_seeded_59",
@@ -5198,21 +5260,24 @@
      ]
     ]
    ],
-   "cause": "ok"
+   "cause": "ok",
+   "registry_cause": null
   },
   {
    "name": "empty_datagram",
    "registry": "fleet",
    "hex": "",
    "records": [],
-   "cause": "ok"
+   "cause": "ok",
+   "registry_cause": null
   },
   {
    "name": "all_zero_pad",
    "registry": "fleet",
    "hex": "000000",
    "records": [],
-   "cause": "ok"
+   "cause": "ok",
+   "registry_cause": null
   },
   {
    "name": "zero_field_stream",
@@ -5224,91 +5289,136 @@
      []
     ]
    ],
-   "cause": "ok"
+   "cause": "ok",
+   "registry_cause": null
   },
   {
    "name": "registered_stream_in_the_other_registry",
    "registry": "tiny",
    "hex": "7ff8",
    "records": [],
-   "cause": "concentrator-unknown-stream"
+   "cause": "concentrator-unknown-stream",
+   "registry_cause": null
   },
   {
    "name": "unknown_stream_id_first",
    "registry": "fleet",
    "hex": "1e",
    "records": [],
-   "cause": "concentrator-unknown-stream"
+   "cause": "concentrator-unknown-stream",
+   "registry_cause": null
   },
   {
    "name": "unknown_stream_id_after_a_good_record",
    "registry": "fleet",
    "hex": "cf1e",
    "records": [],
-   "cause": "concentrator-unknown-stream"
+   "cause": "concentrator-unknown-stream",
+   "registry_cause": null
+  },
+  {
+   "name": "a_datagram_with_one_bit_and_no_codeword",
+   "registry": "fleet",
+   "hex": "80",
+   "records": [],
+   "cause": "concentrator-truncated",
+   "registry_cause": 48
+  },
+  {
+   "name": "a_datagram_with_a_stream_id_cut_after_a_whole_record",
+   "registry": "fleet",
+   "hex": "37",
+   "records": [],
+   "cause": "concentrator-truncated",
+   "registry_cause": 49
+  },
+  {
+   "name": "a_reading_cut_with_only_zero_bits_left",
+   "registry": "fleet",
+   "hex": "78",
+   "records": [],
+   "cause": "concentrator-truncated",
+   "registry_cause": null
+  },
+  {
+   "name": "a_reading_cut_with_a_dangling_codeword",
+   "registry": "fleet",
+   "hex": "7a",
+   "records": [],
+   "cause": "concentrator-truncated",
+   "registry_cause": 49
   },
   {
    "name": "short_reading_whole_datagram_rejected",
    "registry": "fleet",
    "hex": "cf7e",
    "records": [],
-   "cause": "concentrator-truncated"
+   "cause": "concentrator-truncated",
+   "registry_cause": null
   },
   {
    "name": "cut_at_bit_0",
    "registry": "fleet",
    "hex": "",
    "records": [],
-   "cause": "ok"
+   "cause": "ok",
+   "registry_cause": null
   },
   {
    "name": "cut_at_bit_1",
    "registry": "fleet",
    "hex": "80",
    "records": [],
-   "cause": "concentrator-truncated"
+   "cause": "concentrator-truncated",
+   "registry_cause": 48
   },
   {
    "name": "cut_at_bit_2",
    "registry": "fleet",
    "hex": "c0",
    "records": [],
-   "cause": "concentrator-truncated"
+   "cause": "concentrator-truncated",
+   "registry_cause": null
   },
   {
    "name": "cut_at_bit_3",
    "registry": "fleet",
    "hex": "c0",
    "records": [],
-   "cause": "concentrator-truncated"
+   "cause": "concentrator-truncated",
+   "registry_cause": null
   },
   {
    "name": "cut_at_bit_4",
    "registry": "fleet",
    "hex": "c0",
    "records": [],
-   "cause": "concentrator-truncated"
+   "cause": "concentrator-truncated",
+   "registry_cause": null
   },
   {
    "name": "cut_at_bit_5",
    "registry": "fleet",
    "hex": "c8",
    "records": [],
-   "cause": "concentrator-truncated"
+   "cause": "concentrator-truncated",
+   "registry_cause": 49
   },
   {
    "name": "cut_at_bit_6",
    "registry": "fleet",
    "hex": "cc",
    "records": [],
-   "cause": "concentrator-truncated"
+   "cause": "concentrator-truncated",
+   "registry_cause": null
   },
   {
    "name": "cut_at_bit_7",
    "registry": "fleet",
    "hex": "ce",
    "records": [],
-   "cause": "concentrator-truncated"
+   "cause": "concentrator-truncated",
+   "registry_cause": 49
   },
   {
    "name": "cut_at_bit_8",
@@ -5323,7 +5433,8 @@
      ]
     ]
    ],
-   "cause": "ok"
+   "cause": "ok",
+   "registry_cause": null
   },
   {
    "name": "cut_at_bit_9",
@@ -5338,7 +5449,8 @@
      ]
     ]
    ],
-   "cause": "ok"
+   "cause": "ok",
+   "registry_cause": null
   },
   {
    "name": "cut_at_bit_10",
@@ -5353,35 +5465,40 @@
      ]
     ]
    ],
-   "cause": "ok"
+   "cause": "ok",
+   "registry_cause": null
   },
   {
    "name": "cut_at_bit_11",
    "registry": "fleet",
    "hex": "cf20",
    "records": [],
-   "cause": "concentrator-truncated"
+   "cause": "concentrator-truncated",
+   "registry_cause": 49
   },
   {
    "name": "cut_at_bit_12",
    "registry": "fleet",
    "hex": "cf30",
    "records": [],
-   "cause": "concentrator-truncated"
+   "cause": "concentrator-truncated",
+   "registry_cause": null
   },
   {
    "name": "cut_at_bit_13",
    "registry": "fleet",
    "hex": "cf30",
    "records": [],
-   "cause": "concentrator-truncated"
+   "cause": "concentrator-truncated",
+   "registry_cause": null
   },
   {
    "name": "cut_at_bit_14",
    "registry": "fleet",
    "hex": "cf34",
    "records": [],
-   "cause": "concentrator-truncated"
+   "cause": "concentrator-truncated",
+   "registry_cause": 49
   },
   {
    "name": "cut_at_bit_15",
@@ -5402,7 +5519,8 @@
      ]
     ]
    ],
-   "cause": "ok"
+   "cause": "ok",
+   "registry_cause": null
   },
   {
    "name": "cut_at_bit_16",
@@ -5423,126 +5541,144 @@
      ]
     ]
    ],
-   "cause": "ok"
+   "cause": "ok",
+   "registry_cause": null
   },
   {
    "name": "cut_at_bit_17",
    "registry": "fleet",
    "hex": "cf3680",
    "records": [],
-   "cause": "concentrator-truncated"
+   "cause": "concentrator-truncated",
+   "registry_cause": 49
   },
   {
    "name": "cut_at_bit_18",
    "registry": "fleet",
    "hex": "cf36c0",
    "records": [],
-   "cause": "concentrator-truncated"
+   "cause": "concentrator-truncated",
+   "registry_cause": null
   },
   {
    "name": "cut_at_bit_19",
    "registry": "fleet",
    "hex": "cf36e0",
    "records": [],
-   "cause": "concentrator-truncated"
+   "cause": "concentrator-truncated",
+   "registry_cause": 49
   },
   {
    "name": "cut_at_bit_20",
    "registry": "fleet",
    "hex": "cf36f0",
    "records": [],
-   "cause": "concentrator-truncated"
+   "cause": "concentrator-truncated",
+   "registry_cause": null
   },
   {
    "name": "cut_at_bit_21",
    "registry": "fleet",
    "hex": "cf36f8",
    "records": [],
-   "cause": "concentrator-truncated"
+   "cause": "concentrator-truncated",
+   "registry_cause": 49
   },
   {
    "name": "cut_at_bit_22",
    "registry": "fleet",
    "hex": "cf36f8",
    "records": [],
-   "cause": "concentrator-truncated"
+   "cause": "concentrator-truncated",
+   "registry_cause": 49
   },
   {
    "name": "cut_at_bit_23",
    "registry": "fleet",
    "hex": "cf36fa",
    "records": [],
-   "cause": "concentrator-truncated"
+   "cause": "concentrator-truncated",
+   "registry_cause": 49
   },
   {
    "name": "cut_at_bit_24",
    "registry": "fleet",
    "hex": "cf36fb",
    "records": [],
-   "cause": "concentrator-truncated"
+   "cause": "concentrator-truncated",
+   "registry_cause": null
   },
   {
    "name": "cut_at_bit_25",
    "registry": "fleet",
    "hex": "cf36fb80",
    "records": [],
-   "cause": "concentrator-truncated"
+   "cause": "concentrator-truncated",
+   "registry_cause": 49
   },
   {
    "name": "cut_at_bit_26",
    "registry": "fleet",
    "hex": "cf36fbc0",
    "records": [],
-   "cause": "concentrator-truncated"
+   "cause": "concentrator-truncated",
+   "registry_cause": null
   },
   {
    "name": "cut_at_bit_27",
    "registry": "fleet",
    "hex": "cf36fbe0",
    "records": [],
-   "cause": "concentrator-truncated"
+   "cause": "concentrator-truncated",
+   "registry_cause": 49
   },
   {
    "name": "cut_at_bit_28",
    "registry": "fleet",
    "hex": "cf36fbf0",
    "records": [],
-   "cause": "concentrator-truncated"
+   "cause": "concentrator-truncated",
+   "registry_cause": null
   },
   {
    "name": "cut_at_bit_29",
    "registry": "fleet",
    "hex": "cf36fbf8",
    "records": [],
-   "cause": "concentrator-truncated"
+   "cause": "concentrator-truncated",
+   "registry_cause": 49
   },
   {
    "name": "cut_at_bit_30",
    "registry": "fleet",
    "hex": "cf36fbf8",
    "records": [],
-   "cause": "concentrator-truncated"
+   "cause": "concentrator-truncated",
+   "registry_cause": 49
   },
   {
    "name": "cut_at_bit_31",
    "registry": "fleet",
    "hex": "cf36fbf8",
    "records": [],
-   "cause": "concentrator-truncated"
+   "cause": "concentrator-truncated",
+   "registry_cause": 49
   },
   {
    "name": "cut_at_bit_32",
    "registry": "fleet",
    "hex": "cf36fbf8",
    "records": [],
-   "cause": "concentrator-truncated"
+   "cause": "concentrator-truncated",
+   "registry_cause": 49
   },
   {
    "name": "cut_at_bit_33",
    "registry": "fleet",
    "hex": "cf36fbf880",
    "records": [],
-   "cause": "concentrator-truncated"
+   "cause": "concentrator-truncated",
+   "registry_cause": 49
   },
   {
    "name": "cut_at_bit_34",
@@ -5573,7 +5709,8 @@
      ]
     ]
    ],
-   "cause": "ok"
+   "cause": "ok",
+   "registry_cause": null
   },
   {
    "name": "cut_at_bit_35",
@@ -5604,91 +5741,104 @@
      ]
     ]
    ],
-   "cause": "ok"
+   "cause": "ok",
+   "registry_cause": null
   },
   {
    "name": "cut_at_bit_36",
    "registry": "fleet",
    "hex": "cf36fbf8d0",
    "records": [],
-   "cause": "concentrator-truncated"
+   "cause": "concentrator-truncated",
+   "registry_cause": 49
   },
   {
    "name": "cut_at_bit_37",
    "registry": "fleet",
    "hex": "cf36fbf8d0",
    "records": [],
-   "cause": "concentrator-truncated"
+   "cause": "concentrator-truncated",
+   "registry_cause": 49
   },
   {
    "name": "cut_at_bit_38",
    "registry": "fleet",
    "hex": "cf36fbf8d4",
    "records": [],
-   "cause": "concentrator-truncated"
+   "cause": "concentrator-truncated",
+   "registry_cause": 49
   },
   {
    "name": "cut_at_bit_39",
    "registry": "fleet",
    "hex": "cf36fbf8d6",
    "records": [],
-   "cause": "concentrator-truncated"
+   "cause": "concentrator-truncated",
+   "registry_cause": null
   },
   {
    "name": "cut_at_bit_40",
    "registry": "fleet",
    "hex": "cf36fbf8d7",
    "records": [],
-   "cause": "concentrator-truncated"
+   "cause": "concentrator-truncated",
+   "registry_cause": 49
   },
   {
    "name": "cut_at_bit_41",
    "registry": "fleet",
    "hex": "cf36fbf8d780",
    "records": [],
-   "cause": "concentrator-truncated"
+   "cause": "concentrator-truncated",
+   "registry_cause": null
   },
   {
    "name": "cut_at_bit_42",
    "registry": "fleet",
    "hex": "cf36fbf8d780",
    "records": [],
-   "cause": "concentrator-truncated"
+   "cause": "concentrator-truncated",
+   "registry_cause": null
   },
   {
    "name": "cut_at_bit_43",
    "registry": "fleet",
    "hex": "cf36fbf8d7a0",
    "records": [],
-   "cause": "concentrator-truncated"
+   "cause": "concentrator-truncated",
+   "registry_cause": 49
   },
   {
    "name": "cut_at_bit_44",
    "registry": "fleet",
    "hex": "cf36fbf8d7b0",
    "records": [],
-   "cause": "concentrator-truncated"
+   "cause": "concentrator-truncated",
+   "registry_cause": null
   },
   {
    "name": "cut_at_bit_45",
    "registry": "fleet",
    "hex": "cf36fbf8d7b0",
    "records": [],
-   "cause": "concentrator-truncated"
+   "cause": "concentrator-truncated",
+   "registry_cause": null
   },
   {
    "name": "cut_at_bit_46",
    "registry": "fleet",
    "hex": "cf36fbf8d7b0",
    "records": [],
-   "cause": "concentrator-truncated"
+   "cause": "concentrator-truncated",
+   "registry_cause": null
   },
   {
    "name": "cut_at_bit_47",
    "registry": "fleet",
    "hex": "cf36fbf8d7b2",
    "records": [],
-   "cause": "concentrator-truncated"
+   "cause": "concentrator-truncated",
+   "registry_cause": 49
   },
   {
    "name": "cut_at_bit_48",
@@ -5727,483 +5877,552 @@
      ]
     ]
    ],
-   "cause": "ok"
+   "cause": "ok",
+   "registry_cause": null
   },
   {
    "name": "random_bytes_0",
    "registry": "fleet",
    "hex": "452d9a04",
    "records": [],
-   "cause": "concentrator-unknown-stream"
+   "cause": "concentrator-unknown-stream",
+   "registry_cause": null
   },
   {
    "name": "random_bytes_1",
    "registry": "fleet",
    "hex": "06af3b6795",
    "records": [],
-   "cause": "concentrator-unknown-stream"
+   "cause": "concentrator-unknown-stream",
+   "registry_cause": null
   },
   {
    "name": "random_bytes_2",
    "registry": "fleet",
    "hex": "e0d7d7",
    "records": [],
-   "cause": "concentrator-truncated"
+   "cause": "concentrator-truncated",
+   "registry_cause": 49
   },
   {
    "name": "random_bytes_3",
    "registry": "fleet",
    "hex": "225941f8608917",
    "records": [],
-   "cause": "concentrator-unknown-stream"
+   "cause": "concentrator-unknown-stream",
+   "registry_cause": null
   },
   {
    "name": "random_bytes_4",
    "registry": "fleet",
    "hex": "b1",
    "records": [],
-   "cause": "concentrator-unknown-stream"
+   "cause": "concentrator-unknown-stream",
+   "registry_cause": null
   },
   {
    "name": "random_bytes_5",
    "registry": "fleet",
    "hex": "31295f",
    "records": [],
-   "cause": "concentrator-truncated"
+   "cause": "concentrator-truncated",
+   "registry_cause": 49
   },
   {
    "name": "random_bytes_6",
    "registry": "fleet",
    "hex": "d1a39c1adf461740",
    "records": [],
-   "cause": "concentrator-unknown-stream"
+   "cause": "concentrator-unknown-stream",
+   "registry_cause": null
   },
   {
    "name": "random_bytes_7",
    "registry": "fleet",
    "hex": "535c5389fe8866",
    "records": [],
-   "cause": "concentrator-unknown-stream"
+   "cause": "concentrator-unknown-stream",
+   "registry_cause": null
   },
   {
    "name": "random_bytes_8",
    "registry": "fleet",
    "hex": "79f19ff99e39fec9",
    "records": [],
-   "cause": "concentrator-truncated"
+   "cause": "concentrator-truncated",
+   "registry_cause": 49
   },
   {
    "name": "random_bytes_9",
    "registry": "fleet",
    "hex": "e8c491e451b88bf52d8f",
    "records": [],
-   "cause": "concentrator-unknown-stream"
+   "cause": "concentrator-unknown-stream",
+   "registry_cause": null
   },
   {
    "name": "random_bytes_10",
    "registry": "fleet",
    "hex": "b17c343adbde60f82b0a",
    "records": [],
-   "cause": "concentrator-unknown-stream"
+   "cause": "concentrator-unknown-stream",
+   "registry_cause": null
   },
   {
    "name": "random_bytes_11",
    "registry": "fleet",
    "hex": "7756",
    "records": [],
-   "cause": "concentrator-truncated"
+   "cause": "concentrator-truncated",
+   "registry_cause": null
   },
   {
    "name": "random_bytes_12",
    "registry": "fleet",
    "hex": "95cd",
    "records": [],
-   "cause": "concentrator-unknown-stream"
+   "cause": "concentrator-unknown-stream",
+   "registry_cause": null
   },
   {
    "name": "random_bytes_13",
    "registry": "fleet",
    "hex": "bd16b1eefecfa993",
    "records": [],
-   "cause": "concentrator-unknown-stream"
+   "cause": "concentrator-unknown-stream",
+   "registry_cause": null
   },
   {
    "name": "random_bytes_14",
    "registry": "fleet",
    "hex": "0e61b5193a5c",
    "records": [],
-   "cause": "concentrator-unknown-stream"
+   "cause": "concentrator-unknown-stream",
+   "registry_cause": null
   },
   {
    "name": "random_bytes_15",
    "registry": "fleet",
    "hex": "cb7903a9",
    "records": [],
-   "cause": "concentrator-truncated"
+   "cause": "concentrator-truncated",
+   "registry_cause": 49
   },
   {
    "name": "random_bytes_16",
    "registry": "fleet",
    "hex": "427a44199298",
    "records": [],
-   "cause": "concentrator-unknown-stream"
+   "cause": "concentrator-unknown-stream",
+   "registry_cause": null
   },
   {
    "name": "random_bytes_17",
    "registry": "fleet",
    "hex": "52b79f2975d87873c3a26e",
    "records": [],
-   "cause": "concentrator-unknown-stream"
+   "cause": "concentrator-unknown-stream",
+   "registry_cause": null
   },
   {
    "name": "random_bytes_18",
    "registry": "fleet",
    "hex": "4415de4ead1ab6",
    "records": [],
-   "cause": "concentrator-unknown-stream"
+   "cause": "concentrator-unknown-stream",
+   "registry_cause": null
   },
   {
    "name": "random_bytes_19",
    "registry": "fleet",
    "hex": "489e16",
    "records": [],
-   "cause": "concentrator-unknown-stream"
+   "cause": "concentrator-unknown-stream",
+   "registry_cause": null
   },
   {
    "name": "random_bytes_20",
    "registry": "fleet",
    "hex": "057e572150c9de4e",
    "records": [],
-   "cause": "concentrator-unknown-stream"
+   "cause": "concentrator-unknown-stream",
+   "registry_cause": null
   },
   {
    "name": "random_bytes_21",
    "registry": "fleet",
    "hex": "3e8347b49c1fde39a4db0a2b",
    "records": [],
-   "cause": "concentrator-unknown-stream"
+   "cause": "concentrator-unknown-stream",
+   "registry_cause": null
   },
   {
    "name": "random_bytes_22",
    "registry": "fleet",
    "hex": "c0",
    "records": [],
-   "cause": "concentrator-truncated"
+   "cause": "concentrator-truncated",
+   "registry_cause": null
   },
   {
    "name": "random_bytes_23",
    "registry": "fleet",
    "hex": "9e69",
    "records": [],
-   "cause": "concentrator-unknown-stream"
+   "cause": "concentrator-unknown-stream",
+   "registry_cause": null
   },
   {
    "name": "random_bytes_24",
    "registry": "fleet",
    "hex": "3d07ba",
    "records": [],
-   "cause": "concentrator-unknown-stream"
+   "cause": "concentrator-unknown-stream",
+   "registry_cause": null
   },
   {
    "name": "random_bytes_25",
    "registry": "fleet",
    "hex": "2e84a8",
    "records": [],
-   "cause": "concentrator-unknown-stream"
+   "cause": "concentrator-unknown-stream",
+   "registry_cause": null
   },
   {
    "name": "random_bytes_26",
    "registry": "fleet",
    "hex": "0832059aff19",
    "records": [],
-   "cause": "concentrator-unknown-stream"
+   "cause": "concentrator-unknown-stream",
+   "registry_cause": null
   },
   {
    "name": "random_bytes_27",
    "registry": "fleet",
    "hex": "43d2a2f5e5b5db87ad4b4b",
    "records": [],
-   "cause": "concentrator-unknown-stream"
+   "cause": "concentrator-unknown-stream",
+   "registry_cause": null
   },
   {
    "name": "random_bytes_28",
    "registry": "fleet",
    "hex": "493d0e226c4df6778b80",
    "records": [],
-   "cause": "concentrator-unknown-stream"
+   "cause": "concentrator-unknown-stream",
+   "registry_cause": null
   },
   {
    "name": "random_bytes_29",
    "registry": "fleet",
    "hex": "a219d188c88c",
    "records": [],
-   "cause": "concentrator-unknown-stream"
+   "cause": "concentrator-unknown-stream",
+   "registry_cause": null
   },
   {
    "name": "random_bytes_30",
    "registry": "fleet",
    "hex": "e93082c4dee8fd53bb6c562df7",
    "records": [],
-   "cause": "concentrator-unknown-stream"
+   "cause": "concentrator-unknown-stream",
+   "registry_cause": null
   },
   {
    "name": "random_bytes_31",
    "registry": "fleet",
    "hex": "e9",
    "records": [],
-   "cause": "concentrator-truncated"
+   "cause": "concentrator-truncated",
+   "registry_cause": 49
   },
   {
    "name": "random_bytes_32",
    "registry": "fleet",
    "hex": "64d97b19dc03ea0abc",
    "records": [],
-   "cause": "concentrator-unknown-stream"
+   "cause": "concentrator-unknown-stream",
+   "registry_cause": null
   },
   {
    "name": "random_bytes_33",
    "registry": "fleet",
    "hex": "b8cb243e7cedba611e0b",
    "records": [],
-   "cause": "concentrator-unknown-stream"
+   "cause": "concentrator-unknown-stream",
+   "registry_cause": null
   },
   {
    "name": "random_bytes_34",
    "registry": "fleet",
    "hex": "df690285be6ddcd08520",
    "records": [],
-   "cause": "concentrator-unknown-stream"
+   "cause": "concentrator-unknown-stream",
+   "registry_cause": null
   },
   {
    "name": "random_bytes_35",
    "registry": "fleet",
    "hex": "c7985e",
    "records": [],
-   "cause": "concentrator-truncated"
+   "cause": "concentrator-truncated",
+   "registry_cause": null
   },
   {
    "name": "random_bytes_36",
    "registry": "fleet",
    "hex": "3539e2bb15",
    "records": [],
-   "cause": "concentrator-unknown-stream"
+   "cause": "concentrator-unknown-stream",
+   "registry_cause": null
   },
   {
    "name": "random_bytes_37",
    "registry": "fleet",
    "hex": "eb68",
    "records": [],
-   "cause": "concentrator-truncated"
+   "cause": "concentrator-truncated",
+   "registry_cause": 49
   },
   {
    "name": "random_bytes_38",
    "registry": "fleet",
    "hex": "92",
    "records": [],
-   "cause": "concentrator-truncated"
+   "cause": "concentrator-truncated",
+   "registry_cause": 48
   },
   {
    "name": "random_bytes_39",
    "registry": "fleet",
    "hex": "da955895dfb849",
    "records": [],
-   "cause": "concentrator-unknown-stream"
+   "cause": "concentrator-unknown-stream",
+   "registry_cause": null
   },
   {
    "name": "random_bytes_40",
    "registry": "fleet",
    "hex": "6f494b5b8c08",
    "records": [],
-   "cause": "concentrator-truncated"
+   "cause": "concentrator-truncated",
+   "registry_cause": 49
   },
   {
    "name": "random_bytes_41",
    "registry": "fleet",
    "hex": "5ea99daff36da08c",
    "records": [],
-   "cause": "concentrator-unknown-stream"
+   "cause": "concentrator-unknown-stream",
+   "registry_cause": null
   },
   {
    "name": "random_bytes_42",
    "registry": "fleet",
    "hex": "5d",
    "records": [],
-   "cause": "concentrator-truncated"
+   "cause": "concentrator-truncated",
+   "registry_cause": 49
   },
   {
    "name": "random_bytes_43",
    "registry": "fleet",
    "hex": "b40546e38bbe702ba3",
    "records": [],
-   "cause": "concentrator-unknown-stream"
+   "cause": "concentrator-unknown-stream",
+   "registry_cause": null
   },
   {
    "name": "random_bytes_44",
    "registry": "fleet",
    "hex": "db834bf2e1920d485e",
    "records": [],
-   "cause": "concentrator-unknown-stream"
+   "cause": "concentrator-unknown-stream",
+   "registry_cause": null
   },
   {
    "name": "random_bytes_45",
    "registry": "fleet",
    "hex": "8a6a8a",
    "records": [],
-   "cause": "concentrator-unknown-stream"
+   "cause": "concentrator-unknown-stream",
+   "registry_cause": null
   },
   {
    "name": "random_bytes_46",
    "registry": "fleet",
    "hex": "5a414646d309a5c4c41045",
    "records": [],
-   "cause": "concentrator-unknown-stream"
+   "cause": "concentrator-unknown-stream",
+   "registry_cause": null
   },
   {
    "name": "random_bytes_47",
    "registry": "fleet",
    "hex": "47f0325e8fb9be26",
    "records": [],
-   "cause": "concentrator-unknown-stream"
+   "cause": "concentrator-unknown-stream",
+   "registry_cause": null
   },
   {
    "name": "random_bytes_48",
    "registry": "fleet",
    "hex": "a72e5687dd96",
    "records": [],
-   "cause": "concentrator-unknown-stream"
+   "cause": "concentrator-unknown-stream",
+   "registry_cause": null
   },
   {
    "name": "random_bytes_49",
    "registry": "fleet",
    "hex": "fb52dbcb5015f1",
    "records": [],
-   "cause": "concentrator-unknown-stream"
+   "cause": "concentrator-unknown-stream",
+   "registry_cause": null
   },
   {
    "name": "random_bytes_50",
    "registry": "fleet",
    "hex": "14107770f3",
    "records": [],
-   "cause": "concentrator-unknown-stream"
+   "cause": "concentrator-unknown-stream",
+   "registry_cause": null
   },
   {
    "name": "random_bytes_51",
    "registry": "fleet",
    "hex": "487778",
    "records": [],
-   "cause": "concentrator-unknown-stream"
+   "cause": "concentrator-unknown-stream",
+   "registry_cause": null
   },
   {
    "name": "random_bytes_52",
    "registry": "fleet",
    "hex": "c6fb6201ca251b42b63aa83d",
    "records": [],
-   "cause": "concentrator-unknown-stream"
+   "cause": "concentrator-unknown-stream",
+   "registry_cause": null
   },
   {
    "name": "random_bytes_53",
    "registry": "fleet",
    "hex": "c238567e675ba942b9422563a4",
    "records": [],
-   "cause": "concentrator-unknown-stream"
+   "cause": "concentrator-unknown-stream",
+   "registry_cause": null
   },
   {
    "name": "random_bytes_54",
    "registry": "fleet",
    "hex": "bda0369ad62554b3c2cf",
    "records": [],
-   "cause": "concentrator-unknown-stream"
+   "cause": "concentrator-unknown-stream",
+   "registry_cause": null
   },
   {
    "name": "random_bytes_55",
    "registry": "fleet",
    "hex": "63c34d0f",
    "records": [],
-   "cause": "concentrator-truncated"
+   "cause": "concentrator-truncated",
+   "registry_cause": null
   },
   {
    "name": "random_bytes_56",
    "registry": "fleet",
    "hex": "f9",
    "records": [],
-   "cause": "concentrator-truncated"
+   "cause": "concentrator-truncated",
+   "registry_cause": 49
   },
   {
    "name": "random_bytes_57",
    "registry": "fleet",
    "hex": "0ed3e033fb7d4c0e35",
    "records": [],
-   "cause": "concentrator-unknown-stream"
+   "cause": "concentrator-unknown-stream",
+   "registry_cause": null
   },
   {
    "name": "random_bytes_58",
    "registry": "fleet",
    "hex": "2e4a67e435b35546ba09",
    "records": [],
-   "cause": "concentrator-unknown-stream"
+   "cause": "concentrator-unknown-stream",
+   "registry_cause": null
   },
   {
    "name": "random_bytes_59",
    "registry": "fleet",
    "hex": "c3",
    "records": [],
-   "cause": "concentrator-truncated"
+   "cause": "concentrator-truncated",
+   "registry_cause": null
   },
   {
    "name": "random_bytes_60",
    "registry": "fleet",
    "hex": "68a8ce8ca2",
    "records": [],
-   "cause": "concentrator-truncated"
+   "cause": "concentrator-truncated",
+   "registry_cause": 49
   },
   {
    "name": "random_bytes_61",
    "registry": "fleet",
    "hex": "1fc15eb881",
    "records": [],
-   "cause": "concentrator-unknown-stream"
+   "cause": "concentrator-unknown-stream",
+   "registry_cause": null
   },
   {
    "name": "random_bytes_62",
    "registry": "fleet",
    "hex": "428a7083296801497547",
    "records": [],
-   "cause": "concentrator-unknown-stream"
+   "cause": "concentrator-unknown-stream",
+   "registry_cause": null
   },
   {
    "name": "random_bytes_63",
    "registry": "fleet",
    "hex": "b6adde0a4e38ddefee54",
    "records": [],
-   "cause": "concentrator-unknown-stream"
+   "cause": "concentrator-unknown-stream",
+   "registry_cause": null
   },
   {
    "name": "random_bytes_64",
    "registry": "fleet",
    "hex": "283b",
    "records": [],
-   "cause": "concentrator-unknown-stream"
+   "cause": "concentrator-unknown-stream",
+   "registry_cause": null
   },
   {
    "name": "random_bytes_65",
    "registry": "fleet",
    "hex": "4a7534519e93a1be",
    "records": [],
-   "cause": "concentrator-unknown-stream"
+   "cause": "concentrator-unknown-stream",
+   "registry_cause": null
   },
   {
    "name": "random_bytes_66",
    "registry": "fleet",
    "hex": "104fc30a",
    "records": [],
-   "cause": "concentrator-unknown-stream"
+   "cause": "concentrator-unknown-stream",
+   "registry_cause": null
   },
   {
    "name": "random_bytes_67",
    "registry": "fleet",
    "hex": "faa81040a4c2d044",
    "records": [],
-   "cause": "concentrator-unknown-stream"
+   "cause": "concentrator-unknown-stream",
+   "registry_cause": null
   },
   {
    "name": "random_bytes_68",
@@ -6218,98 +6437,112 @@
      ]
     ]
    ],
-   "cause": "ok"
+   "cause": "ok",
+   "registry_cause": null
   },
   {
    "name": "random_bytes_69",
    "registry": "fleet",
    "hex": "81e182f67bdad781973dc2",
    "records": [],
-   "cause": "concentrator-unknown-stream"
+   "cause": "concentrator-unknown-stream",
+   "registry_cause": null
   },
   {
    "name": "random_bytes_70",
    "registry": "fleet",
    "hex": "b8ac33d31e80c2d9f8181439",
    "records": [],
-   "cause": "concentrator-unknown-stream"
+   "cause": "concentrator-unknown-stream",
+   "registry_cause": null
   },
   {
    "name": "random_bytes_71",
    "registry": "fleet",
    "hex": "c7afdf371124a2905e",
    "records": [],
-   "cause": "concentrator-unknown-stream"
+   "cause": "concentrator-unknown-stream",
+   "registry_cause": null
   },
   {
    "name": "random_bytes_72",
    "registry": "fleet",
    "hex": "e6ed56f386f3e95a23f7e7ec",
    "records": [],
-   "cause": "concentrator-unknown-stream"
+   "cause": "concentrator-unknown-stream",
+   "registry_cause": null
   },
   {
    "name": "random_bytes_73",
    "registry": "fleet",
    "hex": "80667ad1b970",
    "records": [],
-   "cause": "concentrator-unknown-stream"
+   "cause": "concentrator-unknown-stream",
+   "registry_cause": null
   },
   {
    "name": "random_bytes_74",
    "registry": "fleet",
    "hex": "6e445a1fd36f98be4b864c",
    "records": [],
-   "cause": "concentrator-unknown-stream"
+   "cause": "concentrator-unknown-stream",
+   "registry_cause": null
   },
   {
    "name": "random_bytes_75",
    "registry": "fleet",
    "hex": "279e02f92d6497",
    "records": [],
-   "cause": "concentrator-unknown-stream"
+   "cause": "concentrator-unknown-stream",
+   "registry_cause": null
   },
   {
    "name": "random_bytes_76",
    "registry": "fleet",
    "hex": "432b00c4",
    "records": [],
-   "cause": "concentrator-unknown-stream"
+   "cause": "concentrator-unknown-stream",
+   "registry_cause": null
   },
   {
    "name": "random_bytes_77",
    "registry": "fleet",
    "hex": "19534b",
    "records": [],
-   "cause": "concentrator-unknown-stream"
+   "cause": "concentrator-unknown-stream",
+   "registry_cause": null
   },
   {
    "name": "random_bytes_78",
    "registry": "fleet",
    "hex": "96e477fec1b5d81166",
    "records": [],
-   "cause": "concentrator-unknown-stream"
+   "cause": "concentrator-unknown-stream",
+   "registry_cause": null
   },
   {
    "name": "random_bytes_79",
    "registry": "fleet",
    "hex": "4ffb51e2a6",
    "records": [],
-   "cause": "concentrator-unknown-stream"
+   "cause": "concentrator-unknown-stream",
+   "registry_cause": null
   },
   {
    "name": "flipped_0",
    "registry": "fleet",
    "hex": "cf36fbb980",
    "records": [],
-   "cause": "concentrator-truncated"
+   "cause": "concentrator-truncated",
+   "registry_cause": null
   },
   {
    "name": "flipped_1",
    "registry": "fleet",
    "hex": "cf36ebf8d0",
    "records": [],
-   "cause": "concentrator-truncated"
+   "cause": "concentrator-truncated",
+   "registry_cause": 49
   },
   {
    "name": "flipped_2",
@@ -6340,7 +6573,8 @@
      ]
     ]
    ],
-   "cause": "ok"
+   "cause": "ok",
+   "registry_cause": null
   },
   {
    "name": "flipped_3",
@@ -6371,14 +6605,16 @@
      ]
     ]
    ],
-   "cause": "ok"
+   "cause": "ok",
+   "registry_cause": null
   },
   {
    "name": "flipped_4",
    "registry": "fleet",
    "hex": "cf36faf8c0",
    "records": [],
-   "cause": "concentrator-truncated"
+   "cause": "concentrator-truncated",
+   "registry_cause": null
   },
   {
    "name": "flipped_5",
@@ -6411,7 +6647,8 @@
      []
     ]
    ],
-   "cause": "ok"
+   "cause": "ok",
+   "registry_cause": null
   },
   {
    "name": "flipped_6",
@@ -6442,28 +6679,32 @@
      ]
     ]
    ],
-   "cause": "ok"
+   "cause": "ok",
+   "registry_cause": null
   },
   {
    "name": "flipped_7",
    "registry": "fleet",
    "hex": "cf36fbf0c4",
    "records": [],
-   "cause": "concentrator-truncated"
+   "cause": "concentrator-truncated",
+   "registry_cause": 49
   },
   {
    "name": "flipped_8",
    "registry": "fleet",
    "hex": "cf367bf0c0",
    "records": [],
-   "cause": "concentrator-truncated"
+   "cause": "concentrator-truncated",
+   "registry_cause": null
   },
   {
    "name": "flipped_9",
    "registry": "fleet",
    "hex": "cf3ef3f9c0",
    "records": [],
-   "cause": "concentrator-unknown-stream"
+   "cause": "concentrator-unknown-stream",
+   "registry_cause": null
   },
   {
    "name": "flipped_10",
@@ -6494,7 +6735,8 @@
      ]
     ]
    ],
-   "cause": "ok"
+   "cause": "ok",
+   "registry_cause": null
   },
   {
    "name": "flipped_11",
@@ -6525,42 +6767,48 @@
      ]
     ]
    ],
-   "cause": "ok"
+   "cause": "ok",
+   "registry_cause": null
   },
   {
    "name": "flipped_12",
    "registry": "fleet",
    "hex": "ce36fff8c0",
    "records": [],
-   "cause": "concentrator-truncated"
+   "cause": "concentrator-truncated",
+   "registry_cause": null
   },
   {
    "name": "flipped_13",
    "registry": "fleet",
    "hex": "cfb6f3fac0",
    "records": [],
-   "cause": "concentrator-unknown-stream"
+   "cause": "concentrator-unknown-stream",
+   "registry_cause": null
   },
   {
    "name": "flipped_14",
    "registry": "fleet",
    "hex": "cb72fbf8c0",
    "records": [],
-   "cause": "concentrator-unknown-stream"
+   "cause": "concentrator-unknown-stream",
+   "registry_cause": null
   },
   {
    "name": "flipped_15",
    "registry": "fleet",
    "hex": "cf24fbf8e0",
    "records": [],
-   "cause": "concentrator-unknown-stream"
+   "cause": "concentrator-unknown-stream",
+   "registry_cause": null
   },
   {
    "name": "flipped_16",
    "registry": "fleet",
    "hex": "cf36abf8c0",
    "records": [],
-   "cause": "concentrator-unknown-stream"
+   "cause": "concentrator-unknown-stream",
+   "registry_cause": null
   },
   {
    "name": "flipped_17",
@@ -6591,14 +6839,16 @@
      ]
     ]
    ],
-   "cause": "ok"
+   "cause": "ok",
+   "registry_cause": null
   },
   {
    "name": "flipped_18",
    "registry": "fleet",
    "hex": "cf26faf8c0",
    "records": [],
-   "cause": "concentrator-unknown-stream"
+   "cause": "concentrator-unknown-stream",
+   "registry_cause": null
   },
   {
    "name": "flipped_19",
@@ -6627,35 +6877,40 @@
      []
     ]
    ],
-   "cause": "ok"
+   "cause": "ok",
+   "registry_cause": null
   },
   {
    "name": "flipped_20",
    "registry": "fleet",
    "hex": "cf36fbf9c0",
    "records": [],
-   "cause": "concentrator-truncated"
+   "cause": "concentrator-truncated",
+   "registry_cause": 49
   },
   {
    "name": "flipped_21",
    "registry": "fleet",
    "hex": "cf36fbfc80",
    "records": [],
-   "cause": "concentrator-truncated"
+   "cause": "concentrator-truncated",
+   "registry_cause": 49
   },
   {
    "name": "flipped_22",
    "registry": "fleet",
    "hex": "cf36fff8c3",
    "records": [],
-   "cause": "concentrator-unknown-stream"
+   "cause": "concentrator-unknown-stream",
+   "registry_cause": null
   },
   {
    "name": "flipped_23",
    "registry": "fleet",
    "hex": "cf26f9e8c0",
    "records": [],
-   "cause": "concentrator-unknown-stream"
+   "cause": "concentrator-unknown-stream",
+   "registry_cause": null
   },
   {
    "name": "flipped_24",
@@ -6690,14 +6945,16 @@
      ]
     ]
    ],
-   "cause": "ok"
+   "cause": "ok",
+   "registry_cause": null
   },
   {
    "name": "flipped_25",
    "registry": "fleet",
    "hex": "cf36faf8c0",
    "records": [],
-   "cause": "concentrator-truncated"
+   "cause": "concentrator-truncated",
+   "registry_cause": null
   },
   {
    "name": "flipped_26",
@@ -6728,14 +6985,16 @@
      ]
     ]
    ],
-   "cause": "ok"
+   "cause": "ok",
+   "registry_cause": null
   },
   {
    "name": "flipped_27",
    "registry": "fleet",
    "hex": "cf36fb78e0",
    "records": [],
-   "cause": "concentrator-truncated"
+   "cause": "concentrator-truncated",
+   "registry_cause": 49
   },
   {
    "name": "flipped_28",
@@ -6766,14 +7025,16 @@
      ]
     ]
    ],
-   "cause": "ok"
+   "cause": "ok",
+   "registry_cause": null
   },
   {
    "name": "flipped_29",
    "registry": "fleet",
    "hex": "cf36fbf8c1",
    "records": [],
-   "cause": "concentrator-truncated"
+   "cause": "concentrator-truncated",
+   "registry_cause": 49
   },
   {
    "name": "flipped_30",
@@ -6808,14 +7069,16 @@
      []
     ]
    ],
-   "cause": "ok"
+   "cause": "ok",
+   "registry_cause": null
   },
   {
    "name": "flipped_31",
    "registry": "fleet",
    "hex": "cd36fbf0d0",
    "records": [],
-   "cause": "concentrator-unknown-stream"
+   "cause": "concentrator-unknown-stream",
+   "registry_cause": null
   },
   {
    "name": "flipped_32",
@@ -6840,28 +7103,32 @@
      ]
     ]
    ],
-   "cause": "ok"
+   "cause": "ok",
+   "registry_cause": null
   },
   {
    "name": "flipped_33",
    "registry": "fleet",
    "hex": "cf36faf8d0",
    "records": [],
-   "cause": "concentrator-truncated"
+   "cause": "concentrator-truncated",
+   "registry_cause": 49
   },
   {
    "name": "flipped_34",
    "registry": "fleet",
    "hex": "cf34fbe8c8",
    "records": [],
-   "cause": "concentrator-unknown-stream"
+   "cause": "concentrator-unknown-stream",
+   "registry_cause": null
   },
   {
    "name": "flipped_35",
    "registry": "fleet",
    "hex": "cb36ffe8c0",
    "records": [],
-   "cause": "concentrator-unknown-stream"
+   "cause": "concentrator-unknown-stream",
+   "registry_cause": null
   },
   {
    "name": "flipped_36",
@@ -6892,14 +7159,16 @@
      ]
     ]
    ],
-   "cause": "ok"
+   "cause": "ok",
+   "registry_cause": null
   },
   {
    "name": "flipped_37",
    "registry": "fleet",
    "hex": "cf34fbf8c0",
    "records": [],
-   "cause": "concentrator-truncated"
+   "cause": "concentrator-truncated",
+   "registry_cause": null
   },
   {
    "name": "flipped_38",
@@ -6933,56 +7202,64 @@
      ]
     ]
    ],
-   "cause": "ok"
+   "cause": "ok",
+   "registry_cause": null
   },
   {
    "name": "flipped_39",
    "registry": "fleet",
    "hex": "cf36fbe8c0",
    "records": [],
-   "cause": "concentrator-truncated"
+   "cause": "concentrator-truncated",
+   "registry_cause": null
   },
   {
    "name": "flipped_40",
    "registry": "fleet",
    "hex": "cfb6fbf8c2",
    "records": [],
-   "cause": "concentrator-unknown-stream"
+   "cause": "concentrator-unknown-stream",
+   "registry_cause": null
   },
   {
    "name": "flipped_41",
    "registry": "fleet",
    "hex": "cfb6fbf8e0",
    "records": [],
-   "cause": "concentrator-unknown-stream"
+   "cause": "concentrator-unknown-stream",
+   "registry_cause": null
   },
   {
    "name": "flipped_42",
    "registry": "fleet",
    "hex": "c336fbf8d0",
    "records": [],
-   "cause": "concentrator-truncated"
+   "cause": "concentrator-truncated",
+   "registry_cause": 49
   },
   {
    "name": "flipped_43",
    "registry": "fleet",
    "hex": "cf36fbfcc4",
    "records": [],
-   "cause": "concentrator-truncated"
+   "cause": "concentrator-truncated",
+   "registry_cause": 49
   },
   {
    "name": "flipped_44",
    "registry": "fleet",
    "hex": "6f36fbf8c0",
    "records": [],
-   "cause": "concentrator-truncated"
+   "cause": "concentrator-truncated",
+   "registry_cause": null
   },
   {
    "name": "flipped_45",
    "registry": "fleet",
    "hex": "cf36faf8c0",
    "records": [],
-   "cause": "concentrator-truncated"
+   "cause": "concentrator-truncated",
+   "registry_cause": null
   },
   {
    "name": "flipped_46",
@@ -7013,42 +7290,48 @@
      ]
     ]
    ],
-   "cause": "ok"
+   "cause": "ok",
+   "registry_cause": null
   },
   {
    "name": "flipped_47",
    "registry": "fleet",
    "hex": "cfb6fbe8d0",
    "records": [],
-   "cause": "concentrator-unknown-stream"
+   "cause": "concentrator-unknown-stream",
+   "registry_cause": null
   },
   {
    "name": "flipped_48",
    "registry": "fleet",
    "hex": "cf32f3f9c0",
    "records": [],
-   "cause": "concentrator-truncated"
+   "cause": "concentrator-truncated",
+   "registry_cause": 49
   },
   {
    "name": "flipped_49",
    "registry": "fleet",
    "hex": "4f36fbd8e0",
    "records": [],
-   "cause": "concentrator-unknown-stream"
+   "cause": "concentrator-unknown-stream",
+   "registry_cause": null
   },
   {
    "name": "flipped_50",
    "registry": "fleet",
    "hex": "cf367bf8c0",
    "records": [],
-   "cause": "concentrator-truncated"
+   "cause": "concentrator-truncated",
+   "registry_cause": null
   },
   {
    "name": "flipped_51",
    "registry": "fleet",
    "hex": "8f367ff8c0",
    "records": [],
-   "cause": "concentrator-truncated"
+   "cause": "concentrator-truncated",
+   "registry_cause": null
   },
   {
    "name": "flipped_52",
@@ -7081,14 +7364,16 @@
      []
     ]
    ],
-   "cause": "ok"
+   "cause": "ok",
+   "registry_cause": null
   },
   {
    "name": "flipped_53",
    "registry": "fleet",
    "hex": "cf36fbf880",
    "records": [],
-   "cause": "concentrator-truncated"
+   "cause": "concentrator-truncated",
+   "registry_cause": 49
   },
   {
    "name": "flipped_54",
@@ -7117,42 +7402,48 @@
      []
     ]
    ],
-   "cause": "ok"
+   "cause": "ok",
+   "registry_cause": null
   },
   {
    "name": "flipped_55",
    "registry": "fleet",
    "hex": "cf26f9e8c0",
    "records": [],
-   "cause": "concentrator-unknown-stream"
+   "cause": "concentrator-unknown-stream",
+   "registry_cause": null
   },
   {
    "name": "flipped_56",
    "registry": "fleet",
    "hex": "cfb2fbf8c0",
    "records": [],
-   "cause": "concentrator-unknown-stream"
+   "cause": "concentrator-unknown-stream",
+   "registry_cause": null
   },
   {
    "name": "flipped_57",
    "registry": "fleet",
    "hex": "8f36faf8c4",
    "records": [],
-   "cause": "concentrator-truncated"
+   "cause": "concentrator-truncated",
+   "registry_cause": 49
   },
   {
    "name": "flipped_58",
    "registry": "fleet",
    "hex": "6f36f9f8c0",
    "records": [],
-   "cause": "concentrator-truncated"
+   "cause": "concentrator-truncated",
+   "registry_cause": null
   },
   {
    "name": "flipped_59",
    "registry": "fleet",
    "hex": "cf36fbe0c1",
    "records": [],
-   "cause": "concentrator-truncated"
+   "cause": "concentrator-truncated",
+   "registry_cause": 49
   },
   {
    "name": "flipped_60",
@@ -7181,14 +7472,16 @@
      []
     ]
    ],
-   "cause": "ok"
+   "cause": "ok",
+   "registry_cause": null
   },
   {
    "name": "flipped_61",
    "registry": "fleet",
    "hex": "cf36fab8c4",
    "records": [],
-   "cause": "concentrator-truncated"
+   "cause": "concentrator-truncated",
+   "registry_cause": 49
   },
   {
    "name": "flipped_62",
@@ -7217,49 +7510,56 @@
      []
     ]
    ],
-   "cause": "ok"
+   "cause": "ok",
+   "registry_cause": null
   },
   {
    "name": "flipped_63",
    "registry": "fleet",
    "hex": "cf3efbf8c0",
    "records": [],
-   "cause": "concentrator-unknown-stream"
+   "cause": "concentrator-unknown-stream",
+   "registry_cause": null
   },
   {
    "name": "flipped_64",
    "registry": "fleet",
    "hex": "ce36fbf880",
    "records": [],
-   "cause": "concentrator-truncated"
+   "cause": "concentrator-truncated",
+   "registry_cause": 49
   },
   {
    "name": "flipped_65",
    "registry": "fleet",
    "hex": "cf36fbf880",
    "records": [],
-   "cause": "concentrator-truncated"
+   "cause": "concentrator-truncated",
+   "registry_cause": 49
   },
   {
    "name": "flipped_66",
    "registry": "fleet",
    "hex": "8f36ebf0c0",
    "records": [],
-   "cause": "concentrator-truncated"
+   "cause": "concentrator-truncated",
+   "registry_cause": null
   },
   {
    "name": "flipped_67",
    "registry": "fleet",
    "hex": "cf3efbf8d0",
    "records": [],
-   "cause": "concentrator-unknown-stream"
+   "cause": "concentrator-unknown-stream",
+   "registry_cause": null
   },
   {
    "name": "flipped_68",
    "registry": "fleet",
    "hex": "ef3e7bf8c0",
    "records": [],
-   "cause": "concentrator-unknown-stream"
+   "cause": "concentrator-unknown-stream",
+   "registry_cause": null
   },
   {
    "name": "flipped_69",
@@ -7284,35 +7584,40 @@
      ]
     ]
    ],
-   "cause": "ok"
+   "cause": "ok",
+   "registry_cause": null
   },
   {
    "name": "flipped_70",
    "registry": "fleet",
    "hex": "cf36fbfca0",
    "records": [],
-   "cause": "concentrator-truncated"
+   "cause": "concentrator-truncated",
+   "registry_cause": 49
   },
   {
    "name": "flipped_71",
    "registry": "fleet",
    "hex": "cf3cfff8c0",
    "records": [],
-   "cause": "concentrator-truncated"
+   "cause": "concentrator-truncated",
+   "registry_cause": null
   },
   {
    "name": "flipped_72",
    "registry": "fleet",
    "hex": "cb16fbf8d0",
    "records": [],
-   "cause": "concentrator-truncated"
+   "cause": "concentrator-truncated",
+   "registry_cause": 49
   },
   {
    "name": "flipped_73",
    "registry": "fleet",
    "hex": "8f36fbd8d0",
    "records": [],
-   "cause": "concentrator-truncated"
+   "cause": "concentrator-truncated",
+   "registry_cause": 49
   },
   {
    "name": "flipped_74",
@@ -7337,21 +7642,24 @@
      ]
     ]
    ],
-   "cause": "ok"
+   "cause": "ok",
+   "registry_cause": null
   },
   {
    "name": "flipped_75",
    "registry": "fleet",
    "hex": "cf32fbf8c2",
    "records": [],
-   "cause": "concentrator-truncated"
+   "cause": "concentrator-truncated",
+   "registry_cause": 49
   },
   {
    "name": "flipped_76",
    "registry": "fleet",
    "hex": "cf3ef9fac0",
    "records": [],
-   "cause": "concentrator-unknown-stream"
+   "cause": "concentrator-unknown-stream",
+   "registry_cause": null
   },
   {
    "name": "flipped_77",
@@ -7382,28 +7690,32 @@
      []
     ]
    ],
-   "cause": "ok"
+   "cause": "ok",
+   "registry_cause": null
   },
   {
    "name": "flipped_78",
    "registry": "fleet",
    "hex": "cf36ebf8c8",
    "records": [],
-   "cause": "concentrator-truncated"
+   "cause": "concentrator-truncated",
+   "registry_cause": 49
   },
   {
    "name": "flipped_79",
    "registry": "fleet",
    "hex": "cf36fbf8e0",
    "records": [],
-   "cause": "concentrator-truncated"
+   "cause": "concentrator-truncated",
+   "registry_cause": 49
   },
   {
    "name": "a_code_with_forty_zero_bits",
    "registry": "fleet",
    "hex": "d154455541410118",
    "records": [],
-   "cause": "concentrator-truncated"
+   "cause": "concentrator-truncated",
+   "registry_cause": null
   }
  ],
  "wide": [
@@ -7412,6 +7724,7 @@
    "registry": "fleet",
    "hex": "ca145045448900912228229780",
    "cause": "ok",
+   "registry_cause": null,
    "rust_overflow": true,
    "python_records": [
     [
@@ -7428,6 +7741,7 @@
    "registry": "fleet",
    "hex": "2512285125084292842549044f",
    "cause": "concentrator-unknown-stream",
+   "registry_cause": null,
    "rust_overflow": false,
    "python_records": []
   },
@@ -7436,6 +7750,7 @@
    "registry": "fleet",
    "hex": "d4145045448900912228229780",
    "cause": "ok",
+   "registry_cause": null,
    "rust_overflow": false,
    "python_records": [
     [
@@ -7452,6 +7767,7 @@
    "registry": "fleet",
    "hex": "c2145045448900912228229780",
    "cause": "ok",
+   "registry_cause": null,
    "rust_overflow": true,
    "python_records": [
     [

@@ -71,6 +71,7 @@ def _decode_case(name, *, bits=None, frame=None):
         decoded = receipts.decode_receipt_bits(bits)
     entry["receipt"] = _receipt_json(decoded.receipt)
     entry["refusal_cause"] = decoded.refusal_cause
+    entry["registry_cause"] = decoded.cause
     return entry
 
 
@@ -124,6 +125,11 @@ def receipt_stream_corpus() -> dict:
         _decode_case("frame_with_extra_zero_bytes", frame=ok_frame + b"\x00\x00\x00"),
         _decode_case("frame_with_a_trailing_byte_of_ones", frame=ok_frame + b"\xff"),
         _decode_case("a_whole_receipt_minus_its_last_bit", bits=ok_bits[:-1]),
+        _decode_case("a_single_one_bit_has_no_complete_codeword", bits="1"),
+        _decode_case("ones_with_no_adjacent_pair_have_no_complete_codeword", bits="10101"),
+        _decode_case("a_cut_frame_with_a_dangling_codeword_after_a_whole_one", bits=zeck.encode_stream([1, 2]) + "1"),
+        _decode_case("a_cut_frame_with_zero_bits_after_a_whole_codeword", bits=zeck.encode_stream([1, 2]) + "000"),
+        _decode_case("six_fields_and_a_dangling_tail", bits=zeck.encode_stream([1, 2, 3, 4, 5, 6]) + "1"),
     ]
     for cut in range(1, len(ok_bits)):
         decode.append(_decode_case(f"prefix_{cut}_bits", bits=ok_bits[:cut]))
@@ -146,7 +152,7 @@ def receipt_stream_corpus() -> dict:
         bits = zeck.encode_stream(wire_ints)
         decoded = receipts.decode_receipt_bits(bits)
         receipt = decoded.receipt
-        wide.append({"name": name, "bits": bits, "refusal_cause": decoded.refusal_cause,
+        wide.append({"name": name, "bits": bits, "refusal_cause": decoded.refusal_cause, "registry_cause": decoded.cause,
                      "rust_overflow": receipt is not None and any(wire_int > U64_MAX for wire_int in wire_ints[1:]),
                      "python_receipt": None if receipt is None else {key: (str(value) if isinstance(value, int) else value)
                                                                     for key, value in receipt.items()}})
@@ -311,8 +317,10 @@ def _concentrate_case(name, records):
 
 
 def _demux_case(name, frame, registry):
-    records, cause = concentrator.demux(frame, REGISTRIES[registry])
-    return {"name": name, "registry": registry, "hex": frame.hex(), "records": _records_json(records), "cause": cause}
+    demuxed = concentrator.demux(frame, REGISTRIES[registry])
+    records, cause = demuxed
+    return {"name": name, "registry": registry, "hex": frame.hex(), "records": _records_json(records), "cause": cause,
+            "registry_cause": demuxed.cause}
 
 
 def concentrator_corpus() -> dict:
@@ -352,6 +360,12 @@ def concentrator_corpus() -> dict:
     demux.append(_demux_case("registered_stream_in_the_other_registry", concentrator.concentrate([(2, [1, 1, 1, 1, 1])]), "tiny"))
     demux.append(_demux_case("unknown_stream_id_first", concentrator.concentrate([(5, [1])]), "fleet"))
     demux.append(_demux_case("unknown_stream_id_after_a_good_record", concentrator.concentrate([(1, [3, 1]), (5, [1])]), "fleet"))
+    demux.append(_demux_case("a_datagram_with_one_bit_and_no_codeword", b"\x80", "fleet"))
+    demux.append(_demux_case("a_datagram_with_a_stream_id_cut_after_a_whole_record",
+                             packed.pack(zeck.encode(3) + zeck.encode(2) + "1", 8), "fleet"))
+    demux.append(_demux_case("a_reading_cut_with_only_zero_bits_left", packed.pack(zeck.encode(2) + zeck.encode(1), 8), "fleet"))
+    demux.append(_demux_case("a_reading_cut_with_a_dangling_codeword",
+                             packed.pack(zeck.encode(2) + zeck.encode(1) + "01", 8), "fleet"))
     demux.append(_demux_case("short_reading_whole_datagram_rejected", concentrator.concentrate([(1, [3, 1]), (2, [1, 1])]), "fleet"))
     # every cut of a multi record datagram, padded back to bytes: a datagram cut anywhere is either
     # whole records, an all-zero tail, or a rejection with a named cause
@@ -373,14 +387,15 @@ def concentrator_corpus() -> dict:
     for name, records in [("wide_wire_int", [(1, [2**64 + 3, 1])]), ("wide_stream_id_is_unknown", [(2**70, [1])]),
                           ("u64_max_wire_int", [(1, [U64_MAX, 1])]), ("u64_max_plus_one_wire_int", [(1, [U64_MAX + 1, 1])])]:
         frame = concentrator.concentrate(records)
-        decoded, cause = concentrator.demux(frame, REGISTRIES["fleet"])
-        wide.append({"name": name, "registry": "fleet", "hex": frame.hex(), "cause": cause,
+        demuxed = concentrator.demux(frame, REGISTRIES["fleet"])
+        decoded, cause = demuxed
+        wide.append({"name": name, "registry": "fleet", "hex": frame.hex(), "cause": cause, "registry_cause": demuxed.cause,
                      "rust_overflow": any(wire_int > U64_MAX for _sid, ints in decoded for wire_int in ints),
                      "python_records": [[str(sid), [str(value) for value in ints]] for sid, ints in decoded]})
     return {
         "version": 1,
         "comment": "FROZEN. Concentrator profile (PROTOCOL.md section 2.9): datagrams built by prismpath.telemetry.concentrator.concentrate, "
-                   "every cut of a multi record datagram, seeded noise and bit flips, each with the records and cause demux returns. "
+                   "every cut of a multi record datagram, seeded noise and bit flips, each with the records and status demux returns, and `registry_cause`, the strict decode cause code (48, 49) or null. "
                    "`wide` datagrams carry an integer beyond 64 bits, which Python returns and the Rust crate refuses.",
         "causes": {"ok": concentrator.OK, "unknown": concentrator.CONCENTRATOR_UNKNOWN_STREAM, "truncated": concentrator.CONCENTRATOR_TRUNCATED},
         "registries": {name: {str(sid): count for sid, count in registry.items()} for name, registry in REGISTRIES.items()},

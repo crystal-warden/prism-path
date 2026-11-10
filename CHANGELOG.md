@@ -163,7 +163,7 @@ flow manifests, receipts and bundles read exactly as 0.1.2 wrote them, and a 0.1
   Zeckendorf codec refuses a code beyond `usize` and the encoder no longer overflows near `usize::MAX`.
 - A manifest that cannot be parsed is `manifest:bad-format` with no manifest in both languages (Python raised, Rust
   answered `sig:missing`). The Python replay window no longer allocates a mask as long as a hostile tick jump.
-- Open for the owner: causes 48 to 51 (`wire:no-terminator`, `wire:dangling-codeword`, `wire:symbol-overflow`,
+- Open for the owner (settled 2026-11-10 below): causes 48 to 51 (`wire:no-terminator`, `wire:dangling-codeword`, `wire:symbol-overflow`,
   `wire:codebook-mismatch`) are registered and no code in either language emits them; nothing in the reference or
   its documents says where each fires, so none was invented.
 
@@ -192,6 +192,17 @@ flow manifests, receipts and bundles read exactly as 0.1.2 wrote them, and a 0.1
   Python took -2 as a window that emptied the transcript and counted 14 dropped over a four step run. Zero is still
   no bound. `RunOpts::max_transcript` is an `Option<i64>` so the Rust caller can be refused as well; `flows.json` has
   two more cases (107 flows).
+- Causes 48, 49 and 51 now have emitters, beside the decoders' own refusal strings and not in place of them
+  (`docs/design/spec-cause-codes.md` section 6.1 has the table). A receipt decode, `concentrator.demux`,
+  `wire.decode_reading` and the Rust strict stream decode report the registry code as `cause` where the refusal is
+  exactly the registry's meaning: `wire:no-terminator` (48) for a non empty frame with no complete codeword,
+  `wire:dangling-codeword` (49) for a partial codeword with data bits after a complete one, and
+  `wire:codebook-mismatch` (51) for a symbol count that is not the policy's field count. A frame cut where only
+  zero bits remain, an empty frame and an unknown stream id carry none. The results are still the plain pairs they
+  were (`DecodedReceipt` and `Demuxed` are tuple subclasses with a `cause`); in Rust `DecodedReceipt.cause`,
+  `concentrator::demux_cause`, `StrictDecodeError` and `WireRefusal` carry it. `receipt_stream.json` and
+  `concentrator.json` list `registry_cause` per decode and demux case. Cause 50 (`wire:symbol-overflow`) still has
+  no emitter, since no decoder here is handed a cell range, and the pin test keeps that for it alone.
 
 ## [0.1.2] (tagged, superseded before upload; never on PyPI)
 

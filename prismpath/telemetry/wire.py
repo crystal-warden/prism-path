@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-from prismpath.kernel import predicates
+from prismpath.kernel import causes, predicates
 from prismpath.telemetry import quantizer
 from prismpath.telemetry import zeckendorf as zeck
 
@@ -37,12 +37,20 @@ def encode_reading_checked(parts: Dict[str, "q.FieldPartition"], reading: Dict[s
     return encode_reading(parts, reading)
 
 
+class CodebookMismatch(ValueError):
+    """A stream that does not decode under the policy it is bound to (invariant I3): its symbol count is not
+    the policy's field count. The message is the decoder's own and `cause` is the registry code
+    `wire:codebook-mismatch` (51, docs/design/spec-cause-codes.md)."""
+
+    cause = causes.NAMES["wire:codebook-mismatch"]
+
+
 def decode_reading(parts: Dict[str, "q.FieldPartition"], bits: str) -> Dict[str, Any]:
     """Bitstream -> a representative reading that routes identically to the original."""
     order = _order(parts)
     wire = zeck.decode_stream(bits)
     if len(wire) != len(order):
-        raise ValueError(f"symbol count {len(wire)} != decision fields {len(order)}")
+        raise CodebookMismatch(f"symbol count {len(wire)} != decision fields {len(order)}")
     syms = {field: wire[field_index] - 1 for field_index, field in enumerate(order)}
     return quantizer.reconstruct(parts, syms)
 

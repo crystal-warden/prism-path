@@ -162,3 +162,24 @@ def test_decode_names_the_two_halves_apart():
     assert decoded.receipt["cause_name"] == "route:stuck"
     assert tuple(decoded) == (decoded.receipt, decoded.refusal_cause)
     assert decode_receipt(b"").refusal_cause == RECEIPT_TRUNCATED
+
+
+def test_a_refusal_carries_the_strict_decode_cause_beside_its_own_string():
+    from prismpath.telemetry import zeckendorf as zeck
+    whole = zeck.encode_stream([1, 2, 3, 4, 5])
+    # no complete codeword in a non empty frame: no-terminator, though the status string is truncated
+    for bits in ("1", "0000", "10101"):
+        decoded = decode_receipt_bits(bits)
+        assert (decoded.receipt, decoded.refusal_cause, decoded.cause) == (None, RECEIPT_TRUNCATED, 48)
+    # cut mid codeword after whole ones: dangling-codeword
+    cut = decode_receipt_bits(zeck.encode_stream([1, 2]) + "1")
+    assert (cut.refusal_cause, cut.cause) == (RECEIPT_TRUNCATED, 49)
+    # cut at a boundary with only padding after: nothing dangles
+    assert decode_receipt_bits(zeck.encode_stream([1, 2]) + "000").cause is None
+    # an empty frame, an extra codeword and a clean decode carry none
+    assert decode_receipt(b"").cause is None and decode_receipt_bits("").cause is None
+    assert decode_receipt_bits(zeck.encode_stream([1, 2, 3, 4, 5, 6]) + "1").cause is None
+    assert decode_receipt_bits(whole).cause is None
+    # still the plain pair to a caller that unpacks it
+    receipt, refusal_cause = decode_receipt_bits("1")
+    assert (receipt, refusal_cause) == (None, RECEIPT_TRUNCATED)

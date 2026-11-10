@@ -2,6 +2,8 @@
 // Copyright 2026 Crystal Warden Supply Chain Labs LLC
 //! Zeckendorf / Fibonacci codec — the self-framing wire for the decision-preserving telemetry stream.
 
+use prismpath_rs::causes;
+
 fn fibs_upto(upper_bound: usize) -> Vec<usize> {
     // `fibs` is seeded with [1, 2] and only ever grows, so `.last()` is always Some. A term the usize cannot
     // hold is beyond any bound, so the growth stops there.
@@ -116,6 +118,13 @@ pub fn decode_stream(bits: &str) -> Vec<usize> {
 /// Python's `decode_stream` does. Python decodes any width; a decoder that must count the integers on a
 /// hostile frame the way Python does, and then refuse the wide ones, uses this one.
 pub fn decode_stream_wide(bits: &str) -> Vec<Option<usize>> {
+    decode_stream_wide_tail(bits).0
+}
+
+/// `decode_stream_wide` and the bits it left over, as Python's `decode_stream_tail` gives them: the run
+/// after the last complete code. A tail with a `1` in it is a partial codeword with data bits, an all zero
+/// tail is byte alignment padding.
+pub fn decode_stream_wide_tail(bits: &str) -> (Vec<Option<usize>>, String) {
     let mut out = Vec::new();
     let chars: Vec<char> = bits.chars().collect();
     let bit_count = chars.len();
@@ -132,15 +141,32 @@ pub fn decode_stream_wide(bits: &str) -> Vec<Option<usize>> {
             cursor += 1;
         }
     }
-    out
+    (out, chars[start..].iter().collect())
 }
+
+/// Why `decode_stream_strict` refused: its own message and, where the refusal is exactly one of the strict
+/// decode causes, the registry code beside it (`wire:no-terminator` 48 when the stream holds no complete
+/// codeword at all, `wire:dangling-codeword` 49 when it ends in a partial codeword with data bits after a
+/// complete one). A code that is not a Fibonacci code carries none.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StrictDecodeError {
+    pub message: String,
+    pub cause: Option<u8>,
+}
+
+impl std::fmt::Display for StrictDecodeError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(formatter, "{}", self.message)
+    }
+}
+impl std::error::Error for StrictDecodeError {}
 
 /// Strict variant for a receiving codec: the lenient `decode_stream` silently drops an incomplete
 /// final frame, which is right for the self-heal/inspect paths but hides truncation from a decoder
 /// that must surface corruption. Here any leftover bits after the last complete code are an error
 /// unless they are all `'0'` — a run of zero bits is legitimate byte-alignment padding
 /// (`packed::pack`), while a leftover `'1'` means a truncated or corrupted final code.
-pub fn decode_stream_strict(bits: &str) -> Result<Vec<usize>, String> {
+pub fn decode_stream_strict(bits: &str) -> Result<Vec<usize>, StrictDecodeError> {
     let mut out = Vec::new();
     let chars: Vec<char> = bits.chars().collect();
     let bit_count = chars.len();
@@ -149,7 +175,7 @@ pub fn decode_stream_strict(bits: &str) -> Result<Vec<usize>, String> {
     while cursor < bit_count {
         if chars[cursor] == '1' && cursor + 1 < bit_count && chars[cursor + 1] == '1' {
             let slice: String = chars[start..=cursor + 1].iter().collect();
-            out.push(decode(&slice)?);
+            out.push(decode(&slice).map_err(|message| StrictDecodeError { message, cause: None })?);
             cursor += 2;
             start = cursor;
         } else {
@@ -157,10 +183,10 @@ pub fn decode_stream_strict(bits: &str) -> Result<Vec<usize>, String> {
         }
     }
     if chars[start..].contains(&'1') {
-        return Err(format!(
-            "truncated Fibonacci stream: {} trailing bits contain a '1' with no terminator",
-            bit_count - start
-        ));
+        return Err(StrictDecodeError {
+            message: format!("truncated Fibonacci stream: {} trailing bits contain a '1' with no terminator", bit_count - start),
+            cause: Some(if out.is_empty() { causes::WIRE_NO_TERMINATOR } else { causes::WIRE_DANGLING_CODEWORD }),
+        });
     }
     Ok(out)
 }

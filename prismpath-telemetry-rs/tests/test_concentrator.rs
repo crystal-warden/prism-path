@@ -2,7 +2,7 @@
 //! `concentrate`, every cut of a multi record datagram, noise and bit flips, each with the records and cause the
 //! Python `demux` returns, and the integers beyond 64 bits that Python carries and this crate refuses.
 
-use prismpath_telemetry_rs::concentrator::{concentrate, demux, ConcentratorError, Record, CONCENTRATOR_TRUNCATED, CONCENTRATOR_UNKNOWN_STREAM, OK};
+use prismpath_telemetry_rs::concentrator::{concentrate, demux, demux_cause, ConcentratorError, Record, CONCENTRATOR_TRUNCATED, CONCENTRATOR_UNKNOWN_STREAM, OK};
 use serde_json::Value;
 use std::collections::HashMap;
 
@@ -53,12 +53,32 @@ fn demux_cases_match_python() {
     let cases = doc["demux"].as_array().unwrap();
     for case in cases {
         let name = case["name"].as_str().unwrap();
-        let (records, cause) = demux(&hex::decode(case["hex"].as_str().unwrap()).unwrap(), &registry(&doc, case["registry"].as_str().unwrap()))
+        let frame = hex::decode(case["hex"].as_str().unwrap()).unwrap();
+        let (records, cause, registry_cause) = demux_cause(&frame, &registry(&doc, case["registry"].as_str().unwrap()))
             .unwrap_or_else(|err| panic!("{name}: {err}"));
         assert_eq!(cause, case["cause"].as_str().unwrap(), "{name}");
+        assert_eq!(registry_cause, case["registry_cause"].as_u64().map(|code| code as u8), "{name}: registry cause");
+        // `demux` is the same answer without the cause
+        assert_eq!(demux(&frame, &registry(&doc, case["registry"].as_str().unwrap())).unwrap(), (records.clone(), cause), "{name}");
         assert_eq!(records, records_of(&case["records"]), "{name}");
     }
     println!("concentrator demux: {} cases match Python", cases.len());
+}
+
+#[test]
+fn only_a_truncation_carries_a_strict_decode_cause() {
+    let doc = corpus();
+    let mut seen = std::collections::BTreeSet::new();
+    for case in doc["demux"].as_array().unwrap() {
+        if let Some(code) = case["registry_cause"].as_u64() {
+            assert_eq!(case["cause"], CONCENTRATOR_TRUNCATED, "{}", case["name"]);
+            seen.insert(code);
+        }
+        if case["cause"] == CONCENTRATOR_UNKNOWN_STREAM || case["cause"] == OK {
+            assert!(case["registry_cause"].is_null(), "{}", case["name"]);
+        }
+    }
+    assert_eq!(seen.into_iter().collect::<Vec<_>>(), [48, 49]);
 }
 
 #[test]
@@ -82,6 +102,8 @@ fn integers_beyond_64_bits_are_refused_not_wrapped() {
         } else {
             let (records, cause) = result.unwrap_or_else(|err| panic!("{name}: {err}"));
             assert_eq!(cause, case["cause"].as_str().unwrap(), "{name}");
+            let registry_cause = demux_cause(&hex::decode(case["hex"].as_str().unwrap()).unwrap(), &registry(&doc, case["registry"].as_str().unwrap())).unwrap().2;
+            assert_eq!(registry_cause, case["registry_cause"].as_u64().map(|code| code as u8), "{name}: registry cause");
             let python: Vec<(String, Vec<String>)> = case["python_records"].as_array().unwrap().iter().map(|record| (record[0].as_str().unwrap().to_string(), record[1].as_array().unwrap().iter().map(|v| v.as_str().unwrap().to_string()).collect())).collect();
             let ours: Vec<(String, Vec<String>)> = records.iter().map(|(sid, ints)| (sid.to_string(), ints.iter().map(u64::to_string).collect())).collect();
             assert_eq!(ours, python, "{name}");

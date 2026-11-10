@@ -94,7 +94,13 @@ fn test_decode_stream_strict_accepts_padding_and_rejects_truncation() {
     // decode_stream silently drops it — the exact difference the strict variant exists for)
     let truncated = format!("{bits}010");
     assert_eq!(z::decode_stream(&truncated), vec![4, 2, 7]);
-    assert!(z::decode_stream_strict(&truncated).is_err());
+    let refusal = z::decode_stream_strict(&truncated).unwrap_err();
+    assert_eq!(refusal.cause, Some(49), "a partial codeword with data bits after a complete one");
+    assert!(refusal.message.contains("truncated Fibonacci stream"));
+    // with no complete codeword at all the same bits are no-terminator
+    assert_eq!(z::decode_stream_strict("1").unwrap_err().cause, Some(48));
+    assert_eq!(z::decode_stream_strict("0000").unwrap(), Vec::<usize>::new());
+    assert_eq!(z::decode_stream_wide_tail(&truncated).1, "010");
 }
 
 #[test]

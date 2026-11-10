@@ -133,6 +133,7 @@ fn decode_cases_match_python() {
         }
         .unwrap_or_else(|err| panic!("{name}: {err}"));
         assert_eq!(decoded.refusal_cause, case["refusal_cause"].as_str().unwrap(), "{name}");
+        assert_eq!(decoded.cause, case["registry_cause"].as_u64().map(|code| code as u8), "{name}: registry cause");
         match case["receipt"].is_null() {
             true => assert!(decoded.receipt.is_none(), "{name}"),
             false => assert_eq!(decoded.receipt.expect(name), expected_receipt(&case["receipt"]), "{name}"),
@@ -141,6 +142,25 @@ fn decode_cases_match_python() {
     }
     assert_eq!(checked, doc["decode"].as_array().unwrap().len());
     println!("receipt stream decode: {checked} cases match Python");
+}
+
+#[test]
+fn the_strict_decode_causes_sit_beside_the_status_string() {
+    let doc = load("receipt_stream.json");
+    let mut seen = std::collections::BTreeMap::new();
+    for case in doc["decode"].as_array().unwrap() {
+        if let Some(code) = case["registry_cause"].as_u64() {
+            // the status string stays the decoder's own; the cause only ever rides on a truncation
+            assert_eq!(case["refusal_cause"], r::RECEIPT_TRUNCATED, "{}", case["name"]);
+            *seen.entry(code).or_insert(0) += 1;
+        } else if case["refusal_cause"] == r::OK {
+            assert!(case["receipt"].is_object(), "{}", case["name"]);
+        }
+    }
+    assert_eq!(seen.keys().copied().collect::<Vec<_>>(), [48, 49], "{seen:?}");
+    // an empty frame, a whole receipt and an extra codeword carry none
+    assert_eq!(r::decode_receipt(&[]).unwrap().cause, None);
+    assert_eq!(r::decode_receipt_bits("").unwrap().cause, None);
 }
 
 #[test]
@@ -175,6 +195,7 @@ fn integers_beyond_64_bits_are_refused_not_wrapped() {
         } else {
             let decoded = decoded.unwrap_or_else(|err| panic!("{name}: {err}"));
             assert_eq!(decoded.refusal_cause, case["refusal_cause"].as_str().unwrap(), "{name}");
+            assert_eq!(decoded.cause, case["registry_cause"].as_u64().map(|code| code as u8), "{name}: registry cause");
             match case["python_receipt"].as_object() {
                 None => assert!(decoded.receipt.is_none(), "{name}"),
                 Some(python) => {

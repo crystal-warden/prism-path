@@ -88,10 +88,20 @@ pub struct DecodedReceipt {
     pub receipt: Option<Receipt>,
     /// Why the decode was refused (`OK` when it was not): a decoder status string, never a registry name.
     pub refusal_cause: &'static str,
+    /// The registry code of a strict decode cause when the refusal is exactly one of them, beside the status
+    /// string, which stays as it was: `wire:no-terminator` (48) for a frame with bits in it and no complete
+    /// codeword, `wire:dangling-codeword` (49) for a frame cut short (fewer than five codewords) that ends in a
+    /// partial codeword with data bits. An empty frame is its own refusal in the strict decode contract, and
+    /// an extra codeword or a wide cause is a refusal about the receipt and not the framing; none carries one.
+    pub cause: Option<u8>,
 }
 
 fn refused(refusal_cause: &'static str) -> DecodedReceipt {
-    DecodedReceipt { receipt: None, refusal_cause }
+    DecodedReceipt { receipt: None, refusal_cause, cause: None }
+}
+
+fn refused_with(refusal_cause: &'static str, cause: Option<u8>) -> DecodedReceipt {
+    DecodedReceipt { receipt: None, refusal_cause, cause }
 }
 
 fn resolve_cause(cause: &CauseRef<'_>) -> Result<u8, ReceiptError> {
@@ -148,12 +158,15 @@ pub fn decode_receipt_bits(bits: &str) -> Result<DecodedReceipt, ReceiptError> {
     if bits.is_empty() {
         return Ok(refused(RECEIPT_TRUNCATED));
     }
-    let wire_ints = zeckendorf::decode_stream_wide(bits);
+    let (wire_ints, tail) = zeckendorf::decode_stream_wide_tail(bits);
     if wire_ints.is_empty() {
-        return Ok(refused(RECEIPT_TRUNCATED));
+        return Ok(refused_with(RECEIPT_TRUNCATED, Some(causes::WIRE_NO_TERMINATOR)));
+    }
+    if wire_ints.len() < RECEIPT_FIELDS.len() {
+        return Ok(refused_with(RECEIPT_TRUNCATED, if tail.contains('1') { Some(causes::WIRE_DANGLING_CODEWORD) } else { None }));
     }
     if wire_ints.len() != RECEIPT_FIELDS.len() {
-        return Ok(refused(if wire_ints.len() < RECEIPT_FIELDS.len() { RECEIPT_TRUNCATED } else { RECEIPT_FIELD_MISMATCH }));
+        return Ok(refused(RECEIPT_FIELD_MISMATCH));
     }
     // symbol = wire integer - 1; a wire integer is at least 1, and a cause beyond 64 bits is beyond the byte
     let cause_code = match wire_ints[0].map(|wire_int| wire_int - 1) {
@@ -177,6 +190,7 @@ pub fn decode_receipt_bits(bits: &str) -> Result<DecodedReceipt, ReceiptError> {
             seq: fields[3],
         }),
         refusal_cause: OK,
+        cause: None,
     })
 }
 

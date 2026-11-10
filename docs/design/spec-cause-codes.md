@@ -102,6 +102,33 @@ replay depth) that belongs beside the cause on the receipt, not inside the code 
 5. **Wire carriage:** a receipt-bearing Facet stream carries the code as a symbol; enters as an
    optional declared profile like every wire addition.
 
+### 6.1 The strict decode causes beside a decoder's own refusal (2026-11-10)
+
+Causes 48 to 51 name what a strict decoder finds wrong with a frame. A decoder here keeps the refusal
+string it has always returned (`receipt-truncated`, `concentrator-truncated`, the `symbol count` message)
+and reports the registry code beside it as `cause`, only where the refusal is exactly what the registry
+says. The strict decode contract is the one the kernel decode plane and the dissector enforce: a non
+empty frame with no complete codeword is `wire:no-terminator`, a partial codeword with data bits after a
+complete one is `wire:dangling-codeword`, and a frame cut where only zero bits remain is padding.
+
+| Decoder refusal | Local string | `cause` |
+|---|---|---|
+| receipt, non empty bits with no complete codeword | `receipt-truncated` | 48 |
+| receipt, fewer than five codewords and a partial codeword with data bits after them | `receipt-truncated` | 49 |
+| receipt, fewer than five codewords and only zero bits after them | `receipt-truncated` | none |
+| receipt, empty frame; more than five codewords; a cause beyond the byte | `receipt-truncated`, `receipt-field-mismatch`, `receipt-invalid-cause` | none |
+| concentrator, a datagram whose first stream id has no complete codeword | `concentrator-truncated` | 48 |
+| concentrator, a stream id after a whole record with no complete codeword | `concentrator-truncated` | 49 |
+| concentrator, a reading cut with a partial codeword with data bits left | `concentrator-truncated` | 49 |
+| concentrator, a reading cut with only zero bits left | `concentrator-truncated` | none |
+| concentrator, an unregistered stream id | `concentrator-unknown-stream` | none (its own registered cause is 54) |
+| reading decode, a symbol count that is not the policy's field count | `symbol count N != decision fields M` | 51 |
+| Rust strict stream decode, no complete codeword and a `1` | `truncated Fibonacci stream` | 48 |
+| Rust strict stream decode, a trailing `1` after a complete codeword | `truncated Fibonacci stream` | 49 |
+
+Cause 50 (`wire:symbol-overflow`, a wire integer beyond the cell range) has no emitter: no decoder here is
+handed a cell range, and the 64 bit width the Rust crate refuses is not it.
+
 ## 7. Non-goals
 
 Authoring-time lint findings stay out (they refuse documents, not decisions; `validate` already
