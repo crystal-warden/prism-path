@@ -216,6 +216,38 @@ jobs:
       - name: Reflect bindings clippy
         run: cargo clippy --manifest-path prismpath-reflect-bindings/Cargo.toml --all-targets -- -D warnings
 
+  # The declared minimum supported Rust version, built rather than asserted. prismpath-rs, the telemetry
+  # port and the preflight tool declare 1.82 (the newest standard library call they use is
+  # Option::is_none_or, stable in 1.82). The hot swap port declares 1.85 because the committed Cargo.lock
+  # resolves ed25519-dalek's zeroize and base64ct to releases written in edition 2024. Each crate is
+  # checked with every target, including its tests, against the committed lockfile.
+  msrv:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - toolchain: "1.82"
+            crates: "-p prismpath-rs -p prismpath-telemetry-rs -p prismpath-preflight"
+          - toolchain: "1.85"
+            crates: "-p prismpath-hotswap-rs"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
+        with:
+          toolchain: ${{ matrix.toolchain }}
+      - name: Declared rust-version matches the toolchain under test
+        run: |
+          for crate in ${{ matrix.crates }}; do
+            [ "$crate" = "-p" ] && continue
+            declared="$(cargo metadata --no-deps --format-version 1 --locked | python3 -c 'import json,sys; print({p["name"]: p["rust_version"] for p in json.load(sys.stdin)["packages"]}["'"$crate"'"])')"
+            test "$declared" = "${{ matrix.toolchain }}" || { echo "$crate declares $declared, job builds ${{ matrix.toolchain }}"; exit 1; }
+          done
+      - name: Build every target at the declared minimum
+        run: cargo check --locked --all-targets ${{ matrix.crates }}
+
   # The Rust crates and the Python reference check each other: the signed packs, the host and its crash
   # recovery, the deferral store, the cause registry, the worker contract, the engine surface and the wire
   # profiles run against a live Python, and PRISMPATH_REQUIRE_CROSS_LANGUAGE makes a leg that cannot find

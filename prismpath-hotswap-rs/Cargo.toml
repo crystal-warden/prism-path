@@ -2,7 +2,7 @@
 name = "prismpath-hotswap-rs"
 version = "0.1.0"
 edition = "2021"
-rust-version = "1.82"
+rust-version = "1.85"
 description = "Native port of the PrismPath secure policy hot-swap: Ed25519-signed packs, envelope-bounded image validation, and the atomic, audited PolicyHost — cross-verified against the Python reference (a pack signed on either runtime verifies on the other)."
 license = "Apache-2.0"
 
