@@ -222,6 +222,29 @@ fn extract_reading(event: &Value, order: &[String], field_paths: &HashMap<String
     (reading, missing)
 }
 
+/// A value as Python's `repr` writes it, which is how the Python report shows an example value
+/// (`95.5`, `'yes'`, `None`, `True`). The value model keeps one number type, so a whole number reads
+/// as an integer, which is what a JSON `95` is to Python; a JSON `95.0` would print as `95.0` there.
+fn py_repr(value: &V) -> String {
+    match value {
+        V::Null => "None".to_string(),
+        V::Bool(flag) => if *flag { "True" } else { "False" }.to_string(),
+        V::Num(number) => {
+            if number.fract() == 0.0 && number.abs() < 1e16 {
+                format!("{}", *number as i64)
+            } else {
+                prismpath_rs::contract::py_float_repr(*number)
+            }
+        }
+        V::Str(text) => prismpath_rs::contract::py_str_repr(text),
+        V::List(items) => format!("[{}]", items.iter().map(py_repr).collect::<Vec<_>>().join(", ")),
+        V::Obj(pairs) => format!("{{{}}}", pairs.iter()
+            .map(|(key, item)| format!("{}: {}", prismpath_rs::contract::py_str_repr(key), py_repr(item)))
+            .collect::<Vec<_>>().join(", ")),
+        V::Ellipsis => "Ellipsis".to_string(),
+    }
+}
+
 /// Which field refused to quantize, once `encode_reading` has said only that one of them did.
 fn attribute_encode_failure(codebook: &Codebook, seen: &HashMap<String, V>,
                             reading: &HashMap<String, V>,
@@ -231,7 +254,7 @@ fn attribute_encode_failure(codebook: &Codebook, seen: &HashMap<String, V>,
         if codebook.parts[field].symbol(&seen[field]).is_err() {
             *out_of_partition.entry(field.clone()).or_default() += 1;
             oop_examples.entry(field.clone())
-                .or_insert_with(|| format!("{:?}", reading[field]));
+                .or_insert_with(|| py_repr(&reading[field]));
         }
     }
 }
@@ -472,8 +495,10 @@ fn section_decision_preservation(scan: &Scan) -> Vec<String> {
              never happen; please report it with the flow + offending readings below:",
             scan.mismatches.len()));
         for mismatch in &scan.mismatches {
-            md.push(format!("- node `{}`: {:?} vs {:?} on {}",
-                mismatch["node"].as_str().unwrap_or("?"), mismatch["original"], mismatch["representative"],
+            md.push(format!("- node `{}`: {} vs {} on {}",
+                mismatch["node"].as_str().unwrap_or("?"),
+                mismatch["original"].as_str().unwrap_or("?"),
+                mismatch["representative"].as_str().unwrap_or("?"),
                 mismatch["reading"]));
         }
     }
