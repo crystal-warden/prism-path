@@ -24,10 +24,10 @@ the work directory is written as `@ROOT@` in every recorded file.
 
 Left out on purpose: the free text of `record:unreadable:<error>` in an `active_unreadable` event for a
 record that is not JSON at all (Python's JSON decoder wording; the Rust port has its own test for that
-branch), and a pack whose manifest file holds a non finite number (Python's `swap` raises
-`CanonicalReadError` with nothing audited, the Rust host audits a rejection `sig:missing`; DIVERGENCES.md).
-An active record that holds NaN or a number beyond the double range is the same case, and is tested on
-both sides (`prismpath/tests/test_policy_host.py`, `tests/test_host_corners.rs`).
+branch), and a pack whose manifest file holds a non finite number (both hosts audit a rejection
+`manifest:bad-format` and activate nothing, and each has its own test:
+`prismpath/tests/test_policy_host.py`, `tests/test_host_corners.rs`). An active record that holds NaN or a
+number beyond the double range is tested on both sides the same way.
 """
 from __future__ import annotations
 
