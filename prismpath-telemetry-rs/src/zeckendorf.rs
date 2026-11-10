@@ -3,11 +3,14 @@
 //! Zeckendorf / Fibonacci codec — the self-framing wire for the decision-preserving telemetry stream.
 
 fn fibs_upto(upper_bound: usize) -> Vec<usize> {
-    // `fibs` is seeded with [1, 2] and only ever grows, so `.last()` is always Some.
+    // `fibs` is seeded with [1, 2] and only ever grows, so `.last()` is always Some. A term the usize cannot
+    // hold is beyond any bound, so the growth stops there.
     let mut fibs = vec![1, 2];
     while *fibs.last().expect("fibs seeded non-empty") <= upper_bound {
-        let next = fibs[fibs.len() - 1] + fibs[fibs.len() - 2];
-        fibs.push(next);
+        match fibs[fibs.len() - 1].checked_add(fibs[fibs.len() - 2]) {
+            Some(next) => fibs.push(next),
+            None => return fibs,
+        }
     }
     if *fibs.last().expect("fibs seeded non-empty") > upper_bound {
         fibs.pop();
@@ -35,24 +38,44 @@ pub fn encode(value: usize) -> Result<String, String> {
     Ok(out)
 }
 
-/// Inverse of `encode`: one Fibonacci code (bit-string ending in `"11"`) -> the integer.
-pub fn decode(code: &str) -> Result<usize, String> {
+/// One Fibonacci code to its value: `Ok(None)` when the value is beyond the `usize` range (Python decodes
+/// any width), `Err` when the string is not a code at all.
+fn decode_code(code: &str) -> Result<Option<usize>, String> {
     if code.len() < 2 || !code.ends_with("11") {
         return Err(format!("not a Fibonacci code (must end in '11'): {code:?}"));
     }
     let zeck = &code[..code.len() - 1]; // strip terminator '1'
-    let mut fibs = vec![1, 2];
-    while fibs.len() < zeck.len() {
-        let next = fibs[fibs.len() - 1] + fibs[fibs.len() - 2];
-        fibs.push(next);
+    if zeck.contains("11") {
+        // Zeckendorf digits are never consecutive, so an internal "11" is a bit string `encode` can never emit.
+        return Err(format!("not a Fibonacci code (consecutive 1s before the terminator): {code:?}"));
     }
-    let mut sum = 0;
-    for (index, ch) in zeck.chars().enumerate() {
+    let mut sum: usize = 0;
+    // The weights are 1, 2, 3, 5, ...; once the next one passes the usize range only a 0 digit may follow.
+    let (mut weight, mut next_weight): (Option<usize>, Option<usize>) = (Some(1), Some(2));
+    for ch in zeck.chars() {
         if ch == '1' {
-            sum += fibs[index];
+            match weight.and_then(|digit_weight| sum.checked_add(digit_weight)) {
+                Some(total) => sum = total,
+                None => return Ok(None),
+            }
         }
+        let after = match (weight, next_weight) {
+            (Some(low), Some(high)) => low.checked_add(high),
+            _ => None,
+        };
+        weight = next_weight;
+        next_weight = after;
     }
-    Ok(sum)
+    Ok(Some(sum))
+}
+
+/// Inverse of `encode`: one Fibonacci code (bit-string ending in `"11"`) -> the integer.
+///
+/// `Err` for a string that is not a code (no `11` ending, or consecutive 1s before the terminator) and
+/// for a value beyond the `usize` range: Python decodes any width, and this refuses what it cannot hold
+/// instead of wrapping or panicking on a hostile frame.
+pub fn decode(code: &str) -> Result<usize, String> {
+    decode_code(code)?.ok_or_else(|| format!("Fibonacci code beyond the usize range: {} bits", code.len()))
 }
 
 /// Concatenate the codes; each code's trailing `"11"` frames the next — zero header, self-delimiting.
@@ -79,6 +102,30 @@ pub fn decode_stream(bits: &str) -> Vec<usize> {
             if let Ok(val) = decode(&slice) {
                 out.push(val);
             }
+            cursor += 2;
+            start = cursor;
+        } else {
+            cursor += 1;
+        }
+    }
+    out
+}
+
+/// `decode_stream` that keeps the place of a code beyond the `usize` range as `None` instead of dropping it
+/// (the lenient `decode_stream` shifts every later symbol), and still drops an incomplete final frame as
+/// Python's `decode_stream` does. Python decodes any width; a decoder that must count the integers on a
+/// hostile frame the way Python does, and then refuse the wide ones, uses this one.
+pub fn decode_stream_wide(bits: &str) -> Vec<Option<usize>> {
+    let mut out = Vec::new();
+    let chars: Vec<char> = bits.chars().collect();
+    let bit_count = chars.len();
+    let mut start = 0;
+    let mut cursor = 0;
+    while cursor < bit_count {
+        if chars[cursor] == '1' && cursor + 1 < bit_count && chars[cursor + 1] == '1' {
+            let slice: String = chars[start..=cursor + 1].iter().collect();
+            // The slice holds no internal "11" (the scan splits at the first one), so it is a code.
+            out.push(decode_code(&slice).unwrap_or(None));
             cursor += 2;
             start = cursor;
         } else {

@@ -23,6 +23,10 @@ reference of record; read it for exact semantics; when in doubt, match Python.**
 | `epochs.rs` | `epochs.py` | chained epochs `H(prev‖merkle)`; `seal`/`ack`/`enforce_cap`/`verify_chain`/`retransmittable`/`gaps`. |
 | `ackchannel.rs` | `ackchannel.py` | HMAC-SHA256 signed ACKs (`hmac`+`sha2`) matching the Python `hmac` bytes exactly; `sign_ack`/`verify_ack`/`AckReceiver` (drop only on a valid, advancing tag). |
 | `decode.rs` | `decode.py` | inspect path: bits -> per reading symbols / reconstructed values / routes. |
+| `receipts.rs` | `receipts.py` | receipt stream profile (PROTOCOL.md 2.10): the cause byte, `event`, `next_node`, `prev_node` and `seq` as symbols plus one, in sorted field order; `encode_receipt*`, `decode_receipt*` returning the receipt and the refusal cause apart. Fields are `u64`; an integer beyond 64 bits is an error, where Python carries it. |
+| `replay.rs` | `replay.py` | replay window (2.8): `TickWindow::check`/`observe`, strict or with a `reorder` tolerance up to 64, the same `(ok, cause)` and the same mask. |
+| `refresh.rs` | `refresh.py` | refresh profile (2.7): `KeyframeScheduler` and `StalenessTracker`, the same transitions. |
+| `concentrator.rs` | `concentrator.py` | concentrator profile (2.9): `concentrate`, and a whole datagram strict `demux` returning no records with the cause on any structural failure. |
 
 ## Keep framing pluggable (do NOT build CBOR now)
 Put the bit<->byte framing behind a trait (e.g. `Wire`) so a CBOR interop mode can be added later without

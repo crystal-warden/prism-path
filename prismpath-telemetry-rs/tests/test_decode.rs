@@ -86,3 +86,18 @@ fn test_partial_final_frame_is_reported_not_crashed() {
     let rep = decode::inspect(&graph, &format!("{}0", bits)).expect("the flow partitions");
     assert_eq!(rep.n_readings, 1);
 }
+
+/// A reading off the wire that carries a number beyond the double range is refused with an error, not a panic.
+#[test]
+fn a_reading_row_with_a_number_beyond_the_double_range_is_an_error_not_a_panic() {
+    for text in [
+        r#"{"symbols": {}, "reading": {"x": 1e400}, "routes": {}}"#,
+        r#"{"symbols": {}, "reading": {"x": [1, {"y": -1e999}]}, "routes": {}}"#,
+    ] {
+        let outcome = std::panic::catch_unwind(|| serde_json::from_str::<decode::ReadingRow>(text));
+        let parsed = outcome.unwrap_or_else(|_| panic!("deserializing {text} panicked"));
+        let error = parsed.expect_err("a number beyond the double range must be refused");
+        assert!(error.to_string().contains("beyond the double range"), "{error}");
+    }
+    assert!(serde_json::from_str::<decode::ReadingRow>(r#"{"symbols": {}, "reading": {"x": 1.5}, "routes": {}}"#).is_ok());
+}
