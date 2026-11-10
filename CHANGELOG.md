@@ -230,6 +230,22 @@ already signed: packs, envelopes, receipts, root statements and every frozen cor
   loader's parser. Loading in kernel needs CAP_BPF; the kernel certification stays the CI job's. The 100,000 case
   run shows no finding on any of the seven legs.
 
+### The eBPF evaluator carries what the C interpreter carries (2026-11-10)
+Research line, `docs/design/spec-verified-core.md` section 9 (D6, step 4). Nothing here changes a table format, a
+signed image or a frozen corpus: the 147 of 147 in kernel are the same vectors.
+- **An operand stack of 64 and no per program or per node bound short of the maps.** The 86 readings the 100,000
+  case run counted as outside the eBPF subset were edge programs past 64 words and operand stacks past 4, both of
+  which `interp.c` runs. The stack is now one `__u64` (`st_get` and `st_put` are a shift by a masked amount, not a
+  `switch` an arm a slot), `STACK_MAX` is 64, and `MAX_PROG_PER_EDGE` and `MAX_EDGES_PER_NODE` are the map
+  capacities. `prog_word_cb` shrank from 423 to 332 instructions. The 32 bit limit is unchanged and stays a
+  compile time refusal on every table target (the spec says why). The 100,000 case run shows the eBPF leg agreeing on
+  146,673 readings as `c-interp` does, no subset refusal, no finding on any of the seven legs.
+- **The verifier's acceptance is checked in the kernel job and, as far as it can be, without one.**
+  `prismpath-ebpf/verifier_budget.py` holds each built object to the combined stack of 512 bytes, no cycle in the
+  evaluator outside `bpf_loop` and its shape; `cert_corpus.py --boundary` writes 35 records of the evaluator's bounds
+  that the `ebpf_kernel` job loads and replays in kernel; `prismpath/tests/test_ebpf_evaluator_bounds.py` runs the
+  same tables natively. `formal/diff/core_diff.py` takes the oracle's path from `PRISMPATH_CORE_ORACLE`.
+
 ### The JavaScript and Go kernels decide the verified core (2026-11-10)
 Research line, `docs/design/spec-verified-core.md` D5. Nothing here changes a format already signed or a frozen
 corpus: a flow that defines no field parses and runs as before.

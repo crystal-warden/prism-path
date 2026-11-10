@@ -33,7 +33,7 @@ The eBPF implementation in [`ppt_xdp.bpf.c`](./ppt_xdp.bpf.c) mirrors `interp.c`
 | `interp.c` Function | `ppt_xdp.bpf.c` Function | Semantics & eBPF Adaptation |
 |---|---|---|
 | `eval_atom(a, regs)` | `eval_atom(a, regs, n_fields)` | Exact parity for totality: non-numeric ordering returns 0 (unsatisfied); missing fields return `TY_NONE`; `TRUTHY` checks `val != 0`. Context bounds checked. |
-| `eval_prog(im, e, regs)` | `eval_prog` + `prog_word_cb` | RPN stack machine (`OPC_NOT/AND/OR/TRUE/FALSE`) run as a `bpf_loop` callback (verified once); fixed-depth constant-indexed operand stack. See §4. |
+| `eval_prog(im, e, regs)` | `eval_prog` + `prog_word_cb` | RPN stack machine (`OPC_NOT/AND/OR/TRUE/FALSE`) run as a `bpf_loop` callback (verified once); operand stack of 64 truth values held as the bits of one `__u64`. See §4. |
 | `evaluate(im, node, regs)` | `evaluate` + `edge_loop_cb` | Priority encoder; edge iteration via `bpf_loop` (verified once), first true edge wins. `evaluate` is `__noinline` (own stack frame). |
 | `mode_eval` / `main` | `ppt_xdp_prog(ctx)` | XDP entry point (`SEC("xdp")`). Parses on wire register file, executes `evaluate`, writes verdict to `result_map`, returns `XDP_PASS`. |
 
@@ -105,11 +105,16 @@ The register file is NOT in either ctx; it lives in a per-CPU map (see 4.5), so 
 Because neither loop is re-explored per-iteration, the state count collapses and the program loads.
 Requires kernel ≥ 5.17.
 
-### 4.4 Constant-indexed operand stack (no `stack[sp]`)
+### 4.4 The operand stack is a bit vector (no `stack[sp]`)
 
-The stack is a fixed-depth array accessed **only** through `st_get`/`st_put`, which `switch` on the
-index so every `st[]` reference is a compile-time-constant slot. This avoids the specific verifier
-penalty for a runtime-variable stack offset. Depth is `STACK_MAX`.
+A runtime-variable offset into a stack array is the specific verifier penalty this section is about, and
+the first fix was a byte array read through `st_get`/`st_put`, which `switch`ed on the index so every
+`st[]` reference was a compile-time-constant slot. That bought a depth of 4 and could not buy more: each
+extra depth was another arm on every access. Every operand is a truth value, so the stack is now **one
+`__u64`**, slot `i` being bit `i`, and `st_get`/`st_put` are a shift by a masked amount. There is no stack
+memory for the verifier to track, the shift costs the same instructions at any depth, and `STACK_MAX` is
+64, the depth `prismpath-hw/interp.c` carries (`prog_word_cb` went from 423 to 332 instructions in the
+object). `STACK_MAX` must stay a power of two no greater than 64, which `ppt_common.h` asserts.
 
 ### 4.5 Register file in a per-CPU map · and the resulting full-capacity bounds
 
@@ -121,12 +126,20 @@ unrolled fill loop (a per field lookup was a helper call × N that re-exploded t
 
 With that in place the bounds run at **full original capacity**: the numbers that overran the verifier
 before the rewrite now load with headroom (processed ~150k of the 1M-insn budget):
-* `MAX_FIELDS_PER_PKT = 32`, `MAX_EDGES_PER_NODE = 64`, `MAX_PROG_PER_EDGE = 64`; edges and prog are
-  `bpf_loop` dimensions (O(1) to the verifier); fields are a once-verified unrolled fill.
-* The one genuine **declared-subset** limit is `STACK_MAX = 4`; the max operand-stack depth of a
-  supported predicate. Level M expressions fold left-associatively, so a flat AND/OR chain (including
-  `in`-lists) stays at depth 2; 4 covers real nesting. It is a `switch` depth (constant-indexed), not
-  an array size, so it is deliberately small; a predicate deeper than this is outside the subset.
+* `MAX_FIELDS_PER_PKT = 32`, `MAX_EDGES_PER_NODE = 1024`, `MAX_PROG_PER_EDGE = 4096`; edges and prog are
+  `bpf_loop` dimensions (O(1) to the verifier) and sit at the map capacities, so no table the maps admit
+  is cut short; fields are a once-verified unrolled fill.
+* `STACK_MAX = 64` is the C interpreter's depth, and the only table feature the evaluator refuses that
+  the interpreter accepts is none: a program that needs more than 64 is refused by both, and Level M
+  source cannot reach it (predicates nest at most 50 deep, which is about 25 stack slots). Level M
+  expressions fold left-associatively, so a flat AND/OR chain (including `in`-lists) stays at depth 2.
+  What the loader still refuses is depth past 64, a table past a map capacity, more than
+  `MAX_FIELDS_PER_PKT` fields, and a malformed program, each at load and never by clamping.
+* The verifier limits that can be checked without a kernel are checked offline by `verifier_budget.py`
+  (combined stack within 512 bytes, no cycle in the evaluator's control flow outside `bpf_loop`,
+  the evaluator's three functions present), and the evaluator at its bounds is replayed by
+  `cert_corpus.py --boundary` (35 records: depth 25, 63 and 64, programs to 4,000 words, a 200 edge node),
+  in kernel by the `ebpf_kernel` job and on the host by `prismpath/tests/test_ebpf_evaluator_bounds.py`.
 
 ### 4.6 Standard safety properties (all retained)
 
@@ -223,7 +236,7 @@ every other kernel uses, and can execute whole flows.
   x86_64 with the hardened loader.** The other 955 are excluded and itemized: 943 whose
   condition is not a match action table (field-vs-field, arithmetic, string-ordering, `is`, non-literal
   collections, constant-only, …) plus 12 float / 11 non-scalar whose *read* field can't be represented on
-  an i32 table. **No exclusion is an eBPF limit**: operand-stack depth stays well under `STACK_MAX=4`.
+  an i32 table. **No exclusion is an eBPF limit**: operand-stack depth stays well under `STACK_MAX=64`.
 - **`sudo ./loader <ppt> run <regs.bin> [names.txt]`**: drives one flow hop-by-hop: start at the flow's
   start node, evaluate it in kernel, follow the matched target, repeat to a terminal. Prints the
   in kernel path and the host-reference path and checks they match. `run_flow_demo.py` / `run_incident_demo.py`

@@ -470,11 +470,11 @@ the implementation's own functions:
 | `go` | `prismpath-go` | `Parse` (the same, in `math/big`), `SystemBoundary`, `IsDeterministic` and `EvalCondition`, `PolicyCheck`, `prismpath-go/cmd/core_diff` | canon/2 (`Canon2Read`) |
 | `c-interp` | `prismpath-hw/interp.c` | host: the reference checks the policy, reads, applies the system boundary; `ppt_compile.py` compiles and encodes registers; the interpreter picks the edge (`formal/diff/ppt_batch.c`) | canon/2 on the host |
 | `c-hdr` | `prismpath-hw/ppt_eval.h`, the embedded evaluator the FPGA's C twin and the firmwares include | the same | canon/2 on the host |
-| `ebpf` | `prismpath-ebpf/ppt_eval_bpf.h`, the evaluator every XDP program there includes, on its userspace path | the same host and compiler; the loader's parser (`ppt_image.c`, `parse_image_buf`) admits the table, which is written into the maps as `ppt_maps.c` writes them, and the evaluator's own text runs over a shim of its array maps and `bpf_loop` (`formal/diff/ebpf_batch.c`) | canon/2 on the host |
+| `ebpf` | `prismpath-ebpf/ppt_eval_bpf.h`, the evaluator every XDP program there includes, on its userspace path | the same host and compiler; the loader's parser (`ppt_image.c`, `parse_image_buf`, whose limits are the C interpreter's) admits the table, which is written into the maps as `ppt_maps.c` writes them, and the evaluator's own text runs over a shim of its array maps and `bpf_loop` (`formal/diff/ebpf_batch.c`) | canon/2 on the host |
 
 Each difference is classified: `agree`; a scope difference (the inferred path and engine counters,
 section 1); `target-limit` (D6: the compiler or the register encoder refuses a value outside 32 bits, interp.c's
-64 deep stack would overflow, or the eBPF loader refuses a table outside its declared subset); or a
+64 deep stack would overflow, or the eBPF loader refuses a table past a map capacity, past 32 fields or past the same depth of 64, which no table of the large run does); or a
 finding, which is minimised to a small reproducer of the same kind. A policy both sides refuse agrees
 only when the leg names the oracle's cause and, where the oracle's refusal names a field or a reason,
 the same field and reason (`finding:cause` otherwise, D7); a policy the oracle refuses for reading an
@@ -490,6 +490,18 @@ disagreement, on any uncoded refusal and on any crash, and it replays the seven 
 regression set through every leg. The oracle comes from `lake build` in `formal/`; the Rust leg is the
 example `prismpath-rs/examples/core_diff.rs`, built on demand; the Go, C and eBPF adapters are compiled
 into a private temporary directory per run.
+
+**The large run, `core-ebpf`** (100,000 cases, seed 1, 419,651 readings, the generator of `core-js-go`, so every
+row but the eBPF row is that run's). The eBPF leg carries what the C interpreter carries, so it no longer
+refuses a table the interpreter runs, and its row is the interpreter's row:
+
+| leg | agree | scope | excluded | other | findings |
+|---|---|---|---|---|---|
+| ebpf | 146,673 | 10,265 inferred, 372 engine counter | 3,181 | target-limit 3,527 at compile, 2,070 on a reading | 0 |
+
+The 86 readings that `core-js-go` counted as outside the eBPF subset are the 86 that now agree (146,587
+to 146,673), and no `target-limit` row is the eBPF loader's any more; the other six legs read as before,
+no finding on any of the seven.
 
 **The large run, `core-js-go`** (100,000 cases, seed 1, 419,651 readings, the same generator as step 3, so the
 oracle's counts are the same). The JavaScript and Go kernels decide the core (D5), so their rows have the
@@ -669,10 +681,45 @@ leg takes the eBPF target's userspace path: the in-kernel evaluator's own text
 (`prismpath-ebpf/ppt_eval_bpf.h`, the `eval_atom`, `eval_prog` and `evaluate` of every XDP program
 there) compiled natively against a shim of its array maps, `bpf_map_lookup_elem` and `bpf_loop` with the
 kernel's semantics, behind the loader's own parser. It routes every reading of every table the loader
-admits as the oracle does; the loader's declared subset (an operand stack of 4, 64 edges per node, 64
-words per edge, 32 fields, `check_evaluator_limits`) refuses 86 readings' tables of the large run, a
+admits as the oracle does; the loader's declared subset then (an operand stack of 4, 64 edges per node, 64
+words per edge, 32 fields, `check_evaluator_limits`) refused 86 readings' tables of the large run, a
 refusal and never a route. What the leg does not exercise is the kernel's verifier and JIT, which the
-kernel certification in CI (`ebpf_kernel`) covers on the frozen corpus.
+kernel certification in CI (`ebpf_kernel`) covers.
+
+**Step 4 (`core-ebpf`): the subset gap closed.** The 86 were the same two table features and no others:
+edge programs of 65 to about 113 words, from `in` lists of more than 32 members and long chains of `and`
+and `or` (397 of the large run's tables), and operand stacks of 5 to 25, from right nested parentheses
+(122 tables). `interp.c` runs both (its stack is 64 deep
+and a program has no length bound), the evaluator did not, so they were the eBPF target's own limit and
+not the table's. The evaluator now carries them: `STACK_MAX` is 64, the operand stack is one `__u64` whose
+bit `i` is slot `i`, so `st_get` and `st_put` are a shift by a masked amount instead of a `switch` of one
+arm a slot (a depth of 64 would have been 64 arms an access, and the verifier explores arms), and
+`MAX_PROG_PER_EDGE` and `MAX_EDGES_PER_NODE` sit at the map capacities, 4,096 words and 1,024 edges,
+which cost the verifier nothing because both loops are `bpf_loop` callbacks verified once and cost a packet
+only what its own table holds. The object's `prog_word_cb` shrank from 423 to 332 instructions. Past
+the interpreter's own depth of 64 the loader still refuses the table, as `interp.c` exits on it, and a
+table past a map capacity or 32 fields is refused at load with the other `MAX_*` bounds, a registered
+refusal of the target at the point the table is built and never a route; source predicates cannot reach
+either (they nest at most 50 deep, about 25 stack slots). Neither the 100,000 case run nor the 5,000 case
+CI run holds a table of that kind, so `target-limit:subset` is zero on both and is kept as a class,
+so that a table past a capacity would still be counted and never routed. The verifier's acceptance is the kernel job's
+and cannot be checked here: `prismpath-ebpf/verifier_budget.py` reads each built object and holds it to
+the limits the repository already models (combined stack within 512 bytes with each frame rounded to 32,
+no cycle in the evaluator's control flow outside `bpf_loop`, the evaluator's three functions reached
+through `bpf_loop`), `cert_corpus.py --boundary` writes 35 records of the evaluator's bounds that the
+`ebpf_kernel` job loads and replays in kernel (stack 25, 63 and 64, programs of 33, 2,000 and 4,000 words, a
+node of 200 edges), and the same tables run natively through this leg's driver in
+`prismpath/tests/test_ebpf_evaluator_bounds.py`.
+
+**The 32 bit limit stays a refusal on every target, the eBPF one included.** The eBPF evaluator could carry
+64 bit values (its registers and atoms are `__s32` structs the compiler and the loader share, and the
+BPF registers are 64 bits wide), and widening them was considered and not done: the table image is one
+format with one set of readers, `ppt_compile.py`, `interp.c`, `ppt_eval.h`, the FPGA's tables, the
+loader, the signed policy hash and the conformance corpus, so a 64 bit atom on one target would be
+another table format and another differential for the others, and the FPGA registers and the C
+firmware's `int32_t` could not follow. A policy with a constant or a reading outside 32 bits is
+therefore refused at compile time by the shared compiler for every table target alike (the 3,527 and
+2,070 of the large run), never routed differently on one of them.
 
 **D7. Which cause names a policy with several problems (Python, Rust). Resolved in step 3.** Found when
 step 2 made every leg report its cause. Both sides refused the same policies and every refusal carried a
