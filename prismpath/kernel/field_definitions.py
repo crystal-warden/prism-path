@@ -341,6 +341,60 @@ def accept_canonical(definition: FieldDefinition, value: Any) -> Tuple[Optional[
     return None, value
 
 
+# ----------------------------------------------------------------- the two checks of a reading
+# Which fields a reading must hold canonically depends on who is checking (docs/design/spec-verified-core.md,
+# section 6.1). The SYSTEM boundary validates the soundness of the system: every field the flow defines,
+# in code point order, is the reading's contract, whether or not a rule reads it; this is the core's runtime
+# boundary and the composition the frozen field definition vectors replay. The POLICY check validates the
+# soundness of a policy: only the fields its rules route on, as SPEC section 4.5 calls a reading canonical
+# and as the Facet quantizer checks the fields it partitions. The system boundary is the stricter: a reading
+# it accepts passes the policy check, and the two agree on every flow that routes on every field it defines
+# (proved in formal/Core/Boundary.lean).
+
+def routed_fields(graph) -> List[str]:
+    """The defined fields the flow's deterministic conditions read, in code point order. Engine counters
+    and names the flow does not define are not reading fields, so they are not listed."""
+    from prismpath.kernel import level_m, predicates
+    defined = getattr(graph, "fields", None) or {}
+    read = set()
+    for node in graph.nodes.values():
+        for _target, cond in node.edges:
+            if not predicates.is_deterministic(cond) or predicates.is_semantic(cond):
+                continue
+            tree = predicates.expr_ast(cond)
+            if tree is None:
+                continue
+            try:
+                atoms = _atoms(level_m._desugar_chains(tree))
+            except (AttributeError, KeyError, IndexError):
+                continue
+            read.update(field_name for field_name, _op, _constant in atoms if field_name in defined)
+    return sorted(read)
+
+
+def _first_refused(definitions: Dict[str, FieldDefinition], names, reading: Dict[str, Any]) -> Optional[Tuple[str, str]]:
+    for field_name in names:
+        reason, _value = accept_canonical(definitions[field_name], reading.get(field_name))
+        if reason is not None:
+            return field_name, reason
+    return None
+
+
+def system_boundary(graph, reading: Dict[str, Any]) -> Optional[Tuple[str, str]]:
+    """The first defined field, in code point order, whose value the reading does not hold canonically,
+    with the reason; None when every defined field is canonical. The core's runtime boundary."""
+    definitions = getattr(graph, "fields", None) or {}
+    return _first_refused(definitions, sorted(definitions), reading)
+
+
+def policy_check(graph, reading: Dict[str, Any]) -> Optional[Tuple[str, str]]:
+    """The first ROUTED field, in code point order, whose value the reading does not hold canonically,
+    with the reason; None when every field the flow routes on is canonical. The check of a policy's
+    soundness (SPEC section 4.5): a defined field no rule reads is not its concern."""
+    definitions = getattr(graph, "fields", None) or {}
+    return _first_refused(definitions, routed_fields(graph), reading)
+
+
 # ----------------------------------------------------------------- lowering
 def _literal_value(expr: str, node) -> Optional[Fraction]:
     """The exact value of a numeric literal node, signed or not, read from its source text."""

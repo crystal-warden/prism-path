@@ -301,6 +301,34 @@ For a checked policy and a reading that reads:
 4. **First match** (SPEC.md section 3, step 1): the verdict is `route t` for the target `t` of the
    first rule whose condition holds; when none holds, `route:no-matching-edge`.
 
+### 6.1 The system boundary and the policy check (D4, resolved)
+
+Which fields a reading must hold canonically depends on who is checking (owner decision, 2026-11-10).
+The two checks have distinct names and both are part of the core:
+
+- **The system boundary** validates the soundness of the *system*: every field the policy defines, in
+  code point order, is the reading's contract, whether or not a rule reads it. It is the boundary of
+  step 2 above and the one the verdict applies; the frozen field definition vectors replay it.
+  Lean `systemBoundary` (`formal/Core/Eval.lean`), Python `field_definitions.system_boundary`, Rust
+  `field_definitions::system_boundary`.
+- **The policy check** validates the soundness of a *policy*: only the defined fields some rule reads
+  (the *routed* fields, `rulesFields` and `Checked.routedDefs` in Lean, `routed_fields` in Python and
+  Rust), in code point order. It is what SPEC.md section 4.5 means by a canonical reading ("every
+  defined field the flow routes on") and what the Facet quantizer checks for the fields it partitions
+  (`prismpath/telemetry/quantizer.py:150-160`); it belongs to policy validation and lint, and it never
+  produces a verdict. Lean `policyCheck`, Python `field_definitions.policy_check`, Rust
+  `field_definitions::policy_check`.
+
+How they relate is proved in `formal/Core/Boundary.lean`: a reading the system boundary accepts passes
+the policy check (`policyCheck_of_systemBoundary`), so a reading the policy check refuses the system
+boundary refuses too (`systemBoundary_of_policyCheck`) and the system boundary is at least as strict on
+every reading; a policy check refusal names a routed field (`policyCheck_refuses_routed`); on a policy
+that routes on every field it defines the two are the same function (`policyCheck_eq_systemBoundary`);
+and the route of a reading the system boundary accepts depends only on the values of the routed fields
+(`route_depends_on_routed`), which is why the policy check is the right check of a policy and the
+system boundary the stricter contract of the system. The oracle's batch mode prints the policy check
+beside every verdict, and the differential holds both legs to it (section 8).
+
 ## 7. The theorems
 
 Proven in `formal/Core`, with no `sorry` and only Lean's standard axioms (`FQ/Axioms.lean` prints the
@@ -423,13 +451,16 @@ definition `int\u001fmin=0` (or `int\u001f`): the reference accepts an `int` fie
 wrong. U+001C to U+001E also end a line in the reference's `splitlines`, so they cannot reach a
 definition through the flow text at all.
 
-**D4. Which fields the boundary checks (reference, two paths).** SPEC.md 4.5 calls a reading canonical
+**D4. Which fields the boundary checks (reference, two paths). Resolved in step 2 (section 6.1).** SPEC.md 4.5 calls a reading canonical
 when every defined field *the flow routes on* is canonical, and the Facet quantizer checks only the
 fields it partitions (`prismpath/telemetry/quantizer.py:150-160`), while the conformance composition
 that both Python and Rust replay checks every defined field (`gen_field_definitions.py:152-158`,
 `prismpath-rs/tests/test_field_definitions.rs`). They differ on a policy that defines a field it never
-reads. **Specification:** every defined field, the stricter rule and the one the corpus freezes; the
-prose of SPEC.md 4.5 should say so, or the definition should be refused as unused. Owner decision.
+reads. **Resolution (owner, 2026-11-10):** both are right, for different checkers. The core's runtime
+boundary is the *system boundary* (every defined field, as the corpus freezes); the SPEC prose and the
+quantizer describe the *policy check* (the routed fields). Section 6.1 defines both, the three
+implementations carry both, and the Lean theorems state that the system boundary is at least as strict
+and that only routed fields can change a route.
 
 **D5. The second tier kernels (JavaScript, Go).** Both refuse every flow that defines its fields
 (`prismpath/portable/prismpath.mjs:1113-1116`, `prismpath-go/parser.go:107-178`), as SPEC.md 4.5

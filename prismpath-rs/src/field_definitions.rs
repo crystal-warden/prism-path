@@ -350,6 +350,51 @@ pub fn accept_canonical(definition: &FieldDefinition, value: &Value) -> Result<V
     }
 }
 
+// ----------------------------------------------------------------- the two checks of a reading
+// Which fields a reading must hold canonically depends on who is checking (docs/design/spec-verified-core.md,
+// section 6.1), as in the reference: the SYSTEM boundary checks every defined field (the core's runtime
+// boundary), the POLICY check only the fields the rules route on (SPEC section 4.5, the Facet quantizer).
+// The system boundary is the stricter (formal/Core/Boundary.lean).
+
+/// The defined fields the flow's deterministic conditions read, in code point order (the reference's
+/// `routed_fields`). Engine counters and names the flow does not define are not listed.
+pub fn routed_fields(graph: &Graph) -> Vec<String> {
+    let mut read: BTreeSet<String> = BTreeSet::new();
+    for node in graph.nodes.values() {
+        for (_target, cond) in &node.edges {
+            if !is_deterministic(cond) || is_semantic(cond) {
+                continue;
+            }
+            if let Ok(atoms) = level_m_atoms(cond) {
+                read.extend(atoms.into_iter().map(|atom| atom.field).filter(|field| graph.fields.contains_key(field)));
+            }
+        }
+    }
+    read.into_iter().collect()
+}
+
+fn first_refused<'a>(graph: &Graph, names: impl Iterator<Item = &'a String>, reading: &std::collections::HashMap<String, Value>) -> Option<(String, &'static str)> {
+    for name in names {
+        if let Err(reason) = accept_canonical(&graph.fields[name], reading.get(name).unwrap_or(&Value::Null)) {
+            return Some((name.clone(), reason));
+        }
+    }
+    None
+}
+
+/// The first defined field, in code point order, the reading does not hold canonically, with the
+/// reason; `None` when every defined field is canonical. The core's runtime boundary.
+pub fn system_boundary(graph: &Graph, reading: &std::collections::HashMap<String, Value>) -> Option<(String, &'static str)> {
+    first_refused(graph, graph.fields.keys(), reading)
+}
+
+/// The first ROUTED field, in code point order, the reading does not hold canonically, with the reason;
+/// `None` when every field the flow routes on is canonical. The check of a policy's soundness.
+pub fn policy_check(graph: &Graph, reading: &std::collections::HashMap<String, Value>) -> Option<(String, &'static str)> {
+    let routed = routed_fields(graph);
+    first_refused(graph, routed.iter(), reading)
+}
+
 // ----------------------------------------------------------------- lowering
 /// The tree lowering needs: names, numeric literals with their spans, lists and comparisons, and
 /// everything else only as a container to walk into. It follows `condition::Parser` rule for rule;

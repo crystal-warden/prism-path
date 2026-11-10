@@ -11,7 +11,8 @@
 //! Output: one JSON line per case.
 
 use prismpath_rs::canon2::{self, Doc};
-use prismpath_rs::{accept_canonical, causes, first_deterministic, parse, Value};
+use prismpath_rs::field_definitions::{policy_check, system_boundary};
+use prismpath_rs::{causes, first_deterministic, parse, Value};
 use std::collections::HashMap;
 use std::io::{Read, Write};
 
@@ -46,15 +47,19 @@ fn reading_verdict(graph: &prismpath_rs::Graph, bytes: &[u8]) -> serde_json::Val
         return refuse("reading:not-object", serde_json::json!({}));
     };
     let values: HashMap<String, Value> = members.iter().map(|(key, value)| (key.clone(), value.to_value())).collect();
-    for (field, definition) in &graph.fields {
-        if let Err(reason) = accept_canonical(definition, values.get(field).unwrap_or(&Value::Null)) {
-            return refuse("route:contract-violation", serde_json::json!({"field": field, "reason": reason}));
+    let mut verdict = if let Some((field, reason)) = system_boundary(graph, &values) {
+        refuse("route:contract-violation", serde_json::json!({"field": field, "reason": reason}))
+    } else {
+        match first_deterministic(&graph.nodes[&graph.start].edges, &values) {
+            Some((target, _)) => serde_json::json!({"verdict": "route", "target": target}),
+            None => refuse("route:no-matching-edge", serde_json::json!({})),
         }
-    }
-    match first_deterministic(&graph.nodes[&graph.start].edges, &values) {
-        Some((target, _)) => serde_json::json!({"verdict": "route", "target": target}),
-        None => refuse("route:no-matching-edge", serde_json::json!({})),
-    }
+    };
+    verdict["policy_check"] = match policy_check(graph, &values) {
+        None => "pass".into(),
+        Some((field, reason)) => serde_json::json!({"field": field, "reason": reason}),
+    };
+    verdict
 }
 
 fn main() {

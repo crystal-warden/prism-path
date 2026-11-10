@@ -620,11 +620,21 @@ def python_reading(graph, raw):
         return {"verdict": "refuse", "cause": "crash", "reason": "RecursionError in canon2.loads"}
     if not isinstance(doc, dict):
         return refuse("reading:not-object")
+    verdict = _python_verdict(graph, doc, refuse)
     try:
-        for field in sorted(graph.fields):
-            reason, _value = field_definitions.accept_canonical(graph.fields[field], doc.get(field))
-            if reason is not None:
-                return refuse("route:contract-violation", field=field, reason=reason)
+        check = field_definitions.policy_check(graph, doc)
+    except Exception as error:   # noqa: BLE001
+        return {"verdict": "refuse", "cause": "crash", "reason": f"policy_check {type(error).__name__}: {error}"[:200]}
+    verdict["policy_check"] = "pass" if check is None else {"field": check[0], "reason": check[1]}
+    return verdict
+
+
+def _python_verdict(graph, doc, refuse):
+    from prismpath.kernel import engine, field_definitions
+    try:
+        refused = field_definitions.system_boundary(graph, doc)
+        if refused is not None:
+            return refuse("route:contract-violation", field=refused[0], reason=refused[1])
         target, _cond = engine.first_deterministic(graph.nodes[graph.start].edges, doc)
     except Exception as error:   # noqa: BLE001 - an exception is itself the finding
         return {"verdict": "refuse", "cause": "crash", "reason": f"{type(error).__name__}: {error}"[:200]}
@@ -768,6 +778,10 @@ def _classify(lean_row, other, leg):
     rows = []
     for lean_v, other_v in zip(lean_row["readings"], other["readings"]):
         a, b = normalize_reading(lean_v), normalize_reading(other_v)
+        if "policy_check" in lean_v and "policy_check" in other_v and lean_v["policy_check"] != other_v["policy_check"]:
+            rows.append(("finding:policy-check", f"lean {lean_v['policy_check']} vs leg {other_v['policy_check']}"))
+        elif "policy_check" in lean_v and b[0] != "crash" and "policy_check" not in other_v and leg in ("python", "rust"):
+            rows.append(("finding:policy-check", f"lean {lean_v['policy_check']} vs leg none"))
         if b[0] == "crash":
             rows.append(("finding:crash", b[1]))
         elif a == b or (a[0] == b[0] == "unreadable" and not READS_CANON2.get(leg, False)):
@@ -903,6 +917,9 @@ def main(argv=None) -> int:
             lean_counts["policy accepted" if row["policy"]["policy"] == "accepted" else "policy refused"] += 1
             for verdict in row["readings"]:
                 lean_counts["reading " + (verdict["verdict"] if verdict["verdict"] == "route" else verdict["cause"])] += 1
+                if verdict.get("policy_check") == "pass" and verdict.get("cause") == "route:contract-violation":
+                    # D4: the system boundary refuses a field no rule reads, which the policy check passes
+                    lean_counts["reading policy check passes, system boundary refuses"] += 1
         for name in legs:
             total[name].update(counts[name])
         for leg, cls, detail, case in findings:

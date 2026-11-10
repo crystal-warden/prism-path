@@ -126,6 +126,44 @@ def canonicalGet (defs : List FieldDef) (ms : List (String × J)) (f : String) :
     | .ok v => v
     | .error _ => none
 
+/-! ## The two checks of a reading
+
+Which fields a reading must hold canonically depends on who is checking (spec section 6.1). The
+**system boundary** validates the soundness of the system: every defined field, in code point order;
+it is the core's runtime boundary, the one `decideReading` applies. The **policy check** validates the
+soundness of a policy: only the defined fields some rule reads (`routed`), as SPEC.md section 4.5 calls
+a reading canonical and as the Facet quantizer checks the fields it partitions. `Core/Boundary.lean`
+proves how they relate. -/
+
+mutual
+/-- The fields a lowered condition reads. -/
+def LCond.fields : LCond → List String
+  | .always | .never => []
+  | .truthy f | .cmp f _ _ | .mem f _ | .nmem f _ => [f]
+  | .not c => c.fields
+  | .and cs | .or cs => fieldsOf cs
+def fieldsOf : List LCond → List String
+  | [] => []
+  | c :: cs => c.fields ++ fieldsOf cs
+end
+
+/-- The fields the rules of a policy read. -/
+def rulesFields : List (Rule LCond) → List String
+  | [] => []
+  | r :: rs => r.cond.fields ++ rulesFields rs
+
+/-- The defined fields the policy routes on, in the order of its definitions (code point order). -/
+def Checked.routedDefs (p : Checked) : List FieldDef :=
+  p.defs.filter (fun d => (rulesFields p.rules).contains d.name)
+
+/-- The system boundary: the first defined field the reading does not hold canonically. -/
+def systemBoundary (p : Checked) (ms : List (String × J)) : Option (String × BoundaryErr) :=
+  firstRefused ms p.defs
+
+/-- The policy check: the first routed field the reading does not hold canonically. -/
+def policyCheck (p : Checked) (ms : List (String × J)) : Option (String × BoundaryErr) :=
+  firstRefused ms p.routedDefs
+
 /-! ## Evaluation -/
 
 def truthyV : V → Bool

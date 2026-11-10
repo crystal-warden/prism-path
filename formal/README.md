@@ -122,6 +122,7 @@ theorems on the standard three.
 | `evalC_toX`, `firstMatch_eq_routeX` | Bridge.lean | the core evaluates and routes as FQ's `evalX` and `routeX` |
 | `boundary_canonical`, `accepted_quantization_preserves`, `core_reconstruct_route` | Bridge.lean | readings the core accepts are FQ canonical, so equal quantization gives equal verdicts and the decoded reading routes as the reading |
 | `scaled_correct`, `lowered_threshold_preserves` | Bridge.lean | a decimal threshold the core lowers decides on the canonical integer as the authored decimal on the source value |
+| `policyCheck_of_systemBoundary`, `systemBoundary_of_policyCheck`, `policyCheck_refuses_routed`, `policyCheck_eq_systemBoundary`, `route_depends_on_routed` | Boundary.lean | **The two checks of a reading.** The system boundary (every defined field) is at least as strict as the policy check (the routed fields), the two agree when every defined field is routed, and only routed fields can change a route |
 
 The oracle is that evaluator compiled: `lake build` also builds `core-oracle`, and
 `.lake/build/bin/core-oracle POLICY.json READING.json ...` prints one JSON line for the policy and one

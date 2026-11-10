@@ -60,6 +60,21 @@ def verdictJson : Verdict → String
   | .route t => "{\"verdict\":\"route\",\"target\":" ++ jsonEscape t ++ "}"
   | .refuse r => "{\"verdict\":\"refuse\"," ++ spelledJson (spellRefusal r) ++ "}"
 
+/-- The policy check of a reading (spec section 6.1), for the batch mode: `"pass"`, the routed field it
+refuses with the reason, or nothing when the policy is refused or the reading is not an object. -/
+def policyCheckJson (p : Except PolicyErr Checked) (reading : Except DocErr J) : String :=
+  match p, reading with
+  | .ok c, .ok (.obj ms) =>
+    match policyCheck c ms with
+    | none => ",\"policy_check\":\"pass\""
+    | some (f, e) => ",\"policy_check\":{\"field\":" ++ jsonEscape f ++ ",\"reason\":" ++ jsonEscape e.name ++ "}"
+  | _, _ => ""
+
+/-- A reading's verdict line with its policy check beside it. -/
+def verdictCheckJson (p : Except PolicyErr Checked) (img : ByteArray) (r : ByteArray) : String :=
+  let v := verdictJson (verdictBytes img r)
+  String.ofList ((chars v).dropLast) ++ policyCheckJson p (readBytes r) ++ "}"
+
 def policyJson (doc : Except DocErr J) : String :=
   match loadPolicy doc with
   | .ok _ => "{\"policy\":\"accepted\"}"
@@ -107,7 +122,8 @@ def batch (b : ByteArray) (out : IO.FS.Stream) : IO UInt32 := do
             | [] => return 2
             | img :: rds =>
               let imgDoc := readBytes img
-              let verdicts := rds.map (fun r => verdictJson (verdictBytes img r))
+              let loaded := loadPolicy imgDoc
+              let verdicts := rds.map (fun r => verdictCheckJson loaded img r)
               out.putStrLn ("{\"id\":" ++ jsonEscape ident ++ ",\"policy\":" ++ policyJson imgDoc ++
                 ",\"readings\":[" ++ ",".intercalate verdicts ++ "]}")
       | _ => IO.eprintln "core-oracle: malformed frame header"; return 2
