@@ -91,6 +91,12 @@ def test_malformed_bound_raises():
         run(_parse_loop("@state_bound(transcript=0)"), loop_agent)
 
 
+def test_a_negative_max_transcript_is_refused_like_a_negative_annotation():
+    with pytest.raises(ValueError, match="max_transcript=-2: must be >= 0"):
+        run(_parse_loop(), loop_agent, max_transcript=-2)
+    assert len(run(_parse_loop(), loop_agent, max_transcript=0).state["transcript"]) > 0   # zero stays no bound
+
+
 def test_checkpoint_payload_stays_flat_across_resumes(tmp_path):
     flow = tmp_path / "waiter.md"
     flow.write_text(WAITER)

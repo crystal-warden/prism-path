@@ -72,7 +72,7 @@ fn a_malformed_state_bound_refuses_the_run_before_the_worker_is_called() {
 #[test]
 fn a_bound_slides_the_transcript_and_counts_what_it_dropped() {
     let flow = "---\nname: loop\nstart: spin\n---\n## spin\n-> spin: when visits < 6\n-> out: else\n## out\nDone.\n";
-    for (keep, kept, dropped) in [(Some(2usize), 2usize, Some(4i64)), (Some(0), 6, None), (None, 6, None), (Some(6), 6, None), (Some(1), 1, Some(5))] {
+    for (keep, kept, dropped) in [(Some(2i64), 2usize, Some(4i64)), (Some(0), 6, None), (None, 6, None), (Some(6), 6, None), (Some(1), 1, Some(5))] {
         let result = run(&parse(flow), worker(json!({})), RunOpts { max_transcript: keep, ..Default::default() }).unwrap();
         assert_eq!(result.state.transcript.len(), kept, "{keep:?}");
         assert_eq!(result.state.dropped.get("transcript").copied(), dropped, "{keep:?}");
@@ -263,7 +263,7 @@ fn the_deterministic_tier_and_every_stop_leave_no_decision_record() {
 #[test]
 fn hostile_options_never_panic() {
     let flow = parse(GATED);
-    for keep in [0usize, 1, usize::MAX] {
+    for keep in [0i64, 1, i64::MAX] {
         let result = run(&flow, worker(json!({"triage": {"text": "t", "confirmed": true}})), RunOpts { max_transcript: Some(keep), type_gate: true, ..Default::default() });
         assert!(result.is_ok(), "{keep}");
     }

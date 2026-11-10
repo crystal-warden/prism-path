@@ -187,6 +187,11 @@ flow manifests, receipts and bundles read exactly as 0.1.2 wrote them, and a 0.1
   `x in [-3, -1]` give a number with the routed values -3 and -1 as `x >= -5` already gave a number. Before, they gave
   `unknown` and no values. A signed float, a signed field and a signed boolean still do not fold. Rust reads the same
   (`prismpath-rs/src/contract.rs`), and `contract.json` holds the corrected answer (58 flows, 23 outputs).
+- A negative `max_transcript` is refused before the run starts, in both languages, as a negative `@state_bound` is:
+  `ValueError` (`EngineError::BadStateBound` in Rust) with `max_transcript=-2: must be >= 0 (0 is no bound)`. Before,
+  Python took -2 as a window that emptied the transcript and counted 14 dropped over a four step run. Zero is still
+  no bound. `RunOpts::max_transcript` is an `Option<i64>` so the Rust caller can be refused as well; `flows.json` has
+  two more cases (107 flows).
 
 ## [0.1.2] (tagged, superseded before upload; never on PyPI)
 

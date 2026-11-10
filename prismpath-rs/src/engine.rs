@@ -381,8 +381,9 @@ pub struct RunOpts {
     /// (cause 37) before routing acts on it.
     pub type_gate: bool,
     /// Keep only the last N entries of the growing history lists, overriding the flow's
-    /// `@state_bound(transcript=N)`. Zero is no bound, as in the reference.
-    pub max_transcript: Option<usize>,
+    /// `@state_bound(transcript=N)`. Zero is no bound, as in the reference, and a negative number is refused
+    /// before the run starts (`EngineError::BadStateBound`), as a negative annotation is.
+    pub max_transcript: Option<i64>,
     /// Carried onto every routing decision record.
     pub run_id: Option<String>,
     pub seed_path: Vec<String>,
@@ -1069,8 +1070,11 @@ where
         None => RunState::default(),
     };
     // The bound on persisted state: the kwarg when given, else the flow's `@state_bound`; zero is none.
+    if let Some(keep) = opts.max_transcript.filter(|keep| *keep < 0) {
+        return Err(EngineError::BadStateBound(format!("max_transcript={keep}: must be >= 0 (0 is no bound)")));
+    }
     let bound = match opts.max_transcript {
-        Some(keep) => Some(keep),
+        Some(keep) => Some(keep as usize),
         None => flow_state_bound(graph)?,
     }
     .filter(|keep| *keep > 0);

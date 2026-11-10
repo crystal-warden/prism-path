@@ -2999,6 +2999,42 @@
   },
   {
    "expect": {
+    "error": "max_transcript=-2: must be >= 0 (0 is no bound)",
+    "error_class": "ValueError"
+   },
+   "flow": "---\nname: plainloop\nstart: spin\n---\n\n## spin\n-> spin: when visits < 5\n-> out: else\n\n## out\nDone.\n",
+   "name": "bound-option-negative-is-refused",
+   "opts": {
+    "max_transcript": -2
+   },
+   "script": {
+    "spin": [
+     {
+      "text": "s"
+     }
+    ]
+   }
+  },
+  {
+   "expect": {
+    "error": "max_transcript=-1: must be >= 0 (0 is no bound)",
+    "error_class": "ValueError"
+   },
+   "flow": "---\nname: bounded\nstart: spin\n---\n\n## spin\n@state_bound(transcript=3)\n-> spin: when visits < 5\n-> out: else\n\n## out\nDone.\n",
+   "name": "bound-option-minus-one-is-refused",
+   "opts": {
+    "max_transcript": -1
+   },
+   "script": {
+    "spin": [
+     {
+      "text": "s"
+     }
+    ]
+   }
+  },
+  {
+   "expect": {
     "error": "@state_bound(transcript=None) on node 'spin': transcript must be a positive integer",
     "error_class": "ValueError"
    },

@@ -24,7 +24,7 @@ struct FlowOpts {
     #[serde(default)]
     type_gate: bool,
     #[serde(default)]
-    max_transcript: Option<usize>,
+    max_transcript: Option<i64>,
 }
 
 #[derive(serde::Deserialize)]

@@ -155,6 +155,8 @@ def run(graph: Graph, worker: Optional[Callable[[str, str, dict], object]] = Non
     # sliding-windows the growing history lists. Routing NEVER reads them — predicates see fields +
     # the visits/error counters, which are per-node ints and untouched — so the window cannot change
     # a routing decision; what it bounds is the checkpoint payload of a long-lived resumable run.
+    if max_transcript is not None and max_transcript < 0:
+        raise ValueError(f"max_transcript={max_transcript}: must be >= 0 (0 is no bound)")
     bound = max_transcript if max_transcript is not None else _flow_state_bound(graph)
     _bound_list(state, "transcript", bound)     # a resume may arrive with an oversized transcript
     if _seed_path and bound and len(_seed_path) > bound:   # bound the RE-SEEDED history too: this is

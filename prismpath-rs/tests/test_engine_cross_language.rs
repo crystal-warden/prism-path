@@ -117,7 +117,7 @@ fn rust_result(scenario: &Json) -> Json {
         state: scenario.get("state").map(|state| Value::try_from_json(state).expect("scenario state")),
         human_floor: scenario.get("humanFloor").and_then(Json::as_f64),
         type_gate: opts_json.get("type_gate").and_then(Json::as_bool).unwrap_or(false),
-        max_transcript: opts_json.get("max_transcript").and_then(Json::as_u64).map(|keep| keep as usize),
+        max_transcript: opts_json.get("max_transcript").and_then(Json::as_i64),
         run_id: scenario.get("run_id").and_then(Json::as_str).map(str::to_string),
         seed_path: scenario
             .get("seed_path")

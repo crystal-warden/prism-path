@@ -472,6 +472,8 @@ FIXTURES = [
         {"spin": [{"text": "s"}]}, opts={}),
     _fx("bound-malformed-but-overridden-by-the-option-is-not-read", _bound_flow("many"), {"spin": [{"text": "s"}]},
         opts={"max_transcript": 2}),
+    _fx("bound-option-negative-is-refused", PLAIN_LOOP_FLOW, {"spin": [{"text": "s"}]}, opts={"max_transcript": -2}),
+    _fx("bound-option-minus-one-is-refused", BOUND_FLOW, {"spin": [{"text": "s"}]}, opts={"max_transcript": -1}),
     _fx("bound-annotation-without-a-transcript-key-is-refused",
         PLAIN_LOOP_FLOW.replace("## spin\n", "## spin\n@state_bound(history=3)\n"), {"spin": [{"text": "s"}]}, opts={}),
     # -- the error tier reports the worker's error class as error_type
