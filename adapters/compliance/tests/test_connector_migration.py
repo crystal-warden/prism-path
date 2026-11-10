@@ -5,7 +5,6 @@ functions remain the stable API and route through it. Pins port parity, manifest
 (attest through the SDK produces the same bound fields + verifiable manifest), the prompt
 seam, and the shared deferral backend."""
 import hashlib
-import json
 
 from adapters.compliance import compliance_adapter as ca
 from prismpath.ledgers import ledger_airgap
@@ -35,8 +34,10 @@ def test_attest_routes_through_the_sdk_with_manifest_parity():
     control = ca.get_control(cid)
     det = {"status": "met", "unmet_objective_ids": [], "gap_summary": "all objectives evidenced"}
     manifest = ca.attest(control, REQ, det)
-    # the SDK binding computes the same root the pre-migration code did
-    assert manifest["root"] == hashlib.sha256(json.dumps(det, sort_keys=True).encode()).hexdigest()
+    # the SDK binding roots the determination's canon/2 content bytes (canon.content_bytes)
+    from prismpath import canon
+    assert manifest["root"] == hashlib.sha256(canon.content_bytes(det)).hexdigest()
+    assert manifest["encoding"] == "canon/2"
     assert manifest["label"] == f"assess:{cid}"
     assert manifest["gate_id"] == "nist_800171_generic@v1"
     assert manifest["ingestion_hashes"] == [ca.bundle_hash(REQ)]

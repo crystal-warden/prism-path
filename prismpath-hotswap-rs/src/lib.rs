@@ -8,11 +8,12 @@
 //! Python reference, nothing here touches the compiler or the image bytes, so certified hashes
 //! stay exactly what the FPGA/eBPF evidence rows cite.
 //!
-//! Cross-language contract (gated in `tests/`): signatures are Ed25519 over
-//! `durable::py_canonical_string(manifest, compact)` — Python's exact
-//! `json.dumps(sort_keys=True, separators=(",",":"))` bytes — so a pack signed by either runtime
-//! verifies on the other, and every refusal uses the same stable reason strings the Python tests
-//! and audit rows pin.
+//! Cross-language contract (gated in `tests/`): a manifest or envelope is a canon/2 document that
+//! names its encoding, and its signature is Ed25519 over the canon/2 domain and its canon/2 bytes
+//! (`durable::signed_message`, `policy_pack.signed_bytes` in Python), so a pack signed by either
+//! runtime verifies on the other; an untagged manifest signed before the migration is verified over
+//! its canon/1 compact bytes, and never written. Every refusal uses the same stable reason strings
+//! the Python tests and audit rows pin.
 //!
 //! Key files: public keys are raw 32-byte Ed25519 (both runtimes read them); private keys here
 //! are raw 32-byte seeds written 0600 (Python's are PEM/PKCS8 — private keys are never shared

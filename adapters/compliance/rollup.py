@@ -15,6 +15,7 @@ Pure aggregation + attestation reuse. No LLM, no domain adjudication.
 """
 import os, json, hashlib
 from prismpath.ledgers import ledger_airgap# CORE attestation (adapter -> core is allowed)
+from prismpath import canon as _canon_mod   # canon/2 content hashes
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 WEIGHTS_PATH = os.path.join(HERE, "catalog", "sprs_weights.json")
@@ -24,10 +25,10 @@ def _weights():
 
 def weights_hash():
     weights_table = _weights()
-    return "sha256:" + hashlib.sha256(json.dumps(weights_table["weights"], sort_keys=True).encode()).hexdigest()[:16]
+    return "sha256:" + hashlib.sha256(_canon_mod.content_bytes(weights_table["weights"])).hexdigest()[:16]
 
 def _canon(obj):
-    return json.dumps(obj, sort_keys=True).encode()
+    return _canon_mod.content_bytes(obj)
 
 # ---------- partial SPRS score ----------
 def sprs_partial(records, weights=None):

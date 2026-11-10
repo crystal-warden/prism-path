@@ -292,7 +292,7 @@ def assess(standard, checks, manifest, evidence):
         determination = {"standard": standard, "control_id": control_id, "status": status,
                          "objectives": {objective_id: list(outcome) for objective_id, outcome in outcomes.items()},
                          "checks": {name: checks[name] for name in sorted(checks)}}
-        root = hashlib.sha256(json.dumps(determination, sort_keys=True).encode()).hexdigest()
+        root = hashlib.sha256(canon.content_bytes(determination)).hexdigest()
         records.append({
             "control_id": control_id, "title": control["title"], "boundary": BOUNDARY, "status": status,
             "gap_summary": " ".join("%s %s: %s." % (objective_id, outcome, reason) for objective_id, (outcome, reason) in outcomes.items()),
