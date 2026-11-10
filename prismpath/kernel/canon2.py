@@ -21,9 +21,9 @@ otherwise lowercase `\\u00xx`), integers in decimal. It refuses every value `loa
 so `loads(dumps(v)) == v` for every value it writes and `dumps(loads(b))` is the one canonical spelling
 of a readable document.
 
-canon/1 (`prismpath.canon`, Python's own `json` with the compact and spaced forms) stays as it is, and
-stays the reader for everything already signed, hashed or anchored under it. This module is scoped to
-the core's documents; the migration plan for the rest is section 3.1 of the spec.
+canon/1 (Python's own `json` with the compact and spaced forms) is retired: this is the one encoding of
+everything PrismPath hashes or signs, and `prismpath.canon` applies it to every document (section 3.1 of
+the spec).
 """
 from __future__ import annotations
 

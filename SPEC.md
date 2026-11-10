@@ -420,9 +420,19 @@ the epoch journal's records) is canon/2 (docs/DICTIONARY.md "canon/2") and names
 `"encoding": "canon/2"`; its hash is sha256 over its canon/2 bytes and a signature over it covers the
 domain `prismpath.canon/2` followed by a zero byte and those bytes, unless its format names a domain of
 its own (`prismpath-root-statement/2`). A reader decides by the document's own tag: canon/2 is read by the
-strict canon/2 reader, a document without the member is canon/1 and is read only to verify what was
-signed, hashed or anchored before the migration, and any other tag is refused. An implementation MUST
-NOT write canon/1. A time in such a document is an integer count of microseconds since the Unix epoch.
+strict canon/2 reader, and a document without the member, or with any other tag, is refused: it is never
+read, hashed or verified under another encoding. canon/1, the earlier encoding (Python's `json` with sorted keys,
+floats as `repr` writes them), is retired: an implementation MUST NOT write it and MUST NOT read, hash or
+verify a document under it, and a reader that meets an untagged document refuses it with a named cause (a
+log line is skipped and the log does not verify, a statement is `bad_format`, a pack, manifest or registry
+is `manifest:bad-format`, a registry `registry:bad-json`, an envelope `envelope:sig-invalid`). A time in a document is an integer count of
+microseconds since the Unix epoch.
+
+A float is refused in content an implementation hashes but did not write (a connector's data, a decision
+outcome, a composer item, a proof, an operator's control data): the caller supplies an integer of a stated
+unit or a decimal string, and the implementation writes no spelling of a float of its own. JSON that is not
+hashed and not signed (a durable run checkpoint, the connector's JSONL sink lines, the flow authority's
+version floor file) stays plain JSON and is never an input to a hash or a signature.
 
 ---
 

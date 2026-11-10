@@ -151,11 +151,10 @@ exactly when the oracle refuses it for one.
 - **The table targets' 32 bit range,** a declared limit of the compiler and the register encoder that shows
   only as a refusal, and the eBPF verifier and JIT in the Linux kernel, which the userspace leg does not
   exercise.
-- **Everything already signed under canon/1:** policy packs and envelopes, audit logs, their root
-  statements and anchored roots read and verify as before under the verify only canon/1 reader; what is
-  written now, the rest of the system included, is canon/2 (specification section 3.1, done on the
-  `canon2-migration` branch), and the frozen canon/1 twins of the receipt and hot swap corpora hold the old
-  reader to its verdicts.
+- **Everything signed under canon/1:** policy packs and envelopes, audit logs, their root statements and
+  anchored roots are no longer read. canon/1 is retired (specification section 3.1, done on the
+  `canon2-migration` and `canon2-finish` branches): everything written, and everything read, is canon/2, a
+  float in hashed content is refused, and no corpus of canon/1 is left.
 - **Anchoring a run.** `ledger anchor` is not taught the run's root statement format, so a run carries no
   third party time.
 - **A sampled replay** shows only the receipts it replayed; the counts above replay every receipt.

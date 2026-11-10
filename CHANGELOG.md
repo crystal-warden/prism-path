@@ -8,53 +8,77 @@ spec stable.
 
 ## [Unreleased]
 
-### Changed, breaking: every hashed or signed document is canon/2 (2026-11-10)
+### Changed, breaking: every hashed or signed document is canon/2, and canon/1 is retired (2026-11-10)
 
 The rest of the system follows the verified core onto canon/2, the integer only JCS profile
 (docs/design/spec-verified-core.md, section 3.1; SPEC.md §8; docs/DICTIONARY.md "canon/2"). A document a
 writer hashes or signs now names `"encoding": "canon/2"`, is hashed over its canon/2 bytes, and is signed
 over the domain `prismpath.canon/2` and a zero byte before those bytes unless its format has a domain of its
-own. canon/1 is verify only: a document without the member is read and verified as it was written, and a
-test holds every call of a canon/1 encoder in Python and Rust to a named list of verify only readers
-(`prismpath/tests/test_canon2_migration.py`).
+own. canon/1, the earlier encoding, is retired in the same release: nothing writes it and nothing reads,
+hashes or verifies a document under it. A document without the tag, or with another tag, is refused with a
+named cause, and what was signed, hashed or anchored under canon/1 no longer verifies. Nobody had used the
+system yet, so there is no migration path; a deployment that has old logs, packs or journals regenerates them.
+`prismpath/tests/test_canon2_migration.py` sweeps Python, Rust, JavaScript, Go and the eBPF and hardware code
+for any encoder or decoder of it, and for its corpora.
 
 - **Audit events** carry `ts_us`, an integer of microseconds since the epoch, instead of the float `ts`, and
   `encoding`; each line is the event's canon/2 bytes, so non ASCII text is raw UTF-8 and no longer `\u`
-  escaped. A data value with a float is refused (`AuditWriteError`), never converted. A log may hold old and
-  new events; each leaf is hashed under the encoding its event names, so an anchored root over old leaves
-  still verifies. `trail` reads either time. Mission Control records an operator's control data as content,
-  and a float in it is refused (`AuditWriteError`).
+  escaped. A data value with a float is refused (`AuditWriteError`), never converted. A log line without the tag
+  is skipped with its cause (`AuditLog.skipped_causes`), the log no longer verifies (`bad_format`, `log_lines`),
+  and `ledger anchor` refuses it. `trail` reads `ts_us`.
 - **Root statements** are `prismpath-root-statement/2`: canon/2, `encoding`, the integer `time_us` instead
-  of the ISO `time`, the domain `prismpath-root-statement/2`. A `/1` statement still verifies, and a chain may
-  move from `/1` to `/2`. A receipt bundle whose receipt or statement names another encoding is `invalid`
+  of the ISO `time`, the domain `prismpath-root-statement/2`. A `prismpath-root-statement/1` statement, or any
+  untagged line in a statements file, is `bad_format` (a complete line that is not canon/2 is never dropped as a
+  torn write; only a final line that is not JSON is `interrupted_statement`), and the next link's `prev` is
+  compared with `unreadable`. A receipt bundle whose receipt or statement does not name canon/2 is `invalid`
   with a `problem`.
 - **Pack manifests, envelopes, flow manifests and the crypto registry** are tagged and signed over the canon/2
-  domain, and their files are their canon/2 bytes. A canon/1 pack, envelope, flow manifest or registry whose
-  signature verifies still loads, until canon/1 signing is retired; a canon/2 one holding a float is
-  `manifest:bad-format`. The registry hash, and so every frozen `registry_hash`, changed.
+  domain, and their files are their canon/2 bytes. An untagged or float holding pack or flow manifest is
+  `manifest:bad-format`, a registry `registry:bad-json`, an envelope `envelope:sig-invalid` (a Rust envelope
+  that does not read was `envelope:missing`). The registry hash, and so every frozen `registry_hash`, changed.
 - **The policy host's intent and active records**, the **epoch journal**'s chain, gap and acknowledgment
   records and data files, **attestation and OpenTimestamps manifests**, the stamp request and proof bundle
-  records, and the **lock file** (its `delta` and `centroid_prior_weight` as decimal strings) are canon/2;
-  older untagged ones still read.
+  records, and the **lock file** (its `delta` and `centroid_prior_weight` as decimal strings) are canon/2. An
+  untagged one is refused: a journal does not open (`JournalCorrupt`, its lines are never truncated), a lock is
+  a `LockError` that says to run `prismpath lock` again, a manifest or receipt does not verify.
+  `prismpath/flows/wazuh_triage_decomposed.lock` was re-written as a canon/2 lock.
 - **The acknowledgment tag** is HMAC over the canon/2 domain and the tagged pair, so an edge and a ground
-  station must both be on this version.
-- **Content hashes** of data PrismPath did not write (a connector's ingestion and knowledge hashes, a
-  decision's outcome root, a composer item id, a ledger proof, the compliance adapter's catalog, weight and
-  determination hashes) are over `canon.content_bytes`: canon/2, and a float anywhere in the content is refused with
-  `FloatRefused` (Python, an `EncodingError`) or the same words as a `CanonicalError` (Rust), which tell the
-  caller to supply an integer of a stated unit or a decimal string. PrismPath writes no spelling of a float of
-  its own, so the earlier rule (a float as its shortest decimal string) is gone, and content that held a
-  float now fails to hash. Every such hash, and so every composer checkpoint name keyed by one, changed.
-- **Corpora.** `host_trace.json`, `hotswap.json`, `receipts.json` (301 cases, with a log and a chain that cross
-  the migration), `crypto_agility.json`, `crypto_migration.json`, `durable.json`, `connector.json` and
-  `context.json` were regenerated through their generators. `receipts_canon1.json` (287 cases) and
-  `hotswap_canon1.json` are the frozen canon/1 twins, never regenerated and replayed by the same Python and
-  Rust tests; `canonical.json` stays as the canon/1 reader's vectors beside `canon2.json`.
-- **Not moved**, each for a stated reason in the spec's section 3.1: the receipt stream's wire frames (binary
-  Zeckendorf, no JSON is hashed), a durable run checkpoint (state, not hashed or signed, whose values may be
-  floats a resume must see unchanged), the flow authority's version floor file and the sink's JSONL records
-  (state and output, not hashed), and the comparison harnesses under `prismpath/comparisons/` (models of
-  other systems).
+  station must both be on this version. A sequence number beyond plus or minus 2^53 minus 1 has no canon/2
+  form: Python raises `EncodingError`, and Rust now returns a `CanonicalError` from `ackchannel::canon`,
+  `sign_ack`, `verify_ack` and `AckReceiver::on_ack` (they returned bare values and panicked), so those four
+  signatures changed.
+- **A float in content PrismPath hashes but did not write is refused.** A connector's ingestion and knowledge
+  hashes, a decision's outcome root, a composer item id, a ledger proof, the compliance adapter's catalog,
+  weight and determination hashes and Mission Control's audit data go through `canon.content_bytes`, which raises
+  `FloatRefused` (Python, an `EncodingError`) and, in Rust, `durable::content_bytes` returns a `CanonicalError`
+  with the same words: supply an integer of a stated unit (microseconds, basis points, bytes) or a decimal
+  string. PrismPath writes no spelling of a float of its own, so the earlier rule (a float as its shortest
+  decimal string) is gone, content that held a float now fails to hash, and every hash that was over such
+  content changed. Mission Control's `audit.record` raises `AuditWriteError`. `connector.json` now carries
+  `float_refusals`, replayed in Rust.
+- **Plain JSON is named and held out of every hash.** `canon.loads`, `load` and `dumps_strict` are
+  `plain_loads`, `plain_load` and `plain_dumps`, for a durable run checkpoint, the connector's JSONL sink
+  lines and the version floor file; `loads_content` reads a model's reply as content. The document `plain_loads`
+  reads is a `PlainDict`, and every hashing helper of `prismpath.canon` refuses one (`PlainJSONRefused`). In
+  Rust, `value::parse_strict` is `parse_plain` (and `parse_content`), and `try_py_canonical_string` and
+  `py_canonical_string` are `plain_dumps`, used only for the sink's line and a message.
+  `prismpath/tests/test_plain_json_never_hashed.py` checks it at run time and in the source of Python and Rust.
+- **Removed.** `canonical_compact`, `canonical_spaced`, `CANON1`, the `/1` root statement reader and
+  `LEGACY_*` constants, `pyCanonicalString` (JavaScript), `value::parse_strict`, the `canonical` section of
+  `durable.json` and the `canon` kind of `receipts.json`, and the corpora `canonical.json`,
+  `receipts_canon1.json` and `hotswap_canon1.json` with `gen_canonical_fixtures.py`. `receipts.json` (245
+  cases) and `hotswap.json` keep the cases built from what canon/1 wrote, as refusals.
+  `host_trace.json`, `hotswap.json`, `receipts.json`, `durable.json` and `connector.json` were regenerated
+  through their generators.
+- **Not re-signed.** `prismpath-hw/demo/flows/*.ppt.manifest.*`, `prismpath-hw/demo-display/switch_nav.*` and the
+  copies in `prismpath-hw/hyst-cert/evidence/` are pack manifests signed under canon/1 by a demo key whose
+  private half is not kept (the evidence copies are named by an anchored `SHA256SUMS`), and
+  `prismpath/comparisons/results/prismpath/evidence/A8/receipt_root.json` is a recorded comparison result; they
+  stay as historic records and `verify_pack` refuses them (`prismpath-hw/hyst-cert/VERIFY.md`).
+- **Not moved**, because it is not hashed or signed: the receipt stream's wire frames (binary Zeckendorf), a
+  durable run checkpoint (state, whose values may be floats a resume must see unchanged), the flow authority's
+  version floor file and the sink's JSONL records, and the comparison harnesses under
+  `prismpath/comparisons/` (models of other systems).
 
 ## [0.1.3] (not yet uploaded)
 
