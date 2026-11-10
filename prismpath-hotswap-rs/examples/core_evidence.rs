@@ -1241,7 +1241,7 @@ fn main() -> ExitCode {
                 Some(count) => Some(count.parse().unwrap_or(200)),
                 None => Some(200),
             };
-            let oracle = flag("--oracle").map(PathBuf::from).unwrap_or_else(|| Path::new(env!("CARGO_MANIFEST_DIR")).join("../formal/.lake/build/bin/core-oracle"));
+            let oracle = flag("--oracle").map(PathBuf::from).or_else(|| std::env::var_os("PRISMPATH_CORE_ORACLE").map(PathBuf::from)).unwrap_or_else(|| Path::new(env!("CARGO_MANIFEST_DIR")).join("../formal/.lake/build/bin/core-oracle"));
             let options = Options {
                 sample,
                 seed: flag("--seed").and_then(|seed| seed.parse().ok()).unwrap_or(0),
