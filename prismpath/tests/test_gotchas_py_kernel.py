@@ -9,6 +9,7 @@ bytes rather than three quarters of a base64 length.
 """
 import sys
 
+from prismpath import canon
 from prismpath.kernel import analysis
 from prismpath.kernel.parser import Graph, Node, parse_file
 
@@ -77,7 +78,7 @@ def test_readable_lock_has_no_lock_error(tmp_path):
     import json
     flow_path = tmp_path / "sem.md"
     flow_path.write_text(SEMANTIC_FLOW)
-    (tmp_path / "sem.lock").write_text(json.dumps({
+    (tmp_path / "sem.lock").write_bytes(canon.canon2_bytes({
         "version": 1, "flow": "sem", "flow_hash": "sha256:x", "encoding": "canon/2",
         "embedder": {"name": "stub", "dim": 8, "probe": "p", "probe_vec": ""},
         "delta": "0.05",

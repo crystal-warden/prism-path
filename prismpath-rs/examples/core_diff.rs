@@ -38,10 +38,20 @@ fn refuse(cause: &str, mut detail: serde_json::Value) -> serde_json::Value {
     detail
 }
 
+/// The cause of a reading the strict reader refuses: its own for a document that is not its canonical
+/// spelling, `reading:unreadable` for a reader rule (spec section 3.2).
+fn reading_cause(error: canon2::Canon2Error) -> &'static str {
+    if error == canon2::Canon2Error::NotCanonical {
+        "reading:not-canonical"
+    } else {
+        "reading:unreadable"
+    }
+}
+
 fn reading_verdict(graph: &prismpath_rs::Graph, bytes: &[u8]) -> serde_json::Value {
     let document = match canon2::read(bytes) {
         Ok(document) => document,
-        Err(error) => return refuse("reading:unreadable", serde_json::json!({"reason": error.rule()})),
+        Err(error) => return refuse(reading_cause(error), serde_json::json!({"reason": error.rule()})),
     };
     let Doc::Obj(members) = document else {
         return refuse("reading:not-object", serde_json::json!({}));
@@ -76,8 +86,9 @@ fn main() {
         let flow = read_frame(&input, &mut pos).expect("flow frame");
         let readings: Vec<&[u8]> = (0..count).map(|_| read_frame(&input, &mut pos).expect("reading frame")).collect();
         let line = if let Err(error) = canon2::read(image) {
-            serde_json::json!({"id": parts[1], "policy": "refused", "cause": "policy:unreadable", "reason": error.rule(),
-                               "code": causes::code("policy:unreadable"), "causes": ["policy:unreadable"]})
+            let cause = if error == canon2::Canon2Error::NotCanonical { "policy:not-canonical" } else { "policy:unreadable" };
+            serde_json::json!({"id": parts[1], "policy": "refused", "cause": cause, "reason": error.rule(),
+                               "code": causes::code(cause), "causes": [cause]})
         } else if flow.is_empty() {
             serde_json::json!({"id": parts[1], "policy": "unrenderable"})
         } else {

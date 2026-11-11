@@ -4984,66 +4984,14 @@
      "swaps.log": "{\"action\":\"swap\",\"actor\":\"policy_host\",\"data\":{\"envelope_id\":\"env1\",\"from_hash\":null,\"key_id\":\"61afed7698af3cc9f68b5b4907afff930996707c5c8d3091a6ee84f9e63c6814\",\"overlay_of\":null,\"result\":\"accepted\",\"to_hash\":\"53763343671435533f1d0009395b9b6eb73cfb1cd7d968712e7f830904eb7a17\",\"unsigned\":false,\"version\":1},\"encoding\":\"canon/2\",\"id\":\"0\",\"idx\":0,\"ts_us\":1760000000000000}\r\n{\"action\":\"swap\",\"actor\":\"policy_host\",\"data\":{\"envelope_id\":\"env1\",\"from_hash\":\"53763343671435533f1d0009395b9b6eb73cfb1cd7d968712e7f830904eb7a17\",\"key_id\":\"61afed7698af3cc9f68b5b4907afff930996707c5c8d3091a6ee84f9e63c6814\",\"overlay_of\":null,\"result\":\"accepted\",\"to_hash\":\"9719bda7af0438bf2a053dfea521f5020e3d6363b0480596814f5699d40ac202\",\"unsigned\":false,\"version\":2},\"encoding\":\"canon/2\",\"id\":\"1\",\"idx\":1,\"ts_us\":1760000000250000}\r\n{\"action\":\"attestation\",\"actor\":\"policy_host\",\"data\":{\"active\":\"9719bda7af0438bf2a053dfea521f5020e3d6363b0480596814f5699d40ac202\",\"overlay_of\":null,\"ts\":\"2026-01-01T00:00:02+00:00\",\"version\":2},\"encoding\":\"canon/2\",\"id\":\"2\",\"idx\":2,\"ts_us\":1760000000500000}\r\n\n\n5\n"
     },
     "final": {
-     "events": [
-      {
-       "action": "swap",
-       "actor": "policy_host",
-       "data": {
-        "envelope_id": "env1",
-        "from_hash": null,
-        "key_id": "61afed7698af3cc9f68b5b4907afff930996707c5c8d3091a6ee84f9e63c6814",
-        "overlay_of": null,
-        "result": "accepted",
-        "to_hash": "53763343671435533f1d0009395b9b6eb73cfb1cd7d968712e7f830904eb7a17",
-        "unsigned": false,
-        "version": 1
-       },
-       "encoding": "canon/2",
-       "id": "0",
-       "idx": 0,
-       "ts_us": 1760000000000000
-      },
-      {
-       "action": "swap",
-       "actor": "policy_host",
-       "data": {
-        "envelope_id": "env1",
-        "from_hash": "53763343671435533f1d0009395b9b6eb73cfb1cd7d968712e7f830904eb7a17",
-        "key_id": "61afed7698af3cc9f68b5b4907afff930996707c5c8d3091a6ee84f9e63c6814",
-        "overlay_of": null,
-        "result": "accepted",
-        "to_hash": "9719bda7af0438bf2a053dfea521f5020e3d6363b0480596814f5699d40ac202",
-        "unsigned": false,
-        "version": 2
-       },
-       "encoding": "canon/2",
-       "id": "1",
-       "idx": 1,
-       "ts_us": 1760000000250000
-      },
-      {
-       "action": "attestation",
-       "actor": "policy_host",
-       "data": {
-        "active": "9719bda7af0438bf2a053dfea521f5020e3d6363b0480596814f5699d40ac202",
-        "overlay_of": null,
-        "ts": "2026-01-01T00:00:02+00:00",
-        "version": 2
-       },
-       "encoding": "canon/2",
-       "id": "2",
-       "idx": 2,
-       "ts_us": 1760000000500000
-      }
-     ],
-     "leaf_count": 3,
-     "leaves": [
-      "4dad0300a35e57b5ddb8af9595214a80ce74c32fbe0921c474eb2311ffe6990f",
-      "44b20a72b97ea12572290338fadaf1362d8ba80f73df221e1c1882fafc99512c",
-      "20e10637bc992b746d03fe612be4f4026d98c86ac1d622f4d50edadf8a5fadb1"
-     ],
-     "root": "8c7570297982acc52402a30f7a2a0a303eaaf4611cd9f2dc0170bcacd486a2c5",
+     "events": [],
+     "leaf_count": 0,
+     "leaves": [],
+     "root": "",
      "skipped": [
+      1,
+      2,
+      3,
       6
      ],
      "verify_log": false,
@@ -5093,47 +5041,58 @@
       "version": 2
      },
      {
-      "leaf_count": 3,
-      "root": "8c7570297982acc52402a30f7a2a0a303eaaf4611cd9f2dc0170bcacd486a2c5",
-      "skipped": [],
-      "verify_log": true,
-      "verify_persisted": true
-     },
-     {
-      "done": "append"
-     },
-     {
-      "active": "9719bda7af0438bf2a053dfea521f5020e3d6363b0480596814f5699d40ac202",
-      "envelope_id": "env1",
-      "opened": true,
-      "overlay_of": null,
-      "since": "2026-01-01T00:00:01+00:00",
-      "unsigned": false,
-      "version": 2
-     },
-     {
-      "leaf_count": 3,
-      "root": "8c7570297982acc52402a30f7a2a0a303eaaf4611cd9f2dc0170bcacd486a2c5",
-      "skipped": [],
-      "verify_log": true,
-      "verify_persisted": true
-     },
-     {
-      "done": "append"
-     },
-     {
-      "active": "9719bda7af0438bf2a053dfea521f5020e3d6363b0480596814f5699d40ac202",
-      "envelope_id": "env1",
-      "opened": true,
-      "overlay_of": null,
-      "since": "2026-01-01T00:00:01+00:00",
-      "unsigned": false,
-      "version": 2
-     },
-     {
-      "leaf_count": 3,
-      "root": "8c7570297982acc52402a30f7a2a0a303eaaf4611cd9f2dc0170bcacd486a2c5",
+      "leaf_count": 0,
+      "root": "",
       "skipped": [
+       1,
+       2,
+       3
+      ],
+      "verify_log": false,
+      "verify_persisted": false
+     },
+     {
+      "done": "append"
+     },
+     {
+      "active": "9719bda7af0438bf2a053dfea521f5020e3d6363b0480596814f5699d40ac202",
+      "envelope_id": "env1",
+      "opened": true,
+      "overlay_of": null,
+      "since": "2026-01-01T00:00:01+00:00",
+      "unsigned": false,
+      "version": 2
+     },
+     {
+      "leaf_count": 0,
+      "root": "",
+      "skipped": [
+       1,
+       2,
+       3
+      ],
+      "verify_log": false,
+      "verify_persisted": false
+     },
+     {
+      "done": "append"
+     },
+     {
+      "active": "9719bda7af0438bf2a053dfea521f5020e3d6363b0480596814f5699d40ac202",
+      "envelope_id": "env1",
+      "opened": true,
+      "overlay_of": null,
+      "since": "2026-01-01T00:00:01+00:00",
+      "unsigned": false,
+      "version": 2
+     },
+     {
+      "leaf_count": 0,
+      "root": "",
+      "skipped": [
+       1,
+       2,
+       3,
        6
       ],
       "verify_log": false,
@@ -6294,7 +6253,7 @@
   {
    "expect": {
     "files": {
-     "active_policy.json": "[\"not\", \"an\", \"object\"]",
+     "active_policy.json": "[\"not\",\"an\",\"object\"]",
      "swaps.log": "{\"action\":\"active_unreadable\",\"actor\":\"policy_host\",\"data\":{\"reason\":\"record:unreadable:a document that is hashed or signed is a JSON object\",\"result\":\"not_restored\"},\"encoding\":\"canon/2\",\"id\":\"0\",\"idx\":0,\"ts_us\":1760000000000000}\n"
     },
     "final": {
@@ -6337,7 +6296,7 @@
       "active": null
      },
      {
-      "active_policy.json": "[\"not\", \"an\", \"object\"]",
+      "active_policy.json": "[\"not\",\"an\",\"object\"]",
       "swaps.log": "{\"action\":\"active_unreadable\",\"actor\":\"policy_host\",\"data\":{\"reason\":\"record:unreadable:a document that is hashed or signed is a JSON object\",\"result\":\"not_restored\"},\"encoding\":\"canon/2\",\"id\":\"0\",\"idx\":0,\"ts_us\":1760000000000000}\n"
      }
     ]
@@ -6351,7 +6310,7 @@
      "do": "write",
      "op": "fs",
      "path": "active_policy.json",
-     "text": "[\"not\", \"an\", \"object\"]"
+     "text": "[\"not\",\"an\",\"object\"]"
     },
     {
      "op": "open"

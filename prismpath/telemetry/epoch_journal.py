@@ -134,7 +134,7 @@ class EpochJournal:
     def _read_jsonl(self, path: str, torn_finding: str) -> List[dict]:
         if not os.path.exists(path):
             return []
-        with open(path, "r", encoding="utf-8") as handle:
+        with open(path, "r", encoding="utf-8", newline="") as handle:
             raw_lines = handle.read().split("\n")
         if raw_lines and raw_lines[-1] == "":
             raw_lines.pop()
@@ -161,7 +161,7 @@ class EpochJournal:
         acks = {}
         if os.path.exists(self._acks_path()):
             try:
-                acks = canon.loads_document(open(self._acks_path(), encoding="utf-8").read())
+                acks = canon.loads_document(open(self._acks_path(), encoding="utf-8", newline="").read())
             except ValueError as error:
                 # atomic_write means a torn acks.json cannot exist; a corrupt one is a real fault
                 raise JournalCorrupt(f"{self._acks_path()} is not a canon/2 document: {error}")

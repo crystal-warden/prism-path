@@ -281,7 +281,7 @@ def _cases(key_id):
     case("active_image_is_a_directory", [open_, _swap("v1"), {"op": "fs", "do": "remove", "path": "active-{sha:v1}.ppt"},
                                          {"op": "fs", "do": "mkdir", "path": "active-{sha:v1}.ppt"}, open_, active, snap])
     case("active_record_not_an_object", [open_, {"op": "fs", "do": "write", "path": "active_policy.json",
-                                                 "text": '["not", "an", "object"]'}, open_, active, snap])
+                                                 "text": '["not","an","object"]'}, open_, active, snap])
     case("active_record_without_image", [open_, _swap("v1"), {"op": "fs", "do": "remove", "path": "active-{sha:v1}.ppt"},
                                          {"op": "fs", "do": "write", "path": "active_policy.json",
                                           "text": '{"sha256": null}'}, open_, active, snap])
@@ -544,7 +544,7 @@ def run_case(case, doc, work):
         base = os.path.join(packs_dir, f"{name}.ppt")
         Path(base).write_bytes(base64.b64decode(pack["image_b64"]))
         if pack["manifest"] is not None:
-            Path(base + ".manifest.json").write_text(json.dumps(pack["manifest"], indent=1, sort_keys=True) + "\n")
+            Path(base + ".manifest.json").write_bytes(canon.canon2_bytes(pack["manifest"]) + b"\n")
             Path(base + ".manifest.sig").write_bytes(bytes.fromhex(pack["sig_hex"]))
     envelope = doc["envelopes"][case.get("envelope", "default")]
     clock = Clock()

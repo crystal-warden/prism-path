@@ -1,6 +1,7 @@
 package prismpath
 
 import (
+	"bytes"
 	"fmt"
 	"sort"
 	"strings"
@@ -13,11 +14,15 @@ import (
 // and a reading. This file is the Go reader and writer, a port of prismpath/kernel/canon2.py held to the same
 // frozen vectors (prismpath/portable/conformance/canon2.json).
 //
-// Canon2Read accepts exactly the JSON documents (RFC 8259) whose numbers are integers within plus or minus
-// 2^53 minus 1 written without a fraction, an exponent or a negative zero, whose objects hold no key twice,
-// whose strings hold no lone surrogate escape, and whose arrays and objects nest at most 128 deep. Any other
-// input is a *Canon2Error whose Rule is the first rule broken reading left to right: utf8, syntax, float,
-// integer-range, negative-zero, duplicate-key, lone-surrogate or depth.
+// Canon2Read is the strict reader (the Lean `Core.readCanonical`): it accepts exactly the canonical bytes of
+// a canon/2 value. A text is first read as canon/2: JSON (RFC 8259) whose numbers are integers within plus or
+// minus 2^53 minus 1 written without a fraction, an exponent or a negative zero, whose objects hold no key
+// twice, whose strings hold no lone surrogate escape, and whose arrays and objects nest at most 128 deep. Any
+// other input is a *Canon2Error whose Rule is the first rule broken reading left to right: utf8, syntax,
+// float, integer-range, negative-zero, duplicate-key, lone-surrogate or depth. A text that reads but is not
+// the canonical spelling of its value (whitespace, members out of key order, a needless escape) is refused
+// with Rule not-canonical. Canon2Canonicalize is the path for text a person wrote: every rule but the
+// spelling, then the canonical bytes, which Canon2Read accepts; no reader calls it.
 
 const (
 	canon2Limit    = int64(1)<<53 - 1
@@ -307,8 +312,36 @@ func (reader *canon2Reader) number(negative bool) interface{} {
 }
 
 // Canon2Read reads the canon/2 document in data (strict UTF-8) as nil, bool, int64, string, []interface{}
-// or map[string]interface{}. The error, if any, is a *Canon2Error carrying the first rule broken.
-func Canon2Read(data []byte) (result interface{}, err error) {
+// or map[string]interface{}, when data is exactly the canonical spelling of that value. The error, if any,
+// is a *Canon2Error carrying the first rule broken, or not-canonical.
+func Canon2Read(data []byte) (interface{}, error) {
+	value, err := canon2Parse(data)
+	if err != nil {
+		return nil, err
+	}
+	written, err := Canon2Write(value)
+	if err != nil {
+		return nil, err
+	}
+	if !bytes.Equal(written, data) {
+		return nil, &Canon2Error{Rule: "not-canonical", Detail: "the document reads as canon/2 but is not its canonical spelling"}
+	}
+	return value, nil
+}
+
+// Canon2Canonicalize returns the canonical bytes of the canon/2 value a person wrote in data, in any legal
+// spelling (whitespace, member order, escapes); every other rule holds as in Canon2Read, and the result is
+// what Canon2Read accepts. A writer's step, never a reader's (prismpath/kernel/canon2.py canonicalize).
+func Canon2Canonicalize(data []byte) ([]byte, error) {
+	value, err := canon2Parse(data)
+	if err != nil {
+		return nil, err
+	}
+	return Canon2Write(value)
+}
+
+// canon2Parse reads data by every canon/2 rule but the spelling.
+func canon2Parse(data []byte) (result interface{}, err error) {
 	if !utf8.Valid(data) {
 		return nil, &Canon2Error{Rule: "utf8"}
 	}

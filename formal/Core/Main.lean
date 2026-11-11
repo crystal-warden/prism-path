@@ -4,8 +4,8 @@ import Core.Eval
 /-!
 # The oracle
 
-`lake exe core-oracle POLICY [READING ...]` reads a policy image and readings (canon/2 documents, as
-files) and prints one JSON line for the policy and one per reading, in the stable format of
+`lake exe core-oracle POLICY [READING ...]` reads a policy image and readings (canon/2 documents in their exact canonical
+spelling, as files) and prints one JSON line for the policy and one per reading, in the stable format of
 docs/design/spec-verified-core.md section 7. `lake exe core-oracle --batch` reads framed cases on
 standard input (the differential harness's transport) and prints one JSON line per case.
 
@@ -73,7 +73,7 @@ def policyCheckJson (p : Except PolicyErr Checked) (reading : Except DocErr J) :
 /-- A reading's verdict line with its policy check beside it. -/
 def verdictCheckJson (p : Except PolicyErr Checked) (img : ByteArray) (r : ByteArray) : String :=
   let v := verdictJson (verdictBytes img r)
-  String.ofList ((chars v).dropLast) ++ policyCheckJson p (readBytes r) ++ "}"
+  String.ofList ((chars v).dropLast) ++ policyCheckJson p (readCanonical r) ++ "}"
 
 def policyJson (doc : Except DocErr J) : String :=
   match loadPolicy doc with
@@ -121,7 +121,7 @@ def batch (b : ByteArray) (out : IO.FS.Stream) : IO UInt32 := do
             match docs with
             | [] => return 2
             | img :: rds =>
-              let imgDoc := readBytes img
+              let imgDoc := readCanonical img
               let loaded := loadPolicy imgDoc
               let verdicts := rds.map (fun r => verdictCheckJson loaded img r)
               out.putStrLn ("{\"id\":" ++ jsonEscape ident ++ ",\"policy\":" ++ policyJson imgDoc ++
@@ -140,7 +140,7 @@ def main (args : List String) : IO UInt32 := do
     batch input (← IO.getStdout)
   | policy :: readings =>
     let img ← IO.FS.readBinFile policy
-    IO.println (policyJson (readBytes img))
+    IO.println (policyJson (readCanonical img))
     for r in readings do
       let rb ← IO.FS.readBinFile r
       IO.println (verdictJson (verdictBytes img rb))

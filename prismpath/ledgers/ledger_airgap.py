@@ -158,7 +158,7 @@ def relay_stamp(request_bundle, out_bundle):
     with tarfile.open(request_bundle, "r:gz") as archive:
         archive.extractall(work)
     src = os.path.join(work, "cw-stamp-request")
-    with open(os.path.join(src, "request.json")) as handle:
+    with open(os.path.join(src, "request.json"), encoding="utf-8", newline="") as handle:
         req = canon.loads_document(handle.read())
     stamped = []
     for entry in req["entries"]:
@@ -207,7 +207,7 @@ def import_proofs(proof_bundle, roots_dir):
     with tarfile.open(proof_bundle, "r:gz") as archive:
         archive.extractall(work)
     src = os.path.join(work, "cw-proof-bundle")
-    with open(os.path.join(src, "receipt.json")) as handle:
+    with open(os.path.join(src, "receipt.json"), encoding="utf-8", newline="") as handle:
         receipt = canon.loads_document(handle.read())
     placed = []
     for fn in os.listdir(src):

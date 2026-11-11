@@ -209,12 +209,35 @@ def content_bytes(value: Any, default: Optional[Any] = None) -> bytes:
     return canon2_bytes(_content_value(value, default))
 
 
+class NotCanonical(CanonicalReadError):
+    """A hashed or signed document that reads as canon/2 but is not its exact canonical bytes (whitespace,
+    members out of key order, a needless escape). It is refused, never re-canonicalized: a person's text is
+    written through `canonicalize_document` (or `prismpath canonicalize`) before it is hashed, signed or
+    read. Its registered cause is `document:not-canonical` (`CAUSE`, code 103)."""
+
+    CAUSE = "document:not-canonical"
+
+
+def _strip_terminator(text: Any) -> Any:
+    """A document file or a JSON Lines line holds the canonical bytes followed by one line feed, the record
+    terminator, which is not part of the document. Exactly that one byte is taken off; anything else
+    (a carriage return, a second line feed, a space) stays and is refused by the strict reader."""
+    if isinstance(text, (bytes, bytearray, memoryview)):
+        text = bytes(text)
+        return text[:-1] if text.endswith(b"\n") else text
+    if isinstance(text, str) and text.endswith("\n"):
+        return text[:-1]
+    return text
+
+
 def loads_document(text: Any) -> Any:
-    """Read a document that is hashed or signed: an object that names canon/2, read by the strict canon/2
-    reader (a float, a duplicate key, an out of range integer or a lone surrogate is refused). Anything
-    else, an untagged object, another tag, or a value that is not an object, raises CanonicalReadError, a
-    json.JSONDecodeError."""
+    """Read a document that is hashed or signed: an object that names canon/2, given as exactly its
+    canonical canon/2 bytes (followed by at most the one line feed that ends a file or a line). Anything
+    else raises CanonicalReadError, a json.JSONDecodeError: an untagged object, another tag, a value that
+    is not an object, a text canon/2 does not read (a float, a duplicate key, an out of range integer, a
+    lone surrogate), and, as `NotCanonical`, a document in any spelling but its canonical one."""
     from prismpath.kernel import canon2
+    text = _strip_terminator(text)
     try:
         probe = json.loads(text)             # only to name the tag; the value read is canon/2's own
     except ValueError:
@@ -227,10 +250,29 @@ def loads_document(text: Any) -> Any:
     try:
         value = canon2.loads(text)
     except canon2.Canon2Error as error:
+        if error.rule == "not-canonical":
+            raise NotCanonical(f"{NotCanonical.CAUSE}: a hashed or signed document must be its exact canonical "
+                               "canon/2 bytes; write it through `prismpath canonicalize` first") from error
         raise CanonicalReadError(f"a document that is read as canon/2 does not read under it: {error}") from error
     if not isinstance(value, dict):
         raise CanonicalReadError("a document that is hashed or signed is a JSON object")
     return value
+
+
+def canonicalize_document(text: Any) -> bytes:
+    """The canonical canon/2 bytes of a document a person wrote, in any legal spelling (whitespace, member
+    order, escapes), so that it can be hashed, signed or read. The writer's side of the strict reader:
+    every other canon/2 rule still holds (a float, a duplicate key, an integer beyond plus or minus 2^53
+    minus 1, a lone surrogate, nesting past 128 raise EncodingError, a float as FloatRefused), and the
+    result is exactly what `loads_document` and `prismpath.kernel.canon2.loads` accept. The document's
+    encoding tag is not added or checked here: a document that is hashed names canon/2 itself."""
+    from prismpath.kernel import canon2
+    try:
+        return canon2.canonicalize(_strip_terminator(text))
+    except canon2.Canon2Error as error:
+        if error.rule == "float":
+            raise FloatRefused(_FLOAT_MESSAGE) from error
+        raise EncodingError(f"no canon/2 form: {error}") from error
 
 
 def plain_dumps(obj: Any, **kwargs: Any) -> str:

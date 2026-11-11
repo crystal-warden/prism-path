@@ -889,9 +889,18 @@ def sign_with_the_reference(flow_bytes: bytes, version: int, private=AUTHORITY_P
         fa.datetime = real
 
 
+def manifest_file(manifest: dict) -> str:
+    """A manifest as a writer that knows canon/2 puts it on disk: its canonical bytes and a line feed, or,
+    for one that has no canon/2 form (a float), the JSON a writer that ignored canon/2 would produce."""
+    try:
+        return canon.canon2_bytes(manifest).decode("utf-8") + "\n"
+    except canon.CanonicalError:
+        return json.dumps(manifest, sort_keys=True, separators=(",", ":")) + "\n"
+
+
 def resign(manifest: dict, private=AUTHORITY_PRIV) -> tuple:
     """A manifest edited and then properly signed, as an authority (or someone holding its key) would."""
-    text = json.dumps(manifest, indent=1, sort_keys=True) + "\n"
+    text = manifest_file(manifest)
     try:
         return text, private.sign(pp.signed_bytes(manifest))
     except canon.CanonicalError:
@@ -970,7 +979,7 @@ def flow_cases() -> list:
     # The manifest is not a manifest.
     cases.append(flow_case("manifest_not_json", FLOW, "{ not json", sig))
     cases.append(flow_case("manifest_empty_file", FLOW, "", sig))
-    cases.append(flow_case("manifest_is_an_array", FLOW, "[1, 2]\n", sig))
+    cases.append(flow_case("manifest_is_an_array", FLOW, "[1,2]\n", sig))
     cases.append(flow_case("manifest_is_a_string", FLOW, '"manifest"\n', sig))
     bad_format = dict(manifest, format="prismpath-flow-manifest/2")
     cases.append(flow_case("manifest_wrong_format_string_even_if_signed", FLOW, *resign(bad_format)))
@@ -985,18 +994,25 @@ def flow_cases() -> list:
     # The signature does not verify.
     edited = dict(manifest, version=9)
     cases.append(
-        flow_case("manifest_edited_after_signing", FLOW, json.dumps(edited, indent=1, sort_keys=True) + "\n", sig)
+        flow_case("manifest_edited_after_signing", FLOW, manifest_file(edited), sig)
     )
     cases.append(
         flow_case(
             "manifest_with_an_extra_field_after_signing",
             FLOW,
-            json.dumps(dict(manifest, extra=1), indent=1, sort_keys=True) + "\n",
+            manifest_file(dict(manifest, extra=1)),
             sig,
         )
     )
     cases.append(
-        flow_case("manifest_reformatted_but_unchanged_still_verifies", FLOW, json.dumps(manifest, sort_keys=True), sig)
+        flow_case("manifest_respelled_but_unchanged_is_not_canonical", FLOW, json.dumps(manifest, indent=1, sort_keys=True) + "\n",
+                  sig, note="the signed content in another spelling: refused before the signature, never respelled")
+    )
+    cases.append(
+        flow_case("manifest_without_its_line_feed_verifies", FLOW, manifest_file(manifest)[:-1], sig)
+    )
+    cases.append(
+        flow_case("manifest_with_a_carriage_return_is_not_canonical", FLOW, manifest_file(manifest)[:-1] + "\r\n", sig)
     )
     cases.append(flow_case("signature_truncated", FLOW, text, sig[:63]))
     cases.append(flow_case("signature_too_long", FLOW, text, sig + b"\x00"))

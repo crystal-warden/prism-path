@@ -3187,16 +3187,49 @@
   },
   {
    "expect": {
-    "findings": [],
+    "findings": [
+     {
+      "finding": "bad_format",
+      "log_lines": [
+       1,
+       2,
+       3,
+       4,
+       5,
+       6,
+       7,
+       8,
+       9
+      ]
+     },
+     {
+      "finding": "log_truncated",
+      "log_leaves": 0,
+      "signed_leaves": 3,
+      "statement": 0
+     },
+     {
+      "finding": "log_truncated",
+      "log_leaves": 0,
+      "signed_leaves": 5,
+      "statement": 1
+     },
+     {
+      "finding": "log_truncated",
+      "log_leaves": 0,
+      "signed_leaves": 9,
+      "statement": 2
+     }
+    ],
     "keys": [
      "d080af74adc57958"
     ],
     "last_statement_sha256": "b2efa7ba2c276ad6d1e42f64a91f74d540df98e8dc48290827280b43ecdc5556",
-    "log_leaves": 9,
+    "log_leaves": 0,
     "pinned": true,
     "signed_leaves": 9,
     "statements": 3,
-    "status": "signed",
+    "status": "invalid",
     "unsigned_tail": 0
    },
    "kind": "trail",
@@ -5096,17 +5129,28 @@
   },
   {
    "expect": {
-    "findings": [],
-    "keys": [
-     "d080af74adc57958"
+    "findings": [
+     {
+      "finding": "bad_format",
+      "line": 1
+     },
+     {
+      "finding": "bad_format",
+      "line": 2
+     },
+     {
+      "finding": "bad_format",
+      "line": 3
+     }
     ],
-    "last_statement_sha256": "b2efa7ba2c276ad6d1e42f64a91f74d540df98e8dc48290827280b43ecdc5556",
+    "keys": [],
+    "last_statement_sha256": null,
     "log_leaves": 9,
     "pinned": true,
-    "signed_leaves": 9,
+    "signed_leaves": 0,
     "statements": 3,
-    "status": "signed",
-    "unsigned_tail": 0
+    "status": "invalid",
+    "unsigned_tail": 9
    },
    "kind": "trail",
    "log_text": "{\"action\":\"decision\",\"actor\":\"engine\",\"data\":{\"cause\":0,\"node\":\"a\",\"note\":\"caf\u00e9 \u2603 \ud834\udd1e \\\"quoted\\\" \\\\ \\t\",\"seq\":0,\"target\":\"b\"},\"encoding\":\"canon/2\",\"id\":\"0\",\"idx\":0,\"ts_us\":1730800000000000}\n{\"action\":\"decision\",\"actor\":\"engine\",\"data\":{\"big\":\"1.5e20\",\"cause\":0,\"edge\":9007199254740991,\"fixed\":-9007199254740991,\"node\":\"a\",\"ok\":true,\"ratio\":\"1e-07\",\"scores\":[1,\"2.5\",\"x\"],\"seq\":1,\"skipped\":null,\"target\":\"b\",\"tiny\":\"5e-324\",\"whole\":100},\"encoding\":\"canon/2\",\"id\":\"1\",\"idx\":1,\"ts_us\":1730800001234568}\n{\"action\":\"decision\",\"actor\":\"engine\",\"data\":{\"cause\":0,\"node\":\"a\",\"seq\":2,\"target\":\"b\"},\"encoding\":\"canon/2\",\"id\":\"2\",\"idx\":2,\"ts_us\":1730800002469136}\n{\"action\":\"decision\",\"actor\":\"engine\",\"data\":{\"cause\":0,\"node\":\"a\",\"note\":\"caf\u00e9 \u2603 \ud834\udd1e \\\"quoted\\\" \\\\ \\t\",\"seq\":3,\"target\":\"b\"},\"encoding\":\"canon/2\",\"id\":\"3\",\"idx\":3,\"ts_us\":1730800003703704}\n{\"action\":\"decision\",\"actor\":\"engine\",\"data\":{\"cause\":0,\"node\":\"a\",\"seq\":4,\"target\":\"b\"},\"encoding\":\"canon/2\",\"id\":\"4\",\"idx\":4,\"ts_us\":1730800004938272}\n{\"action\":\"decision\",\"actor\":\"engine\",\"data\":{\"big\":\"1.5e20\",\"cause\":0,\"edge\":9007199254740991,\"fixed\":-9007199254740991,\"node\":\"a\",\"ok\":true,\"ratio\":\"1e-07\",\"scores\":[1,\"2.5\",\"x\"],\"seq\":5,\"skipped\":null,\"target\":\"b\",\"tiny\":\"5e-324\",\"whole\":100},\"encoding\":\"canon/2\",\"id\":\"5\",\"idx\":5,\"ts_us\":1730800006172840}\n{\"action\":\"decision\",\"actor\":\"engine\",\"data\":{\"cause\":0,\"node\":\"a\",\"note\":\"caf\u00e9 \u2603 \ud834\udd1e \\\"quoted\\\" \\\\ \\t\",\"seq\":6,\"target\":\"b\"},\"encoding\":\"canon/2\",\"id\":\"6\",\"idx\":6,\"ts_us\":1730800007407408}\n{\"action\":\"decision\",\"actor\":\"engine\",\"data\":{\"cause\":0,\"node\":\"a\",\"seq\":7,\"target\":\"b\"},\"encoding\":\"canon/2\",\"id\":\"7\",\"idx\":7,\"ts_us\":1730800008641976}\n{\"action\":\"decision\",\"actor\":\"engine\",\"data\":{\"cause\":0,\"node\":\"a\",\"seq\":8,\"target\":\"b\"},\"encoding\":\"canon/2\",\"id\":\"8\",\"idx\":8,\"ts_us\":1730800009876544}\n",
@@ -10608,7 +10652,7 @@
    "floor": null,
    "flow_text": "---\nname: triage\nstart: a\n---\n\n## a\nDo the thing.\n-> b: when tests_pass\n\n## b\nDone.\n",
    "kind": "flow",
-   "manifest_text": "[1, 2]\n",
+   "manifest_text": "[1,2]\n",
    "name": "manifest_is_an_array",
    "pubs": [
     "9d2fbc00381aa75186e236b7f2fc32f7fd02b750e768c42b52377a861f768971"
@@ -10648,7 +10692,7 @@
    "floor": null,
    "flow_text": "---\nname: triage\nstart: a\n---\n\n## a\nDo the thing.\n-> b: when tests_pass\n\n## b\nDone.\n",
    "kind": "flow",
-   "manifest_text": "{\n \"created\": \"2026-11-04T12:00:00+00:00\",\n \"encoding\": \"canon/2\",\n \"flow\": \"triage\",\n \"flow_sha256\": \"eca37517405241cee3b74e482b0f6f8a626a7b66d54f5adcd66c517635073cb5\",\n \"format\": \"prismpath-flow-manifest/2\",\n \"key_id\": \"1caf156354a3b5f3de5dc3b7cde2d43ec0bd7befd86509176991b9e19292b9a3\",\n \"version\": 3\n}\n",
+   "manifest_text": "{\"created\":\"2026-11-04T12:00:00+00:00\",\"encoding\":\"canon/2\",\"flow\":\"triage\",\"flow_sha256\":\"eca37517405241cee3b74e482b0f6f8a626a7b66d54f5adcd66c517635073cb5\",\"format\":\"prismpath-flow-manifest/2\",\"key_id\":\"1caf156354a3b5f3de5dc3b7cde2d43ec0bd7befd86509176991b9e19292b9a3\",\"version\":3}\n",
    "name": "manifest_wrong_format_string_even_if_signed",
    "pubs": [
     "9d2fbc00381aa75186e236b7f2fc32f7fd02b750e768c42b52377a861f768971"
@@ -10668,7 +10712,7 @@
    "floor": null,
    "flow_text": "---\nname: triage\nstart: a\n---\n\n## a\nDo the thing.\n-> b: when tests_pass\n\n## b\nDone.\n",
    "kind": "flow",
-   "manifest_text": "{\n \"created\": \"2026-11-04T12:00:00+00:00\",\n \"encoding\": \"canon/2\",\n \"flow\": \"triage\",\n \"flow_sha256\": \"eca37517405241cee3b74e482b0f6f8a626a7b66d54f5adcd66c517635073cb5\",\n \"key_id\": \"1caf156354a3b5f3de5dc3b7cde2d43ec0bd7befd86509176991b9e19292b9a3\",\n \"version\": 3\n}\n",
+   "manifest_text": "{\"created\":\"2026-11-04T12:00:00+00:00\",\"encoding\":\"canon/2\",\"flow\":\"triage\",\"flow_sha256\":\"eca37517405241cee3b74e482b0f6f8a626a7b66d54f5adcd66c517635073cb5\",\"key_id\":\"1caf156354a3b5f3de5dc3b7cde2d43ec0bd7befd86509176991b9e19292b9a3\",\"version\":3}\n",
    "name": "manifest_without_format",
    "pubs": [
     "9d2fbc00381aa75186e236b7f2fc32f7fd02b750e768c42b52377a861f768971"
@@ -10688,7 +10732,7 @@
    "floor": null,
    "flow_text": "---\nname: triage\nstart: a\n---\n\n## a\nDo the thing.\n-> b: when tests_pass\n\n## b\nDone.\n",
    "kind": "flow",
-   "manifest_text": "{\n \"created\": \"2026-11-04T12:00:00+00:00\",\n \"encoding\": \"canon/2\",\n \"flow\": \"triage\",\n \"flow_sha256\": \"eca37517405241cee3b74e482b0f6f8a626a7b66d54f5adcd66c517635073cb5\",\n \"format\": \"prismpath-flow-manifest/1\",\n \"key_id\": \"1caf156354a3b5f3de5dc3b7cde2d43ec0bd7befd86509176991b9e19292b9a3\",\n \"version\": \"3\"\n}\n",
+   "manifest_text": "{\"created\":\"2026-11-04T12:00:00+00:00\",\"encoding\":\"canon/2\",\"flow\":\"triage\",\"flow_sha256\":\"eca37517405241cee3b74e482b0f6f8a626a7b66d54f5adcd66c517635073cb5\",\"format\":\"prismpath-flow-manifest/1\",\"key_id\":\"1caf156354a3b5f3de5dc3b7cde2d43ec0bd7befd86509176991b9e19292b9a3\",\"version\":\"3\"}\n",
    "name": "manifest_version_is_a_string",
    "pubs": [
     "9d2fbc00381aa75186e236b7f2fc32f7fd02b750e768c42b52377a861f768971"
@@ -10708,13 +10752,13 @@
    "floor": null,
    "flow_text": "---\nname: triage\nstart: a\n---\n\n## a\nDo the thing.\n-> b: when tests_pass\n\n## b\nDone.\n",
    "kind": "flow",
-   "manifest_text": "{\n \"created\": \"2026-11-04T12:00:00+00:00\",\n \"encoding\": \"canon/2\",\n \"flow\": \"triage\",\n \"flow_sha256\": \"eca37517405241cee3b74e482b0f6f8a626a7b66d54f5adcd66c517635073cb5\",\n \"format\": \"prismpath-flow-manifest/1\",\n \"key_id\": \"1caf156354a3b5f3de5dc3b7cde2d43ec0bd7befd86509176991b9e19292b9a3\",\n \"version\": 3.0\n}\n",
+   "manifest_text": "{\"created\":\"2026-11-04T12:00:00+00:00\",\"encoding\":\"canon/2\",\"flow\":\"triage\",\"flow_sha256\":\"eca37517405241cee3b74e482b0f6f8a626a7b66d54f5adcd66c517635073cb5\",\"format\":\"prismpath-flow-manifest/1\",\"key_id\":\"1caf156354a3b5f3de5dc3b7cde2d43ec0bd7befd86509176991b9e19292b9a3\",\"version\":3.0}\n",
    "name": "manifest_version_is_a_float",
    "pubs": [
     "9d2fbc00381aa75186e236b7f2fc32f7fd02b750e768c42b52377a861f768971"
    ],
    "revoked": [],
-   "sig_hex": "c3b9c6f2552455126993274ad2b42442087c5138ecad3a0ee03b6bf4d51c380cb6b8a583f01459bc99ec796cb374a827f8d828c0e6b7130d980d918a0aa11c0a"
+   "sig_hex": "9d30882fd537829769bed33d1a086a67b818ecbfd78e6f7e28b4b122a7bc63cfe116c8e7fa5f869922ba052068208c8bd5d3dc1ce292b0b1612c4caf89552d0e"
   },
   {
    "expect": {
@@ -10728,7 +10772,7 @@
    "floor": null,
    "flow_text": "---\nname: triage\nstart: a\n---\n\n## a\nDo the thing.\n-> b: when tests_pass\n\n## b\nDone.\n",
    "kind": "flow",
-   "manifest_text": "{\n \"created\": \"2026-11-04T12:00:00+00:00\",\n \"encoding\": \"canon/2\",\n \"flow\": \"triage\",\n \"flow_sha256\": \"eca37517405241cee3b74e482b0f6f8a626a7b66d54f5adcd66c517635073cb5\",\n \"format\": \"prismpath-flow-manifest/1\",\n \"key_id\": \"1caf156354a3b5f3de5dc3b7cde2d43ec0bd7befd86509176991b9e19292b9a3\"\n}\n",
+   "manifest_text": "{\"created\":\"2026-11-04T12:00:00+00:00\",\"encoding\":\"canon/2\",\"flow\":\"triage\",\"flow_sha256\":\"eca37517405241cee3b74e482b0f6f8a626a7b66d54f5adcd66c517635073cb5\",\"format\":\"prismpath-flow-manifest/1\",\"key_id\":\"1caf156354a3b5f3de5dc3b7cde2d43ec0bd7befd86509176991b9e19292b9a3\"}\n",
    "name": "manifest_without_version",
    "pubs": [
     "9d2fbc00381aa75186e236b7f2fc32f7fd02b750e768c42b52377a861f768971"
@@ -10748,7 +10792,7 @@
    "floor": null,
    "flow_text": "---\nname: triage\nstart: a\n---\n\n## a\nDo the thing.\n-> b: when tests_pass\n\n## b\nDone.\n",
    "kind": "flow",
-   "manifest_text": "{\n \"created\": \"2026-11-04T12:00:00+00:00\",\n \"encoding\": \"canon/2\",\n \"flow\": \"triage\",\n \"flow_sha256\": \"eca37517405241cee3b74e482b0f6f8a626a7b66d54f5adcd66c517635073cb5\",\n \"format\": \"prismpath-flow-manifest/1\",\n \"key_id\": \"1caf156354a3b5f3de5dc3b7cde2d43ec0bd7befd86509176991b9e19292b9a3\",\n \"version\": 9\n}\n",
+   "manifest_text": "{\"created\":\"2026-11-04T12:00:00+00:00\",\"encoding\":\"canon/2\",\"flow\":\"triage\",\"flow_sha256\":\"eca37517405241cee3b74e482b0f6f8a626a7b66d54f5adcd66c517635073cb5\",\"format\":\"prismpath-flow-manifest/1\",\"key_id\":\"1caf156354a3b5f3de5dc3b7cde2d43ec0bd7befd86509176991b9e19292b9a3\",\"version\":9}\n",
    "name": "manifest_edited_after_signing",
    "pubs": [
     "9d2fbc00381aa75186e236b7f2fc32f7fd02b750e768c42b52377a861f768971"
@@ -10768,8 +10812,29 @@
    "floor": null,
    "flow_text": "---\nname: triage\nstart: a\n---\n\n## a\nDo the thing.\n-> b: when tests_pass\n\n## b\nDone.\n",
    "kind": "flow",
-   "manifest_text": "{\n \"created\": \"2026-11-04T12:00:00+00:00\",\n \"encoding\": \"canon/2\",\n \"extra\": 1,\n \"flow\": \"triage\",\n \"flow_sha256\": \"eca37517405241cee3b74e482b0f6f8a626a7b66d54f5adcd66c517635073cb5\",\n \"format\": \"prismpath-flow-manifest/1\",\n \"key_id\": \"1caf156354a3b5f3de5dc3b7cde2d43ec0bd7befd86509176991b9e19292b9a3\",\n \"version\": 3\n}\n",
+   "manifest_text": "{\"created\":\"2026-11-04T12:00:00+00:00\",\"encoding\":\"canon/2\",\"extra\":1,\"flow\":\"triage\",\"flow_sha256\":\"eca37517405241cee3b74e482b0f6f8a626a7b66d54f5adcd66c517635073cb5\",\"format\":\"prismpath-flow-manifest/1\",\"key_id\":\"1caf156354a3b5f3de5dc3b7cde2d43ec0bd7befd86509176991b9e19292b9a3\",\"version\":3}\n",
    "name": "manifest_with_an_extra_field_after_signing",
+   "pubs": [
+    "9d2fbc00381aa75186e236b7f2fc32f7fd02b750e768c42b52377a861f768971"
+   ],
+   "revoked": [],
+   "sig_hex": "95a3d87d977e56f9ff881d9d17458d585bdd7a1815ec0df3290e93cd3f3b254cf0cfc0ddceedb7bd0c1038a9d499d7c597700916a1a81370528ab31f11f3360f"
+  },
+  {
+   "expect": {
+    "authorization": "unauthorized",
+    "causes": [
+     "document:not-canonical"
+    ],
+    "manifest_sha256": null,
+    "ok": false
+   },
+   "floor": null,
+   "flow_text": "---\nname: triage\nstart: a\n---\n\n## a\nDo the thing.\n-> b: when tests_pass\n\n## b\nDone.\n",
+   "kind": "flow",
+   "manifest_text": "{\n \"created\": \"2026-11-04T12:00:00+00:00\",\n \"encoding\": \"canon/2\",\n \"flow\": \"triage\",\n \"flow_sha256\": \"eca37517405241cee3b74e482b0f6f8a626a7b66d54f5adcd66c517635073cb5\",\n \"format\": \"prismpath-flow-manifest/1\",\n \"key_id\": \"1caf156354a3b5f3de5dc3b7cde2d43ec0bd7befd86509176991b9e19292b9a3\",\n \"version\": 3\n}\n",
+   "name": "manifest_respelled_but_unchanged_is_not_canonical",
+   "note": "the signed content in another spelling: refused before the signature, never respelled",
    "pubs": [
     "9d2fbc00381aa75186e236b7f2fc32f7fd02b750e768c42b52377a861f768971"
    ],
@@ -10790,8 +10855,28 @@
    "floor": null,
    "flow_text": "---\nname: triage\nstart: a\n---\n\n## a\nDo the thing.\n-> b: when tests_pass\n\n## b\nDone.\n",
    "kind": "flow",
-   "manifest_text": "{\"created\": \"2026-11-04T12:00:00+00:00\", \"encoding\": \"canon/2\", \"flow\": \"triage\", \"flow_sha256\": \"eca37517405241cee3b74e482b0f6f8a626a7b66d54f5adcd66c517635073cb5\", \"format\": \"prismpath-flow-manifest/1\", \"key_id\": \"1caf156354a3b5f3de5dc3b7cde2d43ec0bd7befd86509176991b9e19292b9a3\", \"version\": 3}",
-   "name": "manifest_reformatted_but_unchanged_still_verifies",
+   "manifest_text": "{\"created\":\"2026-11-04T12:00:00+00:00\",\"encoding\":\"canon/2\",\"flow\":\"triage\",\"flow_sha256\":\"eca37517405241cee3b74e482b0f6f8a626a7b66d54f5adcd66c517635073cb5\",\"format\":\"prismpath-flow-manifest/1\",\"key_id\":\"1caf156354a3b5f3de5dc3b7cde2d43ec0bd7befd86509176991b9e19292b9a3\",\"version\":3}",
+   "name": "manifest_without_its_line_feed_verifies",
+   "pubs": [
+    "9d2fbc00381aa75186e236b7f2fc32f7fd02b750e768c42b52377a861f768971"
+   ],
+   "revoked": [],
+   "sig_hex": "95a3d87d977e56f9ff881d9d17458d585bdd7a1815ec0df3290e93cd3f3b254cf0cfc0ddceedb7bd0c1038a9d499d7c597700916a1a81370528ab31f11f3360f"
+  },
+  {
+   "expect": {
+    "authorization": "unauthorized",
+    "causes": [
+     "document:not-canonical"
+    ],
+    "manifest_sha256": null,
+    "ok": false
+   },
+   "floor": null,
+   "flow_text": "---\nname: triage\nstart: a\n---\n\n## a\nDo the thing.\n-> b: when tests_pass\n\n## b\nDone.\n",
+   "kind": "flow",
+   "manifest_text": "{\"created\":\"2026-11-04T12:00:00+00:00\",\"encoding\":\"canon/2\",\"flow\":\"triage\",\"flow_sha256\":\"eca37517405241cee3b74e482b0f6f8a626a7b66d54f5adcd66c517635073cb5\",\"format\":\"prismpath-flow-manifest/1\",\"key_id\":\"1caf156354a3b5f3de5dc3b7cde2d43ec0bd7befd86509176991b9e19292b9a3\",\"version\":3}\r\n",
+   "name": "manifest_with_a_carriage_return_is_not_canonical",
    "pubs": [
     "9d2fbc00381aa75186e236b7f2fc32f7fd02b750e768c42b52377a861f768971"
    ],
@@ -10948,7 +11033,7 @@
    "floor": null,
    "flow_text": "---\nname: triage\nstart: a\n---\n\n## a\nDo the thing.\n-> b: when tests_pass\n\n## b\nDone.\n",
    "kind": "flow",
-   "manifest_text": "{\n \"created\": \"2026-11-04T12:00:00+00:00\",\n \"encoding\": \"canon/2\",\n \"flow\": \"triage\",\n \"flow_sha256\": \"eca37517405241cee3b74e482b0f6f8a626a7b66d54f5adcd66c517635073cb5\",\n \"format\": \"prismpath-flow-manifest/1\",\n \"key_id\": \"1caf156354a3b5f3de5dc3b7cde2d43ec0bd7befd86509176991b9e19292b9a3\",\n \"version\": 3\n}\n",
+   "manifest_text": "{\"created\":\"2026-11-04T12:00:00+00:00\",\"encoding\":\"canon/2\",\"flow\":\"triage\",\"flow_sha256\":\"eca37517405241cee3b74e482b0f6f8a626a7b66d54f5adcd66c517635073cb5\",\"format\":\"prismpath-flow-manifest/1\",\"key_id\":\"1caf156354a3b5f3de5dc3b7cde2d43ec0bd7befd86509176991b9e19292b9a3\",\"version\":3}\n",
    "name": "signed_by_a_stranger_with_the_authoritys_key_id",
    "pubs": [
     "9d2fbc00381aa75186e236b7f2fc32f7fd02b750e768c42b52377a861f768971"
@@ -10968,7 +11053,7 @@
    "floor": null,
    "flow_text": "---\nname: triage\nstart: a\n---\n\n## a\nDo the thing.\n-> b: when tests_pass\n\n## b\nDone.\n",
    "kind": "flow",
-   "manifest_text": "{\n \"created\": \"2026-11-04T12:00:00+00:00\",\n \"encoding\": \"canon/2\",\n \"flow\": \"triage\",\n \"flow_sha256\": \"eca37517405241cee3b74e482b0f6f8a626a7b66d54f5adcd66c517635073cb5\",\n \"format\": \"prismpath-flow-manifest/1\",\n \"key_id\": \"d080af74adc57958d8c77d2f2e27e3493fda17588e60024fd8f38c9b445672ac\",\n \"version\": 3\n}\n",
+   "manifest_text": "{\"created\":\"2026-11-04T12:00:00+00:00\",\"encoding\":\"canon/2\",\"flow\":\"triage\",\"flow_sha256\":\"eca37517405241cee3b74e482b0f6f8a626a7b66d54f5adcd66c517635073cb5\",\"format\":\"prismpath-flow-manifest/1\",\"key_id\":\"d080af74adc57958d8c77d2f2e27e3493fda17588e60024fd8f38c9b445672ac\",\"version\":3}\n",
    "name": "signed_by_the_instance_key_but_only_the_authority_is_trusted",
    "note": "an instance key presented as an authority: the authority's trust list does not hold it",
    "pubs": [
@@ -10991,7 +11076,7 @@
    "floor": null,
    "flow_text": "---\nname: triage\nstart: a\n---\n\n## a\nDo the thing.\n-> b: when tests_pass\n\n## b\nDone.\n",
    "kind": "flow",
-   "manifest_text": "{\n \"created\": \"2026-11-04T12:00:00+00:00\",\n \"encoding\": \"canon/2\",\n \"flow\": \"triage\",\n \"flow_sha256\": \"eca37517405241cee3b74e482b0f6f8a626a7b66d54f5adcd66c517635073cb5\",\n \"format\": \"prismpath-flow-manifest/1\",\n \"key_id\": \"d080af74adc57958d8c77d2f2e27e3493fda17588e60024fd8f38c9b445672ac\",\n \"version\": 3\n}\n",
+   "manifest_text": "{\"created\":\"2026-11-04T12:00:00+00:00\",\"encoding\":\"canon/2\",\"flow\":\"triage\",\"flow_sha256\":\"eca37517405241cee3b74e482b0f6f8a626a7b66d54f5adcd66c517635073cb5\",\"format\":\"prismpath-flow-manifest/1\",\"key_id\":\"d080af74adc57958d8c77d2f2e27e3493fda17588e60024fd8f38c9b445672ac\",\"version\":3}\n",
    "name": "signed_by_the_instance_key_and_trusted_by_mistake",
    "note": "verify_flow alone does not know which key is the instance key; hosts call check_separation first",
    "pubs": [
@@ -11102,7 +11187,7 @@
    "floor": null,
    "flow_text": "---\nname: triage\nstart: a\n---\n\n## a\nDo the thing.\n-> b: when tests_pass\n\n## b\nDone.\n",
    "kind": "flow",
-   "manifest_text": "{\n \"created\": \"2026-11-04T12:00:00+00:00\",\n \"encoding\": \"canon/2\",\n \"flow\": \"triage\",\n \"flow_sha256\": \"eca37517405241cee3b74e482b0f6f8a626a7b66d54f5adcd66c517635073cb5\",\n \"format\": \"prismpath-flow-manifest/1\",\n \"key_id\": \"d40d3fb6eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\",\n \"version\": 3\n}\n",
+   "manifest_text": "{\"created\":\"2026-11-04T12:00:00+00:00\",\"encoding\":\"canon/2\",\"flow\":\"triage\",\"flow_sha256\":\"eca37517405241cee3b74e482b0f6f8a626a7b66d54f5adcd66c517635073cb5\",\"format\":\"prismpath-flow-manifest/1\",\"key_id\":\"d40d3fb6eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\",\"version\":3}\n",
    "name": "manifest_names_another_key_though_signed_by_the_authority",
    "pubs": [
     "9d2fbc00381aa75186e236b7f2fc32f7fd02b750e768c42b52377a861f768971"
@@ -11122,7 +11207,7 @@
    "floor": null,
    "flow_text": "---\nname: triage\nstart: a\n---\n\n## a\nDo the thing.\n-> b: when tests_pass\n\n## b\nDone.\n ",
    "kind": "flow",
-   "manifest_text": "{\n \"created\": \"2026-11-04T12:00:00+00:00\",\n \"encoding\": \"canon/2\",\n \"flow\": \"triage\",\n \"flow_sha256\": \"eca37517405241cee3b74e482b0f6f8a626a7b66d54f5adcd66c517635073cb5\",\n \"format\": \"prismpath-flow-manifest/1\",\n \"key_id\": \"d40d3fb6eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\",\n \"version\": 3\n}\n",
+   "manifest_text": "{\"created\":\"2026-11-04T12:00:00+00:00\",\"encoding\":\"canon/2\",\"flow\":\"triage\",\"flow_sha256\":\"eca37517405241cee3b74e482b0f6f8a626a7b66d54f5adcd66c517635073cb5\",\"format\":\"prismpath-flow-manifest/1\",\"key_id\":\"d40d3fb6eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\",\"version\":3}\n",
    "name": "key_id_mismatch_is_reported_before_a_changed_flow",
    "pubs": [
     "9d2fbc00381aa75186e236b7f2fc32f7fd02b750e768c42b52377a861f768971"
@@ -11262,7 +11347,7 @@
    "floor": null,
    "flow_text": "---\nname: triage\nstart: a\n---\n\n## a\nDo the thing.\n-> b: when tests_pass\n\n## b\nDone.\n",
    "kind": "flow",
-   "manifest_text": "{\n \"created\": \"2026-11-04T12:00:00+00:00\",\n \"encoding\": \"canon/2\",\n \"flow\": \"triage\",\n \"flow_sha256\": \"abababababababababababababababababababababababababababababababab\",\n \"format\": \"prismpath-flow-manifest/1\",\n \"key_id\": \"1caf156354a3b5f3de5dc3b7cde2d43ec0bd7befd86509176991b9e19292b9a3\",\n \"version\": 3\n}\n",
+   "manifest_text": "{\"created\":\"2026-11-04T12:00:00+00:00\",\"encoding\":\"canon/2\",\"flow\":\"triage\",\"flow_sha256\":\"abababababababababababababababababababababababababababababababab\",\"format\":\"prismpath-flow-manifest/1\",\"key_id\":\"1caf156354a3b5f3de5dc3b7cde2d43ec0bd7befd86509176991b9e19292b9a3\",\"version\":3}\n",
    "name": "manifest_names_another_flow_hash",
    "pubs": [
     "9d2fbc00381aa75186e236b7f2fc32f7fd02b750e768c42b52377a861f768971"
@@ -11282,7 +11367,7 @@
    "floor": null,
    "flow_text": "---\nname: triage\nstart: a\n---\n\n## a\nDo the thing.\n-> b: when tests_pass\n\n## b\nDone.\n",
    "kind": "flow",
-   "manifest_text": "{\n \"created\": \"2026-11-04T12:00:00+00:00\",\n \"encoding\": \"canon/2\",\n \"flow\": \"triage\",\n \"format\": \"prismpath-flow-manifest/1\",\n \"key_id\": \"1caf156354a3b5f3de5dc3b7cde2d43ec0bd7befd86509176991b9e19292b9a3\",\n \"version\": 3\n}\n",
+   "manifest_text": "{\"created\":\"2026-11-04T12:00:00+00:00\",\"encoding\":\"canon/2\",\"flow\":\"triage\",\"format\":\"prismpath-flow-manifest/1\",\"key_id\":\"1caf156354a3b5f3de5dc3b7cde2d43ec0bd7befd86509176991b9e19292b9a3\",\"version\":3}\n",
    "name": "manifest_without_a_flow_hash",
    "pubs": [
     "9d2fbc00381aa75186e236b7f2fc32f7fd02b750e768c42b52377a861f768971"
@@ -11302,7 +11387,7 @@
    "floor": null,
    "flow_text": "---\nname: triage\nstart: a\n---\n\n## a\nDo the thing.\n-> b: when tests_pass\n\n## b\nDone.\n",
    "kind": "flow",
-   "manifest_text": "{\n \"created\": \"2026-11-04T12:00:00+00:00\",\n \"encoding\": \"canon/2\",\n \"flow\": \"triage\",\n \"flow_sha256\": \"ECA37517405241CEE3B74E482B0F6F8A626A7B66D54F5ADCD66C517635073CB5\",\n \"format\": \"prismpath-flow-manifest/1\",\n \"key_id\": \"1caf156354a3b5f3de5dc3b7cde2d43ec0bd7befd86509176991b9e19292b9a3\",\n \"version\": 3\n}\n",
+   "manifest_text": "{\"created\":\"2026-11-04T12:00:00+00:00\",\"encoding\":\"canon/2\",\"flow\":\"triage\",\"flow_sha256\":\"ECA37517405241CEE3B74E482B0F6F8A626A7B66D54F5ADCD66C517635073CB5\",\"format\":\"prismpath-flow-manifest/1\",\"key_id\":\"1caf156354a3b5f3de5dc3b7cde2d43ec0bd7befd86509176991b9e19292b9a3\",\"version\":3}\n",
    "name": "flow_hash_in_upper_case_does_not_match",
    "pubs": [
     "9d2fbc00381aa75186e236b7f2fc32f7fd02b750e768c42b52377a861f768971"
@@ -11598,7 +11683,7 @@
    },
    "flow_text": "---\nname: triage\nstart: a\n---\n\n## a\nDo the thing.\n-> b: when tests_pass\n\n## b\nDone.\n",
    "kind": "flow",
-   "manifest_text": "{\n \"created\": \"2026-11-04T12:00:00+00:00\",\n \"encoding\": \"canon/2\",\n \"flow_sha256\": \"eca37517405241cee3b74e482b0f6f8a626a7b66d54f5adcd66c517635073cb5\",\n \"format\": \"prismpath-flow-manifest/1\",\n \"key_id\": \"1caf156354a3b5f3de5dc3b7cde2d43ec0bd7befd86509176991b9e19292b9a3\",\n \"version\": 3\n}\n",
+   "manifest_text": "{\"created\":\"2026-11-04T12:00:00+00:00\",\"encoding\":\"canon/2\",\"flow_sha256\":\"eca37517405241cee3b74e482b0f6f8a626a7b66d54f5adcd66c517635073cb5\",\"format\":\"prismpath-flow-manifest/1\",\"key_id\":\"1caf156354a3b5f3de5dc3b7cde2d43ec0bd7befd86509176991b9e19292b9a3\",\"version\":3}\n",
    "name": "manifest_without_a_flow_name_is_checked_against_the_floor_entry_none",
    "pubs": [
     "9d2fbc00381aa75186e236b7f2fc32f7fd02b750e768c42b52377a861f768971"

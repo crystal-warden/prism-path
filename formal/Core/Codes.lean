@@ -21,12 +21,14 @@ or a registry regenerated without a row the core uses, fails the build.
 namespace Core
 
 theorem policyErr_registered (e : PolicyErr) : (e.code, e.cause) ∈ causeRegistry := by
-  cases e <;> simp only [PolicyErr.code, PolicyErr.cause] <;> decide
+  cases e
+  case unreadable d => cases d <;> decide
+  all_goals (simp only [PolicyErr.code, PolicyErr.cause]; decide)
 
 theorem refusal_registered (r : Refusal) : (r.code, r.cause) ∈ causeRegistry := by
   cases r with
   | policy e => exact policyErr_registered e
-  | readingUnreadable _ => simp only [Refusal.code, Refusal.cause]; decide
+  | readingUnreadable e => cases e <;> decide
   | readingNotObject => simp only [Refusal.code, Refusal.cause]; decide
   | contract _ _ => simp only [Refusal.code, Refusal.cause]; decide
   | noMatch => simp only [Refusal.code, Refusal.cause]; decide

@@ -119,7 +119,7 @@ def upgrade(out_dir, label):
 
 def verify_unit(leaf_hex, out_dir, label):
     """Full chain: Merkle path to the anchored root, then OTS-verify the root against Bitcoin."""
-    with open(os.path.join(out_dir, f"manifest_{label}.json")) as manifest_file:
+    with open(os.path.join(out_dir, f"manifest_{label}.json"), encoding="utf-8", newline="") as manifest_file:
         manifest = canon.loads_document(manifest_file.read())
     leaf_hex = _leaf_hex(leaf_hex)
     path = manifest["leaves"].get(leaf_hex)

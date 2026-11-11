@@ -23,12 +23,12 @@ namespace Core
 
 /-- The oracle refuses the image because a condition reads an engine counter. -/
 def counterRefusal (image : ByteArray) : Bool :=
-  match loadPolicy (readBytes image) with
+  match loadPolicy (readCanonical image) with
   | .error (.engineCounter _) => true
   | _ => false
 
 theorem counterRefusal_iff (image : ByteArray) :
-    counterRefusal image = true ↔ ∃ f, loadPolicy (readBytes image) = .error (.engineCounter f) := by
+    counterRefusal image = true ↔ ∃ f, loadPolicy (readCanonical image) = .error (.engineCounter f) := by
   unfold counterRefusal
   constructor
   · intro h

@@ -15,7 +15,7 @@ import sys
 import pytest
 
 import prismpath
-from prismpath import cli
+from prismpath import canon, cli
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(prismpath.__file__)))
 
@@ -240,7 +240,7 @@ def test_verify_unit_accepts_a_prefixed_leaf(tmp_path, monkeypatch):
     from prismpath.ledgers import ledger_ots
     leaves = ["aa" * 32, "bb" * 32]
     root, paths = ledger_ots.merkle_root_and_paths(leaves)
-    (tmp_path / "manifest_v1.json").write_text(json.dumps(
+    (tmp_path / "manifest_v1.json").write_bytes(canon.canon2_bytes(
         {"label": "v1", "root": root, "leaf_count": 2, "leaves": {leaves[0]: paths[0], leaves[1]: paths[1]},
          "encoding": "canon/2"}))
     monkeypatch.setattr(ledger_ots.subprocess, "run", lambda *a, **k: subprocess.CompletedProcess(a, 0, "", ""))

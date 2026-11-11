@@ -11,7 +11,7 @@ import {
   parse, run, evalCondition, checkPredicate, portabilityViolations, eventTarget,
   isDeterministic, isError, isEvent, isSemantic, eventName, pyTruthy, PredicateError,
   lockedRoute, decodeVec, firstDeterministic, FieldDefinitionError, routedFields, systemBoundary, policyCheck,
-  canon2Read, canon2Write, documentString, registryHash,
+  canon2Read, canon2Write, canon2Canonicalize, documentString, registryHash,
 } from "./prismpath.mjs";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -454,7 +454,7 @@ test("a document is hashed over its canon/2 bytes and canon/1 is refused", () =>
 
 test("canon/2 reads and writes the core's documents and names the first rule broken", () => {
   const bytes = (text) => new TextEncoder().encode(text);
-  assert.deepEqual(canon2Read(bytes('{"a": [1, -2, true, null, "x"]}')), { a: [1, -2, true, null, "x"] });
+  assert.deepEqual(canon2Read(bytes('{"a":[1,-2,true,null,"x"]}')), { a: [1, -2, true, null, "x"] });
   assert.equal(new TextDecoder().decode(canon2Write({ b: 1, a: "\u0001" })), '{"a":"\\u0001","b":1}');
   const rule = (input) => { try { canon2Read(input); return "reads"; } catch (err) { return err.rule; } };
   assert.equal(rule(bytes("1.0")), "float");
@@ -465,7 +465,14 @@ test("canon/2 reads and writes the core's documents and names the first rule bro
   assert.equal(rule(Uint8Array.of(0xc0, 0x80)), "utf8");
   assert.equal(rule(bytes("[".repeat(129))), "depth");
   assert.equal(rule(bytes("{} x")), "syntax");
-  assert.deepEqual(Object.keys(canon2Read(bytes('{"__proto__": 1}'))), ["__proto__"]);
+  assert.deepEqual(Object.keys(canon2Read(bytes('{"__proto__":1}'))), ["__proto__"]);
+  // the strict reader: a document in any spelling but its canonical one is refused, and canonicalize is
+  // the path for text a person wrote
+  for (const spelling of ['{"a": 1}', '{"b":1,"a":2}', '"\\u0041"', '"\\/"', "{}\n", " 0"]) {
+    assert.equal(rule(bytes(spelling)), "not-canonical", spelling);
+  }
+  assert.equal(new TextDecoder().decode(canon2Canonicalize(bytes('{ "b" : 1, "a" : "\\u0041" }\n'))), '{"a":"A","b":1}');
+  assert.throws(() => canon2Canonicalize(bytes("[1.5]")), (err) => err.rule === "float");
 });
 
 test("a bracket is not predicate depth, and Python's limit of 200 open brackets refuses", () => {

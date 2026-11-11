@@ -1,7 +1,7 @@
 {
  "version": 1,
  "comment": "FROZEN. The cause registry of prismpath.kernel.causes: every row, its hash, the engine stop mapping and the lookups a consumer must answer. prismpath-rs/src/causes.rs is generated from the same registry and prismpath-rs/tests/test_causes.rs replays this file. Appending a row regenerates it.",
- "registry_sha256": "4b50c76662b6e71206d699581ed090cd9968385dcbd539c2ce7a2fc6088e5443",
+ "registry_sha256": "b074b28a012192bd1c3102d813742fc78cce13edfa4bd63197d0a65c021ef8f6",
  "registry": [
   {
    "code": 1,
@@ -398,6 +398,24 @@
    "name": "reading:not-object",
    "class": "routing",
    "description": "the reading is a canon/2 document that is not an object"
+  },
+  {
+   "code": 101,
+   "name": "policy:not-canonical",
+   "class": "envelope",
+   "description": "the core's policy image reads as canon/2 but is not its canonical spelling"
+  },
+  {
+   "code": 102,
+   "name": "reading:not-canonical",
+   "class": "routing",
+   "description": "the reading reads as canon/2 but is not its canonical spelling"
+  },
+  {
+   "code": 103,
+   "name": "document:not-canonical",
+   "class": "envelope",
+   "description": "a hashed or signed document reads as canon/2 but is not its canonical spelling"
   }
  ],
  "engine_stop_to_cause": {

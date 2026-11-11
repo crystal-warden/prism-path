@@ -74,6 +74,24 @@ pub fn counter_clock(doc: &Value) -> Clock {
     )
 }
 
+/// A manifest as a writer puts it on disk: its canonical canon/2 bytes and a line feed, which is all the
+/// strict reader accepts; a manifest canon/2 cannot write (a float) as the compact JSON a careless writer
+/// would produce, which the reader refuses before its signature is looked at.
+#[allow(dead_code)]
+pub fn manifest_file(manifest: &Value) -> Vec<u8> {
+    match prismpath_rs::canon2::write_json(manifest) {
+        Ok(mut bytes) => {
+            bytes.push(b'\n');
+            bytes
+        }
+        Err(_) => {
+            let mut bytes = serde_json::to_vec(manifest).unwrap();
+            bytes.push(b'\n');
+            bytes
+        }
+    }
+}
+
 /// Write every pack of the corpus under `dir/packs` (`<name>.ppt` and its manifest, signature and
 /// sidecar where it has them) and the authority's public key under `dir/keys`; returns the key paths.
 pub fn stage(doc: &Value, dir: &Path) -> Vec<String> {
@@ -87,11 +105,7 @@ pub fn stage(doc: &Value, dir: &Path) -> Vec<String> {
         let b64 = base64::engine::general_purpose::STANDARD;
         std::fs::write(&base, b64.decode(pack["image_b64"].as_str().unwrap()).unwrap()).unwrap();
         if !pack["manifest"].is_null() {
-            std::fs::write(
-                format!("{}.manifest.json", base.display()),
-                serde_json::to_string_pretty(&pack["manifest"]).unwrap(),
-            )
-            .unwrap();
+            std::fs::write(format!("{}.manifest.json", base.display()), manifest_file(&pack["manifest"])).unwrap();
             std::fs::write(format!("{}.manifest.sig", base.display()), hex::decode(pack["sig_hex"].as_str().unwrap()).unwrap()).unwrap();
         }
     }

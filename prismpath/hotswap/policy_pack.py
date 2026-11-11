@@ -351,8 +351,12 @@ def verify_pack(ppt_path: str, pubkey_paths: List[str],
     if not os.path.exists(man_path) or not os.path.exists(sig_path):
         return False, ["sig:missing"], None
     try:
-        with open(man_path) as handle:
+        with open(man_path, encoding="utf-8", newline="") as handle:
             manifest = canon.loads_document(handle.read())
+    except canon.NotCanonical:
+        # canon/2 in a spelling other than its canonical bytes: refused with its own registered cause, never
+        # respelled before the signature is checked
+        return False, [canon.NotCanonical.CAUSE], None
     except ValueError:
         # The registry's `manifest:bad-format` is "manifest unparseable": text that is not JSON, not UTF-8,
         # or holds NaN, Infinity or a number beyond the double range (`CanonicalReadError`) is that refusal,
@@ -434,12 +438,14 @@ def load_envelope(base_path: str, pubkey_paths: List[str]) -> Tuple[Optional[dic
         if base_path.endswith(suffix):
             base_path = base_path[:-len(suffix)]
     try:
-        with open(base_path + ".json") as handle:
+        with open(base_path + ".json", encoding="utf-8", newline="") as handle:
             env = canon.loads_document(handle.read())
         with open(base_path + ".sig", "rb") as handle:
             sig = handle.read()
     except FileNotFoundError:
         return None, ["envelope:missing"]
+    except canon.NotCanonical:                   # canon/2, but not its canonical bytes
+        return None, [canon.NotCanonical.CAUSE]
     except ValueError:                           # not canon/2: untagged (canon/1 is retired), another tag, or unreadable
         return None, ["envelope:sig-invalid"]
     try:

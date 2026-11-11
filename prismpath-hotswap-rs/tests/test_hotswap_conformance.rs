@@ -34,7 +34,7 @@ fn stage_case(dir: &std::path::Path, case: &Value) -> (String, Vec<String>) {
     // a case may carry the manifest file's own bytes (not JSON, NaN, not UTF-8 ...), which no `Value` can hold
     let manifest_file = match case.get("manifest_raw_hex").and_then(|value| value.as_str()) {
         Some(raw) => hex::decode(raw).unwrap(),
-        None => serde_json::to_string_pretty(&case["manifest"]).unwrap().into_bytes(),
+        None => common::manifest_file(&case["manifest"]),
     };
     std::fs::write(dir.join("policy.ppt.manifest.json"), manifest_file).unwrap();
     std::fs::write(

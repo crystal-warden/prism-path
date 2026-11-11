@@ -182,7 +182,7 @@ def save_lock(flow_path, lock: dict) -> str:
 
 
 def load_lock(path) -> dict:
-    with open(path, encoding="utf-8") as handle:
+    with open(path, encoding="utf-8", newline="") as handle:
         try:
             lock = canon.loads_document(handle.read())
         except ValueError as error:

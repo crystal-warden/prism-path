@@ -18,7 +18,7 @@ import pytest
 pytest.importorskip("cryptography")
 
 import prismpath  # noqa: E402
-from prismpath import cli  # noqa: E402
+from prismpath import canon, cli  # noqa: E402
 from prismpath.ledgers import audit_log, ledger_ots, root_statement as rs  # noqa: E402
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(prismpath.__file__)))
@@ -37,6 +37,12 @@ Do the thing.
 Done.
 """
 
+
+
+def _canonical(document) -> str:
+    """A tampered line as an attacker who knows canon/2 writes it: the canonical bytes of the edited
+    document, so the verifier's answer is about the content, not the spelling."""
+    return canon.canon2_bytes(document).decode("utf-8")
 
 def _cli(*argv, block=(), cwd=None):
     """The command line in a fresh interpreter, with `block` made unimportable as a plain install leaves it."""
@@ -200,7 +206,7 @@ def test_truncation_is_detected(key, tmp_path):
 def test_a_rewritten_receipt_is_detected_and_located(key, tmp_path):
     log = _signed_log(tmp_path, key)
     lines = open(log.path).read().splitlines()
-    event = json.loads(lines[4]); event["data"]["target"] = "z"; lines[4] = json.dumps(event)
+    event = json.loads(lines[4]); event["data"]["target"] = "z"; lines[4] = _canonical(event)
     open(log.path, "w").write("\n".join(lines) + "\n")
     reopened = _reopen(log)
     assert reopened.verify_log() is True                          # the tree is consistent with itself
@@ -209,6 +215,17 @@ def test_a_rewritten_receipt_is_detected_and_located(key, tmp_path):
     mismatches = [finding for finding in report["findings"] if finding["finding"] == "root_mismatch"]
     assert [finding["statement"] for finding in mismatches] == [1, 2]
     assert mismatches[0]["leaf_range"] == [3, 4]                  # receipt idx 4 lies in the second run
+
+
+def test_a_respelled_receipt_is_refused_as_not_canonical(key, tmp_path):
+    log = _signed_log(tmp_path, key)
+    lines = open(log.path).read().splitlines()
+    lines[4] = json.dumps(json.loads(lines[4]))                   # the same event, spelled with spaces
+    open(log.path, "w").write("\n".join(lines) + "\n")
+    reopened = _reopen(log)
+    assert reopened.skipped == [5] and "document:not-canonical" in reopened.skipped_causes[5]
+    assert reopened.verify_log() is False
+    assert _reopen(log).verify_statements([key.public_raw])["status"] == rs.INVALID
 
 
 def test_a_wrong_key_is_detected(key, tmp_path):
@@ -221,7 +238,7 @@ def test_a_wrong_key_is_detected(key, tmp_path):
 def test_a_log_resigned_by_another_key_does_not_pass_the_pin(key, tmp_path):
     log = _signed_log(tmp_path, key)
     lines = open(log.path).read().splitlines()
-    event = json.loads(lines[0]); event["data"]["target"] = "z"; lines[0] = json.dumps(event)
+    event = json.loads(lines[0]); event["data"]["target"] = "z"; lines[0] = _canonical(event)
     open(log.path, "w").write("\n".join(lines) + "\n")
     os.remove(log.statements_path)
     intruder = rs.InstanceKey.load(rs.keygen(str(tmp_path / "intruder"))["private"])
@@ -245,7 +262,7 @@ def test_an_edited_statement_fails_its_signature(key, tmp_path):
     log = _signed_log(tmp_path, key)
     lines = open(log.statements_path).read().splitlines()
     statement = json.loads(lines[2]); statement["leaves"] = 5
-    lines[2] = json.dumps(statement)
+    lines[2] = _canonical(statement)
     open(log.statements_path, "w").write("\n".join(lines) + "\n")
     report = _reopen(log).verify_statements([key.public_raw])
     assert report["status"] == rs.INVALID and "bad_signature" in _findings(report)
@@ -350,7 +367,7 @@ def test_a_log_signed_after_every_event_verifies_in_linear_time(key, tmp_path, m
     assert hashes["calls"] < 20 * count, hashes["calls"]
     # and a receipt rewritten early is still found, with the range it bounds
     lines = open(log.path).read().splitlines()
-    event = json.loads(lines[10]); event["data"]["cause"] = 99; lines[10] = json.dumps(event)
+    event = json.loads(lines[10]); event["data"]["cause"] = 99; lines[10] = _canonical(event)
     open(log.path, "w").write("\n".join(lines) + "\n")
     hashes["calls"] = 0
     bad = audit_log.AuditLog(log.path).verify_statements([key.public_raw])
@@ -578,7 +595,7 @@ def test_run_signs_its_receipts_and_trail_checks_them(keys, tmp_path, capsys, mo
     assert "receipt 0: verifies" in out
 
     lines = open(audit).read().splitlines()
-    event = json.loads(lines[0]); event["data"]["target"] = "a"; lines[0] = json.dumps(event)
+    event = json.loads(lines[0]); event["data"]["target"] = "a"; lines[0] = _canonical(event)
     open(audit, "w").write("\n".join(lines) + "\n")
     code, out, _err = _run(capsys, "trail", audit, "--pub", keys["public"])
     assert code == 1 and "signing: INVALID: root does not match at statement 0" in out
@@ -839,7 +856,7 @@ def test_anchor_log_refuses_a_log_that_does_not_verify(key, tmp_path, capsys, fa
     log = _signed_log(tmp_path, key)
     lines = open(log.path).read().splitlines()
     if damage == "edited":
-        event = json.loads(lines[1]); event["data"]["cause"] = 5; lines[1] = json.dumps(event)
+        event = json.loads(lines[1]); event["data"]["cause"] = 5; lines[1] = _canonical(event)
     elif damage == "truncated":
         lines = lines[:-3]
     else:
@@ -886,7 +903,7 @@ def test_verify_log_notices_what_the_anchor_no_longer_covers(key, tmp_path, caps
     report = json.loads(out)
     assert code == 1 and report["log_holds_anchor"] is False
     lines = open(log.path).read().splitlines()
-    event = json.loads(lines[0]); event["data"]["cause"] = 7; lines[0] = json.dumps(event)
+    event = json.loads(lines[0]); event["data"]["cause"] = 7; lines[0] = _canonical(event)
     open(log.path, "w").write("\n".join(lines) + "\n")
     code, out, _err = _run(capsys, "ledger", "verify", "--log", log.path, "--out", proofs)
     assert code == 1 and json.loads(out)["log_verifies"] is True and json.loads(out)["signing"] == "invalid"
@@ -902,7 +919,7 @@ def test_verify_log_of_a_merkle_root_anchor_survives_appends_and_notices_edits(t
     code, out, _err = _run(capsys, "ledger", "verify", "--log", log.path, "--out", proofs)
     assert code == 0 and json.loads(out)["log_holds_anchor"] is True and json.loads(out)["signing"] == "unsigned"
     lines = open(log.path).read().splitlines()
-    event = json.loads(lines[2]); event["data"]["cause"] = 9; lines[2] = json.dumps(event)
+    event = json.loads(lines[2]); event["data"]["cause"] = 9; lines[2] = _canonical(event)
     open(log.path, "w").write("\n".join(lines) + "\n")
     code, out, _err = _run(capsys, "ledger", "verify", "--log", log.path, "--out", proofs)
     assert code == 1 and json.loads(out)["log_holds_anchor"] is False

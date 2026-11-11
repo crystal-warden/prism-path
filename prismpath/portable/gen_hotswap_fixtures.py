@@ -30,6 +30,7 @@ REPO = HERE.parent.parent
 sys.path.insert(0, str(REPO))
 sys.path.insert(0, str(REPO / "prismpath-hw"))
 
+from prismpath import canon  # noqa: E402
 from prismpath.hotswap import policy_pack as pp  # noqa: E402
 import ppt_compile as pc                         # noqa: E402
 
@@ -70,8 +71,13 @@ def main() -> int:
             if manifest_raw is not None:
                 (case_dir / "policy.ppt.manifest.json").write_bytes(manifest_raw)
             else:
-                (case_dir / "policy.ppt.manifest.json").write_text(json.dumps(manifest_obj, indent=1,
-                                                                       sort_keys=True) + "\n")
+                # the manifest as a writer puts it on disk: its canonical canon/2 bytes and a line feed, or,
+                # for one canon/2 cannot write (a float), the compact JSON a careless writer would produce
+                try:
+                    manifest_file = canon.canon2_bytes(manifest_obj) + b"\n"
+                except canon.CanonicalError:
+                    manifest_file = json.dumps(manifest_obj, sort_keys=True, separators=(",", ":")).encode() + b"\n"
+                (case_dir / "policy.ppt.manifest.json").write_bytes(manifest_file)
             (case_dir / "policy.ppt.manifest.sig").write_bytes(sig_b)
             if sidecar is not None:
                 (case_dir / "policy.ppt.spiral").write_bytes(sidecar)
@@ -114,18 +120,21 @@ def main() -> int:
         # a manifest file that cannot be parsed is `manifest:bad-format` with no manifest, never an
         # exception out of the gate: text that is not JSON, not UTF-8, NaN, Infinity, -Infinity, a number
         # beyond the double range, not an object, empty
-        good_text = json.dumps(manifest, indent=1, sort_keys=True)
+        good_text = canon.canon2_bytes(manifest).decode("utf-8")
         for variant, raw in [
             ("manifest_not_json", b"{not json"), ("manifest_empty", b""), ("manifest_not_utf8", b"\xff\xfe{}"),
-            ("manifest_nan", good_text.replace('"version": 3', '"version": NaN').encode()),
-            ("manifest_infinity", good_text.replace('"version": 3', '"version": Infinity').encode()),
-            ("manifest_negative_infinity", good_text.replace('"version": 3', '"version": -Infinity').encode()),
-            ("manifest_number_beyond_the_double_range", good_text.replace('"version": 3', '"version": 1e400').encode()),
-            ("manifest_array", b"[1, 2, 3]"), ("manifest_scalar", b"7"), ("manifest_null", b"null"),
+            ("manifest_nan", good_text.replace('"version":3', '"version":NaN').encode()),
+            ("manifest_infinity", good_text.replace('"version":3', '"version":Infinity').encode()),
+            ("manifest_negative_infinity", good_text.replace('"version":3', '"version":-Infinity').encode()),
+            ("manifest_number_beyond_the_double_range", good_text.replace('"version":3', '"version":1e400').encode()),
+            ("manifest_array", b"[1,2,3]"), ("manifest_scalar", b"7"), ("manifest_null", b"null"),
             ("manifest_wrong_format_is_still_bad_format", good_text.replace("ppt-pack/1", "ppt-pack/9").encode()),
             # canon/2 has no float: a manifest that names canon/2 and holds one does not read
-            ("manifest_canon2_with_a_float", good_text.replace('"version": 3', '"version": 3.5').encode()),
+            ("manifest_canon2_with_a_float", good_text.replace('"version":3', '"version":3.5').encode()),
             ("manifest_unknown_encoding", good_text.replace('"canon/2"', '"canon/3"').encode()),
+            # the signed manifest in another spelling: refused as not canonical before its signature is used
+            ("manifest_respelled_is_not_canonical", (json.dumps(manifest, indent=1, sort_keys=True) + "\n").encode()),
+            ("manifest_with_a_carriage_return_is_not_canonical", good_text.encode() + b"\r\n"),
         ]:
             assert variant != "manifest_nan" or b"NaN" in raw
             record(variant, image, None, sig, [pub], [], manifest_raw=raw)

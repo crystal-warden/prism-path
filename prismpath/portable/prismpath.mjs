@@ -1813,6 +1813,7 @@ const CORE_CAUSE_CODES = {
   "policy:unreadable": 89, "policy:shape": 90, "policy:not-level-m": 91, "policy:definition": 92,
   "policy:engine-counter": 93, "policy:kind-mismatch": 94, "policy:rounding": 95, "policy:threshold": 96,
   "policy:none": 97, "policy:absence-untested": 98, "reading:unreadable": 99, "reading:not-object": 100,
+  "policy:not-canonical": 101, "reading:not-canonical": 102,
 };
 
 /** The registered code of one of the core's causes, or null for any other name. */
@@ -1828,7 +1829,8 @@ const UTF8_STRICT = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
 
 /** A text that is not a canon/2 document, or a value with no canon/2 form. `rule` is the first rule broken
  *  reading left to right: utf8, syntax, float, integer-range, negative-zero, duplicate-key,
- *  lone-surrogate or depth (spec section 3). */
+ *  lone-surrogate or depth, or not-canonical for a document that is not its canonical spelling (spec
+ *  sections 3 and 3.2). */
 export class Canon2Error extends Error {
   constructor(rule, detail = "") {
     super(`canon/2 ${rule}${detail ? `: ${detail}` : ""}`);
@@ -1996,29 +1998,56 @@ class Canon2Reader {
   }
 }
 
-/** The canon/2 document in `data` (bytes, decoded as strict UTF-8 first, or an already decoded string) as
- *  an object, array, string, integer (a JS number inside plus or minus 2^53 minus 1), boolean or null.
- *  Throws Canon2Error with the first rule broken. */
-export function canon2Read(data) {
+/** The value of `data` read by every canon/2 rule but the spelling, and the UTF-8 bytes it was read from. */
+function canon2Parse(data) {
   let text;
+  let raw;
   if (typeof data === "string") {
     // a lone surrogate has no UTF-8 form
     if (/[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/.test(data)) {
       throw new Canon2Error("utf8", "the text holds a surrogate code point, which has no UTF-8 form");
     }
     text = data;
+    raw = new TextEncoder().encode(data);
   } else {
     try {
       text = UTF8_STRICT.decode(data);
     } catch {
       throw new Canon2Error("utf8");
     }
+    raw = data;
   }
   const reader = new Canon2Reader(Array.from(text));
   const value = reader.value(0);
   reader.skipWs();
   if (reader.pos !== reader.cps.length) throw new Canon2Error("syntax", `trailing text at ${reader.pos}`);
+  return { value, raw };
+}
+
+function sameBytes(left, right) {
+  if (left.length !== right.length) return false;
+  for (let index = 0; index < left.length; index += 1) if (left[index] !== right[index]) return false;
+  return true;
+}
+
+/** The strict reader (the Lean `Core.readCanonical`): the canon/2 document in `data` (bytes, decoded as
+ *  strict UTF-8 first, or an already decoded string) as an object, array, string, integer (a JS number
+ *  inside plus or minus 2^53 minus 1), boolean or null, when `data` is exactly the canonical spelling of
+ *  that value. Throws Canon2Error with the first rule broken, or `not-canonical` for a document spelled
+ *  any other way (whitespace, members out of key order, a needless escape). */
+export function canon2Read(data) {
+  const { value, raw } = canon2Parse(data);
+  if (!sameBytes(canon2Write(value), raw)) {
+    throw new Canon2Error("not-canonical", "the document reads as canon/2 but is not its canonical spelling");
+  }
   return value;
+}
+
+/** The canonical bytes of the canon/2 value a person wrote in `data`, in any legal spelling (whitespace,
+ *  member order, escapes); every other rule holds as in canon2Read, and the result is what canon2Read
+ *  accepts. A writer's step, never a reader's (prismpath/kernel/canon2.py `canonicalize`). */
+export function canon2Canonicalize(data) {
+  return canon2Write(canon2Parse(data).value);
 }
 
 function canon2WriteString(text, out) {

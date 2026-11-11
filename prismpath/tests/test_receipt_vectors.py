@@ -64,7 +64,7 @@ def test_the_set_covers_every_kind_and_every_named_tamper(encoding):
     assert statuses == {"signed", "signed-unpinned", "unsigned", "invalid"}
     causes = {cause for case in CASES if case["kind"] == "flow" for cause in case["expect"]["causes"]}
     assert causes == {"sig:missing", "sig:invalid", "sig:revoked-key", "manifest:key-id-mismatch", "manifest:bad-format",
-                      "flow:sha256-mismatch", "flow:version-replay"}
+                      "flow:sha256-mismatch", "flow:version-replay", "document:not-canonical"}
     assert any(case["kind"] == "flow" and case["expect"]["ok"] for case in CASES)
 
 

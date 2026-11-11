@@ -22,7 +22,8 @@ in a pack manifest, so a checkout that turns LF into CRLF does not unauthorize a
 any character does.
 
 `verify_flow` refuses with registry causes (`prismpath/kernel/causes.py`): `sig:missing` when there is
-no manifest, `manifest:bad-format`, `sig:invalid` when no trusted authority key verifies it,
+no manifest, `manifest:bad-format`, `document:not-canonical` when the manifest is canon/2 but not its
+exact canonical bytes, `sig:invalid` when no trusted authority key verifies it,
 `sig:revoked-key`, `manifest:key-id-mismatch`, `flow:sha256-mismatch` when the flow changed after
 signing, and `flow:version-replay` when the version is below one already accepted, or equal to it with
 other content. The accepted versions are a floor kept by the deployment (`VersionFloor`), not beside
@@ -113,7 +114,7 @@ def read_manifest(flow_path: str) -> Optional[dict]:
     """The manifest beside the flow, unverified, or None when there is none or it is not JSON."""
     json_path, _sig_path = manifest_paths(flow_path)
     try:
-        with open(json_path, encoding="utf-8") as handle:
+        with open(json_path, encoding="utf-8", newline="") as handle:
             manifest = canon.loads_document(handle.read())
     except (FileNotFoundError, ValueError):
         return None
@@ -130,8 +131,10 @@ def verify_flow(flow_path: str, pubkey_paths: List[str], revoked: frozenset = fr
     if not os.path.exists(json_path) or not os.path.exists(sig_path):
         return False, ["sig:missing"], None
     try:
-        with open(json_path, encoding="utf-8") as handle:
+        with open(json_path, encoding="utf-8", newline="") as handle:
             manifest = canon.loads_document(handle.read())
+    except canon.NotCanonical:
+        return False, [canon.NotCanonical.CAUSE], None
     except ValueError:
         return False, ["manifest:bad-format"], None
     with open(sig_path, "rb") as handle:

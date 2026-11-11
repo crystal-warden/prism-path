@@ -92,12 +92,14 @@ class AuditLog:
         self.skipped_causes: dict = {}         # line number -> why the line was refused (canon/1 lines, bad JSON)
         self._accumulator = _statements.MerkleAccumulator()      # the root as leaves arrive, for signing
         if path and os.path.exists(path):
-            with open(path) as log_file:
-                for line_num, line in enumerate(log_file, 1):
-                    line = line.strip()
-                    if not line:
+            with open(path, encoding="utf-8", newline="") as log_file:
+                # split at each line feed and nothing else: a carriage return stays in its line
+                for line_num, line in enumerate(log_file.read().split("\n"), 1):
+                    if not line.strip():
                         continue
                     try:
+                        # the line as written, its one line feed the terminator: a line in any spelling but
+                        # the event's canonical bytes is refused (document:not-canonical), not respelled
                         ev = _canon.loads_document(line)
                     except Exception as error:
                         self.skipped.append(line_num)
@@ -235,10 +237,9 @@ class AuditLog:
             return False
         with self._lock:
             on_disk = []
-            with open(self.path) as log_file:
-                for line in log_file:
-                    line = line.strip()
-                    if not line:
+            with open(self.path, encoding="utf-8", newline="") as log_file:
+                for line in log_file.read().split("\n"):
+                    if not line.strip():
                         continue
                     try:
                         on_disk.append(_leaf_hex(_canon.loads_document(line)))

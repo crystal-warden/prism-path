@@ -18,7 +18,7 @@ import pytest
 pytest.importorskip("cryptography")
 
 import prismpath  # noqa: E402
-from prismpath import cli  # noqa: E402
+from prismpath import canon, cli  # noqa: E402
 from prismpath.hotswap import flow_authority as fa, policy_pack  # noqa: E402
 from prismpath.kernel import causes  # noqa: E402
 from prismpath.ledgers import root_statement as rs  # noqa: E402
@@ -142,8 +142,10 @@ def test_an_edited_manifest_is_refused(setup):
     _sign(setup)
     json_path = fa.manifest_paths(setup["flow"])[0]
     manifest = json.load(open(json_path)); manifest["version"] = 9
-    json.dump(manifest, open(json_path, "w"))
+    open(json_path, "wb").write(canon.canon2_bytes(manifest) + b"\n")
     assert _verify(setup)[:2] == (False, ["sig:invalid"])
+    json.dump(manifest, open(json_path, "w"))                  # and spelled otherwise: refused before the signature
+    assert _verify(setup)[:2] == (False, ["document:not-canonical"])
     open(json_path, "w").write("{not json")
     assert _verify(setup)[:2] == (False, ["manifest:bad-format"])
 

@@ -18,7 +18,8 @@ A Lean `String` holds Unicode scalar values only, so no value holds a lone surro
 
 `readCanonical` is the strict reader: it accepts a byte string exactly when it is the canonical
 spelling of the value it reads to, and refuses every other byte string, with the reader's cause or
-`notCanonical`.
+`notCanonical`. It is the core's one reader: `Core.verdictBytes` reads the image and the reading with
+it (docs/design/spec-verified-core.md, section 3.2).
 
 Everything here is structural recursion or well founded recursion on a natural number, and nothing is
 `partial`, so the writer is total by construction.
@@ -59,7 +60,11 @@ def wStr (s : String) : List Char := '"' :: (escStr (chars s) ++ ['"'])
 def natDigits (n : Nat) : List Char :=
   if n < 10 then [Char.ofNat (48 + n)] else natDigits (n / 10) ++ [Char.ofNat (48 + n % 10)]
 termination_by n
-decreasing_by omega
+decreasing_by
+  -- `Nat.div_lt_self` rather than `omega`, whose proof terms carry `Quot.sound`: the strict reader is on
+  -- the path of `Core.verdictBytes`, and the core's computations depend on `propext` alone.
+  rename_i h
+  exact Nat.div_lt_self (Nat.lt_of_lt_of_le (by decide) (Nat.le_of_not_lt h)) (by decide)
 
 def wInt (n : Int) : List Char := if n < 0 then '-' :: natDigits n.natAbs else natDigits n.natAbs
 
@@ -209,20 +214,24 @@ def canon (v : J) : Bool := doc v && sortedJ v
 
 /-! ## The strict reader -/
 
-/-- Why a byte string is not a canonical canon/2 document. -/
-inductive CanonErr where
-  | doc (e : DocErr)   -- not a canon/2 document at all
-  | notCanonical       -- a document, but not the canonical spelling of its value
-  deriving DecidableEq, Repr, Inhabited
-
-def CanonErr.name : CanonErr → String
-  | .doc e => e.name
-  | .notCanonical => "not-canonical"
-
-/-- The strict reader: a document, and the canonical spelling of its value. -/
-def readCanonical (b : ByteArray) : Except CanonErr J :=
+/-- The strict reader, the one reader of the core: a document, and the canonical spelling of its value.
+A text that is not a document is refused with the reader's cause; a document spelled any other way
+(whitespace, members out of key order, a needless escape) with `DocErr.notCanonical`. -/
+def readCanonical (b : ByteArray) : Except DocErr J :=
   match readBytes b with
-  | .error e => .error (.doc e)
+  | .error e => .error e
   | .ok v => if utf8Enc (writeChars v) = b.data.toList then .ok v else .error .notCanonical
+
+/-! ## The canonicalize path
+
+Text a person wrote reaches the core only through this writer's step: `canonicalize` reads it by every
+rule of the reader, whatever its spelling, and gives the canonical bytes of its value, which the strict
+reader then accepts (`Core.canonicalize_readCanonical`). No reader calls it. -/
+
+/-- The canonical bytes of the document in `b`, in any legal spelling, or the reader's refusal. -/
+def canonicalize (b : ByteArray) : Except DocErr ByteArray :=
+  match readBytes b with
+  | .error e => .error e
+  | .ok v => .ok (writeBytes v)
 
 end Core

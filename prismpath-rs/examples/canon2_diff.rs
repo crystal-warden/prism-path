@@ -3,9 +3,8 @@
 
 //! The Rust leg of the canon/2 differential (formal/diff/canon2_diff.py). An adapter, not part of the
 //! crate: it reads framed documents on stdin, each `<byte length>\n<bytes>\n`, and prints one line per
-//! document, `ok <c> <hex>` (the reader accepts it; `<hex>` is `canon2::write` of its value, `<c>` is 1 when
-//! the input is already those bytes), `refuse <rule>` (the reader refuses it), `writefail <rule>` (the
-//! writer refuses a value the reader returned) or `panic`.
+//! document, `<strict> ; <canonicalize>`: `canon2::read`'s answer (`ok <hex>` with `canon2::write` of the
+//! value, or `refuse <rule>`) and `canon2::canonicalize`'s (`canon <hex>` or `refuse <rule>`), or `panic`.
 use prismpath_rs::canon2;
 use std::io::{Read, Write};
 
@@ -14,13 +13,15 @@ fn hex(bytes: &[u8]) -> String {
 }
 
 fn line(doc: &[u8]) -> String {
-    match canon2::read(doc) {
+    let strict = match canon2::read(doc).and_then(|value| canon2::write(&value)) {
         Err(e) => format!("refuse {}", e.rule()),
-        Ok(value) => match canon2::write(&value) {
-            Err(e) => format!("writefail {}", e.rule()),
-            Ok(out) => format!("ok {} {}", if out.as_slice() == doc { 1 } else { 0 }, hex(&out)),
-        },
-    }
+        Ok(out) => format!("ok {}", hex(&out)),
+    };
+    let canon = match canon2::canonicalize(doc) {
+        Err(e) => format!("refuse {}", e.rule()),
+        Ok(out) => format!("canon {}", hex(&out)),
+    };
+    format!("{strict} ; {canon}")
 }
 
 fn main() {

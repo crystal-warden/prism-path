@@ -3,8 +3,8 @@
 
 // Command canon2_diff is the Go leg of the canon/2 differential (formal/diff/canon2_diff.py). An adapter,
 // not part of the kernel: it reads framed documents on stdin, each `<byte length>\n<bytes>\n`, and prints one
-// line per document, `ok <c> <hex>` (Canon2Read accepts it; <hex> is Canon2Write of its value, <c> is 1 when
-// the input is already those bytes), `refuse <rule>`, `writefail <rule>` or `panic`.
+// line per document, `<strict> ; <canonicalize>`: Canon2Read's answer (`ok <hex>` with Canon2Write of the
+// value, or `refuse <rule>`) and Canon2Canonicalize's (`canon <hex>` or `refuse <rule>`), or `panic`.
 package main
 
 import (
@@ -34,19 +34,21 @@ func line(doc []byte) (text string) {
 			text = "panic"
 		}
 	}()
-	value, err := prismpath.Canon2Read(doc)
-	if err != nil {
-		return "refuse " + rule(err)
+	strict := ""
+	if value, err := prismpath.Canon2Read(doc); err != nil {
+		strict = "refuse " + rule(err)
+	} else if out, err := prismpath.Canon2Write(value); err != nil {
+		strict = "refuse " + rule(err)
+	} else {
+		strict = "ok " + hex.EncodeToString(out)
 	}
-	out, err := prismpath.Canon2Write(value)
-	if err != nil {
-		return "writefail " + rule(err)
+	canon := ""
+	if out, err := prismpath.Canon2Canonicalize(doc); err != nil {
+		canon = "refuse " + rule(err)
+	} else {
+		canon = "canon " + hex.EncodeToString(out)
 	}
-	same := 0
-	if bytes.Equal(out, doc) {
-		same = 1
-	}
-	return fmt.Sprintf("ok %d %s", same, hex.EncodeToString(out))
+	return strict + " ; " + canon
 }
 
 func main() {

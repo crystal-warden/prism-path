@@ -11,7 +11,7 @@
 pub const CAUSE_NONE: u8 = 0;
 
 /// `registry_sha256()` of the Python registry when this file was generated.
-pub const REGISTRY_SHA256: &str = "4b50c76662b6e71206d699581ed090cd9968385dcbd539c2ce7a2fc6088e5443";
+pub const REGISTRY_SHA256: &str = "b074b28a012192bd1c3102d813742fc78cce13edfa4bd63197d0a65c021ef8f6";
 
 /// The cause class, the semantic axis of the registry.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -177,6 +177,12 @@ pub const POLICY_ABSENCE_UNTESTED: u8 = 98;
 pub const READING_UNREADABLE: u8 = 99;
 /// `reading:not-object`
 pub const READING_NOT_OBJECT: u8 = 100;
+/// `policy:not-canonical`
+pub const POLICY_NOT_CANONICAL: u8 = 101;
+/// `reading:not-canonical`
+pub const READING_NOT_CANONICAL: u8 = 102;
+/// `document:not-canonical`
+pub const DOCUMENT_NOT_CANONICAL: u8 = 103;
 
 /// Every registered cause, in registry order.
 pub const REGISTRY: &[Cause] = &[
@@ -246,6 +252,9 @@ pub const REGISTRY: &[Cause] = &[
     Cause { code: 98, name: "policy:absence-untested", class: CauseClass::Envelope, description: "a field that allows absence is tested with == None or != None by no rule" },
     Cause { code: 99, name: "reading:unreadable", class: CauseClass::Routing, description: "the reading is not a canon/2 document" },
     Cause { code: 100, name: "reading:not-object", class: CauseClass::Routing, description: "the reading is a canon/2 document that is not an object" },
+    Cause { code: 101, name: "policy:not-canonical", class: CauseClass::Envelope, description: "the core's policy image reads as canon/2 but is not its canonical spelling" },
+    Cause { code: 102, name: "reading:not-canonical", class: CauseClass::Routing, description: "the reading reads as canon/2 but is not its canonical spelling" },
+    Cause { code: 103, name: "document:not-canonical", class: CauseClass::Envelope, description: "a hashed or signed document reads as canon/2 but is not its canonical spelling" },
 ];
 
 /// The engine's stop vocabulary mapped onto the registry; `terminal` and `waiting` are clean and have no cause.

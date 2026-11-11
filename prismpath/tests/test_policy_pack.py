@@ -12,6 +12,7 @@ import pytest
 
 pytest.importorskip("cryptography")
 
+from prismpath import canon  # noqa: E402
 from prismpath.hotswap import policy_pack as pp# noqa: E402
 from prismpath.kernel.parser import parse  # noqa: E402
 
@@ -86,9 +87,19 @@ def test_tampered_manifest(pack):
     man_path = Path(pack["ppt"] + ".manifest.json")
     man = json.loads(man_path.read_text())
     man["version"] = 999                       # try to skip the version gate
-    man_path.write_text(json.dumps(man, indent=1, sort_keys=True))
+    man_path.write_bytes(canon.canon2_bytes(man) + b"\n")
     ok, reasons, _ = _verify(pack)
     assert not ok and reasons == ["sig:invalid"]
+
+
+def test_a_respelled_manifest_is_refused_as_not_canonical(pack):
+    man_path = Path(pack["ppt"] + ".manifest.json")
+    man = json.loads(man_path.read_text())
+    man_path.write_text(json.dumps(man, indent=1, sort_keys=True))   # the signed content, spelled otherwise
+    ok, reasons, _ = _verify(pack)
+    assert not ok and reasons == ["document:not-canonical"]
+    man_path.write_bytes(canon.canonicalize_document(man_path.read_bytes()) + b"\n")
+    assert _verify(pack)[:2] == (True, [])
 
 
 def test_wrong_key(pack, tmp_path):

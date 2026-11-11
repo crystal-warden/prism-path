@@ -207,7 +207,7 @@ def python_decisions(cases):
                 raise RuntimeError(f"case {case['id']}: an uncoded refusal {row}")
             refusal = {"verdict": "refuse", "cause": row["cause"], "code": row["code"],
                        "field": row.get("field"), "reason": row.get("policy_reason") or
-                       (row.get("reason") if row["cause"] == "policy:unreadable" else None)}
+                       (row.get("reason") if row["cause"] in core_diff.UNREADABLE_POLICY else None)}
             out[case["id"]] = [_decision(refusal) for _raw in case["readings"]]
         else:
             out[case["id"]] = None

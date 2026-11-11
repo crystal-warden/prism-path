@@ -1201,7 +1201,7 @@ theorem readCanonical_refuses {b : ByteArray} (h : ∀ v, canon v = true → b �
 /-- The refusal's cause: the reader's own cause for a text that is not a document, and `notCanonical`
 for a document that is not spelled canonically. -/
 theorem readCanonical_cause (b : ByteArray) :
-    (∀ e, readBytes b = .error e → readCanonical b = .error (.doc e)) ∧
+    (∀ e, readBytes b = .error e → readCanonical b = .error e) ∧
     (∀ v, readBytes b = .ok v → b ≠ writeBytes v → readCanonical b = .error .notCanonical) := by
   refine ⟨fun e h => by unfold readCanonical; rw [h], fun v h hne => ?_⟩
   unfold readCanonical; rw [h]
@@ -1226,7 +1226,8 @@ implementations share, accepts documents that are not the canonical spelling of 
 whitespace (`[ ]`), members out of key order (`{"b":null,"a":null}`) and a needless escape (`A` written
 as the six characters backslash, `u`, `0`, `0`, `4`, `1`).
 So `writeBytes (readBytes b) = b` does not hold of the reader; it holds of `readCanonical`
-(`write_readCanonical`), which refuses these three as `notCanonical`. -/
+(`write_readCanonical`), which refuses these three as `notCanonical`, and which is why the core and every
+implementation read with the strict reader (specification section 3.2). -/
 theorem reader_not_canonical :
     readBytes ⟨#[91, 32, 93]⟩ = .ok (.arr []) ∧ readCanonical ⟨#[91, 32, 93]⟩ = .error .notCanonical ∧
     readBytes ⟨#[123, 34, 98, 34, 58, 110, 117, 108, 108, 44, 34, 97, 34, 58, 110, 117, 108, 108, 125]⟩ =
@@ -1236,5 +1237,110 @@ theorem reader_not_canonical :
     readBytes ⟨#[34, 92, 117, 48, 48, 52, 49, 34]⟩ = .ok (.str "A") ∧
     readCanonical ⟨#[34, 92, 117, 48, 48, 52, 49, 34]⟩ = .error .notCanonical := by
   refine ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩
+
+
+/-! ## The theorems: the core reads strictly
+
+`Core.verdictBytes` reads the image and the reading with `readCanonical`. These theorems say what that
+adds to the core's theorems about `Core.verdict`: a route is given only on canonical bytes, a document
+spelled any other way is refused with its own cause, and on canonical bytes the decision is the one
+`Core.verdict` makes on the values. -/
+
+/-- **A non canonical image is refused.** An image that reads as a canon/2 document but is not the
+writer's bytes of its value refuses every reading with `policy:not-canonical`. -/
+theorem noncanonical_image_refused {image : ByteArray} {v : J} (h : readBytes image = .ok v)
+    (hne : image ≠ writeBytes v) (reading : ByteArray) :
+    verdictBytes image reading = .refuse (.policy (.unreadable .notCanonical)) := by
+  unfold verdictBytes
+  rw [(readCanonical_cause image).2 v h hne]
+  exact unreadable_image_refused _ _
+
+/-- **A non canonical reading is refused.** Under an accepted image, a reading that reads as a canon/2
+document but is not the writer's bytes of its value is refused with `reading:not-canonical`, whatever
+the value: a respelling of a reading that routes does not route. -/
+theorem noncanonical_reading_refused {image reading : ByteArray} {p : Checked} {v : J}
+    (hp : loadPolicy (readCanonical image) = .ok p) (h : readBytes reading = .ok v)
+    (hne : reading ≠ writeBytes v) :
+    verdictBytes image reading = .refuse (.readingUnreadable .notCanonical) := by
+  unfold verdictBytes
+  rw [(readCanonical_cause reading).2 v h hne]
+  exact unreadable_reading_refused hp _
+
+/-- The reader's own refusals are unchanged: a reading that is not a document at all is refused with
+the rule it broke, as before. -/
+theorem unreadable_bytes_refused {image reading : ByteArray} {p : Checked} {e : DocErr}
+    (hp : loadPolicy (readCanonical image) = .ok p) (h : readBytes reading = .error e) :
+    verdictBytes image reading = .refuse (.readingUnreadable e) := by
+  unfold verdictBytes
+  rw [(readCanonical_cause reading).1 e h]
+  exact unreadable_reading_refused hp _
+
+/-- **On canonical bytes the decision is the core's on the values.** -/
+theorem verdictBytes_canonical {vi vr : J} (hi : canon vi = true) (hr : canon vr = true) :
+    verdictBytes (writeBytes vi) (writeBytes vr) = verdict (.ok vi) (.ok vr) := by
+  unfold verdictBytes
+  rw [readCanonical_write hi, readCanonical_write hr]
+
+/-- **A route is given on canonical bytes only.** When `verdictBytes` routes, the image and the reading
+are each the writer's bytes of a canonical value. -/
+theorem route_canonical {image reading : ByteArray} {t : String} (h : verdictBytes image reading = .route t) :
+    (∃ vi, canon vi = true ∧ image = writeBytes vi) ∧ (∃ vr, canon vr = true ∧ reading = writeBytes vr) := by
+  unfold verdictBytes at h
+  cases hi : readCanonical image with
+  | error e => rw [hi, unreadable_image_refused] at h; cases h
+  | ok vi =>
+    refine ⟨⟨vi, (readCanonical_iff image vi).mp hi⟩, ?_⟩
+    cases hrd : readCanonical reading with
+    | ok vr => exact ⟨vr, (readCanonical_iff reading vr).mp hrd⟩
+    | error e =>
+      rw [hi, hrd] at h
+      cases hp : loadPolicy (Except.ok vi) with
+      | error pe => rw [policy_refusal_refuses_all hp] at h; cases h
+      | ok p => rw [unreadable_reading_refused hp] at h; cases h
+
+/-- **One decided spelling per reading.** Two reading byte strings that both get a decision other than
+an unreadable refusal under the same image, and read to the same value, are byte identical. -/
+theorem decided_reading_unique {image r₁ r₂ : ByteArray} {v : J}
+    (h₁ : readCanonical r₁ = .ok v) (h₂ : readCanonical r₂ = .ok v) :
+    r₁ = r₂ ∧ verdictBytes image r₁ = verdictBytes image r₂ := by
+  refine ⟨readCanonical_unique h₁ h₂, ?_⟩
+  unfold verdictBytes; rw [h₁, h₂]
+
+
+/-! ## The theorems: the canonicalize path -/
+
+/-- **Canonicalize gives what the strict reader accepts.** The bytes `canonicalize` writes for any text
+the reader reads are accepted by the strict reader, as the normal form of the value read. -/
+theorem canonicalize_readCanonical {b c : ByteArray} (h : canonicalize b = .ok c) :
+    ∃ v, readBytes b = .ok v ∧ readCanonical c = .ok (norm v) := by
+  unfold canonicalize at h
+  cases hr : readBytes b with
+  | error e => rw [hr] at h; cases h
+  | ok v =>
+    rw [hr] at h
+    cases h
+    refine ⟨v, rfl, ?_⟩
+    obtain ⟨_, hc, hw⟩ := canonical_form hr
+    rw [← hw]
+    exact readCanonical_write hc
+
+/-- **Canonicalize is the identity on canonical bytes.** -/
+theorem canonicalize_canonical {b : ByteArray} {v : J} (h : readCanonical b = .ok v) : canonicalize b = .ok b := by
+  obtain ⟨hr, hw⟩ := (readCanonical_ok_iff b v).mp h
+  unfold canonicalize; rw [hr]; simp only [hw]
+
+/-- **Canonicalize refuses what the reader refuses**, with the same cause; it never refuses a document
+for its spelling. -/
+theorem canonicalize_error_iff (b : ByteArray) (e : DocErr) :
+    canonicalize b = .error e ↔ readBytes b = .error e := by
+  unfold canonicalize
+  cases readBytes b with
+  | error e' => simp
+  | ok v => simp
+
+/-- **Canonicalize is idempotent.** -/
+theorem canonicalize_idem {b c : ByteArray} (h : canonicalize b = .ok c) : canonicalize c = .ok c := by
+  obtain ⟨v, _, hc⟩ := canonicalize_readCanonical h
+  exact canonicalize_canonical hc
 
 end Core

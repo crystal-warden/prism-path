@@ -38,6 +38,7 @@ var coreCauseCodes = map[string]int{
 	"policy:unreadable": 89, "policy:shape": 90, "policy:not-level-m": 91, "policy:definition": 92,
 	"policy:engine-counter": 93, "policy:kind-mismatch": 94, "policy:rounding": 95, "policy:threshold": 96,
 	"policy:none": 97, "policy:absence-untested": 98, "reading:unreadable": 99, "reading:not-object": 100,
+	"policy:not-canonical": 101, "reading:not-canonical": 102,
 }
 
 // CoreCauseCode is the registered code of one of the core's causes.

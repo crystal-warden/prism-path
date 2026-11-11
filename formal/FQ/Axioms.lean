@@ -116,3 +116,14 @@ reader, and the theorems that the writer and the reader are inverse on the canon
 #print axioms Core.writeBytes
 #print axioms Core.readCanonical
 #print axioms Core.reader_not_canonical
+#print axioms Core.noncanonical_image_refused
+#print axioms Core.noncanonical_reading_refused
+#print axioms Core.unreadable_bytes_refused
+#print axioms Core.verdictBytes_canonical
+#print axioms Core.route_canonical
+#print axioms Core.decided_reading_unique
+#print axioms Core.canonicalize
+#print axioms Core.canonicalize_readCanonical
+#print axioms Core.canonicalize_canonical
+#print axioms Core.canonicalize_error_iff
+#print axioms Core.canonicalize_idem

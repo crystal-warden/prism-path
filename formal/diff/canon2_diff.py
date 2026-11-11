@@ -2,13 +2,18 @@
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """The canon/2 differential: the Lean oracle against the Python, Rust, JavaScript and Go readers and writers.
 
-Every leg reads a framed document (`<byte length>\\n<bytes>\\n`) and prints one line: `ok <c> <hex>` when its
-reader accepts the document (`<hex>` is its writer's bytes of the value read, `<c>` is 1 when the input is
-already those bytes), `refuse <rule>` when its reader refuses it, `writefail <rule>` when its writer refuses a
-value its reader returned, or `panic`. The legs are
+Every leg reads a framed document (`<byte length>\\n<bytes>\\n`) and prints one line, `<strict> ; <canonicalize>`:
 
-- `lean`: `lake exe canon2-oracle --batch` (formal/Core/Canon2Main.lean), whose reader, writer and strict
-  reader are the functions formal/Core/Canon2Proofs.lean proves inverse; the spec says the Lean reader
+- `<strict>` is its strict reader's answer, the reader every hashed or signed document and every reading
+  goes through (specification section 3.2): `ok <hex>` with its writer's bytes of the value read, which
+  must be the input itself, or `refuse <rule>` with the first reader rule broken or `not-canonical`;
+- `<canonicalize>` is its canonicalize path's answer, the writer's step for text a person wrote:
+  `canon <hex>` with the canonical bytes of the value read in any spelling, or `refuse <rule>`;
+
+or `panic`. The legs are
+
+- `lean`: `lake exe canon2-oracle --batch` (formal/Core/Canon2Main.lean), whose strict reader, writer and
+  canonicalize are the functions formal/Core/Canon2Proofs.lean is about; the spec says the Lean reader
   defines canon/2, so on a disagreement the Lean line is the spec's answer;
 - `python`: `prismpath.kernel.canon2` in process;
 - `rust`: `prismpath-rs/examples/canon2_diff.rs` (`--rust`, built with `cargo build --release --example
@@ -18,18 +23,19 @@ value its reader returned, or `panic`. The legs are
 
 Three sets, all seeded:
 
-1. `vectors`: the 73 frozen cases of `prismpath/portable/conformance/canon2.json`, each against its
-   expected canonical bytes or refusal as well as across the legs;
+1. `vectors`: the frozen cases of `prismpath/portable/conformance/canon2.json`, each against its expected
+   strict answer and canonical bytes as well as across the legs;
 2. `values`: generated values (`--values`, default 100000) in the writer's domain, each sent twice, as its
-   canonical bytes (`dumps`; every leg must print `ok 1` and those bytes) and as a random legal spelling
-   (whitespace, member order, escapes; every leg must print the canonical bytes of the same value);
+   canonical bytes (every leg must print `ok` and those bytes, and canonicalize them to themselves) and as
+   a random legal spelling (whitespace, member order, escapes; unless it happens to be the canonical one,
+   every leg must refuse it as `not-canonical` and canonicalize it to the canonical bytes of the value);
 3. `mutations`: byte strings (`--mutations`, default 100000) made from canonical spellings by key order
    swaps, escape variants, whitespace, exponents and fractions, `-0`, leading zeros, integers at and past
    plus or minus 2^53 minus 1, lone and paired surrogate escapes, duplicate keys, nesting at and past 128,
    invalid UTF-8, a byte order mark, truncation and random byte edits; the legs must agree;
 
-and a fixed point check: every canonical output of the three sets is sent again and every leg must print
-`ok 1` with the same bytes.
+and a fixed point check: every canonical output of the three sets is sent again and every leg must accept
+it as it is and canonicalize it to itself.
 
 A disagreement is printed with a minimised reproducer (bytes in hex and as text), every leg's line, and the
 Lean line as the spec's answer. The last line is `canon2-diff: <n> documents, <d> disagreements`.
@@ -62,16 +68,28 @@ def frame(docs: Sequence[bytes]) -> bytes:
 
 def python_line(doc: bytes) -> str:
     try:
-        value = canon2.loads(doc)
+        strict = "ok " + canon2.dumps(canon2.loads(doc)).hex()
     except canon2.Canon2Error as error:
-        return "refuse " + error.rule
+        strict = "refuse " + error.rule
     except RecursionError:
         return "panic recursion"
     try:
-        out = canon2.dumps(value)
+        canon = "canon " + canon2.canonicalize(doc).hex()
     except canon2.Canon2Error as error:
-        return "writefail " + error.rule
-    return "ok %d %s" % (1 if out == doc else 0, out.hex())
+        canon = "refuse " + error.rule
+    except RecursionError:
+        return "panic recursion"
+    return f"{strict} ; {canon}"
+
+
+def accepted(canonical: bytes) -> str:
+    """The line every leg prints for canonical bytes."""
+    return f"ok {canonical.hex()} ; canon {canonical.hex()}"
+
+
+def respelled(canonical: bytes) -> str:
+    """The line every leg prints for another spelling of the value whose canonical bytes are given."""
+    return f"refuse not-canonical ; canon {canonical.hex()}"
 
 
 def run_cmd(cmd: List[str], docs: Sequence[bytes], cwd: Path) -> List[str]:
@@ -316,11 +334,16 @@ def structured(rng: random.Random) -> bytes:
 
 
 # ----------------------------------------------------------------- comparison and minimisation
+def shape(line: str) -> str:
+    """A line without its bytes: the strict verb and rule and the canonicalize verb and rule."""
+    return " ".join(word for word in line.split() if word in ("ok", "canon", "refuse", ";", "panic") or
+                    not all(c in "0123456789abcdef" for c in word))
+
+
 def signature(lines: Dict[str, str]) -> Tuple[Tuple[str, str], ...]:
-    """Which legs differ from the Lean line, and how (the line's first two words)."""
+    """Which legs differ from the Lean line, and how (the line's shape)."""
     lean = lines["lean"]
-    return tuple(sorted((leg, " ".join(lines[leg].split()[:2])) for leg in LEGS if lines[leg] != lean)) + \
-        (("lean", " ".join(lean.split()[:2])),)
+    return tuple(sorted((leg, shape(lines[leg])) for leg in LEGS if lines[leg] != lean)) + (("lean", shape(lean)),)
 
 
 def minimise(legs: Legs, doc: bytes, sig) -> bytes:
@@ -369,13 +392,9 @@ def main() -> int:
     for case in vectors:
         doc = bytes.fromhex(case["hex"])
         sets["vectors"].append(doc)
-        if "refuse" in case:
-            want = "refuse " + case["refuse"]
-            expect["vectors"].append(lambda line, want=want: line == want)
-        else:
-            canon = case["canonical_hex"]
-            flag = "1" if canon == case["hex"] else "0"
-            expect["vectors"].append(lambda line, want=f"ok {flag} {canon}": line == want)
+        strict = "refuse " + case["refuse"] if "refuse" in case else "ok " + case["hex"]
+        canon = "canon " + case["canonical_hex"] if "canonical_hex" in case else "refuse " + case["refuse"]
+        expect["vectors"].append(lambda line, want=f"{strict} ; {canon}": line == want)
 
     sets["probes"] = list(PROBES)
     expect["probes"] = [lambda line: True] * len(PROBES)
@@ -386,10 +405,10 @@ def main() -> int:
         canon = canon2.dumps(value)
         spelt = spell(rng, value, rng.choice([0.0, 0.2, 0.5])).encode()
         sets["values"].append(canon)
-        expect["values"].append(lambda line, want="ok 1 " + canon.hex(): line == want)
+        expect["values"].append(lambda line, want=accepted(canon): line == want)
         sets["values"].append(spelt)
-        flag = "1" if spelt == canon else "0"
-        expect["values"].append(lambda line, want=f"ok {flag} " + canon.hex(): line == want)
+        want = accepted(canon) if spelt == canon else respelled(canon)
+        expect["values"].append(lambda line, want=want: line == want)
 
     sets["mutations"] = []
     for i in range(args.mutations):
@@ -412,9 +431,10 @@ def main() -> int:
         for i, doc in enumerate(docs):
             lines = {leg: res[leg][i] for leg in LEGS}
             words = lines["lean"].split()
-            outcome[" ".join(words[:2])] += 1
-            if words[0] == "ok":
-                canon_out.add(bytes.fromhex(words[2]) if len(words) > 2 else b"")
+            outcome[shape(lines["lean"])] += 1
+            if "canon" in words:
+                after = words[words.index("canon") + 1:]
+                canon_out.add(bytes.fromhex(after[0]) if after else b"")
             if len(set(lines.values())) != 1:
                 disagree += 1
                 findings[signature(lines)].append((name, doc, lines))
@@ -429,11 +449,11 @@ def main() -> int:
     fixed_bad = 0
     for i, doc in enumerate(fixed):
         lines = {leg: res[leg][i] for leg in LEGS}
-        want = "ok 1 " + doc.hex()
+        want = accepted(doc)
         if any(line != want for line in lines.values()):
             fixed_bad += 1
             findings[signature(lines)].append(("fixed-point", doc, lines))
-    print(f"fixed point: {len(fixed)} canonical outputs sent again, {fixed_bad} not printed back as ok 1 with the same bytes")
+    print(f"fixed point: {len(fixed)} canonical outputs sent again, {fixed_bad} not accepted as they are and canonicalized to themselves")
     print(f"expectations (vectors and generated values against the Lean line): {len(expect_fail)} failed")
     for name, doc, line in expect_fail[:5]:
         print(f"  {name}: {doc[:80].hex()} -> {line[:120]}")

@@ -75,8 +75,10 @@ fn a_chain_signed_in_rust_test_code_verifies_like_one_signed_by_python() {
     // A second statement that names the first.
     let second = statement(&signer, 1, 1, &leaf, &statement_hash(&first).unwrap());
     assert_eq!(verify_trail(&log, Some(&format!("{first}\n{second}\n")), &pinned).status, SIGNED);
-    // The same chain read without its newline at the end, and with Windows line endings.
-    assert_eq!(verify_trail(&log, Some(&format!("{first}\r\n{second}")), &pinned).status, SIGNED);
+    // The same chain read without its newline at the end verifies; with Windows line endings a statement
+    // is not its canonical bytes, and the chain does not verify.
+    assert_eq!(verify_trail(&log, Some(&format!("{first}\n{second}")), &pinned).status, SIGNED);
+    assert_eq!(verify_trail(&log, Some(&format!("{first}\r\n{second}")), &pinned).status, INVALID);
 }
 
 #[test]

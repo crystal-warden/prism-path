@@ -18,7 +18,7 @@
 //!
 //! Verify only: this crate holds no signing path for flow manifests. Refusals are the registry
 //! causes (`prismpath/kernel/causes.py`), in the order a reader would ask: `sig:missing`,
-//! `manifest:bad-format`, `sig:invalid`, `sig:revoked-key`, `manifest:key-id-mismatch`,
+//! `manifest:bad-format`, `document:not-canonical`, `sig:invalid`, `sig:revoked-key`, `manifest:key-id-mismatch`,
 //! `flow:sha256-mismatch` (87), `flow:version-replay` (88).
 //!
 //! The authority key is the one `swap keygen` writes. The instance key that signs root statements
@@ -109,8 +109,10 @@ pub fn verify_flow(
     let (Some(manifest_text), Some(signature)) = (manifest_text, signature) else {
         return FlowVerdict::refuse(SIG_MISSING, None);
     };
-    let Ok(manifest) = prismpath_rs::durable::read_document(manifest_text) else {
-        return FlowVerdict::refuse(MANIFEST_BAD_FORMAT, None);
+    let manifest = match prismpath_rs::durable::read_document(manifest_text) {
+        Ok(manifest) => manifest,
+        Err(error) if error.is_not_canonical() => return FlowVerdict::refuse(prismpath_rs::durable::NOT_CANONICAL_CAUSE, None),
+        Err(_) => return FlowVerdict::refuse(MANIFEST_BAD_FORMAT, None),
     };
     let as_object = manifest.is_object().then(|| manifest.clone());
     if !manifest.is_object()

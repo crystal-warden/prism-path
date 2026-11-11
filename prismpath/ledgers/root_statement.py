@@ -303,13 +303,24 @@ def make_statement(key: InstanceKey, *, log: str, seq: int, root: str, leaves: i
     return body
 
 
+def _is_json(line: str) -> bool:
+    """The line parses as JSON at all: a final line that does not is a write a crash cut short, and one
+    that does but is not a canonical statement is `bad_format`."""
+    import json
+    try:
+        json.loads(line)
+    except ValueError:
+        return False
+    return True
+
+
 def read_statements(path: str) -> Tuple[List[dict], List[dict]]:
     """Every statement in the file, and the findings reading it produced. A final line that is not JSON
     is a write a crash cut short, reported as `interrupted_statement`; a bad line anywhere else is
     `bad_format`, because a chain with an unreadable link proves nothing past it."""
     if not path or not os.path.exists(path):
         return [], []
-    with open(path, encoding="utf-8") as handle:
+    with open(path, encoding="utf-8", newline="") as handle:     # bytes as written: a CR is not dropped
         raw_lines = handle.read().split("\n")
     if raw_lines and raw_lines[-1] == "":
         raw_lines.pop()
@@ -320,7 +331,7 @@ def read_statements(path: str) -> Tuple[List[dict], List[dict]]:
             if not isinstance(record, dict):
                 raise ValueError("not an object")
         except ValueError:
-            if index == len(raw_lines) - 1:
+            if index == len(raw_lines) - 1 and not _is_json(line):
                 findings.append({"finding": "interrupted_statement", "line": index + 1})
             else:
                 findings.append({"finding": "bad_format", "line": index + 1})

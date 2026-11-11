@@ -423,8 +423,10 @@ fn leaf_hex(ev: &Value) -> String {
 }
 
 /// The lines of a text file the way Python's universal newline iteration yields them.
-fn python_lines(text: &str) -> Vec<String> {
-    text.replace("\r\n", "\n").replace('\r', "\n").split('\n').map(str::to_string).collect()
+/// The lines of a JSON Lines file of documents: the text split at each line feed and nothing else, so a
+/// carriage return stays in its line and the strict reader refuses it (`prismpath.ledgers.audit_log`).
+fn document_lines(text: &str) -> Vec<&str> {
+    text.split('\n').collect()
 }
 
 impl AuditLog {
@@ -441,9 +443,8 @@ impl AuditLog {
             let bytes = std::fs::read(path).map_err(|error| HostError::Io(io_text(path, &error)))?;
             let text = String::from_utf8(bytes)
                 .map_err(|error| HostError::Io(format!("{path}: not valid UTF-8: {error}")))?;
-            for (offset, raw) in python_lines(&text).iter().enumerate() {
-                let line = py_strip(raw);
-                if line.is_empty() {
+            for (offset, line) in document_lines(&text).into_iter().enumerate() {
+                if py_strip(line).is_empty() {
                     continue;
                 }
                 match durable::read_document(line) {
@@ -520,9 +521,8 @@ impl AuditLog {
         let text = String::from_utf8(bytes)
             .map_err(|error| HostError::Io(format!("{}: not valid UTF-8: {error}", self.path)))?;
         let mut on_disk = Vec::new();
-        for raw in python_lines(&text) {
-            let line = py_strip(&raw);
-            if line.is_empty() {
+        for line in document_lines(&text) {
+            if py_strip(line).is_empty() {
                 continue;
             }
             match durable::read_document(line) {

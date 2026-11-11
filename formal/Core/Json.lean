@@ -10,6 +10,12 @@ minus 1, written without a fraction, an exponent or a negative zero; whose objec
 whose strings hold no lone surrogate; and whose nesting is at most `maxDepth`. Every other text is a
 refusal with one `DocErr` cause, the first one met reading left to right.
 
+This reader alone accepts spellings that are not canonical (whitespace, members out of key order,
+needless escapes). The core reads nothing with it directly: every image and reading goes through the
+strict reader `Core.readCanonical` (Canon2.lean), which accepts exactly the canonical spelling of the
+value this reader reads and refuses every other document with `notCanonical`, the one cause this reader
+itself never returns.
+
 Every function here is defined by structural recursion (on a fuel argument or on the input list), so
 the reader is total by construction and no `partial` definition appears. No `Classical` reasoning is
 used to compute: every test is a decidable comparison of characters or natural numbers.
@@ -43,12 +49,13 @@ inductive DocErr where
   | dupKey        -- an object holds a key twice
   | loneSurrogate -- a \u escape naming half of a surrogate pair alone
   | depth         -- nesting deeper than maxDepth
+  | notCanonical  -- a document, but not the canonical spelling of its value (`Core.readCanonical`)
   deriving DecidableEq, Repr, Inhabited
 
 def DocErr.name : DocErr → String
   | .utf8 => "utf8" | .syntax => "syntax" | .float => "float" | .intRange => "integer-range"
   | .negZero => "negative-zero" | .dupKey => "duplicate-key" | .loneSurrogate => "lone-surrogate"
-  | .depth => "depth"
+  | .depth => "depth" | .notCanonical => "not-canonical"
 
 /-! ## UTF-8
 

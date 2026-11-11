@@ -13,6 +13,7 @@ import pytest
 
 pytest.importorskip("cryptography")
 
+from prismpath import canon  # noqa: E402
 from prismpath.hotswap import policy_pack as pp# noqa: E402
 from prismpath.hotswap import policy_host as ph# noqa: E402
 from prismpath.ledgers.audit_log import AuditLog  # noqa: E402
@@ -438,7 +439,7 @@ def test_an_old_layout_state_directory_is_read_and_migrated_by_the_next_swap(env
     (state / ph.image_file_name(h1)).rename(state / "active.ppt")
     record = json.loads((state / "active_policy.json").read_text())
     del record["image_file"]
-    (state / "active_policy.json").write_text(json.dumps(record, sort_keys=True))
+    (state / "active_policy.json").write_bytes(canon.canon2_bytes(record))
     old = _host(env)
     assert old.active()["active"] == h1, "the old layout is still restored"
     h2 = old.swap(_pack(env, "v2", 2, hot=80))["active"]
@@ -453,7 +454,7 @@ def test_a_record_naming_an_image_outside_the_layout_is_not_restored(env):
     state = env["tmp"] / "state"
     record = json.loads((state / "active_policy.json").read_text())
     record["image_file"] = "../" + record["image_file"]
-    (state / "active_policy.json").write_text(json.dumps(record, sort_keys=True))
+    (state / "active_policy.json").write_bytes(canon.canon2_bytes(record))
     assert _host(env).active() == {"active": None}
     assert AuditLog(str(state / "swaps.log")).events[-1]["data"]["reason"] == "record:image-file-invalid"
 

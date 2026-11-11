@@ -6,15 +6,16 @@ import Core.Canon2
 
 `lake exe canon2-oracle FILE ...` reads each file as a canon/2 document and prints one line per file;
 `lake exe canon2-oracle --batch` reads framed documents on standard input, each `<byte length>\n<bytes>\n`,
-and prints one line per document. A line is
+and prints one line per document. A line is `<strict> ; <canonicalize>`:
 
-- `ok <c> <hex>`: the reader (`Core.readBytes`) accepts the document; `<hex>` is the writer's canonical
-  bytes of its value (`Core.writeBytes`), and `<c>` is `1` when the strict reader (`Core.readCanonical`)
-  accepts the input too, that is when the input is already those bytes, else `0`;
-- `refuse <rule>`: the reader refuses it, with the first rule broken (`Core.DocErr.name`).
+- `<strict>` is the strict reader's answer (`Core.readCanonical`, the reader the core decides with):
+  `ok <hex>` with the writer's bytes of the value (`Core.writeBytes`, which are the input), or
+  `refuse <rule>` with the first rule broken or `not-canonical` (`Core.DocErr.name`);
+- `<canonicalize>` is the canonicalize path's answer (`Core.canonicalize`, for text a person wrote):
+  `canon <hex>` with the canonical bytes of the value read, or `refuse <rule>`.
 
-Only this file does input and output. What it prints is computed by `readBytes`, `writeBytes` and
-`readCanonical`, the functions `Core.Canon2Proofs` is about.
+Only this file does input and output. What it prints is computed by `readCanonical`, `writeBytes` and
+`canonicalize`, the functions `Core.Canon2Proofs` is about.
 -/
 
 namespace Core.Canon2Oracle
@@ -25,11 +26,13 @@ def hex (b : ByteArray) : String :=
   b.foldl (fun s x => (s.push (hexChar (x.toNat / 16))).push (hexChar (x.toNat % 16))) ""
 
 def line (b : ByteArray) : String :=
-  match readBytes b with
-  | .error e => "refuse " ++ e.name
-  | .ok v =>
-    let c := match readCanonical b with | .ok _ => "1" | .error _ => "0"
-    "ok " ++ c ++ " " ++ hex (writeBytes v)
+  let strict := match readCanonical b with
+    | .error e => "refuse " ++ e.name
+    | .ok v => "ok " ++ hex (writeBytes v)
+  let canon := match canonicalize b with
+    | .error e => "refuse " ++ e.name
+    | .ok c => "canon " ++ hex c
+  strict ++ " ; " ++ canon
 
 /-- The decimal length line at `pos` and the position after its line feed. -/
 def header (b : ByteArray) (pos : Nat) : Option (Nat × Nat) :=

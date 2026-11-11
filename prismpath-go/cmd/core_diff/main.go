@@ -84,7 +84,12 @@ func readingVerdict(graph prismpath.Graph, data []byte) map[string]interface{} {
 	if err != nil {
 		var canonErr *prismpath.Canon2Error
 		if errors.As(err, &canonErr) {
-			return refuse("reading:unreadable", map[string]interface{}{"reason": canonErr.Rule})
+			cause := "reading:unreadable"
+			if canonErr.Rule == "not-canonical" {
+				// a document that is not its canonical spelling has a cause of its own (spec section 3.2)
+				cause = "reading:not-canonical"
+			}
+			return refuse(cause, map[string]interface{}{"reason": canonErr.Rule})
 		}
 		return map[string]interface{}{"verdict": "refuse", "cause": "crash", "reason": err.Error()}
 	}
@@ -134,9 +139,13 @@ func main() {
 			if !errors.As(err, &canonErr) {
 				panic(err)
 			}
-			code, _ := prismpath.CoreCauseCode("policy:unreadable")
-			row["policy"], row["cause"], row["reason"], row["code"] = "refused", "policy:unreadable", canonErr.Rule, code
-			row["causes"] = []string{"policy:unreadable"}
+			cause := "policy:unreadable"
+			if canonErr.Rule == "not-canonical" {
+				cause = "policy:not-canonical"
+			}
+			code, _ := prismpath.CoreCauseCode(cause)
+			row["policy"], row["cause"], row["reason"], row["code"] = "refused", cause, canonErr.Rule, code
+			row["causes"] = []string{cause}
 		} else if len(flow) == 0 {
 			row["policy"] = "unrenderable"
 		} else {

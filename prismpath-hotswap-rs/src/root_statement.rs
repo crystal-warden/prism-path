@@ -19,7 +19,7 @@
 //! the reference's OpenSSL backed check would accept; no honest key or signature is affected.
 
 use crate::merkle::{merkle_root, path_from_json, verify_leaf};
-use crate::pyval::{from_hex, head, py_int, universal_newlines};
+use crate::pyval::{from_hex, head, py_int};
 use prismpath_rs::durable;
 use crate::{canonical_bytes, sha256_hex, verify_ed25519};
 use serde_json::{json, Map, Value};
@@ -106,9 +106,9 @@ pub fn check_separation(instance_key_id: Option<&str>, authority_key_ids: &[Stri
 /// Every statement in a statements file's text, and the findings reading it produced. A final line
 /// that is not JSON is a write a crash cut short (`interrupted_statement`); a bad line anywhere else
 /// is `bad_format`, and stands in the chain as an empty statement, because a chain with an unreadable
-/// link proves nothing past it. The text is read as Python reads a file: `\r\n` and `\r` are `\n`.
+/// link proves nothing past it. The text is split at each line feed and nothing else: a statement is its
+/// canonical bytes, so a carriage return left in a line makes it unreadable, as in the reference.
 pub fn read_statements_text(text: &str) -> (Vec<Value>, Vec<Value>) {
-    let text = universal_newlines(text);
     let mut lines: Vec<&str> = text.split('\n').collect();
     if lines.last() == Some(&"") {
         lines.pop();
@@ -337,9 +337,8 @@ pub struct AuditLogView {
 impl AuditLogView {
     pub fn from_text(text: &str) -> AuditLogView {
         let mut view = AuditLogView::default();
-        for (index, line) in universal_newlines(text).split('\n').enumerate() {
-            let line = line.trim();
-            if line.is_empty() {
+        for (index, line) in text.split('\n').enumerate() {
+            if line.trim().is_empty() {
                 continue;
             }
             // Read as `canon.loads_document` reads, so a line holding NaN or a number beyond the double range is a line

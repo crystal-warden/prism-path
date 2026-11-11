@@ -107,6 +107,13 @@ _REGISTRY: Tuple[Tuple[int, str, str, str], ...] = (
     (98,  "policy:absence-untested",     "envelope",  "a field that allows absence is tested with == None or != None by no rule"),
     (99,  "reading:unreadable",          "routing",   "the reading is not a canon/2 document"),
     (100, "reading:not-object",          "routing",   "the reading is a canon/2 document that is not an object"),
+    # -- the strict readers (docs/design/spec-verified-core.md, section 3.2): a document that reads as
+    # canon/2 but is not its exact canonical bytes (whitespace, members out of key order, a needless
+    # escape) is refused, never re-canonicalized. The core's image and reading each name their own
+    # stage, as 89 and 99 do; every other hashed or signed document is the third row.
+    (101, "policy:not-canonical",        "envelope",  "the core's policy image reads as canon/2 but is not its canonical spelling"),
+    (102, "reading:not-canonical",       "routing",   "the reading reads as canon/2 but is not its canonical spelling"),
+    (103, "document:not-canonical",      "envelope",  "a hashed or signed document reads as canon/2 but is not its canonical spelling"),
 )
 
 CODES: Dict[int, Tuple[str, str, str]] = {cause_code: (canonical_name, class_name, description)

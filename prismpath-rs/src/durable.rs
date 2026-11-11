@@ -180,18 +180,53 @@ pub fn signed_message(val: &Value) -> Result<Vec<u8>, CanonicalError> {
     Ok(message)
 }
 
-/// Read a document that is hashed or signed: an object that names canon/2, read by the strict canon/2
-/// reader (a float, a duplicate key or an out of range integer is refused). An untagged object, another
-/// tag and a value that is not an object are refused. `prismpath.canon.loads_document`.
+/// The registered cause of a hashed or signed document that reads as canon/2 but is not its exact
+/// canonical bytes (`prismpath.canon.NotCanonical.CAUSE`).
+pub const NOT_CANONICAL_CAUSE: &str = "document:not-canonical";
+
+impl CanonicalError {
+    /// The document read as canon/2 but was not its exact canonical bytes: the refusal whose registered
+    /// cause is `document:not-canonical`.
+    pub fn is_not_canonical(&self) -> bool {
+        self.0.starts_with(NOT_CANONICAL_CAUSE)
+    }
+}
+
+const NOT_CANONICAL_HELP: &str =
+    "a hashed or signed document must be its exact canonical canon/2 bytes; write it through `prismpath canonicalize` first";
+
+/// A document file or a JSON Lines line holds the canonical bytes followed by one line feed, the record
+/// terminator, which is not part of the document; exactly that one byte is taken off.
+fn strip_terminator(text: &str) -> &str {
+    text.strip_suffix('\n').unwrap_or(text)
+}
+
+/// Read a document that is hashed or signed: an object that names canon/2, given as exactly its canonical
+/// canon/2 bytes (followed by at most the one line feed that ends a file or a line). A float, a duplicate
+/// key or an out of range integer is refused, and so is a document in any spelling but its canonical one
+/// (`document:not-canonical`); an untagged object, another tag and a value that is not an object are
+/// refused. `prismpath.canon.loads_document`.
 pub fn read_document(text: &str) -> Result<Value, CanonicalError> {
+    let text = strip_terminator(text);
     let val = crate::value::parse_plain(text).map_err(|error| CanonicalError(error.to_string()))?;
     if !val.is_object() {
         return Err(CanonicalError("a document that is hashed or signed is a JSON object".to_string()));
     }
     encoding_of(&val)?;
-    crate::canon2::read_str(text)
-        .map_err(|error| CanonicalError(format!("a document that is read as canon/2 does not read under it: {error}")))?;
+    crate::canon2::read_str(text).map_err(|error| match error {
+        crate::canon2::Canon2Error::NotCanonical => CanonicalError(format!("{NOT_CANONICAL_CAUSE}: {NOT_CANONICAL_HELP}")),
+        error => CanonicalError(format!("a document that is read as canon/2 does not read under it: {error}")),
+    })?;
     Ok(val)
+}
+
+/// The canonical canon/2 bytes of a document a person wrote, in any legal spelling (whitespace, member
+/// order, escapes), so that it can be hashed, signed or read; every other canon/2 rule still holds, and
+/// the result is exactly what `read_document` and `canon2::read` accept. The writer's side of the strict
+/// reader (`prismpath.canon.canonicalize_document`).
+pub fn canonicalize_document(text: &str) -> Result<Vec<u8>, CanonicalError> {
+    crate::canon2::canonicalize(strip_terminator(text).as_bytes())
+        .map_err(|error| CanonicalError(format!("no canon/2 form: {error}")))
 }
 
 /// An integer too wide for i64 and u64, written the way Python writes it: every digit, no

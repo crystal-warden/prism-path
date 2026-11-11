@@ -3,10 +3,10 @@
 //
 // The JavaScript leg of the canon/2 differential (formal/diff/canon2_diff.py). An adapter, not part of the
 // kernel: it reads framed documents on stdin, each `<byte length>\n<bytes>\n`, and prints one line per
-// document, `ok <c> <hex>` (canon2Read accepts it; <hex> is canon2Write of its value, <c> is 1 when the
-// input is already those bytes), `refuse <rule>`, `writefail <rule>` or `panic <message>`.
+// document, `<strict> ; <canonicalize>`: canon2Read's answer (`ok <hex>` with canon2Write of the value, or
+// `refuse <rule>`) and canon2Canonicalize's (`canon <hex>` or `refuse <rule>`), or `panic <message>`.
 import { readFileSync, writeSync } from "node:fs";
-import { canon2Read, canon2Write } from "../../prismpath/portable/prismpath.mjs";
+import { canon2Read, canon2Write, canon2Canonicalize } from "../../prismpath/portable/prismpath.mjs";
 
 const input = readFileSync(0);
 const hex = (bytes) => Buffer.from(bytes).toString("hex");
@@ -19,18 +19,22 @@ while (pos < input.length) {
   const start = nl + 1;
   if (!Number.isInteger(n) || start + n + 1 > input.length) process.exit(2);
   const doc = input.subarray(start, start + n);
-  let text;
-  let value;
-  try {
-    value = canon2Read(new Uint8Array(doc));
+  const bytes = new Uint8Array(doc);
+  const answer = (run) => {
     try {
-      const out = canon2Write(value);
-      text = `ok ${Buffer.from(out).equals(doc) ? 1 : 0} ${hex(out)}`;
+      return run();
     } catch (error) {
-      text = error && error.rule ? `writefail ${error.rule}` : `panic ${String(error).slice(0, 60)}`;
+      if (error && error.rule) return `refuse ${error.rule}`;
+      throw error;
     }
+  };
+  let text;
+  try {
+    const strict = answer(() => `ok ${hex(canon2Write(canon2Read(bytes)))}`);
+    const canon = answer(() => `canon ${hex(canon2Canonicalize(bytes))}`);
+    text = `${strict} ; ${canon}`;
   } catch (error) {
-    text = error && error.rule ? `refuse ${error.rule}` : `panic ${String(error).slice(0, 60)}`;
+    text = `panic ${String(error).slice(0, 60)}`;
   }
   lines.push(text);
   pos = start + n + 1;

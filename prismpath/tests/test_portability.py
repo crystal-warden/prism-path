@@ -6,6 +6,7 @@ A flow is PORTABLE (runs on the ML-free port) iff every edge on every REACHABLE 
 `when` predicates, error edges, event edges. Semantic edges are exactly the violations.
 """
 from prismpath.kernel.parser import parse, parse_file
+from prismpath import canon
 from prismpath.kernel import analysis
 
 def test_deterministic_only_flow_is_portable():
@@ -197,7 +198,7 @@ def test_tier_p1_semantic_fully_locked(tmp_path):
     import json
     flow_path = _write(tmp_path, "sem.md", SEM_FLOW)
     # a minimal lock covering the one reachable semantic condition (no embedder needed to test tiers)
-    (tmp_path / "sem.lock").write_text(json.dumps({
+    (tmp_path / "sem.lock").write_bytes(canon.canon2_bytes({
         "version": 1, "flow": "sem", "flow_hash": "sha256:x", "encoding": "canon/2",
         "embedder": {"name": "stub", "dim": 8, "probe": "p", "probe_vec": ""},
         "delta": "0.05",
@@ -210,7 +211,7 @@ def test_tier_p2_when_lock_is_partial(tmp_path):
     import json
     body = SEM_FLOW.replace("-> bad: when visits > 3", "-> bad: it is broken beyond repair")
     flow_path = _write(tmp_path, "sem.md", body)
-    (tmp_path / "sem.lock").write_text(json.dumps({
+    (tmp_path / "sem.lock").write_bytes(canon.canon2_bytes({
         "version": 1, "flow": "sem", "flow_hash": "sha256:x", "encoding": "canon/2",
         "embedder": {"name": "stub", "dim": 8, "probe": "p", "probe_vec": ""},
         "delta": "0.05",

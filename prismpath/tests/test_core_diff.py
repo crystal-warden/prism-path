@@ -122,7 +122,7 @@ def test_the_run_reaches_every_stage(run):
         for verdict in row["readings"]:
             seen[verdict.get("cause", "route")] += 1
     for stage in ("accepted", "route", "route:no-matching-edge", "route:contract-violation", "reading:unreadable",
-                  "policy:unreadable", "policy:shape", "policy:definition", "image:field-index-oob",
+                  "reading:not-canonical", "policy:not-canonical", "policy:unreadable", "policy:shape", "policy:definition", "image:field-index-oob",
                   "policy:threshold", "policy:not-level-m", "policy:kind-mismatch", "policy:rounding",
                   "policy:none", "policy:absence-untested", "image:unknown-op", "image:unknown-type"):
         assert seen[stage] > 0, (stage, seen)
@@ -141,9 +141,11 @@ def test_the_oracle_on_the_spec_example(tmp_path):
                        {"target": "low", "when": ["and", ["cmp", "error_rate", "<", ["num", "0.25"]],
                                                   ["cmp", "label", "==", ["str", "a"]]]},
                        {"target": "miss", "when": ["always"]}]}
-    (tmp_path / "p.json").write_text(json.dumps(image))
-    readings = ['{"error_rate": 8500, "label": "b"}', '{"error_rate": 100}', '{"error_rate": 2499, "label": "a"}',
-                '{"error_rate": "8500"}', '{"error_rate": 1.5}', '{"label": "a"}', "[]"]
+    from prismpath.kernel import canon2
+    (tmp_path / "p.json").write_bytes(canon2.dumps(image))
+    readings = ['{"error_rate":8500,"label":"b"}', '{"error_rate":100}', '{"error_rate":2499,"label":"a"}',
+                '{"error_rate":"8500"}', '{"error_rate":1.5}', '{"label":"a"}', "[]", '{"error_rate": 8500}',
+                '{"label":"b","error_rate":8500}']
     for index, text in enumerate(readings):
         (tmp_path / f"r{index}.json").write_text(text)
     out = subprocess.run([str(core_diff.ORACLE), str(tmp_path / "p.json")] +
@@ -158,6 +160,16 @@ def test_the_oracle_on_the_spec_example(tmp_path):
         {"verdict": "refuse", "cause": "reading:unreadable", "code": 99, "reason": "float"},
         {"verdict": "refuse", "cause": "route:contract-violation", "code": 37, "field": "error_rate", "reason": "missing"},
         {"verdict": "refuse", "cause": "reading:not-object", "code": 100},
+        {"verdict": "refuse", "cause": "reading:not-canonical", "code": 102, "reason": "not-canonical"},
+        {"verdict": "refuse", "cause": "reading:not-canonical", "code": 102, "reason": "not-canonical"},
+    ]
+    # the same image with a space is not its canonical spelling: every reading is refused for the image
+    (tmp_path / "p.json").write_text(json.dumps(image))
+    out = subprocess.run([str(core_diff.ORACLE), str(tmp_path / "p.json"), str(tmp_path / "r0.json")],
+                         capture_output=True, text=True, check=True).stdout.splitlines()
+    assert [json.loads(line) for line in out] == [
+        {"policy": "refused", "cause": "policy:not-canonical", "code": 101, "reason": "not-canonical"},
+        {"verdict": "refuse", "cause": "policy:not-canonical", "code": 101, "reason": "not-canonical"},
     ]
 
 
@@ -186,7 +198,7 @@ def test_d7_one_cause_per_refused_policy():
         image = {"format": "prismpath.core/1", "fields": fields,
                  "rules": [{"target": "hit", "when": cond} for cond in conds] + [{"target": "miss", "when": ["always"]}]}
         for seed in range(8):
-            cases.append({"id": f"d7-{index}-{seed}", "image": json.dumps(image).encode(), "readings": [b"{}"],
+            cases.append({"id": f"d7-{index}-{seed}", "image": core_diff.canonical_text(image).encode(), "readings": [b"{}"],
                           "render_seed": seed})
     lean, results, counts, findings = core_diff.run(cases, legs)
     for case in cases:

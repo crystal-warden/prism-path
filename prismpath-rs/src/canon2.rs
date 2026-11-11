@@ -5,12 +5,16 @@
 //! (`prismpath/portable/conformance/canon2.json`, replayed by `tests/test_canon2.rs`), and to the Lean
 //! reader `Core.readBytes` by the differential harness.
 //!
-//! `read` accepts exactly the JSON documents whose numbers are integers within plus or minus 2^53 minus
-//! 1 written without a fraction, an exponent or a negative zero, whose objects hold no key twice, whose
-//! strings hold no lone surrogate escape, and whose nesting is at most 128. Anything else is a
-//! `Canon2Error` naming the first rule broken reading left to right. `write` produces the canonical
-//! bytes (RFC 8785 with no float: no whitespace, members sorted by UTF-16 code units, raw UTF-8 with
-//! only `"`, `\` and control characters escaped) and refuses every value `read` could not read back.
+//! `read` is the strict reader (the Lean `Core.readCanonical`): it accepts exactly the canonical bytes of
+//! a canon/2 value. A text is first read as canon/2: numbers are integers within plus or minus 2^53 minus
+//! 1 written without a fraction, an exponent or a negative zero, objects hold no key twice, strings hold
+//! no lone surrogate escape, and nesting is at most 128; a text that breaks one is a `Canon2Error` naming
+//! the first rule broken reading left to right. A text that reads but is not the canonical spelling of its
+//! value (whitespace, members out of key order, a needless escape) is `Canon2Error::NotCanonical`. `write`
+//! produces the canonical bytes (RFC 8785 with no float: no whitespace, members sorted by UTF-16 code
+//! units, raw UTF-8 with only `"`, `\` and control characters escaped) and refuses every value `read`
+//! could not read back. `canonicalize` is the path for text a person wrote: every rule but the spelling,
+//! then the canonical bytes, which `read` accepts; it is a writer's step and no reader calls it.
 
 use crate::value::Value;
 
@@ -40,6 +44,8 @@ pub enum Canon2Error {
     DuplicateKey,
     LoneSurrogate,
     Depth,
+    /// The text reads as canon/2 but is not the canonical spelling of its value.
+    NotCanonical,
 }
 
 impl Canon2Error {
@@ -53,6 +59,7 @@ impl Canon2Error {
             Canon2Error::DuplicateKey => "duplicate-key",
             Canon2Error::LoneSurrogate => "lone-surrogate",
             Canon2Error::Depth => "depth",
+            Canon2Error::NotCanonical => "not-canonical",
         }
     }
 }
@@ -291,7 +298,19 @@ impl Reader {
     }
 }
 
-/// The canon/2 document in `bytes`: strict UTF-8 first, then the document.
+/// The value of a text read by every canon/2 rule but the spelling.
+fn parse(text: &str) -> Result<Doc, Canon2Error> {
+    let mut reader = Reader { chars: text.chars().collect(), pos: 0 };
+    let value = reader.value(0)?;
+    reader.skip_ws();
+    if reader.pos != reader.chars.len() {
+        return Err(Canon2Error::Syntax);
+    }
+    Ok(value)
+}
+
+/// The canon/2 document in `bytes`, when `bytes` is exactly the canonical spelling of its value: strict
+/// UTF-8 first, then the document, then the spelling (`NotCanonical`).
 pub fn read(bytes: &[u8]) -> Result<Doc, Canon2Error> {
     let text = std::str::from_utf8(bytes).map_err(|_| Canon2Error::Utf8)?;
     read_str(text)
@@ -299,11 +318,9 @@ pub fn read(bytes: &[u8]) -> Result<Doc, Canon2Error> {
 
 /// `read` on text already known to be UTF-8.
 pub fn read_str(text: &str) -> Result<Doc, Canon2Error> {
-    let mut reader = Reader { chars: text.chars().collect(), pos: 0 };
-    let value = reader.value(0)?;
-    reader.skip_ws();
-    if reader.pos != reader.chars.len() {
-        return Err(Canon2Error::Syntax);
+    let value = parse(text)?;
+    if write(&value)?.as_slice() != text.as_bytes() {
+        return Err(Canon2Error::NotCanonical);
     }
     Ok(value)
 }
@@ -382,9 +399,12 @@ pub fn write(doc: &Doc) -> Result<Vec<u8>, Canon2Error> {
     Ok(out.into_bytes())
 }
 
-/// `write(read(bytes))`: the one canonical spelling of a readable document.
-pub fn canonical(bytes: &[u8]) -> Result<Vec<u8>, Canon2Error> {
-    write(&read(bytes)?)
+/// The canonical bytes of the canon/2 value a person wrote in `bytes`, in any legal spelling
+/// (whitespace, member order, escapes); every other rule holds as in `read`, and the result is what
+/// `read` accepts. A writer's step, never a reader's (`prismpath.kernel.canon2.canonicalize`).
+pub fn canonicalize(bytes: &[u8]) -> Result<Vec<u8>, Canon2Error> {
+    let text = std::str::from_utf8(bytes).map_err(|_| Canon2Error::Utf8)?;
+    write(&parse(text)?)
 }
 
 impl Doc {

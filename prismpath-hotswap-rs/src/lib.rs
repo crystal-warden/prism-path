@@ -486,11 +486,14 @@ pub fn verify_pack(
     };
     // The registry's `manifest:bad-format` is "manifest unparseable": text that is not UTF-8 or JSON, holds
     // NaN, Infinity or a number beyond the double range, or is not an object, is that refusal with no manifest.
-    let Some(manifest) = String::from_utf8(man_bytes)
-        .ok()
-        .and_then(|man_text| durable::read_document(&man_text).ok())
-        .filter(|parsed| parsed.is_object())
-    else {
+    let read = String::from_utf8(man_bytes).ok().map(|man_text| durable::read_document(&man_text));
+    if let Some(Err(error)) = &read {
+        if error.is_not_canonical() {
+            // canon/2 in a spelling other than its canonical bytes: its own registered cause, never respelled
+            return (false, vec![durable::NOT_CANONICAL_CAUSE.to_string()], None);
+        }
+    }
+    let Some(manifest) = read.and_then(Result::ok).filter(|parsed| parsed.is_object()) else {
         return (false, vec!["manifest:bad-format".to_string()], None);
     };
     if manifest.get("format").and_then(|value| value.as_str()) != Some(PACK_FORMAT) {
@@ -604,9 +607,12 @@ pub fn load_envelope(base_path: &str, pubkey_paths: &[String]) -> (Option<Value>
     ) else {
         return (None, vec!["envelope:missing".to_string()]);
     };
-    let Ok(env) = durable::read_document(&text) else {
+    let env = match durable::read_document(&text) {
+        Ok(env) => env,
+        // canon/2, but not its canonical bytes
+        Err(error) if error.is_not_canonical() => return (None, vec![durable::NOT_CANONICAL_CAUSE.to_string()]),
         // not canon/2: untagged (canon/1 is retired), another tag, or unreadable
-        return (None, vec!["envelope:sig-invalid".to_string()]);
+        Err(_) => return (None, vec!["envelope:sig-invalid".to_string()]),
     };
     let Ok(sig_arr): Result<[u8; 64], _> = sig_bytes.as_slice().try_into() else {
         return (None, vec!["envelope:sig-invalid".to_string()]);

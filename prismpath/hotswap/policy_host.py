@@ -152,7 +152,7 @@ class PolicyHost:
 
     def _read_pending(self) -> Optional[dict]:
         try:
-            with open(self._pending_path()) as pending_file:
+            with open(self._pending_path(), encoding="utf-8", newline="") as pending_file:
                 return canon.loads_document(pending_file.read())
         except FileNotFoundError:
             return None
@@ -244,7 +244,7 @@ class PolicyHost:
         record whose image is missing, unreadable or of another digest is not restored, and the
         ledger says so; the host then holds no active policy, the fail closed answer."""
         try:
-            with open(self._active_record_path()) as record_file:
+            with open(self._active_record_path(), encoding="utf-8", newline="") as record_file:
                 record = canon.loads_document(record_file.read())
         except FileNotFoundError:
             return

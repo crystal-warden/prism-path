@@ -455,12 +455,34 @@ def gen_policy(rng):
     return image, fields
 
 
-def dumps(doc, rng):
+# The share of images and readings sent in a spelling that is not their canonical one: every leg must refuse
+# each such document as not canonical (`policy:not-canonical`, `reading:not-canonical`, spec section 3.2).
+NONCANONICAL = 0.08
+
+
+def canonical_text(doc):
+    """The canonical canon/2 spelling of `doc`; for a value canon/2 cannot write (an integer past the exact
+    range), the compact spelling with sorted members, which every reader refuses for that rule first."""
+    from prismpath.kernel import canon2
+    try:
+        return canon2.dumps(doc).decode("utf-8")
+    except canon2.Canon2Error:
+        return json.dumps(doc, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+
+
+def respell(doc, rng):
+    """A legal spelling of `doc` that is usually not its canonical one: shuffled members, whitespace, ASCII
+    escapes."""
     items = list(doc.items()) if isinstance(doc, dict) else None
     if items is not None and rng.random() < 0.5:
         rng.shuffle(items)
         doc = dict(items)
     return json.dumps(doc, ensure_ascii=rng.random() < 0.5, separators=(",", ":") if rng.random() < 0.5 else None)
+
+
+def dumps(doc, rng):
+    """A document as a case sends it: its canonical bytes, or with probability NONCANONICAL a respelling."""
+    return respell(doc, rng) if rng.random() < NONCANONICAL else canonical_text(doc)
 
 
 def mutate_image(rng, image, text):
@@ -579,7 +601,7 @@ def frames(cases, docs_of):
 
 
 def normalize_reading(verdict):
-    """('route', target) | ('contract', field, reason) | ('nomatch',) | ('unreadable', reason) | ('notobject',)"""
+    """('route', target) | ('contract', field, reason) | ('nomatch',) | ('unreadable', reason, cause) | ('notobject',)"""
     if verdict["verdict"] == "route":
         return ("route", verdict["target"])
     cause = verdict["cause"]
@@ -587,8 +609,8 @@ def normalize_reading(verdict):
         return ("contract", verdict["field"], verdict["reason"])
     if cause == "route:no-matching-edge":
         return ("nomatch",)
-    if cause == "reading:unreadable":
-        return ("unreadable", verdict.get("reason", ""))
+    if cause in ("reading:unreadable", "reading:not-canonical"):
+        return ("unreadable", verdict.get("reason", ""), cause)
     if cause == "reading:not-object":
         return ("notobject",)
     if cause == "crash":
@@ -624,6 +646,22 @@ def _render_for(case):
         return None, "unrenderable:recursion"
 
 
+# The causes of an image or a reading the strict reader refuses: a reader rule, or a document that is not its
+# canonical spelling, which has a cause of its own (spec section 3.2).
+UNREADABLE_POLICY = ("policy:unreadable", "policy:not-canonical")
+
+
+def reading_cause(rule):
+    return "reading:not-canonical" if rule == "not-canonical" else "reading:unreadable"
+
+
+def unreadable_policy(why):
+    from prismpath.kernel import causes
+    rule = why.split(":", 1)[1]
+    cause = "policy:not-canonical" if rule == "not-canonical" else "policy:unreadable"
+    return {"policy": "refused", "cause": cause, "reason": rule, "code": causes.code(cause), "causes": [cause]}
+
+
 def python_reading(graph, raw):
     from prismpath.kernel import canon2, causes, engine, field_definitions
 
@@ -633,7 +671,7 @@ def python_reading(graph, raw):
     try:
         doc = canon2.loads(raw)
     except canon2.Canon2Error as error:
-        return refuse("reading:unreadable", reason=error.rule)
+        return refuse(reading_cause(error.rule), reason=error.rule)
     except RecursionError:
         return {"verdict": "refuse", "cause": "crash", "reason": "RecursionError in canon2.loads"}
     if not isinstance(doc, dict):
@@ -675,8 +713,7 @@ def python_leg(cases):
     for case in cases:
         flow, why = case["flow"], case["flow_why"]
         if flow is None and why.startswith("unreadable:"):
-            out[case["id"]] = {"policy": "refused", "cause": "policy:unreadable", "reason": why.split(":", 1)[1],
-                               "code": causes.code("policy:unreadable"), "causes": ["policy:unreadable"]}
+            out[case["id"]] = unreadable_policy(why)
             continue
         if flow is None:
             out[case["id"]] = {"policy": why}
@@ -817,9 +854,7 @@ def table_leg(cases, variant):
     for case in cases:
         flow, why = case["flow"], case["flow_why"]
         if flow is None:
-            out[case["id"]] = ({"policy": "refused", "cause": "policy:unreadable", "reason": why.split(":", 1)[1],
-                                "code": causes.code("policy:unreadable"), "causes": ["policy:unreadable"]}
-                               if why.startswith("unreadable:") else {"policy": why})
+            out[case["id"]] = unreadable_policy(why) if why.startswith("unreadable:") else {"policy": why}
             continue
         try:
             graph = parse(flow)
@@ -851,7 +886,7 @@ def table_leg(cases, variant):
             try:
                 doc = canon2.loads(raw)
             except canon2.Canon2Error as error:
-                verdicts.append(refuse("reading:unreadable", reason=error.rule))
+                verdicts.append(refuse(reading_cause(error.rule), reason=error.rule))
                 registers.append(b"")
                 continue
             if not isinstance(doc, dict):
@@ -942,7 +977,7 @@ def _classify(lean_row, other, leg):
             return [("finding:crash", status)]
         if lean_ok:
             return [("finding:harness", f"lean accepts an image the leg cannot read: {status}")]
-        if lean_policy["cause"] == "policy:unreadable":
+        if lean_policy["cause"] in UNREADABLE_POLICY:
             return [(f"excluded:{status.split(':')[0]}", lean_policy.get("reason", ""))]
         return [(f"excluded:{status.split(':')[0]}", lean_policy["cause"])]
     if lean_ok != (status == "accepted"):
@@ -957,7 +992,7 @@ def _classify(lean_row, other, leg):
         return [(f"finding:policy", f"{what}: {lean_policy.get('cause', '')} {lean_policy.get('reason', '')} "
                                     f"{lean_policy.get('field', '')} | {other.get('reason', '')}")]
     if not lean_ok:
-        if lean_policy["cause"] == "policy:unreadable" or other.get("cause") == "policy:unreadable":
+        if lean_policy["cause"] in UNREADABLE_POLICY or other.get("cause") in UNREADABLE_POLICY:
             if (lean_policy["cause"], lean_policy.get("reason")) != (other.get("cause"), other.get("reason")):
                 return [("finding:policy", f"unreadable image: lean {lean_policy['cause']} {lean_policy.get('reason')} "
                                            f"| leg {other.get('cause')} {other.get('reason')}")]
@@ -965,7 +1000,7 @@ def _classify(lean_row, other, leg):
             return [("agree", "policy-refused")]
         if other.get("cause") == lean_policy["cause"]:
             named = [(key, other_key) for key, other_key in (("field", "field"), ("reason", "policy_reason"))
-                     if lean_policy.get(key) and lean_policy["cause"] != "policy:unreadable"]
+                     if lean_policy.get(key) and lean_policy["cause"] not in UNREADABLE_POLICY]
             if any(other.get(other_key) != lean_policy[key] for key, other_key in named):
                 # one cause per refused policy, and the first problem is the same problem: where the oracle's
                 # refusal names a field or a reason, every leg that speaks the registry names the same
@@ -1062,7 +1097,7 @@ def minimise(case, leg, cls, kind=None):
         return case
 
     def with_image(img):
-        return dict(case, image=json.dumps(img, ensure_ascii=False).encode("utf-8"))
+        return dict(case, image=canonical_text(img).encode("utf-8"))
 
     changed = True
     while changed:

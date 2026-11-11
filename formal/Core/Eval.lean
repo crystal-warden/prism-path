@@ -2,6 +2,7 @@
 -- Copyright 2026 Crystal Warden Supply Chain Labs LLC
 import Core.Policy
 import Core.Causes
+import Core.Canon2
 /-!
 # The verified core: the canonical boundary, evaluation, and the verdict
 
@@ -49,6 +50,7 @@ Every refusal is spelled as a row of the cause registry (`prismpath/kernel/cause
 registry gives another name, does not type check as a theorem. -/
 
 def PolicyErr.cause : PolicyErr → String
+  | .unreadable .notCanonical => "policy:not-canonical"
   | .unreadable _ => "policy:unreadable"
   | .shape _ => "policy:shape"
   | .unknownOp _ => "image:unknown-op"
@@ -64,6 +66,7 @@ def PolicyErr.cause : PolicyErr → String
   | .absenceUntested _ => "policy:absence-untested"
 
 def PolicyErr.code : PolicyErr → Nat
+  | .unreadable .notCanonical => 101
   | .unreadable _ => 89
   | .shape _ => 90
   | .unknownOp _ => 74
@@ -80,6 +83,7 @@ def PolicyErr.code : PolicyErr → Nat
 
 def Refusal.cause : Refusal → String
   | .policy e => e.cause
+  | .readingUnreadable .notCanonical => "reading:not-canonical"
   | .readingUnreadable _ => "reading:unreadable"
   | .readingNotObject => "reading:not-object"
   | .contract _ _ => "route:contract-violation"
@@ -87,6 +91,7 @@ def Refusal.cause : Refusal → String
 
 def Refusal.code : Refusal → Nat
   | .policy e => e.code
+  | .readingUnreadable .notCanonical => 102
   | .readingUnreadable _ => 99
   | .readingNotObject => 100
   | .contract _ _ => 37
@@ -243,7 +248,10 @@ def verdict (image reading : Except DocErr J) : Verdict :=
   | .error e => .refuse (.policy e)
   | .ok p => decideReading p reading
 
-/-- The same on bytes. -/
-def verdictBytes (image reading : ByteArray) : Verdict := verdict (readBytes image) (readBytes reading)
+/-- The same on bytes, read by the strict reader: an image or a reading that is not the exact canonical
+canon/2 spelling of its value is refused (`policy:not-canonical`, `reading:not-canonical`), never read
+under another spelling (docs/design/spec-verified-core.md, section 3.2). -/
+def verdictBytes (image reading : ByteArray) : Verdict :=
+  verdict (readCanonical image) (readCanonical reading)
 
 end Core

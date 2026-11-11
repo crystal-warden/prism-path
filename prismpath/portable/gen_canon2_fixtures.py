@@ -6,10 +6,20 @@
     python -m prismpath.portable.gen_canon2_fixtures --check   exits 1 when the file is stale
 
 Each case is a byte string (as hex, so invalid UTF-8 and every escape survive exactly) and what the
-reference reader `prismpath.kernel.canon2` makes of it: the rule it refuses with, or the canonical
-bytes the reference writer gives the document it reads. The Rust twin replays the file
-(`prismpath-rs/tests/test_canon2.rs`), and `prismpath/tests/test_canon2.py` replays it through the Lean
-oracle as well, so the three readers are held to one table. Regenerating it is a spec change.
+reference makes of it on both of its paths:
+
+* `refuse`, when present, is the rule the strict reader `prismpath.kernel.canon2.loads` refuses it with:
+  a reader rule, or `not-canonical` for a document that reads but is not its canonical spelling. When it
+  is absent the strict reader accepts the bytes, and they are their own canonical spelling;
+* `canonical_hex`, when present, is what `canonicalize` (the path for text a person wrote) makes of it,
+  the canonical bytes of the value it reads; when it is absent `canonicalize` refuses it with `refuse`.
+
+So a canonical document has no `refuse` and `canonical_hex` equal to `hex`, a document spelled otherwise
+has `refuse: not-canonical` and its `canonical_hex`, and a text canon/2 does not read has only `refuse`.
+The Rust, JavaScript and Go twins replay the file (`prismpath-rs/tests/test_canon2.rs`,
+`prismpath/portable/run_vectors.mjs`, `prismpath-go/conformance_test.go`), and
+`prismpath/tests/test_canon2.py` replays it through the Lean oracle as well, so every reader is held to
+one table. Regenerating it is a spec change.
 """
 from __future__ import annotations
 
@@ -21,10 +31,11 @@ from pathlib import Path
 from prismpath.kernel import canon2
 
 OUT = Path(__file__).parent / "conformance" / "canon2.json"
-VERSION = 1
+VERSION = 2
 
 CASES = [
-    # readable documents and their canonical spelling
+    # readable documents: canonical ones, which the strict reader accepts, and other spellings, which it
+    # refuses as not canonical and canonicalize writes canonically
     ("empty object", b"{}"), ("empty array", b"[]"), ("literals", b"[null,true,false]"),
     ("whitespace", b" \t\r\n{ \"a\" : [ 1 , 2 ] }\n"), ("zero", b"0"), ("negative", b"-5"),
     ("exact limit", b"9007199254740991"), ("negative exact limit", b"-9007199254740991"),
@@ -35,6 +46,14 @@ CASES = [
     ("control escape lowercase", b'"\\u001F"'), ("nested", b'{"a":{"b":[{"c":[]}]}}'),
     ("depth 128", b"[" * 128 + b"]" * 128), ("string with nul escape", b'"\\u0000"'),
     ("key escapes", b'{"\\u0061":1,"b\\n":2}'),
+    ("canonical escapes", b'"\\"\\\\\\b\\f\\n\\r\\t\\u0001\\u001f/\xc3\xa9"'),
+    ("canonical object", b'{"":4,"B":5,"a":[1,-2,{"b":null}],"aa":"x"}'),
+    # readable, and refused by the strict reader as not canonical: one spelling difference each
+    ("trailing line feed", b"{}\n"), ("leading space", b" 0"), ("space after colon", b'{"a": 1}'),
+    ("space after comma", b"[1, 2]"), ("members out of order", b'{"b":1,"a":2}'),
+    ("escaped solidus", b'"\\/"'), ("uppercase escape", b'"\\u001F"'), ("escaped letter", b'"\\u0041"'),
+    ("escaped non ascii", b'"\\u00e9"'), ("surrogate pair escape", b'"\\ud83d\\ude00"'),
+    ("escaped tab as u", b'"\\u0009"'), ("nested out of order", b'[{"z":1,"y":2}]'),
     # refusals, the first rule broken reading left to right
     ("not utf8", b"\xff"), ("overlong", b'"\xc0\xaf"'), ("encoded surrogate", b'"\xed\xa0\x80"'),
     ("past U+10FFFF", b'"\xf4\x90\x80\x80"'), ("truncated utf8", b'"\xe2\x82'),
@@ -65,9 +84,13 @@ def build() -> dict:
     for name, data in CASES:
         case = {"name": name, "hex": data.hex()}
         try:
-            case["canonical_hex"] = canon2.canonical(data).hex()
+            canon2.loads(data)
         except canon2.Canon2Error as error:
             case["refuse"] = error.rule
+        try:
+            case["canonical_hex"] = canon2.canonicalize(data).hex()
+        except canon2.Canon2Error as error:
+            assert case.get("refuse") == error.rule, (name, error.rule, case.get("refuse"))
         cases.append(case)
     return {"version": VERSION, "spec": "docs/design/spec-verified-core.md section 3", "cases": cases}
 

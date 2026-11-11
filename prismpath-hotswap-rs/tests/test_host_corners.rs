@@ -125,7 +125,7 @@ fn a_verified_manifest_whose_version_is_not_an_integer_changes_nothing() {
     drop(probe);
     // a canon/2 manifest with a version that is a string reads, and its signature verifies, so the version check decides
     manifest["version"] = json!("7");
-    std::fs::write(&manifest_path, serde_json::to_string(&manifest).unwrap()).unwrap();
+    std::fs::write(&manifest_path, common::manifest_file(&manifest)).unwrap();
     use ed25519_dalek::Signer;
     let signature = load_private(&private).unwrap().sign(&signed_bytes(&manifest).unwrap());
     std::fs::write(format!("{}.manifest.sig", ppt.display()), signature.to_bytes()).unwrap();
@@ -287,8 +287,8 @@ fn a_pack_whose_manifest_holds_a_non_finite_number_is_rejected_and_not_activated
     for (tag, number) in [("nan", "NaN"), ("overflow", "1e400")] {
         let manifest_path = format!("{}.manifest.json", pack_path(&setup.dir, "v2"));
         let text = std::fs::read_to_string(&manifest_path).unwrap();
-        assert!(text.contains("\"version\": 2"));
-        std::fs::write(&manifest_path, text.replacen("\"version\": 2", &format!("\"version\": {number}"), 1)).unwrap();
+        assert!(text.contains("\"version\":2"));
+        std::fs::write(&manifest_path, text.replacen("\"version\":2", &format!("\"version\":{number}"), 1)).unwrap();
         let result = host.swap(&pack_path(&setup.dir, "v2"), false).unwrap();
         assert_eq!(result, json!({"ok": false, "reasons": ["manifest:bad-format"]}), "{tag}");
         assert_eq!(host.history().pop().unwrap()["action"], "swap_rejected", "{tag}: audited");

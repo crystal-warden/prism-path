@@ -13,7 +13,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import {
   parse, run, evalCondition, PredicateError, scriptedAgent, firstDeterministic, FieldDefinitionError,
-  canon2Read, canon2Write, Canon2Error, parseDefinition, canonicalValue, systemBoundary, coreCauseCode,
+  canon2Read, canon2Write, canon2Canonicalize, Canon2Error, parseDefinition, canonicalValue, systemBoundary, coreCauseCode,
 } from "./prismpath.mjs";
 
 const dir = process.argv[2] || join(dirname(fileURLToPath(import.meta.url)), "conformance");
@@ -82,25 +82,35 @@ console.log(`flows:      ${flowPass}/${flows.cases.length - flowSkipped}${flowSk
 
 // ---- canon/2 ------------------------------------------------------------------------------
 // The frozen canon/2 vectors (spec-verified-core.md section 3): every case is refused with the reference's
-// rule, or read and written back to the reference's canonical bytes, which are a fixed point.
+// rule (not-canonical for a spelling that is not the canonical one) or accepted as its own canonical
+// bytes, and canonicalize gives the reference's canonical bytes, a fixed point, or the same refusal.
 const unhex = (hex) => Uint8Array.from(hex.match(/../g) || [], (pair) => parseInt(pair, 16));
 const hexOf = (bytes) => Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
 const canon2 = JSON.parse(readFileSync(join(dir, "canon2.json"), "utf-8"));
 let canon2Pass = 0;
 for (const vector of canon2.cases) {
   let problem = null;
+  const bytes = unhex(vector.hex);
   try {
-    const document = canon2Read(unhex(vector.hex));
+    const document = canon2Read(bytes);
     if (vector.refuse !== undefined) problem = `read, the reference refuses it as ${vector.refuse}`;
-    else {
-      const written = canon2Write(document);
-      if (hexOf(written) !== vector.canonical_hex) problem = `wrote ${hexOf(written)}, want ${vector.canonical_hex}`;
-      else if (hexOf(canon2Write(canon2Read(written))) !== vector.canonical_hex) problem = "the canonical bytes are not a fixed point";
-    }
+    else if (hexOf(canon2Write(document)) !== vector.hex) problem = "the strict reader accepted bytes that are not canonical";
   } catch (err) {
     if (!(err instanceof Canon2Error)) problem = `crashed: ${err}`;
     else if (vector.refuse === undefined) problem = `refused as ${err.rule}, the reference reads it`;
     else if (err.rule !== vector.refuse) problem = `refused as ${err.rule}, want ${vector.refuse}`;
+  }
+  if (problem === null) {
+    try {
+      const written = canon2Canonicalize(bytes);
+      if (vector.canonical_hex === undefined) problem = `canonicalized, the reference refuses it as ${vector.refuse}`;
+      else if (hexOf(written) !== vector.canonical_hex) problem = `canonicalized to ${hexOf(written)}, want ${vector.canonical_hex}`;
+      else if (hexOf(canon2Write(canon2Read(written))) !== vector.canonical_hex) problem = "the canonical bytes are not a fixed point";
+    } catch (err) {
+      if (!(err instanceof Canon2Error)) problem = `canonicalize crashed: ${err}`;
+      else if (vector.canonical_hex !== undefined) problem = `canonicalize refused as ${err.rule}, the reference canonicalizes it`;
+      else if (err.rule !== vector.refuse) problem = `canonicalize refused as ${err.rule}, want ${vector.refuse}`;
+    }
   }
   if (problem === null) { canon2Pass++; continue; }
   failures++;

@@ -1,5 +1,5 @@
 {
- "version": 1,
+ "version": 2,
  "spec": "docs/design/spec-verified-core.md section 3",
  "cases": [
   {
@@ -20,6 +20,7 @@
   {
    "name": "whitespace",
    "hex": "20090d0a7b20226122203a205b2031202c2032205d207d0a",
+   "refuse": "not-canonical",
    "canonical_hex": "7b2261223a5b312c325d7d"
   },
   {
@@ -45,11 +46,13 @@
   {
    "name": "sorted keys",
    "hex": "7b2262223a312c2261223a322c226161223a332c22223a342c2242223a357d",
+   "refuse": "not-canonical",
    "canonical_hex": "7b22223a342c2242223a352c2261223a322c226161223a332c2262223a317d"
   },
   {
    "name": "utf16 order",
    "hex": "7b22ee8080223a312c22f09f9880223a322c22efbfbf223a337d",
+   "refuse": "not-canonical",
    "canonical_hex": "7b22f09f9880223a322c22ee8080223a312c22efbfbf223a337d"
   },
   {
@@ -60,11 +63,13 @@
   {
    "name": "escapes",
    "hex": "225c225c5c5c2f5c625c665c6e5c725c745c75303030315c75303031665c75303032305c75303065395c75643833645c756465303022",
+   "refuse": "not-canonical",
    "canonical_hex": "225c225c5c2f5c625c665c6e5c725c745c75303030315c753030316620c3a9f09f988022"
   },
   {
    "name": "control escape lowercase",
    "hex": "225c753030314622",
+   "refuse": "not-canonical",
    "canonical_hex": "225c753030316622"
   },
   {
@@ -85,7 +90,90 @@
   {
    "name": "key escapes",
    "hex": "7b225c7530303631223a312c22625c6e223a327d",
+   "refuse": "not-canonical",
    "canonical_hex": "7b2261223a312c22625c6e223a327d"
+  },
+  {
+   "name": "canonical escapes",
+   "hex": "225c225c5c5c625c665c6e5c725c745c75303030315c75303031662fc3a922",
+   "canonical_hex": "225c225c5c5c625c665c6e5c725c745c75303030315c75303031662fc3a922"
+  },
+  {
+   "name": "canonical object",
+   "hex": "7b22223a342c2242223a352c2261223a5b312c2d322c7b2262223a6e756c6c7d5d2c226161223a2278227d",
+   "canonical_hex": "7b22223a342c2242223a352c2261223a5b312c2d322c7b2262223a6e756c6c7d5d2c226161223a2278227d"
+  },
+  {
+   "name": "trailing line feed",
+   "hex": "7b7d0a",
+   "refuse": "not-canonical",
+   "canonical_hex": "7b7d"
+  },
+  {
+   "name": "leading space",
+   "hex": "2030",
+   "refuse": "not-canonical",
+   "canonical_hex": "30"
+  },
+  {
+   "name": "space after colon",
+   "hex": "7b2261223a20317d",
+   "refuse": "not-canonical",
+   "canonical_hex": "7b2261223a317d"
+  },
+  {
+   "name": "space after comma",
+   "hex": "5b312c20325d",
+   "refuse": "not-canonical",
+   "canonical_hex": "5b312c325d"
+  },
+  {
+   "name": "members out of order",
+   "hex": "7b2262223a312c2261223a327d",
+   "refuse": "not-canonical",
+   "canonical_hex": "7b2261223a322c2262223a317d"
+  },
+  {
+   "name": "escaped solidus",
+   "hex": "225c2f22",
+   "refuse": "not-canonical",
+   "canonical_hex": "222f22"
+  },
+  {
+   "name": "uppercase escape",
+   "hex": "225c753030314622",
+   "refuse": "not-canonical",
+   "canonical_hex": "225c753030316622"
+  },
+  {
+   "name": "escaped letter",
+   "hex": "225c753030343122",
+   "refuse": "not-canonical",
+   "canonical_hex": "224122"
+  },
+  {
+   "name": "escaped non ascii",
+   "hex": "225c753030653922",
+   "refuse": "not-canonical",
+   "canonical_hex": "22c3a922"
+  },
+  {
+   "name": "surrogate pair escape",
+   "hex": "225c75643833645c756465303022",
+   "refuse": "not-canonical",
+   "canonical_hex": "22f09f988022"
+  },
+  {
+   "name": "escaped tab as u",
+   "hex": "225c753030303922",
+   "refuse": "not-canonical",
+   "canonical_hex": "225c7422"
+  },
+  {
+   "name": "nested out of order",
+   "hex": "5b7b227a223a312c2279223a327d5d",
+   "refuse": "not-canonical",
+   "canonical_hex": "5b7b2279223a322c227a223a317d5d"
   },
   {
    "name": "not utf8",

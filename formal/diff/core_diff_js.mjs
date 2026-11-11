@@ -47,7 +47,7 @@ function readingVerdict(graph, bytes) {
   try {
     doc = canon2Read(bytes);
   } catch (err) {
-    if (err instanceof Canon2Error) return refuse("reading:unreadable", { reason: err.rule });
+    if (err instanceof Canon2Error) return refuse(err.rule === "not-canonical" ? "reading:not-canonical" : "reading:unreadable", { reason: err.rule });
     return { verdict: "refuse", cause: "crash", reason: `canon2Read ${String(err).slice(0, 200)}` };
   }
   if (doc === null || typeof doc !== "object" || Array.isArray(doc)) return refuse("reading:not-object");
@@ -80,8 +80,10 @@ while (pos < input.length) {
     canon2Read(image);
   } catch (err) {
     if (!(err instanceof Canon2Error)) throw err;
-    out.push(JSON.stringify({ id: header[1], policy: "refused", cause: "policy:unreadable", reason: err.rule,
-                              code: coreCauseCode("policy:unreadable"), causes: ["policy:unreadable"] }));
+    // a document that is not its canonical spelling has a cause of its own (spec section 3.2)
+    const cause = err.rule === "not-canonical" ? "policy:not-canonical" : "policy:unreadable";
+    out.push(JSON.stringify({ id: header[1], policy: "refused", cause, reason: err.rule, code: coreCauseCode(cause),
+                              causes: [cause] }));
     continue;
   }
   if (flow.length === 0) {

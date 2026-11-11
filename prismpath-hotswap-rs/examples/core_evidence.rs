@@ -209,6 +209,7 @@ mod oracle_policy {
                 "policy:rounding" => 95,
                 "policy:threshold" => 96,
                 "policy:none" => 97,
+                "policy:not-canonical" => 101,
                 _ => 98,
             }
         }
@@ -740,11 +741,21 @@ mod oracle_policy {
         }
     }
 
+    /// The cause of an image the strict reader refuses: its own for a document that is not its canonical
+    /// spelling (`PolicyErr.code` 101), `policy:unreadable` for a reader rule.
+    pub fn unreadable_image_cause(error: canon2::Canon2Error) -> &'static str {
+        if error == canon2::Canon2Error::NotCanonical {
+            "policy:not-canonical"
+        } else {
+            "policy:unreadable"
+        }
+    }
+
     /// `loadPolicy` on the image's bytes: None when the oracle accepts it, else its refusal.
     pub fn load_policy(image: &[u8]) -> Option<Refused> {
         let doc = match canon2::read(image) {
             Ok(doc) => doc,
-            Err(error) => return Some(Refused { cause: "policy:unreadable", field: None, reason: Some(error.rule().to_string()) }),
+            Err(error) => return Some(Refused { cause: unreadable_image_cause(error), field: None, reason: Some(error.rule().to_string()) }),
         };
         check_image(&doc).err()
     }
@@ -795,7 +806,10 @@ fn refusal(cause: &str, field: Option<&str>, reason: Option<&str>) -> Result<Dec
 fn reading_decision(graph: &prismpath_rs::Graph, bytes: &[u8]) -> Result<Decision, String> {
     let document = match canon2::read(bytes) {
         Ok(document) => document,
-        Err(error) => return refusal("reading:unreadable", None, Some(error.rule())),
+        Err(error) => {
+            let cause = if error == canon2::Canon2Error::NotCanonical { "reading:not-canonical" } else { "reading:unreadable" };
+            return refusal(cause, None, Some(error.rule()));
+        }
     };
     let Doc::Obj(members) = document else {
         return refusal("reading:not-object", None, None);
@@ -813,7 +827,7 @@ fn reading_decision(graph: &prismpath_rs::Graph, bytes: &[u8]) -> Result<Decisio
 /// Every reading's decision, or None for a case the port has no decision on (an image with no flow).
 fn case_decisions(case: &Case) -> Result<Option<Vec<Decision>>, String> {
     if let Err(error) = canon2::read(&case.image) {
-        let refused = refusal("policy:unreadable", None, Some(error.rule()))?;
+        let refused = refusal(oracle_policy::unreadable_image_cause(error), None, Some(error.rule()))?;
         return Ok(Some(case.readings.iter().map(|_| refused.clone()).collect()));
     }
     let Some(flow) = &case.flow else { return Ok(None) };

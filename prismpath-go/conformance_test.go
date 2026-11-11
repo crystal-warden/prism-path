@@ -1,6 +1,7 @@
 package prismpath
 
 import (
+	"bytes"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -208,11 +209,14 @@ func readCorpus(test *testing.T, name string, into interface{}) {
 	}
 }
 
-// The frozen canon/2 vectors (spec-verified-core.md section 3): every case is refused with the reference's
-// rule, or read and written back to the reference's canonical bytes, which are a fixed point.
+// The frozen canon/2 vectors (spec-verified-core.md sections 3 and 3.2): the strict reader refuses every case
+// with the reference's rule (not-canonical for a spelling that is not the canonical one) or accepts it as its
+// own canonical bytes, and Canon2Canonicalize gives the reference's canonical bytes, a fixed point, or refuses
+// with the same rule.
 func TestCanon2Conformance(test *testing.T) {
 	var corpus struct {
-		Cases []struct {
+		Version int `json:"version"`
+		Cases   []struct {
 			Name         string `json:"name"`
 			Hex          string `json:"hex"`
 			CanonicalHex string `json:"canonical_hex"`
@@ -220,6 +224,16 @@ func TestCanon2Conformance(test *testing.T) {
 		} `json:"cases"`
 	}
 	readCorpus(test, "canon2.json", &corpus)
+	if corpus.Version != 2 {
+		test.Fatalf("canon2.json version %d, want 2", corpus.Version)
+	}
+	rule := func(err error) string {
+		var canonErr *Canon2Error
+		if errors.As(err, &canonErr) {
+			return canonErr.Rule
+		}
+		return ""
+	}
 	passed := 0
 	for _, vector := range corpus.Cases {
 		input, err := hex.DecodeString(vector.Hex)
@@ -228,26 +242,36 @@ func TestCanon2Conformance(test *testing.T) {
 		}
 		document, readErr := Canon2Read(input)
 		if vector.Refuse != "" {
-			var canonErr *Canon2Error
-			if !errors.As(readErr, &canonErr) || canonErr.Rule != vector.Refuse {
+			if rule(readErr) != vector.Refuse {
 				test.Errorf("[%s] read as %v (%v), the reference refuses it as %s", vector.Name, document, readErr, vector.Refuse)
+				continue
+			}
+		} else {
+			if readErr != nil {
+				test.Errorf("[%s] refused (%v), the reference reads it", vector.Name, readErr)
+				continue
+			}
+			if written, _ := Canon2Write(document); !bytes.Equal(written, input) {
+				test.Errorf("[%s] the strict reader accepted bytes that are not canonical", vector.Name)
+				continue
+			}
+		}
+		canonical, canonErr := Canon2Canonicalize(input)
+		if vector.CanonicalHex == "" {
+			if rule(canonErr) != vector.Refuse {
+				test.Errorf("[%s] canonicalized (%v), the reference refuses it as %s", vector.Name, canonErr, vector.Refuse)
 				continue
 			}
 			passed++
 			continue
 		}
-		if readErr != nil {
-			test.Errorf("[%s] refused (%v), the reference reads it", vector.Name, readErr)
+		if canonErr != nil || hex.EncodeToString(canonical) != vector.CanonicalHex {
+			test.Errorf("[%s] canonicalized to %x (%v), want %s", vector.Name, canonical, canonErr, vector.CanonicalHex)
 			continue
 		}
-		written, writeErr := Canon2Write(document)
-		if writeErr != nil || hex.EncodeToString(written) != vector.CanonicalHex {
-			test.Errorf("[%s] wrote %x (%v), want %s", vector.Name, written, writeErr, vector.CanonicalHex)
-			continue
-		}
-		again, againErr := Canon2Read(written)
+		again, againErr := Canon2Read(canonical)
 		rewritten, _ := Canon2Write(again)
-		if againErr != nil || hex.EncodeToString(rewritten) != vector.CanonicalHex {
+		if againErr != nil || !bytes.Equal(rewritten, canonical) {
 			test.Errorf("[%s] the canonical bytes are not a fixed point", vector.Name)
 			continue
 		}

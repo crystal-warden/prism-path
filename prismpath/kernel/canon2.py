@@ -8,18 +8,25 @@ reading of the core are canon/2 documents, and this module is the reference read
 `prismpath-rs/src/canon2.rs` is its Rust twin, held to the same frozen vectors
 (`prismpath/portable/conformance/canon2.json`).
 
-`loads` accepts exactly the JSON documents (RFC 8259) whose numbers are integers within plus or minus
-2^53 minus 1 written without a fraction, an exponent or a negative zero, whose objects hold no key twice,
-whose strings hold no lone surrogate escape, and whose arrays and objects nest at most 128 deep. Every
-other input raises `Canon2Error` with `rule` set to the first rule broken reading left to right, the
-same rule the Lean reader names: `utf8`, `syntax`, `float`, `integer-range`, `negative-zero`,
-`duplicate-key`, `lone-surrogate` or `depth`.
+`loads` is the strict reader (the Lean `Core.readCanonical`): it accepts exactly the canonical bytes of a
+canon/2 value and nothing else. A text is first read as canon/2: JSON (RFC 8259) whose numbers are
+integers within plus or minus 2^53 minus 1 written without a fraction, an exponent or a negative zero,
+whose objects hold no key twice, whose strings hold no lone surrogate escape, and whose arrays and objects
+nest at most 128 deep. A text that breaks one of these raises `Canon2Error` with `rule` set to the first
+rule broken reading left to right, the same rule the Lean reader names: `utf8`, `syntax`, `float`,
+`integer-range`, `negative-zero`, `duplicate-key`, `lone-surrogate` or `depth`. A text that reads but is
+not the canonical spelling of its value (whitespace, members out of key order, a needless escape) raises
+`Canon2Error` with `rule` `not-canonical`: it is refused, never re-canonicalized.
 
 `dumps` writes the canonical bytes: no whitespace, object members sorted by the UTF-16 code units of
 their keys, strings raw UTF-8 with only `"`, `\\` and the control characters escaped (`\\b \\t \\n \\f \\r`,
 otherwise lowercase `\\u00xx`), integers in decimal. It refuses every value `loads` could not read back,
-so `loads(dumps(v)) == v` for every value it writes and `dumps(loads(b))` is the one canonical spelling
-of a readable document.
+so `loads(dumps(v)) == v` for every value it writes.
+
+`canonicalize` is the one path for text a person wrote: it reads the text by the rules above but for
+the spelling (whitespace, member order and escapes are allowed) and returns the canonical bytes of its
+value, which `loads` then accepts. It is a writer's step, taken before a document is hashed, signed or
+handed to a reader; no reader calls it (the Lean `Core.canonicalize`).
 
 canon/1 (Python's own `json` with the compact and spaced forms) is retired: this is the one encoding of
 everything PrismPath hashes or signs, and `prismpath.canon` applies it to every document (section 3.1 of
@@ -33,7 +40,7 @@ EXACT_LIMIT = 2 ** 53 - 1
 MAX_DEPTH = 128
 
 RULES = ("utf8", "syntax", "float", "integer-range", "negative-zero", "duplicate-key", "lone-surrogate",
-         "depth")
+         "depth", "not-canonical")
 
 _WS = " \t\n\r"
 _DIGITS = "0123456789"
@@ -234,25 +241,38 @@ class _Reader:
         return value
 
 
-def loads(data: Any) -> Any:
-    """The canon/2 document in `data` (bytes, which are decoded as strict UTF-8 first, or an already
-    decoded str) as dict, list, str, int, bool or None. Raises Canon2Error."""
+def _read(data: Any, caller: str) -> Tuple[Any, bytes]:
+    """The value of `data` read by every canon/2 rule but the spelling, and the bytes it was read from."""
     if isinstance(data, (bytes, bytearray, memoryview)):
+        raw = bytes(data)
         try:
-            text = bytes(data).decode("utf-8")
+            text = raw.decode("utf-8")
         except UnicodeDecodeError as error:
             raise Canon2Error("utf8", str(error)[:80]) from None
     elif isinstance(data, str):
         text = data
         if any(0xD800 <= ord(c) <= 0xDFFF for c in text):
             raise Canon2Error("utf8", "the text holds a surrogate code point, which has no UTF-8 form")
+        raw = text.encode("utf-8")
     else:
-        raise TypeError(f"canon2.loads takes bytes or str, not {type(data).__name__}")
+        raise TypeError(f"canon2.{caller} takes bytes or str, not {type(data).__name__}")
     reader = _Reader(text)
     value = reader.value(0)
     reader.skip_ws()
     if reader.pos != len(text):
         raise Canon2Error("syntax", f"trailing text at {reader.pos}")
+    return value, raw
+
+
+def loads(data: Any) -> Any:
+    """The canon/2 document in `data` (bytes, which are decoded as strict UTF-8 first, or an already
+    decoded str) as dict, list, str, int, bool or None, when `data` is exactly the canonical spelling of
+    that value. Raises Canon2Error: the first rule broken, or `not-canonical` for a document spelled any
+    other way."""
+    value, raw = _read(data, "loads")
+    if dumps(value) != raw:
+        raise Canon2Error("not-canonical", "the document reads as canon/2 but is not its canonical spelling; "
+                          "write it through canonicalize first")
     return value
 
 
@@ -329,13 +349,18 @@ def dumps(value: Any) -> bytes:
     return "".join(out).encode("utf-8")
 
 
-def canonical(data: Any) -> bytes:
-    """`dumps(loads(data))`: the one canonical spelling of a readable document."""
-    return dumps(loads(data))
+def canonicalize(data: Any) -> bytes:
+    """The canonical bytes of the canon/2 value a person wrote in `data`, in any legal spelling
+    (whitespace, member order, escapes). Every other rule holds as in `loads` (a float, a duplicate key,
+    an integer out of range, a lone surrogate, nesting past 128 and bad UTF-8 raise Canon2Error); the
+    result is what `loads` accepts. A writer's step, never a reader's."""
+    value, _raw = _read(data, "canonicalize")
+    return dumps(value)
 
 
 def rule_of(data: Any) -> Tuple[bool, str]:
-    """(True, '') when `data` reads, else (False, rule). A convenience for vectors and the harness."""
+    """(True, '') when the strict reader accepts `data`, else (False, rule). A convenience for vectors and
+    the harness."""
     try:
         loads(data)
     except Canon2Error as error:

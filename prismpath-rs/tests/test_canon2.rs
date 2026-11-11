@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 Crystal Warden Supply Chain Labs LLC
-//! The canon/2 reader and writer replay the reference's frozen vectors
-//! (`prismpath/portable/conformance/canon2.json`, written by `gen_canon2_fixtures.py`): every case is
-//! refused with the reference's rule, or read and written back to the reference's canonical bytes.
+//! The canon/2 strict reader, writer and canonicalize path replay the reference's frozen vectors
+//! (`prismpath/portable/conformance/canon2.json`, written by `gen_canon2_fixtures.py`): the strict reader
+//! refuses every case with the reference's rule (`not-canonical` for a spelling that is not the canonical
+//! one) or accepts it as its own canonical bytes, and `canonicalize` gives the reference's canonical bytes
+//! or refuses with the same rule.
 
 use prismpath_rs::canon2::{self, Doc};
 use serde_json::Value;
@@ -19,23 +21,36 @@ fn unhex(text: &str) -> Vec<u8> {
 #[test]
 fn every_vector_reads_as_the_reference_reads_it() {
     let doc = corpus();
+    assert_eq!(doc["version"], 2);
     let cases = doc["cases"].as_array().expect("cases");
-    assert!(cases.len() > 60);
+    assert!(cases.len() > 80);
+    let mut not_canonical = 0;
     for case in cases {
         let name = case["name"].as_str().unwrap();
         let bytes = unhex(case["hex"].as_str().unwrap());
-        match (canon2::read(&bytes), case.get("refuse").and_then(Value::as_str)) {
+        let refuse = case.get("refuse").and_then(Value::as_str);
+        match (canon2::read(&bytes), refuse) {
             (Err(error), Some(rule)) => assert_eq!(error.rule(), rule, "[{name}]"),
             (Ok(document), None) => {
-                let want = unhex(case["canonical_hex"].as_str().unwrap());
                 let written = canon2::write(&document).expect("a read document writes");
-                assert_eq!(written, want, "[{name}] canonical bytes");
-                let again = canon2::read(&written).expect("canonical bytes read");
-                assert_eq!(canon2::write(&again).unwrap(), written, "[{name}] the canonical bytes are a fixed point");
+                assert_eq!(written, bytes, "[{name}] the strict reader accepted bytes that are not canonical");
             }
             (got, want) => panic!("[{name}] the reference says {want:?}, Rust read {got:?}"),
         }
+        match (canon2::canonicalize(&bytes), case.get("canonical_hex").and_then(Value::as_str)) {
+            (Ok(written), Some(want)) => {
+                assert_eq!(written, unhex(want), "[{name}] canonical bytes");
+                let again = canon2::read(&written).expect("canonical bytes read strictly");
+                assert_eq!(canon2::write(&again).unwrap(), written, "[{name}] the canonical bytes are a fixed point");
+            }
+            (Err(error), None) => assert_eq!(Some(error.rule()), refuse, "[{name}] canonicalize"),
+            (got, want) => panic!("[{name}] the reference canonicalizes to {want:?}, Rust gave {got:?}"),
+        }
+        if refuse == Some("not-canonical") {
+            not_canonical += 1;
+        }
     }
+    assert!(not_canonical >= 15, "the vectors hold the non canonical spellings");
 }
 
 #[test]

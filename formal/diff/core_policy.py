@@ -34,7 +34,7 @@ OPS = ("<", "<=", ">", ">=", "==", "!=")
 CODES = {"policy:unreadable": 89, "policy:shape": 90, "image:unknown-op": 74, "image:unknown-type": 75,
          "policy:not-level-m": 91, "policy:definition": 92, "image:field-index-oob": 76,
          "policy:engine-counter": 93, "policy:kind-mismatch": 94, "policy:rounding": 95, "policy:threshold": 96,
-         "policy:none": 97, "policy:absence-untested": 98}
+         "policy:none": 97, "policy:absence-untested": 98, "policy:not-canonical": 101}
 
 
 class Refused(Exception):
@@ -521,7 +521,9 @@ def load_policy(image: bytes) -> Optional[Tuple[str, int, Optional[str], Optiona
     try:
         doc = canon2.loads(image)
     except canon2.Canon2Error as error:
-        return Refused("policy:unreadable", None, error.rule).spelled()
+        # an image that reads but is not its canonical spelling has a cause of its own (`PolicyErr.code`)
+        cause = "policy:not-canonical" if error.rule == "not-canonical" else "policy:unreadable"
+        return Refused(cause, None, error.rule).spelled()
     try:
         fields, rules = decode_image(doc)
         check_image(fields, rules)
