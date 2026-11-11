@@ -16,7 +16,7 @@ PERSONAS = (
      ("init", "validate", "test", "graph", "lint", "context")),
     ("Engineer: implement the interface once, calibrate for deployment, deliver",
      ("contract", "capability", "compile", "portable", "lock", "verify", "plugins", "ci-report", "lsp", "import",
-      "calibrate", "label", "annotate", "kappa", "centroids", "authorize")),
+      "calibrate", "label", "annotate", "kappa", "centroids", "authorize", "canonicalize")),
     ("Operator: run the system day to day, swap and attest policy (Mission Control is the console; this is the scripted path)",
      ("run", "resume", "compose", "swap", "trail")),
     ("Assessor: anchor, verify, and read the evidence",
