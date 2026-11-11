@@ -173,6 +173,51 @@ def test_locked_router_builds_hybrid_at_locked_delta(tmp_path, stub_embedder):
     assert isinstance(hybrid_router.embed, LockedEmbeddingRouter)
 
 
+# --- the lock's numbers on disk: integers of millionths, never a float or a decimal string ---------
+
+def test_the_lock_holds_its_numbers_as_integers_of_millionths(tmp_path, stub_embedder):
+    import json
+    from prismpath import canon
+    flow = tmp_path / "triage.md"
+    flow.write_text(FLOW)
+    lock = lockfile.build_lock(str(flow), delta=0.125)
+    lock["centroid_prior_weight"] = 4.0
+    path = lockfile.save_lock(str(flow), lock)
+    on_disk = json.loads(open(path, "rb").read())
+    assert on_disk["version"] == 2 and on_disk["delta_micro"] == 125000
+    assert on_disk["centroid_prior_weight_micro"] == 4000000
+    assert "delta" not in on_disk and "centroid_prior_weight" not in on_disk
+    assert open(path, "rb").read() == canon.canon2_bytes(on_disk) + b"\n"
+    loaded = lockfile.load_lock(path)
+    assert loaded["delta"] == 0.125 and loaded["centroid_prior_weight"] == 4.0
+    assert lockfile.to_micro("delta", 0.05) == 50000 and lockfile.to_micro("delta", 1) == 1000000
+
+
+@pytest.mark.parametrize("value", [0.0000001, 1e-7, float("nan"), float("inf"), "0.05", True])
+def test_a_number_a_lock_cannot_hold_exactly_is_refused(value):
+    with pytest.raises(lockfile.LockError):
+        lockfile.to_micro("delta", value)
+
+
+@pytest.mark.parametrize("change", [{"version": 1}, {"delta": "0.05"}, {"delta_micro": 0.5},
+                                    {"delta_micro": "50000"}])
+def test_an_old_or_float_lock_is_refused(tmp_path, stub_embedder, change):
+    from prismpath import canon
+    flow = tmp_path / "triage.md"
+    flow.write_text(FLOW)
+    path = lockfile.save_lock(str(flow), lockfile.build_lock(str(flow)))
+    doc = canon.loads_document(open(path, "rb").read())
+    doc.update(change)
+    try:
+        data = canon.canon2_bytes(doc)
+    except canon.CanonicalError:
+        import json
+        data = json.dumps(doc, sort_keys=True, separators=(",", ":")).encode()
+    open(path, "wb").write(data + b"\n")
+    with pytest.raises(lockfile.LockError):
+        lockfile.load_lock(path)
+
+
 # --- the real thing: reproducible routing with the actual embedder ----------------------
 
 def test_committed_vectors_reproduce_live_routing(tmp_path):

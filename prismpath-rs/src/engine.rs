@@ -419,6 +419,26 @@ pub struct Lock {
     pub conditions: HashMap<String, Vec<f32>>,
     pub centroids: Option<HashMap<String, CentroidPin>>,
     pub dim: usize,
+    /// The lock's escalation margin as an integer of millionths (`delta_micro`, `prismpath/routing/lockfile.py`):
+    /// canon/2 has no float, so a lock never holds one.
+    pub delta_micro: Option<i64>,
+    /// The centroid shrinkage prior weight, an integer of millionths (`centroid_prior_weight_micro`).
+    pub centroid_prior_weight_micro: Option<i64>,
+}
+
+/// One of a lock's integers of millionths: absent, or an integer. A float, a string (the decimal strings a
+/// version 1 lock held) or the old member name is refused, never converted.
+fn lock_micro(obj: &serde_json::Map<String, serde_json::Value>, old: &str, member: &str) -> Result<Option<i64>, String> {
+    if obj.contains_key(old) {
+        return Err(format!("lock holds {old:?}; a version 2 lock holds {member:?}, an integer of millionths"));
+    }
+    match obj.get(member) {
+        None => Ok(None),
+        Some(serde_json::Value::Number(number)) if number.is_i64() || number.is_u64() => {
+            number.as_i64().map(Some).ok_or_else(|| format!("lock.{member} is out of range"))
+        }
+        Some(other) => Err(format!("lock.{member} must be an integer of millionths, not {other}")),
+    }
 }
 
 impl Lock {
@@ -464,7 +484,9 @@ impl Lock {
             None
         };
 
-        Ok(Lock { conditions, centroids, dim })
+        let delta_micro = lock_micro(obj, "delta", "delta_micro")?;
+        let centroid_prior_weight_micro = lock_micro(obj, "centroid_prior_weight", "centroid_prior_weight_micro")?;
+        Ok(Lock { conditions, centroids, dim, delta_micro, centroid_prior_weight_micro })
     }
 }
 

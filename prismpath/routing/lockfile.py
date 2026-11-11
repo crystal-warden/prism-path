@@ -26,8 +26,11 @@ import os
 from typing import Optional
 from prismpath import canon
 
-LOCK_VERSION = 1
+# Version 2: `delta` and `centroid_prior_weight` are written as integers of micro-units (`delta_micro`,
+# `centroid_prior_weight_micro`), not as decimal strings made from floats; a version 1 lock is refused.
+LOCK_VERSION = 2
 DEFAULT_DELTA = 0.05                 # mirrors HybridRouter's default margin
+MICRO = 1_000_000                    # the unit of a lock's two numbers on disk: millionths
 LOCK_COSINE_MIN = 0.9999            # probe cosine below this ⇒ the embedder drifted
 _PROBE = "prismpath routing lockfile embedder fingerprint probe sentence"
 
@@ -161,17 +164,35 @@ def build_lock(flow_path, delta: Optional[float] = None, centroids: Optional[dic
     return lock
 
 
-# The two floats a lock carries, written on disk as decimal strings because canon/2 has no float.
-_DECIMAL_FIELDS = ("delta", "centroid_prior_weight")
+# The two numbers a lock carries that are not integers in memory, and the members that hold them on disk:
+# canon/2 has no float and PrismPath writes none as a decimal string of its own making, so each is an integer
+# count of millionths. Six places keep every value the command line and Mission Control take (a margin such
+# as 0.05, a prior weight such as 4.0) exactly; a value with more places is refused, not rounded.
+_MICRO_FIELDS = (("delta", "delta_micro"), ("centroid_prior_weight", "centroid_prior_weight_micro"))
+
+
+def to_micro(field: str, value) -> int:
+    """`value` as an integer of millionths, exactly: its shortest decimal spelling times 10^6. A value
+    with more than six decimal places, a non finite one, a bool or a string is refused (LockError)."""
+    from decimal import Decimal, InvalidOperation
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise LockError(f"lock {field} must be a number, not {type(value).__name__}")
+    try:
+        scaled = Decimal(repr(value)) * MICRO
+    except InvalidOperation as error:
+        raise LockError(f"lock {field} {value!r} is not a decimal number") from error
+    if not scaled.is_finite() or scaled != scaled.to_integral_value():
+        raise LockError(f"lock {field} {value!r} has more than six decimal places; a lock holds millionths")
+    return int(scaled)
 
 
 def lock_document(lock: dict) -> dict:
-    """The lock as it is written and hashed: canon/2, tagged, with `delta` and `centroid_prior_weight`
-    as their shortest round trip decimal strings."""
+    """The lock as it is written and hashed: canon/2, tagged, with `delta` and `centroid_prior_weight` as
+    integers of millionths (`delta_micro`, `centroid_prior_weight_micro`)."""
     doc = {key: value for key, value in lock.items() if key != canon.ENCODING_KEY}
-    for field in _DECIMAL_FIELDS:
-        if isinstance(doc.get(field), float):
-            doc[field] = repr(doc[field])
+    for field, member in _MICRO_FIELDS:
+        if field in doc:
+            doc[member] = to_micro(field, doc.pop(field))
     return canon.tagged(doc)
 
 
@@ -187,13 +208,19 @@ def load_lock(path) -> dict:
             lock = canon.loads_document(handle.read())
         except ValueError as error:
             raise LockError(f"{path} is not a canon/2 lock ({error}); run `prismpath lock` again") from error
-    # a lock carries its floats as decimal strings; the lock in memory is what it was built as
     lock.pop(canon.ENCODING_KEY)
-    for field in _DECIMAL_FIELDS:
-        if isinstance(lock.get(field), str):
-            lock[field] = float(lock[field])
     if lock.get("version") != LOCK_VERSION:
-        raise LockError(f"unsupported lock version {lock.get('version')!r} (expected {LOCK_VERSION})")
+        raise LockError(f"unsupported lock version {lock.get('version')!r} (expected {LOCK_VERSION}); "
+                        "run `prismpath lock` again")
+    # the lock in memory is what it was built as: each number of millionths back as the float it was
+    for field, member in _MICRO_FIELDS:
+        if field in lock:
+            raise LockError(f"{path} holds {field!r}; a version {LOCK_VERSION} lock holds {member!r}, an integer of millionths")
+        if member in lock:
+            micro = lock.pop(member)
+            if isinstance(micro, bool) or not isinstance(micro, int):
+                raise LockError(f"{path}: {member} must be an integer of millionths, not {micro!r}")
+            lock[field] = micro / MICRO
     return lock
 
 

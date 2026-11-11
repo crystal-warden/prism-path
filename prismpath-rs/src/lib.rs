@@ -214,7 +214,7 @@ mod tests {
         let mut conds = HashMap::new();
         conds.insert("positive".to_string(), vec![1.0f32, 0.0, 0.0, 0.0]);
         conds.insert("negative".to_string(), vec![0.0, 1.0, 0.0, 0.0]);
-        let lock = Lock { conditions: conds, centroids: None, dim: 4 };
+        let lock = Lock { conditions: conds, centroids: None, dim: 4, delta_micro: None, centroid_prior_weight_micro: None };
         let res = run_locked(
             &graph,
             |_, _, _| Ok::<_, String>(Value::Obj(vec![("text".to_string(), Value::Str("great".into()))])),
@@ -235,7 +235,7 @@ mod tests {
         let mut conds = HashMap::new();
         conds.insert("positive".to_string(), vec![1.0f32, 0.0, 0.0, 0.0]);
         conds.insert("negative".to_string(), vec![0.0, 1.0, 0.0, 0.0]);
-        let lock = Lock { conditions: conds, centroids: None, dim: 4 };
+        let lock = Lock { conditions: conds, centroids: None, dim: 4, delta_micro: None, centroid_prior_weight_micro: None };
         let res = run_locked(
             &graph,
             |_, _, _| Ok::<_, String>(Value::Obj(vec![("text".to_string(), Value::Str("ambiguous".into()))])),
@@ -252,7 +252,7 @@ mod tests {
         let graph = parse("## a\nRoute.\n\n-> b: when x == 1\n-> c: semantic edge\n\n## b\nB.\n\n## c\nC.\n");
         let mut conds = HashMap::new();
         conds.insert("semantic edge".to_string(), vec![0.0, 0.0, 1.0, 0.0]);
-        let lock = Lock { conditions: conds, centroids: None, dim: 4 };
+        let lock = Lock { conditions: conds, centroids: None, dim: 4, delta_micro: None, centroid_prior_weight_micro: None };
         let res = run_locked(
             &graph,
             |_, _, _| Ok::<_, String>(Value::Obj(vec![
@@ -274,7 +274,7 @@ mod tests {
         let graph = parse("## a\nDo.\n\n-> b: foo\n-> c: bar\n\n## b\nB.\n\n## c\nC.\n");
         let mut conds = HashMap::new();
         conds.insert("foo".to_string(), vec![1.0, 0.0, 0.0, 0.0]);
-        let lock = Lock { conditions: conds, centroids: None, dim: 4 };
+        let lock = Lock { conditions: conds, centroids: None, dim: 4, delta_micro: None, centroid_prior_weight_micro: None };
         let res = run_locked(
             &graph,
             |_, _, _| Ok::<_, String>(Value::Null),
@@ -295,7 +295,7 @@ mod tests {
         centroids.insert("positive".to_string(), CentroidPin {
             vec: vec![0.0, 1.0, 0.0, 0.0], n: 5,
         });
-        let lock = Lock { conditions: conds, centroids: Some(centroids), dim: 4 };
+        let lock = Lock { conditions: conds, centroids: Some(centroids), dim: 4, delta_micro: None, centroid_prior_weight_micro: None };
         let res = run_locked(
             &graph,
             |_, _, _| Ok::<_, String>(Value::Obj(vec![("text".to_string(), Value::Str("test".into()))])),
@@ -304,6 +304,23 @@ mod tests {
             RunOpts::default(),
         ).unwrap();
         assert_eq!(res.path[1], "b");
+    }
+
+    #[test]
+    fn a_lock_holds_its_numbers_as_integers_of_millionths() {
+        let base = serde_json::json!({"embedder": {"dim": 4}, "conditions": {}});
+        let mut lock = base.clone();
+        lock["delta_micro"] = serde_json::json!(50000);
+        lock["centroid_prior_weight_micro"] = serde_json::json!(4000000);
+        let read = Lock::from_json(&lock).unwrap();
+        assert_eq!((read.delta_micro, read.centroid_prior_weight_micro), (Some(50000), Some(4000000)));
+        assert_eq!(Lock::from_json(&base).unwrap().delta_micro, None);
+        for (member, value) in [("delta_micro", serde_json::json!(0.5)), ("delta_micro", serde_json::json!("50000")),
+                                ("delta", serde_json::json!("0.05")), ("centroid_prior_weight", serde_json::json!(4.0))] {
+            let mut bad = base.clone();
+            bad[member] = value;
+            assert!(Lock::from_json(&bad).is_err(), "{member}");
+        }
     }
 
     #[test]
