@@ -13,8 +13,8 @@ the implementation nor the person who ran it can check what was decided:
     (`receipts.roots.jsonl`, `prismpath.core-run-root/1`, log `core-run`) states their root and count,
     and binds the run's manifest (`run.json`) through its `policy` member. It is a canon/2 document with
     its time an integer count of microseconds (`time_us`), signed over its own domain prefix, so the
-    run's evidence is canon/2 end to end; the canon/1 root statements of audit logs and epoch chains
-    (`prismpath.ledgers.root_statement`) are untouched.
+    run's evidence is canon/2 end to end, as the root statements of audit logs and epoch chains
+    (`prismpath.ledgers.root_statement`, `prismpath-root-statement/2`) are.
 
 The verifier re-checks the root statement, every receipt and every image attestation, and replays a
 sample of the decisions through the Lean oracle; a case outside the core (section 1) is excluded with
@@ -54,8 +54,8 @@ RUN_FORMAT = "prismpath.core-run/1"
 IMAGE_FORMAT = "prismpath.core-image/1"
 RECEIPT_FORMAT = "prismpath.core-receipt/1"
 # The run's root statement: a canon/2 document of its own format, signed over its own domain prefix, so
-# it can never be presented as an audit log's canon/1 root statement (`prismpath-root-statement/1`), an
-# image attestation or a pack signature, or the reverse.
+# it can never be presented as an audit log's root statement (`prismpath-root-statement/2`), an image
+# attestation or a pack signature, or the reverse.
 ROOT_FORMAT = "prismpath.core-run-root/1"
 ROOT_DOMAIN = b"prismpath.core-run-root/1\x00"
 ROOT_MEMBERS = ("format", "log", "root", "leaves", "time_us", "trigger", "key_id", "public_key", "policy", "sig")
