@@ -8,6 +8,44 @@ spec stable.
 
 ## [Unreleased]
 
+### Changed, breaking: every reader is strict, and a lock holds integers of millionths (2026-11-10)
+
+Every reader of a hashed or signed document and of a reading accepts only its exact canonical canon/2 bytes
+(docs/design/spec-verified-core.md, sections 3 and 3.2; SPEC.md §8; docs/DICTIONARY.md "not canonical"). A
+document that reads as canon/2 but is spelled otherwise (whitespace, members out of key order, a needless
+escape, a carriage return) is refused, never re-canonicalized; a file or a JSON Lines line may end with one
+line feed and nothing else.
+
+- **Three causes are registered**: `policy:not-canonical` (101) and `reading:not-canonical` (102) for the core's
+  image and reading, `document:not-canonical` (103) for every other hashed or signed document. The registry
+  hash, and so every frozen value that pins it, changed. canon/2 gains the rule name `not-canonical`
+  (`Canon2Error.rule`, `Canon2Error::NotCanonical`, the JavaScript and Go `rule`, Lean `DocErr.notCanonical`).
+- **The core decides with the strict reader.** `Core.verdictBytes` and the oracle read with
+  `Core.readCanonical`; a respelled image refuses every reading with `policy:not-canonical`, and a respelled
+  reading is refused with `reading:not-canonical`. New theorems say so, that a route is given only on
+  canonical bytes, and what the canonicalize path does; `Core.verdict` and now `Core.verdictBytes`,
+  `Core.writeBytes` and `Core.readCanonical` depend on `propext` only.
+- **Documents.** A pack or flow manifest, or an envelope, in another spelling is `document:not-canonical`
+  (was read and respelled, so `manifest_reformatted_but_unchanged_still_verifies` is now
+  `manifest_respelled_but_unchanged_is_not_canonical`); an audit log line or a root statement in another
+  spelling is an unreadable line or `bad_format`. Files are read without newline translation, so a log or a
+  statements file with CRLF line endings no longer verifies (`crlf_log`, `statements_file_with_crlf`,
+  `log_forms`). A statements file's final line is `interrupted_statement` only when it is not JSON, in Python
+  as in Rust.
+- **The canonicalize path** for text a person wrote: `prismpath canonicalize FILE` (`--out`, `--in-place`,
+  `--check`), `canon.canonicalize_document`, `canon2.canonicalize` (which replaces `canon2.canonical`), Rust
+  `canon2::canonicalize` (which replaces `canon2::canonical`) and `durable::canonicalize_document`, JavaScript
+  `canon2Canonicalize`, Go `Canon2Canonicalize`, Lean `Core.canonicalize`.
+- **Vectors and corpora regenerated**: `canon2.json` is version 2 (a case's `refuse` is the strict reader's
+  answer, `canonical_hex` the canonicalize path's; 87 cases, 18 refused as `not-canonical`), and
+  `receipts.json`, `hotswap.json`, `host_trace.json` and the telemetry receipt stream corpus follow. The
+  canon/2 differential's line is `<strict> ; <canonicalize>`, and the core differential sends 8 percent of
+  images and readings respelled.
+- **A lock is version 2**: `delta` and `centroid_prior_weight` are written as `delta_micro` and
+  `centroid_prior_weight_micro`, integers of millionths, not as decimal strings made by `repr` of a float. A
+  value with more than six decimal places is refused, and Python and Rust (`Lock::from_json`) refuse a
+  version 1 member, a float or a string in their place. A version 1 lock is refused; run `prismpath lock` again.
+
 ### Changed, breaking: every hashed or signed document is canon/2, and canon/1 is retired (2026-11-10)
 
 The rest of the system follows the verified core onto canon/2, the integer only JCS profile

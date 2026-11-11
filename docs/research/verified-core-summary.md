@@ -1,7 +1,7 @@
 # The verified policy core: what is proven, tested, assumed and out of scope
 
 *A summary for a technical reviewer of the narrow slice of PrismPath that is proven once and that every
-implementation is held to. Research line, November 2026, branch `verified-core-4`. The normative text is
+implementation is held to. Research line, November 2026, branches `verified-core-4` and `canon2-strict`. The normative text is
 `docs/design/spec-verified-core.md` (cited below as the specification, with its section numbers); the
 proofs are in `formal/Core`; the differential harness and the evidence tools are in `formal/diff`.*
 
@@ -13,7 +13,8 @@ The verified policy core is one decision: a policy is an ordered list of rules, 
 or `fixed` with a scale and a rounding mode, `bool`, `category`, with ranges and whether absence is
 allowed). A reading, a map of field names to values, is routed to the target of the first rule whose
 condition holds. Both the policy image and the reading are canon/2 documents: JSON with no floats, no
-duplicate keys, integers within plus or minus 2^53 minus 1, and a fixed canonical spelling (specification
+duplicate keys, integers within plus or minus 2^53 minus 1, and a fixed canonical spelling, which is the
+only spelling any reader accepts: a document spelled otherwise is refused as not canonical (specification
 section 3). Every input that is not routed is refused, and every refusal carries a registered cause from
 the append only registry `prismpath/kernel/causes.py` (section 5).
 
@@ -28,8 +29,9 @@ development contains no `sorry`, and the axiom audit that runs at every build (`
 shows each theorem depends on at most Lean's three standard axioms (`propext`, `Classical.choice`,
 `Quot.sound`). The decision function itself, `Core.verdict`, depends only on `propext`, and so does the
 check that decides which cases a differential run excludes (`Core.counterRefusal`): nothing the oracle
-computes goes through `Classical.choice`. The canon/2 writer and strict reader (`Core.writeBytes`, `Core.readCanonical`)
-depend on `propext` and `Quot.sound` only. The theorems are about the function the oracle runs, not about a
+computes goes through `Classical.choice`. The canon/2 writer, the strict reader the core decides with and the
+canonicalize path (`Core.writeBytes`, `Core.readCanonical`, `Core.canonicalize`) and `Core.verdictBytes`
+depend on `propext` only. The theorems are about the function the oracle runs, not about a
 separate model of it.
 
 | group | theorems | statement in words |
@@ -47,6 +49,8 @@ separate model of it.
 | the engine counter exclusion | `counterRefusal_iff`, `counter_excluded_refused` | the check a differential run uses to exclude a case holds exactly when the oracle refuses the policy image for reading an engine counter, and then every reading is refused with `policy:engine-counter`, so the exclusion leaves out no route and no other refusal |
 | evidence and the semantics | `verified_receipt_is_verdict`, `receipt_is_verdict_of_hashes`, `verified_run_complete`, `verified_refusal_registered`, `verified_excluded_counter`, `evidence_sound` | over a model of a differential run and of its verifier with every receipt replayed (`verifyRun`), every receipt the verifier accepts records `Core.verdict` on the image and the reading whose hashes it carries; every reading of every case not excluded has a receipt; a recorded refusal is the decision's registered nonzero code; a case excluded as reading an engine counter refuses every reading for it; and, under the cryptographic hypotheses of section 4, the root statement binds exactly these receipts |
 | the canon/2 encoding layer | `readBytes_doc`, `read_write`, `readChars_wr`, `canonical_form`, `same_value_same_spelling`, `write_injective`, `readCanonical_iff`, `write_readCanonical`, `readCanonical_unique`, `readCanonical_refuses`, `readCanonical_cause`, `reader_not_canonical` | the reader returns only documents (no key twice, integers within plus or minus 2^53 minus 1, nesting at most 128); the writer's bytes of every canonical value read back to the value; every accepted document's canonical bytes read back to its value with every object in key order, and are a fixed point; the writer is injective on canonical values; the strict reader accepts exactly the canonical spellings, so writing what it read gives back the input, two documents it accepts with the same value are byte identical, and everything else is refused with the reader's cause or `not-canonical`; the reader alone accepts whitespace, member order and needless escapes (specification section 3.2) |
+| the strict reader | `noncanonical_image_refused`, `noncanonical_reading_refused`, `unreadable_bytes_refused`, `verdictBytes_canonical`, `route_canonical`, `decided_reading_unique` | the core reads with `readCanonical`: an image that reads but is not its canonical spelling refuses every reading with `policy:not-canonical`, a reading so spelled is refused with `reading:not-canonical`, a reader rule is refused as before, on canonical bytes the decision is `Core.verdict` on the values, a route is given only on canonical bytes, and two accepted spellings of one reading are the same bytes |
+| the canonicalize path | `canonicalize_readCanonical`, `canonicalize_canonical`, `canonicalize_error_iff`, `canonicalize_idem` | what `canonicalize` writes for any text the reader reads is accepted by the strict reader; it is the identity on canonical bytes, refuses exactly what the reader refuses with the same cause, and is idempotent |
 
 The evidence theorems take the cryptography as parameters (a hash, the canonical bytes of a receipt, a
 Merkle root, signature verification) and its security as explicit hypotheses of the theorems that need
@@ -67,44 +71,47 @@ conformance on the inputs run, not a proof about the implementations' source tex
 and readings, well formed and malformed, biased toward boundaries (ranges at plus or minus 2^53 minus 1 and
 at 2^31, scales from 1 to 10^9, decimals at the digit and exponent bounds, conditions at depth 49 to 53,
 absence, wrong types, whitespace variants, escapes and astral characters, floats, `-0`, wide integers,
-duplicate keys, deep nesting, invalid UTF-8, truncated images), runs every case through the oracle and
-through seven legs, and classifies every difference. On the run of 100,000 cases (seed 1, 419,651
-readings) no leg shows a finding of any kind:
+duplicate keys, deep nesting, invalid UTF-8, truncated images, and since `canon2-strict` 8 percent of images
+and readings respelled, which every leg must refuse as not canonical), runs every case through the oracle
+and through seven legs, and classifies every difference. On the run of 100,000 cases on the strict readers
+(seed 1, 420,399 readings, `canon2-strict`) no leg shows a finding of any kind; the oracle refused 32,591
+readings under an image that was not canonical and 4,020 readings that were not, and every leg named the
+same cause each time:
 
 | leg | implementation | agree | outside the slice, by declared reason | findings |
 |---|---|---|---|---|
-| `python` | the Python reference implementation | 163,379 | 10,265 inferred path, 372 engine counter; 3,181 images with no flow rendering | 0 |
-| `rust` | the Rust port | 163,379 | the same | 0 |
-| `js` | the JavaScript kernel, a refusing kernel for field definitions | 60,492 | 10,265 inferred path; 12,902 excluded; 22,035 refused as defining fields; 666 reader gaps of a JSON reader that is not canon/2 | 0 |
-| `go` | the Go kernel, a refusing kernel | 60,511 | as `js`, with 647 reader gaps | 0 |
-| `c-interp` | the table interpreter `prismpath-hw/interp.c` | 146,673 | 10,265, 372, 3,181; 5,597 refusals of the 32 bit target | 0 |
-| `c-hdr` | the embedded evaluator `prismpath-hw/ppt_eval.h` | 146,673 | the same | 0 |
-| `ebpf` | the eBPF evaluator `prismpath-ebpf/ppt_eval_bpf.h`, on its userspace path | 146,587 | the same, and 86 readings of tables outside the loader's declared subset | 0 |
+| `python` | the Python reference implementation | 159,800 | 9,370 inferred path, 307 engine counter; 2,083 images with no flow rendering | 0 |
+| `rust` | the Rust port | 159,800 | the same | 0 |
+| `js` | the JavaScript kernel | 159,800 | the same | 0 |
+| `go` | the Go kernel | 159,800 | the same | 0 |
+| `c-interp` | the table interpreter `prismpath-hw/interp.c` | 144,945 | 9,370, 307, 2,083; 4,996 refusals of the 32 bit target | 0 |
+| `c-hdr` | the embedded evaluator `prismpath-hw/ppt_eval.h` | 144,945 | the same | 0 |
+| `ebpf` | the eBPF evaluator `prismpath-ebpf/ppt_eval_bpf.h`, on its userspace path | 144,945 | the same | 0 |
 
 The counts are policy rows and reading rows together. "Agree" means the same route, or the same refusal
 with the same cause, code, field and reason. On every policy a leg accepts and the oracle accepts, every
 reading's decision is the oracle's, and the policy check of the Python and Rust legs equals the oracle's on
 every reading. The seeded CI run (`prismpath/tests/test_core_diff.py`, 5,000 cases) fails on any finding.
 
-**The canon/2 differential** (`formal/diff/canon2_diff.py`) holds the reader and the writer of Python,
-Rust, JavaScript and Go to `lake exe canon2-oracle`, the compiled Lean writer and readers the theorems of
-section 2 are about. Every leg prints, per document, its writer's bytes of what its reader read and whether
-the input already was them, or its reader's refusal and rule. The sets: the 73 frozen vectors, each against
-its expected bytes or rule; 43 hand written probes (prototype keys such as `__proto__`, numeric keys,
-whitespace JSON does not allow, the boundary of every rule); generated values in the writer's domain, each
-sent as its canonical bytes and as a random legal spelling (whitespace, member order, `\/` and `\u`
-escapes in either case, surrogate pair escapes); byte strings made from canonical spellings by key order
-swaps, escape variants, whitespace, exponents and fractions, `-0`, leading zeros, integers at and past the
-exact range, lone and paired surrogate escapes, duplicate keys, nesting from 126 to 200, invalid UTF-8, a
-byte order mark, truncation and random byte edits; and every canonical output sent again, which every leg
-must print back unchanged. Two runs, no disagreement and no failed expectation:
-
-| run | values (documents) | mutated byte strings | fixed point | documents | disagreements |
-|---|---|---|---|---|---|
-| default seed 20261110 | 100,000 (200,000) | 100,000 | 77,714 | 377,830 | 0 |
-| seed 7 | 250,000 (500,000) | 500,000 | 230,108 | 1,230,224 | 0 |
-
-**Frozen vectors.** canon/2: 73 byte strings covering every reader rule, replayed by Python, Rust and the
+**The canon/2 differential** (`formal/diff/canon2_diff.py`) holds the strict reader, the writer and the
+canonicalize path of Python, Rust, JavaScript and Go to `lake exe canon2-oracle`, the compiled Lean
+functions the theorems of section 2 are about. Every leg prints, per document, its strict reader's answer
+(the writer's bytes of the value, which must be the input, or the refusal and rule, `not-canonical` among
+them) and its canonicalize path's answer (the canonical bytes, or the refusal). The sets: the 87 frozen
+vectors, each against its expected answers; 43 hand written probes (prototype keys such as `__proto__`,
+numeric keys, whitespace JSON does not allow, the boundary of every rule); generated values in the writer's
+domain, each sent as its canonical bytes and as a random legal spelling (whitespace, member order, `\/` and
+`\u` escapes in either case, surrogate pair escapes), which every leg must refuse as `not-canonical` and
+canonicalize to the canonical bytes; byte strings made from canonical spellings by key order swaps, escape
+variants, whitespace, exponents and fractions, `-0`, leading zeros, integers at and past the exact range,
+lone and paired surrogate escapes, duplicate keys, nesting from 126 to 200, invalid UTF-8, a byte order
+mark, truncation and random byte edits; and every canonical output sent again, which every leg must accept
+as it is and canonicalize to itself. On the strict readers (`canon2-strict`, default seed 20261110, 100,000
+values and 100,000 mutations): 377,850 documents, 77,720 canonical outputs at the fixed point, no
+disagreement and no failed expectation. Before the readers were strict (the protocol then printed the
+reader's answer and whether the input was canonical), two runs, no disagreement and no failed expectation:
+**Frozen vectors.** canon/2: 87 byte strings covering every reader rule and 18 spellings refused as not
+canonical, each with the strict reader's answer and the canonicalize path's, replayed by Python, Rust, JavaScript, Go and the
 oracle (`prismpath/portable/conformance/canon2.json`). Field definitions: the conformance vectors replayed by
 Python and Rust, including the depth, whitespace and cause order regressions of D1 to D3 and D7
 (`prismpath/portable/conformance/field_definitions.json`).
@@ -116,6 +123,11 @@ specification section 11). On the same 100,000 cases:
   example's `oracle_policy`), names the oracle's result on every one of the 100,000 images in both
   languages (accepted for 24,041; otherwise the same cause, code, field and reason; 1,310 refused for an
   engine counter);
+- on the strict readers (`canon2-strict`, 20,000 cases, seed 1): both ported checks name the oracle's result
+  on all 20,000 images (4,447 accepted, 262 refused for an engine counter); each language produces a run of
+  73,841 receipts with 2,406 cases excluded, and each verifier verifies the other language's run with both
+  keys pinned and every receipt replayed: 73,841 of 73,841 agree, none differs, in both directions. The
+  large run below was made before the readers were strict;
 - each language produces a run: 100,000 image attestations under a test authority key, 361,984 receipts,
   13,818 cases excluded with their reasons (1,310 engine counter, 9,327 inferred path, 3,181 with no flow
   rendering), and one canon/2 root statement under a test instance key; every document of the run is
@@ -176,6 +188,10 @@ exactly when the oracle refuses it for one.
   anchored roots are no longer read. canon/1 is retired (specification section 3.1, done on the
   `canon2-migration` and `canon2-finish` branches): everything written, and everything read, is canon/2, a
   float in hashed content is refused, and no corpus of canon/1 is left.
+- **Any spelling but the canonical one** (`canon2-strict`): every reader accepts a hashed or signed document
+  and a reading only as its exact canonical bytes and refuses any other spelling as not canonical; a person's
+  text is written through `prismpath canonicalize` first. A lock holds its two numbers as integers of
+  millionths.
 - **Anchoring a run.** `ledger anchor` is not taught the run's root statement format, so a run carries no
   third party time.
 - **A sampled replay** shows only the receipts it replayed; the counts above replay every receipt.

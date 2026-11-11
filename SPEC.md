@@ -421,7 +421,16 @@ the epoch journal's records) is canon/2 (docs/DICTIONARY.md "canon/2") and names
 domain `prismpath.canon/2` followed by a zero byte and those bytes, unless its format names a domain of
 its own (`prismpath-root-statement/2`). A reader decides by the document's own tag: canon/2 is read by the
 strict canon/2 reader, and a document without the member, or with any other tag, is refused: it is never
-read, hashed or verified under another encoding. canon/1, the earlier encoding (Python's `json` with sorted keys,
+read, hashed or verified under another encoding. The strict reader accepts a document only as its exact
+canonical canon/2 bytes: a file or a JSON Lines line holds those bytes followed by at most one line feed,
+the record terminator, and any other spelling (whitespace, members out of key order, a needless escape, a
+carriage return) is refused, never respelled, with the registered cause `document:not-canonical` (code
+103) where the reader names causes (a pack or flow manifest, an envelope) and as an unreadable line or a
+`bad_format` statement where it reports findings. The core's policy image and reading are held to the same
+rule with causes of their own, `policy:not-canonical` (101) and `reading:not-canonical` (102). A document a
+person wrote is written through the canonicalize path first (`prismpath canonicalize`, which keeps every
+other canon/2 rule); no reader calls it. A lock (version 2) holds its margin and its centroid prior
+weight as integers of millionths, `delta_micro` and `centroid_prior_weight_micro`. canon/1, the earlier encoding (Python's `json` with sorted keys,
 floats as `repr` writes them), is retired: an implementation MUST NOT write it and MUST NOT read, hash or
 verify a document under it, and a reader that meets an untagged document refuses it with a named cause (a
 log line is skipped and the log does not verify, a statement is `bad_format`, a pack, manifest or registry

@@ -167,14 +167,30 @@ refuses, with the cause in parentheses:
 The first rule broken, reading left to right, names the refusal. A policy image that does not read
 is refused as `policy:unreadable`; a reading that does not read is refused as `reading:unreadable`.
 
+**Only the canonical bytes are read** (owner decision, 2026-11-10). A text that breaks none of the eight
+rules is still refused unless it is exactly the canonical spelling of the value it reads to (the writer's
+bytes below): whitespace anywhere, members out of key order, a needless escape (`\/`, `\u0041`, an
+uppercase hex digit, a surrogate pair escape for a character that is written raw) are refused as
+`not-canonical`. A policy image so refused is `policy:not-canonical` (code 101), a reading
+`reading:not-canonical` (code 102), and every other hashed or signed document `document:not-canonical`
+(code 103; SPEC.md section 8, which also fixes the one line feed a file or a line may end with). The rule
+comes after the eight: a text that breaks one of them is refused for it, so `not-canonical` names exactly
+the documents that read but are spelled otherwise. Nothing is re-canonicalized on the way in. Text a
+person wrote is written through the **canonicalize path** first: `Core.canonicalize`, its twins
+`canon2.canonicalize` (Python), `canon2::canonicalize` (Rust), `canon2Canonicalize` (JavaScript) and
+`Canon2Canonicalize` (Go), and for whole documents `canon.canonicalize_document`, its Rust twin
+`durable::canonicalize_document` and the command `prismpath canonicalize`, which read by every rule but the
+spelling and return the canonical bytes. It is a writer's step; no reader calls it.
+
 **The readers.** canon/2 is the one reader and writer of the core's documents, in five
-implementations held to one table: the Lean reader `Core.readBytes` (`formal/Core/Json.lean`), which
-defines it; the Python reference `prismpath/kernel/canon2.py` (`loads`, `dumps`); its Rust twin
+implementations held to one table: the Lean strict reader `Core.readCanonical` (`formal/Core/Canon2.lean`)
+over the rules of `Core.readBytes` (`formal/Core/Json.lean`), which define it; the Python reference `prismpath/kernel/canon2.py` (`loads`, `dumps`); its Rust twin
 `prismpath-rs/src/canon2.rs` (`read`, `write`); and the two second tier kernels, JavaScript
 (`canon2Read`, `canon2Write` in `prismpath/portable/prismpath.mjs`) and Go (`Canon2Read`, `Canon2Write` in
 `prismpath-go/canon2.go`). The frozen vectors
 `prismpath/portable/conformance/canon2.json` (written by `prismpath/portable/gen_canon2_fixtures.py`,
-73 byte strings, every rule above at least once and the first rule broken where several are) are
+version 2, 87 byte strings, every rule above at least once and the first rule broken where several are,
+18 spellings refused as `not-canonical` with the canonical bytes `canonicalize` gives them) are
 replayed by `prismpath/tests/test_canon2.py`, which also runs every vector through the oracle, and by
 `prismpath-rs/tests/test_canon2.rs`, `prismpath/portable/run_vectors.mjs` and `prismpath-go/conformance_test.go`.
 The Lean writer `Core.writeBytes` and the strict reader `Core.readCanonical` (`formal/Core/Canon2.lean`) define the
@@ -184,7 +200,9 @@ order of the UTF-16 code units of their keys, strings as raw UTF-8 with only `"`
 characters escaped (`\b \t \n \f \r`, otherwise lowercase `\u00xx`), integers in decimal; it refuses
 every value the reader would refuse, so a written document reads back to the same value and its bytes
 are a fixed point. In the differential harness every leg reads the image and every reading with its
-canon/2 reader, so a document level difference is a finding; there is no reader gap (section 8).
+strict canon/2 reader, so a document level difference is a finding; there is no reader gap (section 8).
+The generator sends images and readings as their canonical bytes, and 8 percent of them respelled, which
+every leg must refuse with `policy:not-canonical` or `reading:not-canonical`.
 
 **canon/1 is retired.** `prismpath.canon`'s Python `json` encodings (compact and spaced) and their Rust twin
 `value::parse_strict` read and hashed everything signed before canon/2: policy packs and envelopes, audit logs
@@ -273,7 +291,9 @@ or minus 2^53 minus 1, nesting is at most 128 deep, and in every object the keys
 code unit order. A Lean string holds Unicode scalar values only, so no value holds a lone surrogate by its
 type. The strict reader, `Core.readCanonical`, reads a byte string with `Core.readBytes` and accepts it
 exactly when it is the writer's spelling of the value read, and otherwise refuses it with the reader's own
-cause or `not-canonical`. The theorems, in words:
+cause or `not-canonical` (`DocErr.notCanonical`, a cause `readBytes` never returns). It is the core's one
+reader: `Core.verdictBytes` reads the image and the reading with it, and the oracle reads with nothing else.
+`Core.canonicalize` is the writer's step for text a person wrote. The theorems, in words:
 
 1. **What the reader returns** (`readChars_doc`, `readBytes_doc`). Every value the reader returns holds no
    key twice in any object, only integers within the exact range, and nests at most 128 deep.
@@ -298,20 +318,34 @@ cause or `not-canonical`. The theorems, in words:
    defines and every implementation shares, accepts `[ ]`, `{"b":null,"a":null}` and a string with a needless
    `\u` escape, none of them a canonical spelling; the strict reader refuses all three.
 
-Item 7 is the one statement the request for these proofs had wrong: "the writer of what the reader reads is
-the input" holds of the strict reader and not of `readBytes`. That is the rules above, not a defect: the
-eight rules refuse what is not a canon/2 document, and none of them refuses whitespace, member order or an
-escape, exactly as RFC 8785 canonicalizes any JSON text rather than accepting only its output. The reader
-was not changed. The core's decision does not depend on the difference (`verdict_text_perm`: two readings
-whose members are a permutation of each other get the same verdict), and every hashed or signed document is
-compared or hashed by its canonical bytes, so a document whose bytes must be canonical is checked with the
-strict reader or by comparing the input with its canonical bytes, as `verify_root_statement` does (section
-11). Making canonical spelling a rule of the reader itself would be a change of this specification and of all
-five readers, and is left to the owner.
+8. **The core reads strictly** (`noncanonical_image_refused`, `noncanonical_reading_refused`,
+   `unreadable_bytes_refused`, `verdictBytes_canonical`, `route_canonical`, `decided_reading_unique`). An
+   image that reads but is not its canonical spelling refuses every reading with `policy:not-canonical`;
+   under an accepted image, a reading that reads but is not its canonical spelling is refused with
+   `reading:not-canonical`, so a respelling of a reading that routes does not route; a reading that is not a
+   document is refused with its reader rule as before; on canonical bytes the decision is `Core.verdict` on
+   the values; a route is given only when the image and the reading are each the writer's bytes of a
+   canonical value; and two reading byte strings the strict reader accepts with the same value are the same
+   bytes and get the same verdict.
+9. **The canonicalize path** (`canonicalize_readCanonical`, `canonicalize_canonical`, `canonicalize_error_iff`,
+   `canonicalize_idem`). What `canonicalize` writes for any text the reader reads is accepted by the strict
+   reader, as the normal form of the value read; it is the identity on canonical bytes; it refuses exactly
+   what the reader refuses, with the same cause, and never for the spelling; and it is idempotent.
 
-The writer and the strict reader depend on `propext` and `Quot.sound` only (the decimal digits are well
-founded recursion), the theorems on the standard three; `Core.verdict` still depends on `propext` only.
-`lake exe canon2-oracle` is the compiled writer and readers (`formal/Core/Canon2Main.lean`), and
+Item 7 is why the readers were made strict. When these proofs were first written, every reader (the spec's
+and all five implementations') accepted any legal spelling and the strict reader was proved but unused; the
+eight rules refuse what is not a canon/2 document and none of them refuses whitespace, member order or an
+escape, as RFC 8785 canonicalizes any JSON text. The owner decided (2026-11-10) that every hashed or signed
+document and every reading must arrive as its exact canonical bytes, so the core now decides with
+`readCanonical` (item 8) and every implementation's reader refuses what it refuses, with the same cause.
+`verdict_text_perm`, which says two readings whose members are a permutation of each other get the same
+verdict, still holds of the values `readChars` returns; under the strict reader at most one spelling of a
+reading is accepted at all (`decided_reading_unique`).
+
+The writer, the strict reader, `canonicalize`, `Core.verdictBytes` and `Core.verdict` depend on `propext` only
+(the decimal digits are well founded recursion whose decreasing proof is `Nat.div_lt_self`, not `omega`, whose
+proof terms carry `Quot.sound`); the theorems depend on at most the standard three.
+`lake exe canon2-oracle` is the compiled strict reader, writer and canonicalize path (`formal/Core/Canon2Main.lean`), and
 `formal/diff/canon2_diff.py` holds the Python, Rust, JavaScript and Go readers and writers to it
 (`docs/research/verified-core-summary.md`, section 3).
 
@@ -387,6 +421,8 @@ record the cause of every refused policy and of every problem in order, which th
 | refusal | cause | code | when |
 |---|---|---|---|
 | image unreadable | `policy:unreadable` | 89 | section 3, on the image |
+| image not its canonical spelling | `policy:not-canonical` | 101 | section 3, on an image that reads |
+| reading not its canonical spelling | `reading:not-canonical` | 102 | section 3, on a reading that reads |
 | image shape | `policy:shape` | 90 | section 2, the image is not the core's syntax |
 | operator outside Level M | `image:unknown-op` | 74 | `causes.py:74`, an atom's operator outside the fragment |
 | value type outside Level M | `image:unknown-type` | 75 | `causes.py:75` |
@@ -632,6 +668,22 @@ refuses a table the interpreter runs, and its row is the interpreter's row:
 The 86 readings that `core-js-go` counted as outside the eBPF subset are the 86 that now agree (146,587
 to 146,673), and no `target-limit` row is the eBPF loader's any more; the other six legs read as before,
 no finding on any of the seven.
+
+**The large run, `canon2-strict`** (100,000 cases, seed 1, 420,399 readings; the generator now sends
+documents as their canonical bytes and 8 percent of images and readings respelled, so the oracle's counts
+differ from the runs below). Every leg reads with its strict reader; the oracle refused 32,591 readings for
+an image that was not canonical (`policy:not-canonical`) and 4,020 readings that were not
+(`reading:not-canonical`), and every leg named the same cause on each:
+
+| leg | agree | scope | excluded | other | findings |
+|---|---|---|---|---|---|
+| python | 159,800 | 9,370 inferred, 307 engine counter | 2,083 | | 0 |
+| rust | 159,800 | 9,370, 307 | 2,083 | | 0 |
+| js | 159,800 | 9,370, 307 | 2,083 | | 0 |
+| go | 159,800 | 9,370, 307 | 2,083 | | 0 |
+| c-interp | 144,945 | 9,370, 307 | 2,083 | target-limit 3,113 at compile, 1,883 on a reading | 0 |
+| c-hdr | 144,945 | 9,370, 307 | 2,083 | target-limit 3,113, 1,883 | 0 |
+| ebpf | 144,945 | 9,370, 307 | 2,083 | target-limit 3,113, 1,883 | 0 |
 
 **The large run, `core-js-go`** (100,000 cases, seed 1, 419,651 readings, the same generator as step 3, so the
 oracle's counts are the same). The JavaScript and Go kernels decide the core (D5), so their rows have the
