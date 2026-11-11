@@ -100,3 +100,28 @@ fn float_spellings_match_python_repr() {
         assert_eq!(py_float_repr(value), python, "{value:e}");
     }
 }
+
+/// The strict reader and the canonicalize path (spec section 3.2): a hashed or signed document is read only
+/// as its exact canonical bytes, followed by at most the one line feed that ends a file or a line; a document
+/// a person wrote is written through `canonicalize_document` first, which keeps every other canon/2 rule.
+#[test]
+fn a_document_is_read_only_as_its_canonical_bytes_and_canonicalize_writes_them() {
+    use prismpath_rs::durable::{canonicalize_document, NOT_CANONICAL_CAUSE};
+    let human = "{\n  \"encoding\": \"canon/2\",\n  \"name\": \"\\u0041pple\",\n  \"a\": [1, 2,  3]\n}\n";
+    let canonical = r#"{"a":[1,2,3],"encoding":"canon/2","name":"Apple"}"#;
+    let error = read_document(human).unwrap_err();
+    assert!(error.is_not_canonical() && error.0.starts_with(NOT_CANONICAL_CAUSE), "{error}");
+    let written = canonicalize_document(human).unwrap();
+    assert_eq!(written, canonical.as_bytes());
+    assert_eq!(read_document(canonical).unwrap(), json!({"a": [1, 2, 3], "encoding": "canon/2", "name": "Apple"}));
+    assert!(read_document(&format!("{canonical}\n")).is_ok());
+    for respelled in [format!("{canonical}\r\n"), format!("{canonical}\n\n"), format!(" {canonical}"), format!("{canonical} ")] {
+        assert!(read_document(&respelled).unwrap_err().is_not_canonical(), "{respelled:?}");
+    }
+    assert_eq!(canonicalize_document(canonical).unwrap(), canonical.as_bytes());
+    for refused in [r#"{"x": 1.5}"#, r#"{"a":1,"a":2}"#, r#"{"x": 9007199254740992}"#, "{"] {
+        assert!(canonicalize_document(refused).is_err(), "{refused}");
+    }
+    // a float, a duplicate key and a range break are their own refusals, never `not-canonical`
+    assert!(!read_document(r#"{"encoding":"canon/2","x": 1.5}"#).unwrap_err().is_not_canonical());
+}
