@@ -2,15 +2,18 @@
 // Copyright 2026 Crystal Warden Supply Chain Labs LLC
 //! prismpath-rs: the portable PrismPath kernel, in Rust.
 //!
-//! A faithful port of portable/prismpath.mjs (itself a certified port of the Python reference:
-//! 1079/1079 predicates, 27/27 flows). The conformance corpus in ../prismpath/portable/conformance
+//! A faithful port of the Python reference, by way of portable/prismpath.mjs (1112/1112 predicates,
+//! 107/107 flows). Where it differs from Python on purpose, DIVERGENCES.md at the repository root says where. The conformance corpus in ../prismpath/portable/conformance
 //! IS the specification, and this crate's only claim to correctness is passing it bit-for-bit:
 //!
 //! ```text
 //! cargo run --bin conformance -- ../prismpath/portable/conformance
 //! ```
 
+pub mod canon2;
+pub mod causes;
 pub mod condition;
+pub mod contract;
 pub mod engine;
 pub mod field_definitions;
 pub mod level_m;
@@ -37,11 +40,12 @@ pub use condition::{
 pub use engine::{
     decode_b64_f32, event_target, first_deterministic, locked_route,
     portability_violations, py_str, reachable, run, run_locked, run_locked_observed, run_observed,
-    CentroidPin, EngineError, Lock, Pending, RouteDecision, RunOpts, RunResult, RunState, Step,
-    Violation,
+    run_locked_decided, CentroidPin, Decision, EngineError, Lock, Pending, RouteDecision, RunOpts, RunResult, RunState,
+    Step, Violation, WorkerError,
 };
+pub use contract::{derive_contract, ContractError};
 pub use level_m::{capability_report, flow_level_m, is_level_m, level_m_atoms, LevelMAtom, NonMemberEdge};
-pub use parser::{parse, parse_checked, Graph, Node};
+pub use parser::{parse, parse_checked, parse_with_limits, Graph, Limits, Node};
 pub use field_definitions::{accept_canonical, canonical_value, CanonicalRefusal, DefinedKind, FieldDefinition, Rounding};
 pub use reach::check_reach;
 pub use value::{PredicateError, Value, V, CMP_DEPTH, MAX_DEPTH};
@@ -175,7 +179,7 @@ mod tests {
         let res = run(
             &graph,
             |_, _, _| {
-                Ok(Value::Obj(vec![
+                Ok::<_, String>(Value::Obj(vec![
                     ("ok".into(), Value::Bool(true)),
                     ("text".into(), Value::Str("x".into())),
                 ]))
@@ -190,7 +194,7 @@ mod tests {
     #[test]
     fn max_steps_protects_against_loops() {
         let graph = parse("## a\n-> a: always\n");
-        let res = run(&graph, |_, _, _| Ok(Value::Str("t".into())), RunOpts::default()).unwrap();
+        let res = run(&graph, |_, _, _| Ok::<_, String>(Value::Str("t".into())), RunOpts::default()).unwrap();
         assert_eq!(res.stopped, "max_steps");
         assert_eq!(res.path.len(), 26);
     }
@@ -199,7 +203,7 @@ mod tests {
     fn semantic_edge_is_refused_up_front() {
         let graph = parse("## a\n-> b: the answer looks correct\n\n## b\nDone.\n");
         assert!(matches!(
-            run(&graph, |_, _, _| Ok(Value::Null), RunOpts::default()),
+            run(&graph, |_, _, _| Ok::<_, String>(Value::Null), RunOpts::default()),
             Err(EngineError::NotPortable(_))
         ));
     }
@@ -210,17 +214,18 @@ mod tests {
         let mut conds = HashMap::new();
         conds.insert("positive".to_string(), vec![1.0f32, 0.0, 0.0, 0.0]);
         conds.insert("negative".to_string(), vec![0.0, 1.0, 0.0, 0.0]);
-        let lock = Lock { conditions: conds, centroids: None, dim: 4 };
+        let lock = Lock { conditions: conds, centroids: None, dim: 4, delta_micro: None, centroid_prior_weight_micro: None };
         let res = run_locked(
             &graph,
-            |_, _, _| Ok(Value::Obj(vec![("text".to_string(), Value::Str("great".into()))])),
+            |_, _, _| Ok::<_, String>(Value::Obj(vec![("text".to_string(), Value::Str("great".into()))])),
             |_text| vec![0.99f32, 0.11, 0.0, 0.0],
             &lock,
             RunOpts::default(),
         ).unwrap();
         assert_eq!(res.path, vec!["a", "b"]);
         assert_eq!(res.stopped, "terminal");
-        assert_eq!(res.steps[0].used, "locked");
+        assert_eq!(res.steps[0].used, "embed");
+        assert_eq!(res.steps[0].locked, Some(true));
         assert!(res.steps[0].score.unwrap() > 0.9);
     }
 
@@ -230,10 +235,10 @@ mod tests {
         let mut conds = HashMap::new();
         conds.insert("positive".to_string(), vec![1.0f32, 0.0, 0.0, 0.0]);
         conds.insert("negative".to_string(), vec![0.0, 1.0, 0.0, 0.0]);
-        let lock = Lock { conditions: conds, centroids: None, dim: 4 };
+        let lock = Lock { conditions: conds, centroids: None, dim: 4, delta_micro: None, centroid_prior_weight_micro: None };
         let res = run_locked(
             &graph,
-            |_, _, _| Ok(Value::Obj(vec![("text".to_string(), Value::Str("ambiguous".into()))])),
+            |_, _, _| Ok::<_, String>(Value::Obj(vec![("text".to_string(), Value::Str("ambiguous".into()))])),
             |_text| vec![0.72f32, 0.69, 0.0, 0.07],
             &lock,
             RunOpts { human_floor: Some(0.99), ..Default::default() },
@@ -247,10 +252,10 @@ mod tests {
         let graph = parse("## a\nRoute.\n\n-> b: when x == 1\n-> c: semantic edge\n\n## b\nB.\n\n## c\nC.\n");
         let mut conds = HashMap::new();
         conds.insert("semantic edge".to_string(), vec![0.0, 0.0, 1.0, 0.0]);
-        let lock = Lock { conditions: conds, centroids: None, dim: 4 };
+        let lock = Lock { conditions: conds, centroids: None, dim: 4, delta_micro: None, centroid_prior_weight_micro: None };
         let res = run_locked(
             &graph,
-            |_, _, _| Ok(Value::Obj(vec![
+            |_, _, _| Ok::<_, String>(Value::Obj(vec![
                 ("text".to_string(), Value::Str("go".into())),
                 ("x".to_string(), Value::Num(1.0)),
             ])),
@@ -259,7 +264,9 @@ mod tests {
             RunOpts::default(),
         ).unwrap();
         assert_eq!(res.path, vec!["a", "b"]);
-        assert!(res.steps[0].used.starts_with("deterministic"));
+        assert_eq!(res.steps[0].used, "deterministic");
+        assert_eq!(res.steps[0].cond.as_deref(), Some("when x == 1"));
+        assert_eq!(res.steps[0].locked, None);
     }
 
     #[test]
@@ -267,10 +274,10 @@ mod tests {
         let graph = parse("## a\nDo.\n\n-> b: foo\n-> c: bar\n\n## b\nB.\n\n## c\nC.\n");
         let mut conds = HashMap::new();
         conds.insert("foo".to_string(), vec![1.0, 0.0, 0.0, 0.0]);
-        let lock = Lock { conditions: conds, centroids: None, dim: 4 };
+        let lock = Lock { conditions: conds, centroids: None, dim: 4, delta_micro: None, centroid_prior_weight_micro: None };
         let res = run_locked(
             &graph,
-            |_, _, _| Ok(Value::Null),
+            |_, _, _| Ok::<_, String>(Value::Null),
             |_| vec![1.0, 0.0, 0.0, 0.0],
             &lock,
             RunOpts::default(),
@@ -288,15 +295,32 @@ mod tests {
         centroids.insert("positive".to_string(), CentroidPin {
             vec: vec![0.0, 1.0, 0.0, 0.0], n: 5,
         });
-        let lock = Lock { conditions: conds, centroids: Some(centroids), dim: 4 };
+        let lock = Lock { conditions: conds, centroids: Some(centroids), dim: 4, delta_micro: None, centroid_prior_weight_micro: None };
         let res = run_locked(
             &graph,
-            |_, _, _| Ok(Value::Obj(vec![("text".to_string(), Value::Str("test".into()))])),
+            |_, _, _| Ok::<_, String>(Value::Obj(vec![("text".to_string(), Value::Str("test".into()))])),
             |_| vec![0.0, 0.99, 0.0, 0.1],
             &lock,
             RunOpts::default(),
         ).unwrap();
         assert_eq!(res.path[1], "b");
+    }
+
+    #[test]
+    fn a_lock_holds_its_numbers_as_integers_of_millionths() {
+        let base = serde_json::json!({"embedder": {"dim": 4}, "conditions": {}});
+        let mut lock = base.clone();
+        lock["delta_micro"] = serde_json::json!(50000);
+        lock["centroid_prior_weight_micro"] = serde_json::json!(4000000);
+        let read = Lock::from_json(&lock).unwrap();
+        assert_eq!((read.delta_micro, read.centroid_prior_weight_micro), (Some(50000), Some(4000000)));
+        assert_eq!(Lock::from_json(&base).unwrap().delta_micro, None);
+        for (member, value) in [("delta_micro", serde_json::json!(0.5)), ("delta_micro", serde_json::json!("50000")),
+                                ("delta", serde_json::json!("0.05")), ("centroid_prior_weight", serde_json::json!(4.0))] {
+            let mut bad = base.clone();
+            bad[member] = value;
+            assert!(Lock::from_json(&bad).is_err(), "{member}");
+        }
     }
 
     #[test]

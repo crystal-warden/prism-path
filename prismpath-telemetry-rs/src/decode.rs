@@ -56,10 +56,10 @@ where
     D: serde::Deserializer<'de>,
 {
     let json_map: HashMap<String, serde_json::Value> = HashMap::deserialize(deserializer)?;
-    Ok(json_map
+    json_map
         .into_iter()
-        .map(|(k, v)| (k, V::from_json(&v)))
-        .collect())
+        .map(|(k, v)| V::try_from_json(&v).map(|value| (k, value)).map_err(<D::Error as serde::de::Error>::custom))
+        .collect()
 }
 
 pub fn encode_readings(

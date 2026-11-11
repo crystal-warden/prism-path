@@ -10,7 +10,8 @@ import assert from "node:assert/strict";
 import {
   parse, run, evalCondition, checkPredicate, portabilityViolations, eventTarget,
   isDeterministic, isError, isEvent, isSemantic, eventName, pyTruthy, PredicateError,
-  lockedRoute, decodeVec,
+  lockedRoute, decodeVec, firstDeterministic, FieldDefinitionError, routedFields, systemBoundary, policyCheck,
+  canon2Read, canon2Write, canon2Canonicalize, documentString, registryHash,
 } from "./prismpath.mjs";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -408,10 +409,81 @@ test("compiled bundle: a semantic flow refuses to run without an embedder", asyn
 });
 
 // ------------------------------------------------------------------ field definitions
-test("a flow that defines its fields is refused, since this kernel does not lower them", () => {
+test("a flow that defines its fields is checked in the core's order, lowered and decided", () => {
   const corpus = JSON.parse(readFileSync(new URL("./conformance/field_definitions.json", import.meta.url)));
   for (const policy of corpus.policies) {
-    assert.throws(() => parse(policy.flow), /does not implement field definitions/, policy.name);
+    if (!policy.accepted) {
+      assert.throws(() => parse(policy.flow), (err) => err instanceof FieldDefinitionError && err.cause === policy.cause
+        && JSON.stringify(err.problems.map((found) => found.cause)) === JSON.stringify(policy.causes), policy.name);
+      continue;
+    }
+    const graph = parse(policy.flow);
+    assert.deepEqual(graph.nodes.s.edges.map(([, cond]) => cond), policy.lowered, policy.name);
+    for (const probe of policy.probes) assert.equal(firstDeterministic(graph.nodes.s.edges, probe.reading)[0], probe.route, policy.name);
   }
   assert.doesNotThrow(() => parse("---\nname: t\n---\n## s\n-> e: when x >= 1\n## e\n"));
+  assert.equal(parse("---\nname: t\n---\n## s\n-> e: when x >= 0.85\n## e\n").nodes.s.edges[0][1], "when x >= 0.85");
+});
+
+test("the system boundary checks every defined field and the policy check only the routed ones", () => {
+  const graph = parse("---\nname: t\nstart: s\nfield.x: int min=0 max=10\nfield.unused: bool\nfield.r: fixed scale=100 rounding=floor\n---\n" +
+    "## s\n-> hit: when x >= 5 and r >= 0.5\n-> miss: else\n## hit\n## miss\n");
+  assert.deepEqual(routedFields(graph), ["r", "x"]);
+  assert.deepEqual(systemBoundary(graph, { x: 5, r: 50 }), ["unused", "missing"]);
+  assert.equal(policyCheck(graph, { x: 5, r: 50 }), null);
+  assert.deepEqual(systemBoundary(graph, { x: 11, r: 50, unused: true }), ["x", "out_of_range"]);
+  assert.deepEqual(policyCheck(graph, { x: 1 }), ["r", "missing"]);
+});
+
+test("a decimal threshold is lowered exactly, past the precision of a double", () => {
+  const graph = parse("---\nname: t\nstart: s\nfield.d: fixed scale=1000000000 rounding=exact min=0 max=9007199254740991\n---\n" +
+    "## s\n-> hit: when d >= 0.007199254\n-> miss: else\n## hit\n## miss\n");
+  assert.equal(graph.nodes.s.edges[0][1], "when d >= 7199254");
+  assert.throws(() => parse("---\nname: t\nstart: s\nfield.d: fixed scale=100 rounding=exact\n---\n## s\n-> hit: when d >= 0.001\n## hit\n"),
+    (err) => err.cause === "policy:threshold" && err.reason === "off-grid" && err.field === "d" && err.code === 96);
+});
+
+test("a document is hashed over its canon/2 bytes and canon/1 is refused", () => {
+  assert.equal(documentString({ b: 2, a: "x", encoding: "canon/2" }), '{"a":"x","b":2,"encoding":"canon/2"}');
+  for (const doc of [{ a: 1 }, { encoding: "canon/1" }, { encoding: "canon/3" }, { encoding: null }, [1], "x", 7, null]) {
+    assert.throws(() => documentString(doc), /canon\/1 is retired|unknown encoding/, JSON.stringify(doc));
+    assert.throws(() => registryHash(doc));
+  }
+  assert.throws(() => documentString({ encoding: "canon/2", n: 1.5 }), (err) => err.rule === "float");
+});
+
+test("canon/2 reads and writes the core's documents and names the first rule broken", () => {
+  const bytes = (text) => new TextEncoder().encode(text);
+  assert.deepEqual(canon2Read(bytes('{"a":[1,-2,true,null,"x"]}')), { a: [1, -2, true, null, "x"] });
+  assert.equal(new TextDecoder().decode(canon2Write({ b: 1, a: "\u0001" })), '{"a":"\\u0001","b":1}');
+  const rule = (input) => { try { canon2Read(input); return "reads"; } catch (err) { return err.rule; } };
+  assert.equal(rule(bytes("1.0")), "float");
+  assert.equal(rule(bytes("-0")), "negative-zero");
+  assert.equal(rule(bytes("9007199254740992")), "integer-range");
+  assert.equal(rule(bytes('{"a":1,"a":2}')), "duplicate-key");
+  assert.equal(rule(bytes('"\\ud800"')), "lone-surrogate");
+  assert.equal(rule(Uint8Array.of(0xc0, 0x80)), "utf8");
+  assert.equal(rule(bytes("[".repeat(129))), "depth");
+  assert.equal(rule(bytes("{} x")), "syntax");
+  assert.deepEqual(Object.keys(canon2Read(bytes('{"__proto__":1}'))), ["__proto__"]);
+  // the strict reader: a document in any spelling but its canonical one is refused, and canonicalize is
+  // the path for text a person wrote
+  for (const spelling of ['{"a": 1}', '{"b":1,"a":2}', '"\\u0041"', '"\\/"', "{}\n", " 0"]) {
+    assert.equal(rule(bytes(spelling)), "not-canonical", spelling);
+  }
+  assert.equal(new TextDecoder().decode(canon2Canonicalize(bytes('{ "b" : 1, "a" : "\\u0041" }\n'))), '{"a":"A","b":1}');
+  assert.throws(() => canon2Canonicalize(bytes("[1.5]")), (err) => err.rule === "float");
+});
+
+test("a bracket is not predicate depth, and Python's limit of 200 open brackets refuses", () => {
+  assert.equal(evalCondition(`when ${"(".repeat(150)}x${")".repeat(150)}`, { x: 1 }), true);
+  assert.equal(evalCondition(`when x in ${"(".repeat(60)}[1]${")".repeat(60)}`, { x: 1 }), true);
+  assert.throws(() => evalCondition(`when ${"(".repeat(201)}x${")".repeat(201)}`, { x: 1 }), PredicateError);
+});
+
+test("front matter is read with Python's whitespace, so U+FEFF is not stripped from a definition", () => {
+  const flow = (text) => `---\nname: t\nstart: s\nfield.x: ${text}\n---\n## s\n-> hit: when x >= 1\n## hit\n`;
+  assert.doesNotThrow(() => parse(flow("\u001fint\u001f")));
+  assert.throws(() => parse(flow("\ufeffint")), (err) => err.cause === "policy:definition" && err.reason === "unknown-kind");
+  assert.throws(() => parse(flow("\ufeff")), (err) => err.reason === "unknown-kind");
 });

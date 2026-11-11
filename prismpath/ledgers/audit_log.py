@@ -56,8 +56,23 @@ class StatementWriteError(AuditWriteError):
 
 def _leaf_hex(ev: dict) -> str:
     """A stable content hash of an event  -  its Merkle leaf. Commits to every field, so editing any past
-    event changes its leaf and therefore the root."""
-    return _canon.sha256_hex(_canon.canonical_compact(ev))
+    event changes its leaf and therefore the root. The event's own tag decides the bytes: an event that
+    names canon/2 is hashed over its canon/2 bytes. An event that does not name canon/2 (an untagged one,
+    written before canon/1 was retired) is refused with an EncodingError."""
+    return _canon.document_hash(ev)
+
+
+def _now_us() -> int:
+    """The wall clock as an integer count of microseconds since the Unix epoch: an event's `ts_us`."""
+    return time.time_ns() // 1000
+
+
+def event_seconds(ev: dict) -> float:
+    """When an event was recorded, in seconds since the epoch, for display and filtering only: its `ts_us`
+    over a million, or 0.0 for an event that has none."""
+    if isinstance(ev.get("ts_us"), int) and not isinstance(ev.get("ts_us"), bool):
+        return ev["ts_us"] / 1_000_000
+    return 0.0
 
 
 class AuditLog:
@@ -74,17 +89,21 @@ class AuditLog:
         self.events: list = []
         self.leaves: list = []
         self.skipped: list = []
+        self.skipped_causes: dict = {}         # line number -> why the line was refused (canon/1 lines, bad JSON)
         self._accumulator = _statements.MerkleAccumulator()      # the root as leaves arrive, for signing
         if path and os.path.exists(path):
-            with open(path) as log_file:
-                for line_num, line in enumerate(log_file, 1):
-                    line = line.strip()
-                    if not line:
+            with open(path, encoding="utf-8", newline="") as log_file:
+                # split at each line feed and nothing else: a carriage return stays in its line
+                for line_num, line in enumerate(log_file.read().split("\n"), 1):
+                    if not line.strip():
                         continue
                     try:
-                        ev = json.loads(line)
-                    except Exception:
+                        # the line as written, its one line feed the terminator: a line in any spelling but
+                        # the event's canonical bytes is refused (document:not-canonical), not respelled
+                        ev = _canon.loads_document(line)
+                    except Exception as error:
                         self.skipped.append(line_num)
+                        self.skipped_causes[line_num] = str(error)[:200]
                         continue
                     self.events.append(ev)
                     self.leaves.append(_leaf_hex(ev))
@@ -95,9 +114,15 @@ class AuditLog:
         unchanged, when the file cannot take it."""
         with self._lock:
             index = len(self.events)
-            event = {"idx": index, "id": f"{index}", "ts": time.time(),
-                     "actor": actor, "action": action, "data": data}
-            line = json.dumps(event) + "\n"
+            event = {"idx": index, "id": f"{index}", "ts_us": _now_us(),
+                     "actor": actor, "action": action, "data": data, _canon.ENCODING_KEY: _canon.CANON2}
+            try:
+                # canon/2: refuses a float, an out of range integer and a lone surrogate before anything is written
+                line_bytes = _canon.canon2_bytes(event)
+                leaf = _canon.sha256_hex(line_bytes)
+                line = line_bytes.decode("utf-8") + "\n"
+            except _canon.CanonicalError as error:
+                raise AuditWriteError(f"audit event has no canonical JSON form: {error}") from error
             if self.path:
                 try:
                     os.makedirs(os.path.dirname(os.path.abspath(self.path)), exist_ok=True)
@@ -108,7 +133,7 @@ class AuditLog:
                 except OSError as error:
                     raise AuditWriteError(f"audit event not persisted to {self.path}: {error}") from error
             self.events.append(event)
-            self.leaves.append(_leaf_hex(event))
+            self.leaves.append(leaf)
             self._accumulator.add(self.leaves[-1])
             if self.sign_appends and self.instance_key is not None:
                 self._sign_locked("append", None)
@@ -169,7 +194,8 @@ class AuditLog:
         if not self.events:
             raise AnchorRefused("the log holds no events: there is nothing to anchor")
         if self.skipped:
-            raise AnchorRefused(f"the log has unreadable lines {self.skipped}: it does not verify")
+            first = self.skipped_causes.get(self.skipped[0], "")
+            raise AnchorRefused(f"the log has unreadable lines {self.skipped}: it does not verify ({first})")
         statements, _findings = _statements.read_statements(self.statements_path)
         if not statements:
             root = self.current_root()
@@ -211,13 +237,12 @@ class AuditLog:
             return False
         with self._lock:
             on_disk = []
-            with open(self.path) as log_file:
-                for line in log_file:
-                    line = line.strip()
-                    if not line:
+            with open(self.path, encoding="utf-8", newline="") as log_file:
+                for line in log_file.read().split("\n"):
+                    if not line.strip():
                         continue
                     try:
-                        on_disk.append(_leaf_hex(json.loads(line)))
+                        on_disk.append(_leaf_hex(_canon.loads_document(line)))
                     except Exception:
                         return False
             return on_disk == self.leaves

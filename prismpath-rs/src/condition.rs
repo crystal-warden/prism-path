@@ -23,10 +23,20 @@ pub(crate) fn js_trim(text: &str) -> &str {
     text.trim_matches(is_js_ws)
 }
 
-/// Python str.strip() whitespace: wider than JS trim (for example U+0085 NEL). The tier a condition
-/// lands in must be identical across engines, so classification uses THIS, never str::trim.
-fn is_py_ws(ch: char) -> bool {
-    is_js_ws(ch) || matches!(ch, '\u{85}' | '\u{1c}' | '\u{1d}' | '\u{1e}' | '\u{1f}')
+/// Python's `str.isspace`, exactly: the whitespace `str.strip()` strips and `str.split()` splits on.
+/// Wider than JS trim (U+0085 NEL and U+001C to U+001F) and narrower in one place: U+FEFF, which JS \s
+/// includes, is not whitespace in Python. The tier a condition lands in, and the words of a field
+/// definition, must be identical across engines, so classification and definitions use THIS, never
+/// str::trim, char::is_whitespace or split_whitespace (which miss U+001C to U+001F, D3).
+pub(crate) fn is_py_ws(ch: char) -> bool {
+    matches!(ch,
+        '\t' | '\n' | '\u{b}' | '\u{c}' | '\r' | '\u{1c}'..='\u{20}' | '\u{85}' | '\u{a0}' | '\u{1680}'
+        | '\u{2000}'..='\u{200a}' | '\u{2028}' | '\u{2029}' | '\u{202f}' | '\u{205f}' | '\u{3000}')
+}
+
+/// Python's `str.split()` with no argument: the words between runs of Python whitespace.
+pub fn py_split(text: &str) -> impl Iterator<Item = &str> {
+    text.split(is_py_ws).filter(|word| !word.is_empty())
 }
 
 pub fn py_trim(text: &str) -> &str {
@@ -66,7 +76,7 @@ pub(crate) const NEVER: [&str; 2] = ["false", "never"];
 // operators here). Python's ast.parse REJECTS these as names: when class == "phish" is a
 // PredicateError there, so it must be one here too, or the edge routes differently across engines.
 // Soft keywords (match/case/type) are ordinary Names in both.
-const PY_KEYWORDS: [&str; 28] = [
+pub(crate) const PY_KEYWORDS: [&str; 28] = [
     "as", "assert", "async", "await", "break", "class", "continue", "def", "del", "elif", "else",
     "except", "finally", "for", "from", "global", "if", "import", "is", "lambda", "nonlocal",
     "pass", "raise", "return", "try", "while", "with", "yield",
@@ -363,7 +373,14 @@ pub(crate) enum Ast {
 struct Parser {
     toks: Vec<Tok>,
     pos: usize,
+    /// Open brackets around the current position. Python's tokenizer refuses a predicate nested in more
+    /// than 200 (`too many nested parentheses`), so this parser does too; brackets do not count toward
+    /// `depth`, which bounds only the nesting that is evaluation depth (D2).
+    brackets: usize,
 }
+
+/// The bracket nesting Python's tokenizer allows (MAXLEVEL).
+const MAX_BRACKETS: usize = 200;
 
 impl Parser {
     fn peek(&self) -> Option<&Tok> {
@@ -389,6 +406,18 @@ impl Parser {
         }
     }
 
+    fn open_bracket(&mut self) -> Result<(), PredicateError> {
+        if self.brackets >= MAX_BRACKETS {
+            return perr("too many nested parentheses");
+        }
+        self.brackets += 1;
+        Ok(())
+    }
+
+    // `depth` counts the nesting that is evaluation depth (a `not`, a later operand of `and` or `or`, a
+    // comparison's right side), never a bracket, so it is at most the evaluation depth of the node being
+    // parsed: the guard below fires only on a predicate the evaluator (`ev_node`, Python's `_ev`) would
+    // refuse anyway, and bounds the recursion. The static bound of SPEC section 4.1 is `static_depth`.
     fn or_expr(&mut self, depth: usize) -> Result<Ast, PredicateError> {
         if depth > MAX_DEPTH {
             return perr("predicate nested too deeply");
@@ -500,18 +529,20 @@ impl Parser {
                 }
             }
             Tok::Op(op_str) if op_str == "[" => {
+                self.open_bracket()?;
                 let mut elts = Vec::new();
                 if self.peek().is_some() && !self.peek_op("]") {
-                    elts.push(self.or_expr(depth + 1)?);
+                    elts.push(self.or_expr(depth)?);
                     while self.peek_op(",") {
                         self.next_tok();
                         if self.peek_op("]") {
                             break;
                         }
-                        elts.push(self.or_expr(depth + 1)?);
+                        elts.push(self.or_expr(depth)?);
                     }
                 }
                 self.expect("]")?;
+                self.brackets -= 1;
                 Ok(Ast::List(elts))
             }
             Tok::Op(op_str) if op_str == "(" => {
@@ -519,7 +550,8 @@ impl Parser {
                     self.next_tok();
                     return Ok(Ast::List(Vec::new()));
                 }
-                let first = self.or_expr(depth + 1)?;
+                self.open_bracket()?;
+                let first = self.or_expr(depth)?;
                 if self.peek_op(",") {
                     let mut elts = vec![first];
                     while self.peek_op(",") {
@@ -527,12 +559,14 @@ impl Parser {
                         if self.peek_op(")") {
                             break;
                         }
-                        elts.push(self.or_expr(depth + 1)?);
+                        elts.push(self.or_expr(depth)?);
                     }
                     self.expect(")")?;
+                    self.brackets -= 1;
                     return Ok(Ast::List(elts));
                 }
                 self.expect(")")?;
+                self.brackets -= 1;
                 Ok(first)
             }
             Tok::Op(op_str) => perr(format!("predicate uses disallowed syntax ({op_str})")),
@@ -542,7 +576,7 @@ impl Parser {
 
 pub(crate) fn parse_expr(src: &str) -> Result<Ast, PredicateError> {
     let toks = tokenize(src)?;
-    let mut parser = Parser { toks, pos: 0 };
+    let mut parser = Parser { toks, pos: 0, brackets: 0 };
     let mut tree = parser.or_expr(0)?;
     if parser.peek_op(",") {
         let mut elts = vec![tree];
@@ -760,6 +794,34 @@ pub fn eval_condition(condition: &str, ctx: &HashMap<String, Value>) -> Result<b
     Ok(py_truthy(&ev_node(&parse_expr(&expr)?, ctx, 0)?))
 }
 
+/// The reference's static depth of a parsed predicate (`predicates._depth` on the folded syntax tree,
+/// docs/design/spec-verified-core.md section 2.4): a name counts its load context, a list or tuple its
+/// own, an operator node one; a constant is a leaf.
+pub(crate) fn static_depth(node: &Ast) -> usize {
+    match node {
+        Ast::Const(..) => 0,
+        Ast::Name(_) => 1,
+        Ast::List(items) => 1 + items.iter().map(static_depth).max().unwrap_or(0),
+        Ast::Not(inner) => 1 + static_depth(inner),
+        Ast::And(items) | Ast::Or(items) => 1 + items.iter().map(static_depth).max().unwrap_or(0),
+        Ast::Cmp { left, rights, .. } => 1 + rights.iter().map(static_depth).chain([static_depth(left)]).max().unwrap_or(0),
+    }
+}
+
+/// The static depth of a deterministic condition's expression, or `None` when it has none (a keyword
+/// catch all, a condition that does not parse).
+pub fn predicate_depth(condition: &str) -> Option<usize> {
+    if !is_deterministic(condition) {
+        return None;
+    }
+    let expr = expr_of(condition);
+    let low = expr.to_lowercase();
+    if ALWAYS.contains(&low.as_str()) || NEVER.contains(&low.as_str()) {
+        return None;
+    }
+    parse_expr(&expr).ok().map(|tree| static_depth(&tree))
+}
+
 pub fn check_predicate(condition: &str) -> Vec<String> {
     if !is_deterministic(condition) {
         return Vec::new();
@@ -772,8 +834,9 @@ pub fn check_predicate(condition: &str) -> Vec<String> {
     if expr.is_empty() {
         return vec![format!("empty `when` predicate in {condition:?}")];
     }
-    if let Err(err) = parse_expr(&expr) {
-        return vec![format!("unparseable/unsafe predicate {condition:?}: {}", err.0)];
+    match parse_expr(&expr) {
+        Err(err) => vec![format!("unparseable/unsafe predicate {condition:?}: {}", err.0)],
+        Ok(tree) if static_depth(&tree) > MAX_DEPTH => vec![format!("predicate {condition:?} is nested too deeply (> {MAX_DEPTH})")],
+        Ok(_) => Vec::new(),
     }
-    Vec::new()
 }

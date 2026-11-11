@@ -1,6 +1,6 @@
 # prismpath-rs · conformance certification against the frozen kernel spec
 
-**Date:** 2026-07-29 · re verified 2026-08-12 on corpus v2 and 2026-10-12 with the reading boundary cases · **Verdict: CONFORMANT**: 1112/1112 predicates, 27/27 flows · Reproduce with:
+**Date:** 2026-07-29 · re verified 2026-08-12 on corpus v2, 2026-10-12 with the reading boundary cases and 2026-11-09 with the type gate, transcript bound and error tier cases · **Verdict: CONFORMANT**: 1112/1112 predicates, 107/107 flows (the 27 frozen and 80 for the engine options, the worker error kind, the guard records, the undefined node and the step shape), 8/8 locked flows · Reproduce with:
 
 ```
 cargo run --bin conformance -- ../prismpath/portable/conformance
@@ -38,7 +38,8 @@ integral floats must serialize as integers or the spawn fixture fails on notatio
   nothing.
 * **Porting discipline is written into the source:** where Python/JS semantics are subtle, the crate
   mirrors the certified .mjs decision and says so at the site; including the two places the .mjs
-  itself is arguably un-Pythonic (`Ellipsis` equals nothing, even itself; `error_type` is `"Error"`).
+  itself is arguably un-Pythonic (`Ellipsis` equals nothing, even itself; the .mjs `error_type` is always `"Error"`, which
+  the Rust crate keeps only for a worker that returns a plain message: a `WorkerError` names its own kind).
   The corpus is the judge, and the corpus cannot tell; if it ever learns to, the gate will say so.
 * **Rust has no catchable stack overflow**, so the .mjs blanket `catch` in `compareOp` becomes an
   explicit comparison-depth budget with the same observable behaviour (unsatisfied, never a crash).

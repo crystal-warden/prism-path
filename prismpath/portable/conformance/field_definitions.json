@@ -1001,164 +1001,550 @@
    ]
   },
   {
+   "name": "depth_fifty_nested_right",
+   "flow": "---\nname: depth_fifty_nested_right\nstart: s\nfield.x: int min=0 max=10\n---\n## s\n-> hit: when x != 7 and (x != 6 and (x != 5 and (x != 4 and (x != 3 and (x != 2 and (x != 1 and (x != 0 and (x != 9 and (x != 8 and (x != 7 and (x != 6 and (x != 5 and (x != 4 and (x != 3 and (x != 2 and (x != 1 and (x != 0 and (x != 9 and (x != 8 and (x != 7 and (x != 6 and (x != 5 and (x != 4 and (x != 3 and (x != 2 and (x != 1 and (x != 0 and (x != 9 and (x != 8 and (x != 7 and (x != 6 and (x != 5 and (x != 4 and (x != 3 and (x != 2 and (x != 1 and (x != 0 and (x != 9 and (x != 8 and (x != 7 and (x != 6 and (x != 5 and (x != 4 and (x != 3 and (x != 2 and (x != 1 and (x != 0 and (x >= 3))))))))))))))))))))))))))))))))))))))))))))))))\n-> miss: else\n## hit\n## low\n## gone\n## miss\n",
+   "accepted": true,
+   "lowered": [
+    "when x != 7 and (x != 6 and (x != 5 and (x != 4 and (x != 3 and (x != 2 and (x != 1 and (x != 0 and (x != 9 and (x != 8 and (x != 7 and (x != 6 and (x != 5 and (x != 4 and (x != 3 and (x != 2 and (x != 1 and (x != 0 and (x != 9 and (x != 8 and (x != 7 and (x != 6 and (x != 5 and (x != 4 and (x != 3 and (x != 2 and (x != 1 and (x != 0 and (x != 9 and (x != 8 and (x != 7 and (x != 6 and (x != 5 and (x != 4 and (x != 3 and (x != 2 and (x != 1 and (x != 0 and (x != 9 and (x != 8 and (x != 7 and (x != 6 and (x != 5 and (x != 4 and (x != 3 and (x != 2 and (x != 1 and (x != 0 and (x >= 3))))))))))))))))))))))))))))))))))))))))))))))))",
+    "else"
+   ],
+   "probes": [
+    {
+     "reading": {
+      "x": 3
+     },
+     "route": "miss"
+    },
+    {
+     "reading": {
+      "x": 2
+     },
+     "route": "miss"
+    },
+    {
+     "reading": {
+      "x": 10
+     },
+     "route": "hit"
+    }
+   ],
+   "refused_readings": [
+    {
+     "reading": {
+      "x": 11
+     },
+     "field": "x",
+     "reason": "out_of_range"
+    }
+   ]
+  },
+  {
+   "name": "depth_fifty_nested_left",
+   "flow": "---\nname: depth_fifty_nested_left\nstart: s\nfield.x: int min=0 max=10\n---\n## s\n-> hit: when ((((((((((((((((((((((((((((((((((((((((((((((((x >= 3) and x != 0) and x != 1) and x != 2) and x != 3) and x != 4) and x != 5) and x != 6) and x != 7) and x != 8) and x != 9) and x != 0) and x != 1) and x != 2) and x != 3) and x != 4) and x != 5) and x != 6) and x != 7) and x != 8) and x != 9) and x != 0) and x != 1) and x != 2) and x != 3) and x != 4) and x != 5) and x != 6) and x != 7) and x != 8) and x != 9) and x != 0) and x != 1) and x != 2) and x != 3) and x != 4) and x != 5) and x != 6) and x != 7) and x != 8) and x != 9) and x != 0) and x != 1) and x != 2) and x != 3) and x != 4) and x != 5) and x != 6) and x != 7\n-> miss: else\n## hit\n## low\n## gone\n## miss\n",
+   "accepted": true,
+   "lowered": [
+    "when ((((((((((((((((((((((((((((((((((((((((((((((((x >= 3) and x != 0) and x != 1) and x != 2) and x != 3) and x != 4) and x != 5) and x != 6) and x != 7) and x != 8) and x != 9) and x != 0) and x != 1) and x != 2) and x != 3) and x != 4) and x != 5) and x != 6) and x != 7) and x != 8) and x != 9) and x != 0) and x != 1) and x != 2) and x != 3) and x != 4) and x != 5) and x != 6) and x != 7) and x != 8) and x != 9) and x != 0) and x != 1) and x != 2) and x != 3) and x != 4) and x != 5) and x != 6) and x != 7) and x != 8) and x != 9) and x != 0) and x != 1) and x != 2) and x != 3) and x != 4) and x != 5) and x != 6) and x != 7",
+    "else"
+   ],
+   "probes": [
+    {
+     "reading": {
+      "x": 3
+     },
+     "route": "miss"
+    },
+    {
+     "reading": {
+      "x": 2
+     },
+     "route": "miss"
+    }
+   ],
+   "refused_readings": [
+    {
+     "reading": {
+      "x": null
+     },
+     "field": "x",
+     "reason": "missing"
+    }
+   ]
+  },
+  {
+   "name": "depth_fifty_not_chain",
+   "flow": "---\nname: depth_fifty_not_chain\nstart: s\nfield.x: int min=0 max=10\n---\n## s\n-> hit: when not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not x >= 3\n-> miss: else\n## hit\n## low\n## gone\n## miss\n",
+   "accepted": true,
+   "lowered": [
+    "when not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not x >= 3",
+    "else"
+   ],
+   "probes": [
+    {
+     "reading": {
+      "x": 3
+     },
+     "route": "hit"
+    },
+    {
+     "reading": {
+      "x": 2
+     },
+     "route": "miss"
+    }
+   ],
+   "refused_readings": []
+  },
+  {
+   "name": "definition_split_on_python_whitespace",
+   "flow": "---\nname: definition_split_on_python_whitespace\nstart: s\nfield.x: int\u001fmin=0\u3000max=10\u001f\nfield.k: category\u2000absent=allowed\n---\n## s\n-> gone: when k == None\n-> hit: when x >= 5\n-> miss: else\n## hit\n## low\n## gone\n## miss\n",
+   "accepted": true,
+   "lowered": [
+    "when k == None",
+    "when x >= 5",
+    "else"
+   ],
+   "probes": [
+    {
+     "reading": {
+      "x": 5,
+      "k": "a"
+     },
+     "route": "hit"
+    },
+    {
+     "reading": {
+      "x": 4,
+      "k": "a"
+     },
+     "route": "miss"
+    },
+    {
+     "reading": {
+      "x": 9
+     },
+     "route": "gone"
+    }
+   ],
+   "refused_readings": [
+    {
+     "reading": {
+      "x": 11,
+      "k": "a"
+     },
+     "field": "x",
+     "reason": "out_of_range"
+    },
+    {
+     "reading": {
+      "x": 1,
+      "k": 3
+     },
+     "field": "k",
+     "reason": "wrong_type"
+    }
+   ]
+  },
+  {
+   "name": "depth_fifty_one_not_chain",
+   "flow": "---\nname: depth_fifty_one_not_chain\nstart: s\nfield.x: int\n---\n## s\n-> hit: when not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not x >= 3\n-> miss: else\n## hit\n## low\n## gone\n## miss\n",
+   "accepted": false,
+   "cause": "policy:not-level-m",
+   "causes": [
+    "policy:not-level-m"
+   ]
+  },
+  {
+   "name": "depth_fifty_two_not_chain",
+   "flow": "---\nname: depth_fifty_two_not_chain\nstart: s\nfield.x: int\n---\n## s\n-> hit: when not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not not x >= 3\n-> miss: else\n## hit\n## low\n## gone\n## miss\n",
+   "accepted": false,
+   "cause": "policy:not-level-m",
+   "causes": [
+    "policy:not-level-m"
+   ]
+  },
+  {
+   "name": "depth_fifty_one_nested_right",
+   "flow": "---\nname: depth_fifty_one_nested_right\nstart: s\nfield.x: int\n---\n## s\n-> hit: when x != 8 and (x != 7 and (x != 6 and (x != 5 and (x != 4 and (x != 3 and (x != 2 and (x != 1 and (x != 0 and (x != 9 and (x != 8 and (x != 7 and (x != 6 and (x != 5 and (x != 4 and (x != 3 and (x != 2 and (x != 1 and (x != 0 and (x != 9 and (x != 8 and (x != 7 and (x != 6 and (x != 5 and (x != 4 and (x != 3 and (x != 2 and (x != 1 and (x != 0 and (x != 9 and (x != 8 and (x != 7 and (x != 6 and (x != 5 and (x != 4 and (x != 3 and (x != 2 and (x != 1 and (x != 0 and (x != 9 and (x != 8 and (x != 7 and (x != 6 and (x != 5 and (x != 4 and (x != 3 and (x != 2 and (x != 1 and (x != 0 and (x >= 3)))))))))))))))))))))))))))))))))))))))))))))))))\n-> miss: else\n## hit\n## low\n## gone\n## miss\n",
+   "accepted": false,
+   "cause": "policy:not-level-m",
+   "causes": [
+    "policy:not-level-m"
+   ]
+  },
+  {
+   "name": "depth_fifty_two_nested_left",
+   "flow": "---\nname: depth_fifty_two_nested_left\nstart: s\nfield.x: int\n---\n## s\n-> hit: when ((((((((((((((((((((((((((((((((((((((((((((((((((x >= 3) and x != 0) and x != 1) and x != 2) and x != 3) and x != 4) and x != 5) and x != 6) and x != 7) and x != 8) and x != 9) and x != 0) and x != 1) and x != 2) and x != 3) and x != 4) and x != 5) and x != 6) and x != 7) and x != 8) and x != 9) and x != 0) and x != 1) and x != 2) and x != 3) and x != 4) and x != 5) and x != 6) and x != 7) and x != 8) and x != 9) and x != 0) and x != 1) and x != 2) and x != 3) and x != 4) and x != 5) and x != 6) and x != 7) and x != 8) and x != 9) and x != 0) and x != 1) and x != 2) and x != 3) and x != 4) and x != 5) and x != 6) and x != 7) and x != 8) and x != 9\n-> miss: else\n## hit\n## low\n## gone\n## miss\n",
+   "accepted": false,
+   "cause": "policy:not-level-m",
+   "causes": [
+    "policy:not-level-m"
+   ]
+  },
+  {
+   "name": "definition_with_a_byte_order_mark",
+   "flow": "---\nname: definition_with_a_byte_order_mark\nstart: s\nfield.x: int\ufeffmin=0\n---\n## s\n-> hit: when x > 1\n-> miss: else\n## hit\n## low\n## gone\n## miss\n",
+   "accepted": false,
+   "cause": "policy:definition",
+   "causes": [
+    "policy:definition"
+   ]
+  },
+  {
    "name": "floor_with_greater",
    "flow": "---\nname: floor_with_greater\nstart: s\nfield.r: fixed scale=10000 unit=ratio rounding=floor min=0 max=10000\n---\n## s\n-> hit: when r > 0.85\n-> miss: else\n## hit\n## low\n## gone\n## miss\n",
-   "accepted": false
+   "accepted": false,
+   "cause": "policy:rounding",
+   "causes": [
+    "policy:rounding"
+   ]
   },
   {
    "name": "floor_with_less_equal",
    "flow": "---\nname: floor_with_less_equal\nstart: s\nfield.r: fixed scale=10000 unit=ratio rounding=floor min=0 max=10000\n---\n## s\n-> hit: when r <= 0.85\n-> miss: else\n## hit\n## low\n## gone\n## miss\n",
-   "accepted": false
+   "accepted": false,
+   "cause": "policy:rounding",
+   "causes": [
+    "policy:rounding"
+   ]
   },
   {
    "name": "floor_with_equality",
    "flow": "---\nname: floor_with_equality\nstart: s\nfield.r: fixed scale=10000 unit=ratio rounding=floor min=0 max=10000\n---\n## s\n-> hit: when r == 0.85\n-> miss: else\n## hit\n## low\n## gone\n## miss\n",
-   "accepted": false
+   "accepted": false,
+   "cause": "policy:rounding",
+   "causes": [
+    "policy:rounding"
+   ]
   },
   {
    "name": "floor_with_membership",
    "flow": "---\nname: floor_with_membership\nstart: s\nfield.r: fixed scale=10000 unit=ratio rounding=floor min=0 max=10000\n---\n## s\n-> hit: when r in [0.5]\n-> miss: else\n## hit\n## low\n## gone\n## miss\n",
-   "accepted": false
+   "accepted": false,
+   "cause": "policy:rounding",
+   "causes": [
+    "policy:rounding"
+   ]
   },
   {
    "name": "floor_with_truthiness",
    "flow": "---\nname: floor_with_truthiness\nstart: s\nfield.r: fixed scale=10000 unit=ratio rounding=floor min=0 max=10000\n---\n## s\n-> hit: when r\n-> miss: else\n## hit\n## low\n## gone\n## miss\n",
-   "accepted": false
+   "accepted": false,
+   "cause": "policy:rounding",
+   "causes": [
+    "policy:rounding"
+   ]
   },
   {
    "name": "ceiling_with_greater_equal",
    "flow": "---\nname: ceiling_with_greater_equal\nstart: s\nfield.t: fixed scale=1000 unit=seconds rounding=ceiling min=0 max=600000\n---\n## s\n-> hit: when t >= 1.5\n-> miss: else\n## hit\n## low\n## gone\n## miss\n",
-   "accepted": false
+   "accepted": false,
+   "cause": "policy:rounding",
+   "causes": [
+    "policy:rounding"
+   ]
   },
   {
    "name": "off_grid_threshold",
    "flow": "---\nname: off_grid_threshold\nstart: s\nfield.r: fixed scale=10000 unit=ratio rounding=floor min=0 max=10000\n---\n## s\n-> hit: when r >= 0.85001\n-> miss: else\n## hit\n## low\n## gone\n## miss\n",
-   "accepted": false
+   "accepted": false,
+   "cause": "policy:threshold",
+   "causes": [
+    "policy:threshold"
+   ]
   },
   {
    "name": "threshold_out_of_range",
    "flow": "---\nname: threshold_out_of_range\nstart: s\nfield.r: fixed scale=10000 unit=ratio rounding=floor min=0 max=10000\n---\n## s\n-> hit: when r >= 1.5\n-> miss: else\n## hit\n## low\n## gone\n## miss\n",
-   "accepted": false
+   "accepted": false,
+   "cause": "policy:threshold",
+   "causes": [
+    "policy:threshold"
+   ]
   },
   {
    "name": "int_constant_out_of_range",
    "flow": "---\nname: int_constant_out_of_range\nstart: s\nfield.c: int min=0 max=10\n---\n## s\n-> hit: when c >= 11\n-> miss: else\n## hit\n## low\n## gone\n## miss\n",
-   "accepted": false
+   "accepted": false,
+   "cause": "policy:threshold",
+   "causes": [
+    "policy:threshold"
+   ]
   },
   {
    "name": "decimal_on_int_field",
    "flow": "---\nname: decimal_on_int_field\nstart: s\nfield.c: int\n---\n## s\n-> hit: when c >= 2.5\n-> miss: else\n## hit\n## low\n## gone\n## miss\n",
-   "accepted": false
+   "accepted": false,
+   "cause": "image:unknown-type",
+   "causes": [
+    "image:unknown-type"
+   ]
   },
   {
    "name": "undefined_field_read",
    "flow": "---\nname: undefined_field_read\nstart: s\nfield.r: fixed scale=10000 unit=ratio rounding=floor min=0 max=10000\n---\n## s\n-> hit: when r >= 0.5 and other > 3\n-> miss: else\n## hit\n## low\n## gone\n## miss\n",
-   "accepted": false
+   "accepted": false,
+   "cause": "image:field-index-oob",
+   "causes": [
+    "image:field-index-oob"
+   ]
   },
   {
    "name": "none_on_field_refusing_absence",
    "flow": "---\nname: none_on_field_refusing_absence\nstart: s\nfield.c: int\n---\n## s\n-> hit: when c == None\n-> miss: else\n## hit\n## low\n## gone\n## miss\n",
-   "accepted": false
+   "accepted": false,
+   "cause": "policy:none",
+   "causes": [
+    "policy:none"
+   ]
   },
   {
    "name": "absence_allowed_but_never_tested",
    "flow": "---\nname: absence_allowed_but_never_tested\nstart: s\nfield.c: int absent=allowed\n---\n## s\n-> hit: when c > 3\n-> miss: else\n## hit\n## low\n## gone\n## miss\n",
-   "accepted": false
+   "accepted": false,
+   "cause": "policy:absence-untested",
+   "causes": [
+    "policy:absence-untested"
+   ]
   },
   {
    "name": "none_inside_a_list",
    "flow": "---\nname: none_inside_a_list\nstart: s\nfield.c: int absent=allowed\n---\n## s\n-> hit: when c in [1, None]\n-> hit: when c == None\n-> miss: else\n## hit\n## low\n## gone\n## miss\n",
-   "accepted": false
+   "accepted": false,
+   "cause": "policy:none",
+   "causes": [
+    "policy:none"
+   ]
   },
   {
    "name": "none_ordered",
    "flow": "---\nname: none_ordered\nstart: s\nfield.c: int absent=allowed\n---\n## s\n-> hit: when c < None\n-> hit: when c == None\n-> miss: else\n## hit\n## low\n## gone\n## miss\n",
-   "accepted": false
+   "accepted": false,
+   "cause": "policy:none",
+   "causes": [
+    "policy:none"
+   ]
   },
   {
    "name": "bool_field_against_number",
    "flow": "---\nname: bool_field_against_number\nstart: s\nfield.b: bool\n---\n## s\n-> hit: when b == 1\n-> miss: else\n## hit\n## low\n## gone\n## miss\n",
-   "accepted": false
+   "accepted": false,
+   "cause": "policy:kind-mismatch",
+   "causes": [
+    "policy:kind-mismatch"
+   ]
   },
   {
    "name": "int_field_against_bool",
    "flow": "---\nname: int_field_against_bool\nstart: s\nfield.c: int\n---\n## s\n-> hit: when c == True\n-> miss: else\n## hit\n## low\n## gone\n## miss\n",
-   "accepted": false
+   "accepted": false,
+   "cause": "policy:kind-mismatch",
+   "causes": [
+    "policy:kind-mismatch"
+   ]
   },
   {
    "name": "int_field_against_string",
    "flow": "---\nname: int_field_against_string\nstart: s\nfield.c: int\n---\n## s\n-> hit: when c == \"3\"\n-> miss: else\n## hit\n## low\n## gone\n## miss\n",
-   "accepted": false
+   "accepted": false,
+   "cause": "policy:kind-mismatch",
+   "causes": [
+    "policy:kind-mismatch"
+   ]
   },
   {
    "name": "category_field_ordered",
    "flow": "---\nname: category_field_ordered\nstart: s\nfield.k: category\n---\n## s\n-> hit: when k < \"m\"\n-> miss: else\n## hit\n## low\n## gone\n## miss\n",
-   "accepted": false
+   "accepted": false,
+   "cause": "image:unknown-op",
+   "causes": [
+    "image:unknown-op"
+   ]
   },
   {
    "name": "category_field_against_number",
    "flow": "---\nname: category_field_against_number\nstart: s\nfield.k: category\n---\n## s\n-> hit: when k == 3\n-> miss: else\n## hit\n## low\n## gone\n## miss\n",
-   "accepted": false
+   "accepted": false,
+   "cause": "policy:kind-mismatch",
+   "causes": [
+    "policy:kind-mismatch"
+   ]
   },
   {
    "name": "field_against_field",
    "flow": "---\nname: field_against_field\nstart: s\nfield.a: int\nfield.b: int\n---\n## s\n-> hit: when a == b\n-> miss: else\n## hit\n## low\n## gone\n## miss\n",
-   "accepted": false
+   "accepted": false,
+   "cause": "image:unknown-type",
+   "causes": [
+    "image:unknown-type"
+   ]
   },
   {
    "name": "unknown_kind",
    "flow": "---\nname: unknown_kind\nstart: s\nfield.x: float\n---\n## s\n-> hit: when x > 1\n-> miss: else\n## hit\n## low\n## gone\n## miss\n",
-   "accepted": false
+   "accepted": false,
+   "cause": "policy:definition",
+   "causes": [
+    "policy:definition"
+   ]
   },
   {
    "name": "fixed_without_rounding",
    "flow": "---\nname: fixed_without_rounding\nstart: s\nfield.x: fixed scale=100\n---\n## s\n-> hit: when x >= 1\n-> miss: else\n## hit\n## low\n## gone\n## miss\n",
-   "accepted": false
+   "accepted": false,
+   "cause": "policy:definition",
+   "causes": [
+    "policy:definition"
+   ]
   },
   {
    "name": "fixed_with_zero_scale",
    "flow": "---\nname: fixed_with_zero_scale\nstart: s\nfield.x: fixed scale=0 rounding=floor\n---\n## s\n-> hit: when x >= 1\n-> miss: else\n## hit\n## low\n## gone\n## miss\n",
-   "accepted": false
+   "accepted": false,
+   "cause": "policy:definition",
+   "causes": [
+    "policy:definition"
+   ]
   },
   {
    "name": "option_the_kind_does_not_take",
    "flow": "---\nname: option_the_kind_does_not_take\nstart: s\nfield.x: int scale=100\n---\n## s\n-> hit: when x > 1\n-> miss: else\n## hit\n## low\n## gone\n## miss\n",
-   "accepted": false
+   "accepted": false,
+   "cause": "policy:definition",
+   "causes": [
+    "policy:definition"
+   ]
   },
   {
    "name": "option_given_twice",
    "flow": "---\nname: option_given_twice\nstart: s\nfield.x: int min=0 min=1\n---\n## s\n-> hit: when x > 1\n-> miss: else\n## hit\n## low\n## gone\n## miss\n",
-   "accepted": false
+   "accepted": false,
+   "cause": "policy:definition",
+   "causes": [
+    "policy:definition"
+   ]
   },
   {
    "name": "empty_range",
    "flow": "---\nname: empty_range\nstart: s\nfield.x: int min=5 max=4\n---\n## s\n-> hit: when x > 1\n-> miss: else\n## hit\n## low\n## gone\n## miss\n",
-   "accepted": false
+   "accepted": false,
+   "cause": "policy:definition",
+   "causes": [
+    "policy:definition"
+   ]
   },
   {
    "name": "range_wider_than_exact",
    "flow": "---\nname: range_wider_than_exact\nstart: s\nfield.x: int max=9007199254740992\n---\n## s\n-> hit: when x > 1\n-> miss: else\n## hit\n## low\n## gone\n## miss\n",
-   "accepted": false
+   "accepted": false,
+   "cause": "policy:definition",
+   "causes": [
+    "policy:definition"
+   ]
   },
   {
    "name": "absent_neither_word",
    "flow": "---\nname: absent_neither_word\nstart: s\nfield.x: int absent=maybe\n---\n## s\n-> hit: when x > 1\n-> miss: else\n## hit\n## low\n## gone\n## miss\n",
-   "accepted": false
+   "accepted": false,
+   "cause": "policy:definition",
+   "causes": [
+    "policy:definition"
+   ]
   },
   {
    "name": "engine_counter_defined",
    "flow": "---\nname: engine_counter_defined\nstart: s\nfield.visits: int\n---\n## s\n-> hit: when visits > 1\n-> miss: else\n## hit\n## low\n## gone\n## miss\n",
-   "accepted": false
+   "accepted": false,
+   "cause": "policy:definition",
+   "causes": [
+    "policy:definition"
+   ]
   },
   {
    "name": "sign_outside_parentheses_on_a_decimal",
    "flow": "---\nname: sign_outside_parentheses_on_a_decimal\nstart: s\nfield.d: fixed scale=100 unit=celsius rounding=floor min=-5000 max=5000\n---\n## s\n-> hit: when d >= -(0.5)\n-> miss: else\n## hit\n## low\n## gone\n## miss\n",
-   "accepted": false
+   "accepted": false,
+   "cause": "policy:threshold",
+   "causes": [
+    "policy:threshold"
+   ]
   },
   {
    "name": "sign_outside_parentheses_on_an_integer",
    "flow": "---\nname: sign_outside_parentheses_on_an_integer\nstart: s\nfield.d: fixed scale=100 unit=celsius rounding=floor min=-5000 max=5000\n---\n## s\n-> hit: when d >= -(5)\n-> miss: else\n## hit\n## low\n## gone\n## miss\n",
-   "accepted": false
+   "accepted": false,
+   "cause": "policy:threshold",
+   "causes": [
+    "policy:threshold"
+   ]
+  },
+  {
+   "name": "d7_atom_left_to_right_in_one_condition",
+   "flow": "---\nname: d7_atom_left_to_right_in_one_condition\nstart: s\nfield.x: int\n---\n## s\n-> hit: when x == 9007199254740992 and x == 2.5\n-> miss: else\n## hit\n## low\n## gone\n## miss\n",
+   "accepted": false,
+   "cause": "policy:threshold",
+   "causes": [
+    "policy:threshold",
+    "image:unknown-type"
+   ]
+  },
+  {
+   "name": "d7_decoding_before_a_definition",
+   "flow": "---\nname: d7_decoding_before_a_definition\nstart: s\nfield.x: int min=5 max=4\nfield.y: int\n---\n## s\n-> hit: when x == y\n-> miss: else\n## hit\n## low\n## gone\n## miss\n",
+   "accepted": false,
+   "cause": "image:unknown-type",
+   "causes": [
+    "image:unknown-type",
+    "policy:definition"
+   ]
+  },
+  {
+   "name": "d7_decoding_of_a_later_rule_before_lowering",
+   "flow": "---\nname: d7_decoding_of_a_later_rule_before_lowering\nstart: s\nfield.x: int\nfield.k: category\n---\n## s\n-> hit: when x == 2.5\n-> hit: when k < \"a\"\n-> miss: else\n## hit\n## low\n## gone\n## miss\n",
+   "accepted": false,
+   "cause": "image:unknown-op",
+   "causes": [
+    "image:unknown-op",
+    "image:unknown-type"
+   ]
+  },
+  {
+   "name": "d7_an_earlier_atom_before_a_later_threshold",
+   "flow": "---\nname: d7_an_earlier_atom_before_a_later_threshold\nstart: s\nfield.x: int\nfield.d: fixed scale=100 unit=celsius rounding=floor min=-5000 max=5000\n---\n## s\n-> hit: when x == True and d >= 0.001\n-> miss: else\n## hit\n## low\n## gone\n## miss\n",
+   "accepted": false,
+   "cause": "policy:kind-mismatch",
+   "causes": [
+    "policy:kind-mismatch",
+    "policy:threshold"
+   ]
+  },
+  {
+   "name": "d7_membership_range_before_rounding",
+   "flow": "---\nname: d7_membership_range_before_rounding\nstart: s\nfield.d: fixed scale=100 rounding=floor min=0 max=100\n---\n## s\n-> hit: when d in [5]\n-> miss: else\n## hit\n## low\n## gone\n## miss\n",
+   "accepted": false,
+   "cause": "policy:threshold",
+   "causes": [
+    "policy:threshold"
+   ]
+  },
+  {
+   "name": "d7_definitions_in_code_point_order",
+   "flow": "---\nname: d7_definitions_in_code_point_order\nstart: s\nfield.b: int min=5 max=4\nfield.a: float\n---\n## s\n-> hit: when a > 1\n-> miss: else\n## hit\n## low\n## gone\n## miss\n",
+   "accepted": false,
+   "cause": "policy:definition",
+   "causes": [
+    "policy:definition",
+    "policy:definition"
+   ]
+  },
+  {
+   "name": "d7_lowering_before_rule_six",
+   "flow": "---\nname: d7_lowering_before_rule_six\nstart: s\nfield.c: category absent=allowed\nfield.x: int\n---\n## s\n-> hit: when x == \"s\"\n-> miss: else\n## hit\n## low\n## gone\n## miss\n",
+   "accepted": false,
+   "cause": "policy:kind-mismatch",
+   "causes": [
+    "policy:kind-mismatch",
+    "policy:absence-untested"
+   ]
   }
  ]
 }

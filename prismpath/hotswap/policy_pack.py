@@ -82,8 +82,22 @@ def _ed25519():
 
 
 def canonical_bytes(obj) -> bytes:
-    """The one canonical JSON encoding signatures are computed over (prismpath.canon, compact form)."""
-    return canon.canonical_compact(obj)
+    """The bytes a document is hashed over (`canon.document_bytes`): its canon/2 bytes. A document that does
+    not name canon/2 (canon/1 is retired) raises EncodingError."""
+    return canon.document_bytes(obj)
+
+
+def signed_bytes(obj) -> bytes:
+    """The bytes a signature over a manifest, an envelope, a flow authority manifest or a crypto registry
+    covers (`canon.signed_message`): `canon.CANON2_DOMAIN` and the canon/2 bytes. A document that does not
+    name canon/2 raises EncodingError."""
+    return canon.signed_message(obj)
+
+
+def write_signed_document(path: str, doc: dict) -> None:
+    """A signed document as it is written to disk: its canon/2 bytes and a newline."""
+    with open(path, "wb") as handle:
+        handle.write(canon.canon2_bytes(doc) + b"\n")
 
 
 sha256_hex = canon.sha256_hex
@@ -245,6 +259,7 @@ def build_manifest(image: bytes, fields: Dict[str, str], version: int,
     header = read_ppt_header(image)
     return {
         "format": PACK_FORMAT,
+        canon.ENCODING_KEY: canon.CANON2,
         "image_sha256": sha256_hex(image),
         "fields": dict(fields),
         "counts": {"atoms": header["atoms"], "nodes": header["nodes"], "edges": header["edges"],
@@ -317,10 +332,8 @@ def build_pack(ppt_path: str, fields: Dict[str, str], version: int, envelope_id:
     if flow_sha256 is not None:
         manifest["flow_sha256"] = flow_sha256
     priv = _load_private(priv_path)
-    sig = priv.sign(canonical_bytes(manifest))
-    with open(ppt_path + ".manifest.json", "w") as handle:
-        json.dump(manifest, handle, indent=1, sort_keys=True)
-        handle.write("\n")
+    sig = priv.sign(signed_bytes(manifest))
+    write_signed_document(ppt_path + ".manifest.json", manifest)
     with open(ppt_path + ".manifest.sig", "wb") as handle:
         handle.write(sig)
     return manifest
@@ -330,19 +343,36 @@ def verify_pack(ppt_path: str, pubkey_paths: List[str],
                 revoked: frozenset = frozenset()) -> Tuple[bool, List[str], Optional[dict]]:
     """The Authorized gate. Verifies: signature over the canonical manifest by a known,
     non-revoked key; manifest key_id matches the verifying key; image hash and header counts
-    match the manifest. Returns (ok, stable-reasons, manifest-or-None)."""
+    match the manifest. Returns (ok, stable-reasons, manifest-or-None): a manifest that cannot be parsed
+    (not JSON, not UTF-8, NaN, Infinity or a number beyond the double range, or not an object) is
+    `manifest:bad-format` with no manifest."""
     _Priv, _Pub, _ser, InvalidSignature = _ed25519()
     man_path, sig_path = ppt_path + ".manifest.json", ppt_path + ".manifest.sig"
     if not os.path.exists(man_path) or not os.path.exists(sig_path):
         return False, ["sig:missing"], None
-    with open(man_path) as handle:
-        manifest = json.load(handle)
+    try:
+        with open(man_path, encoding="utf-8", newline="") as handle:
+            manifest = canon.loads_document(handle.read())
+    except canon.NotCanonical:
+        # canon/2 in a spelling other than its canonical bytes: refused with its own registered cause, never
+        # respelled before the signature is checked
+        return False, [canon.NotCanonical.CAUSE], None
+    except ValueError:
+        # The registry's `manifest:bad-format` is "manifest unparseable": text that is not JSON, not UTF-8,
+        # or holds NaN, Infinity or a number beyond the double range (`CanonicalReadError`) is that refusal,
+        # a stable reason, and not an exception out of a gate that returns reasons.
+        return False, ["manifest:bad-format"], None
     with open(sig_path, "rb") as handle:
         sig = handle.read()
+    if not isinstance(manifest, dict):
+        return False, ["manifest:bad-format"], None
     if manifest.get("format") != PACK_FORMAT:
         return False, ["manifest:bad-format"], manifest
 
-    payload = canonical_bytes(manifest)
+    try:
+        payload = signed_bytes(manifest)
+    except canon.CanonicalError:
+        return False, ["manifest:bad-format"], manifest
     signer_id = None
     for path in pubkey_paths:
         pub, key_id = load_public(path)
@@ -391,13 +421,11 @@ def build_envelope(envelope_id: str, fields: Dict[str, str], caps: Optional[dict
     _pub, key_id = load_public(pub_path)
     env = {"envelope_id": envelope_id, "fields": dict(fields),
            "caps": {**DEFAULT_CAPS, **(caps or {})}, "require_level_m": True,
-           "key_id": key_id}
-    sig = _load_private(priv_path).sign(canonical_bytes(env))
+           "key_id": key_id, canon.ENCODING_KEY: canon.CANON2}
+    sig = _load_private(priv_path).sign(signed_bytes(env))
     os.makedirs(out_dir, exist_ok=True)
     base = os.path.join(out_dir, f"{envelope_id}.envelope")
-    with open(base + ".json", "w") as handle:
-        json.dump(env, handle, indent=1, sort_keys=True)
-        handle.write("\n")
+    write_signed_document(base + ".json", env)
     with open(base + ".sig", "wb") as handle:
         handle.write(sig)
     return env
@@ -410,13 +438,20 @@ def load_envelope(base_path: str, pubkey_paths: List[str]) -> Tuple[Optional[dic
         if base_path.endswith(suffix):
             base_path = base_path[:-len(suffix)]
     try:
-        with open(base_path + ".json") as handle:
-            env = json.load(handle)
+        with open(base_path + ".json", encoding="utf-8", newline="") as handle:
+            env = canon.loads_document(handle.read())
         with open(base_path + ".sig", "rb") as handle:
             sig = handle.read()
     except FileNotFoundError:
         return None, ["envelope:missing"]
-    payload = canonical_bytes(env)
+    except canon.NotCanonical:                   # canon/2, but not its canonical bytes
+        return None, [canon.NotCanonical.CAUSE]
+    except ValueError:                           # not canon/2: untagged (canon/1 is retired), another tag, or unreadable
+        return None, ["envelope:sig-invalid"]
+    try:
+        payload = signed_bytes(env)
+    except canon.CanonicalError:
+        return None, ["envelope:sig-invalid"]
     for path in pubkey_paths:
         pub, _kid = load_public(path)
         try:

@@ -69,10 +69,26 @@ pub fn encode_reading_checked(
         field: String::new(), refusal: quantizer::InputRefusal::OutOfRange })
 }
 
+/// Why a stream did not decode under its policy: the decoder's own message and, where it is exactly one of the
+/// strict decode causes, the registry code beside it. A symbol count that is not the policy's field count is
+/// `wire:codebook-mismatch` (51, invariant I3); the other refusal carries none.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WireRefusal {
+    pub message: String,
+    pub cause: Option<u8>,
+}
+
+impl std::fmt::Display for WireRefusal {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(formatter, "{}", self.message)
+    }
+}
+impl std::error::Error for WireRefusal {}
+
 pub fn decode_reading(
     parts: &HashMap<String, FieldPartition>,
     bits: &str,
-) -> Result<HashMap<String, V>, String> {
+) -> Result<HashMap<String, V>, WireRefusal> {
     decode_reading_with_codec(&FibonacciWireCodec, parts, bits)
 }
 
@@ -80,21 +96,20 @@ pub fn decode_reading_with_codec<C: WireCodec>(
     codec: &C,
     parts: &HashMap<String, FieldPartition>,
     bits: &str,
-) -> Result<HashMap<String, V>, String> {
+) -> Result<HashMap<String, V>, WireRefusal> {
     let ord = order(parts);
     let wire = codec.decode_symbols(bits);
     if wire.len() != ord.len() {
-        return Err(format!(
-            "symbol count {} != decision fields {}",
-            wire.len(),
-            ord.len()
-        ));
+        return Err(WireRefusal {
+            message: format!("symbol count {} != decision fields {}", wire.len(), ord.len()),
+            cause: Some(prismpath_rs::causes::WIRE_CODEBOOK_MISMATCH),
+        });
     }
     let mut syms: HashMap<String, usize> = HashMap::new();
     for (i, f) in ord.into_iter().enumerate() {
         let s = wire[i]
             .checked_sub(1)
-            .ok_or_else(|| format!("invalid wire symbol 0 for field {f}"))?;
+            .ok_or_else(|| WireRefusal { message: format!("invalid wire symbol 0 for field {f}"), cause: None })?;
         syms.insert(f, s);
     }
     Ok(quantizer::reconstruct(parts, &syms))

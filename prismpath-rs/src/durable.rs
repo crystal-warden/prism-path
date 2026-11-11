@@ -11,22 +11,21 @@
 //!     The flow file is NEVER written; a resume against an edited flow is refused by content hash
 //!     (`PRISMPATH_RESUME_ON_FLOW_CHANGE` = refuse | warn | allow, same contract as Python).
 //!   * the content-addressed provenance/override manifests + `verify_manifest` + `salt_leaf`:
-//!     the tamper-evidence primitives. `manifest_hash` is sha256 over Python's exact
-//!     `json.dumps(..., sort_keys=True)` byte layout, reproduced here by `py_canonical_string`
-//!     (also used compact for the policy-pack signatures), so a manifest built on either runtime
-//!     verifies on the other.
+//!     the tamper-evidence primitives. `manifest_hash` is sha256 over the manifest's canon/2 bytes
+//!     (`canon2_bytes`), so a manifest built on either runtime verifies on the other. canon/1, the
+//!     earlier Python `json.dumps` layout, is retired: an untagged manifest is refused.
 //!
 //! Deliberately NOT ported (ops tooling, not edge runtime): the OTS batch-forward relay, tar
 //! bundling, and the RFC-3161/openssl subprocess tiers of `ledger_airgap.py`; the Mission Control
 //! human-queue helpers of `checkpoint.py`; and the git Flow-Ledger (`ledger.py`).
 //!
-//! One honest divergence: Python's `type_gate` (worker-contract enforcement) has no Rust engine
-//! counterpart yet: the flag is PERSISTED faithfully (so a Python resume of a Rust checkpoint
-//! keeps the gate) but this kernel does not enforce it.
+//! The `type_gate` flag is persisted and enforced: a run, and a resume of one, hold each worker's output to
+//! the contract derived from the flow (`contract::derive_contract`), so a Python resume of a Rust checkpoint
+//! and the reverse keep the gate on.
 
 use crate::{
     event_name, is_event, parse, run_observed, EngineError, Pending, RunOpts, RunResult, RunState,
-    Step, Value as EngineValue,
+    Step, Value as EngineValue, WorkerError,
 };
 use serde_json::Value;
 use sha2::{Digest, Sha256};
@@ -49,13 +48,27 @@ fn cerr<RetType>(msg: impl Into<String>) -> Result<RetType, CheckpointError> {
 
 // Python-parity canonical JSON
 
-/// Python `json.dumps(obj, sort_keys=True)` byte-for-byte: sorted keys, `ensure_ascii` escaping,
-/// ints as ints, floats with a `.0` when integral. `spaced=false` gives the
-/// `separators=(",", ":")` compact form the policy-pack signatures use; `spaced=true` the default
-/// `(", ", ": ")` form the manifests hash over.
-pub fn py_canonical_string(val: &Value, spaced: bool) -> String {
-    let (item_sep, key_sep) = if spaced { (", ", ": ") } else { (",", ":") };
-    match val {
+/// A value that has no canonical form: a number beyond the double range (`1e400`), a float in hashed
+/// content, a document that does not name canon/2. `prismpath.canon.CanonicalError` is the same refusal in
+/// Python. A string with a lone surrogate never reaches here, because a Rust `String` cannot hold one.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CanonicalError(pub String);
+
+impl std::fmt::Display for CanonicalError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(formatter, "{}", self.0)
+    }
+}
+impl std::error::Error for CanonicalError {}
+
+/// Python `json.dumps(obj, sort_keys=True)` for a value that is never hashed or signed: a line of the
+/// connector's JSONL sink. Sorted keys, the default `(", ", ": ")` separators, `ensure_ascii` escaping, ints
+/// of any width, floats as `repr(float)`. It is `prismpath.canon.plain_dumps(..., sort_keys=True)`. Nothing
+/// that is hashed or signed is written with it (canon/2 is: `canon2_bytes`), and a test holds every call of
+/// it to a list of sink and message writers. A number beyond the double range is refused with
+/// `CanonicalError`; it is never written as `Infinity`.
+pub fn plain_dumps(val: &Value) -> Result<String, CanonicalError> {
+    Ok(match val {
         Value::Null => "null".to_string(),
         Value::Bool(bool_val) => bool_val.to_string(),
         Value::Number(num_val) => {
@@ -63,31 +76,181 @@ pub fn py_canonical_string(val: &Value, spaced: bool) -> String {
                 i_val.to_string()
             } else if let Some(u_val) = num_val.as_u64() {
                 u_val.to_string()
+            } else if let Some(integer) = beyond_64_bit_integer(num_val) {
+                integer
             } else {
-                py_float_repr(num_val.as_f64().unwrap_or(f64::NAN))
+                match crate::value::number_to_f64(num_val) {
+                    Some(float) => py_float_repr(float),
+                    None => return Err(CanonicalError("NaN, Infinity and -Infinity have no JSON form".to_string())),
+                }
             }
         }
         Value::String(raw) => py_json_quote(raw),
         Value::Array(arr_val) => {
-            let items: Vec<String> = arr_val.iter().map(|item| py_canonical_string(item, spaced)).collect();
-            format!("[{}]", items.join(item_sep))
+            let items = arr_val.iter().map(plain_dumps).collect::<Result<Vec<String>, _>>()?;
+            format!("[{}]", items.join(", "))
         }
         Value::Object(obj_map) => {
             let sorted: BTreeMap<&String, &Value> = obj_map.iter().collect();
-            let items: Vec<String> = sorted
+            let items = sorted
                 .iter()
-                .map(|(key, item)| format!("{}{}{}", py_json_quote(key), key_sep, py_canonical_string(item, spaced)))
-                .collect();
-            format!("{{{}}}", items.join(item_sep))
+                .map(|(key, item)| Ok(format!("{}: {}", py_json_quote(key), plain_dumps(item)?)))
+                .collect::<Result<Vec<String>, CanonicalError>>()?;
+            format!("{{{}}}", items.join(", "))
+        }
+    })
+}
+
+// canon/2, the one encoding of everything hashed or signed
+
+/// The encoding every hashed or signed document is written in, named by the document's own
+/// `encoding` member (`prismpath.canon.CANON2` in Python).
+pub const CANON2: &str = "canon/2";
+pub const ENCODING_KEY: &str = "encoding";
+/// The domain a signature over a canon/2 document is computed over, before the document's bytes, when
+/// its format has no domain of its own (`prismpath.canon.CANON2_DOMAIN`).
+pub const CANON2_DOMAIN: &[u8] = b"prismpath.canon/2\x00";
+
+/// `canon/2` for an object that names it. Any other tag, an object with no tag (canon/1, retired) and a
+/// value that is not an object are refused. `prismpath.canon.encoding_of`.
+pub fn encoding_of(val: &Value) -> Result<&'static str, CanonicalError> {
+    match val.as_object().and_then(|obj| obj.get(ENCODING_KEY)) {
+        None => Err(CanonicalError(
+            "a document without \"encoding\": \"canon/2\" is refused: canon/1 is retired and is not read, hashed or verified".to_string(),
+        )),
+        Some(Value::String(tag)) if tag == CANON2 => Ok(CANON2),
+        Some(other) => Err(CanonicalError(format!(
+            "unknown encoding {}: only canon/2 is read",
+            other.to_string().chars().take(40).collect::<String>()
+        ))),
+    }
+}
+
+/// The canon/2 bytes of `val`, the bytes every writer hashes and signs. A float, an integer beyond plus
+/// or minus 2^53 minus 1 and nesting deeper than 128 are refused, never converted.
+pub fn canon2_bytes(val: &Value) -> Result<Vec<u8>, CanonicalError> {
+    crate::canon2::write_json(val).map_err(|error| CanonicalError(format!("no canon/2 form: {error}")))
+}
+
+/// The message of the refusal of a float in hashed content, the same words as
+/// `prismpath.canon.FloatRefused`.
+pub const FLOAT_REFUSED: &str =
+    "a float is refused in hashed content: supply an integer of a stated unit (microseconds, basis points, bytes) or a decimal string";
+
+/// The canon/2 bytes of content PrismPath hashes but did not write (a worker's outcome, a connector's
+/// data). canon/2 has no float and PrismPath writes no spelling of one, so a number with a fraction or an
+/// exponent anywhere in the content is refused (`FLOAT_REFUSED`), never converted. The caller supplies an
+/// integer of a stated unit or a decimal string. `prismpath.canon.content_bytes`.
+pub fn content_bytes(val: &Value) -> Result<Vec<u8>, CanonicalError> {
+    fn is_float(val: &Value) -> bool {
+        match val {
+            Value::Number(number) => number.as_i64().is_none() && number.as_u64().is_none() && beyond_64_bit_integer(number).is_none(),
+            Value::Array(items) => items.iter().any(is_float),
+            Value::Object(members) => members.values().any(is_float),
+            _ => false,
         }
     }
+    if is_float(val) {
+        return Err(CanonicalError(FLOAT_REFUSED.to_string()));
+    }
+    canon2_bytes(val)
+}
+
+/// `val` with `"encoding": "canon/2"`.
+pub fn tagged(mut val: Value) -> Value {
+    if let Value::Object(obj) = &mut val {
+        obj.insert(ENCODING_KEY.to_string(), Value::String(CANON2.to_string()));
+    }
+    val
+}
+
+/// The bytes a document is hashed over: its canon/2 bytes. A document that does not name canon/2 is
+/// refused. `prismpath.canon.document_bytes`.
+pub fn document_bytes(val: &Value) -> Result<Vec<u8>, CanonicalError> {
+    encoding_of(val)?;
+    canon2_bytes(val)
+}
+
+/// What a signature over `val` covers when its format has no domain of its own: `CANON2_DOMAIN` and the
+/// canon/2 bytes. A document that does not name canon/2 is refused. `prismpath.canon.signed_message`.
+pub fn signed_message(val: &Value) -> Result<Vec<u8>, CanonicalError> {
+    encoding_of(val)?;
+    let mut message = CANON2_DOMAIN.to_vec();
+    message.extend(canon2_bytes(val)?);
+    Ok(message)
+}
+
+/// The registered cause of a hashed or signed document that reads as canon/2 but is not its exact
+/// canonical bytes (`prismpath.canon.NotCanonical.CAUSE`).
+pub const NOT_CANONICAL_CAUSE: &str = "document:not-canonical";
+
+impl CanonicalError {
+    /// The document read as canon/2 but was not its exact canonical bytes: the refusal whose registered
+    /// cause is `document:not-canonical`.
+    pub fn is_not_canonical(&self) -> bool {
+        self.0.starts_with(NOT_CANONICAL_CAUSE)
+    }
+}
+
+const NOT_CANONICAL_HELP: &str =
+    "a hashed or signed document must be its exact canonical canon/2 bytes; write it through `prismpath canonicalize` first";
+
+/// A document file or a JSON Lines line holds the canonical bytes followed by one line feed, the record
+/// terminator, which is not part of the document; exactly that one byte is taken off.
+fn strip_terminator(text: &str) -> &str {
+    text.strip_suffix('\n').unwrap_or(text)
+}
+
+/// Read a document that is hashed or signed: an object that names canon/2, given as exactly its canonical
+/// canon/2 bytes (followed by at most the one line feed that ends a file or a line). A float, a duplicate
+/// key or an out of range integer is refused, and so is a document in any spelling but its canonical one
+/// (`document:not-canonical`); an untagged object, another tag and a value that is not an object are
+/// refused. `prismpath.canon.loads_document`.
+pub fn read_document(text: &str) -> Result<Value, CanonicalError> {
+    let text = strip_terminator(text);
+    let val = crate::value::parse_plain(text).map_err(|error| CanonicalError(error.to_string()))?;
+    if !val.is_object() {
+        return Err(CanonicalError("a document that is hashed or signed is a JSON object".to_string()));
+    }
+    encoding_of(&val)?;
+    crate::canon2::read_str(text).map_err(|error| match error {
+        crate::canon2::Canon2Error::NotCanonical => CanonicalError(format!("{NOT_CANONICAL_CAUSE}: {NOT_CANONICAL_HELP}")),
+        error => CanonicalError(format!("a document that is read as canon/2 does not read under it: {error}")),
+    })?;
+    Ok(val)
+}
+
+/// The canonical canon/2 bytes of a document a person wrote, in any legal spelling (whitespace, member
+/// order, escapes), so that it can be hashed, signed or read; every other canon/2 rule still holds, and
+/// the result is exactly what `read_document` and `canon2::read` accept. The writer's side of the strict
+/// reader (`prismpath.canon.canonicalize_document`).
+pub fn canonicalize_document(text: &str) -> Result<Vec<u8>, CanonicalError> {
+    crate::canon2::canonicalize(strip_terminator(text).as_bytes())
+        .map_err(|error| CanonicalError(format!("no canon/2 form: {error}")))
+}
+
+/// An integer too wide for i64 and u64, written the way Python writes it: every digit, no
+/// exponent. serde_json is built with `arbitrary_precision`, so such a number still carries the
+/// digits it was read from; a number written as a float (`1.0`, `1e30`) is not an integer here,
+/// and `-0` is Python's `0`.
+fn beyond_64_bit_integer(num_val: &serde_json::Number) -> Option<String> {
+    let text = num_val.to_string();
+    let digits = text.strip_prefix('-').unwrap_or(&text);
+    if digits.is_empty() || !digits.bytes().all(|byte| byte.is_ascii_digit()) {
+        return None;
+    }
+    if digits.bytes().all(|byte| byte == b'0') {
+        return Some("0".to_string());
+    }
+    Some(text)
 }
 
 /// Python `repr(float)`, which is what `json.dumps` writes for a float: the shortest digits that
 /// round trip, fixed notation from 1e-4 up to (not including) 1e16 with a `.0` when integral, and
 /// otherwise an exponent with an explicit sign and at least two digits (`1e-05`, `1.5e+20`).
 /// Rust's own `Display` differs from this outside that window (`0.00001`, `150000000000000000000`).
-/// Non finite values are written as `json.dumps` writes them (`NaN`, `Infinity`, `-Infinity`).
+/// Non finite values are written as `json.dumps` writes them (`NaN`, `Infinity`, `-Infinity`), so
+/// this function is a spelling of `repr(float)` only; canonical JSON never calls it with one.
 pub fn py_float_repr(value: f64) -> String {
     if value.is_nan() {
         return "NaN".to_string();
@@ -176,10 +339,20 @@ pub fn state_to_json(st: &RunState) -> Value {
         visits.insert(key.clone(), Value::Number((*count).into()));
     }
     map_obj.insert("visits".to_string(), Value::Object(visits));
+    if !st.dropped.is_empty() {
+        let mut dropped = serde_json::Map::new();
+        for (key, count) in &st.dropped {
+            dropped.insert(key.clone(), Value::Number((*count).into()));
+        }
+        map_obj.insert("_state_dropped".to_string(), Value::Object(dropped));
+    }
     map_obj.insert(
         "transcript".to_string(),
         Value::Array(st.transcript.iter().map(EngineValue::to_json).collect()),
     );
+    if !st.guard_errors.is_empty() {
+        map_obj.insert("_guard_errors".to_string(), Value::Array(st.guard_errors.iter().map(EngineValue::to_json).collect()));
+    }
     if !st.errors.is_empty() {
         let mut errs = serde_json::Map::new();
         for (key, count) in &st.errors {
@@ -213,6 +386,14 @@ pub fn pending_to_json(pending: &Pending) -> Value {
         );
     } else if let Some(reason) = &pending.reason {
         map_obj.insert("reason".to_string(), Value::String(reason.clone()));
+    }
+    if let Some(violations) = &pending.violations {
+        // a contract violation's evidence packet is the node, the reason and the problems, with no candidates
+        map_obj.insert(
+            "violations".to_string(),
+            Value::Array(violations.iter().map(|item| Value::String(item.clone())).collect()),
+        );
+        return Value::Object(map_obj);
     }
     if let Some(would_pick) = &pending.would_pick {
         map_obj.insert("would_pick".to_string(), Value::String(would_pick.clone()));
@@ -286,7 +467,7 @@ pub fn save_checkpoint(
         "pending_decision": result.pending.as_ref().map(pending_to_json).unwrap_or(Value::Null),
         "steps": result.steps.iter().map(|step| serde_json::json!({
             "node": step.node, "target": step.target,
-            "used": step.used.split(':').next().unwrap_or(&step.used),
+            "used": step.used,
         })).collect::<Vec<_>>(),
     });
     atomic_write(path, &serde_json::to_string_pretty(&doc).map_err(|err| CheckpointError(err.to_string()))?)
@@ -294,7 +475,7 @@ pub fn save_checkpoint(
 
 pub fn load_checkpoint(path: &str) -> Result<Value, CheckpointError> {
     let text = std::fs::read_to_string(path).map_err(|err| CheckpointError(err.to_string()))?;
-    let cp: Value = serde_json::from_str(&text).map_err(|err| CheckpointError(err.to_string()))?;
+    let cp: Value = crate::value::parse_plain(&text).map_err(|err| CheckpointError(err.to_string()))?;
     if cp.get("version").and_then(|ver| ver.as_i64()) != Some(CHECKPOINT_VERSION) {
         return cerr(format!(
             "unsupported checkpoint version {:?} (this build expects {CHECKPOINT_VERSION})",
@@ -337,16 +518,18 @@ fn check_flow_unchanged(cp: &Value) -> Result<(), CheckpointError> {
 
 // run_durable / resume
 
-pub fn run_durable<AgentFn>(
+pub fn run_durable<WorkErr, AgentFn>(
     flow_path: &str,
     agent: AgentFn,
     checkpoint_path: &str,
     type_gate: bool,
-    opts: RunOpts,
+    mut opts: RunOpts,
 ) -> Result<RunResult, EngineError>
 where
-    AgentFn: FnMut(&str, &str, &RunState) -> Result<EngineValue, String>,
+    AgentFn: FnMut(&str, &str, &RunState) -> Result<EngineValue, WorkErr>,
+    WorkErr: Into<WorkerError>,
 {
+    opts.type_gate = opts.type_gate || type_gate;
     let text = std::fs::read_to_string(flow_path)
         .map_err(|err| EngineError::Unhandled(format!("cannot read flow {flow_path:?}: {err}")))?;
     let graph = parse(&text);
@@ -378,6 +561,8 @@ fn prior_steps(cp: &Value) -> Vec<Step> {
                     margin: None,
                     sims: None,
                     locked: None,
+                    error_type: None,
+                    guard_errors: None,
                 })
                 .collect()
         })
@@ -394,7 +579,7 @@ fn push_transcript(state_v: &mut EngineValue, entry: EngineValue) {
     }
 }
 
-pub fn resume<AgentFn>(
+pub fn resume<WorkErr, AgentFn>(
     checkpoint_path: &str,
     agent: AgentFn,
     choose: Option<&str>,
@@ -403,7 +588,8 @@ pub fn resume<AgentFn>(
     write_back: bool,
 ) -> Result<RunResult, CheckpointError>
 where
-    AgentFn: FnMut(&str, &str, &RunState) -> Result<EngineValue, String>,
+    AgentFn: FnMut(&str, &str, &RunState) -> Result<EngineValue, WorkErr>,
+    WorkErr: Into<WorkerError>,
 {
     let cp = load_checkpoint(checkpoint_path)?;
     check_flow_unchanged(&cp)?;
@@ -412,7 +598,7 @@ where
     let text = std::fs::read_to_string(flow_path)
         .map_err(|err| CheckpointError(format!("cannot read flow {flow_path:?}: {err}")))?;
     let graph = parse(&text);
-    let mut state_v = EngineValue::from_json(cp.get("state").unwrap_or(&Value::Null));
+    let mut state_v = EngineValue::try_from_json(cp.get("state").unwrap_or(&Value::Null)).map_err(CheckpointError)?;
     if !matches!(state_v, EngineValue::Obj(_)) {
         state_v = EngineValue::Obj(vec![]);
     }
@@ -446,6 +632,7 @@ where
             state: Some(state_v),
             seed_path,
             seed_steps,
+            type_gate,
             ..Default::default()
         };
         let fp = flow_path.to_string();
@@ -493,6 +680,8 @@ where
             margin: None,
             sims: None,
             locked: None,
+            error_type: None,
+            guard_errors: None,
         });
         return run_seeded(choose, state_v, seed_path, steps, agent);
     }
@@ -541,6 +730,8 @@ where
             margin: None,
             sims: None,
             locked: None,
+            error_type: None,
+            guard_errors: None,
         });
         return run_seeded(target, state_v, seed_path, steps, agent);
     }
@@ -706,12 +897,15 @@ pub fn verify_context_chain(segments: &[ContextSegment]) -> bool {
 
 // attestation manifests (C1/C4)
 
-fn manifest_hash_of(manifest_val: &Value) -> String {
+/// sha256 over the canon/2 bytes of every field but `manifest_hash`. A manifest that does not name canon/2
+/// is refused. `canon.manifest_hash`.
+fn manifest_hash_of(manifest_val: &Value) -> Result<String, CanonicalError> {
     let mut body = manifest_val.clone();
     if let Value::Object(obj_map) = &mut body {
         obj_map.remove("manifest_hash");
     }
-    hex::encode(Sha256::digest(py_canonical_string(&body, true).as_bytes()))
+    encoding_of(manifest_val)?;
+    Ok(hex::encode(Sha256::digest(canon2_bytes(&body)?)))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -732,12 +926,16 @@ pub fn provenance_manifest(
         "gate_id": gate_id,
         "knowledge_base_hash": knowledge_base_hash,
         "ingestion_hashes": ingestion_hashes,
+        "encoding": CANON2,
     });
-    let manifest_sha = manifest_hash_of(&manifest_val);
+    // the body holds only the strings and nulls passed in above, which always have a canonical form
+    let manifest_sha = manifest_hash_of(&manifest_val).expect("a manifest of strings has a canonical form");
     manifest_val["manifest_hash"] = Value::String(manifest_sha);
     manifest_val
 }
 
+/// An override of `prior`, which may be any caller supplied manifest: a member of it with no canonical
+/// form (a number beyond the double range) is refused with `CanonicalError`.
 pub fn override_manifest(
     prior: &Value,
     overrider_id: &str,
@@ -745,7 +943,7 @@ pub fn override_manifest(
     new_root_hex: &str,
     new_label: Option<&str>,
     created: &str,
-) -> Value {
+) -> Result<Value, CanonicalError> {
     let label = new_label.map(|lbl| lbl.to_string()).unwrap_or_else(|| {
         format!("override:{}", prior.get("label").and_then(|lbl| lbl.as_str()).unwrap_or(""))
     });
@@ -763,14 +961,19 @@ pub fn override_manifest(
         "gate_id": prior.get("gate_id"),
         "knowledge_base_hash": prior.get("knowledge_base_hash"),
         "ingestion_hashes": prior.get("ingestion_hashes").cloned().unwrap_or(serde_json::json!([])),
+        "encoding": CANON2,
     });
-    let manifest_sha = manifest_hash_of(&manifest_val);
+    let manifest_sha = manifest_hash_of(&manifest_val)?;
     manifest_val["manifest_hash"] = Value::String(manifest_sha);
-    manifest_val
+    Ok(manifest_val)
 }
 
+/// A manifest with no canonical form does not verify.
 pub fn verify_manifest(manifest_val: &Value) -> bool {
-    manifest_val.get("manifest_hash").and_then(|hash_val| hash_val.as_str()) == Some(manifest_hash_of(manifest_val).as_str())
+    match manifest_hash_of(manifest_val) {
+        Ok(expected) => manifest_val.get("manifest_hash").and_then(|hash_val| hash_val.as_str()) == Some(expected.as_str()),
+        Err(_) => false,
+    }
 }
 
 pub fn salt_leaf(leaf_hex: &str, secret: &str) -> Result<String, CheckpointError> {

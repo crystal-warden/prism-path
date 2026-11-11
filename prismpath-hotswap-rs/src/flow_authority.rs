@@ -6,18 +6,19 @@
 //! two file shape a pack manifest has:
 //!
 //! ```text
-//! {"format": "prismpath-flow-manifest/1", "flow": "<name>", "flow_sha256": "<sha256 of the flow>",
+//! {"format": "prismpath-flow-manifest/1", "encoding": "canon/2", "flow": "<name>", "flow_sha256": "<sha256 of the flow>",
 //!  "version": 3, "fields": {...}, "key_id": "<sha256 of the authority public key>", "created": "..."}
 //! ```
 //!
-//! The signature covers the canonical compact JSON of the manifest (the bytes a pack manifest's
-//! covers; the `format` field keeps the two apart). The flow's hash is the SHA-256 of its UTF-8 text
+//! The signature covers the canon/2 domain and the canon/2 bytes of the manifest (the bytes a pack
+//! manifest's covers; the `format` field keeps the two apart); a manifest without `encoding` (canon/1,
+//! retired) is refused as `manifest:bad-format`. The flow's hash is the SHA-256 of its UTF-8 text
 //! with line endings read as LF, so a checkout that turns LF into CRLF does not unauthorize a flow
 //! and a change to any character does.
 //!
 //! Verify only: this crate holds no signing path for flow manifests. Refusals are the registry
 //! causes (`prismpath/kernel/causes.py`), in the order a reader would ask: `sig:missing`,
-//! `manifest:bad-format`, `sig:invalid`, `sig:revoked-key`, `manifest:key-id-mismatch`,
+//! `manifest:bad-format`, `document:not-canonical`, `sig:invalid`, `sig:revoked-key`, `manifest:key-id-mismatch`,
 //! `flow:sha256-mismatch` (87), `flow:version-replay` (88).
 //!
 //! The authority key is the one `swap keygen` writes. The instance key that signs root statements
@@ -25,7 +26,7 @@
 //! `root_statement::check_separation` first, as the Python `run` does.
 
 use crate::pyval::{py_int, py_str, universal_newlines};
-use crate::{canonical_bytes, sha256_hex, verify_ed25519};
+use crate::{canonical_bytes, sha256_hex, signed_bytes, verify_ed25519};
 use serde_json::{json, Map, Value};
 
 pub const FLOW_MANIFEST_FORMAT: &str = "prismpath-flow-manifest/1";
@@ -46,9 +47,10 @@ pub fn flow_sha256(flow: &[u8]) -> Option<String> {
     Some(sha256_hex(universal_newlines(text).as_bytes()))
 }
 
-/// The manifest's content address: SHA-256 of the canonical bytes its signature covers.
-pub fn manifest_sha256(manifest: &Value) -> String {
-    sha256_hex(&canonical_bytes(manifest))
+/// The manifest's content address: SHA-256 of the canonical bytes its signature covers. `None` for a
+/// manifest with no canonical form (a number beyond the double range), which no strict reader yields.
+pub fn manifest_sha256(manifest: &Value) -> Option<String> {
+    canonical_bytes(manifest).ok().map(|bytes| sha256_hex(&bytes))
 }
 
 /// What a root statement and a receipt record as the authorization in force: the manifest hash, the
@@ -86,7 +88,7 @@ impl FlowVerdict {
     pub fn to_json(&self) -> Value {
         json!({
             "ok": self.ok, "causes": self.causes,
-            "manifest_sha256": self.manifest.as_ref().map(manifest_sha256),
+            "manifest_sha256": self.manifest.as_ref().and_then(manifest_sha256),
             "authorization": self.authorization(),
         })
     }
@@ -107,8 +109,10 @@ pub fn verify_flow(
     let (Some(manifest_text), Some(signature)) = (manifest_text, signature) else {
         return FlowVerdict::refuse(SIG_MISSING, None);
     };
-    let Ok(manifest) = serde_json::from_str::<Value>(manifest_text) else {
-        return FlowVerdict::refuse(MANIFEST_BAD_FORMAT, None);
+    let manifest = match prismpath_rs::durable::read_document(manifest_text) {
+        Ok(manifest) => manifest,
+        Err(error) if error.is_not_canonical() => return FlowVerdict::refuse(prismpath_rs::durable::NOT_CANONICAL_CAUSE, None),
+        Err(_) => return FlowVerdict::refuse(MANIFEST_BAD_FORMAT, None),
     };
     let as_object = manifest.is_object().then(|| manifest.clone());
     if !manifest.is_object()
@@ -117,7 +121,9 @@ pub fn verify_flow(
     {
         return FlowVerdict::refuse(MANIFEST_BAD_FORMAT, as_object);
     }
-    let payload = canonical_bytes(&manifest);
+    let Ok(payload) = signed_bytes(&manifest) else {
+        return FlowVerdict::refuse(MANIFEST_BAD_FORMAT, as_object);
+    };
     let signer_id = trusted
         .iter()
         .find(|public| verify_ed25519(public, &payload, signature))
@@ -155,7 +161,7 @@ pub struct VersionFloor {
 impl VersionFloor {
     /// Read the floor file's text (a JSON object of flow name to entry).
     pub fn from_json_str(text: &str) -> Result<VersionFloor, String> {
-        match serde_json::from_str::<Value>(text).map_err(|error| error.to_string())? {
+        match prismpath_rs::value::parse_plain(text).map_err(|error| error.to_string())? {
             Value::Object(entries) => Ok(VersionFloor { entries }),
             _ => Err("the version floor is not a JSON object".to_string()),
         }
@@ -194,9 +200,10 @@ impl VersionFloor {
             }
         }
         let flow_hash = manifest.get("flow_sha256").ok_or("the manifest has no flow_sha256")?.clone();
+        let manifest_hash = manifest_sha256(manifest).ok_or("the manifest has no canonical form")?;
         self.entries.insert(
             name,
-            json!({"version": version, "flow_sha256": flow_hash, "manifest_sha256": manifest_sha256(manifest)}),
+            json!({"version": version, "flow_sha256": flow_hash, "manifest_sha256": manifest_hash}),
         );
         Ok(())
     }

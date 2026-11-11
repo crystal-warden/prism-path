@@ -13,6 +13,10 @@ guarantees, enforced on every run:
      Python verifiers, gives the committed verdict.
   3. THE RUST VERIFIER AGREES. `prismpath-hotswap-rs` replays the same file and must give every
      verdict (skipped where cargo is not installed; CI runs the crate's tests directly as well).
+
+`receipts.json` is canon/2: events with `ts_us` and the `encoding` tag, `prismpath-root-statement/2`
+statements, flow manifests signed over the canon/2 domain. canon/1 is retired and has no twin: the cases
+built from what it wrote are in the set as refusals, with the findings the reference gives.
 """
 import json
 import shutil
@@ -39,6 +43,7 @@ def _generator():
 GEN = _generator()
 DOC = json.loads(VECTORS.read_text(encoding="utf-8"))
 CASES = DOC["cases"]
+SETS = {"canon2": CASES}
 
 
 def test_no_silent_drift():
@@ -47,9 +52,11 @@ def test_no_silent_drift():
         "run `python prismpath/portable/gen_receipt_fixtures.py` and review the diff.")
 
 
-def test_the_set_covers_every_kind_and_every_named_tamper():
+@pytest.mark.parametrize("encoding", sorted(SETS))
+def test_the_set_covers_every_kind_and_every_named_tamper(encoding):
+    CASES = SETS[encoding]
     kinds = {case["kind"] for case in CASES}
-    assert kinds == {"canon", "merkle", "trail", "bundle", "flow", "floor", "separation"}
+    assert kinds == {"merkle", "trail", "bundle", "flow", "floor", "separation"}
     findings = {finding["finding"] for case in CASES if case["kind"] == "trail" for finding in case["expect"]["findings"]}
     assert findings >= {"bad_format", "key_id_mismatch", "bad_signature", "unpinned_key", "authority_key", "chain_broken",
                         "leaf_count_regressed", "log_truncated", "root_mismatch", "no_statements", "interrupted_statement"}
@@ -57,18 +64,35 @@ def test_the_set_covers_every_kind_and_every_named_tamper():
     assert statuses == {"signed", "signed-unpinned", "unsigned", "invalid"}
     causes = {cause for case in CASES if case["kind"] == "flow" for cause in case["expect"]["causes"]}
     assert causes == {"sig:missing", "sig:invalid", "sig:revoked-key", "manifest:key-id-mismatch", "manifest:bad-format",
-                      "flow:sha256-mismatch", "flow:version-replay"}
+                      "flow:sha256-mismatch", "flow:version-replay", "document:not-canonical"}
     assert any(case["kind"] == "flow" and case["expect"]["ok"] for case in CASES)
 
 
 def _ids(kind):
-    return [pytest.param(case, id=case["name"]) for case in CASES if case["kind"] == kind]
+    return [pytest.param(case, id=f"{encoding}:{case['name']}")
+            for encoding, cases in sorted(SETS.items()) for case in cases if case["kind"] == kind]
 
 
-@pytest.mark.parametrize("case", _ids("canon"))
-def test_canon(case):
-    from prismpath import canon
-    assert canon.canonical_compact(json.loads(case["json"])).decode("ascii") == case["expect"]
+def test_the_set_is_canon2_and_what_canon1_wrote_is_refused():
+    """Every log line and statement of `receipts.json` names canon/2 but the lines built as canon/1 on purpose,
+    and every one of those is refused."""
+    untagged = 0
+    for case in CASES:
+        if case["kind"] != "trail":
+            continue
+        for text in (case["log_text"], case["statements_text"] or ""):
+            for line in text.splitlines():
+                try:
+                    record = json.loads(line)
+                except ValueError:
+                    continue
+                if isinstance(record, dict) and "encoding" not in record:
+                    untagged += 1
+    assert untagged > 0
+    refused = {case["name"]: case["expect"] for case in CASES if "canon1" in case["name"]}
+    assert refused
+    for name, expect in refused.items():
+        assert expect.get("status", "invalid") == "invalid" or expect.get("ok") is False, name
 
 
 @pytest.mark.parametrize("case", _ids("merkle"))

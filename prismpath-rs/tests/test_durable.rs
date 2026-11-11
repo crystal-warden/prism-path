@@ -6,6 +6,9 @@
 //! Python reference froze (flow_path/saved_at dropped; everything else must match).
 #![cfg(feature = "durable")]
 
+mod common;
+
+use common::Scratch;
 use prismpath_rs::durable::*;
 use prismpath_rs::{RunState, V};
 use serde_json::Value;
@@ -18,27 +21,6 @@ fn fixtures() -> Value {
     );
     serde_json::from_str(&std::fs::read_to_string(path).expect("read durable.json"))
         .expect("parse durable.json")
-}
-
-#[test]
-fn canonical_json_is_byte_identical_to_python() {
-    let fx = fixtures();
-    let cases = fx["canonical"].as_array().unwrap();
-    for case in cases {
-        assert_eq!(
-            py_canonical_string(&case["obj"], false),
-            case["compact"].as_str().unwrap(),
-            "compact bytes for {}",
-            case["obj"]
-        );
-        assert_eq!(
-            py_canonical_string(&case["obj"], true),
-            case["spaced"].as_str().unwrap(),
-            "spaced bytes for {}",
-            case["obj"]
-        );
-    }
-    eprintln!("canonical: {}/{} byte-identical", cases.len(), cases.len());
 }
 
 #[test]
@@ -73,7 +55,8 @@ fn manifests_verify_and_tamper_fails() {
         over["root"].as_str().unwrap(),
         None,
         over["created"].as_str().unwrap(),
-    );
+    )
+    .unwrap();
     assert_eq!(rebuilt_over, *over, "Rust-built override manifest != Python's");
 }
 
@@ -114,10 +97,8 @@ fn normalize(mut cp: Value) -> Value {
     cp
 }
 
-fn tmpdir() -> std::path::PathBuf {
-    let dir = std::env::temp_dir().join(format!("pp_durable_{}", std::process::id()));
-    std::fs::create_dir_all(&dir).unwrap();
-    dir
+fn tmpdir() -> Scratch {
+    Scratch::new("durable")
 }
 
 #[test]
@@ -170,7 +151,6 @@ fn checkpoint_scenarios_match_the_python_reference() {
         }
     }
     eprintln!("checkpoints: {}/{} scenarios match", scenarios.len(), scenarios.len());
-    let _ = std::fs::remove_dir_all(&dir);
 }
 
 #[test]

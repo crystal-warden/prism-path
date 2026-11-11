@@ -12,6 +12,14 @@ record through the actual XDP program via BPF_PROG_TEST_RUN.
 
 Record format (LE): <s32 expected_target><u32 tbl_len><tbl bytes><u32 pkt_len><pkt bytes>
 Usage: cert_corpus.py <out.packets.bin>
+       cert_corpus.py --boundary <out.packets.bin>
+
+`--boundary` writes the other corpus, the evaluator's own bounds rather than the frozen vectors: an
+operand stack at the depth the source language can reach and at STACK_MAX, programs of 33, 2,000 and
+4,000 words, and a node of 200 edges with the match on the last. Each record's expectation is an
+RPN evaluation written here, independent of both the kernel and interp.c, and interp.c is the second
+referee as above. The in kernel job loads the program under the verifier and runs these records, so a
+change to the evaluator that the verifier refuses, or that misroutes at a bound, fails there.
 """
 import collections
 import json
@@ -53,7 +61,108 @@ def interp_target(ppt_bytes, regs_payload, tmp):
     return -1, False
 
 
+def rpn(img, prog, ctx):
+    """One edge program evaluated on its own stack, the semantics of interp.c written independently."""
+    names = {index: name for name, index in img.fields.items()}
+    stack = []
+    for word in prog:
+        if word < 0x8000:
+            field, op, _ty, val = img.atoms[word]
+            reading = ctx[names[field]]
+            stack.append({pc.OP_EQ: reading == val, pc.OP_NE: reading != val, pc.OP_LT: reading < val,
+                          pc.OP_LE: reading <= val, pc.OP_GT: reading > val, pc.OP_GE: reading >= val}[op])
+        elif word == pc.OPC_NOT:
+            stack.append(not stack.pop())
+        elif word in (pc.OPC_AND, pc.OPC_OR):
+            right, left = stack.pop(), stack.pop()
+            stack.append((left and right) if word == pc.OPC_AND else (left or right))
+        else:
+            stack.append(word == pc.OPC_TRUE)
+    return stack[0]
+
+
+def boundary_images():
+    """[(name, image, ctx, expected target)] at and past the evaluator's old bounds, all within the new."""
+    out = []
+
+    def single(name, prog_of, edges=1, xs=(0, 1, 2, 7, 63)):
+        for x in xs:
+            img = pc.TableImage(max_steps=1)
+            field = img.field("x")
+            prog = prog_of(img, field)
+            ctx = {"x": x}
+            img.nodes = [("p", [(1, name, prog)]), ("t", [])]
+            img.start = 0
+            out.append((f"{name} x={x}", img, ctx, 1 if rpn(img, prog, ctx) else -1))
+
+    def chain(depth):
+        """depth pushes, then depth - 1 operators alternating AND and OR: the stack reaches depth."""
+        def build(img, field):
+            prog = [img.atom(field, pc.OP_NE, pc.TY_INT, k) for k in range(depth)]
+            prog += [pc.OPC_AND if k % 2 else pc.OPC_OR for k in range(depth - 1)]
+            return prog
+        return build
+
+    def listed(count, negate, words=0):
+        """x in [0..count), `words` long by repeating the first atom (a program may reuse an atom)."""
+        def build(img, field):
+            prog = []
+            for k in range(count):
+                prog.append(img.atom(field, pc.OP_EQ, pc.TY_INT, k))
+                if k:
+                    prog.append(pc.OPC_OR)
+            while len(prog) + 2 <= words - negate:
+                prog += [0, pc.OPC_OR]
+            return prog + ([pc.OPC_NOT] if negate else [])
+        return build
+
+    single("depth 25", chain(25))
+    single("depth 63", chain(63))
+    single("depth 64 (STACK_MAX)", chain(64))
+    single("33 member list", listed(33, False), xs=(0, 32, 33, 99))
+    single("not in a 33 member list", listed(33, True), xs=(0, 32, 33, 99))
+    single("not in a 1000 member list", listed(1000, True), xs=(0, 999, 1000, 5000))
+    single("4000 word program", listed(1000, True, 4000), xs=(0, 999, 1000, 5000))
+    for x in (0, 150, 199, 400):
+        img = pc.TableImage(max_steps=1)
+        field = img.field("x")
+        edges, expected = [], -1
+        for k in range(200):
+            prog = [img.atom(field, pc.OP_EQ, pc.TY_INT, k)]
+            edges.append((k + 1, f"x == {k}", prog))
+            if expected < 0 and x == k:
+                expected = k + 1
+        img.nodes = [("p", edges)] + [(f"t{k}", []) for k in range(200)]
+        img.start = 0
+        out.append((f"200 edges x={x}", img, {"x": x}, expected))
+    return out
+
+
+def boundary(out_path):
+    tmp = HERE / "scratch"; tmp.mkdir(exist_ok=True)
+    records, disagree = bytearray(), 0
+    for name, img, ctx, expected in boundary_images():
+        tbl = img.serialize()
+        refused = table_refusals(tbl)
+        if refused:
+            raise SystemExit(f"{name}: a boundary table is outside the evaluator's limits: {refused}")
+        regs_payload = pc.encode_regs(img, ctx, node_idx=0)
+        pkt = frame_packet(0, len(img.fields), regs_payload[4:])
+        target, matched = interp_target(tbl, regs_payload, tmp)
+        if target != expected:
+            disagree += 1
+            print(f"  DISAGREE {name}: interp.c {target}, expected {expected}")
+        records += struct.pack("<iI", expected, len(tbl)) + tbl + struct.pack("<I", len(pkt)) + pkt
+    out_path.write_bytes(records)
+    count = len(boundary_images())
+    print(f"BOUNDARY CORPUS: {count} records, interp.c reference vs independent RPN: {count - disagree}/{count} agree")
+    print(f"wrote {out_path}")
+    return 0 if disagree == 0 else 1
+
+
 def main():
+    if sys.argv[1] == "--boundary":
+        return boundary(Path(sys.argv[2]))
     out_path = Path(sys.argv[1])
     tmp = HERE / "scratch"; tmp.mkdir(exist_ok=True)
     cases = json.loads((CONF / "predicates.json").read_text())["cases"]

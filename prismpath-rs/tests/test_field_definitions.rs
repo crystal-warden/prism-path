@@ -63,8 +63,15 @@ fn a_refused_policy_is_disabled_and_the_engine_will_not_run_it() {
         let name = policy["name"].as_str().unwrap();
         let graph = parse(policy["flow"].as_str().unwrap());
         assert!(graph.field_error.is_some(), "[{name}] parsed although the reference refuses it");
+        // the refusal carries the reference's registered cause, and every problem's cause is registered
+        assert_eq!(graph.field_error_cause, policy["cause"].as_str(), "[{name}] the first problem's cause");
+        // every problem, in the core's order (docs/design/spec-verified-core.md, section 4), is the
+        // reference's: the same causes in the same order, so the first is the same refusal (D7)
+        let expected: Vec<&str> = policy["causes"].as_array().unwrap().iter().map(|cause| cause.as_str().unwrap()).collect();
+        assert_eq!(graph.field_error_causes, expected, "[{name}] the problems in the core's order");
+        assert!(graph.field_error_causes.iter().all(|cause| prismpath_rs::causes::code(cause).is_some()), "[{name}] an unregistered cause");
         assert!(graph.nodes.values().flat_map(|node| node.edges.iter()).all(|(_target, cond)| cond == "never"), "[{name}] an edge stayed live");
-        let outcome = run(&graph, |_node, _instruction, _state| Ok(Value::Null), RunOpts::default());
+        let outcome = run(&graph, |_node, _instruction, _state| Ok::<_, String>(Value::Null), RunOpts::default());
         assert!(matches!(outcome, Err(EngineError::InvalidFlow(_))), "[{name}] the engine ran a refused flow");
     }
 }
@@ -80,4 +87,21 @@ fn a_flow_without_definitions_is_untouched() {
 fn canonical_text_matches_the_reference_spelling() {
     let one = parse_definition("r", "fixed rounding=floor scale=10000 unit=ratio max=10000 min=0").unwrap();
     assert_eq!(one.canonical_text(), "fixed scale=10000 rounding=floor unit=ratio min=0 max=10000 absent=refused");
+}
+
+#[test]
+fn the_system_boundary_and_the_policy_check() {
+    use prismpath_rs::field_definitions::{policy_check, routed_fields, system_boundary};
+    let flow = "---\nname: t\nstart: s\nfield.x: int min=0 max=10\nfield.unused: bool\nfield.r: fixed scale=100 rounding=floor\n---\n## s\n-> hit: when x >= 5 and r >= 0.5\n-> miss: else\n## hit\n## miss\n";
+    let graph = parse(flow);
+    assert!(graph.field_error.is_none(), "{:?}", graph.field_error);
+    assert_eq!(routed_fields(&graph), vec!["r".to_string(), "x".to_string()]);
+    let reading = |pairs: &[(&str, Value)]| pairs.iter().map(|(key, value)| (key.to_string(), value.clone())).collect::<std::collections::HashMap<_, _>>();
+    let ok = reading(&[("x", Value::Num(5.0)), ("r", Value::Num(50.0))]);
+    assert_eq!(system_boundary(&graph, &ok), Some(("unused".to_string(), "missing")));
+    assert_eq!(policy_check(&graph, &ok), None);
+    let wide = reading(&[("x", Value::Num(11.0)), ("r", Value::Num(50.0)), ("unused", Value::Bool(true))]);
+    assert_eq!(system_boundary(&graph, &wide), Some(("x".to_string(), "out_of_range")));
+    assert_eq!(policy_check(&graph, &wide), Some(("x".to_string(), "out_of_range")));
+    assert_eq!(policy_check(&graph, &reading(&[("x", Value::Num(1.0))])), Some(("r".to_string(), "missing")));
 }

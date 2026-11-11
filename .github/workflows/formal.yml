@@ -33,8 +33,23 @@ jobs:
         run: cd formal && lake exe cache get
       - name: Build (modules, #guard bridge checks, axiom audit)
         run: cd formal && lake build
+      - name: The core oracle runs on the specification's example
+        run: |
+          cd formal
+          printf '%s' '{"fields":{"x":"int min=0 max=10"},"format":"prismpath.core/1","rules":[{"target":"hit","when":["cmp","x",">=",["num",5]]}]}' > /tmp/core_policy.json
+          printf '%s' '{"x":7}' > /tmp/core_r1.json
+          printf '%s' '{"x":11}' > /tmp/core_r2.json
+          .lake/build/bin/core-oracle /tmp/core_policy.json /tmp/core_r1.json /tmp/core_r2.json | tee /tmp/core_out.txt
+          grep -q '"target":"hit"' /tmp/core_out.txt
+          grep -q '"reason":"out_of_range"' /tmp/core_out.txt
+          printf '%s' '{"x": 7}' > /tmp/core_r3.json
+          .lake/build/bin/core-oracle /tmp/core_policy.json /tmp/core_r3.json | grep -q '"cause":"reading:not-canonical"'
+      - name: The differential harness, CI size (oracle, Python reference, Rust port, JS, Go, C and eBPF legs), and a run as evidence verified across languages
+        run: |
+          pip install pytest cryptography
+          PRISMPATH_REQUIRE_CORE_ORACLE=1 python -m pytest prismpath/tests/test_core_diff.py prismpath/tests/test_core_evidence.py -q
       - name: No sorry in the sources
-        run: "! grep -rn --include=*.lean -w sorry formal/FQ formal/FQ.lean"
+        run: "! grep -rn --include=*.lean -w sorry formal/FQ formal/FQ.lean formal/Core formal/Core.lean"
       - name: Bridge vectors are byte identical to a fresh generation from the frozen corpora
         run: |
           pip install numpy

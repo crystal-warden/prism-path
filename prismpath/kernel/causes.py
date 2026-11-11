@@ -90,6 +90,30 @@ _REGISTRY: Tuple[Tuple[int, str, str, str], ...] = (
     # manifest:key-id-mismatch); these two are the flow's own.
     (87, "flow:sha256-mismatch",         "authority", "flow document differs from the one its signed flow manifest names"),
     (88, "flow:version-replay",          "authority", "flow manifest version below the accepted floor, or equal to it with another flow"),
+    # -- the verified policy core (docs/design/spec-verified-core.md, section 5): the refusals of one
+    # decision over a policy image and a reading that had no row. A policy refusal is structural, like
+    # the pack verifier's (envelope); the two reading refusals are the decision's own (routing). The
+    # core's other refusals reuse rows already here: image:unknown-op, image:unknown-type,
+    # image:field-index-oob, route:contract-violation and route:no-matching-edge.
+    (89,  "policy:unreadable",           "envelope",  "the core's policy image is not a canon/2 document"),
+    (90,  "policy:shape",                "envelope",  "the policy image is not in the core's abstract syntax"),
+    (91,  "policy:not-level-m",          "envelope",  "a condition names a field Level M does not allow, or nests deeper than the bound of 50"),
+    (92,  "policy:definition",           "envelope",  "a field definition breaks the definition grammar"),
+    (93,  "policy:engine-counter",       "envelope",  "a condition reads an engine counter, which the one decision core does not have"),
+    (94,  "policy:kind-mismatch",        "envelope",  "an atom compares a field with an operator or constant its kind does not take"),
+    (95,  "policy:rounding",             "envelope",  "an atom on a fixed field uses an operator its rounding mode does not carry"),
+    (96,  "policy:threshold",            "envelope",  "a threshold is off its field's grid, outside its range, or past the exact decimal bounds"),
+    (97,  "policy:none",                 "envelope",  "None is ordered, compared on a field that refuses absence, or listed"),
+    (98,  "policy:absence-untested",     "envelope",  "a field that allows absence is tested with == None or != None by no rule"),
+    (99,  "reading:unreadable",          "routing",   "the reading is not a canon/2 document"),
+    (100, "reading:not-object",          "routing",   "the reading is a canon/2 document that is not an object"),
+    # -- the strict readers (docs/design/spec-verified-core.md, section 3.2): a document that reads as
+    # canon/2 but is not its exact canonical bytes (whitespace, members out of key order, a needless
+    # escape) is refused, never re-canonicalized. The core's image and reading each name their own
+    # stage, as 89 and 99 do; every other hashed or signed document is the third row.
+    (101, "policy:not-canonical",        "envelope",  "the core's policy image reads as canon/2 but is not its canonical spelling"),
+    (102, "reading:not-canonical",       "routing",   "the reading reads as canon/2 but is not its canonical spelling"),
+    (103, "document:not-canonical",      "envelope",  "a hashed or signed document reads as canon/2 but is not its canonical spelling"),
 )
 
 CODES: Dict[int, Tuple[str, str, str]] = {cause_code: (canonical_name, class_name, description)

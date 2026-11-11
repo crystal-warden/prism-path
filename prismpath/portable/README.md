@@ -12,7 +12,9 @@ open http://localhost:8321/playground.html
 module: the Markdown flow parser, the safe predicate evaluator (a hand-rolled recursive-descent
 parser; no `eval`, same sandbox as Python's `predicates.py`), and the engine loop
 (deterministic + error + event tiers, `needs_human` / `wait` / `spawn` suspension, `visits`,
-re-entry via `start`/`state`). No build step, no packages: it runs as-is in Node, a browser
+re-entry via `start`/`state`), and the verified policy core (`docs/design/spec-verified-core.md`): canon/2
+documents, field definitions with exact decimal lowering in BigInt, the policy checks in the core's order, the
+system boundary and the policy check. No build step, no packages: it runs as-is in Node, a browser
 `<script type="module">`, an edge function, or a network appliance.
 
 **Which flows? Portability is a TIER, not a bit**: `prismpath portable <flow>` computes it for the
@@ -60,7 +62,7 @@ fixtures**, and Python's `eval_condition` now enforces the sandbox statically (a
 short-circuited chain can no longer smuggle a disallowed call past the runtime on either engine).
 
 The spec itself now ships as **data**: [`conformance/`](conformance/README.md) holds 1,112
-predicate vectors + 27 engine fixtures, generated deterministically from the Python reference
+predicate vectors + 107 engine fixtures, generated deterministically from the Python reference
 (`gen_conformance.py`) and enforced in both directions on every test run; the committed files
 must match a fresh regeneration (no silent reference drift), and this port must pass them
 (`node prismpath/portable/run_vectors.mjs` → CONFORMANT). All seven JavaScript runners

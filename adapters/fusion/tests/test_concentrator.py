@@ -98,3 +98,16 @@ def test_amortization_wins_for_fleets_and_not_for_one():
     for n in (1, 2, 5, 10, 25, 50):
         per, conc = fleet_costs(n)
         print(f"  {n:>5}  {per:>17} {conc:>22.2f}")
+
+
+def test_a_truncated_datagram_carries_the_strict_decode_cause_beside_its_status():
+    from prismpath.telemetry import zeckendorf as zeck
+    only_one_bit = demux(b"\x80", REGISTRY)
+    assert tuple(only_one_bit) == ([], "concentrator-truncated") and only_one_bit.cause == 48
+    after_a_record = demux(packed.pack(zeck.encode(3) + zeck.encode(2) + "1", 8), REGISTRY)
+    assert after_a_record[1] == "concentrator-truncated" and after_a_record.cause == 49
+    padding_only = demux(packed.pack(zeck.encode(2) + zeck.encode(1), 8), REGISTRY)    # a reading cut, zeros left
+    assert padding_only[1] == "concentrator-truncated" and padding_only.cause is None
+    unknown = demux(concentrate([(5, [1])]), REGISTRY)
+    assert unknown[1] == "concentrator-unknown-stream" and unknown.cause is None
+    assert demux(concentrate([(1, [3, 1])]), REGISTRY).cause is None

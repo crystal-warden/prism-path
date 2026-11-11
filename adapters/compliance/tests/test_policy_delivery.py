@@ -198,7 +198,7 @@ def test_a_tampered_delivered_image_fails_every_assessed_requirement(deployed):
 
 
 def test_a_host_whose_stored_image_was_replaced_does_not_attest_the_pack(deployed):
-    (deployed / delivery.STATE_DIR_NAME / "active.ppt").write_bytes(b"not the verified image")
+    open(delivery.active_image_path(str(deployed / delivery.STATE_DIR_NAME)), "wb").write(b"not the verified image")
     summary = delivery.assess_deployment(str(deployed), now=FIXED_NOW)
     assert summary["checks"]["host_attests_pack"]["ok"] is False
     assert _assessed(summary)["eu_cra_annex_i"]["I.2.f"] == "not-met"

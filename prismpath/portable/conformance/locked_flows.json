@@ -5,6 +5,7 @@
     "great job": "6Zd+P/pk1j0AAAAAAAAAAA=="
    },
    "expect": {
+    "cause": 0,
     "path": [
      "classify",
      "positive"
@@ -37,6 +38,7 @@
     "go": "AAAAAAAAAAAqb34/7SniPQ=="
    },
    "expect": {
+    "cause": 0,
     "path": [
      "a",
      "b"
@@ -69,6 +71,7 @@
     "looks right": "Zed5PwUjXj4AAAAAAAAAAA=="
    },
    "expect": {
+    "cause": 0,
     "path": [
      "a",
      "c"
@@ -102,6 +105,7 @@
     "ambiguous": "JqpEPyDjIz8AAAAAAAAAAA=="
    },
    "expect": {
+    "cause": 33,
     "path": [
      "a"
     ],
@@ -134,6 +138,7 @@
     "clear signal": "p/x/P4t8JTwAAAAAAAAAAA=="
    },
    "expect": {
+    "cause": 0,
     "path": [
      "a",
      "b"
@@ -167,6 +172,7 @@
     "anything": "24x2P9uMdj7bjPY9AAAAAA=="
    },
    "expect": {
+    "cause": 0,
     "path": [
      "a",
      "b"
@@ -198,6 +204,7 @@
     "test input": "+JpOPZOsfz8AAAAAAAAAAA=="
    },
    "expect": {
+    "cause": 0,
     "path": [
      "a",
      "b"
@@ -237,6 +244,7 @@
     "finished analyzing": "+PtWPfj7Vj02S38/AAAAAA=="
    },
    "expect": {
+    "cause": 0,
     "path": [
      "intake",
      "analyze",

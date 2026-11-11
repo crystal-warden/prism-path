@@ -12,7 +12,8 @@ parts that every implementation replays:
     cases a binary double gets wrong.
   * `policies`: flows that define their fields. An accepted flow records the conditions after parse
     time lowering and, for a set of readings, the route the engine takes and the reason any reading
-    that is not canonical is refused at the boundary. A refused flow records only that it is refused.
+    that is not canonical is refused at the boundary. A refused flow records its registered refusal
+    cause, the first problem's, and the cause of every problem the reference finds.
   * `version`: bumped when an existing case changes meaning.
 
 Every expected value comes from the reference implementation, never from either twin, so the Rust
@@ -65,6 +66,17 @@ def _flow(name: str, definitions: dict, edges: list) -> str:
                                 edges="\n".join(f"-> {target}: {cond}" for target, cond in edges))
 
 
+def _nested(depth: int, side: str) -> str:
+    """A condition of the reference's static depth `depth` (spec-verified-core.md section 2.4): `not`
+    applied to a comparison, or `and` nested on the right or the left inside parentheses."""
+    if side == "not":
+        return "not " * (depth - 2) + "x >= 3"
+    cond = "x >= 3"
+    for level in range(depth - 2):
+        cond = f"x != {level % 10} and ({cond})" if side == "right" else f"({cond}) and x != {level % 10}"
+    return cond
+
+
 ACCEPTED = [
     ("floor_ratio_with_absent_label",
      {"error_rate": DEFINITIONS["ratio_floor"], "label": DEFINITIONS["label_category"]},
@@ -109,7 +121,34 @@ ACCEPTED = [
      [{"count": 3, "armed": 1}, {"count": 3}, {"count": 6, "armed": True}, {"count": "3", "armed": True}]),
 ]
 
+# Regressions of spec-verified-core.md section 9 (step 2). D2: a condition nested to depth 50 by the
+# reference's measure is accepted, on the right as on the left, where the Rust parser once counted its own
+# recursion and refused a right nested one long before 50. D3: a definition's words are split on Python's
+# whitespace, U+001F and U+3000 among it.
+ACCEPTED += [
+    ("depth_fifty_nested_right", {"x": "int min=0 max=10"},
+     [("hit", "when " + _nested(50, "right")), ("miss", "else")],
+     [{"x": 3}, {"x": 2}, {"x": 10}], [{"x": 11}]),
+    ("depth_fifty_nested_left", {"x": "int min=0 max=10"},
+     [("hit", "when " + _nested(50, "left")), ("miss", "else")],
+     [{"x": 3}, {"x": 2}], [{"x": None}]),
+    ("depth_fifty_not_chain", {"x": "int min=0 max=10"},
+     [("hit", "when " + _nested(50, "not")), ("miss", "else")],
+     [{"x": 3}, {"x": 2}], []),
+    ("definition_split_on_python_whitespace", {"x": "int\x1fmin=0\u3000max=10\x1f", "k": "category\u2000absent=allowed"},
+     [("gone", "when k == None"), ("hit", "when x >= 5"), ("miss", "else")],
+     [{"x": 5, "k": "a"}, {"x": 4, "k": "a"}, {"x": 9}], [{"x": 11, "k": "a"}, {"x": 1, "k": 3}]),
+]
+
 REFUSED = [
+    # D1 and D2: a defined flow nested beyond 50 is refused at load, by the reference's static measure, at
+    # every depth above the bound and in every shape
+    ("depth_fifty_one_not_chain", {"x": "int"}, ["when " + _nested(51, "not")]),
+    ("depth_fifty_two_not_chain", {"x": "int"}, ["when " + _nested(52, "not")]),
+    ("depth_fifty_one_nested_right", {"x": "int"}, ["when " + _nested(51, "right")]),
+    ("depth_fifty_two_nested_left", {"x": "int"}, ["when " + _nested(52, "left")]),
+    # D3: U+FEFF is not whitespace in Python, so it is part of the kind word
+    ("definition_with_a_byte_order_mark", {"x": "int\ufeffmin=0"}, ["when x > 1"]),
     ("floor_with_greater", {"r": DEFINITIONS["ratio_floor"]}, ["when r > 0.85"]),
     ("floor_with_less_equal", {"r": DEFINITIONS["ratio_floor"]}, ["when r <= 0.85"]),
     ("floor_with_equality", {"r": DEFINITIONS["ratio_floor"]}, ["when r == 0.85"]),
@@ -142,6 +181,24 @@ REFUSED = [
     ("engine_counter_defined", {"visits": "int"}, ["when visits > 1"]),
     ("sign_outside_parentheses_on_a_decimal", {"d": DEFINITIONS["drift_floor"]}, ["when d >= -(0.5)"]),
     ("sign_outside_parentheses_on_an_integer", {"d": DEFINITIONS["drift_floor"]}, ["when d >= -(5)"]),
+]
+
+# D7 (spec-verified-core.md sections 4 and 9, step 3): a policy with several problems is refused for the
+# first in the core's order, decoding rule by rule, then the definitions in code point order, then lowering
+# rule by rule and atom by atom, then rule 6. Each flow below has at least two problems, and the reference
+# once named another of them first.
+REFUSED += [
+    ("d7_atom_left_to_right_in_one_condition", {"x": "int"},
+     ["when x == 9007199254740992 and x == 2.5"]),
+    ("d7_decoding_before_a_definition", {"x": "int min=5 max=4", "y": "int"}, ["when x == y"]),
+    ("d7_decoding_of_a_later_rule_before_lowering", {"x": "int", "k": "category"},
+     ["when x == 2.5", "when k < \"a\""]),
+    ("d7_an_earlier_atom_before_a_later_threshold", {"x": "int", "d": DEFINITIONS["drift_floor"]},
+     ["when x == True and d >= 0.001"]),
+    ("d7_membership_range_before_rounding", {"d": "fixed scale=100 rounding=floor min=0 max=100"},
+     ["when d in [5]"]),
+    ("d7_definitions_in_code_point_order", {"b": "int min=5 max=4", "a": "float"}, ["when a > 1"]),
+    ("d7_lowering_before_rule_six", {"c": "category absent=allowed", "x": "int"}, ["when x == \"s\""]),
 ]
 
 
@@ -186,8 +243,10 @@ def build() -> dict:
         flow = _flow(name, definitions, [("hit", cond) for cond in conditions] + [("miss", "else")])
         try:
             parse(flow)
-        except ValueError:
-            policies.append({"name": name, "flow": flow, "accepted": False})
+        except field_definitions.FieldDefinitionError as error:
+            # the registered refusal (prismpath/kernel/causes.py) of every problem, the first one first
+            policies.append({"name": name, "flow": flow, "accepted": False, "cause": error.cause,
+                             "causes": [problem.cause for problem in error.problems]})
             continue
         raise AssertionError(f"{name} was meant to be refused and parsed")
     return {

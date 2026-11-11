@@ -72,3 +72,44 @@ def test_two_spellings_of_one_definition_bind_the_same_text():
     one = fd.parse_definition("r", "fixed rounding=floor scale=10000 unit=ratio max=10000 min=0")
     two = fd.parse_definition("r", "fixed scale=10000 unit=ratio rounding=floor min=0 max=10000 absent=refused")
     assert one.canonical_text() == two.canonical_text()
+
+
+def test_every_refusal_carries_a_registered_cause():
+    """A refused flow names a registered refusal (spec-verified-core.md section 5) for its first problem
+    and for every problem, as the frozen corpus records it; no refusal of the core is uncoded."""
+    from prismpath.kernel import causes
+    corpus = json.loads((Path(__file__).resolve().parents[1] / "portable" / "conformance" /
+                         "field_definitions.json").read_text())
+    refused = [policy for policy in corpus["policies"] if not policy["accepted"]]
+    assert refused
+    for policy in refused:
+        with pytest.raises(fd.FieldDefinitionError) as raised:
+            parse(policy["flow"])
+        error = raised.value
+        assert error.code is not None and causes.name(error.code) == error.cause == policy["cause"], policy["name"]
+        assert [problem.cause for problem in error.problems] == policy["causes"], policy["name"]
+        assert all(problem.code is not None for problem in error.problems), policy["name"]
+    for text in ("float", "", "int min=5 max=4", "fixed scale=100", "int min=x", "bool min=0"):
+        with pytest.raises(fd.FieldDefinitionError) as raised:
+            fd.parse_definition("x", text)
+        assert raised.value.cause == "policy:definition" and raised.value.code == causes.code("policy:definition")
+
+
+def test_the_system_boundary_and_the_policy_check():
+    """D4 (spec-verified-core.md section 6.1): the system boundary checks every defined field, the policy
+    check only the fields the rules read; a reading the system boundary accepts passes the policy check."""
+    flow = ("---\nname: t\nstart: s\nfield.x: int min=0 max=10\nfield.unused: bool\n"
+            "field.r: fixed scale=100 rounding=floor\n---\n## s\n-> hit: when x >= 5 and r >= 0.5\n-> miss: else\n"
+            "## hit\n## miss\n")
+    graph = parse(flow)
+    assert fd.routed_fields(graph) == ["r", "x"]
+    assert fd.system_boundary(graph, {"x": 5, "r": 50}) == ("unused", "missing")
+    assert fd.policy_check(graph, {"x": 5, "r": 50}) is None
+    assert fd.system_boundary(graph, {"x": 11, "r": 50, "unused": True}) == ("x", "out_of_range")
+    assert fd.policy_check(graph, {"x": 11, "r": 50}) == ("x", "out_of_range")
+    assert fd.policy_check(graph, {"x": 1}) == ("r", "missing")
+    for reading in ({}, {"x": 1, "r": 2, "unused": False}, {"x": "1", "unused": 1}, {"r": True, "x": 3}):
+        if fd.system_boundary(graph, reading) is None:
+            assert fd.policy_check(graph, reading) is None
+        if fd.policy_check(graph, reading) is not None:
+            assert fd.system_boundary(graph, reading) is not None

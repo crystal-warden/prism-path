@@ -1,5 +1,5 @@
 name = "fq"
-defaultTargets = ["FQ"]
+defaultTargets = ["FQ", "Core", "core-oracle", "canon2-oracle"]
 
 [[require]]
 name = "mathlib"
@@ -8,3 +8,20 @@ rev = "v4.33.1"
 
 [[lean_lib]]
 name = "FQ"
+
+# The verified policy core (docs/design/spec-verified-core.md): the evaluator, its theorems and its
+# bridge to FQ.
+[[lean_lib]]
+name = "Core"
+
+# The oracle: the core's evaluator compiled to a program that reads canon/2 documents. It imports the
+# evaluator only, not Mathlib, so it links small.
+[[lean_exe]]
+name = "core-oracle"
+root = "Core.Main"
+
+# The canon/2 oracle: the reader, the writer and the strict reader of Core.Canon2 compiled to a program
+# that prints a document's canonical bytes or the reader's refusal (formal/diff/canon2_diff.py).
+[[lean_exe]]
+name = "canon2-oracle"
+root = "Core.Canon2Main"

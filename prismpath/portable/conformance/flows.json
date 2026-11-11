@@ -2,6 +2,7 @@
  "cases": [
   {
    "expect": {
+    "cause": 0,
     "path": [
      "route",
      "chained",
@@ -26,6 +27,7 @@
   },
   {
    "expect": {
+    "cause": 0,
     "path": [
      "route",
      "boolnum",
@@ -48,6 +50,7 @@
   },
   {
    "expect": {
+    "cause": 0,
     "path": [
      "route",
      "substr",
@@ -69,6 +72,7 @@
   },
   {
    "expect": {
+    "cause": 0,
     "path": [
      "route",
      "member",
@@ -91,6 +95,7 @@
   },
   {
    "expect": {
+    "cause": 0,
     "path": [
      "route",
      "pyconst",
@@ -113,6 +118,7 @@
   },
   {
    "expect": {
+    "cause": 0,
     "path": [
      "route",
      "fieldname",
@@ -136,6 +142,7 @@
   },
   {
    "expect": {
+    "cause": 0,
     "path": [
      "route",
      "notin",
@@ -159,6 +166,7 @@
   },
   {
    "expect": {
+    "cause": 0,
     "path": [
      "route",
      "done"
@@ -180,6 +188,7 @@
   },
   {
    "expect": {
+    "cause": 0,
     "path": [
      "route",
      "empty",
@@ -204,6 +213,7 @@
   },
   {
    "expect": {
+    "cause": 0,
     "path": [
      "route",
      "done"
@@ -224,6 +234,7 @@
   },
   {
    "expect": {
+    "cause": 0,
     "path": [
      "route",
      "done"
@@ -245,6 +256,7 @@
   },
   {
    "expect": {
+    "cause": 0,
     "path": [
      "route",
      "boolnum",
@@ -267,6 +279,7 @@
   },
   {
    "expect": {
+    "cause": 0,
     "path": [
      "route",
      "chained",
@@ -296,6 +309,7 @@
   },
   {
    "expect": {
+    "cause": 0,
     "path": [
      "work",
      "work",
@@ -320,6 +334,7 @@
   },
   {
    "expect": {
+    "cause": 0,
     "path": [
      "work",
      "work",
@@ -345,6 +360,7 @@
   },
   {
    "expect": {
+    "cause": 0,
     "path": [
      "hold"
     ],
@@ -366,6 +382,7 @@
   },
   {
    "expect": {
+    "cause": 0,
     "path": [
      "hold"
     ],
@@ -398,6 +415,7 @@
   },
   {
    "expect": {
+    "cause": 34,
     "path": [
      "hold"
     ],
@@ -419,6 +437,7 @@
   },
   {
    "expect": {
+    "cause": 0,
     "path": [
      "go"
     ],
@@ -445,6 +464,7 @@
   },
   {
    "expect": {
+    "cause": 36,
     "path": [
      "work"
     ],
@@ -465,6 +485,7 @@
   },
   {
    "expect": {
+    "cause": 35,
     "path": [
      "spin",
      "spin",
@@ -495,6 +516,7 @@
   },
   {
    "expect": {
+    "cause": 0,
     "path": [
      "route",
      "review"
@@ -516,6 +538,7 @@
   },
   {
    "expect": {
+    "cause": 0,
     "path": [
      "route",
      "got_true"
@@ -534,6 +557,7 @@
   },
   {
    "expect": {
+    "cause": 0,
     "path": [
      "route",
      "got_none"
@@ -552,6 +576,7 @@
   },
   {
    "expect": {
+    "cause": 0,
     "path": [
      "route",
      "other"
@@ -572,6 +597,7 @@
   },
   {
    "expect": {
+    "cause": 0,
     "path": [
      "route",
      "deep"
@@ -593,6 +619,7 @@
   },
   {
    "expect": {
+    "cause": 0,
     "path": [
      "route",
      "trap"
@@ -610,8 +637,3780 @@
      }
     ]
    }
+  },
+  {
+   "expect": {
+    "cause": 0,
+    "guard_errors": [],
+    "path": [
+     "triage",
+     "contain",
+     "done"
+    ],
+    "pending_node": null,
+    "reason": null,
+    "spawn": null,
+    "state_dropped": {},
+    "steps": [
+     {
+      "cond": "when severity == \"high\" and confirmed",
+      "node": "triage",
+      "target": "contain",
+      "used": "deterministic"
+     },
+     {
+      "cond": "when approved",
+      "node": "contain",
+      "target": "done",
+      "used": "deterministic"
+     }
+    ],
+    "stopped": "terminal",
+    "transcript": [
+     {
+      "node": "triage",
+      "outcome": "t"
+     },
+     {
+      "node": "contain",
+      "outcome": "c"
+     }
+    ],
+    "violations": null
+   },
+   "flow": "---\nname: gate\nstart: triage\n---\n\n## triage\nTriage the alert. The edges read `severity` (an enum), `confirmed` (a boolean) and `score` (a number).\n-> contain: when severity == \"high\" and confirmed\n-> review: when score >= 0.8\n-> close: else\n-> held: on error\n\n## contain\n-> done: when approved\n-> held: else\n\n## review\n-> done: always\n\n## close\n-> done: always\n\n## held\n-> done: always\n\n## done\nDone.\n",
+   "name": "type-gate-passes-a-well-typed-output",
+   "opts": {
+    "type_gate": true
+   },
+   "script": {
+    "contain": [
+     {
+      "approved": true,
+      "text": "c"
+     }
+    ],
+    "triage": [
+     {
+      "confirmed": true,
+      "severity": "high",
+      "text": "t"
+     }
+    ]
+   }
+  },
+  {
+   "expect": {
+    "cause": 37,
+    "guard_errors": [],
+    "path": [
+     "triage"
+    ],
+    "pending_node": "triage",
+    "reason": "worker output violates the derived contract",
+    "spawn": null,
+    "state_dropped": {},
+    "steps": [],
+    "stopped": "contract_violation",
+    "transcript": [
+     {
+      "node": "triage",
+      "outcome": "t"
+     }
+    ],
+    "violations": [
+     "type: 'confirmed' should be boolean but worker emitted str ('yes')"
+    ]
+   },
+   "flow": "---\nname: gate\nstart: triage\n---\n\n## triage\nTriage the alert. The edges read `severity` (an enum), `confirmed` (a boolean) and `score` (a number).\n-> contain: when severity == \"high\" and confirmed\n-> review: when score >= 0.8\n-> close: else\n-> held: on error\n\n## contain\n-> done: when approved\n-> held: else\n\n## review\n-> done: always\n\n## close\n-> done: always\n\n## held\n-> done: always\n\n## done\nDone.\n",
+   "name": "type-gate-stops-on-a-wrong-type",
+   "opts": {
+    "type_gate": true
+   },
+   "script": {
+    "triage": [
+     {
+      "confirmed": "yes",
+      "severity": "high",
+      "text": "t"
+     }
+    ]
+   }
+  },
+  {
+   "expect": {
+    "cause": 0,
+    "guard_errors": [],
+    "path": [
+     "triage",
+     "contain",
+     "held",
+     "done"
+    ],
+    "pending_node": null,
+    "reason": null,
+    "spawn": null,
+    "state_dropped": {},
+    "steps": [
+     {
+      "cond": "when severity == \"high\" and confirmed",
+      "node": "triage",
+      "target": "contain",
+      "used": "deterministic"
+     },
+     {
+      "cond": "else",
+      "node": "contain",
+      "target": "held",
+      "used": "deterministic"
+     },
+     {
+      "cond": "always",
+      "node": "held",
+      "target": "done",
+      "used": "deterministic"
+     }
+    ],
+    "stopped": "terminal",
+    "transcript": [
+     {
+      "node": "triage",
+      "outcome": "t"
+     },
+     {
+      "node": "contain",
+      "outcome": "contain"
+     },
+     {
+      "node": "held",
+      "outcome": "held"
+     }
+    ],
+    "violations": null
+   },
+   "flow": "---\nname: gate\nstart: triage\n---\n\n## triage\nTriage the alert. The edges read `severity` (an enum), `confirmed` (a boolean) and `score` (a number).\n-> contain: when severity == \"high\" and confirmed\n-> review: when score >= 0.8\n-> close: else\n-> held: on error\n\n## contain\n-> done: when approved\n-> held: else\n\n## review\n-> done: always\n\n## close\n-> done: always\n\n## held\n-> done: always\n\n## done\nDone.\n",
+   "name": "type-gate-off-routes-the-same-wrong-type",
+   "opts": {
+    "type_gate": false
+   },
+   "script": {
+    "triage": [
+     {
+      "confirmed": "yes",
+      "severity": "high",
+      "text": "t"
+     }
+    ]
+   }
+  },
+  {
+   "expect": {
+    "cause": 0,
+    "guard_errors": [],
+    "path": [
+     "triage",
+     "contain",
+     "held",
+     "done"
+    ],
+    "pending_node": null,
+    "reason": null,
+    "spawn": null,
+    "state_dropped": {},
+    "steps": [
+     {
+      "cond": "when severity == \"high\" and confirmed",
+      "node": "triage",
+      "target": "contain",
+      "used": "deterministic"
+     },
+     {
+      "cond": "else",
+      "node": "contain",
+      "target": "held",
+      "used": "deterministic"
+     },
+     {
+      "cond": "always",
+      "node": "held",
+      "target": "done",
+      "used": "deterministic"
+     }
+    ],
+    "stopped": "terminal",
+    "transcript": [
+     {
+      "node": "triage",
+      "outcome": "t"
+     },
+     {
+      "node": "contain",
+      "outcome": "contain"
+     },
+     {
+      "node": "held",
+      "outcome": "held"
+     }
+    ],
+    "violations": null
+   },
+   "flow": "---\nname: gate\nstart: triage\n---\n\n## triage\nTriage the alert. The edges read `severity` (an enum), `confirmed` (a boolean) and `score` (a number).\n-> contain: when severity == \"high\" and confirmed\n-> review: when score >= 0.8\n-> close: else\n-> held: on error\n\n## contain\n-> done: when approved\n-> held: else\n\n## review\n-> done: always\n\n## close\n-> done: always\n\n## held\n-> done: always\n\n## done\nDone.\n",
+   "name": "no-options-route-the-same-wrong-type",
+   "opts": {},
+   "script": {
+    "triage": [
+     {
+      "confirmed": "yes",
+      "severity": "high",
+      "text": "t"
+     }
+    ]
+   }
+  },
+  {
+   "expect": {
+    "cause": 37,
+    "guard_errors": [],
+    "path": [
+     "triage"
+    ],
+    "pending_node": "triage",
+    "reason": "worker output violates the derived contract",
+    "spawn": null,
+    "state_dropped": {},
+    "steps": [],
+    "stopped": "contract_violation",
+    "transcript": [
+     {
+      "node": "triage",
+      "outcome": "t"
+     }
+    ],
+    "violations": [
+     "type: 'severity' should be enum but worker emitted int (7)",
+     "type: 'confirmed' should be boolean but worker emitted str ('yes')",
+     "type: 'score' should be number but worker emitted str ('hi')"
+    ]
+   },
+   "flow": "---\nname: gate\nstart: triage\n---\n\n## triage\nTriage the alert. The edges read `severity` (an enum), `confirmed` (a boolean) and `score` (a number).\n-> contain: when severity == \"high\" and confirmed\n-> review: when score >= 0.8\n-> close: else\n-> held: on error\n\n## contain\n-> done: when approved\n-> held: else\n\n## review\n-> done: always\n\n## close\n-> done: always\n\n## held\n-> done: always\n\n## done\nDone.\n",
+   "name": "type-gate-lists-every-violation-in-field-order",
+   "opts": {
+    "type_gate": true
+   },
+   "script": {
+    "triage": [
+     {
+      "confirmed": "yes",
+      "score": "hi",
+      "severity": 7,
+      "text": "t"
+     }
+    ]
+   }
+  },
+  {
+   "expect": {
+    "cause": 37,
+    "guard_errors": [],
+    "path": [
+     "triage"
+    ],
+    "pending_node": "triage",
+    "reason": "worker output violates the derived contract",
+    "spawn": null,
+    "state_dropped": {},
+    "steps": [],
+    "stopped": "contract_violation",
+    "transcript": [
+     {
+      "node": "triage",
+      "outcome": "t"
+     }
+    ],
+    "violations": [
+     "type: 'score' should be number but worker emitted bool (True)"
+    ]
+   },
+   "flow": "---\nname: gate\nstart: triage\n---\n\n## triage\nTriage the alert. The edges read `severity` (an enum), `confirmed` (a boolean) and `score` (a number).\n-> contain: when severity == \"high\" and confirmed\n-> review: when score >= 0.8\n-> close: else\n-> held: on error\n\n## contain\n-> done: when approved\n-> held: else\n\n## review\n-> done: always\n\n## close\n-> done: always\n\n## held\n-> done: always\n\n## done\nDone.\n",
+   "name": "type-gate-a-boolean-is-not-a-number",
+   "opts": {
+    "type_gate": true
+   },
+   "script": {
+    "triage": [
+     {
+      "confirmed": false,
+      "score": true,
+      "severity": "low",
+      "text": "t"
+     }
+    ]
+   }
+  },
+  {
+   "expect": {
+    "cause": 37,
+    "guard_errors": [],
+    "path": [
+     "triage"
+    ],
+    "pending_node": "triage",
+    "reason": "worker output violates the derived contract",
+    "spawn": null,
+    "state_dropped": {},
+    "steps": [],
+    "stopped": "contract_violation",
+    "transcript": [
+     {
+      "node": "triage",
+      "outcome": "t"
+     }
+    ],
+    "violations": [
+     "type: 'score' should be number but worker emitted list ([1, 'a'])"
+    ]
+   },
+   "flow": "---\nname: gate\nstart: triage\n---\n\n## triage\nTriage the alert. The edges read `severity` (an enum), `confirmed` (a boolean) and `score` (a number).\n-> contain: when severity == \"high\" and confirmed\n-> review: when score >= 0.8\n-> close: else\n-> held: on error\n\n## contain\n-> done: when approved\n-> held: else\n\n## review\n-> done: always\n\n## close\n-> done: always\n\n## held\n-> done: always\n\n## done\nDone.\n",
+   "name": "type-gate-a-list-is-not-a-number",
+   "opts": {
+    "type_gate": true
+   },
+   "script": {
+    "triage": [
+     {
+      "confirmed": false,
+      "score": [
+       1,
+       "a"
+      ],
+      "severity": "low",
+      "text": "t"
+     }
+    ]
+   }
+  },
+  {
+   "expect": {
+    "cause": 37,
+    "guard_errors": [],
+    "path": [
+     "triage"
+    ],
+    "pending_node": "triage",
+    "reason": "worker output violates the derived contract",
+    "spawn": null,
+    "state_dropped": {},
+    "steps": [],
+    "stopped": "contract_violation",
+    "transcript": [
+     {
+      "node": "triage",
+      "outcome": "t"
+     }
+    ],
+    "violations": [
+     "type: 'severity' should be enum but worker emitted dict ({\"it's\": 'a \"b\"'})"
+    ]
+   },
+   "flow": "---\nname: gate\nstart: triage\n---\n\n## triage\nTriage the alert. The edges read `severity` (an enum), `confirmed` (a boolean) and `score` (a number).\n-> contain: when severity == \"high\" and confirmed\n-> review: when score >= 0.8\n-> close: else\n-> held: on error\n\n## contain\n-> done: when approved\n-> held: else\n\n## review\n-> done: always\n\n## close\n-> done: always\n\n## held\n-> done: always\n\n## done\nDone.\n",
+   "name": "type-gate-quotes-in-a-wrong-value",
+   "opts": {
+    "type_gate": true
+   },
+   "script": {
+    "triage": [
+     {
+      "confirmed": true,
+      "severity": {
+       "it's": "a \"b\""
+      },
+      "text": "t"
+     }
+    ]
+   }
+  },
+  {
+   "expect": {
+    "cause": 0,
+    "guard_errors": [],
+    "path": [
+     "triage",
+     "close",
+     "done"
+    ],
+    "pending_node": null,
+    "reason": null,
+    "spawn": null,
+    "state_dropped": {},
+    "steps": [
+     {
+      "cond": "else",
+      "node": "triage",
+      "target": "close",
+      "used": "deterministic"
+     },
+     {
+      "cond": "always",
+      "node": "close",
+      "target": "done",
+      "used": "deterministic"
+     }
+    ],
+    "stopped": "terminal",
+    "transcript": [
+     {
+      "node": "triage",
+      "outcome": "t"
+     },
+     {
+      "node": "close",
+      "outcome": "close"
+     }
+    ],
+    "violations": null
+   },
+   "flow": "---\nname: gate\nstart: triage\n---\n\n## triage\nTriage the alert. The edges read `severity` (an enum), `confirmed` (a boolean) and `score` (a number).\n-> contain: when severity == \"high\" and confirmed\n-> review: when score >= 0.8\n-> close: else\n-> held: on error\n\n## contain\n-> done: when approved\n-> held: else\n\n## review\n-> done: always\n\n## close\n-> done: always\n\n## held\n-> done: always\n\n## done\nDone.\n",
+   "name": "type-gate-null-is-not-a-violation",
+   "opts": {
+    "type_gate": true
+   },
+   "script": {
+    "triage": [
+     {
+      "confirmed": null,
+      "score": null,
+      "severity": null,
+      "text": "t"
+     }
+    ]
+   }
+  },
+  {
+   "expect": {
+    "cause": 0,
+    "guard_errors": [],
+    "path": [
+     "triage",
+     "close",
+     "done"
+    ],
+    "pending_node": null,
+    "reason": null,
+    "spawn": null,
+    "state_dropped": {},
+    "steps": [
+     {
+      "cond": "else",
+      "node": "triage",
+      "target": "close",
+      "used": "deterministic"
+     },
+     {
+      "cond": "always",
+      "node": "close",
+      "target": "done",
+      "used": "deterministic"
+     }
+    ],
+    "stopped": "terminal",
+    "transcript": [
+     {
+      "node": "triage",
+      "outcome": "t"
+     },
+     {
+      "node": "close",
+      "outcome": "close"
+     }
+    ],
+    "violations": null
+   },
+   "flow": "---\nname: gate\nstart: triage\n---\n\n## triage\nTriage the alert. The edges read `severity` (an enum), `confirmed` (a boolean) and `score` (a number).\n-> contain: when severity == \"high\" and confirmed\n-> review: when score >= 0.8\n-> close: else\n-> held: on error\n\n## contain\n-> done: when approved\n-> held: else\n\n## review\n-> done: always\n\n## close\n-> done: always\n\n## held\n-> done: always\n\n## done\nDone.\n",
+   "name": "type-gate-missing-fields-are-not-violations",
+   "opts": {
+    "type_gate": true
+   },
+   "script": {
+    "triage": [
+     {
+      "text": "t"
+     }
+    ]
+   }
+  },
+  {
+   "expect": {
+    "cause": 0,
+    "guard_errors": [],
+    "path": [
+     "triage",
+     "close",
+     "done"
+    ],
+    "pending_node": null,
+    "reason": null,
+    "spawn": null,
+    "state_dropped": {},
+    "steps": [
+     {
+      "cond": "else",
+      "node": "triage",
+      "target": "close",
+      "used": "deterministic"
+     },
+     {
+      "cond": "always",
+      "node": "close",
+      "target": "done",
+      "used": "deterministic"
+     }
+    ],
+    "stopped": "terminal",
+    "transcript": [
+     {
+      "node": "triage",
+      "outcome": "t"
+     },
+     {
+      "node": "close",
+      "outcome": "close"
+     }
+    ],
+    "violations": null
+   },
+   "flow": "---\nname: gate\nstart: triage\n---\n\n## triage\nTriage the alert. The edges read `severity` (an enum), `confirmed` (a boolean) and `score` (a number).\n-> contain: when severity == \"high\" and confirmed\n-> review: when score >= 0.8\n-> close: else\n-> held: on error\n\n## contain\n-> done: when approved\n-> held: else\n\n## review\n-> done: always\n\n## close\n-> done: always\n\n## held\n-> done: always\n\n## done\nDone.\n",
+   "name": "type-gate-an-unrouted-value-is-not-a-violation",
+   "opts": {
+    "type_gate": true
+   },
+   "script": {
+    "triage": [
+     {
+      "confirmed": true,
+      "score": 0.1,
+      "severity": "low",
+      "text": "t"
+     }
+    ]
+   }
+  },
+  {
+   "expect": {
+    "cause": 37,
+    "guard_errors": [],
+    "path": [
+     "triage",
+     "contain"
+    ],
+    "pending_node": "contain",
+    "reason": "worker output violates the derived contract",
+    "spawn": null,
+    "state_dropped": {},
+    "steps": [
+     {
+      "cond": "when severity == \"high\" and confirmed",
+      "node": "triage",
+      "target": "contain",
+      "used": "deterministic"
+     }
+    ],
+    "stopped": "contract_violation",
+    "transcript": [
+     {
+      "node": "triage",
+      "outcome": "t"
+     },
+     {
+      "node": "contain",
+      "outcome": "c"
+     }
+    ],
+    "violations": [
+     "type: 'approved' should be boolean but worker emitted str ('yes')"
+    ]
+   },
+   "flow": "---\nname: gate\nstart: triage\n---\n\n## triage\nTriage the alert. The edges read `severity` (an enum), `confirmed` (a boolean) and `score` (a number).\n-> contain: when severity == \"high\" and confirmed\n-> review: when score >= 0.8\n-> close: else\n-> held: on error\n\n## contain\n-> done: when approved\n-> held: else\n\n## review\n-> done: always\n\n## close\n-> done: always\n\n## held\n-> done: always\n\n## done\nDone.\n",
+   "name": "type-gate-stops-at-the-node-that-emits-the-wrong-type",
+   "opts": {
+    "type_gate": true
+   },
+   "script": {
+    "contain": [
+     {
+      "approved": "yes",
+      "text": "c"
+     }
+    ],
+    "triage": [
+     {
+      "confirmed": true,
+      "severity": "high",
+      "text": "t"
+     }
+    ]
+   }
+  },
+  {
+   "expect": {
+    "cause": 37,
+    "guard_errors": [],
+    "path": [
+     "triage"
+    ],
+    "pending_node": "triage",
+    "reason": "worker output violates the derived contract",
+    "spawn": null,
+    "state_dropped": {},
+    "steps": [],
+    "stopped": "contract_violation",
+    "transcript": [
+     {
+      "node": "triage",
+      "outcome": ""
+     }
+    ],
+    "violations": [
+     "type: 'confirmed' should be boolean but worker emitted str ('yes')"
+    ]
+   },
+   "flow": "---\nname: gate\nstart: triage\n---\n\n## triage\nTriage the alert. The edges read `severity` (an enum), `confirmed` (a boolean) and `score` (a number).\n-> contain: when severity == \"high\" and confirmed\n-> review: when score >= 0.8\n-> close: else\n-> held: on error\n\n## contain\n-> done: when approved\n-> held: else\n\n## review\n-> done: always\n\n## close\n-> done: always\n\n## held\n-> done: always\n\n## done\nDone.\n",
+   "name": "type-gate-runs-before-the-human-handoff",
+   "opts": {
+    "type_gate": true
+   },
+   "script": {
+    "triage": [
+     {
+      "confirmed": "yes",
+      "needs_human": true,
+      "reason": "unsure"
+     }
+    ]
+   }
+  },
+  {
+   "expect": {
+    "cause": 34,
+    "guard_errors": [],
+    "path": [
+     "triage"
+    ],
+    "pending_node": "triage",
+    "reason": "unsure",
+    "spawn": null,
+    "state_dropped": {},
+    "steps": [],
+    "stopped": "needs_human",
+    "transcript": [
+     {
+      "node": "triage",
+      "outcome": ""
+     }
+    ],
+    "violations": null
+   },
+   "flow": "---\nname: gate\nstart: triage\n---\n\n## triage\nTriage the alert. The edges read `severity` (an enum), `confirmed` (a boolean) and `score` (a number).\n-> contain: when severity == \"high\" and confirmed\n-> review: when score >= 0.8\n-> close: else\n-> held: on error\n\n## contain\n-> done: when approved\n-> held: else\n\n## review\n-> done: always\n\n## close\n-> done: always\n\n## held\n-> done: always\n\n## done\nDone.\n",
+   "name": "human-handoff-without-the-gate",
+   "opts": {
+    "type_gate": false
+   },
+   "script": {
+    "triage": [
+     {
+      "confirmed": "yes",
+      "needs_human": true,
+      "reason": "unsure"
+     }
+    ]
+   }
+  },
+  {
+   "expect": {
+    "cause": 37,
+    "guard_errors": [],
+    "path": [
+     "triage"
+    ],
+    "pending_node": "triage",
+    "reason": "worker output violates the derived contract",
+    "spawn": null,
+    "state_dropped": {},
+    "steps": [],
+    "stopped": "contract_violation",
+    "transcript": [
+     {
+      "node": "triage",
+      "outcome": ""
+     }
+    ],
+    "violations": [
+     "type: 'severity' should be enum but worker emitted int (3)"
+    ]
+   },
+   "flow": "---\nname: gate\nstart: triage\n---\n\n## triage\nTriage the alert. The edges read `severity` (an enum), `confirmed` (a boolean) and `score` (a number).\n-> contain: when severity == \"high\" and confirmed\n-> review: when score >= 0.8\n-> close: else\n-> held: on error\n\n## contain\n-> done: when approved\n-> held: else\n\n## review\n-> done: always\n\n## close\n-> done: always\n\n## held\n-> done: always\n\n## done\nDone.\n",
+   "name": "type-gate-runs-before-the-wait",
+   "opts": {
+    "type_gate": true
+   },
+   "script": {
+    "triage": [
+     {
+      "severity": 3,
+      "wait": true
+     }
+    ]
+   }
+  },
+  {
+   "expect": {
+    "cause": 0,
+    "guard_errors": [],
+    "path": [
+     "read",
+     "hit"
+    ],
+    "pending_node": null,
+    "reason": null,
+    "spawn": null,
+    "state_dropped": {},
+    "steps": [
+     {
+      "cond": "when \"error\" in text",
+      "node": "read",
+      "target": "hit",
+      "used": "deterministic"
+     }
+    ],
+    "stopped": "terminal",
+    "transcript": [
+     {
+      "node": "read",
+      "outcome": "an error happened"
+     }
+    ],
+    "violations": null
+   },
+   "flow": "---\nname: textgate\nstart: read\n---\n\n## read\n-> hit: when \"error\" in text\n-> miss: else\n\n## hit\nHit.\n\n## miss\nMiss.\n",
+   "name": "type-gate-a-plain-outcome-has-only-text",
+   "opts": {
+    "type_gate": true
+   },
+   "script": {
+    "read": [
+     "an error happened"
+    ]
+   }
+  },
+  {
+   "expect": {
+    "cause": 0,
+    "guard_errors": [],
+    "path": [
+     "triage",
+     "close",
+     "done"
+    ],
+    "pending_node": null,
+    "reason": null,
+    "spawn": null,
+    "state_dropped": {},
+    "steps": [
+     {
+      "cond": "else",
+      "node": "triage",
+      "target": "close",
+      "used": "deterministic"
+     },
+     {
+      "cond": "always",
+      "node": "close",
+      "target": "done",
+      "used": "deterministic"
+     }
+    ],
+    "stopped": "terminal",
+    "transcript": [
+     {
+      "node": "triage",
+      "outcome": "just text"
+     },
+     {
+      "node": "close",
+      "outcome": "close"
+     }
+    ],
+    "violations": null
+   },
+   "flow": "---\nname: gate\nstart: triage\n---\n\n## triage\nTriage the alert. The edges read `severity` (an enum), `confirmed` (a boolean) and `score` (a number).\n-> contain: when severity == \"high\" and confirmed\n-> review: when score >= 0.8\n-> close: else\n-> held: on error\n\n## contain\n-> done: when approved\n-> held: else\n\n## review\n-> done: always\n\n## close\n-> done: always\n\n## held\n-> done: always\n\n## done\nDone.\n",
+   "name": "type-gate-a-plain-outcome-misses-a-field-note",
+   "opts": {
+    "type_gate": true
+   },
+   "script": {
+    "triage": [
+     "just text"
+    ]
+   }
+  },
+  {
+   "expect": {
+    "cause": 37,
+    "guard_errors": [],
+    "path": [
+     "contain"
+    ],
+    "pending_node": "contain",
+    "reason": "worker output violates the derived contract",
+    "spawn": null,
+    "state_dropped": {},
+    "steps": [],
+    "stopped": "contract_violation",
+    "transcript": [
+     {
+      "node": "contain",
+      "outcome": "c"
+     }
+    ],
+    "violations": [
+     "type: 'approved' should be boolean but worker emitted int (1)"
+    ]
+   },
+   "flow": "---\nname: gate\nstart: triage\n---\n\n## triage\nTriage the alert. The edges read `severity` (an enum), `confirmed` (a boolean) and `score` (a number).\n-> contain: when severity == \"high\" and confirmed\n-> review: when score >= 0.8\n-> close: else\n-> held: on error\n\n## contain\n-> done: when approved\n-> held: else\n\n## review\n-> done: always\n\n## close\n-> done: always\n\n## held\n-> done: always\n\n## done\nDone.\n",
+   "name": "type-gate-holds-on-reentry",
+   "opts": {
+    "type_gate": true
+   },
+   "script": {
+    "contain": [
+     {
+      "approved": 1,
+      "text": "c"
+     }
+    ]
+   },
+   "start": "contain",
+   "state": {
+    "transcript": [],
+    "visits": {
+     "triage": 1
+    }
+   }
+  },
+  {
+   "expect": {
+    "cause": 0,
+    "guard_errors": [],
+    "path": [
+     "triage",
+     "held",
+     "done"
+    ],
+    "pending_node": null,
+    "reason": null,
+    "spawn": null,
+    "state_dropped": {
+     "transcript": 1
+    },
+    "steps": [
+     {
+      "error_type": "RuntimeError",
+      "node": "triage",
+      "target": "held",
+      "used": "error"
+     },
+     {
+      "cond": "always",
+      "node": "held",
+      "target": "done",
+      "used": "deterministic"
+     }
+    ],
+    "stopped": "terminal",
+    "transcript": [
+     {
+      "node": "held",
+      "outcome": "held"
+     }
+    ],
+    "violations": null
+   },
+   "flow": "---\nname: gate\nstart: triage\n---\n\n## triage\nTriage the alert. The edges read `severity` (an enum), `confirmed` (a boolean) and `score` (a number).\n-> contain: when severity == \"high\" and confirmed\n-> review: when score >= 0.8\n-> close: else\n-> held: on error\n\n## contain\n-> done: when approved\n-> held: else\n\n## review\n-> done: always\n\n## close\n-> done: always\n\n## held\n-> done: always\n\n## done\nDone.\n",
+   "name": "type-gate-leaves-an-error-edge-alone",
+   "opts": {
+    "max_transcript": 1,
+    "type_gate": true
+   },
+   "script": {
+    "triage": [
+     {
+      "__raise__": "kapow"
+     }
+    ]
+   }
+  },
+  {
+   "expect": {
+    "cause": 0,
+    "guard_errors": [],
+    "path": [
+     "spin",
+     "spin",
+     "spin",
+     "spin",
+     "spin",
+     "out"
+    ],
+    "pending_node": null,
+    "reason": null,
+    "spawn": null,
+    "state_dropped": {
+     "transcript": 2
+    },
+    "steps": [
+     {
+      "cond": "when visits < 5",
+      "node": "spin",
+      "target": "spin",
+      "used": "deterministic"
+     },
+     {
+      "cond": "when visits < 5",
+      "node": "spin",
+      "target": "spin",
+      "used": "deterministic"
+     },
+     {
+      "cond": "when visits < 5",
+      "node": "spin",
+      "target": "spin",
+      "used": "deterministic"
+     },
+     {
+      "cond": "when visits < 5",
+      "node": "spin",
+      "target": "spin",
+      "used": "deterministic"
+     },
+     {
+      "cond": "else",
+      "node": "spin",
+      "target": "out",
+      "used": "deterministic"
+     }
+    ],
+    "stopped": "terminal",
+    "transcript": [
+     {
+      "node": "spin",
+      "outcome": "s"
+     },
+     {
+      "node": "spin",
+      "outcome": "s"
+     },
+     {
+      "node": "spin",
+      "outcome": "s"
+     }
+    ],
+    "violations": null
+   },
+   "flow": "---\nname: bounded\nstart: spin\n---\n\n## spin\n@state_bound(transcript=3)\n-> spin: when visits < 5\n-> out: else\n\n## out\nDone.\n",
+   "name": "bound-by-annotation",
+   "opts": {},
+   "script": {
+    "spin": [
+     {
+      "text": "s"
+     }
+    ]
+   }
+  },
+  {
+   "expect": {
+    "cause": 35,
+    "guard_errors": [],
+    "path": [
+     "spin",
+     "spin",
+     "spin",
+     "spin"
+    ],
+    "pending_node": null,
+    "reason": null,
+    "spawn": null,
+    "state_dropped": {},
+    "steps": [
+     {
+      "cond": "when visits < 5",
+      "node": "spin",
+      "target": "spin",
+      "used": "deterministic"
+     },
+     {
+      "cond": "when visits < 5",
+      "node": "spin",
+      "target": "spin",
+      "used": "deterministic"
+     },
+     {
+      "cond": "when visits < 5",
+      "node": "spin",
+      "target": "spin",
+      "used": "deterministic"
+     }
+    ],
+    "stopped": "max_steps",
+    "transcript": [
+     {
+      "node": "spin",
+      "outcome": "s"
+     },
+     {
+      "node": "spin",
+      "outcome": "s"
+     },
+     {
+      "node": "spin",
+      "outcome": "s"
+     }
+    ],
+    "violations": null
+   },
+   "flow": "---\nname: bounded\nstart: spin\n---\n\n## spin\n@state_bound(transcript=3)\n-> spin: when visits < 5\n-> out: else\n\n## out\nDone.\n",
+   "maxSteps": 3,
+   "name": "bound-does-not-change-routing",
+   "opts": {},
+   "script": {
+    "spin": [
+     {
+      "text": "s"
+     }
+    ]
+   }
+  },
+  {
+   "expect": {
+    "cause": 0,
+    "guard_errors": [],
+    "path": [
+     "spin",
+     "spin",
+     "spin",
+     "spin",
+     "spin",
+     "out"
+    ],
+    "pending_node": null,
+    "reason": null,
+    "spawn": null,
+    "state_dropped": {},
+    "steps": [
+     {
+      "cond": "when visits < 5",
+      "node": "spin",
+      "target": "spin",
+      "used": "deterministic"
+     },
+     {
+      "cond": "when visits < 5",
+      "node": "spin",
+      "target": "spin",
+      "used": "deterministic"
+     },
+     {
+      "cond": "when visits < 5",
+      "node": "spin",
+      "target": "spin",
+      "used": "deterministic"
+     },
+     {
+      "cond": "when visits < 5",
+      "node": "spin",
+      "target": "spin",
+      "used": "deterministic"
+     },
+     {
+      "cond": "else",
+      "node": "spin",
+      "target": "out",
+      "used": "deterministic"
+     }
+    ],
+    "stopped": "terminal",
+    "transcript": [
+     {
+      "node": "spin",
+      "outcome": "s"
+     },
+     {
+      "node": "spin",
+      "outcome": "s"
+     },
+     {
+      "node": "spin",
+      "outcome": "s"
+     },
+     {
+      "node": "spin",
+      "outcome": "s"
+     },
+     {
+      "node": "spin",
+      "outcome": "s"
+     }
+    ],
+    "violations": null
+   },
+   "flow": "---\nname: bounded\nstart: spin\n---\n\n## spin\n@state_bound(transcript=3)\n-> spin: when visits < 5\n-> out: else\n\n## out\nDone.\n",
+   "name": "bound-option-overrides-the-annotation",
+   "opts": {
+    "max_transcript": 5
+   },
+   "script": {
+    "spin": [
+     {
+      "text": "s"
+     }
+    ]
+   }
+  },
+  {
+   "expect": {
+    "cause": 0,
+    "guard_errors": [],
+    "path": [
+     "spin",
+     "spin",
+     "spin",
+     "spin",
+     "spin",
+     "out"
+    ],
+    "pending_node": null,
+    "reason": null,
+    "spawn": null,
+    "state_dropped": {
+     "transcript": 3
+    },
+    "steps": [
+     {
+      "cond": "when visits < 5",
+      "node": "spin",
+      "target": "spin",
+      "used": "deterministic"
+     },
+     {
+      "cond": "when visits < 5",
+      "node": "spin",
+      "target": "spin",
+      "used": "deterministic"
+     },
+     {
+      "cond": "when visits < 5",
+      "node": "spin",
+      "target": "spin",
+      "used": "deterministic"
+     },
+     {
+      "cond": "when visits < 5",
+      "node": "spin",
+      "target": "spin",
+      "used": "deterministic"
+     },
+     {
+      "cond": "else",
+      "node": "spin",
+      "target": "out",
+      "used": "deterministic"
+     }
+    ],
+    "stopped": "terminal",
+    "transcript": [
+     {
+      "node": "spin",
+      "outcome": "s"
+     },
+     {
+      "node": "spin",
+      "outcome": "s"
+     }
+    ],
+    "violations": null
+   },
+   "flow": "---\nname: plainloop\nstart: spin\n---\n\n## spin\n-> spin: when visits < 5\n-> out: else\n\n## out\nDone.\n",
+   "name": "bound-option-without-an-annotation",
+   "opts": {
+    "max_transcript": 2
+   },
+   "script": {
+    "spin": [
+     {
+      "text": "s"
+     }
+    ]
+   }
+  },
+  {
+   "expect": {
+    "cause": 0,
+    "guard_errors": [],
+    "path": [
+     "spin",
+     "spin",
+     "spin",
+     "spin",
+     "spin",
+     "out"
+    ],
+    "pending_node": null,
+    "reason": null,
+    "spawn": null,
+    "state_dropped": {},
+    "steps": [
+     {
+      "cond": "when visits < 5",
+      "node": "spin",
+      "target": "spin",
+      "used": "deterministic"
+     },
+     {
+      "cond": "when visits < 5",
+      "node": "spin",
+      "target": "spin",
+      "used": "deterministic"
+     },
+     {
+      "cond": "when visits < 5",
+      "node": "spin",
+      "target": "spin",
+      "used": "deterministic"
+     },
+     {
+      "cond": "when visits < 5",
+      "node": "spin",
+      "target": "spin",
+      "used": "deterministic"
+     },
+     {
+      "cond": "else",
+      "node": "spin",
+      "target": "out",
+      "used": "deterministic"
+     }
+    ],
+    "stopped": "terminal",
+    "transcript": [
+     {
+      "node": "spin",
+      "outcome": "s"
+     },
+     {
+      "node": "spin",
+      "outcome": "s"
+     },
+     {
+      "node": "spin",
+      "outcome": "s"
+     },
+     {
+      "node": "spin",
+      "outcome": "s"
+     },
+     {
+      "node": "spin",
+      "outcome": "s"
+     }
+    ],
+    "violations": null
+   },
+   "flow": "---\nname: plainloop\nstart: spin\n---\n\n## spin\n-> spin: when visits < 5\n-> out: else\n\n## out\nDone.\n",
+   "name": "no-bound-keeps-the-whole-transcript",
+   "opts": {},
+   "script": {
+    "spin": [
+     {
+      "text": "s"
+     }
+    ]
+   }
+  },
+  {
+   "expect": {
+    "cause": 0,
+    "guard_errors": [],
+    "path": [
+     "spin",
+     "spin",
+     "spin",
+     "spin",
+     "spin",
+     "out"
+    ],
+    "pending_node": null,
+    "reason": null,
+    "spawn": null,
+    "state_dropped": {},
+    "steps": [
+     {
+      "cond": "when visits < 5",
+      "node": "spin",
+      "target": "spin",
+      "used": "deterministic"
+     },
+     {
+      "cond": "when visits < 5",
+      "node": "spin",
+      "target": "spin",
+      "used": "deterministic"
+     },
+     {
+      "cond": "when visits < 5",
+      "node": "spin",
+      "target": "spin",
+      "used": "deterministic"
+     },
+     {
+      "cond": "when visits < 5",
+      "node": "spin",
+      "target": "spin",
+      "used": "deterministic"
+     },
+     {
+      "cond": "else",
+      "node": "spin",
+      "target": "out",
+      "used": "deterministic"
+     }
+    ],
+    "stopped": "terminal",
+    "transcript": [
+     {
+      "node": "spin",
+      "outcome": "s"
+     },
+     {
+      "node": "spin",
+      "outcome": "s"
+     },
+     {
+      "node": "spin",
+      "outcome": "s"
+     },
+     {
+      "node": "spin",
+      "outcome": "s"
+     },
+     {
+      "node": "spin",
+      "outcome": "s"
+     }
+    ],
+    "violations": null
+   },
+   "flow": "---\nname: bounded\nstart: spin\n---\n\n## spin\n@state_bound(transcript=3)\n-> spin: when visits < 5\n-> out: else\n\n## out\nDone.\n",
+   "name": "bound-option-zero-is-no-bound",
+   "opts": {
+    "max_transcript": 0
+   },
+   "script": {
+    "spin": [
+     {
+      "text": "s"
+     }
+    ]
+   }
+  },
+  {
+   "expect": {
+    "cause": 0,
+    "guard_errors": [],
+    "path": [
+     "spin",
+     "spin",
+     "spin",
+     "spin",
+     "spin",
+     "out"
+    ],
+    "pending_node": null,
+    "reason": null,
+    "spawn": null,
+    "state_dropped": {},
+    "steps": [
+     {
+      "cond": "when visits < 5",
+      "node": "spin",
+      "target": "spin",
+      "used": "deterministic"
+     },
+     {
+      "cond": "when visits < 5",
+      "node": "spin",
+      "target": "spin",
+      "used": "deterministic"
+     },
+     {
+      "cond": "when visits < 5",
+      "node": "spin",
+      "target": "spin",
+      "used": "deterministic"
+     },
+     {
+      "cond": "when visits < 5",
+      "node": "spin",
+      "target": "spin",
+      "used": "deterministic"
+     },
+     {
+      "cond": "else",
+      "node": "spin",
+      "target": "out",
+      "used": "deterministic"
+     }
+    ],
+    "stopped": "terminal",
+    "transcript": [
+     {
+      "node": "spin",
+      "outcome": "s"
+     },
+     {
+      "node": "spin",
+      "outcome": "s"
+     },
+     {
+      "node": "spin",
+      "outcome": "s"
+     },
+     {
+      "node": "spin",
+      "outcome": "s"
+     },
+     {
+      "node": "spin",
+      "outcome": "s"
+     }
+    ],
+    "violations": null
+   },
+   "flow": "---\nname: plainloop\nstart: spin\n---\n\n## spin\n-> spin: when visits < 5\n-> out: else\n\n## out\nDone.\n",
+   "name": "bound-larger-than-the-history-drops-nothing",
+   "opts": {
+    "max_transcript": 50
+   },
+   "script": {
+    "spin": [
+     {
+      "text": "s"
+     }
+    ]
+   }
+  },
+  {
+   "expect": {
+    "cause": 0,
+    "guard_errors": [],
+    "path": [
+     "spin",
+     "spin",
+     "spin",
+     "spin",
+     "spin",
+     "out"
+    ],
+    "pending_node": null,
+    "reason": null,
+    "spawn": null,
+    "state_dropped": {
+     "transcript": 4
+    },
+    "steps": [
+     {
+      "cond": "when visits < 5",
+      "node": "spin",
+      "target": "spin",
+      "used": "deterministic"
+     },
+     {
+      "cond": "when visits < 5",
+      "node": "spin",
+      "target": "spin",
+      "used": "deterministic"
+     },
+     {
+      "cond": "when visits < 5",
+      "node": "spin",
+      "target": "spin",
+      "used": "deterministic"
+     },
+     {
+      "cond": "when visits < 5",
+      "node": "spin",
+      "target": "spin",
+      "used": "deterministic"
+     },
+     {
+      "cond": "else",
+      "node": "spin",
+      "target": "out",
+      "used": "deterministic"
+     }
+    ],
+    "stopped": "terminal",
+    "transcript": [
+     {
+      "node": "spin",
+      "outcome": "s"
+     }
+    ],
+    "violations": null
+   },
+   "flow": "---\nname: plainloop\nstart: spin\n---\n\n## spin\n-> spin: when visits < 5\n-> out: else\n\n## out\nDone.\n",
+   "name": "bound-of-one",
+   "opts": {
+    "max_transcript": 1
+   },
+   "script": {
+    "spin": [
+     {
+      "text": "s"
+     }
+    ]
+   }
+  },
+  {
+   "expect": {
+    "cause": 0,
+    "guard_errors": [],
+    "path": [
+     "spin",
+     "spin",
+     "out"
+    ],
+    "pending_node": null,
+    "reason": null,
+    "spawn": null,
+    "state_dropped": {
+     "transcript": 6
+    },
+    "steps": [
+     {
+      "cond": "when visits < 5",
+      "node": "spin",
+      "target": "spin",
+      "used": "deterministic"
+     },
+     {
+      "cond": "else",
+      "node": "spin",
+      "target": "out",
+      "used": "deterministic"
+     }
+    ],
+    "stopped": "terminal",
+    "transcript": [
+     {
+      "node": "spin",
+      "outcome": "s"
+     },
+     {
+      "node": "spin",
+      "outcome": "s"
+     }
+    ],
+    "violations": null
+   },
+   "flow": "---\nname: plainloop\nstart: spin\n---\n\n## spin\n-> spin: when visits < 5\n-> out: else\n\n## out\nDone.\n",
+   "name": "bound-trims-an-oversized-transcript-on-resume",
+   "opts": {
+    "max_transcript": 2
+   },
+   "script": {
+    "spin": [
+     {
+      "text": "s"
+     }
+    ]
+   },
+   "start": "spin",
+   "state": {
+    "transcript": [
+     {
+      "node": "spin",
+      "outcome": "old0"
+     },
+     {
+      "node": "spin",
+      "outcome": "old1"
+     },
+     {
+      "node": "spin",
+      "outcome": "old2"
+     },
+     {
+      "node": "spin",
+      "outcome": "old3"
+     },
+     {
+      "node": "spin",
+      "outcome": "old4"
+     },
+     {
+      "node": "spin",
+      "outcome": "old5"
+     }
+    ],
+    "visits": {
+     "spin": 3
+    }
+   }
+  },
+  {
+   "expect": {
+    "cause": 0,
+    "guard_errors": [],
+    "path": [
+     "spin",
+     "spin",
+     "out"
+    ],
+    "pending_node": null,
+    "reason": null,
+    "spawn": null,
+    "state_dropped": {
+     "path": 2,
+     "transcript": 5
+    },
+    "steps": [
+     {
+      "cond": "when visits < 5",
+      "node": "spin",
+      "target": "spin",
+      "used": "deterministic"
+     },
+     {
+      "cond": "else",
+      "node": "spin",
+      "target": "out",
+      "used": "deterministic"
+     }
+    ],
+    "stopped": "terminal",
+    "transcript": [
+     {
+      "node": "spin",
+      "outcome": "s"
+     },
+     {
+      "node": "spin",
+      "outcome": "s"
+     }
+    ],
+    "violations": null
+   },
+   "flow": "---\nname: plainloop\nstart: spin\n---\n\n## spin\n-> spin: when visits < 5\n-> out: else\n\n## out\nDone.\n",
+   "name": "bound-adds-to-what-an-earlier-run-dropped",
+   "opts": {
+    "max_transcript": 2
+   },
+   "script": {
+    "spin": [
+     {
+      "text": "s"
+     }
+    ]
+   },
+   "start": "spin",
+   "state": {
+    "_state_dropped": {
+     "path": 2,
+     "transcript": 4
+    },
+    "transcript": [
+     {
+      "node": "spin",
+      "outcome": "old"
+     }
+    ],
+    "visits": {
+     "spin": 3
+    }
+   }
+  },
+  {
+   "expect": {
+    "cause": 0,
+    "guard_errors": [],
+    "path": [
+     "work",
+     "work",
+     "done"
+    ],
+    "pending_node": null,
+    "reason": null,
+    "spawn": null,
+    "state_dropped": {
+     "transcript": 1
+    },
+    "steps": [
+     {
+      "error_type": "RuntimeError",
+      "node": "work",
+      "target": "work",
+      "used": "error"
+     },
+     {
+      "cond": "when ok",
+      "node": "work",
+      "target": "done",
+      "used": "deterministic"
+     }
+    ],
+    "stopped": "terminal",
+    "transcript": [
+     {
+      "node": "work",
+      "outcome": "w"
+     }
+    ],
+    "violations": null
+   },
+   "flow": "---\nname: errorbound\nstart: work\n---\n\n## work\n@state_bound(transcript=1)\n-> work: on error\n-> done: when ok\n\n## done\nDone.\n",
+   "name": "bound-counts-the-error-entries",
+   "opts": {},
+   "script": {
+    "work": [
+     {
+      "__raise__": "once"
+     },
+     {
+      "ok": true,
+      "text": "w"
+     }
+    ]
+   }
+  },
+  {
+   "expect": {
+    "cause": 0,
+    "guard_errors": [],
+    "path": [
+     "a",
+     "b",
+     "c",
+     "d",
+     "e",
+     "f"
+    ],
+    "pending_node": null,
+    "reason": null,
+    "spawn": null,
+    "state_dropped": {
+     "transcript": 1
+    },
+    "steps": [
+     {
+      "cond": "always",
+      "node": "a",
+      "target": "b",
+      "used": "deterministic"
+     },
+     {
+      "cond": "always",
+      "node": "b",
+      "target": "c",
+      "used": "deterministic"
+     },
+     {
+      "cond": "always",
+      "node": "c",
+      "target": "d",
+      "used": "deterministic"
+     },
+     {
+      "cond": "always",
+      "node": "d",
+      "target": "e",
+      "used": "deterministic"
+     },
+     {
+      "cond": "always",
+      "node": "e",
+      "target": "f",
+      "used": "deterministic"
+     }
+    ],
+    "stopped": "terminal",
+    "transcript": [
+     {
+      "node": "b",
+      "outcome": "b"
+     },
+     {
+      "node": "c",
+      "outcome": "c"
+     },
+     {
+      "node": "d",
+      "outcome": "d"
+     },
+     {
+      "node": "e",
+      "outcome": "e"
+     }
+    ],
+    "violations": null
+   },
+   "flow": "---\nname: firstwins\nstart: a\n---\n\n## a\n-> b: always\n\n## b\n@state_bound(transcript=4)\n-> c: always\n\n## c\n@state_bound(transcript=2)\n-> d: always\n\n## d\n-> e: always\n\n## e\n-> f: always\n\n## f\nDone.\n",
+   "name": "the-first-annotation-in-document-order-binds",
+   "opts": {},
+   "script": {}
+  },
+  {
+   "expect": {
+    "cause": 0,
+    "guard_errors": [],
+    "path": [
+     "spin",
+     "spin",
+     "spin",
+     "spin",
+     "spin",
+     "spin",
+     "spin",
+     "out"
+    ],
+    "pending_node": null,
+    "reason": null,
+    "spawn": null,
+    "state_dropped": {
+     "transcript": 3
+    },
+    "steps": [
+     {
+      "cond": "when visits < 7",
+      "node": "spin",
+      "target": "spin",
+      "used": "deterministic"
+     },
+     {
+      "cond": "when visits < 7",
+      "node": "spin",
+      "target": "spin",
+      "used": "deterministic"
+     },
+     {
+      "cond": "when visits < 7",
+      "node": "spin",
+      "target": "spin",
+      "used": "deterministic"
+     },
+     {
+      "cond": "when visits < 7",
+      "node": "spin",
+      "target": "spin",
+      "used": "deterministic"
+     },
+     {
+      "cond": "when visits < 7",
+      "node": "spin",
+      "target": "spin",
+      "used": "deterministic"
+     },
+     {
+      "cond": "when visits < 7",
+      "node": "spin",
+      "target": "spin",
+      "used": "deterministic"
+     },
+     {
+      "cond": "else",
+      "node": "spin",
+      "target": "out",
+      "used": "deterministic"
+     }
+    ],
+    "stopped": "terminal",
+    "transcript": [
+     {
+      "node": "spin",
+      "outcome": "s"
+     },
+     {
+      "node": "spin",
+      "outcome": "s"
+     },
+     {
+      "node": "spin",
+      "outcome": "s"
+     },
+     {
+      "node": "spin",
+      "outcome": "s"
+     }
+    ],
+    "violations": null
+   },
+   "flow": "---\nname: repeated\nstart: spin\n---\n\n## spin\n@state_bound(transcript=2)\n@state_bound(transcript=4)\n-> spin: when visits < 7\n-> out: else\n\n## out\nDone.\n",
+   "name": "a-repeated-annotation-merges-and-the-last-value-wins",
+   "opts": {},
+   "script": {
+    "spin": [
+     {
+      "text": "s"
+     }
+    ]
+   }
+  },
+  {
+   "expect": {
+    "cause": 0,
+    "guard_errors": [],
+    "path": [
+     "spin",
+     "spin",
+     "spin",
+     "spin",
+     "spin",
+     "out"
+    ],
+    "pending_node": null,
+    "reason": null,
+    "spawn": null,
+    "state_dropped": {},
+    "steps": [
+     {
+      "cond": "when visits < 5",
+      "node": "spin",
+      "target": "spin",
+      "used": "deterministic"
+     },
+     {
+      "cond": "when visits < 5",
+      "node": "spin",
+      "target": "spin",
+      "used": "deterministic"
+     },
+     {
+      "cond": "when visits < 5",
+      "node": "spin",
+      "target": "spin",
+      "used": "deterministic"
+     },
+     {
+      "cond": "when visits < 5",
+      "node": "spin",
+      "target": "spin",
+      "used": "deterministic"
+     },
+     {
+      "cond": "else",
+      "node": "spin",
+      "target": "out",
+      "used": "deterministic"
+     }
+    ],
+    "stopped": "terminal",
+    "transcript": [
+     {
+      "node": "spin",
+      "outcome": "s"
+     },
+     {
+      "node": "spin",
+      "outcome": "s"
+     },
+     {
+      "node": "spin",
+      "outcome": "s"
+     },
+     {
+      "node": "spin",
+      "outcome": "s"
+     },
+     {
+      "node": "spin",
+      "outcome": "s"
+     }
+    ],
+    "violations": null
+   },
+   "flow": "---\nname: plainloop\nstart: spin\n---\n\n## spin\n@state_bound(transcript=1_0)\n-> spin: when visits < 5\n-> out: else\n\n## out\nDone.\n",
+   "name": "bound-with-underscores-in-the-number",
+   "opts": {},
+   "script": {
+    "spin": [
+     {
+      "text": "s"
+     }
+    ]
+   }
+  },
+  {
+   "expect": {
+    "cause": 0,
+    "guard_errors": [],
+    "path": [
+     "spin",
+     "spin",
+     "spin",
+     "spin",
+     "spin",
+     "out"
+    ],
+    "pending_node": null,
+    "reason": null,
+    "spawn": null,
+    "state_dropped": {
+     "transcript": 2
+    },
+    "steps": [
+     {
+      "cond": "when visits < 5",
+      "node": "spin",
+      "target": "spin",
+      "used": "deterministic"
+     },
+     {
+      "cond": "when visits < 5",
+      "node": "spin",
+      "target": "spin",
+      "used": "deterministic"
+     },
+     {
+      "cond": "when visits < 5",
+      "node": "spin",
+      "target": "spin",
+      "used": "deterministic"
+     },
+     {
+      "cond": "when visits < 5",
+      "node": "spin",
+      "target": "spin",
+      "used": "deterministic"
+     },
+     {
+      "cond": "else",
+      "node": "spin",
+      "target": "out",
+      "used": "deterministic"
+     }
+    ],
+    "stopped": "terminal",
+    "transcript": [
+     {
+      "node": "spin",
+      "outcome": "s"
+     },
+     {
+      "node": "spin",
+      "outcome": "s"
+     },
+     {
+      "node": "spin",
+      "outcome": "s"
+     }
+    ],
+    "violations": null
+   },
+   "flow": "---\nname: plainloop\nstart: spin\n---\n\n## spin\n@state_bound(transcript=+003)\n-> spin: when visits < 5\n-> out: else\n\n## out\nDone.\n",
+   "name": "bound-with-a-plus-sign-and-leading-zeros",
+   "opts": {},
+   "script": {
+    "spin": [
+     {
+      "text": "s"
+     }
+    ]
+   }
+  },
+  {
+   "expect": {
+    "cause": 0,
+    "guard_errors": [],
+    "path": [
+     "spin",
+     "spin",
+     "spin",
+     "spin",
+     "spin",
+     "out"
+    ],
+    "pending_node": null,
+    "reason": null,
+    "spawn": null,
+    "state_dropped": {},
+    "steps": [
+     {
+      "cond": "when visits < 5",
+      "node": "spin",
+      "target": "spin",
+      "used": "deterministic"
+     },
+     {
+      "cond": "when visits < 5",
+      "node": "spin",
+      "target": "spin",
+      "used": "deterministic"
+     },
+     {
+      "cond": "when visits < 5",
+      "node": "spin",
+      "target": "spin",
+      "used": "deterministic"
+     },
+     {
+      "cond": "when visits < 5",
+      "node": "spin",
+      "target": "spin",
+      "used": "deterministic"
+     },
+     {
+      "cond": "else",
+      "node": "spin",
+      "target": "out",
+      "used": "deterministic"
+     }
+    ],
+    "stopped": "terminal",
+    "transcript": [
+     {
+      "node": "spin",
+      "outcome": "s"
+     },
+     {
+      "node": "spin",
+      "outcome": "s"
+     },
+     {
+      "node": "spin",
+      "outcome": "s"
+     },
+     {
+      "node": "spin",
+      "outcome": "s"
+     },
+     {
+      "node": "spin",
+      "outcome": "s"
+     }
+    ],
+    "violations": null
+   },
+   "flow": "---\nname: plainloop\nstart: spin\n---\n\n## spin\n@state_bound(transcript=99999999999999999999999)\n-> spin: when visits < 5\n-> out: else\n\n## out\nDone.\n",
+   "name": "bound-too-large-to-reach",
+   "opts": {},
+   "script": {
+    "spin": [
+     {
+      "text": "s"
+     }
+    ]
+   }
+  },
+  {
+   "expect": {
+    "error": "@state_bound(transcript=0) on node 'spin': must be >= 1",
+    "error_class": "ValueError"
+   },
+   "flow": "---\nname: plainloop\nstart: spin\n---\n\n## spin\n@state_bound(transcript=0)\n-> spin: when visits < 5\n-> out: else\n\n## out\nDone.\n",
+   "name": "bound-malformed-zero-is-refused",
+   "opts": {},
+   "script": {
+    "spin": [
+     {
+      "text": "s"
+     }
+    ]
+   }
+  },
+  {
+   "expect": {
+    "error": "@state_bound(transcript=-3) on node 'spin': must be >= 1",
+    "error_class": "ValueError"
+   },
+   "flow": "---\nname: plainloop\nstart: spin\n---\n\n## spin\n@state_bound(transcript=-3)\n-> spin: when visits < 5\n-> out: else\n\n## out\nDone.\n",
+   "name": "bound-malformed-negative-is-refused",
+   "opts": {},
+   "script": {
+    "spin": [
+     {
+      "text": "s"
+     }
+    ]
+   }
+  },
+  {
+   "expect": {
+    "error": "@state_bound(transcript='many') on node 'spin': transcript must be a positive integer",
+    "error_class": "ValueError"
+   },
+   "flow": "---\nname: plainloop\nstart: spin\n---\n\n## spin\n@state_bound(transcript=many)\n-> spin: when visits < 5\n-> out: else\n\n## out\nDone.\n",
+   "name": "bound-malformed-word-is-refused",
+   "opts": {},
+   "script": {
+    "spin": [
+     {
+      "text": "s"
+     }
+    ]
+   }
+  },
+  {
+   "expect": {
+    "error": "@state_bound(transcript='2.5') on node 'spin': transcript must be a positive integer",
+    "error_class": "ValueError"
+   },
+   "flow": "---\nname: plainloop\nstart: spin\n---\n\n## spin\n@state_bound(transcript=2.5)\n-> spin: when visits < 5\n-> out: else\n\n## out\nDone.\n",
+   "name": "bound-malformed-fraction-is-refused",
+   "opts": {},
+   "script": {
+    "spin": [
+     {
+      "text": "s"
+     }
+    ]
+   }
+  },
+  {
+   "expect": {
+    "error": "@state_bound(transcript='') on node 'spin': transcript must be a positive integer",
+    "error_class": "ValueError"
+   },
+   "flow": "---\nname: plainloop\nstart: spin\n---\n\n## spin\n@state_bound(transcript=)\n-> spin: when visits < 5\n-> out: else\n\n## out\nDone.\n",
+   "name": "bound-malformed-empty-is-refused",
+   "opts": {},
+   "script": {
+    "spin": [
+     {
+      "text": "s"
+     }
+    ]
+   }
+  },
+  {
+   "expect": {
+    "error": "@state_bound(transcript='1__0') on node 'spin': transcript must be a positive integer",
+    "error_class": "ValueError"
+   },
+   "flow": "---\nname: plainloop\nstart: spin\n---\n\n## spin\n@state_bound(transcript=1__0)\n-> spin: when visits < 5\n-> out: else\n\n## out\nDone.\n",
+   "name": "bound-malformed-double-underscore-is-refused",
+   "opts": {},
+   "script": {
+    "spin": [
+     {
+      "text": "s"
+     }
+    ]
+   }
+  },
+  {
+   "expect": {
+    "error": "@state_bound(transcript=None) on node 'spin': transcript must be a positive integer",
+    "error_class": "ValueError"
+   },
+   "flow": "---\nname: plainloop\nstart: spin\n---\n\n## spin\n@state_bound(transcript)\n-> spin: when visits < 5\n-> out: else\n\n## out\nDone.\n",
+   "name": "bound-malformed-bare-name-is-refused",
+   "opts": {},
+   "script": {
+    "spin": [
+     {
+      "text": "s"
+     }
+    ]
+   }
+  },
+  {
+   "expect": {
+    "cause": 0,
+    "guard_errors": [],
+    "path": [
+     "spin",
+     "spin",
+     "spin",
+     "spin",
+     "spin",
+     "out"
+    ],
+    "pending_node": null,
+    "reason": null,
+    "spawn": null,
+    "state_dropped": {
+     "transcript": 3
+    },
+    "steps": [
+     {
+      "cond": "when visits < 5",
+      "node": "spin",
+      "target": "spin",
+      "used": "deterministic"
+     },
+     {
+      "cond": "when visits < 5",
+      "node": "spin",
+      "target": "spin",
+      "used": "deterministic"
+     },
+     {
+      "cond": "when visits < 5",
+      "node": "spin",
+      "target": "spin",
+      "used": "deterministic"
+     },
+     {
+      "cond": "when visits < 5",
+      "node": "spin",
+      "target": "spin",
+      "used": "deterministic"
+     },
+     {
+      "cond": "else",
+      "node": "spin",
+      "target": "out",
+      "used": "deterministic"
+     }
+    ],
+    "stopped": "terminal",
+    "transcript": [
+     {
+      "node": "spin",
+      "outcome": "s"
+     },
+     {
+      "node": "spin",
+      "outcome": "s"
+     }
+    ],
+    "violations": null
+   },
+   "flow": "---\nname: plainloop\nstart: spin\n---\n\n## spin\n@state_bound(transcript=many)\n-> spin: when visits < 5\n-> out: else\n\n## out\nDone.\n",
+   "name": "bound-malformed-but-overridden-by-the-option-is-not-read",
+   "opts": {
+    "max_transcript": 2
+   },
+   "script": {
+    "spin": [
+     {
+      "text": "s"
+     }
+    ]
+   }
+  },
+  {
+   "expect": {
+    "error": "max_transcript=-2: must be >= 0 (0 is no bound)",
+    "error_class": "ValueError"
+   },
+   "flow": "---\nname: plainloop\nstart: spin\n---\n\n## spin\n-> spin: when visits < 5\n-> out: else\n\n## out\nDone.\n",
+   "name": "bound-option-negative-is-refused",
+   "opts": {
+    "max_transcript": -2
+   },
+   "script": {
+    "spin": [
+     {
+      "text": "s"
+     }
+    ]
+   }
+  },
+  {
+   "expect": {
+    "error": "max_transcript=-1: must be >= 0 (0 is no bound)",
+    "error_class": "ValueError"
+   },
+   "flow": "---\nname: bounded\nstart: spin\n---\n\n## spin\n@state_bound(transcript=3)\n-> spin: when visits < 5\n-> out: else\n\n## out\nDone.\n",
+   "name": "bound-option-minus-one-is-refused",
+   "opts": {
+    "max_transcript": -1
+   },
+   "script": {
+    "spin": [
+     {
+      "text": "s"
+     }
+    ]
+   }
+  },
+  {
+   "expect": {
+    "error": "@state_bound(transcript=None) on node 'spin': transcript must be a positive integer",
+    "error_class": "ValueError"
+   },
+   "flow": "---\nname: plainloop\nstart: spin\n---\n\n## spin\n@state_bound(history=3)\n-> spin: when visits < 5\n-> out: else\n\n## out\nDone.\n",
+   "name": "bound-annotation-without-a-transcript-key-is-refused",
+   "opts": {},
+   "script": {
+    "spin": [
+     {
+      "text": "s"
+     }
+    ]
+   }
+  },
+  {
+   "expect": {
+    "cause": 0,
+    "guard_errors": [],
+    "path": [
+     "work",
+     "timed_out"
+    ],
+    "pending_node": null,
+    "reason": null,
+    "spawn": null,
+    "state_dropped": {},
+    "steps": [
+     {
+      "error_type": "TimeoutError",
+      "node": "work",
+      "target": "timed_out",
+      "used": "error"
+     }
+    ],
+    "stopped": "terminal",
+    "transcript": [
+     {
+      "error": true,
+      "node": "work",
+      "outcome": "[error: TimeoutError: slow]"
+     }
+    ],
+    "violations": null
+   },
+   "flow": "---\nname: errortype\nstart: work\n---\n\n## work\n-> timed_out: on error when error_type == \"TimeoutError\"\n-> bad_input: on error when error_type in (\"ValueError\", \"KeyError\")\n-> exact: on error when error_message == \"exactly this\"\n-> runtime: on error when error_type == \"RuntimeError\"\n-> other: on error\n-> done: when ok\n\n## timed_out\nTimed out.\n\n## bad_input\nBad input.\n\n## exact\nExact.\n\n## runtime\nRuntime.\n\n## other\nOther.\n\n## done\nDone.\n",
+   "name": "error-type-routes-on-a-named-class",
+   "opts": {},
+   "script": {
+    "work": [
+     {
+      "__kind__": "TimeoutError",
+      "__raise__": "slow"
+     }
+    ]
+   }
+  },
+  {
+   "expect": {
+    "cause": 0,
+    "guard_errors": [],
+    "path": [
+     "work",
+     "bad_input"
+    ],
+    "pending_node": null,
+    "reason": null,
+    "spawn": null,
+    "state_dropped": {},
+    "steps": [
+     {
+      "error_type": "KeyError",
+      "node": "work",
+      "target": "bad_input",
+      "used": "error"
+     }
+    ],
+    "stopped": "terminal",
+    "transcript": [
+     {
+      "error": true,
+      "node": "work",
+      "outcome": "[error: KeyError: no key]"
+     }
+    ],
+    "violations": null
+   },
+   "flow": "---\nname: errortype\nstart: work\n---\n\n## work\n-> timed_out: on error when error_type == \"TimeoutError\"\n-> bad_input: on error when error_type in (\"ValueError\", \"KeyError\")\n-> exact: on error when error_message == \"exactly this\"\n-> runtime: on error when error_type == \"RuntimeError\"\n-> other: on error\n-> done: when ok\n\n## timed_out\nTimed out.\n\n## bad_input\nBad input.\n\n## exact\nExact.\n\n## runtime\nRuntime.\n\n## other\nOther.\n\n## done\nDone.\n",
+   "name": "error-type-routes-on-membership-in-a-tuple",
+   "opts": {},
+   "script": {
+    "work": [
+     {
+      "__kind__": "KeyError",
+      "__raise__": "no key"
+     }
+    ]
+   }
+  },
+  {
+   "expect": {
+    "cause": 0,
+    "guard_errors": [],
+    "path": [
+     "work",
+     "runtime"
+    ],
+    "pending_node": null,
+    "reason": null,
+    "spawn": null,
+    "state_dropped": {},
+    "steps": [
+     {
+      "error_type": "RuntimeError",
+      "node": "work",
+      "target": "runtime",
+      "used": "error"
+     }
+    ],
+    "stopped": "terminal",
+    "transcript": [
+     {
+      "error": true,
+      "node": "work",
+      "outcome": "[error: RuntimeError: plain]"
+     }
+    ],
+    "violations": null
+   },
+   "flow": "---\nname: errortype\nstart: work\n---\n\n## work\n-> timed_out: on error when error_type == \"TimeoutError\"\n-> bad_input: on error when error_type in (\"ValueError\", \"KeyError\")\n-> exact: on error when error_message == \"exactly this\"\n-> runtime: on error when error_type == \"RuntimeError\"\n-> other: on error\n-> done: when ok\n\n## timed_out\nTimed out.\n\n## bad_input\nBad input.\n\n## exact\nExact.\n\n## runtime\nRuntime.\n\n## other\nOther.\n\n## done\nDone.\n",
+   "name": "error-type-defaults-to-runtime-error-in-the-corpus",
+   "opts": {},
+   "script": {
+    "work": [
+     {
+      "__raise__": "plain"
+     }
+    ]
+   }
+  },
+  {
+   "expect": {
+    "cause": 0,
+    "guard_errors": [],
+    "path": [
+     "work",
+     "other"
+    ],
+    "pending_node": null,
+    "reason": null,
+    "spawn": null,
+    "state_dropped": {},
+    "steps": [
+     {
+      "error_type": "OSError",
+      "node": "work",
+      "target": "other",
+      "used": "error"
+     }
+    ],
+    "stopped": "terminal",
+    "transcript": [
+     {
+      "error": true,
+      "node": "work",
+      "outcome": "[error: OSError: odd]"
+     }
+    ],
+    "violations": null
+   },
+   "flow": "---\nname: errortype\nstart: work\n---\n\n## work\n-> timed_out: on error when error_type == \"TimeoutError\"\n-> bad_input: on error when error_type in (\"ValueError\", \"KeyError\")\n-> exact: on error when error_message == \"exactly this\"\n-> runtime: on error when error_type == \"RuntimeError\"\n-> other: on error\n-> done: when ok\n\n## timed_out\nTimed out.\n\n## bad_input\nBad input.\n\n## exact\nExact.\n\n## runtime\nRuntime.\n\n## other\nOther.\n\n## done\nDone.\n",
+   "name": "error-type-an-unlisted-class-takes-the-catch-all",
+   "opts": {},
+   "script": {
+    "work": [
+     {
+      "__kind__": "OSError",
+      "__raise__": "odd"
+     }
+    ]
+   }
+  },
+  {
+   "expect": {
+    "cause": 0,
+    "guard_errors": [],
+    "path": [
+     "work",
+     "other"
+    ],
+    "pending_node": null,
+    "reason": null,
+    "spawn": null,
+    "state_dropped": {},
+    "steps": [
+     {
+      "error_type": "timeouterror",
+      "node": "work",
+      "target": "other",
+      "used": "error"
+     }
+    ],
+    "stopped": "terminal",
+    "transcript": [
+     {
+      "error": true,
+      "node": "work",
+      "outcome": "[error: timeouterror: odd]"
+     }
+    ],
+    "violations": null
+   },
+   "flow": "---\nname: errortype\nstart: work\n---\n\n## work\n-> timed_out: on error when error_type == \"TimeoutError\"\n-> bad_input: on error when error_type in (\"ValueError\", \"KeyError\")\n-> exact: on error when error_message == \"exactly this\"\n-> runtime: on error when error_type == \"RuntimeError\"\n-> other: on error\n-> done: when ok\n\n## timed_out\nTimed out.\n\n## bad_input\nBad input.\n\n## exact\nExact.\n\n## runtime\nRuntime.\n\n## other\nOther.\n\n## done\nDone.\n",
+   "name": "error-type-is-case-sensitive",
+   "opts": {},
+   "script": {
+    "work": [
+     {
+      "__kind__": "timeouterror",
+      "__raise__": "odd"
+     }
+    ]
+   }
+  },
+  {
+   "expect": {
+    "cause": 0,
+    "guard_errors": [],
+    "path": [
+     "work",
+     "bad_input"
+    ],
+    "pending_node": null,
+    "reason": null,
+    "spawn": null,
+    "state_dropped": {},
+    "steps": [
+     {
+      "error_type": "ValueError",
+      "node": "work",
+      "target": "bad_input",
+      "used": "error"
+     }
+    ],
+    "stopped": "terminal",
+    "transcript": [
+     {
+      "error": true,
+      "node": "work",
+      "outcome": "[error: ValueError: exactly this]"
+     }
+    ],
+    "violations": null
+   },
+   "flow": "---\nname: errortype\nstart: work\n---\n\n## work\n-> timed_out: on error when error_type == \"TimeoutError\"\n-> bad_input: on error when error_type in (\"ValueError\", \"KeyError\")\n-> exact: on error when error_message == \"exactly this\"\n-> runtime: on error when error_type == \"RuntimeError\"\n-> other: on error\n-> done: when ok\n\n## timed_out\nTimed out.\n\n## bad_input\nBad input.\n\n## exact\nExact.\n\n## runtime\nRuntime.\n\n## other\nOther.\n\n## done\nDone.\n",
+   "name": "error-type-the-first-handler-in-document-order-wins",
+   "opts": {},
+   "script": {
+    "work": [
+     {
+      "__kind__": "ValueError",
+      "__raise__": "exactly this"
+     }
+    ]
+   }
+  },
+  {
+   "expect": {
+    "cause": 0,
+    "guard_errors": [],
+    "path": [
+     "work",
+     "exact"
+    ],
+    "pending_node": null,
+    "reason": null,
+    "spawn": null,
+    "state_dropped": {},
+    "steps": [
+     {
+      "error_type": "OSError",
+      "node": "work",
+      "target": "exact",
+      "used": "error"
+     }
+    ],
+    "stopped": "terminal",
+    "transcript": [
+     {
+      "error": true,
+      "node": "work",
+      "outcome": "[error: OSError: exactly this]"
+     }
+    ],
+    "violations": null
+   },
+   "flow": "---\nname: errortype\nstart: work\n---\n\n## work\n-> timed_out: on error when error_type == \"TimeoutError\"\n-> bad_input: on error when error_type in (\"ValueError\", \"KeyError\")\n-> exact: on error when error_message == \"exactly this\"\n-> runtime: on error when error_type == \"RuntimeError\"\n-> other: on error\n-> done: when ok\n\n## timed_out\nTimed out.\n\n## bad_input\nBad input.\n\n## exact\nExact.\n\n## runtime\nRuntime.\n\n## other\nOther.\n\n## done\nDone.\n",
+   "name": "error-message-routes-when-the-class-matches-no-earlier-handler",
+   "opts": {},
+   "script": {
+    "work": [
+     {
+      "__kind__": "OSError",
+      "__raise__": "exactly this"
+     }
+    ]
+   }
+  },
+  {
+   "expect": {
+    "cause": 0,
+    "guard_errors": [],
+    "path": [
+     "work",
+     "other"
+    ],
+    "pending_node": null,
+    "reason": null,
+    "spawn": null,
+    "state_dropped": {},
+    "steps": [
+     {
+      "error_type": "My_Error2",
+      "node": "work",
+      "target": "other",
+      "used": "error"
+     }
+    ],
+    "stopped": "terminal",
+    "transcript": [
+     {
+      "error": true,
+      "node": "work",
+      "outcome": "[error: My_Error2: x]"
+     }
+    ],
+    "violations": null
+   },
+   "flow": "---\nname: errortype\nstart: work\n---\n\n## work\n-> timed_out: on error when error_type == \"TimeoutError\"\n-> bad_input: on error when error_type in (\"ValueError\", \"KeyError\")\n-> exact: on error when error_message == \"exactly this\"\n-> runtime: on error when error_type == \"RuntimeError\"\n-> other: on error\n-> done: when ok\n\n## timed_out\nTimed out.\n\n## bad_input\nBad input.\n\n## exact\nExact.\n\n## runtime\nRuntime.\n\n## other\nOther.\n\n## done\nDone.\n",
+   "name": "error-type-a-class-name-with-digits-and-underscores",
+   "opts": {},
+   "script": {
+    "work": [
+     {
+      "__kind__": "My_Error2",
+      "__raise__": "x"
+     }
+    ]
+   }
+  },
+  {
+   "expect": {
+    "cause": 0,
+    "guard_errors": [],
+    "path": [
+     "work",
+     "other"
+    ],
+    "pending_node": null,
+    "reason": null,
+    "spawn": null,
+    "state_dropped": {},
+    "steps": [
+     {
+      "error_type": "Überfehler",
+      "node": "work",
+      "target": "other",
+      "used": "error"
+     }
+    ],
+    "stopped": "terminal",
+    "transcript": [
+     {
+      "error": true,
+      "node": "work",
+      "outcome": "[error: Überfehler: x]"
+     }
+    ],
+    "violations": null
+   },
+   "flow": "---\nname: errortype\nstart: work\n---\n\n## work\n-> timed_out: on error when error_type == \"TimeoutError\"\n-> bad_input: on error when error_type in (\"ValueError\", \"KeyError\")\n-> exact: on error when error_message == \"exactly this\"\n-> runtime: on error when error_type == \"RuntimeError\"\n-> other: on error\n-> done: when ok\n\n## timed_out\nTimed out.\n\n## bad_input\nBad input.\n\n## exact\nExact.\n\n## runtime\nRuntime.\n\n## other\nOther.\n\n## done\nDone.\n",
+   "name": "error-type-a-non-ascii-class-name",
+   "opts": {},
+   "script": {
+    "work": [
+     {
+      "__kind__": "Überfehler",
+      "__raise__": "x"
+     }
+    ]
+   }
+  },
+  {
+   "expect": {
+    "cause": 0,
+    "guard_errors": [],
+    "path": [
+     "work",
+     "timed_out"
+    ],
+    "pending_node": null,
+    "reason": null,
+    "spawn": null,
+    "state_dropped": {},
+    "steps": [
+     {
+      "error_type": "TimeoutError",
+      "node": "work",
+      "target": "timed_out",
+      "used": "error"
+     }
+    ],
+    "stopped": "terminal",
+    "transcript": [
+     {
+      "error": true,
+      "node": "work",
+      "outcome": "[error: TimeoutError: ]"
+     }
+    ],
+    "violations": null
+   },
+   "flow": "---\nname: errortype\nstart: work\n---\n\n## work\n-> timed_out: on error when error_type == \"TimeoutError\"\n-> bad_input: on error when error_type in (\"ValueError\", \"KeyError\")\n-> exact: on error when error_message == \"exactly this\"\n-> runtime: on error when error_type == \"RuntimeError\"\n-> other: on error\n-> done: when ok\n\n## timed_out\nTimed out.\n\n## bad_input\nBad input.\n\n## exact\nExact.\n\n## runtime\nRuntime.\n\n## other\nOther.\n\n## done\nDone.\n",
+   "name": "error-type-with-an-empty-message",
+   "opts": {},
+   "script": {
+    "work": [
+     {
+      "__kind__": "TimeoutError",
+      "__raise__": ""
+     }
+    ]
+   }
+  },
+  {
+   "expect": {
+    "cause": 0,
+    "guard_errors": [],
+    "path": [
+     "work",
+     "work",
+     "work",
+     "failed"
+    ],
+    "pending_node": null,
+    "reason": null,
+    "spawn": null,
+    "state_dropped": {},
+    "steps": [
+     {
+      "error_type": "ValueError",
+      "node": "work",
+      "target": "work",
+      "used": "error"
+     },
+     {
+      "error_type": "ValueError",
+      "node": "work",
+      "target": "work",
+      "used": "error"
+     },
+     {
+      "error_type": "ValueError",
+      "node": "work",
+      "target": "failed",
+      "used": "error"
+     }
+    ],
+    "stopped": "terminal",
+    "transcript": [
+     {
+      "error": true,
+      "node": "work",
+      "outcome": "[error: ValueError: one]"
+     },
+     {
+      "error": true,
+      "node": "work",
+      "outcome": "[error: ValueError: two]"
+     },
+     {
+      "error": true,
+      "node": "work",
+      "outcome": "[error: ValueError: three]"
+     }
+    ],
+    "violations": null
+   },
+   "flow": "---\nname: errortypecount\nstart: work\n---\n\n## work\n-> work: on error when error_type == \"ValueError\" and error_count < 3\n-> failed: on error when error_type == \"ValueError\"\n-> done: when ok\n\n## failed\nFailed.\n\n## done\nDone.\n",
+   "name": "error-type-in-the-transcript-after-a-retry",
+   "opts": {},
+   "script": {
+    "work": [
+     {
+      "__kind__": "ValueError",
+      "__raise__": "one"
+     },
+     {
+      "__kind__": "ValueError",
+      "__raise__": "two"
+     },
+     {
+      "__kind__": "ValueError",
+      "__raise__": "three"
+     }
+    ]
+   }
+  },
+  {
+   "expect": {
+    "cause": 0,
+    "guard_errors": [],
+    "path": [
+     "work",
+     "work",
+     "done"
+    ],
+    "pending_node": null,
+    "reason": null,
+    "spawn": null,
+    "state_dropped": {},
+    "steps": [
+     {
+      "error_type": "ValueError",
+      "node": "work",
+      "target": "work",
+      "used": "error"
+     },
+     {
+      "cond": "when ok",
+      "node": "work",
+      "target": "done",
+      "used": "deterministic"
+     }
+    ],
+    "stopped": "terminal",
+    "transcript": [
+     {
+      "error": true,
+      "node": "work",
+      "outcome": "[error: ValueError: one]"
+     },
+     {
+      "node": "work",
+      "outcome": "fine"
+     }
+    ],
+    "violations": null
+   },
+   "flow": "---\nname: errortypecount\nstart: work\n---\n\n## work\n-> work: on error when error_type == \"ValueError\" and error_count < 3\n-> failed: on error when error_type == \"ValueError\"\n-> done: when ok\n\n## failed\nFailed.\n\n## done\nDone.\n",
+   "name": "error-type-recovers-after-a-retry",
+   "opts": {},
+   "script": {
+    "work": [
+     {
+      "__kind__": "ValueError",
+      "__raise__": "one"
+     },
+     {
+      "ok": true,
+      "text": "fine"
+     }
+    ]
+   }
+  },
+  {
+   "expect": {
+    "error": "bad",
+    "error_class": "ValueError"
+   },
+   "flow": "---\nname: errortypeonly\nstart: work\n---\n\n## work\n-> timed_out: on error when error_type == \"TimeoutError\"\n-> done: when ok\n\n## timed_out\nTimed out.\n\n## done\nDone.\n",
+   "name": "error-type-no-matching-handler-propagates-the-class",
+   "opts": {},
+   "script": {
+    "work": [
+     {
+      "__kind__": "ValueError",
+      "__raise__": "bad"
+     }
+    ]
+   }
+  },
+  {
+   "expect": {
+    "error": "boom",
+    "error_class": "RuntimeError"
+   },
+   "flow": "---\nname: nohandler\nstart: work\n---\n\n## work\n-> done: when ok\n\n## done\nDone.\n",
+   "name": "error-type-no-error-edge-propagates-the-default-class",
+   "opts": {},
+   "script": {
+    "work": [
+     {
+      "__raise__": "boom"
+     }
+    ]
+   }
+  },
+  {
+   "expect": {
+    "cause": 0,
+    "guard_errors": [],
+    "path": [
+     "work",
+     "done"
+    ],
+    "pending_node": null,
+    "reason": null,
+    "spawn": null,
+    "state_dropped": {},
+    "steps": [
+     {
+      "cond": "when ok",
+      "node": "work",
+      "target": "done",
+      "used": "deterministic"
+     }
+    ],
+    "stopped": "terminal",
+    "transcript": [
+     {
+      "node": "work",
+      "outcome": "fine"
+     }
+    ],
+    "violations": null
+   },
+   "flow": "---\nname: errortypeonly\nstart: work\n---\n\n## work\n-> timed_out: on error when error_type == \"TimeoutError\"\n-> done: when ok\n\n## timed_out\nTimed out.\n\n## done\nDone.\n",
+   "name": "error-type-a-later-success-is-not-an-error",
+   "opts": {},
+   "script": {
+    "work": [
+     {
+      "ok": true,
+      "text": "fine"
+     }
+    ]
+   }
+  },
+  {
+   "expect": {
+    "cause": 0,
+    "guard_errors": [
+     {
+      "guard": "when len(error_message) > 3",
+      "node": "work"
+     }
+    ],
+    "path": [
+     "work",
+     "fallback"
+    ],
+    "pending_node": null,
+    "reason": null,
+    "spawn": null,
+    "state_dropped": {},
+    "steps": [
+     {
+      "error_type": "RuntimeError",
+      "guard_errors": 1,
+      "node": "work",
+      "target": "fallback",
+      "used": "error"
+     }
+    ],
+    "stopped": "terminal",
+    "transcript": [
+     {
+      "error": true,
+      "node": "work",
+      "outcome": "[error: RuntimeError: boom]"
+     }
+    ],
+    "violations": null
+   },
+   "flow": "---\nname: guard\nstart: work\n---\n\n## work\n-> handled: on error when len(error_message) > 3\n-> fallback: on error\n-> done: when ok\n\n## handled\nHandled.\n\n## fallback\nFallback.\n\n## done\nDone.\n",
+   "name": "guard-unevaluable-is-recorded-and-skipped",
+   "opts": {},
+   "script": {
+    "work": [
+     {
+      "__raise__": "boom"
+     }
+    ]
+   }
+  },
+  {
+   "expect": {
+    "cause": 0,
+    "guard_errors": [],
+    "path": [
+     "work",
+     "fallback"
+    ],
+    "pending_node": null,
+    "reason": null,
+    "spawn": null,
+    "state_dropped": {},
+    "steps": [
+     {
+      "error_type": "RuntimeError",
+      "node": "work",
+      "target": "fallback",
+      "used": "error"
+     }
+    ],
+    "stopped": "terminal",
+    "transcript": [
+     {
+      "error": true,
+      "node": "work",
+      "outcome": "[error: RuntimeError: boom]"
+     }
+    ],
+    "violations": null
+   },
+   "flow": "---\nname: guard\nstart: work\n---\n\n## work\n-> handled: on error when error_count >= 2\n-> fallback: on error\n-> done: when ok\n\n## handled\nHandled.\n\n## fallback\nFallback.\n\n## done\nDone.\n",
+   "name": "guard-evaluable-leaves-no-record",
+   "opts": {},
+   "script": {
+    "work": [
+     {
+      "__raise__": "boom"
+     }
+    ]
+   }
+  },
+  {
+   "expect": {
+    "cause": 0,
+    "guard_errors": [],
+    "path": [
+     "work",
+     "handled"
+    ],
+    "pending_node": null,
+    "reason": null,
+    "spawn": null,
+    "state_dropped": {},
+    "steps": [
+     {
+      "error_type": "RuntimeError",
+      "node": "work",
+      "target": "handled",
+      "used": "error"
+     }
+    ],
+    "stopped": "terminal",
+    "transcript": [
+     {
+      "error": true,
+      "node": "work",
+      "outcome": "[error: RuntimeError: boom]"
+     }
+    ],
+    "violations": null
+   },
+   "flow": "---\nname: guard\nstart: work\n---\n\n## work\n-> handled: on error when error_count >= 1\n-> fallback: on error\n-> done: when ok\n\n## handled\nHandled.\n\n## fallback\nFallback.\n\n## done\nDone.\n",
+   "name": "guard-an-evaluable-guard-that-matches-is-taken",
+   "opts": {},
+   "script": {
+    "work": [
+     {
+      "__raise__": "boom"
+     }
+    ]
+   }
+  },
+  {
+   "expect": {
+    "cause": 0,
+    "guard_errors": [
+     {
+      "guard": "when error_message ==",
+      "node": "work"
+     },
+     {
+      "guard": "when len(error_message) > 3",
+      "node": "work"
+     }
+    ],
+    "path": [
+     "work",
+     "fallback"
+    ],
+    "pending_node": null,
+    "reason": null,
+    "spawn": null,
+    "state_dropped": {},
+    "steps": [
+     {
+      "error_type": "OSError",
+      "guard_errors": 2,
+      "node": "work",
+      "target": "fallback",
+      "used": "error"
+     }
+    ],
+    "stopped": "terminal",
+    "transcript": [
+     {
+      "error": true,
+      "node": "work",
+      "outcome": "[error: OSError: boom]"
+     }
+    ],
+    "violations": null
+   },
+   "flow": "---\nname: guardtwo\nstart: work\n---\n\n## work\n-> first: on error when error_message ==\n-> second: on error when len(error_message) > 3\n-> third: on error when error_type == \"ValueError\"\n-> fallback: on error\n-> done: when ok\n\n## first\nFirst.\n\n## second\nSecond.\n\n## third\nThird.\n\n## fallback\nFallback.\n\n## done\nDone.\n",
+   "name": "guard-two-unevaluable-guards-are-recorded-in-document-order",
+   "opts": {},
+   "script": {
+    "work": [
+     {
+      "__kind__": "OSError",
+      "__raise__": "boom"
+     }
+    ]
+   }
+  },
+  {
+   "expect": {
+    "cause": 0,
+    "guard_errors": [
+     {
+      "guard": "when error_message ==",
+      "node": "work"
+     },
+     {
+      "guard": "when len(error_message) > 3",
+      "node": "work"
+     }
+    ],
+    "path": [
+     "work",
+     "third"
+    ],
+    "pending_node": null,
+    "reason": null,
+    "spawn": null,
+    "state_dropped": {},
+    "steps": [
+     {
+      "error_type": "ValueError",
+      "guard_errors": 2,
+      "node": "work",
+      "target": "third",
+      "used": "error"
+     }
+    ],
+    "stopped": "terminal",
+    "transcript": [
+     {
+      "error": true,
+      "node": "work",
+      "outcome": "[error: ValueError: boom]"
+     }
+    ],
+    "violations": null
+   },
+   "flow": "---\nname: guardtwo\nstart: work\n---\n\n## work\n-> first: on error when error_message ==\n-> second: on error when len(error_message) > 3\n-> third: on error when error_type == \"ValueError\"\n-> fallback: on error\n-> done: when ok\n\n## first\nFirst.\n\n## second\nSecond.\n\n## third\nThird.\n\n## fallback\nFallback.\n\n## done\nDone.\n",
+   "name": "guard-a-later-evaluable-guard-still-matches",
+   "opts": {},
+   "script": {
+    "work": [
+     {
+      "__kind__": "ValueError",
+      "__raise__": "boom"
+     }
+    ]
+   }
+  },
+  {
+   "expect": {
+    "cause": 0,
+    "guard_errors": [
+     {
+      "guard": "when len(error_message) > 3",
+      "node": "work"
+     },
+     {
+      "guard": "when len(error_message) > 3",
+      "node": "work"
+     },
+     {
+      "guard": "when len(error_message) > 3",
+      "node": "work"
+     }
+    ],
+    "path": [
+     "work",
+     "work",
+     "work",
+     "failed"
+    ],
+    "pending_node": null,
+    "reason": null,
+    "spawn": null,
+    "state_dropped": {},
+    "steps": [
+     {
+      "error_type": "RuntimeError",
+      "guard_errors": 1,
+      "node": "work",
+      "target": "work",
+      "used": "error"
+     },
+     {
+      "error_type": "RuntimeError",
+      "guard_errors": 2,
+      "node": "work",
+      "target": "work",
+      "used": "error"
+     },
+     {
+      "error_type": "RuntimeError",
+      "guard_errors": 3,
+      "node": "work",
+      "target": "failed",
+      "used": "error"
+     }
+    ],
+    "stopped": "terminal",
+    "transcript": [
+     {
+      "error": true,
+      "node": "work",
+      "outcome": "[error: RuntimeError: boom]"
+     },
+     {
+      "error": true,
+      "node": "work",
+      "outcome": "[error: RuntimeError: boom]"
+     },
+     {
+      "error": true,
+      "node": "work",
+      "outcome": "[error: RuntimeError: boom]"
+     }
+    ],
+    "violations": null
+   },
+   "flow": "---\nname: guardloop\nstart: work\n---\n\n## work\n-> bad: on error when len(error_message) > 3\n-> work: on error when error_count < 3\n-> failed: on error\n-> done: when ok\n\n## bad\nBad.\n\n## failed\nFailed.\n\n## done\nDone.\n",
+   "name": "guard-the-count-in-the-step-is-over-the-whole-state",
+   "opts": {},
+   "script": {
+    "work": [
+     {
+      "__raise__": "boom"
+     },
+     {
+      "__raise__": "boom"
+     },
+     {
+      "__raise__": "boom"
+     }
+    ]
+   }
+  },
+  {
+   "expect": {
+    "cause": 0,
+    "guard_errors": [
+     {
+      "guard": "when len(error_message) > 3",
+      "node": "work"
+     }
+    ],
+    "path": [
+     "work",
+     "work",
+     "done"
+    ],
+    "pending_node": null,
+    "reason": null,
+    "spawn": null,
+    "state_dropped": {},
+    "steps": [
+     {
+      "error_type": "RuntimeError",
+      "guard_errors": 1,
+      "node": "work",
+      "target": "work",
+      "used": "error"
+     },
+     {
+      "cond": "when ok",
+      "node": "work",
+      "target": "done",
+      "used": "deterministic"
+     }
+    ],
+    "stopped": "terminal",
+    "transcript": [
+     {
+      "error": true,
+      "node": "work",
+      "outcome": "[error: RuntimeError: boom]"
+     },
+     {
+      "node": "work",
+      "outcome": "fine"
+     }
+    ],
+    "violations": null
+   },
+   "flow": "---\nname: guardloop\nstart: work\n---\n\n## work\n-> bad: on error when len(error_message) > 3\n-> work: on error when error_count < 3\n-> failed: on error\n-> done: when ok\n\n## bad\nBad.\n\n## failed\nFailed.\n\n## done\nDone.\n",
+   "name": "guard-recovery-after-a-recorded-guard",
+   "opts": {},
+   "script": {
+    "work": [
+     {
+      "__raise__": "boom"
+     },
+     {
+      "ok": true,
+      "text": "fine"
+     }
+    ]
+   }
+  },
+  {
+   "expect": {
+    "cause": 0,
+    "guard_errors": [],
+    "path": [
+     "work",
+     "matched"
+    ],
+    "pending_node": null,
+    "reason": null,
+    "spawn": null,
+    "state_dropped": {},
+    "steps": [
+     {
+      "error_type": "RuntimeError",
+      "node": "work",
+      "target": "matched",
+      "used": "error"
+     }
+    ],
+    "stopped": "terminal",
+    "transcript": [
+     {
+      "error": true,
+      "node": "work",
+      "outcome": "[error: RuntimeError: boom]"
+     }
+    ],
+    "violations": null
+   },
+   "flow": "---\nname: guardaftermatch\nstart: work\n---\n\n## work\n-> matched: on error when error_count >= 1\n-> never: on error when len(error_message) > 3\n-> done: when ok\n\n## matched\nMatched.\n\n## never\nNever.\n\n## done\nDone.\n",
+   "name": "guard-after-the-edge-that-matched-is-never-evaluated",
+   "opts": {},
+   "script": {
+    "work": [
+     {
+      "__raise__": "boom"
+     }
+    ]
+   }
+  },
+  {
+   "expect": {
+    "cause": 0,
+    "guard_errors": [
+     {
+      "guard": "when len(error_message) > 3",
+      "node": "first"
+     },
+     {
+      "guard": "when len(error_message) > 3",
+      "node": "second"
+     }
+    ],
+    "path": [
+     "first",
+     "second",
+     "fallback"
+    ],
+    "pending_node": null,
+    "reason": null,
+    "spawn": null,
+    "state_dropped": {},
+    "steps": [
+     {
+      "error_type": "RuntimeError",
+      "guard_errors": 1,
+      "node": "first",
+      "target": "second",
+      "used": "error"
+     },
+     {
+      "error_type": "RuntimeError",
+      "guard_errors": 1,
+      "node": "second",
+      "target": "fallback",
+      "used": "error"
+     }
+    ],
+    "stopped": "terminal",
+    "transcript": [
+     {
+      "error": true,
+      "node": "first",
+      "outcome": "[error: RuntimeError: boom]"
+     },
+     {
+      "error": true,
+      "node": "second",
+      "outcome": "[error: RuntimeError: boom]"
+     }
+    ],
+    "violations": null
+   },
+   "flow": "---\nname: guardother\nstart: first\n---\n\n## first\n-> bad: on error when len(error_message) > 3\n-> second: on error\n-> done: when ok\n\n## second\n-> bad: on error when len(error_message) > 3\n-> fallback: on error\n-> done: when ok\n\n## bad\nBad.\n\n## fallback\nFallback.\n\n## done\nDone.\n",
+   "name": "guard-records-name-the-node-they-came-from",
+   "opts": {},
+   "script": {
+    "first": [
+     {
+      "__raise__": "boom"
+     }
+    ],
+    "second": [
+     {
+      "__raise__": "boom"
+     }
+    ]
+   }
+  },
+  {
+   "expect": {
+    "error": "boom",
+    "error_class": "RuntimeError"
+   },
+   "flow": "---\nname: guardnohandler\nstart: work\n---\n\n## work\n-> handled: on error when len(error_message) > 3\n-> done: when ok\n\n## handled\nHandled.\n\n## done\nDone.\n",
+   "name": "guard-no-handler-matched-propagates-the-error",
+   "opts": {},
+   "script": {
+    "work": [
+     {
+      "__raise__": "boom"
+     }
+    ]
+   }
+  },
+  {
+   "expect": {
+    "cause": 0,
+    "guard_errors": [
+     {
+      "guard": "when len(error_message) > 3",
+      "node": "work"
+     },
+     {
+      "guard": "when f(x)",
+      "node": "elsewhere"
+     },
+     {
+      "guard": "when len(error_message) > 3",
+      "node": "work"
+     }
+    ],
+    "path": [
+     "work",
+     "fallback"
+    ],
+    "pending_node": null,
+    "reason": null,
+    "spawn": null,
+    "state_dropped": {},
+    "steps": [
+     {
+      "error_type": "RuntimeError",
+      "guard_errors": 2,
+      "node": "work",
+      "target": "fallback",
+      "used": "error"
+     }
+    ],
+    "stopped": "terminal",
+    "transcript": [
+     {
+      "error": true,
+      "node": "work",
+      "outcome": "[error: RuntimeError: boom]"
+     }
+    ],
+    "violations": null
+   },
+   "flow": "---\nname: guard\nstart: work\n---\n\n## work\n-> handled: on error when len(error_message) > 3\n-> fallback: on error\n-> done: when ok\n\n## handled\nHandled.\n\n## fallback\nFallback.\n\n## done\nDone.\n",
+   "name": "guard-a-resumed-state-brings-its-earlier-records",
+   "opts": {},
+   "script": {
+    "work": [
+     {
+      "__raise__": "boom"
+     }
+    ]
+   },
+   "start": "work",
+   "state": {
+    "_guard_errors": [
+     {
+      "error": "earlier",
+      "guard": "when len(error_message) > 3",
+      "node": "work"
+     },
+     {
+      "error": "earlier",
+      "guard": "when f(x)",
+      "node": "elsewhere"
+     }
+    ],
+    "transcript": [],
+    "visits": {}
+   }
+  },
+  {
+   "expect": {
+    "error": "'ghost'",
+    "error_class": "KeyError"
+   },
+   "flow": "---\nname: ghost\nstart: work\n---\n\n## work\n-> ghost: always\n\n## done\nDone.\n",
+   "name": "a-route-into-an-undefined-node-is-a-key-error",
+   "opts": {},
+   "script": {}
+  },
+  {
+   "expect": {
+    "error": "'nowhere'",
+    "error_class": "KeyError"
+   },
+   "flow": "---\nname: ghoststart\nstart: nowhere\n---\n\n## work\n-> done: always\n\n## done\nDone.\n",
+   "name": "a-start-node-the-flow-does-not-define-is-a-key-error",
+   "opts": {},
+   "script": {}
+  },
+  {
+   "expect": {
+    "cause": 35,
+    "guard_errors": [],
+    "path": [
+     "work",
+     "ghost"
+    ],
+    "pending_node": null,
+    "reason": null,
+    "spawn": null,
+    "state_dropped": {},
+    "steps": [
+     {
+      "cond": "always",
+      "node": "work",
+      "target": "ghost",
+      "used": "deterministic"
+     }
+    ],
+    "stopped": "max_steps",
+    "transcript": [
+     {
+      "node": "work",
+      "outcome": "work"
+     }
+    ],
+    "violations": null
+   },
+   "flow": "---\nname: ghost\nstart: work\n---\n\n## work\n-> ghost: always\n\n## done\nDone.\n",
+   "maxSteps": 1,
+   "name": "a-route-into-an-undefined-node-after-the-last-step-is-max-steps",
+   "opts": {},
+   "script": {}
+  },
+  {
+   "expect": {
+    "error": "'gone'",
+    "error_class": "KeyError"
+   },
+   "flow": "---\nname: ghost\nstart: work\n---\n\n## work\n-> ghost: always\n\n## done\nDone.\n",
+   "name": "a-resume-into-an-undefined-node-is-a-key-error",
+   "opts": {},
+   "script": {},
+   "start": "gone"
+  },
+  {
+   "expect": {
+    "error": "''",
+    "error_class": "KeyError"
+   },
+   "flow": "just words, no heading\n",
+   "name": "a-flow-with-no-node-is-a-key-error-on-the-empty-start",
+   "opts": {},
+   "script": {}
+  },
+  {
+   "expect": {
+    "error": "'Done'",
+    "error_class": "KeyError"
+   },
+   "flow": "---\nname: ghost\nstart: work\n---\n\n## work\n-> Done: always\n\n## done\nDone.\n",
+   "name": "a-target-is-case-sensitive-so-a-capitalised-name-is-undefined",
+   "opts": {},
+   "script": {}
+  },
+  {
+   "expect": {
+    "error": "'nowhere'",
+    "error_class": "KeyError"
+   },
+   "flow": "---\nname: errorghost\nstart: work\n---\n\n## work\n-> nowhere: on error\n-> done: when ok\n\n## done\nDone.\n",
+   "name": "a-route-into-an-undefined-node-from-an-error-edge",
+   "opts": {},
+   "script": {
+    "work": [
+     {
+      "__raise__": "x"
+     }
+    ]
+   }
+  },
+  {
+   "expect": {
+    "cause": 37,
+    "guard_errors": [],
+    "path": [
+     "triage",
+     "contain"
+    ],
+    "pending_node": "contain",
+    "reason": "worker output violates the derived contract",
+    "spawn": null,
+    "state_dropped": {
+     "transcript": 1
+    },
+    "steps": [
+     {
+      "cond": "when severity == \"high\" and confirmed",
+      "node": "triage",
+      "target": "contain",
+      "used": "deterministic"
+     }
+    ],
+    "stopped": "contract_violation",
+    "transcript": [
+     {
+      "node": "contain",
+      "outcome": "c"
+     }
+    ],
+    "violations": [
+     "type: 'approved' should be boolean but worker emitted str ('yes')"
+    ]
+   },
+   "flow": "---\nname: gate\nstart: triage\n---\n\n## triage\nTriage the alert. The edges read `severity` (an enum), `confirmed` (a boolean) and `score` (a number).\n-> contain: when severity == \"high\" and confirmed\n-> review: when score >= 0.8\n-> close: else\n-> held: on error\n\n## contain\n-> done: when approved\n-> held: else\n\n## review\n-> done: always\n\n## close\n-> done: always\n\n## held\n-> done: always\n\n## done\nDone.\n",
+   "name": "gate-and-bound-together",
+   "opts": {
+    "max_transcript": 1,
+    "type_gate": true
+   },
+   "script": {
+    "contain": [
+     {
+      "approved": "yes",
+      "text": "c"
+     }
+    ],
+    "triage": [
+     {
+      "confirmed": true,
+      "severity": "high",
+      "text": "t"
+     }
+    ]
+   }
   }
  ],
- "note": "script maps node -> outcomes consumed in visit order (last repeats); {'__raise__': msg} throws. expect is the Python reference engine's result.",
+ "note": "script maps node -> outcomes consumed in visit order (last repeats); {'__raise__': msg} throws (class named by '__kind__', RuntimeError by default). expect is the Python reference engine's result.",
  "version": 2
 }

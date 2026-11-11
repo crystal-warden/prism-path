@@ -13,16 +13,22 @@ signature. Verification re-hashes the determination and checks the signature, so
 determination or a tampered receipt fails. anchor_receipt commits the root into a content-addressed
 manifest that verify_manifest re-derives offline.
 """
+from prismpath import canon as _canon
 from prismpath.hotswap import policy_pack as _pp
 from prismpath.ledgers import ledger_airgap as _lg
 
 _SIGNED_KEYS = ("kind", "determination_root", "signed_at", "key_id")
 
 
+def _determination_root(determination):
+    """sha256 of the determination's canon/2 content bytes (a float in it is refused)."""
+    return _pp.sha256_hex(_canon.content_bytes(determination))
+
+
 def _payload(determination, signed_at, key_id):
     return {"kind": "ai-safety-receipt",
-            "determination_root": _pp.sha256_hex(_pp.canonical_bytes(determination)),
-            "signed_at": signed_at, "key_id": key_id}
+            "determination_root": _determination_root(determination),
+            "signed_at": signed_at, "key_id": key_id, _canon.ENCODING_KEY: _canon.CANON2}
 
 
 def sign_receipt(determination, key, signed_at):
@@ -30,7 +36,7 @@ def sign_receipt(determination, key, signed_at):
     signed_at is an ISO-8601 string. Returns a receipt with a signature over the canonical payload."""
     priv = _pp._load_private(key["private"])
     payload = _payload(determination, signed_at, key["key_id"])
-    payload["signature"] = priv.sign(_pp.canonical_bytes(payload)).hex()
+    payload["signature"] = priv.sign(_pp.signed_bytes(payload)).hex()
     return payload
 
 
@@ -41,11 +47,13 @@ def verify_receipt(receipt, determination, pub_path):
     pub, key_id = _pp.load_public(pub_path)
     if receipt.get("key_id") != key_id:
         return False
-    if _pp.sha256_hex(_pp.canonical_bytes(determination)) != receipt.get("determination_root"):
-        return False
-    payload = {field: receipt.get(field) for field in _SIGNED_KEYS}
     try:
-        pub.verify(bytes.fromhex(receipt.get("signature", "")), _pp.canonical_bytes(payload))
+        _canon.encoding_of(receipt)                   # a receipt that does not name canon/2 is refused
+        if _determination_root(determination) != receipt.get("determination_root"):
+            return False
+        payload = {field: receipt.get(field) for field in _SIGNED_KEYS}
+        payload[_canon.ENCODING_KEY] = _canon.CANON2
+        pub.verify(bytes.fromhex(receipt.get("signature", "")), _pp.signed_bytes(payload))
         return True
     except (InvalidSignature, ValueError):
         return False

@@ -50,53 +50,31 @@ size the maps that hold the image. Every one is a power of two, and that is load
 tidy: every map key is masked with `& (capacity - 1)` before the lookup, which is what lets the verifier
 see the key as being in range without a comparison it would have to prove.
 
-**Loop dimensions**: `MAX_EDGES_PER_NODE` 64, `MAX_PROG_PER_EDGE` 64, `MAX_FIELDS_PER_PKT` 32. The first
+**Loop dimensions**: `MAX_EDGES_PER_NODE` 1024, `MAX_PROG_PER_EDGE` 4096, `MAX_FIELDS_PER_PKT` 32. The first
 two are the iteration caps handed to `bpf_loop`, whose callback is verified once no matter how many times
-it runs, so they cost the verifier nothing. The third is the length of the register fill loop, which is
+it runs, so they cost the verifier nothing, and they sit at the capacities of the edge and word maps, so no
+table the maps admit is cut short. A loop stops at the node's own edge count and the program's own word
+count, so what a large cap costs is nothing at run time either. The third is the length of the register fill loop, which is
 unrolled and verified once. A packet naming more than 32 fields is not refused by the base program: the
 fill stops at the cap and the rest of the register file is `TY_NONE`. A policy needing more fields than
 that, such as the 128 field vision class table, does not belong on this substrate as built.
 
-**The one real subset limit**: `STACK_MAX` 4, the operand stack depth of an edge's program. This is not an
-array size that could simply be raised. It is the number of cases in the `st_get` and `st_put` switches,
-so every stack slot is a compile time constant to the verifier. Level M expressions fold left
-associatively, so a flat `and` or `or` chain, membership in a literal list included, stays at depth 2, and
-4 covers real nesting. A predicate deeper than 4 is outside this target's declared subset, and since
-October 2026 that is enforced rather than stated. The loader's `parse_image_buf` runs every edge program's
-stack effect and refuses the image when any program passes `STACK_MAX`, passes `MAX_PROG_PER_EDGE` words,
-lacks an operand, or leaves other than one result, and it refuses a node with more than
-`MAX_EDGES_PER_NODE` edges. It does not trust the header's `max_stack`, which is the compiler's claim. The
-eBPF build scripts apply the same checks through `ebpf_table_limits.py` before they write a table. Before
-then nothing refused such a table, and the shared compiler emits them because the C and FPGA targets allow
-more: `when x not in [0..32]` is 66 words, so the kernel cut it before its final OR and NOT and decided
-the inverse of the policy.
-
-**The 512 byte stack budget** is not a constant anywhere; it is the kernel's limit on a BPF program's
-frame, and two decisions exist only to stay under it: the register file lives in a map rather than in
-either loop context, and `evaluate` is forced `__noinline` so that it gets its own frame instead of
-stacking onto the entry program's.
-
-## What it would look like without the verifier
-
-The same evaluator, written as plain C, is about fifteen lines:
-
-```
-function evaluate(node_index, register_file):
-    node = nodes[node_index]
-    for position in 0 .. node.edge_cnt - 1:
-        edge = edges[node.edge_off + position]
-        stack = empty
-        for word in prog[edge.prog_off .. edge.prog_off + edge.prog_cnt - 1]:
-            if word < 0x8000:   push eval_atom(atoms[word], register_file)
-            elif word is NOT:   top = not top
-            elif word is AND:   right = pop; top = (top and right)
-            elif word is OR:    right = pop; top = (top or right)
-            elif word is TRUE:  push true
-            elif word is FALSE: push false
-        if stack[0]:
-            return position, edge.target       # first true wins, document order
-    return no_match
-```
+**The one real subset limit**: `STACK_MAX` 64, the operand stack depth of an edge's program, which is the
+depth the C interpreter carries (`prismpath-hw/interp.c`), so no table that interpreter runs is outside this
+evaluator for its depth. The stack is one `__u64` of truth values and `st_get` and `st_put` are shifts by a
+masked amount, so the depth costs the verifier nothing; until October 2026 it was a byte array read through
+a `switch` of four arms, which is why it was 4 and could not be raised cheaply. Level M expressions fold
+left associatively, so a flat `and` or `or` chain, membership in a literal list included, stays at depth 2,
+and source predicates, which nest at most 50 deep, reach about 25. A predicate deeper than 64 is outside
+this target's declared subset, and since October 2026 that is enforced rather than stated. The loader's
+`parse_image_buf` runs every edge program's stack effect and refuses the image when any program passes
+`STACK_MAX`, lacks an operand, or leaves other than one result, and it refuses a node or a program past
+`MAX_EDGES_PER_NODE` edges or `MAX_PROG_PER_EDGE` words (the map capacities, which it also refuses). It
+does not trust the header's `max_stack`, which is the compiler's claim. The eBPF build scripts apply the
+same checks through `ebpf_table_limits.py` before they write a table. Before then nothing refused such a
+table, and the shared compiler emits them because the C and FPGA targets allow more: when the bounds were
+a stack of 4 and 64 words, `when x not in [0..32]` was 66 words, so the kernel cut it before its final OR
+and NOT and decided the inverse of the policy.
 
 And here is the same thing as it is actually written, with the four substitutions named:
 
@@ -112,7 +90,7 @@ function edge_loop_cb(edge_index, edge_state):
     if edge_index >= edge_state.edge_cnt: return STOP
     edge = LOOKUP(edges_map, bank_base(...) + ((edge_off + edge_index) & (MAX_EDGES - 1)))
     if edge is NULL: return CONTINUE                    # missing edge skipped, as the reference continues
-    prog_state = { prog_off, prog_cnt, n_fields, bank, st = [0,0,0,0], sp = 0 }
+    prog_state = { prog_off, prog_cnt, n_fields, bank, st = 0 (64 bits), sp = 0 }
     bpf_loop(MAX_PROG_PER_EDGE, prog_word_cb, prog_state)       # substitution 2: the inner for loop
     if prog_state.sp > 0 and st_get(prog_state.st, 0):
         edge_state.matched = edge_index ; edge_state.target = edge.target ; return STOP
@@ -122,7 +100,7 @@ function prog_word_cb(word_index, prog_state):
     if word_index >= prog_state.prog_cnt: return STOP
     word = LOOKUP(prog_map, bank_base(...) + ((prog_off + word_index) & (MAX_PROG_WORDS - 1)))
     ... the same five operators, but every stack access goes through
-        st_get(st, index) / st_put(st, index, value)            # substitution 3: no st[runtime_sp]
+        st_get(st, index) / st_put(st, index, value)            # substitution 3: no st[runtime_sp], a bit vector
         and every push is guarded by  if sp < STACK_MAX
 
 function eval_atom(atom, n_fields):
@@ -137,10 +115,12 @@ The four substitutions, and what each one bought:
    limit; at 16 by 16 they processed 1,000,001 instructions against a 1,000,000 limit. `bpf_loop` verifies
    a callback once regardless of iteration count, so both loops became free and the loop bounds went back
    to full size. This needs kernel 5.17 or newer.
-2. **A constant indexed operand stack instead of `st[sp]`.** A runtime variable index made the verifier
-   explore every possible stack pointer at every access. The `switch` in `st_get` and `st_put` turns every
-   access into a compile time constant slot. Necessary but not sufficient on its own: it shrank the
-   verifier log from 259k lines to about 10k while the state count still plateaued near 47k.
+2. **An operand stack that is a scalar instead of `st[sp]`.** A runtime variable index made the verifier
+   explore every possible stack pointer at every access. The first fix was a `switch` in `st_get` and
+   `st_put` that turned every access into a compile time constant slot. Necessary but not sufficient on its
+   own: it shrank the verifier log from 259k lines to about 10k while the state count still plateaued near
+   47k, and it limited the stack to the four arms it had. The stack is now the bits of one `__u64`, so
+   there is no stack memory to index at all and 64 slots cost what 4 did.
 3. **A per CPU map for the register file instead of a stack array.** XDP runs a packet to completion on one
    CPU, so one per CPU slot is private to the run. Embedding the register file in each loop context
    overran the 512 byte stack budget ("combined stack size ... Too large"), and looking a field up one at
@@ -175,18 +155,21 @@ there is `NONE`, and it is what lets the bounds check double as the semantics.
 
 ### `st_get` and `st_put`
 
-Read and write one slot of the operand stack by index. Both are a `switch` over the four legal indices
-with a default that reads zero or writes nothing. They exist for exactly one reason, given above: an
-index the verifier can fold to a constant. Treat the pair as the stack's whole interface, and note the
-default arms are silent, so a bug that walked off the end of the stack would produce a wrong answer rather
-than a diagnostic. `STACK_MAX` and the number of cases must be changed together.
+Read and write one slot of the operand stack by index. The stack is one `__u64` and slot `i` is bit `i`,
+so `st_get` is a shift and a mask and `st_put` clears the bit and sets it from the value, each with the
+index masked to 6 bits so the verifier sees a shift amount below 64. They exist for exactly one reason,
+given above: no stack memory indexed at run time. Treat the pair as the stack's whole interface, and note
+the mask makes an index past the end wrap rather than fail, so a bug that walked off the end of the stack
+would produce a wrong answer rather than a diagnostic; the guards in `prog_word_cb` and the loader's
+check are what keep every index below `STACK_MAX`, which must stay a power of two no greater than 64
+(`ppt_common.h` asserts it).
 
 ### `prog_word_cb`
 
 The program machine, one reverse Polish word per call, carrying its state in a `struct prog_ctx` that
-holds the program offset and count, the field count, the bank, the four byte operand stack and the stack
-pointer. It stops the loop when the index reaches the program's length, which is how a 64 iteration
-`bpf_loop` runs a three word program. Otherwise it masks the word's index into `prog_map`, looks the word
+holds the program offset and count, the field count, the bank, the stack pointer and the operand
+stack, which is one `__u64`. It stops the loop when the index reaches the program's length, which is how a 4096 iteration
+`bpf_loop` of 4096 iterations runs a three word program. Otherwise it masks the word's index into `prog_map`, looks the word
 up, and either evaluates the atom it names and pushes the result, or applies one of `NOT`, `AND`, `OR`,
 `TRUE`, `FALSE`. Every push is guarded by `sp < STACK_MAX` and every pop by a check that enough operands
 are present, so a malformed program mangles its own answer and cannot touch anything else. The choice to
@@ -295,10 +278,11 @@ One packet, one node with three edges, and one edge whose program is `[atom3, at
 | back in `evaluate` | | write both out parameters, return 0 | |
 
 Peak stack depth was 2, which is what a flat `and` reaches. Depth grows only with right nested
-parentheses: a program shaped `a b AND c d AND e f AND OR OR` peaks at 4, which is exactly `STACK_MAX`,
-and one more level of nesting would peak at 5. At depth 5 the guard `sp < STACK_MAX` makes the fifth push
-a no operation and `st_get` returns 0 for the slot, so the predicate would quietly decide wrongly. That is
-why the loader refuses such a table before it reaches a map, as described under the subset limit above.
+parentheses: a program shaped `a b AND c d AND e f AND OR OR` peaks at 4, and every further level of
+nesting adds one. When `STACK_MAX` was 4 the fifth push was a no operation and the predicate quietly
+decided wrongly, so the loader refused such a table before it reached a map; at 64 the same guard is
+the interpreter's own overflow, past any depth source can write, and the loader still refuses a table
+that would reach it, as described under the subset limit above.
 
 ## The bank arithmetic, in `ppt_net`
 
@@ -394,8 +378,8 @@ that make it load and make it correct. Each of them was a failure once.
 4. **`evaluate` stays `__noinline`.** It needs its own 512 byte frame.
 5. **The register file never lives on the stack** and never inside either loop context. One per CPU map
    value, one lookup, an unrolled fill.
-6. **The operand stack is only ever touched through `st_get` and `st_put`**, and `STACK_MAX` and the
-   number of switch cases move together.
+6. **The operand stack is only ever touched through `st_get` and `st_put`**, and `STACK_MAX` stays a power
+   of two no greater than 64, the width of the word that holds it.
 7. **Both loops stay `bpf_loop` callbacks.** Flattening either back into a `for` loop restores the state
    explosion; clang will not unroll them anyway, because they have a data dependent break and a call
    across a function boundary.
@@ -417,6 +401,8 @@ harness that matches what you changed:
 | harness | the property it proves |
 |---|---|
 | `loader <ppt> certify <packets.bin>`, built by [cert_corpus.py](cert_corpus.py) | the predicate corpus decides identically in kernel and in the reference; 147 of 147 of the declared subset (124 of 124 before October 2026), against the frozen expectations |
+| `loader <ppt> certify <packets.bin>` on `cert_corpus.py --boundary` | the evaluator the verifier accepted routes the bounds (stack 25, 63, 64, programs to 4,000 words, a 200 edge node) as an independent RPN evaluation and `interp.c` do |
+| [verifier_budget.py](verifier_budget.py) (no kernel) | each object stays within the modelled verifier limits: combined stack 512, no loop outside `bpf_loop`, the evaluator's shape |
 | `loader <ppt> run` and `runbatch` | whole flows walk to the same terminal in kernel as on the host |
 | `loader netstorm <a> <b>` | the bank flip is atomic: no torn read under concurrent swaps |
 | [cert_selector.c](cert_selector.c) | the selector's posture trail matches the reference, and the fail safe holds |

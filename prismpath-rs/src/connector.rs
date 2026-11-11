@@ -15,7 +15,7 @@
 //! and `FileDeferralStore`, byte-compatible with the reference's directory layout so either
 //! runtime can list and resume units the other deferred.
 
-use crate::durable::{flow_hash, provenance_manifest, py_canonical_string};
+use crate::durable::{content_bytes, flow_hash, provenance_manifest, plain_dumps, CanonicalError};
 use crate::{py_str, Value as EngineValue};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
@@ -24,7 +24,7 @@ use std::io::Write;
 
 /// `PayloadFlattener.flatten`: nested dict/list -> flat key/value strings. Lists appear BOTH as a
 /// comma-joined scalar string at their parent prefix and as per-index keys.
-pub fn flatten(data: &Value, prefix: &str, delimiter: &str, out: &mut BTreeMap<String, String>) {
+pub fn flatten(data: &Value, prefix: &str, delimiter: &str, out: &mut BTreeMap<String, String>) -> Result<(), String> {
     match data {
         Value::Object(obj_val) => {
             for (key_str, val) in obj_val {
@@ -33,7 +33,7 @@ pub fn flatten(data: &Value, prefix: &str, delimiter: &str, out: &mut BTreeMap<S
                 } else {
                     format!("{prefix}{delimiter}{key_str}")
                 };
-                flatten(val, &key, delimiter, out);
+                flatten(val, &key, delimiter, out)?;
             }
         }
         Value::Array(arr_val) => {
@@ -41,8 +41,8 @@ pub fn flatten(data: &Value, prefix: &str, delimiter: &str, out: &mut BTreeMap<S
                 let joined: Vec<String> = arr_val
                     .iter()
                     .filter(|item| !item.is_object() && !item.is_array())
-                    .map(|item| py_str(&EngineValue::from_json(item)))
-                    .collect();
+                    .map(|item| EngineValue::try_from_json(item).map(|value| py_str(&value)))
+                    .collect::<Result<Vec<String>, String>>()?;
                 out.insert(prefix.to_string(), joined.join(", "));
             }
             for (idx, item) in arr_val.iter().enumerate() {
@@ -51,22 +51,24 @@ pub fn flatten(data: &Value, prefix: &str, delimiter: &str, out: &mut BTreeMap<S
                 } else {
                     format!("{prefix}{delimiter}{idx}")
                 };
-                flatten(item, &key, delimiter, out);
+                flatten(item, &key, delimiter, out)?;
             }
         }
         scalar => {
             if !prefix.is_empty() {
-                out.insert(prefix.to_string(), py_str(&EngineValue::from_json(scalar)));
+                out.insert(prefix.to_string(), py_str(&EngineValue::try_from_json(scalar)?));
             }
         }
     }
+    Ok(())
 }
 
-/// The reference's short content hash: "sha256:" + first 16 hex chars over the spaced canonical
-/// JSON (`json.dumps(sort_keys=True)`).
-pub fn short_hash(data: &Value) -> String {
-    let digest = hex::encode(Sha256::digest(py_canonical_string(data, true).as_bytes()));
-    format!("sha256:{}", &digest[..16])
+/// The reference's short content hash: "sha256:" + first 16 hex chars over the content's canon/2
+/// bytes (`durable::content_bytes`; a float in the data is refused).
+/// Data with no canonical form (a number beyond the double range) is refused with `CanonicalError`.
+pub fn short_hash(data: &Value) -> Result<String, CanonicalError> {
+    let digest = hex::encode(Sha256::digest(content_bytes(data)?));
+    Ok(format!("sha256:{}", &digest[..16]))
 }
 
 /// The six-port Connector. Every method has the reference's default; override per domain.
@@ -81,7 +83,7 @@ pub trait Connector {
             json!({"raw": raw})
         }
     }
-    fn ingestion_hash(&self, data: &Value) -> String {
+    fn ingestion_hash(&self, data: &Value) -> Result<String, CanonicalError> {
         short_hash(data)
     }
 
@@ -89,19 +91,19 @@ pub trait Connector {
     fn retrieve_criteria(&self, _query: &str) -> Option<Value> {
         None
     }
-    fn knowledge_hash(&self, kb: &Value) -> String {
+    fn knowledge_hash(&self, kb: &Value) -> Result<String, CanonicalError> {
         short_hash(kb)
     }
 
     // --- ADJUDICATOR PORT ---
     /// The default prompt surface: the payload FLATTENED to sorted key/value lines, optional
     /// criteria, and a flat-JSON reply instruction when a schema is given.
-    fn adjudication_prompt(&self, payload: &Value, criteria: Option<&str>, schema: Option<&Value>) -> String {
+    fn adjudication_prompt(&self, payload: &Value, criteria: Option<&str>, schema: Option<&Value>) -> Result<String, String> {
         let mut flat = BTreeMap::new();
         if payload.is_object() || payload.is_array() {
-            flatten(payload, "", ".", &mut flat);
+            flatten(payload, "", ".", &mut flat)?;
         } else {
-            flat.insert("input".to_string(), py_str(&EngineValue::from_json(payload)));
+            flat.insert("input".to_string(), py_str(&EngineValue::try_from_json(payload)?));
         }
         let lines: Vec<String> = flat.iter().map(|(key, val)| format!("{key}: {val}")).collect();
         let mut parts = vec![lines.join("\n")];
@@ -115,7 +117,7 @@ pub trait Connector {
             let joined = keys.iter().map(|str_val| str_val.as_str()).collect::<Vec<_>>().join(", ");
             parts.push(format!("Reply with ONE flat JSON object (no nesting) with keys: {joined}."));
         }
-        parts.join("\n\n")
+        Ok(parts.join("\n\n"))
     }
 
     /// Run one adjudication: `generate` is ANY text->text callable. The reply's first JSON
@@ -126,21 +128,21 @@ pub trait Connector {
         generate: &mut dyn FnMut(&str) -> String,
         criteria: Option<&str>,
         schema: Option<&Value>,
-    ) -> Value {
-        let prompt = self.adjudication_prompt(payload, criteria, schema);
+    ) -> Result<Value, String> {
+        let prompt = self.adjudication_prompt(payload, criteria, schema)?;
         let reply = generate(&prompt);
         if let (Some(start_idx), Some(end_idx)) = (reply.find('{'), reply.rfind('}')) {
             if start_idx < end_idx {
                 if let Ok(Value::Object(mut out_map)) =
-                    serde_json::from_str::<Value>(&reply[start_idx..=end_idx])
+                    crate::value::parse_content(&reply[start_idx..=end_idx])
                 {
                     out_map.entry("text".to_string())
                         .or_insert_with(|| Value::String(reply.trim().to_string()));
-                    return Value::Object(out_map);
+                    return Ok(Value::Object(out_map));
                 }
             }
         }
-        json!({"text": reply.trim()})
+        Ok(json!({"text": reply.trim()}))
     }
 
     // --- ACTION / SINK PORT ---
@@ -151,6 +153,8 @@ pub trait Connector {
                 std::fs::create_dir_all(dir_path).map_err(|err| err.to_string())?;
             }
         }
+        // a record with no canonical JSON form (a number beyond the double range) is refused before the file is touched
+        let canonical_line = plain_dumps(result).map_err(|err| err.to_string())?;
         let key_val = result.get(key);
         if key_val.is_none() || key_val == Some(&Value::Null) {
             let mut file_handle = std::fs::OpenOptions::new()
@@ -158,7 +162,7 @@ pub trait Connector {
                 .append(true)
                 .open(destination)
                 .map_err(|err| err.to_string())?;
-            writeln!(file_handle, "{}", py_canonical_string(result, true)).map_err(|err| err.to_string())?;
+            writeln!(file_handle, "{}", canonical_line).map_err(|err| err.to_string())?;
             return Ok(true);
         }
         // upsert: replace the line whose `key` matches, else append
@@ -166,16 +170,16 @@ pub trait Connector {
         let mut lines: Vec<String> = Vec::new();
         let mut replaced = false;
         for line_str in existing.lines().filter(|line_item| !line_item.trim().is_empty()) {
-            match serde_json::from_str::<Value>(line_str) {
+            match crate::value::parse_plain(line_str) {
                 Ok(row) if row.get(key) == key_val => {
-                    lines.push(py_canonical_string(result, true));
+                    lines.push(canonical_line.clone());
                     replaced = true;
                 }
                 _ => lines.push(line_str.to_string()),
             }
         }
         if !replaced {
-            lines.push(py_canonical_string(result, true));
+            lines.push(canonical_line.clone());
         }
         std::fs::write(destination, lines.join("\n") + "\n").map_err(|err| err.to_string())?;
         Ok(true)
@@ -199,10 +203,10 @@ pub trait Connector {
         kb_hash: &str,
         label: Option<&str>,
         created: &str,
-    ) -> Value {
-        let root = hex::encode(Sha256::digest(py_canonical_string(outcome, true).as_bytes()));
+    ) -> Result<Value, String> {
+        let root = hex::encode(Sha256::digest(content_bytes(outcome).map_err(|err| err.to_string())?));
         let default_label = format!("{}:decision", self.name());
-        provenance_manifest(
+        Ok(provenance_manifest(
             &root,
             label.unwrap_or(&default_label),
             created,
@@ -210,7 +214,7 @@ pub trait Connector {
             Some(gate_id),
             ingestion_hashes,
             Some(kb_hash),
-        )
+        ))
     }
 }
 
@@ -306,7 +310,7 @@ impl FileDeferralStore {
     pub fn get(&self, unit_id: &str) -> Option<Value> {
         std::fs::read_to_string(self.path(unit_id))
             .ok()
-            .and_then(|text| serde_json::from_str(&text).ok())
+            .and_then(|text| crate::value::parse_plain(&text).ok())
     }
 
     pub fn pending(&self) -> Vec<Value> {
@@ -323,7 +327,7 @@ impl FileDeferralStore {
             .into_iter()
             .filter_map(|name_str| {
                 let text = std::fs::read_to_string(self.dir.join(name_str)).ok()?;
-                let rec: Value = serde_json::from_str(&text).ok()?;
+                let rec: Value = crate::value::parse_plain(&text).ok()?;
                 (rec.get("status").and_then(|status_val| status_val.as_str()) == Some("pending")).then_some(rec)
             })
             .collect()

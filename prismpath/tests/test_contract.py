@@ -247,3 +247,12 @@ def test_recovers_the_soc_verdict_schema_from_the_real_flow():
     classify = field_types["classify"]
     assert classify["recommended_action"] == {"type": "enum",
                                               "values": ["contain", "ignore", "watch"]}
+
+
+def test_a_signed_integer_literal_types_a_number_as_the_engine_reads_it():
+    flow = '---\nname:t\nstart:n\n---\n## n\nGo.\n-> a: when x == -3\n-> a: when y in [-3, -1]\n-> a: when z == +7\n-> a: when w == -1.5\n## a\n'
+    got = _c(flow)
+    assert got["x"] == {"type": "number", "values": [-3]}
+    assert got["y"] == {"type": "number", "values": [-3, -1]}
+    assert got["z"] == {"type": "number", "values": [7]}
+    assert got["w"]["type"] == "unknown"      # a signed float does not fold

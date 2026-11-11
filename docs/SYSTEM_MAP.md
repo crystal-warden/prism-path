@@ -76,7 +76,7 @@ runs on every push.
 |---|---|---|---|
 | Python engine (reference of record, `SPEC.md`) | `prismpath/kernel/engine.py`, `predicates.py` | generates `prismpath/portable/conformance/` | yes |
 | JS kernel | `prismpath/portable/prismpath.mjs` | `run_vectors.mjs` | yes |
-| Rust kernel | `prismpath-rs/` | `src/bin/conformance.rs`, 1079/1079 predicates, 27/27 flows | yes |
+| Rust kernel | `prismpath-rs/` | `src/bin/conformance.rs`, 1112/1112 predicates, 107/107 flows | yes |
 | Go kernel | `prismpath-go/` | `conformance_test.go` | no |
 | C target (the reference for the `.ppt` execution semantics the substrates follow) | `prismpath-hw/interp.c` | `prismpath-hw/run_vectors.py`, `make cert` | yes |
 | fabric RTL | `prismpath-hw/rtl/ppt_interp.sv` | cocotb gate `prismpath-hw/tb/`, then silicon certification, ledger rows #73 onward | yes (simulation) |
@@ -102,7 +102,7 @@ target is the reference for the compiled image's execution, because the substrat
 | implementation | where | judged by | in CI |
 |---|---|---|---|
 | Python (reference) | `prismpath/hotswap/policy_pack.py`, `policy_host.py` | `prismpath/portable/conformance/hotswap.json`, `crypto_agility.json`, `crypto_migration.json` | yes |
-| Rust | `prismpath-hotswap-rs/` | a pack signed on either runtime verifies on the other; and it verifies root statements, receipt bundles and flow manifests the Python engine writes (`prismpath/portable/conformance/receipts.json`, 287 cases) | yes |
+| Rust | `prismpath-hotswap-rs/` | a pack signed on either runtime verifies on the other; and it verifies root statements, receipt bundles and flow manifests the Python engine writes (`prismpath/portable/conformance/receipts.json`, 245 canon/2 cases, among them the refusals of what canon/1 wrote) | yes |
 | MCU | `prismpath-hw/mesh/` (monocypher) | the mesh recertification and the field walk, rows #136 | no (hardware) |
 | kernel receipt sealing | `prismpath-ebpf/seal_receipts.c` | the unified trail rows #132 to #135 | yes |
 

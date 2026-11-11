@@ -6,6 +6,118 @@ frozen conformance vectors that changes an existing case bumps the spec version,
 is the spec-change review. Pre-1.0, minor versions may break APIs; the flow *format* is already
 spec stable.
 
+## [Unreleased]
+
+### Changed, breaking: every reader is strict, and a lock holds integers of millionths (2026-11-10)
+
+Every reader of a hashed or signed document and of a reading accepts only its exact canonical canon/2 bytes
+(docs/design/spec-verified-core.md, sections 3 and 3.2; SPEC.md §8; docs/DICTIONARY.md "not canonical"). A
+document that reads as canon/2 but is spelled otherwise (whitespace, members out of key order, a needless
+escape, a carriage return) is refused, never re-canonicalized; a file or a JSON Lines line may end with one
+line feed and nothing else.
+
+- **Three causes are registered**: `policy:not-canonical` (101) and `reading:not-canonical` (102) for the core's
+  image and reading, `document:not-canonical` (103) for every other hashed or signed document. The registry
+  hash, and so every frozen value that pins it, changed. canon/2 gains the rule name `not-canonical`
+  (`Canon2Error.rule`, `Canon2Error::NotCanonical`, the JavaScript and Go `rule`, Lean `DocErr.notCanonical`).
+- **The core decides with the strict reader.** `Core.verdictBytes` and the oracle read with
+  `Core.readCanonical`; a respelled image refuses every reading with `policy:not-canonical`, and a respelled
+  reading is refused with `reading:not-canonical`. New theorems say so, that a route is given only on
+  canonical bytes, and what the canonicalize path does; `Core.verdict` and now `Core.verdictBytes`,
+  `Core.writeBytes` and `Core.readCanonical` depend on `propext` only.
+- **Documents.** A pack or flow manifest, or an envelope, in another spelling is `document:not-canonical`
+  (was read and respelled, so `manifest_reformatted_but_unchanged_still_verifies` is now
+  `manifest_respelled_but_unchanged_is_not_canonical`); an audit log line or a root statement in another
+  spelling is an unreadable line or `bad_format`. Files are read without newline translation, so a log or a
+  statements file with CRLF line endings no longer verifies (`crlf_log`, `statements_file_with_crlf`,
+  `log_forms`). A statements file's final line is `interrupted_statement` only when it is not JSON, in Python
+  as in Rust.
+- **The canonicalize path** for text a person wrote: `prismpath canonicalize FILE` (`--out`, `--in-place`,
+  `--check`), `canon.canonicalize_document`, `canon2.canonicalize` (which replaces `canon2.canonical`), Rust
+  `canon2::canonicalize` (which replaces `canon2::canonical`) and `durable::canonicalize_document`, JavaScript
+  `canon2Canonicalize`, Go `Canon2Canonicalize`, Lean `Core.canonicalize`.
+- **Vectors and corpora regenerated**: `canon2.json` is version 2 (a case's `refuse` is the strict reader's
+  answer, `canonical_hex` the canonicalize path's; 87 cases, 18 refused as `not-canonical`), and
+  `receipts.json`, `hotswap.json`, `host_trace.json` and the telemetry receipt stream corpus follow. The
+  canon/2 differential's line is `<strict> ; <canonicalize>`, and the core differential sends 8 percent of
+  images and readings respelled.
+- **A lock is version 2**: `delta` and `centroid_prior_weight` are written as `delta_micro` and
+  `centroid_prior_weight_micro`, integers of millionths, not as decimal strings made by `repr` of a float. A
+  value with more than six decimal places is refused, and Python and Rust (`Lock::from_json`) refuse a
+  version 1 member, a float or a string in their place. A version 1 lock is refused; run `prismpath lock` again.
+
+### Changed, breaking: every hashed or signed document is canon/2, and canon/1 is retired (2026-11-10)
+
+The rest of the system follows the verified core onto canon/2, the integer only JCS profile
+(docs/design/spec-verified-core.md, section 3.1; SPEC.md §8; docs/DICTIONARY.md "canon/2"). A document a
+writer hashes or signs now names `"encoding": "canon/2"`, is hashed over its canon/2 bytes, and is signed
+over the domain `prismpath.canon/2` and a zero byte before those bytes unless its format has a domain of its
+own. canon/1, the earlier encoding, is retired in the same release: nothing writes it and nothing reads,
+hashes or verifies a document under it. A document without the tag, or with another tag, is refused with a
+named cause, and what was signed, hashed or anchored under canon/1 no longer verifies. Nobody had used the
+system yet, so there is no migration path; a deployment that has old logs, packs or journals regenerates them.
+`prismpath/tests/test_canon2_migration.py` sweeps Python, Rust, JavaScript, Go and the eBPF and hardware code
+for any encoder or decoder of it, and for its corpora.
+
+- **Audit events** carry `ts_us`, an integer of microseconds since the epoch, instead of the float `ts`, and
+  `encoding`; each line is the event's canon/2 bytes, so non ASCII text is raw UTF-8 and no longer `\u`
+  escaped. A data value with a float is refused (`AuditWriteError`), never converted. A log line without the tag
+  is skipped with its cause (`AuditLog.skipped_causes`), the log no longer verifies (`bad_format`, `log_lines`),
+  and `ledger anchor` refuses it. `trail` reads `ts_us`.
+- **Root statements** are `prismpath-root-statement/2`: canon/2, `encoding`, the integer `time_us` instead
+  of the ISO `time`, the domain `prismpath-root-statement/2`. A `prismpath-root-statement/1` statement, or any
+  untagged line in a statements file, is `bad_format` (a complete line that is not canon/2 is never dropped as a
+  torn write; only a final line that is not JSON is `interrupted_statement`), and the next link's `prev` is
+  compared with `unreadable`. A receipt bundle whose receipt or statement does not name canon/2 is `invalid`
+  with a `problem`.
+- **Pack manifests, envelopes, flow manifests and the crypto registry** are tagged and signed over the canon/2
+  domain, and their files are their canon/2 bytes. An untagged or float holding pack or flow manifest is
+  `manifest:bad-format`, a registry `registry:bad-json`, an envelope `envelope:sig-invalid` (a Rust envelope
+  that does not read was `envelope:missing`). The registry hash, and so every frozen `registry_hash`, changed.
+- **The policy host's intent and active records**, the **epoch journal**'s chain, gap and acknowledgment
+  records and data files, **attestation and OpenTimestamps manifests**, the stamp request and proof bundle
+  records, and the **lock file** (its `delta` and `centroid_prior_weight` as decimal strings) are canon/2. An
+  untagged one is refused: a journal does not open (`JournalCorrupt`, its lines are never truncated), a lock is
+  a `LockError` that says to run `prismpath lock` again, a manifest or receipt does not verify.
+  `prismpath/flows/wazuh_triage_decomposed.lock` was re-written as a canon/2 lock.
+- **The acknowledgment tag** is HMAC over the canon/2 domain and the tagged pair, so an edge and a ground
+  station must both be on this version. A sequence number beyond plus or minus 2^53 minus 1 has no canon/2
+  form: Python raises `EncodingError`, and Rust now returns a `CanonicalError` from `ackchannel::canon`,
+  `sign_ack`, `verify_ack` and `AckReceiver::on_ack` (they returned bare values and panicked), so those four
+  signatures changed.
+- **A float in content PrismPath hashes but did not write is refused.** A connector's ingestion and knowledge
+  hashes, a decision's outcome root, a composer item id, a ledger proof, the compliance adapter's catalog,
+  weight and determination hashes and Mission Control's audit data go through `canon.content_bytes`, which raises
+  `FloatRefused` (Python, an `EncodingError`) and, in Rust, `durable::content_bytes` returns a `CanonicalError`
+  with the same words: supply an integer of a stated unit (microseconds, basis points, bytes) or a decimal
+  string. PrismPath writes no spelling of a float of its own, so the earlier rule (a float as its shortest
+  decimal string) is gone, content that held a float now fails to hash, and every hash that was over such
+  content changed. Mission Control's `audit.record` raises `AuditWriteError`. `connector.json` now carries
+  `float_refusals`, replayed in Rust.
+- **Plain JSON is named and held out of every hash.** `canon.loads`, `load` and `dumps_strict` are
+  `plain_loads`, `plain_load` and `plain_dumps`, for a durable run checkpoint, the connector's JSONL sink
+  lines and the version floor file; `loads_content` reads a model's reply as content. The document `plain_loads`
+  reads is a `PlainDict`, and every hashing helper of `prismpath.canon` refuses one (`PlainJSONRefused`). In
+  Rust, `value::parse_strict` is `parse_plain` (and `parse_content`), and `try_py_canonical_string` and
+  `py_canonical_string` are `plain_dumps`, used only for the sink's line and a message.
+  `prismpath/tests/test_plain_json_never_hashed.py` checks it at run time and in the source of Python and Rust.
+- **Removed.** `canonical_compact`, `canonical_spaced`, `CANON1`, the `/1` root statement reader and
+  `LEGACY_*` constants, `pyCanonicalString` (JavaScript), `value::parse_strict`, the `canonical` section of
+  `durable.json` and the `canon` kind of `receipts.json`, and the corpora `canonical.json`,
+  `receipts_canon1.json` and `hotswap_canon1.json` with `gen_canonical_fixtures.py`. `receipts.json` (245
+  cases) and `hotswap.json` keep the cases built from what canon/1 wrote, as refusals.
+  `host_trace.json`, `hotswap.json`, `receipts.json`, `durable.json` and `connector.json` were regenerated
+  through their generators.
+- **Not re-signed.** `prismpath-hw/demo/flows/*.ppt.manifest.*`, `prismpath-hw/demo-display/switch_nav.*` and the
+  copies in `prismpath-hw/hyst-cert/evidence/` are pack manifests signed under canon/1 by a demo key whose
+  private half is not kept (the evidence copies are named by an anchored `SHA256SUMS`), and
+  `prismpath/comparisons/results/prismpath/evidence/A8/receipt_root.json` is a recorded comparison result; they
+  stay as historic records and `verify_pack` refuses them (`prismpath-hw/hyst-cert/VERIFY.md`).
+- **Not moved**, because it is not hashed or signed: the receipt stream's wire frames (binary Zeckendorf), a
+  durable run checkpoint (state, whose values may be floats a resume must see unchanged), the flow authority's
+  version floor file and the sink's JSONL records, and the comparison harnesses under
+  `prismpath/comparisons/` (models of other systems).
+
 ## [0.1.3] (not yet uploaded)
 
 The first upload to PyPI since 0.1.0: it carries everything listed under 0.1.2 below, which was tagged but
@@ -53,6 +165,22 @@ flow manifests, receipts and bundles read exactly as 0.1.2 wrote them, and a 0.1
   verify before, and 4.77 s and 0.27 s now (8,000 events: 10.64 s and 0.52 s; what remains of the write is
   the signature and two `fsync` calls per event). The statement format is the same, and a test pins the new
   root equal to the old for every count to 300.
+- **The policy host's active image is content addressed and a rollback commits in the swap's order**, in
+  Python and Rust alike. The image is `active-<sha256>.ppt`, written beside the one in use, and the record
+  `active_policy.json` names it in `image_file`; the record rename is the flip point, and the superseded
+  images and the intent record are removed only after it is durable. A death at any step now leaves exactly
+  one policy a restarted host can restore (before: a death between the image and the record left a digest
+  mismatch and no active policy). `rollback` writes its intent record (`"op": "rollback"`), then the audit
+  event, then the image and the record, so a failing append raises `AuditWriteError` with the previous
+  policy still active (before: the rollback had already flipped); an interrupted one is recorded as
+  `rollback_incomplete`. A state directory in the old layout is read as before and moved to the new one by
+  the next swap or rollback. Renames and removals are made durable with a directory fsync.
+  Every file the host reads back (the record, the intent record, the audit log) is read through the strict
+  readers and every file it writes through the refusing writers, so a record, an intent record or an audit
+  line that holds NaN, Infinity or a number beyond the double range is damage that fails closed, and an
+  event that would carry one is refused with `AuditWriteError` and the log unchanged. The host trace
+  corpus holds 65 cases, among them those inputs; Rust returns `HostError::Canonical` instead of
+  panicking where a record to be written has no canonical form.
 
 ### Rust verification of signed receipts
 
@@ -85,6 +213,200 @@ flow manifests, receipts and bundles read exactly as 0.1.2 wrote them, and a 0.1
   `1.5e+20`, `1e+16`); it had used Rust's own spelling outside the range `1e-4` to `1e16`, which
   would have changed a receipt's leaf. Existing frozen corpora are unchanged.
 - The hot swap crate is in CI (it already was, in `ci.yml`); its README and `docs/SYSTEM_MAP.md` said it was not.
+
+### The engine follow-ups in Rust (2026-11-09)
+- A Rust worker can name the kind of its failure: it returns `Result<Value, E>` for any `E: Into<WorkerError>`, and a
+  `WorkerError { kind, message }` becomes the flow's `error_type` as Python's exception class name does (a plain
+  `String` is kind `Error`, as every failure was before). `Step.error_type` carries it, an error no edge handles is
+  `EngineError::Worker` with the kind and message kept, and `EngineError::reference_exception` gives the class and
+  `str()` Python raises for it. A closure that never fails needs a type for its error: `Ok::<_, String>(value)`.
+- An error guard that cannot be evaluated is recorded as SPEC section 5.3 says: `RunState::guard_errors` holds
+  `{node, guard, error}` (persisted as `_guard_errors`, and kept from a resumed state) and `Step.guard_errors` counts the
+  node's records; the `error` text is Rust's own words and is not compared.
+- `parse` takes the reference's input bounds (`PRISMPATH_MAX_FLOW_BYTES`, `PRISMPATH_MAX_NODES`,
+  `PRISMPATH_MAX_EDGES`, in characters, distinct node names and edge lines, with its messages and its order of
+  checks); a document over one is an empty `Graph` with `parse_error` set (`Graph::refusal`), which the engine,
+  `parse_checked` and the telemetry codec refuse, and `parse_with_limits` and `Limits` take the bounds as
+  values. `parse_limits.json` is a new corpus from Python (49 documents under small caps, 6 built to the
+  default caps, 21 environment strings) and a live Python parses 1500 random documents under random caps as the
+  crate does.
+- `Step.used` has Python's shape: `deterministic` with the edge in `cond`, and `embed` with `locked` true for a locked
+  route (it was `deterministic: <cond>` and `locked`), `flows.json`'s `steps` hold each step's `used` and `cond`, and
+  the cross language test compares each step's whole info, the scores to 1e-5, over the corpus and the sample.
+- A route into an undefined node, which Python leaves as an unhandled `KeyError` and no document promises (`validate`
+  reports the target as `undefined-target`), is pinned by seven `flows.json` cases (the target, the start, an empty
+  flow, a capitalised target, an error edge, the last step and a resume) and is `EngineError::MissingNode` here, which
+  `reference_exception` maps to the `KeyError`.
+- `flows.json` has 33 more cases from Python (11 for the guard records, with `guard_errors` and `steps` now in the
+  `expect` of every case that has `opts`), 15 for routing on `error_type` and for the unhandled worker error and 7
+  for the undefined node, and `__raise__` outcomes take a `__kind__`; an expectation that is a refusal now carries `error_class`.
+
+- Every test that makes a directory in the temporary directory now removes it when it ends, a failed assertion
+  included (a `Scratch` value with a `Drop`, in `prismpath-rs/tests/common`, `prismpath-hotswap-rs/tests/common`
+  and the preflight tests); the older hotswap host tests had left a `pp_host_*` directory for each case on every
+  run, and the preflight and overflow tests an `fpf_*` and an `overflow_*` one. `test_lockfile.py` uses `tmp_path`.
+  A full `cargo test --workspace` and `pytest` leave no new entry in `/tmp`.
+
+### The engine surface in Rust (2026-11-09)
+- `prismpath-rs/src/contract.rs` ports `kernel/contract.py` (derive, JSON Schema, `validate_output`, `declared_emits`,
+  `describe`) with a reader of Python's whole expression grammar, since Python derives the contract with
+  `ast.parse` and so reads what the sandbox refuses (`f(y)`, `x.y`, `-5` as a unary minus). `RunOpts` gains
+  `type_gate` (a wrong typed field stops the run as `contract_violation`, cause 37, with the `violations` in
+  `Pending`), `max_transcript` and the flow's `@state_bound(transcript=N)` (a sliding window with the dropped counts in
+  `RunState.dropped`, a malformed bound refused before the run starts, the re-seeded path and steps bounded too) and
+  `run_id`; `run_locked_decided` calls an observer with the routing decision record of each semantic route. A gated
+  run is checkpointed, resumed and enforced by `durable`, and a checkpoint holds `_state_dropped`.
+- `flows.json` has 45 cases after the 27 frozen ones for the type gate and the bound (a case with `opts`; a case per
+  new stop value, per bound and per malformed bound), generated from Python (`engine_surface_fixtures.py`), and
+  `contract.json` (56 flows, 21 outputs) is new. The conformance binary now reports 72/72 flows beside 1112/1112
+  predicates and 8/8 locked flows.
+- Both engines run 600 random flows and every corpus flow and agree on everything the surface holds, in order
+  (`test_engine_cross_language.rs`); the crate also stops a stuck run's `on_step` at its node, as Python does, where it
+  passed none, and a hostile `visits` or error count no longer overflows.
+
+### Causes, receipts and the wire profiles in Rust (2026-11-09)
+- `prismpath-rs/src/causes.rs` is generated from `prismpath.kernel.causes` by `prismpath/portable/gen_causes_rs.py`
+  with the registry hash and the stop mapping; `RunResult.cause` carries the same code the Python engine gives on
+  every flow of `flows.json` and `locked_flows.json` (their `expect` now holds `cause`); `registry_sha256` matches
+  in both languages and a Rust test checks it against the live Python registry.
+- `prismpath-telemetry-rs` has `receipts`, `replay`, `refresh` and `concentrator`, ported from the Python modules
+  and replayed against `receipts.json` and four corpora generated from Python (`receipt_stream`, `replay`,
+  `refresh`, `concentrator`); Python and Rust verify each other's receipts, datagrams and tick streams. The
+  Zeckendorf codec refuses a code beyond `usize` and the encoder no longer overflows near `usize::MAX`.
+- A manifest that cannot be parsed is `manifest:bad-format` with no manifest in both languages (Python raised, Rust
+  answered `sig:missing`). The Python replay window no longer allocates a mask as long as a hostile tick jump.
+- Open for the owner (settled 2026-11-10 below): causes 48 to 51 (`wire:no-terminator`, `wire:dangling-codeword`, `wire:symbol-overflow`,
+  `wire:codebook-mismatch`) are registered and no code in either language emits them; nothing in the reference or
+  its documents says where each fires, so none was invented.
+
+### Canonical JSON refuses what it has no form for (2026-11-09)
+- NaN, Infinity, -Infinity, a number beyond the double range (`1e400`) and a lone surrogate are refused
+  in both languages, where canonical bytes are written and where a document that is hashed, signed or
+  verified is read. Python raised nothing before and wrote `NaN` and `Infinity`; Rust refused them but
+  read `1e400` as infinity. Neither converts any of them now. `prismpath.canon` has `CanonicalError`
+  (write) and `CanonicalReadError` (read, a `json.JSONDecodeError`), `canon.loads`, `canon.load` and
+  `canon.dumps_strict`; `prismpath-rs` has `value::parse_strict` and `durable::try_py_canonical_string`.
+  An audit event that cannot be canonicalised raises `AuditWriteError` and leaves the log unchanged.
+  The receipt verifiers read through the same strict readers in both languages (`root_statement` and
+  `flow_authority` in Python, the `prismpath-hotswap-rs` receipt modules in Rust), so a statement, an audit
+  line or a manifest holding one of those numbers is unreadable, not hashed, and `statement_hash` and
+  `manifest_sha256` in Rust return `None` for a value with no canonical form. The README entry above
+  that lists integers past 64 bits and `NaN` among what Rust does not read as Python does is superseded.
+
+### Oddities closed in both languages (2026-11-10)
+- A sign on an integer literal in a flow's predicate now types a number in the worker output contract: `derive_contract`
+  folds the sign with `predicates.fold_unary_signs`, as every other reader of a predicate does, so `x == -3` and
+  `x in [-3, -1]` give a number with the routed values -3 and -1 as `x >= -5` already gave a number. Before, they gave
+  `unknown` and no values. A signed float, a signed field and a signed boolean still do not fold. Rust reads the same
+  (`prismpath-rs/src/contract.rs`), and `contract.json` holds the corrected answer (58 flows, 23 outputs).
+- A negative `max_transcript` is refused before the run starts, in both languages, as a negative `@state_bound` is:
+  `ValueError` (`EngineError::BadStateBound` in Rust) with `max_transcript=-2: must be >= 0 (0 is no bound)`. Before,
+  Python took -2 as a window that emptied the transcript and counted 14 dropped over a four step run. Zero is still
+  no bound. `RunOpts::max_transcript` is an `Option<i64>` so the Rust caller can be refused as well; `flows.json` has
+  two more cases (107 flows).
+- Causes 48, 49 and 51 now have emitters, beside the decoders' own refusal strings and not in place of them
+  (`docs/design/spec-cause-codes.md` section 6.1 has the table). A receipt decode, `concentrator.demux`,
+  `wire.decode_reading` and the Rust strict stream decode report the registry code as `cause` where the refusal is
+  exactly the registry's meaning: `wire:no-terminator` (48) for a non empty frame with no complete codeword,
+  `wire:dangling-codeword` (49) for a partial codeword with data bits after a complete one, and
+  `wire:codebook-mismatch` (51) for a symbol count that is not the policy's field count. A frame cut where only
+  zero bits remain, an empty frame and an unknown stream id carry none. The results are still the plain pairs they
+  were (`DecodedReceipt` and `Demuxed` are tuple subclasses with a `cause`); in Rust `DecodedReceipt.cause`,
+  `concentrator::demux_cause`, `StrictDecodeError` and `WireRefusal` carry it. `receipt_stream.json` and
+  `concentrator.json` list `registry_cause` per decode and demux case. Cause 50 (`wire:symbol-overflow`) still has
+  no emitter, since no decoder here is handed a cell range, and the pin test keeps that for it alone.
+
+### The verified policy core: evidence gaps closed (step 4, 2026-11-10)
+Research line, `docs/design/spec-verified-core.md` sections 3.1, 7 and 11. Packs, envelopes, audit log
+receipts, their root statements, anchored roots and every frozen corpus read and verify as before.
+- **A differential run is canon/2 end to end.** Its root statement is a new format, `prismpath.core-run-root/1`,
+  signed over its own domain prefix, integers and strings only, the signer's clock as `time_us` (microseconds,
+  an integer) in place of an ISO string; Python and Rust write it and verify each other's. Only the `core-run`
+  log moved: `prismpath-root-statement/1` and its verifiers are unchanged, and a run's verifier refuses a
+  statement in that format.
+- **A run excludes a case as `engine-counter` only when the oracle refuses its image for reading a counter.** The
+  oracle's own check of an image (Lean `loadPolicy`, named `counterRefusal` for this use in `formal/Core/Scope.lean`)
+  is ported to `formal/diff/core_policy.py` and to the Rust example, so producing a run needs no oracle; `core_evidence.py
+  scope-check` holds both ports to the oracle on every image (100,000 of 100,000 for each, cause, code, field and
+  reason). On the 100,000 case run the exclusion drops from 7,505 images that mention a counter to the 1,310 the oracle
+  refuses for one, and 361,984 receipts are written (352,564 before), every one replayed and agreeing. Lean proves an
+  excluded image refuses every reading with `policy:engine-counter` (`counter_excluded_refused`).
+- **Lean ties a run's evidence to the semantics** (`formal/Core/Evidence.lean`). Over a model of a run and of its
+  verifier with every receipt replayed (`verifyRun`), every accepted receipt records `Core.verdict` on the image and
+  reading whose hashes it carries (`verified_receipt_is_verdict`), on any bytes with those hashes that collide with no
+  document of the run (`receipt_is_verdict_of_hashes`); every reading of every case not excluded has its receipt;
+  a recorded refusal is the verdict's registered nonzero code; and `evidence_sound` adds the root statement under
+  unforgeable signatures and collision free hashing, each stated per object as an explicit hypothesis. No `sorry`; in
+  the axiom audit.
+- **`docs/research/verified-core-summary.md`** states for a reviewer what of the verified policy core is proven (each
+  theorem in words), what is tested (the seven differential legs and their counts on the 100,000 case run, the
+  frozen vectors, the evidence round trip), what is assumed (Ed25519, SHA-256, the Lean kernel and compiler, the C
+  compiler, the hardware, the verifiers) and what is out of scope.
+
+### The verified policy core: one cause per refused policy, runs as evidence, the eBPF leg (2026-11-10)
+Research line, `docs/design/spec-verified-core.md` sections 4, 7, 9 and 11. Nothing here changes a format
+already signed: packs, envelopes, receipts, root statements and every frozen corpus read as before.
+- **A policy with several problems is refused for the first, in every implementation (D7).** The order of the
+  spec's section 4 is normative: every rule decoded (each atom its name, operator and constant, a rule's depth
+  after its condition), then the definitions in code point order, then every atom against its definition, then
+  rule 6. `field_definitions.apply_definitions` and the Rust `apply_definitions` run `core_problems`, which
+  enumerates the problems in that order before any text is lowered; the refusal is the first, with the field and
+  reason the oracle names (`FieldDefinitionError.field` and `.reason`, Rust `Graph.field_error_field` and
+  `field_error_reason`, new), and `problems` and `field_error_causes` keep the whole list, equal in the two
+  languages. `definitions_of` parses in code point order. Before, the reference and the port named whichever
+  problem their own phases met first. Lean proves the core's refusal is the head of the same order
+  (`formal/Core/Order.lean`, `loadPolicy_first_problem`, in the axiom audit). The frozen field definition vectors
+  gain seven `d7_*` policies (44 refused), and the Rust replay now checks the port's whole problem list.
+- **A differential run is evidence.** `formal/diff/core_evidence.py` and `prismpath-hotswap-rs/examples/core_evidence.rs`
+  produce a run: each image's canon/2 bytes signed with the authority key, a canon/2 receipt per decision binding
+  the image hash, the reading hash and the registered cause, and one root statement (log `core-run`) over the
+  receipts signed with the instance key and binding the run's manifest. Their `verify` re-checks the statement,
+  every receipt and attestation, and replays a sample (or all) through the oracle; each language verifies the
+  other's run (100,000 cases, 352,564 receipts, every one replayed, none differing). Keys are test keys generated
+  per run.
+- **The eBPF table target is a differential leg** on its userspace path (`formal/diff/ebpf_batch.c`): the in-kernel
+  evaluator's own text, `prismpath-ebpf/ppt_eval_bpf.h`, over a shim of its maps and `bpf_loop`, behind the
+  loader's parser. Loading in kernel needs CAP_BPF; the kernel certification stays the CI job's. The 100,000 case
+  run shows no finding on any of the seven legs.
+
+### The eBPF evaluator carries what the C interpreter carries (2026-11-10)
+Research line, `docs/design/spec-verified-core.md` section 9 (D6, step 4). Nothing here changes a table format, a
+signed image or a frozen corpus: the 147 of 147 in kernel are the same vectors.
+- **An operand stack of 64 and no per program or per node bound short of the maps.** The 86 readings the 100,000
+  case run counted as outside the eBPF subset were edge programs past 64 words and operand stacks past 4, both of
+  which `interp.c` runs. The stack is now one `__u64` (`st_get` and `st_put` are a shift by a masked amount, not a
+  `switch` an arm a slot), `STACK_MAX` is 64, and `MAX_PROG_PER_EDGE` and `MAX_EDGES_PER_NODE` are the map
+  capacities. `prog_word_cb` shrank from 423 to 332 instructions. The 32 bit limit is unchanged and stays a
+  compile time refusal on every table target (the spec says why). The 100,000 case run shows the eBPF leg agreeing on
+  146,673 readings as `c-interp` does, no subset refusal, no finding on any of the seven legs.
+- **The verifier's acceptance is checked in the kernel job and, as far as it can be, without one.**
+  `prismpath-ebpf/verifier_budget.py` holds each built object to the combined stack of 512 bytes, no cycle in the
+  evaluator outside `bpf_loop` and its shape; `cert_corpus.py --boundary` writes 35 records of the evaluator's bounds
+  that the `ebpf_kernel` job loads and replays in kernel; `prismpath/tests/test_ebpf_evaluator_bounds.py` runs the
+  same tables natively. `formal/diff/core_diff.py` takes the oracle's path from `PRISMPATH_CORE_ORACLE`.
+
+### The JavaScript and Go kernels decide the verified core (2026-11-10)
+Research line, `docs/design/spec-verified-core.md` D5. Nothing here changes a format already signed or a frozen
+corpus: a flow that defines no field parses and runs as before.
+- **Both kernels implement field definitions (SPEC section 4.5) and no longer refuse a flow that defines its
+  fields.** `parse` reads the `field.<name>` definitions with Python's whitespace, checks the policy in the
+  core's order (the problems of the spec's section 4, one cause for a refused policy), and lowers every decimal
+  threshold compared with a `fixed` field to its canonical integer from its source span, exactly (`BigInt` in
+  `prismpath/portable/prismpath.mjs`, `math/big` in `prismpath-go`). A refusal is a `FieldDefinitionError` (both)
+  with the registered cause 89 to 100 or 74 to 76, the field and the reason, and every problem in order; the
+  Go graph keeps every edge disabled and `Run` refuses it. New: `systemBoundary` and `policyCheck`
+  (`SystemBoundary`, `PolicyCheck`), `canonicalValue`, `acceptCanonical`, and a canon/2 reader and writer
+  (`canon2Read`, `canon2Write`; `Canon2Read`, `Canon2Write`) with the frozen vectors replayed in
+  `run_vectors.mjs` (`canon2.json` 73 of 73, `field_definitions.json` 156 of 156) and in
+  `prismpath-go/conformance_test.go`.
+- **Evaluator corrections the core needed.** JavaScript no longer counts a bracket as predicate depth and
+  refuses more than 200 open brackets, as the reference and the Rust port do; Go reads `and` and `or` as one
+  n-ary node (a flat chain of operands is one level, as Python's syntax tree holds it) and `\xNN` in a string as
+  the code point rather than the byte; both read front matter with Python's whitespace, so U+FEFF is not
+  stripped.
+- **The differential harness has no refusing kernel and no reader gap.** `core_diff_js.mjs` and
+  `prismpath-go/cmd/core_diff` compose the kernels' own functions as the Python and Rust legs do, read canon/2,
+  and speak the cause registry. The 100,000 case run shows no finding on any of the seven legs.
 
 ## [0.1.2] (tagged, superseded before upload; never on PyPI)
 

@@ -24,6 +24,12 @@ Files under the journal directory:
                      chain line. A crash between the two leaves the newest epoch unsigned, which
                      `verify_statements` reports as an unsigned tail, not as a failure.
 
+Every line and file is canon/2. A chain line, a gap line and acks.json name `"encoding": "canon/2"`, and
+a chain line that names it says its data file is the canon/2 bytes of the block list too. A journal
+written before canon/2 (untagged lines, data files in Python's spaced JSON) does not open: canon/1 is
+retired, and a complete line that is not canon/2 is `JournalCorrupt`, never read and never discarded as a
+torn write.
+
 Recovery order, at every start:
   1. chain.jsonl is read. A torn final line is discarded and reported as `interrupted_seal`; a torn
      line anywhere else is corruption and the journal refuses to open, because a chain with a hole
@@ -73,13 +79,22 @@ def _sha256(data: bytes) -> str:
 
 
 def _append_line(path: str, record: dict) -> None:
-    """Append one JSON line and fsync it, so the line is on disk before the caller moves on. A crash
-    mid write leaves a torn final line, which recovery discards and reports."""
-    line = json.dumps(record, sort_keys=True) + "\n"
+    """Append one canon/2 line, tagged, and fsync it, so the line is on disk before the caller moves on.
+    A crash mid write leaves a torn final line, which recovery discards and reports."""
+    line = canon.canon2_bytes(canon.tagged(record)).decode("utf-8") + "\n"
     with open(path, "a", encoding="utf-8") as handle:
         handle.write(line)
         handle.flush()
         os.fsync(handle.fileno())
+
+
+def _is_json(line: str) -> bool:
+    """True when `line` is complete JSON of any kind: a line that is not is a torn write."""
+    try:
+        json.loads(line)
+    except ValueError:
+        return False
+    return True
 
 
 class JournalCorrupt(RuntimeError):
@@ -119,15 +134,17 @@ class EpochJournal:
     def _read_jsonl(self, path: str, torn_finding: str) -> List[dict]:
         if not os.path.exists(path):
             return []
-        with open(path, "r", encoding="utf-8") as handle:
+        with open(path, "r", encoding="utf-8", newline="") as handle:
             raw_lines = handle.read().split("\n")
         if raw_lines and raw_lines[-1] == "":
             raw_lines.pop()
         records = []
         for index, line in enumerate(raw_lines):
             try:
-                records.append(json.loads(line))
-            except ValueError:
+                records.append(canon.loads_document(line))
+            except ValueError as error:
+                if _is_json(line):
+                    raise JournalCorrupt(f"{path}: line {index + 1} is not a canon/2 document: {error}") from error
                 if index == len(raw_lines) - 1:
                     self._recovery.append({"finding": torn_finding, "file": os.path.basename(path), "line": index + 1})
                     self._truncate_to(path, raw_lines[:-1])
@@ -144,10 +161,10 @@ class EpochJournal:
         acks = {}
         if os.path.exists(self._acks_path()):
             try:
-                acks = json.loads(open(self._acks_path(), encoding="utf-8").read())
-            except ValueError:
+                acks = canon.loads_document(open(self._acks_path(), encoding="utf-8", newline="").read())
+            except ValueError as error:
                 # atomic_write means a torn acks.json cannot exist; a corrupt one is a real fault
-                raise JournalCorrupt(f"{self._acks_path()} is not JSON")
+                raise JournalCorrupt(f"{self._acks_path()} is not a canon/2 document: {error}")
         gaps = {record["epoch_id"] for record in self._read_jsonl(self._gaps_path(), "interrupted_gap_record")}
 
         expected_prev = ""
@@ -166,7 +183,8 @@ class EpochJournal:
                     gaps.add(epoch_id)
                     os.remove(data_path)
                 else:
-                    blocks = json.loads(data.decode("utf-8"))
+                    from prismpath.kernel import canon2
+                    blocks = canon2.loads(data)
             epoch = epoch_module.Epoch(epoch_id, blocks, record["merkle_root"], record["chained_root"])
             self.store.epochs.append(epoch)
         named = {record["epoch_id"] for record in chain}
@@ -202,8 +220,8 @@ class EpochJournal:
         merkle_root, _proofs = sh.commit(blocks)
         prev = self.store.epochs[-1].chained_root if self.store.epochs else ""
         epoch_id = len(self.store.epochs)
-        data = json.dumps(blocks).encode("utf-8")
-        canon.atomic_write(self._data_path(epoch_id), data.decode("utf-8"))
+        data = canon.canon2_bytes(blocks)
+        canon.atomic_write_bytes(self._data_path(epoch_id), data)
         chained = epoch_module.chain_root(prev, merkle_root)
         _append_line(self._chain_path(), {"epoch_id": epoch_id, "merkle_root": merkle_root, "chained_root": chained,
                                           "data_sha256": _sha256(data), "data_length": len(data)})
@@ -285,7 +303,8 @@ class EpochJournal:
         restart. Returns the number of epochs whose data was dropped."""
         if not any(epoch.chained_root == chained_root for epoch in self.store.epochs):
             return 0
-        canon.atomic_write(self._acks_path(), json.dumps({"last_seq": seq, "acked_through": chained_root}, sort_keys=True))
+        canon.atomic_write_bytes(self._acks_path(), canon.canon2_bytes(
+            canon.tagged({"last_seq": seq, "acked_through": chained_root})))
         self.last_seq = seq
         self.acked_through = chained_root
         return len(self._apply_ack_to_files(chained_root))

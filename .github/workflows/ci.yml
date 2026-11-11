@@ -216,6 +216,102 @@ jobs:
       - name: Reflect bindings clippy
         run: cargo clippy --manifest-path prismpath-reflect-bindings/Cargo.toml --all-targets -- -D warnings
 
+  # The declared minimum supported Rust version, built rather than asserted. prismpath-rs, the telemetry
+  # port and the preflight tool declare 1.82 (the newest standard library call they use is
+  # Option::is_none_or, stable in 1.82). The hot swap port declares 1.85 because the committed Cargo.lock
+  # resolves ed25519-dalek's zeroize and base64ct to releases written in edition 2024. Each crate is
+  # checked with every target, including its tests, against the committed lockfile.
+  msrv:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - toolchain: "1.82"
+            crates: "-p prismpath-rs -p prismpath-telemetry-rs -p prismpath-preflight"
+          - toolchain: "1.85"
+            crates: "-p prismpath-hotswap-rs"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
+        with:
+          toolchain: ${{ matrix.toolchain }}
+      - name: Declared rust-version matches the toolchain under test
+        run: |
+          for crate in ${{ matrix.crates }}; do
+            [ "$crate" = "-p" ] && continue
+            declared="$(cargo metadata --no-deps --format-version 1 --locked | python3 -c 'import json,sys; print({p["name"]: p["rust_version"] for p in json.load(sys.stdin)["packages"]}["'"$crate"'"])')"
+            test "$declared" = "${{ matrix.toolchain }}" || { echo "$crate declares $declared, job builds ${{ matrix.toolchain }}"; exit 1; }
+          done
+      - name: Build every target at the declared minimum
+        run: cargo check --locked --all-targets ${{ matrix.crates }}
+
+  # The Rust crates and the Python reference check each other: the signed packs, the host and its crash
+  # recovery, the deferral store, the cause registry, the worker contract, the engine surface and the wire
+  # profiles run against a live Python, and PRISMPATH_REQUIRE_CROSS_LANGUAGE makes a leg that cannot find
+  # one fail instead of skipping. The log is searched for each leg's closing line, so a test that never
+  # ran is as red as one that failed.
+  rust_cross_language:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: pip install -e . numpy pytest cryptography
+      - name: The Rust and Python hosts, packs and deferral stores check each other, and no leg may be skipped
+        env:
+          PRISMPATH_REQUIRE_CROSS_LANGUAGE: "1"
+        run: |
+          set -o pipefail
+          export PRISMPATH_PYTHON="$(command -v python)"
+          cargo test -p prismpath-hotswap-rs --test test_hotswap_conformance --test test_host_trace --test test_host_crash --test test_host_cross_language -- --nocapture 2>&1 | tee cross_language.log
+          cargo test -p prismpath-rs --test test_connector file_deferral_store_is_cross_runtime -- --nocapture 2>&1 | tee -a cross_language.log
+          cargo test -p prismpath-rs --test test_causes -- --nocapture 2>&1 | tee -a cross_language.log
+          cargo test -p prismpath-rs --test test_contract --test test_engine_surface --test test_engine_cross_language --test test_parse_limits -- --nocapture 2>&1 | tee -a cross_language.log
+          cargo test -p prismpath-telemetry-rs --test test_cross_language -- --nocapture 2>&1 | tee -a cross_language.log
+          grep -q "bidirectional: Python verified the Rust-signed packs" cross_language.log
+          grep -q "file deferral: cross-runtime round-trips both ways" cross_language.log
+          grep -q "cross-language host: each runtime restored the other's active policy" cross_language.log
+          grep -q "cross-language host: each runtime recovered the other's interrupted commit" cross_language.log
+          grep -q "cross-language host: non ASCII log identical in both runtimes" cross_language.log
+          grep -q "host trace: .* cases" cross_language.log
+          grep -q "engine cross language: .* scenarios" cross_language.log
+          grep -q "cross-language telemetry: Python decoded, re-encoded, demultiplexed and replayed what Rust wrote" cross_language.log
+          grep -q "cross-language telemetry: Rust decoded, re-encoded, demultiplexed and replayed what Python wrote" cross_language.log
+          if grep -q SKIP cross_language.log; then echo "a cross language leg was skipped"; exit 1; fi
+
+  # One summary of every frozen corpus against every implementation that consumes it. tools/run_corpora.py
+  # checks its consumer table against the tree (a corpus with no decision, a consumer that no longer
+  # names its corpus, an unreadable target) and then calls the same test targets the jobs above call,
+  # printing one line per corpus and implementation. A new corpus without a consumer decision fails here.
+  corpus_summary:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: "22"
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: "1.22"
+      - name: Install
+        run: pip install -e . numpy pytest cryptography
+      - name: Consumer table against the tree
+        run: python tools/run_corpora.py --check
+      - name: Every corpus against every implementation
+        run: python tools/run_corpora.py
+
   # The Go kernel: the fourth language kernel, judged by the same frozen vectors.
   go:
     runs-on: ubuntu-latest
@@ -248,7 +344,7 @@ jobs:
         run: |
           pip install -e . cocotb==1.9.2 pytest
           sudo apt-get update
-          sudo apt-get install -y verilator clang libbpf-dev
+          sudo apt-get install -y verilator clang llvm libbpf-dev
       - name: C target — certify against the frozen corpus (declared subset)
         run: make -C prismpath-hw cert
       - name: C target, defined flows route as the engine does on lowered thresholds and absence
@@ -283,6 +379,10 @@ jobs:
           python3 prismpath-ebpf/cert_corpus.py /tmp/cert_corpus.bin
       - name: eBPF tables past the evaluator's bounds are refused where they are built and by the loader just built
         run: python -m pytest prismpath/tests/test_ebpf_table_limits.py -q -rs
+      - name: eBPF evaluator at its bounds (stack 64, 4,000 word programs, 200 edge nodes) and every object within the modelled verifier limits, no kernel needed
+        run: |
+          python -m pytest prismpath/tests/test_ebpf_evaluator_bounds.py -q -rs
+          python3 prismpath-ebpf/verifier_budget.py prismpath-ebpf/ppt_xdp.bpf.o prismpath-ebpf/ppt_net.bpf.o prismpath-ebpf/ppt_select.bpf.o prismpath-ebpf/a6/ppt_xdp.bpf.o prismpath-ebpf/facet_decode.bpf.o
 
   # In-kernel eBPF conformance via BPF_PROG_TEST_RUN (needs root + a BPF-capable kernel). Confirmed
   # green on GitHub-hosted ubuntu-24.04 runners (they provide sudo + /sys/kernel/btf + a recent kernel),
@@ -301,15 +401,20 @@ jobs:
       - name: Install
         run: |
           pip install -e .
-          sudo apt-get update && sudo apt-get install -y clang libbpf-dev
+          sudo apt-get update && sudo apt-get install -y clang llvm libbpf-dev
       - name: Build eBPF target + a seed image
         run: |
           make -C prismpath-ebpf
           python3 prismpath-ebpf/cert_corpus.py /tmp/cert_corpus.bin
+          python3 prismpath-ebpf/cert_corpus.py --boundary /tmp/cert_boundary.bin
           python3 prismpath-ebpf/net_compile.py prismpath-ebpf/net_triage.md \
             prismpath-ebpf/build/seed.ppt prismpath-ebpf/build/seed.names
+      - name: The verifier's limits as the repo models them, on the objects about to be loaded
+        run: python3 prismpath-ebpf/verifier_budget.py prismpath-ebpf/ppt_xdp.bpf.o prismpath-ebpf/ppt_net.bpf.o prismpath-ebpf/ppt_select.bpf.o prismpath-ebpf/a6/ppt_xdp.bpf.o prismpath-ebpf/facet_decode.bpf.o
       - name: In-kernel corpus conformance (147/147, BPF_PROG_TEST_RUN)
         run: cd prismpath-ebpf && sudo ./loader build/seed.ppt certify /tmp/cert_corpus.bin
+      - name: In-kernel boundary corpus (stack 64, programs to 4,000 words, 200 edge nodes; the verifier accepts the evaluator and it routes as the reference does)
+        run: cd prismpath-ebpf && sudo ./loader build/seed.ppt certify /tmp/cert_boundary.bin
       - name: In-kernel Facet decode-plane cert (250/250 byte-identical + negative matrix)
         run: cd prismpath-ebpf && sudo -E env "PATH=$PATH" python3 facet_decode_cert.py
       - name: Real packet front end conformance (ppt_net, 90/90 frames against the host engine)

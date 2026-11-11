@@ -31,8 +31,16 @@ class _Echo(BaseConnector):
 
 _PAYLOADS = [
     {"alert": {"id": 7, "severity": "high"}, "agent": "web-01"},
-    {"roles": ["admin", "dev"], "active": True, "score": 1.5},
+    {"roles": ["admin", "dev"], "active": True, "score_milli": 1500, "ratio": "0.25"},
     {"nested": {"deep": {"leaf": None}}, "note": "café"},
+]
+
+# Content with a float: its hash is refused (canon/2 has no float and PrismPath writes no spelling of one), so
+# these are replayed as refusals, and the flattener, which hashes nothing, still reads them.
+_FLOAT_CONTENT = [
+    {"roles": ["admin"], "score": 1.5},
+    {"nested": {"deep": [1, 2.5]}},
+    {"exp": 1e30},
 ]
 
 _FLOW_PARENT = """---
@@ -96,9 +104,25 @@ def main() -> int:
              _PAYLOADS[2], schema={"properties": {"verdict": {}, "reason": {}}})},
     ]
 
-    flat_cases = [{"data": payload, "flat": PayloadFlattener().flatten(payload)} for payload in _PAYLOADS]
+    flat_cases = [{"data": payload, "flat": PayloadFlattener().flatten(payload)}
+                  for payload in _PAYLOADS + _FLOAT_CONTENT]
 
-    outcome = {"verdict": "contain", "score": 0.93}
+    float_refusals = []
+    for payload in _FLOAT_CONTENT:
+        for method in (conn.compute_ingestion_hash, conn.compute_knowledge_hash):
+            try:
+                method(payload)
+            except canon.FloatRefused:
+                continue
+            raise SystemExit(f"a float was hashed: {payload}")
+        try:
+            conn.attest_decision(payload, "sha256:deadbeef", "g", [], "sha256:kb")
+        except canon.FloatRefused:
+            float_refusals.append(payload)
+        else:
+            raise SystemExit(f"a float was attested: {payload}")
+
+    outcome = {"verdict": "contain", "score_bp": 9300}
     att = conn.attest_decision(outcome, "sha256:deadbeef", "wazuh_triage@v3",
                                ["sha256:aa"], "sha256:kb")
     att["created"] = "2026-08-12T00:00:00Z"
@@ -152,9 +176,10 @@ def main() -> int:
         "version": 2,
         "note": "Connector-SDK + composition fixtures from the Python reference. Rust must "
                 "reproduce hashes and prompt strings byte-for-byte, the attestation manifest "
-                "exactly, the fan-out final path/stopped with _children aggregated, and the "
+                "exactly, a refusal (never a hash) for content that holds a float, the fan-out final path/stopped with _children aggregated, and the "
                 "join-policy grid (composer._quorum_threshold/_join_event) value-for-value.",
         "hashes": hashes,
+        "float_refusals": float_refusals,
         "prompts": prompts,
         "flatten": flat_cases,
         "attestation": {"outcome": outcome, "policy_hash": "sha256:deadbeef",

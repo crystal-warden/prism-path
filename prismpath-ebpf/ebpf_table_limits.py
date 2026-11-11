@@ -6,12 +6,15 @@
 The in kernel evaluator runs every loop under a fixed bound so the verifier accepts it. It reads at most
 MAX_EDGES_PER_NODE edges of a node and MAX_PROG_PER_EDGE words of an edge program, and its operand stack
 holds STACK_MAX entries. Past any of those bounds it clamps instead of failing: a push past the stack is
-dropped, and the rest of a long program or a node's later edges are never read. The shared compiler
-emits such tables, because the C and FPGA targets allow more, so `when x not in [0..32]` compiles to 66
-words and decided the inverse of the authored policy in the kernel, and `when a and (b and (c and (d and
-e)))` reaches depth 5 and ignored `e` (October 2026 reading boundary audit). The image loader refuses the
-same tables at load (ppt_image.c, parse_image_buf), and this module refuses them where the eBPF tooling
-builds one.
+dropped, and the rest of a long program or a node's later edges are never read. The bounds were once 64
+words, 64 edges and a stack of 4, and the shared compiler emits tables past those, because the C and FPGA
+targets allow more: `when x not in [0..32]` compiles to 66 words and decided the inverse of the authored
+policy in the kernel, and `when a and (b and (c and (d and e)))` reaches depth 5 and ignored `e` (October
+2026 reading boundary audit). They now sit where the C interpreter's do, a stack of 64 and a node or
+program as long as the maps hold (ppt_common.h says how the evaluator carries them), so what this refuses
+is a depth past 64, which interp.c refuses too, and a table past a map capacity. The image loader refuses
+the same tables at load (ppt_image.c, parse_image_buf), and this module refuses them where the eBPF
+tooling builds one.
 
 The bounds are read from ppt_common.h, the header the evaluator is compiled from, so this check and the
 kernel cannot disagree about them. Every program is also checked to be well formed, because the

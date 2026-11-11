@@ -1,8 +1,11 @@
 package prismpath
 
 import (
+	"bytes"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"math"
 	"os"
 	"path/filepath"
@@ -28,6 +31,7 @@ type flowCase struct {
 	MaxSteps *int                     `json:"maxSteps"`
 	Start    *string                  `json:"start"`
 	State    map[string]interface{}   `json:"state"`
+	Opts     map[string]interface{}   `json:"opts"`
 	Expect   struct {
 		Path        []string    `json:"path"`
 		Stopped     string      `json:"stopped"`
@@ -85,7 +89,14 @@ func TestFlowsConformance(test *testing.T) {
 	}
 
 	passed := 0
+	skipped := 0
 	for _, fx := range corpus.Cases {
+		// A case that carries opts sets an engine option this kernel does not take (the type gate, the
+		// transcript bound, a run id); those cases are for the engines that implement the options.
+		if fx.Opts != nil {
+			skipped++
+			continue
+		}
 		graph := Parse(fx.Flow)
 		used := make(map[string]int)
 
@@ -146,7 +157,7 @@ func TestFlowsConformance(test *testing.T) {
 		}
 	}
 
-	test.Logf("flows: %d/%d passed", passed, len(corpus.Cases))
+	test.Logf("flows: %d/%d passed (%d with engine options skipped)", passed, len(corpus.Cases)-skipped, skipped)
 }
 
 func TestPredicateSemanticsFixes(test *testing.T) {
@@ -187,35 +198,256 @@ func TestPredicateSemanticsFixes(test *testing.T) {
 	}
 }
 
-// A flow that defines its fields (SPEC section 4.5) is refused: this kernel does not lower decimal
-// thresholds, so it must not run such a flow. Every policy of the shared field definition vectors is
-// one, accepted by the reference or not.
-func TestFieldDefinitionsAreRefused(t *testing.T) {
-	raw, err := os.ReadFile(filepath.Join("..", "prismpath", "portable", "conformance", "field_definitions.json"))
+func readCorpus(test *testing.T, name string, into interface{}) {
+	test.Helper()
+	raw, err := os.ReadFile(filepath.Join("..", "prismpath", "portable", "conformance", name))
 	if err != nil {
-		t.Fatalf("read field_definitions.json: %v", err)
+		test.Fatalf("read %s: %v", name, err)
 	}
+	if err := json.Unmarshal(raw, into); err != nil {
+		test.Fatalf("parse %s: %v", name, err)
+	}
+}
+
+// The frozen canon/2 vectors (spec-verified-core.md sections 3 and 3.2): the strict reader refuses every case
+// with the reference's rule (not-canonical for a spelling that is not the canonical one) or accepts it as its
+// own canonical bytes, and Canon2Canonicalize gives the reference's canonical bytes, a fixed point, or refuses
+// with the same rule.
+func TestCanon2Conformance(test *testing.T) {
 	var corpus struct {
+		Version int `json:"version"`
+		Cases   []struct {
+			Name         string `json:"name"`
+			Hex          string `json:"hex"`
+			CanonicalHex string `json:"canonical_hex"`
+			Refuse       string `json:"refuse"`
+		} `json:"cases"`
+	}
+	readCorpus(test, "canon2.json", &corpus)
+	if corpus.Version != 2 {
+		test.Fatalf("canon2.json version %d, want 2", corpus.Version)
+	}
+	rule := func(err error) string {
+		var canonErr *Canon2Error
+		if errors.As(err, &canonErr) {
+			return canonErr.Rule
+		}
+		return ""
+	}
+	passed := 0
+	for _, vector := range corpus.Cases {
+		input, err := hex.DecodeString(vector.Hex)
+		if err != nil {
+			test.Fatalf("[%s] bad hex: %v", vector.Name, err)
+		}
+		document, readErr := Canon2Read(input)
+		if vector.Refuse != "" {
+			if rule(readErr) != vector.Refuse {
+				test.Errorf("[%s] read as %v (%v), the reference refuses it as %s", vector.Name, document, readErr, vector.Refuse)
+				continue
+			}
+		} else {
+			if readErr != nil {
+				test.Errorf("[%s] refused (%v), the reference reads it", vector.Name, readErr)
+				continue
+			}
+			if written, _ := Canon2Write(document); !bytes.Equal(written, input) {
+				test.Errorf("[%s] the strict reader accepted bytes that are not canonical", vector.Name)
+				continue
+			}
+		}
+		canonical, canonErr := Canon2Canonicalize(input)
+		if vector.CanonicalHex == "" {
+			if rule(canonErr) != vector.Refuse {
+				test.Errorf("[%s] canonicalized (%v), the reference refuses it as %s", vector.Name, canonErr, vector.Refuse)
+				continue
+			}
+			passed++
+			continue
+		}
+		if canonErr != nil || hex.EncodeToString(canonical) != vector.CanonicalHex {
+			test.Errorf("[%s] canonicalized to %x (%v), want %s", vector.Name, canonical, canonErr, vector.CanonicalHex)
+			continue
+		}
+		again, againErr := Canon2Read(canonical)
+		rewritten, _ := Canon2Write(again)
+		if againErr != nil || !bytes.Equal(rewritten, canonical) {
+			test.Errorf("[%s] the canonical bytes are not a fixed point", vector.Name)
+			continue
+		}
+		passed++
+	}
+	test.Logf("canon2: %d/%d passed", passed, len(corpus.Cases))
+}
+
+// Field definitions (SPEC section 4.5), replayed from the frozen vectors the Python reference generates: the
+// shared conversion, parse time lowering to the exact text the reference produces, the policy rules in the
+// core's order, the canonical boundary and the engine's routes on canonical readings.
+func TestFieldDefinitionsConformance(test *testing.T) {
+	var corpus struct {
+		Conversion []struct {
+			Definition string      `json:"definition"`
+			Raw        interface{} `json:"raw"`
+			Canonical  interface{} `json:"canonical"`
+			Refused    string      `json:"refused"`
+		} `json:"conversion"`
 		Policies []struct {
-			Name string `json:"name"`
-			Flow string `json:"flow"`
+			Name     string   `json:"name"`
+			Flow     string   `json:"flow"`
+			Accepted bool     `json:"accepted"`
+			Cause    string   `json:"cause"`
+			Causes   []string `json:"causes"`
+			Lowered  []string `json:"lowered"`
+			Probes   []struct {
+				Reading map[string]interface{} `json:"reading"`
+				Route   string                 `json:"route"`
+			} `json:"probes"`
+			Refused []struct {
+				Reading map[string]interface{} `json:"reading"`
+				Field   string                 `json:"field"`
+				Reason  string                 `json:"reason"`
+			} `json:"refused_readings"`
 		} `json:"policies"`
 	}
-	if err := json.Unmarshal(raw, &corpus); err != nil {
-		t.Fatalf("parse field_definitions.json: %v", err)
+	readCorpus(test, "field_definitions.json", &corpus)
+	for _, conversion := range corpus.Conversion {
+		definition, err := ParseDefinition("value", conversion.Definition)
+		if err != nil {
+			test.Errorf("a vector's definition %q does not parse: %v", conversion.Definition, err)
+			continue
+		}
+		value, reason := CanonicalValue(definition, conversion.Raw)
+		if conversion.Refused != "" {
+			if reason != conversion.Refused {
+				test.Errorf("conversion %v of %q: refused as %q (%v), want %q", conversion.Raw, conversion.Definition, reason, value, conversion.Refused)
+			}
+			continue
+		}
+		if reason != "" || fmt.Sprint(value) != fmt.Sprint(conversion.Canonical) {
+			test.Errorf("conversion %v of %q: got %v (%q), want %v", conversion.Raw, conversion.Definition, value, reason, conversion.Canonical)
+		}
 	}
 	for _, policy := range corpus.Policies {
 		graph := Parse(policy.Flow)
-		if graph.Refused == "" {
-			t.Errorf("[%s] parsed without a refusal", policy.Name)
+		if !policy.Accepted {
+			if graph.FieldError == nil || graph.Refused == "" {
+				test.Errorf("[%s] parsed although the reference refuses it", policy.Name)
+				continue
+			}
+			causes := []string{}
+			for _, found := range graph.FieldError.Problems {
+				causes = append(causes, found.Cause)
+				if _, registered := CoreCauseCode(found.Cause); !registered {
+					test.Errorf("[%s] an unregistered cause %s", policy.Name, found.Cause)
+				}
+			}
+			if graph.FieldError.Cause != policy.Cause || !reflect.DeepEqual(causes, policy.Causes) {
+				test.Errorf("[%s] cause %s %v, want %s %v", policy.Name, graph.FieldError.Cause, causes, policy.Cause, policy.Causes)
+			}
+			for _, edge := range graph.Nodes["s"].Edges {
+				if edge.Condition != "never" {
+					test.Errorf("[%s] an edge stayed live: %s", policy.Name, edge.Condition)
+				}
+			}
+			if _, err := Run(graph, func(node string, instruction string, state map[string]interface{}) (interface{}, error) {
+				return nil, nil
+			}, RunOptions{}); err == nil {
+				test.Errorf("[%s] the engine ran a refused flow", policy.Name)
+			}
+			continue
 		}
-		if _, err := Run(graph, func(node string, instruction string, state map[string]interface{}) (interface{}, error) {
-			return nil, nil
-		}, RunOptions{}); err == nil {
-			t.Errorf("[%s] ran", policy.Name)
+		if graph.FieldError != nil {
+			test.Errorf("[%s] refused: %s", policy.Name, graph.FieldError.Message)
+			continue
+		}
+		lowered := []string{}
+		for _, edge := range graph.Nodes["s"].Edges {
+			lowered = append(lowered, edge.Condition)
+		}
+		if !reflect.DeepEqual(lowered, policy.Lowered) {
+			test.Errorf("[%s] lowered %q, want %q", policy.Name, lowered, policy.Lowered)
+		}
+		for _, probe := range policy.Probes {
+			routed := ""
+			for _, edge := range graph.Nodes["s"].Edges {
+				if matched, err := EvalCondition(edge.Condition, probe.Reading); err == nil && matched && IsDeterministic(edge.Condition) {
+					routed = edge.Target
+					break
+				}
+			}
+			if routed != probe.Route {
+				test.Errorf("[%s] %v routed to %q, want %q", policy.Name, probe.Reading, routed, probe.Route)
+			}
+		}
+		for _, refused := range policy.Refused {
+			field, reason, found := SystemBoundary(graph, refused.Reading)
+			if !found || field != refused.Field || reason != refused.Reason {
+				test.Errorf("[%s] %v refused as %s %s (%v), want %s %s", policy.Name, refused.Reading, field, reason, found, refused.Field, refused.Reason)
+			}
 		}
 	}
-	if Parse("---\nname: t\n---\n## s\n-> e: when x >= 1\n## e\n").Refused != "" {
-		t.Errorf("a flow without definitions was refused")
+	if Parse("---\nname: t\n---\n## s\n-> e: when x >= 1\n## e\n").FieldError != nil {
+		test.Errorf("a flow without definitions was refused")
+	}
+}
+
+// The system boundary checks every defined field, the policy check only the routed ones (section 6.1).
+func TestSystemBoundaryAndPolicyCheck(test *testing.T) {
+	graph := Parse("---\nname: t\nstart: s\nfield.x: int min=0 max=10\nfield.unused: bool\nfield.r: fixed scale=100 rounding=floor\n---\n" +
+		"## s\n-> hit: when x >= 5 and r >= 0.5\n-> miss: else\n## hit\n## miss\n")
+	if graph.FieldError != nil {
+		test.Fatalf("refused: %v", graph.FieldError)
+	}
+	if !reflect.DeepEqual(graph.Routed, []string{"r", "x"}) {
+		test.Errorf("routed %v", graph.Routed)
+	}
+	if field, reason, found := SystemBoundary(graph, map[string]interface{}{"x": int64(5), "r": int64(50)}); !found || field != "unused" || reason != "missing" {
+		test.Errorf("system boundary: %s %s %v", field, reason, found)
+	}
+	if _, _, found := PolicyCheck(graph, map[string]interface{}{"x": int64(5), "r": int64(50)}); found {
+		test.Errorf("the policy check refused a reading whose routed fields are canonical")
+	}
+	if field, reason, found := PolicyCheck(graph, map[string]interface{}{"x": int64(1)}); !found || field != "r" || reason != "missing" {
+		test.Errorf("policy check: %s %s %v", field, reason, found)
+	}
+}
+
+// A decimal threshold is lowered exactly, past the precision of a double, and a refusal carries its cause.
+func TestDecimalLoweringIsExact(test *testing.T) {
+	graph := Parse("---\nname: t\nstart: s\nfield.d: fixed scale=1000000000 rounding=exact min=0 max=9007199254740991\n---\n" +
+		"## s\n-> hit: when d >= 0.007199254\n-> miss: else\n## hit\n## miss\n")
+	if got := graph.Nodes["s"].Edges[0].Condition; got != "when d >= 7199254" {
+		test.Errorf("lowered %q", got)
+	}
+	refused := Parse("---\nname: t\nstart: s\nfield.d: fixed scale=100 rounding=exact\n---\n## s\n-> hit: when d >= 0.001\n## hit\n")
+	if refused.FieldError == nil || refused.FieldError.Cause != "policy:threshold" || refused.FieldError.Reason != "off-grid" ||
+		refused.FieldError.Field != "d" || refused.FieldError.Code != 96 {
+		test.Errorf("refusal %+v", refused.FieldError)
+	}
+}
+
+// `and` and `or` are n-ary, so a long flat chain is one level of depth, and `\xNN` is a code point.
+func TestCoreEvaluatorCorrections(test *testing.T) {
+	chain := "when " + strings.TrimSuffix(strings.Repeat("x and ", 60), " and ")
+	if got, err := EvalCondition(chain, map[string]interface{}{"x": int64(1)}); err != nil || !got {
+		test.Errorf("a flat chain of 60 operands: %v %v", got, err)
+	}
+	if got, err := EvalCondition(`when s == "\x85\xe9"`, map[string]interface{}{"s": "\u0085\u00e9"}); err != nil || !got {
+		test.Errorf(`\xNN as a code point: %v %v`, got, err)
+	}
+}
+
+// Front matter is read with Python's whitespace: U+001F is whitespace, U+FEFF is not.
+func TestDefinitionWhitespaceIsPythons(test *testing.T) {
+	flow := func(text string) Graph {
+		return Parse("---\nname: t\nstart: s\nfield.x: " + text + "\n---\n## s\n-> hit: when x >= 1\n## hit\n")
+	}
+	if graph := flow("\x1fint\x1f"); graph.FieldError != nil {
+		test.Errorf("refused: %v", graph.FieldError)
+	}
+	for _, text := range []string{"\ufeffint", "\ufeff"} {
+		if graph := flow(text); graph.FieldError == nil || graph.FieldError.Reason != "unknown-kind" {
+			test.Errorf("%q: %+v", text, graph.FieldError)
+		}
 	}
 }

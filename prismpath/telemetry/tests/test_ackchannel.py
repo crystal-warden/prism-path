@@ -80,3 +80,22 @@ def test_replay_is_rejected():
     root0 = store.epochs[0].chained_root
     res = receiver.on_ack(root0, 5, ack.sign_ack(SECRET, root0, 5))
     assert not res["accepted"] and res["reason"] == "stale-seq"
+
+
+def test_a_sequence_beyond_two_to_the_53_is_refused():
+    """The same refusal the Rust twin returns (`test_ackchannel.rs`): a `seq` beyond plus or minus 2^53 minus 1
+    has no canon/2 form, so signing, verifying and applying it raise, and nothing is recorded or dropped."""
+    import pytest
+    from prismpath import canon
+    limit = 2 ** 53 - 1
+    assert ack.sign_ack(SECRET, "abc", limit) and ack.sign_ack(SECRET, "abc", -limit)
+    for seq in (limit + 1, -limit - 1, 2 ** 63 - 1, -2 ** 63):
+        with pytest.raises(canon.EncodingError):
+            ack.sign_ack(SECRET, "abc", seq)
+        with pytest.raises(canon.EncodingError):
+            ack.verify_ack(SECRET, "abc", seq, "00" * 32)
+        receiver = ack.AckReceiver(_store(2), SECRET)
+        before = receiver.store.retransmittable()
+        with pytest.raises(canon.EncodingError):
+            receiver.on_ack(receiver.store.epochs[0].chained_root, seq, "00" * 32)
+        assert receiver.last_seq == -1 and receiver.store.retransmittable() == before

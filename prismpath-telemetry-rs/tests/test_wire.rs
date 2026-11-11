@@ -44,7 +44,8 @@ fn test_symbol_count_mismatch_error() {
     let g = parse(FLOW);
     let parts = q::build_partitions(&g).expect("the flow partitions");
     let err = w::decode_reading(&parts, "1111").unwrap_err();
-    assert!(err.contains("symbol count"));
+    assert!(err.message.contains("symbol count"));
+    assert_eq!(err.cause, Some(51));
 }
 
 #[test]

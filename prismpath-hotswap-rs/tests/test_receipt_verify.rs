@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2026 Crystal Warden Supply Chain Labs LLC
 //! Receipt verification cross-language gate: replay `conformance/receipts.json`, the frozen vectors
-//! the Python reference produced for canonical JSON, the Merkle tree, audit logs with their root
+//! the Python reference produced for the Merkle tree, audit logs with their root
 //! statements, receipt bundles, flow manifests, the version floor and the instance key separation,
 //! and require every verdict to match Python's exactly (status, counts, finding names and fields,
 //! check results, refusal causes). Every case runs; the test fails with the names of all that differ.
@@ -9,12 +9,17 @@
 use prismpath_hotswap_rs::flow_authority::{verify_flow, VersionFloor};
 use prismpath_hotswap_rs::merkle::{merkle_root, path_from_json, verify_leaf};
 use prismpath_hotswap_rs::root_statement::{check_separation, verify_receipt_bundle, verify_trail};
-use prismpath_rs::durable::py_canonical_string;
 use serde_json::{json, Value};
 
+fn vectors_named(name: &str) -> Value {
+    let path = format!("{}/../prismpath/portable/conformance/{name}", env!("CARGO_MANIFEST_DIR"));
+    serde_json::from_str(&std::fs::read_to_string(path).expect("read the vectors")).expect("parse the vectors")
+}
+
+/// The canon/2 set. canon/1 is retired and has no twin: the cases built from what it wrote are in the set
+/// as refusals, with the findings the Python reference gives for them.
 fn vectors() -> Value {
-    let path = format!("{}/../prismpath/portable/conformance/receipts.json", env!("CARGO_MANIFEST_DIR"));
-    serde_json::from_str(&std::fs::read_to_string(path).expect("read receipts.json")).expect("parse receipts.json")
+    vectors_named("receipts.json")
 }
 
 fn keys(case: &Value, field: &str) -> Vec<Vec<u8>> {
@@ -35,10 +40,6 @@ fn run_case(case: &Value) -> Result<(), String> {
         }
     };
     match case["kind"].as_str().unwrap() {
-        "canon" => {
-            let parsed: Value = serde_json::from_str(case["json"].as_str().unwrap()).map_err(|error| error.to_string())?;
-            compare(json!(py_canonical_string(&parsed, false)))
-        }
         "merkle" => {
             let leaves = strings(case, "leaves");
             if merkle_root(&leaves)? != case["root"].as_str().unwrap() {
@@ -107,7 +108,7 @@ fn rust_gives_every_verdict_the_python_reference_gave() {
         }
     }
     eprintln!("receipts: {}/{} cases agree with Python {:?}", cases.len() - failures.len(), cases.len(), by_kind);
-    assert!(cases.len() >= 250, "the vector set is missing cases");
+    assert!(cases.len() >= 200, "the vector set is missing cases");
     assert!(failures.is_empty(), "{} case(s) differ from the Python reference:\n{}", failures.len(), failures.join("\n"));
 }
 
@@ -115,6 +116,6 @@ fn rust_gives_every_verdict_the_python_reference_gave() {
 fn the_vector_set_has_every_kind() {
     let doc = vectors();
     let kinds: std::collections::BTreeSet<&str> = doc["cases"].as_array().unwrap().iter().map(|case| case["kind"].as_str().unwrap()).collect();
-    let expected = ["bundle", "canon", "floor", "flow", "merkle", "separation", "trail"];
+    let expected = ["bundle", "floor", "flow", "merkle", "separation", "trail"];
     assert_eq!(kinds.into_iter().collect::<Vec<_>>(), expected);
 }

@@ -7,18 +7,19 @@
   "kb_hash": "sha256:kb",
   "manifest": {
    "created": "2026-08-12T00:00:00Z",
+   "encoding": "canon/2",
    "gate_id": "wazuh_triage@v3",
    "ingestion_hashes": [
     "sha256:aa"
    ],
    "knowledge_base_hash": "sha256:kb",
    "label": "echo:decision",
-   "manifest_hash": "821b6ebc0e2b275718bae69be53ec65108c5f8b2e9754b904b2a79f97549240d",
+   "manifest_hash": "ee11d1d0882cac1f6fa5998a7fc8b61e4f09608fb8f3b9e558a2b89323be5796",
    "policy_hash": "sha256:deadbeef",
-   "root": "5af55e1022be5bb92df3172524b8f843fd2056258bdf2577f0d3898579b181c0"
+   "root": "f88f331b5fa4310e16b4f12e8b6927c9850b5d18efddf0b043bcdbf256e3d815"
   },
   "outcome": {
-   "score": 0.93,
+   "score_bp": 9300,
    "verdict": "contain"
   },
   "policy_hash": "sha256:deadbeef"
@@ -194,18 +195,20 @@
   {
    "data": {
     "active": true,
+    "ratio": "0.25",
     "roles": [
      "admin",
      "dev"
     ],
-    "score": 1.5
+    "score_milli": 1500
    },
    "flat": {
     "active": true,
+    "ratio": "0.25",
     "roles": "admin, dev",
     "roles.0": "admin",
     "roles.1": "dev",
-    "score": 1.5
+    "score_milli": 1500
    }
   },
   {
@@ -221,6 +224,61 @@
     "nested.deep.leaf": null,
     "note": "caf\u00e9"
    }
+  },
+  {
+   "data": {
+    "roles": [
+     "admin"
+    ],
+    "score": 1.5
+   },
+   "flat": {
+    "roles": "admin",
+    "roles.0": "admin",
+    "score": 1.5
+   }
+  },
+  {
+   "data": {
+    "nested": {
+     "deep": [
+      1,
+      2.5
+     ]
+    }
+   },
+   "flat": {
+    "nested.deep": "1, 2.5",
+    "nested.deep.0": 1,
+    "nested.deep.1": 2.5
+   }
+  },
+  {
+   "data": {
+    "exp": 1e+30
+   },
+   "flat": {
+    "exp": 1e+30
+   }
+  }
+ ],
+ "float_refusals": [
+  {
+   "roles": [
+    "admin"
+   ],
+   "score": 1.5
+  },
+  {
+   "nested": {
+    "deep": [
+     1,
+     2.5
+    ]
+   }
+  },
+  {
+   "exp": 1e+30
   }
  ],
  "hashes": [
@@ -232,20 +290,21 @@
      "severity": "high"
     }
    },
-   "ingestion": "sha256:e2caadad00699795",
-   "knowledge": "sha256:e2caadad00699795"
+   "ingestion": "sha256:799c0880565d9829",
+   "knowledge": "sha256:799c0880565d9829"
   },
   {
    "data": {
     "active": true,
+    "ratio": "0.25",
     "roles": [
      "admin",
      "dev"
     ],
-    "score": 1.5
+    "score_milli": 1500
    },
-   "ingestion": "sha256:f818c81481a90d15",
-   "knowledge": "sha256:f818c81481a90d15"
+   "ingestion": "sha256:077be8e744ab4077",
+   "knowledge": "sha256:077be8e744ab4077"
   },
   {
    "data": {
@@ -256,8 +315,8 @@
     },
     "note": "caf\u00e9"
    },
-   "ingestion": "sha256:c63ccca1f1902394",
-   "knowledge": "sha256:c63ccca1f1902394"
+   "ingestion": "sha256:b313272c28f9890a",
+   "knowledge": "sha256:b313272c28f9890a"
   }
  ],
  "joins": [
@@ -598,7 +657,7 @@
    "threshold": 1
   }
  ],
- "note": "Connector-SDK + composition fixtures from the Python reference. Rust must reproduce hashes and prompt strings byte-for-byte, the attestation manifest exactly, the fan-out final path/stopped with _children aggregated, and the join-policy grid (composer._quorum_threshold/_join_event) value-for-value.",
+ "note": "Connector-SDK + composition fixtures from the Python reference. Rust must reproduce hashes and prompt strings byte-for-byte, the attestation manifest exactly, a refusal (never a hash) for content that holds a float, the fan-out final path/stopped with _children aggregated, and the join-policy grid (composer._quorum_threshold/_join_event) value-for-value.",
  "prompts": [
   {
    "criteria": null,
@@ -616,13 +675,14 @@
    "criteria": "rule 12 governs",
    "payload": {
     "active": true,
+    "ratio": "0.25",
     "roles": [
      "admin",
      "dev"
     ],
-    "score": 1.5
+    "score_milli": 1500
    },
-   "prompt": "active: True\nroles: admin, dev\nroles.0: admin\nroles.1: dev\nscore: 1.5\n\nCRITERIA:\nrule 12 governs",
+   "prompt": "active: True\nratio: 0.25\nroles: admin, dev\nroles.0: admin\nroles.1: dev\nscore_milli: 1500\n\nCRITERIA:\nrule 12 governs",
    "schema": null
   },
   {

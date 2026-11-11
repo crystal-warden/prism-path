@@ -39,6 +39,7 @@ try:
 except ImportError:  # run as a loose script from a clone: make the repo root importable
     sys.path.insert(0, str(HERE.parent.parent))
 
+from prismpath import canon  # noqa: E402
 from prismpath.telemetry import packed  # noqa: E402
 from prismpath.telemetry import quantizer  # noqa: E402
 from prismpath.telemetry import wire  # noqa: E402
@@ -235,7 +236,7 @@ def scan_sample(
             n_lines -= 1
             break
         try:
-            event = json.loads(line_str)
+            event = canon.plain_loads(line_str)
         except json.JSONDecodeError:
             bad_json += 1
             continue

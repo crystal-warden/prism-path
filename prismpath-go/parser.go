@@ -33,10 +33,16 @@ type Graph struct {
 	Nodes     map[string]Node `json:"nodes"`
 	NodeOrder []string        `json:"node_order"`
 	Terminals []string        `json:"terminals"`
-	// Refused says why this kernel will not run the flow. Field definitions (SPEC section 4.5) are not
-	// implemented here, and a flow that defines its fields may hold decimal thresholds the reference
-	// lowers at parse, so such a flow has every edge disabled and Run refuses it.
-	Refused string `json:"refused,omitempty"`
+	// Fields are the field definitions of SPEC section 4.5, by name; empty for a flow that defines none.
+	Fields map[string]FieldDefinition `json:"fields,omitempty"`
+	// Routed are the defined fields some deterministic edge reads, in code point order.
+	Routed []string `json:"routed,omitempty"`
+	// Refused says why this kernel will not run the flow: its field definitions or the conditions that read
+	// them break a rule of the verified core (docs/design/spec-verified-core.md section 4). A refused flow
+	// has every edge disabled and Run refuses it; FieldError names the first problem, with its registered
+	// cause, and every other problem in the core's order.
+	Refused    string                `json:"refused,omitempty"`
+	FieldError *FieldDefinitionError `json:"-"`
 }
 
 var (
@@ -88,25 +94,23 @@ func Parse(markdown string) Graph {
 
 	inFrontmatter := false
 	fmDone := false
-	definedFields := []string{}
+	meta := map[string]string{}
 	bodyLines := []string{}
 
-	if len(lines) > 0 && strings.TrimSpace(lines[0]) == "---" {
+	if len(lines) > 0 && pyTrim(lines[0]) == "---" {
 		inFrontmatter = true
 		for lineIndex := 1; lineIndex < len(lines); lineIndex++ {
 			line := lines[lineIndex]
-			if strings.TrimSpace(line) == "---" {
+			if pyTrim(line) == "---" {
 				fmDone = true
 				bodyLines = lines[lineIndex+1:]
 				break
 			}
 			parts := strings.SplitN(line, ":", 2)
 			if len(parts) == 2 {
-				key := strings.TrimSpace(parts[0])
-				value := strings.TrimSpace(parts[1])
-				if strings.HasPrefix(key, "field.") {
-					definedFields = append(definedFields, key)
-				}
+				key := pyTrim(parts[0])
+				value := pyTrim(parts[1])
+				meta[key] = value
 				if key == "name" {
 					name = value
 				} else if key == "start" {
@@ -172,18 +176,6 @@ func Parse(markdown string) Graph {
 	}
 	flushNode()
 
-	refused := ""
-	if fmDone && len(definedFields) > 0 {
-		refused = "flow defines its fields (" + strings.Join(definedFields, ", ") + "), and this kernel does not " +
-			"implement field definitions (SPEC section 4.5); run it on the Python or Rust kernel"
-		for nodeName, node := range nodes {
-			for edgeIndex := range node.Edges {
-				node.Edges[edgeIndex].Condition = "never"
-			}
-			nodes[nodeName] = node
-		}
-	}
-
 	if start == "" && len(nodeOrder) > 0 {
 		start = nodeOrder[0]
 	}
@@ -195,12 +187,18 @@ func Parse(markdown string) Graph {
 		}
 	}
 
-	return Graph{
+	graph := Graph{
 		Name:      name,
 		Start:     start,
 		Nodes:     nodes,
 		NodeOrder: nodeOrder,
 		Terminals: terminals,
-		Refused:   refused,
 	}
+	// A flow that defines its fields is checked in the verified core's order and its decimal thresholds are
+	// lowered to canonical integers here, as the reference does (the front matter closed, as the reference
+	// reads it only then); a flow that breaks a rule is refused with a cause and every edge disabled.
+	if fmDone {
+		applyDefinitions(&graph, meta)
+	}
+	return graph
 }

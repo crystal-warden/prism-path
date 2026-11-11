@@ -94,5 +94,30 @@ fn test_decode_stream_strict_accepts_padding_and_rejects_truncation() {
     // decode_stream silently drops it — the exact difference the strict variant exists for)
     let truncated = format!("{bits}010");
     assert_eq!(z::decode_stream(&truncated), vec![4, 2, 7]);
-    assert!(z::decode_stream_strict(&truncated).is_err());
+    let refusal = z::decode_stream_strict(&truncated).unwrap_err();
+    assert_eq!(refusal.cause, Some(49), "a partial codeword with data bits after a complete one");
+    assert!(refusal.message.contains("truncated Fibonacci stream"));
+    // with no complete codeword at all the same bits are no-terminator
+    assert_eq!(z::decode_stream_strict("1").unwrap_err().cause, Some(48));
+    assert_eq!(z::decode_stream_strict("0000").unwrap(), Vec::<usize>::new());
+    assert_eq!(z::decode_stream_wide_tail(&truncated).1, "010");
+}
+
+#[test]
+fn test_hostile_widths_are_refused_without_a_panic() {
+    // the largest value the codec holds round trips; the encoder no longer overflows its own table
+    for n in [usize::MAX, usize::MAX - 1, usize::MAX / 2, 1usize << 63] {
+        assert_eq!(z::decode(&z::encode(n).unwrap()).unwrap(), n);
+    }
+    // a code of any width is a value Python holds and this refuses: an error, never a wrap or a panic
+    let wide = format!("{}11", "0".repeat(10_000));
+    assert!(z::decode(&wide).unwrap_err().contains("beyond the usize range"));
+    // zeros past the range do not matter, only a 1 does; and an internal "11" is not a code
+    assert!(z::decode(&format!("1{}11", "0".repeat(70))).is_ok());
+    assert!(z::decode(&format!("1{}11", "0".repeat(100))).is_err());
+    assert!(z::decode("0111").unwrap_err().contains("consecutive"));
+    // the stream views: lenient drops the wide code, the wide view keeps its place
+    let stream = format!("11{wide}011");
+    assert_eq!(z::decode_stream(&stream), vec![1, 2]);
+    assert_eq!(z::decode_stream_wide(&stream), vec![Some(1), None, Some(2)]);
 }

@@ -19,6 +19,7 @@ import os
 from typing import Dict, List, Optional, Tuple
 
 from prismpath.hotswap import policy_pack as pp
+from prismpath import canon
 
 REGISTRY_FORMAT = "ppt-suite-registry/1"
 
@@ -44,7 +45,7 @@ def build_registry(suites: Dict[str, dict], key_id: str) -> dict:
             "provider": str(spec["provider"]),
             "strength_rank": int(spec["strength_rank"]),
         }
-    return {"format": REGISTRY_FORMAT, "suites": norm, "key_id": str(key_id)}
+    return {"format": REGISTRY_FORMAT, "suites": norm, "key_id": str(key_id), canon.ENCODING_KEY: canon.CANON2}
 
 
 def registry_hash(registry: dict) -> str:
@@ -55,12 +56,15 @@ def registry_hash(registry: dict) -> str:
 # ------------------------------------------------------------------ signing (composes policy_pack)
 
 def sign_registry(registry: dict, priv_path: str, out_path: str) -> str:
-    """Write the canonical registry JSON + a detached Ed25519 signature (`<out>.sig`). Returns hash."""
+    """Write the canonical registry JSON + a detached Ed25519 signature (`<out>.sig`). Returns hash. The
+    registry is written as canon/2 (it names the encoding) and the signature covers `canon.CANON2_DOMAIN`
+    and those bytes."""
     priv = pp._load_private(priv_path)
-    payload = pp.canonical_bytes(registry)
+    registry = canon.tagged(registry)
+    payload = canon.canon2_bytes(registry)
     with open(out_path, "wb") as handle:
         handle.write(payload)
-    sig = priv.sign(payload)
+    sig = priv.sign(pp.signed_bytes(registry))
     with open(out_path + ".sig", "wb") as handle:
         handle.write(sig)
     return registry_hash(registry)
@@ -70,7 +74,6 @@ def verify_registry(path: str, pubkey_paths: List[str],
                     revoked: frozenset = frozenset()) -> Tuple[bool, List[str], Optional[dict]]:
     """Verify a registry file's detached signature by a known, non-revoked authority key.
     Returns (ok, stable-reasons, registry-or-None). Loud absence if signing lib is unavailable."""
-    import json
     _Priv, _Pub, _ser, InvalidSignature = pp._ed25519()
     sig_path = path + ".sig"
     if not os.path.exists(path) or not os.path.exists(sig_path):
@@ -80,16 +83,18 @@ def verify_registry(path: str, pubkey_paths: List[str],
     with open(sig_path, "rb") as handle:
         sig = handle.read()
     try:
-        registry = json.loads(raw)
+        registry = canon.loads_document(raw)
     except Exception:
         return False, ["registry:bad-json"], None
-    if registry.get("format") != REGISTRY_FORMAT:
+    if not isinstance(registry, dict) or registry.get("format") != REGISTRY_FORMAT:
         return False, ["registry:bad-format"], registry
+    # A registry is canon/2 (an untagged one did not read above) and is signed over the domain and its bytes.
+    message = canon.CANON2_DOMAIN + raw
     signer_id = None
     for pk in pubkey_paths:
         pub, key_id = pp.load_public(pk)
         try:
-            pub.verify(sig, raw)
+            pub.verify(sig, message)
             signer_id = key_id
             break
         except InvalidSignature:

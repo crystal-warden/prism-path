@@ -2,7 +2,7 @@
 // Copyright 2026 Crystal Warden Supply Chain Labs LLC
 //! Certify `prismpath-rs` against the frozen kernel spec.
 
-use prismpath_rs::{eval_condition, parse, run, run_locked, Lock, RunOpts, RunState, Value};
+use prismpath_rs::{eval_condition, parse, run, run_locked, Lock, RunOpts, RunState, Value, WorkerError};
 use std::collections::HashMap;
 
 #[derive(serde::Deserialize)]
@@ -17,10 +17,22 @@ struct PredicateFile {
     cases: Vec<PredicateCase>,
 }
 
+/// The engine options a flow case runs under (`type_gate`, `max_transcript`): a case that has them also
+/// expects what they change (`reason`, `violations`, `transcript`, `state_dropped`).
+#[derive(serde::Deserialize, Default)]
+struct FlowOpts {
+    #[serde(default)]
+    type_gate: bool,
+    #[serde(default)]
+    max_transcript: Option<i64>,
+}
+
 #[derive(serde::Deserialize)]
 struct FlowCase {
     name: String,
     flow: String,
+    #[serde(default)]
+    opts: Option<FlowOpts>,
     #[serde(default)]
     script: HashMap<String, Vec<serde_json::Value>>,
     expect: serde_json::Value,
@@ -84,7 +96,7 @@ fn classify(cond: &str) -> &'static str {
 
 fn scripted_agent<'a>(
     script: &'a HashMap<String, Vec<serde_json::Value>>,
-) -> impl FnMut(&str, &str, &RunState) -> Result<Value, String> + 'a {
+) -> impl FnMut(&str, &str, &RunState) -> Result<Value, WorkerError> + 'a {
     let mut used: HashMap<String, usize> = HashMap::new();
     move |node: &str, _instruction: &str, _state: &RunState| {
         let Some(seq) = script.get(node) else {
@@ -95,12 +107,17 @@ fn scripted_agent<'a>(
         let outcome = &seq[idx.min(seq.len().saturating_sub(1))];
         if let serde_json::Value::Object(obj_val) = outcome {
             if let Some(msg) = obj_val.get("__raise__") {
-                return Err(match msg {
+                let message = match msg {
                     serde_json::Value::String(str_val) => str_val.clone(),
                     other => other.to_string(),
-                });
+                };
+                // the corpus names the failure's class with `__kind__`, and the reference raises a
+                // RuntimeError for one that does not
+                let kind = obj_val.get("__kind__").and_then(|kind_val| kind_val.as_str()).unwrap_or("RuntimeError");
+                return Err(WorkerError::new(kind, message));
             }
         }
+        // the frozen corpus is the program's own constant data
         Ok(Value::from_json(outcome))
     }
 }
@@ -180,23 +197,81 @@ fn main() {
             max_steps: fx.max_steps.unwrap_or(25),
             start: fx.start.clone(),
             state: fx.state.as_ref().map(Value::from_json),
+            type_gate: fx.opts.as_ref().is_some_and(|flow_opts| flow_opts.type_gate),
+            max_transcript: fx.opts.as_ref().and_then(|flow_opts| flow_opts.max_transcript),
             ..Default::default()
         };
+        let null = || serde_json::Value::Null;
         let got = match run(&graph, scripted_agent(&fx.script), opts) {
-            Ok(res) => serde_json::json!({
-                "path": res.path,
-                "stopped": res.stopped,
-                "pending_node": res.pending.as_ref().map(|pending_val| pending_val.node.clone()),
-                "spawn": res.pending.as_ref().and_then(|pending_val| pending_val.spawn.as_ref().map(val_to_json)),
-            }),
-            Err(err) => serde_json::json!({ "error": err.to_string() }),
+            Ok(res) => {
+                let mut got = serde_json::json!({
+                    "path": res.path,
+                    "stopped": res.stopped,
+                    "pending_node": res.pending.as_ref().map(|pending_val| pending_val.node.clone()),
+                    "spawn": res.pending.as_ref().and_then(|pending_val| pending_val.spawn.as_ref().map(val_to_json)),
+                    "cause": res.cause,
+                });
+                if fx.opts.is_some() {
+                    got["reason"] = serde_json::json!(res.pending.as_ref().and_then(|pending_val| pending_val.reason.clone()));
+                    got["violations"] = serde_json::json!(res.pending.as_ref().and_then(|pending_val| pending_val.violations.clone()));
+                    got["transcript"] = serde_json::Value::Array(res.state.transcript.iter().map(val_to_json).collect());
+                    got["state_dropped"] = serde_json::Value::Object(
+                        res.state.dropped.iter().map(|(key, count)| (key.clone(), serde_json::json!(count))).collect(),
+                    );
+                    // which guard of which node could not be evaluated; the message is Rust's own words
+                    got["guard_errors"] = serde_json::Value::Array(
+                        res.state
+                            .guard_errors
+                            .iter()
+                            .map(|entry| {
+                                let json = val_to_json(entry);
+                                serde_json::json!({"node": json["node"], "guard": json["guard"]})
+                            })
+                            .collect(),
+                    );
+                    got["steps"] = serde_json::Value::Array(
+                        res.steps
+                            .iter()
+                            .map(|step| {
+                                let mut item = serde_json::json!({"node": step.node, "target": step.target, "used": step.used});
+                                if let Some(cond) = &step.cond {
+                                    item["cond"] = serde_json::json!(cond);
+                                }
+                                if let Some(kind) = &step.error_type {
+                                    item["error_type"] = serde_json::json!(kind);
+                                }
+                                if let Some(count) = step.guard_errors {
+                                    item["guard_errors"] = serde_json::json!(count);
+                                }
+                                item
+                            })
+                            .collect(),
+                    );
+                }
+                got
+            }
+            Err(err) => match err.reference_exception() {
+                Some((class, message)) => serde_json::json!({ "error": message, "error_class": class }),
+                None => serde_json::json!({ "error": err.to_string() }),
+            },
         };
-        let want = serde_json::json!({
-            "path": fx.expect.get("path").cloned().unwrap_or(serde_json::Value::Null),
-            "stopped": fx.expect.get("stopped").cloned().unwrap_or(serde_json::Value::Null),
-            "pending_node": fx.expect.get("pending_node").cloned().unwrap_or(serde_json::Value::Null),
-            "spawn": fx.expect.get("spawn").cloned().unwrap_or(serde_json::Value::Null),
-        });
+        let want = if fx.expect.get("error").is_some() {
+            serde_json::json!({ "error": fx.expect["error"], "error_class": fx.expect.get("error_class").cloned().unwrap_or_else(null) })
+        } else {
+            let mut want = serde_json::json!({
+                "path": fx.expect.get("path").cloned().unwrap_or_else(null),
+                "stopped": fx.expect.get("stopped").cloned().unwrap_or_else(null),
+                "pending_node": fx.expect.get("pending_node").cloned().unwrap_or_else(null),
+                "spawn": fx.expect.get("spawn").cloned().unwrap_or_else(null),
+                "cause": fx.expect.get("cause").cloned().unwrap_or_else(null),
+            });
+            if fx.opts.is_some() {
+                for key in ["reason", "violations", "transcript", "state_dropped", "guard_errors", "steps"] {
+                    want[key] = fx.expect.get(key).cloned().unwrap_or_else(null);
+                }
+            }
+            want
+        };
         if got == want {
             flow_pass += 1;
         } else {
@@ -254,6 +329,7 @@ fn main() {
                     "stopped": res.stopped,
                     "pending_node": res.pending.as_ref().map(|pending_val| pending_val.node.clone()),
                     "would_pick": res.pending.as_ref().and_then(|pending_val| pending_val.would_pick.clone()),
+                    "cause": res.cause,
                 }),
                 Err(err) => serde_json::json!({ "error": err.to_string() }),
             };
@@ -262,6 +338,7 @@ fn main() {
                 "stopped": fx.expect.get("stopped").cloned().unwrap_or(serde_json::Value::Null),
                 "pending_node": fx.expect.get("pending_node").cloned().unwrap_or(serde_json::Value::Null),
                 "would_pick": fx.expect.get("would_pick").cloned().unwrap_or(serde_json::Value::Null),
+                "cause": fx.expect.get("cause").cloned().unwrap_or(serde_json::Value::Null),
             });
             if got == want {
                 p1_pass += 1;

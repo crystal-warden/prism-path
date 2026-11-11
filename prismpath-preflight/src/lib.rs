@@ -213,12 +213,36 @@ fn extract_reading(event: &Value, order: &[String], field_paths: &HashMap<String
         let path = field_paths.get(field).map(String::as_str).unwrap_or(field);
         match walk_path(event, path) {
             Some(value) => {
+                // `event` was read by `parse_plain` above, so no number in it is beyond the double range
                 reading.insert(field.clone(), V::from_json(value));
             }
             None => missing.push(field.clone()),
         }
     }
     (reading, missing)
+}
+
+/// A value as Python's `repr` writes it, which is how the Python report shows an example value
+/// (`95.5`, `'yes'`, `None`, `True`). The value model keeps one number type, so a whole number reads
+/// as an integer, which is what a JSON `95` is to Python; a JSON `95.0` would print as `95.0` there.
+fn py_repr(value: &V) -> String {
+    match value {
+        V::Null => "None".to_string(),
+        V::Bool(flag) => if *flag { "True" } else { "False" }.to_string(),
+        V::Num(number) => {
+            if number.fract() == 0.0 && number.abs() < 1e16 {
+                format!("{}", *number as i64)
+            } else {
+                prismpath_rs::contract::py_float_repr(*number)
+            }
+        }
+        V::Str(text) => prismpath_rs::contract::py_str_repr(text),
+        V::List(items) => format!("[{}]", items.iter().map(py_repr).collect::<Vec<_>>().join(", ")),
+        V::Obj(pairs) => format!("{{{}}}", pairs.iter()
+            .map(|(key, item)| format!("{}: {}", prismpath_rs::contract::py_str_repr(key), py_repr(item)))
+            .collect::<Vec<_>>().join(", ")),
+        V::Ellipsis => "Ellipsis".to_string(),
+    }
 }
 
 /// Which field refused to quantize, once `encode_reading` has said only that one of them did.
@@ -230,7 +254,7 @@ fn attribute_encode_failure(codebook: &Codebook, seen: &HashMap<String, V>,
         if codebook.parts[field].symbol(&seen[field]).is_err() {
             *out_of_partition.entry(field.clone()).or_default() += 1;
             oop_examples.entry(field.clone())
-                .or_insert_with(|| format!("{:?}", reading[field]));
+                .or_insert_with(|| py_repr(&reading[field]));
         }
     }
 }
@@ -278,7 +302,7 @@ pub fn scan_sample(codebook: Codebook, reader: &mut dyn BufRead, cfg: &Config)
             }
         }
         n_lines += 1;
-        let event: Value = match serde_json::from_str(line) {
+        let event: Value = match prismpath_rs::value::parse_plain(line) {
             Ok(Value::Object(object)) => Value::Object(object),
             _ => {
                 bad_json += 1;
@@ -471,8 +495,10 @@ fn section_decision_preservation(scan: &Scan) -> Vec<String> {
              never happen; please report it with the flow + offending readings below:",
             scan.mismatches.len()));
         for mismatch in &scan.mismatches {
-            md.push(format!("- node `{}`: {:?} vs {:?} on {}",
-                mismatch["node"].as_str().unwrap_or("?"), mismatch["original"], mismatch["representative"],
+            md.push(format!("- node `{}`: {} vs {} on {}",
+                mismatch["node"].as_str().unwrap_or("?"),
+                mismatch["original"].as_str().unwrap_or("?"),
+                mismatch["representative"].as_str().unwrap_or("?"),
                 mismatch["reading"]));
         }
     }
@@ -622,6 +648,31 @@ start: classify
 ## ok
 ";
 
+    /// A scratch directory removed when it goes out of scope, a failed assertion included.
+    struct Scratch(std::path::PathBuf);
+
+    impl Scratch {
+        fn new(name: &str) -> Scratch {
+            let dir = std::env::temp_dir().join(format!("pp_preflight_{name}_{}", std::process::id()));
+            let _ = std::fs::remove_dir_all(&dir);
+            std::fs::create_dir_all(&dir).unwrap();
+            Scratch(dir)
+        }
+    }
+
+    impl Drop for Scratch {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    impl std::ops::Deref for Scratch {
+        type Target = std::path::Path;
+        fn deref(&self) -> &std::path::Path {
+            &self.0
+        }
+    }
+
     fn config(dir: &std::path::Path) -> Config {
         std::fs::create_dir_all(dir).unwrap();
         let flow = dir.join("flow.md");
@@ -640,7 +691,7 @@ start: classify
     // alone: anything else and a caller counting once and rendering twice would get two answers.
     #[test]
     fn scan_then_render_matches_the_whole_run() {
-        let dir = std::env::temp_dir().join(format!("ppf_split_{}", std::process::id()));
+        let dir = Scratch::new("split");
         let cfg = config(&dir);
         let sample = "{\"temp\": 95, \"armed\": true}\n{\"temp\": 10, \"armed\": false}\n";
         let codebook = Codebook::from_flow(&cfg).unwrap();
@@ -660,6 +711,5 @@ start: classify
         let whole = run(&Config { sample: sample_file.to_str().unwrap().to_string(), ..config(&dir) })
             .unwrap();
         assert_eq!(whole.markdown, render_markdown(&cfg, &scan));
-        std::fs::remove_dir_all(&dir).ok();
     }
 }

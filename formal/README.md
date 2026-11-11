@@ -102,6 +102,42 @@ line policy, in atom forms the frozen corpus never exercised. No shipped flow us
 branch `fix/quantizer-cut-points` (merged here) with the decisions corpus at version 2; ledger rows
 #140 to #143.
 
+## The verified policy core (formal/Core)
+
+Beside FQ, `formal/Core` is the executable semantics of the narrow core PrismPath proves once: one
+decision of a Level M policy with field definitions, read from canon/2 documents
+(docs/design/spec-verified-core.md). Unlike FQ, which proves properties of a model, these theorems are
+about the very function the oracle runs (`Core.verdict`), and the oracle is the reference the other
+implementations are differentially tested against. The evaluator depends only on `propext`; the
+theorems on the standard three.
+
+| theorem | file | statement in words |
+|---|---|---|
+| `verdict_total`, `matchSteps_le` | Theorems.lean | **Termination.** Every image and reading has a verdict (structural recursion only); routing evaluates at most the policy's atoms |
+| `policy_refusal_refuses_all`, `unreadable_image_refused` | Theorems.lean | **No fail open, policy.** An image that does not read, decode or check refuses every reading with its refusal |
+| `unreadable_reading_refused`, `boundary_refusal` | Theorems.lean | **No fail open, reading.** An unreadable reading, or one the boundary refuses, is refused |
+| `route_sound`, `route_is_a_target` | Theorems.lean | **No fail open, the allow.** A route exists only for a checked policy and a reading every definition accepts, and names the first rule whose condition holds |
+| `verdict_cases`, `policy_refusal_iff`, `verdict_route_or_refuse` | Theorems.lean | **Refusal completeness.** Every input lands in exactly one of six stages, each a route or one refusal of the closed `Refusal` type |
+| `verdict_perm`, `verdict_text_perm`, `readChars_wf`, `evalC_congr` | Theorems.lean | **Determinism.** The verdict depends on a reading's members, not their order or spelling |
+| `evalC_toX`, `firstMatch_eq_routeX` | Bridge.lean | the core evaluates and routes as FQ's `evalX` and `routeX` |
+| `boundary_canonical`, `accepted_quantization_preserves`, `core_reconstruct_route` | Bridge.lean | readings the core accepts are FQ canonical, so equal quantization gives equal verdicts and the decoded reading routes as the reading |
+| `scaled_correct`, `lowered_threshold_preserves` | Bridge.lean | a decimal threshold the core lowers decides on the canonical integer as the authored decimal on the source value |
+| `refusal_registered`, `refusal_code_ne_zero`, `refusal_name_of_code`, `verdict_refusal_registered` | Codes.lean | **Every refusal carries a registered code.** Each refusal's (code, name) is a row of the cause registry generated from `prismpath/kernel/causes.py`, nonzero, and the code alone names it |
+| `loadPolicy_first_problem`, `policy_cause_is_first`, `policy_accepted_iff_no_problem`, `verdict_policy_cause`, `lowerCond_first_atom` | Order.lean | **One cause per refused policy (D7).** The refusal the core computes is the head of `policyProblems`, the problems in the order of spec section 4 (decoding rule by rule, the definitions in code point order, lowering rule by rule and atom by atom, rule 6), and a policy is accepted exactly when that list is empty |
+| `counterRefusal_iff`, `counter_excluded_refused` | Scope.lean | **The engine counter exclusion hides nothing.** `counterRefusal`, the check a differential run uses to exclude a case as reading an engine counter, holds exactly when the oracle refuses the image with `policy:engine-counter`, and then every reading is refused with it |
+| `verified_receipt_is_verdict`, `receipt_is_verdict_of_hashes`, `verified_run_complete`, `verified_refusal_registered`, `verified_excluded_counter`, `evidence_sound` | Evidence.lean | **Evidence and the semantics.** Over a model of a differential run and its verifier (`verifyRun`, every receipt replayed, both keys pinned), every receipt the verifier accepts records `Core.verdict` on the image and reading whose hashes it carries, every reading of every case not excluded has one, and a recorded refusal is the verdict's registered code; the cryptography is a parameter and its security is stated per object as explicit hypotheses (`Unforgeable`, `NoTreeCollision`, `NoCollision`), never as `sorry` |
+| `policyCheck_of_systemBoundary`, `systemBoundary_of_policyCheck`, `policyCheck_refuses_routed`, `policyCheck_eq_systemBoundary`, `route_depends_on_routed` | Boundary.lean | **The two checks of a reading.** The system boundary (every defined field) is at least as strict as the policy check (the routed fields), the two agree when every defined field is routed, and only routed fields can change a route |
+| `readBytes_doc`, `read_write`, `readChars_wr`, `canonical_form`, `same_value_same_spelling`, `write_injective`, `readCanonical_iff`, `write_readCanonical`, `readCanonical_unique`, `readCanonical_refuses`, `readCanonical_cause`, `reader_not_canonical` | Canon2Proofs.lean | **The canon/2 encoding layer.** The reader returns only documents; the writer (`writeBytes`, Canon2.lean) and the reader are inverse on canonical values; every accepted document's canonical bytes are a fixed point; the strict reader (`readCanonical`) accepts exactly the canonical spellings, one per value, and refuses everything else with the reader's cause or `notCanonical`; the reader alone accepts non canonical spellings (spec section 3.2) |
+| `noncanonical_image_refused`, `noncanonical_reading_refused`, `unreadable_bytes_refused`, `verdictBytes_canonical`, `route_canonical`, `decided_reading_unique` | Canon2Proofs.lean | **The core reads strictly.** `Core.verdictBytes` reads with `readCanonical`: a respelled image refuses every reading with `policy:not-canonical`, a respelled reading is refused with `reading:not-canonical`, a route is given only on canonical bytes, and on canonical bytes the decision is `Core.verdict` on the values (spec section 3.2) |
+| `canonicalize_readCanonical`, `canonicalize_canonical`, `canonicalize_error_iff`, `canonicalize_idem` | Canon2Proofs.lean | **The canonicalize path.** `Core.canonicalize`, the writer's step for text a person wrote, gives bytes the strict reader accepts, is the identity on canonical bytes, refuses exactly what the reader refuses, and is idempotent |
+
+The oracle is that evaluator compiled: `lake build` also builds `core-oracle`, and
+`.lake/build/bin/core-oracle POLICY.json READING.json ...` prints one JSON line for the policy and one
+per reading (spec section 8); `--batch` serves the differential harness.
+`canon2-oracle` is the canon/2 writer and readers compiled: `.lake/build/bin/canon2-oracle DOC ...` prints
+`ok <c> <hex>` (the canonical bytes, and 1 when the input already is them) or `refuse <rule>` per document;
+`--batch` serves `diff/canon2_diff.py`.
+
 ## Validation, and how to reproduce it
 
 ```bash
@@ -109,7 +145,7 @@ branch `fix/quantizer-cut-points` (merged here) with the decisions corpus at ver
 curl -sSf https://elan.lean-lang.org/elan-init.sh | sh -s -- -y --default-toolchain leanprover/lean4:v4.33.1
 cd formal && lake exe cache get
 lake build                         # compiles every module, evaluates every #guard, prints the axiom audit
-grep -rn sorry FQ/ FQ.lean         # expect no output
+grep -rn sorry FQ/ FQ.lean Core/ Core.lean   # expect no output
 for m in FQ.Syntax FQ.Partition FQ.I1 FQ.Reconstruct FQ.AlgEq FQ.Zeckendorf FQ.Spiral FQ.Bridge FQ.Vectors; do
   lake env leanchecker $m          # independent kernel re-check of the stored proofs
 done

@@ -588,8 +588,8 @@ pub fn extract_flow_atoms(graph: &Graph) -> Result<HashMap<String, Vec<Atom>>, S
 /// strings with numbers or comparing with None, used to be dropped from the partition silently, so
 /// readings on it decoded without it.
 pub fn build_partitions(graph: &Graph) -> Result<HashMap<String, FieldPartition>, String> {
-    if let Some(reason) = &graph.field_error {
-        return Err(reason.clone());
+    if let Some(reason) = graph.refusal() {
+        return Err(reason.to_string());
     }
     if !graph.fields.is_empty() {
         return defined_partitions(graph);

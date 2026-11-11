@@ -128,30 +128,25 @@ static __always_inline int eval_atom(const struct ppt_atom *atom, __u32 n_fields
     }
 }
 
-/* Fixed-depth operand stack accessed ONLY through constant indices. Using st[runtime_sp] made the
- * verifier explore every possible sp at every access (state explosion, 1M+ insns); a switch on the
- * index means every st[] reference is a compile-time-constant slot, which the verifier handles
- * precisely. STACK_MAX cases; anything deeper is outside the declared subset (no-op / read 0). */
-static __always_inline __u8 st_get(const __u8 *stack, __u32 index)
+/* The operand stack is a bit vector: slot i is bit i of one __u64, so STACK_MAX is 64 and the whole
+ * stack is a scalar, not memory. Every operand is a truth value, so a bit holds all a slot ever
+ * carries. This replaces a byte array read through a switch on a constant index, which was the only way
+ * the verifier would take a runtime stack pointer over memory (st[runtime_sp] made it explore every sp,
+ * 1M+ insns) and which cost one extra jump per depth a program could reach: at depth 64 that switch
+ * would have been 64 arms per access. A shift by a masked amount is the same few instructions at any
+ * depth, touches no stack memory, and gives the verifier a scalar to track instead of 64 slots to keep
+ * apart, so the depth the evaluator carries (the interpreter's own, 64) costs the verifier nothing.
+ * The mask keeps every shift amount provably below 64. A slot past STACK_MAX is outside the declared
+ * subset: the loader refuses the table, and the guards in prog_word_cb drop the push and read 0. */
+static __always_inline __u32 st_get(__u64 stack, __u32 index)
 {
-    switch (index) {
-    case 0: return stack[0];
-    case 1: return stack[1];
-    case 2: return stack[2];
-    case 3: return stack[3];
-    default: return 0;
-    }
+    return (__u32)((stack >> (index & (STACK_MAX - 1))) & 1u);
 }
 
-static __always_inline void st_put(__u8 *stack, __u32 index, __u8 value)
+static __always_inline __u64 st_put(__u64 stack, __u32 index, __u32 value)
 {
-    switch (index) {
-    case 0: stack[0] = value; break;
-    case 1: stack[1] = value; break;
-    case 2: stack[2] = value; break;
-    case 3: stack[3] = value; break;
-    default: break;
-    }
+    __u32 shift = index & (STACK_MAX - 1);
+    return (stack & ~((__u64)1 << shift)) | ((__u64)(value & 1u) << shift);
 }
 
 /* The prog machine runs as its OWN bpf_loop: prog_word_cb processes one RPN word and is verified
@@ -163,8 +158,8 @@ struct prog_ctx {
     __u32 prog_cnt;
     __u32 n_fields;
     PPT_BANK_FIELD
-    __u8 st[STACK_MAX];
     __u32 sp;
+    __u64 st;                                      /* the operand stack, one bit a slot (st_get, st_put) */
 };
 
 static long prog_word_cb(__u32 word_index, void *ctx_ptr)
@@ -182,42 +177,42 @@ static long prog_word_cb(__u32 word_index, void *ctx_ptr)
     if (word < 0x8000) {                           /* atom -> push its result */
         __u32 atom_index = PPT_BANK_BASE(PPT_BANK_OF(state), MAX_ATOMS) + (word & (MAX_ATOMS - 1));
         struct ppt_atom *atom = bpf_map_lookup_elem(&atoms_map, &atom_index);
-        __u8 result = atom ? (__u8)eval_atom(atom, state->n_fields) : 0;
+        __u32 result = atom ? (__u32)eval_atom(atom, state->n_fields) : 0;
         if (state->sp < STACK_MAX) {
-            st_put(state->st, state->sp, result);
+            state->st = st_put(state->st, state->sp, result);
             state->sp++;
         }
     } else {
         switch (word) {
         case OPC_NOT:
             if (state->sp >= 1)
-                st_put(state->st, state->sp - 1, !st_get(state->st, state->sp - 1));
+                state->st = st_put(state->st, state->sp - 1, !st_get(state->st, state->sp - 1));
             break;
         case OPC_AND:
             if (state->sp >= 2) {
-                __u8 rhs = st_get(state->st, state->sp - 1);
-                __u8 lhs = st_get(state->st, state->sp - 2);
+                __u32 rhs = st_get(state->st, state->sp - 1);
+                __u32 lhs = st_get(state->st, state->sp - 2);
                 state->sp--;
-                st_put(state->st, state->sp - 1, (__u8)(lhs && rhs));
+                state->st = st_put(state->st, state->sp - 1, lhs && rhs);
             }
             break;
         case OPC_OR:
             if (state->sp >= 2) {
-                __u8 rhs = st_get(state->st, state->sp - 1);
-                __u8 lhs = st_get(state->st, state->sp - 2);
+                __u32 rhs = st_get(state->st, state->sp - 1);
+                __u32 lhs = st_get(state->st, state->sp - 2);
                 state->sp--;
-                st_put(state->st, state->sp - 1, (__u8)(lhs || rhs));
+                state->st = st_put(state->st, state->sp - 1, lhs || rhs);
             }
             break;
         case OPC_TRUE:
             if (state->sp < STACK_MAX) {
-                st_put(state->st, state->sp, 1);
+                state->st = st_put(state->st, state->sp, 1);
                 state->sp++;
             }
             break;
         case OPC_FALSE:
             if (state->sp < STACK_MAX) {
-                st_put(state->st, state->sp, 0);
+                state->st = st_put(state->st, state->sp, 0);
                 state->sp++;
             }
             break;
@@ -230,7 +225,7 @@ static long prog_word_cb(__u32 word_index, void *ctx_ptr)
 
 /* eval_prog: SAME RPN semantics as interp.c, evaluated via the prog_word_cb bpf_loop. One prog is the
  * word list of one edge's predicate. Exact for any predicate whose operand-stack depth stays
- * <= STACK_MAX (the eBPF target's declared subset). */
+ * <= STACK_MAX (the interpreter's own bound, 64). */
 static __always_inline int eval_prog(const struct ppt_edge *edge, __u32 n_fields, __u32 bank)
 {
     struct prog_ctx state = {};

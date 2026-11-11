@@ -16,7 +16,7 @@ PERSONAS = (
      ("init", "validate", "test", "graph", "lint", "context")),
     ("Engineer: implement the interface once, calibrate for deployment, deliver",
      ("contract", "capability", "compile", "portable", "lock", "verify", "plugins", "ci-report", "lsp", "import",
-      "calibrate", "label", "annotate", "kappa", "centroids", "authorize")),
+      "calibrate", "label", "annotate", "kappa", "centroids", "authorize", "canonicalize")),
     ("Operator: run the system day to day, swap and attest policy (Mission Control is the console; this is the scripted path)",
      ("run", "resume", "compose", "swap", "trail")),
     ("Assessor: anchor, verify, and read the evidence",
@@ -121,6 +121,20 @@ def _add_engineer_commands(subparsers) -> None:
     authorize_parser.add_argument('--state-dir', dest='state_dir', default=None, metavar='DIR',
                                   help='verify: also check the version against the floor accepted in DIR')
     authorize_parser.set_defaults(func=authorize_cmd)
+
+    canonicalize_parser = subparsers.add_parser(
+        'canonicalize', help='Write a canon/2 document a person wrote (any spacing, member order or escapes) '
+                             'as its exact canonical bytes, the only spelling a reader of a hashed or signed '
+                             'document or of a reading accepts')
+    canonicalize_parser.add_argument('document', type=str, help='the document to canonicalize, or - for standard input')
+    canonicalize_mode = canonicalize_parser.add_mutually_exclusive_group()
+    canonicalize_mode.add_argument('--out', default=None, metavar='PATH',
+                                   help='write the canonical bytes and a line feed here (default: standard output)')
+    canonicalize_mode.add_argument('--in-place', dest='in_place', action='store_true',
+                                   help='replace the document with its canonical bytes and a line feed')
+    canonicalize_mode.add_argument('--check', action='store_true',
+                                   help='write nothing; exit 1 when the document is not already its canonical bytes')
+    canonicalize_parser.set_defaults(func=canonicalize_cmd)
 
     contract_parser = subparsers.add_parser(
         'contract', help="Derive each node's worker output schema from its `when` edges")
@@ -887,6 +901,42 @@ def validate_flow(args) -> int:
     findings = list(analysis.analyze(graph))
     findings += analysis.analyze_composition(graph, args.flow_md)   # cross-flow @spawn checks (item #4)
     return _report(findings, args.json)
+
+
+def canonicalize_cmd(args) -> int:
+    """`prismpath canonicalize`: the writer's step for text a person wrote. Every reader of a hashed or
+    signed document and of a reading accepts only the exact canonical canon/2 bytes and refuses any other
+    spelling (`document:not-canonical`, `reading:not-canonical`); this command reads the document by every
+    other canon/2 rule (a float, a duplicate key, an integer beyond plus or minus 2^53 minus 1, a lone
+    surrogate and nesting past 128 are still refused, exit 2) and writes its canonical bytes and one line
+    feed. `--check` writes nothing and exits 1 when the document is not already those bytes."""
+    from prismpath import canon
+    if args.document == "-":
+        raw = sys.stdin.buffer.read()
+    else:
+        _require_file(args.document)
+        with open(args.document, "rb") as handle:
+            raw = handle.read()
+    try:
+        canonical = canon.canonicalize_document(raw) + b"\n"
+    except canon.CanonicalError as error:
+        raise CliError(f"{args.document} has no canon/2 form: {error}") from error
+    if args.check:
+        if raw in (canonical, canonical[:-1]):     # the line feed that ends a file is the reader's terminator
+            return 0
+        print(f"prismpath canonicalize: {args.document} is not its canonical canon/2 bytes "
+              f"(document:not-canonical); run `prismpath canonicalize --in-place {args.document}`", file=sys.stderr)
+        return 1
+    if args.in_place:
+        if args.document == "-":
+            raise CliError("--in-place needs a file, not standard input")
+        canon.atomic_write_bytes(args.document, canonical)
+    elif args.out:
+        canon.atomic_write_bytes(args.out, canonical)
+    else:
+        sys.stdout.buffer.write(canonical)
+        sys.stdout.flush()
+    return 0
 
 
 def contract_cmd(args) -> int:

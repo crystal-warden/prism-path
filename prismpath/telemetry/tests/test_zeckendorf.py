@@ -78,3 +78,12 @@ def test_rejects_non_code():
         zeck.decode("1111")      # an internal '11': a corrupted frame, not a code encode can emit
     with pytest.raises(ValueError):
         zeck.decode("01111")     # the same corruption with a leading zero digit
+
+
+def test_decode_stream_tail_gives_the_bits_a_lenient_decode_drops():
+    whole = zeck.encode_stream([4, 2, 7])
+    assert zeck.decode_stream_tail(whole) == ([4, 2, 7], "")
+    assert zeck.decode_stream_tail(whole + "0000") == ([4, 2, 7], "0000")
+    assert zeck.decode_stream_tail(whole + "010") == ([4, 2, 7], "010")
+    assert zeck.decode_stream_tail("1") == ([], "1")
+    assert zeck.decode_stream(whole + "010") == [4, 2, 7]

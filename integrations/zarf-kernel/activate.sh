@@ -3,7 +3,8 @@
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
 #
 # Activation: load the policy the host accepted into the in-kernel evaluator and show the kernel decides
-# with it. The file loaded is the host's own copy, <deployed>/state/active.ppt, and it is hashed and
+# with it. The file loaded is the host's own copy, the image its record names in <deployed>/state
+# (active-<sha256>.ppt, or active.ppt in the earlier layout), and it is hashed and
 # compared with what the host attests is active before anything reaches the kernel; a mismatch refuses
 # and the kernel is never touched. The kernel's path for the probe reading is then checked against the
 # host reference interpreter, and the outcome is written to <deployed>/activation.json.
@@ -40,7 +41,20 @@ PY
 
 attestation="$("$PRISMPATH" swap attest --out "$DEPLOYED/state" --pub "$DEPLOYED/authority.pub" --envelope "$DEPLOYED/env1.envelope")"
 attested="$(python3 -c 'import json, sys; print(json.load(sys.stdin).get("active") or "")' <<<"$attestation")"
-loaded="$(sha256sum "$DEPLOYED/state/active.ppt" | cut -d' ' -f1)"
+image="$(python3 - "$DEPLOYED/state" <<'PY'
+import json, os, sys
+state, name = sys.argv[1], "active.ppt"
+try:
+    with open(os.path.join(state, "active_policy.json"), encoding="utf-8") as handle:
+        recorded = json.load(handle).get("image_file", name)
+    if isinstance(recorded, str) and os.path.basename(recorded) == recorded:
+        name = recorded
+except (OSError, ValueError, AttributeError):
+    pass
+print(os.path.join(state, name))
+PY
+)"
+loaded="$(sha256sum "$image" | cut -d' ' -f1)"
 
 if [ -z "$attested" ] || [ "$attested" != "$loaded" ]; then
   write_receipt false "refused: the host's copy hashes to $loaded but the host attests ${attested:-nothing} active" \
@@ -51,7 +65,7 @@ fi
 # The loader opens its BPF objects relative to its own directory.
 cd "$PRISMPATH_EBPF"
 set +e
-output="$($SUDO ./loader "$DEPLOYED/state/active.ppt" run "$DEPLOYED/probe.regs.bin" "$DEPLOYED/policy.names" 2>&1)"
+output="$($SUDO ./loader "$image" run "$DEPLOYED/probe.regs.bin" "$DEPLOYED/policy.names" 2>&1)"
 status=$?
 set -e
 host_path="$(awk '/^\[Host reference path/{getline; sub(/^ +/, ""); print; exit}' <<<"$output")"

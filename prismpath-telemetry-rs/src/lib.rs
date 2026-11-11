@@ -3,10 +3,14 @@
 //! `prismpath-telemetry-rs` — a faithful 1-1 Rust port of `prismpath/telemetry/`.
 
 pub mod ackchannel;
+pub mod concentrator;
 pub mod decode;
 pub mod epochs;
 pub mod packed;
 pub mod quantizer;
+pub mod receipts;
+pub mod refresh;
+pub mod replay;
 pub mod selfheal;
 pub mod spiral;
 pub mod wire;
