@@ -1,0 +1,41 @@
+{
+  "format": "prismpath.core/1",
+  "fields": {
+    "version": "int min=1 max=1",
+    "cmd": "int min=1 max=11",
+    "hclass": "int min=0 max=255",
+    "arg0": "int min=0 max=2147483647",
+    "arg1": "int min=0 max=2147483647",
+    "name_len": "int min=0 max=64",
+    "data_len": "int min=0 max=1024"
+  },
+  "rules": [
+    {"target": "refuse_104", "when": ["cmp", "hclass", ">", ["num", 4]]},
+    {"target": "refuse_107",
+     "when": ["and", ["in", "cmd", [["num", 3], ["num", 4], ["num", 5]]],
+                     ["in", "hclass", [["num", 3], ["num", 4]]]]},
+    {"target": "refuse_106", "when": ["cmp", "cmd", "==", ["num", 11]]},
+    {"target": "escalate_113", "when": ["cmp", "cmd", "==", ["num", 10]]},
+    {"target": "allow",
+     "when": ["and", ["cmp", "cmd", "==", ["num", 1]], ["in", "hclass", [["num", 2], ["num", 4]]]]},
+    {"target": "allow",
+     "when": ["and", ["cmp", "cmd", "==", ["num", 2]], ["in", "hclass", [["num", 1], ["num", 3]]],
+                     ["cmp", "arg1", ">=", ["num", 1]], ["cmp", "arg1", "<=", ["num", 4096]]]},
+    {"target": "allow",
+     "when": ["and", ["cmp", "cmd", "==", ["num", 3]], ["cmp", "hclass", "==", ["num", 1]]]},
+    {"target": "allow",
+     "when": ["and", ["cmp", "cmd", "==", ["num", 4]], ["cmp", "hclass", "==", ["num", 2]],
+                     ["cmp", "name_len", ">=", ["num", 1]]]},
+    {"target": "allow",
+     "when": ["and", ["cmp", "cmd", "==", ["num", 5]], ["cmp", "hclass", "==", ["num", 1]]]},
+    {"target": "allow",
+     "when": ["and", ["cmp", "cmd", "==", ["num", 6]], ["in", "hclass", [["num", 1], ["num", 3]]],
+                     ["in", "arg0", [["num", 1], ["num", 2], ["num", 3]]]]},
+    {"target": "allow", "when": ["cmp", "cmd", "==", ["num", 7]]},
+    {"target": "allow",
+     "when": ["and", ["cmp", "cmd", "==", ["num", 8]], ["cmp", "arg0", ">=", ["num", 1]],
+                     ["cmp", "arg0", "<=", ["num", 50]]]},
+    {"target": "allow",
+     "when": ["and", ["cmp", "cmd", "==", ["num", 9]], ["cmp", "data_len", ">=", ["num", 1]]]}
+  ]
+}
