@@ -44,8 +44,9 @@ def ensure_keys(keys: Path):
 
 
 class EpisodeRun:
-    def __init__(self, run: Path, case_id: str, image: bytes, keys: Path):
+    def __init__(self, run: Path, case_id: str, image: bytes, keys: Path, decider: str = DECIDER):
         self.run, self.case_id, self.image, self.keys = Path(run), case_id, image, Path(keys)
+        self.decider = decider            # who decided: the receipts and the manifest name it
         self.run.mkdir(parents=True, exist_ok=False)
         self.readings: List[bytes] = []
         self.receipts = open(self.run / "receipts.jsonl", "wb")
@@ -56,7 +57,7 @@ class EpisodeRun:
         self.readings.append(reading)
         receipt = {"format": core_evidence.RECEIPT_FORMAT, "idx": idx, "case": self.case_id, "reading": idx,
                    "image_sha256": core_evidence.sha256_hex(self.image),
-                   "reading_sha256": core_evidence.sha256_hex(reading), "decider": DECIDER,
+                   "reading_sha256": core_evidence.sha256_hex(reading), "decider": self.decider,
                    **core_evidence._decision(verdict)}
         self.receipts.write(canon2.dumps(receipt) + b"\n")
         self.receipts.flush()
@@ -80,7 +81,7 @@ class EpisodeRun:
                                "sig": signer.sign(core_evidence.IMAGE_DOMAIN + self.image).hex()}) + b"\n"
         (self.run / "images.jsonl").write_bytes(images)
         leaves = [core_evidence.sha256_hex(line) for line in core_evidence._lines(self.run / "receipts.jsonl")]
-        manifest = {"format": core_evidence.RUN_FORMAT, "decider": DECIDER, "cases": 1, "receipts": len(leaves),
+        manifest = {"format": core_evidence.RUN_FORMAT, "decider": self.decider, "cases": 1, "receipts": len(leaves),
                     "excluded": [], "cases_sha256": core_evidence.sha256_hex((self.run / "cases.jsonl").read_bytes()),
                     "images_sha256": core_evidence.sha256_hex(images), "authority_key_id": authority_id,
                     "instance_key_id": instance.key_id}
@@ -100,9 +101,9 @@ def verify(run: Path, keys: Path, oracle=None) -> Dict[str, Any]:
                                 pin_instance=Path(keys) / "instance.pub", oracle=oracle)
 
 
-def replay(run: Path, keys: Path) -> bool:
+def replay(run: Path, keys: Path, decider: str = DECIDER) -> bool:
     """Decide the episode again from its written cases with the reference producer, into `run/replay`, and
     say whether its receipts are the episode's own bytes."""
     again = Path(run) / "replay"
-    core_evidence.produce(Path(run) / "cases.jsonl", again, Path(keys), decider=DECIDER)
+    core_evidence.produce(Path(run) / "cases.jsonl", again, Path(keys), decider=decider)
     return (again / "receipts.jsonl").read_bytes() == (Path(run) / "receipts.jsonl").read_bytes()
