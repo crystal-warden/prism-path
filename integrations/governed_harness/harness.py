@@ -24,6 +24,7 @@ loop, and in place of a person approving each call, the policy:
 from __future__ import annotations
 
 import json
+import re
 import time
 import urllib.request
 from dataclasses import dataclass, field
@@ -63,11 +64,25 @@ def chat(messages: List[Dict[str, str]], *, endpoint: str = ENDPOINT, model: str
     return reply["choices"][0]["message"].get("content") or ""
 
 
+_NATIVE_CALL = re.compile(r"call:([A-Za-z_][A-Za-z0-9_]*)\s*(?=\{)")
+
+
 def parse_reply(text: str) -> Tuple[str, Any]:
-    """("call", {"tool", "args"}) | ("final", text) | ("none", None): the first JSON object in the reply. Keys
-    beside `tool` and `args` are commentary and are dropped; what is inside `args` is the classifier's."""
+    """("call", {"tool", "args"}) | ("final", text) | ("none", None): the first call or end in the reply. Keys
+    beside `tool` and `args` are commentary and are dropped; what is inside `args` is the classifier's.
+
+    Gemma sometimes writes a call in its own native syntax, `call:NAME{ARGS}`, instead of the JSON asked for
+    (the first live run met it). That is a proposed call too, so it is read as one and decided, never passed
+    over: a call the harness does not see is a call with no decision and no receipt."""
     decoder = json.JSONDecoder()
     for start, char in enumerate(text):
+        native = _NATIVE_CALL.match(text, start) if char == "c" else None
+        if native:
+            try:
+                args, _end = decoder.raw_decode(text, native.end())
+            except ValueError:
+                args = None
+            return "call", {"tool": native.group(1), "args": args}
         if char != "{":
             continue
         try:

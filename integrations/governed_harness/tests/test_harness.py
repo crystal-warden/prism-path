@@ -27,9 +27,16 @@ def _oracle():
     ('{"tool": "list_dir", "args": {}}', "call"), ('```json\n{"tool": "read_file", "args": {"path": "a"}}\n```', "call"),
     ('I will list.\n{"tool": "list_dir", "thought": "x"}', "call"), ('{"final": "done"}', "final"),
     ("no json here", "none"), ('{"tool": ', "none"), ('{"other": 1}', "none"),
+    ('call:run_command{"argv": ["ps", "-ef"]}', "call"), ("call:run_command{broken", "call"),
 ])
 def test_parse_reply(text, kind):
     assert harness.parse_reply(text)[0] == kind
+
+
+def test_a_native_gemma_call_is_a_proposed_call():
+    assert harness.parse_reply('x call:run_command{"argv": ["ls"]}') == ("call", {"tool": "run_command", "args": {"argv": ["ls"]}})
+    # unreadable arguments still make a call, which the classifier reads as unknown and the policy refuses
+    assert harness.parse_reply("call:git{nope") == ("call", {"tool": "git", "args": None})
 
 
 def test_commentary_beside_the_call_is_dropped_and_args_are_kept():
