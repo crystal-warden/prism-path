@@ -2,7 +2,6 @@
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """The tool server's re-decision, the receipt logger, and a loopback run of a few cases end to end."""
 import os
-import struct
 import sys
 from pathlib import Path
 

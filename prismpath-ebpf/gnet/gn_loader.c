@@ -10,9 +10,11 @@
  *   gn_loader run IFNAME OBJ TABLE.ppt ACTIONS [--generic] [--image-index N]
  *       Loads, fills (gn_config_map.loaded written last), attaches in native (driver) mode, or generic with
  *       --generic, then prints every ring buffer event as one hex line (struct gn_event) on standard output
- *       for receipt_logger.py, until SIGINT or SIGTERM, when it DETACHES and exits. If the loader dies
- *       without detaching, the program stays attached and its ring buffer fills: an allowed request whose
- *       event cannot be written is dropped (GN_DROP_NOLOG), so a dead logger fails closed.
+ *       for receipt_logger.py, until SIGINT or SIGTERM, when it DETACHES and exits. If the logger goes away
+ *       (a broken pipe), it clears `loaded`, so every request is dropped, leaves the program attached and
+ *       exits 6: a decision that cannot be receipted is never an allow. If the loader itself is killed, the
+ *       program stays attached and its ring buffer fills, and an allowed request whose event cannot be
+ *       written is dropped (GN_DROP_NOLOG); until it is full, the events it holds are never receipted.
  *   gn_loader detach IFNAME
  *       Removes any XDP program from the interface (the same as `ip link set dev IFNAME xdp off`).
  *
@@ -35,8 +37,9 @@
 #include "ppt_image.h"
 #include "gnet/gn_common.h"
 
-static volatile sig_atomic_t stopping;
+static volatile sig_atomic_t stopping, logger_gone;
 static void on_signal(int sig) { (void)sig; stopping = 1; }
+static void on_pipe(int sig) { (void)sig; logger_gone = 1; }
 
 static int map_fd(struct bpf_object *obj, const char *name)
 {
@@ -144,8 +147,8 @@ static int print_event(void *ctx, void *data, size_t len)
     const uint8_t *bytes = data;
     for (size_t i = 0; i < len; i++) printf("%02x", bytes[i]);
     printf("\n");
-    fflush(stdout);
-    return 0;
+    if (fflush(stdout) != 0 || ferror(stdout)) logger_gone = 1;
+    return logger_gone ? -1 : 0;
 }
 
 static int run(const char *ifname, const char *obj_path, const char *table, const char *actions, int generic,
@@ -166,9 +169,20 @@ static int run(const char *ifname, const char *obj_path, const char *table, cons
     fprintf(stderr, "gn_loader: attached to %s (%s mode); Ctrl-C detaches\n", ifname, generic ? "generic" : "native");
     signal(SIGINT, on_signal);
     signal(SIGTERM, on_signal);
-    while (!stopping) {
+    signal(SIGPIPE, on_pipe);
+    while (!stopping && !logger_gone) {
         int got = ring_buffer__poll(ring, 200);
-        if (got < 0 && got != -EINTR) { fprintf(stderr, "gn_loader: ring buffer poll failed: %d\n", got); break; }
+        if (got < 0 && got != -EINTR && !logger_gone) { fprintf(stderr, "gn_loader: ring buffer poll failed: %d\n", got); break; }
+    }
+    if (logger_gone) {
+        /* the receipt logger is gone: a decision now could not be receipted, so stop allowing any. Clear
+         * `loaded` (every request to the port is then dropped), leave the program attached so the port does
+         * not fall open to the tool server, and say how to detach. */
+        struct gn_config closed = {0, 0, image_index, 0};
+        put(map_fd(obj, "gn_config_map"), 0, &closed, "gn_config_map");
+        fprintf(stderr, "gn_loader: the receipt logger is gone; every request to the port is now dropped and the "
+                        "program is left attached. Detach with: ip link set dev %s xdp off\n", ifname);
+        return 6;
     }
     bpf_xdp_detach((int)ifindex, flags, NULL);
     fprintf(stderr, "gn_loader: detached from %s\n", ifname);

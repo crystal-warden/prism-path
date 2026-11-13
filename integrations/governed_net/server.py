@@ -217,12 +217,17 @@ def serve(server: ToolServer, sock: socket.socket, stop: threading.Event) -> Non
 def main(argv=None) -> int:
     """Run until standard input ends, then seal the server's run. Prints the bound port first."""
     parser = argparse.ArgumentParser(description="the governed net tool server")
-    parser.add_argument("--workspace", required=True)
+    parser.add_argument("--workspace", required=True, help="the workspace, or with --make-world a new directory")
     parser.add_argument("--run", required=True)
     parser.add_argument("--keys", required=True)
     parser.add_argument("--bind", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=0)
+    parser.add_argument("--make-world", action="store_true",
+                        help="first make the adversary set's throwaway world (workspace and decoy) at --workspace/..")
     args = parser.parse_args(argv)
+    if args.make_world:
+        from integrations.governed_harness.adversary import make_world
+        args.workspace = str(make_world(Path(args.workspace))["ws"])
     server = ToolServer(Path(args.workspace), NetPolicy.load(), Path(args.run), Path(args.keys))
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.bind((args.bind, args.port))

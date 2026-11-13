@@ -22,7 +22,6 @@ from __future__ import annotations
 
 import hashlib
 import importlib.util
-import random
 import struct
 import sys
 from pathlib import Path

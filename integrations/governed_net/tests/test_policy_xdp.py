@@ -2,8 +2,6 @@
 # Copyright 2026 Crystal Warden Supply Chain Labs LLC
 """The network policy image, its table, and the XDP program's userspace path against the Python decision."""
 import itertools
-import os
-import random
 import struct
 import subprocess
 import sys

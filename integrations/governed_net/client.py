@@ -244,3 +244,29 @@ class NetBackend:
             self.names[path] = handle
             if name.endswith("/"):
                 self.dirs[handle] = path
+
+
+def main(argv=None) -> int:
+    """One live episode against a tool server across the wire: the model proposes, this client sends."""
+    import argparse
+    import json
+    from dataclasses import asdict
+    from integrations.governed_harness import harness
+    from .adversary_net import live_loop
+    parser = argparse.ArgumentParser(description="run one model episode over the governed net protocol")
+    parser.add_argument("--server", required=True, help="the enforcement host's address on the wire")
+    parser.add_argument("--port", type=int, default=p.PORT)
+    parser.add_argument("--status-port", type=int, default=p.PORT + 1)
+    parser.add_argument("--task", required=True)
+    parser.add_argument("--max-steps", type=int, default=8)
+    parser.add_argument("--timeout", type=float, default=1.0)
+    args = parser.parse_args(argv)
+    backend = NetBackend(NetClient((args.server, args.port), (args.server, args.status_port), timeout=args.timeout))
+    steps, replies = [], []
+    stopped = live_loop(args.task, backend, steps, replies, harness.chat, args.max_steps)
+    print(json.dumps({"stopped": stopped, "steps": [asdict(step) for step in steps], "replies": replies}, indent=1))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

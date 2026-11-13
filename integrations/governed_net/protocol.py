@@ -19,7 +19,7 @@ Everything is big endian (network order).
 from __future__ import annotations
 
 import struct
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Dict
 
 MAGIC = 0x474E4554             # "GNET"
