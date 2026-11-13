@@ -16,7 +16,7 @@ INTERP_SRC := $(HWDIR)/interp.c
 CLANG_EXISTS  := $(shell which $(CLANG) >/dev/null 2>&1 && echo 1 || echo 0)
 LIBBPF_EXISTS := $(shell pkg-config --exists libbpf 2>/dev/null && echo 1 || echo 0)
 
-all: ppt_xdp.bpf.o ppt_net.bpf.o facet_decode.bpf.o ppt_select.bpf.o a6/ppt_xdp.bpf.o gnet/gn_xdp.bpf.o loader interp tools
+all: ppt_xdp.bpf.o ppt_net.bpf.o facet_decode.bpf.o ppt_select.bpf.o a6/ppt_xdp.bpf.o gnet/gn_xdp.bpf.o gnet/gn_loader gnet/gn_batch loader interp tools
 
 # the stateful selector and the decode and rewrite variant (a6) are built too, so a clang or header change that
 # breaks them fails the build instead of waiting for the next bench session; all four XDP programs share the
@@ -31,6 +31,14 @@ a6/ppt_xdp.bpf.o: a6/ppt_xdp.bpf.c ppt_common.h ppt_eval_bpf.h
 # its loader, which fills the table and reads the decision ring buffer (needs libbpf, like the other tools)
 gnet/gn_xdp.bpf.o: gnet/gn_xdp.bpf.c gnet/gn_xdp.h gnet/gn_common.h gnet/gn_maps.h ppt_common.h ppt_eval_bpf.h
 	@if [ $(CLANG_EXISTS) -eq 1 ]; then $(CLANG) $(BPF_CFLAGS) -c gnet/gn_xdp.bpf.c -o gnet/gn_xdp.bpf.o; else echo "[NOTICE] $(CLANG) not found"; fi
+
+gnet/gn_loader: gnet/gn_loader.c gnet/gn_common.h ppt_image.c ppt_image.h ppt_common.h
+	@if [ $(LIBBPF_EXISTS) -eq 1 ]; then $(CC) $(CFLAGS) -I. gnet/gn_loader.c ppt_image.c $$(pkg-config --cflags --libs libbpf) -lelf -lz -o gnet/gn_loader; else echo "[NOTICE] libbpf not found, gnet/gn_loader not built"; fi
+
+gnet/gn_batch: gnet/gn_batch.c gnet/gn_xdp.h gnet/gn_common.h gnet/gn_maps.h ppt_eval_bpf.h ppt_image.c ppt_image.h ppt_common.h
+	$(CC) -O2 -std=gnu11 -Wall -Wextra -Wno-unknown-pragmas -I. gnet/gn_batch.c ppt_image.c -o gnet/gn_batch
+
+gnet: gnet/gn_xdp.bpf.o gnet/gn_loader gnet/gn_batch
 
 # The loader's two reusable halves, built once and linked into every host tool. Before the split each
 # harness got them by #including loader.c, which recompiled the whole subcommand dispatch into each
@@ -89,10 +97,10 @@ loader: loader.c ppt_image.c ppt_maps.c ppt_common.h ppt_image.h ppt_maps.h
 	fi
 
 clean:
-	rm -f ppt_xdp.bpf.o ppt_net.bpf.o facet_decode.bpf.o ppt_select.bpf.o a6/ppt_xdp.bpf.o gnet/gn_xdp.bpf.o loader interp $(LOADER_OBJS) $(TOOLS) smoke.out scratch/regs*.bin
+	rm -f ppt_xdp.bpf.o ppt_net.bpf.o facet_decode.bpf.o ppt_select.bpf.o a6/ppt_xdp.bpf.o gnet/gn_xdp.bpf.o gnet/gn_loader gnet/gn_batch loader interp $(LOADER_OBJS) $(TOOLS) smoke.out scratch/regs*.bin
 
 # Host-parity + (as root) full kernel verify/attach/execute. Captures smoke.out; preserves exit code.
 smoke: all
 	@bash smoke.sh > smoke.out 2>&1; rc=$$?; cat smoke.out; exit $$rc
 
-.PHONY: all clean smoke tools
+.PHONY: all clean smoke tools gnet

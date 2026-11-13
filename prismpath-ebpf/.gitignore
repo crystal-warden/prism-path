@@ -12,3 +12,5 @@ receipts_selector
 seal_receipts
 smoke_selector
 *.bpf.o
+gnet/gn_loader
+gnet/gn_batch

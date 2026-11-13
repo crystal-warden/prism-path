@@ -20,13 +20,14 @@ decision. Two more runs: with the tables empty every request must be dropped, an
 full no request may pass.
 
     python -m integrations.governed_net.differential --random 120000 --seed 1 --out DIR
+    python -m integrations.governed_net.differential --random 20000 --corpus-only --out DIR   # for SETUP.md
 """
 from __future__ import annotations
 
 import argparse
 import json
 import random
-import struct
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -201,12 +202,32 @@ def run(count: int, seed: int, out: Path) -> Dict:
     return summary
 
 
+def write_corpus(count: int, seed: int, out: Path) -> Dict:
+    """For the in kernel run (SETUP.md): the policy build, the corpus frames BPF_PROG_TEST_RUN accepts
+    (14 to 3000 bytes) as `frames.bin`, and the userspace path's decisions of them as `expected.txt`, so
+    `gn_loader test-run ... < frames.bin` must print exactly `expected.txt`."""
+    out.mkdir(parents=True, exist_ok=True)
+    policy = NetPolicy.load()
+    build = write_build(out / "policy", policy)
+    binary = xdp_userspace.build(out / "bin")
+    frames = [frame_bytes for part in corpus(count, seed).values() for frame_bytes in part if 14 <= len(frame_bytes) <= 3000]
+    (out / "frames.bin").write_bytes(xdp_userspace._frames(frames))
+    done = subprocess.run([str(binary), build["ppt"], build["actions"], "--image-index", "1"],
+                          input=(out / "frames.bin").read_bytes(), capture_output=True, check=True)
+    (out / "expected.txt").write_bytes(done.stdout)
+    return {"frames": len(frames), "image_sha256": policy.sha256, "dir": str(out)}
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     parser.add_argument("--random", type=int, default=120000)
     parser.add_argument("--seed", type=int, default=1)
     parser.add_argument("--out", required=True)
+    parser.add_argument("--corpus-only", action="store_true", help="write the corpus for the in kernel run, and stop")
     args = parser.parse_args(argv)
+    if args.corpus_only:
+        print(json.dumps(write_corpus(args.random, args.seed, Path(args.out)), indent=1))
+        return 0
     summary = run(args.random, args.seed, Path(args.out))
     print(json.dumps(summary, indent=1))
     closed = summary["fail_closed"]
