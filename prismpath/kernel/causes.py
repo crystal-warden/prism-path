@@ -114,6 +114,20 @@ _REGISTRY: Tuple[Tuple[int, str, str, str], ...] = (
     (101, "policy:not-canonical",        "envelope",  "the core's policy image reads as canon/2 but is not its canonical spelling"),
     (102, "reading:not-canonical",       "routing",   "the reading reads as canon/2 but is not its canonical spelling"),
     (103, "document:not-canonical",      "envelope",  "a hashed or signed document reads as canon/2 but is not its canonical spelling"),
+    # -- the governed agent harness (integrations/governed_harness): the refusals and the escalation
+    # of an agent's proposed tool call, decided by a signed core policy over fields a trusted
+    # classifier reads off the call. They are the decision's own, so they sit in the routing class.
+    # The policy names each one by its code in a rule's target (refuse_<code>, escalate_<code>).
+    (104, "agent:unclassifiable",        "routing",   "an agent tool call the classifier could not map onto the policy's fields; refused, never run"),
+    (105, "agent:kill-by-pattern",       "routing",   "an agent command that signals processes chosen by a name pattern rather than by one process id"),
+    (106, "agent:network",               "routing",   "an agent command or git operation that would reach the network"),
+    (107, "agent:toolchain-write",       "routing",   "an agent write or delete into a toolchain directory"),
+    (108, "agent:glob-path",             "routing",   "an agent write or delete whose path is a pattern, not one exact path"),
+    (109, "agent:path-traversal",        "routing",   "an agent write or delete whose path climbs with a .. component"),
+    (110, "agent:symlink-path",          "routing",   "an agent write or delete whose path passes through a symbolic link"),
+    (111, "agent:outside-workspace",     "routing",   "an agent file operation whose resolved path lies outside the workspace"),
+    (112, "agent:shell-mutation",        "routing",   "an agent command that changes files or processes outside the exact path file tools"),
+    (113, "agent:push-escalated",        "routing",   "an agent git push to a remote class the policy does not allow; escalated to the owner and not run"),
 )
 
 CODES: Dict[int, Tuple[str, str, str]] = {cause_code: (canonical_name, class_name, description)

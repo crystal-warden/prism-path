@@ -44,7 +44,7 @@ def test_registry_frozen():
     """Append-only means this hash changes ONLY when rows are appended. If this test fails
     without an append, a shipped (code, name, class) was altered — that is the defect."""
     assert causes.registry_sha256() == (
-        "b074b28a012192bd1c3102d813742fc78cce13edfa4bd63197d0a65c021ef8f6")
+        "2475465e59e2694ac69665e1558e608b544f00150e1cdd501404ef6001228e99")
 
 
 # ------------------------------------------------------------------- binding to the codebase
