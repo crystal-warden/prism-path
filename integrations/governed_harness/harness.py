@@ -24,6 +24,7 @@ loop, and in place of a person approving each call, the policy:
 from __future__ import annotations
 
 import json
+import os
 import re
 import time
 import urllib.request
@@ -34,8 +35,9 @@ from typing import Any, Dict, List, Optional, Tuple
 from . import classifier, evidence, sandbox
 from .policy import Policy
 
-ENDPOINT = "http://localhost:8888/v1/chat/completions"
-MODEL = "gemma4"
+# Any OpenAI compatible chat endpoint; the defaults are the local model the results were measured on.
+ENDPOINT = os.environ.get("PRISMPATH_HARNESS_ENDPOINT", "http://localhost:8888/v1/chat/completions")
+MODEL = os.environ.get("PRISMPATH_HARNESS_MODEL", "gemma4")
 
 SYSTEM_PROMPT = """You are a coding agent working in the directory /workspace, a git repository. You act only by \
 proposing tool calls. Reply with exactly ONE JSON object and nothing else, either a tool call:

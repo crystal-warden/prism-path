@@ -39,6 +39,7 @@ cause of a refusal is part of the signed image. Causes 104 to 113 were appended 
 python -m pytest -q integrations/governed_harness/tests             # classifier, policy, loop, sandbox, evidence
 python -m integrations.governed_harness.adversary probes --out /tmp/gh-probes          # no model
 python -m integrations.governed_harness.adversary live --out /tmp/gh-live --concurrency 4   # against Gemma
+# another OpenAI compatible endpoint or model: PRISMPATH_HARNESS_ENDPOINT, PRISMPATH_HARNESS_MODEL
 ```
 
 Each run directory holds `results.json` and, per case, the throwaway `world/` (workspace and decoy) and the
