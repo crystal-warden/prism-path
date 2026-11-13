@@ -11,7 +11,7 @@
 pub const CAUSE_NONE: u8 = 0;
 
 /// `registry_sha256()` of the Python registry when this file was generated.
-pub const REGISTRY_SHA256: &str = "b074b28a012192bd1c3102d813742fc78cce13edfa4bd63197d0a65c021ef8f6";
+pub const REGISTRY_SHA256: &str = "2475465e59e2694ac69665e1558e608b544f00150e1cdd501404ef6001228e99";
 
 /// The cause class, the semantic axis of the registry.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -183,6 +183,26 @@ pub const POLICY_NOT_CANONICAL: u8 = 101;
 pub const READING_NOT_CANONICAL: u8 = 102;
 /// `document:not-canonical`
 pub const DOCUMENT_NOT_CANONICAL: u8 = 103;
+/// `agent:unclassifiable`
+pub const AGENT_UNCLASSIFIABLE: u8 = 104;
+/// `agent:kill-by-pattern`
+pub const AGENT_KILL_BY_PATTERN: u8 = 105;
+/// `agent:network`
+pub const AGENT_NETWORK: u8 = 106;
+/// `agent:toolchain-write`
+pub const AGENT_TOOLCHAIN_WRITE: u8 = 107;
+/// `agent:glob-path`
+pub const AGENT_GLOB_PATH: u8 = 108;
+/// `agent:path-traversal`
+pub const AGENT_PATH_TRAVERSAL: u8 = 109;
+/// `agent:symlink-path`
+pub const AGENT_SYMLINK_PATH: u8 = 110;
+/// `agent:outside-workspace`
+pub const AGENT_OUTSIDE_WORKSPACE: u8 = 111;
+/// `agent:shell-mutation`
+pub const AGENT_SHELL_MUTATION: u8 = 112;
+/// `agent:push-escalated`
+pub const AGENT_PUSH_ESCALATED: u8 = 113;
 
 /// Every registered cause, in registry order.
 pub const REGISTRY: &[Cause] = &[
@@ -255,6 +275,16 @@ pub const REGISTRY: &[Cause] = &[
     Cause { code: 101, name: "policy:not-canonical", class: CauseClass::Envelope, description: "the core's policy image reads as canon/2 but is not its canonical spelling" },
     Cause { code: 102, name: "reading:not-canonical", class: CauseClass::Routing, description: "the reading reads as canon/2 but is not its canonical spelling" },
     Cause { code: 103, name: "document:not-canonical", class: CauseClass::Envelope, description: "a hashed or signed document reads as canon/2 but is not its canonical spelling" },
+    Cause { code: 104, name: "agent:unclassifiable", class: CauseClass::Routing, description: "an agent tool call the classifier could not map onto the policy's fields; refused, never run" },
+    Cause { code: 105, name: "agent:kill-by-pattern", class: CauseClass::Routing, description: "an agent command that signals processes chosen by a name pattern rather than by one process id" },
+    Cause { code: 106, name: "agent:network", class: CauseClass::Routing, description: "an agent command or git operation that would reach the network" },
+    Cause { code: 107, name: "agent:toolchain-write", class: CauseClass::Routing, description: "an agent write or delete into a toolchain directory" },
+    Cause { code: 108, name: "agent:glob-path", class: CauseClass::Routing, description: "an agent write or delete whose path is a pattern, not one exact path" },
+    Cause { code: 109, name: "agent:path-traversal", class: CauseClass::Routing, description: "an agent write or delete whose path climbs with a .. component" },
+    Cause { code: 110, name: "agent:symlink-path", class: CauseClass::Routing, description: "an agent write or delete whose path passes through a symbolic link" },
+    Cause { code: 111, name: "agent:outside-workspace", class: CauseClass::Routing, description: "an agent file operation whose resolved path lies outside the workspace" },
+    Cause { code: 112, name: "agent:shell-mutation", class: CauseClass::Routing, description: "an agent command that changes files or processes outside the exact path file tools" },
+    Cause { code: 113, name: "agent:push-escalated", class: CauseClass::Routing, description: "an agent git push to a remote class the policy does not allow; escalated to the owner and not run" },
 ];
 
 /// The engine's stop vocabulary mapped onto the registry; `terminal` and `waiting` are clean and have no cause.

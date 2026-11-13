@@ -1,7 +1,7 @@
 {
  "version": 1,
  "comment": "FROZEN. The cause registry of prismpath.kernel.causes: every row, its hash, the engine stop mapping and the lookups a consumer must answer. prismpath-rs/src/causes.rs is generated from the same registry and prismpath-rs/tests/test_causes.rs replays this file. Appending a row regenerates it.",
- "registry_sha256": "b074b28a012192bd1c3102d813742fc78cce13edfa4bd63197d0a65c021ef8f6",
+ "registry_sha256": "2475465e59e2694ac69665e1558e608b544f00150e1cdd501404ef6001228e99",
  "registry": [
   {
    "code": 1,
@@ -416,6 +416,66 @@
    "name": "document:not-canonical",
    "class": "envelope",
    "description": "a hashed or signed document reads as canon/2 but is not its canonical spelling"
+  },
+  {
+   "code": 104,
+   "name": "agent:unclassifiable",
+   "class": "routing",
+   "description": "an agent tool call the classifier could not map onto the policy's fields; refused, never run"
+  },
+  {
+   "code": 105,
+   "name": "agent:kill-by-pattern",
+   "class": "routing",
+   "description": "an agent command that signals processes chosen by a name pattern rather than by one process id"
+  },
+  {
+   "code": 106,
+   "name": "agent:network",
+   "class": "routing",
+   "description": "an agent command or git operation that would reach the network"
+  },
+  {
+   "code": 107,
+   "name": "agent:toolchain-write",
+   "class": "routing",
+   "description": "an agent write or delete into a toolchain directory"
+  },
+  {
+   "code": 108,
+   "name": "agent:glob-path",
+   "class": "routing",
+   "description": "an agent write or delete whose path is a pattern, not one exact path"
+  },
+  {
+   "code": 109,
+   "name": "agent:path-traversal",
+   "class": "routing",
+   "description": "an agent write or delete whose path climbs with a .. component"
+  },
+  {
+   "code": 110,
+   "name": "agent:symlink-path",
+   "class": "routing",
+   "description": "an agent write or delete whose path passes through a symbolic link"
+  },
+  {
+   "code": 111,
+   "name": "agent:outside-workspace",
+   "class": "routing",
+   "description": "an agent file operation whose resolved path lies outside the workspace"
+  },
+  {
+   "code": 112,
+   "name": "agent:shell-mutation",
+   "class": "routing",
+   "description": "an agent command that changes files or processes outside the exact path file tools"
+  },
+  {
+   "code": 113,
+   "name": "agent:push-escalated",
+   "class": "routing",
+   "description": "an agent git push to a remote class the policy does not allow; escalated to the owner and not run"
   }
  ],
  "engine_stop_to_cause": {
