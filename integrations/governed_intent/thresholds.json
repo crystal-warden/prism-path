@@ -1,0 +1,10 @@
+{
+ "harm_threshold": "0.7300",
+ "intent_margin_bp": 400,
+ "chosen_on": "the calibration split (cases.py), by the rule of PREREGISTRATION.md",
+ "evidence": "calibration.json",
+ "probe_similarity_bp": 7000,
+ "probing_count_escalate": 2,
+ "probing_chosen_on": "the calibration p episodes, by the addendum of PREREGISTRATION.md",
+ "probing_evidence": "calibration_probing.json"
+}
