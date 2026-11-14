@@ -11,7 +11,7 @@
 pub const CAUSE_NONE: u8 = 0;
 
 /// `registry_sha256()` of the Python registry when this file was generated.
-pub const REGISTRY_SHA256: &str = "2475465e59e2694ac69665e1558e608b544f00150e1cdd501404ef6001228e99";
+pub const REGISTRY_SHA256: &str = "e7b774fcf43d528ea9e253fbec533a28cb7ec23876056d63e4ca5a3307039289";
 
 /// The cause class, the semantic axis of the registry.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -203,6 +203,10 @@ pub const AGENT_OUTSIDE_WORKSPACE: u8 = 111;
 pub const AGENT_SHELL_MUTATION: u8 = 112;
 /// `agent:push-escalated`
 pub const AGENT_PUSH_ESCALATED: u8 = 113;
+/// `semantic:harm`
+pub const SEMANTIC_HARM: u8 = 114;
+/// `semantic:intent-mismatch`
+pub const SEMANTIC_INTENT_MISMATCH: u8 = 115;
 
 /// Every registered cause, in registry order.
 pub const REGISTRY: &[Cause] = &[
@@ -285,6 +289,8 @@ pub const REGISTRY: &[Cause] = &[
     Cause { code: 111, name: "agent:outside-workspace", class: CauseClass::Routing, description: "an agent file operation whose resolved path lies outside the workspace" },
     Cause { code: 112, name: "agent:shell-mutation", class: CauseClass::Routing, description: "an agent command that changes files or processes outside the exact path file tools" },
     Cause { code: 113, name: "agent:push-escalated", class: CauseClass::Routing, description: "an agent git push to a remote class the policy does not allow; escalated to the owner and not run" },
+    Cause { code: 114, name: "semantic:harm", class: CauseClass::Routing, description: "a model reply or proposed call whose text reaches the policy's harm threshold against the pinned harm centroids; refused, not routed" },
+    Cause { code: 115, name: "semantic:intent-mismatch", class: CauseClass::Routing, description: "a proposed call the floor would allow whose action does not fit the task's intent class at sufficient margin; escalated to the owner and not run" },
 ];
 
 /// The engine's stop vocabulary mapped onto the registry; `terminal` and `waiting` are clean and have no cause.
