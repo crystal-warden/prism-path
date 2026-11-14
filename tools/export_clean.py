@@ -67,6 +67,8 @@ EXCLUDE_PREFIXES = [
     "prismpath-ebpf/",         # kernel decode plane  (flip to INCLUDE to ship substrates)
     "integrations/governed_harness/",  # a research example run against a local model; its causes and
                                # policy shape reach the product through promotion, not this folder
+    "integrations/governed_net/",      # the same harness over a network wire with an XDP enforcement point,
+                               # a research example like governed_harness (its XDP side is prismpath-ebpf)
     "prismpath/evidence/",     # OTS anchors over the RESEARCH ledger/papers (docs/research/, absent
                                # here) + hardware evidence — provenance is a research-repo concern, and
                                # shipping anchors that reference files not in the mirror is a dangling ref
