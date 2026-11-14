@@ -12,3 +12,11 @@ struct { __uint(type, BPF_MAP_TYPE_ARRAY); __type(key, __u32); __type(value, str
 /* one action per rule of the start node, by matched edge index */
 struct { __uint(type, BPF_MAP_TYPE_ARRAY); __type(key, __u32); __type(value, struct gn_action);
          __uint(max_entries, GN_MAX_RULES); } gn_action_map SEC(".maps");
+
+/* per-verdict counters (GN_CNT_*). PERCPU so the hot path needs no atomic; the loader sums across CPUs.
+ * The userspace shim (gn_batch.c) treats it as a one-slot array, which is all a single-threaded run needs. */
+#ifndef GN_COUNTS_MAP_TYPE
+#define GN_COUNTS_MAP_TYPE BPF_MAP_TYPE_PERCPU_ARRAY
+#endif
+struct { __uint(type, GN_COUNTS_MAP_TYPE); __type(key, __u32); __type(value, __u64);
+         __uint(max_entries, GN_CNT_N); } gn_counts_map SEC(".maps");

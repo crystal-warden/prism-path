@@ -83,6 +83,35 @@ def structured() -> List[bytes]:
     return frames
 
 
+def household() -> List[bytes]:
+    """Realistic household shapes that share the LAN NIC and must all pass untouched (OTHER): other hosts,
+    other ports, other protocols, broadcast and multicast, ARP, IPv6, a VLAN tag, and the SAME agent port
+    to a DIFFERENT host. None is addressed to the configured server at the agent port."""
+    good = req_bytes(p.READ, p.H_WS_FILE, 9, 0, 100)
+    other = "192.0.2.99"           # another host on the LAN (RFC 5737)
+    gw = "192.0.2.1"               # the firewall / gateway
+    blob = bytes(range(80))
+    return [
+        fr.build(good, dst=other),                                   # the agent port, but another host
+        fr.build(good, dst=gw),                                      # the agent port, but the gateway
+        fr.build(good, dport=p.PORT + 1),                            # the server, but another UDP port
+        fr.build(good, dport=p.PORT - 1),                            # the server, but another UDP port
+        fr.build(blob, dport=53, sport=53, dst=gw),                  # DNS to the resolver
+        fr.build(blob, dport=5353, sport=5353, dst="224.0.0.251"),   # mDNS multicast
+        fr.build(blob, sport=68, dport=67, dst="255.255.255.255"),   # DHCP broadcast
+        fr.build(blob, dport=123, dst="192.0.2.7"),                  # NTP
+        fr.build(blob, dport=443, dst=other),                        # QUIC (UDP 443)
+        fr.build(blob, dport=1900, dst="239.255.255.250"),           # SSDP multicast
+        fr.build(good, proto=6),                                     # TCP to the server's ip and port (HTTPS shape)
+        fr.build(good, proto=6, dport=22),                           # SSH
+        fr.build(good, ethertype=0x0806),                            # ARP
+        fr.build(good, ethertype=0x86DD),                            # IPv6
+        fr.build(good, ethertype=0x8100),                            # a VLAN tag
+        fr.build(blob, dst=other, frag=0x2000),                      # a first fragment to another host
+        fr.build(blob, dst=other, frag=0x0021),                      # a later fragment to another host
+    ]
+
+
 def random_request(rng: random.Random) -> bytes:
     cmd = rng.choice([rng.randint(1, 11)] * 9 + [rng.randint(0, 255)])
     well = rng.random() < 0.85                              # mostly well formed, so the policy decides
@@ -132,7 +161,17 @@ def corpus(count: int, seed: int) -> Dict[str, List[bytes]]:
     rng = random.Random(seed)
     rand = [fr.build(random_request(rng)) for _ in range(count // 2)]
     muts = [mutate(rng, rng.choice(rand)) for _ in range(count - count // 2)]
-    return {"structured": structured(), "random": rand, "mutated": muts}
+    return {"structured": structured(), "household": household(), "random": rand, "mutated": muts}
+
+
+def tally(policy: NetPolicy, frames: List[bytes]) -> tuple:
+    """The per-verdict counts the program keeps, computed from the Python decision: (other, allow, drop,
+    malformed), with GN_CNT_DROP covering every policy/no-policy/unlogged drop."""
+    counts = [0, 0, 0, 0]
+    index = {fr.OTHER: 0, fr.ALLOW: 1, fr.DROP_BAD: 3}
+    for frame_bytes in frames:
+        counts[index.get(fr.decide(frame_bytes, policy).outcome, 2)] += 1
+    return tuple(counts)
 
 
 def receipt(policy: NetPolicy, reading: dict, verdict: dict) -> bytes:
@@ -189,12 +228,20 @@ def run(count: int, seed: int, out: Path) -> Dict:
     build = write_build(out / "policy", policy)
     binary = xdp_userspace.build(out / "bin")
     parts = corpus(count, seed)
-    summary = {"seed": seed, "image_sha256": policy.sha256, "parts": {}}
+    summary = {"seed": seed, "image_sha256": policy.sha256, "parts": {}, "counters_differ": 0}
     started = time.monotonic()
     for name, frames in parts.items():
-        rows = xdp_userspace.batch(binary, build["ppt"], build["actions"], frames)
-        summary["parts"][name] = compare(policy, frames, rows)
-    summary["fail_closed"] = fail_closed(binary, build, policy, parts["structured"])
+        got = []
+        rows = xdp_userspace.batch(binary, build["ppt"], build["actions"], frames, counters=got)
+        part = compare(policy, frames, rows)
+        part["counters"] = {"xdp": list(got[0]) if got and got[0] else None, "python": list(tally(policy, frames))}
+        if part["counters"]["xdp"] != part["counters"]["python"]:
+            part["counters_agree"] = False
+            summary["counters_differ"] += 1
+        else:
+            part["counters_agree"] = True
+        summary["parts"][name] = part
+    summary["fail_closed"] = fail_closed(binary, build, policy, parts["structured"] + parts["household"])
     summary["total_frames"] = sum(part["frames"] for part in summary["parts"].values())
     summary["total_disagree"] = sum(part["disagree"] for part in summary["parts"].values())
     summary["seconds"] = round(time.monotonic() - started, 1)
@@ -212,10 +259,12 @@ def write_corpus(count: int, seed: int, out: Path) -> Dict:
     binary = xdp_userspace.build(out / "bin")
     frames = [frame_bytes for part in corpus(count, seed).values() for frame_bytes in part if 14 <= len(frame_bytes) <= 3000]
     (out / "frames.bin").write_bytes(xdp_userspace._frames(frames))
-    done = subprocess.run([str(binary), build["ppt"], build["actions"], "--image-index", "1"],
+    done = subprocess.run([str(binary), build["ppt"], build["actions"], "--image-index", "1",
+                           "--server-ip", fr.SERVER_IP, "--port", str(p.PORT)],
                           input=(out / "frames.bin").read_bytes(), capture_output=True, check=True)
     (out / "expected.txt").write_bytes(done.stdout)
-    return {"frames": len(frames), "image_sha256": policy.sha256, "dir": str(out)}
+    return {"frames": len(frames), "image_sha256": policy.sha256, "server_ip": fr.SERVER_IP, "port": p.PORT,
+            "dir": str(out)}
 
 
 def main(argv=None) -> int:
@@ -231,7 +280,8 @@ def main(argv=None) -> int:
     summary = run(args.random, args.seed, Path(args.out))
     print(json.dumps(summary, indent=1))
     closed = summary["fail_closed"]
-    return 0 if (summary["total_disagree"] == 0 and closed["allowed_with_empty_tables"] == 0
+    return 0 if (summary["total_disagree"] == 0 and summary["counters_differ"] == 0
+                 and closed["allowed_with_empty_tables"] == 0
                  and closed["allowed_with_full_ring"] == 0 and closed["other_traffic_unchanged"]) else 1
 
 

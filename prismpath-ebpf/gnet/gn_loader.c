@@ -130,9 +130,9 @@ static int test_run(const char *obj_path, const char *table, const char *actions
         /* the program's return value must be what its event says: pass exactly for other traffic and allows */
         int passed = opts.retval == XDP_PASS;
         if (passed != (outcome == GN_OTHER || outcome == GN_ALLOW)) mismatches++;
-        printf("%u %u %d %u %d %llu %u %u %u %u %u %u %u %u %u\n", outcome, ev.reason, have_event ? ev.edge : -1,
+        printf("%u %u %d %u %d %llu %u %u %u %u %u %u %u %u %u %u\n", outcome, ev.reason, have_event ? ev.edge : -1,
                ev.cause, have_event, (unsigned long long)ev.request_id, ev.cmd, ev.hclass, ev.arg0, ev.arg1,
-               ev.name_len, ev.data_len, ev.handle, ev.image_index, ev.src_port);
+               ev.name_len, ev.data_len, ev.handle, ev.image_index, ev.src_port, ev.src_ip);
     }
     ring_buffer__free(ring);
     bpf_object__close(obj);

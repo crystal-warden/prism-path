@@ -14,7 +14,10 @@ import hashlib
 import struct
 import subprocess
 from pathlib import Path
-from typing import Iterable, List, NamedTuple, Optional
+from typing import Iterable, List, NamedTuple, Optional, Tuple
+
+from . import frame as fr
+from . import protocol as p
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
@@ -40,6 +43,7 @@ class XdpDecision(NamedTuple):
     handle: int
     image_index: int
     src_port: int
+    src_ip: int
 
     def reading(self):
         """The reading the receipt logger rebuilds from a ring buffer event: the decided fields."""
@@ -66,8 +70,9 @@ def _parse(line: str) -> XdpDecision:
     return XdpDecision(*(int(part) for part in line.split()))
 
 
-def _args(binary, ppt, actions, empty, ring_full, image_index):
-    argv = [str(binary), str(ppt), str(actions), "--image-index", str(image_index)]
+def _args(binary, ppt, actions, empty, ring_full, image_index, server_ip, port):
+    argv = [str(binary), str(ppt), str(actions), "--image-index", str(image_index),
+            "--server-ip", server_ip, "--port", str(port)]
     if empty:
         argv.append("--empty")
     if ring_full:
@@ -75,20 +80,34 @@ def _args(binary, ppt, actions, empty, ring_full, image_index):
     return argv
 
 
+def parse_counters(stderr: str) -> Optional[Tuple[int, int, int, int]]:
+    """The `counters <other> <allow> <drop> <malformed>` line gn_batch prints at the end, or None."""
+    for line in reversed(stderr.splitlines()):
+        if line.startswith("counters "):
+            parts = line.split()[1:]
+            if len(parts) == 4:
+                return tuple(int(part) for part in parts)
+    return None
+
+
 def batch(binary: Path, ppt: Path, actions: Path, frames: List[bytes], *, empty: bool = False,
-          ring_full: bool = False, image_index: int = 1) -> List[XdpDecision]:
-    done = subprocess.run(_args(binary, ppt, actions, empty, ring_full, image_index), input=_frames(frames),
-                          capture_output=True, check=True)
+          ring_full: bool = False, image_index: int = 1, server_ip: str = fr.SERVER_IP, port: int = p.PORT,
+          counters: list = None) -> List[XdpDecision]:
+    done = subprocess.run(_args(binary, ppt, actions, empty, ring_full, image_index, server_ip, port),
+                          input=_frames(frames), capture_output=True, check=True)
     rows = [_parse(line) for line in done.stdout.decode().splitlines()]
     if len(rows) != len(frames):
         raise RuntimeError(f"gn_batch decided {len(rows)} of {len(frames)} frames: {done.stderr.decode()[-500:]}")
+    if counters is not None:
+        counters.append(parse_counters(done.stderr.decode()))
     return rows
 
 
 class Stream:
-    def __init__(self, binary: Path, ppt: Path, actions: Path, image_index: int = 1):
-        self.proc = subprocess.Popen(_args(binary, ppt, actions, False, False, image_index), stdin=subprocess.PIPE,
-                                     stdout=subprocess.PIPE, bufsize=0)
+    def __init__(self, binary: Path, ppt: Path, actions: Path, image_index: int = 1, server_ip: str = fr.SERVER_IP,
+                 port: int = p.PORT):
+        self.proc = subprocess.Popen(_args(binary, ppt, actions, False, False, image_index, server_ip, port),
+                                     stdin=subprocess.PIPE, stdout=subprocess.PIPE, bufsize=0)
 
     def decide(self, frame: bytes) -> XdpDecision:
         self.proc.stdin.write(_frames([frame]))
