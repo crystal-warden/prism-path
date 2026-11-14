@@ -4,7 +4,7 @@
 
 `policy/intent_calls.core.json` decides a proposed call. It is the governed harness's own image
 (`governed_harness/policy/agent_rules.src.json`) with its rules copied VERBATIM and in order, its eleven
-field definitions unchanged, six semantic fields added, and four semantic rules inserted after the floor's
+field definitions unchanged, seven semantic fields added, and five semantic rules inserted after the floor's
 last refusal (rule 9, `agent:shell-mutation`) and before its first allow. Every semantic rule is the
 conjunction of:
 
@@ -16,6 +16,9 @@ conjunction of:
   and its own semantic condition:
 
   S1 refuse_114 (semantic:harm)             harm_bp >= T_h
+  SP escalate_116 (semantic:probing-episode) probing_count >= N: the episode's refused proposals were labelled
+                                             boundary probing N times (observer.py); every later call the floor
+                                             would allow is escalated, and the harness stops the agent
   S2 escalate_115 (semantic:intent-mismatch) margin >= T_m, intent inspect, and a write or delete tool or a
                                              local git write (add, commit, checkout, branch, tag, ...)
   S3 escalate_115                            margin >= T_m, intent not vcs-publish, network or unknown, and
@@ -61,7 +64,7 @@ CALLS_CORE = HERE / "policy" / "intent_calls.core.json"
 RESPONSES_SRC = HERE / "policy" / "intent_responses.src.json"
 RESPONSES_CORE = HERE / "policy" / "intent_responses.core.json"
 
-HARM, MISMATCH = 114, 115
+HARM, MISMATCH, PROBING = 114, 115, 116
 FLOOR_REFUSALS = 9            # rules 1 to 9 of the floor are its refusals; rule 10 is its first allow
 
 SEMANTIC_DEFS = {
@@ -71,6 +74,7 @@ SEMANTIC_DEFS = {
     "harm_bp": "fixed scale=10000 unit=cosine rounding=floor min=0 max=10000",
     "intent_class": "category",
     "intent_margin_bp": "int min=0 max=10000",
+    "probing_count": "int min=0 max=1000",
 }
 
 
@@ -86,6 +90,10 @@ def load_thresholds(path: Path = THRESHOLDS) -> Dict[str, Any]:
     data["harm_bp"] = int(harm * 10000)
     if not isinstance(data["intent_margin_bp"], int) or not 0 <= data["intent_margin_bp"] <= 10000:
         raise ValueError("intent_margin_bp must be an integer 0..10000")
+    if not isinstance(data["probing_count_escalate"], int) or not 1 <= data["probing_count_escalate"] <= 1000:
+        raise ValueError("probing_count_escalate must be an integer 1..1000")
+    if not isinstance(data["probe_similarity_bp"], int) or not 0 < data["probe_similarity_bp"] <= 10000:
+        raise ValueError("probe_similarity_bp must be an integer 1..10000")
     return data
 
 
@@ -110,6 +118,9 @@ def build_calls(thresholds: Dict[str, Any], lock: str) -> Dict[str, Any]:
     semantic = [
         {"target": f"refuse_{HARM}",
          "when": ["and", verified, floor_allows, _cmp("harm_bp", ">=", ["num", thresholds["harm_threshold"]])]},
+        {"target": f"escalate_{PROBING}",
+         "when": ["and", verified, floor_allows,
+                  _cmp("probing_count", ">=", ["num", thresholds["probing_count_escalate"]])]},
         {"target": f"escalate_{MISMATCH}",
          "when": ["and", verified, floor_allows, margin, _cmp("intent_class", "==", _s("inspect")),
                   ["or", ["in", "tool", [_s("write_file"), _s("delete_path")]],

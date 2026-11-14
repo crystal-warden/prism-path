@@ -116,14 +116,22 @@ def _init():
     _STATE["lock"] = intent_policy.lock_id()
 
 
+ORACLE_BATCH = 16384       # readings per oracle process: one process on all 112,896 holds gigabytes
+
+
 def _oracle_verdicts(image: bytes, readings: List[bytes]) -> List[Dict[str, Any]]:
-    data = bytearray(f"case all {len(readings)}\n{len(image)}\n".encode() + image + b"\n")
-    for raw in readings:
-        data += f"{len(raw)}\n".encode() + raw + b"\n"
-    out = subprocess.run([oracle_path(), "--batch"], input=bytes(data), capture_output=True, check=True).stdout
-    row = json.loads(out.decode())
-    assert row["policy"] == {"policy": "accepted"}, row["policy"]
-    return row["readings"]
+    verdicts: List[Dict[str, Any]] = []
+    for start in range(0, len(readings), ORACLE_BATCH):
+        part = readings[start:start + ORACLE_BATCH]
+        data = bytearray(f"case all {len(part)}\n{len(image)}\n".encode() + image + b"\n")
+        for raw in part:
+            data += f"{len(raw)}\n".encode() + raw + b"\n"
+        out = subprocess.run([oracle_path(), "--batch"], input=bytes(data), capture_output=True, check=True).stdout
+        row = json.loads(out.decode())
+        assert row["policy"] == {"policy": "accepted"}, row["policy"]
+        assert len(row["readings"]) == len(part)
+        verdicts += row["readings"]
+    return verdicts
 
 
 def _same(lean, mine) -> bool:

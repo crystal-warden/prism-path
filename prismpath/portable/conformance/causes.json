@@ -1,7 +1,7 @@
 {
  "version": 1,
  "comment": "FROZEN. The cause registry of prismpath.kernel.causes: every row, its hash, the engine stop mapping and the lookups a consumer must answer. prismpath-rs/src/causes.rs is generated from the same registry and prismpath-rs/tests/test_causes.rs replays this file. Appending a row regenerates it.",
- "registry_sha256": "e7b774fcf43d528ea9e253fbec533a28cb7ec23876056d63e4ca5a3307039289",
+ "registry_sha256": "fc4bdf45e03567ebfb7b04cbd797022576606e878be0abc0d0ac37b870b594c6",
  "registry": [
   {
    "code": 1,
@@ -488,6 +488,12 @@
    "name": "semantic:intent-mismatch",
    "class": "routing",
    "description": "a proposed call the floor would allow whose action does not fit the task's intent class at sufficient margin; escalated to the owner and not run"
+  },
+  {
+   "code": 116,
+   "name": "semantic:probing-episode",
+   "class": "routing",
+   "description": "a proposed call in an episode whose refused proposals were labelled boundary probing the registered number of times; escalated, not run, and the agent is stopped"
   }
  ],
  "engine_stop_to_cause": {

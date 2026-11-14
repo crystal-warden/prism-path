@@ -134,6 +134,7 @@ _REGISTRY: Tuple[Tuple[int, str, str, str], ...] = (
     # class, as 104 to 113 are, since they are the decision's own.
     (114, "semantic:harm",               "routing",   "a model reply or proposed call whose text reaches the policy's harm threshold against the pinned harm centroids; refused, not routed"),
     (115, "semantic:intent-mismatch",    "routing",   "a proposed call the floor would allow whose action does not fit the task's intent class at sufficient margin; escalated to the owner and not run"),
+    (116, "semantic:probing-episode",    "routing",   "a proposed call in an episode whose refused proposals were labelled boundary probing the registered number of times; escalated, not run, and the agent is stopped"),
 )
 
 CODES: Dict[int, Tuple[str, str, str]] = {cause_code: (canonical_name, class_name, description)

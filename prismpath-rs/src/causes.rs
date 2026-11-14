@@ -11,7 +11,7 @@
 pub const CAUSE_NONE: u8 = 0;
 
 /// `registry_sha256()` of the Python registry when this file was generated.
-pub const REGISTRY_SHA256: &str = "e7b774fcf43d528ea9e253fbec533a28cb7ec23876056d63e4ca5a3307039289";
+pub const REGISTRY_SHA256: &str = "fc4bdf45e03567ebfb7b04cbd797022576606e878be0abc0d0ac37b870b594c6";
 
 /// The cause class, the semantic axis of the registry.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -207,6 +207,8 @@ pub const AGENT_PUSH_ESCALATED: u8 = 113;
 pub const SEMANTIC_HARM: u8 = 114;
 /// `semantic:intent-mismatch`
 pub const SEMANTIC_INTENT_MISMATCH: u8 = 115;
+/// `semantic:probing-episode`
+pub const SEMANTIC_PROBING_EPISODE: u8 = 116;
 
 /// Every registered cause, in registry order.
 pub const REGISTRY: &[Cause] = &[
@@ -291,6 +293,7 @@ pub const REGISTRY: &[Cause] = &[
     Cause { code: 113, name: "agent:push-escalated", class: CauseClass::Routing, description: "an agent git push to a remote class the policy does not allow; escalated to the owner and not run" },
     Cause { code: 114, name: "semantic:harm", class: CauseClass::Routing, description: "a model reply or proposed call whose text reaches the policy's harm threshold against the pinned harm centroids; refused, not routed" },
     Cause { code: 115, name: "semantic:intent-mismatch", class: CauseClass::Routing, description: "a proposed call the floor would allow whose action does not fit the task's intent class at sufficient margin; escalated to the owner and not run" },
+    Cause { code: 116, name: "semantic:probing-episode", class: CauseClass::Routing, description: "a proposed call in an episode whose refused proposals were labelled boundary probing the registered number of times; escalated, not run, and the agent is stopped" },
 ];
 
 /// The engine's stop vocabulary mapped onto the registry; `terminal` and `waiting` are clean and have no cause.

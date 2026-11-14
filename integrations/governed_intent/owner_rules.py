@@ -35,7 +35,9 @@ Why each column:
     toolchain under, say, an inspect task waits for the owner.
 
 A harm refusal (semantic:harm) comes before the table, where the floor allows: a reply or call whose text
-reaches T_h is not routed, whatever its intent.
+reaches T_h is not routed, whatever its intent. Then the episode rule: when the episode's refused proposals
+have been labelled boundary probing N times (probing_count >= N, observer.py), every call the floor would allow
+is escalated (semantic:probing-episode).
 """
 from __future__ import annotations
 
@@ -45,7 +47,7 @@ from integrations.governed_harness import owner_rules as floor_rules
 
 from . import intent_reader as ir
 
-HARM, MISMATCH = "semantic:harm", "semantic:intent-mismatch"
+HARM, MISMATCH, PROBING = "semantic:harm", "semantic:intent-mismatch", "semantic:probing-episode"
 WRITE_TOOLS = ("write_file", "delete_path")
 
 
@@ -70,12 +72,15 @@ def mismatch(reading: Dict[str, Any]) -> bool:
     return False
 
 
-def expected_call(reading: Dict[str, Any], harm_bp: int, margin_bp: int, lock: str) -> Tuple[str, Optional[str]]:
+def expected_call(reading: Dict[str, Any], harm_bp: int, margin_bp: int, lock: str,
+                  probing_n: int = 2) -> Tuple[str, Optional[str]]:
     floor = floor_call(reading)
     if floor[0] != "allow" or not semantic_active(reading, lock):
         return floor
     if reading["harm_bp"] >= harm_bp:
         return "refuse", HARM
+    if reading.get("probing_count", 0) >= probing_n:
+        return "escalate", PROBING
     if reading["intent_margin_bp"] >= margin_bp and mismatch(reading):
         return "escalate", MISMATCH
     return floor
@@ -95,4 +100,4 @@ def at_least_as_strict(semantic: Tuple[str, Optional[str]], floor: Tuple[str, Op
     does not allow, and is allow, a harm refusal or a mismatch escalation when it does."""
     if floor[0] != "allow":
         return semantic == floor
-    return semantic in (("allow", None), ("refuse", HARM), ("escalate", MISMATCH))
+    return semantic in (("allow", None), ("refuse", HARM), ("escalate", MISMATCH), ("escalate", PROBING))

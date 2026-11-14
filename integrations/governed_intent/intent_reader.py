@@ -29,6 +29,8 @@ THE FIELDS (canon/2 has no floats, so every one is an integer, a category or a v
                          empty. Ties go to the earlier class in that order.
   intent_margin_bp       bp(best) - bp(second), each bp as for harm_bp: the integer gap between the best
                          and second best class (0 on a tie, when disabled, or for `unknown`).
+  probing_count          not read here: the governor sets it from the observation stream (observer.py), the
+                         number of the episode's refused proposals labelled boundary probing so far; 0 here.
 
 Why intent is read from the task and never from the model's reply: the reply is the untrusted side. A
 model that wrote "I am only inspecting" beside a delete could otherwise steer the class to match its own
@@ -75,7 +77,7 @@ BP = 10000
 
 VERIFIED, DISABLED = "verified", "disabled"
 SEMANTIC_FIELDS = ("intent_reader_version", "semantic_status", "semantic_lock", "harm_bp", "intent_class",
-                   "intent_margin_bp")
+                   "intent_margin_bp", "probing_count")
 
 Embed = Callable[[Sequence[str]], List[Any]]
 
@@ -83,7 +85,7 @@ Embed = Callable[[Sequence[str]], List[Any]]
 def zero_fields() -> Dict[str, Any]:
     """The semantic fields of a reading with no semantic signal: what the floor decides on."""
     return {"intent_reader_version": READER_VERSION, "semantic_status": DISABLED, "semantic_lock": "none",
-            "harm_bp": 0, "intent_class": UNKNOWN, "intent_margin_bp": 0}
+            "harm_bp": 0, "intent_class": UNKNOWN, "intent_margin_bp": 0, "probing_count": 0}
 
 
 def bp(cosine: float) -> int:
