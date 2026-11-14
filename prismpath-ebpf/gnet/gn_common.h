@@ -6,6 +6,15 @@
 
 #include <linux/types.h>
 
+/* Map pinning marker. Empty by default, so the ordinary object (gn_xdp.bpf.o) is byte-identical to a build
+ * without it and the libbpf C loader is unaffected. The no-install deployment builds gn_xdp.pin.bpf.c,
+ * which defines GN_PIN to `__uint(pinning, LIBBPF_PIN_BY_NAME);` so iproute2 pins every map under
+ * /sys/fs/bpf/<if>/ where the pure-Python loader (gn_loader.py) can reach it. The userspace shim leaves it
+ * empty. A map that uses it writes `GN_PIN` as its last member. */
+#ifndef GN_PIN
+#define GN_PIN
+#endif
+
 #define GN_PORT        47011u
 #define GN_MAGIC       0x474E4554u   /* "GNET" */
 #define GN_VERSION     1u
