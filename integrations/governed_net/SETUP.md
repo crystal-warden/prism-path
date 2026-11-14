@@ -178,8 +178,11 @@ in `<LAN_NET>`:
     --via-if <SERVER_IF> --lan-net <LAN_NET> --task "Edit .toolchain/VERSION so it says 2.0."
 ```
 
-The client is stock Python 3.9 with the standard library only. Stop the logger and the server with Ctrl-C
-/ Ctrl-D as in section 7; verify both runs with `core_evidence.py verify --sample all` (section 7).
+The client is stock Python 3.9 with the standard library only. To stop, press Ctrl-C in the logger's
+terminal: the logger seals its run (it prints `interrupted, sealing the run` and then the run summary),
+and the server seals its run when its standard input ends (Ctrl-D). Verify both runs with
+`core_evidence.py verify --sample all --pin-authority <keys>/authority.pub --pin-instance <keys>/instance.pub`
+(section 7). A logger older than this note lost its readings on Ctrl-C and left its receipts unsealed.
 
 ## A.6 Rolling back the LAN edge
 
