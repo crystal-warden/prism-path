@@ -4,6 +4,195 @@ Everything here needs privileges, so the owner runs every step by hand. Nothing 
 loaded into a kernel, attached to an interface, or applied to any host's network while it was built.
 Steps that change a host are marked **HOST CHANGE**, and each one has its undo beside it.
 
+There are two layouts. The **LAN edge layout** (section A) is the simpler one the owner chose: no dedicated
+cable and no new VM, the program on the Proxmox host's own LAN NIC, coexisting with the household LAN. The
+**dedicated wire layout** (sections 1 to 8) is the alternative: a cable to a passed-through port on a new
+VM, which isolates the agent path completely. Read the one you are deploying.
+
+---
+
+# A. LAN edge layout (no dedicated wire, no new VM)
+
+The program attaches to the Proxmox host's own LAN port and guards only the tool server's address and the
+agent port; the whole household LAN crosses that NIC and everything else passes untouched.
+
+| Placeholder | Meaning | Example |
+|---|---|---|
+| `<LAN_IF>` | the host's LAN port (Intel i226, igc, a bridge slave of the LAN bridge) | `enp2s0` |
+| `<LAN_NET>` | the LAN's network | `203.0.113.0/24` |
+| `<SERVER_ADDR>` | the tool server's IP, on a different machine reached through the firewall | `198.51.100.20` |
+| `<SERVER_IF>` | the LAN interface on the Mac (Wi-Fi) | `en1` |
+| `<MAC_LAN>` | the Mac's LAN address | `203.0.113.40` |
+| `<MODEL_HOST>` | the machine the model runs on, reachable over the normal network or the mesh | |
+| `<AGENT_PORT>` | the agent UDP port | `47011` |
+
+```
+Mac on Wi-Fi (en1, 203.0.113.40) --- AP --- Proxmox host LAN port <LAN_IF>:  XDP (before the bridge)
+   | harness loop + client, socket pinned to en1                               matches dst=<SERVER_ADDR> udp=47011
+   | agent datagrams routed by the firewall VM to <SERVER_ADDR>                 everything else passes
+   + model: ssh -L 8888 to <MODEL_HOST> (control plane, not governed)        gn_loader.py fills maps, drains ring
+                                                                              tool server on another machine (<SERVER_ADDR>)
+```
+
+Why the program sits on the host's bridge-slave port: XDP on a bridge slave runs on ingress before the
+bridge, so the frames the firewall VM routes toward `<SERVER_ADDR>` are seen here, addressed to the
+firewall's MAC with `<SERVER_ADDR>` as the IPv4 destination. The program matches on that destination IP
+and the agent port, so another host's traffic, other ports, IPv6, ARP, VLAN tags and fragments all pass.
+
+**The bypass, stated plainly.** XDP guards only paths through `<LAN_IF>`. The Mac's route to
+`<SERVER_ADDR>`'s network is advertised over the mesh VPN (a `utun` interface), so a plain socket would
+reach the server through the tunnel, never crossing `<LAN_IF>` in the clear. Two defences, both required:
+the client pins its socket to `<SERVER_IF>` and its LAN source address (`--via-if`), and the tool server
+binds only `<SERVER_ADDR>` and refuses, as a recorded finding, any datagram whose source is outside
+`<LAN_NET>` (section A.4). A host firewall rule on the server machine (A.4) makes that refusal a drop.
+
+## A.1 Build (no install on the host)
+
+The Proxmox host is x86_64 with clang, python3 and iproute2, but no bpftool and no libbpf, so the C loader
+is not built there. Build the BPF object with clang (architecture-neutral) and use the pure-Python loader:
+
+```sh
+# on the host, in this repository (or copy the five files named below)
+clang -O2 -g -target bpf -I/usr/include -I/usr/include/x86_64-linux-gnu -I prismpath-ebpf \
+      -c prismpath-ebpf/gnet/gn_xdp.pin.bpf.c -o prismpath-ebpf/gnet/gn_xdp.pin.bpf.o
+python3 -m integrations.governed_net.policy build          # build/net_rules.ppt, .actions, .core.json
+python3 prismpath-ebpf/gnet/gn_loader.py --self-test        # the loader's own non-privileged checks
+```
+
+The files the host needs: `prismpath-ebpf/gnet/gn_xdp.pin.bpf.c` (and the headers it includes:
+`gn_xdp.bpf.c`, `gn_xdp.h`, `gn_common.h`, `gn_maps.h`, `../ppt_common.h`, `../ppt_eval_bpf.h`),
+`prismpath-ebpf/gnet/gn_loader.py`, and the built `build/net_rules.ppt` and `build/net_rules.actions`. The
+receipt logger (`integrations/governed_net/receipt_logger.py`) needs the repository and its Python
+environment, so run it on a machine that has them (it reads the ring buffer hex `gn_loader.py events`
+prints, so it can be the host or another machine fed over a pipe/SSH).
+
+`gn_xdp.pin.bpf.c` is `gn_xdp.bpf.c` with every map pinned by name, so iproute2 pins the maps where the
+Python loader can reach them. (A static x86_64 build of the C loader on the aarch64 build machine was not
+feasible without installing an x86_64 sysroot and static libbpf; the pure-Python loader is the no-install
+path, and `--self-test` proves its parsing, its bpf_attr packing, its ring-buffer decoder and its counter
+summation with no privilege. The privileged syscalls themselves are first exercised here, on the host.)
+
+## A.2 The kernel test run, with no attach
+
+As with the wire layout, confirm the kernel accepts the program and decides as the userspace path does,
+before attaching to anything. This needs a machine with libbpf to build the C loader (`make -C
+prismpath-ebpf gnet` on the aarch64 build host or any libbpf host), then:
+
+```sh
+python3 -m integrations.governed_net.differential --random 20000 --seed 7 --corpus-only --out /tmp/gnet-corpus
+sudo prismpath-ebpf/gnet/gn_loader test-run prismpath-ebpf/gnet/gn_xdp.bpf.o \
+     /tmp/gnet-corpus/policy/net_rules.ppt /tmp/gnet-corpus/policy/net_rules.actions \
+     < /tmp/gnet-corpus/frames.bin > /tmp/gnet-corpus/kernel.txt
+diff /tmp/gnet-corpus/expected.txt /tmp/gnet-corpus/kernel.txt && echo "kernel agrees"
+```
+
+On the no-install host there is no C loader, so the kernel's acceptance of the program is shown instead by
+the `ip link ... obj` load in A.3 succeeding (iproute2's own libbpf runs the verifier).
+
+## A.3 Coexistence check, then attach
+
+First, a baseline with the program detached (nothing heavier than ping), from the Mac or the host:
+
+```sh
+prismpath-ebpf/gnet/coexist.sh <firewall-ip> <SERVER_ADDR>        # RTTs, detached
+```
+
+**HOST CHANGE (`<LAN_IF>`): attach.** Loading the pinned object attaches the program and pins the maps
+under `/sys/fs/bpf/<LAN_IF>/`:
+
+```sh
+sudo python3 prismpath-ebpf/gnet/gn_loader.py attach <LAN_IF> prismpath-ebpf/gnet/gn_xdp.pin.bpf.o
+# equivalently: sudo ip link set dev <LAN_IF> xdpdrv obj prismpath-ebpf/gnet/gn_xdp.pin.bpf.o sec xdp
+```
+
+Until the maps are filled, `match_dst_ip` is 0, so **nothing matches and the whole LAN passes untouched**
+(a safe first attach). Confirm coexistence, which may blink the link for a few seconds as the driver
+reloads its XDP path:
+
+```sh
+MAPS_DIR=/sys/fs/bpf/<LAN_IF> prismpath-ebpf/gnet/coexist.sh <firewall-ip> <SERVER_ADDR>
+```
+
+The RTTs should match the baseline, and the counters should be all `other` so far. Then set the target and
+the policy (after this, a matched request with no policy would be dropped; the fill sets both together):
+
+```sh
+sudo python3 prismpath-ebpf/gnet/gn_loader.py fill --maps-dir /sys/fs/bpf/<LAN_IF> \
+     --table build/net_rules.ppt --actions build/net_rules.actions --server-ip <SERVER_ADDR> --port <AGENT_PORT>
+```
+
+**DETACH (rollback):** `sudo python3 prismpath-ebpf/gnet/gn_loader.py detach <LAN_IF>` (or `sudo ip link set
+dev <LAN_IF> xdp off`). If the LAN itself drops and you cannot reach the host over it, detach from a
+machine on another path (the mesh VPN, or the Proxmox console), since the management path is not
+`<LAN_IF>`. An attach or detach may blink the link for a few seconds; it does not change any address,
+route or firewall rule, and it never touches the control plane or other hosts.
+
+## A.4 The tool server and its host firewall (the backstop)
+
+On the server machine (`<SERVER_ADDR>`), run the tool server bound to its LAN address, accepting only LAN
+sources:
+
+```sh
+python3 -m integrations.governed_net.server --make-world /tmp/gnet-world \
+    --bind <SERVER_ADDR> --port <AGENT_PORT> --lan-net <LAN_NET> \
+    --run /tmp/gnet-run/server --keys /tmp/gnet-keys
+```
+
+**HOST CHANGE (server machine): accept the agent port only from the LAN.** This closes the tunnel bypass
+at the server, so the backstop is a drop and not only a finding:
+
+```sh
+sudo nft add table inet gnet
+sudo nft add chain inet gnet input '{ type filter hook input priority 0; policy accept; }'
+sudo nft add rule inet gnet input udp dport <AGENT_PORT> ip saddr != <LAN_NET> drop
+```
+
+*Undo:* `sudo nft delete table inet gnet`.
+
+Drain the ring buffer into the receipt logger (on the host, or piped to a machine with the repository):
+
+```sh
+sudo python3 prismpath-ebpf/gnet/gn_loader.py events --maps-dir /sys/fs/bpf/<LAN_IF> \
+  | python3 -m integrations.governed_net.receipt_logger --run /tmp/gnet-run/xdp --keys /tmp/gnet-keys \
+       --status-bind <SERVER_ADDR>
+```
+
+## A.5 The Mac client
+
+**HOST CHANGE (Mac): the model forward.** The model listens on `127.0.0.1:8888` on `<MODEL_HOST>` and is
+the control plane, not the governed path, so forward it to the Mac's localhost over the normal network or
+the mesh, and leave the endpoint at localhost (do not change the model server's bind):
+
+```sh
+ssh -N -L 8888:127.0.0.1:8888 <MODEL_HOST> &
+export PRISMPATH_HARNESS_ENDPOINT=http://localhost:8888/v1/chat/completions PRISMPATH_HARNESS_MODEL=gemma4
+```
+
+Run one episode, pinning the agent socket to the Wi-Fi interface so it crosses `<LAN_IF>` and not the mesh
+tunnel. The client reports the interface and source it chose, and refuses if `<SERVER_IF>` has no address
+in `<LAN_NET>`:
+
+```sh
+/usr/bin/python3 -m integrations.governed_net.client --server <SERVER_ADDR> --port <AGENT_PORT> \
+    --via-if <SERVER_IF> --lan-net <LAN_NET> --task "Edit .toolchain/VERSION so it says 2.0."
+```
+
+The client is stock Python 3.9 with the standard library only. Stop the logger and the server with Ctrl-C
+/ Ctrl-D as in section 7; verify both runs with `core_evidence.py verify --sample all` (section 7).
+
+## A.6 Rolling back the LAN edge
+
+1. `<LAN_IF>`: `sudo python3 prismpath-ebpf/gnet/gn_loader.py detach <LAN_IF>`.
+2. Server machine: `sudo nft delete table inet gnet`.
+3. Mac: stop the SSH forward; the client changes nothing persistent.
+
+Nothing above changes an address, a route or the bridge; the only persistent change is the one nftables
+table on the server, with its undo given.
+
+---
+
+# B. Dedicated wire layout (alternative: a cable to a passed-through port on a new VM)
+
 Names used below. Choose your own and substitute them:
 
 | Placeholder | Meaning | Example |
