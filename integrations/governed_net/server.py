@@ -96,47 +96,69 @@ class Handles:
 
 
 class ToolServer:
-    def __init__(self, workspace: Path, policy: NetPolicy, run: Path, keys: Path, execute=sandbox.execute):
+    def __init__(self, workspace: Path, policy: NetPolicy, run: Path, keys: Path, execute=sandbox.execute,
+                 lan_prefixes=None):
         self.workspace = Path(os.path.realpath(workspace))
         self.policy, self.handles, self.execute = policy, Handles(self.workspace), execute
         self.run = evidence.EpisodeRun(Path(run), "server", policy.image, keys, decider=DECIDER)
-        self.seen = set()
+        # the source-prefix backstop: with XDP guarding only the LAN NIC, a datagram from the mesh VPN or
+        # any other path arrives from an address outside the LAN; the server refuses it as a finding and
+        # never runs it. None means "do not restrict" (used only by unit tests that feed bytes directly).
+        import ipaddress
+        self.lan_prefixes = [ipaddress.ip_network(cidr, strict=False) for cidr in (lan_prefixes or [])]
+        self.seen = set()                         # (src_ip, request_id): a request id is unique per client
         self.findings = []
         self.executed = []
+        self.by_client: Dict[str, Dict] = {}
         self.lock = threading.Lock()
 
-    def _finding(self, request_id: int, kind: str, **detail) -> p.Reply:
-        self.findings.append({"request_id": request_id, "finding": kind, **detail})
+    def _client(self, src_ip: str) -> Dict:
+        return self.by_client.setdefault(src_ip, {"executed": 0, "findings": 0, "out_of_prefix": 0})
+
+    def _finding(self, request_id: int, kind: str, src_ip: str = "?", **detail) -> p.Reply:
+        self.findings.append({"src": src_ip, "request_id": request_id, "finding": kind, **detail})
+        self._client(src_ip)["findings"] += 1
         return p.Reply(p.FINDING, request_id, body=kind.encode())
 
-    def handle(self, raw: bytes) -> Optional[p.Reply]:
+    def handle(self, raw: bytes, src=None) -> Optional[p.Reply]:
+        src_ip = src[0] if src else "?"
         with self.lock:
             try:
                 req = p.decode(raw)
             except p.Malformed as bad:
                 # XDP drops every malformed request, so one that arrived came around it
-                self.findings.append({"request_id": None, "finding": "malformed-arrived", "reason": bad.reason})
+                self.findings.append({"src": src_ip, "request_id": None, "finding": "malformed-arrived",
+                                      "reason": bad.reason})
+                self._client(src_ip)["findings"] += 1
                 return None
-            if req.request_id in self.seen:
-                return self._finding(req.request_id, "replayed-request-id")
-            self.seen.add(req.request_id)
+            if self.lan_prefixes and src is not None:
+                import ipaddress
+                if not any(ipaddress.ip_address(src_ip) in net for net in self.lan_prefixes):
+                    self._client(src_ip)["out_of_prefix"] += 1
+                    return self._finding(req.request_id, "source-outside-lan", src_ip=src_ip, source=src_ip)
+            if (src_ip, req.request_id) in self.seen:
+                return self._finding(req.request_id, "replayed-request-id", src_ip=src_ip)
+            self.seen.add((src_ip, req.request_id))
             true_class, rel = 0, None
             if req.cmd in p.USES_HANDLE:
                 found = self.handles.lookup(req.handle)
                 if found is None:
-                    return self._finding(req.request_id, "unissued-handle", handle=req.handle, claimed=req.hclass)
+                    return self._finding(req.request_id, "unissued-handle", src_ip=src_ip, handle=req.handle,
+                                         claimed=req.hclass)
                 true_class, rel = found
             reading = req.reading(hclass=true_class)
             decision = self.policy.decide(self.policy.reading_bytes(reading))
             idx = self.run.record(self.policy.reading_bytes(reading), decision.verdict)   # before anything runs
             if true_class != req.hclass:
-                return self._finding(req.request_id, "class-mismatch", claimed=req.hclass, true=true_class,
-                                     server_decision=[decision.kind, decision.cause], receipt=idx)
+                return self._finding(req.request_id, "class-mismatch", src_ip=src_ip, claimed=req.hclass,
+                                     true=true_class, server_decision=[decision.kind, decision.cause], receipt=idx)
             if not decision.runs:
-                return self._finding(req.request_id, "server-refuses-what-arrived",
+                return self._finding(req.request_id, "server-refuses-what-arrived", src_ip=src_ip,
                                      server_decision=[decision.kind, decision.cause], receipt=idx)
             ok, body = self._run(req, rel)
-            self.executed.append({"request_id": req.request_id, "reading": reading, "receipt": idx, "ok": ok})
+            self.executed.append({"src": src_ip, "request_id": req.request_id, "reading": reading,
+                                  "receipt": idx, "ok": ok})
+            self._client(src_ip)["executed"] += 1
             return p.Reply(p.OK if ok else p.TOOL_ERROR, req.request_id, 0, idx, body)
 
     # ------------------------------------------------------------------ execution, confined
@@ -197,6 +219,7 @@ class ToolServer:
     def close(self) -> Dict:
         (self.run.run / "findings.json").write_text(json.dumps(self.findings, indent=1))
         (self.run.run / "executed.json").write_text(json.dumps(self.executed, indent=1))
+        (self.run.run / "clients.json").write_text(json.dumps(self.by_client, indent=1))
         return self.run.close()
 
 
@@ -209,7 +232,7 @@ def serve(server: ToolServer, sock: socket.socket, stop: threading.Event) -> Non
             continue
         except OSError:
             return
-        reply = server.handle(raw)
+        reply = server.handle(raw, src=addr)
         if reply is not None:
             sock.sendto(p.encode_reply(reply), addr)
 
@@ -220,15 +243,19 @@ def main(argv=None) -> int:
     parser.add_argument("--workspace", required=True, help="the workspace, or with --make-world a new directory")
     parser.add_argument("--run", required=True)
     parser.add_argument("--keys", required=True)
-    parser.add_argument("--bind", default="127.0.0.1")
-    parser.add_argument("--port", type=int, default=0)
+    parser.add_argument("--bind", default="127.0.0.1", help="the server's own LAN address; it binds only this")
+    parser.add_argument("--port", type=int, default=p.PORT)
+    parser.add_argument("--lan-net", action="append", default=None,
+                        help="accept only datagrams whose source is in this network; repeatable. A datagram "
+                             "from any other path (e.g. the mesh VPN) is a recorded finding, never run")
     parser.add_argument("--make-world", action="store_true",
                         help="first make the adversary set's throwaway world (workspace and decoy) at --workspace/..")
     args = parser.parse_args(argv)
     if args.make_world:
         from integrations.governed_harness.adversary import make_world
         args.workspace = str(make_world(Path(args.workspace))["ws"])
-    server = ToolServer(Path(args.workspace), NetPolicy.load(), Path(args.run), Path(args.keys))
+    server = ToolServer(Path(args.workspace), NetPolicy.load(), Path(args.run), Path(args.keys),
+                        lan_prefixes=args.lan_net)
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.bind((args.bind, args.port))
     print(sock.getsockname()[1], flush=True)

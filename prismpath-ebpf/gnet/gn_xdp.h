@@ -10,16 +10,28 @@
  * both name the same reason for the same malformed datagram.
  *
  * The includer must have defined, BEFORE this header: ppt_common.h, the table maps and ppt_eval_bpf.h
- * (the shared evaluator), gn_config_map and gn_action_map (below), and GN_EMIT(event_ptr), which reports
- * one decision and evaluates to 0 when it was recorded. A decision that could not be recorded is never let
- * through: an allowed call with no record would be an execution with no receipt.
+ * (the shared evaluator), gn_config_map, gn_action_map and gn_counts_map (gn_maps.h), and GN_EMIT(event_ptr),
+ * which reports one decision and evaluates to 0 when it was recorded. A decision that could not be recorded
+ * is never let through: an allowed call with no record would be an execution with no receipt.
  *
- * What is not the agent protocol is passed untouched, by construction: a frame that is not IPv4, an IPv4
- * packet that is not UDP, and a UDP datagram to any other port return GN_OTHER before a byte of payload
- * is read, so SSH, the management network and everything else on the interface never meet the policy.
+ * This program runs on a SHARED interface (the LAN edge layout: the host's own LAN NIC, which the whole
+ * household crosses), so what is not the agent protocol must pass untouched, by construction, before any
+ * payload is read. A frame is the agent protocol ONLY when its IPv4 DESTINATION is the configured server
+ * address (gn_config.match_dst_ip) and its UDP destination port is the configured port (match_port), both
+ * set by the loader. Everything else returns GN_OTHER before the payload: a non-IPv4 ethertype (IPv6, ARP,
+ * a VLAN tag), a non-UDP packet, a UDP datagram to another host or another port (so the same agent port
+ * for a different host passes), and a later fragment. So SSH, DNS, DHCP, the model control plane and every
+ * other host's traffic never meet the policy.
+ *
+ * VLAN: a VLAN-tagged frame (ethertype 0x8100 or 0x88A8) is passed unread. The LAN bridge port this
+ * attaches to carries the household LAN untagged; a tagged frame belongs to another segment and is not the
+ * routed agent path, and matching into a VLAN would need the loader to learn which tag carries it. IPv6 is
+ * passed likewise: the server binds IPv4, so a v6 datagram to the port never reaches it, and v1 of the
+ * protocol is IPv4 only.
+ *
  * Fragments: only a FIRST fragment carries the UDP header (an IPv4 fragment's payload is at least 8 bytes,
- * so the whole UDP header is in it), and a first fragment to the protocol's port is dropped as malformed;
- * the later fragments cannot be reassembled without it. */
+ * so the whole UDP header is in it), and a first fragment to the matched address and port is dropped as
+ * malformed; a later fragment is passed (it cannot be reassembled without the first). */
 #pragma once
 
 #include "gn_common.h"
@@ -115,39 +127,55 @@ static __always_inline void gn_fill(struct ppt_regfile *regfile, const struct gn
     }
 }
 
-/* One frame, `data` .. `data_end`: GN_OTHER for what is not the agent protocol, else the outcome of the
- * decision, with `ev` filled for the logger (and already reported through GN_EMIT). */
+/* One per-verdict counter up by one. PERCPU in the kernel (this-CPU slot, no atomic), one slot in the shim. */
+static __always_inline void gn_count(__u32 which)
+{
+    __u64 *slot = bpf_map_lookup_elem(&gn_counts_map, &which);
+    if (slot)
+        *slot += 1;
+}
+
+/* Not the agent protocol: count it as passed-other and let it through. */
+#define GN_PASS_OTHER() do { gn_count(GN_CNT_OTHER); return GN_OTHER; } while (0)
+
+/* One frame, `data` .. `data_end`: GN_OTHER for what is not the agent protocol (passed), else the outcome
+ * of the decision, with `ev` filled for the logger (and already reported through GN_EMIT). */
 static __always_inline __u32 gn_decide(const __u8 *data, const void *data_end, struct gn_event *ev)
 {
-    /* Ethernet: IPv4 only (no VLAN tag on the dedicated wire); anything else is not the protocol */
+    /* Ethernet: IPv4 only; IPv6, ARP and a VLAN tag are not IPv4 and pass (see the header comment) */
     if ((const void *)(data + 14) > data_end)
-        return GN_OTHER;
+        GN_PASS_OTHER();
     if (gn_be16(data + 12) != 0x0800)
-        return GN_OTHER;
+        GN_PASS_OTHER();
     const __u8 *ip = data + 14;
     if ((const void *)(ip + 20) > data_end)
-        return GN_OTHER;
+        GN_PASS_OTHER();
     if (ip[9] != 17)                                   /* not UDP */
-        return GN_OTHER;
+        GN_PASS_OTHER();
     __u32 ihl = (__u32)(ip[0] & 0x0F) * 4;
     if ((ip[0] >> 4) != 4 || ihl < 20)
-        return GN_OTHER;                               /* not an IPv4 header the stack would accept either */
+        GN_PASS_OTHER();                               /* not an IPv4 header the stack would accept either */
     __u32 frag = gn_be16(ip + 6);
     const __u8 *udp = ip + ihl;
     if ((frag & 0x1FFF) != 0)
-        return GN_OTHER;                               /* a later fragment: no UDP header to read (see top) */
+        GN_PASS_OTHER();                               /* a later fragment: no UDP header to read (see top) */
     if ((const void *)(udp + 8) > data_end)
-        return GN_OTHER;
-    if (gn_be16(udp + 2) != GN_PORT)
-        return GN_OTHER;                               /* another port: never the policy's business */
+        GN_PASS_OTHER();
+
+    /* The match: this frame is the agent protocol only if it is addressed to the configured server IP and
+     * the configured UDP port. Any other destination (another host) or port passes, so the program coexists
+     * on a shared LAN NIC. With empty maps (match_dst_ip == 0) nothing matches and everything passes. */
+    __u32 zero = 0;
+    struct gn_config *cfg = bpf_map_lookup_elem(&gn_config_map, &zero);
+    __u32 dst_ip = gn_be32(ip + 16);
+    __u32 dst_port = gn_be16(udp + 2);
+    if (!cfg || dst_ip != cfg->match_dst_ip || dst_port != cfg->match_port)
+        GN_PASS_OTHER();
 
     /* from here on the frame is addressed to the agent protocol, and it is decided or dropped */
-    ev->src_ip = gn_be32(ip + 12);
+    ev->src_ip = gn_be32(ip + 12);                     /* the client's LAN address: its identity to the logger */
     ev->src_port = (__u16)gn_be16(udp);
-    struct gn_config *cfg;
-    __u32 zero = 0;
-    cfg = bpf_map_lookup_elem(&gn_config_map, &zero);
-    ev->image_index = cfg ? cfg->image_index : 0;
+    ev->image_index = cfg->image_index;
     ev->edge = -1;
     __u32 reason = 0;
     if (frag & 0x2000)
@@ -168,17 +196,20 @@ static __always_inline __u32 gn_decide(const __u8 *data, const void *data_end, s
         ev->reason = (__u8)reason;
         ev->outcome = GN_DROP_BAD;
         GN_EMIT(ev);
+        gn_count(GN_CNT_MALFORMED);
         return GN_DROP_BAD;
     }
-    if (!cfg || !cfg->loaded) {
-        ev->outcome = GN_DROP_NOPOL;
+    if (!cfg->loaded) {
+        ev->outcome = GN_DROP_NOPOL;                   /* configured target, no policy: fail closed */
         GN_EMIT(ev);
+        gn_count(GN_CNT_DROP);
         return GN_DROP_NOPOL;
     }
     struct ppt_regfile *regfile = ppt_regs();
     if (!regfile) {
         ev->outcome = GN_DROP_NOPOL;
         GN_EMIT(ev);
+        gn_count(GN_CNT_DROP);
         return GN_DROP_NOPOL;
     }
     gn_fill(regfile, ev);
@@ -201,7 +232,9 @@ static __always_inline __u32 gn_decide(const __u8 *data, const void *data_end, s
     ev->outcome = (__u8)outcome;
     if (GN_EMIT(ev) != 0 && outcome == GN_ALLOW) {
         ev->outcome = GN_DROP_NOLOG;
+        gn_count(GN_CNT_DROP);
         return GN_DROP_NOLOG;
     }
+    gn_count(outcome == GN_ALLOW ? GN_CNT_ALLOW : GN_CNT_DROP);
     return outcome;
 }

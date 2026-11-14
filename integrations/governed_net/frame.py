@@ -48,9 +48,17 @@ class Outcome(NamedTuple):
     verdict: Optional[dict] = None
 
 
-def decide(frame: bytes, policy, loaded: bool = True) -> Outcome:
-    """The Python decision of one frame (the XDP program's outcome numbers)."""
+def decide(frame: bytes, policy, loaded: bool = True, match_dst_ip: int = None, match_port: int = None) -> Outcome:
+    """The Python decision of one frame (the XDP program's outcome numbers). `match_dst_ip` (host order) and
+    `match_port` are the deployment target; a frame is the agent protocol only when its IPv4 destination and
+    UDP destination port are these, else it passes as OTHER, as on the shared LAN NIC. The defaults are the
+    documentation server address and the protocol port, matching frame.build's defaults."""
+    if match_dst_ip is None:
+        match_dst_ip = protocol.ip_to_u32(SERVER_IP)
+    if match_port is None:
+        match_port = protocol.PORT
     be16 = lambda at: struct.unpack_from(">H", frame, at)[0]   # noqa: E731
+    be32 = lambda at: struct.unpack_from(">I", frame, at)[0]   # noqa: E731
     if len(frame) < 14 or be16(12) != 0x0800:
         return Outcome(OTHER)
     if len(frame) < 34 or frame[23] != 17:
@@ -62,8 +70,10 @@ def decide(frame: bytes, policy, loaded: bool = True) -> Outcome:
     if frag & 0x1FFF:
         return Outcome(OTHER)
     udp = 14 + ihl
-    if len(frame) < udp + 8 or be16(udp + 2) != protocol.PORT:
+    if len(frame) < udp + 8:
         return Outcome(OTHER)
+    if be32(14 + 16) != match_dst_ip or be16(udp + 2) != match_port:
+        return Outcome(OTHER)                       # another host or another port: not the agent protocol
     tot_len, udp_len = be16(16), be16(udp + 4)
     reason = 0
     if frag & 0x2000:

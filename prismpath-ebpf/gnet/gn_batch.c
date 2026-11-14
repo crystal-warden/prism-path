@@ -13,13 +13,17 @@
  * Not covered here: the verifier and the JIT (SETUP.md has the in-kernel run that covers them).
  *
  *   cc -O2 -std=gnu11 -I prismpath-ebpf -o gn_batch prismpath-ebpf/gnet/gn_batch.c prismpath-ebpf/ppt_image.c
- *   gn_batch TABLE.ppt ACTIONS [--empty] [--image-index N]  < frames  > decisions
+ *   gn_batch TABLE.ppt ACTIONS --server-ip A.B.C.D --port N [--empty] [--ring-full] [--image-index N]  < frames  > decisions
  *
- * Input: frames, each a 4 byte little endian length and the frame (Ethernet onwards). Output: one line per
- * frame, written and flushed as it is decided (so the userspace gate can stream through it):
+ * --server-ip and --port are the match target: a frame is the agent protocol only when its IPv4
+ * destination and UDP destination port are these (gn_xdp.h). They default to 0, which no real frame
+ * matches, so they must be set for the policy to see any traffic. Input: frames, each a 4 byte little
+ * endian length and the frame (Ethernet onwards). Output: one line per frame, written and flushed as it is
+ * decided (so the userspace gate can stream through it):
  *   <outcome> <reason> <edge> <cause> <emitted> <request_id> <cmd> <hclass> <arg0> <arg1> <name_len>
- *   <data_len> <handle> <image_index> <src_port>
- * `emitted` is 1 when the frame produced a ring buffer event. */
+ *   <data_len> <handle> <image_index> <src_port> <src_ip>
+ * `emitted` is 1 when the frame produced a ring buffer event. At the end it prints the per-verdict counters
+ * to stderr as `counters <other> <allow> <drop> <malformed>` (GN_CNT_*). */
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -131,15 +135,26 @@ static int load_actions(const uint8_t *bytes, long len)
     return (int)rules;
 }
 
+/* "A.B.C.D" -> host-order u32, as gn_be32 reads it from the wire; 0 on a malformed address. */
+static __u32 parse_ipv4(const char *text)
+{
+    unsigned a, b, c, d;
+    if (sscanf(text, "%u.%u.%u.%u", &a, &b, &c, &d) != 4 || (a | b | c | d) > 255) return 0;
+    return (a << 24) | (b << 16) | (c << 8) | d;
+}
+
 int main(int argc, char **argv)
 {
-    if (argc < 3) { fprintf(stderr, "usage: gn_batch TABLE.ppt ACTIONS [--empty] [--ring-full] [--image-index N]\n"); return 2; }
+    if (argc < 3) { fprintf(stderr, "usage: gn_batch TABLE.ppt ACTIONS --server-ip A.B.C.D --port N "
+                                     "[--empty] [--ring-full] [--image-index N]\n"); return 2; }
     int empty = 0;
-    __u32 image_index = 1;
+    __u32 image_index = 1, match_dst_ip = 0, match_port = 0;
     for (int arg = 3; arg < argc; arg++) {
         if (!strcmp(argv[arg], "--empty")) empty = 1;
         else if (!strcmp(argv[arg], "--ring-full")) ring_fail = 1;
         else if (!strcmp(argv[arg], "--image-index") && arg + 1 < argc) image_index = (__u32)strtoul(argv[++arg], NULL, 10);
+        else if (!strcmp(argv[arg], "--server-ip") && arg + 1 < argc) match_dst_ip = parse_ipv4(argv[++arg]);
+        else if (!strcmp(argv[arg], "--port") && arg + 1 < argc) match_port = (__u32)strtoul(argv[++arg], NULL, 10);
         else { fprintf(stderr, "gn_batch: unknown argument %s\n", argv[arg]); return 2; }
     }
     long table_len, actions_len;
@@ -147,12 +162,16 @@ int main(int argc, char **argv)
     uint8_t *actions = read_file(argv[2], &actions_len);
     Image im; memset(&im, 0, sizeof im);
     if (parse_image_buf(table, table_len, &im) != 0) { fprintf(stderr, "gn_batch: the loader refuses the table\n"); return 3; }
+    /* the match target is always set (even --empty, so the fail-closed case is a configured target with no
+     * policy); the table and loaded flag are set only when not --empty */
+    __u32 zero = 0;
+    struct gn_config *cfg = bpf_map_lookup_elem(&gn_config_map, &zero);
+    cfg->match_dst_ip = match_dst_ip;
+    cfg->match_port = match_port;
     if (!empty) {
         populate(&im);
         int rules = load_actions(actions, actions_len);
         if (rules < 0) { fprintf(stderr, "gn_batch: bad action file\n"); return 3; }
-        __u32 zero = 0;
-        struct gn_config *cfg = bpf_map_lookup_elem(&gn_config_map, &zero);
         cfg->start_node = im.start;
         cfg->image_index = image_index;
         cfg->n_rules = (__u32)rules;
@@ -168,11 +187,19 @@ int main(int argc, char **argv)
         ring_used = 0;
         __u32 outcome = gn_decide(frame, frame + len, &ev);
         const struct gn_event *out = ring_used ? &ring_slot : &ev;
-        printf("%u %u %d %u %d %llu %u %u %u %u %u %u %u %u %u\n", outcome, out->reason, out->edge, out->cause,
+        printf("%u %u %d %u %d %llu %u %u %u %u %u %u %u %u %u %u\n", outcome, out->reason, out->edge, out->cause,
                ring_used, (unsigned long long)out->request_id, out->cmd, out->hclass, out->arg0, out->arg1,
-               out->name_len, out->data_len, out->handle, out->image_index, out->src_port);
+               out->name_len, out->data_len, out->handle, out->image_index, out->src_port, out->src_ip);
         fflush(stdout);
     }
+    __u64 counts[GN_CNT_N] = {0};
+    for (__u32 i = 0; i < GN_CNT_N; i++) {
+        __u64 *slot = bpf_map_lookup_elem(&gn_counts_map, &i);
+        if (slot) counts[i] = *slot;
+    }
+    fprintf(stderr, "counters %llu %llu %llu %llu\n", (unsigned long long)counts[GN_CNT_OTHER],
+            (unsigned long long)counts[GN_CNT_ALLOW], (unsigned long long)counts[GN_CNT_DROP],
+            (unsigned long long)counts[GN_CNT_MALFORMED]);
     free_image(&im);
     free(table); free(actions);
     return 0;

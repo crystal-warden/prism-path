@@ -202,3 +202,24 @@ def decode_listing(body: bytes):
         entries.append((hclass, handle, body[pos:pos + length].decode("utf-8", "replace")))
         pos += length
     return entries
+
+
+# ----------------------------------------------------------------- the status query (client to logger)
+# A request the enforcement point drops gets no reply on the wire, so the client asks the receipt logger
+# what became of it. The query carries only the request id; the client's source address (its LAN identity)
+# tells the logger which client is asking. This lives here, not in the logger, so the client (which must
+# run with only the standard library on the Mac) imports nothing heavier than this module.
+STATUS_QUERY = struct.Struct(">IQ")            # "GNSQ", request id
+STATUS_MAGIC = 0x474E5351
+
+
+def ip_to_u32(text: str) -> int:
+    """Dotted IPv4 -> the host-order u32 the XDP program and the config carry (gn_be32 of the wire bytes)."""
+    parts = [int(part) for part in text.split(".")]
+    if len(parts) != 4 or any(not 0 <= part <= 255 for part in parts):
+        raise ValueError("not an IPv4 address: " + text)
+    return (parts[0] << 24) | (parts[1] << 16) | (parts[2] << 8) | parts[3]
+
+
+def u32_to_ip(value: int) -> str:
+    return "%d.%d.%d.%d" % ((value >> 24) & 255, (value >> 16) & 255, (value >> 8) & 255, value & 255)

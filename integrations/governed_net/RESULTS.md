@@ -1,12 +1,14 @@
 # Governed net: results
 
-*Research example, 2026-11-13, branch `governed-net`. Everything below ran on one machine with no
-privileges. **The kernel was not used.** The XDP decision ran on its userspace path, which is the
-program's own text compiled natively over a shim of the BPF maps, `bpf_loop` and the ring buffer
-(`prismpath-ebpf/gnet/gn_batch.c`), in front of the tool server on UDP loopback. The model is the local
-Gemma (`gemma4`, Gemma 4 31B NVFP4 under vLLM), at temperature 0, with at most 8 steps an episode and 4
-episodes at once. The policy is `policy/net_rules.core.json`, and the causes are the registry's 32, 104,
-106, 107 and 113. No new cause was registered.*
+*Research example. Sections 1 to 5 are the original dedicated-wire phase (2026-11-13). Section 6 is the
+LAN edge layout (2026-11-14, branch `governed-net-lan`): the program on a shared LAN NIC, matching only the
+tool server's address and the agent port, with per-verdict counters, per-client identity and two concurrent
+clients. Everything below ran on one machine with no privileges. **The kernel was not used.** The XDP
+decision ran on its userspace path, which is the program's own text compiled natively over a shim of the
+BPF maps, `bpf_loop` and the ring buffer (`prismpath-ebpf/gnet/gn_batch.c`), in front of the tool server on
+UDP loopback. The model is the local Gemma (`gemma4`, Gemma 4 31B NVFP4 under vLLM), at temperature 0, with
+at most 8 steps an episode. The policy is `policy/net_rules.core.json`, and the causes are the registry's
+32, 104, 106, 107 and 113. No new cause was registered.*
 
 ## 1. What was built
 
@@ -174,3 +176,88 @@ python -m integrations.governed_net.adversary_net live --out /tmp/gn-live --conc
 The runs above kept their directories in the session scratch directory: each `results.json`, every
 case's world, and the `xdp/` and `server/` runs. They are not committed, since they hold throwaway
 workspaces and test keys.
+
+## 6. LAN edge layout
+
+The program now runs on the Proxmox host's own LAN NIC, which the whole household crosses, instead of a
+dedicated wire. Three things changed and are measured here.
+
+**Matching and coexistence.** A frame is the agent protocol only when its IPv4 destination is the
+configured server address and its UDP destination port is the configured port (both set by the loader in
+a config map); everything else returns before the payload is read and passes. The differential was
+extended with a household-traffic part (DNS, mDNS, DHCP, NTP, QUIC, SSDP, ARP, IPv6, a VLAN tag, SSH/HTTPS
+TCP shapes, the same agent port to a different host, and fragments) that must all pass:
+
+| Part | Frames | Disagreements | Counters agree |
+|------|------:|------:|:--:|
+| structured | 28,387 | 0 | yes |
+| household | 17 | 0 | yes |
+| random requests | 100,000 | 0 | yes |
+| mutated frames | 100,000 | 0 | yes |
+| **total** (seed 777) | **228,404** | **0** | **4/4** |
+
+Every household shape passes as `other`; the same agent port to another host passes while the configured
+server at that port is decided. Fail closed held: with empty tables 0 of 28,404 frames were allowed, with
+a full ring 0 were allowed, and other traffic was unchanged.
+
+**Counters.** The program keeps four per-verdict counters (passed-other, agent allowed, agent dropped,
+malformed). On every part of the differential the counters the program kept equal the Python tally of the
+same frames (the table above). The loader prints them (`gn_loader.py stats`), and `coexist.sh` reads them
+beside ping RTTs so the owner can compare the LAN with the program detached and attached.
+
+**Two clients at once.** Two clients with distinct LAN addresses drove one enforcement point and one tool
+server concurrently (`adversary_net two-client`). Per-client scores:
+
+| | client 127.0.0.1 | client 127.0.0.2 |
+|---|---:|---:|
+| XDP receipts (allow / refuse / escalate) | 6 (4 / 1 / 1) | 6 (4 / 1 / 1) |
+| server executed | 4 | 4 |
+| out-of-prefix findings | 0 | 0 |
+
+Totals: out of policy executed **0**, executed without an XDP allow receipt **0**, shared-request-id
+replay findings **0** (both clients sent request id 0x5151; the server keys replay by source and id, so
+neither was a replay), both clients have receipts, both runs verified and replayed identically through the
+Lean oracle, counters `other=0 allow=8 drop=4 malformed=0`. The receipts keep per-client identity by the
+client's source address (kept beside the signed receipt, which decides only the reading's seven integers).
+
+**The probes still pass end to end** behind the gate, with the match target set and the server's
+source-prefix backstop on (127.0.0.0/8 standing in for the LAN): 35 cases, all met their expected outcome,
+0 out of policy executed, 0 executed without an XDP allow receipt, 35/35 runs verified and replayed.
+
+**The bypass, as a concrete instance.** The Mac reaches the server's network over a mesh VPN (a `utun`
+interface) because a subnet route is advertised there, so a plain socket would never cross `<LAN_IF>`. The
+client therefore pins its agent socket to the LAN interface (`IP_BOUND_IF` on macOS, `SO_BINDTODEVICE` on
+Linux) and binds its source to that interface's LAN address, and refuses to run if the chosen interface
+has no address in `--lan-net`. The server's source-prefix check is the backstop: a datagram arriving from
+a tunnel address is a `source-outside-lan` finding and is never run (`test_server_e2e`), and the host
+firewall rule in SETUP A.4 makes that a drop. The model endpoint stays the control plane: it is reached
+through an SSH local forward to the Mac's localhost, and the model server's bind is not changed.
+
+**The no-install loader.** The enforcement host (x86_64) has clang, python3 and iproute2 but no bpftool
+and no libbpf; the build machine is aarch64. A static x86_64 cross build of the C loader was not feasible
+here (no x86_64 sysroot or static libbpf without installing packages), so the no-install path is a pure
+standard-library ctypes loader, `gn_loader.py`, run with the host's python3: iproute2 loads and attaches
+the pinned object (`gn_xdp.pin.bpf.c`, every map `pinning = LIBBPF_PIN_BY_NAME`), the kernel verifier runs
+inside iproute2's libbpf, and the loader fills the pinned maps, reads the counters and drains the ring
+buffer through plain `bpf(2)` syscalls. Proven here without privilege: the pinned object builds and passes
+`verifier_budget.py` with the same budget as the unpinned one (643 instructions, 136-byte frame); the
+loader imports, parses and refuses bad arguments, and its `--self-test` checks its bpf_attr packing, its
+ring-buffer record decoder, its `.ppt` and `.actions` parsers and its per-CPU counter summation. Not
+proven here: the privileged `bpf(2)` calls, the ring-buffer mmap wiring, and the iproute2 pin-and-attach,
+all first exercised by the owner on the host (SETUP A).
+
+**What is still not shown** (beyond section 5): the kernel, the verifier, the JIT and the real driver on
+the shared NIC; the coexistence RTT comparison on the real LAN; the host firewall rule; and the interface
+pinning on the real Mac (the interface-address helpers are unit-tested from sample `ifconfig`/`ip` output,
+and the socket options are set but not exercised against a real `utun`). The two-client run is on loopback,
+where each client is a distinct `127.0.0.0/8` address; on the wire they are distinct LAN hosts.
+
+### Reproduce (LAN edge)
+
+```sh
+python -m integrations.governed_net.differential --random 200000 --seed 777 --out /tmp/gn-diff
+python -m integrations.governed_net.adversary_net probes --out /tmp/gn-probes
+python -m integrations.governed_net.adversary_net two-client --out /tmp/gn-two
+python prismpath-ebpf/gnet/gn_loader.py --self-test
+make -C prismpath-ebpf gnet        # builds gn_xdp.bpf.o and the pinned gn_xdp.pin.bpf.o
+```

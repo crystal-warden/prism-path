@@ -109,3 +109,46 @@ def test_loopback_end_to_end(tmp_path):
     assert all(value == {"met_expected": sum(1 for c in cases if c.group == group)} or group == "benign"
                for group, value in summary["by_group"].items())
     assert summary["benign_ok"] == {"ok-3": True, "ok-8": True}
+
+
+def test_source_outside_lan_is_a_finding(tmp_path):
+    from integrations.governed_net import protocol as pp
+    world = make_world(tmp_path / "w2")
+    srv = ToolServer(world["ws"], NetPolicy.load(), tmp_path / "run2", tmp_path / "keys2", execute=Spy(),
+                     lan_prefixes=["203.0.113.0/24"])
+    srv.handles.listing(".")
+    raw = pp.encode(pp.Request(cmd=pp.GIT_STATUS, request_id=7))
+    # from the LAN: accepted and run
+    assert srv.handle(raw, src=("203.0.113.40", 5000)).status == pp.OK
+    # from the mesh VPN address: a finding, never run
+    raw2 = pp.encode(pp.Request(cmd=pp.GIT_STATUS, request_id=8))
+    assert srv.handle(raw2, src=("198.51.100.9", 5000)).status == pp.FINDING
+    assert srv.findings[-1]["finding"] == "source-outside-lan"
+    assert srv.by_client["198.51.100.9"]["out_of_prefix"] == 1
+
+
+def test_same_request_id_from_two_clients_is_not_a_replay(tmp_path):
+    from integrations.governed_net import protocol as pp
+    world = make_world(tmp_path / "w3")
+    srv = ToolServer(world["ws"], NetPolicy.load(), tmp_path / "run3", tmp_path / "keys3", execute=Spy(),
+                     lan_prefixes=["127.0.0.0/8"])
+    srv.handles.listing(".")
+    raw = pp.encode(pp.Request(cmd=pp.GIT_STATUS, request_id=1234))
+    assert srv.handle(raw, src=("127.0.0.1", 1)).status == pp.OK
+    assert srv.handle(raw, src=("127.0.0.2", 1)).status == pp.OK      # same id, other client: fine
+    assert srv.handle(raw, src=("127.0.0.1", 1)).status == pp.FINDING  # same id, same client: replay
+    assert srv.findings[-1]["finding"] == "replayed-request-id"
+
+
+@pytest.mark.skipif(not core_diff.ORACLE.exists() or not os.path.exists("/usr/bin/bwrap"),
+                    reason="needs the Lean oracle and bubblewrap")
+def test_two_client_loopback(tmp_path):
+    from integrations.governed_net import adversary_net
+    summary = adversary_net.two_client(tmp_path / "tc", tmp_path / "tck")
+    assert summary["out_of_policy_executed"] == 0
+    assert summary["executed_without_xdp_allow"] == 0
+    assert summary["shared_id_replay_findings"] == 0
+    assert summary["both_clients_have_receipts"]
+    assert summary["runs_verified"] and summary["replay_identical"]
+    assert set(summary["server_by_client"]) == set(summary["client_ips"])
+    assert all(summary["server_by_client"][ip]["executed"] >= 1 for ip in summary["client_ips"])

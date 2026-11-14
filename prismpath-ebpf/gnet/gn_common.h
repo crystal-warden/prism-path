@@ -6,6 +6,15 @@
 
 #include <linux/types.h>
 
+/* Map pinning marker. Empty by default, so the ordinary object (gn_xdp.bpf.o) is byte-identical to a build
+ * without it and the libbpf C loader is unaffected. The no-install deployment builds gn_xdp.pin.bpf.c,
+ * which defines GN_PIN to `__uint(pinning, LIBBPF_PIN_BY_NAME);` so iproute2 pins every map under
+ * /sys/fs/bpf/<if>/ where the pure-Python loader (gn_loader.py) can reach it. The userspace shim leaves it
+ * empty. A map that uses it writes `GN_PIN` as its last member. */
+#ifndef GN_PIN
+#define GN_PIN
+#endif
+
 #define GN_PORT        47011u
 #define GN_MAGIC       0x474E4554u   /* "GNET" */
 #define GN_VERSION     1u
@@ -15,6 +24,15 @@
 #define GN_CMD_MAX     11u
 #define GN_FIELDS      7u            /* version cmd hclass arg0 arg1 name_len data_len (protocol.SCHEMA) */
 #define GN_MAX_RULES   64u
+
+/* Per-verdict counters, so the owner can see the program coexist on a shared LAN port: how much traffic
+ * passed untouched against how much was the agent protocol and what became of it. The loader prints them
+ * (gn_loader stats / on exit). PERCPU in the kernel, summed by the loader; one slot in the userspace shim. */
+#define GN_CNT_OTHER     0u          /* not the agent protocol (another host, port, ethertype, fragment): passed */
+#define GN_CNT_ALLOW     1u          /* an agent request the policy allowed: passed to the tool server */
+#define GN_CNT_DROP      2u          /* an agent request refused, escalated, with no policy, or unloggable: dropped */
+#define GN_CNT_MALFORMED 3u          /* an agent request the strict reader refused: dropped */
+#define GN_CNT_N         4u
 
 /* commands (protocol.py) */
 #define GN_LIST 1u
@@ -54,10 +72,17 @@
 #define GN_BAD_IP_HEADER 22u
 
 struct gn_config {
-    __u32 loaded;        /* 0 until the loader has written the whole table: every request is then dropped */
+    __u32 loaded;        /* 0 until the loader has written the whole table: every MATCHED request is then dropped */
     __u32 start_node;
     __u32 image_index;   /* which signed image the tables hold (the logger maps it to its sha256) */
     __u32 n_rules;
+    /* The deployment target, set by the loader (gn_loader run --server-ip --port). A frame is the agent
+     * protocol only when its IPv4 DESTINATION is match_dst_ip and its UDP destination port is match_port;
+     * every other frame on this shared LAN port passes untouched. With the empty maps of a bare `ip link
+     * ... obj` attach these are 0, which no real frame matches, so a bare attach is a pass-through no-op
+     * and does not disturb the household LAN until the loader has set a target and loaded the policy. */
+    __u32 match_dst_ip;  /* host order; the tool server's IPv4 address on the LAN */
+    __u32 match_port;    /* the agent UDP destination port (0..65535) */
 };
 
 struct gn_action {

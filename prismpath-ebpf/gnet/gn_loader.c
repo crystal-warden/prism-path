@@ -3,11 +3,11 @@
 /* gn_loader.c: load, fill, attach and read the governed net XDP program (needs CAP_BPF and CAP_NET_ADMIN;
  * integrations/governed_net/SETUP.md says when and how the owner runs it).
  *
- *   gn_loader test-run OBJ TABLE.ppt ACTIONS [--image-index N]  < frames  > decisions
- *       Loads the program (the kernel verifier runs here), fills its maps, and runs every frame through
- *       BPF_PROG_TEST_RUN, printing gn_batch's line format so the two outputs diff directly. Attaches to
- *       nothing.
- *   gn_loader run IFNAME OBJ TABLE.ppt ACTIONS [--generic] [--image-index N]
+ *   gn_loader test-run OBJ TABLE.ppt ACTIONS --server-ip A.B.C.D --port N [--image-index N]  < frames  > decisions
+ *       Loads the program (the kernel verifier runs here), fills its maps (including the match target, so
+ *       the frames to that address and port are decided), and runs every frame through BPF_PROG_TEST_RUN,
+ *       printing gn_batch's line format so the two outputs diff directly. Attaches to nothing.
+ *   gn_loader run IFNAME OBJ TABLE.ppt ACTIONS --server-ip A.B.C.D --port N [--generic] [--image-index N]
  *       Loads, fills (gn_config_map.loaded written last), attaches in native (driver) mode, or generic with
  *       --generic, then prints every ring buffer event as one hex line (struct gn_event) on standard output
  *       for receipt_logger.py, until SIGINT or SIGTERM, when it DETACHES and exits. If the logger goes away
@@ -56,8 +56,19 @@ static void put(int fd, uint32_t key, const void *value, const char *what)
     }
 }
 
-/* The table and the actions into the maps; `loaded` last, so a packet never sees half a table. */
-static void fill(struct bpf_object *obj, const char *table_path, const char *actions_path, uint32_t image_index)
+/* "A.B.C.D" -> host-order u32, as gn_be32 reads it from the wire; 0 on a malformed address. */
+static uint32_t parse_ipv4(const char *text)
+{
+    unsigned a, b, c, d;
+    if (!text || sscanf(text, "%u.%u.%u.%u", &a, &b, &c, &d) != 4 || (a | b | c | d) > 255) return 0;
+    return (a << 24) | (b << 16) | (c << 8) | d;
+}
+
+/* The table and the actions into the maps; `loaded` last, so a packet never sees half a table. The match
+ * target (server IP and agent port) is set here too: with it unset no frame matches and the program is a
+ * pass-through, so it must be given for the policy to see any traffic. */
+static void fill(struct bpf_object *obj, const char *table_path, const char *actions_path, uint32_t image_index,
+                 uint32_t match_dst_ip, uint32_t match_port)
 {
     long table_len, actions_len;
     uint8_t *table = read_file(table_path, &table_len);
@@ -77,7 +88,7 @@ static void fill(struct bpf_object *obj, const char *table_path, const char *act
         struct gn_action action = {actions[40 + 4 * rule], actions[41 + 4 * rule], rd16(actions + 42 + 4 * rule)};
         put(acts, rule, &action, "gn_action_map");
     }
-    struct gn_config config = {1, im.start, image_index, rules};
+    struct gn_config config = {1, im.start, image_index, rules, match_dst_ip, match_port};
     put(cfg, 0, &config, "gn_config_map");
     free_image(&im);
     free(table); free(actions);
@@ -103,11 +114,12 @@ static int keep_event(void *ctx, void *data, size_t len)
     return 0;
 }
 
-static int test_run(const char *obj_path, const char *table, const char *actions, uint32_t image_index)
+static int test_run(const char *obj_path, const char *table, const char *actions, uint32_t image_index,
+                    uint32_t match_dst_ip, uint32_t match_port)
 {
     struct bpf_program *prog;
     struct bpf_object *obj = open_load(obj_path, &prog);
-    fill(obj, table, actions, image_index);
+    fill(obj, table, actions, image_index, match_dst_ip, match_port);
     struct ring_buffer *ring = ring_buffer__new(map_fd(obj, "gn_events"), keep_event, NULL, NULL);
     if (!ring) { fprintf(stderr, "gn_loader: no ring buffer\n"); return 3; }
     static uint8_t frame[65536];
@@ -130,9 +142,9 @@ static int test_run(const char *obj_path, const char *table, const char *actions
         /* the program's return value must be what its event says: pass exactly for other traffic and allows */
         int passed = opts.retval == XDP_PASS;
         if (passed != (outcome == GN_OTHER || outcome == GN_ALLOW)) mismatches++;
-        printf("%u %u %d %u %d %llu %u %u %u %u %u %u %u %u %u\n", outcome, ev.reason, have_event ? ev.edge : -1,
+        printf("%u %u %d %u %d %llu %u %u %u %u %u %u %u %u %u %u\n", outcome, ev.reason, have_event ? ev.edge : -1,
                ev.cause, have_event, (unsigned long long)ev.request_id, ev.cmd, ev.hclass, ev.arg0, ev.arg1,
-               ev.name_len, ev.data_len, ev.handle, ev.image_index, ev.src_port);
+               ev.name_len, ev.data_len, ev.handle, ev.image_index, ev.src_port, ev.src_ip);
     }
     ring_buffer__free(ring);
     bpf_object__close(obj);
@@ -152,13 +164,13 @@ static int print_event(void *ctx, void *data, size_t len)
 }
 
 static int run(const char *ifname, const char *obj_path, const char *table, const char *actions, int generic,
-               uint32_t image_index)
+               uint32_t image_index, uint32_t match_dst_ip, uint32_t match_port)
 {
     unsigned ifindex = if_nametoindex(ifname);
     if (!ifindex) { fprintf(stderr, "gn_loader: no interface %s\n", ifname); return 3; }
     struct bpf_program *prog;
     struct bpf_object *obj = open_load(obj_path, &prog);
-    fill(obj, table, actions, image_index);
+    fill(obj, table, actions, image_index, match_dst_ip, match_port);
     struct ring_buffer *ring = ring_buffer__new(map_fd(obj, "gn_events"), print_event, NULL, NULL);
     if (!ring) { fprintf(stderr, "gn_loader: no ring buffer\n"); return 3; }
     uint32_t flags = generic ? XDP_FLAGS_SKB_MODE : XDP_FLAGS_DRV_MODE;
@@ -178,7 +190,7 @@ static int run(const char *ifname, const char *obj_path, const char *table, cons
         /* the receipt logger is gone: a decision now could not be receipted, so stop allowing any. Clear
          * `loaded` (every request to the port is then dropped), leave the program attached so the port does
          * not fall open to the tool server, and say how to detach. */
-        struct gn_config closed = {0, 0, image_index, 0};
+        struct gn_config closed = {0, 0, image_index, 0, match_dst_ip, match_port};
         put(map_fd(obj, "gn_config_map"), 0, &closed, "gn_config_map");
         fprintf(stderr, "gn_loader: the receipt logger is gone; every request to the port is now dropped and the "
                         "program is left attached. Detach with: ip link set dev %s xdp off\n", ifname);
@@ -193,16 +205,20 @@ static int run(const char *ifname, const char *obj_path, const char *table, cons
 
 int main(int argc, char **argv)
 {
-    uint32_t image_index = 1;
+    uint32_t image_index = 1, match_dst_ip = 0, match_port = GN_PORT;
     int generic = 0, positional = 0;
     const char *args[6] = {0};
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--image-index") && i + 1 < argc) image_index = (uint32_t)strtoul(argv[++i], NULL, 10);
+        else if (!strcmp(argv[i], "--server-ip") && i + 1 < argc) match_dst_ip = parse_ipv4(argv[++i]);
+        else if (!strcmp(argv[i], "--port") && i + 1 < argc) match_port = (uint32_t)strtoul(argv[++i], NULL, 10);
         else if (!strcmp(argv[i], "--generic")) generic = 1;
         else if (positional < 6) args[positional++] = argv[i];
     }
-    if (positional == 4 && !strcmp(args[0], "test-run")) return test_run(args[1], args[2], args[3], image_index);
-    if (positional == 5 && !strcmp(args[0], "run")) return run(args[1], args[2], args[3], args[4], generic, image_index);
+    if (positional == 4 && !strcmp(args[0], "test-run"))
+        return test_run(args[1], args[2], args[3], image_index, match_dst_ip, match_port);
+    if (positional == 5 && !strcmp(args[0], "run"))
+        return run(args[1], args[2], args[3], args[4], generic, image_index, match_dst_ip, match_port);
     if (positional == 2 && !strcmp(args[0], "detach")) {
         unsigned ifindex = if_nametoindex(args[1]);
         if (!ifindex) { fprintf(stderr, "gn_loader: no interface %s\n", args[1]); return 3; }
@@ -210,8 +226,8 @@ int main(int argc, char **argv)
         if (rc) fprintf(stderr, "gn_loader: detach: %s\n", strerror(-rc));
         return rc ? 3 : 0;
     }
-    fprintf(stderr, "usage: gn_loader test-run OBJ TABLE.ppt ACTIONS < frames\n"
-                    "       gn_loader run IFNAME OBJ TABLE.ppt ACTIONS [--generic] [--image-index N]\n"
+    fprintf(stderr, "usage: gn_loader test-run OBJ TABLE.ppt ACTIONS --server-ip A.B.C.D --port N < frames\n"
+                    "       gn_loader run IFNAME OBJ TABLE.ppt ACTIONS --server-ip A.B.C.D --port N [--generic] [--image-index N]\n"
                     "       gn_loader detach IFNAME\n");
     return 2;
 }

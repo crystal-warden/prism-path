@@ -20,6 +20,7 @@
 #include <bpf/bpf_helpers.h>
 
 #include "../ppt_common.h"
+#include "gn_common.h"      /* defines GN_PIN (empty by default; set by gn_xdp.pin.bpf.c) before the maps */
 
 #ifndef SEC
 #define SEC(NAME) __attribute__((section(NAME), used))
@@ -30,18 +31,18 @@
 
 /* the table image, single bank, as ppt_xdp.bpf.c declares it */
 struct { __uint(type, BPF_MAP_TYPE_ARRAY); __type(key, __u32); __type(value, struct ppt_atom);
-         __uint(max_entries, MAX_ATOMS); } atoms_map SEC(".maps");
+         __uint(max_entries, MAX_ATOMS); GN_PIN } atoms_map SEC(".maps");
 struct { __uint(type, BPF_MAP_TYPE_ARRAY); __type(key, __u32); __type(value, struct ppt_node);
-         __uint(max_entries, MAX_NODES); } nodes_map SEC(".maps");
+         __uint(max_entries, MAX_NODES); GN_PIN } nodes_map SEC(".maps");
 struct { __uint(type, BPF_MAP_TYPE_ARRAY); __type(key, __u32); __type(value, struct ppt_edge);
-         __uint(max_entries, MAX_EDGES); } edges_map SEC(".maps");
+         __uint(max_entries, MAX_EDGES); GN_PIN } edges_map SEC(".maps");
 struct { __uint(type, BPF_MAP_TYPE_ARRAY); __type(key, __u32); __type(value, __u16);
-         __uint(max_entries, MAX_PROG_WORDS); } prog_map SEC(".maps");
+         __uint(max_entries, MAX_PROG_WORDS); GN_PIN } prog_map SEC(".maps");
 
 #include "../ppt_eval_bpf.h"
 #include "gn_maps.h"
 
-struct { __uint(type, BPF_MAP_TYPE_RINGBUF); __uint(max_entries, 1 << 20); } gn_events SEC(".maps");
+struct { __uint(type, BPF_MAP_TYPE_RINGBUF); __uint(max_entries, 1 << 20); GN_PIN } gn_events SEC(".maps");
 
 #define GN_EMIT(ev) bpf_ringbuf_output(&gn_events, (ev), sizeof(struct gn_event), 0)
 

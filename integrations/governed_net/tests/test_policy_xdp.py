@@ -153,3 +153,40 @@ def test_toolchain_write_is_dropped_with_its_cause(built):
     raw = p.encode(p.Request(cmd=p.WRITE, request_id=1, hclass=p.H_TC_FILE, handle=1, data=b"x"))
     (row,) = xdp_userspace.batch(binary, build["ppt"], build["actions"], [fr.build(raw)])
     assert (row.outcome, row.cause) == (fr.DROP_POLICY, causes.code("agent:toolchain-write"))
+
+
+def test_household_traffic_all_passes(built):
+    policy, build, binary = built
+    frames = differential.household()
+    rows = xdp_userspace.batch(binary, build["ppt"], build["actions"], frames)
+    assert [row.outcome for row in rows] == [fr.OTHER] * len(frames)
+    assert all(row.emitted == 0 for row in rows)
+
+
+def test_same_port_other_host_passes_but_server_host_is_matched(built):
+    policy, build, binary = built
+    good = p.encode(p.Request(cmd=p.READ, request_id=1, hclass=p.H_WS_FILE, handle=9, arg1=100))
+    other_host = fr.build(good, dst="192.0.2.99")           # the agent port, different host
+    the_server = fr.build(good, dst=fr.SERVER_IP)           # the configured server and port
+    other_port = fr.build(good, dport=p.PORT + 1)           # the server host, different port
+    rows = xdp_userspace.batch(binary, build["ppt"], build["actions"], [other_host, the_server, other_port])
+    assert rows[0].outcome == fr.OTHER                       # another host: passed
+    assert rows[1].outcome == fr.ALLOW                       # the server: decided and allowed
+    assert rows[2].outcome == fr.OTHER                       # another port: passed
+
+
+def test_counters_agree_with_python(built):
+    policy, build, binary = built
+    frames = differential.structured()[:4000] + differential.household()
+    got = []
+    xdp_userspace.batch(binary, build["ppt"], build["actions"], frames, counters=got)
+    assert got and got[0] == differential.tally(policy, frames)
+
+
+def test_full_differential_including_household(built):
+    policy, build, binary = built
+    parts = differential.corpus(4000, seed=11)
+    assert "household" in parts
+    for name, frames in parts.items():
+        counts = differential.compare(policy, frames, xdp_userspace.batch(binary, build["ppt"], build["actions"], frames))
+        assert counts["disagree"] == 0, (name, counts["first"])
