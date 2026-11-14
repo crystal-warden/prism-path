@@ -11,7 +11,7 @@
 # against how much was the agent protocol (allow/drop/malformed).
 #
 #   coexist.sh <ping-target> [<ping-target> ...]            just the RTTs (detached baseline)
-#   MAPS_DIR=/sys/fs/bpf/<if> coexist.sh <target> ...        RTTs + counters (attached; reads the pinned maps)
+#   MAPS_DIR=/sys/fs/bpf/tc/globals coexist.sh <target> ...        RTTs + counters (attached; reads the pinned maps)
 #
 # MAPS_DIR, when set, must be the bpffs directory iproute2 pinned the maps under; reading the counters
 # needs the gn_loader.py in this directory and python3. It only READS; it changes nothing.
@@ -21,7 +21,7 @@ COUNT="${COUNT:-10}"
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 
 if [ "$#" -lt 1 ]; then
-    echo "usage: [MAPS_DIR=/sys/fs/bpf/<if>] [COUNT=10] $0 <ping-target> [<ping-target> ...]" >&2
+    echo "usage: [MAPS_DIR=/sys/fs/bpf/tc/globals] [COUNT=10] $0 <ping-target> [<ping-target> ...]" >&2
     exit 2
 fi
 
@@ -44,5 +44,5 @@ if [ "${MAPS_DIR:-}" != "" ]; then
         echo "  no pinned maps at $MAPS_DIR (is the program attached with the pinned object?)" >&2
     fi
 else
-    echo "(set MAPS_DIR=/sys/fs/bpf/<if> to also read the counters when the program is attached)"
+    echo "(set MAPS_DIR=/sys/fs/bpf/tc/globals to also read the counters when the program is attached)"
 fi

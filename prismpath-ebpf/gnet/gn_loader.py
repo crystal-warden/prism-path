@@ -10,8 +10,8 @@ and the attach to the host's own iproute2:
 
   * `ip link set dev <IF> xdpdrv obj gn_xdp.pin.bpf.o sec xdp` loads the program (the kernel verifier runs
     inside iproute2's libbpf) and, because that object declares every map `pinning = LIBBPF_PIN_BY_NAME`,
-    pins the maps under /sys/fs/bpf/<IF>/ where this tool can reach them;
-  * `gn_loader.py fill  --maps-dir /sys/fs/bpf/<IF> --table T.ppt --actions A --server-ip IP --port N`
+    pins the maps under /sys/fs/bpf/tc/globals where this tool can reach them;
+  * `gn_loader.py fill  --maps-dir /sys/fs/bpf/tc/globals --table T.ppt --actions A --server-ip IP --port N`
     writes the table, the actions and the match target into the pinned maps, setting `loaded` last;
   * `gn_loader.py events --maps-dir ...` consumes the pinned ring buffer and prints one hex line per
     decision (struct gn_event), exactly the stdout the C loader's `run` prints, for receipt_logger.py;
@@ -261,16 +261,33 @@ def consume_events(maps_dir):
 
 
 # ----------------------------------------------------------------- iproute2 (load / attach / detach)
+# iproute2 pins maps marked LIBBPF_PIN_BY_NAME in its shared globals directory, whatever the interface
+# (seen on the first attach, 2026-11-14), so map names must not collide with another program's there.
+PIN_DIR = "/sys/fs/bpf/tc/globals"
+
 def attach(ifname, obj, generic):
     mode = "xdpgeneric" if generic else "xdpdrv"
     subprocess.run(["ip", "link", "set", "dev", ifname, mode, "obj", obj, "sec", "xdp"], check=True)
-    sys.stderr.write("gn_loader.py: attached %s to %s (%s); maps pin under /sys/fs/bpf/%s/\n"
-                     % (obj, ifname, mode, ifname))
+    sys.stderr.write("gn_loader.py: attached %s to %s (%s); iproute2 pins the maps under %s/\n"
+                     % (obj, ifname, mode, PIN_DIR))
+
+
+# Every map the pinned object declares. iproute2 leaves pins behind on detach, and a later attach would
+# reuse them with the old target and policy loaded, so detach removes them.
+PINNED_MAPS = ("gn_config_map", "gn_action_map", "gn_counts_map", "gn_events",
+               "atoms_map", "nodes_map", "edges_map", "prog_map", "regs_map")
 
 
 def detach(ifname):
     subprocess.run(["ip", "link", "set", "dev", ifname, "xdp", "off"], check=True)
-    sys.stderr.write("gn_loader.py: detached from %s\n" % ifname)
+    removed = 0
+    for name in PINNED_MAPS:
+        try:
+            os.unlink(os.path.join(PIN_DIR, name))
+            removed += 1
+        except FileNotFoundError:
+            pass
+    sys.stderr.write("gn_loader.py: detached from %s; removed %d pinned maps from %s/\n" % (ifname, removed, PIN_DIR))
 
 
 # ----------------------------------------------------------------- the self test (no privilege)

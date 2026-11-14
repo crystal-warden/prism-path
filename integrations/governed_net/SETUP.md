@@ -99,7 +99,7 @@ prismpath-ebpf/gnet/coexist.sh <firewall-ip> <SERVER_ADDR>        # RTTs, detach
 ```
 
 **HOST CHANGE (`<LAN_IF>`): attach.** Loading the pinned object attaches the program and pins the maps
-under `/sys/fs/bpf/<LAN_IF>/`:
+under `/sys/fs/bpf/tc/globals`:
 
 ```sh
 sudo python3 prismpath-ebpf/gnet/gn_loader.py attach <LAN_IF> prismpath-ebpf/gnet/gn_xdp.pin.bpf.o
@@ -111,14 +111,14 @@ Until the maps are filled, `match_dst_ip` is 0, so **nothing matches and the who
 reloads its XDP path:
 
 ```sh
-MAPS_DIR=/sys/fs/bpf/<LAN_IF> prismpath-ebpf/gnet/coexist.sh <firewall-ip> <SERVER_ADDR>
+MAPS_DIR=/sys/fs/bpf/tc/globals prismpath-ebpf/gnet/coexist.sh <firewall-ip> <SERVER_ADDR>
 ```
 
 The RTTs should match the baseline, and the counters should be all `other` so far. Then set the target and
 the policy (after this, a matched request with no policy would be dropped; the fill sets both together):
 
 ```sh
-sudo python3 prismpath-ebpf/gnet/gn_loader.py fill --maps-dir /sys/fs/bpf/<LAN_IF> \
+sudo python3 prismpath-ebpf/gnet/gn_loader.py fill --maps-dir /sys/fs/bpf/tc/globals \
      --table build/net_rules.ppt --actions build/net_rules.actions --server-ip <SERVER_ADDR> --port <AGENT_PORT>
 ```
 
@@ -153,7 +153,7 @@ sudo nft add rule inet gnet input udp dport <AGENT_PORT> ip saddr != <LAN_NET> d
 Drain the ring buffer into the receipt logger (on the host, or piped to a machine with the repository):
 
 ```sh
-sudo python3 prismpath-ebpf/gnet/gn_loader.py events --maps-dir /sys/fs/bpf/<LAN_IF> \
+sudo python3 prismpath-ebpf/gnet/gn_loader.py events --maps-dir /sys/fs/bpf/tc/globals \
   | python3 -m integrations.governed_net.receipt_logger --run /tmp/gnet-run/xdp --keys /tmp/gnet-keys \
        --status-bind <SERVER_ADDR>
 ```
