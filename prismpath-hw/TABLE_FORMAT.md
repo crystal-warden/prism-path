@@ -69,16 +69,34 @@ header (28 bytes):
   u16  visits_idx   field register auto-written with the node's visits (0xFFFF: none)
   u16  max_steps    engine parity, default 25
   u16  max_stack    deepest program stack use (RTL sizing; compiler-computed)
-  u16  flags        bit0 COLORS: a per-node color section is appended (see below); else 0
+  u8   flags        low byte of the word at offset 26; bits below, other bits 0
+  u8   safe_node    high byte: the signed fail-safe node index (0 = undeclared, the reader
+                    falls back to the last-node convention); must be < n_nodes
 
 atoms  n_atoms × 8B:  u16 field_idx, u8 op, u8 const_type, i32 const_val
 nodes  n_nodes × 4B:  u16 edge_off, u16 edge_cnt          (edge_cnt 0 = terminal)
 edges  n_edges × 6B:  u16 target, u16 prog_off, u16 prog_cnt
 prog   prog_len × u16
-colors n_nodes × u16  ONLY when flags.COLORS: a 6-bit LED color per node. Additive: a flow
-                      with no color prose sets flags=0 and omits the section, so it stays
-                      byte identical to a pre-color build (the frozen corpus is untouched).
+attrs  n_nodes × u16  ONLY when flags.NODE_ATTR: a per-node attribute the substrate gives a
+                      meaning (an LED color in the fabric, a verdict or mark in the kernel, a
+                      label in software). Additive: a flow with no attributes sets the bit to 0
+                      and omits the section, so it stays byte identical to a pre-attribute
+                      build (the frozen corpus is untouched).
+names  n_nodes × u32  ONLY when flags.NODE_NAMES, after attrs: the FNV-1a-32 hash of each node's
+                      name, the signed identities a by-name hot-swap migration matches.
 ```
+
+Flag bits (`prismpath-ebpf/ppt_common.h`, `prismpath/hotswap/policy_pack.py`):
+
+| bit | name | meaning |
+|---|---|---|
+| 0x01 | NODE_ATTR (alias COLORS) | the attrs section is appended |
+| 0x02 | MIGRATE_BY_NAME | a resident-selector hot-swap re-resolves the current node by name, else it resets to `safe_node`; meaningful only when `safe_node` is declared |
+| 0x04 | NODE_NAMES | the names section is appended |
+| 0x08 | STATEFUL | the policy declares the resident-FSM (stateful) profile; absent is the stateless base, and the evaluator is the same either way |
+
+This word was documented as a single `u16 flags` with one bit until 2026-11-14, when a scope study of
+cross-language format contracts found every reader and the compiler already split it as above.
 
 Atom ops: `EQ=0 NE=1 LT=2 LE=3 GT=4 GE=5 TRUTHY=6`. Atoms are deduplicated flow-wide; in
 fabric each atom is one comparator against one field register, all evaluated in parallel.
