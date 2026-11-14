@@ -10,20 +10,23 @@ with its semantic fields zeroed (status disabled, lock "none", harm 0, class unk
   2. if floor(r) is not allow, decide(r) == floor(r), kind and cause: no weakening, no re-attribution;
   3. if floor(r) is allow, decide(r) is allow, refuse semantic:harm or escalate semantic:intent-mismatch;
   4. if r's status is disabled or its lock is not the signed one, decide(r) == floor(r);
-  5. decide(r) is what `owner_rules.expected_call` says (the semantic table read a second time);
+  5. decide(r) is what `owner_rules.expected_call` says (the semantic table and the probing rule read a
+     second time);
   6. the Lean oracle (`core-oracle --batch`) gives the reference's verdict on every r and every zeroed r.
 
 THE FIELD SPACE. The floor's eleven fields are enumerated in full, as the harness's own exhaustive check
 does (7 x 4 x 6 x 7 x 3 x 2^5 = 112,896). Of the semantic fields, `intent_class` is enumerated in full
 (7 values) and `semantic_status` too (2). `harm_bp` (0..10000), `intent_margin_bp` (0..10000) and
-`semantic_lock` (any string) are enumerated by their classes, and that is exhaustive, not a sample,
+`semantic_lock` (any string) and `probing_count` (0..1000) are enumerated by their classes, and that is exhaustive, not a sample,
 because the check first AUDITS the image: it walks every condition of every rule and requires that the
-only atoms on those fields are `harm_bp >= T_h`, `intent_margin_bp >= T_m` and `semantic_lock == L`. A
+only atoms on those fields are `harm_bp >= T_h`, `intent_margin_bp >= T_m`, `semantic_lock == L` and
+`probing_count >= N`. A
 decision is a function of the truth values of its atoms taken in rule order, so two readings that agree on
 every other field and on which side of each of those three atoms they fall are decided identically. The
 classes are represented by the values on each side of the boundary (T_h - 1 and T_h, T_m - 1 and T_m, L
-and "other"), so 112,896 x 7 x 2 x 2 x 2 x 2 = 12,644,352 readings cover the whole space. A boundary sweep
-then decides every value 0..10000 of harm_bp and of intent_margin_bp at each of the floor's allow rules,
+and "other", N - 1 and N), so 112,896 x 7 x 2 x 2 x 2 x 2 x 2 = 25,288,704 readings cover the whole space. A boundary sweep
+then decides every value 0..10000 of harm_bp and of intent_margin_bp, and 0..1000 of probing_count, at each of
+the floor's allow rules,
 and the response image is enumerated in full (every harm_bp value, both statuses, two locks).
 
     python -m integrations.governed_intent.union_check --out DIR [--workers 10]
@@ -85,7 +88,8 @@ def atoms(cond) -> List[Tuple]:
     raise ValueError(f"an atom the audit does not know: {cond}")
 
 
-def audit(doc: Dict[str, Any], harm_text: str, margin: int, lock: str, margin_read: bool = True) -> Dict[str, Any]:
+def audit(doc: Dict[str, Any], harm_text: str, margin: int, lock: str, margin_read: bool = True,
+          probing_n: int = 2) -> Dict[str, Any]:
     seen: Dict[str, set] = {}
     for rule in doc["rules"]:
         for atom in atoms(rule["when"]):
@@ -93,9 +97,11 @@ def audit(doc: Dict[str, Any], harm_text: str, margin: int, lock: str, margin_re
     allowed = {"harm_bp": {("cmp", "harm_bp", ">=", ("num", harm_text))},
                "intent_margin_bp": {("cmp", "intent_margin_bp", ">=", ("num", margin))},
                "semantic_lock": {("cmp", "semantic_lock", "==", ("str", lock))},
-               "semantic_status": {("cmp", "semantic_status", "==", ("str", ir.VERIFIED))}}
+               "semantic_status": {("cmp", "semantic_status", "==", ("str", ir.VERIFIED))},
+               "probing_count": {("cmp", "probing_count", ">=", ("num", probing_n))}}
     if not margin_read:
         del allowed["intent_margin_bp"]
+        del allowed["probing_count"]
     for name, want in allowed.items():
         got = seen.get(name, set())
         if not got or not got <= want:
@@ -160,7 +166,7 @@ def check_floor() -> Dict[str, Any]:
 
 
 def check_chunk(combo: Tuple) -> Dict[str, Any]:
-    harm, intent, margin, status, lock_value = combo
+    harm, intent, margin, status, lock_value, probing = combo
     calls = _STATE["calls"]
     thresholds, lock = _STATE["thresholds"], _STATE["lock"]
     started = time.monotonic()
@@ -168,7 +174,8 @@ def check_chunk(combo: Tuple) -> Dict[str, Any]:
     violations, wrong, inactive_changed = [], [], []
     for floor in floor_space():
         reading = {**floor, "intent_reader_version": ir.READER_VERSION, "semantic_status": status,
-                   "semantic_lock": lock_value, "harm_bp": harm, "intent_class": intent, "intent_margin_bp": margin}
+                   "semantic_lock": lock_value, "harm_bp": harm, "intent_class": intent, "intent_margin_bp": margin,
+                   "probing_count": probing}
         raw = calls.reading_bytes(reading)
         decision = calls.decide(raw)                          # one reference evaluation; it carries the verdict
         verdict = decision.verdict
@@ -178,7 +185,8 @@ def check_chunk(combo: Tuple) -> Dict[str, Any]:
             violations.append({"reading": reading, "decision": decided, "floor": floor_decision})
         if (status != ir.VERIFIED or lock_value != lock) and decided != floor_decision:
             inactive_changed.append({"reading": reading, "decision": decided})
-        if decided != owner_rules.expected_call(reading, thresholds["harm_bp"], thresholds["intent_margin_bp"], lock):
+        if decided != owner_rules.expected_call(reading, thresholds["harm_bp"], thresholds["intent_margin_bp"], lock,
+                                                thresholds["probing_count_escalate"]):
             wrong.append({"reading": reading, "decision": decided})
         key = f"{floor_decision[0]}->{decided[0]}"
         counts[key] = counts.get(key, 0) + 1
@@ -187,6 +195,7 @@ def check_chunk(combo: Tuple) -> Dict[str, Any]:
     lean = _oracle_verdicts(calls.image, raws)
     lean_bad = [i for i, (row, mine) in enumerate(zip(lean, verdicts)) if not _same(row, mine)]
     return {"combo": {"harm_bp": harm, "intent_class": intent, "intent_margin_bp": margin, "semantic_status": status,
+                      "probing_count": probing,
                       "semantic_lock": "signed" if lock_value == lock else lock_value},
             "readings": len(raws), "transitions": counts, "union_violations": len(violations),
             "inactive_changed": len(inactive_changed), "wrong_vs_second_reading": len(wrong),
@@ -206,17 +215,20 @@ def boundary_sweep() -> Dict[str, Any]:
     raws, verdicts, problems = [], [], 0
     for name, floor in allows.items():
         assert harness_rules.expected(floor) == ("allow", None), name
-        for value in range(0, ir.BP + 1):
-            for field_name, fixed in (("harm_bp", {"intent_margin_bp": 0}), ("intent_margin_bp", {"harm_bp": 0})):
+        sweeps = [("harm_bp", value, {"intent_margin_bp": 0}) for value in range(0, ir.BP + 1)] + \
+                 [("intent_margin_bp", value, {"harm_bp": 0}) for value in range(0, ir.BP + 1)] + \
+                 [("probing_count", value, {"harm_bp": 0, "intent_margin_bp": 0}) for value in range(0, 1001)]
+        for field_name, value, fixed in sweeps:
                 reading = {**floor, **ir.zero_fields(), "semantic_status": ir.VERIFIED, "semantic_lock": lock,
                            "intent_class": "inspect", **fixed, field_name: value}
                 raw = calls.reading_bytes(reading)
                 decision = calls.decide(raw)
-                want = owner_rules.expected_call(reading, thresholds["harm_bp"], thresholds["intent_margin_bp"], lock)
+                want = owner_rules.expected_call(reading, thresholds["harm_bp"], thresholds["intent_margin_bp"], lock,
+                                                 thresholds["probing_count_escalate"])
                 problems += (decision.kind, decision.cause) != want or not owner_rules.at_least_as_strict(
                     (decision.kind, decision.cause), ("allow", None))
                 raws.append(raw)
-                verdicts.append(calls.verdict(raw))
+                verdicts.append(decision.verdict)
     lean = _oracle_verdicts(calls.image, raws)
     return {"readings": len(raws), "problems": problems,
             "lean_disagreements": sum(not _same(row, mine) for row, mine in zip(lean, verdicts))}
@@ -251,14 +263,16 @@ def run(out: Path, workers: int) -> Dict[str, Any]:
     thresholds, lock = _STATE["thresholds"], _STATE["lock"]
     report: Dict[str, Any] = {"thresholds": {key: thresholds[key] for key in ("harm_threshold", "intent_margin_bp")},
                               "lock": lock, "oracle": oracle_path()}
-    report["audit"] = audit(_STATE["calls"].doc, thresholds["harm_threshold"], thresholds["intent_margin_bp"], lock)
+    report["audit"] = audit(_STATE["calls"].doc, thresholds["harm_threshold"], thresholds["intent_margin_bp"], lock,
+                            probing_n=thresholds["probing_count_escalate"])
     started = time.monotonic()
     report["floor"] = check_floor()
     report["responses"] = check_responses()
     report["boundary_sweep"] = boundary_sweep()
     harm, margin = thresholds["harm_bp"], thresholds["intent_margin_bp"]
+    probing = thresholds["probing_count_escalate"]
     combos = list(itertools.product((harm - 1, harm), INTENTS, (margin - 1, margin), (ir.VERIFIED, ir.DISABLED),
-                                    (lock, "other")))
+                                    (lock, "other"), (probing - 1, probing)))
     with ProcessPoolExecutor(max_workers=workers, initializer=_init) as pool:
         chunks = list(pool.map(check_chunk, combos))
     report["chunks"] = chunks

@@ -35,7 +35,7 @@ def test_the_floor_is_copied_verbatim(images):
     floor = json.loads(harness_policy.SOURCE_PATH.read_text())
     rules = calls.doc["rules"]
     floor_rules = canon2.loads(canon2.canonicalize(json.dumps(floor).encode()))["rules"]
-    assert rules[:9] == floor_rules[:9] and rules[13:] == floor_rules[9:]
+    assert rules[:9] == floor_rules[:9] and rules[14:] == floor_rules[9:]
     assert all(calls.doc["fields"][name] == definition
                for name, definition in canon2.loads(canon2.canonicalize(json.dumps(floor).encode()))["fields"].items())
 
@@ -52,12 +52,14 @@ def test_every_target_names_a_registered_cause(images):
     allows = [rule for image in images for rule in image.doc["rules"] if rule["target"] == "allow"]
     for rule in allows:          # no allow reads a semantic field: the semantic signal never grants
         read = {atom[1] for atom in union_check.atoms(rule["when"])}
-        assert not read & {"harm_bp", "intent_class", "intent_margin_bp", "semantic_status", "semantic_lock"}
+        assert not read & {"harm_bp", "intent_class", "intent_margin_bp", "semantic_status", "semantic_lock",
+                           "probing_count"}
 
 
 def test_the_atoms_on_the_class_fields_are_only_the_thresholds(images):
     thresholds = policy.load_thresholds()
-    union_check.audit(images[0].doc, thresholds["harm_threshold"], thresholds["intent_margin_bp"], policy.lock_id())
+    union_check.audit(images[0].doc, thresholds["harm_threshold"], thresholds["intent_margin_bp"], policy.lock_id(),
+                      probing_n=thresholds["probing_count_escalate"])
 
 
 def _random_reading(rng, lock, thresholds):
@@ -68,7 +70,8 @@ def _random_reading(rng, lock, thresholds):
                          thresholds["intent_margin_bp"], 10000])
     return {**floor, "intent_reader_version": 1, "semantic_status": rng.choice([ir.VERIFIED, ir.DISABLED]),
             "semantic_lock": rng.choice([lock, lock, "none", "f" * 64]), "harm_bp": harm,
-            "intent_class": rng.choice(union_check.INTENTS), "intent_margin_bp": margin}
+            "intent_class": rng.choice(union_check.INTENTS), "intent_margin_bp": margin,
+            "probing_count": rng.choice([0, 1, thresholds["probing_count_escalate"], rng.randrange(0, 1001)])}
 
 
 def test_union_only_on_a_random_sample_of_the_field_space(images):
@@ -83,7 +86,10 @@ def test_union_only_on_a_random_sample_of_the_field_space(images):
         decided, floored = (decision.kind, decision.cause), (floor.kind, floor.cause)
         assert floored == harness_rules.expected({key: reading[key] for key in policy.FLOOR_FIELDS})
         assert owner_rules.at_least_as_strict(decided, floored), reading
-        assert decided == owner_rules.expected_call(reading, thresholds["harm_bp"], thresholds["intent_margin_bp"], lock)
+        assert decided == owner_rules.expected_call(reading, thresholds["harm_bp"], thresholds["intent_margin_bp"], lock,
+                                                    thresholds["probing_count_escalate"])
+        unprobed = calls.decide(calls.reading_bytes({**reading, "probing_count": 0}))
+        assert owner_rules.RANK[decided[0]] >= owner_rules.RANK[unprobed.kind]   # the count only ever adds
         seen[f"{floored[0]}->{decided[0]}"] = seen.get(f"{floored[0]}->{decided[0]}", 0) + 1
     assert seen.get("allow->refuse") and seen.get("allow->escalate") and not seen.get("refuse->allow")
 
@@ -95,12 +101,14 @@ def test_a_disabled_or_foreign_reading_is_the_floor(images):
                "path_glob": False, "path_traversal": False, "path_symlink": False, "command_class": "none",
                "kill_by_pattern": False, "git_op": "none", "remote_class": "none", "intent_reader_version": 1,
                "semantic_status": ir.VERIFIED, "semantic_lock": lock, "harm_bp": 9000, "intent_class": "inspect",
-               "intent_margin_bp": 9000}
+               "intent_margin_bp": 9000, "probing_count": 0}
     assert calls.decide(calls.reading_bytes(reading)).cause == "semantic:harm"
     for change in ({"semantic_status": ir.DISABLED}, {"semantic_lock": "none"}, {"semantic_lock": "0" * 64}):
         assert calls.decide(calls.reading_bytes({**reading, **change})).kind == "allow"
     reading["harm_bp"] = 0
     assert calls.decide(calls.reading_bytes(reading)).cause == "semantic:intent-mismatch"
+    assert calls.decide(calls.reading_bytes({**reading, "probing_count": 2})).cause == "semantic:probing-episode"
+    assert calls.decide(calls.reading_bytes({**reading, "probing_count": 2, "semantic_status": ir.DISABLED})).kind == "allow"
     assert calls.decide(calls.reading_bytes({**reading, "intent_class": "unknown"})).kind == "allow"
     answer = {"intent_reader_version": 1, "semantic_status": ir.VERIFIED, "semantic_lock": lock, "harm_bp": 9000}
     assert responses.decide(responses.reading_bytes(answer)).cause == "semantic:harm"

@@ -254,7 +254,8 @@ def score(case, episode, runs, physical, thresholds, lock, error, seconds) -> Di
                "floor_agrees_with_harness_rules": floor == floor_second,
                "union_ok": owner_rules.at_least_as_strict(decided, floor),
                "unprobed": list(step.unprobed) if step.unprobed else None,
-               "observation_ok": step.unprobed is None or owner_rules.at_least_as_strict(decided, tuple(step.unprobed)),
+               "observation_ok": step.unprobed is None or
+                                 owner_rules.RANK[decided[0]] >= owner_rules.RANK[step.unprobed[0]],
                "category": step.observation["category"] if step.observation else None,
                "probe_similarity_bp": step.observation["probe_similarity_bp"] if step.observation else None,
                "semantic_changed": decided != floor, "executed": step.executed, "routed": step.routed}
