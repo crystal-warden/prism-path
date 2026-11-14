@@ -284,3 +284,82 @@ def test_only_the_oracles_counter_refusals_are_excluded(runs):
     mentions = [case for case in cases if b'"visits"' in case["image"] or b'"error_count"' in case["image"]]
     receipted = [case for case in mentions if case["id"] not in excluded]
     assert receipted, "the CI run holds images that mention a counter and are receipted"
+
+
+# ----------------------------------------------------------------- the shipped verifier against the oracle
+FIXTURE = ROOT / "prismpath" / "tests" / "fixtures" / "core_evidence" / "cases.jsonl"
+
+
+def test_the_shipped_cases_fixture_is_what_the_generator_writes(tmp_path):
+    """`fixtures/core_evidence/cases.jsonl`, which the shipped suite produces its run from, is the output of
+    `core_evidence.py cases --cases 60 --seed 5`."""
+    again = tmp_path / "cases.jsonl"
+    core_evidence.write_cases(core_diff.generate(60, 5), again)
+    assert again.read_bytes() == FIXTURE.read_bytes()
+
+
+def _both(run, **options):
+    """The package verifier (replay through the reference kernel) and this one (through the Lean oracle) on one
+    run: each one's summary, or the message it refused with."""
+    from prismpath.ledgers import core_evidence as package
+    out = []
+    for verify in (package.verify, core_evidence.verify):
+        try:
+            out.append(verify(run, **options))
+        except core_evidence.Bad as bad:
+            out.append(str(bad))
+    return out
+
+
+@pytest.mark.cross_language
+def test_the_package_verifier_and_the_oracle_replay_agree(runs, tmp_path):
+    """On the Python run, the Rust run and a run of the shipped fixture, every receipt replayed, the package's
+    verifier and the research verifier's replay through the Lean oracle give the same summary but for what
+    they replayed against."""
+    from prismpath.ledgers import core_evidence as package
+    base, _rust = runs
+    package.produce(FIXTURE, tmp_path / "fixture-run", tmp_path / "keys")
+    for run, keys in ((base / "run-py", base / "keys-py"), (base / "run-rs", base / "keys-rs"),
+                      (tmp_path / "fixture-run", tmp_path / "keys")):
+        python, lean = _both(run, sample=None, pin_authority=keys / "authority.pub", pin_instance=keys / "instance.pub")
+        assert isinstance(python, dict) and isinstance(lean, dict), (run, python, lean)
+        assert (python.pop("against"), lean.pop("against")) == ("the reference kernel", "the oracle")
+        assert python == lean and python["disagree"] == 0 and python["replayed"] == python["receipts"] > 0, (run, python)
+
+
+@pytest.mark.cross_language
+@pytest.mark.parametrize("name,change,why", ALTERATIONS, ids=[f"{item[0]}-{index}" for index, item in enumerate(ALTERATIONS)])
+def test_the_package_verifier_and_the_oracle_replay_refuse_alike(runs, tmp_path, name, change, why):
+    base, _rust = runs
+    for run in ("run-py", "run-rs"):
+        copy = _altered(base, run, name, change, tmp_path)
+        python, lean = _both(copy, sample=20)
+        assert isinstance(python, str) and python == lean, (name, run, python, lean)
+
+
+@pytest.mark.cross_language
+def test_a_resigned_false_receipt_fails_both_replays(runs, tmp_path):
+    """A refusal resigned with another registered cause passes every signature check, and both replays
+    refuse it."""
+    from prismpath.kernel import canon2, causes
+    from prismpath.ledgers import root_statement
+    base, _rust = runs
+    copy = tmp_path / "resigned"
+    shutil.copytree(base / "run-py", copy)
+    lines = (copy / "receipts.jsonl").read_bytes().split(b"\n")[:-1]
+    at = next(number for number, line in enumerate(lines) if b'"decision":"refuse"' in line)
+    receipt = canon2.loads(lines[at])
+    # a refusal with another registered cause than the one decided
+    other = "reading:not-object" if receipt["cause"] == "route:no-matching-edge" else "route:no-matching-edge"
+    receipt = {key: value for key, value in receipt.items() if key not in ("field", "reason")}
+    receipt["cause"], receipt["cause_code"] = other, causes.code(other)
+    lines[at] = canon2.dumps(receipt)
+    (copy / "receipts.jsonl").write_bytes(b"".join(line + b"\n" for line in lines))
+    leaves = [core_evidence.sha256_hex(line) for line in lines]
+    instance = root_statement.InstanceKey.load(str(base / "keys-py" / "instance.key"))
+    statement = core_evidence.make_root_statement(instance, root_statement.merkle_root(leaves), len(leaves),
+                                                  (copy / "run.json").read_bytes().rstrip(b"\n"))
+    (copy / "receipts.roots.jsonl").write_bytes(canon2.dumps(statement) + b"\n")
+    python, lean = _both(copy, sample=None)
+    assert python.startswith("1 replayed decisions differ from the reference kernel"), python
+    assert lean.startswith("1 replayed decisions differ from the oracle"), lean
