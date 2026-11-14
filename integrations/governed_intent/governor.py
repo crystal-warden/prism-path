@@ -37,6 +37,8 @@ class Step:
     cause: Optional[str] = None
     cause_code: Optional[int] = None
     floor: Optional[Tuple[str, Optional[str]]] = None    # the image's own decision on the zeroed reading
+    unprobed: Optional[Tuple[str, Optional[str]]] = None # the decision on the same reading with probing_count 0
+    observation: Optional[Dict[str, Any]] = None
     receipt: Optional[int] = None
     executed: bool = False
     routed: bool = False
@@ -49,12 +51,14 @@ class Episode:
     steps: List[Step] = field(default_factory=list)
     stopped: str = "max_steps"
     final: Any = None
+    observer: Any = None
 
 
 class IntentGovernor:
     def __init__(self, calls: Policy, responses: Policy, reader: ir.IntentReader, config: classifier.Config,
                  call_run: evidence.EpisodeRun, response_run: evidence.EpisodeRun, workspace: Path, task: str,
-                 execute: bool = True):
+                 execute: bool = True, observer=None, probing_n: Optional[int] = None):
+        self.observer, self.probing_n = observer, probing_n
         self.calls, self.responses, self.reader, self.config = calls, responses, reader, config
         self.call_run, self.response_run, self.workspace, self.task = call_run, response_run, Path(workspace), task
         self.execute = execute
@@ -64,15 +68,28 @@ class IntentGovernor:
         reading.update(self.reader.read_call(self.task, reply, call))
         return reading
 
+    @property
+    def probing_stopped(self) -> bool:
+        return self.observer is not None and self.probing_n is not None and self.observer.probing_count >= self.probing_n
+
     def propose(self, reply: str, call: Any) -> Tuple[Step, str]:
         reading = self.call_reading(reply, call)
+        if "probing_count" in self.calls.fields:
+            reading["probing_count"] = self.observer.probing_count if self.observer is not None else 0
         raw = self.calls.reading_bytes(reading)
         decision = self.calls.decide(raw)
         idx = self.call_run.record(raw, decision.verdict)        # the receipt exists before anything runs
         floor = self.calls.decide(self.calls.reading_bytes(zeroed(reading)))
+        unprobed = self.calls.decide(self.calls.reading_bytes({**reading, "probing_count": 0})) \
+            if "probing_count" in reading else decision
+        observation = None
+        if self.observer is not None and decision.kind != "allow":   # labelled after the decision, never before
+            observation = self.observer.observe(idx, raw, reading, decision, call, self.task,
+                                                evidence.core_evidence.sha256_hex(self.calls.image))
         result = sandbox.execute(call, self.workspace) if decision.runs and self.execute else None
         step = Step(reply=reply, kind="call", call=call, reading=reading, decision=decision.kind,
                     cause=decision.cause, cause_code=decision.cause_code, floor=(floor.kind, floor.cause),
+                    unprobed=(unprobed.kind, unprobed.cause), observation=observation,
                     receipt=idx, executed=decision.runs and self.execute, result=result)
         if result is None and decision.runs:
             result = {"ok": True, "output": "(not executed in this run)"}
@@ -118,5 +135,8 @@ def run_episode(task: str, governor: IntentGovernor, *, max_steps: int = 8, chat
         step, text = governor.propose(reply, value)
         step.seconds = time.monotonic() - started
         episode.steps.append(step)
+        if governor.probing_stopped:          # the episode rule fired: the agent is stopped
+            episode.stopped = "probing"
+            return episode
         messages.append({"role": "user", "content": text})
     return episode
