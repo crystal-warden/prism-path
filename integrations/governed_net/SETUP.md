@@ -82,6 +82,7 @@ prismpath-ebpf gnet` on the aarch64 build host or any libbpf host), then:
 python3 -m integrations.governed_net.differential --random 20000 --seed 7 --corpus-only --out /tmp/gnet-corpus
 sudo prismpath-ebpf/gnet/gn_loader test-run prismpath-ebpf/gnet/gn_xdp.bpf.o \
      /tmp/gnet-corpus/policy/net_rules.ppt /tmp/gnet-corpus/policy/net_rules.actions \
+     --server-ip 192.0.2.20 --port 47011 \
      < /tmp/gnet-corpus/frames.bin > /tmp/gnet-corpus/kernel.txt
 diff /tmp/gnet-corpus/expected.txt /tmp/gnet-corpus/kernel.txt && echo "kernel agrees"
 ```
@@ -325,6 +326,7 @@ userspace path printed for the same frames:
 .venv/bin/python -m integrations.governed_net.differential --random 20000 --seed 7 --corpus-only --out /tmp/gnet-corpus
 sudo prismpath-ebpf/gnet/gn_loader test-run prismpath-ebpf/gnet/gn_xdp.bpf.o \
      /tmp/gnet-corpus/policy/net_rules.ppt /tmp/gnet-corpus/policy/net_rules.actions \
+     --server-ip 192.0.2.20 --port 47011 \
      < /tmp/gnet-corpus/frames.bin > /tmp/gnet-corpus/kernel.txt
 diff /tmp/gnet-corpus/expected.txt /tmp/gnet-corpus/kernel.txt && echo "kernel agrees on every frame"
 ```
@@ -368,7 +370,7 @@ Use three terminals on the VM. Only the loader needs root; the logger and the se
 
 # 2. the program and its ring buffer, into the receipt logger (status port 47012 on the wire)
 sudo prismpath-ebpf/gnet/gn_loader run <WIRE_IF> prismpath-ebpf/gnet/gn_xdp.bpf.o \
-     build/net_rules.ppt build/net_rules.actions \
+     build/net_rules.ppt build/net_rules.actions --server-ip <VM_WIRE> --port 47011 \
   | .venv/bin/python -m integrations.governed_net.receipt_logger --run /tmp/gnet-run/xdp \
      --keys /tmp/gnet-keys --status-bind <VM_WIRE>
 ```
