@@ -20,7 +20,7 @@ PERSONAS = (
     ("Operator: run the system day to day, swap and attest policy (Mission Control is the console; this is the scripted path)",
      ("run", "resume", "compose", "swap", "trail")),
     ("Assessor: anchor, verify, and read the evidence",
-     ("ledger", "facet")),
+     ("ledger", "evidence", "facet")),
 )
 
 
@@ -355,6 +355,27 @@ def _add_assessor_commands(subparsers) -> None:
     ledger_parser.add_argument('--ots', action='store_true',
                                help='accepted and ignored: verify always walks the Merkle path and then the OTS proof')
     ledger_parser.set_defaults(func=ledger_cmd)
+
+    evidence_parser = subparsers.add_parser(
+        'evidence', help='Verify a signed core run: its keys, root statement, Merkle root, image signatures and '
+                         'receipts, every decision or a sample replayed through the reference kernel')
+    evidence_parser.add_argument('action', choices=['verify'],
+                                 help='evidence action: verify checks a core run directory and exits 0 when it '
+                                      'verifies (signed, or signed-unpinned without both pins) and 1 when refused')
+    evidence_parser.add_argument('run', help='the core run directory (run.json, cases.jsonl, images.jsonl, '
+                                             'receipts.jsonl, receipts.roots.jsonl, authority.pub, instance.pub)')
+    evidence_parser.add_argument('--sample', default='200', type=_sample_arg, metavar='N|all',
+                                 help='how many receipts to replay through the reference kernel, or all (default 200)')
+    evidence_parser.add_argument('--seed', type=int, default=0, help='the seed that chooses the sample (default 0)')
+    evidence_parser.add_argument('--pin-authority', dest='pin_authority', default=None, metavar='PUB',
+                                 help="your own copy of the authority public key (raw 32 bytes, as `swap keygen` "
+                                      "writes it); with --pin-instance the root statement is signed, without both "
+                                      "signed-unpinned")
+    evidence_parser.add_argument('--pin-instance', dest='pin_instance', default=None, metavar='PUB',
+                                 help="your own copy of the instance public key (raw 32 bytes, as `ledger keygen` "
+                                      "writes it)")
+    evidence_parser.add_argument('--json', action='store_true', help='machine readable output')
+    evidence_parser.set_defaults(func=evidence_cmd)
 
     facet_parser = subparsers.add_parser(
         'facet', help='Facet telemetry: decision-preserving quantization, wire encoding, and stream decoding')
@@ -1770,6 +1791,47 @@ def _load_telemetry():
     """The Facet codec ships in the package (prismpath.telemetry); PROTOCOL.md is its specification."""
     from prismpath.telemetry import packed, quantizer, wire, zeckendorf
     return quantizer, zeckendorf, wire, packed
+
+
+def _sample_arg(text: str):
+    """`--sample`: a count of receipts to replay, or `all` (None)."""
+    if text == 'all':
+        return None
+    try:
+        count = int(text)
+    except ValueError:
+        count = -1
+    if count < 0:
+        raise argparse.ArgumentTypeError(f"expected a nonnegative count or all, not {text!r}")
+    return count
+
+
+def evidence_cmd(args) -> int:
+    """`evidence verify RUN`: every check of a signed core run, its receipts replayed through the reference
+    kernel; 0 when it verifies, 1 when it is refused, with the first failed check."""
+    from prismpath.ledgers import core_evidence
+    if not os.path.isdir(args.run):
+        raise CliError(f"{args.run} is not a directory (a core run is a directory)")
+    for pin in (args.pin_authority, args.pin_instance):
+        if pin is not None:
+            _require_file(pin)
+    try:
+        summary = core_evidence.verify(args.run, sample=args.sample, seed=args.seed,
+                                       pin_authority=args.pin_authority, pin_instance=args.pin_instance)
+    except core_evidence.Bad as bad:
+        if args.json:
+            print(json.dumps({"ok": False, "run": args.run, "refused": str(bad)}, indent=1))
+        else:
+            print(f"prismpath evidence: REFUSED {args.run}: {bad}")
+        return 1
+    if args.json:
+        print(json.dumps({"ok": True, **summary}, indent=1, default=str))
+    else:
+        print(f"prismpath evidence: verified {args.run}: decider {summary['decider']}, {summary['receipts']} receipts, "
+              f"{summary['images']} image attestations, root statement {summary['root_statement']}, "
+              f"{summary['replayed']} replayed through {summary['against']}: {summary['agree']} agree, "
+              f"{summary['disagree']} disagree")
+    return 0
 
 
 def facet_cmd(args) -> int:
