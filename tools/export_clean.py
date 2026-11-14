@@ -69,6 +69,8 @@ EXCLUDE_PREFIXES = [
                                # policy shape reach the product through promotion, not this folder
     "integrations/governed_net/",      # the same harness over a network wire with an XDP enforcement point,
                                # a research example like governed_harness (its XDP side is prismpath-ebpf)
+    "integrations/governed_intent/",   # intent routing over the harness with the P1 embedder, a research
+                               # example; its causes reach the product through promotion
     "prismpath/evidence/",     # OTS anchors over the RESEARCH ledger/papers (docs/research/, absent
                                # here) + hardware evidence — provenance is a research-repo concern, and
                                # shipping anchors that reference files not in the mirror is a dangling ref
