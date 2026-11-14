@@ -192,10 +192,19 @@ def main(argv=None) -> int:
     stop = threading.Event()
     thread = threading.Thread(target=logger.serve_status, args=(sock, stop), daemon=True)
     thread.start()
-    for line in sys.stdin:
-        line = line.strip()
-        if line:
-            logger.consume(Event.from_ring(bytes.fromhex(line)))
+    import signal
+    # Ctrl-C or a TERM must still seal the run: the readings live in memory until close, so an interrupt
+    # that skipped close lost them and left the receipts without a signed root (the first live run,
+    # 2026-11-14). SIGINT is ignored once the loop ends so a second press cannot interrupt the sealing.
+    signal.signal(signal.SIGTERM, lambda *_: (_ for _ in ()).throw(KeyboardInterrupt()))
+    try:
+        for line in sys.stdin:
+            line = line.strip()
+            if line:
+                logger.consume(Event.from_ring(bytes.fromhex(line)))
+    except KeyboardInterrupt:
+        sys.stderr.write("receipt_logger: interrupted, sealing the run\n")
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
     stop.set()
     thread.join()
     sock.close()

@@ -36,6 +36,7 @@ import os
 import random
 import re
 import socket
+import struct
 import subprocess
 import sys
 import urllib.request
@@ -127,8 +128,36 @@ def ipv4_addresses(text: str) -> List[str]:
     return re.findall(r"inet (?:addr:)?(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})", text)
 
 
+WINDOWS_ADDRS = ("Get-NetIPAddress -AddressFamily IPv4 -InterfaceAlias '%s' -ErrorAction Stop "
+                 "| ForEach-Object { 'inet ' + $_.IPAddress }")
+WINDOWS_INDEX = "(Get-NetAdapter -Name '%s' -ErrorAction Stop).ifIndex"
+IP_UNICASTIF = 31         # Windows <ws2ipdef.h> IP_UNICASTIF: send unicast through this interface index
+
+
+def _powershell(command: str) -> str:
+    done = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", command],
+                          capture_output=True, timeout=15)
+    return done.stdout.decode("utf-8", "replace") if done.returncode == 0 else ""
+
+
+def windows_ifindex(ifname: str) -> int:
+    """The interface index Windows knows by its friendly name (`Wi-Fi`), which socket.if_nametoindex cannot
+    resolve on Windows."""
+    if "'" in ifname:
+        raise RuntimeError("an interface name may not contain a quote")
+    text = _powershell(WINDOWS_INDEX % ifname).strip()
+    if not text.isdigit():
+        raise RuntimeError("Windows has no network adapter named %r" % ifname)
+    return int(text)
+
+
 def interface_ipv4s(ifname: str) -> List[str]:
-    """The interface's IPv4 addresses, via `ip` (Linux) or `ifconfig` (macOS/BSD); stdlib subprocess only."""
+    """The interface's IPv4 addresses, via `ip` (Linux), `ifconfig` (macOS/BSD) or Get-NetIPAddress
+    (Windows); stdlib subprocess only."""
+    if sys.platform == "win32":
+        if "'" in ifname:
+            return []
+        return ipv4_addresses(_powershell(WINDOWS_ADDRS % ifname))
     for argv in (["ip", "-4", "-o", "addr", "show", "dev", ifname], ["ifconfig", ifname]):
         try:
             done = subprocess.run(argv, capture_output=True, timeout=5)
@@ -182,12 +211,19 @@ class NetClient:
         self.interface = None
         source = source_ip
         if via_if:
-            ifindex = socket.if_nametoindex(via_if)                 # raises on an unknown interface
+            if sys.platform == "win32":
+                ifindex = windows_ifindex(via_if)                   # raises on an unknown interface
+            else:
+                ifindex = socket.if_nametoindex(via_if)             # raises on an unknown interface
             if lan_net is None:
                 raise RuntimeError("--via-if needs --lan-net to confirm the interface is on the LAN")
             source = choose_source(via_if, lan_net)
             if sys.platform == "darwin":
                 self.sock.setsockopt(socket.IPPROTO_IP, IP_BOUND_IF, ifindex)
+            elif sys.platform == "win32":
+                # Windows sends from the interface that owns the bound source address (shown on the real
+                # client, 2026-11-14), and IP_UNICASTIF pins it as well; the index goes in network order
+                self.sock.setsockopt(socket.IPPROTO_IP, IP_UNICASTIF, struct.pack("!I", ifindex))
             elif hasattr(socket, "SO_BINDTODEVICE"):
                 try:
                     self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_BINDTODEVICE, (via_if + "\0").encode())
@@ -197,7 +233,10 @@ class NetClient:
         bind_to = source or bind_ip or ("127.0.0.1" if server[0].startswith("127.") else None)
         if bind_to:
             self.sock.bind((bind_to, 0))
-        self.bound = self.sock.getsockname()
+        try:
+            self.bound = self.sock.getsockname()
+        except OSError:                                             # Windows: an unbound socket has no name yet
+            self.bound = ("0.0.0.0", 0)
         rng = random.Random(seed)
         self.ids = itertools.count(rng.randint(1, 2 ** 48))
 
