@@ -22,7 +22,8 @@
  * decided (so the userspace gate can stream through it):
  *   <outcome> <reason> <edge> <cause> <emitted> <request_id> <cmd> <hclass> <arg0> <arg1> <name_len>
  *   <data_len> <handle> <image_index> <src_port> <src_ip>
- * `emitted` is 1 when the frame produced a ring buffer event. At the end it prints the per-verdict counters
+ * `emitted` is 1 when the frame produced a ring buffer event, and `edge` is -1 when it did not, as gn_loader
+ * test-run prints it. At the end it prints the per-verdict counters
  * to stderr as `counters <other> <allow> <drop> <malformed>` (GN_CNT_*). */
 #include <stdint.h>
 #include <stdio.h>
@@ -187,7 +188,7 @@ int main(int argc, char **argv)
         ring_used = 0;
         __u32 outcome = gn_decide(frame, frame + len, &ev);
         const struct gn_event *out = ring_used ? &ring_slot : &ev;
-        printf("%u %u %d %u %d %llu %u %u %u %u %u %u %u %u %u %u\n", outcome, out->reason, out->edge, out->cause,
+        printf("%u %u %d %u %d %llu %u %u %u %u %u %u %u %u %u %u\n", outcome, out->reason, ring_used ? out->edge : -1, out->cause,
                ring_used, (unsigned long long)out->request_id, out->cmd, out->hclass, out->arg0, out->arg1,
                out->name_len, out->data_len, out->handle, out->image_index, out->src_port, out->src_ip);
         fflush(stdout);
