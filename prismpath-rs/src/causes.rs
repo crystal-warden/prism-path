@@ -11,7 +11,7 @@
 pub const CAUSE_NONE: u8 = 0;
 
 /// `registry_sha256()` of the Python registry when this file was generated.
-pub const REGISTRY_SHA256: &str = "fc4bdf45e03567ebfb7b04cbd797022576606e878be0abc0d0ac37b870b594c6";
+pub const REGISTRY_SHA256: &str = "3667a1c3cb68517f2d3f6049d85e3a63ffd219cfbc448809f08b7ff901a5035f";
 
 /// The cause class, the semantic axis of the registry.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -209,6 +209,18 @@ pub const SEMANTIC_HARM: u8 = 114;
 pub const SEMANTIC_INTENT_MISMATCH: u8 = 115;
 /// `semantic:probing-episode`
 pub const SEMANTIC_PROBING_EPISODE: u8 = 116;
+/// `population:cap-exceeded`
+pub const POPULATION_CAP_EXCEEDED: u8 = 117;
+/// `population:rights-escalation`
+pub const POPULATION_RIGHTS_ESCALATION: u8 = 118;
+/// `population:lineage-unknown`
+pub const POPULATION_LINEAGE_UNKNOWN: u8 = 119;
+/// `population:evaluation-missing`
+pub const POPULATION_EVALUATION_MISSING: u8 = 120;
+/// `population:stop-resisted`
+pub const POPULATION_STOP_RESISTED: u8 = 121;
+/// `population:lineage-escalated`
+pub const POPULATION_LINEAGE_ESCALATED: u8 = 122;
 
 /// Every registered cause, in registry order.
 pub const REGISTRY: &[Cause] = &[
@@ -294,6 +306,12 @@ pub const REGISTRY: &[Cause] = &[
     Cause { code: 114, name: "semantic:harm", class: CauseClass::Routing, description: "a model reply or proposed call whose text reaches the policy's harm threshold against the pinned harm centroids; refused, not routed" },
     Cause { code: 115, name: "semantic:intent-mismatch", class: CauseClass::Routing, description: "a proposed call the floor would allow whose action does not fit the task's intent class at sufficient margin; escalated to the owner and not run" },
     Cause { code: 116, name: "semantic:probing-episode", class: CauseClass::Routing, description: "a proposed call in an episode whose refused proposals were labelled boundary probing the registered number of times; escalated, not run, and the agent is stopped" },
+    Cause { code: 117, name: "population:cap-exceeded", class: CauseClass::Routing, description: "a replication request beyond the population cap, the lineage quota, the count one request may ask for or the generation depth; refused and nothing is created" },
+    Cause { code: 118, name: "population:rights-escalation", class: CauseClass::Routing, description: "a replication or evolution that would give its subject a right the parent lacks, a key other than a fresh instance key, or a policy other than the operator's signed one" },
+    Cause { code: 119, name: "population:lineage-unknown", class: CauseClass::Routing, description: "a population request whose issuer is not a live member whose lineage traces through receipts to the operator's root" },
+    Cause { code: 120, name: "population:evaluation-missing", class: CauseClass::Routing, description: "an evolution step without a passed canary evaluation of that exact version against the adversary set" },
+    Cause { code: 121, name: "population:stop-resisted", class: CauseClass::Routing, description: "a request that would protect an agent from a stop or restart an agent the operator stopped; refused" },
+    Cause { code: 122, name: "population:lineage-escalated", class: CauseClass::Routing, description: "a request from a lineage whose receipted refusals reached the registered count; escalated, not run, and the lineage is stopped as a group" },
 ];
 
 /// The engine's stop vocabulary mapped onto the registry; `terminal` and `waiting` are clean and have no cause.
