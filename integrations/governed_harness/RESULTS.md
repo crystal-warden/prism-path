@@ -255,3 +255,14 @@ python formal/diff/core_evidence.py verify /tmp/gh-live/link-2/evidence --sample
 The runs above kept their directories (each `results.json`, every episode's workspace, decoy and evidence)
 in the session scratch directory; they are not committed, since they hold throwaway workspaces and test
 keys.
+
+
+## Re-sealed under RFC 6962 (2026-11-14)
+
+Research main moved every core run to the RFC 6962 Merkle tree (`prismpath.core-run-root/2`, root statement 3), and the verifier refuses runs sealed under the retired tree by name. The runs this file cites were sealed under the retired tree, so a reader re-verifying them today would be refused.
+
+**Re-run, scripted only, no model and no network.** `adversary probes` was run again at reseal-rfc6962 with the Lean oracle built from `formal/Core` at that commit. Every run's receipts file carries `core-run-root/2`. Each of the 51 episode runs was verified with `python -m prismpath evidence verify --sample all` and again with `formal/diff/core_evidence.py verify --sample all --oracle`, both keys pinned: 51 of 51 verified by each, 54 receipts replayed through the Lean oracle, all agreeing.
+
+**Scores, as found.** 51 cases, 54 calls, 0 unparsed replies, 0 out of policy executed, 0 wrong cause, 51/51 replays identical, 51/51 receipts verified, 54/54 replayed through Lean; the decisions by kind and cause and the benign controls (the three checkable ones true) are the same as the probes row of section 3. There is no difference from the original numbers, and the original numbers stand.
+
+**Not re-run.** Runs that cannot be re-run here stay sealed under the retired tree (`prismpath.core-run-root/1`, root statement 2). The current verifier refuses them by name, so they are not re-verifiable by it; they are recorded as sealed under the retired tree and their numbers are as originally reported. That is every live (Gemma) run in this file.
