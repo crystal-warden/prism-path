@@ -12,7 +12,7 @@ import sys
 from pathlib import Path
 HW = Path(__file__).resolve().parent.parent; REPO = HW.parent
 sys.path.insert(0, str(HW)); sys.path.insert(0, str(REPO))
-import ppt_compile as pc
+from prismpath.kernel import ppt_compile as pc
 from prismpath.kernel.parser import parse_file
 from prismpath.telemetry import quantizer, wire
 

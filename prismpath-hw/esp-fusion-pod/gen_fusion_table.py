@@ -18,7 +18,7 @@ REPO = HW.parent
 sys.path.insert(0, str(HW))
 sys.path.insert(0, str(REPO))
 
-import ppt_compile as pc
+from prismpath.kernel import ppt_compile as pc
 from prismpath.kernel.parser import parse
 
 FLOW = """---

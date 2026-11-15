@@ -28,7 +28,7 @@ REPO = HW.parent
 sys.path.insert(0, str(HW))
 sys.path.insert(0, str(REPO))
 
-import ppt_compile as pc
+from prismpath.kernel import ppt_compile as pc
 from prismpath.kernel.parser import parse
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.serialization import (

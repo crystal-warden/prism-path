@@ -30,7 +30,9 @@ HERE = Path(__file__).resolve().parent
 FLOWS = HERE / "demo" / "flows"
 INTERP = HERE / "build" / "interp"
 
-import ppt_compile as pc                                    # noqa: E402
+sys.path.insert(0, str(HERE.parent))    # the repository root, where the prismpath package is
+
+from prismpath.kernel import ppt_compile as pc                                    # noqa: E402
 from prismpath.kernel.parser import parse_file                     # noqa: E402
 
 T_LO_IN, T_LO_OUT = 681, 649        # mid entered from below at +H, left at -H (T_lo=665, H=16)

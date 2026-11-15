@@ -865,7 +865,7 @@ refuses and their runtime's JSON reads; the run of `core-js-go` in section 8 sho
 (`int-out-of-i32`, SPEC.md 4.3), so a checked policy with a constant outside that range compiles to no
 table. This is a declared target limit, not a disagreement; the table adapter (step 2) must report it as
 a refusal of the compiler, never a different route. **Step 2: confirmed.** The C legs compile every
-checked policy with `prismpath-hw/ppt_compile.py` and run its readings through `interp.c` and
+checked policy with `prismpath/kernel/ppt_compile.py` and run its readings through `interp.c` and
 `ppt_eval.h`; 3,527 checked policies of the large run hold a constant outside 32 bits and are refused by
 the compiler (`int-out-of-i32`), and 2,070 readings of compiled policies hold a value the 32 bit
 registers cannot carry and are refused by the register encoder (`encode_scalar`, the same reason);

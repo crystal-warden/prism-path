@@ -81,7 +81,7 @@ Open `prismpath-hw/demo/flows/hyst_band.md`. It is a page of prose with threshol
 page IS the policy. Prove it:
 
 ```
-python3 prismpath-hw/ppt_compile.py prismpath-hw/demo/flows/hyst_band.md -o /tmp/recompiled.ppt
+python3 -m prismpath.kernel.ppt_compile prismpath-hw/demo/flows/hyst_band.md -o /tmp/recompiled.ppt
 sha256sum /tmp/recompiled.ppt
 ```
 

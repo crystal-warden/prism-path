@@ -25,7 +25,7 @@ from prismpath.kernel.parser import parse
 REPO = HERE.parent.parent
 sys.path.insert(0, str(REPO / "prismpath-hw"))
 sys.path.insert(0, str(REPO / "prismpath-hw" / "rp2350"))
-import ppt_compile as pc  # noqa: E402
+from prismpath.kernel import ppt_compile as pc  # noqa: E402
 from certify_rp2350 import Board  # noqa: E402
 
 POLICIES = ["network_admission", "sensor_interlock"]

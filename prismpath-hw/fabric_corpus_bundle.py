@@ -8,7 +8,7 @@ import json, sys
 from collections import Counter
 from pathlib import Path
 HW = Path("prismpath-hw"); sys.path.insert(0, str(HW)); sys.path.insert(0, ".")
-import ppt_compile as pc
+from prismpath.kernel import ppt_compile as pc
 CONF = Path("prismpath/portable/conformance")
 
 cases = json.loads((CONF / "predicates.json").read_text())["cases"]

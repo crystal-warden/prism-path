@@ -76,7 +76,7 @@ def parse_actions(data):
 
 def parse_ppt(data):
     """The .ppt header fields and the four section byte-lists, enough to fill the maps. Raises on a bad
-    header. Mirrors prismpath-hw/ppt_compile.serialize and prismpath-ebpf/ppt_image.c."""
+    header. Mirrors prismpath/kernel/ppt_compile.serialize and prismpath-ebpf/ppt_image.c."""
     if len(data) < 28 or struct.unpack_from("<I", data, 0)[0] != PPT_MAGIC:
         raise ValueError("not a PPT image")
     (_magic, _ver, n_fields, n_interns, n_atoms, n_nodes, n_edges, prog_len, start, _visits,

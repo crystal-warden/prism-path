@@ -10,7 +10,7 @@ import sys
 from pathlib import Path
 HW = Path(__file__).resolve().parent.parent; REPO = HW.parent
 sys.path.insert(0, str(HW)); sys.path.insert(0, str(REPO))
-import ppt_compile as pc
+from prismpath.kernel import ppt_compile as pc
 from prismpath.kernel.parser import parse_file
 if len(sys.argv) < 2: sys.exit("usage: gen_hop_policy.py <flow.md>   (the flow this bench ran is flows/hop_power.md)")
 flow = sys.argv[1]

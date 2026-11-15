@@ -19,7 +19,7 @@ HERE = Path(__file__).resolve().parent
 REPO = HERE.parent
 sys.path.insert(0, str(REPO / "prismpath-hw"))
 sys.path.insert(0, str(REPO))
-import ppt_compile as pc                                  # noqa: E402
+from prismpath.kernel import ppt_compile as pc                                  # noqa: E402
 from ebpf_table_limits import require_within_limits       # noqa: E402
 from prismpath.kernel.parser import parse_file                  # noqa: E402
 

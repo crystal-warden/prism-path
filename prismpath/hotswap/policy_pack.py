@@ -24,7 +24,7 @@ from datetime import datetime, timezone
 from typing import Dict, List, Optional, Tuple
 from prismpath import canon
 from prismpath.extras import MissingExtra
-# --- .ppt format facts (read-only mirror of ppt_compile.py / TABLE_FORMAT.md) ---
+# --- .ppt format facts (read-only mirror of kernel/ppt_compile.py / TABLE_FORMAT.md) ---
 MAGIC = 0x4D545050          # "PPTM"
 FORMAT_VERSION = 1
 HEADER = struct.Struct("<IHHHHHHHHHHHH")   # 28 bytes

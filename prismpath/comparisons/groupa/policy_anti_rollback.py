@@ -33,7 +33,7 @@ from prismpath.comparisons.harness import HERE, TOOLCHAIN_BIN, gen_dir_for
 from prismpath.kernel.parser import parse
 
 sys.path.insert(0, str(HERE.parent.parent / "prismpath-hw"))
-import ppt_compile  # noqa: E402
+from prismpath.kernel import ppt_compile  # noqa: E402
 
 POLICY = "network_admission"
 SCENARIOS = {"stale_policy_1": "stale", "tampered_policy_1": "tampered", "unsigned_policy_1": "unsigned"}

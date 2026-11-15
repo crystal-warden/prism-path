@@ -23,7 +23,7 @@ hashed, Bitcoin anchored manifest you can verify in six commands:
 | file | role |
 |---|---|
 | [TABLE_FORMAT.md](TABLE_FORMAT.md) | PPT v1 image format + the declared v0 subset + engine-parity semantics |
-| [ppt_compile.py](ppt_compile.py) | `compile --target table`: condition/flow → binary image + JSON debug view |
+| [ppt_compile.py](../prismpath/kernel/ppt_compile.py) | `compile --target table`: condition/flow → binary image + JSON debug view |
 | [interp.c](interp.c) | the C target: behavioral twin of the future RTL, same images |
 | [run_vectors.py](run_vectors.py) | certification: frozen conformance corpus → C target, subset-filtered with reasons |
 | [ppt_eval.h](ppt_eval.h) | the embedded evaluator every firmware includes: no allocation, static buffers sized by three macros, return codes instead of exits |

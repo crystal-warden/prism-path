@@ -33,7 +33,7 @@ MANIFEST = HERE / "declared_subset.json"
 
 sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE.parent))
-import ppt_compile as pc                                   # noqa: E402
+from prismpath.kernel import ppt_compile as pc                                   # noqa: E402
 
 
 def case_id(case: dict) -> str:

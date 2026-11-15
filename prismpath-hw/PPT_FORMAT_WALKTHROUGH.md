@@ -39,7 +39,7 @@ not the absence of one, and that is what makes the trail auditable: every evalua
 
 ## The image the compiler emits
 
-The table compiler, [ppt_compile.py](ppt_compile.py), turns that flow into two files: `hyst_band.ppt`,
+The table compiler, [ppt_compile.py](../prismpath/kernel/ppt_compile.py), turns that flow into two files: `hyst_band.ppt`,
 the image, and `hyst_band.json`, a debug view holding the field name table, the intern table and the
 node names. **Only the image is signed and only the image is executed.** The JSON exists so that a
 person, a dashboard or a loader can print names instead of indices; nothing on any substrate depends
@@ -293,7 +293,7 @@ the offsets, the widths or the flag numbers. None of them can move alone.
 
 | where | what it holds | what moving it costs |
 |---|---|---|
-| [ppt_compile.py](ppt_compile.py) | the writer, the only producer of images | every artifact and every hash in the ledger |
+| [ppt_compile.py](../prismpath/kernel/ppt_compile.py) | the writer, the only producer of images | every artifact and every hash in the ledger |
 | [TABLE_FORMAT.md](TABLE_FORMAT.md) | the prose specification and the declared subset | the specification of record; note its layout block predates the flags and safe_node split |
 | [../prismpath/hotswap/policy_pack.py](../prismpath/hotswap/policy_pack.py) | the Python reader: the header, atom, node, edge and word struct formats, the operator and type sets, the opcode set, the flag constants, the envelope caps | the pack tooling and the signing path |
 | [interp.c](interp.c) | the C reference, decoding each section into heap structs | a recertification against the conformance corpus |

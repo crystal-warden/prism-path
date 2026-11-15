@@ -18,7 +18,7 @@ from prismpath.tests._repo import repo_file
 
 _hw = repo_file("prismpath-hw")
 sys.path.insert(0, str(_hw))
-import ppt_compile as pc  # noqa: E402
+from prismpath.kernel import ppt_compile as pc  # noqa: E402
 
 _spec = importlib.util.spec_from_file_location("net_swap", repo_file("prismpath-ebpf", "net_swap.py"))
 ns = importlib.util.module_from_spec(_spec)
