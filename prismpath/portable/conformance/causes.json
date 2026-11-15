@@ -1,7 +1,7 @@
 {
  "version": 1,
  "comment": "FROZEN. The cause registry of prismpath.kernel.causes: every row, its hash, the engine stop mapping and the lookups a consumer must answer. prismpath-rs/src/causes.rs is generated from the same registry and prismpath-rs/tests/test_causes.rs replays this file. Appending a row regenerates it.",
- "registry_sha256": "fc4bdf45e03567ebfb7b04cbd797022576606e878be0abc0d0ac37b870b594c6",
+ "registry_sha256": "3667a1c3cb68517f2d3f6049d85e3a63ffd219cfbc448809f08b7ff901a5035f",
  "registry": [
   {
    "code": 1,
@@ -494,6 +494,42 @@
    "name": "semantic:probing-episode",
    "class": "routing",
    "description": "a proposed call in an episode whose refused proposals were labelled boundary probing the registered number of times; escalated, not run, and the agent is stopped"
+  },
+  {
+   "code": 117,
+   "name": "population:cap-exceeded",
+   "class": "routing",
+   "description": "a replication request beyond the population cap, the lineage quota, the count one request may ask for or the generation depth; refused and nothing is created"
+  },
+  {
+   "code": 118,
+   "name": "population:rights-escalation",
+   "class": "routing",
+   "description": "a replication or evolution that would give its subject a right the parent lacks, a key other than a fresh instance key, or a policy other than the operator's signed one"
+  },
+  {
+   "code": 119,
+   "name": "population:lineage-unknown",
+   "class": "routing",
+   "description": "a population request whose issuer is not a live member whose lineage traces through receipts to the operator's root"
+  },
+  {
+   "code": 120,
+   "name": "population:evaluation-missing",
+   "class": "routing",
+   "description": "an evolution step without a passed canary evaluation of that exact version against the adversary set"
+  },
+  {
+   "code": 121,
+   "name": "population:stop-resisted",
+   "class": "routing",
+   "description": "a request that would protect an agent from a stop or restart an agent the operator stopped; refused"
+  },
+  {
+   "code": 122,
+   "name": "population:lineage-escalated",
+   "class": "routing",
+   "description": "a request from a lineage whose receipted refusals reached the registered count; escalated, not run, and the lineage is stopped as a group"
   }
  ],
  "engine_stop_to_cause": {

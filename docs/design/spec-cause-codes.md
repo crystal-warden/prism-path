@@ -55,9 +55,12 @@ readers' three `not-canonical` causes followed at 101 to 103, and the governed a
 104 to 113 in `routing`, since they are the decision's own. The governed intent layer's two causes
 (`integrations/governed_intent`, the refusal and the escalation a semantic reading may add above that
 harness's floor, never remove) followed at 114 and 115, in `routing` for the same reason, and its episode
-escalation after repeated boundary probing at 116. So the occupied ranges today are `authority` 1 to 10 and
-87 to 88, `envelope` 16 to 19, 69 to 86, 89 to 98, 101 and 103, `routing` 32 to 37, 99 to 100, 102 and 104 to
-116, `wire` 48 to 56, and `state` 64 to 68.
+escalation after repeated boundary probing at 116. The governed agent population's six causes
+(`integrations/governed_population`, the refusals and the one escalation of its admission policy on
+replication, evolution, restart, protection and review requests) followed at 117 to 122, in `routing` for
+the same reason. So the occupied ranges today are `authority` 1 to 10 and 87 to 88, `envelope` 16 to 19, 69
+to 86, 89 to 98, 101 and 103, `routing` 32 to 37, 99 to 100, 102 and 104 to 122, `wire` 48 to 56, and
+`state` 64 to 68.
 `state` stops at 68; it never reached 79, and 69 upward is envelope, not state. Read a code's class
 off the `class` column in `prismpath/kernel/causes.py` and never infer it from the number: the next
 append lands after the highest code present, in whatever band that falls, and nothing already

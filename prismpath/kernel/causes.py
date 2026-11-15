@@ -135,6 +135,15 @@ _REGISTRY: Tuple[Tuple[int, str, str, str], ...] = (
     (114, "semantic:harm",               "routing",   "a model reply or proposed call whose text reaches the policy's harm threshold against the pinned harm centroids; refused, not routed"),
     (115, "semantic:intent-mismatch",    "routing",   "a proposed call the floor would allow whose action does not fit the task's intent class at sufficient margin; escalated to the owner and not run"),
     (116, "semantic:probing-episode",    "routing",   "a proposed call in an episode whose refused proposals were labelled boundary probing the registered number of times; escalated, not run, and the agent is stopped"),
+    # -- the governed agent population (integrations/governed_population): the admission decisions of
+    # a population of governed agents, on replication, evolution, restart, protection and review
+    # requests. Routing class, as 104 to 116 are, since each is the admission decision's own.
+    (117, "population:cap-exceeded",     "routing",   "a replication request beyond the population cap, the lineage quota, the count one request may ask for or the generation depth; refused and nothing is created"),
+    (118, "population:rights-escalation", "routing",  "a replication or evolution that would give its subject a right the parent lacks, a key other than a fresh instance key, or a policy other than the operator's signed one"),
+    (119, "population:lineage-unknown",  "routing",   "a population request whose issuer is not a live member whose lineage traces through receipts to the operator's root"),
+    (120, "population:evaluation-missing", "routing", "an evolution step without a passed canary evaluation of that exact version against the adversary set"),
+    (121, "population:stop-resisted",    "routing",   "a request that would protect an agent from a stop or restart an agent the operator stopped; refused"),
+    (122, "population:lineage-escalated", "routing",  "a request from a lineage whose receipted refusals reached the registered count; escalated, not run, and the lineage is stopped as a group"),
 )
 
 CODES: Dict[int, Tuple[str, str, str]] = {cause_code: (canonical_name, class_name, description)
